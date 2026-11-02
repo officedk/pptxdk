@@ -705,7 +705,7 @@ export function createBuilder(modules: readonly CapabilityModule[]) {
   ): Promise<BuildResult> {
     const target = validateOptions(options);
     try {
-      return withHostTree(element, (container) =>
+      return await withHostTree(element, (container) =>
         compileDocument(container, bound, target),
       );
     } catch (error) {

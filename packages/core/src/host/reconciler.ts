@@ -2,7 +2,7 @@ import { createContext, type ReactNode } from "react";
 import Reconciler from "react-reconciler";
 import {
   DefaultEventPriority,
-  LegacyRoot,
+  ConcurrentRoot,
 } from "react-reconciler/constants.js";
 
 import {
@@ -16,6 +16,20 @@ import {
 type Props = Record<string, unknown>;
 
 let currentUpdatePriority = 0;
+
+type FiberNode = {
+  readonly tag: number;
+  readonly memoizedState: unknown;
+  readonly child: FiberNode | null;
+  readonly sibling: FiberNode | null;
+};
+
+type FiberRoot = {
+  current: FiberNode;
+  readonly pendingLanes: number;
+};
+
+const suspenseComponentTag = 13;
 
 function insertChild(
   children: HostChild[],
@@ -75,7 +89,7 @@ const reconciler = Reconciler<
     return new HostNode(type, withoutChildren(props), internalHandle);
   },
   createTextInstance(text) {
-    return { type: "#text", text };
+    return { type: "#text", text, hidden: false };
   },
   appendInitialChild(parent, child) {
     insertChild(parent.children, child);
@@ -104,6 +118,18 @@ const reconciler = Reconciler<
   },
   commitTextUpdate(textInstance, _previous, next) {
     textInstance.text = next;
+  },
+  hideInstance(instance) {
+    instance.hidden = true;
+  },
+  hideTextInstance(textInstance) {
+    textInstance.hidden = true;
+  },
+  unhideInstance(instance) {
+    instance.hidden = false;
+  },
+  unhideTextInstance(textInstance) {
+    textInstance.hidden = false;
   },
   resetTextContent() {},
   clearContainer(container) {
@@ -152,39 +178,123 @@ const reconciler = Reconciler<
   getSuspendedCommitReason: () => null,
 });
 
-/** 为一次构建创建专属 React root，并在序列化完成后卸载。 */
-export function withHostTree<T>(
+function containsSuspendedBoundary(fiber: FiberNode | null): boolean {
+  for (let current = fiber; current !== null; current = current.sibling) {
+    if (
+      current.tag === suspenseComponentTag &&
+      current.memoizedState !== null
+    ) {
+      return true;
+    }
+    if (containsSuspendedBoundary(current.child)) return true;
+  }
+  return false;
+}
+
+/** 为一次构建创建专属 React root，等待已声明内容并在序列化后卸载。 */
+export async function withHostTree<T>(
   element: ReactNode,
   consume: (container: HostContainer) => T,
-): T {
+): Promise<T> {
   const container: HostContainer = { children: [] };
   let failure: { error: unknown } | undefined;
-  const record = (error: unknown): void => {
-    failure ??= { error };
-  };
+  let queueCompletionCheck = (): void => {};
   const root = reconciler.createContainer(
     container,
-    LegacyRoot,
+    ConcurrentRoot,
     null,
     false,
     null,
     "react-pptx",
-    record,
-    record,
+    (error) => {
+      failure ??= { error };
+      queueCompletionCheck();
+    },
+    () => {},
     () => {},
     () => {},
     null,
   );
+  const fiberRoot = root as unknown as FiberRoot;
+  const currentDescriptor = Object.getOwnPropertyDescriptor(root, "current");
+  let current = fiberRoot.current;
+  let currentAdapterInstalled = false;
 
   try {
-    reconciler.updateContainerSync(element, root, null, null);
-    reconciler.flushSyncWork();
-    reconciler.flushPassiveEffects();
-    if (failure !== undefined) throw failure.error;
+    if (
+      currentDescriptor?.configurable !== true ||
+      currentDescriptor.writable !== true
+    ) {
+      throw new Error("当前 React root 不支持已验证的提交观察适配");
+    }
+
+    await new Promise<void>((resolve, reject) => {
+      let settled = false;
+      let revision = 0;
+
+      const finish = (failed: boolean, error?: unknown): void => {
+        if (settled) return;
+        settled = true;
+        if (failed) reject(error);
+        else if (failure !== undefined) reject(failure.error);
+        else resolve();
+      };
+
+      queueCompletionCheck = (): void => {
+        if (settled) return;
+        const observedRevision = ++revision;
+        queueMicrotask(() => {
+          if (settled || observedRevision !== revision) return;
+          try {
+            reconciler.flushPassiveEffects();
+            if (settled || observedRevision !== revision) return;
+            if (failure !== undefined) {
+              finish(true, failure.error);
+              return;
+            }
+            if (
+              !containsSuspendedBoundary(fiberRoot.current) &&
+              fiberRoot.pendingLanes === 0
+            ) {
+              finish(false);
+            }
+          } catch (error) {
+            finish(true, error);
+          }
+        });
+      };
+
+      Object.defineProperty(root, "current", {
+        enumerable: currentDescriptor.enumerable === true,
+        configurable: true,
+        get: () => current,
+        set(next: FiberNode) {
+          current = next;
+          try {
+            queueCompletionCheck();
+          } catch (error) {
+            failure ??= { error };
+          }
+        },
+      });
+      currentAdapterInstalled = true;
+
+      reconciler.updateContainer(element, root, null, null);
+    });
+
     return consume(container);
   } finally {
-    reconciler.updateContainerSync(null, root, null, null);
-    reconciler.flushSyncWork();
-    reconciler.flushPassiveEffects();
+    try {
+      reconciler.updateContainerSync(null, root, null, null);
+      reconciler.flushSyncWork();
+      reconciler.flushPassiveEffects();
+    } finally {
+      if (currentAdapterInstalled && currentDescriptor !== undefined) {
+        Object.defineProperty(root, "current", {
+          ...currentDescriptor,
+          value: current,
+        });
+      }
+    }
   }
 }

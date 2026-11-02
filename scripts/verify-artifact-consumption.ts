@@ -162,9 +162,10 @@ try {
     join(temporaryDirectory, "consumer-types.ts"),
     [
       'import { createElement } from "react";',
-      'import { Deck, Shape, Slide, build, type BuildResult, type ShapeProps } from "@react-pptx/react-pptx";',
+      'import { Deck, font, P, Shape, Slide, Span, Text, build, type BuildResult, type ShapeProps, type TextProps } from "@react-pptx/react-pptx";',
       'const shape: ShapeProps = { testId: "typed", x: 0, y: 0, width: 40, height: 30 };',
-      'const result: Promise<BuildResult> = build(createElement(Deck, {}, createElement(Slide, { slideId: "typed" }, createElement(Shape, shape))));',
+      'const text: TextProps = { testId: "typed-text", x: 0, y: 36, width: 100, height: 36, style: { fontFamily: font("Consumer Sans"), lineHeight: "22pt" } };',
+      'const result: Promise<BuildResult> = build(createElement(Deck, {}, createElement(Slide, { slideId: "typed" }, createElement(Shape, shape), createElement(Text, text, createElement(P, { style: { list: { type: "bullet" } } }, createElement(Span, { style: { fontWeight: "bold" } }, "Installed 文本"))))));',
       "void result;",
     ].join("\n"),
   );
@@ -172,14 +173,14 @@ try {
     join(temporaryDirectory, "consumer-runtime.ts"),
     [
       'import { createElement } from "react";',
-      'import { Deck, Shape, Slide, build } from "@react-pptx/react-pptx";',
+      'import { Deck, font, P, Shape, Slide, Span, Text, build } from "@react-pptx/react-pptx";',
       'import { validatePptx } from "@react-pptx/validation";',
       'import { writeFile } from "node:fs/promises";',
-      'const result = await build(createElement(Deck, { width: 120, height: 96 }, createElement(Slide, { slideId: "installed" }, createElement(Shape, { testId: "packed-shape", geometry: "hexagon", x: 10, y: 12, width: 45, height: 30, fill: "#123456" }))));',
+      'const result = await build(createElement(Deck, { width: 120, height: 96 }, createElement(Slide, { slideId: "installed" }, createElement(Shape, { testId: "packed-shape", geometry: "hexagon", x: 10, y: 12, width: 45, height: 30, fill: "#123456" }), createElement(Text, { testId: "packed-text", x: 10, y: 48, width: 90, height: 36, style: { fontFamily: font("Consumer Sans"), lineHeight: "22pt" } }, createElement(P, { style: { list: { type: "bullet" } } }, createElement(Span, { style: { fontWeight: "bold" } }, "Installed 文本"))))));',
       "const file = await validatePptx(result.pptx);",
-      'if (file.errors.length !== 0 || file.slides[0]?.objects[0]?.name !== "packed-shape") throw new Error(JSON.stringify(file.errors));',
+      'if (file.errors.length !== 0 || file.slides[0]?.objects[0]?.name !== "packed-shape" || file.slides[0]?.objects[1]?.text?.paragraphs[0]?.text !== "Installed 文本" || file.slides[0]?.objects[1]?.text?.paragraphs[0]?.list?.type !== "bullet") throw new Error(JSON.stringify(file.errors));',
       'await writeFile("artifact.pptx", result.pptx);',
-      "process.stdout.write(JSON.stringify({ standard: file.profile.standard, slideId: file.slides[0]?.id, object: file.slides[0]?.objects[0]?.name, bytes: result.pptx.byteLength }));",
+      "process.stdout.write(JSON.stringify({ standard: file.profile.standard, slideId: file.slides[0]?.id, object: file.slides[0]?.objects[0]?.name, text: file.slides[0]?.objects[1]?.text?.text, bytes: result.pptx.byteLength }));",
     ].join("\n"),
   );
 
@@ -198,12 +199,14 @@ try {
     readonly standard?: string;
     readonly slideId?: string;
     readonly object?: string;
+    readonly text?: string;
     readonly bytes?: number;
   };
   if (
     summary.standard !== "ECMA-376 5th edition Transitional" ||
     summary.slideId !== "installed" ||
     summary.object !== "packed-shape" ||
+    summary.text !== "Installed 文本" ||
     summary.bytes === undefined ||
     summary.bytes <= 0
   ) {

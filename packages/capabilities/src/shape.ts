@@ -7,6 +7,8 @@ import {
 } from "@react-pptx/core";
 import { createElement, type ReactNode } from "react";
 
+import { writeTextBody, type TextStyle } from "./text-service.ts";
+
 export type ShapeProps = {
   readonly testId?: string;
   readonly name?: string;
@@ -16,6 +18,10 @@ export type ShapeProps = {
   readonly width: number;
   readonly height: number;
   readonly fill?: string;
+  /** 直接写入此形状的原生正文，不创建额外文本框。 */
+  readonly text?: string;
+  /** 形状正文使用共享文字服务，裁剪文本框能力后仍可写出。 */
+  readonly textStyle?: TextStyle;
   readonly children?: ReactNode;
 };
 
@@ -56,6 +62,8 @@ const allowedParameters = [
   "width",
   "height",
   "fill",
+  "text",
+  "textStyle",
 ] as const;
 
 function record(input: CapabilityInput): Record<string, unknown> {
@@ -109,12 +117,13 @@ function shapeXml(
   geometry: string,
   box: { x: number; y: number; width: number; height: number },
   fill: string | undefined,
+  textBody: string,
 ): string {
   const fillXml =
     fill === undefined
       ? "<a:noFill/>"
       : `<a:solidFill><a:srgbClr val="${fill}"/></a:solidFill>`;
-  return `<p:sp><p:nvSpPr><p:cNvPr id="${id}" name="${escapedName}"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr><p:spPr><a:xfrm><a:off x="${pxToEmu(box.x)}" y="${pxToEmu(box.y)}"/><a:ext cx="${pxToEmu(box.width)}" cy="${pxToEmu(box.height)}"/></a:xfrm><a:prstGeom prst="${geometry}"><a:avLst/></a:prstGeom>${fillXml}<a:ln><a:noFill/></a:ln></p:spPr></p:sp>`;
+  return `<p:sp><p:nvSpPr><p:cNvPr id="${id}" name="${escapedName}"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr><p:spPr><a:xfrm><a:off x="${pxToEmu(box.x)}" y="${pxToEmu(box.y)}"/><a:ext cx="${pxToEmu(box.width)}" cy="${pxToEmu(box.height)}"/></a:xfrm><a:prstGeom prst="${geometry}"><a:avLst/></a:prstGeom>${fillXml}<a:ln><a:noFill/></a:ln></p:spPr>${textBody}</p:sp>`;
 }
 
 /** 形状模块独立校验输入、声明原生几何，并生成对应 PresentationML 对象。 */
@@ -160,6 +169,18 @@ export const shapeCapability: CapabilityModule = {
     ) {
       throw new CapabilityError("invalid-fill", "fill 必须是 #RRGGBB 颜色");
     }
+    const text = props["text"];
+    if (text !== undefined && typeof text !== "string") {
+      throw new CapabilityError("invalid-text", "Shape.text 必须是字符串");
+    }
+    let textOutput: ReturnType<typeof writeTextBody> | undefined;
+    if (text !== undefined && text !== "") {
+      textOutput = writeTextBody(
+        [{ type: "#text", text }],
+        props["textStyle"],
+        "middle",
+      );
+    }
     const name = requestedName ?? testId ?? `Shape ${context.id - 1}`;
     let escapedName: string;
     try {
@@ -177,6 +198,7 @@ export const shapeCapability: CapabilityModule = {
         geometry,
         box,
         fill?.slice(1).toUpperCase(),
+        textOutput?.xml ?? "",
       ),
       observation: {
         id: context.id,
@@ -185,8 +207,15 @@ export const shapeCapability: CapabilityModule = {
         ...(testId === undefined ? {} : { testId }),
         geometry,
         box,
+        ...(text === undefined ? {} : { text }),
       },
       extensions: [],
+      ...(textOutput === undefined
+        ? {}
+        : {
+            resourceClaims: textOutput.resourceClaims,
+            warnings: textOutput.warnings,
+          }),
     };
   },
 };

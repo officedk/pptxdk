@@ -2,7 +2,14 @@
   "extends": "@react-pptx/tooling-config/node.json",
   "compilerOptions": {
     "types": ["node"],
-    "declarationMap": false
+    "declarationMap": false,
+    "jsx": "react-jsx"
   },
-  "include": ["src/**/*.ts", "test/**/*.ts", "*.config.ts", "template/**/*.ts"]
+  "include": [
+    "src/**/*.ts",
+    "test/**/*.ts",
+    "test/**/*.tsx",
+    "*.config.ts",
+    "template/**/*.ts"
+  ]
 }

@@ -24,6 +24,11 @@
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
     },
+    "./node": {
+      "source": "./src/node.ts",
+      "types": "./dist/node.d.ts",
+      "default": "./dist/node.js"
+    },
     "./shape": {
       "source": "./src/shape.ts",
       "types": "./dist/shape.d.ts",
@@ -47,6 +52,7 @@
   "dependencies": {
     "@react-pptx/capabilities": "workspace:*",
     "@react-pptx/core": "workspace:*",
+    "esbuild": "catalog:",
     "react": "catalog:"
   },
   "devDependencies": {

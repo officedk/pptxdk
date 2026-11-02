@@ -8,6 +8,7 @@ const packageNames = [
   "@react-pptx/capabilities",
   "@react-pptx/react-pptx",
   "@react-pptx/validation",
+  "@react-pptx/cli",
 ] as const;
 
 interface PnpmPackage {
@@ -93,6 +94,7 @@ const reactPptxDependencies = JSON.parse(
     "@react-pptx/react-pptx",
     "list",
     "fflate",
+    "esbuild",
     "--depth",
     "0",
     "--json",
@@ -152,6 +154,7 @@ try {
           ...dependencies,
           fflate: installedVersion(reactPptx, "fflate"),
           react: installedVersion(core, "react"),
+          esbuild: installedVersion(reactPptx, "esbuild"),
         },
         devDependencies: {
           "@types/react": installedVersion(core, "@types/react"),
@@ -200,6 +203,7 @@ try {
       'import { createElement, Suspense, use, useEffect, useState } from "react";',
       'import { Cell, Deck, fade, font, Group, Image, P, Row, Shape, Slide, Span, spin, Step, Table, Text, build, transitions, type BuildOptions, type BuildResult, type CellProps, type GroupProps, type ImageProps, type MotionProps, type NativeTableObservation, type RowProps, type ShapeProps, type StepProps, type TableColumn, type TableProps, type TextProps, type Transition } from "@react-pptx/react-pptx";',
       'import { type ValidationIssue, type ValidationResult } from "@react-pptx/validation";',
+      'import { buildFromSource, type BuildFromSourceOptions } from "@react-pptx/react-pptx/node";',
       'const shape: ShapeProps = { testId: "typed", x: 0, y: 0, width: 40, height: 30 };',
       "const image: ImageProps = { src: new Uint8Array([0x89, 0x50, 0x4e, 0x47]), width: 40, height: 30 };",
       'const group: GroupProps = { name: "typed-group" };',
@@ -219,9 +223,29 @@ try {
       "function AsyncSalesTable({ source }: { source: string }) { const [promise, setPromise] = useState<Promise<string> | null>(null); useEffect(() => { setPromise(fetch(source).then(response => response.text())); }, [source]); return promise === null ? null : createElement(Suspense, { fallback: null }, createElement(AsyncText, { promise })); }",
       'const asyncTable = createElement(AsyncSalesTable, { source: "https://example.invalid/data" });',
       "const signalOptions: BuildOptions = { signal: new AbortController().signal };",
+      "const sourceOptions: BuildFromSourceOptions = { signal: new AbortController().signal };",
+      'const sourceBuild = buildFromSource("./consumer-deck.tsx", sourceOptions);',
       'const result: Promise<BuildResult> = build(createElement(Deck, {}, createElement(Slide, { slideId: "typed", transition }, createElement(Group, group, createElement(Shape, { ...shape, ...motion }), createElement(Text, text, createElement(P, { style: { list: { type: "bullet" } } }, createElement(Span, { style: { fontWeight: "bold" } }, "Installed 文本"))), createElement(Image, image), createElement(Step, { ...step }, createElement(Shape, { ...shape, testId: "step-shape", enter: fade(), emphasis: spin() }))))));',
       'const tableElement = createElement(Table, table, createElement(Row, row, createElement(Cell, cell, "North")));',
-      "void [result, contentSizedText, validationIssue, validatorProfile, asyncTable, signalOptions, tableElement, tableObservation];",
+      "void [result, contentSizedText, validationIssue, validatorProfile, asyncTable, signalOptions, sourceBuild, tableElement, tableObservation];",
+    ].join("\n"),
+  );
+  await writeFile(
+    join(temporaryDirectory, "consumer-deck-helper.ts"),
+    'export const sourceTitle = "安装 CLI 源码标题";\n',
+  );
+  await writeFile(
+    join(temporaryDirectory, "consumer-deck.tsx"),
+    [
+      'import { Deck, Shape, Slide } from "@react-pptx/react-pptx";',
+      'import { sourceTitle } from "./consumer-deck-helper.ts";',
+      "export default function ConsumerDeck() {",
+      "  return (",
+      '    <Deck width={120} height={96}><Slide slideId="source-cli">',
+      '      <Shape testId="source-cli" name={sourceTitle} x={8} y={8} width={80} height={32} text={sourceTitle} />',
+      "    </Slide></Deck>",
+      "  );",
+      "}",
     ].join("\n"),
   );
   await writeFile(
@@ -233,7 +257,13 @@ try {
       'import { strFromU8, strToU8, unzipSync, zipSync } from "fflate";',
       'import { getEventListeners } from "node:events";',
       'import { readFile, writeFile } from "node:fs/promises";',
+      'import { buildFromSource } from "@react-pptx/react-pptx/node";',
       'const jostMetrics = new Uint8Array(await readFile(new URL("./jost-latin-400-normal.woff2", import.meta.url)));',
+      'const installedCliBytes = await readFile("cli-output/installed.pptx");',
+      "const installedCliFile = await validatePptx(new Uint8Array(installedCliBytes));",
+      'const sourceBuildResult = await buildFromSource("./consumer-deck.tsx");',
+      "const installedCliEquivalent = Buffer.from(installedCliBytes).equals(Buffer.from(sourceBuildResult.pptx));",
+      'if (installedCliFile.errors.length !== 0 || installedCliFile.slides[0]?.id !== "source-cli" || installedCliFile.slides[0]?.objects[0]?.text?.text !== "安装 CLI 源码标题" || !installedCliEquivalent || sourceBuildResult.report.slides[0]?.id !== "source-cli") throw new Error(JSON.stringify({ errors: installedCliFile.errors, slide: installedCliFile.slides[0], installedCliEquivalent }));',
       'const transition = transitions.morph({ by: "word", duration: 1200, fallback: transitions.fade() });',
       'const imageBytes = new Uint8Array(Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/n1sAAAAASUVORK5CYII=", "base64"));',
       'const result = await build(createElement(Deck, { width: 120, height: 96 }, createElement(Slide, { slideId: "installed", transition }, createElement(Group, { testId: "packed-group", enter: fade({ duration: 800, delay: 100, easing: { decelerate: 0.5 } }) }, createElement(Step, { n: 1 }, createElement(Shape, { testId: "packed-shape", geometry: "hexagon", x: 10, y: 12, width: 45, height: 30, fill: "#123456", text: "Installed shape text", enter: fade({ duration: 250 }), emphasis: spin({ from: 180 }) }), createElement(Image, { testId: "packed-image", src: imageBytes, x: 60, y: 12, width: 40, height: 30, fit: "cover", enter: wipe({ from: "right" }) })), createElement(Text, { testId: "packed-text", x: 10, y: 48, width: 90, height: 36, style: { fontFamily: font("Consumer Sans"), lineHeight: "22pt" }, emphasis: spin({ from: 90 }) }, createElement(P, { style: { list: { type: "bullet" } } }, createElement(Span, { style: { fontWeight: "bold" } }, "Installed 文本"))), createElement(Group, { testId: "nested-group" }, createElement(Shape, { testId: "nested-shape", x: 80, y: 60, width: 12, height: 10, text: "Nested member" }))))));',
@@ -298,7 +328,7 @@ try {
       'try { await build(createElement(Deck, {}, createElement(Slide, { slideId: "missing-metrics" }, createElement(Text, { testId: "content-sized-text", x: 0, y: 0, width: 100, height: "auto", style: { fontFamily: font("Consumer Sans") } }, "Content sized text")))); } catch (error) { missingMetrics = error; }',
       'if (!(missingMetrics instanceof BuildError) || missingMetrics.diagnostics[0]?.code !== "font-measurement-unavailable") throw new Error("installed content-sized text did not require explicit font metrics");',
       'await writeFile("artifact.pptx", result.pptx);',
-      'process.stdout.write(JSON.stringify({ standard: file.profile.standard, schemaPackage: file.profile.schemaValidator.package, schemaPackageVersion: file.profile.schemaValidator.packageVersion, sdkVersion: file.profile.schemaValidator.sdkVersion, officeVersion: file.profile.schemaValidator.officeVersion, applicationEvidence: file.profile.applicationEvidence, slideId: file.slides[0]?.id, group: group.name, groupBox: group.boxEmu, shape: shape.name, shapeText: shape.text.text, shapeBox: shape.boxEmu, text: text.name, textContent: text.text.text, bullet: text.text.paragraphs[0]?.list?.type, image: image.name, mediaType: image.image.contentType, imageBox: image.boxEmu, table: tableObject.name, tableCells: tableObject.table.cells, tableMerges: tableObject.table.merges, tableColumnWidthEmu: tableObject.table.columnWidthsEmu[0], tableBytes: tableResult.pptx.byteLength, contentSizedText: contentSizedText.text.text, contentSizedTextHeightEmu: contentSizedText.boxEmu.height, contentSizedTextLineSpacingPoints: contentSizedText.text.paragraphs[0].lineSpacingPoints, nestedGroup: nestedGroup.name, nestedShape: nestedShape.name, nestedShapeText: nestedShape.text.text, nestedShapeBox: nestedShape.boxEmu, missingMetrics: missingMetrics.diagnostics[0].code, objectIds: [group.id, shape.id, text.id, image.id, nestedGroup.id, nestedShape.id], animations, transition: file.slides[0]?.transition?.kind, durationMs: file.slides[0]?.transition?.durationMs, extensions: file.extensions, forbiddenCode: forbidden.diagnostics[0]?.code, schemaGate: schemaIssue.code, schemaPart: schemaIssue.part, schemaXPath: schemaIssue.xpath, bytes: result.pptx.byteLength, contentSizedBytes: contentSizedResult.pptx.byteLength, cancellationObserved, cancellationCleanups, cancellationListeners: getEventListeners(cancellationController.signal, "abort").length }));',
+      'process.stdout.write(JSON.stringify({ installedCliSlideId: installedCliFile.slides[0]?.id, installedCliText: installedCliFile.slides[0]?.objects[0]?.text?.text, installedCliEquivalent, standard: file.profile.standard, schemaPackage: file.profile.schemaValidator.package, schemaPackageVersion: file.profile.schemaValidator.packageVersion, sdkVersion: file.profile.schemaValidator.sdkVersion, officeVersion: file.profile.schemaValidator.officeVersion, applicationEvidence: file.profile.applicationEvidence, slideId: file.slides[0]?.id, group: group.name, groupBox: group.boxEmu, shape: shape.name, shapeText: shape.text.text, shapeBox: shape.boxEmu, text: text.name, textContent: text.text.text, bullet: text.text.paragraphs[0]?.list?.type, image: image.name, mediaType: image.image.contentType, imageBox: image.boxEmu, table: tableObject.name, tableCells: tableObject.table.cells, tableMerges: tableObject.table.merges, tableColumnWidthEmu: tableObject.table.columnWidthsEmu[0], tableBytes: tableResult.pptx.byteLength, contentSizedText: contentSizedText.text.text, contentSizedTextHeightEmu: contentSizedText.boxEmu.height, contentSizedTextLineSpacingPoints: contentSizedText.text.paragraphs[0].lineSpacingPoints, nestedGroup: nestedGroup.name, nestedShape: nestedShape.name, nestedShapeText: nestedShape.text.text, nestedShapeBox: nestedShape.boxEmu, missingMetrics: missingMetrics.diagnostics[0].code, objectIds: [group.id, shape.id, text.id, image.id, nestedGroup.id, nestedShape.id], animations, transition: file.slides[0]?.transition?.kind, durationMs: file.slides[0]?.transition?.durationMs, extensions: file.extensions, forbiddenCode: forbidden.diagnostics[0]?.code, schemaGate: schemaIssue.code, schemaPart: schemaIssue.part, schemaXPath: schemaIssue.xpath, bytes: result.pptx.byteLength, contentSizedBytes: contentSizedResult.pptx.byteLength, cancellationObserved, cancellationCleanups, cancellationListeners: getEventListeners(cancellationController.signal, "abort").length }));',
     ].join("\n"),
   );
   const cropLoader = join(temporaryDirectory, "reject-text-box.mjs");
@@ -350,6 +380,20 @@ try {
     ["exec", "tsc", "--project", "tsconfig.json"],
     temporaryDirectory,
   );
+  const cliOutput = run(
+    "pnpm",
+    [
+      "exec",
+      "react-pptx",
+      "consumer-deck.tsx",
+      "--out",
+      "cli-output/installed.pptx",
+    ],
+    temporaryDirectory,
+  );
+  if (!cliOutput.includes("已导出文稿：")) {
+    throw new Error(`安装后的 CLI 没有报告成功导出：${cliOutput}`);
+  }
   const summaryText = run(
     process.execPath,
     ["--import", devtoolsSentinel, "consumer-runtime.ts"],
@@ -402,8 +446,14 @@ try {
     readonly cancellationObserved?: boolean;
     readonly cancellationCleanups?: number;
     readonly cancellationListeners?: number;
+    readonly installedCliSlideId?: string;
+    readonly installedCliText?: string;
+    readonly installedCliEquivalent?: boolean;
   };
   if (
+    summary.installedCliSlideId !== "source-cli" ||
+    summary.installedCliText !== "安装 CLI 源码标题" ||
+    summary.installedCliEquivalent !== true ||
     summary.standard !== "ECMA-376 5th edition Transitional" ||
     summary.schemaPackage !== "@ooxml-tools/validate" ||
     summary.schemaPackageVersion !== "0.4.6" ||

@@ -38,6 +38,40 @@ function deck(shape: ReturnType<typeof createElement>) {
 }
 
 describe("公开构建入口", () => {
+  it("在基础及扩展转场前写出页面色彩映射覆盖", async () => {
+    const result = await build(
+      createElement(
+        Deck,
+        {},
+        createElement(Slide, {
+          slideId: "fade-order",
+          transition: transitions.fade(),
+        }),
+        createElement(Slide, {
+          slideId: "flip-order",
+          transition: transitions.flip({ fallback: transitions.fade() }),
+        }),
+        createElement(Slide, {
+          slideId: "morph-order",
+          transition: transitions.morph({ fallback: transitions.push() }),
+        }),
+      ),
+    );
+    const parts = unzipSync(result.pptx);
+
+    for (let index = 0; index < 3; index += 1) {
+      const part = parts[`ppt/slides/slide${index + 1}.xml`];
+      assert.ok(part);
+      const xml = strFromU8(part);
+      const slideContentEnd = xml.indexOf("</p:cSld>");
+      const colorMapStart = xml.indexOf("<p:clrMapOvr>");
+      const transitionStart = xml.indexOf("<p:transition");
+      assert.ok(slideContentEnd >= 0);
+      assert.ok(colorMapStart > slideContentEnd);
+      assert.ok(transitionStart > colorMapStart);
+    }
+  });
+
   it("生成固定区域文字并保留中英与 Unicode 内容", async () => {
     const content = "固定区域文字 — React + 简体中文 😀";
     const result = await build(
@@ -1360,8 +1394,18 @@ describe("公开构建入口", () => {
         code: "unknown-parameter",
       },
       {
+        slideId: "null-strips-direction",
+        transition: transitions.strips({ direction: null as never }),
+        code: "invalid-transition-direction",
+      },
+      {
         slideId: "invalid-strips-direction",
         transition: transitions.strips({ direction: "diagonal" as never }),
+        code: "invalid-transition-direction",
+      },
+      {
+        slideId: "null-push-direction",
+        transition: transitions.push({ from: null as never }),
         code: "invalid-transition-direction",
       },
       {
@@ -1370,9 +1414,25 @@ describe("公开构建入口", () => {
         code: "invalid-transition-direction",
       },
       {
+        slideId: "null-flip-direction",
+        transition: transitions.flip({
+          direction: null as never,
+          fallback: transitions.fade(),
+        }),
+        code: "invalid-transition-direction",
+      },
+      {
         slideId: "missing-flip-fallback",
         transition: transitions.flip({} as never),
         code: "missing-transition-fallback",
+      },
+      {
+        slideId: "null-morph-option",
+        transition: transitions.morph({
+          by: null as never,
+          fallback: transitions.fade(),
+        }),
+        code: "invalid-morph-option",
       },
       {
         slideId: "invalid-morph-option",
@@ -1381,6 +1441,11 @@ describe("公开构建入口", () => {
           fallback: transitions.fade(),
         }),
         code: "invalid-morph-option",
+      },
+      {
+        slideId: "helper-kind-and-unknown-option",
+        transition: transitions.fade({ kind: "push", from: "left" } as never),
+        code: "unknown-parameter",
       },
       {
         slideId: "extension-fallback",

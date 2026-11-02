@@ -152,7 +152,7 @@ function layout(): string {
 
 function slide(slideId: string, shapeXml: string, slideXml: string): string {
   return xmlDocument(
-    `<p:sld xmlns:a="${namespaces.a}" xmlns:r="${namespaces.r}" xmlns:p="${namespaces.p}"><p:cSld name="${xmlEscape(slideId)}"><p:spTree>${emptyShapeTree}${shapeXml}</p:spTree></p:cSld>${slideXml}<p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr></p:sld>`,
+    `<p:sld xmlns:a="${namespaces.a}" xmlns:r="${namespaces.r}" xmlns:p="${namespaces.p}"><p:cSld name="${xmlEscape(slideId)}"><p:spTree>${emptyShapeTree}${shapeXml}</p:spTree></p:cSld><p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr>${slideXml}</p:sld>`,
   );
 }
 

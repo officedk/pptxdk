@@ -87,9 +87,9 @@ function declaration<Kind extends Transition["kind"]>(
   options: object,
 ): Transition & { readonly kind: Kind } {
   return Object.freeze({
+    ...options,
     type: "transition",
     kind,
-    ...options,
   }) as Transition & {
     readonly kind: Kind;
   };
@@ -106,13 +106,17 @@ export const transitions = Object.freeze({
   ): StandardTransition =>
     declaration("strips", {
       ...options,
-      direction: options.direction ?? "rightDown",
+      direction:
+        options.direction === undefined ? "rightDown" : options.direction,
     }),
   /** 使用从页面边缘进入的基础 push 效果。 */
   push: (
     options: TransitionOptions & { readonly from?: TransitionDirection } = {},
   ): StandardTransition =>
-    declaration("push", { ...options, from: options.from ?? "bottom" }),
+    declaration("push", {
+      ...options,
+      from: options.from === undefined ? "bottom" : options.from,
+    }),
   /** 使用 p14 Flip；必须显式提供基础格式 fallback。 */
   flip: (
     options: TransitionOptions & {
@@ -122,7 +126,7 @@ export const transitions = Object.freeze({
   ): FlipTransition =>
     declaration("flip", {
       ...options,
-      direction: options.direction ?? "right",
+      direction: options.direction === undefined ? "right" : options.direction,
     }) as FlipTransition,
   /** 使用 p159 Morph；必须显式提供基础格式 fallback。 */
   morph: (
@@ -133,7 +137,7 @@ export const transitions = Object.freeze({
   ): MorphTransition =>
     declaration("morph", {
       ...options,
-      by: options.by ?? "object",
+      by: options.by === undefined ? "object" : options.by,
     }) as MorphTransition,
 });
 

@@ -483,13 +483,18 @@ function textBody(
   cell: ParsedCell,
   width: number | "max-content",
   height?: number,
+  contentSized = false,
 ): ReturnType<typeof writeTextBody> {
   try {
     return writeTextBody(
       cell.node.children,
       cell.textStyle,
       cell.verticalAlign,
-      { width, ...(height === undefined ? {} : { height }) },
+      {
+        width,
+        ...(height === undefined ? {} : { height }),
+        ...(contentSized ? { contentSized: true } : {}),
+      },
       "table-cell",
     );
   } catch (error) {
@@ -686,7 +691,7 @@ function emptyCell(): string {
 
 function frameXml(
   id: number,
-  name: string,
+  escapedName: string,
   x: number,
   y: number,
   widths: readonly number[],
@@ -701,7 +706,7 @@ function frameXml(
     .join("");
   const width = widths.reduce((sum, value) => sum + pxToEmu(value), 0);
   const height = heights.reduce((sum, value) => sum + pxToEmu(value), 0);
-  return `<p:graphicFrame><p:nvGraphicFramePr><p:cNvPr id="${id}" name="${xmlEscape(name)}"/><p:cNvGraphicFramePr/><p:nvPr/></p:nvGraphicFramePr><p:xfrm><a:off x="${pxToEmu(x)}" y="${pxToEmu(y)}"/><a:ext cx="${width}" cy="${height}"/></p:xfrm><a:graphic><a:graphicData uri="${tableUri}"><a:tbl><a:tblPr/><a:tblGrid>${columnXml}</a:tblGrid>${rowXml}</a:tbl></a:graphicData></a:graphic></p:graphicFrame>`;
+  return `<p:graphicFrame><p:nvGraphicFramePr><p:cNvPr id="${id}" name="${escapedName}"/><p:cNvGraphicFramePr/><p:nvPr/></p:nvGraphicFramePr><p:xfrm><a:off x="${pxToEmu(x)}" y="${pxToEmu(y)}"/><a:ext cx="${width}" cy="${height}"/></p:xfrm><a:graphic><a:graphicData uri="${tableUri}"><a:tbl><a:tblPr/><a:tblGrid>${columnXml}</a:tblGrid>${rowXml}</a:tbl></a:graphicData></a:graphic></p:graphicFrame>`;
 }
 
 /** 表格模块独立校验行列结构，以原生 graphicFrame 和 a:tbl 写入单一对象。 */
@@ -919,7 +924,17 @@ export const tableCapability: CapabilityModule = {
           }
           const hMerge = column > owner.column ? ' hMerge="1"' : "";
           const vMerge = rowIndex > owner.row ? ' vMerge="1"' : "";
-          rowCells.push(`<a:tc${hMerge}${vMerge}>${emptyCell()}</a:tc>`);
+          const spanAttributes = [
+            ...(rowIndex === owner.row && owner.rowSpan > 1
+              ? [`rowSpan="${owner.rowSpan}"`]
+              : []),
+            ...(column === owner.column && owner.colSpan > 1
+              ? [`gridSpan="${owner.colSpan}"`]
+              : []),
+          ];
+          rowCells.push(
+            `<a:tc${hMerge}${vMerge}${spanAttributes.length === 0 ? "" : ` ${spanAttributes.join(" ")}`}>${emptyCell()}</a:tc>`,
+          );
           continue;
         }
         const innerHeight = Math.max(
@@ -930,7 +945,15 @@ export const tableCapability: CapabilityModule = {
             cell.padding.top -
             cell.padding.bottom,
         );
-        const body = textBody(cell, innerWidthOf(cell), innerHeight);
+        const contentSized = rows
+          .slice(cell.row, cell.row + cell.rowSpan)
+          .some((row) => row.height === undefined);
+        const body = textBody(
+          cell,
+          innerWidthOf(cell),
+          innerHeight,
+          contentSized,
+        );
         addTextResult(body, cell.path);
         matrix[rowIndex]![column] = body.text;
         const spanAttributes = [

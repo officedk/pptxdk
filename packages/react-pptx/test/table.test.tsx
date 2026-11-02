@@ -11,11 +11,13 @@ import {
   Cell,
   Deck,
   font,
+  P,
   Row,
   Slide,
   Table,
 } from "@react-pptx/react-pptx";
 import { validatePptx } from "@react-pptx/validation";
+import { strFromU8, strToU8, unzipSync, zipSync } from "fflate";
 import { createElement, type ReactNode } from "react";
 import { describe, it } from "vitest";
 
@@ -192,7 +194,12 @@ describe("原生表格", () => {
             createElement(
               Row,
               null,
-              createElement(Cell, { style: { padding: 2 } }, "中文中文"),
+              createElement(
+                Cell,
+                { style: { padding: 2 } },
+                createElement(P, null, "中文中文"),
+                createElement(P, null, "自动行高第二段"),
+              ),
             ),
           ),
         ),
@@ -205,6 +212,56 @@ describe("原生表格", () => {
       `measured content height should wrap: ${autoHeight}px`,
     );
     assert.deepEqual(automatic.report.diagnostics, []);
+    const automaticFile = await validatePptx(automatic.pptx);
+    assert.deepEqual(automaticFile.errors, []);
+    const automaticParagraphs =
+      automaticFile.slides[0]?.objects[0]?.table?.cellTexts[0]?.text
+        .paragraphs ?? [];
+    assert.equal(automaticParagraphs.length, 2);
+    assert.deepEqual(
+      automaticParagraphs.map(({ lineSpacingPoints }) => lineSpacingPoints),
+      [17.38, 17.38],
+    );
+
+    const spanningAutomatic = await build(
+      createElement(
+        Deck,
+        { width: 960, height: 540 },
+        createElement(
+          Slide,
+          { slideId: "spanning-automatic" },
+          createElement(
+            Table,
+            { testId: "spanning-automatic", columns: [32, 32], style },
+            createElement(
+              Row,
+              null,
+              createElement(
+                Cell,
+                { rowSpan: 2, style: { padding: 2 } },
+                createElement(P, null, "跨行中文中文"),
+                createElement(P, null, "跨行自动高度"),
+              ),
+              createElement(Cell, null, "首行"),
+            ),
+            createElement(Row, null, createElement(Cell, null, "次行")),
+          ),
+        ),
+      ),
+    );
+    const spanningFile = await validatePptx(spanningAutomatic.pptx);
+    assert.deepEqual(spanningFile.errors, []);
+    assert.deepEqual(spanningFile.slides[0]?.objects[0]?.table?.merges, [
+      { row: 0, column: 0, rowSpan: 2, colSpan: 1 },
+    ]);
+    const spanningParagraphs =
+      spanningFile.slides[0]?.objects[0]?.table?.cellTexts[0]?.text
+        .paragraphs ?? [];
+    assert.equal(spanningParagraphs.length, 2);
+    assert.deepEqual(
+      spanningParagraphs.map(({ lineSpacingPoints }) => lineSpacingPoints),
+      [17.38, 17.38],
+    );
 
     const fixed = await build(
       createElement(
@@ -252,6 +309,94 @@ describe("原生表格", () => {
     assert.deepEqual(file.errors, []);
     assert.equal(file.slides[0]?.objects[0]?.table?.cells[0]?.[0], "中文中文");
     assert.equal(file.slides[0]?.objects[0]?.table?.rowHeightsEmu[0], 190_500);
+    assert.equal(
+      file.slides[0]?.objects[0]?.table?.cellTexts[0]?.text.paragraphs[0]
+        ?.lineSpacingPoints,
+      undefined,
+    );
+
+    const explicitLineHeight = await build(
+      createElement(
+        Deck,
+        { width: 960, height: 540 },
+        createElement(
+          Slide,
+          { slideId: "explicit-line-height" },
+          createElement(
+            Table,
+            { testId: "explicit-line-height", columns: [60], style },
+            createElement(
+              Row,
+              { style: { height: 40 } },
+              createElement(Cell, { style: { lineHeight: 18 } }, "显式行距"),
+            ),
+          ),
+        ),
+      ),
+    );
+    const explicitLineHeightFile = await validatePptx(explicitLineHeight.pptx);
+    assert.deepEqual(explicitLineHeightFile.errors, []);
+    assert.equal(
+      explicitLineHeightFile.slides[0]?.objects[0]?.table?.cellTexts[0]?.text
+        .paragraphs[0]?.lineSpacingPoints,
+      13.5,
+    );
+  });
+
+  it("矩形合并在首行和首列续格写出跨度，独立读取器拒绝缺失跨度", async () => {
+    const result = await build(
+      createElement(
+        Deck,
+        { width: 960, height: 540 },
+        createElement(
+          Slide,
+          { slideId: "rectangle-merge" },
+          createElement(
+            Table,
+            { testId: "rectangle-merge", columns: [60, 60] },
+            createElement(
+              Row,
+              { style: { height: 24 } },
+              createElement(Cell, { colSpan: 2, rowSpan: 2 }, "矩形合并"),
+            ),
+            createElement(Row, { style: { height: 24 } }),
+          ),
+        ),
+      ),
+    );
+
+    const slidePath = "ppt/slides/slide1.xml";
+    const parts = unzipSync(result.pptx);
+    const slideXml = strFromU8(parts[slidePath]!);
+    assert.deepEqual(
+      [...slideXml.matchAll(/<a:tc(?=[\s>])([^>]*)>/gu)].map(
+        ([, attributes]) => attributes?.trim() ?? "",
+      ),
+      [
+        'gridSpan="2" rowSpan="2"',
+        'hMerge="1" rowSpan="2"',
+        'vMerge="1" gridSpan="2"',
+        'hMerge="1" vMerge="1"',
+      ],
+    );
+    const file = await validatePptx(result.pptx);
+    assert.deepEqual(file.errors, []);
+    assert.deepEqual(file.slides[0]?.objects[0]?.table?.merges, [
+      { row: 0, column: 0, rowSpan: 2, colSpan: 2 },
+    ]);
+
+    const malformedSlide = slideXml
+      .replace('hMerge="1" rowSpan="2"', 'hMerge="1"')
+      .replace('vMerge="1" gridSpan="2"', 'vMerge="1"');
+    assert.notEqual(malformedSlide, slideXml);
+    parts[slidePath] = strToU8(malformedSlide);
+    const malformedFile = await validatePptx(zipSync(parts));
+    assert.equal(
+      malformedFile.errors.filter(({ code }) => code === "invalid-table-merge")
+        .length,
+      2,
+      JSON.stringify(malformedFile.errors),
+    );
   });
 
   it("写入横向和纵向合并锚点及续格", async () => {
@@ -526,5 +671,46 @@ describe("原生表格", () => {
       italic: false,
       color: "#FFFFFF",
     });
+  });
+
+  it("表格名称只转义一次并在非法 XML 字符处报告构建错误", async () => {
+    const testId = 'Q1 & "R&D" <board>';
+    const result = await build(
+      tableDeck(
+        createElement(
+          Table,
+          { testId, columns: [60] },
+          createElement(
+            Row,
+            { style: { height: 40 } },
+            createElement(Cell, null, "name"),
+          ),
+        ),
+      ),
+    );
+    assert.equal(result.report.slides[0]?.objects[0]?.name, testId);
+    assert.equal(result.report.slides[0]?.objects[0]?.testId, testId);
+    const file = await validatePptx(result.pptx);
+    assert.deepEqual(file.errors, []);
+    assert.equal(file.slides[0]?.objects[0]?.name, testId);
+
+    await assert.rejects(
+      build(
+        tableDeck(
+          createElement(
+            Table,
+            { name: "invalid\u0001name", columns: [60] },
+            createElement(
+              Row,
+              { style: { height: 40 } },
+              createElement(Cell, null, "name"),
+            ),
+          ),
+        ),
+      ),
+      (error: unknown) =>
+        error instanceof BuildError &&
+        error.diagnostics.some(({ code }) => code === "invalid-xml-character"),
+    );
   });
 });

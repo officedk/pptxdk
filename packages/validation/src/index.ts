@@ -1294,6 +1294,10 @@ function validateTable(
     XmlElement,
     { readonly horizontal: boolean; readonly vertical: boolean }
   >();
+  const spans = new Map<
+    XmlElement,
+    { readonly rowSpan: number; readonly colSpan: number }
+  >();
   const merges: {
     row: number;
     column: number;
@@ -1322,9 +1326,10 @@ function validateTable(
         horizontal: horizontalContinuation,
         vertical: verticalContinuation,
       });
-      if (horizontalContinuation || verticalContinuation) continue;
       const colSpan = tableSpan(cell, "gridSpan", part, errors);
       const rowSpan = tableSpan(cell, "rowSpan", part, errors);
+      spans.set(cell, { rowSpan, colSpan });
+      if (horizontalContinuation || verticalContinuation) continue;
       if (
         column + colSpan > columns.length ||
         rowIndex + rowSpan > rowNodes.length
@@ -1379,17 +1384,22 @@ function validateTable(
       }
       const isAnchor = rowIndex === owner.row && column === owner.column;
       const continuation = continuations.get(cell);
+      const span = spans.get(cell);
       const horizontalContinuation = continuation?.horizontal ?? false;
       const verticalContinuation = continuation?.vertical ?? false;
+      const expectedRowSpan = rowIndex === owner.row ? owner.rowSpan : 1;
+      const expectedColSpan = column === owner.column ? owner.colSpan : 1;
       if (
         horizontalContinuation !== (!isAnchor && column > owner.column) ||
-        verticalContinuation !== (!isAnchor && rowIndex > owner.row)
+        verticalContinuation !== (!isAnchor && rowIndex > owner.row) ||
+        span?.rowSpan !== expectedRowSpan ||
+        span?.colSpan !== expectedColSpan
       ) {
         issue(
           errors,
           part,
           "invalid-table-merge",
-          `表格 ${identity.name} 的合并续格标记与锚点范围不一致`,
+          `表格 ${identity.name} 的合并续格标记或跨度与锚点范围不一致`,
         );
       }
     }

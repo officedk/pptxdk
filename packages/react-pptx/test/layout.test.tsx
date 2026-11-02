@@ -1350,6 +1350,144 @@ describe("公开布局入口", () => {
     );
   });
 
+  it("baseline 自动最小高度沿用无文字 flex 容器的子项基线", async () => {
+    const makeText = () =>
+      createElement(
+        Text,
+        {
+          testId: "measured-text",
+          width: 100,
+          height: 60,
+          style: { fontFamily: cjkFont, fontSize: 20 },
+        },
+        "中",
+      );
+    const makeRow = () =>
+      createElement(
+        Box,
+        {
+          testId: "baseline-row",
+          style: { display: "flex", alignItems: "baseline", width: 300 },
+        },
+        makeText(),
+        createElement(
+          Box,
+          {
+            testId: "shape-container",
+            style: {
+              display: "flex",
+              alignItems: "flex-start",
+              width: 100,
+              height: 100,
+            },
+          },
+          createElement(Shape, {
+            testId: "inner-shape",
+            width: 100,
+            height: 20,
+          }),
+        ),
+      );
+    const makeFollowing = () =>
+      createElement(Shape, {
+        testId: "following-shape",
+        width: 100,
+        height: 20,
+        style: { flexShrink: 0 },
+      });
+
+    const natural = await build(
+      createElement(
+        Deck,
+        { width: 400, height: 400 },
+        createElement(
+          Slide,
+          { slideId: "mixed-baseline-natural" },
+          createElement(
+            Box,
+            { style: { width: 300 } },
+            makeRow(),
+            makeFollowing(),
+          ),
+        ),
+      ),
+    );
+    assert.equal(
+      natural.report.slides[0]?.layouts?.find(
+        ({ testId }) => testId === "baseline-row",
+      )?.box.height,
+      103.2,
+    );
+    assert.deepEqual(
+      natural.report.slides[0]?.objects.map(({ testId, box }) => ({
+        testId,
+        y: box?.y,
+      })),
+      [
+        { testId: "measured-text", y: 0 },
+        { testId: "inner-shape", y: 3.2 },
+        { testId: "following-shape", y: 103.2 },
+      ],
+    );
+    const naturalFile = await validatePptx(natural.pptx);
+    assert.deepEqual(naturalFile.errors, []);
+    assert.deepEqual(
+      naturalFile.slides[0]?.objects.map(({ boxEmu }) =>
+        Number((boxEmu.y / 9525).toFixed(2)),
+      ),
+      [0, 3.2, 103.2],
+    );
+
+    const automatic = await build(
+      createElement(
+        Deck,
+        { width: 400, height: 400 },
+        createElement(
+          Slide,
+          { slideId: "mixed-baseline-auto-min" },
+          createElement(
+            Box,
+            {
+              style: {
+                display: "flex",
+                flexDirection: "column",
+                width: 300,
+                height: 200,
+              },
+            },
+            makeRow(),
+            makeFollowing(),
+          ),
+        ),
+      ),
+    );
+    assert.equal(
+      automatic.report.slides[0]?.layouts?.find(
+        ({ testId }) => testId === "baseline-row",
+      )?.box.height,
+      103.2,
+    );
+    assert.deepEqual(
+      automatic.report.slides[0]?.objects.map(({ testId, box }) => ({
+        testId,
+        y: box?.y,
+      })),
+      [
+        { testId: "measured-text", y: 0 },
+        { testId: "inner-shape", y: 3.2 },
+        { testId: "following-shape", y: 103.2 },
+      ],
+    );
+    const automaticFile = await validatePptx(automatic.pptx);
+    assert.deepEqual(automaticFile.errors, []);
+    assert.deepEqual(
+      automaticFile.slides[0]?.objects.map(({ boxEmu }) =>
+        Number((boxEmu.y / 9525).toFixed(2)),
+      ),
+      [0, 3.2, 103.2],
+    );
+  });
+
   it("弹性列保留文字主轴内容高度，minHeight: 0 允许收缩", async () => {
     const columnText = (testId: string, minHeight?: number) =>
       createElement(Text, {

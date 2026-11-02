@@ -148,6 +148,11 @@ function element(child: CapabilityChild): child is CapabilityElement {
   return "props" in child;
 }
 
+// 这里只允许共享文字样式属性通过布局白名单；具体校验仍由能力模块负责。
+function allowsSharedTextStyle(type: string): boolean {
+  return type === "rp:text" || type === "rp:table" || type === "rp:chart";
+}
+
 function identity(element: CapabilityElement): string | undefined {
   const testId = element.props["testId"];
   return typeof testId === "string" && testId.trim() !== ""
@@ -510,7 +515,7 @@ export class LayoutPass {
     try {
       this.#appendChildren(children, parentPath, root, false);
       this.#prepareTextBaselines(root);
-      // 固定尺寸父节点可能跳过新建测量树；先bootstrap，再标脏内部测量叶并重算。
+      // 固定尺寸父节点可能跳过新建测量树；先初次求解，再标脏测量叶并重算。
       rootYoga.calculateLayout(
         this.#dimensions.width,
         this.#dimensions.height,
@@ -538,20 +543,12 @@ export class LayoutPass {
     return { boxes: this.#boxes, warnings: this.#warnings };
   }
 
-  #validateLoose(
-    input: CapabilityElement,
-    path: string,
-    parentFlex: boolean,
-  ): void {
+  #validateLoose(input: CapabilityElement, path: string): void {
     const module = this.#modules.get(input.type);
     if (!objectModule(module)) return;
-    // Text 和 Table 以共享文字样式承载字体属性；Table 在布局中仍是叶对象。
-    const allowsTextStyle =
-      input.type === "rp:text" || input.type === "rp:table";
-    const style = readStyle(input.props["style"], path, false, allowsTextStyle);
-    if (!parentFlex) return;
-    // The parent currently only calls this for objects embedded in an explicit layout tree.
-    void style;
+    // Text、Table 与 Chart 以共享文字服务消费字体属性，布局中仍是叶对象。
+    const allowsTextStyle = allowsSharedTextStyle(input.type);
+    readStyle(input.props["style"], path, false, allowsTextStyle);
   }
 
   #appendChildren(
@@ -575,13 +572,12 @@ export class LayoutPass {
         return;
       }
       if (!includeObjects) {
-        this.#validateLoose(child, childPath, false);
+        this.#validateLoose(child, childPath);
         return;
       }
       const module = this.#modules.get(child.type);
       if (!objectModule(module)) return;
-      const allowsTextStyle =
-        child.type === "rp:text" || child.type === "rp:table";
+      const allowsTextStyle = allowsSharedTextStyle(child.type);
       const childStyle = readStyle(
         child.props["style"],
         childPath,
@@ -957,7 +953,7 @@ export class LayoutPass {
       Edge.Top,
       measurement.baseline - expandedSpacing(node.style, "padding").top,
     );
-    // 零尺寸relative marker只向Yoga提供内容基线，不进入语义布局树或PPTX。
+    // 零尺寸相对定位标记只向 Yoga 提供内容基线，不进入语义布局树或 PPTX。
     marker.setIsReferenceBaseline(true);
 
     node.yoga.unsetMeasureFunc();
@@ -983,12 +979,30 @@ export class LayoutPass {
 
   #baselineOffsetWithin(node: LayoutNode): number {
     if (node.baseline !== undefined) return node.baseline;
-    const child = node.children[0];
+    if (node.children.length === 0) return node.yoga.getComputedHeight();
+
+    // 与 Yoga Baseline.cpp 相同：先取本行的基线或参考子项，否则取首项。
+    const participants = new Set(this.#baselineParticipants(node));
+    const baselineChild = node.children.find(
+      (child) => child.yoga.isReferenceBaseline() || participants.has(child),
+    );
+    const child = baselineChild ?? node.children[0];
     if (child === undefined) {
       fail(
         node.path,
         "unsupported-baseline-context",
         "布局子树没有可传播的文字 baseline",
+      );
+    }
+    if (
+      node.style.flexWrap === "wrap" &&
+      baselineChild !== undefined &&
+      baselineChild !== node.children[0]
+    ) {
+      fail(
+        node.path,
+        "unsupported-baseline-context",
+        "无法在换行的 Box 中可靠确定文字 baseline 所在行",
       );
     }
     return child.yoga.getComputedTop() + this.#baselineOffsetWithin(child);
@@ -998,16 +1012,14 @@ export class LayoutPass {
     const participants = this.#baselineParticipants(node);
     if (!participants.some((child) => this.#containsText(child)))
       return undefined;
-    // baseline行高按最大上升部与最大下降部合成，不回写为固定高度约束。
+    // 基线行高按最大上升部与最大下降部合成，不回写为固定高度约束。
     let ascent = 0;
     let descent = 0;
     for (const child of participants) {
       const margin = expandedSpacing(child.style, "margin");
       const contribution = this.#minContentContribution(child, "height");
       const height = Math.max(0, contribution - margin.top - margin.bottom);
-      const baseline = this.#containsText(child)
-        ? this.#baselineOffsetWithin(child)
-        : height;
+      const baseline = this.#baselineOffsetWithin(child);
       ascent = Math.max(ascent, margin.top + baseline);
       descent = Math.max(descent, margin.bottom + height - baseline);
     }

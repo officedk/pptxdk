@@ -116,6 +116,33 @@ export type FileSlide = {
   readonly id: string;
   readonly objects: readonly FileObject[];
   readonly transition?: FileTransition;
+  readonly animations?: readonly FileAnimationStep[];
+};
+
+export type FileAnimationStep = {
+  readonly trigger: "auto" | "click";
+  readonly effects: readonly FileAnimationEffect[];
+};
+
+export type FileAnimationEffect = {
+  readonly targetId: number;
+  readonly kind: "entrance" | "emphasis";
+  readonly preset:
+    | "fade"
+    | "wipe"
+    | "zoom"
+    | "fly"
+    | "floatUp"
+    | "spinIn"
+    | "stretch"
+    | "spin";
+  readonly durationMs: number;
+  readonly delayMs: number;
+  readonly from?: "left" | "right" | "top" | "bottom" | number;
+  readonly easing?: {
+    readonly accelerate?: number;
+    readonly decelerate?: number;
+  };
 };
 
 export type FileTransition = {
@@ -1451,6 +1478,375 @@ function readSlideTransition(
   return { transition: result.transition, extensions: result.extensions };
 }
 
+function descendantsByName(
+  parent: XmlNode,
+  namespace: string,
+  localName: string,
+): XmlElement[] {
+  const result: XmlElement[] = [];
+  const pending = [parent];
+  while (pending.length > 0) {
+    const current = pending.pop();
+    if (current === undefined) continue;
+    for (
+      let child = current.firstChild;
+      child !== null;
+      child = child.nextSibling
+    ) {
+      if (child.nodeType !== 1) continue;
+      const element = child as XmlElement;
+      if (
+        element.namespaceURI === namespace &&
+        element.localName === localName
+      ) {
+        result.push(element);
+      }
+      pending.push(element);
+    }
+  }
+  return result;
+}
+
+function positiveIntegerValue(value: string): number | undefined {
+  if (!/^\d+$/u.test(value)) return undefined;
+  const parsed = Number(value);
+  return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : undefined;
+}
+
+function nonNegativeIntegerValue(value: string): number | undefined {
+  if (!/^\d+$/u.test(value)) return undefined;
+  const parsed = Number(value);
+  return Number.isSafeInteger(parsed) && parsed >= 0 ? parsed : undefined;
+}
+
+function collectObjectIds(objects: readonly FileObject[]): Set<number> {
+  const result = new Set<number>();
+  const pending = [...objects];
+  while (pending.length > 0) {
+    const object = pending.pop();
+    if (object === undefined) continue;
+    result.add(object.id);
+    pending.push(...(object.members ?? []));
+  }
+  return result;
+}
+
+function readSlideAnimations(
+  slide: XmlElement,
+  part: string,
+  objects: readonly FileObject[],
+  errors: ValidationIssue[],
+): readonly FileAnimationStep[] | undefined {
+  const timingNodes = elements(slide, presentationNamespace, "timing");
+  if (timingNodes.length === 0) return undefined;
+  if (timingNodes.length > 1) {
+    issue(errors, part, "duplicate-timing", "页面包含多个动画时序声明");
+  }
+  const timing = timingNodes[0];
+  if (timing === undefined) return undefined;
+
+  const timeIds = new Set<number>();
+  for (const timeNode of descendantsByName(
+    timing,
+    presentationNamespace,
+    "cTn",
+  )) {
+    const id = positiveIntegerValue(attribute(timeNode, "id"));
+    if (id === undefined) {
+      issue(errors, part, "invalid-animation-id", "动画 cTn 缺少正整数 id");
+      continue;
+    }
+    if (timeIds.has(id)) {
+      issue(
+        errors,
+        part,
+        "duplicate-animation-id",
+        `动画时间节点 id ${id} 重复`,
+      );
+    }
+    timeIds.add(id);
+  }
+
+  const knownObjects = collectObjectIds(objects);
+  const mainSequence = descendantsByName(
+    timing,
+    presentationNamespace,
+    "cTn",
+  ).find((timeNode) => attribute(timeNode, "nodeType") === "mainSeq");
+  const sequenceChildren =
+    mainSequence === undefined
+      ? undefined
+      : first(mainSequence, presentationNamespace, "childTnLst");
+  if (sequenceChildren === undefined) {
+    issue(
+      errors,
+      part,
+      "invalid-animation-tree",
+      "动画时序缺少 mainSeq 点击步列表",
+    );
+    return [];
+  }
+
+  const result: FileAnimationStep[] = [];
+  for (const stepNode of elements(
+    sequenceChildren,
+    presentationNamespace,
+    "par",
+  )) {
+    const stepTimeNode = first(stepNode, presentationNamespace, "cTn");
+    if (stepTimeNode === undefined) {
+      issue(errors, part, "invalid-animation-step", "点击步缺少 cTn");
+      continue;
+    }
+    const stepConditions = first(
+      stepTimeNode,
+      presentationNamespace,
+      "stCondLst",
+    );
+    const isAutomatic =
+      stepConditions !== undefined &&
+      descendantsByName(stepConditions, presentationNamespace, "cond").some(
+        (condition) => attribute(condition, "evt") === "onBegin",
+      );
+    const trigger: FileAnimationStep["trigger"] = isAutomatic
+      ? "auto"
+      : "click";
+    const stepChildren = first(
+      stepTimeNode,
+      presentationNamespace,
+      "childTnLst",
+    );
+    const effects: FileAnimationEffect[] = [];
+    for (const group of elements(
+      stepChildren ?? stepTimeNode,
+      presentationNamespace,
+      "par",
+    )) {
+      const groupTimeNode = first(group, presentationNamespace, "cTn");
+      if (groupTimeNode === undefined) continue;
+      const groupCondition = first(
+        first(groupTimeNode, presentationNamespace, "stCondLst") ??
+          groupTimeNode,
+        presentationNamespace,
+        "cond",
+      );
+      const groupDelayText =
+        groupCondition === undefined ? "0" : attribute(groupCondition, "delay");
+      const groupDelay = nonNegativeIntegerValue(groupDelayText || "0");
+      if (groupDelay === undefined) {
+        issue(
+          errors,
+          part,
+          "invalid-animation-delay",
+          "动画组延迟必须是非负整数毫秒",
+        );
+        continue;
+      }
+      const groupChildren = first(
+        groupTimeNode,
+        presentationNamespace,
+        "childTnLst",
+      );
+      for (const effectNode of elements(
+        groupChildren ?? groupTimeNode,
+        presentationNamespace,
+        "par",
+      )) {
+        const effectTimeNode = first(effectNode, presentationNamespace, "cTn");
+        if (effectTimeNode === undefined) continue;
+        const presetId = integerAttribute(effectTimeNode, "presetID");
+        if (presetId === undefined) continue;
+        const presetClass = attribute(effectTimeNode, "presetClass");
+        const presetById: Readonly<
+          Record<number, FileAnimationEffect["preset"]>
+        > = {
+          2: "fly",
+          8: "spin",
+          10: "fade",
+          17: "stretch",
+          22: "wipe",
+          42: "floatUp",
+          49: "spinIn",
+          53: "zoom",
+        };
+        const preset = presetById[presetId];
+        const kind =
+          presetClass === "entr"
+            ? "entrance"
+            : presetClass === "emph"
+              ? "emphasis"
+              : undefined;
+        if (preset === undefined || kind === undefined) {
+          issue(
+            errors,
+            part,
+            "unsupported-animation",
+            `不支持动画预设 ${presetClass}#${presetId}`,
+          );
+          continue;
+        }
+        const expectedKind = preset === "spin" ? "emphasis" : "entrance";
+        if (kind !== expectedKind) {
+          issue(
+            errors,
+            part,
+            "invalid-animation-kind",
+            `${preset} 的 presetClass 必须是 ${expectedKind === "emphasis" ? "emph" : "entr"}`,
+          );
+          continue;
+        }
+        const effectConditionList = first(
+          effectTimeNode,
+          presentationNamespace,
+          "stCondLst",
+        );
+        const effectCondition =
+          effectConditionList === undefined
+            ? undefined
+            : first(effectConditionList, presentationNamespace, "cond");
+        const effectDelay = nonNegativeIntegerValue(
+          effectCondition === undefined
+            ? "0"
+            : attribute(effectCondition, "delay") || "0",
+        );
+        if (effectDelay === undefined) {
+          issue(
+            errors,
+            part,
+            "invalid-animation-delay",
+            "动画效果延迟必须是非负整数毫秒",
+          );
+          continue;
+        }
+        const behaviorNodes = descendantsByName(
+          effectTimeNode,
+          presentationNamespace,
+          "cBhvr",
+        );
+        const durations = behaviorNodes
+          .map((behavior) =>
+            integerAttribute(
+              first(behavior, presentationNamespace, "cTn"),
+              "dur",
+            ),
+          )
+          .filter((duration): duration is number => duration !== undefined);
+        const durationMs =
+          durations.length === 0 ? undefined : Math.max(...durations);
+        if (durationMs === undefined || durationMs <= 0) {
+          issue(
+            errors,
+            part,
+            "invalid-animation-duration",
+            "动画行为缺少正整数时长",
+          );
+          continue;
+        }
+        const targetNodes = descendantsByName(
+          effectTimeNode,
+          presentationNamespace,
+          "spTgt",
+        );
+        const targetIds = targetNodes.map((target) =>
+          positiveIntegerValue(attribute(target, "spid")),
+        );
+        const validTargetIds = targetIds.filter(
+          (targetId): targetId is number => targetId !== undefined,
+        );
+        if (
+          targetNodes.length === 0 ||
+          validTargetIds.length !== targetNodes.length ||
+          new Set(validTargetIds).size !== 1
+        ) {
+          issue(
+            errors,
+            part,
+            "invalid-animation-target",
+            "一个动画效果必须指向唯一原生对象",
+          );
+          continue;
+        }
+        const targetId = validTargetIds[0];
+        if (targetId === undefined || !knownObjects.has(targetId)) {
+          issue(
+            errors,
+            part,
+            "missing-animation-target",
+            `动画目标 ${String(targetId)} 不存在`,
+          );
+          continue;
+        }
+        const easing: { accelerate?: number; decelerate?: number } = {};
+        const accelerate = integerAttribute(effectTimeNode, "accel");
+        const decelerate = integerAttribute(effectTimeNode, "decel");
+        if (accelerate !== undefined && accelerate !== 0) {
+          easing.accelerate = accelerate / 100000;
+        }
+        if (decelerate !== undefined && decelerate !== 0) {
+          easing.decelerate = decelerate / 100000;
+        }
+        const directionSubtype = integerAttribute(
+          effectTimeNode,
+          "presetSubtype",
+        );
+        const direction =
+          preset === "wipe" || preset === "fly"
+            ? ({ 1: "top", 2: "right", 4: "bottom", 8: "left" } as const)[
+                directionSubtype ?? -1
+              ]
+            : undefined;
+        if (
+          (preset === "wipe" || preset === "fly") &&
+          direction === undefined
+        ) {
+          issue(
+            errors,
+            part,
+            "invalid-animation-direction",
+            `${preset} 缺少有效方向`,
+          );
+          continue;
+        }
+        const rotation = descendantsByName(
+          effectTimeNode,
+          presentationNamespace,
+          "animRot",
+        )[0];
+        const rotationFrom =
+          rotation === undefined
+            ? undefined
+            : decimalAttribute(rotation, "from");
+        if (preset === "spin" && rotationFrom === undefined) {
+          issue(
+            errors,
+            part,
+            "invalid-animation-rotation",
+            "spin 缺少有效起始角度",
+          );
+          continue;
+        }
+        const from =
+          direction === undefined
+            ? rotationFrom === undefined
+              ? undefined
+              : rotationFrom / 60000
+            : direction;
+        effects.push({
+          targetId,
+          kind,
+          preset,
+          durationMs,
+          delayMs: groupDelay + effectDelay,
+          ...(from === undefined ? {} : { from }),
+          ...(Object.keys(easing).length === 0 ? {} : { easing }),
+        });
+      }
+    }
+    if (effects.length > 0) result.push({ trigger, effects });
+  }
+  return result;
+}
+
 function readPresentation(
   files: XmlFiles,
   documents: Documents,
@@ -1559,6 +1955,12 @@ function readPresentation(
       errors,
     );
     const transition = readSlideTransition(slideRoot, slidePath, errors);
+    const animations = readSlideAnimations(
+      slideRoot,
+      slidePath,
+      objects,
+      errors,
+    );
     for (const extension of transition.extensions) {
       usedExtensions.add(extension);
     }
@@ -1585,6 +1987,7 @@ function readPresentation(
       ...(transition.transition === undefined
         ? {}
         : { transition: transition.transition }),
+      ...(animations === undefined ? {} : { animations }),
     });
   });
   if (slideIds.length === 0)

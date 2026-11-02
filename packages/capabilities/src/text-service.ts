@@ -220,7 +220,7 @@ function fontFamilyValue(value: FontReference | undefined): Font {
   return value as Font;
 }
 
-function normalizedFont(style: RunStyle): NormalizedFont {
+function normalizedFonts(style: RunStyle): NormalizedFont[] {
   const family = fontFamilyValue(style.fontFamily);
   const weight = weightValue(style.fontWeight);
   const faceStyle = style.fontStyle ?? "normal";
@@ -250,29 +250,38 @@ function normalizedFont(style: RunStyle): NormalizedFont {
       );
     }
   }
-  const face = faces.find(
+  const matchingFaces = faces.filter(
     (candidate) =>
       (candidate.weight ?? 400) === weight &&
       (candidate.style ?? "normal") === faceStyle,
   );
-  const data = face?.data;
-  const identity =
-    data === undefined
-      ? "missing"
-      : createHash("sha256").update(data).digest("hex");
-  return {
+  const providedFaces = matchingFaces.filter(
+    (candidate) => candidate.data !== undefined,
+  );
+  if (providedFaces.length === 0) {
+    return [
+      {
+        family: family.family,
+        weight,
+        style: faceStyle,
+        hasResource: false,
+        identity: "missing",
+      },
+    ];
+  }
+  return providedFaces.map((face) => ({
     family: family.family,
     weight,
     style: faceStyle,
-    hasResource: data !== undefined,
-    identity,
-  };
+    hasResource: true,
+    identity: createHash("sha256").update(face.data!).digest("hex"),
+  }));
 }
 
 function validateRunStyle(style: RunStyle): RunStyle {
   fontSizePoints(style.fontSize);
   weightValue(style.fontWeight);
-  normalizedFont(style);
+  normalizedFonts(style);
   if (style.color !== undefined && !/^#[0-9a-f]{6}$/iu.test(style.color)) {
     throw new CapabilityError(
       "invalid-text-color",
@@ -295,7 +304,11 @@ function readRunStyle(value: unknown): RunStyle {
 }
 
 function mergeRunStyle(parent: RunStyle, child: RunStyle): RunStyle {
-  return validateRunStyle({ ...parent, ...child });
+  const declared = Object.fromEntries(
+    Object.entries(child).filter(([, value]) => value !== undefined),
+  ) as RunStyle;
+  // P 和 Span 未声明的字段会是 undefined，不能覆盖继承的父级样式。
+  return validateRunStyle({ ...parent, ...declared });
 }
 
 function readTextStyle(value: unknown, label: string): TextStyle {
@@ -482,7 +495,7 @@ function collectRuns(
 }
 
 function runXml(run: Run): string {
-  const font = normalizedFont(run.style);
+  const font = normalizedFonts(run.style)[0]!;
   const points = fontSizePoints(run.style.fontSize);
   const weight = font.weight;
   const bold = weight >= 600;
@@ -615,27 +628,29 @@ export function writeTextBody(
   const resolvedRuns = paragraphs.flatMap(({ runs }) => runs);
   const used = new Map<string, NormalizedFont[]>();
   for (const run of resolvedRuns) {
-    const font = normalizedFont(run.style);
-    const key = `${font.family.toLocaleLowerCase("en-US")}\u0000${font.weight}\u0000${font.style}`;
-    const resources = used.get(key) ?? [];
-    if (!resources.some(({ identity }) => identity === font.identity)) {
-      resources.push(font);
-      used.set(key, resources);
+    for (const font of normalizedFonts(run.style)) {
+      const key = `${font.family.toLocaleLowerCase("en-US")}\u0000${font.weight}\u0000${font.style}`;
+      const resources = used.get(key) ?? [];
+      if (!resources.some(({ identity }) => identity === font.identity)) {
+        resources.push(font);
+        used.set(key, resources);
+      }
     }
   }
   const resourceClaims: TextResourceClaim[] = [];
   const warnings: { code: string; message: string }[] = [];
   for (const [key, resources] of used) {
     for (const font of resources) {
-      resourceClaims.push({
-        kind: "font-face",
-        key,
-        identity: font.identity,
-      });
       if (!font.hasResource) {
         warnings.push({
           code: "font-measurement-unavailable",
           message: `未提供 ${font.family} ${font.weight} ${font.style} 的显式字体资源；固定区域文字不会核对实际换行或装入情况`,
+        });
+      } else {
+        resourceClaims.push({
+          kind: "font-face",
+          key,
+          identity: font.identity,
         });
       }
     }

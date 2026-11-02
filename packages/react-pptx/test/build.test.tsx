@@ -173,6 +173,66 @@ describe("公开构建入口", () => {
     ]);
   });
 
+  it("段落继承文本框文字样式并只覆盖显式声明的字段", async () => {
+    const result = await build(
+      deck(
+        createElement(
+          Text,
+          {
+            testId: "paragraph-inherited-style",
+            x: 24,
+            y: 32,
+            width: 420,
+            height: 180,
+            style: {
+              fontFamily: "Paragraph Base",
+              fontSize: "32pt",
+              fontWeight: "bold",
+              fontStyle: "italic",
+              color: "#123456",
+            },
+          },
+          createElement(P, {}, "继承全部文字样式"),
+          createElement(P, { style: { color: "#ABCDEF" } }, "只覆盖颜色"),
+        ),
+      ),
+    );
+
+    const file = await validatePptx(result.pptx);
+    assert.deepEqual(file.errors, []);
+    assert.deepEqual(
+      file.slides[0]?.objects[0]?.text?.paragraphs.map(({ runs }) =>
+        runs.map(({ fontFamily, fontSizePt, bold, italic, color }) => ({
+          fontFamily,
+          fontSizePt,
+          bold,
+          italic,
+          color,
+        })),
+      ),
+      [
+        [
+          {
+            fontFamily: "Paragraph Base",
+            fontSizePt: 32,
+            bold: true,
+            italic: true,
+            color: "#123456",
+          },
+        ],
+        [
+          {
+            fontFamily: "Paragraph Base",
+            fontSizePt: 32,
+            bold: true,
+            italic: true,
+            color: "#ABCDEF",
+          },
+        ],
+      ],
+    );
+  });
+
   it("同名字族、字重和样式引用冲突资源时报告来源", async () => {
     const element = deck(
       createElement(
@@ -213,6 +273,94 @@ describe("公开构建入口", () => {
       assert.match(error.diagnostics[0]?.path ?? "", /text\[font-conflict\]/u);
       return true;
     });
+  });
+
+  it("同一字体值中实际使用的重复字重样式冲突资源会失败", async () => {
+    const sharedValue = font("Duplicate Face", [
+      { data: new Uint8Array([1, 2]) },
+      { weight: 400, style: "normal", data: new Uint8Array([3, 4]) },
+    ]);
+
+    await assert.rejects(
+      build(
+        deck(
+          createElement(
+            Text,
+            { testId: "duplicate-face", x: 12, y: 12, width: 300, height: 80 },
+            createElement(
+              Span,
+              { style: { fontFamily: sharedValue } },
+              "实际使用默认字重和样式",
+            ),
+          ),
+        ),
+      ),
+      (error: unknown) => {
+        assert.ok(error instanceof BuildError);
+        assert.equal(error.diagnostics[0]?.code, "conflicting-resource");
+        assert.match(
+          error.diagnostics[0]?.path ?? "",
+          /text\[duplicate-face\]/u,
+        );
+        return true;
+      },
+    );
+  });
+
+  it("仅名称引用与唯一同名字体资源共存时保留度量提示且成功构建", async () => {
+    const result = await build(
+      deck(
+        createElement(
+          Text,
+          {
+            testId: "font-name-with-resource",
+            x: 12,
+            y: 12,
+            width: 300,
+            height: 80,
+          },
+          createElement(
+            P,
+            {},
+            createElement(
+              Span,
+              { style: { fontFamily: "Shared" } },
+              "名称引用",
+            ),
+            createElement(
+              Span,
+              {
+                style: {
+                  fontFamily: font("Shared", [
+                    { data: new Uint8Array([1, 2]) },
+                    { weight: 700, data: new Uint8Array([3, 4]) },
+                  ]),
+                },
+              },
+              "资源引用",
+            ),
+          ),
+        ),
+      ),
+    );
+
+    const file = await validatePptx(result.pptx);
+    assert.deepEqual(file.errors, []);
+    assert.deepEqual(
+      file.slides[0]?.objects[0]?.text?.paragraphs[0]?.runs.map(
+        ({ fontFamily }) => fontFamily,
+      ),
+      ["Shared", "Shared"],
+    );
+    assert.deepEqual(
+      result.report.diagnostics.map(({ path, code }) => ({ path, code })),
+      [
+        {
+          path: "deck/slide[cover]/text[font-name-with-resource]",
+          code: "font-measurement-unavailable",
+        },
+      ],
+    );
   });
 
   it("固定区域可只声明字体名，报告度量限制且默认不嵌字体", async () => {

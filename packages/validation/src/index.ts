@@ -41,6 +41,8 @@ const maximumShapeExtentEmu = 2_147_483_647;
 const minimumFontSizeCentipoints = 100;
 const maximumFontSizeCentipoints = 400_000;
 const maximumTextSpacingCentipoints = 158_400;
+// 外部 SDK 用共享文件编号关联输入；串行调用可避免并发覆盖，失败后队列仍会释放。
+let schemaValidationQueue: Promise<void> = Promise.resolve();
 
 export type ValidationIssue = {
   readonly part: string;
@@ -172,7 +174,7 @@ function issue(
 async function validateStandardStructure(
   input: Uint8Array,
 ): Promise<ValidationIssue[]> {
-  try {
+  const validation = schemaValidationQueue.then(async () => {
     const results = await validateOpenXml(
       input,
       "pptx",
@@ -184,6 +186,14 @@ async function validateStandardStructure(
       message: description,
       ...(path.xpath === "" ? {} : { xpath: path.xpath }),
     }));
+  });
+  schemaValidationQueue = validation.then(
+    () => undefined,
+    () => undefined,
+  );
+
+  try {
+    return await validation;
   } catch (error) {
     return [
       {

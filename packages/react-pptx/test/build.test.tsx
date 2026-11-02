@@ -72,6 +72,62 @@ describe("公开构建入口", () => {
     }
   });
 
+  it("并发验证正常的形状与文字产物", async () => {
+    const shapeResult = await build(
+      deck(
+        createElement(Shape, {
+          testId: "concurrent-shape",
+          x: 0,
+          y: 0,
+          width: 120,
+          height: 72,
+        }),
+      ),
+    );
+    const textResult = await build(
+      deck(
+        createElement(
+          Text,
+          {
+            x: 0,
+            y: 0,
+            width: 240,
+            height: 96,
+          },
+          "并发验证",
+        ),
+      ),
+    );
+
+    const files = await Promise.all([
+      validatePptx(shapeResult.pptx),
+      validatePptx(textResult.pptx),
+    ]);
+
+    assert.deepEqual(
+      files.map(({ errors }) => errors),
+      [[], []],
+    );
+    assert.deepEqual(
+      files.map(({ presentation }) => presentation.slideCount),
+      [1, 1],
+    );
+
+    const sequentialFile = await validatePptx(shapeResult.pptx);
+    assert.deepEqual(sequentialFile.errors, []);
+
+    const invalidFile = await validatePptx(new Uint8Array([0]));
+    assert.ok(
+      invalidFile.errors.some(({ code }) => code === "schema-validator-failed"),
+    );
+    assert.ok(
+      invalidFile.errors.some(({ code }) => code === "invalid-package"),
+    );
+
+    const fileAfterFailure = await validatePptx(textResult.pptx);
+    assert.deepEqual(fileAfterFailure.errors, []);
+  });
+
   it("生成固定区域文字并保留中英与 Unicode 内容", async () => {
     const content = "固定区域文字 — React + 简体中文 😀";
     const result = await build(

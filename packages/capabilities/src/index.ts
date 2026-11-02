@@ -11,7 +11,9 @@ export type {
   ChartProps,
   ChartSeries,
   ColumnOrBarChartProps,
+  DoughnutChartProps,
   LineOrAreaChartProps,
+  PieChartProps,
 } from "#/chart.ts";
 export { Image, imageCapability } from "#/image.ts";
 export type { ImageProps, ImageSource } from "#/image.ts";

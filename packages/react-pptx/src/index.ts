@@ -21,7 +21,13 @@ export const build = createBuilder([
   transitionCapability,
 ]);
 
-export { BuildError, Deck, formatBaseline, targets } from "@react-pptx/core";
+export {
+  Box,
+  BuildError,
+  Deck,
+  formatBaseline,
+  targets,
+} from "@react-pptx/core";
 export { Slide } from "./slide.ts";
 export {
   Chart,
@@ -63,7 +69,9 @@ export type {
   ChartProps,
   ChartSeries,
   ColumnOrBarChartProps,
+  DoughnutChartProps,
   LineOrAreaChartProps,
+  PieChartProps,
   CellProps,
   RowProps,
   TableCellStyle,
@@ -80,7 +88,14 @@ export type {
   BuildOptions,
   BuildReport,
   BuildResult,
+  BoxProps,
   Diagnostic,
+  GeometryBox,
+  LayoutChildReference,
+  LayoutLength,
+  LayoutObservation,
+  LayoutSpacing,
+  LayoutStyle,
   NativeTableObservation,
   ObjectObservation,
   SlideObservation,

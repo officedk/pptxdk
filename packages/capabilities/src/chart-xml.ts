@@ -193,7 +193,11 @@ function dataLabels(
     outsideEnd: "outEnd",
     bestFit: "bestFit",
   } as const;
-  const hasPosition = kind === "column" || kind === "bar";
+  const hasPosition =
+    kind === "column" ||
+    kind === "bar" ||
+    kind === "pie" ||
+    kind === "doughnut";
   const settings = (textStyle: string | undefined) => [
     labels.numberFormat === undefined
       ? undefined
@@ -237,11 +241,13 @@ function chartSeries(
   index: number,
   labels: ChartDataLabels | false | undefined,
   textStyles: ChartTextStyleXml,
+  explosion: number | undefined,
 ): XmlElement {
   const rows = data.categories.length + 1;
   const column = columnName(index + 1);
   const bar = kind === "column" || kind === "bar";
   const lineChart = kind === "line";
+  const pie = kind === "pie" || kind === "doughnut";
   const itemShape =
     item.color === undefined
       ? undefined
@@ -284,6 +290,9 @@ function chartSeries(
     lineChart
       ? el("c:marker", null, el("c:symbol", { val: "none" }))
       : undefined,
+    pie && explosion !== undefined
+      ? el("c:explosion", { val: Math.round(explosion) })
+      : undefined,
     points,
     dataLabels(kind, labels, item, index, textStyles),
     el("c:cat", null, strRef(`${sheet}!$A$2:$A$${rows}`, data.categories)),
@@ -309,6 +318,10 @@ function chartPlot(
   props: ChartProps,
   textStyles: ChartTextStyleXml,
 ): XmlElement {
+  const explosion =
+    props.kind === "pie" || props.kind === "doughnut"
+      ? props.explosion
+      : undefined;
   const items = props.data.series.map((item, index) =>
     chartSeries(
       props.kind,
@@ -317,6 +330,7 @@ function chartPlot(
       index,
       props.dataLabels,
       textStyles,
+      explosion,
     ),
   );
   const axes = [
@@ -360,6 +374,18 @@ function chartPlot(
         items,
         axes,
       );
+    case "pie":
+    case "doughnut":
+      return el(
+        props.kind === "pie" ? "c:pieChart" : "c:doughnutChart",
+        null,
+        el("c:varyColors", { val: true }),
+        items,
+        el("c:firstSliceAng", { val: props.firstSliceAngle ?? 0 }),
+        props.kind === "doughnut"
+          ? el("c:holeSize", { val: props.holeSize ?? 50 })
+          : undefined,
+      );
   }
 }
 
@@ -383,6 +409,7 @@ function gridlines(value: ChartAxis | undefined): XmlElement | undefined {
 }
 
 function axes(props: ChartProps, textStyles: ChartTextStyleXml): XmlElement[] {
+  if (props.kind === "pie" || props.kind === "doughnut") return [];
   const category = props.categoryAxis;
   const value = props.valueAxis;
   const horizontal = props.kind === "bar";

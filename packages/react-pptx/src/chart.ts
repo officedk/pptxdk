@@ -48,6 +48,8 @@ export type {
   ChartProps,
   ChartSeries,
   ColumnOrBarChartProps,
+  DoughnutChartProps,
   LineOrAreaChartProps,
+  PieChartProps,
 } from "@react-pptx/capabilities/chart";
 export type { SlideProps } from "./slide.ts";

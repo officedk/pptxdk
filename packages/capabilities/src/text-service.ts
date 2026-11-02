@@ -61,6 +61,14 @@ export type TextServiceResult = {
   }[];
 };
 
+export type TextLayoutMeasurement = {
+  readonly width: number;
+  readonly height: number;
+  readonly minContentWidth: number;
+  readonly minContentHeight: number;
+  readonly baseline?: number;
+};
+
 type HostText = { readonly type: "#text"; readonly text: string };
 type HostElement = {
   readonly type: `rp:${string}`;
@@ -1115,10 +1123,25 @@ function paragraphLineHeight(paragraph: Paragraph): number {
   return spacingCentipoints(maximum, "lineHeight") / 75;
 }
 
-function paragraphMeasurement(
-  paragraph: Paragraph,
-  width: number,
-): MeasuredParagraph {
+function paragraphBaseline(paragraph: Paragraph): number | undefined {
+  // 混合 run 的首行基线需要逐段文字片段度量，当前结果不包含这类依据。
+  if (paragraph.runs.length !== 1 || paragraph.runs[0]!.text === "") {
+    return undefined;
+  }
+  const style = paragraph.runs[0]!.style;
+  const face = measureRunFace(style).font;
+  const fontSize = fontSizePoints(style.fontSize) * (4 / 3);
+  const naturalLineHeight =
+    ((face.ascent - face.descent + face.lineGap) / face.unitsPerEm) * fontSize;
+  const lineHeight = paragraphLineHeight(paragraph);
+  const leading = (lineHeight - naturalLineHeight) / 2;
+  return (face.ascent / face.unitsPerEm) * fontSize + leading;
+}
+
+function paragraphPieces(paragraph: Paragraph): {
+  readonly text: string;
+  readonly pieces: readonly MeasurePiece[];
+} {
   const sourceRuns =
     paragraph.runs.length > 0
       ? paragraph.runs
@@ -1147,6 +1170,35 @@ function paragraphMeasurement(
     start += run.text.length;
   }
   const text = sourceRuns.map((run) => run.text).join("");
+  return { text, pieces };
+}
+
+function paragraphMinContentWidth(paragraph: Paragraph): number {
+  const { text, pieces } = paragraphPieces(paragraph);
+  if (text === "") return 0;
+  const breaker = new LineBreaker(text);
+  let start = 0;
+  let widest = 0;
+  for (
+    let next = breaker.nextBreak();
+    next !== null;
+    next = breaker.nextBreak()
+  ) {
+    const contentEnd = trimMandatoryBreakEnd(text, start, next.position);
+    widest = Math.max(
+      widest,
+      rangeWidth(pieces, text, start, trimLineEnd(text, start, contentEnd)),
+    );
+    start = next.position;
+  }
+  return widest;
+}
+
+function paragraphMeasurement(
+  paragraph: Paragraph,
+  width: number,
+): MeasuredParagraph {
+  const { text, pieces } = paragraphPieces(paragraph);
   const wrapped = wrapParagraph(text, pieces, width);
   const spacingAfter =
     paragraph.style.spacingAfter === undefined
@@ -1180,6 +1232,37 @@ function measureParagraphs(
     width: Math.max(0, ...measured.map((paragraph) => paragraph.width)),
     height,
     paragraphs: measured,
+  };
+}
+
+/** 以共享文字服务的实际字体与断行规则返回布局尺寸。 */
+export function measureTextLayout(
+  children: readonly unknown[],
+  styleValue: unknown,
+  availableWidth?: number,
+): TextLayoutMeasurement {
+  const style = readTextStyle(styleValue, "Text.style");
+  const paragraphs = normalizeParagraphs(children, style);
+  const measured = measureParagraphs(
+    paragraphs,
+    availableWidth ?? Number.POSITIVE_INFINITY,
+  );
+  const minContentWidth = Math.max(
+    0,
+    ...paragraphs.map(paragraphMinContentWidth),
+  );
+  const baseline =
+    style.verticalAlign === undefined || style.verticalAlign === "top"
+      ? paragraphs[0] === undefined
+        ? undefined
+        : paragraphBaseline(paragraphs[0])
+      : undefined;
+  return {
+    width: measured.width,
+    height: measured.height,
+    minContentWidth,
+    minContentHeight: measured.height,
+    ...(baseline === undefined ? {} : { baseline }),
   };
 }
 

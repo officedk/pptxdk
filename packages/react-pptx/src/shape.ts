@@ -9,9 +9,10 @@ export const build = createBuilder([
   motionCapability,
 ]);
 
-export { Deck, formatBaseline, targets } from "@react-pptx/core";
+export { Box, Deck, formatBaseline, targets } from "@react-pptx/core";
 export { Slide } from "./slide.ts";
 export { Shape, shapeCapability } from "@react-pptx/capabilities/shape";
+export type { BoxProps, LayoutStyle } from "@react-pptx/core";
 export {
   Step,
   fade,

@@ -1,6 +1,6 @@
 import { createElement, type ReactNode } from "react";
 
-import type { DeckProps, SlideProps } from "#/types.ts";
+import type { BoxProps, DeckProps, SlideProps } from "#/types.ts";
 
 function hostElement<P extends { readonly children?: ReactNode }>(
   type: string,
@@ -12,3 +12,4 @@ function hostElement<P extends { readonly children?: ReactNode }>(
 
 export const Deck = hostElement<DeckProps>("rp:deck");
 export const Slide = hostElement<SlideProps>("rp:slide");
+export const Box = hostElement<BoxProps>("rp:box");

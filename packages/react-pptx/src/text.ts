@@ -9,7 +9,7 @@ export const build = createBuilder([
   motionCapability,
 ]);
 
-export { Deck, formatBaseline, targets } from "@react-pptx/core";
+export { Box, Deck, formatBaseline, targets } from "@react-pptx/core";
 export { Slide } from "./slide.ts";
 export {
   font,
@@ -49,7 +49,9 @@ export type {
   BuildOptions,
   BuildReport,
   BuildResult,
+  BoxProps,
   Diagnostic,
+  LayoutStyle,
   ObjectObservation,
   SlideObservation,
   Target,

@@ -27,6 +27,7 @@ export type {
   Font,
   FontFace,
   FontFaceStyle,
+  FontOptions,
   FontReference,
   FontSize,
   ParagraphProps,

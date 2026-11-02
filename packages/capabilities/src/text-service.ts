@@ -1,26 +1,31 @@
 import { createHash } from "node:crypto";
 
-import { CapabilityError, pxToEmu, xmlEscape } from "@react-pptx/core";
+import {
+  CapabilityError,
+  pxToEmu,
+  resolvedColorXml,
+  xmlEscape,
+  type ColorValue,
+  type Font,
+  type FontFaceStyle,
+  type FontReference,
+  type FontSize,
+  type ResolvedColor,
+  type TextAlignment,
+  type TextStyle,
+  type ThemeContext,
+} from "@react-pptx/core";
 import * as fontkit from "fontkit";
 // @ts-expect-error -- linebreak 未提供类型，下面只声明所用的断点接口。
 import LineBreakerImplementation from "linebreak";
 
 import type { FontEmbeddingUse } from "./font-embedding.ts";
-import type { Font, FontFaceStyle } from "./font.ts";
-
-export type FontReference = string | Font;
-export type FontSize = number | `${number}px` | `${number}pt`;
-export type TextAlignment = "left" | "center" | "right" | "justify";
-
-export type TextStyle = {
-  readonly fontFamily?: FontReference;
-  readonly fontSize?: FontSize;
-  readonly fontWeight?: number | "normal" | "bold";
-  readonly fontStyle?: FontFaceStyle;
-  readonly color?: string;
-  readonly lineHeight?: FontSize;
-  readonly verticalAlign?: "top" | "middle" | "bottom";
-};
+export type {
+  FontReference,
+  FontSize,
+  TextAlignment,
+  TextStyle,
+} from "@react-pptx/core";
 
 export type TextList =
   | {
@@ -81,7 +86,11 @@ type RunStyle = {
   readonly fontSize?: FontSize | undefined;
   readonly fontWeight?: TextStyle["fontWeight"] | undefined;
   readonly fontStyle?: FontFaceStyle | undefined;
-  readonly color?: string | undefined;
+  readonly color?: ColorValue | ResolvedColor | undefined;
+  readonly themeFont?: "major" | "minor" | undefined;
+};
+type RunStyleInput = Omit<RunStyle, "color" | "themeFont"> & {
+  readonly color?: ColorValue | undefined;
 };
 type Run = { readonly text: string; readonly style: RunStyle };
 type Paragraph = {
@@ -382,16 +391,10 @@ function validateRunStyle(style: RunStyle): RunStyle {
   fontSizePoints(style.fontSize);
   weightValue(style.fontWeight);
   normalizedFonts(style);
-  if (style.color !== undefined && !/^#[0-9a-f]{6}$/iu.test(style.color)) {
-    throw new CapabilityError(
-      "invalid-text-color",
-      "color 必须是 #RRGGBB 颜色",
-    );
-  }
   return style;
 }
 
-function readRunStyle(value: unknown): RunStyle {
+function readRunStyle(value: unknown, theme: ThemeContext): RunStyle {
   const props = styleRecord(value, "Span.style");
   onlyKnownKeys(
     props,
@@ -399,16 +402,54 @@ function readRunStyle(value: unknown): RunStyle {
     "Span.style",
   );
   const style = props as RunStyle;
-  validateRunStyle(style);
-  return style;
+  const font =
+    style.fontFamily === undefined
+      ? undefined
+      : theme.resolveFont(style.fontFamily);
+  if (style.color !== undefined) theme.resolveColor(style.color as ColorValue);
+  const resolved: RunStyle = {
+    ...style,
+    ...(font === undefined
+      ? {}
+      : {
+          fontFamily: font.font ?? font.family,
+          ...(font.themeFont === undefined ? {} : { themeFont: font.themeFont }),
+        }),
+  };
+  return validateRunStyle(resolved);
 }
 
-function mergeRunStyle(parent: RunStyle, child: RunStyle): RunStyle {
-  const declared = Object.fromEntries(
+function mergeRunStyle(
+  parent: RunStyle,
+  child: RunStyle,
+  theme: ThemeContext,
+): RunStyle {
+  const declared: Record<string, unknown> = Object.fromEntries(
     Object.entries(child).filter(([, value]) => value !== undefined),
-  ) as RunStyle;
+  );
+  if (child.fontFamily !== undefined) {
+    const font = theme.resolveFont(child.fontFamily);
+    declared["fontFamily"] = font.font ?? font.family;
+    if (child.themeFont === undefined && font.themeFont === undefined) {
+      delete declared["themeFont"];
+    } else {
+      declared["themeFont"] = child.themeFont ?? font.themeFont;
+    }
+  }
+  if (child.color !== undefined && !isResolvedColor(child.color)) {
+    theme.resolveColor(child.color as ColorValue);
+  }
   // P 和 Span 未声明的字段会是 undefined，不能覆盖继承的父级样式。
-  return validateRunStyle({ ...parent, ...declared });
+  const merged = { ...parent, ...declared } as RunStyle;
+  if (child.fontFamily !== undefined && declared["themeFont"] === undefined) {
+    const { themeFont: _themeFont, ...withoutThemeFont } = merged;
+    return validateRunStyle(withoutThemeFont);
+  }
+  return validateRunStyle(merged);
+}
+
+function isResolvedColor(value: unknown): value is ResolvedColor {
+  return record(value) && typeof value["hex"] === "string";
 }
 
 function outputBold(font: NormalizedFont): boolean {
@@ -422,7 +463,15 @@ function outputBold(font: NormalizedFont): boolean {
   }
 }
 
-function readTextStyle(value: unknown, label: string): TextStyle {
+type ResolvedTextStyle = TextStyle & {
+  readonly themeFont?: "major" | "minor";
+};
+
+function readTextStyle(
+  value: unknown,
+  label: string,
+  theme: ThemeContext,
+): ResolvedTextStyle {
   const props = styleRecord(value, label);
   onlyKnownKeys(
     props,
@@ -437,7 +486,7 @@ function readTextStyle(value: unknown, label: string): TextStyle {
     ],
     label,
   );
-  const style = props as TextStyle;
+  const style = { ...defaultTextStyle, ...theme.textStyle, ...props } as TextStyle;
   if (
     style.verticalAlign !== undefined &&
     !["top", "middle", "bottom"].includes(style.verticalAlign)
@@ -453,17 +502,29 @@ function readTextStyle(value: unknown, label: string): TextStyle {
     fontWeight: style.fontWeight,
     fontStyle: style.fontStyle,
     color: style.color,
+    themeFont: (style as ResolvedTextStyle).themeFont,
   };
-  validateRunStyle(runStyle);
+  const font = theme.resolveFont(runStyle.fontFamily ?? defaultTextStyle.fontFamily!);
+  if (runStyle.color !== undefined && !isResolvedColor(runStyle.color)) {
+    theme.resolveColor(runStyle.color as ColorValue);
+  }
+  validateRunStyle({
+    ...runStyle,
+    fontFamily: font.font ?? font.family,
+  });
   if (style.lineHeight !== undefined)
     spacingCentipoints(
       positiveLength(style.lineHeight, "lineHeight"),
       "lineHeight",
     );
-  return style;
+  return {
+    ...style,
+    fontFamily: font.font ?? font.family,
+    ...(font.themeFont === undefined ? {} : { themeFont: font.themeFont }),
+  };
 }
 
-function paragraphStyle(value: unknown): ParagraphStyle {
+function paragraphStyle(value: unknown, theme: ThemeContext): ParagraphStyle {
   const props = styleRecord(value, "P.style");
   onlyKnownKeys(
     props,
@@ -508,14 +569,8 @@ function paragraphStyle(value: unknown): ParagraphStyle {
     spacingCentipoints(style.spacingAfter, "spacingAfter");
   }
   if (style.list !== undefined) validateList(style.list);
-  const runStyle: RunStyle = {
-    fontFamily: style.fontFamily,
-    fontSize: style.fontSize,
-    fontWeight: style.fontWeight,
-    fontStyle: style.fontStyle,
-    color: style.color,
-  };
-  validateRunStyle(runStyle);
+  if (style.fontFamily !== undefined) theme.resolveFont(style.fontFamily);
+  if (style.color !== undefined) theme.resolveColor(style.color);
   return style;
 }
 
@@ -586,6 +641,7 @@ function collectRuns(
   children: readonly unknown[],
   style: RunStyle,
   runs: Run[],
+  theme: ThemeContext,
 ): void {
   for (const child of children) {
     if (!hostChild(child)) {
@@ -608,23 +664,35 @@ function collectRuns(
         `Span 含未实现参数 ${unknown}`,
       );
     }
-    const spanStyle = readRunStyle(child.props["style"]);
-    const nextStyle = mergeRunStyle(style, spanStyle);
-    collectRuns(child.children, nextStyle, runs);
+    const spanStyle = readRunStyle(child.props["style"], theme);
+    const nextStyle = mergeRunStyle(style, spanStyle, theme);
+    collectRuns(child.children, nextStyle, runs, theme);
   }
 }
 
-function runPropertiesXml(style: RunStyle, tag: "a:rPr" | "a:defRPr"): string {
+function runPropertiesXml(
+  style: RunStyle,
+  tag: "a:rPr" | "a:defRPr",
+  theme: ThemeContext,
+): string {
   const font = normalizedFonts(style)[0]!;
   const points = fontSizePoints(style.fontSize);
   const bold = outputBold(font);
-  const color = style.color ?? "#000000";
-  return `<${tag} lang="en-US" sz="${centipoints(points)}" b="${bold ? 1 : 0}" i="${font.style === "italic" ? 1 : 0}"><a:solidFill><a:srgbClr val="${color.slice(1).toUpperCase()}"/></a:solidFill><a:latin typeface="${escapedXml(font.family)}"/></${tag}>`;
+  const color = isResolvedColor(style.color)
+    ? style.color
+    : theme.resolveColor(style.color ?? "#000000");
+  const typeface =
+    style.themeFont === "major"
+      ? "+mj-lt"
+      : style.themeFont === "minor"
+        ? "+mn-lt"
+        : font.family;
+  return `<${tag} lang="en-US" sz="${centipoints(points)}" b="${bold ? 1 : 0}" i="${font.style === "italic" ? 1 : 0}"><a:solidFill>${resolvedColorXml(color)}</a:solidFill><a:latin typeface="${escapedXml(typeface)}"/></${tag}>`;
 }
 
-function runXml(run: Run): string {
+function runXml(run: Run, theme: ThemeContext): string {
   const text = escapedXml(run.text);
-  return `<a:r>${runPropertiesXml(run.style, "a:rPr")}<a:t xml:space="preserve">${text}</a:t></a:r>`;
+  return `<a:r>${runPropertiesXml(run.style, "a:rPr", theme)}<a:t xml:space="preserve">${text}</a:t></a:r>`;
 }
 
 function textResourceClaims(runs: readonly Run[]): {
@@ -699,7 +767,7 @@ function alignmentValue(value: TextAlignment | undefined): string | undefined {
   return { left: "l", center: "ctr", right: "r", justify: "just" }[value];
 }
 
-function paragraphXml(paragraph: Paragraph): string {
+function paragraphXml(paragraph: Paragraph, theme: ThemeContext): string {
   const { style, runs } = paragraph;
   const attributes: string[] = [];
   const align = alignmentValue(style.align);
@@ -732,12 +800,13 @@ function paragraphXml(paragraph: Paragraph): string {
     runs.length === 0
       ? `<a:endParaRPr lang="en-US" sz="${centipoints(fontSizePoints(paragraph.endStyle.fontSize))}"/>`
       : "";
-  return `<a:p>${pPr}${runs.map(runXml).join("")}${endProperties}</a:p>`;
+  return `<a:p>${pPr}${runs.map((run) => runXml(run, theme)).join("")}${endProperties}</a:p>`;
 }
 
 function normalizeParagraphs(
   children: readonly unknown[],
-  textStyle: TextStyle,
+  textStyle: ResolvedTextStyle,
+  theme: ThemeContext,
 ): Paragraph[] {
   const baseRunStyle: RunStyle = {
     fontFamily: textStyle.fontFamily,
@@ -745,6 +814,7 @@ function normalizeParagraphs(
     fontWeight: textStyle.fontWeight,
     fontStyle: textStyle.fontStyle,
     color: textStyle.color,
+    themeFont: textStyle.themeFont,
   };
   validateRunStyle(baseRunStyle);
 
@@ -770,7 +840,7 @@ function normalizeParagraphs(
       throw new CapabilityError("invalid-text-child", "文字内容树包含无效节点");
     }
     if (child.type === "#text" || child.type === "rp:span") {
-      collectRuns([child], baseRunStyle, inline);
+      collectRuns([child], baseRunStyle, inline, theme);
       continue;
     }
     if (child.type !== "rp:paragraph") {
@@ -789,7 +859,7 @@ function normalizeParagraphs(
     }
     const style = {
       ...baseParagraphStyle,
-      ...paragraphStyle(child.props["style"]),
+      ...paragraphStyle(child.props["style"], theme),
     };
     const paragraphRunStyle = mergeRunStyle(baseRunStyle, {
       fontFamily: style.fontFamily,
@@ -797,9 +867,9 @@ function normalizeParagraphs(
       fontWeight: style.fontWeight,
       fontStyle: style.fontStyle,
       color: style.color,
-    });
+    }, theme);
     const runs: Run[] = [];
-    collectRuns(child.children, paragraphRunStyle, runs);
+    collectRuns(child.children, paragraphRunStyle, runs, theme);
     paragraphs.push({ runs, style, endStyle: paragraphRunStyle });
   }
   flushInline();
@@ -1252,10 +1322,11 @@ function measureParagraphs(
 export function measureTextLayout(
   children: readonly unknown[],
   styleValue: unknown,
+  theme: ThemeContext,
   availableWidth?: number,
 ): TextLayoutMeasurement {
-  const style = readTextStyle(styleValue, "Text.style");
-  const paragraphs = normalizeParagraphs(children, style);
+  const style = readTextStyle(styleValue, "Text.style", theme);
+  const paragraphs = normalizeParagraphs(children, style, theme);
   const measured = measureParagraphs(
     paragraphs,
     availableWidth ?? Number.POSITIVE_INFINITY,
@@ -1287,12 +1358,13 @@ function bodyAnchor(verticalAlign: TextStyle["verticalAlign"]): string {
 export function writeTextBody(
   children: readonly unknown[],
   styleValue: unknown,
+  theme: ThemeContext,
   verticalAlign: TextStyle["verticalAlign"] = "top",
   layout?: TextLayoutRequest,
   destination: TextBodyDestination = "text-box",
 ): TextServiceResult {
-  const style = readTextStyle(styleValue, "Text.style");
-  const paragraphs = normalizeParagraphs(children, style);
+  const style = readTextStyle(styleValue, "Text.style", theme);
+  const paragraphs = normalizeParagraphs(children, style, theme);
   const runs = paragraphs.flatMap((paragraph) =>
     paragraph.runs.length > 0
       ? paragraph.runs
@@ -1357,8 +1429,8 @@ export function writeTextBody(
     .join("\n");
   const xml =
     destination === "table-cell"
-      ? `<a:txBody><a:bodyPr/><a:lstStyle/>${outputParagraphs.map(paragraphXml).join("")}</a:txBody>`
-      : `<p:txBody><a:bodyPr wrap="square" lIns="0" tIns="0" rIns="0" bIns="0" anchor="${bodyAnchor(style.verticalAlign ?? verticalAlign)}"><a:noAutofit/></a:bodyPr><a:lstStyle/>${outputParagraphs.map(paragraphXml).join("")}</p:txBody>`;
+      ? `<a:txBody><a:bodyPr/><a:lstStyle/>${outputParagraphs.map((paragraph) => paragraphXml(paragraph, theme)).join("")}</a:txBody>`
+      : `<p:txBody><a:bodyPr wrap="square" lIns="0" tIns="0" rIns="0" bIns="0" anchor="${bodyAnchor(style.verticalAlign ?? verticalAlign)}"><a:noAutofit/></a:bodyPr><a:lstStyle/>${outputParagraphs.map((paragraph) => paragraphXml(paragraph, theme)).join("")}</p:txBody>`;
   return {
     xml,
     text,
@@ -1376,25 +1448,27 @@ export function writeChartTextProperties(
   styleValue: unknown,
   texts: readonly string[],
   label: string,
+  theme: ThemeContext,
 ): Pick<
   TextServiceResult,
   "text" | "resourceClaims" | "fontUses" | "warnings"
 > & {
   readonly xml: string;
 } {
-  const style = readTextStyle(styleValue, label);
+  const style = readTextStyle(styleValue, label, theme);
   const runStyle: RunStyle = {
     fontFamily: style.fontFamily,
     fontSize: style.fontSize,
     fontWeight: style.fontWeight,
     fontStyle: style.fontStyle,
     color: style.color,
+    themeFont: style.themeFont,
   };
   validateRunStyle(runStyle);
   const runs = texts.map((text) => ({ text, style: runStyle }));
   for (const text of texts) escapedXml(text);
   const { resourceClaims, fontUses, warnings } = textResourceClaims(runs);
-  const defaultProperties = runPropertiesXml(runStyle, "a:defRPr");
+  const defaultProperties = runPropertiesXml(runStyle, "a:defRPr", theme);
   const outputText = texts.join("\n");
   const lineSpacing =
     style.lineHeight === undefined

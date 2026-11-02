@@ -8,6 +8,13 @@ import { HostNode, type HostChild, type HostContainer } from "#/host/nodes.ts";
 import { withHostTree } from "#/host/reconciler.ts";
 import { LayoutPass, type LayoutPassResult } from "#/layout.ts";
 import {
+  createThemeContext,
+  textStyleFrom,
+  type ThemeContext,
+  type ThemeInput,
+  type ThemeScope,
+} from "#/theme.ts";
+import {
   assertXml10Characters,
   pptxParts,
   pxToEmu,
@@ -107,6 +114,7 @@ type BuildContext = {
   readonly target: Target;
   readonly dimensions: Dimensions;
   readonly options: BuildOptions;
+  readonly theme: ThemeContext;
   readonly layout: LayoutPassResult;
 };
 
@@ -311,7 +319,7 @@ function positiveDimension(value: unknown, label: string): number {
 }
 
 function deckDimensions(node: HostNode): Dimensions {
-  const unknown = ownKeys(node.props, ["width", "height"]);
+  const unknown = ownKeys(node.props, ["width", "height", "theme", "style"]);
   if (unknown !== undefined) {
     throw new BuildError([
       diagnostic("deck", "unknown-parameter", `Deck 含未知参数 ${unknown}`),
@@ -371,7 +379,12 @@ function resolveSlides(
     const slideProperties = [...modules.values()]
       .filter(isSlideCapability)
       .map(({ slideProp }) => slideProp);
-    const unknown = ownKeys(node.props, ["slideId", ...slideProperties]);
+    const unknown = ownKeys(node.props, [
+      "slideId",
+      "theme",
+      "style",
+      ...slideProperties,
+    ]);
     if (unknown !== undefined) {
       const rawId = node.props["slideId"];
       const label = typeof rawId === "string" ? rawId : index + 1;
@@ -871,11 +884,13 @@ function compileChildren(
     const id = context.slide.nextId++;
     const input: CapabilityInput = child;
     const layoutBox = context.layout.boxes.get(child);
+    const theme = context.layout.themes.get(child) ?? context.theme;
     try {
       const output = module.compile(input, {
         id,
         path,
         options: context.options,
+        theme,
         ...(layoutBox === undefined ? {} : { layoutBox }),
         compileChildren(nested) {
           return compileChildren(nested, context, path);
@@ -984,6 +999,7 @@ function compileSlide(
   dimensions: Dimensions,
   document: DocumentBuildState,
   options: BuildOptions,
+  documentTheme: ThemeContext,
 ): SlideBuild {
   const slide: SlideBuildState = {
     nextId: 2,
@@ -1000,7 +1016,16 @@ function compileSlide(
     );
   }
   const children = node.children.map(capabilityChild);
-  const layout = new LayoutPass(modules, dimensions).run(children, path);
+  const theme = documentTheme.with(
+    node.props["theme"] as ThemeScope | undefined,
+    textStyleFrom(node.props["style"]),
+  );
+  const layout = new LayoutPass(modules, dimensions).run(
+    children,
+    path,
+    theme,
+    node.props["style"],
+  );
   document.warnings.push(...layout.warnings);
   const compiled = compileChildren(
     children,
@@ -1011,6 +1036,7 @@ function compileSlide(
       target,
       dimensions,
       options,
+      theme,
       layout,
     },
     path,
@@ -1116,6 +1142,10 @@ function compileDocument(
       diagnostic("deck", "document-root", "缺少 Deck 根组件"),
     ]);
   const size = deckDimensions(deck);
+  const theme = createThemeContext(
+    deck.props["theme"] as ThemeInput | undefined,
+    deck.props["style"] as Record<string, unknown> | undefined,
+  );
   const document: DocumentBuildState = {
     usedExtensions: new Set(),
     warnings: [],
@@ -1130,7 +1160,7 @@ function compileDocument(
     nextPresentationRelationshipId: slides.length + 2,
   };
   const builtSlides = slides.map(({ node, id }) =>
-    compileSlide(node, id, modules, target, size, document, options),
+    compileSlide(node, id, modules, target, size, document, options, theme),
   );
   const parts = pptxParts(
     size,
@@ -1151,6 +1181,7 @@ function compileDocument(
       name,
       value,
     })),
+    theme.theme,
   );
   const pptx = zipSync(
     Object.fromEntries(

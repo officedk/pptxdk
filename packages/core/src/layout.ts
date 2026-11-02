@@ -23,8 +23,11 @@ import type {
   GeometryBox,
   LayoutLength,
   LayoutStyle,
+  ThemeContext,
+  ThemeScope,
   ObjectCapabilityModule,
 } from "#/types.ts";
+import { textStyleFrom } from "#/theme.ts";
 
 type Dimensions = { readonly width: number; readonly height: number };
 type Edges = {
@@ -37,6 +40,7 @@ type LayoutNode = {
   readonly yoga: YogaNode;
   readonly element?: CapabilityElement;
   readonly style: LayoutStyle;
+  readonly theme: ThemeContext;
   readonly path: string;
   readonly module?: ObjectCapabilityModule;
   readonly children: LayoutNode[];
@@ -48,6 +52,7 @@ type LayoutNode = {
 
 export type LayoutPassResult = {
   readonly boxes: WeakMap<CapabilityElement, GeometryBox>;
+  readonly themes: WeakMap<CapabilityElement, ThemeContext>;
   readonly warnings: readonly Diagnostic[];
 };
 
@@ -150,7 +155,12 @@ function element(child: CapabilityChild): child is CapabilityElement {
 
 // 这里只允许共享文字样式属性通过布局白名单；具体校验仍由能力模块负责。
 function allowsSharedTextStyle(type: string): boolean {
-  return type === "rp:text" || type === "rp:table" || type === "rp:chart";
+  return (
+    type === "rp:text" ||
+    type === "rp:table" ||
+    type === "rp:chart" ||
+    type === "rp:box"
+  );
 }
 
 function identity(element: CapabilityElement): string | undefined {
@@ -486,6 +496,7 @@ export class LayoutPass {
   readonly #dimensions: Dimensions;
   readonly #config = Yoga.Config.create();
   readonly #boxes = new WeakMap<CapabilityElement, GeometryBox>();
+  readonly #themes = new WeakMap<CapabilityElement, ThemeContext>();
   readonly #warnings: Diagnostic[] = [];
 
   constructor(
@@ -500,20 +511,23 @@ export class LayoutPass {
   run(
     children: readonly CapabilityChild[],
     parentPath: string,
+    theme: ThemeContext,
+    slideStyle?: unknown,
   ): LayoutPassResult {
     const rootYoga = Yoga.Node.create(this.#config);
+    const rootStyle = readStyle(slideStyle, parentPath, true, true);
     const root: LayoutNode = {
       yoga: rootYoga,
-      style: { display: "block" },
+      style: rootStyle,
+      theme,
       path: parentPath,
       children: [],
     };
-    rootYoga.setDisplay(Display.Flex);
-    rootYoga.setFlexDirection(FlexDirection.Column);
     rootYoga.setWidth(this.#dimensions.width);
     rootYoga.setHeight(this.#dimensions.height);
+    this.#applyStyle(rootYoga, rootStyle, { display: "block" }, true, true);
     try {
-      this.#appendChildren(children, parentPath, root, false);
+      this.#appendChildren(children, parentPath, root, false, theme);
       this.#prepareTextBaselines(root);
       // 固定尺寸父节点可能跳过新建测量树；先初次求解，再标脏测量叶并重算。
       rootYoga.calculateLayout(
@@ -540,7 +554,11 @@ export class LayoutPass {
       rootYoga.freeRecursive();
       this.#config.free();
     }
-    return { boxes: this.#boxes, warnings: this.#warnings };
+    return {
+      boxes: this.#boxes,
+      themes: this.#themes,
+      warnings: this.#warnings,
+    };
   }
 
   #validateLoose(input: CapabilityElement, path: string): void {
@@ -556,19 +574,44 @@ export class LayoutPass {
     parentPath: string,
     parent: LayoutNode,
     includeObjects: boolean,
+    theme: ThemeContext,
   ): void {
     children.forEach((child, index) => {
       if (!element(child)) return;
       const childPath = `${parentPath}/${label(child, index)}`;
       if (child.type === "rp:box") {
-        const built = this.#buildBox(child, childPath, parent.style);
+        const built = this.#buildBox(child, childPath, parent.style, theme);
         parent.yoga.insertChild(built.yoga, parent.children.length);
         parent.children.push(built);
         return;
       }
       if (child.type === "rp:group") {
         // Group 只保留原生成员关系；其内容继续使用外层布局上下文。
-        this.#appendChildren(child.children, childPath, parent, includeObjects);
+        const style = child.props["style"];
+        if (record(style)) {
+          const unknown = Object.keys(style).find(
+            (key) => !textProperties.has(key),
+          );
+          if (unknown !== undefined) {
+            fail(
+              childPath,
+              "unsupported-text-style",
+              `Group.style 含未实现文字属性 ${unknown}`,
+            );
+          }
+        }
+        const nextTheme = theme.with(
+          child.props["theme"] as ThemeScope | undefined,
+          textStyleFrom(style),
+        );
+        this.#themes.set(child, nextTheme);
+        this.#appendChildren(
+          child.children,
+          childPath,
+          parent,
+          includeObjects,
+          nextTheme,
+        );
         return;
       }
       if (!includeObjects) {
@@ -589,10 +632,12 @@ export class LayoutPass {
         yoga: childYoga,
         element: child,
         style: childStyle,
+        theme,
         path: childPath,
         module,
         children: [],
       };
+      this.#themes.set(child, theme);
       this.#applyStyle(childYoga, childStyle, parent.style, false, false);
       this.#setDeclaredSize(layoutChild);
       if (module.measureLayout !== undefined) {
@@ -623,9 +668,10 @@ export class LayoutPass {
     input: CapabilityElement,
     path: string,
     parentStyle: LayoutStyle,
+    parentTheme: ThemeContext,
   ): LayoutNode {
     const unknown = Object.keys(input.props).find(
-      (key) => key !== "testId" && key !== "style",
+      (key) => key !== "testId" && key !== "style" && key !== "theme",
     );
     if (unknown !== undefined) {
       fail(path, "unknown-parameter", `Box 含未实现参数 ${unknown}`);
@@ -637,17 +683,24 @@ export class LayoutPass {
     ) {
       fail(path, "invalid-parameter", "testId 必须是非空字符串");
     }
-    const style = readStyle(input.props["style"], path, true, false);
+    const rawStyle = input.props["style"];
+    const style = readStyle(rawStyle, path, true, true);
+    const theme = parentTheme.with(
+      input.props["theme"] as ThemeScope | undefined,
+      textStyleFrom(rawStyle),
+    );
     const yoga = Yoga.Node.create(this.#config);
     const node: LayoutNode = {
       yoga,
       element: input,
       style,
+      theme,
       path,
       children: [],
     };
+    this.#themes.set(input, theme);
     this.#applyStyle(yoga, style, parentStyle, false, true);
-    this.#appendChildren(input.children, path, node, true);
+    this.#appendChildren(input.children, path, node, true, theme);
     return node;
   }
 
@@ -778,7 +831,10 @@ export class LayoutPass {
       return undefined;
     }
     try {
-      return node.module.measureLayout(node.element, request);
+      return node.module.measureLayout(node.element, {
+        ...request,
+        theme: node.theme,
+      });
     } catch (error) {
       if (error instanceof BuildError) throw error;
       const code =

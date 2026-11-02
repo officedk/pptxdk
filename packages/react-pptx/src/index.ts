@@ -25,7 +25,13 @@ export {
   Box,
   BuildError,
   Deck,
+  darker,
+  defaultTheme,
+  defineTheme,
   formatBaseline,
+  isNativeColorSlot,
+  lighter,
+  nativeColorSlots,
   targets,
 } from "@react-pptx/core";
 export { Slide } from "./slide.ts";
@@ -89,6 +95,8 @@ export type {
   BuildReport,
   BuildResult,
   BoxProps,
+  ColorValue,
+  DeckProps,
   Diagnostic,
   GeometryBox,
   LayoutChildReference,
@@ -100,6 +108,12 @@ export type {
   ObjectObservation,
   SlideObservation,
   Target,
+  NativeColorSlot,
+  Theme,
+  ThemeColor,
+  ThemeInput,
+  ThemeScope,
+  ThemeShade,
 } from "@react-pptx/core";
 export type { SlideProps } from "./slide.ts";
 export type {

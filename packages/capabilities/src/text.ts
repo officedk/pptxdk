@@ -168,6 +168,7 @@ export const textCapability: CapabilityModule = {
       return measureTextLayout(
         input.children,
         style,
+        request.theme,
         typeof width === "number" ? width : undefined,
       );
     } catch (error) {
@@ -212,6 +213,7 @@ export const textCapability: CapabilityModule = {
     const body = writeTextBody(
       input.children,
       textStyle(input.props["style"]),
+      context.theme,
       "top",
       {
         width: dimensions.width,

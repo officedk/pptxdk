@@ -4,6 +4,8 @@ import {
   xmlEscape,
   type CapabilityInput,
   type CapabilityModule,
+  type TextStyle,
+  type ThemeScope,
   type ObjectObservation,
 } from "@react-pptx/core";
 import type { ReactNode } from "react";
@@ -18,12 +20,16 @@ import {
 export type GroupProps = MotionProps & {
   readonly testId?: string;
   readonly name?: string;
+  readonly style?: TextStyle;
+  readonly theme?: ThemeScope;
   readonly children?: ReactNode;
 };
 
 const allowedParameters = [
   "testId",
   "name",
+  "style",
+  "theme",
   "enter",
   "emphasis",
   "motion",

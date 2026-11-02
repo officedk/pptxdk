@@ -1,10 +1,13 @@
 import {
   CapabilityError,
   pxToEmu,
+  resolvedColorXml,
   xmlEscape,
   type CapabilityLayoutMeasurement,
   type CapabilityLayoutRequest,
+  type ColorValue,
   type LayoutStyle,
+  type ResolvedColor,
   type CapabilityInput,
   type CapabilityModule,
 } from "@react-pptx/core";
@@ -31,7 +34,7 @@ export type ShapeProps = MotionProps & {
   readonly width?: number;
   readonly height?: number;
   readonly style?: LayoutStyle;
-  readonly fill?: string;
+  readonly fill?: ColorValue;
   /** 直接写入此形状的原生正文，不创建额外文本框。 */
   readonly text?: string;
   /** 形状正文使用共享文字服务，裁剪文本框能力后仍可写出。 */
@@ -136,13 +139,13 @@ function shapeXml(
   escapedName: string,
   geometry: string,
   box: { x: number; y: number; width: number; height: number },
-  fill: string | undefined,
+  fill: ResolvedColor | undefined,
   textBody: string,
 ): string {
   const fillXml =
     fill === undefined
       ? "<a:noFill/>"
-      : `<a:solidFill><a:srgbClr val="${fill}"/></a:solidFill>`;
+      : `<a:solidFill>${resolvedColorXml(fill)}</a:solidFill>`;
   return `<p:sp><p:nvSpPr><p:cNvPr id="${id}" name="${escapedName}"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr><p:spPr><a:xfrm><a:off x="${pxToEmu(box.x)}" y="${pxToEmu(box.y)}"/><a:ext cx="${pxToEmu(box.width)}" cy="${pxToEmu(box.height)}"/></a:xfrm><a:prstGeom prst="${geometry}"><a:avLst/></a:prstGeom>${fillXml}<a:ln><a:noFill/></a:ln></p:spPr>${textBody}</p:sp>`;
 }
 
@@ -161,6 +164,7 @@ export const shapeCapability: CapabilityModule = {
       const measured = measureTextLayout(
         [{ type: "#text", text }],
         input.props["textStyle"],
+        request.theme,
         request.availableWidth,
       );
       return measured;
@@ -238,13 +242,10 @@ export const shapeCapability: CapabilityModule = {
               "height",
             ),
           };
-    const fill = props["fill"];
-    if (
-      fill !== undefined &&
-      (typeof fill !== "string" || !/^#[0-9a-f]{6}$/iu.test(fill))
-    ) {
-      throw new CapabilityError("invalid-fill", "fill 必须是 #RRGGBB 颜色");
-    }
+    const fill =
+      props["fill"] === undefined
+        ? undefined
+        : context.theme.resolveColor(props["fill"] as ColorValue);
     const text = props["text"];
     if (text !== undefined && typeof text !== "string") {
       throw new CapabilityError("invalid-text", "Shape.text 必须是字符串");
@@ -254,6 +255,7 @@ export const shapeCapability: CapabilityModule = {
       textOutput = writeTextBody(
         [{ type: "#text", text }],
         props["textStyle"],
+        context.theme,
         "middle",
         { width: box.width, height: box.height },
       );
@@ -281,7 +283,7 @@ export const shapeCapability: CapabilityModule = {
         escapedName,
         geometry,
         box,
-        fill?.slice(1).toUpperCase(),
+        fill,
         textOutput?.xml ?? "",
       ),
       observation: {

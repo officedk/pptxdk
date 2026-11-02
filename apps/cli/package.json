@@ -2,6 +2,12 @@
   "name": "@react-pptx/cli",
   "version": "0.0.0",
   "private": true,
+  "bin": {
+    "react-pptx": "./dist/cli.js"
+  },
+  "files": [
+    "dist"
+  ],
   "type": "module",
   "imports": {
     "#/*.ts": {
@@ -21,18 +27,24 @@
     "lint": "oxlint --quiet --format=unix --ignore-pattern node_modules .",
     "lint:fix": "oxlint --format=unix . --fix",
     "typecheck": "tsc -p tsconfig.node.json --noEmit --pretty false",
-    "build": "rm -rf dist && tsc -p tsconfig.build.json --pretty false"
+    "build": "rm -rf dist && tsc -p tsconfig.build.json --pretty false && chmod +x dist/cli.js",
+    "test": "vitest run"
   },
   "dependencies": {
     "@react-pptx/react-pptx": "workspace:*"
   },
   "devDependencies": {
     "@react-pptx/tooling-config": "workspace:*",
+    "@react-pptx/validation": "workspace:*",
     "@types/node": "catalog:",
+    "@types/react": "catalog:",
     "oxfmt": "catalog:",
     "oxlint": "catalog:",
     "oxlint-tsgolint": "catalog:",
-    "typescript-7": "catalog:"
+    "react": "catalog:",
+    "typescript-7": "catalog:",
+    "vite": "catalog:",
+    "vitest": "catalog:"
   },
   "engines": {
     "node": "^26.13.0"

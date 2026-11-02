@@ -2,21 +2,29 @@ import {
   CapabilityError,
   pxToEmu,
   xmlEscape,
+  type CapabilityLayoutMeasurement,
+  type CapabilityLayoutRequest,
+  type LayoutStyle,
   type CapabilityInput,
   type CapabilityModule,
 } from "@react-pptx/core";
 import { createElement, type ReactNode } from "react";
 
-import { writeTextBody, type TextStyle } from "./text-service.ts";
+import {
+  measureTextLayout,
+  writeTextBody,
+  type TextStyle,
+} from "./text-service.ts";
 
 export type ShapeProps = {
   readonly testId?: string;
   readonly name?: string;
   readonly geometry?: string;
-  readonly x: number;
-  readonly y: number;
-  readonly width: number;
-  readonly height: number;
+  readonly x?: number;
+  readonly y?: number;
+  readonly width?: number;
+  readonly height?: number;
+  readonly style?: LayoutStyle;
   readonly fill?: string;
   /** 直接写入此形状的原生正文，不创建额外文本框。 */
   readonly text?: string;
@@ -61,6 +69,7 @@ const allowedParameters = [
   "y",
   "width",
   "height",
+  "style",
   "fill",
   "text",
   "textStyle",
@@ -129,6 +138,41 @@ function shapeXml(
 /** 形状模块独立校验输入、声明原生几何，并生成对应 PresentationML 对象。 */
 export const shapeCapability: CapabilityModule = {
   declaration: "rp:shape",
+  measureLayout(
+    input: CapabilityInput,
+    request: CapabilityLayoutRequest,
+  ): CapabilityLayoutMeasurement | undefined {
+    const text = input.props["text"];
+    if (typeof text !== "string" || text === "") {
+      return { minContentWidth: 0, minContentHeight: 0 };
+    }
+    try {
+      const measured = measureTextLayout(
+        [{ type: "#text", text }],
+        input.props["textStyle"],
+        request.availableWidth,
+      );
+      return measured;
+    } catch (error) {
+      const style = record(input);
+      const layoutStyle =
+        typeof style["style"] === "object" && style["style"] !== null
+          ? (style["style"] as Record<string, unknown>)
+          : {};
+      const hasFixedSize =
+        typeof (layoutStyle["width"] ?? input.props["width"]) === "number" &&
+        typeof (layoutStyle["height"] ?? input.props["height"]) === "number";
+      if (
+        hasFixedSize &&
+        error instanceof CapabilityError &&
+        (error.code === "font-measurement-unavailable" ||
+          error.code === "font-missing-glyph")
+      ) {
+        return undefined;
+      }
+      throw error;
+    }
+  },
   compile(input, context) {
     const props = record(input);
     const unknown = Object.keys(props).find(
@@ -156,12 +200,33 @@ export const shapeCapability: CapabilityModule = {
         `不支持形状几何 ${typeof geometry === "string" ? geometry : "非字符串值"}`,
       );
     }
-    const box = {
-      x: requiredNumber(props, "x"),
-      y: requiredNumber(props, "y"),
-      width: requiredNumber(props, "width"),
-      height: requiredNumber(props, "height"),
-    };
+    const layoutStyle =
+      typeof props["style"] === "object" && props["style"] !== null
+        ? (props["style"] as Record<string, unknown>)
+        : {};
+    const box =
+      context.layoutBox === undefined
+        ? {
+            x: requiredNumber(props, "x"),
+            y: requiredNumber(props, "y"),
+            width: requiredNumber(
+              { width: layoutStyle["width"] ?? props["width"] },
+              "width",
+            ),
+            height: requiredNumber(
+              { height: layoutStyle["height"] ?? props["height"] },
+              "height",
+            ),
+          }
+        : {
+            x: requiredNumber({ x: context.layoutBox.x }, "x"),
+            y: requiredNumber({ y: context.layoutBox.y }, "y"),
+            width: requiredNumber({ width: context.layoutBox.width }, "width"),
+            height: requiredNumber(
+              { height: context.layoutBox.height },
+              "height",
+            ),
+          };
     const fill = props["fill"];
     if (
       fill !== undefined &&

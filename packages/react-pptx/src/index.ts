@@ -15,7 +15,13 @@ export const build = createBuilder([
   transitionCapability,
 ]);
 
-export { BuildError, Deck, formatBaseline, targets } from "@react-pptx/core";
+export {
+  Box,
+  BuildError,
+  Deck,
+  formatBaseline,
+  targets,
+} from "@react-pptx/core";
 export { Slide } from "./slide.ts";
 export {
   Image,
@@ -37,7 +43,14 @@ export type {
   BuildOptions,
   BuildReport,
   BuildResult,
+  BoxProps,
   Diagnostic,
+  GeometryBox,
+  LayoutChildReference,
+  LayoutLength,
+  LayoutObservation,
+  LayoutSpacing,
+  LayoutStyle,
   ObjectObservation,
   SlideObservation,
   Target,

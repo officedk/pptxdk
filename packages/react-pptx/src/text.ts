@@ -4,7 +4,7 @@ import { createBuilder } from "@react-pptx/core";
 
 export const build = createBuilder([textCapability, transitionCapability]);
 
-export { Deck, formatBaseline, targets } from "@react-pptx/core";
+export { Box, Deck, formatBaseline, targets } from "@react-pptx/core";
 export { Slide } from "./slide.ts";
 export {
   font,
@@ -18,7 +18,9 @@ export type {
   BuildOptions,
   BuildReport,
   BuildResult,
+  BoxProps,
   Diagnostic,
+  LayoutStyle,
   ObjectObservation,
   SlideObservation,
   Target,

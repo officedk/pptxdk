@@ -1,0 +1,572 @@
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+
+import {
+  Box,
+  build,
+  BuildError,
+  Deck,
+  font,
+  Image,
+  Shape,
+  Slide,
+  Text,
+} from "@react-pptx/react-pptx";
+import { validatePptx } from "@react-pptx/validation";
+import { createElement } from "react";
+import { describe, it } from "vitest";
+
+const cjkFont = font("Noto Sans CJK SC", [
+  {
+    weight: 400,
+    data: new Uint8Array(
+      readFileSync(
+        new URL("./assets/fonts/NotoSansSC-Regular.woff2", import.meta.url),
+      ),
+    ),
+  },
+]);
+const wideImage = new Uint8Array(
+  readFileSync(new URL("./assets/wide-20000x1.png", import.meta.url)),
+);
+
+describe("公开布局入口", () => {
+  it("块容器纵向排列并横向拉伸，画布外的显式几何保持原位", async () => {
+    const result = await build(
+      createElement(
+        Deck,
+        { width: 320, height: 240 },
+        createElement(
+          Slide,
+          { slideId: "block-layout" },
+          createElement(
+            Box,
+            { testId: "column", style: { width: 200, height: 10 } },
+            createElement(Shape, {
+              testId: "first",
+              height: 20,
+            }),
+            createElement(Shape, {
+              testId: "second",
+              height: 10,
+            }),
+          ),
+          createElement(Shape, {
+            testId: "explicit",
+            x: 24,
+            y: 32,
+            width: 50,
+            height: 40,
+          }),
+        ),
+      ),
+    );
+
+    assert.deepEqual(
+      result.report.slides[0]?.objects.map(({ testId, box }) => ({
+        testId,
+        box,
+      })),
+      [
+        {
+          testId: "first",
+          box: { x: 0, y: 0, width: 200, height: 20 },
+        },
+        {
+          testId: "second",
+          box: { x: 0, y: 20, width: 200, height: 10 },
+        },
+        {
+          testId: "explicit",
+          box: { x: 24, y: 32, width: 50, height: 40 },
+        },
+      ],
+    );
+    assert.equal(result.report.slides[0]?.layouts?.[0]?.testId, "column");
+    assert.deepEqual(result.report.slides[0]?.layouts?.[0]?.box, {
+      x: 0,
+      y: 0,
+      width: 200,
+      height: 10,
+    });
+
+    const file = await validatePptx(result.pptx);
+    assert.deepEqual(file.errors, []);
+    assert.deepEqual(
+      file.slides[0]?.objects.map(({ boxEmu }) => ({
+        x: boxEmu.x / 9525,
+        y: boxEmu.y / 9525,
+        width: boxEmu.width / 9525,
+        height: boxEmu.height / 9525,
+      })),
+      [
+        { x: 0, y: 0, width: 200, height: 20 },
+        { x: 0, y: 20, width: 200, height: 10 },
+        { x: 24, y: 32, width: 50, height: 40 },
+      ],
+    );
+  });
+
+  it("auto 尺寸会覆盖原生对象的显式尺寸并按内容排版", async () => {
+    const result = await build(
+      createElement(
+        Deck,
+        { width: 320, height: 240 },
+        createElement(
+          Slide,
+          { slideId: "auto-layout-size" },
+          createElement(
+            Box,
+            { style: { width: 100, height: 100 } },
+            createElement(Shape, {
+              testId: "auto-text-shape",
+              width: 20,
+              height: 10,
+              text: "中文中文中文",
+              textStyle: { fontFamily: cjkFont, fontSize: 20 },
+              style: { width: "auto", height: "auto" },
+            }),
+          ),
+        ),
+      ),
+    );
+
+    assert.deepEqual(result.report.slides[0]?.objects[0]?.box, {
+      x: 0,
+      y: 0,
+      width: 100,
+      height: 57.92,
+    });
+    const file = await validatePptx(result.pptx);
+    assert.deepEqual(file.errors, []);
+    assert.deepEqual(file.slides[0]?.objects[0]?.boxEmu, {
+      x: 0,
+      y: 0,
+      width: 100 * 9525,
+      height: 57.92 * 9525,
+    });
+  });
+
+  it("弹性子项按内容最小宽度收缩，minWidth: 0 解除该下限", async () => {
+    const makeText = (testId: string, minWidth?: number) =>
+      createElement(Text, {
+        testId,
+        width: 100,
+        height: "auto",
+        style: {
+          fontFamily: cjkFont,
+          fontSize: 20,
+          ...(minWidth === undefined ? {} : { minWidth }),
+        },
+        children: "中文中文中文",
+      });
+    const result = await build(
+      createElement(
+        Deck,
+        { width: 320, height: 500 },
+        createElement(
+          Slide,
+          { slideId: "flex-min-content" },
+          createElement(
+            Box,
+            {
+              testId: "constrained",
+              style: { display: "flex", width: 30, height: 200 },
+            },
+            makeText("constrained-a"),
+            makeText("constrained-b"),
+          ),
+          createElement(
+            Box,
+            {
+              testId: "released",
+              style: { display: "flex", width: 30, height: 200 },
+            },
+            makeText("released-a", 0),
+            makeText("released-b", 0),
+          ),
+        ),
+      ),
+    );
+
+    assert.deepEqual(
+      result.report.slides[0]?.objects.map(({ testId, box }) => ({
+        testId,
+        box,
+      })),
+      [
+        {
+          testId: "constrained-a",
+          box: { x: 0, y: 0, width: 20, height: 200 },
+        },
+        {
+          testId: "constrained-b",
+          box: { x: 20, y: 0, width: 20, height: 200 },
+        },
+        {
+          testId: "released-a",
+          box: { x: 0, y: 200, width: 15, height: 200 },
+        },
+        {
+          testId: "released-b",
+          box: { x: 15, y: 200, width: 15, height: 200 },
+        },
+      ],
+    );
+    assert.deepEqual(
+      result.report.diagnostics.map(({ code, path }) => ({ code, path })),
+      [
+        {
+          code: "overset",
+          path: "deck/slide[flex-min-content]/box[released]/text[released-a]",
+        },
+        {
+          code: "overset",
+          path: "deck/slide[flex-min-content]/box[released]/text[released-b]",
+        },
+      ],
+    );
+
+    const file = await validatePptx(result.pptx);
+    assert.deepEqual(file.errors, []);
+    assert.deepEqual(
+      file.slides[0]?.objects.map(({ boxEmu }) => ({
+        x: boxEmu.x / 9525,
+        y: boxEmu.y / 9525,
+        width: boxEmu.width / 9525,
+        height: boxEmu.height / 9525,
+      })),
+      [
+        { x: 0, y: 0, width: 20, height: 200 },
+        { x: 20, y: 0, width: 20, height: 200 },
+        { x: 0, y: 200, width: 15, height: 200 },
+        { x: 15, y: 200, width: 15, height: 200 },
+      ],
+    );
+  });
+
+  it("嵌套布局容器保留实例身份，复用同一元素时仍各自求解", async () => {
+    const card = createElement(
+      Box,
+      { testId: "card", style: { flex: 1, height: 100 } },
+      createElement(Shape, { testId: "card-shape", height: 20 }),
+    );
+    const result = await build(
+      createElement(
+        Deck,
+        { width: 320, height: 240 },
+        createElement(
+          Slide,
+          { slideId: "reused-layout" },
+          createElement(
+            Box,
+            {
+              testId: "row",
+              style: { display: "flex", width: 300, height: 120 },
+            },
+            card,
+            card,
+          ),
+        ),
+      ),
+    );
+
+    assert.deepEqual(
+      result.report.slides[0]?.objects.map(({ testId, box }) => ({
+        testId,
+        box,
+      })),
+      [
+        {
+          testId: "card-shape",
+          box: { x: 0, y: 0, width: 150, height: 20 },
+        },
+        {
+          testId: "card-shape",
+          box: { x: 150, y: 0, width: 150, height: 20 },
+        },
+      ],
+    );
+    const layouts = result.report.slides[0]?.layouts ?? [];
+    const row = layouts.find(({ testId }) => testId === "row");
+    const cards = layouts.filter(({ testId }) => testId === "card");
+    assert.equal(row?.box.width, 300);
+    assert.equal(cards.length, 2);
+    assert.deepEqual(
+      row?.children.map(({ kind }) => kind),
+      ["layout", "layout"],
+    );
+    assert.notEqual(row?.children[0]?.id, row?.children[1]?.id);
+
+    const file = await validatePptx(result.pptx);
+    assert.deepEqual(file.errors, []);
+    assert.deepEqual(
+      file.slides[0]?.objects.map(({ boxEmu }) => ({
+        x: boxEmu.x / 9525,
+        y: boxEmu.y / 9525,
+        width: boxEmu.width / 9525,
+        height: boxEmu.height / 9525,
+      })),
+      [
+        { x: 0, y: 0, width: 150, height: 20 },
+        { x: 150, y: 0, width: 150, height: 20 },
+      ],
+    );
+  });
+
+  it("拒绝块容器上的弹性专属属性，并在块父级忽略弹性子项属性", async () => {
+    await assert.rejects(
+      build(
+        createElement(
+          Deck,
+          { width: 320, height: 240 },
+          createElement(
+            Slide,
+            { slideId: "invalid-context" },
+            createElement(Box, { style: { justifyContent: "center" } }),
+          ),
+        ),
+      ),
+      (error: unknown) =>
+        error instanceof BuildError &&
+        error.diagnostics.some(({ code }) => code === "invalid-layout-context"),
+    );
+
+    const result = await build(
+      createElement(
+        Deck,
+        { width: 320, height: 240 },
+        createElement(
+          Slide,
+          { slideId: "ignored-item-style" },
+          createElement(
+            Box,
+            { style: { width: 100 } },
+            createElement(Shape, {
+              testId: "block-item",
+              width: 30,
+              height: 10,
+              style: { flex: 1, alignSelf: "center" },
+            }),
+          ),
+        ),
+      ),
+    );
+    assert.deepEqual(result.report.slides[0]?.objects[0]?.box, {
+      x: 0,
+      y: 0,
+      width: 30,
+      height: 10,
+    });
+  });
+
+  it("容器和子对象越界时保留求解尺寸并返回警告", async () => {
+    const result = await build(
+      createElement(
+        Deck,
+        { width: 320, height: 240 },
+        createElement(
+          Slide,
+          { slideId: "overflow" },
+          createElement(
+            Box,
+            { testId: "wide-container", style: { width: 400, height: 50 } },
+            createElement(Shape, { testId: "wide-shape", height: 10 }),
+          ),
+        ),
+      ),
+    );
+
+    assert.equal(result.report.slides[0]?.layouts?.[0]?.box.width, 400);
+    assert.equal(result.report.slides[0]?.objects[0]?.box?.width, 400);
+    assert.deepEqual(
+      result.report.diagnostics.map(({ path, code }) => ({ path, code })),
+      [
+        { path: "deck/slide[overflow]/box[wide-container]", code: "overflow" },
+        {
+          path: "deck/slide[overflow]/box[wide-container]/shape[wide-shape]",
+          code: "overflow",
+        },
+      ],
+    );
+    const file = await validatePptx(result.pptx);
+    assert.deepEqual(file.errors, []);
+    assert.equal(file.slides[0]?.objects[0]?.boxEmu.width, 400 * 9525);
+  });
+
+  it("图片和形状都按弹性对齐位置写入原生对象", async () => {
+    const result = await build(
+      createElement(
+        Deck,
+        { width: 320, height: 240 },
+        createElement(
+          Slide,
+          { slideId: "aligned-objects" },
+          createElement(
+            Box,
+            {
+              testId: "toolbar",
+              style: {
+                display: "flex",
+                width: 100,
+                height: 100,
+                justifyContent: "space-between",
+                alignItems: "center",
+              },
+            },
+            createElement(Image, {
+              testId: "logo",
+              src: wideImage,
+              width: 30,
+              height: 20,
+            }),
+            createElement(Shape, {
+              testId: "action",
+              width: 20,
+              height: 20,
+            }),
+          ),
+        ),
+      ),
+    );
+
+    assert.deepEqual(
+      result.report.slides[0]?.objects.map(({ kind, testId, box }) => ({
+        kind,
+        testId,
+        box,
+      })),
+      [
+        {
+          kind: "image",
+          testId: "logo",
+          box: { x: 0, y: 40, width: 30, height: 20 },
+        },
+        {
+          kind: "shape",
+          testId: "action",
+          box: { x: 80, y: 40, width: 20, height: 20 },
+        },
+      ],
+    );
+    const file = await validatePptx(result.pptx);
+    assert.deepEqual(file.errors, []);
+    assert.deepEqual(
+      file.slides[0]?.objects.map(({ boxEmu }) => ({
+        x: boxEmu.x / 9525,
+        y: boxEmu.y / 9525,
+        width: boxEmu.width / 9525,
+        height: boxEmu.height / 9525,
+      })),
+      [
+        { x: 0, y: 40, width: 30, height: 20 },
+        { x: 80, y: 40, width: 20, height: 20 },
+      ],
+    );
+  });
+
+  it("弹性列保留文字主轴内容高度，minHeight: 0 允许收缩", async () => {
+    const columnText = (testId: string, minHeight?: number) =>
+      createElement(Text, {
+        testId,
+        width: 20,
+        height: "auto",
+        style: {
+          fontFamily: cjkFont,
+          fontSize: 20,
+          ...(minHeight === undefined ? {} : { minHeight }),
+        },
+        children: "中文中文中文",
+      });
+    const result = await build(
+      createElement(
+        Deck,
+        { width: 320, height: 700 },
+        createElement(
+          Slide,
+          { slideId: "column-min-content" },
+          createElement(
+            Box,
+            {
+              testId: "constrained-column",
+              style: {
+                display: "flex",
+                flexDirection: "column",
+                width: 100,
+                height: 300,
+              },
+            },
+            columnText("column-a"),
+            columnText("column-b"),
+          ),
+          createElement(
+            Box,
+            {
+              testId: "released-column",
+              style: {
+                display: "flex",
+                flexDirection: "column",
+                width: 100,
+                height: 300,
+              },
+            },
+            columnText("released-column-a", 0),
+            columnText("released-column-b", 0),
+          ),
+        ),
+      ),
+    );
+
+    assert.deepEqual(
+      result.report.slides[0]?.objects.map(({ testId, box }) => ({
+        testId,
+        box,
+      })),
+      [
+        {
+          testId: "column-a",
+          box: { x: 0, y: 0, width: 20, height: 173.76 },
+        },
+        {
+          testId: "column-b",
+          box: { x: 0, y: 173.76, width: 20, height: 173.76 },
+        },
+        {
+          testId: "released-column-a",
+          box: { x: 0, y: 300, width: 20, height: 150 },
+        },
+        {
+          testId: "released-column-b",
+          box: { x: 0, y: 450, width: 20, height: 150 },
+        },
+      ],
+    );
+    assert.deepEqual(
+      result.report.diagnostics.map(({ code, path }) => ({ code, path })),
+      [
+        {
+          code: "overset",
+          path: "deck/slide[column-min-content]/box[released-column]/text[released-column-a]",
+        },
+        {
+          code: "overset",
+          path: "deck/slide[column-min-content]/box[released-column]/text[released-column-b]",
+        },
+      ],
+    );
+    const file = await validatePptx(result.pptx);
+    assert.deepEqual(file.errors, []);
+    assert.deepEqual(
+      file.slides[0]?.objects.map(({ boxEmu }) => ({
+        y: boxEmu.y / 9525,
+        height: boxEmu.height / 9525,
+      })),
+      [
+        { y: 0, height: 173.76 },
+        { y: 173.76, height: 173.76 },
+        { y: 300, height: 150 },
+        { y: 450, height: 150 },
+      ],
+    );
+  });
+});

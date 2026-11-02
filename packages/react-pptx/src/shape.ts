@@ -4,9 +4,10 @@ import { createBuilder } from "@react-pptx/core";
 
 export const build = createBuilder([shapeCapability, transitionCapability]);
 
-export { Deck, formatBaseline, targets } from "@react-pptx/core";
+export { Box, Deck, formatBaseline, targets } from "@react-pptx/core";
 export { Slide } from "./slide.ts";
 export { Shape, shapeCapability } from "@react-pptx/capabilities/shape";
+export type { BoxProps, LayoutStyle } from "@react-pptx/core";
 export type { ShapeProps } from "@react-pptx/capabilities/shape";
 export { createBuilder } from "@react-pptx/core";
 export type {

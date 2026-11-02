@@ -1,0 +1,29 @@
+nodeLinker: isolated
+preferSymlinkedExecutables: true
+shellEmulator: true
+autoInstallPeers: false
+injectWorkspacePackages: false
+dedupeInjectedDeps: false
+syncInjectedDepsAfterScripts:
+  - build
+minimumReleaseAge: 1440
+minimumReleaseAgeStrict: true
+allowBuilds:
+  esbuild: true
+overrides: {}
+packages:
+  - apps/*
+  - packages/*
+catalog:
+  "@changesets/cli": 3.0.3
+  "@types/node": ^26.0.0
+  "@types/react": 19.3.0
+  oxfmt: ^0.74.0
+  oxlint: ^1.89.0
+  oxlint-tsgolint: ^7.0.2001
+  react: 19.3.1
+  turbo: 2.11.10
+  vite: 8.3.5
+  vitest: 5.0.5
+  typescript-7: npm:typescript@^7.0.2
+  zod: ^4.6.7

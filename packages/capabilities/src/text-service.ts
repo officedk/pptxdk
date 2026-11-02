@@ -44,6 +44,8 @@ export type TextResourceClaim = {
   readonly kind: "font-face";
   readonly key: string;
   readonly identity: string;
+  /** 实际输出给该字体样式的文本字符，供后续字体处理继续复用。 */
+  readonly characters: string;
 };
 
 export type TextServiceResult = {
@@ -598,13 +600,58 @@ function collectRuns(
   }
 }
 
-function runXml(run: Run): string {
-  const font = normalizedFonts(run.style)[0]!;
-  const points = fontSizePoints(run.style.fontSize);
+function runPropertiesXml(style: RunStyle, tag: "a:rPr" | "a:defRPr"): string {
+  const font = normalizedFonts(style)[0]!;
+  const points = fontSizePoints(style.fontSize);
   const bold = outputBold(font);
-  const color = run.style.color ?? "#000000";
+  const color = style.color ?? "#000000";
+  return `<${tag} lang="en-US" sz="${centipoints(points)}" b="${bold ? 1 : 0}" i="${font.style === "italic" ? 1 : 0}"><a:solidFill><a:srgbClr val="${color.slice(1).toUpperCase()}"/></a:solidFill><a:latin typeface="${escapedXml(font.family)}"/></${tag}>`;
+}
+
+function runXml(run: Run): string {
   const text = escapedXml(run.text);
-  return `<a:r><a:rPr lang="en-US" sz="${centipoints(points)}" b="${bold ? 1 : 0}" i="${font.style === "italic" ? 1 : 0}"><a:solidFill><a:srgbClr val="${color.slice(1).toUpperCase()}"/></a:solidFill><a:latin typeface="${escapedXml(font.family)}"/></a:rPr><a:t xml:space="preserve">${text}</a:t></a:r>`;
+  return `<a:r>${runPropertiesXml(run.style, "a:rPr")}<a:t xml:space="preserve">${text}</a:t></a:r>`;
+}
+
+function textResourceClaims(runs: readonly Run[]): {
+  readonly resourceClaims: TextResourceClaim[];
+  readonly warnings: { readonly code: string; readonly message: string }[];
+} {
+  const used = new Map<
+    string,
+    { readonly fonts: NormalizedFont[]; readonly text: string[] }
+  >();
+  for (const run of runs) {
+    for (const font of normalizedFonts(run.style)) {
+      const key = `${font.family.toLocaleLowerCase("en-US")}\u0000${font.weight}\u0000${font.style}`;
+      const entry = used.get(key) ?? { fonts: [], text: [] };
+      if (!entry.fonts.some(({ identity }) => identity === font.identity)) {
+        entry.fonts.push(font);
+      }
+      entry.text.push(run.text);
+      used.set(key, entry);
+    }
+  }
+  const resourceClaims: TextResourceClaim[] = [];
+  const warnings: { code: string; message: string }[] = [];
+  for (const [key, entry] of used) {
+    for (const font of entry.fonts) {
+      if (!font.hasResource) {
+        warnings.push({
+          code: "font-measurement-unavailable",
+          message: `未提供 ${font.family} ${font.weight} ${font.style} 的显式字体资源；固定区域文字不会核对实际换行或装入情况`,
+        });
+      } else {
+        resourceClaims.push({
+          kind: "font-face",
+          key,
+          identity: font.identity,
+          characters: entry.text.join(""),
+        });
+      }
+    }
+  }
+  return { resourceClaims, warnings };
 }
 
 function alignmentValue(value: TextAlignment | undefined): string | undefined {
@@ -1206,40 +1253,12 @@ export function writeTextBody(
 ): TextServiceResult {
   const style = readTextStyle(styleValue, "Text.style");
   const paragraphs = normalizeParagraphs(children, style);
-  const resolvedStyles = paragraphs.flatMap((paragraph) =>
+  const runs = paragraphs.flatMap((paragraph) =>
     paragraph.runs.length > 0
-      ? paragraph.runs.map((run) => run.style)
-      : [paragraph.endStyle],
+      ? paragraph.runs
+      : [{ text: "", style: paragraph.endStyle }],
   );
-  const used = new Map<string, NormalizedFont[]>();
-  for (const runStyle of resolvedStyles) {
-    for (const font of normalizedFonts(runStyle)) {
-      const key = `${font.family.toLocaleLowerCase("en-US")}\u0000${font.weight}\u0000${font.style}`;
-      const resources = used.get(key) ?? [];
-      if (!resources.some(({ identity }) => identity === font.identity)) {
-        resources.push(font);
-        used.set(key, resources);
-      }
-    }
-  }
-  const resourceClaims: TextResourceClaim[] = [];
-  const warnings: { code: string; message: string }[] = [];
-  for (const [key, resources] of used) {
-    for (const font of resources) {
-      if (!font.hasResource) {
-        warnings.push({
-          code: "font-measurement-unavailable",
-          message: `未提供 ${font.family} ${font.weight} ${font.style} 的显式字体资源；固定区域文字不会核对实际换行或装入情况`,
-        });
-      } else {
-        resourceClaims.push({
-          kind: "font-face",
-          key,
-          identity: font.identity,
-        });
-      }
-    }
-  }
+  const { resourceClaims, warnings } = textResourceClaims(runs);
   let measured: ReturnType<typeof measureParagraphs> | undefined;
   if (layout !== undefined) {
     try {
@@ -1307,6 +1326,40 @@ export function writeTextBody(
     ...(measured === undefined
       ? {}
       : { measurement: { width: measured.width, height: measured.height } }),
+    warnings,
+  };
+}
+
+/** 为原生图表文字生成共享字体样式，并按实际类别、系列和标签文本登记字体 claims。 */
+export function writeChartTextProperties(
+  styleValue: unknown,
+  texts: readonly string[],
+  label: string,
+): Pick<TextServiceResult, "text" | "resourceClaims" | "warnings"> & {
+  readonly xml: string;
+} {
+  const style = readTextStyle(styleValue, label);
+  const runStyle: RunStyle = {
+    fontFamily: style.fontFamily,
+    fontSize: style.fontSize,
+    fontWeight: style.fontWeight,
+    fontStyle: style.fontStyle,
+    color: style.color,
+  };
+  validateRunStyle(runStyle);
+  const runs = texts.map((text) => ({ text, style: runStyle }));
+  for (const text of texts) escapedXml(text);
+  const { resourceClaims, warnings } = textResourceClaims(runs);
+  const defaultProperties = runPropertiesXml(runStyle, "a:defRPr");
+  const outputText = texts.join("\n");
+  const lineSpacing =
+    style.lineHeight === undefined
+      ? ""
+      : `<a:lnSpc><a:spcPts val="${spacingCentipoints(positiveLength(style.lineHeight, "lineHeight"), "lineHeight")}"/></a:lnSpc>`;
+  return {
+    xml: `<c:txPr><a:bodyPr anchor="${bodyAnchor(style.verticalAlign)}"/><a:lstStyle/><a:p><a:pPr>${lineSpacing}${defaultProperties}</a:pPr><a:endParaRPr lang="en-US"/></a:p></c:txPr>`,
+    text: outputText,
+    resourceClaims,
     warnings,
   };
 }

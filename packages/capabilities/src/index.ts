@@ -1,5 +1,18 @@
 export { Shape, shapeCapability } from "#/shape.ts";
 export type { ShapeProps } from "#/shape.ts";
+export { Chart, chartCapability } from "#/chart.ts";
+export type {
+  ChartAxis,
+  ChartData,
+  ChartDataLabels,
+  ChartKind,
+  ChartLine,
+  ChartPoint,
+  ChartProps,
+  ChartSeries,
+  ColumnOrBarChartProps,
+  LineOrAreaChartProps,
+} from "#/chart.ts";
 export { Image, imageCapability } from "#/image.ts";
 export type { ImageProps, ImageSource } from "#/image.ts";
 export { Group, groupCapability } from "#/group.ts";

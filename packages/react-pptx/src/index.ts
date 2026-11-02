@@ -1,4 +1,5 @@
 import {
+  chartCapability,
   groupCapability,
   imageCapability,
   motionCapability,
@@ -10,6 +11,7 @@ import {
 import { createBuilder } from "@react-pptx/core";
 
 export const build = createBuilder([
+  chartCapability,
   groupCapability,
   imageCapability,
   motionCapability,
@@ -28,6 +30,8 @@ export {
 } from "@react-pptx/core";
 export { Slide } from "./slide.ts";
 export {
+  Chart,
+  chartCapability,
   Image,
   Group,
   Shape,
@@ -56,6 +60,16 @@ export {
   zoom,
 } from "@react-pptx/capabilities";
 export type {
+  ChartAxis,
+  ChartData,
+  ChartDataLabels,
+  ChartKind,
+  ChartLine,
+  ChartPoint,
+  ChartProps,
+  ChartSeries,
+  ColumnOrBarChartProps,
+  LineOrAreaChartProps,
   CellProps,
   RowProps,
   TableCellStyle,

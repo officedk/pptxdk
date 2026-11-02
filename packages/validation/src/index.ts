@@ -8,6 +8,9 @@ const presentationNamespace =
   "http://schemas.openxmlformats.org/presentationml/2006/main";
 const drawingNamespace =
   "http://schemas.openxmlformats.org/drawingml/2006/main";
+const chartNamespace = "http://schemas.openxmlformats.org/drawingml/2006/chart";
+const spreadsheetNamespace =
+  "http://schemas.openxmlformats.org/spreadsheetml/2006/main";
 const tableUri = "http://schemas.openxmlformats.org/drawingml/2006/table";
 const relationshipNamespace =
   "http://schemas.openxmlformats.org/officeDocument/2006/relationships";
@@ -55,7 +58,7 @@ export type ValidationIssue = {
 export type FileObject = {
   readonly id: number;
   readonly name: string;
-  readonly kind: "shape" | "image" | "group" | "table";
+  readonly kind: "shape" | "image" | "chart" | "group" | "table";
   readonly geometry?: string;
   readonly boxEmu: {
     readonly x: number;
@@ -68,6 +71,7 @@ export type FileObject = {
     readonly part: string;
     readonly contentType: string;
   };
+  readonly chart?: FileChart;
   readonly crop?: {
     readonly left?: number;
     readonly top?: number;
@@ -95,6 +99,25 @@ export type FileObject = {
       readonly column: number;
       readonly text: FileText;
     }[];
+  };
+};
+
+export type FileChartSeries = {
+  readonly name: string;
+  readonly categories: readonly string[];
+  readonly values: readonly (number | null)[];
+};
+
+export type FileChart = {
+  readonly types: readonly string[];
+  readonly direction?: "col" | "bar";
+  readonly grouping?: string;
+  readonly series: readonly FileChartSeries[];
+  readonly embeddedWorkbook?: {
+    readonly part: string;
+    readonly sheetName: string;
+    readonly categories: readonly string[];
+    readonly series: readonly FileChartSeries[];
   };
 };
 
@@ -1064,10 +1087,564 @@ function validatePicture(
   };
 }
 
+type ChartCache<T> = {
+  readonly formula: string;
+  readonly values: readonly T[];
+};
+
+function chartStringCache(
+  reference: XmlElement | undefined,
+  part: string,
+  errors: ValidationIssue[],
+): ChartCache<string> | undefined {
+  const formulaElement =
+    reference === undefined ? undefined : first(reference, chartNamespace, "f");
+  const cache =
+    reference === undefined
+      ? undefined
+      : first(reference, chartNamespace, "strCache");
+  const formula = formulaElement?.textContent ?? "";
+  const count = integerAttribute(
+    cache === undefined ? undefined : first(cache, chartNamespace, "ptCount"),
+    "val",
+  );
+  if (formula === "" || count === undefined || count < 0) {
+    issue(
+      errors,
+      part,
+      "invalid-chart-cache",
+      "图表字符串引用缺少公式或缓存数量",
+    );
+    return undefined;
+  }
+  const values = Array.from({ length: count }, () => "");
+  for (const point of cache === undefined
+    ? []
+    : elements(cache, chartNamespace, "pt")) {
+    const index = integerAttribute(point, "idx");
+    const value = first(point, chartNamespace, "v")?.textContent;
+    if (
+      index === undefined ||
+      index < 0 ||
+      index >= values.length ||
+      value == null
+    ) {
+      issue(errors, part, "invalid-chart-cache", "图表字符串缓存含无效数据点");
+      continue;
+    }
+    values[index] = value;
+  }
+  return { formula, values };
+}
+
+function chartNumberCache(
+  reference: XmlElement | undefined,
+  part: string,
+  errors: ValidationIssue[],
+): ChartCache<number | null> | undefined {
+  const formulaElement =
+    reference === undefined ? undefined : first(reference, chartNamespace, "f");
+  const cache =
+    reference === undefined
+      ? undefined
+      : first(reference, chartNamespace, "numCache");
+  const formula = formulaElement?.textContent ?? "";
+  const count = integerAttribute(
+    cache === undefined ? undefined : first(cache, chartNamespace, "ptCount"),
+    "val",
+  );
+  if (formula === "" || count === undefined || count < 0) {
+    issue(
+      errors,
+      part,
+      "invalid-chart-cache",
+      "图表数值引用缺少公式或缓存数量",
+    );
+    return undefined;
+  }
+  const values: (number | null)[] = Array.from({ length: count }, () => null);
+  for (const point of cache === undefined
+    ? []
+    : elements(cache, chartNamespace, "pt")) {
+    const index = integerAttribute(point, "idx");
+    const text = first(point, chartNamespace, "v")?.textContent;
+    const value = text === undefined ? NaN : Number(text);
+    if (
+      index === undefined ||
+      index < 0 ||
+      index >= values.length ||
+      !Number.isFinite(value)
+    ) {
+      issue(errors, part, "invalid-chart-cache", "图表数值缓存含无效数据点");
+      continue;
+    }
+    values[index] = value;
+  }
+  return { formula, values };
+}
+
+function spreadsheetColumn(index: number): string {
+  let column = "";
+  for (let value = index + 1; value > 0; value = Math.floor((value - 1) / 26)) {
+    column = String.fromCharCode(65 + ((value - 1) % 26)) + column;
+  }
+  return column;
+}
+
+function readEmbeddedWorkbook(
+  part: string,
+  bytes: Uint8Array,
+  series: readonly FileChartSeries[],
+  errors: ValidationIssue[],
+): FileChart["embeddedWorkbook"] {
+  let files: XmlFiles;
+  try {
+    files = unzipSync(bytes);
+  } catch (error) {
+    issue(
+      errors,
+      part,
+      "invalid-embedded-workbook",
+      error instanceof Error ? error.message : "嵌入工作簿不是有效 ZIP 部件",
+    );
+    return undefined;
+  }
+  const nestedErrors: ValidationIssue[] = [];
+  const documents = parseXmlFiles(files, nestedErrors);
+  const relationships = checkRelationships(files, documents, nestedErrors);
+  for (const nestedError of nestedErrors) {
+    issue(
+      errors,
+      `${part}!/${nestedError.part}`,
+      nestedError.code,
+      nestedError.message,
+    );
+  }
+  const workbookPart = "xl/workbook.xml";
+  const workbook = documents.get(workbookPart)?.documentElement;
+  if (
+    workbook == null ||
+    workbook.namespaceURI !== spreadsheetNamespace ||
+    workbook.localName !== "workbook"
+  ) {
+    issue(
+      errors,
+      part,
+      "invalid-embedded-workbook",
+      "嵌入工作簿缺少 xl/workbook.xml",
+    );
+    return undefined;
+  }
+  const sheet = elements(
+    first(workbook, spreadsheetNamespace, "sheets") ?? workbook,
+    spreadsheetNamespace,
+    "sheet",
+  )[0];
+  const sheetName = sheet === undefined ? "" : attribute(sheet, "name");
+  const sheetRelationshipId =
+    sheet?.getAttributeNS(relationshipNamespace, "id") ?? "";
+  const sheetRelationship = relationships
+    .get(workbookPart)
+    ?.get(sheetRelationshipId);
+  if (sheetName === "" || sheetRelationship === undefined) {
+    issue(
+      errors,
+      part,
+      "invalid-embedded-workbook",
+      "嵌入工作簿缺少有效工作表关系",
+    );
+    return undefined;
+  }
+  const sheetPart = relationshipTargetPath(
+    workbookPart,
+    attribute(sheetRelationship, "Target"),
+  );
+  const worksheet = documents.get(sheetPart)?.documentElement;
+  if (
+    worksheet == null ||
+    worksheet.namespaceURI !== spreadsheetNamespace ||
+    worksheet.localName !== "worksheet"
+  ) {
+    issue(
+      errors,
+      part,
+      "invalid-embedded-workbook",
+      "嵌入工作簿工作表部件无效",
+    );
+    return undefined;
+  }
+  const sheetData = first(worksheet, spreadsheetNamespace, "sheetData");
+  const cells = new Map<string, string>();
+  for (const row of sheetData === undefined
+    ? []
+    : elements(sheetData, spreadsheetNamespace, "row")) {
+    for (const cell of elements(row, spreadsheetNamespace, "c")) {
+      const reference = attribute(cell, "r");
+      const inline = first(cell, spreadsheetNamespace, "is");
+      const value =
+        attribute(cell, "t") === "inlineStr"
+          ? (first(inline ?? cell, spreadsheetNamespace, "t")?.textContent ??
+            "")
+          : (first(cell, spreadsheetNamespace, "v")?.textContent ?? "");
+      if (reference !== "") cells.set(reference, value);
+    }
+  }
+  const categoryCount = series[0]?.categories.length ?? 0;
+  const categories = Array.from({ length: categoryCount }, (_, index) => {
+    const category = cells.get(`A${index + 2}`);
+    if (category === undefined) {
+      issue(
+        errors,
+        part,
+        "incomplete-embedded-workbook",
+        `工作簿缺少 A${index + 2} 分类`,
+      );
+    }
+    return category ?? "";
+  });
+  const workbookSeries = series.map((expected, index) => {
+    const column = spreadsheetColumn(index + 1);
+    const name = cells.get(`${column}1`);
+    if (name === undefined) {
+      issue(
+        errors,
+        part,
+        "incomplete-embedded-workbook",
+        `工作簿缺少 ${column}1 系列名称`,
+      );
+    }
+    const values = Array.from({ length: categoryCount }, (_, row) => {
+      const text = cells.get(`${column}${row + 2}`);
+      if (text === undefined) return null;
+      const value = Number(text);
+      if (!Number.isFinite(value)) {
+        issue(
+          errors,
+          part,
+          "invalid-embedded-workbook-value",
+          `工作簿 ${column}${row + 2} 不是有限数值`,
+        );
+        return null;
+      }
+      return value;
+    });
+    if (
+      name !== expected.name ||
+      categories.some(
+        (category, row) => category !== expected.categories[row],
+      ) ||
+      values.some((value, row) => value !== expected.values[row])
+    ) {
+      issue(
+        errors,
+        part,
+        "chart-workbook-mismatch",
+        `图表系列 ${expected.name} 与嵌入工作簿内容不一致`,
+      );
+    }
+    return {
+      name: name ?? "",
+      categories,
+      values,
+    };
+  });
+  return {
+    part,
+    sheetName,
+    categories,
+    series: workbookSeries,
+  };
+}
+
+function validateChart(
+  frame: XmlElement,
+  part: string,
+  files: XmlFiles,
+  documents: Documents,
+  relationships: Map<string, Map<string, XmlElement>>,
+  contentTypes: {
+    defaults: Map<string, string>;
+    overrides: Map<string, string>;
+  },
+  errors: ValidationIssue[],
+): FileObject | undefined {
+  const identity = objectIdentity(
+    frame,
+    "nvGraphicFramePr",
+    part,
+    "chart",
+    errors,
+  );
+  if (identity === undefined) return undefined;
+  const transform = first(frame, presentationNamespace, "xfrm");
+  const boxEmu = transformBox(transform, part, identity.name, "chart", errors);
+  const graphic = first(
+    frame,
+    "http://schemas.openxmlformats.org/drawingml/2006/main",
+    "graphic",
+  );
+  const graphicData =
+    graphic === undefined
+      ? undefined
+      : first(graphic, drawingNamespace, "graphicData");
+  const reference =
+    graphicData === undefined
+      ? undefined
+      : first(graphicData, chartNamespace, "chart");
+  const relationshipId =
+    reference?.getAttributeNS(relationshipNamespace, "id") ?? "";
+  const relationship = relationships.get(part)?.get(relationshipId);
+  if (
+    relationship === undefined ||
+    attribute(relationship, "Type") !== `${relationshipNamespace}/chart` ||
+    attribute(relationship, "TargetMode") === "External"
+  ) {
+    issue(
+      errors,
+      part,
+      "invalid-chart-relationship",
+      `图表 ${identity.name} 缺少包内 chart 关系`,
+    );
+    return boxEmu === undefined
+      ? undefined
+      : { id: identity.id, name: identity.name, kind: "chart", boxEmu };
+  }
+  const chartPart = relationshipTargetPath(
+    part,
+    attribute(relationship, "Target"),
+  );
+  const chartXml = documents.get(chartPart)?.documentElement;
+  if (
+    chartXml == null ||
+    chartXml.namespaceURI !== chartNamespace ||
+    chartXml.localName !== "chartSpace" ||
+    contentTypeForPart(chartPart, contentTypes) !==
+      "application/vnd.openxmlformats-officedocument.drawingml.chart+xml"
+  ) {
+    issue(
+      errors,
+      chartPart,
+      "invalid-chart-part",
+      `图表 ${identity.name} 的部件或内容类型无效`,
+    );
+    return boxEmu === undefined
+      ? undefined
+      : { id: identity.id, name: identity.name, kind: "chart", boxEmu };
+  }
+  const chart = first(chartXml, chartNamespace, "chart");
+  const plotArea =
+    chart === undefined ? undefined : first(chart, chartNamespace, "plotArea");
+  const typeNodes =
+    plotArea === undefined
+      ? []
+      : elements(plotArea, chartNamespace, "barChart").concat(
+          elements(plotArea, chartNamespace, "lineChart"),
+          elements(plotArea, chartNamespace, "areaChart"),
+        );
+  if (typeNodes.length === 0) {
+    issue(
+      errors,
+      chartPart,
+      "missing-chart-type",
+      "图表部件缺少原生坐标系图表类型",
+    );
+  }
+  const types = typeNodes
+    .map(({ localName }) => localName)
+    .filter((localName): localName is string => typeof localName === "string");
+  const firstType = typeNodes[0];
+  const direction =
+    firstType?.localName === "barChart"
+      ? attribute(
+          first(firstType, chartNamespace, "barDir") ?? firstType,
+          "val",
+        )
+      : undefined;
+  if (direction !== undefined && direction !== "bar" && direction !== "col") {
+    issue(errors, chartPart, "invalid-chart-direction", "图表条形方向无效");
+  }
+  const grouping =
+    firstType === undefined
+      ? undefined
+      : attribute(
+          first(firstType, chartNamespace, "grouping") ?? firstType,
+          "val",
+        );
+  const series: FileChartSeries[] = [];
+  const formulas: {
+    readonly name: string;
+    readonly categories: string;
+    readonly values: string;
+  }[] = [];
+  for (const typeNode of typeNodes) {
+    for (const chartSeries of elements(typeNode, chartNamespace, "ser")) {
+      const title = first(chartSeries, chartNamespace, "tx");
+      const nameCache = chartStringCache(
+        title === undefined
+          ? undefined
+          : first(title, chartNamespace, "strRef"),
+        chartPart,
+        errors,
+      );
+      const category = first(chartSeries, chartNamespace, "cat");
+      const categoryCache = chartStringCache(
+        category === undefined
+          ? undefined
+          : first(category, chartNamespace, "strRef"),
+        chartPart,
+        errors,
+      );
+      const value = first(chartSeries, chartNamespace, "val");
+      const valueCache = chartNumberCache(
+        value === undefined
+          ? undefined
+          : first(value, chartNamespace, "numRef"),
+        chartPart,
+        errors,
+      );
+      if (
+        nameCache === undefined ||
+        categoryCache === undefined ||
+        valueCache === undefined
+      ) {
+        continue;
+      }
+      if (
+        categoryCache.values.length !== valueCache.values.length ||
+        nameCache.values.length !== 1
+      ) {
+        issue(
+          errors,
+          chartPart,
+          "invalid-chart-series",
+          "图表系列名称、分类和值数量不一致",
+        );
+      }
+      const name = nameCache.values[0] ?? "";
+      series.push({
+        name,
+        categories: categoryCache.values,
+        values: valueCache.values,
+      });
+      formulas.push({
+        name: nameCache.formula,
+        categories: categoryCache.formula,
+        values: valueCache.formula,
+      });
+    }
+  }
+  const externalData = first(chartXml, chartNamespace, "externalData");
+  const workbookRelationshipId =
+    externalData?.getAttributeNS(relationshipNamespace, "id") ?? "";
+  const workbookRelationship = relationships
+    .get(chartPart)
+    ?.get(workbookRelationshipId);
+  let embeddedWorkbook: FileChart["embeddedWorkbook"];
+  if (
+    workbookRelationship === undefined ||
+    attribute(workbookRelationship, "Type") !==
+      `${relationshipNamespace}/package` ||
+    attribute(workbookRelationship, "TargetMode") === "External"
+  ) {
+    issue(
+      errors,
+      chartPart,
+      "invalid-workbook-relationship",
+      "图表缺少嵌入工作簿 package 关系",
+    );
+  } else {
+    const workbookPart = relationshipTargetPath(
+      chartPart,
+      attribute(workbookRelationship, "Target"),
+    );
+    const workbookBytes = files[workbookPart];
+    if (
+      workbookBytes === undefined ||
+      contentTypeForPart(workbookPart, contentTypes) !==
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    ) {
+      issue(
+        errors,
+        workbookPart,
+        "invalid-embedded-workbook",
+        "图表嵌入工作簿部件或内容类型无效",
+      );
+    } else {
+      embeddedWorkbook = readEmbeddedWorkbook(
+        workbookPart,
+        workbookBytes,
+        series,
+        errors,
+      );
+    }
+  }
+  const workbookSeries = embeddedWorkbook?.series ?? [];
+  const formulaSheetName = embeddedWorkbook?.sheetName ?? "";
+  for (const [index, formula] of formulas.entries()) {
+    const column = spreadsheetColumn(index + 1);
+    const lastRow = (series[index]?.categories.length ?? 0) + 1;
+    const expected = {
+      name: `${formulaSheetName}!$${column}$1`,
+      categories: `${formulaSheetName}!$A$2:$A$${lastRow}`,
+      values: `${formulaSheetName}!$${column}$2:$${column}$${lastRow}`,
+    };
+    if (
+      formula.name !== expected.name ||
+      formula.categories !== expected.categories ||
+      formula.values !== expected.values
+    ) {
+      issue(
+        errors,
+        chartPart,
+        "invalid-chart-formula",
+        `图表系列 ${series[index]?.name ?? index + 1} 未引用对应工作簿单元格`,
+      );
+    }
+    const workbookValues = workbookSeries[index];
+    const chartValues = series[index];
+    if (
+      workbookValues !== undefined &&
+      chartValues !== undefined &&
+      (workbookValues.name !== chartValues.name ||
+        workbookValues.categories.some(
+          (category, row) => category !== chartValues.categories[row],
+        ) ||
+        workbookValues.values.some(
+          (value, row) => value !== chartValues.values[row],
+        ))
+    ) {
+      issue(
+        errors,
+        chartPart,
+        "chart-workbook-mismatch",
+        `图表系列 ${chartValues.name} 的缓存与工作簿不一致`,
+      );
+    }
+  }
+  if (boxEmu === undefined) return undefined;
+  const chartObservation: FileChart = {
+    types,
+    ...(direction === undefined
+      ? {}
+      : { direction: direction as "bar" | "col" }),
+    ...(grouping === undefined || grouping === "" ? {} : { grouping }),
+    series,
+    ...(embeddedWorkbook === undefined ? {} : { embeddedWorkbook }),
+  };
+  return {
+    id: identity.id,
+    name: identity.name,
+    kind: "chart",
+    boxEmu,
+    chart: chartObservation,
+  };
+}
+
 function validateGroup(
   group: XmlElement,
   part: string,
   files: XmlFiles,
+  documents: Documents,
   relationships: Map<string, Map<string, XmlElement>>,
   contentTypes: {
     defaults: Map<string, string>;
@@ -1116,6 +1693,7 @@ function validateGroup(
     group,
     part,
     files,
+    documents,
     relationships,
     contentTypes,
     errors,
@@ -1437,6 +2015,7 @@ function readObjects(
   parent: XmlNode,
   part: string,
   files: XmlFiles,
+  documents: Documents,
   relationships: Map<string, Map<string, XmlElement>>,
   contentTypes: {
     defaults: Map<string, string>;
@@ -1468,18 +2047,40 @@ function readObjects(
           errors,
         );
         break;
+      case "graphicFrame": {
+        const frame = child as XmlElement;
+        const graphic = first(frame, drawingNamespace, "graphic");
+        const graphicData =
+          graphic === undefined
+            ? undefined
+            : first(graphic, drawingNamespace, "graphicData");
+        const uri =
+          graphicData === undefined ? undefined : attribute(graphicData, "uri");
+        if (uri === chartNamespace) {
+          object = validateChart(
+            frame,
+            part,
+            files,
+            documents,
+            relationships,
+            contentTypes,
+            errors,
+          );
+        } else if (uri === tableUri) {
+          object = validateTable(frame, part, errors);
+        }
+        break;
+      }
       case "grpSp":
         object = validateGroup(
           child as XmlElement,
           part,
           files,
+          documents,
           relationships,
           contentTypes,
           errors,
         );
-        break;
-      case "graphicFrame":
-        object = validateTable(child as XmlElement, part, errors);
         break;
     }
     if (object !== undefined) objects.push(object);
@@ -2267,6 +2868,7 @@ function readPresentation(
       slideTree,
       slidePath,
       files,
+      documents,
       relationships,
       contentTypes,
       errors,

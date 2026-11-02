@@ -318,6 +318,9 @@ importers:
       '@react-pptx/core':
         specifier: workspace:*
         version: link:../core
+      fflate:
+        specifier: 'catalog:'
+        version: 0.8.3
       fontkit:
         specifier: 'catalog:'
         version: 2.0.4

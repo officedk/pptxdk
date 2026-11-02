@@ -219,6 +219,26 @@ export type CapabilityResource = {
   readonly relationshipType: string;
 };
 
+/** 一个页面原生部件，以及它通过部件关系引用的二进制资源。 */
+export type CapabilityPackagePart = {
+  readonly part: {
+    /** 包内相对路径模板，必须恰含一个 `{n}` 部件序号。 */
+    readonly pathTemplate: string;
+    readonly contentType: string;
+  };
+  readonly relationshipType: string;
+  /** 接收相关部件关系标识，按 relatedParts 顺序对应。 */
+  readonly content: (
+    relatedRelationshipIds: readonly string[],
+  ) => string | Uint8Array;
+  readonly relatedParts: readonly {
+    readonly pathTemplate: string;
+    readonly contentType: string;
+    readonly relationshipType: string;
+    readonly bytes: Uint8Array;
+  }[];
+};
+
 export type CapabilityContext = {
   readonly id: number;
   readonly path: string;
@@ -227,6 +247,8 @@ export type CapabilityContext = {
   compileChildren(children: readonly CapabilityChild[]): CapabilityChildren;
   /** 将二进制资源加入 PPTX，并返回当前页面对应的关系标识。 */
   registerResource(resource: CapabilityResource): string;
+  /** 注册当前页面引用的原生部件及其直接关联的二进制部件。 */
+  registerPackagePart(part: CapabilityPackagePart): string;
 };
 
 export type CapabilityLayoutRequest = {
@@ -259,6 +281,8 @@ export type CapabilityOutput = {
     readonly kind: string;
     readonly key: string;
     readonly identity: string;
+    /** 来自共享文字服务的实际输出文字，供后续字体资源处理使用。 */
+    readonly characters?: string;
   }[];
   readonly warnings?: readonly {
     readonly code: string;

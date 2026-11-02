@@ -33,7 +33,10 @@ export type {
 export { font, P, Span, Text, textCapability } from "#/text.ts";
 export { transitionCapability, transitions } from "#/transition.ts";
 export {
+  after,
+  Box,
   Step,
+  MotionScope,
   fade,
   fly,
   floatUp,
@@ -41,10 +44,12 @@ export {
   spin,
   spinIn,
   stretch,
+  useMotionScope,
   wipe,
   zoom,
 } from "#/motion.ts";
 export type {
+  BoxProps,
   Easing,
   Effect,
   EffectOptions,
@@ -52,9 +57,17 @@ export type {
   EmphasisEffect,
   EntranceEffect,
   MotionDirection,
+  MotionCompletionState,
   MotionEffectObservation,
+  MotionMoment,
+  MotionMomentOffset,
   MotionObservation,
+  MotionScopeHandle,
+  MotionScopeMode,
+  MotionScopeObservation,
+  MotionScopeProps,
   MotionProps,
+  MotionTiming,
   MotionStepObservation,
   StepProps,
 } from "#/motion.ts";

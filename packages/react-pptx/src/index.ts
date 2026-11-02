@@ -21,15 +21,11 @@ export const build = createBuilder([
   transitionCapability,
 ]);
 
-export {
-  Box,
-  BuildError,
-  Deck,
-  formatBaseline,
-  targets,
-} from "@react-pptx/core";
+export { BuildError, Deck, formatBaseline, targets } from "@react-pptx/core";
 export { Slide } from "./slide.ts";
 export {
+  after,
+  Box,
   Chart,
   chartCapability,
   Image,
@@ -50,12 +46,14 @@ export {
   transitionCapability,
   transitions,
   Step,
+  MotionScope,
   fade,
   fly,
   floatUp,
   spin,
   spinIn,
   stretch,
+  useMotionScope,
   wipe,
   zoom,
 } from "@react-pptx/capabilities";
@@ -80,13 +78,13 @@ export type {
   TableStyle,
   TableTextStyle,
   TableVerticalAlign,
+  BoxProps,
 } from "@react-pptx/capabilities";
 export { createBuilder } from "@react-pptx/core";
 export type {
   BuildOptions,
   BuildReport,
   BuildResult,
-  BoxProps,
   Diagnostic,
   GeometryBox,
   LayoutChildReference,
@@ -126,9 +124,17 @@ export type {
   EmphasisEffect,
   EntranceEffect,
   MotionDirection,
+  MotionCompletionState,
   MotionEffectObservation,
+  MotionMoment,
+  MotionMomentOffset,
   MotionObservation,
+  MotionScopeHandle,
+  MotionScopeMode,
+  MotionScopeObservation,
+  MotionScopeProps,
   MotionProps,
+  MotionTiming,
   MotionStepObservation,
   StepProps,
 } from "@react-pptx/capabilities";

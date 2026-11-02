@@ -18,7 +18,7 @@ import type {
   CapabilityChild,
   CapabilityElement,
   CapabilityLayoutMeasurement,
-  CapabilityModule,
+  RegisteredCapabilityModule,
   Diagnostic,
   GeometryBox,
   LayoutLength,
@@ -475,21 +475,21 @@ function layoutPixel(value: number): number {
 }
 
 function objectModule(
-  module: CapabilityModule | undefined,
+  module: RegisteredCapabilityModule | undefined,
 ): module is ObjectCapabilityModule {
   return module !== undefined && "compile" in module;
 }
 
 /** 在能力模块写出原生对象前求解 Box、块与弹性布局。 */
 export class LayoutPass {
-  readonly #modules: ReadonlyMap<string, CapabilityModule>;
+  readonly #modules: ReadonlyMap<string, RegisteredCapabilityModule>;
   readonly #dimensions: Dimensions;
   readonly #config = Yoga.Config.create();
   readonly #boxes = new WeakMap<CapabilityElement, GeometryBox>();
   readonly #warnings: Diagnostic[] = [];
 
   constructor(
-    modules: ReadonlyMap<string, CapabilityModule>,
+    modules: ReadonlyMap<string, RegisteredCapabilityModule>,
     dimensions: Dimensions,
   ) {
     this.#modules = modules;
@@ -571,11 +571,15 @@ export class LayoutPass {
         this.#appendChildren(child.children, childPath, parent, includeObjects);
         return;
       }
+      const module = this.#modules.get(child.type);
+      if (module !== undefined && "compileDeclaration" in module) {
+        this.#appendChildren(child.children, childPath, parent, includeObjects);
+        return;
+      }
       if (!includeObjects) {
         this.#validateLoose(child, childPath);
         return;
       }
-      const module = this.#modules.get(child.type);
       if (!objectModule(module)) return;
       const allowsTextStyle = allowsSharedTextStyle(child.type);
       const childStyle = readStyle(

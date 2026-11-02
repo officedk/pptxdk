@@ -81,8 +81,7 @@ const allowedParameters = [
   "enter",
   "emphasis",
   "motion",
-  "__motionEnabled",
-  "__motionStep",
+  "__motionContext",
 ] as const;
 
 function record(input: CapabilityInput): Record<string, unknown> {

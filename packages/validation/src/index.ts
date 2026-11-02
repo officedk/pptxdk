@@ -14,6 +14,11 @@ const packageRelationshipNamespace =
   "http://schemas.openxmlformats.org/package/2006/relationships";
 const contentTypeNamespace =
   "http://schemas.openxmlformats.org/package/2006/content-types";
+const p14Namespace = "http://schemas.microsoft.com/office/powerpoint/2010/main";
+const p159Namespace =
+  "http://schemas.microsoft.com/office/powerpoint/2015/09/main";
+const markupCompatibilityNamespace =
+  "http://schemas.openxmlformats.org/markup-compatibility/2006";
 const transitionalStandard = "ECMA-376 5th edition Transitional";
 const schemaValidatorPackage = "@ooxml-tools/validate";
 const schemaValidatorPackageVersion = "0.4.6";
@@ -26,7 +31,7 @@ const schemaValidatorProfile = {
   officeVersion: schemaValidatorOfficeVersion,
 } as const;
 const validationScope =
-  "Open XML SDK 3.0.2 在 Microsoft365 配置下实现的 Transitional 包、Schema 与约束校验；另由本地读取器独立核对 OPC 关系、内容类型及页面、形状、图片、组合和文字结构。MC 仅按 SDK 支持选择 Choice 或 Fallback；p14／p159 的所有兼容分支及未知扩展不保证均被验证。校验不等于完整标准认证或应用证据。";
+  "Open XML SDK 3.0.2 在 Microsoft365 配置下实现的 Transitional 包、Schema 与约束校验；另由本地读取器独立核对 OPC 关系、内容类型及页面、形状、图片、组合、文字与转场结构，并逐支核对转场 Choice／Fallback 的 Requires 和目标扩展限制。SDK 的 MC 仅按其支持选择 Choice 或 Fallback；p14／p159 的所有兼容分支及未知扩展不保证均被 Schema 验证。校验不等于完整标准认证或应用证据。";
 const applicationEvidence = "not-validated";
 const minimumSlideLayoutId = 2_147_483_648;
 const maximumSlideLayoutId = 4_294_967_295;
@@ -108,6 +113,23 @@ export type FileText = {
 export type FileSlide = {
   readonly id: string;
   readonly objects: readonly FileObject[];
+  readonly transition?: FileTransition;
+};
+
+export type FileTransition = {
+  readonly kind: "fade" | "strips" | "push" | "flip" | "morph";
+  readonly speed?: "fast" | "med" | "slow";
+  readonly direction?: string;
+  readonly durationMs?: number;
+  readonly by?: "object" | "word" | "character";
+  readonly fallback?: FileTransition;
+};
+
+export type ValidationExtension = "p14" | "p159";
+
+export type ValidationOptions = {
+  /** 拒绝实际文件使用的目标未允许扩展；省略时只做结构读取。 */
+  readonly allowedExtensions?: readonly ValidationExtension[];
 };
 
 export type ValidationResult = {
@@ -118,6 +140,7 @@ export type ValidationResult = {
     readonly applicationEvidence: typeof applicationEvidence;
   };
   readonly errors: readonly ValidationIssue[];
+  readonly extensions: readonly ValidationExtension[];
   readonly presentation: {
     readonly slideCount: number;
     readonly widthEmu?: number;
@@ -131,6 +154,11 @@ type XmlDocument = ReturnType<DOMParser["parseFromString"]>;
 type XmlNode = NonNullable<XmlDocument["firstChild"]>;
 type XmlElement = NonNullable<XmlDocument["documentElement"]>;
 type Documents = Map<string, XmlDocument>;
+
+type TransitionRead = {
+  readonly transition?: FileTransition;
+  readonly extensions: ReadonlySet<ValidationExtension>;
+};
 
 function issue(
   errors: ValidationIssue[],
@@ -1105,6 +1133,314 @@ function readObjects(
   return objects;
 }
 
+function childElements(parent: XmlNode): XmlElement[] {
+  const result: XmlElement[] = [];
+  for (
+    let child = parent.firstChild;
+    child !== null;
+    child = child.nextSibling
+  ) {
+    if (child.nodeType === 1) result.push(child as XmlElement);
+  }
+  return result;
+}
+
+function extensionForNamespace(
+  namespace: string | null,
+): ValidationExtension | undefined {
+  if (namespace === p14Namespace) return "p14";
+  if (namespace === p159Namespace) return "p159";
+  return undefined;
+}
+
+function transitionDuration(value: string): number | undefined {
+  const match = /^(\d+(?:\.\d)?)(h|min|s|ms|µs|ns)?$/u.exec(value);
+  if (match === null) return undefined;
+  const amount = Number(match[1]);
+  const multiplier =
+    match[2] === "h"
+      ? 3_600_000
+      : match[2] === "min"
+        ? 60_000
+        : match[2] === "s"
+          ? 1_000
+          : match[2] === "µs"
+            ? 0.001
+            : match[2] === "ns"
+              ? 0.000001
+              : 1;
+  const milliseconds = amount * multiplier;
+  return Number.isFinite(milliseconds) ? milliseconds : undefined;
+}
+
+function readTransitionElement(
+  transition: XmlElement,
+  part: string,
+  errors: ValidationIssue[],
+  insideChoice: boolean,
+): {
+  readonly transition: FileTransition;
+  readonly extensions: ReadonlySet<ValidationExtension>;
+} {
+  const extensions = new Set<ValidationExtension>();
+  const speedValue = attribute(transition, "spd");
+  const speed =
+    speedValue === "fast" || speedValue === "med" || speedValue === "slow"
+      ? speedValue
+      : undefined;
+  if (speedValue !== "" && speed === undefined) {
+    issue(
+      errors,
+      part,
+      "invalid-transition-speed",
+      `未知转场速度 ${speedValue}`,
+    );
+  }
+  const durationValue = transition.getAttributeNS(p14Namespace, "dur");
+  let durationMs: number | undefined;
+  if (transition.hasAttributeNS(p14Namespace, "dur")) {
+    extensions.add("p14");
+    durationMs = transitionDuration(durationValue ?? "");
+    if (durationMs === undefined) {
+      issue(
+        errors,
+        part,
+        "invalid-transition-duration",
+        "p14:dur 不是有效时长",
+      );
+    }
+  }
+  const effects = childElements(transition);
+  if (effects.length !== 1) {
+    issue(
+      errors,
+      part,
+      "invalid-transition-effect",
+      "转场必须恰好包含一个效果元素",
+    );
+  }
+  const effect = effects[0];
+  let kind: FileTransition["kind"] = "fade";
+  let direction: string | undefined;
+  let by: FileTransition["by"];
+  if (effect?.namespaceURI === presentationNamespace) {
+    if (effect.localName === "fade") kind = "fade";
+    else if (effect.localName === "strips") {
+      kind = "strips";
+      direction = attribute(effect, "dir");
+      if (!["lu", "ru", "ld", "rd"].includes(direction)) {
+        issue(errors, part, "invalid-transition-direction", "strips.dir 无效");
+      }
+    } else if (effect.localName === "push") {
+      kind = "push";
+      direction = attribute(effect, "dir");
+      if (!["l", "r", "u", "d"].includes(direction)) {
+        issue(errors, part, "invalid-transition-direction", "push.dir 无效");
+      }
+    } else {
+      issue(
+        errors,
+        part,
+        "unsupported-transition-effect",
+        `不支持转场效果 p:${effect.localName}`,
+      );
+    }
+  } else if (
+    effect?.namespaceURI === p14Namespace &&
+    effect.localName === "flip"
+  ) {
+    kind = "flip";
+    extensions.add("p14");
+    direction = attribute(effect, "dir");
+    if (direction !== "l" && direction !== "r") {
+      issue(
+        errors,
+        part,
+        "invalid-transition-direction",
+        "flip.dir 必须是 l 或 r",
+      );
+    }
+  } else if (
+    effect?.namespaceURI === p159Namespace &&
+    effect.localName === "morph"
+  ) {
+    kind = "morph";
+    extensions.add("p159");
+    const option = attribute(effect, "option");
+    if (option === "byObject") by = "object";
+    else if (option === "byWord") by = "word";
+    else if (option === "byChar") by = "character";
+    else
+      issue(errors, part, "invalid-morph-option", `未知 Morph 选项 ${option}`);
+  } else if (effect !== undefined) {
+    issue(
+      errors,
+      part,
+      "unsupported-transition-effect",
+      "转场效果使用未知命名空间",
+    );
+  }
+  if (!insideChoice && extensions.size > 0) {
+    issue(
+      errors,
+      part,
+      "extension-outside-choice",
+      "p14／p159 转场机制必须放在 mc:Choice 内",
+    );
+  }
+  const result: FileTransition = {
+    kind,
+    ...(speed === undefined ? {} : { speed }),
+    ...(direction === undefined ? {} : { direction }),
+    ...(durationMs === undefined ? {} : { durationMs }),
+    ...(by === undefined ? {} : { by }),
+  };
+  return { transition: result, extensions };
+}
+
+function readAlternateTransition(
+  alternate: XmlElement,
+  part: string,
+  errors: ValidationIssue[],
+): TransitionRead {
+  const choices = elements(alternate, markupCompatibilityNamespace, "Choice");
+  const fallbacks = elements(
+    alternate,
+    markupCompatibilityNamespace,
+    "Fallback",
+  );
+  if (choices.length !== 1 || fallbacks.length !== 1) {
+    issue(
+      errors,
+      part,
+      "invalid-transition-alternate",
+      "转场兼容分支必须包含一个 Choice 和一个 Fallback",
+    );
+  }
+  const choice = choices[0];
+  const fallback = fallbacks[0];
+  const choiceTransition =
+    choice === undefined
+      ? undefined
+      : elements(choice, presentationNamespace, "transition")[0];
+  const fallbackTransition =
+    fallback === undefined
+      ? undefined
+      : elements(fallback, presentationNamespace, "transition")[0];
+  if (
+    choice === undefined ||
+    fallback === undefined ||
+    choiceTransition === undefined ||
+    fallbackTransition === undefined
+  ) {
+    issue(
+      errors,
+      part,
+      "invalid-transition-alternate",
+      "转场兼容分支的 Choice 和 Fallback 都必须包含 p:transition",
+    );
+    return { extensions: new Set() };
+  }
+  const choiceResult = readTransitionElement(
+    choiceTransition,
+    part,
+    errors,
+    true,
+  );
+  const fallbackResult = readTransitionElement(
+    fallbackTransition,
+    part,
+    errors,
+    false,
+  );
+  if (
+    fallbackResult.transition.kind !== "fade" &&
+    fallbackResult.transition.kind !== "strips" &&
+    fallbackResult.transition.kind !== "push"
+  ) {
+    issue(
+      errors,
+      part,
+      "invalid-transition-fallback",
+      "转场 Fallback 必须使用 Transitional 基础效果",
+    );
+  }
+  const required = new Set<ValidationExtension>();
+  const requiredPrefixes = attribute(choice, "Requires")
+    .trim()
+    .split(/\s+/u)
+    .filter((prefix) => prefix !== "");
+  for (const prefix of requiredPrefixes) {
+    const extension = extensionForNamespace(choice.lookupNamespaceURI(prefix));
+    if (extension === undefined) {
+      issue(
+        errors,
+        part,
+        "unsupported-extension",
+        `转场 Choice 要求不支持的命名空间 ${prefix}`,
+      );
+    } else {
+      required.add(extension);
+    }
+  }
+  for (const extension of choiceResult.extensions) {
+    if (!required.has(extension)) {
+      issue(
+        errors,
+        part,
+        "missing-extension-requirement",
+        `转场 Choice 使用 ${extension}，但 Requires 未声明该机制`,
+      );
+    }
+  }
+  for (const extension of required) {
+    if (!choiceResult.extensions.has(extension)) {
+      issue(
+        errors,
+        part,
+        "unused-extension-requirement",
+        `转场 Choice 声明了未使用的 ${extension} 机制`,
+      );
+    }
+  }
+  const extensions = new Set<ValidationExtension>([
+    ...choiceResult.extensions,
+    ...required,
+    ...fallbackResult.extensions,
+  ]);
+  return {
+    transition: {
+      ...choiceResult.transition,
+      fallback: fallbackResult.transition,
+    },
+    extensions,
+  };
+}
+
+function readSlideTransition(
+  slide: XmlElement,
+  part: string,
+  errors: ValidationIssue[],
+): TransitionRead {
+  const candidates = childElements(slide).filter(
+    (child) =>
+      (child.namespaceURI === presentationNamespace &&
+        child.localName === "transition") ||
+      (child.namespaceURI === markupCompatibilityNamespace &&
+        child.localName === "AlternateContent"),
+  );
+  if (candidates.length > 1) {
+    issue(errors, part, "duplicate-transition", "页面包含多个转场声明");
+  }
+  const candidate = candidates[0];
+  if (candidate === undefined) return { extensions: new Set() };
+  if (candidate.namespaceURI === markupCompatibilityNamespace) {
+    return readAlternateTransition(candidate, part, errors);
+  }
+  const result = readTransitionElement(candidate, part, errors, false);
+  return { transition: result.transition, extensions: result.extensions };
+}
+
 function readPresentation(
   files: XmlFiles,
   documents: Documents,
@@ -1114,7 +1450,11 @@ function readPresentation(
     overrides: Map<string, string>;
   },
   errors: ValidationIssue[],
-): { presentation: ValidationResult["presentation"]; slides: FileSlide[] } {
+): {
+  presentation: ValidationResult["presentation"];
+  slides: FileSlide[];
+  extensions: ValidationExtension[];
+} {
   const part = "ppt/presentation.xml";
   const document = documents.get(part);
   const root = document?.documentElement;
@@ -1129,7 +1469,11 @@ function readPresentation(
       "invalid-presentation",
       "缺少 Transitional PresentationML 根部件",
     );
-    return { presentation: { slideCount: 0 }, slides: [] };
+    return {
+      presentation: { slideCount: 0 },
+      slides: [],
+      extensions: [],
+    };
   }
   const size = first(root, presentationNamespace, "sldSz");
   const widthEmu = integerAttribute(size, "cx");
@@ -1154,6 +1498,7 @@ function readPresentation(
     ids === undefined ? [] : elements(ids, presentationNamespace, "sldId");
   const presentationRelationships = relationships.get(part) ?? new Map();
   const slides: FileSlide[] = [];
+  const usedExtensions = new Set<ValidationExtension>();
   slideIds.forEach((slideId, index) => {
     const relationshipId =
       slideId.getAttributeNS(relationshipNamespace, "id") ?? "";
@@ -1203,6 +1548,10 @@ function readPresentation(
       contentTypes,
       errors,
     );
+    const transition = readSlideTransition(slideRoot, slidePath, errors);
+    for (const extension of transition.extensions) {
+      usedExtensions.add(extension);
+    }
     const seenIds = new Set<number>();
     const pending = [...objects];
     while (pending.length > 0) {
@@ -1223,6 +1572,9 @@ function readPresentation(
       id:
         commonSlideData === undefined ? "" : attribute(commonSlideData, "name"),
       objects,
+      ...(transition.transition === undefined
+        ? {}
+        : { transition: transition.transition }),
     });
   });
   if (slideIds.length === 0)
@@ -1242,15 +1594,18 @@ function readPresentation(
       ...(heightEmu === undefined ? {} : { heightEmu }),
     },
     slides,
+    extensions: [...usedExtensions],
   };
 }
 
 /**
  * 对同一份 PPTX 字节执行 SDK 结构校验并独立读取页面对象、几何和原生文字，
- * 不读取构建报告。SDK 的 MC 分支选择和扩展覆盖有限；此结果不代表应用证据。
+ * 不读取构建报告。allowedExtensions 会约束本地读取器发现的所有转场兼容分支；
+ * SDK 的 MC 分支选择和扩展覆盖有限，校验结果不代表应用证据。
  */
 export async function validatePptx(
   input: Uint8Array,
+  options: ValidationOptions = {},
 ): Promise<ValidationResult> {
   const errors = await validateStandardStructure(input);
   let files: XmlFiles;
@@ -1271,6 +1626,7 @@ export async function validatePptx(
         applicationEvidence,
       },
       errors,
+      extensions: [],
       presentation: { slideCount: 0 },
       slides: [],
     };
@@ -1349,7 +1705,7 @@ export async function validatePptx(
     relationships,
     errors,
   );
-  const { presentation, slides } = readPresentation(
+  const { presentation, slides, extensions } = readPresentation(
     files,
     documents,
     relationships,
@@ -1365,6 +1721,19 @@ export async function validatePptx(
       errors,
     );
   }
+  for (const extension of extensions) {
+    if (
+      options.allowedExtensions !== undefined &&
+      !options.allowedExtensions.includes(extension)
+    ) {
+      issue(
+        errors,
+        "ppt/slides",
+        "forbidden-extension",
+        `输出目标禁止实际文件使用 ${extension}`,
+      );
+    }
+  }
   return {
     profile: {
       standard: transitionalStandard,
@@ -1373,6 +1742,7 @@ export async function validatePptx(
       applicationEvidence,
     },
     errors,
+    extensions,
     presentation,
     slides,
   };

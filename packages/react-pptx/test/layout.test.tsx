@@ -1488,6 +1488,149 @@ describe("公开布局入口", () => {
     );
   });
 
+  it("baseline 子项选择采用 Yoga 对 column 的解析对齐", async () => {
+    const makeText = () =>
+      createElement(
+        Text,
+        {
+          testId: "selection-text",
+          width: 100,
+          height: 60,
+          style: { fontFamily: cjkFont, fontSize: 20 },
+        },
+        "中",
+      );
+    const makeRow = () =>
+      createElement(
+        Box,
+        {
+          testId: "selection-row",
+          style: { display: "flex", alignItems: "baseline", width: 300 },
+        },
+        makeText(),
+        createElement(
+          Box,
+          {
+            testId: "selection-column",
+            style: {
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "flex-start",
+              width: 100,
+              height: 100,
+            },
+          },
+          createElement(Shape, {
+            testId: "selection-first-shape",
+            width: 100,
+            height: 20,
+          }),
+          createElement(Shape, {
+            testId: "selection-second-shape",
+            width: 100,
+            height: 80,
+            style: { alignSelf: "baseline" },
+          }),
+        ),
+      );
+    const makeFollowing = () =>
+      createElement(Shape, {
+        testId: "selection-following-shape",
+        width: 100,
+        height: 20,
+        style: { flexShrink: 0 },
+      });
+    const expectedObjects = [
+      { testId: "selection-text", y: 0 },
+      { testId: "selection-first-shape", y: 3.2 },
+      { testId: "selection-second-shape", y: 23.2 },
+      { testId: "selection-following-shape", y: 103.2 },
+    ];
+
+    const natural = await build(
+      createElement(
+        Deck,
+        { width: 400, height: 400 },
+        createElement(
+          Slide,
+          { slideId: "baseline-selection-natural" },
+          createElement(
+            Box,
+            { style: { width: 300 } },
+            makeRow(),
+            makeFollowing(),
+          ),
+        ),
+      ),
+    );
+    assert.equal(
+      natural.report.slides[0]?.layouts?.find(
+        ({ testId }) => testId === "selection-row",
+      )?.box.height,
+      103.2,
+    );
+    assert.deepEqual(
+      natural.report.slides[0]?.objects.map(({ testId, box }) => ({
+        testId,
+        y: box?.y,
+      })),
+      expectedObjects,
+    );
+    const naturalFile = await validatePptx(natural.pptx);
+    assert.deepEqual(naturalFile.errors, []);
+    assert.deepEqual(
+      naturalFile.slides[0]?.objects.map(({ boxEmu }) =>
+        Number((boxEmu.y / 9525).toFixed(2)),
+      ),
+      [0, 3.2, 23.2, 103.2],
+    );
+
+    const automatic = await build(
+      createElement(
+        Deck,
+        { width: 400, height: 400 },
+        createElement(
+          Slide,
+          { slideId: "baseline-selection-auto-min" },
+          createElement(
+            Box,
+            {
+              style: {
+                display: "flex",
+                flexDirection: "column",
+                width: 300,
+                height: 200,
+              },
+            },
+            makeRow(),
+            makeFollowing(),
+          ),
+        ),
+      ),
+    );
+    assert.equal(
+      automatic.report.slides[0]?.layouts?.find(
+        ({ testId }) => testId === "selection-row",
+      )?.box.height,
+      103.2,
+    );
+    assert.deepEqual(
+      automatic.report.slides[0]?.objects.map(({ testId, box }) => ({
+        testId,
+        y: box?.y,
+      })),
+      expectedObjects,
+    );
+    const automaticFile = await validatePptx(automatic.pptx);
+    assert.deepEqual(automaticFile.errors, []);
+    assert.deepEqual(
+      automaticFile.slides[0]?.objects.map(({ boxEmu }) =>
+        Number((boxEmu.y / 9525).toFixed(2)),
+      ),
+      [0, 3.2, 23.2, 103.2],
+    );
+  });
+
   it("弹性列保留文字主轴内容高度，minHeight: 0 允许收缩", async () => {
     const columnText = (testId: string, minHeight?: number) =>
       createElement(Text, {

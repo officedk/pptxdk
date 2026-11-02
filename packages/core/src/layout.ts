@@ -833,16 +833,29 @@ export class LayoutPass {
     );
   }
 
+  #resolvedChildAlignment(node: LayoutNode, child: LayoutNode): Align {
+    // 使用已应用到 Yoga 的属性，复现其列向 baseline 到 flex-start 的回退。
+    const childAlignment = child.yoga.getAlignSelf();
+    const alignment =
+      childAlignment === Align.Auto
+        ? node.yoga.getAlignItems()
+        : childAlignment;
+    const direction = node.yoga.getFlexDirection();
+    if (
+      alignment === Align.Baseline &&
+      (direction === FlexDirection.Column ||
+        direction === FlexDirection.ColumnReverse)
+    ) {
+      return Align.FlexStart;
+    }
+    return alignment;
+  }
+
   #baselineParticipants(node: LayoutNode): LayoutNode[] {
     if (node.style.display !== "flex") return [];
-    return node.children.filter((child) => {
-      const alignment = child.style.alignSelf;
-      return (
-        alignment === "baseline" ||
-        ((alignment === undefined || alignment === "auto") &&
-          node.style.alignItems === "baseline")
-      );
-    });
+    return node.children.filter(
+      (child) => this.#resolvedChildAlignment(node, child) === Align.Baseline,
+    );
   }
 
   #isTextBearing(node: LayoutNode): boolean {

@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -34,7 +34,13 @@ const jpeg = new Uint8Array(
   ),
 );
 const gif = new Uint8Array(
-  Buffer.from("R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs=", "base64"),
+  Buffer.from(
+    "47494638396101000100800000000000ffffff2c00000000010001000002024401003b",
+    "hex",
+  ),
+);
+const widePng = new Uint8Array(
+  readFileSync(new URL("./assets/wide-20000x1.png", import.meta.url)),
 );
 
 describe("图片与原生组合", () => {
@@ -214,6 +220,37 @@ describe("图片与原生组合", () => {
     );
   });
 
+  it("拒绝 contain 派生后无法表示的极小图片尺寸", async () => {
+    await assert.rejects(
+      build(
+        createElement(
+          Deck,
+          { width: 960, height: 540 },
+          createElement(
+            Slide,
+            { slideId: "tiny-contain" },
+            createElement(Image, {
+              testId: "tiny-contain",
+              src: widePng,
+              width: 1,
+              height: 1,
+              fit: "contain",
+            }),
+          ),
+        ),
+      ),
+      (error: unknown) => {
+        assert.ok(error instanceof BuildError);
+        assert.equal(error.diagnostics[0]?.code, "invalid-coordinate");
+        assert.match(
+          error.diagnostics[0]?.path ?? "",
+          /image\[tiny-contain\]/u,
+        );
+        return true;
+      },
+    );
+  });
+
   it("按显式分数裁切并拒绝越界裁切值", async () => {
     const result = await build(
       createElement(
@@ -317,6 +354,96 @@ describe("图片与原生组合", () => {
         },
       );
     }
+  });
+
+  it("拒绝缺少 IDAT 数据块的 PNG", async () => {
+    const noIdatPng = new Uint8Array(
+      Buffer.from(
+        "89504e470d0a1a0a0000000d49484452000000010000000108000000003a7e9b550000000049454e44ae426082",
+        "hex",
+      ),
+    );
+    await assert.rejects(
+      build(
+        createElement(
+          Deck,
+          { width: 960, height: 540 },
+          createElement(
+            Slide,
+            { slideId: "no-idat" },
+            createElement(Image, {
+              testId: "no-idat",
+              src: noIdatPng,
+            }),
+          ),
+        ),
+      ),
+      (error: unknown) => {
+        assert.ok(error instanceof BuildError);
+        assert.equal(error.diagnostics[0]?.code, "unsupported-image-format");
+        assert.match(error.diagnostics[0]?.path ?? "", /image\[no-idat\]/u);
+        return true;
+      },
+    );
+  });
+
+  it("拒绝缺少扫描数据和 EOI 标记的 JPEG", async () => {
+    const truncatedJpeg = new Uint8Array(
+      Buffer.from("ffd8ffc00011080001000103011100021100031100", "hex"),
+    );
+    await assert.rejects(
+      build(
+        createElement(
+          Deck,
+          { width: 960, height: 540 },
+          createElement(
+            Slide,
+            { slideId: "truncated-jpeg" },
+            createElement(Image, {
+              testId: "truncated-jpeg",
+              src: truncatedJpeg,
+            }),
+          ),
+        ),
+      ),
+      (error: unknown) => {
+        assert.ok(error instanceof BuildError);
+        assert.equal(error.diagnostics[0]?.code, "unsupported-image-format");
+        assert.match(
+          error.diagnostics[0]?.path ?? "",
+          /image\[truncated-jpeg\]/u,
+        );
+        return true;
+      },
+    );
+  });
+
+  it("拒绝缺少图像数据块的 GIF", async () => {
+    const emptyGif = new Uint8Array(
+      Buffer.from("474946383961010001000000003b", "hex"),
+    );
+    await assert.rejects(
+      build(
+        createElement(
+          Deck,
+          { width: 960, height: 540 },
+          createElement(
+            Slide,
+            { slideId: "empty-gif" },
+            createElement(Image, {
+              testId: "empty-gif",
+              src: emptyGif,
+            }),
+          ),
+        ),
+      ),
+      (error: unknown) => {
+        assert.ok(error instanceof BuildError);
+        assert.equal(error.diagnostics[0]?.code, "unsupported-image-format");
+        assert.match(error.diagnostics[0]?.path ?? "", /image\[empty-gif\]/u);
+        return true;
+      },
+    );
   });
 
   it("保留嵌套原生组合成员的身份、范围与相对坐标", async () => {

@@ -985,7 +985,10 @@ function readPresentation(
   };
 }
 
-/** 从实际 PPTX 字节读取 Transitional 包关系、页面对象和几何，不读取构建报告。 */
+/**
+ * 从实际 PPTX 字节读取 Transitional 包关系、页面对象和几何，不读取构建报告。
+ * 图片核对媒体关系、类型与签名，不解码像素数据。
+ */
 export async function validatePptx(
   input: Uint8Array,
 ): Promise<ValidationResult> {

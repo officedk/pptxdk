@@ -93,6 +93,7 @@ function pngMetadata(data: Uint8Array): ImageMetadata | undefined {
   }
   let offset = 8;
   let hasHeader = false;
+  let hasImageData = false;
   let hasEnd = false;
   while (offset + 12 <= data.length) {
     const size = uint32(data, offset);
@@ -108,8 +109,14 @@ function pngMetadata(data: Uint8Array): ImageMetadata | undefined {
       data[offset + 5] === 0x45 &&
       data[offset + 6] === 0x4e &&
       data[offset + 7] === 0x44;
+    const isImageData =
+      data[offset + 4] === 0x49 &&
+      data[offset + 5] === 0x44 &&
+      data[offset + 6] === 0x41 &&
+      data[offset + 7] === 0x54;
     if (offset === 8 && !isHeader) return undefined;
     if (isHeader) hasHeader = true;
+    if (isImageData && size > 0) hasImageData = true;
     if (isEnd) {
       hasEnd = size === 0;
       break;
@@ -118,7 +125,9 @@ function pngMetadata(data: Uint8Array): ImageMetadata | undefined {
   }
   const width = uint32(data, 16);
   const height = uint32(data, 20);
-  if (!hasHeader || !hasEnd || width < 1 || height < 1) return undefined;
+  if (!hasHeader || !hasImageData || !hasEnd || width < 1 || height < 1) {
+    return undefined;
+  }
   return { extension: "png", contentType: "image/png", width, height };
 }
 
@@ -127,11 +136,41 @@ function jpegMetadata(data: Uint8Array): ImageMetadata | undefined {
     return undefined;
   }
   let offset = 2;
+  let frame: ImageMetadata | undefined;
   while (offset + 4 <= data.length) {
     if (data[offset] !== 0xff) return undefined;
     while (data[offset] === 0xff) offset += 1;
     const marker = data[offset];
-    if (marker === undefined || marker === 0xda || marker === 0xd9) break;
+    if (marker === undefined || marker === 0xd9) return undefined;
+    if (marker === 0xda) {
+      const length = uint16(data, offset + 1);
+      if (
+        frame === undefined ||
+        length < 2 ||
+        offset + length + 1 > data.length
+      ) {
+        return undefined;
+      }
+      let hasScanData = false;
+      for (let index = offset + length + 1; index + 1 < data.length; index++) {
+        if (data[index] !== 0xff) {
+          hasScanData = true;
+          continue;
+        }
+        let markerIndex = index + 1;
+        while (data[markerIndex] === 0xff) markerIndex += 1;
+        const scanMarker = data[markerIndex];
+        if (scanMarker === 0xd9) return hasScanData ? frame : undefined;
+        if (
+          scanMarker === 0x00 ||
+          (scanMarker !== undefined && scanMarker >= 0xd0 && scanMarker <= 0xd7)
+        ) {
+          hasScanData = true;
+        }
+        index = markerIndex;
+      }
+      return undefined;
+    }
     if (
       marker === 0xd8 ||
       marker === 0x01 ||
@@ -152,7 +191,7 @@ function jpegMetadata(data: Uint8Array): ImageMetadata | undefined {
       const height = uint16(data, offset + 4);
       const width = uint16(data, offset + 6);
       if (width < 1 || height < 1) return undefined;
-      return { extension: "jpeg", contentType: "image/jpeg", width, height };
+      frame = { extension: "jpeg", contentType: "image/jpeg", width, height };
     }
     offset += length + 1;
   }
@@ -171,7 +210,66 @@ function gifMetadata(data: Uint8Array): ImageMetadata | undefined {
   const width = (data[6] ?? 0) + ((data[7] ?? 0) << 8);
   const height = (data[8] ?? 0) + ((data[9] ?? 0) << 8);
   if (width < 1 || height < 1) return undefined;
-  return { extension: "gif", contentType: "image/gif", width, height };
+  let offset = 13;
+  const globalTable = data[10] ?? 0;
+  if ((globalTable & 0x80) !== 0) {
+    offset += 3 * (1 << ((globalTable & 0x07) + 1));
+    if (offset > data.length) return undefined;
+  }
+  let hasImageData = false;
+  while (offset < data.length) {
+    const block = data[offset];
+    if (block === 0x3b) {
+      if (offset !== data.length - 1 || !hasImageData) return undefined;
+      return { extension: "gif", contentType: "image/gif", width, height };
+    }
+    if (block === 0x21) {
+      if (offset + 1 >= data.length) return undefined;
+      offset += 2;
+      let terminated = false;
+      while (offset < data.length) {
+        const size = data[offset] ?? 0;
+        offset += 1;
+        if (size === 0) {
+          terminated = true;
+          break;
+        }
+        offset += size;
+        if (offset > data.length) return undefined;
+      }
+      if (!terminated) return undefined;
+      continue;
+    }
+    if (block !== 0x2c || offset + 10 > data.length) return undefined;
+    const imageWidth = (data[offset + 5] ?? 0) + ((data[offset + 6] ?? 0) << 8);
+    const imageHeight =
+      (data[offset + 7] ?? 0) + ((data[offset + 8] ?? 0) << 8);
+    const localTable = data[offset + 9] ?? 0;
+    if (imageWidth < 1 || imageHeight < 1) return undefined;
+    offset += 10;
+    if ((localTable & 0x80) !== 0) {
+      offset += 3 * (1 << ((localTable & 0x07) + 1));
+      if (offset > data.length) return undefined;
+    }
+    if (offset >= data.length) return undefined;
+    offset += 1;
+    let hasImageBlockData = false;
+    let terminated = false;
+    while (offset < data.length) {
+      const size = data[offset] ?? 0;
+      offset += 1;
+      if (size === 0) {
+        terminated = true;
+        break;
+      }
+      offset += size;
+      if (offset > data.length) return undefined;
+      hasImageBlockData = true;
+    }
+    if (!terminated || !hasImageBlockData) return undefined;
+    hasImageData = true;
+  }
+  return undefined;
 }
 
 function readImage(source: unknown): LoadedImage {
@@ -397,6 +495,9 @@ export const imageCapability: CapabilityModule = {
         box.width = fittedWidth;
       }
     }
+    // contain 派生的尺寸也必须能写成非零 EMU。
+    box.width = dimension(box.width, "width");
+    box.height = dimension(box.height, "height");
     const name = requestedName ?? testId ?? `Image ${context.id - 1}`;
     let escapedName: string;
     let escapedAlt: string | undefined;

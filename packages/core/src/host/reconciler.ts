@@ -195,9 +195,32 @@ function containsSuspendedBoundary(fiber: FiberNode | null): boolean {
 export async function withHostTree<T>(
   element: ReactNode,
   consume: (container: HostContainer) => T,
+  signal?: AbortSignal,
 ): Promise<T> {
+  if (signal?.aborted) throw signal.reason;
+
   const container: HostContainer = { children: [] };
-  let failure: { error: unknown } | undefined;
+  type Outcome = "running" | "completed" | "failed" | "cancelled";
+  let outcome: Outcome = "running";
+  let outcomeError: unknown;
+  let cleanupError: { error: unknown } | undefined;
+  let cleaning = false;
+  let resolveCompletion = (): void => {};
+  let rejectCompletion = (_error: unknown): void => {};
+  const completion = new Promise<void>((resolve, reject) => {
+    resolveCompletion = resolve;
+    rejectCompletion = reject;
+  });
+
+  const finish = (next: Exclude<Outcome, "running">, error?: unknown) => {
+    // 首个终态请求锁定结果；已认领的完成不会被后来到达的 abort 回滚。
+    if (outcome !== "running") return;
+    outcome = next;
+    outcomeError = error;
+    if (next === "completed") resolveCompletion();
+    else rejectCompletion(error);
+  };
+
   let queueCompletionCheck = (): void => {};
   const root = reconciler.createContainer(
     container,
@@ -207,8 +230,11 @@ export async function withHostTree<T>(
     null,
     "react-pptx",
     (error) => {
-      failure ??= { error };
-      queueCompletionCheck();
+      if (cleaning) {
+        cleanupError ??= { error };
+      } else if (outcome === "running") {
+        finish("failed", error);
+      }
     },
     () => {},
     () => {},
@@ -219,6 +245,15 @@ export async function withHostTree<T>(
   const currentDescriptor = Object.getOwnPropertyDescriptor(root, "current");
   let current = fiberRoot.current;
   let currentAdapterInstalled = false;
+  let abortListenerInstalled = false;
+  let revision = 0;
+  let operationError: unknown;
+  let operationFailed = false;
+  let result: T | undefined;
+  let hasResult = false;
+
+  const currentOutcome = (): Outcome => outcome;
+  const onAbort = (): void => finish("cancelled", signal?.reason);
 
   try {
     if (
@@ -228,73 +263,102 @@ export async function withHostTree<T>(
       throw new Error("当前 React root 不支持已验证的提交观察适配");
     }
 
-    await new Promise<void>((resolve, reject) => {
-      let settled = false;
-      let revision = 0;
-
-      const finish = (failed: boolean, error?: unknown): void => {
-        if (settled) return;
-        settled = true;
-        if (failed) reject(error);
-        else if (failure !== undefined) reject(failure.error);
-        else resolve();
-      };
-
-      queueCompletionCheck = (): void => {
-        if (settled) return;
+    queueCompletionCheck = (): void => {
+      if (outcome !== "running") return;
+      try {
         const observedRevision = ++revision;
         queueMicrotask(() => {
-          if (settled || observedRevision !== revision) return;
+          if (outcome !== "running" || observedRevision !== revision) return;
           try {
             reconciler.flushPassiveEffects();
-            if (settled || observedRevision !== revision) return;
-            if (failure !== undefined) {
-              finish(true, failure.error);
-              return;
-            }
+            if (outcome !== "running" || observedRevision !== revision) return;
             if (
               !containsSuspendedBoundary(fiberRoot.current) &&
               fiberRoot.pendingLanes === 0
             ) {
-              finish(false);
+              finish("completed");
             }
           } catch (error) {
-            finish(true, error);
+            finish("failed", error);
           }
         });
-      };
+      } catch (error) {
+        finish("failed", error);
+      }
+    };
 
-      Object.defineProperty(root, "current", {
-        enumerable: currentDescriptor.enumerable === true,
-        configurable: true,
-        get: () => current,
-        set(next: FiberNode) {
-          current = next;
-          try {
-            queueCompletionCheck();
-          } catch (error) {
-            failure ??= { error };
-          }
-        },
-      });
-      currentAdapterInstalled = true;
-
-      reconciler.updateContainer(element, root, null, null);
+    Object.defineProperty(root, "current", {
+      enumerable: currentDescriptor.enumerable === true,
+      configurable: true,
+      get: () => current,
+      set(next: FiberNode) {
+        current = next;
+        queueCompletionCheck();
+      },
     });
+    currentAdapterInstalled = true;
 
-    return consume(container);
-  } finally {
+    if (signal !== undefined) {
+      signal.addEventListener("abort", onAbort, { once: true });
+      abortListenerInstalled = true;
+      if (signal.aborted) onAbort();
+    }
+    if (outcome === "running") {
+      reconciler.updateContainer(element, root, null, null);
+    }
+
     try {
-      reconciler.updateContainerSync(null, root, null, null);
-      reconciler.flushSyncWork();
-      reconciler.flushPassiveEffects();
+      await completion;
+      if (currentOutcome() === "completed") {
+        result = consume(container);
+        hasResult = true;
+      }
+    } catch (error) {
+      operationFailed = true;
+      operationError = error;
+    }
+  } catch (error) {
+    operationFailed = true;
+    operationError = error;
+  } finally {
+    cleaning = true;
+    const attemptCleanup = (cleanup: () => void): void => {
+      try {
+        cleanup();
+      } catch (error) {
+        cleanupError ??= { error };
+      }
+    };
+
+    try {
+      attemptCleanup(() => {
+        reconciler.updateContainerSync(null, root, null, null);
+      });
+      attemptCleanup(() => reconciler.flushSyncWork());
+      attemptCleanup(() => reconciler.flushPassiveEffects());
     } finally {
       if (currentAdapterInstalled && currentDescriptor !== undefined) {
-        Object.defineProperty(root, "current", {
-          ...currentDescriptor,
-          value: current,
+        attemptCleanup(() => {
+          Object.defineProperty(root, "current", {
+            ...currentDescriptor,
+            value: current,
+          });
         });
+      }
+      if (abortListenerInstalled && signal !== undefined) {
+        attemptCleanup(() => signal.removeEventListener("abort", onAbort));
       }
     }
   }
+
+  const finalOutcome = currentOutcome();
+  if (operationFailed) throw operationError;
+  if (finalOutcome === "failed" || finalOutcome === "cancelled") {
+    throw outcomeError;
+  }
+  if (cleanupError !== undefined) throw cleanupError.error;
+  if (finalOutcome !== "completed" || !hasResult) {
+    throw new Error("React 构建未产生完成结果");
+  }
+  return result as T;
 }

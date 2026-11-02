@@ -1,8 +1,4 @@
-import {
-  CapabilityError,
-  xmlEscape,
-  type CapabilityAnnotation,
-} from "@react-pptx/core";
+import { CapabilityError, type CapabilityAnnotation } from "@react-pptx/core";
 import {
   createContext,
   createElement,

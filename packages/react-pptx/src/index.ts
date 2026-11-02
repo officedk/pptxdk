@@ -1,7 +1,15 @@
-import { shapeCapability } from "@react-pptx/capabilities";
+import {
+  groupCapability,
+  imageCapability,
+  shapeCapability,
+} from "@react-pptx/capabilities";
 import { createBuilder } from "@react-pptx/core";
 
-export const build = createBuilder([shapeCapability]);
+export const build = createBuilder([
+  shapeCapability,
+  imageCapability,
+  groupCapability,
+]);
 
 export {
   BuildError,
@@ -10,7 +18,14 @@ export {
   Slide,
   targets,
 } from "@react-pptx/core";
-export { Shape, shapeCapability } from "@react-pptx/capabilities";
+export {
+  Image,
+  Group,
+  Shape,
+  groupCapability,
+  imageCapability,
+  shapeCapability,
+} from "@react-pptx/capabilities";
 export { createBuilder } from "@react-pptx/core";
 export type {
   BuildOptions,
@@ -21,4 +36,9 @@ export type {
   SlideObservation,
   Target,
 } from "@react-pptx/core";
-export type { ShapeProps } from "@react-pptx/capabilities";
+export type {
+  GroupProps,
+  ImageProps,
+  ImageSource,
+  ShapeProps,
+} from "@react-pptx/capabilities";

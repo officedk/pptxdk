@@ -1,0 +1,555 @@
+import assert from "node:assert/strict";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { pathToFileURL } from "node:url";
+
+import {
+  build,
+  BuildError,
+  createBuilder,
+  Deck,
+  Group,
+  groupCapability,
+  Image,
+  Shape,
+  shapeCapability,
+  Slide,
+} from "@react-pptx/react-pptx";
+import { validatePptx } from "@react-pptx/validation";
+import { unzipSync, zipSync } from "fflate";
+import { createElement, type ComponentType } from "react";
+import { describe, it } from "vitest";
+
+const png = new Uint8Array(
+  Buffer.from(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/n1sAAAAASUVORK5CYII=",
+    "base64",
+  ),
+);
+const jpeg = new Uint8Array(
+  Buffer.from(
+    "/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAP//////////////////////////////////////////////////////////////////////////////////////2wBDAf//////////////////////////////////////////////////////////////////////////////////////wAARCAABAAEDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAX/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/9oADAMBAAIQAxAAAAFR/8QAFBABAAAAAAAAAAAAAAAAAAAAAP/aAAgBAQABBQJ//8QAFBABAAAAAAAAAAAAAAAAAAAAAP/aAAgBAwEBPwF//8QAFBABAAAAAAAAAAAAAAAAAAAAAP/aAAgBAgEBPwF//8QAFBABAAAAAAAAAAAAAAAAAAAAAP/aAAgBAQAGPwJ//8QAFBABAAAAAAAAAAAAAAAAAAAAAP/aAAgBAQABPyF//9oADAMBAAIRAxEAPwD/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/9oACAEBAAE/IV//2Q==",
+    "base64",
+  ),
+);
+const gif = new Uint8Array(
+  Buffer.from("R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs=", "base64"),
+);
+
+describe("图片与原生组合", () => {
+  it("通过公开构建读取图片资源并在实际 PPTX 中建立图片关系", async () => {
+    const result = await build(
+      createElement(
+        Deck,
+        { width: 960, height: 540 },
+        createElement(
+          Slide,
+          { slideId: "media" },
+          createElement(Image, {
+            testId: "cover-photo",
+            src: png,
+            alt: "封面照片",
+            x: 32,
+            y: 48,
+            width: 120,
+            height: 72,
+            fit: "cover",
+          }),
+        ),
+      ),
+    );
+
+    assert.deepEqual(result.report.slides[0]?.objects, [
+      {
+        id: 2,
+        kind: "image",
+        name: "cover-photo",
+        testId: "cover-photo",
+        box: { x: 32, y: 48, width: 120, height: 72 },
+      },
+    ]);
+
+    const file = await validatePptx(result.pptx);
+    assert.deepEqual(file.errors, []);
+    const image = file.slides[0]?.objects[0];
+    assert.equal(image?.kind, "image");
+    assert.deepEqual(image?.boxEmu, {
+      x: 304800,
+      y: 457200,
+      width: 1143000,
+      height: 685800,
+    });
+    assert.equal(image?.image?.contentType, "image/png");
+    assert.deepEqual(image?.crop, { top: 20000, bottom: 20000 });
+    assert.ok(image?.image?.relationshipId);
+    assert.ok(image?.image?.part);
+    assert.deepEqual(unzipSync(result.pptx)[image.image.part], png);
+
+    const damagedParts = unzipSync(result.pptx);
+    delete damagedParts[image.image.part];
+    const damagedFile = await validatePptx(zipSync(damagedParts));
+    assert.ok(
+      damagedFile.errors.some(({ code }) => code === "invalid-image-part"),
+    );
+  });
+
+  it("从本地路径和 file URL 读取图片资源", async () => {
+    const directory = mkdtempSync(join(tmpdir(), "react-pptx-image-"));
+    const path = join(directory, "pixel.png");
+    writeFileSync(path, png);
+    try {
+      for (const source of [path, pathToFileURL(path)]) {
+        const result = await build(
+          createElement(
+            Deck,
+            { width: 960, height: 540 },
+            createElement(
+              Slide,
+              { slideId: "local-image" },
+              createElement(Image, {
+                testId: "local-image",
+                src: source,
+              }),
+            ),
+          ),
+        );
+        const file = await validatePptx(result.pptx);
+        assert.deepEqual(file.errors, []);
+        assert.deepEqual(result.report.slides[0]?.objects[0]?.box, {
+          x: 0,
+          y: 0,
+          width: 1,
+          height: 1,
+        });
+        assert.equal(
+          file.slides[0]?.objects[0]?.image?.contentType,
+          "image/png",
+        );
+      }
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("读取 JPEG 与 GIF 固有尺寸并保留其原生资源类型", async () => {
+    for (const [src, contentType] of [
+      [jpeg, "image/jpeg"],
+      [gif, "image/gif"],
+    ] as const) {
+      const result = await build(
+        createElement(
+          Deck,
+          { width: 960, height: 540 },
+          createElement(
+            Slide,
+            { slideId: contentType },
+            createElement(Image, { testId: contentType, src }),
+          ),
+        ),
+      );
+      const file = await validatePptx(result.pptx);
+      assert.deepEqual(file.errors, []);
+      assert.deepEqual(result.report.slides[0]?.objects[0]?.box, {
+        x: 0,
+        y: 0,
+        width: 1,
+        height: 1,
+      });
+      const image = file.slides[0]?.objects[0];
+      assert.equal(image?.image?.contentType, contentType);
+      assert.deepEqual(unzipSync(result.pptx)[image?.image?.part ?? ""], src);
+    }
+  });
+
+  it("按内容复用媒体部件，并为保留比例模式计算图片尺寸", async () => {
+    const result = await build(
+      createElement(
+        Deck,
+        { width: 960, height: 540 },
+        createElement(
+          Slide,
+          { slideId: "reuse" },
+          createElement(Image, {
+            testId: "contained",
+            src: png,
+            x: 32,
+            y: 48,
+            width: 120,
+            height: 72,
+            fit: "contain",
+          }),
+          createElement(Image, {
+            testId: "duplicate",
+            src: png,
+            x: 200,
+            y: 48,
+            width: 120,
+            height: 72,
+          }),
+        ),
+      ),
+    );
+
+    assert.deepEqual(
+      result.report.slides[0]?.objects.map(({ box }) => box),
+      [
+        { x: 56, y: 48, width: 72, height: 72 },
+        { x: 200, y: 48, width: 120, height: 72 },
+      ],
+    );
+    const file = await validatePptx(result.pptx);
+    assert.deepEqual(file.errors, []);
+    const images = file.slides[0]?.objects ?? [];
+    assert.equal(images[0]?.image?.part, images[1]?.image?.part);
+    assert.equal(
+      images[0]?.image?.relationshipId,
+      images[1]?.image?.relationshipId,
+    );
+    assert.equal(
+      Object.keys(unzipSync(result.pptx)).filter((part) =>
+        part.startsWith("ppt/media/"),
+      ).length,
+      1,
+    );
+  });
+
+  it("按显式分数裁切并拒绝越界裁切值", async () => {
+    const result = await build(
+      createElement(
+        Deck,
+        { width: 960, height: 540 },
+        createElement(
+          Slide,
+          { slideId: "crop" },
+          createElement(Image, {
+            testId: "cropped",
+            src: png,
+            x: 0,
+            y: 0,
+            width: 120,
+            height: 72,
+            fit: "contain",
+            crop: { left: 0.1, right: 0.2 },
+          }),
+        ),
+      ),
+    );
+    const file = await validatePptx(result.pptx);
+    assert.deepEqual(file.errors, []);
+    assert.deepEqual(file.slides[0]?.objects[0]?.crop, {
+      left: 10000,
+      right: 20000,
+    });
+
+    for (const [index, crop] of [
+      { left: 0.6, right: 0.5 },
+      { top: Number.POSITIVE_INFINITY },
+      { bottom: -0.1 },
+    ].entries()) {
+      await assert.rejects(
+        build(
+          createElement(
+            Deck,
+            { width: 960, height: 540 },
+            createElement(
+              Slide,
+              { slideId: `bad-crop-${index}` },
+              createElement(Image, {
+                testId: `bad-crop-${index}`,
+                src: png,
+                width: 120,
+                height: 72,
+                crop,
+              }),
+            ),
+          ),
+        ),
+        (error: unknown) => {
+          assert.ok(error instanceof BuildError);
+          assert.equal(error.diagnostics[0]?.code, "invalid-crop");
+          assert.match(error.diagnostics[0]?.path ?? "", /image\[bad-crop-/u);
+          return true;
+        },
+      );
+    }
+  });
+
+  it("拒绝无效 fit 值、缺失文件与无法识别的图片内容", async () => {
+    const invalidFit = Image as ComponentType<Record<string, unknown>>;
+    for (const [props, code] of [
+      [
+        { testId: "bad-fit", src: png, width: 120, height: 72, fit: "stretch" },
+        "unsupported-fit",
+      ],
+      [
+        {
+          testId: "missing",
+          src: new URL("file:///tmp/react-pptx-no-image.png"),
+        },
+        "image-read-failed",
+      ],
+      [
+        { testId: "unknown-format", src: new Uint8Array([1, 2, 3, 4]) },
+        "unsupported-image-format",
+      ],
+    ] as const) {
+      await assert.rejects(
+        build(
+          createElement(
+            Deck,
+            { width: 960, height: 540 },
+            createElement(
+              Slide,
+              { slideId: "invalid-image" },
+              createElement(invalidFit, props),
+            ),
+          ),
+        ),
+        (error: unknown) => {
+          assert.ok(error instanceof BuildError);
+          assert.equal(error.diagnostics[0]?.code, code);
+          assert.match(
+            error.diagnostics[0]?.path ?? "",
+            /slide\[invalid-image\]/u,
+          );
+          return true;
+        },
+      );
+    }
+  });
+
+  it("保留嵌套原生组合成员的身份、范围与相对坐标", async () => {
+    const result = await build(
+      createElement(
+        Deck,
+        { width: 960, height: 540 },
+        createElement(
+          Slide,
+          { slideId: "groups" },
+          createElement(
+            Group,
+            { testId: "outer" },
+            createElement(Shape, {
+              testId: "left",
+              x: 20,
+              y: 30,
+              width: 40,
+              height: 30,
+            }),
+            createElement(
+              Group,
+              { testId: "inner" },
+              createElement(Image, {
+                testId: "photo",
+                src: png,
+                x: 100,
+                y: 50,
+                width: 80,
+                height: 40,
+              }),
+              createElement(Shape, {
+                testId: "right",
+                x: 150,
+                y: 90,
+                width: 20,
+                height: 10,
+              }),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    assert.deepEqual(result.report.slides[0]?.objects, [
+      {
+        id: 2,
+        kind: "group",
+        name: "outer",
+        testId: "outer",
+        box: { x: 20, y: 30, width: 160, height: 70 },
+        members: [
+          {
+            id: 3,
+            kind: "shape",
+            name: "left",
+            testId: "left",
+            geometry: "rect",
+            box: { x: 20, y: 30, width: 40, height: 30 },
+          },
+          {
+            id: 4,
+            kind: "group",
+            name: "inner",
+            testId: "inner",
+            box: { x: 100, y: 50, width: 80, height: 50 },
+            members: [
+              {
+                id: 5,
+                kind: "image",
+                name: "photo",
+                testId: "photo",
+                box: { x: 100, y: 50, width: 80, height: 40 },
+              },
+              {
+                id: 6,
+                kind: "shape",
+                name: "right",
+                testId: "right",
+                geometry: "rect",
+                box: { x: 150, y: 90, width: 20, height: 10 },
+              },
+            ],
+          },
+        ],
+      },
+    ]);
+
+    const file = await validatePptx(result.pptx);
+    assert.deepEqual(file.errors, []);
+    const outer = file.slides[0]?.objects[0];
+    assert.equal(outer?.kind, "group");
+    assert.equal(outer?.id, 2);
+    assert.deepEqual(outer?.boxEmu, {
+      x: 190500,
+      y: 285750,
+      width: 1524000,
+      height: 666750,
+    });
+    assert.deepEqual(outer?.groupTransform, {
+      childOffset: { x: 190500, y: 285750 },
+      childExtent: { width: 1524000, height: 666750 },
+    });
+    assert.deepEqual(
+      outer?.members?.map(({ id, kind, name, boxEmu }) => ({
+        id,
+        kind,
+        name,
+        boxEmu,
+      })),
+      [
+        {
+          id: 3,
+          kind: "shape",
+          name: "left",
+          boxEmu: { x: 190500, y: 285750, width: 381000, height: 285750 },
+        },
+        {
+          id: 4,
+          kind: "group",
+          name: "inner",
+          boxEmu: {
+            x: 952500,
+            y: 476250,
+            width: 762000,
+            height: 476250,
+          },
+        },
+      ],
+    );
+    const inner = outer?.members?.[1];
+    assert.deepEqual(
+      [
+        (inner?.boxEmu.x ?? 0) - (outer?.groupTransform?.childOffset.x ?? 0),
+        (inner?.boxEmu.y ?? 0) - (outer?.groupTransform?.childOffset.y ?? 0),
+        (inner?.members?.[1]?.boxEmu.x ?? 0) -
+          (inner?.groupTransform?.childOffset.x ?? 0),
+        (inner?.members?.[1]?.boxEmu.y ?? 0) -
+          (inner?.groupTransform?.childOffset.y ?? 0),
+      ],
+      [762000, 190500, 476250, 381000],
+    );
+    assert.deepEqual(
+      [
+        outer?.id,
+        ...(outer?.members?.map(({ id }) => id) ?? []),
+        ...(inner?.members?.map(({ id }) => id) ?? []),
+      ],
+      [2, 3, 4, 5, 6],
+    );
+    assert.equal(inner?.members?.[0]?.image?.contentType, "image/png");
+  });
+
+  it("将 Group 限定为原生组合，并在成员能力被裁剪时准确报错", async () => {
+    const positionedGroup = Group as ComponentType<Record<string, unknown>>;
+    await assert.rejects(
+      build(
+        createElement(
+          Deck,
+          { width: 960, height: 540 },
+          createElement(
+            Slide,
+            { slideId: "group-props" },
+            createElement(
+              positionedGroup,
+              { testId: "not-a-box", x: 20 },
+              createElement(Shape, {
+                testId: "member",
+                x: 20,
+                y: 30,
+                width: 40,
+                height: 30,
+              }),
+            ),
+          ),
+        ),
+      ),
+      (error: unknown) => {
+        assert.ok(error instanceof BuildError);
+        assert.equal(error.diagnostics[0]?.code, "unknown-parameter");
+        assert.match(error.diagnostics[0]?.path ?? "", /group\[not-a-box\]/u);
+        return true;
+      },
+    );
+
+    await assert.rejects(
+      build(
+        createElement(
+          Deck,
+          { width: 960, height: 540 },
+          createElement(
+            Slide,
+            { slideId: "empty-group" },
+            createElement(Group, { testId: "empty" }),
+          ),
+        ),
+      ),
+      (error: unknown) => {
+        assert.ok(error instanceof BuildError);
+        assert.equal(error.diagnostics[0]?.code, "empty-group");
+        assert.match(error.diagnostics[0]?.path ?? "", /group\[empty\]/u);
+        return true;
+      },
+    );
+
+    const clippedBuild = createBuilder([shapeCapability, groupCapability]);
+    await assert.rejects(
+      clippedBuild(
+        createElement(
+          Deck,
+          { width: 960, height: 540 },
+          createElement(
+            Slide,
+            { slideId: "clipped-group" },
+            createElement(
+              Group,
+              { testId: "clipped" },
+              createElement(Image, { testId: "missing-image", src: png }),
+            ),
+          ),
+        ),
+      ),
+      (error: unknown) => {
+        assert.ok(error instanceof BuildError);
+        assert.ok(
+          error.diagnostics.some(
+            ({ code, path }) =>
+              code === "missing-capability" &&
+              /group\[clipped\]\/image\[missing-image\]/u.test(path),
+          ),
+        );
+        return true;
+      },
+    );
+  });
+});

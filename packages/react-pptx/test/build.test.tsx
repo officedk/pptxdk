@@ -73,6 +73,7 @@ describe("公开构建入口", () => {
     assert.deepEqual(file.slides[0]?.objects[0], {
       id: 2,
       name: "badge",
+      kind: "shape",
       geometry: "ellipse",
       boxEmu: { x: 304800, y: 457200, width: 1143000, height: 685800 },
     });

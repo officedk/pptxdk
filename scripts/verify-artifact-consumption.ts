@@ -162,9 +162,11 @@ try {
     join(temporaryDirectory, "consumer-types.ts"),
     [
       'import { createElement } from "react";',
-      'import { Deck, Shape, Slide, build, type BuildResult, type ShapeProps } from "@react-pptx/react-pptx";',
+      'import { Deck, Group, Image, Shape, Slide, build, type BuildResult, type GroupProps, type ImageProps, type ShapeProps } from "@react-pptx/react-pptx";',
       'const shape: ShapeProps = { testId: "typed", x: 0, y: 0, width: 40, height: 30 };',
-      'const result: Promise<BuildResult> = build(createElement(Deck, {}, createElement(Slide, { slideId: "typed" }, createElement(Shape, shape))));',
+      "const image: ImageProps = { src: new Uint8Array([0x89, 0x50, 0x4e, 0x47]), width: 40, height: 30 };",
+      'const group: GroupProps = { name: "typed-group" };',
+      'const result: Promise<BuildResult> = build(createElement(Deck, {}, createElement(Slide, { slideId: "typed" }, createElement(Group, group, createElement(Shape, shape), createElement(Image, image)))));',
       "void result;",
     ].join("\n"),
   );
@@ -172,14 +174,17 @@ try {
     join(temporaryDirectory, "consumer-runtime.ts"),
     [
       'import { createElement } from "react";',
-      'import { Deck, Shape, Slide, build } from "@react-pptx/react-pptx";',
+      'import { Deck, Group, Image, Shape, Slide, build } from "@react-pptx/react-pptx";',
       'import { validatePptx } from "@react-pptx/validation";',
       'import { writeFile } from "node:fs/promises";',
-      'const result = await build(createElement(Deck, { width: 120, height: 96 }, createElement(Slide, { slideId: "installed" }, createElement(Shape, { testId: "packed-shape", geometry: "hexagon", x: 10, y: 12, width: 45, height: 30, fill: "#123456" }))));',
+      'const imageBytes = new Uint8Array(Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/n1sAAAAASUVORK5CYII=", "base64"));',
+      'const result = await build(createElement(Deck, { width: 120, height: 96 }, createElement(Slide, { slideId: "installed" }, createElement(Group, { testId: "packed-group" }, createElement(Shape, { testId: "packed-shape", geometry: "hexagon", x: 10, y: 12, width: 45, height: 30, fill: "#123456" }), createElement(Image, { testId: "packed-image", src: imageBytes, x: 60, y: 12, width: 40, height: 30, fit: "cover" })))));',
       "const file = await validatePptx(result.pptx);",
-      'if (file.errors.length !== 0 || file.slides[0]?.objects[0]?.name !== "packed-shape") throw new Error(JSON.stringify(file.errors));',
+      "const group = file.slides[0]?.objects[0];",
+      'const image = group?.members?.find(({ kind }) => kind === "image");',
+      'if (file.errors.length !== 0 || group?.kind !== "group" || group.name !== "packed-group" || image?.name !== "packed-image" || image.image?.contentType !== "image/png") throw new Error(JSON.stringify(file.errors));',
       'await writeFile("artifact.pptx", result.pptx);',
-      "process.stdout.write(JSON.stringify({ standard: file.profile.standard, slideId: file.slides[0]?.id, object: file.slides[0]?.objects[0]?.name, bytes: result.pptx.byteLength }));",
+      "process.stdout.write(JSON.stringify({ standard: file.profile.standard, slideId: file.slides[0]?.id, group: group.name, member: image.name, mediaType: image.image.contentType, bytes: result.pptx.byteLength }));",
     ].join("\n"),
   );
 
@@ -197,13 +202,17 @@ try {
   const summary = JSON.parse(summaryText) as {
     readonly standard?: string;
     readonly slideId?: string;
-    readonly object?: string;
+    readonly group?: string;
+    readonly member?: string;
+    readonly mediaType?: string;
     readonly bytes?: number;
   };
   if (
     summary.standard !== "ECMA-376 5th edition Transitional" ||
     summary.slideId !== "installed" ||
-    summary.object !== "packed-shape" ||
+    summary.group !== "packed-group" ||
+    summary.member !== "packed-image" ||
+    summary.mediaType !== "image/png" ||
     summary.bytes === undefined ||
     summary.bytes <= 0
   ) {

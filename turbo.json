@@ -44,6 +44,7 @@
       ],
       "inputs": [
         "scripts/verify-artifact-consumption.ts",
+        "scripts/assets/fonts/**",
         "package.json",
         "apps/cli/package.json",
         "apps/cli/src/**",

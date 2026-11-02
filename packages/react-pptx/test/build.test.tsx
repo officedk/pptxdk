@@ -8,14 +8,18 @@ import { join } from "node:path";
 import {
   build,
   BuildError,
+  Cell,
+  Chart,
   Deck,
   createBuilder,
   font,
   P,
+  Row,
   Shape,
   shapeCapability,
   Slide,
   Span,
+  Table,
   Text,
   targets,
   transitions,
@@ -40,6 +44,21 @@ function deck(shape: ReturnType<typeof createElement>) {
 
 function testFont(path: string): Uint8Array {
   return new Uint8Array(readFileSync(new URL(path, import.meta.url)));
+}
+
+function withFontFsType(bytes: Uint8Array, fsType: number): Uint8Array {
+  const copy = new Uint8Array(bytes);
+  const view = new DataView(copy.buffer, copy.byteOffset, copy.byteLength);
+  const tableCount = view.getUint16(4);
+  for (let index = 0; index < tableCount; index += 1) {
+    const record = 12 + index * 16;
+    const tag = String.fromCharCode(...copy.subarray(record, record + 4));
+    if (tag === "OS/2") {
+      view.setUint16(view.getUint32(record + 8) + 8, fsType);
+      return copy;
+    }
+  }
+  throw new Error("Jost fixture must contain an OS/2 table");
 }
 
 const notoSansScRegular = testFont("./assets/fonts/NotoSansSC-Regular.woff2");
@@ -130,6 +149,361 @@ describe("公开构建入口", () => {
         path.startsWith("ppt/fonts/"),
       ),
       [],
+    );
+  });
+
+  it("完整嵌入覆盖实际使用的文本框、形状、表格和图表字族样式", async () => {
+    const installedFont = font("Jost*", [
+      { weight: 400, data: jostBook },
+      { weight: 700, data: jostBold },
+      { weight: 600, data: new Uint8Array([1]) },
+    ]);
+    const result = await build(
+      createElement(
+        Deck,
+        { width: 960, height: 540 },
+        createElement(
+          Slide,
+          { slideId: "font-embedding" },
+          createElement(
+            Text,
+            {
+              testId: "embedded-font-bold-first",
+              x: 24,
+              y: 18,
+              width: 240,
+              height: 36,
+              style: { fontFamily: installedFont, fontWeight: "bold" },
+            },
+            "Bold first",
+          ),
+          createElement(
+            Text,
+            {
+              testId: "embedded-font-text",
+              x: 24,
+              y: 18,
+              width: 240,
+              height: 36,
+              style: { fontFamily: installedFont },
+            },
+            "Regular ",
+            createElement(Span, { style: { fontWeight: "bold" } }, "bold"),
+          ),
+          createElement(Shape, {
+            testId: "embedded-font-shape",
+            x: 24,
+            y: 64,
+            width: 240,
+            height: 36,
+            text: "Shape text",
+            textStyle: { fontFamily: installedFont },
+          }),
+          createElement(
+            Table,
+            {
+              testId: "embedded-font-table",
+              x: 24,
+              y: 110,
+              width: 240,
+              columns: [240],
+              style: { fontFamily: installedFont, fontSize: 16 },
+            },
+            createElement(
+              Row,
+              { style: { height: 28 } },
+              createElement(
+                Cell,
+                { style: { fontWeight: "bold" } },
+                "Table text",
+              ),
+            ),
+          ),
+          createElement(Chart, {
+            testId: "embedded-font-chart",
+            kind: "line",
+            x: 300,
+            y: 18,
+            width: 400,
+            height: 240,
+            style: { fontFamily: installedFont },
+            valueAxis: { style: { fontWeight: "bold" } },
+            data: {
+              categories: ["Q1", "Q2"],
+              series: [{ name: "Sales", values: [12, 18] }],
+            },
+          }),
+        ),
+      ),
+      { embedFonts: "full" },
+    );
+
+    const parts = unzipSync(result.pptx);
+    const presentation = strFromU8(parts["ppt/presentation.xml"]!);
+    const presentationRelationships = strFromU8(
+      parts["ppt/_rels/presentation.xml.rels"]!,
+    );
+    assert.match(presentation, /embedTrueTypeFonts="1"/u);
+    assert.equal((presentation.match(/<p:embeddedFont>/gu) ?? []).length, 1);
+    assert.match(
+      presentation,
+      /<p:font typeface="Jost\*" pitchFamily="2" charset="0"\/>/u,
+    );
+    assert.match(
+      presentation,
+      /<p:regular r:id="rId\d+"\/><p:bold r:id="rId\d+"\/>/u,
+    );
+    assert.doesNotMatch(presentation, /<p:italic(?:\s|\/)/u);
+    const fontRelationships = [
+      ...presentationRelationships.matchAll(
+        /<Relationship Id="(rId\d+)" Type="http:\/\/schemas\.openxmlformats\.org\/officeDocument\/2006\/relationships\/font" Target="([^"]+)"\/>/gu,
+      ),
+    ];
+    assert.equal(fontRelationships.length, 2);
+    for (const [style, expectedBytes, expectedWeight] of [
+      ["regular", jostBook, 400],
+      ["bold", jostBold, 700],
+    ] as const) {
+      const embeddedStyle = new RegExp(
+        `<p:${style} r:id="(rId\\d+)"\\/>`,
+        "u",
+      ).exec(presentation);
+      assert.ok(embeddedStyle?.[1]);
+      const relationship = fontRelationships.find(
+        ([, relationshipId]) => relationshipId === embeddedStyle[1],
+      );
+      assert.ok(relationship?.[2]);
+      const fontPart = parts[`ppt/${relationship[2]}`]!;
+      const view = new DataView(
+        fontPart.buffer,
+        fontPart.byteOffset,
+        fontPart.byteLength,
+      );
+      const fontDataLength = view.getUint32(4, true);
+      assert.equal(view.getUint32(8, true), 0x00020002);
+      assert.equal(view.getUint32(28, true), expectedWeight);
+      assert.equal(view.getUint16(32, true), 0);
+      assert.equal(fontDataLength, expectedBytes.byteLength);
+      assert.deepEqual(
+        fontPart.subarray(fontPart.byteLength - fontDataLength),
+        expectedBytes,
+      );
+    }
+    assert.deepEqual((await validatePptx(result.pptx)).errors, []);
+  });
+
+  it("按 OS/2 样式链接把 600 字重 SemiBold 写入 regular 槽位", async () => {
+    const result = await build(
+      deck(
+        createElement(
+          Text,
+          {
+            testId: "embedded-semibold",
+            x: 24,
+            y: 18,
+            width: 240,
+            height: 36,
+            style: {
+              fontFamily: font("Darker Grotesque SemiBold", [
+                { weight: 600, data: darkerGrotesqueSemiBold },
+              ]),
+              fontWeight: 600,
+            },
+          },
+          "SemiBold text",
+        ),
+      ),
+      { embedFonts: "full" },
+    );
+    const parts = unzipSync(result.pptx);
+    const presentation = strFromU8(parts["ppt/presentation.xml"]!);
+    assert.match(
+      presentation,
+      /<p:embeddedFont><p:font typeface="Darker Grotesque SemiBold"[^>]*\/><p:regular r:id="rId\d+"\/><\/p:embeddedFont>/u,
+    );
+    assert.doesNotMatch(presentation, /<p:bold r:id/u);
+    const file = await validatePptx(result.pptx);
+    assert.deepEqual(file.errors, []);
+    assert.equal(
+      file.slides[0]?.objects[0]?.text?.paragraphs[0]?.runs[0]?.bold,
+      false,
+    );
+    const fontPartPath = Object.keys(parts).find((path) =>
+      path.startsWith("ppt/fonts/"),
+    );
+    assert.ok(fontPartPath);
+    const fontPart = parts[fontPartPath]!;
+    const view = new DataView(
+      fontPart.buffer,
+      fontPart.byteOffset,
+      fontPart.byteLength,
+    );
+    assert.equal(view.getUint32(28, true), 600);
+    assert.deepEqual(
+      fontPart.subarray(fontPart.byteLength - view.getUint32(4, true)),
+      darkerGrotesqueSemiBold,
+    );
+  });
+
+  it("完整嵌入接受 OS/2 no-subsetting 标志并保留完整字体文件", async () => {
+    const original = jostBook;
+    const noSubsetting = withFontFsType(original, 0x0100);
+    const result = await build(
+      <Deck>
+        <Slide slideId="font-no-subsetting">
+          <Text
+            x={0}
+            y={0}
+            width={100}
+            height={32}
+            style={{
+              fontFamily: font("Jost*", [{ weight: 400, data: noSubsetting }]),
+            }}
+          >
+            完整字体
+          </Text>
+        </Slide>
+      </Deck>,
+      { embedFonts: "full" },
+    );
+    const parts = unzipSync(result.pptx);
+    const embedded = parts["ppt/fonts/font1.fntdata"];
+    assert.ok(embedded);
+    const view = new DataView(embedded!.buffer, embedded!.byteOffset);
+    const payloadStart = view.getUint32(0, true) - original.byteLength;
+    assert.equal(view.getUint16(32, true), 0x0100);
+    assert.deepEqual(embedded.subarray(payloadStart), noSubsetting);
+  });
+
+  it("完整嵌入请求不能跳过缺少资源、格式或权限受限的实际字族", async () => {
+    const cases = [
+      {
+        label: "font-value-opt-out",
+        fontValue: font("Jost*", [{ weight: 400, data: jostBook }], {
+          embeddable: false,
+        }),
+        code: "font-not-embeddable",
+      },
+      {
+        label: "missing-resource",
+        fontValue: font("Jost*"),
+        code: "font-embedding-resource-missing",
+      },
+      {
+        label: "substitute-resource",
+        fontValue: font("Other Family", [{ weight: 400, data: jostBook }], {
+          substitute: true,
+        }),
+        code: "font-substitute-not-embeddable",
+      },
+      {
+        label: "unsupported-woff2",
+        fontValue: font("Noto Sans CJK SC", [
+          { weight: 400, data: notoSansScRegular },
+        ]),
+        code: "unsupported-font-format",
+      },
+      {
+        label: "wrong-weight-resource",
+        fontValue: font("Jost*", [{ weight: 400, data: jostBold }]),
+        code: "font-style-mismatch",
+      },
+      {
+        label: "restricted-license",
+        fontValue: font("Jost*", [
+          { weight: 400, data: withFontFsType(jostBook, 0x0002) },
+        ]),
+        code: "font-embedding-restricted",
+      },
+      {
+        label: "preview-print-license",
+        fontValue: font("Jost*", [
+          { weight: 400, data: withFontFsType(jostBook, 0x0004) },
+        ]),
+        code: "font-embedding-preview-print",
+      },
+      {
+        label: "bitmap-only-license",
+        fontValue: font("Jost*", [
+          { weight: 400, data: withFontFsType(jostBook, 0x0200) },
+        ]),
+        code: "font-embedding-bitmap-only",
+      },
+      {
+        label: "invalid-license-flags",
+        fontValue: font("Jost*", [
+          { weight: 400, data: withFontFsType(jostBook, 0x000a) },
+        ]),
+        code: "invalid-font-permissions",
+      },
+    ] as const;
+
+    for (const { label, fontValue, code } of cases) {
+      await assert.rejects(
+        build(
+          deck(
+            createElement(
+              Text,
+              {
+                testId: label,
+                x: 24,
+                y: 18,
+                width: 240,
+                height: 36,
+                style: { fontFamily: fontValue },
+              },
+              "Embed me",
+            ),
+          ),
+          { embedFonts: "full" },
+        ),
+        (error: unknown) => {
+          assert.ok(error instanceof BuildError);
+          assert.equal(error.diagnostics[0]?.code, code);
+          assert.equal(
+            error.diagnostics[0]?.path,
+            `deck/slide[cover]/text[${label}]`,
+          );
+          return true;
+        },
+      );
+    }
+
+    const notRequested = await build(
+      deck(
+        createElement(
+          Text,
+          {
+            testId: "font-value-opt-out-default",
+            x: 24,
+            y: 18,
+            width: 240,
+            height: 36,
+            style: {
+              fontFamily: font("Jost*", [{ weight: 400, data: jostBook }], {
+                embeddable: false,
+              }),
+            },
+          },
+          "Measure only",
+        ),
+      ),
+    );
+    assert.deepEqual(
+      Object.keys(unzipSync(notRequested.pptx)).filter((path) =>
+        path.startsWith("ppt/fonts/"),
+      ),
+      [],
+    );
+    await assert.rejects(
+      build(deck(createElement(Shape, { x: 0, y: 0, width: 32, height: 32 })), {
+        embedFonts: "subset" as "full",
+      }),
+      (error: unknown) => {
+        assert.ok(error instanceof BuildError);
+        assert.equal(error.diagnostics[0]?.code, "unsupported-font-embedding");
+        return true;
+      },
     );
   });
 

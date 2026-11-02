@@ -14,6 +14,10 @@ import {
   type ChartTextStyleXml,
 } from "./chart-xml.ts";
 import {
+  fontPresentationContributions,
+  type FontEmbeddingUse,
+} from "./font-embedding.ts";
+import {
   motionAnnotations,
   motionElement,
   type MotionProps,
@@ -585,6 +589,7 @@ function chartResourceClaims(
 ): {
   readonly textStyles: ChartTextStyleXml;
   readonly resourceClaims: readonly TextResourceClaim[];
+  readonly fontUses: readonly FontEmbeddingUse[];
   readonly warnings: readonly {
     readonly code: string;
     readonly message: string;
@@ -597,6 +602,10 @@ function chartResourceClaims(
   ];
   const chart = writeChartTextProperties(props.style, chartText, "Chart.style");
   const resourceClaims: TextResourceClaim[] = [...chart.resourceClaims];
+  const fontUses: FontEmbeddingUse[] = chart.fontUses.map((use) => ({
+    ...use,
+    path: "Chart.style",
+  }));
   const warnings = [...chart.warnings];
   const textStyles: {
     chart: string;
@@ -613,6 +622,12 @@ function chartResourceClaims(
     );
     textStyles.categoryAxis = output.xml;
     resourceClaims.push(...output.resourceClaims);
+    fontUses.push(
+      ...output.fontUses.map((use) => ({
+        ...use,
+        path: "Chart.categoryAxis.style",
+      })),
+    );
     warnings.push(...output.warnings);
   }
   if (props.valueAxis?.style !== undefined) {
@@ -627,6 +642,12 @@ function chartResourceClaims(
     );
     textStyles.valueAxis = output.xml;
     resourceClaims.push(...output.resourceClaims);
+    fontUses.push(
+      ...output.fontUses.map((use) => ({
+        ...use,
+        path: "Chart.valueAxis.style",
+      })),
+    );
     warnings.push(...output.warnings);
   }
   if (props.dataLabels !== undefined && props.dataLabels !== false) {
@@ -638,6 +659,12 @@ function chartResourceClaims(
       );
       textStyles.dataLabels = output.xml;
       resourceClaims.push(...output.resourceClaims);
+      fontUses.push(
+        ...output.fontUses.map((use) => ({
+          ...use,
+          path: "Chart.dataLabels.style",
+        })),
+      );
       warnings.push(...output.warnings);
     }
     for (const [seriesIndex, series] of data.series.entries()) {
@@ -667,6 +694,12 @@ function chartResourceClaims(
         textStyles.pointLabels ??= new Map();
         textStyles.pointLabels.set(`${seriesIndex}:${pointIndex}`, output.xml);
         resourceClaims.push(...output.resourceClaims);
+        fontUses.push(
+          ...output.fontUses.map((use) => ({
+            ...use,
+            path: "Chart.dataLabels.point.style",
+          })),
+        );
         warnings.push(...output.warnings);
       }
     }
@@ -680,6 +713,7 @@ function chartResourceClaims(
   return {
     textStyles,
     resourceClaims,
+    fontUses,
     warnings: [...uniqueWarnings.values()],
   };
 }
@@ -832,10 +866,8 @@ export const chartCapability: CapabilityModule = {
       textBody: false,
       filled: props.kind !== "line",
     });
-    const { textStyles, resourceClaims, warnings } = chartResourceClaims(
-      props,
-      props.data,
-    );
+    const { textStyles, resourceClaims, fontUses, warnings } =
+      chartResourceClaims(props, props.data);
     const workbook = chartWorkbook(props.data);
     const relationshipId = context.registerPackagePart({
       part: {
@@ -881,6 +913,10 @@ export const chartCapability: CapabilityModule = {
       extensions: [],
       ...(annotations.length === 0 ? {} : { annotations }),
       resourceClaims,
+      presentationContributions: fontPresentationContributions(
+        fontUses,
+        context.options.embedFonts,
+      ),
       warnings,
     };
   },

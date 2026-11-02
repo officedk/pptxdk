@@ -1,6 +1,7 @@
 export type HostText = {
   readonly type: "#text";
   text: string;
+  hidden: boolean;
 };
 
 export class HostNode {
@@ -8,6 +9,7 @@ export class HostNode {
   props: Readonly<Record<string, unknown>>;
   readonly children: HostChild[] = [];
   fiber: unknown;
+  hidden = false;
 
   constructor(
     type: string,

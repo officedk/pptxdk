@@ -25,7 +25,7 @@ catalog:
   oxlint: ^1.89.0
   oxlint-tsgolint: ^7.0.2001
   react: 19.3.1
-  react-reconciler: ^0.34.0
+  react-reconciler: 0.34.0
   turbo: 2.11.10
   vite: 8.3.5
   vitest: 5.0.5

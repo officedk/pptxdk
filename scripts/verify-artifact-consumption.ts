@@ -69,6 +69,7 @@ const coreDependencies = JSON.parse(
     "@react-pptx/core",
     "list",
     "react",
+    "react-reconciler",
     "@types/react",
     "typescript-7",
     "--depth",
@@ -79,6 +80,12 @@ const coreDependencies = JSON.parse(
 const core = coreDependencies[0];
 if (core === undefined) {
   throw new Error("pnpm 未返回 @react-pptx/core 的安装依赖");
+}
+if (
+  installedVersion(core, "react") !== "19.3.1" ||
+  installedVersion(core, "react-reconciler") !== "0.34.0"
+) {
+  throw new Error("制品消费验收要求 React 19.3.1 与 react-reconciler 0.34.0");
 }
 const reactPptxDependencies = JSON.parse(
   run("pnpm", [
@@ -181,7 +188,7 @@ try {
   await writeFile(
     join(temporaryDirectory, "consumer-types.ts"),
     [
-      'import { createElement } from "react";',
+      'import { createElement, Suspense, use, useEffect, useState } from "react";',
       'import { Deck, font, Group, Image, P, Shape, Slide, Span, Text, build, transitions, type BuildResult, type GroupProps, type ImageProps, type ShapeProps, type TextProps, type Transition } from "@react-pptx/react-pptx";',
       'import { type ValidationIssue, type ValidationResult } from "@react-pptx/validation";',
       'const shape: ShapeProps = { testId: "typed", x: 0, y: 0, width: 40, height: 30 };',
@@ -191,14 +198,17 @@ try {
       'const transition: Transition = transitions.morph({ by: "word", duration: 1200, fallback: transitions.fade() });',
       'const validationIssue: ValidationIssue = { part: "/ppt/slides/slide1.xml", code: "schema-error", message: "invalid", xpath: "/p:sld[1]" };',
       'const validatorProfile: ValidationResult["profile"]["schemaValidator"] = { package: "@ooxml-tools/validate", packageVersion: "0.4.6", sdkVersion: "3.0.2", officeVersion: "Microsoft365" };',
+      "function AsyncText({ promise }: { promise: Promise<string> }) { return createElement(Text, text, use(promise)); }",
+      "function AsyncSalesTable({ source }: { source: string }) { const [promise, setPromise] = useState<Promise<string> | null>(null); useEffect(() => { setPromise(fetch(source).then(response => response.text())); }, [source]); return promise === null ? null : createElement(Suspense, { fallback: null }, createElement(AsyncText, { promise })); }",
+      'const asyncTable = createElement(AsyncSalesTable, { source: "https://example.invalid/data" });',
       'const result: Promise<BuildResult> = build(createElement(Deck, {}, createElement(Slide, { slideId: "typed", transition }, createElement(Group, group, createElement(Shape, shape), createElement(Text, text, createElement(P, { style: { list: { type: "bullet" } } }, createElement(Span, { style: { fontWeight: "bold" } }, "Installed 文本"))), createElement(Image, image)))));',
-      "void [result, validationIssue, validatorProfile];",
+      "void [result, validationIssue, validatorProfile, asyncTable];",
     ].join("\n"),
   );
   await writeFile(
     join(temporaryDirectory, "consumer-runtime.ts"),
     [
-      'import { createElement } from "react";',
+      'import { createElement, Suspense, use, useEffect, useState } from "react";',
       'import { BuildError, Deck, font, Group, Image, P, Shape, Slide, Span, Text, build, targets, transitions } from "@react-pptx/react-pptx";',
       'import { validatePptx } from "@react-pptx/validation";',
       'import { strFromU8, strToU8, unzipSync, zipSync } from "fflate";',
@@ -214,6 +224,18 @@ try {
       'const nestedGroup = group?.members?.find(({ kind }) => kind === "group");',
       'const nestedShape = nestedGroup?.members?.find(({ name }) => name === "nested-shape");',
       'if (file.errors.length !== 0 || file.extensions.join(",") !== "p14,p159" || file.slides[0]?.transition?.kind !== "morph" || file.slides[0]?.transition?.by !== "word" || file.slides[0]?.transition?.durationMs !== 1200 || group?.kind !== "group" || group.name !== "packed-group" || !group.boxEmu || group.boxEmu.width <= 0 || shape?.text?.text !== "Installed shape text" || !shape.boxEmu || shape.boxEmu.x <= 0 || text?.text?.paragraphs[0]?.text !== "Installed 文本" || text.text.paragraphs[0]?.list?.type !== "bullet" || image?.name !== "packed-image" || image.image?.contentType !== "image/png" || !image.boxEmu || nestedGroup?.name !== "nested-group" || nestedShape?.text?.text !== "Nested member" || !nestedShape.boxEmu) throw new Error(JSON.stringify({ errors: file.errors, group, shape, text, image, nestedGroup }));',
+      "const asyncResource = Promise.withResolvers<string>();",
+      "const asyncStarted = Promise.withResolvers<void>();",
+      'function AsyncText({ promise }) { const content = use(promise); return createElement(Text, { testId: "installed-async", x: 0, y: 0, width: 90, height: 36 }, content); }',
+      "function AsyncSalesTable() { const [promise, setPromise] = useState(null); useEffect(() => { asyncStarted.resolve(); setPromise(asyncResource.promise); }, []); return promise ? createElement(Suspense, { fallback: null }, createElement(AsyncText, { promise })) : null; }",
+      'const asyncBuildPromise = build(createElement(Deck, { width: 120, height: 96 }, createElement(Slide, { slideId: "installed-async" }, createElement(AsyncSalesTable))));',
+      "let asyncSettled = false; void asyncBuildPromise.then(() => { asyncSettled = true; }, () => { asyncSettled = true; });",
+      "await asyncStarted.promise;",
+      'if (asyncSettled) throw new Error("installed build returned before its React dependency completed");',
+      'asyncResource.resolve("安装制品的最终异步内容");',
+      "const asyncResult = await asyncBuildPromise;",
+      "const asyncFile = await validatePptx(asyncResult.pptx);",
+      'if (asyncFile.errors.length !== 0 || asyncResult.report.slides[0]?.objects[0]?.text !== "安装制品的最终异步内容" || asyncFile.slides[0]?.objects[0]?.text?.text !== "安装制品的最终异步内容") throw new Error(JSON.stringify({ errors: asyncFile.errors, report: asyncResult.report.slides }));',
       "const mutatedParts = unzipSync(result.pptx);",
       'const masterPart = "ppt/slideMasters/slideMaster1.xml";',
       "const master = strFromU8(mutatedParts[masterPart]);",
@@ -259,6 +281,17 @@ try {
       "process.stdout.write(JSON.stringify({ shapeText: file.slides[0]?.objects[0]?.text?.text, missingCode: missingText.diagnostics[0]?.code, missingPath: missingText.diagnostics[0]?.path, textBoxImplementationLoaded: false }));",
     ].join("\n"),
   );
+  const devtoolsSentinel = join(temporaryDirectory, "devtools-sentinel.mjs");
+  await writeFile(
+    devtoolsSentinel,
+    [
+      "let injections = 0;",
+      "let notifications = 0;",
+      "const hook = Object.freeze({ supportsFiber: true, inject() { injections += 1; return 73; }, onCommitFiberRoot() { notifications += 1; } });",
+      "Object.defineProperty(globalThis, '__REACT_DEVTOOLS_GLOBAL_HOOK__', { value: hook, enumerable: false, configurable: false, writable: false });",
+      "process.on('exit', () => { if (globalThis.__REACT_DEVTOOLS_GLOBAL_HOOK__ !== hook || injections !== 0 || notifications !== 0) throw new Error('React build changed or used the existing DevTools hook'); });",
+    ].join("\n"),
+  );
 
   run("pnpm", ["install", "--offline", "--ignore-scripts"], temporaryDirectory);
   run(
@@ -268,7 +301,7 @@ try {
   );
   const summaryText = run(
     process.execPath,
-    ["consumer-runtime.ts"],
+    ["--import", devtoolsSentinel, "consumer-runtime.ts"],
     temporaryDirectory,
   );
   const summary = JSON.parse(summaryText) as {

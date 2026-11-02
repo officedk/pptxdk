@@ -5,11 +5,16 @@ import {
   type CapabilityInput,
   type CapabilityModule,
 } from "@react-pptx/core";
-import { createElement, type ReactNode } from "react";
+import type { ReactNode } from "react";
 
+import {
+  motionAnnotations,
+  motionElement,
+  type MotionProps,
+} from "./motion-api.ts";
 import { writeTextBody, type TextStyle } from "./text-service.ts";
 
-export type ShapeProps = {
+export type ShapeProps = MotionProps & {
   readonly testId?: string;
   readonly name?: string;
   readonly geometry?: string;
@@ -64,6 +69,11 @@ const allowedParameters = [
   "fill",
   "text",
   "textStyle",
+  "enter",
+  "emphasis",
+  "motion",
+  "__motionEnabled",
+  "__motionStep",
 ] as const;
 
 function record(input: CapabilityInput): Record<string, unknown> {
@@ -182,6 +192,13 @@ export const shapeCapability: CapabilityModule = {
       );
     }
     const name = requestedName ?? testId ?? `Shape ${context.id - 1}`;
+    const annotations = motionAnnotations(props, {
+      kind: "shape",
+      name,
+      ...(testId === undefined ? {} : { testId }),
+      textBody: textOutput !== undefined,
+      filled: fill !== undefined,
+    });
     let escapedName: string;
     try {
       escapedName = xmlEscape(name);
@@ -210,6 +227,7 @@ export const shapeCapability: CapabilityModule = {
         ...(text === undefined ? {} : { text }),
       },
       extensions: [],
+      ...(annotations.length === 0 ? {} : { annotations }),
       ...(textOutput === undefined
         ? {}
         : {
@@ -222,5 +240,5 @@ export const shapeCapability: CapabilityModule = {
 
 /** 在 React root 中声明一个由官方形状模块处理的原生对象。 */
 export function Shape(props: ShapeProps): ReactNode {
-  return createElement("rp:shape", props, props.children);
+  return motionElement("rp:shape", props);
 }

@@ -22,6 +22,7 @@ import {
   type CapabilityChild,
   type CapabilityChildren,
   type CapabilityInput,
+  type CapabilityContribution,
   type CapabilityModule,
   type CapabilityResource,
   type Diagnostic,
@@ -30,6 +31,7 @@ import {
   type ObjectObservation,
   type SlideCapabilityModule,
   type SlideObservation,
+  type SlideCapabilitySlot,
   type Target,
 } from "#/types.ts";
 
@@ -55,6 +57,7 @@ type SlideBuildState = {
   readonly diagnostics: Diagnostic[];
   readonly relationships: PptxRelationship[];
   readonly relationshipIds: Map<string, string>;
+  readonly contributions: CapabilityContribution[];
 };
 
 type BuildContext = {
@@ -517,6 +520,13 @@ function compileChildren(
           message: warning.message,
         });
       }
+      for (const annotation of output.annotations ?? []) {
+        context.slide.contributions.push({
+          ...annotation,
+          path,
+          targetId: id,
+        });
+      }
       xml.push(output.xml);
       const observation = { ...output.observation, id };
       if (observation.box !== undefined) {
@@ -564,6 +574,7 @@ function compileSlide(
     diagnostics: [],
     relationships: [],
     relationshipIds: new Map(),
+    contributions: [],
   };
   const path = `deck/slide[${id}]`;
   if (nonWhitespaceText(node.children)) {
@@ -576,7 +587,10 @@ function compileSlide(
     { document, slide, modules, target, dimensions },
     path,
   );
-  const slideXml: string[] = [];
+  const slideXml: {
+    readonly slot: SlideCapabilitySlot;
+    readonly xml: string;
+  }[] = [];
   const capabilities: Record<string, unknown> = {};
   const input: CapabilityInput = {
     type: node.type,
@@ -585,11 +599,17 @@ function compileSlide(
   };
   for (const module of modules.values()) {
     if (!isSlideCapability(module)) continue;
-    if (!Object.hasOwn(node.props, module.slideProp)) continue;
+    if (!module.always && !Object.hasOwn(node.props, module.slideProp))
+      continue;
     try {
-      const output = module.compileSlide(input, { path });
-      slideXml.push(output.xml);
-      capabilities[module.declaration] = output.observation;
+      const output = module.compileSlide(input, {
+        path,
+        contributions: slide.contributions,
+      });
+      slideXml.push({ slot: module.slot, xml: output.xml });
+      if (output.observation !== undefined) {
+        capabilities[module.declaration] = output.observation;
+      }
       for (const extension of output.extensions) {
         if (!target.extensions.includes(extension)) {
           slide.diagnostics.push(
@@ -615,15 +635,43 @@ function compileSlide(
       );
     }
   }
+  for (const contribution of slide.contributions) {
+    const consumer = modules.get(contribution.capability);
+    if (
+      consumer === undefined ||
+      !isSlideCapability(consumer) ||
+      (!consumer.always && !Object.hasOwn(node.props, consumer.slideProp))
+    ) {
+      slide.diagnostics.push(
+        diagnostic(
+          contribution.path,
+          "missing-capability",
+          `没有注册 ${contribution.capability} 的能力模块`,
+        ),
+      );
+    }
+  }
   if (slide.diagnostics.length > 0) throw new BuildError(slide.diagnostics);
   return {
     id,
     objects: compiled.objects,
     shapeXml: compiled.xml,
-    slideXml: slideXml.join(""),
+    slideXml: slideXml
+      .map((item, index) => ({ item, index }))
+      .sort(
+        (left, right) =>
+          slideSlotOrder(left.item.slot) - slideSlotOrder(right.item.slot) ||
+          left.index - right.index,
+      )
+      .map(({ item }) => item.xml)
+      .join(""),
     capabilities,
     relationships: slide.relationships,
   };
+}
+
+function slideSlotOrder(slot: SlideCapabilitySlot): number {
+  return slot === "transition" ? 0 : 1;
 }
 
 function compileDocument(

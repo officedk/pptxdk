@@ -87,6 +87,18 @@ export type CapabilityChildren = {
   readonly objects: readonly ObjectObservation[];
 };
 
+/** 能力模块随原生对象提交、供同名页面模块消费的声明数据。 */
+export type CapabilityAnnotation = {
+  readonly capability: string;
+  readonly value: unknown;
+};
+
+/** 核心补充对象身份和诊断位置后传给页面模块的声明数据。 */
+export type CapabilityContribution = CapabilityAnnotation & {
+  readonly path: string;
+  readonly targetId: number;
+};
+
 export type CapabilityResource = {
   readonly bytes: Uint8Array;
   readonly extension: string;
@@ -108,6 +120,8 @@ export type CapabilityOutput = {
   readonly xml: string;
   readonly observation: ObjectObservation;
   readonly extensions: readonly Extension[];
+  /** 由对应页面能力编译的对象级声明，例如动效。 */
+  readonly annotations?: readonly CapabilityAnnotation[];
   readonly resourceClaims?: readonly {
     readonly kind: string;
     readonly key: string;
@@ -125,8 +139,11 @@ export type ObjectCapabilityModule = {
   compile(input: CapabilityInput, context: CapabilityContext): CapabilityOutput;
 };
 
+export type SlideCapabilitySlot = "transition" | "timing";
+
 export type SlideCapabilityContext = {
   readonly path: string;
+  readonly contributions: readonly CapabilityContribution[];
 };
 
 export type SlideCapabilityOutput = {
@@ -139,6 +156,10 @@ export type SlideCapabilityOutput = {
 export type SlideCapabilityModule = {
   /** 该模块负责的 Slide 属性名。 */
   readonly slideProp: string;
+  /** 按 PresentationML 的固定子元素顺序写入页面。 */
+  readonly slot: SlideCapabilitySlot;
+  /** 无论 Slide 是否提供对应属性，均运行一次。 */
+  readonly always?: boolean;
   /** 报告中的稳定能力键。 */
   readonly declaration: string;
   compileSlide(

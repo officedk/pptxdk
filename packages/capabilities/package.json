@@ -43,6 +43,11 @@
       "source": "./src/transition.ts",
       "types": "./dist/transition.d.ts",
       "default": "./dist/transition.js"
+    },
+    "./motion": {
+      "source": "./src/motion.ts",
+      "types": "./dist/motion.d.ts",
+      "default": "./dist/motion.js"
     }
   },
   "scripts": {

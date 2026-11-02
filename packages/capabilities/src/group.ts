@@ -6,16 +6,30 @@ import {
   type CapabilityModule,
   type ObjectObservation,
 } from "@react-pptx/core";
-import { createElement, type ReactNode } from "react";
+import type { ReactNode } from "react";
+
+import {
+  motionAnnotations,
+  motionElement,
+  type MotionProps,
+} from "./motion-api.ts";
 
 /** Group 只保留身份和原生成员，范围由成员几何求并集，不参与布局。 */
-export type GroupProps = {
+export type GroupProps = MotionProps & {
   readonly testId?: string;
   readonly name?: string;
   readonly children?: ReactNode;
 };
 
-const allowedParameters = ["testId", "name"] as const;
+const allowedParameters = [
+  "testId",
+  "name",
+  "enter",
+  "emphasis",
+  "motion",
+  "__motionEnabled",
+  "__motionStep",
+] as const;
 const emuPerPixel = 9525;
 const maximumGroupExtentEmu = 2_147_483_647;
 
@@ -127,6 +141,13 @@ export const groupCapability: CapabilityModule = {
     const compiled = context.compileChildren(input.children);
     const geometry = bounds(compiled.objects);
     const name = requestedName ?? testId ?? `Group ${context.id - 1}`;
+    const annotations = motionAnnotations(input.props, {
+      kind: "group",
+      name,
+      ...(testId === undefined ? {} : { testId }),
+      textBody: false,
+      filled: false,
+    });
     let escapedName: string;
     try {
       escapedName = xmlEscape(name);
@@ -147,11 +168,12 @@ export const groupCapability: CapabilityModule = {
         members: compiled.objects,
       },
       extensions: [],
+      ...(annotations.length === 0 ? {} : { annotations }),
     };
   },
 };
 
 /** 在 React 根树中声明一个保留原生成员结构的可编辑组合。 */
 export function Group(props: GroupProps): ReactNode {
-  return createElement("rp:group", props, props.children);
+  return motionElement("rp:group", props);
 }

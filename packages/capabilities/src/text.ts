@@ -6,6 +6,7 @@ import {
   type CapabilityModule,
 } from "@react-pptx/core";
 
+import { motionAnnotations } from "./motion-api.ts";
 import { textExtent, writeTextBody } from "./text-service.ts";
 
 export { P, Span, Text } from "./text-elements.ts";
@@ -35,6 +36,11 @@ const allowedParameters = [
   "height",
   "style",
   "children",
+  "enter",
+  "emphasis",
+  "motion",
+  "__motionEnabled",
+  "__motionStep",
 ] as const;
 
 function optionalName(
@@ -114,6 +120,13 @@ export const textCapability: CapabilityModule = {
     };
     const body = writeTextBody(input.children, input.props["style"], "top");
     const name = requestedName ?? testId ?? `Text ${context.id - 1}`;
+    const annotations = motionAnnotations(input.props, {
+      kind: "text",
+      name,
+      ...(testId === undefined ? {} : { testId }),
+      textBody: true,
+      filled: false,
+    });
     let escapedName: string;
     try {
       escapedName = xmlEscape(name);
@@ -134,6 +147,7 @@ export const textCapability: CapabilityModule = {
         text: body.text,
       },
       extensions: [],
+      ...(annotations.length === 0 ? {} : { annotations }),
       resourceClaims: body.resourceClaims,
       warnings: body.warnings,
     };

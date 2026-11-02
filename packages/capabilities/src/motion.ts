@@ -9,6 +9,7 @@ import type {
   MotionDirection,
   MotionEffectObservation,
   MotionObservation,
+  MotionStartDependency,
 } from "./motion-api.ts";
 import { motionScopeAnnotation } from "./motion-api.ts";
 import { compileMotionPlan, type MotionPlanStep } from "./motion-plan.ts";
@@ -38,6 +39,7 @@ export type {
   EntranceEffect,
   MotionCompletionState,
   MotionDirection,
+  MotionGranularity,
   MotionEffectObservation,
   MotionMoment,
   MotionMomentOffset,
@@ -47,6 +49,8 @@ export type {
   MotionScopeObservation,
   MotionScopeProps,
   MotionProps,
+  MotionStartDependency,
+  MotionTargetRange,
   MotionTiming,
   MotionStepObservation,
   StepProps,
@@ -79,15 +83,39 @@ class TimingIds {
 }
 
 type TimingEffect = MotionEffectObservation & {
+  readonly effectIndex: number;
+  readonly partIndex?: number;
   readonly targetTextBody: boolean;
   readonly targetFilled: boolean;
 };
 
 function timingTarget(effect: TimingEffect): string {
+  const range = effect.target.range;
   return element(
     "p:tgtEl",
     undefined,
-    element("p:spTgt", { spid: effect.target.id }),
+    element(
+      "p:spTgt",
+      { spid: effect.target.id },
+      range?.type === "paragraph"
+        ? element(
+            "p:txEl",
+            undefined,
+            element("p:pRg", { st: range.start, end: range.end }),
+          )
+        : undefined,
+      range?.type === "chart"
+        ? element(
+            "p:graphicEl",
+            undefined,
+            element("a:chart", {
+              seriesIdx: range.seriesIndex,
+              categoryIdx: range.categoryIndex,
+              bldStep: range.step,
+            }),
+          )
+        : undefined,
+    ),
   );
 }
 
@@ -247,6 +275,9 @@ function effectTree(
   nodeType: string,
   delay: number,
   ids: TimingIds,
+  effectId: number,
+  buildGroupId?: number,
+  dependencyId?: number,
 ): string {
   const preset = {
     fade: { id: 10, class: "entr" },
@@ -268,7 +299,7 @@ function effectTree(
           : 0;
   const easing = effect.easing;
   const properties: XmlAttributes = {
-    id: ids.take(),
+    id: effectId,
     presetID: preset.id,
     presetClass: preset.class,
     presetSubtype: subtype,
@@ -281,7 +312,7 @@ function effectTree(
         ? undefined
         : Math.round(easing.decelerate * 100000),
     fill: "hold",
-    grpId: effect.targetTextBody ? 0 : undefined,
+    grpId: effect.targetTextBody ? 0 : buildGroupId,
     nodeType,
   };
   return element(
@@ -290,23 +321,67 @@ function effectTree(
     element(
       "p:cTn",
       properties,
-      element("p:stCondLst", undefined, element("p:cond", { delay })),
+      element(
+        "p:stCondLst",
+        undefined,
+        effect.startAfter === undefined
+          ? element("p:cond", { delay })
+          : element(
+              "p:cond",
+              { evt: "end", delay: effect.startAfter.offsetMs },
+              element("p:tn", { val: dependencyId }),
+            ),
+      ),
+      effect.by !== "word" && effect.by !== "letter"
+        ? undefined
+        : element(
+            "p:iterate",
+            { type: effect.by === "word" ? "wd" : "lt" },
+            // 单次 dur 只描述当前词或字，不能伪装成整段自然完成时刻。
+            element("p:tmAbs", { val: effect.intervalMs }),
+          ),
       element("p:childTnLst", undefined, ...behaviorIds(effect, ids)),
     ),
   );
+}
+
+function effectKey(effect: TimingEffect | MotionStartDependency): string {
+  const targetId = "target" in effect ? effect.target.id : effect.targetId;
+  return `${targetId}:${effect.effectIndex}:${"partIndex" in effect ? (effect.partIndex ?? "") : ""}`;
 }
 
 function timingXml(steps: readonly MotionPlanStep[]): string {
   const ids = new TimingIds();
   const rootId = ids.take();
   const sequenceId = ids.take();
+  const effectNodeIds = new Map<string, number>();
+  for (const step of steps) {
+    for (const effect of step.effects) {
+      effectNodeIds.set(effectKey(effect), ids.take());
+    }
+  }
+  const chartBuildGroupIds = new Map<number, number>();
+  for (const step of steps) {
+    for (const effect of step.effects) {
+      if (
+        effect.target.range?.type === "chart" &&
+        !chartBuildGroupIds.has(effect.target.id)
+      ) {
+        // bldGraphic 的 grpId 必须关联该图表实际存在的时间节点。
+        const id = effectNodeIds.get(effectKey(effect));
+        if (id !== undefined) chartBuildGroupIds.set(effect.target.id, id);
+      }
+    }
+  }
   const stepGroups = steps.map((step) => {
     const stepId = ids.take();
     const ordered = step.effects
       .map((effect) => effect as TimingEffect)
       .sort(
         (left, right) =>
-          left.startMs - right.startMs || left.target.id - right.target.id,
+          (left.startMs ?? Number.MAX_SAFE_INTEGER) -
+            (right.startMs ?? Number.MAX_SAFE_INTEGER) ||
+          left.target.id - right.target.id,
       );
     const groups: {
       start: number;
@@ -315,6 +390,16 @@ function timingXml(steps: readonly MotionPlanStep[]): string {
     let ended = 0;
     ordered.forEach((effect, index) => {
       const current = groups.at(-1);
+      if (effect.startAfter !== undefined) {
+        groups.push({
+          start: 0,
+          effects: [{ effect, nodeType: "afterEffect" }],
+        });
+        return;
+      }
+      if (effect.startMs === undefined) {
+        throw new Error("MotionPlan 数值起点缺失且没有原生完成关系");
+      }
       if (index === 0) {
         groups.push({
           start: effect.startMs,
@@ -334,7 +419,7 @@ function timingXml(steps: readonly MotionPlanStep[]): string {
           effects: [{ effect, nodeType: "afterEffect" }],
         });
       }
-      ended = Math.max(ended, effect.endMs);
+      if (effect.endMs !== undefined) ended = Math.max(ended, effect.endMs);
     });
     const trigger =
       step.trigger === "click"
@@ -360,9 +445,35 @@ function timingXml(steps: readonly MotionPlanStep[]): string {
           element(
             "p:childTnLst",
             undefined,
-            ...group.effects.map(({ effect, nodeType }) =>
-              effectTree(effect, nodeType, effect.startMs - group.start, ids),
-            ),
+            ...group.effects.map(({ effect, nodeType }) => {
+              const dependencyId =
+                effect.startAfter === undefined
+                  ? undefined
+                  : effectNodeIds.get(effectKey(effect.startAfter));
+              const effectId = effectNodeIds.get(effectKey(effect));
+              const buildGroupId =
+                effect.target.range?.type === "chart"
+                  ? chartBuildGroupIds.get(effect.target.id)
+                  : undefined;
+              if (effectId === undefined) {
+                throw new Error("MotionPlan 效果缺少原生时间节点身份");
+              }
+              if (
+                effect.startAfter !== undefined &&
+                dependencyId === undefined
+              ) {
+                throw new Error("MotionPlan 单前驱完成事件不存在");
+              }
+              return effectTree(
+                effect,
+                nodeType,
+                effect.startMs === undefined ? 0 : effect.startMs - group.start,
+                ids,
+                effectId,
+                buildGroupId,
+                dependencyId,
+              );
+            }),
           ),
         ),
       );
@@ -383,11 +494,13 @@ function timingXml(steps: readonly MotionPlanStep[]): string {
     undefined,
     element("p:sldTgt", undefined),
   );
-  const effectTargets = new Map<number, TimingEffect>();
+  const buildTargets = new Map<number, TimingEffect>();
   for (const step of steps) {
     for (const effect of step.effects) {
       const timed = effect as TimingEffect;
-      if (timed.targetTextBody) effectTargets.set(timed.target.id, timed);
+      if (timed.targetTextBody || timed.target.range?.type === "chart") {
+        buildTargets.set(timed.target.id, timed);
+      }
     }
   }
   return element(
@@ -433,18 +546,36 @@ function timingXml(steps: readonly MotionPlanStep[]): string {
         ),
       ),
     ),
-    effectTargets.size === 0
+    buildTargets.size === 0
       ? undefined
       : element(
           "p:bldLst",
           undefined,
-          ...[...effectTargets.values()].map((effect) =>
-            element("p:bldP", {
+          ...[...buildTargets.values()].map((effect) => {
+            if (effect.target.range?.type === "chart") {
+              const by = effect.target.range.step;
+              return element(
+                "p:bldGraphic",
+                {
+                  spid: effect.target.id,
+                  grpId: chartBuildGroupIds.get(effect.target.id),
+                },
+                by === "series" || by === "category"
+                  ? element(
+                      "p:bldSub",
+                      undefined,
+                      element("a:bldChart", { bld: by }),
+                    )
+                  : element("p:bldAsOne", undefined),
+              );
+            }
+            return element("p:bldP", {
               spid: effect.target.id,
               grpId: 0,
+              build: effect.by === "paragraph" ? "p" : undefined,
               animBg: effect.targetFilled ? true : undefined,
-            }),
-          ),
+            });
+          }),
         ),
   );
 }

@@ -3,10 +3,12 @@ import { CapabilityError, type CapabilityContribution } from "@react-pptx/core";
 import type {
   Effect,
   MotionMoment,
-  MotionCompletionState,
   MotionScopeDeclaration,
   MotionTiming,
   MotionEffectObservation,
+  MotionGranularity,
+  MotionStartDependency,
+  MotionTargetRange,
   MotionObservation,
   MotionScopeObservation,
   MotionStepObservation,
@@ -22,6 +24,9 @@ type MotionTarget = {
   readonly testId?: string;
   readonly textBody: boolean;
   readonly filled: boolean;
+  readonly paragraphCount?: number;
+  readonly chartSeriesCount?: number;
+  readonly chartCategoryCount?: number;
 };
 
 type MotionValue = {
@@ -39,8 +44,14 @@ type ScopeValue = {
 type ScheduledEffect = MotionEffectObservation & {
   readonly stepKey: string;
   readonly order: number;
+  readonly effectIndex: number;
+  readonly partIndex?: number;
   readonly targetTextBody: boolean;
   readonly targetFilled: boolean;
+  readonly iterate?: {
+    readonly type: "wd" | "lt";
+    readonly intervalMs: number;
+  };
 };
 
 export type MotionPlanStep = MotionStepObservation & {
@@ -57,7 +68,8 @@ export type MotionPlan = {
 
 type Completion =
   | { readonly state: "known"; readonly timeMs: number }
-  | { readonly state: Exclude<MotionCompletionState, "known"> };
+  | { readonly state: "unknown"; readonly event?: MotionStartDependency }
+  | { readonly state: "no-natural-completion" };
 
 type ScopeMember =
   | { readonly kind: "scope"; readonly id: string; readonly order: number }
@@ -88,6 +100,20 @@ type StepState = {
 };
 
 type TimePoint = Completion;
+
+type EffectExpansion =
+  | { readonly type: "single"; readonly count: 1 }
+  | {
+      readonly type: "iterate";
+      readonly count: 1;
+      readonly by: "word" | "letter";
+      readonly intervalMs: number;
+    }
+  | {
+      readonly type: "parts";
+      readonly count: number;
+      readonly ranges: readonly MotionTargetRange[];
+    };
 
 function fail(code: string, message: string, path?: string): never {
   throw new CapabilityError(code, message, path);
@@ -147,15 +173,37 @@ function known(timeMs: number): TimePoint {
 }
 
 function add(time: TimePoint, offsetMs: number): TimePoint {
-  return time.state === "known" ? known(time.timeMs + offsetMs) : time;
+  if (time.state === "known") return known(time.timeMs + offsetMs);
+  if (time.state === "unknown" && time.event !== undefined) {
+    return {
+      state: "unknown",
+      event: { ...time.event, offsetMs: time.event.offsetMs + offsetMs },
+    };
+  }
+  return time;
 }
 
 function maximum(times: readonly TimePoint[]): TimePoint {
   if (times.some(({ state }) => state === "no-natural-completion")) {
     return { state: "no-natural-completion" };
   }
-  if (times.some(({ state }) => state === "unknown")) {
-    return { state: "unknown" };
+  const unknownTimes = times.filter(({ state }) => state === "unknown");
+  if (unknownTimes.length > 0) {
+    const knownTimes = times.filter(
+      (time): time is { readonly state: "known"; readonly timeMs: number } =>
+        time.state === "known",
+    );
+    const onlyZeroBoundary = knownTimes.every(({ timeMs }) => timeMs === 0);
+    const [onlyUnknown] = unknownTimes;
+    return {
+      state: "unknown",
+      ...(unknownTimes.length === 1 &&
+      onlyZeroBoundary &&
+      onlyUnknown?.state === "unknown" &&
+      onlyUnknown.event !== undefined
+        ? { event: onlyUnknown.event }
+        : {}),
+    };
   }
   return known(
     Math.max(
@@ -175,13 +223,126 @@ function completion(
   ) {
     return { state: "no-natural-completion" };
   }
-  if (
-    start.state === "unknown" ||
-    children.some(({ state }) => state === "unknown")
-  ) {
+  if (children.length === 1) return children[0] ?? start;
+  if (children.some(({ state }) => state === "unknown")) {
     return { state: "unknown" };
   }
   return maximum([start, ...children]);
+}
+
+function expansionFor(
+  target: MotionTarget,
+  effect: Effect,
+  path: string,
+): EffectExpansion {
+  if (effect.by === undefined) return { type: "single", count: 1 };
+  if (effect.by === "word" || effect.by === "letter") {
+    if (!target.textBody || !target.paragraphCount) {
+      fail(
+        "invalid-motion-granularity",
+        `by: "${effect.by}" 需要含文字的原生对象`,
+        path,
+      );
+    }
+    return {
+      type: "iterate",
+      count: 1,
+      by: effect.by,
+      intervalMs:
+        effect.intervalMs ?? Math.max(1, Math.round(effect.duration / 10)),
+    };
+  }
+  if (effect.by === "paragraph") {
+    const count = target.paragraphCount ?? 0;
+    if (!target.textBody || count < 1) {
+      fail(
+        "invalid-motion-granularity",
+        'by: "paragraph" 需要含段落的原生文字对象',
+        path,
+      );
+    }
+    return {
+      type: "parts",
+      count,
+      ranges: Array.from({ length: count }, (_, index) => ({
+        type: "paragraph" as const,
+        start: index,
+        end: index,
+      })),
+    };
+  }
+  const seriesCount = target.chartSeriesCount ?? 0;
+  const categoryCount = target.chartCategoryCount ?? 0;
+  if (target.kind !== "chart" || seriesCount < 1 || categoryCount < 1) {
+    fail(
+      "invalid-motion-granularity",
+      `by: "${effect.by}" 需要含数据的原生图表`,
+      path,
+    );
+  }
+  const count = effect.by === "series" ? seriesCount : categoryCount;
+  const ranges: MotionTargetRange[] = [
+    {
+      type: "chart",
+      step: "gridLegend",
+      seriesIndex: -3,
+      categoryIndex: -3,
+    },
+    ...Array.from({ length: count }, (_, index) =>
+      effect.by === "series"
+        ? {
+            type: "chart" as const,
+            step: "series" as const,
+            seriesIndex: index,
+            categoryIndex: -4,
+          }
+        : {
+            type: "chart" as const,
+            step: "category" as const,
+            seriesIndex: -4,
+            categoryIndex: index,
+          },
+    ),
+  ];
+  return { type: "parts", count: ranges.length, ranges };
+}
+
+function effectEnd(
+  base: TimePoint,
+  target: TargetState,
+  effect: Effect,
+  effectIndex: number,
+  expansion: EffectExpansion,
+): TimePoint {
+  if (expansion.type === "iterate") {
+    // 原生逐词/逐字节点会自然结束，但本计划不从单次行为时长估算整段时长。
+    return {
+      state: "unknown",
+      event: {
+        targetId: target.id,
+        effectIndex,
+        point: "end",
+        offsetMs: 0,
+      },
+    };
+  }
+  const offset =
+    Math.round(effect.delay) + expansion.count * Math.round(effect.duration);
+  const end = add(base, offset);
+  if (end.state === "known") return end;
+  if (end.state === "no-natural-completion") return end;
+  const partIndex =
+    expansion.type === "parts" ? expansion.count - 1 : undefined;
+  return {
+    state: "unknown",
+    event: {
+      targetId: target.id,
+      effectIndex,
+      ...(partIndex === undefined ? {} : { partIndex }),
+      point: "end",
+      offsetMs: 0,
+    },
+  };
 }
 
 function motionScope(value: MotionScopeDeclaration): boolean {
@@ -198,6 +359,19 @@ function motionPlan(
   const scopes = new Map<string, ScopeState>();
   const targets = new Map<number, TargetState>();
   const roots: ScopeMember[] = [];
+  const effectExpansions = new Map<string, EffectExpansion>();
+  const getExpansion = (target: TargetState, effectIndex: number) => {
+    const key = `${target.id}:${effectIndex}`;
+    const existing = effectExpansions.get(key);
+    if (existing !== undefined) return existing;
+    const effect = target.value.effects[effectIndex];
+    if (effect === undefined) {
+      fail("invalid-motion", "动效效果索引不存在", target.path);
+    }
+    const expansion = expansionFor(target.value.target, effect, target.path);
+    effectExpansions.set(key, expansion);
+    return expansion;
+  };
 
   for (const contribution of contributions) {
     if (contribution.capability !== "motion") continue;
@@ -244,6 +418,31 @@ function motionPlan(
       trigger: trigger.trigger,
       ...(trigger.number === undefined ? {} : { number: trigger.number }),
     });
+  }
+
+  for (const target of targets.values()) {
+    const granularities = new Set(
+      target.value.effects
+        .map(({ by }) => by)
+        .filter((by): by is MotionGranularity => by !== undefined),
+    );
+    const textGranularities = [...granularities].filter(
+      (by) => by === "paragraph" || by === "word" || by === "letter",
+    );
+    const chartGranularities = [...granularities].filter(
+      (by) => by === "series" || by === "category",
+    );
+    const incompatible =
+      target.value.target.kind === "chart"
+        ? chartGranularities.length > 1
+        : textGranularities.length > 1;
+    if (incompatible) {
+      fail(
+        "invalid-motion-granularity",
+        "同一原生对象的并行动效不能混用不兼容的构建粒度",
+        target.path,
+      );
+    }
   }
 
   for (const scope of scopes.values()) {
@@ -513,10 +712,18 @@ function motionPlan(
         fail("invalid-motion", "编排作用域的对象成员声明不存在", parent.path);
       }
       const base = memberStart(parent, member);
-      const effectEnds = target.value.effects.map((effect) =>
-        add(add(base, Math.round(effect.delay)), Math.round(effect.duration)),
+      const effectEnds = target.value.effects.map((effect, effectIndex) =>
+        effectEnd(
+          base,
+          target,
+          effect,
+          effectIndex,
+          getExpansion(target, effectIndex),
+        ),
       );
-      return maximum(effectEnds);
+      return effectEnds.length === 1
+        ? (effectEnds[0] ?? base)
+        : maximum(effectEnds);
     };
 
     const memberStart = (
@@ -551,7 +758,7 @@ function motionPlan(
         ) {
           return { state: "no-natural-completion" };
         }
-        cursor = maximum([cursor, ended]);
+        cursor = ended;
       }
       return cursor;
     };
@@ -651,6 +858,9 @@ function motionPlan(
           : { eachMs: Math.round(scope.declaration.each) }),
         delayMs: Math.round(scope.declaration.delay),
         ...(start.state === "known" ? { startMs: start.timeMs } : {}),
+        ...(start.state === "unknown" && start.event !== undefined
+          ? { startAfter: start.event }
+          : {}),
         ...(end.state === "known" ? { endMs: end.timeMs } : {}),
         completion: end.state,
         members: observedMembers,
@@ -672,44 +882,91 @@ function motionPlan(
               order: target.order,
             });
       for (const [index, effect] of target.value.effects.entries()) {
-        const start = add(base, Math.round(effect.delay));
-        const end = add(start, Math.round(effect.duration));
-        if (start.state !== "known" || end.state !== "known") {
-          fail(
-            start.state === "no-natural-completion" ||
-              end.state === "no-natural-completion"
-              ? "no-natural-completion"
-              : "unknown-motion-start",
-            "当前动效 writer 需要可确定的成员起点",
-            target.path,
+        const expansion = getExpansion(target, index);
+        const entries =
+          expansion.type === "parts"
+            ? expansion.ranges.map((range, partIndex) => ({
+                range,
+                partIndex,
+              }))
+            : [expansion.type === "iterate" ? { iterate: expansion } : {}];
+        for (const entry of entries) {
+          const partIndex = "partIndex" in entry ? entry.partIndex : undefined;
+          const start = add(
+            base,
+            Math.round(effect.delay) +
+              (partIndex === undefined
+                ? 0
+                : partIndex * Math.round(effect.duration)),
           );
+          if (start.state === "no-natural-completion") {
+            fail(
+              "no-natural-completion",
+              "无自然完成的内容不能启动后继效果",
+              target.path,
+            );
+          }
+          if (start.state === "unknown" && start.event === undefined) {
+            fail(
+              "unknown-motion-start",
+              "未知起点没有可引用的单个原生完成事件",
+              target.path,
+            );
+          }
+          const knownStart = start.state === "known" ? start.timeMs : undefined;
+          const end =
+            expansion.type === "iterate"
+              ? { state: "unknown" as const }
+              : knownStart === undefined
+                ? { state: "unknown" as const }
+                : known(knownStart + Math.round(effect.duration));
+          const from =
+            typeof effect.from === "number"
+              ? Math.round(effect.from * 60000) / 60000
+              : effect.from;
+          const easing = normalizedEasing(effect.easing);
+          addStepEffect({
+            target: {
+              id: target.id,
+              name: target.value.target.name,
+              ...(target.value.target.testId === undefined
+                ? {}
+                : { testId: target.value.target.testId }),
+              ...("range" in entry ? { range: entry.range } : {}),
+            },
+            kind: effect.kind,
+            preset: effect.preset,
+            durationMs: Math.round(effect.duration),
+            delayMs: Math.round(effect.delay),
+            ...(effect.by === undefined ? {} : { by: effect.by }),
+            ...(expansion.type === "iterate"
+              ? { intervalMs: expansion.intervalMs }
+              : {}),
+            ...(from === undefined ? {} : { from }),
+            ...(easing === undefined ? {} : { easing }),
+            ...(knownStart === undefined ? {} : { startMs: knownStart }),
+            ...(end.state === "known"
+              ? { endMs: end.timeMs }
+              : { completion: "unknown" as const }),
+            ...(start.state === "unknown" && start.event !== undefined
+              ? { startAfter: start.event }
+              : {}),
+            stepKey: key,
+            order: target.order + index,
+            effectIndex: index,
+            ...(partIndex === undefined ? {} : { partIndex }),
+            targetTextBody: target.value.target.textBody,
+            targetFilled: target.value.target.filled,
+            ...(expansion.type === "iterate"
+              ? {
+                  iterate: {
+                    type: expansion.by === "word" ? "wd" : "lt",
+                    intervalMs: expansion.intervalMs,
+                  },
+                }
+              : {}),
+          });
         }
-        const from =
-          typeof effect.from === "number"
-            ? Math.round(effect.from * 60000) / 60000
-            : effect.from;
-        const easing = normalizedEasing(effect.easing);
-        addStepEffect({
-          target: {
-            id: target.id,
-            name: target.value.target.name,
-            ...(target.value.target.testId === undefined
-              ? {}
-              : { testId: target.value.target.testId }),
-          },
-          kind: effect.kind,
-          preset: effect.preset,
-          durationMs: Math.round(effect.duration),
-          delayMs: Math.round(effect.delay),
-          ...(from === undefined ? {} : { from }),
-          ...(easing === undefined ? {} : { easing }),
-          startMs: start.timeMs,
-          endMs: end.timeMs,
-          stepKey: key,
-          order: target.order + index,
-          targetTextBody: target.value.target.textBody,
-          targetFilled: target.value.target.filled,
-        });
       }
       scheduledObjects.add(target.id);
     }
@@ -726,7 +983,8 @@ function motionPlan(
         .slice()
         .sort(
           (left, right) =>
-            left.startMs - right.startMs ||
+            (left.startMs ?? Number.MAX_SAFE_INTEGER) -
+              (right.startMs ?? Number.MAX_SAFE_INTEGER) ||
             left.target.id - right.target.id ||
             left.order - right.order,
         );
@@ -760,6 +1018,9 @@ function motionPlan(
               order: _order,
               targetTextBody: _targetTextBody,
               targetFilled: _targetFilled,
+              effectIndex: _effectIndex,
+              partIndex: _partIndex,
+              iterate: _iterate,
               ...effect
             }) => Object.freeze(effect),
           ),

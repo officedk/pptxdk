@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   build,
   BuildError,
+  Chart,
   createBuilder,
   Deck,
   fade,
@@ -10,6 +11,8 @@ import {
   floatUp,
   Group,
   Image,
+  MotionScope,
+  P,
   Shape,
   shapeCapability,
   Slide,
@@ -22,12 +25,13 @@ import {
   transitionCapability,
   transitions,
   type MotionObservation,
+  useMotionScope,
   wipe,
   zoom,
 } from "@react-pptx/react-pptx";
 import { validatePptx } from "@react-pptx/validation";
 import { strFromU8, strToU8, unzipSync, zipSync } from "fflate";
-import { createElement } from "react";
+import { createElement, Fragment } from "react";
 import { describe, it } from "vitest";
 
 const png = new Uint8Array(
@@ -38,6 +42,452 @@ const png = new Uint8Array(
 );
 
 describe("对象动画", () => {
+  it("按原生段落范围逐段生成文字效果并从同次文件读回", async () => {
+    const result = await build(
+      createElement(
+        Deck,
+        { width: 320, height: 180 },
+        createElement(
+          Slide,
+          { slideId: "paragraph-motion" },
+          createElement(
+            Text,
+            {
+              testId: "paragraphs",
+              x: 10,
+              y: 10,
+              width: 240,
+              height: 100,
+              enter: fade({ by: "paragraph", duration: 300 }),
+            },
+            createElement(P, null, "First"),
+            createElement(P, null, "Second"),
+          ),
+        ),
+      ),
+    );
+
+    const motion = result.report.slides[0]?.capabilities?.[
+      "motion"
+    ] as MotionObservation;
+    assert.deepEqual(
+      motion.steps[0]?.effects.map(({ target, startMs, endMs }) => [
+        target.range,
+        startMs,
+        endMs,
+      ]),
+      [
+        [{ type: "paragraph", start: 0, end: 0 }, 0, 300],
+        [{ type: "paragraph", start: 1, end: 1 }, 300, 600],
+      ],
+    );
+
+    const file = await validatePptx(result.pptx);
+    assert.deepEqual(file.errors, []);
+    assert.deepEqual(
+      file.slides[0]?.animations?.[0]?.effects.map(
+        ({ targetId, targetRange, nativeBuild, durationMs, delayMs }) => [
+          targetId,
+          targetRange,
+          nativeBuild,
+          durationMs,
+          delayMs,
+        ],
+      ),
+      [
+        [
+          file.slides[0]?.objects[0]?.id,
+          { type: "paragraph", start: 0, end: 0 },
+          "paragraph",
+          300,
+          0,
+        ],
+        [
+          file.slides[0]?.objects[0]?.id,
+          { type: "paragraph", start: 1, end: 1 },
+          "paragraph",
+          300,
+          300,
+        ],
+      ],
+    );
+  });
+
+  it("保留逐字未知完成并用单个原生 end 事件启动后继", async () => {
+    function LetterAndFollower() {
+      const letters = useMotionScope();
+      const follower = useMotionScope();
+      return createElement(
+        Fragment,
+        null,
+        createElement(
+          MotionScope,
+          { scope: letters },
+          createElement(
+            Text,
+            {
+              testId: "letters",
+              x: 10,
+              y: 10,
+              width: 240,
+              height: 60,
+              enter: fade({
+                by: "letter",
+                duration: 1000,
+                intervalMs: 500,
+              }),
+            },
+            "LATE EARLY",
+          ),
+        ),
+        createElement(Text, {
+          testId: "words",
+          x: 10,
+          y: 70,
+          width: 240,
+          height: 40,
+          enter: fade({ by: "word", duration: 600 }),
+          children: "First second",
+        }),
+        createElement(
+          MotionScope,
+          { scope: follower, startAt: letters.end },
+          createElement(Shape, {
+            testId: "after-letters",
+            x: 10,
+            y: 90,
+            style: { width: 60, height: 30 },
+            fill: "#123456",
+            enter: fade({ duration: 200 }),
+          }),
+        ),
+      );
+    }
+
+    const result = await build(
+      createElement(
+        Deck,
+        { width: 320, height: 180 },
+        createElement(
+          Slide,
+          { slideId: "letter-end" },
+          createElement(LetterAndFollower),
+        ),
+      ),
+    );
+    const motion = result.report.slides[0]?.capabilities?.[
+      "motion"
+    ] as MotionObservation;
+    const effects = motion.steps[0]?.effects ?? [];
+    const source = effects.find(({ target }) => target.testId === "letters");
+    const follower = effects.find(
+      ({ target }) => target.testId === "after-letters",
+    );
+    const wordEffect = effects.find(({ target }) => target.testId === "words");
+    assert.deepEqual(
+      [
+        source?.by,
+        source?.intervalMs,
+        source?.durationMs,
+        source?.startMs,
+        source?.endMs,
+        source?.completion,
+      ],
+      ["letter", 500, 1000, 0, undefined, "unknown"],
+    );
+    assert.deepEqual(follower?.startAfter, {
+      targetId: source?.target.id,
+      effectIndex: 0,
+      point: "end",
+      offsetMs: 0,
+    });
+    assert.equal(follower?.startMs, undefined);
+    assert.equal(follower?.endMs, undefined);
+    assert.equal(follower?.completion, "unknown");
+    assert.deepEqual(
+      [
+        wordEffect?.by,
+        wordEffect?.intervalMs,
+        wordEffect?.durationMs,
+        wordEffect?.startMs,
+        wordEffect?.endMs,
+        wordEffect?.completion,
+      ],
+      ["word", 60, 600, 0, undefined, "unknown"],
+    );
+    const sourceScope = motion.scopes?.find(({ members }) =>
+      members.some(
+        (member) => member.kind === "object" && member.id === source?.target.id,
+      ),
+    );
+    assert.deepEqual(
+      [sourceScope?.completion, sourceScope?.startMs, sourceScope?.endMs],
+      ["unknown", 0, undefined],
+    );
+    const followerScope = motion.scopes?.find(({ members }) =>
+      members.some(
+        (member) =>
+          member.kind === "object" && member.id === follower?.target.id,
+      ),
+    );
+    assert.deepEqual(
+      [
+        followerScope?.completion,
+        followerScope?.startMs,
+        followerScope?.endMs,
+        followerScope?.startAfter?.targetId,
+      ],
+      ["unknown", undefined, undefined, source?.target.id],
+    );
+
+    const file = await validatePptx(result.pptx);
+    assert.deepEqual(file.errors, []);
+    assert.deepEqual(
+      file.slides[0]?.objects.map(({ name }) => name),
+      ["letters", "words", "after-letters"],
+    );
+    const fileEffects = file.slides[0]?.animations?.[0]?.effects ?? [];
+    const sourceFileEffect = fileEffects.find(
+      ({ targetId }) => targetId === source?.target.id,
+    );
+    const followerFileEffect = fileEffects.find(
+      ({ targetId }) => targetId === follower?.target.id,
+    );
+    const wordFileEffect = fileEffects.find(
+      ({ targetId }) => targetId === wordEffect?.target.id,
+    );
+    assert.deepEqual(
+      [
+        sourceFileEffect?.by,
+        sourceFileEffect?.intervalMs,
+        sourceFileEffect?.durationMs,
+        sourceFileEffect?.completion,
+      ],
+      ["letter", 500, 1000, "unknown"],
+    );
+    assert.equal(followerFileEffect?.startAfter?.targetId, source?.target.id);
+    assert.equal(followerFileEffect?.startAfter?.point, "end");
+    assert.equal(followerFileEffect?.startAfter?.offsetMs, 0);
+    assert.deepEqual(
+      [
+        wordFileEffect?.by,
+        wordFileEffect?.intervalMs,
+        wordFileEffect?.durationMs,
+        wordFileEffect?.completion,
+      ],
+      ["word", 60, 600, "unknown"],
+    );
+    const sourceTimingId = followerFileEffect?.startAfter?.timingId;
+    const slidePart = unzipSync(result.pptx)["ppt/slides/slide1.xml"];
+    assert.ok(slidePart);
+    assert.ok(
+      strFromU8(slidePart).includes(
+        `<p:cond evt="end" delay="0"><p:tn val="${sourceTimingId}"></p:tn></p:cond>`,
+      ),
+    );
+  });
+
+  it("按原生系列和分类范围展开图表效果并保留图表对象", async () => {
+    const data = {
+      categories: ["Q1", "Q2"],
+      series: [
+        { name: "North", values: [2, 3] },
+        { name: "South", values: [4, 5] },
+      ],
+    };
+    const result = await build(
+      createElement(
+        Deck,
+        { width: 480, height: 270 },
+        createElement(
+          Slide,
+          { slideId: "chart-motion" },
+          createElement(Chart, {
+            testId: "series-chart",
+            x: 10,
+            y: 10,
+            width: 210,
+            height: 200,
+            kind: "column",
+            data,
+            enter: wipe({ by: "series", duration: 400, from: "left" }),
+          }),
+          createElement(Chart, {
+            testId: "category-chart",
+            x: 240,
+            y: 10,
+            width: 210,
+            height: 200,
+            kind: "line",
+            data,
+            enter: fade({ by: "category", duration: 300 }),
+          }),
+        ),
+      ),
+    );
+    const motion = result.report.slides[0]?.capabilities?.[
+      "motion"
+    ] as MotionObservation;
+    assert.deepEqual(
+      motion.steps[0]?.effects.map(({ target, by, startMs, endMs }) => [
+        target.testId,
+        by,
+        target.range,
+        startMs,
+        endMs,
+      ]),
+      [
+        [
+          "series-chart",
+          "series",
+          {
+            type: "chart",
+            step: "gridLegend",
+            seriesIndex: -3,
+            categoryIndex: -3,
+          },
+          0,
+          400,
+        ],
+        [
+          "category-chart",
+          "category",
+          {
+            type: "chart",
+            step: "gridLegend",
+            seriesIndex: -3,
+            categoryIndex: -3,
+          },
+          0,
+          300,
+        ],
+        [
+          "category-chart",
+          "category",
+          {
+            type: "chart",
+            step: "category",
+            seriesIndex: -4,
+            categoryIndex: 0,
+          },
+          300,
+          600,
+        ],
+        [
+          "series-chart",
+          "series",
+          { type: "chart", step: "series", seriesIndex: 0, categoryIndex: -4 },
+          400,
+          800,
+        ],
+        [
+          "category-chart",
+          "category",
+          {
+            type: "chart",
+            step: "category",
+            seriesIndex: -4,
+            categoryIndex: 1,
+          },
+          600,
+          900,
+        ],
+        [
+          "series-chart",
+          "series",
+          { type: "chart", step: "series", seriesIndex: 1, categoryIndex: -4 },
+          800,
+          1200,
+        ],
+      ],
+    );
+
+    const file = await validatePptx(result.pptx);
+    assert.deepEqual(file.errors, []);
+    assert.deepEqual(
+      file.slides[0]?.objects.map(({ kind, name }) => [kind, name]),
+      [
+        ["chart", "series-chart"],
+        ["chart", "category-chart"],
+      ],
+    );
+    assert.deepEqual(
+      file.slides[0]?.animations?.[0]?.effects.map(
+        ({ targetId, targetRange, nativeBuild, durationMs, delayMs }) => [
+          targetId,
+          targetRange,
+          nativeBuild,
+          durationMs,
+          delayMs,
+        ],
+      ),
+      [
+        [
+          file.slides[0]?.objects[0]?.id,
+          {
+            type: "chart",
+            step: "gridLegend",
+            seriesIndex: -3,
+            categoryIndex: -3,
+          },
+          "series",
+          400,
+          0,
+        ],
+        [
+          file.slides[0]?.objects[1]?.id,
+          {
+            type: "chart",
+            step: "gridLegend",
+            seriesIndex: -3,
+            categoryIndex: -3,
+          },
+          "category",
+          300,
+          0,
+        ],
+        [
+          file.slides[0]?.objects[1]?.id,
+          {
+            type: "chart",
+            step: "category",
+            seriesIndex: -4,
+            categoryIndex: 0,
+          },
+          "category",
+          300,
+          300,
+        ],
+        [
+          file.slides[0]?.objects[0]?.id,
+          { type: "chart", step: "series", seriesIndex: 0, categoryIndex: -4 },
+          "series",
+          400,
+          400,
+        ],
+        [
+          file.slides[0]?.objects[1]?.id,
+          {
+            type: "chart",
+            step: "category",
+            seriesIndex: -4,
+            categoryIndex: 1,
+          },
+          "category",
+          300,
+          600,
+        ],
+        [
+          file.slides[0]?.objects[0]?.id,
+          { type: "chart", step: "series", seriesIndex: 1, categoryIndex: -4 },
+          "series",
+          400,
+          800,
+        ],
+      ],
+    );
+  });
+
   it("从公开构建声明生成淡入，并从同次 PPTX 读回目标和时间", async () => {
     const effect = fade({
       duration: 800,
@@ -453,11 +903,13 @@ describe("对象动画", () => {
       [fade({ delay: -1 }), "invalid-delay"],
       [fade({ unexpected: true } as never), "unknown-parameter"],
       [fade({ easing: null } as never), "invalid-easing"],
+      [fade({ by: "letter", intervalMs: 0 }), "invalid-motion-interval"],
       [
         fade({ easing: { accelerate: 0.8, decelerate: 0.4 } }),
         "invalid-easing",
       ],
       [wipe({ from: null } as never), "invalid-direction"],
+      [fade({ by: "paragraph" }), "invalid-motion-granularity"],
     ] as const) {
       await assert.rejects(
         build(

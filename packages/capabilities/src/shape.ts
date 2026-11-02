@@ -264,6 +264,9 @@ export const shapeCapability: CapabilityModule = {
       ...(testId === undefined ? {} : { testId }),
       textBody: textOutput !== undefined,
       filled: fill !== undefined,
+      ...(textOutput === undefined
+        ? {}
+        : { paragraphCount: textOutput.paragraphCount }),
     });
     let escapedName: string;
     try {

@@ -70,8 +70,7 @@ const allowedParameters = [
   "enter",
   "emphasis",
   "motion",
-  "__motionEnabled",
-  "__motionStep",
+  "__motionContext",
 ] as const;
 const maximumShapeExtentEmu = 2_147_483_647;
 

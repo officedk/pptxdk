@@ -851,8 +851,7 @@ function validateProps(
       "enter",
       "emphasis",
       "motion",
-      "__motionEnabled",
-      "__motionStep",
+      "__motionContext",
     ],
     "Chart",
   );
@@ -938,12 +937,9 @@ function validateProps(
     ...(props["enter"] === undefined ? {} : { enter: props["enter"] }),
     ...(props["emphasis"] === undefined ? {} : { emphasis: props["emphasis"] }),
     ...(props["motion"] === undefined ? {} : { motion: props["motion"] }),
-    ...(props["__motionEnabled"] === undefined
+    ...(props["__motionContext"] === undefined
       ? {}
-      : { __motionEnabled: props["__motionEnabled"] }),
-    ...(props["__motionStep"] === undefined
-      ? {}
-      : { __motionStep: props["__motionStep"] }),
+      : { __motionContext: props["__motionContext"] }),
     x,
     y,
     width,

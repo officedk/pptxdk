@@ -1,21 +1,22 @@
 import {
-  CapabilityError,
   xmlEscape,
-  type CapabilityContribution,
   type CapabilityInput,
   type SlideCapabilityModule,
+  type TransparentCapabilityModule,
 } from "@react-pptx/core";
 
 import type {
-  Effect,
-  Easing,
   MotionDirection,
   MotionEffectObservation,
   MotionObservation,
-  MotionStepObservation,
 } from "./motion-api.ts";
+import { motionScopeAnnotation } from "./motion-api.ts";
+import { compileMotionPlan, type MotionPlanStep } from "./motion-plan.ts";
 
 export {
+  after,
+  Box,
+  MotionScope,
   Step,
   fade,
   fly,
@@ -23,184 +24,33 @@ export {
   spin,
   spinIn,
   stretch,
+  useMotionScope,
   wipe,
   zoom,
 } from "./motion-api.ts";
 export type {
+  BoxProps,
   Easing,
   Effect,
   EffectOptions,
   EffectPreset,
   EmphasisEffect,
   EntranceEffect,
+  MotionCompletionState,
   MotionDirection,
   MotionEffectObservation,
+  MotionMoment,
+  MotionMomentOffset,
   MotionObservation,
+  MotionScopeHandle,
+  MotionScopeMode,
+  MotionScopeObservation,
+  MotionScopeProps,
   MotionProps,
+  MotionTiming,
   MotionStepObservation,
   StepProps,
 } from "./motion-api.ts";
-
-type StepDeclaration =
-  | { readonly mode: "automatic"; readonly identity: string }
-  | { readonly mode: "explicit"; readonly number: number };
-
-type MotionValue = {
-  readonly target: {
-    readonly kind: string;
-    readonly name: string;
-    readonly testId?: string;
-    readonly textBody: boolean;
-    readonly filled: boolean;
-  };
-  readonly step?: StepDeclaration;
-  readonly effects: readonly Effect[];
-};
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-type TimedEffect = MotionEffectObservation & {
-  readonly stepKey: string;
-  readonly order: number;
-  readonly targetTextBody: boolean;
-  readonly targetFilled: boolean;
-};
-
-type TimedStep = {
-  readonly key: string;
-  readonly trigger: "auto" | "click";
-  readonly number?: number;
-  readonly order: number;
-  readonly effects: TimedEffect[];
-};
-
-function motionValue(value: unknown): value is MotionValue {
-  return (
-    isRecord(value) &&
-    isRecord(value["target"]) &&
-    Array.isArray(value["effects"])
-  );
-}
-
-function normalizedEasing(easing: Easing | undefined): Easing | undefined {
-  if (easing === undefined) return undefined;
-  const accelerate =
-    easing.accelerate === undefined
-      ? undefined
-      : Math.round(easing.accelerate * 100000) / 100000;
-  const decelerate =
-    easing.decelerate === undefined
-      ? undefined
-      : Math.round(easing.decelerate * 100000) / 100000;
-  if (
-    (accelerate === undefined || accelerate === 0) &&
-    (decelerate === undefined || decelerate === 0)
-  ) {
-    return undefined;
-  }
-  return Object.freeze({
-    ...(accelerate === undefined || accelerate === 0 ? {} : { accelerate }),
-    ...(decelerate === undefined || decelerate === 0 ? {} : { decelerate }),
-  });
-}
-
-function motionSteps(
-  contributions: readonly CapabilityContribution[],
-): readonly MotionStepObservation[] {
-  const steps = new Map<string, TimedStep>();
-  const objects = contributions
-    .filter(({ capability }) => capability === "motion")
-    .slice()
-    .sort((left, right) => left.targetId - right.targetId);
-
-  for (const contribution of objects) {
-    if (!motionValue(contribution.value)) {
-      throw new CapabilityError(
-        "invalid-motion",
-        `motion 注解在 ${contribution.path} 中无效`,
-      );
-    }
-    const value = contribution.value;
-    const step = value.step;
-    const trigger = step === undefined ? "auto" : "click";
-    const key =
-      step === undefined
-        ? "slide-entry"
-        : step.mode === "explicit"
-          ? `explicit:${step.number}`
-          : `automatic:${step.identity}`;
-    const stepOrder = contribution.targetId;
-    const existing = steps.get(key);
-    const compiled: TimedStep = existing ?? {
-      key,
-      trigger,
-      ...(step?.mode === "explicit" ? { number: step.number } : {}),
-      order: stepOrder,
-      effects: [],
-    };
-    value.effects.forEach((effect, index) => {
-      const durationMs = Math.round(effect.duration);
-      const delayMs = Math.round(effect.delay);
-      const from =
-        typeof effect.from === "number"
-          ? Math.round(effect.from * 60000) / 60000
-          : effect.from;
-      const easing = normalizedEasing(effect.easing);
-      compiled.effects.push({
-        target: {
-          id: contribution.targetId,
-          name: value.target.name,
-          ...(value.target.testId === undefined
-            ? {}
-            : { testId: value.target.testId }),
-        },
-        kind: effect.kind,
-        preset: effect.preset,
-        durationMs,
-        delayMs,
-        ...(from === undefined ? {} : { from }),
-        ...(easing === undefined ? {} : { easing }),
-        startMs: delayMs,
-        endMs: delayMs + durationMs,
-        stepKey: key,
-        order: index,
-        targetTextBody: value.target.textBody,
-        targetFilled: value.target.filled,
-      });
-    });
-    steps.set(key, compiled);
-  }
-
-  return [...steps.values()]
-    .sort((left, right) => {
-      if (left.trigger !== right.trigger)
-        return left.trigger === "auto" ? -1 : 1;
-      return left.order - right.order;
-    })
-    .map((step) => ({
-      trigger: step.trigger,
-      ...(step.number === undefined ? {} : { number: step.number }),
-      effects: step.effects
-        .slice()
-        .sort(
-          (left, right) =>
-            left.startMs - right.startMs ||
-            left.target.id - right.target.id ||
-            left.order - right.order,
-        )
-        .map(
-          ({
-            stepKey: _key,
-            order: _order,
-            targetTextBody: _text,
-            targetFilled: _fill,
-            ...effect
-          }) => effect,
-        ),
-    }));
-}
 
 type XmlAttributes = Record<string, string | number | boolean | undefined>;
 
@@ -446,7 +296,7 @@ function effectTree(
   );
 }
 
-function timingXml(steps: readonly MotionStepObservation[]): string {
+function timingXml(steps: readonly MotionPlanStep[]): string {
   const ids = new TimingIds();
   const rootId = ids.take();
   const sequenceId = ids.take();
@@ -605,15 +455,30 @@ export const motionCapability: SlideCapabilityModule = Object.freeze({
   slideProp: "__motion",
   slot: "timing",
   always: true,
+  transparentDeclarations: [
+    {
+      declaration: "rp:motion-scope",
+      compileDeclaration(input) {
+        return [motionScopeAnnotation(input.props)];
+      },
+    } satisfies TransparentCapabilityModule,
+  ],
   compileSlide(_input: CapabilityInput, context) {
-    const steps = motionSteps(context.contributions);
-    if (steps.length === 0) {
-      return { xml: "", extensions: [] };
+    const plan = compileMotionPlan(context.contributions);
+    const hasEffects = plan.steps.some((step) => step.effects.length > 0);
+    if (!hasEffects) {
+      return {
+        xml: "",
+        extensions: [],
+        ...(plan.observation.scopes === undefined
+          ? {}
+          : { observation: plan.observation }),
+      };
     }
     return {
-      xml: timingXml(steps),
+      xml: timingXml(plan.steps),
       extensions: [],
-      observation: Object.freeze({ steps }) satisfies MotionObservation,
+      observation: plan.observation satisfies MotionObservation,
     };
   },
 });

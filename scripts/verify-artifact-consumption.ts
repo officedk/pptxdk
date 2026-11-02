@@ -183,6 +183,35 @@ try {
       "process.stdout.write(JSON.stringify({ standard: file.profile.standard, slideId: file.slides[0]?.id, object: file.slides[0]?.objects[0]?.name, text: file.slides[0]?.objects[1]?.text?.text, bytes: result.pptx.byteLength }));",
     ].join("\n"),
   );
+  const cropLoader = join(temporaryDirectory, "reject-text-box.mjs");
+  await writeFile(
+    cropLoader,
+    [
+      "export async function resolve(specifier, context, nextResolve) {",
+      "  const resolved = await nextResolve(specifier, context);",
+      '  if (resolved.url.includes("/capabilities/dist/text.js")) throw new Error("installed text-box implementation was loaded");',
+      "  return resolved;",
+      "}",
+    ].join("\n"),
+  );
+  await writeFile(
+    join(temporaryDirectory, "consumer-cropped.mjs"),
+    [
+      'import { createElement } from "react";',
+      'import { BuildError } from "@react-pptx/core";',
+      'import { Text as TextDeclaration } from "@react-pptx/capabilities/text-elements";',
+      'import { build, Deck, Shape, Slide } from "@react-pptx/react-pptx/shape";',
+      'import { validatePptx } from "@react-pptx/validation";',
+      'const result = await build(createElement(Deck, { width: 120, height: 96 }, createElement(Slide, { slideId: "installed-cropped" }, createElement(Shape, { testId: "installed-shape-text", x: 0, y: 0, width: 90, height: 30, text: "Installed shape text" }))));',
+      "const file = await validatePptx(result.pptx);",
+      'if (file.errors.length !== 0 || file.slides[0]?.objects[0]?.text?.text !== "Installed shape text") throw new Error(JSON.stringify(file.errors));',
+      'function NestedText() { return createElement(TextDeclaration, { testId: "missing-installed-text", x: 0, y: 32, width: 90, height: 30 }, "not registered"); }',
+      "let missingText;",
+      'try { await build(createElement(Deck, {}, createElement(Slide, { slideId: "nested" }, createElement(NestedText)))); } catch (error) { missingText = error; }',
+      'if (!(missingText instanceof BuildError) || missingText.diagnostics[0]?.code !== "missing-capability" || missingText.diagnostics[0]?.path !== "deck/slide[nested]/text[missing-installed-text]") throw new Error("installed nested Text did not report the cropped capability");',
+      "process.stdout.write(JSON.stringify({ shapeText: file.slides[0]?.objects[0]?.text?.text, missingCode: missingText.diagnostics[0]?.code, missingPath: missingText.diagnostics[0]?.path, textBoxImplementationLoaded: false }));",
+    ].join("\n"),
+  );
 
   run("pnpm", ["install", "--offline", "--ignore-scripts"], temporaryDirectory);
   run(
@@ -212,7 +241,28 @@ try {
   ) {
     throw new Error(`安装制品返回了意外结果：${summaryText}`);
   }
-  process.stdout.write(`正式制品消费通过：${summaryText}\n`);
+  const croppedText = run(
+    process.execPath,
+    ["--loader", cropLoader, "consumer-cropped.mjs"],
+    temporaryDirectory,
+  );
+  const cropped = JSON.parse(croppedText) as {
+    readonly shapeText?: string;
+    readonly missingCode?: string;
+    readonly missingPath?: string;
+    readonly textBoxImplementationLoaded?: boolean;
+  };
+  if (
+    cropped.shapeText !== "Installed shape text" ||
+    cropped.missingCode !== "missing-capability" ||
+    cropped.missingPath !== "deck/slide[nested]/text[missing-installed-text]" ||
+    cropped.textBoxImplementationLoaded !== false
+  ) {
+    throw new Error(`安装制品裁剪入口返回了意外结果：${croppedText}`);
+  }
+  process.stdout.write(
+    `正式制品消费通过：${summaryText}\n安装制品裁剪通过：${croppedText}\n`,
+  );
 } finally {
   await rm(temporaryDirectory, { recursive: true, force: true });
 }

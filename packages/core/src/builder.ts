@@ -1,18 +1,29 @@
+import { createHash } from "node:crypto";
+
 import { strToU8, zipSync } from "fflate";
 import type { ReactNode } from "react";
 
 import { CapabilityError, BuildError } from "#/diagnostics.ts";
 import { HostNode, type HostChild, type HostContainer } from "#/host/nodes.ts";
 import { withHostTree } from "#/host/reconciler.ts";
-import { assertXml10Characters, pptxParts, pxToEmu } from "#/ooxml.ts";
+import {
+  assertXml10Characters,
+  pptxParts,
+  pxToEmu,
+  type PptxPackageResource,
+  type PptxRelationship,
+} from "#/ooxml.ts";
 import {
   formatBaseline,
   targets,
   type BuildOptions,
   type BuildReport,
   type BuildResult,
+  type CapabilityChild,
+  type CapabilityChildren,
   type CapabilityInput,
   type CapabilityModule,
+  type CapabilityResource,
   type Diagnostic,
   type Extension,
   type ObjectObservation,
@@ -24,6 +35,30 @@ type SlideBuild = {
   readonly id: string;
   readonly objects: readonly ObjectObservation[];
   readonly shapeXml: string;
+  readonly relationships: readonly PptxRelationship[];
+};
+
+type DocumentBuildState = {
+  readonly usedExtensions: Set<Extension>;
+  readonly warnings: Diagnostic[];
+  readonly resourceClaims: Map<string, { identity: string; path: string }>;
+  readonly resources: Map<string, PptxPackageResource>;
+  readonly resourceTypes: Map<string, string>;
+};
+
+type SlideBuildState = {
+  nextId: number;
+  readonly diagnostics: Diagnostic[];
+  readonly relationships: PptxRelationship[];
+  readonly relationshipIds: Map<string, string>;
+};
+
+type BuildContext = {
+  readonly document: DocumentBuildState;
+  readonly slide: SlideBuildState;
+  readonly modules: ReadonlyMap<string, CapabilityModule>;
+  readonly target: Target;
+  readonly dimensions: Dimensions;
 };
 
 type Dimensions = { readonly width: number; readonly height: number };
@@ -66,6 +101,26 @@ function childNodes(children: readonly HostChild[]): HostNode[] {
 function componentLabel(node: HostNode, index: number): string {
   const type = node.type.startsWith("rp:") ? node.type.slice(3) : node.type;
   const identity = node.props["testId"];
+  const label =
+    typeof identity === "string" && identity.trim() !== ""
+      ? identity
+      : String(index + 1);
+  return `${type}[${label}]`;
+}
+
+function capabilityChild(child: HostChild): CapabilityChild {
+  if (!isHostNode(child)) return { type: "#text", text: child.text };
+  return {
+    type: child.type,
+    props: child.props,
+    children: child.children.map(capabilityChild),
+  };
+}
+
+function capabilityLabel(child: CapabilityChild, index: number): string {
+  if (!("props" in child)) return `text[${index + 1}]`;
+  const type = child.type.startsWith("rp:") ? child.type.slice(3) : child.type;
+  const identity = child.props["testId"];
   const label =
     typeof identity === "string" && identity.trim() !== ""
       ? identity
@@ -285,52 +340,127 @@ function resolveSlides(
   });
 }
 
-function compileSlide(
-  node: HostNode,
-  id: string,
-  index: number,
-  modules: ReadonlyMap<string, CapabilityModule>,
-  target: Target,
-  dimensions: Dimensions,
-  usedExtensions: Set<Extension>,
-  warnings: Diagnostic[],
-): SlideBuild {
-  const diagnostics: Diagnostic[] = [];
-  const objects: ObjectObservation[] = [];
-  const shapeXml: string[] = [];
-  if (nonWhitespaceText(node.children)) {
-    diagnostics.push(
-      diagnostic(
-        `deck/slide[${id}]`,
-        "unexpected-text",
-        "Slide 页面不能直接包含文本",
-      ),
+function addResource(
+  resource: CapabilityResource,
+  context: BuildContext,
+): string {
+  if (
+    !(resource.bytes instanceof Uint8Array) ||
+    resource.bytes.byteLength === 0
+  ) {
+    throw new CapabilityError("invalid-resource", "资源必须包含非空二进制内容");
+  }
+  if (
+    typeof resource.extension !== "string" ||
+    !/^[a-z0-9]+$/iu.test(resource.extension) ||
+    typeof resource.contentType !== "string" ||
+    resource.contentType.trim() === "" ||
+    typeof resource.relationshipType !== "string" ||
+    resource.relationshipType.trim() === ""
+  ) {
+    throw new CapabilityError("invalid-resource", "资源的格式或关系类型无效");
+  }
+  const extension = resource.extension.toLowerCase();
+  if (extension === "xml" || extension === "rels") {
+    throw new CapabilityError(
+      "invalid-resource",
+      `资源扩展名 .${extension} 与 PPTX 核心部件冲突`,
     );
   }
-  const declarations = childNodes(node.children);
-  declarations.forEach((declaration, declarationIndex) => {
-    const path = `deck/slide[${id}]/${componentLabel(declaration, declarationIndex)}`;
-    const module = modules.get(declaration.type);
+  const knownType = context.document.resourceTypes.get(extension);
+  if (knownType !== undefined && knownType !== resource.contentType) {
+    throw new CapabilityError(
+      "conflicting-resource-type",
+      `资源扩展名 .${extension} 对应多个内容类型`,
+    );
+  }
+  context.document.resourceTypes.set(extension, resource.contentType);
+  try {
+    assertXml10Characters(resource.contentType);
+    assertXml10Characters(resource.relationshipType);
+  } catch {
+    throw new CapabilityError(
+      "invalid-resource",
+      "资源关系含 XML 不允许的字符",
+    );
+  }
+
+  const digest = createHash("sha256").update(resource.bytes).digest("hex");
+  const assetKey = `${extension}\u0000${resource.contentType}\u0000${digest}`;
+  let asset = context.document.resources.get(assetKey);
+  if (asset === undefined) {
+    asset = {
+      name: `resource${context.document.resources.size + 1}.${extension}`,
+      bytes: new Uint8Array(resource.bytes),
+      extension,
+      contentType: resource.contentType,
+    };
+    context.document.resources.set(assetKey, asset);
+  }
+
+  const relationshipKey = `${assetKey}\u0000${resource.relationshipType}`;
+  const existingRelationship =
+    context.slide.relationshipIds.get(relationshipKey);
+  if (existingRelationship !== undefined) return existingRelationship;
+  const id = `rId${context.slide.relationships.length + 2}`;
+  context.slide.relationshipIds.set(relationshipKey, id);
+  context.slide.relationships.push({
+    id,
+    type: resource.relationshipType,
+    target: `../media/${asset.name}`,
+  });
+  return id;
+}
+
+function compileChildren(
+  children: readonly CapabilityChild[],
+  context: BuildContext,
+  parentPath: string,
+): CapabilityChildren {
+  const xml: string[] = [];
+  const objects: ObjectObservation[] = [];
+  children.forEach((child, index) => {
+    if (!("props" in child)) {
+      if (child.text.trim() !== "") {
+        context.slide.diagnostics.push(
+          diagnostic(
+            `${parentPath}/${capabilityLabel(child, index)}`,
+            "unexpected-text",
+            "原生对象容器不能直接包含文本",
+          ),
+        );
+      }
+      return;
+    }
+
+    const path = `${parentPath}/${capabilityLabel(child, index)}`;
+    const module = context.modules.get(child.type);
     if (module === undefined) {
-      diagnostics.push(
+      context.slide.diagnostics.push(
         diagnostic(
           path,
           "missing-capability",
-          `没有注册 ${declaration.type} 的能力模块`,
+          `没有注册 ${child.type} 的能力模块`,
         ),
       );
       return;
     }
-    const input: CapabilityInput = {
-      type: declaration.type,
-      props: declaration.props,
-      children: declaration.children,
-    };
+    const id = context.slide.nextId++;
+    const input: CapabilityInput = child;
     try {
-      const output = module.compile(input, { id: objects.length + 2, path });
+      const output = module.compile(input, {
+        id,
+        path,
+        compileChildren(nested) {
+          return compileChildren(nested, context, path);
+        },
+        registerResource(resource) {
+          return addResource(resource, context);
+        },
+      });
       for (const extension of output.extensions) {
-        if (!target.extensions.includes(extension)) {
-          diagnostics.push(
+        if (!context.target.extensions.includes(extension)) {
+          context.slide.diagnostics.push(
             diagnostic(
               path,
               "forbidden-mechanism",
@@ -338,20 +468,46 @@ function compileSlide(
             ),
           );
         } else {
-          usedExtensions.add(extension);
+          context.document.usedExtensions.add(extension);
         }
       }
-      shapeXml.push(output.xml);
-      const observation = { ...output.observation, id: objects.length + 2 };
+      for (const claim of output.resourceClaims ?? []) {
+        const claimKey = `${claim.kind}\u0000${claim.key}`;
+        const existing = context.document.resourceClaims.get(claimKey);
+        if (existing !== undefined && existing.identity !== claim.identity) {
+          context.slide.diagnostics.push(
+            diagnostic(
+              path,
+              "conflicting-resource",
+              `资源 ${claim.key} 与 ${existing.path} 使用了冲突定义`,
+            ),
+          );
+        } else {
+          context.document.resourceClaims.set(claimKey, {
+            identity: claim.identity,
+            path,
+          });
+        }
+      }
+      for (const warning of output.warnings ?? []) {
+        context.document.warnings.push({
+          severity: "warning",
+          path,
+          code: warning.code,
+          message: warning.message,
+        });
+      }
+      xml.push(output.xml);
+      const observation = { ...output.observation, id };
       if (observation.box !== undefined) {
         const box = observation.box;
         if (
           box.x < 0 ||
           box.y < 0 ||
-          box.x + box.width > dimensions.width ||
-          box.y + box.height > dimensions.height
+          box.x + box.width > context.dimensions.width ||
+          box.y + box.height > context.dimensions.height
         ) {
-          warnings.push({
+          context.document.warnings.push({
             severity: "warning",
             path,
             code: "overflow",
@@ -361,7 +517,7 @@ function compileSlide(
       }
       objects.push(observation);
     } catch (error) {
-      diagnostics.push(
+      context.slide.diagnostics.push(
         error instanceof CapabilityError
           ? diagnostic(path, error.code, error.message)
           : diagnostic(
@@ -372,8 +528,41 @@ function compileSlide(
       );
     }
   });
-  if (diagnostics.length > 0) throw new BuildError(diagnostics);
-  return { id, objects, shapeXml: shapeXml.join("") };
+  return { xml: xml.join(""), objects };
+}
+
+function compileSlide(
+  node: HostNode,
+  id: string,
+  modules: ReadonlyMap<string, CapabilityModule>,
+  target: Target,
+  dimensions: Dimensions,
+  document: DocumentBuildState,
+): SlideBuild {
+  const slide: SlideBuildState = {
+    nextId: 2,
+    diagnostics: [],
+    relationships: [],
+    relationshipIds: new Map(),
+  };
+  const path = `deck/slide[${id}]`;
+  if (nonWhitespaceText(node.children)) {
+    slide.diagnostics.push(
+      diagnostic(path, "unexpected-text", "Slide 页面不能直接包含文本"),
+    );
+  }
+  const compiled = compileChildren(
+    node.children.map(capabilityChild),
+    { document, slide, modules, target, dimensions },
+    path,
+  );
+  if (slide.diagnostics.length > 0) throw new BuildError(slide.diagnostics);
+  return {
+    id,
+    objects: compiled.objects,
+    shapeXml: compiled.xml,
+    relationships: slide.relationships,
+  };
 }
 
 function compileDocument(
@@ -388,27 +577,31 @@ function compileDocument(
       diagnostic("deck", "document-root", "缺少 Deck 根组件"),
     ]);
   const size = deckDimensions(deck);
-  const usedExtensions = new Set<Extension>();
-  const warnings: Diagnostic[] = [];
-  const builtSlides = slides.map(({ node, id }, index) =>
-    compileSlide(
-      node,
-      id,
-      index,
-      modules,
-      target,
-      size,
-      usedExtensions,
-      warnings,
-    ),
+  const document: DocumentBuildState = {
+    usedExtensions: new Set(),
+    warnings: [],
+    resourceClaims: new Map(),
+    resources: new Map(),
+    resourceTypes: new Map(),
+  };
+  const builtSlides = slides.map(({ node, id }) =>
+    compileSlide(node, id, modules, target, size, document),
   );
   const parts = pptxParts(
     size,
-    builtSlides.map(({ id, shapeXml }) => ({ id, shapeXml })),
+    builtSlides.map(({ id, shapeXml, relationships }) => ({
+      id,
+      shapeXml,
+      relationships,
+    })),
+    [...document.resources.values()],
   );
   const pptx = zipSync(
     Object.fromEntries(
-      Object.entries(parts).map(([path, xml]) => [path, strToU8(xml)]),
+      Object.entries(parts).map(([path, content]) => [
+        path,
+        typeof content === "string" ? strToU8(content) : content,
+      ]),
     ),
     { level: 6, mtime: new Date("2020-01-01T00:00:00Z") },
   );
@@ -426,9 +619,9 @@ function compileDocument(
       format: target.format,
       extensions: [...target.extensions],
     },
-    extensions: [...usedExtensions],
+    extensions: [...document.usedExtensions],
     slides: slideObservations,
-    diagnostics: warnings,
+    diagnostics: document.warnings,
   });
   return Object.freeze({ pptx, report });
 }

@@ -57,13 +57,29 @@ function relationships(
     `<Relationships xmlns="${namespaces.relationships}">${entries
       .map(
         ({ id, type, target }) =>
-          `<Relationship Id="${id}" Type="${type}" Target="${target}"/>`,
+          `<Relationship Id="${xmlEscape(id)}" Type="${xmlEscape(type)}" Target="${xmlEscape(target)}"/>`,
       )
       .join("")}</Relationships>`,
   );
 }
 
-function contentTypes(slideCount: number): string {
+export type PptxPackageResource = {
+  readonly name: string;
+  readonly bytes: Uint8Array;
+  readonly extension: string;
+  readonly contentType: string;
+};
+
+export type PptxRelationship = {
+  readonly id: string;
+  readonly type: string;
+  readonly target: string;
+};
+
+function contentTypes(
+  slideCount: number,
+  resources: readonly PptxPackageResource[],
+): string {
   const overrides = [
     [
       "/ppt/presentation.xml",
@@ -86,11 +102,23 @@ function contentTypes(slideCount: number): string {
       "application/vnd.openxmlformats-officedocument.presentationml.slide+xml",
     ]),
   ];
+  const defaults = new Map<string, string>([
+    ["rels", "application/vnd.openxmlformats-package.relationships+xml"],
+    ["xml", "application/xml"],
+  ]);
+  for (const resource of resources) {
+    defaults.set(resource.extension, resource.contentType);
+  }
   return xmlDocument(
-    `<Types xmlns="${namespaces.contentTypes}"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/>${overrides
+    `<Types xmlns="${namespaces.contentTypes}">${[...defaults]
+      .map(
+        ([extension, contentType]) =>
+          `<Default Extension="${xmlEscape(extension)}" ContentType="${xmlEscape(contentType)}"/>`,
+      )
+      .join("")}${overrides
       .map(
         ([partName, contentType]) =>
-          `<Override PartName="${partName}" ContentType="${contentType}"/>`,
+          `<Override PartName="${xmlEscape(partName!)}" ContentType="${xmlEscape(contentType!)}"/>`,
       )
       .join("")}</Types>`,
   );
@@ -130,8 +158,13 @@ function slide(slideId: string, shapeXml: string): string {
 
 export function pptxParts(
   size: { readonly width: number; readonly height: number },
-  slides: readonly { readonly id: string; readonly shapeXml: string }[],
-): Record<string, string> {
+  slides: readonly {
+    readonly id: string;
+    readonly shapeXml: string;
+    readonly relationships: readonly PptxRelationship[];
+  }[],
+  resources: readonly PptxPackageResource[] = [],
+): Record<string, string | Uint8Array> {
   const slideRelationships = slides.map((_, index) => ({
     id: `rId${index + 2}`,
     type: `${namespaces.r}/slide`,
@@ -143,8 +176,8 @@ export function pptxParts(
   const presentation = xmlDocument(
     `<p:presentation xmlns:a="${namespaces.a}" xmlns:r="${namespaces.r}" xmlns:p="${namespaces.p}"><p:sldMasterIdLst><p:sldMasterId id="2147483648" r:id="rId1"/></p:sldMasterIdLst><p:sldIdLst>${slideIds}</p:sldIdLst><p:sldSz cx="${pxToEmu(size.width)}" cy="${pxToEmu(size.height)}"/><p:notesSz cx="6858000" cy="9144000"/></p:presentation>`,
   );
-  const parts: Record<string, string> = {
-    "[Content_Types].xml": contentTypes(slides.length),
+  const parts: Record<string, string | Uint8Array> = {
+    "[Content_Types].xml": contentTypes(slides.length, resources),
     "_rels/.rels": relationships([
       {
         id: "rId1",
@@ -195,7 +228,11 @@ export function pptxParts(
         type: `${namespaces.r}/slideLayout`,
         target: "../slideLayouts/slideLayout1.xml",
       },
+      ...slides[index]!.relationships,
     ]);
   });
+  for (const resource of resources) {
+    parts[`ppt/media/${resource.name}`] = resource.bytes;
+  }
   return parts;
 }

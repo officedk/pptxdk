@@ -41,6 +41,8 @@ export type ObjectObservation = {
   readonly testId?: string;
   readonly geometry?: string;
   readonly box?: Box;
+  readonly text?: string;
+  readonly members?: readonly ObjectObservation[];
 };
 
 export type SlideObservation = {
@@ -66,15 +68,38 @@ export type BuildResult = {
   readonly report: BuildReport;
 };
 
-export type CapabilityInput = {
+/** React 宿主树中的通用节点，不暴露 React 或渲染器内部对象。 */
+export type CapabilityElement = {
   readonly type: string;
   readonly props: Readonly<Record<string, unknown>>;
-  readonly children: readonly unknown[];
+  readonly children: readonly CapabilityChild[];
+};
+
+export type CapabilityChild =
+  | CapabilityElement
+  | { readonly type: "#text"; readonly text: string };
+
+export type CapabilityInput = CapabilityElement;
+
+export type CapabilityChildren = {
+  readonly xml: string;
+  readonly objects: readonly ObjectObservation[];
+};
+
+export type CapabilityResource = {
+  readonly bytes: Uint8Array;
+  readonly extension: string;
+  readonly contentType: string;
+  readonly relationshipType: string;
 };
 
 export type CapabilityContext = {
   readonly id: number;
   readonly path: string;
+  /** 使用同一组已注册模块递归编译原生子对象。 */
+  compileChildren(children: readonly CapabilityChild[]): CapabilityChildren;
+  /** 将二进制资源加入 PPTX，并返回当前页面对应的关系标识。 */
+  registerResource(resource: CapabilityResource): string;
 };
 
 export type CapabilityOutput = {
@@ -82,6 +107,15 @@ export type CapabilityOutput = {
   readonly xml: string;
   readonly observation: ObjectObservation;
   readonly extensions: readonly Extension[];
+  readonly resourceClaims?: readonly {
+    readonly kind: string;
+    readonly key: string;
+    readonly identity: string;
+  }[];
+  readonly warnings?: readonly {
+    readonly code: string;
+    readonly message: string;
+  }[];
 };
 
 export type CapabilityModule = {

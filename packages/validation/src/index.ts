@@ -12,6 +12,7 @@ const chartNamespace = "http://schemas.openxmlformats.org/drawingml/2006/chart";
 const spreadsheetNamespace =
   "http://schemas.openxmlformats.org/spreadsheetml/2006/main";
 const chartSheetName = "Sheet1";
+const tableUri = "http://schemas.openxmlformats.org/drawingml/2006/table";
 const relationshipNamespace =
   "http://schemas.openxmlformats.org/officeDocument/2006/relationships";
 const packageRelationshipNamespace =
@@ -58,7 +59,7 @@ export type ValidationIssue = {
 export type FileObject = {
   readonly id: number;
   readonly name: string;
-  readonly kind: "shape" | "image" | "chart" | "group";
+  readonly kind: "shape" | "image" | "chart" | "group" | "table";
   readonly geometry?: string;
   readonly boxEmu: {
     readonly x: number;
@@ -84,6 +85,22 @@ export type FileObject = {
   };
   readonly members?: readonly FileObject[];
   readonly text?: FileText;
+  readonly table?: {
+    readonly columnWidthsEmu: readonly number[];
+    readonly rowHeightsEmu: readonly number[];
+    readonly cells: readonly (readonly string[])[];
+    readonly merges: readonly {
+      readonly row: number;
+      readonly column: number;
+      readonly rowSpan: number;
+      readonly colSpan: number;
+    }[];
+    readonly cellTexts: readonly {
+      readonly row: number;
+      readonly column: number;
+      readonly text: FileText;
+    }[];
+  };
 };
 
 export type FileChartSeries = {
@@ -728,6 +745,14 @@ function validateTextValueRanges(
 ): void {
   const body = first(shape, presentationNamespace, "txBody");
   if (body === undefined) return;
+  validateTextBodyValueRanges(body, part, errors);
+}
+
+function validateTextBodyValueRanges(
+  body: XmlElement,
+  part: string,
+  errors: ValidationIssue[],
+): void {
   for (const paragraph of elements(body, drawingNamespace, "p")) {
     for (const run of elements(paragraph, drawingNamespace, "r")) {
       validateTextValueRange(
@@ -1697,6 +1722,295 @@ function validateGroup(
   };
 }
 
+function tableSpan(
+  cell: XmlElement,
+  name: "gridSpan" | "rowSpan",
+  part: string,
+  errors: ValidationIssue[],
+): number {
+  if (!cell.hasAttribute(name)) return 1;
+  const value = integerAttribute(cell, name);
+  if (value === undefined || value < 1) {
+    issue(errors, part, "invalid-table-merge", `${name} 必须是正整数`);
+    return 1;
+  }
+  return value;
+}
+
+function tableMergeFlag(
+  cell: XmlElement,
+  name: "hMerge" | "vMerge",
+  part: string,
+  errors: ValidationIssue[],
+): boolean {
+  const value = attribute(cell, name);
+  if (value === "" || value === "0" || value === "false") return false;
+  if (value === "1" || value === "true") return true;
+  issue(errors, part, "invalid-table-merge", `${name} 必须是布尔值`);
+  return false;
+}
+
+function tableCellText(
+  cell: XmlElement,
+  part: string,
+  errors: ValidationIssue[],
+): FileText {
+  const body = first(cell, drawingNamespace, "txBody");
+  if (body === undefined) {
+    issue(errors, part, "missing-table-cell-text", "表格单元格缺少 a:txBody");
+    return { text: "", paragraphs: [] };
+  }
+  validateTextBodyValueRanges(body, part, errors);
+  const paragraphs = elements(body, drawingNamespace, "p").map(readParagraph);
+  return { text: paragraphs.map(({ text }) => text).join("\n"), paragraphs };
+}
+
+/** 独立读取表格网格与合并覆盖，不调用生产表格模块的计算结果。 */
+function validateTable(
+  frame: XmlElement,
+  part: string,
+  errors: ValidationIssue[],
+): FileObject | undefined {
+  const identity = objectIdentity(
+    frame,
+    "nvGraphicFramePr",
+    part,
+    "table",
+    errors,
+  );
+  if (identity === undefined) return undefined;
+  const transform = first(frame, presentationNamespace, "xfrm");
+  const boxEmu = transformBox(transform, part, identity.name, "table", errors);
+  const graphic = first(frame, drawingNamespace, "graphic");
+  const graphicData =
+    graphic === undefined
+      ? undefined
+      : first(graphic, drawingNamespace, "graphicData");
+  const table =
+    graphicData === undefined
+      ? undefined
+      : first(graphicData, drawingNamespace, "tbl");
+  if (
+    graphicData === undefined ||
+    attribute(graphicData, "uri") !== tableUri ||
+    table === undefined
+  ) {
+    issue(
+      errors,
+      part,
+      "invalid-table-graphic",
+      `表格 ${identity.name} 缺少 DrawingML 表格内容`,
+    );
+    return undefined;
+  }
+  const grid = first(table, drawingNamespace, "tblGrid");
+  const columns =
+    grid === undefined ? [] : elements(grid, drawingNamespace, "gridCol");
+  if (columns.length === 0) {
+    issue(
+      errors,
+      part,
+      "invalid-table-grid",
+      `表格 ${identity.name} 缺少列网格`,
+    );
+  }
+  const columnWidthsEmu = columns.map((column, index) => {
+    const width = integerAttribute(column, "w");
+    if (width === undefined || width < 1 || width > maximumShapeExtentEmu) {
+      issue(
+        errors,
+        part,
+        "invalid-table-grid",
+        `表格 ${identity.name} 第 ${index + 1} 列宽无效`,
+      );
+      return 0;
+    }
+    return width;
+  });
+  const rowNodes = elements(table, drawingNamespace, "tr");
+  if (rowNodes.length === 0) {
+    issue(
+      errors,
+      part,
+      "invalid-table-grid",
+      `表格 ${identity.name} 至少需要一行`,
+    );
+  }
+  const rowHeightsEmu: number[] = [];
+  const rowCells: XmlElement[][] = [];
+  for (const [rowIndex, row] of rowNodes.entries()) {
+    const height = integerAttribute(row, "h");
+    if (height === undefined || height < 1 || height > maximumShapeExtentEmu) {
+      issue(
+        errors,
+        part,
+        "invalid-table-grid",
+        `表格 ${identity.name} 第 ${rowIndex + 1} 行高无效`,
+      );
+      rowHeightsEmu.push(0);
+    } else rowHeightsEmu.push(height);
+    const cells = elements(row, drawingNamespace, "tc");
+    if (cells.length !== columns.length) {
+      issue(
+        errors,
+        part,
+        "invalid-table-grid",
+        `表格 ${identity.name} 第 ${rowIndex + 1} 行含 ${cells.length} 个格子，列网格含 ${columns.length} 列`,
+      );
+    }
+    rowCells.push(cells);
+  }
+
+  type Owner = {
+    readonly row: number;
+    readonly column: number;
+    readonly rowSpan: number;
+    readonly colSpan: number;
+  };
+  const owners = new Map<string, Owner>();
+  const continuations = new Map<
+    XmlElement,
+    { readonly horizontal: boolean; readonly vertical: boolean }
+  >();
+  const spans = new Map<
+    XmlElement,
+    { readonly rowSpan: number; readonly colSpan: number }
+  >();
+  const merges: {
+    row: number;
+    column: number;
+    rowSpan: number;
+    colSpan: number;
+  }[] = [];
+  const cells: string[][] = rowNodes.map(() =>
+    Array.from({ length: columns.length }, () => ""),
+  );
+  const cellTexts: { row: number; column: number; text: FileText }[] = [];
+  for (const [rowIndex, currentRow] of rowCells.entries()) {
+    for (
+      let column = 0;
+      column < Math.min(currentRow.length, columns.length);
+      column += 1
+    ) {
+      const cell = currentRow[column]!;
+      const horizontalContinuation = tableMergeFlag(
+        cell,
+        "hMerge",
+        part,
+        errors,
+      );
+      const verticalContinuation = tableMergeFlag(cell, "vMerge", part, errors);
+      continuations.set(cell, {
+        horizontal: horizontalContinuation,
+        vertical: verticalContinuation,
+      });
+      const colSpan = tableSpan(cell, "gridSpan", part, errors);
+      const rowSpan = tableSpan(cell, "rowSpan", part, errors);
+      spans.set(cell, { rowSpan, colSpan });
+      if (horizontalContinuation || verticalContinuation) continue;
+      if (
+        column + colSpan > columns.length ||
+        rowIndex + rowSpan > rowNodes.length
+      ) {
+        issue(
+          errors,
+          part,
+          "invalid-table-merge",
+          `表格 ${identity.name} 的合并范围越界`,
+        );
+      }
+      const owner = { row: rowIndex, column, rowSpan, colSpan };
+      for (
+        let row = rowIndex;
+        row < Math.min(rowNodes.length, rowIndex + rowSpan);
+        row += 1
+      ) {
+        for (
+          let col = column;
+          col < Math.min(columns.length, column + colSpan);
+          col += 1
+        ) {
+          const key = `${row}:${col}`;
+          if (owners.has(key))
+            issue(
+              errors,
+              part,
+              "conflicting-table-merge",
+              `表格 ${identity.name} 的合并范围重叠`,
+            );
+          else owners.set(key, owner);
+        }
+      }
+      if (rowSpan > 1 || colSpan > 1) merges.push(owner);
+      const text = tableCellText(cell, part, errors);
+      cells[rowIndex]![column] = text.text;
+      cellTexts.push({ row: rowIndex, column, text });
+    }
+  }
+  for (const [rowIndex, currentRow] of rowCells.entries()) {
+    for (let column = 0; column < columns.length; column += 1) {
+      const cell = currentRow[column];
+      const owner = owners.get(`${rowIndex}:${column}`);
+      if (owner === undefined || cell === undefined) {
+        issue(
+          errors,
+          part,
+          "invalid-table-grid",
+          `表格 ${identity.name} 的第 ${rowIndex + 1} 行第 ${column + 1} 列没有有效单元格`,
+        );
+        continue;
+      }
+      const isAnchor = rowIndex === owner.row && column === owner.column;
+      const continuation = continuations.get(cell);
+      const span = spans.get(cell);
+      const horizontalContinuation = continuation?.horizontal ?? false;
+      const verticalContinuation = continuation?.vertical ?? false;
+      const expectedRowSpan = rowIndex === owner.row ? owner.rowSpan : 1;
+      const expectedColSpan = column === owner.column ? owner.colSpan : 1;
+      if (
+        horizontalContinuation !== (!isAnchor && column > owner.column) ||
+        verticalContinuation !== (!isAnchor && rowIndex > owner.row) ||
+        span?.rowSpan !== expectedRowSpan ||
+        span?.colSpan !== expectedColSpan
+      ) {
+        issue(
+          errors,
+          part,
+          "invalid-table-merge",
+          `表格 ${identity.name} 的合并续格标记或跨度与锚点范围不一致`,
+        );
+      }
+    }
+  }
+  const widthEmu = columnWidthsEmu.reduce((sum, width) => sum + width, 0);
+  const heightEmu = rowHeightsEmu.reduce((sum, height) => sum + height, 0);
+  if (
+    boxEmu !== undefined &&
+    (boxEmu.width !== widthEmu || boxEmu.height !== heightEmu)
+  ) {
+    issue(
+      errors,
+      part,
+      "invalid-table-transform",
+      `表格 ${identity.name} 的框架尺寸与行列网格合计不一致`,
+    );
+  }
+  if (boxEmu === undefined) return undefined;
+  return {
+    id: identity.id,
+    name: identity.name,
+    kind: "table",
+    boxEmu,
+    table: {
+      columnWidthsEmu,
+      rowHeightsEmu,
+      cells,
+      merges,
+      cellTexts,
+    },
+  };
+}
+
 function readObjects(
   parent: XmlNode,
   part: string,
@@ -1762,6 +2076,9 @@ function readObjects(
           contentTypes,
           errors,
         );
+        break;
+      case "graphicFrame":
+        object = validateTable(child as XmlElement, part, errors);
         break;
     }
     if (object !== undefined) objects.push(object);

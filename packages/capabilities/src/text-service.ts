@@ -90,10 +90,12 @@ type NormalizedFont = {
 };
 
 type TextLayoutRequest = {
-  readonly width: number;
+  readonly width: number | "max-content";
   readonly height?: number;
   readonly contentSized?: boolean;
 };
+
+type TextBodyDestination = "text-box" | "table-cell";
 
 type MeasureFace = {
   readonly font: fontkit.Font;
@@ -1164,6 +1166,7 @@ export function writeTextBody(
   styleValue: unknown,
   verticalAlign: TextStyle["verticalAlign"] = "top",
   layout?: TextLayoutRequest,
+  destination: TextBodyDestination = "text-box",
 ): TextServiceResult {
   const style = readTextStyle(styleValue, "Text.style");
   const paragraphs = normalizeParagraphs(children, style);
@@ -1176,7 +1179,10 @@ export function writeTextBody(
   let measured: ReturnType<typeof measureParagraphs> | undefined;
   if (layout !== undefined) {
     try {
-      measured = measureParagraphs(paragraphs, layout.width);
+      measured = measureParagraphs(
+        paragraphs,
+        layout.width === "max-content" ? Number.MAX_VALUE : layout.width,
+      );
     } catch (error) {
       if (layout.contentSized === true) throw error;
       if (error instanceof CapabilityError) {
@@ -1203,7 +1209,8 @@ export function writeTextBody(
   if (
     measured !== undefined &&
     layout !== undefined &&
-    (measured.width > layout.width + 0.01 ||
+    ((typeof layout.width === "number" &&
+      measured.width > layout.width + 0.01) ||
       (layout.height !== undefined && measured.height > layout.height + 0.01))
   ) {
     warnings.push({
@@ -1225,8 +1232,12 @@ export function writeTextBody(
   const text = outputParagraphs
     .map(({ runs }) => runs.map(({ text: part }) => part).join(""))
     .join("\n");
+  const xml =
+    destination === "table-cell"
+      ? `<a:txBody><a:bodyPr/><a:lstStyle/>${outputParagraphs.map(paragraphXml).join("")}</a:txBody>`
+      : `<p:txBody><a:bodyPr wrap="square" lIns="0" tIns="0" rIns="0" bIns="0" anchor="${bodyAnchor(style.verticalAlign ?? verticalAlign)}"><a:noAutofit/></a:bodyPr><a:lstStyle/>${outputParagraphs.map(paragraphXml).join("")}</p:txBody>`;
   return {
-    xml: `<p:txBody><a:bodyPr wrap="square" lIns="0" tIns="0" rIns="0" bIns="0" anchor="${bodyAnchor(style.verticalAlign ?? verticalAlign)}"><a:noAutofit/></a:bodyPr><a:lstStyle/>${outputParagraphs.map(paragraphXml).join("")}</p:txBody>`,
+    xml,
     text,
     resourceClaims,
     ...(measured === undefined

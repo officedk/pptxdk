@@ -5,6 +5,7 @@ import {
   motionCapability,
   shapeCapability,
   textCapability,
+  tableCapability,
   transitionCapability,
 } from "@react-pptx/capabilities";
 import { createBuilder } from "@react-pptx/core";
@@ -16,6 +17,7 @@ export const build = createBuilder([
   motionCapability,
   shapeCapability,
   textCapability,
+  tableCapability,
   transitionCapability,
 ]);
 
@@ -27,6 +29,9 @@ export {
   Image,
   Group,
   Shape,
+  Table,
+  Row,
+  Cell,
   groupCapability,
   imageCapability,
   motionCapability,
@@ -59,6 +64,16 @@ export type {
   ChartSeries,
   ColumnOrBarChartProps,
   LineOrAreaChartProps,
+  CellProps,
+  RowProps,
+  TableCellStyle,
+  TableColumn,
+  TableProps,
+  TableRowStyle,
+  TableSpacing,
+  TableStyle,
+  TableTextStyle,
+  TableVerticalAlign,
 } from "@react-pptx/capabilities";
 export { createBuilder } from "@react-pptx/core";
 export type {
@@ -66,6 +81,7 @@ export type {
   BuildReport,
   BuildResult,
   Diagnostic,
+  NativeTableObservation,
   ObjectObservation,
   SlideObservation,
   Target,

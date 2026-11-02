@@ -515,7 +515,7 @@ function compileChildren(
       for (const warning of output.warnings ?? []) {
         context.document.warnings.push({
           severity: "warning",
-          path,
+          path: warning.path === undefined ? path : `${path}/${warning.path}`,
           code: warning.code,
           message: warning.message,
         });
@@ -549,7 +549,11 @@ function compileChildren(
     } catch (error) {
       context.slide.diagnostics.push(
         error instanceof CapabilityError
-          ? diagnostic(path, error.code, error.message)
+          ? diagnostic(
+              error.path === undefined ? path : `${path}/${error.path}`,
+              error.code,
+              error.message,
+            )
           : diagnostic(
               path,
               "capability-failure",

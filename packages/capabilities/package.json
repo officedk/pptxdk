@@ -39,6 +39,11 @@
       "types": "./dist/text-elements.d.ts",
       "default": "./dist/text-elements.js"
     },
+    "./table": {
+      "source": "./src/table.ts",
+      "types": "./dist/table.d.ts",
+      "default": "./dist/table.js"
+    },
     "./transition": {
       "source": "./src/transition.ts",
       "types": "./dist/transition.d.ts",

@@ -23,6 +23,7 @@ export type {
   Extension,
   ObjectCapabilityModule,
   ObjectObservation,
+  NativeTableObservation,
   SlideCapabilityContext,
   SlideCapabilityModule,
   SlideCapabilityOutput,

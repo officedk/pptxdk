@@ -1062,6 +1062,294 @@ describe("公开布局入口", () => {
     );
   });
 
+  it("baseline reference 同时参与自动最小值、允许显式解除并穿过简单 Box", async () => {
+    const baselineText = (testId: string, fontSize: number) =>
+      createElement(
+        Text,
+        {
+          testId,
+          width: 100,
+          height: 60,
+          style: { fontFamily: cjkFont, fontSize },
+        },
+        "中",
+      );
+    const buildColumn = (minHeight?: number) =>
+      build(
+        createElement(
+          Deck,
+          { width: 320, height: 120 },
+          createElement(
+            Slide,
+            {
+              slideId:
+                minHeight === 0 ? "baseline-min-zero" : "baseline-auto-min",
+            },
+            createElement(
+              Box,
+              {
+                testId: "column",
+                style: {
+                  display: "flex",
+                  flexDirection: "column",
+                  width: 300,
+                  height: 70,
+                },
+              },
+              createElement(
+                Box,
+                {
+                  testId: "baseline-row",
+                  style: {
+                    display: "flex",
+                    alignItems: "baseline",
+                    width: 300,
+                    ...(minHeight === undefined ? {} : { minHeight }),
+                  },
+                },
+                baselineText("small-text", 20),
+                baselineText("large-text", 40),
+              ),
+              createElement(Shape, {
+                testId: "following-block",
+                width: 100,
+                height: 20,
+                style: { flexShrink: 0 },
+              }),
+            ),
+          ),
+        ),
+      );
+
+    const autoMin = await buildColumn();
+    const autoLayouts = autoMin.report.slides[0]?.layouts ?? [];
+    assert.equal(
+      autoLayouts.find(({ testId }) => testId === "baseline-row")?.box.height,
+      83.2,
+    );
+    assert.equal(
+      autoMin.report.slides[0]?.objects.find(
+        ({ testId }) => testId === "following-block",
+      )?.box?.y,
+      83.2,
+    );
+    const autoFile = await validatePptx(autoMin.pptx);
+    assert.deepEqual(autoFile.errors, []);
+    assert.deepEqual(
+      autoFile.slides[0]?.objects.map(({ boxEmu }) =>
+        Number((boxEmu.y / 9525).toFixed(2)),
+      ),
+      [23.2, 0, 83.2],
+    );
+    assert.equal(
+      autoFile.slides[0]?.objects.find(({ name }) => name === "following-block")
+        ?.boxEmu.y,
+      83.2 * 9525,
+    );
+
+    const released = await buildColumn(0);
+    const releasedLayouts = released.report.slides[0]?.layouts ?? [];
+    assert.equal(
+      releasedLayouts.find(({ testId }) => testId === "baseline-row")?.box
+        .height,
+      50,
+    );
+    assert.deepEqual(
+      released.report.slides[0]?.objects.map(({ testId, box }) => ({
+        testId,
+        y: box?.y,
+      })),
+      [
+        { testId: "small-text", y: 23.2 },
+        { testId: "large-text", y: 0 },
+        { testId: "following-block", y: 50 },
+      ],
+    );
+    const releasedFile = await validatePptx(released.pptx);
+    assert.deepEqual(releasedFile.errors, []);
+    assert.deepEqual(
+      releasedFile.slides[0]?.objects.map(({ boxEmu }) =>
+        Number((boxEmu.y / 9525).toFixed(2)),
+      ),
+      [23.2, 0, 50],
+    );
+
+    const nested = await build(
+      createElement(
+        Deck,
+        { width: 320, height: 120 },
+        createElement(
+          Slide,
+          { slideId: "nested-text-baseline" },
+          createElement(
+            Box,
+            {
+              style: {
+                display: "flex",
+                alignItems: "baseline",
+                width: 300,
+                height: 100,
+              },
+            },
+            createElement(
+              Box,
+              {
+                testId: "small-wrapper",
+                style: { display: "flex", width: 100, height: 60 },
+              },
+              baselineText("wrapped-small-text", 20),
+            ),
+            createElement(
+              Box,
+              {
+                testId: "large-wrapper",
+                style: { display: "flex", width: 100, height: 60 },
+              },
+              baselineText("wrapped-large-text", 40),
+            ),
+          ),
+        ),
+      ),
+    );
+    assert.deepEqual(
+      nested.report.slides[0]?.layouts
+        ?.filter(
+          ({ testId }) =>
+            testId === "small-wrapper" || testId === "large-wrapper",
+        )
+        .map(({ testId, box }) => ({ testId, y: box.y })),
+      [
+        { testId: "small-wrapper", y: 23.2 },
+        { testId: "large-wrapper", y: 0 },
+      ],
+    );
+    assert.deepEqual(
+      nested.report.slides[0]?.objects.map(({ testId, box }) => ({
+        testId,
+        y: box?.y,
+      })),
+      [
+        { testId: "wrapped-small-text", y: 23.2 },
+        { testId: "wrapped-large-text", y: 0 },
+      ],
+    );
+    const nestedFile = await validatePptx(nested.pptx);
+    assert.deepEqual(nestedFile.errors, []);
+    assert.equal(nested.report.slides[0]?.objects.length, 2);
+    assert.equal(nested.report.slides[0]?.layouts?.length, 3);
+    assert.deepEqual(
+      nestedFile.slides[0]?.objects.map(({ boxEmu }) =>
+        Number((boxEmu.y / 9525).toFixed(2)),
+      ),
+      [23.2, 0],
+    );
+
+    await assert.rejects(
+      build(
+        createElement(
+          Deck,
+          { width: 320, height: 120 },
+          createElement(
+            Slide,
+            { slideId: "complex-text-baseline-wrapper" },
+            createElement(
+              Box,
+              {
+                style: {
+                  display: "flex",
+                  alignItems: "baseline",
+                  width: 300,
+                  height: 100,
+                },
+              },
+              createElement(
+                Box,
+                {
+                  style: { display: "flex", width: 200, height: 60 },
+                },
+                baselineText("wrapped-first", 20),
+                baselineText("wrapped-second", 40),
+              ),
+            ),
+          ),
+        ),
+      ),
+      (error: unknown) =>
+        error instanceof BuildError &&
+        error.diagnostics.some(
+          ({ code }) => code === "unsupported-baseline-context",
+        ),
+    );
+  });
+
+  it("非baseline文字保留弹性stretch与内容定高", async () => {
+    const result = await build(
+      createElement(
+        Deck,
+        { width: 320, height: 120 },
+        createElement(
+          Slide,
+          { slideId: "text-stretch-without-baseline" },
+          createElement(
+            Box,
+            {
+              style: {
+                display: "flex",
+                alignItems: "stretch",
+                width: 300,
+                height: 100,
+              },
+            },
+            createElement(
+              Text,
+              {
+                testId: "fixed-text",
+                width: 100,
+                height: 60,
+                style: { fontFamily: cjkFont, fontSize: 20 },
+              },
+              "中",
+            ),
+            createElement(
+              Text,
+              {
+                testId: "content-sized-text",
+                width: 100,
+                height: "auto",
+                style: { fontFamily: cjkFont, fontSize: 20 },
+              },
+              "中",
+            ),
+          ),
+        ),
+      ),
+    );
+
+    assert.deepEqual(
+      result.report.slides[0]?.objects.map(({ testId, box }) => ({
+        testId,
+        y: box?.y,
+        height: box?.height,
+      })),
+      [
+        { testId: "fixed-text", y: 0, height: 60 },
+        { testId: "content-sized-text", y: 0, height: 100 },
+      ],
+    );
+    const file = await validatePptx(result.pptx);
+    assert.deepEqual(file.errors, []);
+    assert.deepEqual(
+      file.slides[0]?.objects.map(({ boxEmu }) => ({
+        y: boxEmu.y / 9525,
+        height: boxEmu.height / 9525,
+      })),
+      [
+        { y: 0, height: 60 },
+        { y: 0, height: 100 },
+      ],
+    );
+  });
+
   it("弹性列保留文字主轴内容高度，minHeight: 0 允许收缩", async () => {
     const columnText = (testId: string, minHeight?: number) =>
       createElement(Text, {

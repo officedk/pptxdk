@@ -7,7 +7,9 @@ import Yoga, {
   Gutter,
   Justify,
   MeasureMode,
+  PositionType,
   Wrap,
+  type MeasureFunction,
   type Node as YogaNode,
 } from "yoga-layout";
 
@@ -38,8 +40,10 @@ type LayoutNode = {
   readonly path: string;
   readonly module?: ObjectCapabilityModule;
   readonly children: LayoutNode[];
-  /** Yoga 不支持文本基线回调；提交几何前记录的交叉轴修正。 */
-  baselineAdjustmentY: number;
+  /** 文字需要提供基线时，由外部对象节点转交给内部测量叶节点。 */
+  measureFunction?: MeasureFunction;
+  baselineContent?: YogaNode;
+  baseline?: number;
 };
 
 export type LayoutPassResult = {
@@ -498,7 +502,6 @@ export class LayoutPass {
       style: { display: "block" },
       path: parentPath,
       children: [],
-      baselineAdjustmentY: 0,
     };
     rootYoga.setDisplay(Display.Flex);
     rootYoga.setFlexDirection(FlexDirection.Column);
@@ -506,20 +509,21 @@ export class LayoutPass {
     rootYoga.setHeight(this.#dimensions.height);
     try {
       this.#appendChildren(children, parentPath, root, false);
+      this.#prepareTextBaselines(root);
+      // 固定尺寸父节点可能跳过新建测量树；先bootstrap，再标脏内部测量叶并重算。
       rootYoga.calculateLayout(
         this.#dimensions.width,
         this.#dimensions.height,
         Direction.LTR,
       );
-      if (this.#applyAutomaticMinimums(root)) {
+      if (this.#markBaselineMeasurementsDirty(root)) {
         rootYoga.calculateLayout(
           this.#dimensions.width,
           this.#dimensions.height,
           Direction.LTR,
         );
       }
-      // 基线修正可能撑高自适应行；重算后续块流位置直至高度稳定。
-      while (this.#applyBaselineAlignment(root)) {
+      if (this.#applyAutomaticMinimums(root)) {
         rootYoga.calculateLayout(
           this.#dimensions.width,
           this.#dimensions.height,
@@ -541,8 +545,10 @@ export class LayoutPass {
   ): void {
     const module = this.#modules.get(input.type);
     if (!objectModule(module)) return;
-    const isText = input.type === "rp:text";
-    const style = readStyle(input.props["style"], path, false, isText);
+    // Text 和 Table 以共享文字样式承载字体属性；Table 在布局中仍是叶对象。
+    const allowsTextStyle =
+      input.type === "rp:text" || input.type === "rp:table";
+    const style = readStyle(input.props["style"], path, false, allowsTextStyle);
     if (!parentFlex) return;
     // The parent currently only calls this for objects embedded in an explicit layout tree.
     void style;
@@ -574,12 +580,13 @@ export class LayoutPass {
       }
       const module = this.#modules.get(child.type);
       if (!objectModule(module)) return;
-      const isText = child.type === "rp:text";
+      const allowsTextStyle =
+        child.type === "rp:text" || child.type === "rp:table";
       const childStyle = readStyle(
         child.props["style"],
         childPath,
         false,
-        isText,
+        allowsTextStyle,
       );
       const childYoga = Yoga.Node.create(this.#config);
       const layoutChild: LayoutNode = {
@@ -589,12 +596,11 @@ export class LayoutPass {
         path: childPath,
         module,
         children: [],
-        baselineAdjustmentY: 0,
       };
       this.#applyStyle(childYoga, childStyle, parent.style, false, false);
       this.#setDeclaredSize(layoutChild);
       if (module.measureLayout !== undefined) {
-        childYoga.setMeasureFunc((width, widthMode) => {
+        const measureFunction: MeasureFunction = (width, widthMode) => {
           const measured = this.#measure(
             layoutChild,
             widthMode === MeasureMode.Undefined
@@ -608,7 +614,9 @@ export class LayoutPass {
                 : (measured?.width ?? 0),
             height: measured?.height ?? 0,
           };
-        });
+        };
+        layoutChild.measureFunction = measureFunction;
+        childYoga.setMeasureFunc(measureFunction);
       }
       parent.yoga.insertChild(childYoga, parent.children.length);
       parent.children.push(layoutChild);
@@ -641,7 +649,6 @@ export class LayoutPass {
       style,
       path,
       children: [],
-      baselineAdjustmentY: 0,
     };
     this.#applyStyle(yoga, style, parentStyle, false, true);
     this.#appendChildren(input.children, path, node, true);
@@ -830,29 +837,76 @@ export class LayoutPass {
     );
   }
 
-  #applyBaselineAlignment(node: LayoutNode): boolean {
-    let changed = false;
-    const flexRow = node.style.display === "flex" && rowDirection(node.style);
-    const participants =
-      node.style.display !== "flex"
-        ? []
-        : node.children.filter((child) => {
-            const alignment = child.style.alignSelf;
-            return (
-              alignment === "baseline" ||
-              ((alignment === undefined || alignment === "auto") &&
-                node.style.alignItems === "baseline")
-            );
-          });
-    const needsTextBaseline = participants.some((child) => {
-      const element = child.element;
+  #baselineParticipants(node: LayoutNode): LayoutNode[] {
+    if (node.style.display !== "flex") return [];
+    return node.children.filter((child) => {
+      const alignment = child.style.alignSelf;
       return (
-        element?.type === "rp:text" ||
-        (typeof element?.props["text"] === "string" &&
-          element.props["text"] !== "")
+        alignment === "baseline" ||
+        ((alignment === undefined || alignment === "auto") &&
+          node.style.alignItems === "baseline")
       );
     });
-    if (participants.length > 0 && flexRow && needsTextBaseline) {
+  }
+
+  #isTextBearing(node: LayoutNode): boolean {
+    return (
+      node.element?.type === "rp:text" ||
+      (typeof node.element?.props["text"] === "string" &&
+        node.element.props["text"] !== "")
+    );
+  }
+
+  #containsText(node: LayoutNode): boolean {
+    return (
+      this.#isTextBearing(node) ||
+      node.children.some((child) => this.#containsText(child))
+    );
+  }
+
+  #baselineTextLeaf(node: LayoutNode): LayoutNode {
+    if (this.#isTextBearing(node)) return node;
+    if (node.element?.type !== "rp:box" || node.children.length !== 1) {
+      fail(
+        node.path,
+        "unsupported-baseline-context",
+        "文字 baseline 目前只沿单子项 Box 链传播",
+      );
+    }
+    const child = node.children[0]!;
+    const simpleRow =
+      node.style.display === "flex" &&
+      node.style.flexWrap !== "wrap" &&
+      rowDirection(node.style) &&
+      !reverseDirection(node.style);
+    const childAlign = child.style.alignSelf;
+    const parentAlign = node.style.alignItems;
+    const alignedAtStart =
+      childAlign === "start" ||
+      childAlign === "flex-start" ||
+      ((childAlign === undefined || childAlign === "auto") &&
+        (parentAlign === "start" || parentAlign === "flex-start"));
+    const stretchedFixedHeight =
+      (childAlign === undefined ||
+        childAlign === "auto" ||
+        childAlign === "stretch") &&
+      (parentAlign === undefined || parentAlign === "stretch") &&
+      typeof (child.style.height ?? child.element?.props["height"]) ===
+        "number";
+    if (!simpleRow || (!alignedAtStart && !stretchedFixedHeight)) {
+      fail(
+        node.path,
+        "unsupported-baseline-context",
+        "文字 baseline 需要不换行的行 Box，且唯一子项的交叉轴位置固定在顶部",
+      );
+    }
+    return this.#baselineTextLeaf(child);
+  }
+
+  #prepareTextBaselines(node: LayoutNode): void {
+    const flexRow = node.style.display === "flex" && rowDirection(node.style);
+    const participants = this.#baselineParticipants(node);
+    if (flexRow && participants.some((child) => this.#containsText(child))) {
       if (node.style.flexWrap === "wrap") {
         fail(
           node.path,
@@ -860,70 +914,110 @@ export class LayoutPass {
           "文字 baseline 目前要求不换行的行弹性容器",
         );
       }
-      const baselines = participants.map((child) => {
-        const lineOffset = this.#baselineOffset(child);
-        return {
-          child,
-          offset: child.yoga.getComputedMargin(Edge.Top) + lineOffset,
-          position: child.yoga.getComputedTop() + lineOffset,
-        };
-      });
-      // 以实际文字基线替代 Yoga 的盒底近似，同时保留容器内容区起点。
-      const lineBaseline =
-        node.yoga.getComputedPadding(Edge.Top) +
-        Math.max(...baselines.map(({ offset }) => offset));
-      for (const { child, position } of baselines) {
-        child.baselineAdjustmentY = lineBaseline - position;
-      }
-      if (node.style.height === undefined || node.style.height === "auto") {
-        const currentHeight = node.yoga.getComputedHeight();
-        const contentBottom = Math.max(
-          0,
-          ...node.children.map(
-            (child) =>
-              child.yoga.getComputedTop() +
-              child.baselineAdjustmentY +
-              child.yoga.getComputedHeight() +
-              child.yoga.getComputedMargin(Edge.Bottom),
-          ),
-        );
-        const requiredHeight = Math.max(
-          currentHeight,
-          contentBottom + node.yoga.getComputedPadding(Edge.Bottom),
-        );
-        const maximum = styleLength(node.style.maxHeight);
-        const boundedHeight = Math.min(
-          requiredHeight,
-          ...(maximum === undefined ? [] : [maximum]),
-        );
-        if (boundedHeight > currentHeight + 0.01) {
-          node.yoga.setMinHeight(boundedHeight);
-          changed = true;
-        }
+      for (const participant of participants) {
+        if (!this.#containsText(participant)) continue;
+        this.#installBaselineMarker(this.#baselineTextLeaf(participant));
       }
     }
+    for (const child of node.children) this.#prepareTextBaselines(child);
+  }
+
+  #installBaselineMarker(node: LayoutNode): void {
+    if (node.baselineContent !== undefined) return;
+    const measureFunction = node.measureFunction;
+    if (measureFunction === undefined) {
+      fail(
+        node.path,
+        "baseline-measurement-unavailable",
+        "baseline 对齐需要文字能力提供可靠的字体度量",
+      );
+    }
+    const rawWidth = node.style.width ?? node.element?.props["width"];
+    const availableWidth = length(rawWidth, "width", node.path);
+    const measurement = this.#measure(
+      node,
+      availableWidth === undefined ? {} : { availableWidth },
+    );
+    if (measurement?.baseline === undefined) {
+      fail(
+        node.path,
+        "baseline-measurement-unavailable",
+        "baseline 对齐需要单一文字 run、top anchor 与显式字体资源",
+      );
+    }
+
+    const content = Yoga.Node.create(this.#config);
+    content.setFlexShrink(1);
+    content.setMeasureFunc(measureFunction);
+    const marker = Yoga.Node.create(this.#config);
+    marker.setWidth(0);
+    marker.setHeight(0);
+    marker.setPositionType(PositionType.Relative);
+    marker.setPosition(
+      Edge.Top,
+      measurement.baseline - expandedSpacing(node.style, "padding").top,
+    );
+    // 零尺寸relative marker只向Yoga提供内容基线，不进入语义布局树或PPTX。
+    marker.setIsReferenceBaseline(true);
+
+    node.yoga.unsetMeasureFunc();
+    node.yoga.setFlexDirection(FlexDirection.Row);
+    node.yoga.setAlignItems(Align.FlexStart);
+    node.yoga.insertChild(content, 0);
+    node.yoga.insertChild(marker, 1);
+    node.baseline = measurement.baseline;
+    node.baselineContent = content;
+  }
+
+  #markBaselineMeasurementsDirty(node: LayoutNode): boolean {
+    let changed = false;
+    if (node.baselineContent !== undefined) {
+      node.baselineContent.markDirty();
+      changed = true;
+    }
     for (const child of node.children) {
-      if (this.#applyBaselineAlignment(child)) changed = true;
+      if (this.#markBaselineMeasurementsDirty(child)) changed = true;
     }
     return changed;
   }
 
-  #baselineOffset(node: LayoutNode): number {
-    const element = node.element;
-    const containsText =
-      element?.type === "rp:text" ||
-      (typeof element?.props["text"] === "string" &&
-        element.props["text"] !== "");
-    if (!containsText) return node.yoga.getComputedHeight();
-    const measurement = this.#measure(node, {
-      availableWidth: node.yoga.getComputedWidth(),
-    });
-    if (measurement?.baseline !== undefined) return measurement.baseline;
-    fail(
-      node.path,
-      "baseline-measurement-unavailable",
-      "baseline 对齐需要可确定首行基线的文字与字体度量",
+  #baselineOffsetWithin(node: LayoutNode): number {
+    if (node.baseline !== undefined) return node.baseline;
+    const child = node.children[0];
+    if (child === undefined) {
+      fail(
+        node.path,
+        "unsupported-baseline-context",
+        "布局子树没有可传播的文字 baseline",
+      );
+    }
+    return child.yoga.getComputedTop() + this.#baselineOffsetWithin(child);
+  }
+
+  #baselineContentHeight(node: LayoutNode): number | undefined {
+    const participants = this.#baselineParticipants(node);
+    if (!participants.some((child) => this.#containsText(child)))
+      return undefined;
+    // baseline行高按最大上升部与最大下降部合成，不回写为固定高度约束。
+    let ascent = 0;
+    let descent = 0;
+    for (const child of participants) {
+      const margin = expandedSpacing(child.style, "margin");
+      const contribution = this.#minContentContribution(child, "height");
+      const height = Math.max(0, contribution - margin.top - margin.bottom);
+      const baseline = this.#containsText(child)
+        ? this.#baselineOffsetWithin(child)
+        : height;
+      ascent = Math.max(ascent, margin.top + baseline);
+      descent = Math.max(descent, margin.bottom + height - baseline);
+    }
+    const nonParticipantsHeight = Math.max(
+      0,
+      ...node.children
+        .filter((child) => !participants.includes(child))
+        .map((child) => this.#minContentContribution(child, "height")),
     );
+    return Math.max(ascent + descent, nonParticipantsHeight);
   }
 
   #minContentContribution(node: LayoutNode, axis: "width" | "height"): number {
@@ -994,6 +1088,9 @@ export class LayoutPass {
         ),
       );
     }
+    if (!horizontal && flexRow) {
+      content = this.#baselineContentHeight(node) ?? content;
+    }
     if (horizontal) {
       const padding = expandedSpacing(node.style, "padding");
       content += padding.left + padding.right;
@@ -1018,9 +1115,7 @@ export class LayoutPass {
   ): void {
     const box = {
       x: layoutPixel(origin.x + node.yoga.getComputedLeft()),
-      y: layoutPixel(
-        origin.y + node.yoga.getComputedTop() + node.baselineAdjustmentY,
-      ),
+      y: layoutPixel(origin.y + node.yoga.getComputedTop()),
       width: layoutPixel(node.yoga.getComputedWidth()),
       height: layoutPixel(node.yoga.getComputedHeight()),
     };

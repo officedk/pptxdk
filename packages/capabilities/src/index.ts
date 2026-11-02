@@ -5,6 +5,7 @@ export type { ImageProps, ImageSource } from "#/image.ts";
 export { Group, groupCapability } from "#/group.ts";
 export type { GroupProps } from "#/group.ts";
 export { font, P, Span, Text, textCapability } from "#/text.ts";
+export { transitionCapability, transitions } from "#/transition.ts";
 export type {
   Font,
   FontFace,
@@ -21,3 +22,13 @@ export type {
   TextProps,
   TextStyle,
 } from "#/text.ts";
+export type {
+  FlipTransition,
+  MorphTransition,
+  StandardTransition,
+  StripsDirection,
+  Transition,
+  TransitionDirection,
+  TransitionDuration,
+  TransitionSpeed,
+} from "#/transition.ts";

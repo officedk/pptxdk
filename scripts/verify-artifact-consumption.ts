@@ -177,13 +177,14 @@ try {
     join(temporaryDirectory, "consumer-types.ts"),
     [
       'import { createElement } from "react";',
-      'import { Deck, font, Group, Image, P, Shape, Slide, Span, Text, build, type BuildResult, type GroupProps, type ImageProps, type ShapeProps, type TextProps } from "@react-pptx/react-pptx";',
+      'import { Deck, font, Group, Image, P, Shape, Slide, Span, Text, build, transitions, type BuildResult, type GroupProps, type ImageProps, type ShapeProps, type TextProps, type Transition } from "@react-pptx/react-pptx";',
       'const shape: ShapeProps = { testId: "typed", x: 0, y: 0, width: 40, height: 30 };',
       "const image: ImageProps = { src: new Uint8Array([0x89, 0x50, 0x4e, 0x47]), width: 40, height: 30 };",
       'const group: GroupProps = { name: "typed-group" };',
       'const text: TextProps = { testId: "typed-text", x: 0, y: 36, width: 100, height: 36, style: { fontFamily: font("Consumer Sans"), lineHeight: "22pt" } };',
       'const contentSizedText: TextProps = { testId: "typed-content-sized-text", x: 0, y: 72, width: 100, height: "auto", style: { fontFamily: font("Consumer Sans") } };',
-      'const result: Promise<BuildResult> = build(createElement(Deck, {}, createElement(Slide, { slideId: "typed" }, createElement(Group, group, createElement(Shape, shape), createElement(Text, text, createElement(P, { style: { list: { type: "bullet" } } }, createElement(Span, { style: { fontWeight: "bold" } }, "Installed 文本"))), createElement(Image, image)))));',
+      'const transition: Transition = transitions.morph({ by: "word", duration: 1200, fallback: transitions.fade() });',
+      'const result: Promise<BuildResult> = build(createElement(Deck, {}, createElement(Slide, { slideId: "typed", transition }, createElement(Group, group, createElement(Shape, shape), createElement(Text, text, createElement(P, { style: { list: { type: "bullet" } } }, createElement(Span, { style: { fontWeight: "bold" } }, "Installed 文本"))), createElement(Image, image)))));',
       "void result;",
       "void contentSizedText;",
     ].join("\n"),
@@ -192,20 +193,24 @@ try {
     join(temporaryDirectory, "consumer-runtime.ts"),
     [
       'import { createElement } from "react";',
-      'import { BuildError, Deck, font, Group, Image, P, Shape, Slide, Span, Text, build } from "@react-pptx/react-pptx";',
+      'import { BuildError, Deck, font, Group, Image, P, Shape, Slide, Span, Text, build, targets, transitions } from "@react-pptx/react-pptx";',
       'import { validatePptx } from "@react-pptx/validation";',
       'import { readFile, writeFile } from "node:fs/promises";',
       'const jostMetrics = new Uint8Array(await readFile(new URL("./jost-latin-400-normal.woff2", import.meta.url)));',
+      'const transition = transitions.morph({ by: "word", duration: 1200, fallback: transitions.fade() });',
       'const imageBytes = new Uint8Array(Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/n1sAAAAASUVORK5CYII=", "base64"));',
-      'const result = await build(createElement(Deck, { width: 120, height: 96 }, createElement(Slide, { slideId: "installed" }, createElement(Group, { testId: "packed-group" }, createElement(Shape, { testId: "packed-shape", geometry: "hexagon", x: 10, y: 12, width: 45, height: 30, fill: "#123456", text: "Installed shape text" }), createElement(Text, { testId: "packed-text", x: 10, y: 48, width: 90, height: 36, style: { fontFamily: font("Consumer Sans"), lineHeight: "22pt" } }, createElement(P, { style: { list: { type: "bullet" } } }, createElement(Span, { style: { fontWeight: "bold" } }, "Installed 文本"))), createElement(Image, { testId: "packed-image", src: imageBytes, x: 60, y: 12, width: 40, height: 30, fit: "cover" }), createElement(Group, { testId: "nested-group" }, createElement(Shape, { testId: "nested-shape", x: 80, y: 60, width: 12, height: 10, text: "Nested member" }))))));',
-      "const file = await validatePptx(result.pptx);",
+      'const result = await build(createElement(Deck, { width: 120, height: 96 }, createElement(Slide, { slideId: "installed", transition }, createElement(Group, { testId: "packed-group" }, createElement(Shape, { testId: "packed-shape", geometry: "hexagon", x: 10, y: 12, width: 45, height: 30, fill: "#123456", text: "Installed shape text" }), createElement(Text, { testId: "packed-text", x: 10, y: 48, width: 90, height: 36, style: { fontFamily: font("Consumer Sans"), lineHeight: "22pt" } }, createElement(P, { style: { list: { type: "bullet" } } }, createElement(Span, { style: { fontWeight: "bold" } }, "Installed 文本"))), createElement(Image, { testId: "packed-image", src: imageBytes, x: 60, y: 12, width: 40, height: 30, fit: "cover" }), createElement(Group, { testId: "nested-group" }, createElement(Shape, { testId: "nested-shape", x: 80, y: 60, width: 12, height: 10, text: "Nested member" }))))));',
+      'const file = await validatePptx(result.pptx, { allowedExtensions: ["p14", "p159"] });',
       "const group = file.slides[0]?.objects[0];",
       'const shape = group?.members?.find(({ name }) => name === "packed-shape");',
       'const text = group?.members?.find(({ name }) => name === "packed-text");',
       'const image = group?.members?.find(({ kind }) => kind === "image");',
       'const nestedGroup = group?.members?.find(({ kind }) => kind === "group");',
       'const nestedShape = nestedGroup?.members?.find(({ name }) => name === "nested-shape");',
-      'if (file.errors.length !== 0 || group?.kind !== "group" || group.name !== "packed-group" || !group.boxEmu || group.boxEmu.width <= 0 || shape?.text?.text !== "Installed shape text" || !shape.boxEmu || shape.boxEmu.x <= 0 || text?.text?.paragraphs[0]?.text !== "Installed 文本" || text.text.paragraphs[0]?.list?.type !== "bullet" || image?.name !== "packed-image" || image.image?.contentType !== "image/png" || !image.boxEmu || nestedGroup?.name !== "nested-group" || nestedShape?.text?.text !== "Nested member" || !nestedShape.boxEmu) throw new Error(JSON.stringify({ errors: file.errors, group, shape, text, image, nestedGroup }));',
+      'if (file.errors.length !== 0 || file.extensions.join(",") !== "p14,p159" || file.slides[0]?.transition?.kind !== "morph" || file.slides[0]?.transition?.by !== "word" || file.slides[0]?.transition?.durationMs !== 1200 || group?.kind !== "group" || group.name !== "packed-group" || !group.boxEmu || group.boxEmu.width <= 0 || shape?.text?.text !== "Installed shape text" || !shape.boxEmu || shape.boxEmu.x <= 0 || text?.text?.paragraphs[0]?.text !== "Installed 文本" || text.text.paragraphs[0]?.list?.type !== "bullet" || image?.name !== "packed-image" || image.image?.contentType !== "image/png" || !image.boxEmu || nestedGroup?.name !== "nested-group" || nestedShape?.text?.text !== "Nested member" || !nestedShape.boxEmu) throw new Error(JSON.stringify({ errors: file.errors, group, shape, text, image, nestedGroup }));',
+      "let forbidden;",
+      'try { await build(createElement(Deck, {}, createElement(Slide, { slideId: "forbidden", transition })), { target: targets.baselineOnly }); } catch (error) { forbidden = error; }',
+      'if (!(forbidden instanceof BuildError) || forbidden.diagnostics[0]?.code !== "forbidden-mechanism") throw new Error("installed baseline target did not reject the transition mechanism");',
       'const contentSizedResult = await build(createElement(Deck, { width: 120, height: 96 }, createElement(Slide, { slideId: "installed-content-sized" }, createElement(Text, { testId: "packed-content-sized", x: 10, y: 10, width: 70, height: "auto", style: { fontFamily: font("Jost", [{ weight: 400, data: jostMetrics }]), fontSize: 20 } }, "Installed font"))));',
       "const contentSizedFile = await validatePptx(contentSizedResult.pptx);",
       "const contentSizedText = contentSizedFile.slides[0]?.objects[0];",
@@ -214,7 +219,7 @@ try {
       'try { await build(createElement(Deck, {}, createElement(Slide, { slideId: "missing-metrics" }, createElement(Text, { testId: "content-sized-text", x: 0, y: 0, width: 100, height: "auto", style: { fontFamily: font("Consumer Sans") } }, "Content sized text")))); } catch (error) { missingMetrics = error; }',
       'if (!(missingMetrics instanceof BuildError) || missingMetrics.diagnostics[0]?.code !== "font-measurement-unavailable") throw new Error("installed content-sized text did not require explicit font metrics");',
       'await writeFile("artifact.pptx", result.pptx);',
-      "process.stdout.write(JSON.stringify({ standard: file.profile.standard, slideId: file.slides[0]?.id, group: group.name, groupBox: group.boxEmu, shape: shape.name, shapeText: shape.text.text, shapeBox: shape.boxEmu, text: text.name, textContent: text.text.text, bullet: text.text.paragraphs[0]?.list?.type, image: image.name, mediaType: image.image.contentType, imageBox: image.boxEmu, contentSizedText: contentSizedText.text.text, contentSizedTextHeightEmu: contentSizedText.boxEmu.height, contentSizedTextLineSpacingPoints: contentSizedText.text.paragraphs[0].lineSpacingPoints, nestedGroup: nestedGroup.name, nestedShape: nestedShape.name, nestedShapeText: nestedShape.text.text, nestedShapeBox: nestedShape.boxEmu, missingMetrics: missingMetrics.diagnostics[0].code, objectIds: [group.id, shape.id, text.id, image.id, nestedGroup.id, nestedShape.id], bytes: result.pptx.byteLength, contentSizedBytes: contentSizedResult.pptx.byteLength }));",
+      "process.stdout.write(JSON.stringify({ standard: file.profile.standard, slideId: file.slides[0]?.id, group: group.name, groupBox: group.boxEmu, shape: shape.name, shapeText: shape.text.text, shapeBox: shape.boxEmu, text: text.name, textContent: text.text.text, bullet: text.text.paragraphs[0]?.list?.type, image: image.name, mediaType: image.image.contentType, imageBox: image.boxEmu, contentSizedText: contentSizedText.text.text, contentSizedTextHeightEmu: contentSizedText.boxEmu.height, contentSizedTextLineSpacingPoints: contentSizedText.text.paragraphs[0].lineSpacingPoints, nestedGroup: nestedGroup.name, nestedShape: nestedShape.name, nestedShapeText: nestedShape.text.text, nestedShapeBox: nestedShape.boxEmu, missingMetrics: missingMetrics.diagnostics[0].code, objectIds: [group.id, shape.id, text.id, image.id, nestedGroup.id, nestedShape.id], transition: file.slides[0]?.transition?.kind, durationMs: file.slides[0]?.transition?.durationMs, extensions: file.extensions, forbiddenCode: forbidden.diagnostics[0]?.code, bytes: result.pptx.byteLength, contentSizedBytes: contentSizedResult.pptx.byteLength }));",
     ].join("\n"),
   );
   const cropLoader = join(temporaryDirectory, "reject-text-box.mjs");
@@ -279,6 +284,10 @@ try {
     readonly objectIds?: readonly number[];
     readonly bytes?: number;
     readonly contentSizedBytes?: number;
+    readonly transition?: string;
+    readonly durationMs?: number;
+    readonly extensions?: readonly string[];
+    readonly forbiddenCode?: string;
   };
   if (
     summary.standard !== "ECMA-376 5th edition Transitional" ||
@@ -300,6 +309,10 @@ try {
     summary.missingMetrics !== "font-measurement-unavailable" ||
     summary.objectIds?.length !== 6 ||
     new Set(summary.objectIds).size !== 6 ||
+    summary.transition !== "morph" ||
+    summary.durationMs !== 1200 ||
+    summary.extensions?.join(",") !== "p14,p159" ||
+    summary.forbiddenCode !== "forbidden-mechanism" ||
     summary.bytes === undefined ||
     summary.bytes <= 0 ||
     summary.contentSizedBytes === undefined ||

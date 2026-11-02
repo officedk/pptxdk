@@ -38,6 +38,11 @@
       "source": "./src/text-elements.ts",
       "types": "./dist/text-elements.d.ts",
       "default": "./dist/text-elements.js"
+    },
+    "./transition": {
+      "source": "./src/transition.ts",
+      "types": "./dist/transition.d.ts",
+      "default": "./dist/transition.js"
     }
   },
   "scripts": {

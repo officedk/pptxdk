@@ -3,23 +3,20 @@ import {
   imageCapability,
   shapeCapability,
   textCapability,
+  transitionCapability,
 } from "@react-pptx/capabilities";
 import { createBuilder } from "@react-pptx/core";
 
 export const build = createBuilder([
+  groupCapability,
+  imageCapability,
   shapeCapability,
   textCapability,
-  imageCapability,
-  groupCapability,
+  transitionCapability,
 ]);
 
-export {
-  BuildError,
-  Deck,
-  formatBaseline,
-  Slide,
-  targets,
-} from "@react-pptx/core";
+export { BuildError, Deck, formatBaseline, targets } from "@react-pptx/core";
+export { Slide } from "./slide.ts";
 export {
   Image,
   Group,
@@ -32,6 +29,8 @@ export {
   Span,
   Text,
   textCapability,
+  transitionCapability,
+  transitions,
 } from "@react-pptx/capabilities";
 export { createBuilder } from "@react-pptx/core";
 export type {
@@ -43,6 +42,7 @@ export type {
   SlideObservation,
   Target,
 } from "@react-pptx/core";
+export type { SlideProps } from "./slide.ts";
 export type {
   GroupProps,
   ImageProps,
@@ -62,4 +62,14 @@ export type {
   TextList,
   TextProps,
   TextStyle,
+} from "@react-pptx/capabilities";
+export type {
+  FlipTransition,
+  MorphTransition,
+  StandardTransition,
+  StripsDirection,
+  Transition,
+  TransitionDirection,
+  TransitionDuration,
+  TransitionSpeed,
 } from "@react-pptx/capabilities";

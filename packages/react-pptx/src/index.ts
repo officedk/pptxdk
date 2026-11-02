@@ -1,4 +1,6 @@
 import {
+  groupCapability,
+  imageCapability,
   shapeCapability,
   textCapability,
   transitionCapability,
@@ -6,6 +8,8 @@ import {
 import { createBuilder } from "@react-pptx/core";
 
 export const build = createBuilder([
+  groupCapability,
+  imageCapability,
   shapeCapability,
   textCapability,
   transitionCapability,
@@ -14,10 +18,14 @@ export const build = createBuilder([
 export { BuildError, Deck, formatBaseline, targets } from "@react-pptx/core";
 export { Slide } from "./slide.ts";
 export {
+  Image,
+  Group,
+  Shape,
+  groupCapability,
+  imageCapability,
+  shapeCapability,
   font,
   P,
-  Shape,
-  shapeCapability,
   Span,
   Text,
   textCapability,
@@ -36,6 +44,9 @@ export type {
 } from "@react-pptx/core";
 export type { SlideProps } from "./slide.ts";
 export type {
+  GroupProps,
+  ImageProps,
+  ImageSource,
   Font,
   FontFace,
   FontFaceStyle,
@@ -43,6 +54,7 @@ export type {
   FontSize,
   ParagraphProps,
   ParagraphStyle,
+  ShapeProps,
   ShapeTextStyle,
   SpanProps,
   TextAlignment,
@@ -60,4 +72,3 @@ export type {
   TransitionDuration,
   TransitionSpeed,
 } from "@react-pptx/capabilities";
-export type { ShapeProps } from "@react-pptx/capabilities";

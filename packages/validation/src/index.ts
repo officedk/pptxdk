@@ -34,13 +34,30 @@ export type ValidationIssue = {
 export type FileObject = {
   readonly id: number;
   readonly name: string;
-  readonly geometry: string;
+  readonly kind: "shape" | "image" | "group";
+  readonly geometry?: string;
   readonly boxEmu: {
     readonly x: number;
     readonly y: number;
     readonly width: number;
     readonly height: number;
   };
+  readonly image?: {
+    readonly relationshipId: string;
+    readonly part: string;
+    readonly contentType: string;
+  };
+  readonly crop?: {
+    readonly left?: number;
+    readonly top?: number;
+    readonly right?: number;
+    readonly bottom?: number;
+  };
+  readonly groupTransform?: {
+    readonly childOffset: { readonly x: number; readonly y: number };
+    readonly childExtent: { readonly width: number; readonly height: number };
+  };
+  readonly members?: readonly FileObject[];
   readonly text?: FileText;
 };
 
@@ -383,12 +400,12 @@ function validateContentTypes(
   files: XmlFiles,
   documents: Documents,
   errors: ValidationIssue[],
-): void {
+): { defaults: Map<string, string>; overrides: Map<string, string> } {
   const part = "[Content_Types].xml";
   const document = documents.get(part);
   if (document === undefined) {
     issue(errors, part, "missing-content-types", "缺少内容类型部件");
-    return;
+    return { defaults: new Map(), overrides: new Map() };
   }
   const root = document.documentElement;
   if (
@@ -402,8 +419,14 @@ function validateContentTypes(
       "invalid-content-types-root",
       "内容类型部件根元素不符合 OPC 命名空间",
     );
-    return;
+    return { defaults: new Map(), overrides: new Map() };
   }
+  const defaults = new Map(
+    elements(root, contentTypeNamespace, "Default").map((entry) => [
+      attribute(entry, "Extension").toLowerCase(),
+      attribute(entry, "ContentType"),
+    ]),
+  );
   const overrides = new Map(
     elements(root, contentTypeNamespace, "Override").map((entry) => [
       attribute(entry, "PartName"),
@@ -443,6 +466,47 @@ function validateContentTypes(
       issue(errors, part, "missing-content-type", `/${path} 缺少页面内容类型`);
     }
   }
+  return { defaults, overrides };
+}
+
+function contentTypeForPart(
+  path: string,
+  contentTypes: {
+    defaults: Map<string, string>;
+    overrides: Map<string, string>;
+  },
+): string | undefined {
+  const override = contentTypes.overrides.get(`/${path}`);
+  if (override !== undefined) return override;
+  const extension = path.slice(path.lastIndexOf(".") + 1).toLowerCase();
+  return contentTypes.defaults.get(extension);
+}
+
+function imageSignatureMatches(
+  bytes: Uint8Array,
+  contentType: string,
+): boolean {
+  if (contentType === "image/png") {
+    return (
+      bytes.length >= 8 &&
+      bytes[0] === 0x89 &&
+      bytes[1] === 0x50 &&
+      bytes[2] === 0x4e &&
+      bytes[3] === 0x47 &&
+      bytes[4] === 0x0d &&
+      bytes[5] === 0x0a &&
+      bytes[6] === 0x1a &&
+      bytes[7] === 0x0a
+    );
+  }
+  if (contentType === "image/jpeg") {
+    return bytes.length >= 4 && bytes[0] === 0xff && bytes[1] === 0xd8;
+  }
+  if (contentType === "image/gif") {
+    const signature = String.fromCharCode(...bytes.subarray(0, 6));
+    return signature === "GIF87a" || signature === "GIF89a";
+  }
+  return false;
 }
 
 function requireRelationship(
@@ -585,10 +649,353 @@ function validateShape(
   return {
     id,
     name,
+    kind: "shape",
     geometry: geometryName,
     boxEmu: { x, y, width, height },
     ...(text === undefined ? {} : { text }),
   };
+}
+
+function objectIdentity(
+  object: XmlElement,
+  propertiesName: string,
+  part: string,
+  kind: string,
+  errors: ValidationIssue[],
+): { id: number; name: string } | undefined {
+  const properties = first(object, presentationNamespace, propertiesName);
+  const drawingProperties =
+    properties === undefined
+      ? undefined
+      : first(properties, presentationNamespace, "cNvPr");
+  const id = integerAttribute(drawingProperties, "id");
+  const name =
+    drawingProperties === undefined ? "" : attribute(drawingProperties, "name");
+  if (id === undefined || id < 1 || name === "") {
+    issue(
+      errors,
+      part,
+      `invalid-${kind}-identity`,
+      `${kind} 缺少有效对象标识或名称`,
+    );
+    return undefined;
+  }
+  return { id, name };
+}
+
+function transformBox(
+  transform: XmlElement | undefined,
+  part: string,
+  name: string,
+  kind: string,
+  errors: ValidationIssue[],
+): FileObject["boxEmu"] | undefined {
+  const offset =
+    transform === undefined
+      ? undefined
+      : first(transform, drawingNamespace, "off");
+  const extent =
+    transform === undefined
+      ? undefined
+      : first(transform, drawingNamespace, "ext");
+  const x = integerAttribute(offset, "x");
+  const y = integerAttribute(offset, "y");
+  const width = integerAttribute(extent, "cx");
+  const height = integerAttribute(extent, "cy");
+  if (
+    x === undefined ||
+    y === undefined ||
+    width === undefined ||
+    height === undefined ||
+    width < 1 ||
+    width > maximumShapeExtentEmu ||
+    height < 1 ||
+    height > maximumShapeExtentEmu
+  ) {
+    issue(
+      errors,
+      part,
+      `invalid-${kind}-transform`,
+      `${kind} ${name} 的坐标或尺寸无效`,
+    );
+    return undefined;
+  }
+  return { x, y, width, height };
+}
+
+function validatePicture(
+  picture: XmlElement,
+  part: string,
+  files: XmlFiles,
+  relationships: Map<string, Map<string, XmlElement>>,
+  contentTypes: {
+    defaults: Map<string, string>;
+    overrides: Map<string, string>;
+  },
+  errors: ValidationIssue[],
+): FileObject | undefined {
+  const identity = objectIdentity(picture, "nvPicPr", part, "picture", errors);
+  if (identity === undefined) return undefined;
+  const properties = first(picture, presentationNamespace, "spPr");
+  const geometry =
+    properties === undefined
+      ? undefined
+      : first(properties, drawingNamespace, "prstGeom");
+  const geometryName =
+    geometry === undefined ? "" : attribute(geometry, "prst");
+  if (geometryName === "") {
+    issue(
+      errors,
+      part,
+      "missing-picture-geometry",
+      `图片 ${identity.name} 缺少几何`,
+    );
+    return undefined;
+  }
+  const boxEmu = transformBox(
+    properties === undefined
+      ? undefined
+      : first(properties, drawingNamespace, "xfrm"),
+    part,
+    identity.name,
+    "picture",
+    errors,
+  );
+  const fill = first(picture, presentationNamespace, "blipFill");
+  const blip =
+    fill === undefined ? undefined : first(fill, drawingNamespace, "blip");
+  const sourceRect =
+    fill === undefined ? undefined : first(fill, drawingNamespace, "srcRect");
+  const crop: NonNullable<FileObject["crop"]> = {};
+  for (const [field, attributeName] of [
+    ["left", "l"],
+    ["top", "t"],
+    ["right", "r"],
+    ["bottom", "b"],
+  ] as const) {
+    if (sourceRect?.hasAttribute(attributeName) !== true) continue;
+    const value = integerAttribute(sourceRect, attributeName);
+    if (value === undefined || value < 0 || value > 100000) {
+      issue(
+        errors,
+        part,
+        "invalid-picture-crop",
+        `图片 ${identity.name} 的裁切值无效`,
+      );
+      continue;
+    }
+    Object.assign(crop, { [field]: value });
+  }
+  if ((crop.left ?? 0) + (crop.right ?? 0) > 100000) {
+    issue(
+      errors,
+      part,
+      "invalid-picture-crop",
+      `图片 ${identity.name} 左右裁切越界`,
+    );
+  }
+  if ((crop.top ?? 0) + (crop.bottom ?? 0) > 100000) {
+    issue(
+      errors,
+      part,
+      "invalid-picture-crop",
+      `图片 ${identity.name} 上下裁切越界`,
+    );
+  }
+  const relationshipId =
+    blip?.getAttributeNS(relationshipNamespace, "embed") ?? "";
+  const relationship = relationships.get(part)?.get(relationshipId);
+  let image: FileObject["image"];
+  if (relationship === undefined) {
+    issue(
+      errors,
+      part,
+      "missing-image-relationship",
+      `图片 ${identity.name} 引用的关系 ${relationshipId} 不存在`,
+    );
+  } else if (
+    attribute(relationship, "Type") !== `${relationshipNamespace}/image` ||
+    attribute(relationship, "TargetMode") === "External"
+  ) {
+    issue(
+      errors,
+      part,
+      "invalid-image-relationship",
+      `图片 ${identity.name} 必须引用包内图片部件`,
+    );
+  } else {
+    const imagePart = relationshipTargetPath(
+      part,
+      attribute(relationship, "Target"),
+    );
+    const bytes = files[imagePart];
+    const contentType = contentTypeForPart(imagePart, contentTypes);
+    const expectedType = imagePart.endsWith(".png")
+      ? "image/png"
+      : imagePart.endsWith(".jpeg") || imagePart.endsWith(".jpg")
+        ? "image/jpeg"
+        : imagePart.endsWith(".gif")
+          ? "image/gif"
+          : undefined;
+    if (
+      !imagePart.startsWith("ppt/media/") ||
+      bytes === undefined ||
+      contentType === undefined ||
+      contentType !== expectedType ||
+      expectedType === undefined ||
+      !imageSignatureMatches(bytes, contentType)
+    ) {
+      issue(
+        errors,
+        part,
+        "invalid-image-part",
+        `图片 ${identity.name} 的媒体部件缺失或内容类型无效`,
+      );
+    } else {
+      image = { relationshipId, part: imagePart, contentType };
+    }
+  }
+  if (boxEmu === undefined) return undefined;
+  return {
+    id: identity.id,
+    name: identity.name,
+    kind: "image",
+    geometry: geometryName,
+    boxEmu,
+    ...(image === undefined ? {} : { image }),
+    ...(Object.keys(crop).length === 0 ? {} : { crop }),
+  };
+}
+
+function validateGroup(
+  group: XmlElement,
+  part: string,
+  files: XmlFiles,
+  relationships: Map<string, Map<string, XmlElement>>,
+  contentTypes: {
+    defaults: Map<string, string>;
+    overrides: Map<string, string>;
+  },
+  errors: ValidationIssue[],
+): FileObject | undefined {
+  const identity = objectIdentity(group, "nvGrpSpPr", part, "group", errors);
+  if (identity === undefined) return undefined;
+  const properties = first(group, presentationNamespace, "grpSpPr");
+  const transform =
+    properties === undefined
+      ? undefined
+      : first(properties, drawingNamespace, "xfrm");
+  const boxEmu = transformBox(transform, part, identity.name, "group", errors);
+  const childOffset =
+    transform === undefined
+      ? undefined
+      : first(transform, drawingNamespace, "chOff");
+  const childExtent =
+    transform === undefined
+      ? undefined
+      : first(transform, drawingNamespace, "chExt");
+  const childX = integerAttribute(childOffset, "x");
+  const childY = integerAttribute(childOffset, "y");
+  const childWidth = integerAttribute(childExtent, "cx");
+  const childHeight = integerAttribute(childExtent, "cy");
+  if (
+    childX === undefined ||
+    childY === undefined ||
+    childWidth === undefined ||
+    childHeight === undefined ||
+    childWidth < 1 ||
+    childHeight < 1 ||
+    childWidth > maximumShapeExtentEmu ||
+    childHeight > maximumShapeExtentEmu
+  ) {
+    issue(
+      errors,
+      part,
+      "invalid-group-transform",
+      `组合 ${identity.name} 缺少有效的成员坐标范围`,
+    );
+  }
+  const members = readObjects(
+    group,
+    part,
+    files,
+    relationships,
+    contentTypes,
+    errors,
+  );
+  if (members.length === 0) {
+    issue(errors, part, "empty-group", `组合 ${identity.name} 没有原生成员`);
+  }
+  if (boxEmu === undefined) return undefined;
+  return {
+    id: identity.id,
+    name: identity.name,
+    kind: "group",
+    boxEmu,
+    ...(childX === undefined || childY === undefined
+      ? {}
+      : {
+          groupTransform: {
+            childOffset: { x: childX, y: childY },
+            childExtent: {
+              width: childWidth ?? 0,
+              height: childHeight ?? 0,
+            },
+          },
+        }),
+    members,
+  };
+}
+
+function readObjects(
+  parent: XmlNode,
+  part: string,
+  files: XmlFiles,
+  relationships: Map<string, Map<string, XmlElement>>,
+  contentTypes: {
+    defaults: Map<string, string>;
+    overrides: Map<string, string>;
+  },
+  errors: ValidationIssue[],
+): FileObject[] {
+  const objects: FileObject[] = [];
+  for (
+    let child = parent.firstChild;
+    child !== null;
+    child = child.nextSibling
+  ) {
+    if (child.nodeType !== 1 || child.namespaceURI !== presentationNamespace) {
+      continue;
+    }
+    let object: FileObject | undefined;
+    switch (child.localName) {
+      case "sp":
+        object = validateShape(child as XmlElement, part, errors);
+        break;
+      case "pic":
+        object = validatePicture(
+          child as XmlElement,
+          part,
+          files,
+          relationships,
+          contentTypes,
+          errors,
+        );
+        break;
+      case "grpSp":
+        object = validateGroup(
+          child as XmlElement,
+          part,
+          files,
+          relationships,
+          contentTypes,
+          errors,
+        );
+        break;
+    }
+    if (object !== undefined) objects.push(object);
+  }
+  return objects;
 }
 
 function childElements(parent: XmlNode): XmlElement[] {
@@ -903,6 +1310,10 @@ function readPresentation(
   files: XmlFiles,
   documents: Documents,
   relationships: Map<string, Map<string, XmlElement>>,
+  contentTypes: {
+    defaults: Map<string, string>;
+    overrides: Map<string, string>;
+  },
   errors: ValidationIssue[],
 ): {
   presentation: ValidationResult["presentation"];
@@ -923,7 +1334,11 @@ function readPresentation(
       "invalid-presentation",
       "缺少 Transitional PresentationML 根部件",
     );
-    return { presentation: { slideCount: 0 }, slides: [], extensions: [] };
+    return {
+      presentation: { slideCount: 0 },
+      slides: [],
+      extensions: [],
+    };
   }
   const size = first(root, presentationNamespace, "sldSz");
   const widthEmu = integerAttribute(size, "cx");
@@ -990,26 +1405,33 @@ function readPresentation(
       issue(errors, slidePath, "missing-shape-tree", "页面缺少 shape tree");
       return;
     }
-    const objects = elements(slideTree, presentationNamespace, "sp").flatMap(
-      (shape) => {
-        const object = validateShape(shape, slidePath, errors);
-        return object === undefined ? [] : [object];
-      },
+    const objects = readObjects(
+      slideTree,
+      slidePath,
+      files,
+      relationships,
+      contentTypes,
+      errors,
     );
+    const transition = readSlideTransition(slideRoot, slidePath, errors);
+    for (const extension of transition.extensions) {
+      usedExtensions.add(extension);
+    }
     const seenIds = new Set<number>();
-    for (const object of objects) {
-      if (seenIds.has(object.id))
+    const pending = [...objects];
+    while (pending.length > 0) {
+      const object = pending.pop();
+      if (object === undefined) continue;
+      if (seenIds.has(object.id)) {
         issue(
           errors,
           slidePath,
           "duplicate-object-id",
           `对象标识 ${object.id} 重复`,
         );
+      }
       seenIds.add(object.id);
-    }
-    const transition = readSlideTransition(slideRoot, slidePath, errors);
-    for (const extension of transition.extensions) {
-      usedExtensions.add(extension);
+      pending.push(...(object.members ?? []));
     }
     slides.push({
       id:
@@ -1041,7 +1463,10 @@ function readPresentation(
   };
 }
 
-/** 从实际 PPTX 字节读取包关系、页面对象、几何和原生文字段落，不读取构建报告。 */
+/**
+ * 从实际 PPTX 字节读取页面对象、几何和原生文字段落、run 与列表，不读取构建报告。
+ * 图片核对媒体关系、类型与签名，不解码像素数据。
+ */
 export async function validatePptx(
   input: Uint8Array,
   options: ValidationOptions = {},
@@ -1061,7 +1486,7 @@ export async function validatePptx(
       profile: {
         standard: transitionalStandard,
         scope:
-          "OPC 关系、内容类型、核心 PresentationML 页面／形状、原生文字段落／run／列表结构及基础／扩展转场",
+          "OPC 关系、内容类型以及 PresentationML 页面、形状、图片、组合、原生文字段落／run／列表和基础／扩展转场结构",
       },
       errors,
       extensions: [],
@@ -1085,7 +1510,7 @@ export async function validatePptx(
       issue(errors, requiredPart, "missing-part", "PPTX 缺少必要部件");
   }
   const relationships = checkRelationships(files, documents, errors);
-  validateContentTypes(files, documents, errors);
+  const contentTypes = validateContentTypes(files, documents, errors);
   requireRoot(
     documents,
     errors,
@@ -1147,6 +1572,7 @@ export async function validatePptx(
     files,
     documents,
     relationships,
+    contentTypes,
     errors,
   );
   for (const [index] of slides.entries()) {
@@ -1175,7 +1601,7 @@ export async function validatePptx(
     profile: {
       standard: transitionalStandard,
       scope:
-        "OPC 关系、内容类型、核心 PresentationML 页面／形状、原生文字段落／run／列表结构及基础／扩展转场",
+        "OPC 关系、内容类型以及 PresentationML 页面、形状、图片、组合、原生文字段落／run／列表和基础／扩展转场结构",
     },
     errors,
     extensions,

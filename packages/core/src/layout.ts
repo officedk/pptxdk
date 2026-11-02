@@ -852,7 +852,7 @@ export class LayoutPass {
   }
 
   #baselineParticipants(node: LayoutNode): LayoutNode[] {
-    if (node.style.display !== "flex") return [];
+    // 以求解节点的实际属性解析参与者，不读取被非flex父级忽略的原始样式。
     return node.children.filter(
       (child) => this.#resolvedChildAlignment(node, child) === Align.Baseline,
     );

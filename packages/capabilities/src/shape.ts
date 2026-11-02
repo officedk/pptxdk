@@ -179,6 +179,7 @@ export const shapeCapability: CapabilityModule = {
         [{ type: "#text", text }],
         props["textStyle"],
         "middle",
+        { width: box.width, height: box.height },
       );
     }
     const name = requestedName ?? testId ?? `Shape ${context.id - 1}`;

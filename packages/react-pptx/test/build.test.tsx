@@ -44,6 +44,9 @@ function testFont(path: string): Uint8Array {
 const notoSansScRegular = testFont("./assets/fonts/NotoSansSC-Regular.woff2");
 const jostBook = testFont("./assets/fonts/Jost-400-Book.ttf");
 const jostBold = testFont("./assets/fonts/Jost-700-Bold.ttf");
+const darkerGrotesqueSemiBold = testFont(
+  "./assets/fonts/DarkerGrotesque-SemiBold.ttf",
+);
 
 describe("公开构建入口", () => {
   it("内容定高文字缺少度量字体时以构建错误拒绝", async () => {
@@ -197,6 +200,57 @@ describe("公开构建入口", () => {
     );
   });
 
+  it("超宽字素与显式换行各自只计一行且保留尾部空行", async () => {
+    const measureFont = font("Noto Sans CJK SC", [
+      { weight: 400, data: notoSansScRegular },
+    ]);
+    const result = await build(
+      createElement(
+        Deck,
+        { width: 960, height: 540 },
+        createElement(
+          Slide,
+          { slideId: "cover" },
+          createElement(Text, {
+            testId: "wide-grapheme-hard-break",
+            x: 0,
+            y: 0,
+            width: 1,
+            height: "auto",
+            style: { fontFamily: measureFont, fontSize: 20 },
+            children: "a\nb",
+          }),
+          createElement(Text, {
+            testId: "trailing-hard-break",
+            x: 40,
+            y: 0,
+            width: 100,
+            height: "auto",
+            style: { fontFamily: measureFont, fontSize: 20 },
+            children: "a\n",
+          }),
+        ),
+      ),
+    );
+
+    assert.deepEqual(
+      result.report.slides[0]?.objects.map(({ box }) => box?.height),
+      [57.92, 57.92],
+    );
+    const file = await validatePptx(result.pptx);
+    assert.deepEqual(file.errors, []);
+    assert.deepEqual(
+      file.slides[0]?.objects.map(({ text }) => text?.text),
+      ["a\nb", "a\n"],
+    );
+    assert.deepEqual(
+      file.slides[0]?.objects.map(({ text }) =>
+        text?.paragraphs.map(({ lineSpacingPoints }) => lineSpacingPoints),
+      ),
+      [[21.72], [21.72]],
+    );
+  });
+
   it("代测字体必须显式声明并保留原输出字体名", async () => {
     const alternateFace = font(
       "Deck Display Name",
@@ -326,6 +380,39 @@ describe("公开构建入口", () => {
     );
   });
 
+  it("按独立 SemiBold 字族的真实常规样式写入字重映射", async () => {
+    const result = await build(
+      deck(
+        createElement(Text, {
+          testId: "semibold-family-regular-face",
+          x: 24,
+          y: 18,
+          width: 240,
+          height: "auto",
+          style: {
+            fontFamily: font("Darker Grotesque SemiBold", [
+              { weight: 600, data: darkerGrotesqueSemiBold },
+            ]),
+            fontSize: 20,
+            fontWeight: 600,
+          },
+          children: "SemiBold family",
+        }),
+      ),
+    );
+
+    const file = await validatePptx(result.pptx);
+    assert.deepEqual(file.errors, []);
+    assert.deepEqual(file.slides[0]?.objects[0]?.text?.paragraphs[0]?.runs[0], {
+      text: "SemiBold family",
+      fontFamily: "Darker Grotesque SemiBold",
+      fontSizePt: 15,
+      bold: false,
+      italic: false,
+      color: "#000000",
+    });
+  });
+
   it("度量到固定区域装不下时警告并保留区域、内容和原生默认行距", async () => {
     const result = await build(
       deck(
@@ -366,6 +453,65 @@ describe("公开构建入口", () => {
     assert.equal(
       file.slides[0]?.objects[0]?.text?.paragraphs[0]?.lineSpacingPoints,
       undefined,
+    );
+  });
+
+  it("带文字形状与文本框共用固定区域装不下诊断", async () => {
+    const measureFont = font("Noto Sans CJK SC", [
+      { weight: 400, data: notoSansScRegular },
+    ]);
+    const result = await build(
+      createElement(
+        Deck,
+        { width: 960, height: 540 },
+        createElement(
+          Slide,
+          { slideId: "cover" },
+          createElement(Text, {
+            testId: "overset-text",
+            x: 0,
+            y: 0,
+            width: 20,
+            height: 20,
+            style: { fontFamily: measureFont, fontSize: 20 },
+            children: "中文中文",
+          }),
+          createElement(Shape, {
+            testId: "overset-shape",
+            x: 40,
+            y: 0,
+            width: 20,
+            height: 20,
+            text: "中文中文",
+            textStyle: { fontFamily: measureFont, fontSize: 20 },
+          }),
+        ),
+      ),
+    );
+
+    assert.deepEqual(
+      result.report.diagnostics.map(({ code, path }) => ({ code, path })),
+      [
+        { code: "overset", path: "deck/slide[cover]/text[overset-text]" },
+        { code: "overset", path: "deck/slide[cover]/shape[overset-shape]" },
+      ],
+    );
+    assert.deepEqual(
+      result.report.slides[0]?.objects.map(({ box }) => box),
+      [
+        { x: 0, y: 0, width: 20, height: 20 },
+        { x: 40, y: 0, width: 20, height: 20 },
+      ],
+    );
+    assert.deepEqual(
+      result.report.slides[0]?.objects.map(({ text }) => text),
+      ["中文中文", "中文中文"],
+    );
+    const file = await validatePptx(result.pptx);
+    assert.deepEqual(file.errors, []);
+    assert.deepEqual(
+      file.slides[0]?.objects.map(({ text }) => text?.text),
+      ["中文中文", "中文中文"],
     );
   });
 

@@ -43,6 +43,7 @@
       ],
       "inputs": [
         "scripts/verify-artifact-consumption.ts",
+        "package.json",
         "packages/core/package.json",
         "packages/capabilities/package.json",
         "packages/react-pptx/package.json",

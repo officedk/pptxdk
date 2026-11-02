@@ -123,6 +123,9 @@ export const textCapability: CapabilityModule = {
     const requestedHeight = height(input.props["height"]);
     const body = writeTextBody(input.children, input.props["style"], "top", {
       width: dimensions.width,
+      ...(requestedHeight.contentSized
+        ? {}
+        : { height: requestedHeight.value }),
       contentSized: requestedHeight.contentSized,
     });
     const box = {
@@ -131,19 +134,6 @@ export const textCapability: CapabilityModule = {
         ? size(body.measurement?.height, "height")
         : requestedHeight.value,
     };
-    const warnings = [...body.warnings];
-    if (
-      body.measurement !== undefined &&
-      (body.measurement.width > box.width + 0.01 ||
-        (requestedHeight.contentSized === false &&
-          body.measurement.height > box.height + 0.01))
-    ) {
-      warnings.push({
-        code: "overset",
-        message:
-          "按已提供的字体度量，文字超出文本框的宽或高；构建保留原始内容和尺寸",
-      });
-    }
     const name = requestedName ?? testId ?? `Text ${context.id - 1}`;
     let escapedName: string;
     try {
@@ -166,7 +156,7 @@ export const textCapability: CapabilityModule = {
       },
       extensions: [],
       resourceClaims: body.resourceClaims,
-      warnings,
+      warnings: body.warnings,
     };
     return output;
   },

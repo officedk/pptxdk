@@ -89,6 +89,7 @@ type NormalizedFont = {
 
 type TextLayoutRequest = {
   readonly width: number;
+  readonly height?: number;
   readonly contentSized?: boolean;
 };
 
@@ -384,6 +385,17 @@ function mergeRunStyle(parent: RunStyle, child: RunStyle): RunStyle {
   return validateRunStyle({ ...parent, ...declared });
 }
 
+function outputBold(font: NormalizedFont): boolean {
+  const fallback = font.weight >= 600;
+  if (!font.hasResource || font.substitute) return fallback;
+  try {
+    // 字重数值不能替代字体文件声明的同族粗体样式链接。
+    return measureFace(font).font["OS/2"].fsSelection.bold;
+  } catch {
+    return fallback;
+  }
+}
+
 function readTextStyle(value: unknown, label: string): TextStyle {
   const props = styleRecord(value, label);
   onlyKnownKeys(
@@ -579,8 +591,7 @@ function collectRuns(
 function runXml(run: Run): string {
   const font = normalizedFonts(run.style)[0]!;
   const points = fontSizePoints(run.style.fontSize);
-  const weight = font.weight;
-  const bold = weight >= 600;
+  const bold = outputBold(font);
   const color = run.style.color ?? "#000000";
   const text = escapedXml(run.text);
   return `<a:r><a:rPr lang="en-US" sz="${centipoints(points)}" b="${bold ? 1 : 0}" i="${font.style === "italic" ? 1 : 0}"><a:solidFill><a:srgbClr val="${color.slice(1).toUpperCase()}"/></a:solidFill><a:latin typeface="${escapedXml(font.family)}"/></a:rPr><a:t xml:space="preserve">${text}</a:t></a:r>`;
@@ -858,6 +869,21 @@ function graphemeEnds(text: string, start: number, end: number): number[] {
   return result;
 }
 
+function trimMandatoryBreakEnd(
+  text: string,
+  start: number,
+  end: number,
+): number {
+  let trimmed = end;
+  while (
+    trimmed > start &&
+    /[\n\r\v\f\u0085\u2028\u2029]/u.test(text[trimmed - 1] ?? "")
+  ) {
+    trimmed -= 1;
+  }
+  return trimmed;
+}
+
 function wrapParagraph(
   text: string,
   pieces: readonly MeasurePiece[],
@@ -889,6 +915,9 @@ function wrapParagraph(
 
   for (const lineBreak of breaks) {
     const unitEnd = lineBreak.position;
+    const breakContentEnd = trimMandatoryBreakEnd(text, unitStart, unitEnd);
+    // linebreak 把文本末尾的必需换行标为普通结束边界，控制符仍代表空行。
+    const required = lineBreak.required || breakContentEnd < unitEnd;
     const candidateWidth = rangeWidth(
       pieces,
       text,
@@ -897,13 +926,13 @@ function wrapParagraph(
     );
     if (candidateWidth <= width + epsilon) {
       lineEnd = unitEnd;
-      if (lineBreak.required) {
+      if (required) {
         lines.push({ start: lineStart, end: lineEnd });
         lineStart = unitEnd;
         lineEnd = unitEnd;
       }
       unitStart = unitEnd;
-      endedWithRequiredBreak = lineBreak.required;
+      endedWithRequiredBreak = required;
       continue;
     }
 
@@ -924,7 +953,8 @@ function wrapParagraph(
     } else {
       let chunkStart = unitStart;
       let previous = chunkStart;
-      for (const boundary of graphemeEnds(text, unitStart, unitEnd)) {
+      const fallbackEnd = required ? breakContentEnd : unitEnd;
+      for (const boundary of graphemeEnds(text, unitStart, fallbackEnd)) {
         const chunkWidth = rangeWidth(
           pieces,
           text,
@@ -948,16 +978,18 @@ function wrapParagraph(
         previous = boundary;
       }
       lineStart = chunkStart;
-      lineEnd = unitEnd;
+      lineEnd = fallbackEnd;
     }
 
-    if (lineBreak.required) {
-      lines.push({ start: lineStart, end: unitEnd });
+    if (required) {
+      if (lineEnd > lineStart) {
+        lines.push({ start: lineStart, end: lineEnd });
+      }
       lineStart = unitEnd;
       lineEnd = unitEnd;
     }
     unitStart = unitEnd;
-    endedWithRequiredBreak = lineBreak.required;
+    endedWithRequiredBreak = required;
   }
 
   if (lineStart < text.length || lineEnd > lineStart || lines.length === 0) {
@@ -1148,6 +1180,18 @@ export function writeTextBody(
       "font-measurement-unavailable",
       "内容定高文字缺少完整的字体度量依据",
     );
+  }
+  if (
+    measured !== undefined &&
+    layout !== undefined &&
+    (measured.width > layout.width + 0.01 ||
+      (layout.height !== undefined && measured.height > layout.height + 0.01))
+  ) {
+    warnings.push({
+      code: "overset",
+      message:
+        "按已提供的字体度量，文字超出文本框的宽或高；构建保留原始内容和尺寸",
+    });
   }
   const outputParagraphs =
     layout?.contentSized === true && measured !== undefined

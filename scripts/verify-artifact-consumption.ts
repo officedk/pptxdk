@@ -63,6 +63,13 @@ if (workspacePackage.packageManager === undefined) {
     "根 package.json 缺少 packageManager，无法固定临时消费者的 pnpm 版本",
   );
 }
+const jostMetrics = new Uint8Array(
+  await readFile(
+    new URL(
+      import.meta.resolve("@fontsource/jost/files/jost-latin-400-normal.woff2"),
+    ),
+  ),
+);
 const coreDependencies = JSON.parse(
   run("pnpm", [
     "--filter",
@@ -85,6 +92,10 @@ const temporaryDirectory = await mkdtemp(
   join(tmpdir(), "react-pptx-consumer-"),
 );
 try {
+  await writeFile(
+    join(temporaryDirectory, "jost-latin-400-normal.woff2"),
+    jostMetrics,
+  );
   const dependencies: Record<string, string> = {};
   const overrides: Record<string, string> = {};
   for (const name of packageNames) {
@@ -183,7 +194,8 @@ try {
       'import { createElement } from "react";',
       'import { BuildError, Deck, font, Group, Image, P, Shape, Slide, Span, Text, build } from "@react-pptx/react-pptx";',
       'import { validatePptx } from "@react-pptx/validation";',
-      'import { writeFile } from "node:fs/promises";',
+      'import { readFile, writeFile } from "node:fs/promises";',
+      'const jostMetrics = new Uint8Array(await readFile(new URL("./jost-latin-400-normal.woff2", import.meta.url)));',
       'const imageBytes = new Uint8Array(Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/n1sAAAAASUVORK5CYII=", "base64"));',
       'const result = await build(createElement(Deck, { width: 120, height: 96 }, createElement(Slide, { slideId: "installed" }, createElement(Group, { testId: "packed-group" }, createElement(Shape, { testId: "packed-shape", geometry: "hexagon", x: 10, y: 12, width: 45, height: 30, fill: "#123456", text: "Installed shape text" }), createElement(Text, { testId: "packed-text", x: 10, y: 48, width: 90, height: 36, style: { fontFamily: font("Consumer Sans"), lineHeight: "22pt" } }, createElement(P, { style: { list: { type: "bullet" } } }, createElement(Span, { style: { fontWeight: "bold" } }, "Installed 文本"))), createElement(Image, { testId: "packed-image", src: imageBytes, x: 60, y: 12, width: 40, height: 30, fit: "cover" }), createElement(Group, { testId: "nested-group" }, createElement(Shape, { testId: "nested-shape", x: 80, y: 60, width: 12, height: 10, text: "Nested member" }))))));',
       "const file = await validatePptx(result.pptx);",
@@ -194,11 +206,15 @@ try {
       'const nestedGroup = group?.members?.find(({ kind }) => kind === "group");',
       'const nestedShape = nestedGroup?.members?.find(({ name }) => name === "nested-shape");',
       'if (file.errors.length !== 0 || group?.kind !== "group" || group.name !== "packed-group" || !group.boxEmu || group.boxEmu.width <= 0 || shape?.text?.text !== "Installed shape text" || !shape.boxEmu || shape.boxEmu.x <= 0 || text?.text?.paragraphs[0]?.text !== "Installed 文本" || text.text.paragraphs[0]?.list?.type !== "bullet" || image?.name !== "packed-image" || image.image?.contentType !== "image/png" || !image.boxEmu || nestedGroup?.name !== "nested-group" || nestedShape?.text?.text !== "Nested member" || !nestedShape.boxEmu) throw new Error(JSON.stringify({ errors: file.errors, group, shape, text, image, nestedGroup }));',
+      'const contentSizedResult = await build(createElement(Deck, { width: 120, height: 96 }, createElement(Slide, { slideId: "installed-content-sized" }, createElement(Text, { testId: "packed-content-sized", x: 10, y: 10, width: 70, height: "auto", style: { fontFamily: font("Jost", [{ weight: 400, data: jostMetrics }]), fontSize: 20 } }, "Installed font"))));',
+      "const contentSizedFile = await validatePptx(contentSizedResult.pptx);",
+      "const contentSizedText = contentSizedFile.slides[0]?.objects[0];",
+      'if (contentSizedFile.errors.length !== 0 || contentSizedText?.text?.text !== "Installed font" || contentSizedText.boxEmu?.height !== 550672 || contentSizedText.text.paragraphs[0]?.lineSpacingPoints !== 21.68 || contentSizedText.text.paragraphs[0]?.runs[0]?.fontFamily !== "Jost" || contentSizedResult.report.slides[0]?.objects[0]?.box?.height !== 57.81333333333333) throw new Error(JSON.stringify({ errors: contentSizedFile.errors, text: contentSizedText, report: contentSizedResult.report.slides[0]?.objects[0] }));',
       "let missingMetrics;",
       'try { await build(createElement(Deck, {}, createElement(Slide, { slideId: "missing-metrics" }, createElement(Text, { testId: "content-sized-text", x: 0, y: 0, width: 100, height: "auto", style: { fontFamily: font("Consumer Sans") } }, "Content sized text")))); } catch (error) { missingMetrics = error; }',
       'if (!(missingMetrics instanceof BuildError) || missingMetrics.diagnostics[0]?.code !== "font-measurement-unavailable") throw new Error("installed content-sized text did not require explicit font metrics");',
       'await writeFile("artifact.pptx", result.pptx);',
-      "process.stdout.write(JSON.stringify({ standard: file.profile.standard, slideId: file.slides[0]?.id, group: group.name, groupBox: group.boxEmu, shape: shape.name, shapeText: shape.text.text, shapeBox: shape.boxEmu, text: text.name, textContent: text.text.text, bullet: text.text.paragraphs[0]?.list?.type, image: image.name, mediaType: image.image.contentType, imageBox: image.boxEmu, nestedGroup: nestedGroup.name, nestedShape: nestedShape.name, nestedShapeText: nestedShape.text.text, nestedShapeBox: nestedShape.boxEmu, missingMetrics: missingMetrics.diagnostics[0].code, objectIds: [group.id, shape.id, text.id, image.id, nestedGroup.id, nestedShape.id], bytes: result.pptx.byteLength }));",
+      "process.stdout.write(JSON.stringify({ standard: file.profile.standard, slideId: file.slides[0]?.id, group: group.name, groupBox: group.boxEmu, shape: shape.name, shapeText: shape.text.text, shapeBox: shape.boxEmu, text: text.name, textContent: text.text.text, bullet: text.text.paragraphs[0]?.list?.type, image: image.name, mediaType: image.image.contentType, imageBox: image.boxEmu, contentSizedText: contentSizedText.text.text, contentSizedTextHeightEmu: contentSizedText.boxEmu.height, contentSizedTextLineSpacingPoints: contentSizedText.text.paragraphs[0].lineSpacingPoints, nestedGroup: nestedGroup.name, nestedShape: nestedShape.name, nestedShapeText: nestedShape.text.text, nestedShapeBox: nestedShape.boxEmu, missingMetrics: missingMetrics.diagnostics[0].code, objectIds: [group.id, shape.id, text.id, image.id, nestedGroup.id, nestedShape.id], bytes: result.pptx.byteLength, contentSizedBytes: contentSizedResult.pptx.byteLength }));",
     ].join("\n"),
   );
   const cropLoader = join(temporaryDirectory, "reject-text-box.mjs");
@@ -253,12 +269,16 @@ try {
     readonly bullet?: string;
     readonly image?: string;
     readonly mediaType?: string;
+    readonly contentSizedText?: string;
+    readonly contentSizedTextHeightEmu?: number;
+    readonly contentSizedTextLineSpacingPoints?: number;
     readonly nestedGroup?: string;
     readonly nestedShape?: string;
     readonly nestedShapeText?: string;
     readonly missingMetrics?: string;
     readonly objectIds?: readonly number[];
     readonly bytes?: number;
+    readonly contentSizedBytes?: number;
   };
   if (
     summary.standard !== "ECMA-376 5th edition Transitional" ||
@@ -271,6 +291,9 @@ try {
     summary.bullet !== "bullet" ||
     summary.image !== "packed-image" ||
     summary.mediaType !== "image/png" ||
+    summary.contentSizedText !== "Installed font" ||
+    summary.contentSizedTextHeightEmu !== 550672 ||
+    summary.contentSizedTextLineSpacingPoints !== 21.68 ||
     summary.nestedGroup !== "nested-group" ||
     summary.nestedShape !== "nested-shape" ||
     summary.nestedShapeText !== "Nested member" ||
@@ -278,7 +301,9 @@ try {
     summary.objectIds?.length !== 6 ||
     new Set(summary.objectIds).size !== 6 ||
     summary.bytes === undefined ||
-    summary.bytes <= 0
+    summary.bytes <= 0 ||
+    summary.contentSizedBytes === undefined ||
+    summary.contentSizedBytes <= 0
   ) {
     throw new Error(`安装制品返回了意外结果：${summaryText}`);
   }

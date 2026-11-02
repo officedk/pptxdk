@@ -1685,6 +1685,16 @@ function readSlideAnimations(
           );
           continue;
         }
+        const expectedKind = preset === "spin" ? "emphasis" : "entrance";
+        if (kind !== expectedKind) {
+          issue(
+            errors,
+            part,
+            "invalid-animation-kind",
+            `${preset} 的 presetClass 必须是 ${expectedKind === "emphasis" ? "emph" : "entr"}`,
+          );
+          continue;
+        }
         const effectConditionList = first(
           effectTimeNode,
           presentationNamespace,

@@ -8,6 +8,7 @@ import {
 
 import type {
   Effect,
+  Easing,
   MotionDirection,
   MotionEffectObservation,
   MotionObservation,
@@ -83,6 +84,28 @@ function motionValue(value: unknown): value is MotionValue {
   );
 }
 
+function normalizedEasing(easing: Easing | undefined): Easing | undefined {
+  if (easing === undefined) return undefined;
+  const accelerate =
+    easing.accelerate === undefined
+      ? undefined
+      : Math.round(easing.accelerate * 100000) / 100000;
+  const decelerate =
+    easing.decelerate === undefined
+      ? undefined
+      : Math.round(easing.decelerate * 100000) / 100000;
+  if (
+    (accelerate === undefined || accelerate === 0) &&
+    (decelerate === undefined || decelerate === 0)
+  ) {
+    return undefined;
+  }
+  return Object.freeze({
+    ...(accelerate === undefined || accelerate === 0 ? {} : { accelerate }),
+    ...(decelerate === undefined || decelerate === 0 ? {} : { decelerate }),
+  });
+}
+
 function motionSteps(
   contributions: readonly CapabilityContribution[],
 ): readonly MotionStepObservation[] {
@@ -120,6 +143,11 @@ function motionSteps(
     value.effects.forEach((effect, index) => {
       const durationMs = Math.round(effect.duration);
       const delayMs = Math.round(effect.delay);
+      const from =
+        typeof effect.from === "number"
+          ? Math.round(effect.from * 60000) / 60000
+          : effect.from;
+      const easing = normalizedEasing(effect.easing);
       compiled.effects.push({
         target: {
           id: contribution.targetId,
@@ -132,19 +160,8 @@ function motionSteps(
         preset: effect.preset,
         durationMs,
         delayMs,
-        ...(effect.from === undefined ? {} : { from: effect.from }),
-        ...(effect.easing === undefined
-          ? {}
-          : {
-              easing: Object.freeze({
-                ...(effect.easing.accelerate === undefined
-                  ? {}
-                  : { accelerate: effect.easing.accelerate }),
-                ...(effect.easing.decelerate === undefined
-                  ? {}
-                  : { decelerate: effect.easing.decelerate }),
-              }),
-            }),
+        ...(from === undefined ? {} : { from }),
+        ...(easing === undefined ? {} : { easing }),
         startMs: delayMs,
         endMs: delayMs + durationMs,
         stepKey: key,

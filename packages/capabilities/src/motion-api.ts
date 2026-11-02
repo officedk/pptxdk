@@ -274,6 +274,18 @@ const presets = new Set<EffectPreset>([
   "stretch",
   "spin",
 ]);
+const presetKinds: Readonly<Record<EffectPreset, Effect["kind"]>> = {
+  fade: "entrance",
+  wipe: "entrance",
+  zoom: "entrance",
+  fly: "entrance",
+  floatUp: "entrance",
+  spinIn: "entrance",
+  stretch: "entrance",
+  spin: "emphasis",
+};
+const minimumRotationUnits = -2_147_483_648;
+const maximumRotationUnits = 2_147_483_647;
 const effectKeys = [
   "type",
   "kind",
@@ -311,6 +323,14 @@ function validatedEffect(value: unknown, expected: Effect["kind"]): Effect {
   if (typeof preset !== "string" || !presets.has(preset as EffectPreset)) {
     return fail("unsupported-effect", `不支持动画效果 ${String(preset)}`);
   }
+  if (presetKinds[preset as EffectPreset] !== expected) {
+    return fail(
+      "invalid-motion",
+      expected === "entrance"
+        ? `${preset}() 是强调效果，应传给 emphasis`
+        : `${preset}() 是入场效果，应传给 enter`,
+    );
+  }
   const duration = value["duration"];
   const delay = value["delay"];
   if (
@@ -340,8 +360,18 @@ function validatedEffect(value: unknown, expected: Effect["kind"]): Effect {
   }
   if (preset === "spin") {
     const from = value["from"];
-    if (typeof from !== "number" || !Number.isFinite(from)) {
-      return fail("invalid-rotation", "spin 的 from 必须是有限角度数值");
+    const units = typeof from === "number" ? Math.round(from * 60000) : NaN;
+    if (
+      typeof from !== "number" ||
+      !Number.isFinite(from) ||
+      !Number.isSafeInteger(units) ||
+      units < minimumRotationUnits ||
+      units > maximumRotationUnits
+    ) {
+      return fail(
+        "invalid-rotation",
+        "spin 的 from 换算后必须落在有符号 32 位角度范围内",
+      );
     }
   }
   if (

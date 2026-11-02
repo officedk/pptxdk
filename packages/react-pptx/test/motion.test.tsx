@@ -557,6 +557,80 @@ describe("对象动画", () => {
       ),
       JSON.stringify(invalidFile.errors),
     );
+
+    const mismatchedPresetClass = strFromU8(slide).replace(
+      'presetClass="entr"',
+      'presetClass="emph"',
+    );
+    assert.notEqual(mismatchedPresetClass, strFromU8(slide));
+    parts[slidePath] = strToU8(mismatchedPresetClass);
+    const invalidKindFile = await validatePptx(zipSync(parts));
+    assert.ok(
+      invalidKindFile.errors.some(
+        ({ code }) => code === "invalid-animation-kind",
+      ),
+      JSON.stringify(invalidKindFile.errors),
+    );
+  });
+
+  it("拒绝超出原生角度范围及与效果预设不匹配的声明", async () => {
+    const cases: readonly {
+      readonly testId: string;
+      readonly props: Record<string, unknown>;
+      readonly code: string;
+    }[] = [
+      {
+        testId: "rotation-over-int32",
+        props: { emphasis: spin({ from: 40_000 }) },
+        code: "invalid-rotation",
+      },
+      {
+        testId: "rotation-too-large",
+        props: { emphasis: spin({ from: 1e20 }) },
+        code: "invalid-rotation",
+      },
+      {
+        testId: "spin-in-enter",
+        props: { enter: { ...spin(), kind: "entrance" } },
+        code: "invalid-motion",
+      },
+      {
+        testId: "fade-as-emphasis",
+        props: { emphasis: { ...fade(), kind: "emphasis" } },
+        code: "invalid-motion",
+      },
+    ];
+    for (const { testId, props, code } of cases) {
+      await assert.rejects(
+        build(
+          createElement(
+            Deck,
+            {},
+            createElement(
+              Slide,
+              { slideId: "invalid-preset" },
+              createElement(Shape, {
+                testId,
+                x: 0,
+                y: 0,
+                width: 16,
+                height: 16,
+                ...props,
+              } as never),
+            ),
+          ),
+        ),
+        (error: unknown) => {
+          assert.ok(error instanceof BuildError);
+          assert.equal(error.diagnostics[0]?.code, code);
+          assert.match(
+            error.diagnostics[0]?.path ?? "",
+            new RegExp(`shape\\[${testId}\\]`, "u"),
+          );
+          return true;
+        },
+      );
+    }
   });
 
   it("按固定页面槽位写入转场和动画，与模块注册顺序无关", async () => {

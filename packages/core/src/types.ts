@@ -127,6 +127,7 @@ export type ObjectObservation = {
   readonly geometry?: string;
   readonly box?: GeometryBox;
   readonly text?: string;
+  readonly table?: NativeTableObservation;
   readonly members?: readonly ObjectObservation[];
 };
 
@@ -140,6 +141,20 @@ export type LayoutObservation = {
   readonly testId?: string;
   readonly box: GeometryBox;
   readonly children: readonly LayoutChildReference[];
+};
+
+/** 表格报告保留零基行列索引，与其原生合并范围一一对应。 */
+export type NativeTableObservation = {
+  readonly columnWidths: readonly number[];
+  readonly rowHeights: readonly number[];
+  /** 被合并覆盖的格子留空，合并锚点保存单元格正文。 */
+  readonly cells: readonly (readonly string[])[];
+  readonly merges: readonly {
+    readonly row: number;
+    readonly column: number;
+    readonly rowSpan: number;
+    readonly colSpan: number;
+  }[];
 };
 
 export type SlideObservation = {
@@ -248,6 +263,8 @@ export type CapabilityOutput = {
   readonly warnings?: readonly {
     readonly code: string;
     readonly message: string;
+    /** 相对原生对象的子路径，用于精确定位单元格诊断。 */
+    readonly path?: string;
   }[];
 };
 

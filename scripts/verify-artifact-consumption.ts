@@ -198,7 +198,7 @@ try {
     join(temporaryDirectory, "consumer-types.ts"),
     [
       'import { createElement, Suspense, use, useEffect, useState } from "react";',
-      'import { Deck, fade, font, Group, Image, P, Shape, Slide, Span, spin, Step, Text, build, transitions, type BuildOptions, type BuildResult, type GroupProps, type ImageProps, type MotionProps, type ShapeProps, type StepProps, type TextProps, type Transition } from "@react-pptx/react-pptx";',
+      'import { Cell, Deck, fade, font, Group, Image, P, Row, Shape, Slide, Span, spin, Step, Table, Text, build, transitions, type BuildOptions, type BuildResult, type CellProps, type GroupProps, type ImageProps, type MotionProps, type NativeTableObservation, type RowProps, type ShapeProps, type StepProps, type TableColumn, type TableProps, type TextProps, type Transition } from "@react-pptx/react-pptx";',
       'import { type ValidationIssue, type ValidationResult } from "@react-pptx/validation";',
       'const shape: ShapeProps = { testId: "typed", x: 0, y: 0, width: 40, height: 30 };',
       "const image: ImageProps = { src: new Uint8Array([0x89, 0x50, 0x4e, 0x47]), width: 40, height: 30 };",
@@ -208,6 +208,11 @@ try {
       "const step: StepProps = { n: 1 };",
       'const contentSizedText: TextProps = { testId: "typed-content-sized-text", x: 0, y: 72, width: 100, height: "auto", style: { fontFamily: font("Consumer Sans") } };',
       'const transition: Transition = transitions.morph({ by: "word", duration: 1200, fallback: transitions.fade() });',
+      'const tableColumns: readonly TableColumn[] = [28, "2fr", "auto"];',
+      'const table: TableProps = { testId: "typed-table", x: 8, y: 8, width: 104, columns: tableColumns };',
+      'const row: RowProps = { testId: "typed-row", style: { height: 24 } };',
+      'const cell: CellProps = { testId: "typed-cell", rowSpan: 2, style: { padding: [2, 4], verticalAlign: "middle" } };',
+      'const tableObservation: NativeTableObservation = { columnWidths: [28, 52, 24], rowHeights: [24, 24], cells: [["North", "Q1", "100"], ["", "Q2", "120"]], merges: [{ row: 0, column: 0, rowSpan: 2, colSpan: 1 }] };',
       'const validationIssue: ValidationIssue = { part: "/ppt/slides/slide1.xml", code: "schema-error", message: "invalid", xpath: "/p:sld[1]" };',
       'const validatorProfile: ValidationResult["profile"]["schemaValidator"] = { package: "@ooxml-tools/validate", packageVersion: "0.4.6", sdkVersion: "3.0.2", officeVersion: "Microsoft365" };',
       "function AsyncText({ promise }: { promise: Promise<string> }) { return createElement(Text, text, use(promise)); }",
@@ -215,14 +220,15 @@ try {
       'const asyncTable = createElement(AsyncSalesTable, { source: "https://example.invalid/data" });',
       "const signalOptions: BuildOptions = { signal: new AbortController().signal };",
       'const result: Promise<BuildResult> = build(createElement(Deck, {}, createElement(Slide, { slideId: "typed", transition }, createElement(Group, group, createElement(Shape, { ...shape, ...motion }), createElement(Text, text, createElement(P, { style: { list: { type: "bullet" } } }, createElement(Span, { style: { fontWeight: "bold" } }, "Installed 文本"))), createElement(Image, image), createElement(Step, { ...step }, createElement(Shape, { ...shape, testId: "step-shape", enter: fade(), emphasis: spin() }))))));',
-      "void [result, contentSizedText, validationIssue, validatorProfile, asyncTable, signalOptions];",
+      'const tableElement = createElement(Table, table, createElement(Row, row, createElement(Cell, cell, "North")));',
+      "void [result, contentSizedText, validationIssue, validatorProfile, asyncTable, signalOptions, tableElement, tableObservation];",
     ].join("\n"),
   );
   await writeFile(
     join(temporaryDirectory, "consumer-runtime.ts"),
     [
       'import { createElement, Suspense, use, useEffect, useState } from "react";',
-      'import { BuildError, Deck, fade, font, Group, Image, P, Shape, Slide, Span, spin, Step, Text, build, targets, transitions, wipe } from "@react-pptx/react-pptx";',
+      'import { BuildError, Cell, Deck, fade, font, Group, Image, P, Row, Shape, Slide, Span, spin, Step, Table, Text, build, targets, transitions, wipe } from "@react-pptx/react-pptx";',
       'import { validatePptx } from "@react-pptx/validation";',
       'import { strFromU8, strToU8, unzipSync, zipSync } from "fflate";',
       'import { getEventListeners } from "node:events";',
@@ -232,6 +238,11 @@ try {
       'const imageBytes = new Uint8Array(Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/n1sAAAAASUVORK5CYII=", "base64"));',
       'const result = await build(createElement(Deck, { width: 120, height: 96 }, createElement(Slide, { slideId: "installed", transition }, createElement(Group, { testId: "packed-group", enter: fade({ duration: 800, delay: 100, easing: { decelerate: 0.5 } }) }, createElement(Step, { n: 1 }, createElement(Shape, { testId: "packed-shape", geometry: "hexagon", x: 10, y: 12, width: 45, height: 30, fill: "#123456", text: "Installed shape text", enter: fade({ duration: 250 }), emphasis: spin({ from: 180 }) }), createElement(Image, { testId: "packed-image", src: imageBytes, x: 60, y: 12, width: 40, height: 30, fit: "cover", enter: wipe({ from: "right" }) })), createElement(Text, { testId: "packed-text", x: 10, y: 48, width: 90, height: 36, style: { fontFamily: font("Consumer Sans"), lineHeight: "22pt" }, emphasis: spin({ from: 90 }) }, createElement(P, { style: { list: { type: "bullet" } } }, createElement(Span, { style: { fontWeight: "bold" } }, "Installed 文本"))), createElement(Group, { testId: "nested-group" }, createElement(Shape, { testId: "nested-shape", x: 80, y: 60, width: 12, height: 10, text: "Nested member" }))))));',
       'const file = await validatePptx(result.pptx, { allowedExtensions: ["p14", "p159"] });',
+      'const tableResult = await build(createElement(Deck, { width: 120, height: 96 }, createElement(Slide, { slideId: "installed-table" }, createElement(Table, { testId: "packed-table", x: 8, y: 8, width: 104, columns: [28, "2fr", "auto"], style: { fontFamily: font("Jost", [{ weight: 400, data: jostMetrics }]), fontSize: 14 } }, createElement(Row, { style: { height: 24 } }, createElement(Cell, { colSpan: 2 }, "Period"), createElement(Cell, null, "YoY")), createElement(Row, { style: { height: 24 } }, createElement(Cell, { rowSpan: 2 }, "N"), createElement(Cell, null, "Q1"), createElement(Cell, null, "100")), createElement(Row, { style: { height: 24 } }, createElement(Cell, null, "Q2"), createElement(Cell, null, "120"))))));',
+      "const tableFile = await validatePptx(tableResult.pptx);",
+      "const tableObject = tableFile.slides[0]?.objects[0];",
+      'if (tableFile.errors.length !== 0 || tableObject?.kind !== "table" || tableObject.name !== "packed-table" || tableObject.table?.cells[0]?.[0] !== "Period" || tableObject.table.cells[1]?.[0] !== "N" || tableObject.table.cells[2]?.[1] !== "Q2" || JSON.stringify(tableObject.table.merges) !== JSON.stringify([{ row: 0, column: 0, rowSpan: 1, colSpan: 2 }, { row: 1, column: 0, rowSpan: 2, colSpan: 1 }]) || tableObject.table.columnWidthsEmu[0] !== 266700 || JSON.stringify(tableResult.report.slides[0]?.objects[0]?.table?.merges) !== JSON.stringify([{ row: 0, column: 0, rowSpan: 1, colSpan: 2 }, { row: 1, column: 0, rowSpan: 2, colSpan: 1 }]) || tableResult.report.diagnostics.length !== 0) throw new Error(JSON.stringify({ errors: tableFile.errors, tableObject, report: tableResult.report }));',
+      'await writeFile("table-artifact.pptx", tableResult.pptx);',
       "const group = file.slides[0]?.objects[0];",
       'const shape = group?.members?.find(({ name }) => name === "packed-shape");',
       'const text = group?.members?.find(({ name }) => name === "packed-text");',
@@ -287,7 +298,7 @@ try {
       'try { await build(createElement(Deck, {}, createElement(Slide, { slideId: "missing-metrics" }, createElement(Text, { testId: "content-sized-text", x: 0, y: 0, width: 100, height: "auto", style: { fontFamily: font("Consumer Sans") } }, "Content sized text")))); } catch (error) { missingMetrics = error; }',
       'if (!(missingMetrics instanceof BuildError) || missingMetrics.diagnostics[0]?.code !== "font-measurement-unavailable") throw new Error("installed content-sized text did not require explicit font metrics");',
       'await writeFile("artifact.pptx", result.pptx);',
-      'process.stdout.write(JSON.stringify({ standard: file.profile.standard, schemaPackage: file.profile.schemaValidator.package, schemaPackageVersion: file.profile.schemaValidator.packageVersion, sdkVersion: file.profile.schemaValidator.sdkVersion, officeVersion: file.profile.schemaValidator.officeVersion, applicationEvidence: file.profile.applicationEvidence, slideId: file.slides[0]?.id, group: group.name, groupBox: group.boxEmu, shape: shape.name, shapeText: shape.text.text, shapeBox: shape.boxEmu, text: text.name, textContent: text.text.text, bullet: text.text.paragraphs[0]?.list?.type, image: image.name, mediaType: image.image.contentType, imageBox: image.boxEmu, contentSizedText: contentSizedText.text.text, contentSizedTextHeightEmu: contentSizedText.boxEmu.height, contentSizedTextLineSpacingPoints: contentSizedText.text.paragraphs[0].lineSpacingPoints, nestedGroup: nestedGroup.name, nestedShape: nestedShape.name, nestedShapeText: nestedShape.text.text, nestedShapeBox: nestedShape.boxEmu, missingMetrics: missingMetrics.diagnostics[0].code, objectIds: [group.id, shape.id, text.id, image.id, nestedGroup.id, nestedShape.id], animations, transition: file.slides[0]?.transition?.kind, durationMs: file.slides[0]?.transition?.durationMs, extensions: file.extensions, forbiddenCode: forbidden.diagnostics[0]?.code, schemaGate: schemaIssue.code, schemaPart: schemaIssue.part, schemaXPath: schemaIssue.xpath, bytes: result.pptx.byteLength, contentSizedBytes: contentSizedResult.pptx.byteLength, cancellationObserved, cancellationCleanups, cancellationListeners: getEventListeners(cancellationController.signal, "abort").length }));',
+      'process.stdout.write(JSON.stringify({ standard: file.profile.standard, schemaPackage: file.profile.schemaValidator.package, schemaPackageVersion: file.profile.schemaValidator.packageVersion, sdkVersion: file.profile.schemaValidator.sdkVersion, officeVersion: file.profile.schemaValidator.officeVersion, applicationEvidence: file.profile.applicationEvidence, slideId: file.slides[0]?.id, group: group.name, groupBox: group.boxEmu, shape: shape.name, shapeText: shape.text.text, shapeBox: shape.boxEmu, text: text.name, textContent: text.text.text, bullet: text.text.paragraphs[0]?.list?.type, image: image.name, mediaType: image.image.contentType, imageBox: image.boxEmu, table: tableObject.name, tableCells: tableObject.table.cells, tableMerges: tableObject.table.merges, tableColumnWidthEmu: tableObject.table.columnWidthsEmu[0], tableBytes: tableResult.pptx.byteLength, contentSizedText: contentSizedText.text.text, contentSizedTextHeightEmu: contentSizedText.boxEmu.height, contentSizedTextLineSpacingPoints: contentSizedText.text.paragraphs[0].lineSpacingPoints, nestedGroup: nestedGroup.name, nestedShape: nestedShape.name, nestedShapeText: nestedShape.text.text, nestedShapeBox: nestedShape.boxEmu, missingMetrics: missingMetrics.diagnostics[0].code, objectIds: [group.id, shape.id, text.id, image.id, nestedGroup.id, nestedShape.id], animations, transition: file.slides[0]?.transition?.kind, durationMs: file.slides[0]?.transition?.durationMs, extensions: file.extensions, forbiddenCode: forbidden.diagnostics[0]?.code, schemaGate: schemaIssue.code, schemaPart: schemaIssue.part, schemaXPath: schemaIssue.xpath, bytes: result.pptx.byteLength, contentSizedBytes: contentSizedResult.pptx.byteLength, cancellationObserved, cancellationCleanups, cancellationListeners: getEventListeners(cancellationController.signal, "abort").length }));',
     ].join("\n"),
   );
   const cropLoader = join(temporaryDirectory, "reject-text-box.mjs");
@@ -305,18 +316,20 @@ try {
     join(temporaryDirectory, "consumer-cropped.mjs"),
     [
       'import { createElement } from "react";',
-      'import { BuildError } from "@react-pptx/core";',
+      'import { BuildError, createBuilder } from "@react-pptx/core";',
       'import { Text as TextDeclaration } from "@react-pptx/capabilities/text-elements";',
-      'import { build, Deck, Shape, Slide } from "@react-pptx/react-pptx/shape";',
+      'import { Cell, Row, Table, tableCapability } from "@react-pptx/capabilities/table";',
+      'import { Deck, Shape, Slide, shapeCapability } from "@react-pptx/react-pptx/shape";',
       'import { validatePptx } from "@react-pptx/validation";',
-      'const result = await build(createElement(Deck, { width: 120, height: 96 }, createElement(Slide, { slideId: "installed-cropped" }, createElement(Shape, { testId: "installed-shape-text", x: 0, y: 0, width: 90, height: 30, text: "Installed shape text" }))));',
+      "const build = createBuilder([shapeCapability, tableCapability]);",
+      'const result = await build(createElement(Deck, { width: 120, height: 96 }, createElement(Slide, { slideId: "installed-cropped" }, createElement(Shape, { testId: "installed-shape-text", x: 0, y: 0, width: 90, height: 30, text: "Installed shape text" }), createElement(Table, { testId: "installed-table", x: 0, y: 32, columns: [120], style: { fontSize: 14 } }, createElement(Row, { style: { height: 24 } }, createElement(Cell, null, "Installed table"))))));',
       "const file = await validatePptx(result.pptx);",
-      'if (file.errors.length !== 0 || file.slides[0]?.objects[0]?.text?.text !== "Installed shape text") throw new Error(JSON.stringify(file.errors));',
+      'if (file.errors.length !== 0 || file.slides[0]?.objects[0]?.text?.text !== "Installed shape text" || file.slides[0]?.objects[1]?.kind !== "table" || file.slides[0]?.objects[1]?.table?.cells[0]?.[0] !== "Installed table") throw new Error(JSON.stringify(file.errors));',
       'function NestedText() { return createElement(TextDeclaration, { testId: "missing-installed-text", x: 0, y: 32, width: 90, height: 30 }, "not registered"); }',
       "let missingText;",
       'try { await build(createElement(Deck, {}, createElement(Slide, { slideId: "nested" }, createElement(NestedText)))); } catch (error) { missingText = error; }',
       'if (!(missingText instanceof BuildError) || missingText.diagnostics[0]?.code !== "missing-capability" || missingText.diagnostics[0]?.path !== "deck/slide[nested]/text[missing-installed-text]") throw new Error("installed nested Text did not report the cropped capability");',
-      "process.stdout.write(JSON.stringify({ shapeText: file.slides[0]?.objects[0]?.text?.text, missingCode: missingText.diagnostics[0]?.code, missingPath: missingText.diagnostics[0]?.path, textBoxImplementationLoaded: false }));",
+      "process.stdout.write(JSON.stringify({ shapeText: file.slides[0]?.objects[0]?.text?.text, tableKind: file.slides[0]?.objects[1]?.kind, tableText: file.slides[0]?.objects[1]?.table?.cells[0]?.[0], missingCode: missingText.diagnostics[0]?.code, missingPath: missingText.diagnostics[0]?.path, textBoxImplementationLoaded: false }));",
     ].join("\n"),
   );
   const devtoolsSentinel = join(temporaryDirectory, "devtools-sentinel.mjs");
@@ -374,6 +387,16 @@ try {
     readonly contentSizedText?: string;
     readonly contentSizedTextHeightEmu?: number;
     readonly contentSizedTextLineSpacingPoints?: number;
+    readonly table?: string;
+    readonly tableCells?: readonly (readonly string[])[];
+    readonly tableMerges?: readonly {
+      readonly row: number;
+      readonly column: number;
+      readonly rowSpan: number;
+      readonly colSpan: number;
+    }[];
+    readonly tableColumnWidthEmu?: number;
+    readonly tableBytes?: number;
     readonly missingMetrics?: string;
     readonly contentSizedBytes?: number;
     readonly cancellationObserved?: boolean;
@@ -436,6 +459,21 @@ try {
     summary.contentSizedText !== "Installed font" ||
     summary.contentSizedTextHeightEmu !== 550672 ||
     summary.contentSizedTextLineSpacingPoints !== 21.68 ||
+    summary.table !== "packed-table" ||
+    JSON.stringify(summary.tableCells) !==
+      JSON.stringify([
+        ["Period", "", "YoY"],
+        ["N", "Q1", "100"],
+        ["", "Q2", "120"],
+      ]) ||
+    JSON.stringify(summary.tableMerges) !==
+      JSON.stringify([
+        { row: 0, column: 0, rowSpan: 1, colSpan: 2 },
+        { row: 1, column: 0, rowSpan: 2, colSpan: 1 },
+      ]) ||
+    summary.tableColumnWidthEmu !== 266700 ||
+    summary.tableBytes === undefined ||
+    summary.tableBytes <= 0 ||
     summary.missingMetrics !== "font-measurement-unavailable" ||
     summary.bytes === undefined ||
     summary.bytes <= 0 ||
@@ -454,12 +492,16 @@ try {
   );
   const cropped = JSON.parse(croppedText) as {
     readonly shapeText?: string;
+    readonly tableKind?: string;
+    readonly tableText?: string;
     readonly missingCode?: string;
     readonly missingPath?: string;
     readonly textBoxImplementationLoaded?: boolean;
   };
   if (
     cropped.shapeText !== "Installed shape text" ||
+    cropped.tableKind !== "table" ||
+    cropped.tableText !== "Installed table" ||
     cropped.missingCode !== "missing-capability" ||
     cropped.missingPath !== "deck/slide[nested]/text[missing-installed-text]" ||
     cropped.textBoxImplementationLoaded !== false

@@ -18,10 +18,13 @@ export class BuildError extends Error {
 
 export class CapabilityError extends Error {
   readonly code: string;
+  readonly path: string | undefined;
 
-  constructor(code: string, message: string) {
+  /** 子路径相对触发能力的原生对象，方便定位对象内部的单元格声明。 */
+  constructor(code: string, message: string, path?: string) {
     super(message);
     this.name = "CapabilityError";
     this.code = code;
+    this.path = path;
   }
 }

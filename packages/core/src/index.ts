@@ -31,6 +31,7 @@ export type {
   LayoutStyle,
   ObjectCapabilityModule,
   ObjectObservation,
+  NativeTableObservation,
   SlideCapabilityContext,
   SlideCapabilityModule,
   SlideCapabilityOutput,

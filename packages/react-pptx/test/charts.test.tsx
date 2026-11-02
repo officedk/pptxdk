@@ -1,11 +1,16 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 
 import {
   BuildError,
   build,
   Chart,
   Deck,
+  fade,
+  font,
   Slide,
+  spin,
+  Step,
   type ChartProps,
 } from "@react-pptx/react-pptx";
 import { validatePptx } from "@react-pptx/validation";
@@ -13,6 +18,248 @@ import { strFromU8, strToU8, unzipSync, zipSync } from "fflate";
 import { describe, it } from "vitest";
 
 describe("原生坐标系图表", () => {
+  it("登记值轴实际字体资源并检测与图表文字的冲突", async () => {
+    const jost = new Uint8Array(
+      readFileSync(
+        new URL("./assets/fonts/Jost-400-Book.ttf", import.meta.url),
+      ),
+    );
+    const notoSans = new Uint8Array(
+      readFileSync(
+        new URL("./assets/fonts/NotoSansSC-Regular.woff2", import.meta.url),
+      ),
+    );
+    const primaryFont = font(
+      "Collision Sans",
+      [{ weight: 400, style: "normal", data: jost }],
+      { substitute: true },
+    );
+    const sameFont = font(
+      "Collision Sans",
+      [{ weight: 400, style: "normal", data: jost }],
+      { substitute: true },
+    );
+    const conflictingFont = font(
+      "Collision Sans",
+      [{ weight: 400, style: "normal", data: notoSans }],
+      { substitute: true },
+    );
+    const result = await build(
+      <Deck>
+        <Slide slideId="value-axis-font">
+          <Chart
+            testId="value-axis-font"
+            kind="column"
+            x={0}
+            y={0}
+            width={200}
+            height={120}
+            data={{ categories: ["A"], series: [{ name: "S", values: [1] }] }}
+            style={{ fontFamily: primaryFont }}
+            valueAxis={{ style: { fontFamily: sameFont } }}
+          />
+        </Slide>
+      </Deck>,
+    );
+    const chartPath = Object.keys(unzipSync(result.pptx)).find((path) =>
+      /^ppt\/charts\/chart\d+\.xml$/u.test(path),
+    );
+    assert.ok(chartPath);
+    const chartXml = strFromU8(unzipSync(result.pptx)[chartPath]!);
+    assert.ok(chartXml.includes("<c:valAx"));
+    assert.ok(chartXml.includes('<a:latin typeface="Collision Sans"/>'));
+    assert.deepEqual((await validatePptx(result.pptx)).errors, []);
+
+    await assert.rejects(
+      build(
+        <Deck>
+          <Slide slideId="value-axis-font-conflict">
+            <Chart
+              testId="value-axis-font-conflict"
+              kind="column"
+              x={0}
+              y={0}
+              width={200}
+              height={120}
+              data={{
+                categories: ["A"],
+                series: [{ name: "S", values: [1] }],
+              }}
+              style={{ fontFamily: primaryFont }}
+              valueAxis={{ style: { fontFamily: conflictingFont } }}
+            />
+          </Slide>
+        </Deck>,
+      ),
+      (error: unknown) => {
+        assert.ok(error instanceof BuildError);
+        assert.equal(error.diagnostics[0]?.code, "conflicting-resource");
+        assert.match(
+          error.diagnostics[0]?.path ?? "",
+          /chart\[value-axis-font-conflict\]/u,
+        );
+        return true;
+      },
+    );
+  });
+
+  it("保留基础动画、点击步与禁用声明，并引用 graphicFrame 对象", async () => {
+    const result = await build(
+      <Deck>
+        <Slide slideId="chart-motion">
+          <Chart
+            testId="entering-chart"
+            kind="column"
+            x={0}
+            y={0}
+            width={200}
+            height={120}
+            data={{ categories: ["A"], series: [{ name: "S", values: [1] }] }}
+            enter={fade({ duration: 700 })}
+            emphasis={spin({ duration: 250, from: 180 })}
+          />
+          <Step n={3}>
+            <Chart
+              testId="click-chart"
+              kind="line"
+              x={220}
+              y={0}
+              width={200}
+              height={120}
+              data={{ categories: ["A"], series: [{ name: "S", values: [1] }] }}
+              enter={fade({ duration: 300 })}
+            />
+          </Step>
+          <Chart
+            testId="disabled-chart"
+            kind="area"
+            x={440}
+            y={0}
+            width={200}
+            height={120}
+            data={{ categories: ["A"], series: [{ name: "S", values: [1] }] }}
+            enter={fade()}
+            motion={false}
+          />
+        </Slide>
+      </Deck>,
+    );
+    const [entering, clicking, disabled] =
+      result.report.slides[0]?.objects ?? [];
+    assert.deepEqual(result.report.slides[0]?.capabilities?.["motion"], {
+      steps: [
+        {
+          trigger: "auto",
+          effects: [
+            {
+              target: {
+                id: entering?.id,
+                name: "entering-chart",
+                testId: "entering-chart",
+              },
+              kind: "entrance",
+              preset: "fade",
+              durationMs: 700,
+              delayMs: 0,
+              startMs: 0,
+              endMs: 700,
+            },
+            {
+              target: {
+                id: entering?.id,
+                name: "entering-chart",
+                testId: "entering-chart",
+              },
+              kind: "emphasis",
+              preset: "spin",
+              durationMs: 250,
+              delayMs: 0,
+              from: 180,
+              startMs: 0,
+              endMs: 250,
+            },
+          ],
+        },
+        {
+          trigger: "click",
+          number: 3,
+          effects: [
+            {
+              target: {
+                id: clicking?.id,
+                name: "click-chart",
+                testId: "click-chart",
+              },
+              kind: "entrance",
+              preset: "fade",
+              durationMs: 300,
+              delayMs: 0,
+              startMs: 0,
+              endMs: 300,
+            },
+          ],
+        },
+      ],
+    });
+
+    const file = await validatePptx(result.pptx);
+    assert.deepEqual(file.errors, []);
+    assert.deepEqual(
+      file.slides[0]?.animations?.map(({ trigger, effects }) => ({
+        trigger,
+        effects: effects.map(({ targetId, preset }) => [targetId, preset]),
+      })),
+      [
+        {
+          trigger: "auto",
+          effects: [
+            [entering?.id, "fade"],
+            [entering?.id, "spin"],
+          ],
+        },
+        {
+          trigger: "click",
+          effects: [[clicking?.id, "fade"]],
+        },
+      ],
+    );
+    const slideXml = strFromU8(
+      unzipSync(result.pptx)["ppt/slides/slide1.xml"]!,
+    );
+    assert.ok(slideXml.includes(`<p:spTgt spid="${entering?.id}">`));
+    assert.ok(slideXml.includes(`<p:spTgt spid="${clicking?.id}">`));
+    assert.ok(!slideXml.includes(`<p:spTgt spid="${disabled?.id}">`));
+    assert.ok(!slideXml.includes("<p:bldP"));
+
+    await assert.rejects(
+      build(
+        <Deck>
+          <Slide slideId="invalid-chart-motion">
+            <Chart
+              testId="invalid-motion"
+              kind="column"
+              x={0}
+              y={0}
+              width={200}
+              height={120}
+              data={{ categories: ["A"], series: [{ name: "S", values: [1] }] }}
+              enter={fade({ duration: 0 })}
+            />
+          </Slide>
+        </Deck>,
+      ),
+      (error: unknown) => {
+        assert.ok(error instanceof BuildError);
+        assert.equal(error.diagnostics[0]?.code, "invalid-duration");
+        assert.match(
+          error.diagnostics[0]?.path ?? "",
+          /chart\[invalid-motion\]/u,
+        );
+        return true;
+      },
+    );
+  });
+
   it("将柱形图、图表缓存和嵌入工作簿写成一致的可编辑数据", async () => {
     const result = await build(
       <Deck width={800} height={600}>
@@ -282,6 +529,8 @@ describe("原生坐标系图表", () => {
     assert.ok(columnXml.includes('<c:overlap val="100"/>'));
     assert.ok(columnXml.includes('<c:max val="10"/>'));
     assert.ok(columnXml.includes('<c:majorUnit val="2"/>'));
+    assert.ok(columnXml.includes('<a:ln w="9525">'));
+    assert.ok(columnXml.includes('<a:ln w="4763">'));
     assert.ok(
       columnXml.includes('<c:numFmt formatCode="0.0" sourceLinked="0"/>'),
     );
@@ -357,6 +606,183 @@ describe("原生坐标系图表", () => {
           part === "ppt/charts/chart1.xml",
       ),
     );
+  });
+
+  it("发现图表公式引用了嵌入工作簿中不存在的工作表", async () => {
+    const result = await build(
+      <Deck>
+        <Slide slideId="renamed-chart-sheet">
+          <Chart
+            testId="renamed-chart-sheet"
+            kind="line"
+            x={0}
+            y={0}
+            width={200}
+            height={120}
+            data={{ categories: ["A"], series: [{ name: "S", values: [1] }] }}
+          />
+        </Slide>
+      </Deck>,
+    );
+    const parts = unzipSync(result.pptx);
+    const workbookPath = "ppt/embeddings/Microsoft_Excel_Worksheet1.xlsx";
+    const workbook = unzipSync(parts[workbookPath]!);
+    const workbookXml = strFromU8(workbook["xl/workbook.xml"]!);
+    assert.ok(workbookXml.includes('name="Sheet1"'));
+    workbook["xl/workbook.xml"] = strToU8(
+      workbookXml.replace('name="Sheet1"', 'name="ActuallyOther"'),
+    );
+    parts[workbookPath] = zipSync(workbook);
+
+    const file = await validatePptx(zipSync(parts));
+    assert.equal(
+      file.slides[0]?.objects[0]?.chart?.embeddedWorkbook?.sheetName,
+      "ActuallyOther",
+    );
+    assert.ok(
+      file.errors.some(
+        ({ code, part }) =>
+          code === "invalid-chart-formula" && part === "ppt/charts/chart1.xml",
+      ),
+      JSON.stringify(file.errors),
+    );
+  });
+
+  it("轴线和网格线的换算宽度必须落在 DrawingML 范围内", async () => {
+    for (const { testId, valueAxis } of [
+      { testId: "axis-line-overflow", valueAxis: { line: { width: 1e308 } } },
+      {
+        testId: "axis-gridline-overflow",
+        valueAxis: { gridlines: { width: 20_116_801 / 9525 } },
+      },
+    ]) {
+      await assert.rejects(
+        build(
+          <Deck>
+            <Slide slideId={testId}>
+              <Chart
+                testId={testId}
+                kind="column"
+                x={0}
+                y={0}
+                width={200}
+                height={120}
+                data={{
+                  categories: ["A"],
+                  series: [{ name: "S", values: [1] }],
+                }}
+                valueAxis={valueAxis}
+              />
+            </Slide>
+          </Deck>,
+        ),
+        (error: unknown) => {
+          assert.ok(error instanceof BuildError);
+          assert.equal(error.diagnostics[0]?.code, "invalid-style");
+          assert.match(
+            error.diagnostics[0]?.path ?? "",
+            new RegExp(`chart\\[${testId}\\]`, "u"),
+          );
+          return true;
+        },
+      );
+    }
+
+    const maximumWidth = 20_116_800 / 9525;
+    const boundaryResult = await build(
+      <Deck>
+        <Slide slideId="maximum-axis-line-width">
+          <Chart
+            testId="maximum-axis-line-width"
+            kind="column"
+            x={0}
+            y={0}
+            width={200}
+            height={120}
+            data={{ categories: ["A"], series: [{ name: "S", values: [1] }] }}
+            valueAxis={{ line: { width: maximumWidth } }}
+          />
+        </Slide>
+      </Deck>,
+    );
+    const boundaryChart = strFromU8(
+      unzipSync(boundaryResult.pptx)["ppt/charts/chart1.xml"]!,
+    );
+    assert.ok(boundaryChart.includes('<a:ln w="20116800">'));
+    assert.deepEqual((await validatePptx(boundaryResult.pptx)).errors, []);
+  });
+
+  it("按每个分类下标拒绝稀疏系列值", async () => {
+    const sparseValues = Array<number>(2);
+    await assert.rejects(
+      build(
+        <Deck>
+          <Slide slideId="sparse-chart-data">
+            <Chart
+              testId="sparse-values"
+              kind="column"
+              x={0}
+              y={0}
+              width={200}
+              height={120}
+              data={{
+                categories: ["A", "B"],
+                series: [{ name: "S", values: sparseValues }],
+              }}
+            />
+          </Slide>
+        </Deck>,
+      ),
+      (error: unknown) => {
+        assert.ok(error instanceof BuildError);
+        assert.equal(error.diagnostics[0]?.code, "invalid-data");
+        assert.match(
+          error.diagnostics[0]?.path ?? "",
+          /chart\[sparse-values\]/u,
+        );
+        return true;
+      },
+    );
+  });
+
+  it("拒绝分类轴没有写出语义的数值参数", async () => {
+    for (const [option, value] of [
+      ["min", 20],
+      ["max", 40],
+      ["majorUnit", 5],
+      ["numberFormat", "0.000"],
+    ] as const) {
+      await assert.rejects(
+        build(
+          <Deck>
+            <Slide slideId={`category-axis-${option}`}>
+              <Chart
+                testId="category-axis-option"
+                kind="column"
+                x={0}
+                y={0}
+                width={200}
+                height={120}
+                data={{
+                  categories: ["A"],
+                  series: [{ name: "S", values: [1] }],
+                }}
+                categoryAxis={{ [option]: value }}
+              />
+            </Slide>
+          </Deck>,
+        ),
+        (error: unknown) => {
+          assert.ok(error instanceof BuildError);
+          assert.equal(error.diagnostics[0]?.code, "invalid-axis");
+          assert.match(
+            error.diagnostics[0]?.path ?? "",
+            /chart\[category-axis-option\]/u,
+          );
+          return true;
+        },
+      );
+    }
   });
 
   it("以定位构建错误拒绝无效数据和不适用参数组合", async () => {

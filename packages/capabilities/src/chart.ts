@@ -134,6 +134,8 @@ const chartContentType =
 const workbookContentType =
   "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
 const maximumShapeExtentEmu = 2_147_483_647;
+// DrawingML 的 a:ln/@w 上限为 20,116,800 EMU；先验证换算值再序列化。
+const maximumLineWidthEmu = 20_116_800;
 const chartOptions: Readonly<Record<ChartKind, readonly string[]>> = {
   column: ["stacking", "valueAxis", "categoryAxis", "gapWidth", "overlap"],
   bar: ["stacking", "valueAxis", "categoryAxis", "gapWidth", "overlap"],
@@ -238,11 +240,13 @@ function lineStyle(value: unknown, label: string): ChartLine | undefined {
   onlyKeys(value, ["color", "width"], label);
   const color = optionalColor(value["color"], `${label}.color`);
   const width = value["width"];
-  if (
-    width !== undefined &&
-    (typeof width !== "number" || !Number.isFinite(width) || width <= 0)
-  ) {
-    fail("invalid-style", `${label}.width 必须是有限正像素数值`);
+  if (width !== undefined) {
+    if (typeof width !== "number" || !Number.isFinite(width) || width <= 0) {
+      fail("invalid-style", `${label}.width 必须是有限正像素数值`);
+    }
+    if (pxToEmu(width) > maximumLineWidthEmu) {
+      fail("invalid-style", `${label}.width 换算后超出可写线宽范围`);
+    }
   }
   return {
     ...(color === undefined ? {} : { color }),
@@ -250,7 +254,11 @@ function lineStyle(value: unknown, label: string): ChartLine | undefined {
   };
 }
 
-function axis(value: unknown, label: string): ChartAxis | undefined {
+function axis(
+  value: unknown,
+  label: string,
+  kind: "category" | "value",
+): ChartAxis | undefined {
   if (value === undefined) return undefined;
   if (!isRecord(value)) fail("invalid-axis", `${label} 必须是对象`);
   onlyKeys(
@@ -267,6 +275,14 @@ function axis(value: unknown, label: string): ChartAxis | undefined {
     ],
     label,
   );
+  if (kind === "category") {
+    const unsupported = ["min", "max", "majorUnit", "numberFormat"].find(
+      (key) => value[key] !== undefined,
+    );
+    if (unsupported !== undefined) {
+      fail("invalid-axis", `${label}.${unsupported} 仅适用于值轴`);
+    }
+  }
   const visible = value["visible"];
   if (visible !== undefined && typeof visible !== "boolean") {
     fail("invalid-axis", `${label}.visible 必须是布尔值`);
@@ -380,7 +396,8 @@ function chartData(value: unknown): ChartData {
         `系列「${name}」有 ${Array.isArray(values) ? values.length : 0} 个值，对应 ${categories.length} 个分类`,
       );
     }
-    values.forEach((value, valueIndex) => {
+    for (let valueIndex = 0; valueIndex < values.length; valueIndex += 1) {
+      const value = values[valueIndex];
       if (
         value !== null &&
         (typeof value !== "number" || !Number.isFinite(value))
@@ -390,7 +407,7 @@ function chartData(value: unknown): ChartData {
           `系列「${name}」的第 ${valueIndex + 1} 个值必须是有限数值或 null`,
         );
       }
-    });
+    }
     const pointsValue = item["points"];
     let points: Record<number, ChartPoint> | undefined;
     if (pointsValue !== undefined) {
@@ -599,9 +616,13 @@ function chartResourceClaims(
     warnings.push(...output.warnings);
   }
   if (props.valueAxis?.style !== undefined) {
+    const axisValues = data.series.flatMap(({ values }) =>
+      values.filter((value): value is number => value !== null).map(String),
+    );
+    // 坐标轴刻度由应用生成；共享文字服务仍需一个文本运行来登记值轴字体。
     const output = writeChartTextProperties(
       mergeTextStyle(props.style, props.valueAxis.style),
-      [],
+      axisValues.length === 0 ? [""] : axisValues,
       "Chart.valueAxis.style",
     );
     textStyles.valueAxis = output.xml;
@@ -753,6 +774,15 @@ function validateProps(props: Record<string, unknown>): ChartProps {
   return {
     ...(testId === undefined ? {} : { testId }),
     ...(name === undefined ? {} : { name }),
+    ...(props["enter"] === undefined ? {} : { enter: props["enter"] }),
+    ...(props["emphasis"] === undefined ? {} : { emphasis: props["emphasis"] }),
+    ...(props["motion"] === undefined ? {} : { motion: props["motion"] }),
+    ...(props["__motionEnabled"] === undefined
+      ? {}
+      : { __motionEnabled: props["__motionEnabled"] }),
+    ...(props["__motionStep"] === undefined
+      ? {}
+      : { __motionStep: props["__motionStep"] }),
     x,
     y,
     width,
@@ -768,10 +798,16 @@ function validateProps(props: Record<string, unknown>): ChartProps {
     ...(stack === undefined ? {} : { stacking: stack }),
     ...(props["valueAxis"] === undefined
       ? {}
-      : { valueAxis: axis(props["valueAxis"], "Chart.valueAxis") }),
+      : { valueAxis: axis(props["valueAxis"], "Chart.valueAxis", "value") }),
     ...(props["categoryAxis"] === undefined
       ? {}
-      : { categoryAxis: axis(props["categoryAxis"], "Chart.categoryAxis") }),
+      : {
+          categoryAxis: axis(
+            props["categoryAxis"],
+            "Chart.categoryAxis",
+            "category",
+          ),
+        }),
     ...(gapWidth === undefined ? {} : { gapWidth: gapWidth as number }),
     ...(overlap === undefined ? {} : { overlap: overlap as number }),
   } as ChartProps;
@@ -793,7 +829,7 @@ export const chartCapability: CapabilityModule = {
       kind: "chart",
       name,
       ...(props.testId === undefined ? {} : { testId: props.testId }),
-      textBody: true,
+      textBody: false,
       filled: props.kind !== "line",
     });
     const { textStyles, resourceClaims, warnings } = chartResourceClaims(

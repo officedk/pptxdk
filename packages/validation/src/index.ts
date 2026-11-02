@@ -11,7 +11,6 @@ const drawingNamespace =
 const chartNamespace = "http://schemas.openxmlformats.org/drawingml/2006/chart";
 const spreadsheetNamespace =
   "http://schemas.openxmlformats.org/spreadsheetml/2006/main";
-const chartSheetName = "Sheet1";
 const tableUri = "http://schemas.openxmlformats.org/drawingml/2006/table";
 const relationshipNamespace =
   "http://schemas.openxmlformats.org/officeDocument/2006/relationships";
@@ -1580,13 +1579,14 @@ function validateChart(
     }
   }
   const workbookSeries = embeddedWorkbook?.series ?? [];
+  const formulaSheetName = embeddedWorkbook?.sheetName ?? "";
   for (const [index, formula] of formulas.entries()) {
     const column = spreadsheetColumn(index + 1);
     const lastRow = (series[index]?.categories.length ?? 0) + 1;
     const expected = {
-      name: `${chartSheetName}!$${column}$1`,
-      categories: `${chartSheetName}!$A$2:$A$${lastRow}`,
-      values: `${chartSheetName}!$${column}$2:$${column}$${lastRow}`,
+      name: `${formulaSheetName}!$${column}$1`,
+      categories: `${formulaSheetName}!$A$2:$A$${lastRow}`,
+      values: `${formulaSheetName}!$${column}$2:$${column}$${lastRow}`,
     };
     if (
       formula.name !== expected.name ||
@@ -2047,16 +2047,18 @@ function readObjects(
           errors,
         );
         break;
-      case "graphicFrame":
-        if (
-          first(
-            child as XmlElement,
-            "http://schemas.openxmlformats.org/drawingml/2006/main",
-            "graphic",
-          ) !== undefined
-        ) {
+      case "graphicFrame": {
+        const frame = child as XmlElement;
+        const graphic = first(frame, drawingNamespace, "graphic");
+        const graphicData =
+          graphic === undefined
+            ? undefined
+            : first(graphic, drawingNamespace, "graphicData");
+        const uri =
+          graphicData === undefined ? undefined : attribute(graphicData, "uri");
+        if (uri === chartNamespace) {
           object = validateChart(
-            child as XmlElement,
+            frame,
             part,
             files,
             documents,
@@ -2064,8 +2066,11 @@ function readObjects(
             contentTypes,
             errors,
           );
+        } else if (uri === tableUri) {
+          object = validateTable(frame, part, errors);
         }
         break;
+      }
       case "grpSp":
         object = validateGroup(
           child as XmlElement,
@@ -2076,9 +2081,6 @@ function readObjects(
           contentTypes,
           errors,
         );
-        break;
-      case "graphicFrame":
-        object = validateTable(child as XmlElement, part, errors);
         break;
     }
     if (object !== undefined) objects.push(object);

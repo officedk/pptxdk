@@ -38,6 +38,19 @@
       "inputs": [],
       "outputs": [],
       "tags": ["quality:light"]
+    },
+    "test": {
+      "dependsOn": ["build", "^build"],
+      "inputs": [
+        "src/**",
+        "test/**",
+        "package.json",
+        "vitest.config.ts",
+        "tsconfig.node.json"
+      ],
+      "outputs": [],
+      "cache": false,
+      "tags": ["quality:heavy"]
     }
   }
 }

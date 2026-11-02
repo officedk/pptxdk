@@ -38,12 +38,17 @@
     },
     "//#verify:artifact-consumption": {
       "dependsOn": [
+        "@react-pptx/cli#build",
         "@react-pptx/react-pptx#build",
         "@react-pptx/validation#build"
       ],
       "inputs": [
         "scripts/verify-artifact-consumption.ts",
         "package.json",
+        "apps/cli/package.json",
+        "apps/cli/src/**",
+        "apps/cli/dist/**",
+        "pnpm-workspace.yaml",
         "packages/core/package.json",
         "packages/capabilities/package.json",
         "packages/react-pptx/package.json",

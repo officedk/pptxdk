@@ -634,15 +634,26 @@ function textResourceClaims(runs: readonly Run[]): {
 } {
   const used = new Map<
     string,
-    { readonly fonts: NormalizedFont[]; readonly text: string[] }
+    {
+      readonly fonts: NormalizedFont[];
+      readonly fontPolicies: Map<string, NormalizedFont>;
+      readonly text: string[];
+    }
   >();
   for (const run of runs) {
     for (const font of normalizedFonts(run.style)) {
       const key = `${font.family.toLocaleLowerCase("en-US")}\u0000${font.weight}\u0000${font.style}`;
-      const entry = used.get(key) ?? { fonts: [], text: [] };
+      const entry = used.get(key) ?? {
+        fonts: [],
+        fontPolicies: new Map<string, NormalizedFont>(),
+        text: [],
+      };
       if (!entry.fonts.some(({ identity }) => identity === font.identity)) {
         entry.fonts.push(font);
       }
+      // 字节资源可以合并，但每种实际使用的嵌入策略都须独立校验。
+      const policyKey = `${font.identity}\u0000${font.substitute ? 1 : 0}\u0000${font.embeddable ? 1 : 0}`;
+      entry.fontPolicies.set(policyKey, font);
       entry.text.push(run.text);
       used.set(key, entry);
     }
@@ -651,7 +662,7 @@ function textResourceClaims(runs: readonly Run[]): {
   const fontUses: FontEmbeddingUse[] = [];
   const warnings: { code: string; message: string }[] = [];
   for (const [key, entry] of used) {
-    for (const font of entry.fonts) {
+    for (const font of entry.fontPolicies.values()) {
       fontUses.push({
         family: font.family,
         weight: font.weight,
@@ -663,6 +674,8 @@ function textResourceClaims(runs: readonly Run[]): {
         bold: outputBold(font),
         italic: font.style === "italic",
       });
+    }
+    for (const font of entry.fonts) {
       if (!font.hasResource) {
         warnings.push({
           code: "font-measurement-unavailable",

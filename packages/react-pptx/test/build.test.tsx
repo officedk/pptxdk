@@ -64,6 +64,8 @@ function withFontFsType(bytes: Uint8Array, fsType: number): Uint8Array {
 const notoSansScRegular = testFont("./assets/fonts/NotoSansSC-Regular.woff2");
 const jostBook = testFont("./assets/fonts/Jost-400-Book.ttf");
 const jostBold = testFont("./assets/fonts/Jost-700-Bold.ttf");
+const jostItalic = testFont("./assets/fonts/Jost-400-Italic.ttf");
+const jostBoldItalic = testFont("./assets/fonts/Jost-700-BoldItalic.ttf");
 const darkerGrotesqueSemiBold = testFont(
   "./assets/fonts/DarkerGrotesque-SemiBold.ttf",
 );
@@ -343,6 +345,247 @@ describe("公开构建入口", () => {
       fontPart.subarray(fontPart.byteLength - view.getUint32(4, true)),
       darkerGrotesqueSemiBold,
     );
+  });
+
+  it("完整嵌入把真实斜体和粗斜体字体映射到对应样式槽", async () => {
+    const jostItalicFaces = font("Jost", [
+      { weight: 400, style: "italic", data: jostItalic },
+      { weight: 700, style: "italic", data: jostBoldItalic },
+    ]);
+    const result = await build(
+      createElement(
+        Deck,
+        { width: 960, height: 540 },
+        createElement(
+          Slide,
+          { slideId: "italic-font-slots" },
+          createElement(
+            Text,
+            {
+              testId: "italic-font",
+              x: 24,
+              y: 18,
+              width: 240,
+              height: 36,
+              style: { fontFamily: jostItalicFaces, fontStyle: "italic" },
+            },
+            "Italic",
+          ),
+          createElement(
+            Text,
+            {
+              testId: "bold-italic-font",
+              x: 24,
+              y: 60,
+              width: 240,
+              height: 36,
+              style: {
+                fontFamily: jostItalicFaces,
+                fontWeight: "bold",
+                fontStyle: "italic",
+              },
+            },
+            "Bold italic",
+          ),
+        ),
+      ),
+      { embedFonts: "full" },
+    );
+
+    const file = await validatePptx(result.pptx);
+    assert.deepEqual(file.errors, []);
+    assert.deepEqual(
+      file.slides[0]?.objects.map(({ text }) => ({
+        run: text?.paragraphs[0]?.runs[0]
+          ? {
+              text: text.paragraphs[0].runs[0].text,
+              bold: text.paragraphs[0].runs[0].bold,
+              italic: text.paragraphs[0].runs[0].italic,
+            }
+          : undefined,
+      })),
+      [
+        {
+          run: { text: "Italic", bold: false, italic: true },
+        },
+        {
+          run: { text: "Bold italic", bold: true, italic: true },
+        },
+      ],
+    );
+
+    const parts = unzipSync(result.pptx);
+    const presentation = strFromU8(parts["ppt/presentation.xml"]!);
+    assert.match(presentation, /embedTrueTypeFonts="1"/u);
+    assert.match(presentation, /<p:italic r:id="rId\d+"\/>/u);
+    assert.match(presentation, /<p:boldItalic r:id="rId\d+"\/>/u);
+    const presentationRelationships = strFromU8(
+      parts["ppt/_rels/presentation.xml.rels"]!,
+    );
+    const fontRelationships = [
+      ...presentationRelationships.matchAll(
+        /<Relationship Id="(rId\d+)" Type="http:\/\/schemas\.openxmlformats\.org\/officeDocument\/2006\/relationships\/font" Target="([^"]+)"\/>/gu,
+      ),
+    ];
+    assert.equal(fontRelationships.length, 2);
+    for (const [style, expectedBytes, expectedWeight] of [
+      ["italic", jostItalic, 400],
+      ["boldItalic", jostBoldItalic, 700],
+    ] as const) {
+      const embeddedStyle = new RegExp(
+        `<p:${style} r:id="(rId\\d+)"\\/>`,
+        "u",
+      ).exec(presentation);
+      assert.ok(embeddedStyle?.[1]);
+      const relationship = fontRelationships.find(
+        ([, relationshipId]) => relationshipId === embeddedStyle[1],
+      );
+      assert.ok(relationship?.[2]);
+      const fontPart = parts[`ppt/${relationship[2]}`]!;
+      const view = new DataView(
+        fontPart.buffer,
+        fontPart.byteOffset,
+        fontPart.byteLength,
+      );
+      const fontDataLength = view.getUint32(4, true);
+      assert.equal(view.getUint32(8, true), 0x00020002);
+      assert.equal(view.getUint32(28, true), expectedWeight);
+      assert.equal(fontDataLength, expectedBytes.byteLength);
+      assert.deepEqual(
+        fontPart.subarray(fontPart.byteLength - fontDataLength),
+        expectedBytes,
+      );
+    }
+  });
+
+  it("同一文字中的嵌入限制不受相同字节去重和片段顺序影响", async () => {
+    const policies = [
+      {
+        label: "not-embeddable",
+        options: { embeddable: false },
+        code: "font-not-embeddable",
+      },
+      {
+        label: "substitute",
+        options: { substitute: true },
+        code: "font-substitute-not-embeddable",
+      },
+    ] as const;
+
+    for (const { label, options, code } of policies) {
+      const allowed = font("Jost*", [{ weight: 400, data: jostBook }]);
+      const restricted = font(
+        "Jost*",
+        [{ weight: 400, data: jostBook }],
+        options,
+      );
+      for (const [order, fontValues] of [
+        ["allowed-first", [allowed, restricted]],
+        ["restricted-first", [restricted, allowed]],
+      ] as const) {
+        const testId = `font-policy-${label}-${order}`;
+        const spans = fontValues.map((fontValue, index) =>
+          createElement(
+            Span,
+            { key: index, style: { fontFamily: fontValue } },
+            `run ${index}`,
+          ),
+        );
+        await assert.rejects(
+          build(
+            deck(
+              createElement(
+                Text,
+                {
+                  testId,
+                  x: 24,
+                  y: 18,
+                  width: 240,
+                  height: 36,
+                },
+                ...spans,
+              ),
+            ),
+            { embedFonts: "full" },
+          ),
+          (error: unknown) => {
+            assert.ok(error instanceof BuildError);
+            assert.equal(error.diagnostics[0]?.code, code);
+            assert.equal(
+              error.diagnostics[0]?.path,
+              `deck/slide[cover]/text[${testId}]`,
+            );
+            return true;
+          },
+        );
+      }
+    }
+  });
+
+  it("允许的相同字体字节仍合并，默认构建仍不嵌入字体", async () => {
+    const firstAllowed = font("Jost*", [{ weight: 400, data: jostBook }]);
+    const secondAllowed = font("Jost*", [{ weight: 400, data: jostBook }]);
+    const full = await build(
+      deck(
+        createElement(
+          Text,
+          { testId: "same-font-bytes", x: 24, y: 18, width: 240, height: 36 },
+          createElement(Span, { style: { fontFamily: firstAllowed } }, "first"),
+          createElement(
+            Span,
+            { style: { fontFamily: secondAllowed } },
+            "second",
+          ),
+        ),
+      ),
+      { embedFonts: "full" },
+    );
+    const parts = unzipSync(full.pptx);
+    const presentation = strFromU8(parts["ppt/presentation.xml"]!);
+    assert.equal((presentation.match(/<p:embeddedFont>/gu) ?? []).length, 1);
+    assert.equal((presentation.match(/<p:regular r:id=/gu) ?? []).length, 1);
+    assert.equal(
+      Object.keys(parts).filter((path) => path.startsWith("ppt/fonts/")).length,
+      1,
+    );
+
+    const notRequested = await build(
+      deck(
+        createElement(
+          Text,
+          {
+            testId: "default-font-policy",
+            x: 24,
+            y: 18,
+            width: 240,
+            height: 36,
+          },
+          createElement(
+            Span,
+            { style: { fontFamily: firstAllowed } },
+            "allowed",
+          ),
+          createElement(
+            Span,
+            {
+              style: {
+                fontFamily: font("Jost*", [{ weight: 400, data: jostBook }], {
+                  embeddable: false,
+                }),
+              },
+            },
+            "not embedded",
+          ),
+        ),
+      ),
+    );
+    assert.deepEqual(
+      Object.keys(unzipSync(notRequested.pptx)).filter((path) =>
+        path.startsWith("ppt/fonts/"),
+      ),
+      [],
+    );
+    assert.deepEqual((await validatePptx(notRequested.pptx)).errors, []);
   });
 
   it("完整嵌入接受 Editable 与 no-subsetting 标志并保留完整字体文件", async () => {

@@ -247,6 +247,63 @@ function EmptySequenceMember() {
   );
 }
 
+function DelayedInactiveSequenceMember({
+  sourceMode,
+}: {
+  readonly sourceMode: "empty" | "static" | "disabled";
+}) {
+  const sequence = useMotionScope();
+  const inactive = useMotionScope();
+  const afterSequence = useMotionScope();
+  const afterInactive = useMotionScope();
+  const inactiveContent =
+    sourceMode === "empty"
+      ? null
+      : sourceMode === "static"
+        ? createElement(Shape, {
+            testId: "static-source",
+            x: 0,
+            y: 0,
+            width: 20,
+            height: 20,
+          })
+        : movingShape("disabled-source", 100);
+
+  return createElement(
+    Deck,
+    { width: 320, height: 180 },
+    createElement(
+      Slide,
+      { slideId: "delayed-inactive-sequence-member" },
+      createElement(
+        MotionScope,
+        { scope: sequence, mode: "sequence" },
+        movingShape("first", 100),
+        createElement(
+          MotionScope,
+          {
+            scope: inactive,
+            delay: 1000,
+            motion: sourceMode !== "disabled",
+          },
+          inactiveContent,
+        ),
+        movingShape("second", 100),
+      ),
+      createElement(
+        MotionScope,
+        { scope: afterSequence, startAt: sequence.end },
+        movingShape("after-sequence", 100),
+      ),
+      createElement(
+        MotionScope,
+        { scope: afterInactive, startAt: after(inactive.end, 25) },
+        movingShape("after-inactive", 100),
+      ),
+    ),
+  );
+}
+
 function EmptyStaggerMember() {
   const stagger = useMotionScope();
   const empty = useMotionScope();
@@ -568,6 +625,46 @@ describe("组件编排作用域", () => {
       ],
     );
     assert.deepEqual((await validatePptx(staggerResult.pptx)).errors, []);
+  });
+
+  it("非活动延迟子作用域不拉长父完成，且保留自身完成边界", async () => {
+    for (const sourceMode of ["empty", "static", "disabled"] as const) {
+      const result = await build(
+        createElement(DelayedInactiveSequenceMember, { sourceMode }),
+      );
+      const slide = result.report.slides[0];
+      const motion = slide?.capabilities?.["motion"] as MotionObservation;
+      assert.deepEqual(
+        motion.steps[0]?.effects.map(({ target, startMs, endMs }) => [
+          target.testId,
+          startMs,
+          endMs,
+        ]),
+        [
+          ["first", 0, 100],
+          ["second", 100, 200],
+          ["after-sequence", 200, 300],
+          ["after-inactive", 1125, 1225],
+        ],
+      );
+
+      const file = await validatePptx(result.pptx);
+      assert.deepEqual(file.errors, []);
+      assert.deepEqual(
+        file.slides[0]?.animations?.[0]?.effects.map(
+          ({ targetId, delayMs }) => [
+            slide?.objects.find(({ id }) => id === targetId)?.testId,
+            delayMs,
+          ],
+        ),
+        [
+          ["first", 0],
+          ["second", 100],
+          ["after-sequence", 200],
+          ["after-inactive", 1125],
+        ],
+      );
+    }
   });
 
   it("自行指定起点的并行成员仍计入父作用域整体完成", async () => {

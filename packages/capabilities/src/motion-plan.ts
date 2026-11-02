@@ -593,7 +593,8 @@ function motionPlan(
       }
       resolvingEnds.add(scope.declaration.identity);
       const start = resolveScopeStart(scope);
-      const members = directChildren(scope);
+      // 非活动作用域仍可提供自身边界时刻，但不延长父作用域的整体完成。
+      const members = activeChildren(scope);
       const memberEnds = members.map((member) => memberEnd(scope, member));
       const end = completion(start, memberEnds);
       ends.set(scope.declaration.identity, end);

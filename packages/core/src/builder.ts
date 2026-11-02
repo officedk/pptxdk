@@ -4,7 +4,7 @@ import type { ReactNode } from "react";
 import { CapabilityError, BuildError } from "#/diagnostics.ts";
 import { HostNode, type HostChild, type HostContainer } from "#/host/nodes.ts";
 import { withHostTree } from "#/host/reconciler.ts";
-import { pptxParts } from "#/ooxml.ts";
+import { assertXml10Characters, pptxParts, pxToEmu } from "#/ooxml.ts";
 import {
   formatBaseline,
   targets,
@@ -27,6 +27,8 @@ type SlideBuild = {
 };
 
 type Dimensions = { readonly width: number; readonly height: number };
+const minimumSlideSizeEmu = 914_400;
+const maximumSlideSizeEmu = 51_206_400;
 
 function diagnostic(path: string, code: string, message: string): Diagnostic {
   return { severity: "error", path, code, message };
@@ -161,17 +163,18 @@ function validateOptions(options: BuildOptions): Target {
 }
 
 function positiveDimension(value: unknown, label: string): number {
-  if (
-    typeof value !== "number" ||
-    !Number.isFinite(value) ||
-    value <= 0 ||
-    value > 1_000_000
-  ) {
+  if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) {
+    throw new BuildError([
+      diagnostic("deck", "invalid-dimension", `${label} 必须是有限正像素数值`),
+    ]);
+  }
+  const sizeEmu = pxToEmu(value);
+  if (sizeEmu < minimumSlideSizeEmu || sizeEmu > maximumSlideSizeEmu) {
     throw new BuildError([
       diagnostic(
         "deck",
         "invalid-dimension",
-        `${label} 必须是 0 到 1000000 之间的有限像素数值`,
+        `${label} 换算后的页面尺寸必须在 ${minimumSlideSizeEmu} 到 ${maximumSlideSizeEmu} EMU 的闭区间内`,
       ),
     ]);
   }
@@ -254,6 +257,17 @@ function resolveSlides(
           `deck/slide[${index + 1}]`,
           "invalid-slide-id",
           "Slide.slideId 必须是非空字符串",
+        ),
+      ]);
+    }
+    try {
+      assertXml10Characters(id);
+    } catch {
+      throw new BuildError([
+        diagnostic(
+          `deck/slide[${index + 1}]`,
+          "invalid-xml-character",
+          "Slide.slideId 含 XML 1.0 不允许的字符",
         ),
       ]);
     }

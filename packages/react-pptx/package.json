@@ -44,6 +44,7 @@
     "@react-pptx/validation": "workspace:*",
     "@types/node": "catalog:",
     "@types/react": "catalog:",
+    "fflate": "catalog:",
     "oxfmt": "catalog:",
     "oxlint": "catalog:",
     "oxlint-tsgolint": "catalog:",

@@ -175,7 +175,7 @@ try {
       'import { Deck, Shape, Slide, build } from "@react-pptx/react-pptx";',
       'import { validatePptx } from "@react-pptx/validation";',
       'import { writeFile } from "node:fs/promises";',
-      'const result = await build(createElement(Deck, { width: 120, height: 80 }, createElement(Slide, { slideId: "installed" }, createElement(Shape, { testId: "packed-shape", geometry: "hexagon", x: 10, y: 12, width: 45, height: 30, fill: "#123456" }))));',
+      'const result = await build(createElement(Deck, { width: 120, height: 96 }, createElement(Slide, { slideId: "installed" }, createElement(Shape, { testId: "packed-shape", geometry: "hexagon", x: 10, y: 12, width: 45, height: 30, fill: "#123456" }))));',
       "const file = await validatePptx(result.pptx);",
       'if (file.errors.length !== 0 || file.slides[0]?.objects[0]?.name !== "packed-shape") throw new Error(JSON.stringify(file.errors));',
       'await writeFile("artifact.pptx", result.pptx);',

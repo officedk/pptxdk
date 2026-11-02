@@ -45,6 +45,7 @@ const geometryNames = new Set([
   "leftBracket",
   "rightBracket",
 ]);
+const maximumShapeExtentEmu = 2_147_483_647;
 
 const allowedParameters = [
   "testId",
@@ -66,19 +67,26 @@ function requiredNumber(
   name: "x" | "y" | "width" | "height",
 ): number {
   const value = props[name];
-  const minimum = name === "width" || name === "height" ? 0 : -1_000_000;
+  const isExtent = name === "width" || name === "height";
+  const minimum = isExtent ? 0 : -1_000_000;
   if (
     typeof value !== "number" ||
     !Number.isFinite(value) ||
-    (name === "width" || name === "height"
-      ? value <= minimum
-      : value < minimum) ||
-    value > 1_000_000
+    (isExtent ? value <= minimum : value < minimum || value > 1_000_000)
   ) {
     throw new CapabilityError(
       "invalid-coordinate",
-      `${name} 必须是有限像素数值，宽高必须大于 0`,
+      `${name} 必须是有限像素数值，宽高必须大于 0，坐标范围为 -1000000 到 1000000`,
     );
+  }
+  if (isExtent) {
+    const extentEmu = pxToEmu(value);
+    if (extentEmu < 1 || extentEmu > maximumShapeExtentEmu) {
+      throw new CapabilityError(
+        "invalid-coordinate",
+        `${name} 换算后必须在 1 到 ${maximumShapeExtentEmu} EMU 的闭区间内`,
+      );
+    }
   }
   return value;
 }
@@ -97,7 +105,7 @@ function optionalText(
 
 function shapeXml(
   id: number,
-  name: string,
+  escapedName: string,
   geometry: string,
   box: { x: number; y: number; width: number; height: number },
   fill: string | undefined,
@@ -106,7 +114,7 @@ function shapeXml(
     fill === undefined
       ? "<a:noFill/>"
       : `<a:solidFill><a:srgbClr val="${fill}"/></a:solidFill>`;
-  return `<p:sp><p:nvSpPr><p:cNvPr id="${id}" name="${xmlEscape(name)}"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr><p:spPr><a:xfrm><a:off x="${pxToEmu(box.x)}" y="${pxToEmu(box.y)}"/><a:ext cx="${pxToEmu(box.width)}" cy="${pxToEmu(box.height)}"/></a:xfrm><a:prstGeom prst="${geometry}"><a:avLst/></a:prstGeom>${fillXml}<a:ln><a:noFill/></a:ln></p:spPr></p:sp>`;
+  return `<p:sp><p:nvSpPr><p:cNvPr id="${id}" name="${escapedName}"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr><p:spPr><a:xfrm><a:off x="${pxToEmu(box.x)}" y="${pxToEmu(box.y)}"/><a:ext cx="${pxToEmu(box.width)}" cy="${pxToEmu(box.height)}"/></a:xfrm><a:prstGeom prst="${geometry}"><a:avLst/></a:prstGeom>${fillXml}<a:ln><a:noFill/></a:ln></p:spPr></p:sp>`;
 }
 
 /** 形状模块独立校验输入、声明原生几何，并生成对应 PresentationML 对象。 */
@@ -153,10 +161,19 @@ export const shapeCapability: CapabilityModule = {
       throw new CapabilityError("invalid-fill", "fill 必须是 #RRGGBB 颜色");
     }
     const name = requestedName ?? testId ?? `Shape ${context.id - 1}`;
+    let escapedName: string;
+    try {
+      escapedName = xmlEscape(name);
+    } catch {
+      throw new CapabilityError(
+        "invalid-xml-character",
+        "Shape.name 含 XML 1.0 不允许的字符",
+      );
+    }
     return {
       xml: shapeXml(
         context.id,
-        name,
+        escapedName,
         geometry,
         box,
         fill?.slice(1).toUpperCase(),

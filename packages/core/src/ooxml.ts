@@ -2,13 +2,36 @@ export function pxToEmu(value: number): number {
   return Math.round(value * 9525);
 }
 
+export function assertXml10Characters(value: string): void {
+  for (const character of value) {
+    const codePoint = character.codePointAt(0);
+    if (
+      codePoint !== undefined &&
+      codePoint !== 0x9 &&
+      codePoint !== 0xa &&
+      codePoint !== 0xd &&
+      (codePoint < 0x20 ||
+        (codePoint >= 0xd800 && codePoint <= 0xdfff) ||
+        codePoint === 0xfffe ||
+        codePoint === 0xffff)
+    ) {
+      throw new Error("字符串包含 XML 1.0 不允许的字符");
+    }
+  }
+}
+
 export function xmlEscape(value: string): string {
+  assertXml10Characters(value);
+  // XML 会规范化属性中的原始空白，字符引用可以保留身份值。
   return value
     .replace(/&/gu, "&amp;")
     .replace(/</gu, "&lt;")
     .replace(/>/gu, "&gt;")
     .replace(/"/gu, "&quot;")
-    .replace(/'/gu, "&apos;");
+    .replace(/'/gu, "&apos;")
+    .replace(/\r/gu, "&#xD;")
+    .replace(/\n/gu, "&#xA;")
+    .replace(/\t/gu, "&#x9;");
 }
 
 export function xmlDocument(body: string): string {
@@ -25,6 +48,7 @@ const namespaces = {
 
 const emptyShapeTree =
   '<p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/><a:chOff x="0" y="0"/><a:chExt cx="0" cy="0"/></a:xfrm></p:grpSpPr>';
+const minimumSlideLayoutId = 2_147_483_648;
 
 function relationships(
   entries: readonly { id: string; type: string; target: string }[],
@@ -88,7 +112,7 @@ function master(): string {
   const colorMap =
     '<p:clrMap bg1="lt1" tx1="dk1" bg2="lt2" tx2="dk2" accent1="accent1" accent2="accent2" accent3="accent3" accent4="accent4" accent5="accent5" accent6="accent6" hlink="hlink" folHlink="folHlink"/>';
   return xmlDocument(
-    `<p:sldMaster xmlns:a="${namespaces.a}" xmlns:r="${namespaces.r}" xmlns:p="${namespaces.p}"><p:cSld name="Office Theme"><p:spTree>${emptyShapeTree}</p:spTree></p:cSld>${colorMap}<p:sldLayoutIdLst><p:sldLayoutId id="1" r:id="rId1"/></p:sldLayoutIdLst><p:txStyles><p:titleStyle/><p:bodyStyle/><p:otherStyle/></p:txStyles></p:sldMaster>`,
+    `<p:sldMaster xmlns:a="${namespaces.a}" xmlns:r="${namespaces.r}" xmlns:p="${namespaces.p}"><p:cSld name="Office Theme"><p:spTree>${emptyShapeTree}</p:spTree></p:cSld>${colorMap}<p:sldLayoutIdLst><p:sldLayoutId id="${minimumSlideLayoutId}" r:id="rId1"/></p:sldLayoutIdLst><p:txStyles><p:titleStyle/><p:bodyStyle/><p:otherStyle/></p:txStyles></p:sldMaster>`,
   );
 }
 

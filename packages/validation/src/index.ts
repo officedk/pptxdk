@@ -14,6 +14,11 @@ const packageRelationshipNamespace =
 const contentTypeNamespace =
   "http://schemas.openxmlformats.org/package/2006/content-types";
 const transitionalStandard = "ECMA-376 5th edition Transitional";
+const minimumSlideLayoutId = 2_147_483_648;
+const maximumSlideLayoutId = 4_294_967_295;
+const minimumSlideSizeEmu = 914_400;
+const maximumSlideSizeEmu = 51_206_400;
+const maximumShapeExtentEmu = 2_147_483_647;
 
 export type ValidationIssue = {
   readonly part: string;
@@ -328,6 +333,36 @@ function requireRoot(
   }
 }
 
+function validateSlideLayoutIds(
+  documents: Documents,
+  errors: ValidationIssue[],
+): void {
+  const part = "ppt/slideMasters/slideMaster1.xml";
+  const root = documents.get(part)?.documentElement;
+  if (root == null) return;
+  const layoutIds = first(root, presentationNamespace, "sldLayoutIdLst");
+  if (layoutIds === undefined) return;
+  for (const layoutId of elements(
+    layoutIds,
+    presentationNamespace,
+    "sldLayoutId",
+  )) {
+    const id = integerAttribute(layoutId, "id");
+    if (
+      id === undefined ||
+      id < minimumSlideLayoutId ||
+      id > maximumSlideLayoutId
+    ) {
+      issue(
+        errors,
+        part,
+        "invalid-slide-layout-id",
+        `母版版式标识 ${attribute(layoutId, "id")} 必须是 ${minimumSlideLayoutId} 至 ${maximumSlideLayoutId} 的整数`,
+      );
+    }
+  }
+}
+
 function validateShape(
   shape: XmlElement,
   part: string,
@@ -382,8 +417,10 @@ function validateShape(
     y === undefined ||
     width === undefined ||
     height === undefined ||
-    width <= 0 ||
-    height <= 0
+    width < 1 ||
+    width > maximumShapeExtentEmu ||
+    height < 1 ||
+    height > maximumShapeExtentEmu
   ) {
     issue(
       errors,
@@ -424,10 +461,17 @@ function readPresentation(
   if (
     widthEmu === undefined ||
     heightEmu === undefined ||
-    widthEmu <= 0 ||
-    heightEmu <= 0
+    widthEmu < minimumSlideSizeEmu ||
+    widthEmu > maximumSlideSizeEmu ||
+    heightEmu < minimumSlideSizeEmu ||
+    heightEmu > maximumSlideSizeEmu
   ) {
-    issue(errors, part, "invalid-slide-size", "页面尺寸缺失或无效");
+    issue(
+      errors,
+      part,
+      "invalid-slide-size",
+      `页面尺寸必须在 ${minimumSlideSizeEmu} 到 ${maximumSlideSizeEmu} EMU 的闭区间内`,
+    );
   }
   const ids = first(root, presentationNamespace, "sldIdLst");
   const slideIds =
@@ -567,6 +611,7 @@ export async function validatePptx(
     presentationNamespace,
     "sldMaster",
   );
+  validateSlideLayoutIds(documents, errors);
   requireRoot(
     documents,
     errors,

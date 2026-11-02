@@ -11,6 +11,7 @@ import {
   targets,
 } from "@react-pptx/react-pptx";
 import { validatePptx } from "@react-pptx/validation";
+import { strFromU8, strToU8, unzipSync, zipSync } from "fflate";
 import {
   createElement,
   useEffect,
@@ -75,6 +76,295 @@ describe("公开构建入口", () => {
       geometry: "ellipse",
       boxEmu: { x: 304800, y: 457200, width: 1143000, height: 685800 },
     });
+  });
+
+  it("从 PPTX 实际读回时保留页面标识中的换行、回车和制表符", async () => {
+    const slideIds = [
+      "alpha\nbeta",
+      "alpha\rbeta",
+      "alpha\tbeta",
+      "alpha beta",
+    ] as const;
+    const result = await build(
+      createElement(
+        Deck,
+        { width: 960, height: 540 },
+        createElement(
+          Slide,
+          { slideId: slideIds[0] },
+          createElement(Shape, {
+            testId: "object-name",
+            name: "object\nname\r\tend",
+            x: 0,
+            y: 0,
+            width: 40,
+            height: 30,
+          }),
+          createElement(Shape, {
+            testId: "test\nid",
+            x: 50,
+            y: 0,
+            width: 40,
+            height: 30,
+          }),
+        ),
+        ...slideIds
+          .slice(1)
+          .map((slideId) => createElement(Slide, { slideId })),
+      ),
+    );
+
+    const file = await validatePptx(result.pptx);
+
+    assert.deepEqual(
+      result.report.slides.map(({ id }) => id),
+      slideIds,
+    );
+    assert.deepEqual(file.errors, []);
+    assert.deepEqual(
+      file.slides.map(({ id }) => id),
+      slideIds,
+    );
+    assert.deepEqual(
+      file.slides[0]?.objects.map(({ name }) => name),
+      ["object\nname\r\tend", "test\nid"],
+    );
+  });
+
+  it("拒绝 XML 1.0 无法表示的对象名称和页面标识并定位来源", async () => {
+    const invalidObjectName = deck(
+      createElement(Shape, {
+        testId: "invalid-name",
+        name: "hello\u0000world",
+        x: 0,
+        y: 0,
+        width: 40,
+        height: 30,
+      }),
+    );
+    const invalidTestId = deck(
+      createElement(Shape, {
+        testId: "hello\u0000world",
+        x: 0,
+        y: 0,
+        width: 40,
+        height: 30,
+      }),
+    );
+    const invalidSlideId = createElement(
+      Deck,
+      { width: 960, height: 540 },
+      createElement(Slide, { slideId: "alpha\u0000beta" }),
+    );
+
+    for (const [element, path] of [
+      [invalidObjectName, /slide\[cover\].*shape\[invalid-name\]/u],
+      [invalidTestId, /slide\[cover\].*shape\[/u],
+      [invalidSlideId, /slide\[1\]/u],
+    ] as const) {
+      await assert.rejects(build(element), (error: unknown) => {
+        assert.ok(error instanceof BuildError);
+        assert.equal(error.diagnostics[0]?.code, "invalid-xml-character");
+        assert.match(error.diagnostics[0]?.path ?? "", path);
+        return true;
+      });
+    }
+  });
+
+  it("拒绝无法在 EMU 闭区间内表达的形状宽高", async () => {
+    for (const size of [
+      { width: 0.00001, height: 20 },
+      { width: 40, height: 0.00001 },
+      { width: 1_000_000, height: 20 },
+      { width: 40, height: 1_000_000 },
+    ]) {
+      await assert.rejects(
+        build(
+          deck(
+            createElement(Shape, {
+              testId: "too-small",
+              x: 0,
+              y: 0,
+              ...size,
+            }),
+          ),
+        ),
+        (error: unknown) => {
+          assert.ok(error instanceof BuildError);
+          assert.equal(error.diagnostics[0]?.code, "invalid-coordinate");
+          assert.match(
+            error.diagnostics[0]?.path ?? "",
+            /slide\[cover\].*shape\[too-small\]/u,
+          );
+          return true;
+        },
+      );
+    }
+  });
+
+  it("独立读取器接受形状宽高的最终 EMU 闭区间边界", async () => {
+    const result = await build(
+      createElement(
+        Deck,
+        { width: 5376, height: 5376 },
+        createElement(
+          Slide,
+          { slideId: "extent-boundary" },
+          createElement(Shape, {
+            testId: "extent-boundary",
+            x: 0,
+            y: 0,
+            // 该像素值按标准换算后舍入到形状尺寸上界。
+            width: 225457.60073490813,
+            height: 0.00006,
+          }),
+        ),
+      ),
+    );
+
+    const file = await validatePptx(result.pptx);
+
+    assert.deepEqual(file.errors, []);
+    assert.equal(file.slides[0]?.objects[0]?.boxEmu.width, 2_147_483_647);
+    assert.equal(file.slides[0]?.objects[0]?.boxEmu.height, 1);
+  });
+
+  it("独立校验器拒绝超过格式上限的形状尺寸", async () => {
+    const result = await build(
+      deck(
+        createElement(Shape, {
+          testId: "oversized",
+          x: 0,
+          y: 0,
+          width: 40,
+          height: 30,
+        }),
+      ),
+    );
+    const parts = unzipSync(result.pptx);
+    const slidePart = "ppt/slides/slide1.xml";
+    const slide = parts[slidePart];
+    assert.ok(slide);
+    const slideXml = strFromU8(slide);
+    const invalidSlideXml = slideXml.replace(
+      '<a:ext cx="381000" cy="285750"',
+      '<a:ext cx="2147483648" cy="285750"',
+    );
+    assert.notEqual(invalidSlideXml, slideXml);
+    parts[slidePart] = strToU8(invalidSlideXml);
+
+    const file = await validatePptx(zipSync(parts));
+
+    assert.ok(
+      file.errors.some(
+        ({ part, code }) =>
+          part === slidePart && code === "invalid-shape-transform",
+      ),
+    );
+  });
+
+  it("按最终 EMU 限制页面尺寸并保留边界内的小数像素", async () => {
+    const boundary = await build(
+      createElement(
+        Deck,
+        { width: 95.99995, height: 5376.00005 },
+        createElement(Slide, { slideId: "boundary" }),
+      ),
+    );
+    const boundaryFile = await validatePptx(boundary.pptx);
+    assert.deepEqual(boundaryFile.errors, []);
+    assert.equal(boundaryFile.presentation.widthEmu, 914400);
+    assert.equal(boundaryFile.presentation.heightEmu, 51206400);
+
+    for (const size of [
+      { width: 1, height: 1 },
+      { width: 95.9999, height: 100 },
+      { width: 100, height: 95.9999 },
+      { width: 5376.0001, height: 100 },
+      { width: 100, height: 5376.0001 },
+      { width: 10000, height: 720 },
+    ]) {
+      await assert.rejects(
+        build(
+          createElement(
+            Deck,
+            size,
+            createElement(Slide, { slideId: "invalid-size" }),
+          ),
+        ),
+        (error: unknown) => {
+          assert.ok(error instanceof BuildError);
+          assert.equal(error.diagnostics[0]?.code, "invalid-dimension");
+          assert.equal(error.diagnostics[0]?.path, "deck");
+          return true;
+        },
+      );
+    }
+  });
+
+  it("独立校验器拒绝超出格式范围的实际页面尺寸", async () => {
+    const result = await build(
+      createElement(
+        Deck,
+        { width: 96, height: 5376 },
+        createElement(Slide, { slideId: "size" }),
+      ),
+    );
+    const parts = unzipSync(result.pptx);
+    const presentationPart = "ppt/presentation.xml";
+    const presentation = parts[presentationPart];
+    assert.ok(presentation);
+    const presentationXml = strFromU8(presentation);
+    const invalidPresentationXml = presentationXml
+      .replace('cx="914400"', 'cx="914399"')
+      .replace('cy="51206400"', 'cy="51206401"');
+    assert.notEqual(invalidPresentationXml, presentationXml);
+    parts[presentationPart] = strToU8(invalidPresentationXml);
+
+    const file = await validatePptx(zipSync(parts));
+
+    assert.ok(
+      file.errors.some(
+        ({ part, code }) =>
+          part === presentationPart && code === "invalid-slide-size",
+      ),
+    );
+  });
+
+  it("独立校验器拒绝低于格式下限的母版版式标识", async () => {
+    const result = await build(
+      deck(
+        createElement(Shape, {
+          testId: "badge",
+          geometry: "ellipse",
+          x: 32,
+          y: 48,
+          width: 120,
+          height: 72,
+        }),
+      ),
+    );
+    const parts = unzipSync(result.pptx);
+    const masterPart = "ppt/slideMasters/slideMaster1.xml";
+    const master = parts[masterPart];
+    assert.ok(master);
+    const masterXml = strFromU8(master);
+    const invalidMasterXml = masterXml.replace(
+      /(<p:sldLayoutId id=")\d+(")/u,
+      (_match, prefix: string, suffix: string) =>
+        `${prefix}2147483647${suffix}`,
+    );
+    assert.notEqual(invalidMasterXml, masterXml);
+    parts[masterPart] = strToU8(invalidMasterXml);
+
+    const file = await validatePptx(zipSync(parts));
+
+    assert.ok(
+      file.errors.some(
+        ({ part, code }) =>
+          part === masterPart && code === "invalid-slide-layout-id",
+      ),
+    );
   });
 
   it("等待真实组件的布局与被动 Effect 提交并完成 root 卸载清理", async () => {
@@ -189,7 +479,7 @@ describe("公开构建入口", () => {
     const result = await build(
       createElement(
         Deck,
-        { width: 100, height: 80 },
+        { width: 100, height: 100 },
         createElement(
           Slide,
           { slideId: "cover" },

@@ -110,6 +110,57 @@ describe("react-pptx 单次导出 CLI", () => {
     }
   });
 
+  it("源码导入期间取消立即结束本次调用并隔离并发加载", async () => {
+    const programmaticScript = [
+      'import { buildFromSource } from "@react-pptx/react-pptx/node";',
+      'import { pathToFileURL } from "node:url";',
+      `const pendingEntry = ${JSON.stringify(fixture("source-load-pending.tsx"))};`,
+      `const concurrentEntry = ${JSON.stringify(fixture("source-load-after-cancel.tsx"))};`,
+      `const unloadedEntry = ${JSON.stringify(fixture("unloaded after cancellation.tsx"))};`,
+      `const independentEntry = ${JSON.stringify(fixture("independent deck.tsx"))};`,
+      'async function expectHookReleased(path) { const error = await import(pathToFileURL(path).href).then(() => undefined, failure => failure); if (error?.code !== "ERR_UNKNOWN_FILE_EXTENSION") throw new Error(JSON.stringify({ path, error })); }',
+      "const state = { controller: new AbortController(), started: false, concurrentStarted: false, rejectPending: undefined, allowConcurrentImport: undefined };",
+      "globalThis.__reactPptxSourceLoadState = state;",
+      "const preController = new AbortController();",
+      'const preReason = new Error("源码接入前已取消");',
+      "preController.abort(preReason);",
+      "const preCancelled = await buildFromSource(pendingEntry, { signal: preController.signal }).then(() => undefined, error => error);",
+      'if (preCancelled !== preReason || state.started) throw new Error("预取消执行了源码入口或未保留取消原因");',
+      'const reason = new Error("源码导入期间取消");',
+      "const unhandled = [];",
+      "const collectUnhandled = error => unhandled.push(error);",
+      'process.on("unhandledRejection", collectUnhandled);',
+      'const first = buildFromSource(pendingEntry, { signal: state.controller.signal }).then(value => ({ kind: "built", value }), error => ({ kind: "failed", error }));',
+      "while (!state.started) await new Promise(setImmediate);",
+      "const second = buildFromSource(concurrentEntry);",
+      "while (!state.concurrentStarted) await new Promise(setImmediate);",
+      "state.controller.abort(reason);",
+      'const firstOutcome = await Promise.race([first, new Promise(resolve => setImmediate(() => resolve({ kind: "pending" })))]);',
+      'if (firstOutcome.kind === "pending") { state.rejectPending(reason); await first; throw new Error("源码导入取消未及时结束调用"); }',
+      'if (firstOutcome.kind !== "failed" || firstOutcome.error !== reason) throw new Error("源码导入取消没有保留原始原因");',
+      "state.rejectPending(reason);",
+      'if (state.allowConcurrentImport === undefined) throw new Error("并发入口尚未进入延迟导入阶段");',
+      "state.allowConcurrentImport();",
+      "const secondResult = await second;",
+      'if (secondResult.report.slides[0]?.id !== "source-after-cancellation") throw new Error("A 取消影响了并发 B 的延迟 TSX 导入");',
+      "await new Promise(resolve => setTimeout(resolve, 0));",
+      'process.removeListener("unhandledRejection", collectUnhandled);',
+      "if (unhandled.length > 0) throw new Error(`晚到模块拒绝未被接管：${String(unhandled[0])}`);",
+      "await expectHookReleased(unloadedEntry);",
+      "const independent = await buildFromSource(independentEntry);",
+      'if (independent.report.slides[0]?.id !== "independent") throw new Error("取消后后续源码构建失败");',
+    ].join("\n");
+    const programmatic = runNode(
+      ["--input-type=module", "-e", programmaticScript],
+      import.meta.dirname,
+    );
+
+    expect(
+      programmatic.code,
+      `${programmatic.stderr}\n${programmatic.stdout}`,
+    ).toBe(0);
+  });
+
   it("构建诊断导致失败退出且不写出伪成功制品", async () => {
     const directory = await mkdtemp(join(tmpdir(), "react-pptx cli "));
     try {
@@ -159,6 +210,47 @@ describe("react-pptx 单次导出 CLI", () => {
 
       expect(code).toBe(130);
       expect(stderr).toContain("已取消");
+      expect(existsSync(output)).toBe(false);
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("源码导入期间的 SIGINT 保持取消退出状态", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "react-pptx cli "));
+    try {
+      const output = join(directory, "cancelled-during-source-load.pptx");
+      const child = spawn(
+        process.execPath,
+        [cli, fixture("source-load-cli-cancelled.tsx"), "--out", output],
+        {
+          cwd: directory,
+          stdio: ["ignore", "pipe", "pipe"],
+        },
+      );
+      let stdout = "";
+      let stderr = "";
+      let interrupted = false;
+      child.stdout.setEncoding("utf8");
+      child.stderr.setEncoding("utf8");
+      child.stdout.on("data", (chunk: string) => {
+        stdout += chunk;
+        if (
+          !interrupted &&
+          stdout.includes("__react_pptx_source_load_cancel_ready__")
+        ) {
+          interrupted = true;
+          child.kill("SIGINT");
+        }
+      });
+      child.stderr.on("data", (chunk: string) => {
+        stderr += chunk;
+      });
+      const code = await waitForClose(child);
+
+      expect(code).toBe(130);
+      expect(stderr).toContain("已取消");
+      expect(stderr).not.toContain("源码接入失败");
       expect(existsSync(output)).toBe(false);
     } finally {
       await rm(directory, { recursive: true, force: true });

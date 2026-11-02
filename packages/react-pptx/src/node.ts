@@ -72,11 +72,53 @@ function sourceUrl(entry: string | URL): URL {
   return pathToFileURL(entry);
 }
 
-async function loadDeck(url: URL, exportName: string): Promise<ReactNode> {
-  let deckModule: Record<string, unknown>;
-  try {
-    deckModule = (await import(url.href)) as Record<string, unknown>;
-  } catch (cause) {
+type SourceModuleLoad =
+  | { readonly kind: "loaded"; readonly module: Record<string, unknown> }
+  | { readonly kind: "cancelled" }
+  | { readonly kind: "failed"; readonly cause: unknown };
+
+function importSourceModule(
+  url: URL,
+  signal?: AbortSignal,
+): Promise<SourceModuleLoad> {
+  return new Promise((resolve) => {
+    let settled = false;
+    const settle = (result: SourceModuleLoad) => {
+      if (settled) return;
+      settled = true;
+      signal?.removeEventListener("abort", onAbort);
+      resolve(result);
+    };
+    const onAbort = () => settle({ kind: "cancelled" });
+
+    if (signal?.aborted) {
+      onAbort();
+      return;
+    }
+    signal?.addEventListener("abort", onAbort, { once: true });
+    if (signal?.aborted) {
+      onAbort();
+      return;
+    }
+
+    // 导入启动后不能中止；接管晚到完成或拒绝，避免拒绝脱离本次调用。
+    void import(url.href).then(
+      (module: Record<string, unknown>) => settle({ kind: "loaded", module }),
+      (cause: unknown) => settle({ kind: "failed", cause }),
+    );
+  });
+}
+
+async function loadDeck(
+  url: URL,
+  exportName: string,
+  signal?: AbortSignal,
+): Promise<ReactNode> {
+  const loaded = await importSourceModule(url, signal);
+  if (loaded.kind === "cancelled") throw signal?.reason;
+
+  if (loaded.kind === "failed") {
+    const { cause } = loaded;
     const details =
       cause instanceof Error ? (cause.stack ?? cause.message) : String(cause);
     throw new SourceLoadError(
@@ -87,6 +129,7 @@ async function loadDeck(url: URL, exportName: string): Promise<ReactNode> {
     );
   }
 
+  const deckModule = loaded.module;
   const exported = deckModule[exportName];
   if (isValidElement(exported)) return exported;
   if (typeof exported === "function") {
@@ -100,7 +143,8 @@ async function loadDeck(url: URL, exportName: string): Promise<ReactNode> {
 
 /**
  * 从 Node.js 本地 ESM 源码入口执行正式构建。TS、TSX、MTS 和 JSX 由本入口加载；
- * 入口及其源码依赖仍按 Node 的文件位置解析。返回值与 `build` 完全相同。
+ * 入口及其源码依赖仍按 Node 的文件位置解析。取消信号也覆盖源码导入，并保留原始取消原因。
+ * 返回值与 `build` 完全相同。
  */
 export async function buildFromSource(
   entry: string | URL,
@@ -112,7 +156,7 @@ export async function buildFromSource(
 
   const hooks = registerSourceLoader();
   try {
-    const deck = await loadDeck(url, exportName);
+    const deck = await loadDeck(url, exportName, buildOptions.signal);
     return await build(deck, buildOptions);
   } finally {
     hooks.deregister();

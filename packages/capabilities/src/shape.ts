@@ -17,6 +17,7 @@ import {
 } from "./motion-api.ts";
 import {
   measureTextLayout,
+  textInsets,
   writeTextBody,
   type TextStyle,
 } from "./text-service.ts";
@@ -214,6 +215,7 @@ export const shapeCapability: CapabilityModule = {
       typeof props["style"] === "object" && props["style"] !== null
         ? (props["style"] as Record<string, unknown>)
         : {};
+    const insets = textInsets(layoutStyle);
     const box =
       context.layoutBox === undefined
         ? {
@@ -254,7 +256,11 @@ export const shapeCapability: CapabilityModule = {
         [{ type: "#text", text }],
         props["textStyle"],
         "middle",
-        { width: box.width, height: box.height },
+        {
+          width: Math.max(0, box.width - insets.left - insets.right),
+          height: Math.max(0, box.height - insets.top - insets.bottom),
+          insets,
+        },
       );
     }
     const name = requestedName ?? testId ?? `Shape ${context.id - 1}`;

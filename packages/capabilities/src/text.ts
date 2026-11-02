@@ -11,6 +11,7 @@ import {
 import { motionAnnotations } from "./motion-api.ts";
 import {
   measureTextLayout,
+  textInsets,
   textExtent,
   writeTextBody,
 } from "./text-service.ts";
@@ -153,6 +154,7 @@ export const textCapability: CapabilityModule = {
     request: CapabilityLayoutRequest,
   ): CapabilityLayoutMeasurement | undefined {
     const style = textStyle(input.props["style"]);
+    const insets = textInsets(input.props["style"]);
     const heightStyle = layoutStyleValue(input, "height");
     const isContentSized =
       heightStyle === "auto" ||
@@ -167,7 +169,11 @@ export const textCapability: CapabilityModule = {
       return measureTextLayout(
         input.children,
         style,
-        typeof width === "number" ? width : undefined,
+        request.availableWidth !== undefined
+          ? request.availableWidth
+          : typeof width === "number"
+            ? Math.max(0, width - insets.left - insets.right)
+            : undefined,
       );
     } catch (error) {
       if (
@@ -193,6 +199,7 @@ export const textCapability: CapabilityModule = {
     }
     const testId = optionalName(input.props["testId"], "testId");
     const requestedName = optionalName(input.props["name"], "name");
+    const insets = textInsets(input.props["style"]);
     const styleWidth = layoutStyleValue(input, "width");
     const styleHeight = layoutStyleValue(input, "height");
     const dimensions = {
@@ -208,14 +215,23 @@ export const textCapability: CapabilityModule = {
       ? undefined
       : requestedHeight.value;
     const outputHeight = context.layoutBox?.height ?? measuredHeight;
+    const innerWidth = Math.max(
+      0,
+      dimensions.width - insets.left - insets.right,
+    );
+    const innerHeight =
+      outputHeight === undefined
+        ? undefined
+        : Math.max(0, outputHeight - insets.top - insets.bottom);
     const body = writeTextBody(
       input.children,
       textStyle(input.props["style"]),
       "top",
       {
-        width: dimensions.width,
-        ...(outputHeight === undefined ? {} : { height: outputHeight }),
+        width: innerWidth,
+        ...(innerHeight === undefined ? {} : { height: innerHeight }),
         contentSized: requestedHeight.contentSized,
+        insets,
       },
     );
     const box = {
@@ -223,7 +239,9 @@ export const textCapability: CapabilityModule = {
       height: size(
         context.layoutBox?.height ??
           (requestedHeight.contentSized
-            ? body.measurement?.height
+            ? body.measurement === undefined
+              ? undefined
+              : body.measurement.height + insets.top + insets.bottom
             : requestedHeight.value),
         "height",
       ),

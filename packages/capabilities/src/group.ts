@@ -4,6 +4,7 @@ import {
   xmlEscape,
   type CapabilityInput,
   type CapabilityModule,
+  type LayoutStyle,
   type ObjectObservation,
 } from "@react-pptx/core";
 import type { ReactNode } from "react";
@@ -18,12 +19,14 @@ import {
 export type GroupProps = MotionProps & {
   readonly testId?: string;
   readonly name?: string;
+  readonly style?: LayoutStyle;
   readonly children?: ReactNode;
 };
 
 const allowedParameters = [
   "testId",
   "name",
+  "style",
   "enter",
   "emphasis",
   "motion",
@@ -140,6 +143,19 @@ export const groupCapability: CapabilityModule = {
     const requestedName = optionalText(input.props, "name");
     const compiled = context.compileChildren(input.children);
     const geometry = bounds(compiled.objects);
+    const outputGeometry = context.layoutBox ?? geometry.pixels;
+    if (outputGeometry.width <= 0 || outputGeometry.height <= 0) {
+      throw new CapabilityError(
+        "invalid-group-geometry",
+        "Group 布局范围的宽和高必须大于 0",
+      );
+    }
+    const outputEmu = {
+      x: pxToEmu(outputGeometry.x),
+      y: pxToEmu(outputGeometry.y),
+      width: pxToEmu(outputGeometry.width),
+      height: pxToEmu(outputGeometry.height),
+    };
     const name = requestedName ?? testId ?? `Group ${context.id - 1}`;
     const annotations = motionAnnotations(input.props, {
       kind: "group",
@@ -158,13 +174,13 @@ export const groupCapability: CapabilityModule = {
       );
     }
     return {
-      xml: groupXml(context.id, escapedName, geometry.emu, compiled.xml),
+      xml: groupXml(context.id, escapedName, outputEmu, compiled.xml),
       observation: {
         id: context.id,
         kind: "group",
         name,
         ...(testId === undefined ? {} : { testId }),
-        box: geometry.pixels,
+        box: outputGeometry,
         members: compiled.objects,
       },
       extensions: [],

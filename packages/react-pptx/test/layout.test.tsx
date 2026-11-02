@@ -5,15 +5,21 @@ import {
   Box,
   build,
   BuildError,
+  Chart,
+  Cell,
   Deck,
+  fade,
   font,
   Group,
   Image,
   Shape,
   Slide,
+  Row,
+  Table,
   Text,
 } from "@react-pptx/react-pptx";
 import { validatePptx } from "@react-pptx/validation";
+import { strFromU8, unzipSync } from "fflate";
 import { createElement } from "react";
 import { describe, it } from "vitest";
 
@@ -32,6 +38,555 @@ const wideImage = new Uint8Array(
 );
 
 describe("公开布局入口", () => {
+  it("Slide 可作为画布网格容器，隐藏子树不输出，zIndex 只改绘制顺序", async () => {
+    const result = await build(
+      <Deck width={320} height={180}>
+        <Slide
+          slideId="slide-grid"
+          style={{
+            display: "grid",
+            gridTemplateColumns: "2fr 1fr",
+            gridTemplateRows: "100px",
+          }}
+        >
+          <Shape
+            testId="front"
+            height={30}
+            enter={fade()}
+            style={{ aspectRatio: 2, zIndex: 1 }}
+          />
+          <Shape
+            testId="back"
+            width={100}
+            height={40}
+            enter={fade()}
+            style={{ gridColumn: 2, gridRow: 1, zIndex: -1 }}
+          />
+          <Shape
+            testId="hidden"
+            style={{ display: "none", width: 500, height: 500 }}
+          />
+        </Slide>
+      </Deck>,
+    );
+
+    assert.deepEqual(
+      result.report.slides[0]?.objects.map(({ id, testId, box }) => ({
+        id,
+        testId,
+        box,
+      })),
+      [
+        {
+          id: 3,
+          testId: "back",
+          box: { x: 213.33, y: 0, width: 100, height: 40 },
+        },
+        { id: 2, testId: "front", box: { x: 0, y: 0, width: 60, height: 30 } },
+      ],
+    );
+    const slideXml = strFromU8(
+      unzipSync(result.pptx)["ppt/slides/slide1.xml"]!,
+    );
+    assert.ok(
+      slideXml.indexOf('name="back"') < slideXml.indexOf('name="front"'),
+    );
+    assert.equal(slideXml.includes('name="hidden"'), false);
+    const motion = result.report.slides[0]?.capabilities?.["motion"] as {
+      readonly steps: readonly {
+        readonly effects: readonly {
+          readonly target: { readonly testId?: string };
+        }[];
+      }[];
+    };
+    assert.deepEqual(
+      motion.steps[0]?.effects.map(({ target }) => target.testId),
+      ["front", "back"],
+    );
+    assert.deepEqual((await validatePptx(result.pptx)).errors, []);
+  });
+
+  it("Grid 中的 Table 与 Chart 使用各自原生尺寸模型", async () => {
+    const result = await build(
+      <Deck width={320} height={240}>
+        <Slide slideId="grid-native-layout">
+          <Box
+            testId="grid-native"
+            style={{
+              display: "grid",
+              width: 300,
+              height: 180,
+              gridTemplateColumns: "1fr 1fr",
+              gridTemplateRows: "1fr",
+              columnGap: 10,
+            }}
+          >
+            <Table
+              testId="grid-table"
+              columns={["1fr"]}
+              style={{ fontFamily: cjkFont, fontSize: 12, gridColumn: 1 }}
+            >
+              <Row>
+                <Cell>Table</Cell>
+              </Row>
+            </Table>
+            <Chart
+              testId="grid-chart"
+              kind="line"
+              style={{ gridColumn: 2 }}
+              data={{ categories: ["A"], series: [{ name: "S", values: [1] }] }}
+            />
+          </Box>
+        </Slide>
+      </Deck>,
+    );
+    const objects = result.report.slides[0]?.objects ?? [];
+    assert.deepEqual(
+      objects.map(({ kind, testId, box }) => ({ kind, testId, box })),
+      [
+        {
+          kind: "table",
+          testId: "grid-table",
+          box: { x: 0, y: 0, width: 145, height: 180 },
+        },
+        {
+          kind: "chart",
+          testId: "grid-chart",
+          box: { x: 155, y: 0, width: 145, height: 180 },
+        },
+      ],
+    );
+    assert.deepEqual((await validatePptx(result.pptx)).errors, []);
+  });
+
+  it("Grid 轨道从容器内边距之后开始", async () => {
+    const result = await build(
+      <Deck width={320} height={240}>
+        <Slide slideId="grid-padding">
+          <Box
+            style={{
+              display: "grid",
+              width: 200,
+              height: 100,
+              padding: [10, 20],
+              gridTemplateColumns: "1fr",
+              gridTemplateRows: "1fr",
+            }}
+          >
+            <Shape testId="inside-padding" />
+          </Box>
+        </Slide>
+      </Deck>,
+    );
+
+    assert.deepEqual(result.report.slides[0]?.objects[0]?.box, {
+      x: 20,
+      y: 10,
+      width: 160,
+      height: 80,
+    });
+    assert.deepEqual((await validatePptx(result.pptx)).errors, []);
+  });
+
+  it("auto 网格轨道尊重文字 min-content 并与原生对象几何一致", async () => {
+    const result = await build(
+      <Deck width={320} height={240}>
+        <Slide slideId="grid-min-content">
+          <Box
+            style={{
+              display: "grid",
+              width: 140,
+              height: 50,
+              gridTemplateColumns: "auto 1fr",
+              gridTemplateRows: "1fr",
+              columnGap: 10,
+            }}
+          >
+            <Text
+              testId="min-content"
+              style={{ fontFamily: cjkFont, fontSize: 20 }}
+            >
+              WWWW
+            </Text>
+            <Shape testId="after-min-content" width={20} height={20} />
+          </Box>
+        </Slide>
+      </Deck>,
+    );
+    const objects = result.report.slides[0]?.objects ?? [];
+    const text = objects.find(({ testId }) => testId === "min-content");
+    const afterText = objects.find(
+      ({ testId }) => testId === "after-min-content",
+    );
+    assert.ok(text?.box !== undefined && text.box.width > 0);
+    assert.equal(afterText?.box?.x, text.box.x + text.box.width + 10);
+
+    const file = await validatePptx(result.pptx);
+    assert.deepEqual(file.errors, []);
+    const nativeText = file.slides[0]?.objects.find(
+      ({ name }) => name === "min-content",
+    );
+    assert.deepEqual(
+      {
+        x: (nativeText?.boxEmu.x ?? 0) / 9525,
+        y: (nativeText?.boxEmu.y ?? 0) / 9525,
+        width: (nativeText?.boxEmu.width ?? 0) / 9525,
+        height: (nativeText?.boxEmu.height ?? 0) / 9525,
+      },
+      text?.box,
+    );
+  });
+
+  it("Grid 项目里的绝对后代仍使用最近的显式定位祖先", async () => {
+    const result = await build(
+      <Deck width={320} height={240}>
+        <Slide slideId="grid-absolute-descendant">
+          <Box style={{ position: "relative", width: 200, height: 120 }}>
+            <Box
+              style={{
+                display: "grid",
+                width: 100,
+                height: 80,
+                marginLeft: 30,
+                marginTop: 40,
+                gridTemplateColumns: "1fr",
+                gridTemplateRows: "1fr",
+              }}
+            >
+              <Box style={{ width: 50, height: 40 }}>
+                <Shape
+                  testId="absolute-descendant"
+                  style={{
+                    position: "absolute",
+                    left: 10,
+                    top: 20,
+                    width: 10,
+                    height: 10,
+                  }}
+                />
+              </Box>
+            </Box>
+          </Box>
+        </Slide>
+      </Deck>,
+    );
+
+    assert.deepEqual(result.report.slides[0]?.objects[0]?.box, {
+      x: 10,
+      y: 20,
+      width: 10,
+      height: 10,
+    });
+    assert.deepEqual((await validatePptx(result.pptx)).errors, []);
+  });
+
+  it("拒绝绝对网格项未实现的 placement 与不支持的网格 baseline", async () => {
+    await assert.rejects(
+      build(
+        <Deck width={320} height={240}>
+          <Slide slideId="absolute-grid-placement">
+            <Box style={{ display: "grid", width: 200, height: 100 }}>
+              <Shape
+                testId="misplaced"
+                style={{ position: "absolute", gridColumn: 1 }}
+              />
+            </Box>
+          </Slide>
+        </Deck>,
+      ),
+      (error: unknown) =>
+        error instanceof BuildError &&
+        error.diagnostics[0]?.code === "unsupported-grid-positioning",
+    );
+    await assert.rejects(
+      build(
+        <Deck width={320} height={240}>
+          <Slide slideId="grid-baseline">
+            <Box style={{ display: "grid", alignItems: "baseline" }} />
+          </Slide>
+        </Deck>,
+      ),
+      (error: unknown) =>
+        error instanceof BuildError &&
+        error.diagnostics[0]?.code === "unsupported-grid-alignment",
+    );
+  });
+
+  it("带布局 style 的 Group 作为原生对象参与父级流布局", async () => {
+    const result = await build(
+      <Deck width={320} height={140}>
+        <Slide slideId="group-flow">
+          <Box style={{ display: "flex", width: 300, height: 100, gap: 10 }}>
+            <Group
+              testId="flow-group"
+              style={{
+                display: "flex",
+                flexDirection: "row",
+                gap: 5,
+                width: 100,
+                height: 60,
+              }}
+            >
+              <Shape testId="group-a" width={20} height={20} />
+              <Shape testId="group-b" width={20} height={20} />
+            </Group>
+            <Shape testId="after-group" width={30} height={30} />
+          </Box>
+        </Slide>
+      </Deck>,
+    );
+    const group = result.report.slides[0]?.objects.find(
+      ({ testId }) => testId === "flow-group",
+    );
+    assert.deepEqual(group?.box, { x: 0, y: 0, width: 100, height: 60 });
+    assert.deepEqual(
+      group?.members?.map(({ testId, box }) => ({ testId, box })),
+      [
+        { testId: "group-a", box: { x: 0, y: 0, width: 20, height: 20 } },
+        { testId: "group-b", box: { x: 25, y: 0, width: 20, height: 20 } },
+      ],
+    );
+    assert.deepEqual(
+      result.report.slides[0]?.objects.find(
+        ({ testId }) => testId === "after-group",
+      )?.box,
+      { x: 110, y: 0, width: 30, height: 30 },
+    );
+    assert.deepEqual((await validatePptx(result.pptx)).errors, []);
+  });
+
+  it("Text 与 Shape.text 将 padding 写入 bodyPr 并参与文字高度和 baseline", async () => {
+    const result = await build(
+      <Deck width={320} height={160}>
+        <Slide slideId="text-insets">
+          <Box style={{ display: "flex", alignItems: "baseline", width: 300 }}>
+            <Text
+              testId="plain-text"
+              width={80}
+              height="auto"
+              style={{ fontFamily: cjkFont, fontSize: 20 }}
+            >
+              AB
+            </Text>
+            <Text
+              testId="padded-text"
+              width={80}
+              height="auto"
+              style={{ fontFamily: cjkFont, fontSize: 20, padding: [10, 4] }}
+            >
+              AB
+            </Text>
+            <Shape
+              testId="padded-shape"
+              width={100}
+              height={50}
+              text="中文中文中文"
+              textStyle={{ fontFamily: cjkFont, fontSize: 20 }}
+              style={{
+                paddingTop: 2,
+                paddingRight: 3,
+                paddingBottom: 4,
+                paddingLeft: 5,
+              }}
+            />
+          </Box>
+        </Slide>
+      </Deck>,
+    );
+    const objects = result.report.slides[0]?.objects ?? [];
+    const plain = objects.find(({ testId }) => testId === "plain-text")?.box;
+    const padded = objects.find(({ testId }) => testId === "padded-text")?.box;
+    assert.equal(padded?.height, (plain?.height ?? 0) + 20);
+    assert.equal(padded?.y, (plain?.y ?? 0) - 10);
+    const shape = objects.find(({ testId }) => testId === "padded-shape")?.box;
+    assert.deepEqual(shape, { x: 160, y: 8, width: 100, height: 50 });
+    const slideXml = strFromU8(
+      unzipSync(result.pptx)["ppt/slides/slide1.xml"]!,
+    );
+    const bodyPrFor = (testId: string) => {
+      const id = objects.find(
+        ({ testId: objectTestId }) => objectTestId === testId,
+      )?.id;
+      const start = slideXml.indexOf(`id="${id}"`);
+      const body = slideXml.indexOf("<a:bodyPr", start);
+      return slideXml.slice(body, slideXml.indexOf("</a:bodyPr>", body));
+    };
+    assert.match(
+      bodyPrFor("padded-text"),
+      /lIns="38100" tIns="95250" rIns="38100" bIns="95250"/u,
+    );
+    assert.match(
+      bodyPrFor("padded-shape"),
+      /lIns="47625" tIns="19050" rIns="28575" bIns="38100"/u,
+    );
+    assert.ok(
+      result.report.diagnostics.some(
+        ({ code, path }) =>
+          code === "overset" && path.endsWith("shape[padded-shape]"),
+      ),
+    );
+    assert.deepEqual((await validatePptx(result.pptx)).errors, []);
+  });
+
+  it("按 repeat/minmax 网格轨道放置内容并满足跨列约束", async () => {
+    const result = await build(
+      <Deck width={320} height={240}>
+        <Slide slideId="grid-tracks">
+          <Box
+            testId="grid"
+            style={{
+              display: "grid",
+              width: 200,
+              height: 100,
+              gridTemplateColumns: "repeat(2, minmax(60px, 1fr))",
+              gridTemplateRows: "auto auto",
+              columnGap: 10,
+              rowGap: 5,
+            }}
+          >
+            <Shape testId="first" height={20} />
+            <Shape testId="span" height={10} style={{ gridColumn: "span 2" }} />
+          </Box>
+        </Slide>
+      </Deck>,
+    );
+
+    assert.deepEqual(
+      result.report.slides[0]?.objects.map(({ testId, box }) => ({
+        testId,
+        box,
+      })),
+      [
+        { testId: "first", box: { x: 0, y: 0, width: 95, height: 20 } },
+        { testId: "span", box: { x: 0, y: 25, width: 200, height: 10 } },
+      ],
+    );
+    assert.deepEqual((await validatePptx(result.pptx)).errors, []);
+  });
+
+  it("相对定位与绝对定位分别按 containing block 的横纵百分比求值", async () => {
+    const result = await build(
+      <Deck width={320} height={240}>
+        <Slide slideId="position-percent">
+          <Box
+            testId="anchor"
+            style={{ position: "relative", width: 200, height: 100 }}
+          >
+            <Box style={{ width: 100, height: 40 }}>
+              <Shape
+                testId="absolute"
+                style={{
+                  position: "absolute",
+                  left: "10%",
+                  top: "20%",
+                  width: "25%",
+                  height: 10,
+                }}
+              />
+            </Box>
+            <Shape
+              testId="relative"
+              width={50}
+              height={20}
+              style={{ position: "relative", left: "10%", top: "50%" }}
+            />
+            <Shape
+              testId="absolute-native-coordinates"
+              x={70}
+              y={30}
+              width={10}
+              height={10}
+              style={{ position: "absolute" }}
+            />
+          </Box>
+        </Slide>
+      </Deck>,
+    );
+
+    assert.deepEqual(
+      result.report.slides[0]?.objects.map(({ testId, box }) => ({
+        testId,
+        box,
+      })),
+      [
+        { testId: "absolute", box: { x: 20, y: 20, width: 50, height: 10 } },
+        { testId: "relative", box: { x: 20, y: 90, width: 50, height: 20 } },
+        {
+          testId: "absolute-native-coordinates",
+          box: { x: 70, y: 30, width: 10, height: 10 },
+        },
+      ],
+    );
+    assert.deepEqual(
+      result.report.slides[0]?.objects.find(
+        ({ testId }) => testId === "absolute-native-coordinates",
+      )?.box,
+      { x: 70, y: 30, width: 10, height: 10 },
+    );
+    assert.deepEqual((await validatePptx(result.pptx)).errors, []);
+  });
+
+  it("直接 Slide 子项的百分比定位以页面为 containing block，static offset 有诊断", async () => {
+    const result = await build(
+      <Deck width={320} height={240}>
+        <Slide slideId="page-positioning">
+          <Shape
+            testId="page-absolute"
+            style={{
+              position: "absolute",
+              right: "10%",
+              bottom: "10%",
+              width: "25%",
+              height: 10,
+            }}
+          />
+          <Shape
+            testId="page-relative"
+            x={10}
+            y={20}
+            width={20}
+            height={10}
+            style={{ position: "relative", left: "10%", top: "10%" }}
+          />
+        </Slide>
+      </Deck>,
+    );
+    assert.deepEqual(
+      result.report.slides[0]?.objects.map(({ testId, box }) => ({
+        testId,
+        box,
+      })),
+      [
+        {
+          testId: "page-absolute",
+          box: { x: 208, y: 206, width: 80, height: 10 },
+        },
+        {
+          testId: "page-relative",
+          box: { x: 42, y: 44, width: 20, height: 10 },
+        },
+      ],
+    );
+    await assert.rejects(
+      build(
+        <Deck width={320} height={240}>
+          <Slide slideId="static-offset">
+            <Shape
+              testId="invalid-offset"
+              width={20}
+              height={10}
+              style={{ left: 10 }}
+            />
+          </Slide>
+        </Deck>,
+      ),
+      (error: unknown) =>
+        error instanceof BuildError &&
+        error.diagnostics[0]?.code === "invalid-layout-context",
+    );
+    assert.deepEqual((await validatePptx(result.pptx)).errors, []);
+  });
+
   it("显式 display:block 保留块布局，块容器仍拒绝弹性专属属性", async () => {
     const result = await build(
       createElement(

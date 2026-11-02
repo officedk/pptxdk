@@ -4,6 +4,9 @@ import {
   xmlEscape,
   type CapabilityInput,
   type CapabilityModule,
+  type CapabilityLayoutMeasurement,
+  type CapabilityLayoutRequest,
+  type LayoutStyle,
   type NativeTableObservation,
 } from "@react-pptx/core";
 import { createElement, type ReactNode } from "react";
@@ -39,7 +42,7 @@ export type TableTextStyle = {
   readonly verticalAlign?: TableVerticalAlign;
 };
 
-export type TableStyle = TableTextStyle;
+export type TableStyle = TableTextStyle & LayoutStyle;
 
 export type TableRowStyle = TableTextStyle & {
   /** 未指定时按本行未合并单元格的文字度量确定行高。 */
@@ -148,6 +151,52 @@ const cellStyleKeys = [
   "paddingRight",
   "paddingBottom",
   "paddingLeft",
+] as const;
+const layoutStyleKeys = [
+  "display",
+  "position",
+  "inset",
+  "left",
+  "top",
+  "right",
+  "bottom",
+  "width",
+  "height",
+  "minWidth",
+  "minHeight",
+  "maxWidth",
+  "maxHeight",
+  "margin",
+  "marginTop",
+  "marginRight",
+  "marginBottom",
+  "marginLeft",
+  "padding",
+  "paddingTop",
+  "paddingRight",
+  "paddingBottom",
+  "paddingLeft",
+  "gap",
+  "rowGap",
+  "columnGap",
+  "flexDirection",
+  "flexWrap",
+  "justifyContent",
+  "alignItems",
+  "alignSelf",
+  "alignContent",
+  "flex",
+  "flexGrow",
+  "flexShrink",
+  "flexBasis",
+  "aspectRatio",
+  "gridTemplateColumns",
+  "gridTemplateRows",
+  "gridColumn",
+  "gridRow",
+  "justifyItems",
+  "justifySelf",
+  "zIndex",
 ] as const;
 const tableParameters = [
   "testId",
@@ -358,7 +407,11 @@ function trackStyle(
   readonly style: Record<string, unknown>;
 } {
   const additional =
-    type === "table" ? [] : type === "row" ? rowStyleKeys : cellStyleKeys;
+    type === "table"
+      ? layoutStyleKeys
+      : type === "row"
+        ? rowStyleKeys
+        : cellStyleKeys;
   return textStyle(
     input.props["style"],
     type === "table" ? "Table" : type === "row" ? "Row" : "Cell",
@@ -709,32 +762,247 @@ function frameXml(
   return `<p:graphicFrame><p:nvGraphicFramePr><p:cNvPr id="${id}" name="${escapedName}"/><p:cNvGraphicFramePr/><p:nvPr/></p:nvGraphicFramePr><p:xfrm><a:off x="${pxToEmu(x)}" y="${pxToEmu(y)}"/><a:ext cx="${width}" cy="${height}"/></p:xfrm><a:graphic><a:graphicData uri="${tableUri}"><a:tbl><a:tblPr/><a:tblGrid>${columnXml}</a:tblGrid>${rowXml}</a:tbl></a:graphicData></a:graphic></p:graphicFrame>`;
 }
 
+type TableLayoutModel = {
+  readonly columns: readonly Track[];
+  readonly tableStyle: ReturnType<typeof trackStyle>;
+  readonly rows: readonly ParsedRow[];
+  readonly cells: readonly ParsedCell[];
+  readonly widths: readonly number[];
+  readonly heights: readonly number[];
+  readonly warnings: { code: string; message: string; path?: string }[];
+  readonly warningKeys: Set<string>;
+  readonly claims: { kind: string; key: string; identity: string }[];
+};
+
+/** Shared table-owned track and text sizing used by both LayoutPass and XML emission. */
+function tableLayoutModel(
+  input: CapabilityInput,
+  requestedWidth: number | undefined,
+): TableLayoutModel {
+  const columns = parseTracks(input.props["columns"]);
+  const tableStyle = trackStyle(input, "table");
+  const tableVerticalAlign =
+    verticalAlign(tableStyle.style["verticalAlign"]) ?? "middle";
+  const { rows, cells } = prepareRows(
+    input,
+    columns,
+    tableStyle.textStyle,
+    tableVerticalAlign,
+  );
+  const warnings: { code: string; message: string; path?: string }[] = [];
+  const claims: { kind: string; key: string; identity: string }[] = [];
+  const warningKeys = new Set<string>();
+  const addTextResult = (
+    result: ReturnType<typeof writeTextBody>,
+    path: string,
+  ) => {
+    for (const warning of result.warnings) {
+      const key = `${path}\u0000${warning.code}\u0000${warning.message}`;
+      if (warningKeys.has(key)) continue;
+      warningKeys.add(key);
+      warnings.push({ ...warning, path });
+    }
+    claims.push(...result.resourceClaims);
+  };
+  const naturalWidths = new Map<ParsedCell, number>();
+  const needNaturalWidth = columns.some(
+    (track) =>
+      track.kind === "auto" ||
+      (track.kind === "fr" && requestedWidth === undefined),
+  );
+  if (needNaturalWidth) {
+    for (const cell of cells) {
+      if (cell.colSpan !== 1) continue;
+      const track = columns[cell.column];
+      const needsTrackWidth =
+        track?.kind === "auto" ||
+        (track?.kind === "fr" && requestedWidth === undefined);
+      if (!needsTrackWidth) continue;
+      const measured = textBody(cell, "max-content");
+      addTextResult(measured, cell.path);
+      if (measured.measurement === undefined && measured.text.trim() !== "") {
+        fail(
+          "font-measurement-unavailable",
+          "auto 列需要可用的字体度量；请提供度量字体或改用明确列宽",
+          cell.path,
+        );
+      }
+      naturalWidths.set(cell, measured.measurement?.width ?? 0);
+    }
+  }
+  const widths = columns.map((track, index) => {
+    if (track.kind === "px") return track.value;
+    const intrinsic = Math.max(
+      0,
+      ...cells
+        .filter((cell) => cell.column === index && cell.colSpan === 1)
+        .map(
+          (cell) =>
+            (naturalWidths.get(cell) ?? 0) +
+            cell.padding.left +
+            cell.padding.right,
+        ),
+    );
+    return Math.max(1, intrinsic);
+  });
+  if (requestedWidth !== undefined) {
+    const fractionTotal = columns.reduce(
+      (sum, track) => sum + (track.kind === "fr" ? track.value : 0),
+      0,
+    );
+    const fixedWidth = widths.reduce(
+      (sum, value, index) => sum + (columns[index]?.kind === "fr" ? 0 : value),
+      0,
+    );
+    if (fractionTotal > 0) {
+      const free = requestedWidth - fixedWidth;
+      const fractionalColumns = columns.filter(
+        (track) => track.kind === "fr",
+      ).length;
+      if (free >= fractionalColumns) {
+        columns.forEach((track, index) => {
+          if (track.kind === "fr")
+            widths[index] = (free * track.value) / fractionTotal;
+        });
+      } else {
+        columns.forEach((track, index) => {
+          if (track.kind === "fr") widths[index] = 1;
+        });
+      }
+    } else {
+      const baseWidth = widths.reduce((sum, value) => sum + value, 0);
+      if (requestedWidth > baseWidth && baseWidth > 0) {
+        widths.forEach((value, index) => {
+          widths[index] = (value * requestedWidth) / baseWidth;
+        });
+      }
+    }
+    const actualWidth = widths.reduce((sum, value) => sum + value, 0);
+    if (actualWidth > requestedWidth + 0.01) {
+      warnings.push({
+        code: "table-width-overflow",
+        message: `列的最小宽度合计 ${actualWidth}px 超出声明宽度 ${requestedWidth}px；构建保留列宽`,
+      });
+    }
+  }
+  const widthsEmu = widths.map((width, index) =>
+    pxExtent(width, `第 ${index + 1} 列宽`),
+  );
+  if (widthsEmu.reduce((sum, value) => sum + value, 0) > maximumExtentEmu) {
+    fail("invalid-table-geometry", "表格列宽合计超出可写入范围");
+  }
+  const heights = rows.map((row) => row.height ?? 0);
+  const widthOf = (cell: ParsedCell) =>
+    widths
+      .slice(cell.column, cell.column + cell.colSpan)
+      .reduce((sum, width) => sum + width, 0);
+  const requiredHeight = (cell: ParsedCell) => {
+    const innerWidth = Math.max(
+      0,
+      widthOf(cell) - cell.padding.left - cell.padding.right,
+    );
+    const result = textBody(cell, innerWidth);
+    addTextResult(result, cell.path);
+    if (result.measurement === undefined && result.text.trim() !== "") {
+      fail(
+        "font-measurement-unavailable",
+        "自动行高需要可用的字体度量；请提供度量字体或为 Row 指定 height",
+        cell.path,
+      );
+    }
+    return (
+      (result.measurement?.height ?? 0) + cell.padding.top + cell.padding.bottom
+    );
+  };
+  for (const cell of cells) {
+    if (cell.rowSpan !== 1 || rows[cell.row]?.height !== undefined) continue;
+    heights[cell.row] = Math.max(heights[cell.row] ?? 0, requiredHeight(cell));
+  }
+  for (const cell of cells) {
+    if (cell.rowSpan === 1) continue;
+    const covered = Array.from(
+      { length: cell.rowSpan },
+      (_, index) => cell.row + index,
+    );
+    const growable = covered.filter((row) => rows[row]?.height === undefined);
+    if (growable.length === 0) continue;
+    const currentHeight = covered.reduce(
+      (sum, row) => sum + (heights[row] ?? 0),
+      0,
+    );
+    const missing = requiredHeight(cell) - currentHeight;
+    if (missing <= 0) continue;
+    const targetRow = growable.at(-1);
+    if (targetRow !== undefined)
+      heights[targetRow] = (heights[targetRow] ?? 0) + missing;
+  }
+  heights.forEach((height, index) => {
+    if (height <= 0) heights[index] = 1;
+  });
+  const heightsEmu = heights.map((height, index) =>
+    pxExtent(height, `第 ${index + 1} 行高`, rows[index]?.path),
+  );
+  if (heightsEmu.reduce((sum, value) => sum + value, 0) > maximumExtentEmu) {
+    fail("invalid-table-geometry", "表格行高合计超出可写入范围");
+  }
+  return {
+    columns,
+    tableStyle,
+    rows,
+    cells,
+    widths,
+    heights,
+    warnings,
+    warningKeys,
+    claims,
+  };
+}
+
 /** 表格模块独立校验行列结构，以原生 graphicFrame 和 a:tbl 写入单一对象。 */
 export const tableCapability: CapabilityModule = {
   declaration: "rp:table",
+  measureLayout(
+    input: CapabilityInput,
+    request: CapabilityLayoutRequest,
+  ): CapabilityLayoutMeasurement {
+    onlyKeys(input.props, tableParameters, "Table");
+    const style = trackStyle(input, "table").style;
+    const declaredWidth = style["width"] ?? input.props["width"];
+    const requestedWidth =
+      request.availableWidth !== undefined && request.availableWidth > 0
+        ? request.availableWidth
+        : typeof declaredWidth === "number"
+          ? positiveSize(declaredWidth, "Table.width")
+          : undefined;
+    const model = tableLayoutModel(input, requestedWidth);
+    const natural =
+      requestedWidth === undefined ? model : tableLayoutModel(input, undefined);
+    const width = model.widths.reduce((sum, value) => sum + value, 0);
+    const height = model.heights.reduce((sum, value) => sum + value, 0);
+    return {
+      width,
+      height,
+      minContentWidth: natural.widths.reduce((sum, value) => sum + value, 0),
+      minContentHeight: natural.heights.reduce((sum, value) => sum + value, 0),
+    };
+  },
   compile(input, context) {
     onlyKeys(input.props, tableParameters, "Table");
     const testId = optionalName(input.props["testId"], "testId");
     const requestedName = optionalName(input.props["name"], "name");
-    const x = coordinate(input.props["x"], "x");
-    const y = coordinate(input.props["y"], "y");
+    const style = trackStyle(input, "table").style;
+    const declaredWidth = style["width"] ?? input.props["width"];
     const requestedWidth =
-      input.props["width"] === undefined
-        ? undefined
-        : positiveSize(input.props["width"], "Table.width");
-    const columns = parseTracks(input.props["columns"]);
-    const tableStyle = trackStyle(input, "table");
-    const tableVerticalAlign =
-      verticalAlign(tableStyle.style["verticalAlign"]) ?? "middle";
-    const { rows, cells } = prepareRows(
-      input,
-      columns,
-      tableStyle.textStyle,
-      tableVerticalAlign,
-    );
-    const warnings: { code: string; message: string; path?: string }[] = [];
-    const claims: { kind: string; key: string; identity: string }[] = [];
-    const warningKeys = new Set<string>();
+      context.layoutBox?.width ??
+      (typeof declaredWidth === "number"
+        ? positiveSize(declaredWidth, "Table.width")
+        : undefined);
+    const model = tableLayoutModel(input, requestedWidth);
+    const { columns, rows, cells, widths } = model;
+    const heights = [...model.heights];
+    const warnings = [...model.warnings];
+    const claims = [...model.claims];
+    const warningKeys = new Set(model.warningKeys);
     const addTextResult = (
       result: ReturnType<typeof writeTextBody>,
       path: string,
@@ -747,153 +1015,38 @@ export const tableCapability: CapabilityModule = {
       }
       claims.push(...result.resourceClaims);
     };
-    const naturalWidths = new Map<ParsedCell, number>();
-    const needNaturalWidth = columns.some(
-      (track) =>
-        track.kind === "auto" ||
-        (track.kind === "fr" && requestedWidth === undefined),
-    );
-    if (needNaturalWidth) {
-      for (const cell of cells) {
-        if (cell.colSpan !== 1) continue;
-        const track = columns[cell.column];
-        const needsTrackWidth =
-          track?.kind === "auto" ||
-          (track?.kind === "fr" && requestedWidth === undefined);
-        if (!needsTrackWidth) continue;
-        const measured = textBody(cell, "max-content");
-        addTextResult(measured, cell.path);
-        if (measured.measurement === undefined && measured.text.trim() !== "") {
-          fail(
-            "font-measurement-unavailable",
-            "auto 列需要可用的字体度量；请提供度量字体或改用明确列宽",
-            cell.path,
-          );
-        }
-        naturalWidths.set(cell, measured.measurement?.width ?? 0);
-      }
-    }
-    const widths = columns.map((track, index) => {
-      if (track.kind === "px") return track.value;
-      const intrinsic = Math.max(
-        0,
-        ...cells
-          .filter((cell) => cell.column === index && cell.colSpan === 1)
-          .map(
-            (cell) =>
-              (naturalWidths.get(cell) ?? 0) +
-              cell.padding.left +
-              cell.padding.right,
-          ),
-      );
-      return Math.max(1, intrinsic);
-    });
-    if (requestedWidth !== undefined) {
-      const fractionTotal = columns.reduce(
-        (sum, track) => sum + (track.kind === "fr" ? track.value : 0),
-        0,
-      );
-      const fixedWidth = widths.reduce(
-        (sum, value, index) =>
-          sum + (columns[index]?.kind === "fr" ? 0 : value),
-        0,
-      );
-      if (fractionTotal > 0) {
-        const free = requestedWidth - fixedWidth;
-        const fractionalColumns = columns.filter(
-          (track) => track.kind === "fr",
-        ).length;
-        if (free >= fractionalColumns) {
-          columns.forEach((track, index) => {
-            if (track.kind === "fr")
-              widths[index] = (free * track.value) / fractionTotal;
-          });
+    const targetHeight = context.layoutBox?.height;
+    if (targetHeight !== undefined) {
+      const naturalHeight = heights.reduce((sum, value) => sum + value, 0);
+      if (targetHeight > naturalHeight + 0.01) {
+        const growable = rows.flatMap((row, index) =>
+          row.height === undefined ? [index] : [],
+        );
+        if (growable.length > 0) {
+          const extra = (targetHeight - naturalHeight) / growable.length;
+          for (const row of growable)
+            heights[row] = (heights[row] ?? 0) + extra;
         } else {
-          columns.forEach((track, index) => {
-            if (track.kind === "fr") widths[index] = 1;
+          warnings.push({
+            code: "table-height-underflow",
+            message: `固定行高合计 ${naturalHeight}px 小于布局高度 ${targetHeight}px；构建保留行高`,
           });
         }
-      } else {
-        const baseWidth = widths.reduce((sum, value) => sum + value, 0);
-        if (requestedWidth > baseWidth && baseWidth > 0) {
-          // 沿用 fit-content 表格规则：宽度扩展已有列，窄于内容时保留列宽并警告。
-          widths.forEach((value, index) => {
-            widths[index] = (value * requestedWidth) / baseWidth;
-          });
-        }
-      }
-      const actualWidth = widths.reduce((sum, value) => sum + value, 0);
-      if (actualWidth > requestedWidth + 0.01) {
+      } else if (targetHeight < naturalHeight - 0.01) {
         warnings.push({
-          code: "table-width-overflow",
-          message: `列的最小宽度合计 ${actualWidth}px 超出声明宽度 ${requestedWidth}px；构建保留列宽`,
+          code: "table-height-overflow",
+          message: `行高合计 ${naturalHeight}px 超出布局高度 ${targetHeight}px；构建保留行高`,
         });
       }
     }
-    const widthsEmu = widths.map((width, index) =>
-      pxExtent(width, `第 ${index + 1} 列宽`),
-    );
-    if (widthsEmu.reduce((sum, value) => sum + value, 0) > maximumExtentEmu) {
-      fail("invalid-table-geometry", "表格列宽合计超出可写入范围");
-    }
-
-    const heights = rows.map((row) => row.height ?? 0);
+    const x = coordinate(context.layoutBox?.x ?? input.props["x"], "x");
+    const y = coordinate(context.layoutBox?.y ?? input.props["y"], "y");
     const widthOf = (cell: ParsedCell) =>
       widths
         .slice(cell.column, cell.column + cell.colSpan)
         .reduce((sum, width) => sum + width, 0);
     const innerWidthOf = (cell: ParsedCell) =>
       Math.max(0, widthOf(cell) - cell.padding.left - cell.padding.right);
-    const requiredHeight = (cell: ParsedCell) => {
-      const result = textBody(cell, innerWidthOf(cell));
-      addTextResult(result, cell.path);
-      if (result.measurement === undefined && result.text.trim() !== "") {
-        fail(
-          "font-measurement-unavailable",
-          "自动行高需要可用的字体度量；请提供度量字体或为 Row 指定 height",
-          cell.path,
-        );
-      }
-      return (
-        (result.measurement?.height ?? 0) +
-        cell.padding.top +
-        cell.padding.bottom
-      );
-    };
-    for (const cell of cells) {
-      if (cell.rowSpan !== 1 || rows[cell.row]?.height !== undefined) continue;
-      heights[cell.row] = Math.max(
-        heights[cell.row] ?? 0,
-        requiredHeight(cell),
-      );
-    }
-    for (const cell of cells) {
-      if (cell.rowSpan === 1) continue;
-      const covered = Array.from(
-        { length: cell.rowSpan },
-        (_, index) => cell.row + index,
-      );
-      const growable = covered.filter((row) => rows[row]?.height === undefined);
-      if (growable.length === 0) continue;
-      const currentHeight = covered.reduce(
-        (sum, row) => sum + (heights[row] ?? 0),
-        0,
-      );
-      const missing = requiredHeight(cell) - currentHeight;
-      if (missing <= 0) continue;
-      const targetRow = growable.at(-1);
-      if (targetRow !== undefined)
-        heights[targetRow] = (heights[targetRow] ?? 0) + missing;
-    }
-    heights.forEach((height, index) => {
-      if (height <= 0) heights[index] = 1;
-    });
-    const heightsEmu = heights.map((height, index) =>
-      pxExtent(height, `第 ${index + 1} 行高`, rows[index]?.path),
-    );
-    if (heightsEmu.reduce((sum, value) => sum + value, 0) > maximumExtentEmu) {
-      fail("invalid-table-geometry", "表格行高合计超出可写入范围");
-    }
 
     const anchors = new Map(
       cells.map((cell) => [`${cell.row}:${cell.column}`, cell]),

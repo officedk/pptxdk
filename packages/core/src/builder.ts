@@ -23,6 +23,7 @@ import {
   type BuildReport,
   type BuildResult,
   type CapabilityChild,
+  type CapabilityElement,
   type CapabilityChildren,
   type CapabilityInput,
   type CapabilityPackagePart,
@@ -335,7 +336,11 @@ function resolveSlides(
     const slideProperties = [...modules.values()]
       .filter(isSlideCapability)
       .map(({ slideProp }) => slideProp);
-    const unknown = ownKeys(node.props, ["slideId", ...slideProperties]);
+    const unknown = ownKeys(node.props, [
+      "slideId",
+      "style",
+      ...slideProperties,
+    ]);
     if (unknown !== undefined) {
       const rawId = node.props["slideId"];
       const label = typeof rawId === "string" ? rawId : index + 1;
@@ -593,9 +598,13 @@ function compileChildren(
   context: BuildContext,
   parentPath: string,
 ): CompiledChildren {
-  const xml: string[] = [];
-  const objects: ObjectObservation[] = [];
-  const references: LayoutChildReference[] = [];
+  const painted: {
+    readonly sourceIndex: number;
+    readonly zIndex: number;
+    readonly xml: string;
+    readonly objects: readonly ObjectObservation[];
+    readonly reference: LayoutChildReference;
+  }[] = [];
   children.forEach((child, index) => {
     if (!("props" in child)) {
       if (child.text.trim() !== "") {
@@ -610,6 +619,7 @@ function compileChildren(
       return;
     }
 
+    if (context.layout.hidden.has(child)) return;
     const path = `${parentPath}/${capabilityLabel(child, index)}`;
     if (child.type === "rp:box") {
       const box = context.layout.boxes.get(child);
@@ -628,9 +638,13 @@ function compileChildren(
         box,
         children: compiled.references,
       });
-      xml.push(compiled.xml);
-      objects.push(...compiled.objects);
-      references.push({ kind: "layout", id });
+      painted.push({
+        sourceIndex: index,
+        zIndex: paintOrder(child),
+        xml: compiled.xml,
+        objects: compiled.objects,
+        reference: { kind: "layout", id },
+      });
       return;
     }
     const module = context.modules.get(child.type);
@@ -709,7 +723,6 @@ function compileChildren(
           targetId: id,
         });
       }
-      xml.push(output.xml);
       const observation = { ...output.observation, id };
       if (observation.box !== undefined) {
         const box = observation.box;
@@ -727,8 +740,13 @@ function compileChildren(
           });
         }
       }
-      objects.push(observation);
-      references.push({ kind: "object", id: observation.id });
+      painted.push({
+        sourceIndex: index,
+        zIndex: paintOrder(child),
+        xml: output.xml,
+        objects: [observation],
+        reference: { kind: "object", id: observation.id },
+      });
     } catch (error) {
       context.slide.diagnostics.push(
         error instanceof CapabilityError
@@ -745,7 +763,23 @@ function compileChildren(
       );
     }
   });
-  return { xml: xml.join(""), objects, references };
+  painted.sort(
+    (left, right) =>
+      left.zIndex - right.zIndex || left.sourceIndex - right.sourceIndex,
+  );
+  return {
+    xml: painted.map(({ xml }) => xml).join(""),
+    objects: painted.flatMap(({ objects }) => objects),
+    references: painted.map(({ reference }) => reference),
+  };
+}
+
+function paintOrder(child: CapabilityElement): number {
+  const style = child.props["style"];
+  if (typeof style !== "object" || style === null || Array.isArray(style))
+    return 0;
+  const value = (style as Record<string, unknown>)["zIndex"];
+  return typeof value === "number" && Number.isFinite(value) ? value : 0;
 }
 
 function compileSlide(
@@ -771,7 +805,11 @@ function compileSlide(
     );
   }
   const children = node.children.map(capabilityChild);
-  const layout = new LayoutPass(modules, dimensions).run(children, path);
+  const layout = new LayoutPass(modules, dimensions).run(
+    children,
+    path,
+    node.props["style"],
+  );
   document.warnings.push(...layout.warnings);
   const compiled = compileChildren(
     children,

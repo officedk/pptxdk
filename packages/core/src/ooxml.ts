@@ -147,7 +147,8 @@ function themePart(value: Theme): string {
       if (!/^#[0-9a-f]{6}$/iu.test(color)) {
         throw new Error(`Theme.colors.${slot} 必须是 #RRGGBB 颜色`);
       }
-      const schemeName = slot === "hlink" ? "hlink" : slot === "folHlink" ? "folHlink" : slot;
+      const schemeName =
+        slot === "hlink" ? "hlink" : slot === "folHlink" ? "folHlink" : slot;
       return `<a:${schemeName}><a:srgbClr val="${color.slice(1).toUpperCase()}"/></a:${schemeName}>`;
     })
     .join("")}</a:clrScheme>`;

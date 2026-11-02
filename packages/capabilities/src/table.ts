@@ -452,7 +452,7 @@ function mergeBorder(
   if (width === 0) return undefined;
   pxExtent(width, "borderWidth", path);
   return {
-    color: borderColor ?? theme.resolveColor("#000000"),
+    color: borderColor ?? theme.resolveColor("dk1"),
     width,
     dash:
       lineStyle === "dashed"

@@ -89,9 +89,6 @@ type RunStyle = {
   readonly color?: ColorValue | ResolvedColor | undefined;
   readonly themeFont?: "major" | "minor" | undefined;
 };
-type RunStyleInput = Omit<RunStyle, "color" | "themeFont"> & {
-  readonly color?: ColorValue | undefined;
-};
 type Run = { readonly text: string; readonly style: RunStyle };
 type Paragraph = {
   readonly runs: readonly Run[];
@@ -146,11 +143,11 @@ const graphemes = new Intl.Segmenter(undefined, { granularity: "grapheme" });
 const measureFaces = new Map<string, fontkit.Font>();
 
 const defaultTextStyle: TextStyle = Object.freeze({
-  fontFamily: "Aptos",
+  fontFamily: "minor",
   fontSize: 24,
   fontWeight: "normal",
   fontStyle: "normal",
-  color: "#000000",
+  color: "dk1",
 });
 
 function record(value: unknown): value is Record<string, unknown> {
@@ -413,7 +410,9 @@ function readRunStyle(value: unknown, theme: ThemeContext): RunStyle {
       ? {}
       : {
           fontFamily: font.font ?? font.family,
-          ...(font.themeFont === undefined ? {} : { themeFont: font.themeFont }),
+          ...(font.themeFont === undefined
+            ? {}
+            : { themeFont: font.themeFont }),
         }),
   };
   return validateRunStyle(resolved);
@@ -486,7 +485,11 @@ function readTextStyle(
     ],
     label,
   );
-  const style = { ...defaultTextStyle, ...theme.textStyle, ...props } as TextStyle;
+  const style = {
+    ...defaultTextStyle,
+    ...theme.textStyle,
+    ...props,
+  } as TextStyle;
   if (
     style.verticalAlign !== undefined &&
     !["top", "middle", "bottom"].includes(style.verticalAlign)
@@ -504,7 +507,9 @@ function readTextStyle(
     color: style.color,
     themeFont: (style as ResolvedTextStyle).themeFont,
   };
-  const font = theme.resolveFont(runStyle.fontFamily ?? defaultTextStyle.fontFamily!);
+  const font = theme.resolveFont(
+    runStyle.fontFamily ?? defaultTextStyle.fontFamily!,
+  );
   if (runStyle.color !== undefined && !isResolvedColor(runStyle.color)) {
     theme.resolveColor(runStyle.color as ColorValue);
   }
@@ -680,7 +685,7 @@ function runPropertiesXml(
   const bold = outputBold(font);
   const color = isResolvedColor(style.color)
     ? style.color
-    : theme.resolveColor(style.color ?? "#000000");
+    : theme.resolveColor(style.color ?? "dk1");
   const typeface =
     style.themeFont === "major"
       ? "+mj-lt"
@@ -861,13 +866,17 @@ function normalizeParagraphs(
       ...baseParagraphStyle,
       ...paragraphStyle(child.props["style"], theme),
     };
-    const paragraphRunStyle = mergeRunStyle(baseRunStyle, {
-      fontFamily: style.fontFamily,
-      fontSize: style.fontSize,
-      fontWeight: style.fontWeight,
-      fontStyle: style.fontStyle,
-      color: style.color,
-    }, theme);
+    const paragraphRunStyle = mergeRunStyle(
+      baseRunStyle,
+      {
+        fontFamily: style.fontFamily,
+        fontSize: style.fontSize,
+        fontWeight: style.fontWeight,
+        fontStyle: style.fontStyle,
+        color: style.color,
+      },
+      theme,
+    );
     const runs: Run[] = [];
     collectRuns(child.children, paragraphRunStyle, runs, theme);
     paragraphs.push({ runs, style, endStyle: paragraphRunStyle });

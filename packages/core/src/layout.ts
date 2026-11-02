@@ -14,6 +14,7 @@ import Yoga, {
 } from "yoga-layout";
 
 import { BuildError, CapabilityError } from "#/diagnostics.ts";
+import { textStyleFrom } from "#/theme.ts";
 import type {
   CapabilityChild,
   CapabilityElement,
@@ -27,7 +28,6 @@ import type {
   ThemeScope,
   ObjectCapabilityModule,
 } from "#/types.ts";
-import { textStyleFrom } from "#/theme.ts";
 
 type Dimensions = { readonly width: number; readonly height: number };
 type Edges = {
@@ -135,6 +135,23 @@ function diagnostic(path: string, code: string, message: string): Diagnostic {
 
 function fail(path: string, code: string, message: string): never {
   throw new BuildError([diagnostic(path, code, message)]);
+}
+
+function deriveTheme(
+  parent: ThemeContext,
+  scope: ThemeScope | undefined,
+  style: ReturnType<typeof textStyleFrom>,
+  path: string,
+): ThemeContext {
+  try {
+    return parent.with(scope, style);
+  } catch (error) {
+    fail(
+      path,
+      error instanceof CapabilityError ? error.code : "invalid-theme-scope",
+      error instanceof Error ? error.message : String(error),
+    );
+  }
 }
 
 function record(value: unknown): value is Record<string, unknown> {
@@ -600,9 +617,11 @@ export class LayoutPass {
             );
           }
         }
-        const nextTheme = theme.with(
+        const nextTheme = deriveTheme(
+          theme,
           child.props["theme"] as ThemeScope | undefined,
           textStyleFrom(style),
+          childPath,
         );
         this.#themes.set(child, nextTheme);
         this.#appendChildren(
@@ -697,9 +716,11 @@ export class LayoutPass {
     }
     const rawStyle = input.props["style"];
     const style = readStyle(rawStyle, path, true, true);
-    const theme = parentTheme.with(
+    const theme = deriveTheme(
+      parentTheme,
       input.props["theme"] as ThemeScope | undefined,
       textStyleFrom(rawStyle),
+      path,
     );
     const yoga = Yoga.Node.create(this.#config);
     const node: LayoutNode = {

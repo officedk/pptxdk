@@ -101,7 +101,7 @@ export type Theme = {
   } & Readonly<Record<string, FontToken>>;
 };
 
-/** 页面或容器上的局部主题只能替换文稿中已有的颜色令牌。 */
+/** 页面或容器上的局部主题只能替换文稿中已有的颜色与字体令牌。 */
 export type ThemeScope = {
   readonly colors?: Readonly<Record<string, ThemeColor>>;
   readonly fonts?: Readonly<Record<string, FontToken>>;
@@ -152,10 +152,13 @@ const nativeSchemeReference: Record<NativeColorSlot, string> = {
   folHlink: "folHlink",
 };
 
-const contextRecords = new WeakMap<ThemeContext, {
-  readonly parent?: ThemeContext;
-  readonly scope?: ThemeScope;
-}>();
+const contextRecords = new WeakMap<
+  ThemeContext,
+  {
+    readonly parent?: ThemeContext;
+    readonly scope?: ThemeScope;
+  }
+>();
 
 const textStyleKeys = new Set([
   "fontFamily",
@@ -174,7 +177,8 @@ function record(value: unknown): value is Record<string, unknown> {
 /** 从包含布局字段的容器 style 中取出可继承文字字段。 */
 export function textStyleFrom(value: unknown): TextStyle {
   if (value === undefined) return {};
-  if (!record(value)) throw new CapabilityError("invalid-style", "style 必须是对象");
+  if (!record(value))
+    throw new CapabilityError("invalid-style", "style 必须是对象");
   return Object.fromEntries(
     Object.entries(value).filter(
       ([key, item]) => textStyleKeys.has(key) && item !== undefined,
@@ -233,10 +237,7 @@ function scopeValue(
   let current: ThemeContext | undefined = context;
   while (current !== undefined) {
     const scope = contextRecords.get(current)?.scope;
-    if (
-      scope?.colors !== undefined &&
-      Object.hasOwn(scope.colors, name)
-    ) {
+    if (scope?.colors !== undefined && Object.hasOwn(scope.colors, name)) {
       return {
         value: scope.colors[name]!,
         ...(contextRecords.get(current)?.parent === undefined
@@ -314,7 +315,12 @@ function shadeHex(hex: string, lumMod: number, lumOff: number): string {
 }
 
 function checkedFraction(value: unknown, label: string): number {
-  if (typeof value !== "number" || !Number.isFinite(value) || value < 0 || value > 1) {
+  if (
+    typeof value !== "number" ||
+    !Number.isFinite(value) ||
+    value < 0 ||
+    value > 1
+  ) {
     throw new CapabilityError("invalid-color", `${label} 必须是 0 到 1 的数值`);
   }
   return value;
@@ -352,12 +358,20 @@ function resolveColorName(
   }
   if (nativeSlot(value)) {
     const configured = context.theme.colors[value];
-    const resolved = resolveColorName(configured, rootContext(context), depth + 1);
+    const resolved = resolveColorName(
+      configured,
+      rootContext(context),
+      depth + 1,
+    );
     return { ...resolved, slot: value };
   }
   const local = scopeValue(context, value);
   if (local !== undefined) {
-    return resolveColorValue(local.value, local.parent ?? rootContext(context), depth + 1);
+    return resolveColorValue(
+      local.value,
+      local.parent ?? rootContext(context),
+      depth + 1,
+    );
   }
   const configured = context.theme.colors[value];
   if (configured === undefined) {
@@ -417,10 +431,7 @@ function createContext(
       let checkedScope: ThemeScope | undefined;
       if (nextScope !== undefined) {
         if (!record(nextScope)) {
-          throw new CapabilityError(
-            "invalid-theme-scope",
-            "theme 必须是包含 colors 或 fonts 的对象",
-          );
+          throw new CapabilityError("invalid-theme-scope", "theme 必须是对象");
         }
         const unknown = Object.keys(nextScope).find(
           (key) => key !== "colors" && key !== "fonts",
@@ -477,8 +488,12 @@ function createContext(
           }
         }
         checkedScope = Object.freeze({
-          ...(colors === undefined ? {} : { colors: Object.freeze({ ...colors }) }),
-          ...(fonts === undefined ? {} : { fonts: Object.freeze({ ...fonts }) }),
+          ...(colors === undefined
+            ? {}
+            : { colors: Object.freeze({ ...colors }) }),
+          ...(fonts === undefined
+            ? {}
+            : { fonts: Object.freeze({ ...fonts }) }),
         });
       }
       const nextStyle = { ...context.textStyle };
@@ -593,7 +608,10 @@ export function resolvedColorXml(value: ResolvedColor): string {
       ? ""
       : `<a:alpha val="${Math.round(value.alpha * 100000)}"/>`,
   ].join("");
-  return value.slot === undefined
-    ? `<a:srgbClr val="${value.hex}">${children}</a:srgbClr>`
-    : `<a:schemeClr val="${nativeSchemeReference[value.slot]}">${children}</a:schemeClr>`;
+  const element = value.slot === undefined ? "srgbClr" : "schemeClr";
+  const color =
+    value.slot === undefined ? value.hex : nativeSchemeReference[value.slot];
+  return children === ""
+    ? `<a:${element} val="${color}"/>`
+    : `<a:${element} val="${color}">${children}</a:${element}>`;
 }

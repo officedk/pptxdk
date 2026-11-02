@@ -160,7 +160,7 @@ function chartLine(
   return el(
     "a:ln",
     { w: pxToEmu(value.width ?? 1) },
-    el("a:solidFill", null, color(value.color ?? "#000000", theme)),
+    el("a:solidFill", null, color(value.color ?? "dk1", theme)),
   );
 }
 
@@ -285,7 +285,11 @@ function chartSeries(
             "c:spPr",
             null,
             lineChart
-              ? el("a:ln", null, el("a:solidFill", null, color(point.color, theme)))
+              ? el(
+                  "a:ln",
+                  null,
+                  el("a:solidFill", null, color(point.color, theme)),
+                )
               : el("a:solidFill", null, color(point.color, theme)),
           ),
         ),
@@ -423,7 +427,9 @@ function gridlines(
   return el(
     "c:majorGridlines",
     null,
-    value.gridlines === true ? undefined : shapeProperties(value.gridlines, theme),
+    value.gridlines === true
+      ? undefined
+      : shapeProperties(value.gridlines, theme),
   );
 }
 

@@ -1,6 +1,11 @@
-import type { Font, FontFace, FontFaceStyle, FontOptions } from "@react-pptx/core";
+import type { Font, FontFace, FontOptions } from "@react-pptx/core";
 
-export type { Font, FontFace, FontFaceStyle, FontOptions } from "@react-pptx/core";
+export type {
+  Font,
+  FontFace,
+  FontFaceStyle,
+  FontOptions,
+} from "@react-pptx/core";
 
 /** 创建一个字体值；资源只从调用方提供的字节读取。 */
 export function font(

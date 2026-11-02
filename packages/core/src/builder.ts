@@ -8,13 +8,6 @@ import { HostNode, type HostChild, type HostContainer } from "#/host/nodes.ts";
 import { withHostTree } from "#/host/reconciler.ts";
 import { LayoutPass, type LayoutPassResult } from "#/layout.ts";
 import {
-  createThemeContext,
-  textStyleFrom,
-  type ThemeContext,
-  type ThemeInput,
-  type ThemeScope,
-} from "#/theme.ts";
-import {
   assertXml10Characters,
   pptxParts,
   pxToEmu,
@@ -23,6 +16,13 @@ import {
   type PptxPackageResource,
   type PptxRelationship,
 } from "#/ooxml.ts";
+import {
+  createThemeContext,
+  textStyleFrom,
+  type ThemeContext,
+  type ThemeInput,
+  type ThemeScope,
+} from "#/theme.ts";
 import {
   formatBaseline,
   targets,
@@ -1057,10 +1057,16 @@ function compileSlide(
     );
   }
   const children = node.children.map(capabilityChild);
-  const theme = documentTheme.with(
-    node.props["theme"] as ThemeScope | undefined,
-    textStyleFrom(node.props["style"]),
-  );
+  let theme: ThemeContext;
+  try {
+    theme = documentTheme.with(
+      node.props["theme"] as ThemeScope | undefined,
+      textStyleFrom(node.props["style"]),
+    );
+  } catch (error) {
+    if (!(error instanceof CapabilityError)) throw error;
+    throw new BuildError([diagnostic(path, error.code, error.message)]);
+  }
   const layout = new LayoutPass(modules, dimensions).run(
     children,
     path,
@@ -1183,10 +1189,16 @@ function compileDocument(
       diagnostic("deck", "document-root", "缺少 Deck 根组件"),
     ]);
   const size = deckDimensions(deck);
-  const theme = createThemeContext(
-    deck.props["theme"] as ThemeInput | undefined,
-    deck.props["style"] as Record<string, unknown> | undefined,
-  );
+  let theme: ThemeContext;
+  try {
+    theme = createThemeContext(
+      deck.props["theme"] as ThemeInput | undefined,
+      deck.props["style"] as Record<string, unknown> | undefined,
+    );
+  } catch (error) {
+    if (!(error instanceof CapabilityError)) throw error;
+    throw new BuildError([diagnostic("deck", error.code, error.message)]);
+  }
   const document: DocumentBuildState = {
     usedExtensions: new Set(),
     warnings: [],

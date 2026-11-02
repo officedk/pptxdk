@@ -1,6 +1,11 @@
 import type { ReactNode } from "react";
 
-import type { ThemeContext, ThemeInput, ThemeScope, TextStyle } from "#/theme.ts";
+import type {
+  ThemeContext,
+  ThemeInput,
+  ThemeScope,
+  TextStyle,
+} from "#/theme.ts";
 
 export type {
   ColorValue,

@@ -171,15 +171,17 @@ try {
       "const image: ImageProps = { src: new Uint8Array([0x89, 0x50, 0x4e, 0x47]), width: 40, height: 30 };",
       'const group: GroupProps = { name: "typed-group" };',
       'const text: TextProps = { testId: "typed-text", x: 0, y: 36, width: 100, height: 36, style: { fontFamily: font("Consumer Sans"), lineHeight: "22pt" } };',
+      'const contentSizedText: TextProps = { testId: "typed-content-sized-text", x: 0, y: 72, width: 100, height: "auto", style: { fontFamily: font("Consumer Sans") } };',
       'const result: Promise<BuildResult> = build(createElement(Deck, {}, createElement(Slide, { slideId: "typed" }, createElement(Group, group, createElement(Shape, shape), createElement(Text, text, createElement(P, { style: { list: { type: "bullet" } } }, createElement(Span, { style: { fontWeight: "bold" } }, "Installed 文本"))), createElement(Image, image)))));',
       "void result;",
+      "void contentSizedText;",
     ].join("\n"),
   );
   await writeFile(
     join(temporaryDirectory, "consumer-runtime.ts"),
     [
       'import { createElement } from "react";',
-      'import { Deck, font, Group, Image, P, Shape, Slide, Span, Text, build } from "@react-pptx/react-pptx";',
+      'import { BuildError, Deck, font, Group, Image, P, Shape, Slide, Span, Text, build } from "@react-pptx/react-pptx";',
       'import { validatePptx } from "@react-pptx/validation";',
       'import { writeFile } from "node:fs/promises";',
       'const imageBytes = new Uint8Array(Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/n1sAAAAASUVORK5CYII=", "base64"));',
@@ -192,8 +194,11 @@ try {
       'const nestedGroup = group?.members?.find(({ kind }) => kind === "group");',
       'const nestedShape = nestedGroup?.members?.find(({ name }) => name === "nested-shape");',
       'if (file.errors.length !== 0 || group?.kind !== "group" || group.name !== "packed-group" || !group.boxEmu || group.boxEmu.width <= 0 || shape?.text?.text !== "Installed shape text" || !shape.boxEmu || shape.boxEmu.x <= 0 || text?.text?.paragraphs[0]?.text !== "Installed 文本" || text.text.paragraphs[0]?.list?.type !== "bullet" || image?.name !== "packed-image" || image.image?.contentType !== "image/png" || !image.boxEmu || nestedGroup?.name !== "nested-group" || nestedShape?.text?.text !== "Nested member" || !nestedShape.boxEmu) throw new Error(JSON.stringify({ errors: file.errors, group, shape, text, image, nestedGroup }));',
+      "let missingMetrics;",
+      'try { await build(createElement(Deck, {}, createElement(Slide, { slideId: "missing-metrics" }, createElement(Text, { testId: "content-sized-text", x: 0, y: 0, width: 100, height: "auto", style: { fontFamily: font("Consumer Sans") } }, "Content sized text")))); } catch (error) { missingMetrics = error; }',
+      'if (!(missingMetrics instanceof BuildError) || missingMetrics.diagnostics[0]?.code !== "font-measurement-unavailable") throw new Error("installed content-sized text did not require explicit font metrics");',
       'await writeFile("artifact.pptx", result.pptx);',
-      "process.stdout.write(JSON.stringify({ standard: file.profile.standard, slideId: file.slides[0]?.id, group: group.name, groupBox: group.boxEmu, shape: shape.name, shapeText: shape.text.text, shapeBox: shape.boxEmu, text: text.name, textContent: text.text.text, bullet: text.text.paragraphs[0]?.list?.type, image: image.name, mediaType: image.image.contentType, imageBox: image.boxEmu, nestedGroup: nestedGroup.name, nestedShape: nestedShape.name, nestedShapeText: nestedShape.text.text, nestedShapeBox: nestedShape.boxEmu, objectIds: [group.id, shape.id, text.id, image.id, nestedGroup.id, nestedShape.id], bytes: result.pptx.byteLength }));",
+      "process.stdout.write(JSON.stringify({ standard: file.profile.standard, slideId: file.slides[0]?.id, group: group.name, groupBox: group.boxEmu, shape: shape.name, shapeText: shape.text.text, shapeBox: shape.boxEmu, text: text.name, textContent: text.text.text, bullet: text.text.paragraphs[0]?.list?.type, image: image.name, mediaType: image.image.contentType, imageBox: image.boxEmu, nestedGroup: nestedGroup.name, nestedShape: nestedShape.name, nestedShapeText: nestedShape.text.text, nestedShapeBox: nestedShape.boxEmu, missingMetrics: missingMetrics.diagnostics[0].code, objectIds: [group.id, shape.id, text.id, image.id, nestedGroup.id, nestedShape.id], bytes: result.pptx.byteLength }));",
     ].join("\n"),
   );
   const cropLoader = join(temporaryDirectory, "reject-text-box.mjs");
@@ -251,6 +256,7 @@ try {
     readonly nestedGroup?: string;
     readonly nestedShape?: string;
     readonly nestedShapeText?: string;
+    readonly missingMetrics?: string;
     readonly objectIds?: readonly number[];
     readonly bytes?: number;
   };
@@ -268,6 +274,7 @@ try {
     summary.nestedGroup !== "nested-group" ||
     summary.nestedShape !== "nested-shape" ||
     summary.nestedShapeText !== "Nested member" ||
+    summary.missingMetrics !== "font-measurement-unavailable" ||
     summary.objectIds?.length !== 6 ||
     new Set(summary.objectIds).size !== 6 ||
     summary.bytes === undefined ||

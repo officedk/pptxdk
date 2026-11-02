@@ -1,6 +1,9 @@
 import { createHash } from "node:crypto";
 
 import { CapabilityError, pxToEmu, xmlEscape } from "@react-pptx/core";
+import * as fontkit from "fontkit";
+// @ts-expect-error -- linebreak 未提供类型，下面只声明所用的断点接口。
+import LineBreakerImplementation from "linebreak";
 
 import type { Font, FontFaceStyle } from "./font.ts";
 
@@ -47,6 +50,7 @@ export type TextServiceResult = {
   readonly xml: string;
   readonly text: string;
   readonly resourceClaims: readonly TextResourceClaim[];
+  readonly measurement?: { readonly width: number; readonly height: number };
   readonly warnings: readonly {
     readonly code: string;
     readonly message: string;
@@ -71,14 +75,50 @@ type Run = { readonly text: string; readonly style: RunStyle };
 type Paragraph = {
   readonly runs: readonly Run[];
   readonly style: ParagraphStyle;
+  readonly endStyle: RunStyle;
 };
 type NormalizedFont = {
   readonly family: string;
   readonly weight: number;
   readonly style: FontFaceStyle;
+  readonly substitute: boolean;
   readonly hasResource: boolean;
   readonly identity: string;
+  readonly data?: Uint8Array;
 };
+
+type TextLayoutRequest = {
+  readonly width: number;
+  readonly contentSized?: boolean;
+};
+
+type MeasureFace = {
+  readonly font: fontkit.Font;
+  readonly identity: string;
+};
+
+type MeasurePiece = {
+  readonly text: string;
+  readonly style: RunStyle;
+  readonly start: number;
+  readonly end: number;
+  readonly face: MeasureFace;
+};
+
+type MeasuredParagraph = {
+  readonly lineCount: number;
+  readonly width: number;
+  readonly lineHeight: number;
+  readonly spacingAfter: number;
+};
+
+type LineBreakerConstructor = new (text: string) => {
+  nextBreak(): { readonly position: number; readonly required: boolean } | null;
+};
+
+const LineBreaker = LineBreakerImplementation as LineBreakerConstructor;
+const graphemes = new Intl.Segmenter(undefined, { granularity: "grapheme" });
+const measureFaces = new Map<string, fontkit.Font>();
 
 const defaultTextStyle: TextStyle = Object.freeze({
   fontFamily: "Aptos",
@@ -234,9 +274,18 @@ function fontFamilyValue(value: FontReference | undefined): Font {
   if (value["family"].trim() === "") {
     throw new CapabilityError("invalid-font-family", "Font.family 不能为空");
   }
-  onlyKnownKeys(value, ["family", "faces"], "Font");
+  onlyKnownKeys(value, ["family", "faces", "substitute"], "Font");
   if (value["faces"] !== undefined && !Array.isArray(value["faces"])) {
     throw new CapabilityError("invalid-font-family", "Font.faces 必须是数组");
+  }
+  if (
+    value["substitute"] !== undefined &&
+    typeof value["substitute"] !== "boolean"
+  ) {
+    throw new CapabilityError(
+      "invalid-font-family",
+      "Font.substitute 必须是布尔值",
+    );
   }
   return value as Font;
 }
@@ -285,6 +334,7 @@ function normalizedFonts(style: RunStyle): NormalizedFont[] {
         family: family.family,
         weight,
         style: faceStyle,
+        substitute: family.substitute ?? false,
         hasResource: false,
         identity: "missing",
       },
@@ -294,8 +344,10 @@ function normalizedFonts(style: RunStyle): NormalizedFont[] {
     family: family.family,
     weight,
     style: faceStyle,
+    substitute: family.substitute ?? false,
     hasResource: true,
     identity: createHash("sha256").update(face.data!).digest("hex"),
+    data: face.data!,
   }));
 }
 
@@ -570,7 +622,7 @@ function paragraphXml(paragraph: Paragraph): string {
       : `<a:pPr ${attributes.join(" ")}>${lineSpacing}${spacingAfter}${list}</a:pPr>`;
   const endProperties =
     runs.length === 0
-      ? `<a:endParaRPr lang="en-US" sz="${centipoints(fontSizePoints(style.fontSize))}"/>`
+      ? `<a:endParaRPr lang="en-US" sz="${centipoints(fontSizePoints(paragraph.endStyle.fontSize))}"/>`
       : "";
   return `<a:p>${pPr}${runs.map(runXml).join("")}${endProperties}</a:p>`;
 }
@@ -596,7 +648,11 @@ function normalizeParagraphs(
       : { lineHeight: textStyle.lineHeight };
   const flushInline = (): void => {
     if (inline.length > 0) {
-      paragraphs.push({ runs: inline, style: baseParagraphStyle });
+      paragraphs.push({
+        runs: inline,
+        style: baseParagraphStyle,
+        endStyle: baseRunStyle,
+      });
       inline = [];
     }
   };
@@ -636,11 +692,387 @@ function normalizeParagraphs(
     });
     const runs: Run[] = [];
     collectRuns(child.children, paragraphRunStyle, runs);
-    paragraphs.push({ runs, style });
+    paragraphs.push({ runs, style, endStyle: paragraphRunStyle });
   }
   flushInline();
-  if (paragraphs.length === 0) paragraphs.push({ runs: [], style: {} });
+  if (paragraphs.length === 0) {
+    paragraphs.push({
+      runs: [],
+      style: baseParagraphStyle,
+      endStyle: baseRunStyle,
+    });
+  }
   return paragraphs;
+}
+
+function fontFamilyKey(value: string): string {
+  return value.trim().replace(/\s+/gu, " ").toLocaleLowerCase("en-US");
+}
+
+function measureFace(source: NormalizedFont): MeasureFace {
+  if (!source.hasResource || source.data === undefined) {
+    throw new CapabilityError(
+      "font-measurement-unavailable",
+      `内容定高文字缺少 ${source.family} ${source.weight} ${source.style} 的显式字体资源`,
+    );
+  }
+
+  let parsed = measureFaces.get(source.identity);
+  if (parsed === undefined) {
+    try {
+      const data = source.data;
+      const bytes = Buffer.from(data.buffer, data.byteOffset, data.byteLength);
+      const opened = fontkit.create(bytes);
+      if (!("unitsPerEm" in opened)) {
+        throw new Error("字体集合不属于单字体文件");
+      }
+      parsed = opened;
+      measureFaces.set(source.identity, parsed);
+    } catch (error) {
+      throw new CapabilityError(
+        "font-format-unsupported",
+        `无法解析 ${source.family} 的字体度量文件：${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+  }
+
+  if (
+    source.substitute !== true &&
+    fontFamilyKey(parsed.familyName) !== fontFamilyKey(source.family)
+  ) {
+    throw new CapabilityError(
+      "font-substitution-required",
+      `度量文件声明为 ${parsed.familyName}，要保留输出字体名 ${source.family} 必须显式设置 Font.substitute`,
+    );
+  }
+  if (parsed["OS/2"].usWeightClass !== source.weight) {
+    throw new CapabilityError(
+      "font-face-mismatch",
+      `${source.family} 的 ${source.weight} ${source.style} 字体值与文件实际字重 ${parsed["OS/2"].usWeightClass} 不符`,
+    );
+  }
+  const fileItalic =
+    parsed["OS/2"].fsSelection.italic ||
+    parsed["OS/2"].fsSelection.oblique ||
+    parsed.italicAngle !== 0;
+  if (fileItalic !== (source.style === "italic")) {
+    throw new CapabilityError(
+      "font-face-mismatch",
+      `${source.family} 的 ${source.weight} ${source.style} 字体值与文件实际字形样式不符`,
+    );
+  }
+  if (
+    !Number.isFinite(parsed.unitsPerEm) ||
+    parsed.unitsPerEm <= 0 ||
+    !Number.isFinite(parsed.ascent) ||
+    !Number.isFinite(parsed.descent) ||
+    !Number.isFinite(parsed.lineGap)
+  ) {
+    throw new CapabilityError(
+      "font-metrics-invalid",
+      `${source.family} 的字体行距指标无效`,
+    );
+  }
+  return { font: parsed, identity: source.identity };
+}
+
+function measureRunFace(style: RunStyle): MeasureFace {
+  const candidates = normalizedFonts(style).filter(
+    (candidate) => candidate.hasResource,
+  );
+  const unique = candidates.filter(
+    (candidate, index) =>
+      candidates.findIndex((other) => other.identity === candidate.identity) ===
+      index,
+  );
+  if (unique.length !== 1) {
+    throw new CapabilityError(
+      unique.length === 0
+        ? "font-measurement-unavailable"
+        : "conflicting-resource",
+      unique.length === 0
+        ? "内容定高文字必须为每个实际使用的字重和样式提供字体文件"
+        : "同一字体字重和样式对应多个度量文件，无法确定测量依据",
+    );
+  }
+  return measureFace(unique[0]!);
+}
+
+function missingCharacters(face: MeasureFace, text: string): string[] {
+  const missing = new Set<string>();
+  for (const character of text) {
+    if (
+      /^[\p{Cc}\p{Cf}\u{FE00}-\u{FE0F}\u{E0100}-\u{E01EF}]$/u.test(character)
+    ) {
+      continue;
+    }
+    const codePoint = character.codePointAt(0);
+    if (codePoint !== undefined && !face.font.hasGlyphForCodePoint(codePoint)) {
+      missing.add(character);
+    }
+  }
+  return [...missing];
+}
+
+function rangeWidth(
+  pieces: readonly MeasurePiece[],
+  text: string,
+  start: number,
+  end: number,
+): number {
+  let width = 0;
+  for (const piece of pieces) {
+    const from = Math.max(start, piece.start);
+    const to = Math.min(end, piece.end);
+    if (from >= to) continue;
+    let visible = "";
+    for (const character of text.slice(from, to)) {
+      if (
+        !/^[\p{Cc}\p{Cf}\u{FE00}-\u{FE0F}\u{E0100}-\u{E01EF}]$/u.test(character)
+      ) {
+        visible += character;
+      }
+    }
+    if (visible === "") continue;
+    const advance = piece.face.font.layout(visible).advanceWidth;
+    const pixels = fontSizePoints(piece.style.fontSize) * (4 / 3);
+    width += (advance / piece.face.font.unitsPerEm) * pixels;
+  }
+  return width;
+}
+
+function trimLineEnd(text: string, start: number, end: number): number {
+  let trimmed = end;
+  while (trimmed > start && /\s/u.test(text[trimmed - 1] ?? "")) {
+    trimmed -= 1;
+  }
+  return trimmed;
+}
+
+function graphemeEnds(text: string, start: number, end: number): number[] {
+  const result: number[] = [];
+  for (const segment of graphemes.segment(text)) {
+    const boundary = segment.index + segment.segment.length;
+    if (boundary > start && boundary <= end) result.push(boundary);
+  }
+  return result;
+}
+
+function wrapParagraph(
+  text: string,
+  pieces: readonly MeasurePiece[],
+  width: number,
+): { readonly lines: number; readonly width: number } {
+  if (text === "") return { lines: 1, width: 0 };
+  const breaks: { readonly position: number; readonly required: boolean }[] =
+    [];
+  const breaker = new LineBreaker(text);
+  let position = 0;
+  for (
+    let next = breaker.nextBreak();
+    next !== null;
+    next = breaker.nextBreak()
+  ) {
+    if (next.position > position) breaks.push(next);
+    position = next.position;
+  }
+  if (position < text.length) {
+    breaks.push({ position: text.length, required: false });
+  }
+
+  const lines: { readonly start: number; readonly end: number }[] = [];
+  const epsilon = 0.01;
+  let lineStart = 0;
+  let lineEnd = 0;
+  let unitStart = 0;
+  let endedWithRequiredBreak = false;
+
+  for (const lineBreak of breaks) {
+    const unitEnd = lineBreak.position;
+    const candidateWidth = rangeWidth(
+      pieces,
+      text,
+      lineStart,
+      trimLineEnd(text, lineStart, unitEnd),
+    );
+    if (candidateWidth <= width + epsilon) {
+      lineEnd = unitEnd;
+      if (lineBreak.required) {
+        lines.push({ start: lineStart, end: lineEnd });
+        lineStart = unitEnd;
+        lineEnd = unitEnd;
+      }
+      unitStart = unitEnd;
+      endedWithRequiredBreak = lineBreak.required;
+      continue;
+    }
+
+    if (lineEnd > lineStart) {
+      lines.push({ start: lineStart, end: lineEnd });
+      lineStart = unitStart;
+      lineEnd = unitStart;
+    }
+
+    const unitWidth = rangeWidth(
+      pieces,
+      text,
+      unitStart,
+      trimLineEnd(text, unitStart, unitEnd),
+    );
+    if (unitWidth <= width + epsilon) {
+      lineEnd = unitEnd;
+    } else {
+      let chunkStart = unitStart;
+      let previous = chunkStart;
+      for (const boundary of graphemeEnds(text, unitStart, unitEnd)) {
+        const chunkWidth = rangeWidth(
+          pieces,
+          text,
+          chunkStart,
+          trimLineEnd(text, chunkStart, boundary),
+        );
+        if (chunkWidth > width + epsilon && previous > chunkStart) {
+          lines.push({ start: chunkStart, end: previous });
+          chunkStart = previous;
+        }
+        const singleWidth = rangeWidth(
+          pieces,
+          text,
+          chunkStart,
+          trimLineEnd(text, chunkStart, boundary),
+        );
+        if (singleWidth > width + epsilon && previous === chunkStart) {
+          lines.push({ start: chunkStart, end: boundary });
+          chunkStart = boundary;
+        }
+        previous = boundary;
+      }
+      lineStart = chunkStart;
+      lineEnd = unitEnd;
+    }
+
+    if (lineBreak.required) {
+      lines.push({ start: lineStart, end: unitEnd });
+      lineStart = unitEnd;
+      lineEnd = unitEnd;
+    }
+    unitStart = unitEnd;
+    endedWithRequiredBreak = lineBreak.required;
+  }
+
+  if (lineStart < text.length || lineEnd > lineStart || lines.length === 0) {
+    lines.push({ start: lineStart, end: text.length });
+  } else if (endedWithRequiredBreak) {
+    lines.push({ start: text.length, end: text.length });
+  }
+  const lineWidths = lines.map(({ start, end }) =>
+    rangeWidth(pieces, text, start, trimLineEnd(text, start, end)),
+  );
+  return {
+    lines: lines.length,
+    width: Math.max(0, ...lineWidths),
+  };
+}
+
+function paragraphLineHeight(paragraph: Paragraph): number {
+  if (paragraph.style.lineHeight !== undefined) {
+    const value = positiveLength(paragraph.style.lineHeight, "lineHeight");
+    return spacingCentipoints(value, "lineHeight") / 75;
+  }
+  const styles =
+    paragraph.runs.length > 0
+      ? paragraph.runs.map((run) => run.style)
+      : [paragraph.endStyle];
+  let maximum = 0;
+  for (const style of styles) {
+    const face = measureRunFace(style).font;
+    // DrawingML 行距取字体 ascent - descent + lineGap，再按输出字号缩放。
+    const units = face.ascent - face.descent + face.lineGap;
+    const lineHeight =
+      (units / face.unitsPerEm) * fontSizePoints(style.fontSize) * (4 / 3);
+    if (!Number.isFinite(lineHeight) || lineHeight <= 0) {
+      throw new CapabilityError(
+        "font-metrics-invalid",
+        "字体行距指标必须产生有限正值",
+      );
+    }
+    maximum = Math.max(maximum, lineHeight);
+  }
+  if (maximum === 0) {
+    throw new CapabilityError(
+      "font-measurement-unavailable",
+      "内容定高文字缺少可用于确定行距的字体",
+    );
+  }
+  return spacingCentipoints(maximum, "lineHeight") / 75;
+}
+
+function paragraphMeasurement(
+  paragraph: Paragraph,
+  width: number,
+): MeasuredParagraph {
+  const sourceRuns =
+    paragraph.runs.length > 0
+      ? paragraph.runs
+      : [{ text: "", style: paragraph.endStyle }];
+  const pieces: MeasurePiece[] = [];
+  let start = 0;
+  for (const run of sourceRuns) {
+    const face = measureRunFace(run.style);
+    const missing = missingCharacters(face, run.text);
+    if (missing.length > 0) {
+      const shown = missing.slice(0, 10).join(" ");
+      const extra = missing.length - 10;
+      const family = fontFamilyValue(run.style.fontFamily).family;
+      throw new CapabilityError(
+        "font-missing-glyph",
+        `${family} 缺少字符 ${shown}${extra > 0 ? `，另有 ${extra} 个字符` : ""} 的字形`,
+      );
+    }
+    pieces.push({
+      text: run.text,
+      style: run.style,
+      start,
+      end: start + run.text.length,
+      face,
+    });
+    start += run.text.length;
+  }
+  const text = sourceRuns.map((run) => run.text).join("");
+  const wrapped = wrapParagraph(text, pieces, width);
+  const spacingAfter =
+    paragraph.style.spacingAfter === undefined
+      ? 0
+      : spacingCentipoints(paragraph.style.spacingAfter, "spacingAfter") / 75;
+  return {
+    lineCount: wrapped.lines,
+    width: wrapped.width,
+    lineHeight: paragraphLineHeight(paragraph),
+    spacingAfter,
+  };
+}
+
+function measureParagraphs(
+  paragraphs: readonly Paragraph[],
+  width: number,
+): {
+  readonly width: number;
+  readonly height: number;
+  readonly paragraphs: readonly MeasuredParagraph[];
+} {
+  const measured = paragraphs.map((paragraph) =>
+    paragraphMeasurement(paragraph, width),
+  );
+  let height = 0;
+  measured.forEach((paragraph, index) => {
+    height += paragraph.lineCount * paragraph.lineHeight;
+    if (index < measured.length - 1) height += paragraph.spacingAfter;
+  });
+  return {
+    width: Math.max(0, ...measured.map((paragraph) => paragraph.width)),
+    height,
+    paragraphs: measured,
+  };
 }
 
 function bodyAnchor(verticalAlign: TextStyle["verticalAlign"]): string {
@@ -652,13 +1084,18 @@ export function writeTextBody(
   children: readonly unknown[],
   styleValue: unknown,
   verticalAlign: TextStyle["verticalAlign"] = "top",
+  layout?: TextLayoutRequest,
 ): TextServiceResult {
   const style = readTextStyle(styleValue, "Text.style");
   const paragraphs = normalizeParagraphs(children, style);
-  const resolvedRuns = paragraphs.flatMap(({ runs }) => runs);
+  const resolvedStyles = paragraphs.flatMap((paragraph) =>
+    paragraph.runs.length > 0
+      ? paragraph.runs.map((run) => run.style)
+      : [paragraph.endStyle],
+  );
   const used = new Map<string, NormalizedFont[]>();
-  for (const run of resolvedRuns) {
-    for (const font of normalizedFonts(run.style)) {
+  for (const runStyle of resolvedStyles) {
+    for (const font of normalizedFonts(runStyle)) {
       const key = `${font.family.toLocaleLowerCase("en-US")}\u0000${font.weight}\u0000${font.style}`;
       const resources = used.get(key) ?? [];
       if (!resources.some(({ identity }) => identity === font.identity)) {
@@ -685,11 +1122,55 @@ export function writeTextBody(
       }
     }
   }
-  const xml = `<p:txBody><a:bodyPr wrap="square" lIns="0" tIns="0" rIns="0" bIns="0" anchor="${bodyAnchor(style.verticalAlign ?? verticalAlign)}"><a:noAutofit/></a:bodyPr><a:lstStyle/>${paragraphs.map(paragraphXml).join("")}</p:txBody>`;
-  const text = paragraphs
+  let measured: ReturnType<typeof measureParagraphs> | undefined;
+  if (layout !== undefined) {
+    try {
+      measured = measureParagraphs(paragraphs, layout.width);
+    } catch (error) {
+      if (layout.contentSized === true) throw error;
+      if (error instanceof CapabilityError) {
+        if (!warnings.some((warning) => warning.code === error.code)) {
+          warnings.push({
+            code: error.code,
+            message: `未能依据已提供的字体完成文字度量：${error.message}`,
+          });
+        }
+      } else {
+        warnings.push({
+          code: "font-measurement-unavailable",
+          message: `未能依据已提供的字体完成文字度量：${error instanceof Error ? error.message : String(error)}`,
+        });
+      }
+    }
+  }
+  if (layout?.contentSized === true && measured === undefined) {
+    throw new CapabilityError(
+      "font-measurement-unavailable",
+      "内容定高文字缺少完整的字体度量依据",
+    );
+  }
+  const outputParagraphs =
+    layout?.contentSized === true && measured !== undefined
+      ? paragraphs.map((paragraph, index) => ({
+          ...paragraph,
+          style: {
+            ...paragraph.style,
+            lineHeight: measured.paragraphs[index]!.lineHeight,
+          },
+        }))
+      : paragraphs;
+  const text = outputParagraphs
     .map(({ runs }) => runs.map(({ text: part }) => part).join(""))
     .join("\n");
-  return { xml, text, resourceClaims, warnings };
+  return {
+    xml: `<p:txBody><a:bodyPr wrap="square" lIns="0" tIns="0" rIns="0" bIns="0" anchor="${bodyAnchor(style.verticalAlign ?? verticalAlign)}"><a:noAutofit/></a:bodyPr><a:lstStyle/>${outputParagraphs.map(paragraphXml).join("")}</p:txBody>`,
+    text,
+    resourceClaims,
+    ...(measured === undefined
+      ? {}
+      : { measurement: { width: measured.width, height: measured.height } }),
+    warnings,
+  };
 }
 
 /** 把固定像素长度转换成 DrawingML 可表达的 EMU。 */

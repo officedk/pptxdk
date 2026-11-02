@@ -50,10 +50,13 @@
   },
   "dependencies": {
     "@react-pptx/core": "workspace:*",
+    "fontkit": "catalog:",
+    "linebreak": "catalog:",
     "react": "catalog:"
   },
   "devDependencies": {
     "@react-pptx/tooling-config": "workspace:*",
+    "@types/fontkit": "catalog:",
     "@types/node": "catalog:",
     "@types/react": "catalog:",
     "oxfmt": "catalog:",

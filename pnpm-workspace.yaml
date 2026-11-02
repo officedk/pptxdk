@@ -21,6 +21,9 @@ catalog:
   "@types/react-reconciler": ^0.34.1
   "@xmldom/xmldom": ^0.9.12
   fflate: ^0.8.3
+  fontkit: ^2.0.4
+  linebreak: ^1.1.0
+  "@types/fontkit": ^2.0.9
   oxfmt: ^0.74.0
   oxlint: ^1.89.0
   oxlint-tsgolint: ^7.0.2001

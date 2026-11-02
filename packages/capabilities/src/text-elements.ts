@@ -8,7 +8,7 @@ export type TextProps = {
   readonly x: number;
   readonly y: number;
   readonly width: number;
-  readonly height: number;
+  readonly height: number | "auto";
   readonly style?: TextStyle;
   readonly children?: ReactNode;
 };
@@ -23,7 +23,7 @@ export type SpanProps = {
   readonly children?: ReactNode;
 };
 
-/** 固定区域原生文本框；框内换行由目标应用决定。 */
+/** 原生文本框；数值高度保留固定区域，auto 高度使用明确字体度量。 */
 export function Text(props: TextProps): ReactNode {
   return createElement("rp:text", props, props.children);
 }

@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
+import { readFileSync } from "node:fs";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -36,7 +37,338 @@ function deck(shape: ReturnType<typeof createElement>) {
   );
 }
 
+function testFont(path: string): Uint8Array {
+  return new Uint8Array(readFileSync(new URL(path, import.meta.url)));
+}
+
+const notoSansScRegular = testFont("./assets/fonts/NotoSansSC-Regular.woff2");
+const jostBook = testFont("./assets/fonts/Jost-400-Book.ttf");
+const jostBold = testFont("./assets/fonts/Jost-700-Bold.ttf");
+
 describe("公开构建入口", () => {
+  it("内容定高文字缺少度量字体时以构建错误拒绝", async () => {
+    let failure: unknown;
+    try {
+      await build(
+        deck(
+          createElement(Text, {
+            testId: "missing-content-metrics",
+            x: 24,
+            y: 18,
+            width: 240,
+            height: "auto",
+            style: { fontFamily: "Aptos" },
+            children: "需要明确度量字体",
+          }),
+        ),
+      );
+    } catch (error) {
+      failure = error;
+    }
+
+    assert.ok(failure instanceof BuildError);
+    assert.deepEqual(
+      failure.diagnostics.map(({ code, path }) => ({ code, path })),
+      [
+        {
+          code: "font-measurement-unavailable",
+          path: "deck/slide[cover]/text[missing-content-metrics]",
+        },
+      ],
+    );
+  });
+
+  it("按明确 WOFF2 字体指标计算内容高度并写入相同固定行距", async () => {
+    const result = await build(
+      deck(
+        createElement(Text, {
+          testId: "measured-mixed-text",
+          x: 24,
+          y: 18,
+          width: 400,
+          height: "auto",
+          style: {
+            fontFamily: font("Noto Sans CJK SC", [
+              { weight: 400, data: notoSansScRegular },
+            ]),
+            fontSize: 20,
+          },
+          children: "中文 A é",
+        }),
+      ),
+    );
+
+    assert.deepEqual(result.report.slides[0]?.objects[0]?.box, {
+      x: 24,
+      y: 18,
+      width: 400,
+      height: 28.96,
+    });
+    assert.deepEqual(result.report.diagnostics, []);
+    const file = await validatePptx(result.pptx);
+    assert.deepEqual(file.errors, []);
+    assert.deepEqual(file.slides[0]?.objects[0]?.text?.paragraphs[0], {
+      text: "中文 A é",
+      lineSpacingPoints: 21.72,
+      runs: [
+        {
+          text: "中文 A é",
+          fontFamily: "Noto Sans CJK SC",
+          fontSizePt: 15,
+          bold: false,
+          italic: false,
+          color: "#000000",
+        },
+      ],
+    });
+    assert.deepEqual(
+      Object.keys(unzipSync(result.pptx)).filter((path) =>
+        path.startsWith("ppt/fonts/"),
+      ),
+      [],
+    );
+  });
+
+  it("按 Unicode 断行机会和字素边界测量中文与超长词", async () => {
+    const measureFont = font("Noto Sans CJK SC", [
+      { weight: 400, data: notoSansScRegular },
+    ]);
+    const result = await build(
+      createElement(
+        Deck,
+        { width: 960, height: 540 },
+        createElement(
+          Slide,
+          { slideId: "cover" },
+          createElement(Text, {
+            testId: "cjk-breaks",
+            x: 0,
+            y: 0,
+            width: 20,
+            height: "auto",
+            style: { fontFamily: measureFont, fontSize: 20 },
+            children: "中文",
+          }),
+          createElement(Text, {
+            testId: "long-word-breaks",
+            x: 40,
+            y: 0,
+            width: 1,
+            height: "auto",
+            style: { fontFamily: measureFont, fontSize: 20 },
+            children: "abcdef",
+          }),
+          createElement(Text, {
+            testId: "combining-grapheme",
+            x: 80,
+            y: 0,
+            width: 1,
+            height: "auto",
+            style: { fontFamily: measureFont, fontSize: 20 },
+            children: "é",
+          }),
+        ),
+      ),
+    );
+
+    assert.deepEqual(
+      result.report.slides[0]?.objects.map(({ testId, box }) => ({
+        testId,
+        height: box?.height,
+      })),
+      [
+        { testId: "cjk-breaks", height: 57.92 },
+        { testId: "long-word-breaks", height: 173.76 },
+        { testId: "combining-grapheme", height: 28.96 },
+      ],
+    );
+    assert.deepEqual(
+      result.report.diagnostics.map(({ code, path }) => ({ code, path })),
+      [
+        { code: "overset", path: "deck/slide[cover]/text[long-word-breaks]" },
+        { code: "overset", path: "deck/slide[cover]/text[combining-grapheme]" },
+      ],
+    );
+    const file = await validatePptx(result.pptx);
+    assert.deepEqual(file.errors, []);
+    assert.deepEqual(
+      file.slides[0]?.objects.map(({ text }) => text?.text),
+      ["中文", "abcdef", "é"],
+    );
+  });
+
+  it("代测字体必须显式声明并保留原输出字体名", async () => {
+    const alternateFace = font(
+      "Deck Display Name",
+      [{ weight: 400, data: notoSansScRegular }],
+      { substitute: true },
+    );
+    const result = await build(
+      deck(
+        createElement(Text, {
+          testId: "substituted-font",
+          x: 0,
+          y: 0,
+          width: 100,
+          height: "auto",
+          style: { fontFamily: alternateFace, fontSize: 20 },
+          children: "中文",
+        }),
+      ),
+    );
+    const file = await validatePptx(result.pptx);
+    assert.deepEqual(file.errors, []);
+    assert.equal(
+      file.slides[0]?.objects[0]?.text?.paragraphs[0]?.runs[0]?.fontFamily,
+      "Deck Display Name",
+    );
+
+    await assert.rejects(
+      build(
+        deck(
+          createElement(Text, {
+            x: 0,
+            y: 0,
+            width: 100,
+            height: "auto",
+            style: {
+              fontFamily: font("Deck Display Name", [
+                { weight: 400, data: notoSansScRegular },
+              ]),
+              fontSize: 20,
+            },
+            children: "中文",
+          }),
+        ),
+      ),
+      (error: unknown) =>
+        error instanceof BuildError &&
+        error.diagnostics.some(
+          ({ code }) => code === "font-substitution-required",
+        ),
+    );
+  });
+
+  it("内容定高拒绝没有覆盖所需字符的字体文件", async () => {
+    await assert.rejects(
+      build(
+        deck(
+          createElement(Text, {
+            x: 0,
+            y: 0,
+            width: 100,
+            height: "auto",
+            style: {
+              fontFamily: font("Jost*", [{ weight: 400, data: jostBook }]),
+              fontSize: 20,
+            },
+            children: "中文",
+          }),
+        ),
+      ),
+      (error: unknown) =>
+        error instanceof BuildError &&
+        error.diagnostics.some(({ code }) => code === "font-missing-glyph"),
+    );
+  });
+
+  it("按准确字重选择度量文件，并要求实际斜体字重资源", async () => {
+    const jost = font("Jost*", [
+      { weight: 400, data: jostBook },
+      { weight: 700, data: jostBold },
+    ]);
+    const result = await build(
+      deck(
+        createElement(
+          Text,
+          {
+            x: 0,
+            y: 0,
+            width: 240,
+            height: "auto",
+            style: { fontFamily: jost, fontSize: 20 },
+          },
+          "Book ",
+          createElement(Span, { style: { fontWeight: "bold" } }, "Bold"),
+        ),
+      ),
+    );
+    const file = await validatePptx(result.pptx);
+    assert.deepEqual(file.errors, []);
+    assert.deepEqual(
+      file.slides[0]?.objects[0]?.text?.paragraphs[0]?.runs.map(
+        ({ fontFamily, bold }) => ({ fontFamily, bold }),
+      ),
+      [
+        { fontFamily: "Jost*", bold: false },
+        { fontFamily: "Jost*", bold: true },
+      ],
+    );
+
+    await assert.rejects(
+      build(
+        deck(
+          createElement(Text, {
+            x: 0,
+            y: 0,
+            width: 240,
+            height: "auto",
+            style: { fontFamily: jost, fontStyle: "italic", fontSize: 20 },
+            children: "Italic",
+          }),
+        ),
+      ),
+      (error: unknown) =>
+        error instanceof BuildError &&
+        error.diagnostics.some(
+          ({ code }) => code === "font-measurement-unavailable",
+        ),
+    );
+  });
+
+  it("度量到固定区域装不下时警告并保留区域、内容和原生默认行距", async () => {
+    const result = await build(
+      deck(
+        createElement(
+          Text,
+          {
+            testId: "fixed-overset",
+            x: 24,
+            y: 18,
+            width: 20,
+            height: 20,
+            style: {
+              fontFamily: font("Noto Sans CJK SC", [
+                { weight: 400, data: notoSansScRegular },
+              ]),
+              fontSize: 20,
+            },
+          },
+          "中文中文",
+        ),
+      ),
+    );
+
+    assert.deepEqual(result.report.slides[0]?.objects[0]?.box, {
+      x: 24,
+      y: 18,
+      width: 20,
+      height: 20,
+    });
+    assert.equal(result.report.slides[0]?.objects[0]?.text, "中文中文");
+    assert.deepEqual(
+      result.report.diagnostics.map(({ code }) => code),
+      ["overset"],
+    );
+    const file = await validatePptx(result.pptx);
+    assert.deepEqual(file.errors, []);
+    assert.equal(file.slides[0]?.objects[0]?.text?.text, "中文中文");
+    assert.equal(
+      file.slides[0]?.objects[0]?.text?.paragraphs[0]?.lineSpacingPoints,
+      undefined,
+    );
+  });
+
   it("生成固定区域文字并保留中英与 Unicode 内容", async () => {
     const content = "固定区域文字 — React + 简体中文 😀";
     const result = await build(

@@ -24,7 +24,7 @@ import {
 } from "./text-service.ts";
 import type { TextStyle } from "./text-service.ts";
 
-export type ChartKind = "column" | "bar" | "line" | "area";
+export type ChartKind = "column" | "bar" | "line" | "area" | "pie" | "doughnut";
 
 export type ChartPoint = {
   readonly color?: string;
@@ -123,7 +123,30 @@ export type ColumnOrBarChartProps = ChartBase &
 export type LineOrAreaChartProps = ChartBase &
   CartesianOptions & { readonly kind: "line" | "area" };
 
-export type ChartProps = ColumnOrBarChartProps | LineOrAreaChartProps;
+type PieOptions = {
+  /**
+   * 将扇区向外拉开的半径百分比。
+   * 四舍五入后的整数须在当前正式校验支持的 0–2,147,483,647 范围内。
+   */
+  readonly explosion?: number;
+  /** 第一个扇区的顺时针起始角，范围为 0–360 度，序列化为整数。 */
+  readonly firstSliceAngle?: number;
+};
+
+export type PieChartProps = ChartBase & PieOptions & { readonly kind: "pie" };
+
+export type DoughnutChartProps = ChartBase &
+  PieOptions & {
+    readonly kind: "doughnut";
+    /** 环形图内孔大小的百分比，范围为 10–90。 */
+    readonly holeSize?: number;
+  };
+
+export type ChartProps =
+  | ColumnOrBarChartProps
+  | LineOrAreaChartProps
+  | PieChartProps
+  | DoughnutChartProps;
 
 const chartRelationship =
   "http://schemas.openxmlformats.org/officeDocument/2006/relationships/chart";
@@ -136,11 +159,15 @@ const workbookContentType =
 const maximumShapeExtentEmu = 2_147_483_647;
 // DrawingML 的 a:ln/@w 上限为 20,116,800 EMU；先验证换算值再序列化。
 const maximumLineWidthEmu = 20_116_800;
+// 当前正式校验配置接受的取整值范围为 0–2,147,483,647；此处不是 OOXML 通用格式上限。
+const maximumExplosionForCurrentValidationProfile = 2_147_483_647;
 const chartOptions: Readonly<Record<ChartKind, readonly string[]>> = {
   column: ["stacking", "valueAxis", "categoryAxis", "gapWidth", "overlap"],
   bar: ["stacking", "valueAxis", "categoryAxis", "gapWidth", "overlap"],
   line: ["stacking", "valueAxis", "categoryAxis"],
   area: ["stacking", "valueAxis", "categoryAxis"],
+  pie: ["explosion", "firstSliceAngle"],
+  doughnut: ["explosion", "firstSliceAngle", "holeSize"],
 };
 const allChartOptions = [...new Set(Object.values(chartOptions).flat())];
 const positionValues = new Set([
@@ -223,6 +250,34 @@ function finiteNumber(value: unknown, label: string): number {
     fail("invalid-parameter", `${label} 必须是有限数值`);
   }
   return value;
+}
+
+type RoundedRangeBoundary = "input-and-result" | "rounded-result";
+
+function roundedRange(
+  value: unknown,
+  label: string,
+  minimum: number,
+  maximum: number,
+  boundary: RoundedRangeBoundary = "input-and-result",
+): number | undefined {
+  if (value === undefined) return undefined;
+  const number = finiteNumber(value, label);
+  const rounded = Math.round(number);
+  if (
+    (boundary === "input-and-result" &&
+      (number < minimum || number > maximum)) ||
+    rounded < minimum ||
+    rounded > maximum
+  ) {
+    fail(
+      "invalid-chart-option",
+      boundary === "rounded-result"
+        ? `${label} 四舍五入后必须在 ${minimum} 到 ${maximum} 的范围内`
+        : `${label} 必须在 ${minimum} 到 ${maximum} 的格式范围内`,
+    );
+  }
+  return rounded;
 }
 
 function xmlText(value: string, label: string): string {
@@ -357,7 +412,7 @@ function axis(
   };
 }
 
-function chartData(value: unknown): ChartData {
+function chartData(value: unknown, kind: ChartKind): ChartData {
   if (!isRecord(value)) fail("invalid-data", "Chart.data 必须是对象");
   onlyKeys(value, ["categories", "series"], "Chart.data");
   const categories = value["categories"];
@@ -405,6 +460,16 @@ function chartData(value: unknown): ChartData {
         fail(
           "invalid-data",
           `系列「${name}」的第 ${valueIndex + 1} 个值必须是有限数值或 null`,
+        );
+      }
+      if (
+        (kind === "pie" || kind === "doughnut") &&
+        typeof value === "number" &&
+        value < 0
+      ) {
+        fail(
+          "invalid-data",
+          `系列「${name}」的第 ${valueIndex + 1} 个饼图值不能为负数`,
         );
       }
     }
@@ -490,7 +555,13 @@ function labels(
         : "Chart.dataLabels.position 必须是支持的字符串",
     );
   }
-  if (position !== undefined && kind !== "column" && kind !== "bar") {
+  if (
+    position !== undefined &&
+    kind !== "column" &&
+    kind !== "bar" &&
+    kind !== "pie" &&
+    kind !== "doughnut"
+  ) {
     fail("invalid-data-labels", `${kind} 图表不支持指定数据标签位置`);
   }
   const numberFormat = value["numberFormat"];
@@ -590,6 +661,8 @@ function chartResourceClaims(
     readonly message: string;
   }[];
 } {
+  const cartesian =
+    props.kind === "pie" || props.kind === "doughnut" ? undefined : props;
   const chartText = [
     ...data.categories,
     ...data.series.map(({ name }) => name),
@@ -605,9 +678,9 @@ function chartResourceClaims(
     dataLabels?: string;
     pointLabels?: Map<string, string>;
   } = { chart: chart.xml };
-  if (props.categoryAxis?.style !== undefined) {
+  if (cartesian?.categoryAxis?.style !== undefined) {
     const output = writeChartTextProperties(
-      mergeTextStyle(props.style, props.categoryAxis.style),
+      mergeTextStyle(props.style, cartesian.categoryAxis.style),
       data.categories,
       "Chart.categoryAxis.style",
     );
@@ -615,13 +688,13 @@ function chartResourceClaims(
     resourceClaims.push(...output.resourceClaims);
     warnings.push(...output.warnings);
   }
-  if (props.valueAxis?.style !== undefined) {
+  if (cartesian?.valueAxis?.style !== undefined) {
     const axisValues = data.series.flatMap(({ values }) =>
       values.filter((value): value is number => value !== null).map(String),
     );
     // 坐标轴刻度由应用生成；共享文字服务仍需一个文本运行来登记值轴字体。
     const output = writeChartTextProperties(
-      mergeTextStyle(props.style, props.valueAxis.style),
+      mergeTextStyle(props.style, cartesian.valueAxis.style),
       axisValues.length === 0 ? [""] : axisValues,
       "Chart.valueAxis.style",
     );
@@ -721,7 +794,13 @@ function validateProps(props: Record<string, unknown>): ChartProps {
     ],
     "Chart",
   );
-  const data = chartData(props["data"]);
+  const data = chartData(props["data"], chartKind);
+  if (
+    (chartKind === "pie" || chartKind === "doughnut") &&
+    data.series.length !== 1
+  ) {
+    fail("invalid-data", `${chartKind} 图表当前仅支持一个数据系列`);
+  }
   const testId = optionalName(props["testId"], "testId");
   const name = optionalName(props["name"], "name");
   if (name !== undefined) xmlText(name, "Chart.name");
@@ -770,6 +849,24 @@ function validateProps(props: Record<string, unknown>): ChartProps {
     fail("invalid-overlap", "Chart.overlap 必须在 -100 到 100 间");
   }
   const checkedPlotArea = plotArea(props["plotArea"], box);
+  const explosion =
+    chartKind === "pie" || chartKind === "doughnut"
+      ? roundedRange(
+          props["explosion"],
+          "Chart.explosion",
+          0,
+          maximumExplosionForCurrentValidationProfile,
+          "rounded-result",
+        )
+      : undefined;
+  const firstSliceAngle =
+    chartKind === "pie" || chartKind === "doughnut"
+      ? roundedRange(props["firstSliceAngle"], "Chart.firstSliceAngle", 0, 360)
+      : undefined;
+  const holeSize =
+    chartKind === "doughnut"
+      ? roundedRange(props["holeSize"], "Chart.holeSize", 10, 90)
+      : undefined;
   return {
     ...(testId === undefined ? {} : { testId }),
     ...(name === undefined ? {} : { name }),
@@ -806,10 +903,17 @@ function validateProps(props: Record<string, unknown>): ChartProps {
         }),
     ...(gapWidth === undefined ? {} : { gapWidth: gapWidth as number }),
     ...(overlap === undefined ? {} : { overlap: overlap as number }),
+    ...(chartKind === "pie" || chartKind === "doughnut"
+      ? {
+          ...(explosion === undefined ? {} : { explosion }),
+          ...(firstSliceAngle === undefined ? {} : { firstSliceAngle }),
+        }
+      : {}),
+    ...(chartKind === "doughnut" && holeSize !== undefined ? { holeSize } : {}),
   } as ChartProps;
 }
 
-/** 图表模块校验坐标系图表输入，并生成原生图表部件及其嵌入工作簿。 */
+/** 图表模块校验输入，并生成原生图表部件及其嵌入工作簿。 */
 export const chartCapability: CapabilityModule = {
   declaration: "rp:chart",
   compile(input: CapabilityInput, context) {
@@ -882,7 +986,7 @@ export const chartCapability: CapabilityModule = {
   },
 };
 
-/** 声明一个由官方能力模块编译为原生坐标系图表的对象。 */
+/** 声明一个由官方能力模块编译为原生图表的对象。 */
 export function Chart(props: ChartProps): ReactNode {
   return motionElement("rp:chart", props);
 }

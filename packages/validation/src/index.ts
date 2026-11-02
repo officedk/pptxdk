@@ -19,6 +19,9 @@ const maximumSlideLayoutId = 4_294_967_295;
 const minimumSlideSizeEmu = 914_400;
 const maximumSlideSizeEmu = 51_206_400;
 const maximumShapeExtentEmu = 2_147_483_647;
+const minimumFontSizeCentipoints = 100;
+const maximumFontSizeCentipoints = 400_000;
+const maximumTextSpacingCentipoints = 158_400;
 
 export type ValidationIssue = {
   readonly part: string;
@@ -78,6 +81,7 @@ export type FileTextParagraph = {
   readonly runs: readonly FileTextRun[];
   readonly alignment?: string;
   readonly lineSpacingPoints?: number;
+  readonly spacingAfterPoints?: number;
   readonly list?: FileTextList;
 };
 
@@ -213,6 +217,16 @@ function readParagraph(paragraph: XmlElement): FileTextParagraph {
       ? undefined
       : first(lineSpacing, drawingNamespace, "spcPts");
   const lineSpacingValue = decimalAttribute(exactSpacing, "val");
+  const spacingAfter =
+    paragraphProperties === undefined
+      ? undefined
+      : first(paragraphProperties, drawingNamespace, "spcAft");
+  const spacingAfterValue = decimalAttribute(
+    spacingAfter === undefined
+      ? undefined
+      : first(spacingAfter, drawingNamespace, "spcPts"),
+    "val",
+  );
   const bullet =
     paragraphProperties === undefined
       ? undefined
@@ -243,6 +257,9 @@ function readParagraph(paragraph: XmlElement): FileTextParagraph {
     ...(lineSpacingValue === undefined
       ? {}
       : { lineSpacingPoints: lineSpacingValue / 100 }),
+    ...(spacingAfterValue === undefined
+      ? {}
+      : { spacingAfterPoints: spacingAfterValue / 100 }),
     ...(list === undefined ? {} : { list }),
   };
 }
@@ -550,6 +567,80 @@ function validateSlideLayoutIds(
   }
 }
 
+function validateTextValueRange(
+  element: XmlElement | undefined,
+  name: string,
+  minimum: number,
+  maximum: number,
+  part: string,
+  errors: ValidationIssue[],
+  code: "invalid-font-size" | "invalid-text-spacing",
+  label: string,
+): void {
+  if (element === undefined || !element.hasAttribute(name)) return;
+  const value = integerAttribute(element, name);
+  if (value === undefined || value < minimum || value > maximum) {
+    issue(
+      errors,
+      part,
+      code,
+      `${label}字段必须是 ${minimum} 到 ${maximum} 间的整数`,
+    );
+  }
+}
+
+function validateTextValueRanges(
+  shape: XmlElement,
+  part: string,
+  errors: ValidationIssue[],
+): void {
+  const body = first(shape, presentationNamespace, "txBody");
+  if (body === undefined) return;
+  for (const paragraph of elements(body, drawingNamespace, "p")) {
+    for (const run of elements(paragraph, drawingNamespace, "r")) {
+      validateTextValueRange(
+        first(run, drawingNamespace, "rPr"),
+        "sz",
+        minimumFontSizeCentipoints,
+        maximumFontSizeCentipoints,
+        part,
+        errors,
+        "invalid-font-size",
+        "字号",
+      );
+    }
+    validateTextValueRange(
+      first(paragraph, drawingNamespace, "endParaRPr"),
+      "sz",
+      minimumFontSizeCentipoints,
+      maximumFontSizeCentipoints,
+      part,
+      errors,
+      "invalid-font-size",
+      "字号",
+    );
+    const properties = first(paragraph, drawingNamespace, "pPr");
+    for (const spacingName of ["lnSpc", "spcAft"] as const) {
+      const spacing =
+        properties === undefined
+          ? undefined
+          : first(properties, drawingNamespace, spacingName);
+      validateTextValueRange(
+        spacing === undefined
+          ? undefined
+          : first(spacing, drawingNamespace, "spcPts"),
+        "val",
+        0,
+        maximumTextSpacingCentipoints,
+        part,
+        errors,
+        "invalid-text-spacing",
+        "段落间距",
+      );
+    }
+  }
+}
+
 function validateShape(
   shape: XmlElement,
   part: string,
@@ -617,6 +708,7 @@ function validateShape(
     );
     return undefined;
   }
+  validateTextValueRanges(shape, part, errors);
   const text = readTextBody(shape);
   return {
     id,

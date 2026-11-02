@@ -164,21 +164,42 @@ function centipoints(value: number): number {
   return Math.round(value * 100);
 }
 
-function lengthCentipoints(pixels: number): number {
-  return Math.round(pixels * 75);
+function spacingCentipoints(
+  pixels: number,
+  label: "lineHeight" | "spacingAfter",
+): number {
+  const value = Math.round(pixels * 75);
+  if (value < 0 || value > 158_400) {
+    throw new CapabilityError(
+      label === "lineHeight"
+        ? "invalid-text-length"
+        : "invalid-paragraph-spacing",
+      `${label} 换算后必须在 0 到 1584pt 的 DrawingML 范围内`,
+    );
+  }
+  return value;
 }
 
 function fontSizePoints(value: FontSize | undefined): number {
-  if (value === undefined)
-    return positiveLength(defaultTextStyle.fontSize, "字号") * 0.75;
-  if (typeof value === "string" && value.endsWith("pt")) {
-    const points = Number(value.slice(0, -2));
+  let points: number;
+  if (value === undefined) {
+    points = positiveLength(defaultTextStyle.fontSize, "字号") * 0.75;
+  } else if (typeof value === "string" && value.endsWith("pt")) {
+    points = Number(value.slice(0, -2));
     if (!Number.isFinite(points) || points <= 0) {
       throw new CapabilityError("invalid-font-size", "fontSize 必须大于 0");
     }
-    return points;
+  } else {
+    points = positiveLength(value, "fontSize") * 0.75;
   }
-  return positiveLength(value, "fontSize") * 0.75;
+  const serialized = centipoints(points);
+  if (serialized < 100 || serialized > 400_000) {
+    throw new CapabilityError(
+      "invalid-font-size",
+      "fontSize 换算后必须在 1 到 4000pt 的 DrawingML 范围内",
+    );
+  }
+  return serialized / 100;
 }
 
 function weightValue(value: TextStyle["fontWeight"]): number {
@@ -345,7 +366,10 @@ function readTextStyle(value: unknown, label: string): TextStyle {
   };
   validateRunStyle(runStyle);
   if (style.lineHeight !== undefined)
-    positiveLength(style.lineHeight, "lineHeight");
+    spacingCentipoints(
+      positiveLength(style.lineHeight, "lineHeight"),
+      "lineHeight",
+    );
   return style;
 }
 
@@ -377,7 +401,10 @@ function paragraphStyle(value: unknown): ParagraphStyle {
     );
   }
   if (style.lineHeight !== undefined)
-    positiveLength(style.lineHeight, "lineHeight");
+    spacingCentipoints(
+      positiveLength(style.lineHeight, "lineHeight"),
+      "lineHeight",
+    );
   if (
     style.spacingAfter !== undefined &&
     (!Number.isFinite(style.spacingAfter) || style.spacingAfter < 0)
@@ -386,6 +413,9 @@ function paragraphStyle(value: unknown): ParagraphStyle {
       "invalid-paragraph-spacing",
       "spacingAfter 必须是有限非负像素数值",
     );
+  }
+  if (style.spacingAfter !== undefined) {
+    spacingCentipoints(style.spacingAfter, "spacingAfter");
   }
   if (style.list !== undefined) validateList(style.list);
   const runStyle: RunStyle = {
@@ -519,11 +549,11 @@ function paragraphXml(paragraph: Paragraph): string {
   const lineSpacing =
     style.lineHeight === undefined
       ? ""
-      : `<a:lnSpc><a:spcPts val="${lengthCentipoints(positiveLength(style.lineHeight, "lineHeight"))}"/></a:lnSpc>`;
+      : `<a:lnSpc><a:spcPts val="${spacingCentipoints(positiveLength(style.lineHeight, "lineHeight"), "lineHeight")}"/></a:lnSpc>`;
   const spacingAfter =
     style.spacingAfter === undefined || style.spacingAfter === 0
       ? ""
-      : `<a:spcAft><a:spcPts val="${lengthCentipoints(style.spacingAfter)}"/></a:spcAft>`;
+      : `<a:spcAft><a:spcPts val="${spacingCentipoints(style.spacingAfter, "spacingAfter")}"/></a:spcAft>`;
   let list = "";
   if (style.list?.type === "bullet") {
     list = `<a:buChar char="${xmlEscape(style.list.character ?? "•")}"/>`;

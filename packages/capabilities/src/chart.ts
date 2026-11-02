@@ -124,7 +124,10 @@ export type LineOrAreaChartProps = ChartBase &
   CartesianOptions & { readonly kind: "line" | "area" };
 
 type PieOptions = {
-  /** 将扇区向外拉开的半径百分比，范围按 OOXML 无符号 32 位整数校验。 */
+  /**
+   * 将扇区向外拉开的半径百分比。
+   * 四舍五入后的整数须在当前正式校验支持的 0–2,147,483,647 范围内。
+   */
   readonly explosion?: number;
   /** 第一个扇区的顺时针起始角，范围为 0–360 度，序列化为整数。 */
   readonly firstSliceAngle?: number;
@@ -156,8 +159,8 @@ const workbookContentType =
 const maximumShapeExtentEmu = 2_147_483_647;
 // DrawingML 的 a:ln/@w 上限为 20,116,800 EMU；先验证换算值再序列化。
 const maximumLineWidthEmu = 20_116_800;
-// c:explosion 使用 OOXML CT_UnsignedInt，最大值为 2^32 - 1。
-const maximumExplosion = 4_294_967_295;
+// 当前正式校验配置接受的取整值范围为 0–2,147,483,647；此处不是 OOXML 通用格式上限。
+const maximumExplosionForCurrentValidationProfile = 2_147_483_647;
 const chartOptions: Readonly<Record<ChartKind, readonly string[]>> = {
   column: ["stacking", "valueAxis", "categoryAxis", "gapWidth", "overlap"],
   bar: ["stacking", "valueAxis", "categoryAxis", "gapWidth", "overlap"],
@@ -249,24 +252,29 @@ function finiteNumber(value: unknown, label: string): number {
   return value;
 }
 
+type RoundedRangeBoundary = "input-and-result" | "rounded-result";
+
 function roundedRange(
   value: unknown,
   label: string,
   minimum: number,
   maximum: number,
+  boundary: RoundedRangeBoundary = "input-and-result",
 ): number | undefined {
   if (value === undefined) return undefined;
   const number = finiteNumber(value, label);
   const rounded = Math.round(number);
   if (
-    number < minimum ||
-    number > maximum ||
+    (boundary === "input-and-result" &&
+      (number < minimum || number > maximum)) ||
     rounded < minimum ||
     rounded > maximum
   ) {
     fail(
       "invalid-chart-option",
-      `${label} 必须在 ${minimum} 到 ${maximum} 的格式范围内`,
+      boundary === "rounded-result"
+        ? `${label} 四舍五入后必须在 ${minimum} 到 ${maximum} 的范围内`
+        : `${label} 必须在 ${minimum} 到 ${maximum} 的格式范围内`,
     );
   }
   return rounded;
@@ -844,7 +852,13 @@ function validateProps(props: Record<string, unknown>): ChartProps {
   const checkedPlotArea = plotArea(props["plotArea"], box);
   const explosion =
     chartKind === "pie" || chartKind === "doughnut"
-      ? roundedRange(props["explosion"], "Chart.explosion", 0, maximumExplosion)
+      ? roundedRange(
+          props["explosion"],
+          "Chart.explosion",
+          0,
+          maximumExplosionForCurrentValidationProfile,
+          "rounded-result",
+        )
       : undefined;
   const firstSliceAngle =
     chartKind === "pie" || chartKind === "doughnut"

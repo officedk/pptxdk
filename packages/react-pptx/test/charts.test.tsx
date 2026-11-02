@@ -719,6 +719,111 @@ describe("原生坐标系图表", () => {
     assert.ok(!pieSheet.includes("<v></v>"));
   });
 
+  it("按当前正式校验配置限制饼图与环形图的最终爆炸值", async () => {
+    const data = {
+      categories: ["A", "B"],
+      series: [{ name: "S", values: [1, 2] }],
+    } as const;
+    const acceptedValues = [
+      ["zero", 0, 0],
+      ["common", 400, 400],
+      ["maximum", 2_147_483_647, 2_147_483_647],
+      ["rounds-to-maximum", 2_147_483_647.49, 2_147_483_647],
+    ] as const;
+    const expectedValues = acceptedValues.map(([, , rounded]) => rounded);
+    const kinds = ["pie", "doughnut"] as const;
+    const result = await build(
+      <Deck>
+        <Slide slideId="explosion-supported-range">
+          {kinds.flatMap((kind) =>
+            acceptedValues.map(([label, explosion]) => (
+              <Chart
+                key={`${kind}-${label}`}
+                testId={`${kind}-${label}`}
+                kind={kind}
+                x={0}
+                y={0}
+                width={200}
+                height={120}
+                data={data}
+                explosion={explosion}
+              />
+            )),
+          )}
+        </Slide>
+      </Deck>,
+    );
+
+    const parts = unzipSync(result.pptx);
+    const file = await validatePptx(result.pptx);
+    assert.deepEqual(file.errors, []);
+    assert.deepEqual(
+      file.slides[0]?.objects.map(({ chart }) => chart?.types),
+      [
+        ["pieChart"],
+        ["pieChart"],
+        ["pieChart"],
+        ["pieChart"],
+        ["doughnutChart"],
+        ["doughnutChart"],
+        ["doughnutChart"],
+        ["doughnutChart"],
+      ],
+    );
+    const chartPaths = Object.keys(parts)
+      .filter((path) => /^ppt\/charts\/chart\d+\.xml$/u.test(path))
+      .sort(
+        (left, right) =>
+          Number(left.match(/chart(\d+)/u)?.[1]) -
+          Number(right.match(/chart(\d+)/u)?.[1]),
+      );
+    assert.deepEqual(
+      chartPaths.map((path) => {
+        const xml = strFromU8(parts[path]!);
+        return Number(xml.match(/<c:explosion val="(\d+)"\/>/u)?.[1]);
+      }),
+      [...expectedValues, ...expectedValues],
+    );
+
+    const rejectedValues = [
+      ["half-rounds-overflow", 2_147_483_647.5],
+      ["first-unrepresentable", 2_147_483_648],
+      ["unsigned-integer-maximum", 4_294_967_295],
+    ] as const;
+    for (const kind of kinds) {
+      for (const [label, explosion] of rejectedValues) {
+        const testId = `${kind}-explosion-${label}`;
+        await assert.rejects(
+          build(
+            <Deck>
+              <Slide slideId={testId}>
+                <Chart
+                  testId={testId}
+                  kind={kind}
+                  x={0}
+                  y={0}
+                  width={200}
+                  height={120}
+                  data={data}
+                  explosion={explosion}
+                />
+              </Slide>
+            </Deck>,
+          ),
+          (error: unknown) => {
+            assert.ok(error instanceof BuildError);
+            assert.equal(error.diagnostics[0]?.code, "invalid-chart-option");
+            assert.match(
+              error.diagnostics[0]?.path ?? "",
+              new RegExp(`chart\\[${testId}\\]`, "u"),
+            );
+            return true;
+          },
+        );
+      }
+    }
+  });
+
   it("拒绝饼图系列、数值和参数的非法组合", async () => {
     const base = {
       x: 0,

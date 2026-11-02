@@ -345,9 +345,9 @@ describe("公开构建入口", () => {
     );
   });
 
-  it("完整嵌入接受 OS/2 no-subsetting 标志并保留完整字体文件", async () => {
+  it("完整嵌入接受 Editable 与 no-subsetting 标志并保留完整字体文件", async () => {
     const original = jostBook;
-    const noSubsetting = withFontFsType(original, 0x0100);
+    const noSubsetting = withFontFsType(original, 0x0108);
     const result = await build(
       <Deck>
         <Slide slideId="font-no-subsetting">
@@ -371,7 +371,7 @@ describe("公开构建入口", () => {
     assert.ok(embedded);
     const view = new DataView(embedded!.buffer, embedded!.byteOffset);
     const payloadStart = view.getUint32(0, true) - original.byteLength;
-    assert.equal(view.getUint16(32, true), 0x0100);
+    assert.equal(view.getUint16(32, true), 0x0108);
     assert.deepEqual(embedded.subarray(payloadStart), noSubsetting);
   });
 

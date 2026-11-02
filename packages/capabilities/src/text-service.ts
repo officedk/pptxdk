@@ -5,6 +5,7 @@ import * as fontkit from "fontkit";
 // @ts-expect-error -- linebreak 未提供类型，下面只声明所用的断点接口。
 import LineBreakerImplementation from "linebreak";
 
+import type { FontEmbeddingUse } from "./font-embedding.ts";
 import type { Font, FontFaceStyle } from "./font.ts";
 
 export type FontReference = string | Font;
@@ -52,6 +53,7 @@ export type TextServiceResult = {
   readonly xml: string;
   readonly text: string;
   readonly resourceClaims: readonly TextResourceClaim[];
+  readonly fontUses: readonly FontEmbeddingUse[];
   readonly measurement?: { readonly width: number; readonly height: number };
   readonly warnings: readonly {
     readonly code: string;
@@ -92,6 +94,7 @@ type NormalizedFont = {
   readonly weight: number;
   readonly style: FontFaceStyle;
   readonly substitute: boolean;
+  readonly embeddable: boolean;
   readonly hasResource: boolean;
   readonly identity: string;
   readonly data?: Uint8Array;
@@ -293,7 +296,7 @@ function fontFamilyValue(value: FontReference | undefined): Font {
   if (value["family"].trim() === "") {
     throw new CapabilityError("invalid-font-family", "Font.family 不能为空");
   }
-  onlyKnownKeys(value, ["family", "faces", "substitute"], "Font");
+  onlyKnownKeys(value, ["family", "faces", "substitute", "embeddable"], "Font");
   if (value["faces"] !== undefined && !Array.isArray(value["faces"])) {
     throw new CapabilityError("invalid-font-family", "Font.faces 必须是数组");
   }
@@ -304,6 +307,15 @@ function fontFamilyValue(value: FontReference | undefined): Font {
     throw new CapabilityError(
       "invalid-font-family",
       "Font.substitute 必须是布尔值",
+    );
+  }
+  if (
+    value["embeddable"] !== undefined &&
+    typeof value["embeddable"] !== "boolean"
+  ) {
+    throw new CapabilityError(
+      "invalid-font-family",
+      "Font.embeddable 必须是布尔值",
     );
   }
   return value as Font;
@@ -354,6 +366,7 @@ function normalizedFonts(style: RunStyle): NormalizedFont[] {
         weight,
         style: faceStyle,
         substitute: family.substitute ?? false,
+        embeddable: family.embeddable ?? true,
         hasResource: false,
         identity: "missing",
       },
@@ -364,6 +377,7 @@ function normalizedFonts(style: RunStyle): NormalizedFont[] {
     weight,
     style: faceStyle,
     substitute: family.substitute ?? false,
+    embeddable: family.embeddable ?? true,
     hasResource: true,
     identity: createHash("sha256").update(face.data!).digest("hex"),
     data: face.data!,
@@ -621,26 +635,52 @@ function runXml(run: Run): string {
 
 function textResourceClaims(runs: readonly Run[]): {
   readonly resourceClaims: TextResourceClaim[];
+  readonly fontUses: FontEmbeddingUse[];
   readonly warnings: { readonly code: string; readonly message: string }[];
 } {
   const used = new Map<
     string,
-    { readonly fonts: NormalizedFont[]; readonly text: string[] }
+    {
+      readonly fonts: NormalizedFont[];
+      readonly fontPolicies: Map<string, NormalizedFont>;
+      readonly text: string[];
+    }
   >();
   for (const run of runs) {
     for (const font of normalizedFonts(run.style)) {
       const key = `${font.family.toLocaleLowerCase("en-US")}\u0000${font.weight}\u0000${font.style}`;
-      const entry = used.get(key) ?? { fonts: [], text: [] };
+      const entry = used.get(key) ?? {
+        fonts: [],
+        fontPolicies: new Map<string, NormalizedFont>(),
+        text: [],
+      };
       if (!entry.fonts.some(({ identity }) => identity === font.identity)) {
         entry.fonts.push(font);
       }
+      // 字节资源可以合并，但每种实际使用的嵌入策略都须独立校验。
+      const policyKey = `${font.identity}\u0000${font.substitute ? 1 : 0}\u0000${font.embeddable ? 1 : 0}`;
+      entry.fontPolicies.set(policyKey, font);
       entry.text.push(run.text);
       used.set(key, entry);
     }
   }
   const resourceClaims: TextResourceClaim[] = [];
+  const fontUses: FontEmbeddingUse[] = [];
   const warnings: { code: string; message: string }[] = [];
   for (const [key, entry] of used) {
+    for (const font of entry.fontPolicies.values()) {
+      fontUses.push({
+        family: font.family,
+        weight: font.weight,
+        style: font.style,
+        identity: font.identity,
+        ...(font.data === undefined ? {} : { bytes: font.data }),
+        substitute: font.substitute,
+        embeddable: font.embeddable,
+        bold: outputBold(font),
+        italic: font.style === "italic",
+      });
+    }
     for (const font of entry.fonts) {
       if (!font.hasResource) {
         warnings.push({
@@ -657,7 +697,7 @@ function textResourceClaims(runs: readonly Run[]): {
       }
     }
   }
-  return { resourceClaims, warnings };
+  return { resourceClaims, fontUses, warnings };
 }
 
 function alignmentValue(value: TextAlignment | undefined): string | undefined {
@@ -1315,7 +1355,7 @@ export function writeTextBody(
       ? paragraph.runs
       : [{ text: "", style: paragraph.endStyle }],
   );
-  const { resourceClaims, warnings } = textResourceClaims(runs);
+  const { resourceClaims, fontUses, warnings } = textResourceClaims(runs);
   let measured: ReturnType<typeof measureParagraphs> | undefined;
   if (layout !== undefined) {
     try {
@@ -1380,6 +1420,7 @@ export function writeTextBody(
     xml,
     text,
     resourceClaims,
+    fontUses,
     ...(measured === undefined
       ? {}
       : { measurement: { width: measured.width, height: measured.height } }),
@@ -1392,7 +1433,10 @@ export function writeChartTextProperties(
   styleValue: unknown,
   texts: readonly string[],
   label: string,
-): Pick<TextServiceResult, "text" | "resourceClaims" | "warnings"> & {
+): Pick<
+  TextServiceResult,
+  "text" | "resourceClaims" | "fontUses" | "warnings"
+> & {
   readonly xml: string;
 } {
   const style = readTextStyle(styleValue, label);
@@ -1406,7 +1450,7 @@ export function writeChartTextProperties(
   validateRunStyle(runStyle);
   const runs = texts.map((text) => ({ text, style: runStyle }));
   for (const text of texts) escapedXml(text);
-  const { resourceClaims, warnings } = textResourceClaims(runs);
+  const { resourceClaims, fontUses, warnings } = textResourceClaims(runs);
   const defaultProperties = runPropertiesXml(runStyle, "a:defRPr");
   const outputText = texts.join("\n");
   const lineSpacing =
@@ -1417,6 +1461,7 @@ export function writeChartTextProperties(
     xml: `<c:txPr><a:bodyPr anchor="${bodyAnchor(style.verticalAlign)}"/><a:lstStyle/><a:p><a:pPr>${lineSpacing}${defaultProperties}</a:pPr><a:endParaRPr lang="en-US"/></a:p></c:txPr>`,
     text: outputText,
     resourceClaims,
+    fontUses,
     warnings,
   };
 }

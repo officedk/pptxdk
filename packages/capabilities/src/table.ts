@@ -12,6 +12,10 @@ import {
 import { createElement, type ReactNode } from "react";
 
 import {
+  fontPresentationContributions,
+  type FontEmbeddingUse,
+} from "./font-embedding.ts";
+import {
   motionAnnotations,
   motionElement,
   type MotionProps,
@@ -1002,6 +1006,7 @@ export const tableCapability: CapabilityModule = {
     const heights = [...model.heights];
     const warnings = [...model.warnings];
     const claims = [...model.claims];
+    const fontUses: FontEmbeddingUse[] = [];
     const warningKeys = new Set(model.warningKeys);
     const addTextResult = (
       result: ReturnType<typeof writeTextBody>,
@@ -1014,6 +1019,7 @@ export const tableCapability: CapabilityModule = {
         warnings.push({ ...warning, path });
       }
       claims.push(...result.resourceClaims);
+      fontUses.push(...result.fontUses.map((use) => ({ ...use, path })));
     };
     const targetHeight = context.layoutBox?.height;
     if (targetHeight !== undefined) {
@@ -1183,6 +1189,10 @@ export const tableCapability: CapabilityModule = {
       extensions: [],
       ...(annotations.length === 0 ? {} : { annotations }),
       resourceClaims: [...uniqueClaims.values()],
+      presentationContributions: fontPresentationContributions(
+        fontUses,
+        context.options.embedFonts,
+      ),
       warnings,
     };
   },

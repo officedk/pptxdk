@@ -25,6 +25,8 @@ export const targets = Object.freeze({
 
 export type BuildOptions = {
   readonly target?: Target;
+  /** 明确请求嵌入文稿实际使用的完整字体；默认不嵌入。 */
+  readonly embedFonts?: "full";
   /**
    * 单次构建的协作式取消信号；未指定时没有默认超时。
    * 完成、未处理错误与取消以首次确定的终态为准，完成后取消不会改变结果。
@@ -269,6 +271,8 @@ export type CapabilityPackagePart = {
 export type CapabilityContext = {
   readonly id: number;
   readonly path: string;
+  /** 本次构建选项；能力模块自行解释其负责的选项。 */
+  readonly options: BuildOptions;
   readonly layoutBox?: GeometryBox;
   /** 使用同一组已注册模块递归编译原生子对象。 */
   compileChildren(children: readonly CapabilityChild[]): CapabilityChildren;
@@ -276,6 +280,29 @@ export type CapabilityContext = {
   registerResource(resource: CapabilityResource): string;
   /** 注册当前页面引用的原生部件及其直接关联的二进制部件。 */
   registerPackagePart(part: CapabilityPackagePart): string;
+};
+
+/** 一个文稿级 XML 记录中的资源项，由核心统一分配部件与关系标识。 */
+export type CapabilityPresentationContribution = {
+  readonly collection: string;
+  readonly presentationAttributes?: Readonly<Record<string, string>>;
+  readonly record: {
+    readonly key: string;
+    readonly identity: string;
+    readonly tagName: string;
+    readonly content: string;
+  };
+  readonly item: {
+    readonly key: string;
+    readonly identity: string;
+    /** 同一记录中兄弟关系项的模式顺序。 */
+    readonly order: number;
+    readonly relationshipType: string;
+    readonly pathTemplate: string;
+    readonly contentType: string;
+    readonly bytes: Uint8Array;
+    readonly content: (relationshipId: string) => string;
+  };
 };
 
 export type CapabilityLayoutRequest = {
@@ -311,6 +338,8 @@ export type CapabilityOutput = {
     /** 来自共享文字服务的实际输出文字，供后续字体资源处理使用。 */
     readonly characters?: string;
   }[];
+  /** 由对象实际使用的资源构成、需要挂接到 presentation 的记录项。 */
+  readonly presentationContributions?: readonly CapabilityPresentationContribution[];
   readonly warnings?: readonly {
     readonly code: string;
     readonly message: string;

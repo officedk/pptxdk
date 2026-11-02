@@ -33,6 +33,10 @@
     "typecheck": "tsc -p tsconfig.node.json --noEmit --pretty false",
     "build": "rm -rf dist && tsc -p tsconfig.build.json --pretty false"
   },
+  "dependencies": {
+    "@xmldom/xmldom": "catalog:",
+    "fflate": "catalog:"
+  },
   "devDependencies": {
     "@react-pptx/tooling-config": "workspace:*",
     "@types/node": "catalog:",

@@ -1,0 +1,180 @@
+import {
+  CapabilityError,
+  pxToEmu,
+  xmlEscape,
+  type CapabilityInput,
+  type CapabilityModule,
+} from "@react-pptx/core";
+import { createElement, type ReactNode } from "react";
+
+export type ShapeProps = {
+  readonly testId?: string;
+  readonly name?: string;
+  readonly geometry?: string;
+  readonly x: number;
+  readonly y: number;
+  readonly width: number;
+  readonly height: number;
+  readonly fill?: string;
+  readonly children?: ReactNode;
+};
+
+const geometryNames = new Set([
+  "rect",
+  "roundRect",
+  "ellipse",
+  "triangle",
+  "rtTriangle",
+  "diamond",
+  "parallelogram",
+  "trapezoid",
+  "pentagon",
+  "hexagon",
+  "heptagon",
+  "octagon",
+  "star4",
+  "star5",
+  "star6",
+  "star8",
+  "cloud",
+  "heart",
+  "pie",
+  "arc",
+  "leftBrace",
+  "rightBrace",
+  "leftBracket",
+  "rightBracket",
+]);
+
+const allowedParameters = [
+  "testId",
+  "name",
+  "geometry",
+  "x",
+  "y",
+  "width",
+  "height",
+  "fill",
+] as const;
+
+function record(input: CapabilityInput): Record<string, unknown> {
+  return input.props;
+}
+
+function requiredNumber(
+  props: Record<string, unknown>,
+  name: "x" | "y" | "width" | "height",
+): number {
+  const value = props[name];
+  const minimum = name === "width" || name === "height" ? 0 : -1_000_000;
+  if (
+    typeof value !== "number" ||
+    !Number.isFinite(value) ||
+    (name === "width" || name === "height"
+      ? value <= minimum
+      : value < minimum) ||
+    value > 1_000_000
+  ) {
+    throw new CapabilityError(
+      "invalid-coordinate",
+      `${name} 必须是有限像素数值，宽高必须大于 0`,
+    );
+  }
+  return value;
+}
+
+function optionalText(
+  props: Record<string, unknown>,
+  name: "testId" | "name",
+): string | undefined {
+  const value = props[name];
+  if (value === undefined) return undefined;
+  if (typeof value !== "string" || value.trim() === "") {
+    throw new CapabilityError("invalid-parameter", `${name} 必须是非空字符串`);
+  }
+  return value;
+}
+
+function shapeXml(
+  id: number,
+  name: string,
+  geometry: string,
+  box: { x: number; y: number; width: number; height: number },
+  fill: string | undefined,
+): string {
+  const fillXml =
+    fill === undefined
+      ? "<a:noFill/>"
+      : `<a:solidFill><a:srgbClr val="${fill}"/></a:solidFill>`;
+  return `<p:sp><p:nvSpPr><p:cNvPr id="${id}" name="${xmlEscape(name)}"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr><p:spPr><a:xfrm><a:off x="${pxToEmu(box.x)}" y="${pxToEmu(box.y)}"/><a:ext cx="${pxToEmu(box.width)}" cy="${pxToEmu(box.height)}"/></a:xfrm><a:prstGeom prst="${geometry}"><a:avLst/></a:prstGeom>${fillXml}<a:ln><a:noFill/></a:ln></p:spPr></p:sp>`;
+}
+
+/** 形状模块独立校验输入、声明原生几何，并生成对应 PresentationML 对象。 */
+export const shapeCapability: CapabilityModule = {
+  declaration: "rp:shape",
+  compile(input, context) {
+    const props = record(input);
+    const unknown = Object.keys(props).find(
+      (key) => !(allowedParameters as readonly string[]).includes(key),
+    );
+    if (unknown !== undefined) {
+      throw new CapabilityError(
+        "unknown-parameter",
+        `Shape 含未实现参数 ${unknown}`,
+      );
+    }
+    if (input.children.length > 0) {
+      throw new CapabilityError(
+        "unsupported-children",
+        "本构建切片的 Shape 不接受子内容",
+      );
+    }
+
+    const testId = optionalText(props, "testId");
+    const requestedName = optionalText(props, "name");
+    const geometry = props["geometry"] ?? "rect";
+    if (typeof geometry !== "string" || !geometryNames.has(geometry)) {
+      throw new CapabilityError(
+        "unsupported-geometry",
+        `不支持形状几何 ${typeof geometry === "string" ? geometry : "非字符串值"}`,
+      );
+    }
+    const box = {
+      x: requiredNumber(props, "x"),
+      y: requiredNumber(props, "y"),
+      width: requiredNumber(props, "width"),
+      height: requiredNumber(props, "height"),
+    };
+    const fill = props["fill"];
+    if (
+      fill !== undefined &&
+      (typeof fill !== "string" || !/^#[0-9a-f]{6}$/iu.test(fill))
+    ) {
+      throw new CapabilityError("invalid-fill", "fill 必须是 #RRGGBB 颜色");
+    }
+    const name = requestedName ?? testId ?? `Shape ${context.id - 1}`;
+    return {
+      xml: shapeXml(
+        context.id,
+        name,
+        geometry,
+        box,
+        fill?.slice(1).toUpperCase(),
+      ),
+      observation: {
+        id: context.id,
+        kind: "shape",
+        name,
+        ...(testId === undefined ? {} : { testId }),
+        geometry,
+        box,
+      },
+      extensions: [],
+    };
+  },
+};
+
+/** 在 React root 中声明一个由官方形状模块处理的原生对象。 */
+export function Shape(props: ShapeProps): ReactNode {
+  return createElement("rp:shape", props, props.children);
+}

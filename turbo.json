@@ -36,6 +36,27 @@
       "outputs": [],
       "tags": ["quality:light"]
     },
+    "//#verify:artifact-consumption": {
+      "dependsOn": [
+        "@react-pptx/react-pptx#build",
+        "@react-pptx/validation#build"
+      ],
+      "inputs": [
+        "scripts/verify-artifact-consumption.ts",
+        "packages/core/package.json",
+        "packages/capabilities/package.json",
+        "packages/react-pptx/package.json",
+        "packages/validation/package.json",
+        "packages/core/dist/**",
+        "packages/capabilities/dist/**",
+        "packages/react-pptx/dist/**",
+        "packages/validation/dist/**",
+        "pnpm-lock.yaml"
+      ],
+      "outputs": [],
+      "cache": false,
+      "tags": ["quality:heavy"]
+    },
     "//#publication:pack": {
       "tags": ["work:release"],
       "cache": false

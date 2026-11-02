@@ -173,6 +173,15 @@ catalogs:
     '@types/react':
       specifier: 19.3.0
       version: 19.3.0
+    '@types/react-reconciler':
+      specifier: ^0.34.1
+      version: 0.34.1
+    '@xmldom/xmldom':
+      specifier: ^0.9.12
+      version: 0.9.12
+    fflate:
+      specifier: ^0.8.3
+      version: 0.8.3
     oxfmt:
       specifier: ^0.74.0
       version: 0.74.0
@@ -185,6 +194,9 @@ catalogs:
     react:
       specifier: 19.3.1
       version: 19.3.1
+    react-reconciler:
+      specifier: ^0.34.0
+      version: 0.34.0
     turbo:
       specifier: 2.11.10
       version: 2.11.10
@@ -197,9 +209,6 @@ catalogs:
     vitest:
       specifier: 5.0.5
       version: 5.0.5
-    zod:
-      specifier: ^4.6.7
-      version: 4.6.7
 
 importers:
 
@@ -322,16 +331,59 @@ importers:
 
   packages/core:
     dependencies:
+      fflate:
+        specifier: 'catalog:'
+        version: 0.8.3
       react:
         specifier: 'catalog:'
         version: 19.3.1
-      zod:
+      react-reconciler:
         specifier: 'catalog:'
-        version: 4.6.7
+        version: 0.34.0(react@19.3.1)
     devDependencies:
       '@react-pptx/tooling-config':
         specifier: workspace:*
         version: link:../tooling-config
+      '@types/node':
+        specifier: 'catalog:'
+        version: 26.6.6
+      '@types/react':
+        specifier: 'catalog:'
+        version: 19.3.0
+      '@types/react-reconciler':
+        specifier: 'catalog:'
+        version: 0.34.1(@types/react@19.3.0)
+      oxfmt:
+        specifier: 'catalog:'
+        version: 0.74.0
+      oxlint:
+        specifier: 'catalog:'
+        version: 1.90.0(oxlint-tsgolint@7.0.2005)
+      oxlint-tsgolint:
+        specifier: 'catalog:'
+        version: 7.0.2005
+      typescript-7:
+        specifier: 'catalog:'
+        version: typescript@7.0.2
+
+  packages/react-pptx:
+    dependencies:
+      '@react-pptx/capabilities':
+        specifier: workspace:*
+        version: link:../capabilities
+      '@react-pptx/core':
+        specifier: workspace:*
+        version: link:../core
+      react:
+        specifier: 'catalog:'
+        version: 19.3.1
+    devDependencies:
+      '@react-pptx/tooling-config':
+        specifier: workspace:*
+        version: link:../tooling-config
+      '@react-pptx/validation':
+        specifier: workspace:*
+        version: link:../validation
       '@types/node':
         specifier: 'catalog:'
         version: 26.6.6
@@ -356,40 +408,6 @@ importers:
       vitest:
         specifier: 'catalog:'
         version: 5.0.5(@types/node@26.6.6)(vite@8.3.5(@types/node@26.6.6)(yaml@2.9.1))
-
-  packages/react-pptx:
-    dependencies:
-      '@react-pptx/capabilities':
-        specifier: workspace:*
-        version: link:../capabilities
-      '@react-pptx/core':
-        specifier: workspace:*
-        version: link:../core
-      react:
-        specifier: 'catalog:'
-        version: 19.3.1
-    devDependencies:
-      '@react-pptx/tooling-config':
-        specifier: workspace:*
-        version: link:../tooling-config
-      '@types/node':
-        specifier: 'catalog:'
-        version: 26.6.6
-      '@types/react':
-        specifier: 'catalog:'
-        version: 19.3.0
-      oxfmt:
-        specifier: 'catalog:'
-        version: 0.74.0
-      oxlint:
-        specifier: 'catalog:'
-        version: 1.90.0(oxlint-tsgolint@7.0.2005)
-      oxlint-tsgolint:
-        specifier: 'catalog:'
-        version: 7.0.2005
-      typescript-7:
-        specifier: 'catalog:'
-        version: typescript@7.0.2
 
   packages/tooling-config:
     devDependencies:
@@ -416,6 +434,13 @@ importers:
         version: 5.0.5(@types/node@26.6.6)(vite@8.3.5(@types/node@26.6.6)(yaml@2.9.1))
 
   packages/validation:
+    dependencies:
+      '@xmldom/xmldom':
+        specifier: 'catalog:'
+        version: 0.9.12
+      fflate:
+        specifier: 'catalog:'
+        version: 0.8.3
     devDependencies:
       '@react-pptx/tooling-config':
         specifier: workspace:*
@@ -951,6 +976,11 @@ packages:
   '@types/node@26.6.6':
     resolution: {integrity: sha512-MzQj+8Kx3XI40OmUAE6Qoh58ZMNstNNMwn2nfd3qWsfe7nDNSqJNzes4njhz6AHwrSHOffSLwXU6yb474Q4aog==}
 
+  '@types/react-reconciler@0.34.1':
+    resolution: {integrity: sha512-XAzeH3rARrfApMETpkcFmfJQRS3rPpXsSR/XA8H3sV8WgA0bp6UE7sLNM92l1ZbCclUKmrH28Ik2fSejh9UxRg==}
+    peerDependencies:
+      '@types/react': '*'
+
   '@types/react@19.3.0':
     resolution: {integrity: sha512-N0rFCuH9YoxG9/m61l9MfpJKfmLOVU0em7ipIz6TRgSSkvReLB9vL85GB+yr8Bs5leqpvg96JSwF4ZS1s4viQg==}
 
@@ -1088,6 +1118,10 @@ packages:
   '@vitest/spy@5.0.5':
     resolution: {integrity: sha512-lwJRExuH417257Q5wv9QYugN9IMJkoxcrKrYxGPQkBzl7wlNpTUxD/5yNX4ESKVUIShKPgkGchYPFMWOOk0wzw==}
 
+  '@xmldom/xmldom@0.9.12':
+    resolution: {integrity: sha512-5AXjrcMClTryPe9LgZrygpB1lj7s0S9E0+W+AHaVKAVyHanafK86iPSvG5xHVSp/jC+VH1UXu0TAEmY279xH7A==}
+    engines: {node: '>=14.6'}
+
   assertion-error@2.0.1:
     resolution: {integrity: sha512-Izi8RQcffqCeNVgFigKli1ssklIbpHnCYc6AknXGYoB6grJqyeby7jv12JUQgmTAnIDnbck1uxksT4dzN3PWBA==}
     engines: {node: '>=12'}
@@ -1134,6 +1168,9 @@ packages:
     peerDependenciesMeta:
       picomatch:
         optional: true
+
+  fflate@0.8.3:
+    resolution: {integrity: sha512-tbZNuJrLwGUp3zshBtdy4W+ORxZuIh8a5ilyIEQDC5rY1f3U20JMry0Ll3WBzU58EZKsEuJFXhb5gwv8CsPvgA==}
 
   fsevents@2.3.3:
     resolution: {integrity: sha512-5xoDfX+fL7faATnagmWPpbFtwh/R77WmMMqqHGS65C3vvB0YHrgF+B1YmZ3441tMj5n63k0212XNoJwzlhffQw==}
@@ -1289,6 +1326,12 @@ packages:
     resolution: {integrity: sha512-LJlKCCAUFKOuZxipUdYw1NzIITEsPcgyOG9LkvRJvuKj/bRzbuRY0ARXvL0pWGpsZvn8jku+LMep2eU0seHp8g==}
     engines: {node: ^10 || ^12 || >=14}
 
+  react-reconciler@0.34.0:
+    resolution: {integrity: sha512-eVibvB1fc9j5Qf1KRkiM3GzRPBdjg2P6G6QV2f3P6Eb3OGMxRBhdg2rrUwjbV5JrQaJj8nOa8uajmmJA5tJWjQ==}
+    engines: {node: '>=0.10.0'}
+    peerDependencies:
+      react: ^19.3.0
+
   react@19.3.1:
     resolution: {integrity: sha512-QNhWdt7nrgVWWQG58QuGsAR3jv3Hbe4mb4vz7w2csnHavciZJgda1CPNaldF6eVxv90ud3jUXpKlHL69gO38yw==}
     engines: {node: '>=0.10.0'}
@@ -1297,6 +1340,9 @@ packages:
     resolution: {integrity: sha512-bWvlMpFKiTfDKfnK7FC2MPgPeWCf/Kpwsq49ApdW+FQaBZb6O6dZ4MAPbPUjp7hYQrw/RobqCzn64BRrQecGHw==}
     engines: {node: ^20.19.0 || >=22.12.0}
     hasBin: true
+
+  scheduler@0.28.0:
+    resolution: {integrity: sha512-juorfCmIkIw8tT+p5BXSm6PJjQF/ycEYmKyzURCIt/RaZIhL+PulbQ9Yu2z1HdOJDdqDTlxA1+xKBmHXJsczAw==}
 
   semver@7.8.5:
     resolution: {integrity: sha512-Y7/KDsb8LjooZpwaqGyulO6DQlksgCncchHGk+sZIY4SBvUocMBEFH5Ur1fI4dV+Jvl0w6cjvucaIi40puRioA==}
@@ -1438,9 +1484,6 @@ packages:
     resolution: {integrity: sha512-3NxN8+78OdzbT7C/WjGsyfPAtJaN3FNDsWxv7Y7mcDsT/oOmgW8BpyQQFFBnvZE3j9Y2Sdz1ULFLezL7Eb2yFw==}
     engines: {node: '>= 14.6'}
     hasBin: true
-
-  zod@4.6.7:
-    resolution: {integrity: sha512-g8W2D2kU6a8untc053fX1uVBKzM7yqAxW/3zwk83+6RyF2+SKOuV+c0wBDhUwzV1PaGapmZH+rmcUzPf+3CGwg==}
 
 snapshots:
 
@@ -1798,6 +1841,10 @@ snapshots:
     dependencies:
       undici-types: 8.9.0
 
+  '@types/react-reconciler@0.34.1(@types/react@19.3.0)':
+    dependencies:
+      '@types/react': 19.3.0
+
   '@types/react@19.3.0':
     dependencies:
       csstype: 3.2.3
@@ -1873,6 +1920,8 @@ snapshots:
 
   '@vitest/spy@5.0.5': {}
 
+  '@xmldom/xmldom@0.9.12': {}
+
   assertion-error@2.0.1: {}
 
   cac@7.1.0: {}
@@ -1904,6 +1953,8 @@ snapshots:
   fdir@6.5.0(picomatch@4.0.7):
     optionalDependencies:
       picomatch: 4.0.7
+
+  fflate@0.8.3: {}
 
   fsevents@2.3.3:
     optional: true
@@ -2046,6 +2097,11 @@ snapshots:
       picocolors: 1.1.1
       source-map-js: 1.2.2
 
+  react-reconciler@0.34.0(react@19.3.1):
+    dependencies:
+      react: 19.3.1
+      scheduler: 0.28.0
+
   react@19.3.1: {}
 
   rolldown@1.2.16:
@@ -2068,6 +2124,8 @@ snapshots:
       '@rolldown/binding-openharmony-arm64': 1.2.16
       '@rolldown/binding-win32-arm64-msvc': 1.2.16
       '@rolldown/binding-win32-x64-msvc': 1.2.16
+
+  scheduler@0.28.0: {}
 
   semver@7.8.5: {}
 
@@ -2160,5 +2218,3 @@ snapshots:
   why-is-node-running@3.2.1: {}
 
   yaml@2.9.1: {}
-
-  zod@4.6.7: {}

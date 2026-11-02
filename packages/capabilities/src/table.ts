@@ -971,15 +971,28 @@ export const tableCapability: CapabilityModule = {
     onlyKeys(input.props, tableParameters, "Table");
     const style = trackStyle(input, "table").style;
     const declaredWidth = style["width"] ?? input.props["width"];
-    const requestedWidth =
+    const declaredSize =
+      typeof declaredWidth === "number"
+        ? positiveSize(declaredWidth, "Table.width")
+        : undefined;
+    const natural = tableLayoutModel(input, undefined);
+    const naturalWidth = natural.widths.reduce((sum, width) => sum + width, 0);
+    const availableWidth =
       request.availableWidth !== undefined && request.availableWidth > 0
         ? request.availableWidth
-        : typeof declaredWidth === "number"
-          ? positiveSize(declaredWidth, "Table.width")
-          : undefined;
-    const model = tableLayoutModel(input, requestedWidth);
-    const natural =
-      requestedWidth === undefined ? model : tableLayoutModel(input, undefined);
+        : undefined;
+    const requestedWidth =
+      declaredSize ??
+      (availableWidth !== undefined &&
+      (request.widthMode === "exactly" ||
+        request.widthMode === undefined ||
+        naturalWidth > availableWidth)
+        ? availableWidth
+        : undefined);
+    const model =
+      requestedWidth === undefined
+        ? natural
+        : tableLayoutModel(input, requestedWidth);
     const width = model.widths.reduce((sum, value) => sum + value, 0);
     const height = model.heights.reduce((sum, value) => sum + value, 0);
     return {

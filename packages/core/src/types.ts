@@ -311,6 +311,8 @@ export type CapabilityPresentationContribution = {
 export type CapabilityLayoutRequest = {
   /** 当前布局算法可提供的内容宽度，单位为像素。 */
   readonly availableWidth?: number;
+  /** 可用宽度是可收缩的上限，还是布局必须分配的精确宽度。 */
+  readonly widthMode?: "at-most" | "exactly";
 };
 
 /** 能力模块可提供的固有尺寸及主轴 min-content 尺寸，均以像素表示。 */

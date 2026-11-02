@@ -381,7 +381,11 @@ describe("公开布局入口", () => {
               width={100}
               height={50}
               text="中文中文中文"
-              textStyle={{ fontFamily: cjkFont, fontSize: 20 }}
+              textStyle={{
+                fontFamily: cjkFont,
+                fontSize: 20,
+                verticalAlign: "top",
+              }}
               style={{
                 paddingTop: 2,
                 paddingRight: 3,
@@ -2288,6 +2292,664 @@ describe("公开布局入口", () => {
         { y: 300, height: 150 },
         { y: 450, height: 150 },
       ],
+    );
+  });
+
+  it("fr 轨道只把数字 minmax 下界作为约束，行内容仍按下界类型处理", async () => {
+    const result = await build(
+      <Deck width={400} height={400}>
+        <Slide slideId="fr-minimum-100">
+          <Box
+            style={{
+              display: "grid",
+              width: 300,
+              height: 100,
+              gridTemplateColumns: "minmax(100px, 1fr) 1fr",
+              gridTemplateRows: "1fr",
+            }}
+          >
+            <Shape testId="lower-100-first" />
+            <Shape testId="lower-100-second" />
+          </Box>
+        </Slide>
+        <Slide slideId="fr-minimum-200">
+          <Box
+            style={{
+              display: "grid",
+              width: 300,
+              height: 100,
+              gridTemplateColumns: "minmax(200px, 1fr) 1fr",
+              gridTemplateRows: "1fr",
+            }}
+          >
+            <Shape testId="lower-200-first" />
+            <Shape testId="lower-200-second" />
+          </Box>
+        </Slide>
+        <Slide slideId="fr-row-numeric-minimum">
+          <Box
+            style={{
+              display: "grid",
+              width: 100,
+              height: 100,
+              gridTemplateColumns: "1fr",
+              gridTemplateRows: "minmax(20px, 1fr) 1fr",
+            }}
+          >
+            <Shape testId="row-minimum-first" />
+            <Shape testId="row-minimum-second" />
+          </Box>
+        </Slide>
+        <Slide slideId="fr-row-zero-minimum-overflow">
+          <Box
+            style={{
+              display: "grid",
+              width: 100,
+              height: 100,
+              gridTemplateColumns: "1fr",
+              gridTemplateRows: "minmax(0px, 1fr) 1fr",
+            }}
+          >
+            <Shape testId="row-zero-first" width={20} height={200} />
+            <Shape testId="row-zero-second" width={20} height={10} />
+          </Box>
+        </Slide>
+        <Slide slideId="fr-row-auto-content-minimum">
+          <Box
+            style={{
+              display: "grid",
+              width: 100,
+              height: 100,
+              gridTemplateColumns: "1fr",
+              gridTemplateRows: "minmax(auto, 1fr) 1fr",
+            }}
+          >
+            <Shape testId="row-auto-first" width={20} height={200} />
+            <Shape testId="row-auto-second" width={20} height={10} />
+          </Box>
+        </Slide>
+      </Deck>,
+    );
+
+    assert.deepEqual(
+      result.report.slides.map((slide) => slide?.objects.map(({ box }) => box)),
+      [
+        [
+          { x: 0, y: 0, width: 150, height: 100 },
+          { x: 150, y: 0, width: 150, height: 100 },
+        ],
+        [
+          { x: 0, y: 0, width: 200, height: 100 },
+          { x: 200, y: 0, width: 100, height: 100 },
+        ],
+        [
+          { x: 0, y: 0, width: 100, height: 50 },
+          { x: 0, y: 50, width: 100, height: 50 },
+        ],
+        [
+          { x: 0, y: 0, width: 20, height: 200 },
+          { x: 0, y: 50, width: 20, height: 10 },
+        ],
+        [
+          { x: 0, y: 0, width: 20, height: 200 },
+          { x: 0, y: 200, width: 20, height: 10 },
+        ],
+      ],
+    );
+    assert.deepEqual(
+      result.report.diagnostics.map(({ code }) => code),
+      ["grid-item-overflow", "grid-overflow", "grid-item-overflow"],
+    );
+
+    const file = await validatePptx(result.pptx);
+    assert.deepEqual(file.errors, []);
+    assert.deepEqual(
+      file.slides.map((slide) =>
+        slide?.objects.map(({ boxEmu }) => [
+          boxEmu.x,
+          boxEmu.y,
+          boxEmu.width,
+          boxEmu.height,
+        ]),
+      ),
+      [
+        [
+          [0, 0, 1_428_750, 952_500],
+          [1_428_750, 0, 1_428_750, 952_500],
+        ],
+        [
+          [0, 0, 1_905_000, 952_500],
+          [1_905_000, 0, 952_500, 952_500],
+        ],
+        [
+          [0, 0, 952_500, 476_250],
+          [0, 476_250, 952_500, 476_250],
+        ],
+        [
+          [0, 0, 190_500, 1_905_000],
+          [0, 476_250, 190_500, 95_250],
+        ],
+        [
+          [0, 0, 190_500, 1_905_000],
+          [0, 1_905_000, 190_500, 95_250],
+        ],
+      ],
+    );
+  });
+
+  it("自动高度 Grid 保留父布局给出的拉伸或绝对定位高度", async () => {
+    const stretchedGrid = (testId: string) => (
+      <Box
+        testId={testId}
+        style={{
+          display: "grid",
+          width: 100,
+          gridTemplateColumns: "100px",
+          gridTemplateRows: "1fr 1fr",
+        }}
+      >
+        <Shape testId={`${testId}-first`} width={20} height={20} />
+        <Shape testId={`${testId}-second`} width={20} height={20} />
+      </Box>
+    );
+    const result = await build(
+      <Deck width={400} height={300}>
+        <Slide slideId="grid-in-flex-stretch">
+          <Box style={{ display: "flex", width: 300, height: 100 }}>
+            {stretchedGrid("flex-inner-grid")}
+          </Box>
+        </Slide>
+        <Slide slideId="grid-in-grid-stretch">
+          <Box
+            style={{
+              display: "grid",
+              width: 300,
+              height: 100,
+              gridTemplateColumns: "100px",
+              gridTemplateRows: "100px",
+            }}
+          >
+            {stretchedGrid("grid-inner-grid")}
+          </Box>
+        </Slide>
+        <Slide slideId="grid-in-absolute-inset">
+          <Box style={{ position: "relative", width: 300, height: 100 }}>
+            <Box
+              testId="absolute-inner-grid"
+              style={{
+                display: "grid",
+                position: "absolute",
+                inset: 0,
+                gridTemplateColumns: "1fr",
+                gridTemplateRows: "1fr 1fr",
+              }}
+            >
+              <Shape
+                testId="absolute-inner-grid-first"
+                width={20}
+                height={20}
+              />
+              <Shape
+                testId="absolute-inner-grid-second"
+                width={20}
+                height={20}
+              />
+            </Box>
+          </Box>
+        </Slide>
+        <Slide slideId="grid-content-auto-height">
+          <Box style={{ display: "block", width: 100 }}>
+            <Box
+              testId="content-inner-grid"
+              style={{
+                display: "grid",
+                width: 100,
+                gridTemplateColumns: "100px",
+                gridTemplateRows: "auto auto",
+              }}
+            >
+              <Shape testId="content-inner-grid-first" width={20} height={20} />
+              <Shape
+                testId="content-inner-grid-second"
+                width={20}
+                height={20}
+              />
+            </Box>
+          </Box>
+        </Slide>
+      </Deck>,
+    );
+
+    assert.deepEqual(
+      result.report.slides.map((slide, index) => {
+        const layoutId = [
+          "flex-inner-grid",
+          "grid-inner-grid",
+          "absolute-inner-grid",
+          "content-inner-grid",
+        ][index];
+        return slide?.layouts?.find(({ testId }) => testId === layoutId)?.box;
+      }),
+      [
+        { x: 0, y: 0, width: 100, height: 100 },
+        { x: 0, y: 0, width: 100, height: 100 },
+        { x: 0, y: 0, width: 300, height: 100 },
+        { x: 0, y: 0, width: 100, height: 40 },
+      ],
+    );
+    const file = await validatePptx(result.pptx);
+    assert.deepEqual(file.errors, []);
+    assert.deepEqual(
+      file.slides.map((slide) =>
+        slide?.objects.map(({ boxEmu }) => boxEmu.y / 9525),
+      ),
+      [
+        [0, 50],
+        [0, 50],
+        [0, 50],
+        [0, 20],
+      ],
+    );
+  });
+
+  it("Grid 项百分比尺寸和相对偏移都以所属 area 为依据", async () => {
+    const result = await build(
+      <Deck width={400} height={300}>
+        <Slide slideId="grid-area-percent-size">
+          <Box
+            style={{
+              display: "grid",
+              width: 300,
+              height: 100,
+              gridTemplateColumns: "100px 200px",
+              gridTemplateRows: "100px",
+            }}
+          >
+            <Shape
+              testId="percent-width-in-area"
+              height={20}
+              style={{ width: "50%", margin: [0, 10] }}
+            />
+            <Shape
+              testId="percent-height-in-area"
+              width={20}
+              style={{ height: "50%", margin: [10, 0] }}
+            />
+          </Box>
+        </Slide>
+        <Slide slideId="grid-area-relative-offset">
+          <Box
+            style={{
+              display: "grid",
+              width: 300,
+              height: 100,
+              gridTemplateColumns: "100px 100px 100px",
+              gridTemplateRows: "20px 30px 50px",
+            }}
+          >
+            <Shape
+              testId="relative-first-cell"
+              width={20}
+              height={10}
+              style={{ position: "relative", left: "10%", top: "10%" }}
+            />
+            <Shape
+              testId="relative-spanning-area"
+              width={20}
+              height={10}
+              style={{
+                position: "relative",
+                left: "10%",
+                top: "10%",
+                gridColumn: "2 / span 2",
+                gridRow: "2 / span 2",
+              }}
+            />
+          </Box>
+        </Slide>
+      </Deck>,
+    );
+
+    assert.deepEqual(
+      result.report.slides.map((slide) => slide?.objects.map(({ box }) => box)),
+      [
+        [
+          { x: 10, y: 0, width: 50, height: 20 },
+          { x: 100, y: 10, width: 20, height: 50 },
+        ],
+        [
+          { x: 10, y: 2, width: 20, height: 10 },
+          { x: 120, y: 28, width: 20, height: 10 },
+        ],
+      ],
+    );
+    const file = await validatePptx(result.pptx);
+    assert.deepEqual(file.errors, []);
+    assert.deepEqual(
+      file.slides.map((slide) =>
+        slide?.objects.map(({ boxEmu }) => [
+          boxEmu.x,
+          boxEmu.y,
+          boxEmu.width,
+          boxEmu.height,
+        ]),
+      ),
+      [
+        [
+          [95_250, 0, 476_250, 190_500],
+          [952_500, 95_250, 190_500, 476_250],
+        ],
+        [
+          [95_250, 19_050, 190_500, 95_250],
+          [1_143_000, 266_700, 190_500, 95_250],
+        ],
+      ],
+    );
+  });
+
+  it("Table 区分自然宽度的上限测量与精确布局分配", async () => {
+    const table = (testId: string, style: { readonly width?: number } = {}) => (
+      <Table
+        testId={testId}
+        columns={[80]}
+        style={{ fontFamily: cjkFont, fontSize: 12, ...style }}
+      >
+        <Row style={{ height: 40 }}>
+          <Cell>中</Cell>
+        </Row>
+      </Table>
+    );
+    const result = await build(
+      <Deck width={600} height={400}>
+        <Slide slideId="table-natural-control">{table("natural")}</Slide>
+        <Slide slideId="table-flex-natural">
+          <Box
+            style={{
+              display: "flex",
+              alignItems: "flex-start",
+              width: 400,
+              height: 100,
+              gap: 10,
+            }}
+          >
+            {table("flex-natural")}
+            <Shape testId="flex-after-natural" width={100} height={20} />
+          </Box>
+        </Slide>
+        <Slide slideId="table-block-stretch">
+          <Box style={{ display: "block", width: 200 }}>
+            {table("stretched")}
+          </Box>
+        </Slide>
+        <Slide slideId="table-flex-explicit-width">
+          <Box
+            style={{
+              display: "flex",
+              alignItems: "flex-start",
+              width: 400,
+              height: 100,
+              gap: 10,
+            }}
+          >
+            {table("explicit", { width: 120 })}
+            <Shape testId="flex-after-explicit" width={100} height={20} />
+          </Box>
+        </Slide>
+      </Deck>,
+    );
+
+    assert.deepEqual(
+      result.report.slides.map((slide) =>
+        slide?.objects.map(({ testId, box, table }) => ({
+          testId,
+          box,
+          columns: table?.columnWidths,
+          rows: table?.rowHeights,
+        })),
+      ),
+      [
+        [
+          {
+            testId: "natural",
+            box: { x: 0, y: 0, width: 80, height: 40 },
+            columns: [80],
+            rows: [40],
+          },
+        ],
+        [
+          {
+            testId: "flex-natural",
+            box: { x: 0, y: 0, width: 80, height: 40 },
+            columns: [80],
+            rows: [40],
+          },
+          {
+            testId: "flex-after-natural",
+            box: { x: 90, y: 0, width: 100, height: 20 },
+            columns: undefined,
+            rows: undefined,
+          },
+        ],
+        [
+          {
+            testId: "stretched",
+            box: { x: 0, y: 0, width: 200, height: 40 },
+            columns: [200],
+            rows: [40],
+          },
+        ],
+        [
+          {
+            testId: "explicit",
+            box: { x: 0, y: 0, width: 120, height: 40 },
+            columns: [120],
+            rows: [40],
+          },
+          {
+            testId: "flex-after-explicit",
+            box: { x: 130, y: 0, width: 100, height: 20 },
+            columns: undefined,
+            rows: undefined,
+          },
+        ],
+      ],
+    );
+    const file = await validatePptx(result.pptx);
+    assert.deepEqual(file.errors, []);
+    assert.deepEqual(
+      file.slides.map((slide) =>
+        slide?.objects.map((object) => ({
+          kind: object.kind,
+          box: [
+            object.boxEmu.x,
+            object.boxEmu.y,
+            object.boxEmu.width,
+            object.boxEmu.height,
+          ],
+          columns: object.table?.columnWidthsEmu,
+          rows: object.table?.rowHeightsEmu,
+        })),
+      ),
+      [
+        [
+          {
+            kind: "table",
+            box: [0, 0, 762_000, 381_000],
+            columns: [762_000],
+            rows: [381_000],
+          },
+        ],
+        [
+          {
+            kind: "table",
+            box: [0, 0, 762_000, 381_000],
+            columns: [762_000],
+            rows: [381_000],
+          },
+          {
+            kind: "shape",
+            box: [857_250, 0, 952_500, 190_500],
+            columns: undefined,
+            rows: undefined,
+          },
+        ],
+        [
+          {
+            kind: "table",
+            box: [0, 0, 1_905_000, 381_000],
+            columns: [1_905_000],
+            rows: [381_000],
+          },
+        ],
+        [
+          {
+            kind: "table",
+            box: [0, 0, 1_143_000, 381_000],
+            columns: [1_143_000],
+            rows: [381_000],
+          },
+          {
+            kind: "shape",
+            box: [1_238_250, 0, 952_500, 190_500],
+            columns: undefined,
+            rows: undefined,
+          },
+        ],
+      ],
+    );
+  });
+
+  it("Shape.text 默认使用 middle anchor，且只为有效 top 提供文字 baseline", async () => {
+    const ordinary = await build(
+      <Deck width={400} height={200}>
+        <Slide slideId="shape-text-effective-anchors">
+          <Box style={{ display: "flex", width: 210, height: 100, gap: 10 }}>
+            <Shape
+              testId="default-middle-shape"
+              width={100}
+              height={100}
+              text="中"
+              textStyle={{ fontFamily: cjkFont, fontSize: 20 }}
+              style={{ padding: 10 }}
+            />
+            <Shape
+              testId="explicit-top-shape"
+              width={100}
+              height={100}
+              text="中"
+              textStyle={{
+                fontFamily: cjkFont,
+                fontSize: 20,
+                verticalAlign: "top",
+              }}
+              style={{ padding: 10 }}
+            />
+          </Box>
+        </Slide>
+      </Deck>,
+    );
+    assert.deepEqual(ordinary.report.diagnostics, []);
+    const ordinaryXml = strFromU8(
+      unzipSync(ordinary.pptx)["ppt/slides/slide1.xml"]!,
+    );
+    const anchorFor = (testId: string) => {
+      const id = ordinary.report.slides[0]?.objects.find(
+        ({ testId: objectTestId }) => objectTestId === testId,
+      )?.id;
+      const start = ordinaryXml.indexOf(`id="${id}"`);
+      const body = ordinaryXml.indexOf("<a:bodyPr", start);
+      const end = ordinaryXml.indexOf("</a:bodyPr>", body);
+      return ordinaryXml.slice(body, end);
+    };
+    assert.match(anchorFor("default-middle-shape"), /anchor="ctr"/u);
+    assert.match(anchorFor("explicit-top-shape"), /anchor="t"/u);
+    assert.deepEqual((await validatePptx(ordinary.pptx)).errors, []);
+
+    const topBaseline = await build(
+      <Deck width={400} height={200}>
+        <Slide slideId="shape-text-top-baseline">
+          <Box style={{ display: "flex", alignItems: "baseline", width: 300 }}>
+            <Text
+              testId="top-baseline-text"
+              width={100}
+              height={100}
+              style={{
+                fontFamily: cjkFont,
+                fontSize: 20,
+                verticalAlign: "top",
+              }}
+            >
+              中
+            </Text>
+            <Shape
+              testId="top-baseline-shape"
+              width={100}
+              height={100}
+              text="中"
+              textStyle={{
+                fontFamily: cjkFont,
+                fontSize: 40,
+                verticalAlign: "top",
+              }}
+            />
+          </Box>
+        </Slide>
+      </Deck>,
+    );
+    assert.deepEqual(
+      topBaseline.report.slides[0]?.objects.map(({ testId, box }) => ({
+        testId,
+        y: box?.y,
+      })),
+      [
+        { testId: "top-baseline-text", y: 23.2 },
+        { testId: "top-baseline-shape", y: 0 },
+      ],
+    );
+    const topBaselineFile = await validatePptx(topBaseline.pptx);
+    assert.deepEqual(topBaselineFile.errors, []);
+    assert.deepEqual(
+      topBaselineFile.slides[0]?.objects.map(({ boxEmu }) => boxEmu.y),
+      [220_980, 0],
+    );
+
+    await assert.rejects(
+      build(
+        <Deck width={400} height={200}>
+          <Slide slideId="shape-text-middle-baseline">
+            <Box
+              style={{ display: "flex", alignItems: "baseline", width: 300 }}
+            >
+              <Text
+                testId="top-text"
+                width={100}
+                height={100}
+                style={{
+                  fontFamily: cjkFont,
+                  fontSize: 20,
+                  verticalAlign: "top",
+                }}
+              >
+                中
+              </Text>
+              <Shape
+                testId="middle-shape"
+                width={100}
+                height={100}
+                text="中"
+                textStyle={{ fontFamily: cjkFont, fontSize: 40 }}
+              />
+            </Box>
+          </Slide>
+        </Deck>,
+      ),
+      (error: unknown) =>
+        error instanceof BuildError &&
+        error.diagnostics.some(
+          ({ code, path }) =>
+            code === "baseline-measurement-unavailable" &&
+            path.endsWith("shape[middle-shape]"),
+        ),
     );
   });
 });

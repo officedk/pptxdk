@@ -115,6 +115,15 @@ type BuildContext = {
 
 type CompiledChildren = CapabilityChildren & {
   readonly references: readonly LayoutChildReference[];
+  readonly paintLayers: readonly PaintLayer[];
+};
+
+type PaintLayer = {
+  readonly sourceOrder: readonly number[];
+  readonly zIndex: number;
+  readonly xml: string;
+  readonly objects: readonly ObjectObservation[];
+  readonly reference: LayoutChildReference;
 };
 
 type Dimensions = { readonly width: number; readonly height: number };
@@ -824,13 +833,7 @@ function compileChildren(
   context: BuildContext,
   parentPath: string,
 ): CompiledChildren {
-  const painted: {
-    readonly sourceIndex: number;
-    readonly zIndex: number;
-    readonly xml: string;
-    readonly objects: readonly ObjectObservation[];
-    readonly reference: LayoutChildReference;
-  }[] = [];
+  const painted: PaintLayer[] = [];
   children.forEach((child, index) => {
     if (!("props" in child)) {
       if (child.text.trim() !== "") {
@@ -866,7 +869,7 @@ function compileChildren(
         children: compiled.references,
       });
       painted.push({
-        sourceIndex: index,
+        sourceOrder: [index],
         zIndex: paintOrder(child),
         xml: compiled.xml,
         objects: compiled.objects,
@@ -906,9 +909,13 @@ function compileChildren(
         );
       }
       const compiled = compileChildren(child.children, context, path);
-      xml.push(compiled.xml);
-      objects.push(...compiled.objects);
-      references.push(...compiled.references);
+      // 透明声明不占绘制层级；其子项携带自己的层序并与兄弟一同排序。
+      painted.push(
+        ...compiled.paintLayers.map((layer) => ({
+          ...layer,
+          sourceOrder: [index, ...layer.sourceOrder],
+        })),
+      );
       return;
     }
     if (!isObjectCapability(module)) {
@@ -1009,7 +1016,7 @@ function compileChildren(
         }
       }
       painted.push({
-        sourceIndex: index,
+        sourceOrder: [index],
         zIndex: paintOrder(child),
         xml: output.xml,
         objects: [observation],
@@ -1033,13 +1040,26 @@ function compileChildren(
   });
   painted.sort(
     (left, right) =>
-      left.zIndex - right.zIndex || left.sourceIndex - right.sourceIndex,
+      left.zIndex - right.zIndex ||
+      compareSourceOrder(left.sourceOrder, right.sourceOrder),
   );
   return {
     xml: painted.map(({ xml }) => xml).join(""),
     objects: painted.flatMap(({ objects }) => objects),
     references: painted.map(({ reference }) => reference),
+    paintLayers: painted,
   };
+}
+
+function compareSourceOrder(
+  left: readonly number[],
+  right: readonly number[],
+): number {
+  for (let index = 0; index < Math.min(left.length, right.length); index += 1) {
+    const difference = left[index]! - right[index]!;
+    if (difference !== 0) return difference;
+  }
+  return left.length - right.length;
 }
 
 function paintOrder(child: CapabilityElement): number {

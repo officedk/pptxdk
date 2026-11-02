@@ -90,6 +90,15 @@ function record(input: CapabilityInput): Record<string, unknown> {
   return input.props;
 }
 
+function shapeTextMeasurementStyle(value: unknown): unknown {
+  if (value === undefined) return { verticalAlign: "middle" };
+  if (typeof value !== "object" || value === null || Array.isArray(value))
+    return value;
+  const style = value as Record<string, unknown>;
+  // Shape 正文写出时默认 middle；测量也必须使用同一有效 anchor。
+  return { ...style, verticalAlign: style["verticalAlign"] ?? "middle" };
+}
+
 function requiredNumber(
   props: Record<string, unknown>,
   name: "x" | "y" | "width" | "height",
@@ -160,7 +169,7 @@ export const shapeCapability: CapabilityModule = {
     try {
       const measured = measureTextLayout(
         [{ type: "#text", text }],
-        input.props["textStyle"],
+        shapeTextMeasurementStyle(input.props["textStyle"]),
         request.availableWidth,
       );
       return measured;

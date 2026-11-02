@@ -70,6 +70,8 @@ type LayoutNode = {
   readonly children: LayoutNode[];
   readonly escaped: LayoutNode[];
   gridItem?: boolean;
+  /** 网格父项尚未回算 Yoga 子节点时保留已分配的盒高。 */
+  gridAreaHeight?: number;
   /** 文字需要提供基线时，由外部对象节点转交给内部测量叶节点。 */
   measureFunction?: MeasureFunction;
   baselineContent?: YogaNode;
@@ -266,7 +268,7 @@ function gridTracks(
           {
             ...maximum,
             min: Math.max(minValue, maximum.min),
-            ...(lower === "auto" ? { contentMinimum: true } : {}),
+            contentMinimum: lower === "auto",
           },
         ];
       }
@@ -280,6 +282,61 @@ function gridTracks(
     fail(path, "invalid-grid-tracks", "网格轨道必须包含 1 到 128 条轨道");
   }
   return tracks;
+}
+
+function distributeFrTracks(
+  sizes: number[],
+  tracks: readonly GridTrack[],
+  availableSize: number,
+  gap: number,
+): void {
+  const trackAt = (index: number): GridTrack =>
+    tracks[index] ?? { kind: "auto", min: 0 };
+  const flexible = new Set(
+    sizes.flatMap((_, index) => (trackAt(index).kind === "fr" ? [index] : [])),
+  );
+  if (flexible.size === 0) return;
+
+  const gapSize = gap * Math.max(0, sizes.length - 1);
+  const fixedSize = sizes.reduce(
+    (sum, size, index) => sum + (trackAt(index).kind === "fr" ? 0 : size),
+    0,
+  );
+
+  // 下界高于初次份额时先冻结该轨道，再按剩余空间分配未冻结轨道。
+  while (flexible.size > 0) {
+    const factorTotal = [...flexible].reduce((sum, index) => {
+      const track = trackAt(index);
+      return sum + (track.kind === "fr" ? track.value : 0);
+    }, 0);
+    const frozenSize = sizes.reduce(
+      (sum, size, index) =>
+        sum +
+        (flexible.has(index) ? 0 : trackAt(index).kind === "fr" ? size : 0),
+      0,
+    );
+    const freeSize = Math.max(
+      0,
+      availableSize - fixedSize - gapSize - frozenSize,
+    );
+    const undersized = [...flexible].filter((index) => {
+      const track = trackAt(index);
+      return (
+        track.kind === "fr" &&
+        freeSize * (track.value / factorTotal) < (sizes[index] ?? track.min)
+      );
+    });
+    if (undersized.length > 0) {
+      for (const index of undersized) flexible.delete(index);
+      continue;
+    }
+    for (const index of flexible) {
+      const track = trackAt(index);
+      if (track.kind === "fr")
+        sizes[index] = freeSize * (track.value / factorTotal);
+    }
+    return;
+  }
 }
 
 function gridPlacement(
@@ -1233,6 +1290,7 @@ export class LayoutPass {
           "enter",
           "emphasis",
           "motion",
+          "__motionContext",
           "__motionEnabled",
           "__motionStep",
         ].includes(key),
@@ -1330,7 +1388,13 @@ export class LayoutPass {
       const measureFunction: MeasureFunction = (width, widthMode) => {
         const measured = this.#measure(
           node,
-          widthMode === MeasureMode.Undefined ? {} : { availableWidth: width },
+          widthMode === MeasureMode.Undefined
+            ? {}
+            : {
+                availableWidth: width,
+                widthMode:
+                  widthMode === MeasureMode.Exactly ? "exactly" : "at-most",
+              },
         );
         return {
           width:
@@ -1567,36 +1631,7 @@ export class LayoutPass {
       }
     }
     if (innerWidth !== undefined) {
-      const frTotal = columns.reduce(
-        (sum, track) => sum + (track.kind === "fr" ? track.value : 0),
-        0,
-      );
-      const fixed = columnWidths.reduce(
-        (sum, width, index) =>
-          sum + (columns[index]?.kind === "fr" ? 0 : width),
-        0,
-      );
-      const frBase = columnWidths.reduce(
-        (sum, width, index) =>
-          sum + (columns[index]?.kind === "fr" ? width : 0),
-        0,
-      );
-      const free = Math.max(
-        0,
-        innerWidth -
-          fixed -
-          frBase -
-          columnGap * Math.max(0, columns.length - 1),
-      );
-      if (frTotal > 0) {
-        columns.forEach((track, index) => {
-          if (track.kind === "fr") {
-            columnWidths[index] =
-              (columnWidths[index] ?? track.min) +
-              (free * track.value) / frTotal;
-          }
-        });
-      }
+      distributeFrTracks(columnWidths, columns, innerWidth, columnGap);
     }
     const spanWidth = (start: number, span: number) =>
       columnWidths
@@ -1613,7 +1648,8 @@ export class LayoutPass {
         kind: "auto" as const,
         min: 0,
       };
-      if (track.kind === "px") continue;
+      if (track.kind === "px" || (track.kind === "fr" && !track.contentMinimum))
+        continue;
       const margin = expandedSpacing(placement.node.style, "margin");
       const size = this.#naturalSize(
         placement.node,
@@ -1654,33 +1690,7 @@ export class LayoutPass {
       }
     }
     if (innerHeight !== undefined) {
-      const frTotal = rowTracks.reduce(
-        (sum, track, index) =>
-          sum + (index < rowCount && track.kind === "fr" ? track.value : 0),
-        0,
-      );
-      const fixed = rowHeights.reduce(
-        (sum, height, index) =>
-          sum + (rowTracks[index]?.kind === "fr" ? 0 : height),
-        0,
-      );
-      const frBase = rowHeights.reduce(
-        (sum, height, index) =>
-          sum + (rowTracks[index]?.kind === "fr" ? height : 0),
-        0,
-      );
-      const free = Math.max(
-        0,
-        innerHeight - fixed - frBase - rowGap * Math.max(0, rowCount - 1),
-      );
-      if (frTotal > 0) {
-        rowTracks.forEach((track, index) => {
-          if (track.kind === "fr" && index < rowCount) {
-            rowHeights[index] =
-              (rowHeights[index] ?? track.min) + (free * track.value) / frTotal;
-          }
-        });
-      }
+      distributeFrTracks(rowHeights, rowTracks, innerHeight, rowGap);
     }
     const spanHeightFinal = (start: number, span: number) =>
       rowHeights
@@ -1703,18 +1713,20 @@ export class LayoutPass {
   #placeGrid(node: LayoutNode): void {
     const padding = expandedSpacing(node.style, "padding");
     const outerWidth = node.yoga.getComputedWidth();
-    const outerHeight = node.yoga.getComputedHeight();
+    const outerHeight =
+      node.yoga.getComputedHeight() || node.gridAreaHeight || 0;
     const hasWidth =
       node.element === undefined ||
       (node.style.width !== undefined && node.style.width !== "auto");
-    const hasHeight =
+    const hasResolvedHeight =
       node.element === undefined ||
-      (node.style.height !== undefined && node.style.height !== "auto");
+      (node.style.height !== undefined && node.style.height !== "auto") ||
+      outerHeight > 0;
     const innerWidth =
       outerWidth > 0
         ? Math.max(0, outerWidth - padding.left - padding.right)
         : undefined;
-    const innerHeight = hasHeight
+    const innerHeight = hasResolvedHeight
       ? Math.max(0, outerHeight - padding.top - padding.bottom)
       : undefined;
     const model = this.#gridModel(node, innerWidth, innerHeight);
@@ -1735,7 +1747,7 @@ export class LayoutPass {
     if (!hasWidth && outerWidth <= 0) {
       node.yoga.setWidth(model.width + padding.left + padding.right);
     }
-    if (!hasHeight) {
+    if (!hasResolvedHeight) {
       node.yoga.setHeight(model.height + padding.top + padding.bottom);
     }
     for (const placement of model.placements) {
@@ -1783,11 +1795,11 @@ export class LayoutPass {
         childStyle.height ?? child.element?.props["height"];
       const widthPercent = resolvePercent(
         declaredWidth as LayoutLength | undefined,
-        availableWidth,
+        cellWidth,
       );
       const heightPercent = resolvePercent(
         declaredHeight as LayoutLength | undefined,
-        availableHeight,
+        cellHeight,
       );
       const widthSpecified =
         declaredWidth !== undefined && declaredWidth !== "auto";
@@ -1839,6 +1851,9 @@ export class LayoutPass {
       }
       const usedWidth = child.yoga.getComputedWidth() || width;
       const usedHeight = child.yoga.getComputedHeight() || height;
+      if (child.style.display === "grid" && !heightSpecified) {
+        child.gridAreaHeight = height;
+      }
       if (
         usedWidth > availableWidth + 0.01 ||
         usedHeight > availableHeight + 0.01
@@ -1880,7 +1895,7 @@ export class LayoutPass {
           ? relative(
               childStyle.left ?? childStyle.inset,
               childStyle.right ?? childStyle.inset,
-              innerWidth ?? cellWidth,
+              cellWidth,
             )
           : 0;
       const dy =
@@ -1888,7 +1903,7 @@ export class LayoutPass {
           ? relative(
               childStyle.top ?? childStyle.inset,
               childStyle.bottom ?? childStyle.inset,
-              innerHeight ?? cellHeight,
+              cellHeight,
             )
           : 0;
       child.yoga.setPositionType(PositionType.Absolute);
@@ -2034,7 +2049,10 @@ export class LayoutPass {
 
   #measure(
     node: LayoutNode,
-    request: { readonly availableWidth?: number },
+    request: {
+      readonly availableWidth?: number;
+      readonly widthMode?: "at-most" | "exactly";
+    },
   ): CapabilityLayoutMeasurement | undefined {
     if (
       node.module?.measureLayout === undefined ||

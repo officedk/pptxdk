@@ -25,6 +25,11 @@ export const targets = Object.freeze({
 
 export type BuildOptions = {
   readonly target?: Target;
+  /**
+   * 单次构建的协作式取消信号；未指定时没有默认超时。
+   * 完成、未处理错误与取消以首次确定的终态为准，完成后取消不会改变结果。
+   */
+  readonly signal?: AbortSignal;
 };
 
 export type GeometryBox = {

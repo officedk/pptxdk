@@ -237,7 +237,7 @@ function validateOptions(options: BuildOptions): Target {
       diagnostic("build", "invalid-options", "构建选项必须是对象"),
     ]);
   }
-  const unknown = ownKeys(options, ["target"]);
+  const unknown = ownKeys(options, ["target", "signal"]);
   if (unknown !== undefined) {
     throw new BuildError([
       diagnostic("build", "unknown-parameter", `构建选项含未知参数 ${unknown}`),
@@ -802,10 +802,15 @@ export function createBuilder(modules: readonly CapabilityModule[]) {
   ): Promise<BuildResult> {
     const target = validateOptions(options);
     try {
-      return await withHostTree(element, (container) =>
-        compileDocument(container, bound, target),
+      return await withHostTree(
+        element,
+        (container) => compileDocument(container, bound, target),
+        options.signal,
       );
     } catch (error) {
+      if (options.signal?.aborted && error === options.signal.reason) {
+        throw error;
+      }
       if (error instanceof BuildError) throw error;
       throw new BuildError([
         diagnostic(

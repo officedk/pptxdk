@@ -198,7 +198,7 @@ try {
     join(temporaryDirectory, "consumer-types.ts"),
     [
       'import { createElement, Suspense, use, useEffect, useState } from "react";',
-      'import { Deck, fade, font, Group, Image, P, Shape, Slide, Span, spin, Step, Text, build, transitions, type BuildResult, type GroupProps, type ImageProps, type MotionProps, type ShapeProps, type StepProps, type TextProps, type Transition } from "@react-pptx/react-pptx";',
+      'import { Deck, fade, font, Group, Image, P, Shape, Slide, Span, spin, Step, Text, build, transitions, type BuildOptions, type BuildResult, type GroupProps, type ImageProps, type MotionProps, type ShapeProps, type StepProps, type TextProps, type Transition } from "@react-pptx/react-pptx";',
       'import { type ValidationIssue, type ValidationResult } from "@react-pptx/validation";',
       'const shape: ShapeProps = { testId: "typed", x: 0, y: 0, width: 40, height: 30 };',
       "const image: ImageProps = { src: new Uint8Array([0x89, 0x50, 0x4e, 0x47]), width: 40, height: 30 };",
@@ -213,8 +213,9 @@ try {
       "function AsyncText({ promise }: { promise: Promise<string> }) { return createElement(Text, text, use(promise)); }",
       "function AsyncSalesTable({ source }: { source: string }) { const [promise, setPromise] = useState<Promise<string> | null>(null); useEffect(() => { setPromise(fetch(source).then(response => response.text())); }, [source]); return promise === null ? null : createElement(Suspense, { fallback: null }, createElement(AsyncText, { promise })); }",
       'const asyncTable = createElement(AsyncSalesTable, { source: "https://example.invalid/data" });',
+      "const signalOptions: BuildOptions = { signal: new AbortController().signal };",
       'const result: Promise<BuildResult> = build(createElement(Deck, {}, createElement(Slide, { slideId: "typed", transition }, createElement(Group, group, createElement(Shape, { ...shape, ...motion }), createElement(Text, text, createElement(P, { style: { list: { type: "bullet" } } }, createElement(Span, { style: { fontWeight: "bold" } }, "Installed 文本"))), createElement(Image, image), createElement(Step, { ...step }, createElement(Shape, { ...shape, testId: "step-shape", enter: fade(), emphasis: spin() }))))));',
-      "void [result, contentSizedText, validationIssue, validatorProfile, asyncTable];",
+      "void [result, contentSizedText, validationIssue, validatorProfile, asyncTable, signalOptions];",
     ].join("\n"),
   );
   await writeFile(
@@ -224,6 +225,7 @@ try {
       'import { BuildError, Deck, fade, font, Group, Image, P, Shape, Slide, Span, spin, Step, Text, build, targets, transitions, wipe } from "@react-pptx/react-pptx";',
       'import { validatePptx } from "@react-pptx/validation";',
       'import { strFromU8, strToU8, unzipSync, zipSync } from "fflate";',
+      'import { getEventListeners } from "node:events";',
       'import { readFile, writeFile } from "node:fs/promises";',
       'const jostMetrics = new Uint8Array(await readFile(new URL("./jost-latin-400-normal.woff2", import.meta.url)));',
       'const transition = transitions.morph({ by: "word", duration: 1200, fallback: transitions.fade() });',
@@ -251,6 +253,20 @@ try {
       "const asyncResult = await asyncBuildPromise;",
       "const asyncFile = await validatePptx(asyncResult.pptx);",
       'if (asyncFile.errors.length !== 0 || asyncResult.report.slides[0]?.objects[0]?.text !== "安装制品的最终异步内容" || asyncFile.slides[0]?.objects[0]?.text?.text !== "安装制品的最终异步内容") throw new Error(JSON.stringify({ errors: asyncFile.errors, report: asyncResult.report.slides }));',
+      "const cancellationController = new AbortController();",
+      "const cancellationStarted = Promise.withResolvers<void>();",
+      "const neverResource = new Promise<string>(() => {});",
+      "let cancellationCleanups = 0;",
+      'function CancelledContent() { useEffect(() => { cancellationStarted.resolve(); return () => { cancellationCleanups += 1; }; }, []); return createElement(Suspense, { fallback: createElement(Text, { x: 0, y: 0, width: 90, height: 36 }, "安装制品加载占位") }, createElement(AsyncText, { promise: neverResource })); }',
+      'const cancellationReason = new Error("安装制品调用方取消");',
+      'const cancellationBuild = build(createElement(Deck, { width: 120, height: 96 }, createElement(Slide, { slideId: "installed-cancelled" }, createElement(CancelledContent))), { signal: cancellationController.signal });',
+      "let cancellationObserved = false;",
+      'const cancellationRejected = cancellationBuild.then(() => { throw new Error("安装制品取消后仍返回了产物"); }, error => { if (error !== cancellationReason) throw error; cancellationObserved = true; });',
+      "await cancellationStarted.promise;",
+      'if (getEventListeners(cancellationController.signal, "abort").length !== 1) throw new Error("安装制品没有监听调用方取消");',
+      "cancellationController.abort(cancellationReason);",
+      "await cancellationRejected;",
+      'if (!cancellationObserved || cancellationCleanups !== 1 || getEventListeners(cancellationController.signal, "abort").length !== 0) throw new Error(JSON.stringify({ cancellationObserved, cancellationCleanups, abortListeners: getEventListeners(cancellationController.signal, "abort").length }));',
       "const mutatedParts = unzipSync(result.pptx);",
       'const masterPart = "ppt/slideMasters/slideMaster1.xml";',
       "const master = strFromU8(mutatedParts[masterPart]);",
@@ -271,7 +287,7 @@ try {
       'try { await build(createElement(Deck, {}, createElement(Slide, { slideId: "missing-metrics" }, createElement(Text, { testId: "content-sized-text", x: 0, y: 0, width: 100, height: "auto", style: { fontFamily: font("Consumer Sans") } }, "Content sized text")))); } catch (error) { missingMetrics = error; }',
       'if (!(missingMetrics instanceof BuildError) || missingMetrics.diagnostics[0]?.code !== "font-measurement-unavailable") throw new Error("installed content-sized text did not require explicit font metrics");',
       'await writeFile("artifact.pptx", result.pptx);',
-      "process.stdout.write(JSON.stringify({ standard: file.profile.standard, schemaPackage: file.profile.schemaValidator.package, schemaPackageVersion: file.profile.schemaValidator.packageVersion, sdkVersion: file.profile.schemaValidator.sdkVersion, officeVersion: file.profile.schemaValidator.officeVersion, applicationEvidence: file.profile.applicationEvidence, slideId: file.slides[0]?.id, group: group.name, groupBox: group.boxEmu, shape: shape.name, shapeText: shape.text.text, shapeBox: shape.boxEmu, text: text.name, textContent: text.text.text, bullet: text.text.paragraphs[0]?.list?.type, image: image.name, mediaType: image.image.contentType, imageBox: image.boxEmu, contentSizedText: contentSizedText.text.text, contentSizedTextHeightEmu: contentSizedText.boxEmu.height, contentSizedTextLineSpacingPoints: contentSizedText.text.paragraphs[0].lineSpacingPoints, nestedGroup: nestedGroup.name, nestedShape: nestedShape.name, nestedShapeText: nestedShape.text.text, nestedShapeBox: nestedShape.boxEmu, missingMetrics: missingMetrics.diagnostics[0].code, objectIds: [group.id, shape.id, text.id, image.id, nestedGroup.id, nestedShape.id], animations, transition: file.slides[0]?.transition?.kind, durationMs: file.slides[0]?.transition?.durationMs, extensions: file.extensions, forbiddenCode: forbidden.diagnostics[0]?.code, schemaGate: schemaIssue.code, schemaPart: schemaIssue.part, schemaXPath: schemaIssue.xpath, bytes: result.pptx.byteLength, contentSizedBytes: contentSizedResult.pptx.byteLength }));",
+      'process.stdout.write(JSON.stringify({ standard: file.profile.standard, schemaPackage: file.profile.schemaValidator.package, schemaPackageVersion: file.profile.schemaValidator.packageVersion, sdkVersion: file.profile.schemaValidator.sdkVersion, officeVersion: file.profile.schemaValidator.officeVersion, applicationEvidence: file.profile.applicationEvidence, slideId: file.slides[0]?.id, group: group.name, groupBox: group.boxEmu, shape: shape.name, shapeText: shape.text.text, shapeBox: shape.boxEmu, text: text.name, textContent: text.text.text, bullet: text.text.paragraphs[0]?.list?.type, image: image.name, mediaType: image.image.contentType, imageBox: image.boxEmu, contentSizedText: contentSizedText.text.text, contentSizedTextHeightEmu: contentSizedText.boxEmu.height, contentSizedTextLineSpacingPoints: contentSizedText.text.paragraphs[0].lineSpacingPoints, nestedGroup: nestedGroup.name, nestedShape: nestedShape.name, nestedShapeText: nestedShape.text.text, nestedShapeBox: nestedShape.boxEmu, missingMetrics: missingMetrics.diagnostics[0].code, objectIds: [group.id, shape.id, text.id, image.id, nestedGroup.id, nestedShape.id], animations, transition: file.slides[0]?.transition?.kind, durationMs: file.slides[0]?.transition?.durationMs, extensions: file.extensions, forbiddenCode: forbidden.diagnostics[0]?.code, schemaGate: schemaIssue.code, schemaPart: schemaIssue.part, schemaXPath: schemaIssue.xpath, bytes: result.pptx.byteLength, contentSizedBytes: contentSizedResult.pptx.byteLength, cancellationObserved, cancellationCleanups, cancellationListeners: getEventListeners(cancellationController.signal, "abort").length }));',
     ].join("\n"),
   );
   const cropLoader = join(temporaryDirectory, "reject-text-box.mjs");
@@ -360,6 +376,9 @@ try {
     readonly contentSizedTextLineSpacingPoints?: number;
     readonly missingMetrics?: string;
     readonly contentSizedBytes?: number;
+    readonly cancellationObserved?: boolean;
+    readonly cancellationCleanups?: number;
+    readonly cancellationListeners?: number;
   };
   if (
     summary.standard !== "ECMA-376 5th edition Transitional" ||
@@ -421,7 +440,10 @@ try {
     summary.bytes === undefined ||
     summary.bytes <= 0 ||
     summary.contentSizedBytes === undefined ||
-    summary.contentSizedBytes <= 0
+    summary.contentSizedBytes <= 0 ||
+    summary.cancellationObserved !== true ||
+    summary.cancellationCleanups !== 1 ||
+    summary.cancellationListeners !== 0
   ) {
     throw new Error(`安装制品返回了意外结果：${summaryText}`);
   }

@@ -53,6 +53,37 @@ export type FileObject = {
     readonly childExtent: { readonly width: number; readonly height: number };
   };
   readonly members?: readonly FileObject[];
+  readonly text?: FileText;
+};
+
+export type FileTextRun = {
+  readonly text: string;
+  readonly fontFamily?: string;
+  readonly fontSizePt?: number;
+  readonly bold?: boolean;
+  readonly italic?: boolean;
+  readonly color?: string;
+};
+
+export type FileTextList =
+  | { readonly type: "bullet"; readonly character: string }
+  | {
+      readonly type: "number";
+      readonly style: string;
+      readonly startAt?: number;
+    };
+
+export type FileTextParagraph = {
+  readonly text: string;
+  readonly runs: readonly FileTextRun[];
+  readonly alignment?: string;
+  readonly lineSpacingPoints?: number;
+  readonly list?: FileTextList;
+};
+
+export type FileText = {
+  readonly text: string;
+  readonly paragraphs: readonly FileTextParagraph[];
 };
 
 export type FileSlide = {
@@ -132,6 +163,98 @@ function integerAttribute(
   if (value === "" || !/^-?\d+$/u.test(value)) return undefined;
   const parsed = Number(value);
   return Number.isSafeInteger(parsed) ? parsed : undefined;
+}
+
+function decimalAttribute(
+  element: XmlElement | undefined,
+  name: string,
+): number | undefined {
+  if (element === undefined) return undefined;
+  const value = attribute(element, name);
+  if (value === "") return undefined;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : undefined;
+}
+
+function readTextRun(run: XmlElement): FileTextRun {
+  const text = first(run, drawingNamespace, "t")?.textContent ?? "";
+  const properties = first(run, drawingNamespace, "rPr");
+  if (properties === undefined) return { text };
+
+  const latin = first(properties, drawingNamespace, "latin");
+  const fill = first(properties, drawingNamespace, "solidFill");
+  const color =
+    fill === undefined ? undefined : first(fill, drawingNamespace, "srgbClr");
+  const fontFamily = latin === undefined ? "" : attribute(latin, "typeface");
+  const fontSize = decimalAttribute(properties, "sz");
+  const bold = attribute(properties, "b");
+  const italic = attribute(properties, "i");
+  return {
+    text,
+    ...(fontFamily === "" ? {} : { fontFamily }),
+    ...(fontSize === undefined ? {} : { fontSizePt: fontSize / 100 }),
+    ...(bold === "" ? {} : { bold: bold === "1" || bold === "true" }),
+    ...(italic === "" ? {} : { italic: italic === "1" || italic === "true" }),
+    ...(color === undefined || attribute(color, "val") === ""
+      ? {}
+      : { color: `#${attribute(color, "val").toUpperCase()}` }),
+  };
+}
+
+function readParagraph(paragraph: XmlElement): FileTextParagraph {
+  const runs = elements(paragraph, drawingNamespace, "r").map(readTextRun);
+  const paragraphProperties = first(paragraph, drawingNamespace, "pPr");
+  const lineSpacing =
+    paragraphProperties === undefined
+      ? undefined
+      : first(paragraphProperties, drawingNamespace, "lnSpc");
+  const exactSpacing =
+    lineSpacing === undefined
+      ? undefined
+      : first(lineSpacing, drawingNamespace, "spcPts");
+  const lineSpacingValue = decimalAttribute(exactSpacing, "val");
+  const bullet =
+    paragraphProperties === undefined
+      ? undefined
+      : first(paragraphProperties, drawingNamespace, "buChar");
+  const autoNumber =
+    paragraphProperties === undefined
+      ? undefined
+      : first(paragraphProperties, drawingNamespace, "buAutoNum");
+  const alignment =
+    paragraphProperties === undefined
+      ? ""
+      : attribute(paragraphProperties, "algn");
+  let list: FileTextList | undefined;
+  if (bullet !== undefined) {
+    list = { type: "bullet", character: attribute(bullet, "char") };
+  } else if (autoNumber !== undefined) {
+    const startAt = integerAttribute(autoNumber, "startAt");
+    list = {
+      type: "number",
+      style: attribute(autoNumber, "type"),
+      ...(startAt === undefined ? {} : { startAt }),
+    };
+  }
+  return {
+    text: runs.map(({ text }) => text).join(""),
+    runs,
+    ...(alignment === "" ? {} : { alignment }),
+    ...(lineSpacingValue === undefined
+      ? {}
+      : { lineSpacingPoints: lineSpacingValue / 100 }),
+    ...(list === undefined ? {} : { list }),
+  };
+}
+
+function readTextBody(shape: XmlElement): FileText | undefined {
+  const body = first(shape, presentationNamespace, "txBody");
+  if (body === undefined) return undefined;
+  const paragraphs = elements(body, drawingNamespace, "p").map(readParagraph);
+  return {
+    text: paragraphs.map(({ text }) => text).join("\n"),
+    paragraphs,
+  };
 }
 
 function parseXmlFiles(files: XmlFiles, errors: ValidationIssue[]): Documents {
@@ -494,12 +617,14 @@ function validateShape(
     );
     return undefined;
   }
+  const text = readTextBody(shape);
   return {
     id,
     name,
     kind: "shape",
     geometry: geometryName,
     boxEmu: { x, y, width, height },
+    ...(text === undefined ? {} : { text }),
   };
 }
 
@@ -986,7 +1111,7 @@ function readPresentation(
 }
 
 /**
- * 从实际 PPTX 字节读取 Transitional 包关系、页面对象和几何，不读取构建报告。
+ * 从实际 PPTX 字节读取页面对象、几何和原生文字段落、run 与列表，不读取构建报告。
  * 图片核对媒体关系、类型与签名，不解码像素数据。
  */
 export async function validatePptx(
@@ -1007,7 +1132,7 @@ export async function validatePptx(
       profile: {
         standard: transitionalStandard,
         scope:
-          "OPC 关系、内容类型以及 PresentationML 页面、形状、图片和组合结构",
+          "OPC 关系、内容类型以及 PresentationML 页面、形状、图片、组合和原生文字段落／run／列表结构",
       },
       errors,
       presentation: { slideCount: 0 },
@@ -1107,7 +1232,8 @@ export async function validatePptx(
   return {
     profile: {
       standard: transitionalStandard,
-      scope: "OPC 关系、内容类型以及 PresentationML 页面、形状、图片和组合结构",
+      scope:
+        "OPC 关系、内容类型以及 PresentationML 页面、形状、图片、组合和原生文字段落／run／列表结构",
     },
     errors,
     presentation,

@@ -35,7 +35,11 @@ function run(
   });
   if (result.error !== undefined || result.status !== 0) {
     const reason =
-      result.error?.message ?? result.stderr.trim() ?? "子进程失败";
+      result.error?.message ??
+      [result.stderr.trim(), result.stdout.trim()].find(
+        (output) => output !== "",
+      ) ??
+      "子进程失败";
     throw new Error(`${command} ${args.join(" ")} 失败：${reason}`);
   }
   return result.stdout.trim();
@@ -162,11 +166,12 @@ try {
     join(temporaryDirectory, "consumer-types.ts"),
     [
       'import { createElement } from "react";',
-      'import { Deck, Group, Image, Shape, Slide, build, type BuildResult, type GroupProps, type ImageProps, type ShapeProps } from "@react-pptx/react-pptx";',
+      'import { Deck, font, Group, Image, P, Shape, Slide, Span, Text, build, type BuildResult, type GroupProps, type ImageProps, type ShapeProps, type TextProps } from "@react-pptx/react-pptx";',
       'const shape: ShapeProps = { testId: "typed", x: 0, y: 0, width: 40, height: 30 };',
       "const image: ImageProps = { src: new Uint8Array([0x89, 0x50, 0x4e, 0x47]), width: 40, height: 30 };",
       'const group: GroupProps = { name: "typed-group" };',
-      'const result: Promise<BuildResult> = build(createElement(Deck, {}, createElement(Slide, { slideId: "typed" }, createElement(Group, group, createElement(Shape, shape), createElement(Image, image)))));',
+      'const text: TextProps = { testId: "typed-text", x: 0, y: 36, width: 100, height: 36, style: { fontFamily: font("Consumer Sans"), lineHeight: "22pt" } };',
+      'const result: Promise<BuildResult> = build(createElement(Deck, {}, createElement(Slide, { slideId: "typed" }, createElement(Group, group, createElement(Shape, shape), createElement(Text, text, createElement(P, { style: { list: { type: "bullet" } } }, createElement(Span, { style: { fontWeight: "bold" } }, "Installed 文本"))), createElement(Image, image)))));',
       "void result;",
     ].join("\n"),
   );
@@ -174,17 +179,50 @@ try {
     join(temporaryDirectory, "consumer-runtime.ts"),
     [
       'import { createElement } from "react";',
-      'import { Deck, Group, Image, Shape, Slide, build } from "@react-pptx/react-pptx";',
+      'import { Deck, font, Group, Image, P, Shape, Slide, Span, Text, build } from "@react-pptx/react-pptx";',
       'import { validatePptx } from "@react-pptx/validation";',
       'import { writeFile } from "node:fs/promises";',
       'const imageBytes = new Uint8Array(Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/n1sAAAAASUVORK5CYII=", "base64"));',
-      'const result = await build(createElement(Deck, { width: 120, height: 96 }, createElement(Slide, { slideId: "installed" }, createElement(Group, { testId: "packed-group" }, createElement(Shape, { testId: "packed-shape", geometry: "hexagon", x: 10, y: 12, width: 45, height: 30, fill: "#123456" }), createElement(Image, { testId: "packed-image", src: imageBytes, x: 60, y: 12, width: 40, height: 30, fit: "cover" })))));',
+      'const result = await build(createElement(Deck, { width: 120, height: 96 }, createElement(Slide, { slideId: "installed" }, createElement(Group, { testId: "packed-group" }, createElement(Shape, { testId: "packed-shape", geometry: "hexagon", x: 10, y: 12, width: 45, height: 30, fill: "#123456", text: "Installed shape text" }), createElement(Text, { testId: "packed-text", x: 10, y: 48, width: 90, height: 36, style: { fontFamily: font("Consumer Sans"), lineHeight: "22pt" } }, createElement(P, { style: { list: { type: "bullet" } } }, createElement(Span, { style: { fontWeight: "bold" } }, "Installed 文本"))), createElement(Image, { testId: "packed-image", src: imageBytes, x: 60, y: 12, width: 40, height: 30, fit: "cover" }), createElement(Group, { testId: "nested-group" }, createElement(Shape, { testId: "nested-shape", x: 80, y: 60, width: 12, height: 10, text: "Nested member" }))))));',
       "const file = await validatePptx(result.pptx);",
       "const group = file.slides[0]?.objects[0];",
+      'const shape = group?.members?.find(({ name }) => name === "packed-shape");',
+      'const text = group?.members?.find(({ name }) => name === "packed-text");',
       'const image = group?.members?.find(({ kind }) => kind === "image");',
-      'if (file.errors.length !== 0 || group?.kind !== "group" || group.name !== "packed-group" || image?.name !== "packed-image" || image.image?.contentType !== "image/png") throw new Error(JSON.stringify(file.errors));',
+      'const nestedGroup = group?.members?.find(({ kind }) => kind === "group");',
+      'const nestedShape = nestedGroup?.members?.find(({ name }) => name === "nested-shape");',
+      'if (file.errors.length !== 0 || group?.kind !== "group" || group.name !== "packed-group" || !group.boxEmu || group.boxEmu.width <= 0 || shape?.text?.text !== "Installed shape text" || !shape.boxEmu || shape.boxEmu.x <= 0 || text?.text?.paragraphs[0]?.text !== "Installed 文本" || text.text.paragraphs[0]?.list?.type !== "bullet" || image?.name !== "packed-image" || image.image?.contentType !== "image/png" || !image.boxEmu || nestedGroup?.name !== "nested-group" || nestedShape?.text?.text !== "Nested member" || !nestedShape.boxEmu) throw new Error(JSON.stringify({ errors: file.errors, group, shape, text, image, nestedGroup }));',
       'await writeFile("artifact.pptx", result.pptx);',
-      "process.stdout.write(JSON.stringify({ standard: file.profile.standard, slideId: file.slides[0]?.id, group: group.name, member: image.name, mediaType: image.image.contentType, bytes: result.pptx.byteLength }));",
+      "process.stdout.write(JSON.stringify({ standard: file.profile.standard, slideId: file.slides[0]?.id, group: group.name, groupBox: group.boxEmu, shape: shape.name, shapeText: shape.text.text, shapeBox: shape.boxEmu, text: text.name, textContent: text.text.text, bullet: text.text.paragraphs[0]?.list?.type, image: image.name, mediaType: image.image.contentType, imageBox: image.boxEmu, nestedGroup: nestedGroup.name, nestedShape: nestedShape.name, nestedShapeText: nestedShape.text.text, nestedShapeBox: nestedShape.boxEmu, objectIds: [group.id, shape.id, text.id, image.id, nestedGroup.id, nestedShape.id], bytes: result.pptx.byteLength }));",
+    ].join("\n"),
+  );
+  const cropLoader = join(temporaryDirectory, "reject-text-box.mjs");
+  await writeFile(
+    cropLoader,
+    [
+      "export async function resolve(specifier, context, nextResolve) {",
+      "  const resolved = await nextResolve(specifier, context);",
+      '  if (resolved.url.includes("/capabilities/dist/text.js")) throw new Error("installed text-box implementation was loaded");',
+      "  return resolved;",
+      "}",
+    ].join("\n"),
+  );
+  await writeFile(
+    join(temporaryDirectory, "consumer-cropped.mjs"),
+    [
+      'import { createElement } from "react";',
+      'import { BuildError } from "@react-pptx/core";',
+      'import { Text as TextDeclaration } from "@react-pptx/capabilities/text-elements";',
+      'import { build, Deck, Shape, Slide } from "@react-pptx/react-pptx/shape";',
+      'import { validatePptx } from "@react-pptx/validation";',
+      'const result = await build(createElement(Deck, { width: 120, height: 96 }, createElement(Slide, { slideId: "installed-cropped" }, createElement(Shape, { testId: "installed-shape-text", x: 0, y: 0, width: 90, height: 30, text: "Installed shape text" }))));',
+      "const file = await validatePptx(result.pptx);",
+      'if (file.errors.length !== 0 || file.slides[0]?.objects[0]?.text?.text !== "Installed shape text") throw new Error(JSON.stringify(file.errors));',
+      'function NestedText() { return createElement(TextDeclaration, { testId: "missing-installed-text", x: 0, y: 32, width: 90, height: 30 }, "not registered"); }',
+      "let missingText;",
+      'try { await build(createElement(Deck, {}, createElement(Slide, { slideId: "nested" }, createElement(NestedText)))); } catch (error) { missingText = error; }',
+      'if (!(missingText instanceof BuildError) || missingText.diagnostics[0]?.code !== "missing-capability" || missingText.diagnostics[0]?.path !== "deck/slide[nested]/text[missing-installed-text]") throw new Error("installed nested Text did not report the cropped capability");',
+      "process.stdout.write(JSON.stringify({ shapeText: file.slides[0]?.objects[0]?.text?.text, missingCode: missingText.diagnostics[0]?.code, missingPath: missingText.diagnostics[0]?.path, textBoxImplementationLoaded: false }));",
     ].join("\n"),
   );
 
@@ -203,22 +241,62 @@ try {
     readonly standard?: string;
     readonly slideId?: string;
     readonly group?: string;
-    readonly member?: string;
+    readonly shape?: string;
+    readonly shapeText?: string;
+    readonly text?: string;
+    readonly textContent?: string;
+    readonly bullet?: string;
+    readonly image?: string;
     readonly mediaType?: string;
+    readonly nestedGroup?: string;
+    readonly nestedShape?: string;
+    readonly nestedShapeText?: string;
+    readonly objectIds?: readonly number[];
     readonly bytes?: number;
   };
   if (
     summary.standard !== "ECMA-376 5th edition Transitional" ||
     summary.slideId !== "installed" ||
     summary.group !== "packed-group" ||
-    summary.member !== "packed-image" ||
+    summary.shape !== "packed-shape" ||
+    summary.shapeText !== "Installed shape text" ||
+    summary.text !== "packed-text" ||
+    summary.textContent !== "Installed 文本" ||
+    summary.bullet !== "bullet" ||
+    summary.image !== "packed-image" ||
     summary.mediaType !== "image/png" ||
+    summary.nestedGroup !== "nested-group" ||
+    summary.nestedShape !== "nested-shape" ||
+    summary.nestedShapeText !== "Nested member" ||
+    summary.objectIds?.length !== 6 ||
+    new Set(summary.objectIds).size !== 6 ||
     summary.bytes === undefined ||
     summary.bytes <= 0
   ) {
     throw new Error(`安装制品返回了意外结果：${summaryText}`);
   }
-  process.stdout.write(`正式制品消费通过：${summaryText}\n`);
+  const croppedText = run(
+    process.execPath,
+    ["--loader", cropLoader, "consumer-cropped.mjs"],
+    temporaryDirectory,
+  );
+  const cropped = JSON.parse(croppedText) as {
+    readonly shapeText?: string;
+    readonly missingCode?: string;
+    readonly missingPath?: string;
+    readonly textBoxImplementationLoaded?: boolean;
+  };
+  if (
+    cropped.shapeText !== "Installed shape text" ||
+    cropped.missingCode !== "missing-capability" ||
+    cropped.missingPath !== "deck/slide[nested]/text[missing-installed-text]" ||
+    cropped.textBoxImplementationLoaded !== false
+  ) {
+    throw new Error(`安装制品裁剪入口返回了意外结果：${croppedText}`);
+  }
+  process.stdout.write(
+    `正式制品消费通过：${summaryText}\n安装制品裁剪通过：${croppedText}\n`,
+  );
 } finally {
   await rm(temporaryDirectory, { recursive: true, force: true });
 }

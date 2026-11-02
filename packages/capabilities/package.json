@@ -23,6 +23,21 @@
       "source": "./src/index.ts",
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
+    },
+    "./shape": {
+      "source": "./src/shape.ts",
+      "types": "./dist/shape.d.ts",
+      "default": "./dist/shape.js"
+    },
+    "./text": {
+      "source": "./src/text.ts",
+      "types": "./dist/text.d.ts",
+      "default": "./dist/text.js"
+    },
+    "./text-elements": {
+      "source": "./src/text-elements.ts",
+      "types": "./dist/text-elements.d.ts",
+      "default": "./dist/text-elements.js"
     }
   },
   "scripts": {

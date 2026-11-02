@@ -9,12 +9,16 @@ import {
   BuildError,
   createBuilder,
   Deck,
+  font,
   Group,
   groupCapability,
   Image,
+  P,
   Shape,
   shapeCapability,
   Slide,
+  Span,
+  Text,
 } from "@react-pptx/react-pptx";
 import { validatePptx } from "@react-pptx/validation";
 import { unzipSync, zipSync } from "fflate";
@@ -44,6 +48,169 @@ const widePng = new Uint8Array(
 );
 
 describe("图片与原生组合", () => {
+  it("在嵌套原生组合中保留文字段落、形状文字、媒体关系和成员几何", async () => {
+    const result = await build(
+      createElement(
+        Deck,
+        { width: 960, height: 540 },
+        createElement(
+          Slide,
+          { slideId: "mixed-group" },
+          createElement(
+            Group,
+            { testId: "outer-group" },
+            createElement(Shape, {
+              testId: "shape-text",
+              geometry: "hexagon",
+              x: 20,
+              y: 24,
+              width: 120,
+              height: 72,
+              text: "Shape body",
+            }),
+            createElement(
+              Text,
+              {
+                testId: "paragraph-text",
+                x: 160,
+                y: 24,
+                width: 360,
+                height: 120,
+                style: { fontFamily: font("Aptos"), fontSize: "14pt" },
+              },
+              createElement(
+                P,
+                { style: { list: { type: "bullet", character: "•" } } },
+                "Group paragraph ",
+                createElement(Span, { style: { fontWeight: "bold" } }, "style"),
+              ),
+            ),
+            createElement(Image, {
+              testId: "group-image",
+              src: png,
+              x: 20,
+              y: 120,
+              width: 120,
+              height: 72,
+              fit: "cover",
+            }),
+            createElement(
+              Group,
+              { testId: "inner-group" },
+              createElement(Shape, {
+                testId: "inner-shape",
+                x: 190,
+                y: 80,
+                width: 40,
+                height: 20,
+              }),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    const outerObservation = result.report.slides[0]?.objects[0];
+    assert.equal(outerObservation?.kind, "group");
+    assert.deepEqual(
+      outerObservation?.members?.map(({ name }) => name),
+      ["shape-text", "paragraph-text", "group-image", "inner-group"],
+    );
+
+    const file = await validatePptx(result.pptx);
+    assert.deepEqual(file.errors, []);
+    const outer = file.slides[0]?.objects[0];
+    assert.equal(outer?.kind, "group");
+    assert.equal(outer?.name, "outer-group");
+    assert.deepEqual(outer?.boxEmu, {
+      x: 190_500,
+      y: 228_600,
+      width: 4_762_500,
+      height: 1_600_200,
+    });
+    assert.deepEqual(outer?.groupTransform, {
+      childOffset: { x: 190_500, y: 228_600 },
+      childExtent: { width: 4_762_500, height: 1_600_200 },
+    });
+
+    const members = outer?.members ?? [];
+    const shapeText = members.find(({ name }) => name === "shape-text");
+    assert.equal(shapeText?.kind, "shape");
+    assert.equal(shapeText?.geometry, "hexagon");
+    assert.equal(shapeText?.text?.text, "Shape body");
+    assert.deepEqual(shapeText?.boxEmu, {
+      x: 190_500,
+      y: 228_600,
+      width: 1_143_000,
+      height: 685_800,
+    });
+
+    const paragraphText = members.find(({ name }) => name === "paragraph-text");
+    assert.equal(paragraphText?.text?.text, "Group paragraph style");
+    assert.deepEqual(paragraphText?.text?.paragraphs[0]?.list, {
+      type: "bullet",
+      character: "•",
+    });
+    assert.deepEqual(
+      paragraphText?.text?.paragraphs[0]?.runs.map(({ text, bold }) => ({
+        text,
+        bold,
+      })),
+      [
+        { text: "Group paragraph ", bold: false },
+        { text: "style", bold: true },
+      ],
+    );
+    assert.deepEqual(paragraphText?.boxEmu, {
+      x: 1_524_000,
+      y: 228_600,
+      width: 3_429_000,
+      height: 1_143_000,
+    });
+
+    const image = members.find(({ kind }) => kind === "image");
+    assert.equal(image?.name, "group-image");
+    assert.equal(image?.image?.contentType, "image/png");
+    assert.ok(image?.image?.relationshipId);
+    assert.deepEqual(image?.boxEmu, {
+      x: 190_500,
+      y: 1_143_000,
+      width: 1_143_000,
+      height: 685_800,
+    });
+    assert.deepEqual(image?.crop, { top: 20_000, bottom: 20_000 });
+    assert.deepEqual(unzipSync(result.pptx)[image?.image?.part ?? ""], png);
+
+    const inner = members.find(({ kind }) => kind === "group");
+    assert.equal(inner?.name, "inner-group");
+    assert.deepEqual(inner?.boxEmu, {
+      x: 1_809_750,
+      y: 762_000,
+      width: 381_000,
+      height: 190_500,
+    });
+    const innerShape = inner?.members?.[0];
+    assert.equal(innerShape?.name, "inner-shape");
+    assert.ok(Number.isSafeInteger(innerShape?.id));
+    assert.deepEqual(innerShape?.boxEmu, inner?.boxEmu);
+    const objectIds = [
+      outer?.id,
+      shapeText?.id,
+      paragraphText?.id,
+      image?.id,
+      inner?.id,
+      innerShape?.id,
+    ];
+    assert.ok(objectIds.every((id) => Number.isSafeInteger(id)));
+    assert.equal(new Set(objectIds).size, objectIds.length);
+    assert.equal(
+      Object.keys(unzipSync(result.pptx)).filter((part) =>
+        part.startsWith("ppt/media/"),
+      ).length,
+      1,
+    );
+  });
+
   it("通过公开构建读取图片资源并在实际 PPTX 中建立图片关系", async () => {
     const result = await build(
       createElement(

@@ -38,6 +38,8 @@ type LayoutNode = {
   readonly path: string;
   readonly module?: ObjectCapabilityModule;
   readonly children: LayoutNode[];
+  /** Yoga 不支持文本基线回调；提交几何前记录的交叉轴修正。 */
+  baselineAdjustmentY: number;
 };
 
 export type LayoutPassResult = {
@@ -89,7 +91,6 @@ const textProperties = new Set([
   "verticalAlign",
 ]);
 const containerProperties = [
-  "display",
   "flexDirection",
   "flexWrap",
   "justifyContent",
@@ -297,9 +298,12 @@ function readStyle(
   }
   if (
     !isContainer &&
-    Object.keys(value).some((key) =>
-      containerProperties.includes(key as (typeof containerProperties)[number]),
-    )
+    (value["display"] !== undefined ||
+      Object.keys(value).some((key) =>
+        containerProperties.includes(
+          key as (typeof containerProperties)[number],
+        ),
+      ))
   ) {
     fail(
       path,
@@ -494,29 +498,28 @@ export class LayoutPass {
       style: { display: "block" },
       path: parentPath,
       children: [],
+      baselineAdjustmentY: 0,
     };
     rootYoga.setDisplay(Display.Flex);
     rootYoga.setFlexDirection(FlexDirection.Column);
     rootYoga.setWidth(this.#dimensions.width);
     rootYoga.setHeight(this.#dimensions.height);
     try {
-      children.forEach((child, index) => {
-        if (!element(child)) return;
-        const childPath = `${parentPath}/${label(child, index)}`;
-        if (child.type === "rp:box") {
-          const built = this.#buildBox(child, childPath, root.style);
-          rootYoga.insertChild(built.yoga, root.children.length);
-          root.children.push(built);
-        } else {
-          this.#validateLoose(child, childPath, false);
-        }
-      });
+      this.#appendChildren(children, parentPath, root, false);
       rootYoga.calculateLayout(
         this.#dimensions.width,
         this.#dimensions.height,
         Direction.LTR,
       );
       if (this.#applyAutomaticMinimums(root)) {
+        rootYoga.calculateLayout(
+          this.#dimensions.width,
+          this.#dimensions.height,
+          Direction.LTR,
+        );
+      }
+      // 基线修正可能撑高自适应行；重算后续块流位置直至高度稳定。
+      while (this.#applyBaselineAlignment(root)) {
         rootYoga.calculateLayout(
           this.#dimensions.width,
           this.#dimensions.height,
@@ -545,6 +548,73 @@ export class LayoutPass {
     void style;
   }
 
+  #appendChildren(
+    children: readonly CapabilityChild[],
+    parentPath: string,
+    parent: LayoutNode,
+    includeObjects: boolean,
+  ): void {
+    children.forEach((child, index) => {
+      if (!element(child)) return;
+      const childPath = `${parentPath}/${label(child, index)}`;
+      if (child.type === "rp:box") {
+        const built = this.#buildBox(child, childPath, parent.style);
+        parent.yoga.insertChild(built.yoga, parent.children.length);
+        parent.children.push(built);
+        return;
+      }
+      if (child.type === "rp:group") {
+        // Group 只保留原生成员关系；其内容继续使用外层布局上下文。
+        this.#appendChildren(child.children, childPath, parent, includeObjects);
+        return;
+      }
+      if (!includeObjects) {
+        this.#validateLoose(child, childPath, false);
+        return;
+      }
+      const module = this.#modules.get(child.type);
+      if (!objectModule(module)) return;
+      const isText = child.type === "rp:text";
+      const childStyle = readStyle(
+        child.props["style"],
+        childPath,
+        false,
+        isText,
+      );
+      const childYoga = Yoga.Node.create(this.#config);
+      const layoutChild: LayoutNode = {
+        yoga: childYoga,
+        element: child,
+        style: childStyle,
+        path: childPath,
+        module,
+        children: [],
+        baselineAdjustmentY: 0,
+      };
+      this.#applyStyle(childYoga, childStyle, parent.style, false, false);
+      this.#setDeclaredSize(layoutChild);
+      if (module.measureLayout !== undefined) {
+        childYoga.setMeasureFunc((width, widthMode) => {
+          const measured = this.#measure(
+            layoutChild,
+            widthMode === MeasureMode.Undefined
+              ? {}
+              : { availableWidth: width },
+          );
+          return {
+            width:
+              widthMode === MeasureMode.Exactly
+                ? width
+                : (measured?.width ?? 0),
+            height: measured?.height ?? 0,
+          };
+        });
+      }
+      parent.yoga.insertChild(childYoga, parent.children.length);
+      parent.children.push(layoutChild);
+    });
+  }
+
   #buildBox(
     input: CapabilityElement,
     path: string,
@@ -571,57 +641,10 @@ export class LayoutPass {
       style,
       path,
       children: [],
+      baselineAdjustmentY: 0,
     };
-    this.#applyStyle(yoga, style, parentStyle, false, true, path);
-    for (const [index, child] of input.children.entries()) {
-      if (!element(child)) continue;
-      const childPath = `${path}/${label(child, index)}`;
-      if (child.type === "rp:box") {
-        const built = this.#buildBox(child, childPath, style);
-        yoga.insertChild(built.yoga, node.children.length);
-        node.children.push(built);
-        continue;
-      }
-      const module = this.#modules.get(child.type);
-      if (!objectModule(module)) continue;
-      const isText = child.type === "rp:text";
-      const childStyle = readStyle(
-        child.props["style"],
-        childPath,
-        false,
-        isText,
-      );
-      const childYoga = Yoga.Node.create(this.#config);
-      const layoutChild: LayoutNode = {
-        yoga: childYoga,
-        element: child,
-        style: childStyle,
-        path: childPath,
-        module,
-        children: [],
-      };
-      this.#applyStyle(childYoga, childStyle, style, false, false, childPath);
-      this.#setDeclaredSize(layoutChild);
-      if (module.measureLayout !== undefined) {
-        childYoga.setMeasureFunc((width, widthMode) => {
-          const measured = this.#measure(
-            layoutChild,
-            widthMode === MeasureMode.Undefined
-              ? {}
-              : { availableWidth: width },
-          );
-          return {
-            width:
-              widthMode === MeasureMode.Exactly
-                ? width
-                : (measured?.width ?? 0),
-            height: measured?.height ?? 0,
-          };
-        });
-      }
-      yoga.insertChild(childYoga, node.children.length);
-      node.children.push(layoutChild);
-    }
+    this.#applyStyle(yoga, style, parentStyle, false, true);
+    this.#appendChildren(input.children, path, node, true);
     return node;
   }
 
@@ -643,7 +666,6 @@ export class LayoutPass {
     parent: LayoutStyle,
     isRoot: boolean,
     isContainer: boolean,
-    path: string,
   ): void {
     yoga.setDisplay(Display.Flex);
     const flex = style.display === "flex";
@@ -676,8 +698,12 @@ export class LayoutPass {
     if (flex && style.alignItems !== undefined) {
       yoga.setAlignItems(yogaAlign(style.alignItems));
     }
-    if (flex && style.alignContent !== undefined)
+    if (flex && style.alignContent !== undefined) {
       yoga.setAlignContent(yogaAlignContent(style.alignContent));
+    } else if (flex && style.flexWrap === "wrap") {
+      // Yoga 默认从起始边堆叠弹性行；CSS 默认会拉伸有剩余空间的行。
+      yoga.setAlignContent(Align.Stretch);
+    }
     if (flex && style.gap !== undefined) yoga.setGap(Gutter.All, style.gap);
     if (flex && style.rowGap !== undefined)
       yoga.setGap(Gutter.Row, style.rowGap);
@@ -736,10 +762,6 @@ export class LayoutPass {
     if (isContainer && style.display !== "flex") {
       yoga.setAlignItems(Align.Stretch);
     }
-    if (isContainer && style.display !== "flex" && parent.display === "flex") {
-      // No container-only values are valid here; readStyle reports them with source context.
-      void path;
-    }
   }
 
   #measure(
@@ -775,10 +797,8 @@ export class LayoutPass {
           ? child.style.minWidth
           : child.style.minHeight;
         if (typeof explicitMinimum === "number") continue;
-        const minimum = this.#minContent(
-          child,
-          horizontal ? "width" : "height",
-        );
+        const axis = horizontal ? "width" : "height";
+        const minimum = this.#automaticMinimum(child, axis);
         if (minimum === undefined || minimum <= 0) continue;
         if (horizontal) child.yoga.setMinWidth(minimum);
         else child.yoga.setMinHeight(minimum);
@@ -791,6 +811,144 @@ export class LayoutPass {
     return changed;
   }
 
+  #automaticMinimum(
+    node: LayoutNode,
+    axis: "width" | "height",
+  ): number | undefined {
+    const content = this.#minContent(node, axis);
+    if (content === undefined) return undefined;
+    const maximum =
+      axis === "width"
+        ? styleLength(node.style.maxWidth)
+        : styleLength(node.style.maxHeight);
+    const rawDimension = node.style[axis] ?? node.element?.props[axis];
+    const declared = length(rawDimension, axis, node.path);
+    return Math.min(
+      content,
+      ...(declared === undefined ? [] : [declared]),
+      ...(maximum === undefined ? [] : [maximum]),
+    );
+  }
+
+  #applyBaselineAlignment(node: LayoutNode): boolean {
+    let changed = false;
+    const flexRow = node.style.display === "flex" && rowDirection(node.style);
+    const participants =
+      node.style.display !== "flex"
+        ? []
+        : node.children.filter((child) => {
+            const alignment = child.style.alignSelf;
+            return (
+              alignment === "baseline" ||
+              ((alignment === undefined || alignment === "auto") &&
+                node.style.alignItems === "baseline")
+            );
+          });
+    const needsTextBaseline = participants.some((child) => {
+      const element = child.element;
+      return (
+        element?.type === "rp:text" ||
+        (typeof element?.props["text"] === "string" &&
+          element.props["text"] !== "")
+      );
+    });
+    if (participants.length > 0 && flexRow && needsTextBaseline) {
+      if (node.style.flexWrap === "wrap") {
+        fail(
+          node.path,
+          "unsupported-baseline-context",
+          "文字 baseline 目前要求不换行的行弹性容器",
+        );
+      }
+      const baselines = participants.map((child) => {
+        const lineOffset = this.#baselineOffset(child);
+        return {
+          child,
+          offset: child.yoga.getComputedMargin(Edge.Top) + lineOffset,
+          position: child.yoga.getComputedTop() + lineOffset,
+        };
+      });
+      // 以实际文字基线替代 Yoga 的盒底近似，同时保留容器内容区起点。
+      const lineBaseline =
+        node.yoga.getComputedPadding(Edge.Top) +
+        Math.max(...baselines.map(({ offset }) => offset));
+      for (const { child, position } of baselines) {
+        child.baselineAdjustmentY = lineBaseline - position;
+      }
+      if (node.style.height === undefined || node.style.height === "auto") {
+        const currentHeight = node.yoga.getComputedHeight();
+        const contentBottom = Math.max(
+          0,
+          ...node.children.map(
+            (child) =>
+              child.yoga.getComputedTop() +
+              child.baselineAdjustmentY +
+              child.yoga.getComputedHeight() +
+              child.yoga.getComputedMargin(Edge.Bottom),
+          ),
+        );
+        const requiredHeight = Math.max(
+          currentHeight,
+          contentBottom + node.yoga.getComputedPadding(Edge.Bottom),
+        );
+        const maximum = styleLength(node.style.maxHeight);
+        const boundedHeight = Math.min(
+          requiredHeight,
+          ...(maximum === undefined ? [] : [maximum]),
+        );
+        if (boundedHeight > currentHeight + 0.01) {
+          node.yoga.setMinHeight(boundedHeight);
+          changed = true;
+        }
+      }
+    }
+    for (const child of node.children) {
+      if (this.#applyBaselineAlignment(child)) changed = true;
+    }
+    return changed;
+  }
+
+  #baselineOffset(node: LayoutNode): number {
+    const element = node.element;
+    const containsText =
+      element?.type === "rp:text" ||
+      (typeof element?.props["text"] === "string" &&
+        element.props["text"] !== "");
+    if (!containsText) return node.yoga.getComputedHeight();
+    const measurement = this.#measure(node, {
+      availableWidth: node.yoga.getComputedWidth(),
+    });
+    if (measurement?.baseline !== undefined) return measurement.baseline;
+    fail(
+      node.path,
+      "baseline-measurement-unavailable",
+      "baseline 对齐需要可确定首行基线的文字与字体度量",
+    );
+  }
+
+  #minContentContribution(node: LayoutNode, axis: "width" | "height"): number {
+    const content = this.#minContent(node, axis) ?? 0;
+    const rawDimension = node.style[axis] ?? node.element?.props[axis];
+    let size = length(rawDimension, axis, node.path) ?? content;
+    const minimum =
+      axis === "width"
+        ? styleLength(node.style.minWidth)
+        : styleLength(node.style.minHeight);
+    const maximum =
+      axis === "width"
+        ? styleLength(node.style.maxWidth)
+        : styleLength(node.style.maxHeight);
+    if (minimum !== undefined) size = Math.max(size, minimum);
+    if (maximum !== undefined) size = Math.min(size, maximum);
+    const margin = expandedSpacing(node.style, "margin");
+    return (
+      size +
+      (axis === "width"
+        ? margin.left + margin.right
+        : margin.top + margin.bottom)
+    );
+  }
+
   #minContent(node: LayoutNode, axis: "width" | "height"): number | undefined {
     if (node.element?.type !== "rp:box") {
       const measured = this.#measure(node, {
@@ -800,22 +958,7 @@ export class LayoutPass {
         axis === "width"
           ? measured?.minContentWidth
           : measured?.minContentHeight;
-      if (result === undefined) return undefined;
-      const declared =
-        axis === "width"
-          ? (styleLength(node.style.width) ??
-            length(node.element?.props["width"], "width", node.path))
-          : (styleLength(node.style.height) ??
-            length(node.element?.props["height"], "height", node.path));
-      const maximum =
-        axis === "width"
-          ? styleLength(node.style.maxWidth)
-          : styleLength(node.style.maxHeight);
-      return Math.min(
-        result,
-        ...(declared === undefined ? [] : [declared]),
-        ...(maximum === undefined ? [] : [maximum]),
-      );
+      return result;
     }
     const horizontal = axis === "width";
     const flexRow =
@@ -827,11 +970,7 @@ export class LayoutPass {
     let content: number;
     if (horizontal && flexRow) {
       content = node.children.reduce(
-        (total, child) =>
-          total +
-          (this.#minContent(child, axis) ?? 0) +
-          expandedSpacing(child.style, "margin").left +
-          expandedSpacing(child.style, "margin").right,
+        (total, child) => total + this.#minContentContribution(child, axis),
         0,
       );
       content +=
@@ -839,11 +978,7 @@ export class LayoutPass {
         Math.max(0, node.children.length - 1);
     } else if (!horizontal && (flexColumn || node.style.display !== "flex")) {
       content = node.children.reduce(
-        (total, child) =>
-          total +
-          (this.#minContent(child, axis) ?? 0) +
-          expandedSpacing(child.style, "margin").top +
-          expandedSpacing(child.style, "margin").bottom,
+        (total, child) => total + this.#minContentContribution(child, axis),
         0,
       );
       if (node.style.display === "flex") {
@@ -854,7 +989,9 @@ export class LayoutPass {
     } else {
       content = Math.max(
         0,
-        ...node.children.map((child) => this.#minContent(child, axis) ?? 0),
+        ...node.children.map((child) =>
+          this.#minContentContribution(child, axis),
+        ),
       );
     }
     if (horizontal) {
@@ -881,7 +1018,9 @@ export class LayoutPass {
   ): void {
     const box = {
       x: layoutPixel(origin.x + node.yoga.getComputedLeft()),
-      y: layoutPixel(origin.y + node.yoga.getComputedTop()),
+      y: layoutPixel(
+        origin.y + node.yoga.getComputedTop() + node.baselineAdjustmentY,
+      ),
       width: layoutPixel(node.yoga.getComputedWidth()),
       height: layoutPixel(node.yoga.getComputedHeight()),
     };

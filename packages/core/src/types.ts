@@ -229,6 +229,8 @@ export type CapabilityLayoutMeasurement = {
   readonly minContentWidth?: number;
   /** 计算高度方向自动最小尺寸时采用的最小内容高度。 */
   readonly minContentHeight?: number;
+  /** 有可靠文字度量时，首行基线距对象顶边的像素距离。 */
+  readonly baseline?: number;
 };
 
 export type CapabilityOutput = {

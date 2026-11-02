@@ -62,6 +62,7 @@ export type TextLayoutMeasurement = {
   readonly height: number;
   readonly minContentWidth: number;
   readonly minContentHeight: number;
+  readonly baseline?: number;
 };
 
 type HostText = { readonly type: "#text"; readonly text: string };
@@ -1046,6 +1047,21 @@ function paragraphLineHeight(paragraph: Paragraph): number {
   return spacingCentipoints(maximum, "lineHeight") / 75;
 }
 
+function paragraphBaseline(paragraph: Paragraph): number | undefined {
+  // 混合 run 的首行基线需要逐段文字片段度量，当前结果不包含这类依据。
+  if (paragraph.runs.length !== 1 || paragraph.runs[0]!.text === "") {
+    return undefined;
+  }
+  const style = paragraph.runs[0]!.style;
+  const face = measureRunFace(style).font;
+  const fontSize = fontSizePoints(style.fontSize) * (4 / 3);
+  const naturalLineHeight =
+    ((face.ascent - face.descent + face.lineGap) / face.unitsPerEm) * fontSize;
+  const lineHeight = paragraphLineHeight(paragraph);
+  const leading = (lineHeight - naturalLineHeight) / 2;
+  return (face.ascent / face.unitsPerEm) * fontSize + leading;
+}
+
 function paragraphPieces(paragraph: Paragraph): {
   readonly text: string;
   readonly pieces: readonly MeasurePiece[];
@@ -1159,11 +1175,18 @@ export function measureTextLayout(
     0,
     ...paragraphs.map(paragraphMinContentWidth),
   );
+  const baseline =
+    style.verticalAlign === undefined || style.verticalAlign === "top"
+      ? paragraphs[0] === undefined
+        ? undefined
+        : paragraphBaseline(paragraphs[0])
+      : undefined;
   return {
     width: measured.width,
     height: measured.height,
     minContentWidth,
     minContentHeight: measured.height,
+    ...(baseline === undefined ? {} : { baseline }),
   };
 }
 

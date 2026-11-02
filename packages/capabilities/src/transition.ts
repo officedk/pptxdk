@@ -378,6 +378,7 @@ function compileTransition(value: unknown): {
 export const transitionCapability: SlideCapabilityModule = Object.freeze({
   declaration: "transition",
   slideProp: "transition",
+  slot: "transition",
   compileSlide(input: CapabilityInput) {
     const transition = compileTransition(input.props["transition"]);
     return {

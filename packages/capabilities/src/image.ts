@@ -11,12 +11,18 @@ import {
   type CapabilityModule,
   type LayoutStyle,
 } from "@react-pptx/core";
-import { createElement, type ReactNode } from "react";
+import type { ReactNode } from "react";
+
+import {
+  motionAnnotations,
+  motionElement,
+  type MotionProps,
+} from "./motion-api.ts";
 
 /** 本地文件路径、file URL 或图片原始字节。 */
 export type ImageSource = string | URL | Uint8Array;
 
-export type ImageProps = {
+export type ImageProps = MotionProps & {
   readonly testId?: string;
   readonly name?: string;
   readonly src: ImageSource;
@@ -61,6 +67,11 @@ const allowedParameters = [
   "style",
   "fit",
   "crop",
+  "enter",
+  "emphasis",
+  "motion",
+  "__motionEnabled",
+  "__motionStep",
 ] as const;
 const maximumShapeExtentEmu = 2_147_483_647;
 
@@ -553,6 +564,13 @@ export const imageCapability: CapabilityModule = {
     box.width = dimension(box.width, "width");
     box.height = dimension(box.height, "height");
     const name = requestedName ?? testId ?? `Image ${context.id - 1}`;
+    const annotations = motionAnnotations(props, {
+      kind: "image",
+      name,
+      ...(testId === undefined ? {} : { testId }),
+      textBody: false,
+      filled: false,
+    });
     let escapedName: string;
     let escapedAlt: string | undefined;
     try {
@@ -600,11 +618,12 @@ export const imageCapability: CapabilityModule = {
         box,
       },
       extensions: [],
+      ...(annotations.length === 0 ? {} : { annotations }),
     };
   },
 };
 
 /** 在 React 根树中声明一张由官方图片模块处理的原生图片。 */
 export function Image(props: ImageProps): ReactNode {
-  return createElement("rp:image", props, props.children);
+  return motionElement("rp:image", props);
 }

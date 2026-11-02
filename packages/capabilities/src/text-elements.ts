@@ -1,9 +1,10 @@
 import type { LayoutStyle } from "@react-pptx/core";
 import { createElement, type ReactNode } from "react";
 
+import { motionElement, type MotionProps } from "./motion-api.ts";
 import type { ParagraphStyle, TextStyle } from "./text-service.ts";
 
-export type TextProps = {
+export type TextProps = MotionProps & {
   readonly testId?: string;
   readonly name?: string;
   readonly x?: number;
@@ -26,7 +27,7 @@ export type SpanProps = {
 
 /** 原生文本框；数值高度保留固定区域，auto 高度使用明确字体度量。 */
 export function Text(props: TextProps): ReactNode {
-  return createElement("rp:text", props, props.children);
+  return motionElement("rp:text", props);
 }
 
 /** 在文本框中声明原生段落，可设置行距和段落列表语义。 */

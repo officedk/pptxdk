@@ -1,6 +1,7 @@
 import {
   groupCapability,
   imageCapability,
+  motionCapability,
   shapeCapability,
   textCapability,
   transitionCapability,
@@ -10,6 +11,7 @@ import { createBuilder } from "@react-pptx/core";
 export const build = createBuilder([
   groupCapability,
   imageCapability,
+  motionCapability,
   shapeCapability,
   textCapability,
   transitionCapability,
@@ -29,6 +31,7 @@ export {
   Shape,
   groupCapability,
   imageCapability,
+  motionCapability,
   shapeCapability,
   font,
   P,
@@ -37,6 +40,15 @@ export {
   textCapability,
   transitionCapability,
   transitions,
+  Step,
+  fade,
+  fly,
+  floatUp,
+  spin,
+  spinIn,
+  stretch,
+  wipe,
+  zoom,
 } from "@react-pptx/capabilities";
 export { createBuilder } from "@react-pptx/core";
 export type {
@@ -75,6 +87,18 @@ export type {
   TextList,
   TextProps,
   TextStyle,
+  Easing,
+  Effect,
+  EffectOptions,
+  EffectPreset,
+  EmphasisEffect,
+  EntranceEffect,
+  MotionDirection,
+  MotionEffectObservation,
+  MotionObservation,
+  MotionProps,
+  MotionStepObservation,
+  StepProps,
 } from "@react-pptx/capabilities";
 export type {
   FlipTransition,

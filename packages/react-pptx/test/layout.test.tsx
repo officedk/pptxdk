@@ -288,6 +288,10 @@ describe("公开布局入口", () => {
       ],
     );
     const layouts = result.report.slides[0]?.layouts ?? [];
+    assert.deepEqual(
+      layouts.map(({ testId }) => testId),
+      ["row", "card", "card"],
+    );
     const row = layouts.find(({ testId }) => testId === "row");
     const cards = layouts.filter(({ testId }) => testId === "card");
     assert.equal(row?.box.width, 300);

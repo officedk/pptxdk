@@ -107,6 +107,15 @@ const temporaryDirectory = await mkdtemp(
   join(tmpdir(), "react-pptx-consumer-"),
 );
 try {
+  await writeFile(
+    join(temporaryDirectory, "jost-latin-400-normal.woff2"),
+    await readFile(
+      new URL(
+        import.meta
+          .resolve("@fontsource/jost/files/jost-latin-400-normal.woff2"),
+      ),
+    ),
+  );
   const dependencies: Record<string, string> = {};
   const overrides: Record<string, string> = {};
   for (const name of packageNames) {
@@ -197,14 +206,15 @@ try {
       'const text: TextProps = { testId: "typed-text", x: 0, y: 36, width: 100, height: 36, style: { fontFamily: font("Consumer Sans"), lineHeight: "22pt" } };',
       "const motion: MotionProps = { enter: fade({ duration: 800 }) };",
       "const step: StepProps = { n: 1 };",
+      'const contentSizedText: TextProps = { testId: "typed-content-sized-text", x: 0, y: 72, width: 100, height: "auto", style: { fontFamily: font("Consumer Sans") } };',
       'const transition: Transition = transitions.morph({ by: "word", duration: 1200, fallback: transitions.fade() });',
       'const validationIssue: ValidationIssue = { part: "/ppt/slides/slide1.xml", code: "schema-error", message: "invalid", xpath: "/p:sld[1]" };',
       'const validatorProfile: ValidationResult["profile"]["schemaValidator"] = { package: "@ooxml-tools/validate", packageVersion: "0.4.6", sdkVersion: "3.0.2", officeVersion: "Microsoft365" };',
       "function AsyncText({ promise }: { promise: Promise<string> }) { return createElement(Text, text, use(promise)); }",
       "function AsyncSalesTable({ source }: { source: string }) { const [promise, setPromise] = useState<Promise<string> | null>(null); useEffect(() => { setPromise(fetch(source).then(response => response.text())); }, [source]); return promise === null ? null : createElement(Suspense, { fallback: null }, createElement(AsyncText, { promise })); }",
       'const asyncTable = createElement(AsyncSalesTable, { source: "https://example.invalid/data" });',
-      'const result: Promise<BuildResult> = build(createElement(Deck, {}, createElement(Slide, { slideId: "typed", transition }, createElement(Group, group, createElement(Shape, { ...shape, ...motion }), createElement(Text, text, createElement(P, { style: { list: { type: "bullet" } } }, createElement(Span, { style: { fontWeight: "bold" } }, "Installed 文本"))), createElement(Image, image), createElement(Step, step, createElement(Shape, { ...shape, testId: "step-shape", enter: fade(), emphasis: spin() }))))));',
-      "void [result, validationIssue, validatorProfile, asyncTable];",
+      'const result: Promise<BuildResult> = build(createElement(Deck, {}, createElement(Slide, { slideId: "typed", transition }, createElement(Group, group, createElement(Shape, { ...shape, ...motion }), createElement(Text, text, createElement(P, { style: { list: { type: "bullet" } } }, createElement(Span, { style: { fontWeight: "bold" } }, "Installed 文本"))), createElement(Image, image), createElement(Step, { ...step }, createElement(Shape, { ...shape, testId: "step-shape", enter: fade(), emphasis: spin() }))))));',
+      "void [result, contentSizedText, validationIssue, validatorProfile, asyncTable];",
     ].join("\n"),
   );
   await writeFile(
@@ -214,7 +224,8 @@ try {
       'import { BuildError, Deck, fade, font, Group, Image, P, Shape, Slide, Span, spin, Step, Text, build, targets, transitions, wipe } from "@react-pptx/react-pptx";',
       'import { validatePptx } from "@react-pptx/validation";',
       'import { strFromU8, strToU8, unzipSync, zipSync } from "fflate";',
-      'import { writeFile } from "node:fs/promises";',
+      'import { readFile, writeFile } from "node:fs/promises";',
+      'const jostMetrics = new Uint8Array(await readFile(new URL("./jost-latin-400-normal.woff2", import.meta.url)));',
       'const transition = transitions.morph({ by: "word", duration: 1200, fallback: transitions.fade() });',
       'const imageBytes = new Uint8Array(Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/n1sAAAAASUVORK5CYII=", "base64"));',
       'const result = await build(createElement(Deck, { width: 120, height: 96 }, createElement(Slide, { slideId: "installed", transition }, createElement(Group, { testId: "packed-group", enter: fade({ duration: 800, delay: 100, easing: { decelerate: 0.5 } }) }, createElement(Step, { n: 1 }, createElement(Shape, { testId: "packed-shape", geometry: "hexagon", x: 10, y: 12, width: 45, height: 30, fill: "#123456", text: "Installed shape text", enter: fade({ duration: 250 }), emphasis: spin({ from: 180 }) }), createElement(Image, { testId: "packed-image", src: imageBytes, x: 60, y: 12, width: 40, height: 30, fit: "cover", enter: wipe({ from: "right" }) })), createElement(Text, { testId: "packed-text", x: 10, y: 48, width: 90, height: 36, style: { fontFamily: font("Consumer Sans"), lineHeight: "22pt" }, emphasis: spin({ from: 90 }) }, createElement(P, { style: { list: { type: "bullet" } } }, createElement(Span, { style: { fontWeight: "bold" } }, "Installed 文本"))), createElement(Group, { testId: "nested-group" }, createElement(Shape, { testId: "nested-shape", x: 80, y: 60, width: 12, height: 10, text: "Nested member" }))))));',
@@ -252,8 +263,15 @@ try {
       "let forbidden;",
       'try { await build(createElement(Deck, {}, createElement(Slide, { slideId: "forbidden", transition })), { target: targets.baselineOnly }); } catch (error) { forbidden = error; }',
       'if (!(forbidden instanceof BuildError) || forbidden.diagnostics[0]?.code !== "forbidden-mechanism") throw new Error("installed baseline target did not reject the transition mechanism");',
+      'const contentSizedResult = await build(createElement(Deck, { width: 120, height: 96 }, createElement(Slide, { slideId: "installed-content-sized" }, createElement(Text, { testId: "packed-content-sized", x: 10, y: 10, width: 70, height: "auto", style: { fontFamily: font("Jost", [{ weight: 400, data: jostMetrics }]), fontSize: 20 } }, "Installed font"))));',
+      "const contentSizedFile = await validatePptx(contentSizedResult.pptx);",
+      "const contentSizedText = contentSizedFile.slides[0]?.objects[0];",
+      'if (contentSizedFile.errors.length !== 0 || contentSizedText?.text?.text !== "Installed font" || contentSizedText.boxEmu?.height !== 550672 || contentSizedText.text.paragraphs[0]?.lineSpacingPoints !== 21.68 || contentSizedText.text.paragraphs[0]?.runs[0]?.fontFamily !== "Jost" || contentSizedResult.report.slides[0]?.objects[0]?.box?.height !== 57.81333333333333) throw new Error(JSON.stringify({ errors: contentSizedFile.errors, text: contentSizedText, report: contentSizedResult.report.slides[0]?.objects[0] }));',
+      "let missingMetrics;",
+      'try { await build(createElement(Deck, {}, createElement(Slide, { slideId: "missing-metrics" }, createElement(Text, { testId: "content-sized-text", x: 0, y: 0, width: 100, height: "auto", style: { fontFamily: font("Consumer Sans") } }, "Content sized text")))); } catch (error) { missingMetrics = error; }',
+      'if (!(missingMetrics instanceof BuildError) || missingMetrics.diagnostics[0]?.code !== "font-measurement-unavailable") throw new Error("installed content-sized text did not require explicit font metrics");',
       'await writeFile("artifact.pptx", result.pptx);',
-      "process.stdout.write(JSON.stringify({ standard: file.profile.standard, schemaPackage: file.profile.schemaValidator.package, schemaPackageVersion: file.profile.schemaValidator.packageVersion, sdkVersion: file.profile.schemaValidator.sdkVersion, officeVersion: file.profile.schemaValidator.officeVersion, applicationEvidence: file.profile.applicationEvidence, slideId: file.slides[0]?.id, group: group.name, groupBox: group.boxEmu, shape: shape.name, shapeText: shape.text.text, shapeBox: shape.boxEmu, text: text.name, textContent: text.text.text, bullet: text.text.paragraphs[0]?.list?.type, image: image.name, mediaType: image.image.contentType, imageBox: image.boxEmu, nestedGroup: nestedGroup.name, nestedShape: nestedShape.name, nestedShapeText: nestedShape.text.text, nestedShapeBox: nestedShape.boxEmu, objectIds: [group.id, shape.id, text.id, image.id, nestedGroup.id, nestedShape.id], animations, transition: file.slides[0]?.transition?.kind, durationMs: file.slides[0]?.transition?.durationMs, extensions: file.extensions, forbiddenCode: forbidden.diagnostics[0]?.code, schemaGate: schemaIssue.code, schemaPart: schemaIssue.part, schemaXPath: schemaIssue.xpath, bytes: result.pptx.byteLength }));",
+      "process.stdout.write(JSON.stringify({ standard: file.profile.standard, schemaPackage: file.profile.schemaValidator.package, schemaPackageVersion: file.profile.schemaValidator.packageVersion, sdkVersion: file.profile.schemaValidator.sdkVersion, officeVersion: file.profile.schemaValidator.officeVersion, applicationEvidence: file.profile.applicationEvidence, slideId: file.slides[0]?.id, group: group.name, groupBox: group.boxEmu, shape: shape.name, shapeText: shape.text.text, shapeBox: shape.boxEmu, text: text.name, textContent: text.text.text, bullet: text.text.paragraphs[0]?.list?.type, image: image.name, mediaType: image.image.contentType, imageBox: image.boxEmu, contentSizedText: contentSizedText.text.text, contentSizedTextHeightEmu: contentSizedText.boxEmu.height, contentSizedTextLineSpacingPoints: contentSizedText.text.paragraphs[0].lineSpacingPoints, nestedGroup: nestedGroup.name, nestedShape: nestedShape.name, nestedShapeText: nestedShape.text.text, nestedShapeBox: nestedShape.boxEmu, missingMetrics: missingMetrics.diagnostics[0].code, objectIds: [group.id, shape.id, text.id, image.id, nestedGroup.id, nestedShape.id], animations, transition: file.slides[0]?.transition?.kind, durationMs: file.slides[0]?.transition?.durationMs, extensions: file.extensions, forbiddenCode: forbidden.diagnostics[0]?.code, schemaGate: schemaIssue.code, schemaPart: schemaIssue.part, schemaXPath: schemaIssue.xpath, bytes: result.pptx.byteLength, contentSizedBytes: contentSizedResult.pptx.byteLength }));",
     ].join("\n"),
   );
   const cropLoader = join(temporaryDirectory, "reject-text-box.mjs");
@@ -337,6 +355,11 @@ try {
     readonly schemaPart?: string;
     readonly schemaXPath?: string;
     readonly bytes?: number;
+    readonly contentSizedText?: string;
+    readonly contentSizedTextHeightEmu?: number;
+    readonly contentSizedTextLineSpacingPoints?: number;
+    readonly missingMetrics?: string;
+    readonly contentSizedBytes?: number;
   };
   if (
     summary.standard !== "ECMA-376 5th edition Transitional" ||
@@ -391,8 +414,14 @@ try {
     summary.schemaGate !== "Sch_AttributeValueDataTypeDetailed" ||
     summary.schemaPart !== "/ppt/slideMasters/slideMaster1.xml" ||
     summary.schemaXPath === undefined ||
+    summary.contentSizedText !== "Installed font" ||
+    summary.contentSizedTextHeightEmu !== 550672 ||
+    summary.contentSizedTextLineSpacingPoints !== 21.68 ||
+    summary.missingMetrics !== "font-measurement-unavailable" ||
     summary.bytes === undefined ||
-    summary.bytes <= 0
+    summary.bytes <= 0 ||
+    summary.contentSizedBytes === undefined ||
+    summary.contentSizedBytes <= 0
   ) {
     throw new Error(`安装制品返回了意外结果：${summaryText}`);
   }

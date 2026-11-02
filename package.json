@@ -19,6 +19,7 @@
   },
   "devDependencies": {
     "@changesets/cli": "catalog:",
+    "@fontsource/jost": "5.3.0",
     "@react-pptx/tooling-config": "workspace:./packages/tooling-config",
     "@types/node": "catalog:",
     "oxfmt": "catalog:",

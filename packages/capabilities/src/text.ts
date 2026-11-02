@@ -17,7 +17,7 @@ export type {
   TextProps,
 } from "./text-elements.ts";
 export { font } from "./font.ts";
-export type { Font, FontFace, FontFaceStyle } from "./font.ts";
+export type { Font, FontFace, FontFaceStyle, FontOptions } from "./font.ts";
 export type {
   FontReference,
   FontSize,
@@ -83,6 +83,15 @@ function size(value: unknown, label: "width" | "height"): number {
   return value;
 }
 
+function height(
+  value: unknown,
+):
+  | { readonly contentSized: true }
+  | { readonly contentSized: false; readonly value: number } {
+  if (value === "auto") return { contentSized: true };
+  return { contentSized: false, value: size(value, "height") };
+}
+
 function textBoxXml(
   id: number,
   escapedName: string,
@@ -112,13 +121,25 @@ export const textCapability: CapabilityModule = {
     }
     const testId = optionalName(input.props["testId"], "testId");
     const requestedName = optionalName(input.props["name"], "name");
-    const box = {
+    const dimensions = {
       x: coordinate(input.props["x"], "x"),
       y: coordinate(input.props["y"], "y"),
       width: size(input.props["width"], "width"),
-      height: size(input.props["height"], "height"),
     };
-    const body = writeTextBody(input.children, input.props["style"], "top");
+    const requestedHeight = height(input.props["height"]);
+    const body = writeTextBody(input.children, input.props["style"], "top", {
+      width: dimensions.width,
+      ...(requestedHeight.contentSized
+        ? {}
+        : { height: requestedHeight.value }),
+      contentSized: requestedHeight.contentSized,
+    });
+    const box = {
+      ...dimensions,
+      height: requestedHeight.contentSized
+        ? size(body.measurement?.height, "height")
+        : requestedHeight.value,
+    };
     const name = requestedName ?? testId ?? `Text ${context.id - 1}`;
     const annotations = motionAnnotations(input.props, {
       kind: "text",

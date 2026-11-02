@@ -549,6 +549,62 @@ describe("公开构建入口", () => {
     }
   });
 
+  it("并发验证正常的形状与文字产物", async () => {
+    const shapeResult = await build(
+      deck(
+        createElement(Shape, {
+          testId: "concurrent-shape",
+          x: 0,
+          y: 0,
+          width: 120,
+          height: 72,
+        }),
+      ),
+    );
+    const textResult = await build(
+      deck(
+        createElement(
+          Text,
+          {
+            x: 0,
+            y: 0,
+            width: 240,
+            height: 96,
+          },
+          "并发验证",
+        ),
+      ),
+    );
+
+    const files = await Promise.all([
+      validatePptx(shapeResult.pptx),
+      validatePptx(textResult.pptx),
+    ]);
+
+    assert.deepEqual(
+      files.map(({ errors }) => errors),
+      [[], []],
+    );
+    assert.deepEqual(
+      files.map(({ presentation }) => presentation.slideCount),
+      [1, 1],
+    );
+
+    const sequentialFile = await validatePptx(shapeResult.pptx);
+    assert.deepEqual(sequentialFile.errors, []);
+
+    const invalidFile = await validatePptx(new Uint8Array([0]));
+    assert.ok(
+      invalidFile.errors.some(({ code }) => code === "schema-validator-failed"),
+    );
+    assert.ok(
+      invalidFile.errors.some(({ code }) => code === "invalid-package"),
+    );
+
+    const fileAfterFailure = await validatePptx(textResult.pptx);
+    assert.deepEqual(fileAfterFailure.errors, []);
+  });
+
   it("生成固定区域文字并保留中英与 Unicode 内容", async () => {
     const content = "固定区域文字 — React + 简体中文 😀";
     const result = await build(
@@ -982,7 +1038,7 @@ describe("公开构建入口", () => {
     } finally {
       await rm(directory, { recursive: true, force: true });
     }
-  });
+  }, 20_000); // 独立进程首次加载 SDK WASM runtime 约需 10 秒。
 
   it("把真实 React 形状生成 Transitional PPTX 并保留只读身份观察", async () => {
     const result = await build(
@@ -1032,6 +1088,109 @@ describe("公开构建入口", () => {
       geometry: "ellipse",
       boxEmu: { x: 304800, y: 457200, width: 1143000, height: 685800 },
     });
+  });
+
+  it("对公开构建的同一份 PPTX 执行 SDK 结构校验并保留定位", async () => {
+    const result = await build(
+      deck(
+        createElement(Shape, {
+          testId: "schema-gate",
+          x: 0,
+          y: 0,
+          width: 120,
+          height: 72,
+        }),
+      ),
+    );
+    const validFile = await validatePptx(result.pptx);
+    assert.deepEqual(validFile.errors, []);
+    assert.deepEqual(validFile.profile.schemaValidator, {
+      package: "@ooxml-tools/validate",
+      packageVersion: "0.4.6",
+      sdkVersion: "3.0.2",
+      officeVersion: "Microsoft365",
+    });
+    assert.equal(validFile.profile.applicationEvidence, "not-validated");
+    assert.match(validFile.profile.scope, /MC/iu);
+
+    const masterPart = "ppt/slideMasters/slideMaster1.xml";
+    const masterParts = unzipSync(result.pptx);
+    const master = strFromU8(masterParts[masterPart]!);
+    assert.match(master, /sldLayoutId id="2147483648"/u);
+    masterParts[masterPart] = strToU8(
+      master.replace('id="2147483648"', 'id="1"'),
+    );
+    const invalidMaster = await validatePptx(zipSync(masterParts));
+    assert.ok(
+      invalidMaster.errors.some(
+        ({ code, part, xpath }) =>
+          code === "Sch_AttributeValueDataTypeDetailed" &&
+          part === "/ppt/slideMasters/slideMaster1.xml" &&
+          xpath !== undefined,
+      ),
+    );
+
+    const textResult = await build(
+      deck(
+        createElement(
+          Text,
+          {
+            x: 0,
+            y: 0,
+            width: 240,
+            height: 96,
+            style: { lineHeight: "24px" },
+          },
+          "标准结构边界",
+        ),
+      ),
+    );
+    const slidePart = "ppt/slides/slide1.xml";
+    const textParts = unzipSync(textResult.pptx);
+    const textSlide = strFromU8(textParts[slidePart]!);
+    assert.match(textSlide, /sz="1800"/u);
+    assert.match(textSlide, /<a:spcPts val="1800"/u);
+    textParts[slidePart] = strToU8(
+      textSlide
+        .replace('sz="1800"', 'sz="99"')
+        .replace('<a:spcPts val="1800"', '<a:spcPts val="158401"'),
+    );
+    const invalidText = await validatePptx(zipSync(textParts));
+    assert.ok(
+      invalidText.errors.some(
+        ({ code, part, xpath }) =>
+          code === "Sch_AttributeValueDataTypeDetailed" &&
+          part === "/ppt/slides/slide1.xml" &&
+          xpath?.includes("/a:rPr") === true,
+      ),
+    );
+    assert.ok(
+      invalidText.errors.some(
+        ({ code, part, xpath }) =>
+          code === "Sch_AttributeValueDataTypeDetailed" &&
+          part === "/ppt/slides/slide1.xml" &&
+          xpath?.includes("/a:spcPts") === true,
+      ),
+    );
+
+    const invalidOrderParts = unzipSync(result.pptx);
+    const slide = strFromU8(invalidOrderParts[slidePart]!);
+    assert.match(slide, /<\/p:cSld><p:clrMapOvr>/u);
+    invalidOrderParts[slidePart] = strToU8(
+      slide.replace(
+        "</p:cSld><p:clrMapOvr>",
+        "</p:cSld><p:transition><p:fade/></p:transition><p:clrMapOvr>",
+      ),
+    );
+    const invalidOrder = await validatePptx(zipSync(invalidOrderParts));
+    assert.ok(
+      invalidOrder.errors.some(
+        ({ code, part, xpath }) =>
+          code === "Sch_UnexpectedElementContentExpectingComplex" &&
+          part === "/ppt/slides/slide1.xml" &&
+          xpath === "/p:sld[1]",
+      ),
+    );
   });
 
   it("从 PPTX 实际读回时保留页面标识中的换行、回车和制表符", async () => {

@@ -10,6 +10,8 @@ import {
   assertXml10Characters,
   pptxParts,
   pxToEmu,
+  type PptxPackagePart,
+  type PptxPackageRelationshipSet,
   type PptxPackageResource,
   type PptxRelationship,
 } from "#/ooxml.ts";
@@ -22,6 +24,7 @@ import {
   type CapabilityChild,
   type CapabilityChildren,
   type CapabilityInput,
+  type CapabilityPackagePart,
   type CapabilityContribution,
   type CapabilityModule,
   type CapabilityResource,
@@ -47,9 +50,15 @@ type SlideBuild = {
 type DocumentBuildState = {
   readonly usedExtensions: Set<Extension>;
   readonly warnings: Diagnostic[];
-  readonly resourceClaims: Map<string, { identity: string; path: string }>;
+  readonly resourceClaims: Map<
+    string,
+    { identity: string; path: string; characters: string }
+  >;
   readonly resources: Map<string, PptxPackageResource>;
   readonly resourceTypes: Map<string, string>;
+  readonly packageParts: Map<string, PptxPackagePart>;
+  readonly packageRelationships: Map<string, PptxRelationship[]>;
+  nextPackagePartId: number;
 };
 
 type SlideBuildState = {
@@ -435,6 +444,140 @@ function addResource(
   return id;
 }
 
+function relationshipTarget(sourcePath: string, targetPath: string): string {
+  const sourceSegments = sourcePath.split("/").slice(0, -1);
+  const targetSegments = targetPath.split("/");
+  while (
+    sourceSegments.length > 0 &&
+    targetSegments.length > 0 &&
+    sourceSegments[0] === targetSegments[0]
+  ) {
+    sourceSegments.shift();
+    targetSegments.shift();
+  }
+  return [...sourceSegments.map(() => ".."), ...targetSegments].join("/");
+}
+
+function packagePartPath(template: string, sequence: number): string {
+  if (
+    (template.match(/\{n\}/gu) ?? []).length !== 1 ||
+    !/^(?:[a-z0-9_-]+\/)*[a-z0-9_-]+\.[a-z0-9]+$/iu.test(
+      template.replace("{n}", String(sequence)),
+    )
+  ) {
+    throw new CapabilityError(
+      "invalid-part",
+      "原生部件路径必须是安全的包内路径并含一个部件序号",
+    );
+  }
+  return template.replace("{n}", String(sequence));
+}
+
+function addPackagePart(
+  packagePart: CapabilityPackagePart,
+  context: BuildContext,
+): string {
+  const { part, relatedParts } = packagePart;
+  if (
+    typeof part.pathTemplate !== "string" ||
+    typeof part.contentType !== "string" ||
+    part.contentType.trim() === "" ||
+    typeof packagePart.relationshipType !== "string" ||
+    packagePart.relationshipType.trim() === "" ||
+    typeof packagePart.content !== "function" ||
+    !Array.isArray(relatedParts) ||
+    relatedParts.some(
+      (related) =>
+        typeof related.pathTemplate !== "string" ||
+        typeof related.contentType !== "string" ||
+        related.contentType.trim() === "" ||
+        typeof related.relationshipType !== "string" ||
+        related.relationshipType.trim() === "" ||
+        !(related.bytes instanceof Uint8Array) ||
+        related.bytes.byteLength === 0,
+    )
+  ) {
+    throw new CapabilityError(
+      "invalid-part",
+      "原生部件或其相关部件的格式与关系无效",
+    );
+  }
+  try {
+    for (const value of [part.contentType, packagePart.relationshipType]) {
+      assertXml10Characters(value);
+    }
+    for (const related of relatedParts) {
+      for (const value of [related.contentType, related.relationshipType]) {
+        assertXml10Characters(value);
+      }
+    }
+  } catch {
+    throw new CapabilityError(
+      "invalid-part",
+      "原生部件的内容类型或关系含 XML 1.0 不允许的字符",
+    );
+  }
+
+  const sequence = context.document.nextPackagePartId++;
+  const partPath = packagePartPath(part.pathTemplate, sequence);
+  const related = relatedParts.map((item, index) => ({
+    path: packagePartPath(item.pathTemplate, sequence),
+    relationship: {
+      id: `rId${index + 1}`,
+      type: item.relationshipType,
+      target: "",
+    },
+    descriptor: item,
+  }));
+  for (const item of related) {
+    item.relationship.target = relationshipTarget(partPath, item.path);
+  }
+  const relatedIds = related.map(({ relationship }) => relationship.id);
+  const content = packagePart.content(relatedIds);
+  if (
+    !(typeof content === "string"
+      ? content.length > 0
+      : content instanceof Uint8Array && content.byteLength > 0)
+  ) {
+    throw new CapabilityError("invalid-part", "原生部件必须包含内容");
+  }
+  const relatedPaths = new Set(related.map(({ path }) => path));
+  if (
+    context.document.packageParts.has(partPath) ||
+    relatedPaths.size !== related.length ||
+    relatedPaths.has(partPath) ||
+    related.some(({ path }) => context.document.packageParts.has(path))
+  ) {
+    throw new CapabilityError("duplicate-part", "PPTX 部件路径重复");
+  }
+  context.document.packageParts.set(partPath, {
+    path: partPath,
+    content,
+    contentType: part.contentType,
+  });
+  for (const item of related) {
+    context.document.packageParts.set(item.path, {
+      path: item.path,
+      content: new Uint8Array(item.descriptor.bytes),
+      contentType: item.descriptor.contentType,
+    });
+  }
+  if (related.length > 0) {
+    context.document.packageRelationships.set(
+      partPath,
+      related.map(({ relationship }) => relationship),
+    );
+  }
+
+  const relationshipId = `rId${context.slide.relationships.length + 2}`;
+  context.slide.relationships.push({
+    id: relationshipId,
+    type: packagePart.relationshipType,
+    target: relationshipTarget("ppt/slides/slide.xml", partPath),
+  });
+  return relationshipId;
+}
+
 function compileChildren(
   children: readonly CapabilityChild[],
   context: BuildContext,
@@ -480,6 +623,9 @@ function compileChildren(
         registerResource(resource) {
           return addResource(resource, context);
         },
+        registerPackagePart(part) {
+          return addPackagePart(part, context);
+        },
       });
       for (const extension of output.extensions) {
         if (!context.target.extensions.includes(extension)) {
@@ -508,7 +654,8 @@ function compileChildren(
         } else {
           context.document.resourceClaims.set(claimKey, {
             identity: claim.identity,
-            path,
+            path: existing?.path ?? path,
+            characters: (existing?.characters ?? "") + (claim.characters ?? ""),
           });
         }
       }
@@ -696,6 +843,9 @@ function compileDocument(
     resourceClaims: new Map(),
     resources: new Map(),
     resourceTypes: new Map(),
+    packageParts: new Map(),
+    packageRelationships: new Map(),
+    nextPackagePartId: 1,
   };
   const builtSlides = slides.map(({ node, id }) =>
     compileSlide(node, id, modules, target, size, document),
@@ -709,6 +859,11 @@ function compileDocument(
       relationships,
     })),
     [...document.resources.values()],
+    [...document.packageParts.values()],
+    [...document.packageRelationships].map(([sourcePath, relationships]) => ({
+      sourcePath,
+      relationships,
+    })) satisfies PptxPackageRelationshipSet[],
   );
   const pptx = zipSync(
     Object.fromEntries(

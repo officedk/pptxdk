@@ -34,6 +34,11 @@
       "types": "./dist/shape.d.ts",
       "default": "./dist/shape.js"
     },
+    "./chart": {
+      "source": "./src/chart.ts",
+      "types": "./dist/chart.d.ts",
+      "default": "./dist/chart.js"
+    },
     "./text": {
       "source": "./src/text.ts",
       "types": "./dist/text.d.ts",

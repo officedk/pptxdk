@@ -76,9 +76,21 @@ export type PptxRelationship = {
   readonly target: string;
 };
 
+export type PptxPackagePart = {
+  readonly path: string;
+  readonly content: string | Uint8Array;
+  readonly contentType: string;
+};
+
+export type PptxPackageRelationshipSet = {
+  readonly sourcePath: string;
+  readonly relationships: readonly PptxRelationship[];
+};
+
 function contentTypes(
   slideCount: number,
   resources: readonly PptxPackageResource[],
+  packageParts: readonly PptxPackagePart[],
 ): string {
   const overrides = [
     [
@@ -101,6 +113,7 @@ function contentTypes(
       `/ppt/slides/slide${index + 1}.xml`,
       "application/vnd.openxmlformats-officedocument.presentationml.slide+xml",
     ]),
+    ...packageParts.map((part) => [`/${part.path}`, part.contentType]),
   ];
   const defaults = new Map<string, string>([
     ["rels", "application/vnd.openxmlformats-package.relationships+xml"],
@@ -165,6 +178,8 @@ export function pptxParts(
     readonly relationships: readonly PptxRelationship[];
   }[],
   resources: readonly PptxPackageResource[] = [],
+  packageParts: readonly PptxPackagePart[] = [],
+  packageRelationships: readonly PptxPackageRelationshipSet[] = [],
 ): Record<string, string | Uint8Array> {
   const slideRelationships = slides.map((_, index) => ({
     id: `rId${index + 2}`,
@@ -178,7 +193,7 @@ export function pptxParts(
     `<p:presentation xmlns:a="${namespaces.a}" xmlns:r="${namespaces.r}" xmlns:p="${namespaces.p}"><p:sldMasterIdLst><p:sldMasterId id="2147483648" r:id="rId1"/></p:sldMasterIdLst><p:sldIdLst>${slideIds}</p:sldIdLst><p:sldSz cx="${pxToEmu(size.width)}" cy="${pxToEmu(size.height)}"/><p:notesSz cx="6858000" cy="9144000"/></p:presentation>`,
   );
   const parts: Record<string, string | Uint8Array> = {
-    "[Content_Types].xml": contentTypes(slides.length, resources),
+    "[Content_Types].xml": contentTypes(slides.length, resources, packageParts),
     "_rels/.rels": relationships([
       {
         id: "rId1",
@@ -235,6 +250,18 @@ export function pptxParts(
   });
   for (const resource of resources) {
     parts[`ppt/media/${resource.name}`] = resource.bytes;
+  }
+  for (const part of packageParts) {
+    parts[part.path] = part.content;
+  }
+  for (const relationshipSet of packageRelationships) {
+    const marker = relationshipSet.sourcePath.lastIndexOf("/");
+    const directory =
+      marker === -1 ? "" : relationshipSet.sourcePath.slice(0, marker + 1);
+    const name = relationshipSet.sourcePath.slice(marker + 1);
+    parts[`${directory}_rels/${name}.rels`] = relationships(
+      relationshipSet.relationships,
+    );
   }
   return parts;
 }

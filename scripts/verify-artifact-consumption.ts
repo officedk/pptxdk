@@ -80,6 +80,21 @@ const core = coreDependencies[0];
 if (core === undefined) {
   throw new Error("pnpm 未返回 @react-pptx/core 的安装依赖");
 }
+const reactPptxDependencies = JSON.parse(
+  run("pnpm", [
+    "--filter",
+    "@react-pptx/react-pptx",
+    "list",
+    "fflate",
+    "--depth",
+    "0",
+    "--json",
+  ]),
+) as readonly PnpmListEntry[];
+const reactPptx = reactPptxDependencies[0];
+if (reactPptx === undefined) {
+  throw new Error("pnpm 未返回 @react-pptx/react-pptx 的安装依赖");
+}
 
 const temporaryDirectory = await mkdtemp(
   join(tmpdir(), "react-pptx-consumer-"),
@@ -119,6 +134,7 @@ try {
         packageManager: workspacePackage.packageManager,
         dependencies: {
           ...dependencies,
+          fflate: installedVersion(reactPptx, "fflate"),
           react: installedVersion(core, "react"),
         },
         devDependencies: {
@@ -167,12 +183,15 @@ try {
     [
       'import { createElement } from "react";',
       'import { Deck, font, Group, Image, P, Shape, Slide, Span, Text, build, type BuildResult, type GroupProps, type ImageProps, type ShapeProps, type TextProps } from "@react-pptx/react-pptx";',
+      'import { type ValidationIssue, type ValidationResult } from "@react-pptx/validation";',
       'const shape: ShapeProps = { testId: "typed", x: 0, y: 0, width: 40, height: 30 };',
       "const image: ImageProps = { src: new Uint8Array([0x89, 0x50, 0x4e, 0x47]), width: 40, height: 30 };",
       'const group: GroupProps = { name: "typed-group" };',
       'const text: TextProps = { testId: "typed-text", x: 0, y: 36, width: 100, height: 36, style: { fontFamily: font("Consumer Sans"), lineHeight: "22pt" } };',
+      'const validationIssue: ValidationIssue = { part: "/ppt/slides/slide1.xml", code: "schema-error", message: "invalid", xpath: "/p:sld[1]" };',
+      'const validatorProfile: ValidationResult["profile"]["schemaValidator"] = { package: "@ooxml-tools/validate", packageVersion: "0.4.6", sdkVersion: "3.0.2", officeVersion: "Microsoft365" };',
       'const result: Promise<BuildResult> = build(createElement(Deck, {}, createElement(Slide, { slideId: "typed" }, createElement(Group, group, createElement(Shape, shape), createElement(Text, text, createElement(P, { style: { list: { type: "bullet" } } }, createElement(Span, { style: { fontWeight: "bold" } }, "Installed 文本"))), createElement(Image, image)))));',
-      "void result;",
+      "void [result, validationIssue, validatorProfile];",
     ].join("\n"),
   );
   await writeFile(
@@ -181,6 +200,7 @@ try {
       'import { createElement } from "react";',
       'import { Deck, font, Group, Image, P, Shape, Slide, Span, Text, build } from "@react-pptx/react-pptx";',
       'import { validatePptx } from "@react-pptx/validation";',
+      'import { strFromU8, strToU8, unzipSync, zipSync } from "fflate";',
       'import { writeFile } from "node:fs/promises";',
       'const imageBytes = new Uint8Array(Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/n1sAAAAASUVORK5CYII=", "base64"));',
       'const result = await build(createElement(Deck, { width: 120, height: 96 }, createElement(Slide, { slideId: "installed" }, createElement(Group, { testId: "packed-group" }, createElement(Shape, { testId: "packed-shape", geometry: "hexagon", x: 10, y: 12, width: 45, height: 30, fill: "#123456", text: "Installed shape text" }), createElement(Text, { testId: "packed-text", x: 10, y: 48, width: 90, height: 36, style: { fontFamily: font("Consumer Sans"), lineHeight: "22pt" } }, createElement(P, { style: { list: { type: "bullet" } } }, createElement(Span, { style: { fontWeight: "bold" } }, "Installed 文本"))), createElement(Image, { testId: "packed-image", src: imageBytes, x: 60, y: 12, width: 40, height: 30, fit: "cover" }), createElement(Group, { testId: "nested-group" }, createElement(Shape, { testId: "nested-shape", x: 80, y: 60, width: 12, height: 10, text: "Nested member" }))))));',
@@ -192,8 +212,17 @@ try {
       'const nestedGroup = group?.members?.find(({ kind }) => kind === "group");',
       'const nestedShape = nestedGroup?.members?.find(({ name }) => name === "nested-shape");',
       'if (file.errors.length !== 0 || group?.kind !== "group" || group.name !== "packed-group" || !group.boxEmu || group.boxEmu.width <= 0 || shape?.text?.text !== "Installed shape text" || !shape.boxEmu || shape.boxEmu.x <= 0 || text?.text?.paragraphs[0]?.text !== "Installed 文本" || text.text.paragraphs[0]?.list?.type !== "bullet" || image?.name !== "packed-image" || image.image?.contentType !== "image/png" || !image.boxEmu || nestedGroup?.name !== "nested-group" || nestedShape?.text?.text !== "Nested member" || !nestedShape.boxEmu) throw new Error(JSON.stringify({ errors: file.errors, group, shape, text, image, nestedGroup }));',
+      "const mutatedParts = unzipSync(result.pptx);",
+      'const masterPart = "ppt/slideMasters/slideMaster1.xml";',
+      "const master = strFromU8(mutatedParts[masterPart]);",
+      'const layoutId = `sldLayoutId id="2147483648"`;',
+      'if (!master.includes(layoutId)) throw new Error("generated master layout id was not found");',
+      'mutatedParts[masterPart] = strToU8(master.replace(`id="2147483648"`, `id="1"`));',
+      "const invalidFile = await validatePptx(zipSync(mutatedParts));",
+      'const schemaIssue = invalidFile.errors.find(({ code, part, xpath }) => code === "Sch_AttributeValueDataTypeDetailed" && part === "/ppt/slideMasters/slideMaster1.xml" && xpath !== undefined);',
+      "if (schemaIssue === undefined) throw new Error(JSON.stringify({ errors: invalidFile.errors }));",
       'await writeFile("artifact.pptx", result.pptx);',
-      "process.stdout.write(JSON.stringify({ standard: file.profile.standard, slideId: file.slides[0]?.id, group: group.name, groupBox: group.boxEmu, shape: shape.name, shapeText: shape.text.text, shapeBox: shape.boxEmu, text: text.name, textContent: text.text.text, bullet: text.text.paragraphs[0]?.list?.type, image: image.name, mediaType: image.image.contentType, imageBox: image.boxEmu, nestedGroup: nestedGroup.name, nestedShape: nestedShape.name, nestedShapeText: nestedShape.text.text, nestedShapeBox: nestedShape.boxEmu, objectIds: [group.id, shape.id, text.id, image.id, nestedGroup.id, nestedShape.id], bytes: result.pptx.byteLength }));",
+      "process.stdout.write(JSON.stringify({ standard: file.profile.standard, slideId: file.slides[0]?.id, group: group.name, groupBox: group.boxEmu, shape: shape.name, shapeText: shape.text.text, shapeBox: shape.boxEmu, text: text.name, textContent: text.text.text, bullet: text.text.paragraphs[0]?.list?.type, image: image.name, mediaType: image.image.contentType, imageBox: image.boxEmu, nestedGroup: nestedGroup.name, nestedShape: nestedShape.name, nestedShapeText: nestedShape.text.text, nestedShapeBox: nestedShape.boxEmu, schemaGate: schemaIssue.code, schemaPart: schemaIssue.part, schemaXPath: schemaIssue.xpath, objectIds: [group.id, shape.id, text.id, image.id, nestedGroup.id, nestedShape.id], bytes: result.pptx.byteLength }));",
     ].join("\n"),
   );
   const cropLoader = join(temporaryDirectory, "reject-text-box.mjs");
@@ -252,6 +281,9 @@ try {
     readonly nestedShape?: string;
     readonly nestedShapeText?: string;
     readonly objectIds?: readonly number[];
+    readonly schemaGate?: string;
+    readonly schemaPart?: string;
+    readonly schemaXPath?: string;
     readonly bytes?: number;
   };
   if (
@@ -270,6 +302,9 @@ try {
     summary.nestedShapeText !== "Nested member" ||
     summary.objectIds?.length !== 6 ||
     new Set(summary.objectIds).size !== 6 ||
+    summary.schemaGate !== "Sch_AttributeValueDataTypeDetailed" ||
+    summary.schemaPart !== "/ppt/slideMasters/slideMaster1.xml" ||
+    summary.schemaXPath === undefined ||
     summary.bytes === undefined ||
     summary.bytes <= 0
   ) {

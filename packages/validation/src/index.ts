@@ -1,5 +1,6 @@
 import { posix } from "node:path";
 
+import validateOpenXml from "@ooxml-tools/validate";
 import { DOMParser } from "@xmldom/xmldom";
 import { strFromU8, unzipSync } from "fflate";
 
@@ -14,6 +15,19 @@ const packageRelationshipNamespace =
 const contentTypeNamespace =
   "http://schemas.openxmlformats.org/package/2006/content-types";
 const transitionalStandard = "ECMA-376 5th edition Transitional";
+const schemaValidatorPackage = "@ooxml-tools/validate";
+const schemaValidatorPackageVersion = "0.4.6";
+const openXmlSdkVersion = "3.0.2";
+const schemaValidatorOfficeVersion = "Microsoft365";
+const schemaValidatorProfile = {
+  package: schemaValidatorPackage,
+  packageVersion: schemaValidatorPackageVersion,
+  sdkVersion: openXmlSdkVersion,
+  officeVersion: schemaValidatorOfficeVersion,
+} as const;
+const validationScope =
+  "Open XML SDK 3.0.2 在 Microsoft365 配置下实现的 Transitional 包、Schema 与约束校验；另由本地读取器独立核对 OPC 关系、内容类型及页面、形状、图片、组合和文字结构。MC 仅按 SDK 支持选择 Choice 或 Fallback；p14／p159 的所有兼容分支及未知扩展不保证均被验证。校验不等于完整标准认证或应用证据。";
+const applicationEvidence = "not-validated";
 const minimumSlideLayoutId = 2_147_483_648;
 const maximumSlideLayoutId = 4_294_967_295;
 const minimumSlideSizeEmu = 914_400;
@@ -27,6 +41,7 @@ export type ValidationIssue = {
   readonly part: string;
   readonly code: string;
   readonly message: string;
+  readonly xpath?: string;
 };
 
 export type FileObject = {
@@ -98,7 +113,9 @@ export type FileSlide = {
 export type ValidationResult = {
   readonly profile: {
     readonly standard: typeof transitionalStandard;
+    readonly schemaValidator: typeof schemaValidatorProfile;
     readonly scope: string;
+    readonly applicationEvidence: typeof applicationEvidence;
   };
   readonly errors: readonly ValidationIssue[];
   readonly presentation: {
@@ -122,6 +139,32 @@ function issue(
   message: string,
 ): void {
   errors.push({ part, code, message });
+}
+
+async function validateStandardStructure(
+  input: Uint8Array,
+): Promise<ValidationIssue[]> {
+  try {
+    const results = await validateOpenXml(
+      input,
+      "pptx",
+      schemaValidatorOfficeVersion,
+    );
+    return results.map(({ id, description, path }) => ({
+      part: path.partUri,
+      code: id,
+      message: description,
+      ...(path.xpath === "" ? {} : { xpath: path.xpath }),
+    }));
+  } catch (error) {
+    return [
+      {
+        part: "",
+        code: "schema-validator-failed",
+        message: `Open XML SDK 结构校验器执行失败：${error instanceof Error ? error.message : String(error)}`,
+      },
+    ];
+  }
 }
 
 function elements(
@@ -1203,13 +1246,13 @@ function readPresentation(
 }
 
 /**
- * 从实际 PPTX 字节读取页面对象、几何和原生文字段落、run 与列表，不读取构建报告。
- * 图片核对媒体关系、类型与签名，不解码像素数据。
+ * 对同一份 PPTX 字节执行 SDK 结构校验并独立读取页面对象、几何和原生文字，
+ * 不读取构建报告。SDK 的 MC 分支选择和扩展覆盖有限；此结果不代表应用证据。
  */
 export async function validatePptx(
   input: Uint8Array,
 ): Promise<ValidationResult> {
-  const errors: ValidationIssue[] = [];
+  const errors = await validateStandardStructure(input);
   let files: XmlFiles;
   try {
     files = unzipSync(input);
@@ -1223,8 +1266,9 @@ export async function validatePptx(
     return {
       profile: {
         standard: transitionalStandard,
-        scope:
-          "OPC 关系、内容类型以及 PresentationML 页面、形状、图片、组合和原生文字段落／run／列表结构",
+        schemaValidator: schemaValidatorProfile,
+        scope: validationScope,
+        applicationEvidence,
       },
       errors,
       presentation: { slideCount: 0 },
@@ -1324,8 +1368,9 @@ export async function validatePptx(
   return {
     profile: {
       standard: transitionalStandard,
-      scope:
-        "OPC 关系、内容类型以及 PresentationML 页面、形状、图片、组合和原生文字段落／run／列表结构",
+      schemaValidator: schemaValidatorProfile,
+      scope: validationScope,
+      applicationEvidence,
     },
     errors,
     presentation,

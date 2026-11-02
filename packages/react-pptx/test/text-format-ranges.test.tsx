@@ -165,10 +165,14 @@ describe("DrawingML 文字字段范围", () => {
     );
 
     const file = await validatePptx(zipSync(parts));
-    assert.deepEqual(file.errors.map(({ code }) => code).sort(), [
-      "invalid-font-size",
-      "invalid-text-spacing",
-      "invalid-text-spacing",
-    ]);
+    assert.deepEqual(
+      file.errors
+        .filter(({ code }) =>
+          ["invalid-font-size", "invalid-text-spacing"].includes(code),
+        )
+        .map(({ code }) => code)
+        .sort(),
+      ["invalid-font-size", "invalid-text-spacing", "invalid-text-spacing"],
+    );
   });
 });

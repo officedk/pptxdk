@@ -26,7 +26,9 @@ import {
   type CapabilityResource,
   type Diagnostic,
   type Extension,
+  type ObjectCapabilityModule,
   type ObjectObservation,
+  type SlideCapabilityModule,
   type SlideObservation,
   type Target,
 } from "#/types.ts";
@@ -35,6 +37,8 @@ type SlideBuild = {
   readonly id: string;
   readonly objects: readonly ObjectObservation[];
   readonly shapeXml: string;
+  readonly slideXml: string;
+  readonly capabilities: Readonly<Record<string, unknown>>;
   readonly relationships: readonly PptxRelationship[];
 };
 
@@ -86,6 +90,18 @@ function ownKeys(
 
 function isHostNode(child: HostChild): child is HostNode {
   return child instanceof HostNode;
+}
+
+function isSlideCapability(
+  module: CapabilityModule,
+): module is SlideCapabilityModule {
+  return "compileSlide" in module;
+}
+
+function isObjectCapability(
+  module: CapabilityModule,
+): module is ObjectCapabilityModule {
+  return "compile" in module;
 }
 
 function nonWhitespaceText(children: readonly HostChild[]): boolean {
@@ -251,6 +267,7 @@ function deckDimensions(node: HostNode): Dimensions {
 
 function resolveSlides(
   container: HostContainer,
+  modules: ReadonlyMap<string, CapabilityModule>,
 ): { node: HostNode; id: string }[] {
   const decks = childNodes(container.children);
   if (decks.length !== 1 || decks[0]?.type !== "rp:deck") {
@@ -293,15 +310,18 @@ function resolveSlides(
         ),
       ]);
     }
-    const unknown = ownKeys(node.props, ["slideId"]);
+    const slideProperties = [...modules.values()]
+      .filter(isSlideCapability)
+      .map(({ slideProp }) => slideProp);
+    const unknown = ownKeys(node.props, ["slideId", ...slideProperties]);
     if (unknown !== undefined) {
       const rawId = node.props["slideId"];
       const label = typeof rawId === "string" ? rawId : index + 1;
       throw new BuildError([
         diagnostic(
           `deck/slide[${label}]`,
-          "unknown-parameter",
-          `Slide 含未知参数 ${unknown}`,
+          "missing-capability",
+          `没有注册 Slide.${unknown} 的能力模块`,
         ),
       ]);
     }
@@ -435,7 +455,7 @@ function compileChildren(
 
     const path = `${parentPath}/${capabilityLabel(child, index)}`;
     const module = context.modules.get(child.type);
-    if (module === undefined) {
+    if (module === undefined || !isObjectCapability(module)) {
       context.slide.diagnostics.push(
         diagnostic(
           path,
@@ -556,11 +576,52 @@ function compileSlide(
     { document, slide, modules, target, dimensions },
     path,
   );
+  const slideXml: string[] = [];
+  const capabilities: Record<string, unknown> = {};
+  const input: CapabilityInput = {
+    type: node.type,
+    props: node.props,
+    children: node.children.map(capabilityChild),
+  };
+  for (const module of modules.values()) {
+    if (!isSlideCapability(module)) continue;
+    if (!Object.hasOwn(node.props, module.slideProp)) continue;
+    try {
+      const output = module.compileSlide(input, { path });
+      slideXml.push(output.xml);
+      capabilities[module.declaration] = output.observation;
+      for (const extension of output.extensions) {
+        if (!target.extensions.includes(extension)) {
+          slide.diagnostics.push(
+            diagnostic(
+              path,
+              "forbidden-mechanism",
+              `输出目标禁止 ${extension}`,
+            ),
+          );
+        } else {
+          document.usedExtensions.add(extension);
+        }
+      }
+    } catch (error) {
+      slide.diagnostics.push(
+        error instanceof CapabilityError
+          ? diagnostic(path, error.code, error.message)
+          : diagnostic(
+              path,
+              "capability-failure",
+              error instanceof Error ? error.message : String(error),
+            ),
+      );
+    }
+  }
   if (slide.diagnostics.length > 0) throw new BuildError(slide.diagnostics);
   return {
     id,
     objects: compiled.objects,
     shapeXml: compiled.xml,
+    slideXml: slideXml.join(""),
+    capabilities,
     relationships: slide.relationships,
   };
 }
@@ -570,7 +631,7 @@ function compileDocument(
   modules: ReadonlyMap<string, CapabilityModule>,
   target: Target,
 ): BuildResult {
-  const slides = resolveSlides(container);
+  const slides = resolveSlides(container, modules);
   const deck = childNodes(container.children)[0];
   if (deck === undefined)
     throw new BuildError([
@@ -589,9 +650,10 @@ function compileDocument(
   );
   const parts = pptxParts(
     size,
-    builtSlides.map(({ id, shapeXml, relationships }) => ({
+    builtSlides.map(({ id, shapeXml, slideXml, relationships }) => ({
       id,
       shapeXml,
+      slideXml,
       relationships,
     })),
     [...document.resources.values()],
@@ -610,6 +672,9 @@ function compileDocument(
       id: slide.id,
       index: index + 1,
       objects: slide.objects,
+      ...(Object.keys(slide.capabilities).length > 0 && {
+        capabilities: slide.capabilities,
+      }),
     }),
   );
   const report: BuildReport = deepFreeze({

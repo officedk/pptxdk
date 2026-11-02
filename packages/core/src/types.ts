@@ -49,6 +49,7 @@ export type SlideObservation = {
   readonly id: string;
   readonly index: number;
   readonly objects: readonly ObjectObservation[];
+  readonly capabilities?: Readonly<Record<string, unknown>>;
 };
 
 export type BuildReport = {
@@ -118,11 +119,35 @@ export type CapabilityOutput = {
   }[];
 };
 
-export type CapabilityModule = {
+export type ObjectCapabilityModule = {
   /** 声明组件的宿主类型，例如 `rp:shape`。 */
   readonly declaration: string;
   compile(input: CapabilityInput, context: CapabilityContext): CapabilityOutput;
 };
+
+export type SlideCapabilityContext = {
+  readonly path: string;
+};
+
+export type SlideCapabilityOutput = {
+  /** 由核心放入页面属性区的格式内容。 */
+  readonly xml: string;
+  readonly extensions: readonly Extension[];
+  readonly observation?: unknown;
+};
+
+export type SlideCapabilityModule = {
+  /** 该模块负责的 Slide 属性名。 */
+  readonly slideProp: string;
+  /** 报告中的稳定能力键。 */
+  readonly declaration: string;
+  compileSlide(
+    input: CapabilityInput,
+    context: SlideCapabilityContext,
+  ): SlideCapabilityOutput;
+};
+
+export type CapabilityModule = ObjectCapabilityModule | SlideCapabilityModule;
 
 export type Diagnostic = {
   readonly severity: "error" | "warning";
@@ -142,4 +167,5 @@ export type DeckProps = ElementProps & {
 
 export type SlideProps = ElementProps & {
   readonly slideId: string;
+  readonly transition?: unknown;
 };

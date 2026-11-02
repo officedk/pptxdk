@@ -17,6 +17,7 @@ import {
   Span,
   Text,
   targets,
+  transitions,
 } from "@react-pptx/react-pptx";
 import { validatePptx } from "@react-pptx/validation";
 import { strFromU8, strToU8, unzipSync, zipSync } from "fflate";
@@ -930,6 +931,490 @@ describe("公开构建入口", () => {
     const file = await validatePptx(result.pptx);
     assert.deepEqual(file.errors, []);
     assert.equal(file.slides[0]?.objects[0]?.geometry, "triangle");
+  });
+
+  it("生成并从同次 PPTX 读回基础页面转场", async () => {
+    const result = await build(
+      createElement(
+        Deck,
+        { width: 960, height: 540 },
+        createElement(Slide, {
+          slideId: "fade",
+          transition: transitions.fade(),
+        }),
+        createElement(Slide, {
+          slideId: "strips",
+          transition: transitions.strips({ direction: "leftUp" }),
+        }),
+        createElement(Slide, {
+          slideId: "push",
+          transition: transitions.push({ from: "top" }),
+        }),
+        createElement(Slide, {
+          slideId: "strips-default",
+          transition: transitions.strips(),
+        }),
+        createElement(Slide, {
+          slideId: "push-default",
+          transition: transitions.push(),
+        }),
+      ),
+    );
+
+    assert.deepEqual(result.report.extensions, []);
+    assert.deepEqual(
+      result.report.slides.map(
+        ({ capabilities }) => capabilities?.["transition"],
+      ),
+      [
+        { kind: "fade", speed: "slow" },
+        { kind: "strips", direction: "leftUp", speed: "slow" },
+        { kind: "push", from: "top", speed: "slow" },
+        { kind: "strips", direction: "rightDown", speed: "slow" },
+        { kind: "push", from: "bottom", speed: "slow" },
+      ],
+    );
+    const file = await validatePptx(result.pptx);
+    assert.deepEqual(file.errors, []);
+    assert.deepEqual(
+      file.slides.map(({ transition }) => transition),
+      [
+        { kind: "fade", speed: "slow" },
+        { kind: "strips", speed: "slow", direction: "lu" },
+        { kind: "push", speed: "slow", direction: "u" },
+        { kind: "strips", speed: "slow", direction: "rd" },
+        { kind: "push", speed: "slow", direction: "d" },
+      ],
+    );
+  });
+
+  it("将每个方向参数写为对应 Transitional 方向代码", async () => {
+    const declarations = [
+      ...(
+        [
+          ["leftUp", "lu"],
+          ["rightUp", "ru"],
+          ["leftDown", "ld"],
+          ["rightDown", "rd"],
+        ] as const
+      ).map(([direction], index) =>
+        createElement(Slide, {
+          slideId: `strips-${index}`,
+          transition: transitions.strips({ direction }),
+        }),
+      ),
+      ...(
+        [
+          ["left", "l"],
+          ["right", "r"],
+          ["top", "u"],
+          ["bottom", "d"],
+        ] as const
+      ).map(([from], index) =>
+        createElement(Slide, {
+          slideId: `push-${index}`,
+          transition: transitions.push({ from }),
+        }),
+      ),
+    ];
+    const result = await build(createElement(Deck, {}, ...declarations));
+    const file = await validatePptx(result.pptx);
+
+    assert.deepEqual(file.errors, []);
+    assert.deepEqual(
+      file.slides.map(({ transition }) => [
+        transition?.kind,
+        transition?.direction,
+      ]),
+      [
+        ["strips", "lu"],
+        ["strips", "ru"],
+        ["strips", "ld"],
+        ["strips", "rd"],
+        ["push", "l"],
+        ["push", "r"],
+        ["push", "u"],
+        ["push", "d"],
+      ],
+    );
+  });
+
+  it("按时长边界选择基础速度并写入取整后的精确毫秒", async () => {
+    const timings = [
+      [600, "fast", 600],
+      [600.6, "med", 601],
+      [601, "med", 601],
+      [875, "med", 875],
+      [876, "slow", 876],
+    ] as const;
+    const result = await build(
+      createElement(
+        Deck,
+        {},
+        ...timings.map(([duration], index) =>
+          createElement(Slide, {
+            slideId: `duration-${index}`,
+            transition: transitions.fade({ duration }),
+          }),
+        ),
+      ),
+    );
+    const file = await validatePptx(result.pptx, {
+      allowedExtensions: ["p14", "p159"],
+    });
+
+    assert.deepEqual(file.errors, []);
+    assert.deepEqual(
+      file.slides.map(({ transition }) => [
+        transition?.speed,
+        transition?.durationMs,
+      ]),
+      timings.map(([, speed, duration]) => [speed, duration]),
+    );
+  });
+
+  it("独立文件检查发现 Choice 漏报的 p14 时长依赖", async () => {
+    const result = await build(
+      createElement(
+        Deck,
+        {},
+        createElement(Slide, {
+          slideId: "morph-duration",
+          transition: transitions.morph({
+            duration: 1200,
+            fallback: transitions.fade(),
+          }),
+        }),
+      ),
+    );
+    const parts = unzipSync(result.pptx);
+    const slidePart = parts["ppt/slides/slide1.xml"];
+    assert.ok(slidePart);
+    const xml = strFromU8(slidePart);
+    assert.match(xml, /Requires="p14 p159"/u);
+    parts["ppt/slides/slide1.xml"] = strToU8(
+      xml.replace('Requires="p14 p159"', 'Requires="p159"'),
+    );
+
+    const file = await validatePptx(
+      zipSync(parts, { mtime: new Date("2020-01-01T00:00:00Z") }),
+      { allowedExtensions: ["p159"] },
+    );
+    assert.ok(
+      file.errors.some(({ code }) => code === "missing-extension-requirement"),
+    );
+    assert.ok(file.errors.some(({ code }) => code === "forbidden-extension"));
+  });
+
+  it("精确时长写入 p14 与有依据的 Transitional 速度回退", async () => {
+    const result = await build(
+      createElement(
+        Deck,
+        {},
+        createElement(Slide, {
+          slideId: "timed",
+          transition: transitions.fade({ duration: 777 }),
+        }),
+      ),
+    );
+
+    assert.deepEqual(result.report.extensions, ["p14"]);
+    assert.deepEqual(result.report.slides[0]?.capabilities?.["transition"], {
+      kind: "fade",
+      speed: "med",
+      durationMs: 777,
+      fallback: { kind: "fade", speed: "med" },
+    });
+    const file = await validatePptx(result.pptx, {
+      allowedExtensions: ["p14", "p159"],
+    });
+    assert.deepEqual(file.errors, []);
+    assert.deepEqual(file.extensions, ["p14"]);
+    assert.deepEqual(file.slides[0]?.transition, {
+      kind: "fade",
+      speed: "med",
+      durationMs: 777,
+      fallback: { kind: "fade", speed: "med" },
+    });
+
+    const disallowed = await validatePptx(result.pptx, {
+      allowedExtensions: [],
+    });
+    assert.ok(
+      disallowed.errors.some(({ code }) => code === "forbidden-extension"),
+    );
+    await assert.rejects(
+      build(
+        createElement(
+          Deck,
+          {},
+          createElement(Slide, {
+            slideId: "baseline-only",
+            transition: transitions.fade({ duration: 777 }),
+          }),
+        ),
+        { target: targets.baselineOnly },
+      ),
+      (error: unknown) => {
+        assert.ok(error instanceof BuildError);
+        assert.equal(error.diagnostics[0]?.code, "forbidden-mechanism");
+        assert.equal(error.diagnostics[0]?.path, "deck/slide[baseline-only]");
+        return true;
+      },
+    );
+  });
+
+  it("Flip 与 Morph 显式携带兼容分支并核对联合机制需求", async () => {
+    const declarations = createElement(
+      Deck,
+      {},
+      createElement(Slide, {
+        slideId: "flip",
+        transition: transitions.flip({
+          direction: "left",
+          fallback: transitions.fade(),
+        }),
+      }),
+      createElement(Slide, {
+        slideId: "morph",
+        transition: transitions.morph({
+          by: "character",
+          duration: 1200,
+          fallback: transitions.push({ from: "right" }),
+        }),
+      }),
+    );
+    const result = await build(declarations);
+
+    assert.deepEqual(result.report.extensions, ["p14", "p159"]);
+    assert.deepEqual(
+      result.report.slides.map(
+        ({ capabilities }) => capabilities?.["transition"],
+      ),
+      [
+        {
+          kind: "flip",
+          direction: "left",
+          speed: "slow",
+          fallback: { kind: "fade", speed: "slow" },
+        },
+        {
+          kind: "morph",
+          by: "character",
+          speed: "slow",
+          durationMs: 1200,
+          fallback: { kind: "push", from: "right", speed: "slow" },
+        },
+      ],
+    );
+    const file = await validatePptx(result.pptx, {
+      allowedExtensions: ["p14", "p159"],
+    });
+    assert.deepEqual(file.errors, []);
+    assert.deepEqual(file.extensions, ["p14", "p159"]);
+    assert.deepEqual(
+      file.slides.map(({ transition }) => transition),
+      [
+        {
+          kind: "flip",
+          speed: "slow",
+          direction: "l",
+          fallback: { kind: "fade", speed: "slow" },
+        },
+        {
+          kind: "morph",
+          speed: "slow",
+          durationMs: 1200,
+          by: "character",
+          fallback: { kind: "push", speed: "slow", direction: "r" },
+        },
+      ],
+    );
+
+    await assert.rejects(
+      build(declarations, { target: targets.baselineOnly }),
+      (error: unknown) => {
+        assert.ok(error instanceof BuildError);
+        assert.equal(error.diagnostics[0]?.code, "forbidden-mechanism");
+        return true;
+      },
+    );
+    await assert.rejects(
+      build(declarations, {
+        target: {
+          ...targets.transitional,
+          name: "p159-only",
+          extensions: ["p159"],
+        },
+      }),
+      (error: unknown) => {
+        assert.ok(error instanceof BuildError);
+        assert.equal(error.diagnostics[0]?.code, "forbidden-mechanism");
+        assert.equal(error.diagnostics[0]?.message, "输出目标禁止 p14");
+        return true;
+      },
+    );
+    await assert.rejects(
+      build(declarations, {
+        target: {
+          ...targets.transitional,
+          name: "p14-only",
+          extensions: ["p14"],
+        },
+      }),
+      (error: unknown) => {
+        assert.ok(error instanceof BuildError);
+        assert.equal(error.diagnostics[0]?.code, "forbidden-mechanism");
+        assert.equal(error.diagnostics[0]?.message, "输出目标禁止 p159");
+        return true;
+      },
+    );
+  });
+
+  it("使用扩展转场默认选项并保留基础 fallback 声明", async () => {
+    const result = await build(
+      createElement(
+        Deck,
+        {},
+        createElement(Slide, {
+          slideId: "flip-default",
+          transition: transitions.flip({ fallback: transitions.strips() }),
+        }),
+        createElement(Slide, {
+          slideId: "morph-default",
+          transition: transitions.morph({ fallback: transitions.fade() }),
+        }),
+      ),
+    );
+    const file = await validatePptx(result.pptx, {
+      allowedExtensions: ["p14", "p159"],
+    });
+
+    assert.deepEqual(file.errors, []);
+    assert.deepEqual(
+      file.slides.map(({ transition }) => transition),
+      [
+        {
+          kind: "flip",
+          speed: "slow",
+          direction: "r",
+          fallback: { kind: "strips", speed: "slow", direction: "rd" },
+        },
+        {
+          kind: "morph",
+          speed: "slow",
+          by: "object",
+          fallback: { kind: "fade", speed: "slow" },
+        },
+      ],
+    );
+  });
+
+  it("裁剪转场能力后定位被省略的 Slide 声明", async () => {
+    await assert.rejects(
+      createBuilder([shapeCapability])(
+        createElement(
+          Deck,
+          {},
+          createElement(Slide, {
+            slideId: "missing-transition-module",
+            transition: transitions.fade(),
+          }),
+        ),
+      ),
+      (error: unknown) => {
+        assert.ok(error instanceof BuildError);
+        assert.equal(error.diagnostics[0]?.code, "missing-capability");
+        assert.equal(
+          error.diagnostics[0]?.path,
+          "deck/slide[missing-transition-module]",
+        );
+        return true;
+      },
+    );
+  });
+
+  it("按 Slide 路径拒绝非法时长、方向、选项和 fallback", async () => {
+    const invalidTransitions: readonly {
+      readonly slideId: string;
+      readonly transition: unknown;
+      readonly code: string;
+    }[] = [
+      {
+        slideId: "negative-duration",
+        transition: transitions.fade({ duration: -1 }),
+        code: "invalid-transition-duration",
+      },
+      {
+        slideId: "non-finite-duration",
+        transition: transitions.fade({ duration: Number.POSITIVE_INFINITY }),
+        code: "invalid-transition-duration",
+      },
+      {
+        slideId: "unknown-parameter",
+        transition: transitions.fade({
+          duration: 600,
+          surprise: true,
+        } as never),
+        code: "unknown-parameter",
+      },
+      {
+        slideId: "invalid-strips-direction",
+        transition: transitions.strips({ direction: "diagonal" as never }),
+        code: "invalid-transition-direction",
+      },
+      {
+        slideId: "invalid-push-direction",
+        transition: transitions.push({ from: "center" as never }),
+        code: "invalid-transition-direction",
+      },
+      {
+        slideId: "missing-flip-fallback",
+        transition: transitions.flip({} as never),
+        code: "missing-transition-fallback",
+      },
+      {
+        slideId: "invalid-morph-option",
+        transition: transitions.morph({
+          by: "sentence" as never,
+          fallback: transitions.fade(),
+        }),
+        code: "invalid-morph-option",
+      },
+      {
+        slideId: "extension-fallback",
+        transition: transitions.flip({
+          fallback: transitions.morph({
+            fallback: transitions.fade(),
+          }) as never,
+        }),
+        code: "invalid-transition-fallback",
+      },
+    ];
+
+    for (const invalid of invalidTransitions) {
+      await assert.rejects(
+        build(
+          createElement(
+            Deck,
+            {},
+            createElement(Slide, {
+              slideId: invalid.slideId,
+              transition: invalid.transition as never,
+            }),
+          ),
+        ),
+        (error: unknown) => {
+          assert.ok(error instanceof BuildError);
+          assert.equal(error.diagnostics[0]?.code, invalid.code);
+          assert.equal(
+            error.diagnostics[0]?.path,
+            `deck/slide[${invalid.slideId}]`,
+          );
+          return true;
+        },
+      );
+    }
   });
 
   it("越界保留原始形状并在生成证据中返回警告", async () => {

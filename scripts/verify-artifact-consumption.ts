@@ -162,10 +162,11 @@ try {
     join(temporaryDirectory, "consumer-types.ts"),
     [
       'import { createElement } from "react";',
-      'import { Deck, font, P, Shape, Slide, Span, Text, build, type BuildResult, type ShapeProps, type TextProps } from "@react-pptx/react-pptx";',
+      'import { Deck, font, P, Shape, Slide, Span, Text, build, transitions, type BuildResult, type ShapeProps, type TextProps, type Transition } from "@react-pptx/react-pptx";',
       'const shape: ShapeProps = { testId: "typed", x: 0, y: 0, width: 40, height: 30 };',
       'const text: TextProps = { testId: "typed-text", x: 0, y: 36, width: 100, height: 36, style: { fontFamily: font("Consumer Sans"), lineHeight: "22pt" } };',
-      'const result: Promise<BuildResult> = build(createElement(Deck, {}, createElement(Slide, { slideId: "typed" }, createElement(Shape, shape), createElement(Text, text, createElement(P, { style: { list: { type: "bullet" } } }, createElement(Span, { style: { fontWeight: "bold" } }, "Installed 文本"))))));',
+      'const transition: Transition = transitions.morph({ by: "word", duration: 1200, fallback: transitions.fade() });',
+      'const result: Promise<BuildResult> = build(createElement(Deck, {}, createElement(Slide, { slideId: "typed", transition }, createElement(Shape, shape), createElement(Text, text, createElement(P, { style: { list: { type: "bullet" } } }, createElement(Span, { style: { fontWeight: "bold" } }, "Installed 文本"))))));',
       "void result;",
     ].join("\n"),
   );
@@ -173,14 +174,18 @@ try {
     join(temporaryDirectory, "consumer-runtime.ts"),
     [
       'import { createElement } from "react";',
-      'import { Deck, font, P, Shape, Slide, Span, Text, build } from "@react-pptx/react-pptx";',
+      'import { BuildError, Deck, font, P, Shape, Slide, Span, Text, build, targets, transitions } from "@react-pptx/react-pptx";',
       'import { validatePptx } from "@react-pptx/validation";',
       'import { writeFile } from "node:fs/promises";',
-      'const result = await build(createElement(Deck, { width: 120, height: 96 }, createElement(Slide, { slideId: "installed" }, createElement(Shape, { testId: "packed-shape", geometry: "hexagon", x: 10, y: 12, width: 45, height: 30, fill: "#123456" }), createElement(Text, { testId: "packed-text", x: 10, y: 48, width: 90, height: 36, style: { fontFamily: font("Consumer Sans"), lineHeight: "22pt" } }, createElement(P, { style: { list: { type: "bullet" } } }, createElement(Span, { style: { fontWeight: "bold" } }, "Installed 文本"))))));',
-      "const file = await validatePptx(result.pptx);",
-      'if (file.errors.length !== 0 || file.slides[0]?.objects[0]?.name !== "packed-shape" || file.slides[0]?.objects[1]?.text?.paragraphs[0]?.text !== "Installed 文本" || file.slides[0]?.objects[1]?.text?.paragraphs[0]?.list?.type !== "bullet") throw new Error(JSON.stringify(file.errors));',
+      'const transition = transitions.morph({ by: "word", duration: 1200, fallback: transitions.fade() });',
+      'const result = await build(createElement(Deck, { width: 120, height: 96 }, createElement(Slide, { slideId: "installed", transition }, createElement(Shape, { testId: "packed-shape", geometry: "hexagon", x: 10, y: 12, width: 45, height: 30, fill: "#123456" }), createElement(Text, { testId: "packed-text", x: 10, y: 48, width: 90, height: 36, style: { fontFamily: font("Consumer Sans"), lineHeight: "22pt" } }, createElement(P, { style: { list: { type: "bullet" } } }, createElement(Span, { style: { fontWeight: "bold" } }, "Installed 文本"))))));',
+      'const file = await validatePptx(result.pptx, { allowedExtensions: ["p14", "p159"] });',
+      'if (file.errors.length !== 0 || file.extensions.join(",") !== "p14,p159" || file.slides[0]?.transition?.kind !== "morph" || file.slides[0]?.transition?.by !== "word" || file.slides[0]?.transition?.durationMs !== 1200 || file.slides[0]?.objects[0]?.name !== "packed-shape" || file.slides[0]?.objects[1]?.text?.paragraphs[0]?.text !== "Installed 文本" || file.slides[0]?.objects[1]?.text?.paragraphs[0]?.list?.type !== "bullet") throw new Error(JSON.stringify(file.errors));',
+      "let forbidden;",
+      'try { await build(createElement(Deck, {}, createElement(Slide, { slideId: "forbidden", transition })), { target: targets.baselineOnly }); } catch (error) { forbidden = error; }',
+      'if (!(forbidden instanceof BuildError) || forbidden.diagnostics[0]?.code !== "forbidden-mechanism") throw new Error("installed baseline target did not reject the transition mechanism");',
       'await writeFile("artifact.pptx", result.pptx);',
-      "process.stdout.write(JSON.stringify({ standard: file.profile.standard, slideId: file.slides[0]?.id, object: file.slides[0]?.objects[0]?.name, text: file.slides[0]?.objects[1]?.text?.text, bytes: result.pptx.byteLength }));",
+      "process.stdout.write(JSON.stringify({ standard: file.profile.standard, slideId: file.slides[0]?.id, object: file.slides[0]?.objects[0]?.name, text: file.slides[0]?.objects[1]?.text?.text, transition: file.slides[0]?.transition?.kind, durationMs: file.slides[0]?.transition?.durationMs, extensions: file.extensions, forbiddenCode: forbidden.diagnostics[0]?.code, bytes: result.pptx.byteLength }));",
     ].join("\n"),
   );
   const cropLoader = join(temporaryDirectory, "reject-text-box.mjs");
@@ -229,6 +234,10 @@ try {
     readonly slideId?: string;
     readonly object?: string;
     readonly text?: string;
+    readonly transition?: string;
+    readonly durationMs?: number;
+    readonly extensions?: readonly string[];
+    readonly forbiddenCode?: string;
     readonly bytes?: number;
   };
   if (
@@ -236,6 +245,10 @@ try {
     summary.slideId !== "installed" ||
     summary.object !== "packed-shape" ||
     summary.text !== "Installed 文本" ||
+    summary.transition !== "morph" ||
+    summary.durationMs !== 1200 ||
+    summary.extensions?.join(",") !== "p14,p159" ||
+    summary.forbiddenCode !== "forbidden-mechanism" ||
     summary.bytes === undefined ||
     summary.bytes <= 0
   ) {

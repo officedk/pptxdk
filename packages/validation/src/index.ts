@@ -692,7 +692,7 @@ function readPresentation(
   };
 }
 
-/** 从实际 PPTX 字节读取 Transitional 包关系、页面对象和几何，不读取构建报告。 */
+/** 从实际 PPTX 字节读取包关系、页面对象、几何和原生文字段落，不读取构建报告。 */
 export async function validatePptx(
   input: Uint8Array,
 ): Promise<ValidationResult> {
@@ -710,7 +710,8 @@ export async function validatePptx(
     return {
       profile: {
         standard: transitionalStandard,
-        scope: "OPC 关系、内容类型和核心 PresentationML 页面／形状结构",
+        scope:
+          "OPC 关系、内容类型、核心 PresentationML 页面／形状及原生文字段落／run／列表结构",
       },
       errors,
       presentation: { slideCount: 0 },
@@ -809,7 +810,8 @@ export async function validatePptx(
   return {
     profile: {
       standard: transitionalStandard,
-      scope: "OPC 关系、内容类型和核心 PresentationML 页面／形状结构",
+      scope:
+        "OPC 关系、内容类型、核心 PresentationML 页面／形状及原生文字段落／run／列表结构",
     },
     errors,
     presentation,

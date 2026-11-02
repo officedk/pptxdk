@@ -8,6 +8,7 @@ import {
   type CapabilityModule,
 } from "@react-pptx/core";
 
+import { fontPresentationContributions } from "./font-embedding.ts";
 import { motionAnnotations } from "./motion-api.ts";
 import {
   measureTextLayout,
@@ -257,6 +258,10 @@ export const textCapability: CapabilityModule = {
       extensions: [],
       ...(annotations.length === 0 ? {} : { annotations }),
       resourceClaims: body.resourceClaims,
+      presentationContributions: fontPresentationContributions(
+        body.fontUses,
+        context.options.embedFonts,
+      ),
       warnings: body.warnings,
     };
     return output;

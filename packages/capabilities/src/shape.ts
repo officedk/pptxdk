@@ -10,6 +10,7 @@ import {
 } from "@react-pptx/core";
 import type { ReactNode } from "react";
 
+import { fontPresentationContributions } from "./font-embedding.ts";
 import {
   motionAnnotations,
   motionElement,
@@ -297,6 +298,10 @@ export const shapeCapability: CapabilityModule = {
         ? {}
         : {
             resourceClaims: textOutput.resourceClaims,
+            presentationContributions: fontPresentationContributions(
+              textOutput.fontUses,
+              context.options.embedFonts,
+            ),
             warnings: textOutput.warnings,
           }),
     };

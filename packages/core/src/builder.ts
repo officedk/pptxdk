@@ -26,6 +26,7 @@ import {
   type CapabilityChildren,
   type CapabilityInput,
   type CapabilityPackagePart,
+  type CapabilityPresentationContribution,
   type CapabilityContribution,
   type CapabilityModule,
   type RegisteredCapabilityModule,
@@ -63,7 +64,32 @@ type DocumentBuildState = {
   readonly resourceTypes: Map<string, string>;
   readonly packageParts: Map<string, PptxPackagePart>;
   readonly packageRelationships: Map<string, PptxRelationship[]>;
+  readonly presentationAttributes: Map<string, string>;
+  readonly presentationCollections: Map<
+    string,
+    {
+      readonly tagName: string;
+      readonly records: Map<
+        string,
+        {
+          readonly identity: string;
+          readonly tagName: string;
+          readonly content: string;
+          readonly items: Map<
+            string,
+            {
+              identity: string;
+              order: number;
+              preview: string;
+              content: string;
+            }
+          >;
+        }
+      >;
+    }
+  >;
   nextPackagePartId: number;
+  nextPresentationRelationshipId: number;
 };
 
 type SlideBuildState = {
@@ -82,6 +108,7 @@ type BuildContext = {
   readonly modules: ReadonlyMap<string, RegisteredCapabilityModule>;
   readonly target: Target;
   readonly dimensions: Dimensions;
+  readonly options: BuildOptions;
   readonly layout: LayoutPassResult;
 };
 
@@ -248,10 +275,19 @@ function validateOptions(options: BuildOptions): Target {
       diagnostic("build", "invalid-options", "构建选项必须是对象"),
     ]);
   }
-  const unknown = ownKeys(options, ["target", "signal"]);
+  const unknown = ownKeys(options, ["target", "signal", "embedFonts"]);
   if (unknown !== undefined) {
     throw new BuildError([
       diagnostic("build", "unknown-parameter", `构建选项含未知参数 ${unknown}`),
+    ]);
+  }
+  if (options.embedFonts !== undefined && options.embedFonts !== "full") {
+    throw new BuildError([
+      diagnostic(
+        "build.embedFonts",
+        "unsupported-font-embedding",
+        "embedFonts 目前只支持 full",
+      ),
     ]);
   }
   return validateTarget(options.target);
@@ -590,6 +626,194 @@ function addPackagePart(
   return relationshipId;
 }
 
+function xmlName(value: string): boolean {
+  return /^(?:[A-Za-z_][A-Za-z0-9_.-]*:)?[A-Za-z_][A-Za-z0-9_.-]*$/u.test(
+    value,
+  );
+}
+
+function addPresentationContribution(
+  contribution: CapabilityPresentationContribution,
+  context: BuildContext,
+  path: string,
+): void {
+  const { collection, record, item } = contribution;
+  if (
+    !xmlName(collection) ||
+    typeof record.key !== "string" ||
+    record.key === "" ||
+    typeof record.identity !== "string" ||
+    typeof record.tagName !== "string" ||
+    !xmlName(record.tagName) ||
+    typeof record.content !== "string" ||
+    typeof item.key !== "string" ||
+    item.key === "" ||
+    typeof item.identity !== "string" ||
+    !Number.isInteger(item.order) ||
+    item.order < 0 ||
+    typeof item.relationshipType !== "string" ||
+    item.relationshipType.trim() === "" ||
+    typeof item.pathTemplate !== "string" ||
+    typeof item.contentType !== "string" ||
+    item.contentType.trim() === "" ||
+    !(item.bytes instanceof Uint8Array) ||
+    item.bytes.byteLength === 0 ||
+    typeof item.content !== "function"
+  ) {
+    throw new CapabilityError(
+      "invalid-presentation-contribution",
+      "文稿级部件贡献的记录、关系或资源无效",
+    );
+  }
+  try {
+    assertXml10Characters(collection);
+    assertXml10Characters(record.content);
+    assertXml10Characters(item.relationshipType);
+    assertXml10Characters(item.contentType);
+    for (const [name, value] of Object.entries(
+      contribution.presentationAttributes ?? {},
+    )) {
+      if (!xmlName(name) || typeof value !== "string") {
+        throw new Error("invalid presentation attribute");
+      }
+      assertXml10Characters(value);
+    }
+  } catch {
+    throw new CapabilityError(
+      "invalid-presentation-contribution",
+      "文稿级部件贡献含无效 XML 名称或字符",
+    );
+  }
+
+  for (const [name, value] of Object.entries(
+    contribution.presentationAttributes ?? {},
+  )) {
+    const existing = context.document.presentationAttributes.get(name);
+    if (existing !== undefined && existing !== value) {
+      context.slide.diagnostics.push(
+        diagnostic(
+          path,
+          "conflicting-presentation-attribute",
+          `presentation 属性 ${name} 的贡献值冲突`,
+        ),
+      );
+    } else {
+      context.document.presentationAttributes.set(name, value);
+    }
+  }
+
+  let targetCollection =
+    context.document.presentationCollections.get(collection);
+  if (targetCollection === undefined) {
+    targetCollection = { tagName: collection, records: new Map() };
+    context.document.presentationCollections.set(collection, targetCollection);
+  }
+  let targetRecord = targetCollection.records.get(record.key);
+  if (targetRecord === undefined) {
+    targetRecord = {
+      identity: record.identity,
+      tagName: record.tagName,
+      content: record.content,
+      items: new Map(),
+    };
+    targetCollection.records.set(record.key, targetRecord);
+  } else if (
+    targetRecord.identity !== record.identity ||
+    targetRecord.tagName !== record.tagName ||
+    targetRecord.content !== record.content
+  ) {
+    context.slide.diagnostics.push(
+      diagnostic(
+        path,
+        "conflicting-presentation-record",
+        `文稿级记录 ${record.key} 的声明冲突`,
+      ),
+    );
+    return;
+  }
+
+  let preview: string;
+  try {
+    preview = item.content("rId0");
+    assertXml10Characters(preview);
+  } catch {
+    throw new CapabilityError(
+      "invalid-presentation-contribution",
+      "文稿级部件贡献无法生成 XML 内容",
+    );
+  }
+  if (preview.trim() === "") {
+    throw new CapabilityError(
+      "invalid-presentation-contribution",
+      "文稿级部件贡献必须生成内容",
+    );
+  }
+  const existingItem = targetRecord.items.get(item.key);
+  if (existingItem !== undefined) {
+    if (
+      existingItem.identity !== item.identity ||
+      existingItem.order !== item.order ||
+      existingItem.preview !== preview
+    ) {
+      context.slide.diagnostics.push(
+        diagnostic(
+          path,
+          "conflicting-presentation-item",
+          `文稿级记录 ${record.key} 的项目 ${item.key} 使用了冲突资源`,
+        ),
+      );
+    }
+    return;
+  }
+
+  const sequence = context.document.nextPackagePartId++;
+  const partPath = packagePartPath(item.pathTemplate, sequence);
+  if (context.document.packageParts.has(partPath)) {
+    throw new CapabilityError("duplicate-part", "PPTX 部件路径重复");
+  }
+  const relationshipId = `rId${context.document.nextPresentationRelationshipId++}`;
+  const content = item.content(relationshipId);
+  context.document.packageParts.set(partPath, {
+    path: partPath,
+    content: new Uint8Array(item.bytes),
+    contentType: item.contentType,
+  });
+  const relationships =
+    context.document.packageRelationships.get("ppt/presentation.xml") ?? [];
+  relationships.push({
+    id: relationshipId,
+    type: item.relationshipType,
+    target: relationshipTarget("ppt/presentation.xml", partPath),
+  });
+  context.document.packageRelationships.set(
+    "ppt/presentation.xml",
+    relationships,
+  );
+  targetRecord.items.set(item.key, {
+    identity: item.identity,
+    order: item.order,
+    preview,
+    content,
+  });
+}
+
+function presentationContent(document: DocumentBuildState): string {
+  return [...document.presentationCollections.values()]
+    .map(
+      ({ tagName, records }) =>
+        `<${tagName}>${[...records.values()]
+          .map(
+            (record) =>
+              `<${record.tagName}>${record.content}${[...record.items.values()]
+                .sort((left, right) => left.order - right.order)
+                .map(({ content }) => content)
+                .join("")}</${record.tagName}>`,
+          )
+          .join("")}</${tagName}>`,
+    )
+    .join("");
+}
+
 function compileChildren(
   children: readonly CapabilityChild[],
   context: BuildContext,
@@ -690,6 +914,7 @@ function compileChildren(
       const output = module.compile(input, {
         id,
         path,
+        options: context.options,
         ...(layoutBox === undefined ? {} : { layoutBox }),
         compileChildren(nested) {
           return compileChildren(nested, context, path);
@@ -732,6 +957,9 @@ function compileChildren(
             characters: (existing?.characters ?? "") + (claim.characters ?? ""),
           });
         }
+      }
+      for (const contribution of output.presentationContributions ?? []) {
+        addPresentationContribution(contribution, context, path);
       }
       for (const warning of output.warnings ?? []) {
         context.document.warnings.push({
@@ -795,6 +1023,7 @@ function compileSlide(
   target: Target,
   dimensions: Dimensions,
   document: DocumentBuildState,
+  options: BuildOptions,
 ): SlideBuild {
   const slide: SlideBuildState = {
     nextId: 2,
@@ -822,6 +1051,7 @@ function compileSlide(
       modules,
       target,
       dimensions,
+      options,
       layout,
     },
     path,
@@ -918,6 +1148,7 @@ function compileDocument(
   container: HostContainer,
   modules: ReadonlyMap<string, RegisteredCapabilityModule>,
   target: Target,
+  options: BuildOptions,
 ): BuildResult {
   const slides = resolveSlides(container, modules);
   const deck = childNodes(container.children)[0];
@@ -934,10 +1165,13 @@ function compileDocument(
     resourceTypes: new Map(),
     packageParts: new Map(),
     packageRelationships: new Map(),
+    presentationAttributes: new Map(),
+    presentationCollections: new Map(),
     nextPackagePartId: 1,
+    nextPresentationRelationshipId: slides.length + 2,
   };
   const builtSlides = slides.map(({ node, id }) =>
-    compileSlide(node, id, modules, target, size, document),
+    compileSlide(node, id, modules, target, size, document, options),
   );
   const parts = pptxParts(
     size,
@@ -953,6 +1187,11 @@ function compileDocument(
       sourcePath,
       relationships,
     })) satisfies PptxPackageRelationshipSet[],
+    presentationContent(document),
+    [...document.presentationAttributes].map(([name, value]) => ({
+      name,
+      value,
+    })),
   );
   const pptx = zipSync(
     Object.fromEntries(
@@ -1019,7 +1258,7 @@ export function createBuilder(modules: readonly CapabilityModule[]) {
     try {
       return await withHostTree(
         element,
-        (container) => compileDocument(container, bound, target),
+        (container) => compileDocument(container, bound, target, options),
         options.signal,
       );
     } catch (error) {

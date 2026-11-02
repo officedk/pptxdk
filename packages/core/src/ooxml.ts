@@ -180,6 +180,8 @@ export function pptxParts(
   resources: readonly PptxPackageResource[] = [],
   packageParts: readonly PptxPackagePart[] = [],
   packageRelationships: readonly PptxPackageRelationshipSet[] = [],
+  presentationContent = "",
+  presentationAttributes: readonly { name: string; value: string }[] = [],
 ): Record<string, string | Uint8Array> {
   const slideRelationships = slides.map((_, index) => ({
     id: `rId${index + 2}`,
@@ -189,8 +191,15 @@ export function pptxParts(
   const slideIds = slides
     .map((_, index) => `<p:sldId id="${256 + index}" r:id="rId${index + 2}"/>`)
     .join("");
+  const presentationAttributeXml = presentationAttributes
+    .map(({ name, value }) => ` ${name}="${xmlEscape(value)}"`)
+    .join("");
+  const extraPresentationRelationships =
+    packageRelationships.find(
+      ({ sourcePath }) => sourcePath === "ppt/presentation.xml",
+    )?.relationships ?? [];
   const presentation = xmlDocument(
-    `<p:presentation xmlns:a="${namespaces.a}" xmlns:r="${namespaces.r}" xmlns:p="${namespaces.p}"><p:sldMasterIdLst><p:sldMasterId id="2147483648" r:id="rId1"/></p:sldMasterIdLst><p:sldIdLst>${slideIds}</p:sldIdLst><p:sldSz cx="${pxToEmu(size.width)}" cy="${pxToEmu(size.height)}"/><p:notesSz cx="6858000" cy="9144000"/></p:presentation>`,
+    `<p:presentation xmlns:a="${namespaces.a}" xmlns:r="${namespaces.r}" xmlns:p="${namespaces.p}"${presentationAttributeXml}><p:sldMasterIdLst><p:sldMasterId id="2147483648" r:id="rId1"/></p:sldMasterIdLst><p:sldIdLst>${slideIds}</p:sldIdLst><p:sldSz cx="${pxToEmu(size.width)}" cy="${pxToEmu(size.height)}"/><p:notesSz cx="6858000" cy="9144000"/>${presentationContent}</p:presentation>`,
   );
   const parts: Record<string, string | Uint8Array> = {
     "[Content_Types].xml": contentTypes(slides.length, resources, packageParts),
@@ -209,6 +218,7 @@ export function pptxParts(
         target: "slideMasters/slideMaster1.xml",
       },
       ...slideRelationships,
+      ...extraPresentationRelationships,
     ]),
     "ppt/slideMasters/slideMaster1.xml": master(),
     "ppt/slideMasters/_rels/slideMaster1.xml.rels": relationships([
@@ -255,6 +265,7 @@ export function pptxParts(
     parts[part.path] = part.content;
   }
   for (const relationshipSet of packageRelationships) {
+    if (relationshipSet.sourcePath === "ppt/presentation.xml") continue;
     const marker = relationshipSet.sourcePath.lastIndexOf("/");
     const directory =
       marker === -1 ? "" : relationshipSet.sourcePath.slice(0, marker + 1);

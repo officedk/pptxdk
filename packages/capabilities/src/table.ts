@@ -9,6 +9,10 @@ import {
 import { createElement, type ReactNode } from "react";
 
 import {
+  fontPresentationContributions,
+  type FontEmbeddingUse,
+} from "./font-embedding.ts";
+import {
   motionAnnotations,
   motionElement,
   type MotionProps,
@@ -733,6 +737,7 @@ export const tableCapability: CapabilityModule = {
     );
     const warnings: { code: string; message: string; path?: string }[] = [];
     const claims: { kind: string; key: string; identity: string }[] = [];
+    const fontUses: FontEmbeddingUse[] = [];
     const warningKeys = new Set<string>();
     const addTextResult = (
       result: ReturnType<typeof writeTextBody>,
@@ -745,6 +750,7 @@ export const tableCapability: CapabilityModule = {
         warnings.push({ ...warning, path });
       }
       claims.push(...result.resourceClaims);
+      fontUses.push(...result.fontUses.map((use) => ({ ...use, path })));
     };
     const naturalWidths = new Map<ParsedCell, number>();
     const needNaturalWidth = columns.some(
@@ -1029,6 +1035,10 @@ export const tableCapability: CapabilityModule = {
       extensions: [],
       ...(annotations.length === 0 ? {} : { annotations }),
       resourceClaims: [...uniqueClaims.values()],
+      presentationContributions: fontPresentationContributions(
+        fontUses,
+        context.options.embedFonts,
+      ),
       warnings,
     };
   },

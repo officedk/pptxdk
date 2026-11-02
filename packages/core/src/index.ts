@@ -17,6 +17,7 @@ export type {
   CapabilityContext,
   CapabilityInput,
   CapabilityPackagePart,
+  CapabilityPresentationContribution,
   CapabilityModule,
   CapabilityOutput,
   CapabilityResource,

@@ -36,6 +36,7 @@ import {
   type CapabilityPresentationContribution,
   type CapabilityContribution,
   type CapabilityModule,
+  type RegisteredCapabilityModule,
   type CapabilityResource,
   type Diagnostic,
   type Extension,
@@ -100,6 +101,7 @@ type DocumentBuildState = {
 
 type SlideBuildState = {
   nextId: number;
+  nextNodeOrder: number;
   readonly diagnostics: Diagnostic[];
   readonly relationships: PptxRelationship[];
   readonly relationshipIds: Map<string, string>;
@@ -110,7 +112,7 @@ type SlideBuildState = {
 type BuildContext = {
   readonly document: DocumentBuildState;
   readonly slide: SlideBuildState;
-  readonly modules: ReadonlyMap<string, CapabilityModule>;
+  readonly modules: ReadonlyMap<string, RegisteredCapabilityModule>;
   readonly target: Target;
   readonly dimensions: Dimensions;
   readonly options: BuildOptions;
@@ -150,13 +152,13 @@ function isHostNode(child: HostChild): child is HostNode {
 }
 
 function isSlideCapability(
-  module: CapabilityModule,
+  module: RegisteredCapabilityModule,
 ): module is SlideCapabilityModule {
   return "compileSlide" in module;
 }
 
 function isObjectCapability(
-  module: CapabilityModule,
+  module: RegisteredCapabilityModule,
 ): module is ObjectCapabilityModule {
   return "compile" in module;
 }
@@ -333,7 +335,7 @@ function deckDimensions(node: HostNode): Dimensions {
 
 function resolveSlides(
   container: HostContainer,
-  modules: ReadonlyMap<string, CapabilityModule>,
+  modules: ReadonlyMap<string, RegisteredCapabilityModule>,
 ): { node: HostNode; id: string }[] {
   const decks = childNodes(container.children);
   if (decks.length !== 1 || decks[0]?.type !== "rp:deck") {
@@ -848,6 +850,7 @@ function compileChildren(
     }
 
     const path = `${parentPath}/${capabilityLabel(child, index)}`;
+    const order = context.slide.nextNodeOrder++;
     if (child.type === "rp:box") {
       const box = context.layout.boxes.get(child);
       if (box === undefined) {
@@ -871,7 +874,43 @@ function compileChildren(
       return;
     }
     const module = context.modules.get(child.type);
-    if (module === undefined || !isObjectCapability(module)) {
+    if (module === undefined) {
+      context.slide.diagnostics.push(
+        diagnostic(
+          path,
+          "missing-capability",
+          `没有注册 ${child.type} 的能力模块`,
+        ),
+      );
+      return;
+    }
+    if ("compileDeclaration" in module) {
+      try {
+        for (const annotation of module.compileDeclaration(child, { path })) {
+          context.slide.contributions.push({ ...annotation, path, order });
+        }
+      } catch (error) {
+        context.slide.diagnostics.push(
+          error instanceof CapabilityError
+            ? diagnostic(
+                error.path === undefined ? path : `${path}/${error.path}`,
+                error.code,
+                error.message,
+              )
+            : diagnostic(
+                path,
+                "capability-failure",
+                error instanceof Error ? error.message : String(error),
+              ),
+        );
+      }
+      const compiled = compileChildren(child.children, context, path);
+      xml.push(compiled.xml);
+      objects.push(...compiled.objects);
+      references.push(...compiled.references);
+      return;
+    }
+    if (!isObjectCapability(module)) {
       context.slide.diagnostics.push(
         diagnostic(
           path,
@@ -950,6 +989,7 @@ function compileChildren(
           ...annotation,
           path,
           targetId: id,
+          order,
         });
       }
       xml.push(output.xml);
@@ -994,7 +1034,7 @@ function compileChildren(
 function compileSlide(
   node: HostNode,
   id: string,
-  modules: ReadonlyMap<string, CapabilityModule>,
+  modules: ReadonlyMap<string, RegisteredCapabilityModule>,
   target: Target,
   dimensions: Dimensions,
   document: DocumentBuildState,
@@ -1003,6 +1043,7 @@ function compileSlide(
 ): SlideBuild {
   const slide: SlideBuildState = {
     nextId: 2,
+    nextNodeOrder: 0,
     diagnostics: [],
     relationships: [],
     relationshipIds: new Map(),
@@ -1080,7 +1121,7 @@ function compileSlide(
     } catch (error) {
       slide.diagnostics.push(
         error instanceof CapabilityError
-          ? diagnostic(path, error.code, error.message)
+          ? diagnostic(error.path ?? path, error.code, error.message)
           : diagnostic(
               path,
               "capability-failure",
@@ -1131,7 +1172,7 @@ function slideSlotOrder(slot: SlideCapabilitySlot): number {
 
 function compileDocument(
   container: HostContainer,
-  modules: ReadonlyMap<string, CapabilityModule>,
+  modules: ReadonlyMap<string, RegisteredCapabilityModule>,
   target: Target,
   options: BuildOptions,
 ): BuildResult {
@@ -1218,11 +1259,26 @@ function compileDocument(
 }
 
 export function createBuilder(modules: readonly CapabilityModule[]) {
-  const bound = new Map(modules.map((module) => [module.declaration, module]));
-  if (bound.size !== modules.length) {
-    throw new BuildError([
-      diagnostic("build.modules", "duplicate-capability", "能力模块声明重复"),
-    ]);
+  const bound = new Map<string, RegisteredCapabilityModule>();
+  for (const module of modules) {
+    const declarations = [
+      module,
+      ...("compileSlide" in module
+        ? (module.transparentDeclarations ?? [])
+        : []),
+    ];
+    for (const declaration of declarations) {
+      if (bound.has(declaration.declaration)) {
+        throw new BuildError([
+          diagnostic(
+            "build.modules",
+            "duplicate-capability",
+            "能力模块声明重复",
+          ),
+        ]);
+      }
+      bound.set(declaration.declaration, declaration);
+    }
   }
 
   return async function build(

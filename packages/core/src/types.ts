@@ -236,7 +236,10 @@ export type CapabilityAnnotation = {
 /** 核心补充对象身份和诊断位置后传给页面模块的声明数据。 */
 export type CapabilityContribution = CapabilityAnnotation & {
   readonly path: string;
-  readonly targetId: number;
+  /** 原生对象声明才带有此身份；透明能力声明不生成对象 ID。 */
+  readonly targetId?: number;
+  /** 页面宿主树中的前序位置，用于保留透明声明和对象成员顺序。 */
+  readonly order: number;
 };
 
 export type CapabilityResource = {
@@ -361,6 +364,16 @@ export type ObjectCapabilityModule = {
   compile(input: CapabilityInput, context: CapabilityContext): CapabilityOutput;
 };
 
+/** 不生成原生对象、只向所属页面能力提交声明的透明宿主节点。 */
+export type TransparentCapabilityModule = {
+  /** 声明组件生成的宿主类型，例如 `rp:motion-scope`。 */
+  readonly declaration: string;
+  compileDeclaration(
+    input: CapabilityInput,
+    context: { readonly path: string },
+  ): readonly CapabilityAnnotation[];
+};
+
 export type SlideCapabilitySlot = "transition" | "timing";
 
 export type SlideCapabilityContext = {
@@ -384,6 +397,8 @@ export type SlideCapabilityModule = {
   readonly always?: boolean;
   /** 报告中的稳定能力键。 */
   readonly declaration: string;
+  /** 由该能力自行接线、供内部透明声明宿主使用的处理器。 */
+  readonly transparentDeclarations?: readonly TransparentCapabilityModule[];
   compileSlide(
     input: CapabilityInput,
     context: SlideCapabilityContext,
@@ -391,6 +406,11 @@ export type SlideCapabilityModule = {
 };
 
 export type CapabilityModule = ObjectCapabilityModule | SlideCapabilityModule;
+
+/** Builder 内部注册的模块，透明声明只能由页面能力模块拥有。 */
+export type RegisteredCapabilityModule =
+  | CapabilityModule
+  | TransparentCapabilityModule;
 
 export type Diagnostic = {
   readonly severity: "error" | "warning";

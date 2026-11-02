@@ -33,8 +33,7 @@ const allowedParameters = [
   "enter",
   "emphasis",
   "motion",
-  "__motionEnabled",
-  "__motionStep",
+  "__motionContext",
 ] as const;
 const emuPerPixel = 9525;
 const maximumGroupExtentEmu = 2_147_483_647;

@@ -70,5 +70,6 @@ export type {
   SlideCapabilitySlot,
   SlideObservation,
   SlideProps,
+  TransparentCapabilityModule,
   Target,
 } from "#/types.ts";

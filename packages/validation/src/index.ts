@@ -1440,14 +1440,11 @@ function validateChart(
       : elements(plotArea, chartNamespace, "barChart").concat(
           elements(plotArea, chartNamespace, "lineChart"),
           elements(plotArea, chartNamespace, "areaChart"),
+          elements(plotArea, chartNamespace, "pieChart"),
+          elements(plotArea, chartNamespace, "doughnutChart"),
         );
   if (typeNodes.length === 0) {
-    issue(
-      errors,
-      chartPart,
-      "missing-chart-type",
-      "图表部件缺少原生坐标系图表类型",
-    );
+    issue(errors, chartPart, "missing-chart-type", "图表部件缺少原生图表类型");
   }
   const types = typeNodes
     .map(({ localName }) => localName)

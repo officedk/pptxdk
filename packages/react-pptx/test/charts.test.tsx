@@ -572,6 +572,265 @@ describe("原生坐标系图表", () => {
     );
   });
 
+  it("写出原生饼图与环形图并保留适用样式及工作簿数据", async () => {
+    const categories = ["线上 & <门店> 😀", "合作门店", "空值"];
+    const pieSeries = {
+      name: "渠道 & mix",
+      values: [72.5, 27.5, null],
+      points: {
+        0: { color: "#CC3300", labelColor: "#FFFFFF" },
+        1: { color: "#336699" },
+        2: { color: "#999999" },
+      },
+    } as const;
+    const doughnutSeries = {
+      name: "Q1",
+      values: [10, null, 30],
+      points: {
+        0: { color: "#227744" },
+        2: { color: "#AA8822", labelColor: "#FFFFFF" },
+      },
+    } as const;
+    const result = await build(
+      <Deck width={800} height={600}>
+        <Slide slideId="pie-and-doughnut">
+          <Chart
+            testId="pie"
+            kind="pie"
+            x={20}
+            y={20}
+            width={350}
+            height={350}
+            data={{ categories, series: [pieSeries] }}
+            explosion={25.5}
+            firstSliceAngle={359.5}
+            enter={fade({ duration: 500 })}
+            legend="top"
+            dataLabels={{
+              value: true,
+              percent: true,
+              category: true,
+              position: "outsideEnd",
+              numberFormat: "0.0%",
+              style: {
+                fontFamily: "Aptos",
+                fontSize: "12pt",
+                color: "#112233",
+              },
+            }}
+          />
+          <Chart
+            testId="doughnut"
+            kind="doughnut"
+            x={410}
+            y={20}
+            width={350}
+            height={350}
+            data={{ categories, series: [doughnutSeries] }}
+            explosion={400}
+            firstSliceAngle={360}
+            holeSize={89.5}
+            legend={false}
+            dataLabels={{
+              value: true,
+              category: true,
+              position: "center",
+            }}
+          />
+        </Slide>
+      </Deck>,
+    );
+
+    const parts = unzipSync(result.pptx);
+    const file = await validatePptx(result.pptx);
+    assert.deepEqual(file.errors, []);
+    const chartObjects = result.report.slides[0]?.objects ?? [];
+    assert.deepEqual(
+      chartObjects.map(({ kind, name, testId }) => [kind, name, testId]),
+      [
+        ["chart", "pie", "pie"],
+        ["chart", "doughnut", "doughnut"],
+      ],
+    );
+    assert.deepEqual(
+      file.slides[0]?.objects.map(({ chart }) => chart?.types),
+      [["pieChart"], ["doughnutChart"]],
+    );
+    assert.deepEqual(file.slides[0]?.objects[0]?.chart?.series, [
+      { name: "渠道 & mix", categories, values: [72.5, 27.5, null] },
+    ]);
+    assert.deepEqual(
+      file.slides[0]?.objects[0]?.chart?.embeddedWorkbook?.series,
+      [{ name: "渠道 & mix", categories, values: [72.5, 27.5, null] }],
+    );
+    assert.deepEqual(file.slides[0]?.objects[1]?.chart?.series, [
+      { name: "Q1", categories, values: [10, null, 30] },
+    ]);
+    assert.deepEqual(
+      file.slides[0]?.objects[1]?.chart?.embeddedWorkbook?.series,
+      [{ name: "Q1", categories, values: [10, null, 30] }],
+    );
+
+    const pieXml = strFromU8(parts["ppt/charts/chart1.xml"]!);
+    assert.ok(pieXml.includes("<c:pieChart>"));
+    assert.ok(pieXml.includes('<c:explosion val="26"/>'));
+    assert.ok(pieXml.includes('<c:firstSliceAng val="360"/>'));
+    assert.ok(pieXml.includes('<c:legendPos val="t"/>'));
+    assert.ok(pieXml.includes('<c:dLblPos val="outEnd"/>'));
+    assert.ok(
+      pieXml.includes('<c:numFmt formatCode="0.0%" sourceLinked="0"/>'),
+    );
+    assert.ok(pieXml.includes('<c:showVal val="1"/>'));
+    assert.ok(pieXml.includes('<c:showPercent val="1"/>'));
+    assert.ok(pieXml.includes('<c:showCatName val="1"/>'));
+    assert.ok(pieXml.includes('<a:latin typeface="Aptos"/>'));
+    assert.ok(pieXml.includes('<a:srgbClr val="CC3300"/>'));
+    assert.ok(pieXml.includes('<a:srgbClr val="FFFFFF"/>'));
+    assert.ok(pieXml.includes("线上 &amp; &lt;门店&gt; 😀"));
+    assert.ok(!pieXml.includes("<c:catAx"));
+    assert.ok(!pieXml.includes("<c:valAx"));
+    const slideXml = strFromU8(parts["ppt/slides/slide1.xml"]!);
+    assert.ok(slideXml.includes(`<p:spTgt spid="${chartObjects[0]?.id}">`));
+    assert.ok(!slideXml.includes("<p:bldP"));
+
+    const doughnutXml = strFromU8(parts["ppt/charts/chart2.xml"]!);
+    assert.ok(doughnutXml.includes("<c:doughnutChart>"));
+    assert.ok(doughnutXml.includes('<c:explosion val="400"/>'));
+    assert.ok(doughnutXml.includes('<c:firstSliceAng val="360"/>'));
+    assert.ok(doughnutXml.includes('<c:holeSize val="90"/>'));
+    assert.ok(doughnutXml.includes('<c:dLblPos val="ctr"/>'));
+    assert.ok(!doughnutXml.includes("<c:legend>"));
+    assert.ok(!doughnutXml.includes("<c:catAx"));
+    assert.ok(!doughnutXml.includes("<c:valAx"));
+
+    const pieWorkbook = unzipSync(
+      parts[file.slides[0]?.objects[0]?.chart?.embeddedWorkbook?.part ?? ""]!,
+    );
+    const pieSheet = strFromU8(pieWorkbook["xl/worksheets/sheet1.xml"]!);
+    for (const value of [
+      "线上 &amp; &lt;门店&gt; 😀",
+      "合作门店",
+      "空值",
+      "渠道 &amp; mix",
+      "<v>72.5</v>",
+      "<v>27.5</v>",
+    ])
+      assert.ok(pieSheet.includes(value), value);
+    assert.ok(!pieSheet.includes("<v></v>"));
+  });
+
+  it("拒绝饼图系列、数值和参数的非法组合", async () => {
+    const base = {
+      x: 0,
+      y: 0,
+      width: 200,
+      height: 120,
+      data: {
+        categories: ["A", "B"],
+        series: [{ name: "S", values: [1, 2] }],
+      },
+    } as const;
+    const twoSeries = {
+      ...base.data,
+      series: [
+        { name: "S", values: [1, 2] },
+        { name: "T", values: [3, 4] },
+      ],
+    } as const;
+    const invalidCases: {
+      readonly testId: string;
+      readonly code: string;
+      readonly props: ChartProps;
+    }[] = [
+      {
+        testId: "pie-series-count",
+        code: "invalid-data",
+        props: { ...base, kind: "pie", data: twoSeries },
+      },
+      {
+        testId: "doughnut-series-count",
+        code: "invalid-data",
+        props: { ...base, kind: "doughnut", data: twoSeries },
+      },
+      {
+        testId: "pie-negative-value",
+        code: "invalid-data",
+        props: {
+          ...base,
+          kind: "pie",
+          data: {
+            categories: ["A", "B"],
+            series: [{ name: "S", values: [1, -2] }],
+          },
+        },
+      },
+      {
+        testId: "pie-angle-overflow",
+        code: "invalid-chart-option",
+        props: { ...base, kind: "pie", firstSliceAngle: 360.1 },
+      },
+      {
+        testId: "doughnut-hole-underflow",
+        code: "invalid-chart-option",
+        props: { ...base, kind: "doughnut", holeSize: 9.9 },
+      },
+      {
+        testId: "doughnut-hole-overflow",
+        code: "invalid-chart-option",
+        props: { ...base, kind: "doughnut", holeSize: 90.1 },
+      },
+      {
+        testId: "pie-explosion-underflow",
+        code: "invalid-chart-option",
+        props: { ...base, kind: "pie", explosion: -1 },
+      },
+      {
+        testId: "pie-explosion-overflow",
+        code: "invalid-chart-option",
+        props: { ...base, kind: "pie", explosion: 4_294_967_296 },
+      },
+      {
+        testId: "pie-hole-size",
+        code: "invalid-chart-option",
+        props: {
+          ...base,
+          kind: "pie",
+          holeSize: 50,
+        } as unknown as ChartProps,
+      },
+      {
+        testId: "doughnut-stacking",
+        code: "invalid-chart-option",
+        props: {
+          ...base,
+          kind: "doughnut",
+          stacking: "stacked",
+        } as unknown as ChartProps,
+      },
+    ];
+
+    for (const { testId, code, props } of invalidCases) {
+      await assert.rejects(
+        build(
+          <Deck>
+            <Slide slideId={testId}>
+              <Chart testId={testId} {...props} />
+            </Slide>
+          </Deck>,
+        ),
+        (error: unknown) => {
+          assert.ok(error instanceof BuildError);
+          assert.equal(error.diagnostics[0]?.code, code);
+          assert.match(
+            error.diagnostics[0]?.path ?? "",
+            new RegExp(`chart\\[${testId}\\]`, "u"),
+          );
+          return true;
+        },
+      );
+    }
+  });
+
   it("报告损坏的图表到工作簿部件关系", async () => {
     const result = await build(
       <Deck>

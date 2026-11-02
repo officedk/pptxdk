@@ -32,11 +32,91 @@ export type BuildOptions = {
   readonly signal?: AbortSignal;
 };
 
-export type Box = {
+export type GeometryBox = {
   readonly x: number;
   readonly y: number;
   readonly width: number;
   readonly height: number;
+};
+
+/** 固定画布长度；数值按像素解释，auto 由布局容器结合内容决定。 */
+export type LayoutLength = number | "auto";
+
+export type LayoutSpacing =
+  | number
+  | readonly [vertical: number, horizontal: number]
+  | readonly [top: number, right: number, bottom: number, left: number];
+
+/** 固定画布支持的块与弹性样式子集，不包含网格或绝对定位。 */
+export type LayoutStyle = {
+  readonly display?: "block" | "flex";
+  readonly width?: LayoutLength;
+  readonly height?: LayoutLength;
+  readonly minWidth?: LayoutLength;
+  readonly minHeight?: LayoutLength;
+  readonly maxWidth?: LayoutLength;
+  readonly maxHeight?: LayoutLength;
+  readonly margin?: LayoutSpacing;
+  readonly marginTop?: number;
+  readonly marginRight?: number;
+  readonly marginBottom?: number;
+  readonly marginLeft?: number;
+  readonly padding?: LayoutSpacing;
+  readonly paddingTop?: number;
+  readonly paddingRight?: number;
+  readonly paddingBottom?: number;
+  readonly paddingLeft?: number;
+  readonly gap?: number;
+  readonly rowGap?: number;
+  readonly columnGap?: number;
+  readonly flexDirection?: "row" | "column" | "row-reverse" | "column-reverse";
+  readonly flexWrap?: "nowrap" | "wrap";
+  readonly justifyContent?:
+    | "start"
+    | "end"
+    | "center"
+    | "flex-start"
+    | "flex-end"
+    | "space-between"
+    | "space-around"
+    | "space-evenly";
+  readonly alignItems?:
+    | "start"
+    | "end"
+    | "center"
+    | "stretch"
+    | "flex-start"
+    | "flex-end"
+    | "baseline";
+  readonly alignSelf?:
+    | "auto"
+    | "start"
+    | "end"
+    | "center"
+    | "stretch"
+    | "flex-start"
+    | "flex-end"
+    | "baseline";
+  readonly alignContent?:
+    | "start"
+    | "end"
+    | "center"
+    | "flex-start"
+    | "flex-end"
+    | "space-between"
+    | "space-around"
+    | "space-evenly"
+    | "stretch";
+  readonly flex?: number;
+  readonly flexGrow?: number;
+  readonly flexShrink?: number;
+  readonly flexBasis?: LayoutLength;
+};
+
+/** 透明布局容器；它只安排子项，不要求生成对应的原生演示对象。 */
+export type BoxProps = ElementProps & {
+  readonly testId?: string;
+  readonly style?: LayoutStyle;
 };
 
 export type ObjectObservation = {
@@ -45,10 +125,22 @@ export type ObjectObservation = {
   readonly name: string;
   readonly testId?: string;
   readonly geometry?: string;
-  readonly box?: Box;
+  readonly box?: GeometryBox;
   readonly text?: string;
   readonly table?: NativeTableObservation;
   readonly members?: readonly ObjectObservation[];
+};
+
+export type LayoutChildReference = {
+  readonly kind: "layout" | "object";
+  readonly id: number;
+};
+
+export type LayoutObservation = {
+  readonly id: number;
+  readonly testId?: string;
+  readonly box: GeometryBox;
+  readonly children: readonly LayoutChildReference[];
 };
 
 /** 表格报告保留零基行列索引，与其原生合并范围一一对应。 */
@@ -69,6 +161,7 @@ export type SlideObservation = {
   readonly id: string;
   readonly index: number;
   readonly objects: readonly ObjectObservation[];
+  readonly layouts?: readonly LayoutObservation[];
   readonly capabilities?: Readonly<Record<string, unknown>>;
 };
 
@@ -149,12 +242,32 @@ export type CapabilityPackagePart = {
 export type CapabilityContext = {
   readonly id: number;
   readonly path: string;
+  readonly layoutBox?: GeometryBox;
   /** 使用同一组已注册模块递归编译原生子对象。 */
   compileChildren(children: readonly CapabilityChild[]): CapabilityChildren;
   /** 将二进制资源加入 PPTX，并返回当前页面对应的关系标识。 */
   registerResource(resource: CapabilityResource): string;
   /** 注册当前页面引用的原生部件及其直接关联的二进制部件。 */
   registerPackagePart(part: CapabilityPackagePart): string;
+};
+
+export type CapabilityLayoutRequest = {
+  /** 当前布局算法可提供的内容宽度，单位为像素。 */
+  readonly availableWidth?: number;
+};
+
+/** 能力模块可提供的固有尺寸及主轴 min-content 尺寸，均以像素表示。 */
+export type CapabilityLayoutMeasurement = {
+  /** 按请求宽度排版后的自然宽度。 */
+  readonly width?: number;
+  /** 按请求宽度排版后的自然高度。 */
+  readonly height?: number;
+  /** 计算宽度方向自动最小尺寸时采用的最小内容宽度。 */
+  readonly minContentWidth?: number;
+  /** 计算高度方向自动最小尺寸时采用的最小内容高度。 */
+  readonly minContentHeight?: number;
+  /** 有可靠文字度量时，首行基线距对象顶边的像素距离。 */
+  readonly baseline?: number;
 };
 
 export type CapabilityOutput = {
@@ -182,6 +295,11 @@ export type CapabilityOutput = {
 export type ObjectCapabilityModule = {
   /** 声明组件的宿主类型，例如 `rp:shape`。 */
   readonly declaration: string;
+  /** 布局需要固有尺寸或主轴最小内容尺寸时，使用能力自身的内容度量提供依据。 */
+  measureLayout?(
+    input: CapabilityInput,
+    request: CapabilityLayoutRequest,
+  ): CapabilityLayoutMeasurement | undefined;
   compile(input: CapabilityInput, context: CapabilityContext): CapabilityOutput;
 };
 

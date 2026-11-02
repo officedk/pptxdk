@@ -36,7 +36,8 @@
   "dependencies": {
     "fflate": "catalog:",
     "react": "catalog:",
-    "react-reconciler": "catalog:"
+    "react-reconciler": "catalog:",
+    "yoga-layout": "catalog:"
   },
   "devDependencies": {
     "@react-pptx/tooling-config": "workspace:*",

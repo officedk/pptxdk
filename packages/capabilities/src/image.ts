@@ -5,8 +5,11 @@ import {
   CapabilityError,
   pxToEmu,
   xmlEscape,
+  type CapabilityLayoutMeasurement,
+  type CapabilityLayoutRequest,
   type CapabilityInput,
   type CapabilityModule,
+  type LayoutStyle,
 } from "@react-pptx/core";
 import type { ReactNode } from "react";
 
@@ -30,6 +33,7 @@ export type ImageProps = MotionProps & {
   readonly y?: number;
   readonly width?: number;
   readonly height?: number;
+  readonly style?: LayoutStyle;
   /** `fill` 拉伸，`cover` 居中裁切，`contain` 保留比例；缺省为 `fill`。 */
   readonly fit?: "fill" | "cover" | "contain";
   /** 显式裁切每边的原图比例；提供后优先于 `fit`。 */
@@ -60,6 +64,7 @@ const allowedParameters = [
   "y",
   "width",
   "height",
+  "style",
   "fit",
   "crop",
   "enter",
@@ -359,6 +364,19 @@ function dimension(
   return actual;
 }
 
+function requestedDimension(
+  style: Readonly<Record<string, unknown>>,
+  props: Readonly<Record<string, unknown>>,
+  name: "width" | "height",
+): unknown {
+  const styled = style[name];
+  return styled === undefined
+    ? props[name]
+    : typeof styled === "number"
+      ? styled
+      : undefined;
+}
+
 function cropValues(value: unknown): Record<string, number> | undefined {
   if (value === undefined) return undefined;
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
@@ -424,6 +442,33 @@ function imageXml(
 /** 图片模块读取并验证正式资源，再输出带媒体关系的原生 picture 对象。 */
 export const imageCapability: CapabilityModule = {
   declaration: "rp:image",
+  measureLayout(
+    input: CapabilityInput,
+    request: CapabilityLayoutRequest,
+  ): CapabilityLayoutMeasurement {
+    const props = input.props;
+    const image = readImage(props["src"]);
+    const style =
+      typeof props["style"] === "object" && props["style"] !== null
+        ? (props["style"] as Record<string, unknown>)
+        : {};
+    const requestedWidth = requestedDimension(style, props, "width");
+    const requestedHeight = requestedDimension(style, props, "height");
+    const declaredWidth =
+      typeof requestedWidth === "number" ? requestedWidth : undefined;
+    const declaredHeight =
+      typeof requestedHeight === "number" ? requestedHeight : undefined;
+    const width =
+      declaredWidth ??
+      Math.min(image.width, request.availableWidth ?? image.width);
+    const height = declaredHeight ?? (width * image.height) / image.width;
+    return {
+      width,
+      height,
+      minContentWidth: image.width,
+      minContentHeight: image.height,
+    };
+  },
   compile(input: CapabilityInput, context) {
     const props = input.props;
     const unknown = Object.keys(props).find(
@@ -450,22 +495,31 @@ export const imageCapability: CapabilityModule = {
       throw new CapabilityError("invalid-parameter", "alt 必须是字符串");
     }
     const image = readImage(props["src"]);
-    const x = dimension(props["x"], "x", 0);
-    const y = dimension(props["y"], "y", 0);
+    const imageStyle =
+      typeof props["style"] === "object" && props["style"] !== null
+        ? (props["style"] as Record<string, unknown>)
+        : {};
+    const requestedWidth = requestedDimension(imageStyle, props, "width");
+    const requestedHeight = requestedDimension(imageStyle, props, "height");
+    const x = dimension(context.layoutBox?.x ?? props["x"], "x", 0);
+    const y = dimension(context.layoutBox?.y ?? props["y"], "y", 0);
     let width: number;
     let height: number;
-    if (props["width"] === undefined && props["height"] === undefined) {
+    if (context.layoutBox !== undefined) {
+      width = dimension(context.layoutBox.width, "width");
+      height = dimension(context.layoutBox.height, "height");
+    } else if (requestedWidth === undefined && requestedHeight === undefined) {
       width = image.width;
       height = image.height;
-    } else if (props["width"] === undefined) {
-      height = dimension(props["height"], "height");
+    } else if (requestedWidth === undefined) {
+      height = dimension(requestedHeight, "height");
       width = (height * image.width) / image.height;
-    } else if (props["height"] === undefined) {
-      width = dimension(props["width"], "width");
+    } else if (requestedHeight === undefined) {
+      width = dimension(requestedWidth, "width");
       height = (width * image.height) / image.width;
     } else {
-      width = dimension(props["width"], "width");
-      height = dimension(props["height"], "height");
+      width = dimension(requestedWidth, "width");
+      height = dimension(requestedHeight, "height");
     }
     width = dimension(width, "width");
     height = dimension(height, "height");

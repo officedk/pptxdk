@@ -6,6 +6,7 @@ import type { ReactNode } from "react";
 import { CapabilityError, BuildError } from "#/diagnostics.ts";
 import { HostNode, type HostChild, type HostContainer } from "#/host/nodes.ts";
 import { withHostTree } from "#/host/reconciler.ts";
+import { LayoutPass, type LayoutPassResult } from "#/layout.ts";
 import {
   assertXml10Characters,
   pptxParts,
@@ -30,6 +31,8 @@ import {
   type CapabilityResource,
   type Diagnostic,
   type Extension,
+  type LayoutChildReference,
+  type LayoutObservation,
   type ObjectCapabilityModule,
   type ObjectObservation,
   type SlideCapabilityModule,
@@ -41,6 +44,7 @@ import {
 type SlideBuild = {
   readonly id: string;
   readonly objects: readonly ObjectObservation[];
+  readonly layouts: readonly LayoutObservation[];
   readonly shapeXml: string;
   readonly slideXml: string;
   readonly capabilities: Readonly<Record<string, unknown>>;
@@ -66,6 +70,7 @@ type SlideBuildState = {
   readonly diagnostics: Diagnostic[];
   readonly relationships: PptxRelationship[];
   readonly relationshipIds: Map<string, string>;
+  readonly layouts: LayoutObservation[];
   readonly contributions: CapabilityContribution[];
 };
 
@@ -75,6 +80,11 @@ type BuildContext = {
   readonly modules: ReadonlyMap<string, CapabilityModule>;
   readonly target: Target;
   readonly dimensions: Dimensions;
+  readonly layout: LayoutPassResult;
+};
+
+type CompiledChildren = CapabilityChildren & {
+  readonly references: readonly LayoutChildReference[];
 };
 
 type Dimensions = { readonly width: number; readonly height: number };
@@ -582,9 +592,10 @@ function compileChildren(
   children: readonly CapabilityChild[],
   context: BuildContext,
   parentPath: string,
-): CapabilityChildren {
+): CompiledChildren {
   const xml: string[] = [];
   const objects: ObjectObservation[] = [];
+  const references: LayoutChildReference[] = [];
   children.forEach((child, index) => {
     if (!("props" in child)) {
       if (child.text.trim() !== "") {
@@ -600,6 +611,28 @@ function compileChildren(
     }
 
     const path = `${parentPath}/${capabilityLabel(child, index)}`;
+    if (child.type === "rp:box") {
+      const box = context.layout.boxes.get(child);
+      if (box === undefined) {
+        context.slide.diagnostics.push(
+          diagnostic(path, "layout-unavailable", "Box 缺少布局结果"),
+        );
+        return;
+      }
+      const id = context.slide.nextId++;
+      const compiled = compileChildren(child.children, context, path);
+      const testId = child.props["testId"];
+      context.slide.layouts.push({
+        id,
+        ...(typeof testId === "string" ? { testId } : {}),
+        box,
+        children: compiled.references,
+      });
+      xml.push(compiled.xml);
+      objects.push(...compiled.objects);
+      references.push({ kind: "layout", id });
+      return;
+    }
     const module = context.modules.get(child.type);
     if (module === undefined || !isObjectCapability(module)) {
       context.slide.diagnostics.push(
@@ -613,10 +646,12 @@ function compileChildren(
     }
     const id = context.slide.nextId++;
     const input: CapabilityInput = child;
+    const layoutBox = context.layout.boxes.get(child);
     try {
       const output = module.compile(input, {
         id,
         path,
+        ...(layoutBox === undefined ? {} : { layoutBox }),
         compileChildren(nested) {
           return compileChildren(nested, context, path);
         },
@@ -693,6 +728,7 @@ function compileChildren(
         }
       }
       objects.push(observation);
+      references.push({ kind: "object", id: observation.id });
     } catch (error) {
       context.slide.diagnostics.push(
         error instanceof CapabilityError
@@ -709,7 +745,7 @@ function compileChildren(
       );
     }
   });
-  return { xml: xml.join(""), objects };
+  return { xml: xml.join(""), objects, references };
 }
 
 function compileSlide(
@@ -725,6 +761,7 @@ function compileSlide(
     diagnostics: [],
     relationships: [],
     relationshipIds: new Map(),
+    layouts: [],
     contributions: [],
   };
   const path = `deck/slide[${id}]`;
@@ -733,9 +770,19 @@ function compileSlide(
       diagnostic(path, "unexpected-text", "Slide 页面不能直接包含文本"),
     );
   }
+  const children = node.children.map(capabilityChild);
+  const layout = new LayoutPass(modules, dimensions).run(children, path);
+  document.warnings.push(...layout.warnings);
   const compiled = compileChildren(
-    node.children.map(capabilityChild),
-    { document, slide, modules, target, dimensions },
+    children,
+    {
+      document,
+      slide,
+      modules,
+      target,
+      dimensions,
+      layout,
+    },
     path,
   );
   const slideXml: {
@@ -806,6 +853,7 @@ function compileSlide(
   return {
     id,
     objects: compiled.objects,
+    layouts: [...slide.layouts].sort((left, right) => left.id - right.id),
     shapeXml: compiled.xml,
     slideXml: slideXml
       .map((item, index) => ({ item, index }))
@@ -879,6 +927,7 @@ function compileDocument(
       id: slide.id,
       index: index + 1,
       objects: slide.objects,
+      ...(slide.layouts.length > 0 && { layouts: slide.layouts }),
       ...(Object.keys(slide.capabilities).length > 0 && {
         capabilities: slide.capabilities,
       }),

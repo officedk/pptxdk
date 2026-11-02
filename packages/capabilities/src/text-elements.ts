@@ -1,3 +1,4 @@
+import type { LayoutStyle } from "@react-pptx/core";
 import { createElement, type ReactNode } from "react";
 
 import { motionElement, type MotionProps } from "./motion-api.ts";
@@ -6,11 +7,11 @@ import type { ParagraphStyle, TextStyle } from "./text-service.ts";
 export type TextProps = MotionProps & {
   readonly testId?: string;
   readonly name?: string;
-  readonly x: number;
-  readonly y: number;
-  readonly width: number;
-  readonly height: number | "auto";
-  readonly style?: TextStyle;
+  readonly x?: number;
+  readonly y?: number;
+  readonly width?: number;
+  readonly height?: number | "auto";
+  readonly style?: TextStyle & LayoutStyle;
   readonly children?: ReactNode;
 };
 

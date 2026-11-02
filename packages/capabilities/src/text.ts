@@ -2,12 +2,18 @@ import {
   CapabilityError,
   pxToEmu,
   xmlEscape,
+  type CapabilityLayoutMeasurement,
+  type CapabilityLayoutRequest,
   type CapabilityInput,
   type CapabilityModule,
 } from "@react-pptx/core";
 
 import { motionAnnotations } from "./motion-api.ts";
-import { textExtent, writeTextBody } from "./text-service.ts";
+import {
+  measureTextLayout,
+  textExtent,
+  writeTextBody,
+} from "./text-service.ts";
 
 export { P, Span, Text } from "./text-elements.ts";
 export type {
@@ -42,6 +48,10 @@ const allowedParameters = [
   "__motionEnabled",
   "__motionStep",
 ] as const;
+
+function record(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
 
 function optionalName(
   value: unknown,
@@ -88,8 +98,37 @@ function height(
 ):
   | { readonly contentSized: true }
   | { readonly contentSized: false; readonly value: number } {
-  if (value === "auto") return { contentSized: true };
+  if (value === "auto" || value === undefined) return { contentSized: true };
   return { contentSized: false, value: size(value, "height") };
+}
+
+const textStyleProperties = new Set([
+  "fontFamily",
+  "fontSize",
+  "fontWeight",
+  "fontStyle",
+  "color",
+  "lineHeight",
+  "verticalAlign",
+]);
+
+function textStyle(value: unknown): unknown {
+  if (!record(value)) return value;
+  return Object.fromEntries(
+    Object.entries(value).filter(([key]) => textStyleProperties.has(key)),
+  );
+}
+
+function layoutStyleValue(
+  input: CapabilityInput,
+  name: "width" | "height",
+): number | "auto" | undefined {
+  const value = input.props["style"];
+  if (!record(value)) return undefined;
+  const dimension = value[name];
+  return typeof dimension === "number" || dimension === "auto"
+    ? dimension
+    : undefined;
 }
 
 function textBoxXml(
@@ -109,6 +148,39 @@ function textBoxXml(
 /** 固定区域文本框能力；具体文字服务由文本框与其他原生对象共享。 */
 export const textCapability: CapabilityModule = {
   declaration: "rp:text",
+  measureLayout(
+    input: CapabilityInput,
+    request: CapabilityLayoutRequest,
+  ): CapabilityLayoutMeasurement | undefined {
+    const style = textStyle(input.props["style"]);
+    const heightStyle = layoutStyleValue(input, "height");
+    const isContentSized =
+      heightStyle === "auto" ||
+      (heightStyle === undefined &&
+        (input.props["height"] === "auto" ||
+          input.props["height"] === undefined));
+    const width =
+      request.availableWidth ??
+      layoutStyleValue(input, "width") ??
+      input.props["width"];
+    try {
+      return measureTextLayout(
+        input.children,
+        style,
+        typeof width === "number" ? width : undefined,
+      );
+    } catch (error) {
+      if (
+        !isContentSized &&
+        error instanceof CapabilityError &&
+        (error.code === "font-measurement-unavailable" ||
+          error.code === "font-missing-glyph")
+      ) {
+        return undefined;
+      }
+      throw error;
+    }
+  },
   compile(input: CapabilityInput, context) {
     const unknown = Object.keys(input.props).find(
       (key) => !(allowedParameters as readonly string[]).includes(key),
@@ -121,24 +193,40 @@ export const textCapability: CapabilityModule = {
     }
     const testId = optionalName(input.props["testId"], "testId");
     const requestedName = optionalName(input.props["name"], "name");
+    const styleWidth = layoutStyleValue(input, "width");
+    const styleHeight = layoutStyleValue(input, "height");
     const dimensions = {
-      x: coordinate(input.props["x"], "x"),
-      y: coordinate(input.props["y"], "y"),
-      width: size(input.props["width"], "width"),
+      x: coordinate(context.layoutBox?.x ?? input.props["x"], "x"),
+      y: coordinate(context.layoutBox?.y ?? input.props["y"], "y"),
+      width: size(
+        context.layoutBox?.width ?? styleWidth ?? input.props["width"],
+        "width",
+      ),
     };
-    const requestedHeight = height(input.props["height"]);
-    const body = writeTextBody(input.children, input.props["style"], "top", {
-      width: dimensions.width,
-      ...(requestedHeight.contentSized
-        ? {}
-        : { height: requestedHeight.value }),
-      contentSized: requestedHeight.contentSized,
-    });
+    const requestedHeight = height(styleHeight ?? input.props["height"]);
+    const measuredHeight = requestedHeight.contentSized
+      ? undefined
+      : requestedHeight.value;
+    const outputHeight = context.layoutBox?.height ?? measuredHeight;
+    const body = writeTextBody(
+      input.children,
+      textStyle(input.props["style"]),
+      "top",
+      {
+        width: dimensions.width,
+        ...(outputHeight === undefined ? {} : { height: outputHeight }),
+        contentSized: requestedHeight.contentSized,
+      },
+    );
     const box = {
       ...dimensions,
-      height: requestedHeight.contentSized
-        ? size(body.measurement?.height, "height")
-        : requestedHeight.value,
+      height: size(
+        context.layoutBox?.height ??
+          (requestedHeight.contentSized
+            ? body.measurement?.height
+            : requestedHeight.value),
+        "height",
+      ),
     };
     const name = requestedName ?? testId ?? `Text ${context.id - 1}`;
     const annotations = motionAnnotations(input.props, {

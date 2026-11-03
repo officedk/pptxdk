@@ -2,6 +2,7 @@ import {
   CapabilityError,
   type BoxProps as CoreBoxProps,
   type CapabilityAnnotation,
+  type GeometryBox,
 } from "@react-pptx/core";
 import {
   createContext,
@@ -536,6 +537,19 @@ type MotionTarget = {
   readonly paragraphCount?: number;
   readonly chartSeriesCount?: number;
   readonly chartCategoryCount?: number;
+  readonly box?: GeometryBox;
+  readonly rotationDegrees?: number;
+  readonly hasBackground?: boolean;
+  readonly members?: readonly MotionNativeMember[];
+};
+
+type MotionNativeMember = {
+  readonly id: number;
+  readonly kind: string;
+  readonly name: string;
+  readonly testId?: string;
+  readonly box?: GeometryBox;
+  readonly members?: readonly MotionNativeMember[];
 };
 
 type MotionValue = {
@@ -579,6 +593,17 @@ export type MotionStepObservation = {
   readonly effects: readonly MotionEffectObservation[];
 };
 
+/** 一个逻辑 Group 效果在 PPTX 中对应的真实成员效果与 timing 身份。 */
+export type MotionNativeProjection = {
+  readonly logicalTargetId: number;
+  readonly logicalEffectIndex: number;
+  readonly preset: EffectPreset;
+  readonly nativeEffects: readonly {
+    readonly targetId: number;
+    readonly timingId: number;
+  }[];
+};
+
 export type MotionScopeObservation = {
   readonly id: string;
   readonly parentId?: string;
@@ -600,6 +625,7 @@ export type MotionScopeObservation = {
 export type MotionObservation = {
   readonly steps: readonly MotionStepObservation[];
   readonly scopes?: readonly MotionScopeObservation[];
+  readonly nativeProjections?: readonly MotionNativeProjection[];
 };
 
 function fail(code: string, message: string): never {

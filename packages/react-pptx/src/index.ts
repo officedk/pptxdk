@@ -207,6 +207,7 @@ export type {
   MotionMembership,
   MotionMomentObservation,
   MotionMomentRef,
+  MotionNativeProjection,
   MotionMoment,
   MotionMomentOffset,
   MotionObservation,

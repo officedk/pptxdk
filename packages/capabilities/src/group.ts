@@ -56,6 +56,30 @@ type EmuBox = {
   readonly height: number;
 };
 
+type MotionNativeMember = {
+  readonly id: number;
+  readonly kind: string;
+  readonly name: string;
+  readonly testId?: string;
+  readonly box?: NonNullable<ObjectObservation["box"]>;
+  readonly members?: readonly MotionNativeMember[];
+};
+
+function motionMembers(
+  objects: readonly ObjectObservation[],
+): readonly MotionNativeMember[] {
+  return objects.map((object) => ({
+    id: object.id,
+    kind: object.kind,
+    name: object.name,
+    ...(object.testId === undefined ? {} : { testId: object.testId }),
+    ...(object.box === undefined ? {} : { box: object.box }),
+    ...(object.members === undefined
+      ? {}
+      : { members: motionMembers(object.members) }),
+  }));
+}
+
 function optionalText(
   props: Readonly<Record<string, unknown>>,
   name: "testId" | "name" | "part",
@@ -181,12 +205,22 @@ export const groupCapability: CapabilityModule = {
     };
     const name =
       context.morphName ?? requestedName ?? testId ?? `Group ${context.id - 1}`;
+    const style = input.props["style"];
+    const styleRecord =
+      typeof style === "object" && style !== null && !Array.isArray(style)
+        ? (style as Record<string, unknown>)
+        : {};
+    const rotation = styleRecord["rotate"];
+    const members = motionMembers(compiled.objects);
     const annotations = motionAnnotations(input.props, {
       kind: "group",
       name,
       ...(testId === undefined ? {} : { testId }),
       textBody: false,
       filled: false,
+      box: outputGeometry,
+      rotationDegrees: typeof rotation === "number" ? rotation : 0,
+      members,
     });
     let escapedName: string;
     try {
@@ -197,11 +231,6 @@ export const groupCapability: CapabilityModule = {
         "Group.name 含 XML 1.0 不允许的字符",
       );
     }
-    const style = input.props["style"];
-    const rotation =
-      typeof style === "object" && style !== null && !Array.isArray(style)
-        ? (style as Record<string, unknown>)["rotate"]
-        : undefined;
     return {
       xml: groupXml(
         context.id,

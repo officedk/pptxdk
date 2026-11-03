@@ -67,6 +67,8 @@ export type FileObject = {
     readonly width: number;
     readonly height: number;
   };
+  /** 实际 a:xfrm@rot；未出现时表示原始角度为 0°。 */
+  readonly rotationDegrees?: number;
   readonly image?: {
     readonly relationshipId: string;
     readonly part: string;
@@ -86,6 +88,8 @@ export type FileObject = {
   readonly groupTransform?: {
     readonly childOffset: { readonly x: number; readonly y: number };
     readonly childExtent: { readonly width: number; readonly height: number };
+    readonly flipH?: boolean;
+    readonly flipV?: boolean;
   };
   readonly members?: readonly FileObject[];
   readonly text?: FileText;
@@ -223,11 +227,38 @@ export type FileAnimationTargetRange =
       readonly categoryIndex: number;
     };
 
+export type FileAnimationKeyframe = {
+  readonly time?: number;
+  readonly formula?: string;
+  readonly value?: string;
+  readonly valueType?: string;
+};
+
+/** 实际文件行为节点；`from`/`to` 是端点视图，含公式时完整轨迹保存在 keyframes。 */
+export type FileAnimationBehavior = {
+  readonly behavior: "set" | "anim" | "animEffect" | "animRot" | "animClr";
+  readonly targetId: number;
+  readonly targetType: "object" | "paragraph" | "background" | "chart";
+  readonly targetRange?: FileAnimationTargetRange;
+  readonly attributeNames: readonly string[];
+  readonly durationMs?: number;
+  readonly from?: string;
+  readonly to?: string;
+  readonly calculationMode?: string;
+  /** 文件中实际 `p:tav` 的顺序；公式按相邻节点的数值关键值求值。 */
+  readonly keyframes?: readonly FileAnimationKeyframe[];
+  readonly additive?: string;
+  readonly filter?: string;
+};
+
 export type FileAnimationEffect = {
   readonly targetId: number;
   readonly timingId: number;
   readonly targetRange?: FileAnimationTargetRange;
-  readonly nativeBuild?: "paragraph" | "series" | "category";
+  readonly nativeBuild?: "paragraph" | "allAtOnce" | "series" | "category";
+  readonly nativeBuildGroupId?: number;
+  readonly nativeBuildAnimBg?: boolean;
+  readonly nativeBehaviors?: readonly FileAnimationBehavior[];
   readonly kind: "entrance" | "emphasis";
   readonly preset:
     | "fade"
@@ -254,6 +285,567 @@ export type FileAnimationEffect = {
     readonly decelerate?: number;
   };
 };
+
+const textProjectionParagraphRoles: Partial<
+  Record<FileAnimationEffect["preset"], readonly string[]>
+> = {
+  fade: ["animEffect:fade"],
+  wipe: ["wipe"],
+  zoom: [
+    "anim:ppt_x",
+    "anim:ppt_y",
+    "anim:ppt_w",
+    "anim:ppt_h",
+    "animEffect:fade",
+  ],
+  fly: ["anim:ppt_x", "anim:ppt_y"],
+  floatUp: ["animEffect:fade", "anim:ppt_x", "anim:ppt_y"],
+  spinIn: [
+    "anim:ppt_w",
+    "anim:ppt_h",
+    "anim:style.rotation",
+    "anim:ppt_x",
+    "anim:ppt_y",
+    "animEffect:fade",
+  ],
+  stretch: ["anim:ppt_x", "anim:ppt_w", "anim:ppt_h"],
+  spin: ["animRot:r", "anim:ppt_x", "anim:ppt_y"],
+};
+
+const textProjectionBackgroundRoles: Partial<
+  Record<FileAnimationEffect["preset"], readonly string[]>
+> = {
+  fade: ["animEffect:fade"],
+  zoom: [
+    "anim:ppt_x",
+    "anim:ppt_y",
+    "anim:ppt_w",
+    "anim:ppt_h",
+    "animEffect:fade",
+  ],
+  fly: ["anim:ppt_x", "anim:ppt_y"],
+  floatUp: ["animEffect:fade", "anim:ppt_x", "anim:ppt_y"],
+  spinIn: [
+    "anim:ppt_x",
+    "anim:ppt_y",
+    "anim:ppt_w",
+    "anim:ppt_h",
+    "animRot:r",
+    "animEffect:fade",
+  ],
+  stretch: ["anim:ppt_x", "anim:ppt_w", "anim:ppt_h"],
+  spin: ["animRot:r", "anim:ppt_x", "anim:ppt_y"],
+};
+
+function animationBehaviorRole(behavior: FileAnimationBehavior): string {
+  return behavior.behavior === "animEffect"
+    ? `${behavior.behavior}:${behavior.filter ?? ""}`
+    : `${behavior.behavior}:${behavior.attributeNames.join(",")}`;
+}
+
+function hasRoles(
+  actual: readonly string[],
+  expected: readonly string[],
+): boolean {
+  if (actual.length !== expected.length) return false;
+  const normalize = (roles: readonly string[]) =>
+    [...roles].sort((left, right) => left.localeCompare(right));
+  const expectedRoles = normalize(expected);
+  return normalize(actual).every(
+    (role, index) => role === expectedRoles[index],
+  );
+}
+
+function isPositionBehavior(behavior: FileAnimationBehavior): boolean {
+  return (
+    behavior.behavior === "anim" &&
+    behavior.attributeNames.length === 1 &&
+    (behavior.attributeNames[0] === "ppt_x" ||
+      behavior.attributeNames[0] === "ppt_y")
+  );
+}
+
+/** 限定读取器本轮写出的共同中心旋转公式，不执行通用公式求值。 */
+type CenterRotationFormula = {
+  readonly axis: "ppt_x" | "ppt_y";
+  readonly centerX: number;
+  readonly centerY: number;
+  readonly angleDegrees: number;
+  readonly scaleToCenter: boolean;
+  readonly aspectRatio: number;
+};
+
+function closeGeometryNumber(left: number, right: number): boolean {
+  return (
+    Math.abs(left - right) <=
+    1e-12 * Math.max(1, Math.abs(left), Math.abs(right))
+  );
+}
+
+function parseCenterRotationFormula(
+  behavior: FileAnimationBehavior,
+): CenterRotationFormula | undefined {
+  const formula = behavior.keyframes?.[0]?.formula;
+  const axis = behavior.attributeNames[0];
+  if (formula === undefined || (axis !== "ppt_x" && axis !== "ppt_y")) {
+    return undefined;
+  }
+  const number = "(-?(?:\\d+(?:\\.\\d*)?|\\.\\d+))";
+  const xPattern = new RegExp(
+    `^${number}\\+(\\$\\*)?\\(\\(#ppt_x-${number}\\)\\*cos\\(\\(${number}\\*pi/180\\)\\*\\(1-\\$\\)\\)-\\(#ppt_y-${number}\\)\\*${number}\\*sin\\(\\(${number}\\*pi/180\\)\\*\\(1-\\$\\)\\)\\)-#ppt_x$`,
+    "u",
+  );
+  const yPattern = new RegExp(
+    `^${number}\\+(\\$\\*)?\\(\\(#ppt_x-${number}\\)\\*${number}\\*sin\\(\\(${number}\\*pi/180\\)\\*\\(1-\\$\\)\\)\\+\\(#ppt_y-${number}\\)\\*cos\\(\\(${number}\\*pi/180\\)\\*\\(1-\\$\\)\\)\\)-#ppt_y$`,
+    "u",
+  );
+  const match = (axis === "ppt_x" ? xPattern : yPattern).exec(formula);
+  if (match === null) return undefined;
+  const captures = match.slice(1);
+  const values = captures.map((value) =>
+    value === undefined || value === "" || value === "$*"
+      ? undefined
+      : Number(value),
+  );
+  const scaleToCenter = captures[1] === "$*";
+  let centerX: number | undefined;
+  let centerY: number | undefined;
+  let aspectRatio: number | undefined;
+  let angleA: number | undefined;
+  let angleB: number | undefined;
+  if (axis === "ppt_x") {
+    const [
+      leadingCenter,
+      ,
+      repeatedCenterX,
+      cosineAngle,
+      repeatedCenterY,
+      ratio,
+      sineAngle,
+    ] = values;
+    if (
+      leadingCenter === undefined ||
+      repeatedCenterX === undefined ||
+      cosineAngle === undefined ||
+      repeatedCenterY === undefined ||
+      ratio === undefined ||
+      sineAngle === undefined ||
+      !closeGeometryNumber(leadingCenter, repeatedCenterX)
+    ) {
+      return undefined;
+    }
+    centerX = leadingCenter;
+    centerY = repeatedCenterY;
+    aspectRatio = ratio;
+    angleA = cosineAngle;
+    angleB = sineAngle;
+  } else {
+    const [
+      leadingCenterY,
+      ,
+      repeatedCenterX,
+      ratio,
+      sineAngle,
+      repeatedCenterY,
+      cosineAngle,
+    ] = values;
+    if (
+      leadingCenterY === undefined ||
+      repeatedCenterX === undefined ||
+      ratio === undefined ||
+      sineAngle === undefined ||
+      repeatedCenterY === undefined ||
+      cosineAngle === undefined ||
+      !closeGeometryNumber(leadingCenterY, repeatedCenterY)
+    ) {
+      return undefined;
+    }
+    centerX = repeatedCenterX;
+    centerY = leadingCenterY;
+    aspectRatio = ratio;
+    angleA = sineAngle;
+    angleB = cosineAngle;
+  }
+  if (
+    centerX === undefined ||
+    centerY === undefined ||
+    aspectRatio === undefined ||
+    angleA === undefined ||
+    angleB === undefined ||
+    !closeGeometryNumber(angleA, angleB)
+  ) {
+    return undefined;
+  }
+  return {
+    axis,
+    centerX,
+    centerY,
+    angleDegrees: angleA,
+    scaleToCenter,
+    aspectRatio,
+  };
+}
+
+/** 校验共同几何的进度载体，不推演公式在任意时刻的位置。 */
+function validCenterRotationProgress(behavior: FileAnimationBehavior): boolean {
+  const keyframes = behavior.keyframes;
+  return (
+    isPositionBehavior(behavior) &&
+    behavior.additive === "sum" &&
+    behavior.calculationMode === "lin" &&
+    keyframes?.length === 2 &&
+    keyframes[0]?.time === 0 &&
+    keyframes[1]?.time === 100000 &&
+    keyframes[1]?.formula === undefined &&
+    keyframes[0]?.valueType === "fltVal" &&
+    keyframes[0]?.value === "0" &&
+    keyframes[1]?.valueType === "fltVal" &&
+    keyframes[1]?.value === "1" &&
+    parseCenterRotationFormula(behavior) !== undefined
+  );
+}
+
+function hasCompletePositionAxes(
+  behaviors: readonly FileAnimationBehavior[],
+): boolean {
+  const axesByTarget = new Map<string, string[]>();
+  for (const behavior of behaviors.filter(isPositionBehavior)) {
+    const target = JSON.stringify([
+      behavior.targetId,
+      behavior.targetType,
+      behavior.targetRange,
+    ]);
+    const axes = axesByTarget.get(target) ?? [];
+    axes.push(behavior.attributeNames[0] ?? "");
+    axesByTarget.set(target, axes);
+  }
+  return [...axesByTarget.values()].every((axes) =>
+    hasRoles(axes, ["ppt_x", "ppt_y"]),
+  );
+}
+
+function hasConsistentPositionFormulas(
+  behaviors: readonly FileAnimationBehavior[],
+): boolean {
+  // 同一时间节点内实际写出的段落、背景与成员必须共享参数关系。
+  const formulas = behaviors
+    .filter(isPositionBehavior)
+    .map(parseCenterRotationFormula);
+  const firstFormula = formulas[0];
+  return (
+    firstFormula !== undefined &&
+    formulas.every(
+      (formula) =>
+        formula !== undefined &&
+        closeGeometryNumber(formula.centerX, firstFormula.centerX) &&
+        closeGeometryNumber(formula.centerY, firstFormula.centerY) &&
+        closeGeometryNumber(formula.angleDegrees, firstFormula.angleDegrees) &&
+        formula.scaleToCenter === firstFormula.scaleToCenter,
+    )
+  );
+}
+
+function sameAnimationTarget(
+  left: FileAnimationBehavior,
+  right: FileAnimationBehavior,
+): boolean {
+  return (
+    left.targetId === right.targetId &&
+    left.targetType === right.targetType &&
+    JSON.stringify(left.targetRange) === JSON.stringify(right.targetRange)
+  );
+}
+
+function oneBehaviorForTarget(
+  behaviors: readonly FileAnimationBehavior[],
+  target: FileAnimationBehavior,
+  behaviorName: FileAnimationBehavior["behavior"],
+  attributeName: string,
+): FileAnimationBehavior | undefined {
+  const matches = behaviors.filter(
+    (behavior) =>
+      sameAnimationTarget(behavior, target) &&
+      behavior.behavior === behaviorName &&
+      behavior.attributeNames.length === 1 &&
+      behavior.attributeNames[0] === attributeName,
+  );
+  return matches.length === 1 ? matches[0] : undefined;
+}
+
+function numericEndpoints(
+  behavior: FileAnimationBehavior | undefined,
+): readonly [number, number] | undefined {
+  if (behavior?.from === undefined || behavior.to === undefined) {
+    return undefined;
+  }
+  const from = Number(behavior.from);
+  const to = Number(behavior.to);
+  return Number.isFinite(from) && Number.isFinite(to) ? [from, to] : undefined;
+}
+
+function hasLinearNumericEndpoints(
+  behavior: FileAnimationBehavior,
+  from: string,
+  to: string,
+): boolean {
+  return (
+    behavior.calculationMode === "lin" &&
+    behavior.keyframes?.length === 2 &&
+    behavior.keyframes[0]?.time === 0 &&
+    behavior.keyframes[0]?.valueType === "fltVal" &&
+    behavior.keyframes[0]?.value === from &&
+    behavior.keyframes[1]?.time === 100000 &&
+    behavior.keyframes[1]?.valueType === "fltVal" &&
+    behavior.keyframes[1]?.value === to
+  );
+}
+
+function hasSpinInScale(
+  behaviors: readonly FileAnimationBehavior[],
+  position: FileAnimationBehavior,
+  axis: "ppt_w" | "ppt_h",
+): boolean {
+  const scale = oneBehaviorForTarget(behaviors, position, "anim", axis);
+  return (
+    scale !== undefined &&
+    scale.additive === undefined &&
+    scale.calculationMode === "lin" &&
+    scale.from === "0" &&
+    scale.to === `#${axis}` &&
+    scale.durationMs === position.durationMs &&
+    scale.keyframes?.length === 2 &&
+    scale.keyframes[0]?.time === 0 &&
+    scale.keyframes[0]?.valueType === "fltVal" &&
+    scale.keyframes[0]?.value === "0" &&
+    scale.keyframes[1]?.time === 100000 &&
+    scale.keyframes[1]?.valueType === "strVal" &&
+    scale.keyframes[1]?.value === `#${axis}`
+  );
+}
+
+function spinAngleForPosition(
+  preset: FileAnimationEffect["preset"],
+  position: FileAnimationBehavior,
+  behaviors: readonly FileAnimationBehavior[],
+): number | undefined {
+  if (preset === "spin") {
+    const rotation = oneBehaviorForTarget(behaviors, position, "animRot", "r");
+    const endpoints = numericEndpoints(rotation);
+    if (
+      rotation === undefined ||
+      rotation.additive !== "sum" ||
+      endpoints === undefined ||
+      rotation.durationMs !== position.durationMs
+    ) {
+      return undefined;
+    }
+    return (endpoints[0] - endpoints[1]) / 60000;
+  }
+  if (preset !== "spinIn") return undefined;
+  if (
+    !hasSpinInScale(behaviors, position, "ppt_w") ||
+    !hasSpinInScale(behaviors, position, "ppt_h")
+  ) {
+    return undefined;
+  }
+  if (position.targetType === "background") {
+    const rotation = oneBehaviorForTarget(behaviors, position, "animRot", "r");
+    const endpoints = numericEndpoints(rotation);
+    if (
+      rotation === undefined ||
+      rotation.additive !== "sum" ||
+      endpoints === undefined ||
+      rotation.durationMs !== position.durationMs
+    ) {
+      return undefined;
+    }
+    return (endpoints[0] - endpoints[1]) / 60000;
+  }
+  const rotation = oneBehaviorForTarget(
+    behaviors,
+    position,
+    "anim",
+    "style.rotation",
+  );
+  const endpoints = numericEndpoints(rotation);
+  if (
+    rotation === undefined ||
+    rotation.additive !== undefined ||
+    endpoints === undefined ||
+    !closeGeometryNumber(endpoints[0], 360) ||
+    !closeGeometryNumber(endpoints[1], 0) ||
+    !hasLinearNumericEndpoints(rotation, "360", "0") ||
+    rotation.durationMs !== position.durationMs
+  ) {
+    return undefined;
+  }
+  return endpoints[0] - endpoints[1];
+}
+
+/** 按页面尺寸、对象几何和对应的原生旋转／缩放参数核对实际位置公式。 */
+function validCenterRotationGeometry(
+  preset: FileAnimationEffect["preset"],
+  behaviors: readonly FileAnimationBehavior[],
+  objects: readonly FileObject[],
+  widthEmu: number,
+  heightEmu: number,
+): boolean {
+  const positions = behaviors.filter(isPositionBehavior);
+  if (positions.length === 0) return true;
+  const parsed = positions.map(parseCenterRotationFormula);
+  const firstFormula = parsed[0];
+  if (
+    firstFormula === undefined ||
+    (preset !== "spin" && preset !== "spinIn") ||
+    firstFormula.scaleToCenter !== (preset === "spinIn")
+  ) {
+    return false;
+  }
+  const expectedRatios = {
+    ppt_x: heightEmu / widthEmu,
+    ppt_y: widthEmu / heightEmu,
+  } as const;
+  return positions.every((position, index) => {
+    const formula = parsed[index];
+    if (
+      formula === undefined ||
+      formula.scaleToCenter !== (preset === "spinIn") ||
+      !closeGeometryNumber(formula.centerX, firstFormula.centerX) ||
+      !closeGeometryNumber(formula.centerY, firstFormula.centerY) ||
+      !closeGeometryNumber(formula.angleDegrees, firstFormula.angleDegrees) ||
+      !closeGeometryNumber(formula.aspectRatio, expectedRatios[formula.axis])
+    ) {
+      return false;
+    }
+    const geometry = motionTargetGeometry(
+      objects,
+      position.targetId,
+      widthEmu,
+      heightEmu,
+    );
+    if (geometry === undefined || !geometry.supported) return false;
+    const centers =
+      preset === "spin"
+        ? [geometry.objectCenter, ...geometry.containingGroupCenters]
+        : [geometry.objectCenter];
+    if (
+      !centers.some(
+        (center) =>
+          closeGeometryNumber(formula.centerX, center.x) &&
+          closeGeometryNumber(formula.centerY, center.y),
+      )
+    ) {
+      return false;
+    }
+    const angle = spinAngleForPosition(preset, position, behaviors);
+    return (
+      angle !== undefined && closeGeometryNumber(formula.angleDegrees, angle)
+    );
+  });
+}
+
+/** 按实际段落、背景和可见性目标完整核对后，才恢复逻辑 whole Text。 */
+function validWholeTextProjection(
+  preset: FileAnimationEffect["preset"],
+  kind: FileAnimationEffect["kind"],
+  paragraphCount: number,
+  build: string,
+  animBg: boolean,
+  behaviors: readonly FileAnimationBehavior[],
+): boolean {
+  const expectedParagraphRoles = textProjectionParagraphRoles[preset];
+  if (expectedParagraphRoles === undefined) return false;
+
+  const visibilitySets = behaviors.filter(({ behavior }) => behavior === "set");
+  const visibilityRoles = visibilitySets.map(({ targetType, targetRange }) =>
+    targetType === "paragraph" &&
+    targetRange?.type === "paragraph" &&
+    targetRange.start === targetRange.end
+      ? `paragraph:${targetRange.start}`
+      : targetType === "background" && targetRange === undefined
+        ? "background"
+        : "invalid",
+  );
+  const expectedVisibilityRoles =
+    kind === "entrance"
+      ? [
+          ...Array.from(
+            { length: paragraphCount },
+            (_, index) => `paragraph:${index}`,
+          ),
+          ...(animBg ? ["background"] : []),
+        ]
+      : [];
+  if (
+    behaviors.some(({ targetType }) => targetType === "object") ||
+    !hasRoles(visibilityRoles, expectedVisibilityRoles) ||
+    visibilitySets.some(
+      ({ attributeNames, durationMs, to }) =>
+        attributeNames.length !== 1 ||
+        attributeNames[0] !== "style.visibility" ||
+        durationMs !== 1 ||
+        to !== "visible",
+    ) ||
+    (kind === "entrance" && build !== "p")
+  ) {
+    return false;
+  }
+
+  for (let index = 0; index < paragraphCount; index += 1) {
+    const paragraphBehaviors = behaviors.filter(
+      ({ behavior, targetType, targetRange }) =>
+        behavior !== "set" &&
+        targetType === "paragraph" &&
+        targetRange?.type === "paragraph" &&
+        targetRange.start === index &&
+        targetRange.end === index,
+    );
+    const actualRoles = paragraphBehaviors.map(animationBehaviorRole);
+    if (preset === "wipe") {
+      if (
+        actualRoles.length !== 1 ||
+        !actualRoles[0]?.startsWith("animEffect:wipe(")
+      ) {
+        return false;
+      }
+    } else if (!hasRoles(actualRoles, expectedParagraphRoles)) {
+      return false;
+    }
+  }
+
+  const backgroundBehaviors = behaviors.filter(
+    ({ behavior, targetType }) =>
+      behavior !== "set" && targetType === "background",
+  );
+  if (backgroundBehaviors.length === 0) return !animBg;
+  if (preset === "wipe") {
+    const paragraphFilter = behaviors.find(
+      ({ behavior, targetType }) =>
+        behavior === "animEffect" && targetType === "paragraph",
+    )?.filter;
+    return (
+      animBg &&
+      paragraphFilter !== undefined &&
+      backgroundBehaviors.every(
+        ({ targetRange, filter }) =>
+          targetRange === undefined && filter === paragraphFilter,
+      ) &&
+      hasRoles(backgroundBehaviors.map(animationBehaviorRole), [
+        `animEffect:${paragraphFilter}`,
+      ])
+    );
+  }
+  const expectedBackgroundRoles = textProjectionBackgroundRoles[preset];
+  return (
+    animBg &&
+    expectedBackgroundRoles !== undefined &&
+    backgroundBehaviors.every(({ targetRange }) => targetRange === undefined) &&
+    hasRoles(
+      backgroundBehaviors.map(animationBehaviorRole),
+      expectedBackgroundRoles,
+    )
+  );
+}
 
 export type FileTransition = {
   readonly kind: "fade" | "strips" | "push" | "flip" | "morph";
@@ -406,6 +998,13 @@ function decimalAttribute(
   if (value === "") return undefined;
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : undefined;
+}
+
+function readRotationDegrees(
+  transform: XmlElement | undefined,
+): number | undefined {
+  const rotation = integerAttribute(transform, "rot");
+  return rotation === undefined ? undefined : rotation / 60000;
 }
 
 type ThemeTextReader = {
@@ -1132,6 +1731,7 @@ function validateShape(
     properties === undefined
       ? undefined
       : first(properties, drawingNamespace, "xfrm");
+  const rotation = readRotationDegrees(transform);
   const offset =
     transform === undefined
       ? undefined
@@ -1170,6 +1770,7 @@ function validateShape(
     kind: "shape",
     geometry: geometryName,
     boxEmu: { x, y, width, height },
+    ...(rotation === undefined ? {} : { rotationDegrees: rotation }),
     ...(text === undefined ? {} : { text }),
   };
 }
@@ -1265,15 +1866,18 @@ function validatePicture(
     );
     return undefined;
   }
-  const boxEmu = transformBox(
+  const transform =
     properties === undefined
       ? undefined
-      : first(properties, drawingNamespace, "xfrm"),
+      : first(properties, drawingNamespace, "xfrm");
+  const boxEmu = transformBox(
+    transform,
     part,
     identity.name,
     "picture",
     errors,
   );
+  const rotation = readRotationDegrees(transform);
   const fill = first(picture, presentationNamespace, "blipFill");
   const blip =
     fill === undefined ? undefined : first(fill, drawingNamespace, "blip");
@@ -1375,6 +1979,7 @@ function validatePicture(
     kind: "image",
     geometry: geometryName,
     boxEmu,
+    ...(rotation === undefined ? {} : { rotationDegrees: rotation }),
     ...(image === undefined ? {} : { image }),
     ...(Object.keys(crop).length === 0 ? {} : { crop }),
   };
@@ -1951,6 +2556,7 @@ function validateGroup(
       ? undefined
       : first(properties, drawingNamespace, "xfrm");
   const boxEmu = transformBox(transform, part, identity.name, "group", errors);
+  const rotation = readRotationDegrees(transform);
   const childOffset =
     transform === undefined
       ? undefined
@@ -2008,8 +2614,17 @@ function validateGroup(
               width: childWidth ?? 0,
               height: childHeight ?? 0,
             },
+            ...(transform !== undefined &&
+            ["1", "true"].includes(attribute(transform, "flipH"))
+              ? { flipH: true }
+              : {}),
+            ...(transform !== undefined &&
+            ["1", "true"].includes(attribute(transform, "flipV"))
+              ? { flipV: true }
+              : {}),
           },
         }),
+    ...(rotation === undefined ? {} : { rotationDegrees: rotation }),
     members,
   };
 }
@@ -3059,6 +3674,93 @@ function findObjectById(
   return undefined;
 }
 
+type MotionPoint = { readonly x: number; readonly y: number };
+type ObjectCoordinateTransform = {
+  readonly offsetX: number;
+  readonly offsetY: number;
+  readonly scaleX: number;
+  readonly scaleY: number;
+};
+type MotionTargetGeometry = {
+  readonly objectCenter: MotionPoint;
+  readonly containingGroupCenters: readonly MotionPoint[];
+  readonly supported: boolean;
+};
+
+/** 按实际组合 off/ext/chOff/chExt 把成员中心映射到页面坐标。 */
+function motionTargetGeometry(
+  objects: readonly FileObject[],
+  targetId: number,
+  widthEmu: number,
+  heightEmu: number,
+): MotionTargetGeometry | undefined {
+  if (widthEmu <= 0 || heightEmu <= 0) return undefined;
+  const identity: ObjectCoordinateTransform = {
+    offsetX: 0,
+    offsetY: 0,
+    scaleX: 1,
+    scaleY: 1,
+  };
+  let found: MotionTargetGeometry | undefined;
+  const visit = (
+    candidates: readonly FileObject[],
+    transform: ObjectCoordinateTransform,
+    containingGroupCenters: readonly MotionPoint[],
+    supported: boolean,
+  ): void => {
+    for (const object of candidates) {
+      const box = object.boxEmu;
+      const pageX = transform.offsetX + box.x * transform.scaleX;
+      const pageY = transform.offsetY + box.y * transform.scaleY;
+      const objectCenter = {
+        x: (pageX + (box.width * transform.scaleX) / 2) / widthEmu,
+        y: (pageY + (box.height * transform.scaleY) / 2) / heightEmu,
+      };
+      if (object.id === targetId) {
+        found = {
+          objectCenter,
+          containingGroupCenters,
+          supported,
+        };
+        return;
+      }
+      if (object.kind !== "group") continue;
+      const groupCenters = [...containingGroupCenters, objectCenter];
+      const groupTransform = object.groupTransform;
+      const transformSupported =
+        groupTransform !== undefined &&
+        groupTransform.childExtent.width > 0 &&
+        groupTransform.childExtent.height > 0 &&
+        groupTransform.flipH !== true &&
+        groupTransform.flipV !== true &&
+        closeGeometryNumber((object.rotationDegrees ?? 0) % 360, 0);
+      if (!transformSupported || groupTransform === undefined) {
+        visit(object.members ?? [], transform, groupCenters, false);
+        if (found !== undefined) return;
+        continue;
+      }
+      const localScaleX = box.width / groupTransform.childExtent.width;
+      const localScaleY = box.height / groupTransform.childExtent.height;
+      const childTransform: ObjectCoordinateTransform = {
+        offsetX:
+          transform.offsetX +
+          (box.x - groupTransform.childOffset.x * localScaleX) *
+            transform.scaleX,
+        offsetY:
+          transform.offsetY +
+          (box.y - groupTransform.childOffset.y * localScaleY) *
+            transform.scaleY,
+        scaleX: transform.scaleX * localScaleX,
+        scaleY: transform.scaleY * localScaleY,
+      };
+      visit(object.members ?? [], childTransform, groupCenters, supported);
+      if (found !== undefined) return;
+    }
+  };
+  visit(objects, identity, [], true);
+  return found;
+}
+
 type TimingTreeNode = {
   readonly wrapper: XmlElement;
   readonly timeNode: XmlElement;
@@ -3078,6 +3780,7 @@ function readSlideAnimations(
   slide: XmlElement,
   part: string,
   objects: readonly FileObject[],
+  slideSize: { readonly widthEmu: number; readonly heightEmu: number },
   errors: ValidationIssue[],
 ): SlideAnimationRead | undefined {
   const timingNodes = elements(slide, presentationNamespace, "timing");
@@ -3403,14 +4106,90 @@ function readSlideAnimations(
     });
 
   const buildList = first(timing, presentationNamespace, "bldLst");
-  const paragraphBuilds = new Map<number, string>();
+  const paragraphBuildKey = (targetId: number, groupId: number): string =>
+    `${targetId}:${groupId}`;
+  const backgroundBuildGroups = new Set<string>();
+  for (const node of timingTreeNodes.values()) {
+    if (node.kind !== "effect") continue;
+    const target = descendantsByName(
+      node.timeNode,
+      presentationNamespace,
+      "spTgt",
+    )[0];
+    const targetId =
+      target === undefined
+        ? undefined
+        : positiveIntegerValue(attribute(target, "spid"));
+    const groupId = nonNegativeIntegerValue(
+      attribute(node.timeNode, "grpId") || "0",
+    );
+    if (
+      targetId !== undefined &&
+      groupId !== undefined &&
+      descendantsByName(node.timeNode, presentationNamespace, "bg").length > 0
+    ) {
+      backgroundBuildGroups.add(paragraphBuildKey(targetId, groupId));
+    }
+  }
+  const paragraphBuilds = new Map<
+    string,
+    { readonly build: string; readonly animBg?: boolean }
+  >();
   const chartBuilds = new Map<number, "all" | "series" | "category">();
   const chartBuildGroupIds = new Map<number, number>();
   if (buildList !== undefined) {
     for (const build of elements(buildList, presentationNamespace, "bldP")) {
       const targetId = positiveIntegerValue(attribute(build, "spid"));
-      if (targetId !== undefined) {
-        paragraphBuilds.set(targetId, attribute(build, "build"));
+      const groupText = attribute(build, "grpId");
+      const groupId = nonNegativeIntegerValue(
+        groupText === "" ? "0" : groupText,
+      );
+      if (targetId === undefined || groupId === undefined) {
+        issue(
+          errors,
+          part,
+          "invalid-paragraph-build-group",
+          "文字构建声明需要有效的原生对象和非负组标识",
+        );
+        continue;
+      }
+      const key = paragraphBuildKey(targetId, groupId);
+      if (paragraphBuilds.has(key)) {
+        issue(
+          errors,
+          part,
+          "duplicate-paragraph-build-group",
+          `文字对象 ${targetId} 的构建组 ${groupId} 重复`,
+        );
+      }
+      const animBgText = attribute(build, "animBg");
+      paragraphBuilds.set(key, {
+        build: attribute(build, "build"),
+        ...(animBgText === "1" || animBgText === "true"
+          ? { animBg: true }
+          : animBgText === "0" || animBgText === "false"
+            ? { animBg: false }
+            : {}),
+      });
+    }
+    for (const [key, build] of paragraphBuilds) {
+      if ((build.animBg === true) !== backgroundBuildGroups.has(key)) {
+        issue(
+          errors,
+          part,
+          "inconsistent-animation-background-role",
+          `文字构建组 ${key} 的 animBg 必须与该组实际 spTgt/bg 行为一致`,
+        );
+      }
+    }
+    for (const key of backgroundBuildGroups) {
+      if (!paragraphBuilds.has(key)) {
+        issue(
+          errors,
+          part,
+          "missing-animation-background-build",
+          `背景行为所在文字构建组 ${key} 缺少 bldP 声明`,
+        );
       }
     }
     for (const build of elements(
@@ -3539,6 +4318,190 @@ function readSlideAnimations(
         output,
       );
     }
+  };
+  const nativeBehaviorsOf = (
+    effectTimeNode: XmlElement,
+  ): FileAnimationBehavior[] => {
+    const children = first(effectTimeNode, presentationNamespace, "childTnLst");
+    if (children === undefined) return [];
+    const behaviorElements: XmlElement[] = [];
+    for (
+      let child = children.firstChild;
+      child !== null;
+      child = child.nextSibling
+    ) {
+      if (
+        child.nodeType === 1 &&
+        child.namespaceURI === presentationNamespace &&
+        child.localName !== null &&
+        ["set", "anim", "animEffect", "animRot", "animClr"].includes(
+          child.localName,
+        )
+      ) {
+        behaviorElements.push(child as XmlElement);
+      }
+    }
+    const rangeOf = (
+      target: XmlElement,
+    ): FileAnimationTargetRange | undefined => {
+      const textElement = first(target, presentationNamespace, "txEl");
+      if (textElement !== undefined) {
+        const range = first(textElement, presentationNamespace, "pRg");
+        const start = nonNegativeIntegerValue(
+          range === undefined ? "" : attribute(range, "st"),
+        );
+        const end = nonNegativeIntegerValue(
+          range === undefined ? "" : attribute(range, "end"),
+        );
+        return start === undefined || end === undefined || start > end
+          ? undefined
+          : { type: "paragraph", start, end };
+      }
+      const graphicElement = first(target, presentationNamespace, "graphicEl");
+      const chart =
+        graphicElement === undefined
+          ? undefined
+          : first(graphicElement, drawingNamespace, "chart");
+      if (chart === undefined) return undefined;
+      const seriesIndex = integerAttribute(chart, "seriesIdx");
+      const categoryIndex = integerAttribute(chart, "categoryIdx");
+      const step = attribute(chart, "bldStep");
+      if (
+        seriesIndex === undefined ||
+        categoryIndex === undefined ||
+        (step !== "gridLegend" && step !== "series" && step !== "category")
+      ) {
+        return undefined;
+      }
+      return {
+        type: "chart",
+        step,
+        seriesIndex,
+        categoryIndex,
+      };
+    };
+    const valueText = (wrapper: XmlElement | undefined): string | undefined => {
+      if (wrapper === undefined) return undefined;
+      const value =
+        first(wrapper, presentationNamespace, "fltVal") ??
+        first(wrapper, presentationNamespace, "strVal");
+      const text = value === undefined ? "" : attribute(value, "val");
+      return text === "" ? undefined : text;
+    };
+    return behaviorElements.flatMap((behaviorNode) => {
+      const cBhvr = first(behaviorNode, presentationNamespace, "cBhvr");
+      if (cBhvr === undefined) return [];
+      const targets = descendantsByName(cBhvr, presentationNamespace, "spTgt");
+      const target = targets[0];
+      if (target === undefined) return [];
+      const targetId = positiveIntegerValue(attribute(target, "spid"));
+      if (targetId === undefined) return [];
+      const targetText = first(target, presentationNamespace, "txEl");
+      const targetGraphic = first(target, presentationNamespace, "graphicEl");
+      const targetRange = rangeOf(target);
+      const durationMs = integerAttribute(
+        first(cBhvr, presentationNamespace, "cTn"),
+        "dur",
+      );
+      const targetType =
+        first(target, presentationNamespace, "bg") !== undefined
+          ? "background"
+          : targetText !== undefined
+            ? "paragraph"
+            : targetGraphic !== undefined
+              ? "chart"
+              : "object";
+      const attributeList = first(cBhvr, presentationNamespace, "attrNameLst");
+      const attributeNames =
+        attributeList === undefined
+          ? []
+          : elements(attributeList, presentationNamespace, "attrName").map(
+              ({ textContent }) => textContent ?? "",
+            );
+      const tavList = first(behaviorNode, presentationNamespace, "tavLst");
+      const tavs =
+        tavList === undefined
+          ? []
+          : elements(tavList, presentationNamespace, "tav");
+      const keyframes = tavs.map((tav): FileAnimationKeyframe => {
+        const time = nonNegativeIntegerValue(attribute(tav, "tm"));
+        const formula = attribute(tav, "fmla");
+        const valueNode = first(tav, presentationNamespace, "val");
+        const typedValue =
+          valueNode === undefined
+            ? undefined
+            : (first(valueNode, presentationNamespace, "fltVal") ??
+              first(valueNode, presentationNamespace, "strVal"));
+        const valueType = typedValue?.localName ?? undefined;
+        const value =
+          typedValue === undefined ? "" : attribute(typedValue, "val");
+        return {
+          ...(time === undefined ? {} : { time }),
+          ...(formula === "" ? {} : { formula }),
+          ...(value === "" ? {} : { value }),
+          ...(valueType === undefined ? {} : { valueType }),
+        };
+      });
+      const firstTav = tavs[0];
+      const lastTav = tavs.at(-1);
+      const fromValue =
+        valueText(
+          firstTav === undefined
+            ? undefined
+            : first(firstTav, presentationNamespace, "val"),
+        ) ??
+        (() => {
+          const from = first(behaviorNode, presentationNamespace, "from");
+          const color =
+            from === undefined
+              ? undefined
+              : first(from, drawingNamespace, "srgbClr");
+          return (
+            attribute(behaviorNode, "from") ||
+            (color === undefined ? "" : attribute(color, "val")) ||
+            undefined
+          );
+        })();
+      const toValue =
+        valueText(
+          lastTav === undefined
+            ? undefined
+            : first(lastTav, presentationNamespace, "val"),
+        ) ??
+        (() => {
+          const to = first(behaviorNode, presentationNamespace, "to");
+          const color =
+            to === undefined
+              ? undefined
+              : first(to, drawingNamespace, "srgbClr");
+          return (
+            attribute(behaviorNode, "to") ||
+            (color === undefined ? "" : attribute(color, "val")) ||
+            valueText(to) ||
+            undefined
+          );
+        })();
+      const additive = attribute(cBhvr, "additive");
+      const filter = attribute(behaviorNode, "filter");
+      return [
+        {
+          behavior: behaviorNode.localName as FileAnimationBehavior["behavior"],
+          targetId,
+          targetType,
+          ...(targetRange === undefined ? {} : { targetRange }),
+          attributeNames,
+          ...(durationMs === undefined ? {} : { durationMs }),
+          ...(fromValue === undefined ? {} : { from: fromValue }),
+          ...(toValue === undefined ? {} : { to: toValue }),
+          ...(attribute(behaviorNode, "calcmode") === ""
+            ? {}
+            : { calculationMode: attribute(behaviorNode, "calcmode") }),
+          ...(tavList === undefined ? {} : { keyframes }),
+          ...(additive === "" ? {} : { additive }),
+          ...(filter === "" ? {} : { filter }),
+        },
+      ];
+    });
   };
 
   const result: FileAnimationStep[] = [];
@@ -3818,17 +4781,134 @@ function readSlideAnimations(
       const rangeSignatures = new Set(
         ranges.map((range) => JSON.stringify(range)),
       );
-      if (rangeSignatures.size > 1) {
+      const targetObject = findObjectById(objects, targetId);
+      const nativeBuildGroupId = nonNegativeIntegerValue(
+        attribute(effectTimeNode, "grpId") || "0",
+      );
+      const paragraphBuild =
+        nativeBuildGroupId === undefined
+          ? undefined
+          : paragraphBuilds.get(
+              paragraphBuildKey(targetId, nativeBuildGroupId),
+            );
+      const nativeBehaviors = nativeBehaviorsOf(effectTimeNode);
+      if (
+        nativeBehaviors.some(({ behavior, durationMs: behaviorDuration }) =>
+          behavior === "set"
+            ? behaviorDuration !== 1
+            : behaviorDuration !== traversalDurationMs,
+        )
+      ) {
+        issue(
+          errors,
+          part,
+          "inconsistent-animation-behavior-duration",
+          "同一效果的原生行为必须保留相同时长，可见性初始化固定为 1ms",
+        );
+        continue;
+      }
+      const paragraphRanges = nativeBehaviors
+        .map(({ targetType, targetRange }) =>
+          targetType === "paragraph" && targetRange?.type === "paragraph"
+            ? targetRange
+            : undefined,
+        )
+        .filter(
+          (
+            range,
+          ): range is Extract<
+            FileAnimationTargetRange,
+            { type: "paragraph" }
+          > => range !== undefined,
+        );
+      const paragraphIndexes = new Set(
+        paragraphRanges.map(({ start }) => start),
+      );
+      // grpId=1 的 build=p 表示完整段落投影；即使所有 pRg 都被删掉也必须校验。
+      const requiresFullParagraphProjection =
+        nativeBuildGroupId === 1 &&
+        paragraphBuild?.build === "p" &&
+        targetObject?.text !== undefined &&
+        targetObject.text.paragraphs.length > 0;
+      const fullParagraphProjection =
+        nativeBuildGroupId === 1 &&
+        (paragraphBuild?.build === "allAtOnce" ||
+          paragraphBuild?.build === "p") &&
+        targetObject?.text !== undefined &&
+        paragraphRanges.length > 0 &&
+        ranges.every(
+          (range) => range === undefined || range.type === "paragraph",
+        ) &&
+        paragraphRanges.every(({ start, end }) => start === end) &&
+        paragraphIndexes.size === targetObject.text.paragraphs.length &&
+        targetObject.text.paragraphs.every((_, index) =>
+          paragraphIndexes.has(index),
+        );
+      if (rangeSignatures.size > 1 && !fullParagraphProjection) {
         issue(
           errors,
           part,
           "inconsistent-animation-target-range",
-          "同一动画的行为节点必须指向相同原生文字或图表范围",
+          "同一动画的行为节点必须使用一致范围，整体文字投影则必须覆盖全部段落",
         );
         continue;
       }
-      const targetRange = ranges[0];
-      const targetObject = findObjectById(objects, targetId);
+      if (
+        !fullParagraphProjection &&
+        ranges.some((range) => range?.type === "paragraph") &&
+        (nativeBuildGroupId === undefined || paragraphBuild?.build !== "p")
+      ) {
+        issue(
+          errors,
+          part,
+          "invalid-animation-target-range",
+          "逐段文字目标必须关联同组 build=p 的原生构建声明",
+        );
+        continue;
+      }
+      if (
+        (fullParagraphProjection || requiresFullParagraphProjection) &&
+        !validWholeTextProjection(
+          preset,
+          kind,
+          targetObject?.text?.paragraphs.length ?? 0,
+          paragraphBuild?.build ?? "",
+          paragraphBuild?.animBg === true,
+          nativeBehaviors,
+        )
+      ) {
+        issue(
+          errors,
+          part,
+          "invalid-animation-projection-target",
+          "整体文字投影的初始化、段落属性或背景职责不符合对应预设",
+        );
+        continue;
+      }
+      if (
+        (preset === "spin" || preset === "spinIn") &&
+        nativeBehaviors.some(isPositionBehavior) &&
+        (!hasCompletePositionAxes(nativeBehaviors) ||
+          !hasConsistentPositionFormulas(nativeBehaviors) ||
+          nativeBehaviors
+            .filter(isPositionBehavior)
+            .some((behavior) => !validCenterRotationProgress(behavior)) ||
+          !validCenterRotationGeometry(
+            preset,
+            nativeBehaviors,
+            objects,
+            slideSize.widthEmu,
+            slideSize.heightEmu,
+          ))
+      ) {
+        issue(
+          errors,
+          part,
+          "invalid-animation-progress-formula",
+          "共同中心自转的位置公式不受支持或与实际几何、角度、缩放及进度参数不一致",
+        );
+      }
+      const targetRange = fullParagraphProjection ? undefined : ranges[0];
       let fromColor: string | undefined;
       let toColor: string | undefined;
       if (preset === "breathe") {
@@ -3894,7 +4974,7 @@ function readSlideAnimations(
       if (
         targetRange?.type === "paragraph" &&
         (targetObject?.text === undefined ||
-          paragraphBuilds.get(targetId) !== "p" ||
+          paragraphBuild?.build !== "p" ||
           targetRange.end >= targetObject.text.paragraphs.length)
       ) {
         issue(
@@ -3964,7 +5044,8 @@ function readSlideAnimations(
           value < 1 ||
           targetRange !== undefined ||
           targetObject?.text === undefined ||
-          !paragraphBuilds.has(targetId)
+          nativeBuildGroupId === undefined ||
+          !paragraphBuilds.has(paragraphBuildKey(targetId, nativeBuildGroupId))
         ) {
           issue(
             errors,
@@ -4039,15 +5120,34 @@ function readSlideAnimations(
             : rotationFrom / 60000
           : direction;
       const chartBuild = chartBuilds.get(targetId);
+      const nativeBuild =
+        paragraphBuild?.build === "p"
+          ? "paragraph"
+          : paragraphBuild?.build === "allAtOnce"
+            ? "allAtOnce"
+            : chartBuild === "series" || chartBuild === "category"
+              ? chartBuild
+              : undefined;
       effects.push({
         targetId,
         timingId,
         ...(targetRange === undefined ? {} : { targetRange }),
-        ...(targetRange?.type === "paragraph"
-          ? { nativeBuild: "paragraph" as const }
-          : chartBuild === "series" || chartBuild === "category"
-            ? { nativeBuild: chartBuild }
-            : {}),
+        ...(nativeBuild === undefined ? {} : { nativeBuild }),
+        ...(paragraphBuild === undefined || nativeBuildGroupId === undefined
+          ? {}
+          : {
+              nativeBuildGroupId,
+              ...(paragraphBuild.animBg === undefined
+                ? {}
+                : { nativeBuildAnimBg: paragraphBuild.animBg }),
+            }),
+        ...(fullParagraphProjection ||
+        nativeBehaviors.some(
+          ({ targetType, additive }) =>
+            targetType === "background" || additive === "sum",
+        )
+          ? { nativeBehaviors }
+          : {}),
         kind,
         preset,
         durationMs,
@@ -4292,6 +5392,10 @@ function readPresentation(
       slideRoot,
       slidePath,
       objects,
+      {
+        widthEmu: widthEmu ?? 0,
+        heightEmu: heightEmu ?? 0,
+      },
       errors,
     );
     for (const extension of transition.extensions) {

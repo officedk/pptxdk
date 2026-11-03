@@ -309,6 +309,14 @@ describe("原创能力册", () => {
     );
     const unknownSlide = file.slides[11];
     assert.ok(unknownSlide);
+    const paragraphText = fileObject(
+      unknownSlide.objects,
+      "paragraph-by-paragraph-reveal",
+    );
+    const wholeText = fileObject(
+      unknownSlide.objects,
+      "wait-for-all-completion",
+    );
     assert.ok(
       unknownSlide.animationContainers?.some(
         ({ endSync }) => endSync === "all",
@@ -324,7 +332,10 @@ describe("原创能力册", () => {
     );
     assert.deepEqual(
       unknownFileEffects
-        .filter(({ nativeBuild }) => nativeBuild === "paragraph")
+        .filter(
+          ({ nativeBuild, targetId }) =>
+            nativeBuild === "paragraph" && targetId === paragraphText.id,
+        )
         .map(({ targetRange, delayMs }) => [
           targetRange?.type,
           targetRange?.type === "paragraph" ? targetRange.start : undefined,
@@ -333,6 +344,33 @@ describe("原创能力册", () => {
       [
         ["paragraph", 0, 0],
         ["paragraph", 1, 340],
+      ],
+    );
+    const wholeTextEffect = unknownFileEffects.find(
+      ({ targetId }) => targetId === wholeText.id,
+    );
+    assert.ok(wholeTextEffect);
+    assert.deepEqual(
+      [
+        wholeTextEffect.targetRange,
+        wholeTextEffect.nativeBuild,
+        wholeTextEffect.nativeBuildGroupId,
+        wholeTextEffect.preset,
+        wholeText.text?.paragraphs.length,
+      ],
+      [undefined, "paragraph", 1, "fade", 1],
+    );
+    assert.deepEqual(
+      wholeTextEffect.nativeBehaviors?.map(
+        ({ behavior, targetRange, filter }) => [
+          behavior,
+          targetRange?.type === "paragraph" ? targetRange.start : undefined,
+          filter,
+        ],
+      ),
+      [
+        ["set", 0, undefined],
+        ["animEffect", 0, "fade"],
       ],
     );
     assert.match(

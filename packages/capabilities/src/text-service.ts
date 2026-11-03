@@ -56,6 +56,11 @@ export type TextResourceClaim = {
   readonly characters: string;
 };
 
+/** 控制符和默认可忽略码点保留在文本流中，但不要求独立 cmap 字形。 */
+export function requiresFontGlyph(character: string): boolean {
+  return !/^[\p{Cc}\p{Default_Ignorable_Code_Point}]$/u.test(character);
+}
+
 export type TextServiceResult = {
   readonly xml: string;
   readonly text: string;
@@ -1098,11 +1103,7 @@ function measureRunFace(style: RunStyle): MeasureFace {
 function missingCharacters(face: MeasureFace, text: string): string[] {
   const missing = new Set<string>();
   for (const character of text) {
-    if (
-      /^[\p{Cc}\p{Cf}\u{FE00}-\u{FE0F}\u{E0100}-\u{E01EF}]$/u.test(character)
-    ) {
-      continue;
-    }
+    if (!requiresFontGlyph(character)) continue;
     const codePoint = character.codePointAt(0);
     if (codePoint !== undefined && !face.font.hasGlyphForCodePoint(codePoint)) {
       missing.add(character);
@@ -1127,11 +1128,7 @@ function rangeWidth(
       piece.style.textTransform === "uppercase" ? source.toUpperCase() : source;
     let visible = "";
     for (const character of transformed) {
-      if (
-        !/^[\p{Cc}\p{Cf}\u{FE00}-\u{FE0F}\u{E0100}-\u{E01EF}]$/u.test(character)
-      ) {
-        visible += character;
-      }
+      if (requiresFontGlyph(character)) visible += character;
     }
     if (visible === "") continue;
     const advance = piece.face.font.layout(visible).advanceWidth;

@@ -9,6 +9,7 @@ import * as fontkit from "fontkit";
 
 import { subsetFont } from "./font-subset.ts";
 import type { FontFaceStyle } from "./font.ts";
+import { requiresFontGlyph } from "./text-service.ts";
 
 const fontRelationship =
   "http://schemas.openxmlformats.org/officeDocument/2006/relationships/font";
@@ -249,13 +250,12 @@ function subsetBytes(
   checked: ReturnType<typeof checkedFont>,
   characters: string,
 ): Uint8Array {
-  const defaultIgnorable = /^\p{Default_Ignorable_Code_Point}$/u;
   const requiredCharacters = [...new Set(characters)];
   for (const character of requiredCharacters) {
     const codePoint = character.codePointAt(0);
     if (
       codePoint !== undefined &&
-      !defaultIgnorable.test(character) &&
+      requiresFontGlyph(character) &&
       !checked.font.hasGlyphForCodePoint(codePoint)
     ) {
       return fail(
@@ -268,6 +268,7 @@ function subsetBytes(
 
   let bytes: Uint8Array;
   try {
+    // 覆盖检查忽略非字形码点，但原字符流仍交给 HarfBuzz 保留布局闭包。
     bytes = subsetFont(use.bytes!, characters);
   } catch (error) {
     return fail(
@@ -311,7 +312,7 @@ function subsetBytes(
     const codePoint = character.codePointAt(0);
     if (
       codePoint !== undefined &&
-      !defaultIgnorable.test(character) &&
+      requiresFontGlyph(character) &&
       !font.hasGlyphForCodePoint(codePoint)
     ) {
       return fail(

@@ -315,6 +315,7 @@ try {
       "}",
     ].join("\n"),
   );
+  // Reader 中资源部件路径与关系编号属于封装位置；此处按页面语义和图片字节比较。
   await writeFile(
     join(temporaryDirectory, "consumer-runtime.ts"),
     [
@@ -354,12 +355,21 @@ try {
       "const installedCliEquivalent = Buffer.from(installedCliBytes).equals(Buffer.from(sourceBuildResult.pptx));",
       'if (installedCliFile.errors.length !== 0 || installedCliFile.presentation.title !== "安装 CLI 源码标题" || JSON.stringify(installedCliFile.presentation.sections) !== JSON.stringify([{ name: "开场", slideIds: ["source-cli"] }, { name: "内容", slideIds: ["target-cli"] }]) || installedCliFile.slides[0]?.id !== "source-cli" || installedCliFile.slides[0]?.advanceAfterMs !== 1500 || installedCliFile.slides[0]?.background?.type !== "solid" || installedCliShape?.link?.slideId !== "target-cli" || installedCliNumber?.field !== "slidenum" || installedCliNumber.text !== "1" || installedCliShapeNumber?.field !== "slidenum" || installedCliShapeNumber.text !== "1" || installedCliFile.slides[1]?.background?.type !== "gradient" || !installedCliEquivalent || sourceBuildResult.report.title !== "安装 CLI 源码标题" || sourceBuildResult.report.slides[0]?.id !== "source-cli" || sourceBuildResult.report.slides[0]?.objects[0]?.link !== "slide:target-cli" || sourceBuildResult.report.slides[0]?.objects.find(({ testId }) => testId === "source-cli-shape-number")?.text !== "第 1") throw new Error(JSON.stringify({ errors: installedCliFile.errors, presentation: installedCliFile.presentation, slides: installedCliFile.slides, installedCliEquivalent }));',
       'const exampleSource = new URL(import.meta.resolve("@react-pptx/examples/decks"));',
+      'const readEmbeddedFonts = (parts) => Object.entries(parts).filter(([part]) => part.startsWith("ppt/fonts/") && part.endsWith(".fntdata")).map(([part, bytes]) => { const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength); const payloadLength = view.getUint32(4, true); if (view.getUint32(8, true) !== 0x00020002 || payloadLength <= 0 || payloadLength > bytes.byteLength) throw new Error(`invalid embedded font part ${part}`); const payload = bytes.subarray(bytes.byteLength - payloadLength); const parsed = fontkit.create(Buffer.from(payload)); if (parsed.type !== "TTF") throw new Error(`embedded font part ${part} is not TTF`); return { part, weight: view.getUint32(28, true), payload, parsed }; });',
+      "const readerObject = (object) => ({ name: object.name, kind: object.kind, geometry: object.geometry, boxEmu: object.boxEmu, rotationDegrees: object.rotationDegrees, crop: object.crop, link: object.link, groupTransform: object.groupTransform, image: object.image === undefined ? undefined : { contentType: object.image.contentType }, text: object.text, table: object.table, chart: object.chart === undefined ? undefined : { types: object.chart.types, direction: object.chart.direction, grouping: object.chart.grouping, series: object.chart.series, embeddedWorkbook: object.chart.embeddedWorkbook === undefined ? undefined : { sheetName: object.chart.embeddedWorkbook.sheetName, categories: object.chart.embeddedWorkbook.categories, series: object.chart.embeddedWorkbook.series } }, members: (object.members ?? []).map(readerObject) });",
+      "const capabilityDeckContentAndLayout = (file) => JSON.stringify({ presentation: file.presentation, slides: file.slides.map(({ objects, ...slide }) => ({ ...slide, objects: objects.map(readerObject) })) });",
+      'const capabilityDeckMediaHashes = (parts) => Object.entries(parts).filter(([part]) => part.startsWith("ppt/media/")).map(([, bytes]) => createHash("sha256").update(bytes).digest("hex")).sort();',
       "const representativeDecks = [];",
+      "let defaultCapabilityDeck;",
+      "let defaultCapabilityDeckParts;",
       'const exampleText = (objects) => objects.flatMap(({ text, members = [] }) => [...(Array.isArray(text?.text) ? text.text : text?.text === undefined ? [] : [text.text]), ...exampleText(members)]).join("\\n");',
       'for (const { name, exportName, title, slideCount } of [{ name: "capability-deck", exportName: "capabilityDeck", title: "灵感实验室 · 原创能力册", slideCount: 12 }, { name: "sales-report", exportName: "default", title: "季度销售经营报告", slideCount: 2 }, { name: "school-reference", exportName: "schoolReferenceDeck", title: "PowerPoint School 参考页", slideCount: 2 }]) {',
       "  const result = await buildFromSource(exampleSource, { exportName });",
       "  const file = await validatePptx(result.pptx);",
+      '  const parts = name === "capability-deck" ? unzipSync(result.pptx) : undefined;',
+      "  const embeddedFonts = parts === undefined ? [] : readEmbeddedFonts(parts);",
       '  if (result.report.diagnostics.some(({ severity }) => severity === "error") || file.errors.length !== 0 || file.presentation.title !== title || file.presentation.slideCount !== slideCount) throw new Error(JSON.stringify({ name, report: result.report.diagnostics, errors: file.errors, presentation: file.presentation }));',
+      '  if (name === "capability-deck") { if (embeddedFonts.length !== 0) throw new Error("默认能力册意外包含嵌入字体"); defaultCapabilityDeck = file; defaultCapabilityDeckParts = parts; }',
       '  if (name === "capability-deck" && file.slides[0]?.objects.find(({ name: objectName }) => objectName === "cover-observatory-image")?.kind !== "image") throw new Error("安装 examples 未带入能力册图片资源");',
       '  if (name === "sales-report") { const cells = file.slides.flatMap(({ objects }) => objects).filter(({ kind }) => kind === "table").flatMap(({ table }) => table?.cells.flat() ?? []); if (!cells.includes("北方区") || !cells.includes("云端服务")) throw new Error("安装 examples 未从包内数据资源生成两张销售表"); }',
       '  if (name === "school-reference" && (!exampleText(file.slides[0]?.objects ?? []).includes("Our Services") || !exampleText(file.slides[1]?.objects ?? []).includes("Agenda Slide"))) throw new Error("安装 examples 未生成服务页与议程页");',
@@ -368,8 +378,31 @@ try {
       "  await writeFile(`${name}-build-report.json`, `${JSON.stringify(result.report, null, 2)}\\n`);",
       "  await writeFile(`${name}-reader.json`, `${JSON.stringify(file, null, 2)}\\n`);",
       "  await writeFile(`${name}.sha256`, `${sha256}  ${name}.pptx\\n`);",
-      "  representativeDecks.push({ name, title, slideCount, bytes: result.pptx.byteLength, sha256 });",
+      '  representativeDecks.push({ name, title, slideCount, fontMode: "default", ...(name === "capability-deck" ? { embeddedFonts: embeddedFonts.map(({ part, weight, payload, parsed }) => ({ part, family: parsed.familyName, weight, payloadBytes: payload.byteLength, sha256: createHash("sha256").update(payload).digest("hex") })) } : {}), bytes: result.pptx.byteLength, sha256 });',
       "}",
+      "const capabilityFontModeSizes = {};",
+      'for (const fontMode of ["full", "subset"]) {',
+      "  const name = `capability-deck-${fontMode}`;",
+      '  const title = "灵感实验室 · 原创能力册";',
+      '  const result = await buildFromSource(exampleSource, { exportName: "capabilityDeck", embedFonts: fontMode });',
+      "  const file = await validatePptx(result.pptx);",
+      "  const parts = unzipSync(result.pptx);",
+      "  const fonts = readEmbeddedFonts(parts);",
+      "  const families = new Set(fonts.map(({ parsed }) => parsed.familyName));",
+      '  const jostWeights = fonts.filter(({ parsed }) => parsed.familyName === "Jost*").map(({ weight }) => weight).sort((left, right) => left - right);',
+      '  if (result.report.diagnostics.some(({ severity }) => severity === "error") || file.errors.length !== 0 || file.presentation.title !== title || file.presentation.slideCount !== 12 || fonts.length === 0 || !families.has("Jost*") || !families.has("ZCOOL XiaoWei") || JSON.stringify(jostWeights) !== JSON.stringify([400, 700])) throw new Error(JSON.stringify({ name, report: result.report.diagnostics, errors: file.errors, presentation: file.presentation, fonts: fonts.map(({ part, weight, parsed }) => ({ part, family: parsed.familyName, weight })) }));',
+      "  if (defaultCapabilityDeck === undefined || defaultCapabilityDeckParts === undefined || capabilityDeckContentAndLayout(file) !== capabilityDeckContentAndLayout(defaultCapabilityDeck) || JSON.stringify(capabilityDeckMediaHashes(parts)) !== JSON.stringify(capabilityDeckMediaHashes(defaultCapabilityDeckParts))) throw new Error(`${name} 的页面内容、布局或图片资源与默认能力册不一致`);",
+      '  const embeddedFonts = fonts.map(({ part, weight, payload, parsed }) => ({ part, family: parsed.familyName, weight, payloadBytes: payload.byteLength, sha256: createHash("sha256").update(payload).digest("hex") }));',
+      "  const fontPayloadBytes = embeddedFonts.reduce((total, font) => total + font.payloadBytes, 0);",
+      '  const sha256 = createHash("sha256").update(result.pptx).digest("hex");',
+      "  await writeFile(`${name}.pptx`, result.pptx);",
+      "  await writeFile(`${name}-build-report.json`, `${JSON.stringify(result.report, null, 2)}\\n`);",
+      "  await writeFile(`${name}-reader.json`, `${JSON.stringify(file, null, 2)}\\n`);",
+      "  await writeFile(`${name}.sha256`, `${sha256}  ${name}.pptx\\n`);",
+      "  capabilityFontModeSizes[fontMode] = { bytes: result.pptx.byteLength, fontPayloadBytes };",
+      "  representativeDecks.push({ name, title, slideCount: 12, fontMode, embeddedFonts, bytes: result.pptx.byteLength, sha256 });",
+      "}",
+      "if (capabilityFontModeSizes.subset.fontPayloadBytes >= capabilityFontModeSizes.full.fontPayloadBytes || capabilityFontModeSizes.subset.bytes >= capabilityFontModeSizes.full.bytes) throw new Error(JSON.stringify({ capabilityFontModeSizes }));",
       'const installedExampleCliBytes = await readFile("cli-output/installed-sales-report.pptx");',
       'const installedExampleCliEquivalent = Buffer.from(installedExampleCliBytes).equals(Buffer.from(await readFile("sales-report.pptx")));',
       'if (!installedExampleCliEquivalent) throw new Error("安装 CLI 与程序化 API 使用同一个已安装 examples 导出入口却生成了不同的销售报告");',
@@ -503,11 +536,11 @@ try {
       'const fontSubsetRelationId = fontSubsetRelation?.match(/Id="([^"]+)"/u)?.[1];',
       'const fontSubsetRelationTarget = fontSubsetRelation?.match(/Target="([^"]+)"/u)?.[1];',
       "const fontSubsetWrapped = fontSubsetRelationTarget === undefined ? undefined : fontSubsetParts[`ppt/${fontSubsetRelationTarget}`];",
-      "const fontSubsetPayloadLength = fontSubsetWrapped === undefined ? undefined : new DataView(fontSubsetWrapped.buffer, fontSubsetWrapped.byteOffset, fontSubsetWrapped.byteLength).getUint32(4, true);",
-      "const fontSubsetPayload = fontSubsetWrapped === undefined || fontSubsetPayloadLength === undefined ? undefined : fontSubsetWrapped.subarray(fontSubsetWrapped.byteLength - fontSubsetPayloadLength);",
+      "const fontSubsetResource = fontSubsetRelationTarget === undefined || fontSubsetWrapped === undefined ? undefined : readEmbeddedFonts({ [`ppt/${fontSubsetRelationTarget}`]: fontSubsetWrapped })[0];",
+      "const fontSubsetPayload = fontSubsetResource?.payload;",
       'const fontSubsetStyleReferenceMatches = fontSubsetRelationId !== undefined && fontSubsetPresentation.includes(`<p:regular r:id="${fontSubsetRelationId}"/>`);',
       "const fontSubsetSourceFont = fontkit.create(Buffer.from(embeddedFontBytes));",
-      "const fontSubsetFont = fontSubsetPayload === undefined ? undefined : fontkit.create(Buffer.from(fontSubsetPayload));",
+      "const fontSubsetFont = fontSubsetResource?.parsed;",
       'const fontSubsetGlyphsMatch = fontSubsetFont !== undefined && [..."Subset AV"].every((character) => fontSubsetFont.hasGlyphForCodePoint(character.codePointAt(0) ?? -1)) && fontSubsetSourceFont.hasGlyphForCodePoint(90) && !fontSubsetFont.hasGlyphForCodePoint(90);',
       'if (fontSubsetFile.errors.length !== 0 || fontSubsetFile.slides[0]?.objects[0]?.text?.text !== "Subset AV" || fontSubsetRelationTarget === undefined || fontSubsetPayload === undefined || fontSubsetPayload.byteLength >= embeddedFontBytes.byteLength || !fontSubsetStyleReferenceMatches || !fontSubsetGlyphsMatch) throw new Error(JSON.stringify({ errors: fontSubsetFile.errors, text: fontSubsetFile.slides[0]?.objects[0]?.text?.text, fontSubsetRelationTarget, payloadLength: fontSubsetPayload?.byteLength, sourceFontLength: embeddedFontBytes.byteLength, fontSubsetStyleReferenceMatches, fontSubsetGlyphsMatch }));',
       'await writeFile("font-subset-installed.pptx", fontSubsetResult.pptx);',
@@ -709,24 +742,48 @@ try {
       readonly name?: string;
       readonly title?: string;
       readonly slideCount?: number;
+      readonly fontMode?: "default" | "full" | "subset";
+      readonly embeddedFonts?: readonly {
+        readonly part?: string;
+        readonly family?: string;
+        readonly weight?: number;
+        readonly payloadBytes?: number;
+        readonly sha256?: string;
+      }[];
       readonly bytes?: number;
       readonly sha256?: string;
     }[];
     readonly installedExampleCliEquivalent?: boolean;
   };
   const expectedRepresentativeDecks = [
-    ["capability-deck", "灵感实验室 · 原创能力册", 12],
-    ["sales-report", "季度销售经营报告", 2],
-    ["school-reference", "PowerPoint School 参考页", 2],
+    ["capability-deck", "灵感实验室 · 原创能力册", 12, "default"],
+    ["sales-report", "季度销售经营报告", 2, "default"],
+    ["school-reference", "PowerPoint School 参考页", 2, "default"],
+    ["capability-deck-full", "灵感实验室 · 原创能力册", 12, "full"],
+    ["capability-deck-subset", "灵感实验室 · 原创能力册", 12, "subset"],
   ] as const;
+  const defaultCapabilityDeck = summary.representativeDecks?.find(
+    ({ name }) => name === "capability-deck",
+  );
+  const fullCapabilityDeck = summary.representativeDecks?.find(
+    ({ name }) => name === "capability-deck-full",
+  );
+  const subsetCapabilityDeck = summary.representativeDecks?.find(
+    ({ name }) => name === "capability-deck-subset",
+  );
+  const fullCapabilityDeckFonts = fullCapabilityDeck?.embeddedFonts ?? [];
+  const subsetCapabilityDeckFonts = subsetCapabilityDeck?.embeddedFonts ?? [];
   if (
     summary.installedExampleCliEquivalent !== true ||
     JSON.stringify(
-      summary.representativeDecks?.map(({ name, title, slideCount }) => [
-        name,
-        title,
-        slideCount,
-      ]),
+      summary.representativeDecks?.map(
+        ({ name, title, slideCount, fontMode }) => [
+          name,
+          title,
+          slideCount,
+          fontMode,
+        ],
+      ),
     ) !== JSON.stringify(expectedRepresentativeDecks) ||
     summary.representativeDecks?.some(
       ({ bytes, sha256 }) =>
@@ -734,6 +791,12 @@ try {
         bytes <= 0 ||
         !/^[a-f\d]{64}$/u.test(sha256 ?? ""),
     ) !== false ||
+    defaultCapabilityDeck?.fontMode !== "default" ||
+    defaultCapabilityDeck.embeddedFonts?.length !== 0 ||
+    fullCapabilityDeck?.fontMode !== "full" ||
+    fullCapabilityDeckFonts.length === 0 ||
+    subsetCapabilityDeck?.fontMode !== "subset" ||
+    subsetCapabilityDeckFonts.length === 0 ||
     summary.installedCliSlideId !== "source-cli" ||
     summary.installedCliText !== "安装 CLI 源码标题" ||
     summary.installedCliTitle !== "安装 CLI 源码标题" ||

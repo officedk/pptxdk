@@ -164,8 +164,19 @@ export type FileAnimationStep = {
   readonly effects: readonly FileAnimationEffect[];
 };
 
+export type FileAnimationTargetRange =
+  | { readonly type: "paragraph"; readonly start: number; readonly end: number }
+  | {
+      readonly type: "chart";
+      readonly step: "gridLegend" | "series" | "category";
+      readonly seriesIndex: number;
+      readonly categoryIndex: number;
+    };
+
 export type FileAnimationEffect = {
   readonly targetId: number;
+  readonly targetRange?: FileAnimationTargetRange;
+  readonly nativeBuild?: "paragraph" | "series" | "category";
   readonly kind: "entrance" | "emphasis";
   readonly preset:
     | "fade"
@@ -178,6 +189,15 @@ export type FileAnimationEffect = {
     | "spin";
   readonly durationMs: number;
   readonly delayMs: number;
+  readonly by?: "word" | "letter";
+  readonly intervalMs?: number;
+  readonly completion?: "unknown";
+  readonly startAfter?: {
+    readonly targetId: number;
+    readonly timingId: number;
+    readonly point: "end";
+    readonly offsetMs: number;
+  };
   readonly from?: "left" | "right" | "top" | "bottom" | number;
   readonly easing?: {
     readonly accelerate?: number;
@@ -2635,6 +2655,20 @@ function collectObjectIds(objects: readonly FileObject[]): Set<number> {
   return result;
 }
 
+function findObjectById(
+  objects: readonly FileObject[],
+  id: number,
+): FileObject | undefined {
+  const pending = [...objects];
+  while (pending.length > 0) {
+    const object = pending.pop();
+    if (object === undefined) continue;
+    if (object.id === id) return object;
+    pending.push(...(object.members ?? []));
+  }
+  return undefined;
+}
+
 function readSlideAnimations(
   slide: XmlElement,
   part: string,
@@ -2650,6 +2684,8 @@ function readSlideAnimations(
   if (timing === undefined) return undefined;
 
   const timeIds = new Set<number>();
+  const effectTimeIds = new Set<number>();
+  const effectTargets = new Map<number, number>();
   for (const timeNode of descendantsByName(
     timing,
     presentationNamespace,
@@ -2669,9 +2705,73 @@ function readSlideAnimations(
       );
     }
     timeIds.add(id);
+    if (attribute(timeNode, "presetID") !== "") {
+      effectTimeIds.add(id);
+      const targetIds = descendantsByName(
+        timeNode,
+        presentationNamespace,
+        "spTgt",
+      )
+        .map((target) => positiveIntegerValue(attribute(target, "spid")))
+        .filter((targetId): targetId is number => targetId !== undefined);
+      const uniqueTargetIds = new Set(targetIds);
+      if (uniqueTargetIds.size === 1 && targetIds.length > 0) {
+        const [targetId] = uniqueTargetIds;
+        if (targetId !== undefined) effectTargets.set(id, targetId);
+      }
+    }
   }
 
   const knownObjects = collectObjectIds(objects);
+  const buildList = first(timing, presentationNamespace, "bldLst");
+  const paragraphBuilds = new Map<number, string>();
+  const chartBuilds = new Map<number, "all" | "series" | "category">();
+  const chartBuildGroupIds = new Map<number, number>();
+  if (buildList !== undefined) {
+    for (const build of elements(buildList, presentationNamespace, "bldP")) {
+      const targetId = positiveIntegerValue(attribute(build, "spid"));
+      if (targetId !== undefined) {
+        paragraphBuilds.set(targetId, attribute(build, "build"));
+      }
+    }
+    for (const build of elements(
+      buildList,
+      presentationNamespace,
+      "bldGraphic",
+    )) {
+      const targetId = positiveIntegerValue(attribute(build, "spid"));
+      if (targetId === undefined) continue;
+      const groupId = positiveIntegerValue(attribute(build, "grpId"));
+      if (
+        groupId === undefined ||
+        !timeIds.has(groupId) ||
+        effectTargets.get(groupId) !== targetId
+      ) {
+        issue(
+          errors,
+          part,
+          "invalid-chart-build-group",
+          "图表构建声明必须关联同一图表的原生时间节点",
+        );
+        continue;
+      }
+      chartBuildGroupIds.set(targetId, groupId);
+      const subBuild = first(build, presentationNamespace, "bldSub");
+      const chartBuild =
+        subBuild === undefined
+          ? undefined
+          : first(subBuild, drawingNamespace, "bldChart");
+      const mode =
+        chartBuild === undefined
+          ? first(build, presentationNamespace, "bldAsOne") === undefined
+            ? undefined
+            : "all"
+          : attribute(chartBuild, "bld");
+      if (mode === "all" || mode === "series" || mode === "category") {
+        chartBuilds.set(targetId, mode);
+      }
+    }
+  }
   const mainSequence = descendantsByName(
     timing,
     presentationNamespace,
@@ -2880,6 +2980,229 @@ function readSlideAnimations(
           );
           continue;
         }
+        let invalidRange = false;
+        const ranges: (FileAnimationTargetRange | undefined)[] =
+          targetNodes.map((target) => {
+            const textElement = first(target, presentationNamespace, "txEl");
+            if (textElement !== undefined) {
+              const range = first(textElement, presentationNamespace, "pRg");
+              const start = nonNegativeIntegerValue(
+                range === undefined ? "" : attribute(range, "st"),
+              );
+              const end = nonNegativeIntegerValue(
+                range === undefined ? "" : attribute(range, "end"),
+              );
+              if (start === undefined || end === undefined || start > end) {
+                issue(
+                  errors,
+                  part,
+                  "invalid-animation-target-range",
+                  "文字动画段落范围必须是有效的非负闭区间",
+                );
+                invalidRange = true;
+                return undefined;
+              }
+              return { type: "paragraph" as const, start, end };
+            }
+            const graphicElement = first(
+              target,
+              presentationNamespace,
+              "graphicEl",
+            );
+            const chart =
+              graphicElement === undefined
+                ? undefined
+                : first(graphicElement, drawingNamespace, "chart");
+            if (chart !== undefined) {
+              const seriesIndex = integerAttribute(chart, "seriesIdx");
+              const categoryIndex = integerAttribute(chart, "categoryIdx");
+              const step = attribute(chart, "bldStep");
+              if (
+                seriesIndex === undefined ||
+                categoryIndex === undefined ||
+                (step !== "gridLegend" &&
+                  step !== "series" &&
+                  step !== "category")
+              ) {
+                issue(
+                  errors,
+                  part,
+                  "invalid-animation-target-range",
+                  "图表动画范围缺少有效的系列、分类或展开步骤",
+                );
+                invalidRange = true;
+                return undefined;
+              }
+              return {
+                type: "chart" as const,
+                step: step as "gridLegend" | "series" | "category",
+                seriesIndex,
+                categoryIndex,
+              };
+            }
+            return undefined;
+          });
+        if (invalidRange) continue;
+        const rangeSignatures = new Set(
+          ranges.map((range) => JSON.stringify(range)),
+        );
+        if (rangeSignatures.size > 1) {
+          issue(
+            errors,
+            part,
+            "inconsistent-animation-target-range",
+            "同一动画的行为节点必须指向相同原生文字或图表范围",
+          );
+          continue;
+        }
+        const targetRange = ranges[0];
+        const targetObject = findObjectById(objects, targetId);
+        const chartSeriesCount = targetObject?.chart?.series.length ?? 0;
+        const chartCategoryCount =
+          targetObject?.chart?.series[0]?.categories.length ?? 0;
+        if (
+          targetRange?.type === "paragraph" &&
+          (targetObject?.text === undefined ||
+            paragraphBuilds.get(targetId) !== "p" ||
+            targetRange.end >= targetObject.text.paragraphs.length)
+        ) {
+          issue(
+            errors,
+            part,
+            "invalid-animation-target-range",
+            "文字动画段落范围超出目标原生文字对象",
+          );
+          continue;
+        }
+        if (
+          targetRange?.type === "chart" &&
+          (targetObject?.kind !== "chart" ||
+            integerAttribute(effectTimeNode, "grpId") !==
+              chartBuildGroupIds.get(targetId) ||
+            (targetRange.step !== "gridLegend" &&
+              chartBuilds.get(targetId) !== targetRange.step) ||
+            chartBuilds.get(targetId) === undefined ||
+            (targetRange.step === "gridLegend" &&
+              chartBuilds.get(targetId) === "all") ||
+            (targetRange.step === "gridLegend" &&
+              (targetRange.seriesIndex !== -3 ||
+                targetRange.categoryIndex !== -3)) ||
+            (targetRange.step === "series" &&
+              (targetRange.seriesIndex < 0 ||
+                targetRange.categoryIndex !== -4 ||
+                targetRange.seriesIndex >= chartSeriesCount)) ||
+            (targetRange.step === "category" &&
+              (targetRange.seriesIndex !== -4 ||
+                targetRange.categoryIndex < 0 ||
+                targetRange.categoryIndex >= chartCategoryCount)))
+        ) {
+          issue(
+            errors,
+            part,
+            "invalid-animation-target-range",
+            "图表动画范围超出原生图表中的系列或分类",
+          );
+          continue;
+        }
+        const iterateNodes = elements(
+          effectTimeNode,
+          presentationNamespace,
+          "iterate",
+        );
+        if (iterateNodes.length > 1) {
+          issue(
+            errors,
+            part,
+            "invalid-animation-iteration",
+            "一个动画效果只能包含一个原生迭代声明",
+          );
+          continue;
+        }
+        const iterate = iterateNodes[0];
+        let by: "word" | "letter" | undefined;
+        let intervalMs: number | undefined;
+        if (iterate !== undefined) {
+          const type = attribute(iterate, "type");
+          const interval = first(iterate, presentationNamespace, "tmAbs");
+          const value = nonNegativeIntegerValue(
+            interval === undefined ? "" : attribute(interval, "val"),
+          );
+          if (
+            (type !== "wd" && type !== "lt") ||
+            value === undefined ||
+            value < 1 ||
+            targetRange !== undefined ||
+            targetObject?.text === undefined ||
+            !paragraphBuilds.has(targetId)
+          ) {
+            issue(
+              errors,
+              part,
+              "invalid-animation-iteration",
+              "文字迭代必须为逐词或逐字，带正整数绝对间隔，并指向原生文字对象",
+            );
+            continue;
+          }
+          by = type === "wd" ? "word" : "letter";
+          intervalMs = value;
+        }
+        const effectConditions =
+          effectConditionList === undefined
+            ? []
+            : elements(effectConditionList, presentationNamespace, "cond");
+        const endConditions = effectConditions.filter(
+          (condition) => attribute(condition, "evt") === "end",
+        );
+        let startAfter:
+          | {
+              readonly targetId: number;
+              readonly timingId: number;
+              readonly point: "end";
+              readonly offsetMs: number;
+            }
+          | undefined;
+        if (endConditions.length > 0) {
+          const condition = endConditions[0];
+          const timingReference =
+            condition === undefined
+              ? undefined
+              : first(condition, presentationNamespace, "tn");
+          const timingId = positiveIntegerValue(
+            timingReference === undefined
+              ? ""
+              : attribute(timingReference, "val"),
+          );
+          const offsetMs = nonNegativeIntegerValue(
+            condition === undefined
+              ? "0"
+              : attribute(condition, "delay") || "0",
+          );
+          const sourceTargetId =
+            timingId === undefined ? undefined : effectTargets.get(timingId);
+          if (
+            endConditions.length !== 1 ||
+            timingId === undefined ||
+            offsetMs === undefined ||
+            !timeIds.has(timingId) ||
+            !effectTimeIds.has(timingId) ||
+            sourceTargetId === undefined ||
+            timingId === positiveIntegerValue(attribute(effectTimeNode, "id"))
+          ) {
+            issue(
+              errors,
+              part,
+              "invalid-animation-end-dependency",
+              "动画完成依赖必须引用另一个有效原生效果的 end 事件",
+            );
+            continue;
+          }
+          startAfter = {
+            targetId: sourceTargetId,
+            timingId,
+            point: "end",
+            offsetMs,
+          };
+        }
         const easing: { accelerate?: number; decelerate?: number } = {};
         const accelerate = integerAttribute(effectTimeNode, "accel");
         const decelerate = integerAttribute(effectTimeNode, "decel");
@@ -2935,12 +3258,23 @@ function readSlideAnimations(
               ? undefined
               : rotationFrom / 60000
             : direction;
+        const chartBuild = chartBuilds.get(targetId);
         effects.push({
           targetId,
+          ...(targetRange === undefined ? {} : { targetRange }),
+          ...(targetRange?.type === "paragraph"
+            ? { nativeBuild: "paragraph" as const }
+            : chartBuild === "series" || chartBuild === "category"
+              ? { nativeBuild: chartBuild }
+              : {}),
           kind,
           preset,
           durationMs,
           delayMs: groupDelay + effectDelay,
+          ...(by === undefined ? {} : { by }),
+          ...(intervalMs === undefined ? {} : { intervalMs }),
+          ...(by === undefined ? {} : { completion: "unknown" as const }),
+          ...(startAfter === undefined ? {} : { startAfter }),
           ...(from === undefined ? {} : { from }),
           ...(Object.keys(easing).length === 0 ? {} : { easing }),
         });

@@ -102,6 +102,9 @@ function validateKnownMotionTimes(observation: MotionObservation): void {
     validateKnownTime(scope.startMs, "编排作用域起点");
     validateKnownTime(scope.endMs, "编排作用域完成时刻");
     validateKnownTime(scope.startAfter?.offsetMs, "作用域完成依赖偏移");
+    for (const dependency of scope.startAfterAll ?? []) {
+      validateKnownTime(dependency.offsetMs, "作用域起点约束偏移");
+    }
   }
   for (const step of observation.steps) {
     for (const effect of step.effects) {
@@ -111,6 +114,9 @@ function validateKnownMotionTimes(observation: MotionObservation): void {
       validateKnownTime(effect.startMs, "动画起点");
       validateKnownTime(effect.endMs, "动画完成时刻");
       validateKnownTime(effect.startAfter?.offsetMs, "动画完成依赖偏移");
+      for (const dependency of effect.startAfterAll ?? []) {
+        validateKnownTime(dependency.offsetMs, "动画起点约束偏移");
+      }
     }
   }
 }
@@ -807,15 +813,22 @@ function startAfterDelay(
   start: MotionPlanStart,
   delayMs: number,
 ): MotionPlanStart {
-  return start.kind === "parent-start"
-    ? { kind: start.kind, delayMs: start.delayMs + delayMs }
-    : {
-        kind: start.kind,
-        dependency: {
-          ...start.dependency,
-          offsetMs: start.dependency.offsetMs + delayMs,
-        },
-      };
+  if (start.kind === "parent-start") {
+    return { kind: start.kind, delayMs: start.delayMs + delayMs };
+  }
+  if (start.kind === "end") {
+    return {
+      kind: start.kind,
+      dependency: {
+        ...start.dependency,
+        offsetMs: start.dependency.offsetMs + delayMs,
+      },
+    };
+  }
+  if (start.kind === "condition-join") {
+    return { kind: "condition-end", id: start.id, delayMs };
+  }
+  return { ...start, delayMs: start.delayMs + delayMs };
 }
 
 // 仅在合并结果仍可写入单个 ST_TLTime 字段时折叠延迟层。
@@ -827,8 +840,13 @@ function addNativeStartDelay(
   const value =
     delayed.kind === "parent-start"
       ? delayed.delayMs
-      : delayed.dependency.offsetMs;
+      : delayed.kind === "end"
+        ? delayed.dependency.offsetMs
+        : delayed.kind === "condition-end"
+          ? delayed.delayMs
+          : undefined;
   return Number.isSafeInteger(value) &&
+    value !== undefined &&
     value >= 0 &&
     value <= maximumTimeNodeValue
     ? delayed
@@ -839,8 +857,21 @@ function composeNativeStarts(
   inherited: MotionPlanStart | undefined,
   child: MotionPlanStart,
 ): MotionPlanStart | undefined {
-  // 只有沿用父起点的子项才合并延迟；独立 end 条件不继承父延迟。
-  if (inherited === undefined || child.kind === "end") return child;
+  // 多约束集合必须留在原宿主中，不能与已投影的父起点折叠。
+  if (child.kind === "condition-join") {
+    return inherited === undefined ? child : undefined;
+  }
+  // 独立完成事件不继承父延迟；其他子项沿用父起点时才合并延迟。
+  if (
+    inherited === undefined ||
+    child.kind === "end" ||
+    child.kind === "condition-end"
+  ) {
+    return child;
+  }
+  if (inherited.kind === "condition-join") {
+    return { kind: "condition-end", id: inherited.id, delayMs: child.delayMs };
+  }
   return addNativeStartDelay(inherited, child.delayMs);
 }
 
@@ -868,11 +899,29 @@ function nativeStartCondition(
   effectNodeIds: ReadonlyMap<string, number>,
   scopeNodeIds: ReadonlyMap<string, number>,
   targetGroupIds: ReadonlyMap<string, number>,
+  conditionNodeIds: ReadonlyMap<string, number>,
 ): string {
   if (start.kind === "parent-start") {
     return element("p:cond", {
       delay: timeNodeValue(start.delayMs, "动画起点延迟"),
     });
+  }
+  if (start.kind === "condition-join") {
+    throw new Error("MotionPlan 条件集合必须先于其消费者写出");
+  }
+  if (start.kind === "condition-end") {
+    const conditionId = conditionNodeIds.get(`${stepKey}:${start.id}`);
+    if (conditionId === undefined) {
+      throw new Error("MotionPlan 条件集合缺少原生时间节点身份");
+    }
+    return element(
+      "p:cond",
+      {
+        evt: "end",
+        delay: timeNodeValue(start.delayMs, "条件集合完成偏移"),
+      },
+      element("p:tn", { val: conditionId }),
+    );
   }
   const dependencyId = dependencyTimingId(
     start.dependency,
@@ -922,6 +971,44 @@ function timingContainer(
   );
 }
 
+function conditionJoinTree(
+  start: Extract<MotionPlanStart, { readonly kind: "condition-join" }>,
+  stepKey: string,
+  ids: TimingIds,
+  effectNodeIds: ReadonlyMap<string, number>,
+  scopeNodeIds: ReadonlyMap<string, number>,
+  targetGroupIds: ReadonlyMap<string, number>,
+  conditionNodeIds: ReadonlyMap<string, number>,
+): string {
+  const id = conditionNodeIds.get(`${stepKey}:${start.id}`);
+  if (id === undefined) {
+    throw new Error("MotionPlan 条件集合缺少原生时间节点身份");
+  }
+  const leaves = start.gates.map((gate) =>
+    element(
+      "p:par",
+      undefined,
+      element(
+        "p:cTn",
+        { id: ids.take(), dur: 0, fill: "hold" },
+        element(
+          "p:stCondLst",
+          undefined,
+          nativeStartCondition(
+            gate,
+            stepKey,
+            effectNodeIds,
+            scopeNodeIds,
+            targetGroupIds,
+            conditionNodeIds,
+          ),
+        ),
+      ),
+    ),
+  );
+  return timingContainer(id, element("p:cond", { delay: 0 }), leaves);
+}
+
 function mainSequenceWithGroup(
   id: number,
   children: readonly string[],
@@ -950,6 +1037,7 @@ function timingXml(
   const effectNodeIds = new Map<string, number>();
   const scopeNodeIds = new Map<string, number>();
   const targetGroupIds = new Map<string, number>();
+  const conditionNodeIds = new Map<string, number>();
   const referencedScopeNodes = new Set<string>();
   const referencedTargetGroups = new Set<string>();
 
@@ -966,6 +1054,17 @@ function timingXml(
         } else if ("group" in dependency) {
           referencedTargetGroups.add(`${stepKey}:${dependency.targetId}`);
         }
+      } else if (node.nativeStart.kind === "condition-join") {
+        referencedScopeNodes.add(`${stepKey}:${node.nativeStart.hostScopeId}`);
+        for (const gate of node.nativeStart.gates) {
+          if (gate.kind !== "end") continue;
+          const dependency = gate.dependency;
+          if ("scopeId" in dependency) {
+            referencedScopeNodes.add(`${stepKey}:${dependency.scopeId}`);
+          } else if ("group" in dependency) {
+            referencedTargetGroups.add(`${stepKey}:${dependency.targetId}`);
+          }
+        }
       }
       if (node.kind === "scope") {
         collectReferencedContainers(node.children, stepKey);
@@ -981,6 +1080,9 @@ function timingXml(
     stepKey: string,
   ): void => {
     for (const node of nodes) {
+      if (node.nativeStart.kind === "condition-join") {
+        conditionNodeIds.set(`${stepKey}:${node.nativeStart.id}`, ids.take());
+      }
       if (node.kind === "scope") {
         scopeNodeIds.set(`${stepKey}:${node.id}`, ids.take());
         registerNodeIds(node.children, stepKey);
@@ -1160,12 +1262,30 @@ function timingXml(
               ? "afterEffect"
               : "withEffect";
         const nodeType = defaultNodeType;
-        const effectiveStart = composeNativeStarts(
+        let effectiveStart = composeNativeStarts(
           inheritedStart,
           node.nativeStart,
         );
         if (effectiveStart === undefined) {
           throw new Error("原生时序投影需要保留延迟分层");
+        }
+        if (effectiveStart.kind === "condition-join") {
+          rendered.push(
+            conditionJoinTree(
+              effectiveStart,
+              step.key,
+              ids,
+              effectNodeIds,
+              scopeNodeIds,
+              targetGroupIds,
+              conditionNodeIds,
+            ),
+          );
+          effectiveStart = {
+            kind: "condition-end",
+            id: effectiveStart.id,
+            delayMs: 0,
+          };
         }
         if (node.kind === "scope") {
           const scopeId = scopeNodeIds.get(`${step.key}:${node.id}`);
@@ -1195,6 +1315,7 @@ function timingXml(
               effectNodeIds,
               scopeNodeIds,
               targetGroupIds,
+              conditionNodeIds,
             );
             const children = renderNodes(node.children, undefined, false);
             rendered.push(
@@ -1225,6 +1346,7 @@ function timingXml(
           effectNodeIds,
           scopeNodeIds,
           targetGroupIds,
+          conditionNodeIds,
         );
         const targetGroupKey = `${step.key}:${node.targetId}`;
         const effectStarts = node.effects.map((effect) =>
@@ -1279,6 +1401,7 @@ function timingXml(
             effectNodeIds,
             scopeNodeIds,
             targetGroupIds,
+            conditionNodeIds,
           );
           const buildGroupId =
             effect.target.range?.type === "chart"

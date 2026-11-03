@@ -38,6 +38,7 @@ function observedShape(
   y: number,
   fill: string,
   duration: number,
+  delay = 0,
 ) {
   return createElement(Shape, {
     testId,
@@ -47,7 +48,7 @@ function observedShape(
     height: 24,
     fill,
     text,
-    enter: fade({ duration }),
+    enter: fade({ duration, delay }),
   });
 }
 
@@ -737,6 +738,131 @@ function UnknownCompletionTree() {
   );
 }
 
+type IncomparableJoinOptions = {
+  readonly firstText: string;
+  readonly trigger: "auto" | "click" | "explicit";
+  readonly unknownParentStart?: boolean;
+  readonly parentStartGate?: boolean;
+  readonly scopeDelayMs?: number;
+  readonly effectDelayMs?: number;
+};
+
+function IncomparableUnknownJoin({
+  firstText,
+  trigger,
+  unknownParentStart = false,
+  parentStartGate = false,
+  scopeDelayMs = 0,
+  effectDelayMs = 0,
+}: IncomparableJoinOptions) {
+  const parentSource = useMotionScope();
+  const outer = useMotionScope();
+  const chain = useMotionScope();
+  const inner = useMotionScope();
+  const delayed = useMotionScope();
+  const afterJoin = useMotionScope();
+  const selfStarted = useMotionScope();
+  const follower = useMotionScope();
+  const source = createElement(
+    Text,
+    {
+      testId: "join-parent-source",
+      x: 10,
+      y: 8,
+      width: 300,
+      height: 24,
+      style: { fontSize: 12 },
+      enter: fade({ by: "letter", duration: 1000, intervalMs: 500 }),
+    },
+    "AB",
+  );
+  const first = createElement(
+    Text,
+    {
+      testId: "join-first",
+      x: 10,
+      y: 8,
+      width: 300,
+      height: 24,
+      style: { fontSize: 12 },
+      enter: fade({ by: "letter", duration: 1000, intervalMs: 500 }),
+    },
+    firstText,
+  );
+  const late = createElement(
+    Text,
+    {
+      testId: "join-late",
+      x: 10,
+      y: 42,
+      width: 300,
+      height: 24,
+      style: { fontSize: 12 },
+      enter: fade({ by: "letter", duration: 1000, intervalMs: 500 }),
+    },
+    "XY",
+  );
+  const chainContents = createElement(
+    MotionScope,
+    { scope: inner },
+    first,
+    createElement(MotionScope, { scope: delayed, delay: 1000 }, late),
+  );
+  const orderedChain = createElement(
+    MotionScope,
+    { scope: chain, mode: "sequence" },
+    chainContents,
+    createElement(
+      MotionScope,
+      {
+        scope: afterJoin,
+        startAt: parentStartGate
+          ? after(chain.start, 5000)
+          : after(delayed.end, 11000),
+        ...(scopeDelayMs === 0 ? {} : { delay: scopeDelayMs }),
+      },
+      observedShape("join-after", "D", 122, "#ED7D31", 100, effectDelayMs),
+    ),
+  );
+  const outerScope = createElement(
+    MotionScope,
+    {
+      scope: outer,
+      ...(unknownParentStart ? { startAt: after(parentSource.end, 25) } : {}),
+    },
+    orderedChain,
+    createElement(
+      MotionScope,
+      { scope: selfStarted, startAt: after(chain.start, 4000) },
+      observedShape("join-independent", "C", 88, "#4472C4", 100),
+    ),
+  );
+  const content = createElement(
+    Fragment,
+    null,
+    unknownParentStart
+      ? createElement(MotionScope, { scope: parentSource }, source)
+      : null,
+    outerScope,
+    createElement(
+      MotionScope,
+      { scope: follower, startAt: outer.end },
+      observedShape("join-follower", "E", 156, "#70AD47", 100),
+    ),
+  );
+  const stepped =
+    trigger === "explicit"
+      ? createElement(Step, { n: 2 }, content)
+      : trigger === "click"
+        ? createElement(Step, null, content)
+        : content;
+  return createElement(
+    Deck,
+    { width: 320, height: 190 },
+    createElement(Slide, { slideId: "incomparable-unknown-join" }, stepped),
+  );
+}
+
 function UnknownCompletionEntryDeck() {
   const autoCollection = useMotionScope();
   const autoSource = useMotionScope();
@@ -1343,6 +1469,368 @@ describe("组件编排作用域", () => {
         ({ code }) => code === "invalid-animation-end-dependency",
       ),
     );
+  });
+
+  it("同父顺序成员间保留不可比较的未知完成约束和真实整体完成", async () => {
+    const variants: readonly IncomparableJoinOptions[] = [
+      { firstText: "AB", trigger: "auto" },
+      { firstText: "ABCDEFGHIJKLMNOPQRSTUVWXYZ123456", trigger: "auto" },
+      { firstText: "AB", trigger: "click" },
+      { firstText: "ABCDEFGHIJKLMNOPQRSTUVWXYZ123456", trigger: "click" },
+      {
+        firstText: "AB",
+        trigger: "explicit",
+        unknownParentStart: true,
+      },
+      {
+        firstText: "ABCDEFGHIJKLMNOPQRSTUVWXYZ123456",
+        trigger: "explicit",
+        unknownParentStart: true,
+      },
+      { firstText: "AB", trigger: "auto", parentStartGate: true },
+      { firstText: "AB", trigger: "click", parentStartGate: true },
+      {
+        firstText: "AB",
+        trigger: "auto",
+        parentStartGate: true,
+        effectDelayMs: 37,
+      },
+      {
+        firstText: "AB",
+        trigger: "click",
+        parentStartGate: true,
+        scopeDelayMs: 41,
+        effectDelayMs: 37,
+      },
+      { firstText: "AB", trigger: "auto", effectDelayMs: 37 },
+      {
+        firstText: "AB",
+        trigger: "click",
+        scopeDelayMs: 41,
+        effectDelayMs: 37,
+      },
+    ];
+
+    for (const options of variants) {
+      const result = await build(
+        createElement(IncomparableUnknownJoin, options),
+      );
+      const slide = result.report.slides[0];
+      const motion = slide?.capabilities?.["motion"] as MotionObservation;
+      const objectId = (testId: string) =>
+        slide?.objects.find(({ testId: id }) => id === testId)?.id;
+      const scopeContaining = (testId: string) =>
+        motion.scopes?.find(({ members }) =>
+          members.some(
+            (member) =>
+              member.kind === "object" && member.id === objectId(testId),
+          ),
+        );
+      const delayedScope = scopeContaining("join-late");
+      const innerScope = motion.scopes?.find(
+        ({ members }) =>
+          members.some(
+            (member) =>
+              member.kind === "object" && member.id === objectId("join-first"),
+          ) &&
+          members.some(
+            (member) =>
+              member.kind === "scope" && member.id === delayedScope?.id,
+          ),
+      );
+      const afterJoinScope = scopeContaining("join-after");
+      const chainScope = motion.scopes?.find(
+        ({ members }) =>
+          members.some(
+            (member) => member.kind === "scope" && member.id === innerScope?.id,
+          ) &&
+          members.some(
+            (member) =>
+              member.kind === "scope" && member.id === afterJoinScope?.id,
+          ),
+      );
+      const selfStartedScope = scopeContaining("join-independent");
+      const outerScope = motion.scopes?.find(
+        ({ members }) =>
+          members.some(
+            (member) => member.kind === "scope" && member.id === chainScope?.id,
+          ) &&
+          members.some(
+            (member) =>
+              member.kind === "scope" && member.id === selfStartedScope?.id,
+          ),
+      );
+      const conditionSources = [
+        {
+          scopeId: innerScope?.id,
+          point: "end" as const,
+          offsetMs: options.scopeDelayMs ?? 0,
+        },
+        options.parentStartGate === true
+          ? {
+              scopeId: chainScope?.id,
+              point: "start" as const,
+              offsetMs: 5000 + (options.scopeDelayMs ?? 0),
+            }
+          : {
+              scopeId: delayedScope?.id,
+              point: "end" as const,
+              offsetMs: 11000 + (options.scopeDelayMs ?? 0),
+            },
+      ];
+      const effectSources = conditionSources.map((dependency) => ({
+        ...dependency,
+        offsetMs: dependency.offsetMs + (options.effectDelayMs ?? 0),
+      }));
+      const firstObservation = motion.steps[0]?.effects.find(
+        ({ target }) => target.testId === "join-first",
+      );
+      const lateObservation = motion.steps[0]?.effects.find(
+        ({ target }) => target.testId === "join-late",
+      );
+      const afterJoinObservation = motion.steps[0]?.effects.find(
+        ({ target }) => target.testId === "join-after",
+      );
+      const followerObservation = motion.steps[0]?.effects.find(
+        ({ target }) => target.testId === "join-follower",
+      );
+      assert.deepEqual(
+        [firstObservation?.completion, firstObservation?.endMs],
+        ["unknown", undefined],
+      );
+      assert.deepEqual(
+        [lateObservation?.completion, lateObservation?.endMs],
+        ["unknown", undefined],
+      );
+      assert.deepEqual(
+        [
+          afterJoinScope?.startMs,
+          afterJoinScope?.endMs,
+          afterJoinScope?.completion,
+        ],
+        [undefined, undefined, "unknown"],
+      );
+      assert.deepEqual(afterJoinScope?.startAfterAll, conditionSources);
+      assert.equal(afterJoinScope?.startAfter, undefined);
+      assert.deepEqual(afterJoinObservation?.startAfterAll, effectSources);
+      assert.equal(afterJoinObservation?.startAfter, undefined);
+      assert.equal(afterJoinObservation?.completion, "unknown");
+      assert.deepEqual(
+        [
+          innerScope?.completion,
+          chainScope?.completion,
+          outerScope?.completion,
+        ],
+        ["unknown", "unknown", "unknown"],
+      );
+      assert.equal(
+        followerObservation?.startAfter &&
+          "scopeId" in followerObservation.startAfter &&
+          followerObservation.startAfter.scopeId,
+        outerScope?.id,
+      );
+      if (options.unknownParentStart === true) {
+        const parentSource = scopeContaining("join-parent-source");
+        assert.equal(
+          outerScope?.startAfter &&
+            "scopeId" in outerScope.startAfter &&
+            outerScope.startAfter.scopeId,
+          parentSource?.id,
+        );
+      }
+      assert.equal(
+        motion.steps[0]?.trigger,
+        options.trigger === "auto" ? "auto" : "click",
+      );
+      assert.equal(
+        motion.steps[0]?.number,
+        options.trigger === "explicit" ? 2 : undefined,
+      );
+
+      const file = await validatePptx(result.pptx);
+      assert.deepEqual(file.errors, []);
+      assert.deepEqual(file.extensions, []);
+      const fileSlide = file.slides[0];
+      const fileEffects = fileSlide?.animations?.[0]?.effects ?? [];
+      const fileEffect = (testId: string) =>
+        fileEffects.find(({ targetId }) => targetId === objectId(testId));
+      const firstEffect = fileEffect("join-first");
+      const lateEffect = fileEffect("join-late");
+      const afterJoinEffect = fileEffect("join-after");
+      const independentEffect = fileEffect("join-independent");
+      const followerEffect = fileEffect("join-follower");
+      const containers = fileSlide?.animationContainers ?? [];
+      const childrenOf = (parentId: number | undefined) =>
+        containers.find(({ timingId }) => timingId === parentId);
+      assert.ok(
+        firstEffect &&
+          lateEffect &&
+          afterJoinEffect &&
+          independentEffect &&
+          followerEffect,
+      );
+      assert.equal(firstEffect.by, "letter");
+      assert.equal(firstEffect.completion, "unknown");
+      assert.equal(lateEffect.by, "letter");
+      assert.equal(lateEffect.completion, "unknown");
+      const fileInner = containers.find(
+        ({ children, endSync }) =>
+          endSync === "all" &&
+          children.some(
+            ({ kind, timingId }) =>
+              kind === "effect" && timingId === firstEffect.timingId,
+          ) &&
+          children.some(
+            ({ kind, timingId }) =>
+              kind === "container" ||
+              (kind === "effect" && timingId === lateEffect.timingId),
+          ),
+      );
+      const fileDelayed = containers.find(
+        ({ children, endSync }) =>
+          endSync === "all" &&
+          children.some(
+            ({ kind, timingId }) =>
+              kind === "effect" && timingId === lateEffect.timingId,
+          ),
+      );
+      assert.ok(fileInner);
+      if (options.parentStartGate !== true) assert.ok(fileDelayed);
+      assert.equal(fileInner.durationMs, undefined);
+      const join = containers.find(({ children, endSync, durationMs }) => {
+        if (
+          endSync !== "all" ||
+          durationMs !== undefined ||
+          children.length !== 2
+        ) {
+          return false;
+        }
+        return children.every(({ kind, timingId }) => {
+          const gate = childrenOf(timingId);
+          return (
+            kind === "container" &&
+            gate?.durationMs === 0 &&
+            gate.children.length === 0
+          );
+        });
+      });
+      assert.ok(join);
+      const gates = join.children.map(({ timingId }) => childrenOf(timingId));
+      const secondGateSource =
+        options.parentStartGate === true ? undefined : fileDelayed?.timingId;
+      assert.deepEqual(
+        gates.map((gate) => [
+          gate?.startAfter?.timingId,
+          gate?.startAfter?.offsetMs,
+        ]),
+        [
+          [fileInner.timingId, options.scopeDelayMs ?? 0],
+          [
+            secondGateSource,
+            options.parentStartGate === true
+              ? undefined
+              : 11000 + (options.scopeDelayMs ?? 0),
+          ],
+        ],
+      );
+      assert.equal(afterJoinEffect.startAfter?.timingId, join.timingId);
+      assert.equal(
+        afterJoinEffect.startAfter?.offsetMs,
+        options.effectDelayMs ?? 0,
+      );
+      const fileChain = childrenOf(join.parentTimingId);
+      assert.ok(fileChain);
+      assert.ok(
+        fileChain.children.some(
+          ({ kind, timingId }) =>
+            kind === "container" && timingId === fileInner.timingId,
+        ),
+      );
+      const fileOuter = childrenOf(followerEffect.startAfter?.timingId);
+      assert.equal(fileOuter?.endSync, "all");
+      assert.equal(fileOuter?.durationMs, undefined);
+      assert.equal(followerEffect.startAfter?.timingId, fileOuter?.timingId);
+      assert.ok(
+        fileOuter?.children.some(
+          ({ kind, timingId }) =>
+            kind === "container" && timingId === fileChain.timingId,
+        ),
+      );
+      assert.ok(
+        fileOuter?.children.some(
+          ({ kind, timingId }) =>
+            kind === "effect" && timingId === independentEffect.timingId,
+        ),
+      );
+
+      const archive = unzipSync(result.pptx);
+      const slidePart = archive["ppt/slides/slide1.xml"];
+      assert.ok(slidePart);
+      const xml = strFromU8(slidePart);
+      const timingNodeIndex = (timingId: number) =>
+        xml.indexOf(`<p:cTn id="${timingId}"`);
+      assert.ok(timingNodeIndex(fileInner.timingId) >= 0);
+      assert.ok(
+        timingNodeIndex(join.timingId) > timingNodeIndex(fileInner.timingId),
+      );
+      assert.ok(
+        timingNodeIndex(afterJoinEffect.timingId) >
+          timingNodeIndex(join.timingId),
+      );
+      assert.match(
+        startConditions(xml, join.timingId),
+        /<p:cond delay="0"><\/p:cond>/u,
+      );
+      assert.match(
+        xml.slice(
+          timingNodeIndex(join.timingId),
+          timingNodeIndex(join.timingId) + 500,
+        ),
+        /<p:endSync evt="end" delay="0"><p:rtn val="all"><\/p:rtn><\/p:endSync>/u,
+      );
+      for (const [index, gate] of gates.entries()) {
+        assert.ok(gate);
+        const conditions = startConditions(xml, gate.timingId);
+        const offsetMs =
+          index === 0
+            ? (options.scopeDelayMs ?? 0)
+            : options.parentStartGate === true
+              ? 5000 + (options.scopeDelayMs ?? 0)
+              : 11000 + (options.scopeDelayMs ?? 0);
+        if (index === 1 && options.parentStartGate === true) {
+          assert.match(
+            conditions,
+            new RegExp(`<p:cond delay="${offsetMs}"><\\/p:cond>`, "u"),
+          );
+        } else {
+          assert.match(
+            conditions,
+            new RegExp(
+              `<p:cond evt="end" delay="${offsetMs}"><p:tn val="${gate.startAfter?.timingId}"><\\/p:tn><\\/p:cond>`,
+              "u",
+            ),
+          );
+        }
+        assert.match(
+          xml.slice(
+            timingNodeIndex(gate.timingId),
+            timingNodeIndex(gate.timingId) + 180,
+          ),
+          /dur="0"/u,
+        );
+      }
+      assert.match(
+        startConditions(xml, afterJoinEffect.timingId),
+        new RegExp(
+          `<p:cond evt="end" delay="${options.effectDelayMs ?? 0}"><p:tn val="${join.timingId}"><\\/p:tn><\\/p:cond>`,
+          "u",
+        ),
+      );
+      assert.equal(
+        fileOuter?.children.some(({ timingId }) => timingId === join.timingId),
+        false,
+      );
+    }
   });
 
   it("嵌套未知完成的自动步与点击步保留真实入口角色和完整依赖", async () => {

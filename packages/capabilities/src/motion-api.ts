@@ -47,7 +47,7 @@ export type MotionTargetRange =
       readonly categoryIndex: number;
     };
 
-/** 未知起点指向效果、同对象效果集合或真实作用域完成事件。 */
+/** 未知起点约束指向效果、同对象效果集合或真实作用域的起止时刻。 */
 export type MotionStartDependency =
   | {
       readonly targetId: number;
@@ -64,7 +64,7 @@ export type MotionStartDependency =
     }
   | {
       readonly scopeId: string;
-      readonly point: "end";
+      readonly point: "start" | "end";
       readonly offsetMs: number;
     };
 
@@ -583,6 +583,8 @@ export type MotionEffectObservation = {
   readonly endMs?: number;
   readonly completion?: Exclude<MotionCompletionState, "known">;
   readonly startAfter?: MotionStartDependency;
+  /** 未知起点由多项真实时刻共同约束时，列出全部来源及相对偏移。 */
+  readonly startAfterAll?: readonly MotionStartDependency[];
 };
 
 export type MotionStepObservation = {
@@ -612,6 +614,8 @@ export type MotionScopeObservation = {
   readonly endMs?: number;
   readonly completion: MotionCompletionState;
   readonly startAfter?: MotionStartDependency;
+  /** 未知起点由多项真实时刻共同约束时，列出全部来源及相对偏移。 */
+  readonly startAfterAll?: readonly MotionStartDependency[];
   readonly members: readonly (
     | { readonly kind: "scope"; readonly id: string }
     | { readonly kind: "object"; readonly id: number }

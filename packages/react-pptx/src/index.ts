@@ -187,6 +187,7 @@ export type {
   MotionGranularity,
   MotionCompletionState,
   MotionEffectObservation,
+  MotionNativeProjection,
   MotionMoment,
   MotionMomentOffset,
   MotionObservation,

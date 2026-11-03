@@ -466,6 +466,7 @@ export type SlideCapabilitySlot = "background" | "transition" | "timing";
 
 export type SlideCapabilityContext = {
   readonly path: string;
+  readonly dimensions: { readonly width: number; readonly height: number };
   readonly contributions: readonly CapabilityContribution[];
   readonly theme: ThemeContext;
   readonly registerResource: (resource: CapabilityResource) => string;

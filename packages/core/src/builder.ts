@@ -1863,6 +1863,7 @@ function compileSlide(
     try {
       const output = module.compileSlide(input, {
         path,
+        dimensions,
         contributions: slide.contributions,
         theme,
         registerResource(resource) {

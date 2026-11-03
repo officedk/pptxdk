@@ -608,6 +608,13 @@ export const imageCapability: CapabilityModule = {
       ...(testId === undefined ? {} : { testId }),
       textBody: false,
       filled: false,
+      box,
+      rotationDegrees:
+        typeof imageStyle["rotate"] === "number" ? imageStyle["rotate"] : 0,
+      hasBackground:
+        imageStyle["borderColor"] !== undefined ||
+        (typeof imageStyle["borderWidth"] === "number" &&
+          imageStyle["borderWidth"] > 0),
     });
     let escapedName: string;
     let escapedAlt: string | undefined;

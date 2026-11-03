@@ -336,6 +336,16 @@ export const shapeCapability: CapabilityModule = {
         props["fill"] !== undefined ||
         layoutStyle["backgroundColor"] !== undefined ||
         layoutStyle["backgroundImage"] !== undefined,
+      box,
+      rotationDegrees:
+        typeof layoutStyle["rotate"] === "number" ? layoutStyle["rotate"] : 0,
+      hasBackground:
+        props["fill"] !== undefined ||
+        layoutStyle["backgroundColor"] !== undefined ||
+        layoutStyle["backgroundImage"] !== undefined ||
+        layoutStyle["borderColor"] !== undefined ||
+        (typeof layoutStyle["borderWidth"] === "number" &&
+          layoutStyle["borderWidth"] > 0),
       ...(textOutput === undefined
         ? {}
         : { paragraphCount: textOutput.paragraphCount }),

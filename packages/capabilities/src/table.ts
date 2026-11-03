@@ -1248,6 +1248,11 @@ export const tableCapability: CapabilityModule = {
       filled: cells.some(
         (cell) => cell.fill !== undefined || rows[cell.row]?.fill !== undefined,
       ),
+      box,
+      rotationDegrees: 0,
+      hasBackground: cells.some(
+        (cell) => cell.fill !== undefined || rows[cell.row]?.fill !== undefined,
+      ),
     });
     return {
       xml: frameXml(

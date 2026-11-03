@@ -1293,6 +1293,14 @@ export const chartCapability: CapabilityModule = {
       ...(props.testId === undefined ? {} : { testId: props.testId }),
       textBody: false,
       filled: props.kind !== "line",
+      box: {
+        x: props.x!,
+        y: props.y!,
+        width: props.width!,
+        height: props.height!,
+      },
+      rotationDegrees: 0,
+      hasBackground: props.kind !== "line",
       chartSeriesCount: props.data.series.length,
       chartCategoryCount: props.data.categories.length,
     });

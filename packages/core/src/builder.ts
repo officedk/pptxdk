@@ -18,6 +18,13 @@ import {
   type PptxRelationship,
 } from "#/ooxml.ts";
 import {
+  createThemeContext,
+  textStyleFrom,
+  type ThemeContext,
+  type ThemeInput,
+  type ThemeScope,
+} from "#/theme.ts";
+import {
   formatBaseline,
   targets,
   type BuildOptions,
@@ -123,6 +130,7 @@ type BuildContext = {
   readonly target: Target;
   readonly dimensions: Dimensions;
   readonly options: BuildOptions;
+  readonly theme: ThemeContext;
   readonly layout: LayoutPassResult;
 };
 
@@ -365,7 +373,7 @@ function positiveDimension(value: unknown, label: string): number {
 }
 
 function deckDimensions(node: HostNode): Dimensions {
-  const unknown = ownKeys(node.props, ["width", "height"]);
+  const unknown = ownKeys(node.props, ["width", "height", "theme", "style"]);
   if (unknown !== undefined) {
     throw new BuildError([
       diagnostic("deck", "unknown-parameter", `Deck 含未知参数 ${unknown}`),
@@ -427,6 +435,7 @@ function resolveSlides(
       .map(({ slideProp }) => slideProp);
     const unknown = ownKeys(node.props, [
       "slideId",
+      "theme",
       "style",
       ...slideProperties,
     ]);
@@ -1038,12 +1047,14 @@ function compileChildren(
     const id = context.slide.nextId++;
     const input: CapabilityInput = child;
     const layoutBox = context.layout.boxes.get(child);
+    const theme = context.layout.themes.get(child) ?? context.theme;
     try {
       const output = module.compile(input, {
         id,
         path,
         options: context.options,
         ...(morphName === undefined ? {} : { morphName }),
+        theme,
         ...(layoutBox === undefined ? {} : { layoutBox }),
         compileChildren(nested) {
           return compileChildren(
@@ -1217,6 +1228,7 @@ function compileSlide(
   dimensions: Dimensions,
   document: DocumentBuildState,
   options: BuildOptions,
+  documentTheme: ThemeContext,
 ): SlideBuild {
   const slide: SlideBuildState = {
     nextId: 2,
@@ -1235,9 +1247,20 @@ function compileSlide(
     );
   }
   const children = node.children.map(capabilityChild);
+  let theme: ThemeContext;
+  try {
+    theme = documentTheme.with(
+      node.props["theme"] as ThemeScope | undefined,
+      textStyleFrom(node.props["style"]),
+    );
+  } catch (error) {
+    if (!(error instanceof CapabilityError)) throw error;
+    throw new BuildError([diagnostic(path, error.code, error.message)]);
+  }
   const layout = new LayoutPass(modules, dimensions).run(
     children,
     path,
+    theme,
     node.props["style"],
   );
   document.warnings.push(...layout.warnings);
@@ -1250,6 +1273,7 @@ function compileSlide(
       target,
       dimensions,
       options,
+      theme,
       layout,
     },
     path,
@@ -1356,6 +1380,16 @@ function compileDocument(
       diagnostic("deck", "document-root", "缺少 Deck 根组件"),
     ]);
   const size = deckDimensions(deck);
+  let theme: ThemeContext;
+  try {
+    theme = createThemeContext(
+      deck.props["theme"] as ThemeInput | undefined,
+      deck.props["style"] as Record<string, unknown> | undefined,
+    );
+  } catch (error) {
+    if (!(error instanceof CapabilityError)) throw error;
+    throw new BuildError([diagnostic("deck", error.code, error.message)]);
+  }
   const document: DocumentBuildState = {
     usedExtensions: new Set(),
     warnings: [],
@@ -1372,7 +1406,7 @@ function compileDocument(
     nextMorphName: 1,
   };
   const builtSlides = slides.map(({ node, id }) =>
-    compileSlide(node, id, modules, target, size, document, options),
+    compileSlide(node, id, modules, target, size, document, options, theme),
   );
   const morphDiagnostics: Diagnostic[] = [];
   for (let index = 1; index < slides.length; index += 1) {
@@ -1419,6 +1453,7 @@ function compileDocument(
       name,
       value,
     })),
+    theme.theme,
   );
   const pptx = zipSync(
     Object.fromEntries(

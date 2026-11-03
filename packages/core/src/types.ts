@@ -1,5 +1,34 @@
 import type { ReactNode } from "react";
 
+import type {
+  ThemeContext,
+  ThemeInput,
+  ThemeScope,
+  TextStyle,
+} from "#/theme.ts";
+
+export type {
+  ColorValue,
+  Font,
+  FontFace,
+  FontFaceStyle,
+  FontOptions,
+  FontReference,
+  FontSize,
+  FontToken,
+  NativeColorSlot,
+  ResolvedColor,
+  ResolvedThemeFont,
+  TextAlignment,
+  TextStyle,
+  Theme,
+  ThemeColor,
+  ThemeContext,
+  ThemeInput,
+  ThemeScope,
+  ThemeShade,
+} from "#/theme.ts";
+
 export const formatBaseline = "ECMA-376 5th edition Transitional" as const;
 
 export type Extension = "p14" | "p159";
@@ -145,7 +174,8 @@ export type LayoutStyle = {
 /** 透明布局容器；它只安排子项，不要求生成对应的原生演示对象。 */
 export type BoxProps = ElementProps & {
   readonly testId?: string;
-  readonly style?: LayoutStyle;
+  readonly style?: LayoutStyle & TextStyle;
+  readonly theme?: ThemeScope;
 };
 
 export type ObjectObservation = {
@@ -274,6 +304,8 @@ export type CapabilityPackagePart = {
 export type CapabilityContext = {
   readonly id: number;
   readonly path: string;
+  /** 当前元素可用的文稿主题、局部颜色作用域与容器文字默认值。 */
+  readonly theme: ThemeContext;
   /** 本次构建选项；能力模块自行解释其负责的选项。 */
   readonly options: BuildOptions;
   readonly layoutBox?: GeometryBox;
@@ -315,6 +347,8 @@ export type CapabilityLayoutRequest = {
   readonly availableWidth?: number;
   /** 可用宽度是可收缩的上限，还是布局必须分配的精确宽度。 */
   readonly widthMode?: "at-most" | "exactly";
+  /** 度量与对象写出共享的主题、局部作用域和容器文字默认值。 */
+  readonly theme: ThemeContext;
 };
 
 /** 能力模块可提供的固有尺寸及主轴 min-content 尺寸，均以像素表示。 */
@@ -428,10 +462,13 @@ export type ElementProps = {
 export type DeckProps = ElementProps & {
   readonly width?: number;
   readonly height?: number;
+  readonly theme?: ThemeInput;
+  readonly style?: TextStyle;
 };
 
 export type SlideProps = ElementProps & {
   readonly slideId: string;
   readonly transition?: unknown;
-  readonly style?: Omit<LayoutStyle, "zIndex">;
+  readonly theme?: ThemeScope;
+  readonly style?: TextStyle & Omit<LayoutStyle, "zIndex">;
 };

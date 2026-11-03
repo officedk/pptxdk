@@ -4,10 +4,12 @@ import {
   xmlEscape,
   type CapabilityInput,
   type CapabilityModule,
+  type ColorValue,
   type CapabilityLayoutMeasurement,
   type CapabilityLayoutRequest,
   type GeometryBox,
   type LayoutStyle,
+  type ThemeContext,
 } from "@react-pptx/core";
 import type { ReactNode } from "react";
 
@@ -36,9 +38,9 @@ import type { TextStyle } from "./text-service.ts";
 export type ChartKind = "column" | "bar" | "line" | "area" | "pie" | "doughnut";
 
 export type ChartPoint = {
-  readonly color?: string;
+  readonly color?: ColorValue;
   /** 覆盖该数据点的数据标签文字颜色。 */
-  readonly labelColor?: string;
+  readonly labelColor?: ColorValue;
 };
 
 export type ChartSeries = {
@@ -46,7 +48,7 @@ export type ChartSeries = {
   /** 每个分类对应一个数值；null 在图表与工作簿中保留为空值。 */
   readonly values: readonly (number | null)[];
   /** 柱、面积或线的颜色。 */
-  readonly color?: string;
+  readonly color?: ColorValue;
   /** 按分类下标覆盖单个点的颜色或数据标签文字颜色。 */
   readonly points?: Readonly<Record<number, ChartPoint>>;
 };
@@ -57,7 +59,7 @@ export type ChartData = {
 };
 
 export type ChartLine = {
-  readonly color?: string;
+  readonly color?: ColorValue;
   /** 线宽，单位为 px。 */
   readonly width?: number;
 };
@@ -187,6 +189,8 @@ const chartTextStyleKeys = [
   "color",
   "lineHeight",
   "verticalAlign",
+  "align",
+  "spacingAfter",
 ] as const;
 const allChartOptions = [...new Set(Object.values(chartOptions).flat())];
 const positionValues = new Set([
@@ -266,12 +270,15 @@ function textOnlyStyle(value: unknown): TextStyle | undefined {
   ) as TextStyle;
 }
 
-function optionalColor(value: unknown, label: string): string | undefined {
+function optionalColor(value: unknown, label: string): ColorValue | undefined {
   if (value === undefined) return undefined;
-  if (typeof value !== "string" || !/^#[0-9a-f]{6}$/iu.test(value)) {
-    fail("invalid-color", `${label} 必须是 #RRGGBB 颜色`);
+  if (
+    typeof value === "string" ||
+    (isRecord(value) && ("slot" in value || "color" in value))
+  ) {
+    return value as ColorValue;
   }
-  return value.toUpperCase();
+  fail("invalid-color", `${label} 必须是颜色值或主题令牌`);
 }
 
 function finiteNumber(value: unknown, label: string): number {
@@ -682,6 +689,7 @@ function mergeTextStyle(
 function chartResourceClaims(
   props: ChartProps,
   data: ChartData,
+  theme: ThemeContext,
 ): {
   readonly textStyles: ChartTextStyleXml;
   readonly resourceClaims: readonly TextResourceClaim[];
@@ -699,7 +707,12 @@ function chartResourceClaims(
     ...dataLabelTexts(data, props.dataLabels),
   ];
   const chartStyle = textOnlyStyle(props.style);
-  const chart = writeChartTextProperties(chartStyle, chartText, "Chart.style");
+  const chart = writeChartTextProperties(
+    chartStyle,
+    chartText,
+    "Chart.style",
+    theme,
+  );
   const resourceClaims: TextResourceClaim[] = [...chart.resourceClaims];
   const fontUses: FontEmbeddingUse[] = chart.fontUses.map((use) => ({
     ...use,
@@ -718,6 +731,7 @@ function chartResourceClaims(
       mergeTextStyle(chartStyle, cartesian.categoryAxis.style),
       data.categories,
       "Chart.categoryAxis.style",
+      theme,
     );
     textStyles.categoryAxis = output.xml;
     resourceClaims.push(...output.resourceClaims);
@@ -738,6 +752,7 @@ function chartResourceClaims(
       mergeTextStyle(chartStyle, cartesian.valueAxis.style),
       axisValues.length === 0 ? [""] : axisValues,
       "Chart.valueAxis.style",
+      theme,
     );
     textStyles.valueAxis = output.xml;
     resourceClaims.push(...output.resourceClaims);
@@ -755,6 +770,7 @@ function chartResourceClaims(
         mergeTextStyle(chartStyle, props.dataLabels.style),
         dataLabelTexts(data, props.dataLabels),
         "Chart.dataLabels.style",
+        theme,
       );
       textStyles.dataLabels = output.xml;
       resourceClaims.push(...output.resourceClaims);
@@ -789,6 +805,7 @@ function chartResourceClaims(
           }),
           pointText,
           "Chart.dataLabels.point.style",
+          theme,
         );
         textStyles.pointLabels ??= new Map();
         textStyles.pointLabels.set(`${seriesIndex}:${pointIndex}`, output.xml);
@@ -1034,7 +1051,7 @@ export const chartCapability: CapabilityModule = {
       chartCategoryCount: props.data.categories.length,
     });
     const { textStyles, resourceClaims, fontUses, warnings } =
-      chartResourceClaims(props, props.data);
+      chartResourceClaims(props, props.data, context.theme);
     const workbook = chartWorkbook(props.data);
     const relationshipId = context.registerPackagePart({
       part: {
@@ -1047,7 +1064,12 @@ export const chartCapability: CapabilityModule = {
         if (workbookRelationshipId === undefined) {
           fail("invalid-part", "图表部件需要嵌入工作簿关系");
         }
-        return chartPartXml(props, workbookRelationshipId, textStyles);
+        return chartPartXml(
+          props,
+          workbookRelationshipId,
+          textStyles,
+          context.theme,
+        );
       },
       relatedParts: [
         {

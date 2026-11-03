@@ -348,33 +348,208 @@ function decimalAttribute(
   return Number.isFinite(parsed) ? parsed : undefined;
 }
 
-function readTextRun(run: XmlElement): FileTextRun {
+type ThemeTextReader = {
+  readonly colors: ReadonlyMap<string, string>;
+  readonly schemeSlots: ReadonlyMap<string, string>;
+  readonly fonts: ReadonlyMap<string, string>;
+};
+
+const themeColorSlots = [
+  "dk1",
+  "lt1",
+  "dk2",
+  "lt2",
+  "accent1",
+  "accent2",
+  "accent3",
+  "accent4",
+  "accent5",
+  "accent6",
+  "hlink",
+  "folHlink",
+] as const;
+
+function themeTextReader(documents: Documents): ThemeTextReader {
+  const theme = documents.get("ppt/theme/theme1.xml")?.documentElement;
+  const themeElements =
+    theme == null ? undefined : first(theme, drawingNamespace, "themeElements");
+  const colorScheme =
+    themeElements === undefined
+      ? undefined
+      : first(themeElements, drawingNamespace, "clrScheme");
+  const colors = new Map<string, string>();
+  for (const slot of themeColorSlots) {
+    const entry =
+      colorScheme === undefined
+        ? undefined
+        : first(colorScheme, drawingNamespace, slot);
+    const rgb =
+      entry === undefined
+        ? undefined
+        : first(entry, drawingNamespace, "srgbClr");
+    const system =
+      entry === undefined
+        ? undefined
+        : first(entry, drawingNamespace, "sysClr");
+    const value =
+      rgb !== undefined
+        ? attribute(rgb, "val")
+        : system === undefined
+          ? ""
+          : attribute(system, "lastClr") || attribute(system, "val");
+    if (/^[0-9a-f]{6}$/iu.test(value)) colors.set(slot, value.toUpperCase());
+  }
+
+  const fontScheme =
+    themeElements === undefined
+      ? undefined
+      : first(themeElements, drawingNamespace, "fontScheme");
+  const fonts = new Map<string, string>();
+  for (const [name, token] of [
+    ["majorFont", "major"],
+    ["minorFont", "minor"],
+  ] as const) {
+    const fontSet =
+      fontScheme === undefined
+        ? undefined
+        : first(fontScheme, drawingNamespace, name);
+    const latin =
+      fontSet === undefined
+        ? undefined
+        : first(fontSet, drawingNamespace, "latin");
+    const family = latin === undefined ? "" : attribute(latin, "typeface");
+    if (family !== "") fonts.set(token, family);
+  }
+
+  const master = documents.get(
+    "ppt/slideMasters/slideMaster1.xml",
+  )?.documentElement;
+  const colorMap =
+    master == null ? undefined : first(master, presentationNamespace, "clrMap");
+  const schemeSlots = new Map<string, string>();
+  for (const slot of themeColorSlots) schemeSlots.set(slot, slot);
+  for (const [scheme, fallback] of [
+    ["tx1", "dk1"],
+    ["bg1", "lt1"],
+    ["tx2", "dk2"],
+    ["bg2", "lt2"],
+  ] as const) {
+    schemeSlots.set(
+      scheme,
+      (colorMap === undefined ? "" : attribute(colorMap, scheme)) || fallback,
+    );
+  }
+  return { colors, schemeSlots, fonts };
+}
+
+function shadedThemeColor(hex: string, fill: XmlElement): string {
+  const lumMod = decimalAttribute(
+    first(fill, drawingNamespace, "lumMod"),
+    "val",
+  );
+  const lumOff = decimalAttribute(
+    first(fill, drawingNamespace, "lumOff"),
+    "val",
+  );
+  if (lumMod === undefined && lumOff === undefined) return hex;
+  const [r, g, b] = [0, 2, 4].map(
+    (start) => Number.parseInt(hex.slice(start, start + 2), 16) / 255,
+  ) as [number, number, number];
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  const lightness = (max + min) / 2;
+  const delta = max - min;
+  const saturation =
+    delta === 0 ? 0 : delta / (1 - Math.abs(2 * lightness - 1));
+  const hue =
+    delta === 0
+      ? 0
+      : max === r
+        ? ((g - b) / delta + 6) % 6
+        : max === g
+          ? (b - r) / delta + 2
+          : (r - g) / delta + 4;
+  const shaded = Math.min(
+    1,
+    Math.max(0, (lightness * (lumMod ?? 100_000) + (lumOff ?? 0)) / 100_000),
+  );
+  const chroma = (1 - Math.abs(2 * shaded - 1)) * saturation;
+  const x = chroma * (1 - Math.abs((hue % 2) - 1));
+  const m = shaded - chroma / 2;
+  const [r1, g1, b1] =
+    hue < 1
+      ? [chroma, x, 0]
+      : hue < 2
+        ? [x, chroma, 0]
+        : hue < 3
+          ? [0, chroma, x]
+          : hue < 4
+            ? [0, x, chroma]
+            : hue < 5
+              ? [x, 0, chroma]
+              : [chroma, 0, x];
+  return [r1, g1, b1]
+    .map((channel) =>
+      Math.round((channel + m) * 255)
+        .toString(16)
+        .padStart(2, "0"),
+    )
+    .join("")
+    .toUpperCase();
+}
+
+function readRunColor(
+  fill: XmlElement | undefined,
+  theme: ThemeTextReader,
+): string | undefined {
+  if (fill === undefined) return undefined;
+  const rgb = first(fill, drawingNamespace, "srgbClr");
+  if (rgb !== undefined && attribute(rgb, "val") !== "") {
+    return `#${attribute(rgb, "val").toUpperCase()}`;
+  }
+  const scheme = first(fill, drawingNamespace, "schemeClr");
+  if (scheme === undefined) return undefined;
+  const slot = theme.schemeSlots.get(attribute(scheme, "val"));
+  const hex = slot === undefined ? undefined : theme.colors.get(slot);
+  return hex === undefined ? undefined : `#${shadedThemeColor(hex, scheme)}`;
+}
+
+function readTextRun(run: XmlElement, theme: ThemeTextReader): FileTextRun {
   const text = first(run, drawingNamespace, "t")?.textContent ?? "";
   const properties = first(run, drawingNamespace, "rPr");
   if (properties === undefined) return { text };
 
   const latin = first(properties, drawingNamespace, "latin");
   const fill = first(properties, drawingNamespace, "solidFill");
-  const color =
-    fill === undefined ? undefined : first(fill, drawingNamespace, "srgbClr");
-  const fontFamily = latin === undefined ? "" : attribute(latin, "typeface");
+  const rawFontFamily = latin === undefined ? "" : attribute(latin, "typeface");
+  const themeFont =
+    rawFontFamily === "+mj-lt"
+      ? theme.fonts.get("major")
+      : rawFontFamily === "+mn-lt"
+        ? theme.fonts.get("minor")
+        : undefined;
+  const fontFamily = themeFont ?? rawFontFamily;
   const fontSize = decimalAttribute(properties, "sz");
   const bold = attribute(properties, "b");
   const italic = attribute(properties, "i");
+  const color = readRunColor(fill, theme);
   return {
     text,
     ...(fontFamily === "" ? {} : { fontFamily }),
     ...(fontSize === undefined ? {} : { fontSizePt: fontSize / 100 }),
     ...(bold === "" ? {} : { bold: bold === "1" || bold === "true" }),
     ...(italic === "" ? {} : { italic: italic === "1" || italic === "true" }),
-    ...(color === undefined || attribute(color, "val") === ""
-      ? {}
-      : { color: `#${attribute(color, "val").toUpperCase()}` }),
+    ...(color === undefined ? {} : { color }),
   };
 }
 
-function readParagraph(paragraph: XmlElement): FileTextParagraph {
-  const runs = elements(paragraph, drawingNamespace, "r").map(readTextRun);
+function readParagraph(
+  paragraph: XmlElement,
+  theme: ThemeTextReader,
+): FileTextParagraph {
+  const runs = elements(paragraph, drawingNamespace, "r").map((run) =>
+    readTextRun(run, theme),
+  );
   const paragraphProperties = first(paragraph, drawingNamespace, "pPr");
   const lineSpacing =
     paragraphProperties === undefined
@@ -432,10 +607,15 @@ function readParagraph(paragraph: XmlElement): FileTextParagraph {
   };
 }
 
-function readTextBody(shape: XmlElement): FileText | undefined {
+function readTextBody(
+  shape: XmlElement,
+  theme: ThemeTextReader,
+): FileText | undefined {
   const body = first(shape, presentationNamespace, "txBody");
   if (body === undefined) return undefined;
-  const paragraphs = elements(body, drawingNamespace, "p").map(readParagraph);
+  const paragraphs = elements(body, drawingNamespace, "p").map((paragraph) =>
+    readParagraph(paragraph, theme),
+  );
   return {
     text: paragraphs.map(({ text }) => text).join("\n"),
     paragraphs,
@@ -821,6 +1001,7 @@ function validateShape(
   shape: XmlElement,
   part: string,
   errors: ValidationIssue[],
+  theme: ThemeTextReader,
 ): FileObject | undefined {
   const shapeProperties = first(shape, presentationNamespace, "nvSpPr");
   const drawingProperties =
@@ -885,7 +1066,7 @@ function validateShape(
     return undefined;
   }
   validateTextValueRanges(shape, part, errors);
-  const text = readTextBody(shape);
+  const text = readTextBody(shape, theme);
   return {
     id,
     name,
@@ -1668,6 +1849,7 @@ function validateGroup(
     overrides: Map<string, string>;
   },
   errors: ValidationIssue[],
+  theme: ThemeTextReader,
 ): FileObject | undefined {
   const identity = objectIdentity(group, "nvGrpSpPr", part, "group", errors);
   if (identity === undefined) return undefined;
@@ -1714,6 +1896,7 @@ function validateGroup(
     relationships,
     contentTypes,
     errors,
+    theme,
   );
   if (members.length === 0) {
     issue(errors, part, "empty-group", `组合 ${identity.name} 没有原生成员`);
@@ -1771,6 +1954,7 @@ function tableCellText(
   cell: XmlElement,
   part: string,
   errors: ValidationIssue[],
+  theme: ThemeTextReader,
 ): FileText {
   const body = first(cell, drawingNamespace, "txBody");
   if (body === undefined) {
@@ -1778,7 +1962,9 @@ function tableCellText(
     return { text: "", paragraphs: [] };
   }
   validateTextBodyValueRanges(body, part, errors);
-  const paragraphs = elements(body, drawingNamespace, "p").map(readParagraph);
+  const paragraphs = elements(body, drawingNamespace, "p").map((paragraph) =>
+    readParagraph(paragraph, theme),
+  );
   return { text: paragraphs.map(({ text }) => text).join("\n"), paragraphs };
 }
 
@@ -1787,6 +1973,7 @@ function validateTable(
   frame: XmlElement,
   part: string,
   errors: ValidationIssue[],
+  theme: ThemeTextReader,
 ): FileObject | undefined {
   const identity = objectIdentity(
     frame,
@@ -1959,7 +2146,7 @@ function validateTable(
         }
       }
       if (rowSpan > 1 || colSpan > 1) merges.push(owner);
-      const text = tableCellText(cell, part, errors);
+      const text = tableCellText(cell, part, errors, theme);
       cells[rowIndex]![column] = text.text;
       cellTexts.push({ row: rowIndex, column, text });
     }
@@ -2039,6 +2226,7 @@ function readObjects(
     overrides: Map<string, string>;
   },
   errors: ValidationIssue[],
+  theme: ThemeTextReader,
 ): FileObject[] {
   const objects: FileObject[] = [];
   for (
@@ -2052,7 +2240,7 @@ function readObjects(
     let object: FileObject | undefined;
     switch (child.localName) {
       case "sp":
-        object = validateShape(child as XmlElement, part, errors);
+        object = validateShape(child as XmlElement, part, errors, theme);
         break;
       case "pic":
         object = validatePicture(
@@ -2084,7 +2272,7 @@ function readObjects(
             errors,
           );
         } else if (uri === tableUri) {
-          object = validateTable(frame, part, errors);
+          object = validateTable(frame, part, errors, theme);
         }
         break;
       }
@@ -2097,6 +2285,7 @@ function readObjects(
           relationships,
           contentTypes,
           errors,
+          theme,
         );
         break;
     }
@@ -3110,6 +3299,7 @@ function readPresentation(
   slides: FileSlide[];
   extensions: ValidationExtension[];
 } {
+  const textTheme = themeTextReader(documents);
   const part = "ppt/presentation.xml";
   const document = documents.get(part);
   const root = document?.documentElement;
@@ -3203,6 +3393,7 @@ function readPresentation(
       relationships,
       contentTypes,
       errors,
+      textTheme,
     );
     const transition = readSlideTransition(slideRoot, slidePath, errors);
     const animations = readSlideAnimations(

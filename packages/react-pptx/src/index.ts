@@ -21,7 +21,18 @@ export const build = createBuilder([
   transitionCapability,
 ]);
 
-export { BuildError, Deck, formatBaseline, targets } from "@react-pptx/core";
+export {
+  BuildError,
+  Deck,
+  darker,
+  defaultTheme,
+  defineTheme,
+  formatBaseline,
+  isNativeColorSlot,
+  lighter,
+  nativeColorSlots,
+  targets,
+} from "@react-pptx/core";
 export { Slide } from "./slide.ts";
 export {
   after,
@@ -88,6 +99,8 @@ export type {
   BuildOptions,
   BuildReport,
   BuildResult,
+  ColorValue,
+  DeckProps,
   Diagnostic,
   GeometryBox,
   LayoutChildReference,
@@ -99,6 +112,12 @@ export type {
   ObjectObservation,
   SlideObservation,
   Target,
+  NativeColorSlot,
+  Theme,
+  ThemeColor,
+  ThemeInput,
+  ThemeScope,
+  ThemeShade,
 } from "@react-pptx/core";
 export type { SlideProps } from "./slide.ts";
 export type {

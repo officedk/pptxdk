@@ -1,6 +1,7 @@
 import {
   CapabilityError,
   pxToEmu,
+  resolvedColorXml,
   xmlEscape,
   type CapabilityInput,
   type CapabilityModule,
@@ -8,6 +9,9 @@ import {
   type CapabilityLayoutRequest,
   type LayoutStyle,
   type NativeTableObservation,
+  type ColorValue,
+  type ResolvedColor,
+  type ThemeContext,
 } from "@react-pptx/core";
 import { createElement, type ReactNode } from "react";
 
@@ -42,7 +46,7 @@ export type TableTextStyle = {
   readonly fontSize?: FontSize;
   readonly fontWeight?: number | "normal" | "bold";
   readonly fontStyle?: "normal" | "italic";
-  readonly color?: string;
+  readonly color?: ColorValue;
   readonly lineHeight?: FontSize;
   readonly verticalAlign?: TableVerticalAlign;
 };
@@ -52,12 +56,12 @@ export type TableStyle = TableTextStyle & LayoutStyle;
 export type TableRowStyle = TableTextStyle & {
   /** 未指定时按本行未合并单元格的文字度量确定行高。 */
   readonly height?: number;
-  readonly backgroundColor?: string;
+  readonly backgroundColor?: ColorValue;
 };
 
 export type TableCellStyle = TableTextStyle & {
-  readonly backgroundColor?: string;
-  readonly borderColor?: string;
+  readonly backgroundColor?: ColorValue;
+  readonly borderColor?: ColorValue;
   readonly borderWidth?: number;
   readonly borderStyle?: "solid" | "dashed" | "dotted";
   readonly padding?: TableSpacing;
@@ -121,9 +125,9 @@ type ParsedCell = {
   readonly textStyle: Record<string, unknown>;
   readonly verticalAlign: TableVerticalAlign;
   readonly padding: Edges;
-  readonly fill?: string;
+  readonly fill?: ResolvedColor;
   readonly border?: {
-    readonly color: string;
+    readonly color: ResolvedColor;
     readonly width: number;
     readonly dash: "solid" | "dash" | "dot";
   };
@@ -134,7 +138,7 @@ type ParsedRow = {
   readonly height?: number;
   readonly textStyle: Record<string, unknown>;
   readonly verticalAlign?: TableVerticalAlign;
-  readonly fill?: string;
+  readonly fill?: ResolvedColor;
 };
 
 const textStyleKeys = [
@@ -145,6 +149,8 @@ const textStyleKeys = [
   "color",
   "lineHeight",
   "verticalAlign",
+  "align",
+  "spacingAfter",
 ] as const;
 const rowStyleKeys = ["height", "backgroundColor"] as const;
 const cellStyleKeys = [
@@ -306,13 +312,18 @@ function positiveSize(value: unknown, label: string, path?: string): number {
 function color(
   value: unknown,
   label: string,
+  theme: ThemeContext,
   path?: string,
-): string | undefined {
+): ResolvedColor | undefined {
   if (value === undefined) return undefined;
-  if (typeof value !== "string" || !/^#[0-9a-f]{6}$/iu.test(value)) {
-    fail("invalid-table-color", `${label} 必须是 #RRGGBB 颜色`, path);
+  try {
+    return theme.resolveColor(value as ColorValue);
+  } catch (error) {
+    if (error instanceof CapabilityError) {
+      fail(error.code, `${label}：${error.message}`, path);
+    }
+    throw error;
   }
-  return value.slice(1).toUpperCase();
 }
 
 function verticalAlign(
@@ -468,9 +479,10 @@ function cellPadding(style: Record<string, unknown>, path: string): Edges {
 
 function mergeBorder(
   style: Record<string, unknown>,
+  theme: ThemeContext,
   path: string,
 ): ParsedCell["border"] {
-  const borderColor = color(style["borderColor"], "borderColor", path);
+  const borderColor = color(style["borderColor"], "borderColor", theme, path);
   const widthValue = style["borderWidth"];
   const lineStyle = style["borderStyle"];
   if (
@@ -498,7 +510,7 @@ function mergeBorder(
   if (width === 0) return undefined;
   pxExtent(width, "borderWidth", path);
   return {
-    color: borderColor ?? "000000",
+    color: borderColor ?? theme.resolveColor("dk1"),
     width,
     dash:
       lineStyle === "dashed"
@@ -521,10 +533,10 @@ function pxExtent(value: number, label: string, path?: string): number {
   return emu;
 }
 
-function fillXml(value: string | undefined): string {
+function fillXml(value: ResolvedColor | undefined): string {
   return value === undefined
     ? "<a:noFill/>"
-    : `<a:solidFill><a:srgbClr val="${value}"/></a:solidFill>`;
+    : `<a:solidFill>${resolvedColorXml(value)}</a:solidFill>`;
 }
 
 function lineXml(
@@ -535,11 +547,12 @@ function lineXml(
   const width = Math.max(1, pxToEmu(border.width));
   const dash =
     border.dash === "solid" ? "" : `<a:prstDash val="${border.dash}"/>`;
-  return `<a:ln${side} w="${width}"><a:solidFill><a:srgbClr val="${border.color}"/></a:solidFill>${dash}</a:ln${side}>`;
+  return `<a:ln${side} w="${width}"><a:solidFill>${resolvedColorXml(border.color)}</a:solidFill>${dash}</a:ln${side}>`;
 }
 
 function textBody(
   cell: ParsedCell,
+  theme: ThemeContext,
   width: number | "max-content",
   height?: number,
   contentSized = false,
@@ -548,6 +561,7 @@ function textBody(
     return writeTextBody(
       cell.node.children,
       cell.textStyle,
+      theme,
       cell.verticalAlign,
       {
         width,
@@ -578,6 +592,7 @@ function prepareRows(
   columns: readonly Track[],
   tableTextStyle: Record<string, unknown>,
   tableVerticalAlign: TableVerticalAlign,
+  theme: ThemeContext,
 ): {
   readonly rows: readonly ParsedRow[];
   readonly cells: readonly ParsedCell[];
@@ -610,6 +625,7 @@ function prepareRows(
     const rowFill = color(
       rowStyle.style["backgroundColor"],
       "Row.style.backgroundColor",
+      theme,
       rowPath,
     );
     const rowVerticalAlign =
@@ -687,12 +703,13 @@ function prepareRows(
         color(
           cellStyle.style["backgroundColor"],
           "Cell.style.backgroundColor",
+          theme,
           cellPath,
         ) ?? row.fill;
       const cellVerticalAlign =
         verticalAlign(cellStyle.style["verticalAlign"], cellPath) ??
         rowVerticalAlign;
-      const border = mergeBorder(cellStyle.style, cellPath);
+      const border = mergeBorder(cellStyle.style, theme, cellPath);
       const cell: ParsedCell = {
         node: cellChild as ParsedCell["node"],
         row: rowIndex,
@@ -736,7 +753,7 @@ function mergeCellProperties(
   padding: Edges,
   vertical: TableVerticalAlign,
   border: ParsedCell["border"],
-  fill: string | undefined,
+  fill: ResolvedColor | undefined,
 ): string {
   const lines = (["L", "R", "T", "B"] as const)
     .map((side) => lineXml(side, border))
@@ -784,6 +801,7 @@ type TableLayoutModel = {
 function tableLayoutModel(
   input: CapabilityInput,
   requestedWidth: number | undefined,
+  theme: ThemeContext,
 ): TableLayoutModel {
   const columns = parseTracks(input.props["columns"]);
   const tableStyle = trackStyle(input, "table");
@@ -794,6 +812,7 @@ function tableLayoutModel(
     columns,
     tableStyle.textStyle,
     tableVerticalAlign,
+    theme,
   );
   const warnings: { code: string; message: string; path?: string }[] = [];
   const claims: { kind: string; key: string; identity: string }[] = [];
@@ -824,7 +843,7 @@ function tableLayoutModel(
         track?.kind === "auto" ||
         (track?.kind === "fr" && requestedWidth === undefined);
       if (!needsTrackWidth) continue;
-      const measured = textBody(cell, "max-content");
+      const measured = textBody(cell, theme, "max-content");
       addTextResult(measured, cell.path);
       if (measured.measurement === undefined && measured.text.trim() !== "") {
         fail(
@@ -907,7 +926,7 @@ function tableLayoutModel(
       0,
       widthOf(cell) - cell.padding.left - cell.padding.right,
     );
-    const result = textBody(cell, innerWidth);
+    const result = textBody(cell, theme, innerWidth);
     addTextResult(result, cell.path);
     if (result.measurement === undefined && result.text.trim() !== "") {
       fail(
@@ -978,7 +997,7 @@ export const tableCapability: CapabilityModule = {
       typeof declaredWidth === "number"
         ? positiveSize(declaredWidth, "Table.width")
         : undefined;
-    const natural = tableLayoutModel(input, undefined);
+    const natural = tableLayoutModel(input, undefined, request.theme);
     const naturalWidth = natural.widths.reduce((sum, width) => sum + width, 0);
     const availableWidth =
       request.availableWidth !== undefined && request.availableWidth > 0
@@ -995,7 +1014,7 @@ export const tableCapability: CapabilityModule = {
     const model =
       requestedWidth === undefined
         ? natural
-        : tableLayoutModel(input, requestedWidth);
+        : tableLayoutModel(input, requestedWidth, request.theme);
     const width = model.widths.reduce((sum, value) => sum + value, 0);
     const height = model.heights.reduce((sum, value) => sum + value, 0);
     return {
@@ -1016,7 +1035,7 @@ export const tableCapability: CapabilityModule = {
       (typeof declaredWidth === "number"
         ? positiveSize(declaredWidth, "Table.width")
         : undefined);
-    const model = tableLayoutModel(input, requestedWidth);
+    const model = tableLayoutModel(input, requestedWidth, context.theme);
     const { columns, rows, cells, widths } = model;
     const heights = [...model.heights];
     const warnings = [...model.warnings];
@@ -1124,6 +1143,7 @@ export const tableCapability: CapabilityModule = {
           .some((row) => row.height === undefined);
         const body = textBody(
           cell,
+          context.theme,
           innerWidthOf(cell),
           innerHeight,
           contentSized,

@@ -1,4 +1,10 @@
-import { pxToEmu, xmlEscape } from "@react-pptx/core";
+import {
+  pxToEmu,
+  resolvedColorXml,
+  xmlEscape,
+  type ColorValue,
+  type ThemeContext,
+} from "@react-pptx/core";
 import { strToU8, zipSync } from "fflate";
 
 import type {
@@ -142,27 +148,33 @@ function numRef(
   );
 }
 
-function color(value: string): XmlElement {
-  return el("a:srgbClr", { val: value.slice(1).toUpperCase() });
+function color(value: ColorValue, theme: ThemeContext): XmlRaw {
+  return { raw: resolvedColorXml(theme.resolveColor(value)) };
 }
 
-function chartLine(value: ChartLine | undefined): XmlElement | undefined {
+function chartLine(
+  value: ChartLine | undefined,
+  theme: ThemeContext,
+): XmlElement | undefined {
   if (value === undefined) return undefined;
   return el(
     "a:ln",
     { w: pxToEmu(value.width ?? 1) },
-    el("a:solidFill", null, color(value.color ?? "#000000")),
+    el("a:solidFill", null, color(value.color ?? "dk1", theme)),
   );
 }
 
 function shapeProperties(
   value: "none" | ChartLine | undefined,
+  theme: ThemeContext,
 ): XmlElement | undefined {
   if (value === undefined) return undefined;
   return el(
     "c:spPr",
     null,
-    value === "none" ? el("a:ln", null, el("a:noFill")) : chartLine(value),
+    value === "none"
+      ? el("a:ln", null, el("a:noFill"))
+      : chartLine(value, theme),
   );
 }
 
@@ -242,6 +254,7 @@ function chartSeries(
   labels: ChartDataLabels | false | undefined,
   textStyles: ChartTextStyleXml,
   explosion: number | undefined,
+  theme: ThemeContext,
 ): XmlElement {
   const rows = data.categories.length + 1;
   const column = columnName(index + 1);
@@ -255,9 +268,9 @@ function chartSeries(
         ? el(
             "c:spPr",
             null,
-            el("a:ln", null, el("a:solidFill", null, color(item.color))),
+            el("a:ln", null, el("a:solidFill", null, color(item.color, theme))),
           )
-        : el("c:spPr", null, el("a:solidFill", null, color(item.color)));
+        : el("c:spPr", null, el("a:solidFill", null, color(item.color, theme)));
   const points = Object.entries<ChartPoint>(item.points ?? {}).flatMap(
     ([pointIndex, point]) => {
       if (point.color === undefined) return [];
@@ -272,8 +285,12 @@ function chartSeries(
             "c:spPr",
             null,
             lineChart
-              ? el("a:ln", null, el("a:solidFill", null, color(point.color)))
-              : el("a:solidFill", null, color(point.color)),
+              ? el(
+                  "a:ln",
+                  null,
+                  el("a:solidFill", null, color(point.color, theme)),
+                )
+              : el("a:solidFill", null, color(point.color, theme)),
           ),
         ),
       ];
@@ -317,6 +334,7 @@ function grouping(
 function chartPlot(
   props: ChartProps,
   textStyles: ChartTextStyleXml,
+  theme: ThemeContext,
 ): XmlElement {
   const explosion =
     props.kind === "pie" || props.kind === "doughnut"
@@ -331,6 +349,7 @@ function chartPlot(
       props.dataLabels,
       textStyles,
       explosion,
+      theme,
     ),
   );
   const axes = [
@@ -391,24 +410,34 @@ function chartPlot(
 
 function lineXml(
   value: boolean | ChartLine | undefined,
+  theme: ThemeContext,
 ): XmlElement | undefined {
   if (value === undefined || value === true) return undefined;
   if (value === false)
     return el("c:spPr", null, el("a:ln", null, el("a:noFill")));
-  return shapeProperties(value);
+  return shapeProperties(value, theme);
 }
 
-function gridlines(value: ChartAxis | undefined): XmlElement | undefined {
+function gridlines(
+  value: ChartAxis | undefined,
+  theme: ThemeContext,
+): XmlElement | undefined {
   if (value?.gridlines === undefined || value.gridlines === false)
     return undefined;
   return el(
     "c:majorGridlines",
     null,
-    value.gridlines === true ? undefined : shapeProperties(value.gridlines),
+    value.gridlines === true
+      ? undefined
+      : shapeProperties(value.gridlines, theme),
   );
 }
 
-function axes(props: ChartProps, textStyles: ChartTextStyleXml): XmlElement[] {
+function axes(
+  props: ChartProps,
+  textStyles: ChartTextStyleXml,
+  theme: ThemeContext,
+): XmlElement[] {
   if (props.kind === "pie" || props.kind === "doughnut") return [];
   const category = props.categoryAxis;
   const value = props.valueAxis;
@@ -421,12 +450,12 @@ function axes(props: ChartProps, textStyles: ChartTextStyleXml): XmlElement[] {
       el("c:scaling", null, el("c:orientation", { val: "minMax" })),
       el("c:delete", { val: category?.visible === false }),
       el("c:axPos", { val: horizontal ? "l" : "b" }),
-      gridlines(category),
+      gridlines(category, theme),
       el("c:numFmt", { formatCode: "General", sourceLinked: true }),
       el("c:majorTickMark", { val: "none" }),
       el("c:minorTickMark", { val: "none" }),
       el("c:tickLblPos", { val: "nextTo" }),
-      lineXml(category?.line),
+      lineXml(category?.line, theme),
       raw(textStyles.categoryAxis),
       el("c:crossAx", { val: valueAxisId }),
       el("c:crosses", { val: "autoZero" }),
@@ -448,7 +477,7 @@ function axes(props: ChartProps, textStyles: ChartTextStyleXml): XmlElement[] {
       ),
       el("c:delete", { val: value?.visible === false }),
       el("c:axPos", { val: horizontal ? "b" : "l" }),
-      gridlines(value),
+      gridlines(value, theme),
       el("c:numFmt", {
         formatCode: value?.numberFormat ?? "General",
         sourceLinked: value?.numberFormat === undefined,
@@ -456,7 +485,7 @@ function axes(props: ChartProps, textStyles: ChartTextStyleXml): XmlElement[] {
       el("c:majorTickMark", { val: "none" }),
       el("c:minorTickMark", { val: "none" }),
       el("c:tickLblPos", { val: "nextTo" }),
-      lineXml(value?.line),
+      lineXml(value?.line, theme),
       raw(textStyles.valueAxis),
       el("c:crossAx", { val: categoryAxisId }),
       el("c:crosses", { val: "autoZero" }),
@@ -503,6 +532,7 @@ export function chartPartXml(
   props: ChartProps,
   relatedRelationshipId: string,
   textStyles: ChartTextStyleXml,
+  theme: ThemeContext,
 ): string {
   return serialize(
     el(
@@ -523,8 +553,8 @@ export function chartPartXml(
           "c:plotArea",
           null,
           plotLayout(props),
-          chartPlot(props, textStyles),
-          axes(props, textStyles),
+          chartPlot(props, textStyles, theme),
+          axes(props, textStyles, theme),
           transparent(),
         ),
         props.legend === undefined || props.legend === false

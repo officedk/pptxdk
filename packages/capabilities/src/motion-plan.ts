@@ -1278,8 +1278,8 @@ function motionPlan(
       parentStart: TimePoint,
     ): boolean => {
       if (parentStart.state === "no-natural-completion") return false;
-      return candidates.some((candidate) => {
-        if (parentStart.state === "known") {
+      if (parentStart.state === "known") {
+        return candidates.some((candidate) => {
           const earliestTime = facts.earliestTime(
             candidate.eventId,
             originEventId,
@@ -1288,21 +1288,22 @@ function motionPlan(
             earliestTime !== undefined &&
             earliestTime + candidate.offsetMs > parentStart.timeMs
           );
-        }
-        return (
-          parentStart.candidates.length > 0 &&
-          parentStart.candidates.every((parentCandidate) => {
-            const lowerBound = facts.lowerBound(
-              parentCandidate.eventId,
-              candidate.eventId,
-            );
-            return (
-              lowerBound !== undefined &&
-              lowerBound + candidate.offsetMs - parentCandidate.offsetMs > 0
-            );
-          })
-        );
-      });
+        });
+      }
+      if (parentStart.candidates.length === 0) return false;
+      // 两侧都是候选最大值；逐个父候选找到严格晚于它的完成候选即可。
+      return parentStart.candidates.every((parentCandidate) =>
+        candidates.some((candidate) => {
+          const lowerBound = facts.lowerBound(
+            parentCandidate.eventId,
+            candidate.eventId,
+          );
+          return (
+            lowerBound !== undefined &&
+            lowerBound + candidate.offsetMs - parentCandidate.offsetMs > 0
+          );
+        }),
+      );
     };
 
     const resolveNativeStart = (

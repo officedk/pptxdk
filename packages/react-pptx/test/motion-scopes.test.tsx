@@ -1314,6 +1314,75 @@ function CrossBranchConditionJoin({ kind, trigger }: CrossBranchJoinOptions) {
   );
 }
 
+type NestedMaxConditionJoinOptions = {
+  readonly reverse: boolean;
+  readonly trigger: "auto" | "click";
+  readonly control?: boolean;
+  readonly partialCoverage?: boolean;
+};
+
+function NestedMaxConditionJoin({
+  reverse,
+  trigger,
+  control = false,
+  partialCoverage = false,
+}: NestedMaxConditionJoinOptions) {
+  const host = useMotionScope();
+  const sources = useMotionScope();
+  const first = useMotionScope();
+  const delayed = useMotionScope();
+  const parent = useMotionScope();
+  const child = useMotionScope();
+  const firstSource = createElement(
+    MotionScope,
+    { scope: first },
+    unknownLetterText("nested-max-first", "AB", 8),
+  );
+  const delayedSource = createElement(
+    MotionScope,
+    { scope: delayed, delay: 1000 },
+    unknownLetterText("nested-max-delayed", "XY", 40),
+  );
+  const childScope = createElement(
+    MotionScope,
+    {
+      scope: child,
+      startAt: control
+        ? after(parent.start, 1)
+        : partialCoverage
+          ? after(sources.end, 1)
+          : after(delayed.end, 12000),
+      ...(control || partialCoverage ? {} : { delay: 1 }),
+    },
+    observedShape("nested-max-consumer", "D", 76, "#ED7D31", 100),
+  );
+  const parentScope = createElement(
+    MotionScope,
+    { scope: parent, startAt: after(delayed.end, 11000) },
+    childScope,
+  );
+  const sourceTree = createElement(
+    MotionScope,
+    { scope: sources, mode: "parallel" },
+    ...(reverse ? [delayedSource, firstSource] : [firstSource, delayedSource]),
+  );
+  const content = createElement(
+    MotionScope,
+    { scope: host, mode: "sequence" },
+    sourceTree,
+    parentScope,
+  );
+  return createElement(
+    Deck,
+    { width: 320, height: 170 },
+    createElement(
+      Slide,
+      { slideId: `nested-max-${reverse ? "reverse" : "forward"}-${trigger}` },
+      trigger === "click" ? createElement(Step, { n: 1 }, content) : content,
+    ),
+  );
+}
+
 function IncomparableUnknownJoin({
   firstText,
   trigger,
@@ -2800,6 +2869,176 @@ describe("组件编排作用域", () => {
         options.trigger === "click" ? "clickEffect" : "afterEffect",
       );
     }
+  });
+
+  it("按最大候选逐项证明嵌套条件集合严格晚于其父起点", async () => {
+    const variants: readonly Omit<NestedMaxConditionJoinOptions, "control">[] =
+      [
+        { reverse: false, trigger: "auto" },
+        { reverse: true, trigger: "auto" },
+        { reverse: false, trigger: "click" },
+        { reverse: true, trigger: "click" },
+      ];
+
+    for (const options of variants) {
+      for (const control of [false, true]) {
+        const result = await build(
+          createElement(NestedMaxConditionJoin, { ...options, control }),
+        );
+        const slide = result.report.slides[0];
+        const motion = slide?.capabilities?.["motion"] as MotionObservation;
+        const objectId = (testId: string) =>
+          slide?.objects.find(({ testId: id }) => id === testId)?.id;
+        const scopeContaining = (testId: string) =>
+          motion.scopes?.find(({ members }) =>
+            members.some(
+              (member) =>
+                member.kind === "object" && member.id === objectId(testId),
+            ),
+          );
+        const firstScope = scopeContaining("nested-max-first");
+        const delayedScope = scopeContaining("nested-max-delayed");
+        const consumerScope = scopeContaining("nested-max-consumer");
+        const sourceScope = motion.scopes?.find(
+          ({ members }) =>
+            members.some(
+              (member) =>
+                member.kind === "scope" && member.id === firstScope?.id,
+            ) &&
+            members.some(
+              (member) =>
+                member.kind === "scope" && member.id === delayedScope?.id,
+            ),
+        );
+        const parentScope = motion.scopes?.find(({ members }) =>
+          members.some(
+            (member) =>
+              member.kind === "scope" && member.id === consumerScope?.id,
+          ),
+        );
+        assert.ok(
+          firstScope &&
+            delayedScope &&
+            consumerScope &&
+            sourceScope &&
+            parentScope,
+        );
+        assert.deepEqual(parentScope.startAfterAll, [
+          { scopeId: sourceScope.id, point: "end", offsetMs: 0 },
+          { scopeId: delayedScope.id, point: "end", offsetMs: 11000 },
+        ]);
+        assert.deepEqual(consumerScope.startAfterAll, [
+          { scopeId: sourceScope.id, point: "end", offsetMs: 1 },
+          {
+            scopeId: delayedScope.id,
+            point: "end",
+            offsetMs: control ? 11001 : 12001,
+          },
+        ]);
+
+        const file = await validatePptx(result.pptx);
+        assert.deepEqual(file.errors, []);
+        assert.deepEqual(file.extensions, []);
+        const fileSlide = file.slides[0];
+        assert.equal(fileSlide?.animations?.[0]?.trigger, options.trigger);
+        const effects = fileSlide?.animations?.[0]?.effects ?? [];
+        assert.equal(effects.length, 3);
+        const effect = (testId: string) =>
+          effects.find(({ targetId }) => targetId === objectId(testId));
+        const firstEffect = effect("nested-max-first");
+        const delayedEffect = effect("nested-max-delayed");
+        const consumerEffect = effect("nested-max-consumer");
+        assert.ok(firstEffect && delayedEffect && consumerEffect);
+        for (const sourceEffect of [firstEffect, delayedEffect]) {
+          assert.equal(sourceEffect.by, "letter");
+          assert.equal(sourceEffect.completion, "unknown");
+        }
+        const containers = fileSlide?.animationContainers ?? [];
+        const containerById = (timingId: number | undefined) =>
+          containers.find(({ timingId: id }) => id === timingId);
+        const effectContainer = (timingId: number) =>
+          containers.find(({ children }) =>
+            children.some(
+              ({ kind, timingId: childId }) =>
+                kind === "effect" && childId === timingId,
+            ),
+          );
+        const firstContainer = effectContainer(firstEffect.timingId);
+        const delayedContainer = effectContainer(delayedEffect.timingId);
+        assert.ok(
+          consumerEffect.startAfter && firstContainer && delayedContainer,
+        );
+        const join = containerById(consumerEffect.startAfter.timingId);
+        assert.ok(join);
+        assert.equal(join.endSync, "all");
+        assert.equal(join.durationMs, undefined);
+        assert.equal(join.children.length, 2);
+        if (control) {
+          assert.equal(consumerEffect.startAfter.offsetMs, 1);
+        } else {
+          assert.equal(consumerEffect.startAfter.offsetMs, 0);
+          const gates = join.children.map(({ timingId }) =>
+            containerById(timingId),
+          );
+          const ancestors = (container: (typeof containers)[number]) => {
+            const result = [container];
+            let parent = containerById(container.parentTimingId);
+            while (parent !== undefined) {
+              result.push(parent);
+              parent = containerById(parent.parentTimingId);
+            }
+            return result;
+          };
+          const delayedAncestorIds = ancestors(delayedContainer).map(
+            ({ timingId }) => timingId,
+          );
+          const sourceContainer = ancestors(firstContainer).find(
+            ({ timingId }) => delayedAncestorIds.includes(timingId),
+          );
+          assert.ok(sourceContainer);
+          assert.deepEqual(
+            gates.map((gate) => [
+              gate?.startAfter?.timingId,
+              gate?.startAfter?.offsetMs,
+            ]),
+            [
+              [sourceContainer.timingId, 1],
+              [delayedContainer.timingId, 12001],
+            ],
+          );
+        }
+
+        const slidePart = unzipSync(result.pptx)["ppt/slides/slide1.xml"];
+        assert.ok(slidePart);
+        const xml = strFromU8(slidePart);
+        assertTimingReferencesFollowDefinitions(xml);
+        assert.equal(
+          firstMainSequenceEntryNodeType(xml, 0),
+          options.trigger === "click" ? "clickEffect" : "afterEffect",
+        );
+      }
+    }
+  });
+
+  it("只有部分父起点候选有严格下界时仍拒绝条件集合", async () => {
+    await assert.rejects(
+      build(
+        createElement(NestedMaxConditionJoin, {
+          reverse: false,
+          trigger: "auto",
+          partialCoverage: true,
+        }),
+      ),
+      (error: unknown) => {
+        assert.ok(error instanceof BuildError);
+        assert.equal(error.diagnostics[0]?.code, "unknown-motion-start");
+        assert.match(
+          error.diagnostics[0]?.message ?? "",
+          /不能证明条件集合完成晚于消费成员的父作用域激活/u,
+        );
+        return true;
+      },
+    );
   });
 
   it("同父顺序成员间保留不可比较的未知完成约束和真实整体完成", async () => {

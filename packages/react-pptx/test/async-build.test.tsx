@@ -73,6 +73,16 @@ class ErrorBoundary extends Component<
 }
 
 describe("公开构建中的 React 异步内容", () => {
+  it("加载 NODE_ENV 对应的 React 元素实现", () => {
+    const element = createElement("react-mode-probe");
+
+    // React 19 的开发元素带有 _store；生产元素没有。检查实际模块分支，而非环境变量本身。
+    assert.equal(
+      Object.hasOwn(element, "_store"),
+      process.env.NODE_ENV !== "production",
+    );
+  });
+
   it("预取消不会执行作者组件或留下 AbortSignal 监听", async () => {
     const controller = new AbortController();
     const reason = new Error("调用方已取消");

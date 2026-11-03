@@ -2,6 +2,9 @@
   "name": "@react-pptx/examples",
   "version": "0.0.0",
   "private": true,
+  "files": [
+    "dist"
+  ],
   "type": "module",
   "imports": {
     "#/*.ts": {
@@ -13,6 +16,12 @@
       "source": "./src/*.tsx",
       "types": "./dist/*.d.ts",
       "default": "./dist/*.js"
+    }
+  },
+  "exports": {
+    "./decks": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
     }
   },
   "scripts": {

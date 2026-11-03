@@ -33,13 +33,45 @@ type Edges = {
   readonly bottom: number;
   readonly left: number;
 };
+type GridTrack =
+  | { readonly kind: "px"; readonly value: number }
+  | { readonly kind: "auto"; readonly min: number }
+  | {
+      readonly kind: "fr";
+      readonly value: number;
+      readonly min: number;
+      readonly contentMinimum?: boolean;
+    };
+type GridPlacement = {
+  readonly node: LayoutNode;
+  readonly row: number;
+  readonly column: number;
+  readonly rowSpan: number;
+  readonly columnSpan: number;
+};
+type GridModel = {
+  readonly placements: readonly GridPlacement[];
+  readonly widths: readonly number[];
+  readonly heights: readonly number[];
+  readonly columnGap: number;
+  readonly rowGap: number;
+  readonly spanWidth: (start: number, span: number) => number;
+  readonly spanHeight: (start: number, span: number) => number;
+  readonly width: number;
+  readonly height: number;
+};
 type LayoutNode = {
   readonly yoga: YogaNode;
   readonly element?: CapabilityElement;
   readonly style: LayoutStyle;
   readonly path: string;
   readonly module?: ObjectCapabilityModule;
+  parent?: LayoutNode;
   readonly children: LayoutNode[];
+  readonly escaped: LayoutNode[];
+  gridItem?: boolean;
+  /** 网格父项尚未回算 Yoga 子节点时保留已分配的盒高。 */
+  gridAreaHeight?: number;
   /** 文字需要提供基线时，由外部对象节点转交给内部测量叶节点。 */
   measureFunction?: MeasureFunction;
   baselineContent?: YogaNode;
@@ -48,11 +80,18 @@ type LayoutNode = {
 
 export type LayoutPassResult = {
   readonly boxes: WeakMap<CapabilityElement, GeometryBox>;
+  readonly hidden: WeakSet<CapabilityElement>;
   readonly warnings: readonly Diagnostic[];
 };
 
 const layoutProperties = [
   "display",
+  "position",
+  "inset",
+  "left",
+  "top",
+  "right",
+  "bottom",
   "width",
   "height",
   "minWidth",
@@ -82,6 +121,14 @@ const layoutProperties = [
   "flexGrow",
   "flexShrink",
   "flexBasis",
+  "aspectRatio",
+  "gridTemplateColumns",
+  "gridTemplateRows",
+  "gridColumn",
+  "gridRow",
+  "justifyItems",
+  "justifySelf",
+  "zIndex",
 ] as const;
 
 const layoutPropertySet = new Set<string>(layoutProperties);
@@ -104,6 +151,12 @@ const containerProperties = [
   "rowGap",
   "columnGap",
 ] as const;
+const gridContainerProperties = [
+  "gridTemplateColumns",
+  "gridTemplateRows",
+  "justifyItems",
+] as const;
+const gridItemProperties = ["gridColumn", "gridRow", "justifySelf"] as const;
 const alignItems = [
   "start",
   "end",
@@ -148,6 +201,210 @@ function element(child: CapabilityChild): child is CapabilityElement {
   return "props" in child;
 }
 
+function gridTokens(input: string, path: string): string[] {
+  const tokens: string[] = [];
+  let depth = 0;
+  let current = "";
+  for (const character of input.trim()) {
+    if (character === "(") depth += 1;
+    if (character === ")") depth -= 1;
+    if (depth < 0) fail(path, "invalid-grid-tracks", "网格轨道括号不匹配");
+    if (/\s/u.test(character) && depth === 0) {
+      if (current !== "") tokens.push(current);
+      current = "";
+    } else current += character;
+  }
+  if (depth !== 0) fail(path, "invalid-grid-tracks", "网格轨道括号不匹配");
+  if (current !== "") tokens.push(current);
+  return tokens;
+}
+
+function parseGridPixels(token: string, path: string): number {
+  const match = /^(\d+(?:\.\d+)?)(?:px)?$/u.exec(token);
+  if (match === null)
+    fail(path, "invalid-grid-tracks", `不支持网格轨道 ${token}`);
+  return Number(match[1]);
+}
+
+function parseGridBasicTrack(token: string, path: string): GridTrack {
+  if (token === "auto") return { kind: "auto", min: 0 };
+  const fraction = /^(\d+(?:\.\d+)?)fr$/u.exec(token);
+  if (fraction !== null) {
+    const value = Number(fraction[1]);
+    if (value <= 0) fail(path, "invalid-grid-tracks", "fr 轨道比例必须大于 0");
+    return { kind: "fr", value, min: 0 };
+  }
+  return { kind: "px", value: parseGridPixels(token, path) };
+}
+
+function gridTracks(
+  input: string | undefined,
+  path: string,
+  defaultFr: boolean,
+): GridTrack[] {
+  if (input === undefined || input.trim() === "") {
+    return defaultFr ? [{ kind: "fr", value: 1, min: 0 }] : [];
+  }
+  const parseOne = (token: string): GridTrack[] => {
+    const repeat = /^repeat\(\s*(\d+)\s*,\s*(.+)\)$/u.exec(token);
+    if (repeat !== null) {
+      const count = Number(repeat[1]);
+      if (!Number.isInteger(count) || count < 1 || count > 128) {
+        fail(path, "invalid-grid-tracks", "repeat 次数必须是 1 到 128 的整数");
+      }
+      const repeated = gridTokens(repeat[2]!, path).flatMap(parseOne);
+      if (repeated.length * count > 128) {
+        fail(path, "invalid-grid-tracks", "展开后的网格轨道不能超过 128 条");
+      }
+      return Array.from({ length: count }, () => repeated).flat();
+    }
+    const minmax = /^minmax\(\s*([^,]+?)\s*,\s*([^)]+?)\s*\)$/u.exec(token);
+    if (minmax !== null) {
+      const lower = minmax[1]!.trim();
+      const minValue = lower === "auto" ? 0 : parseGridPixels(lower, path);
+      const maximum = parseGridBasicTrack(minmax[2]!.trim(), path);
+      if (maximum.kind === "fr") {
+        return [
+          {
+            ...maximum,
+            min: Math.max(minValue, maximum.min),
+            contentMinimum: lower === "auto",
+          },
+        ];
+      }
+      if (maximum.kind === "auto") return [{ kind: "auto", min: minValue }];
+      return [{ kind: "px", value: Math.max(minValue, maximum.value) }];
+    }
+    return [parseGridBasicTrack(token, path)];
+  };
+  const tracks = gridTokens(input, path).flatMap(parseOne);
+  if (tracks.length === 0 || tracks.length > 128) {
+    fail(path, "invalid-grid-tracks", "网格轨道必须包含 1 到 128 条轨道");
+  }
+  return tracks;
+}
+
+function distributeFrTracks(
+  sizes: number[],
+  tracks: readonly GridTrack[],
+  availableSize: number,
+  gap: number,
+): void {
+  const trackAt = (index: number): GridTrack =>
+    tracks[index] ?? { kind: "auto", min: 0 };
+  const flexible = new Set(
+    sizes.flatMap((_, index) => (trackAt(index).kind === "fr" ? [index] : [])),
+  );
+  if (flexible.size === 0) return;
+
+  const gapSize = gap * Math.max(0, sizes.length - 1);
+  const fixedSize = sizes.reduce(
+    (sum, size, index) => sum + (trackAt(index).kind === "fr" ? 0 : size),
+    0,
+  );
+
+  // 下界高于初次份额时先冻结该轨道，再按剩余空间分配未冻结轨道。
+  while (flexible.size > 0) {
+    const factorTotal = [...flexible].reduce((sum, index) => {
+      const track = trackAt(index);
+      return sum + (track.kind === "fr" ? track.value : 0);
+    }, 0);
+    const frozenSize = sizes.reduce(
+      (sum, size, index) =>
+        sum +
+        (flexible.has(index) ? 0 : trackAt(index).kind === "fr" ? size : 0),
+      0,
+    );
+    const freeSize = Math.max(
+      0,
+      availableSize - fixedSize - gapSize - frozenSize,
+    );
+    const undersized = [...flexible].filter((index) => {
+      const track = trackAt(index);
+      return (
+        track.kind === "fr" &&
+        freeSize * (track.value / factorTotal) < (sizes[index] ?? track.min)
+      );
+    });
+    if (undersized.length > 0) {
+      for (const index of undersized) flexible.delete(index);
+      continue;
+    }
+    for (const index of flexible) {
+      const track = trackAt(index);
+      if (track.kind === "fr")
+        sizes[index] = freeSize * (track.value / factorTotal);
+    }
+    return;
+  }
+}
+
+function gridPlacement(
+  value: number | string | undefined,
+  path: string,
+): { readonly start?: number; readonly span: number } {
+  if (value === undefined) return { span: 1 };
+  const positiveIndex = (raw: string): number => {
+    const result = Number(raw);
+    if (!Number.isInteger(result) || result < 1) {
+      fail(path, "invalid-grid-placement", "网格行列号必须是正整数");
+    }
+    return result - 1;
+  };
+  if (typeof value === "number") {
+    if (!Number.isInteger(value) || value < 1) {
+      fail(path, "invalid-grid-placement", "网格行列号必须是正整数");
+    }
+    return { start: value - 1, span: 1 };
+  }
+  const text = value.trim();
+  let match = /^span\s+(\d+)$/u.exec(text);
+  if (match !== null) {
+    const span = Number(match[1]);
+    if (span < 1)
+      fail(path, "invalid-grid-placement", "网格 span 必须是正整数");
+    return { span };
+  }
+  match = /^(\d+)\s*\/\s*span\s+(\d+)$/u.exec(text);
+  if (match !== null) {
+    const span = Number(match[2]);
+    if (span < 1)
+      fail(path, "invalid-grid-placement", "网格 span 必须是正整数");
+    return { start: positiveIndex(match[1]!), span };
+  }
+  match = /^(\d+)\s*\/\s*(\d+)$/u.exec(text);
+  if (match !== null) {
+    const start = positiveIndex(match[1]!);
+    const end = positiveIndex(match[2]!);
+    if (end <= start)
+      fail(path, "invalid-grid-placement", "网格结束行列号必须大于开始号");
+    return { start, span: end - start };
+  }
+  if (/^\d+$/u.test(text)) return { start: positiveIndex(text), span: 1 };
+  fail(path, "invalid-grid-placement", `不支持网格 placement ${value}`);
+}
+
+function gridAlignment(
+  value:
+    | LayoutStyle["alignItems"]
+    | LayoutStyle["justifyItems"]
+    | LayoutStyle["justifySelf"],
+): "start" | "end" | "center" | "stretch" {
+  if (value === "center") return "center";
+  if (value === "end" || value === "flex-end") return "end";
+  if (value === "stretch") return "stretch";
+  return "start";
+}
+
+function resolvePercent(
+  value: LayoutLength | undefined,
+  basis: number,
+): number | undefined {
+  if (typeof value !== "string") return undefined;
+  const match = /^(-?(?:\d+(?:\.\d*)?|\.\d+))%$/u.exec(value);
+  return match === null ? undefined : (Number(match[1]) * basis) / 100;
+}
+
 // 这里只允许共享文字样式属性通过布局白名单；具体校验仍由能力模块负责。
 function allowsSharedTextStyle(type: string): boolean {
   return type === "rp:text" || type === "rp:table" || type === "rp:chart";
@@ -181,6 +438,21 @@ function length(
   nonNegative = true,
 ): number | undefined {
   if (value === undefined || value === "auto") return undefined;
+  if (typeof value === "string") {
+    const percent = /^(-?(?:\d+(?:\.\d*)?|\.\d+))%$/u.exec(value);
+    if (percent === null) {
+      fail(
+        path,
+        "invalid-layout-style",
+        `${name} 必须是像素数值、百分比或 auto`,
+      );
+    }
+    const amount = Number(percent[1]);
+    if (!Number.isFinite(amount) || (nonNegative && amount < 0)) {
+      fail(path, "invalid-layout-style", `${name} 不能小于 0`);
+    }
+    return undefined;
+  }
   const amount = number(value, name, path);
   if (nonNegative && amount < 0) {
     fail(path, "invalid-layout-style", `${name} 不能小于 0`);
@@ -293,6 +565,7 @@ function readStyle(
   path: string,
   isContainer: boolean,
   isText: boolean,
+  allowsPadding = isContainer,
 ): LayoutStyle {
   if (value === undefined) return {};
   if (!record(value)) {
@@ -307,7 +580,9 @@ function readStyle(
   }
   if (
     !isContainer &&
-    (value["display"] !== undefined ||
+    ((value["display"] !== undefined &&
+      value["display"] !== "none" &&
+      value["display"] !== "block") ||
       Object.keys(value).some((key) =>
         containerProperties.includes(
           key as (typeof containerProperties)[number],
@@ -321,17 +596,46 @@ function readStyle(
     );
   }
   const display = value["display"];
-  if (display !== undefined && display !== "block" && display !== "flex") {
-    fail(path, "unsupported-layout-value", "display 只支持 block 或 flex");
+  if (
+    display !== undefined &&
+    display !== "block" &&
+    display !== "flex" &&
+    display !== "grid" &&
+    display !== "none"
+  ) {
+    fail(
+      path,
+      "unsupported-layout-value",
+      "display 只支持 block、flex、grid 或 none",
+    );
   }
   const resolvedDisplay =
     (display as LayoutStyle["display"] | undefined) ?? "block";
+  if (resolvedDisplay === "grid" && value["alignItems"] === "baseline") {
+    fail(path, "unsupported-grid-alignment", "网格容器不支持 baseline 对齐");
+  }
   for (const key of containerProperties) {
-    if (value[key] !== undefined && resolvedDisplay !== "flex") {
+    if (
+      value[key] !== undefined &&
+      !(key === "alignItems" && resolvedDisplay === "grid") &&
+      !(key === "gap" && resolvedDisplay === "grid") &&
+      !(key === "rowGap" && resolvedDisplay === "grid") &&
+      !(key === "columnGap" && resolvedDisplay === "grid") &&
+      resolvedDisplay !== "flex"
+    ) {
       fail(
         path,
         "invalid-layout-context",
-        `${key} 只适用于 display: "flex" 的容器`,
+        `${key} 只适用于 display: "flex"${key === "alignItems" ? " 或 grid" : ""} 的容器`,
+      );
+    }
+  }
+  for (const key of gridContainerProperties) {
+    if (value[key] !== undefined && resolvedDisplay !== "grid") {
+      fail(
+        path,
+        "invalid-layout-context",
+        `${key} 只适用于 display: "grid" 的容器`,
       );
     }
   }
@@ -365,6 +669,42 @@ function readStyle(
     ...contentAlignments,
     "stretch",
   ]);
+  allowedValue("position", value["position"], [
+    "static",
+    "relative",
+    "absolute",
+  ]);
+  allowedValue("justifyItems", value["justifyItems"], [
+    "start",
+    "end",
+    "center",
+    "stretch",
+    "flex-start",
+    "flex-end",
+  ]);
+  allowedValue("justifySelf", value["justifySelf"], [
+    "auto",
+    "start",
+    "end",
+    "center",
+    "stretch",
+    "flex-start",
+    "flex-end",
+  ]);
+  const position =
+    (value["position"] as LayoutStyle["position"] | undefined) ?? "static";
+  if (
+    position === "static" &&
+    ["inset", "left", "top", "right", "bottom"].some(
+      (key) => value[key] !== undefined,
+    )
+  ) {
+    fail(
+      path,
+      "invalid-layout-context",
+      "定位偏移只适用于 relative 或 absolute 元素",
+    );
+  }
   for (const key of ["flex", "flexGrow", "flexShrink"] as const) {
     const candidate = value[key];
     if (candidate !== undefined && number(candidate, key, path) < 0) {
@@ -387,6 +727,40 @@ function readStyle(
     "flexBasis",
   ] as const) {
     length(value[key], key, path);
+  }
+  const ratio = value["aspectRatio"];
+  if (
+    ratio !== undefined &&
+    (typeof ratio !== "number" || !Number.isFinite(ratio) || ratio <= 0)
+  ) {
+    fail(path, "invalid-layout-style", "aspectRatio 必须是有限正数");
+  }
+  const zIndex = value["zIndex"];
+  if (
+    zIndex !== undefined &&
+    (typeof zIndex !== "number" || !Number.isFinite(zIndex))
+  ) {
+    fail(path, "invalid-layout-style", "zIndex 必须是有限数值");
+  }
+  for (const key of ["inset", "left", "top", "right", "bottom"] as const) {
+    const candidate = value[key];
+    if (candidate !== undefined) length(candidate, key, path, false);
+  }
+  for (const key of ["gridTemplateColumns", "gridTemplateRows"] as const) {
+    if (value[key] !== undefined && typeof value[key] !== "string") {
+      fail(path, "invalid-layout-style", `${key} 必须是网格轨道字符串`);
+    }
+  }
+  for (const key of gridItemProperties) {
+    const candidate = value[key];
+    if (
+      candidate !== undefined &&
+      key !== "justifySelf" &&
+      typeof candidate !== "number" &&
+      typeof candidate !== "string"
+    ) {
+      fail(path, "invalid-layout-style", `${key} 必须是行列号或 span 声明`);
+    }
   }
   const padding = value["padding"];
   if (padding !== undefined) {
@@ -416,7 +790,7 @@ function readStyle(
   }
   if (value["margin"] !== undefined) spacing(value["margin"], "margin", path);
   if (
-    !isContainer &&
+    !allowsPadding &&
     [
       "padding",
       "paddingTop",
@@ -431,10 +805,18 @@ function readStyle(
   const maxWidth = length(value["maxWidth"], "maxWidth", path);
   const minHeight = length(value["minHeight"], "minHeight", path);
   const maxHeight = length(value["maxHeight"], "maxHeight", path);
-  if (minWidth !== undefined && maxWidth !== undefined && minWidth > maxWidth) {
+  if (
+    typeof value["minWidth"] === "number" &&
+    typeof value["maxWidth"] === "number" &&
+    minWidth !== undefined &&
+    maxWidth !== undefined &&
+    minWidth > maxWidth
+  ) {
     fail(path, "invalid-layout-style", "minWidth 不能大于 maxWidth");
   }
   if (
+    typeof value["minHeight"] === "number" &&
+    typeof value["maxHeight"] === "number" &&
     minHeight !== undefined &&
     maxHeight !== undefined &&
     minHeight > maxHeight
@@ -469,6 +851,62 @@ function styleLength(value: LayoutLength | undefined): number | undefined {
   return typeof value === "number" ? value : undefined;
 }
 
+function setLength(
+  yoga: YogaNode,
+  property:
+    | "width"
+    | "height"
+    | "minWidth"
+    | "minHeight"
+    | "maxWidth"
+    | "maxHeight"
+    | "flexBasis",
+  value: LayoutLength | undefined,
+): void {
+  const setters = {
+    width: ["setWidth", "setWidthPercent"],
+    height: ["setHeight", "setHeightPercent"],
+    minWidth: ["setMinWidth", "setMinWidthPercent"],
+    minHeight: ["setMinHeight", "setMinHeightPercent"],
+    maxWidth: ["setMaxWidth", "setMaxWidthPercent"],
+    maxHeight: ["setMaxHeight", "setMaxHeightPercent"],
+    flexBasis: ["setFlexBasis", "setFlexBasisPercent"],
+  } as const;
+  const [pointSetter, percentSetter] = setters[property];
+  const percent =
+    typeof value === "string" ? /^(\d+(?:\.\d*)?|\.\d+)%$/u.exec(value) : null;
+  if (percent !== null) {
+    (yoga[percentSetter] as (amount: number) => void)(Number(percent[1]));
+    return;
+  }
+  if (typeof value === "number") {
+    (yoga[pointSetter] as (amount: number) => void)(value);
+    return;
+  }
+  if (value === "auto") {
+    const autoSetter = {
+      width: "setWidthAuto",
+      height: "setHeightAuto",
+      minWidth: "setMinWidth",
+      minHeight: "setMinHeight",
+      maxWidth: "setMaxWidth",
+      maxHeight: "setMaxHeight",
+      flexBasis: "setFlexBasisAuto",
+    }[property] as keyof YogaNode;
+    const setter = yoga[autoSetter] as ((amount?: number) => void) | undefined;
+    if (setter !== undefined) setter.call(yoga);
+  }
+}
+
+function setPosition(
+  yoga: YogaNode,
+  edge: Edge,
+  value: LayoutLength | undefined,
+): void {
+  if (value === undefined || value === "auto") return;
+  yoga.setPosition(edge, value);
+}
+
 function layoutPixel(value: number): number {
   // Yoga 以单精度浮点保存尺寸；按文字服务精度归一到百分之一像素。
   return Math.round(value * 100) / 100;
@@ -486,7 +924,9 @@ export class LayoutPass {
   readonly #dimensions: Dimensions;
   readonly #config = Yoga.Config.create();
   readonly #boxes = new WeakMap<CapabilityElement, GeometryBox>();
+  readonly #hidden = new WeakSet<CapabilityElement>();
   readonly #warnings: Diagnostic[] = [];
+  readonly #warningKeys = new Set<string>();
 
   constructor(
     modules: ReadonlyMap<string, RegisteredCapabilityModule>,
@@ -500,20 +940,28 @@ export class LayoutPass {
   run(
     children: readonly CapabilityChild[],
     parentPath: string,
+    slideStyle?: unknown,
   ): LayoutPassResult {
+    const style = readStyle(slideStyle, parentPath, true, false);
     const rootYoga = Yoga.Node.create(this.#config);
     const root: LayoutNode = {
       yoga: rootYoga,
-      style: { display: "block" },
+      style,
       path: parentPath,
       children: [],
+      escaped: [],
     };
-    rootYoga.setDisplay(Display.Flex);
-    rootYoga.setFlexDirection(FlexDirection.Column);
     rootYoga.setWidth(this.#dimensions.width);
     rootYoga.setHeight(this.#dimensions.height);
+    rootYoga.setPositionType(PositionType.Relative);
+    this.#applyStyle(rootYoga, style, { display: "block" }, true, true);
     try {
-      this.#appendChildren(children, parentPath, root, false);
+      this.#appendChildren(
+        children,
+        parentPath,
+        root,
+        slideStyle !== undefined,
+      );
       this.#prepareTextBaselines(root);
       // 固定尺寸父节点可能跳过新建测量树；先初次求解，再标脏测量叶并重算。
       rootYoga.calculateLayout(
@@ -521,6 +969,14 @@ export class LayoutPass {
         this.#dimensions.height,
         Direction.LTR,
       );
+      for (let pass = 0; pass < 3; pass += 1) {
+        this.#resolveGridTree(root);
+        rootYoga.calculateLayout(
+          this.#dimensions.width,
+          this.#dimensions.height,
+          Direction.LTR,
+        );
+      }
       if (this.#markBaselineMeasurementsDirty(root)) {
         rootYoga.calculateLayout(
           this.#dimensions.width,
@@ -534,21 +990,44 @@ export class LayoutPass {
           this.#dimensions.height,
           Direction.LTR,
         );
+        this.#resolveGridTree(root);
+        rootYoga.calculateLayout(
+          this.#dimensions.width,
+          this.#dimensions.height,
+          Direction.LTR,
+        );
       }
       this.#commit(root, { x: 0, y: 0 });
     } finally {
       rootYoga.freeRecursive();
+      this.#freeEscaped(root);
       this.#config.free();
     }
-    return { boxes: this.#boxes, warnings: this.#warnings };
+    return {
+      boxes: this.#boxes,
+      hidden: this.#hidden,
+      warnings: this.#warnings,
+    };
   }
 
-  #validateLoose(input: CapabilityElement, path: string): void {
+  #validateLoose(input: CapabilityElement, path: string): LayoutStyle {
     const module = this.#modules.get(input.type);
-    if (!objectModule(module)) return;
+    if (!objectModule(module)) return {};
     // Text、Table 与 Chart 以共享文字服务消费字体属性，布局中仍是叶对象。
     const allowsTextStyle = allowsSharedTextStyle(input.type);
-    readStyle(input.props["style"], path, false, allowsTextStyle);
+    const isGroup = input.type === "rp:group";
+    const allowsPadding =
+      input.type === "rp:text" ||
+      (input.type === "rp:shape" &&
+        typeof input.props["text"] === "string" &&
+        input.props["text"] !== "");
+    return readStyle(
+      input.props["style"],
+      path,
+      isGroup,
+      allowsTextStyle,
+      allowsPadding,
+    );
   }
 
   #appendChildren(
@@ -560,15 +1039,56 @@ export class LayoutPass {
     children.forEach((child, index) => {
       if (!element(child)) return;
       const childPath = `${parentPath}/${label(child, index)}`;
+      if (parent.style.display === "none") {
+        this.#markHidden(child);
+        return;
+      }
       if (child.type === "rp:box") {
-        const built = this.#buildBox(child, childPath, parent.style);
-        parent.yoga.insertChild(built.yoga, parent.children.length);
-        parent.children.push(built);
+        const childStyle = readStyle(
+          child.props["style"],
+          childPath,
+          true,
+          false,
+        );
+        if (childStyle.display === "none") {
+          this.#markHidden(child);
+          return;
+        }
+        this.#validateItemStyle(childStyle, parent, childPath);
+        const built = this.#buildBox(child, childPath, parent);
+        this.#appendLayoutChild(parent, built);
         return;
       }
       if (child.type === "rp:group") {
-        // Group 只保留原生成员关系；其内容继续使用外层布局上下文。
-        this.#appendChildren(child.children, childPath, parent, includeObjects);
+        const childStyle = readStyle(
+          child.props["style"],
+          childPath,
+          true,
+          false,
+        );
+        if (childStyle.display === "none") {
+          this.#markHidden(child);
+          return;
+        }
+        this.#validateItemStyle(childStyle, parent, childPath);
+        if (!includeObjects) {
+          const optsIntoLayout = Object.keys(childStyle).some(
+            (key) => key !== "zIndex",
+          );
+          if (!optsIntoLayout) {
+            this.#appendChildren(child.children, childPath, parent, false);
+            return;
+          }
+        }
+        const built = this.#buildGroup(child, childPath, parent);
+        this.#appendLayoutChild(parent, built);
+        return;
+      }
+      const looseStyle = includeObjects
+        ? undefined
+        : this.#validateLoose(child, childPath);
+      if (looseStyle?.display === "none") {
+        this.#markHidden(child);
         return;
       }
       const module = this.#modules.get(child.type);
@@ -577,7 +1097,15 @@ export class LayoutPass {
         return;
       }
       if (!includeObjects) {
-        this.#validateLoose(child, childPath);
+        if (looseStyle !== undefined)
+          this.#validateItemStyle(looseStyle, parent, childPath);
+        if (looseStyle !== undefined && this.#requiresLooseLayout(looseStyle)) {
+          const built = this.#buildObject(child, childPath, parent, looseStyle);
+          if (built !== undefined) {
+            this.#positionLooseGeometry(built);
+            this.#appendLayoutChild(parent, built);
+          }
+        }
         return;
       }
       if (!objectModule(module)) return;
@@ -587,46 +1115,137 @@ export class LayoutPass {
         childPath,
         false,
         allowsTextStyle,
+        child.type === "rp:text" ||
+          (child.type === "rp:shape" &&
+            typeof child.props["text"] === "string" &&
+            child.props["text"] !== ""),
       );
-      const childYoga = Yoga.Node.create(this.#config);
-      const layoutChild: LayoutNode = {
-        yoga: childYoga,
-        element: child,
-        style: childStyle,
-        path: childPath,
-        module,
-        children: [],
-      };
-      this.#applyStyle(childYoga, childStyle, parent.style, false, false);
-      this.#setDeclaredSize(layoutChild);
-      if (module.measureLayout !== undefined) {
-        const measureFunction: MeasureFunction = (width, widthMode) => {
-          const measured = this.#measure(
-            layoutChild,
-            widthMode === MeasureMode.Undefined
-              ? {}
-              : { availableWidth: width },
-          );
-          return {
-            width:
-              widthMode === MeasureMode.Exactly
-                ? width
-                : (measured?.width ?? 0),
-            height: measured?.height ?? 0,
-          };
-        };
-        layoutChild.measureFunction = measureFunction;
-        childYoga.setMeasureFunc(measureFunction);
+      if (childStyle.display === "none") {
+        this.#markHidden(child);
+        return;
       }
-      parent.yoga.insertChild(childYoga, parent.children.length);
-      parent.children.push(layoutChild);
+      this.#validateItemStyle(childStyle, parent, childPath);
+      const layoutChild = this.#buildObject(
+        child,
+        childPath,
+        parent,
+        childStyle,
+      );
+      if (layoutChild === undefined) return;
+      this.#appendLayoutChild(parent, layoutChild);
     });
+  }
+
+  #validateItemStyle(
+    style: LayoutStyle,
+    parent: LayoutNode,
+    path: string,
+  ): void {
+    if (
+      parent.style.display === "grid" &&
+      style.position === "absolute" &&
+      (style.alignSelf !== undefined ||
+        style.justifySelf !== undefined ||
+        style.gridColumn !== undefined ||
+        style.gridRow !== undefined)
+    ) {
+      fail(
+        path,
+        "unsupported-grid-positioning",
+        "绝对定位网格项暂不支持网格 placement 或 self alignment",
+      );
+    }
+    if (
+      parent.style.display === "grid" &&
+      style.position !== "absolute" &&
+      style.alignSelf === "baseline"
+    ) {
+      fail(path, "unsupported-grid-alignment", "网格项不支持 baseline 对齐");
+    }
+  }
+
+  #appendLayoutChild(parent: LayoutNode, child: LayoutNode): void {
+    child.parent = parent;
+    if (
+      child.style.position === "absolute" &&
+      this.#containingBlock(parent) !== parent
+    ) {
+      this.#containingBlock(parent).escaped.push(child);
+      return;
+    }
+    this.#markGridItem(child, parent);
+    parent.yoga.insertChild(child.yoga, parent.children.length);
+    parent.children.push(child);
+  }
+
+  #containingBlock(parent: LayoutNode): LayoutNode {
+    let current: LayoutNode | undefined = parent;
+    while (current !== undefined) {
+      if (current.element === undefined) return current;
+      if (
+        current.style.position === "relative" ||
+        current.style.position === "absolute"
+      ) {
+        return current;
+      }
+      current = current.parent;
+    }
+    fail(parent.path, "layout-unavailable", "定位对象不在页面画布内");
+  }
+
+  #placeEscaped(node: LayoutNode, containingBlock: GeometryBox): void {
+    const container = Yoga.Node.create(this.#config);
+    container.setWidth(containingBlock.width);
+    container.setHeight(containingBlock.height);
+    container.setPositionType(PositionType.Relative);
+    container.insertChild(node.yoga, 0);
+    try {
+      this.#markBaselineMeasurementsDirty(node);
+      for (let pass = 0; pass < 3; pass += 1) {
+        container.calculateLayout(
+          containingBlock.width,
+          containingBlock.height,
+          Direction.LTR,
+        );
+        this.#resolveGridTree(node);
+      }
+      if (this.#applyAutomaticMinimums(node)) {
+        container.calculateLayout(
+          containingBlock.width,
+          containingBlock.height,
+          Direction.LTR,
+        );
+        this.#resolveGridTree(node);
+        container.calculateLayout(
+          containingBlock.width,
+          containingBlock.height,
+          Direction.LTR,
+        );
+      }
+      container.calculateLayout(
+        containingBlock.width,
+        containingBlock.height,
+        Direction.LTR,
+      );
+      this.#commit(node, { x: containingBlock.x, y: containingBlock.y });
+    } finally {
+      container.removeChild(node.yoga);
+      container.free();
+    }
+  }
+
+  #freeEscaped(node: LayoutNode): void {
+    for (const child of node.escaped) {
+      child.yoga.freeRecursive();
+      this.#freeEscaped(child);
+    }
+    for (const child of node.children) this.#freeEscaped(child);
   }
 
   #buildBox(
     input: CapabilityElement,
     path: string,
-    parentStyle: LayoutStyle,
+    parent: LayoutNode,
   ): LayoutNode {
     const unknown = Object.keys(input.props).find(
       (key) => key !== "testId" && key !== "style",
@@ -649,22 +1268,673 @@ export class LayoutPass {
       style,
       path,
       children: [],
+      parent,
+      escaped: [],
     };
-    this.#applyStyle(yoga, style, parentStyle, false, true);
+    this.#applyStyle(yoga, style, parent.style, false, true);
     this.#appendChildren(input.children, path, node, true);
     return node;
+  }
+
+  #buildGroup(
+    input: CapabilityElement,
+    path: string,
+    parent: LayoutNode,
+  ): LayoutNode {
+    const unknown = Object.keys(input.props).find(
+      (key) =>
+        ![
+          "testId",
+          "name",
+          "style",
+          "enter",
+          "emphasis",
+          "motion",
+          "__motionContext",
+          "__motionEnabled",
+          "__motionStep",
+        ].includes(key),
+    );
+    if (unknown !== undefined)
+      fail(path, "unknown-parameter", `Group 含未实现参数 ${unknown}`);
+    const style = readStyle(input.props["style"], path, true, false);
+    const yoga = Yoga.Node.create(this.#config);
+    const node: LayoutNode = {
+      yoga,
+      element: input,
+      style,
+      path,
+      children: [],
+      parent,
+      escaped: [],
+    };
+    this.#applyStyle(yoga, style, parent.style, false, true);
+    this.#appendChildren(input.children, path, node, true);
+    return node;
+  }
+
+  #markHidden(child: CapabilityElement): void {
+    this.#hidden.add(child);
+    for (const descendant of child.children) {
+      if (element(descendant)) this.#markHidden(descendant);
+    }
+  }
+
+  #markGridItem(child: LayoutNode, parent: LayoutNode): void {
+    if (
+      parent.style.display !== "grid" ||
+      child.style.position === "absolute"
+    ) {
+      return;
+    }
+    child.gridItem = true;
+    child.yoga.setPositionType(PositionType.Absolute);
+  }
+
+  #requiresLooseLayout(style: LayoutStyle): boolean {
+    return (
+      style.position === "absolute" ||
+      style.position === "relative" ||
+      style.aspectRatio !== undefined ||
+      style.width !== undefined ||
+      style.height !== undefined ||
+      style.minWidth !== undefined ||
+      style.minHeight !== undefined ||
+      style.maxWidth !== undefined ||
+      style.maxHeight !== undefined
+    );
+  }
+
+  #buildObject(
+    input: CapabilityElement,
+    path: string,
+    parent: LayoutNode,
+    style: LayoutStyle,
+  ): LayoutNode | undefined {
+    const module = this.#modules.get(input.type);
+    if (!objectModule(module)) return undefined;
+    const yoga = Yoga.Node.create(this.#config);
+    const node: LayoutNode = {
+      yoga,
+      element: input,
+      style,
+      path,
+      module,
+      children: [],
+      parent,
+      escaped: [],
+    };
+    this.#applyStyle(yoga, style, parent.style, false, false);
+    this.#setDeclaredSize(node);
+    if (style.position === "absolute") {
+      if (
+        style.left === undefined &&
+        style.inset === undefined &&
+        style.right === undefined &&
+        typeof input.props["x"] === "number"
+      ) {
+        yoga.setPosition(Edge.Left, input.props["x"]);
+      }
+      if (
+        style.top === undefined &&
+        style.inset === undefined &&
+        style.bottom === undefined &&
+        typeof input.props["y"] === "number"
+      ) {
+        yoga.setPosition(Edge.Top, input.props["y"]);
+      }
+    }
+    if (module.measureLayout !== undefined) {
+      const measureFunction: MeasureFunction = (width, widthMode) => {
+        const measured = this.#measure(
+          node,
+          widthMode === MeasureMode.Undefined
+            ? {}
+            : {
+                availableWidth: width,
+                widthMode:
+                  widthMode === MeasureMode.Exactly ? "exactly" : "at-most",
+              },
+        );
+        return {
+          width:
+            widthMode === MeasureMode.Exactly ? width : (measured?.width ?? 0),
+          height: measured?.height ?? 0,
+        };
+      };
+      node.measureFunction = measureFunction;
+      yoga.setMeasureFunc(measureFunction);
+    }
+    return node;
+  }
+
+  #positionLooseGeometry(node: LayoutNode): void {
+    const element = node.element;
+    if (element === undefined) return;
+    const props = element.props;
+    const x = typeof props["x"] === "number" ? props["x"] : 0;
+    const y = typeof props["y"] === "number" ? props["y"] : 0;
+    if (node.style.position === "absolute") {
+      if (
+        node.style.left === undefined &&
+        node.style.inset === undefined &&
+        node.style.right === undefined
+      )
+        node.yoga.setPosition(Edge.Left, x);
+      if (
+        node.style.top === undefined &&
+        node.style.inset === undefined &&
+        node.style.bottom === undefined
+      )
+        node.yoga.setPosition(Edge.Top, y);
+      return;
+    }
+    const offset = (
+      start: LayoutLength | undefined,
+      end: LayoutLength | undefined,
+      basis: number,
+    ) => {
+      if (typeof start === "number") return start;
+      if (typeof start === "string" && start.endsWith("%")) {
+        return (Number(start.slice(0, -1)) * basis) / 100;
+      }
+      if (typeof end === "number") return -end;
+      if (typeof end === "string" && end.endsWith("%")) {
+        return -(Number(end.slice(0, -1)) * basis) / 100;
+      }
+      return 0;
+    };
+    const left = offset(
+      node.style.left ?? node.style.inset,
+      node.style.right ?? node.style.inset,
+      this.#dimensions.width,
+    );
+    const top = offset(
+      node.style.top ?? node.style.inset,
+      node.style.bottom ?? node.style.inset,
+      this.#dimensions.height,
+    );
+    node.yoga.setPositionType(PositionType.Absolute);
+    node.yoga.setPositionAuto(Edge.Right);
+    node.yoga.setPositionAuto(Edge.Bottom);
+    node.yoga.setPosition(Edge.Left, x + left);
+    node.yoga.setPosition(Edge.Top, y + top);
+    node.yoga.setAlwaysFormsContainingBlock(true);
+  }
+
+  #gridPlacements(
+    node: LayoutNode,
+    explicitColumns: readonly GridTrack[],
+  ): {
+    readonly placements: readonly GridPlacement[];
+    readonly columns: GridTrack[];
+  } {
+    const columns = [...explicitColumns];
+    const children = node.children.filter((child) => child.gridItem === true);
+    const occupied = new Set<string>();
+    const placements: GridPlacement[] = [];
+    let cursorRow = 0;
+    let cursorColumn = 0;
+    const ensureColumns = (count: number) => {
+      if (count > 128)
+        fail(node.path, "invalid-grid-placement", "隐式网格列不能超过 128 条");
+      while (columns.length < count) columns.push({ kind: "auto", min: 0 });
+    };
+    for (const child of children) {
+      const column = gridPlacement(child.style.gridColumn, child.path);
+      const row = gridPlacement(child.style.gridRow, child.path);
+      const columnSpan = column.span;
+      if (column.start !== undefined) ensureColumns(column.start + columnSpan);
+      else if (columnSpan > columns.length) ensureColumns(columnSpan);
+      let currentRow = row.start ?? cursorRow;
+      let currentColumn = column.start ?? cursorColumn;
+      if (
+        row.start === undefined &&
+        column.start !== undefined &&
+        column.start < cursorColumn
+      )
+        currentRow += 1;
+      const fits = (rowIndex: number, columnIndex: number) => {
+        if (row.start === undefined && column.start === undefined) {
+          if (columnIndex + columnSpan > columns.length) return false;
+        } else {
+          ensureColumns(columnIndex + columnSpan);
+        }
+        for (let rowOffset = 0; rowOffset < row.span; rowOffset += 1) {
+          for (
+            let columnOffset = 0;
+            columnOffset < columnSpan;
+            columnOffset += 1
+          ) {
+            if (
+              occupied.has(
+                `${rowIndex + rowOffset}:${columnIndex + columnOffset}`,
+              )
+            )
+              return false;
+          }
+        }
+        return true;
+      };
+      const fixed = row.start !== undefined && column.start !== undefined;
+      if (!fixed) {
+        while (!fits(currentRow, currentColumn)) {
+          if (column.start !== undefined) currentRow += 1;
+          else {
+            currentColumn += 1;
+            if (currentColumn + columnSpan > columns.length) {
+              currentColumn = 0;
+              currentRow += 1;
+            }
+          }
+        }
+      }
+      if (currentRow + row.span > 128) {
+        fail(child.path, "invalid-grid-placement", "隐式网格行不能超过 128 行");
+      }
+      for (let rowOffset = 0; rowOffset < row.span; rowOffset += 1) {
+        for (
+          let columnOffset = 0;
+          columnOffset < columnSpan;
+          columnOffset += 1
+        ) {
+          occupied.add(
+            `${currentRow + rowOffset}:${currentColumn + columnOffset}`,
+          );
+        }
+      }
+      placements.push({
+        node: child,
+        row: currentRow,
+        column: currentColumn,
+        rowSpan: row.span,
+        columnSpan,
+      });
+      if (row.start === undefined) {
+        cursorRow = currentRow;
+        cursorColumn = currentColumn + columnSpan;
+      }
+    }
+    return { placements, columns };
+  }
+
+  #naturalSize(node: LayoutNode, width?: number): Dimensions {
+    node.yoga.calculateLayout(width, undefined, Direction.LTR);
+    return {
+      width: node.yoga.getComputedWidth(),
+      height: node.yoga.getComputedHeight(),
+    };
+  }
+
+  #gridModel(
+    node: LayoutNode,
+    innerWidth: number | undefined,
+    innerHeight: number | undefined,
+  ): GridModel {
+    const columnTracks = gridTracks(
+      node.style.gridTemplateColumns,
+      node.path,
+      true,
+    );
+    const rowTracks = gridTracks(node.style.gridTemplateRows, node.path, false);
+    const { placements, columns } = this.#gridPlacements(node, columnTracks);
+    const columnGap = node.style.columnGap ?? node.style.gap ?? 0;
+    const rowGap = node.style.rowGap ?? node.style.gap ?? 0;
+    const rowCount = Math.max(
+      rowTracks.length,
+      ...placements.map((placement) => placement.row + placement.rowSpan),
+      0,
+    );
+    const minContentWidth = (item: LayoutNode): number =>
+      this.#minContentContribution(item, "width");
+    const columnWidths = columns.map((track) =>
+      track.kind === "px" ? track.value : track.min,
+    );
+    for (const placement of placements) {
+      if (placement.columnSpan !== 1) continue;
+      const track = columns[placement.column];
+      if (
+        track === undefined ||
+        track.kind === "px" ||
+        (track.kind === "fr" && track.contentMinimum !== true)
+      )
+        continue;
+      columnWidths[placement.column] = Math.max(
+        columnWidths[placement.column] ?? 0,
+        Math.max(track.min, minContentWidth(placement.node)),
+      );
+    }
+    const columnSpanWidth = (start: number, span: number) =>
+      columnWidths
+        .slice(start, start + span)
+        .reduce((sum, width) => sum + width, 0) +
+      columnGap * Math.max(0, span - 1);
+    for (const placement of placements) {
+      if (placement.columnSpan === 1) continue;
+      const required = minContentWidth(placement.node);
+      const missing =
+        required - columnSpanWidth(placement.column, placement.columnSpan);
+      if (missing <= 0) continue;
+      const growable = Array.from(
+        { length: placement.columnSpan },
+        (_, index) => placement.column + index,
+      ).filter(
+        (index) =>
+          columns[index]?.kind === "auto" ||
+          (columns[index]?.kind === "fr" &&
+            columns[index]?.contentMinimum === true),
+      );
+      if (growable.length === 0) continue;
+      for (const index of growable) {
+        columnWidths[index] =
+          (columnWidths[index] ?? 0) + missing / growable.length;
+      }
+    }
+    if (innerWidth !== undefined) {
+      distributeFrTracks(columnWidths, columns, innerWidth, columnGap);
+    }
+    const spanWidth = (start: number, span: number) =>
+      columnWidths
+        .slice(start, start + span)
+        .reduce((sum, width) => sum + width, 0) +
+      columnGap * Math.max(0, span - 1);
+    const rowHeights = Array.from({ length: rowCount }, (_, index) => {
+      const track = rowTracks[index] ?? { kind: "auto" as const, min: 0 };
+      return track.kind === "px" ? track.value : track.min;
+    });
+    for (const placement of placements) {
+      if (placement.rowSpan !== 1) continue;
+      const track = rowTracks[placement.row] ?? {
+        kind: "auto" as const,
+        min: 0,
+      };
+      if (track.kind === "px" || (track.kind === "fr" && !track.contentMinimum))
+        continue;
+      const margin = expandedSpacing(placement.node.style, "margin");
+      const size = this.#naturalSize(
+        placement.node,
+        spanWidth(placement.column, placement.columnSpan),
+      );
+      rowHeights[placement.row] = Math.max(
+        rowHeights[placement.row] ?? 0,
+        track.min,
+        size.height + margin.top + margin.bottom,
+      );
+    }
+    const spanHeight = (start: number, span: number) =>
+      rowHeights
+        .slice(start, start + span)
+        .reduce((sum, height) => sum + height, 0) +
+      rowGap * Math.max(0, span - 1);
+    for (const placement of placements) {
+      if (placement.rowSpan === 1) continue;
+      const natural = this.#naturalSize(
+        placement.node,
+        spanWidth(placement.column, placement.columnSpan),
+      );
+      const margin = expandedSpacing(placement.node.style, "margin");
+      const missing =
+        natural.height +
+        margin.top +
+        margin.bottom -
+        spanHeight(placement.row, placement.rowSpan);
+      if (missing <= 0) continue;
+      const growable = Array.from(
+        { length: placement.rowSpan },
+        (_, index) => placement.row + index,
+      ).filter((index) => (rowTracks[index]?.kind ?? "auto") !== "px");
+      if (growable.length === 0) continue;
+      for (const index of growable) {
+        rowHeights[index] =
+          (rowHeights[index] ?? 0) + missing / growable.length;
+      }
+    }
+    if (innerHeight !== undefined) {
+      distributeFrTracks(rowHeights, rowTracks, innerHeight, rowGap);
+    }
+    const spanHeightFinal = (start: number, span: number) =>
+      rowHeights
+        .slice(start, start + span)
+        .reduce((sum, height) => sum + height, 0) +
+      rowGap * Math.max(0, span - 1);
+    return {
+      placements,
+      widths: columnWidths,
+      heights: rowHeights,
+      columnGap,
+      rowGap,
+      spanWidth,
+      spanHeight: spanHeightFinal,
+      width: spanWidth(0, columnWidths.length),
+      height: rowCount === 0 ? 0 : spanHeightFinal(0, rowCount),
+    };
+  }
+
+  #placeGrid(node: LayoutNode): void {
+    const padding = expandedSpacing(node.style, "padding");
+    const outerWidth = node.yoga.getComputedWidth();
+    const outerHeight =
+      node.yoga.getComputedHeight() || node.gridAreaHeight || 0;
+    const hasWidth =
+      node.element === undefined ||
+      (node.style.width !== undefined && node.style.width !== "auto");
+    const hasResolvedHeight =
+      node.element === undefined ||
+      (node.style.height !== undefined && node.style.height !== "auto") ||
+      outerHeight > 0;
+    const innerWidth =
+      outerWidth > 0
+        ? Math.max(0, outerWidth - padding.left - padding.right)
+        : undefined;
+    const innerHeight = hasResolvedHeight
+      ? Math.max(0, outerHeight - padding.top - padding.bottom)
+      : undefined;
+    const model = this.#gridModel(node, innerWidth, innerHeight);
+    if (innerWidth !== undefined && model.width > innerWidth + 0.01) {
+      this.#warnOnce(
+        node.path,
+        "grid-overflow",
+        `网格列的最小尺寸合计 ${model.width}px 超出可用宽度 ${innerWidth}px；构建保留轨道尺寸`,
+      );
+    }
+    if (innerHeight !== undefined && model.height > innerHeight + 0.01) {
+      this.#warnOnce(
+        node.path,
+        "grid-overflow",
+        `网格行的最小尺寸合计 ${model.height}px 超出可用高度 ${innerHeight}px；构建保留轨道尺寸`,
+      );
+    }
+    if (!hasWidth && outerWidth <= 0) {
+      node.yoga.setWidth(model.width + padding.left + padding.right);
+    }
+    if (!hasResolvedHeight) {
+      node.yoga.setHeight(model.height + padding.top + padding.bottom);
+    }
+    for (const placement of model.placements) {
+      const child = placement.node;
+      const childStyle = child.style;
+      const cellWidth = model.spanWidth(placement.column, placement.columnSpan);
+      const cellHeight = model.spanHeight(placement.row, placement.rowSpan);
+      const cellX =
+        padding.left +
+        model.spanWidth(0, placement.column) +
+        (placement.column > 0 ? model.columnGap : 0);
+      const cellY =
+        padding.top +
+        model.spanHeight(0, placement.row) +
+        (placement.row > 0 ? model.rowGap : 0);
+      const margin = expandedSpacing(childStyle, "margin");
+      const availableWidth = Math.max(
+        0,
+        cellWidth - margin.left - margin.right,
+      );
+      const availableHeight = Math.max(
+        0,
+        cellHeight - margin.top - margin.bottom,
+      );
+      const justify = gridAlignment(
+        childStyle.justifySelf === undefined ||
+          childStyle.justifySelf === "auto"
+          ? (node.style.justifyItems ?? "stretch")
+          : childStyle.justifySelf,
+      );
+      const alignValue =
+        childStyle.alignSelf === undefined || childStyle.alignSelf === "auto"
+          ? (node.style.alignItems ?? "stretch")
+          : childStyle.alignSelf;
+      if (alignValue === "baseline") {
+        fail(
+          child.path,
+          "unsupported-grid-alignment",
+          "网格中的文字 baseline 对齐尚无可靠行基线",
+        );
+      }
+      const align = gridAlignment(alignValue);
+      const declaredWidth = childStyle.width ?? child.element?.props["width"];
+      const declaredHeight =
+        childStyle.height ?? child.element?.props["height"];
+      const widthPercent = resolvePercent(
+        declaredWidth as LayoutLength | undefined,
+        cellWidth,
+      );
+      const heightPercent = resolvePercent(
+        declaredHeight as LayoutLength | undefined,
+        cellHeight,
+      );
+      const widthSpecified =
+        declaredWidth !== undefined && declaredWidth !== "auto";
+      let heightSpecified =
+        declaredHeight !== undefined && declaredHeight !== "auto";
+      if (widthPercent !== undefined) child.yoga.setWidth(widthPercent);
+      if (heightPercent !== undefined && availableHeight > 0) {
+        child.yoga.setHeight(heightPercent);
+      } else if (heightPercent !== undefined) {
+        child.yoga.setHeightAuto();
+        heightSpecified = false;
+      }
+      const minWidth = resolvePercent(childStyle.minWidth, cellWidth);
+      const maxWidth = resolvePercent(childStyle.maxWidth, cellWidth);
+      const minHeight = resolvePercent(childStyle.minHeight, cellHeight);
+      const maxHeight = resolvePercent(childStyle.maxHeight, cellHeight);
+      if (minWidth !== undefined) child.yoga.setMinWidth(minWidth);
+      if (maxWidth !== undefined) child.yoga.setMaxWidth(maxWidth);
+      if (minHeight !== undefined) child.yoga.setMinHeight(minHeight);
+      if (maxHeight !== undefined) child.yoga.setMaxHeight(maxHeight);
+      const intrinsic = this.#naturalSize(
+        child,
+        typeof declaredWidth === "string" && declaredWidth.endsWith("%")
+          ? cellWidth
+          : undefined,
+      );
+      let width = widthSpecified
+        ? intrinsic.width
+        : justify === "stretch"
+          ? availableWidth
+          : intrinsic.width;
+      if (
+        childStyle.aspectRatio !== undefined &&
+        heightSpecified &&
+        !widthSpecified
+      ) {
+        width = intrinsic.height * childStyle.aspectRatio;
+      }
+      if (!widthSpecified || widthPercent !== undefined)
+        child.yoga.setWidth(Math.max(0, width));
+      const naturalAtWidth = this.#naturalSize(child, width);
+      let height = heightSpecified
+        ? naturalAtWidth.height
+        : align === "stretch" && childStyle.aspectRatio === undefined
+          ? availableHeight
+          : naturalAtWidth.height;
+      if (!heightSpecified && childStyle.aspectRatio === undefined) {
+        child.yoga.setHeight(Math.max(0, height));
+      }
+      const usedWidth = child.yoga.getComputedWidth() || width;
+      const usedHeight = child.yoga.getComputedHeight() || height;
+      if (child.style.display === "grid" && !heightSpecified) {
+        child.gridAreaHeight = height;
+      }
+      if (
+        usedWidth > availableWidth + 0.01 ||
+        usedHeight > availableHeight + 0.01
+      ) {
+        this.#warnOnce(
+          child.path,
+          "grid-item-overflow",
+          "网格项超出其轨道区域，构建保留声明尺寸",
+        );
+      }
+      const xAlign =
+        justify === "center"
+          ? Math.max(0, (availableWidth - usedWidth) / 2)
+          : justify === "end"
+            ? Math.max(0, availableWidth - usedWidth)
+            : 0;
+      const yAlign =
+        align === "center"
+          ? Math.max(0, (availableHeight - usedHeight) / 2)
+          : align === "end"
+            ? Math.max(0, availableHeight - usedHeight)
+            : 0;
+      const relative = (
+        start: LayoutLength | undefined,
+        end: LayoutLength | undefined,
+        basis: number,
+      ) => {
+        const resolve = (value: LayoutLength | undefined) =>
+          typeof value === "number"
+            ? value
+            : typeof value === "string" && value.endsWith("%")
+              ? (Number(value.slice(0, -1)) * basis) / 100
+              : undefined;
+        const startValue = resolve(start);
+        return startValue ?? -(resolve(end) ?? 0);
+      };
+      const dx =
+        childStyle.position === "relative"
+          ? relative(
+              childStyle.left ?? childStyle.inset,
+              childStyle.right ?? childStyle.inset,
+              cellWidth,
+            )
+          : 0;
+      const dy =
+        childStyle.position === "relative"
+          ? relative(
+              childStyle.top ?? childStyle.inset,
+              childStyle.bottom ?? childStyle.inset,
+              cellHeight,
+            )
+          : 0;
+      child.yoga.setPositionType(PositionType.Absolute);
+      child.yoga.setPosition(Edge.Left, cellX + xAlign + dx);
+      child.yoga.setPosition(Edge.Top, cellY + yAlign + dy);
+    }
+  }
+
+  #resolveGridTree(node: LayoutNode): void {
+    if (node.style.display === "grid") this.#placeGrid(node);
+    for (const child of node.children) this.#resolveGridTree(child);
+  }
+
+  #warnOnce(path: string, code: string, message: string): void {
+    const key = `${path}\u0000${code}\u0000${message}`;
+    if (this.#warningKeys.has(key)) return;
+    this.#warningKeys.add(key);
+    this.#warnings.push({ severity: "warning", path, code, message });
   }
 
   #setDeclaredSize(node: LayoutNode): void {
     const props = node.element?.props ?? {};
     const style = node.style;
     const rawWidth = style.width ?? props["width"];
-    const width = length(rawWidth, "width", node.path);
+    const width = rawWidth;
     const rawHeight = style.height ?? props["height"];
-    const height =
-      rawHeight === "auto" ? undefined : length(rawHeight, "height", node.path);
-    if (width !== undefined) node.yoga.setWidth(width);
-    if (height !== undefined) node.yoga.setHeight(height);
+    const height = rawHeight;
+    if (width !== undefined)
+      setLength(node.yoga, "width", width as LayoutLength);
+    if (height !== undefined)
+      setLength(node.yoga, "height", height as LayoutLength);
   }
 
   #applyStyle(
@@ -674,7 +1944,24 @@ export class LayoutPass {
     isRoot: boolean,
     isContainer: boolean,
   ): void {
-    yoga.setDisplay(Display.Flex);
+    const display = style.display ?? "block";
+    yoga.setDisplay(display === "none" ? Display.None : Display.Flex);
+    yoga.setPositionType(
+      style.position === "absolute"
+        ? PositionType.Absolute
+        : style.position === "relative" || isRoot
+          ? PositionType.Relative
+          : PositionType.Static,
+    );
+    for (const [edge, value] of [
+      [Edge.Left, style.left ?? style.inset],
+      [Edge.Top, style.top ?? style.inset],
+      [Edge.Right, style.right ?? style.inset],
+      [Edge.Bottom, style.bottom ?? style.inset],
+    ] as const) {
+      setPosition(yoga, edge, value);
+    }
+    if (style.aspectRatio !== undefined) yoga.setAspectRatio(style.aspectRatio);
     const flex = style.display === "flex";
     yoga.setFlexDirection(
       flex
@@ -711,10 +1998,12 @@ export class LayoutPass {
       // Yoga 默认从起始边堆叠弹性行；CSS 默认会拉伸有剩余空间的行。
       yoga.setAlignContent(Align.Stretch);
     }
-    if (flex && style.gap !== undefined) yoga.setGap(Gutter.All, style.gap);
-    if (flex && style.rowGap !== undefined)
+    const grid = style.display === "grid";
+    if ((flex || grid) && style.gap !== undefined)
+      yoga.setGap(Gutter.All, style.gap);
+    if ((flex || grid) && style.rowGap !== undefined)
       yoga.setGap(Gutter.Row, style.rowGap);
-    if (flex && style.columnGap !== undefined)
+    if ((flex || grid) && style.columnGap !== undefined)
       yoga.setGap(Gutter.Column, style.columnGap);
     for (const key of [
       "width",
@@ -724,17 +2013,7 @@ export class LayoutPass {
       "maxWidth",
       "maxHeight",
     ] as const) {
-      const amount = styleLength(style[key]);
-      if (amount === undefined) continue;
-      const setter = {
-        width: "setWidth",
-        height: "setHeight",
-        minWidth: "setMinWidth",
-        minHeight: "setMinHeight",
-        maxWidth: "setMaxWidth",
-        maxHeight: "setMaxHeight",
-      }[key] as keyof YogaNode;
-      (yoga[setter] as (value: number) => void)(amount);
+      setLength(yoga, key, style[key]);
     }
     const padding = expandedSpacing(style, "padding");
     yoga.setPadding(Edge.Top, padding.top);
@@ -755,11 +2034,8 @@ export class LayoutPass {
           yoga.setFlexBasis(0);
         }
         if (style.flexGrow !== undefined) yoga.setFlexGrow(style.flexGrow);
-        if (style.flexBasis !== undefined) {
-          const basis = styleLength(style.flexBasis);
-          if (basis === undefined) yoga.setFlexBasisAuto();
-          else yoga.setFlexBasis(basis);
-        }
+        if (style.flexBasis !== undefined)
+          setLength(yoga, "flexBasis", style.flexBasis);
         if (style.alignSelf !== undefined)
           yoga.setAlignSelf(yogaAlign(style.alignSelf));
       } else {
@@ -773,7 +2049,10 @@ export class LayoutPass {
 
   #measure(
     node: LayoutNode,
-    request: { readonly availableWidth?: number },
+    request: {
+      readonly availableWidth?: number;
+      readonly widthMode?: "at-most" | "exactly";
+    },
   ): CapabilityLayoutMeasurement | undefined {
     if (
       node.module?.measureLayout === undefined ||
@@ -803,7 +2082,11 @@ export class LayoutPass {
         const explicitMinimum = horizontal
           ? child.style.minWidth
           : child.style.minHeight;
-        if (typeof explicitMinimum === "number") continue;
+        if (
+          child.style.position === "absolute" ||
+          (explicitMinimum !== undefined && explicitMinimum !== "auto")
+        )
+          continue;
         const axis = horizontal ? "width" : "height";
         const minimum = this.#automaticMinimum(child, axis);
         if (minimum === undefined || minimum <= 0) continue;
@@ -933,6 +2216,7 @@ export class LayoutPass {
       }
     }
     for (const child of node.children) this.#prepareTextBaselines(child);
+    for (const child of node.escaped) this.#prepareTextBaselines(child);
   }
 
   #installBaselineMarker(node: LayoutNode): void {
@@ -947,9 +2231,17 @@ export class LayoutPass {
     }
     const rawWidth = node.style.width ?? node.element?.props["width"];
     const availableWidth = length(rawWidth, "width", node.path);
+    const padding = expandedSpacing(node.style, "padding");
     const measurement = this.#measure(
       node,
-      availableWidth === undefined ? {} : { availableWidth },
+      availableWidth === undefined
+        ? {}
+        : {
+            availableWidth: Math.max(
+              0,
+              availableWidth - padding.left - padding.right,
+            ),
+          },
     );
     if (measurement?.baseline === undefined) {
       fail(
@@ -966,10 +2258,7 @@ export class LayoutPass {
     marker.setWidth(0);
     marker.setHeight(0);
     marker.setPositionType(PositionType.Relative);
-    marker.setPosition(
-      Edge.Top,
-      measurement.baseline - expandedSpacing(node.style, "padding").top,
-    );
+    marker.setPosition(Edge.Top, measurement.baseline);
     // 零尺寸相对定位标记只向 Yoga 提供内容基线，不进入语义布局树或 PPTX。
     marker.setIsReferenceBaseline(true);
 
@@ -978,7 +2267,7 @@ export class LayoutPass {
     node.yoga.setAlignItems(Align.FlexStart);
     node.yoga.insertChild(content, 0);
     node.yoga.insertChild(marker, 1);
-    node.baseline = measurement.baseline;
+    node.baseline = measurement.baseline + padding.top;
     node.baselineContent = content;
   }
 
@@ -1073,17 +2362,46 @@ export class LayoutPass {
   }
 
   #minContent(node: LayoutNode, axis: "width" | "height"): number | undefined {
-    if (node.element?.type !== "rp:box") {
-      const measured = this.#measure(node, {
-        availableWidth: node.yoga.getComputedWidth(),
-      });
+    const isContainer =
+      node.element === undefined ||
+      node.element.type === "rp:box" ||
+      node.element.type === "rp:group";
+    if (!isContainer) {
+      const padding = expandedSpacing(node.style, "padding");
+      const computedWidth = node.yoga.getComputedWidth();
+      const rawWidth = node.style.width ?? node.element?.props["width"];
+      const measuredWidth =
+        typeof rawWidth === "string" && rawWidth.endsWith("%")
+          ? undefined
+          : Math.max(0, computedWidth - padding.left - padding.right);
+      const measured = this.#measure(
+        node,
+        measuredWidth === undefined ? {} : { availableWidth: measuredWidth },
+      );
       const result =
         axis === "width"
           ? measured?.minContentWidth
           : measured?.minContentHeight;
-      return result;
+      if (result === undefined) return undefined;
+      return (
+        result +
+        (axis === "width"
+          ? padding.left + padding.right
+          : padding.top + padding.bottom)
+      );
     }
     const horizontal = axis === "width";
+    if (node.style.display === "grid") {
+      const model = this.#gridModel(node, undefined, undefined);
+      return (
+        (horizontal ? model.width : model.height) +
+        (horizontal
+          ? expandedSpacing(node.style, "padding").left +
+            expandedSpacing(node.style, "padding").right
+          : expandedSpacing(node.style, "padding").top +
+            expandedSpacing(node.style, "padding").bottom)
+      );
+    }
     const flexRow =
       node.style.display === "flex" &&
       rowDirection(node.style) &&
@@ -1168,5 +2486,6 @@ export class LayoutPass {
     }
     for (const child of node.children)
       this.#commit(child, { x: box.x, y: box.y });
+    for (const child of node.escaped) this.#placeEscaped(child, box);
   }
 }

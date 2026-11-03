@@ -41,17 +41,23 @@ export type GeometryBox = {
   readonly height: number;
 };
 
-/** 固定画布长度；数值按像素解释，auto 由布局容器结合内容决定。 */
-export type LayoutLength = number | "auto";
+/** 固定画布长度；数值按像素解释，百分比按所属布局区域求值。 */
+export type LayoutLength = number | `${number}%` | "auto";
 
 export type LayoutSpacing =
   | number
   | readonly [vertical: number, horizontal: number]
   | readonly [top: number, right: number, bottom: number, left: number];
 
-/** 固定画布支持的块与弹性样式子集，不包含网格或绝对定位。 */
+/** 固定画布 CSS 布局子集；数值长度按像素解释。 */
 export type LayoutStyle = {
-  readonly display?: "block" | "flex";
+  readonly display?: "block" | "flex" | "grid" | "none";
+  readonly position?: "static" | "relative" | "absolute";
+  readonly inset?: LayoutLength;
+  readonly left?: LayoutLength;
+  readonly top?: LayoutLength;
+  readonly right?: LayoutLength;
+  readonly bottom?: LayoutLength;
   readonly width?: LayoutLength;
   readonly height?: LayoutLength;
   readonly minWidth?: LayoutLength;
@@ -113,6 +119,27 @@ export type LayoutStyle = {
   readonly flexGrow?: number;
   readonly flexShrink?: number;
   readonly flexBasis?: LayoutLength;
+  readonly aspectRatio?: number;
+  readonly gridTemplateColumns?: string;
+  readonly gridTemplateRows?: string;
+  readonly gridColumn?: number | string;
+  readonly gridRow?: number | string;
+  readonly justifyItems?:
+    | "start"
+    | "end"
+    | "center"
+    | "stretch"
+    | "flex-start"
+    | "flex-end";
+  readonly justifySelf?:
+    | "auto"
+    | "start"
+    | "end"
+    | "center"
+    | "stretch"
+    | "flex-start"
+    | "flex-end";
+  readonly zIndex?: number;
 };
 
 /** 透明布局容器；它只安排子项，不要求生成对应的原生演示对象。 */
@@ -284,6 +311,8 @@ export type CapabilityPresentationContribution = {
 export type CapabilityLayoutRequest = {
   /** 当前布局算法可提供的内容宽度，单位为像素。 */
   readonly availableWidth?: number;
+  /** 可用宽度是可收缩的上限，还是布局必须分配的精确宽度。 */
+  readonly widthMode?: "at-most" | "exactly";
 };
 
 /** 能力模块可提供的固有尺寸及主轴 min-content 尺寸，均以像素表示。 */
@@ -402,4 +431,5 @@ export type DeckProps = ElementProps & {
 export type SlideProps = ElementProps & {
   readonly slideId: string;
   readonly transition?: unknown;
+  readonly style?: Omit<LayoutStyle, "zIndex">;
 };

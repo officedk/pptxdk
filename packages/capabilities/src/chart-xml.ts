@@ -491,10 +491,10 @@ function plotLayout(props: ChartProps): XmlElement {
       el("c:layoutTarget", { val: "inner" }),
       el("c:xMode", { val: "edge" }),
       el("c:yMode", { val: "edge" }),
-      el("c:x", { val: fraction(area.left, props.width) }),
-      el("c:y", { val: fraction(area.top, props.height) }),
-      el("c:w", { val: fraction(area.width, props.width) }),
-      el("c:h", { val: fraction(area.height, props.height) }),
+      el("c:x", { val: fraction(area.left, props.width ?? 1) }),
+      el("c:y", { val: fraction(area.top, props.height ?? 1) }),
+      el("c:w", { val: fraction(area.width, props.width ?? 1) }),
+      el("c:h", { val: fraction(area.height, props.height ?? 1) }),
     ),
   );
 }

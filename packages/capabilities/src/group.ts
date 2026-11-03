@@ -4,6 +4,7 @@ import {
   xmlEscape,
   type CapabilityInput,
   type CapabilityModule,
+  type LayoutStyle,
   type ObjectObservation,
 } from "@react-pptx/core";
 import type { ReactNode } from "react";
@@ -14,16 +15,18 @@ import {
   type MotionProps,
 } from "./motion-api.ts";
 
-/** Group 只保留身份和原生成员，范围由成员几何求并集，不参与布局。 */
+/** 原生 Group 保留成员关系；style 可让它作为布局子项排列，输出范围取成员几何并集。 */
 export type GroupProps = MotionProps & {
   readonly testId?: string;
   readonly name?: string;
+  readonly style?: LayoutStyle;
   readonly children?: ReactNode;
 };
 
 const allowedParameters = [
   "testId",
   "name",
+  "style",
   "enter",
   "emphasis",
   "motion",
@@ -122,7 +125,7 @@ function groupXml(
   return `<p:grpSp><p:nvGrpSpPr><p:cNvPr id="${id}" name="${escapedName}"/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr><a:xfrm><a:off x="${box.x}" y="${box.y}"/><a:ext cx="${box.width}" cy="${box.height}"/><a:chOff x="${box.x}" y="${box.y}"/><a:chExt cx="${box.width}" cy="${box.height}"/></a:xfrm></p:grpSpPr>${members}</p:grpSp>`;
 }
 
-/** 将成员保留为可编辑的原生对象；组合范围由成员几何求并集，不负责布局或编排作用域。 */
+/** 将成员保留为原生对象并按最终成员几何写出组合范围；外层布局由 core 求解。 */
 export const groupCapability: CapabilityModule = {
   declaration: "rp:group",
   compile(input: CapabilityInput, context) {
@@ -139,6 +142,19 @@ export const groupCapability: CapabilityModule = {
     const requestedName = optionalText(input.props, "name");
     const compiled = context.compileChildren(input.children);
     const geometry = bounds(compiled.objects);
+    const outputGeometry = context.layoutBox ?? geometry.pixels;
+    if (outputGeometry.width <= 0 || outputGeometry.height <= 0) {
+      throw new CapabilityError(
+        "invalid-group-geometry",
+        "Group 布局范围的宽和高必须大于 0",
+      );
+    }
+    const outputEmu = {
+      x: pxToEmu(outputGeometry.x),
+      y: pxToEmu(outputGeometry.y),
+      width: pxToEmu(outputGeometry.width),
+      height: pxToEmu(outputGeometry.height),
+    };
     const name = requestedName ?? testId ?? `Group ${context.id - 1}`;
     const annotations = motionAnnotations(input.props, {
       kind: "group",
@@ -157,13 +173,13 @@ export const groupCapability: CapabilityModule = {
       );
     }
     return {
-      xml: groupXml(context.id, escapedName, geometry.emu, compiled.xml),
+      xml: groupXml(context.id, escapedName, outputEmu, compiled.xml),
       observation: {
         id: context.id,
         kind: "group",
         name,
         ...(testId === undefined ? {} : { testId }),
-        box: geometry.pixels,
+        box: outputGeometry,
         members: compiled.objects,
       },
       extensions: [],

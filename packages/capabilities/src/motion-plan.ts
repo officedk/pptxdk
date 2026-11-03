@@ -1238,6 +1238,8 @@ function motionPlan(
     });
     const starts = new Map<string, TimePoint>();
     const ends = new Map<string, TimePoint>();
+    // 逻辑起点保留来源表达；TimePoint 仍使用命名事件身份供内部完成求解。
+    const scopeStartExpressions = new Map<string, TimeExpression>();
     const scopeCompletionMembers = new Map<string, readonly TimePoint[]>();
     const scopeStartPlans = new Map<string, MotionPlanStart>();
     const conditionJoinsById = new Map<
@@ -1882,7 +1884,7 @@ function motionPlan(
     const resolveMoment = (
       reference: MotionMoment,
       fromPath: string,
-    ): TimePoint => {
+    ): TimePoint | TimeExpression => {
       const owner = scopes.get(reference.scope);
       if (owner === undefined) {
         fail("missing-cue", "时刻句柄对应的编排作用域不存在", fromPath);
@@ -1913,7 +1915,17 @@ function motionPlan(
         sourceScope = publishedScope;
         point = publisher.point;
       }
-      if (point === "start") return resolveScopeStart(sourceScope);
+      if (point === "start") {
+        const start = resolveScopeStart(sourceScope);
+        const expression = asExpression(start);
+        const original = scopeStartExpressions.get(
+          sourceScope.declaration.identity,
+        );
+        return expression.state === "no-natural-completion" ||
+          original?.state !== "unknown"
+          ? expression
+          : { ...expression, candidates: original.candidates };
+      }
       requestedScopeEnds.add(sourceScope.declaration.identity);
       return resolveScopeEnd(sourceScope);
     };
@@ -2084,7 +2096,7 @@ function motionPlan(
               order: scope.order,
             },
       );
-      // 多来源起点保留候选，但仍由 eventId 表示整个合成起点。
+      // 别名读取原表达；TimePoint 仅保留多来源候选，避免改写内部事件身份。
       const start = materializeEvent(
         startExpression,
         scopeStartEventId(scope),
@@ -2099,6 +2111,13 @@ function motionPlan(
           : undefined,
       );
       if (nativeStart.kind === "parent-start") {
+        // 候选可能沿别名展开到祖先来源；仍把实际父起点门槛记入事实图。
+        facts.addLowerBound(
+          parentStart.eventId,
+          scopeStartEventId(scope),
+          nativeStart.delayMs,
+          scope.path,
+        );
         facts.addExactOffset(
           parentStart.eventId,
           scopeStartEventId(scope),
@@ -2106,6 +2125,12 @@ function motionPlan(
           scope.path,
         );
       } else if (nativeStart.kind === "condition-end") {
+        facts.addLowerBound(
+          nativeStart.id,
+          scopeStartEventId(scope),
+          nativeStart.delayMs,
+          scope.path,
+        );
         facts.addExactOffset(
           nativeStart.id,
           scopeStartEventId(scope),
@@ -2136,6 +2161,7 @@ function motionPlan(
           });
         }
       }
+      scopeStartExpressions.set(scope.declaration.identity, startExpression);
       scopeStartPlans.set(scope.declaration.identity, nativeStart);
       starts.set(scope.declaration.identity, start);
       resolvingStarts.delete(scope.declaration.identity);

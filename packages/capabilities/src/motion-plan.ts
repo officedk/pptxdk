@@ -133,6 +133,11 @@ type TimeCandidate = {
   readonly dependency?: MotionStartDependency;
 };
 
+type TimeReference = {
+  readonly eventId: string;
+  readonly offsetMs: number;
+};
+
 type Completion =
   | {
       readonly state: "known";
@@ -190,8 +195,14 @@ type TimeExpression =
       readonly state: "known";
       readonly timeMs: number;
       readonly candidates: readonly TimeCandidate[];
+      /** 被引用事件身份与候选来源分开保存，供精确别名复用已有时序节点。 */
+      readonly references: readonly TimeReference[];
     }
-  | { readonly state: "unknown"; readonly candidates: readonly TimeCandidate[] }
+  | {
+      readonly state: "unknown";
+      readonly candidates: readonly TimeCandidate[];
+      readonly references: readonly TimeReference[];
+    }
   | { readonly state: "no-natural-completion" };
 
 type EffectExpansion =
@@ -286,6 +297,7 @@ function eventTime(
   nativeStart?: MotionPlanStart,
   reportedStartAfter?: MotionStartDependency,
   reportedStartAfterAll?: readonly MotionStartDependency[],
+  candidates?: readonly TimeCandidate[],
 ): TimePoint {
   const candidate: TimeCandidate = {
     eventId,
@@ -300,7 +312,7 @@ function eventTime(
       state,
       timeMs,
       eventId,
-      candidates: [candidate],
+      candidates: candidates ?? [candidate],
       ...(dependency === undefined ? {} : { dependency }),
       ...(nativeStart === undefined ? {} : { nativeStart }),
       ...(reportedStartAfter === undefined ? {} : { reportedStartAfter }),
@@ -310,7 +322,7 @@ function eventTime(
   return {
     state,
     eventId,
-    candidates: [candidate],
+    candidates: candidates ?? [candidate],
     ...(dependency === undefined ? {} : { dependency }),
     ...(nativeStart === undefined ? {} : { nativeStart }),
     ...(reportedStartAfter === undefined ? {} : { reportedStartAfter }),
@@ -501,13 +513,19 @@ class MotionTimingFacts {
 
 function asExpression(time: TimePoint): TimeExpression {
   if (time.state === "no-natural-completion") return time;
+  const reference = { eventId: time.eventId, offsetMs: 0 };
   return time.state === "known"
     ? {
         state: "known",
         timeMs: time.timeMs,
         candidates: time.candidates,
+        references: [reference],
       }
-    : { state: "unknown", candidates: time.candidates };
+    : {
+        state: "unknown",
+        candidates: time.candidates,
+        references: [reference],
+      };
 }
 
 function add(
@@ -519,9 +537,47 @@ function add(
     ...candidate,
     offsetMs: candidate.offsetMs + offsetMs,
   }));
+  const references =
+    "references" in time
+      ? time.references
+      : [{ eventId: time.eventId, offsetMs: 0 }];
+  const shiftedReferences = references.map((reference) => ({
+    ...reference,
+    offsetMs: reference.offsetMs + offsetMs,
+  }));
   return time.state === "known"
-    ? { state: "known", timeMs: time.timeMs + offsetMs, candidates }
-    : { state: "unknown", candidates };
+    ? {
+        state: "known",
+        timeMs: time.timeMs + offsetMs,
+        candidates,
+        references: shiftedReferences,
+      }
+    : { state: "unknown", candidates, references: shiftedReferences };
+}
+
+function commonCandidateOffset(
+  candidates: readonly TimeCandidate[],
+  reference: readonly TimeCandidate[],
+): number | undefined {
+  if (candidates.length === 0 || candidates.length !== reference.length) {
+    return undefined;
+  }
+  const referenceByEvent = new Map(
+    reference.map((candidate) => [candidate.eventId, candidate]),
+  );
+  if (referenceByEvent.size !== reference.length) return undefined;
+  let commonOffset: number | undefined;
+  for (const candidate of candidates) {
+    const source = referenceByEvent.get(candidate.eventId);
+    if (source === undefined) return undefined;
+    const offset = candidate.offsetMs - source.offsetMs;
+    if (!Number.isSafeInteger(offset)) return undefined;
+    if (commonOffset !== undefined && commonOffset !== offset) {
+      return undefined;
+    }
+    commonOffset = offset;
+  }
+  return commonOffset;
 }
 
 function candidateDominates(
@@ -554,6 +610,21 @@ function maximum(
     }
   }
   const unique = [...uniqueByEvent.values()];
+  const referencesByEvent = new Map<string, TimeReference>();
+  for (const time of times) {
+    if (time.state === "no-natural-completion") continue;
+    const references =
+      "references" in time
+        ? time.references
+        : [{ eventId: time.eventId, offsetMs: 0 }];
+    for (const reference of references) {
+      const current = referencesByEvent.get(reference.eventId);
+      if (current === undefined || reference.offsetMs > current.offsetMs) {
+        referencesByEvent.set(reference.eventId, reference);
+      }
+    }
+  }
+  const references = [...referencesByEvent.values()];
   const exactCandidates = unique.map((candidate) => {
     const timeMs = facts.exactTime(candidate.eventId);
     return timeMs === undefined ? undefined : timeMs + candidate.offsetMs;
@@ -571,6 +642,7 @@ function maximum(
       candidates: unique.filter(
         (_candidate, index) => exactCandidates[index] === latest,
       ),
+      references,
     };
   }
 
@@ -583,7 +655,7 @@ function maximum(
     });
     return !dominated;
   });
-  return { state: "unknown", candidates: reduced };
+  return { state: "unknown", candidates: reduced, references };
 }
 
 function materializeEvent(
@@ -595,6 +667,7 @@ function materializeEvent(
   nativeStart?: MotionPlanStart,
   reportedStartAfter?: MotionStartDependency,
   reportedStartAfterAll?: readonly MotionStartDependency[],
+  preservedCandidates?: readonly TimeCandidate[],
 ): TimePoint {
   if (expression.state === "no-natural-completion") return expression;
   for (const candidate of expression.candidates) {
@@ -621,6 +694,7 @@ function materializeEvent(
       nativeStart,
       reportedStartAfter,
       reportedStartAfterAll,
+      preservedCandidates,
     );
   }
   return eventTime(
@@ -631,6 +705,7 @@ function materializeEvent(
     nativeStart,
     reportedStartAfter,
     reportedStartAfterAll,
+    preservedCandidates,
   );
 }
 
@@ -1108,6 +1183,18 @@ function motionPlan(
     const starts = new Map<string, TimePoint>();
     const ends = new Map<string, TimePoint>();
     const scopeStartPlans = new Map<string, MotionPlanStart>();
+    const conditionJoinsById = new Map<
+      string,
+      Extract<MotionPlanStart, { readonly kind: "condition-join" }>
+    >();
+    const conditionStartsByEventId = new Map<
+      string,
+      {
+        readonly id: string;
+        readonly candidates: readonly TimeCandidate[];
+        readonly delayMs: number;
+      }
+    >();
     const resolvingStarts = new Set<string>();
     const resolvingEnds = new Set<string>();
     const scheduledObjects = new Set<number>();
@@ -1192,6 +1279,80 @@ function motionPlan(
           fail("unknown-motion-start", "子项起点早于其包含作用域", path);
         }
         return { kind: "parent-start", delayMs };
+      }
+
+      const parentStartDelay = commonCandidateOffset(
+        expression.candidates,
+        parentStart.candidates,
+      );
+      if (parentStartDelay !== undefined && parentStartDelay >= 0) {
+        // 仅当每个原始事件都增加相同精确偏移时，才复用父起点。
+        return { kind: "parent-start", delayMs: parentStartDelay };
+      }
+      for (const reference of expression.references) {
+        const canonical = conditionStartsByEventId.get(reference.eventId);
+        if (canonical === undefined) continue;
+        const delayMs = commonCandidateOffset(
+          expression.candidates,
+          canonical.candidates,
+        );
+        if (delayMs === undefined || delayMs !== reference.offsetMs) continue;
+        // Offset belongs to the later alias; it cannot recover a join END
+        // that occurred before the consumer's real parent became active.
+        const joinEndCandidates = canonical.candidates.map((candidate) => ({
+          ...candidate,
+          // The recorded candidates describe the aliased scope start.
+          offsetMs: candidate.offsetMs - canonical.delayMs,
+        }));
+        const joinEndIsPending = joinEndCandidates.some((candidate) => {
+          if (parentStart.state === "known") {
+            const earliestTime = facts.earliestTime(
+              candidate.eventId,
+              originEventId,
+            );
+            return (
+              earliestTime !== undefined &&
+              earliestTime + candidate.offsetMs > parentStart.timeMs
+            );
+          }
+          return (
+            parentStart.candidates.length > 0 &&
+            parentStart.candidates.every((parentCandidate) => {
+              const lowerBound = facts.lowerBound(
+                parentCandidate.eventId,
+                candidate.eventId,
+              );
+              return (
+                lowerBound !== undefined &&
+                lowerBound + candidate.offsetMs - parentCandidate.offsetMs > 0
+              );
+            })
+          );
+        });
+        if (!joinEndIsPending) {
+          fail(
+            "unknown-motion-start",
+            "不能证明条件集合完成晚于消费者父作用域激活",
+            path,
+          );
+        }
+        const conditionEndDelay = canonical.delayMs + delayMs;
+        if (
+          !Number.isSafeInteger(conditionEndDelay) ||
+          conditionEndDelay < 0 ||
+          conditionEndDelay > maximumTimeNodeValue
+        ) {
+          fail(
+            "invalid-motion-time",
+            "条件集合完成偏移必须保持在 ST_TLTime 范围内",
+            path,
+          );
+        }
+        return {
+          kind: "condition-end",
+          id: canonical.id,
+          delayMs: conditionEndDelay,
+        };
       }
 
       if (expression.candidates.length !== 1) {
@@ -1364,6 +1525,29 @@ function motionPlan(
               },
         );
         return Object.freeze(dependencies);
+      }
+      if (nativeStart.kind === "condition-end") {
+        const canonical = conditionJoinsById.get(nativeStart.id);
+        if (canonical === undefined) {
+          throw new Error("MotionPlan 条件别名缺少原始条件集合");
+        }
+        const dependencies = canonical.gates.map((gate) =>
+          gate.kind === "end"
+            ? gate.dependency
+            : {
+                scopeId: canonical.hostScopeId,
+                point: "start" as const,
+                offsetMs: gate.delayMs,
+              },
+        );
+        return Object.freeze(
+          dependencies.map((dependency) =>
+            dependencyAtEvent(
+              dependency,
+              dependency.offsetMs + nativeStart.delayMs,
+            ),
+          ),
+        );
       }
       if (nativeStart.kind !== "parent-start") return undefined;
       if (parentStart.state === "no-natural-completion") return undefined;
@@ -1574,6 +1758,20 @@ function motionPlan(
         base = maximum([base, fromCue], facts);
       }
       const startExpression = add(base, scope.declaration.delay);
+      if (startExpression.state === "no-natural-completion") {
+        fail(
+          "no-natural-completion",
+          "无自然完成的内容不能启动后继效果",
+          scope.path,
+        );
+      }
+      if (parentStart.state === "no-natural-completion") {
+        fail(
+          "no-natural-completion",
+          "无自然完成的父作用域不能启动后继效果",
+          scope.path,
+        );
+      }
       const nativeStart = resolveNativeStart(
         startExpression,
         parentStart,
@@ -1588,6 +1786,7 @@ function motionPlan(
               order: scope.order,
             },
       );
+      // 多来源起点保留候选，但仍由 eventId 表示整个合成起点。
       const start = materializeEvent(
         startExpression,
         scopeStartEventId(scope),
@@ -1597,7 +1796,48 @@ function motionPlan(
         nativeStart,
         reportedDependency(nativeStart, parentStart),
         reportedDependencies(nativeStart, parentStart),
+        startExpression.candidates.length > 1
+          ? startExpression.candidates
+          : undefined,
       );
+      if (nativeStart.kind === "parent-start") {
+        facts.addExactOffset(
+          parentStart.eventId,
+          scopeStartEventId(scope),
+          nativeStart.delayMs,
+          scope.path,
+        );
+      } else if (nativeStart.kind === "condition-end") {
+        facts.addExactOffset(
+          nativeStart.id,
+          scopeStartEventId(scope),
+          nativeStart.delayMs,
+          scope.path,
+        );
+      }
+      if (nativeStart.kind === "condition-join") {
+        conditionJoinsById.set(nativeStart.id, nativeStart);
+        conditionStartsByEventId.set(scopeStartEventId(scope), {
+          id: nativeStart.id,
+          candidates: startExpression.candidates,
+          delayMs: 0,
+        });
+      } else if (nativeStart.kind === "condition-end") {
+        conditionStartsByEventId.set(scopeStartEventId(scope), {
+          id: nativeStart.id,
+          candidates: startExpression.candidates,
+          delayMs: nativeStart.delayMs,
+        });
+      } else if (nativeStart.kind === "parent-start") {
+        const inherited = conditionStartsByEventId.get(parentStart.eventId);
+        if (inherited !== undefined) {
+          conditionStartsByEventId.set(scopeStartEventId(scope), {
+            id: inherited.id,
+            candidates: startExpression.candidates,
+            delayMs: inherited.delayMs + nativeStart.delayMs,
+          });
+        }
+      }
       scopeStartPlans.set(scope.declaration.identity, nativeStart);
       starts.set(scope.declaration.identity, start);
       resolvingStarts.delete(scope.declaration.identity);
@@ -1877,6 +2117,108 @@ function motionPlan(
       };
     };
 
+    const conditionEvent = (id: string) => `condition:${id}`;
+    const nodePath = (node: MotionPlanNode): string | undefined =>
+      node.kind === "scope"
+        ? [...scopes.values()].find(
+            (scope) => scopeId(scope.declaration.identity, scopes) === node.id,
+          )?.path
+        : targets.get(node.targetId)?.path;
+    const sortNativeRoots = (
+      rootNodes: readonly MotionPlanNode[],
+    ): MotionPlanNode[] => {
+      const rootDefinitions = new Map<string, number>();
+      const rootReferences = rootNodes.map(
+        (): { readonly id: string; readonly node: MotionPlanNode }[] => [],
+      );
+      const collectRootDependencies = (
+        node: MotionPlanNode,
+        rootIndex: number,
+      ): void => {
+        if (node.kind === "scope") {
+          rootDefinitions.set(`scope:${node.id}`, rootIndex);
+        } else {
+          if (node.effects.length > 1) {
+            rootDefinitions.set(`target:${node.targetId}`, rootIndex);
+          }
+          for (const effect of node.effects) {
+            rootDefinitions.set(
+              eventSource({
+                targetId: effect.target.id,
+                effectIndex: effect.effectIndex,
+                ...(effect.partIndex === undefined
+                  ? {}
+                  : { partIndex: effect.partIndex }),
+                point: "end",
+                offsetMs: 0,
+              }),
+              rootIndex,
+            );
+          }
+        }
+        const collectDependency = (id: string) =>
+          rootReferences[rootIndex]?.push({ id, node });
+        if (node.nativeStart.kind === "end") {
+          collectDependency(eventSource(node.nativeStart.dependency));
+        } else if (node.nativeStart.kind === "condition-end") {
+          collectDependency(conditionEvent(node.nativeStart.id));
+        } else if (node.nativeStart.kind === "condition-join") {
+          rootDefinitions.set(conditionEvent(node.nativeStart.id), rootIndex);
+          for (const gate of node.nativeStart.gates) {
+            if (gate.kind === "end") {
+              collectDependency(eventSource(gate.dependency));
+            }
+          }
+        }
+        if (node.kind === "scope") {
+          for (const child of node.children) {
+            collectRootDependencies(child, rootIndex);
+          }
+        }
+      };
+      rootNodes.forEach((node, index) => collectRootDependencies(node, index));
+
+      // 只调整同一组原生时间节点的序列化顺序，依赖条件本身保持不变。
+      const nextRootNodes = rootNodes.map(() => new Set<number>());
+      const rootIndegrees = rootNodes.map(() => 0);
+      for (const [consumerIndex, references] of rootReferences.entries()) {
+        for (const reference of references) {
+          const definitionIndex = rootDefinitions.get(reference.id);
+          // 来源可能属于外层同一步根节点；由外层排序和最终顺序检查处理。
+          if (definitionIndex === undefined) continue;
+          if (
+            definitionIndex !== consumerIndex &&
+            !nextRootNodes[definitionIndex]?.has(consumerIndex)
+          ) {
+            nextRootNodes[definitionIndex]?.add(consumerIndex);
+            rootIndegrees[consumerIndex] =
+              (rootIndegrees[consumerIndex] ?? 0) + 1;
+          }
+        }
+      }
+      const readyRootNodes = rootIndegrees.flatMap((indegree, index) =>
+        indegree === 0 ? [index] : [],
+      );
+      const rootOrder: number[] = [];
+      while (readyRootNodes.length > 0) {
+        readyRootNodes.sort((left, right) => left - right);
+        const current = readyRootNodes.shift();
+        if (current === undefined) continue;
+        rootOrder.push(current);
+        for (const following of nextRootNodes[current] ?? []) {
+          const remaining = (rootIndegrees[following] ?? 0) - 1;
+          rootIndegrees[following] = remaining;
+          if (remaining === 0) readyRootNodes.push(following);
+        }
+      }
+      return rootOrder.length === rootNodes.length
+        ? rootOrder.flatMap((index) => {
+            const node = rootNodes[index];
+            return node === undefined ? [] : [node];
+          })
+        : [...rootNodes];
+    };
+
     const scopeNode = (scope: ScopeState): MotionPlanNode | undefined => {
       const children = activeChildren(scope).flatMap((member) => {
         if (member.kind === "scope") {
@@ -1903,11 +2245,11 @@ function motionPlan(
         kind: "scope",
         id: scopeId(scope.declaration.identity, scopes),
         nativeStart,
-        children,
+        children: sortNativeRoots(children),
       };
     };
 
-    const nodes = roots.flatMap((member) => {
+    const rootNodes = roots.flatMap((member) => {
       if (member.kind === "scope") {
         const scope = scopes.get(member.id);
         if (scope === undefined || !scopeSteps(scope).includes(key)) return [];
@@ -1919,6 +2261,64 @@ function motionPlan(
       const node = targetNode(target);
       return node === undefined ? [] : [node];
     });
+    const nodes = sortNativeRoots(rootNodes);
+    const definedEvents = new Set<string>();
+    const definedConditions = new Set<string>();
+    const verifyEventReference = (id: string, node: MotionPlanNode): void => {
+      if (!definedEvents.has(id)) {
+        fail(
+          "unknown-motion-start",
+          "原生完成来源必须在其条件引用之前定义",
+          nodePath(node),
+        );
+      }
+    };
+    const verifyNodeOrder = (node: MotionPlanNode): void => {
+      if (node.nativeStart.kind === "condition-join") {
+        for (const gate of node.nativeStart.gates) {
+          if (gate.kind === "end") {
+            verifyEventReference(eventSource(gate.dependency), node);
+          }
+        }
+        definedConditions.add(conditionEvent(node.nativeStart.id));
+      }
+      if (node.kind === "scope") {
+        definedEvents.add(`scope:${node.id}`);
+      } else {
+        if (node.effects.length > 1) {
+          definedEvents.add(`target:${node.targetId}`);
+        }
+        for (const effect of node.effects) {
+          definedEvents.add(
+            eventSource({
+              targetId: effect.target.id,
+              effectIndex: effect.effectIndex,
+              ...(effect.partIndex === undefined
+                ? {}
+                : { partIndex: effect.partIndex }),
+              point: "end",
+              offsetMs: 0,
+            }),
+          );
+        }
+      }
+      if (node.nativeStart.kind === "end") {
+        verifyEventReference(eventSource(node.nativeStart.dependency), node);
+      } else if (
+        node.nativeStart.kind === "condition-end" &&
+        !definedConditions.has(conditionEvent(node.nativeStart.id))
+      ) {
+        fail(
+          "unknown-motion-start",
+          "条件集合必须在其消费者之前定义",
+          nodePath(node),
+        );
+      }
+      if (node.kind === "scope") {
+        for (const child of node.children) verifyNodeOrder(child);
+      }
+    };
+    for (const node of nodes) verifyNodeOrder(node);
     allStepNodes.set(key, nodes);
   }
 

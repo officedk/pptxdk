@@ -670,21 +670,249 @@ function plotArea(
   return result;
 }
 
+const generalNumberCharacters = "0123456789.,-+eE";
+const dateNameCharacters =
+  "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
+// 明确给出简体中文 LCID 时，日期名称使用本地化字形，不按英文字符处理。
+const dateNameCharactersByLocale: Readonly<Record<string, string>> = {
+  "0804": "星期日一二三四五六七八九十年月",
+};
+const numberFormatLiteralCharacters = new Set("$+():^'{}<=>-/!&~ ");
+
+function dateNameCharactersForLocale(
+  locale: string | undefined,
+): string | undefined {
+  if (locale === undefined) return dateNameCharacters;
+  const languageId = /^(?:0x)?([\da-f]{1,4})(?:,.*)?$/iu.exec(locale)?.[1];
+  if (languageId === undefined) return undefined;
+  const normalizedLanguageId = languageId.padStart(4, "0").toUpperCase();
+  if (normalizedLanguageId === "0409") return dateNameCharacters;
+  // 明确指定但未登记名称字形的 locale 不伪装成英文。
+  return dateNameCharactersByLocale[normalizedLanguageId];
+}
+
+function hasDigitPlaceholderAfter(
+  format: readonly string[],
+  start: number,
+): boolean {
+  for (let index = start; index < format.length; index += 1) {
+    const character = format[index]!;
+    if (character === ";") return false;
+    if (character === '"') {
+      index += 1;
+      while (index < format.length && format[index] !== '"') index += 1;
+      continue;
+    }
+    if (character === "\\" || character === "_") {
+      index += 1;
+      continue;
+    }
+    if (character === "[") {
+      while (index < format.length && format[index] !== "]") index += 1;
+      continue;
+    }
+    if (character === "0" || character === "#" || character === "?") {
+      return true;
+    }
+  }
+  return false;
+}
+
+/** 申领图表数字格式可能显示的字形，不在构建时模拟应用的数值格式化。 */
+function numberLabelCharacters(
+  numberFormat: string | undefined,
+  percent = false,
+): string {
+  const characters = new Set<string>();
+  const add = (value: string) => {
+    for (const character of value) characters.add(character);
+  };
+  const format = Array.from(numberFormat ?? "");
+  const defaultFormat =
+    numberFormat === undefined ||
+    numberFormat.trim().toLocaleLowerCase("en-US") === "general";
+  let hasNumericValue = defaultFormat;
+  let hasGeneralValue = defaultFormat;
+  let sectionLocale: string | undefined;
+  let sectionCount = 1;
+
+  if (defaultFormat) add(generalNumberCharacters);
+  for (let index = 0; index < format.length; index += 1) {
+    const character = format[index]!;
+    if (character === '"') {
+      for (index += 1; index < format.length; index += 1) {
+        if (format[index] === '"') break;
+        characters.add(format[index]!);
+      }
+      continue;
+    }
+    if (character === "\\" || character === "*") {
+      const following = format[index + 1];
+      if (following !== undefined) {
+        characters.add(following);
+        index += 1;
+      }
+      continue;
+    }
+    if (character === "_") {
+      index += 1;
+      continue;
+    }
+    if (character === "[") {
+      const end = format.indexOf("]", index + 1);
+      if (end < 0) continue;
+      const directive = format.slice(index + 1, end).join("");
+      if (directive.startsWith("$")) {
+        const currencyAndLocale = directive.slice(1);
+        const separator = currencyAndLocale.indexOf("-");
+        const currency =
+          separator < 0
+            ? currencyAndLocale
+            : currencyAndLocale.slice(0, separator);
+        add(currency);
+        sectionLocale =
+          separator < 0 ? undefined : currencyAndLocale.slice(separator + 1);
+      } else if (/^[hms]+$/iu.test(directive)) {
+        hasNumericValue = true;
+      }
+      index = end;
+      continue;
+    }
+    if (character === ";") {
+      sectionCount += 1;
+      if (sectionCount > 3) break;
+      sectionLocale = undefined;
+      continue;
+    }
+    if (character === "0" || character === "#" || character === "?") {
+      if (character === "?") characters.add(" ");
+      hasNumericValue = true;
+      continue;
+    }
+    if (character === ",") {
+      if (hasDigitPlaceholderAfter(format, index + 1))
+        characters.add(character);
+      continue;
+    }
+    if (character === "." || character === "%") {
+      characters.add(character);
+      continue;
+    }
+    if (character === "A" || character === "a") {
+      const amPm = format.slice(index, index + 5).join("");
+      const amPmHalf = format.slice(index, index + 3).join("");
+      if (/^am\/pm$/iu.test(amPm)) {
+        add(amPm.replace("/", ""));
+        index += 4;
+        continue;
+      }
+      if (/^a\/p$/iu.test(amPmHalf)) {
+        add(amPmHalf.replace("/", ""));
+        index += 2;
+        continue;
+      }
+    }
+    if (/[yYmdDhHsS]/u.test(character)) {
+      let end = index + 1;
+      while (
+        end < format.length &&
+        format[end]!.toLocaleLowerCase("en-US") ===
+          character.toLocaleLowerCase("en-US")
+      ) {
+        end += 1;
+      }
+      const width = end - index;
+      hasNumericValue = true;
+      if (
+        (character.toLocaleLowerCase("en-US") === "m" ||
+          character.toLocaleLowerCase("en-US") === "d") &&
+        width >= 3
+      ) {
+        const dateNames = dateNameCharactersForLocale(sectionLocale);
+        if (dateNames !== undefined) add(dateNames);
+      }
+      index = end - 1;
+      continue;
+    }
+    if (character === "G" || character === "g") {
+      const general = format.slice(index, index + 7).join("");
+      if (
+        general.toLocaleLowerCase("en-US") === "general" &&
+        (format[index + 7] === undefined || !/[a-z]/iu.test(format[index + 7]!))
+      ) {
+        add(generalNumberCharacters);
+        hasNumericValue = true;
+        hasGeneralValue = true;
+        index += 6;
+        continue;
+      }
+    }
+    if (character === "E" || character === "e") {
+      const sign = format[index + 1];
+      if (
+        (sign === "+" || sign === "-") &&
+        hasDigitPlaceholderAfter(format, index + 2)
+      ) {
+        add(character + sign);
+        hasNumericValue = true;
+        index += 1;
+        continue;
+      }
+    }
+    if (numberFormatLiteralCharacters.has(character)) {
+      characters.add(character);
+      continue;
+    }
+    if (/[1-9]/u.test(character) || character.codePointAt(0)! > 0x7f) {
+      characters.add(character);
+    }
+  }
+
+  if (hasNumericValue) {
+    add("0123456789");
+    if (sectionCount === 1) characters.add("-");
+  }
+  if (hasGeneralValue) add("+eE");
+  if (percent && numberFormat === undefined) characters.add("%");
+  return [...characters].join("");
+}
+
 function dataLabelTexts(
   data: ChartData,
   value: ChartDataLabels | false | undefined,
 ): string[] {
   if (value === undefined || value === false) return [];
   const texts: string[] = [];
+  const numericLabels =
+    value.value === true || value.percent === true
+      ? numberLabelCharacters(value.numberFormat, value.percent === true)
+      : "";
   for (const series of data.series) {
     for (const [index, number] of series.values.entries()) {
       if (number === null) continue;
-      if (value.value === true || value.percent === true)
-        texts.push(String(number));
+      if (numericLabels !== "") texts.push(numericLabels);
       if (value.category === true) texts.push(data.categories[index]!);
     }
   }
   return texts;
+}
+
+function pointDataLabelTexts(
+  data: ChartData,
+  labels: ChartDataLabels,
+  index: number,
+): string[] {
+  if (data.series.some((series) => series.values[index] !== null)) {
+    const texts: string[] = [];
+    if (labels.value === true || labels.percent === true) {
+      texts.push(
+        numberLabelCharacters(labels.numberFormat, labels.percent === true),
+      );
+    }
+    if (labels.category === true) texts.push(data.categories[index]!);
+    return texts;
+  }
+  return [];
 }
 
 function mergeTextStyle(
@@ -709,11 +937,32 @@ function chartResourceClaims(
 } {
   const cartesian =
     props.kind === "pie" || props.kind === "doughnut" ? undefined : props;
+  const dataLabelText = dataLabelTexts(data, props.dataLabels);
   const chartText = [
     ...data.categories,
     ...data.series.map(({ name }) => name),
-    ...dataLabelTexts(data, props.dataLabels),
+    ...(props.dataLabels === undefined ||
+    props.dataLabels === false ||
+    props.dataLabels.style === undefined
+      ? dataLabelText
+      : []),
   ];
+  const valueAxisCharacters =
+    cartesian?.valueAxis?.visible === false
+      ? []
+      : [
+          numberLabelCharacters(
+            cartesian?.valueAxis?.numberFormat,
+            cartesian?.stacking === "percent",
+          ),
+        ];
+  if (
+    cartesian !== undefined &&
+    cartesian.valueAxis?.visible !== false &&
+    cartesian.valueAxis?.style === undefined
+  ) {
+    chartText.push(...valueAxisCharacters);
+  }
   const chartStyle = textOnlyStyle(props.style);
   const chart = writeChartTextProperties(
     chartStyle,
@@ -752,13 +1001,9 @@ function chartResourceClaims(
     warnings.push(...output.warnings);
   }
   if (cartesian?.valueAxis?.style !== undefined) {
-    const axisValues = data.series.flatMap(({ values }) =>
-      values.filter((value): value is number => value !== null).map(String),
-    );
-    // 坐标轴刻度由应用生成；共享文字服务仍需一个文本运行来登记值轴字体。
     const output = writeChartTextProperties(
       mergeTextStyle(chartStyle, cartesian.valueAxis.style),
-      axisValues.length === 0 ? [""] : axisValues,
+      valueAxisCharacters,
       "Chart.valueAxis.style",
       theme,
     );
@@ -796,15 +1041,7 @@ function chartResourceClaims(
         const index = Number(pointIndex);
         const number = series.values[index];
         if (number === null || number === undefined) continue;
-        const pointText = [
-          ...(props.dataLabels.value === true ||
-          props.dataLabels.percent === true
-            ? [String(number)]
-            : []),
-          ...(props.dataLabels.category === true
-            ? [data.categories[index]!]
-            : []),
-        ];
+        const pointText = pointDataLabelTexts(data, props.dataLabels, index);
         if (pointText.length === 0) continue;
         const output = writeChartTextProperties(
           mergeTextStyle(chartStyle, {

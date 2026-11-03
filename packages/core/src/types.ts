@@ -72,8 +72,8 @@ export const targets = Object.freeze({
 
 export type BuildOptions = {
   readonly target?: Target;
-  /** 明确请求嵌入文稿实际使用的完整字体；默认不嵌入。 */
-  readonly embedFonts?: "full";
+  /** 明确请求嵌入文稿实际使用字体的完整文件或字符子集；默认不嵌入。 */
+  readonly embedFonts?: "full" | "subset";
   /**
    * 单次构建的协作式取消信号；未指定时没有默认超时。
    * 完成、未处理错误与取消以首次确定的终态为准，完成后取消不会改变结果。
@@ -380,7 +380,11 @@ export type CapabilityPresentationContribution = {
     readonly relationshipType: string;
     readonly pathTemplate: string;
     readonly contentType: string;
-    readonly bytes: Uint8Array;
+    readonly bytes?: Uint8Array;
+    /** 需要等待文稿字符收集完成时，指向对应的共享资源声明。 */
+    readonly resourceClaim?: { readonly kind: string; readonly key: string };
+    /** 核心聚合该资源声明的字符后调用一次，返回最终写入的部件字节。 */
+    readonly resolveBytes?: (characters: string) => Uint8Array;
     readonly content: (relationshipId: string) => string;
   };
 };
@@ -417,13 +421,7 @@ export type CapabilityOutput = {
   readonly extensions: readonly Extension[];
   /** 由对应页面能力编译的对象级声明，例如动效。 */
   readonly annotations?: readonly CapabilityAnnotation[];
-  readonly resourceClaims?: readonly {
-    readonly kind: string;
-    readonly key: string;
-    readonly identity: string;
-    /** 来自共享文字服务的实际输出文字，供后续字体资源处理使用。 */
-    readonly characters?: string;
-  }[];
+  readonly resourceClaims?: readonly CapabilityResourceClaim[];
   /** 由对象实际使用的资源构成、需要挂接到 presentation 的记录项。 */
   readonly presentationContributions?: readonly CapabilityPresentationContribution[];
   readonly warnings?: readonly {
@@ -432,6 +430,15 @@ export type CapabilityOutput = {
     /** 相对原生对象的子路径，用于精确定位单元格诊断。 */
     readonly path?: string;
   }[];
+};
+
+/** 能力向文稿范围资源处理提供的声明；字符内容由同一生产文字服务生成。 */
+export type CapabilityResourceClaim = {
+  readonly kind: string;
+  readonly key: string;
+  readonly identity: string;
+  /** 来自共享文字服务的实际输出文字，供后续字体资源处理使用。 */
+  readonly characters?: string;
 };
 
 export type ObjectCapabilityModule = {

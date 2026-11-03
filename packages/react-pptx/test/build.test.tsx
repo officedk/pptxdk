@@ -30,6 +30,8 @@ import {
 } from "@react-pptx/react-pptx";
 import { validatePptx } from "@react-pptx/validation";
 import { strFromU8, strToU8, unzipSync, zipSync } from "fflate";
+import * as fontkit from "fontkit";
+import * as harfbuzz from "harfbuzzjs";
 import {
   createElement,
   useEffect,
@@ -48,6 +50,76 @@ function deck(shape: ReturnType<typeof createElement>) {
 
 function testFont(path: string): Uint8Array {
   return new Uint8Array(readFileSync(new URL(path, import.meta.url)));
+}
+
+function parsedFont(bytes: Uint8Array): fontkit.Font {
+  const parsed = fontkit.create(Buffer.from(bytes));
+  if (parsed.type !== "TTF") throw new Error("预期静态 TrueType 字体");
+  return parsed as fontkit.Font;
+}
+
+function shapedGlyphs(
+  bytes: Uint8Array,
+  text: string,
+): readonly {
+  readonly cluster: number;
+  readonly path: string;
+  readonly xAdvance: number;
+  readonly yAdvance: number;
+  readonly xOffset: number;
+  readonly yOffset: number;
+}[] {
+  const blob = new harfbuzz.Blob(bytes);
+  const face = new harfbuzz.Face(blob);
+  const font = new harfbuzz.Font(face);
+  const buffer = new harfbuzz.Buffer();
+  buffer.addText(text);
+  buffer.guessSegmentProperties();
+  harfbuzz.shape(font, buffer);
+  const parsed = parsedFont(bytes);
+  const infos = buffer.getGlyphInfos();
+  const positions = buffer.getGlyphPositions();
+  return infos.map((info, index) => {
+    const position = positions[index]!;
+    return {
+      cluster: info.cluster,
+      path: parsed.getGlyph(info.codepoint).path.toSVG(),
+      xAdvance: position.xAdvance,
+      yAdvance: position.yAdvance,
+      xOffset: position.xOffset,
+      yOffset: position.yOffset,
+    };
+  });
+}
+
+function embeddedFont(
+  parts: Record<string, Uint8Array | null>,
+  presentation: string,
+  family: string,
+  style: "regular" | "bold" | "italic" | "boldItalic",
+): Uint8Array {
+  const record = [
+    ...presentation.matchAll(
+      /<p:embeddedFont><p:font typeface="([^"]+)"[^>]*\/><p:(regular|bold|italic|boldItalic) r:id="([^"]+)"\/><\/p:embeddedFont>/gu,
+    ),
+  ].find(
+    ([, typeface, fontStyle]) => typeface === family && fontStyle === style,
+  );
+  assert.ok(record?.[3]);
+  const relationships = strFromU8(parts["ppt/_rels/presentation.xml.rels"]!);
+  const relation = [
+    ...relationships.matchAll(
+      /<Relationship Id="([^"]+)" Type="http:\/\/schemas\.openxmlformats\.org\/officeDocument\/2006\/relationships\/font" Target="([^"]+)"\/>/gu,
+    ),
+  ].find(([, id]) => id === record[3]);
+  assert.ok(relation?.[2]);
+  const wrapped = parts[`ppt/${relation[2]}`]!;
+  const dataLength = new DataView(
+    wrapped.buffer,
+    wrapped.byteOffset,
+    wrapped.byteLength,
+  ).getUint32(4, true);
+  return wrapped.subarray(wrapped.byteLength - dataLength);
 }
 
 function withFontFsType(bytes: Uint8Array, fsType: number): Uint8Array {
@@ -70,11 +142,633 @@ const jostBook = testFont("./assets/fonts/Jost-400-Book.ttf");
 const jostBold = testFont("./assets/fonts/Jost-700-Bold.ttf");
 const jostItalic = testFont("./assets/fonts/Jost-400-Italic.ttf");
 const jostBoldItalic = testFont("./assets/fonts/Jost-700-BoldItalic.ttf");
+const zcoolXiaoWei = testFont("./assets/fonts/ZCOOLXiaoWei_400Regular.ttf");
 const darkerGrotesqueSemiBold = testFont(
   "./assets/fonts/DarkerGrotesque-SemiBold.ttf",
 );
 
 describe("公开构建入口", () => {
+  it("按 Text、Table、Chart、大小写和列表的实际字符嵌入 TrueType 子集", async () => {
+    const cjkFont = font("ZCOOL XiaoWei", [
+      { weight: 400, data: zcoolXiaoWei },
+    ]);
+    const latinFont = font("Jost*", [{ weight: 400, data: jostBook }]);
+    const result = await build(
+      createElement(
+        Deck,
+        { width: 960, height: 540 },
+        createElement(
+          Slide,
+          { slideId: "font-subset" },
+          createElement(
+            Text,
+            {
+              testId: "subset-text",
+              x: 8,
+              y: 8,
+              width: 640,
+              height: 180,
+              style: { fontFamily: cjkFont },
+            },
+            "中文",
+            createElement(
+              Span,
+              { style: { textTransform: "uppercase" } },
+              "aß",
+            ),
+            createElement(
+              P,
+              { style: { list: { type: "bullet", character: "•" } } },
+              "列表项",
+            ),
+            createElement(
+              P,
+              { style: { list: { type: "number", startAt: 7 } } },
+              "编号项",
+            ),
+          ),
+          createElement(
+            Text,
+            {
+              testId: "subset-latin",
+              x: 8,
+              y: 80,
+              width: 300,
+              height: 36,
+              style: { fontFamily: latinFont },
+            },
+            "office AV",
+          ),
+          createElement(
+            Table,
+            {
+              testId: "subset-table",
+              x: 8,
+              y: 128,
+              width: 240,
+              columns: [240],
+              style: { fontFamily: cjkFont },
+            },
+            createElement(
+              Row,
+              { style: { height: 28 } },
+              createElement(Cell, null, "表格"),
+            ),
+          ),
+          createElement(Chart, {
+            testId: "subset-chart",
+            kind: "column",
+            x: 280,
+            y: 128,
+            width: 320,
+            height: 220,
+            style: { fontFamily: cjkFont },
+            data: {
+              categories: ["销售图"],
+              series: [{ name: "金额", values: [12] }],
+            },
+          }),
+        ),
+      ),
+      { embedFonts: "subset" },
+    );
+
+    assert.deepEqual(result.report.diagnostics, []);
+    const file = await validatePptx(result.pptx);
+    assert.deepEqual(file.errors, []);
+    assert.equal(file.slides[0]?.objects.length, 4);
+
+    const parts = unzipSync(result.pptx);
+    const presentation = strFromU8(parts["ppt/presentation.xml"]!);
+    const cjkSubsetBytes = embeddedFont(
+      parts,
+      presentation,
+      "ZCOOL XiaoWei",
+      "regular",
+    );
+    const latinSubsetBytes = embeddedFont(
+      parts,
+      presentation,
+      "Jost*",
+      "regular",
+    );
+    const cjkFull = parsedFont(zcoolXiaoWei);
+    const cjkSubset = parsedFont(cjkSubsetBytes);
+    const latinFull = parsedFont(jostBook);
+    const latinSubset = parsedFont(latinSubsetBytes);
+    assert.ok(cjkSubset.numGlyphs < cjkFull.numGlyphs);
+    assert.ok(latinSubset.numGlyphs < latinFull.numGlyphs);
+    assert.ok(cjkSubset.hasGlyphForCodePoint("中".codePointAt(0)!));
+    assert.ok(cjkSubset.hasGlyphForCodePoint("表".codePointAt(0)!));
+    assert.ok(cjkSubset.hasGlyphForCodePoint("销".codePointAt(0)!));
+    assert.ok(cjkSubset.hasGlyphForCodePoint("•".codePointAt(0)!));
+    assert.ok(cjkSubset.hasGlyphForCodePoint("7".codePointAt(0)!));
+    assert.ok(cjkSubset.hasGlyphForCodePoint(".".codePointAt(0)!));
+    assert.ok(cjkSubset.hasGlyphForCodePoint("A".codePointAt(0)!));
+    assert.ok(cjkSubset.hasGlyphForCodePoint("S".codePointAt(0)!));
+    assert.equal(cjkSubset.hasGlyphForCodePoint("ß".codePointAt(0)!), false);
+    assert.equal(cjkSubset.hasGlyphForCodePoint("a".codePointAt(0)!), false);
+    assert.equal(cjkSubset.hasGlyphForCodePoint("Z".codePointAt(0)!), false);
+    const expectedCjkCharacters = [
+      ...new Set(
+        Array.from(
+          "中文ASS•列表项0123456789.,-+Ee编号项表格销售图金额",
+          (character) => character.codePointAt(0)!,
+        ),
+      ),
+      // cmap format 4 的结束段必须保留 U+FFFF 哨兵。
+      0xffff,
+    ].sort((left, right) => left - right);
+    assert.deepEqual(
+      [...cjkSubset.characterSet].sort((left, right) => left - right),
+      expectedCjkCharacters,
+    );
+    assert.ok(latinSubset.availableFeatures.includes("kern"));
+    assert.deepEqual(
+      shapedGlyphs(zcoolXiaoWei, "中文A7"),
+      shapedGlyphs(cjkSubsetBytes, "中文A7"),
+    );
+    assert.deepEqual(
+      shapedGlyphs(jostBook, "office AV"),
+      shapedGlyphs(latinSubsetBytes, "office AV"),
+    );
+    assert.deepEqual(
+      Object.keys(parts).filter((path) => path.startsWith("ppt/fonts/")),
+      ["ppt/fonts/font1.fntdata", "ppt/fonts/font2.fntdata"],
+    );
+  });
+
+  it("图表独占字体子集覆盖刻度、格式字面量、百分比和样式继承", async () => {
+    const chartFont = font("ZCOOL XiaoWei", [
+      { weight: 400, data: zcoolXiaoWei },
+    ]);
+    const chartCases = [
+      {
+        testId: "subset-chart-default-axis",
+        chart: createElement(Chart, {
+          testId: "subset-chart-default-axis",
+          kind: "column",
+          x: 0,
+          y: 0,
+          width: 320,
+          height: 220,
+          style: { fontFamily: chartFont },
+          data: {
+            categories: ["甲"],
+            series: [{ name: "乙", values: [12] }],
+          },
+        }),
+        expected: Array.from("0123456789"),
+        absent: [],
+      },
+      {
+        testId: "subset-chart-percent-axis",
+        chart: createElement(Chart, {
+          testId: "subset-chart-percent-axis",
+          kind: "column",
+          stacking: "percent",
+          x: 0,
+          y: 0,
+          width: 320,
+          height: 220,
+          style: { fontFamily: chartFont },
+          data: {
+            categories: ["甲"],
+            series: [{ name: "乙", values: [12] }],
+          },
+        }),
+        expected: Array.from("0123456789%"),
+        absent: [],
+      },
+      {
+        testId: "subset-chart-formatted-axis",
+        chart: createElement(Chart, {
+          testId: "subset-chart-formatted-axis",
+          kind: "column",
+          x: 0,
+          y: 0,
+          width: 320,
+          height: 220,
+          style: { fontFamily: chartFont },
+          valueAxis: {
+            min: 0,
+            max: 20,
+            majorUnit: 5,
+            numberFormat: '#,##0"元"',
+            style: { fontSize: 14 },
+          },
+          data: {
+            categories: ["甲"],
+            series: [{ name: "乙", values: [12] }],
+          },
+        }),
+        expected: Array.from("0123456789,元"),
+        absent: ["#", '"'],
+      },
+      {
+        testId: "subset-chart-formatted-label",
+        chart: createElement(Chart, {
+          testId: "subset-chart-formatted-label",
+          kind: "pie",
+          x: 0,
+          y: 0,
+          width: 320,
+          height: 220,
+          style: { fontFamily: chartFont },
+          dataLabels: {
+            value: true,
+            numberFormat: '0"元"',
+            style: { fontSize: 14 },
+          },
+          data: {
+            categories: ["甲", "乙"],
+            series: [{ name: "丙", values: [1, 2] }],
+          },
+        }),
+        expected: Array.from("0123456789元"),
+        absent: ['"'],
+      },
+      {
+        testId: "subset-chart-percent-label",
+        chart: createElement(Chart, {
+          testId: "subset-chart-percent-label",
+          kind: "pie",
+          x: 0,
+          y: 0,
+          width: 320,
+          height: 220,
+          style: { fontFamily: chartFont },
+          dataLabels: { percent: true, style: { fontSize: 14 } },
+          data: {
+            categories: ["甲", "乙"],
+            series: [{ name: "丙", values: [1, 2] }],
+          },
+        }),
+        expected: Array.from("0123456789%"),
+        absent: [],
+      },
+      {
+        testId: "subset-chart-locale-only-label",
+        chart: createElement(Chart, {
+          testId: "subset-chart-locale-only-label",
+          kind: "pie",
+          x: 0,
+          y: 0,
+          width: 320,
+          height: 220,
+          style: { fontFamily: chartFont },
+          dataLabels: {
+            value: true,
+            numberFormat: "[$-409]0",
+            style: { fontSize: 14 },
+          },
+          data: {
+            categories: ["甲"],
+            series: [{ name: "乙", values: [12] }],
+          },
+        }),
+        expected: Array.from("0123456789"),
+        absent: ["$", "[", "]"],
+      },
+      {
+        testId: "subset-chart-currency-literal-label",
+        chart: createElement(Chart, {
+          testId: "subset-chart-currency-literal-label",
+          kind: "pie",
+          x: 0,
+          y: 0,
+          width: 320,
+          height: 220,
+          style: { fontFamily: chartFont },
+          dataLabels: {
+            value: true,
+            numberFormat: "[$￥-804]#,##0.00",
+            style: { fontSize: 14 },
+          },
+          data: {
+            categories: ["甲"],
+            series: [{ name: "乙", values: [12] }],
+          },
+        }),
+        expected: Array.from("0123456789￥,."),
+        absent: ["$", "#", "[", "]"],
+      },
+      {
+        testId: "subset-chart-condition-color-label",
+        chart: createElement(Chart, {
+          testId: "subset-chart-condition-color-label",
+          kind: "pie",
+          x: 0,
+          y: 0,
+          width: 320,
+          height: 220,
+          style: { fontFamily: chartFont },
+          dataLabels: {
+            value: true,
+            numberFormat: '[Red][>=100]0"元";[Blue][<100]0"分"',
+            style: { fontSize: 14 },
+          },
+          data: {
+            categories: ["甲"],
+            series: [{ name: "乙", values: [12] }],
+          },
+        }),
+        expected: Array.from("0123456789元分"),
+        absent: Array.from("[]<>RedBlu"),
+      },
+      {
+        testId: "subset-chart-escaped-literal-label",
+        chart: createElement(Chart, {
+          testId: "subset-chart-escaped-literal-label",
+          kind: "pie",
+          x: 0,
+          y: 0,
+          width: 320,
+          height: 220,
+          style: { fontFamily: chartFont },
+          dataLabels: {
+            value: true,
+            numberFormat: "0\\元",
+            style: { fontSize: 14 },
+          },
+          data: {
+            categories: ["甲"],
+            series: [{ name: "乙", values: [12] }],
+          },
+        }),
+        expected: Array.from("0123456789元"),
+        absent: ["\\"],
+      },
+      {
+        testId: "subset-chart-chinese-date-name-label",
+        chart: createElement(Chart, {
+          testId: "subset-chart-chinese-date-name-label",
+          kind: "pie",
+          x: 0,
+          y: 0,
+          width: 320,
+          height: 220,
+          style: { fontFamily: chartFont },
+          dataLabels: {
+            value: true,
+            numberFormat: "[$-804]dddd",
+            style: { fontSize: 14 },
+          },
+          data: {
+            categories: ["甲"],
+            series: [{ name: "乙", values: [12] }],
+          },
+        }),
+        expected: Array.from("0123456789星期日一二三四五六"),
+        absent: ["A", "J", "S"],
+      },
+      {
+        testId: "subset-chart-question-placeholder-label",
+        chart: createElement(Chart, {
+          testId: "subset-chart-question-placeholder-label",
+          kind: "pie",
+          x: 0,
+          y: 0,
+          width: 320,
+          height: 220,
+          style: { fontFamily: chartFont },
+          dataLabels: {
+            value: true,
+            numberFormat: "??",
+            style: { fontSize: 14 },
+          },
+          data: {
+            categories: ["甲"],
+            series: [{ name: "乙", values: [12] }],
+          },
+        }),
+        expected: Array.from("0123456789 "),
+        absent: ["?"],
+      },
+    ] as const;
+
+    for (const { testId, chart, expected, absent } of chartCases) {
+      const result = await build(deck(chart), { embedFonts: "subset" });
+      assert.deepEqual(result.report.diagnostics, []);
+      assert.deepEqual((await validatePptx(result.pptx)).errors, []);
+
+      const parts = unzipSync(result.pptx);
+      const subset = parsedFont(
+        embeddedFont(
+          parts,
+          strFromU8(parts["ppt/presentation.xml"]!),
+          "ZCOOL XiaoWei",
+          "regular",
+        ),
+      );
+      for (const character of expected) {
+        assert.ok(
+          subset.hasGlyphForCodePoint(character.codePointAt(0)!),
+          `${testId} 子集应覆盖 ${character}`,
+        );
+      }
+      for (const character of absent) {
+        assert.equal(
+          subset.hasGlyphForCodePoint(character.codePointAt(0)!),
+          false,
+          `${testId} 不应把格式控制符 ${character} 当作显示字形`,
+        );
+      }
+    }
+
+    const latinFont = font("Jost*", [{ weight: 400, data: jostBook }]);
+    await assert.rejects(
+      build(
+        deck(
+          createElement(Chart, {
+            testId: "subset-chart-label-style-missing-glyph",
+            kind: "pie",
+            x: 0,
+            y: 0,
+            width: 320,
+            height: 220,
+            style: { fontFamily: chartFont },
+            dataLabels: {
+              value: true,
+              numberFormat: '0"元"',
+              style: { fontFamily: latinFont },
+            },
+            data: {
+              categories: ["甲", "乙"],
+              series: [{ name: "丙", values: [1, 2] }],
+            },
+          }),
+        ),
+        { embedFonts: "subset" },
+      ),
+      (error: unknown) =>
+        error instanceof BuildError &&
+        error.diagnostics.some(
+          ({ code, message }) =>
+            code === "font-missing-glyph" && message.includes("元"),
+        ),
+    );
+  });
+
+  it("数值标签忽略专用于文本的第四节", async () => {
+    const latinFont = font("Jost*", [{ weight: 400, data: jostBook }]);
+    const result = await build(
+      deck(
+        createElement(Chart, {
+          testId: "subset-chart-fourth-text-section",
+          kind: "pie",
+          x: 0,
+          y: 0,
+          width: 320,
+          height: 220,
+          style: { fontFamily: latinFont },
+          dataLabels: {
+            value: true,
+            numberFormat: '0;0;0;"元"@',
+            style: { fontSize: 14 },
+          },
+          data: {
+            categories: ["A"],
+            series: [{ name: "B", values: [12] }],
+          },
+        }),
+      ),
+      { embedFonts: "subset" },
+    );
+    assert.deepEqual(result.report.diagnostics, []);
+    assert.deepEqual((await validatePptx(result.pptx)).errors, []);
+
+    const parts = unzipSync(result.pptx);
+    const subset = parsedFont(
+      embeddedFont(
+        parts,
+        strFromU8(parts["ppt/presentation.xml"]!),
+        "Jost*",
+        "regular",
+      ),
+    );
+    assert.equal(subset.hasGlyphForCodePoint("元".codePointAt(0)!), false);
+  });
+
+  it("locale-only 数值格式不要求货币字形", async () => {
+    const chartFont = font("ZCOOL XiaoWei", [
+      { weight: 400, data: zcoolXiaoWei },
+    ]);
+    const axisResult = await build(
+      deck(
+        createElement(Chart, {
+          testId: "subset-chart-locale-only-source",
+          kind: "column",
+          x: 0,
+          y: 0,
+          width: 320,
+          height: 220,
+          style: { fontFamily: chartFont },
+          data: {
+            categories: ["甲"],
+            series: [{ name: "乙", values: [12] }],
+          },
+        }),
+      ),
+      { embedFonts: "subset" },
+    );
+    const axisParts = unzipSync(axisResult.pptx);
+    const narrowFontBytes = embeddedFont(
+      axisParts,
+      strFromU8(axisParts["ppt/presentation.xml"]!),
+      "ZCOOL XiaoWei",
+      "regular",
+    );
+    assert.equal(
+      parsedFont(narrowFontBytes).hasGlyphForCodePoint("$".codePointAt(0)!),
+      false,
+    );
+
+    const narrowFont = font("ZCOOL XiaoWei", [
+      { weight: 400, data: narrowFontBytes },
+    ]);
+    const result = await build(
+      deck(
+        createElement(Chart, {
+          testId: "subset-chart-locale-only-label-narrow-font",
+          kind: "pie",
+          x: 0,
+          y: 0,
+          width: 320,
+          height: 220,
+          style: { fontFamily: narrowFont },
+          dataLabels: {
+            value: true,
+            numberFormat: "[$-409]0",
+            style: { fontSize: 14 },
+          },
+          data: {
+            categories: ["甲"],
+            series: [{ name: "乙", values: [12] }],
+          },
+        }),
+      ),
+      { embedFonts: "subset" },
+    );
+    assert.deepEqual(result.report.diagnostics, []);
+    assert.deepEqual((await validatePptx(result.pptx)).errors, []);
+
+    const parts = unzipSync(result.pptx);
+    const subset = parsedFont(
+      embeddedFont(
+        parts,
+        strFromU8(parts["ppt/presentation.xml"]!),
+        "ZCOOL XiaoWei",
+        "regular",
+      ),
+    );
+    assert.equal(subset.hasGlyphForCodePoint("$".codePointAt(0)!), false);
+    for (const character of "0123456789") {
+      assert.ok(subset.hasGlyphForCodePoint(character.codePointAt(0)!));
+    }
+  });
+
+  it("字符子集不把换行和制表控制符当作缺失字形", async () => {
+    const jost = font("Jost*", [{ weight: 400, data: jostBook }]);
+    for (const [testId, text] of [
+      ["subset-lf", "A\nB"],
+      ["subset-crlf", "A\r\nB"],
+      ["subset-tab", "A\tB"],
+    ] as const) {
+      const result = await build(
+        deck(
+          createElement(
+            Text,
+            {
+              testId,
+              x: 0,
+              y: 0,
+              width: 320,
+              height: 300,
+              style: { fontFamily: jost },
+            },
+            text,
+          ),
+        ),
+        { embedFonts: "subset" },
+      );
+      assert.deepEqual(result.report.diagnostics, []);
+      assert.deepEqual((await validatePptx(result.pptx)).errors, []);
+
+      const parts = unzipSync(result.pptx);
+      const subset = parsedFont(
+        embeddedFont(
+          parts,
+          strFromU8(parts["ppt/presentation.xml"]!),
+          "Jost*",
+          "regular",
+        ),
+      );
+      assert.ok(subset.hasGlyphForCodePoint("A".codePointAt(0)!));
+      assert.ok(subset.hasGlyphForCodePoint("B".codePointAt(0)!));
+    }
+  });
+
   it("Shape 正文经共享文字服务度量、写出页码字段并登记实际字符", async () => {
     const pageNumberClaims: string[] = [];
     const shapeModule = shapeCapability as ObjectCapabilityModule;
@@ -241,7 +935,8 @@ describe("公开构建入口", () => {
     );
   });
 
-  it("Text、Shape、Table 跨页页码字段共用全稿唯一的大写标识", async () => {
+  it("Text、Shape、Table 页码字段进入同一 Chart 字符子集", async () => {
+    const pageFont = font("Jost*", [{ weight: 400, data: jostBook }]);
     const textFields = (count: number) =>
       Array.from({ length: count }, (_, index) =>
         createElement(SlideNumber, { key: index }),
@@ -255,7 +950,14 @@ describe("公开构建入口", () => {
           { slideId: "field-first" },
           createElement(
             Text,
-            { testId: "text-first", x: 0, y: 0, width: 100, height: 30 },
+            {
+              testId: "text-first",
+              x: 0,
+              y: 0,
+              width: 100,
+              height: 30,
+              style: { fontFamily: pageFont },
+            },
             ...textFields(3),
           ),
           createElement(
@@ -266,12 +968,19 @@ describe("公开构建入口", () => {
               y: 40,
               width: 100,
               height: 30,
+              textStyle: { fontFamily: pageFont },
             },
             createElement(SlideNumber, {}),
           ),
           createElement(
             Table,
-            { testId: "table-first", x: 0, y: 80, columns: [100] },
+            {
+              testId: "table-first",
+              x: 0,
+              y: 80,
+              columns: [100],
+              style: { fontFamily: pageFont },
+            },
             createElement(
               Row,
               { style: { height: 30 } },
@@ -284,7 +993,14 @@ describe("公开构建入口", () => {
           { slideId: "field-second" },
           createElement(
             Text,
-            { testId: "text-second", x: 0, y: 0, width: 100, height: 30 },
+            {
+              testId: "text-second",
+              x: 0,
+              y: 0,
+              width: 100,
+              height: 30,
+              style: { fontFamily: pageFont },
+            },
             ...textFields(2),
           ),
           createElement(
@@ -295,12 +1011,19 @@ describe("公开构建入口", () => {
               y: 40,
               width: 100,
               height: 30,
+              textStyle: { fontFamily: pageFont },
             },
             createElement(SlideNumber, {}),
           ),
           createElement(
             Table,
-            { testId: "table-second", x: 0, y: 80, columns: [50, 50] },
+            {
+              testId: "table-second",
+              x: 0,
+              y: 80,
+              columns: [50, 50],
+              style: { fontFamily: pageFont },
+            },
             createElement(
               Row,
               { style: { height: 30 } },
@@ -308,11 +1031,44 @@ describe("公开构建入口", () => {
               createElement(Cell, {}, createElement(SlideNumber, {})),
             ),
           ),
+          createElement(Chart, {
+            testId: "page-field-chart",
+            kind: "pie",
+            x: 110,
+            y: 0,
+            width: 200,
+            height: 220,
+            style: { fontFamily: pageFont },
+            dataLabels: {
+              value: true,
+              numberFormat: '0;0;0;"元"@',
+            },
+            data: {
+              categories: ["A"],
+              series: [{ name: "B", values: [12] }],
+            },
+          }),
         ),
       ),
+      { embedFonts: "subset" },
     );
     const file = await validatePptx(result.pptx);
     assert.deepEqual(file.errors, []);
+
+    const parts = unzipSync(result.pptx);
+    const subset = parsedFont(
+      embeddedFont(
+        parts,
+        strFromU8(parts["ppt/presentation.xml"]!),
+        "Jost*",
+        "regular",
+      ),
+    );
+    assert.ok(subset.numGlyphs < parsedFont(jostBook).numGlyphs);
+    for (const character of "0123456789") {
+      assert.ok(subset.hasGlyphForCodePoint(character.codePointAt(0)!));
+    }
+    assert.equal(subset.hasGlyphForCodePoint("元".codePointAt(0)!), false);
 
     const allIds = file.slides.flatMap((slide, index) => {
       const xml = strFromU8(
@@ -872,7 +1628,7 @@ describe("公开构建入口", () => {
     assert.deepEqual((await validatePptx(notRequested.pptx)).errors, []);
   });
 
-  it("完整嵌入接受 Editable 与 no-subsetting 标志并保留完整字体文件", async () => {
+  it("完整嵌入接受 Editable 与 no-subsetting 标志，子集请求按许可拒绝", async () => {
     const original = jostBook;
     const noSubsetting = withFontFsType(original, 0x0108);
     const result = await build(
@@ -900,6 +1656,39 @@ describe("公开构建入口", () => {
     const payloadStart = view.getUint32(0, true) - original.byteLength;
     assert.equal(view.getUint16(32, true), 0x0108);
     assert.deepEqual(embedded.subarray(payloadStart), noSubsetting);
+
+    await assert.rejects(
+      build(
+        <Deck>
+          <Slide slideId="font-no-subsetting-subset">
+            <Text
+              testId="font-no-subsetting-subset"
+              x={0}
+              y={0}
+              width={100}
+              height={32}
+              style={{
+                fontFamily: font("Jost*", [
+                  { weight: 400, data: noSubsetting },
+                ]),
+              }}
+            >
+              子集字体
+            </Text>
+          </Slide>
+        </Deck>,
+        { embedFonts: "subset" },
+      ),
+      (error: unknown) => {
+        assert.ok(error instanceof BuildError);
+        assert.equal(error.diagnostics[0]?.code, "font-subsetting-forbidden");
+        assert.equal(
+          error.diagnostics[0]?.path,
+          "deck/slide[font-no-subsetting-subset]/text[font-no-subsetting-subset]",
+        );
+        return true;
+      },
+    );
   });
 
   it("完整嵌入请求不能跳过缺少资源、格式或权限受限的实际字族", async () => {
@@ -996,6 +1785,69 @@ describe("公开构建入口", () => {
       );
     }
 
+    await assert.rejects(
+      build(
+        deck(
+          createElement(
+            Text,
+            {
+              testId: "subset-unsupported-woff2",
+              x: 24,
+              y: 18,
+              width: 240,
+              height: 36,
+              style: {
+                fontFamily: font("Noto Sans CJK SC", [
+                  { weight: 400, data: notoSansScRegular },
+                ]),
+              },
+            },
+            "中文",
+          ),
+        ),
+        { embedFonts: "subset" },
+      ),
+      (error: unknown) => {
+        assert.ok(error instanceof BuildError);
+        assert.equal(error.diagnostics[0]?.code, "unsupported-font-format");
+        return true;
+      },
+    );
+
+    assert.equal(parsedFont(zcoolXiaoWei).hasGlyphForCodePoint(0x1f984), false);
+    await assert.rejects(
+      build(
+        deck(
+          createElement(
+            Text,
+            {
+              testId: "subset-missing-glyph",
+              x: 24,
+              y: 18,
+              width: 240,
+              height: 36,
+              style: {
+                fontFamily: font("ZCOOL XiaoWei", [
+                  { weight: 400, data: zcoolXiaoWei },
+                ]),
+              },
+            },
+            "🦄",
+          ),
+        ),
+        { embedFonts: "subset" },
+      ),
+      (error: unknown) => {
+        assert.ok(error instanceof BuildError);
+        assert.equal(error.diagnostics[0]?.code, "font-missing-glyph");
+        assert.equal(
+          error.diagnostics[0]?.path,
+          "deck/slide[cover]/text[subset-missing-glyph]",
+        );
+        return true;
+      },
+    );
+
     const notRequested = await build(
       deck(
         createElement(
@@ -1024,7 +1876,7 @@ describe("公开构建入口", () => {
     );
     await assert.rejects(
       build(deck(createElement(Shape, { x: 0, y: 0, width: 32, height: 32 })), {
-        embedFonts: "subset" as "full",
+        embedFonts: "partial" as "full",
       }),
       (error: unknown) => {
         assert.ok(error instanceof BuildError);

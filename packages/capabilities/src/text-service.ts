@@ -56,6 +56,11 @@ export type TextResourceClaim = {
   readonly characters: string;
 };
 
+/** 控制符和默认可忽略码点保留在文本流中，但不要求独立 cmap 字形。 */
+export function requiresFontGlyph(character: string): boolean {
+  return !/^[\p{Cc}\p{Default_Ignorable_Code_Point}]$/u.test(character);
+}
+
 export type TextServiceResult = {
   readonly xml: string;
   readonly text: string;
@@ -864,6 +869,7 @@ function textResourceClaims(runs: readonly Run[]): {
         family: font.family,
         weight: font.weight,
         style: font.style,
+        claimKey: key,
         identity: font.identity,
         ...(font.data === undefined ? {} : { bytes: font.data }),
         substitute: font.substitute,
@@ -1137,11 +1143,7 @@ function measureRunFace(style: RunStyle): MeasureFace {
 function missingCharacters(face: MeasureFace, text: string): string[] {
   const missing = new Set<string>();
   for (const character of text) {
-    if (
-      /^[\p{Cc}\p{Cf}\u{FE00}-\u{FE0F}\u{E0100}-\u{E01EF}]$/u.test(character)
-    ) {
-      continue;
-    }
+    if (!requiresFontGlyph(character)) continue;
     const codePoint = character.codePointAt(0);
     if (codePoint !== undefined && !face.font.hasGlyphForCodePoint(codePoint)) {
       missing.add(character);
@@ -1166,11 +1168,7 @@ function rangeWidth(
       piece.style.textTransform === "uppercase" ? source.toUpperCase() : source;
     let visible = "";
     for (const character of transformed) {
-      if (
-        !/^[\p{Cc}\p{Cf}\u{FE00}-\u{FE0F}\u{E0100}-\u{E01EF}]$/u.test(character)
-      ) {
-        visible += character;
-      }
+      if (requiresFontGlyph(character)) visible += character;
     }
     if (visible === "") continue;
     const advance = piece.face.font.layout(visible).advanceWidth;
@@ -1609,7 +1607,22 @@ export function writeTextBody(
       ? paragraph.runs
       : [{ text: "", style: paragraph.endStyle }],
   );
-  const { resourceClaims, fontUses, warnings } = textResourceClaims(runs);
+  const listRuns = paragraphs.flatMap((paragraph) => {
+    const list = paragraph.style.list;
+    if (list === undefined) return [];
+    const characters =
+      list.type === "bullet" ? (list.character ?? "•") : "0123456789.";
+    return [
+      {
+        text: characters,
+        style: paragraph.runs[0]?.style ?? paragraph.endStyle,
+      },
+    ];
+  });
+  const { resourceClaims, fontUses, warnings } = textResourceClaims([
+    ...runs,
+    ...listRuns,
+  ]);
   let measured: ReturnType<typeof measureParagraphs> | undefined;
   if (layout !== undefined) {
     try {

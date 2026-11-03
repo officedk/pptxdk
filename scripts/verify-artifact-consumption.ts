@@ -111,6 +111,21 @@ const reactPptx = reactPptxDependencies[0];
 if (reactPptx === undefined) {
   throw new Error("pnpm 未返回 @react-pptx/react-pptx 的安装依赖");
 }
+const capabilitiesDependencies = JSON.parse(
+  run("pnpm", [
+    "--filter",
+    "@react-pptx/capabilities",
+    "list",
+    "fontkit",
+    "--depth",
+    "0",
+    "--json",
+  ]),
+) as readonly PnpmListEntry[];
+const capabilities = capabilitiesDependencies[0];
+if (capabilities === undefined) {
+  throw new Error("pnpm 未返回 @react-pptx/capabilities 的安装依赖");
+}
 
 const temporaryDirectory = await mkdtemp(
   join(tmpdir(), "react-pptx-consumer-"),
@@ -164,6 +179,7 @@ try {
         dependencies: {
           ...dependencies,
           fflate: installedVersion(reactPptx, "fflate"),
+          fontkit: installedVersion(capabilities, "fontkit"),
           react: installedVersion(core, "react"),
           esbuild: installedVersion(reactPptx, "esbuild"),
         },
@@ -254,6 +270,7 @@ try {
       'const asyncTable = createElement(AsyncSalesTable, { source: "https://example.invalid/data" });',
       "const signalOptions: BuildOptions = { signal: new AbortController().signal };",
       'const fontEmbeddingOptions: BuildOptions = { embedFonts: "full" };',
+      'const fontSubsetOptions: BuildOptions = { embedFonts: "subset" };',
       'const themeInput: ThemeInput = { name: "Consumer theme", colors: { dk1: "#223344", ink: "accent1", accent1: "#336699", pale: lighter("accent1", 0.4), deep: darker("accent1", 0.2) }, fonts: { major: "Aptos Display", minor: "Aptos" } };',
       'const themeScope: ThemeScope = { colors: { ink: "#C00000" }, fonts: { major: font("Consumer Display") } };',
       'const colorValue: ColorValue = { color: "accent1", alpha: 0.5 };',
@@ -265,7 +282,7 @@ try {
       'const defaultChartResult: Promise<BuildResult> = build(createElement(Deck, {}, createElement(Slide, { slideId: "typed-chart" }, createElement(Chart, defaultChart))));',
       'const chartOnlyResult: Promise<BuildResult> = buildChartOnly(createElement(ChartDeck, {}, createElement(ChartSlide, { slideId: "typed-chart-only" }, createElement(ChartOnly, chartOnly))));',
       'const tableElement = createElement(Table, table, createElement(Row, row, createElement(Cell, cell, "North")));',
-      "void [result, defaultChartResult, chartOnlyResult, contentSizedText, noWrapText, typedBox, granularText, granularChart, validationIssue, validatorProfile, asyncTable, signalOptions, fontEmbeddingOptions, themeInput, themeScope, colorValue, textDefaults, themedDeck, sourceBuild, tableElement, tableObservation, scopeMoment, scopeCompletion, scopeProps, linkTarget, background, section, slideNumber, shapeWithSlideNumber];",
+      "void [result, defaultChartResult, chartOnlyResult, contentSizedText, noWrapText, typedBox, granularText, granularChart, validationIssue, validatorProfile, asyncTable, signalOptions, fontEmbeddingOptions, fontSubsetOptions, themeInput, themeScope, colorValue, textDefaults, themedDeck, sourceBuild, tableElement, tableObservation, scopeMoment, scopeCompletion, scopeProps, linkTarget, background, section, slideNumber, shapeWithSlideNumber];",
     ].join("\n"),
   );
   await writeFile(
@@ -299,6 +316,7 @@ try {
       'import { build as buildChartOnly, Chart as ChartOnly, Deck as ChartDeck, Slide as ChartSlide } from "@react-pptx/react-pptx/chart";',
       'import { validatePptx } from "@react-pptx/validation";',
       'import { strFromU8, strToU8, unzipSync, zipSync } from "fflate";',
+      'import * as fontkit from "fontkit";',
       'import { getEventListeners } from "node:events";',
       'import { readFile, writeFile } from "node:fs/promises";',
       'import { buildFromSource } from "@react-pptx/react-pptx/node";',
@@ -437,12 +455,33 @@ try {
       'const fontEmbeddingXmlMatches = fontPresentation.includes("embedTrueTypeFonts=\\"1\\"") && fontPresentation.includes("<p:font typeface=\\"Jost*\\"") && fontEmbeddingStyleReferenceMatches;',
       'if (fontEmbeddingFile.errors.length !== 0 || fontEmbeddingFile.slides[0]?.objects[0]?.text?.text !== "Installed embedded font" || !fontEmbeddingXmlMatches || fontRelationId === undefined || embeddedFontPayload === undefined || !fontEmbeddingPayloadMatches) throw new Error(JSON.stringify({ errors: fontEmbeddingFile.errors, presentation: fontPresentation, relationships: fontRelationships, fontRelationId, fontRelationTarget, payloadLength: embeddedFontPayload?.byteLength, sourceFontLength: embeddedFontBytes.byteLength, fontEmbeddingXmlMatches, fontEmbeddingStyleReferenceMatches, fontEmbeddingPayloadMatches }));',
       'await writeFile("font-embedding-installed.pptx", fontEmbeddingResult.pptx);',
+      'const fontSubsetResult = await build(createElement(Deck, { width: 120, height: 96 }, createElement(Slide, { slideId: "installed-font-subset" }, createElement(Text, { testId: "installed-subset-font", x: 8, y: 8, width: 96, height: 36, style: { fontFamily: font("Jost*", [{ weight: 400, data: embeddedFontBytes }]) } }, "Subset AV"))), { embedFonts: "subset" });',
+      "const fontSubsetFile = await validatePptx(fontSubsetResult.pptx);",
+      "const fontSubsetParts = unzipSync(fontSubsetResult.pptx);",
+      'const fontSubsetPresentation = strFromU8(fontSubsetParts["ppt/presentation.xml"]);',
+      'const fontSubsetRelationships = strFromU8(fontSubsetParts["ppt/_rels/presentation.xml.rels"]);',
+      'const fontSubsetRelation = fontSubsetRelationships.split("/>").find((relation) => relation.includes("/relationships/font"));',
+      'const fontSubsetRelationId = fontSubsetRelation?.match(/Id="([^"]+)"/u)?.[1];',
+      'const fontSubsetRelationTarget = fontSubsetRelation?.match(/Target="([^"]+)"/u)?.[1];',
+      "const fontSubsetWrapped = fontSubsetRelationTarget === undefined ? undefined : fontSubsetParts[`ppt/${fontSubsetRelationTarget}`];",
+      "const fontSubsetPayloadLength = fontSubsetWrapped === undefined ? undefined : new DataView(fontSubsetWrapped.buffer, fontSubsetWrapped.byteOffset, fontSubsetWrapped.byteLength).getUint32(4, true);",
+      "const fontSubsetPayload = fontSubsetWrapped === undefined || fontSubsetPayloadLength === undefined ? undefined : fontSubsetWrapped.subarray(fontSubsetWrapped.byteLength - fontSubsetPayloadLength);",
+      'const fontSubsetStyleReferenceMatches = fontSubsetRelationId !== undefined && fontSubsetPresentation.includes(`<p:regular r:id="${fontSubsetRelationId}"/>`);',
+      "const fontSubsetSourceFont = fontkit.create(Buffer.from(embeddedFontBytes));",
+      "const fontSubsetFont = fontSubsetPayload === undefined ? undefined : fontkit.create(Buffer.from(fontSubsetPayload));",
+      'const fontSubsetGlyphsMatch = fontSubsetFont !== undefined && [..."Subset AV"].every((character) => fontSubsetFont.hasGlyphForCodePoint(character.codePointAt(0) ?? -1)) && fontSubsetSourceFont.hasGlyphForCodePoint(90) && !fontSubsetFont.hasGlyphForCodePoint(90);',
+      'if (fontSubsetFile.errors.length !== 0 || fontSubsetFile.slides[0]?.objects[0]?.text?.text !== "Subset AV" || fontSubsetRelationTarget === undefined || fontSubsetPayload === undefined || fontSubsetPayload.byteLength >= embeddedFontBytes.byteLength || !fontSubsetStyleReferenceMatches || !fontSubsetGlyphsMatch) throw new Error(JSON.stringify({ errors: fontSubsetFile.errors, text: fontSubsetFile.slides[0]?.objects[0]?.text?.text, fontSubsetRelationTarget, payloadLength: fontSubsetPayload?.byteLength, sourceFontLength: embeddedFontBytes.byteLength, fontSubsetStyleReferenceMatches, fontSubsetGlyphsMatch }));',
+      'await writeFile("font-subset-installed.pptx", fontSubsetResult.pptx);',
+      "let missingSubsetGlyph;",
+      'try { await build(createElement(Deck, { width: 120, height: 96 }, createElement(Slide, { slideId: "installed-font-subset-missing-glyph" }, createElement(Text, { testId: "installed-subset-font-missing-glyph", x: 8, y: 8, width: 96, height: 36, style: { fontFamily: font("Jost*", [{ weight: 400, data: embeddedFontBytes }]) } }, "元"))), { embedFonts: "subset" }); } catch (error) { missingSubsetGlyph = error; }',
+      'if (!(missingSubsetGlyph instanceof BuildError) || missingSubsetGlyph.diagnostics[0]?.code !== "font-missing-glyph" || missingSubsetGlyph.diagnostics[0]?.path !== "deck/slide[installed-font-subset-missing-glyph]/text[installed-subset-font-missing-glyph]") throw new Error(JSON.stringify({ diagnostics: missingSubsetGlyph?.diagnostics }));',
+      "const fontSubsetSummary = { fontSubsetText: fontSubsetFile.slides[0]?.objects[0]?.text?.text, fontSubsetPayloadBytes: fontSubsetPayload?.byteLength, fontSubsetSourceBytes: embeddedFontBytes.byteLength, fontSubsetGlyphsMatch, missingSubsetGlyphCode: missingSubsetGlyph.diagnostics[0].code, missingSubsetGlyphPath: missingSubsetGlyph.diagnostics[0].path };",
       "let missingMetrics;",
       'try { await build(createElement(Deck, {}, createElement(Slide, { slideId: "missing-metrics" }, createElement(Text, { testId: "content-sized-text", x: 0, y: 0, width: 100, height: "auto", style: { fontFamily: font("Consumer Sans") } }, "Content sized text")))); } catch (error) { missingMetrics = error; }',
       'if (!(missingMetrics instanceof BuildError) || missingMetrics.diagnostics[0]?.code !== "font-measurement-unavailable") throw new Error("installed content-sized text did not require explicit font metrics");',
       'await writeFile("artifact.pptx", result.pptx);',
       'await writeFile("artifact-chart.pptx", chartResult.pptx);',
-      'process.stdout.write(JSON.stringify({ installedCliSlideId: installedCliFile.slides[0]?.id, installedCliText: installedCliFile.slides[0]?.objects[0]?.text?.text, installedCliTitle: installedCliFile.presentation.title, installedCliSectionCount: installedCliFile.presentation.sections?.length, installedCliAdvanceAfterMs: installedCliFile.slides[0]?.advanceAfterMs, installedCliLink: installedCliShape?.link, installedCliField: installedCliNumber?.field, installedCliShapeField: installedCliShapeNumber?.field, installedCliShapeNumber: installedCliShapeNumber?.text, installedCliEquivalent, standard: file.profile.standard, schemaPackage: file.profile.schemaValidator.package, schemaPackageVersion: file.profile.schemaValidator.packageVersion, sdkVersion: file.profile.schemaValidator.sdkVersion, officeVersion: file.profile.schemaValidator.officeVersion, applicationEvidence: file.profile.applicationEvidence, slideId: file.slides[0]?.id, group: group.name, groupBox: group.boxEmu, shape: shape.name, shapeText: shape.text.text, shapeBox: shape.boxEmu, text: text.name, textContent: text.text.text, bullet: text.text.paragraphs[0]?.list?.type, image: image.name, mediaType: image.image.contentType, imageBox: image.boxEmu, table: tableObject.name, tableCells: tableObject.table.cells, tableMerges: tableObject.table.merges, tableColumnWidthEmu: tableObject.table.columnWidthsEmu[0], tableBytes: tableResult.pptx.byteLength, contentSizedText: contentSizedText.text.text, contentSizedTextHeightEmu: contentSizedText.boxEmu.height, contentSizedTextLineSpacingPoints: contentSizedText.text.paragraphs[0].lineSpacingPoints, nestedGroup: nestedGroup.name, nestedShape: nestedShape.name, nestedShapeText: nestedShape.text.text, nestedShapeBox: nestedShape.boxEmu, missingMetrics: missingMetrics.diagnostics[0].code, objectIds: [group.id, shape.id, text.id, image.id, nestedGroup.id, nestedShape.id], animations, transition: file.slides[0]?.transition?.kind, durationMs: file.slides[0]?.transition?.durationMs, extensions: file.extensions, forbiddenCode: forbidden.diagnostics[0]?.code, schemaGate: schemaIssue.code, schemaPart: schemaIssue.part, schemaXPath: schemaIssue.xpath, bytes: result.pptx.byteLength, contentSizedBytes: contentSizedResult.pptx.byteLength, embeddedFontPartBytes: embeddedFontPart?.byteLength, embeddedFontPayloadBytes: embeddedFontPayload?.byteLength, embeddedFontFamily: fontEmbeddingFile.slides[0]?.objects[0]?.text?.paragraphs[0]?.runs[0]?.fontFamily, chartKinds: chartObjects.map(({ chart }) => chart?.types[0]), chartEmbeddedWorkbookParts: chartObjects.map(({ chart }) => chart?.embeddedWorkbook?.part), chartBytes: chartResult.pptx.byteLength, cancellationObserved, cancellationCleanups, cancellationListeners: getEventListeners(cancellationController.signal, "abort").length }));',
+      'process.stdout.write(JSON.stringify({ ...fontSubsetSummary, installedCliSlideId: installedCliFile.slides[0]?.id, installedCliText: installedCliFile.slides[0]?.objects[0]?.text?.text, installedCliTitle: installedCliFile.presentation.title, installedCliSectionCount: installedCliFile.presentation.sections?.length, installedCliAdvanceAfterMs: installedCliFile.slides[0]?.advanceAfterMs, installedCliLink: installedCliShape?.link, installedCliField: installedCliNumber?.field, installedCliShapeField: installedCliShapeNumber?.field, installedCliShapeNumber: installedCliShapeNumber?.text, installedCliEquivalent, standard: file.profile.standard, schemaPackage: file.profile.schemaValidator.package, schemaPackageVersion: file.profile.schemaValidator.packageVersion, sdkVersion: file.profile.schemaValidator.sdkVersion, officeVersion: file.profile.schemaValidator.officeVersion, applicationEvidence: file.profile.applicationEvidence, slideId: file.slides[0]?.id, group: group.name, groupBox: group.boxEmu, shape: shape.name, shapeText: shape.text.text, shapeBox: shape.boxEmu, text: text.name, textContent: text.text.text, bullet: text.text.paragraphs[0]?.list?.type, image: image.name, mediaType: image.image.contentType, imageBox: image.boxEmu, table: tableObject.name, tableCells: tableObject.table.cells, tableMerges: tableObject.table.merges, tableColumnWidthEmu: tableObject.table.columnWidthsEmu[0], tableBytes: tableResult.pptx.byteLength, contentSizedText: contentSizedText.text.text, contentSizedTextHeightEmu: contentSizedText.boxEmu.height, contentSizedTextLineSpacingPoints: contentSizedText.text.paragraphs[0].lineSpacingPoints, nestedGroup: nestedGroup.name, nestedShape: nestedShape.name, nestedShapeText: nestedShape.text.text, nestedShapeBox: nestedShape.boxEmu, missingMetrics: missingMetrics.diagnostics[0].code, objectIds: [group.id, shape.id, text.id, image.id, nestedGroup.id, nestedShape.id], animations, transition: file.slides[0]?.transition?.kind, durationMs: file.slides[0]?.transition?.durationMs, extensions: file.extensions, forbiddenCode: forbidden.diagnostics[0]?.code, schemaGate: schemaIssue.code, schemaPart: schemaIssue.part, schemaXPath: schemaIssue.xpath, bytes: result.pptx.byteLength, contentSizedBytes: contentSizedResult.pptx.byteLength, embeddedFontPartBytes: embeddedFontPart?.byteLength, embeddedFontPayloadBytes: embeddedFontPayload?.byteLength, embeddedFontFamily: fontEmbeddingFile.slides[0]?.objects[0]?.text?.paragraphs[0]?.runs[0]?.fontFamily, chartKinds: chartObjects.map(({ chart }) => chart?.types[0]), chartEmbeddedWorkbookParts: chartObjects.map(({ chart }) => chart?.embeddedWorkbook?.part), chartBytes: chartResult.pptx.byteLength, cancellationObserved, cancellationCleanups, cancellationListeners: getEventListeners(cancellationController.signal, "abort").length }));',
     ].join("\n"),
   );
   const cropLoader = join(temporaryDirectory, "reject-text-box.mjs");
@@ -574,6 +613,12 @@ try {
     readonly embeddedFontPartBytes?: number;
     readonly embeddedFontPayloadBytes?: number;
     readonly embeddedFontFamily?: string;
+    readonly fontSubsetText?: string;
+    readonly fontSubsetPayloadBytes?: number;
+    readonly fontSubsetSourceBytes?: number;
+    readonly fontSubsetGlyphsMatch?: boolean;
+    readonly missingSubsetGlyphCode?: string;
+    readonly missingSubsetGlyphPath?: string;
   };
   if (
     summary.installedCliSlideId !== "source-cli" ||
@@ -667,7 +712,15 @@ try {
     summary.embeddedFontPayloadBytes !== 90780 ||
     summary.embeddedFontPartBytes === undefined ||
     summary.embeddedFontPartBytes <= summary.embeddedFontPayloadBytes ||
-    summary.embeddedFontFamily !== "Jost*"
+    summary.embeddedFontFamily !== "Jost*" ||
+    summary.fontSubsetText !== "Subset AV" ||
+    summary.fontSubsetPayloadBytes === undefined ||
+    summary.fontSubsetSourceBytes === undefined ||
+    summary.fontSubsetPayloadBytes >= summary.fontSubsetSourceBytes ||
+    summary.fontSubsetGlyphsMatch !== true ||
+    summary.missingSubsetGlyphCode !== "font-missing-glyph" ||
+    summary.missingSubsetGlyphPath !==
+      "deck/slide[installed-font-subset-missing-glyph]/text[installed-subset-font-missing-glyph]"
   ) {
     throw new Error(`安装制品返回了意外结果：${summaryText}`);
   }
@@ -679,6 +732,15 @@ try {
   await writeFile(
     join(artifactDirectory, "installed-font-embedding.pptx"),
     await readFile(join(temporaryDirectory, "font-embedding-installed.pptx")),
+  );
+  const subsetArtifactDirectory = join(
+    process.cwd(),
+    ".scratch/react-pptx-formal/experiments/13-format-installed-fix",
+  );
+  await mkdir(subsetArtifactDirectory, { recursive: true });
+  await writeFile(
+    join(subsetArtifactDirectory, "font-subset-installed.pptx"),
+    await readFile(join(temporaryDirectory, "font-subset-installed.pptx")),
   );
   const croppedText = run(
     process.execPath,

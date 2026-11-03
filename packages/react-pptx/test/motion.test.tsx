@@ -3643,8 +3643,8 @@ describe("对象动画", () => {
         )
         .map(({ from, to, targetRange }) => [from, to, targetRange]),
       [
-        ["372", "12", { type: "paragraph", start: 0, end: 0 }],
-        ["372", "12", { type: "paragraph", start: 1, end: 1 }],
+        ["360", "0", { type: "paragraph", start: 0, end: 0 }],
+        ["360", "0", { type: "paragraph", start: 1, end: 1 }],
       ],
     );
   });
@@ -3710,6 +3710,7 @@ describe("对象动画", () => {
     );
     const file = await validatePptx(result.pptx);
     assert.deepEqual(file.errors, []);
+    assert.equal(file.slides[0]?.objects[0]?.rotationDegrees, 12);
 
     const firstSlideXml = strFromU8(
       unzipSync(result.pptx)["ppt/slides/slide1.xml"]!,
@@ -3792,6 +3793,17 @@ describe("对象动画", () => {
           ),
       ),
     );
+    assert.ok(
+      memberSpins?.every((effect) =>
+        effect.nativeBehaviors?.some(
+          ({ behavior, from, to, additive }) =>
+            behavior === "animRot" &&
+            from === "13500000" &&
+            to === "0" &&
+            additive === "sum",
+        ),
+      ),
+    );
 
     const textId = result.report.slides[0]?.objects[0]?.id;
     assert.ok(textId !== undefined);
@@ -3859,6 +3871,134 @@ describe("对象动画", () => {
       missingPositionRole.errors.some(
         ({ code }) => code === "invalid-animation-projection-target",
       ),
+    );
+
+    const groupSlidePath = "ppt/slides/slide2.xml";
+    const groupSlideXml = strFromU8(parts[groupSlidePath]!);
+    const validateGroupSlide = (xml: string) =>
+      validatePptx(zipSync({ ...parts, [groupSlidePath]: strToU8(xml) }));
+    const rewriteFormulas = (
+      xml: string,
+      rewrite: (formula: string) => string,
+      targetId?: number,
+    ) =>
+      xml.replace(/<p:anim\b[\s\S]*?<\/p:anim>/gu, (behavior) => {
+        if (
+          targetId !== undefined &&
+          !behavior.includes(`<p:spTgt spid="${targetId}">`)
+        ) {
+          return behavior;
+        }
+        return behavior.replace(
+          /fmla="([^"]+)"/u,
+          (_match, formula: string) => `fmla="${rewrite(formula)}"`,
+        );
+      });
+    const invalidGeometryInputs = [
+      [
+        "位置函数恒为零",
+        () =>
+          validateSlide(
+            rewriteFormulas(firstSlideXml, (formula) => `0*(${formula})`),
+          ),
+      ],
+      [
+        "正弦与余弦互换",
+        () =>
+          validateSlide(
+            rewriteFormulas(firstSlideXml, (formula) =>
+              formula
+                .replaceAll("cos(", "__cos__(")
+                .replaceAll("sin(", "cos(")
+                .replaceAll("__cos__(", "sin("),
+            ),
+          ),
+      ],
+      [
+        "页面纵横比错误",
+        () =>
+          validateSlide(
+            rewriteFormulas(firstSlideXml, (formula) =>
+              formula
+                .replaceAll("0.5625", "1")
+                .replaceAll("1.77777777777778", "1"),
+            ),
+          ),
+      ],
+      [
+        "整体文字中心错误",
+        () =>
+          validateSlide(
+            rewriteFormulas(firstSlideXml, (formula) =>
+              formula
+                .replaceAll("0.40625", "0.9")
+                .replaceAll("0.407407407407407", "0.1"),
+            ),
+          ),
+      ],
+    ] as const;
+    for (const [name, readback] of invalidGeometryInputs) {
+      const invalid = await readback();
+      assert.ok(
+        invalid.errors.some(
+          ({ code }) => code === "invalid-animation-progress-formula",
+        ),
+        `实际动画 XML 中的${name}必须被拒绝`,
+      );
+    }
+
+    const groupShapeId = group?.members?.find(
+      ({ name }) => name === "formula-spin-shape-member",
+    )?.id;
+    assert.ok(groupShapeId !== undefined);
+    const wrongMemberAngle = await validateGroupSlide(
+      rewriteFormulas(
+        groupSlideXml,
+        (formula) => formula.replaceAll("225*pi/180", "30*pi/180"),
+        groupShapeId,
+      ),
+    );
+    assert.ok(
+      wrongMemberAngle.errors.some(
+        ({ code }) => code === "invalid-animation-progress-formula",
+      ),
+      "成员位置角度必须与实际 animRot 角度一致",
+    );
+
+    const wrongMemberCenter = await validateGroupSlide(
+      rewriteFormulas(
+        groupSlideXml,
+        (formula) => {
+          const centerX = formula.match(
+            /#ppt_x-(-?(?:\d+(?:\.\d*)?|\.\d+))/u,
+          )?.[1];
+          const centerY = formula.match(
+            /#ppt_y-(-?(?:\d+(?:\.\d*)?|\.\d+))/u,
+          )?.[1];
+          assert.ok(centerX !== undefined && centerY !== undefined);
+          return formula.replaceAll(centerX, "0.7").replaceAll(centerY, "0.2");
+        },
+        groupShapeId,
+      ),
+    );
+    assert.ok(
+      wrongMemberCenter.errors.some(
+        ({ code }) => code === "invalid-animation-progress-formula",
+      ),
+      "成员位置中心必须符合实际组合几何",
+    );
+
+    const zeroFunctionReadback = await validateSlide(
+      rewriteFormulas(firstSlideXml, (formula) => `0*(${formula})`),
+    );
+    const preservedSpinIn = zeroFunctionReadback.slides[0]?.animations
+      ?.flatMap(({ effects }) => effects)
+      .find(({ preset }) => preset === "spinIn");
+    assert.ok(
+      preservedSpinIn?.nativeBehaviors?.some(
+        ({ keyframes }) => keyframes?.[0]?.formula?.startsWith("0*(") === true,
+      ),
+      "不支持的公式仍须保留在读回结果中供诊断",
     );
   });
 

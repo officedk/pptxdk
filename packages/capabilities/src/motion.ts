@@ -628,17 +628,11 @@ function behaviorIds(
       const box = targetBox(effect, "整体文字旋入");
       const center = geometryCenter(box, dimensions);
       const position = centerRotationDelta(effect, center, dimensions, true);
-      const baseRotation = effect.targetRotationDegrees ?? 0;
       const geometry = positionTargets().flatMap((targetElement) => [
         singleMotion("ppt_w", 0, "#ppt_w", false, targetElement),
         singleMotion("ppt_h", 0, "#ppt_h", false, targetElement),
-        singleMotion(
-          "style.rotation",
-          baseRotation + 360,
-          baseRotation,
-          false,
-          targetElement,
-        ),
+        // 段落旋转相对文本框原角度表达，不能再把对象角度加进端点。
+        singleMotion("style.rotation", 360, 0, false, targetElement),
         progressMotion("ppt_x", position[0], targetElement),
         progressMotion("ppt_y", position[1], targetElement),
       ]);

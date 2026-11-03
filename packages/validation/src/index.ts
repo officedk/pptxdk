@@ -67,6 +67,8 @@ export type FileObject = {
     readonly width: number;
     readonly height: number;
   };
+  /** 实际 a:xfrm@rot；未出现时表示原始角度为 0°。 */
+  readonly rotationDegrees?: number;
   readonly image?: {
     readonly relationshipId: string;
     readonly part: string;
@@ -86,6 +88,8 @@ export type FileObject = {
   readonly groupTransform?: {
     readonly childOffset: { readonly x: number; readonly y: number };
     readonly childExtent: { readonly width: number; readonly height: number };
+    readonly flipH?: boolean;
+    readonly flipV?: boolean;
   };
   readonly members?: readonly FileObject[];
   readonly text?: FileText;
@@ -361,10 +365,130 @@ function isPositionBehavior(behavior: FileAnimationBehavior): boolean {
   );
 }
 
+/** 限定读取器本轮写出的共同中心旋转公式，不执行通用公式求值。 */
+type CenterRotationFormula = {
+  readonly axis: "ppt_x" | "ppt_y";
+  readonly centerX: number;
+  readonly centerY: number;
+  readonly angleDegrees: number;
+  readonly scaleToCenter: boolean;
+  readonly aspectRatio: number;
+};
+
+function closeGeometryNumber(left: number, right: number): boolean {
+  return (
+    Math.abs(left - right) <=
+    1e-12 * Math.max(1, Math.abs(left), Math.abs(right))
+  );
+}
+
+function parseCenterRotationFormula(
+  behavior: FileAnimationBehavior,
+): CenterRotationFormula | undefined {
+  const formula = behavior.keyframes?.[0]?.formula;
+  const axis = behavior.attributeNames[0];
+  if (formula === undefined || (axis !== "ppt_x" && axis !== "ppt_y")) {
+    return undefined;
+  }
+  const number = "(-?(?:\\d+(?:\\.\\d*)?|\\.\\d+))";
+  const xPattern = new RegExp(
+    `^${number}\\+(\\$\\*)?\\(\\(#ppt_x-${number}\\)\\*cos\\(\\(${number}\\*pi/180\\)\\*\\(1-\\$\\)\\)-\\(#ppt_y-${number}\\)\\*${number}\\*sin\\(\\(${number}\\*pi/180\\)\\*\\(1-\\$\\)\\)\\)-#ppt_x$`,
+    "u",
+  );
+  const yPattern = new RegExp(
+    `^${number}\\+(\\$\\*)?\\(\\(#ppt_x-${number}\\)\\*${number}\\*sin\\(\\(${number}\\*pi/180\\)\\*\\(1-\\$\\)\\)\\+\\(#ppt_y-${number}\\)\\*cos\\(\\(${number}\\*pi/180\\)\\*\\(1-\\$\\)\\)\\)-#ppt_y$`,
+    "u",
+  );
+  const match = (axis === "ppt_x" ? xPattern : yPattern).exec(formula);
+  if (match === null) return undefined;
+  const captures = match.slice(1);
+  const values = captures.map((value) =>
+    value === undefined || value === "" || value === "$*"
+      ? undefined
+      : Number(value),
+  );
+  const scaleToCenter = captures[1] === "$*";
+  let centerX: number | undefined;
+  let centerY: number | undefined;
+  let aspectRatio: number | undefined;
+  let angleA: number | undefined;
+  let angleB: number | undefined;
+  if (axis === "ppt_x") {
+    const [
+      leadingCenter,
+      ,
+      repeatedCenterX,
+      cosineAngle,
+      repeatedCenterY,
+      ratio,
+      sineAngle,
+    ] = values;
+    if (
+      leadingCenter === undefined ||
+      repeatedCenterX === undefined ||
+      cosineAngle === undefined ||
+      repeatedCenterY === undefined ||
+      ratio === undefined ||
+      sineAngle === undefined ||
+      !closeGeometryNumber(leadingCenter, repeatedCenterX)
+    ) {
+      return undefined;
+    }
+    centerX = leadingCenter;
+    centerY = repeatedCenterY;
+    aspectRatio = ratio;
+    angleA = cosineAngle;
+    angleB = sineAngle;
+  } else {
+    const [
+      leadingCenterY,
+      ,
+      repeatedCenterX,
+      ratio,
+      sineAngle,
+      repeatedCenterY,
+      cosineAngle,
+    ] = values;
+    if (
+      leadingCenterY === undefined ||
+      repeatedCenterX === undefined ||
+      ratio === undefined ||
+      sineAngle === undefined ||
+      repeatedCenterY === undefined ||
+      cosineAngle === undefined ||
+      !closeGeometryNumber(leadingCenterY, repeatedCenterY)
+    ) {
+      return undefined;
+    }
+    centerX = repeatedCenterX;
+    centerY = leadingCenterY;
+    aspectRatio = ratio;
+    angleA = sineAngle;
+    angleB = cosineAngle;
+  }
+  if (
+    centerX === undefined ||
+    centerY === undefined ||
+    aspectRatio === undefined ||
+    angleA === undefined ||
+    angleB === undefined ||
+    !closeGeometryNumber(angleA, angleB)
+  ) {
+    return undefined;
+  }
+  return {
+    axis,
+    centerX,
+    centerY,
+    angleDegrees: angleA,
+    scaleToCenter,
+    aspectRatio,
+  };
+}
+
 /** 校验共同几何的进度载体，不推演公式在任意时刻的位置。 */
 function validCenterRotationProgress(behavior: FileAnimationBehavior): boolean {
   const keyframes = behavior.keyframes;
-  const formula = keyframes?.[0]?.formula;
   return (
     isPositionBehavior(behavior) &&
     behavior.additive === "sum" &&
@@ -377,13 +501,7 @@ function validCenterRotationProgress(behavior: FileAnimationBehavior): boolean {
     keyframes[0]?.value === "0" &&
     keyframes[1]?.valueType === "fltVal" &&
     keyframes[1]?.value === "1" &&
-    formula !== undefined &&
-    formula.includes("$") &&
-    formula.includes("#ppt_x") &&
-    formula.includes("#ppt_y") &&
-    formula.includes("pi") &&
-    formula.includes("cos(") &&
-    formula.includes("sin(")
+    parseCenterRotationFormula(behavior) !== undefined
   );
 }
 
@@ -392,7 +510,11 @@ function hasCompletePositionAxes(
 ): boolean {
   const axesByTarget = new Map<string, string[]>();
   for (const behavior of behaviors.filter(isPositionBehavior)) {
-    const target = JSON.stringify([behavior.targetType, behavior.targetRange]);
+    const target = JSON.stringify([
+      behavior.targetId,
+      behavior.targetType,
+      behavior.targetRange,
+    ]);
     const axes = axesByTarget.get(target) ?? [];
     axes.push(behavior.attributeNames[0] ?? "");
     axesByTarget.set(target, axes);
@@ -405,18 +527,219 @@ function hasCompletePositionAxes(
 function hasConsistentPositionFormulas(
   behaviors: readonly FileAnimationBehavior[],
 ): boolean {
-  // 同一共同中心的段落、背景和成员应使用一致的轴向公式。
-  return ["ppt_x", "ppt_y"].every((axis) => {
-    const formulas = behaviors
-      .filter(
-        (behavior) =>
-          isPositionBehavior(behavior) && behavior.attributeNames[0] === axis,
+  // 同一时间节点内实际写出的段落、背景与成员必须共享参数关系。
+  const formulas = behaviors
+    .filter(isPositionBehavior)
+    .map(parseCenterRotationFormula);
+  const firstFormula = formulas[0];
+  return (
+    firstFormula !== undefined &&
+    formulas.every(
+      (formula) =>
+        formula !== undefined &&
+        closeGeometryNumber(formula.centerX, firstFormula.centerX) &&
+        closeGeometryNumber(formula.centerY, firstFormula.centerY) &&
+        closeGeometryNumber(formula.angleDegrees, firstFormula.angleDegrees) &&
+        formula.scaleToCenter === firstFormula.scaleToCenter,
+    )
+  );
+}
+
+function sameAnimationTarget(
+  left: FileAnimationBehavior,
+  right: FileAnimationBehavior,
+): boolean {
+  return (
+    left.targetId === right.targetId &&
+    left.targetType === right.targetType &&
+    JSON.stringify(left.targetRange) === JSON.stringify(right.targetRange)
+  );
+}
+
+function oneBehaviorForTarget(
+  behaviors: readonly FileAnimationBehavior[],
+  target: FileAnimationBehavior,
+  behaviorName: FileAnimationBehavior["behavior"],
+  attributeName: string,
+): FileAnimationBehavior | undefined {
+  const matches = behaviors.filter(
+    (behavior) =>
+      sameAnimationTarget(behavior, target) &&
+      behavior.behavior === behaviorName &&
+      behavior.attributeNames.length === 1 &&
+      behavior.attributeNames[0] === attributeName,
+  );
+  return matches.length === 1 ? matches[0] : undefined;
+}
+
+function numericEndpoints(
+  behavior: FileAnimationBehavior | undefined,
+): readonly [number, number] | undefined {
+  if (behavior?.from === undefined || behavior.to === undefined) {
+    return undefined;
+  }
+  const from = Number(behavior.from);
+  const to = Number(behavior.to);
+  return Number.isFinite(from) && Number.isFinite(to) ? [from, to] : undefined;
+}
+
+function hasLinearNumericEndpoints(
+  behavior: FileAnimationBehavior,
+  from: string,
+  to: string,
+): boolean {
+  return (
+    behavior.calculationMode === "lin" &&
+    behavior.keyframes?.length === 2 &&
+    behavior.keyframes[0]?.time === 0 &&
+    behavior.keyframes[0]?.valueType === "fltVal" &&
+    behavior.keyframes[0]?.value === from &&
+    behavior.keyframes[1]?.time === 100000 &&
+    behavior.keyframes[1]?.valueType === "fltVal" &&
+    behavior.keyframes[1]?.value === to
+  );
+}
+
+function hasSpinInScale(
+  behaviors: readonly FileAnimationBehavior[],
+  position: FileAnimationBehavior,
+  axis: "ppt_w" | "ppt_h",
+): boolean {
+  const scale = oneBehaviorForTarget(behaviors, position, "anim", axis);
+  return (
+    scale !== undefined &&
+    scale.additive === undefined &&
+    scale.calculationMode === "lin" &&
+    scale.from === "0" &&
+    scale.to === `#${axis}` &&
+    scale.durationMs === position.durationMs &&
+    scale.keyframes?.length === 2 &&
+    scale.keyframes[0]?.time === 0 &&
+    scale.keyframes[0]?.valueType === "fltVal" &&
+    scale.keyframes[0]?.value === "0" &&
+    scale.keyframes[1]?.time === 100000 &&
+    scale.keyframes[1]?.valueType === "strVal" &&
+    scale.keyframes[1]?.value === `#${axis}`
+  );
+}
+
+function spinAngleForPosition(
+  preset: FileAnimationEffect["preset"],
+  position: FileAnimationBehavior,
+  behaviors: readonly FileAnimationBehavior[],
+): number | undefined {
+  if (preset === "spin") {
+    const rotation = oneBehaviorForTarget(behaviors, position, "animRot", "r");
+    const endpoints = numericEndpoints(rotation);
+    if (
+      rotation === undefined ||
+      rotation.additive !== "sum" ||
+      endpoints === undefined ||
+      rotation.durationMs !== position.durationMs
+    ) {
+      return undefined;
+    }
+    return (endpoints[0] - endpoints[1]) / 60000;
+  }
+  if (preset !== "spinIn") return undefined;
+  if (
+    !hasSpinInScale(behaviors, position, "ppt_w") ||
+    !hasSpinInScale(behaviors, position, "ppt_h")
+  ) {
+    return undefined;
+  }
+  if (position.targetType === "background") {
+    const rotation = oneBehaviorForTarget(behaviors, position, "animRot", "r");
+    const endpoints = numericEndpoints(rotation);
+    if (
+      rotation === undefined ||
+      rotation.additive !== "sum" ||
+      endpoints === undefined ||
+      rotation.durationMs !== position.durationMs
+    ) {
+      return undefined;
+    }
+    return (endpoints[0] - endpoints[1]) / 60000;
+  }
+  const rotation = oneBehaviorForTarget(
+    behaviors,
+    position,
+    "anim",
+    "style.rotation",
+  );
+  const endpoints = numericEndpoints(rotation);
+  if (
+    rotation === undefined ||
+    rotation.additive !== undefined ||
+    endpoints === undefined ||
+    !closeGeometryNumber(endpoints[0], 360) ||
+    !closeGeometryNumber(endpoints[1], 0) ||
+    !hasLinearNumericEndpoints(rotation, "360", "0") ||
+    rotation.durationMs !== position.durationMs
+  ) {
+    return undefined;
+  }
+  return endpoints[0] - endpoints[1];
+}
+
+/** 按页面尺寸、对象几何和对应的原生旋转／缩放参数核对实际位置公式。 */
+function validCenterRotationGeometry(
+  preset: FileAnimationEffect["preset"],
+  behaviors: readonly FileAnimationBehavior[],
+  objects: readonly FileObject[],
+  widthEmu: number,
+  heightEmu: number,
+): boolean {
+  const positions = behaviors.filter(isPositionBehavior);
+  if (positions.length === 0) return true;
+  const parsed = positions.map(parseCenterRotationFormula);
+  const firstFormula = parsed[0];
+  if (
+    firstFormula === undefined ||
+    (preset !== "spin" && preset !== "spinIn") ||
+    firstFormula.scaleToCenter !== (preset === "spinIn")
+  ) {
+    return false;
+  }
+  const expectedRatios = {
+    ppt_x: heightEmu / widthEmu,
+    ppt_y: widthEmu / heightEmu,
+  } as const;
+  return positions.every((position, index) => {
+    const formula = parsed[index];
+    if (
+      formula === undefined ||
+      formula.scaleToCenter !== (preset === "spinIn") ||
+      !closeGeometryNumber(formula.centerX, firstFormula.centerX) ||
+      !closeGeometryNumber(formula.centerY, firstFormula.centerY) ||
+      !closeGeometryNumber(formula.angleDegrees, firstFormula.angleDegrees) ||
+      !closeGeometryNumber(formula.aspectRatio, expectedRatios[formula.axis])
+    ) {
+      return false;
+    }
+    const geometry = motionTargetGeometry(
+      objects,
+      position.targetId,
+      widthEmu,
+      heightEmu,
+    );
+    if (geometry === undefined || !geometry.supported) return false;
+    const centers =
+      preset === "spin"
+        ? [geometry.objectCenter, ...geometry.containingGroupCenters]
+        : [geometry.objectCenter];
+    if (
+      !centers.some(
+        (center) =>
+          closeGeometryNumber(formula.centerX, center.x) &&
+          closeGeometryNumber(formula.centerY, center.y),
       )
-      .map((behavior) => behavior.keyframes?.[0]?.formula);
+    ) {
+      return false;
+    }
+    const angle = spinAngleForPosition(preset, position, behaviors);
     return (
-      formulas.length === 0 ||
-      (formulas.every((formula) => formula !== undefined) &&
-        new Set(formulas).size === 1)
+      angle !== undefined && closeGeometryNumber(formula.angleDegrees, angle)
     );
   });
 }
@@ -675,6 +998,13 @@ function decimalAttribute(
   if (value === "") return undefined;
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : undefined;
+}
+
+function readRotationDegrees(
+  transform: XmlElement | undefined,
+): number | undefined {
+  const rotation = integerAttribute(transform, "rot");
+  return rotation === undefined ? undefined : rotation / 60000;
 }
 
 type ThemeTextReader = {
@@ -1401,6 +1731,7 @@ function validateShape(
     properties === undefined
       ? undefined
       : first(properties, drawingNamespace, "xfrm");
+  const rotation = readRotationDegrees(transform);
   const offset =
     transform === undefined
       ? undefined
@@ -1439,6 +1770,7 @@ function validateShape(
     kind: "shape",
     geometry: geometryName,
     boxEmu: { x, y, width, height },
+    ...(rotation === undefined ? {} : { rotationDegrees: rotation }),
     ...(text === undefined ? {} : { text }),
   };
 }
@@ -1534,15 +1866,18 @@ function validatePicture(
     );
     return undefined;
   }
-  const boxEmu = transformBox(
+  const transform =
     properties === undefined
       ? undefined
-      : first(properties, drawingNamespace, "xfrm"),
+      : first(properties, drawingNamespace, "xfrm");
+  const boxEmu = transformBox(
+    transform,
     part,
     identity.name,
     "picture",
     errors,
   );
+  const rotation = readRotationDegrees(transform);
   const fill = first(picture, presentationNamespace, "blipFill");
   const blip =
     fill === undefined ? undefined : first(fill, drawingNamespace, "blip");
@@ -1644,6 +1979,7 @@ function validatePicture(
     kind: "image",
     geometry: geometryName,
     boxEmu,
+    ...(rotation === undefined ? {} : { rotationDegrees: rotation }),
     ...(image === undefined ? {} : { image }),
     ...(Object.keys(crop).length === 0 ? {} : { crop }),
   };
@@ -2220,6 +2556,7 @@ function validateGroup(
       ? undefined
       : first(properties, drawingNamespace, "xfrm");
   const boxEmu = transformBox(transform, part, identity.name, "group", errors);
+  const rotation = readRotationDegrees(transform);
   const childOffset =
     transform === undefined
       ? undefined
@@ -2277,8 +2614,17 @@ function validateGroup(
               width: childWidth ?? 0,
               height: childHeight ?? 0,
             },
+            ...(transform !== undefined &&
+            ["1", "true"].includes(attribute(transform, "flipH"))
+              ? { flipH: true }
+              : {}),
+            ...(transform !== undefined &&
+            ["1", "true"].includes(attribute(transform, "flipV"))
+              ? { flipV: true }
+              : {}),
           },
         }),
+    ...(rotation === undefined ? {} : { rotationDegrees: rotation }),
     members,
   };
 }
@@ -3328,6 +3674,93 @@ function findObjectById(
   return undefined;
 }
 
+type MotionPoint = { readonly x: number; readonly y: number };
+type ObjectCoordinateTransform = {
+  readonly offsetX: number;
+  readonly offsetY: number;
+  readonly scaleX: number;
+  readonly scaleY: number;
+};
+type MotionTargetGeometry = {
+  readonly objectCenter: MotionPoint;
+  readonly containingGroupCenters: readonly MotionPoint[];
+  readonly supported: boolean;
+};
+
+/** 按实际组合 off/ext/chOff/chExt 把成员中心映射到页面坐标。 */
+function motionTargetGeometry(
+  objects: readonly FileObject[],
+  targetId: number,
+  widthEmu: number,
+  heightEmu: number,
+): MotionTargetGeometry | undefined {
+  if (widthEmu <= 0 || heightEmu <= 0) return undefined;
+  const identity: ObjectCoordinateTransform = {
+    offsetX: 0,
+    offsetY: 0,
+    scaleX: 1,
+    scaleY: 1,
+  };
+  let found: MotionTargetGeometry | undefined;
+  const visit = (
+    candidates: readonly FileObject[],
+    transform: ObjectCoordinateTransform,
+    containingGroupCenters: readonly MotionPoint[],
+    supported: boolean,
+  ): void => {
+    for (const object of candidates) {
+      const box = object.boxEmu;
+      const pageX = transform.offsetX + box.x * transform.scaleX;
+      const pageY = transform.offsetY + box.y * transform.scaleY;
+      const objectCenter = {
+        x: (pageX + (box.width * transform.scaleX) / 2) / widthEmu,
+        y: (pageY + (box.height * transform.scaleY) / 2) / heightEmu,
+      };
+      if (object.id === targetId) {
+        found = {
+          objectCenter,
+          containingGroupCenters,
+          supported,
+        };
+        return;
+      }
+      if (object.kind !== "group") continue;
+      const groupCenters = [...containingGroupCenters, objectCenter];
+      const groupTransform = object.groupTransform;
+      const transformSupported =
+        groupTransform !== undefined &&
+        groupTransform.childExtent.width > 0 &&
+        groupTransform.childExtent.height > 0 &&
+        groupTransform.flipH !== true &&
+        groupTransform.flipV !== true &&
+        closeGeometryNumber((object.rotationDegrees ?? 0) % 360, 0);
+      if (!transformSupported || groupTransform === undefined) {
+        visit(object.members ?? [], transform, groupCenters, false);
+        if (found !== undefined) return;
+        continue;
+      }
+      const localScaleX = box.width / groupTransform.childExtent.width;
+      const localScaleY = box.height / groupTransform.childExtent.height;
+      const childTransform: ObjectCoordinateTransform = {
+        offsetX:
+          transform.offsetX +
+          (box.x - groupTransform.childOffset.x * localScaleX) *
+            transform.scaleX,
+        offsetY:
+          transform.offsetY +
+          (box.y - groupTransform.childOffset.y * localScaleY) *
+            transform.scaleY,
+        scaleX: transform.scaleX * localScaleX,
+        scaleY: transform.scaleY * localScaleY,
+      };
+      visit(object.members ?? [], childTransform, groupCenters, supported);
+      if (found !== undefined) return;
+    }
+  };
+  visit(objects, identity, [], true);
+  return found;
+}
+
 type TimingTreeNode = {
   readonly wrapper: XmlElement;
   readonly timeNode: XmlElement;
@@ -3347,6 +3780,7 @@ function readSlideAnimations(
   slide: XmlElement,
   part: string,
   objects: readonly FileObject[],
+  slideSize: { readonly widthEmu: number; readonly heightEmu: number },
   errors: ValidationIssue[],
 ): SlideAnimationRead | undefined {
   const timingNodes = elements(slide, presentationNamespace, "timing");
@@ -4458,15 +4892,21 @@ function readSlideAnimations(
           !hasConsistentPositionFormulas(nativeBehaviors) ||
           nativeBehaviors
             .filter(isPositionBehavior)
-            .some((behavior) => !validCenterRotationProgress(behavior)))
+            .some((behavior) => !validCenterRotationProgress(behavior)) ||
+          !validCenterRotationGeometry(
+            preset,
+            nativeBehaviors,
+            objects,
+            slideSize.widthEmu,
+            slideSize.heightEmu,
+          ))
       ) {
         issue(
           errors,
           part,
           "invalid-animation-progress-formula",
-          "共同中心自转的位置行为必须保留成对坐标、sum 叠加及 0→1 公式进度",
+          "共同中心自转的位置公式不受支持或与实际几何、角度、缩放及进度参数不一致",
         );
-        continue;
       }
       const targetRange = fullParagraphProjection ? undefined : ranges[0];
       let fromColor: string | undefined;
@@ -4952,6 +5392,10 @@ function readPresentation(
       slideRoot,
       slidePath,
       objects,
+      {
+        widthEmu: widthEmu ?? 0,
+        heightEmu: heightEmu ?? 0,
+      },
       errors,
     );
     for (const extension of transition.extensions) {

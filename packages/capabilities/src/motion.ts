@@ -1,4 +1,5 @@
 import {
+  CapabilityError,
   xmlEscape,
   type CapabilityInput,
   type SlideCapabilityModule,
@@ -11,17 +12,24 @@ import type {
   MotionObservation,
   MotionStartDependency,
 } from "./motion-api.ts";
-import { motionScopeAnnotation } from "./motion-api.ts";
-import { compileMotionPlan, type MotionPlanStep } from "./motion-plan.ts";
+import { maximumTimeNodeValue, motionScopeAnnotation } from "./motion-api.ts";
+import {
+  compileMotionPlan,
+  type MotionPlanNode,
+  type MotionPlanStart,
+  type MotionPlanStep,
+} from "./motion-plan.ts";
 
 export {
   after,
+  breathe,
   Box,
   MotionScope,
   Step,
   fade,
   fly,
   floatUp,
+  repeat,
   spin,
   spinIn,
   stretch,
@@ -35,8 +43,12 @@ export type {
   Effect,
   EffectOptions,
   EffectPreset,
+  BreatheEffect,
+  BreatheOptions,
   EmphasisEffect,
+  EmphasisEffectDeclaration,
   EntranceEffect,
+  EntranceEffectDeclaration,
   MotionCompletionState,
   MotionDirection,
   MotionGranularity,
@@ -53,10 +65,52 @@ export type {
   MotionTargetRange,
   MotionTiming,
   MotionStepObservation,
+  RepeatCount,
+  RepeatedEffect,
   StepProps,
 } from "./motion-api.ts";
 
 type XmlAttributes = Record<string, string | number | boolean | undefined>;
+
+function invalidMotionTime(field: string): never {
+  throw new CapabilityError(
+    "invalid-motion-time",
+    `${field} 必须是精确的非负整数毫秒，且实际写入时不得超过 ST_TLTime 范围`,
+  );
+}
+
+// 累计总时长可由 repeat 表达；只有实际投影到 ST_TLTime 的字段受其上限约束。
+function validateKnownTime(value: number | undefined, field: string): void {
+  if (value !== undefined && (!Number.isSafeInteger(value) || value < 0)) {
+    invalidMotionTime(field);
+  }
+}
+
+function timeNodeValue(value: number, field: string): number {
+  validateKnownTime(value, field);
+  if (value > maximumTimeNodeValue) invalidMotionTime(field);
+  return value;
+}
+
+function validateKnownMotionTimes(observation: MotionObservation): void {
+  for (const scope of observation.scopes ?? []) {
+    validateKnownTime(scope.delayMs, "编排作用域延迟");
+    validateKnownTime(scope.eachMs, "交错间隔");
+    validateKnownTime(scope.startMs, "编排作用域起点");
+    validateKnownTime(scope.endMs, "编排作用域完成时刻");
+    validateKnownTime(scope.startAfter?.offsetMs, "作用域完成依赖偏移");
+  }
+  for (const step of observation.steps) {
+    for (const effect of step.effects) {
+      validateKnownTime(effect.durationMs, "动画时长");
+      validateKnownTime(effect.delayMs, "动画延迟");
+      validateKnownTime(effect.intervalMs, "动画迭代间隔");
+      validateKnownTime(effect.startMs, "动画起点");
+      validateKnownTime(effect.endMs, "动画完成时刻");
+      validateKnownTime(effect.startAfter?.offsetMs, "动画完成依赖偏移");
+    }
+  }
+}
 
 function element(
   name: string,
@@ -134,6 +188,18 @@ function direction(effect: MotionEffectObservation): MotionDirection {
 function behaviorIds(effect: TimingEffect, ids: TimingIds): readonly string[] {
   const target = () => timingTarget(effect);
   const duration = effect.durationMs;
+  validateKnownTime(duration, "动画时长");
+  if (effect.preset === "breathe") {
+    timeNodeValue(Math.round(duration / 2), "呼吸半周期");
+  } else {
+    timeNodeValue(duration, "动画行为时长");
+  }
+  if (effect.repeatCount !== undefined && effect.repeatCount !== "forever") {
+    timeNodeValue(effect.repeatCount * 1000, "动画重复次数");
+  }
+  if (effect.intervalMs !== undefined) {
+    timeNodeValue(effect.intervalMs, "动画迭代间隔");
+  }
   const show = () =>
     element(
       "p:set",
@@ -267,18 +333,52 @@ function behaviorIds(effect: TimingEffect, ids: TimingIds): readonly string[] {
           ),
         ),
       ];
+    case "breathe":
+      return [
+        element(
+          "p:animClr",
+          { clrSpc: "rgb" },
+          element(
+            "p:cBhvr",
+            undefined,
+            element("p:cTn", {
+              id: ids.take(),
+              dur: Math.round(duration / 2),
+              fill: "hold",
+            }),
+            target(),
+            attributeNames("fillcolor"),
+          ),
+          element(
+            "p:from",
+            undefined,
+            element("a:srgbClr", {
+              val: effect.fromColor?.slice(1),
+            }),
+          ),
+          element(
+            "p:to",
+            undefined,
+            element("a:srgbClr", {
+              val: effect.toColor?.slice(1),
+            }),
+          ),
+        ),
+      ];
   }
 }
 
 function effectTree(
   effect: TimingEffect,
   nodeType: string,
-  delay: number,
+  startCondition: string,
   ids: TimingIds,
   effectId: number,
   buildGroupId?: number,
-  dependencyId?: number,
 ): string {
+  if (effect.startAfter !== undefined) {
+    timeNodeValue(effect.startAfter.offsetMs, "完成依赖偏移");
+  }
   const preset = {
     fade: { id: 10, class: "entr" },
     wipe: { id: 22, class: "entr" },
@@ -288,6 +388,7 @@ function effectTree(
     spinIn: { id: 49, class: "entr" },
     stretch: { id: 17, class: "entr" },
     spin: { id: 8, class: "emph" },
+    breathe: { id: 0, class: "emph" },
   }[effect.preset];
   const subtype =
     effect.preset === "zoom"
@@ -303,6 +404,13 @@ function effectTree(
     presetID: preset.id,
     presetClass: preset.class,
     presetSubtype: subtype,
+    repeatCount:
+      effect.repeatCount === "forever"
+        ? "indefinite"
+        : effect.repeatCount === undefined
+          ? undefined
+          : effect.repeatCount * 1000,
+    autoRev: effect.preset === "breathe" ? true : undefined,
     accel:
       easing?.accelerate === undefined || easing.accelerate === 0
         ? undefined
@@ -321,17 +429,7 @@ function effectTree(
     element(
       "p:cTn",
       properties,
-      element(
-        "p:stCondLst",
-        undefined,
-        effect.startAfter === undefined
-          ? element("p:cond", { delay })
-          : element(
-              "p:cond",
-              { evt: "end", delay: effect.startAfter.offsetMs },
-              element("p:tn", { val: dependencyId }),
-            ),
-      ),
+      element("p:stCondLst", undefined, startCondition),
       effect.by !== "word" && effect.by !== "letter"
         ? undefined
         : element(
@@ -345,9 +443,100 @@ function effectTree(
   );
 }
 
-function effectKey(effect: TimingEffect | MotionStartDependency): string {
-  const targetId = "target" in effect ? effect.target.id : effect.targetId;
-  return `${targetId}:${effect.effectIndex}:${"partIndex" in effect ? (effect.partIndex ?? "") : ""}`;
+function effectKey(effect: TimingEffect): string {
+  return `${effect.target.id}:${effect.effectIndex}:${effect.partIndex ?? ""}`;
+}
+
+function startAfterDelay(
+  start: MotionPlanStart,
+  delayMs: number,
+): MotionPlanStart {
+  return start.kind === "parent-start"
+    ? { kind: start.kind, delayMs: start.delayMs + delayMs }
+    : {
+        kind: start.kind,
+        dependency: {
+          ...start.dependency,
+          offsetMs: start.dependency.offsetMs + delayMs,
+        },
+      };
+}
+
+function dependencyTimingId(
+  dependency: MotionStartDependency,
+  stepKey: string,
+  effectNodeIds: ReadonlyMap<string, number>,
+  scopeNodeIds: ReadonlyMap<string, number>,
+  targetGroupIds: ReadonlyMap<string, number>,
+): number | undefined {
+  if ("scopeId" in dependency) {
+    return scopeNodeIds.get(`${stepKey}:${dependency.scopeId}`);
+  }
+  if ("group" in dependency) {
+    return targetGroupIds.get(`${stepKey}:${dependency.targetId}`);
+  }
+  return effectNodeIds.get(
+    `${dependency.targetId}:${dependency.effectIndex}:${dependency.partIndex ?? ""}`,
+  );
+}
+
+function nativeStartCondition(
+  start: MotionPlanStart,
+  stepKey: string,
+  effectNodeIds: ReadonlyMap<string, number>,
+  scopeNodeIds: ReadonlyMap<string, number>,
+  targetGroupIds: ReadonlyMap<string, number>,
+): string {
+  if (start.kind === "parent-start") {
+    return element("p:cond", {
+      delay: timeNodeValue(start.delayMs, "动画起点延迟"),
+    });
+  }
+  const dependencyId = dependencyTimingId(
+    start.dependency,
+    stepKey,
+    effectNodeIds,
+    scopeNodeIds,
+    targetGroupIds,
+  );
+  if (dependencyId === undefined) {
+    throw new Error("MotionPlan 完成依赖没有对应的原生时序节点");
+  }
+  return element(
+    "p:cond",
+    {
+      evt: "end",
+      delay: timeNodeValue(start.dependency.offsetMs, "完成依赖偏移"),
+    },
+    element("p:tn", { val: dependencyId }),
+  );
+}
+
+function endSync(): string {
+  // 容器等全部真实子节点自然结束；不从这些子项估算聚合数值时长。
+  return element(
+    "p:endSync",
+    { evt: "end", delay: 0 },
+    element("p:rtn", { val: "all" }),
+  );
+}
+
+function timingContainer(
+  id: number,
+  startCondition: string,
+  children: readonly string[],
+): string {
+  return element(
+    "p:par",
+    undefined,
+    element(
+      "p:cTn",
+      { id, fill: "hold" },
+      element("p:stCondLst", undefined, startCondition),
+      endSync(),
+      element("p:childTnLst", undefined, ...children),
+    ),
+  );
 }
 
 function timingXml(steps: readonly MotionPlanStep[]): string {
@@ -355,10 +544,29 @@ function timingXml(steps: readonly MotionPlanStep[]): string {
   const rootId = ids.take();
   const sequenceId = ids.take();
   const effectNodeIds = new Map<string, number>();
-  for (const step of steps) {
-    for (const effect of step.effects) {
-      effectNodeIds.set(effectKey(effect), ids.take());
+  const scopeNodeIds = new Map<string, number>();
+  const targetGroupIds = new Map<string, number>();
+
+  const registerNodeIds = (
+    nodes: readonly MotionPlanNode[],
+    stepKey: string,
+  ): void => {
+    for (const node of nodes) {
+      if (node.kind === "scope") {
+        scopeNodeIds.set(`${stepKey}:${node.id}`, ids.take());
+        registerNodeIds(node.children, stepKey);
+        continue;
+      }
+      if (node.effects.length > 1) {
+        targetGroupIds.set(`${stepKey}:${node.targetId}`, ids.take());
+      }
+      for (const effect of node.effects) {
+        effectNodeIds.set(effectKey(effect), ids.take());
+      }
     }
+  };
+  for (const step of steps) {
+    registerNodeIds(step.nodes, step.key);
   }
   const chartBuildGroupIds = new Map<number, number>();
   for (const step of steps) {
@@ -375,52 +583,6 @@ function timingXml(steps: readonly MotionPlanStep[]): string {
   }
   const stepGroups = steps.map((step) => {
     const stepId = ids.take();
-    const ordered = step.effects
-      .map((effect) => effect as TimingEffect)
-      .sort(
-        (left, right) =>
-          (left.startMs ?? Number.MAX_SAFE_INTEGER) -
-            (right.startMs ?? Number.MAX_SAFE_INTEGER) ||
-          left.target.id - right.target.id,
-      );
-    const groups: {
-      start: number;
-      effects: { readonly effect: TimingEffect; readonly nodeType: string }[];
-    }[] = [];
-    let ended = 0;
-    ordered.forEach((effect, index) => {
-      const current = groups.at(-1);
-      if (effect.startAfter !== undefined) {
-        groups.push({
-          start: 0,
-          effects: [{ effect, nodeType: "afterEffect" }],
-        });
-        return;
-      }
-      if (effect.startMs === undefined) {
-        throw new Error("MotionPlan 数值起点缺失且没有原生完成关系");
-      }
-      if (index === 0) {
-        groups.push({
-          start: effect.startMs,
-          effects: [
-            {
-              effect,
-              nodeType:
-                step.trigger === "click" ? "clickEffect" : "afterEffect",
-            },
-          ],
-        });
-      } else if (current !== undefined && effect.startMs < ended) {
-        current.effects.push({ effect, nodeType: "withEffect" });
-      } else {
-        groups.push({
-          start: ended,
-          effects: [{ effect, nodeType: "afterEffect" }],
-        });
-      }
-      if (effect.endMs !== undefined) ended = Math.max(ended, effect.endMs);
-    });
     const trigger =
       step.trigger === "click"
         ? element("p:cond", { delay: "indefinite" })
@@ -429,55 +591,95 @@ function timingXml(steps: readonly MotionPlanStep[]): string {
             { evt: "onBegin", delay: 0 },
             element("p:tn", { val: sequenceId }),
           )}`;
-    const groupXml = groups.map((group) => {
-      const groupId = ids.take();
-      return element(
-        "p:par",
-        undefined,
-        element(
-          "p:cTn",
-          { id: groupId, fill: "hold" },
-          element(
-            "p:stCondLst",
-            undefined,
-            element("p:cond", { delay: group.start }),
-          ),
-          element(
-            "p:childTnLst",
-            undefined,
-            ...group.effects.map(({ effect, nodeType }) => {
-              const dependencyId =
-                effect.startAfter === undefined
-                  ? undefined
-                  : effectNodeIds.get(effectKey(effect.startAfter));
-              const effectId = effectNodeIds.get(effectKey(effect));
-              const buildGroupId =
-                effect.target.range?.type === "chart"
-                  ? chartBuildGroupIds.get(effect.target.id)
-                  : undefined;
-              if (effectId === undefined) {
-                throw new Error("MotionPlan 效果缺少原生时间节点身份");
-              }
-              if (
-                effect.startAfter !== undefined &&
-                dependencyId === undefined
-              ) {
-                throw new Error("MotionPlan 单前驱完成事件不存在");
-              }
-              return effectTree(
-                effect,
-                nodeType,
-                effect.startMs === undefined ? 0 : effect.startMs - group.start,
-                ids,
-                effectId,
-                buildGroupId,
-                dependencyId,
-              );
-            }),
-          ),
-        ),
-      );
-    });
+    const renderNodes = (
+      nodes: readonly MotionPlanNode[],
+      isTopLevel: boolean,
+    ): string[] =>
+      nodes.map((node, index) => {
+        const nodeType =
+          index === 0 && isTopLevel && step.trigger === "click"
+            ? "clickEffect"
+            : index === 0
+              ? "afterEffect"
+              : "withEffect";
+        const condition = nativeStartCondition(
+          node.nativeStart,
+          step.key,
+          effectNodeIds,
+          scopeNodeIds,
+          targetGroupIds,
+        );
+        if (node.kind === "scope") {
+          const scopeId = scopeNodeIds.get(`${step.key}:${node.id}`);
+          if (scopeId === undefined) {
+            throw new Error("MotionPlan 作用域缺少原生时间节点身份");
+          }
+          const children = renderNodes(node.children, false);
+          return timingContainer(scopeId, condition, children);
+        }
+        const childDelay = (effect: TimingEffect): number =>
+          timeNodeValue(
+            effect.delayMs + (effect.partIndex ?? 0) * effect.durationMs,
+            "动画对象成员延迟",
+          );
+        if (node.effects.length > 1) {
+          const groupId = targetGroupIds.get(`${step.key}:${node.targetId}`);
+          if (groupId === undefined) {
+            throw new Error("MotionPlan 对象成员缺少原生聚合节点身份");
+          }
+          const children = node.effects.map((effect, effectIndex) => {
+            const effectId = effectNodeIds.get(effectKey(effect));
+            if (effectId === undefined) {
+              throw new Error("MotionPlan 效果缺少原生时间节点身份");
+            }
+            const buildGroupId =
+              effect.target.range?.type === "chart"
+                ? chartBuildGroupIds.get(effect.target.id)
+                : undefined;
+            return effectTree(
+              effect,
+              effectIndex === 0 ? "afterEffect" : "withEffect",
+              element("p:cond", { delay: childDelay(effect) }),
+              ids,
+              effectId,
+              buildGroupId,
+            );
+          });
+          return timingContainer(groupId, condition, children);
+        }
+        const [effect] = node.effects;
+        if (effect === undefined) {
+          throw new Error("MotionPlan 对象成员没有效果节点");
+        }
+        const effectId = effectNodeIds.get(effectKey(effect));
+        if (effectId === undefined) {
+          throw new Error("MotionPlan 效果缺少原生时间节点身份");
+        }
+        const localStart = startAfterDelay(
+          node.nativeStart,
+          childDelay(effect),
+        );
+        const effectCondition = nativeStartCondition(
+          localStart,
+          step.key,
+          effectNodeIds,
+          scopeNodeIds,
+          targetGroupIds,
+        );
+        const buildGroupId =
+          effect.target.range?.type === "chart"
+            ? chartBuildGroupIds.get(effect.target.id)
+            : undefined;
+        return effectTree(
+          effect,
+          nodeType,
+          effectCondition,
+          ids,
+          effectId,
+          buildGroupId,
+        );
+      });
+    const stepChildren = renderNodes(step.nodes, true);
     return element(
       "p:par",
       undefined,
@@ -485,7 +687,7 @@ function timingXml(steps: readonly MotionPlanStep[]): string {
         "p:cTn",
         { id: stepId, fill: "hold" },
         element("p:stCondLst", undefined, trigger),
-        element("p:childTnLst", undefined, ...groupXml),
+        element("p:childTnLst", undefined, ...stepChildren),
       ),
     );
   });
@@ -604,6 +806,7 @@ export const motionCapability: SlideCapabilityModule = Object.freeze({
   ],
   compileSlide(_input: CapabilityInput, context) {
     const plan = compileMotionPlan(context.contributions);
+    validateKnownMotionTimes(plan.observation);
     const hasEffects = plan.steps.some((step) => step.effects.length > 0);
     if (!hasEffects) {
       return {

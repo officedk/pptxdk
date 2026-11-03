@@ -25,7 +25,10 @@ export type EffectPreset =
   | "floatUp"
   | "spinIn"
   | "stretch"
-  | "spin";
+  | "spin"
+  | "breathe";
+
+export type RepeatCount = number | "forever";
 
 export type MotionGranularity =
   | "paragraph"
@@ -43,13 +46,26 @@ export type MotionTargetRange =
       readonly categoryIndex: number;
     };
 
-export type MotionStartDependency = {
-  readonly targetId: number;
-  readonly effectIndex: number;
-  readonly partIndex?: number;
-  readonly point: "end";
-  readonly offsetMs: number;
-};
+/** 未知起点指向效果、同对象效果集合或真实作用域完成事件。 */
+export type MotionStartDependency =
+  | {
+      readonly targetId: number;
+      readonly effectIndex: number;
+      readonly partIndex?: number;
+      readonly point: "end";
+      readonly offsetMs: number;
+    }
+  | {
+      readonly targetId: number;
+      readonly group: "effects";
+      readonly point: "end";
+      readonly offsetMs: number;
+    }
+  | {
+      readonly scopeId: string;
+      readonly point: "end";
+      readonly offsetMs: number;
+    };
 
 export type Effect = {
   readonly type: "effect";
@@ -59,6 +75,8 @@ export type Effect = {
   readonly duration: number;
   readonly delay: number;
   readonly from?: MotionDirection | number;
+  readonly fromColor?: string;
+  readonly toColor?: string;
   readonly easing?: Easing;
   /** 文字按段落、词或字展开，图表按系列或分类展开。 */
   readonly by?: MotionGranularity;
@@ -101,6 +119,41 @@ export type MotionScopeHandle = {
 
 export type EntranceEffect = Effect & { readonly kind: "entrance" };
 export type EmphasisEffect = Effect & { readonly kind: "emphasis" };
+export type RepeatedEffect<E extends Effect = Effect> = {
+  readonly type: "repeated-effect";
+  readonly effect: E;
+  readonly count: RepeatCount;
+};
+export type EntranceEffectDeclaration =
+  | EntranceEffect
+  | RepeatedEffect<EntranceEffect>;
+export type EmphasisEffectDeclaration =
+  | EmphasisEffect
+  | RepeatedEffect<EmphasisEffect>;
+
+export type BreatheOptions = {
+  /** 完整的暗→亮→暗周期，单位为偶数毫秒。 */
+  readonly period: number;
+  /** 周期起点的暗色；播放开始时动画从此颜色起步。 */
+  readonly from: string;
+  /** 半周期终点的亮色。 */
+  readonly to: string;
+  /** 相对所属触发起点的延迟，单位为毫秒。 */
+  readonly delay?: number;
+  /** 加速和减速各占完整周期的比例，合计不能超过 1。 */
+  readonly easing?: Easing;
+};
+
+export type BreatheEffect = EmphasisEffect & {
+  readonly preset: "breathe";
+  readonly fromColor: string;
+  readonly toColor: string;
+};
+
+/** repeat() 校验后的内部效果；作者必须通过 RepeatedEffect 声明轮数。 */
+export type NormalizedEffect = Effect & {
+  readonly repeatCount?: RepeatCount;
+};
 
 export type EffectOptions = {
   /** 单次效果行为时长，单位为毫秒；细粒度展开的完成总长不由此值表示。 */
@@ -117,9 +170,11 @@ export type EffectOptions = {
 
 export type MotionProps = {
   /** 对象进入效果；数组中的效果从同一触发起点并行开始。 */
-  readonly enter?: EntranceEffect | readonly EntranceEffect[];
+  readonly enter?:
+    | EntranceEffectDeclaration
+    | readonly EntranceEffectDeclaration[];
   /** 对已显示对象应用的强调效果。 */
-  readonly emphasis?: EmphasisEffect;
+  readonly emphasis?: EmphasisEffectDeclaration;
   /** 设为 false 可禁用此对象及其后代的动效。 */
   readonly motion?: boolean;
 };
@@ -173,7 +228,9 @@ type MotionContextValue = {
   readonly enabled: boolean;
   readonly step?: StepDeclaration;
   readonly scopes: readonly MotionScopeDeclaration[];
-  readonly defaultEnter?: EntranceEffect | readonly EntranceEffect[];
+  readonly defaultEnter?:
+    | EntranceEffectDeclaration
+    | readonly EntranceEffectDeclaration[];
 };
 
 const motionContext = createContext<MotionContextValue>({
@@ -384,6 +441,56 @@ export function spin(
   ) as EmphasisEffect;
 }
 
+// 保留结构化 JavaScript 输入中的额外选项，交由正式效果校验诊断。
+const breatheUnknownParameters = Symbol("breathe unknown parameters");
+const breatheOptionNames = new Set([
+  "period",
+  "delay",
+  "from",
+  "to",
+  "easing",
+  "by",
+  "intervalMs",
+]);
+
+/** 声明 Shape 填充色暗→亮的半周期；原生 autoRev 完成反向，形成完整周期。 */
+export function breathe(options: BreatheOptions): BreatheEffect {
+  const { period, delay = 0, from, to } = options;
+  const optionRecord = options as unknown as Record<string, unknown>;
+  const by = optionRecord["by"];
+  const intervalMs = optionRecord["intervalMs"];
+  const unknownParameters = Object.keys(optionRecord).filter(
+    (key) => !breatheOptionNames.has(key),
+  );
+  const rawEasing: unknown = options.easing;
+  const easing = isRecord(rawEasing)
+    ? Object.freeze({ ...rawEasing })
+    : rawEasing;
+  return Object.freeze({
+    type: "effect",
+    kind: "emphasis",
+    preset: "breathe",
+    duration: period,
+    delay,
+    fromColor: from,
+    toColor: to,
+    ...(easing === undefined ? {} : { easing: easing as Easing }),
+    ...(by === undefined ? {} : { by }),
+    ...(intervalMs === undefined ? {} : { intervalMs }),
+    ...(unknownParameters.length === 0
+      ? {}
+      : { [breatheUnknownParameters]: unknownParameters }),
+  }) as unknown as BreatheEffect;
+}
+
+/** 将受支持效果包装为指定总轮数；forever 只适用于 breathe。 */
+export function repeat<E extends Effect>(
+  effect: E,
+  count: RepeatCount,
+): RepeatedEffect<E> {
+  return Object.freeze({ type: "repeated-effect", effect, count });
+}
+
 /** 一次点击触发一组对象；相同编号的声明共用点击步。 */
 export function Step({ n, children }: StepProps): ReactNode {
   const parent = useContext(motionContext);
@@ -424,6 +531,7 @@ type MotionTarget = {
   readonly name: string;
   readonly testId?: string;
   readonly textBody: boolean;
+  readonly hasTextCharacters?: boolean;
   readonly filled: boolean;
   readonly paragraphCount?: number;
   readonly chartSeriesCount?: number;
@@ -434,7 +542,7 @@ type MotionValue = {
   readonly target: MotionTarget;
   readonly step?: StepDeclaration;
   readonly scopes: readonly MotionScopeDeclaration[];
-  readonly effects: readonly Effect[];
+  readonly effects: readonly NormalizedEffect[];
 };
 
 export type MotionEffectObservation = {
@@ -446,12 +554,16 @@ export type MotionEffectObservation = {
   };
   readonly kind: Effect["kind"];
   readonly preset: EffectPreset;
-  /** 单次原生行为时长，不代表细粒度展开的总完成时长。 */
+  /** 单次效果时长；breathe 表示完整往返周期，不代表细粒度展开总长。 */
   readonly durationMs: number;
+  /** 完整呼吸周期的总轮数；forever 表示本页持续且无自然完成。 */
+  readonly repeatCount?: RepeatCount;
   readonly delayMs: number;
   readonly by?: MotionGranularity;
   readonly intervalMs?: number;
   readonly from?: MotionDirection | number;
+  readonly fromColor?: string;
+  readonly toColor?: string;
   readonly easing?: Easing;
   readonly startMs?: number;
   readonly endMs?: number;
@@ -504,6 +616,7 @@ const presets = new Set<EffectPreset>([
   "spinIn",
   "stretch",
   "spin",
+  "breathe",
 ]);
 const presetKinds: Readonly<Record<EffectPreset, Effect["kind"]>> = {
   fade: "entrance",
@@ -514,6 +627,7 @@ const presetKinds: Readonly<Record<EffectPreset, Effect["kind"]>> = {
   spinIn: "entrance",
   stretch: "entrance",
   spin: "emphasis",
+  breathe: "emphasis",
 };
 const minimumRotationUnits = -2_147_483_648;
 const maximumRotationUnits = 2_147_483_647;
@@ -527,6 +641,8 @@ const effectKeys = [
   "easing",
   "by",
   "intervalMs",
+  "fromColor",
+  "toColor",
 ] as const;
 
 const motionGranularities = new Set<MotionGranularity>([
@@ -537,8 +653,56 @@ const motionGranularities = new Set<MotionGranularity>([
   "category",
 ]);
 
-function validatedEffect(value: unknown, expected: Effect["kind"]): Effect {
-  if (!isRecord(value) || value["type"] !== "effect") {
+// ST_TLTime 使用 unsignedInt；repeatCount 的单位是千分之一轮。
+export const maximumTimeNodeValue = 4_294_967_295;
+const maxRepeatCount = Math.floor(maximumTimeNodeValue / 1000);
+
+function normalizeColor(value: unknown, name: string): string {
+  if (typeof value !== "string" || !/^#[0-9a-f]{6}$/iu.test(value)) {
+    return fail("invalid-breathe-color", `${name} 必须是 #RRGGBB 颜色`);
+  }
+  return value.toUpperCase();
+}
+
+function relativeLuminance(color: string): number {
+  const channels = [1, 3, 5].map(
+    (offset) => Number.parseInt(color.slice(offset, offset + 2), 16) / 255,
+  );
+  const linear = channels.map((channel) =>
+    channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4,
+  );
+  return (
+    0.2126 * (linear[0] ?? 0) +
+    0.7152 * (linear[1] ?? 0) +
+    0.0722 * (linear[2] ?? 0)
+  );
+}
+
+function validatedEffect(
+  value: unknown,
+  expected: Effect["kind"],
+): NormalizedEffect {
+  let repeatCount: RepeatCount | undefined;
+  let repeatDeclared = false;
+  let effectValue = value;
+  if (isRecord(value) && value["type"] === "repeated-effect") {
+    repeatDeclared = true;
+    const unknownRepeatField = Object.keys(value).find(
+      (key) => key !== "type" && key !== "effect" && key !== "count",
+    );
+    if (unknownRepeatField !== undefined) {
+      return fail(
+        "unknown-parameter",
+        `repeat 声明含未实现参数 ${unknownRepeatField}`,
+      );
+    }
+    if (!isRecord(value["effect"]) || value["effect"]["type"] !== "effect") {
+      return fail("invalid-repeat", "repeat 必须直接包装单个效果声明");
+    }
+    repeatCount = value["count"] as RepeatCount;
+    effectValue = value["effect"];
+  }
+  if (!isRecord(effectValue) || effectValue["type"] !== "effect") {
     return fail(
       "invalid-motion",
       expected === "entrance"
@@ -546,25 +710,39 @@ function validatedEffect(value: unknown, expected: Effect["kind"]): Effect {
         : "emphasis 必须是 spin() 等强调效果声明",
     );
   }
-  const unknown = Object.keys(value).find(
+  const unsupportedBreatheParameters = (
+    effectValue as {
+      readonly [breatheUnknownParameters]?: readonly string[];
+    }
+  )[breatheUnknownParameters];
+  if (unsupportedBreatheParameters?.length) {
+    return fail(
+      "unknown-parameter",
+      `breathe 声明含未实现参数 ${unsupportedBreatheParameters[0]}`,
+    );
+  }
+  const unknown = Object.keys(effectValue).find(
     (key) => !(effectKeys as readonly string[]).includes(key),
   );
   if (unknown !== undefined) {
     return fail("unknown-parameter", `动画效果含未实现参数 ${unknown}`);
   }
-  if (value["kind"] !== expected) {
+  if (effectValue["kind"] !== expected) {
     return fail(
       "invalid-motion",
       expected === "entrance"
-        ? `${String(value["preset"])}() 是强调效果，应传给 emphasis`
-        : `${String(value["preset"])}() 是入场效果，应传给 enter`,
+        ? `${String(effectValue["preset"])}() 是强调效果，应传给 emphasis`
+        : `${String(effectValue["preset"])}() 是入场效果，应传给 enter`,
     );
   }
-  const preset = value["preset"];
+  const preset = effectValue["preset"];
   if (typeof preset !== "string" || !presets.has(preset as EffectPreset)) {
     return fail("unsupported-effect", `不支持动画效果 ${String(preset)}`);
   }
-  if (presetKinds[preset as EffectPreset] !== expected) {
+  if (
+    preset !== "breathe" &&
+    presetKinds[preset as EffectPreset] !== expected
+  ) {
     return fail(
       "invalid-motion",
       expected === "entrance"
@@ -572,8 +750,8 @@ function validatedEffect(value: unknown, expected: Effect["kind"]): Effect {
         : `${preset}() 是入场效果，应传给 enter`,
     );
   }
-  const duration = value["duration"];
-  const delay = value["delay"];
+  const duration = effectValue["duration"];
+  const delay = effectValue["delay"];
   if (
     typeof duration !== "number" ||
     !Number.isFinite(duration) ||
@@ -592,8 +770,11 @@ function validatedEffect(value: unknown, expected: Effect["kind"]): Effect {
   ) {
     return fail("invalid-delay", "动画延迟必须能写成有限非负整数毫秒");
   }
-  const by = value["by"];
-  const interval = value["intervalMs"];
+  if (preset === "breathe" && Math.round(delay) > maximumTimeNodeValue) {
+    return fail("invalid-delay", "breathe 延迟超出原生计时值范围");
+  }
+  const by = effectValue["by"];
+  const interval = effectValue["intervalMs"];
   if (
     by !== undefined &&
     (typeof by !== "string" ||
@@ -615,13 +796,13 @@ function validatedEffect(value: unknown, expected: Effect["kind"]): Effect {
   }
   if (
     (preset === "wipe" || preset === "fly") &&
-    (typeof value["from"] !== "string" ||
-      !directions.has(value["from"] as MotionDirection))
+    (typeof effectValue["from"] !== "string" ||
+      !directions.has(effectValue["from"] as MotionDirection))
   ) {
     return fail("invalid-direction", `${preset} 的 from 必须是有效方向`);
   }
   if (preset === "spin") {
-    const from = value["from"];
+    const from = effectValue["from"];
     const units = typeof from === "number" ? Math.round(from * 60000) : NaN;
     if (
       typeof from !== "number" ||
@@ -640,11 +821,11 @@ function validatedEffect(value: unknown, expected: Effect["kind"]): Effect {
     preset !== "wipe" &&
     preset !== "fly" &&
     preset !== "spin" &&
-    value["from"] !== undefined
+    effectValue["from"] !== undefined
   ) {
     return fail("invalid-motion", `${preset} 不接受 from 参数`);
   }
-  const easing = value["easing"];
+  const easing = effectValue["easing"];
   if (easing !== undefined) {
     if (!isRecord(easing)) {
       return fail("invalid-easing", "easing 必须是对象");
@@ -672,7 +853,90 @@ function validatedEffect(value: unknown, expected: Effect["kind"]): Effect {
       );
     }
   }
-  return value as unknown as Effect;
+  let fromColor: string | undefined;
+  let toColor: string | undefined;
+  if (preset === "breathe") {
+    if (expected !== "emphasis") {
+      return fail("invalid-motion", "breathe() 必须传给 emphasis");
+    }
+    if (
+      typeof duration !== "number" ||
+      !Number.isSafeInteger(duration) ||
+      duration < 2 ||
+      duration % 2 !== 0 ||
+      duration / 2 > maximumTimeNodeValue
+    ) {
+      return fail(
+        "invalid-breathe-period",
+        "breathe 的 period 必须是大于 1 的偶数毫秒，且半周期可写入原生时长",
+      );
+    }
+    fromColor = normalizeColor(effectValue["fromColor"], "breathe.from");
+    toColor = normalizeColor(effectValue["toColor"], "breathe.to");
+    if (relativeLuminance(toColor) <= relativeLuminance(fromColor)) {
+      return fail(
+        "invalid-breathe-colors",
+        "breathe.to 必须比 breathe.from 明亮",
+      );
+    }
+  } else if (
+    effectValue["fromColor"] !== undefined ||
+    effectValue["toColor"] !== undefined
+  ) {
+    return fail("invalid-motion", `${String(preset)} 不接受呼吸灯颜色参数`);
+  }
+
+  if (repeatDeclared) {
+    if (preset !== "spin" && preset !== "breathe") {
+      return fail(
+        "unsupported-repeat",
+        `${String(preset)} 尚不支持重复；当前仅支持 spin 和 breathe`,
+      );
+    }
+    if (repeatCount === "forever") {
+      if (preset !== "breathe") {
+        return fail("unsupported-repeat", "forever 当前仅支持完整呼吸周期");
+      }
+    } else if (
+      typeof repeatCount !== "number" ||
+      !Number.isSafeInteger(repeatCount) ||
+      repeatCount < 1 ||
+      repeatCount > maxRepeatCount
+    ) {
+      return fail(
+        "invalid-repeat-count",
+        `repeat 次数必须是 1 到 ${maxRepeatCount} 的总轮数`,
+      );
+    }
+    if (
+      typeof repeatCount === "number" &&
+      (!Number.isSafeInteger(
+        Math.round(delay) + Math.round(duration) * repeatCount,
+      ) ||
+        Math.round(delay) > maximumTimeNodeValue ||
+        (preset === "breathe" ? duration / 2 : Math.round(duration)) >
+          maximumTimeNodeValue ||
+        repeatCount * 1000 > maximumTimeNodeValue)
+    ) {
+      return fail(
+        "invalid-repeat-duration",
+        "重复后的总时长必须保持为精确整数毫秒且单轮不超过原生计时范围",
+      );
+    }
+    if (by !== undefined) {
+      return fail(
+        "unsupported-repeat-combination",
+        "重复效果当前不能与逐段、逐词、逐字或图表粒度组合",
+      );
+    }
+  }
+
+  return {
+    ...(effectValue as unknown as Effect),
+    ...(repeatCount === undefined ? {} : { repeatCount }),
+    ...(fromColor === undefined ? {} : { fromColor }),
+    ...(toColor === undefined ? {} : { toColor }),
+  };
 }
 
 function stepDeclaration(value: unknown): StepDeclaration | undefined {
@@ -853,8 +1117,8 @@ function contextValue(value: unknown): MotionContextValue {
       ? {}
       : {
           defaultEnter: defaultEnter as
-            | EntranceEffect
-            | readonly EntranceEffect[],
+            | EntranceEffectDeclaration
+            | readonly EntranceEffectDeclaration[],
         }),
   };
 }
@@ -879,6 +1143,17 @@ export function motionAnnotations(
       validatedEffect(value, "emphasis"),
     ),
   ];
+  if (
+    effects.some(
+      ({ preset }) =>
+        preset === "breathe" && (target.kind !== "shape" || !target.filled),
+    )
+  ) {
+    return fail(
+      "invalid-breathe-target",
+      "breathe() 需要带实色填充的原生 Shape；Group 需由实际成员分别声明效果",
+    );
+  }
   if (effects.length === 0) return [];
   const annotation: CapabilityAnnotation = {
     capability: "motion",

@@ -1064,12 +1064,13 @@ export class LayoutPass {
     );
   }
 
+  // 透明 Group 不在布局树中，因此主题上下文必须沿声明树单独传递。
   #appendChildren(
     children: readonly CapabilityChild[],
     parentPath: string,
     parent: LayoutNode,
     includeObjects: boolean,
-    theme: ThemeContext,
+    themeContext: ThemeContext,
   ): void {
     children.forEach((child, index) => {
       if (!element(child)) return;
@@ -1090,7 +1091,7 @@ export class LayoutPass {
           return;
         }
         this.#validateItemStyle(childStyle, parent, childPath);
-        const built = this.#buildBox(child, childPath, parent);
+        const built = this.#buildBox(child, childPath, parent, themeContext);
         this.#appendLayoutChild(parent, built);
         return;
       }
@@ -1113,7 +1114,7 @@ export class LayoutPass {
           );
           if (!optsIntoLayout) {
             const groupTheme = deriveTheme(
-              theme,
+              themeContext,
               child.props["theme"] as ThemeScope | undefined,
               textStyleFrom(child.props["style"]),
               childPath,
@@ -1129,7 +1130,7 @@ export class LayoutPass {
             return;
           }
         }
-        const built = this.#buildGroup(child, childPath, parent);
+        const built = this.#buildGroup(child, childPath, parent, themeContext);
         this.#appendLayoutChild(parent, built);
         return;
       }
@@ -1142,22 +1143,28 @@ export class LayoutPass {
       }
       const module = this.#modules.get(child.type);
       if (module !== undefined && "compileDeclaration" in module) {
-        this.#themes.set(child, theme);
+        this.#themes.set(child, themeContext);
         this.#appendChildren(
           child.children,
           childPath,
           parent,
           includeObjects,
-          theme,
+          themeContext,
         );
         return;
       }
       if (!includeObjects) {
-        this.#themes.set(child, theme);
+        this.#themes.set(child, themeContext);
         if (looseStyle !== undefined)
           this.#validateItemStyle(looseStyle, parent, childPath);
         if (looseStyle !== undefined && this.#requiresLooseLayout(looseStyle)) {
-          const built = this.#buildObject(child, childPath, parent, looseStyle);
+          const built = this.#buildObject(
+            child,
+            childPath,
+            parent,
+            looseStyle,
+            themeContext,
+          );
           if (built !== undefined) {
             this.#positionLooseGeometry(built);
             this.#appendLayoutChild(parent, built);
@@ -1187,6 +1194,7 @@ export class LayoutPass {
         childPath,
         parent,
         childStyle,
+        themeContext,
       );
       if (layoutChild === undefined) return;
       this.#appendLayoutChild(parent, layoutChild);
@@ -1303,6 +1311,7 @@ export class LayoutPass {
     input: CapabilityElement,
     path: string,
     parent: LayoutNode,
+    themeContext: ThemeContext,
   ): LayoutNode {
     const unknown = Object.keys(input.props).find(
       (key) => key !== "testId" && key !== "style" && key !== "theme",
@@ -1320,7 +1329,7 @@ export class LayoutPass {
     const rawStyle = input.props["style"];
     const style = readStyle(rawStyle, path, true, true);
     const theme = deriveTheme(
-      parent.theme,
+      themeContext,
       input.props["theme"] as ThemeScope | undefined,
       textStyleFrom(rawStyle),
       path,
@@ -1346,6 +1355,7 @@ export class LayoutPass {
     input: CapabilityElement,
     path: string,
     parent: LayoutNode,
+    themeContext: ThemeContext,
   ): LayoutNode {
     const unknown = Object.keys(input.props).find(
       (key) =>
@@ -1366,7 +1376,7 @@ export class LayoutPass {
       fail(path, "unknown-parameter", `Group 含未实现参数 ${unknown}`);
     const style = readStyle(input.props["style"], path, true, true);
     const theme = deriveTheme(
-      parent.theme,
+      themeContext,
       input.props["theme"] as ThemeScope | undefined,
       textStyleFrom(input.props["style"]),
       path,
@@ -1425,6 +1435,7 @@ export class LayoutPass {
     path: string,
     parent: LayoutNode,
     style: LayoutStyle,
+    themeContext: ThemeContext,
   ): LayoutNode | undefined {
     const module = this.#modules.get(input.type);
     if (!objectModule(module)) return undefined;
@@ -1433,14 +1444,14 @@ export class LayoutPass {
       yoga,
       element: input,
       style,
-      theme: parent.theme,
+      theme: themeContext,
       path,
       module,
       children: [],
       parent,
       escaped: [],
     };
-    this.#themes.set(input, parent.theme);
+    this.#themes.set(input, themeContext);
     this.#applyStyle(yoga, style, parent.style, false, false);
     this.#setDeclaredSize(node);
     if (style.position === "absolute") {

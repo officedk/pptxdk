@@ -820,6 +820,150 @@ describe("公开主题入口", () => {
     assert.match(slide, /<a:spcPts val="600"\/>/u);
   });
 
+  it("透明 Group 的主题与文字默认值穿过布局节点并隔离外部兄弟", async () => {
+    const leaf = (style?: {
+      readonly width?: number;
+      readonly position?: "relative";
+    }) => (
+      <Text
+        testId="leaf"
+        x={10}
+        y={20}
+        width={300}
+        height="auto"
+        {...(style === undefined ? {} : { style })}
+      >
+        <P>First paragraph</P>
+        <P>Second paragraph</P>
+      </Text>
+    );
+    const variants: { readonly slideId: string; readonly child: ReactNode }[] =
+      [
+        { slideId: "direct", child: leaf() },
+        {
+          slideId: "box",
+          child: <Box style={{ width: 400 }}>{leaf()}</Box>,
+        },
+        {
+          slideId: "nested-layout-group",
+          child: (
+            <Group style={{ display: "flex", width: 400 }}>{leaf()}</Group>
+          ),
+        },
+        { slideId: "styled-leaf", child: leaf({ width: 300 }) },
+        { slideId: "relative-leaf", child: leaf({ position: "relative" }) },
+        {
+          slideId: "motion-box",
+          child: (
+            <TestMotionScope>
+              <Box style={{ width: 400 }}>{leaf()}</Box>
+            </TestMotionScope>
+          ),
+        },
+      ];
+    const result = await build(
+      <Deck
+        theme={defineTheme({
+          colors: { ink: "#112233", caption: "ink" },
+          fonts: { minor: cjkFont, body: cjkFont },
+        })}
+      >
+        {variants.map(({ slideId, child }) => (
+          <Slide slideId={slideId} key={slideId}>
+            <Group
+              testId="outer-group"
+              theme={{
+                colors: { ink: "#C00000" },
+                fonts: { minor: localFont, body: localFont },
+              }}
+              style={{ color: "caption", align: "center", spacingAfter: 12 }}
+            >
+              {child}
+            </Group>
+            <Text
+              testId="sibling"
+              x={10}
+              y={120}
+              width={300}
+              height="auto"
+              style={{ color: "caption" }}
+            >
+              <P>Outside the Group</P>
+            </Text>
+          </Slide>
+        ))}
+      </Deck>,
+    );
+
+    const file = await validatePptx(result.pptx);
+    assert.deepEqual(file.errors, []);
+    const findReportObject = (
+      objects: (typeof result.report.slides)[number]["objects"],
+      testId: string,
+    ) => {
+      const pending = [...objects];
+      while (pending.length > 0) {
+        const object = pending.shift();
+        if (object === undefined) break;
+        if (object.testId === testId) return object;
+        pending.push(...(object.members ?? []));
+      }
+      assert.fail(`missing report object ${testId}`);
+    };
+    const findFileObject = (
+      objects: NonNullable<(typeof file.slides)[number]>["objects"],
+      testId: string,
+    ) => {
+      const pending = [...objects];
+      while (pending.length > 0) {
+        const object = pending.shift();
+        if (object === undefined) break;
+        if (object.name === testId) return object;
+        pending.push(...(object.members ?? []));
+      }
+      assert.fail(`missing file object ${testId}`);
+    };
+
+    for (const [index, { slideId }] of variants.entries()) {
+      const reportSlide = result.report.slides[index];
+      const fileSlide = file.slides[index];
+      assert.ok(reportSlide);
+      assert.ok(fileSlide);
+      const text = findReportObject(reportSlide.objects, "leaf");
+      assert.equal(text.box?.height, 81.36, `${slideId} measured height`);
+      if (slideId === "direct") {
+        assert.deepEqual(text.box, { x: 10, y: 20, width: 300, height: 81.36 });
+      }
+
+      const output = findFileObject(fileSlide.objects, "leaf");
+      const runs = output.text?.paragraphs.flatMap(
+        ({ runs: paragraphRuns }) => paragraphRuns,
+      );
+      assert.ok(runs);
+      assert.ok(runs.length > 0);
+      for (const run of runs) {
+        assert.equal(run.fontFamily, "Jost*");
+        assert.equal(run.color, "#C00000");
+      }
+
+      const sibling = findFileObject(fileSlide.objects, "sibling");
+      const siblingRun = sibling.text?.paragraphs
+        .flatMap(({ runs: paragraphRuns }) => paragraphRuns)
+        .find(({ text: value }) => value.includes("Outside the Group"));
+      assert.equal(siblingRun?.fontFamily, "Theme Metrics Sans");
+      assert.equal(siblingRun?.color, "#112233");
+
+      const slide = strFromU8(
+        unzipSync(result.pptx)[`ppt/slides/slide${index + 1}.xml`]!,
+      );
+      const start = slide.indexOf('name="leaf"');
+      assert.notEqual(start, -1);
+      const objectXml = slide.slice(start, slide.indexOf("</p:sp>", start));
+      assert.match(objectXml, /algn="ctr"/u);
+      assert.match(objectXml, /<a:spcPts val="900"\/>/u);
+    }
+  });
+
   it("局部主题拒绝未知颜色与字体令牌", async () => {
     const theme = defineTheme({
       colors: { ink: "accent1" },

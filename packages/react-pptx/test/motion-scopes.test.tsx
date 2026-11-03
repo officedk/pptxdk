@@ -71,6 +71,71 @@ function unknownLetterText(testId: string, text: string, y: number) {
   );
 }
 
+function TargetGroupStepEntry({
+  trigger,
+  includeScopeEndConsumer,
+}: {
+  readonly trigger: "auto" | "click";
+  readonly includeScopeEndConsumer: boolean;
+}) {
+  const sequence = useMotionScope();
+  const sequenceFollower = useMotionScope();
+  const externalFollower = useMotionScope();
+  const content = createElement(
+    Fragment,
+    null,
+    createElement(
+      MotionScope,
+      { scope: sequence, mode: "sequence" },
+      createElement(Shape, {
+        testId: "target-group-step-entry-source",
+        x: 5,
+        y: 5,
+        width: 150,
+        height: 30,
+        fill: "#000000",
+        text: "ABCD",
+        enter: fade({ by: "letter", duration: 350, intervalMs: 120 }),
+        emphasis: spin({ duration: 400 }),
+      }),
+      createElement(
+        MotionScope,
+        { scope: sequenceFollower },
+        observedShape(
+          "target-group-step-entry-sequence-follower",
+          "Sequence follower",
+          40,
+          "#70AD47",
+          80,
+        ),
+      ),
+    ),
+    includeScopeEndConsumer
+      ? createElement(
+          MotionScope,
+          { scope: externalFollower, startAt: sequence.end },
+          observedShape(
+            "target-group-step-entry-external-follower",
+            "External follower",
+            76,
+            "#4472C4",
+            80,
+          ),
+        )
+      : null,
+  );
+  const slideId = `target-group-step-entry-${trigger}-${includeScopeEndConsumer}`;
+  return createElement(
+    Deck,
+    { width: 320, height: 180 },
+    createElement(
+      Slide,
+      { slideId },
+      trigger === "click" ? createElement(Step, { n: 1 }, content) : content,
+    ),
+  );
+}
+
 function SingleSourceUnknownStartAliases({
   trigger,
   sourceCompletion = "unknown",
@@ -6948,6 +7013,148 @@ describe("组件编排作用域", () => {
       const slidePart = unzipSync(result.pptx)["ppt/slides/slide1.xml"];
       assert.ok(slidePart);
       assertTimingReferencesFollowDefinitions(strFromU8(slidePart));
+    }
+  });
+
+  it("多效果对象在自动与点击步中保留聚合入口和首效果角色", async () => {
+    for (const trigger of ["auto", "click"] as const) {
+      for (const includeScopeEndConsumer of [false, true]) {
+        const slideId = `target-group-step-entry-${trigger}-${includeScopeEndConsumer}`;
+        const result = await build(
+          createElement(TargetGroupStepEntry, {
+            trigger,
+            includeScopeEndConsumer,
+          }),
+        );
+        const slide = result.report.slides[0];
+        assert.ok(slide);
+        const motion = slide.capabilities?.["motion"] as MotionObservation;
+        const sourceId = slide.objects.find(
+          ({ testId }) => testId === "target-group-step-entry-source",
+        )?.id;
+        assert.ok(sourceId);
+        const sourceEffects = motion.steps[0]?.effects.filter(
+          ({ target }) => target.id === sourceId,
+        );
+        assert.deepEqual(
+          sourceEffects?.map(({ preset, startMs, endMs, completion }) => [
+            preset,
+            startMs,
+            endMs,
+            completion,
+          ]),
+          [
+            ["fade", 0, undefined, "unknown"],
+            ["spin", 0, 400, undefined],
+          ],
+        );
+        const sourceScope = motion.scopes?.find(({ members }) =>
+          members.some(
+            (member) => member.kind === "object" && member.id === sourceId,
+          ),
+        );
+        const sequenceFollowerEffect = motion.steps[0]?.effects.find(
+          ({ target }) =>
+            target.testId === "target-group-step-entry-sequence-follower",
+        );
+        assert.ok(sourceScope && sequenceFollowerEffect);
+        assert.equal(sourceScope.completion, "unknown");
+        assert.deepEqual(sequenceFollowerEffect.startAfter, {
+          targetId: sourceId,
+          group: "effects",
+          point: "end",
+          offsetMs: 0,
+        });
+        if (includeScopeEndConsumer) {
+          const externalFollowerEffect = motion.steps[0]?.effects.find(
+            ({ target }) =>
+              target.testId === "target-group-step-entry-external-follower",
+          );
+          assert.ok(externalFollowerEffect);
+          assert.deepEqual(externalFollowerEffect.startAfter, {
+            scopeId: sourceScope.id,
+            point: "end",
+            offsetMs: 0,
+          });
+        }
+
+        const query = observeMotion(result.query.slide(slideId).observation);
+        const queryStep = query?.steps[0];
+        assert.equal(queryStep?.trigger, trigger);
+        assert.deepEqual(
+          queryStep?.effects
+            .filter(({ target }) => target.id === sourceId)
+            .map(({ preset, start, end }) => [
+              preset,
+              start.state,
+              "ms" in start ? start.ms : undefined,
+              end.state,
+              "ms" in end ? end.ms : undefined,
+            ]),
+          [
+            ["fade", "known", 0, "unknown", undefined],
+            ["spin", "known", 0, "known", 400],
+          ],
+        );
+
+        const file = await validatePptx(result.pptx);
+        assert.deepEqual(file.errors, []);
+        assert.deepEqual(file.extensions, []);
+        const fileSlide = file.slides[0];
+        assert.equal(fileSlide?.animations?.[0]?.trigger, trigger);
+        const fileSourceEffects =
+          fileSlide?.animations?.[0]?.effects.filter(
+            ({ targetId }) => targetId === sourceId,
+          ) ?? [];
+        assert.equal(fileSourceEffects.length, 2);
+        const sourceEffectIds = new Set(
+          fileSourceEffects.map(({ timingId }) => timingId),
+        );
+        const sourceGroups = (fileSlide?.animationContainers ?? []).filter(
+          ({ children }) =>
+            children.length === 2 &&
+            children.every(
+              ({ kind, timingId }) =>
+                kind === "effect" && sourceEffectIds.has(timingId),
+            ),
+        );
+        assert.equal(sourceGroups.length, 1);
+        const sourceGroup = sourceGroups[0];
+        assert.ok(sourceGroup);
+        assert.equal(sourceGroup.endSync, "all");
+        assert.deepEqual(
+          sourceGroup.children.map(({ kind }) => kind),
+          ["effect", "effect"],
+        );
+
+        const slidePart = unzipSync(result.pptx)["ppt/slides/slide1.xml"];
+        assert.ok(slidePart);
+        const xml = strFromU8(slidePart);
+        const timingAttributes = (timingId: number) => {
+          const start = xml.indexOf(`<p:cTn id="${timingId}"`);
+          assert.notEqual(start, -1);
+          const end = xml.indexOf(">", start);
+          assert.ok(end > start);
+          return xml.slice(start, end + 1);
+        };
+        const entryRole = trigger === "auto" ? "afterEffect" : "clickEffect";
+        assert.ok(
+          timingAttributes(sourceGroup.timingId).includes(
+            `nodeType="${entryRole}"`,
+          ),
+        );
+        assert.ok(
+          timingAttributes(
+            Math.min(...fileSourceEffects.map(({ timingId }) => timingId)),
+          ).includes('nodeType="afterEffect"'),
+        );
+        assert.ok(
+          timingAttributes(
+            Math.max(...fileSourceEffects.map(({ timingId }) => timingId)),
+          ).includes('nodeType="withEffect"'),
+        );
+        assertTimingReferencesFollowDefinitions(xml);
+      }
     }
   });
 

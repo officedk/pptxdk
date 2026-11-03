@@ -1815,17 +1815,21 @@ function timingXml(
                 : undefined;
             return renderedEffect(
               effect,
-              effectIndex === 0
-                ? (pendingRootNodeType ?? "afterEffect")
-                : "withEffect",
+              effectIndex === 0 ? "afterEffect" : "withEffect",
               element("p:cond", { delay: childDelay(effect) }),
               effectId,
               buildGroupId,
             );
           });
+          // 原生导入按固定深度识别步首；聚合容器与首真实效果保留各自的角色。
           rendered.push(
             renderedRoot(
-              timingContainer(groupId, condition, children),
+              timingContainer(
+                groupId,
+                condition,
+                children,
+                pendingRootNodeType,
+              ),
               "target-group",
               pendingRootNodeType !== undefined && children.length > 0,
             ),

@@ -569,6 +569,8 @@ export type MotionEffectObservation = {
   readonly endMs?: number;
   readonly completion?: Exclude<MotionCompletionState, "known">;
   readonly startAfter?: MotionStartDependency;
+  /** 未知起点需要多项完成事件共同约束时，列出全部真实来源及各自偏移。 */
+  readonly startAfterAll?: readonly MotionStartDependency[];
 };
 
 export type MotionStepObservation = {
@@ -587,6 +589,8 @@ export type MotionScopeObservation = {
   readonly endMs?: number;
   readonly completion: MotionCompletionState;
   readonly startAfter?: MotionStartDependency;
+  /** 未知起点需要多项完成事件共同约束时，列出全部真实来源及各自偏移。 */
+  readonly startAfterAll?: readonly MotionStartDependency[];
   readonly members: readonly (
     | { readonly kind: "scope"; readonly id: string }
     | { readonly kind: "object"; readonly id: number }

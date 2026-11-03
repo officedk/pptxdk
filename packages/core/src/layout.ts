@@ -1376,6 +1376,7 @@ export class LayoutPass {
       (key) =>
         ![
           "testId",
+          "part",
           "style",
           "theme",
           "morphKey",
@@ -1392,6 +1393,13 @@ export class LayoutPass {
       (typeof testId !== "string" || testId.trim() === "")
     ) {
       fail(path, "invalid-parameter", "testId 必须是非空字符串");
+    }
+    const part = input.props["part"];
+    if (
+      part !== undefined &&
+      (typeof part !== "string" || part.trim() === "")
+    ) {
+      fail(path, "invalid-parameter", "part 必须是非空字符串");
     }
     const rawStyle = input.props["style"];
     const style = readStyle(rawStyle, path, true, true, true, visualProperties);
@@ -1438,6 +1446,7 @@ export class LayoutPass {
       (key) =>
         ![
           "testId",
+          "part",
           "name",
           "style",
           "theme",

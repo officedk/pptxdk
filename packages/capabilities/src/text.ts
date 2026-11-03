@@ -39,6 +39,7 @@ export type {
 
 const allowedParameters = [
   "testId",
+  "part",
   "name",
   "morphKey",
   "link",
@@ -60,7 +61,7 @@ function record(value: unknown): value is Record<string, unknown> {
 
 function optionalName(
   value: unknown,
-  parameter: "testId" | "name",
+  parameter: "testId" | "name" | "part",
 ): string | undefined {
   if (value === undefined) return undefined;
   if (typeof value !== "string" || value.trim() === "") {
@@ -213,6 +214,7 @@ export const textCapability: CapabilityModule = {
       );
     }
     const testId = optionalName(input.props["testId"], "testId");
+    const part = optionalName(input.props["part"], "part");
     const requestedName = optionalName(input.props["name"], "name");
     const insets = textInsets(input.props["style"]);
     const styleWidth = layoutStyleValue(input, "width");
@@ -311,6 +313,7 @@ export const textCapability: CapabilityModule = {
         kind: "text",
         name,
         ...(testId === undefined ? {} : { testId }),
+        ...(part === undefined ? {} : { part }),
         box,
         text: body.text,
       },

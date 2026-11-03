@@ -46,6 +46,7 @@ export type ShapeProps = MotionProps &
   MorphProps & {
     readonly link?: LinkTarget;
     readonly testId?: string;
+    readonly part?: string;
     readonly name?: string;
     readonly geometry?: Geometry;
     readonly flipH?: boolean;
@@ -68,6 +69,7 @@ const maximumShapeExtentEmu = 2_147_483_647;
 
 const allowedParameters = [
   "testId",
+  "part",
   "name",
   "morphKey",
   "link",
@@ -184,7 +186,7 @@ function requiredNumber(
 
 function optionalText(
   props: Record<string, unknown>,
-  name: "testId" | "name",
+  name: "testId" | "name" | "part",
 ): string | undefined {
   const value = props[name];
   if (value === undefined) return undefined;
@@ -256,6 +258,7 @@ export const shapeCapability: CapabilityModule = {
       );
     }
     const testId = optionalText(props, "testId");
+    const part = optionalText(props, "part");
     const requestedName = optionalText(props, "name");
     const geometry = props["geometry"] as Geometry | undefined;
     const layoutStyle =
@@ -363,6 +366,7 @@ export const shapeCapability: CapabilityModule = {
         kind: "shape",
         name,
         ...(testId === undefined ? {} : { testId }),
+        ...(part === undefined ? {} : { part }),
         geometry: properties.geometryName,
         box,
         ...(textOutput === undefined

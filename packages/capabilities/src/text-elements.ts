@@ -8,6 +8,7 @@ import type { ParagraphStyle, TextStyle } from "./text-service.ts";
 export type TextProps = MotionProps &
   MorphProps & {
     readonly testId?: string;
+    readonly part?: string;
     readonly name?: string;
     readonly link?: LinkTarget;
     readonly x?: number;

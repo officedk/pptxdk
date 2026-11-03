@@ -31,6 +31,7 @@ export type ImageSource = string | URL | Uint8Array;
 export type ImageProps = MotionProps &
   MorphProps & {
     readonly testId?: string;
+    readonly part?: string;
     readonly name?: string;
     readonly link?: LinkTarget;
     readonly src: ImageSource;
@@ -68,6 +69,7 @@ export type LoadedImage = ImageMetadata & { readonly bytes: Uint8Array };
 
 const allowedParameters = [
   "testId",
+  "part",
   "name",
   "morphKey",
   "link",
@@ -340,7 +342,7 @@ export function readImage(source: unknown): LoadedImage {
 
 function optionalText(
   props: Record<string, unknown>,
-  name: "testId" | "name",
+  name: "testId" | "name" | "part",
 ): string | undefined {
   const value = props[name];
   if (value === undefined) return undefined;
@@ -511,6 +513,7 @@ export const imageCapability: CapabilityModule = {
     }
 
     const testId = optionalText(props, "testId");
+    const part = optionalText(props, "part");
     const requestedName = optionalText(props, "name");
     const altValue = props["alt"];
     if (altValue !== undefined && typeof altValue !== "string") {
@@ -656,6 +659,7 @@ export const imageCapability: CapabilityModule = {
         kind: "image",
         name,
         ...(testId === undefined ? {} : { testId }),
+        ...(part === undefined ? {} : { part }),
         box,
       },
       extensions: [],

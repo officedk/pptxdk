@@ -81,6 +81,7 @@ export type TableCellStyle = TableTextStyle & {
 export type TableProps = MotionProps &
   MorphProps & {
     readonly testId?: string;
+    readonly part?: string;
     readonly name?: string;
     readonly link?: LinkTarget;
     readonly x?: number;
@@ -143,6 +144,8 @@ type ParsedCell = {
 
 type ParsedRow = {
   readonly path: string;
+  readonly testId?: string;
+  readonly part?: string;
   readonly height?: number;
   readonly textStyle: Record<string, unknown>;
   readonly verticalAlign?: TableVerticalAlign;
@@ -224,6 +227,7 @@ const layoutStyleKeys = [
 ] as const;
 const tableParameters = [
   "testId",
+  "part",
   "name",
   "morphKey",
   "link",
@@ -651,6 +655,12 @@ function prepareRows(
       tableVerticalAlign;
     const row: ParsedRow = {
       path: rowPath,
+      ...(typeof child.props["testId"] === "string"
+        ? { testId: child.props["testId"] }
+        : {}),
+      ...(typeof child.props["part"] === "string"
+        ? { part: child.props["part"] }
+        : {}),
       ...(height === undefined ? {} : { height }),
       textStyle: mergeTextStyle(tableTextStyle, rowStyle.textStyle),
       verticalAlign: rowVerticalAlign,
@@ -1061,6 +1071,7 @@ export const tableCapability: CapabilityModule = {
   compile(input, context) {
     onlyKeys(input.props, tableParameters, "Table");
     const testId = optionalName(input.props["testId"], "testId");
+    const part = optionalName(input.props["part"], "part");
     const requestedName = optionalName(input.props["name"], "name");
     const style = trackStyle(input, "table").style;
     const declaredWidth = style["width"] ?? input.props["width"];
@@ -1227,6 +1238,51 @@ export const tableCapability: CapabilityModule = {
     const width = widths.reduce((sum, value) => sum + value, 0);
     const height = heights.reduce((sum, value) => sum + value, 0);
     const box = { x, y, width, height };
+    const tableParts = [
+      ...rows.map((row, rowIndex) => ({
+        kind: "row" as const,
+        ...(row.testId === undefined ? {} : { testId: row.testId }),
+        ...(row.part === undefined ? {} : { part: row.part }),
+        row: rowIndex,
+        box: {
+          x,
+          y:
+            y +
+            heights.slice(0, rowIndex).reduce((sum, value) => sum + value, 0),
+          width,
+          height: heights[rowIndex] ?? 0,
+        },
+        text: matrix[rowIndex]?.join("\t") ?? "",
+      })),
+      ...cells.map((cell) => ({
+        kind: "cell" as const,
+        ...(typeof cell.node.props["testId"] === "string"
+          ? { testId: cell.node.props["testId"] }
+          : {}),
+        ...(typeof cell.node.props["part"] === "string"
+          ? { part: cell.node.props["part"] }
+          : {}),
+        row: cell.row,
+        column: cell.column,
+        rowSpan: cell.rowSpan,
+        colSpan: cell.colSpan,
+        box: {
+          x:
+            x +
+            widths.slice(0, cell.column).reduce((sum, value) => sum + value, 0),
+          y:
+            y +
+            heights.slice(0, cell.row).reduce((sum, value) => sum + value, 0),
+          width: widths
+            .slice(cell.column, cell.column + cell.colSpan)
+            .reduce((sum, value) => sum + value, 0),
+          height: heights
+            .slice(cell.row, cell.row + cell.rowSpan)
+            .reduce((sum, value) => sum + value, 0),
+        },
+        text: matrix[cell.row]?.[cell.column] ?? "",
+      })),
+    ];
     const observation: NativeTableObservation = {
       columnWidths: [...widths],
       rowHeights: [...heights],
@@ -1239,6 +1295,11 @@ export const tableCapability: CapabilityModule = {
           rowSpan,
           colSpan,
         })),
+      ...(tableParts.some(
+        ({ testId, part }) => testId !== undefined || part !== undefined,
+      )
+        ? { parts: tableParts }
+        : {}),
     };
     const annotations = motionAnnotations(input.props, {
       kind: "table",
@@ -1265,6 +1326,7 @@ export const tableCapability: CapabilityModule = {
         kind: "table",
         name,
         ...(testId === undefined ? {} : { testId }),
+        ...(part === undefined ? {} : { part }),
         box,
         table: observation,
       },

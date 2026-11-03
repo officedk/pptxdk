@@ -21,6 +21,7 @@ import {
   type PptxPackageResource,
   type PptxRelationship,
 } from "#/ooxml.ts";
+import { createBuildQuery, type QueryContentNode } from "#/query.ts";
 import {
   createThemeContext,
   textStyleFrom,
@@ -53,6 +54,7 @@ import {
   type ObjectCapabilityModule,
   type ObjectObservation,
   type NativeLink,
+  type ResourceObservation,
   type SlideCapabilityModule,
   type SlideObservation,
   type SlideCapabilitySlot,
@@ -67,6 +69,10 @@ type SlideBuild = {
   readonly advanceAfter?: number;
   readonly objects: readonly ObjectObservation[];
   readonly layouts: readonly LayoutObservation[];
+  readonly content: readonly QueryContentNode[];
+  readonly resources: readonly (ResourceObservation & {
+    readonly objectId: number;
+  })[];
   readonly shapeXml: string;
   readonly backgroundXml: string;
   readonly slideXml: string;
@@ -167,6 +173,8 @@ type SlideBuildState = {
   readonly relationships: PptxRelationship[];
   readonly relationshipIds: Map<string, string>;
   readonly layouts: LayoutObservation[];
+  readonly resourceObservations: (ResourceObservation & { objectId: number })[];
+  readonly contentChildrenByObjectId: Map<number, readonly QueryContentNode[]>;
   readonly contributions: CapabilityContribution[];
   readonly morphObjects: Map<MorphKey, MorphObject>;
   readonly linkedSlideIndexes: Set<number>;
@@ -186,6 +194,7 @@ type BuildContext = {
 
 type CompiledChildren = CapabilityChildren & {
   readonly references: readonly LayoutChildReference[];
+  readonly content: readonly QueryContentNode[];
   readonly paintLayers: readonly PaintLayer[];
 };
 
@@ -206,9 +215,9 @@ function diagnostic(path: string, code: string, message: string): Diagnostic {
 }
 
 function deepFreeze<T>(value: T): T {
-  if (typeof value !== "object" || value === null || Object.isFrozen(value))
-    return value;
-  Object.freeze(value);
+  if (typeof value !== "object" || value === null) return value;
+  // 能力观察可能已浅冻结；仍需递归冻结其中尚未冻结的子值。
+  if (!Object.isFrozen(value)) Object.freeze(value);
   for (const child of Object.values(value)) deepFreeze(child);
   return value;
 }
@@ -681,6 +690,7 @@ function resolveSlides(
 function addResource(
   resource: CapabilityResource,
   context: Pick<BuildContext, "document" | "slide">,
+  objectId?: number,
 ): string {
   if (
     !(resource.bytes instanceof Uint8Array) ||
@@ -736,6 +746,14 @@ function addResource(
     context.document.resources.set(assetKey, asset);
   }
 
+  if (objectId !== undefined) {
+    recordResourceObservation(context.slide, objectId, {
+      part: `ppt/media/${asset.name}`,
+      contentType: asset.contentType,
+      byteLength: asset.bytes.byteLength,
+    });
+  }
+
   const relationshipKey = `${assetKey}\u0000${resource.relationshipType}`;
   const existingRelationship =
     context.slide.relationshipIds.get(relationshipKey);
@@ -764,6 +782,22 @@ function relationshipTarget(sourcePath: string, targetPath: string): string {
   return [...sourceSegments.map(() => ".."), ...targetSegments].join("/");
 }
 
+function recordResourceObservation(
+  slide: SlideBuildState,
+  objectId: number,
+  resource: ResourceObservation,
+): void {
+  if (
+    slide.resourceObservations.some(
+      (existing) =>
+        existing.objectId === objectId && existing.part === resource.part,
+    )
+  ) {
+    return;
+  }
+  slide.resourceObservations.push({ objectId, ...resource });
+}
+
 function packagePartPath(template: string, sequence: number): string {
   if (
     (template.match(/\{n\}/gu) ?? []).length !== 1 ||
@@ -782,6 +816,7 @@ function packagePartPath(template: string, sequence: number): string {
 function addPackagePart(
   packagePart: CapabilityPackagePart,
   context: BuildContext,
+  objectId?: number,
 ): string {
   const { part, relatedParts } = packagePart;
   if (
@@ -855,6 +890,23 @@ function addPackagePart(
     related.some(({ path }) => context.document.packageParts.has(path))
   ) {
     throw new CapabilityError("duplicate-part", "PPTX 部件路径重复");
+  }
+  if (objectId !== undefined) {
+    recordResourceObservation(context.slide, objectId, {
+      part: partPath,
+      contentType: part.contentType,
+      byteLength:
+        typeof content === "string"
+          ? strToU8(content).byteLength
+          : content.byteLength,
+    });
+    for (const item of related) {
+      recordResourceObservation(context.slide, objectId, {
+        part: item.path,
+        contentType: item.descriptor.contentType,
+        byteLength: item.descriptor.bytes.byteLength,
+      });
+    }
   }
   context.document.packageParts.set(partPath, {
     path: partPath,
@@ -1173,18 +1225,22 @@ function capabilityContext(
     theme,
     ...(layoutBox === undefined ? {} : { layoutBox }),
     compileChildren(nested) {
-      return compileChildren(
+      const compiled = compileChildren(
         nested,
         context,
         path,
         insideGroup || child.type === "rp:group",
       );
+      if (child.type === "rp:group") {
+        context.slide.contentChildrenByObjectId.set(id, compiled.content);
+      }
+      return { xml: compiled.xml, objects: compiled.objects };
     },
     registerResource(resource) {
-      return addResource(resource, context);
+      return addResource(resource, context, id);
     },
     registerPackagePart(part) {
-      return addPackagePart(part, context);
+      return addPackagePart(part, context, id);
     },
   };
 }
@@ -1285,6 +1341,7 @@ function compileChildren(
   insideGroup = false,
 ): CompiledChildren {
   const painted: PaintLayer[] = [];
+  const content: QueryContentNode[] = [];
   children.forEach((child, index) => {
     if (!("props" in child)) {
       if (child.text.trim() !== "") {
@@ -1478,6 +1535,9 @@ function compileChildren(
       context.slide.layouts.push({
         id,
         ...(typeof testId === "string" ? { testId } : {}),
+        ...(typeof child.props["part"] === "string"
+          ? { part: child.props["part"] }
+          : {}),
         box,
         children: [
           ...(boxObservation === undefined
@@ -1485,6 +1545,18 @@ function compileChildren(
             : [{ kind: "object" as const, id: boxObservation.id }]),
           ...compiled.references,
         ],
+      });
+      content.push({
+        ...(typeof testId === "string" ? { testId } : {}),
+        ...(typeof child.props["part"] === "string"
+          ? { part: child.props["part"] }
+          : {}),
+        reference: {
+          kind: "layout",
+          id,
+          objectIds: boxObservation === undefined ? [] : [boxObservation.id],
+        },
+        children: compiled.content,
       });
       painted.push({
         sourceOrder: [index],
@@ -1588,6 +1660,7 @@ function compileChildren(
         path,
         insideGroup,
       );
+      content.push(...compiled.content);
       // 透明声明不占绘制层级；其子项携带自己的层序并与兄弟一同排序。
       painted.push(
         ...compiled.paintLayers.map((layer) => ({
@@ -1709,6 +1782,19 @@ function compileChildren(
         id,
         ...(compiledLink === undefined ? {} : { link: compiledLink.summary }),
       };
+      content.push({
+        ...(typeof child.props["testId"] === "string"
+          ? { testId: child.props["testId"] }
+          : {}),
+        ...(typeof observation.part === "string"
+          ? { part: observation.part }
+          : {}),
+        reference: { kind: "object", id: observation.id },
+        children: [
+          ...(context.slide.contentChildrenByObjectId.get(id) ?? []),
+          ...tableContentNodes(observation),
+        ],
+      });
       if (observation.box !== undefined) {
         const box = observation.box;
         if (
@@ -1757,6 +1843,7 @@ function compileChildren(
     xml: painted.map(({ xml }) => xml).join(""),
     objects: painted.flatMap(({ objects }) => objects),
     references: painted.map(({ reference }) => reference),
+    content,
     paintLayers: painted,
   };
 }
@@ -1780,6 +1867,35 @@ function paintOrder(child: CapabilityElement): number {
   return typeof value === "number" && Number.isFinite(value) ? value : 0;
 }
 
+function tableContentNodes(object: ObjectObservation): QueryContentNode[] {
+  const parts = object.table?.parts;
+  if (parts === undefined) return [];
+  const nodeAt = (partIndex: number): QueryContentNode => {
+    const part = parts[partIndex];
+    if (part === undefined) throw new Error("表格查询部件索引不存在");
+    return {
+      ...(part.testId === undefined ? {} : { testId: part.testId }),
+      ...(part.part === undefined ? {} : { part: part.part }),
+      reference: { kind: "table-part", tableId: object.id, partIndex },
+      children: [],
+    };
+  };
+  return parts.flatMap((part, partIndex) =>
+    part.kind === "row"
+      ? [
+          {
+            ...nodeAt(partIndex),
+            children: parts.flatMap((cell, cellIndex) =>
+              cell.kind === "cell" && cell.row === part.row
+                ? [nodeAt(cellIndex)]
+                : [],
+            ),
+          },
+        ]
+      : [],
+  );
+}
+
 function compileSlide(
   resolved: ResolvedSlide,
   modules: ReadonlyMap<string, RegisteredCapabilityModule>,
@@ -1799,6 +1915,8 @@ function compileSlide(
     relationshipIds: new Map(),
     linkedSlideIndexes: new Set(),
     layouts: [],
+    resourceObservations: [],
+    contentChildrenByObjectId: new Map(),
     contributions: [],
     morphObjects: new Map(),
   };
@@ -1927,6 +2045,8 @@ function compileSlide(
     ...(advanceAfter === undefined ? {} : { advanceAfter }),
     objects: compiled.objects,
     layouts: [...slide.layouts].sort((left, right) => left.id - right.id),
+    content: compiled.content,
+    resources: slide.resourceObservations,
     shapeXml: compiled.xml,
     backgroundXml,
     slideXml: slideXml
@@ -2142,7 +2262,14 @@ function compileDocument(
     slides: slideObservations,
     diagnostics: document.warnings,
   });
-  return Object.freeze({ pptx, report });
+  const query = createBuildQuery(
+    builtSlides.map((slide, index) => ({
+      observation: report.slides[index]!,
+      content: slide.content,
+      resources: slide.resources,
+    })),
+  );
+  return Object.freeze({ pptx, report, query });
 }
 
 export function createBuilder(modules: readonly CapabilityModule[]) {

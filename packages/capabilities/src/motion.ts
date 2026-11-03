@@ -22,6 +22,7 @@ import {
   type MotionPlanStartGate,
   type MotionPlanStep,
 } from "./motion-plan.ts";
+import { registerMotionObservation } from "./motion-query.ts";
 
 export {
   after,
@@ -40,6 +41,27 @@ export {
   wipe,
   zoom,
 } from "./motion-api.ts";
+export { observeMotion } from "./motion-query.ts";
+export type {
+  EffectInstanceObservation,
+  MotionCueObservation,
+  MotionCueRef,
+  MotionDecision,
+  MotionDependencyObservation,
+  MotionDifference,
+  MotionEffectRef,
+  MotionIntervalRef,
+  MotionMembership,
+  MotionMomentObservation,
+  MotionMomentRef,
+  MotionQuery,
+  MotionScopeQueryMember,
+  MotionScopeQueryObservation,
+  MotionScopeRef,
+  MotionStepQuery,
+  MotionStepRef,
+  MotionTime,
+} from "./motion-query.ts";
 export type {
   BoxProps,
   Easing,
@@ -1177,6 +1199,7 @@ export const motionCapability: SlideCapabilityModule = Object.freeze({
   compileSlide(_input: CapabilityInput, context) {
     const plan = compileMotionPlan(context.contributions);
     validateKnownMotionTimes(plan.observation);
+    registerMotionObservation(plan.observation, plan.query);
     const hasEffects = plan.steps.some((step) => step.effects.length > 0);
     if (!hasEffects) {
       return {

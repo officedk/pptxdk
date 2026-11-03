@@ -3,6 +3,7 @@ export { BuildError, CapabilityError } from "#/diagnostics.ts";
 export { Box, Deck, Section, Slide } from "#/elements.ts";
 export { createMorphScope } from "#/morph.ts";
 export type { MorphKey, MorphScope } from "#/morph.ts";
+export { BuildQueryError } from "#/query.ts";
 export { pxToEmu, xmlEscape } from "#/ooxml.ts";
 export {
   darker,
@@ -42,6 +43,7 @@ export type {
   ThemeShade,
 } from "#/theme.ts";
 export type {
+  BuildQuery,
   BuildOptions,
   BuildReport,
   BuildResult,
@@ -66,6 +68,9 @@ export type {
   Extension,
   GeometryBox,
   LayoutChildReference,
+  Locator,
+  LocatorResourceObservation,
+  LocatorObservation,
   LayoutLength,
   LayoutObservation,
   LayoutSpacing,
@@ -74,13 +79,16 @@ export type {
   NativeLink,
   ObjectCapabilityModule,
   ObjectObservation,
+  ResourceObservation,
   NativeTableObservation,
+  NativeTablePartObservation,
   SlideCapabilityContext,
   SlideCapabilityModule,
   SlideCapabilityOutput,
   SlideCapabilitySlot,
   SlideBackground,
   SlideObservation,
+  SlideQuery,
   SlideProps,
   SectionProps,
   TransparentCapabilityModule,

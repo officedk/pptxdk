@@ -36,6 +36,7 @@ export const boxCapability: CapabilityModule = {
       (key) =>
         ![
           "testId",
+          "part",
           "style",
           "theme",
           "morphKey",
@@ -58,6 +59,13 @@ export const boxCapability: CapabilityModule = {
       (typeof testId !== "string" || testId.trim() === "")
     ) {
       throw new CapabilityError("invalid-parameter", "testId 必须是非空字符串");
+    }
+    const part = input.props["part"];
+    if (
+      part !== undefined &&
+      (typeof part !== "string" || part.trim() === "")
+    ) {
+      throw new CapabilityError("invalid-parameter", "part 必须是非空字符串");
     }
     const name =
       context.morphName ??
@@ -95,6 +103,7 @@ export const boxCapability: CapabilityModule = {
         kind: "shape",
         name,
         ...(typeof testId === "string" ? { testId } : {}),
+        ...(typeof part === "string" ? { part } : {}),
         geometry: properties.geometryName,
         box,
       },

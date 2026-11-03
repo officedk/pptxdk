@@ -192,6 +192,7 @@ export type LayoutStyle = {
 /** 透明布局容器；它只安排子项，不要求生成对应的原生演示对象。 */
 export type BoxProps = ElementProps & {
   readonly testId?: string;
+  readonly part?: string;
   readonly morphKey?: MorphKey;
   readonly link?: LinkTarget;
   readonly style?: LayoutStyle & TextStyle & VisualStyle;
@@ -215,6 +216,7 @@ export type ObjectObservation = {
   readonly kind: string;
   readonly name: string;
   readonly testId?: string;
+  readonly part?: string;
   readonly geometry?: string;
   readonly box?: GeometryBox;
   readonly text?: string;
@@ -231,6 +233,7 @@ export type LayoutChildReference = {
 export type LayoutObservation = {
   readonly id: number;
   readonly testId?: string;
+  readonly part?: string;
   readonly box: GeometryBox;
   readonly children: readonly LayoutChildReference[];
 };
@@ -247,6 +250,20 @@ export type NativeTableObservation = {
     readonly rowSpan: number;
     readonly colSpan: number;
   }[];
+  /** 行与格的身份和最终几何由表格模块在共享布局结果中提交。 */
+  readonly parts?: readonly NativeTablePartObservation[];
+};
+
+export type NativeTablePartObservation = {
+  readonly kind: "row" | "cell";
+  readonly testId?: string;
+  readonly part?: string;
+  readonly row: number;
+  readonly column?: number;
+  readonly rowSpan?: number;
+  readonly colSpan?: number;
+  readonly box: GeometryBox;
+  readonly text: string;
 };
 
 export type SlideObservation = {
@@ -276,6 +293,50 @@ export type BuildReport = {
 export type BuildResult = {
   readonly pptx: Uint8Array;
   readonly report: BuildReport;
+  readonly query: BuildQuery;
+};
+
+export type LocatorObservation = {
+  readonly evidence: "generation";
+  readonly testId?: string;
+  readonly part?: string;
+  readonly box?: GeometryBox;
+  readonly text?: string;
+  readonly objects: readonly ObjectObservation[];
+  readonly resources?: readonly LocatorResourceObservation[];
+};
+
+export type ResourceObservation = {
+  readonly part: string;
+  readonly contentType: string;
+  readonly byteLength: number;
+};
+
+export type LocatorResourceObservation = ResourceObservation & {
+  readonly objectId: number;
+};
+
+/** 对本次成功构建中的正式内容进行只读定位与字段观察。 */
+export type Locator = {
+  getByTestId(testId: string): Locator;
+  getAllByTestId(testId: string): readonly Locator[];
+  part(name: string): Locator;
+  parts(name: string): readonly Locator[];
+  children(): readonly Locator[];
+  descendants(): readonly Locator[];
+  observe(): LocatorObservation;
+};
+
+export type SlideQuery = Locator & {
+  readonly id: string;
+  readonly index: number;
+  readonly observation: SlideObservation;
+};
+
+export type BuildQuery = {
+  readonly evidence: "generation";
+  readonly slides: readonly SlideQuery[];
+  slide(slideId: string): SlideQuery;
 };
 
 /** React 宿主树中的通用节点，不暴露 React 或渲染器内部对象。 */

@@ -25,6 +25,7 @@ import {
 export type GroupProps = MotionProps &
   MorphProps & {
     readonly testId?: string;
+    readonly part?: string;
     readonly name?: string;
     readonly link?: LinkTarget;
     readonly style?: LayoutStyle & TextStyle & Pick<VisualStyle, "rotate">;
@@ -34,6 +35,7 @@ export type GroupProps = MotionProps &
 
 const allowedParameters = [
   "testId",
+  "part",
   "name",
   "morphKey",
   "link",
@@ -56,7 +58,7 @@ type EmuBox = {
 
 function optionalText(
   props: Readonly<Record<string, unknown>>,
-  name: "testId" | "name",
+  name: "testId" | "name" | "part",
 ): string | undefined {
   const value = props[name];
   if (value === undefined) return undefined;
@@ -160,6 +162,7 @@ export const groupCapability: CapabilityModule = {
       );
     }
     const testId = optionalText(input.props, "testId");
+    const part = optionalText(input.props, "part");
     const requestedName = optionalText(input.props, "name");
     const compiled = context.compileChildren(input.children);
     const geometry = bounds(compiled.objects);
@@ -213,6 +216,7 @@ export const groupCapability: CapabilityModule = {
         kind: "group",
         name,
         ...(testId === undefined ? {} : { testId }),
+        ...(part === undefined ? {} : { part }),
         box: outputGeometry,
         members: compiled.objects,
       },

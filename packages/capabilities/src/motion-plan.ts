@@ -15,6 +15,15 @@ import type {
   MotionStepObservation,
   NormalizedEffect,
 } from "./motion-api.ts";
+import {
+  createMotionQuery,
+  type MotionQuery,
+  type MotionQueryCueSource,
+  type MotionQueryEffectSource,
+  type MotionQueryMomentSource,
+  type MotionQueryScopeSource,
+  type MotionQueryStepSource,
+} from "./motion-query.ts";
 
 type StepDeclaration =
   | { readonly mode: "automatic"; readonly identity: string }
@@ -179,6 +188,7 @@ export function composeMotionPlanStarts(
 export type MotionPlan = {
   readonly steps: readonly MotionPlanStep[];
   readonly observation: MotionObservation;
+  readonly query: MotionQuery;
 };
 
 type TimeCandidate = {
@@ -887,27 +897,34 @@ function effectEnd(
   expansion: EffectExpansion,
   facts: MotionTimingFacts,
 ): TimePoint {
-  if (effect.repeatCount === "forever") {
-    return { state: "no-natural-completion" };
-  }
-  const rounds = effect.repeatCount ?? 1;
-  const durationMs = Math.round(effect.duration) * rounds;
-
   const partIndex =
     expansion.type === "parts" ? expansion.count - 1 : undefined;
-  const dependency: MotionStartDependency = {
-    targetId: target.id,
-    effectIndex,
-    ...(partIndex === undefined ? {} : { partIndex }),
-    point: "end",
-    offsetMs: 0,
-  };
   const startOffsetMs =
     Math.round(effect.delay) +
-    (partIndex === undefined ? 0 : partIndex * durationMs);
+    (partIndex === undefined ? 0 : partIndex * Math.round(effect.duration));
   const startExpression = add(base, startOffsetMs);
+  return effectTimingAt(
+    startExpression,
+    target,
+    effect,
+    effectIndex,
+    partIndex,
+    expansion,
+    facts,
+  ).end;
+}
+
+function effectTimingAt(
+  startExpression: TimeExpression,
+  target: TargetState,
+  effect: NormalizedEffect,
+  effectIndex: number,
+  partIndex: number | undefined,
+  expansion: EffectExpansion,
+  facts: MotionTimingFacts,
+): { readonly start: TimePoint; readonly end: TimePoint } {
   if (startExpression.state === "no-natural-completion") {
-    return startExpression;
+    return { start: startExpression, end: startExpression };
   }
   const startEventId = `effect-start:${target.id}:${effectIndex}:${partIndex ?? ""}`;
   const start = materializeEvent(
@@ -917,9 +934,29 @@ function effectEnd(
     facts,
     target.path,
   );
-  if (start.state === "no-natural-completion") return start;
-
+  if (start.state === "no-natural-completion") {
+    return { start, end: start };
+  }
+  if (effect.repeatCount === "forever") {
+    return { start, end: { state: "no-natural-completion" } };
+  }
+  const rounds = effect.repeatCount ?? 1;
+  const durationMs = Math.round(effect.duration) * rounds;
+  const dependency: MotionStartDependency = {
+    targetId: target.id,
+    effectIndex,
+    ...(partIndex === undefined ? {} : { partIndex }),
+    point: "end",
+    offsetMs: 0,
+  };
   const endEventId = dependencyEventId(dependency);
+  const existingEndTime = facts.exactTime(endEventId);
+  if (existingEndTime !== undefined && !Number.isSafeInteger(existingEndTime)) {
+    return {
+      start,
+      end: eventTime(endEventId, "known", existingEndTime, dependency),
+    };
+  }
   // 当前 spTgt 保留整对象的单次行为；逐词即使没有子集也仍有此正下界。
   const minimumDuration =
     expansion.type === "iterate" &&
@@ -940,9 +977,15 @@ function effectEnd(
   if (expansion.type !== "iterate" && start.state === "known") {
     const endMs = start.timeMs + durationMs;
     facts.setExactTime(endEventId, endMs, target.path);
-    return eventTime(endEventId, "known", endMs, dependency);
+    return {
+      start,
+      end: eventTime(endEventId, "known", endMs, dependency),
+    };
   }
-  return eventTime(endEventId, "unknown", undefined, dependency);
+  return {
+    start,
+    end: eventTime(endEventId, "unknown", undefined, dependency),
+  };
 }
 
 function motionScope(value: MotionScopeDeclaration): boolean {
@@ -1221,6 +1264,12 @@ function motionPlan(
 
   const allScheduledEffects = new Map<string, ScheduledEffect[]>();
   const allStepNodes = new Map<string, MotionPlanNode[]>();
+  const querySourcesByStep = new Map<
+    string,
+    Omit<MotionQueryStepSource, "effects"> & {
+      readonly effectSources: Map<string, MotionQueryEffectSource>;
+    }
+  >();
   const addStepEffect = (effect: ScheduledEffect) => {
     const items = allScheduledEffects.get(effect.stepKey) ?? [];
     items.push(effect);
@@ -1263,6 +1312,8 @@ function motionPlan(
     const scheduledObjects = new Set<number>();
     const flattenedScopes = new Set<string>();
     const requestedScopeEnds = new Set<string>();
+    const queryScopes: MotionQueryScopeSource[] = [];
+    const queryEffectSources = new Map<string, MotionQueryEffectSource>();
 
     const directMemberForScope = (
       host: ScopeState,
@@ -2256,6 +2307,26 @@ function motionPlan(
         completion: end.state,
         members: observedMembers,
       });
+      queryScopes.push({
+        identity: scope.declaration.identity,
+        id,
+        ...(scope.declaration.parent === undefined
+          ? {}
+          : { parentIdentity: scope.declaration.parent }),
+        mode: scope.declaration.mode,
+        ...(scope.declaration.each === undefined
+          ? {}
+          : { eachMs: Math.round(scope.declaration.each) }),
+        delayMs: Math.round(scope.declaration.delay),
+        members: directChildren(scope).map((member) =>
+          member.kind === "scope"
+            ? { kind: "scope" as const, identity: member.id }
+            : { kind: "object" as const, targetId: member.id },
+        ),
+        start: queryMomentSource(start),
+        end: queryMomentSource(end),
+        declaration: scope.declaration,
+      });
     }
 
     const targetsForStep = [...targets.values()]
@@ -2321,20 +2392,25 @@ function motionPlan(
             start.state === "unknown"
               ? reportedDependencies(nativeStart, parentStart)
               : undefined;
-          const knownStart = start.state === "known" ? start.timeMs : undefined;
+          const timing = effectTimingAt(
+            start,
+            target,
+            effect,
+            index,
+            partIndex,
+            expansion,
+            facts,
+          );
+          const knownStart =
+            timing.start.state === "known" ? timing.start.timeMs : undefined;
           const endMs =
-            expansion.type === "iterate" ||
-            effect.repeatCount === "forever" ||
-            knownStart === undefined
-              ? undefined
-              : knownStart +
-                Math.round(effect.duration) * (effect.repeatCount ?? 1);
+            timing.end.state === "known" ? timing.end.timeMs : undefined;
           const from =
             typeof effect.from === "number"
               ? Math.round(effect.from * 60000) / 60000
               : effect.from;
           const easing = normalizedEasing(effect.easing);
-          addStepEffect({
+          const scheduledEffect: ScheduledEffect = {
             target: {
               id: target.id,
               name: target.value.target.name,
@@ -2363,7 +2439,7 @@ function motionPlan(
                   toColor: effect.toColor,
                 }
               : {}),
-            ...(effect.repeatCount === "forever"
+            ...(timing.end.state === "no-natural-completion"
               ? { completion: "no-natural-completion" as const }
               : endMs === undefined
                 ? { completion: "unknown" as const }
@@ -2384,6 +2460,18 @@ function motionPlan(
                   },
                 }
               : {}),
+          };
+          addStepEffect(scheduledEffect);
+          queryEffectSources.set(motionEffectKey(target.id, index, partIndex), {
+            observation: scheduledEffect,
+            targetId: target.id,
+            effectIndex: index,
+            ...(partIndex === undefined ? {} : { partIndex }),
+            start: queryMomentSource(timing.start),
+            end: queryMomentSource(timing.end),
+            scopeIdentities: target.value.scopes.map(
+              ({ identity }) => identity,
+            ),
           });
         }
       }
@@ -2938,6 +3026,41 @@ function motionPlan(
     };
     for (const node of nodes) verifyNodeOrder(node);
     allStepNodes.set(key, nodes);
+    const queryCues: MotionQueryCueSource[] = [];
+    for (const [cueKey, publisher] of cuePublishers) {
+      const publisherScope = scopes.get(publisher.scope);
+      if (
+        publisherScope === undefined ||
+        !scopeSteps(publisherScope).includes(key)
+      ) {
+        continue;
+      }
+      const declaration =
+        publisher.point === "start"
+          ? publisherScope.declaration.publishStart
+          : publisherScope.declaration.publishEnd;
+      if (declaration?.point !== "named" || declaration.name === undefined) {
+        continue;
+      }
+      queryCues.push({
+        key: cueKey,
+        name: declaration.name,
+        scopeIdentity: publisher.scope,
+        point: publisher.point,
+      });
+    }
+    querySourcesByStep.set(key, {
+      key,
+      trigger: step.trigger,
+      ...(step.number === undefined ? {} : { number: step.number }),
+      facts: {
+        exactOffset: (from, to) => facts.exactOffset(from, to),
+        lowerBound: (from, to) => facts.lowerBound(from, to),
+      },
+      effectSources: queryEffectSources,
+      scopes: queryScopes,
+      cues: queryCues,
+    });
   }
 
   const plans = [...stepStates.values()]
@@ -2965,6 +3088,29 @@ function motionPlan(
         nodes: allStepNodes.get(step.key) ?? [],
       } satisfies MotionPlanStep;
     });
+
+  const querySources: MotionQueryStepSource[] = plans.map((step) => {
+    const source = querySourcesByStep.get(step.key);
+    if (source === undefined) throw new Error("MotionPlan 查询步缺失");
+    const effects = step.effects.map((effect) => {
+      const effectSource = source.effectSources.get(
+        motionEffectKey(effect.target.id, effect.effectIndex, effect.partIndex),
+      );
+      if (effectSource === undefined) {
+        throw new Error("MotionPlan 查询效果缺失");
+      }
+      return effectSource;
+    });
+    return {
+      key: source.key,
+      trigger: source.trigger,
+      ...(source.number === undefined ? {} : { number: source.number }),
+      facts: source.facts,
+      effects,
+      scopes: source.scopes,
+      cues: source.cues,
+    };
+  });
 
   const scopesObservation = scopeObservations.sort((left, right) => {
     const leftScope = [...scopes.values()].find(
@@ -3001,7 +3147,29 @@ function motionPlan(
       : { scopes: Object.freeze(scopesObservation) }),
   });
 
-  return { steps: plans, observation };
+  const query = createMotionQuery(querySources);
+  return { steps: plans, observation, query };
+}
+
+function queryMomentSource(time: TimePoint): MotionQueryMomentSource {
+  if (time.state === "no-natural-completion") {
+    return { time: { state: "no-natural-completion" } };
+  }
+  return {
+    eventId: time.eventId,
+    time:
+      time.state === "known"
+        ? { state: "known", ms: time.timeMs }
+        : { state: "unknown" },
+  };
+}
+
+function motionEffectKey(
+  targetId: number,
+  effectIndex: number,
+  partIndex: number | undefined,
+): string {
+  return `${targetId}:${effectIndex}:${partIndex ?? ""}`;
 }
 
 function scopeId(

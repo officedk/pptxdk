@@ -100,6 +100,7 @@ export type ChartDataLabels = {
 type ChartBase = MotionProps &
   MorphProps & {
     readonly testId?: string;
+    readonly part?: string;
     readonly name?: string;
     readonly link?: LinkTarget;
     readonly x?: number;
@@ -230,7 +231,7 @@ function onlyKeys(
 
 function optionalName(
   value: unknown,
-  label: "testId" | "name",
+  label: "testId" | "name" | "part",
 ): string | undefined {
   if (value === undefined) return undefined;
   if (typeof value !== "string" || value.trim() === "") {
@@ -1100,6 +1101,7 @@ function validateProps(
     props,
     [
       "testId",
+      "part",
       "name",
       "morphKey",
       "link",
@@ -1129,6 +1131,7 @@ function validateProps(
     fail("invalid-data", `${chartKind} 图表当前仅支持一个数据系列`);
   }
   const testId = optionalName(props["testId"], "testId");
+  const part = optionalName(props["part"], "part");
   const name = optionalName(props["name"], "name");
   if (name !== undefined) xmlText(name, "Chart.name");
   const style = isRecord(props["style"]) ? props["style"] : {};
@@ -1199,6 +1202,7 @@ function validateProps(
       : undefined;
   return {
     ...(testId === undefined ? {} : { testId }),
+    ...(part === undefined ? {} : { part }),
     ...(name === undefined ? {} : { name }),
     ...(props["enter"] === undefined ? {} : { enter: props["enter"] }),
     ...(props["emphasis"] === undefined ? {} : { emphasis: props["emphasis"] }),
@@ -1344,6 +1348,7 @@ export const chartCapability: CapabilityModule = {
         kind: "chart",
         name,
         ...(props.testId === undefined ? {} : { testId: props.testId }),
+        ...(props.part === undefined ? {} : { part: props.part }),
         box: {
           x: props.x!,
           y: props.y!,

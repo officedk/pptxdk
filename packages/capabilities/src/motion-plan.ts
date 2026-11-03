@@ -1,4 +1,8 @@
-import { CapabilityError, type CapabilityContribution } from "@react-pptx/core";
+import {
+  CapabilityError,
+  type CapabilityContribution,
+  type GeometryBox,
+} from "@react-pptx/core";
 
 import type {
   Effect,
@@ -29,6 +33,19 @@ type MotionTarget = {
   readonly paragraphCount?: number;
   readonly chartSeriesCount?: number;
   readonly chartCategoryCount?: number;
+  readonly box?: GeometryBox;
+  readonly rotationDegrees?: number;
+  readonly hasBackground?: boolean;
+  readonly members?: readonly MotionNativeMember[];
+};
+
+type MotionNativeMember = {
+  readonly id: number;
+  readonly kind: string;
+  readonly name: string;
+  readonly testId?: string;
+  readonly box?: GeometryBox;
+  readonly members?: readonly MotionNativeMember[];
 };
 
 type MotionValue = {
@@ -50,6 +67,11 @@ type ScheduledEffect = MotionEffectObservation & {
   readonly partIndex?: number;
   readonly targetTextBody: boolean;
   readonly targetFilled: boolean;
+  readonly targetBox?: GeometryBox;
+  readonly targetRotationDegrees?: number;
+  readonly targetHasBackground: boolean;
+  readonly targetParagraphCount?: number;
+  readonly targetMembers?: readonly MotionNativeMember[];
   readonly iterate?: {
     readonly type: "wd" | "lt";
     readonly intervalMs: number;
@@ -1590,6 +1612,19 @@ function motionPlan(
             ...(partIndex === undefined ? {} : { partIndex }),
             targetTextBody: target.value.target.textBody,
             targetFilled: target.value.target.filled,
+            ...(target.value.target.box === undefined
+              ? {}
+              : { targetBox: target.value.target.box }),
+            ...(target.value.target.rotationDegrees === undefined
+              ? {}
+              : { targetRotationDegrees: target.value.target.rotationDegrees }),
+            targetHasBackground: target.value.target.hasBackground ?? false,
+            ...(target.value.target.paragraphCount === undefined
+              ? {}
+              : { targetParagraphCount: target.value.target.paragraphCount }),
+            ...(target.value.target.members === undefined
+              ? {}
+              : { targetMembers: target.value.target.members }),
             ...(expansion.type === "iterate"
               ? {
                   iterate: {
@@ -1722,6 +1757,11 @@ function motionPlan(
               order: _order,
               targetTextBody: _targetTextBody,
               targetFilled: _targetFilled,
+              targetBox: _targetBox,
+              targetRotationDegrees: _targetRotationDegrees,
+              targetHasBackground: _targetHasBackground,
+              targetParagraphCount: _targetParagraphCount,
+              targetMembers: _targetMembers,
               effectIndex: _effectIndex,
               partIndex: _partIndex,
               iterate: _iterate,

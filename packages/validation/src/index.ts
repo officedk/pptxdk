@@ -223,11 +223,27 @@ export type FileAnimationTargetRange =
       readonly categoryIndex: number;
     };
 
+export type FileAnimationBehavior = {
+  readonly behavior: "set" | "anim" | "animEffect" | "animRot" | "animClr";
+  readonly targetId: number;
+  readonly targetType: "object" | "paragraph" | "background" | "chart";
+  readonly targetRange?: FileAnimationTargetRange;
+  readonly attributeNames: readonly string[];
+  readonly durationMs?: number;
+  readonly from?: string;
+  readonly to?: string;
+  readonly additive?: string;
+  readonly filter?: string;
+};
+
 export type FileAnimationEffect = {
   readonly targetId: number;
   readonly timingId: number;
   readonly targetRange?: FileAnimationTargetRange;
-  readonly nativeBuild?: "paragraph" | "series" | "category";
+  readonly nativeBuild?: "paragraph" | "allAtOnce" | "series" | "category";
+  readonly nativeBuildGroupId?: number;
+  readonly nativeBuildAnimBg?: boolean;
+  readonly nativeBehaviors?: readonly FileAnimationBehavior[];
   readonly kind: "entrance" | "emphasis";
   readonly preset:
     | "fade"
@@ -254,6 +270,131 @@ export type FileAnimationEffect = {
     readonly decelerate?: number;
   };
 };
+
+const textProjectionParagraphRoles: Partial<
+  Record<FileAnimationEffect["preset"], readonly string[]>
+> = {
+  fade: ["animEffect:fade"],
+  wipe: ["wipe"],
+  zoom: [
+    "anim:ppt_x",
+    "anim:ppt_y",
+    "anim:ppt_w",
+    "anim:ppt_h",
+    "animEffect:fade",
+  ],
+  fly: ["anim:ppt_x", "anim:ppt_y"],
+  floatUp: ["animEffect:fade", "anim:ppt_x", "anim:ppt_y"],
+  spinIn: [
+    "anim:ppt_w",
+    "anim:ppt_h",
+    "anim:style.rotation",
+    "anim:ppt_x",
+    "anim:ppt_y",
+    "animEffect:fade",
+  ],
+  stretch: ["anim:ppt_w", "anim:ppt_h"],
+  spin: ["animRot:r", "anim:ppt_x", "anim:ppt_y"],
+};
+
+const textProjectionBackgroundRoles: Partial<
+  Record<FileAnimationEffect["preset"], readonly string[]>
+> = {
+  zoom: ["anim:ppt_x", "anim:ppt_y", "anim:ppt_w", "anim:ppt_h"],
+  fly: ["anim:ppt_x", "anim:ppt_y"],
+  floatUp: ["anim:ppt_x", "anim:ppt_y"],
+  spinIn: ["anim:ppt_x", "anim:ppt_y", "animRot:r"],
+  stretch: ["anim:ppt_w", "anim:ppt_h"],
+  spin: ["animRot:r", "anim:ppt_x", "anim:ppt_y"],
+};
+
+function animationBehaviorRole(behavior: FileAnimationBehavior): string {
+  return behavior.behavior === "animEffect"
+    ? `${behavior.behavior}:${behavior.filter ?? ""}`
+    : `${behavior.behavior}:${behavior.attributeNames.join(",")}`;
+}
+
+function hasRoles(
+  actual: readonly string[],
+  expected: readonly string[],
+): boolean {
+  if (actual.length !== expected.length) return false;
+  const normalize = (roles: readonly string[]) =>
+    [...roles].sort((left, right) => left.localeCompare(right));
+  const expectedRoles = normalize(expected);
+  return normalize(actual).every(
+    (role, index) => role === expectedRoles[index],
+  );
+}
+
+/** 只有目标和属性逐段符合该预设职责时，才恢复逻辑 whole Text。 */
+function validWholeTextProjection(
+  preset: FileAnimationEffect["preset"],
+  kind: FileAnimationEffect["kind"],
+  paragraphCount: number,
+  animBg: boolean,
+  behaviors: readonly FileAnimationBehavior[],
+): boolean {
+  const expectedParagraphRoles = textProjectionParagraphRoles[preset];
+  if (expectedParagraphRoles === undefined) return false;
+
+  const objectBehaviors = behaviors.filter(
+    ({ targetType }) => targetType === "object",
+  );
+  const visibilitySets = objectBehaviors.filter(
+    ({ behavior }) => behavior === "set",
+  );
+  if (
+    objectBehaviors.length !== visibilitySets.length ||
+    visibilitySets.length !== (kind === "entrance" ? 1 : 0) ||
+    visibilitySets.some(
+      ({ targetRange, attributeNames, durationMs, to }) =>
+        targetRange !== undefined ||
+        attributeNames.length !== 1 ||
+        attributeNames[0] !== "style.visibility" ||
+        durationMs !== 1 ||
+        to !== "visible",
+    )
+  ) {
+    return false;
+  }
+
+  for (let index = 0; index < paragraphCount; index += 1) {
+    const paragraphBehaviors = behaviors.filter(
+      ({ targetType, targetRange }) =>
+        targetType === "paragraph" &&
+        targetRange?.type === "paragraph" &&
+        targetRange.start === index &&
+        targetRange.end === index,
+    );
+    const actualRoles = paragraphBehaviors.map(animationBehaviorRole);
+    if (preset === "wipe") {
+      if (
+        actualRoles.length !== 1 ||
+        !actualRoles[0]?.startsWith("animEffect:wipe(")
+      ) {
+        return false;
+      }
+    } else if (!hasRoles(actualRoles, expectedParagraphRoles)) {
+      return false;
+    }
+  }
+
+  const backgroundBehaviors = behaviors.filter(
+    ({ targetType }) => targetType === "background",
+  );
+  if (backgroundBehaviors.length === 0) return !animBg;
+  const expectedBackgroundRoles = textProjectionBackgroundRoles[preset];
+  return (
+    animBg &&
+    expectedBackgroundRoles !== undefined &&
+    backgroundBehaviors.every(({ targetRange }) => targetRange === undefined) &&
+    hasRoles(
+      backgroundBehaviors.map(animationBehaviorRole),
+      expectedBackgroundRoles,
+    )
+  );
+}
 
 export type FileTransition = {
   readonly kind: "fade" | "strips" | "push" | "flip" | "morph";
@@ -3403,15 +3544,48 @@ function readSlideAnimations(
     });
 
   const buildList = first(timing, presentationNamespace, "bldLst");
-  const paragraphBuilds = new Map<number, string>();
+  const paragraphBuildKey = (targetId: number, groupId: number): string =>
+    `${targetId}:${groupId}`;
+  const paragraphBuilds = new Map<
+    string,
+    { readonly build: string; readonly animBg?: boolean }
+  >();
   const chartBuilds = new Map<number, "all" | "series" | "category">();
   const chartBuildGroupIds = new Map<number, number>();
   if (buildList !== undefined) {
     for (const build of elements(buildList, presentationNamespace, "bldP")) {
       const targetId = positiveIntegerValue(attribute(build, "spid"));
-      if (targetId !== undefined) {
-        paragraphBuilds.set(targetId, attribute(build, "build"));
+      const groupText = attribute(build, "grpId");
+      const groupId = nonNegativeIntegerValue(
+        groupText === "" ? "0" : groupText,
+      );
+      if (targetId === undefined || groupId === undefined) {
+        issue(
+          errors,
+          part,
+          "invalid-paragraph-build-group",
+          "文字构建声明需要有效的原生对象和非负组标识",
+        );
+        continue;
       }
+      const key = paragraphBuildKey(targetId, groupId);
+      if (paragraphBuilds.has(key)) {
+        issue(
+          errors,
+          part,
+          "duplicate-paragraph-build-group",
+          `文字对象 ${targetId} 的构建组 ${groupId} 重复`,
+        );
+      }
+      const animBgText = attribute(build, "animBg");
+      paragraphBuilds.set(key, {
+        build: attribute(build, "build"),
+        ...(animBgText === "1" || animBgText === "true"
+          ? { animBg: true }
+          : animBgText === "0" || animBgText === "false"
+            ? { animBg: false }
+            : {}),
+      });
     }
     for (const build of elements(
       buildList,
@@ -3539,6 +3713,167 @@ function readSlideAnimations(
         output,
       );
     }
+  };
+  const nativeBehaviorsOf = (
+    effectTimeNode: XmlElement,
+  ): FileAnimationBehavior[] => {
+    const children = first(effectTimeNode, presentationNamespace, "childTnLst");
+    if (children === undefined) return [];
+    const behaviorElements: XmlElement[] = [];
+    for (
+      let child = children.firstChild;
+      child !== null;
+      child = child.nextSibling
+    ) {
+      if (
+        child.nodeType === 1 &&
+        child.namespaceURI === presentationNamespace &&
+        child.localName !== null &&
+        ["set", "anim", "animEffect", "animRot", "animClr"].includes(
+          child.localName,
+        )
+      ) {
+        behaviorElements.push(child as XmlElement);
+      }
+    }
+    const rangeOf = (
+      target: XmlElement,
+    ): FileAnimationTargetRange | undefined => {
+      const textElement = first(target, presentationNamespace, "txEl");
+      if (textElement !== undefined) {
+        const range = first(textElement, presentationNamespace, "pRg");
+        const start = nonNegativeIntegerValue(
+          range === undefined ? "" : attribute(range, "st"),
+        );
+        const end = nonNegativeIntegerValue(
+          range === undefined ? "" : attribute(range, "end"),
+        );
+        return start === undefined || end === undefined || start > end
+          ? undefined
+          : { type: "paragraph", start, end };
+      }
+      const graphicElement = first(target, presentationNamespace, "graphicEl");
+      const chart =
+        graphicElement === undefined
+          ? undefined
+          : first(graphicElement, drawingNamespace, "chart");
+      if (chart === undefined) return undefined;
+      const seriesIndex = integerAttribute(chart, "seriesIdx");
+      const categoryIndex = integerAttribute(chart, "categoryIdx");
+      const step = attribute(chart, "bldStep");
+      if (
+        seriesIndex === undefined ||
+        categoryIndex === undefined ||
+        (step !== "gridLegend" && step !== "series" && step !== "category")
+      ) {
+        return undefined;
+      }
+      return {
+        type: "chart",
+        step,
+        seriesIndex,
+        categoryIndex,
+      };
+    };
+    const valueText = (wrapper: XmlElement | undefined): string | undefined => {
+      if (wrapper === undefined) return undefined;
+      const value =
+        first(wrapper, presentationNamespace, "fltVal") ??
+        first(wrapper, presentationNamespace, "strVal");
+      const text = value === undefined ? "" : attribute(value, "val");
+      return text === "" ? undefined : text;
+    };
+    return behaviorElements.flatMap((behaviorNode) => {
+      const cBhvr = first(behaviorNode, presentationNamespace, "cBhvr");
+      if (cBhvr === undefined) return [];
+      const targets = descendantsByName(cBhvr, presentationNamespace, "spTgt");
+      const target = targets[0];
+      if (target === undefined) return [];
+      const targetId = positiveIntegerValue(attribute(target, "spid"));
+      if (targetId === undefined) return [];
+      const targetText = first(target, presentationNamespace, "txEl");
+      const targetGraphic = first(target, presentationNamespace, "graphicEl");
+      const targetRange = rangeOf(target);
+      const durationMs = integerAttribute(
+        first(cBhvr, presentationNamespace, "cTn"),
+        "dur",
+      );
+      const targetType =
+        first(target, presentationNamespace, "bg") !== undefined
+          ? "background"
+          : targetText !== undefined
+            ? "paragraph"
+            : targetGraphic !== undefined
+              ? "chart"
+              : "object";
+      const attributeList = first(cBhvr, presentationNamespace, "attrNameLst");
+      const attributeNames =
+        attributeList === undefined
+          ? []
+          : elements(attributeList, presentationNamespace, "attrName").map(
+              ({ textContent }) => textContent ?? "",
+            );
+      const tavList = first(behaviorNode, presentationNamespace, "tavLst");
+      const tavs =
+        tavList === undefined
+          ? []
+          : elements(tavList, presentationNamespace, "tav");
+      const firstTav = tavs[0];
+      const lastTav = tavs.at(-1);
+      const fromValue =
+        valueText(
+          firstTav === undefined
+            ? undefined
+            : first(firstTav, presentationNamespace, "val"),
+        ) ??
+        (() => {
+          const from = first(behaviorNode, presentationNamespace, "from");
+          const color =
+            from === undefined
+              ? undefined
+              : first(from, drawingNamespace, "srgbClr");
+          return (
+            attribute(behaviorNode, "from") ||
+            (color === undefined ? "" : attribute(color, "val")) ||
+            undefined
+          );
+        })();
+      const toValue =
+        valueText(
+          lastTav === undefined
+            ? undefined
+            : first(lastTav, presentationNamespace, "val"),
+        ) ??
+        (() => {
+          const to = first(behaviorNode, presentationNamespace, "to");
+          const color =
+            to === undefined
+              ? undefined
+              : first(to, drawingNamespace, "srgbClr");
+          return (
+            attribute(behaviorNode, "to") ||
+            (color === undefined ? "" : attribute(color, "val")) ||
+            valueText(to) ||
+            undefined
+          );
+        })();
+      const additive = attribute(cBhvr, "additive");
+      const filter = attribute(behaviorNode, "filter");
+      return [
+        {
+          behavior: behaviorNode.localName as FileAnimationBehavior["behavior"],
+          targetId,
+          targetType,
+          ...(targetRange === undefined ? {} : { targetRange }),
+          attributeNames,
+          ...(durationMs === undefined ? {} : { durationMs }),
+          ...(fromValue === undefined ? {} : { from: fromValue }),
+          ...(toValue === undefined ? {} : { to: toValue }),
+          ...(additive === "" ? {} : { additive }),
+          ...(filter === "" ? {} : { filter }),
+        },
+      ];
+    });
   };
 
   const result: FileAnimationStep[] = [];
@@ -3818,17 +4153,114 @@ function readSlideAnimations(
       const rangeSignatures = new Set(
         ranges.map((range) => JSON.stringify(range)),
       );
-      if (rangeSignatures.size > 1) {
+      const targetObject = findObjectById(objects, targetId);
+      const nativeBuildGroupId = nonNegativeIntegerValue(
+        attribute(effectTimeNode, "grpId") || "0",
+      );
+      const paragraphBuild =
+        nativeBuildGroupId === undefined
+          ? undefined
+          : paragraphBuilds.get(
+              paragraphBuildKey(targetId, nativeBuildGroupId),
+            );
+      const nativeBehaviors = nativeBehaviorsOf(effectTimeNode);
+      if (
+        nativeBehaviors.some(({ behavior, durationMs: behaviorDuration }) =>
+          behavior === "set"
+            ? behaviorDuration !== 1
+            : behaviorDuration !== traversalDurationMs,
+        )
+      ) {
+        issue(
+          errors,
+          part,
+          "inconsistent-animation-behavior-duration",
+          "同一效果的原生行为必须保留相同时长，可见性初始化固定为 1ms",
+        );
+        continue;
+      }
+      const paragraphRanges = nativeBehaviors
+        .map(({ targetType, targetRange }) =>
+          targetType === "paragraph" && targetRange?.type === "paragraph"
+            ? targetRange
+            : undefined,
+        )
+        .filter(
+          (
+            range,
+          ): range is Extract<
+            FileAnimationTargetRange,
+            { type: "paragraph" }
+          > => range !== undefined,
+        );
+      const paragraphIndexes = new Set(
+        paragraphRanges.map(({ start }) => start),
+      );
+      const fullParagraphProjection =
+        paragraphBuild?.build === "allAtOnce" &&
+        targetObject?.text !== undefined &&
+        paragraphRanges.length > 0 &&
+        ranges.every(
+          (range) => range === undefined || range.type === "paragraph",
+        ) &&
+        paragraphRanges.every(({ start, end }) => start === end) &&
+        paragraphIndexes.size === targetObject.text.paragraphs.length &&
+        targetObject.text.paragraphs.every((_, index) =>
+          paragraphIndexes.has(index),
+        );
+      if (rangeSignatures.size > 1 && !fullParagraphProjection) {
         issue(
           errors,
           part,
           "inconsistent-animation-target-range",
-          "同一动画的行为节点必须指向相同原生文字或图表范围",
+          "同一动画的行为节点必须使用一致范围，整体文字投影则必须覆盖全部段落",
         );
         continue;
       }
-      const targetRange = ranges[0];
-      const targetObject = findObjectById(objects, targetId);
+      if (
+        !fullParagraphProjection &&
+        ranges.some((range) => range?.type === "paragraph") &&
+        (nativeBuildGroupId === undefined || paragraphBuild?.build !== "p")
+      ) {
+        issue(
+          errors,
+          part,
+          "invalid-animation-target-range",
+          "逐段文字目标必须关联同组 build=p 的原生构建声明",
+        );
+        continue;
+      }
+      const hasBackgroundBehaviors = nativeBehaviors.some(
+        ({ targetType }) => targetType === "background",
+      );
+      if ((paragraphBuild?.animBg === true) !== hasBackgroundBehaviors) {
+        issue(
+          errors,
+          part,
+          "inconsistent-animation-background-role",
+          "文字构建 animBg 必须与实际 spTgt/bg 原生行为一致",
+        );
+        continue;
+      }
+      if (
+        fullParagraphProjection &&
+        !validWholeTextProjection(
+          preset,
+          kind,
+          targetObject?.text?.paragraphs.length ?? 0,
+          paragraphBuild?.animBg === true,
+          nativeBehaviors,
+        )
+      ) {
+        issue(
+          errors,
+          part,
+          "invalid-animation-projection-target",
+          "整体文字投影的初始化、段落属性或背景职责不符合对应预设",
+        );
+        continue;
+      }
+      const targetRange = fullParagraphProjection ? undefined : ranges[0];
       let fromColor: string | undefined;
       let toColor: string | undefined;
       if (preset === "breathe") {
@@ -3894,7 +4326,7 @@ function readSlideAnimations(
       if (
         targetRange?.type === "paragraph" &&
         (targetObject?.text === undefined ||
-          paragraphBuilds.get(targetId) !== "p" ||
+          paragraphBuild?.build !== "p" ||
           targetRange.end >= targetObject.text.paragraphs.length)
       ) {
         issue(
@@ -3964,7 +4396,8 @@ function readSlideAnimations(
           value < 1 ||
           targetRange !== undefined ||
           targetObject?.text === undefined ||
-          !paragraphBuilds.has(targetId)
+          nativeBuildGroupId === undefined ||
+          !paragraphBuilds.has(paragraphBuildKey(targetId, nativeBuildGroupId))
         ) {
           issue(
             errors,
@@ -4039,15 +4472,34 @@ function readSlideAnimations(
             : rotationFrom / 60000
           : direction;
       const chartBuild = chartBuilds.get(targetId);
+      const nativeBuild =
+        paragraphBuild?.build === "p"
+          ? "paragraph"
+          : paragraphBuild?.build === "allAtOnce"
+            ? "allAtOnce"
+            : chartBuild === "series" || chartBuild === "category"
+              ? chartBuild
+              : undefined;
       effects.push({
         targetId,
         timingId,
         ...(targetRange === undefined ? {} : { targetRange }),
-        ...(targetRange?.type === "paragraph"
-          ? { nativeBuild: "paragraph" as const }
-          : chartBuild === "series" || chartBuild === "category"
-            ? { nativeBuild: chartBuild }
-            : {}),
+        ...(nativeBuild === undefined ? {} : { nativeBuild }),
+        ...(paragraphBuild === undefined || nativeBuildGroupId === undefined
+          ? {}
+          : {
+              nativeBuildGroupId,
+              ...(paragraphBuild.animBg === undefined
+                ? {}
+                : { nativeBuildAnimBg: paragraphBuild.animBg }),
+            }),
+        ...(fullParagraphProjection ||
+        nativeBehaviors.some(
+          ({ targetType, additive }) =>
+            targetType === "background" || additive === "sum",
+        )
+          ? { nativeBehaviors }
+          : {}),
         kind,
         preset,
         durationMs,

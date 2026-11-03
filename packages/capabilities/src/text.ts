@@ -286,6 +286,15 @@ export const textCapability: CapabilityModule = {
       filled:
         visualStyle["backgroundColor"] !== undefined ||
         visualStyle["backgroundImage"] !== undefined,
+      box,
+      rotationDegrees:
+        typeof visualStyle["rotate"] === "number" ? visualStyle["rotate"] : 0,
+      hasBackground:
+        visualStyle["backgroundColor"] !== undefined ||
+        visualStyle["backgroundImage"] !== undefined ||
+        visualStyle["borderColor"] !== undefined ||
+        (typeof visualStyle["borderWidth"] === "number" &&
+          visualStyle["borderWidth"] > 0),
       paragraphCount: body.paragraphCount,
     });
     let escapedName: string;

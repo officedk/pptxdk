@@ -403,6 +403,144 @@ describe("公开构建入口", () => {
         expected: Array.from("0123456789%"),
         absent: [],
       },
+      {
+        testId: "subset-chart-locale-only-label",
+        chart: createElement(Chart, {
+          testId: "subset-chart-locale-only-label",
+          kind: "pie",
+          x: 0,
+          y: 0,
+          width: 320,
+          height: 220,
+          style: { fontFamily: chartFont },
+          dataLabels: {
+            value: true,
+            numberFormat: "[$-409]0",
+            style: { fontSize: 14 },
+          },
+          data: {
+            categories: ["甲"],
+            series: [{ name: "乙", values: [12] }],
+          },
+        }),
+        expected: Array.from("0123456789"),
+        absent: ["$", "[", "]"],
+      },
+      {
+        testId: "subset-chart-currency-literal-label",
+        chart: createElement(Chart, {
+          testId: "subset-chart-currency-literal-label",
+          kind: "pie",
+          x: 0,
+          y: 0,
+          width: 320,
+          height: 220,
+          style: { fontFamily: chartFont },
+          dataLabels: {
+            value: true,
+            numberFormat: "[$￥-804]#,##0.00",
+            style: { fontSize: 14 },
+          },
+          data: {
+            categories: ["甲"],
+            series: [{ name: "乙", values: [12] }],
+          },
+        }),
+        expected: Array.from("0123456789￥,."),
+        absent: ["$", "#", "[", "]"],
+      },
+      {
+        testId: "subset-chart-condition-color-label",
+        chart: createElement(Chart, {
+          testId: "subset-chart-condition-color-label",
+          kind: "pie",
+          x: 0,
+          y: 0,
+          width: 320,
+          height: 220,
+          style: { fontFamily: chartFont },
+          dataLabels: {
+            value: true,
+            numberFormat: '[Red][>=100]0"元";[Blue][<100]0"分"',
+            style: { fontSize: 14 },
+          },
+          data: {
+            categories: ["甲"],
+            series: [{ name: "乙", values: [12] }],
+          },
+        }),
+        expected: Array.from("0123456789元分"),
+        absent: Array.from("[]<>RedBlu"),
+      },
+      {
+        testId: "subset-chart-escaped-literal-label",
+        chart: createElement(Chart, {
+          testId: "subset-chart-escaped-literal-label",
+          kind: "pie",
+          x: 0,
+          y: 0,
+          width: 320,
+          height: 220,
+          style: { fontFamily: chartFont },
+          dataLabels: {
+            value: true,
+            numberFormat: "0\\元",
+            style: { fontSize: 14 },
+          },
+          data: {
+            categories: ["甲"],
+            series: [{ name: "乙", values: [12] }],
+          },
+        }),
+        expected: Array.from("0123456789元"),
+        absent: ["\\"],
+      },
+      {
+        testId: "subset-chart-chinese-date-name-label",
+        chart: createElement(Chart, {
+          testId: "subset-chart-chinese-date-name-label",
+          kind: "pie",
+          x: 0,
+          y: 0,
+          width: 320,
+          height: 220,
+          style: { fontFamily: chartFont },
+          dataLabels: {
+            value: true,
+            numberFormat: "[$-804]dddd",
+            style: { fontSize: 14 },
+          },
+          data: {
+            categories: ["甲"],
+            series: [{ name: "乙", values: [12] }],
+          },
+        }),
+        expected: Array.from("0123456789星期日一二三四五六"),
+        absent: ["A", "J", "S"],
+      },
+      {
+        testId: "subset-chart-question-placeholder-label",
+        chart: createElement(Chart, {
+          testId: "subset-chart-question-placeholder-label",
+          kind: "pie",
+          x: 0,
+          y: 0,
+          width: 320,
+          height: 220,
+          style: { fontFamily: chartFont },
+          dataLabels: {
+            value: true,
+            numberFormat: "??",
+            style: { fontSize: 14 },
+          },
+          data: {
+            categories: ["甲"],
+            series: [{ name: "乙", values: [12] }],
+          },
+        }),
+        expected: Array.from("0123456789 "),
+        absent: ["?"],
+      },
     ] as const;
 
     for (const { testId, chart, expected, absent } of chartCases) {
@@ -466,6 +604,124 @@ describe("公开构建入口", () => {
             code === "font-missing-glyph" && message.includes("元"),
         ),
     );
+  });
+
+  it("数值标签忽略专用于文本的第四节", async () => {
+    const latinFont = font("Jost*", [{ weight: 400, data: jostBook }]);
+    const result = await build(
+      deck(
+        createElement(Chart, {
+          testId: "subset-chart-fourth-text-section",
+          kind: "pie",
+          x: 0,
+          y: 0,
+          width: 320,
+          height: 220,
+          style: { fontFamily: latinFont },
+          dataLabels: {
+            value: true,
+            numberFormat: '0;0;0;"元"@',
+            style: { fontSize: 14 },
+          },
+          data: {
+            categories: ["A"],
+            series: [{ name: "B", values: [12] }],
+          },
+        }),
+      ),
+      { embedFonts: "subset" },
+    );
+    assert.deepEqual(result.report.diagnostics, []);
+    assert.deepEqual((await validatePptx(result.pptx)).errors, []);
+
+    const parts = unzipSync(result.pptx);
+    const subset = parsedFont(
+      embeddedFont(
+        parts,
+        strFromU8(parts["ppt/presentation.xml"]!),
+        "Jost*",
+        "regular",
+      ),
+    );
+    assert.equal(subset.hasGlyphForCodePoint("元".codePointAt(0)!), false);
+  });
+
+  it("locale-only 数值格式不要求货币字形", async () => {
+    const chartFont = font("ZCOOL XiaoWei", [
+      { weight: 400, data: zcoolXiaoWei },
+    ]);
+    const axisResult = await build(
+      deck(
+        createElement(Chart, {
+          testId: "subset-chart-locale-only-source",
+          kind: "column",
+          x: 0,
+          y: 0,
+          width: 320,
+          height: 220,
+          style: { fontFamily: chartFont },
+          data: {
+            categories: ["甲"],
+            series: [{ name: "乙", values: [12] }],
+          },
+        }),
+      ),
+      { embedFonts: "subset" },
+    );
+    const axisParts = unzipSync(axisResult.pptx);
+    const narrowFontBytes = embeddedFont(
+      axisParts,
+      strFromU8(axisParts["ppt/presentation.xml"]!),
+      "ZCOOL XiaoWei",
+      "regular",
+    );
+    assert.equal(
+      parsedFont(narrowFontBytes).hasGlyphForCodePoint("$".codePointAt(0)!),
+      false,
+    );
+
+    const narrowFont = font("ZCOOL XiaoWei", [
+      { weight: 400, data: narrowFontBytes },
+    ]);
+    const result = await build(
+      deck(
+        createElement(Chart, {
+          testId: "subset-chart-locale-only-label-narrow-font",
+          kind: "pie",
+          x: 0,
+          y: 0,
+          width: 320,
+          height: 220,
+          style: { fontFamily: narrowFont },
+          dataLabels: {
+            value: true,
+            numberFormat: "[$-409]0",
+            style: { fontSize: 14 },
+          },
+          data: {
+            categories: ["甲"],
+            series: [{ name: "乙", values: [12] }],
+          },
+        }),
+      ),
+      { embedFonts: "subset" },
+    );
+    assert.deepEqual(result.report.diagnostics, []);
+    assert.deepEqual((await validatePptx(result.pptx)).errors, []);
+
+    const parts = unzipSync(result.pptx);
+    const subset = parsedFont(
+      embeddedFont(
+        parts,
+        strFromU8(parts["ppt/presentation.xml"]!),
+        "ZCOOL XiaoWei",
+        "regular",
+      ),
+    );
+    assert.equal(subset.hasGlyphForCodePoint("$".codePointAt(0)!), false);
+    for (const character of "0123456789") {
+      assert.ok(subset.hasGlyphForCodePoint(character.codePointAt(0)!));
+    }
   });
 
   it("字符子集不把换行和制表控制符当作缺失字形", async () => {

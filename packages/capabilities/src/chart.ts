@@ -671,7 +671,22 @@ function plotArea(
 const generalNumberCharacters = "0123456789.,-+eE";
 const dateNameCharacters =
   "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
+// 明确给出简体中文 LCID 时，日期名称使用本地化字形，不按英文字符处理。
+const dateNameCharactersByLocale: Readonly<Record<string, string>> = {
+  "0804": "星期日一二三四五六七八九十年月",
+};
 const numberFormatLiteralCharacters = new Set("$+():^'{}<=>-/!&~ ");
+
+function dateNameCharactersForLocale(
+  locale: string | undefined,
+): string | undefined {
+  if (locale === undefined) return dateNameCharacters;
+  const languageId = /^(?:0x)?([\da-f]{1,4})(?:,.*)?$/iu.exec(locale)?.[1];
+  if (languageId === undefined) return undefined;
+  const normalizedLanguageId = languageId.padStart(4, "0").toUpperCase();
+  if (normalizedLanguageId === "0409") return dateNameCharacters;
+  return dateNameCharactersByLocale[normalizedLanguageId];
+}
 
 function hasDigitPlaceholderAfter(
   format: readonly string[],
@@ -715,7 +730,7 @@ function numberLabelCharacters(
     numberFormat.trim().toLocaleLowerCase("en-US") === "general";
   let hasNumericValue = defaultFormat;
   let hasGeneralValue = defaultFormat;
-  let hasDateName = false;
+  let sectionLocale: string | undefined;
   let sectionCount = 1;
 
   if (defaultFormat) add(generalNumberCharacters);
@@ -752,12 +767,8 @@ function numberLabelCharacters(
             ? currencyAndLocale
             : currencyAndLocale.slice(0, separator);
         add(currency);
-        if (
-          currency === "" &&
-          /^(?:0?409)$/iu.test(currencyAndLocale.slice(1))
-        ) {
-          add("$");
-        }
+        sectionLocale =
+          separator < 0 ? undefined : currencyAndLocale.slice(separator + 1);
       } else if (/^[hms]+$/iu.test(directive)) {
         hasNumericValue = true;
       }
@@ -766,9 +777,12 @@ function numberLabelCharacters(
     }
     if (character === ";") {
       sectionCount += 1;
+      if (sectionCount > 3) break;
+      sectionLocale = undefined;
       continue;
     }
     if (character === "0" || character === "#" || character === "?") {
+      if (character === "?") characters.add(" ");
       hasNumericValue = true;
       continue;
     }
@@ -811,7 +825,8 @@ function numberLabelCharacters(
           character.toLocaleLowerCase("en-US") === "d") &&
         width >= 3
       ) {
-        hasDateName = true;
+        const dateNames = dateNameCharactersForLocale(sectionLocale);
+        if (dateNames !== undefined) add(dateNames);
       }
       index = end - 1;
       continue;
@@ -855,7 +870,6 @@ function numberLabelCharacters(
     if (sectionCount === 1) characters.add("-");
   }
   if (hasGeneralValue) add("+eE");
-  if (hasDateName) add(dateNameCharacters);
   if (percent && numberFormat === undefined) characters.add("%");
   return [...characters].join("");
 }

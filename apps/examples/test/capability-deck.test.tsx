@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
 import type { MotionObservation } from "@react-pptx/react-pptx";
@@ -341,16 +341,27 @@ describe("原创能力册", () => {
     );
   }, 60_000);
 
-  it("从正式 dist 链生成默认、完整与子集产物并保存同次证据", async () => {
+  it("从源码与正式 dist 链生成三种字体模式并保存同次证据", async () => {
     const outputDirectory = join(
       import.meta.dirname,
       "../test-results/capability-deck",
     );
+    await rm(outputDirectory, { recursive: true, force: true });
     await mkdir(outputDirectory, { recursive: true });
 
-    for (const mode of ["default", "full", "subset"] as const) {
+    for (const [entry, mode] of [
+      ["source", "default"],
+      ["source", "full"],
+      ["source", "subset"],
+      ["dist", "default"],
+      ["dist", "full"],
+      ["dist", "subset"],
+    ] as const) {
       const result = await buildFromSource(
-        new URL("../dist/index.js", import.meta.url),
+        new URL(
+          entry === "source" ? "../src/index.ts" : "../dist/index.js",
+          import.meta.url,
+        ),
         {
           exportName: "capabilityDeck",
           ...(mode === "default" ? {} : { embedFonts: mode }),
@@ -359,6 +370,9 @@ describe("原创能力册", () => {
       const file = await validatePptx(result.pptx);
       const parts = unzipSync(result.pptx);
       const fonts = embeddedFonts(parts);
+      const allObjects = file.slides.flatMap(({ objects }) =>
+        flattenObjects(objects),
+      );
 
       assert.deepEqual(result.report.diagnostics, []);
       assert.deepEqual(file.errors, []);
@@ -394,26 +408,38 @@ describe("原创能力册", () => {
           ({ parsed }) => parsed.familyName === "ZCOOL XiaoWei",
         );
         assert.ok(cjk, "实际嵌入资源缺少 ZCOOL XiaoWei");
-        const chartLabelText = file.slides
-          .flatMap(({ objects }) => flattenObjects(objects))
-          .flatMap(
-            ({ chart }) =>
-              chart?.series.flatMap(({ name, categories }) => [
-                name,
-                ...categories,
-              ]) ?? [],
-          )
+        const cjkText = allObjects
+          .flatMap(({ text, table, chart }) => [
+            ...(text?.paragraphs.flatMap(({ runs, list }) => {
+              const cjkRuns = runs.filter(
+                ({ fontFamily }) => fontFamily === "ZCOOL XiaoWei",
+              );
+              return [
+                ...cjkRuns.map(({ text: runText }) => runText),
+                ...(cjkRuns.length > 0 && list?.type === "bullet"
+                  ? [list.character]
+                  : []),
+                ...(cjkRuns.length > 0 &&
+                list?.type === "number" &&
+                list.startAt !== undefined
+                  ? [String(list.startAt)]
+                  : []),
+              ];
+            }) ?? []),
+            ...(table?.cellTexts.flatMap(({ text: cellText }) =>
+              cellText.paragraphs.flatMap(({ runs }) =>
+                runs
+                  .filter(({ fontFamily }) => fontFamily === "ZCOOL XiaoWei")
+                  .map(({ text: runText }) => runText),
+              ),
+            ) ?? []),
+            ...(chart?.series.flatMap(({ name, categories, values }) => [
+              name,
+              ...categories,
+              ...values.map((value) => String(value ?? "")),
+            ]) ?? []),
+          ])
           .join("");
-        const cjkCharacters = new Set([
-          ...Array.from("中文营收万元•%0123456789. "),
-          ...Array.from(chartLabelText),
-        ]);
-        for (const character of cjkCharacters) {
-          assert.ok(
-            cjk.parsed.hasGlyphForCodePoint(character.codePointAt(0)!),
-            `ZCOOL XiaoWei 缺少实际内容所需字形 ${character}`,
-          );
-        }
         const chartXml = Object.entries(parts)
           .filter(
             ([part]) =>
@@ -421,6 +447,19 @@ describe("原创能力册", () => {
           )
           .map(([, bytes]) => strFromU8(bytes))
           .join("\n");
+        const chartFormatText = [...chartXml.matchAll(/formatCode="([^"]*)"/gu)]
+          .map(([, format]) => format?.replaceAll("&quot;", '"') ?? "")
+          .filter((format) => format !== "General")
+          .map((format) => format.replace(/"([^"]*)"/gu, "$1"))
+          .join("");
+        const chartDisplayText = `${chartFormatText}${chartXml.includes('<c:showPercent val="1"') ? "%" : ""}`;
+        const cjkCharacters = new Set(Array.from(cjkText + chartDisplayText));
+        for (const character of cjkCharacters) {
+          assert.ok(
+            cjk.parsed.hasGlyphForCodePoint(character.codePointAt(0)!),
+            `ZCOOL XiaoWei 缺少本次 PPTX 实际内容所需字形 ${character}`,
+          );
+        }
         assert.ok(chartXml.includes("万元"));
         if (mode === "full") {
           const source = readFileSync(
@@ -439,7 +478,7 @@ describe("原创能力册", () => {
         }
       }
 
-      const prefix = `${mode}-capability-deck`;
+      const prefix = `${entry}-${mode}-capability-deck`;
       await writeFile(join(outputDirectory, `${prefix}.pptx`), result.pptx);
       await writeFile(
         join(outputDirectory, `${prefix}-report.json`),

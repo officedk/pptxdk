@@ -38,6 +38,7 @@ function observedShape(
   y: number,
   fill: string,
   duration: number,
+  delay = 0,
 ) {
   return createElement(Shape, {
     testId,
@@ -47,7 +48,7 @@ function observedShape(
     height: 24,
     fill,
     text,
-    enter: fade({ duration }),
+    enter: fade({ duration, delay }),
   });
 }
 
@@ -741,12 +742,18 @@ type IncomparableJoinOptions = {
   readonly firstText: string;
   readonly trigger: "auto" | "click" | "explicit";
   readonly unknownParentStart?: boolean;
+  readonly parentStartGate?: boolean;
+  readonly scopeDelayMs?: number;
+  readonly effectDelayMs?: number;
 };
 
 function IncomparableUnknownJoin({
   firstText,
   trigger,
   unknownParentStart = false,
+  parentStartGate = false,
+  scopeDelayMs = 0,
+  effectDelayMs = 0,
 }: IncomparableJoinOptions) {
   const parentSource = useMotionScope();
   const outer = useMotionScope();
@@ -807,8 +814,14 @@ function IncomparableUnknownJoin({
     chainContents,
     createElement(
       MotionScope,
-      { scope: afterJoin, startAt: after(delayed.end, 11000) },
-      observedShape("join-after", "D", 122, "#ED7D31", 100),
+      {
+        scope: afterJoin,
+        startAt: parentStartGate
+          ? after(chain.start, 5000)
+          : after(delayed.end, 11000),
+        ...(scopeDelayMs === 0 ? {} : { delay: scopeDelayMs }),
+      },
+      observedShape("join-after", "D", 122, "#ED7D31", 100, effectDelayMs),
     ),
   );
   const outerScope = createElement(
@@ -1474,6 +1487,28 @@ describe("组件编排作用域", () => {
         trigger: "explicit",
         unknownParentStart: true,
       },
+      { firstText: "AB", trigger: "auto", parentStartGate: true },
+      { firstText: "AB", trigger: "click", parentStartGate: true },
+      {
+        firstText: "AB",
+        trigger: "auto",
+        parentStartGate: true,
+        effectDelayMs: 37,
+      },
+      {
+        firstText: "AB",
+        trigger: "click",
+        parentStartGate: true,
+        scopeDelayMs: 41,
+        effectDelayMs: 37,
+      },
+      { firstText: "AB", trigger: "auto", effectDelayMs: 37 },
+      {
+        firstText: "AB",
+        trigger: "click",
+        scopeDelayMs: 41,
+        effectDelayMs: 37,
+      },
     ];
 
     for (const options of variants) {
@@ -1529,14 +1564,24 @@ describe("组件编排作用域", () => {
         {
           scopeId: innerScope?.id,
           point: "end" as const,
-          offsetMs: 0,
+          offsetMs: options.scopeDelayMs ?? 0,
         },
-        {
-          scopeId: delayedScope?.id,
-          point: "end" as const,
-          offsetMs: 11000,
-        },
+        options.parentStartGate === true
+          ? {
+              scopeId: chainScope?.id,
+              point: "start" as const,
+              offsetMs: 5000 + (options.scopeDelayMs ?? 0),
+            }
+          : {
+              scopeId: delayedScope?.id,
+              point: "end" as const,
+              offsetMs: 11000 + (options.scopeDelayMs ?? 0),
+            },
       ];
+      const effectSources = conditionSources.map((dependency) => ({
+        ...dependency,
+        offsetMs: dependency.offsetMs + (options.effectDelayMs ?? 0),
+      }));
       const firstObservation = motion.steps[0]?.effects.find(
         ({ target }) => target.testId === "join-first",
       );
@@ -1558,13 +1603,18 @@ describe("组件编排作用域", () => {
         ["unknown", undefined],
       );
       assert.deepEqual(
-        [afterJoinScope?.startMs, afterJoinScope?.endMs],
-        [undefined, undefined],
+        [
+          afterJoinScope?.startMs,
+          afterJoinScope?.endMs,
+          afterJoinScope?.completion,
+        ],
+        [undefined, undefined, "unknown"],
       );
       assert.deepEqual(afterJoinScope?.startAfterAll, conditionSources);
       assert.equal(afterJoinScope?.startAfter, undefined);
-      assert.deepEqual(afterJoinObservation?.startAfterAll, conditionSources);
+      assert.deepEqual(afterJoinObservation?.startAfterAll, effectSources);
       assert.equal(afterJoinObservation?.startAfter, undefined);
+      assert.equal(afterJoinObservation?.completion, "unknown");
       assert.deepEqual(
         [
           innerScope?.completion,
@@ -1630,7 +1680,11 @@ describe("组件编排作用域", () => {
             ({ kind, timingId }) =>
               kind === "effect" && timingId === firstEffect.timingId,
           ) &&
-          children.some(({ kind }) => kind === "container"),
+          children.some(
+            ({ kind, timingId }) =>
+              kind === "container" ||
+              (kind === "effect" && timingId === lateEffect.timingId),
+          ),
       );
       const fileDelayed = containers.find(
         ({ children, endSync }) =>
@@ -1640,7 +1694,8 @@ describe("组件编排作用域", () => {
               kind === "effect" && timingId === lateEffect.timingId,
           ),
       );
-      assert.ok(fileInner && fileDelayed);
+      assert.ok(fileInner);
+      if (options.parentStartGate !== true) assert.ok(fileDelayed);
       assert.equal(fileInner.durationMs, undefined);
       const join = containers.find(({ children, endSync, durationMs }) => {
         if (
@@ -1655,25 +1710,34 @@ describe("组件编排作用域", () => {
           return (
             kind === "container" &&
             gate?.durationMs === 0 &&
-            gate.children.length === 0 &&
-            gate.startAfter !== undefined
+            gate.children.length === 0
           );
         });
       });
       assert.ok(join);
       const gates = join.children.map(({ timingId }) => childrenOf(timingId));
+      const secondGateSource =
+        options.parentStartGate === true ? undefined : fileDelayed?.timingId;
       assert.deepEqual(
         gates.map((gate) => [
           gate?.startAfter?.timingId,
           gate?.startAfter?.offsetMs,
         ]),
         [
-          [fileInner.timingId, 0],
-          [fileDelayed.timingId, 11000],
+          [fileInner.timingId, options.scopeDelayMs ?? 0],
+          [
+            secondGateSource,
+            options.parentStartGate === true
+              ? undefined
+              : 11000 + (options.scopeDelayMs ?? 0),
+          ],
         ],
       );
       assert.equal(afterJoinEffect.startAfter?.timingId, join.timingId);
-      assert.equal(afterJoinEffect.startAfter?.offsetMs, 0);
+      assert.equal(
+        afterJoinEffect.startAfter?.offsetMs,
+        options.effectDelayMs ?? 0,
+      );
       const fileChain = childrenOf(join.parentTimingId);
       assert.ok(fileChain);
       assert.ok(
@@ -1724,12 +1788,29 @@ describe("组件编排作用域", () => {
         ),
         /<p:endSync evt="end" delay="0"><p:rtn val="all"><\/p:rtn><\/p:endSync>/u,
       );
-      for (const gate of gates) {
+      for (const [index, gate] of gates.entries()) {
         assert.ok(gate);
-        assert.match(
-          startConditions(xml, gate.timingId),
-          /<p:cond\b[^>]*evt="end"/u,
-        );
+        const conditions = startConditions(xml, gate.timingId);
+        const offsetMs =
+          index === 0
+            ? (options.scopeDelayMs ?? 0)
+            : options.parentStartGate === true
+              ? 5000 + (options.scopeDelayMs ?? 0)
+              : 11000 + (options.scopeDelayMs ?? 0);
+        if (index === 1 && options.parentStartGate === true) {
+          assert.match(
+            conditions,
+            new RegExp(`<p:cond delay="${offsetMs}"><\\/p:cond>`, "u"),
+          );
+        } else {
+          assert.match(
+            conditions,
+            new RegExp(
+              `<p:cond evt="end" delay="${offsetMs}"><p:tn val="${gate.startAfter?.timingId}"><\\/p:tn><\\/p:cond>`,
+              "u",
+            ),
+          );
+        }
         assert.match(
           xml.slice(
             timingNodeIndex(gate.timingId),
@@ -1738,6 +1819,13 @@ describe("组件编排作用域", () => {
           /dur="0"/u,
         );
       }
+      assert.match(
+        startConditions(xml, afterJoinEffect.timingId),
+        new RegExp(
+          `<p:cond evt="end" delay="${options.effectDelayMs ?? 0}"><p:tn val="${join.timingId}"><\\/p:tn><\\/p:cond>`,
+          "u",
+        ),
+      );
       assert.equal(
         fileOuter?.children.some(({ timingId }) => timingId === join.timingId),
         false,

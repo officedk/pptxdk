@@ -1331,8 +1331,15 @@ function motionPlan(
       parentStart: TimePoint,
     ): readonly MotionStartDependency[] | undefined => {
       if (nativeStart.kind === "condition-join") {
-        const dependencies = nativeStart.gates.flatMap((gate) =>
-          gate.kind === "end" ? [gate.dependency] : [],
+        const dependencies = nativeStart.gates.map((gate) =>
+          gate.kind === "end"
+            ? gate.dependency
+            : {
+                // 原生数值门相对集合宿主的真实起点，查询也保留该来源。
+                scopeId: nativeStart.hostScopeId,
+                point: "start" as const,
+                offsetMs: gate.delayMs,
+              },
         );
         return Object.freeze(dependencies);
       }

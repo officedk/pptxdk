@@ -1894,30 +1894,33 @@ function motionPlan(
               hostStart.eventId,
               candidate.eventId,
             );
-            if (exactHostOffset !== undefined && exactHostOffset >= 0) {
+            if (exactHostOffset !== undefined) {
               const delayMs = exactHostOffset + candidate.offsetMs;
               if (!Number.isSafeInteger(delayMs)) {
                 lastReason = "精确宿主累计偏移超出安全整数范围";
                 validHost = false;
                 break;
               }
-              const lowered = addMotionPlanStartDelay(
-                { kind: "parent-start", delayMs: 0 },
-                delayMs,
-              );
-              const sourceDependencyAtCandidate =
-                dependency === undefined
-                  ? undefined
-                  : dependencyAtEvent(dependency, candidate.offsetMs);
-              if (
-                lowered === undefined ||
-                !appendGateStart(lowered, sourceDependencyAtCandidate)
-              ) {
-                lastReason = "精确宿主累计偏移无法保持为安全整数延迟层";
-                validHost = false;
-                break;
+              if (delayMs >= 0) {
+                // 已发生的来源可由足够大的候选偏移抵消，再折叠成宿主延迟。
+                const lowered = addMotionPlanStartDelay(
+                  { kind: "parent-start", delayMs: 0 },
+                  delayMs,
+                );
+                const sourceDependencyAtCandidate =
+                  dependency === undefined
+                    ? undefined
+                    : dependencyAtEvent(dependency, candidate.offsetMs);
+                if (
+                  lowered === undefined ||
+                  !appendGateStart(lowered, sourceDependencyAtCandidate)
+                ) {
+                  lastReason = "精确宿主累计偏移无法保持为安全整数延迟层";
+                  validHost = false;
+                  break;
+                }
+                continue;
               }
-              continue;
             }
             if (exactHostOffset !== undefined && exactHostOffset < 0) {
               lastReason = "候选来源已早于宿主激活且不能折叠为合法偏移";

@@ -2926,6 +2926,79 @@ function MultiSourceSpreadOffsetStart() {
   );
 }
 
+function ExactHostOffsetCancellation() {
+  const host = useMotionScope();
+  const leftWrapper = useMotionScope();
+  const rightWrapper = useMotionScope();
+  const left = useMotionScope();
+  const right = useMotionScope();
+  const sourceA = useMotionScope();
+  const sourceB = useMotionScope();
+  const afterA = useMotionScope();
+  const afterB = useMotionScope();
+  const letterText = (testId: string) =>
+    createElement(
+      Text,
+      {
+        testId,
+        x: 0,
+        y: 0,
+        width: 80,
+        height: 20,
+        enter: fade({ by: "letter", duration: 601, intervalMs: 211 }),
+      },
+      `${testId}XY`,
+    );
+  const shape = (testId: string) =>
+    createElement(Shape, {
+      testId,
+      x: 0,
+      y: 40,
+      width: 20,
+      height: 20,
+      fill: "#CC0000",
+      enter: fade({ duration: 103 }),
+    });
+  const branch = (
+    wrapper: ReturnType<typeof useMotionScope>,
+    inner: ReturnType<typeof useMotionScope>,
+    source: ReturnType<typeof useMotionScope>,
+    follower: ReturnType<typeof useMotionScope>,
+    sourceTestId: string,
+    followerTestId: string,
+    otherSource: ReturnType<typeof useMotionScope>,
+    offsetMs: number,
+  ) =>
+    createElement(
+      MotionScope,
+      { scope: wrapper, delay: 31 },
+      createElement(
+        MotionScope,
+        { scope: inner, mode: "parallel" },
+        createElement(MotionScope, { scope: source }, letterText(sourceTestId)),
+        createElement(
+          MotionScope,
+          { scope: follower, startAt: after(otherSource.end, offsetMs) },
+          shape(followerTestId),
+        ),
+      ),
+    );
+  return createElement(
+    Deck,
+    { width: 320, height: 120 },
+    createElement(
+      Slide,
+      { slideId: "exact-host-offset-cancellation" },
+      createElement(
+        MotionScope,
+        { scope: host, mode: "parallel" },
+        branch(leftWrapper, left, sourceA, afterA, "A", "D", sourceB, 1001),
+        branch(rightWrapper, right, sourceB, afterB, "B", "E", sourceA, 1104),
+      ),
+    ),
+  );
+}
+
 describe("组件编排作用域", () => {
   it("等待交错作用域的全部成员，并允许前向引用完成与命名时刻", async () => {
     const result = await build(createElement(StaggeredSource));
@@ -7420,5 +7493,68 @@ describe("组件编排作用域", () => {
     assert.deepEqual(queryEffect?.startAfterAll, expectedDependencies);
     const writtenTimes = await assertValidMotionPptx(result.pptx);
     assert.ok(writtenTimes.includes(4_294_967_295));
+  });
+
+  it("精确宿主抵消负来源偏移时使用零时长宿主门避免伪循环", async () => {
+    const result = await build(createElement(ExactHostOffsetCancellation));
+    const slide = result.report.slides[0];
+    const motion = slide?.capabilities?.["motion"] as MotionObservation;
+    const scopeContainingObject = (testId: string) => {
+      const id = slide?.objects.find((object) => object.testId === testId)?.id;
+      return motion.scopes?.find(({ members }) =>
+        members.some((member) => member.kind === "object" && member.id === id),
+      );
+    };
+    const scopeContainingScope = (scopeId: string | undefined) =>
+      scopeId === undefined
+        ? undefined
+        : motion.scopes?.find(({ members }) =>
+            members.some(
+              (member) => member.kind === "scope" && member.id === scopeId,
+            ),
+          );
+    const sourceA = scopeContainingObject("A");
+    const sourceB = scopeContainingObject("B");
+    const afterA = scopeContainingObject("D");
+    const afterB = scopeContainingObject("E");
+    const left = scopeContainingScope(afterA?.id);
+    const right = scopeContainingScope(afterB?.id);
+    assert.ok(sourceA && sourceB && afterA && afterB && left && right);
+    const expectedAfterA = [
+      { scopeId: left.id, point: "start", offsetMs: 0 },
+      { scopeId: sourceB.id, point: "end", offsetMs: 1001 },
+    ];
+    const expectedAfterB = [
+      { scopeId: right.id, point: "start", offsetMs: 0 },
+      { scopeId: sourceA.id, point: "end", offsetMs: 1104 },
+    ];
+    assert.deepEqual(afterA.startAfterAll, expectedAfterA);
+    assert.deepEqual(afterB.startAfterAll, expectedAfterB);
+    const reportEffects = motion.steps[0]?.effects ?? [];
+    assert.deepEqual(
+      reportEffects.find(({ target }) => target.testId === "D")?.startAfterAll,
+      expectedAfterA,
+    );
+    assert.deepEqual(
+      reportEffects.find(({ target }) => target.testId === "E")?.startAfterAll,
+      expectedAfterB,
+    );
+    const query = observeMotion(
+      result.query.slide("exact-host-offset-cancellation").observation,
+    );
+    assert.deepEqual(
+      query?.steps[0]?.effects.find(({ target }) => target.testId === "D")
+        ?.startAfterAll,
+      expectedAfterA,
+    );
+    assert.deepEqual(
+      query?.steps[0]?.effects.find(({ target }) => target.testId === "E")
+        ?.startAfterAll,
+      expectedAfterB,
+    );
+    const writtenTimes = await assertValidMotionPptx(result.pptx);
+    assert.ok(writtenTimes.includes(0));
+    assert.ok(writtenTimes.includes(1001));
+    assert.ok(writtenTimes.includes(1104));
   });
 });

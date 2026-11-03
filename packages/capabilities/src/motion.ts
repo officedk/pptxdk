@@ -1427,6 +1427,31 @@ function timingXml(
   // 空步骤只保留查询声明，不为原生时序树写入空的 childTnLst。
   const stepsWithNativeNodes = steps.filter(({ nodes }) => nodes.length > 0);
   const stepGroups = stepsWithNativeNodes.map((step) => {
+    const hasConditionJoin = (start: MotionPlanStart): boolean =>
+      start.kind === "condition-join" ||
+      (start.kind === "delay-layer" && hasConditionJoin(start.start));
+    const hasPrivateTimingDefinitions = (
+      nodes: readonly MotionPlanNode[],
+    ): boolean =>
+      nodes.some((node) => {
+        if (
+          node.kind === "completion-collector" ||
+          hasConditionJoin(node.nativeStart)
+        ) {
+          return true;
+        }
+        return (
+          node.kind === "scope" &&
+          ((node.conditionDefinitionsBefore?.length ?? 0) > 0 ||
+            hasPrivateTimingDefinitions(node.children))
+        );
+      });
+    // 条件 join 要在首个 consumer 前定义，完成 collector 又要收集所有原始 END；
+    // 当前 writer 将每个 gate 与 consumer 放在同一个 step host。只要本步含有这类
+    // 私有定义，就保留整个共享宿主，避免拆分提升根时改变已验证的父节点与定义顺序。
+    const preserveStepHost =
+      (step.conditionDefinitionsBefore?.length ?? 0) > 0 ||
+      hasPrivateTimingDefinitions(step.nodes);
     const stepId = ids.take();
     const trigger =
       step.trigger === "click"
@@ -1441,25 +1466,54 @@ function timingXml(
         effect.delayMs + (effect.partIndex ?? 0) * effect.durationMs,
         "动画对象成员延迟",
       );
+    type RenderedRootKind =
+      | "effect"
+      | "scope"
+      | "target-group"
+      | "condition-definition"
+      | "completion-definition"
+      | "delay-layer";
+    type RenderedRoot = {
+      readonly xml: string;
+      readonly kind: RenderedRootKind;
+      readonly stepEntryRole: boolean;
+      readonly promoteToStep: boolean;
+    };
+    const renderedRoot = (
+      xml: string,
+      kind: RenderedRootKind,
+      stepEntryRole = false,
+      promoteToStep = false,
+    ): RenderedRoot => ({ xml, kind, stepEntryRole, promoteToStep });
+    const effectRoots = (
+      xml: readonly string[],
+      carriesStepEntryRole: boolean,
+    ): RenderedRoot[] =>
+      xml.map((item, index) =>
+        renderedRoot(item, "effect", index === 0 && carriesStepEntryRole),
+      );
     const wrapDelayLayers = (
       start: MotionPlanStart,
-      children: readonly string[],
+      children: readonly RenderedRoot[],
       nodeType?: string,
-    ): string[] => {
+    ): RenderedRoot[] => {
       const { base, delays } = motionPlanStartLayers(start);
       if (delays.length === 0) return [...children];
-      const rendered: string[] = [];
+      const rendered: RenderedRoot[] = [];
       let outerStart = base;
       if (outerStart.kind === "condition-join") {
         rendered.push(
-          conditionJoinTree(
-            outerStart,
-            step.key,
-            ids,
-            effectNodeIds,
-            scopeNodeIds,
-            targetGroupIds,
-            conditionNodeIds,
+          renderedRoot(
+            conditionJoinTree(
+              outerStart,
+              step.key,
+              ids,
+              effectNodeIds,
+              scopeNodeIds,
+              targetGroupIds,
+              conditionNodeIds,
+            ),
+            "condition-definition",
           ),
         );
         outerStart = {
@@ -1468,7 +1522,7 @@ function timingXml(
           delayMs: 0,
         };
       }
-      let nestedChildren = [...children];
+      let nestedChildren = children.map(({ xml }) => xml);
       for (
         let layerIndex = delays.length - 2;
         layerIndex >= 0;
@@ -1492,18 +1546,22 @@ function timingXml(
         ];
       }
       rendered.push(
-        timingContainer(
-          ids.take(),
-          nativeStartCondition(
-            outerStart,
-            step.key,
-            effectNodeIds,
-            scopeNodeIds,
-            targetGroupIds,
-            conditionNodeIds,
+        renderedRoot(
+          timingContainer(
+            ids.take(),
+            nativeStartCondition(
+              outerStart,
+              step.key,
+              effectNodeIds,
+              scopeNodeIds,
+              targetGroupIds,
+              conditionNodeIds,
+            ),
+            nestedChildren,
+            nodeType,
           ),
-          nestedChildren,
-          nodeType,
+          "delay-layer",
+          nodeType !== undefined,
         ),
       );
       return rendered;
@@ -1514,8 +1572,8 @@ function timingXml(
       isTopLevel: boolean,
       firstRootNodeType?: string,
       conditionDefinitionsBefore: readonly MotionPlanConditionPlacement[] = [],
-    ): string[] => {
-      const rendered: string[] = [];
+    ): RenderedRoot[] => {
+      const rendered: RenderedRoot[] = [];
       let pendingRootNodeType = firstRootNodeType;
       for (const [index, node] of nodes.entries()) {
         const nodeId =
@@ -1527,14 +1585,17 @@ function timingXml(
         for (const placement of conditionDefinitionsBefore) {
           if (placement.join.beforeNodeId !== nodeId) continue;
           rendered.push(
-            conditionJoinTree(
-              placement.join,
-              step.key,
-              ids,
-              effectNodeIds,
-              scopeNodeIds,
-              targetGroupIds,
-              conditionNodeIds,
+            renderedRoot(
+              conditionJoinTree(
+                placement.join,
+                step.key,
+                ids,
+                effectNodeIds,
+                scopeNodeIds,
+                targetGroupIds,
+                conditionNodeIds,
+              ),
+              "condition-definition",
             ),
           );
         }
@@ -1562,26 +1623,30 @@ function timingXml(
             ...node,
             nativeStart: { kind: "parent-start", delayMs: lastDelay },
           };
-          rendered.push(
-            ...wrapDelayLayers(
-              effectiveStart,
-              renderNodes([delayedNode], undefined, false),
-              pendingRootNodeType,
-            ),
+          const delayedRoots = wrapDelayLayers(
+            effectiveStart,
+            renderNodes([delayedNode], undefined, false),
+            pendingRootNodeType,
           );
-          pendingRootNodeType = undefined;
+          rendered.push(...delayedRoots);
+          if (delayedRoots.some(({ stepEntryRole }) => stepEntryRole)) {
+            pendingRootNodeType = undefined;
+          }
           continue;
         }
         if (effectiveStart.kind === "condition-join") {
           rendered.push(
-            conditionJoinTree(
-              effectiveStart,
-              step.key,
-              ids,
-              effectNodeIds,
-              scopeNodeIds,
-              targetGroupIds,
-              conditionNodeIds,
+            renderedRoot(
+              conditionJoinTree(
+                effectiveStart,
+                step.key,
+                ids,
+                effectNodeIds,
+                scopeNodeIds,
+                targetGroupIds,
+                conditionNodeIds,
+              ),
+              "condition-definition",
             ),
           );
           effectiveStart = {
@@ -1601,6 +1666,11 @@ function timingXml(
           const needsStartNode =
             node.preserveStart === true ||
             referencedScopeStartNodes.has(`${step.key}:start:${node.id}`);
+          // 只有计划步自身的根节点能复用 mainSeq step；透明外层被提升时，其后代仍保持原来的逻辑深度。
+          const promoteScopeToStep =
+            isTopLevel &&
+            !preserveStepHost &&
+            (needsCompletionNode || needsStartNode);
           const childrenCanLift = node.children.every((child) => {
             const childStart = composeMotionPlanStarts(
               effectiveStart,
@@ -1633,29 +1703,49 @@ function timingXml(
               node.children,
               undefined,
               false,
-              undefined,
+              promoteScopeToStep
+                ? (pendingRootNodeType ?? defaultNodeType)
+                : undefined,
               node.conditionDefinitionsBefore,
             );
-            rendered.push(
+            const renderedScope = renderedRoot(
               timingContainer(
                 scopeId,
                 condition,
-                children,
-                pendingRootNodeType,
+                children.map(({ xml }) => xml),
+                promoteScopeToStep ? undefined : pendingRootNodeType,
               ),
+              "scope",
+              promoteScopeToStep
+                ? pendingRootNodeType !== undefined &&
+                    children.some(({ stepEntryRole }) => stepEntryRole)
+                : pendingRootNodeType !== undefined,
+              promoteScopeToStep,
             );
+            rendered.push(renderedScope);
+            if (
+              pendingRootNodeType !== undefined &&
+              renderedScope.stepEntryRole
+            ) {
+              pendingRootNodeType = undefined;
+            }
           } else {
-            rendered.push(
-              ...renderNodes(
-                node.children,
-                effectiveStart,
-                false,
-                pendingRootNodeType,
-                node.conditionDefinitionsBefore,
-              ),
+            const liftedRoots = renderNodes(
+              node.children,
+              effectiveStart,
+              // 物理上移除无身份包装，不会把后代改成作者声明的步根。
+              false,
+              pendingRootNodeType,
+              node.conditionDefinitionsBefore,
             );
+            rendered.push(...liftedRoots);
+            if (
+              pendingRootNodeType !== undefined &&
+              liftedRoots.some(({ stepEntryRole }) => stepEntryRole)
+            ) {
+              pendingRootNodeType = undefined;
+            }
           }
-          if (rendered.length > 0) pendingRootNodeType = undefined;
           continue;
         }
 
@@ -1675,20 +1765,21 @@ function timingXml(
             conditionNodeIds,
           );
           rendered.push(
-            endCollectorTree(
-              collectorId,
-              condition,
-              node.gates,
-              step.key,
-              ids,
-              effectNodeIds,
-              scopeNodeIds,
-              targetGroupIds,
-              conditionNodeIds,
-              pendingRootNodeType,
+            renderedRoot(
+              endCollectorTree(
+                collectorId,
+                condition,
+                node.gates,
+                step.key,
+                ids,
+                effectNodeIds,
+                scopeNodeIds,
+                targetGroupIds,
+                conditionNodeIds,
+              ),
+              "completion-definition",
             ),
           );
-          pendingRootNodeType = undefined;
           continue;
         }
 
@@ -1724,14 +1815,20 @@ function timingXml(
                 : undefined;
             return renderedEffect(
               effect,
-              effectIndex === 0 ? "afterEffect" : "withEffect",
+              effectIndex === 0
+                ? (pendingRootNodeType ?? "afterEffect")
+                : "withEffect",
               element("p:cond", { delay: childDelay(effect) }),
               effectId,
               buildGroupId,
             );
           });
           rendered.push(
-            timingContainer(groupId, condition, children, pendingRootNodeType),
+            renderedRoot(
+              timingContainer(groupId, condition, children),
+              "target-group",
+              pendingRootNodeType !== undefined && children.length > 0,
+            ),
           );
           pendingRootNodeType = undefined;
           continue;
@@ -1747,9 +1844,11 @@ function timingXml(
             throw new Error("原生时序投影丢失可编码的动画延迟分层");
           }
           let effectStart = localStart;
-          let effectNodeType =
-            pendingRootNodeType ??
-            (effectIndex === 0 ? nodeType : "withEffect");
+          const rootNodeType =
+            effectIndex === 0
+              ? (pendingRootNodeType ?? nodeType)
+              : "withEffect";
+          let effectNodeType = rootNodeType;
           if (localStart.kind === "delay-layer") {
             const lastDelay = motionPlanStartLayers(localStart).delays.at(-1);
             if (lastDelay === undefined) {
@@ -1781,11 +1880,13 @@ function timingXml(
             ...(localStart.kind === "delay-layer"
               ? wrapDelayLayers(
                   localStart,
-                  effectTrees,
-                  pendingRootNodeType ??
-                    (effectIndex === 0 ? nodeType : "withEffect"),
+                  effectRoots(effectTrees, false),
+                  rootNodeType,
                 )
-              : effectTrees),
+              : effectRoots(
+                  effectTrees,
+                  effectIndex === 0 && pendingRootNodeType !== undefined,
+                )),
           );
           pendingRootNodeType = undefined;
         }
@@ -1800,10 +1901,35 @@ function timingXml(
       step.trigger === "click" ? "clickEffect" : "afterEffect",
       step.conditionDefinitionsBefore,
     );
-    const stepTimingGroups =
-      stepChildren.length === 0
-        ? []
-        : [mainSequenceWithGroup(ids.take(), stepChildren)];
+    const stepTimingGroups: string[] = [];
+    if (
+      stepChildren.some(
+        ({ kind, promoteToStep }) => kind === "scope" && promoteToStep,
+      )
+    ) {
+      let groupChildren: string[] = [];
+      const flushGroup = () => {
+        if (groupChildren.length === 0) return;
+        stepTimingGroups.push(mainSequenceWithGroup(ids.take(), groupChildren));
+        groupChildren = [];
+      };
+      for (const root of stepChildren) {
+        if (root.kind === "scope" && root.promoteToStep) {
+          flushGroup();
+          stepTimingGroups.push(root.xml);
+        } else {
+          groupChildren.push(root.xml);
+        }
+      }
+      flushGroup();
+    } else if (stepChildren.length > 0) {
+      stepTimingGroups.push(
+        mainSequenceWithGroup(
+          ids.take(),
+          stepChildren.map(({ xml }) => xml),
+        ),
+      );
+    }
     return element(
       "p:par",
       undefined,

@@ -595,6 +595,47 @@ function firstMainSequenceEntryNodeType(
   return attributes?.match(/(?:^|\s)nodeType="([^"]+)"/u)?.[1];
 }
 
+function mainSequenceStepDirectChildIds(
+  xml: string,
+  stepIndex: number,
+): number[] {
+  const sequenceStart = xml.indexOf("<p:seq");
+  const sequenceEnd = xml.indexOf("</p:seq>", sequenceStart);
+  assert.ok(sequenceStart >= 0 && sequenceEnd > sequenceStart);
+  const sequence = xml.slice(sequenceStart, sequenceEnd);
+  const mainSequenceStart = sequence.indexOf('nodeType="mainSeq"');
+  const stepsStart = sequence.indexOf("<p:childTnLst>", mainSequenceStart);
+  assert.ok(mainSequenceStart >= 0 && stepsStart > mainSequenceStart);
+  const listLength = "<p:childTnLst>".length;
+  const steps = directTimingChildren(sequence.slice(stepsStart + listLength));
+  const step = steps[stepIndex];
+  assert.ok(step);
+  const childListStart = step.indexOf("<p:childTnLst>");
+  assert.ok(childListStart >= 0);
+  return directTimingChildren(step.slice(childListStart + listLength)).map(
+    (node) => {
+      const id = node.match(/<p:cTn\b[^>]*\bid="(\d+)"/u)?.[1];
+      assert.ok(id, "mainSeq 步的直接时间节点缺少身份");
+      return Number(id);
+    },
+  );
+}
+
+function mainSequenceStepXml(xml: string, stepIndex: number): string {
+  const sequenceStart = xml.indexOf("<p:seq");
+  const sequenceEnd = xml.indexOf("</p:seq>", sequenceStart);
+  assert.ok(sequenceStart >= 0 && sequenceEnd > sequenceStart);
+  const sequence = xml.slice(sequenceStart, sequenceEnd);
+  const mainSequenceStart = sequence.indexOf('nodeType="mainSeq"');
+  const stepsStart = sequence.indexOf("<p:childTnLst>", mainSequenceStart);
+  assert.ok(mainSequenceStart >= 0 && stepsStart > mainSequenceStart);
+  const listLength = "<p:childTnLst>".length;
+  const steps = directTimingChildren(sequence.slice(stepsStart + listLength));
+  const step = steps[stepIndex];
+  assert.ok(step);
+  return step;
+}
+
 function StaggeredSource() {
   const source = useMotionScope();
   const namedCompletion = source.cue("finished");
@@ -2418,13 +2459,59 @@ function IncomparableUnknownJoin({
   );
 }
 
-function UnknownCompletionEntryDeck() {
+function UnknownCompletionEntryDeck({
+  directStepRoots,
+}: {
+  readonly directStepRoots: boolean;
+}) {
   const autoCollection = useMotionScope();
   const autoSource = useMotionScope();
   const autoFollower = useMotionScope();
   const clickCollection = useMotionScope();
   const clickSource = useMotionScope();
   const clickFollower = useMotionScope();
+  const autoSourceNode = createElement(
+    MotionScope,
+    { scope: autoSource, mode: "stagger", each: 100 },
+    unknownLetterText("auto-unknown-long", "ABCD", 8),
+    unknownLetterText("auto-unknown-short", "AB", 48),
+  );
+  const autoFollowerNode = createElement(
+    MotionScope,
+    { scope: autoFollower, startAt: after(autoSource.end, 25) },
+    movingShape("auto-after-unknown", 80),
+  );
+  const clickSourceNode = createElement(
+    MotionScope,
+    { scope: clickSource, mode: "stagger", each: 100 },
+    unknownLetterText("click-unknown-long", "WXYZ", 88),
+    unknownLetterText("click-unknown-short", "WX", 128),
+  );
+  const clickFollowerNode = createElement(
+    MotionScope,
+    { scope: clickFollower, startAt: after(clickSource.end, 30) },
+    movingShape("click-after-unknown", 80),
+  );
+  const autoRoots = directStepRoots
+    ? [autoSourceNode, autoFollowerNode]
+    : [
+        createElement(
+          MotionScope,
+          { scope: autoCollection },
+          autoSourceNode,
+          autoFollowerNode,
+        ),
+      ];
+  const clickRoots = directStepRoots
+    ? [clickSourceNode, clickFollowerNode]
+    : [
+        createElement(
+          MotionScope,
+          { scope: clickCollection },
+          clickSourceNode,
+          clickFollowerNode,
+        ),
+      ];
 
   return createElement(
     Deck,
@@ -2432,43 +2519,8 @@ function UnknownCompletionEntryDeck() {
     createElement(
       Slide,
       { slideId: "unknown-completion-entry" },
-      createElement(
-        MotionScope,
-        { scope: autoCollection },
-        createElement(
-          MotionScope,
-          { scope: autoSource, mode: "stagger", each: 100 },
-          unknownLetterText("auto-unknown-long", "ABCD", 8),
-          unknownLetterText("auto-unknown-short", "AB", 48),
-        ),
-        createElement(
-          MotionScope,
-          { scope: autoFollower, startAt: after(autoSource.end, 25) },
-          movingShape("auto-after-unknown", 80),
-        ),
-      ),
-      createElement(
-        Step,
-        { n: 1 },
-        createElement(
-          MotionScope,
-          { scope: clickCollection },
-          createElement(
-            MotionScope,
-            { scope: clickSource, mode: "stagger", each: 100 },
-            unknownLetterText("click-unknown-long", "WXYZ", 88),
-            unknownLetterText("click-unknown-short", "WX", 128),
-          ),
-          createElement(
-            MotionScope,
-            {
-              scope: clickFollower,
-              startAt: after(clickSource.end, 30),
-            },
-            movingShape("click-after-unknown", 80),
-          ),
-        ),
-      ),
+      ...autoRoots,
+      createElement(Step, { n: 1 }, ...clickRoots),
     ),
   );
 }
@@ -5840,75 +5892,110 @@ describe("组件编排作用域", () => {
     }
   });
 
-  it("嵌套未知完成的自动步与点击步保留真实入口角色和完整依赖", async () => {
-    const result = await build(createElement(UnknownCompletionEntryDeck));
-    const slide = result.report.slides[0];
-    const file = await validatePptx(result.pptx);
-    assert.deepEqual(file.errors, []);
-
-    const animations = file.slides[0]?.animations ?? [];
-    assert.deepEqual(
-      animations.map(({ trigger }) => trigger),
-      ["auto", "click"],
-    );
-    const slidePart = unzipSync(result.pptx)["ppt/slides/slide1.xml"];
-    assert.ok(slidePart);
-    const xml = strFromU8(slidePart);
-    assert.deepEqual(
-      [
-        firstMainSequenceEntryNodeType(xml, 0),
-        firstMainSequenceEntryNodeType(xml, 1),
-      ],
-      ["afterEffect", "clickEffect"],
-    );
-
-    const objectId = (testId: string) =>
-      slide?.objects.find(({ testId: id }) => id === testId)?.id;
-    const fileEffects = file.slides[0]?.animations?.flatMap(
-      ({ effects }) => effects,
-    );
-    const fileEffect = (testId: string) => {
-      const targetId = objectId(testId);
-      return fileEffects?.find((effect) => effect.targetId === targetId);
-    };
-    const containers = file.slides[0]?.animationContainers ?? [];
-    for (const [sourceNames, followerName, offsetMs] of [
-      [["auto-unknown-long", "auto-unknown-short"], "auto-after-unknown", 25],
-      [
-        ["click-unknown-long", "click-unknown-short"],
-        "click-after-unknown",
-        30,
-      ],
-    ] as const) {
-      const sourceEffects = sourceNames.map((name) => fileEffect(name));
-      const follower = fileEffect(followerName);
-      assert.ok(
-        sourceEffects.every((effect) => effect?.completion === "unknown"),
+  it("透明嵌套与步根未知完成作用域均保留入口角色和完整依赖", async () => {
+    for (const directStepRoots of [false, true]) {
+      const result = await build(
+        createElement(UnknownCompletionEntryDeck, { directStepRoots }),
       );
-      assert.ok(follower);
-      const source = containers.find(
-        ({ children, endSync }) =>
-          endSync === "all" &&
-          sourceEffects.every((effect) =>
-            children.some(
-              ({ kind, timingId }) =>
-                kind === "effect" && timingId === effect?.timingId,
-            ),
-          ),
-      );
-      assert.ok(source);
-      assert.equal(source.durationMs, undefined);
+      const slide = result.report.slides[0];
+      const file = await validatePptx(result.pptx);
+      assert.deepEqual(file.errors, []);
+
+      const animations = file.slides[0]?.animations ?? [];
       assert.deepEqual(
-        [follower.startAfter?.timingId, follower.startAfter?.offsetMs],
-        [source.timingId, offsetMs],
+        animations.map(({ trigger }) => trigger),
+        ["auto", "click"],
       );
-      assert.match(
-        startConditions(xml, follower.timingId),
-        new RegExp(
-          `<p:cond evt="end" delay="${offsetMs}"><p:tn val="${source.timingId}"><\\/p:tn><\\/p:cond>`,
-          "u",
-        ),
+      const slidePart = unzipSync(result.pptx)["ppt/slides/slide1.xml"];
+      assert.ok(slidePart);
+      const xml = strFromU8(slidePart);
+      assert.deepEqual(
+        [
+          firstMainSequenceEntryNodeType(xml, 0),
+          firstMainSequenceEntryNodeType(xml, 1),
+        ],
+        ["afterEffect", "clickEffect"],
       );
+
+      const objectId = (testId: string) =>
+        slide?.objects.find(({ testId: id }) => id === testId)?.id;
+      const fileEffects = file.slides[0]?.animations?.flatMap(
+        ({ effects }) => effects,
+      );
+      const fileEffect = (testId: string) => {
+        const targetId = objectId(testId);
+        return fileEffects?.find((effect) => effect.targetId === targetId);
+      };
+      const containers = file.slides[0]?.animationContainers ?? [];
+      for (const [sourceNames, followerName, offsetMs, stepIndex] of [
+        [
+          ["auto-unknown-long", "auto-unknown-short"],
+          "auto-after-unknown",
+          25,
+          0,
+        ],
+        [
+          ["click-unknown-long", "click-unknown-short"],
+          "click-after-unknown",
+          30,
+          1,
+        ],
+      ] as const) {
+        const sourceEffects = sourceNames.map((name) => fileEffect(name));
+        const follower = fileEffect(followerName);
+        assert.ok(
+          sourceEffects.every((effect) => effect?.completion === "unknown"),
+        );
+        assert.ok(follower);
+        const source = containers.find(
+          ({ children, endSync }) =>
+            endSync === "all" &&
+            sourceEffects.every((effect) =>
+              children.some(
+                ({ kind, timingId }) =>
+                  kind === "effect" && timingId === effect?.timingId,
+              ),
+            ),
+        );
+        assert.ok(source);
+        assert.equal(source.durationMs, undefined);
+        if (directStepRoots) {
+          assert.ok(
+            mainSequenceStepDirectChildIds(xml, stepIndex).includes(
+              source.timingId,
+            ),
+            "有真实完成身份的步根作用域应直接承载在 mainSeq 步下",
+          );
+        }
+        assert.equal(
+          firstMainSequenceEntryNodeType(xml, stepIndex),
+          stepIndex === 0 ? "afterEffect" : "clickEffect",
+          "自动步和点击步的入口角色应交给作用域内首个真实执行节点",
+        );
+        assert.equal(
+          mainSequenceStepXml(xml, stepIndex).match(/nodeType="clickEffect"/gu)
+            ?.length ?? 0,
+          stepIndex === 0 ? 0 : 1,
+          "一个点击步只保留一个真实 clickEffect 入口",
+        );
+        for (const effect of sourceEffects) {
+          const definitions = xml.match(
+            new RegExp(`<p:cTn\\b[^>]*\\bid="${effect?.timingId}"`, "gu"),
+          );
+          assert.equal(definitions?.length, 1, "真实效果节点应只写出一次");
+        }
+        assert.deepEqual(
+          [follower.startAfter?.timingId, follower.startAfter?.offsetMs],
+          [source.timingId, offsetMs],
+        );
+        assert.match(
+          startConditions(xml, follower.timingId),
+          new RegExp(
+            `<p:cond evt="end" delay="${offsetMs}"><p:tn val="${source.timingId}"><\\/p:tn><\\/p:cond>`,
+            "u",
+          ),
+        );
+      }
     }
   });
 

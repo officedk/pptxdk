@@ -904,7 +904,12 @@ function compileChildren(
         return;
       }
       const id = context.slide.nextId++;
-      const compiled = compileChildren(child.children, context, path);
+      const compiled = compileChildren(
+        child.children,
+        context,
+        path,
+        insideGroup,
+      );
       const testId = child.props["testId"];
       context.slide.layouts.push({
         id,

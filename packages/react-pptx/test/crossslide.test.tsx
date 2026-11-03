@@ -11,6 +11,7 @@ import {
   Deck,
   Group,
   Image,
+  MotionScope,
   Row,
   Shape,
   Slide,
@@ -18,6 +19,7 @@ import {
   Text,
   targets,
   transitions,
+  useMotionScope,
 } from "@react-pptx/react-pptx";
 import { validatePptx } from "@react-pptx/validation";
 import { createElement } from "react";
@@ -106,6 +108,62 @@ describe("跨页对象连续性", () => {
         },
       );
     }
+  });
+
+  it("透明 Box 和 MotionScope 在页面顶层保留 Morph 对应", async () => {
+    const key = createMorphScope().handle("hero");
+    function MotionWrappedHero() {
+      const scope = useMotionScope();
+      return createElement(
+        MotionScope,
+        { scope },
+        createElement(Shape, {
+          morphKey: key,
+          x: 240,
+          y: 20,
+          width: 60,
+          height: 40,
+        }),
+      );
+    }
+    const result = await build(
+      createElement(
+        Deck,
+        {},
+        createElement(
+          Slide,
+          { slideId: "before" },
+          createElement(
+            Box,
+            { style: { width: 100, height: 80 } },
+            createElement(Shape, {
+              morphKey: key,
+              x: 20,
+              y: 20,
+              width: 60,
+              height: 40,
+            }),
+          ),
+        ),
+        createElement(
+          Slide,
+          {
+            slideId: "after",
+            transition: transitions.morph({ fallback: transitions.fade() }),
+          },
+          createElement(MotionWrappedHero),
+        ),
+      ),
+    );
+    const file = await validatePptx(result.pptx, {
+      allowedExtensions: ["p14", "p159"],
+    });
+
+    assert.deepEqual(file.errors, []);
+    assert.equal(
+      file.slides[0]?.objects[0]?.name,
+      file.slides[1]?.objects[0]?.name,
+    );
   });
 
   it("隔离重复组件实例中的同名句柄并按显式 scope 匹配", async () => {
@@ -459,6 +517,32 @@ describe("跨页对象连续性", () => {
     const image = new Uint8Array(
       readFileSync(new URL("./assets/wide-20000x1.png", import.meta.url)),
     );
+    function MotionWrappedShape() {
+      const scope = useMotionScope();
+      return createElement(
+        MotionScope,
+        { scope },
+        createElement(Shape, {
+          morphKey: key,
+          x: 0,
+          y: 0,
+          width: 40,
+          height: 30,
+        }),
+      );
+    }
+    function MotionWrappedBox() {
+      const scope = useMotionScope();
+      return createElement(
+        MotionScope,
+        { scope },
+        createElement(
+          Box,
+          { style: { width: 100, height: 80 } },
+          createElement(MotionWrappedShape),
+        ),
+      );
+    }
     const invalid = [
       {
         code: "invalid-morph-key",
@@ -562,6 +646,88 @@ describe("跨页对象连续性", () => {
                 height: 30,
               }),
             ),
+          ),
+        ),
+      },
+      {
+        code: "morph-inside-group",
+        deck: createElement(
+          Deck,
+          {},
+          createElement(
+            Slide,
+            { slideId: "before" },
+            createElement(
+              Group,
+              null,
+              createElement(
+                Box,
+                { style: { width: 100, height: 80 } },
+                createElement(Shape, {
+                  morphKey: key,
+                  x: 0,
+                  y: 0,
+                  width: 40,
+                  height: 30,
+                }),
+              ),
+            ),
+          ),
+          createElement(
+            Slide,
+            {
+              slideId: "after",
+              transition: transitions.morph({ fallback: transitions.fade() }),
+            },
+            createElement(Shape, {
+              morphKey: key,
+              x: 240,
+              y: 20,
+              width: 40,
+              height: 30,
+            }),
+          ),
+        ),
+      },
+      {
+        code: "morph-inside-group",
+        deck: createElement(
+          Deck,
+          {},
+          createElement(
+            Slide,
+            { slideId: "nested-boxes" },
+            createElement(
+              Group,
+              null,
+              createElement(
+                Box,
+                { style: { width: 100, height: 80 } },
+                createElement(
+                  Box,
+                  { style: { width: 80, height: 60 } },
+                  createElement(Shape, {
+                    morphKey: key,
+                    x: 0,
+                    y: 0,
+                    width: 40,
+                    height: 30,
+                  }),
+                ),
+              ),
+            ),
+          ),
+        ),
+      },
+      {
+        code: "morph-inside-group",
+        deck: createElement(
+          Deck,
+          {},
+          createElement(
+            Slide,
+            { slideId: "mixed-wrappers" },
+            createElement(Group, null, createElement(MotionWrappedBox)),
           ),
         ),
       },

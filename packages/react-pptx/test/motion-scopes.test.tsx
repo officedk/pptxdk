@@ -734,6 +734,90 @@ describe("组件编排作用域", () => {
     );
   });
 
+  it("可见 Box 背景继承默认入场，但不覆盖子项自有入场或禁用状态", async () => {
+    const result = await build(
+      createElement(
+        Deck,
+        { width: 320, height: 180 },
+        createElement(
+          Slide,
+          { slideId: "visible-box-motion" },
+          createElement(
+            Box,
+            {
+              testId: "visible-background",
+              enter: fade({ duration: 200, delay: 800 }),
+              style: { width: 120, height: 80, backgroundColor: "accent1" },
+            },
+            createElement(Shape, {
+              testId: "inherited-child",
+              x: 0,
+              y: 0,
+              width: 20,
+              height: 20,
+            }),
+            createElement(Shape, {
+              testId: "own-entry-child",
+              x: 24,
+              y: 0,
+              width: 20,
+              height: 20,
+              enter: fade({ duration: 100 }),
+            }),
+          ),
+          createElement(
+            Box,
+            {
+              testId: "disabled-background",
+              motion: false,
+              enter: fade(),
+              style: { width: 100, height: 60, backgroundColor: "accent2" },
+            },
+            createElement(Shape, {
+              testId: "disabled-child",
+              x: 0,
+              y: 0,
+              width: 20,
+              height: 20,
+              enter: fade(),
+            }),
+          ),
+        ),
+      ),
+    );
+    const slide = result.report.slides[0];
+    const motion = slide?.capabilities?.["motion"] as MotionObservation;
+    const file = await validatePptx(result.pptx);
+
+    assert.deepEqual(file.errors, []);
+    assert.deepEqual(
+      motion.steps[0]?.effects.map(
+        ({ target, startMs, delayMs, durationMs }) => [
+          target.testId,
+          startMs,
+          delayMs,
+          durationMs,
+        ],
+      ),
+      [
+        ["own-entry-child", 0, 0, 100],
+        ["visible-background", 800, 800, 200],
+        ["inherited-child", 800, 800, 200],
+      ],
+    );
+    assert.deepEqual(
+      file.slides[0]?.animations?.[0]?.effects.map(({ targetId, delayMs }) => [
+        slide?.objects.find(({ id }) => id === targetId)?.testId,
+        delayMs,
+      ]),
+      [
+        ["own-entry-child", 0],
+        ["visible-background", 800],
+        ["inherited-child", 800],
+      ],
+    );
+  });
+
   it("同名组件实例互相隔离，普通函数、Fragment 和原生 Group 不自动成作用域", async () => {
     const reused = await build(
       createElement(

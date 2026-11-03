@@ -70,6 +70,8 @@ export type ShapePropertiesOptions = {
   /** The shape capability's legacy top-level fill. */
   readonly fill?: ColorValue;
   readonly image?: boolean;
+  /** 无可见视觉的布局容器不要求写出原生变换。 */
+  readonly layoutOnlyWhenInvisible?: boolean;
 };
 
 export type ShapePropertiesResult = {
@@ -110,6 +112,21 @@ function emu(
     invalid(
       "invalid-visual-style",
       `${label} 换算后必须处于 DrawingML 可写范围`,
+    );
+  }
+  return converted;
+}
+
+function lineWidthEmu(value: number): number {
+  const converted = pxToEmu(value);
+  if (
+    !Number.isSafeInteger(converted) ||
+    converted < 1 ||
+    converted > 20_116_800
+  ) {
+    invalid(
+      "invalid-visual-style",
+      "borderWidth 换算后必须在 1 到 20116800 EMU 的 DrawingML 线宽范围内",
     );
   }
   return converted;
@@ -228,6 +245,14 @@ function customGeometryXml(geometry: CustomGeometry): string {
   if (width <= 0 || height <= 0 || geometry.paths.length === 0) {
     invalid("invalid-geometry", "自定义几何必须有正 viewBox 和至少一个路径");
   }
+  const widthUnits = point(width, "geometry.width");
+  const heightUnits = point(height, "geometry.height");
+  if (Number(widthUnits) === 0 || Number(heightUnits) === 0) {
+    invalid(
+      "invalid-geometry",
+      "自定义几何 viewBox 换算后必须在路径坐标空间内保留正宽和正高",
+    );
+  }
   const pathList = geometry.paths
     .map((path, index) => {
       if (
@@ -246,7 +271,7 @@ function customGeometryXml(geometry: CustomGeometry): string {
           `自定义路径 ${index + 1} 的 fill/stroke 必须是布尔值`,
         );
       const commands = path.commands.map(pathCommandXml).join("");
-      return `<a:path w="${point(width, "geometry.width")}" h="${point(height, "geometry.height")}"${path.fill === false ? ' fill="none"' : ""}${path.stroke === false ? ' stroke="0"' : ""}>${commands}</a:path>`;
+      return `<a:path w="${widthUnits}" h="${heightUnits}"${path.fill === false ? ' fill="none"' : ""}${path.stroke === false ? ' stroke="0"' : ""}>${commands}</a:path>`;
     })
     .join("");
   return `<a:custGeom><a:avLst/><a:gdLst/><a:ahLst/><a:cxnLst/><a:rect l="l" t="t" r="r" b="b"/><a:pathLst>${pathList}</a:pathLst></a:custGeom>`;
@@ -280,7 +305,7 @@ function geometryXml(
     if (value["adjust"] !== undefined) {
       if (!isRecord(value["adjust"]))
         invalid("invalid-geometry", "preset.adjust 必须是对象");
-      adjust = value["adjust"] as Record<string, number>;
+      adjust = { ...value["adjust"] } as Record<string, number>;
     }
   } else
     invalid(
@@ -432,7 +457,7 @@ function lineXml(
       : styleName === "dotted"
         ? "sysDot"
         : undefined;
-  return `<a:ln w="${emu(width, "borderWidth", false)}"><a:solidFill>${resolvedColorXml(withOpacity(theme.resolveColor(color as ColorValue), opacity))}</a:solidFill>${dash === undefined ? "" : `<a:prstDash val="${dash}"/>`}</a:ln>`;
+  return `<a:ln w="${lineWidthEmu(width)}"><a:solidFill>${resolvedColorXml(withOpacity(theme.resolveColor(color as ColorValue), opacity))}</a:solidFill>${dash === undefined ? "" : `<a:prstDash val="${dash}"/>`}</a:ln>`;
 }
 
 function effectsXml(theme: ThemeContext, style: VisualStyleRecord): string {
@@ -484,7 +509,6 @@ export function shapePropertiesXml(
       : finite(style["borderRadius"], "borderRadius");
   if (radius !== undefined && radius < 0)
     invalid("invalid-visual-style", "borderRadius 必须是非负长度");
-  const geometry = geometryXml(options.geometry, radius, box, warnings);
   const visualFill = options.image
     ? ""
     : fillXml(theme, style, options.fill, opacity);
@@ -498,8 +522,18 @@ export function shapePropertiesXml(
     style["backgroundImage"] !== undefined ||
     (style["borderColor"] !== undefined && borderWidth > 0) ||
     style["boxShadow"] !== undefined;
+  const geometry = geometryXml(
+    options.geometry,
+    options.layoutOnlyWhenInvisible && !hasVisibleStyle ? undefined : radius,
+    box,
+    warnings,
+  );
+  const transform =
+    options.layoutOnlyWhenInvisible && !hasVisibleStyle
+      ? ""
+      : transformXml(box, style, options.flipH, options.flipV);
   return {
-    xml: `<p:spPr>${transformXml(box, style, options.flipH, options.flipV)}${geometry.xml}${visualFill}${line}${effects}</p:spPr>`,
+    xml: `<p:spPr>${transform}${geometry.xml}${visualFill}${line}${effects}</p:spPr>`,
     ...(opacity === undefined ? {} : { opacity }),
     warnings,
     hasVisibleStyle,

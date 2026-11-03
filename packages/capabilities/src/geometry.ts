@@ -359,10 +359,20 @@ export function parseSvgPath(data: string): PathCommand[] {
     if (!Number.isFinite(value)) invalidGeometry("SVG 路径坐标必须是有限数值");
     return value;
   };
+  const flag = (name: string) => {
+    const token = tokens[index];
+    if (token !== "0" && token !== "1") {
+      invalidGeometry(`SVG 弧线 ${name} 必须是单个 0 或 1`);
+    }
+    index += 1;
+    return token === "1";
+  };
   while (index < tokens.length) {
     if (isCommand(tokens[index])) {
       command = tokens[index] ?? "";
       index += 1;
+    } else if (command === "") {
+      invalidGeometry("SVG close 命令 Z 后不能跟随隐式参数");
     }
     const relative = command === command.toLowerCase();
     const upper = command.toUpperCase();
@@ -439,8 +449,8 @@ export function parseSvgPath(data: string): PathCommand[] {
         const rx = number();
         const ry = number();
         const rotation = number();
-        const largeArc = number() !== 0;
-        const sweep = number() !== 0;
+        const largeArc = flag("large-arc-flag");
+        const sweep = flag("sweep-flag");
         const endX = ox + number();
         const endY = oy + number();
         commands.push(
@@ -456,6 +466,7 @@ export function parseSvgPath(data: string): PathCommand[] {
         x = startX;
         y = startY;
         lastControl = undefined;
+        command = "";
         break;
       default:
         invalidGeometry(`SVG 路径命令 ${command} 不受支持`);

@@ -12,6 +12,7 @@ import {
   type ColorValue,
   type ResolvedColor,
   type ThemeContext,
+  type TextStyle,
 } from "@react-pptx/core";
 import { createElement, type ReactNode } from "react";
 
@@ -49,6 +50,10 @@ export type TableTextStyle = {
   readonly color?: ColorValue;
   readonly lineHeight?: FontSize;
   readonly verticalAlign?: TableVerticalAlign;
+  readonly letterSpacing?: TextStyle["letterSpacing"];
+  readonly textTransform?: TextStyle["textTransform"];
+  readonly textDecoration?: TextStyle["textDecoration"];
+  readonly textShadow?: TextStyle["textShadow"];
 };
 
 export type TableStyle = TableTextStyle & LayoutStyle;
@@ -151,6 +156,10 @@ const textStyleKeys = [
   "verticalAlign",
   "align",
   "spacingAfter",
+  "letterSpacing",
+  "textTransform",
+  "textDecoration",
+  "textShadow",
 ] as const;
 const rowStyleKeys = ["height", "backgroundColor"] as const;
 const cellStyleKeys = [

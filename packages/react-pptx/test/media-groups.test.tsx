@@ -21,7 +21,7 @@ import {
   Text,
 } from "@react-pptx/react-pptx";
 import { validatePptx } from "@react-pptx/validation";
-import { unzipSync, zipSync } from "fflate";
+import { strFromU8, unzipSync, zipSync } from "fflate";
 import { createElement, type ComponentType } from "react";
 import { describe, it } from "vitest";
 
@@ -384,6 +384,44 @@ describe("图片与原生组合", () => {
         part.startsWith("ppt/media/"),
       ).length,
       1,
+    );
+  });
+
+  it("将 contain 的最终尺寸写入原生图片变换", async () => {
+    const result = await build(
+      createElement(
+        Deck,
+        { width: 960, height: 540 },
+        createElement(
+          Slide,
+          { slideId: "contain-transform" },
+          createElement(Image, {
+            testId: "contained-square",
+            src: png,
+            x: 20,
+            y: 30,
+            width: 100,
+            height: 80,
+            fit: "contain",
+          }),
+        ),
+      ),
+    );
+
+    const file = await validatePptx(result.pptx);
+    assert.deepEqual(file.errors, []);
+    assert.deepEqual(result.report.slides[0]?.objects[0]?.box, {
+      x: 30,
+      y: 30,
+      width: 80,
+      height: 80,
+    });
+    const slideXml = strFromU8(
+      unzipSync(result.pptx)["ppt/slides/slide1.xml"]!,
+    );
+    assert.match(
+      slideXml,
+      /<p:spPr><a:xfrm><a:off x="285750" y="285750"\/><a:ext cx="762000" cy="762000"\/><\/a:xfrm>/u,
     );
   });
 

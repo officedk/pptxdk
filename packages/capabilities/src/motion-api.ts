@@ -1,5 +1,4 @@
 import {
-  Box as CoreBox,
   CapabilityError,
   type BoxProps as CoreBoxProps,
   type CapabilityAnnotation,
@@ -276,7 +275,7 @@ export function Box({
   return createElement(
     motionContext.Provider,
     { value: context },
-    createElement(CoreBox, props, children),
+    createElement("rp:box", { ...props, __motionContext: context }, children),
   );
 }
 

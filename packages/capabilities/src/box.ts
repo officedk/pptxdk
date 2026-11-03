@@ -6,6 +6,7 @@ import {
   type GeometryBox,
 } from "@react-pptx/core";
 
+import { motionAnnotations } from "./motion-api.ts";
 import { shapePropertiesXml } from "./visual.ts";
 
 function styleRecord(value: unknown): Record<string, unknown> {
@@ -30,7 +31,10 @@ export const boxCapability: CapabilityModule = {
   declaration: "rp:box",
   compile(input: CapabilityInput, context) {
     const unknown = Object.keys(input.props).find(
-      (key) => !["testId", "style", "theme"].includes(key),
+      (key) =>
+        !["testId", "style", "theme", "morphKey", "__motionContext"].includes(
+          key,
+        ),
     );
     if (unknown !== undefined) {
       throw new CapabilityError(
@@ -48,9 +52,27 @@ export const boxCapability: CapabilityModule = {
     ) {
       throw new CapabilityError("invalid-parameter", "testId 必须是非空字符串");
     }
-    const name = typeof testId === "string" ? testId : `Box ${context.id - 1}`;
+    const name =
+      context.morphName ??
+      (typeof testId === "string" ? testId : `Box ${context.id - 1}`);
     const style = styleRecord(input.props["style"]);
-    const properties = shapePropertiesXml({ theme: context.theme, style, box });
+    const properties = shapePropertiesXml({
+      theme: context.theme,
+      style,
+      box,
+      layoutOnlyWhenInvisible: true,
+    });
+    const annotations = properties.hasVisibleStyle
+      ? motionAnnotations(input.props, {
+          kind: "shape",
+          name,
+          ...(typeof testId === "string" ? { testId } : {}),
+          textBody: false,
+          filled:
+            style["backgroundColor"] !== undefined ||
+            style["backgroundImage"] !== undefined,
+        })
+      : [];
     return {
       xml: properties.hasVisibleStyle
         ? objectXml(context.id, name, box, properties.xml)
@@ -64,6 +86,7 @@ export const boxCapability: CapabilityModule = {
         box,
       },
       extensions: [],
+      ...(annotations.length === 0 ? {} : { annotations }),
       ...(properties.warnings.length === 0
         ? {}
         : { warnings: properties.warnings }),

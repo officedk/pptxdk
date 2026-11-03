@@ -18,6 +18,66 @@ import { strFromU8, strToU8, unzipSync, zipSync } from "fflate";
 import { describe, it } from "vitest";
 
 describe("原生坐标系图表", () => {
+  it("让图表、坐标轴和数据标签继承共享文字视觉样式", async () => {
+    const result = await build(
+      <Deck>
+        <Slide slideId="chart-text-visual">
+          <Chart
+            testId="chart-text-visual"
+            kind="column"
+            x={0}
+            y={0}
+            width={240}
+            height={160}
+            data={{
+              categories: ["ßeta"],
+              series: [{ name: "Series", values: [1] }],
+            }}
+            style={{
+              fontFamily: "Aptos",
+              fontSize: "12pt",
+              letterSpacing: 1.25,
+              textTransform: "uppercase",
+              textDecoration: "underline",
+              textShadow: { color: "accent3", blur: 2 },
+            }}
+            categoryAxis={{
+              style: {
+                letterSpacing: 2,
+                textTransform: "uppercase",
+                textDecoration: "underline",
+                textShadow: { color: "accent4", blur: 1 },
+              },
+            }}
+            dataLabels={{
+              category: true,
+              style: {
+                letterSpacing: 1.5,
+                textTransform: "uppercase",
+                textDecoration: "underline",
+                textShadow: { color: "accent5", blur: 1 },
+              },
+            }}
+          />
+        </Slide>
+      </Deck>,
+    );
+    const file = await validatePptx(result.pptx);
+
+    assert.deepEqual(file.errors, []);
+    const parts = unzipSync(result.pptx);
+    const chartPath = Object.keys(parts).find((part) =>
+      /^ppt\/charts\/chart\d+\.xml$/u.test(part),
+    );
+    assert.ok(chartPath);
+    const chartXml = strFromU8(parts[chartPath]!);
+    assert.match(chartXml, /spc="94"/u);
+    assert.match(chartXml, /spc="150"/u);
+    assert.match(chartXml, /cap="all"/u);
+    assert.equal((chartXml.match(/u="sng"/gu) ?? []).length, 3);
+    assert.equal((chartXml.match(/<a:outerShdw/gu) ?? []).length, 3);
+  });
+
   it("登记值轴实际字体资源并检测与图表文字的冲突", async () => {
     const jost = new Uint8Array(
       readFileSync(

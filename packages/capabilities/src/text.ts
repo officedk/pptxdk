@@ -118,6 +118,7 @@ const textStyleProperties = new Set([
   "textTransform",
   "textDecoration",
   "textShadow",
+  "textWrap",
 ]);
 
 function textStyle(value: unknown): unknown {

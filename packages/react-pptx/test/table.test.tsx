@@ -82,6 +82,60 @@ describe("原生表格", () => {
     }
   }, 20_000); // 独立进程首次加载 Open XML SDK WASM runtime 约需 10 秒。
 
+  it("让表格和单元格文字样式共用字距、大小写、装饰和阴影服务", async () => {
+    const result = await build(
+      tableDeck(
+        createElement(
+          Table,
+          {
+            testId: "text-style-table",
+            columns: [160],
+            style: {
+              fontFamily: "Aptos",
+              fontSize: "12pt",
+              letterSpacing: 1.25,
+              textTransform: "uppercase",
+              textDecoration: "underline",
+              textShadow: { color: "accent3", blur: 2 },
+            },
+          },
+          createElement(
+            Row,
+            { style: { height: 28 } },
+            createElement(Cell, null, "ßeta"),
+          ),
+          createElement(
+            Row,
+            { style: { height: 28 } },
+            createElement(
+              Cell,
+              {
+                style: {
+                  letterSpacing: 2,
+                  textTransform: "uppercase",
+                  textDecoration: "underline",
+                  textShadow: { color: "accent4", blur: 1 },
+                },
+              },
+              "cell style",
+            ),
+          ),
+        ),
+      ),
+    );
+
+    const file = await validatePptx(result.pptx);
+    assert.deepEqual(file.errors, []);
+    const slideXml = strFromU8(
+      unzipSync(result.pptx)["ppt/slides/slide1.xml"]!,
+    );
+    assert.match(slideXml, /spc="94"/u);
+    assert.match(slideXml, /spc="150"/u);
+    assert.equal((slideXml.match(/cap="all"/gu) ?? []).length, 2);
+    assert.equal((slideXml.match(/u="sng"/gu) ?? []).length, 2);
+    assert.equal((slideXml.match(/<a:outerShdw/gu) ?? []).length, 2);
+  });
+
   it("在表格、行或单元格路径定位结构缺口和冲突合并", async () => {
     const incomplete = createElement(
       Table,

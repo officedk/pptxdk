@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 
+import type { MorphKey } from "#/morph.ts";
 import type {
   ThemeContext,
   ThemeInput,
@@ -181,6 +182,7 @@ export type LayoutStyle = {
 /** 透明布局容器；它只安排子项，不要求生成对应的原生演示对象。 */
 export type BoxProps = ElementProps & {
   readonly testId?: string;
+  readonly morphKey?: MorphKey;
   readonly style?: LayoutStyle & TextStyle & VisualStyle;
   readonly theme?: ThemeScope;
 };

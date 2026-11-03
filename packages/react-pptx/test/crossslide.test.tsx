@@ -26,6 +26,89 @@ import { createElement } from "react";
 import { describe, it } from "vitest";
 
 describe("跨页对象连续性", () => {
+  it("只让可见 Box 的自有背景参与原生 Morph，子项仍保持独立", async () => {
+    const scope = createMorphScope();
+    const background = scope.handle("card-background");
+    const declarations = createElement(
+      Deck,
+      {},
+      createElement(
+        Slide,
+        { slideId: "card-before" },
+        createElement(
+          Box,
+          {
+            testId: "card-before",
+            morphKey: background,
+            style: { width: 160, height: 100, backgroundColor: "accent1" },
+          },
+          createElement(Shape, {
+            testId: "card-child-before",
+            x: 12,
+            y: 12,
+            width: 40,
+            height: 30,
+          }),
+        ),
+      ),
+      createElement(
+        Slide,
+        {
+          slideId: "card-after",
+          transition: transitions.morph({ fallback: transitions.fade() }),
+        },
+        createElement(
+          Box,
+          {
+            testId: "card-after",
+            morphKey: background,
+            style: { width: 180, height: 110, backgroundColor: "accent2" },
+          },
+          createElement(Shape, {
+            testId: "card-child-after",
+            x: 16,
+            y: 16,
+            width: 44,
+            height: 32,
+          }),
+        ),
+      ),
+    );
+    const result = await build(declarations);
+    const file = await validatePptx(result.pptx, {
+      allowedExtensions: ["p14", "p159"],
+    });
+
+    assert.deepEqual(file.errors, []);
+    assert.deepEqual(
+      result.report.slides.map(({ objects }) =>
+        objects.map(({ testId, kind }) => ({ testId, kind })),
+      ),
+      [
+        [
+          { testId: "card-before", kind: "shape" },
+          { testId: "card-child-before", kind: "shape" },
+        ],
+        [
+          { testId: "card-after", kind: "shape" },
+          { testId: "card-child-after", kind: "shape" },
+        ],
+      ],
+    );
+    assert.equal(
+      result.report.slides[0]?.objects[0]?.name,
+      result.report.slides[1]?.objects[0]?.name,
+    );
+    assert.ok(result.report.slides[0]?.objects[0]?.name.startsWith("!!"));
+    assert.deepEqual(
+      file.slides.map(({ objects }) => objects.map(({ kind }) => kind)),
+      [
+        ["shape", "shape"],
+        ["shape", "shape"],
+      ],
+    );
+  });
+
   it("通过同一个显式句柄写出相邻页的原生 Morph 对应", async () => {
     const scope = createMorphScope();
     const hero = scope.handle("hero");

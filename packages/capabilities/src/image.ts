@@ -551,21 +551,6 @@ export const imageCapability: CapabilityModule = {
     }
     const crop = cropValues(props["crop"]);
     const box = { x, y, width, height };
-    const properties = shapePropertiesXml({
-      theme: context.theme,
-      style: imageStyle,
-      box,
-      ...(props["geometry"] === undefined
-        ? {}
-        : { geometry: props["geometry"] as Geometry }),
-      ...(props["flipH"] === undefined
-        ? {}
-        : { flipH: props["flipH"] as boolean }),
-      ...(props["flipV"] === undefined
-        ? {}
-        : { flipV: props["flipV"] as boolean }),
-      image: true,
-    });
     const sourceCrop = crop ?? {};
     if (crop === undefined && fit === "cover") {
       const imageRatio = image.width / image.height;
@@ -595,6 +580,21 @@ export const imageCapability: CapabilityModule = {
     // contain 派生的尺寸也必须能写成非零 EMU。
     box.width = dimension(box.width, "width");
     box.height = dimension(box.height, "height");
+    const properties = shapePropertiesXml({
+      theme: context.theme,
+      style: imageStyle,
+      box,
+      ...(props["geometry"] === undefined
+        ? {}
+        : { geometry: props["geometry"] as Geometry }),
+      ...(props["flipH"] === undefined
+        ? {}
+        : { flipH: props["flipH"] as boolean }),
+      ...(props["flipV"] === undefined
+        ? {}
+        : { flipV: props["flipV"] as boolean }),
+      image: true,
+    });
     const name =
       context.morphName ?? requestedName ?? testId ?? `Image ${context.id - 1}`;
     const annotations = motionAnnotations(props, {

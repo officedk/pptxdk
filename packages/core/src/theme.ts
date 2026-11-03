@@ -44,6 +44,8 @@ export type TextStyle = {
   readonly textTransform?: "none" | "uppercase";
   readonly textDecoration?: "none" | "underline";
   readonly textShadow?: Shadow | "none";
+  /** 文本框按正常断行或保持每行在同一行显示。 */
+  readonly textWrap?: "normal" | "nowrap";
 };
 
 export type GradientStop = {
@@ -231,6 +233,7 @@ const textStyleKeys = new Set([
   "textTransform",
   "textDecoration",
   "textShadow",
+  "textWrap",
 ]);
 
 function record(value: unknown): value is Record<string, unknown> {

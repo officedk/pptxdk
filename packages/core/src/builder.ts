@@ -6,7 +6,11 @@ import type { ReactNode } from "react";
 import { CapabilityError, BuildError } from "#/diagnostics.ts";
 import { HostNode, type HostChild, type HostContainer } from "#/host/nodes.ts";
 import { withHostTree } from "#/host/reconciler.ts";
-import { LayoutPass, type LayoutPassResult } from "#/layout.ts";
+import {
+  hasVisibleBoxStyle,
+  LayoutPass,
+  type LayoutPassResult,
+} from "#/layout.ts";
 import { getMorphKeyLabel, isMorphKey, type MorphKey } from "#/morph.ts";
 import {
   assertXml10Characters,
@@ -880,19 +884,6 @@ function presentationContent(document: DocumentBuildState): string {
     .join("");
 }
 
-function hasVisibleBoxStyle(value: unknown): boolean {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) {
-    return false;
-  }
-  const style = value as Record<string, unknown>;
-  return (
-    style["backgroundColor"] !== undefined ||
-    style["backgroundImage"] !== undefined ||
-    style["boxShadow"] !== undefined ||
-    (style["borderColor"] !== undefined && style["borderWidth"] !== 0)
-  );
-}
-
 function capabilityContext(
   context: BuildContext,
   child: CapabilityElement,
@@ -962,6 +953,47 @@ function compileChildren(
       }
       const id = context.slide.nextId++;
       const module = context.modules.get("rp:box");
+      let morphKey: MorphKey | undefined;
+      let morphName: string | undefined;
+      if (requestedMorphKey !== undefined) {
+        if (!isMorphKey(requestedMorphKey)) {
+          context.slide.diagnostics.push(
+            diagnostic(
+              path,
+              "invalid-morph-key",
+              "morphKey 必须由 createMorphScope().handle(name) 创建",
+            ),
+          );
+        } else if (insideGroup) {
+          context.slide.diagnostics.push(
+            diagnostic(
+              path,
+              "morph-inside-group",
+              "Morph 只匹配页面顶层对象；请把 morphKey 放到 Group 上以移动整个组合",
+            ),
+          );
+        } else if (!hasVisibleBoxStyle(child.props["style"])) {
+          context.slide.diagnostics.push(
+            diagnostic(
+              path,
+              "morph-needs-object",
+              "只有会生成原生背景形状的可见 Box 才能参与 Morph",
+            ),
+          );
+        } else {
+          morphKey = requestedMorphKey;
+          morphName = nativeObjectName(morphKey, context.document);
+          if (context.slide.morphObjects.has(morphKey)) {
+            context.slide.diagnostics.push(
+              diagnostic(
+                path,
+                "duplicate-morph-key",
+                `Morph 句柄 “${getMorphKeyLabel(morphKey)}” 在此页重复使用；同一页只能声明一次`,
+              ),
+            );
+          }
+        }
+      }
       let boxXml = "";
       let boxObservation: ObjectObservation | undefined;
       if (module !== undefined && isObjectCapability(module)) {
@@ -977,11 +1009,52 @@ function compileChildren(
               box,
               context.layout.themes.get(child) ?? context.theme,
               insideGroup,
+              morphName,
             ),
           );
           boxXml = output.xml;
-          if (output.xml !== "")
+          if (output.xml !== "") {
             boxObservation = { ...output.observation, id: objectId };
+            if (morphKey !== undefined && morphName !== undefined) {
+              const nativeKind = morphNativeKind(output.observation.kind);
+              if (
+                output.observation.name !== morphName ||
+                nativeKind === undefined
+              ) {
+                context.slide.diagnostics.push(
+                  diagnostic(
+                    path,
+                    "unsupported-morph-object",
+                    "rp:box 未将 morphKey 写入可支持的原生背景形状名称",
+                  ),
+                );
+              } else if (!context.slide.morphObjects.has(morphKey)) {
+                context.slide.morphObjects.set(morphKey, {
+                  kind: nativeKind,
+                  name: morphName,
+                  path,
+                });
+              }
+            }
+          } else if (morphKey !== undefined) {
+            context.slide.diagnostics.push(
+              diagnostic(
+                path,
+                "morph-needs-object",
+                "只有会生成原生背景形状的可见 Box 才能参与 Morph",
+              ),
+            );
+          }
+          if (boxObservation !== undefined) {
+            for (const annotation of output.annotations ?? []) {
+              context.slide.contributions.push({
+                ...annotation,
+                path,
+                targetId: boxObservation.id,
+                order,
+              });
+            }
+          }
           for (const warning of output.warnings ?? []) {
             context.document.warnings.push({
               severity: "warning",

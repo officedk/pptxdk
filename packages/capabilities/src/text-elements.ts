@@ -23,7 +23,7 @@ export type ParagraphProps = {
 };
 
 export type SpanProps = {
-  readonly style?: Omit<TextStyle, "verticalAlign" | "lineHeight">;
+  readonly style?: Omit<TextStyle, "verticalAlign" | "lineHeight" | "textWrap">;
   readonly children?: ReactNode;
 };
 

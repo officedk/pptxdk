@@ -151,6 +151,7 @@ const textProperties = new Set([
   "textTransform",
   "textDecoration",
   "textShadow",
+  "textWrap",
 ]);
 const visualProperties = new Set([
   "backgroundColor",
@@ -228,6 +229,16 @@ function deriveTheme(
 
 function record(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+export function hasVisibleBoxStyle(value: unknown): boolean {
+  if (!record(value)) return false;
+  return (
+    value["backgroundColor"] !== undefined ||
+    value["backgroundImage"] !== undefined ||
+    value["boxShadow"] !== undefined ||
+    (value["borderColor"] !== undefined && value["borderWidth"] !== 0)
+  );
 }
 
 function describe(value: unknown): string {
@@ -1359,15 +1370,11 @@ export class LayoutPass {
     themeContext: ThemeContext,
   ): LayoutNode {
     const unknown = Object.keys(input.props).find(
-      (key) => key !== "testId" && key !== "style" && key !== "theme",
+      (key) =>
+        !["testId", "style", "theme", "morphKey", "__motionContext"].includes(
+          key,
+        ),
     );
-    if (input.props["morphKey"] !== undefined) {
-      fail(
-        path,
-        "morph-needs-object",
-        "Box 只负责布局且不会生成原生对象；请把 morphKey 放到实际对象或 Group 上",
-      );
-    }
     if (unknown !== undefined) {
       fail(path, "unknown-parameter", `Box 含未实现参数 ${unknown}`);
     }
@@ -1380,6 +1387,16 @@ export class LayoutPass {
     }
     const rawStyle = input.props["style"];
     const style = readStyle(rawStyle, path, true, true, true, visualProperties);
+    if (
+      input.props["morphKey"] !== undefined &&
+      !hasVisibleBoxStyle(rawStyle)
+    ) {
+      fail(
+        path,
+        "morph-needs-object",
+        "只有会生成原生背景形状的可见 Box 才能参与 Morph",
+      );
+    }
     const theme = deriveTheme(
       themeContext,
       input.props["theme"] as ThemeScope | undefined,

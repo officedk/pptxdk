@@ -110,6 +110,7 @@ const shapeTextStyleKeys = new Set([
   "textTransform",
   "textDecoration",
   "textShadow",
+  "textWrap",
 ]);
 
 function shapeTextStyle(props: Readonly<Record<string, unknown>>): unknown {

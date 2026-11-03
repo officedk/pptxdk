@@ -35,6 +35,8 @@ import {
 } from "./text-service.ts";
 import type { TextStyle } from "./text-service.ts";
 
+type ChartTextStyle = Omit<TextStyle, "textWrap">;
+
 export type ChartKind = "column" | "bar" | "line" | "area" | "pie" | "doughnut";
 
 export type ChartPoint = {
@@ -77,7 +79,7 @@ export type ChartAxis = {
   /** 坐标轴线；false 隐藏轴线。 */
   readonly line?: boolean | ChartLine;
   /** 轴标签的文字样式。 */
-  readonly style?: TextStyle;
+  readonly style?: ChartTextStyle;
 };
 
 export type ChartDataLabels = {
@@ -91,7 +93,7 @@ export type ChartDataLabels = {
     | "outsideEnd"
     | "bestFit";
   readonly numberFormat?: string;
-  readonly style?: TextStyle;
+  readonly style?: ChartTextStyle;
 };
 
 type ChartBase = MotionProps &
@@ -114,7 +116,7 @@ type ChartBase = MotionProps &
       readonly height: number;
     };
     /** 图表图例、轴和数据标签共用的文字样式。 */
-    readonly style?: TextStyle & LayoutStyle;
+    readonly style?: ChartTextStyle & LayoutStyle;
   };
 
 type CartesianOptions = {
@@ -191,6 +193,10 @@ const chartTextStyleKeys = [
   "verticalAlign",
   "align",
   "spacingAfter",
+  "letterSpacing",
+  "textTransform",
+  "textDecoration",
+  "textShadow",
 ] as const;
 const allChartOptions = [...new Set(Object.values(chartOptions).flat())];
 const positionValues = new Set([

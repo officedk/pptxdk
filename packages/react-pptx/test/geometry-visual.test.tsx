@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 
 import {
@@ -10,6 +11,7 @@ import {
   Group,
   Image,
   linearGradient,
+  font,
   path,
   preset,
   Shape,
@@ -24,6 +26,16 @@ import { describe, it } from "vitest";
 const imageBytes = new Uint8Array(
   readFileSync(new URL("./assets/wide-20000x1.png", import.meta.url)),
 );
+const jost = font("Jost*", [
+  {
+    weight: 400,
+    data: new Uint8Array(
+      readFileSync(
+        new URL("./assets/fonts/Jost-400-Book.ttf", import.meta.url),
+      ),
+    ),
+  },
+]);
 
 function deck(children: readonly ReturnType<typeof createElement>[]) {
   return createElement(
@@ -204,6 +216,350 @@ describe("几何、对象视觉和文字视觉", () => {
         (item) => item.geometry === "wedgeRoundRectCallout",
       ),
     );
+  });
+
+  it("允许透明且无原生尺寸的 Box 仅承载布局语义", async () => {
+    const result = await build(
+      deck([
+        createElement(Box, { key: "empty", testId: "empty-box" }),
+        createElement(Box, {
+          key: "zero-height",
+          testId: "zero-height-box",
+          style: { width: 100, height: 0 },
+        }),
+      ]),
+    );
+
+    const file = await validatePptx(result.pptx);
+    assert.deepEqual(file.errors, []);
+    assert.ok(
+      !result.report.slides[0]?.objects.some(
+        ({ testId }) => testId === "empty-box" || testId === "zero-height-box",
+      ),
+    );
+  });
+
+  it("为复用的预设派生圆角调整值而不改写作者输入", async () => {
+    const geometry = preset("roundRect", Object.freeze({}));
+    const result = await build(
+      deck([
+        createElement(Shape, {
+          key: "radius-10",
+          geometry,
+          x: 0,
+          y: 0,
+          width: 100,
+          height: 100,
+          style: { borderRadius: 10 },
+        }),
+        createElement(Shape, {
+          key: "radius-20",
+          geometry,
+          x: 120,
+          y: 0,
+          width: 100,
+          height: 100,
+          style: { borderRadius: 20 },
+        }),
+      ]),
+    );
+
+    const file = await validatePptx(result.pptx);
+    assert.deepEqual(file.errors, []);
+    const slideXml = strFromU8(
+      unzipSync(result.pptx)["ppt/slides/slide1.xml"]!,
+    );
+    assert.match(slideXml, /fmla="val 10000"/u);
+    assert.match(slideXml, /fmla="val 20000"/u);
+    assert.deepEqual(geometry.adjust, {});
+  });
+
+  it("按实际字距量化和大小写展开后的字符边界度量自动高度", async () => {
+    const result = await build(
+      deck([
+        createElement(Text, {
+          key: "spacing-decimal",
+          testId: "spacing-decimal",
+          x: 0,
+          y: 0,
+          width: 300.42,
+          height: "auto",
+          style: { fontFamily: jost, fontSize: 20, letterSpacing: 1.25 },
+          children: "AAAAAAAAAAAAAAAAAAAA",
+        }),
+        createElement(Text, {
+          key: "spacing-equivalent",
+          testId: "spacing-equivalent",
+          x: 0,
+          y: 60,
+          width: 300.42,
+          height: "auto",
+          style: {
+            fontFamily: jost,
+            fontSize: 20,
+            letterSpacing: 94 / 75,
+          },
+          children: "AAAAAAAAAAAAAAAAAAAA",
+        }),
+        createElement(Text, {
+          key: "uppercase-expansion",
+          testId: "uppercase-expansion",
+          x: 0,
+          y: 120,
+          width: 16.44,
+          height: "auto",
+          style: { fontFamily: jost, fontSize: 20, textTransform: "uppercase" },
+          children: "ß",
+        }),
+        createElement(Text, {
+          key: "uppercase-literal",
+          testId: "uppercase-literal",
+          x: 0,
+          y: 240,
+          width: 16.44,
+          height: "auto",
+          style: { fontFamily: jost, fontSize: 20, textTransform: "uppercase" },
+          children: "SS",
+        }),
+      ]),
+    );
+    const file = await validatePptx(result.pptx);
+    assert.deepEqual(file.errors, []);
+    const objects = result.report.slides[0]?.objects ?? [];
+    const height = (testId: string) =>
+      objects.find((object) => object.testId === testId)?.box?.height;
+
+    assert.equal(height("spacing-decimal"), height("spacing-equivalent"));
+    assert.equal(height("uppercase-expansion"), height("uppercase-literal"));
+    const slideXml = strFromU8(
+      unzipSync(result.pptx)["ppt/slides/slide1.xml"]!,
+    );
+    assert.equal((slideXml.match(/spc="94"/gu) ?? []).length, 2);
+    assert.equal((slideXml.match(/cap="all"/gu) ?? []).length, 2);
+  });
+
+  it("定位拒绝 close 后的数字和非 0/1 圆弧旗标", () => {
+    const child = spawnSync(
+      process.execPath,
+      [
+        "--conditions=source",
+        "--input-type=module",
+        "--eval",
+        [
+          'import { path } from "@react-pptx/react-pptx";',
+          'for (const data of ["M0 0Z1", "M0 0A10 10 0 2 3 20 20", "M0 0A10 10 0 1.0 0 20 20"]) {',
+          "  try { path(data, { viewBox: [30, 30] }); process.exitCode = 1; break; }",
+          '  catch (error) { if (error?.code !== "invalid-geometry") { process.exitCode = 2; break; } }',
+          "}",
+          'if (process.exitCode === undefined) path("M0 0Z m5 5 l1 1", { viewBox: [30, 30] });',
+          'if (process.exitCode === undefined) process.stdout.write("ok");',
+        ].join("\n"),
+      ],
+      { timeout: 2_000 },
+    );
+
+    assert.equal(
+      child.status,
+      0,
+      `invalid path probe failed: ${child.error?.message ?? child.stderr.toString()}`,
+    );
+    assert.equal(child.stdout.toString(), "ok");
+  });
+
+  it("按 DrawingML 边线最终 EMU 范围拒绝无法写入的宽度", async () => {
+    const valid = await build(
+      deck([
+        createElement(Shape, {
+          x: 0,
+          y: 0,
+          width: 30,
+          height: 30,
+          style: { borderColor: "accent1", borderWidth: 2112 },
+        }),
+      ]),
+    );
+    const file = await validatePptx(valid.pptx);
+    assert.deepEqual(file.errors, []);
+    assert.match(
+      strFromU8(unzipSync(valid.pptx)["ppt/slides/slide1.xml"]!),
+      /<a:ln w="20116800">/u,
+    );
+
+    await assert.rejects(
+      build(
+        deck([
+          createElement(Shape, {
+            testId: "line-too-wide",
+            x: 0,
+            y: 0,
+            width: 30,
+            height: 30,
+            style: { borderColor: "accent1", borderWidth: 3000 },
+          }),
+        ]),
+      ),
+      (error: unknown) =>
+        error instanceof BuildError &&
+        error.diagnostics.some(
+          ({ code, path }) =>
+            code === "invalid-visual-style" &&
+            path.includes("shape[line-too-wide]"),
+        ),
+    );
+  });
+
+  it("拒绝量化后为零的自定义几何路径空间", async () => {
+    await assert.rejects(
+      build(
+        deck([
+          createElement(Shape, {
+            testId: "tiny-view-box",
+            x: 0,
+            y: 0,
+            width: 100,
+            height: 100,
+            geometry: path("M0 0 L.0001 .0001", {
+              viewBox: [0.0001, 0.0001],
+            }),
+            style: { borderColor: "accent1" },
+          }),
+        ]),
+      ),
+      (error: unknown) =>
+        error instanceof BuildError &&
+        error.diagnostics.some(
+          ({ code, path: diagnosticPath }) =>
+            code === "invalid-geometry" &&
+            diagnosticPath.includes("shape[tiny-view-box]"),
+        ),
+    );
+
+    const valid = await build(
+      deck([
+        createElement(Shape, {
+          testId: "one-unit-view-box",
+          x: 0,
+          y: 0,
+          width: 100,
+          height: 100,
+          geometry: path("M0 0 L.001 .001", { viewBox: [0.001, 0.001] }),
+          style: { borderColor: "accent1" },
+        }),
+      ]),
+    );
+    assert.deepEqual((await validatePptx(valid.pptx)).errors, []);
+    assert.match(
+      strFromU8(unzipSync(valid.pptx)["ppt/slides/slide1.xml"]!),
+      /<a:path w="1" h="1">/u,
+    );
+  });
+
+  it("保留正常断行并让 Text 与 Shape 的 nowrap 共用度量和原生 wrap", async () => {
+    const content = "alpha beta gamma delta";
+    const result = await build(
+      deck([
+        createElement(Text, {
+          key: "normal-wrap",
+          testId: "normal-wrap",
+          x: 0,
+          y: 0,
+          width: 30,
+          height: "auto",
+          style: { fontFamily: jost, fontSize: 20, textWrap: "normal" },
+          children: content,
+        }),
+        createElement(Text, {
+          key: "no-wrap",
+          testId: "no-wrap",
+          x: 80,
+          y: 0,
+          width: 30,
+          height: "auto",
+          style: { fontFamily: jost, fontSize: 20, textWrap: "nowrap" },
+          children: content,
+        }),
+        createElement(Box, {
+          key: "normal-min-content",
+          testId: "normal-min-content",
+          style: {
+            display: "flex",
+            flexDirection: "row",
+            width: 160,
+            height: 40,
+            alignItems: "start",
+          },
+          children: [
+            createElement(Text, {
+              key: "normal-flex-text",
+              testId: "normal-flex-text",
+              style: { fontFamily: jost, fontSize: 20, textWrap: "normal" },
+              children: content,
+            }),
+            createElement(Shape, {
+              key: "normal-flex-marker",
+              testId: "normal-flex-marker",
+              width: 20,
+              height: 20,
+            }),
+          ],
+        }),
+        createElement(Box, {
+          key: "nowrap-min-content",
+          testId: "nowrap-min-content",
+          style: {
+            display: "flex",
+            flexDirection: "row",
+            width: 160,
+            height: 40,
+            alignItems: "start",
+          },
+          children: [
+            createElement(Text, {
+              key: "nowrap-flex-text",
+              testId: "nowrap-flex-text",
+              style: { fontFamily: jost, fontSize: 20, textWrap: "nowrap" },
+              children: content,
+            }),
+            createElement(Shape, {
+              key: "nowrap-flex-marker",
+              testId: "nowrap-flex-marker",
+              width: 20,
+              height: 20,
+              style: { minWidth: 1 },
+            }),
+          ],
+        }),
+        createElement(Shape, {
+          key: "shape-no-wrap",
+          testId: "shape-no-wrap",
+          x: 300,
+          y: 0,
+          width: 100,
+          height: 50,
+          text: content,
+          style: { fontFamily: jost, fontSize: 20, textWrap: "nowrap" },
+        }),
+      ]),
+    );
+    const file = await validatePptx(result.pptx);
+
+    assert.deepEqual(file.errors, []);
+    const objects = result.report.slides[0]?.objects ?? [];
+    const object = (testId: string) =>
+      objects.find((candidate) => candidate.testId === testId);
+    assert.ok(
+      (object("normal-wrap")?.box?.height ?? 0) >
+        (object("no-wrap")?.box?.height ?? 0),
+    );
+    assert.ok(
+      (object("nowrap-flex-text")?.box?.width ?? 0) >
+        (object("normal-flex-text")?.box?.width ?? 0),
+    );
+    const slideXml = strFromU8(
+      unzipSync(result.pptx)["ppt/slides/slide1.xml"]!,
+    );
+    assert.match(slideXml, /<a:bodyPr wrap="square"/u);
+    assert.equal((slideXml.match(/<a:bodyPr wrap="none"/gu) ?? []).length, 3);
   });
 
   it("定位拒绝非法几何、渐变、文本间距和不可表达组合", async () => {

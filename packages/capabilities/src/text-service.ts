@@ -42,7 +42,7 @@ export type TextList =
       readonly level?: number;
     };
 
-export type ParagraphStyle = Omit<TextStyle, "verticalAlign"> & {
+export type ParagraphStyle = Omit<TextStyle, "verticalAlign" | "textWrap"> & {
   readonly align?: TextAlignment;
   readonly spacingAfter?: number;
   readonly list?: TextList;
@@ -101,6 +101,7 @@ type Paragraph = {
   readonly runs: readonly Run[];
   readonly style: ParagraphStyle;
   readonly endStyle: RunStyle;
+  readonly wrap: "normal" | "nowrap";
 };
 type NormalizedFont = {
   readonly family: string;
@@ -553,6 +554,7 @@ function readTextStyle(
       "textTransform",
       "textDecoration",
       "textShadow",
+      "textWrap",
     ],
     label,
   );
@@ -563,6 +565,16 @@ function readTextStyle(
   } as TextStyle;
   if (style.textShadow === "none")
     delete (style as { textShadow?: Shadow | "none" }).textShadow;
+  if (
+    style.textWrap !== undefined &&
+    style.textWrap !== "normal" &&
+    style.textWrap !== "nowrap"
+  ) {
+    throw new CapabilityError(
+      "invalid-text-wrap",
+      "textWrap 只能是 normal 或 nowrap",
+    );
+  }
   if (
     style.verticalAlign !== undefined &&
     !["top", "middle", "bottom"].includes(style.verticalAlign)
@@ -921,6 +933,7 @@ function normalizeParagraphs(
         runs: inline,
         style: baseParagraphStyle,
         endStyle: baseRunStyle,
+        wrap: textStyle.textWrap ?? "normal",
       });
       inline = [];
     }
@@ -969,7 +982,12 @@ function normalizeParagraphs(
     );
     const runs: Run[] = [];
     collectRuns(child.children, paragraphRunStyle, runs, theme);
-    paragraphs.push({ runs, style, endStyle: paragraphRunStyle });
+    paragraphs.push({
+      runs,
+      style,
+      endStyle: paragraphRunStyle,
+      wrap: textStyle.textWrap ?? "normal",
+    });
   }
   flushInline();
   if (paragraphs.length === 0) {
@@ -977,6 +995,7 @@ function normalizeParagraphs(
       runs: [],
       style: baseParagraphStyle,
       endStyle: baseRunStyle,
+      wrap: textStyle.textWrap ?? "normal",
     });
   }
   return paragraphs;
@@ -1338,10 +1357,7 @@ function paragraphPieces(paragraph: Paragraph): {
   let start = 0;
   for (const run of sourceRuns) {
     const face = measureRunFace(run.style);
-    const shown =
-      run.style.textTransform === "uppercase"
-        ? run.text.toUpperCase()
-        : run.text;
+    const shown = displayedText(run);
     const missing = missingCharacters(face, shown);
     if (missing.length > 0) {
       const shown = missing.slice(0, 10).join(" ");
@@ -1352,22 +1368,31 @@ function paragraphPieces(paragraph: Paragraph): {
         `${family} 缺少字符 ${shown}${extra > 0 ? `，另有 ${extra} 个字符` : ""} 的字形`,
       );
     }
+    const letterSpacing =
+      run.style.letterSpacing === undefined
+        ? undefined
+        : letterSpacingCentipoints(run.style.letterSpacing) / 75;
+    const measureStyle =
+      letterSpacing === undefined ? run.style : { ...run.style, letterSpacing };
     pieces.push({
-      text: run.text,
-      style: run.style,
+      text: shown,
+      style: measureStyle,
       start,
-      end: start + run.text.length,
+      end: start + shown.length,
       face,
     });
-    start += run.text.length;
+    start += shown.length;
   }
-  const text = sourceRuns.map((run) => run.text).join("");
+  const text = pieces.map((piece) => piece.text).join("");
   return { text, pieces };
 }
 
 function paragraphMinContentWidth(paragraph: Paragraph): number {
   const { text, pieces } = paragraphPieces(paragraph);
   if (text === "") return 0;
+  if (paragraph.wrap === "nowrap") {
+    return wrapParagraph(text, pieces, Number.MAX_VALUE).width;
+  }
   const breaker = new LineBreaker(text);
   let start = 0;
   let widest = 0;
@@ -1391,7 +1416,11 @@ function paragraphMeasurement(
   width: number,
 ): MeasuredParagraph {
   const { text, pieces } = paragraphPieces(paragraph);
-  const wrapped = wrapParagraph(text, pieces, width);
+  const wrapped = wrapParagraph(
+    text,
+    pieces,
+    paragraph.wrap === "nowrap" ? Number.MAX_VALUE : width,
+  );
   const spacingAfter =
     paragraph.style.spacingAfter === undefined
       ? 0
@@ -1523,7 +1552,13 @@ export function writeTextBody(
   layout?: TextLayoutRequest,
   destination: TextBodyDestination = "text-box",
 ): TextServiceResult {
-  const style = readTextStyle(styleValue, "Text.style", theme);
+  const style = readTextStyle(
+    destination === "table-cell"
+      ? { ...styleRecord(styleValue, "Text.style"), textWrap: "normal" }
+      : styleValue,
+    "Text.style",
+    theme,
+  );
   const paragraphs = normalizeParagraphs(children, style, theme);
   const runs = paragraphs.flatMap((paragraph) =>
     paragraph.runs.length > 0
@@ -1590,7 +1625,7 @@ export function writeTextBody(
   const xml =
     destination === "table-cell"
       ? `<a:txBody><a:bodyPr/><a:lstStyle/>${outputParagraphs.map((paragraph) => paragraphXml(paragraph, theme)).join("")}</a:txBody>`
-      : `<p:txBody><a:bodyPr wrap="square" lIns="${pxToEmu(layout?.insets?.left ?? 0)}" tIns="${pxToEmu(layout?.insets?.top ?? 0)}" rIns="${pxToEmu(layout?.insets?.right ?? 0)}" bIns="${pxToEmu(layout?.insets?.bottom ?? 0)}" anchor="${bodyAnchor(style.verticalAlign ?? verticalAlign)}"><a:noAutofit/></a:bodyPr><a:lstStyle/>${outputParagraphs.map((paragraph) => paragraphXml(paragraph, theme)).join("")}</p:txBody>`;
+      : `<p:txBody><a:bodyPr wrap="${style.textWrap === "nowrap" ? "none" : "square"}" lIns="${pxToEmu(layout?.insets?.left ?? 0)}" tIns="${pxToEmu(layout?.insets?.top ?? 0)}" rIns="${pxToEmu(layout?.insets?.right ?? 0)}" bIns="${pxToEmu(layout?.insets?.bottom ?? 0)}" anchor="${bodyAnchor(style.verticalAlign ?? verticalAlign)}"><a:noAutofit/></a:bodyPr><a:lstStyle/>${outputParagraphs.map((paragraph) => paragraphXml(paragraph, theme)).join("")}</p:txBody>`;
   return {
     xml,
     text,
@@ -1624,6 +1659,10 @@ export function writeChartTextProperties(
     fontStyle: style.fontStyle,
     color: style.color,
     themeFont: style.themeFont,
+    letterSpacing: style.letterSpacing,
+    textTransform: style.textTransform,
+    textDecoration: style.textDecoration,
+    textShadow: style.textShadow,
   };
   validateRunStyle(runStyle);
   const runs = texts.map((text) => ({ text, style: runStyle }));

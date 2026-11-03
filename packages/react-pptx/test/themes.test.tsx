@@ -13,8 +13,10 @@ import {
   Group,
   lighter,
   MotionScope,
+  P,
   Slide,
   Shape,
+  Span,
   Table,
   Row,
   Cell,
@@ -495,6 +497,329 @@ describe("公开主题入口", () => {
     );
   });
 
+  it("文稿颜色别名在使用处解析最近局部覆盖并保留同名外层引用", async () => {
+    const result = await build(
+      <Deck
+        theme={defineTheme({
+          colors: {
+            ink: "#112233",
+            caption: "ink",
+            chain: "caption",
+          },
+        })}
+      >
+        <Slide slideId="local-alias" theme={{ colors: { ink: "#C00000" } }}>
+          <Text
+            testId="alias-text"
+            x={0}
+            y={0}
+            width={180}
+            height={40}
+            style={{ color: "chain" }}
+          >
+            Alias text
+          </Text>
+          <Shape
+            testId="alias-shape"
+            x={0}
+            y={50}
+            width={100}
+            height={30}
+            fill="chain"
+            text="Alias shape"
+            textStyle={{ color: "chain" }}
+          />
+          <Table testId="alias-table" columns={[140]} x={0} y={90}>
+            <Row style={{ height: 36 }}>
+              <Cell style={{ color: "chain", backgroundColor: "chain" }}>
+                Alias cell
+              </Cell>
+            </Row>
+          </Table>
+          <Chart
+            testId="alias-chart"
+            kind="column"
+            x={160}
+            y={90}
+            width={240}
+            height={150}
+            style={{ color: "chain" }}
+            data={{
+              categories: ["A"],
+              series: [{ name: "Alias series", values: [1], color: "chain" }],
+            }}
+          />
+          <Box
+            testId="same-name-scope"
+            style={{ width: 100, height: 40 }}
+            theme={{ colors: { ink: "ink" } }}
+          >
+            <Shape
+              testId="same-name-shape"
+              x={0}
+              y={0}
+              width={80}
+              height={30}
+              fill="ink"
+            />
+          </Box>
+        </Slide>
+      </Deck>,
+    );
+
+    assert.deepEqual((await validatePptx(result.pptx)).errors, []);
+    const parts = unzipSync(result.pptx);
+    const slide = strFromU8(parts["ppt/slides/slide1.xml"]!);
+    const chart = strFromU8(parts["ppt/charts/chart1.xml"]!);
+    assert.match(slide, /name="alias-text"[\s\S]*?<a:srgbClr val="C00000"\/>/u);
+    assert.match(
+      slide,
+      /name="alias-shape"[\s\S]*?<a:srgbClr val="C00000"\/>/u,
+    );
+    assert.match(
+      slide,
+      /name="alias-table"[\s\S]*?<a:srgbClr val="C00000"\/>/u,
+    );
+    assert.match(chart, /<a:srgbClr val="C00000"\/>/u);
+    const sameNameStart = slide.indexOf('name="same-name-shape"');
+    assert.notEqual(sameNameStart, -1);
+    assert.match(
+      slide.slice(sameNameStart, sameNameStart + 1200),
+      /val="C00000"/u,
+    );
+  });
+
+  it("Text、P 和 Span 对同一字体令牌只解析一次", async () => {
+    const result = await build(
+      <Deck
+        theme={defineTheme({
+          fonts: { body: "Aptos", Aptos: "Courier New" },
+        })}
+      >
+        <Slide slideId="font-token-once">
+          <Text
+            testId="font-token-once"
+            x={0}
+            y={0}
+            width={300}
+            height={120}
+            style={{ fontFamily: "body" }}
+          >
+            Bare text
+            <P style={{ fontFamily: "body" }}>Paragraph text</P>
+            <Span style={{ fontFamily: "body" }}>Span text</Span>
+          </Text>
+        </Slide>
+      </Deck>,
+    );
+
+    const file = await validatePptx(result.pptx);
+    assert.deepEqual(file.errors, []);
+    const object = file.slides[0]?.objects.find(
+      ({ name }) => name === "font-token-once",
+    );
+    const runs = object?.text?.paragraphs.flatMap(({ runs: paragraphRuns }) =>
+      paragraphRuns.map(({ text, fontFamily }) => ({ text, fontFamily })),
+    );
+    assert.deepEqual(
+      runs?.map(({ text, fontFamily }) => [text.trim(), fontFamily]),
+      [
+        ["Bare text", "Aptos"],
+        ["Paragraph text", "Aptos"],
+        ["Span text", "Aptos"],
+      ],
+    );
+  });
+
+  it("Deck、Slide、Box 和 Group 的段落默认值参与度量并允许后代覆盖", async () => {
+    const result = await build(
+      <Deck
+        theme={defineTheme({ fonts: { minor: localFont } })}
+        style={{ align: "center", spacingAfter: 16 }}
+      >
+        <Slide slideId="deck-paragraph-defaults">
+          <Text testId="deck-auto" x={0} y={0} width={280} height="auto">
+            <P>First paragraph</P>
+            <P>Second paragraph</P>
+          </Text>
+          <Text
+            testId="deck-zero-gap"
+            x={300}
+            y={0}
+            width={280}
+            height="auto"
+            style={{ spacingAfter: 0 }}
+          >
+            <P>First paragraph</P>
+            <P>Second paragraph</P>
+          </Text>
+          <Chart
+            testId="deck-paragraph-chart"
+            kind="column"
+            x={0}
+            y={160}
+            width={280}
+            height={160}
+            data={{
+              categories: ["A"],
+              series: [{ name: "Series", values: [1] }],
+            }}
+          />
+        </Slide>
+        <Slide
+          slideId="slide-paragraph-defaults"
+          style={{ align: "right", spacingAfter: 12 }}
+        >
+          <Text testId="slide-default" x={0} y={0} width={280} height={100}>
+            <P>First paragraph</P>
+            <P>Second paragraph</P>
+          </Text>
+        </Slide>
+        <Slide slideId="box-paragraph-defaults">
+          <Box
+            testId="paragraph-box"
+            style={{ width: 600, height: 260, align: "left", spacingAfter: 8 }}
+          >
+            <Text testId="box-auto" x={0} y={0} width={280} height="auto">
+              <P>First paragraph</P>
+              <P style={{ align: "right", spacingAfter: 4 }}>
+                Second paragraph override
+              </P>
+            </Text>
+            <Text
+              testId="box-zero-gap"
+              x={300}
+              y={0}
+              width={280}
+              height="auto"
+              style={{ spacingAfter: 0 }}
+            >
+              <P>First paragraph</P>
+              <P>Second paragraph</P>
+            </Text>
+          </Box>
+          <Text testId="box-sibling" x={0} y={280} width={280} height={100}>
+            <P>First paragraph</P>
+            <P>Second paragraph</P>
+          </Text>
+          <Box
+            testId="second-paragraph-box"
+            style={{
+              width: 600,
+              height: 140,
+              align: "right",
+              spacingAfter: 10,
+            }}
+          >
+            <Text
+              testId="second-box-default"
+              x={0}
+              y={0}
+              width={280}
+              height={100}
+            >
+              <P>First paragraph</P>
+              <P>Second paragraph</P>
+            </Text>
+          </Box>
+        </Slide>
+        <Slide slideId="group-paragraph-defaults">
+          <Group
+            testId="paragraph-group"
+            style={{ align: "justify", spacingAfter: 20 }}
+          >
+            <Text testId="group-default" x={0} y={0} width={280} height={100}>
+              <P>First paragraph</P>
+              <P>Second paragraph</P>
+            </Text>
+          </Group>
+        </Slide>
+      </Deck>,
+    );
+
+    const measuredHeight = (testId: string, slideIndex: number) => {
+      const object = result.report.slides[slideIndex]?.objects.find(
+        ({ testId: objectTestId }) => objectTestId === testId,
+      );
+      const height = object?.box?.height;
+      if (typeof height !== "number") assert.fail(`missing ${testId}`);
+      return height;
+    };
+    assert.equal(
+      Math.round(
+        (measuredHeight("deck-auto", 0) - measuredHeight("deck-zero-gap", 0)) *
+          100,
+      ) / 100,
+      16,
+    );
+    assert.equal(
+      Math.round(
+        (measuredHeight("box-auto", 2) - measuredHeight("box-zero-gap", 2)) *
+          100,
+      ) / 100,
+      8,
+    );
+
+    const file = await validatePptx(result.pptx);
+    assert.deepEqual(file.errors, []);
+    const slideXml = (index: number) =>
+      strFromU8(unzipSync(result.pptx)[`ppt/slides/slide${index + 1}.xml`]!);
+    const objectXml = (index: number, testId: string) => {
+      const xml = slideXml(index);
+      const start = xml.indexOf(`name="${testId}"`);
+      assert.notEqual(start, -1, `missing ${testId}`);
+      const end = xml.indexOf("</p:sp>", start);
+      return xml.slice(start, end);
+    };
+    assert.match(objectXml(0, "deck-auto"), /algn="ctr"/u);
+    assert.match(objectXml(0, "deck-auto"), /<a:spcPts val="1200"\/>/u);
+    const chart = strFromU8(unzipSync(result.pptx)["ppt/charts/chart1.xml"]!);
+    assert.match(
+      chart,
+      /<a:pPr algn="ctr">.*?<a:spcAft><a:spcPts val="1200"/su,
+    );
+    assert.match(objectXml(1, "slide-default"), /algn="r"/u);
+    assert.match(objectXml(1, "slide-default"), /<a:spcPts val="900"\/>/u);
+    assert.match(objectXml(2, "box-auto"), /algn="l"/u);
+    assert.match(objectXml(2, "box-auto"), /<a:spcPts val="600"\/>/u);
+    assert.match(objectXml(2, "box-auto"), /algn="r"/u);
+    assert.match(objectXml(2, "box-auto"), /<a:spcPts val="300"\/>/u);
+    assert.match(objectXml(2, "box-sibling"), /algn="ctr"/u);
+    assert.match(objectXml(2, "second-box-default"), /algn="r"/u);
+    assert.match(objectXml(2, "second-box-default"), /<a:spcPts val="750"\/>/u);
+    assert.match(objectXml(3, "group-default"), /algn="just"/u);
+    assert.match(objectXml(3, "group-default"), /<a:spcPts val="1500"\/>/u);
+  });
+
+  it("Group 纯文字默认值不改变原有布局参与条件", async () => {
+    const result = await build(
+      <Deck>
+        <Slide slideId="text-only-group-style">
+          <Group
+            testId="text-only-group"
+            style={{ align: "center", spacingAfter: 8 }}
+          >
+            <Text testId="group-child" x={10} y={20} width={120} height={40}>
+              <P>First paragraph</P>
+              <P>Second paragraph</P>
+            </Text>
+          </Group>
+        </Slide>
+      </Deck>,
+    );
+
+    const group = result.report.slides[0]?.objects.find(
+      ({ testId }) => testId === "text-only-group",
+    );
+    const child = group?.members?.find(
+      ({ testId }) => testId === "group-child",
+    );
+    assert.deepEqual(child?.box, { x: 10, y: 20, width: 120, height: 40 });
+    const slide = strFromU8(unzipSync(result.pptx)["ppt/slides/slide1.xml"]!);
+    assert.match(slide, /name="text-only-group"[\s\S]*?algn="ctr"/u);
+    assert.match(slide, /<a:spcPts val="600"\/>/u);
+  });
+
   it("局部主题拒绝未知颜色与字体令牌", async () => {
     const theme = defineTheme({
       colors: { ink: "accent1" },
@@ -601,13 +926,15 @@ describe("公开主题入口", () => {
           style={{ fontStyle: "italic" }}
         >
           <Text testId="italic" x={0} y={0} width={300} height="auto">
-            Local font resource
+            Local font resource{" "}
+            <Span style={{ fontFamily: "major" }}>inline resource</Span>
           </Text>
         </Slide>
       </Deck>,
       { embedFonts: "full" },
     );
-    assert.deepEqual((await validatePptx(result.pptx)).errors, []);
+    const file = await validatePptx(result.pptx);
+    assert.deepEqual(file.errors, []);
     const parts = unzipSync(result.pptx);
     const presentation = strFromU8(parts["ppt/presentation.xml"]!);
     const slide = strFromU8(parts["ppt/slides/slide1.xml"]!);
@@ -616,6 +943,12 @@ describe("公开主题入口", () => {
     assert.ok(Object.keys(parts).some((path) => path.startsWith("ppt/fonts/")));
     assert.match(slide, /<a:latin typeface="Jost"\/>/u);
     assert.match(slide, /i="1"/u);
+    const inline = file.slides[0]?.objects
+      .find(({ name }) => name === "italic")
+      ?.text?.paragraphs.flatMap(({ runs }) => runs)
+      .find(({ text }) => text.includes("inline resource"));
+    assert.equal(inline?.fontFamily, "Jost");
+    assert.equal(inline?.italic, true);
     assert.match(
       strFromU8(parts["ppt/theme/theme1.xml"]!),
       /<a:majorFont><a:latin typeface="Aptos Display"/u,

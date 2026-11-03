@@ -111,6 +111,8 @@ const textStyleProperties = new Set([
   "color",
   "lineHeight",
   "verticalAlign",
+  "align",
+  "spacingAfter",
 ]);
 
 function textStyle(value: unknown): unknown {
@@ -169,6 +171,7 @@ export const textCapability: CapabilityModule = {
       return measureTextLayout(
         input.children,
         style,
+        request.theme,
         request.availableWidth !== undefined
           ? request.availableWidth
           : typeof width === "number"

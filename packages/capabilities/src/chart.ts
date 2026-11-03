@@ -4,10 +4,12 @@ import {
   xmlEscape,
   type CapabilityInput,
   type CapabilityModule,
+  type ColorValue,
   type CapabilityLayoutMeasurement,
   type CapabilityLayoutRequest,
   type GeometryBox,
   type LayoutStyle,
+  type ThemeContext,
 } from "@react-pptx/core";
 import type { ReactNode } from "react";
 
@@ -185,6 +187,8 @@ const chartTextStyleKeys = [
   "color",
   "lineHeight",
   "verticalAlign",
+  "align",
+  "spacingAfter",
 ] as const;
 const allChartOptions = [...new Set(Object.values(chartOptions).flat())];
 const positionValues = new Set([
@@ -264,7 +268,7 @@ function textOnlyStyle(value: unknown): TextStyle | undefined {
   ) as TextStyle;
 }
 
-function optionalColor(value: unknown, label: string): string | undefined {
+function optionalColor(value: unknown, label: string): ColorValue | undefined {
   if (value === undefined) return undefined;
   if (
     typeof value === "string" ||
@@ -701,7 +705,12 @@ function chartResourceClaims(
     ...dataLabelTexts(data, props.dataLabels),
   ];
   const chartStyle = textOnlyStyle(props.style);
-  const chart = writeChartTextProperties(chartStyle, chartText, "Chart.style");
+  const chart = writeChartTextProperties(
+    chartStyle,
+    chartText,
+    "Chart.style",
+    theme,
+  );
   const resourceClaims: TextResourceClaim[] = [...chart.resourceClaims];
   const fontUses: FontEmbeddingUse[] = chart.fontUses.map((use) => ({
     ...use,

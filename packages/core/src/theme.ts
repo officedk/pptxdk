@@ -35,6 +35,10 @@ export type TextStyle = {
   readonly color?: ColorValue;
   readonly lineHeight?: FontSize;
   readonly verticalAlign?: "top" | "middle" | "bottom";
+  /** 未显式覆盖的段落对齐方式。 */
+  readonly align?: TextAlignment;
+  /** 未显式覆盖的段后距，单位为像素。 */
+  readonly spacingAfter?: number;
 };
 
 export const nativeColorSlots = [
@@ -168,6 +172,8 @@ const textStyleKeys = new Set([
   "color",
   "lineHeight",
   "verticalAlign",
+  "align",
+  "spacingAfter",
 ]);
 
 function record(value: unknown): value is Record<string, unknown> {
@@ -377,7 +383,8 @@ function resolveColorName(
   if (configured === undefined) {
     throw new CapabilityError("invalid-color", `未知颜色或主题令牌 ${raw}`);
   }
-  return resolveColorValue(configured, rootContext(context), depth + 1);
+  // 文稿令牌的别名值在实际使用位置解析，才能看到最近作用域的覆盖。
+  return resolveColorValue(configured, context, depth + 1);
 }
 
 function rootContext(context: ThemeContext): ThemeContext {

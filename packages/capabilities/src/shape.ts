@@ -173,6 +173,7 @@ export const shapeCapability: CapabilityModule = {
       const measured = measureTextLayout(
         [{ type: "#text", text }],
         shapeTextMeasurementStyle(input.props["textStyle"]),
+        request.theme,
         request.availableWidth,
       );
       return measured;

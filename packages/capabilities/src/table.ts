@@ -147,6 +147,8 @@ const textStyleKeys = [
   "color",
   "lineHeight",
   "verticalAlign",
+  "align",
+  "spacingAfter",
 ] as const;
 const rowStyleKeys = ["height", "backgroundColor"] as const;
 const cellStyleKeys = [
@@ -796,6 +798,7 @@ type TableLayoutModel = {
 function tableLayoutModel(
   input: CapabilityInput,
   requestedWidth: number | undefined,
+  theme: ThemeContext,
 ): TableLayoutModel {
   const columns = parseTracks(input.props["columns"]);
   const tableStyle = trackStyle(input, "table");
@@ -806,6 +809,7 @@ function tableLayoutModel(
     columns,
     tableStyle.textStyle,
     tableVerticalAlign,
+    theme,
   );
   const warnings: { code: string; message: string; path?: string }[] = [];
   const claims: { kind: string; key: string; identity: string }[] = [];
@@ -836,7 +840,7 @@ function tableLayoutModel(
         track?.kind === "auto" ||
         (track?.kind === "fr" && requestedWidth === undefined);
       if (!needsTrackWidth) continue;
-      const measured = textBody(cell, "max-content");
+      const measured = textBody(cell, theme, "max-content");
       addTextResult(measured, cell.path);
       if (measured.measurement === undefined && measured.text.trim() !== "") {
         fail(
@@ -919,7 +923,7 @@ function tableLayoutModel(
       0,
       widthOf(cell) - cell.padding.left - cell.padding.right,
     );
-    const result = textBody(cell, innerWidth);
+    const result = textBody(cell, theme, innerWidth);
     addTextResult(result, cell.path);
     if (result.measurement === undefined && result.text.trim() !== "") {
       fail(
@@ -990,7 +994,7 @@ export const tableCapability: CapabilityModule = {
       typeof declaredWidth === "number"
         ? positiveSize(declaredWidth, "Table.width")
         : undefined;
-    const natural = tableLayoutModel(input, undefined);
+    const natural = tableLayoutModel(input, undefined, request.theme);
     const naturalWidth = natural.widths.reduce((sum, width) => sum + width, 0);
     const availableWidth =
       request.availableWidth !== undefined && request.availableWidth > 0
@@ -1007,7 +1011,7 @@ export const tableCapability: CapabilityModule = {
     const model =
       requestedWidth === undefined
         ? natural
-        : tableLayoutModel(input, requestedWidth);
+        : tableLayoutModel(input, requestedWidth, request.theme);
     const width = model.widths.reduce((sum, value) => sum + value, 0);
     const height = model.heights.reduce((sum, value) => sum + value, 0);
     return {
@@ -1028,7 +1032,7 @@ export const tableCapability: CapabilityModule = {
       (typeof declaredWidth === "number"
         ? positiveSize(declaredWidth, "Table.width")
         : undefined);
-    const model = tableLayoutModel(input, requestedWidth);
+    const model = tableLayoutModel(input, requestedWidth, context.theme);
     const { columns, rows, cells, widths } = model;
     const heights = [...model.heights];
     const warnings = [...model.warnings];

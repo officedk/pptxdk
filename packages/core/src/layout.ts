@@ -84,6 +84,7 @@ type LayoutNode = {
 
 export type LayoutPassResult = {
   readonly boxes: WeakMap<CapabilityElement, GeometryBox>;
+  readonly themes: WeakMap<CapabilityElement, ThemeContext>;
   readonly hidden: WeakSet<CapabilityElement>;
   readonly warnings: readonly Diagnostic[];
 };
@@ -144,6 +145,8 @@ const textProperties = new Set([
   "color",
   "lineHeight",
   "verticalAlign",
+  "align",
+  "spacingAfter",
 ]);
 const containerProperties = [
   "flexDirection",
@@ -950,6 +953,7 @@ export class LayoutPass {
   readonly #dimensions: Dimensions;
   readonly #config = Yoga.Config.create();
   readonly #boxes = new WeakMap<CapabilityElement, GeometryBox>();
+  readonly #themes = new WeakMap<CapabilityElement, ThemeContext>();
   readonly #hidden = new WeakSet<CapabilityElement>();
   readonly #warnings: Diagnostic[] = [];
   readonly #warningKeys = new Set<string>();
@@ -966,14 +970,15 @@ export class LayoutPass {
   run(
     children: readonly CapabilityChild[],
     parentPath: string,
+    theme: ThemeContext,
     slideStyle?: unknown,
   ): LayoutPassResult {
-    const style = readStyle(slideStyle, parentPath, true, false);
     const rootYoga = Yoga.Node.create(this.#config);
     const rootStyle = readStyle(slideStyle, parentPath, true, true);
     const root: LayoutNode = {
       yoga: rootYoga,
-      style,
+      style: rootStyle,
+      theme,
       path: parentPath,
       children: [],
       escaped: [],
@@ -981,13 +986,14 @@ export class LayoutPass {
     rootYoga.setWidth(this.#dimensions.width);
     rootYoga.setHeight(this.#dimensions.height);
     rootYoga.setPositionType(PositionType.Relative);
-    this.#applyStyle(rootYoga, style, { display: "block" }, true, true);
+    this.#applyStyle(rootYoga, rootStyle, { display: "block" }, true, true);
     try {
       this.#appendChildren(
         children,
         parentPath,
         root,
         slideStyle !== undefined,
+        theme,
       );
       this.#prepareTextBaselines(root);
       // 固定尺寸父节点可能跳过新建测量树；先初次求解，再标脏测量叶并重算。
@@ -1032,6 +1038,7 @@ export class LayoutPass {
     }
     return {
       boxes: this.#boxes,
+      themes: this.#themes,
       hidden: this.#hidden,
       warnings: this.#warnings,
     };
@@ -1076,7 +1083,7 @@ export class LayoutPass {
           child.props["style"],
           childPath,
           true,
-          false,
+          true,
         );
         if (childStyle.display === "none") {
           this.#markHidden(child);
@@ -1092,7 +1099,7 @@ export class LayoutPass {
           child.props["style"],
           childPath,
           true,
-          false,
+          true,
         );
         if (childStyle.display === "none") {
           this.#markHidden(child);
@@ -1100,11 +1107,25 @@ export class LayoutPass {
         }
         this.#validateItemStyle(childStyle, parent, childPath);
         if (!includeObjects) {
+          // Group 的文字默认值只作用于后代，不代表它要成为布局项。
           const optsIntoLayout = Object.keys(childStyle).some(
-            (key) => key !== "zIndex",
+            (key) => key !== "zIndex" && !textProperties.has(key),
           );
           if (!optsIntoLayout) {
-            this.#appendChildren(child.children, childPath, parent, false);
+            const groupTheme = deriveTheme(
+              theme,
+              child.props["theme"] as ThemeScope | undefined,
+              textStyleFrom(child.props["style"]),
+              childPath,
+            );
+            this.#themes.set(child, groupTheme);
+            this.#appendChildren(
+              child.children,
+              childPath,
+              parent,
+              false,
+              groupTheme,
+            );
             return;
           }
         }
@@ -1132,6 +1153,7 @@ export class LayoutPass {
         return;
       }
       if (!includeObjects) {
+        this.#themes.set(child, theme);
         if (looseStyle !== undefined)
           this.#validateItemStyle(looseStyle, parent, childPath);
         if (looseStyle !== undefined && this.#requiresLooseLayout(looseStyle)) {
@@ -1298,7 +1320,7 @@ export class LayoutPass {
     const rawStyle = input.props["style"];
     const style = readStyle(rawStyle, path, true, true);
     const theme = deriveTheme(
-      parentTheme,
+      parent.theme,
       input.props["theme"] as ThemeScope | undefined,
       textStyleFrom(rawStyle),
       path,
@@ -1314,8 +1336,9 @@ export class LayoutPass {
       parent,
       escaped: [],
     };
+    this.#themes.set(input, theme);
     this.#applyStyle(yoga, style, parent.style, false, true);
-    this.#appendChildren(input.children, path, node, true);
+    this.#appendChildren(input.children, path, node, true, theme);
     return node;
   }
 
@@ -1330,6 +1353,7 @@ export class LayoutPass {
           "testId",
           "name",
           "style",
+          "theme",
           "enter",
           "emphasis",
           "motion",
@@ -1340,19 +1364,27 @@ export class LayoutPass {
     );
     if (unknown !== undefined)
       fail(path, "unknown-parameter", `Group 含未实现参数 ${unknown}`);
-    const style = readStyle(input.props["style"], path, true, false);
+    const style = readStyle(input.props["style"], path, true, true);
+    const theme = deriveTheme(
+      parent.theme,
+      input.props["theme"] as ThemeScope | undefined,
+      textStyleFrom(input.props["style"]),
+      path,
+    );
     const yoga = Yoga.Node.create(this.#config);
     const node: LayoutNode = {
       yoga,
       element: input,
       style,
+      theme,
       path,
       children: [],
       parent,
       escaped: [],
     };
+    this.#themes.set(input, theme);
     this.#applyStyle(yoga, style, parent.style, false, true);
-    this.#appendChildren(input.children, path, node, true);
+    this.#appendChildren(input.children, path, node, true, theme);
     return node;
   }
 
@@ -1401,12 +1433,14 @@ export class LayoutPass {
       yoga,
       element: input,
       style,
+      theme: parent.theme,
       path,
       module,
       children: [],
       parent,
       escaped: [],
     };
+    this.#themes.set(input, parent.theme);
     this.#applyStyle(yoga, style, parent.style, false, false);
     this.#setDeclaredSize(node);
     if (style.position === "absolute") {

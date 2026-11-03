@@ -345,6 +345,8 @@ export type CapabilityLayoutRequest = {
   readonly availableWidth?: number;
   /** 可用宽度是可收缩的上限，还是布局必须分配的精确宽度。 */
   readonly widthMode?: "at-most" | "exactly";
+  /** 度量与对象写出共享的主题、局部作用域和容器文字默认值。 */
+  readonly theme: ThemeContext;
 };
 
 /** 能力模块可提供的固有尺寸及主轴 min-content 尺寸，均以像素表示。 */
@@ -465,5 +467,6 @@ export type DeckProps = ElementProps & {
 export type SlideProps = ElementProps & {
   readonly slideId: string;
   readonly transition?: unknown;
-  readonly style?: Omit<LayoutStyle, "zIndex">;
+  readonly theme?: ThemeScope;
+  readonly style?: TextStyle & Omit<LayoutStyle, "zIndex">;
 };

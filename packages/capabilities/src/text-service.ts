@@ -397,31 +397,14 @@ function validateRunStyle(style: RunStyle): RunStyle {
   return style;
 }
 
-function readRunStyle(value: unknown, theme: ThemeContext): RunStyle {
+function readRunStyle(value: unknown): RunStyle {
   const props = styleRecord(value, "Span.style");
   onlyKnownKeys(
     props,
     ["fontFamily", "fontSize", "fontWeight", "fontStyle", "color"],
     "Span.style",
   );
-  const style = props as RunStyle;
-  const font =
-    style.fontFamily === undefined
-      ? undefined
-      : theme.resolveFont(style.fontFamily);
-  if (style.color !== undefined) theme.resolveColor(style.color as ColorValue);
-  const resolved: RunStyle = {
-    ...style,
-    ...(font === undefined
-      ? {}
-      : {
-          fontFamily: font.font ?? font.family,
-          ...(font.themeFont === undefined
-            ? {}
-            : { themeFont: font.themeFont }),
-        }),
-  };
-  return validateRunStyle(resolved);
+  return validateRunStyle(props as RunStyle);
 }
 
 function mergeRunStyle(
@@ -442,7 +425,7 @@ function mergeRunStyle(
     }
   }
   if (child.color !== undefined && !isResolvedColor(child.color)) {
-    theme.resolveColor(child.color as ColorValue);
+    declared["color"] = theme.resolveColor(child.color as ColorValue);
   }
   // P 和 Span 未声明的字段会是 undefined，不能覆盖继承的父级样式。
   const merged = { ...parent, ...declared } as RunStyle;
@@ -472,6 +455,32 @@ type ResolvedTextStyle = TextStyle & {
   readonly themeFont?: "major" | "minor";
 };
 
+function validateParagraphDefaults(
+  style: Pick<ParagraphStyle, "align" | "spacingAfter">,
+): void {
+  if (
+    style.align !== undefined &&
+    !["left", "center", "right", "justify"].includes(style.align)
+  ) {
+    throw new CapabilityError(
+      "invalid-text-alignment",
+      "align 只能是 left、center、right 或 justify",
+    );
+  }
+  if (
+    style.spacingAfter !== undefined &&
+    (!Number.isFinite(style.spacingAfter) || style.spacingAfter < 0)
+  ) {
+    throw new CapabilityError(
+      "invalid-paragraph-spacing",
+      "spacingAfter 必须是有限非负像素数值",
+    );
+  }
+  if (style.spacingAfter !== undefined) {
+    spacingCentipoints(style.spacingAfter, "spacingAfter");
+  }
+}
+
 function readTextStyle(
   value: unknown,
   label: string,
@@ -488,6 +497,8 @@ function readTextStyle(
       "color",
       "lineHeight",
       "verticalAlign",
+      "align",
+      "spacingAfter",
     ],
     label,
   );
@@ -505,6 +516,7 @@ function readTextStyle(
       "verticalAlign 只能是 top、middle 或 bottom",
     );
   }
+  validateParagraphDefaults(style);
   const runStyle: RunStyle = {
     fontFamily: style.fontFamily,
     fontSize: style.fontSize,
@@ -535,7 +547,7 @@ function readTextStyle(
   };
 }
 
-function paragraphStyle(value: unknown, theme: ThemeContext): ParagraphStyle {
+function paragraphStyle(value: unknown): ParagraphStyle {
   const props = styleRecord(value, "P.style");
   onlyKnownKeys(
     props,
@@ -553,35 +565,13 @@ function paragraphStyle(value: unknown, theme: ThemeContext): ParagraphStyle {
     "P.style",
   );
   const style = props as ParagraphStyle;
-  if (
-    style.align !== undefined &&
-    !["left", "center", "right", "justify"].includes(style.align)
-  ) {
-    throw new CapabilityError(
-      "invalid-text-alignment",
-      "align 只能是 left、center、right 或 justify",
-    );
-  }
+  validateParagraphDefaults(style);
   if (style.lineHeight !== undefined)
     spacingCentipoints(
       positiveLength(style.lineHeight, "lineHeight"),
       "lineHeight",
     );
-  if (
-    style.spacingAfter !== undefined &&
-    (!Number.isFinite(style.spacingAfter) || style.spacingAfter < 0)
-  ) {
-    throw new CapabilityError(
-      "invalid-paragraph-spacing",
-      "spacingAfter 必须是有限非负像素数值",
-    );
-  }
-  if (style.spacingAfter !== undefined) {
-    spacingCentipoints(style.spacingAfter, "spacingAfter");
-  }
   if (style.list !== undefined) validateList(style.list);
-  if (style.fontFamily !== undefined) theme.resolveFont(style.fontFamily);
-  if (style.color !== undefined) theme.resolveColor(style.color);
   return style;
 }
 
@@ -675,7 +665,7 @@ function collectRuns(
         `Span 含未实现参数 ${unknown}`,
       );
     }
-    const spanStyle = readRunStyle(child.props["style"], theme);
+    const spanStyle = readRunStyle(child.props["style"]);
     const nextStyle = mergeRunStyle(style, spanStyle, theme);
     collectRuns(child.children, nextStyle, runs, theme);
   }
@@ -831,10 +821,15 @@ function normalizeParagraphs(
 
   const paragraphs: Paragraph[] = [];
   let inline: Run[] = [];
-  const baseParagraphStyle: ParagraphStyle =
-    textStyle.lineHeight === undefined
+  const baseParagraphStyle: ParagraphStyle = {
+    ...(textStyle.lineHeight === undefined
       ? {}
-      : { lineHeight: textStyle.lineHeight };
+      : { lineHeight: textStyle.lineHeight }),
+    ...(textStyle.align === undefined ? {} : { align: textStyle.align }),
+    ...(textStyle.spacingAfter === undefined
+      ? {}
+      : { spacingAfter: textStyle.spacingAfter }),
+  };
   const flushInline = (): void => {
     if (inline.length > 0) {
       paragraphs.push({
@@ -870,7 +865,7 @@ function normalizeParagraphs(
     }
     const style = {
       ...baseParagraphStyle,
-      ...paragraphStyle(child.props["style"], theme),
+      ...paragraphStyle(child.props["style"]),
     };
     const paragraphRunStyle = mergeRunStyle(
       baseRunStyle,
@@ -1495,8 +1490,8 @@ export function writeTextBody(
     .join("\n");
   const xml =
     destination === "table-cell"
-      ? `<a:txBody><a:bodyPr/><a:lstStyle/>${outputParagraphs.map(paragraphXml).join("")}</a:txBody>`
-      : `<p:txBody><a:bodyPr wrap="square" lIns="${pxToEmu(layout?.insets?.left ?? 0)}" tIns="${pxToEmu(layout?.insets?.top ?? 0)}" rIns="${pxToEmu(layout?.insets?.right ?? 0)}" bIns="${pxToEmu(layout?.insets?.bottom ?? 0)}" anchor="${bodyAnchor(style.verticalAlign ?? verticalAlign)}"><a:noAutofit/></a:bodyPr><a:lstStyle/>${outputParagraphs.map(paragraphXml).join("")}</p:txBody>`;
+      ? `<a:txBody><a:bodyPr/><a:lstStyle/>${outputParagraphs.map((paragraph) => paragraphXml(paragraph, theme)).join("")}</a:txBody>`
+      : `<p:txBody><a:bodyPr wrap="square" lIns="${pxToEmu(layout?.insets?.left ?? 0)}" tIns="${pxToEmu(layout?.insets?.top ?? 0)}" rIns="${pxToEmu(layout?.insets?.right ?? 0)}" bIns="${pxToEmu(layout?.insets?.bottom ?? 0)}" anchor="${bodyAnchor(style.verticalAlign ?? verticalAlign)}"><a:noAutofit/></a:bodyPr><a:lstStyle/>${outputParagraphs.map((paragraph) => paragraphXml(paragraph, theme)).join("")}</p:txBody>`;
   return {
     xml,
     text,
@@ -1540,8 +1535,15 @@ export function writeChartTextProperties(
     style.lineHeight === undefined
       ? ""
       : `<a:lnSpc><a:spcPts val="${spacingCentipoints(positiveLength(style.lineHeight, "lineHeight"), "lineHeight")}"/></a:lnSpc>`;
+  const alignment = alignmentValue(style.align);
+  const paragraphAlignment =
+    alignment === undefined ? "" : ` algn="${alignment}"`;
+  const spacingAfter =
+    style.spacingAfter === undefined || style.spacingAfter === 0
+      ? ""
+      : `<a:spcAft><a:spcPts val="${spacingCentipoints(style.spacingAfter, "spacingAfter")}"/></a:spcAft>`;
   return {
-    xml: `<c:txPr><a:bodyPr anchor="${bodyAnchor(style.verticalAlign)}"/><a:lstStyle/><a:p><a:pPr>${lineSpacing}${defaultProperties}</a:pPr><a:endParaRPr lang="en-US"/></a:p></c:txPr>`,
+    xml: `<c:txPr><a:bodyPr anchor="${bodyAnchor(style.verticalAlign)}"/><a:lstStyle/><a:p><a:pPr${paragraphAlignment}>${lineSpacing}${spacingAfter}${defaultProperties}</a:pPr><a:endParaRPr lang="en-US"/></a:p></c:txPr>`,
     text: outputText,
     resourceClaims,
     fontUses,

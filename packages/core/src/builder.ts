@@ -393,6 +393,7 @@ function resolveSlides(
       .map(({ slideProp }) => slideProp);
     const unknown = ownKeys(node.props, [
       "slideId",
+      "theme",
       "style",
       ...slideProperties,
     ]);
@@ -1106,9 +1107,20 @@ function compileSlide(
     );
   }
   const children = node.children.map(capabilityChild);
+  let theme: ThemeContext;
+  try {
+    theme = documentTheme.with(
+      node.props["theme"] as ThemeScope | undefined,
+      textStyleFrom(node.props["style"]),
+    );
+  } catch (error) {
+    if (!(error instanceof CapabilityError)) throw error;
+    throw new BuildError([diagnostic(path, error.code, error.message)]);
+  }
   const layout = new LayoutPass(modules, dimensions).run(
     children,
     path,
+    theme,
     node.props["style"],
   );
   document.warnings.push(...layout.warnings);

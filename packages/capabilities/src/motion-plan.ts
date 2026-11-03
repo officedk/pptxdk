@@ -1275,6 +1275,45 @@ function motionPlan(
           canonical.candidates,
         );
         if (delayMs === undefined || delayMs !== reference.offsetMs) continue;
+        // Offset belongs to the later alias; it cannot recover a join END
+        // that occurred before the consumer's real parent became active.
+        const joinEndCandidates = canonical.candidates.map((candidate) => ({
+          ...candidate,
+          // The recorded candidates describe the aliased scope start.
+          offsetMs: candidate.offsetMs - canonical.delayMs,
+        }));
+        const joinEndIsPending = joinEndCandidates.some((candidate) => {
+          if (parentStart.state === "known") {
+            const earliestTime = facts.earliestTime(
+              candidate.eventId,
+              originEventId,
+            );
+            return (
+              earliestTime !== undefined &&
+              earliestTime + candidate.offsetMs > parentStart.timeMs
+            );
+          }
+          return (
+            parentStart.candidates.length > 0 &&
+            parentStart.candidates.every((parentCandidate) => {
+              const lowerBound = facts.lowerBound(
+                parentCandidate.eventId,
+                candidate.eventId,
+              );
+              return (
+                lowerBound !== undefined &&
+                lowerBound + candidate.offsetMs - parentCandidate.offsetMs > 0
+              );
+            })
+          );
+        });
+        if (!joinEndIsPending) {
+          fail(
+            "unknown-motion-start",
+            "不能证明条件集合完成晚于消费者父作用域激活",
+            path,
+          );
+        }
         const conditionEndDelay = canonical.delayMs + delayMs;
         if (
           !Number.isSafeInteger(conditionEndDelay) ||
@@ -2073,7 +2112,7 @@ function motionPlan(
       };
     };
 
-    const nodes = roots.flatMap((member) => {
+    const rootNodes = roots.flatMap((member) => {
       if (member.kind === "scope") {
         const scope = scopes.get(member.id);
         if (scope === undefined || !scopeSteps(scope).includes(key)) return [];
@@ -2085,6 +2124,98 @@ function motionPlan(
       const node = targetNode(target);
       return node === undefined ? [] : [node];
     });
+    const rootDefinitions = new Map<string, number>();
+    const rootReferences = rootNodes.map(
+      (): { readonly id: string; readonly node: MotionPlanNode }[] => [],
+    );
+    const nodePath = (node: MotionPlanNode): string | undefined =>
+      node.kind === "scope"
+        ? [...scopes.values()].find(
+            (scope) => scopeId(scope.declaration.identity, scopes) === node.id,
+          )?.path
+        : targets.get(node.targetId)?.path;
+    const collectRootConditions = (
+      node: MotionPlanNode,
+      rootIndex: number,
+    ): void => {
+      if (node.nativeStart.kind === "condition-join") {
+        rootDefinitions.set(node.nativeStart.id, rootIndex);
+      } else if (node.nativeStart.kind === "condition-end") {
+        rootReferences[rootIndex]?.push({ id: node.nativeStart.id, node });
+      }
+      if (node.kind === "scope") {
+        for (const child of node.children) {
+          collectRootConditions(child, rootIndex);
+        }
+      }
+    };
+    rootNodes.forEach((node, index) => collectRootConditions(node, index));
+
+    // 步级根节点各自带有完整起点；只按别名依赖调整其 XML 定义先后。
+    const nextRootNodes = rootNodes.map(() => new Set<number>());
+    const rootIndegrees = rootNodes.map(() => 0);
+    for (const [consumerIndex, references] of rootReferences.entries()) {
+      for (const reference of references) {
+        const definitionIndex = rootDefinitions.get(reference.id);
+        if (definitionIndex === undefined) {
+          fail(
+            "unknown-motion-start",
+            "无法在当前时间计划中定位 alias 所引用的条件集合",
+            nodePath(reference.node),
+          );
+        }
+        if (
+          definitionIndex !== consumerIndex &&
+          !nextRootNodes[definitionIndex]?.has(consumerIndex)
+        ) {
+          nextRootNodes[definitionIndex]?.add(consumerIndex);
+          rootIndegrees[consumerIndex] =
+            (rootIndegrees[consumerIndex] ?? 0) + 1;
+        }
+      }
+    }
+    const readyRootNodes = rootIndegrees.flatMap((indegree, index) =>
+      indegree === 0 ? [index] : [],
+    );
+    const rootOrder: number[] = [];
+    while (readyRootNodes.length > 0) {
+      readyRootNodes.sort((left, right) => left - right);
+      const current = readyRootNodes.shift();
+      if (current === undefined) continue;
+      rootOrder.push(current);
+      for (const following of nextRootNodes[current] ?? []) {
+        const remaining = (rootIndegrees[following] ?? 0) - 1;
+        rootIndegrees[following] = remaining;
+        if (remaining === 0) readyRootNodes.push(following);
+      }
+    }
+    const nodes =
+      rootOrder.length === rootNodes.length
+        ? rootOrder.flatMap((index) => {
+            const node = rootNodes[index];
+            return node === undefined ? [] : [node];
+          })
+        : rootNodes;
+    const definedConditions = new Set<string>();
+    const verifyConditionOrder = (node: MotionPlanNode): void => {
+      if (
+        node.nativeStart.kind === "condition-end" &&
+        !definedConditions.has(node.nativeStart.id)
+      ) {
+        fail(
+          "unknown-motion-start",
+          "无法在消费者之前定义 alias 所引用的条件集合",
+          nodePath(node),
+        );
+      }
+      if (node.nativeStart.kind === "condition-join") {
+        definedConditions.add(node.nativeStart.id);
+      }
+      if (node.kind === "scope") {
+        for (const child of node.children) verifyConditionOrder(child);
+      }
+    };
+    for (const node of nodes) verifyConditionOrder(node);
     allStepNodes.set(key, nodes);
   }
 

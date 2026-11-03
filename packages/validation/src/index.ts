@@ -2711,6 +2711,47 @@ function readSlideAnimations(
     });
   }
 
+  const completionPrerequisites = new Map<number, readonly number[]>();
+  for (const node of timingTreeNodes.values()) {
+    const prerequisites = [
+      ...(node.kind === "container" && containerEndSync.has(node.timingId)
+        ? node.children
+        : []),
+    ];
+    const startDependency = dependencyByTimingId.get(node.timingId);
+    if (startDependency !== undefined) {
+      prerequisites.push(startDependency.timingId);
+    }
+    completionPrerequisites.set(node.timingId, prerequisites);
+  }
+  const completedTimingIds = new Set<number>();
+  const visitingTimingIds = new Set<number>();
+  let hasCompletionCycle = false;
+  const visitCompletion = (timingId: number): void => {
+    if (completedTimingIds.has(timingId) || hasCompletionCycle) return;
+    if (visitingTimingIds.has(timingId)) {
+      hasCompletionCycle = true;
+      return;
+    }
+    visitingTimingIds.add(timingId);
+    for (const prerequisite of completionPrerequisites.get(timingId) ?? []) {
+      visitCompletion(prerequisite);
+    }
+    visitingTimingIds.delete(timingId);
+    completedTimingIds.add(timingId);
+  };
+  for (const timingId of timingTreeNodes.keys()) {
+    visitCompletion(timingId);
+  }
+  if (hasCompletionCycle) {
+    issue(
+      errors,
+      part,
+      "invalid-animation-end-dependency",
+      "动画完成依赖包含等待环，无法自然结束",
+    );
+  }
+
   const containers: FileAnimationContainer[] = [...timingTreeNodes.values()]
     .filter(
       (

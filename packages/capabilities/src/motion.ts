@@ -366,6 +366,55 @@ function startAfterDelay(start: PlanStart, delayMs: number): PlanStart {
   throw new Error("MotionPlan 起点缺少数值或原生完成关系");
 }
 
+function dependencyTimingId(
+  dependency: MotionStartDependency,
+  stepKey: string,
+  effectNodeIds: ReadonlyMap<string, number>,
+  scopeNodeIds: ReadonlyMap<string, number>,
+  targetGroupIds: ReadonlyMap<string, number>,
+): number | undefined {
+  if ("scopeId" in dependency) {
+    return scopeNodeIds.get(`${stepKey}:${dependency.scopeId}`);
+  }
+  if ("group" in dependency) {
+    return targetGroupIds.get(`${stepKey}:${dependency.targetId}`);
+  }
+  return effectNodeIds.get(
+    `${dependency.targetId}:${dependency.effectIndex}:${dependency.partIndex ?? ""}`,
+  );
+}
+
+function nodeTimingIds(
+  node: MotionPlanNode,
+  stepKey: string,
+  effectNodeIds: ReadonlyMap<string, number>,
+  scopeNodeIds: ReadonlyMap<string, number>,
+  targetGroupIds: ReadonlyMap<string, number>,
+): number[] {
+  if (node.kind === "scope") {
+    return [
+      scopeNodeIds.get(`${stepKey}:${node.id}`),
+      ...node.children.flatMap((child) =>
+        nodeTimingIds(
+          child,
+          stepKey,
+          effectNodeIds,
+          scopeNodeIds,
+          targetGroupIds,
+        ),
+      ),
+    ].filter((id): id is number => id !== undefined);
+  }
+  const groupId = targetGroupIds.get(`${stepKey}:${node.targetId}`);
+  return [
+    ...(groupId === undefined ? [] : [groupId]),
+    ...node.effects.flatMap((effect) => {
+      const id = effectNodeIds.get(effectKey(effect));
+      return id === undefined ? [] : [id];
+    }),
+  ];
+}
+
 function nativeStartCondition(
   start: PlanStart,
   parent: PlanStart,
@@ -373,6 +422,7 @@ function nativeStartCondition(
   effectNodeIds: ReadonlyMap<string, number>,
   scopeNodeIds: ReadonlyMap<string, number>,
   targetGroupIds: ReadonlyMap<string, number>,
+  priorTimingIds: ReadonlySet<number>,
 ): string {
   if (start.startMs !== undefined) {
     if (parent.startAfter !== undefined) {
@@ -388,24 +438,34 @@ function nativeStartCondition(
   }
   if (parent.startAfter !== undefined) {
     if (dependencyKey(start.startAfter) !== dependencyKey(parent.startAfter)) {
-      throw new Error("MotionPlan 子起点与父作用域依赖无法合并");
+      const dependencyId = dependencyTimingId(
+        start.startAfter,
+        stepKey,
+        effectNodeIds,
+        scopeNodeIds,
+        targetGroupIds,
+      );
+      if (dependencyId === undefined || !priorTimingIds.has(dependencyId)) {
+        throw new Error("MotionPlan 子起点与父作用域依赖无法合并");
+      }
+      // 父容器已从外部事件启动；此前的真实成员只需等待其自身完成。
+      return element(
+        "p:cond",
+        { evt: "end", delay: start.startAfter.offsetMs },
+        element("p:tn", { val: dependencyId }),
+      );
     }
     const delay = start.startAfter.offsetMs - parent.startAfter.offsetMs;
     if (delay < 0) throw new Error("MotionPlan 子项早于其包含作用域启动");
     return element("p:cond", { delay });
   }
-  let dependencyId: number | undefined;
-  if ("scopeId" in start.startAfter) {
-    dependencyId = scopeNodeIds.get(`${stepKey}:${start.startAfter.scopeId}`);
-  } else if ("group" in start.startAfter) {
-    dependencyId = targetGroupIds.get(
-      `${stepKey}:${start.startAfter.targetId}`,
-    );
-  } else {
-    dependencyId = effectNodeIds.get(
-      `${start.startAfter.targetId}:${start.startAfter.effectIndex}:${start.startAfter.partIndex ?? ""}`,
-    );
-  }
+  const dependencyId = dependencyTimingId(
+    start.startAfter,
+    stepKey,
+    effectNodeIds,
+    scopeNodeIds,
+    targetGroupIds,
+  );
   if (dependencyId === undefined) {
     throw new Error("MotionPlan 完成依赖没有对应的原生时序节点");
   }
@@ -513,6 +573,19 @@ function timingXml(steps: readonly MotionPlanStep[]): string {
             ? {}
             : { startAfter: node.startAfter }),
         };
+        const priorTimingIds = new Set(
+          nodes
+            .slice(0, index)
+            .flatMap((previous) =>
+              nodeTimingIds(
+                previous,
+                step.key,
+                effectNodeIds,
+                scopeNodeIds,
+                targetGroupIds,
+              ),
+            ),
+        );
         const condition = nativeStartCondition(
           start,
           parentStart,
@@ -520,6 +593,7 @@ function timingXml(steps: readonly MotionPlanStep[]): string {
           effectNodeIds,
           scopeNodeIds,
           targetGroupIds,
+          priorTimingIds,
         );
         if (node.kind === "scope") {
           const scopeId = scopeNodeIds.get(`${step.key}:${node.id}`);
@@ -572,6 +646,7 @@ function timingXml(steps: readonly MotionPlanStep[]): string {
           effectNodeIds,
           scopeNodeIds,
           targetGroupIds,
+          priorTimingIds,
         );
         const buildGroupId =
           effect.target.range?.type === "chart"

@@ -51,6 +51,168 @@ function observedShape(
   });
 }
 
+function unknownLetterText(testId: string, text: string, y: number) {
+  return createElement(
+    Text,
+    {
+      testId,
+      x: 10,
+      y,
+      width: 280,
+      height: 32,
+      enter: fade({ by: "letter", duration: 1000, intervalMs: 500 }),
+    },
+    text,
+  );
+}
+
+type UnknownStartSequenceOptions = {
+  readonly mode?: "parallel" | "sequence" | "stagger";
+  readonly nested?: boolean;
+  readonly explicitStep?: boolean;
+};
+
+function UnknownStartSequence({
+  mode = "sequence",
+  nested = false,
+  explicitStep = false,
+}: UnknownStartSequenceOptions) {
+  const source = useMotionScope();
+  const follow = useMotionScope();
+  const nestedSequence = useMotionScope();
+  const follower = useMotionScope();
+  const sourceScope = createElement(
+    MotionScope,
+    { scope: source },
+    unknownLetterText("unknown-source", "ABC", 8),
+  );
+  const first = observedShape("sequence-first", "First", 48, "#ED7D31", 100);
+  const second = observedShape("sequence-second", "Second", 78, "#4472C4", 100);
+  const followContents = nested
+    ? createElement(
+        MotionScope,
+        { scope: nestedSequence, mode: "sequence" },
+        first,
+        second,
+      )
+    : [first, second];
+  const followScope = createElement(
+    MotionScope,
+    {
+      scope: follow,
+      mode: nested ? "parallel" : mode,
+      ...(mode === "stagger" && !nested ? { each: 100 } : {}),
+      startAt: after(source.end, 25),
+    },
+    followContents,
+  );
+  const followerScope = createElement(
+    MotionScope,
+    { scope: follower, startAt: after(follow.end, 10) },
+    observedShape("sequence-follower", "Follower", 108, "#70AD47", 50),
+  );
+  const content = explicitStep
+    ? createElement(Step, { n: 2 }, sourceScope, followScope, followerScope)
+    : createElement(Fragment, null, sourceScope, followScope, followerScope);
+  return createElement(
+    Deck,
+    { width: 320, height: 180 },
+    createElement(Slide, { slideId: "unknown-start-sequence" }, content),
+  );
+}
+
+function SelfStartedNestedPredecessor() {
+  const source = useMotionScope();
+  const follow = useMotionScope();
+  const predecessor = useMotionScope();
+  const follower = useMotionScope();
+  return createElement(
+    Deck,
+    { width: 320, height: 180 },
+    createElement(
+      Slide,
+      { slideId: "self-started-nested-predecessor" },
+      createElement(
+        MotionScope,
+        { scope: source },
+        unknownLetterText("self-start-source", "ABC", 8),
+      ),
+      createElement(
+        MotionScope,
+        {
+          scope: follow,
+          mode: "sequence",
+          startAt: after(source.end, 25),
+        },
+        createElement(
+          MotionScope,
+          {
+            scope: predecessor,
+            startAt: after(follow.start, 40),
+          },
+          unknownLetterText("predecessor-long", "ABCDEFG", 48),
+          unknownLetterText("predecessor-short", "AB", 88),
+        ),
+        observedShape("after-predecessor", "D", 128, "#ED7D31", 100),
+      ),
+      createElement(
+        MotionScope,
+        { scope: follower, startAt: after(follow.end, 10) },
+        observedShape(
+          "after-self-started-sequence",
+          "Follower",
+          158,
+          "#70AD47",
+          50,
+        ),
+      ),
+    ),
+  );
+}
+
+function ReaderCycleDeck() {
+  const first = useMotionScope();
+  const second = useMotionScope();
+  return createElement(
+    Deck,
+    { width: 320, height: 180 },
+    createElement(
+      Slide,
+      { slideId: "reader-completion-cycle" },
+      createElement(
+        MotionScope,
+        { scope: first },
+        movingShape("cycle-first", 100),
+      ),
+      createElement(
+        MotionScope,
+        { scope: second },
+        movingShape("cycle-second", 100),
+      ),
+    ),
+  );
+}
+
+function startAfterCondition(
+  xml: string,
+  timingId: number,
+  sourceTimingId: number,
+): string {
+  const marker = `<p:cTn id="${timingId}"`;
+  const nodeStart = xml.indexOf(marker);
+  assert.notEqual(nodeStart, -1);
+  const conditionsStart = xml.indexOf("<p:stCondLst>", nodeStart);
+  const conditionsEnd = xml.indexOf("</p:stCondLst>", conditionsStart);
+  assert.ok(conditionsStart > nodeStart && conditionsEnd > conditionsStart);
+  const conditions = xml.slice(conditionsStart, conditionsEnd);
+  const rewritten = conditions.replace(
+    /<p:cond\b[^>]*>[\s\S]*?<\/p:cond>/u,
+    `<p:cond evt="end" delay="0"><p:tn val="${sourceTimingId}"></p:tn></p:cond>`,
+  );
+  assert.notEqual(rewritten, conditions);
+  return xml.slice(0, conditionsStart) + rewritten + xml.slice(conditionsEnd);
+}
+
 function StaggeredSource() {
   const source = useMotionScope();
   const namedCompletion = source.cue("finished");
@@ -849,6 +1011,229 @@ describe("组件编排作用域", () => {
         ({ code }) => code === "invalid-animation-end-dependency",
       ),
     );
+  });
+
+  it("未知外部起点后的顺序成员可依赖实际前驱，且后继等待完整作用域", async () => {
+    const result = await build(createElement(UnknownStartSequence, {}));
+    const slide = result.report.slides[0];
+    const motion = slide?.capabilities?.["motion"] as MotionObservation;
+    const objectId = (testId: string) =>
+      slide?.objects.find((object) => object.testId === testId)?.id;
+    const source = motion.steps[0]?.effects.find(
+      ({ target }) => target.testId === "unknown-source",
+    );
+    const first = motion.steps[0]?.effects.find(
+      ({ target }) => target.testId === "sequence-first",
+    );
+    const second = motion.steps[0]?.effects.find(
+      ({ target }) => target.testId === "sequence-second",
+    );
+    const follower = motion.steps[0]?.effects.find(
+      ({ target }) => target.testId === "sequence-follower",
+    );
+    assert.deepEqual(
+      [source?.completion, source?.endMs, first?.startMs, second?.startMs],
+      ["unknown", undefined, undefined, undefined],
+    );
+    assert.equal(
+      first?.startAfter &&
+        "scopeId" in first.startAfter &&
+        first.startAfter.scopeId,
+      "scope-1",
+    );
+    assert.equal(first?.startAfter?.offsetMs, 25);
+    assert.deepEqual(
+      second?.startAfter && "targetId" in second.startAfter
+        ? [second.startAfter.targetId, second.startAfter.point]
+        : undefined,
+      [objectId("sequence-first"), "end"],
+    );
+    assert.equal(
+      follower?.startAfter &&
+        "scopeId" in follower.startAfter &&
+        follower.startAfter.scopeId,
+      "scope-2",
+    );
+
+    const file = await validatePptx(result.pptx);
+    assert.deepEqual(file.errors, []);
+    const fileEffects = file.slides[0]?.animations?.[0]?.effects ?? [];
+    const fileEffect = (testId: string) =>
+      fileEffects.find(({ targetId }) => targetId === objectId(testId));
+    const fileFirst = fileEffect("sequence-first");
+    const fileSecond = fileEffect("sequence-second");
+    const fileFollower = fileEffect("sequence-follower");
+    assert.equal(fileFirst?.startAfter?.source, "container");
+    assert.equal(fileFirst?.startAfter?.offsetMs, 25);
+    assert.equal(fileSecond?.startAfter?.timingId, fileFirst?.timingId);
+    assert.equal(fileSecond?.startAfter?.offsetMs, 0);
+    const sequence = file.slides[0]?.animationContainers?.find(
+      ({ children, endSync }) =>
+        endSync === "all" &&
+        children.some(
+          ({ kind, timingId }) =>
+            kind === "effect" && timingId === fileFirst?.timingId,
+        ) &&
+        children.some(
+          ({ kind, timingId }) =>
+            kind === "effect" && timingId === fileSecond?.timingId,
+        ),
+    );
+    assert.ok(sequence);
+    assert.equal(sequence.durationMs, undefined);
+    assert.equal(fileFollower?.startAfter?.timingId, sequence.timingId);
+  });
+
+  it("未知起点后的并行、交错、嵌套顺序及同一点击步保持可写", async () => {
+    const variants: readonly UnknownStartSequenceOptions[] = [
+      { mode: "parallel" as const },
+      { mode: "stagger" as const },
+      { nested: true },
+      { explicitStep: true },
+    ];
+    for (const options of variants) {
+      const result = await build(createElement(UnknownStartSequence, options));
+      const file = await validatePptx(result.pptx);
+      assert.deepEqual(file.errors, []);
+      assert.equal(
+        file.slides[0]?.animations?.[0]?.trigger,
+        options.explicitStep === true ? "click" : "auto",
+      );
+    }
+  });
+
+  it("顺序前项以真实自定起点子作用域整体完成后启动", async () => {
+    const result = await build(createElement(SelfStartedNestedPredecessor));
+    const slide = result.report.slides[0];
+    const motion = slide?.capabilities?.["motion"] as MotionObservation;
+    const objectId = (testId: string) =>
+      slide?.objects.find((object) => object.testId === testId)?.id;
+    const predecessorScope = motion.scopes?.find(
+      ({ members }) =>
+        members.some(
+          (member) =>
+            member.kind === "object" &&
+            member.id === objectId("predecessor-long"),
+        ) &&
+        members.some(
+          (member) =>
+            member.kind === "object" &&
+            member.id === objectId("predecessor-short"),
+        ),
+    );
+    const first = motion.steps[0]?.effects.find(
+      ({ target }) => target.testId === "after-predecessor",
+    );
+    const follower = motion.steps[0]?.effects.find(
+      ({ target }) => target.testId === "after-self-started-sequence",
+    );
+    assert.deepEqual(
+      [predecessorScope?.completion, predecessorScope?.endMs],
+      ["unknown", undefined],
+    );
+    assert.deepEqual(
+      predecessorScope?.startAfter && "scopeId" in predecessorScope.startAfter
+        ? [
+            predecessorScope.startAfter.scopeId,
+            predecessorScope.startAfter.offsetMs,
+          ]
+        : undefined,
+      ["scope-1", 65],
+    );
+    assert.equal(
+      first?.startAfter &&
+        "scopeId" in first.startAfter &&
+        first.startAfter.scopeId,
+      predecessorScope?.id,
+    );
+    assert.equal(
+      follower?.startAfter &&
+        "scopeId" in follower.startAfter &&
+        follower.startAfter.scopeId,
+      "scope-2",
+    );
+
+    const file = await validatePptx(result.pptx);
+    assert.deepEqual(file.errors, []);
+    const effects = file.slides[0]?.animations?.[0]?.effects ?? [];
+    const fileEffect = (testId: string) =>
+      effects.find(({ targetId }) => targetId === objectId(testId));
+    const fileFirst = fileEffect("after-predecessor");
+    const fileFollower = fileEffect("after-self-started-sequence");
+    const containers = file.slides[0]?.animationContainers ?? [];
+    const predecessor = containers.find(
+      ({ children, endSync }) =>
+        endSync === "all" &&
+        children.length === 2 &&
+        children.every(({ kind }) => kind === "effect") &&
+        children.some(
+          ({ timingId }) =>
+            timingId === fileEffect("predecessor-long")?.timingId,
+        ) &&
+        children.some(
+          ({ timingId }) =>
+            timingId === fileEffect("predecessor-short")?.timingId,
+        ),
+    );
+    assert.ok(predecessor);
+    const sequence = containers.find(
+      ({ children, endSync }) =>
+        endSync === "all" &&
+        children.some(
+          ({ kind, timingId }) =>
+            kind === "container" && timingId === predecessor.timingId,
+        ) &&
+        children.some(
+          ({ kind, timingId }) =>
+            kind === "effect" && timingId === fileFirst?.timingId,
+        ),
+    );
+    assert.ok(sequence);
+    assert.equal(fileFirst?.startAfter?.timingId, predecessor.timingId);
+    assert.equal(fileFirst?.startAfter?.offsetMs, 0);
+    assert.equal(fileFollower?.startAfter?.timingId, sequence.timingId);
+  });
+
+  it("独立读取器拒绝相互等待及包含在自身完成条件中的环", async () => {
+    const result = await build(createElement(ReaderCycleDeck));
+    const original = await validatePptx(result.pptx);
+    assert.deepEqual(original.errors, []);
+    const scopes = (original.slides[0]?.animationContainers ?? []).filter(
+      ({ endSync }) => endSync === "all",
+    );
+    assert.equal(scopes.length, 2);
+    const [first, second] = scopes;
+    assert.ok(first && second);
+    const firstEffect = first.children.find(({ kind }) => kind === "effect");
+    assert.ok(firstEffect);
+    const archive = unzipSync(result.pptx);
+    const slidePart = archive["ppt/slides/slide1.xml"];
+    assert.ok(slidePart);
+    const xml = strFromU8(slidePart);
+
+    const mutualCycle = startAfterCondition(
+      startAfterCondition(xml, first.timingId, second.timingId),
+      second.timingId,
+      first.timingId,
+    );
+    const parentCycle = startAfterCondition(
+      xml,
+      firstEffect.timingId,
+      first.timingId,
+    );
+    for (const brokenXml of [mutualCycle, parentCycle]) {
+      const brokenFile = await validatePptx(
+        zipSync({
+          ...archive,
+          "ppt/slides/slide1.xml": strToU8(brokenXml),
+        }),
+      );
+      assert.ok(
+        brokenFile.errors.some(
+          ({ code }) => code === "invalid-animation-end-dependency",
+        ),
+      );
+    }
   });
 
   it("空子作用域保留顺序边界，但不占交错位置", async () => {

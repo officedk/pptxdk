@@ -1496,6 +1496,10 @@ type DfsEndCollectorOptions = {
   readonly branchOrder?: "p-first" | "q-first";
   readonly consumerOrder?: "p-first" | "q-first";
   readonly trigger?: "auto" | "click";
+  readonly wrapP?: boolean;
+  readonly wrapQ?: boolean;
+  readonly wrapperDepth?: 1 | 2;
+  readonly hostMode?: "parallel" | "stagger";
   readonly wordSources?: boolean;
   readonly firstText?: string;
   readonly secondText?: string;
@@ -1509,6 +1513,10 @@ function DfsEndCollectors({
   branchOrder = "p-first",
   consumerOrder = "p-first",
   trigger = "auto",
+  wrapP = false,
+  wrapQ = false,
+  wrapperDepth = 1,
+  hostMode = "parallel",
   wordSources = false,
   firstText,
   secondText = "GHIJKLMN",
@@ -1518,7 +1526,11 @@ function DfsEndCollectors({
 }: DfsEndCollectorOptions) {
   const host = useMotionScope();
   const p = useMotionScope();
+  const pWrapper = useMotionScope();
+  const pOuterWrapper = useMotionScope();
   const q = useMotionScope();
+  const qWrapper = useMotionScope();
+  const qOuterWrapper = useMotionScope();
   const a = useMotionScope();
   const b = useMotionScope();
   const d = useMotionScope();
@@ -1589,10 +1601,40 @@ function DfsEndCollectors({
       observedShape("dfs-e", "E", 104, "#4472C4", 100),
     ),
   );
+  let firstBranchWithOptionalWrapper = firstBranch;
+  if (wrapP) {
+    firstBranchWithOptionalWrapper = createElement(
+      MotionScope,
+      { scope: pWrapper },
+      firstBranchWithOptionalWrapper,
+    );
+    if (wrapperDepth === 2) {
+      firstBranchWithOptionalWrapper = createElement(
+        MotionScope,
+        { scope: pOuterWrapper },
+        firstBranchWithOptionalWrapper,
+      );
+    }
+  }
+  let secondBranchWithOptionalWrapper = secondBranch;
+  if (wrapQ) {
+    secondBranchWithOptionalWrapper = createElement(
+      MotionScope,
+      { scope: qWrapper },
+      secondBranchWithOptionalWrapper,
+    );
+    if (wrapperDepth === 2) {
+      secondBranchWithOptionalWrapper = createElement(
+        MotionScope,
+        { scope: qOuterWrapper },
+        secondBranchWithOptionalWrapper,
+      );
+    }
+  }
   const branches =
     branchOrder === "p-first"
-      ? [firstBranch, secondBranch]
-      : [secondBranch, firstBranch];
+      ? [firstBranchWithOptionalWrapper, secondBranchWithOptionalWrapper]
+      : [secondBranchWithOptionalWrapper, firstBranchWithOptionalWrapper];
   const pConsumer = createElement(
     MotionScope,
     { scope: afterP, startAt: p.end },
@@ -1617,7 +1659,15 @@ function DfsEndCollectors({
   const content = createElement(
     Fragment,
     null,
-    createElement(MotionScope, { scope: host, mode: "parallel" }, ...branches),
+    createElement(
+      MotionScope,
+      {
+        scope: host,
+        mode: hostMode,
+        ...(hostMode === "stagger" ? { each: 500 } : {}),
+      },
+      ...branches,
+    ),
     ...consumers,
     startAliasConsumer,
     createElement(
@@ -1634,6 +1684,104 @@ function DfsEndCollectors({
       {
         slideId: `dfs-end-collectors-${longFirst ? "long" : "short"}-${branchOrder}-${consumerOrder}-${trigger}-${wordSources ? "word" : "letter"}`,
       },
+      trigger === "click" ? createElement(Step, { n: 2 }, content) : content,
+    ),
+  );
+}
+
+type B20ProjectionOptions = {
+  readonly firstText: string;
+  readonly trigger: "auto" | "click";
+};
+
+function B20RecursiveProjection({ firstText, trigger }: B20ProjectionOptions) {
+  const parentSourceScope = useMotionScope();
+  const host = useMotionScope();
+  const lateWrapper = useMotionScope();
+  const p = useMotionScope();
+  const q = useMotionScope();
+  const a = useMotionScope();
+  const b = useMotionScope();
+  const d = useMotionScope();
+  const e = useMotionScope();
+  const afterP = useMotionScope();
+  const afterQ = useMotionScope();
+  const afterHost = useMotionScope();
+  const pStartAlias = useMotionScope();
+  const parentSource = createElement(
+    MotionScope,
+    { scope: parentSourceScope },
+    unknownLetterText("b20-parent-source", "ABCDEFGHIJKLMNOPQRST", 8),
+  );
+  const pBranch = createElement(
+    MotionScope,
+    { scope: p, mode: "sequence", delay: 200 },
+    createElement(
+      MotionScope,
+      { scope: a },
+      unknownLetterText("b20-a", firstText, 38),
+    ),
+    createElement(
+      MotionScope,
+      { scope: d, startAt: after(b.end, 11000) },
+      observedShape("b20-d", "D", 72, "#ED7D31", 100),
+    ),
+  );
+  const qBranch = createElement(
+    MotionScope,
+    { scope: q, mode: "sequence" },
+    createElement(
+      MotionScope,
+      { scope: b },
+      unknownLetterText("b20-b", "GHIJKLMNOPQRSTUVWXYZ", 106),
+    ),
+    createElement(
+      MotionScope,
+      { scope: e, startAt: after(a.end, 11000) },
+      observedShape("b20-e", "E", 140, "#4472C4", 100),
+    ),
+  );
+  const content = createElement(
+    Fragment,
+    null,
+    parentSource,
+    createElement(
+      MotionScope,
+      { scope: host, mode: "stagger", each: 500 },
+      createElement(
+        MotionScope,
+        { scope: lateWrapper, startAt: after(parentSourceScope.end, 2500) },
+        pBranch,
+      ),
+      qBranch,
+    ),
+    createElement(
+      MotionScope,
+      { scope: afterP, startAt: p.end },
+      observedShape("b20-after-p", "After P", 174, "#70AD47", 100),
+    ),
+    createElement(
+      MotionScope,
+      { scope: afterQ, startAt: q.end },
+      observedShape("b20-after-q", "After Q", 208, "#A5A5A5", 100),
+    ),
+    createElement(
+      MotionScope,
+      { scope: afterHost, startAt: host.end },
+      observedShape("b20-after-host", "After H", 242, "#5B9BD5", 100),
+    ),
+    createElement(
+      MotionScope,
+      { scope: pStartAlias, startAt: after(p.start, 19) },
+      observedShape("b20-p-start-alias", "P start", 276, "#FFC000", 50),
+    ),
+  );
+  return createElement(
+    Deck,
+    { width: 360, height: 340 },
+    createElement(
+      Slide,
+      { slideId: `b20-${firstText.length}-${trigger}` },
       trigger === "click" ? createElement(Step, { n: 2 }, content) : content,
     ),
   );
@@ -3966,6 +4114,186 @@ describe("组件编排作用域", () => {
     }
   });
 
+  it("普通并行包装不会改变交叉顺序分支的整体完成", async () => {
+    const cases = [
+      { wrapP: true, branchOrder: "p-first" as const },
+      {
+        wrapQ: true,
+        branchOrder: "q-first" as const,
+        trigger: "click" as const,
+      },
+      {
+        wrapP: true,
+        wrapQ: true,
+        wrapperDepth: 2 as const,
+        branchOrder: "q-first" as const,
+        hostMode: "stagger" as const,
+      },
+    ];
+    for (const options of cases) {
+      const result = await build(createElement(DfsEndCollectors, options));
+      const slide = result.report.slides[0];
+      const motion = slide?.capabilities?.["motion"] as MotionObservation;
+      const objectId = (testId: string) =>
+        slide?.objects.find(({ testId: id }) => id === testId)?.id;
+      const scopeContaining = (testId: string) =>
+        motion.scopes?.find(({ members }) =>
+          members.some(
+            (member) =>
+              member.kind === "object" && member.id === objectId(testId),
+          ),
+        );
+      const first = scopeContaining("dfs-first");
+      const second = scopeContaining("dfs-second");
+      const d = scopeContaining("dfs-d");
+      const e = scopeContaining("dfs-e");
+      const p = motion.scopes?.find(
+        ({ members }) =>
+          members.some(
+            (member) => member.kind === "scope" && member.id === first?.id,
+          ) &&
+          members.some(
+            (member) => member.kind === "scope" && member.id === d?.id,
+          ),
+      );
+      const q = motion.scopes?.find(
+        ({ members }) =>
+          members.some(
+            (member) => member.kind === "scope" && member.id === second?.id,
+          ) &&
+          members.some(
+            (member) => member.kind === "scope" && member.id === e?.id,
+          ),
+      );
+      assert.ok(first && second && d && e && p && q);
+      assert.deepEqual(
+        p.members.map(({ kind, id }) => [kind, id]),
+        [
+          ["scope", first.id],
+          ["scope", d.id],
+        ],
+      );
+      assert.deepEqual(
+        q.members.map(({ kind, id }) => [kind, id]),
+        [
+          ["scope", second.id],
+          ["scope", e.id],
+        ],
+      );
+
+      const file = await validatePptx(result.pptx);
+      assert.deepEqual(file.errors, []);
+      assert.deepEqual(file.extensions, []);
+      assert.equal(file.slides[0]?.animations?.[0]?.effects.length, 7);
+      const slidePart = unzipSync(result.pptx)["ppt/slides/slide1.xml"];
+      assert.ok(slidePart);
+      assertTimingReferencesFollowDefinitions(strFromU8(slidePart));
+    }
+  });
+
+  it("一般未知晚父起点在 stagger 宿主中递归重基并保留 start 别名", async () => {
+    const cases = [
+      { firstText: "AB", trigger: "auto" as const },
+      { firstText: "AB", trigger: "click" as const },
+      {
+        firstText: "ABCDEFGHIJKLMNOPQRSTUVWXYZ123456",
+        trigger: "auto" as const,
+      },
+      {
+        firstText: "ABCDEFGHIJKLMNOPQRSTUVWXYZ123456",
+        trigger: "click" as const,
+      },
+    ];
+    for (const options of cases) {
+      const result = await build(
+        createElement(B20RecursiveProjection, options),
+      );
+      const slide = result.report.slides[0];
+      const motion = slide?.capabilities?.["motion"] as MotionObservation;
+      const objectId = (testId: string) =>
+        slide?.objects.find(({ testId: id }) => id === testId)?.id;
+      const scopeContaining = (testId: string) =>
+        motion.scopes?.find(({ members }) =>
+          members.some(
+            (member) =>
+              member.kind === "object" && member.id === objectId(testId),
+          ),
+        );
+      const sourceA = scopeContaining("b20-a");
+      const sourceB = scopeContaining("b20-b");
+      const d = scopeContaining("b20-d");
+      const e = scopeContaining("b20-e");
+      const p = motion.scopes?.find(
+        ({ members }) =>
+          members.some(
+            (member) => member.kind === "scope" && member.id === sourceA?.id,
+          ) &&
+          members.some(
+            (member) => member.kind === "scope" && member.id === d?.id,
+          ),
+      );
+      const q = motion.scopes?.find(
+        ({ members }) =>
+          members.some(
+            (member) => member.kind === "scope" && member.id === sourceB?.id,
+          ) &&
+          members.some(
+            (member) => member.kind === "scope" && member.id === e?.id,
+          ),
+      );
+      const alias = scopeContaining("b20-p-start-alias");
+      const sourceT = scopeContaining("b20-parent-source");
+      assert.ok(sourceA && sourceB && d && e && p && q && alias && sourceT);
+      assert.deepEqual(
+        p.members.map(({ kind, id }) => [kind, id]),
+        [
+          ["scope", sourceA.id],
+          ["scope", d.id],
+        ],
+      );
+      assert.deepEqual(
+        q.members.map(({ kind, id }) => [kind, id]),
+        [
+          ["scope", sourceB.id],
+          ["scope", e.id],
+        ],
+      );
+      assert.equal(p.completion, "unknown");
+      assert.equal(q.completion, "unknown");
+      assert.ok(
+        alias.startAfterAll?.some(
+          (dependency) =>
+            "scopeId" in dependency &&
+            dependency.scopeId === sourceT.id &&
+            dependency.point === "end" &&
+            dependency.offsetMs === 2719,
+        ),
+      );
+
+      const file = await validatePptx(result.pptx);
+      assert.deepEqual(file.errors, []);
+      assert.deepEqual(file.extensions, []);
+      assert.equal(file.slides[0]?.animations?.[0]?.trigger, options.trigger);
+      const effects = file.slides[0]?.animations?.[0]?.effects ?? [];
+      assert.equal(effects.length, 9);
+      assert.equal(new Set(effects.map(({ targetId }) => targetId)).size, 9);
+      for (const testId of ["b20-parent-source", "b20-a", "b20-b"]) {
+        const effect = effects.find(
+          ({ targetId }) => targetId === objectId(testId),
+        );
+        assert.ok(effect);
+        assert.deepEqual(
+          [effect.by, effect.intervalMs, effect.durationMs, effect.completion],
+          ["letter", 500, 1000, "unknown"],
+        );
+      }
+      const slidePart = unzipSync(result.pptx)["ppt/slides/slide1.xml"];
+      assert.ok(slidePart);
+      const xml = strFromU8(slidePart);
+      assertTimingReferencesFollowDefinitions(xml);
+    }
+  });
+
   it("逐词真实单次行为在中英文、空白、标点和空文本上保留正下界", async () => {
     const texts = ["中文词语", "e\u0301 👩🏽‍💻", "   \t", "，。!?", ""];
     for (const [index, text] of texts.entries()) {
@@ -4043,24 +4371,50 @@ describe("组件编排作用域", () => {
     }
   });
 
-  it("真实嵌套成员完成可收集，但零下界成员仍不能作为早宿主监听源", async () => {
-    await assert.rejects(
-      build(
-        createElement(DfsEndCollectors, {
-          emptyFirstLetter: true,
-          trigger: "auto",
-        }),
-      ),
-      (error: unknown) => {
-        assert.ok(error instanceof BuildError);
-        assert.equal(error.diagnostics[0]?.code, "unknown-motion-start");
-        assert.match(
-          error.diagnostics[0]?.message ?? "",
-          /不能证明真实来源结束晚于候选宿主激活/u,
-        );
-        return true;
-      },
+  it("空 letter 仍以目标单次行为提供完成正下界", async () => {
+    const result = await build(
+      createElement(DfsEndCollectors, {
+        emptyFirstLetter: true,
+        trigger: "auto",
+      }),
     );
+    const slide = result.report.slides[0];
+    const motion = slide?.capabilities?.["motion"] as MotionObservation;
+    const sourceId = slide?.objects.find(
+      ({ testId }) => testId === "dfs-first",
+    )?.id;
+    const sourceScope = motion.scopes?.find(({ members }) =>
+      members.some(
+        (member) => member.kind === "object" && member.id === sourceId,
+      ),
+    );
+    assert.ok(sourceScope);
+    assert.equal(sourceScope.completion, "unknown");
+    assert.equal(sourceScope.endMs, undefined);
+
+    const file = await validatePptx(result.pptx);
+    assert.deepEqual(file.errors, []);
+    assert.deepEqual(file.extensions, []);
+    const effects = file.slides[0]?.animations?.[0]?.effects ?? [];
+    const sourceEffect = effects.find(({ targetId }) => targetId === sourceId);
+    assert.ok(sourceEffect);
+    assert.deepEqual(
+      [
+        sourceEffect.by,
+        sourceEffect.intervalMs,
+        sourceEffect.durationMs,
+        sourceEffect.completion,
+      ],
+      ["letter", 500, 1000, "unknown"],
+    );
+    const slidePart = unzipSync(result.pptx)["ppt/slides/slide1.xml"];
+    assert.ok(slidePart);
+    const xml = strFromU8(slidePart);
+    assert.match(
+      xml,
+      /<p:iterate type="lt"><p:tmAbs val="500"><\/p:tmAbs><\/p:iterate>/u,
+    );
+    assertTimingReferencesFollowDefinitions(xml);
   });
 
   it("晚起点别名保留逻辑起点，完成收集器仍从早宿主注册", async () => {

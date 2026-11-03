@@ -472,6 +472,15 @@ function startAfterDelay(
       },
     };
   }
+  if (start.kind === "event") {
+    return {
+      kind: start.kind,
+      dependency: {
+        ...start.dependency,
+        offsetMs: start.dependency.offsetMs + delayMs,
+      },
+    };
+  }
   if (start.kind === "condition-join") {
     return { kind: "condition-end", id: start.id, delayMs };
   }
@@ -487,7 +496,7 @@ function addNativeStartDelay(
   const value =
     delayed.kind === "parent-start"
       ? delayed.delayMs
-      : delayed.kind === "end"
+      : delayed.kind === "end" || delayed.kind === "event"
         ? delayed.dependency.offsetMs
         : delayed.kind === "condition-end"
           ? delayed.delayMs
@@ -508,7 +517,9 @@ function dependencyTimingId(
   targetGroupIds: ReadonlyMap<string, number>,
 ): number | undefined {
   if ("scopeId" in dependency) {
-    return scopeNodeIds.get(`${stepKey}:${dependency.scopeId}`);
+    return scopeNodeIds.get(
+      `${stepKey}:${dependency.point}:${dependency.scopeId}`,
+    );
   }
   if ("group" in dependency) {
     return targetGroupIds.get(`${stepKey}:${dependency.targetId}`);
@@ -561,7 +572,10 @@ function nativeStartCondition(
   return element(
     "p:cond",
     {
-      evt: "end",
+      evt:
+        start.kind === "event" || start.dependency.point === "start"
+          ? "begin"
+          : "end",
       delay: timeNodeValue(start.dependency.offsetMs, "完成依赖偏移"),
     },
     element("p:tn", { val: dependencyId }),
@@ -622,6 +636,17 @@ function conditionJoinTree(
   );
 }
 
+function gateStart(gate: MotionPlanStartGate): MotionPlanStart {
+  switch (gate.kind) {
+    case "parent-start":
+      return { kind: "parent-start", delayMs: gate.delayMs };
+    case "end":
+      return { kind: "end", dependency: gate.dependency };
+    case "begin":
+      return { kind: "event", dependency: gate.dependency };
+  }
+}
+
 function endCollectorTree(
   id: number,
   startCondition: string,
@@ -645,7 +670,7 @@ function endCollectorTree(
           "p:stCondLst",
           undefined,
           nativeStartCondition(
-            gate,
+            gateStart(gate),
             stepKey,
             effectNodeIds,
             scopeNodeIds,
@@ -686,13 +711,19 @@ function timingXml(steps: readonly MotionPlanStep[]): string {
   const targetGroupIds = new Map<string, number>();
   const conditionNodeIds = new Map<string, number>();
   const referencedScopeNodes = new Set<string>();
+  const referencedScopeStartNodes = new Set<string>();
   const referencedTargetGroups = new Set<string>();
   const keepDependencyContainer = (
     dependency: MotionStartDependency,
     stepKey: string,
   ): void => {
     if ("scopeId" in dependency) {
-      referencedScopeNodes.add(`${stepKey}:${dependency.scopeId}`);
+      const key = `${stepKey}:${dependency.point}:${dependency.scopeId}`;
+      if (dependency.point === "start") {
+        referencedScopeStartNodes.add(key);
+      } else {
+        referencedScopeNodes.add(key);
+      }
     } else if ("group" in dependency) {
       referencedTargetGroups.add(`${stepKey}:${dependency.targetId}`);
     }
@@ -704,28 +735,41 @@ function timingXml(steps: readonly MotionPlanStep[]): string {
     stepKey: string,
   ): void => {
     for (const node of nodes) {
-      if (node.nativeStart.kind === "end") {
+      if (
+        node.nativeStart.kind === "end" ||
+        node.nativeStart.kind === "event"
+      ) {
         keepDependencyContainer(node.nativeStart.dependency, stepKey);
       } else if (node.nativeStart.kind === "condition-join") {
-        referencedScopeNodes.add(`${stepKey}:${node.nativeStart.hostScopeId}`);
+        referencedScopeStartNodes.add(
+          `${stepKey}:start:${node.nativeStart.hostScopeId}`,
+        );
+        referencedScopeStartNodes.add(
+          `${stepKey}:start:${node.nativeStart.consumerParentScopeId}`,
+        );
         for (const gate of node.nativeStart.gates) {
-          if (gate.kind !== "end") continue;
-          keepDependencyContainer(gate.dependency, stepKey);
+          if (gate.kind === "end" || gate.kind === "begin") {
+            keepDependencyContainer(gate.dependency, stepKey);
+          }
         }
       }
       if (node.kind === "completion-collector") {
         for (const gate of node.gates) {
-          keepDependencyContainer(gate.dependency, stepKey);
+          if (gate.kind === "end" || gate.kind === "begin") {
+            keepDependencyContainer(gate.dependency, stepKey);
+          }
         }
       }
       if (node.kind === "scope") {
         for (const placement of node.conditionDefinitionsBefore ?? []) {
-          referencedScopeNodes.add(`${stepKey}:${placement.join.hostScopeId}`);
-          referencedScopeNodes.add(
-            `${stepKey}:${placement.join.consumerParentScopeId}`,
+          referencedScopeStartNodes.add(
+            `${stepKey}:start:${placement.join.hostScopeId}`,
+          );
+          referencedScopeStartNodes.add(
+            `${stepKey}:start:${placement.join.consumerParentScopeId}`,
           );
           for (const gate of placement.join.gates) {
-            if (gate.kind === "end") {
+            if (gate.kind === "end" || gate.kind === "begin") {
               keepDependencyContainer(gate.dependency, stepKey);
             }
           }
@@ -750,12 +794,16 @@ function timingXml(steps: readonly MotionPlanStep[]): string {
         for (const placement of node.conditionDefinitionsBefore ?? []) {
           conditionNodeIds.set(`${stepKey}:${placement.join.id}`, ids.take());
         }
-        scopeNodeIds.set(`${stepKey}:${node.id}`, ids.take());
+        const scopeTimingId = ids.take();
+        scopeNodeIds.set(`${stepKey}:start:${node.id}`, scopeTimingId);
+        if (node.splitCompletion !== true) {
+          scopeNodeIds.set(`${stepKey}:end:${node.id}`, scopeTimingId);
+        }
         registerNodeIds(node.children, stepKey);
         continue;
       }
       if (node.kind === "completion-collector") {
-        scopeNodeIds.set(`${stepKey}:${node.scopeId}`, ids.take());
+        scopeNodeIds.set(`${stepKey}:end:${node.scopeId}`, ids.take());
         continue;
       }
       if (node.effects.length > 1) {
@@ -860,13 +908,16 @@ function timingXml(steps: readonly MotionPlanStep[]): string {
           };
         }
         if (node.kind === "scope") {
-          const scopeId = scopeNodeIds.get(`${step.key}:${node.id}`);
+          const scopeId = scopeNodeIds.get(`${step.key}:start:${node.id}`);
           if (scopeId === undefined) {
             throw new Error("MotionPlan 作用域缺少原生时间节点身份");
           }
-          const needsCompletionNode = referencedScopeNodes.has(
-            `${step.key}:${node.id}`,
-          );
+          const needsCompletionNode =
+            node.splitCompletion !== true &&
+            referencedScopeNodes.has(`${step.key}:end:${node.id}`);
+          const needsStartNode =
+            node.preserveStart === true ||
+            referencedScopeStartNodes.has(`${step.key}:start:${node.id}`);
           const childrenCanLift = node.children.every((child) => {
             const childStart = composeMotionPlanStarts(
               effectiveStart,
@@ -886,7 +937,7 @@ function timingXml(steps: readonly MotionPlanStep[]): string {
               addNativeStartDelay(childStart, childDelay(effect)) !== undefined
             );
           });
-          if (needsCompletionNode || !childrenCanLift) {
+          if (needsCompletionNode || needsStartNode || !childrenCanLift) {
             const condition = nativeStartCondition(
               effectiveStart,
               step.key,
@@ -926,7 +977,9 @@ function timingXml(steps: readonly MotionPlanStep[]): string {
         }
 
         if (node.kind === "completion-collector") {
-          const collectorId = scopeNodeIds.get(`${step.key}:${node.scopeId}`);
+          const collectorId = scopeNodeIds.get(
+            `${step.key}:end:${node.scopeId}`,
+          );
           if (collectorId === undefined) {
             throw new Error("MotionPlan 完成集合缺少原生时间节点身份");
           }

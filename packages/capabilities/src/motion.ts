@@ -462,6 +462,32 @@ function startAfterDelay(
       };
 }
 
+// 仅在合并结果仍可写入单个 ST_TLTime 字段时折叠延迟层。
+function addNativeStartDelay(
+  start: MotionPlanStart,
+  delayMs: number,
+): MotionPlanStart | undefined {
+  const delayed = startAfterDelay(start, delayMs);
+  const value =
+    delayed.kind === "parent-start"
+      ? delayed.delayMs
+      : delayed.dependency.offsetMs;
+  return Number.isSafeInteger(value) &&
+    value >= 0 &&
+    value <= maximumTimeNodeValue
+    ? delayed
+    : undefined;
+}
+
+function composeNativeStarts(
+  inherited: MotionPlanStart | undefined,
+  child: MotionPlanStart,
+): MotionPlanStart | undefined {
+  // 只有沿用父起点的子项才合并延迟；独立 end 条件不继承父延迟。
+  if (inherited === undefined || child.kind === "end") return child;
+  return addNativeStartDelay(inherited, child.delayMs);
+}
+
 function dependencyTimingId(
   dependency: MotionStartDependency,
   stepKey: string,
@@ -525,15 +551,34 @@ function timingContainer(
   id: number,
   startCondition: string,
   children: readonly string[],
+  nodeType?: string,
 ): string {
   return element(
     "p:par",
     undefined,
     element(
       "p:cTn",
-      { id, fill: "hold" },
+      { id, fill: "hold", nodeType },
       element("p:stCondLst", undefined, startCondition),
       endSync(),
+      element("p:childTnLst", undefined, ...children),
+    ),
+  );
+}
+
+function mainSequenceWithGroup(
+  id: number,
+  children: readonly string[],
+): string {
+  // mainSeq 的标准 step→with-group→入口节点层级供原生导入识别步首角色。
+  // 分组从步首立即开始，不复制计划起点，也不创建 Shape 或完成来源。
+  return element(
+    "p:par",
+    undefined,
+    element(
+      "p:cTn",
+      { id, fill: "hold" },
+      element("p:stCondLst", undefined, element("p:cond", { delay: 0 })),
       element("p:childTnLst", undefined, ...children),
     ),
   );
@@ -546,6 +591,31 @@ function timingXml(steps: readonly MotionPlanStep[]): string {
   const effectNodeIds = new Map<string, number>();
   const scopeNodeIds = new Map<string, number>();
   const targetGroupIds = new Map<string, number>();
+  const referencedScopeNodes = new Set<string>();
+  const referencedTargetGroups = new Set<string>();
+
+  // 只为真实 end 依赖保留聚合节点；无消费者的容器可把起点投影给成员。
+  const collectReferencedContainers = (
+    nodes: readonly MotionPlanNode[],
+    stepKey: string,
+  ): void => {
+    for (const node of nodes) {
+      if (node.nativeStart.kind === "end") {
+        const dependency = node.nativeStart.dependency;
+        if ("scopeId" in dependency) {
+          referencedScopeNodes.add(`${stepKey}:${dependency.scopeId}`);
+        } else if ("group" in dependency) {
+          referencedTargetGroups.add(`${stepKey}:${dependency.targetId}`);
+        }
+      }
+      if (node.kind === "scope") {
+        collectReferencedContainers(node.children, stepKey);
+      }
+    }
+  };
+  for (const step of steps) {
+    collectReferencedContainers(step.nodes, step.key);
+  }
 
   const registerNodeIds = (
     nodes: readonly MotionPlanNode[],
@@ -591,39 +661,103 @@ function timingXml(steps: readonly MotionPlanStep[]): string {
             { evt: "onBegin", delay: 0 },
             element("p:tn", { val: sequenceId }),
           )}`;
+    const childDelay = (effect: TimingEffect): number =>
+      timeNodeValue(
+        effect.delayMs + (effect.partIndex ?? 0) * effect.durationMs,
+        "动画对象成员延迟",
+      );
     const renderNodes = (
       nodes: readonly MotionPlanNode[],
+      inheritedStart: MotionPlanStart | undefined,
       isTopLevel: boolean,
-    ): string[] =>
-      nodes.map((node, index) => {
-        const nodeType =
+      firstRootNodeType?: string,
+    ): string[] => {
+      const rendered: string[] = [];
+      let pendingRootNodeType = firstRootNodeType;
+      for (const [index, node] of nodes.entries()) {
+        const defaultNodeType =
           index === 0 && isTopLevel && step.trigger === "click"
             ? "clickEffect"
             : index === 0
               ? "afterEffect"
               : "withEffect";
-        const condition = nativeStartCondition(
+        const nodeType = defaultNodeType;
+        const effectiveStart = composeNativeStarts(
+          inheritedStart,
           node.nativeStart,
-          step.key,
-          effectNodeIds,
-          scopeNodeIds,
-          targetGroupIds,
         );
+        if (effectiveStart === undefined) {
+          throw new Error("原生时序投影需要保留延迟分层");
+        }
         if (node.kind === "scope") {
           const scopeId = scopeNodeIds.get(`${step.key}:${node.id}`);
           if (scopeId === undefined) {
             throw new Error("MotionPlan 作用域缺少原生时间节点身份");
           }
-          const children = renderNodes(node.children, false);
-          return timingContainer(scopeId, condition, children);
-        }
-        const childDelay = (effect: TimingEffect): number =>
-          timeNodeValue(
-            effect.delayMs + (effect.partIndex ?? 0) * effect.durationMs,
-            "动画对象成员延迟",
+          const needsCompletionNode = referencedScopeNodes.has(
+            `${step.key}:${node.id}`,
           );
-        if (node.effects.length > 1) {
-          const groupId = targetGroupIds.get(`${step.key}:${node.targetId}`);
+          const childrenCanLift = node.children.every((child) => {
+            const childStart = composeNativeStarts(
+              effectiveStart,
+              child.nativeStart,
+            );
+            if (childStart === undefined) return false;
+            if (child.kind === "scope" || child.effects.length > 1) return true;
+            const [effect] = child.effects;
+            return (
+              effect !== undefined &&
+              addNativeStartDelay(childStart, childDelay(effect)) !== undefined
+            );
+          });
+          if (needsCompletionNode || !childrenCanLift) {
+            const condition = nativeStartCondition(
+              effectiveStart,
+              step.key,
+              effectNodeIds,
+              scopeNodeIds,
+              targetGroupIds,
+            );
+            const children = renderNodes(node.children, undefined, false);
+            rendered.push(
+              timingContainer(
+                scopeId,
+                condition,
+                children,
+                pendingRootNodeType,
+              ),
+            );
+          } else {
+            rendered.push(
+              ...renderNodes(
+                node.children,
+                effectiveStart,
+                false,
+                pendingRootNodeType,
+              ),
+            );
+          }
+          if (rendered.length > 0) pendingRootNodeType = undefined;
+          continue;
+        }
+
+        const condition = nativeStartCondition(
+          effectiveStart,
+          step.key,
+          effectNodeIds,
+          scopeNodeIds,
+          targetGroupIds,
+        );
+        const targetGroupKey = `${step.key}:${node.targetId}`;
+        const effectStarts = node.effects.map((effect) =>
+          addNativeStartDelay(effectiveStart, childDelay(effect)),
+        );
+        const keepTargetGroup =
+          node.effects.length > 1 &&
+          (referencedTargetGroups.has(targetGroupKey) ||
+            effectStarts.some((start) => start === undefined));
+        if (keepTargetGroup) {
+          const groupId = targetGroupIds.get(targetGroupKey);
           if (groupId === undefined) {
             throw new Error("MotionPlan 对象成员缺少原生聚合节点身份");
           }
@@ -645,41 +779,60 @@ function timingXml(steps: readonly MotionPlanStep[]): string {
               buildGroupId,
             );
           });
-          return timingContainer(groupId, condition, children);
+          rendered.push(
+            timingContainer(groupId, condition, children, pendingRootNodeType),
+          );
+          pendingRootNodeType = undefined;
+          continue;
         }
-        const [effect] = node.effects;
-        if (effect === undefined) {
-          throw new Error("MotionPlan 对象成员没有效果节点");
+
+        for (const [effectIndex, effect] of node.effects.entries()) {
+          const effectId = effectNodeIds.get(effectKey(effect));
+          if (effectId === undefined) {
+            throw new Error("MotionPlan 效果缺少原生时间节点身份");
+          }
+          const localStart = effectStarts[effectIndex];
+          if (localStart === undefined) {
+            throw new Error("原生时序投影丢失可编码的动画延迟分层");
+          }
+          const effectCondition = nativeStartCondition(
+            localStart,
+            step.key,
+            effectNodeIds,
+            scopeNodeIds,
+            targetGroupIds,
+          );
+          const buildGroupId =
+            effect.target.range?.type === "chart"
+              ? chartBuildGroupIds.get(effect.target.id)
+              : undefined;
+          rendered.push(
+            effectTree(
+              effect,
+              pendingRootNodeType ??
+                (effectIndex === 0 ? nodeType : "withEffect"),
+              effectCondition,
+              ids,
+              effectId,
+              buildGroupId,
+            ),
+          );
+          pendingRootNodeType = undefined;
         }
-        const effectId = effectNodeIds.get(effectKey(effect));
-        if (effectId === undefined) {
-          throw new Error("MotionPlan 效果缺少原生时间节点身份");
-        }
-        const localStart = startAfterDelay(
-          node.nativeStart,
-          childDelay(effect),
-        );
-        const effectCondition = nativeStartCondition(
-          localStart,
-          step.key,
-          effectNodeIds,
-          scopeNodeIds,
-          targetGroupIds,
-        );
-        const buildGroupId =
-          effect.target.range?.type === "chart"
-            ? chartBuildGroupIds.get(effect.target.id)
-            : undefined;
-        return effectTree(
-          effect,
-          nodeType,
-          effectCondition,
-          ids,
-          effectId,
-          buildGroupId,
-        );
-      });
-    const stepChildren = renderNodes(step.nodes, true);
+      }
+      return rendered;
+    };
+    // nodeType 仅标记真实步首节点，应用的时刻条件仍完全来自计划。
+    const stepChildren = renderNodes(
+      step.nodes,
+      undefined,
+      true,
+      step.trigger === "click" ? "clickEffect" : "afterEffect",
+    );
+    const stepTimingGroups =
+      stepChildren.length === 0
+        ? []
+        : [mainSequenceWithGroup(ids.take(), stepChildren)];
     return element(
       "p:par",
       undefined,
@@ -687,7 +840,7 @@ function timingXml(steps: readonly MotionPlanStep[]): string {
         "p:cTn",
         { id: stepId, fill: "hold" },
         element("p:stCondLst", undefined, trigger),
-        element("p:childTnLst", undefined, ...stepChildren),
+        element("p:childTnLst", undefined, ...stepTimingGroups),
       ),
     );
   });

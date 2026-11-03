@@ -100,6 +100,106 @@ function KnownRelationsDeck() {
   );
 }
 
+function DeclarationClosureDeck() {
+  const top = useMotionScope();
+  const parent = useMotionScope();
+  const empty = useMotionScope();
+  const dependent = useMotionScope();
+  const deepOne = useMotionScope();
+  const deepTwo = useMotionScope();
+  const deepThree = useMotionScope();
+  const deepLeaf = useMotionScope();
+  return createElement(
+    Deck,
+    { width: 120, height: 100 },
+    createElement(
+      Slide,
+      { slideId: "motion-declaration-closure" },
+      createElement(
+        MotionScope,
+        { scope: top, delay: 10 },
+        createElement(
+          MotionScope,
+          { scope: parent, delay: 200 },
+          createElement(MotionScope, {
+            scope: empty,
+            delay: 40,
+            publishEnd: empty.cue("ready"),
+          }),
+          createElement(MotionScope, {
+            scope: dependent,
+            startAt: after(empty.cue("ready"), 10),
+          }),
+          createElement(
+            Step,
+            { n: 1 },
+            createElement(Shape, {
+              testId: "closure-click",
+              x: 0,
+              y: 0,
+              width: 10,
+              height: 10,
+              enter: fade({ duration: 100 }),
+            }),
+          ),
+          createElement(
+            MotionScope,
+            { scope: deepOne, delay: 31 },
+            createElement(
+              Step,
+              { n: 1 },
+              createElement(Shape, {
+                testId: "closure-deep-one-click",
+                x: 15,
+                y: 0,
+                width: 10,
+                height: 10,
+                enter: fade({ duration: 100 }),
+              }),
+            ),
+            createElement(
+              MotionScope,
+              { scope: deepTwo, delay: 32 },
+              createElement(
+                Step,
+                { n: 1 },
+                createElement(Shape, {
+                  testId: "closure-deep-two-click",
+                  x: 30,
+                  y: 0,
+                  width: 10,
+                  height: 10,
+                  enter: fade({ duration: 100 }),
+                }),
+              ),
+              createElement(
+                MotionScope,
+                { scope: deepThree, delay: 33 },
+                createElement(
+                  Step,
+                  { n: 1 },
+                  createElement(Shape, {
+                    testId: "closure-deep-three-click",
+                    x: 45,
+                    y: 0,
+                    width: 10,
+                    height: 10,
+                    enter: fade({ duration: 100 }),
+                  }),
+                ),
+                createElement(MotionScope, {
+                  scope: deepLeaf,
+                  delay: 34,
+                }),
+              ),
+            ),
+          ),
+        ),
+      ),
+    ),
+  );
+}
+
 function MixedIntervalsDeck() {
   const words = useMotionScope();
   const follower = useMotionScope();
@@ -434,6 +534,147 @@ describe("observeMotion", () => {
       state: "known",
       value: false,
     });
+  });
+
+  it("按声明闭包保留多层作用域关系且不扩展活动时间", async () => {
+    const result = await build(createElement(DeclarationClosureDeck));
+    const motion = observeMotion(
+      result.query.slide("motion-declaration-closure").observation,
+    );
+    const automatic = motion?.steps.find(({ trigger }) => trigger === "auto");
+    const click = motion?.steps.find(
+      ({ trigger, number }) => trigger === "click" && number === 1,
+    );
+    assert.ok(automatic);
+    assert.ok(click);
+    assert.equal(automatic.scopes.length, 8);
+    assert.equal(automatic.effects.length, 0);
+
+    const automaticByDelay = new Map(
+      automatic.scopes.map((scope) => [scope.delayMs, scope] as const),
+    );
+    const top = automaticByDelay.get(10);
+    const parent = automaticByDelay.get(200);
+    const empty = automaticByDelay.get(40);
+    const dependent = automaticByDelay.get(0);
+    const deepOne = automaticByDelay.get(31);
+    const deepTwo = automaticByDelay.get(32);
+    const deepThree = automaticByDelay.get(33);
+    const deepLeaf = automaticByDelay.get(34);
+    const closure = [
+      top,
+      parent,
+      empty,
+      dependent,
+      deepOne,
+      deepTwo,
+      deepThree,
+      deepLeaf,
+    ];
+    assert.ok(closure.every((scope) => scope !== undefined));
+    assert.deepEqual(
+      [
+        top,
+        parent,
+        empty,
+        dependent,
+        deepOne,
+        deepTwo,
+        deepThree,
+        deepLeaf,
+      ].map((scope) => scope?.delayMs),
+      [10, 200, 40, 0, 31, 32, 33, 34],
+    );
+
+    const relationships = [
+      [top!, parent!],
+      [parent!, empty!],
+      [parent!, dependent!],
+      [parent!, deepOne!],
+      [deepOne!, deepTwo!],
+      [deepTwo!, deepThree!],
+      [deepThree!, deepLeaf!],
+    ] as const;
+    for (const [ancestor, child] of relationships) {
+      assert.equal(child.parent, ancestor.ref);
+      assert.ok(
+        ancestor.members.some(
+          (member) => member.kind === "scope" && member.ref === child.ref,
+        ),
+      );
+    }
+
+    assert.equal(top!.step, automatic.ref);
+    assert.equal(parent!.start.state, "known");
+    assert.equal(parent!.start.ms, 210);
+    assert.equal(parent!.end.state, "known");
+    assert.equal(parent!.end.ms, 210);
+    assert.equal(empty!.end.state, "known");
+    assert.equal(empty!.end.ms, 250);
+    assert.equal(dependent!.start.state, "known");
+    assert.equal(dependent!.start.ms, 260);
+    assert.ok(
+      automatic.cues.some(
+        ({ name, publishedBy, point }) =>
+          name === "ready" && publishedBy === empty!.ref && point === "end",
+      ),
+    );
+    assert.ok(
+      automatic.dependencies.some(
+        (dependency) =>
+          dependency.kind === "cue-publish" &&
+          dependency.scope === empty!.ref &&
+          dependency.point === "end",
+      ),
+    );
+    assert.ok(
+      automatic.dependencies.some(
+        (dependency) =>
+          dependency.kind === "cue-use" &&
+          dependency.scope === dependent!.ref &&
+          dependency.cue.scopeId === empty!.ref.id &&
+          dependency.offsetMs === 10,
+      ),
+    );
+
+    const clickTop = click.scopes.find(({ delayMs }) => delayMs === 10);
+    const clickParent = click.scopes.find(({ delayMs }) => delayMs === 200);
+    const clickDeepOne = click.scopes.find(({ delayMs }) => delayMs === 31);
+    const clickEffect = click.effects.find(
+      ({ target }) => target.testId === "closure-click",
+    );
+    assert.ok(clickTop);
+    assert.ok(clickParent);
+    assert.ok(clickDeepOne);
+    assert.ok(clickEffect);
+    assert.equal(clickTop.step, click.ref);
+    assert.equal(clickTop.parent, undefined);
+    assert.equal(clickParent.parent, clickTop.ref);
+    assert.equal(clickDeepOne.parent, clickParent.ref);
+    assert.equal(clickParent.members.length, 2);
+    assert.ok(
+      clickParent.members.some(
+        (member) => member.kind === "scope" && member.ref === clickDeepOne.ref,
+      ),
+    );
+    assert.ok(
+      clickParent.members.some(
+        (member) => member.kind === "effect" && member.ref === clickEffect.ref,
+      ),
+    );
+    assert.equal(clickEffect.start.state, "known");
+    assert.equal(clickEffect.start.ms, 210);
+    assert.equal(clickEffect.end.state, "known");
+    assert.equal(clickEffect.end.ms, 310);
+    assert.notEqual(top!.ref, clickTop.ref);
+    assert.deepEqual(automatic.difference(top!.start.ref, clickTop.start.ref), {
+      state: "unknown",
+      reason: "different-step",
+    });
+    assert.equal(
+      click.scopes.some(({ delayMs }) => delayMs === 40 || delayMs === 0),
+      false,
+    );
   });
 
   it("保留效果实例、具名时刻声明并查询精确关系", async () => {

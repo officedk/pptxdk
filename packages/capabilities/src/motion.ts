@@ -1817,9 +1817,9 @@ export const motionCapability: SlideCapabilityModule = Object.freeze({
   compileSlide(_input: CapabilityInput, context) {
     const plan = compileMotionPlan(context.contributions);
     validateKnownMotionTimes(plan.observation);
-    registerMotionObservation(plan.observation, plan.query);
     const hasEffects = plan.steps.some((step) => step.effects.length > 0);
     if (!hasEffects) {
+      registerMotionObservation(plan.observation, plan.query);
       return {
         xml: "",
         extensions: [],
@@ -1829,15 +1829,18 @@ export const motionCapability: SlideCapabilityModule = Object.freeze({
       };
     }
     const timing = timingXml(plan.steps, context.dimensions);
+    const observation = {
+      ...plan.observation,
+      ...(timing.nativeProjections.length === 0
+        ? {}
+        : { nativeProjections: timing.nativeProjections }),
+    } satisfies MotionObservation;
+    // 查询身份必须绑定包含原生投影的最终公开观察对象。
+    registerMotionObservation(observation, plan.query);
     return {
       xml: timing.xml,
       extensions: [],
-      observation: {
-        ...plan.observation,
-        ...(timing.nativeProjections.length === 0
-          ? {}
-          : { nativeProjections: timing.nativeProjections }),
-      } satisfies MotionObservation,
+      observation,
     };
   },
 });

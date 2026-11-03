@@ -1167,6 +1167,19 @@ function motionPlan(
     scope.members.sort((left, right) => left.order - right.order);
   }
 
+  const queryDeclarationIndex = new Map<
+    string,
+    { readonly parent?: string; readonly members: readonly ScopeMember[] }
+  >();
+  for (const scope of scopes.values()) {
+    queryDeclarationIndex.set(scope.declaration.identity, {
+      ...(scope.declaration.parent === undefined
+        ? {}
+        : { parent: scope.declaration.parent }),
+      members: scope.members,
+    });
+  }
+
   const activeSteps = new Map<string, Set<string>>();
   const collectActiveSteps = (identity: string): Set<string> => {
     const cached = activeSteps.get(identity);
@@ -1340,16 +1353,23 @@ function motionPlan(
     const queryScopeIdentities = new Set<string>();
     for (const scope of scopes.values()) {
       if (!scopeSteps(scope).includes(key)) continue;
-      let current: ScopeState | undefined = scope;
-      while (current !== undefined) {
-        const identity = current.declaration.identity;
-        if (queryScopeIdentities.has(identity)) break;
+      let identity: string | undefined = scope.declaration.identity;
+      while (identity !== undefined && !queryScopeIdentities.has(identity)) {
         queryScopeIdentities.add(identity);
-        const parentIdentity: string | undefined = current.declaration.parent;
-        current =
-          parentIdentity === undefined ? undefined : scopes.get(parentIdentity);
+        identity = queryDeclarationIndex.get(identity)?.parent;
       }
     }
+    // 作用域边来自声明闭包；对象效果仍按本步活动成员筛选。
+    const queryDeclarationMembers = (
+      scope: ScopeState,
+    ): readonly ScopeMember[] =>
+      queryDeclarationIndex
+        .get(scope.declaration.identity)
+        ?.members.filter((member) =>
+          member.kind === "scope"
+            ? queryScopeIdentities.has(member.id)
+            : memberIsActive(member, key),
+        ) ?? [];
 
     const directMemberForScope = (
       host: ScopeState,
@@ -2354,7 +2374,7 @@ function motionPlan(
           ? {}
           : { eachMs: Math.round(scope.declaration.each) }),
         delayMs: Math.round(scope.declaration.delay),
-        members: directChildren(scope).map((member) =>
+        members: queryDeclarationMembers(scope).map((member) =>
           member.kind === "scope"
             ? { kind: "scope" as const, identity: member.id }
             : { kind: "object" as const, targetId: member.id },
@@ -3099,7 +3119,7 @@ function motionPlan(
           ? {}
           : { eachMs: Math.round(scope.declaration.each) }),
         delayMs: Math.round(scope.declaration.delay),
-        members: directChildren(scope).map((member) =>
+        members: queryDeclarationMembers(scope).map((member) =>
           member.kind === "scope"
             ? { kind: "scope" as const, identity: member.id }
             : { kind: "object" as const, targetId: member.id },

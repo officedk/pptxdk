@@ -68,6 +68,45 @@ function RepeatedSpinDeck() {
   );
 }
 
+function TimeProjectionDeck({
+  outerDelay,
+  innerDelay,
+  duration,
+  repeatCount,
+}: {
+  readonly outerDelay: number;
+  readonly innerDelay: number;
+  readonly duration: number;
+  readonly repeatCount: number;
+}) {
+  const outer = useMotionScope();
+  const inner = useMotionScope();
+  return createElement(
+    Deck,
+    { width: 120, height: 100 },
+    createElement(
+      Slide,
+      { slideId: "time-projection" },
+      createElement(
+        MotionScope,
+        { scope: outer, delay: outerDelay },
+        createElement(
+          MotionScope,
+          { scope: inner, delay: innerDelay },
+          createElement(Shape, {
+            testId: "timed-repeat",
+            x: 0,
+            y: 0,
+            width: 20,
+            height: 20,
+            emphasis: repeat(spin({ duration }), repeatCount),
+          }),
+        ),
+      ),
+    ),
+  );
+}
+
 function RepeatedAndBreathingDeck() {
   const choreography = useMotionScope();
   const body = useMotionScope();
@@ -93,7 +132,7 @@ function RepeatedAndBreathingDeck() {
             width: 40,
             height: 40,
             fill: "#164E3D",
-            emphasis: repeat(spin({ duration: 1200, from: 0 }), 3),
+            emphasis: repeat(spin({ duration: 1200 }), 3),
           }),
           createElement(Shape, {
             testId: "finite-breathe",
@@ -117,7 +156,7 @@ function RepeatedAndBreathingDeck() {
             {
               testId: "native-lamp-group",
               name: "Native group - two spins",
-              emphasis: repeat(spin({ duration: 1200, from: 0 }), 2),
+              emphasis: repeat(spin({ duration: 1200 }), 2),
             },
             createElement(Shape, {
               testId: "infinite-lamp",
@@ -148,6 +187,7 @@ function RepeatedAndBreathingDeck() {
           y: 20,
           width: 40,
           height: 40,
+          fill: "#4ADE80",
           enter: fade({ duration: 100 }),
         }),
       ),
@@ -160,6 +200,7 @@ function RepeatedAndBreathingDeck() {
           y: 80,
           width: 40,
           height: 20,
+          fill: "#3B82F6",
           enter: fade({ duration: 80 }),
         }),
       ),
@@ -172,6 +213,7 @@ function RepeatedAndBreathingDeck() {
           y: 80,
           width: 40,
           height: 20,
+          fill: "#F97316",
           enter: fade({ duration: 80 }),
         }),
       ),
@@ -488,6 +530,138 @@ describe("对象动画", () => {
     );
   });
 
+  it("独立读取器拒绝等待没有自然完成的文件效果", async () => {
+    const result = await build(createElement(RepeatedAndBreathingDeck));
+    const parts = unzipSync(result.pptx);
+    const slidePath = "ppt/slides/slide1.xml";
+    const slidePart = parts[slidePath];
+    assert.ok(slidePart);
+    const timing = strFromU8(slidePart);
+    const infiniteSourceId = timing.match(
+      /<p:cTn id="(\d+)"[^>]*presetID="0"[^>]*repeatCount="indefinite"/u,
+    )?.[1];
+    const finiteTargetId = timing.match(
+      /<p:cTn id="(\d+)"[^>]*presetID="8"/u,
+    )?.[1];
+    assert.ok(infiniteSourceId);
+    assert.ok(finiteTargetId);
+    const condition = new RegExp(
+      `(<p:cTn id="${finiteTargetId}"[^>]*><p:stCondLst>)[\\s\\S]*?(</p:stCondLst>)`,
+      "u",
+    );
+    const invalidTiming = timing.replace(
+      condition,
+      `$1<p:cond evt="end" delay="0"><p:tn val="${infiniteSourceId}"></p:tn></p:cond>$2`,
+    );
+    assert.notEqual(invalidTiming, timing);
+
+    const invalidFile = await validatePptx(
+      zipSync({ ...parts, [slidePath]: strToU8(invalidTiming) }),
+    );
+    assert.ok(
+      invalidFile.errors.some(({ code }) => code === "no-natural-completion"),
+    );
+  });
+
+  it("按实际计时字段限制范围并保留可精确表达的长重复", async () => {
+    const result = await build(
+      createElement(TimeProjectionDeck, {
+        outerDelay: 4_294_967_295,
+        innerDelay: 0,
+        duration: 2_500_000_000,
+        repeatCount: 4,
+      }),
+    );
+    const motion = result.report.slides[0]?.capabilities?.[
+      "motion"
+    ] as MotionObservation;
+    const effect = motion.steps[0]?.effects[0];
+    assert.deepEqual(
+      [effect?.startMs, effect?.endMs, effect?.durationMs, effect?.repeatCount],
+      [4_294_967_295, 14_294_967_295, 2_500_000_000, 4],
+    );
+
+    const file = await validatePptx(result.pptx);
+    assert.deepEqual(file.errors, []);
+    const slidePart = unzipSync(result.pptx)["ppt/slides/slide1.xml"];
+    assert.ok(slidePart);
+    const timing = strFromU8(slidePart);
+    assert.match(timing, /<p:cond delay="4294967295"><\/p:cond>/u);
+    assert.match(
+      timing,
+      /<p:cTn[^>]*presetID="8"[^>]*repeatCount="4000"[^>]*>[\s\S]*?<p:animRot from="21600000" to="0"><p:cBhvr><p:cTn[^>]*dur="2500000000"/u,
+    );
+
+    const maxPeriod = 8_589_934_590;
+    const breatheResult = await build(
+      createElement(
+        Deck,
+        { width: 120, height: 100 },
+        createElement(
+          Slide,
+          { slideId: "maximum-breathe-period" },
+          createElement(Shape, {
+            testId: "maximum-breathe-period",
+            x: 0,
+            y: 0,
+            width: 20,
+            height: 20,
+            fill: "#164E3D",
+            emphasis: breathe({
+              period: maxPeriod,
+              from: "#164E3D",
+              to: "#4ADE80",
+            }),
+          }),
+        ),
+      ),
+    );
+    const breatheMotion = breatheResult.report.slides[0]?.capabilities?.[
+      "motion"
+    ] as MotionObservation;
+    const breatheEffect = breatheMotion.steps[0]?.effects[0];
+    assert.deepEqual(
+      [breatheEffect?.durationMs, breatheEffect?.endMs],
+      [maxPeriod, maxPeriod],
+    );
+    const breatheFile = await validatePptx(breatheResult.pptx);
+    assert.deepEqual(breatheFile.errors, []);
+    const breatheSlide = unzipSync(breatheResult.pptx)["ppt/slides/slide1.xml"];
+    assert.ok(breatheSlide);
+    assert.match(
+      strFromU8(breatheSlide),
+      /<p:animClr clrSpc="rgb"><p:cBhvr><p:cTn[^>]*dur="4294967295"/u,
+    );
+  });
+
+  it("拒绝组合后不可编码的时间字段和失去整数精度的已知时刻", async () => {
+    const cases = [
+      {
+        outerDelay: 4_294_967_295,
+        innerDelay: 1,
+        duration: 1000,
+        repeatCount: 2,
+      },
+      {
+        outerDelay: Number.MAX_SAFE_INTEGER,
+        innerDelay: 0,
+        duration: 2000,
+        repeatCount: 2,
+      },
+    ] as const;
+
+    for (const props of cases) {
+      await assert.rejects(
+        build(createElement(TimeProjectionDeck, props)),
+        (error: unknown) => {
+          assert.ok(error instanceof BuildError);
+          assert.equal(error.diagnostics[0]?.code, "invalid-motion-time");
+          return true;
+        },
+      );
+    }
+  });
+
   it("允许顺序末项持续循环并拒绝被它阻挡的顺序后继", async () => {
     const result = await build(
       createElement(InfiniteSequenceTail, { blockAfter: false }),
@@ -525,6 +699,18 @@ describe("对象动画", () => {
   });
 
   it("拒绝有限重复的非法次数、效果与呼吸参数", async () => {
+    const breatheWithGranularity = {
+      period: 2000,
+      from: "#164E3D",
+      to: "#4ADE80",
+      by: "word" as const,
+    };
+    const breatheWithUnsupportedDuration = {
+      period: 2000,
+      from: "#164E3D",
+      to: "#4ADE80",
+      duration: 1000,
+    };
     const cases = [
       {
         testId: "repeat-fade",
@@ -564,6 +750,48 @@ describe("对象动画", () => {
         testId: "repeat-granularity",
         props: { emphasis: repeat(spin({ by: "letter" }), 2) },
         code: "unsupported-repeat-combination",
+      },
+      {
+        testId: "repeat-breathe-granularity",
+        props: {
+          fill: "#164E3D",
+          emphasis: repeat(breathe(breatheWithGranularity), 2),
+        },
+        code: "unsupported-repeat-combination",
+      },
+      {
+        testId: "breathe-unsupported-duration",
+        props: {
+          fill: "#164E3D",
+          emphasis: breathe(breatheWithUnsupportedDuration),
+        },
+        code: "unknown-parameter",
+      },
+      {
+        testId: "breathe-null-easing",
+        props: {
+          fill: "#164E3D",
+          emphasis: breathe({
+            period: 2000,
+            from: "#164E3D",
+            to: "#4ADE80",
+            easing: null,
+          } as never),
+        },
+        code: "invalid-easing",
+      },
+      {
+        testId: "breathe-false-easing",
+        props: {
+          fill: "#164E3D",
+          emphasis: breathe({
+            period: 2000,
+            from: "#164E3D",
+            to: "#4ADE80",
+            easing: false,
+          } as never),
+        },
+        code: "invalid-easing",
       },
       {
         testId: "odd-breathe-period",

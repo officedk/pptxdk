@@ -1,4 +1,5 @@
 import {
+  CapabilityError,
   xmlEscape,
   type CapabilityInput,
   type SlideCapabilityModule,
@@ -11,7 +12,7 @@ import type {
   MotionObservation,
   MotionStartDependency,
 } from "./motion-api.ts";
-import { motionScopeAnnotation } from "./motion-api.ts";
+import { maximumTimeNodeValue, motionScopeAnnotation } from "./motion-api.ts";
 import { compileMotionPlan, type MotionPlanStep } from "./motion-plan.ts";
 
 export {
@@ -65,6 +66,46 @@ export type {
 } from "./motion-api.ts";
 
 type XmlAttributes = Record<string, string | number | boolean | undefined>;
+
+function invalidMotionTime(field: string): never {
+  throw new CapabilityError(
+    "invalid-motion-time",
+    `${field} 必须是精确的非负整数毫秒，且实际写入时不得超过 ST_TLTime 范围`,
+  );
+}
+
+// 累计总时长可由 repeat 表达；只有实际投影到 ST_TLTime 的字段受其上限约束。
+function validateKnownTime(value: number | undefined, field: string): void {
+  if (value !== undefined && (!Number.isSafeInteger(value) || value < 0)) {
+    invalidMotionTime(field);
+  }
+}
+
+function timeNodeValue(value: number, field: string): number {
+  validateKnownTime(value, field);
+  if (value > maximumTimeNodeValue) invalidMotionTime(field);
+  return value;
+}
+
+function validateKnownMotionTimes(observation: MotionObservation): void {
+  for (const scope of observation.scopes ?? []) {
+    validateKnownTime(scope.delayMs, "编排作用域延迟");
+    validateKnownTime(scope.eachMs, "交错间隔");
+    validateKnownTime(scope.startMs, "编排作用域起点");
+    validateKnownTime(scope.endMs, "编排作用域完成时刻");
+    validateKnownTime(scope.startAfter?.offsetMs, "作用域完成依赖偏移");
+  }
+  for (const step of observation.steps) {
+    for (const effect of step.effects) {
+      validateKnownTime(effect.durationMs, "动画时长");
+      validateKnownTime(effect.delayMs, "动画延迟");
+      validateKnownTime(effect.intervalMs, "动画迭代间隔");
+      validateKnownTime(effect.startMs, "动画起点");
+      validateKnownTime(effect.endMs, "动画完成时刻");
+      validateKnownTime(effect.startAfter?.offsetMs, "动画完成依赖偏移");
+    }
+  }
+}
 
 function element(
   name: string,
@@ -142,6 +183,18 @@ function direction(effect: MotionEffectObservation): MotionDirection {
 function behaviorIds(effect: TimingEffect, ids: TimingIds): readonly string[] {
   const target = () => timingTarget(effect);
   const duration = effect.durationMs;
+  validateKnownTime(duration, "动画时长");
+  if (effect.preset === "breathe") {
+    timeNodeValue(Math.round(duration / 2), "呼吸半周期");
+  } else {
+    timeNodeValue(duration, "动画行为时长");
+  }
+  if (effect.repeatCount !== undefined && effect.repeatCount !== "forever") {
+    timeNodeValue(effect.repeatCount * 1000, "动画重复次数");
+  }
+  if (effect.intervalMs !== undefined) {
+    timeNodeValue(effect.intervalMs, "动画迭代间隔");
+  }
   const show = () =>
     element(
       "p:set",
@@ -319,6 +372,9 @@ function effectTree(
   buildGroupId?: number,
   dependencyId?: number,
 ): string {
+  if (effect.startAfter !== undefined) {
+    timeNodeValue(effect.startAfter.offsetMs, "完成依赖偏移");
+  }
   const preset = {
     fade: { id: 10, class: "entr" },
     wipe: { id: 22, class: "entr" },
@@ -488,7 +544,9 @@ function timingXml(steps: readonly MotionPlanStep[]): string {
           element(
             "p:stCondLst",
             undefined,
-            element("p:cond", { delay: group.start }),
+            element("p:cond", {
+              delay: timeNodeValue(group.start, "编排组起点延迟"),
+            }),
           ),
           element(
             "p:childTnLst",
@@ -515,7 +573,12 @@ function timingXml(steps: readonly MotionPlanStep[]): string {
               return effectTree(
                 effect,
                 nodeType,
-                effect.startMs === undefined ? 0 : effect.startMs - group.start,
+                effect.startAfter !== undefined || effect.startMs === undefined
+                  ? 0
+                  : timeNodeValue(
+                      effect.startMs - group.start,
+                      "动画组内起点延迟",
+                    ),
                 ids,
                 effectId,
                 buildGroupId,
@@ -652,6 +715,7 @@ export const motionCapability: SlideCapabilityModule = Object.freeze({
   ],
   compileSlide(_input: CapabilityInput, context) {
     const plan = compileMotionPlan(context.contributions);
+    validateKnownMotionTimes(plan.observation);
     const hasEffects = plan.steps.some((step) => step.effects.length > 0);
     if (!hasEffects) {
       return {

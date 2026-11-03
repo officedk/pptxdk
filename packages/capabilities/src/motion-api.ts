@@ -429,19 +429,46 @@ export function spin(
   ) as EmphasisEffect;
 }
 
+// 保留结构化 JavaScript 输入中的额外选项，交由正式效果校验诊断。
+const breatheUnknownParameters = Symbol("breathe unknown parameters");
+const breatheOptionNames = new Set([
+  "period",
+  "delay",
+  "from",
+  "to",
+  "easing",
+  "by",
+  "intervalMs",
+]);
+
 /** 声明 Shape 填充色暗→亮的半周期；原生 autoRev 完成反向，形成完整周期。 */
 export function breathe(options: BreatheOptions): BreatheEffect {
-  const easing = options.easing;
+  const { period, delay = 0, from, to } = options;
+  const optionRecord = options as unknown as Record<string, unknown>;
+  const by = optionRecord["by"];
+  const intervalMs = optionRecord["intervalMs"];
+  const unknownParameters = Object.keys(optionRecord).filter(
+    (key) => !breatheOptionNames.has(key),
+  );
+  const rawEasing: unknown = options.easing;
+  const easing = isRecord(rawEasing)
+    ? Object.freeze({ ...rawEasing })
+    : rawEasing;
   return Object.freeze({
     type: "effect",
     kind: "emphasis",
     preset: "breathe",
-    duration: options.period,
-    delay: options.delay === undefined ? 0 : options.delay,
-    fromColor: options.from,
-    toColor: options.to,
-    ...(easing === undefined ? {} : { easing: Object.freeze({ ...easing }) }),
-  }) as BreatheEffect;
+    duration: period,
+    delay,
+    fromColor: from,
+    toColor: to,
+    ...(easing === undefined ? {} : { easing: easing as Easing }),
+    ...(by === undefined ? {} : { by }),
+    ...(intervalMs === undefined ? {} : { intervalMs }),
+    ...(unknownParameters.length === 0
+      ? {}
+      : { [breatheUnknownParameters]: unknownParameters }),
+  }) as unknown as BreatheEffect;
 }
 
 /** 将受支持效果包装为指定总轮数；forever 只适用于 breathe。 */
@@ -614,7 +641,7 @@ const motionGranularities = new Set<MotionGranularity>([
 ]);
 
 // ST_TLTime 使用 unsignedInt；repeatCount 的单位是千分之一轮。
-const maximumTimeNodeValue = 4_294_967_295;
+export const maximumTimeNodeValue = 4_294_967_295;
 const maxRepeatCount = Math.floor(maximumTimeNodeValue / 1000);
 
 function normalizeColor(value: unknown, name: string): string {
@@ -668,6 +695,17 @@ function validatedEffect(
       expected === "entrance"
         ? "enter 必须是 fade()、wipe() 等入场效果声明"
         : "emphasis 必须是 spin() 等强调效果声明",
+    );
+  }
+  const unsupportedBreatheParameters = (
+    effectValue as {
+      readonly [breatheUnknownParameters]?: readonly string[];
+    }
+  )[breatheUnknownParameters];
+  if (unsupportedBreatheParameters?.length) {
+    return fail(
+      "unknown-parameter",
+      `breathe 声明含未实现参数 ${unsupportedBreatheParameters[0]}`,
     );
   }
   const unknown = Object.keys(effectValue).find(

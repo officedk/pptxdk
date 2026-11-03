@@ -2691,6 +2691,7 @@ function readSlideAnimations(
   const timeIds = new Set<number>();
   const effectTimeIds = new Set<number>();
   const effectTargets = new Map<number, number>();
+  const effectsWithoutNaturalCompletion = new Set<number>();
   for (const timeNode of descendantsByName(
     timing,
     presentationNamespace,
@@ -2712,6 +2713,9 @@ function readSlideAnimations(
     timeIds.add(id);
     if (attribute(timeNode, "presetID") !== "") {
       effectTimeIds.add(id);
+      if (attribute(timeNode, "repeatCount") === "indefinite") {
+        effectsWithoutNaturalCompletion.add(id);
+      }
       const targetIds = descendantsByName(
         timeNode,
         presentationNamespace,
@@ -3302,6 +3306,15 @@ function readSlideAnimations(
               part,
               "invalid-animation-end-dependency",
               "动画完成依赖必须引用另一个有效原生效果的 end 事件",
+            );
+            continue;
+          }
+          if (effectsWithoutNaturalCompletion.has(timingId)) {
+            issue(
+              errors,
+              part,
+              "no-natural-completion",
+              "动画完成依赖不能引用没有自然完成的无限效果",
             );
             continue;
           }

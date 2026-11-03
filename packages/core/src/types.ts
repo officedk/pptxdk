@@ -7,6 +7,9 @@ import type {
   ThemeScope,
   TextStyle,
   VisualStyle,
+  ColorValue,
+  LinearGradient,
+  RadialGradient,
 } from "#/theme.ts";
 
 export type {
@@ -40,6 +43,13 @@ export type {
 export const formatBaseline = "ECMA-376 5th edition Transitional" as const;
 
 export type Extension = "p14" | "p159";
+
+/** 页面背景可采用主题颜色、共享视觉 writer 支持的渐变，或正式图片资源输入。 */
+export type SlideBackground =
+  | ColorValue
+  | LinearGradient
+  | RadialGradient
+  | { readonly image: string | URL | Uint8Array };
 
 export type Target = {
   readonly name: string;
@@ -183,8 +193,21 @@ export type LayoutStyle = {
 export type BoxProps = ElementProps & {
   readonly testId?: string;
   readonly morphKey?: MorphKey;
+  readonly link?: LinkTarget;
   readonly style?: LayoutStyle & TextStyle & VisualStyle;
   readonly theme?: ThemeScope;
+};
+
+/** 对象点击后由 PowerPoint 解释的目标声明；内部目标按稳定页面标识解析。 */
+export type LinkTarget =
+  | { readonly slideId: string }
+  | { readonly url: string }
+  | { readonly action: "home" };
+
+/** 已由核心登记为关系或页面动作、供原生对象能力写入的链接属性。 */
+export type NativeLink = {
+  readonly relationshipId?: string;
+  readonly action?: string;
 };
 
 export type ObjectObservation = {
@@ -195,6 +218,7 @@ export type ObjectObservation = {
   readonly geometry?: string;
   readonly box?: GeometryBox;
   readonly text?: string;
+  readonly link?: string;
   readonly table?: NativeTableObservation;
   readonly members?: readonly ObjectObservation[];
 };
@@ -228,6 +252,9 @@ export type NativeTableObservation = {
 export type SlideObservation = {
   readonly id: string;
   readonly index: number;
+  readonly section?: string;
+  readonly hidden?: boolean;
+  readonly advanceAfter?: number;
   readonly objects: readonly ObjectObservation[];
   readonly layouts?: readonly LayoutObservation[];
   readonly capabilities?: Readonly<Record<string, unknown>>;
@@ -235,6 +262,7 @@ export type SlideObservation = {
 
 export type BuildReport = {
   readonly evidence: "generation";
+  readonly title?: string;
   readonly target: {
     readonly name: string;
     readonly format: typeof formatBaseline;
@@ -317,6 +345,12 @@ export type CapabilityContext = {
   readonly theme: ThemeContext;
   /** 本次构建选项；能力模块自行解释其负责的选项。 */
   readonly options: BuildOptions;
+  /** 当前页面在文稿中的实际序号，供共享文字服务写出页码字段。 */
+  readonly slideNumber: number;
+  /** 为本次文稿中的原生文字字段分配稳定且互不重复的标识。 */
+  readonly createTextFieldId: () => string;
+  /** 由核心解析并登记的对象点击关系，能力写入所属 p:cNvPr。 */
+  readonly nativeLink?: NativeLink;
   readonly layoutBox?: GeometryBox;
   /** 将显式连续性句柄转换成 OOXML 对象名称；未声明连续性的对象不带此值。 */
   readonly morphName?: string;
@@ -362,6 +396,8 @@ export type CapabilityLayoutRequest = {
   readonly widthMode?: "at-most" | "exactly";
   /** 度量与对象写出共享的主题、局部作用域和容器文字默认值。 */
   readonly theme: ThemeContext;
+  /** 当前页面在文稿中的实际序号，供共享文字服务度量原生页码字段。 */
+  readonly slideNumber: number;
 };
 
 /** 能力模块可提供的固有尺寸及主轴 min-content 尺寸，均以像素表示。 */
@@ -426,11 +462,13 @@ export type TransparentCapabilityModule = {
   ): readonly CapabilityAnnotation[];
 };
 
-export type SlideCapabilitySlot = "transition" | "timing";
+export type SlideCapabilitySlot = "background" | "transition" | "timing";
 
 export type SlideCapabilityContext = {
   readonly path: string;
   readonly contributions: readonly CapabilityContribution[];
+  readonly theme: ThemeContext;
+  readonly registerResource: (resource: CapabilityResource) => string;
 };
 
 export type SlideCapabilityOutput = {
@@ -443,6 +481,8 @@ export type SlideCapabilityOutput = {
 export type SlideCapabilityModule = {
   /** 该模块负责的 Slide 属性名。 */
   readonly slideProp: string;
+  /** 同一模块共同消费的页面属性，例如转场与自动翻页时刻。 */
+  readonly slideProps?: readonly string[];
   /** 按 PresentationML 的固定子元素顺序写入页面。 */
   readonly slot: SlideCapabilitySlot;
   /** 无论 Slide 是否提供对应属性，均运行一次。 */
@@ -480,6 +520,7 @@ export type DeckProps = ElementProps & {
   readonly height?: number;
   readonly theme?: ThemeInput;
   readonly style?: TextStyle;
+  readonly title?: string;
 };
 
 export type SlideProps = ElementProps & {
@@ -487,4 +528,12 @@ export type SlideProps = ElementProps & {
   readonly transition?: unknown;
   readonly theme?: ThemeScope;
   readonly style?: TextStyle & Omit<LayoutStyle, "zIndex">;
+  readonly hidden?: boolean;
+  readonly advanceAfter?: number;
+  readonly background?: SlideBackground;
+};
+
+/** 将若干页面组织为 PowerPoint 中可折叠的平面分节。 */
+export type SectionProps = ElementProps & {
+  readonly name: string;
 };

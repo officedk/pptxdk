@@ -359,7 +359,7 @@ function geometryXml(
   };
 }
 
-function fillXml(
+export function fillXml(
   theme: ThemeContext,
   style: VisualStyleRecord,
   explicitFill: ColorValue | undefined,

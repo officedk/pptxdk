@@ -1,4 +1,4 @@
-import type { LayoutStyle, VisualStyle } from "@react-pptx/core";
+import type { LayoutStyle, LinkTarget, VisualStyle } from "@react-pptx/core";
 import { createElement, type ReactNode } from "react";
 
 import type { MorphProps } from "./morph-api.ts";
@@ -9,6 +9,7 @@ export type TextProps = MotionProps &
   MorphProps & {
     readonly testId?: string;
     readonly name?: string;
+    readonly link?: LinkTarget;
     readonly x?: number;
     readonly y?: number;
     readonly width?: number;
@@ -27,6 +28,10 @@ export type SpanProps = {
   readonly children?: ReactNode;
 };
 
+export type SlideNumberProps = {
+  readonly style?: Omit<TextStyle, "verticalAlign" | "lineHeight" | "textWrap">;
+};
+
 /** 原生文本框；数值高度保留固定区域，auto 高度使用明确字体度量。 */
 export function Text(props: TextProps): ReactNode {
   return motionElement("rp:text", props);
@@ -40,6 +45,11 @@ export function P(props: ParagraphProps): ReactNode {
 /** 在段落中声明单独样式的文字片段。 */
 export function Span(props: SpanProps): ReactNode {
   return createElement("rp:span", props, props.children);
+}
+
+/** 写出由演示文稿应用解析的原生页码字段。 */
+export function SlideNumber(props: SlideNumberProps): ReactNode {
+  return createElement("rp:slide-number", props);
 }
 
 /** Shape 的纯文字样式类型；它不依赖文本框组件能力。 */

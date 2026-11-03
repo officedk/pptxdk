@@ -5,9 +5,12 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+import type { ObjectCapabilityModule } from "@react-pptx/core";
 import {
   build,
   BuildError,
+  boxCapability,
+  Box,
   Cell,
   Chart,
   Deck,
@@ -18,6 +21,7 @@ import {
   Shape,
   shapeCapability,
   Slide,
+  SlideNumber,
   Span,
   Table,
   Text,
@@ -763,6 +767,348 @@ describe("公开构建入口", () => {
       assert.ok(subset.hasGlyphForCodePoint("A".codePointAt(0)!));
       assert.ok(subset.hasGlyphForCodePoint("B".codePointAt(0)!));
     }
+  });
+
+  it("Shape 正文经共享文字服务度量、写出页码字段并登记实际字符", async () => {
+    const pageNumberClaims: string[] = [];
+    const shapeModule = shapeCapability as ObjectCapabilityModule;
+    const observedShapeCapability: ObjectCapabilityModule = {
+      ...shapeModule,
+      compile(input, context) {
+        const output = shapeModule.compile(input, context);
+        pageNumberClaims.push(
+          ...(output.resourceClaims ?? []).flatMap(({ characters }) =>
+            characters === undefined ? [] : [characters],
+          ),
+        );
+        return output;
+      },
+    };
+    const shapeBuild = createBuilder([boxCapability, observedShapeCapability]);
+    const measurementFont = font("Jost", [{ weight: 400, data: jostBook }], {
+      substitute: true,
+    });
+    const pageShapes = (pageNumber: number) =>
+      createElement(
+        Box,
+        {
+          style: {
+            display: "flex",
+            alignItems: "flex-start",
+            width: 250,
+            height: 60,
+          },
+        },
+        createElement(
+          Shape,
+          {
+            testId: `field-shape-${pageNumber}`,
+            textStyle: {
+              fontFamily: measurementFont,
+              fontSize: 20,
+              lineHeight: 28,
+            },
+            style: { width: "auto", height: "auto" },
+          },
+          createElement(
+            P,
+            { style: { lineHeight: 28 } },
+            "Page ",
+            createElement(
+              Span,
+              { style: { color: "#336699" } },
+              createElement(SlideNumber, {}),
+            ),
+          ),
+        ),
+        createElement(Shape, {
+          testId: `literal-shape-${pageNumber}`,
+          text: `Page ${pageNumber}`,
+          textStyle: {
+            fontFamily: measurementFont,
+            fontSize: 20,
+            lineHeight: 28,
+          },
+          style: { width: "auto", height: "auto" },
+        }),
+      );
+    const result = await shapeBuild(
+      createElement(
+        Deck,
+        { width: 320, height: 100 },
+        ...Array.from({ length: 10 }, (_, index) => {
+          const pageNumber = index + 1;
+          return createElement(
+            Slide,
+            { key: pageNumber, slideId: `shape-field-${pageNumber}` },
+            pageNumber === 1 || pageNumber === 10
+              ? pageShapes(pageNumber)
+              : null,
+          );
+        }),
+      ),
+    );
+
+    const fieldShape = (pageNumber: number) =>
+      result.report.slides[pageNumber - 1]?.objects.find(
+        ({ testId }) => testId === `field-shape-${pageNumber}`,
+      );
+    const literalShape = (pageNumber: number) =>
+      result.report.slides[pageNumber - 1]?.objects.find(
+        ({ testId }) => testId === `literal-shape-${pageNumber}`,
+      );
+    assert.equal(fieldShape(1)?.text, "Page 1");
+    assert.equal(fieldShape(10)?.text, "Page 10");
+    assert.deepEqual(
+      [fieldShape(1)?.box?.width, fieldShape(1)?.box?.height],
+      [literalShape(1)?.box?.width, literalShape(1)?.box?.height],
+    );
+    assert.deepEqual(
+      [fieldShape(10)?.box?.width, fieldShape(10)?.box?.height],
+      [literalShape(10)?.box?.width, literalShape(10)?.box?.height],
+    );
+    assert.ok(
+      (fieldShape(10)?.box?.width ?? 0) > (fieldShape(1)?.box?.width ?? 0),
+    );
+    assert.ok(
+      pageNumberClaims.some(
+        (characters) =>
+          characters.includes("Page 1") && characters.includes("0123456789"),
+      ),
+    );
+    assert.ok(
+      pageNumberClaims.some(
+        (characters) =>
+          characters.includes("Page 10") && characters.includes("0123456789"),
+      ),
+    );
+
+    const file = await validatePptx(result.pptx);
+    assert.deepEqual(file.errors, []);
+    assert.deepEqual(
+      [1, 10].map((pageNumber) => {
+        const field = file.slides[pageNumber - 1]?.objects[0]?.text;
+        const paragraph = field?.paragraphs[0];
+        const run = paragraph?.runs.at(-1);
+        return [
+          field?.text,
+          paragraph?.lineSpacingPoints,
+          run?.text,
+          run?.field,
+          run?.color,
+        ];
+      }),
+      [
+        ["Page 1", 21, "1", "slidenum", "#336699"],
+        ["Page 10", 21, "10", "slidenum", "#336699"],
+      ],
+    );
+    for (const pageNumber of [1, 10]) {
+      const xml = strFromU8(
+        unzipSync(result.pptx)[`ppt/slides/slide${pageNumber}.xml`]!,
+      );
+      assert.match(xml, /<a:fld id="\{[0-9A-F-]+\}" type="slidenum">/u);
+    }
+
+    await assert.rejects(
+      shapeBuild(
+        deck(
+          createElement(
+            Shape,
+            {
+              testId: "conflicting-shape-body",
+              x: 10,
+              y: 10,
+              width: 100,
+              height: 40,
+              text: "literal",
+            },
+            createElement(SlideNumber, {}),
+          ),
+        ),
+      ),
+      (error: unknown) =>
+        error instanceof BuildError &&
+        error.diagnostics[0]?.code === "conflicting-text-content" &&
+        error.diagnostics[0]?.path ===
+          "deck/slide[cover]/shape[conflicting-shape-body]",
+    );
+  });
+
+  it("Text、Shape、Table 页码字段进入同一 Chart 字符子集", async () => {
+    const pageFont = font("Jost*", [{ weight: 400, data: jostBook }]);
+    const textFields = (count: number) =>
+      Array.from({ length: count }, (_, index) =>
+        createElement(SlideNumber, { key: index }),
+      );
+    const result = await build(
+      createElement(
+        Deck,
+        { width: 320, height: 240 },
+        createElement(
+          Slide,
+          { slideId: "field-first" },
+          createElement(
+            Text,
+            {
+              testId: "text-first",
+              x: 0,
+              y: 0,
+              width: 100,
+              height: 30,
+              style: { fontFamily: pageFont },
+            },
+            ...textFields(3),
+          ),
+          createElement(
+            Shape,
+            {
+              testId: "shape-first",
+              x: 0,
+              y: 40,
+              width: 100,
+              height: 30,
+              textStyle: { fontFamily: pageFont },
+            },
+            createElement(SlideNumber, {}),
+          ),
+          createElement(
+            Table,
+            {
+              testId: "table-first",
+              x: 0,
+              y: 80,
+              columns: [100],
+              style: { fontFamily: pageFont },
+            },
+            createElement(
+              Row,
+              { style: { height: 30 } },
+              createElement(Cell, {}, createElement(SlideNumber, {})),
+            ),
+          ),
+        ),
+        createElement(
+          Slide,
+          { slideId: "field-second" },
+          createElement(
+            Text,
+            {
+              testId: "text-second",
+              x: 0,
+              y: 0,
+              width: 100,
+              height: 30,
+              style: { fontFamily: pageFont },
+            },
+            ...textFields(2),
+          ),
+          createElement(
+            Shape,
+            {
+              testId: "shape-second",
+              x: 0,
+              y: 40,
+              width: 100,
+              height: 30,
+              textStyle: { fontFamily: pageFont },
+            },
+            createElement(SlideNumber, {}),
+          ),
+          createElement(
+            Table,
+            {
+              testId: "table-second",
+              x: 0,
+              y: 80,
+              columns: [50, 50],
+              style: { fontFamily: pageFont },
+            },
+            createElement(
+              Row,
+              { style: { height: 30 } },
+              createElement(Cell, {}, createElement(SlideNumber, {})),
+              createElement(Cell, {}, createElement(SlideNumber, {})),
+            ),
+          ),
+          createElement(Chart, {
+            testId: "page-field-chart",
+            kind: "pie",
+            x: 110,
+            y: 0,
+            width: 200,
+            height: 220,
+            style: { fontFamily: pageFont },
+            dataLabels: {
+              value: true,
+              numberFormat: '0;0;0;"元"@',
+            },
+            data: {
+              categories: ["A"],
+              series: [{ name: "B", values: [12] }],
+            },
+          }),
+        ),
+      ),
+      { embedFonts: "subset" },
+    );
+    const file = await validatePptx(result.pptx);
+    assert.deepEqual(file.errors, []);
+
+    const parts = unzipSync(result.pptx);
+    const subset = parsedFont(
+      embeddedFont(
+        parts,
+        strFromU8(parts["ppt/presentation.xml"]!),
+        "Jost*",
+        "regular",
+      ),
+    );
+    assert.ok(subset.numGlyphs < parsedFont(jostBook).numGlyphs);
+    for (const character of "0123456789") {
+      assert.ok(subset.hasGlyphForCodePoint(character.codePointAt(0)!));
+    }
+    assert.equal(subset.hasGlyphForCodePoint("元".codePointAt(0)!), false);
+
+    const allIds = file.slides.flatMap((slide, index) => {
+      const xml = strFromU8(
+        unzipSync(result.pptx)[`ppt/slides/slide${index + 1}.xml`]!,
+      );
+      return [...xml.matchAll(/<a:fld id="([^"]+)" type="slidenum"/gu)].map(
+        ([, id]) => id!,
+      );
+    });
+    assert.equal(allIds.length, 10);
+    assert.equal(new Set(allIds).size, allIds.length);
+    assert.ok(
+      allIds.every((id) =>
+        /^\{[0-9A-F]{8}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{12}\}$/u.test(
+          id,
+        ),
+      ),
+    );
+
+    const fieldsInObject = (
+      object: (typeof file.slides)[number]["objects"][number],
+    ) => [
+      ...(object.text?.paragraphs.flatMap((paragraph) =>
+        paragraph.runs
+          .filter(({ field }) => field === "slidenum")
+          .map(({ text }) => text),
+      ) ?? []),
+      ...(object.table?.cellTexts.flatMap(
+        (cell) =>
+          cell.text?.paragraphs.flatMap((paragraph) =>
+            paragraph.runs
+              .filter(({ field }) => field === "slidenum")
+              .map(({ text }) => text),
+          ) ?? [],
+      ) ?? []),
+    ];
+    assert.deepEqual(
+      file.slides.map((slide) => slide.objects.flatMap(fieldsInObject)),
+      [Array(5).fill("1"), Array(5).fill("2")],
+    );
   });
 
   it("内容定高文字缺少度量字体时以构建错误拒绝", async () => {

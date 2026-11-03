@@ -982,6 +982,7 @@ function objectModule(
 export class LayoutPass {
   readonly #modules: ReadonlyMap<string, RegisteredCapabilityModule>;
   readonly #dimensions: Dimensions;
+  readonly #slideNumber: number;
   readonly #config = Yoga.Config.create();
   readonly #boxes = new WeakMap<CapabilityElement, GeometryBox>();
   readonly #themes = new WeakMap<CapabilityElement, ThemeContext>();
@@ -992,9 +993,11 @@ export class LayoutPass {
   constructor(
     modules: ReadonlyMap<string, RegisteredCapabilityModule>,
     dimensions: Dimensions,
+    slideNumber = 1,
   ) {
     this.#modules = modules;
     this.#dimensions = dimensions;
+    this.#slideNumber = slideNumber;
     this.#config.setPointScaleFactor(0);
   }
 
@@ -1371,9 +1374,14 @@ export class LayoutPass {
   ): LayoutNode {
     const unknown = Object.keys(input.props).find(
       (key) =>
-        !["testId", "style", "theme", "morphKey", "__motionContext"].includes(
-          key,
-        ),
+        ![
+          "testId",
+          "style",
+          "theme",
+          "morphKey",
+          "link",
+          "__motionContext",
+        ].includes(key),
     );
     if (unknown !== undefined) {
       fail(path, "unknown-parameter", `Box 含未实现参数 ${unknown}`);
@@ -2228,6 +2236,7 @@ export class LayoutPass {
       return node.module.measureLayout(node.element, {
         ...request,
         theme: node.theme,
+        slideNumber: this.#slideNumber,
       });
     } catch (error) {
       if (error instanceof BuildError) throw error;

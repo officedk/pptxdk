@@ -5,6 +5,7 @@ import {
   type ColorValue,
   type ThemeContext,
 } from "@react-pptx/core";
+import type { NativeLink } from "@react-pptx/core";
 import { strToU8, zipSync } from "fflate";
 
 import type {
@@ -589,7 +590,14 @@ export function chartFrameXml(
     readonly height: number;
   },
   relationshipId: string,
+  link: NativeLink | undefined,
 ): string {
+  const linkAttributes = {
+    ...(link?.relationshipId === undefined
+      ? {}
+      : { "r:id": link.relationshipId }),
+    ...(link?.action === undefined ? {} : { action: link.action }),
+  };
   return serializeFragment(
     el(
       "p:graphicFrame",
@@ -597,7 +605,11 @@ export function chartFrameXml(
       el(
         "p:nvGraphicFramePr",
         null,
-        el("p:cNvPr", { id, name }),
+        el(
+          "p:cNvPr",
+          { id, name },
+          link === undefined ? undefined : el("a:hlinkClick", linkAttributes),
+        ),
         el("p:cNvGraphicFramePr"),
         el("p:nvPr"),
       ),

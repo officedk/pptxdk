@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+
 import { defaultTheme, isFont, nativeColorSlots, type Theme } from "#/theme.ts";
 
 export function pxToEmu(value: number): number {
@@ -53,13 +55,18 @@ const emptyShapeTree =
 const minimumSlideLayoutId = 2_147_483_648;
 
 function relationships(
-  entries: readonly { id: string; type: string; target: string }[],
+  entries: readonly {
+    id: string;
+    type: string;
+    target: string;
+    targetMode?: "External";
+  }[],
 ): string {
   return xmlDocument(
     `<Relationships xmlns="${namespaces.relationships}">${entries
       .map(
-        ({ id, type, target }) =>
-          `<Relationship Id="${xmlEscape(id)}" Type="${xmlEscape(type)}" Target="${xmlEscape(target)}"/>`,
+        ({ id, type, target, targetMode }) =>
+          `<Relationship Id="${xmlEscape(id)}" Type="${xmlEscape(type)}" Target="${xmlEscape(target)}"${targetMode === undefined ? "" : ` TargetMode="${xmlEscape(targetMode)}"`}/>`,
       )
       .join("")}</Relationships>`,
   );
@@ -76,6 +83,7 @@ export type PptxRelationship = {
   readonly id: string;
   readonly type: string;
   readonly target: string;
+  readonly targetMode?: "External";
 };
 
 export type PptxPackagePart = {
@@ -93,6 +101,7 @@ function contentTypes(
   slideCount: number,
   resources: readonly PptxPackageResource[],
   packageParts: readonly PptxPackagePart[],
+  hasCoreProperties: boolean,
 ): string {
   const overrides = [
     [
@@ -115,6 +124,14 @@ function contentTypes(
       `/ppt/slides/slide${index + 1}.xml`,
       "application/vnd.openxmlformats-officedocument.presentationml.slide+xml",
     ]),
+    ...(hasCoreProperties
+      ? [
+          [
+            "/docProps/core.xml",
+            "application/vnd.openxmlformats-package.core-properties+xml",
+          ],
+        ]
+      : []),
     ...packageParts.map((part) => [`/${part.path}`, part.contentType]),
   ];
   const defaults = new Map<string, string>([
@@ -183,9 +200,47 @@ function layout(): string {
   );
 }
 
-function slide(slideId: string, shapeXml: string, slideXml: string): string {
+function slide(
+  slideId: string,
+  shapeXml: string,
+  slideXml: string,
+  backgroundXml: string,
+  hidden: boolean,
+): string {
   return xmlDocument(
-    `<p:sld xmlns:a="${namespaces.a}" xmlns:r="${namespaces.r}" xmlns:p="${namespaces.p}"><p:cSld name="${xmlEscape(slideId)}"><p:spTree>${emptyShapeTree}${shapeXml}</p:spTree></p:cSld><p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr>${slideXml}</p:sld>`,
+    `<p:sld xmlns:a="${namespaces.a}" xmlns:r="${namespaces.r}" xmlns:p="${namespaces.p}"${hidden ? ' show="false"' : ""}><p:cSld name="${xmlEscape(slideId)}">${backgroundXml}<p:spTree>${emptyShapeTree}${shapeXml}</p:spTree></p:cSld><p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr>${slideXml}</p:sld>`,
+  );
+}
+
+function sectionId(index: number, name: string): string {
+  const hex = createHash("sha1")
+    .update(`section:${index}:${name}`)
+    .digest("hex")
+    .toUpperCase();
+  return `{${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20, 32)}}`;
+}
+
+function sectionListXml(
+  sections: readonly {
+    readonly name: string;
+    readonly slideIndexes: readonly number[];
+  }[],
+): string {
+  if (sections.length === 0) return "";
+  const entries = sections
+    .map(
+      ({ name, slideIndexes }, index) =>
+        `<p14:section name="${xmlEscape(name)}" id="${sectionId(index, name)}"><p14:sldIdLst>${slideIndexes
+          .map((slideIndex) => `<p14:sldId id="${255 + slideIndex}"/>`)
+          .join("")}</p14:sldIdLst></p14:section>`,
+    )
+    .join("");
+  return `<p:extLst><p:ext uri="{521415D9-36F7-43E2-AB2F-B90AF26B5E84}"><p14:sectionLst xmlns:p14="http://schemas.microsoft.com/office/powerpoint/2010/main">${entries}</p14:sectionLst></p:ext></p:extLst>`;
+}
+
+function coreProperties(title: string): string {
+  return xmlDocument(
+    `<cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcterms="http://purl.org/dc/terms/" xmlns:dcmitype="http://purl.org/dc/dcmitype/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><dc:title>${xmlEscape(title)}</dc:title></cp:coreProperties>`,
   );
 }
 
@@ -193,7 +248,9 @@ export function pptxParts(
   size: { readonly width: number; readonly height: number },
   slides: readonly {
     readonly id: string;
+    readonly hidden?: boolean;
     readonly shapeXml: string;
+    readonly backgroundXml?: string;
     readonly slideXml?: string;
     readonly relationships: readonly PptxRelationship[];
   }[],
@@ -203,6 +260,11 @@ export function pptxParts(
   presentationContent = "",
   presentationAttributes: readonly { name: string; value: string }[] = [],
   themeValue: Theme = defaultTheme,
+  title?: string,
+  sections: readonly {
+    readonly name: string;
+    readonly slideIndexes: readonly number[];
+  }[] = [],
 ): Record<string, string | Uint8Array> {
   const slideRelationships = slides.map((_, index) => ({
     id: `rId${index + 2}`,
@@ -220,16 +282,30 @@ export function pptxParts(
       ({ sourcePath }) => sourcePath === "ppt/presentation.xml",
     )?.relationships ?? [];
   const presentation = xmlDocument(
-    `<p:presentation xmlns:a="${namespaces.a}" xmlns:r="${namespaces.r}" xmlns:p="${namespaces.p}"${presentationAttributeXml}><p:sldMasterIdLst><p:sldMasterId id="2147483648" r:id="rId1"/></p:sldMasterIdLst><p:sldIdLst>${slideIds}</p:sldIdLst><p:sldSz cx="${pxToEmu(size.width)}" cy="${pxToEmu(size.height)}"/><p:notesSz cx="6858000" cy="9144000"/>${presentationContent}</p:presentation>`,
+    `<p:presentation xmlns:a="${namespaces.a}" xmlns:r="${namespaces.r}" xmlns:p="${namespaces.p}"${presentationAttributeXml}><p:sldMasterIdLst><p:sldMasterId id="2147483648" r:id="rId1"/></p:sldMasterIdLst><p:sldIdLst>${slideIds}</p:sldIdLst><p:sldSz cx="${pxToEmu(size.width)}" cy="${pxToEmu(size.height)}"/><p:notesSz cx="6858000" cy="9144000"/>${presentationContent}${sectionListXml(sections)}</p:presentation>`,
   );
   const parts: Record<string, string | Uint8Array> = {
-    "[Content_Types].xml": contentTypes(slides.length, resources, packageParts),
+    "[Content_Types].xml": contentTypes(
+      slides.length,
+      resources,
+      packageParts,
+      title !== undefined,
+    ),
     "_rels/.rels": relationships([
       {
         id: "rId1",
         type: `${namespaces.r}/officeDocument`,
         target: "ppt/presentation.xml",
       },
+      ...(title === undefined
+        ? []
+        : [
+            {
+              id: "rId2",
+              type: "http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties",
+              target: "docProps/core.xml",
+            },
+          ]),
     ]),
     "ppt/presentation.xml": presentation,
     "ppt/_rels/presentation.xml.rels": relationships([
@@ -264,11 +340,13 @@ export function pptxParts(
     ]),
     "ppt/theme/theme1.xml": themePart(themeValue),
   };
-  slides.forEach(({ shapeXml, slideXml }, index) => {
+  slides.forEach(({ shapeXml, slideXml, backgroundXml, hidden }, index) => {
     parts[`ppt/slides/slide${index + 1}.xml`] = slide(
       slides[index]!.id,
       shapeXml,
       slideXml ?? "",
+      backgroundXml ?? "",
+      hidden ?? false,
     );
     parts[`ppt/slides/_rels/slide${index + 1}.xml.rels`] = relationships([
       {
@@ -279,6 +357,7 @@ export function pptxParts(
       ...slides[index]!.relationships,
     ]);
   });
+  if (title !== undefined) parts["docProps/core.xml"] = coreProperties(title);
   for (const resource of resources) {
     parts[`ppt/media/${resource.name}`] = resource.bytes;
   }

@@ -3649,6 +3649,149 @@ describe("对象动画", () => {
     );
   });
 
+  it("以实际 EMU 几何读取小数布局的 SpinIn 与 Spin", async () => {
+    const result = await build(
+      createElement(
+        Deck,
+        { width: 853, height: 617 },
+        ...(["fractional-spin-in", "fractional-spin"] as const).map((slideId) =>
+          createElement(
+            Slide,
+            { key: slideId, slideId },
+            createElement(Text, {
+              testId: slideId,
+              x: 71.12345,
+              y: 83.12345,
+              width: 317.12345,
+              height: 127.12345,
+              ...(slideId === "fractional-spin-in"
+                ? { enter: spinIn({ duration: 1234 }) }
+                : { emphasis: spin({ duration: 1234, from: 137.25 }) }),
+              children: [
+                createElement(P, { key: "first" }, "First paragraph"),
+                createElement(P, { key: "second" }, "Second paragraph"),
+              ],
+            }),
+          ),
+        ),
+      ),
+    );
+    const parts = unzipSync(result.pptx);
+    const firstSlideXml = strFromU8(parts["ppt/slides/slide1.xml"]!);
+    const secondSlideXml = strFromU8(parts["ppt/slides/slide2.xml"]!);
+    assert.ok(firstSlideXml.includes('<a:off x="677451" y="791751"/>'));
+    assert.ok(firstSlideXml.includes('<a:ext cx="3020601" cy="1210851"/>'));
+    assert.ok(secondSlideXml.includes('<a:off x="677451" y="791751"/>'));
+    assert.ok(secondSlideXml.includes('<a:ext cx="3020601" cy="1210851"/>'));
+
+    const file = await validatePptx(result.pptx);
+    assert.deepEqual(file.errors, []);
+    assert.ok(
+      file.slides[0]?.animations?.some(({ effects }) =>
+        effects.some(({ preset }) => preset === "spinIn"),
+      ),
+    );
+    assert.ok(
+      file.slides[1]?.animations?.some(({ effects }) =>
+        effects.some(({ preset }) => preset === "spin"),
+      ),
+    );
+
+    const spinInEffect = file.slides[0]?.animations
+      ?.flatMap(({ effects }) => effects)
+      .find(({ preset }) => preset === "spinIn");
+    const positionFormula = spinInEffect?.nativeBehaviors?.find(
+      ({ attributeNames }) => attributeNames[0] === "ppt_x",
+    )?.keyframes?.[0]?.formula;
+    assert.ok(positionFormula !== undefined);
+    const centerX = /^(-?(?:\d+(?:\.\d*)?|\.\d+))\+\$\*/u.exec(
+      positionFormula,
+    )?.[1];
+    assert.ok(centerX !== undefined);
+    const presentationXml = strFromU8(parts["ppt/presentation.xml"]!);
+    const pageWidthEmu = Number(
+      /<p:sldSz cx="(\d+)"/u.exec(presentationXml)?.[1],
+    );
+    assert.ok(Number.isSafeInteger(pageWidthEmu) && pageWidthEmu > 0);
+    const wrongCenterX = String(Number(centerX) + 1 / pageWidthEmu);
+    const wrongCenterSlide = firstSlideXml.replace(
+      /fmla="([^"]+)"/gu,
+      (attribute, formula: string) =>
+        formula.includes("cos(") && formula.includes("sin(")
+          ? `fmla="${formula.replaceAll(centerX, wrongCenterX)}"`
+          : attribute,
+    );
+    assert.notEqual(wrongCenterSlide, firstSlideXml);
+    const wrongCenterReadback = await validatePptx(
+      zipSync({
+        ...parts,
+        "ppt/slides/slide1.xml": strToU8(wrongCenterSlide),
+      }),
+    );
+    assert.ok(
+      wrongCenterReadback.errors.some(
+        ({ code }) => code === "invalid-animation-progress-formula",
+      ),
+      "共同中心偏离实际几何 1 EMU 时仍须拒绝",
+    );
+  });
+
+  it("在坐标、尺寸和页面尺寸跨越 EMU 舍入边界时读回共同中心", async () => {
+    const cases = [
+      {
+        testId: "rounding-down",
+        x: (1_000_000 + 0.499) / 9525,
+        y: (2_000_000 + 0.501) / 9525,
+        width: (3_000_000 + 0.499) / 9525,
+        height: (1_000_000 + 0.501) / 9525,
+      },
+      {
+        testId: "rounding-up",
+        x: (1_500_000 + 0.501) / 9525,
+        y: (2_500_000 + 0.499) / 9525,
+        width: (2_000_000 + 0.501) / 9525,
+        height: (1_500_000 + 0.499) / 9525,
+      },
+    ] as const;
+    const result = await build(
+      createElement(
+        Deck,
+        {
+          width: (8_000_000 + 0.499) / 9525,
+          height: (5_000_000 + 0.501) / 9525,
+        },
+        createElement(
+          Slide,
+          { slideId: "emu-rounding-boundaries" },
+          ...cases.map(({ testId, ...box }) =>
+            createElement(Text, {
+              key: testId,
+              testId,
+              ...box,
+              emphasis: spin({ duration: 1234, from: 137.25 }),
+              children: createElement(P, {}, testId),
+            }),
+          ),
+        ),
+      ),
+    );
+    const parts = unzipSync(result.pptx);
+    const presentationXml = strFromU8(parts["ppt/presentation.xml"]!);
+    const slideXml = strFromU8(parts["ppt/slides/slide1.xml"]!);
+    assert.ok(presentationXml.includes('<p:sldSz cx="8000000" cy="5000001"/>'));
+    assert.ok(slideXml.includes('<a:off x="1000000" y="2000001"/>'));
+    assert.ok(slideXml.includes('<a:ext cx="3000000" cy="1000001"/>'));
+    assert.ok(slideXml.includes('<a:off x="1500001" y="2500000"/>'));
+    assert.ok(slideXml.includes('<a:ext cx="2000001" cy="1500000"/>'));
+
+    const file = await validatePptx(result.pptx);
+    assert.deepEqual(file.errors, []);
+    assert.equal(
+      file.slides[0]?.animations?.flatMap(({ effects }) => effects).length,
+      2,
+    );
+  });
+
   it("共同中心 SpinIn 与 Group Spin 读回完整公式和数值进度", async () => {
     const result = await build(
       createElement(

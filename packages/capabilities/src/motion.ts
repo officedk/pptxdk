@@ -1,5 +1,6 @@
 import {
   CapabilityError,
+  pxToEmu,
   xmlEscape,
   type CapabilityInput,
   type GeometryBox,
@@ -296,6 +297,22 @@ function geometryCenter(
   };
 }
 
+/** 共同旋转中心按写入 xfrm 与 sldSz 的整数 EMU 计算，避免读回两种舍入结果。 */
+function serializedGeometryCenter(
+  box: GeometryBox,
+  dimensions: { readonly width: number; readonly height: number },
+): { readonly x: number; readonly y: number } {
+  const widthEmu = pxToEmu(dimensions.width);
+  const heightEmu = pxToEmu(dimensions.height);
+  if (widthEmu <= 0 || heightEmu <= 0) {
+    throw new CapabilityError("invalid-motion-page-size", "页面尺寸必须大于 0");
+  }
+  return {
+    x: (pxToEmu(box.x) + pxToEmu(box.width) / 2) / widthEmu,
+    y: (pxToEmu(box.y) + pxToEmu(box.height) / 2) / heightEmu,
+  };
+}
+
 function targetBox(effect: TimingEffect, purpose: string): GeometryBox {
   if (effect.targetBox === undefined) {
     throw new CapabilityError(
@@ -323,8 +340,10 @@ function centerRotationDelta(
   dimensions: { readonly width: number; readonly height: number },
   scaleToCenter = false,
 ): readonly [string, string] {
-  const ratioX = formulaNumber(dimensions.height / dimensions.width);
-  const ratioY = formulaNumber(dimensions.width / dimensions.height);
+  const widthEmu = pxToEmu(dimensions.width);
+  const heightEmu = pxToEmu(dimensions.height);
+  const ratioX = formulaNumber(heightEmu / widthEmu);
+  const ratioY = formulaNumber(widthEmu / heightEmu);
   const centerX = formulaNumber(center.x);
   const centerY = formulaNumber(center.y);
   const { angle } = rotationFormula(effect);
@@ -626,7 +645,7 @@ function behaviorIds(
         ];
       }
       const box = targetBox(effect, "整体文字旋入");
-      const center = geometryCenter(box, dimensions);
+      const center = serializedGeometryCenter(box, dimensions);
       const position = centerRotationDelta(effect, center, dimensions, true);
       const geometry = positionTargets().flatMap((targetElement) => [
         singleMotion("ppt_w", 0, "#ppt_w", false, targetElement),
@@ -711,7 +730,7 @@ function behaviorIds(
       }
       const center =
         effect.groupSpinCenter ??
-        geometryCenter(targetBox(effect, "整体文字自转"), dimensions);
+        serializedGeometryCenter(targetBox(effect, "整体文字自转"), dimensions);
       const position = centerRotationDelta(effect, center, dimensions);
       if (wholeText) {
         return [
@@ -1231,7 +1250,7 @@ function timingXml(
           "原生 Group 自转投影需要同次布局得到的组合范围",
         );
       }
-      const center = geometryCenter(box, dimensions);
+      const center = serializedGeometryCenter(box, dimensions);
       const projectedMembers = leafMembers(members);
       if (projectedMembers.length === 0) {
         throw new CapabilityError(

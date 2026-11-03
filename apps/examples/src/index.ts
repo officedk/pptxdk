@@ -1,5 +1,6 @@
 import { createSalesReport, loadBundledOverview } from "./sales-report.tsx";
 
+export { capabilityDeck, CapabilityDeck } from "./capability-deck.tsx";
 export {
   createHttpSalesSource,
   createSalesReport,

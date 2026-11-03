@@ -1254,12 +1254,6 @@ export const tableCapability: CapabilityModule = {
         (cell) => cell.fill !== undefined || rows[cell.row]?.fill !== undefined,
       ),
     });
-    const uniqueClaims = new Map(
-      claims.map((claim) => [
-        `${claim.kind}\u0000${claim.key}\u0000${claim.identity}`,
-        claim,
-      ]),
-    );
     return {
       xml: frameXml(
         context.id,
@@ -1281,7 +1275,7 @@ export const tableCapability: CapabilityModule = {
       },
       extensions: [],
       ...(annotations.length === 0 ? {} : { annotations }),
-      resourceClaims: [...uniqueClaims.values()],
+      resourceClaims: claims,
       presentationContributions: fontPresentationContributions(
         fontUses,
         context.options.embedFonts,

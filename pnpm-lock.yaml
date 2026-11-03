@@ -318,6 +318,9 @@ importers:
       '@react-pptx/validation':
         specifier: workspace:*
         version: link:../../packages/validation
+      '@types/fontkit':
+        specifier: 'catalog:'
+        version: 2.0.9
       '@types/node':
         specifier: 'catalog:'
         version: 26.6.6
@@ -327,6 +330,9 @@ importers:
       fflate:
         specifier: 'catalog:'
         version: 0.8.3
+      fontkit:
+        specifier: 'catalog:'
+        version: 2.0.4
       oxfmt:
         specifier: 'catalog:'
         version: 0.74.0

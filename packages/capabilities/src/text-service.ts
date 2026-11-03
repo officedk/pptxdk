@@ -52,6 +52,7 @@ export type TextResourceClaim = {
 export type TextServiceResult = {
   readonly xml: string;
   readonly text: string;
+  readonly paragraphCount: number;
   readonly resourceClaims: readonly TextResourceClaim[];
   readonly fontUses: readonly FontEmbeddingUse[];
   readonly measurement?: { readonly width: number; readonly height: number };
@@ -1419,6 +1420,7 @@ export function writeTextBody(
   return {
     xml,
     text,
+    paragraphCount: outputParagraphs.length,
     resourceClaims,
     fontUses,
     ...(measured === undefined

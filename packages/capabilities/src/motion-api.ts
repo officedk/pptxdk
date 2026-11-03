@@ -28,14 +28,43 @@ export type EffectPreset =
   | "stretch"
   | "spin";
 
+export type MotionGranularity =
+  | "paragraph"
+  | "word"
+  | "letter"
+  | "series"
+  | "category";
+
+export type MotionTargetRange =
+  | { readonly type: "paragraph"; readonly start: number; readonly end: number }
+  | {
+      readonly type: "chart";
+      readonly step: "gridLegend" | "series" | "category";
+      readonly seriesIndex: number;
+      readonly categoryIndex: number;
+    };
+
+export type MotionStartDependency = {
+  readonly targetId: number;
+  readonly effectIndex: number;
+  readonly partIndex?: number;
+  readonly point: "end";
+  readonly offsetMs: number;
+};
+
 export type Effect = {
   readonly type: "effect";
   readonly kind: "entrance" | "emphasis";
   readonly preset: EffectPreset;
+  /** 单次原生行为时长；逐词或逐字展开的完成总长保持未知。 */
   readonly duration: number;
   readonly delay: number;
   readonly from?: MotionDirection | number;
   readonly easing?: Easing;
+  /** 文字按段落、词或字展开，图表按系列或分类展开。 */
+  readonly by?: MotionGranularity;
+  /** 逐词或逐字效果中，相邻原生单元的启动间隔。 */
+  readonly intervalMs?: number;
 };
 
 export type MotionScopeMode = "parallel" | "sequence" | "stagger";
@@ -75,12 +104,16 @@ export type EntranceEffect = Effect & { readonly kind: "entrance" };
 export type EmphasisEffect = Effect & { readonly kind: "emphasis" };
 
 export type EffectOptions = {
-  /** 时长，单位为毫秒。 */
+  /** 单次效果行为时长，单位为毫秒；细粒度展开的完成总长不由此值表示。 */
   readonly duration?: number;
   /** 相对所属触发起点的延迟，单位为毫秒。 */
   readonly delay?: number;
   /** 加速和减速各占时长的比例，合计不能超过 1。 */
   readonly easing?: Easing;
+  /** 文字逐词或逐字启动间隔；省略时为单次行为时长的十分之一。 */
+  readonly intervalMs?: number;
+  /** 按原生段落、词、字、图表系列或分类逐项展开。 */
+  readonly by?: MotionGranularity;
 };
 
 export type MotionProps = {
@@ -393,6 +426,9 @@ type MotionTarget = {
   readonly testId?: string;
   readonly textBody: boolean;
   readonly filled: boolean;
+  readonly paragraphCount?: number;
+  readonly chartSeriesCount?: number;
+  readonly chartCategoryCount?: number;
 };
 
 type MotionValue = {
@@ -407,15 +443,21 @@ export type MotionEffectObservation = {
     readonly id: number;
     readonly name: string;
     readonly testId?: string;
+    readonly range?: MotionTargetRange;
   };
   readonly kind: Effect["kind"];
   readonly preset: EffectPreset;
+  /** 单次原生行为时长，不代表细粒度展开的总完成时长。 */
   readonly durationMs: number;
   readonly delayMs: number;
+  readonly by?: MotionGranularity;
+  readonly intervalMs?: number;
   readonly from?: MotionDirection | number;
   readonly easing?: Easing;
-  readonly startMs: number;
-  readonly endMs: number;
+  readonly startMs?: number;
+  readonly endMs?: number;
+  readonly completion?: Exclude<MotionCompletionState, "known">;
+  readonly startAfter?: MotionStartDependency;
 };
 
 export type MotionStepObservation = {
@@ -433,6 +475,7 @@ export type MotionScopeObservation = {
   readonly startMs?: number;
   readonly endMs?: number;
   readonly completion: MotionCompletionState;
+  readonly startAfter?: MotionStartDependency;
   readonly members: readonly (
     | { readonly kind: "scope"; readonly id: string }
     | { readonly kind: "object"; readonly id: number }
@@ -483,7 +526,17 @@ const effectKeys = [
   "delay",
   "from",
   "easing",
+  "by",
+  "intervalMs",
 ] as const;
+
+const motionGranularities = new Set<MotionGranularity>([
+  "paragraph",
+  "word",
+  "letter",
+  "series",
+  "category",
+]);
 
 function validatedEffect(value: unknown, expected: Effect["kind"]): Effect {
   if (!isRecord(value) || value["type"] !== "effect") {
@@ -539,6 +592,27 @@ function validatedEffect(value: unknown, expected: Effect["kind"]): Effect {
     !Number.isFinite(Math.round(delay) + Math.round(duration))
   ) {
     return fail("invalid-delay", "动画延迟必须能写成有限非负整数毫秒");
+  }
+  const by = value["by"];
+  const interval = value["intervalMs"];
+  if (
+    by !== undefined &&
+    (typeof by !== "string" ||
+      !motionGranularities.has(by as MotionGranularity))
+  ) {
+    return fail("invalid-motion", "by 必须是受支持的文字或图表粒度");
+  }
+  if (
+    interval !== undefined &&
+    ((by !== "word" && by !== "letter") ||
+      typeof interval !== "number" ||
+      !Number.isSafeInteger(interval) ||
+      interval < 1)
+  ) {
+    return fail(
+      "invalid-motion-interval",
+      "intervalMs 仅适用于逐词或逐字效果，且必须是正整数毫秒",
+    );
   }
   if (
     (preset === "wipe" || preset === "fly") &&

@@ -255,6 +255,7 @@ export const textCapability: CapabilityModule = {
       ...(testId === undefined ? {} : { testId }),
       textBody: true,
       filled: false,
+      paragraphCount: body.paragraphCount,
     });
     let escapedName: string;
     try {

@@ -1030,6 +1030,8 @@ export const chartCapability: CapabilityModule = {
       ...(props.testId === undefined ? {} : { testId: props.testId }),
       textBody: false,
       filled: props.kind !== "line",
+      chartSeriesCount: props.data.series.length,
+      chartCategoryCount: props.data.categories.length,
     });
     const { textStyles, resourceClaims, fontUses, warnings } =
       chartResourceClaims(props, props.data);

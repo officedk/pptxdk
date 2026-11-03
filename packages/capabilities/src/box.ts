@@ -6,6 +6,7 @@ import {
   type GeometryBox,
 } from "@react-pptx/core";
 
+import { nativeLinkXml } from "./identity.ts";
 import { motionAnnotations } from "./motion-api.ts";
 import { shapePropertiesXml } from "./visual.ts";
 
@@ -22,8 +23,9 @@ function objectXml(
   name: string,
   box: GeometryBox,
   properties: string,
+  linkXml: string,
 ): string {
-  return `<p:sp><p:nvSpPr><p:cNvPr id="${id}" name="${xmlEscape(name)}"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr>${properties}</p:sp>`;
+  return `<p:sp><p:nvSpPr><p:cNvPr id="${id}" name="${xmlEscape(name)}">${linkXml}</p:cNvPr><p:cNvSpPr/><p:nvPr/></p:nvSpPr>${properties}</p:sp>`;
 }
 
 /** 可见 Box 背景使用同一形状属性 writer；无填充/线/阴影时仅保留布局语义。 */
@@ -32,9 +34,14 @@ export const boxCapability: CapabilityModule = {
   compile(input: CapabilityInput, context) {
     const unknown = Object.keys(input.props).find(
       (key) =>
-        !["testId", "style", "theme", "morphKey", "__motionContext"].includes(
-          key,
-        ),
+        ![
+          "testId",
+          "style",
+          "theme",
+          "morphKey",
+          "link",
+          "__motionContext",
+        ].includes(key),
     );
     if (unknown !== undefined) {
       throw new CapabilityError(
@@ -75,7 +82,13 @@ export const boxCapability: CapabilityModule = {
       : [];
     return {
       xml: properties.hasVisibleStyle
-        ? objectXml(context.id, name, box, properties.xml)
+        ? objectXml(
+            context.id,
+            name,
+            box,
+            properties.xml,
+            nativeLinkXml(context.nativeLink),
+          )
         : "",
       observation: {
         id: context.id,

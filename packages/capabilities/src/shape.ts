@@ -6,6 +6,7 @@ import {
   type CapabilityLayoutRequest,
   type ColorValue,
   type LayoutStyle,
+  type LinkTarget,
   type TextStyle as CoreTextStyle,
   type VisualStyle,
   type CapabilityInput,
@@ -23,6 +24,7 @@ export type {
   PathOptions,
   PresetGeometry,
 } from "./geometry.ts";
+import { nativeLinkXml } from "./identity.ts";
 export { linearGradient, radialGradient } from "./visual.ts";
 export type { VisualStyle } from "@react-pptx/core";
 import { fontPresentationContributions } from "./font-embedding.ts";
@@ -42,6 +44,7 @@ import { shapePropertiesXml } from "./visual.ts";
 
 export type ShapeProps = MotionProps &
   MorphProps & {
+    readonly link?: LinkTarget;
     readonly testId?: string;
     readonly name?: string;
     readonly geometry?: Geometry;
@@ -53,10 +56,11 @@ export type ShapeProps = MotionProps &
     readonly height?: number;
     readonly style?: LayoutStyle & VisualStyle & CoreTextStyle;
     readonly fill?: ColorValue;
-    /** 直接写入此形状的原生正文，不创建额外文本框。 */
+    /** 直接写入此形状的原生正文，不创建额外文本框；与 children 互斥。 */
     readonly text?: string;
     /** 形状正文使用共享文字服务，裁剪文本框能力后仍可写出。 */
     readonly textStyle?: TextStyle;
+    /** 与 Text 共用的原生正文节点，可包含 P、Span 与 SlideNumber。 */
     readonly children?: ReactNode;
   };
 
@@ -66,6 +70,7 @@ const allowedParameters = [
   "testId",
   "name",
   "morphKey",
+  "link",
   "geometry",
   "flipH",
   "flipV",
@@ -134,6 +139,20 @@ function shapeTextStyle(props: Readonly<Record<string, unknown>>): unknown {
   return { ...inherited, ...(explicit as Record<string, unknown>) };
 }
 
+function shapeTextContent(input: CapabilityInput): readonly unknown[] {
+  const text = input.props["text"];
+  if (typeof text === "string") {
+    if (input.children.length > 0) {
+      throw new CapabilityError(
+        "conflicting-text-content",
+        "Shape.text 与 Shape 子正文不能同时声明",
+      );
+    }
+    return text === "" ? [] : [{ type: "#text", text }];
+  }
+  return text === undefined ? input.children : [];
+}
+
 function requiredNumber(
   props: Record<string, unknown>,
   name: "x" | "y" | "width" | "height",
@@ -180,8 +199,9 @@ function shapeXml(
   escapedName: string,
   properties: string,
   textBody: string,
+  linkXml: string,
 ): string {
-  return `<p:sp><p:nvSpPr><p:cNvPr id="${id}" name="${escapedName}"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr>${properties}${textBody}</p:sp>`;
+  return `<p:sp><p:nvSpPr><p:cNvPr id="${id}" name="${escapedName}">${linkXml}</p:cNvPr><p:cNvSpPr/><p:nvPr/></p:nvSpPr>${properties}${textBody}</p:sp>`;
 }
 
 /** 形状模块独立校验输入、声明原生几何，并生成对应 PresentationML 对象。 */
@@ -191,16 +211,17 @@ export const shapeCapability: CapabilityModule = {
     input: CapabilityInput,
     request: CapabilityLayoutRequest,
   ): CapabilityLayoutMeasurement | undefined {
-    const text = input.props["text"];
-    if (typeof text !== "string" || text === "") {
+    const children = shapeTextContent(input);
+    if (children.length === 0) {
       return { minContentWidth: 0, minContentHeight: 0 };
     }
     try {
       const measured = measureTextLayout(
-        [{ type: "#text", text }],
+        children,
         shapeTextMeasurementStyle(shapeTextStyle(input.props)),
         request.theme,
         request.availableWidth,
+        request.slideNumber,
       );
       return measured;
     } catch (error) {
@@ -234,13 +255,6 @@ export const shapeCapability: CapabilityModule = {
         `Shape 含未实现参数 ${unknown}`,
       );
     }
-    if (input.children.length > 0) {
-      throw new CapabilityError(
-        "unsupported-children",
-        "本构建切片的 Shape 不接受子内容",
-      );
-    }
-
     const testId = optionalText(props, "testId");
     const requestedName = optionalText(props, "name");
     const geometry = props["geometry"] as Geometry | undefined;
@@ -291,10 +305,11 @@ export const shapeCapability: CapabilityModule = {
     if (text !== undefined && typeof text !== "string") {
       throw new CapabilityError("invalid-text", "Shape.text 必须是字符串");
     }
+    const textChildren = shapeTextContent(input);
     let textOutput: ReturnType<typeof writeTextBody> | undefined;
-    if (text !== undefined && text !== "") {
+    if (textChildren.length > 0) {
       textOutput = writeTextBody(
-        [{ type: "#text", text }],
+        textChildren,
         shapeTextStyle(props),
         context.theme,
         "middle",
@@ -302,6 +317,11 @@ export const shapeCapability: CapabilityModule = {
           width: Math.max(0, box.width - insets.left - insets.right),
           height: Math.max(0, box.height - insets.top - insets.bottom),
           insets,
+        },
+        "text-box",
+        {
+          slideNumber: context.slideNumber,
+          createId: context.createTextFieldId,
         },
       );
     }
@@ -336,6 +356,7 @@ export const shapeCapability: CapabilityModule = {
         escapedName,
         properties.xml,
         textOutput?.xml ?? "",
+        nativeLinkXml(context.nativeLink),
       ),
       observation: {
         id: context.id,
@@ -344,7 +365,11 @@ export const shapeCapability: CapabilityModule = {
         ...(testId === undefined ? {} : { testId }),
         geometry: properties.geometryName,
         box,
-        ...(text === undefined ? {} : { text }),
+        ...(textOutput === undefined
+          ? text === undefined
+            ? {}
+            : { text }
+          : { text: textOutput.text }),
       },
       extensions: [],
       ...(properties.warnings.length === 0 && textOutput === undefined

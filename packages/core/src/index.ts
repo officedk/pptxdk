@@ -1,6 +1,6 @@
 export { createBuilder } from "#/builder.ts";
 export { BuildError, CapabilityError } from "#/diagnostics.ts";
-export { Box, Deck, Slide } from "#/elements.ts";
+export { Box, Deck, Section, Slide } from "#/elements.ts";
 export { createMorphScope } from "#/morph.ts";
 export type { MorphKey, MorphScope } from "#/morph.ts";
 export { pxToEmu, xmlEscape } from "#/ooxml.ts";
@@ -59,6 +59,7 @@ export type {
   CapabilityModule,
   CapabilityOutput,
   CapabilityResource,
+  CapabilityResourceClaim,
   DeckProps,
   Diagnostic,
   ElementProps,
@@ -69,6 +70,8 @@ export type {
   LayoutObservation,
   LayoutSpacing,
   LayoutStyle,
+  LinkTarget,
+  NativeLink,
   ObjectCapabilityModule,
   ObjectObservation,
   NativeTableObservation,
@@ -76,8 +79,10 @@ export type {
   SlideCapabilityModule,
   SlideCapabilityOutput,
   SlideCapabilitySlot,
+  SlideBackground,
   SlideObservation,
   SlideProps,
+  SectionProps,
   TransparentCapabilityModule,
   Target,
 } from "#/types.ts";

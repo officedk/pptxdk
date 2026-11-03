@@ -79,6 +79,10 @@ export type FileObject = {
     readonly right?: number;
     readonly bottom?: number;
   };
+  readonly link?:
+    | { readonly slideId: string }
+    | { readonly url: string }
+    | { readonly action: "home" };
   readonly groupTransform?: {
     readonly childOffset: { readonly x: number; readonly y: number };
     readonly childExtent: { readonly width: number; readonly height: number };
@@ -124,6 +128,7 @@ export type FileChart = {
 
 export type FileTextRun = {
   readonly text: string;
+  readonly field?: "slidenum";
   readonly fontFamily?: string;
   readonly fontSizePt?: number;
   readonly bold?: boolean;
@@ -155,6 +160,10 @@ export type FileText = {
 
 export type FileSlide = {
   readonly id: string;
+  readonly hidden?: boolean;
+  readonly advanceAfterMs?: number;
+  readonly section?: string;
+  readonly background?: FileSlideBackground;
   readonly objects: readonly FileObject[];
   readonly transition?: FileTransition;
   readonly animations?: readonly FileAnimationStep[];
@@ -181,6 +190,24 @@ export type FileAnimationDependency = {
   readonly source: "effect" | "container";
   readonly targetId?: number;
 };
+
+export type FileSlideBackground =
+  | { readonly type: "solid"; readonly color?: string }
+  | {
+      readonly type: "gradient";
+      readonly kind: "linear" | "radial";
+      readonly stops: readonly {
+        readonly position: number;
+        readonly color?: string;
+      }[];
+      readonly angle?: number;
+    }
+  | {
+      readonly type: "image";
+      readonly relationshipId: string;
+      readonly part: string;
+      readonly contentType: string;
+    };
 
 export type FileAnimationStep = {
   readonly trigger: "auto" | "click";
@@ -257,6 +284,11 @@ export type ValidationResult = {
     readonly slideCount: number;
     readonly widthEmu?: number;
     readonly heightEmu?: number;
+    readonly title?: string;
+    readonly sections?: readonly {
+      readonly name: string;
+      readonly slideIds: readonly string[];
+    }[];
   };
   readonly slides: readonly FileSlide[];
 };
@@ -270,6 +302,11 @@ type Documents = Map<string, XmlDocument>;
 type TransitionRead = {
   readonly transition?: FileTransition;
   readonly extensions: ReadonlySet<ValidationExtension>;
+};
+
+type PresentationSection = {
+  readonly name: string;
+  readonly slideIds: readonly string[];
 };
 
 function issue(
@@ -537,10 +574,30 @@ function readRunColor(
   return hex === undefined ? undefined : `#${shadedThemeColor(hex, scheme)}`;
 }
 
-function readTextRun(run: XmlElement, theme: ThemeTextReader): FileTextRun {
+function readTextRun(
+  run: XmlElement,
+  theme: ThemeTextReader,
+  part: string,
+  errors: ValidationIssue[],
+): FileTextRun {
   const text = first(run, drawingNamespace, "t")?.textContent ?? "";
+  const fieldType = run.localName === "fld" ? attribute(run, "type") : "";
+  const fieldId = run.localName === "fld" ? attribute(run, "id") : "";
+  if (
+    run.localName === "fld" &&
+    (fieldType !== "slidenum" ||
+      !/^\{?[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\}?$/iu.test(
+        fieldId,
+      ))
+  ) {
+    issue(errors, part, "invalid-text-field", "原生文字字段类型或标识无效");
+  }
   const properties = first(run, drawingNamespace, "rPr");
-  if (properties === undefined) return { text };
+  if (properties === undefined)
+    return {
+      text,
+      ...(fieldType === "slidenum" ? { field: "slidenum" as const } : {}),
+    };
 
   const latin = first(properties, drawingNamespace, "latin");
   const fill = first(properties, drawingNamespace, "solidFill");
@@ -558,6 +615,7 @@ function readTextRun(run: XmlElement, theme: ThemeTextReader): FileTextRun {
   const color = readRunColor(fill, theme);
   return {
     text,
+    ...(fieldType === "slidenum" ? { field: "slidenum" as const } : {}),
     ...(fontFamily === "" ? {} : { fontFamily }),
     ...(fontSize === undefined ? {} : { fontSizePt: fontSize / 100 }),
     ...(bold === "" ? {} : { bold: bold === "1" || bold === "true" }),
@@ -569,10 +627,16 @@ function readTextRun(run: XmlElement, theme: ThemeTextReader): FileTextRun {
 function readParagraph(
   paragraph: XmlElement,
   theme: ThemeTextReader,
+  part: string,
+  errors: ValidationIssue[],
 ): FileTextParagraph {
-  const runs = elements(paragraph, drawingNamespace, "r").map((run) =>
-    readTextRun(run, theme),
-  );
+  const runs = childElements(paragraph)
+    .filter(
+      (run) =>
+        run.namespaceURI === drawingNamespace &&
+        (run.localName === "r" || run.localName === "fld"),
+    )
+    .map((run) => readTextRun(run, theme, part, errors));
   const paragraphProperties = first(paragraph, drawingNamespace, "pPr");
   const lineSpacing =
     paragraphProperties === undefined
@@ -633,11 +697,13 @@ function readParagraph(
 function readTextBody(
   shape: XmlElement,
   theme: ThemeTextReader,
+  part: string,
+  errors: ValidationIssue[],
 ): FileText | undefined {
   const body = first(shape, presentationNamespace, "txBody");
   if (body === undefined) return undefined;
   const paragraphs = elements(body, drawingNamespace, "p").map((paragraph) =>
-    readParagraph(paragraph, theme),
+    readParagraph(paragraph, theme, part, errors),
   );
   return {
     text: paragraphs.map(({ text }) => text).join("\n"),
@@ -1097,7 +1163,7 @@ function validateShape(
     return undefined;
   }
   validateTextValueRanges(shape, part, errors);
-  const text = readTextBody(shape, theme);
+  const text = readTextBody(shape, theme, part, errors);
   return {
     id,
     name,
@@ -1989,7 +2055,7 @@ function tableCellText(
   }
   validateTextBodyValueRanges(body, part, errors);
   const paragraphs = elements(body, drawingNamespace, "p").map((paragraph) =>
-    readParagraph(paragraph, theme),
+    readParagraph(paragraph, theme, part, errors),
   );
   return { text: paragraphs.map(({ text }) => text).join("\n"), paragraphs };
 }
@@ -2315,9 +2381,250 @@ function readObjects(
         );
         break;
     }
-    if (object !== undefined) objects.push(object);
+    if (object !== undefined) {
+      const link = readObjectLink(
+        child as XmlElement,
+        object.id,
+        part,
+        documents,
+        relationships,
+        errors,
+      );
+      objects.push({ ...object, ...(link === undefined ? {} : { link }) });
+    }
   }
   return objects;
+}
+
+function readObjectLink(
+  object: XmlElement,
+  objectId: number,
+  part: string,
+  documents: Documents,
+  relationships: Map<string, Map<string, XmlElement>>,
+  errors: ValidationIssue[],
+): FileObject["link"] {
+  const nonVisual = descendantsByName(
+    object,
+    presentationNamespace,
+    "cNvPr",
+  ).find((candidate) => integerAttribute(candidate, "id") === objectId);
+  const click =
+    nonVisual === undefined
+      ? undefined
+      : descendantsByName(nonVisual, drawingNamespace, "hlinkClick")[0];
+  if (click === undefined) return undefined;
+  const relationshipId =
+    click.getAttributeNS(relationshipNamespace, "id") ?? "";
+  const action = attribute(click, "action");
+  if (!click.hasAttributeNS(relationshipNamespace, "id")) {
+    issue(errors, part, "invalid-object-link", "对象链接缺少关系标识属性");
+    return undefined;
+  }
+  if (relationshipId === "") {
+    if (action === "ppaction://hlinkshowjump?jump=firstslide") {
+      return { action: "home" };
+    }
+    issue(
+      errors,
+      part,
+      "invalid-object-link",
+      "对象链接缺少有效关系或 home 动作",
+    );
+    return undefined;
+  }
+  const relationship = relationships.get(part)?.get(relationshipId);
+  if (relationship === undefined) {
+    issue(
+      errors,
+      part,
+      "missing-object-link-relationship",
+      `对象链接引用不存在的关系 ${relationshipId}`,
+    );
+    return undefined;
+  }
+  const type = attribute(relationship, "Type");
+  const targetMode = attribute(relationship, "TargetMode");
+  if (type === `${relationshipNamespace}/hyperlink`) {
+    if (targetMode !== "External" || action !== "") {
+      issue(
+        errors,
+        part,
+        "invalid-object-link",
+        "URL 链接必须使用外部 hyperlink 关系",
+      );
+      return undefined;
+    }
+    const url = attribute(relationship, "Target");
+    try {
+      return { url: new URL(url).href };
+    } catch {
+      issue(
+        errors,
+        part,
+        "invalid-object-link-url",
+        "外部链接关系的目标不是绝对 URL",
+      );
+      return undefined;
+    }
+  }
+  if (type === `${relationshipNamespace}/slide`) {
+    if (targetMode === "External" || action !== "ppaction://hlinksldjump") {
+      issue(
+        errors,
+        part,
+        "invalid-object-link",
+        "页面跳转必须使用内部 slide 关系和跳转动作",
+      );
+      return undefined;
+    }
+    const targetPart = relationshipTargetPath(
+      part,
+      attribute(relationship, "Target"),
+    );
+    const targetSlide = documents.get(targetPart)?.documentElement;
+    const commonSlideData =
+      targetSlide == null
+        ? undefined
+        : first(targetSlide, presentationNamespace, "cSld");
+    const slideId =
+      commonSlideData === undefined ? "" : attribute(commonSlideData, "name");
+    if (slideId === "") {
+      issue(
+        errors,
+        part,
+        "invalid-object-link-target",
+        "页面跳转目标缺少稳定标识",
+      );
+      return undefined;
+    }
+    return { slideId };
+  }
+  issue(
+    errors,
+    part,
+    "invalid-object-link",
+    "对象链接关系类型不是 hyperlink 或 slide",
+  );
+  return undefined;
+}
+
+function readSlideBackground(
+  slide: XmlElement,
+  part: string,
+  files: XmlFiles,
+  relationships: Map<string, Map<string, XmlElement>>,
+  contentTypes: {
+    defaults: Map<string, string>;
+    overrides: Map<string, string>;
+  },
+  theme: ThemeTextReader,
+  errors: ValidationIssue[],
+): FileSlideBackground | undefined {
+  const commonData = first(slide, presentationNamespace, "cSld");
+  const background =
+    commonData === undefined
+      ? undefined
+      : first(commonData, presentationNamespace, "bg");
+  if (background === undefined) return undefined;
+  const properties = first(background, presentationNamespace, "bgPr");
+  if (properties === undefined) {
+    issue(errors, part, "invalid-slide-background", "页面背景缺少 bgPr");
+    return undefined;
+  }
+  const picture = first(properties, drawingNamespace, "blipFill");
+  if (picture !== undefined) {
+    const blip = first(picture, drawingNamespace, "blip");
+    const relationshipId =
+      blip?.getAttributeNS(relationshipNamespace, "embed") ?? "";
+    const relationship =
+      relationshipId === ""
+        ? undefined
+        : relationships.get(part)?.get(relationshipId);
+    if (
+      blip === undefined ||
+      relationship === undefined ||
+      attribute(relationship, "Type") !== `${relationshipNamespace}/image` ||
+      attribute(relationship, "TargetMode") === "External"
+    ) {
+      issue(
+        errors,
+        part,
+        "invalid-slide-background-image",
+        "页面图片背景缺少有效的内部 image 关系",
+      );
+      return undefined;
+    }
+    const targetPart = relationshipTargetPath(
+      part,
+      attribute(relationship, "Target"),
+    );
+    const bytes = files[targetPart];
+    const contentType = contentTypeForPart(targetPart, contentTypes);
+    if (
+      bytes === undefined ||
+      contentType === undefined ||
+      !imageSignatureMatches(bytes, contentType)
+    ) {
+      issue(
+        errors,
+        part,
+        "invalid-slide-background-image",
+        "页面图片背景目标缺少有效图片内容或内容类型",
+      );
+      return undefined;
+    }
+    return { type: "image", relationshipId, part: targetPart, contentType };
+  }
+  const gradient = first(properties, drawingNamespace, "gradFill");
+  if (gradient !== undefined) {
+    const stops = first(gradient, drawingNamespace, "gsLst");
+    const values =
+      stops === undefined ? [] : elements(stops, drawingNamespace, "gs");
+    const parsedStops = values.map((stop) => {
+      const position = integerAttribute(stop, "pos");
+      if (position === undefined || position < 0 || position > 100_000) {
+        issue(
+          errors,
+          part,
+          "invalid-slide-background-gradient",
+          "渐变色标位置无效",
+        );
+      }
+      const color = readRunColor(stop, theme);
+      return {
+        position: (position ?? 0) / 100_000,
+        ...(color === undefined ? {} : { color }),
+      };
+    });
+    if (parsedStops.length < 2) {
+      issue(
+        errors,
+        part,
+        "invalid-slide-background-gradient",
+        "页面渐变至少需要两个色标",
+      );
+    }
+    const linear = first(gradient, drawingNamespace, "lin");
+    const radial = first(gradient, drawingNamespace, "path");
+    const angleValue =
+      linear === undefined ? undefined : integerAttribute(linear, "ang");
+    return {
+      type: "gradient",
+      kind: radial === undefined ? "linear" : "radial",
+      stops: parsedStops,
+      ...(angleValue === undefined
+        ? {}
+        : { angle: (((angleValue / 60_000 + 90) % 360) + 360) % 360 }),
+    };
+  }
+  const solid = first(properties, drawingNamespace, "solidFill");
+  if (solid !== undefined) {
+    const color = readRunColor(solid, theme);
+    return { type: "solid", ...(color === undefined ? {} : { color }) };
+  }
+  issue(errors, part, "invalid-slide-background", "页面背景缺少受支持的填充");
+  return undefined;
 }
 
 function childElements(parent: XmlNode): XmlElement[] {
@@ -2366,7 +2673,7 @@ function readTransitionElement(
   errors: ValidationIssue[],
   insideChoice: boolean,
 ): {
-  readonly transition: FileTransition;
+  readonly transition?: FileTransition;
   readonly extensions: ReadonlySet<ValidationExtension>;
 } {
   const extensions = new Set<ValidationExtension>();
@@ -2398,6 +2705,9 @@ function readTransitionElement(
     }
   }
   const effects = childElements(transition);
+  if (effects.length === 0 && transition.hasAttribute("advTm")) {
+    return { extensions };
+  }
   if (effects.length !== 1) {
     issue(
       errors,
@@ -2541,6 +2851,7 @@ function readAlternateTransition(
     false,
   );
   if (
+    fallbackResult.transition !== undefined &&
     fallbackResult.transition.kind !== "fade" &&
     fallbackResult.transition.kind !== "strips" &&
     fallbackResult.transition.kind !== "push"
@@ -2596,10 +2907,16 @@ function readAlternateTransition(
     ...fallbackResult.extensions,
   ]);
   return {
-    transition: {
-      ...choiceResult.transition,
-      fallback: fallbackResult.transition,
-    },
+    ...(choiceResult.transition === undefined
+      ? {}
+      : {
+          transition: {
+            ...choiceResult.transition,
+            ...(fallbackResult.transition === undefined
+              ? {}
+              : { fallback: fallbackResult.transition }),
+          },
+        }),
     extensions,
   };
 }
@@ -2625,7 +2942,54 @@ function readSlideTransition(
     return readAlternateTransition(candidate, part, errors);
   }
   const result = readTransitionElement(candidate, part, errors, false);
-  return { transition: result.transition, extensions: result.extensions };
+  return {
+    ...(result.transition === undefined
+      ? {}
+      : { transition: result.transition }),
+    extensions: result.extensions,
+  };
+}
+
+function readAdvanceAfter(
+  slide: XmlElement,
+  part: string,
+  errors: ValidationIssue[],
+): number | undefined {
+  const candidates = childElements(slide).filter(
+    (child) =>
+      (child.namespaceURI === presentationNamespace &&
+        child.localName === "transition") ||
+      (child.namespaceURI === markupCompatibilityNamespace &&
+        child.localName === "AlternateContent"),
+  );
+  const transitions = candidates.flatMap((candidate) =>
+    candidate.namespaceURI === presentationNamespace
+      ? [candidate]
+      : descendantsByName(candidate, presentationNamespace, "transition"),
+  );
+  const hasTiming = transitions.some((transition) =>
+    transition.hasAttribute("advTm"),
+  );
+  if (!hasTiming) return undefined;
+  const values = transitions.map((transition) =>
+    transition.hasAttribute("advTm")
+      ? nonNegativeIntegerValue(attribute(transition, "advTm"))
+      : undefined,
+  );
+  if (
+    values.some((value) => value === undefined) ||
+    new Set(values).size !== 1 ||
+    (values[0] ?? 0) > 4_294_967_295
+  ) {
+    issue(
+      errors,
+      part,
+      "inconsistent-advance-after",
+      "转场兼容分支的自动翻页时刻必须是相同的非负整数毫秒数",
+    );
+    return undefined;
+  }
+  return values[0];
 }
 
 function descendantsByName(
@@ -3708,6 +4072,87 @@ function readSlideAnimations(
   return { steps: result, containers };
 }
 
+function readCoreTitle(
+  documents: Documents,
+  relationships: Map<string, Map<string, XmlElement>>,
+  errors: ValidationIssue[],
+): string | undefined {
+  const coreRelationshipType =
+    "http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties";
+  const relationship = [...(relationships.get("")?.values() ?? [])].find(
+    (entry) => attribute(entry, "Type") === coreRelationshipType,
+  );
+  if (relationship === undefined) return undefined;
+  const part = relationshipTargetPath("", attribute(relationship, "Target"));
+  const root = documents.get(part)?.documentElement;
+  if (root == null || root.localName !== "coreProperties") {
+    issue(errors, part, "invalid-core-properties", "文稿元数据部件根元素无效");
+    return undefined;
+  }
+  const title = first(root, "http://purl.org/dc/elements/1.1/", "title");
+  return title?.textContent ?? undefined;
+}
+
+function readSections(
+  root: XmlElement,
+  slideIds: readonly XmlElement[],
+  slideIdByPresentationId: ReadonlyMap<string, string>,
+  part: string,
+  errors: ValidationIssue[],
+): {
+  readonly sections: readonly PresentationSection[];
+  readonly used: boolean;
+} {
+  const list = descendantsByName(root, p14Namespace, "sectionLst")[0];
+  if (list === undefined) return { sections: [], used: false };
+  const assigned = new Set<string>();
+  const sections = elements(list, p14Namespace, "section").map((section) => {
+    const name = attribute(section, "name");
+    if (name.trim() === "") {
+      issue(errors, part, "invalid-section-name", "页面分节名称不能为空");
+    }
+    const ids = first(section, p14Namespace, "sldIdLst");
+    const sectionSlideIds = (
+      ids === undefined ? [] : elements(ids, p14Namespace, "sldId")
+    ).flatMap((entry) => {
+      const presentationId = attribute(entry, "id");
+      const slideId = slideIdByPresentationId.get(presentationId);
+      if (slideId === undefined) {
+        issue(
+          errors,
+          part,
+          "missing-section-slide",
+          `分节引用不存在的页面 ID ${presentationId}`,
+        );
+        return [];
+      }
+      if (assigned.has(presentationId)) {
+        issue(
+          errors,
+          part,
+          "duplicate-section-slide",
+          `页面 ID ${presentationId} 在多个分节中出现`,
+        );
+      }
+      assigned.add(presentationId);
+      return [slideId];
+    });
+    return { name, slideIds: sectionSlideIds };
+  });
+  for (const slide of slideIds) {
+    const id = attribute(slide, "id");
+    if (!assigned.has(id)) {
+      issue(
+        errors,
+        part,
+        "unassigned-section-slide",
+        `页面 ID ${id} 未分配到分节`,
+      );
+    }
+  }
+  return { sections, used: true };
+}
+
 function readPresentation(
   files: XmlFiles,
   documents: Documents,
@@ -3767,7 +4212,21 @@ function readPresentation(
   const presentationRelationships = relationships.get(part) ?? new Map();
   const slides: FileSlide[] = [];
   const usedExtensions = new Set<ValidationExtension>();
+  const presentationSlideIds = new Map<string, string>();
+  const stableSlideIds = new Set<string>();
   slideIds.forEach((slideId, index) => {
+    const presentationId = attribute(slideId, "id");
+    if (!/^\d+$/u.test(presentationId)) {
+      issue(errors, part, "invalid-slide-id", `页面 ${index + 1} 缺少数值 ID`);
+    }
+    if (presentationSlideIds.has(presentationId)) {
+      issue(
+        errors,
+        part,
+        "duplicate-slide-id",
+        `页面 ID ${presentationId} 重复`,
+      );
+    }
     const relationshipId =
       slideId.getAttributeNS(relationshipNamespace, "id") ?? "";
     const relationship = presentationRelationships.get(relationshipId);
@@ -3819,6 +4278,16 @@ function readPresentation(
       textTheme,
     );
     const transition = readSlideTransition(slideRoot, slidePath, errors);
+    const advanceAfterMs = readAdvanceAfter(slideRoot, slidePath, errors);
+    const background = readSlideBackground(
+      slideRoot,
+      slidePath,
+      files,
+      relationships,
+      contentTypes,
+      textTheme,
+      errors,
+    );
     const animationRead = readSlideAnimations(
       slideRoot,
       slidePath,
@@ -3844,9 +4313,26 @@ function readPresentation(
       seenIds.add(object.id);
       pending.push(...(object.members ?? []));
     }
+    const stableSlideId =
+      commonSlideData === undefined ? "" : attribute(commonSlideData, "name");
+    if (stableSlideId === "") {
+      issue(errors, slidePath, "missing-stable-slide-id", "页面缺少稳定标识");
+    }
+    if (stableSlideIds.has(stableSlideId)) {
+      issue(
+        errors,
+        slidePath,
+        "duplicate-stable-slide-id",
+        `页面标识 ${stableSlideId} 重复`,
+      );
+    }
+    stableSlideIds.add(stableSlideId);
+    presentationSlideIds.set(presentationId, stableSlideId);
     slides.push({
-      id:
-        commonSlideData === undefined ? "" : attribute(commonSlideData, "name"),
+      id: stableSlideId,
+      ...(attribute(slideRoot, "show") === "false" ? { hidden: true } : {}),
+      ...(advanceAfterMs === undefined ? {} : { advanceAfterMs }),
+      ...(background === undefined ? {} : { background }),
       objects,
       ...(transition.transition === undefined
         ? {}
@@ -3859,6 +4345,24 @@ function readPresentation(
           }),
     });
   });
+  const sectionResult = readSections(
+    root,
+    slideIds,
+    presentationSlideIds,
+    part,
+    errors,
+  );
+  if (sectionResult.used) usedExtensions.add("p14");
+  const sectionBySlideId = new Map<string, string>();
+  for (const section of sectionResult.sections) {
+    for (const slideId of section.slideIds)
+      sectionBySlideId.set(slideId, section.name);
+  }
+  const slidesWithSections = slides.map((slide) => {
+    const section = sectionBySlideId.get(slide.id);
+    return { ...slide, ...(section === undefined ? {} : { section }) };
+  });
+  const title = readCoreTitle(documents, relationships, errors);
   if (slideIds.length === 0)
     issue(errors, part, "missing-slides", "Presentation 不含页面");
   if (files["ppt/theme/theme1.xml"] === undefined) {
@@ -3874,8 +4378,12 @@ function readPresentation(
       slideCount: slideIds.length,
       ...(widthEmu === undefined ? {} : { widthEmu }),
       ...(heightEmu === undefined ? {} : { heightEmu }),
+      ...(title === undefined ? {} : { title }),
+      ...(sectionResult.sections.length === 0
+        ? {}
+        : { sections: sectionResult.sections }),
     },
-    slides,
+    slides: slidesWithSections,
     extensions: [...usedExtensions],
   };
 }

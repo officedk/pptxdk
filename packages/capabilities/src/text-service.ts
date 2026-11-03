@@ -56,6 +56,11 @@ export type TextResourceClaim = {
   readonly characters: string;
 };
 
+/** 控制符和默认可忽略码点保留在文本流中，但不要求独立 cmap 字形。 */
+export function requiresFontGlyph(character: string): boolean {
+  return !/^[\p{Cc}\p{Default_Ignorable_Code_Point}]$/u.test(character);
+}
+
 export type TextServiceResult = {
   readonly xml: string;
   readonly text: string;
@@ -96,7 +101,15 @@ type RunStyle = {
   readonly textDecoration?: TextStyle["textDecoration"] | undefined;
   readonly textShadow?: Shadow | "none" | undefined;
 };
-type Run = { readonly text: string; readonly style: RunStyle };
+type Run = {
+  readonly text: string;
+  readonly style: RunStyle;
+  readonly field?: { readonly id: string; readonly type: "slidenum" };
+};
+type TextFieldContext = {
+  readonly slideNumber: number;
+  readonly createId?: () => string;
+};
 type Paragraph = {
   readonly runs: readonly Run[];
   readonly style: ParagraphStyle;
@@ -719,6 +732,7 @@ function collectRuns(
   style: RunStyle,
   runs: Run[],
   theme: ThemeContext,
+  fields: TextFieldContext,
 ): void {
   for (const child of children) {
     if (!hostChild(child)) {
@@ -728,7 +742,7 @@ function collectRuns(
       if (child.text !== "") runs.push({ text: child.text, style });
       continue;
     }
-    if (child.type !== "rp:span") {
+    if (child.type !== "rp:span" && child.type !== "rp:slide-number") {
       throw new CapabilityError(
         "unsupported-text-child",
         `${child.type} 不能作为文字段落或 run 使用`,
@@ -743,7 +757,27 @@ function collectRuns(
     }
     const spanStyle = readRunStyle(child.props["style"]);
     const nextStyle = mergeRunStyle(style, spanStyle, theme);
-    collectRuns(child.children, nextStyle, runs, theme);
+    if (child.type === "rp:slide-number") {
+      if (child.children.length > 0) {
+        throw new CapabilityError(
+          "invalid-slide-number",
+          "SlideNumber 不能包含子内容",
+        );
+      }
+      runs.push({
+        text: String(fields.slideNumber),
+        style: nextStyle,
+        field: {
+          id:
+            fields.createId?.() ??
+            // The layout-only table normalization never emits this field XML.
+            "00000000-0000-4000-8000-000000000001",
+          type: "slidenum",
+        },
+      });
+      continue;
+    }
+    collectRuns(child.children, nextStyle, runs, theme, fields);
   }
 }
 
@@ -786,6 +820,9 @@ function displayedText(run: Run): string {
 
 function runXml(run: Run, theme: ThemeContext): string {
   const text = escapedXml(run.text);
+  if (run.field !== undefined) {
+    return `<a:fld id="${escapedXml(run.field.id)}" type="${run.field.type}">${runPropertiesXml(run.style, "a:rPr", theme)}<a:t>${text}</a:t></a:fld>`;
+  }
   return `<a:r>${runPropertiesXml(run.style, "a:rPr", theme)}<a:t xml:space="preserve">${text}</a:t></a:r>`;
 }
 
@@ -816,7 +853,10 @@ function textResourceClaims(runs: readonly Run[]): {
       // 字节资源可以合并，但每种实际使用的嵌入策略都须独立校验。
       const policyKey = `${font.identity}\u0000${font.substitute ? 1 : 0}\u0000${font.embeddable ? 1 : 0}`;
       entry.fontPolicies.set(policyKey, font);
-      entry.text.push(displayedText(run));
+      entry.text.push(
+        displayedText(run),
+        ...(run.field?.type === "slidenum" ? ["0123456789"] : []),
+      );
       used.set(key, entry);
     }
   }
@@ -829,6 +869,7 @@ function textResourceClaims(runs: readonly Run[]): {
         family: font.family,
         weight: font.weight,
         style: font.style,
+        claimKey: key,
         identity: font.identity,
         ...(font.data === undefined ? {} : { bytes: font.data }),
         substitute: font.substitute,
@@ -901,6 +942,7 @@ function normalizeParagraphs(
   children: readonly unknown[],
   textStyle: ResolvedTextStyle,
   theme: ThemeContext,
+  fields: TextFieldContext,
 ): Paragraph[] {
   const baseRunStyle: RunStyle = {
     fontFamily: textStyle.fontFamily,
@@ -943,8 +985,12 @@ function normalizeParagraphs(
     if (!hostChild(child)) {
       throw new CapabilityError("invalid-text-child", "文字内容树包含无效节点");
     }
-    if (child.type === "#text" || child.type === "rp:span") {
-      collectRuns([child], baseRunStyle, inline, theme);
+    if (
+      child.type === "#text" ||
+      child.type === "rp:span" ||
+      child.type === "rp:slide-number"
+    ) {
+      collectRuns([child], baseRunStyle, inline, theme, fields);
       continue;
     }
     if (child.type !== "rp:paragraph") {
@@ -981,7 +1027,7 @@ function normalizeParagraphs(
       theme,
     );
     const runs: Run[] = [];
-    collectRuns(child.children, paragraphRunStyle, runs, theme);
+    collectRuns(child.children, paragraphRunStyle, runs, theme, fields);
     paragraphs.push({
       runs,
       style,
@@ -1097,11 +1143,7 @@ function measureRunFace(style: RunStyle): MeasureFace {
 function missingCharacters(face: MeasureFace, text: string): string[] {
   const missing = new Set<string>();
   for (const character of text) {
-    if (
-      /^[\p{Cc}\p{Cf}\u{FE00}-\u{FE0F}\u{E0100}-\u{E01EF}]$/u.test(character)
-    ) {
-      continue;
-    }
+    if (!requiresFontGlyph(character)) continue;
     const codePoint = character.codePointAt(0);
     if (codePoint !== undefined && !face.font.hasGlyphForCodePoint(codePoint)) {
       missing.add(character);
@@ -1126,11 +1168,7 @@ function rangeWidth(
       piece.style.textTransform === "uppercase" ? source.toUpperCase() : source;
     let visible = "";
     for (const character of transformed) {
-      if (
-        !/^[\p{Cc}\p{Cf}\u{FE00}-\u{FE0F}\u{E0100}-\u{E01EF}]$/u.test(character)
-      ) {
-        visible += character;
-      }
+      if (requiresFontGlyph(character)) visible += character;
     }
     if (visible === "") continue;
     const advance = piece.face.font.layout(visible).advanceWidth;
@@ -1462,9 +1500,12 @@ export function measureTextLayout(
   styleValue: unknown,
   theme: ThemeContext,
   availableWidth?: number,
+  slideNumber = 1,
 ): TextLayoutMeasurement {
   const style = readTextStyle(styleValue, "Text.style", theme);
-  const paragraphs = normalizeParagraphs(children, style, theme);
+  const paragraphs = normalizeParagraphs(children, style, theme, {
+    slideNumber,
+  });
   const measured = measureParagraphs(
     paragraphs,
     availableWidth ?? Number.POSITIVE_INFINITY,
@@ -1551,6 +1592,7 @@ export function writeTextBody(
   verticalAlign: TextStyle["verticalAlign"] = "top",
   layout?: TextLayoutRequest,
   destination: TextBodyDestination = "text-box",
+  fields: TextFieldContext = { slideNumber: 1 },
 ): TextServiceResult {
   const style = readTextStyle(
     destination === "table-cell"
@@ -1559,13 +1601,28 @@ export function writeTextBody(
     "Text.style",
     theme,
   );
-  const paragraphs = normalizeParagraphs(children, style, theme);
+  const paragraphs = normalizeParagraphs(children, style, theme, fields);
   const runs = paragraphs.flatMap((paragraph) =>
     paragraph.runs.length > 0
       ? paragraph.runs
       : [{ text: "", style: paragraph.endStyle }],
   );
-  const { resourceClaims, fontUses, warnings } = textResourceClaims(runs);
+  const listRuns = paragraphs.flatMap((paragraph) => {
+    const list = paragraph.style.list;
+    if (list === undefined) return [];
+    const characters =
+      list.type === "bullet" ? (list.character ?? "•") : "0123456789.";
+    return [
+      {
+        text: characters,
+        style: paragraph.runs[0]?.style ?? paragraph.endStyle,
+      },
+    ];
+  });
+  const { resourceClaims, fontUses, warnings } = textResourceClaims([
+    ...runs,
+    ...listRuns,
+  ]);
   let measured: ReturnType<typeof measureParagraphs> | undefined;
   if (layout !== undefined) {
     try {

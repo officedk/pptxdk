@@ -23,9 +23,11 @@ catalog:
   esbuild: ^0.28.2
   fflate: ^0.8.3
   fontkit: ^2.0.4
+  harfbuzzjs: ^1.6.4
   linebreak: ^1.1.0
   yoga-layout: ^3.2.1
   "@types/fontkit": ^2.0.9
+  "@types/emscripten": ^1.41.6
   oxfmt: ^0.74.0
   oxlint: ^1.89.0
   oxlint-tsgolint: ^7.0.2001

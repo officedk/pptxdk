@@ -5,6 +5,7 @@ import {
   type CapabilityInput,
   type CapabilityModule,
   type LayoutStyle,
+  type LinkTarget,
   type ObjectObservation,
   type TextStyle,
   type ThemeScope,
@@ -12,6 +13,7 @@ import {
 } from "@react-pptx/core";
 import type { ReactNode } from "react";
 
+import { nativeLinkXml } from "./identity.ts";
 import type { MorphProps } from "./morph-api.ts";
 import {
   motionAnnotations,
@@ -24,6 +26,7 @@ export type GroupProps = MotionProps &
   MorphProps & {
     readonly testId?: string;
     readonly name?: string;
+    readonly link?: LinkTarget;
     readonly style?: LayoutStyle & TextStyle & Pick<VisualStyle, "rotate">;
     readonly theme?: ThemeScope;
     readonly children?: ReactNode;
@@ -33,6 +36,7 @@ const allowedParameters = [
   "testId",
   "name",
   "morphKey",
+  "link",
   "style",
   "theme",
   "enter",
@@ -129,6 +133,7 @@ function groupXml(
   box: EmuBox,
   members: string,
   rotation: number | undefined,
+  linkXml: string,
 ): string {
   // 组内坐标与页面坐标保持同一基准，避免成员因重复换算而发生缩放或位移。
   if (rotation !== undefined && !Number.isFinite(rotation)) {
@@ -138,7 +143,7 @@ function groupXml(
     rotation === undefined
       ? undefined
       : Math.round((((rotation % 360) + 360) % 360) * 60000);
-  return `<p:grpSp><p:nvGrpSpPr><p:cNvPr id="${id}" name="${escapedName}"/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr><a:xfrm${angle === undefined || angle === 0 ? "" : ` rot="${angle}"`}><a:off x="${box.x}" y="${box.y}"/><a:ext cx="${box.width}" cy="${box.height}"/><a:chOff x="${box.x}" y="${box.y}"/><a:chExt cx="${box.width}" cy="${box.height}"/></a:xfrm></p:grpSpPr>${members}</p:grpSp>`;
+  return `<p:grpSp><p:nvGrpSpPr><p:cNvPr id="${id}" name="${escapedName}">${linkXml}</p:cNvPr><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr><a:xfrm${angle === undefined || angle === 0 ? "" : ` rot="${angle}"`}><a:off x="${box.x}" y="${box.y}"/><a:ext cx="${box.width}" cy="${box.height}"/><a:chOff x="${box.x}" y="${box.y}"/><a:chExt cx="${box.width}" cy="${box.height}"/></a:xfrm></p:grpSpPr>${members}</p:grpSp>`;
 }
 
 /** 将成员保留为原生对象并按最终成员几何写出组合范围；外层布局由 core 求解。 */
@@ -201,6 +206,7 @@ export const groupCapability: CapabilityModule = {
         outputEmu,
         compiled.xml,
         rotation === undefined ? undefined : (rotation as number),
+        nativeLinkXml(context.nativeLink),
       ),
       observation: {
         id: context.id,

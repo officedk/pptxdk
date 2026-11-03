@@ -188,6 +188,7 @@ function transitionElement(
   value: TransitionRecord,
   duration: number | undefined,
   useDurationExtension: boolean,
+  advanceAfter?: number,
 ): string {
   const kind = value["kind"];
   const transitionSpeed = speed(duration);
@@ -196,8 +197,10 @@ function transitionElement(
     useDurationExtension && duration !== undefined
       ? ` p14:dur="${Math.round(duration)}"`
       : "";
+  const advanceAttribute =
+    advanceAfter === undefined ? "" : ` advTm="${Math.round(advanceAfter)}"`;
   if (kind === "fade")
-    return `<p:transition${speedAttribute}${durationAttribute}><p:fade/></p:transition>`;
+    return `<p:transition${speedAttribute}${durationAttribute}${advanceAttribute}><p:fade/></p:transition>`;
   if (kind === "strips") {
     const direction = value["direction"];
     if (
@@ -209,7 +212,7 @@ function transitionElement(
         "strips.direction 必须是四种对角方向之一",
       );
     }
-    return `<p:transition${speedAttribute}${durationAttribute}><p:strips dir="${stripDirections[direction as StripsDirection]}"/></p:transition>`;
+    return `<p:transition${speedAttribute}${durationAttribute}${advanceAttribute}><p:strips dir="${stripDirections[direction as StripsDirection]}"/></p:transition>`;
   }
   if (kind === "push") {
     const from = value["from"];
@@ -219,7 +222,7 @@ function transitionElement(
         "push.from 必须是 left、right、top 或 bottom",
       );
     }
-    return `<p:transition${speedAttribute}${durationAttribute}><p:push dir="${pushDirections[from as TransitionDirection]}"/></p:transition>`;
+    return `<p:transition${speedAttribute}${durationAttribute}${advanceAttribute}><p:push dir="${pushDirections[from as TransitionDirection]}"/></p:transition>`;
   }
   if (kind === "flip") {
     const direction = value["direction"];
@@ -229,7 +232,7 @@ function transitionElement(
         "flip.direction 必须是 left 或 right",
       );
     }
-    return `<p:transition${speedAttribute}${durationAttribute}><p14:flip dir="${direction === "left" ? "l" : "r"}"/></p:transition>`;
+    return `<p:transition${speedAttribute}${durationAttribute}${advanceAttribute}><p14:flip dir="${direction === "left" ? "l" : "r"}"/></p:transition>`;
   }
   if (kind === "morph") {
     const by = value["by"];
@@ -239,7 +242,7 @@ function transitionElement(
         "morph.by 必须是 object、word 或 character",
       );
     }
-    return `<p:transition${speedAttribute}${durationAttribute}><p159:morph option="${morphOptions[by]}"/></p:transition>`;
+    return `<p:transition${speedAttribute}${durationAttribute}${advanceAttribute}><p159:morph option="${morphOptions[by]}"/></p:transition>`;
   }
   return fail("unsupported-transition", `不支持转场类型 ${String(kind)}`);
 }
@@ -247,6 +250,7 @@ function transitionElement(
 function standardTransition(
   value: TransitionRecord,
   inheritedDuration: number | undefined,
+  advanceAfter?: number,
 ): {
   readonly xml: string;
   readonly observation: Readonly<Record<string, unknown>>;
@@ -271,7 +275,7 @@ function standardTransition(
   const explicitDuration = durationOf(value);
   const effectiveDuration = explicitDuration ?? inheritedDuration;
   return {
-    xml: transitionElement(value, effectiveDuration, false),
+    xml: transitionElement(value, effectiveDuration, false, advanceAfter),
     observation: Object.freeze({
       kind,
       ...(kind === "strips" ? { direction: value["direction"] } : {}),
@@ -281,7 +285,10 @@ function standardTransition(
   };
 }
 
-function compileTransition(value: unknown): {
+function compileTransition(
+  value: unknown,
+  advanceAfter?: number,
+): {
   readonly xml: string;
   readonly extensions: readonly Extension[];
   readonly observation: Readonly<Record<string, unknown>>;
@@ -331,9 +338,9 @@ function compileTransition(value: unknown): {
     if (fallbackValue["type"] !== "transition") {
       return fail("invalid-transition-fallback", "转场 fallback 声明无效");
     }
-    fallback = standardTransition(fallbackValue, duration);
+    fallback = standardTransition(fallbackValue, duration, advanceAfter);
   } else if (duration !== undefined) {
-    fallback = standardTransition(transition, duration);
+    fallback = standardTransition(transition, duration, advanceAfter);
   }
   const effectExtensions: Extension[] =
     kind === "flip" ? ["p14"] : kind === "morph" ? ["p159"] : [];
@@ -343,7 +350,12 @@ function compileTransition(value: unknown): {
       ...effectExtensions,
     ]),
   ];
-  const standardXml = transitionElement(transition, duration, false);
+  const standardXml = transitionElement(
+    transition,
+    duration,
+    false,
+    advanceAfter,
+  );
   const observation: Record<string, unknown> = {
     kind,
     ...(kind === "strips" ? { direction: transition["direction"] } : {}),
@@ -361,7 +373,7 @@ function compileTransition(value: unknown): {
       observation: Object.freeze(observation),
     };
   }
-  const exactXml = transitionElement(transition, duration, true);
+  const exactXml = transitionElement(transition, duration, true, advanceAfter);
   const fallbackXml = fallback?.xml ?? standardXml;
   const requires = extensions.join(" ");
   const declarations = [
@@ -378,13 +390,40 @@ function compileTransition(value: unknown): {
 export const transitionCapability: SlideCapabilityModule = Object.freeze({
   declaration: "transition",
   slideProp: "transition",
+  slideProps: ["transition", "advanceAfter"],
   slot: "transition",
   compileSlide(input: CapabilityInput) {
-    const transition = compileTransition(input.props["transition"]);
+    const advanceAfter = input.props["advanceAfter"];
+    if (
+      advanceAfter !== undefined &&
+      (typeof advanceAfter !== "number" ||
+        !Number.isFinite(advanceAfter) ||
+        advanceAfter < 0 ||
+        advanceAfter > 4_294_967_295)
+    ) {
+      return fail(
+        "invalid-advance-after",
+        "Slide.advanceAfter 必须是 0 到 4294967295 之间的有限毫秒数",
+      );
+    }
+    const transitionValue = input.props["transition"];
+    const transition =
+      transitionValue === undefined
+        ? {
+            xml:
+              advanceAfter === undefined
+                ? ""
+                : `<p:transition advTm="${Math.round(advanceAfter)}"/>`,
+            extensions: [] as readonly Extension[],
+            observation: undefined,
+          }
+        : compileTransition(transitionValue, advanceAfter);
     return {
       xml: transition.xml,
       extensions: transition.extensions,
-      observation: transition.observation,
+      ...(transition.observation === undefined
+        ? {}
+        : { observation: transition.observation }),
     };
   },
 });

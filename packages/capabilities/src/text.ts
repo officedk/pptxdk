@@ -8,6 +8,7 @@ import {
 } from "@react-pptx/core";
 
 import { fontPresentationContributions } from "./font-embedding.ts";
+import { nativeLinkXml } from "./identity.ts";
 import { motionAnnotations } from "./motion-api.ts";
 import {
   measureTextLayout,
@@ -17,9 +18,10 @@ import {
 } from "./text-service.ts";
 import { shapePropertiesXml } from "./visual.ts";
 
-export { P, Span, Text } from "./text-elements.ts";
+export { P, SlideNumber, Span, Text } from "./text-elements.ts";
 export type {
   ParagraphProps,
+  SlideNumberProps,
   ShapeTextStyle,
   SpanProps,
   TextProps,
@@ -39,6 +41,7 @@ const allowedParameters = [
   "testId",
   "name",
   "morphKey",
+  "link",
   "x",
   "y",
   "width",
@@ -151,8 +154,9 @@ function textBoxXml(
   },
   textBody: string,
   properties: string,
+  linkXml: string,
 ): string {
-  return `<p:sp><p:nvSpPr><p:cNvPr id="${id}" name="${escapedName}"/><p:cNvSpPr txBox="1"/><p:nvPr/></p:nvSpPr>${properties}${textBody}</p:sp>`;
+  return `<p:sp><p:nvSpPr><p:cNvPr id="${id}" name="${escapedName}">${linkXml}</p:cNvPr><p:cNvSpPr txBox="1"/><p:nvPr/></p:nvSpPr>${properties}${textBody}</p:sp>`;
 }
 
 /** 固定区域文本框能力；具体文字服务由文本框与其他原生对象共享。 */
@@ -184,6 +188,7 @@ export const textCapability: CapabilityModule = {
           : typeof width === "number"
             ? Math.max(0, width - insets.left - insets.right)
             : undefined,
+        request.slideNumber,
       );
     } catch (error) {
       if (
@@ -244,6 +249,11 @@ export const textCapability: CapabilityModule = {
         contentSized: requestedHeight.contentSized,
         insets,
       },
+      "text-box",
+      {
+        slideNumber: context.slideNumber,
+        createId: context.createTextFieldId,
+      },
     );
     const box = {
       ...dimensions,
@@ -288,7 +298,14 @@ export const textCapability: CapabilityModule = {
       );
     }
     const output = {
-      xml: textBoxXml(context.id, escapedName, box, body.xml, properties.xml),
+      xml: textBoxXml(
+        context.id,
+        escapedName,
+        box,
+        body.xml,
+        properties.xml,
+        nativeLinkXml(context.nativeLink),
+      ),
       observation: {
         id: context.id,
         kind: "text",

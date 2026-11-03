@@ -4287,6 +4287,12 @@ function readSlideAnimations(
       const paragraphIndexes = new Set(
         paragraphRanges.map(({ start }) => start),
       );
+      // grpId=1 的 build=p 表示完整段落投影；即使所有 pRg 都被删掉也必须校验。
+      const requiresFullParagraphProjection =
+        nativeBuildGroupId === 1 &&
+        paragraphBuild?.build === "p" &&
+        targetObject?.text !== undefined &&
+        targetObject.text.paragraphs.length > 0;
       const fullParagraphProjection =
         nativeBuildGroupId === 1 &&
         (paragraphBuild?.build === "allAtOnce" ||
@@ -4324,7 +4330,7 @@ function readSlideAnimations(
         continue;
       }
       if (
-        fullParagraphProjection &&
+        (fullParagraphProjection || requiresFullParagraphProjection) &&
         !validWholeTextProjection(
           preset,
           kind,

@@ -2657,6 +2657,52 @@ describe("对象动画", () => {
       ),
     );
 
+    const paragraphBehaviors = [
+      ...futureXml.matchAll(/<p:(set|animEffect)\b[^>]*>[\s\S]*?<\/p:\1>/gu),
+    ]
+      .map(([nativeBehavior]) => nativeBehavior ?? "")
+      .filter((nativeBehavior) =>
+        nativeBehavior.includes(`<p:spTgt spid="${futureTextId}"><p:txEl>`),
+      );
+    assert.equal(paragraphBehaviors.length, 4);
+    const backgroundOnlyXml = paragraphBehaviors.reduce(
+      (xml, nativeBehavior) => xml.replace(nativeBehavior, ""),
+      futureXml,
+    );
+    const missingAllParagraphRoles = await validatePptx(
+      zipSync({
+        ...parts,
+        [slidePath]: strToU8(backgroundOnlyXml),
+      }),
+    );
+    assert.ok(
+      missingAllParagraphRoles.errors.some(
+        ({ code }) => code === "invalid-animation-projection-target",
+      ),
+    );
+
+    const backgroundOnlyBuildXml = backgroundOnlyXml.replace(
+      `<p:bldP spid="${futureTextId}" grpId="1" build="p" animBg="1"></p:bldP>`,
+      `<p:bldP spid="${futureTextId}" grpId="1" build="allAtOnce" animBg="1"></p:bldP>`,
+    );
+    assert.notEqual(backgroundOnlyBuildXml, backgroundOnlyXml);
+    const legalBackgroundOnlyFile = await validatePptx(
+      zipSync({
+        ...parts,
+        [slidePath]: strToU8(backgroundOnlyBuildXml),
+      }),
+    );
+    assert.deepEqual(legalBackgroundOnlyFile.errors, []);
+    assert.deepEqual(
+      legalBackgroundOnlyFile.slides[0]?.animations?.[1]?.effects[0]?.nativeBehaviors?.map(
+        ({ behavior, targetType }) => [behavior, targetType],
+      ),
+      [
+        ["set", "background"],
+        ["animEffect", "background"],
+      ],
+    );
+
     const delayedTextId = result.report.slides[1]?.objects[0]?.id;
     assert.ok(delayedTextId !== undefined);
     const delayedXml = strFromU8(

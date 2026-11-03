@@ -111,6 +111,11 @@ type TimeCandidate = {
   readonly dependency?: MotionStartDependency;
 };
 
+type TimeReference = {
+  readonly eventId: string;
+  readonly offsetMs: number;
+};
+
 type Completion =
   | {
       readonly state: "known";
@@ -168,8 +173,14 @@ type TimeExpression =
       readonly state: "known";
       readonly timeMs: number;
       readonly candidates: readonly TimeCandidate[];
+      /** 被引用事件身份与候选来源分开保存，供精确别名复用已有时序节点。 */
+      readonly references: readonly TimeReference[];
     }
-  | { readonly state: "unknown"; readonly candidates: readonly TimeCandidate[] }
+  | {
+      readonly state: "unknown";
+      readonly candidates: readonly TimeCandidate[];
+      readonly references: readonly TimeReference[];
+    }
   | { readonly state: "no-natural-completion" };
 
 type EffectExpansion =
@@ -264,6 +275,7 @@ function eventTime(
   nativeStart?: MotionPlanStart,
   reportedStartAfter?: MotionStartDependency,
   reportedStartAfterAll?: readonly MotionStartDependency[],
+  candidates?: readonly TimeCandidate[],
 ): TimePoint {
   const candidate: TimeCandidate = {
     eventId,
@@ -278,7 +290,7 @@ function eventTime(
       state,
       timeMs,
       eventId,
-      candidates: [candidate],
+      candidates: candidates ?? [candidate],
       ...(dependency === undefined ? {} : { dependency }),
       ...(nativeStart === undefined ? {} : { nativeStart }),
       ...(reportedStartAfter === undefined ? {} : { reportedStartAfter }),
@@ -288,7 +300,7 @@ function eventTime(
   return {
     state,
     eventId,
-    candidates: [candidate],
+    candidates: candidates ?? [candidate],
     ...(dependency === undefined ? {} : { dependency }),
     ...(nativeStart === undefined ? {} : { nativeStart }),
     ...(reportedStartAfter === undefined ? {} : { reportedStartAfter }),
@@ -479,13 +491,19 @@ class MotionTimingFacts {
 
 function asExpression(time: TimePoint): TimeExpression {
   if (time.state === "no-natural-completion") return time;
+  const reference = { eventId: time.eventId, offsetMs: 0 };
   return time.state === "known"
     ? {
         state: "known",
         timeMs: time.timeMs,
         candidates: time.candidates,
+        references: [reference],
       }
-    : { state: "unknown", candidates: time.candidates };
+    : {
+        state: "unknown",
+        candidates: time.candidates,
+        references: [reference],
+      };
 }
 
 function add(
@@ -497,9 +515,47 @@ function add(
     ...candidate,
     offsetMs: candidate.offsetMs + offsetMs,
   }));
+  const references =
+    "references" in time
+      ? time.references
+      : [{ eventId: time.eventId, offsetMs: 0 }];
+  const shiftedReferences = references.map((reference) => ({
+    ...reference,
+    offsetMs: reference.offsetMs + offsetMs,
+  }));
   return time.state === "known"
-    ? { state: "known", timeMs: time.timeMs + offsetMs, candidates }
-    : { state: "unknown", candidates };
+    ? {
+        state: "known",
+        timeMs: time.timeMs + offsetMs,
+        candidates,
+        references: shiftedReferences,
+      }
+    : { state: "unknown", candidates, references: shiftedReferences };
+}
+
+function commonCandidateOffset(
+  candidates: readonly TimeCandidate[],
+  reference: readonly TimeCandidate[],
+): number | undefined {
+  if (candidates.length === 0 || candidates.length !== reference.length) {
+    return undefined;
+  }
+  const referenceByEvent = new Map(
+    reference.map((candidate) => [candidate.eventId, candidate]),
+  );
+  if (referenceByEvent.size !== reference.length) return undefined;
+  let commonOffset: number | undefined;
+  for (const candidate of candidates) {
+    const source = referenceByEvent.get(candidate.eventId);
+    if (source === undefined) return undefined;
+    const offset = candidate.offsetMs - source.offsetMs;
+    if (!Number.isSafeInteger(offset)) return undefined;
+    if (commonOffset !== undefined && commonOffset !== offset) {
+      return undefined;
+    }
+    commonOffset = offset;
+  }
+  return commonOffset;
 }
 
 function candidateDominates(
@@ -532,6 +588,21 @@ function maximum(
     }
   }
   const unique = [...uniqueByEvent.values()];
+  const referencesByEvent = new Map<string, TimeReference>();
+  for (const time of times) {
+    if (time.state === "no-natural-completion") continue;
+    const references =
+      "references" in time
+        ? time.references
+        : [{ eventId: time.eventId, offsetMs: 0 }];
+    for (const reference of references) {
+      const current = referencesByEvent.get(reference.eventId);
+      if (current === undefined || reference.offsetMs > current.offsetMs) {
+        referencesByEvent.set(reference.eventId, reference);
+      }
+    }
+  }
+  const references = [...referencesByEvent.values()];
   const exactCandidates = unique.map((candidate) => {
     const timeMs = facts.exactTime(candidate.eventId);
     return timeMs === undefined ? undefined : timeMs + candidate.offsetMs;
@@ -549,6 +620,7 @@ function maximum(
       candidates: unique.filter(
         (_candidate, index) => exactCandidates[index] === latest,
       ),
+      references,
     };
   }
 
@@ -561,7 +633,7 @@ function maximum(
     });
     return !dominated;
   });
-  return { state: "unknown", candidates: reduced };
+  return { state: "unknown", candidates: reduced, references };
 }
 
 function materializeEvent(
@@ -573,6 +645,7 @@ function materializeEvent(
   nativeStart?: MotionPlanStart,
   reportedStartAfter?: MotionStartDependency,
   reportedStartAfterAll?: readonly MotionStartDependency[],
+  preservedCandidates?: readonly TimeCandidate[],
 ): TimePoint {
   if (expression.state === "no-natural-completion") return expression;
   for (const candidate of expression.candidates) {
@@ -599,6 +672,7 @@ function materializeEvent(
       nativeStart,
       reportedStartAfter,
       reportedStartAfterAll,
+      preservedCandidates,
     );
   }
   return eventTime(
@@ -609,6 +683,7 @@ function materializeEvent(
     nativeStart,
     reportedStartAfter,
     reportedStartAfterAll,
+    preservedCandidates,
   );
 }
 
@@ -1086,6 +1161,18 @@ function motionPlan(
     const starts = new Map<string, TimePoint>();
     const ends = new Map<string, TimePoint>();
     const scopeStartPlans = new Map<string, MotionPlanStart>();
+    const conditionJoinsById = new Map<
+      string,
+      Extract<MotionPlanStart, { readonly kind: "condition-join" }>
+    >();
+    const conditionStartsByEventId = new Map<
+      string,
+      {
+        readonly id: string;
+        readonly candidates: readonly TimeCandidate[];
+        readonly delayMs: number;
+      }
+    >();
     const resolvingStarts = new Set<string>();
     const resolvingEnds = new Set<string>();
     const scheduledObjects = new Set<number>();
@@ -1170,6 +1257,41 @@ function motionPlan(
           fail("unknown-motion-start", "子项起点早于其包含作用域", path);
         }
         return { kind: "parent-start", delayMs };
+      }
+
+      const parentStartDelay = commonCandidateOffset(
+        expression.candidates,
+        parentStart.candidates,
+      );
+      if (parentStartDelay !== undefined && parentStartDelay >= 0) {
+        // 仅当每个原始事件都增加相同精确偏移时，才复用父起点。
+        return { kind: "parent-start", delayMs: parentStartDelay };
+      }
+      for (const reference of expression.references) {
+        const canonical = conditionStartsByEventId.get(reference.eventId);
+        if (canonical === undefined) continue;
+        const delayMs = commonCandidateOffset(
+          expression.candidates,
+          canonical.candidates,
+        );
+        if (delayMs === undefined || delayMs !== reference.offsetMs) continue;
+        const conditionEndDelay = canonical.delayMs + delayMs;
+        if (
+          !Number.isSafeInteger(conditionEndDelay) ||
+          conditionEndDelay < 0 ||
+          conditionEndDelay > maximumTimeNodeValue
+        ) {
+          fail(
+            "invalid-motion-time",
+            "条件集合完成偏移必须保持在 ST_TLTime 范围内",
+            path,
+          );
+        }
+        return {
+          kind: "condition-end",
+          id: canonical.id,
+          delayMs: conditionEndDelay,
+        };
       }
 
       if (expression.candidates.length !== 1) {
@@ -1342,6 +1464,29 @@ function motionPlan(
               },
         );
         return Object.freeze(dependencies);
+      }
+      if (nativeStart.kind === "condition-end") {
+        const canonical = conditionJoinsById.get(nativeStart.id);
+        if (canonical === undefined) {
+          throw new Error("MotionPlan 条件别名缺少原始条件集合");
+        }
+        const dependencies = canonical.gates.map((gate) =>
+          gate.kind === "end"
+            ? gate.dependency
+            : {
+                scopeId: canonical.hostScopeId,
+                point: "start" as const,
+                offsetMs: gate.delayMs,
+              },
+        );
+        return Object.freeze(
+          dependencies.map((dependency) =>
+            dependencyAtEvent(
+              dependency,
+              dependency.offsetMs + nativeStart.delayMs,
+            ),
+          ),
+        );
       }
       if (nativeStart.kind !== "parent-start") return undefined;
       if (parentStart.state === "no-natural-completion") return undefined;
@@ -1552,6 +1697,20 @@ function motionPlan(
         base = maximum([base, fromCue], facts);
       }
       const startExpression = add(base, scope.declaration.delay);
+      if (startExpression.state === "no-natural-completion") {
+        fail(
+          "no-natural-completion",
+          "无自然完成的内容不能启动后继效果",
+          scope.path,
+        );
+      }
+      if (parentStart.state === "no-natural-completion") {
+        fail(
+          "no-natural-completion",
+          "无自然完成的父作用域不能启动后继效果",
+          scope.path,
+        );
+      }
       const nativeStart = resolveNativeStart(
         startExpression,
         parentStart,
@@ -1566,6 +1725,7 @@ function motionPlan(
               order: scope.order,
             },
       );
+      // 多来源起点保留候选，但仍由 eventId 表示整个合成起点。
       const start = materializeEvent(
         startExpression,
         scopeStartEventId(scope),
@@ -1575,7 +1735,48 @@ function motionPlan(
         nativeStart,
         reportedDependency(nativeStart, parentStart),
         reportedDependencies(nativeStart, parentStart),
+        startExpression.candidates.length > 1
+          ? startExpression.candidates
+          : undefined,
       );
+      if (nativeStart.kind === "parent-start") {
+        facts.addExactOffset(
+          parentStart.eventId,
+          scopeStartEventId(scope),
+          nativeStart.delayMs,
+          scope.path,
+        );
+      } else if (nativeStart.kind === "condition-end") {
+        facts.addExactOffset(
+          nativeStart.id,
+          scopeStartEventId(scope),
+          nativeStart.delayMs,
+          scope.path,
+        );
+      }
+      if (nativeStart.kind === "condition-join") {
+        conditionJoinsById.set(nativeStart.id, nativeStart);
+        conditionStartsByEventId.set(scopeStartEventId(scope), {
+          id: nativeStart.id,
+          candidates: startExpression.candidates,
+          delayMs: 0,
+        });
+      } else if (nativeStart.kind === "condition-end") {
+        conditionStartsByEventId.set(scopeStartEventId(scope), {
+          id: nativeStart.id,
+          candidates: startExpression.candidates,
+          delayMs: nativeStart.delayMs,
+        });
+      } else if (nativeStart.kind === "parent-start") {
+        const inherited = conditionStartsByEventId.get(parentStart.eventId);
+        if (inherited !== undefined) {
+          conditionStartsByEventId.set(scopeStartEventId(scope), {
+            id: inherited.id,
+            candidates: startExpression.candidates,
+            delayMs: inherited.delayMs + nativeStart.delayMs,
+          });
+        }
+      }
       scopeStartPlans.set(scope.declaration.identity, nativeStart);
       starts.set(scope.declaration.identity, start);
       resolvingStarts.delete(scope.declaration.identity);

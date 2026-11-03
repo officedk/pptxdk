@@ -187,18 +187,10 @@ export function textShadowXml(theme: ThemeContext, value: unknown): string {
 
 function transformXml(
   box: ShapeBox,
-  style: VisualStyleRecord,
+  rotation: number | undefined,
   flipH: boolean | undefined,
   flipV: boolean | undefined,
 ): string {
-  const rotate =
-    style["rotate"] === undefined
-      ? undefined
-      : finite(style["rotate"], "rotate");
-  const normalized =
-    rotate === undefined
-      ? undefined
-      : Math.round((((rotate % 360) + 360) % 360) * 60000);
   for (const [name, value] of [
     ["flipH", flipH],
     ["flipV", flipV],
@@ -206,7 +198,16 @@ function transformXml(
     if (value !== undefined && typeof value !== "boolean")
       invalid("invalid-visual-style", `${name} 必须是布尔值`);
   }
-  return `<a:xfrm${normalized === undefined || normalized === 0 ? "" : ` rot="${normalized}"`}${flipH ? ' flipH="1"' : ""}${flipV ? ' flipV="1"' : ""}><a:off x="${emu(box.x, "x", true, true)}" y="${emu(box.y, "y", true, true)}"/><a:ext cx="${emu(box.width, "width", false)}" cy="${emu(box.height, "height", false)}"/></a:xfrm>`;
+  return `<a:xfrm${rotation === undefined || rotation === 0 ? "" : ` rot="${rotation}"`}${flipH ? ' flipH="1"' : ""}${flipV ? ' flipV="1"' : ""}><a:off x="${emu(box.x, "x", true, true)}" y="${emu(box.y, "y", true, true)}"/><a:ext cx="${emu(box.width, "width", false)}" cy="${emu(box.height, "height", false)}"/></a:xfrm>`;
+}
+
+function rotationUnits(style: VisualStyleRecord): number | undefined {
+  if (style["rotate"] === undefined) return undefined;
+  const degrees = finite(style["rotate"], "rotate");
+  const units = Math.round((((degrees % 360) + 360) % 360) * 60000);
+  if (!Number.isSafeInteger(units) || units < 0 || units > 21_600_000)
+    invalid("invalid-visual-style", "rotate 换算后超出 DrawingML 可写范围");
+  return units;
 }
 
 function point(value: number, label: string): string {
@@ -528,10 +529,12 @@ export function shapePropertiesXml(
     box,
     warnings,
   );
+  // 透明布局 Box 不写原生变换，但非法旋转仍是不可写的视觉声明。
+  const rotation = rotationUnits(style);
   const transform =
     options.layoutOnlyWhenInvisible && !hasVisibleStyle
       ? ""
-      : transformXml(box, style, options.flipH, options.flipV);
+      : transformXml(box, rotation, options.flipH, options.flipV);
   return {
     xml: `<p:spPr>${transform}${geometry.xml}${visualFill}${line}${effects}</p:spPr>`,
     ...(opacity === undefined ? {} : { opacity }),

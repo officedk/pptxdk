@@ -165,6 +165,7 @@ describe("几何、对象视觉和文字视觉", () => {
             height: 50,
             backgroundColor: "accent2",
             borderRadius: 10,
+            rotate: 15,
           },
         }),
         createElement(Box, {
@@ -194,6 +195,7 @@ describe("几何、对象视觉和文字视觉", () => {
     assert.match(slideXml, /spc="94"/u);
     assert.match(slideXml, /<a:effectLst><a:outerShdw/u);
     assert.match(slideXml, /rot="720000"/u);
+    assert.match(slideXml, /rot="900000"/u);
     assert.match(slideXml, /flipH="1"/u);
     assert.match(slideXml, /flipV="1"/u);
     assert.ok(
@@ -225,7 +227,7 @@ describe("几何、对象视觉和文字视觉", () => {
         createElement(Box, {
           key: "zero-height",
           testId: "zero-height-box",
-          style: { width: 100, height: 0 },
+          style: { width: 100, height: 0, rotate: 15 },
         }),
       ]),
     );
@@ -237,6 +239,37 @@ describe("几何、对象视觉和文字视觉", () => {
         ({ testId }) => testId === "empty-box" || testId === "zero-height-box",
       ),
     );
+  });
+
+  it("透明 Box 仍会按可写单位拒绝非法旋转声明", async () => {
+    for (const rotate of [
+      Number.NaN,
+      Number.POSITIVE_INFINITY,
+      "bad",
+    ] as const) {
+      await assert.rejects(
+        build(
+          deck([
+            createElement(Box, {
+              testId: "badrotate",
+              style: {
+                width: 100,
+                height: 20,
+                rotate: rotate as unknown as number,
+              },
+            }),
+          ]),
+        ),
+        (error: unknown) =>
+          error instanceof BuildError &&
+          error.diagnostics.some(
+            (item) =>
+              item.code === "invalid-visual-style" &&
+              item.path.includes("badrotate") &&
+              item.message.includes("rotate"),
+          ),
+      );
+    }
   });
 
   it("为复用的预设派生圆角调整值而不改写作者输入", async () => {

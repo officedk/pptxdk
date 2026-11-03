@@ -258,7 +258,7 @@ export function MotionScope({
   );
 }
 
-/** 布局 Box 将默认入场传给未自带入场的后代，但不成为动画目标。 */
+/** 可见 Box 的自有背景和未自带入场的后代可继承默认入场。 */
 export function Box({
   enter,
   motion,

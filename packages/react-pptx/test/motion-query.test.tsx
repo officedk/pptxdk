@@ -538,6 +538,8 @@ describe("observeMotion", () => {
 
   it("按声明闭包保留多层作用域关系且不扩展活动时间", async () => {
     const result = await build(createElement(DeclarationClosureDeck));
+    const file = await validatePptx(result.pptx);
+    assert.deepEqual(file.errors, []);
     const motion = observeMotion(
       result.query.slide("motion-declaration-closure").observation,
     );

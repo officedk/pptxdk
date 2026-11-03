@@ -284,7 +284,6 @@ export const textCapability: CapabilityModule = {
       name,
       ...(testId === undefined ? {} : { testId }),
       textBody: true,
-      hasTextCharacters: body.text.length > 0,
       filled:
         visualStyle["backgroundColor"] !== undefined ||
         visualStyle["backgroundImage"] !== undefined,

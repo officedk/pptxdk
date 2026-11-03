@@ -17,8 +17,10 @@ import type {
 } from "./motion-api.ts";
 import { maximumTimeNodeValue, motionScopeAnnotation } from "./motion-api.ts";
 import {
+  addMotionPlanStartDelay,
   composeMotionPlanStarts,
   compileMotionPlan,
+  motionPlanStartLayers,
   type MotionPlanConditionPlacement,
   type MotionPlanNode,
   type MotionPlanStart,
@@ -821,7 +823,7 @@ function effectTree(
   dimensions: { readonly width: number; readonly height: number },
 ): string {
   if (effect.startAfter !== undefined) {
-    timeNodeValue(effect.startAfter.offsetMs, "完成依赖偏移");
+    validateKnownTime(effect.startAfter.offsetMs, "完成依赖偏移");
   }
   const preset = {
     fade: { id: 10, class: "entr" },
@@ -895,46 +897,28 @@ function effectKey(effect: TimingEffect): string {
   return `${effect.target.id}:${effect.effectIndex}:${effect.partIndex ?? ""}`;
 }
 
-function startAfterDelay(
-  start: MotionPlanStart,
-  delayMs: number,
-): MotionPlanStart {
-  if (start.kind === "parent-start") {
-    return { kind: start.kind, delayMs: start.delayMs + delayMs };
-  }
-  if (start.kind === "end") {
-    return {
-      kind: start.kind,
-      dependency: {
-        ...start.dependency,
-        offsetMs: start.dependency.offsetMs + delayMs,
-      },
-    };
-  }
-  if (start.kind === "condition-join") {
-    return { kind: "condition-end", id: start.id, delayMs };
-  }
-  return { ...start, delayMs: start.delayMs + delayMs };
-}
-
-// 仅在合并结果仍可写入单个 ST_TLTime 字段时折叠延迟层。
 function addNativeStartDelay(
   start: MotionPlanStart,
   delayMs: number,
 ): MotionPlanStart | undefined {
-  const delayed = startAfterDelay(start, delayMs);
-  const value =
-    delayed.kind === "parent-start"
-      ? delayed.delayMs
-      : delayed.kind === "end"
-        ? delayed.dependency.offsetMs
-        : delayed.kind === "condition-end"
-          ? delayed.delayMs
+  const delayed = addMotionPlanStartDelay(start, delayMs);
+  if (delayed === undefined) return undefined;
+  const { base, delays } = motionPlanStartLayers(delayed);
+  const baseValue =
+    base.kind === "parent-start"
+      ? base.delayMs
+      : base.kind === "end" || base.kind === "event"
+        ? base.dependency.offsetMs
+        : base.kind === "condition-end"
+          ? base.delayMs
           : undefined;
-  return Number.isSafeInteger(value) &&
-    value !== undefined &&
-    value >= 0 &&
-    value <= maximumTimeNodeValue
+  return [baseValue, ...delays].every(
+    (value) =>
+      value === undefined ||
+      (Number.isSafeInteger(value) &&
+        value >= 0 &&
+        value <= maximumTimeNodeValue),
+  )
     ? delayed
     : undefined;
 }
@@ -947,7 +931,9 @@ function dependencyTimingId(
   targetGroupIds: ReadonlyMap<string, number>,
 ): number | undefined {
   if ("scopeId" in dependency) {
-    return scopeNodeIds.get(`${stepKey}:${dependency.scopeId}`);
+    return scopeNodeIds.get(
+      `${stepKey}:${dependency.point}:${dependency.scopeId}`,
+    );
   }
   if ("group" in dependency) {
     return targetGroupIds.get(`${stepKey}:${dependency.targetId}`);
@@ -972,6 +958,9 @@ function nativeStartCondition(
   }
   if (start.kind === "condition-join") {
     throw new Error("MotionPlan 条件集合必须先于其消费者写出");
+  }
+  if (start.kind === "delay-layer") {
+    throw new Error("MotionPlan 延迟层必须通过原生时间容器写出");
   }
   if (start.kind === "condition-end") {
     const conditionId = conditionNodeIds.get(`${stepKey}:${start.id}`);
@@ -1000,7 +989,10 @@ function nativeStartCondition(
   return element(
     "p:cond",
     {
-      evt: "end",
+      evt:
+        start.kind === "event" || start.dependency.point === "start"
+          ? "begin"
+          : "end",
       delay: timeNodeValue(start.dependency.offsetMs, "完成依赖偏移"),
     },
     element("p:tn", { val: dependencyId }),
@@ -1022,15 +1014,17 @@ function timingContainer(
   children: readonly string[],
   nodeType?: string,
 ): string {
+  const isEmpty = children.length === 0;
   return element(
     "p:par",
     undefined,
     element(
       "p:cTn",
-      { id, fill: "hold", nodeType },
+      { id, ...(isEmpty ? { dur: 0 } : {}), fill: "hold", nodeType },
       element("p:stCondLst", undefined, startCondition),
-      endSync(),
-      element("p:childTnLst", undefined, ...children),
+      isEmpty ? undefined : endSync(),
+      // 空作用域的 END 与其未知 START 相同；省略空列表以保持合法 XML。
+      isEmpty ? undefined : element("p:childTnLst", undefined, ...children),
     ),
   );
 }
@@ -1061,6 +1055,17 @@ function conditionJoinTree(
   );
 }
 
+function gateStart(gate: MotionPlanStartGate): MotionPlanStart {
+  switch (gate.kind) {
+    case "parent-start":
+      return { kind: "parent-start", delayMs: gate.delayMs };
+    case "end":
+      return { kind: "end", dependency: gate.dependency };
+    case "begin":
+      return { kind: "event", dependency: gate.dependency };
+  }
+}
+
 function endCollectorTree(
   id: number,
   startCondition: string,
@@ -1084,7 +1089,7 @@ function endCollectorTree(
           "p:stCondLst",
           undefined,
           nativeStartCondition(
-            gate,
+            gateStart(gate),
             stepKey,
             effectNodeIds,
             scopeNodeIds,
@@ -1128,15 +1133,41 @@ function timingXml(
   const targetGroupIds = new Map<string, number>();
   const conditionNodeIds = new Map<string, number>();
   const referencedScopeNodes = new Set<string>();
+  const referencedScopeStartNodes = new Set<string>();
   const referencedTargetGroups = new Set<string>();
   const keepDependencyContainer = (
     dependency: MotionStartDependency,
     stepKey: string,
   ): void => {
     if ("scopeId" in dependency) {
-      referencedScopeNodes.add(`${stepKey}:${dependency.scopeId}`);
+      const key = `${stepKey}:${dependency.point}:${dependency.scopeId}`;
+      if (dependency.point === "start") {
+        referencedScopeStartNodes.add(key);
+      } else {
+        referencedScopeNodes.add(key);
+      }
     } else if ("group" in dependency) {
       referencedTargetGroups.add(`${stepKey}:${dependency.targetId}`);
+    }
+  };
+  const collectStartReferences = (
+    start: MotionPlanStart,
+    stepKey: string,
+  ): void => {
+    if (start.kind === "delay-layer") {
+      collectStartReferences(start.start, stepKey);
+    } else if (start.kind === "end" || start.kind === "event") {
+      keepDependencyContainer(start.dependency, stepKey);
+    } else if (start.kind === "condition-join") {
+      referencedScopeStartNodes.add(`${stepKey}:start:${start.hostScopeId}`);
+      referencedScopeStartNodes.add(
+        `${stepKey}:start:${start.consumerParentScopeId}`,
+      );
+      for (const gate of start.gates) {
+        if (gate.kind === "end" || gate.kind === "begin") {
+          keepDependencyContainer(gate.dependency, stepKey);
+        }
+      }
     }
   };
 
@@ -1146,28 +1177,24 @@ function timingXml(
     stepKey: string,
   ): void => {
     for (const node of nodes) {
-      if (node.nativeStart.kind === "end") {
-        keepDependencyContainer(node.nativeStart.dependency, stepKey);
-      } else if (node.nativeStart.kind === "condition-join") {
-        referencedScopeNodes.add(`${stepKey}:${node.nativeStart.hostScopeId}`);
-        for (const gate of node.nativeStart.gates) {
-          if (gate.kind !== "end") continue;
-          keepDependencyContainer(gate.dependency, stepKey);
-        }
-      }
+      collectStartReferences(node.nativeStart, stepKey);
       if (node.kind === "completion-collector") {
         for (const gate of node.gates) {
-          keepDependencyContainer(gate.dependency, stepKey);
+          if (gate.kind === "end" || gate.kind === "begin") {
+            keepDependencyContainer(gate.dependency, stepKey);
+          }
         }
       }
       if (node.kind === "scope") {
         for (const placement of node.conditionDefinitionsBefore ?? []) {
-          referencedScopeNodes.add(`${stepKey}:${placement.join.hostScopeId}`);
-          referencedScopeNodes.add(
-            `${stepKey}:${placement.join.consumerParentScopeId}`,
+          referencedScopeStartNodes.add(
+            `${stepKey}:start:${placement.join.hostScopeId}`,
+          );
+          referencedScopeStartNodes.add(
+            `${stepKey}:start:${placement.join.consumerParentScopeId}`,
           );
           for (const gate of placement.join.gates) {
-            if (gate.kind === "end") {
+            if (gate.kind === "end" || gate.kind === "begin") {
               keepDependencyContainer(gate.dependency, stepKey);
             }
           }
@@ -1178,6 +1205,13 @@ function timingXml(
   };
   for (const step of steps) {
     collectReferencedContainers(step.nodes, step.key);
+    for (const placement of step.conditionDefinitionsBefore ?? []) {
+      for (const gate of placement.join.gates) {
+        if (gate.kind === "end" || gate.kind === "begin") {
+          keepDependencyContainer(gate.dependency, step.key);
+        }
+      }
+    }
   }
 
   const registerNodeIds = (
@@ -1185,19 +1219,24 @@ function timingXml(
     stepKey: string,
   ): void => {
     for (const node of nodes) {
-      if (node.nativeStart.kind === "condition-join") {
-        conditionNodeIds.set(`${stepKey}:${node.nativeStart.id}`, ids.take());
+      const { base: startBase } = motionPlanStartLayers(node.nativeStart);
+      if (startBase.kind === "condition-join") {
+        conditionNodeIds.set(`${stepKey}:${startBase.id}`, ids.take());
       }
       if (node.kind === "scope") {
         for (const placement of node.conditionDefinitionsBefore ?? []) {
           conditionNodeIds.set(`${stepKey}:${placement.join.id}`, ids.take());
         }
-        scopeNodeIds.set(`${stepKey}:${node.id}`, ids.take());
+        const scopeTimingId = ids.take();
+        scopeNodeIds.set(`${stepKey}:start:${node.id}`, scopeTimingId);
+        if (node.splitCompletion !== true) {
+          scopeNodeIds.set(`${stepKey}:end:${node.id}`, scopeTimingId);
+        }
         registerNodeIds(node.children, stepKey);
         continue;
       }
       if (node.kind === "completion-collector") {
-        scopeNodeIds.set(`${stepKey}:${node.scopeId}`, ids.take());
+        scopeNodeIds.set(`${stepKey}:end:${node.scopeId}`, ids.take());
         continue;
       }
       if (node.effects.length > 1) {
@@ -1209,6 +1248,9 @@ function timingXml(
     }
   };
   for (const step of steps) {
+    for (const placement of step.conditionDefinitionsBefore ?? []) {
+      conditionNodeIds.set(`${step.key}:${placement.join.id}`, ids.take());
+    }
     registerNodeIds(step.nodes, step.key);
   }
   const chartBuildGroupIds = new Map<number, number>();
@@ -1372,7 +1414,9 @@ function timingXml(
       ),
     ];
   };
-  const stepGroups = steps.map((step) => {
+  // 空步骤只保留查询声明，不为原生时序树写入空的 childTnLst。
+  const stepsWithNativeNodes = steps.filter(({ nodes }) => nodes.length > 0);
+  const stepGroups = stepsWithNativeNodes.map((step) => {
     const stepId = ids.take();
     const trigger =
       step.trigger === "click"
@@ -1387,6 +1431,73 @@ function timingXml(
         effect.delayMs + (effect.partIndex ?? 0) * effect.durationMs,
         "动画对象成员延迟",
       );
+    const wrapDelayLayers = (
+      start: MotionPlanStart,
+      children: readonly string[],
+      nodeType?: string,
+    ): string[] => {
+      const { base, delays } = motionPlanStartLayers(start);
+      if (delays.length === 0) return [...children];
+      const rendered: string[] = [];
+      let outerStart = base;
+      if (outerStart.kind === "condition-join") {
+        rendered.push(
+          conditionJoinTree(
+            outerStart,
+            step.key,
+            ids,
+            effectNodeIds,
+            scopeNodeIds,
+            targetGroupIds,
+            conditionNodeIds,
+          ),
+        );
+        outerStart = {
+          kind: "condition-end",
+          id: outerStart.id,
+          delayMs: 0,
+        };
+      }
+      let nestedChildren = [...children];
+      for (
+        let layerIndex = delays.length - 2;
+        layerIndex >= 0;
+        layerIndex -= 1
+      ) {
+        const delayMs = delays[layerIndex];
+        if (delayMs === undefined) continue;
+        nestedChildren = [
+          timingContainer(
+            ids.take(),
+            nativeStartCondition(
+              { kind: "parent-start", delayMs },
+              step.key,
+              effectNodeIds,
+              scopeNodeIds,
+              targetGroupIds,
+              conditionNodeIds,
+            ),
+            nestedChildren,
+          ),
+        ];
+      }
+      rendered.push(
+        timingContainer(
+          ids.take(),
+          nativeStartCondition(
+            outerStart,
+            step.key,
+            effectNodeIds,
+            scopeNodeIds,
+            targetGroupIds,
+            conditionNodeIds,
+          ),
+          nestedChildren,
+          nodeType,
+        ),
+      );
+      return rendered;
+    };
     const renderNodes = (
       nodes: readonly MotionPlanNode[],
       inheritedStart: MotionPlanStart | undefined,
@@ -1431,6 +1542,26 @@ function timingXml(
         if (effectiveStart === undefined) {
           throw new Error("原生时序投影需要保留延迟分层");
         }
+        if (effectiveStart.kind === "delay-layer") {
+          const { delays } = motionPlanStartLayers(effectiveStart);
+          const lastDelay = delays.at(-1);
+          if (lastDelay === undefined) {
+            throw new Error("MotionPlan 延迟层缺少实际延迟字段");
+          }
+          const delayedNode: MotionPlanNode = {
+            ...node,
+            nativeStart: { kind: "parent-start", delayMs: lastDelay },
+          };
+          rendered.push(
+            ...wrapDelayLayers(
+              effectiveStart,
+              renderNodes([delayedNode], undefined, false),
+              pendingRootNodeType,
+            ),
+          );
+          pendingRootNodeType = undefined;
+          continue;
+        }
         if (effectiveStart.kind === "condition-join") {
           rendered.push(
             conditionJoinTree(
@@ -1450,13 +1581,16 @@ function timingXml(
           };
         }
         if (node.kind === "scope") {
-          const scopeId = scopeNodeIds.get(`${step.key}:${node.id}`);
+          const scopeId = scopeNodeIds.get(`${step.key}:start:${node.id}`);
           if (scopeId === undefined) {
             throw new Error("MotionPlan 作用域缺少原生时间节点身份");
           }
-          const needsCompletionNode = referencedScopeNodes.has(
-            `${step.key}:${node.id}`,
-          );
+          const needsCompletionNode =
+            node.splitCompletion !== true &&
+            referencedScopeNodes.has(`${step.key}:end:${node.id}`);
+          const needsStartNode =
+            node.preserveStart === true ||
+            referencedScopeStartNodes.has(`${step.key}:start:${node.id}`);
           const childrenCanLift = node.children.every((child) => {
             const childStart = composeMotionPlanStarts(
               effectiveStart,
@@ -1476,7 +1610,7 @@ function timingXml(
               addNativeStartDelay(childStart, childDelay(effect)) !== undefined
             );
           });
-          if (needsCompletionNode || !childrenCanLift) {
+          if (needsCompletionNode || needsStartNode || !childrenCanLift) {
             const condition = nativeStartCondition(
               effectiveStart,
               step.key,
@@ -1516,7 +1650,9 @@ function timingXml(
         }
 
         if (node.kind === "completion-collector") {
-          const collectorId = scopeNodeIds.get(`${step.key}:${node.scopeId}`);
+          const collectorId = scopeNodeIds.get(
+            `${step.key}:end:${node.scopeId}`,
+          );
           if (collectorId === undefined) {
             throw new Error("MotionPlan 完成集合缺少原生时间节点身份");
           }
@@ -1600,8 +1736,20 @@ function timingXml(
           if (localStart === undefined) {
             throw new Error("原生时序投影丢失可编码的动画延迟分层");
           }
+          let effectStart = localStart;
+          let effectNodeType =
+            pendingRootNodeType ??
+            (effectIndex === 0 ? nodeType : "withEffect");
+          if (localStart.kind === "delay-layer") {
+            const lastDelay = motionPlanStartLayers(localStart).delays.at(-1);
+            if (lastDelay === undefined) {
+              throw new Error("MotionPlan 效果延迟层缺少实际延迟字段");
+            }
+            effectStart = { kind: "parent-start", delayMs: lastDelay };
+            effectNodeType = effectIndex === 0 ? "afterEffect" : "withEffect";
+          }
           const effectCondition = nativeStartCondition(
-            localStart,
+            effectStart,
             step.key,
             effectNodeIds,
             scopeNodeIds,
@@ -1612,15 +1760,22 @@ function timingXml(
             effect.target.range?.type === "chart"
               ? chartBuildGroupIds.get(effect.target.id)
               : undefined;
+          const effectTrees = renderedEffect(
+            effect,
+            effectNodeType,
+            effectCondition,
+            effectId,
+            buildGroupId,
+          );
           rendered.push(
-            ...renderedEffect(
-              effect,
-              pendingRootNodeType ??
-                (effectIndex === 0 ? nodeType : "withEffect"),
-              effectCondition,
-              effectId,
-              buildGroupId,
-            ),
+            ...(localStart.kind === "delay-layer"
+              ? wrapDelayLayers(
+                  localStart,
+                  effectTrees,
+                  pendingRootNodeType ??
+                    (effectIndex === 0 ? nodeType : "withEffect"),
+                )
+              : effectTrees),
           );
           pendingRootNodeType = undefined;
         }
@@ -1633,6 +1788,7 @@ function timingXml(
       undefined,
       true,
       step.trigger === "click" ? "clickEffect" : "afterEffect",
+      step.conditionDefinitionsBefore,
     );
     const stepTimingGroups =
       stepChildren.length === 0

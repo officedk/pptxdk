@@ -277,6 +277,8 @@ export type CapabilityContext = {
   /** 本次构建选项；能力模块自行解释其负责的选项。 */
   readonly options: BuildOptions;
   readonly layoutBox?: GeometryBox;
+  /** 将显式连续性句柄转换成 OOXML 对象名称；未声明连续性的对象不带此值。 */
+  readonly morphName?: string;
   /** 使用同一组已注册模块递归编译原生子对象。 */
   compileChildren(children: readonly CapabilityChild[]): CapabilityChildren;
   /** 将二进制资源加入 PPTX，并返回当前页面对应的关系标识。 */

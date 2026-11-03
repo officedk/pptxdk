@@ -9,6 +9,7 @@ import {
 } from "@react-pptx/core";
 import type { ReactNode } from "react";
 
+import type { MorphProps } from "./morph-api.ts";
 import {
   motionAnnotations,
   motionElement,
@@ -16,16 +17,18 @@ import {
 } from "./motion-api.ts";
 
 /** 原生 Group 保留成员关系；style 可让它作为布局子项排列，输出范围取成员几何并集。 */
-export type GroupProps = MotionProps & {
-  readonly testId?: string;
-  readonly name?: string;
-  readonly style?: LayoutStyle;
-  readonly children?: ReactNode;
-};
+export type GroupProps = MotionProps &
+  MorphProps & {
+    readonly testId?: string;
+    readonly name?: string;
+    readonly style?: LayoutStyle;
+    readonly children?: ReactNode;
+  };
 
 const allowedParameters = [
   "testId",
   "name",
+  "morphKey",
   "style",
   "enter",
   "emphasis",
@@ -155,7 +158,8 @@ export const groupCapability: CapabilityModule = {
       width: pxToEmu(outputGeometry.width),
       height: pxToEmu(outputGeometry.height),
     };
-    const name = requestedName ?? testId ?? `Group ${context.id - 1}`;
+    const name =
+      context.morphName ?? requestedName ?? testId ?? `Group ${context.id - 1}`;
     const annotations = motionAnnotations(input.props, {
       kind: "group",
       name,

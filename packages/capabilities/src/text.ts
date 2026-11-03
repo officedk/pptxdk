@@ -38,6 +38,7 @@ export type {
 const allowedParameters = [
   "testId",
   "name",
+  "morphKey",
   "x",
   "y",
   "width",
@@ -246,7 +247,8 @@ export const textCapability: CapabilityModule = {
         "height",
       ),
     };
-    const name = requestedName ?? testId ?? `Text ${context.id - 1}`;
+    const name =
+      context.morphName ?? requestedName ?? testId ?? `Text ${context.id - 1}`;
     const annotations = motionAnnotations(input.props, {
       kind: "text",
       name,

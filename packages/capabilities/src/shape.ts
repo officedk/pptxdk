@@ -11,6 +11,7 @@ import {
 import type { ReactNode } from "react";
 
 import { fontPresentationContributions } from "./font-embedding.ts";
+import type { MorphProps } from "./morph-api.ts";
 import {
   motionAnnotations,
   motionElement,
@@ -23,22 +24,23 @@ import {
   type TextStyle,
 } from "./text-service.ts";
 
-export type ShapeProps = MotionProps & {
-  readonly testId?: string;
-  readonly name?: string;
-  readonly geometry?: string;
-  readonly x?: number;
-  readonly y?: number;
-  readonly width?: number;
-  readonly height?: number;
-  readonly style?: LayoutStyle;
-  readonly fill?: string;
-  /** 直接写入此形状的原生正文，不创建额外文本框。 */
-  readonly text?: string;
-  /** 形状正文使用共享文字服务，裁剪文本框能力后仍可写出。 */
-  readonly textStyle?: TextStyle;
-  readonly children?: ReactNode;
-};
+export type ShapeProps = MotionProps &
+  MorphProps & {
+    readonly testId?: string;
+    readonly name?: string;
+    readonly geometry?: string;
+    readonly x?: number;
+    readonly y?: number;
+    readonly width?: number;
+    readonly height?: number;
+    readonly style?: LayoutStyle;
+    readonly fill?: string;
+    /** 直接写入此形状的原生正文，不创建额外文本框。 */
+    readonly text?: string;
+    /** 形状正文使用共享文字服务，裁剪文本框能力后仍可写出。 */
+    readonly textStyle?: TextStyle;
+    readonly children?: ReactNode;
+  };
 
 const geometryNames = new Set([
   "rect",
@@ -71,6 +73,7 @@ const maximumShapeExtentEmu = 2_147_483_647;
 const allowedParameters = [
   "testId",
   "name",
+  "morphKey",
   "geometry",
   "x",
   "y",
@@ -272,7 +275,8 @@ export const shapeCapability: CapabilityModule = {
         },
       );
     }
-    const name = requestedName ?? testId ?? `Shape ${context.id - 1}`;
+    const name =
+      context.morphName ?? requestedName ?? testId ?? `Shape ${context.id - 1}`;
     const annotations = motionAnnotations(props, {
       kind: "shape",
       name,

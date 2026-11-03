@@ -1,6 +1,8 @@
 export { createBuilder } from "#/builder.ts";
 export { BuildError, CapabilityError } from "#/diagnostics.ts";
 export { Box, Deck, Slide } from "#/elements.ts";
+export { createMorphScope } from "#/morph.ts";
+export type { MorphKey, MorphScope } from "#/morph.ts";
 export { pxToEmu, xmlEscape } from "#/ooxml.ts";
 export { formatBaseline, targets } from "#/types.ts";
 export type {

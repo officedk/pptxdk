@@ -566,6 +566,24 @@ function timingContainer(
   );
 }
 
+function mainSequenceWithGroup(
+  id: number,
+  children: readonly string[],
+): string {
+  // mainSeq 的标准 step→with-group→入口节点层级供原生导入识别步首角色。
+  // 分组从步首立即开始，不复制计划起点，也不创建 Shape 或完成来源。
+  return element(
+    "p:par",
+    undefined,
+    element(
+      "p:cTn",
+      { id, fill: "hold" },
+      element("p:stCondLst", undefined, element("p:cond", { delay: 0 })),
+      element("p:childTnLst", undefined, ...children),
+    ),
+  );
+}
+
 function timingXml(steps: readonly MotionPlanStep[]): string {
   const ids = new TimingIds();
   const rootId = ids.take();
@@ -811,6 +829,10 @@ function timingXml(steps: readonly MotionPlanStep[]): string {
       true,
       step.trigger === "click" ? "clickEffect" : "afterEffect",
     );
+    const stepTimingGroups =
+      stepChildren.length === 0
+        ? []
+        : [mainSequenceWithGroup(ids.take(), stepChildren)];
     return element(
       "p:par",
       undefined,
@@ -818,7 +840,7 @@ function timingXml(steps: readonly MotionPlanStep[]): string {
         "p:cTn",
         { id: stepId, fill: "hold" },
         element("p:stCondLst", undefined, trigger),
-        element("p:childTnLst", undefined, ...stepChildren),
+        element("p:childTnLst", undefined, ...stepTimingGroups),
       ),
     );
   });

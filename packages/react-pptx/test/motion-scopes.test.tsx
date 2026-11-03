@@ -438,7 +438,7 @@ function directTimingChildren(xml: string): string[] {
   return children;
 }
 
-function firstMainSequenceNodeType(
+function firstMainSequenceEntryNodeType(
   xml: string,
   stepIndex: number,
 ): string | undefined {
@@ -456,9 +456,17 @@ function firstMainSequenceNodeType(
   const childListStart = step.indexOf("<p:childTnLst>");
   assert.ok(childListStart >= 0);
   const nodes = directTimingChildren(step.slice(childListStart + listLength));
-  const firstNode = nodes[0];
-  assert.ok(firstNode);
-  const attributes = firstNode.match(/<p:cTn\b([^>]*)>/u)?.[1];
+  const withNode = nodes[0];
+  assert.ok(withNode);
+  const withChildrenStart = withNode.indexOf("<p:childTnLst>");
+  assert.ok(withChildrenStart >= 0);
+  // LibreOffice fixMainSequenceTiming reads the first child of this with-node.
+  const entryNodes = directTimingChildren(
+    withNode.slice(withChildrenStart + listLength),
+  );
+  const entryNode = entryNodes[0];
+  assert.ok(entryNode);
+  const attributes = entryNode.match(/<p:cTn\b([^>]*)>/u)?.[1];
   return attributes?.match(/(?:^|\s)nodeType="([^"]+)"/u)?.[1];
 }
 
@@ -1352,7 +1360,10 @@ describe("组件编排作用域", () => {
     assert.ok(slidePart);
     const xml = strFromU8(slidePart);
     assert.deepEqual(
-      [firstMainSequenceNodeType(xml, 0), firstMainSequenceNodeType(xml, 1)],
+      [
+        firstMainSequenceEntryNodeType(xml, 0),
+        firstMainSequenceEntryNodeType(xml, 1),
+      ],
       ["afterEffect", "clickEffect"],
     );
 

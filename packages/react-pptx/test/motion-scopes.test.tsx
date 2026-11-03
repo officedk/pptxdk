@@ -1149,6 +1149,171 @@ function ForwardConditionJoinOrdinaryEndChain({
   );
 }
 
+type EarlyHostParallelJoinOptions = {
+  readonly longFirst?: boolean;
+  readonly sourceOrder?: "first-late" | "late-first";
+  readonly trigger?: "auto" | "click";
+};
+
+function EarlyHostParallelJoin({
+  longFirst = false,
+  sourceOrder = "first-late",
+  trigger = "auto",
+}: EarlyHostParallelJoinOptions) {
+  const host = useMotionScope();
+  const inner = useMotionScope();
+  const late = useMotionScope();
+  const parent = useMotionScope();
+  const delayedConsumer = useMotionScope();
+  const follower = useMotionScope();
+  const firstSource = createElement(
+    Text,
+    {
+      testId: "early-host-first",
+      x: 10,
+      y: 8,
+      width: 300,
+      height: 24,
+      style: { fontSize: 12 },
+      enter: fade({ by: "letter", duration: 1000, intervalMs: 500 }),
+    },
+    longFirst ? "ABCDEFGHIJKLMNOPQRSTUVWXYZ123456" : "AB",
+  );
+  const lateSource = createElement(
+    MotionScope,
+    { scope: late, delay: 1000 },
+    createElement(
+      Text,
+      {
+        testId: "early-host-late",
+        x: 10,
+        y: 40,
+        width: 300,
+        height: 24,
+        style: { fontSize: 12 },
+        enter: fade({ by: "letter", duration: 1000, intervalMs: 500 }),
+      },
+      "XY",
+    ),
+  );
+  const sourceMembers =
+    sourceOrder === "first-late"
+      ? [firstSource, lateSource]
+      : [lateSource, firstSource];
+  const sourceTree = createElement(
+    MotionScope,
+    { scope: inner },
+    ...sourceMembers,
+  );
+  const consumerTree = createElement(
+    MotionScope,
+    { scope: parent, startAt: inner.end },
+    createElement(
+      MotionScope,
+      {
+        scope: delayedConsumer,
+        startAt: after(late.end, 11000),
+        delay: 1000,
+      },
+      observedShape("early-host-consumer", "D", 76, "#ED7D31", 100),
+    ),
+  );
+  const content = createElement(
+    Fragment,
+    null,
+    createElement(
+      MotionScope,
+      { scope: host, mode: "parallel" },
+      sourceTree,
+      consumerTree,
+    ),
+    createElement(
+      MotionScope,
+      { scope: follower, startAt: host.end },
+      observedShape("early-host-follower", "Follower", 112, "#70AD47", 50),
+    ),
+  );
+  return createElement(
+    Deck,
+    { width: 320, height: 170 },
+    createElement(
+      Slide,
+      { slideId: `early-host-${longFirst ? "long" : "short"}-${trigger}` },
+      trigger === "click" ? createElement(Step, { n: 2 }, content) : content,
+    ),
+  );
+}
+
+type CrossBranchJoinOptions = {
+  readonly kind: "cross-forward" | "cross-reverse" | "nonsequence";
+  readonly trigger: "auto" | "click";
+};
+
+function CrossBranchConditionJoin({ kind, trigger }: CrossBranchJoinOptions) {
+  const host = useMotionScope();
+  const first = useMotionScope();
+  const late = useMotionScope();
+  const parent = useMotionScope();
+  const consumer = useMotionScope();
+  const follower = useMotionScope();
+  const firstSource = createElement(
+    MotionScope,
+    { scope: first },
+    unknownLetterText("cross-first", "AB", 8),
+  );
+  const lateSource = createElement(
+    MotionScope,
+    { scope: late, delay: 1000 },
+    unknownLetterText("cross-late", "XY", 40),
+  );
+  const consumerMember = createElement(
+    MotionScope,
+    {
+      scope: consumer,
+      ...(kind === "nonsequence"
+        ? { startAt: after(late.end, 11000), delay: 1000 }
+        : { startAt: after(first.end, 11000) }),
+    },
+    observedShape("cross-consumer", "D", 76, "#ED7D31", 100),
+  );
+  const parentTree = createElement(
+    MotionScope,
+    {
+      scope: parent,
+      ...(kind === "nonsequence" ? { startAt: first.end } : {}),
+      ...(kind === "nonsequence" ? {} : { mode: "sequence" as const }),
+    },
+    ...(kind === "nonsequence"
+      ? [consumerMember]
+      : [lateSource, consumerMember]),
+  );
+  const children =
+    kind === "nonsequence"
+      ? [firstSource, lateSource, parentTree]
+      : kind === "cross-forward"
+        ? [firstSource, parentTree]
+        : [parentTree, firstSource];
+  const content = createElement(
+    Fragment,
+    null,
+    createElement(MotionScope, { scope: host, mode: "parallel" }, ...children),
+    createElement(
+      MotionScope,
+      { scope: follower, startAt: host.end },
+      observedShape("cross-follower", "Follower", 112, "#70AD47", 50),
+    ),
+  );
+  return createElement(
+    Deck,
+    { width: 320, height: 170 },
+    createElement(
+      Slide,
+      { slideId: `${kind}-${trigger}` },
+      trigger === "click" ? createElement(Step, { n: 2 }, content) : content,
+    ),
+  );
+}
+
 function IncomparableUnknownJoin({
   firstText,
   trigger,
@@ -2349,6 +2514,291 @@ describe("组件编排作用域", () => {
           [group.timingId, 0],
         );
       }
+    }
+  });
+
+  it("早宿主条件集合保留来源声明顺序、未知时长和点击步入口", async () => {
+    const variants: readonly EarlyHostParallelJoinOptions[] = [
+      { longFirst: false, sourceOrder: "first-late", trigger: "auto" },
+      { longFirst: false, sourceOrder: "late-first", trigger: "auto" },
+      { longFirst: false, sourceOrder: "first-late", trigger: "click" },
+      { longFirst: false, sourceOrder: "late-first", trigger: "click" },
+      { longFirst: true, sourceOrder: "first-late", trigger: "auto" },
+      { longFirst: true, sourceOrder: "late-first", trigger: "auto" },
+      { longFirst: true, sourceOrder: "first-late", trigger: "click" },
+      { longFirst: true, sourceOrder: "late-first", trigger: "click" },
+    ];
+    for (const options of variants) {
+      const result = await build(createElement(EarlyHostParallelJoin, options));
+      const slide = result.report.slides[0];
+      const motion = slide?.capabilities?.["motion"] as MotionObservation;
+      const objectId = (testId: string) =>
+        slide?.objects.find(({ testId: id }) => id === testId)?.id;
+      const scopeContaining = (testId: string) =>
+        motion.scopes?.find(({ members }) =>
+          members.some(
+            (member) =>
+              member.kind === "object" && member.id === objectId(testId),
+          ),
+        );
+      const firstScope = scopeContaining("early-host-first");
+      const lateScope = scopeContaining("early-host-late");
+      const consumerScope = scopeContaining("early-host-consumer");
+      const consumerParentScope = motion.scopes?.find(({ members }) =>
+        members.some(
+          (member) =>
+            member.kind === "scope" && member.id === consumerScope?.id,
+        ),
+      );
+      const hostScope = motion.scopes?.find(
+        ({ members }) =>
+          members.some(
+            (member) => member.kind === "scope" && member.id === firstScope?.id,
+          ) &&
+          members.some(
+            (member) =>
+              member.kind === "scope" && member.id === consumerParentScope?.id,
+          ),
+      );
+      const followerScope = scopeContaining("early-host-follower");
+      assert.ok(
+        firstScope &&
+          lateScope &&
+          consumerScope &&
+          consumerParentScope &&
+          hostScope &&
+          followerScope,
+      );
+      assert.deepEqual(consumerScope.startAfterAll, [
+        { scopeId: firstScope.id, point: "end", offsetMs: 1000 },
+        { scopeId: lateScope.id, point: "end", offsetMs: 12000 },
+      ]);
+      assert.deepEqual(consumerScope.completion, "unknown");
+      assert.deepEqual(consumerParentScope.startAfter, {
+        scopeId: firstScope.id,
+        point: "end",
+        offsetMs: 0,
+      });
+      assert.deepEqual(followerScope.startAfter, {
+        scopeId: hostScope.id,
+        point: "end",
+        offsetMs: 0,
+      });
+
+      const file = await validatePptx(result.pptx);
+      assert.deepEqual(file.errors, []);
+      assert.deepEqual(file.extensions, []);
+      const fileSlide = file.slides[0];
+      assert.equal(
+        fileSlide?.animations?.[0]?.trigger,
+        options.trigger ?? "auto",
+      );
+      const effects = fileSlide?.animations?.[0]?.effects ?? [];
+      assert.equal(effects.length, 4);
+      const effect = (testId: string) =>
+        effects.find(({ targetId }) => targetId === objectId(testId));
+      const firstEffect = effect("early-host-first");
+      const lateEffect = effect("early-host-late");
+      const consumerEffect = effect("early-host-consumer");
+      const followerEffect = effect("early-host-follower");
+      assert.ok(firstEffect && lateEffect && consumerEffect && followerEffect);
+      for (const source of [firstEffect, lateEffect]) {
+        assert.equal(source.by, "letter");
+        assert.equal(source.completion, "unknown");
+      }
+
+      const containers = fileSlide?.animationContainers ?? [];
+      const consumerParent = containers.find(({ children }) =>
+        children.some(
+          ({ kind, timingId }) =>
+            kind === "effect" && timingId === consumerEffect.timingId,
+        ),
+      );
+      assert.ok(consumerEffect.startAfter && consumerParent);
+      const join = containers.find(
+        ({ timingId }) => timingId === consumerEffect.startAfter?.timingId,
+      );
+      const firstSourceContainer = containers.find(({ children }) =>
+        children.some(
+          ({ kind, timingId }) =>
+            kind === "effect" && timingId === firstEffect.timingId,
+        ),
+      );
+      const host = containers.find(
+        ({ timingId }) => timingId === join?.parentTimingId,
+      );
+      assert.ok(join && host && firstSourceContainer);
+      assert.equal(join.endSync, "all");
+      assert.equal(join.durationMs, undefined);
+      assert.equal(join.children.length, 2);
+      assert.equal(consumerParent.parentTimingId, host.timingId);
+      assert.equal(
+        consumerParent.startAfter?.timingId,
+        firstSourceContainer.timingId,
+      );
+      assert.equal(consumerParent.startAfter?.point, "end");
+      assert.equal(consumerParent.startAfter?.offsetMs, 0);
+      assert.equal(followerEffect.startAfter?.timingId, host.timingId);
+      assert.equal(followerEffect.startAfter?.point, "end");
+      assert.ok(
+        host.children.some(
+          ({ kind, timingId }) =>
+            kind === "container" && timingId === join.timingId,
+        ),
+      );
+
+      const slidePart = unzipSync(result.pptx)["ppt/slides/slide1.xml"];
+      assert.ok(slidePart);
+      const xml = strFromU8(slidePart);
+      assertTimingReferencesFollowDefinitions(xml);
+      assert.equal(
+        firstMainSequenceEntryNodeType(xml, 0),
+        options.trigger === "click" ? "clickEffect" : "afterEffect",
+      );
+    }
+  });
+
+  it("跨并行分支放置条件集合并按来源关系排序两种声明顺序", async () => {
+    const variants: readonly CrossBranchJoinOptions[] = [
+      { kind: "cross-forward", trigger: "auto" },
+      { kind: "cross-reverse", trigger: "auto" },
+      { kind: "nonsequence", trigger: "auto" },
+      { kind: "cross-forward", trigger: "click" },
+      { kind: "cross-reverse", trigger: "click" },
+      { kind: "nonsequence", trigger: "click" },
+    ];
+    for (const options of variants) {
+      const result = await build(
+        createElement(CrossBranchConditionJoin, options),
+      );
+      const slide = result.report.slides[0];
+      const motion = slide?.capabilities?.["motion"] as MotionObservation;
+      const objectId = (testId: string) =>
+        slide?.objects.find(({ testId: id }) => id === testId)?.id;
+      const scopeContaining = (testId: string) =>
+        motion.scopes?.find(({ members }) =>
+          members.some(
+            (member) =>
+              member.kind === "object" && member.id === objectId(testId),
+          ),
+        );
+      const firstScope = scopeContaining("cross-first");
+      const lateScope = scopeContaining("cross-late");
+      const consumerScope = scopeContaining("cross-consumer");
+      const consumerParent = motion.scopes?.find(({ members }) =>
+        members.some(
+          (member) =>
+            member.kind === "scope" && member.id === consumerScope?.id,
+        ),
+      );
+      assert.ok(firstScope && lateScope && consumerScope && consumerParent);
+      const conditionSources =
+        options.kind === "nonsequence"
+          ? [
+              {
+                scopeId: firstScope.id,
+                point: "end" as const,
+                offsetMs: 1000,
+              },
+              {
+                scopeId: lateScope.id,
+                point: "end" as const,
+                offsetMs: 12000,
+              },
+            ]
+          : [
+              {
+                scopeId: lateScope.id,
+                point: "end" as const,
+                offsetMs: 0,
+              },
+              {
+                scopeId: firstScope.id,
+                point: "end" as const,
+                offsetMs: 11000,
+              },
+            ];
+      assert.deepEqual(consumerScope.startAfterAll, conditionSources);
+      assert.equal(consumerScope.completion, "unknown");
+
+      const file = await validatePptx(result.pptx);
+      assert.deepEqual(file.errors, []);
+      assert.deepEqual(file.extensions, []);
+      const fileSlide = file.slides[0];
+      assert.equal(fileSlide?.animations?.[0]?.trigger, options.trigger);
+      const effects = fileSlide?.animations?.[0]?.effects ?? [];
+      assert.equal(effects.length, 4);
+      const effect = (testId: string) =>
+        effects.find(({ targetId }) => targetId === objectId(testId));
+      const firstEffect = effect("cross-first");
+      const lateEffect = effect("cross-late");
+      const consumerEffect = effect("cross-consumer");
+      const followerEffect = effect("cross-follower");
+      assert.ok(firstEffect && lateEffect && consumerEffect && followerEffect);
+      for (const source of [firstEffect, lateEffect]) {
+        assert.equal(source.by, "letter");
+        assert.equal(source.completion, "unknown");
+      }
+
+      const containers = fileSlide?.animationContainers ?? [];
+      const consumerParentContainer = containers.find(({ children }) =>
+        children.some(
+          ({ kind, timingId }) =>
+            kind === "effect" && timingId === consumerEffect.timingId,
+        ),
+      );
+      assert.ok(consumerEffect.startAfter && consumerParentContainer);
+      const join = containers.find(
+        ({ timingId }) => timingId === consumerEffect.startAfter?.timingId,
+      );
+      assert.ok(join);
+      const joinHost = containers.find(
+        ({ timingId }) => timingId === join.parentTimingId,
+      );
+      const outerHost = containers.find(
+        ({ timingId }) => timingId === consumerParentContainer.parentTimingId,
+      );
+      assert.ok(joinHost && outerHost);
+      assert.equal(join.endSync, "all");
+      assert.equal(join.children.length, 2);
+      assert.equal(join.durationMs, undefined);
+      if (options.kind === "nonsequence") {
+        assert.equal(consumerParentContainer.parentTimingId, joinHost.timingId);
+        assert.equal(consumerParentContainer.startAfter?.offsetMs, 0);
+      } else {
+        assert.equal(joinHost.timingId, consumerParentContainer.timingId);
+      }
+      assert.equal(followerEffect.startAfter?.timingId, outerHost.timingId);
+
+      const firstContainer = containers.find(({ children }) =>
+        children.some(
+          ({ kind, timingId }) =>
+            kind === "effect" && timingId === firstEffect.timingId,
+        ),
+      );
+      const lateContainer = containers.find(({ children }) =>
+        children.some(
+          ({ kind, timingId }) =>
+            kind === "effect" && timingId === lateEffect.timingId,
+        ),
+      );
+      assert.ok(firstContainer && lateContainer);
+      const slidePart = unzipSync(result.pptx)["ppt/slides/slide1.xml"];
+      assert.ok(slidePart);
+      const xml = strFromU8(slidePart);
+      assertTimingReferencesFollowDefinitions(xml);
+      const definitionAt = (timingId: number) =>
+        xml.indexOf(`<p:cTn id="${timingId}"`);
+      assert.ok(
+        definitionAt(firstContainer.timingId) < definitionAt(join.timingId),
+      );
+      assert.ok(
+        definitionAt(lateContainer.timingId) < definitionAt(join.timingId),
+      );
+      assert.equal(
+        firstMainSequenceEntryNodeType(xml, 0),
+        options.trigger === "click" ? "clickEffect" : "afterEffect",
+      );
     }
   });
 

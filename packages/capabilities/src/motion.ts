@@ -15,6 +15,7 @@ import type {
 import { maximumTimeNodeValue, motionScopeAnnotation } from "./motion-api.ts";
 import {
   compileMotionPlan,
+  type MotionPlanConditionPlacement,
   type MotionPlanNode,
   type MotionPlanStart,
   type MotionPlanStep,
@@ -681,6 +682,16 @@ function timingXml(steps: readonly MotionPlanStep[]): string {
   const conditionNodeIds = new Map<string, number>();
   const referencedScopeNodes = new Set<string>();
   const referencedTargetGroups = new Set<string>();
+  const keepDependencyContainer = (
+    dependency: MotionStartDependency,
+    stepKey: string,
+  ): void => {
+    if ("scopeId" in dependency) {
+      referencedScopeNodes.add(`${stepKey}:${dependency.scopeId}`);
+    } else if ("group" in dependency) {
+      referencedTargetGroups.add(`${stepKey}:${dependency.targetId}`);
+    }
+  };
 
   // 只为真实 end 依赖保留聚合节点；无消费者的容器可把起点投影给成员。
   const collectReferencedContainers = (
@@ -689,25 +700,26 @@ function timingXml(steps: readonly MotionPlanStep[]): string {
   ): void => {
     for (const node of nodes) {
       if (node.nativeStart.kind === "end") {
-        const dependency = node.nativeStart.dependency;
-        if ("scopeId" in dependency) {
-          referencedScopeNodes.add(`${stepKey}:${dependency.scopeId}`);
-        } else if ("group" in dependency) {
-          referencedTargetGroups.add(`${stepKey}:${dependency.targetId}`);
-        }
+        keepDependencyContainer(node.nativeStart.dependency, stepKey);
       } else if (node.nativeStart.kind === "condition-join") {
         referencedScopeNodes.add(`${stepKey}:${node.nativeStart.hostScopeId}`);
         for (const gate of node.nativeStart.gates) {
           if (gate.kind !== "end") continue;
-          const dependency = gate.dependency;
-          if ("scopeId" in dependency) {
-            referencedScopeNodes.add(`${stepKey}:${dependency.scopeId}`);
-          } else if ("group" in dependency) {
-            referencedTargetGroups.add(`${stepKey}:${dependency.targetId}`);
-          }
+          keepDependencyContainer(gate.dependency, stepKey);
         }
       }
       if (node.kind === "scope") {
+        for (const placement of node.conditionDefinitionsBefore ?? []) {
+          referencedScopeNodes.add(`${stepKey}:${placement.join.hostScopeId}`);
+          referencedScopeNodes.add(
+            `${stepKey}:${placement.join.consumerParentScopeId}`,
+          );
+          for (const gate of placement.join.gates) {
+            if (gate.kind === "end") {
+              keepDependencyContainer(gate.dependency, stepKey);
+            }
+          }
+        }
         collectReferencedContainers(node.children, stepKey);
       }
     }
@@ -725,6 +737,9 @@ function timingXml(steps: readonly MotionPlanStep[]): string {
         conditionNodeIds.set(`${stepKey}:${node.nativeStart.id}`, ids.take());
       }
       if (node.kind === "scope") {
+        for (const placement of node.conditionDefinitionsBefore ?? []) {
+          conditionNodeIds.set(`${stepKey}:${placement.join.id}`, ids.take());
+        }
         scopeNodeIds.set(`${stepKey}:${node.id}`, ids.take());
         registerNodeIds(node.children, stepKey);
         continue;
@@ -773,10 +788,29 @@ function timingXml(steps: readonly MotionPlanStep[]): string {
       inheritedStart: MotionPlanStart | undefined,
       isTopLevel: boolean,
       firstRootNodeType?: string,
+      conditionDefinitionsBefore: readonly MotionPlanConditionPlacement[] = [],
     ): string[] => {
       const rendered: string[] = [];
       let pendingRootNodeType = firstRootNodeType;
       for (const [index, node] of nodes.entries()) {
+        const nodeId =
+          node.kind === "scope"
+            ? `scope:${node.id}`
+            : `target:${node.targetId}`;
+        for (const placement of conditionDefinitionsBefore) {
+          if (placement.join.beforeNodeId !== nodeId) continue;
+          rendered.push(
+            conditionJoinTree(
+              placement.join,
+              step.key,
+              ids,
+              effectNodeIds,
+              scopeNodeIds,
+              targetGroupIds,
+              conditionNodeIds,
+            ),
+          );
+        }
         const defaultNodeType =
           index === 0 && isTopLevel && step.trigger === "click"
             ? "clickEffect"
@@ -839,7 +873,13 @@ function timingXml(steps: readonly MotionPlanStep[]): string {
               targetGroupIds,
               conditionNodeIds,
             );
-            const children = renderNodes(node.children, undefined, false);
+            const children = renderNodes(
+              node.children,
+              undefined,
+              false,
+              undefined,
+              node.conditionDefinitionsBefore,
+            );
             rendered.push(
               timingContainer(
                 scopeId,
@@ -855,6 +895,7 @@ function timingXml(steps: readonly MotionPlanStep[]): string {
                 effectiveStart,
                 false,
                 pendingRootNodeType,
+                node.conditionDefinitionsBefore,
               ),
             );
           }

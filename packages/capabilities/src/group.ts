@@ -8,6 +8,7 @@ import {
   type ObjectObservation,
   type TextStyle,
   type ThemeScope,
+  type VisualStyle,
 } from "@react-pptx/core";
 import type { ReactNode } from "react";
 
@@ -23,7 +24,7 @@ export type GroupProps = MotionProps &
   MorphProps & {
     readonly testId?: string;
     readonly name?: string;
-    readonly style?: LayoutStyle & TextStyle;
+    readonly style?: LayoutStyle & TextStyle & Pick<VisualStyle, "rotate">;
     readonly theme?: ThemeScope;
     readonly children?: ReactNode;
   };
@@ -127,9 +128,17 @@ function groupXml(
   escapedName: string,
   box: EmuBox,
   members: string,
+  rotation: number | undefined,
 ): string {
   // 组内坐标与页面坐标保持同一基准，避免成员因重复换算而发生缩放或位移。
-  return `<p:grpSp><p:nvGrpSpPr><p:cNvPr id="${id}" name="${escapedName}"/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr><a:xfrm><a:off x="${box.x}" y="${box.y}"/><a:ext cx="${box.width}" cy="${box.height}"/><a:chOff x="${box.x}" y="${box.y}"/><a:chExt cx="${box.width}" cy="${box.height}"/></a:xfrm></p:grpSpPr>${members}</p:grpSp>`;
+  if (rotation !== undefined && !Number.isFinite(rotation)) {
+    throw new CapabilityError("invalid-visual-style", "rotate 必须是有限角度");
+  }
+  const angle =
+    rotation === undefined
+      ? undefined
+      : Math.round((((rotation % 360) + 360) % 360) * 60000);
+  return `<p:grpSp><p:nvGrpSpPr><p:cNvPr id="${id}" name="${escapedName}"/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr><a:xfrm${angle === undefined || angle === 0 ? "" : ` rot="${angle}"`}><a:off x="${box.x}" y="${box.y}"/><a:ext cx="${box.width}" cy="${box.height}"/><a:chOff x="${box.x}" y="${box.y}"/><a:chExt cx="${box.width}" cy="${box.height}"/></a:xfrm></p:grpSpPr>${members}</p:grpSp>`;
 }
 
 /** 将成员保留为原生对象并按最终成员几何写出组合范围；外层布局由 core 求解。 */
@@ -180,8 +189,19 @@ export const groupCapability: CapabilityModule = {
         "Group.name 含 XML 1.0 不允许的字符",
       );
     }
+    const style = input.props["style"];
+    const rotation =
+      typeof style === "object" && style !== null && !Array.isArray(style)
+        ? (style as Record<string, unknown>)["rotate"]
+        : undefined;
     return {
-      xml: groupXml(context.id, escapedName, outputEmu, compiled.xml),
+      xml: groupXml(
+        context.id,
+        escapedName,
+        outputEmu,
+        compiled.xml,
+        rotation === undefined ? undefined : (rotation as number),
+      ),
       observation: {
         id: context.id,
         kind: "group",

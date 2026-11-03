@@ -1,6 +1,5 @@
 import {
   CapabilityError,
-  pxToEmu,
   xmlEscape,
   type CapabilityLayoutMeasurement,
   type CapabilityLayoutRequest,
@@ -16,6 +15,7 @@ import {
   textExtent,
   writeTextBody,
 } from "./text-service.ts";
+import { shapePropertiesXml } from "./visual.ts";
 
 export { P, Span, Text } from "./text-elements.ts";
 export type {
@@ -114,6 +114,10 @@ const textStyleProperties = new Set([
   "verticalAlign",
   "align",
   "spacingAfter",
+  "letterSpacing",
+  "textTransform",
+  "textDecoration",
+  "textShadow",
 ]);
 
 function textStyle(value: unknown): unknown {
@@ -145,8 +149,9 @@ function textBoxXml(
     readonly height: number;
   },
   textBody: string,
+  properties: string,
 ): string {
-  return `<p:sp><p:nvSpPr><p:cNvPr id="${id}" name="${escapedName}"/><p:cNvSpPr txBox="1"/><p:nvPr/></p:nvSpPr><p:spPr><a:xfrm><a:off x="${pxToEmu(box.x)}" y="${pxToEmu(box.y)}"/><a:ext cx="${pxToEmu(box.width)}" cy="${pxToEmu(box.height)}"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom><a:noFill/><a:ln><a:noFill/></a:ln></p:spPr>${textBody}</p:sp>`;
+  return `<p:sp><p:nvSpPr><p:cNvPr id="${id}" name="${escapedName}"/><p:cNvSpPr txBox="1"/><p:nvPr/></p:nvSpPr>${properties}${textBody}</p:sp>`;
 }
 
 /** 固定区域文本框能力；具体文字服务由文本框与其他原生对象共享。 */
@@ -251,6 +256,14 @@ export const textCapability: CapabilityModule = {
         "height",
       ),
     };
+    const visualStyle = record(input.props["style"])
+      ? input.props["style"]
+      : {};
+    const properties = shapePropertiesXml({
+      theme: context.theme,
+      style: visualStyle,
+      box,
+    });
     const name =
       context.morphName ?? requestedName ?? testId ?? `Text ${context.id - 1}`;
     const annotations = motionAnnotations(input.props, {
@@ -258,7 +271,9 @@ export const textCapability: CapabilityModule = {
       name,
       ...(testId === undefined ? {} : { testId }),
       textBody: true,
-      filled: false,
+      filled:
+        visualStyle["backgroundColor"] !== undefined ||
+        visualStyle["backgroundImage"] !== undefined,
       paragraphCount: body.paragraphCount,
     });
     let escapedName: string;
@@ -271,7 +286,7 @@ export const textCapability: CapabilityModule = {
       );
     }
     const output = {
-      xml: textBoxXml(context.id, escapedName, box, body.xml),
+      xml: textBoxXml(context.id, escapedName, box, body.xml, properties.xml),
       observation: {
         id: context.id,
         kind: "text",
@@ -281,13 +296,13 @@ export const textCapability: CapabilityModule = {
         text: body.text,
       },
       extensions: [],
+      warnings: [...body.warnings, ...properties.warnings],
       ...(annotations.length === 0 ? {} : { annotations }),
       resourceClaims: body.resourceClaims,
       presentationContributions: fontPresentationContributions(
         body.fontUses,
         context.options.embedFonts,
       ),
-      warnings: body.warnings,
     };
     return output;
   },

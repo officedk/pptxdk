@@ -1,5 +1,30 @@
-export { Shape, shapeCapability } from "#/shape.ts";
-export type { ShapeProps } from "#/shape.ts";
+export {
+  Shape,
+  blockArc,
+  linearGradient,
+  path,
+  preset,
+  radialGradient,
+  shapeCapability,
+} from "#/shape.ts";
+export type {
+  CustomGeometry,
+  Geometry,
+  GeometryPath,
+  PathCommand,
+  PathOptions,
+  PresetGeometry,
+  ShapeProps,
+} from "#/shape.ts";
+export { boxCapability } from "#/box.ts";
+export type {
+  GradientStop,
+  ImageVisualStyle,
+  LinearGradient,
+  RadialGradient,
+  Shadow,
+  VisualStyle,
+} from "@react-pptx/core";
 export { Chart, chartCapability } from "#/chart.ts";
 export type {
   ChartAxis,

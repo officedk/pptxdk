@@ -147,7 +147,24 @@ const textProperties = new Set([
   "verticalAlign",
   "align",
   "spacingAfter",
+  "letterSpacing",
+  "textTransform",
+  "textDecoration",
+  "textShadow",
 ]);
+const visualProperties = new Set([
+  "backgroundColor",
+  "backgroundImage",
+  "borderColor",
+  "borderWidth",
+  "borderStyle",
+  "borderRadius",
+  "opacity",
+  "boxShadow",
+  "softEdge",
+  "rotate",
+]);
+const groupVisualProperties = new Set(["rotate"]);
 const containerProperties = [
   "flexDirection",
   "flexWrap",
@@ -595,6 +612,7 @@ function readStyle(
   isContainer: boolean,
   isText: boolean,
   allowsPadding = isContainer,
+  allowedPresentation: ReadonlySet<string> = new Set(),
 ): LayoutStyle {
   if (value === undefined) return {};
   if (!record(value)) {
@@ -602,7 +620,9 @@ function readStyle(
   }
   const unknown = Object.keys(value).find(
     (key) =>
-      !layoutPropertySet.has(key) && !(isText && textProperties.has(key)),
+      !layoutPropertySet.has(key) &&
+      !(isText && textProperties.has(key)) &&
+      !allowedPresentation.has(key),
   );
   if (unknown !== undefined) {
     fail(path, "unsupported-layout-style", `style 含未实现属性 ${unknown}`);
@@ -1048,8 +1068,18 @@ export class LayoutPass {
     const module = this.#modules.get(input.type);
     if (!objectModule(module)) return {};
     // Text、Table 与 Chart 以共享文字服务消费字体属性，布局中仍是叶对象。
-    const allowsTextStyle = allowsSharedTextStyle(input.type);
+    const allowsTextStyle =
+      allowsSharedTextStyle(input.type) ||
+      (input.type === "rp:shape" &&
+        typeof input.props["text"] === "string" &&
+        input.props["text"] !== "");
     const isGroup = input.type === "rp:group";
+    const presentation =
+      input.type === "rp:group"
+        ? groupVisualProperties
+        : ["rp:box", "rp:text", "rp:shape", "rp:image"].includes(input.type)
+          ? visualProperties
+          : undefined;
     const allowsPadding =
       input.type === "rp:text" ||
       (input.type === "rp:shape" &&
@@ -1061,6 +1091,7 @@ export class LayoutPass {
       isGroup,
       allowsTextStyle,
       allowsPadding,
+      presentation,
     );
   }
 
@@ -1085,6 +1116,8 @@ export class LayoutPass {
           childPath,
           true,
           true,
+          true,
+          visualProperties,
         );
         if (childStyle.display === "none") {
           this.#markHidden(child);
@@ -1101,6 +1134,8 @@ export class LayoutPass {
           childPath,
           true,
           true,
+          true,
+          groupVisualProperties,
         );
         if (childStyle.display === "none") {
           this.#markHidden(child);
@@ -1173,7 +1208,16 @@ export class LayoutPass {
         return;
       }
       if (!objectModule(module)) return;
-      const allowsTextStyle = allowsSharedTextStyle(child.type);
+      const allowsTextStyle =
+        allowsSharedTextStyle(child.type) ||
+        (child.type === "rp:shape" &&
+          typeof child.props["text"] === "string" &&
+          child.props["text"] !== "");
+      const presentation = ["rp:text", "rp:shape", "rp:image"].includes(
+        child.type,
+      )
+        ? visualProperties
+        : undefined;
       const childStyle = readStyle(
         child.props["style"],
         childPath,
@@ -1183,6 +1227,7 @@ export class LayoutPass {
           (child.type === "rp:shape" &&
             typeof child.props["text"] === "string" &&
             child.props["text"] !== ""),
+        presentation,
       );
       if (childStyle.display === "none") {
         this.#markHidden(child);
@@ -1334,7 +1379,7 @@ export class LayoutPass {
       fail(path, "invalid-parameter", "testId 必须是非空字符串");
     }
     const rawStyle = input.props["style"];
-    const style = readStyle(rawStyle, path, true, true);
+    const style = readStyle(rawStyle, path, true, true, true, visualProperties);
     const theme = deriveTheme(
       themeContext,
       input.props["theme"] as ThemeScope | undefined,
@@ -1381,7 +1426,14 @@ export class LayoutPass {
     );
     if (unknown !== undefined)
       fail(path, "unknown-parameter", `Group 含未实现参数 ${unknown}`);
-    const style = readStyle(input.props["style"], path, true, true);
+    const style = readStyle(
+      input.props["style"],
+      path,
+      true,
+      true,
+      true,
+      groupVisualProperties,
+    );
     const theme = deriveTheme(
       themeContext,
       input.props["theme"] as ThemeScope | undefined,

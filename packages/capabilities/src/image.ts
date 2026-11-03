@@ -9,16 +9,19 @@ import {
   type CapabilityLayoutRequest,
   type CapabilityInput,
   type CapabilityModule,
+  type ImageVisualStyle,
   type LayoutStyle,
 } from "@react-pptx/core";
 import type { ReactNode } from "react";
 
+import type { Geometry } from "./geometry.ts";
 import type { MorphProps } from "./morph-api.ts";
 import {
   motionAnnotations,
   motionElement,
   type MotionProps,
 } from "./motion-api.ts";
+import { shapePropertiesXml } from "./visual.ts";
 
 /** 本地文件路径、file URL 或图片原始字节。 */
 export type ImageSource = string | URL | Uint8Array;
@@ -35,7 +38,10 @@ export type ImageProps = MotionProps &
     readonly y?: number;
     readonly width?: number;
     readonly height?: number;
-    readonly style?: LayoutStyle;
+    readonly geometry?: Geometry;
+    readonly flipH?: boolean;
+    readonly flipV?: boolean;
+    readonly style?: LayoutStyle & ImageVisualStyle;
     /** `fill` 拉伸，`cover` 居中裁切，`contain` 保留比例；缺省为 `fill`。 */
     readonly fit?: "fill" | "cover" | "contain";
     /** 显式裁切每边的原图比例；提供后优先于 `fit`。 */
@@ -67,6 +73,9 @@ const allowedParameters = [
   "y",
   "width",
   "height",
+  "geometry",
+  "flipH",
+  "flipV",
   "style",
   "fit",
   "crop",
@@ -428,6 +437,8 @@ function imageXml(
   relationshipId: string,
   box: { x: number; y: number; width: number; height: number },
   crop: Record<string, number>,
+  properties: string,
+  opacity: number | undefined,
 ): string {
   const description = escapedAlt === undefined ? "" : ` descr="${escapedAlt}"`;
   const cropXml =
@@ -438,7 +449,11 @@ function imageXml(
             ([side, fraction]) => ` ${side}="${Math.round(fraction * 100000)}"`,
           )
           .join("")}/>`;
-  return `<p:pic><p:nvPicPr><p:cNvPr id="${id}" name="${escapedName}"${description}/><p:cNvPicPr><a:picLocks noChangeAspect="1"/></p:cNvPicPr><p:nvPr/></p:nvPicPr><p:blipFill><a:blip r:embed="${xmlEscape(relationshipId)}"/>${cropXml}<a:stretch><a:fillRect/></a:stretch></p:blipFill><p:spPr><a:xfrm><a:off x="${pxToEmu(box.x)}" y="${pxToEmu(box.y)}"/><a:ext cx="${pxToEmu(box.width)}" cy="${pxToEmu(box.height)}"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></p:spPr></p:pic>`;
+  const alpha =
+    opacity === undefined
+      ? ""
+      : `<a:alphaModFix amt="${Math.round(opacity * 100000)}"/>`;
+  return `<p:pic><p:nvPicPr><p:cNvPr id="${id}" name="${escapedName}"${description}/><p:cNvPicPr><a:picLocks noChangeAspect="1"/></p:cNvPicPr><p:nvPr/></p:nvPicPr><p:blipFill><a:blip r:embed="${xmlEscape(relationshipId)}">${alpha}</a:blip>${cropXml}<a:stretch><a:fillRect/></a:stretch></p:blipFill>${properties}</p:pic>`;
 }
 
 /** 图片模块读取并验证正式资源，再输出带媒体关系的原生 picture 对象。 */
@@ -536,6 +551,21 @@ export const imageCapability: CapabilityModule = {
     }
     const crop = cropValues(props["crop"]);
     const box = { x, y, width, height };
+    const properties = shapePropertiesXml({
+      theme: context.theme,
+      style: imageStyle,
+      box,
+      ...(props["geometry"] === undefined
+        ? {}
+        : { geometry: props["geometry"] as Geometry }),
+      ...(props["flipH"] === undefined
+        ? {}
+        : { flipH: props["flipH"] as boolean }),
+      ...(props["flipV"] === undefined
+        ? {}
+        : { flipV: props["flipV"] as boolean }),
+      image: true,
+    });
     const sourceCrop = crop ?? {};
     if (crop === undefined && fit === "cover") {
       const imageRatio = image.width / image.height;
@@ -612,6 +642,8 @@ export const imageCapability: CapabilityModule = {
         relationshipId,
         box,
         serializedCrop,
+        properties.xml,
+        properties.opacity,
       ),
       observation: {
         id: context.id,
@@ -621,6 +653,9 @@ export const imageCapability: CapabilityModule = {
         box,
       },
       extensions: [],
+      ...(properties.warnings.length === 0
+        ? {}
+        : { warnings: properties.warnings }),
       ...(annotations.length === 0 ? {} : { annotations }),
     };
   },

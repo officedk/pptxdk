@@ -5,6 +5,7 @@ import type {
   ThemeInput,
   ThemeScope,
   TextStyle,
+  VisualStyle,
 } from "#/theme.ts";
 
 export type {
@@ -15,12 +16,18 @@ export type {
   FontOptions,
   FontReference,
   FontSize,
+  GradientStop,
+  ImageVisualStyle,
+  LinearGradient,
   FontToken,
   NativeColorSlot,
   ResolvedColor,
   ResolvedThemeFont,
   TextAlignment,
   TextStyle,
+  VisualStyle,
+  RadialGradient,
+  Shadow,
   Theme,
   ThemeColor,
   ThemeContext,
@@ -174,7 +181,7 @@ export type LayoutStyle = {
 /** 透明布局容器；它只安排子项，不要求生成对应的原生演示对象。 */
 export type BoxProps = ElementProps & {
   readonly testId?: string;
-  readonly style?: LayoutStyle & TextStyle;
+  readonly style?: LayoutStyle & TextStyle & VisualStyle;
   readonly theme?: ThemeScope;
 };
 

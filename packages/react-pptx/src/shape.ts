@@ -1,9 +1,11 @@
+import { boxCapability } from "@react-pptx/capabilities/box";
 import { motionCapability } from "@react-pptx/capabilities/motion";
 import { shapeCapability } from "@react-pptx/capabilities/shape";
 import { transitionCapability } from "@react-pptx/capabilities/transition";
 import { createBuilder } from "@react-pptx/core";
 
 export const build = createBuilder([
+  boxCapability,
   shapeCapability,
   transitionCapability,
   motionCapability,
@@ -11,8 +13,25 @@ export const build = createBuilder([
 
 export { Box, Deck, formatBaseline, targets } from "@react-pptx/core";
 export { Slide } from "./slide.ts";
-export { Shape, shapeCapability } from "@react-pptx/capabilities/shape";
-export type { BoxProps, LayoutStyle } from "@react-pptx/core";
+export {
+  Shape,
+  blockArc,
+  linearGradient,
+  path,
+  preset,
+  radialGradient,
+  shapeCapability,
+} from "@react-pptx/capabilities/shape";
+export type {
+  BoxProps,
+  GradientStop,
+  ImageVisualStyle,
+  LayoutStyle,
+  LinearGradient,
+  RadialGradient,
+  Shadow,
+  VisualStyle,
+} from "@react-pptx/core";
 export {
   Step,
   fade,
@@ -40,6 +59,14 @@ export type {
   StepProps,
 } from "@react-pptx/capabilities/motion";
 export type { ShapeProps } from "@react-pptx/capabilities/shape";
+export type {
+  CustomGeometry,
+  Geometry,
+  GeometryPath,
+  PathCommand,
+  PathOptions,
+  PresetGeometry,
+} from "@react-pptx/capabilities/shape";
 export { createBuilder } from "@react-pptx/core";
 export type {
   BuildOptions,

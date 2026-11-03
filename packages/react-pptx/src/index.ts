@@ -1,4 +1,5 @@
 import {
+  boxCapability,
   chartCapability,
   groupCapability,
   imageCapability,
@@ -11,6 +12,7 @@ import {
 import { createBuilder } from "@react-pptx/core";
 
 export const build = createBuilder([
+  boxCapability,
   chartCapability,
   groupCapability,
   imageCapability,
@@ -43,6 +45,11 @@ export {
   Group,
   createMorphScope,
   Shape,
+  blockArc,
+  linearGradient,
+  path,
+  preset,
+  radialGradient,
   Table,
   Row,
   Cell,
@@ -50,6 +57,7 @@ export {
   imageCapability,
   motionCapability,
   shapeCapability,
+  boxCapability,
   font,
   P,
   Span,
@@ -93,6 +101,12 @@ export type {
   TableTextStyle,
   TableVerticalAlign,
   BoxProps,
+  CustomGeometry,
+  Geometry,
+  GeometryPath,
+  PathCommand,
+  PathOptions,
+  PresetGeometry,
 } from "@react-pptx/capabilities";
 export { createBuilder } from "@react-pptx/core";
 export type {
@@ -108,6 +122,12 @@ export type {
   LayoutObservation,
   LayoutSpacing,
   LayoutStyle,
+  GradientStop,
+  ImageVisualStyle,
+  LinearGradient,
+  RadialGradient,
+  Shadow,
+  VisualStyle,
   NativeTableObservation,
   ObjectObservation,
   SlideObservation,

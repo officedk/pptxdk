@@ -1,18 +1,30 @@
 import {
   CapabilityError,
   pxToEmu,
-  resolvedColorXml,
   xmlEscape,
   type CapabilityLayoutMeasurement,
   type CapabilityLayoutRequest,
   type ColorValue,
   type LayoutStyle,
-  type ResolvedColor,
+  type TextStyle as CoreTextStyle,
+  type VisualStyle,
   type CapabilityInput,
   type CapabilityModule,
 } from "@react-pptx/core";
 import type { ReactNode } from "react";
 
+import type { Geometry } from "./geometry.ts";
+export { blockArc, path, preset } from "./geometry.ts";
+export type {
+  CustomGeometry,
+  Geometry,
+  GeometryPath,
+  PathCommand,
+  PathOptions,
+  PresetGeometry,
+} from "./geometry.ts";
+export { linearGradient, radialGradient } from "./visual.ts";
+export type { VisualStyle } from "@react-pptx/core";
 import { fontPresentationContributions } from "./font-embedding.ts";
 import type { MorphProps } from "./morph-api.ts";
 import {
@@ -26,17 +38,20 @@ import {
   writeTextBody,
   type TextStyle,
 } from "./text-service.ts";
+import { shapePropertiesXml } from "./visual.ts";
 
 export type ShapeProps = MotionProps &
   MorphProps & {
     readonly testId?: string;
     readonly name?: string;
-    readonly geometry?: string;
+    readonly geometry?: Geometry;
+    readonly flipH?: boolean;
+    readonly flipV?: boolean;
     readonly x?: number;
     readonly y?: number;
     readonly width?: number;
     readonly height?: number;
-    readonly style?: LayoutStyle;
+    readonly style?: LayoutStyle & VisualStyle & CoreTextStyle;
     readonly fill?: ColorValue;
     /** 直接写入此形状的原生正文，不创建额外文本框。 */
     readonly text?: string;
@@ -45,32 +60,6 @@ export type ShapeProps = MotionProps &
     readonly children?: ReactNode;
   };
 
-const geometryNames = new Set([
-  "rect",
-  "roundRect",
-  "ellipse",
-  "triangle",
-  "rtTriangle",
-  "diamond",
-  "parallelogram",
-  "trapezoid",
-  "pentagon",
-  "hexagon",
-  "heptagon",
-  "octagon",
-  "star4",
-  "star5",
-  "star6",
-  "star8",
-  "cloud",
-  "heart",
-  "pie",
-  "arc",
-  "leftBrace",
-  "rightBrace",
-  "leftBracket",
-  "rightBracket",
-]);
 const maximumShapeExtentEmu = 2_147_483_647;
 
 const allowedParameters = [
@@ -78,6 +67,8 @@ const allowedParameters = [
   "name",
   "morphKey",
   "geometry",
+  "flipH",
+  "flipV",
   "x",
   "y",
   "width",
@@ -103,6 +94,43 @@ function shapeTextMeasurementStyle(value: unknown): unknown {
   const style = value as Record<string, unknown>;
   // Shape 正文写出时默认 middle；测量也必须使用同一有效 anchor。
   return { ...style, verticalAlign: style["verticalAlign"] ?? "middle" };
+}
+
+const shapeTextStyleKeys = new Set([
+  "fontFamily",
+  "fontSize",
+  "fontWeight",
+  "fontStyle",
+  "color",
+  "lineHeight",
+  "verticalAlign",
+  "align",
+  "spacingAfter",
+  "letterSpacing",
+  "textTransform",
+  "textDecoration",
+  "textShadow",
+]);
+
+function shapeTextStyle(props: Readonly<Record<string, unknown>>): unknown {
+  const layoutStyle =
+    typeof props["style"] === "object" &&
+    props["style"] !== null &&
+    !Array.isArray(props["style"])
+      ? (props["style"] as Record<string, unknown>)
+      : {};
+  const inherited = Object.fromEntries(
+    Object.entries(layoutStyle).filter(([key]) => shapeTextStyleKeys.has(key)),
+  );
+  const explicit = props["textStyle"];
+  if (explicit === undefined) return inherited;
+  if (
+    typeof explicit !== "object" ||
+    explicit === null ||
+    Array.isArray(explicit)
+  )
+    return explicit;
+  return { ...inherited, ...(explicit as Record<string, unknown>) };
 }
 
 function requiredNumber(
@@ -149,16 +177,10 @@ function optionalText(
 function shapeXml(
   id: number,
   escapedName: string,
-  geometry: string,
-  box: { x: number; y: number; width: number; height: number },
-  fill: ResolvedColor | undefined,
+  properties: string,
   textBody: string,
 ): string {
-  const fillXml =
-    fill === undefined
-      ? "<a:noFill/>"
-      : `<a:solidFill>${resolvedColorXml(fill)}</a:solidFill>`;
-  return `<p:sp><p:nvSpPr><p:cNvPr id="${id}" name="${escapedName}"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr><p:spPr><a:xfrm><a:off x="${pxToEmu(box.x)}" y="${pxToEmu(box.y)}"/><a:ext cx="${pxToEmu(box.width)}" cy="${pxToEmu(box.height)}"/></a:xfrm><a:prstGeom prst="${geometry}"><a:avLst/></a:prstGeom>${fillXml}<a:ln><a:noFill/></a:ln></p:spPr>${textBody}</p:sp>`;
+  return `<p:sp><p:nvSpPr><p:cNvPr id="${id}" name="${escapedName}"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr>${properties}${textBody}</p:sp>`;
 }
 
 /** 形状模块独立校验输入、声明原生几何，并生成对应 PresentationML 对象。 */
@@ -175,7 +197,7 @@ export const shapeCapability: CapabilityModule = {
     try {
       const measured = measureTextLayout(
         [{ type: "#text", text }],
-        shapeTextMeasurementStyle(input.props["textStyle"]),
+        shapeTextMeasurementStyle(shapeTextStyle(input.props)),
         request.theme,
         request.availableWidth,
       );
@@ -220,13 +242,7 @@ export const shapeCapability: CapabilityModule = {
 
     const testId = optionalText(props, "testId");
     const requestedName = optionalText(props, "name");
-    const geometry = props["geometry"] ?? "rect";
-    if (typeof geometry !== "string" || !geometryNames.has(geometry)) {
-      throw new CapabilityError(
-        "unsupported-geometry",
-        `不支持形状几何 ${typeof geometry === "string" ? geometry : "非字符串值"}`,
-      );
-    }
+    const geometry = props["geometry"] as Geometry | undefined;
     const layoutStyle =
       typeof props["style"] === "object" && props["style"] !== null
         ? (props["style"] as Record<string, unknown>)
@@ -255,10 +271,21 @@ export const shapeCapability: CapabilityModule = {
               "height",
             ),
           };
-    const fill =
-      props["fill"] === undefined
-        ? undefined
-        : context.theme.resolveColor(props["fill"] as ColorValue);
+    const properties = shapePropertiesXml({
+      theme: context.theme,
+      style: layoutStyle,
+      box,
+      ...(geometry === undefined ? {} : { geometry }),
+      ...(props["flipH"] === undefined
+        ? {}
+        : { flipH: props["flipH"] as boolean }),
+      ...(props["flipV"] === undefined
+        ? {}
+        : { flipV: props["flipV"] as boolean }),
+      ...(props["fill"] === undefined
+        ? {}
+        : { fill: props["fill"] as ColorValue }),
+    });
     const text = props["text"];
     if (text !== undefined && typeof text !== "string") {
       throw new CapabilityError("invalid-text", "Shape.text 必须是字符串");
@@ -267,7 +294,7 @@ export const shapeCapability: CapabilityModule = {
     if (text !== undefined && text !== "") {
       textOutput = writeTextBody(
         [{ type: "#text", text }],
-        props["textStyle"],
+        shapeTextStyle(props),
         context.theme,
         "middle",
         {
@@ -284,7 +311,10 @@ export const shapeCapability: CapabilityModule = {
       name,
       ...(testId === undefined ? {} : { testId }),
       textBody: textOutput !== undefined,
-      filled: fill !== undefined,
+      filled:
+        props["fill"] !== undefined ||
+        layoutStyle["backgroundColor"] !== undefined ||
+        layoutStyle["backgroundImage"] !== undefined,
       ...(textOutput === undefined
         ? {}
         : { paragraphCount: textOutput.paragraphCount }),
@@ -302,9 +332,7 @@ export const shapeCapability: CapabilityModule = {
       xml: shapeXml(
         context.id,
         escapedName,
-        geometry,
-        box,
-        fill,
+        properties.xml,
         textOutput?.xml ?? "",
       ),
       observation: {
@@ -312,11 +340,16 @@ export const shapeCapability: CapabilityModule = {
         kind: "shape",
         name,
         ...(testId === undefined ? {} : { testId }),
-        geometry,
+        geometry: properties.geometryName,
         box,
         ...(text === undefined ? {} : { text }),
       },
       extensions: [],
+      ...(properties.warnings.length === 0 && textOutput === undefined
+        ? {}
+        : {
+            warnings: [...properties.warnings, ...(textOutput?.warnings ?? [])],
+          }),
       ...(annotations.length === 0 ? {} : { annotations }),
       ...(textOutput === undefined
         ? {}
@@ -326,7 +359,6 @@ export const shapeCapability: CapabilityModule = {
               textOutput.fontUses,
               context.options.embedFonts,
             ),
-            warnings: textOutput.warnings,
           }),
     };
   },

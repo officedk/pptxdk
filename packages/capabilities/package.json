@@ -29,6 +29,11 @@
       "types": "./dist/shape.d.ts",
       "default": "./dist/shape.js"
     },
+    "./box": {
+      "source": "./src/box.ts",
+      "types": "./dist/box.d.ts",
+      "default": "./dist/box.js"
+    },
     "./chart": {
       "source": "./src/chart.ts",
       "types": "./dist/chart.d.ts",

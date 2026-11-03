@@ -37,6 +37,7 @@ import {
   type CapabilityPackagePart,
   type CapabilityPresentationContribution,
   type CapabilityContribution,
+  type CapabilityContext,
   type CapabilityModule,
   type RegisteredCapabilityModule,
   type CapabilityResource,
@@ -879,6 +880,53 @@ function presentationContent(document: DocumentBuildState): string {
     .join("");
 }
 
+function hasVisibleBoxStyle(value: unknown): boolean {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return false;
+  }
+  const style = value as Record<string, unknown>;
+  return (
+    style["backgroundColor"] !== undefined ||
+    style["backgroundImage"] !== undefined ||
+    style["boxShadow"] !== undefined ||
+    (style["borderColor"] !== undefined && style["borderWidth"] !== 0)
+  );
+}
+
+function capabilityContext(
+  context: BuildContext,
+  child: CapabilityElement,
+  id: number,
+  path: string,
+  layoutBox: CapabilityContext["layoutBox"],
+  theme: ThemeContext,
+  insideGroup: boolean,
+  morphName?: string,
+): CapabilityContext {
+  return {
+    id,
+    path,
+    options: context.options,
+    ...(morphName === undefined ? {} : { morphName }),
+    theme,
+    ...(layoutBox === undefined ? {} : { layoutBox }),
+    compileChildren(nested) {
+      return compileChildren(
+        nested,
+        context,
+        path,
+        insideGroup || child.type === "rp:group",
+      );
+    },
+    registerResource(resource) {
+      return addResource(resource, context);
+    },
+    registerPackagePart(part) {
+      return addPackagePart(part, context);
+    },
+  };
+}
+
 function compileChildren(
   children: readonly CapabilityChild[],
   context: BuildContext,
@@ -913,6 +961,60 @@ function compileChildren(
         return;
       }
       const id = context.slide.nextId++;
+      const module = context.modules.get("rp:box");
+      let boxXml = "";
+      let boxObservation: ObjectObservation | undefined;
+      if (module !== undefined && isObjectCapability(module)) {
+        const objectId = context.slide.nextId++;
+        try {
+          const output = module.compile(
+            child,
+            capabilityContext(
+              context,
+              child,
+              objectId,
+              path,
+              box,
+              context.layout.themes.get(child) ?? context.theme,
+              insideGroup,
+            ),
+          );
+          boxXml = output.xml;
+          if (output.xml !== "")
+            boxObservation = { ...output.observation, id: objectId };
+          for (const warning of output.warnings ?? []) {
+            context.document.warnings.push({
+              severity: "warning",
+              path:
+                warning.path === undefined ? path : `${path}/${warning.path}`,
+              code: warning.code,
+              message: warning.message,
+            });
+          }
+        } catch (error) {
+          context.slide.diagnostics.push(
+            error instanceof CapabilityError
+              ? diagnostic(
+                  error.path === undefined ? path : `${path}/${error.path}`,
+                  error.code,
+                  error.message,
+                )
+              : diagnostic(
+                  path,
+                  "capability-failure",
+                  error instanceof Error ? error.message : String(error),
+                ),
+          );
+        }
+      } else if (hasVisibleBoxStyle(child.props["style"])) {
+        context.slide.diagnostics.push(
+          diagnostic(
+            path,
+            "missing-capability",
+            "可见 Box 需要注册 rp:box 形状写出能力",
+          ),
+        );
+      }
       const compiled = compileChildren(
         child.children,
         context,
@@ -924,13 +1026,21 @@ function compileChildren(
         id,
         ...(typeof testId === "string" ? { testId } : {}),
         box,
-        children: compiled.references,
+        children: [
+          ...(boxObservation === undefined
+            ? []
+            : [{ kind: "object" as const, id: boxObservation.id }]),
+          ...compiled.references,
+        ],
       });
       painted.push({
         sourceOrder: [index],
         zIndex: paintOrder(child),
-        xml: compiled.xml,
-        objects: compiled.objects,
+        xml: boxXml + compiled.xml,
+        objects: [
+          ...(boxObservation === undefined ? [] : [boxObservation]),
+          ...compiled.objects,
+        ],
         reference: { kind: "layout", id },
       });
       return;
@@ -1049,28 +1159,19 @@ function compileChildren(
     const layoutBox = context.layout.boxes.get(child);
     const theme = context.layout.themes.get(child) ?? context.theme;
     try {
-      const output = module.compile(input, {
-        id,
-        path,
-        options: context.options,
-        ...(morphName === undefined ? {} : { morphName }),
-        theme,
-        ...(layoutBox === undefined ? {} : { layoutBox }),
-        compileChildren(nested) {
-          return compileChildren(
-            nested,
-            context,
-            path,
-            insideGroup || child.type === "rp:group",
-          );
-        },
-        registerResource(resource) {
-          return addResource(resource, context);
-        },
-        registerPackagePart(part) {
-          return addPackagePart(part, context);
-        },
-      });
+      const output = module.compile(
+        input,
+        capabilityContext(
+          context,
+          child,
+          id,
+          path,
+          layoutBox,
+          theme,
+          insideGroup,
+          morphName,
+        ),
+      );
       if (morphKey !== undefined && morphName !== undefined) {
         const nativeKind = morphNativeKind(output.observation.kind);
         if (output.observation.name !== morphName) {

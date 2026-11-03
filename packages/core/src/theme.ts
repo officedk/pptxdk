@@ -39,7 +39,60 @@ export type TextStyle = {
   readonly align?: TextAlignment;
   /** 未显式覆盖的段后距，单位为像素。 */
   readonly spacingAfter?: number;
+  /** 字符间距，单位为像素。 */
+  readonly letterSpacing?: number;
+  readonly textTransform?: "none" | "uppercase";
+  readonly textDecoration?: "none" | "underline";
+  readonly textShadow?: Shadow | "none";
 };
+
+export type GradientStop = {
+  readonly color: ColorValue;
+  readonly position: number;
+};
+
+export type LinearGradient = {
+  readonly type: "linear-gradient";
+  readonly angle: number;
+  readonly stops: readonly GradientStop[];
+};
+
+export type RadialGradient = {
+  readonly type: "radial-gradient";
+  readonly stops: readonly GradientStop[];
+};
+
+export type Shadow = {
+  readonly color?: ColorValue;
+  readonly blur?: number;
+  readonly distance?: number;
+  readonly angle?: number;
+};
+
+/** 由原生 DrawingML 形状、图片、文本框及可见 Box 共用的视觉字段。 */
+export type VisualStyle = {
+  readonly backgroundColor?: ColorValue;
+  readonly backgroundImage?: LinearGradient | RadialGradient;
+  readonly borderColor?: ColorValue;
+  readonly borderWidth?: number;
+  readonly borderStyle?: "solid" | "dashed" | "dotted";
+  readonly borderRadius?: number;
+  readonly opacity?: number;
+  readonly boxShadow?: Shadow;
+  readonly softEdge?: number;
+  readonly rotate?: number;
+};
+
+export type ImageVisualStyle = Pick<
+  VisualStyle,
+  | "borderColor"
+  | "borderWidth"
+  | "borderStyle"
+  | "opacity"
+  | "boxShadow"
+  | "softEdge"
+  | "rotate"
+>;
 
 export const nativeColorSlots = [
   "dk1",
@@ -174,6 +227,10 @@ const textStyleKeys = new Set([
   "verticalAlign",
   "align",
   "spacingAfter",
+  "letterSpacing",
+  "textTransform",
+  "textDecoration",
+  "textShadow",
 ]);
 
 function record(value: unknown): value is Record<string, unknown> {

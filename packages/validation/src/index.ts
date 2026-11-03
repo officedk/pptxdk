@@ -997,6 +997,19 @@ function validateTextBodyValueRanges(
   }
 }
 
+function readGeometryName(properties: XmlElement | undefined): string {
+  if (properties === undefined) return "";
+  const preset = first(properties, drawingNamespace, "prstGeom");
+  const custom = first(properties, drawingNamespace, "custGeom");
+  if (preset !== undefined && custom !== undefined) return "";
+  if (preset !== undefined) return attribute(preset, "prst");
+  if (custom === undefined) return "";
+  const pathList = first(custom, drawingNamespace, "pathLst");
+  const paths =
+    pathList === undefined ? [] : elements(pathList, drawingNamespace, "path");
+  return paths.length === 0 ? "" : "custom";
+}
+
 function validateShape(
   shape: XmlElement,
   part: string,
@@ -1016,12 +1029,7 @@ function validateShape(
     return undefined;
   }
   const properties = first(shape, presentationNamespace, "spPr");
-  const geometry =
-    properties === undefined
-      ? undefined
-      : first(properties, drawingNamespace, "prstGeom");
-  const geometryName =
-    geometry === undefined ? "" : attribute(geometry, "prst");
+  const geometryName = readGeometryName(properties);
   if (geometryName === "") {
     issue(
       errors,
@@ -1158,12 +1166,7 @@ function validatePicture(
   const identity = objectIdentity(picture, "nvPicPr", part, "picture", errors);
   if (identity === undefined) return undefined;
   const properties = first(picture, presentationNamespace, "spPr");
-  const geometry =
-    properties === undefined
-      ? undefined
-      : first(properties, drawingNamespace, "prstGeom");
-  const geometryName =
-    geometry === undefined ? "" : attribute(geometry, "prst");
+  const geometryName = readGeometryName(properties);
   if (geometryName === "") {
     issue(
       errors,

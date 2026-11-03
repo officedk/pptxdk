@@ -11,6 +11,7 @@ import {
   type FontReference,
   type FontSize,
   type ResolvedColor,
+  type Shadow,
   type TextAlignment,
   type TextStyle,
   type ThemeContext,
@@ -20,6 +21,7 @@ import * as fontkit from "fontkit";
 import LineBreakerImplementation from "linebreak";
 
 import type { FontEmbeddingUse } from "./font-embedding.ts";
+import { textShadowXml } from "./visual.ts";
 export type {
   FontReference,
   FontSize,
@@ -89,6 +91,10 @@ type RunStyle = {
   readonly fontStyle?: FontFaceStyle | undefined;
   readonly color?: ColorValue | ResolvedColor | undefined;
   readonly themeFont?: "major" | "minor" | undefined;
+  readonly letterSpacing?: number | undefined;
+  readonly textTransform?: TextStyle["textTransform"] | undefined;
+  readonly textDecoration?: TextStyle["textDecoration"] | undefined;
+  readonly textShadow?: Shadow | "none" | undefined;
 };
 type Run = { readonly text: string; readonly style: RunStyle };
 type Paragraph = {
@@ -249,6 +255,17 @@ function spacingCentipoints(
   return value;
 }
 
+function letterSpacingCentipoints(value: number): number {
+  const points = Math.round(value * 75);
+  if (!Number.isFinite(value) || points < -400_000 || points > 400_000) {
+    throw new CapabilityError(
+      "invalid-letter-spacing",
+      "letterSpacing 换算后必须在 -4000 到 4000pt 的 DrawingML 范围内",
+    );
+  }
+  return points;
+}
+
 function fontSizePoints(value: FontSize | undefined): number {
   let points: number;
   if (value === undefined) {
@@ -395,6 +412,26 @@ function validateRunStyle(style: RunStyle): RunStyle {
   fontSizePoints(style.fontSize);
   weightValue(style.fontWeight);
   normalizedFonts(style);
+  if (style.letterSpacing !== undefined)
+    letterSpacingCentipoints(style.letterSpacing);
+  if (
+    style.textTransform !== undefined &&
+    !["none", "uppercase"].includes(style.textTransform)
+  ) {
+    throw new CapabilityError(
+      "invalid-text-transform",
+      "textTransform 只能是 none 或 uppercase",
+    );
+  }
+  if (
+    style.textDecoration !== undefined &&
+    !["none", "underline"].includes(style.textDecoration)
+  ) {
+    throw new CapabilityError(
+      "invalid-text-decoration",
+      "textDecoration 只能是 none 或 underline",
+    );
+  }
   return style;
 }
 
@@ -402,7 +439,17 @@ function readRunStyle(value: unknown): RunStyle {
   const props = styleRecord(value, "Span.style");
   onlyKnownKeys(
     props,
-    ["fontFamily", "fontSize", "fontWeight", "fontStyle", "color"],
+    [
+      "fontFamily",
+      "fontSize",
+      "fontWeight",
+      "fontStyle",
+      "color",
+      "letterSpacing",
+      "textTransform",
+      "textDecoration",
+      "textShadow",
+    ],
     "Span.style",
   );
   return validateRunStyle(props as RunStyle);
@@ -430,6 +477,8 @@ function mergeRunStyle(
   }
   // P 和 Span 未声明的字段会是 undefined，不能覆盖继承的父级样式。
   const merged = { ...parent, ...declared } as RunStyle;
+  if (child.textShadow === "none")
+    delete (merged as { textShadow?: Shadow | "none" }).textShadow;
   if (child.fontFamily !== undefined && declared["themeFont"] === undefined) {
     const { themeFont: _themeFont, ...withoutThemeFont } = merged;
     return validateRunStyle(withoutThemeFont);
@@ -500,6 +549,10 @@ function readTextStyle(
       "verticalAlign",
       "align",
       "spacingAfter",
+      "letterSpacing",
+      "textTransform",
+      "textDecoration",
+      "textShadow",
     ],
     label,
   );
@@ -508,6 +561,8 @@ function readTextStyle(
     ...theme.textStyle,
     ...props,
   } as TextStyle;
+  if (style.textShadow === "none")
+    delete (style as { textShadow?: Shadow | "none" }).textShadow;
   if (
     style.verticalAlign !== undefined &&
     !["top", "middle", "bottom"].includes(style.verticalAlign)
@@ -525,6 +580,10 @@ function readTextStyle(
     fontStyle: style.fontStyle,
     color: style.color,
     themeFont: (style as ResolvedTextStyle).themeFont,
+    letterSpacing: style.letterSpacing,
+    textTransform: style.textTransform,
+    textDecoration: style.textDecoration,
+    textShadow: style.textShadow,
   };
   const font = theme.resolveFont(
     runStyle.fontFamily ?? defaultTextStyle.fontFamily!,
@@ -561,6 +620,10 @@ function paragraphStyle(value: unknown): ParagraphStyle {
       "lineHeight",
       "align",
       "spacingAfter",
+      "letterSpacing",
+      "textTransform",
+      "textDecoration",
+      "textShadow",
       "list",
     ],
     "P.style",
@@ -689,7 +752,24 @@ function runPropertiesXml(
       : style.themeFont === "minor"
         ? "+mn-lt"
         : font.family;
-  return `<${tag} lang="en-US" sz="${centipoints(points)}" b="${bold ? 1 : 0}" i="${font.style === "italic" ? 1 : 0}"><a:solidFill>${resolvedColorXml(color)}</a:solidFill><a:latin typeface="${escapedXml(typeface)}"/></${tag}>`;
+  const attributes = [
+    `lang="en-US"`,
+    `sz="${centipoints(points)}"`,
+    `b="${bold ? 1 : 0}"`,
+    `i="${font.style === "italic" ? 1 : 0}"`,
+    ...(style.textDecoration === "underline" ? ['u="sng"'] : []),
+    ...(style.textTransform === "uppercase" ? ['cap="all"'] : []),
+    ...(style.letterSpacing === undefined || style.letterSpacing === 0
+      ? []
+      : [`spc="${letterSpacingCentipoints(style.letterSpacing)}"`]),
+  ].join(" ");
+  return `<${tag} ${attributes}><a:solidFill>${resolvedColorXml(color)}</a:solidFill>${textShadowXml(theme, style.textShadow)}<a:latin typeface="${escapedXml(typeface)}"/></${tag}>`;
+}
+
+function displayedText(run: Run): string {
+  return run.style.textTransform === "uppercase"
+    ? run.text.toUpperCase()
+    : run.text;
 }
 
 function runXml(run: Run, theme: ThemeContext): string {
@@ -724,7 +804,7 @@ function textResourceClaims(runs: readonly Run[]): {
       // 字节资源可以合并，但每种实际使用的嵌入策略都须独立校验。
       const policyKey = `${font.identity}\u0000${font.substitute ? 1 : 0}\u0000${font.embeddable ? 1 : 0}`;
       entry.fontPolicies.set(policyKey, font);
-      entry.text.push(run.text);
+      entry.text.push(displayedText(run));
       used.set(key, entry);
     }
   }
@@ -817,6 +897,10 @@ function normalizeParagraphs(
     fontStyle: textStyle.fontStyle,
     color: textStyle.color,
     themeFont: textStyle.themeFont,
+    letterSpacing: textStyle.letterSpacing,
+    textTransform: textStyle.textTransform,
+    textDecoration: textStyle.textDecoration,
+    textShadow: textStyle.textShadow,
   };
   validateRunStyle(baseRunStyle);
 
@@ -876,6 +960,10 @@ function normalizeParagraphs(
         fontWeight: style.fontWeight,
         fontStyle: style.fontStyle,
         color: style.color,
+        letterSpacing: style.letterSpacing,
+        textTransform: style.textTransform,
+        textDecoration: style.textDecoration,
+        textShadow: style.textShadow,
       },
       theme,
     );
@@ -1014,8 +1102,11 @@ function rangeWidth(
     const from = Math.max(start, piece.start);
     const to = Math.min(end, piece.end);
     if (from >= to) continue;
+    const source = text.slice(from, to);
+    const transformed =
+      piece.style.textTransform === "uppercase" ? source.toUpperCase() : source;
     let visible = "";
-    for (const character of text.slice(from, to)) {
+    for (const character of transformed) {
       if (
         !/^[\p{Cc}\p{Cf}\u{FE00}-\u{FE0F}\u{E0100}-\u{E01EF}]$/u.test(character)
       ) {
@@ -1025,7 +1116,10 @@ function rangeWidth(
     if (visible === "") continue;
     const advance = piece.face.font.layout(visible).advanceWidth;
     const pixels = fontSizePoints(piece.style.fontSize) * (4 / 3);
-    width += (advance / piece.face.font.unitsPerEm) * pixels;
+    const characterCount = Array.from(graphemes.segment(transformed)).length;
+    width +=
+      (advance / piece.face.font.unitsPerEm) * pixels +
+      (piece.style.letterSpacing ?? 0) * characterCount;
   }
   return width;
 }
@@ -1244,7 +1338,11 @@ function paragraphPieces(paragraph: Paragraph): {
   let start = 0;
   for (const run of sourceRuns) {
     const face = measureRunFace(run.style);
-    const missing = missingCharacters(face, run.text);
+    const shown =
+      run.style.textTransform === "uppercase"
+        ? run.text.toUpperCase()
+        : run.text;
+    const missing = missingCharacters(face, shown);
     if (missing.length > 0) {
       const shown = missing.slice(0, 10).join(" ");
       const extra = missing.length - 10;

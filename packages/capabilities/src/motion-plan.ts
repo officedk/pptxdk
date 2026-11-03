@@ -162,7 +162,38 @@ export type MotionPlanStartGate =
       readonly sourceDependency?: MotionStartDependency;
     }
   | { readonly kind: "end"; readonly dependency: MotionStartDependency }
-  | { readonly kind: "begin"; readonly dependency: MotionStartDependency };
+  | { readonly kind: "begin"; readonly dependency: MotionStartDependency }
+  | {
+      readonly kind: "plan-start";
+      /** 候选偏移已分层时，沿用同一 MotionPlan 起点表达。 */
+      readonly start: MotionPlanStart;
+      readonly sourceDependency?: MotionStartDependency;
+    };
+
+function planStartForGate(gate: MotionPlanStartGate): MotionPlanStart {
+  switch (gate.kind) {
+    case "parent-start":
+      return { kind: "parent-start", delayMs: gate.delayMs };
+    case "end":
+      return { kind: "end", dependency: gate.dependency };
+    case "begin":
+      return { kind: "event", dependency: gate.dependency };
+    case "plan-start":
+      return gate.start;
+  }
+}
+
+function gateSourceDependencies(
+  gate: MotionPlanStartGate,
+): readonly MotionStartDependency[] {
+  if (gate.kind === "end" || gate.kind === "begin") {
+    return [gate.dependency];
+  }
+  if (gate.kind !== "plan-start") return [];
+  if (gate.sourceDependency !== undefined) return [gate.sourceDependency];
+  const { base } = motionPlanStartLayers(gate.start);
+  return base.kind === "end" || base.kind === "event" ? [base.dependency] : [];
+}
 
 export function motionPlanStartLayers(start: MotionPlanStart): {
   readonly base: MotionPlanStart;
@@ -1794,6 +1825,36 @@ function motionPlan(
           const subscribedSources: TimeCandidate[] = [];
           let validHost = true;
           let requiresProjection = false;
+          const appendGateStart = (
+            start: MotionPlanStart,
+            sourceDependency?: MotionStartDependency,
+          ): boolean => {
+            if (start.kind === "delay-layer") {
+              gates.push({
+                kind: "plan-start",
+                start,
+                ...(sourceDependency === undefined ? {} : { sourceDependency }),
+              });
+              return true;
+            }
+            if (start.kind === "parent-start") {
+              gates.push({
+                kind: "parent-start",
+                delayMs: start.delayMs,
+                ...(sourceDependency === undefined ? {} : { sourceDependency }),
+              });
+              return true;
+            }
+            if (start.kind === "end") {
+              gates.push({ kind: "end", dependency: start.dependency });
+              return true;
+            }
+            if (start.kind === "event") {
+              gates.push({ kind: "begin", dependency: start.dependency });
+              return true;
+            }
+            return false;
+          };
           for (const candidate of startCandidates) {
             let dependency = candidate.dependency;
             if (
@@ -1811,47 +1872,51 @@ function motionPlan(
             }
             if (
               !Number.isSafeInteger(candidate.offsetMs) ||
-              candidate.offsetMs < 0 ||
-              candidate.offsetMs > maximumTimeNodeValue
+              candidate.offsetMs < 0
             ) {
-              lastReason = "完成偏移超出可写范围";
+              lastReason = "完成偏移超出安全整数范围";
               validHost = false;
               break;
             }
             if (candidate.eventId === hostStart.eventId) {
-              gates.push({ kind: "parent-start", delayMs: candidate.offsetMs });
+              const lowered = addMotionPlanStartDelay(
+                { kind: "parent-start", delayMs: 0 },
+                candidate.offsetMs,
+              );
+              if (lowered === undefined || !appendGateStart(lowered)) {
+                lastReason = "父起点候选无法保持为安全整数延迟层";
+                validHost = false;
+                break;
+              }
               continue;
             }
             const exactHostOffset = facts.exactOffset(
               hostStart.eventId,
               candidate.eventId,
             );
-            if (
-              exactHostOffset !== undefined &&
-              exactHostOffset + candidate.offsetMs <= maximumTimeNodeValue
-            ) {
+            if (exactHostOffset !== undefined && exactHostOffset >= 0) {
               const delayMs = exactHostOffset + candidate.offsetMs;
-              if (
-                !Number.isSafeInteger(delayMs) ||
-                delayMs < 0 ||
-                delayMs > maximumTimeNodeValue
-              ) {
-                lastReason = "精确宿主偏移超出可写范围";
+              if (!Number.isSafeInteger(delayMs)) {
+                lastReason = "精确宿主累计偏移超出安全整数范围";
                 validHost = false;
                 break;
               }
-              gates.push({
-                kind: "parent-start",
+              const lowered = addMotionPlanStartDelay(
+                { kind: "parent-start", delayMs: 0 },
                 delayMs,
-                ...(dependency === undefined
-                  ? {}
-                  : {
-                      sourceDependency: dependencyAtEvent(
-                        dependency,
-                        candidate.offsetMs,
-                      ),
-                    }),
-              });
+              );
+              const sourceDependencyAtCandidate =
+                dependency === undefined
+                  ? undefined
+                  : dependencyAtEvent(dependency, candidate.offsetMs);
+              if (
+                lowered === undefined ||
+                !appendGateStart(lowered, sourceDependencyAtCandidate)
+              ) {
+                lastReason = "精确宿主累计偏移无法保持为安全整数延迟层";
+                validHost = false;
+                break;
+              }
               continue;
             }
             if (exactHostOffset !== undefined && exactHostOffset < 0) {
@@ -1939,10 +2004,23 @@ function motionPlan(
               validHost = false;
               break;
             }
-            gates.push({
-              kind: dependency.point === "start" ? "begin" : "end",
-              dependency: dependencyAtEvent(dependency, candidate.offsetMs),
-            });
+            const lowered = addMotionPlanStartDelay(
+              dependency.point === "start"
+                ? {
+                    kind: "event",
+                    dependency: dependencyAtEvent(dependency),
+                  }
+                : {
+                    kind: "end",
+                    dependency: dependencyAtEvent(dependency),
+                  },
+              candidate.offsetMs,
+            );
+            if (lowered === undefined || !appendGateStart(lowered)) {
+              lastReason = "完成依赖无法保持为安全整数延迟层";
+              validHost = false;
+              break;
+            }
             subscribedSources.push({ ...candidate, offsetMs: 0 });
             if (dependency.point === "start") {
               const sourceScope = scopeForPlanId(dependency.scopeId);
@@ -2218,22 +2296,49 @@ function motionPlan(
           );
         });
       };
+      const reportedGateDependencies = (
+        gate: MotionPlanStartGate,
+        hostScopeId: string,
+      ): readonly MotionStartDependency[] => {
+        if (gate.kind === "end") return [gate.dependency];
+        if (gate.kind === "begin") {
+          return expandStartDependency(gate.dependency);
+        }
+        if (gate.kind === "parent-start") {
+          return gate.sourceDependency === undefined
+            ? [
+                {
+                  // 原生数值门相对集合宿主的真实起点，查询也保留该来源。
+                  scopeId: hostScopeId,
+                  point: "start",
+                  offsetMs: gate.delayMs,
+                },
+              ]
+            : expandStartDependency(gate.sourceDependency);
+        }
+        if (gate.sourceDependency !== undefined) {
+          return expandStartDependency(gate.sourceDependency);
+        }
+        const { base, delays } = motionPlanStartLayers(gate.start);
+        if (base.kind === "parent-start") {
+          return [
+            {
+              scopeId: hostScopeId,
+              point: "start",
+              offsetMs:
+                base.delayMs +
+                delays.reduce((total, delayMs) => total + delayMs, 0),
+            },
+          ];
+        }
+        return reportedDependencies(gate.start, parentStart) ?? [];
+      };
+      if (nativeStart.kind === "end" || nativeStart.kind === "event") {
+        return Object.freeze(expandStartDependency(nativeStart.dependency));
+      }
       if (nativeStart.kind === "condition-join") {
         const dependencies = nativeStart.gates.flatMap((gate) =>
-          gate.kind === "end"
-            ? [gate.dependency]
-            : gate.kind === "begin"
-              ? expandStartDependency(gate.dependency)
-              : gate.sourceDependency === undefined
-                ? [
-                    {
-                      // 原生数值门相对集合宿主的真实起点，查询也保留该来源。
-                      scopeId: nativeStart.hostScopeId,
-                      point: "start" as const,
-                      offsetMs: gate.delayMs,
-                    },
-                  ]
-                : expandStartDependency(gate.sourceDependency),
+          reportedGateDependencies(gate, nativeStart.hostScopeId),
         );
         return Object.freeze(dependencies);
       }
@@ -2243,19 +2348,7 @@ function motionPlan(
           throw new Error("MotionPlan 条件别名缺少原始条件集合");
         }
         const dependencies = canonical.gates.flatMap((gate) =>
-          gate.kind === "end"
-            ? [gate.dependency]
-            : gate.kind === "begin"
-              ? expandStartDependency(gate.dependency)
-              : gate.sourceDependency === undefined
-                ? [
-                    {
-                      scopeId: canonical.hostScopeId,
-                      point: "start" as const,
-                      offsetMs: gate.delayMs,
-                    },
-                  ]
-                : expandStartDependency(gate.sourceDependency),
+          reportedGateDependencies(gate, canonical.hostScopeId),
         );
         return Object.freeze(
           dependencies.map((dependency) =>
@@ -3207,6 +3300,26 @@ function motionPlan(
       const rootReferences = rootNodes.map(
         (): { readonly id: string; readonly node: MotionPlanNode }[] => [],
       );
+      const collectStartDependency = (
+        start: MotionPlanStart,
+        rootIndex: number,
+        node: MotionPlanNode,
+      ): void => {
+        const collectDependency = (id: string) =>
+          rootReferences[rootIndex]?.push({ id, node });
+        if (start.kind === "delay-layer") {
+          collectStartDependency(start.start, rootIndex, node);
+        } else if (start.kind === "end" || start.kind === "event") {
+          collectDependency(eventSource(start.dependency));
+        } else if (start.kind === "condition-end") {
+          collectDependency(conditionEvent(start.id));
+        } else if (start.kind === "condition-join") {
+          rootDefinitions.set(conditionEvent(start.id), rootIndex);
+          for (const gate of start.gates) {
+            collectStartDependency(planStartForGate(gate), rootIndex, node);
+          }
+        }
+      };
       const collectRootDependencies = (
         node: MotionPlanNode,
         rootIndex: number,
@@ -3219,11 +3332,7 @@ function motionPlan(
         } else if (node.kind === "completion-collector") {
           rootDefinitions.set(`scope:${node.scopeId}`, rootIndex);
           for (const gate of node.gates) {
-            if (gate.kind !== "end" && gate.kind !== "begin") continue;
-            rootReferences[rootIndex]?.push({
-              id: eventSource(gate.dependency),
-              node,
-            });
+            collectStartDependency(planStartForGate(gate), rootIndex, node);
           }
         } else {
           if (node.effects.length > 1) {
@@ -3244,35 +3353,12 @@ function motionPlan(
             );
           }
         }
-        const collectDependency = (id: string) =>
-          rootReferences[rootIndex]?.push({ id, node });
-        const collectStartDependency = (start: MotionPlanStart): void => {
-          if (start.kind === "delay-layer") {
-            collectStartDependency(start.start);
-          } else if (start.kind === "end" || start.kind === "event") {
-            collectDependency(eventSource(start.dependency));
-          } else if (start.kind === "condition-end") {
-            collectDependency(conditionEvent(start.id));
-          } else if (start.kind === "condition-join") {
-            rootDefinitions.set(conditionEvent(start.id), rootIndex);
-            for (const gate of start.gates) {
-              if (gate.kind === "end" || gate.kind === "begin") {
-                collectDependency(eventSource(gate.dependency));
-              }
-            }
-          }
-        };
-        collectStartDependency(node.nativeStart);
+        collectStartDependency(node.nativeStart, rootIndex, node);
         if (node.kind === "scope") {
           for (const placement of node.conditionDefinitionsBefore ?? []) {
             rootDefinitions.set(conditionEvent(placement.join.id), rootIndex);
             for (const gate of placement.join.gates) {
-              if (gate.kind === "end" || gate.kind === "begin") {
-                rootReferences[rootIndex]?.push({
-                  id: eventSource(gate.dependency),
-                  node,
-                });
-              }
+              collectStartDependency(planStartForGate(gate), rootIndex, node);
             }
           }
           for (const child of node.children) {
@@ -3289,11 +3375,13 @@ function motionPlan(
         if (consumerIndex < 0) continue;
         rootDefinitions.set(conditionEvent(placement.join.id), consumerIndex);
         for (const gate of placement.join.gates) {
-          if (gate.kind === "end" || gate.kind === "begin") {
-            rootReferences[consumerIndex]?.push({
-              id: eventSource(gate.dependency),
-              node: rootNodes[consumerIndex] as MotionPlanNode,
-            });
+          const consumer = rootNodes[consumerIndex];
+          if (consumer !== undefined) {
+            collectStartDependency(
+              planStartForGate(gate),
+              consumerIndex,
+              consumer,
+            );
           }
         }
       }
@@ -3387,15 +3475,16 @@ function motionPlan(
             if (root === undefined) continue;
             for (const { join } of placementsIn(root)) {
               const hasCrossingSource = join.gates.some((gate) => {
-                if (gate.kind !== "end" && gate.kind !== "begin") return false;
-                const sourceRoot = rootDefinitions.get(
-                  eventSource(gate.dependency),
-                );
-                return (
-                  sourceRoot !== undefined &&
-                  sourceRoot !== rootIndex &&
-                  cycleRootIndices.has(sourceRoot)
-                );
+                return gateSourceDependencies(gate).some((dependency) => {
+                  const sourceRoot = rootDefinitions.get(
+                    eventSource(dependency),
+                  );
+                  return (
+                    sourceRoot !== undefined &&
+                    sourceRoot !== rootIndex &&
+                    cycleRootIndices.has(sourceRoot)
+                  );
+                });
               });
               if (!hasCrossingSource) continue;
               const consumerId = join.beforeNodeId;
@@ -3653,41 +3742,51 @@ function motionPlan(
         );
       }
     };
+    const verifyConditionJoins = (
+      start: MotionPlanStart,
+      node: MotionPlanNode,
+    ): void => {
+      if (start.kind === "delay-layer") {
+        verifyConditionJoins(start.start, node);
+      } else if (start.kind === "condition-join") {
+        for (const gate of start.gates) {
+          verifyGate(gate, node);
+        }
+        definedConditions.add(conditionEvent(start.id));
+      }
+    };
+    const verifyStartDependencies = (
+      start: MotionPlanStart,
+      node: MotionPlanNode,
+    ): void => {
+      if (start.kind === "delay-layer") {
+        verifyStartDependencies(start.start, node);
+      } else if (start.kind === "end" || start.kind === "event") {
+        verifyEventReference(eventSource(start.dependency), node);
+      } else if (
+        start.kind === "condition-end" &&
+        !definedConditions.has(conditionEvent(start.id))
+      ) {
+        fail(
+          "unknown-motion-start",
+          "条件集合必须在其消费者之前定义",
+          nodePath(node),
+        );
+      }
+    };
+    const verifyGate = (
+      gate: MotionPlanStartGate,
+      node: MotionPlanNode,
+    ): void => {
+      const start = planStartForGate(gate);
+      verifyConditionJoins(start, node);
+      verifyStartDependencies(start, node);
+    };
     const verifyNodeOrder = (node: MotionPlanNode): void => {
-      const verifyConditionJoins = (start: MotionPlanStart): void => {
-        if (start.kind === "delay-layer") {
-          verifyConditionJoins(start.start);
-        } else if (start.kind === "condition-join") {
-          for (const gate of start.gates) {
-            if (gate.kind === "end" || gate.kind === "begin") {
-              verifyEventReference(eventSource(gate.dependency), node);
-            }
-          }
-          definedConditions.add(conditionEvent(start.id));
-        }
-      };
-      const verifyStartDependencies = (start: MotionPlanStart): void => {
-        if (start.kind === "delay-layer") {
-          verifyStartDependencies(start.start);
-        } else if (start.kind === "end" || start.kind === "event") {
-          verifyEventReference(eventSource(start.dependency), node);
-        } else if (
-          start.kind === "condition-end" &&
-          !definedConditions.has(conditionEvent(start.id))
-        ) {
-          fail(
-            "unknown-motion-start",
-            "条件集合必须在其消费者之前定义",
-            nodePath(node),
-          );
-        }
-      };
-      verifyConditionJoins(node.nativeStart);
+      verifyConditionJoins(node.nativeStart, node);
       if (node.kind === "completion-collector") {
         for (const gate of node.gates) {
-          if (gate.kind === "end" || gate.kind === "begin") {
-            verifyEventReference(eventSource(gate.dependency), node);
-          }
+          verifyGate(gate, node);
         }
         const eventId = `scope:${node.scopeId}`;
         if (definedEvents.has(eventId)) {
@@ -3721,7 +3820,7 @@ function motionPlan(
           );
         }
       }
-      verifyStartDependencies(node.nativeStart);
+      verifyStartDependencies(node.nativeStart, node);
       if (node.kind === "scope") {
         const placements = node.conditionDefinitionsBefore ?? [];
         const remaining = new Set(placements);
@@ -3730,9 +3829,7 @@ function motionPlan(
           for (const placement of placements) {
             if (placement.join.beforeNodeId !== childId) continue;
             for (const gate of placement.join.gates) {
-              if (gate.kind === "end" || gate.kind === "begin") {
-                verifyEventReference(eventSource(gate.dependency), node);
-              }
+              verifyGate(gate, node);
             }
             if (definedConditions.has(conditionEvent(placement.join.id))) {
               fail(
@@ -3761,9 +3858,7 @@ function motionPlan(
       for (const placement of rootConditionDefinitionsBefore) {
         if (placement.join.beforeNodeId !== nodeId) continue;
         for (const gate of placement.join.gates) {
-          if (gate.kind === "end" || gate.kind === "begin") {
-            verifyEventReference(eventSource(gate.dependency), node);
-          }
+          verifyGate(gate, node);
         }
         if (definedConditions.has(conditionEvent(placement.join.id))) {
           fail(

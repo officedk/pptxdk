@@ -1063,6 +1063,8 @@ function gateStart(gate: MotionPlanStartGate): MotionPlanStart {
       return { kind: "end", dependency: gate.dependency };
     case "begin":
       return { kind: "event", dependency: gate.dependency };
+    case "plan-start":
+      return gate.start;
   }
 }
 
@@ -1078,28 +1080,44 @@ function endCollectorTree(
   conditionNodeIds: ReadonlyMap<string, number>,
   nodeType?: string,
 ): string {
-  const leaves = gates.map((gate) =>
-    element(
-      "p:par",
-      undefined,
-      element(
-        "p:cTn",
-        { id: ids.take(), dur: 0, fill: "hold" },
-        element(
-          "p:stCondLst",
-          undefined,
-          nativeStartCondition(
-            gateStart(gate),
-            stepKey,
-            effectNodeIds,
-            scopeNodeIds,
-            targetGroupIds,
-            conditionNodeIds,
-          ),
+  const gateTree = (gate: MotionPlanStartGate): string => {
+    const { base, delays } = motionPlanStartLayers(gateStart(gate));
+    if (base.kind === "condition-join") {
+      throw new Error("MotionPlan 原生条件门不能嵌入未定义的条件集合");
+    }
+    const container = (
+      start: MotionPlanStart,
+      children: readonly string[] = [],
+    ) =>
+      timingContainer(
+        ids.take(),
+        nativeStartCondition(
+          start,
+          stepKey,
+          effectNodeIds,
+          scopeNodeIds,
+          targetGroupIds,
+          conditionNodeIds,
         ),
+        children,
+      );
+    const lastDelay = delays.at(-1);
+    let children = [
+      container(
+        lastDelay === undefined
+          ? base
+          : { kind: "parent-start", delayMs: lastDelay },
       ),
-    ),
-  );
+    ];
+    for (let layerIndex = delays.length - 2; layerIndex >= 0; layerIndex -= 1) {
+      const delayMs = delays[layerIndex];
+      if (delayMs !== undefined) {
+        children = [container({ kind: "parent-start", delayMs }, children)];
+      }
+    }
+    return delays.length === 0 ? children[0]! : container(base, children);
+  };
+  const leaves = gates.map(gateTree);
   return timingContainer(id, startCondition, leaves, nodeType);
 }
 
@@ -1164,9 +1182,7 @@ function timingXml(
         `${stepKey}:start:${start.consumerParentScopeId}`,
       );
       for (const gate of start.gates) {
-        if (gate.kind === "end" || gate.kind === "begin") {
-          keepDependencyContainer(gate.dependency, stepKey);
-        }
+        collectStartReferences(gateStart(gate), stepKey);
       }
     }
   };
@@ -1180,9 +1196,7 @@ function timingXml(
       collectStartReferences(node.nativeStart, stepKey);
       if (node.kind === "completion-collector") {
         for (const gate of node.gates) {
-          if (gate.kind === "end" || gate.kind === "begin") {
-            keepDependencyContainer(gate.dependency, stepKey);
-          }
+          collectStartReferences(gateStart(gate), stepKey);
         }
       }
       if (node.kind === "scope") {
@@ -1194,9 +1208,7 @@ function timingXml(
             `${stepKey}:start:${placement.join.consumerParentScopeId}`,
           );
           for (const gate of placement.join.gates) {
-            if (gate.kind === "end" || gate.kind === "begin") {
-              keepDependencyContainer(gate.dependency, stepKey);
-            }
+            collectStartReferences(gateStart(gate), stepKey);
           }
         }
         collectReferencedContainers(node.children, stepKey);
@@ -1207,9 +1219,7 @@ function timingXml(
     collectReferencedContainers(step.nodes, step.key);
     for (const placement of step.conditionDefinitionsBefore ?? []) {
       for (const gate of placement.join.gates) {
-        if (gate.kind === "end" || gate.kind === "begin") {
-          keepDependencyContainer(gate.dependency, step.key);
-        }
+        collectStartReferences(gateStart(gate), step.key);
       }
     }
   }

@@ -2817,6 +2817,115 @@ function UniversalDelayLoweringDeck({
   );
 }
 
+function LateParentMultiSourceStartAlias() {
+  const sequence = useMotionScope();
+  const first = useMotionScope();
+  const sourceA = useMotionScope();
+  const sourceB = useMotionScope();
+  const joined = useMotionScope();
+  const parent = useMotionScope();
+  const alias = useMotionScope();
+  const maximum = 4_294_967_295;
+  const letterText = (testId: string, value: string, y: number) =>
+    createElement(
+      Text,
+      {
+        testId,
+        x: 10,
+        y,
+        width: 280,
+        height: 32,
+        style: { fontSize: 12 },
+        enter: fade({ by: "letter", duration: 601, intervalMs: 211 }),
+      },
+      value,
+    );
+  const content = createElement(
+    Fragment,
+    null,
+    createElement(
+      MotionScope,
+      { scope: sequence, mode: "sequence" },
+      createElement(
+        MotionScope,
+        { scope: first },
+        createElement(
+          MotionScope,
+          { scope: sourceA },
+          letterText("multisource-late-a", "AA", 8),
+        ),
+        createElement(
+          MotionScope,
+          { scope: sourceB, delay: 1000 },
+          letterText("multisource-late-b", "BB", 42),
+        ),
+      ),
+      createElement(
+        MotionScope,
+        { scope: joined, startAt: after(sourceB.end, 1301), delay: maximum },
+        observedShape("multisource-late-join", "Join", 76, "#ED7D31", 103),
+      ),
+    ),
+    createElement(
+      MotionScope,
+      { scope: parent, startAt: after(sourceA.end, 10) },
+      createElement(
+        MotionScope,
+        { scope: alias, startAt: after(joined.start, 19) },
+        observedShape("multisource-late-alias", "Alias", 108, "#C00000", 103),
+      ),
+    ),
+  );
+  return createElement(
+    Deck,
+    { width: 320, height: 180 },
+    createElement(Slide, { slideId: "multisource-late-start-alias" }, content),
+  );
+}
+
+function MultiSourceSpreadOffsetStart() {
+  const sequence = useMotionScope();
+  const sources = useMotionScope();
+  const sourceA = useMotionScope();
+  const sourceB = useMotionScope();
+  const sourceC = useMotionScope();
+  const joined = useMotionScope();
+  const maximum = 4_294_967_295;
+  const content = createElement(
+    MotionScope,
+    { scope: sequence, mode: "sequence" },
+    createElement(
+      MotionScope,
+      { scope: sources },
+      createElement(
+        MotionScope,
+        { scope: sourceA },
+        unknownLetterText("spread-offset-a", "AA", 8),
+      ),
+      createElement(
+        MotionScope,
+        { scope: sourceC },
+        unknownLetterText("spread-offset-c", "CC", 42),
+      ),
+      createElement(
+        MotionScope,
+        { scope: sourceB, startAt: after(sourceC.end, 1301) },
+        observedShape("spread-offset-b", "B", 76, "#ED7D31", 103),
+      ),
+    ),
+    createElement(
+      MotionScope,
+      { scope: joined, startAt: after(sourceB.start, maximum) },
+      observedShape("spread-offset-join", "Join", 108, "#C00000", 103),
+    ),
+  );
+  return createElement(
+    Deck,
+    { width: 320, height: 180 },
+    createElement(Slide, { slideId: "multisource-spread-offset" }, content),
+  );
+}
+
 describe("组件编排作用域", () => {
   it("等待交错作用域的全部成员，并允许前向引用完成与命名时刻", async () => {
     const result = await build(createElement(StaggeredSource));
@@ -7215,6 +7324,101 @@ describe("组件编排作用域", () => {
     const writtenTimes = await assertValidMotionPptx(result.pptx);
     assert.ok(writtenTimes.includes(1000));
     assert.ok(writtenTimes.includes(1301));
+    assert.ok(writtenTimes.includes(4_294_967_295));
+  });
+
+  it("晚父中的多来源 START 别名保留分层延迟并生成有效 PPTX", async () => {
+    const result = await build(createElement(LateParentMultiSourceStartAlias));
+    const slide = result.report.slides[0];
+    const motion = slide?.capabilities?.["motion"] as MotionObservation;
+    const scopeContainingObject = (testId: string) => {
+      const id = slide?.objects.find((object) => object.testId === testId)?.id;
+      return motion.scopes?.find(({ members }) =>
+        members.some((member) => member.kind === "object" && member.id === id),
+      );
+    };
+    const scopeContainingScope = (scopeId: string | undefined) =>
+      scopeId === undefined
+        ? undefined
+        : motion.scopes?.find(({ members }) =>
+            members.some(
+              (member) => member.kind === "scope" && member.id === scopeId,
+            ),
+          );
+    const sourceA = scopeContainingObject("multisource-late-a");
+    const sourceB = scopeContainingObject("multisource-late-b");
+    const first = scopeContainingScope(sourceA?.id);
+    const joined = scopeContainingObject("multisource-late-join");
+    const alias = scopeContainingObject("multisource-late-alias");
+    const parent = scopeContainingScope(alias?.id);
+    assert.ok(sourceA && sourceB && first && joined && parent && alias);
+    const expectedJoinDependencies = [
+      { scopeId: first.id, point: "end", offsetMs: 4_294_967_295 },
+      { scopeId: sourceB.id, point: "end", offsetMs: 4_294_968_596 },
+    ];
+    const expectedAliasDependencies = [
+      { scopeId: sourceA.id, point: "end", offsetMs: 10 },
+      { scopeId: first.id, point: "end", offsetMs: 4_294_967_314 },
+      { scopeId: sourceB.id, point: "end", offsetMs: 4_294_968_615 },
+    ];
+    assert.deepEqual(joined.startAfterAll, expectedJoinDependencies);
+    assert.deepEqual(alias.startAfterAll, expectedAliasDependencies);
+    assert.deepEqual(parent.startAfter, {
+      scopeId: sourceA.id,
+      point: "end",
+      offsetMs: 10,
+    });
+    assert.equal(
+      motion.steps[0]?.effects.filter(
+        ({ target }) =>
+          target.testId === "multisource-late-join" ||
+          target.testId === "multisource-late-alias",
+      ).length,
+      2,
+    );
+    const query = observeMotion(
+      result.query.slide("multisource-late-start-alias").observation,
+    );
+    const queryAlias = query?.steps[0]?.effects.find(
+      ({ target }) => target.testId === "multisource-late-alias",
+    );
+    assert.deepEqual(queryAlias?.startAfterAll, expectedAliasDependencies);
+    const writtenTimes = await assertValidMotionPptx(result.pptx);
+    assert.ok(writtenTimes.includes(4_294_967_295));
+  });
+
+  it("多来源条件将零偏移与超 U32 候选分别分层写出", async () => {
+    const result = await build(createElement(MultiSourceSpreadOffsetStart));
+    const slide = result.report.slides[0];
+    const motion = slide?.capabilities?.["motion"] as MotionObservation;
+    const scopeContainingObject = (testId: string) => {
+      const id = slide?.objects.find((object) => object.testId === testId)?.id;
+      return motion.scopes?.find(({ members }) =>
+        members.some((member) => member.kind === "object" && member.id === id),
+      );
+    };
+    const sourceC = scopeContainingObject("spread-offset-c");
+    const sourceB = scopeContainingObject("spread-offset-b");
+    const joined = scopeContainingObject("spread-offset-join");
+    const sources = motion.scopes?.find(({ members }) =>
+      members.some(
+        (member) => member.kind === "scope" && member.id === sourceB?.id,
+      ),
+    );
+    assert.ok(sourceC && sourceB && joined && sources);
+    const expectedDependencies = [
+      { scopeId: sources.id, point: "end", offsetMs: 0 },
+      { scopeId: sourceC.id, point: "end", offsetMs: 4_294_968_596 },
+    ];
+    assert.deepEqual(joined.startAfterAll, expectedDependencies);
+    const query = observeMotion(
+      result.query.slide("multisource-spread-offset").observation,
+    );
+    const queryEffect = query?.steps[0]?.effects.find(
+      ({ target }) => target.testId === "spread-offset-join",
+    );
+    assert.deepEqual(queryEffect?.startAfterAll, expectedDependencies);
+    const writtenTimes = await assertValidMotionPptx(result.pptx);
     assert.ok(writtenTimes.includes(4_294_967_295));
   });
 });

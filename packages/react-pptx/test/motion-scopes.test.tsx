@@ -170,6 +170,159 @@ function SelfStartedNestedPredecessor() {
   );
 }
 
+type SequenceStartCausalityOptions = {
+  readonly sourceUnknown: boolean;
+  readonly firstUnknown: boolean;
+  readonly offsetMs: number;
+  readonly explicitStep?: boolean;
+};
+
+function SequenceStartCausality({
+  sourceUnknown,
+  firstUnknown,
+  offsetMs,
+  explicitStep = false,
+}: SequenceStartCausalityOptions) {
+  const source = useMotionScope();
+  const follow = useMotionScope();
+  const child = useMotionScope();
+  const follower = useMotionScope();
+  const sourceContent = sourceUnknown
+    ? createElement(
+        Text,
+        {
+          testId: "causality-source",
+          x: 10,
+          y: 8,
+          width: 280,
+          height: 32,
+          enter: fade({ by: "letter", duration: 733, intervalMs: 211 }),
+        },
+        "AB",
+      )
+    : movingShape("causality-source", 137);
+  const first = firstUnknown
+    ? createElement(
+        Text,
+        {
+          testId: "causality-first",
+          x: 10,
+          y: 48,
+          width: 280,
+          height: 32,
+          enter: fade({ by: "letter", duration: 733, intervalMs: 211 }),
+        },
+        "AB",
+      )
+    : movingShape("causality-first", 137);
+  const content = createElement(
+    Fragment,
+    null,
+    createElement(MotionScope, { scope: source }, sourceContent),
+    createElement(
+      MotionScope,
+      { scope: follow, mode: "sequence", startAt: after(source.end, 25) },
+      first,
+      createElement(
+        MotionScope,
+        { scope: child, startAt: after(follow.start, offsetMs) },
+        movingShape("causality-second", 137),
+      ),
+    ),
+    createElement(
+      MotionScope,
+      { scope: follower, startAt: after(follow.end, 11) },
+      movingShape("causality-follower", 50),
+    ),
+  );
+  return createElement(
+    Deck,
+    { width: 320, height: 180 },
+    createElement(
+      Slide,
+      { slideId: "sequence-start-causality" },
+      explicitStep ? createElement(Step, { n: 2 }, content) : content,
+    ),
+  );
+}
+
+type ForwardSiblingOptions = { readonly sourceFirst: boolean };
+
+function ForwardSibling({ sourceFirst }: ForwardSiblingOptions) {
+  const activator = useMotionScope();
+  const parent = useMotionScope();
+  const source = useMotionScope();
+  const waiter = useMotionScope();
+  const sourceScope = createElement(
+    MotionScope,
+    { scope: source },
+    movingShape("forward-source", 200),
+  );
+  const waitingScope = createElement(
+    MotionScope,
+    { scope: waiter, startAt: source.end },
+    movingShape("forward-waiter", 100),
+  );
+  return createElement(
+    Deck,
+    { width: 320, height: 180 },
+    createElement(
+      Slide,
+      { slideId: "forward-sibling" },
+      createElement(
+        MotionScope,
+        { scope: activator },
+        unknownLetterText("forward-activator", "ABC", 8),
+      ),
+      createElement(
+        MotionScope,
+        {
+          scope: parent,
+          mode: "parallel",
+          startAt: after(activator.end, 10),
+        },
+        ...(sourceFirst
+          ? [sourceScope, waitingScope]
+          : [waitingScope, sourceScope]),
+      ),
+    ),
+  );
+}
+
+function IncomparableUnknownStarts() {
+  const firstSource = useMotionScope();
+  const secondSource = useMotionScope();
+  const parent = useMotionScope();
+  const child = useMotionScope();
+  return createElement(
+    Deck,
+    { width: 320, height: 180 },
+    createElement(
+      Slide,
+      { slideId: "incomparable-unknown-starts" },
+      createElement(
+        MotionScope,
+        { scope: firstSource },
+        unknownLetterText("incomparable-first", "ABC", 8),
+      ),
+      createElement(
+        MotionScope,
+        { scope: secondSource },
+        unknownLetterText("incomparable-second", "DEF", 48),
+      ),
+      createElement(
+        MotionScope,
+        { scope: parent, startAt: firstSource.end },
+        createElement(
+          MotionScope,
+          { scope: child, startAt: secondSource.end },
+          movingShape("incomparable-child", 100),
+        ),
+      ),
+    ),
+  );
+}
+
 function ReaderCycleDeck() {
   const first = useMotionScope();
   const second = useMotionScope();
@@ -208,6 +361,22 @@ function startAfterCondition(
   const rewritten = conditions.replace(
     /<p:cond\b[^>]*>[\s\S]*?<\/p:cond>/u,
     `<p:cond evt="end" delay="0"><p:tn val="${sourceTimingId}"></p:tn></p:cond>`,
+  );
+  assert.notEqual(rewritten, conditions);
+  return xml.slice(0, conditionsStart) + rewritten + xml.slice(conditionsEnd);
+}
+
+function startAtDelay(xml: string, timingId: number, delayMs: number): string {
+  const marker = `<p:cTn id="${timingId}"`;
+  const nodeStart = xml.indexOf(marker);
+  assert.notEqual(nodeStart, -1);
+  const conditionsStart = xml.indexOf("<p:stCondLst>", nodeStart);
+  const conditionsEnd = xml.indexOf("</p:stCondLst>", conditionsStart);
+  assert.ok(conditionsStart > nodeStart && conditionsEnd > conditionsStart);
+  const conditions = xml.slice(conditionsStart, conditionsEnd);
+  const rewritten = conditions.replace(
+    /<p:cond\b[^>]*>[\s\S]*?<\/p:cond>/u,
+    `<p:cond delay="${delayMs}"></p:cond>`,
   );
   assert.notEqual(rewritten, conditions);
   return xml.slice(0, conditionsStart) + rewritten + xml.slice(conditionsEnd);
@@ -808,6 +977,21 @@ describe("组件编排作用域", () => {
     );
   });
 
+  it("拒绝没有原生合并形式的不可比较未知起点", async () => {
+    await assert.rejects(
+      build(createElement(IncomparableUnknownStarts)),
+      (error: unknown) => {
+        assert.ok(error instanceof BuildError);
+        assert.equal(error.diagnostics[0]?.code, "unknown-motion-start");
+        assert.match(
+          error.diagnostics[0]?.message ?? "",
+          /不可比较的未知起点/u,
+        );
+        return true;
+      },
+    );
+  });
+
   it("顺序作用域等待嵌套并行作用域的全部成员", async () => {
     const result = await build(createElement(SequencedScopes));
     const slide = result.report.slides[0];
@@ -1084,6 +1268,177 @@ describe("组件编排作用域", () => {
     assert.equal(fileFollower?.startAfter?.timingId, sequence.timingId);
   });
 
+  it("顺序前驱完成覆盖冗余自定起点，保留未知时长与真实整体完成", async () => {
+    const variants: readonly SequenceStartCausalityOptions[] = [
+      {
+        sourceUnknown: true,
+        firstUnknown: true,
+        offsetMs: 0,
+      },
+      {
+        sourceUnknown: true,
+        firstUnknown: true,
+        offsetMs: 17,
+      },
+      {
+        sourceUnknown: true,
+        firstUnknown: false,
+        offsetMs: 17,
+      },
+      {
+        sourceUnknown: false,
+        firstUnknown: true,
+        offsetMs: 17,
+        explicitStep: true,
+      },
+      {
+        sourceUnknown: false,
+        firstUnknown: false,
+        offsetMs: 17,
+      },
+    ];
+
+    for (const options of variants) {
+      const result = await build(
+        createElement(SequenceStartCausality, options),
+      );
+      const slide = result.report.slides[0];
+      const motion = slide?.capabilities?.["motion"] as MotionObservation;
+      const objectId = (testId: string) =>
+        slide?.objects.find(({ testId: id }) => id === testId)?.id;
+      const source = motion.steps[0]?.effects.find(
+        ({ target }) => target.testId === "causality-source",
+      );
+      const first = motion.steps[0]?.effects.find(
+        ({ target }) => target.testId === "causality-first",
+      );
+      const second = motion.steps[0]?.effects.find(
+        ({ target }) => target.testId === "causality-second",
+      );
+      const follower = motion.steps[0]?.effects.find(
+        ({ target }) => target.testId === "causality-follower",
+      );
+
+      if (options.sourceUnknown) {
+        assert.deepEqual(
+          [source?.completion, source?.endMs],
+          ["unknown", undefined],
+        );
+      }
+      if (options.firstUnknown) {
+        assert.deepEqual(
+          [first?.completion, first?.endMs],
+          ["unknown", undefined],
+        );
+      }
+      assert.ok(second);
+      assert.ok(follower);
+      if (options.sourceUnknown || options.firstUnknown) {
+        assert.deepEqual(
+          second.startAfter && "targetId" in second.startAfter
+            ? [second.startAfter.targetId, second.startAfter.point]
+            : undefined,
+          [objectId("causality-first"), "end"],
+        );
+      } else {
+        assert.equal(second.startMs, 299);
+      }
+
+      const file = await validatePptx(result.pptx);
+      assert.deepEqual(file.errors, []);
+      const effects = file.slides[0]?.animations?.[0]?.effects ?? [];
+      const fileEffect = (testId: string) =>
+        effects.find(({ targetId }) => targetId === objectId(testId));
+      const fileFirst = fileEffect("causality-first");
+      const fileSecond = fileEffect("causality-second");
+      const fileFollower = fileEffect("causality-follower");
+      assert.ok(fileFirst && fileSecond && fileFollower);
+      if (options.firstUnknown) {
+        assert.equal(fileFirst.by, "letter");
+        assert.equal(fileFirst.completion, "unknown");
+        assert.equal(fileSecond.startAfter?.timingId, fileFirst.timingId);
+        assert.equal(fileSecond.startAfter?.offsetMs, 0);
+      }
+      if (options.sourceUnknown) {
+        assert.equal(fileFirst.startAfter?.source, "container");
+        assert.equal(fileFirst.startAfter?.offsetMs, 25);
+      }
+      const child = file.slides[0]?.animationContainers?.find(
+        ({ children, endSync }) =>
+          endSync === "all" &&
+          children.some(
+            ({ kind, timingId }) =>
+              kind === "effect" && timingId === fileSecond.timingId,
+          ),
+      );
+      const follow = file.slides[0]?.animationContainers?.find(
+        ({ children, endSync }) =>
+          endSync === "all" &&
+          children.some(
+            ({ kind, timingId }) =>
+              kind === "effect" && timingId === fileFirst.timingId,
+          ) &&
+          children.some(
+            ({ kind, timingId }) =>
+              kind === "container" && timingId === child?.timingId,
+          ),
+      );
+      assert.ok(follow);
+      if (options.sourceUnknown || options.firstUnknown) {
+        assert.equal(fileFollower.startAfter?.timingId, follow.timingId);
+        assert.equal(fileFollower.startAfter?.offsetMs, 11);
+      } else {
+        assert.equal(fileFollower.startAfter, undefined);
+        assert.equal(follower.startMs, 447);
+      }
+      assert.equal(
+        file.slides[0]?.animations?.[0]?.trigger,
+        options.explicitStep === true ? "click" : "auto",
+      );
+    }
+  });
+
+  it("平行作用域中的完成引用不受兄弟声明顺序影响", async () => {
+    for (const sourceFirst of [true, false]) {
+      const result = await build(
+        createElement(ForwardSibling, { sourceFirst }),
+      );
+      const slide = result.report.slides[0];
+      const objectId = (testId: string) =>
+        slide?.objects.find(({ testId: id }) => id === testId)?.id;
+      const file = await validatePptx(result.pptx);
+      assert.deepEqual(file.errors, []);
+      const effects = file.slides[0]?.animations?.[0]?.effects ?? [];
+      const sourceEffect = effects.find(
+        ({ targetId }) => targetId === objectId("forward-source"),
+      );
+      const waiterEffect = effects.find(
+        ({ targetId }) => targetId === objectId("forward-waiter"),
+      );
+      assert.ok(sourceEffect && waiterEffect);
+      const containers = file.slides[0]?.animationContainers ?? [];
+      const source = containers.find(
+        ({ children, endSync }) =>
+          endSync === "all" &&
+          children.some(
+            ({ kind, timingId }) =>
+              kind === "effect" && timingId === sourceEffect.timingId,
+          ),
+      );
+      const waiter = containers.find(
+        ({ children, endSync }) =>
+          endSync === "all" &&
+          children.some(
+            ({ kind, timingId }) =>
+              kind === "effect" && timingId === waiterEffect.timingId,
+          ),
+      );
+      assert.ok(source && waiter);
+      assert.equal(waiterEffect.startAfter?.timingId, source.timingId);
+      assert.equal(waiterEffect.startAfter?.offsetMs, 0);
+    }
+  });
+
   it("未知起点后的并行、交错、嵌套顺序及同一点击步保持可写", async () => {
     const variants: readonly UnknownStartSequenceOptions[] = [
       { mode: "parallel" as const },
@@ -1234,6 +1589,71 @@ describe("组件编排作用域", () => {
         ),
       );
     }
+  });
+
+  it("独立读取器把父启动前置传给实际子节点，并接受合法前向引用", async () => {
+    const result = await build(createElement(UnknownStartSequence, {}));
+    const original = await validatePptx(result.pptx);
+    assert.deepEqual(original.errors, []);
+    const slide = result.report.slides[0];
+    const objectId = (testId: string) =>
+      slide?.objects.find(({ testId: id }) => id === testId)?.id;
+    const effects = original.slides[0]?.animations?.[0]?.effects ?? [];
+    const sourceEffect = effects.find(
+      ({ targetId }) => targetId === objectId("unknown-source"),
+    );
+    const firstEffect = effects.find(
+      ({ targetId }) => targetId === objectId("sequence-first"),
+    );
+    assert.ok(sourceEffect && firstEffect);
+    const containers = original.slides[0]?.animationContainers ?? [];
+    const source = containers.find(
+      ({ children, endSync }) =>
+        endSync === "all" &&
+        children.some(
+          ({ kind, timingId }) =>
+            kind === "effect" && timingId === sourceEffect.timingId,
+        ),
+    );
+    const follow = containers.find(
+      ({ children, endSync }) =>
+        endSync === "all" &&
+        children.some(
+          ({ kind, timingId }) =>
+            kind === "effect" && timingId === firstEffect.timingId,
+        ),
+    );
+    assert.ok(source && follow);
+    const archive = unzipSync(result.pptx);
+    const slidePart = archive["ppt/slides/slide1.xml"];
+    assert.ok(slidePart);
+    const xml = strFromU8(slidePart);
+
+    const inheritedCycle = startAfterCondition(
+      xml,
+      source.timingId,
+      firstEffect.timingId,
+    );
+    const cycleRead = await validatePptx(
+      zipSync({
+        ...archive,
+        "ppt/slides/slide1.xml": strToU8(inheritedCycle),
+      }),
+    );
+    assert.ok(
+      cycleRead.errors.some(
+        ({ code }) => code === "invalid-animation-end-dependency",
+      ),
+    );
+
+    const forwardReference = startAtDelay(inheritedCycle, follow.timingId, 0);
+    const forwardRead = await validatePptx(
+      zipSync({
+        ...archive,
+        "ppt/slides/slide1.xml": strToU8(forwardReference),
+      }),
+    );
+    assert.deepEqual(forwardRead.errors, []);
   });
 
   it("空子作用域保留顺序边界，但不占交错位置", async () => {

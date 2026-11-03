@@ -258,6 +258,7 @@ export const textCapability: CapabilityModule = {
       name,
       ...(testId === undefined ? {} : { testId }),
       textBody: true,
+      hasTextCharacters: body.text.length > 0,
       filled: false,
       paragraphCount: body.paragraphCount,
     });

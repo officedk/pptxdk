@@ -284,6 +284,7 @@ export const shapeCapability: CapabilityModule = {
       name,
       ...(testId === undefined ? {} : { testId }),
       textBody: textOutput !== undefined,
+      hasTextCharacters: textOutput !== undefined && textOutput.text.length > 0,
       filled: fill !== undefined,
       ...(textOutput === undefined
         ? {}

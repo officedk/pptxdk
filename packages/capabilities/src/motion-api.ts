@@ -438,6 +438,7 @@ type MotionTarget = {
   readonly name: string;
   readonly testId?: string;
   readonly textBody: boolean;
+  readonly hasTextCharacters?: boolean;
   readonly filled: boolean;
   readonly paragraphCount?: number;
   readonly chartSeriesCount?: number;

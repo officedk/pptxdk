@@ -15,6 +15,7 @@ import { motionScopeAnnotation } from "./motion-api.ts";
 import {
   compileMotionPlan,
   type MotionPlanNode,
+  type MotionPlanStart,
   type MotionPlanStep,
 } from "./motion-plan.ts";
 
@@ -342,28 +343,19 @@ function effectKey(effect: TimingEffect): string {
   return `${effect.target.id}:${effect.effectIndex}:${effect.partIndex ?? ""}`;
 }
 
-function dependencyKey(dependency: MotionStartDependency): string {
-  if ("scopeId" in dependency) return `scope:${dependency.scopeId}`;
-  if ("group" in dependency) return `target:${dependency.targetId}`;
-  return `effect:${dependency.targetId}:${dependency.effectIndex}:${dependency.partIndex ?? ""}`;
-}
-
-type PlanStart = {
-  readonly startMs?: number;
-  readonly startAfter?: MotionStartDependency;
-};
-
-function startAfterDelay(start: PlanStart, delayMs: number): PlanStart {
-  if (start.startMs !== undefined) return { startMs: start.startMs + delayMs };
-  if (start.startAfter !== undefined) {
-    return {
-      startAfter: {
-        ...start.startAfter,
-        offsetMs: start.startAfter.offsetMs + delayMs,
-      },
-    };
-  }
-  throw new Error("MotionPlan 起点缺少数值或原生完成关系");
+function startAfterDelay(
+  start: MotionPlanStart,
+  delayMs: number,
+): MotionPlanStart {
+  return start.kind === "parent-start"
+    ? { kind: start.kind, delayMs: start.delayMs + delayMs }
+    : {
+        kind: start.kind,
+        dependency: {
+          ...start.dependency,
+          offsetMs: start.dependency.offsetMs + delayMs,
+        },
+      };
 }
 
 function dependencyTimingId(
@@ -384,83 +376,17 @@ function dependencyTimingId(
   );
 }
 
-function nodeTimingIds(
-  node: MotionPlanNode,
-  stepKey: string,
-  effectNodeIds: ReadonlyMap<string, number>,
-  scopeNodeIds: ReadonlyMap<string, number>,
-  targetGroupIds: ReadonlyMap<string, number>,
-): number[] {
-  if (node.kind === "scope") {
-    return [
-      scopeNodeIds.get(`${stepKey}:${node.id}`),
-      ...node.children.flatMap((child) =>
-        nodeTimingIds(
-          child,
-          stepKey,
-          effectNodeIds,
-          scopeNodeIds,
-          targetGroupIds,
-        ),
-      ),
-    ].filter((id): id is number => id !== undefined);
-  }
-  const groupId = targetGroupIds.get(`${stepKey}:${node.targetId}`);
-  return [
-    ...(groupId === undefined ? [] : [groupId]),
-    ...node.effects.flatMap((effect) => {
-      const id = effectNodeIds.get(effectKey(effect));
-      return id === undefined ? [] : [id];
-    }),
-  ];
-}
-
 function nativeStartCondition(
-  start: PlanStart,
-  parent: PlanStart,
+  start: MotionPlanStart,
   stepKey: string,
   effectNodeIds: ReadonlyMap<string, number>,
   scopeNodeIds: ReadonlyMap<string, number>,
   targetGroupIds: ReadonlyMap<string, number>,
-  priorTimingIds: ReadonlySet<number>,
 ): string {
-  if (start.startMs !== undefined) {
-    if (parent.startAfter !== undefined) {
-      throw new Error("MotionPlan 不能在未知父起点之后推导数值起点");
-    }
-    const delay = start.startMs - (parent.startMs ?? 0);
-    if (delay < 0) throw new Error("MotionPlan 子项早于其包含作用域启动");
-    return element("p:cond", { delay });
-  }
-  if (start.startAfter === undefined) {
-    if (parent.startAfter !== undefined) return element("p:cond", { delay: 0 });
-    return element("p:cond", { delay: 0 });
-  }
-  if (parent.startAfter !== undefined) {
-    if (dependencyKey(start.startAfter) !== dependencyKey(parent.startAfter)) {
-      const dependencyId = dependencyTimingId(
-        start.startAfter,
-        stepKey,
-        effectNodeIds,
-        scopeNodeIds,
-        targetGroupIds,
-      );
-      if (dependencyId === undefined || !priorTimingIds.has(dependencyId)) {
-        throw new Error("MotionPlan 子起点与父作用域依赖无法合并");
-      }
-      // 父容器已从外部事件启动；此前的真实成员只需等待其自身完成。
-      return element(
-        "p:cond",
-        { evt: "end", delay: start.startAfter.offsetMs },
-        element("p:tn", { val: dependencyId }),
-      );
-    }
-    const delay = start.startAfter.offsetMs - parent.startAfter.offsetMs;
-    if (delay < 0) throw new Error("MotionPlan 子项早于其包含作用域启动");
-    return element("p:cond", { delay });
-  }
+  if (start.kind === "parent-start")
+    return element("p:cond", { delay: start.delayMs });
   const dependencyId = dependencyTimingId(
-    start.startAfter,
+    start.dependency,
     stepKey,
     effectNodeIds,
     scopeNodeIds,
@@ -471,7 +397,7 @@ function nativeStartCondition(
   }
   return element(
     "p:cond",
-    { evt: "end", delay: start.startAfter.offsetMs },
+    { evt: "end", delay: start.dependency.offsetMs },
     element("p:tn", { val: dependencyId }),
   );
 }
@@ -557,7 +483,6 @@ function timingXml(steps: readonly MotionPlanStep[]): string {
           )}`;
     const renderNodes = (
       nodes: readonly MotionPlanNode[],
-      parentStart: PlanStart,
       isTopLevel: boolean,
     ): string[] =>
       nodes.map((node, index) => {
@@ -567,40 +492,19 @@ function timingXml(steps: readonly MotionPlanStep[]): string {
             : index === 0
               ? "afterEffect"
               : "withEffect";
-        const start: PlanStart = {
-          ...(node.startMs === undefined ? {} : { startMs: node.startMs }),
-          ...(node.startAfter === undefined
-            ? {}
-            : { startAfter: node.startAfter }),
-        };
-        const priorTimingIds = new Set(
-          nodes
-            .slice(0, index)
-            .flatMap((previous) =>
-              nodeTimingIds(
-                previous,
-                step.key,
-                effectNodeIds,
-                scopeNodeIds,
-                targetGroupIds,
-              ),
-            ),
-        );
         const condition = nativeStartCondition(
-          start,
-          parentStart,
+          node.nativeStart,
           step.key,
           effectNodeIds,
           scopeNodeIds,
           targetGroupIds,
-          priorTimingIds,
         );
         if (node.kind === "scope") {
           const scopeId = scopeNodeIds.get(`${step.key}:${node.id}`);
           if (scopeId === undefined) {
             throw new Error("MotionPlan 作用域缺少原生时间节点身份");
           }
-          const children = renderNodes(node.children, start, false);
+          const children = renderNodes(node.children, false);
           return timingContainer(scopeId, condition, children);
         }
         const childDelay = (effect: TimingEffect): number =>
@@ -638,15 +542,16 @@ function timingXml(steps: readonly MotionPlanStep[]): string {
         if (effectId === undefined) {
           throw new Error("MotionPlan 效果缺少原生时间节点身份");
         }
-        const localStart = startAfterDelay(start, childDelay(effect));
+        const localStart = startAfterDelay(
+          node.nativeStart,
+          childDelay(effect),
+        );
         const effectCondition = nativeStartCondition(
           localStart,
-          parentStart,
           step.key,
           effectNodeIds,
           scopeNodeIds,
           targetGroupIds,
-          priorTimingIds,
         );
         const buildGroupId =
           effect.target.range?.type === "chart"
@@ -661,7 +566,7 @@ function timingXml(steps: readonly MotionPlanStep[]): string {
           buildGroupId,
         );
       });
-    const stepChildren = renderNodes(step.nodes, { startMs: 0 }, true);
+    const stepChildren = renderNodes(step.nodes, true);
     return element(
       "p:par",
       undefined,

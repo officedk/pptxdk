@@ -2900,39 +2900,57 @@ function readSlideAnimations(
     });
   }
 
-  const completionPrerequisites = new Map<number, readonly number[]>();
+  const timingEvent = (timingId: number, point: "start" | "end"): string =>
+    `${timingId}:${point}`;
+  const eventPrerequisites = new Map<string, string[]>();
+  const requireBefore = (before: string, after: string): void => {
+    const prerequisites = eventPrerequisites.get(after) ?? [];
+    prerequisites.push(before);
+    eventPrerequisites.set(after, prerequisites);
+    if (!eventPrerequisites.has(before)) eventPrerequisites.set(before, []);
+  };
   for (const node of timingTreeNodes.values()) {
-    const prerequisites = [
-      ...(node.kind === "container" && containerEndSync.has(node.timingId)
-        ? node.children
-        : []),
-    ];
+    const startEvent = timingEvent(node.timingId, "start");
+    const endEvent = timingEvent(node.timingId, "end");
+    eventPrerequisites.set(
+      startEvent,
+      eventPrerequisites.get(startEvent) ?? [],
+    );
+    requireBefore(startEvent, endEvent);
+    if (node.parentTimingId !== undefined) {
+      // 子节点继承父节点的启动前置；父完成不代表子完成。
+      requireBefore(timingEvent(node.parentTimingId, "start"), startEvent);
+    }
     const startDependency = dependencyByTimingId.get(node.timingId);
     if (startDependency !== undefined) {
-      prerequisites.push(startDependency.timingId);
+      requireBefore(timingEvent(startDependency.timingId, "end"), startEvent);
     }
-    completionPrerequisites.set(node.timingId, prerequisites);
+    if (node.kind === "container" && containerEndSync.has(node.timingId)) {
+      for (const childId of node.children) {
+        requireBefore(timingEvent(childId, "end"), endEvent);
+      }
+    }
   }
-  const completedTimingIds = new Set<number>();
-  const visitingTimingIds = new Set<number>();
-  let hasCompletionCycle = false;
-  const visitCompletion = (timingId: number): void => {
-    if (completedTimingIds.has(timingId) || hasCompletionCycle) return;
-    if (visitingTimingIds.has(timingId)) {
-      hasCompletionCycle = true;
+  const completedEvents = new Set<string>();
+  const visitingEvents = new Set<string>();
+  let hasTimingCycle = false;
+  const visitTimingEvent = (event: string): void => {
+    if (completedEvents.has(event) || hasTimingCycle) return;
+    if (visitingEvents.has(event)) {
+      hasTimingCycle = true;
       return;
     }
-    visitingTimingIds.add(timingId);
-    for (const prerequisite of completionPrerequisites.get(timingId) ?? []) {
-      visitCompletion(prerequisite);
+    visitingEvents.add(event);
+    for (const prerequisite of eventPrerequisites.get(event) ?? []) {
+      visitTimingEvent(prerequisite);
     }
-    visitingTimingIds.delete(timingId);
-    completedTimingIds.add(timingId);
+    visitingEvents.delete(event);
+    completedEvents.add(event);
   };
-  for (const timingId of timingTreeNodes.keys()) {
-    visitCompletion(timingId);
+  for (const event of eventPrerequisites.keys()) {
+    visitTimingEvent(event);
   }
-  if (hasCompletionCycle) {
+  if (hasTimingCycle) {
     issue(
       errors,
       part,

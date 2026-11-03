@@ -5,6 +5,11 @@ export {
   createSalesReport,
   SalesTable,
 } from "./sales-report.tsx";
+export {
+  SchoolAgendaPage,
+  SchoolServicesPage,
+  schoolReferenceDeck,
+} from "./school-reference.tsx";
 export type {
   SalesDataSource,
   SalesOverview,

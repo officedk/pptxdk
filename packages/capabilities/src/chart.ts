@@ -9,6 +9,7 @@ import {
   type CapabilityLayoutRequest,
   type GeometryBox,
   type LayoutStyle,
+  type LinkTarget,
   type ThemeContext,
 } from "@react-pptx/core";
 import type { ReactNode } from "react";
@@ -100,6 +101,7 @@ type ChartBase = MotionProps &
   MorphProps & {
     readonly testId?: string;
     readonly name?: string;
+    readonly link?: LinkTarget;
     readonly x?: number;
     readonly y?: number;
     readonly width?: number;
@@ -863,6 +865,7 @@ function validateProps(
       "testId",
       "name",
       "morphKey",
+      "link",
       "x",
       "y",
       "width",
@@ -1097,6 +1100,7 @@ export const chartCapability: CapabilityModule = {
           height: props.height!,
         },
         relationshipId,
+        context.nativeLink,
       ),
       observation: {
         id: context.id,

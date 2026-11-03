@@ -6,6 +6,7 @@ import {
   type CapabilityLayoutRequest,
   type ColorValue,
   type LayoutStyle,
+  type LinkTarget,
   type TextStyle as CoreTextStyle,
   type VisualStyle,
   type CapabilityInput,
@@ -23,6 +24,7 @@ export type {
   PathOptions,
   PresetGeometry,
 } from "./geometry.ts";
+import { nativeLinkXml } from "./identity.ts";
 export { linearGradient, radialGradient } from "./visual.ts";
 export type { VisualStyle } from "@react-pptx/core";
 import { fontPresentationContributions } from "./font-embedding.ts";
@@ -42,6 +44,7 @@ import { shapePropertiesXml } from "./visual.ts";
 
 export type ShapeProps = MotionProps &
   MorphProps & {
+    readonly link?: LinkTarget;
     readonly testId?: string;
     readonly name?: string;
     readonly geometry?: Geometry;
@@ -66,6 +69,7 @@ const allowedParameters = [
   "testId",
   "name",
   "morphKey",
+  "link",
   "geometry",
   "flipH",
   "flipV",
@@ -180,8 +184,9 @@ function shapeXml(
   escapedName: string,
   properties: string,
   textBody: string,
+  linkXml: string,
 ): string {
-  return `<p:sp><p:nvSpPr><p:cNvPr id="${id}" name="${escapedName}"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr>${properties}${textBody}</p:sp>`;
+  return `<p:sp><p:nvSpPr><p:cNvPr id="${id}" name="${escapedName}">${linkXml}</p:cNvPr><p:cNvSpPr/><p:nvPr/></p:nvSpPr>${properties}${textBody}</p:sp>`;
 }
 
 /** 形状模块独立校验输入、声明原生几何，并生成对应 PresentationML 对象。 */
@@ -201,6 +206,7 @@ export const shapeCapability: CapabilityModule = {
         shapeTextMeasurementStyle(shapeTextStyle(input.props)),
         request.theme,
         request.availableWidth,
+        request.slideNumber,
       );
       return measured;
     } catch (error) {
@@ -303,6 +309,11 @@ export const shapeCapability: CapabilityModule = {
           height: Math.max(0, box.height - insets.top - insets.bottom),
           insets,
         },
+        "text-box",
+        {
+          slideNumber: context.slideNumber,
+          createId: context.createTextFieldId,
+        },
       );
     }
     const name =
@@ -335,6 +346,7 @@ export const shapeCapability: CapabilityModule = {
         escapedName,
         properties.xml,
         textOutput?.xml ?? "",
+        nativeLinkXml(context.nativeLink),
       ),
       observation: {
         id: context.id,

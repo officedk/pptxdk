@@ -212,11 +212,15 @@ try {
     join(temporaryDirectory, "consumer-types.ts"),
     [
       'import { createElement, Suspense, use, useEffect, useState } from "react";',
-      'import { after, Cell, Chart, createMorphScope, darker, Deck, defineTheme, fade, font, Group, Image, lighter, MotionScope, P, Row, Shape, Slide, Span, spin, Step, Table, Text, useMotionScope, build, transitions, type BoxProps, type BuildOptions, type BuildResult, type CellProps, type ChartAxis, type ChartData, type ChartDataLabels, type ChartKind, type ChartLine, type ChartPoint, type ChartProps as DefaultChartProps, type ChartSeries, type ColorValue, type ColumnOrBarChartProps, type GroupProps, type ImageProps, type LineOrAreaChartProps, type MotionCompletionState, type MotionGranularity, type MotionMoment, type MotionObservation, type MotionProps, type MotionScopeHandle, type MotionScopeMode, type MotionScopeProps, type NativeTableObservation, type RowProps, type ShapeProps, type StepProps, type TableColumn, type TableProps, type TableRowStyle, type TableCellStyle, type TableSpacing, type TableStyle, type TableTextStyle, type TableVerticalAlign, type TextProps, type TextStyle, type ThemeInput, type ThemeScope, type Transition } from "@react-pptx/react-pptx";',
+      'import { after, Cell, Chart, createMorphScope, darker, Deck, defineTheme, fade, font, Group, Image, lighter, linearGradient, MotionScope, P, Row, Section, Shape, Slide, SlideNumber, Span, spin, Step, Table, Text, useMotionScope, build, transitions, type BoxProps, type BuildOptions, type BuildResult, type CellProps, type ChartAxis, type ChartData, type ChartDataLabels, type ChartKind, type ChartLine, type ChartPoint, type ChartProps as DefaultChartProps, type ChartSeries, type ColorValue, type ColumnOrBarChartProps, type GroupProps, type ImageProps, type LineOrAreaChartProps, type LinkTarget, type MotionCompletionState, type MotionGranularity, type MotionMoment, type MotionObservation, type MotionProps, type MotionScopeHandle, type MotionScopeMode, type MotionScopeProps, type NativeTableObservation, type RowProps, type SectionProps, type ShapeProps, type SlideBackground, type SlideNumberProps, type StepProps, type TableColumn, type TableProps, type TableRowStyle, type TableCellStyle, type TableSpacing, type TableStyle, type TableTextStyle, type TableVerticalAlign, type TextProps, type TextStyle, type ThemeInput, type ThemeScope, type Transition } from "@react-pptx/react-pptx";',
       'import { build as buildChartOnly, Chart as ChartOnly, Deck as ChartDeck, Slide as ChartSlide, type ChartProps } from "@react-pptx/react-pptx/chart";',
       'import { type ValidationIssue, type ValidationResult } from "@react-pptx/validation";',
       'import { buildFromSource, type BuildFromSourceOptions } from "@react-pptx/react-pptx/node";',
       'const shape: ShapeProps = { testId: "typed", x: 0, y: 0, width: 40, height: 30 };',
+      'const linkTarget: LinkTarget = { slideId: "typed-target" };',
+      'const background: SlideBackground = linearGradient(45, "#123456", "#abcdef");',
+      'const section: SectionProps = { name: "typed-section" };',
+      'const slideNumber: SlideNumberProps = { style: { fontWeight: "bold" } };',
       "const boxScope = createMorphScope();",
       'const typedBox: BoxProps = { morphKey: boxScope.handle("background"), style: { width: 80, height: 32, backgroundColor: "accent1" } };',
       "const image: ImageProps = { src: new Uint8Array([0x89, 0x50, 0x4e, 0x47]), width: 40, height: 30 };",
@@ -256,11 +260,11 @@ try {
       'const themedDeck = createElement(Deck, { theme: defineTheme(themeInput), style: textDefaults }, createElement(Slide, { slideId: "typed-theme", theme: themeScope, style: { fontSize: 16 } }, createElement(Text, { testId: "typed-theme-text", x: 0, y: 0, width: 100, height: "auto" }, "Theme consumer")));',
       "const sourceOptions: BuildFromSourceOptions = { signal: new AbortController().signal };",
       'const sourceBuild = buildFromSource("./consumer-deck.tsx", sourceOptions);',
-      'const result: Promise<BuildResult> = build(createElement(Deck, {}, createElement(Slide, { slideId: "typed", transition }, createElement(Group, group, createElement(Shape, { ...shape, ...motion }), createElement(Text, text, createElement(P, { style: { list: { type: "bullet" } } }, createElement(Span, { style: { fontWeight: "bold" } }, "Installed 文本"))), createElement(Image, image), createElement(Step, { ...step }, createElement(Shape, { ...shape, testId: "step-shape", enter: fade(), emphasis: spin() }))))));',
+      'const result: Promise<BuildResult> = build(createElement(Deck, {}, createElement(Section, section, createElement(Slide, { slideId: "typed", transition, background }, createElement(Group, group, createElement(Shape, { ...shape, link: linkTarget, ...motion }), createElement(Text, text, createElement(P, { style: { list: { type: "bullet" } } }, createElement(Span, { style: { fontWeight: "bold" } }, "Installed 文本"), createElement(SlideNumber, slideNumber))), createElement(Image, image), createElement(Step, { ...step }, createElement(Shape, { ...shape, testId: "step-shape", enter: fade(), emphasis: spin() })))))));',
       'const defaultChartResult: Promise<BuildResult> = build(createElement(Deck, {}, createElement(Slide, { slideId: "typed-chart" }, createElement(Chart, defaultChart))));',
       'const chartOnlyResult: Promise<BuildResult> = buildChartOnly(createElement(ChartDeck, {}, createElement(ChartSlide, { slideId: "typed-chart-only" }, createElement(ChartOnly, chartOnly))));',
       'const tableElement = createElement(Table, table, createElement(Row, row, createElement(Cell, cell, "North")));',
-      "void [result, defaultChartResult, chartOnlyResult, contentSizedText, noWrapText, typedBox, granularText, granularChart, validationIssue, validatorProfile, asyncTable, signalOptions, fontEmbeddingOptions, themeInput, themeScope, colorValue, textDefaults, themedDeck, sourceBuild, tableElement, tableObservation, scopeMoment, scopeCompletion, scopeProps];",
+      "void [result, defaultChartResult, chartOnlyResult, contentSizedText, noWrapText, typedBox, granularText, granularChart, validationIssue, validatorProfile, asyncTable, signalOptions, fontEmbeddingOptions, themeInput, themeScope, colorValue, textDefaults, themedDeck, sourceBuild, tableElement, tableObservation, scopeMoment, scopeCompletion, scopeProps, linkTarget, background, section, slideNumber];",
     ].join("\n"),
   );
   await writeFile(
@@ -270,13 +274,17 @@ try {
   await writeFile(
     join(temporaryDirectory, "consumer-deck.tsx"),
     [
-      'import { Deck, Shape, Slide } from "@react-pptx/react-pptx";',
+      'import { Deck, Section, Shape, Slide, SlideNumber, Text, linearGradient } from "@react-pptx/react-pptx";',
       'import { sourceTitle } from "./consumer-deck-helper.ts";',
       "export default function ConsumerDeck() {",
       "  return (",
-      '    <Deck width={120} height={96}><Slide slideId="source-cli">',
-      '      <Shape testId="source-cli" name={sourceTitle} x={8} y={8} width={80} height={32} text={sourceTitle} />',
-      "    </Slide></Deck>",
+      "    <Deck title={sourceTitle} width={120} height={96}>",
+      '      <Section name="开场"><Slide slideId="source-cli" background="#EAF2F8" advanceAfter={1500}>',
+      '        <Shape testId="source-cli" link={{ slideId: "target-cli" }} name={sourceTitle} x={8} y={8} width={80} height={32} text={sourceTitle} />',
+      '        <Text testId="source-cli-number" x={8} y={48} width={80} height={24}>第 <SlideNumber /></Text>',
+      "      </Slide></Section>",
+      '      <Section name="内容"><Slide slideId="target-cli" background={linearGradient(30, "#123456", "#ABCDEF")} /></Section>',
+      "    </Deck>",
       "  );",
       "}",
     ].join("\n"),
@@ -285,7 +293,7 @@ try {
     join(temporaryDirectory, "consumer-runtime.ts"),
     [
       'import { createElement, Suspense, use, useEffect, useState } from "react";',
-      'import { after, BuildError, Box, Cell, Chart, createMorphScope, darker, Deck, defineTheme, fade, font, Group, Image, lighter, MotionScope, P, Row, Shape, Slide, Span, spin, Step, Table, Text, useMotionScope, build, targets, transitions, wipe } from "@react-pptx/react-pptx";',
+      'import { after, BuildError, Box, Cell, Chart, createMorphScope, darker, Deck, defineTheme, fade, font, Group, Image, lighter, linearGradient, MotionScope, P, Row, Section, Shape, Slide, SlideNumber, Span, spin, Step, Table, Text, useMotionScope, build, targets, transitions, wipe } from "@react-pptx/react-pptx";',
       'import { build as buildChartOnly, Chart as ChartOnly, Deck as ChartDeck, Slide as ChartSlide } from "@react-pptx/react-pptx/chart";',
       'import { validatePptx } from "@react-pptx/validation";',
       'import { strFromU8, strToU8, unzipSync, zipSync } from "fflate";',
@@ -296,6 +304,8 @@ try {
       'const embeddedFontBytes = new Uint8Array(await readFile(new URL("./Jost-400-Book.ttf", import.meta.url)));',
       'const installedCliBytes = await readFile("cli-output/installed.pptx");',
       "const installedCliFile = await validatePptx(new Uint8Array(installedCliBytes));",
+      'const installedCliNumber = installedCliFile.slides[0]?.objects.find(({ name }) => name === "source-cli-number")?.text?.paragraphs[0]?.runs[1];',
+      'const installedCliShape = installedCliFile.slides[0]?.objects.find(({ kind }) => kind === "shape");',
       'const themeResult = await build(createElement(Deck, { theme: defineTheme({ name: "Installed consumer theme", colors: { dk1: "#223344", ink: "accent1", accent1: "#336699", deep: darker("accent1", 0.2), pale: lighter("accent1", 0.4) }, fonts: { major: "Aptos Display", minor: font("Jost*", [{ weight: 400, data: embeddedFontBytes }]) } }), style: { textWrap: "nowrap" } }, createElement(Slide, { slideId: "installed-theme", theme: { colors: { ink: "#C00000" } }, style: { fontSize: 16 } }, createElement(Text, { testId: "installed-theme-text", x: 0, y: 0, width: 100, height: "auto" }, "Installed theme"), createElement(Shape, { testId: "installed-theme-fill", x: 0, y: 40, width: 40, height: 20, fill: "deep" }), createElement(Shape, { testId: "installed-local-fill", x: 48, y: 40, width: 40, height: 20, fill: "ink" }))));',
       "const themeFile = await validatePptx(themeResult.pptx);",
       "const themeParts = unzipSync(themeResult.pptx);",
@@ -313,7 +323,7 @@ try {
       'if (installedBoxMotionFile.errors.length !== 0 || installedBoxBefore?.name !== installedBoxAfter?.name || !installedBoxBefore?.name.startsWith("!!") || installedBoxMotionFile.slides[0]?.objects.length !== 2 || !installedBoxEffects.includes("installed-box-before") || !installedBoxEffects.includes("installed-box-child-before")) throw new Error(JSON.stringify({ errors: installedBoxMotionFile.errors, before: installedBoxBefore, after: installedBoxAfter, objects: installedBoxMotionFile.slides[0]?.objects, effects: installedBoxEffects }));',
       'const sourceBuildResult = await buildFromSource("./consumer-deck.tsx");',
       "const installedCliEquivalent = Buffer.from(installedCliBytes).equals(Buffer.from(sourceBuildResult.pptx));",
-      'if (installedCliFile.errors.length !== 0 || installedCliFile.slides[0]?.id !== "source-cli" || installedCliFile.slides[0]?.objects[0]?.text?.text !== "安装 CLI 源码标题" || !installedCliEquivalent || sourceBuildResult.report.slides[0]?.id !== "source-cli") throw new Error(JSON.stringify({ errors: installedCliFile.errors, slide: installedCliFile.slides[0], installedCliEquivalent }));',
+      'if (installedCliFile.errors.length !== 0 || installedCliFile.presentation.title !== "安装 CLI 源码标题" || JSON.stringify(installedCliFile.presentation.sections) !== JSON.stringify([{ name: "开场", slideIds: ["source-cli"] }, { name: "内容", slideIds: ["target-cli"] }]) || installedCliFile.slides[0]?.id !== "source-cli" || installedCliFile.slides[0]?.advanceAfterMs !== 1500 || installedCliFile.slides[0]?.background?.type !== "solid" || installedCliShape?.link?.slideId !== "target-cli" || installedCliNumber?.field !== "slidenum" || installedCliNumber.text !== "1" || installedCliFile.slides[1]?.background?.type !== "gradient" || !installedCliEquivalent || sourceBuildResult.report.title !== "安装 CLI 源码标题" || sourceBuildResult.report.slides[0]?.id !== "source-cli" || sourceBuildResult.report.slides[0]?.objects[0]?.link !== "slide:target-cli") throw new Error(JSON.stringify({ errors: installedCliFile.errors, presentation: installedCliFile.presentation, slides: installedCliFile.slides, installedCliEquivalent }));',
       'const transition = transitions.morph({ by: "word", duration: 1200, fallback: transitions.fade() });',
       'function InstalledScopeDeck() { const source = useMotionScope(); const follower = useMotionScope(); return createElement(Deck, { width: 120, height: 96 }, createElement(Slide, { slideId: "installed-motion-scope" }, createElement(MotionScope, { scope: source, mode: "sequence" }, createElement(Shape, { testId: "scope-first", x: 4, y: 4, width: 20, height: 20, enter: fade({ duration: 200 }) }), createElement(Shape, { testId: "scope-second", x: 28, y: 4, width: 20, height: 20, enter: fade({ duration: 100 }) })), createElement(MotionScope, { scope: follower, startAt: after(source.end, 25) }, createElement(Shape, { testId: "scope-follower", x: 52, y: 4, width: 20, height: 20, enter: fade({ duration: 50 }) })))); }',
       "const scopeResult = await build(createElement(InstalledScopeDeck));",
@@ -424,7 +434,7 @@ try {
       'if (!(missingMetrics instanceof BuildError) || missingMetrics.diagnostics[0]?.code !== "font-measurement-unavailable") throw new Error("installed content-sized text did not require explicit font metrics");',
       'await writeFile("artifact.pptx", result.pptx);',
       'await writeFile("artifact-chart.pptx", chartResult.pptx);',
-      'process.stdout.write(JSON.stringify({ installedCliSlideId: installedCliFile.slides[0]?.id, installedCliText: installedCliFile.slides[0]?.objects[0]?.text?.text, installedCliEquivalent, standard: file.profile.standard, schemaPackage: file.profile.schemaValidator.package, schemaPackageVersion: file.profile.schemaValidator.packageVersion, sdkVersion: file.profile.schemaValidator.sdkVersion, officeVersion: file.profile.schemaValidator.officeVersion, applicationEvidence: file.profile.applicationEvidence, slideId: file.slides[0]?.id, group: group.name, groupBox: group.boxEmu, shape: shape.name, shapeText: shape.text.text, shapeBox: shape.boxEmu, text: text.name, textContent: text.text.text, bullet: text.text.paragraphs[0]?.list?.type, image: image.name, mediaType: image.image.contentType, imageBox: image.boxEmu, table: tableObject.name, tableCells: tableObject.table.cells, tableMerges: tableObject.table.merges, tableColumnWidthEmu: tableObject.table.columnWidthsEmu[0], tableBytes: tableResult.pptx.byteLength, contentSizedText: contentSizedText.text.text, contentSizedTextHeightEmu: contentSizedText.boxEmu.height, contentSizedTextLineSpacingPoints: contentSizedText.text.paragraphs[0].lineSpacingPoints, nestedGroup: nestedGroup.name, nestedShape: nestedShape.name, nestedShapeText: nestedShape.text.text, nestedShapeBox: nestedShape.boxEmu, missingMetrics: missingMetrics.diagnostics[0].code, objectIds: [group.id, shape.id, text.id, image.id, nestedGroup.id, nestedShape.id], animations, transition: file.slides[0]?.transition?.kind, durationMs: file.slides[0]?.transition?.durationMs, extensions: file.extensions, forbiddenCode: forbidden.diagnostics[0]?.code, schemaGate: schemaIssue.code, schemaPart: schemaIssue.part, schemaXPath: schemaIssue.xpath, bytes: result.pptx.byteLength, contentSizedBytes: contentSizedResult.pptx.byteLength, embeddedFontPartBytes: embeddedFontPart?.byteLength, embeddedFontPayloadBytes: embeddedFontPayload?.byteLength, embeddedFontFamily: fontEmbeddingFile.slides[0]?.objects[0]?.text?.paragraphs[0]?.runs[0]?.fontFamily, chartKinds: chartObjects.map(({ chart }) => chart?.types[0]), chartEmbeddedWorkbookParts: chartObjects.map(({ chart }) => chart?.embeddedWorkbook?.part), chartBytes: chartResult.pptx.byteLength, cancellationObserved, cancellationCleanups, cancellationListeners: getEventListeners(cancellationController.signal, "abort").length }));',
+      'process.stdout.write(JSON.stringify({ installedCliSlideId: installedCliFile.slides[0]?.id, installedCliText: installedCliFile.slides[0]?.objects[0]?.text?.text, installedCliTitle: installedCliFile.presentation.title, installedCliSectionCount: installedCliFile.presentation.sections?.length, installedCliAdvanceAfterMs: installedCliFile.slides[0]?.advanceAfterMs, installedCliLink: installedCliShape?.link, installedCliField: installedCliNumber?.field, installedCliEquivalent, standard: file.profile.standard, schemaPackage: file.profile.schemaValidator.package, schemaPackageVersion: file.profile.schemaValidator.packageVersion, sdkVersion: file.profile.schemaValidator.sdkVersion, officeVersion: file.profile.schemaValidator.officeVersion, applicationEvidence: file.profile.applicationEvidence, slideId: file.slides[0]?.id, group: group.name, groupBox: group.boxEmu, shape: shape.name, shapeText: shape.text.text, shapeBox: shape.boxEmu, text: text.name, textContent: text.text.text, bullet: text.text.paragraphs[0]?.list?.type, image: image.name, mediaType: image.image.contentType, imageBox: image.boxEmu, table: tableObject.name, tableCells: tableObject.table.cells, tableMerges: tableObject.table.merges, tableColumnWidthEmu: tableObject.table.columnWidthsEmu[0], tableBytes: tableResult.pptx.byteLength, contentSizedText: contentSizedText.text.text, contentSizedTextHeightEmu: contentSizedText.boxEmu.height, contentSizedTextLineSpacingPoints: contentSizedText.text.paragraphs[0].lineSpacingPoints, nestedGroup: nestedGroup.name, nestedShape: nestedShape.name, nestedShapeText: nestedShape.text.text, nestedShapeBox: nestedShape.boxEmu, missingMetrics: missingMetrics.diagnostics[0].code, objectIds: [group.id, shape.id, text.id, image.id, nestedGroup.id, nestedShape.id], animations, transition: file.slides[0]?.transition?.kind, durationMs: file.slides[0]?.transition?.durationMs, extensions: file.extensions, forbiddenCode: forbidden.diagnostics[0]?.code, schemaGate: schemaIssue.code, schemaPart: schemaIssue.part, schemaXPath: schemaIssue.xpath, bytes: result.pptx.byteLength, contentSizedBytes: contentSizedResult.pptx.byteLength, embeddedFontPartBytes: embeddedFontPart?.byteLength, embeddedFontPayloadBytes: embeddedFontPayload?.byteLength, embeddedFontFamily: fontEmbeddingFile.slides[0]?.objects[0]?.text?.paragraphs[0]?.runs[0]?.fontFamily, chartKinds: chartObjects.map(({ chart }) => chart?.types[0]), chartEmbeddedWorkbookParts: chartObjects.map(({ chart }) => chart?.embeddedWorkbook?.part), chartBytes: chartResult.pptx.byteLength, cancellationObserved, cancellationCleanups, cancellationListeners: getEventListeners(cancellationController.signal, "abort").length }));',
     ].join("\n"),
   );
   const cropLoader = join(temporaryDirectory, "reject-text-box.mjs");
@@ -545,6 +555,11 @@ try {
     readonly installedCliSlideId?: string;
     readonly installedCliText?: string;
     readonly installedCliEquivalent?: boolean;
+    readonly installedCliTitle?: string;
+    readonly installedCliSectionCount?: number;
+    readonly installedCliAdvanceAfterMs?: number;
+    readonly installedCliLink?: { readonly slideId?: string };
+    readonly installedCliField?: string;
     readonly embeddedFontPartBytes?: number;
     readonly embeddedFontPayloadBytes?: number;
     readonly embeddedFontFamily?: string;
@@ -552,6 +567,11 @@ try {
   if (
     summary.installedCliSlideId !== "source-cli" ||
     summary.installedCliText !== "安装 CLI 源码标题" ||
+    summary.installedCliTitle !== "安装 CLI 源码标题" ||
+    summary.installedCliSectionCount !== 2 ||
+    summary.installedCliAdvanceAfterMs !== 1500 ||
+    summary.installedCliLink?.slideId !== "target-cli" ||
+    summary.installedCliField !== "slidenum" ||
     summary.installedCliEquivalent !== true ||
     summary.standard !== "ECMA-376 5th edition Transitional" ||
     summary.schemaPackage !== "@ooxml-tools/validate" ||

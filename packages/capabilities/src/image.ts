@@ -11,10 +11,12 @@ import {
   type CapabilityModule,
   type ImageVisualStyle,
   type LayoutStyle,
+  type LinkTarget,
 } from "@react-pptx/core";
 import type { ReactNode } from "react";
 
 import type { Geometry } from "./geometry.ts";
+import { nativeLinkXml } from "./identity.ts";
 import type { MorphProps } from "./morph-api.ts";
 import {
   motionAnnotations,
@@ -30,6 +32,7 @@ export type ImageProps = MotionProps &
   MorphProps & {
     readonly testId?: string;
     readonly name?: string;
+    readonly link?: LinkTarget;
     readonly src: ImageSource;
     /** 图片的替代说明。 */
     readonly alt?: string;
@@ -61,12 +64,13 @@ type ImageMetadata = {
   readonly height: number;
 };
 
-type LoadedImage = ImageMetadata & { readonly bytes: Uint8Array };
+export type LoadedImage = ImageMetadata & { readonly bytes: Uint8Array };
 
 const allowedParameters = [
   "testId",
   "name",
   "morphKey",
+  "link",
   "src",
   "alt",
   "x",
@@ -299,7 +303,7 @@ function gifMetadata(data: Uint8Array): ImageMetadata | undefined {
   return undefined;
 }
 
-function readImage(source: unknown): LoadedImage {
+export function readImage(source: unknown): LoadedImage {
   if (
     typeof source !== "string" &&
     !(source instanceof URL) &&
@@ -439,6 +443,7 @@ function imageXml(
   crop: Record<string, number>,
   properties: string,
   opacity: number | undefined,
+  linkXml: string,
 ): string {
   const description = escapedAlt === undefined ? "" : ` descr="${escapedAlt}"`;
   const cropXml =
@@ -453,7 +458,7 @@ function imageXml(
     opacity === undefined
       ? ""
       : `<a:alphaModFix amt="${Math.round(opacity * 100000)}"/>`;
-  return `<p:pic><p:nvPicPr><p:cNvPr id="${id}" name="${escapedName}"${description}/><p:cNvPicPr><a:picLocks noChangeAspect="1"/></p:cNvPicPr><p:nvPr/></p:nvPicPr><p:blipFill><a:blip r:embed="${xmlEscape(relationshipId)}">${alpha}</a:blip>${cropXml}<a:stretch><a:fillRect/></a:stretch></p:blipFill>${properties}</p:pic>`;
+  return `<p:pic><p:nvPicPr><p:cNvPr id="${id}" name="${escapedName}"${description}>${linkXml}</p:cNvPr><p:cNvPicPr><a:picLocks noChangeAspect="1"/></p:cNvPicPr><p:nvPr/></p:nvPicPr><p:blipFill><a:blip r:embed="${xmlEscape(relationshipId)}">${alpha}</a:blip>${cropXml}<a:stretch><a:fillRect/></a:stretch></p:blipFill>${properties}</p:pic>`;
 }
 
 /** 图片模块读取并验证正式资源，再输出带媒体关系的原生 picture 对象。 */
@@ -644,6 +649,7 @@ export const imageCapability: CapabilityModule = {
         serializedCrop,
         properties.xml,
         properties.opacity,
+        nativeLinkXml(context.nativeLink),
       ),
       observation: {
         id: context.id,

@@ -51,6 +51,7 @@ import {
   type LayoutObservation,
   type ObjectCapabilityModule,
   type ObjectObservation,
+  type NativeLink,
   type SlideCapabilityModule,
   type SlideObservation,
   type SlideCapabilitySlot,
@@ -59,19 +60,49 @@ import {
 
 type SlideBuild = {
   readonly id: string;
+  readonly index: number;
+  readonly section?: string;
+  readonly hidden: boolean;
+  readonly advanceAfter?: number;
   readonly objects: readonly ObjectObservation[];
   readonly layouts: readonly LayoutObservation[];
   readonly shapeXml: string;
+  readonly backgroundXml: string;
   readonly slideXml: string;
   readonly capabilities: Readonly<Record<string, unknown>>;
   readonly relationships: readonly PptxRelationship[];
   readonly morphObjects: ReadonlyMap<MorphKey, MorphObject>;
+  readonly linkedSlideIndexes: ReadonlySet<number>;
+};
+
+type ResolvedSlide = {
+  readonly node: HostNode;
+  readonly id: string;
+  readonly index: number;
+  readonly section?: string;
+  readonly hidden?: boolean;
+  readonly advanceAfter?: number;
+};
+
+type ResolvedSection = {
+  readonly name: string;
+  readonly slideIndexes: readonly number[];
+};
+
+type ResolvedDocument = {
+  readonly slides: readonly ResolvedSlide[];
+  readonly sections: readonly ResolvedSection[];
 };
 
 type MorphObject = {
   readonly kind: MorphNativeKind;
   readonly name: string;
   readonly path: string;
+};
+
+type CompiledLink = {
+  readonly nativeLink: NativeLink;
+  readonly summary: string;
 };
 
 type MorphNativeKind = "sp" | "pic" | "grpSp" | "table" | "chart";
@@ -115,9 +146,12 @@ type DocumentBuildState = {
   nextPresentationRelationshipId: number;
   readonly morphNames: Map<MorphKey, string>;
   nextMorphName: number;
+  readonly slideIndexById: ReadonlyMap<string, number>;
+  nextTextFieldId: number;
 };
 
 type SlideBuildState = {
+  readonly index: number;
   nextId: number;
   nextNodeOrder: number;
   readonly diagnostics: Diagnostic[];
@@ -126,6 +160,7 @@ type SlideBuildState = {
   readonly layouts: LayoutObservation[];
   readonly contributions: CapabilityContribution[];
   readonly morphObjects: Map<MorphKey, MorphObject>;
+  readonly linkedSlideIndexes: Set<number>;
 };
 
 type BuildContext = {
@@ -137,6 +172,7 @@ type BuildContext = {
   readonly options: BuildOptions;
   readonly theme: ThemeContext;
   readonly layout: LayoutPassResult;
+  readonly slideNumber: number;
 };
 
 type CompiledChildren = CapabilityChildren & {
@@ -378,7 +414,13 @@ function positiveDimension(value: unknown, label: string): number {
 }
 
 function deckDimensions(node: HostNode): Dimensions {
-  const unknown = ownKeys(node.props, ["width", "height", "theme", "style"]);
+  const unknown = ownKeys(node.props, [
+    "width",
+    "height",
+    "theme",
+    "style",
+    "title",
+  ]);
   if (unknown !== undefined) {
     throw new BuildError([
       diagnostic("deck", "unknown-parameter", `Deck 含未知参数 ${unknown}`),
@@ -393,7 +435,7 @@ function deckDimensions(node: HostNode): Dimensions {
 function resolveSlides(
   container: HostContainer,
   modules: ReadonlyMap<string, RegisteredCapabilityModule>,
-): { node: HostNode; id: string }[] {
+): ResolvedDocument {
   const decks = childNodes(container.children);
   if (decks.length !== 1 || decks[0]?.type !== "rp:deck") {
     throw new BuildError([
@@ -410,38 +452,127 @@ function resolveSlides(
       diagnostic("deck", "unexpected-text", "Deck 根组件外不能有文本"),
     ]);
   }
-  const slideNodes = childNodes(deck.children);
   if (nonWhitespaceText(deck.children)) {
     throw new BuildError([
-      diagnostic("deck", "unexpected-text", "Deck 只能包含 Slide 页面"),
+      diagnostic(
+        "deck",
+        "unexpected-text",
+        "Deck 只能包含 Slide 页面和 Section 分节",
+      ),
     ]);
   }
+  const topLevel = childNodes(deck.children);
   if (
-    slideNodes.length === 0 ||
-    slideNodes.length !== deck.children.filter(isHostNode).length
+    topLevel.length === 0 ||
+    topLevel.length !== deck.children.filter(isHostNode).length
   ) {
     throw new BuildError([
       diagnostic("deck", "missing-slide", "Deck 至少需要一个 Slide 页面"),
     ]);
   }
-  const ids = new Set<string>();
-  return slideNodes.map((node, index) => {
-    if (node.type !== "rp:slide") {
-      throw new BuildError([
-        diagnostic(
-          `deck/${componentLabel(node, index)}`,
-          "unexpected-declaration",
-          "Deck 的直接子项必须是 Slide",
-        ),
-      ]);
+  const sectioned = topLevel.some((node) => node.type === "rp:section");
+  const candidates: {
+    node: HostNode;
+    section?: string;
+    sectionIndex?: number;
+  }[] = [];
+  const sections: { name: string; slideIndexes: number[] }[] = [];
+  if (sectioned) {
+    for (const [index, node] of topLevel.entries()) {
+      if (node.type !== "rp:section") {
+        throw new BuildError([
+          diagnostic(
+            `deck/${componentLabel(node, index)}`,
+            "mixed-sections",
+            "使用 Section 分节时，每个页面都必须属于一个 Section",
+          ),
+        ]);
+      }
+      const unknown = ownKeys(node.props, ["name"]);
+      if (unknown !== undefined) {
+        throw new BuildError([
+          diagnostic(
+            `deck/section[${index + 1}]`,
+            "unknown-section-property",
+            `Section 不支持属性 ${unknown}`,
+          ),
+        ]);
+      }
+      const name = node.props["name"];
+      if (typeof name !== "string" || name.trim() === "") {
+        throw new BuildError([
+          diagnostic(
+            `deck/section[${index + 1}]`,
+            "invalid-section-name",
+            "Section.name 必须是非空字符串",
+          ),
+        ]);
+      }
+      try {
+        assertXml10Characters(name);
+      } catch {
+        throw new BuildError([
+          diagnostic(
+            `deck/section[${name}]`,
+            "invalid-xml-character",
+            "Section.name 含 XML 1.0 不允许的字符",
+          ),
+        ]);
+      }
+      if (nonWhitespaceText(node.children)) {
+        throw new BuildError([
+          diagnostic(
+            `deck/section[${name}]`,
+            "unexpected-section-text",
+            "Section 只能包含 Slide 页面",
+          ),
+        ]);
+      }
+      const sectionIndex = sections.length;
+      const section = { name, slideIndexes: [] as number[] };
+      sections.push(section);
+      for (const [memberIndex, member] of childNodes(node.children).entries()) {
+        if (member.type !== "rp:slide") {
+          throw new BuildError([
+            diagnostic(
+              `deck/section[${name}]/${componentLabel(member, memberIndex)}`,
+              "nested-section",
+              "Section 只能包含 Slide 页面，不能嵌套 Section",
+            ),
+          ]);
+        }
+        candidates.push({ node: member, section: name, sectionIndex });
+      }
     }
-    const slideProperties = [...modules.values()]
-      .filter(isSlideCapability)
-      .map(({ slideProp }) => slideProp);
+  } else {
+    for (const [index, node] of topLevel.entries()) {
+      if (node.type !== "rp:slide") {
+        throw new BuildError([
+          diagnostic(
+            `deck/${componentLabel(node, index)}`,
+            "unexpected-declaration",
+            "Deck 的直接子项必须是 Slide 或 Section",
+          ),
+        ]);
+      }
+      candidates.push({ node });
+    }
+  }
+  if (candidates.length === 0) {
+    throw new BuildError([
+      diagnostic("deck", "missing-slide", "Deck 至少需要一个 Slide 页面"),
+    ]);
+  }
+  const ids = new Set<string>();
+  const slideProperties = [...modules.values()]
+    .filter(isSlideCapability)
+    .flatMap((module) => module.slideProps ?? [module.slideProp]);
+  const slides = candidates.map(({ node, section, sectionIndex }, index) => {
     const unknown = ownKeys(node.props, [
       "slideId",
       "theme",
       "style",
+      "hidden",
       ...slideProperties,
     ]);
     if (unknown !== undefined) {
@@ -486,13 +617,57 @@ function resolveSlides(
       ]);
     }
     ids.add(id);
-    return { node, id };
+    const hidden = node.props["hidden"];
+    if (hidden !== undefined && typeof hidden !== "boolean") {
+      throw new BuildError([
+        diagnostic(
+          `deck/slide[${id}]`,
+          "invalid-hidden-slide",
+          "Slide.hidden 必须是布尔值",
+        ),
+      ]);
+    }
+    const advanceAfter = node.props["advanceAfter"];
+    if (
+      advanceAfter !== undefined &&
+      (typeof advanceAfter !== "number" ||
+        !Number.isFinite(advanceAfter) ||
+        advanceAfter < 0 ||
+        advanceAfter > 4_294_967_295)
+    ) {
+      throw new BuildError([
+        diagnostic(
+          `deck/slide[${id}]`,
+          "invalid-advance-after",
+          "Slide.advanceAfter 必须是 0 到 4294967295 之间的有限毫秒数",
+        ),
+      ]);
+    }
+    const resolved = {
+      node,
+      id,
+      index: index + 1,
+      ...(section === undefined ? {} : { section }),
+      ...(hidden === undefined ? {} : { hidden }),
+      ...(advanceAfter === undefined ? {} : { advanceAfter }),
+    };
+    if (sectionIndex !== undefined) {
+      sections[sectionIndex]?.slideIndexes.push(index + 1);
+    }
+    return resolved;
   });
+  return {
+    slides,
+    sections: sections.map(({ name, slideIndexes }) => ({
+      name,
+      slideIndexes,
+    })),
+  };
 }
 
 function addResource(
   resource: CapabilityResource,
-  context: BuildContext,
+  context: Pick<BuildContext, "document" | "slide">,
 ): string {
   if (
     !(resource.bytes instanceof Uint8Array) ||
@@ -893,12 +1068,19 @@ function capabilityContext(
   theme: ThemeContext,
   insideGroup: boolean,
   morphName?: string,
+  nativeLink?: NativeLink,
 ): CapabilityContext {
   return {
     id,
     path,
     options: context.options,
+    slideNumber: context.slideNumber,
+    createTextFieldId() {
+      const serial = context.document.nextTextFieldId++;
+      return `{00000000-0000-4000-8000-${serial.toString(16).padStart(12, "0")}}`;
+    },
     ...(morphName === undefined ? {} : { morphName }),
+    ...(nativeLink === undefined ? {} : { nativeLink }),
     theme,
     ...(layoutBox === undefined ? {} : { layoutBox }),
     compileChildren(nested) {
@@ -916,6 +1098,95 @@ function capabilityContext(
       return addPackagePart(part, context);
     },
   };
+}
+
+function registerLink(
+  value: unknown,
+  context: BuildContext,
+  path: string,
+): CompiledLink | undefined {
+  if (value === undefined) return undefined;
+  const reportInvalid = (message: string) => {
+    context.slide.diagnostics.push(diagnostic(path, "invalid-link", message));
+  };
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    reportInvalid("link 必须指定 slideId、url 或 home 动作");
+    return undefined;
+  }
+  const entries = Object.entries(value).filter(
+    ([, target]) => target !== undefined,
+  );
+  if (entries.length !== 1) {
+    reportInvalid("link 必须且只能指定一个目标");
+    return undefined;
+  }
+  const [kind, target] = entries[0] ?? [];
+  if (kind === "slideId" && typeof target === "string") {
+    const targetIndex = context.document.slideIndexById.get(target);
+    if (targetIndex === undefined) {
+      context.slide.diagnostics.push(
+        diagnostic(
+          path,
+          "missing-link-target",
+          `没有页面标识为 ${JSON.stringify(target)} 的目标页面`,
+        ),
+      );
+      return undefined;
+    }
+    const relationshipKey = `link:slide:${target}`;
+    let relationshipId = context.slide.relationshipIds.get(relationshipKey);
+    if (relationshipId === undefined) {
+      relationshipId = `rId${context.slide.relationships.length + 2}`;
+      context.slide.relationshipIds.set(relationshipKey, relationshipId);
+      context.slide.relationships.push({
+        id: relationshipId,
+        type: "http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide",
+        target: `slide${targetIndex}.xml`,
+      });
+    }
+    if (targetIndex !== context.slide.index)
+      context.slide.linkedSlideIndexes.add(targetIndex);
+    return {
+      nativeLink: {
+        relationshipId,
+        action: "ppaction://hlinksldjump",
+      },
+      summary: `slide:${target}`,
+    };
+  }
+  if (kind === "url" && typeof target === "string") {
+    let url: URL;
+    try {
+      url = new URL(target);
+    } catch {
+      reportInvalid("link.url 必须是绝对 URL");
+      return undefined;
+    }
+    const relationshipKey = `link:url:${url.href}`;
+    let relationshipId = context.slide.relationshipIds.get(relationshipKey);
+    if (relationshipId === undefined) {
+      relationshipId = `rId${context.slide.relationships.length + 2}`;
+      context.slide.relationshipIds.set(relationshipKey, relationshipId);
+      context.slide.relationships.push({
+        id: relationshipId,
+        type: "http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink",
+        target: url.href,
+        targetMode: "External",
+      });
+    }
+    return { nativeLink: { relationshipId }, summary: `url:${url.href}` };
+  }
+  if (kind === "action" && target === "home") {
+    return {
+      nativeLink: {
+        relationshipId: "",
+        action: "ppaction://hlinkshowjump?jump=firstslide",
+      },
+      summary: "home",
+    };
+  }
+  reportInvalid("link 支持 { slideId }、{ url } 或 { action: 'home' }");
+  return undefined;
 }
 
 function compileChildren(
@@ -953,6 +1224,21 @@ function compileChildren(
       }
       const id = context.slide.nextId++;
       const module = context.modules.get("rp:box");
+      const hasNativeBox = hasVisibleBoxStyle(child.props["style"]);
+      const rawLink = child.props["link"];
+      const boxLink =
+        rawLink === undefined
+          ? undefined
+          : hasNativeBox
+            ? registerLink(rawLink, context, path)
+            : (context.slide.diagnostics.push(
+                diagnostic(
+                  path,
+                  "link-needs-object",
+                  "透明 Box 不生成可点击对象；请将 link 放到可见 Box 或 Group 上",
+                ),
+              ),
+              undefined);
       let morphKey: MorphKey | undefined;
       let morphName: string | undefined;
       if (requestedMorphKey !== undefined) {
@@ -1010,11 +1296,16 @@ function compileChildren(
               context.layout.themes.get(child) ?? context.theme,
               insideGroup,
               morphName,
+              boxLink?.nativeLink,
             ),
           );
           boxXml = output.xml;
           if (output.xml !== "") {
-            boxObservation = { ...output.observation, id: objectId };
+            boxObservation = {
+              ...output.observation,
+              id: objectId,
+              ...(boxLink === undefined ? {} : { link: boxLink.summary }),
+            };
             if (morphKey !== undefined && morphName !== undefined) {
               const nativeKind = morphNativeKind(output.observation.kind);
               if (
@@ -1231,6 +1522,7 @@ function compileChildren(
     const input: CapabilityInput = child;
     const layoutBox = context.layout.boxes.get(child);
     const theme = context.layout.themes.get(child) ?? context.theme;
+    const compiledLink = registerLink(child.props["link"], context, path);
     try {
       const output = module.compile(
         input,
@@ -1243,6 +1535,7 @@ function compileChildren(
           theme,
           insideGroup,
           morphName,
+          compiledLink?.nativeLink,
         ),
       );
       if (morphKey !== undefined && morphName !== undefined) {
@@ -1322,7 +1615,11 @@ function compileChildren(
           order,
         });
       }
-      const observation = { ...output.observation, id };
+      const observation = {
+        ...output.observation,
+        id,
+        ...(compiledLink === undefined ? {} : { link: compiledLink.summary }),
+      };
       if (observation.box !== undefined) {
         const box = observation.box;
         if (
@@ -1395,8 +1692,7 @@ function paintOrder(child: CapabilityElement): number {
 }
 
 function compileSlide(
-  node: HostNode,
-  id: string,
+  resolved: ResolvedSlide,
   modules: ReadonlyMap<string, RegisteredCapabilityModule>,
   target: Target,
   dimensions: Dimensions,
@@ -1404,12 +1700,15 @@ function compileSlide(
   options: BuildOptions,
   documentTheme: ThemeContext,
 ): SlideBuild {
+  const { node, id, index, section, hidden = false, advanceAfter } = resolved;
   const slide: SlideBuildState = {
+    index,
     nextId: 2,
     nextNodeOrder: 0,
     diagnostics: [],
     relationships: [],
     relationshipIds: new Map(),
+    linkedSlideIndexes: new Set(),
     layouts: [],
     contributions: [],
     morphObjects: new Map(),
@@ -1431,7 +1730,7 @@ function compileSlide(
     if (!(error instanceof CapabilityError)) throw error;
     throw new BuildError([diagnostic(path, error.code, error.message)]);
   }
-  const layout = new LayoutPass(modules, dimensions).run(
+  const layout = new LayoutPass(modules, dimensions, index).run(
     children,
     path,
     theme,
@@ -1449,6 +1748,7 @@ function compileSlide(
       options,
       theme,
       layout,
+      slideNumber: index,
     },
     path,
   );
@@ -1457,6 +1757,7 @@ function compileSlide(
     readonly xml: string;
   }[] = [];
   const capabilities: Record<string, unknown> = {};
+  let backgroundXml = "";
   const input: CapabilityInput = {
     type: node.type,
     props: node.props,
@@ -1464,14 +1765,23 @@ function compileSlide(
   };
   for (const module of modules.values()) {
     if (!isSlideCapability(module)) continue;
-    if (!module.always && !Object.hasOwn(node.props, module.slideProp))
+    const slideProps = module.slideProps ?? [module.slideProp];
+    if (
+      !module.always &&
+      !slideProps.some((property) => Object.hasOwn(node.props, property))
+    )
       continue;
     try {
       const output = module.compileSlide(input, {
         path,
         contributions: slide.contributions,
+        theme,
+        registerResource(resource) {
+          return addResource(resource, { document, slide });
+        },
       });
-      slideXml.push({ slot: module.slot, xml: output.xml });
+      if (module.slot === "background") backgroundXml += output.xml;
+      else slideXml.push({ slot: module.slot, xml: output.xml });
       if (output.observation !== undefined) {
         capabilities[module.declaration] = output.observation;
       }
@@ -1505,7 +1815,10 @@ function compileSlide(
     if (
       consumer === undefined ||
       !isSlideCapability(consumer) ||
-      (!consumer.always && !Object.hasOwn(node.props, consumer.slideProp))
+      (!consumer.always &&
+        !(consumer.slideProps ?? [consumer.slideProp]).some((property) =>
+          Object.hasOwn(node.props, property),
+        ))
     ) {
       slide.diagnostics.push(
         diagnostic(
@@ -1519,9 +1832,14 @@ function compileSlide(
   if (slide.diagnostics.length > 0) throw new BuildError(slide.diagnostics);
   return {
     id,
+    index,
+    ...(section === undefined ? {} : { section }),
+    hidden,
+    ...(advanceAfter === undefined ? {} : { advanceAfter }),
     objects: compiled.objects,
     layouts: [...slide.layouts].sort((left, right) => left.id - right.id),
     shapeXml: compiled.xml,
+    backgroundXml,
     slideXml: slideXml
       .map((item, index) => ({ item, index }))
       .sort(
@@ -1534,6 +1852,7 @@ function compileSlide(
     capabilities,
     relationships: slide.relationships,
     morphObjects: slide.morphObjects,
+    linkedSlideIndexes: slide.linkedSlideIndexes,
   };
 }
 
@@ -1547,13 +1866,33 @@ function compileDocument(
   target: Target,
   options: BuildOptions,
 ): BuildResult {
-  const slides = resolveSlides(container, modules);
+  const resolved = resolveSlides(container, modules);
+  const { slides, sections } = resolved;
   const deck = childNodes(container.children)[0];
   if (deck === undefined)
     throw new BuildError([
       diagnostic("deck", "document-root", "缺少 Deck 根组件"),
     ]);
   const size = deckDimensions(deck);
+  const title = deck.props["title"];
+  if (title !== undefined && typeof title !== "string") {
+    throw new BuildError([
+      diagnostic("deck", "invalid-title", "Deck.title 必须是字符串"),
+    ]);
+  }
+  if (typeof title === "string") {
+    try {
+      assertXml10Characters(title);
+    } catch {
+      throw new BuildError([
+        diagnostic(
+          "deck",
+          "invalid-title",
+          "Deck.title 含 XML 1.0 不允许的字符",
+        ),
+      ]);
+    }
+  }
   let theme: ThemeContext;
   try {
     theme = createThemeContext(
@@ -1563,6 +1902,18 @@ function compileDocument(
   } catch (error) {
     if (!(error instanceof CapabilityError)) throw error;
     throw new BuildError([diagnostic("deck", error.code, error.message)]);
+  }
+  const slideIndexById = new Map(
+    slides.map((slide) => [slide.id, slide.index] as const),
+  );
+  if (sections.length > 0 && !target.extensions.includes("p14")) {
+    throw new BuildError([
+      diagnostic(
+        "deck/sections",
+        "forbidden-mechanism",
+        "当前输出目标禁止 p14 分节机制",
+      ),
+    ]);
   }
   const document: DocumentBuildState = {
     usedExtensions: new Set(),
@@ -1578,44 +1929,78 @@ function compileDocument(
     nextPresentationRelationshipId: slides.length + 2,
     morphNames: new Map(),
     nextMorphName: 1,
+    slideIndexById,
+    nextTextFieldId: 1,
   };
-  const builtSlides = slides.map(({ node, id }) =>
-    compileSlide(node, id, modules, target, size, document, options, theme),
+  const builtSlides = slides.map((resolvedSlide) =>
+    compileSlide(
+      resolvedSlide,
+      modules,
+      target,
+      size,
+      document,
+      options,
+      theme,
+    ),
   );
+  if (sections.length > 0) document.usedExtensions.add("p14");
   const morphDiagnostics: Diagnostic[] = [];
-  for (let index = 1; index < slides.length; index += 1) {
+  for (let index = 0; index < slides.length; index += 1) {
     const current = slides[index];
     const currentBuild = builtSlides[index];
-    const previousBuild = builtSlides[index - 1];
     if (
       current === undefined ||
       currentBuild === undefined ||
-      previousBuild === undefined ||
       !usesMorphTransition(current.node)
     ) {
       continue;
     }
+    const sourceIndexes = new Set<number>();
+    if (!current.hidden) {
+      let priorVisible = index - 1;
+      while (priorVisible >= 0 && slides[priorVisible]?.hidden === true)
+        priorVisible -= 1;
+      if (priorVisible >= 0) sourceIndexes.add(priorVisible);
+    }
+    for (
+      let sourceIndex = 0;
+      sourceIndex < builtSlides.length;
+      sourceIndex += 1
+    ) {
+      if (
+        sourceIndex !== index &&
+        builtSlides[sourceIndex]?.linkedSlideIndexes.has(current.index)
+      ) {
+        sourceIndexes.add(sourceIndex);
+      }
+    }
     for (const [key, object] of currentBuild.morphObjects) {
-      const previous = previousBuild.morphObjects.get(key);
-      if (previous === undefined || previous.kind === object.kind) continue;
-      morphDiagnostics.push(
-        diagnostic(
-          object.path,
-          "morph-object-kind-mismatch",
-          `原生对象 ${object.name}（句柄 “${getMorphKeyLabel(key)}”）在前页 ${slides[index - 1]?.id} 对应 ${previous.kind}，当前页对应 ${object.kind}；仅支持相同原生对象类型连续`,
-        ),
-      );
+      for (const sourceIndex of sourceIndexes) {
+        const source = builtSlides[sourceIndex]?.morphObjects.get(key);
+        if (source === undefined || source.kind === object.kind) continue;
+        morphDiagnostics.push(
+          diagnostic(
+            object.path,
+            "morph-object-kind-mismatch",
+            `原生对象 ${object.name}（句柄 “${getMorphKeyLabel(key)}”）在来源页 ${slides[sourceIndex]?.id} 对应 ${source.kind}，当前页对应 ${object.kind}；仅支持相同原生对象类型`,
+          ),
+        );
+      }
     }
   }
   if (morphDiagnostics.length > 0) throw new BuildError(morphDiagnostics);
   const parts = pptxParts(
     size,
-    builtSlides.map(({ id, shapeXml, slideXml, relationships }) => ({
-      id,
-      shapeXml,
-      slideXml,
-      relationships,
-    })),
+    builtSlides.map(
+      ({ id, hidden, shapeXml, backgroundXml, slideXml, relationships }) => ({
+        id,
+        hidden,
+        shapeXml,
+        backgroundXml,
+        slideXml,
+        relationships,
+      }),
+    ),
     [...document.resources.values()],
     [...document.packageParts.values()],
     [...document.packageRelationships].map(([sourcePath, relationships]) => ({
@@ -1628,6 +2013,8 @@ function compileDocument(
       value,
     })),
     theme.theme,
+    title,
+    sections,
   );
   const pptx = zipSync(
     Object.fromEntries(
@@ -1638,19 +2025,23 @@ function compileDocument(
     ),
     { level: 6, mtime: new Date("2020-01-01T00:00:00Z") },
   );
-  const slideObservations: SlideObservation[] = builtSlides.map(
-    (slide, index) => ({
-      id: slide.id,
-      index: index + 1,
-      objects: slide.objects,
-      ...(slide.layouts.length > 0 && { layouts: slide.layouts }),
-      ...(Object.keys(slide.capabilities).length > 0 && {
-        capabilities: slide.capabilities,
-      }),
+  const slideObservations: SlideObservation[] = builtSlides.map((slide) => ({
+    id: slide.id,
+    index: slide.index,
+    ...(slide.section === undefined ? {} : { section: slide.section }),
+    ...(slide.hidden ? { hidden: true } : {}),
+    ...(slide.advanceAfter === undefined
+      ? {}
+      : { advanceAfter: Math.round(slide.advanceAfter) }),
+    objects: slide.objects,
+    ...(slide.layouts.length > 0 && { layouts: slide.layouts }),
+    ...(Object.keys(slide.capabilities).length > 0 && {
+      capabilities: slide.capabilities,
     }),
-  );
+  }));
   const report: BuildReport = deepFreeze({
     evidence: "generation",
+    ...(typeof title === "string" ? { title } : {}),
     target: {
       name: target.name,
       format: target.format,

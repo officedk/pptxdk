@@ -8,6 +8,7 @@ import {
   type CapabilityLayoutMeasurement,
   type CapabilityLayoutRequest,
   type LayoutStyle,
+  type LinkTarget,
   type NativeTableObservation,
   type ColorValue,
   type ResolvedColor,
@@ -20,6 +21,7 @@ import {
   fontPresentationContributions,
   type FontEmbeddingUse,
 } from "./font-embedding.ts";
+import { nativeLinkXml } from "./identity.ts";
 import type { MorphProps } from "./morph-api.ts";
 import {
   motionAnnotations,
@@ -80,6 +82,7 @@ export type TableProps = MotionProps &
   MorphProps & {
     readonly testId?: string;
     readonly name?: string;
+    readonly link?: LinkTarget;
     readonly x?: number;
     readonly y?: number;
     /** 为 fr 列提供可分配宽度；省略时所有列按内容自然宽度确定。 */
@@ -223,6 +226,7 @@ const tableParameters = [
   "testId",
   "name",
   "morphKey",
+  "link",
   "x",
   "y",
   "width",
@@ -565,6 +569,10 @@ function textBody(
   width: number | "max-content",
   height?: number,
   contentSized = false,
+  fields?: {
+    readonly slideNumber: number;
+    readonly createId?: () => string;
+  },
 ): ReturnType<typeof writeTextBody> {
   try {
     return writeTextBody(
@@ -578,6 +586,7 @@ function textBody(
         ...(contentSized ? { contentSized: true } : {}),
       },
       "table-cell",
+      fields,
     );
   } catch (error) {
     if (error instanceof CapabilityError) {
@@ -782,6 +791,7 @@ function frameXml(
   widths: readonly number[],
   heights: readonly number[],
   rows: readonly string[],
+  linkXml: string,
 ): string {
   const columnXml = widths
     .map((width) => `<a:gridCol w="${pxToEmu(width)}"/>`)
@@ -791,7 +801,7 @@ function frameXml(
     .join("");
   const width = widths.reduce((sum, value) => sum + pxToEmu(value), 0);
   const height = heights.reduce((sum, value) => sum + pxToEmu(value), 0);
-  return `<p:graphicFrame><p:nvGraphicFramePr><p:cNvPr id="${id}" name="${escapedName}"/><p:cNvGraphicFramePr/><p:nvPr/></p:nvGraphicFramePr><p:xfrm><a:off x="${pxToEmu(x)}" y="${pxToEmu(y)}"/><a:ext cx="${width}" cy="${height}"/></p:xfrm><a:graphic><a:graphicData uri="${tableUri}"><a:tbl><a:tblPr/><a:tblGrid>${columnXml}</a:tblGrid>${rowXml}</a:tbl></a:graphicData></a:graphic></p:graphicFrame>`;
+  return `<p:graphicFrame><p:nvGraphicFramePr><p:cNvPr id="${id}" name="${escapedName}">${linkXml}</p:cNvPr><p:cNvGraphicFramePr/><p:nvPr/></p:nvGraphicFramePr><p:xfrm><a:off x="${pxToEmu(x)}" y="${pxToEmu(y)}"/><a:ext cx="${width}" cy="${height}"/></p:xfrm><a:graphic><a:graphicData uri="${tableUri}"><a:tbl><a:tblPr/><a:tblGrid>${columnXml}</a:tblGrid>${rowXml}</a:tbl></a:graphicData></a:graphic></p:graphicFrame>`;
 }
 
 type TableLayoutModel = {
@@ -811,6 +821,7 @@ function tableLayoutModel(
   input: CapabilityInput,
   requestedWidth: number | undefined,
   theme: ThemeContext,
+  slideNumber: number,
 ): TableLayoutModel {
   const columns = parseTracks(input.props["columns"]);
   const tableStyle = trackStyle(input, "table");
@@ -852,7 +863,9 @@ function tableLayoutModel(
         track?.kind === "auto" ||
         (track?.kind === "fr" && requestedWidth === undefined);
       if (!needsTrackWidth) continue;
-      const measured = textBody(cell, theme, "max-content");
+      const measured = textBody(cell, theme, "max-content", undefined, false, {
+        slideNumber,
+      });
       addTextResult(measured, cell.path);
       if (measured.measurement === undefined && measured.text.trim() !== "") {
         fail(
@@ -935,7 +948,9 @@ function tableLayoutModel(
       0,
       widthOf(cell) - cell.padding.left - cell.padding.right,
     );
-    const result = textBody(cell, theme, innerWidth);
+    const result = textBody(cell, theme, innerWidth, undefined, false, {
+      slideNumber,
+    });
     addTextResult(result, cell.path);
     if (result.measurement === undefined && result.text.trim() !== "") {
       fail(
@@ -1006,7 +1021,12 @@ export const tableCapability: CapabilityModule = {
       typeof declaredWidth === "number"
         ? positiveSize(declaredWidth, "Table.width")
         : undefined;
-    const natural = tableLayoutModel(input, undefined, request.theme);
+    const natural = tableLayoutModel(
+      input,
+      undefined,
+      request.theme,
+      request.slideNumber,
+    );
     const naturalWidth = natural.widths.reduce((sum, width) => sum + width, 0);
     const availableWidth =
       request.availableWidth !== undefined && request.availableWidth > 0
@@ -1023,7 +1043,12 @@ export const tableCapability: CapabilityModule = {
     const model =
       requestedWidth === undefined
         ? natural
-        : tableLayoutModel(input, requestedWidth, request.theme);
+        : tableLayoutModel(
+            input,
+            requestedWidth,
+            request.theme,
+            request.slideNumber,
+          );
     const width = model.widths.reduce((sum, value) => sum + value, 0);
     const height = model.heights.reduce((sum, value) => sum + value, 0);
     return {
@@ -1044,7 +1069,12 @@ export const tableCapability: CapabilityModule = {
       (typeof declaredWidth === "number"
         ? positiveSize(declaredWidth, "Table.width")
         : undefined);
-    const model = tableLayoutModel(input, requestedWidth, context.theme);
+    const model = tableLayoutModel(
+      input,
+      requestedWidth,
+      context.theme,
+      context.slideNumber,
+    );
     const { columns, rows, cells, widths } = model;
     const heights = [...model.heights];
     const warnings = [...model.warnings];
@@ -1156,6 +1186,10 @@ export const tableCapability: CapabilityModule = {
           innerWidthOf(cell),
           innerHeight,
           contentSized,
+          {
+            slideNumber: context.slideNumber,
+            createId: context.createTextFieldId,
+          },
         );
         addTextResult(body, cell.path);
         matrix[rowIndex]![column] = body.text;
@@ -1222,7 +1256,16 @@ export const tableCapability: CapabilityModule = {
       ]),
     );
     return {
-      xml: frameXml(context.id, escapedName, x, y, widths, heights, rowsXml),
+      xml: frameXml(
+        context.id,
+        escapedName,
+        x,
+        y,
+        widths,
+        heights,
+        rowsXml,
+        nativeLinkXml(context.nativeLink),
+      ),
       observation: {
         id: context.id,
         kind: "table",

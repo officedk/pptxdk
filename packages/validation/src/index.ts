@@ -39,6 +39,7 @@ const validationScope =
 const applicationEvidence = "not-validated";
 const minimumSlideLayoutId = 2_147_483_648;
 const maximumSlideLayoutId = 4_294_967_295;
+const maximumTimeNodeValue = 4_294_967_295;
 const minimumSlideSizeEmu = 914_400;
 const maximumSlideSizeEmu = 51_206_400;
 const maximumShapeExtentEmu = 2_147_483_647;
@@ -186,12 +187,14 @@ export type FileAnimationEffect = {
     | "floatUp"
     | "spinIn"
     | "stretch"
-    | "spin";
+    | "spin"
+    | "breathe";
   readonly durationMs: number;
   readonly delayMs: number;
+  readonly repeatCount?: number | "forever";
   readonly by?: "word" | "letter";
   readonly intervalMs?: number;
-  readonly completion?: "unknown";
+  readonly completion?: "unknown" | "no-natural-completion";
   readonly startAfter?: {
     readonly targetId: number;
     readonly timingId: number;
@@ -199,6 +202,8 @@ export type FileAnimationEffect = {
     readonly offsetMs: number;
   };
   readonly from?: "left" | "right" | "top" | "bottom" | number;
+  readonly fromColor?: string;
+  readonly toColor?: string;
   readonly easing?: {
     readonly accelerate?: number;
     readonly decelerate?: number;
@@ -2861,6 +2866,11 @@ function readSlideAnimations(
         const presetId = integerAttribute(effectTimeNode, "presetID");
         if (presetId === undefined) continue;
         const presetClass = attribute(effectTimeNode, "presetClass");
+        const colorAnimationNodes = descendantsByName(
+          effectTimeNode,
+          presentationNamespace,
+          "animClr",
+        );
         const presetById: Readonly<
           Record<number, FileAnimationEffect["preset"]>
         > = {
@@ -2873,7 +2883,11 @@ function readSlideAnimations(
           49: "spinIn",
           53: "zoom",
         };
-        const preset = presetById[presetId];
+        const preset =
+          presetById[presetId] ??
+          (presetId === 0 && colorAnimationNodes.length === 1
+            ? "breathe"
+            : undefined);
         const kind =
           presetClass === "entr"
             ? "entrance"
@@ -2889,7 +2903,8 @@ function readSlideAnimations(
           );
           continue;
         }
-        const expectedKind = preset === "spin" ? "emphasis" : "entrance";
+        const expectedKind =
+          preset === "spin" || preset === "breathe" ? "emphasis" : "entrance";
         if (kind !== expectedKind) {
           issue(
             errors,
@@ -2922,6 +2937,31 @@ function readSlideAnimations(
           );
           continue;
         }
+        const repeatText = attribute(effectTimeNode, "repeatCount");
+        let repeatCount: number | "forever" | undefined;
+        if (repeatText === "indefinite") {
+          repeatCount = "forever";
+        } else if (repeatText !== "") {
+          const nativeRepeatCount = nonNegativeIntegerValue(repeatText);
+          if (
+            nativeRepeatCount === undefined ||
+            nativeRepeatCount > maximumTimeNodeValue ||
+            nativeRepeatCount < 1000 ||
+            nativeRepeatCount % 1000 !== 0
+          ) {
+            issue(
+              errors,
+              part,
+              "invalid-animation-repeat",
+              "动画 repeatCount 必须是千分之一计数中的完整正整数轮数",
+            );
+            continue;
+          }
+          repeatCount = nativeRepeatCount / 1000;
+        }
+        const autoReverse = ["1", "true"].includes(
+          attribute(effectTimeNode, "autoRev"),
+        );
         const behaviorNodes = descendantsByName(
           effectTimeNode,
           presentationNamespace,
@@ -2935,17 +2975,27 @@ function readSlideAnimations(
             ),
           )
           .filter((duration): duration is number => duration !== undefined);
-        const durationMs =
+        const traversalDurationMs =
           durations.length === 0 ? undefined : Math.max(...durations);
-        if (durationMs === undefined || durationMs <= 0) {
+        if (
+          traversalDurationMs === undefined ||
+          traversalDurationMs <= 0 ||
+          (preset === "breathe" &&
+            (!autoReverse || traversalDurationMs > maximumTimeNodeValue))
+        ) {
           issue(
             errors,
             part,
-            "invalid-animation-duration",
-            "动画行为缺少正整数时长",
+            preset === "breathe"
+              ? "invalid-breathe-cycle"
+              : "invalid-animation-duration",
+            preset === "breathe"
+              ? "呼吸周期必须由正向颜色动画和原生反向组成"
+              : "动画行为缺少正整数时长",
           );
           continue;
         }
+        const durationMs = traversalDurationMs * (preset === "breathe" ? 2 : 1);
         const targetNodes = descendantsByName(
           effectTimeNode,
           presentationNamespace,
@@ -3057,6 +3107,65 @@ function readSlideAnimations(
         }
         const targetRange = ranges[0];
         const targetObject = findObjectById(objects, targetId);
+        let fromColor: string | undefined;
+        let toColor: string | undefined;
+        if (preset === "breathe") {
+          const colorAnimation = colorAnimationNodes[0];
+          const colorBehavior =
+            colorAnimation === undefined
+              ? undefined
+              : first(colorAnimation, presentationNamespace, "cBhvr");
+          const colorAttributeList =
+            colorBehavior === undefined
+              ? undefined
+              : first(colorBehavior, presentationNamespace, "attrNameLst");
+          const colorAttribute =
+            colorAttributeList === undefined
+              ? undefined
+              : first(colorAttributeList, presentationNamespace, "attrName");
+          const colorTargetIds =
+            colorBehavior === undefined
+              ? []
+              : descendantsByName(
+                  colorBehavior,
+                  presentationNamespace,
+                  "spTgt",
+                ).map((target) =>
+                  positiveIntegerValue(attribute(target, "spid")),
+                );
+          const colorValue = (name: "from" | "to"): string | undefined => {
+            if (colorAnimation === undefined) return undefined;
+            const wrapper = first(colorAnimation, presentationNamespace, name);
+            const rgb =
+              wrapper === undefined
+                ? undefined
+                : first(wrapper, drawingNamespace, "srgbClr");
+            const hex = rgb === undefined ? "" : attribute(rgb, "val");
+            return /^[0-9a-f]{6}$/iu.test(hex)
+              ? `#${hex.toUpperCase()}`
+              : undefined;
+          };
+          fromColor = colorValue("from");
+          toColor = colorValue("to");
+          if (
+            colorAnimation === undefined ||
+            attribute(colorAnimation, "clrSpc") !== "rgb" ||
+            colorAttribute?.textContent !== "fillcolor" ||
+            colorTargetIds.length !== 1 ||
+            colorTargetIds[0] !== targetId ||
+            fromColor === undefined ||
+            toColor === undefined ||
+            targetObject?.kind !== "shape"
+          ) {
+            issue(
+              errors,
+              part,
+              "invalid-breathe-animation",
+              "呼吸效果必须是 Shape 填充色的正向颜色动画并带原生反向",
+            );
+            continue;
+          }
+        }
         const chartSeriesCount = targetObject?.chart?.series.length ?? 0;
         const chartCategoryCount =
           targetObject?.chart?.series[0]?.categories.length ?? 0;
@@ -3271,11 +3380,18 @@ function readSlideAnimations(
           preset,
           durationMs,
           delayMs: groupDelay + effectDelay,
+          ...(repeatCount === undefined ? {} : { repeatCount }),
           ...(by === undefined ? {} : { by }),
           ...(intervalMs === undefined ? {} : { intervalMs }),
-          ...(by === undefined ? {} : { completion: "unknown" as const }),
+          ...(repeatCount === "forever"
+            ? { completion: "no-natural-completion" as const }
+            : by === undefined
+              ? {}
+              : { completion: "unknown" as const }),
           ...(startAfter === undefined ? {} : { startAfter }),
           ...(from === undefined ? {} : { from }),
+          ...(fromColor === undefined ? {} : { fromColor }),
+          ...(toColor === undefined ? {} : { toColor }),
           ...(Object.keys(easing).length === 0 ? {} : { easing }),
         });
       }

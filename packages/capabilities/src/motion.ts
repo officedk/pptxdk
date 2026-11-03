@@ -16,12 +16,14 @@ import { compileMotionPlan, type MotionPlanStep } from "./motion-plan.ts";
 
 export {
   after,
+  breathe,
   Box,
   MotionScope,
   Step,
   fade,
   fly,
   floatUp,
+  repeat,
   spin,
   spinIn,
   stretch,
@@ -35,8 +37,12 @@ export type {
   Effect,
   EffectOptions,
   EffectPreset,
+  BreatheEffect,
+  BreatheOptions,
   EmphasisEffect,
+  EmphasisEffectDeclaration,
   EntranceEffect,
+  EntranceEffectDeclaration,
   MotionCompletionState,
   MotionDirection,
   MotionGranularity,
@@ -53,6 +59,8 @@ export type {
   MotionTargetRange,
   MotionTiming,
   MotionStepObservation,
+  RepeatCount,
+  RepeatedEffect,
   StepProps,
 } from "./motion-api.ts";
 
@@ -267,6 +275,38 @@ function behaviorIds(effect: TimingEffect, ids: TimingIds): readonly string[] {
           ),
         ),
       ];
+    case "breathe":
+      return [
+        element(
+          "p:animClr",
+          { clrSpc: "rgb" },
+          element(
+            "p:cBhvr",
+            undefined,
+            element("p:cTn", {
+              id: ids.take(),
+              dur: Math.round(duration / 2),
+              fill: "hold",
+            }),
+            target(),
+            attributeNames("fillcolor"),
+          ),
+          element(
+            "p:from",
+            undefined,
+            element("a:srgbClr", {
+              val: effect.fromColor?.slice(1),
+            }),
+          ),
+          element(
+            "p:to",
+            undefined,
+            element("a:srgbClr", {
+              val: effect.toColor?.slice(1),
+            }),
+          ),
+        ),
+      ];
   }
 }
 
@@ -288,6 +328,7 @@ function effectTree(
     spinIn: { id: 49, class: "entr" },
     stretch: { id: 17, class: "entr" },
     spin: { id: 8, class: "emph" },
+    breathe: { id: 0, class: "emph" },
   }[effect.preset];
   const subtype =
     effect.preset === "zoom"
@@ -303,6 +344,13 @@ function effectTree(
     presetID: preset.id,
     presetClass: preset.class,
     presetSubtype: subtype,
+    repeatCount:
+      effect.repeatCount === "forever"
+        ? "indefinite"
+        : effect.repeatCount === undefined
+          ? undefined
+          : effect.repeatCount * 1000,
+    autoRev: effect.preset === "breathe" ? true : undefined,
     accel:
       easing?.accelerate === undefined || easing.accelerate === 0
         ? undefined

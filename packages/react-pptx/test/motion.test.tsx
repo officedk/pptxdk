@@ -6,6 +6,7 @@ import {
   Chart,
   createBuilder,
   Deck,
+  breathe,
   fade,
   fly,
   floatUp,
@@ -22,6 +23,7 @@ import {
   Step,
   Text,
   motionCapability,
+  repeat,
   transitionCapability,
   transitions,
   type MotionObservation,
@@ -41,7 +43,651 @@ const png = new Uint8Array(
   ),
 );
 
+function RepeatedSpinDeck() {
+  const body = useMotionScope();
+  return createElement(
+    Deck,
+    { width: 320, height: 180 },
+    createElement(
+      Slide,
+      { slideId: "finite-repeat" },
+      createElement(
+        MotionScope,
+        { scope: body },
+        createElement(Shape, {
+          testId: "three-turns",
+          x: 20,
+          y: 20,
+          width: 40,
+          height: 40,
+          fill: "#164E3D",
+          emphasis: repeat(spin({ duration: 100, from: 0 }), 3),
+        }),
+      ),
+    ),
+  );
+}
+
+function RepeatedAndBreathingDeck() {
+  const choreography = useMotionScope();
+  const body = useMotionScope();
+  const lamp = useMotionScope();
+  const afterBody = useMotionScope();
+  return createElement(
+    Deck,
+    { width: 320, height: 180 },
+    createElement(
+      Slide,
+      { slideId: "breathing-scope" },
+      createElement(
+        MotionScope,
+        { scope: choreography },
+        createElement(
+          MotionScope,
+          { scope: body },
+          createElement(Shape, {
+            testId: "finite-body",
+            name: "Finite body - spin three turns",
+            x: 20,
+            y: 20,
+            width: 40,
+            height: 40,
+            fill: "#164E3D",
+            emphasis: repeat(spin({ duration: 1200, from: 0 }), 3),
+          }),
+          createElement(Shape, {
+            testId: "finite-breathe",
+            name: "Finite body - two breathe cycles",
+            x: 20,
+            y: 70,
+            width: 20,
+            height: 20,
+            fill: "#FFFFFF",
+            emphasis: repeat(
+              breathe({ period: 2000, from: "#164E3D", to: "#4ADE80" }),
+              2,
+            ),
+          }),
+        ),
+        createElement(
+          MotionScope,
+          { scope: lamp },
+          createElement(
+            Group,
+            {
+              testId: "native-lamp-group",
+              name: "Native group - two spins",
+              emphasis: repeat(spin({ duration: 1200, from: 0 }), 2),
+            },
+            createElement(Shape, {
+              testId: "infinite-lamp",
+              name: "Group member - breathe until slide exit",
+              x: 80,
+              y: 20,
+              width: 40,
+              height: 40,
+              fill: "#164E3D",
+              emphasis: repeat(
+                breathe({
+                  period: 1600,
+                  from: "#164E3D",
+                  to: "#4ADE80",
+                }),
+                "forever",
+              ),
+            }),
+          ),
+        ),
+      ),
+      createElement(
+        MotionScope,
+        { scope: afterBody, startAt: body.end },
+        createElement(Shape, {
+          testId: "after-body",
+          x: 140,
+          y: 20,
+          width: 40,
+          height: 40,
+          enter: fade({ duration: 100 }),
+        }),
+      ),
+      createElement(
+        Step,
+        { n: 1 },
+        createElement(Shape, {
+          testId: "first-click",
+          x: 20,
+          y: 80,
+          width: 40,
+          height: 20,
+          enter: fade({ duration: 80 }),
+        }),
+      ),
+      createElement(
+        Step,
+        { n: 2 },
+        createElement(Shape, {
+          testId: "second-click",
+          x: 80,
+          y: 80,
+          width: 40,
+          height: 20,
+          enter: fade({ duration: 80 }),
+        }),
+      ),
+    ),
+    createElement(
+      Slide,
+      { slideId: "after-breathing-slide" },
+      createElement(Shape, {
+        testId: "next-page",
+        x: 20,
+        y: 20,
+        width: 40,
+        height: 40,
+        fill: "#4ADE80",
+      }),
+    ),
+  );
+}
+
+function InfiniteSequenceTail({
+  blockAfter,
+}: {
+  readonly blockAfter: boolean;
+}) {
+  const sequence = useMotionScope();
+  const lamp = useMotionScope();
+  return createElement(
+    Deck,
+    { width: 320, height: 180 },
+    createElement(
+      Slide,
+      { slideId: blockAfter ? "blocked-infinite-tail" : "infinite-tail" },
+      createElement(
+        MotionScope,
+        { scope: sequence, mode: "sequence" },
+        createElement(Shape, {
+          testId: "before-lamp",
+          x: 0,
+          y: 0,
+          width: 20,
+          height: 20,
+          enter: fade({ duration: 100 }),
+        }),
+        createElement(
+          MotionScope,
+          { scope: lamp },
+          createElement(Shape, {
+            testId: "tail-lamp",
+            x: 30,
+            y: 0,
+            width: 20,
+            height: 20,
+            fill: "#164E3D",
+            emphasis: repeat(
+              breathe({ period: 1600, from: "#164E3D", to: "#4ADE80" }),
+              "forever",
+            ),
+          }),
+        ),
+        blockAfter
+          ? createElement(Shape, {
+              testId: "blocked-follower",
+              x: 60,
+              y: 0,
+              width: 20,
+              height: 20,
+              enter: fade({ duration: 100 }),
+            })
+          : null,
+      ),
+    ),
+  );
+}
+
 describe("对象动画", () => {
+  it("有限重复按总轮数进入编排完成与实际文件", async () => {
+    const result = await build(createElement(RepeatedSpinDeck));
+    const motion = result.report.slides[0]?.capabilities?.[
+      "motion"
+    ] as MotionObservation;
+    const effect = motion.steps[0]?.effects[0];
+    const scope = motion.scopes?.[0];
+
+    assert.deepEqual(
+      [
+        effect?.preset,
+        effect?.durationMs,
+        effect?.repeatCount,
+        effect?.startMs,
+        effect?.endMs,
+        effect?.completion,
+      ],
+      ["spin", 100, 3, 0, 300, undefined],
+    );
+    assert.deepEqual(
+      [scope?.completion, scope?.startMs, scope?.endMs],
+      ["known", 0, 300],
+    );
+
+    const file = await validatePptx(result.pptx);
+    assert.deepEqual(file.errors, []);
+    const fileEffect = file.slides[0]?.animations?.[0]?.effects[0];
+    assert.deepEqual(
+      [fileEffect?.preset, fileEffect?.durationMs, fileEffect?.repeatCount],
+      ["spin", 100, 3],
+    );
+    const slidePart = unzipSync(result.pptx)["ppt/slides/slide1.xml"];
+    assert.ok(slidePart);
+    const timing = strFromU8(slidePart);
+    assert.match(timing, /<p:cTn[^>]*presetID="8"[^>]*repeatCount="3000"/u);
+  });
+
+  it("连续呼吸保持无自然完成且只等待有限正文作用域", async () => {
+    const result = await build(createElement(RepeatedAndBreathingDeck));
+    const slide = result.report.slides[0];
+    const motion = slide?.capabilities?.["motion"] as MotionObservation;
+    const effects = motion.steps.flatMap((step) => step.effects);
+    const bodyEffect = effects.find(
+      ({ target }) => target.testId === "finite-body",
+    );
+    const finiteBreathe = effects.find(
+      ({ target }) => target.testId === "finite-breathe",
+    );
+    const lampEffect = effects.find(
+      ({ target }) => target.testId === "infinite-lamp",
+    );
+    const groupEffect = effects.find(
+      ({ target }) => target.testId === "native-lamp-group",
+    );
+    const follower = effects.find(
+      ({ target }) => target.testId === "after-body",
+    );
+    assert.deepEqual(
+      [
+        bodyEffect?.preset,
+        bodyEffect?.repeatCount,
+        bodyEffect?.startMs,
+        bodyEffect?.endMs,
+      ],
+      ["spin", 3, 0, 3600],
+    );
+    assert.deepEqual(
+      [
+        finiteBreathe?.preset,
+        finiteBreathe?.durationMs,
+        finiteBreathe?.repeatCount,
+        finiteBreathe?.endMs,
+        finiteBreathe?.fromColor,
+        finiteBreathe?.toColor,
+      ],
+      ["breathe", 2000, 2, 4000, "#164E3D", "#4ADE80"],
+    );
+    assert.deepEqual(
+      [
+        lampEffect?.preset,
+        lampEffect?.durationMs,
+        lampEffect?.repeatCount,
+        lampEffect?.fromColor,
+        lampEffect?.toColor,
+        lampEffect?.startMs,
+        lampEffect?.endMs,
+        lampEffect?.completion,
+      ],
+      [
+        "breathe",
+        1600,
+        "forever",
+        "#164E3D",
+        "#4ADE80",
+        0,
+        undefined,
+        "no-natural-completion",
+      ],
+    );
+    assert.equal("endMs" in (lampEffect ?? {}), false);
+    assert.deepEqual(
+      [groupEffect?.preset, groupEffect?.repeatCount, groupEffect?.endMs],
+      ["spin", 2, 2400],
+    );
+    assert.notEqual(groupEffect?.target.id, lampEffect?.target.id);
+    assert.deepEqual([follower?.startMs, follower?.endMs], [4000, 4100]);
+    const bodyScope = motion.scopes?.find((scope) =>
+      scope.members.some(
+        (member) =>
+          member.kind === "object" && member.id === bodyEffect?.target.id,
+      ),
+    );
+    const lampScope = motion.scopes?.find((scope) =>
+      scope.members.some(
+        (member) =>
+          member.kind === "object" && member.id === lampEffect?.target.id,
+      ),
+    );
+    const choreography = motion.scopes?.find(
+      (scope) =>
+        scope.members.some(
+          (member) => member.kind === "scope" && member.id === bodyScope?.id,
+        ) &&
+        scope.members.some(
+          (member) => member.kind === "scope" && member.id === lampScope?.id,
+        ),
+    );
+    assert.deepEqual(
+      [bodyScope?.completion, bodyScope?.startMs, bodyScope?.endMs],
+      ["known", 0, 4000],
+    );
+    assert.deepEqual(
+      [lampScope?.completion, lampScope?.startMs, lampScope?.endMs],
+      ["no-natural-completion", 0, undefined],
+    );
+    assert.equal("endMs" in (lampScope ?? {}), false);
+    assert.deepEqual(
+      [choreography?.completion, choreography?.startMs, choreography?.endMs],
+      ["no-natural-completion", 0, undefined],
+    );
+
+    const file = await validatePptx(result.pptx);
+    assert.deepEqual(file.errors, []);
+    const bodyObject = slide?.objects.find(
+      ({ testId }) => testId === "finite-body",
+    );
+    const finiteBreatheObject = slide?.objects.find(
+      ({ testId }) => testId === "finite-breathe",
+    );
+    const lampObject = slide?.objects
+      .flatMap((object) => [object, ...(object.members ?? [])])
+      .find(({ testId }) => testId === "infinite-lamp");
+    const groupObject = slide?.objects.find(
+      ({ testId }) => testId === "native-lamp-group",
+    );
+    const fileEffects = file.slides[0]?.animations?.flatMap(
+      (step) => step.effects,
+    );
+    const fileBody = fileEffects?.find(
+      ({ targetId }) => targetId === bodyObject?.id,
+    );
+    const fileFiniteBreathe = fileEffects?.find(
+      ({ targetId }) => targetId === finiteBreatheObject?.id,
+    );
+    const fileLamp = fileEffects?.find(
+      ({ targetId }) => targetId === lampObject?.id,
+    );
+    const fileGroup = fileEffects?.find(
+      ({ targetId }) => targetId === groupObject?.id,
+    );
+    assert.deepEqual(
+      [fileBody?.durationMs, fileBody?.repeatCount, fileBody?.completion],
+      [1200, 3, undefined],
+    );
+    assert.deepEqual(
+      [
+        fileFiniteBreathe?.preset,
+        fileFiniteBreathe?.durationMs,
+        fileFiniteBreathe?.repeatCount,
+        fileFiniteBreathe?.fromColor,
+        fileFiniteBreathe?.toColor,
+      ],
+      ["breathe", 2000, 2, "#164E3D", "#4ADE80"],
+    );
+    assert.deepEqual(
+      [
+        fileLamp?.preset,
+        fileLamp?.durationMs,
+        fileLamp?.repeatCount,
+        fileLamp?.fromColor,
+        fileLamp?.toColor,
+        fileLamp?.completion,
+      ],
+      [
+        "breathe",
+        1600,
+        "forever",
+        "#164E3D",
+        "#4ADE80",
+        "no-natural-completion",
+      ],
+    );
+    assert.deepEqual(
+      [fileGroup?.preset, fileGroup?.repeatCount, fileGroup?.durationMs],
+      ["spin", 2, 1200],
+    );
+    assert.notEqual(fileGroup?.targetId, fileLamp?.targetId);
+    const slidePart = unzipSync(result.pptx)["ppt/slides/slide1.xml"];
+    assert.ok(slidePart);
+    const timing = strFromU8(slidePart);
+    const finiteShapeStart = timing.indexOf(
+      `<p:cNvPr id="${finiteBreatheObject?.id}" name="Finite body - two breathe cycles"/>`,
+    );
+    const finiteShapeFill = timing.indexOf(
+      '<a:solidFill><a:srgbClr val="FFFFFF"/></a:solidFill>',
+      finiteShapeStart,
+    );
+    const nextShape = timing.indexOf("<p:sp>", finiteShapeStart + 1);
+    assert.ok(
+      finiteShapeStart >= 0 &&
+        finiteShapeFill > finiteShapeStart &&
+        (nextShape < 0 || finiteShapeFill < nextShape),
+    );
+    assert.match(
+      timing,
+      /<p:cTn[^>]*presetID="0"[^>]*presetClass="emph"[^>]*repeatCount="indefinite"[^>]*autoRev="1"/u,
+    );
+    assert.match(
+      timing,
+      /<p:animClr clrSpc="rgb">[\s\S]*?<p:cTn[^>]*dur="800"[^>]*>[\s\S]*?<p:attrName>fillcolor<\/p:attrName>[\s\S]*?<p:from><a:srgbClr val="164E3D"><\/a:srgbClr><\/p:from>[\s\S]*?<p:to><a:srgbClr val="4ADE80"><\/a:srgbClr><\/p:to><\/p:animClr>/u,
+    );
+    assert.match(
+      timing,
+      /<p:cTn[^>]*presetID="0"[^>]*repeatCount="2000"[^>]*autoRev="1"/u,
+    );
+    assert.match(
+      timing,
+      /<p:cTn[^>]*presetID="0"[^>]*repeatCount="2000"[^>]*autoRev="1"[^>]*>[\s\S]*?<p:animClr clrSpc="rgb"><p:cBhvr><p:cTn[^>]*dur="1000"/u,
+    );
+  });
+
+  it("允许顺序末项持续循环并拒绝被它阻挡的顺序后继", async () => {
+    const result = await build(
+      createElement(InfiniteSequenceTail, { blockAfter: false }),
+    );
+    const motion = result.report.slides[0]?.capabilities?.[
+      "motion"
+    ] as MotionObservation;
+    assert.deepEqual(
+      motion.steps[0]?.effects.map(({ target, startMs, endMs, completion }) => [
+        target.testId,
+        startMs,
+        endMs,
+        completion,
+      ]),
+      [
+        ["before-lamp", 0, 100, undefined],
+        ["tail-lamp", 100, undefined, "no-natural-completion"],
+      ],
+    );
+    assert.equal(motion.scopes?.[0]?.completion, "no-natural-completion");
+    assert.equal("endMs" in (motion.scopes?.[0] ?? {}), false);
+
+    await assert.rejects(
+      build(createElement(InfiniteSequenceTail, { blockAfter: true })),
+      (error: unknown) => {
+        assert.ok(error instanceof BuildError);
+        assert.equal(error.diagnostics[0]?.code, "no-natural-completion");
+        assert.match(
+          error.diagnostics[0]?.path ?? "",
+          /shape\[blocked-follower\]/u,
+        );
+        return true;
+      },
+    );
+  });
+
+  it("拒绝有限重复的非法次数、效果与呼吸参数", async () => {
+    const cases = [
+      {
+        testId: "repeat-fade",
+        props: {
+          enter: repeat(fade({ duration: 100 }), 2),
+        },
+        code: "unsupported-repeat",
+      },
+      {
+        testId: "repeat-zero",
+        props: { emphasis: repeat(spin(), 0) },
+        code: "invalid-repeat-count",
+      },
+      {
+        testId: "repeat-missing-count",
+        props: { emphasis: repeat(spin(), undefined as never) },
+        code: "invalid-repeat-count",
+      },
+      {
+        testId: "repeat-count-limit",
+        props: { emphasis: repeat(spin(), 4_294_968) },
+        code: "invalid-repeat-count",
+      },
+      {
+        testId: "repeat-duration-limit",
+        props: {
+          emphasis: repeat(spin({ duration: 4_294_967_296 }), 1),
+        },
+        code: "invalid-repeat-duration",
+      },
+      {
+        testId: "repeat-forever-spin",
+        props: { emphasis: repeat(spin(), "forever") },
+        code: "unsupported-repeat",
+      },
+      {
+        testId: "repeat-granularity",
+        props: { emphasis: repeat(spin({ by: "letter" }), 2) },
+        code: "unsupported-repeat-combination",
+      },
+      {
+        testId: "odd-breathe-period",
+        props: {
+          emphasis: breathe({
+            period: 1601,
+            from: "#164E3D",
+            to: "#4ADE80",
+          }),
+        },
+        code: "invalid-breathe-period",
+      },
+      {
+        testId: "breathe-period-limit",
+        props: {
+          emphasis: breathe({
+            period: 8_589_934_592,
+            from: "#164E3D",
+            to: "#4ADE80",
+          }),
+        },
+        code: "invalid-breathe-period",
+      },
+      {
+        testId: "dark-breathe-endpoint",
+        props: {
+          fill: "#FFFFFF",
+          emphasis: breathe({
+            period: 1600,
+            from: "#FFFFFF",
+            to: "#000000",
+          }),
+        },
+        code: "invalid-breathe-colors",
+      },
+      {
+        testId: "unfilled-breathe-target",
+        props: {
+          emphasis: breathe({
+            period: 1600,
+            from: "#164E3D",
+            to: "#4ADE80",
+          }),
+        },
+        code: "invalid-breathe-target",
+      },
+    ] as const;
+
+    for (const { testId, props, code } of cases) {
+      await assert.rejects(
+        build(
+          createElement(
+            Deck,
+            {},
+            createElement(
+              Slide,
+              { slideId: `invalid-${testId}` },
+              createElement(Shape, {
+                testId,
+                x: 0,
+                y: 0,
+                width: 20,
+                height: 20,
+                ...props,
+              } as never),
+            ),
+          ),
+        ),
+        (error: unknown) => {
+          assert.ok(error instanceof BuildError);
+          assert.equal(error.diagnostics[0]?.code, code);
+          assert.match(
+            error.diagnostics[0]?.path ?? "",
+            new RegExp(`shape\\[${testId}\\]`, "u"),
+          );
+          return true;
+        },
+      );
+    }
+  });
+
+  it("呼吸颜色只绑定有填充的 Shape 成员，不绑定原生 Group 容器", async () => {
+    await assert.rejects(
+      build(
+        createElement(
+          Deck,
+          {},
+          createElement(
+            Slide,
+            { slideId: "group-breathe-target" },
+            createElement(
+              Group,
+              {
+                testId: "group-breathe",
+                emphasis: breathe({
+                  period: 1600,
+                  from: "#164E3D",
+                  to: "#4ADE80",
+                }),
+              },
+              createElement(Shape, {
+                testId: "group-breathe-child",
+                x: 20,
+                y: 20,
+                width: 20,
+                height: 20,
+                fill: "#164E3D",
+              }),
+            ),
+          ),
+        ),
+      ),
+      (error: unknown) => {
+        assert.ok(error instanceof BuildError);
+        assert.equal(error.diagnostics[0]?.code, "invalid-breathe-target");
+        assert.match(
+          error.diagnostics[0]?.path ?? "",
+          /group\[group-breathe\]/u,
+        );
+        return true;
+      },
+    );
+  });
+
   it("段落效果与整体效果并存时保留段落构建且不改变效果顺序", async () => {
     const cases: readonly {
       readonly testId: string;

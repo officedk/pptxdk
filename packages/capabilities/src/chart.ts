@@ -21,6 +21,7 @@ import {
   fontPresentationContributions,
   type FontEmbeddingUse,
 } from "./font-embedding.ts";
+import type { MorphProps } from "./morph-api.ts";
 import {
   motionAnnotations,
   motionElement,
@@ -91,27 +92,28 @@ export type ChartDataLabels = {
   readonly style?: TextStyle;
 };
 
-type ChartBase = MotionProps & {
-  readonly testId?: string;
-  readonly name?: string;
-  readonly x?: number;
-  readonly y?: number;
-  readonly width?: number;
-  readonly height?: number;
-  readonly data: ChartData;
-  /** 省略、false 时隐藏图例。 */
-  readonly legend?: false | "top" | "bottom" | "left" | "right";
-  readonly dataLabels?: false | ChartDataLabels;
-  /** 相对图表框的内部绘图区位置，单位为 px。 */
-  readonly plotArea?: {
-    readonly left: number;
-    readonly top: number;
-    readonly width: number;
-    readonly height: number;
+type ChartBase = MotionProps &
+  MorphProps & {
+    readonly testId?: string;
+    readonly name?: string;
+    readonly x?: number;
+    readonly y?: number;
+    readonly width?: number;
+    readonly height?: number;
+    readonly data: ChartData;
+    /** 省略、false 时隐藏图例。 */
+    readonly legend?: false | "top" | "bottom" | "left" | "right";
+    readonly dataLabels?: false | ChartDataLabels;
+    /** 相对图表框的内部绘图区位置，单位为 px。 */
+    readonly plotArea?: {
+      readonly left: number;
+      readonly top: number;
+      readonly width: number;
+      readonly height: number;
+    };
+    /** 图表图例、轴和数据标签共用的文字样式。 */
+    readonly style?: TextStyle & LayoutStyle;
   };
-  /** 图表图例、轴和数据标签共用的文字样式。 */
-  readonly style?: TextStyle & LayoutStyle;
-};
 
 type CartesianOptions = {
   readonly stacking?: "stacked" | "percent";
@@ -837,6 +839,7 @@ function validateProps(
     [
       "testId",
       "name",
+      "morphKey",
       "x",
       "y",
       "width",
@@ -1016,7 +1019,11 @@ export const chartCapability: CapabilityModule = {
       );
     }
     const props = validateProps({ ...input.props }, context.layoutBox);
-    const name = props.name ?? props.testId ?? `Chart ${context.id - 1}`;
+    const name =
+      context.morphName ??
+      props.name ??
+      props.testId ??
+      `Chart ${context.id - 1}`;
     const annotations = motionAnnotations(props, {
       kind: "chart",
       name,

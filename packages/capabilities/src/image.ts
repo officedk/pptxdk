@@ -13,6 +13,7 @@ import {
 } from "@react-pptx/core";
 import type { ReactNode } from "react";
 
+import type { MorphProps } from "./morph-api.ts";
 import {
   motionAnnotations,
   motionElement,
@@ -22,29 +23,30 @@ import {
 /** 本地文件路径、file URL 或图片原始字节。 */
 export type ImageSource = string | URL | Uint8Array;
 
-export type ImageProps = MotionProps & {
-  readonly testId?: string;
-  readonly name?: string;
-  readonly src: ImageSource;
-  /** 图片的替代说明。 */
-  readonly alt?: string;
-  /** 位置和范围以 px 表示；位置缺省为 0，宽高缺省按原图尺寸推导。 */
-  readonly x?: number;
-  readonly y?: number;
-  readonly width?: number;
-  readonly height?: number;
-  readonly style?: LayoutStyle;
-  /** `fill` 拉伸，`cover` 居中裁切，`contain` 保留比例；缺省为 `fill`。 */
-  readonly fit?: "fill" | "cover" | "contain";
-  /** 显式裁切每边的原图比例；提供后优先于 `fit`。 */
-  readonly crop?: {
-    readonly left?: number;
-    readonly top?: number;
-    readonly right?: number;
-    readonly bottom?: number;
+export type ImageProps = MotionProps &
+  MorphProps & {
+    readonly testId?: string;
+    readonly name?: string;
+    readonly src: ImageSource;
+    /** 图片的替代说明。 */
+    readonly alt?: string;
+    /** 位置和范围以 px 表示；位置缺省为 0，宽高缺省按原图尺寸推导。 */
+    readonly x?: number;
+    readonly y?: number;
+    readonly width?: number;
+    readonly height?: number;
+    readonly style?: LayoutStyle;
+    /** `fill` 拉伸，`cover` 居中裁切，`contain` 保留比例；缺省为 `fill`。 */
+    readonly fit?: "fill" | "cover" | "contain";
+    /** 显式裁切每边的原图比例；提供后优先于 `fit`。 */
+    readonly crop?: {
+      readonly left?: number;
+      readonly top?: number;
+      readonly right?: number;
+      readonly bottom?: number;
+    };
+    readonly children?: ReactNode;
   };
-  readonly children?: ReactNode;
-};
 
 type ImageMetadata = {
   readonly extension: "png" | "jpeg" | "gif";
@@ -58,6 +60,7 @@ type LoadedImage = ImageMetadata & { readonly bytes: Uint8Array };
 const allowedParameters = [
   "testId",
   "name",
+  "morphKey",
   "src",
   "alt",
   "x",
@@ -562,7 +565,8 @@ export const imageCapability: CapabilityModule = {
     // contain 派生的尺寸也必须能写成非零 EMU。
     box.width = dimension(box.width, "width");
     box.height = dimension(box.height, "height");
-    const name = requestedName ?? testId ?? `Image ${context.id - 1}`;
+    const name =
+      context.morphName ?? requestedName ?? testId ?? `Image ${context.id - 1}`;
     const annotations = motionAnnotations(props, {
       kind: "image",
       name,

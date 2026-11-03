@@ -30,6 +30,7 @@ export {
   chartCapability,
   Image,
   Group,
+  createMorphScope,
   Shape,
   Table,
   Row,
@@ -102,6 +103,9 @@ export type {
 export type { SlideProps } from "./slide.ts";
 export type {
   GroupProps,
+  MorphKey,
+  MorphProps,
+  MorphScope,
   ImageProps,
   ImageSource,
   Font,

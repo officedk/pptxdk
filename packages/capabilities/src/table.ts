@@ -15,6 +15,7 @@ import {
   fontPresentationContributions,
   type FontEmbeddingUse,
 } from "./font-embedding.ts";
+import type { MorphProps } from "./morph-api.ts";
 import {
   motionAnnotations,
   motionElement,
@@ -66,17 +67,18 @@ export type TableCellStyle = TableTextStyle & {
   readonly paddingLeft?: number;
 };
 
-export type TableProps = MotionProps & {
-  readonly testId?: string;
-  readonly name?: string;
-  readonly x?: number;
-  readonly y?: number;
-  /** 为 fr 列提供可分配宽度；省略时所有列按内容自然宽度确定。 */
-  readonly width?: number;
-  readonly columns: readonly TableColumn[];
-  readonly style?: TableStyle;
-  readonly children?: ReactNode;
-};
+export type TableProps = MotionProps &
+  MorphProps & {
+    readonly testId?: string;
+    readonly name?: string;
+    readonly x?: number;
+    readonly y?: number;
+    /** 为 fr 列提供可分配宽度；省略时所有列按内容自然宽度确定。 */
+    readonly width?: number;
+    readonly columns: readonly TableColumn[];
+    readonly style?: TableStyle;
+    readonly children?: ReactNode;
+  };
 
 type TablePartProps = {
   readonly testId?: string;
@@ -205,6 +207,7 @@ const layoutStyleKeys = [
 const tableParameters = [
   "testId",
   "name",
+  "morphKey",
   "x",
   "y",
   "width",
@@ -1150,7 +1153,8 @@ export const tableCapability: CapabilityModule = {
         warning.message = `${warning.message}（表格单元格保留原始内容和声明尺寸）`;
       }
     }
-    const name = requestedName ?? testId ?? `Table ${context.id - 1}`;
+    const name =
+      context.morphName ?? requestedName ?? testId ?? `Table ${context.id - 1}`;
     let escapedName: string;
     try {
       escapedName = xmlEscape(name);

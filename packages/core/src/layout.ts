@@ -1250,6 +1250,13 @@ export class LayoutPass {
     const unknown = Object.keys(input.props).find(
       (key) => key !== "testId" && key !== "style",
     );
+    if (input.props["morphKey"] !== undefined) {
+      fail(
+        path,
+        "morph-needs-object",
+        "Box 只负责布局且不会生成原生对象；请把 morphKey 放到实际对象或 Group 上",
+      );
+    }
     if (unknown !== undefined) {
       fail(path, "unknown-parameter", `Box 含未实现参数 ${unknown}`);
     }

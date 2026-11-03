@@ -7,6 +7,7 @@ import { CapabilityError, BuildError } from "#/diagnostics.ts";
 import { HostNode, type HostChild, type HostContainer } from "#/host/nodes.ts";
 import { withHostTree } from "#/host/reconciler.ts";
 import { LayoutPass, type LayoutPassResult } from "#/layout.ts";
+import { getMorphKeyLabel, isMorphKey, type MorphKey } from "#/morph.ts";
 import {
   assertXml10Characters,
   pptxParts,
@@ -52,7 +53,16 @@ type SlideBuild = {
   readonly slideXml: string;
   readonly capabilities: Readonly<Record<string, unknown>>;
   readonly relationships: readonly PptxRelationship[];
+  readonly morphObjects: ReadonlyMap<MorphKey, MorphObject>;
 };
+
+type MorphObject = {
+  readonly kind: MorphNativeKind;
+  readonly name: string;
+  readonly path: string;
+};
+
+type MorphNativeKind = "sp" | "pic" | "grpSp" | "table" | "chart";
 
 type DocumentBuildState = {
   readonly usedExtensions: Set<Extension>;
@@ -91,6 +101,8 @@ type DocumentBuildState = {
   >;
   nextPackagePartId: number;
   nextPresentationRelationshipId: number;
+  readonly morphNames: Map<MorphKey, string>;
+  nextMorphName: number;
 };
 
 type SlideBuildState = {
@@ -101,6 +113,7 @@ type SlideBuildState = {
   readonly relationshipIds: Map<string, string>;
   readonly layouts: LayoutObservation[];
   readonly contributions: CapabilityContribution[];
+  readonly morphObjects: Map<MorphKey, MorphObject>;
 };
 
 type BuildContext = {
@@ -203,6 +216,35 @@ function capabilityLabel(child: CapabilityChild, index: number): string {
       ? identity
       : String(index + 1);
   return `${type}[${label}]`;
+}
+
+function nativeObjectName(key: MorphKey, document: DocumentBuildState): string {
+  let name = document.morphNames.get(key);
+  if (name === undefined) {
+    name = `!!react-pptx-morph-${document.nextMorphName++}`;
+    document.morphNames.set(key, name);
+  }
+  return name;
+}
+
+function morphNativeKind(kind: string): MorphNativeKind | undefined {
+  // 文本与形状同为 p:sp；Morph 按页面顶层 PresentationML 原生对象类型配对。
+  if (kind === "shape" || kind === "text") return "sp";
+  if (kind === "image") return "pic";
+  if (kind === "group") return "grpSp";
+  if (kind === "table" || kind === "chart") return kind;
+  return undefined;
+}
+
+function usesMorphTransition(node: HostNode): boolean {
+  const transition = node.props["transition"];
+  return (
+    typeof transition === "object" &&
+    transition !== null &&
+    !Array.isArray(transition) &&
+    (transition as Record<string, unknown>)["type"] === "transition" &&
+    (transition as Record<string, unknown>)["kind"] === "morph"
+  );
 }
 
 function validateTarget(target: Target | undefined): Target {
@@ -832,6 +874,7 @@ function compileChildren(
   children: readonly CapabilityChild[],
   context: BuildContext,
   parentPath: string,
+  insideGroup = false,
 ): CompiledChildren {
   const painted: PaintLayer[] = [];
   children.forEach((child, index) => {
@@ -851,6 +894,7 @@ function compileChildren(
     if (context.layout.hidden.has(child)) return;
     const path = `${parentPath}/${capabilityLabel(child, index)}`;
     const order = context.slide.nextNodeOrder++;
+    const requestedMorphKey = child.props["morphKey"];
     if (child.type === "rp:box") {
       const box = context.layout.boxes.get(child);
       if (box === undefined) {
@@ -888,6 +932,59 @@ function compileChildren(
       );
       return;
     }
+    let morphKey: MorphKey | undefined;
+    let morphName: string | undefined;
+    if (requestedMorphKey !== undefined) {
+      if (!isMorphKey(requestedMorphKey)) {
+        context.slide.diagnostics.push(
+          diagnostic(
+            path,
+            "invalid-morph-key",
+            "morphKey 必须由 createMorphScope().handle(name) 创建",
+          ),
+        );
+      } else if (insideGroup) {
+        context.slide.diagnostics.push(
+          diagnostic(
+            path,
+            "morph-inside-group",
+            "Morph 只匹配页面顶层对象；请把 morphKey 放到 Group 上以移动整个组合",
+          ),
+        );
+      } else if (
+        "compileDeclaration" in module ||
+        !isObjectCapability(module)
+      ) {
+        context.slide.diagnostics.push(
+          diagnostic(
+            path,
+            "morph-needs-object",
+            "morphKey 只能用于会生成原生对象的能力",
+          ),
+        );
+      } else if (child.props["name"] !== undefined) {
+        context.slide.diagnostics.push(
+          diagnostic(
+            path,
+            "morph-object-name-conflict",
+            "morphKey 和 name 都要占用原生对象名称；请只指定其中一个",
+          ),
+        );
+      } else {
+        morphKey = requestedMorphKey;
+        morphName = nativeObjectName(morphKey, context.document);
+        const previous = context.slide.morphObjects.get(morphKey);
+        if (previous !== undefined) {
+          context.slide.diagnostics.push(
+            diagnostic(
+              path,
+              "duplicate-morph-key",
+              `Morph 句柄 “${getMorphKeyLabel(morphKey)}” 在此页重复使用；同一页只能声明一次`,
+            ),
+          );
+        }
+      }
+    }
     if ("compileDeclaration" in module) {
       try {
         for (const annotation of module.compileDeclaration(child, { path })) {
@@ -908,7 +1005,12 @@ function compileChildren(
               ),
         );
       }
-      const compiled = compileChildren(child.children, context, path);
+      const compiled = compileChildren(
+        child.children,
+        context,
+        path,
+        insideGroup,
+      );
       // 透明声明不占绘制层级；其子项携带自己的层序并与兄弟一同排序。
       painted.push(
         ...compiled.paintLayers.map((layer) => ({
@@ -936,9 +1038,15 @@ function compileChildren(
         id,
         path,
         options: context.options,
+        ...(morphName === undefined ? {} : { morphName }),
         ...(layoutBox === undefined ? {} : { layoutBox }),
         compileChildren(nested) {
-          return compileChildren(nested, context, path);
+          return compileChildren(
+            nested,
+            context,
+            path,
+            insideGroup || child.type === "rp:group",
+          );
         },
         registerResource(resource) {
           return addResource(resource, context);
@@ -947,6 +1055,32 @@ function compileChildren(
           return addPackagePart(part, context);
         },
       });
+      if (morphKey !== undefined && morphName !== undefined) {
+        const nativeKind = morphNativeKind(output.observation.kind);
+        if (output.observation.name !== morphName) {
+          context.slide.diagnostics.push(
+            diagnostic(
+              path,
+              "unsupported-morph-object",
+              `${child.type} 未将 morphKey 写入原生对象名称，不能参与 Morph 对应`,
+            ),
+          );
+        } else if (nativeKind === undefined) {
+          context.slide.diagnostics.push(
+            diagnostic(
+              path,
+              "unsupported-morph-object",
+              `${child.type} 生成的 ${output.observation.kind} 不是已支持的 Morph 原生对象类型`,
+            ),
+          );
+        } else if (!context.slide.morphObjects.has(morphKey)) {
+          context.slide.morphObjects.set(morphKey, {
+            kind: nativeKind,
+            name: morphName,
+            path,
+          });
+        }
+      }
       for (const extension of output.extensions) {
         if (!context.target.extensions.includes(extension)) {
           context.slide.diagnostics.push(
@@ -1087,6 +1221,7 @@ function compileSlide(
     relationshipIds: new Map(),
     layouts: [],
     contributions: [],
+    morphObjects: new Map(),
   };
   const path = `deck/slide[${id}]`;
   if (nonWhitespaceText(node.children)) {
@@ -1195,6 +1330,7 @@ function compileSlide(
       .join(""),
     capabilities,
     relationships: slide.relationships,
+    morphObjects: slide.morphObjects,
   };
 }
 
@@ -1227,10 +1363,38 @@ function compileDocument(
     presentationCollections: new Map(),
     nextPackagePartId: 1,
     nextPresentationRelationshipId: slides.length + 2,
+    morphNames: new Map(),
+    nextMorphName: 1,
   };
   const builtSlides = slides.map(({ node, id }) =>
     compileSlide(node, id, modules, target, size, document, options),
   );
+  const morphDiagnostics: Diagnostic[] = [];
+  for (let index = 1; index < slides.length; index += 1) {
+    const current = slides[index];
+    const currentBuild = builtSlides[index];
+    const previousBuild = builtSlides[index - 1];
+    if (
+      current === undefined ||
+      currentBuild === undefined ||
+      previousBuild === undefined ||
+      !usesMorphTransition(current.node)
+    ) {
+      continue;
+    }
+    for (const [key, object] of currentBuild.morphObjects) {
+      const previous = previousBuild.morphObjects.get(key);
+      if (previous === undefined || previous.kind === object.kind) continue;
+      morphDiagnostics.push(
+        diagnostic(
+          object.path,
+          "morph-object-kind-mismatch",
+          `原生对象 ${object.name}（句柄 “${getMorphKeyLabel(key)}”）在前页 ${slides[index - 1]?.id} 对应 ${previous.kind}，当前页对应 ${object.kind}；仅支持相同原生对象类型连续`,
+        ),
+      );
+    }
+  }
+  if (morphDiagnostics.length > 0) throw new BuildError(morphDiagnostics);
   const parts = pptxParts(
     size,
     builtSlides.map(({ id, shapeXml, slideXml, relationships }) => ({

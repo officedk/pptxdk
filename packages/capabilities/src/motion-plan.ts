@@ -12,6 +12,7 @@ import type {
   MotionObservation,
   MotionScopeObservation,
   MotionStepObservation,
+  NormalizedEffect,
 } from "./motion-api.ts";
 
 type StepDeclaration =
@@ -34,7 +35,7 @@ type MotionValue = {
   readonly target: MotionTarget;
   readonly step?: StepDeclaration;
   readonly scopes: readonly MotionScopeDeclaration[];
-  readonly effects: readonly Effect[];
+  readonly effects: readonly NormalizedEffect[];
 };
 
 type ScopeValue = {
@@ -706,11 +707,17 @@ function expansionFor(
 function effectEnd(
   base: TimeExpression,
   target: TargetState,
-  effect: Effect,
+  effect: NormalizedEffect,
   effectIndex: number,
   expansion: EffectExpansion,
   facts: MotionTimingFacts,
 ): TimePoint {
+  if (effect.repeatCount === "forever") {
+    return { state: "no-natural-completion" };
+  }
+  const rounds = effect.repeatCount ?? 1;
+  const durationMs = Math.round(effect.duration) * rounds;
+
   const partIndex =
     expansion.type === "parts" ? expansion.count - 1 : undefined;
   const dependency: MotionStartDependency = {
@@ -720,7 +727,6 @@ function effectEnd(
     point: "end",
     offsetMs: 0,
   };
-  const durationMs = Math.round(effect.duration);
   const startOffsetMs =
     Math.round(effect.delay) +
     (partIndex === undefined ? 0 : partIndex * durationMs);
@@ -750,7 +756,7 @@ function effectEnd(
   if (expansion.type === "iterate") {
     facts.addLowerBound(startEventId, endEventId, minimumDuration, target.path);
   } else {
-    // 有限行为保留相对时差，不要求效果起点已有绝对数值。
+    // 有限行为保留完整重复后的相对时差，不要求起点已有绝对数值。
     facts.addLowerBound(startEventId, endEventId, durationMs, target.path);
     facts.addExactOffset(startEventId, endEventId, durationMs, target.path);
   }
@@ -1532,9 +1538,12 @@ function motionPlan(
               : undefined;
           const knownStart = start.state === "known" ? start.timeMs : undefined;
           const endMs =
-            expansion.type === "iterate" || knownStart === undefined
+            expansion.type === "iterate" ||
+            effect.repeatCount === "forever" ||
+            knownStart === undefined
               ? undefined
-              : knownStart + Math.round(effect.duration);
+              : knownStart +
+                Math.round(effect.duration) * (effect.repeatCount ?? 1);
           const from =
             typeof effect.from === "number"
               ? Math.round(effect.from * 60000) / 60000
@@ -1552,6 +1561,9 @@ function motionPlan(
             kind: effect.kind,
             preset: effect.preset,
             durationMs: Math.round(effect.duration),
+            ...(effect.repeatCount === undefined
+              ? {}
+              : { repeatCount: effect.repeatCount }),
             delayMs: Math.round(effect.delay),
             ...(effect.by === undefined ? {} : { by: effect.by }),
             ...(expansion.type === "iterate"
@@ -1560,9 +1572,17 @@ function motionPlan(
             ...(from === undefined ? {} : { from }),
             ...(easing === undefined ? {} : { easing }),
             ...(knownStart === undefined ? {} : { startMs: knownStart }),
-            ...(endMs === undefined
-              ? { completion: "unknown" as const }
-              : { endMs }),
+            ...(effect.preset === "breathe"
+              ? {
+                  fromColor: effect.fromColor,
+                  toColor: effect.toColor,
+                }
+              : {}),
+            ...(effect.repeatCount === "forever"
+              ? { completion: "no-natural-completion" as const }
+              : endMs === undefined
+                ? { completion: "unknown" as const }
+                : { endMs }),
             ...(startAfter === undefined ? {} : { startAfter }),
             stepKey: key,
             order: target.order + index,

@@ -63,6 +63,7 @@ export { createMorphScope } from "#/morph-api.ts";
 export type { MorphKey, MorphProps, MorphScope } from "#/morph-api.ts";
 export {
   after,
+  breathe,
   Box,
   Step,
   MotionScope,
@@ -70,6 +71,7 @@ export {
   fly,
   floatUp,
   motionCapability,
+  repeat,
   spin,
   spinIn,
   stretch,
@@ -83,7 +85,11 @@ export type {
   Effect,
   EffectOptions,
   EffectPreset,
+  BreatheEffect,
+  BreatheOptions,
   EmphasisEffect,
+  EmphasisEffectDeclaration,
+  EntranceEffectDeclaration,
   EntranceEffect,
   MotionDirection,
   MotionGranularity,
@@ -101,6 +107,8 @@ export type {
   MotionTargetRange,
   MotionTiming,
   MotionStepObservation,
+  RepeatCount,
+  RepeatedEffect,
   StepProps,
 } from "#/motion.ts";
 export type {

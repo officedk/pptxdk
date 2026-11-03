@@ -11,6 +11,7 @@ import {
   MotionScope,
   Shape,
   Slide,
+  spin,
   Step,
   Text,
   useMotionScope,
@@ -18,7 +19,7 @@ import {
 } from "@react-pptx/react-pptx";
 import { validatePptx } from "@react-pptx/validation";
 import { strFromU8, strToU8, unzipSync, zipSync } from "fflate";
-import { createElement, Fragment } from "react";
+import { createElement, Fragment, type ReactNode } from "react";
 import { describe, it } from "vitest";
 
 function movingShape(testId: string, duration: number) {
@@ -415,6 +416,23 @@ function startConditions(xml: string, timingId: number): string {
   const conditionsEnd = xml.indexOf("</p:stCondLst>", conditionsStart);
   assert.ok(conditionsStart > nodeStart && conditionsEnd > conditionsStart);
   return xml.slice(conditionsStart, conditionsEnd);
+}
+
+function assertTimingReferencesFollowDefinitions(xml: string): void {
+  const definitions = new Map<string, number>();
+  for (const match of xml.matchAll(/<p:cTn\b[^>]*\bid="(\d+)"/gu)) {
+    const id = match[1];
+    assert.ok(id);
+    assert.equal(definitions.has(id), false, `重复的时间节点定义 ${id}`);
+    definitions.set(id, match.index);
+  }
+  for (const match of xml.matchAll(/<p:tn\b[^>]*\bval="(\d+)"/gu)) {
+    const id = match[1];
+    assert.ok(id);
+    const definition = definitions.get(id);
+    assert.ok(definition !== undefined, `时间引用 ${id} 没有节点定义`);
+    assert.ok(definition < match.index, `时间引用 ${id} 出现在节点定义之前`);
+  }
 }
 
 function directTimingChildren(xml: string): string[] {
@@ -936,6 +954,132 @@ function ForwardConditionJoinAlias() {
           ),
         ),
       ),
+    ),
+  );
+}
+
+type RootEndChainRoot =
+  | "alias"
+  | "afterAlias"
+  | "afterAfterAlias"
+  | "host"
+  | "follower"
+  | "targetGroup";
+
+type RootEndChainOptions = {
+  readonly rootOrder: readonly RootEndChainRoot[];
+  readonly includeAfterAfterAlias?: boolean;
+  readonly includeTargetGroup?: boolean;
+  readonly explicitStep?: boolean;
+};
+
+function ForwardConditionJoinOrdinaryEndChain({
+  rootOrder,
+  includeAfterAfterAlias = false,
+  includeTargetGroup = false,
+  explicitStep = false,
+}: RootEndChainOptions) {
+  const host = useMotionScope();
+  const first = useMotionScope();
+  const delayed = useMotionScope();
+  const joined = useMotionScope();
+  const alias = useMotionScope();
+  const afterAlias = useMotionScope();
+  const afterAfterAlias = useMotionScope();
+  const follower = useMotionScope();
+  const targetGroupSequence = useMotionScope();
+  const targetGroupFollower = useMotionScope();
+  const source = createElement(
+    MotionScope,
+    { scope: host, mode: "sequence" },
+    createElement(
+      MotionScope,
+      { scope: first },
+      unknownLetterText("chain-first", "AB", 8),
+      createElement(
+        MotionScope,
+        { scope: delayed, delay: 1000 },
+        unknownLetterText("chain-delayed", "XY", 42),
+      ),
+    ),
+    createElement(
+      MotionScope,
+      { scope: joined, startAt: after(delayed.end, 11000) },
+      observedShape("chain-join", "Join", 76, "#ED7D31", 100),
+    ),
+  );
+  const targetGroupSource = createElement(
+    MotionScope,
+    { scope: targetGroupSequence, mode: "sequence" },
+    createElement(Shape, {
+      testId: "chain-target-group-source",
+      x: 10,
+      y: 220,
+      width: 280,
+      height: 24,
+      fill: "#7030A0",
+      text: "AB",
+      enter: fade({ by: "letter", duration: 100, intervalMs: 50 }),
+      emphasis: spin({ duration: 200 }),
+    }),
+    createElement(
+      MotionScope,
+      { scope: targetGroupFollower },
+      observedShape(
+        "chain-target-group-follower",
+        "Group follower",
+        248,
+        "#7030A0",
+        100,
+      ),
+    ),
+  );
+  const rootNodes: Record<RootEndChainRoot, ReactNode> = {
+    alias: createElement(
+      MotionScope,
+      { scope: alias, startAt: after(joined.start, 19) },
+      observedShape("chain-alias", "Alias", 108, "#C00000", 100),
+    ),
+    afterAlias: createElement(
+      MotionScope,
+      { scope: afterAlias, startAt: alias.end },
+      observedShape("chain-after-alias", "After alias", 136, "#4472C4", 100),
+    ),
+    afterAfterAlias: includeAfterAfterAlias
+      ? createElement(
+          MotionScope,
+          { scope: afterAfterAlias, startAt: after(afterAlias.end, 7) },
+          observedShape(
+            "chain-after-after-alias",
+            "After after alias",
+            164,
+            "#A5A5A5",
+            100,
+          ),
+        )
+      : null,
+    host: source,
+    follower: createElement(
+      MotionScope,
+      { scope: follower, startAt: host.end },
+      observedShape("chain-follower", "Follower", 192, "#70AD47", 100),
+    ),
+    targetGroup: includeTargetGroup ? targetGroupSource : null,
+  };
+  const roots = createElement(
+    Fragment,
+    null,
+    ...rootOrder.flatMap((root) =>
+      rootNodes[root] === null ? [] : [rootNodes[root]],
+    ),
+  );
+  return createElement(
+    Deck,
+    { width: 320, height: 280 },
+    createElement(
+      Slide,
+      { slideId: "forward-condition-join-ordinary-end-chain" },
+      explicitStep ? createElement(Step, { n: 2 }, roots) : roots,
     ),
   );
 }
@@ -1934,6 +2078,7 @@ describe("组件编排作用域", () => {
     const slidePart = unzipSync(result.pptx)["ppt/slides/slide1.xml"];
     assert.ok(slidePart);
     const xml = strFromU8(slidePart);
+    assertTimingReferencesFollowDefinitions(xml);
     const timingNodeIndex = (timingId: number | undefined) =>
       xml.indexOf(`<p:cTn id="${timingId}"`);
     const joinIndex = timingNodeIndex(join.timingId);
@@ -1953,6 +2098,108 @@ describe("组件编排作用域", () => {
         "u",
       ),
     );
+  });
+
+  it("排序 alias 时同时保留普通作用域完成依赖", async () => {
+    const variants: readonly RootEndChainOptions[] = [
+      {
+        rootOrder: ["alias", "afterAlias", "host", "follower"],
+      },
+      {
+        rootOrder: ["host", "afterAlias", "alias", "follower"],
+      },
+      {
+        rootOrder: [
+          "afterAfterAlias",
+          "alias",
+          "afterAlias",
+          "host",
+          "follower",
+          "targetGroup",
+        ],
+        includeAfterAfterAlias: true,
+        includeTargetGroup: true,
+        explicitStep: true,
+      },
+    ];
+    for (const options of variants) {
+      const result = await build(
+        createElement(ForwardConditionJoinOrdinaryEndChain, options),
+      );
+      const slide = result.report.slides[0];
+      const motion = slide?.capabilities?.["motion"] as MotionObservation;
+      const objectId = (testId: string) =>
+        slide?.objects.find(({ testId: id }) => id === testId)?.id;
+      const scopeContaining = (testId: string) =>
+        motion.scopes?.find(({ members }) =>
+          members.some(
+            (member) =>
+              member.kind === "object" && member.id === objectId(testId),
+          ),
+        );
+      const aliasScope = scopeContaining("chain-alias");
+      const afterAliasScope = scopeContaining("chain-after-alias");
+      assert.ok(aliasScope && afterAliasScope);
+      assert.deepEqual(afterAliasScope.startAfter, {
+        scopeId: aliasScope.id,
+        point: "end",
+        offsetMs: 0,
+      });
+      if (options.includeAfterAfterAlias === true) {
+        const afterAfterAliasScope = scopeContaining("chain-after-after-alias");
+        assert.ok(afterAfterAliasScope);
+        assert.deepEqual(afterAfterAliasScope.startAfter, {
+          scopeId: afterAliasScope.id,
+          point: "end",
+          offsetMs: 7,
+        });
+      }
+      if (options.includeTargetGroup === true) {
+        const targetGroupFollower = scopeContaining(
+          "chain-target-group-follower",
+        );
+        assert.ok(targetGroupFollower);
+        assert.deepEqual(targetGroupFollower.startAfter, {
+          targetId: objectId("chain-target-group-source"),
+          group: "effects",
+          point: "end",
+          offsetMs: 0,
+        });
+      }
+
+      const file = await validatePptx(result.pptx);
+      assert.deepEqual(file.errors, []);
+      assert.deepEqual(file.extensions, []);
+      assert.equal(
+        file.slides[0]?.animations?.[0]?.trigger,
+        options.explicitStep === true ? "click" : "auto",
+      );
+      const slidePart = unzipSync(result.pptx)["ppt/slides/slide1.xml"];
+      assert.ok(slidePart);
+      const xml = strFromU8(slidePart);
+      assertTimingReferencesFollowDefinitions(xml);
+      if (options.includeTargetGroup === true) {
+        const fileSlide = file.slides[0];
+        const groupFollowerEffect = fileSlide?.animations?.[0]?.effects.find(
+          ({ targetId }) =>
+            targetId === objectId("chain-target-group-follower"),
+        );
+        const group = fileSlide?.animationContainers?.find(
+          ({ timingId }) =>
+            timingId === groupFollowerEffect?.startAfter?.timingId,
+        );
+        assert.ok(group && groupFollowerEffect);
+        assert.equal(group.endSync, "all");
+        assert.equal(group.children.length, 2);
+        assert.deepEqual(
+          [
+            groupFollowerEffect.startAfter?.timingId,
+            groupFollowerEffect.startAfter?.offsetMs,
+          ],
+          [group.timingId, 0],
+        );
+      }
+    }
   });
 
   it("同父顺序成员间保留不可比较的未知完成约束和真实整体完成", async () => {
@@ -2672,6 +2919,9 @@ describe("组件编排作用域", () => {
       const file = await validatePptx(result.pptx);
       assert.deepEqual(file.errors, []);
       const effects = file.slides[0]?.animations?.[0]?.effects ?? [];
+      const slidePart = unzipSync(result.pptx)["ppt/slides/slide1.xml"];
+      assert.ok(slidePart);
+      assertTimingReferencesFollowDefinitions(strFromU8(slidePart));
       const sourceEffect = effects.find(
         ({ targetId }) => targetId === objectId("forward-source"),
       );

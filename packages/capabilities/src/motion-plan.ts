@@ -2082,6 +2082,108 @@ function motionPlan(
       };
     };
 
+    const conditionEvent = (id: string) => `condition:${id}`;
+    const nodePath = (node: MotionPlanNode): string | undefined =>
+      node.kind === "scope"
+        ? [...scopes.values()].find(
+            (scope) => scopeId(scope.declaration.identity, scopes) === node.id,
+          )?.path
+        : targets.get(node.targetId)?.path;
+    const sortNativeRoots = (
+      rootNodes: readonly MotionPlanNode[],
+    ): MotionPlanNode[] => {
+      const rootDefinitions = new Map<string, number>();
+      const rootReferences = rootNodes.map(
+        (): { readonly id: string; readonly node: MotionPlanNode }[] => [],
+      );
+      const collectRootDependencies = (
+        node: MotionPlanNode,
+        rootIndex: number,
+      ): void => {
+        if (node.kind === "scope") {
+          rootDefinitions.set(`scope:${node.id}`, rootIndex);
+        } else {
+          if (node.effects.length > 1) {
+            rootDefinitions.set(`target:${node.targetId}`, rootIndex);
+          }
+          for (const effect of node.effects) {
+            rootDefinitions.set(
+              eventSource({
+                targetId: effect.target.id,
+                effectIndex: effect.effectIndex,
+                ...(effect.partIndex === undefined
+                  ? {}
+                  : { partIndex: effect.partIndex }),
+                point: "end",
+                offsetMs: 0,
+              }),
+              rootIndex,
+            );
+          }
+        }
+        const collectDependency = (id: string) =>
+          rootReferences[rootIndex]?.push({ id, node });
+        if (node.nativeStart.kind === "end") {
+          collectDependency(eventSource(node.nativeStart.dependency));
+        } else if (node.nativeStart.kind === "condition-end") {
+          collectDependency(conditionEvent(node.nativeStart.id));
+        } else if (node.nativeStart.kind === "condition-join") {
+          rootDefinitions.set(conditionEvent(node.nativeStart.id), rootIndex);
+          for (const gate of node.nativeStart.gates) {
+            if (gate.kind === "end") {
+              collectDependency(eventSource(gate.dependency));
+            }
+          }
+        }
+        if (node.kind === "scope") {
+          for (const child of node.children) {
+            collectRootDependencies(child, rootIndex);
+          }
+        }
+      };
+      rootNodes.forEach((node, index) => collectRootDependencies(node, index));
+
+      // 只调整同一组原生时间节点的序列化顺序，依赖条件本身保持不变。
+      const nextRootNodes = rootNodes.map(() => new Set<number>());
+      const rootIndegrees = rootNodes.map(() => 0);
+      for (const [consumerIndex, references] of rootReferences.entries()) {
+        for (const reference of references) {
+          const definitionIndex = rootDefinitions.get(reference.id);
+          // 来源可能属于外层同一步根节点；由外层排序和最终顺序检查处理。
+          if (definitionIndex === undefined) continue;
+          if (
+            definitionIndex !== consumerIndex &&
+            !nextRootNodes[definitionIndex]?.has(consumerIndex)
+          ) {
+            nextRootNodes[definitionIndex]?.add(consumerIndex);
+            rootIndegrees[consumerIndex] =
+              (rootIndegrees[consumerIndex] ?? 0) + 1;
+          }
+        }
+      }
+      const readyRootNodes = rootIndegrees.flatMap((indegree, index) =>
+        indegree === 0 ? [index] : [],
+      );
+      const rootOrder: number[] = [];
+      while (readyRootNodes.length > 0) {
+        readyRootNodes.sort((left, right) => left - right);
+        const current = readyRootNodes.shift();
+        if (current === undefined) continue;
+        rootOrder.push(current);
+        for (const following of nextRootNodes[current] ?? []) {
+          const remaining = (rootIndegrees[following] ?? 0) - 1;
+          rootIndegrees[following] = remaining;
+          if (remaining === 0) readyRootNodes.push(following);
+        }
+      }
+      return rootOrder.length === rootNodes.length
+        ? rootOrder.flatMap((index) => {
+            const node = rootNodes[index];
+            return node === undefined ? [] : [node];
+          })
+        : [...rootNodes];
+    };
+
     const scopeNode = (scope: ScopeState): MotionPlanNode | undefined => {
       const children = activeChildren(scope).flatMap((member) => {
         if (member.kind === "scope") {
@@ -2108,7 +2210,7 @@ function motionPlan(
         kind: "scope",
         id: scopeId(scope.declaration.identity, scopes),
         nativeStart,
-        children,
+        children: sortNativeRoots(children),
       };
     };
 
@@ -2124,98 +2226,64 @@ function motionPlan(
       const node = targetNode(target);
       return node === undefined ? [] : [node];
     });
-    const rootDefinitions = new Map<string, number>();
-    const rootReferences = rootNodes.map(
-      (): { readonly id: string; readonly node: MotionPlanNode }[] => [],
-    );
-    const nodePath = (node: MotionPlanNode): string | undefined =>
-      node.kind === "scope"
-        ? [...scopes.values()].find(
-            (scope) => scopeId(scope.declaration.identity, scopes) === node.id,
-          )?.path
-        : targets.get(node.targetId)?.path;
-    const collectRootConditions = (
-      node: MotionPlanNode,
-      rootIndex: number,
-    ): void => {
-      if (node.nativeStart.kind === "condition-join") {
-        rootDefinitions.set(node.nativeStart.id, rootIndex);
-      } else if (node.nativeStart.kind === "condition-end") {
-        rootReferences[rootIndex]?.push({ id: node.nativeStart.id, node });
-      }
-      if (node.kind === "scope") {
-        for (const child of node.children) {
-          collectRootConditions(child, rootIndex);
-        }
-      }
-    };
-    rootNodes.forEach((node, index) => collectRootConditions(node, index));
-
-    // 步级根节点各自带有完整起点；只按别名依赖调整其 XML 定义先后。
-    const nextRootNodes = rootNodes.map(() => new Set<number>());
-    const rootIndegrees = rootNodes.map(() => 0);
-    for (const [consumerIndex, references] of rootReferences.entries()) {
-      for (const reference of references) {
-        const definitionIndex = rootDefinitions.get(reference.id);
-        if (definitionIndex === undefined) {
-          fail(
-            "unknown-motion-start",
-            "无法在当前时间计划中定位 alias 所引用的条件集合",
-            nodePath(reference.node),
-          );
-        }
-        if (
-          definitionIndex !== consumerIndex &&
-          !nextRootNodes[definitionIndex]?.has(consumerIndex)
-        ) {
-          nextRootNodes[definitionIndex]?.add(consumerIndex);
-          rootIndegrees[consumerIndex] =
-            (rootIndegrees[consumerIndex] ?? 0) + 1;
-        }
-      }
-    }
-    const readyRootNodes = rootIndegrees.flatMap((indegree, index) =>
-      indegree === 0 ? [index] : [],
-    );
-    const rootOrder: number[] = [];
-    while (readyRootNodes.length > 0) {
-      readyRootNodes.sort((left, right) => left - right);
-      const current = readyRootNodes.shift();
-      if (current === undefined) continue;
-      rootOrder.push(current);
-      for (const following of nextRootNodes[current] ?? []) {
-        const remaining = (rootIndegrees[following] ?? 0) - 1;
-        rootIndegrees[following] = remaining;
-        if (remaining === 0) readyRootNodes.push(following);
-      }
-    }
-    const nodes =
-      rootOrder.length === rootNodes.length
-        ? rootOrder.flatMap((index) => {
-            const node = rootNodes[index];
-            return node === undefined ? [] : [node];
-          })
-        : rootNodes;
+    const nodes = sortNativeRoots(rootNodes);
+    const definedEvents = new Set<string>();
     const definedConditions = new Set<string>();
-    const verifyConditionOrder = (node: MotionPlanNode): void => {
-      if (
-        node.nativeStart.kind === "condition-end" &&
-        !definedConditions.has(node.nativeStart.id)
-      ) {
+    const verifyEventReference = (id: string, node: MotionPlanNode): void => {
+      if (!definedEvents.has(id)) {
         fail(
           "unknown-motion-start",
-          "无法在消费者之前定义 alias 所引用的条件集合",
+          "原生完成来源必须在其条件引用之前定义",
           nodePath(node),
         );
       }
+    };
+    const verifyNodeOrder = (node: MotionPlanNode): void => {
       if (node.nativeStart.kind === "condition-join") {
-        definedConditions.add(node.nativeStart.id);
+        for (const gate of node.nativeStart.gates) {
+          if (gate.kind === "end") {
+            verifyEventReference(eventSource(gate.dependency), node);
+          }
+        }
+        definedConditions.add(conditionEvent(node.nativeStart.id));
       }
       if (node.kind === "scope") {
-        for (const child of node.children) verifyConditionOrder(child);
+        definedEvents.add(`scope:${node.id}`);
+      } else {
+        if (node.effects.length > 1) {
+          definedEvents.add(`target:${node.targetId}`);
+        }
+        for (const effect of node.effects) {
+          definedEvents.add(
+            eventSource({
+              targetId: effect.target.id,
+              effectIndex: effect.effectIndex,
+              ...(effect.partIndex === undefined
+                ? {}
+                : { partIndex: effect.partIndex }),
+              point: "end",
+              offsetMs: 0,
+            }),
+          );
+        }
+      }
+      if (node.nativeStart.kind === "end") {
+        verifyEventReference(eventSource(node.nativeStart.dependency), node);
+      } else if (
+        node.nativeStart.kind === "condition-end" &&
+        !definedConditions.has(conditionEvent(node.nativeStart.id))
+      ) {
+        fail(
+          "unknown-motion-start",
+          "条件集合必须在其消费者之前定义",
+          nodePath(node),
+        );
+      }
+      if (node.kind === "scope") {
+        for (const child of node.children) verifyNodeOrder(child);
       }
     };
-    for (const node of nodes) verifyConditionOrder(node);
+    for (const node of nodes) verifyNodeOrder(node);
     allStepNodes.set(key, nodes);
   }
 

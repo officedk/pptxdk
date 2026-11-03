@@ -175,6 +175,8 @@ type SequenceStartCausalityOptions = {
   readonly firstUnknown: boolean;
   readonly offsetMs: number;
   readonly explicitStep?: boolean;
+  readonly automaticClickStep?: boolean;
+  readonly wrapFirstInScope?: boolean;
 };
 
 function SequenceStartCausality({
@@ -182,9 +184,12 @@ function SequenceStartCausality({
   firstUnknown,
   offsetMs,
   explicitStep = false,
+  automaticClickStep = false,
+  wrapFirstInScope = false,
 }: SequenceStartCausalityOptions) {
   const source = useMotionScope();
   const follow = useMotionScope();
+  const firstScope = useMotionScope();
   const child = useMotionScope();
   const follower = useMotionScope();
   const sourceContent = sourceUnknown
@@ -215,6 +220,9 @@ function SequenceStartCausality({
         "AB",
       )
     : movingShape("causality-first", 137);
+  const firstMember = wrapFirstInScope
+    ? createElement(MotionScope, { scope: firstScope }, first)
+    : first;
   const content = createElement(
     Fragment,
     null,
@@ -222,7 +230,7 @@ function SequenceStartCausality({
     createElement(
       MotionScope,
       { scope: follow, mode: "sequence", startAt: after(source.end, 25) },
-      first,
+      firstMember,
       createElement(
         MotionScope,
         { scope: child, startAt: after(follow.start, offsetMs) },
@@ -241,7 +249,11 @@ function SequenceStartCausality({
     createElement(
       Slide,
       { slideId: "sequence-start-causality" },
-      explicitStep ? createElement(Step, { n: 2 }, content) : content,
+      explicitStep
+        ? createElement(Step, { n: 2 }, content)
+        : automaticClickStep
+          ? createElement(Step, null, content)
+          : content,
     ),
   );
 }
@@ -380,6 +392,16 @@ function startAtDelay(xml: string, timingId: number, delayMs: number): string {
   );
   assert.notEqual(rewritten, conditions);
   return xml.slice(0, conditionsStart) + rewritten + xml.slice(conditionsEnd);
+}
+
+function startConditions(xml: string, timingId: number): string {
+  const marker = `<p:cTn id="${timingId}"`;
+  const nodeStart = xml.indexOf(marker);
+  assert.notEqual(nodeStart, -1);
+  const conditionsStart = xml.indexOf("<p:stCondLst>", nodeStart);
+  const conditionsEnd = xml.indexOf("</p:stCondLst>", conditionsStart);
+  assert.ok(conditionsStart > nodeStart && conditionsEnd > conditionsStart);
+  return xml.slice(conditionsStart, conditionsEnd);
 }
 
 function StaggeredSource() {
@@ -1286,6 +1308,39 @@ describe("组件编排作用域", () => {
         offsetMs: 17,
       },
       {
+        sourceUnknown: true,
+        firstUnknown: false,
+        offsetMs: 136,
+      },
+      {
+        sourceUnknown: true,
+        firstUnknown: false,
+        offsetMs: 137,
+      },
+      {
+        sourceUnknown: true,
+        firstUnknown: false,
+        offsetMs: 200,
+      },
+      {
+        sourceUnknown: true,
+        firstUnknown: false,
+        offsetMs: 200,
+        automaticClickStep: true,
+      },
+      {
+        sourceUnknown: true,
+        firstUnknown: false,
+        offsetMs: 200,
+        explicitStep: true,
+      },
+      {
+        sourceUnknown: true,
+        firstUnknown: false,
+        offsetMs: 200,
+        wrapFirstInScope: true,
+      },
+      {
         sourceUnknown: false,
         firstUnknown: true,
         offsetMs: 17,
@@ -1334,12 +1389,25 @@ describe("组件编排作用域", () => {
       assert.ok(second);
       assert.ok(follower);
       if (options.sourceUnknown || options.firstUnknown) {
-        assert.deepEqual(
-          second.startAfter && "targetId" in second.startAfter
-            ? [second.startAfter.targetId, second.startAfter.point]
-            : undefined,
-          [objectId("causality-first"), "end"],
-        );
+        if (
+          options.sourceUnknown &&
+          !options.firstUnknown &&
+          options.offsetMs >= 200
+        ) {
+          assert.deepEqual(
+            second.startAfter && "scopeId" in second.startAfter
+              ? [second.startAfter.scopeId, second.startAfter.offsetMs]
+              : undefined,
+            ["scope-1", 225],
+          );
+        } else {
+          assert.deepEqual(
+            second.startAfter && "targetId" in second.startAfter
+              ? [second.startAfter.targetId, second.startAfter.point]
+              : undefined,
+            [objectId("causality-first"), "end"],
+          );
+        }
       } else {
         assert.equal(second.startMs, 299);
       }
@@ -1349,10 +1417,33 @@ describe("组件编排作用域", () => {
       const effects = file.slides[0]?.animations?.[0]?.effects ?? [];
       const fileEffect = (testId: string) =>
         effects.find(({ targetId }) => targetId === objectId(testId));
+      const fileSource = fileEffect("causality-source");
       const fileFirst = fileEffect("causality-first");
       const fileSecond = fileEffect("causality-second");
       const fileFollower = fileEffect("causality-follower");
-      assert.ok(fileFirst && fileSecond && fileFollower);
+      const containers = file.slides[0]?.animationContainers ?? [];
+      const sourceContainer = containers.find(
+        ({ children, endSync }) =>
+          endSync === "all" &&
+          children.some(
+            ({ kind, timingId }) =>
+              kind === "effect" && timingId === fileSource?.timingId,
+          ),
+      );
+      const child = containers.find(({ children }) =>
+        children.some(
+          ({ kind, timingId }) =>
+            kind === "effect" && timingId === fileSecond?.timingId,
+        ),
+      );
+      const follow =
+        child?.parentTimingId === undefined
+          ? undefined
+          : containers.find(
+              ({ timingId }) => timingId === child.parentTimingId,
+            );
+      assert.ok(fileSource && fileFirst && fileSecond && fileFollower);
+      assert.ok(sourceContainer && child && follow);
       if (options.firstUnknown) {
         assert.equal(fileFirst.by, "letter");
         assert.equal(fileFirst.completion, "unknown");
@@ -1363,27 +1454,27 @@ describe("组件编排作用域", () => {
         assert.equal(fileFirst.startAfter?.source, "container");
         assert.equal(fileFirst.startAfter?.offsetMs, 25);
       }
-      const child = file.slides[0]?.animationContainers?.find(
-        ({ children, endSync }) =>
-          endSync === "all" &&
-          children.some(
-            ({ kind, timingId }) =>
-              kind === "effect" && timingId === fileSecond.timingId,
-          ),
-      );
-      const follow = file.slides[0]?.animationContainers?.find(
-        ({ children, endSync }) =>
-          endSync === "all" &&
-          children.some(
-            ({ kind, timingId }) =>
-              kind === "effect" && timingId === fileFirst.timingId,
-          ) &&
-          children.some(
-            ({ kind, timingId }) =>
-              kind === "container" && timingId === child?.timingId,
-          ),
-      );
-      assert.ok(follow);
+      assert.equal(follow.endSync, "all");
+      if (
+        options.sourceUnknown &&
+        !options.firstUnknown &&
+        options.offsetMs >= 200
+      ) {
+        assert.equal(fileSecond.startAfter?.source, "container");
+        assert.equal(fileSecond.startAfter?.timingId, sourceContainer.timingId);
+        assert.equal(fileSecond.startAfter?.offsetMs, 25);
+        assert.equal(fileSecond.delayMs, 225);
+        assert.equal(child.startAfter, undefined);
+        const slideXml = unzipSync(result.pptx)["ppt/slides/slide1.xml"];
+        assert.ok(slideXml);
+        assert.match(
+          startConditions(strFromU8(slideXml), child.timingId),
+          /<p:cond delay="200"><\/p:cond>/u,
+        );
+      } else if (options.sourceUnknown || options.firstUnknown) {
+        assert.equal(fileSecond.startAfter?.timingId, fileFirst.timingId);
+        assert.equal(fileSecond.startAfter?.offsetMs, 0);
+      }
       if (options.sourceUnknown || options.firstUnknown) {
         assert.equal(fileFollower.startAfter?.timingId, follow.timingId);
         assert.equal(fileFollower.startAfter?.offsetMs, 11);
@@ -1393,7 +1484,9 @@ describe("组件编排作用域", () => {
       }
       assert.equal(
         file.slides[0]?.animations?.[0]?.trigger,
-        options.explicitStep === true ? "click" : "auto",
+        options.explicitStep === true || options.automaticClickStep === true
+          ? "click"
+          : "auto",
       );
     }
   });

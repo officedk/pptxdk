@@ -276,7 +276,8 @@ function eventTime(
 
 class MotionTimingFacts {
   private readonly successors = new Map<string, Map<string, number>>();
-  private readonly exactSuccessors = new Map<string, Map<string, number>>();
+  // 精确时差可正反推导；反向关系不进入必要前置图的环检查。
+  private readonly exactRelations = new Map<string, Map<string, number>>();
   private readonly exactTimes = new Map<string, number>();
 
   setExactTime(eventId: string, timeMs: number, path: string): void {
@@ -297,7 +298,6 @@ class MotionTimingFacts {
     offsetMs: number,
     path: string,
   ): void {
-    this.addLowerBound(before, after, offsetMs, path);
     const exactBefore = this.exactTime(before);
     const exactAfter = this.exactTime(after);
     if (
@@ -307,22 +307,39 @@ class MotionTimingFacts {
     ) {
       fail("motion-plan-conflict", "精确编排时差与已知时刻冲突", path);
     }
-    const edges = this.exactSuccessors.get(before) ?? new Map<string, number>();
-    const existing = edges.get(after);
+    const existing = this.exactRelations.get(before)?.get(after);
     if (existing !== undefined && existing !== offsetMs) {
       fail("motion-plan-conflict", "同一编排事件得到冲突的精确时差", path);
     }
+    const existingReverse = this.exactRelations.get(after)?.get(before);
+    if (existingReverse !== undefined && existingReverse !== -offsetMs) {
+      fail("motion-plan-conflict", "同一编排事件得到冲突的精确时差", path);
+    }
+    const edges = this.exactRelations.get(before) ?? new Map<string, number>();
     edges.set(after, offsetMs);
-    this.exactSuccessors.set(before, edges);
+    this.exactRelations.set(before, edges);
+    const reverseEdges =
+      this.exactRelations.get(after) ?? new Map<string, number>();
+    reverseEdges.set(before, -offsetMs);
+    this.exactRelations.set(after, reverseEdges);
   }
 
   exactOffset(before: string, after: string): number | undefined {
     const exactBefore = this.exactTime(before);
     const exactAfter = this.exactTime(after);
-    if (exactBefore !== undefined && exactAfter !== undefined) {
-      return exactAfter - exactBefore;
+    const exactDifference =
+      exactBefore === undefined || exactAfter === undefined
+        ? undefined
+        : exactAfter - exactBefore;
+    const relationDifference = this.exactPath(before, after);
+    if (
+      exactDifference !== undefined &&
+      relationDifference !== undefined &&
+      exactDifference !== relationDifference
+    ) {
+      fail("motion-plan-conflict", "精确编排时差与已知时刻冲突");
     }
-    return this.exactPath(before, after, new Set());
+    return relationDifference ?? exactDifference;
   }
 
   addLowerBound(
@@ -358,15 +375,13 @@ class MotionTimingFacts {
   }
 
   lowerBound(before: string, after: string): number | undefined {
-    const exactBefore = this.exactTime(before);
-    const exactAfter = this.exactTime(after);
-    const exactDifference =
-      exactBefore === undefined || exactAfter === undefined
-        ? undefined
-        : exactAfter - exactBefore;
+    const exactDifference = this.exactOffset(before, after);
     const pathDifference = this.longestPath(before, after, new Set());
     if (exactDifference === undefined) return pathDifference;
     if (pathDifference === undefined) return exactDifference;
+    if (pathDifference > exactDifference) {
+      fail("motion-plan-conflict", "编排时差事实与精确时差冲突");
+    }
     return Math.max(exactDifference, pathDifference);
   }
 
@@ -414,26 +429,29 @@ class MotionTimingFacts {
     return longest;
   }
 
-  private exactPath(
-    from: string,
-    to: string,
-    visited: Set<string>,
-  ): number | undefined {
+  private exactPath(from: string, to: string): number | undefined {
     if (from === to) return 0;
-    if (visited.has(from)) return undefined;
-    visited.add(from);
-    let exact: number | undefined;
-    for (const [next, weight] of this.exactSuccessors.get(from) ?? []) {
-      const remaining = this.exactPath(next, to, visited);
-      if (remaining === undefined) continue;
-      const candidate = weight + remaining;
-      if (exact !== undefined && exact !== candidate) {
-        fail("motion-plan-conflict", "同一编排时刻存在冲突的精确关系");
+    const offsets = new Map<string, number>([[from, 0]]);
+    const pending = [from];
+    for (let index = 0; index < pending.length; index += 1) {
+      const current = pending[index];
+      if (current === undefined) continue;
+      const currentOffset = offsets.get(current);
+      if (currentOffset === undefined) continue;
+      for (const [next, difference] of this.exactRelations.get(current) ?? []) {
+        const candidate = currentOffset + difference;
+        const existing = offsets.get(next);
+        if (existing !== undefined) {
+          if (existing !== candidate) {
+            fail("motion-plan-conflict", "同一编排时刻存在冲突的精确关系");
+          }
+          continue;
+        }
+        offsets.set(next, candidate);
+        pending.push(next);
       }
-      exact = candidate;
     }
-    visited.delete(from);
-    return exact;
+    return offsets.get(to);
   }
 }
 
@@ -593,6 +611,16 @@ function completion(
   if (end.state === "no-natural-completion") return end;
   if (end.state === "known") {
     facts.setExactTime(eventId, end.timeMs, path);
+  }
+  if (end.candidates.length === 1) {
+    const [winner] = end.candidates;
+    if (winner !== undefined) {
+      // 唯一胜出的真实完成事件与整体结束保持精确等价，绝对时刻仍可未知。
+      facts.addLowerBound(winner.eventId, eventId, winner.offsetMs, path);
+      facts.addExactOffset(winner.eventId, eventId, winner.offsetMs, path);
+    }
+  }
+  if (end.state === "known") {
     return eventTime(eventId, "known", end.timeMs, dependency);
   }
   return eventTime(eventId, "unknown", undefined, dependency);
@@ -719,7 +747,13 @@ function effectEnd(
       : expansion.type === "iterate"
         ? 0
         : durationMs;
-  facts.addLowerBound(startEventId, endEventId, minimumDuration, target.path);
+  if (expansion.type === "iterate") {
+    facts.addLowerBound(startEventId, endEventId, minimumDuration, target.path);
+  } else {
+    // 有限行为保留相对时差，不要求效果起点已有绝对数值。
+    facts.addLowerBound(startEventId, endEventId, durationMs, target.path);
+    facts.addExactOffset(startEventId, endEventId, durationMs, target.path);
+  }
   if (expansion.type !== "iterate" && start.state === "known") {
     const endMs = start.timeMs + durationMs;
     facts.setExactTime(endEventId, endMs, target.path);
@@ -1075,19 +1109,6 @@ function motionPlan(
       if (candidate.eventId === parentStart.eventId) {
         return { kind: "parent-start", delayMs: candidate.offsetMs };
       }
-      const exactParentOffset = facts.exactOffset(
-        candidate.eventId,
-        parentStart.eventId,
-      );
-      if (
-        exactParentOffset !== undefined &&
-        candidate.offsetMs >= exactParentOffset
-      ) {
-        return {
-          kind: "parent-start",
-          delayMs: candidate.offsetMs - exactParentOffset,
-        };
-      }
       if (
         parentStart.nativeStart?.kind === "end" &&
         dependencyEventId(parentStart.nativeStart.dependency) ===
@@ -1098,6 +1119,7 @@ function motionPlan(
         if (delayMs >= 0) return { kind: "parent-start", delayMs };
       }
 
+      // 保留仍晚于父启动的真实完成事件；仅在它已先于父启动时改用精确偏移。
       const eventAfterParent =
         parentStart.eventId === undefined
           ? undefined
@@ -1121,6 +1143,19 @@ function motionPlan(
             candidate.dependency,
             candidate.offsetMs,
           ),
+        };
+      }
+      const exactParentOffset = facts.exactOffset(
+        candidate.eventId,
+        parentStart.eventId,
+      );
+      if (
+        exactParentOffset !== undefined &&
+        candidate.offsetMs >= exactParentOffset
+      ) {
+        return {
+          kind: "parent-start",
+          delayMs: candidate.offsetMs - exactParentOffset,
         };
       }
       fail(

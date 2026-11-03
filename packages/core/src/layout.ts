@@ -14,6 +14,7 @@ import Yoga, {
 } from "yoga-layout";
 
 import { BuildError, CapabilityError } from "#/diagnostics.ts";
+import { textStyleFrom } from "#/theme.ts";
 import type {
   CapabilityChild,
   CapabilityElement,
@@ -23,6 +24,8 @@ import type {
   GeometryBox,
   LayoutLength,
   LayoutStyle,
+  ThemeContext,
+  ThemeScope,
   ObjectCapabilityModule,
 } from "#/types.ts";
 
@@ -64,6 +67,7 @@ type LayoutNode = {
   readonly yoga: YogaNode;
   readonly element?: CapabilityElement;
   readonly style: LayoutStyle;
+  readonly theme: ThemeContext;
   readonly path: string;
   readonly module?: ObjectCapabilityModule;
   parent?: LayoutNode;
@@ -80,6 +84,7 @@ type LayoutNode = {
 
 export type LayoutPassResult = {
   readonly boxes: WeakMap<CapabilityElement, GeometryBox>;
+  readonly themes: WeakMap<CapabilityElement, ThemeContext>;
   readonly hidden: WeakSet<CapabilityElement>;
   readonly warnings: readonly Diagnostic[];
 };
@@ -140,6 +145,8 @@ const textProperties = new Set([
   "color",
   "lineHeight",
   "verticalAlign",
+  "align",
+  "spacingAfter",
 ]);
 const containerProperties = [
   "flexDirection",
@@ -183,6 +190,23 @@ function diagnostic(path: string, code: string, message: string): Diagnostic {
 
 function fail(path: string, code: string, message: string): never {
   throw new BuildError([diagnostic(path, code, message)]);
+}
+
+function deriveTheme(
+  parent: ThemeContext,
+  scope: ThemeScope | undefined,
+  style: ReturnType<typeof textStyleFrom>,
+  path: string,
+): ThemeContext {
+  try {
+    return parent.with(scope, style);
+  } catch (error) {
+    fail(
+      path,
+      error instanceof CapabilityError ? error.code : "invalid-theme-scope",
+      error instanceof Error ? error.message : String(error),
+    );
+  }
 }
 
 function record(value: unknown): value is Record<string, unknown> {
@@ -407,7 +431,12 @@ function resolvePercent(
 
 // 这里只允许共享文字样式属性通过布局白名单；具体校验仍由能力模块负责。
 function allowsSharedTextStyle(type: string): boolean {
-  return type === "rp:text" || type === "rp:table" || type === "rp:chart";
+  return (
+    type === "rp:text" ||
+    type === "rp:table" ||
+    type === "rp:chart" ||
+    type === "rp:box"
+  );
 }
 
 function identity(element: CapabilityElement): string | undefined {
@@ -924,6 +953,7 @@ export class LayoutPass {
   readonly #dimensions: Dimensions;
   readonly #config = Yoga.Config.create();
   readonly #boxes = new WeakMap<CapabilityElement, GeometryBox>();
+  readonly #themes = new WeakMap<CapabilityElement, ThemeContext>();
   readonly #hidden = new WeakSet<CapabilityElement>();
   readonly #warnings: Diagnostic[] = [];
   readonly #warningKeys = new Set<string>();
@@ -940,13 +970,15 @@ export class LayoutPass {
   run(
     children: readonly CapabilityChild[],
     parentPath: string,
+    theme: ThemeContext,
     slideStyle?: unknown,
   ): LayoutPassResult {
-    const style = readStyle(slideStyle, parentPath, true, false);
     const rootYoga = Yoga.Node.create(this.#config);
+    const rootStyle = readStyle(slideStyle, parentPath, true, true);
     const root: LayoutNode = {
       yoga: rootYoga,
-      style,
+      style: rootStyle,
+      theme,
       path: parentPath,
       children: [],
       escaped: [],
@@ -954,13 +986,14 @@ export class LayoutPass {
     rootYoga.setWidth(this.#dimensions.width);
     rootYoga.setHeight(this.#dimensions.height);
     rootYoga.setPositionType(PositionType.Relative);
-    this.#applyStyle(rootYoga, style, { display: "block" }, true, true);
+    this.#applyStyle(rootYoga, rootStyle, { display: "block" }, true, true);
     try {
       this.#appendChildren(
         children,
         parentPath,
         root,
         slideStyle !== undefined,
+        theme,
       );
       this.#prepareTextBaselines(root);
       // 固定尺寸父节点可能跳过新建测量树；先初次求解，再标脏测量叶并重算。
@@ -1005,6 +1038,7 @@ export class LayoutPass {
     }
     return {
       boxes: this.#boxes,
+      themes: this.#themes,
       hidden: this.#hidden,
       warnings: this.#warnings,
     };
@@ -1030,11 +1064,13 @@ export class LayoutPass {
     );
   }
 
+  // 透明 Group 不在布局树中，因此主题上下文必须沿声明树单独传递。
   #appendChildren(
     children: readonly CapabilityChild[],
     parentPath: string,
     parent: LayoutNode,
     includeObjects: boolean,
+    themeContext: ThemeContext,
   ): void {
     children.forEach((child, index) => {
       if (!element(child)) return;
@@ -1048,14 +1084,14 @@ export class LayoutPass {
           child.props["style"],
           childPath,
           true,
-          false,
+          true,
         );
         if (childStyle.display === "none") {
           this.#markHidden(child);
           return;
         }
         this.#validateItemStyle(childStyle, parent, childPath);
-        const built = this.#buildBox(child, childPath, parent);
+        const built = this.#buildBox(child, childPath, parent, themeContext);
         this.#appendLayoutChild(parent, built);
         return;
       }
@@ -1064,7 +1100,7 @@ export class LayoutPass {
           child.props["style"],
           childPath,
           true,
-          false,
+          true,
         );
         if (childStyle.display === "none") {
           this.#markHidden(child);
@@ -1072,15 +1108,29 @@ export class LayoutPass {
         }
         this.#validateItemStyle(childStyle, parent, childPath);
         if (!includeObjects) {
+          // Group 的文字默认值只作用于后代，不代表它要成为布局项。
           const optsIntoLayout = Object.keys(childStyle).some(
-            (key) => key !== "zIndex",
+            (key) => key !== "zIndex" && !textProperties.has(key),
           );
           if (!optsIntoLayout) {
-            this.#appendChildren(child.children, childPath, parent, false);
+            const groupTheme = deriveTheme(
+              themeContext,
+              child.props["theme"] as ThemeScope | undefined,
+              textStyleFrom(child.props["style"]),
+              childPath,
+            );
+            this.#themes.set(child, groupTheme);
+            this.#appendChildren(
+              child.children,
+              childPath,
+              parent,
+              false,
+              groupTheme,
+            );
             return;
           }
         }
-        const built = this.#buildGroup(child, childPath, parent);
+        const built = this.#buildGroup(child, childPath, parent, themeContext);
         this.#appendLayoutChild(parent, built);
         return;
       }
@@ -1093,14 +1143,28 @@ export class LayoutPass {
       }
       const module = this.#modules.get(child.type);
       if (module !== undefined && "compileDeclaration" in module) {
-        this.#appendChildren(child.children, childPath, parent, includeObjects);
+        this.#themes.set(child, themeContext);
+        this.#appendChildren(
+          child.children,
+          childPath,
+          parent,
+          includeObjects,
+          themeContext,
+        );
         return;
       }
       if (!includeObjects) {
+        this.#themes.set(child, themeContext);
         if (looseStyle !== undefined)
           this.#validateItemStyle(looseStyle, parent, childPath);
         if (looseStyle !== undefined && this.#requiresLooseLayout(looseStyle)) {
-          const built = this.#buildObject(child, childPath, parent, looseStyle);
+          const built = this.#buildObject(
+            child,
+            childPath,
+            parent,
+            looseStyle,
+            themeContext,
+          );
           if (built !== undefined) {
             this.#positionLooseGeometry(built);
             this.#appendLayoutChild(parent, built);
@@ -1130,6 +1194,7 @@ export class LayoutPass {
         childPath,
         parent,
         childStyle,
+        themeContext,
       );
       if (layoutChild === undefined) return;
       this.#appendLayoutChild(parent, layoutChild);
@@ -1246,9 +1311,10 @@ export class LayoutPass {
     input: CapabilityElement,
     path: string,
     parent: LayoutNode,
+    themeContext: ThemeContext,
   ): LayoutNode {
     const unknown = Object.keys(input.props).find(
-      (key) => key !== "testId" && key !== "style",
+      (key) => key !== "testId" && key !== "style" && key !== "theme",
     );
     if (input.props["morphKey"] !== undefined) {
       fail(
@@ -1267,19 +1333,28 @@ export class LayoutPass {
     ) {
       fail(path, "invalid-parameter", "testId 必须是非空字符串");
     }
-    const style = readStyle(input.props["style"], path, true, false);
+    const rawStyle = input.props["style"];
+    const style = readStyle(rawStyle, path, true, true);
+    const theme = deriveTheme(
+      themeContext,
+      input.props["theme"] as ThemeScope | undefined,
+      textStyleFrom(rawStyle),
+      path,
+    );
     const yoga = Yoga.Node.create(this.#config);
     const node: LayoutNode = {
       yoga,
       element: input,
       style,
+      theme,
       path,
       children: [],
       parent,
       escaped: [],
     };
+    this.#themes.set(input, theme);
     this.#applyStyle(yoga, style, parent.style, false, true);
-    this.#appendChildren(input.children, path, node, true);
+    this.#appendChildren(input.children, path, node, true, theme);
     return node;
   }
 
@@ -1287,6 +1362,7 @@ export class LayoutPass {
     input: CapabilityElement,
     path: string,
     parent: LayoutNode,
+    themeContext: ThemeContext,
   ): LayoutNode {
     const unknown = Object.keys(input.props).find(
       (key) =>
@@ -1294,6 +1370,7 @@ export class LayoutPass {
           "testId",
           "name",
           "style",
+          "theme",
           "enter",
           "emphasis",
           "motion",
@@ -1304,19 +1381,27 @@ export class LayoutPass {
     );
     if (unknown !== undefined)
       fail(path, "unknown-parameter", `Group 含未实现参数 ${unknown}`);
-    const style = readStyle(input.props["style"], path, true, false);
+    const style = readStyle(input.props["style"], path, true, true);
+    const theme = deriveTheme(
+      themeContext,
+      input.props["theme"] as ThemeScope | undefined,
+      textStyleFrom(input.props["style"]),
+      path,
+    );
     const yoga = Yoga.Node.create(this.#config);
     const node: LayoutNode = {
       yoga,
       element: input,
       style,
+      theme,
       path,
       children: [],
       parent,
       escaped: [],
     };
+    this.#themes.set(input, theme);
     this.#applyStyle(yoga, style, parent.style, false, true);
-    this.#appendChildren(input.children, path, node, true);
+    this.#appendChildren(input.children, path, node, true, theme);
     return node;
   }
 
@@ -1357,6 +1442,7 @@ export class LayoutPass {
     path: string,
     parent: LayoutNode,
     style: LayoutStyle,
+    themeContext: ThemeContext,
   ): LayoutNode | undefined {
     const module = this.#modules.get(input.type);
     if (!objectModule(module)) return undefined;
@@ -1365,12 +1451,14 @@ export class LayoutPass {
       yoga,
       element: input,
       style,
+      theme: themeContext,
       path,
       module,
       children: [],
       parent,
       escaped: [],
     };
+    this.#themes.set(input, themeContext);
     this.#applyStyle(yoga, style, parent.style, false, false);
     this.#setDeclaredSize(node);
     if (style.position === "absolute") {
@@ -2068,7 +2156,10 @@ export class LayoutPass {
       return undefined;
     }
     try {
-      return node.module.measureLayout(node.element, request);
+      return node.module.measureLayout(node.element, {
+        ...request,
+        theme: node.theme,
+      });
     } catch (error) {
       if (error instanceof BuildError) throw error;
       const code =

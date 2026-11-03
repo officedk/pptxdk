@@ -6,6 +6,8 @@ import {
   type CapabilityModule,
   type LayoutStyle,
   type ObjectObservation,
+  type TextStyle,
+  type ThemeScope,
 } from "@react-pptx/core";
 import type { ReactNode } from "react";
 
@@ -21,7 +23,8 @@ export type GroupProps = MotionProps &
   MorphProps & {
     readonly testId?: string;
     readonly name?: string;
-    readonly style?: LayoutStyle;
+    readonly style?: LayoutStyle & TextStyle;
+    readonly theme?: ThemeScope;
     readonly children?: ReactNode;
   };
 
@@ -30,6 +33,7 @@ const allowedParameters = [
   "name",
   "morphKey",
   "style",
+  "theme",
   "enter",
   "emphasis",
   "motion",

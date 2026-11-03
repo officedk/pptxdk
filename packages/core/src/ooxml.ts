@@ -1,3 +1,5 @@
+import { defaultTheme, isFont, nativeColorSlots, type Theme } from "#/theme.ts";
+
 export function pxToEmu(value: number): number {
   return Math.round(value * 9525);
 }
@@ -137,15 +139,32 @@ function contentTypes(
   );
 }
 
-function theme(): string {
-  const colors = `<a:clrScheme name="Office"><a:dk1><a:sysClr val="windowText" lastClr="000000"/></a:dk1><a:lt1><a:sysClr val="window" lastClr="FFFFFF"/></a:lt1><a:dk2><a:srgbClr val="1F497D"/></a:dk2><a:lt2><a:srgbClr val="EEECE1"/></a:lt2><a:accent1><a:srgbClr val="4F81BD"/></a:accent1><a:accent2><a:srgbClr val="C0504D"/></a:accent2><a:accent3><a:srgbClr val="9BBB59"/></a:accent3><a:accent4><a:srgbClr val="8064A2"/></a:accent4><a:accent5><a:srgbClr val="4BACC6"/></a:accent5><a:accent6><a:srgbClr val="F79646"/></a:accent6><a:hlink><a:srgbClr val="0000FF"/></a:hlink><a:folHlink><a:srgbClr val="800080"/></a:folHlink></a:clrScheme>`;
-  const fonts = `<a:fontScheme name="Office"><a:majorFont><a:latin typeface="Aptos Display"/><a:ea typeface=""/><a:cs typeface=""/></a:majorFont><a:minorFont><a:latin typeface="Aptos"/><a:ea typeface=""/><a:cs typeface=""/></a:minorFont></a:fontScheme>`;
+function themePart(value: Theme): string {
+  const name = xmlEscape(value.name);
+  const colors = `<a:clrScheme name="${name}">${nativeColorSlots
+    .map((slot) => {
+      const color = value.colors[slot];
+      if (!/^#[0-9a-f]{6}$/iu.test(color)) {
+        throw new Error(`Theme.colors.${slot} 必须是 #RRGGBB 颜色`);
+      }
+      const schemeName =
+        slot === "hlink" ? "hlink" : slot === "folHlink" ? "folHlink" : slot;
+      return `<a:${schemeName}><a:srgbClr val="${color.slice(1).toUpperCase()}"/></a:${schemeName}>`;
+    })
+    .join("")}</a:clrScheme>`;
+  const major = isFont(value.fonts.major)
+    ? value.fonts.major.family
+    : value.fonts.major;
+  const minor = isFont(value.fonts.minor)
+    ? value.fonts.minor.family
+    : value.fonts.minor;
+  const fonts = `<a:fontScheme name="${name}"><a:majorFont><a:latin typeface="${xmlEscape(major)}"/><a:ea typeface=""/><a:cs typeface=""/></a:majorFont><a:minorFont><a:latin typeface="${xmlEscape(minor)}"/><a:ea typeface=""/><a:cs typeface=""/></a:minorFont></a:fontScheme>`;
   const fill = `<a:solidFill><a:schemeClr val="phClr"/></a:solidFill>`;
   const line = `<a:ln w="6350"><a:solidFill><a:schemeClr val="phClr"/></a:solidFill></a:ln>`;
   const effect = `<a:effectStyle><a:effectLst/></a:effectStyle>`;
   const format = `<a:fmtScheme name="Office"><a:fillStyleLst>${fill}${fill}${fill}</a:fillStyleLst><a:lnStyleLst>${line}${line}${line}</a:lnStyleLst><a:effectStyleLst>${effect}${effect}${effect}</a:effectStyleLst><a:bgFillStyleLst>${fill}${fill}${fill}</a:bgFillStyleLst></a:fmtScheme>`;
   return xmlDocument(
-    `<a:theme xmlns:a="${namespaces.a}" name="Office Theme"><a:themeElements>${colors}${fonts}${format}</a:themeElements><a:objectDefaults/><a:extraClrSchemeLst/></a:theme>`,
+    `<a:theme xmlns:a="${namespaces.a}" name="${name}"><a:themeElements>${colors}${fonts}${format}</a:themeElements><a:objectDefaults/><a:extraClrSchemeLst/></a:theme>`,
   );
 }
 
@@ -183,6 +202,7 @@ export function pptxParts(
   packageRelationships: readonly PptxPackageRelationshipSet[] = [],
   presentationContent = "",
   presentationAttributes: readonly { name: string; value: string }[] = [],
+  themeValue: Theme = defaultTheme,
 ): Record<string, string | Uint8Array> {
   const slideRelationships = slides.map((_, index) => ({
     id: `rId${index + 2}`,
@@ -242,7 +262,7 @@ export function pptxParts(
         target: "../slideMasters/slideMaster1.xml",
       },
     ]),
-    "ppt/theme/theme1.xml": theme(),
+    "ppt/theme/theme1.xml": themePart(themeValue),
   };
   slides.forEach(({ shapeXml, slideXml }, index) => {
     parts[`ppt/slides/slide${index + 1}.xml`] = slide(

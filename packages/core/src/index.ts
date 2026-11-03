@@ -4,7 +4,37 @@ export { Box, Deck, Slide } from "#/elements.ts";
 export { createMorphScope } from "#/morph.ts";
 export type { MorphKey, MorphScope } from "#/morph.ts";
 export { pxToEmu, xmlEscape } from "#/ooxml.ts";
+export {
+  darker,
+  defaultTheme,
+  defineTheme,
+  isNativeColorSlot,
+  lighter,
+  nativeColorSlots,
+  resolvedColorXml,
+} from "#/theme.ts";
 export { formatBaseline, targets } from "#/types.ts";
+export type {
+  ColorValue,
+  Font,
+  FontFace,
+  FontFaceStyle,
+  FontOptions,
+  FontReference,
+  FontSize,
+  FontToken,
+  NativeColorSlot,
+  ResolvedColor,
+  ResolvedThemeFont,
+  TextAlignment,
+  TextStyle,
+  Theme,
+  ThemeColor,
+  ThemeContext,
+  ThemeInput,
+  ThemeScope,
+  ThemeShade,
+} from "#/theme.ts";
 export type {
   BuildOptions,
   BuildReport,

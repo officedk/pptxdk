@@ -687,6 +687,7 @@ function dateNameCharactersForLocale(
   if (languageId === undefined) return undefined;
   const normalizedLanguageId = languageId.padStart(4, "0").toUpperCase();
   if (normalizedLanguageId === "0409") return dateNameCharacters;
+  // 明确指定但未登记名称字形的 locale 不伪装成英文。
   return dateNameCharactersByLocale[normalizedLanguageId];
 }
 

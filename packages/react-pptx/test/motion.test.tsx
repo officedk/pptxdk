@@ -2162,6 +2162,51 @@ describe("对象动画", () => {
     );
   });
 
+  it("在 whole 数组的共享文字构建组中保留 Fly 的背景角色", async () => {
+    const result = await build(
+      createElement(
+        Deck,
+        { width: 1280, height: 900 },
+        createElement(
+          Slide,
+          { slideId: "whole-text-background-array" },
+          createElement(Text, {
+            testId: "filled-whole-array",
+            x: 800,
+            y: 500,
+            width: 400,
+            height: 160,
+            style: {
+              backgroundColor: "#38BDF8",
+              borderColor: "#1D4ED8",
+              borderWidth: 4,
+            },
+            enter: [fly({ from: "left", duration: 4000 }), fade()],
+            children: [
+              createElement(P, { key: "first" }, "First paragraph"),
+              createElement(P, { key: "second" }, "Second paragraph"),
+            ],
+          }),
+        ),
+      ),
+    );
+    const file = await validatePptx(result.pptx);
+    assert.deepEqual(file.errors, []);
+    assert.deepEqual(
+      file.slides[0]?.animations?.flatMap(({ effects }) =>
+        effects.map(({ preset, nativeBuild, nativeBuildAnimBg }) => [
+          preset,
+          nativeBuild,
+          nativeBuildAnimBg,
+        ]),
+      ),
+      [
+        ["fly", "paragraph", true],
+        ["fade", "paragraph", true],
+      ],
+    );
+  });
+
   it("保留原生 Group 并将有限整体 Spin 投影到全部真实成员", async () => {
     const result = await build(
       createElement(
@@ -2362,6 +2407,80 @@ describe("对象动画", () => {
       ).length,
       2,
     );
+  });
+
+  it("为纯 whole Text entrance 数组增加原生段落构建层但保留逻辑 whole target", async () => {
+    const result = await build(
+      createElement(
+        Deck,
+        { width: 1280, height: 900 },
+        createElement(
+          Slide,
+          { slideId: "whole-text-motion-array" },
+          createElement(Text, {
+            testId: "whole-array-text",
+            x: 800,
+            y: 500,
+            width: 400,
+            height: 160,
+            enter: [
+              fly({ from: "left", duration: 4000 }),
+              spinIn({ duration: 4000 }),
+            ],
+            children: [
+              createElement(
+                P,
+                { key: "long" },
+                "A deliberately long first paragraph",
+              ),
+              createElement(P, { key: "short" }, "A shorter indented item"),
+            ],
+          }),
+        ),
+      ),
+    );
+    const logicalMotion = result.report.slides[0]?.capabilities?.[
+      "motion"
+    ] as MotionObservation;
+    assert.deepEqual(
+      logicalMotion.steps[0]?.effects.map(({ preset, target, by }) => [
+        preset,
+        target.range,
+        by,
+      ]),
+      [
+        ["fly", undefined, undefined],
+        ["spinIn", undefined, undefined],
+      ],
+    );
+
+    const file = await validatePptx(result.pptx);
+    assert.deepEqual(file.errors, []);
+    const effects = file.slides[0]?.animations?.[0]?.effects ?? [];
+    assert.deepEqual(
+      effects.map(({ preset, nativeBuild, nativeBuildGroupId }) => [
+        preset,
+        nativeBuild,
+        nativeBuildGroupId,
+      ]),
+      [
+        ["fly", "paragraph", 1],
+        ["spinIn", "paragraph", 1],
+      ],
+    );
+    for (const effect of effects) {
+      const paragraphIndexes = new Set(
+        effect.nativeBehaviors?.flatMap(({ targetType, targetRange }) =>
+          targetType === "paragraph" && targetRange?.type === "paragraph"
+            ? [targetRange.start]
+            : [],
+        ),
+      );
+      assert.deepEqual(
+        [...paragraphIndexes].sort((left, right) => left - right),
+        [0, 1],
+      );
+    }
   });
 
   it("将八种既有 whole Text 预设逐段写出并独立读回全部原生范围", async () => {

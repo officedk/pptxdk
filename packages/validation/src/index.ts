@@ -383,7 +383,7 @@ function validWholeTextProjection(
   const backgroundBehaviors = behaviors.filter(
     ({ targetType }) => targetType === "background",
   );
-  if (backgroundBehaviors.length === 0) return !animBg;
+  if (backgroundBehaviors.length === 0) return true;
   const expectedBackgroundRoles = textProjectionBackgroundRoles[preset];
   return (
     animBg &&
@@ -3546,6 +3546,29 @@ function readSlideAnimations(
   const buildList = first(timing, presentationNamespace, "bldLst");
   const paragraphBuildKey = (targetId: number, groupId: number): string =>
     `${targetId}:${groupId}`;
+  const backgroundBuildGroups = new Set<string>();
+  for (const node of timingTreeNodes.values()) {
+    if (node.kind !== "effect") continue;
+    const target = descendantsByName(
+      node.timeNode,
+      presentationNamespace,
+      "spTgt",
+    )[0];
+    const targetId =
+      target === undefined
+        ? undefined
+        : positiveIntegerValue(attribute(target, "spid"));
+    const groupId = nonNegativeIntegerValue(
+      attribute(node.timeNode, "grpId") || "0",
+    );
+    if (
+      targetId !== undefined &&
+      groupId !== undefined &&
+      descendantsByName(node.timeNode, presentationNamespace, "bg").length > 0
+    ) {
+      backgroundBuildGroups.add(paragraphBuildKey(targetId, groupId));
+    }
+  }
   const paragraphBuilds = new Map<
     string,
     { readonly build: string; readonly animBg?: boolean }
@@ -3586,6 +3609,26 @@ function readSlideAnimations(
             ? { animBg: false }
             : {}),
       });
+    }
+    for (const [key, build] of paragraphBuilds) {
+      if ((build.animBg === true) !== backgroundBuildGroups.has(key)) {
+        issue(
+          errors,
+          part,
+          "inconsistent-animation-background-role",
+          `文字构建组 ${key} 的 animBg 必须与该组实际 spTgt/bg 行为一致`,
+        );
+      }
+    }
+    for (const key of backgroundBuildGroups) {
+      if (!paragraphBuilds.has(key)) {
+        issue(
+          errors,
+          part,
+          "missing-animation-background-build",
+          `背景行为所在文字构建组 ${key} 缺少 bldP 声明`,
+        );
+      }
     }
     for (const build of elements(
       buildList,
@@ -4197,7 +4240,9 @@ function readSlideAnimations(
         paragraphRanges.map(({ start }) => start),
       );
       const fullParagraphProjection =
-        paragraphBuild?.build === "allAtOnce" &&
+        nativeBuildGroupId === 1 &&
+        (paragraphBuild?.build === "allAtOnce" ||
+          paragraphBuild?.build === "p") &&
         targetObject?.text !== undefined &&
         paragraphRanges.length > 0 &&
         ranges.every(
@@ -4227,18 +4272,6 @@ function readSlideAnimations(
           part,
           "invalid-animation-target-range",
           "逐段文字目标必须关联同组 build=p 的原生构建声明",
-        );
-        continue;
-      }
-      const hasBackgroundBehaviors = nativeBehaviors.some(
-        ({ targetType }) => targetType === "background",
-      );
-      if ((paragraphBuild?.animBg === true) !== hasBackgroundBehaviors) {
-        issue(
-          errors,
-          part,
-          "inconsistent-animation-background-role",
-          "文字构建 animBg 必须与实际 spTgt/bg 原生行为一致",
         );
         continue;
       }

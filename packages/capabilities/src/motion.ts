@@ -1337,6 +1337,28 @@ function timingXml(
     }
   >();
   const chartBuildTargets = new Map<number, TimingEffect>();
+  const paragraphBuildTargets = new Set<number>();
+  const wholeTextArrays = new Map<number, Set<number>>();
+  for (const step of steps) {
+    const wholeTextDeclarations = new Map<number, Set<number>>();
+    for (const effect of step.effects) {
+      if (!effect.targetTextBody) continue;
+      if (
+        effect.by === "paragraph" ||
+        effect.target.range?.type === "paragraph"
+      ) {
+        paragraphBuildTargets.add(effect.target.id);
+      }
+      if (!isWholeTextProjection(effect)) continue;
+      const declarations =
+        wholeTextDeclarations.get(effect.target.id) ?? new Set<number>();
+      declarations.add(effect.effectIndex);
+      wholeTextDeclarations.set(effect.target.id, declarations);
+    }
+    for (const [targetId, declarations] of wholeTextDeclarations) {
+      if (declarations.size > 1) wholeTextArrays.set(targetId, declarations);
+    }
+  }
   for (const step of steps) {
     for (const effect of step.effects) {
       const timed = effect as TimingEffect;
@@ -1346,20 +1368,24 @@ function timingXml(
         const previous = paragraphBuilds.get(key);
         const build =
           groupId === 1
-            ? "allAtOnce"
+            ? wholeTextArrays.has(timed.target.id) &&
+              !paragraphBuildTargets.has(timed.target.id)
+              ? "p"
+              : "allAtOnce"
             : timed.by === "paragraph" ||
                 timed.target.range?.type === "paragraph"
               ? "p"
               : previous?.build;
+        // 纯 whole Text 数组须有原生段落构建层，PowerPoint 才会执行各段旋入；
+        // 这是格式表达，不改变 MotionPlan 中作者声明的 whole 目标。
+        const animBg =
+          groupId === 1 &&
+          (previous?.animBg === true || hasWholeTextBackgroundBehaviors(timed));
         paragraphBuilds.set(key, {
           effect: timed,
           groupId,
           ...(build === undefined ? {} : { build }),
-          ...(timed.targetHasBackground
-            ? {
-                animBg: groupId === 1 && hasWholeTextBackgroundBehaviors(timed),
-              }
-            : {}),
+          ...(timed.targetHasBackground ? { animBg } : {}),
         });
       } else if (timed.target.range?.type === "chart") {
         chartBuildTargets.set(timed.target.id, timed);

@@ -1733,9 +1733,34 @@ describe("公开构建入口", () => {
     const masterPart = "ppt/slideMasters/slideMaster1.xml";
     const masterParts = unzipSync(result.pptx);
     const master = strFromU8(masterParts[masterPart]!);
-    assert.match(master, /sldLayoutId id="2147483648"/u);
+    const presentation = strFromU8(masterParts["ppt/presentation.xml"]!);
+    const masterIds = Array.from(
+      presentation.matchAll(/<p:sldMasterId\b[^>]*\bid="(\d+)"/gu),
+      (match) => Number(match[1]),
+    );
+    const layoutIds = Array.from(
+      master.matchAll(/<p:sldLayoutId\b[^>]*\bid="(\d+)"/gu),
+      (match) => Number(match[1]),
+    );
+    assert.equal(masterIds.length, 1);
+    assert.equal(layoutIds.length, 1);
+    for (const id of [...masterIds, ...layoutIds]) {
+      assert.ok(id >= 2_147_483_648 && id <= 4_294_967_295);
+    }
+    assert.equal(
+      new Set([...masterIds, ...layoutIds]).size,
+      masterIds.length + layoutIds.length,
+    );
+
+    const layoutIdMatch = master.match(
+      /(<p:sldLayoutId\b[^>]*\bid=")(\d+)(")/u,
+    );
+    assert.ok(layoutIdMatch);
     masterParts[masterPart] = strToU8(
-      master.replace('id="2147483648"', 'id="1"'),
+      master.replace(
+        layoutIdMatch[0],
+        `${layoutIdMatch[1]}1${layoutIdMatch[3]}`,
+      ),
     );
     const invalidMaster = await validatePptx(zipSync(masterParts));
     assert.ok(

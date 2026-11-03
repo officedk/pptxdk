@@ -4,8 +4,10 @@ import {
   xmlEscape,
   type CapabilityInput,
   type CapabilityModule,
-  type ColorValue,
-  type ThemeContext,
+  type CapabilityLayoutMeasurement,
+  type CapabilityLayoutRequest,
+  type GeometryBox,
+  type LayoutStyle,
 } from "@react-pptx/core";
 import type { ReactNode } from "react";
 
@@ -92,10 +94,10 @@ export type ChartDataLabels = {
 type ChartBase = MotionProps & {
   readonly testId?: string;
   readonly name?: string;
-  readonly x: number;
-  readonly y: number;
-  readonly width: number;
-  readonly height: number;
+  readonly x?: number;
+  readonly y?: number;
+  readonly width?: number;
+  readonly height?: number;
   readonly data: ChartData;
   /** 省略、false 时隐藏图例。 */
   readonly legend?: false | "top" | "bottom" | "left" | "right";
@@ -108,7 +110,7 @@ type ChartBase = MotionProps & {
     readonly height: number;
   };
   /** 图表图例、轴和数据标签共用的文字样式。 */
-  readonly style?: TextStyle;
+  readonly style?: TextStyle & LayoutStyle;
 };
 
 type CartesianOptions = {
@@ -175,6 +177,15 @@ const chartOptions: Readonly<Record<ChartKind, readonly string[]>> = {
   pie: ["explosion", "firstSliceAngle"],
   doughnut: ["explosion", "firstSliceAngle", "holeSize"],
 };
+const chartTextStyleKeys = [
+  "fontFamily",
+  "fontSize",
+  "fontWeight",
+  "fontStyle",
+  "color",
+  "lineHeight",
+  "verticalAlign",
+] as const;
 const allChartOptions = [...new Set(Object.values(chartOptions).flat())];
 const positionValues = new Set([
   "center",
@@ -215,6 +226,7 @@ function optionalName(
 }
 
 function coordinate(value: unknown, label: "x" | "y"): number {
+  if (value === undefined) return 0;
   if (
     typeof value !== "number" ||
     !Number.isFinite(value) ||
@@ -243,7 +255,16 @@ function extent(value: unknown, label: "width" | "height"): number {
   return value;
 }
 
-function optionalColor(value: unknown, label: string): ColorValue | undefined {
+function textOnlyStyle(value: unknown): TextStyle | undefined {
+  if (!isRecord(value)) return undefined;
+  return Object.fromEntries(
+    chartTextStyleKeys.flatMap((key) =>
+      value[key] === undefined ? [] : [[key, value[key]]],
+    ),
+  ) as TextStyle;
+}
+
+function optionalColor(value: unknown, label: string): string | undefined {
   if (value === undefined) return undefined;
   if (
     typeof value === "string" ||
@@ -679,12 +700,8 @@ function chartResourceClaims(
     ...data.series.map(({ name }) => name),
     ...dataLabelTexts(data, props.dataLabels),
   ];
-  const chart = writeChartTextProperties(
-    props.style,
-    chartText,
-    "Chart.style",
-    theme,
-  );
+  const chartStyle = textOnlyStyle(props.style);
+  const chart = writeChartTextProperties(chartStyle, chartText, "Chart.style");
   const resourceClaims: TextResourceClaim[] = [...chart.resourceClaims];
   const fontUses: FontEmbeddingUse[] = chart.fontUses.map((use) => ({
     ...use,
@@ -700,7 +717,7 @@ function chartResourceClaims(
   } = { chart: chart.xml };
   if (cartesian?.categoryAxis?.style !== undefined) {
     const output = writeChartTextProperties(
-      mergeTextStyle(props.style, cartesian.categoryAxis.style),
+      mergeTextStyle(chartStyle, cartesian.categoryAxis.style),
       data.categories,
       "Chart.categoryAxis.style",
       theme,
@@ -721,7 +738,7 @@ function chartResourceClaims(
     );
     // 坐标轴刻度由应用生成；共享文字服务仍需一个文本运行来登记值轴字体。
     const output = writeChartTextProperties(
-      mergeTextStyle(props.style, cartesian.valueAxis.style),
+      mergeTextStyle(chartStyle, cartesian.valueAxis.style),
       axisValues.length === 0 ? [""] : axisValues,
       "Chart.valueAxis.style",
       theme,
@@ -739,7 +756,7 @@ function chartResourceClaims(
   if (props.dataLabels !== undefined && props.dataLabels !== false) {
     if (props.dataLabels.style !== undefined) {
       const output = writeChartTextProperties(
-        mergeTextStyle(props.style, props.dataLabels.style),
+        mergeTextStyle(chartStyle, props.dataLabels.style),
         dataLabelTexts(data, props.dataLabels),
         "Chart.dataLabels.style",
         theme,
@@ -771,7 +788,7 @@ function chartResourceClaims(
         ];
         if (pointText.length === 0) continue;
         const output = writeChartTextProperties(
-          mergeTextStyle(props.style, {
+          mergeTextStyle(chartStyle, {
             ...props.dataLabels.style,
             color: point.labelColor,
           }),
@@ -806,7 +823,10 @@ function chartResourceClaims(
   };
 }
 
-function validateProps(props: Record<string, unknown>): ChartProps {
+function validateProps(
+  props: Record<string, unknown>,
+  layoutBox?: GeometryBox,
+): ChartProps {
   const kind = props["kind"];
   if (typeof kind !== "string" || !Object.hasOwn(chartOptions, kind)) {
     fail("unsupported-chart-kind", `不支持图表类型 ${String(kind)}`);
@@ -853,10 +873,13 @@ function validateProps(props: Record<string, unknown>): ChartProps {
   const testId = optionalName(props["testId"], "testId");
   const name = optionalName(props["name"], "name");
   if (name !== undefined) xmlText(name, "Chart.name");
-  const x = coordinate(props["x"], "x");
-  const y = coordinate(props["y"], "y");
-  const width = extent(props["width"], "width");
-  const height = extent(props["height"], "height");
+  const style = isRecord(props["style"]) ? props["style"] : {};
+  const x = layoutBox?.x ?? coordinate(props["x"], "x");
+  const y = layoutBox?.y ?? coordinate(props["y"], "y");
+  const width =
+    layoutBox?.width ?? extent(props["width"] ?? style["width"], "width");
+  const height =
+    layoutBox?.height ?? extent(props["height"] ?? style["height"], "height");
   const box = { width, height };
   const legend = props["legend"];
   if (
@@ -936,7 +959,7 @@ function validateProps(props: Record<string, unknown>): ChartProps {
     ...(checkedPlotArea === undefined ? {} : { plotArea: checkedPlotArea }),
     ...(props["style"] === undefined
       ? {}
-      : { style: props["style"] as TextStyle }),
+      : { style: props["style"] as TextStyle & LayoutStyle }),
     ...(stack === undefined ? {} : { stacking: stack }),
     ...(props["valueAxis"] === undefined
       ? {}
@@ -965,6 +988,34 @@ function validateProps(props: Record<string, unknown>): ChartProps {
 /** 图表模块校验输入，并生成原生图表部件及其嵌入工作簿。 */
 export const chartCapability: CapabilityModule = {
   declaration: "rp:chart",
+  measureLayout(
+    input: CapabilityInput,
+    request: CapabilityLayoutRequest,
+  ): CapabilityLayoutMeasurement {
+    if (input.children.length > 0) {
+      fail(
+        "unsupported-children",
+        "Chart 不接受子内容；图表文字和数据应放入 data",
+      );
+    }
+    const style = isRecord(input.props["style"]) ? input.props["style"] : {};
+    const rawWidth = style["width"] ?? input.props["width"];
+    const rawHeight = style["height"] ?? input.props["height"];
+    const declaredWidth = typeof rawWidth === "number" ? rawWidth : undefined;
+    const declaredHeight =
+      typeof rawHeight === "number" ? rawHeight : undefined;
+    const width =
+      request.availableWidth ??
+      declaredWidth ??
+      (declaredHeight === undefined ? 320 : declaredHeight * (16 / 9));
+    const height = declaredHeight ?? width * (9 / 16);
+    return {
+      width,
+      height,
+      minContentWidth: declaredWidth ?? 0,
+      minContentHeight: declaredHeight ?? 0,
+    };
+  },
   compile(input: CapabilityInput, context) {
     if (input.children.length > 0) {
       fail(
@@ -972,7 +1023,7 @@ export const chartCapability: CapabilityModule = {
         "Chart 不接受子内容；图表文字和数据应放入 data",
       );
     }
-    const props = validateProps({ ...input.props });
+    const props = validateProps({ ...input.props }, context.layoutBox);
     const name = props.name ?? props.testId ?? `Chart ${context.id - 1}`;
     const annotations = motionAnnotations(props, {
       kind: "chart",
@@ -1015,7 +1066,12 @@ export const chartCapability: CapabilityModule = {
       xml: chartFrameXml(
         context.id,
         name,
-        { x: props.x, y: props.y, width: props.width, height: props.height },
+        {
+          x: props.x!,
+          y: props.y!,
+          width: props.width!,
+          height: props.height!,
+        },
         relationshipId,
       ),
       observation: {
@@ -1024,10 +1080,10 @@ export const chartCapability: CapabilityModule = {
         name,
         ...(props.testId === undefined ? {} : { testId: props.testId }),
         box: {
-          x: props.x,
-          y: props.y,
-          width: props.width,
-          height: props.height,
+          x: props.x!,
+          y: props.y!,
+          width: props.width!,
+          height: props.height!,
         },
       },
       extensions: [],

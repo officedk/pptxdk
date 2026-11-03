@@ -110,6 +110,12 @@ type TextLayoutRequest = {
   readonly width: number | "max-content";
   readonly height?: number;
   readonly contentSized?: boolean;
+  readonly insets?: {
+    readonly top: number;
+    readonly right: number;
+    readonly bottom: number;
+    readonly left: number;
+  };
 };
 
 type TextBodyDestination = "text-box" | "table-cell";
@@ -1363,6 +1369,57 @@ function bodyAnchor(verticalAlign: TextStyle["verticalAlign"]): string {
   return { top: "t", middle: "ctr", bottom: "b" }[verticalAlign ?? "top"];
 }
 
+export function textInsets(value: unknown): {
+  readonly top: number;
+  readonly right: number;
+  readonly bottom: number;
+  readonly left: number;
+} {
+  const style = record(value) ? value : {};
+  const raw = style["padding"];
+  let edges = { top: 0, right: 0, bottom: 0, left: 0 };
+  if (typeof raw === "number") {
+    edges = { top: raw, right: raw, bottom: raw, left: raw };
+  } else if (Array.isArray(raw) && (raw.length === 2 || raw.length === 4)) {
+    const values = raw;
+    edges =
+      values.length === 2
+        ? {
+            top: values[0] as number,
+            right: values[1] as number,
+            bottom: values[0] as number,
+            left: values[1] as number,
+          }
+        : {
+            top: values[0] as number,
+            right: values[1] as number,
+            bottom: values[2] as number,
+            left: values[3] as number,
+          };
+  } else if (raw !== undefined) {
+    throw new CapabilityError(
+      "invalid-text-insets",
+      "padding 必须是数字、二元组或四元组",
+    );
+  }
+  const result: { top: number; right: number; bottom: number; left: number } = {
+    top: (style["paddingTop"] ?? edges.top) as number,
+    right: (style["paddingRight"] ?? edges.right) as number,
+    bottom: (style["paddingBottom"] ?? edges.bottom) as number,
+    left: (style["paddingLeft"] ?? edges.left) as number,
+  };
+  for (const [name, amount] of Object.entries(result)) {
+    if (typeof amount !== "number" || !Number.isFinite(amount) || amount < 0) {
+      throw new CapabilityError(
+        "invalid-text-insets",
+        `${name} inset 必须是有限非负像素数值`,
+      );
+    }
+    pxToEmu(amount);
+  }
+  return result;
+}
+
 /** 为文本框与形状文字共用段落、run、列表和字体资源处理。 */
 export function writeTextBody(
   children: readonly unknown[],
@@ -1438,8 +1495,8 @@ export function writeTextBody(
     .join("\n");
   const xml =
     destination === "table-cell"
-      ? `<a:txBody><a:bodyPr/><a:lstStyle/>${outputParagraphs.map((paragraph) => paragraphXml(paragraph, theme)).join("")}</a:txBody>`
-      : `<p:txBody><a:bodyPr wrap="square" lIns="0" tIns="0" rIns="0" bIns="0" anchor="${bodyAnchor(style.verticalAlign ?? verticalAlign)}"><a:noAutofit/></a:bodyPr><a:lstStyle/>${outputParagraphs.map((paragraph) => paragraphXml(paragraph, theme)).join("")}</p:txBody>`;
+      ? `<a:txBody><a:bodyPr/><a:lstStyle/>${outputParagraphs.map(paragraphXml).join("")}</a:txBody>`
+      : `<p:txBody><a:bodyPr wrap="square" lIns="${pxToEmu(layout?.insets?.left ?? 0)}" tIns="${pxToEmu(layout?.insets?.top ?? 0)}" rIns="${pxToEmu(layout?.insets?.right ?? 0)}" bIns="${pxToEmu(layout?.insets?.bottom ?? 0)}" anchor="${bodyAnchor(style.verticalAlign ?? verticalAlign)}"><a:noAutofit/></a:bodyPr><a:lstStyle/>${outputParagraphs.map(paragraphXml).join("")}</p:txBody>`;
   return {
     xml,
     text,

@@ -30,6 +30,7 @@ import {
   type BuildReport,
   type BuildResult,
   type CapabilityChild,
+  type CapabilityElement,
   type CapabilityChildren,
   type CapabilityInput,
   type CapabilityPackagePart,
@@ -122,6 +123,15 @@ type BuildContext = {
 
 type CompiledChildren = CapabilityChildren & {
   readonly references: readonly LayoutChildReference[];
+  readonly paintLayers: readonly PaintLayer[];
+};
+
+type PaintLayer = {
+  readonly sourceOrder: readonly number[];
+  readonly zIndex: number;
+  readonly xml: string;
+  readonly objects: readonly ObjectObservation[];
+  readonly reference: LayoutChildReference;
 };
 
 type Dimensions = { readonly width: number; readonly height: number };
@@ -383,7 +393,6 @@ function resolveSlides(
       .map(({ slideProp }) => slideProp);
     const unknown = ownKeys(node.props, [
       "slideId",
-      "theme",
       "style",
       ...slideProperties,
     ]);
@@ -832,9 +841,7 @@ function compileChildren(
   context: BuildContext,
   parentPath: string,
 ): CompiledChildren {
-  const xml: string[] = [];
-  const objects: ObjectObservation[] = [];
-  const references: LayoutChildReference[] = [];
+  const painted: PaintLayer[] = [];
   children.forEach((child, index) => {
     if (!("props" in child)) {
       if (child.text.trim() !== "") {
@@ -849,6 +856,7 @@ function compileChildren(
       return;
     }
 
+    if (context.layout.hidden.has(child)) return;
     const path = `${parentPath}/${capabilityLabel(child, index)}`;
     const order = context.slide.nextNodeOrder++;
     if (child.type === "rp:box") {
@@ -868,9 +876,13 @@ function compileChildren(
         box,
         children: compiled.references,
       });
-      xml.push(compiled.xml);
-      objects.push(...compiled.objects);
-      references.push({ kind: "layout", id });
+      painted.push({
+        sourceOrder: [index],
+        zIndex: paintOrder(child),
+        xml: compiled.xml,
+        objects: compiled.objects,
+        reference: { kind: "layout", id },
+      });
       return;
     }
     const module = context.modules.get(child.type);
@@ -905,9 +917,13 @@ function compileChildren(
         );
       }
       const compiled = compileChildren(child.children, context, path);
-      xml.push(compiled.xml);
-      objects.push(...compiled.objects);
-      references.push(...compiled.references);
+      // 透明声明不占绘制层级；其子项携带自己的层序并与兄弟一同排序。
+      painted.push(
+        ...compiled.paintLayers.map((layer) => ({
+          ...layer,
+          sourceOrder: [index, ...layer.sourceOrder],
+        })),
+      );
       return;
     }
     if (!isObjectCapability(module)) {
@@ -992,7 +1008,6 @@ function compileChildren(
           order,
         });
       }
-      xml.push(output.xml);
       const observation = { ...output.observation, id };
       if (observation.box !== undefined) {
         const box = observation.box;
@@ -1010,8 +1025,13 @@ function compileChildren(
           });
         }
       }
-      objects.push(observation);
-      references.push({ kind: "object", id: observation.id });
+      painted.push({
+        sourceOrder: [index],
+        zIndex: paintOrder(child),
+        xml: output.xml,
+        objects: [observation],
+        reference: { kind: "object", id: observation.id },
+      });
     } catch (error) {
       context.slide.diagnostics.push(
         error instanceof CapabilityError
@@ -1028,7 +1048,36 @@ function compileChildren(
       );
     }
   });
-  return { xml: xml.join(""), objects, references };
+  painted.sort(
+    (left, right) =>
+      left.zIndex - right.zIndex ||
+      compareSourceOrder(left.sourceOrder, right.sourceOrder),
+  );
+  return {
+    xml: painted.map(({ xml }) => xml).join(""),
+    objects: painted.flatMap(({ objects }) => objects),
+    references: painted.map(({ reference }) => reference),
+    paintLayers: painted,
+  };
+}
+
+function compareSourceOrder(
+  left: readonly number[],
+  right: readonly number[],
+): number {
+  for (let index = 0; index < Math.min(left.length, right.length); index += 1) {
+    const difference = left[index]! - right[index]!;
+    if (difference !== 0) return difference;
+  }
+  return left.length - right.length;
+}
+
+function paintOrder(child: CapabilityElement): number {
+  const style = child.props["style"];
+  if (typeof style !== "object" || style === null || Array.isArray(style))
+    return 0;
+  const value = (style as Record<string, unknown>)["zIndex"];
+  return typeof value === "number" && Number.isFinite(value) ? value : 0;
 }
 
 function compileSlide(
@@ -1057,20 +1106,9 @@ function compileSlide(
     );
   }
   const children = node.children.map(capabilityChild);
-  let theme: ThemeContext;
-  try {
-    theme = documentTheme.with(
-      node.props["theme"] as ThemeScope | undefined,
-      textStyleFrom(node.props["style"]),
-    );
-  } catch (error) {
-    if (!(error instanceof CapabilityError)) throw error;
-    throw new BuildError([diagnostic(path, error.code, error.message)]);
-  }
   const layout = new LayoutPass(modules, dimensions).run(
     children,
     path,
-    theme,
     node.props["style"],
   );
   document.warnings.push(...layout.warnings);

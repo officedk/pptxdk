@@ -21,6 +21,7 @@ import {
 } from "./motion-api.ts";
 import {
   measureTextLayout,
+  textInsets,
   writeTextBody,
   type TextStyle,
 } from "./text-service.ts";
@@ -90,6 +91,15 @@ const allowedParameters = [
 
 function record(input: CapabilityInput): Record<string, unknown> {
   return input.props;
+}
+
+function shapeTextMeasurementStyle(value: unknown): unknown {
+  if (value === undefined) return { verticalAlign: "middle" };
+  if (typeof value !== "object" || value === null || Array.isArray(value))
+    return value;
+  const style = value as Record<string, unknown>;
+  // Shape 正文写出时默认 middle；测量也必须使用同一有效 anchor。
+  return { ...style, verticalAlign: style["verticalAlign"] ?? "middle" };
 }
 
 function requiredNumber(
@@ -162,8 +172,7 @@ export const shapeCapability: CapabilityModule = {
     try {
       const measured = measureTextLayout(
         [{ type: "#text", text }],
-        input.props["textStyle"],
-        request.theme,
+        shapeTextMeasurementStyle(input.props["textStyle"]),
         request.availableWidth,
       );
       return measured;
@@ -218,6 +227,7 @@ export const shapeCapability: CapabilityModule = {
       typeof props["style"] === "object" && props["style"] !== null
         ? (props["style"] as Record<string, unknown>)
         : {};
+    const insets = textInsets(layoutStyle);
     const box =
       context.layoutBox === undefined
         ? {
@@ -256,7 +266,11 @@ export const shapeCapability: CapabilityModule = {
         props["textStyle"],
         context.theme,
         "middle",
-        { width: box.width, height: box.height },
+        {
+          width: Math.max(0, box.width - insets.left - insets.right),
+          height: Math.max(0, box.height - insets.top - insets.bottom),
+          insets,
+        },
       );
     }
     const name = requestedName ?? testId ?? `Shape ${context.id - 1}`;

@@ -3374,17 +3374,72 @@ describe("对象动画", () => {
         attributeNames.some((name) => name === "ppt_x" || name === "ppt_y"),
     );
     assert.deepEqual(
-      spinPositions?.map(({ attributeNames, additive, from, to }) => [
-        attributeNames,
-        additive,
-        from?.includes("cos(") && from.includes("sin("),
-        to,
-      ]),
+      spinPositions?.map(
+        ({
+          attributeNames,
+          additive,
+          from,
+          to,
+          calculationMode,
+          keyframes,
+        }) => [
+          attributeNames,
+          additive,
+          from,
+          to,
+          calculationMode,
+          keyframes?.map(({ time, value, formula }) => [
+            time,
+            value,
+            formula?.includes("$") ?? false,
+          ]),
+        ],
+      ),
       [
-        [["ppt_x"], "sum", true, "0"],
-        [["ppt_y"], "sum", true, "0"],
-        [["ppt_x"], "sum", true, "0"],
-        [["ppt_y"], "sum", true, "0"],
+        [
+          ["ppt_x"],
+          "sum",
+          "0",
+          "1",
+          "lin",
+          [
+            [0, "0", true],
+            [100000, "1", false],
+          ],
+        ],
+        [
+          ["ppt_y"],
+          "sum",
+          "0",
+          "1",
+          "lin",
+          [
+            [0, "0", true],
+            [100000, "1", false],
+          ],
+        ],
+        [
+          ["ppt_x"],
+          "sum",
+          "0",
+          "1",
+          "lin",
+          [
+            [0, "0", true],
+            [100000, "1", false],
+          ],
+        ],
+        [
+          ["ppt_y"],
+          "sum",
+          "0",
+          "1",
+          "lin",
+          [
+            [0, "0", true],
+            [100000, "1", false],
+          ],
+        ],
       ],
     );
     assert.equal(
@@ -3591,6 +3646,219 @@ describe("对象动画", () => {
         ["372", "12", { type: "paragraph", start: 0, end: 0 }],
         ["372", "12", { type: "paragraph", start: 1, end: 1 }],
       ],
+    );
+  });
+
+  it("共同中心 SpinIn 与 Group Spin 读回完整公式和数值进度", async () => {
+    const result = await build(
+      createElement(
+        Deck,
+        { width: 960, height: 540 },
+        createElement(
+          Slide,
+          { slideId: "whole-fly-spin-in" },
+          createElement(Text, {
+            testId: "whole-spin-in-text",
+            x: 180,
+            y: 140,
+            width: 420,
+            height: 160,
+            style: { rotate: 12, backgroundColor: "#FEF3C7" },
+            enter: [
+              fly({ from: "left", duration: 4000 }),
+              spinIn({ duration: 4000 }),
+            ],
+            children: [
+              createElement(P, { key: "long" }, "A long first paragraph"),
+              createElement(P, { key: "short" }, "SHORT"),
+            ],
+          }),
+        ),
+        createElement(
+          Slide,
+          { slideId: "group-spin-members" },
+          createElement(
+            Group,
+            {
+              testId: "formula-spin-group",
+              emphasis: spin({ duration: 4000, from: 225 }),
+            },
+            createElement(Text, {
+              testId: "formula-spin-text-member",
+              x: 110,
+              y: 130,
+              width: 260,
+              height: 120,
+              style: { backgroundColor: "#DBEAFE" },
+              enter: fade({ duration: 4000 }),
+              children: [
+                createElement(P, { key: "long" }, "A long member paragraph"),
+                createElement(P, { key: "short" }, "SHORT"),
+              ],
+            }),
+            createElement(Shape, {
+              testId: "formula-spin-shape-member",
+              x: 470,
+              y: 230,
+              width: 64,
+              height: 64,
+              fill: "#F97316",
+            }),
+          ),
+        ),
+      ),
+    );
+    const file = await validatePptx(result.pptx);
+    assert.deepEqual(file.errors, []);
+
+    const firstSlideXml = strFromU8(
+      unzipSync(result.pptx)["ppt/slides/slide1.xml"]!,
+    );
+    const spinInEffect = file.slides[0]?.animations?.[0]?.effects.find(
+      ({ preset }) => preset === "spinIn",
+    );
+    const spinInPositions = spinInEffect?.nativeBehaviors?.filter(
+      ({ attributeNames }) =>
+        attributeNames.includes("ppt_x") || attributeNames.includes("ppt_y"),
+    );
+    assert.equal(spinInPositions?.length, 6);
+    assert.deepEqual(
+      spinInPositions?.map(({ attributeNames, additive, from, to }) => [
+        attributeNames,
+        additive,
+        from,
+        to,
+      ]),
+      [
+        [["ppt_x"], "sum", "0", "1"],
+        [["ppt_y"], "sum", "0", "1"],
+        [["ppt_x"], "sum", "0", "1"],
+        [["ppt_y"], "sum", "0", "1"],
+        [["ppt_x"], "sum", "0", "1"],
+        [["ppt_y"], "sum", "0", "1"],
+      ],
+    );
+    for (const behavior of spinInPositions ?? []) {
+      assert.equal(behavior.calculationMode, "lin");
+      assert.deepEqual(
+        behavior.keyframes?.map(({ time, value }) => [time, value]),
+        [
+          [0, "0"],
+          [100000, "1"],
+        ],
+      );
+      const formula = behavior.keyframes?.[0]?.formula;
+      assert.ok(formula?.includes("$"));
+      assert.ok(formula?.includes("#ppt_x"));
+      assert.ok(formula?.includes("#ppt_y"));
+      assert.ok(formula?.includes("cos(") && formula.includes("sin("));
+      assert.equal(
+        formula,
+        behavior.attributeNames[0] === "ppt_x"
+          ? "0.40625+$*((#ppt_x-0.40625)*cos((360*pi/180)*(1-$))-(#ppt_y-0.407407407407407)*0.5625*sin((360*pi/180)*(1-$)))-#ppt_x"
+          : "0.407407407407407+$*((#ppt_x-0.40625)*1.77777777777778*sin((360*pi/180)*(1-$))+(#ppt_y-0.407407407407407)*cos((360*pi/180)*(1-$)))-#ppt_y",
+      );
+      assert.ok(firstSlideXml.includes(`fmla="${formula}"`));
+    }
+
+    const group = file.slides[1]?.objects.find(
+      ({ name }) => name === "formula-spin-group",
+    );
+    const memberSpins = file.slides[1]?.animations
+      ?.flatMap(({ effects }) => effects)
+      .filter(({ preset }) => preset === "spin");
+    assert.deepEqual(
+      memberSpins?.map(({ targetId }) => targetId),
+      group?.members?.map(({ id }) => id),
+    );
+    assert.ok(
+      memberSpins?.every((effect) =>
+        effect.nativeBehaviors
+          ?.filter(
+            ({ attributeNames }) =>
+              attributeNames.includes("ppt_x") ||
+              attributeNames.includes("ppt_y"),
+          )
+          .every(
+            (behavior) =>
+              behavior.additive === "sum" &&
+              behavior.calculationMode === "lin" &&
+              behavior.keyframes?.length === 2 &&
+              behavior.keyframes[0]?.time === 0 &&
+              behavior.keyframes[0]?.value === "0" &&
+              behavior.keyframes[1]?.time === 100000 &&
+              behavior.keyframes[1]?.value === "1" &&
+              behavior.keyframes[0]?.formula?.includes("(225*pi/180)") === true,
+          ),
+      ),
+    );
+
+    const textId = result.report.slides[0]?.objects[0]?.id;
+    assert.ok(textId !== undefined);
+    const geometryXml = [
+      ...firstSlideXml.matchAll(/<p:anim\b[\s\S]*?<\/p:anim>/gu),
+    ]
+      .map(([behavior]) => behavior ?? "")
+      .find(
+        (behavior) =>
+          behavior.includes("fmla=") &&
+          behavior.includes(
+            `<p:spTgt spid="${textId}"><p:txEl><p:pRg st="0" end="0"></p:pRg></p:txEl></p:spTgt>`,
+          ) &&
+          behavior.includes("<p:attrName>ppt_x</p:attrName>"),
+      );
+    assert.ok(geometryXml !== undefined);
+    const formula = spinInPositions?.[0]?.keyframes?.[0]?.formula;
+    assert.ok(formula !== undefined);
+    const slidePath = "ppt/slides/slide1.xml";
+    const parts = unzipSync(result.pptx);
+    const validateSlide = (xml: string) =>
+      validatePptx(zipSync({ ...parts, [slidePath]: strToU8(xml) }));
+
+    const missingFormulaXml = geometryXml.replace(/\s+fmla="[^"]+"/u, "");
+    assert.notEqual(missingFormulaXml, geometryXml);
+    const missingFormula = await validateSlide(
+      firstSlideXml.replace(geometryXml, missingFormulaXml),
+    );
+    assert.ok(
+      missingFormula.errors.some(
+        ({ code }) => code === "invalid-animation-progress-formula",
+      ),
+    );
+
+    const wrongFormula = formula.replace("0.40625", "0.5");
+    assert.notEqual(wrongFormula, formula);
+    const changedFormula = await validateSlide(
+      firstSlideXml.replace(
+        geometryXml,
+        geometryXml.replace(`fmla="${formula}"`, `fmla="${wrongFormula}"`),
+      ),
+    );
+    assert.ok(
+      changedFormula.errors.some(
+        ({ code }) => code === "invalid-animation-progress-formula",
+      ),
+    );
+
+    const wrongSum = await validateSlide(
+      firstSlideXml.replace(
+        geometryXml,
+        geometryXml.replace('additive="sum"', 'additive="base"'),
+      ),
+    );
+    assert.ok(
+      wrongSum.errors.some(
+        ({ code }) => code === "invalid-animation-progress-formula",
+      ),
+    );
+
+    const missingPositionRole = await validateSlide(
+      firstSlideXml.replace(geometryXml, ""),
+    );
+    assert.ok(
+      missingPositionRole.errors.some(
+        ({ code }) => code === "invalid-animation-projection-target",
+      ),
     );
   });
 

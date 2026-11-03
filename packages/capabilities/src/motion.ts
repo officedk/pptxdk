@@ -407,6 +407,7 @@ function behaviorIds(
     to: string | number,
     additive: boolean | "sum",
     targetElement: string,
+    progressFormula?: string,
   ) =>
     element(
       "p:anim",
@@ -421,7 +422,14 @@ function behaviorIds(
       element(
         "p:tavLst",
         undefined,
-        element("p:tav", { tm: 0 }, element("p:val", undefined, value(from))),
+        element(
+          "p:tav",
+          {
+            tm: 0,
+            ...(progressFormula === undefined ? {} : { fmla: progressFormula }),
+          },
+          element("p:val", undefined, value(from)),
+        ),
         element(
           "p:tav",
           { tm: 100000 },
@@ -437,6 +445,12 @@ function behaviorIds(
     additive: boolean | "sum",
     targetElement = target(),
   ) => motion(name, from, to, additive, targetElement);
+  // 共同中心位移已是完整进度函数；公式接收 0→1 数值进度，避免函数值被当作端点再次插值。
+  const progressMotion = (
+    name: string,
+    formula: string,
+    targetElement = target(),
+  ) => motion(name, 0, 1, "sum", targetElement, formula);
   const rotation = (targetElement: string, additive: boolean | "sum" = false) =>
     element(
       "p:animRot",
@@ -625,15 +639,15 @@ function behaviorIds(
           false,
           targetElement,
         ),
-        singleMotion("ppt_x", position[0], 0, "sum", targetElement),
-        singleMotion("ppt_y", position[1], 0, "sum", targetElement),
+        progressMotion("ppt_x", position[0], targetElement),
+        progressMotion("ppt_y", position[1], targetElement),
       ]);
       return [
         showOnce(),
         ...geometry,
         ...backgroundTargets().flatMap((targetElement) => [
-          singleMotion("ppt_x", position[0], 0, "sum", targetElement),
-          singleMotion("ppt_y", position[1], 0, "sum", targetElement),
+          progressMotion("ppt_x", position[0], targetElement),
+          progressMotion("ppt_y", position[1], targetElement),
           singleMotion("ppt_w", 0, "#ppt_w", false, targetElement),
           singleMotion("ppt_h", 0, "#ppt_h", false, targetElement),
           rotation(targetElement, "sum"),
@@ -709,20 +723,20 @@ function behaviorIds(
         return [
           ...positionTargets().flatMap((targetElement) => [
             rotation(targetElement, "sum"),
-            singleMotion("ppt_x", position[0], 0, "sum", targetElement),
-            singleMotion("ppt_y", position[1], 0, "sum", targetElement),
+            progressMotion("ppt_x", position[0], targetElement),
+            progressMotion("ppt_y", position[1], targetElement),
           ]),
           ...backgroundTargets().flatMap((targetElement) => [
             rotation(targetElement, "sum"),
-            singleMotion("ppt_x", position[0], 0, "sum", targetElement),
-            singleMotion("ppt_y", position[1], 0, "sum", targetElement),
+            progressMotion("ppt_x", position[0], targetElement),
+            progressMotion("ppt_y", position[1], targetElement),
           ]),
         ];
       }
       return [
         rotation(target(), "sum"),
-        singleMotion("ppt_x", position[0], 0, "sum"),
-        singleMotion("ppt_y", position[1], 0, "sum"),
+        progressMotion("ppt_x", position[0]),
+        progressMotion("ppt_y", position[1]),
       ];
     }
     case "breathe":

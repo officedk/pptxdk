@@ -223,6 +223,14 @@ export type FileAnimationTargetRange =
       readonly categoryIndex: number;
     };
 
+export type FileAnimationKeyframe = {
+  readonly time?: number;
+  readonly formula?: string;
+  readonly value?: string;
+  readonly valueType?: string;
+};
+
+/** 实际文件行为节点；`from`/`to` 是端点视图，含公式时完整轨迹保存在 keyframes。 */
 export type FileAnimationBehavior = {
   readonly behavior: "set" | "anim" | "animEffect" | "animRot" | "animClr";
   readonly targetId: number;
@@ -232,6 +240,9 @@ export type FileAnimationBehavior = {
   readonly durationMs?: number;
   readonly from?: string;
   readonly to?: string;
+  readonly calculationMode?: string;
+  /** 文件中实际 `p:tav` 的顺序；公式按相邻节点的数值关键值求值。 */
+  readonly keyframes?: readonly FileAnimationKeyframe[];
   readonly additive?: string;
   readonly filter?: string;
 };
@@ -339,6 +350,75 @@ function hasRoles(
   return normalize(actual).every(
     (role, index) => role === expectedRoles[index],
   );
+}
+
+function isPositionBehavior(behavior: FileAnimationBehavior): boolean {
+  return (
+    behavior.behavior === "anim" &&
+    behavior.attributeNames.length === 1 &&
+    (behavior.attributeNames[0] === "ppt_x" ||
+      behavior.attributeNames[0] === "ppt_y")
+  );
+}
+
+/** 校验共同几何的进度载体，不推演公式在任意时刻的位置。 */
+function validCenterRotationProgress(behavior: FileAnimationBehavior): boolean {
+  const keyframes = behavior.keyframes;
+  const formula = keyframes?.[0]?.formula;
+  return (
+    isPositionBehavior(behavior) &&
+    behavior.additive === "sum" &&
+    behavior.calculationMode === "lin" &&
+    keyframes?.length === 2 &&
+    keyframes[0]?.time === 0 &&
+    keyframes[1]?.time === 100000 &&
+    keyframes[1]?.formula === undefined &&
+    keyframes[0]?.valueType === "fltVal" &&
+    keyframes[0]?.value === "0" &&
+    keyframes[1]?.valueType === "fltVal" &&
+    keyframes[1]?.value === "1" &&
+    formula !== undefined &&
+    formula.includes("$") &&
+    formula.includes("#ppt_x") &&
+    formula.includes("#ppt_y") &&
+    formula.includes("pi") &&
+    formula.includes("cos(") &&
+    formula.includes("sin(")
+  );
+}
+
+function hasCompletePositionAxes(
+  behaviors: readonly FileAnimationBehavior[],
+): boolean {
+  const axesByTarget = new Map<string, string[]>();
+  for (const behavior of behaviors.filter(isPositionBehavior)) {
+    const target = JSON.stringify([behavior.targetType, behavior.targetRange]);
+    const axes = axesByTarget.get(target) ?? [];
+    axes.push(behavior.attributeNames[0] ?? "");
+    axesByTarget.set(target, axes);
+  }
+  return [...axesByTarget.values()].every((axes) =>
+    hasRoles(axes, ["ppt_x", "ppt_y"]),
+  );
+}
+
+function hasConsistentPositionFormulas(
+  behaviors: readonly FileAnimationBehavior[],
+): boolean {
+  // 同一共同中心的段落、背景和成员应使用一致的轴向公式。
+  return ["ppt_x", "ppt_y"].every((axis) => {
+    const formulas = behaviors
+      .filter(
+        (behavior) =>
+          isPositionBehavior(behavior) && behavior.attributeNames[0] === axis,
+      )
+      .map((behavior) => behavior.keyframes?.[0]?.formula);
+    return (
+      formulas.length === 0 ||
+      (formulas.every((formula) => formula !== undefined) &&
+        new Set(formulas).size === 1)
+    );
+  });
 }
 
 /** 按实际段落、背景和可见性目标完整核对后，才恢复逻辑 whole Text。 */
@@ -3909,6 +3989,25 @@ function readSlideAnimations(
         tavList === undefined
           ? []
           : elements(tavList, presentationNamespace, "tav");
+      const keyframes = tavs.map((tav): FileAnimationKeyframe => {
+        const time = nonNegativeIntegerValue(attribute(tav, "tm"));
+        const formula = attribute(tav, "fmla");
+        const valueNode = first(tav, presentationNamespace, "val");
+        const typedValue =
+          valueNode === undefined
+            ? undefined
+            : (first(valueNode, presentationNamespace, "fltVal") ??
+              first(valueNode, presentationNamespace, "strVal"));
+        const valueType = typedValue?.localName ?? undefined;
+        const value =
+          typedValue === undefined ? "" : attribute(typedValue, "val");
+        return {
+          ...(time === undefined ? {} : { time }),
+          ...(formula === "" ? {} : { formula }),
+          ...(value === "" ? {} : { value }),
+          ...(valueType === undefined ? {} : { valueType }),
+        };
+      });
       const firstTav = tavs[0];
       const lastTav = tavs.at(-1);
       const fromValue =
@@ -3960,6 +4059,10 @@ function readSlideAnimations(
           ...(durationMs === undefined ? {} : { durationMs }),
           ...(fromValue === undefined ? {} : { from: fromValue }),
           ...(toValue === undefined ? {} : { to: toValue }),
+          ...(attribute(behaviorNode, "calcmode") === ""
+            ? {}
+            : { calculationMode: attribute(behaviorNode, "calcmode") }),
+          ...(tavList === undefined ? {} : { keyframes }),
           ...(additive === "" ? {} : { additive }),
           ...(filter === "" ? {} : { filter }),
         },
@@ -4345,6 +4448,23 @@ function readSlideAnimations(
           part,
           "invalid-animation-projection-target",
           "整体文字投影的初始化、段落属性或背景职责不符合对应预设",
+        );
+        continue;
+      }
+      if (
+        (preset === "spin" || preset === "spinIn") &&
+        nativeBehaviors.some(isPositionBehavior) &&
+        (!hasCompletePositionAxes(nativeBehaviors) ||
+          !hasConsistentPositionFormulas(nativeBehaviors) ||
+          nativeBehaviors
+            .filter(isPositionBehavior)
+            .some((behavior) => !validCenterRotationProgress(behavior)))
+      ) {
+        issue(
+          errors,
+          part,
+          "invalid-animation-progress-formula",
+          "共同中心自转的位置行为必须保留成对坐标、sum 叠加及 0→1 公式进度",
         );
         continue;
       }

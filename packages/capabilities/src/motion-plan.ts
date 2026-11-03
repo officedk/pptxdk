@@ -75,6 +75,16 @@ export type MotionPlanNode =
       readonly conditionDefinitionsBefore?: readonly MotionPlanConditionPlacement[];
     }
   | {
+      readonly kind: "completion-collector";
+      /** 这个原生容器只代表逻辑作用域的 END，不代表其 START。 */
+      readonly scopeId: string;
+      readonly nativeStart: MotionPlanStart;
+      readonly gates: readonly Extract<
+        MotionPlanStartGate,
+        { readonly kind: "end" }
+      >[];
+    }
+  | {
       readonly kind: "target";
       readonly targetId: number;
       readonly nativeStart: MotionPlanStart;
@@ -107,6 +117,63 @@ export type MotionPlanStart =
 export type MotionPlanStartGate =
   | { readonly kind: "parent-start"; readonly delayMs: number }
   | { readonly kind: "end"; readonly dependency: MotionStartDependency };
+
+function addMotionPlanStartDelay(
+  start: MotionPlanStart,
+  delayMs: number,
+): MotionPlanStart | undefined {
+  let delayed: MotionPlanStart;
+  if (start.kind === "parent-start") {
+    delayed = { kind: start.kind, delayMs: start.delayMs + delayMs };
+  } else if (start.kind === "end") {
+    delayed = {
+      kind: start.kind,
+      dependency: {
+        ...start.dependency,
+        offsetMs: start.dependency.offsetMs + delayMs,
+      },
+    };
+  } else if (start.kind === "condition-join") {
+    delayed = { kind: "condition-end", id: start.id, delayMs };
+  } else {
+    delayed = { ...start, delayMs: start.delayMs + delayMs };
+  }
+  const value =
+    delayed.kind === "parent-start"
+      ? delayed.delayMs
+      : delayed.kind === "end"
+        ? delayed.dependency.offsetMs
+        : delayed.kind === "condition-end"
+          ? delayed.delayMs
+          : undefined;
+  return Number.isSafeInteger(value) &&
+    value !== undefined &&
+    value >= 0 &&
+    value <= maximumTimeNodeValue
+    ? delayed
+    : undefined;
+}
+
+/** 将逻辑父起点折叠进同一真实时间节点的子项起点。 */
+export function composeMotionPlanStarts(
+  inherited: MotionPlanStart | undefined,
+  child: MotionPlanStart,
+): MotionPlanStart | undefined {
+  if (child.kind === "condition-join") {
+    return inherited === undefined ? child : undefined;
+  }
+  if (
+    inherited === undefined ||
+    child.kind === "end" ||
+    child.kind === "condition-end"
+  ) {
+    return child;
+  }
+  if (inherited.kind === "condition-join") {
+    return { kind: "condition-end", id: inherited.id, delayMs: child.delayMs };
+  }
+  return addMotionPlanStartDelay(inherited, child.delayMs);
+}
 
 /** The single slide-local result consumed by both the writer and build report. */
 export type MotionPlan = {
@@ -853,10 +920,12 @@ function effectEnd(
   if (start.state === "no-natural-completion") return start;
 
   const endEventId = dependencyEventId(dependency);
+  // 当前 spTgt 保留整对象的单次行为；逐词即使没有子集也仍有此正下界。
   const minimumDuration =
     expansion.type === "iterate" &&
-    expansion.by === "letter" &&
-    target.value.target.hasTextCharacters === true
+    (expansion.by === "word" ||
+      (expansion.by === "letter" &&
+        target.value.target.hasTextCharacters === true))
       ? durationMs
       : expansion.type === "iterate"
         ? 0
@@ -1169,6 +1238,7 @@ function motionPlan(
     });
     const starts = new Map<string, TimePoint>();
     const ends = new Map<string, TimePoint>();
+    const scopeCompletionMembers = new Map<string, readonly TimePoint[]>();
     const scopeStartPlans = new Map<string, MotionPlanStart>();
     const conditionJoinsById = new Map<
       string,
@@ -1189,6 +1259,8 @@ function motionPlan(
     const resolvingStarts = new Set<string>();
     const resolvingEnds = new Set<string>();
     const scheduledObjects = new Set<number>();
+    const flattenedScopes = new Set<string>();
+    const requestedScopeEnds = new Set<string>();
 
     const directMemberForScope = (
       host: ScopeState,
@@ -1243,6 +1315,34 @@ function motionPlan(
       member.kind === "scope"
         ? `scope:${scopeId(member.id, scopes)}`
         : `target:${member.id}`;
+
+    const canFlattenEarlierSequenceSource = (
+      host: ScopeState,
+      actualParent: ScopeState,
+      consumer: ScopeMember,
+      dependency: MotionStartDependency,
+    ): boolean => {
+      if (
+        host.declaration.identity === actualParent.declaration.identity ||
+        actualParent.declaration.parent !== host.declaration.identity ||
+        actualParent.declaration.mode !== "sequence" ||
+        consumer.kind !== "scope"
+      ) {
+        return false;
+      }
+      const consumerBranch = directConsumerAtHost(host, actualParent, consumer);
+      if (
+        consumerBranch?.kind !== "scope" ||
+        consumerBranch.id !== actualParent.declaration.identity
+      ) {
+        return false;
+      }
+      const sourceIndex = directMemberForDependency(actualParent, dependency);
+      const consumerIndex = actualParent.members.findIndex(
+        (member) => member.kind === consumer.kind && member.id === consumer.id,
+      );
+      return sourceIndex !== undefined && sourceIndex < consumerIndex;
+    };
 
     const directConsumerAtHost = (
       candidateHost: ScopeState,
@@ -1458,6 +1558,7 @@ function motionPlan(
           }
           const gates: MotionPlanStartGate[] = [];
           let validHost = true;
+          let flattenedParent: ScopeState | undefined;
           for (const candidate of expression.candidates) {
             let gateCandidate = candidate;
             if (
@@ -1539,9 +1640,22 @@ function motionPlan(
             }
             const sourceIndex = directMemberForDependency(host, dependency);
             if (sourceIndex === consumerIndex) {
-              lastReason = "来源与消费成员位于同一宿主分支，不能先于集合定义";
-              validHost = false;
-              break;
+              if (
+                !canFlattenEarlierSequenceSource(
+                  host,
+                  hostScope,
+                  consumer,
+                  dependency,
+                ) ||
+                (flattenedParent !== undefined &&
+                  flattenedParent.declaration.identity !==
+                    hostScope.declaration.identity)
+              ) {
+                lastReason = "来源与消费成员位于同一宿主分支，不能先于集合定义";
+                validHost = false;
+                break;
+              }
+              flattenedParent = hostScope;
             }
             if ("scopeId" in dependency) {
               const sourceScope = [...scopes.values()].find(
@@ -1588,15 +1702,22 @@ function motionPlan(
             lastReason = "不能证明条件集合完成晚于消费成员的父作用域激活";
             continue;
           }
+          if (flattenedParent !== undefined) {
+            flattenedScopes.add(flattenedParent.declaration.identity);
+          }
           return {
             kind: "condition-join",
             id: eventId,
             hostScopeId: scopeId(host.declaration.identity, scopes),
             consumerParentScopeId: scopeId(
-              hostScope.declaration.identity,
+              flattenedParent === undefined
+                ? hostScope.declaration.identity
+                : host.declaration.identity,
               scopes,
             ),
-            beforeNodeId: memberNodeId(consumerBranch),
+            beforeNodeId: memberNodeId(
+              flattenedParent === undefined ? consumerBranch : consumer,
+            ),
             gates,
           };
         }
@@ -1792,9 +1913,9 @@ function motionPlan(
         sourceScope = publishedScope;
         point = publisher.point;
       }
-      return point === "start"
-        ? resolveScopeStart(sourceScope)
-        : resolveScopeEnd(sourceScope);
+      if (point === "start") return resolveScopeStart(sourceScope);
+      requestedScopeEnds.add(sourceScope.declaration.identity);
+      return resolveScopeEnd(sourceScope);
     };
 
     const resolveCueTime = (
@@ -2032,6 +2153,7 @@ function motionPlan(
       // 非活动作用域仍可提供自身边界时刻，但不延长父作用域的整体完成。
       const members = activeChildren(scope);
       const memberEnds = members.map((member) => memberEnd(scope, member));
+      scopeCompletionMembers.set(scope.declaration.identity, memberEnds);
       const end = completion(
         start,
         memberEnds,
@@ -2289,7 +2411,11 @@ function motionPlan(
       join: Extract<MotionPlanStart, { readonly kind: "condition-join" }>,
     ): void => {
       const placements = conditionPlacementsByHost.get(join.hostScopeId) ?? [];
-      if (placements.some(({ join: existing }) => existing.id === join.id)) {
+      const existingIndex = placements.findIndex(
+        ({ join: existing }) => existing.id === join.id,
+      );
+      if (existingIndex >= 0) {
+        placements[existingIndex] = { join };
         return;
       }
       placements.push({ join });
@@ -2302,15 +2428,27 @@ function motionPlan(
         : start;
 
     const conditionEvent = (id: string) => `condition:${id}`;
+    const planNodeId = (node: MotionPlanNode): string =>
+      node.kind === "scope"
+        ? `scope:${node.id}`
+        : node.kind === "completion-collector"
+          ? `completion:${node.scopeId}`
+          : `target:${node.targetId}`;
     const nodePath = (node: MotionPlanNode): string | undefined =>
       node.kind === "scope"
         ? [...scopes.values()].find(
             (scope) => scopeId(scope.declaration.identity, scopes) === node.id,
           )?.path
-        : targets.get(node.targetId)?.path;
+        : node.kind === "completion-collector"
+          ? [...scopes.values()].find(
+              (scope) =>
+                scopeId(scope.declaration.identity, scopes) === node.scopeId,
+            )?.path
+          : targets.get(node.targetId)?.path;
     const sortNativeRoots = (
       rootNodes: readonly MotionPlanNode[],
       conditionDefinitionsBefore: readonly MotionPlanConditionPlacement[] = [],
+      parentScope?: ScopeState,
     ): MotionPlanNode[] => {
       const rootDefinitions = new Map<string, number>();
       const rootReferences = rootNodes.map(
@@ -2322,6 +2460,14 @@ function motionPlan(
       ): void => {
         if (node.kind === "scope") {
           rootDefinitions.set(`scope:${node.id}`, rootIndex);
+        } else if (node.kind === "completion-collector") {
+          rootDefinitions.set(`scope:${node.scopeId}`, rootIndex);
+          for (const gate of node.gates) {
+            rootReferences[rootIndex]?.push({
+              id: eventSource(gate.dependency),
+              node,
+            });
+          }
         } else {
           if (node.effects.length > 1) {
             rootDefinitions.set(`target:${node.targetId}`, rootIndex);
@@ -2376,10 +2522,7 @@ function motionPlan(
 
       for (const placement of conditionDefinitionsBefore) {
         const consumerIndex = rootNodes.findIndex(
-          (node) =>
-            (node.kind === "scope"
-              ? `scope:${node.id}`
-              : `target:${node.targetId}`) === placement.join.beforeNodeId,
+          (node) => planNodeId(node) === placement.join.beforeNodeId,
         );
         if (consumerIndex < 0) continue;
         rootDefinitions.set(conditionEvent(placement.join.id), consumerIndex);
@@ -2426,6 +2569,48 @@ function motionPlan(
           if (remaining === 0) readyRootNodes.push(following);
         }
       }
+      if (
+        rootOrder.length !== rootNodes.length &&
+        parentScope?.declaration.mode === "parallel"
+      ) {
+        const reachableFrom = (start: number): Set<number> => {
+          const reached = new Set<number>();
+          const pending = [...(nextRootNodes[start] ?? [])];
+          while (pending.length > 0) {
+            const current = pending.pop();
+            if (current === undefined || reached.has(current)) continue;
+            reached.add(current);
+            pending.push(...(nextRootNodes[current] ?? []));
+          }
+          return reached;
+        };
+        const reachable = rootNodes.map((_, index) => reachableFrom(index));
+        for (let index = 0; index < rootNodes.length; index += 1) {
+          const cycleMembers = rootNodes.flatMap((node, candidateIndex) =>
+            reachable[index]?.has(candidateIndex) &&
+            reachable[candidateIndex]?.has(index)
+              ? [node]
+              : [],
+          );
+          if (cycleMembers.length < 2) continue;
+          const sequenceScopes = cycleMembers.flatMap((node) => {
+            if (node.kind !== "scope") return [];
+            const state = [...scopes.values()].find(
+              (candidate) =>
+                scopeId(candidate.declaration.identity, scopes) === node.id,
+            );
+            return state?.declaration.mode === "sequence" &&
+              state.declaration.parent === parentScope.declaration.identity
+              ? [state]
+              : [];
+          });
+          if (sequenceScopes.length !== cycleMembers.length) continue;
+          // 互等的顺序分支改在共同并行宿主内排布，保留各自成员起点。
+          for (const sequenceScope of sequenceScopes) {
+            flattenedScopes.add(sequenceScope.declaration.identity);
+          }
+        }
+      }
       return rootOrder.length === rootNodes.length
         ? rootOrder.flatMap((index) => {
             const node = rootNodes[index];
@@ -2434,15 +2619,14 @@ function motionPlan(
         : [...rootNodes];
     };
 
-    const scopeNode = (scope: ScopeState): MotionPlanNode | undefined => {
+    const scopeNode = (scope: ScopeState): MotionPlanNode[] => {
       const children = activeChildren(scope).flatMap((member) => {
         if (member.kind === "scope") {
           const childScope = scopes.get(member.id);
           if (childScope === undefined) {
             fail("missing-scope", "编排作用域的成员声明不存在", scope.path);
           }
-          const node = scopeNode(childScope);
-          return node === undefined ? [] : [node];
+          return scopeNode(childScope);
         }
         const target = targets.get(member.id);
         if (target === undefined) {
@@ -2451,11 +2635,140 @@ function motionPlan(
         const node = targetNode(target, scope);
         return node === undefined ? [] : [node];
       });
-      if (children.length === 0) return undefined;
+      if (children.length === 0) return [];
       const nativeStart = scopeStartPlans.get(scope.declaration.identity);
       if (nativeStart === undefined) {
         fail("motion-plan-conflict", "作用域缺少已求解的起点", scope.path);
       }
+
+      if (flattenedScopes.has(scope.declaration.identity)) {
+        const parentId = scope.declaration.parent;
+        const parent =
+          parentId === undefined ? undefined : scopes.get(parentId);
+        if (parent === undefined) {
+          fail("motion-plan-conflict", "交叉集合缺少真实早宿主", scope.path);
+        }
+        const parentScopeId = scopeId(parent.declaration.identity, scopes);
+        const firstChild = children[0];
+        if (firstChild === undefined) {
+          fail(
+            "motion-plan-conflict",
+            "交叉集合没有可提升的真实成员",
+            scope.path,
+          );
+        }
+        const firstChildId = planNodeId(firstChild);
+        const scopeNodeIdentity = `scope:${scopeId(scope.declaration.identity, scopes)}`;
+        const localHostId = scopeId(scope.declaration.identity, scopes);
+        const localPlacements =
+          conditionPlacementsByHost.get(localHostId) ?? [];
+        conditionPlacementsByHost.delete(localHostId);
+        for (const placement of localPlacements) {
+          recordConditionPlacement({
+            ...placement.join,
+            hostScopeId: parentScopeId,
+            consumerParentScopeId: parentScopeId,
+          });
+        }
+        for (const [hostScopeId, placements] of conditionPlacementsByHost) {
+          for (let index = 0; index < placements.length; index += 1) {
+            const placement = placements[index];
+            if (placement?.join.beforeNodeId !== scopeNodeIdentity) continue;
+            if (hostScopeId !== parentScopeId) {
+              fail(
+                "unknown-motion-start",
+                "交叉提升不能保留早宿主之外的条件集合定义位置",
+                scope.path,
+              );
+            }
+            placements[index] = {
+              join: {
+                ...placement.join,
+                consumerParentScopeId: parentScopeId,
+                beforeNodeId: firstChildId,
+              },
+            };
+          }
+        }
+        if (nativeStart.kind === "condition-join") {
+          if (nativeStart.hostScopeId !== parentScopeId) {
+            fail(
+              "unknown-motion-start",
+              "交叉提升不能把逻辑起点集合移出其真实早宿主",
+              scope.path,
+            );
+          }
+          recordConditionPlacement({
+            ...nativeStart,
+            consumerParentScopeId: parentScopeId,
+            beforeNodeId: firstChildId,
+          });
+        }
+        const inheritedStart = consumerStart(nativeStart);
+        const liftedChildren = children.map((child) => {
+          const childStart = composeMotionPlanStarts(
+            inheritedStart,
+            child.nativeStart,
+          );
+          if (childStart === undefined) {
+            fail(
+              "unknown-motion-start",
+              "交叉提升后无法保留真实成员的起点关系",
+              scope.path,
+            );
+          }
+          return { ...child, nativeStart: childStart };
+        });
+        if (requestedScopeEnds.has(scope.declaration.identity)) {
+          const memberEnds = scopeCompletionMembers.get(
+            scope.declaration.identity,
+          );
+          const expectedMembers = activeChildren(scope);
+          const hostStart = resolveScopeStart(parent);
+          if (
+            memberEnds === undefined ||
+            memberEnds.length !== expectedMembers.length ||
+            hostStart.state === "no-natural-completion"
+          ) {
+            fail(
+              "unknown-motion-start",
+              "交叉提升缺少可核对的完整成员完成集合",
+              scope.path,
+            );
+          }
+          const gates = memberEnds.map((memberEnd) => {
+            if (memberEnd.state === "no-natural-completion") {
+              fail(
+                "unknown-motion-start",
+                "交叉提升不能收集无自然完成的真实成员",
+                scope.path,
+              );
+            }
+            const dependency = memberEnd.dependency;
+            if (
+              dependency === undefined ||
+              dependency.point !== "end" ||
+              !strictlyAfterParentStart(memberEnd.candidates, hostStart)
+            ) {
+              fail(
+                "unknown-motion-start",
+                "不能证明真实成员 END 晚于早宿主激活并可被全体收集",
+                scope.path,
+              );
+            }
+            return { kind: "end" as const, dependency };
+          });
+          liftedChildren.push({
+            kind: "completion-collector",
+            scopeId: scopeId(scope.declaration.identity, scopes),
+            // 该集合从真实早宿主激活时监听；它的 END 才代表逻辑作用域完成。
+            nativeStart: { kind: "parent-start", delayMs: 0 },
+            gates,
+          });
+        }
+        return liftedChildren;
+      }
+
       if (nativeStart.kind === "condition-join") {
         recordConditionPlacement(nativeStart);
       }
@@ -2463,29 +2776,41 @@ function motionPlan(
         conditionPlacementsByHost.get(
           scopeId(scope.declaration.identity, scopes),
         ) ?? [];
-      return {
-        kind: "scope",
-        id: scopeId(scope.declaration.identity, scopes),
-        nativeStart: consumerStart(nativeStart),
-        children: sortNativeRoots(children, conditionDefinitionsBefore),
-        ...(conditionDefinitionsBefore.length === 0
-          ? {}
-          : { conditionDefinitionsBefore }),
-      };
+      return [
+        {
+          kind: "scope",
+          id: scopeId(scope.declaration.identity, scopes),
+          nativeStart: consumerStart(nativeStart),
+          children: sortNativeRoots(
+            children,
+            conditionDefinitionsBefore,
+            scope,
+          ),
+          ...(conditionDefinitionsBefore.length === 0
+            ? {}
+            : { conditionDefinitionsBefore }),
+        },
+      ];
     };
 
-    const rootNodes = roots.flatMap((member) => {
-      if (member.kind === "scope") {
-        const scope = scopes.get(member.id);
-        if (scope === undefined || !scopeSteps(scope).includes(key)) return [];
-        const node = scopeNode(scope);
+    let rootNodes: MotionPlanNode[] = [];
+    while (true) {
+      conditionPlacementsByHost.clear();
+      const priorFlattenedScopeCount = flattenedScopes.size;
+      rootNodes = roots.flatMap((member) => {
+        if (member.kind === "scope") {
+          const scope = scopes.get(member.id);
+          if (scope === undefined || !scopeSteps(scope).includes(key))
+            return [];
+          return scopeNode(scope);
+        }
+        const target = targets.get(member.id);
+        if (target === undefined || target.stepKey !== key) return [];
+        const node = targetNode(target);
         return node === undefined ? [] : [node];
-      }
-      const target = targets.get(member.id);
-      if (target === undefined || target.stepKey !== key) return [];
-      const node = targetNode(target);
-      return node === undefined ? [] : [node];
-    });
+      });
+      if (flattenedScopes.size === priorFlattenedScopeCount) break;
+    }
     const nodes = sortNativeRoots(rootNodes);
     const definedEvents = new Set<string>();
     const definedConditions = new Set<string>();
@@ -2493,7 +2818,7 @@ function motionPlan(
       if (!definedEvents.has(id)) {
         fail(
           "unknown-motion-start",
-          "原生完成来源必须在其条件引用之前定义",
+          `原生完成来源 ${id} 必须在其条件引用之前定义`,
           nodePath(node),
         );
       }
@@ -2507,7 +2832,20 @@ function motionPlan(
         }
         definedConditions.add(conditionEvent(node.nativeStart.id));
       }
-      if (node.kind === "scope") {
+      if (node.kind === "completion-collector") {
+        for (const gate of node.gates) {
+          verifyEventReference(eventSource(gate.dependency), node);
+        }
+        const eventId = `scope:${node.scopeId}`;
+        if (definedEvents.has(eventId)) {
+          fail(
+            "motion-plan-conflict",
+            "同一作用域重复定义完成事件",
+            nodePath(node),
+          );
+        }
+        definedEvents.add(eventId);
+      } else if (node.kind === "scope") {
         definedEvents.add(`scope:${node.id}`);
       } else {
         if (node.effects.length > 1) {
@@ -2543,10 +2881,7 @@ function motionPlan(
         const placements = node.conditionDefinitionsBefore ?? [];
         const remaining = new Set(placements);
         for (const child of node.children) {
-          const childId =
-            child.kind === "scope"
-              ? `scope:${child.id}`
-              : `target:${child.targetId}`;
+          const childId = planNodeId(child);
           for (const placement of placements) {
             if (placement.join.beforeNodeId !== childId) continue;
             for (const gate of placement.join.gates) {

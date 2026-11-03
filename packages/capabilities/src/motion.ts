@@ -14,10 +14,12 @@ import type {
 } from "./motion-api.ts";
 import { maximumTimeNodeValue, motionScopeAnnotation } from "./motion-api.ts";
 import {
+  composeMotionPlanStarts,
   compileMotionPlan,
   type MotionPlanConditionPlacement,
   type MotionPlanNode,
   type MotionPlanStart,
+  type MotionPlanStartGate,
   type MotionPlanStep,
 } from "./motion-plan.ts";
 
@@ -498,28 +500,6 @@ function addNativeStartDelay(
     : undefined;
 }
 
-function composeNativeStarts(
-  inherited: MotionPlanStart | undefined,
-  child: MotionPlanStart,
-): MotionPlanStart | undefined {
-  // 多约束集合必须留在原宿主中，不能与已投影的父起点折叠。
-  if (child.kind === "condition-join") {
-    return inherited === undefined ? child : undefined;
-  }
-  // 独立完成事件不继承父延迟；其他子项沿用父起点时才合并延迟。
-  if (
-    inherited === undefined ||
-    child.kind === "end" ||
-    child.kind === "condition-end"
-  ) {
-    return child;
-  }
-  if (inherited.kind === "condition-join") {
-    return { kind: "condition-end", id: inherited.id, delayMs: child.delayMs };
-  }
-  return addNativeStartDelay(inherited, child.delayMs);
-}
-
 function dependencyTimingId(
   dependency: MotionStartDependency,
   stepKey: string,
@@ -629,7 +609,32 @@ function conditionJoinTree(
   if (id === undefined) {
     throw new Error("MotionPlan 条件集合缺少原生时间节点身份");
   }
-  const leaves = start.gates.map((gate) =>
+  return endCollectorTree(
+    id,
+    element("p:cond", { delay: 0 }),
+    start.gates,
+    stepKey,
+    ids,
+    effectNodeIds,
+    scopeNodeIds,
+    targetGroupIds,
+    conditionNodeIds,
+  );
+}
+
+function endCollectorTree(
+  id: number,
+  startCondition: string,
+  gates: readonly MotionPlanStartGate[],
+  stepKey: string,
+  ids: TimingIds,
+  effectNodeIds: ReadonlyMap<string, number>,
+  scopeNodeIds: ReadonlyMap<string, number>,
+  targetGroupIds: ReadonlyMap<string, number>,
+  conditionNodeIds: ReadonlyMap<string, number>,
+  nodeType?: string,
+): string {
+  const leaves = gates.map((gate) =>
     element(
       "p:par",
       undefined,
@@ -651,7 +656,7 @@ function conditionJoinTree(
       ),
     ),
   );
-  return timingContainer(id, element("p:cond", { delay: 0 }), leaves);
+  return timingContainer(id, startCondition, leaves, nodeType);
 }
 
 function mainSequenceWithGroup(
@@ -708,6 +713,11 @@ function timingXml(steps: readonly MotionPlanStep[]): string {
           keepDependencyContainer(gate.dependency, stepKey);
         }
       }
+      if (node.kind === "completion-collector") {
+        for (const gate of node.gates) {
+          keepDependencyContainer(gate.dependency, stepKey);
+        }
+      }
       if (node.kind === "scope") {
         for (const placement of node.conditionDefinitionsBefore ?? []) {
           referencedScopeNodes.add(`${stepKey}:${placement.join.hostScopeId}`);
@@ -742,6 +752,10 @@ function timingXml(steps: readonly MotionPlanStep[]): string {
         }
         scopeNodeIds.set(`${stepKey}:${node.id}`, ids.take());
         registerNodeIds(node.children, stepKey);
+        continue;
+      }
+      if (node.kind === "completion-collector") {
+        scopeNodeIds.set(`${stepKey}:${node.scopeId}`, ids.take());
         continue;
       }
       if (node.effects.length > 1) {
@@ -796,7 +810,9 @@ function timingXml(steps: readonly MotionPlanStep[]): string {
         const nodeId =
           node.kind === "scope"
             ? `scope:${node.id}`
-            : `target:${node.targetId}`;
+            : node.kind === "completion-collector"
+              ? `completion:${node.scopeId}`
+              : `target:${node.targetId}`;
         for (const placement of conditionDefinitionsBefore) {
           if (placement.join.beforeNodeId !== nodeId) continue;
           rendered.push(
@@ -818,7 +834,7 @@ function timingXml(steps: readonly MotionPlanStep[]): string {
               ? "afterEffect"
               : "withEffect";
         const nodeType = defaultNodeType;
-        let effectiveStart = composeNativeStarts(
+        let effectiveStart = composeMotionPlanStarts(
           inheritedStart,
           node.nativeStart,
         );
@@ -852,12 +868,18 @@ function timingXml(steps: readonly MotionPlanStep[]): string {
             `${step.key}:${node.id}`,
           );
           const childrenCanLift = node.children.every((child) => {
-            const childStart = composeNativeStarts(
+            const childStart = composeMotionPlanStarts(
               effectiveStart,
               child.nativeStart,
             );
             if (childStart === undefined) return false;
-            if (child.kind === "scope" || child.effects.length > 1) return true;
+            if (
+              child.kind === "scope" ||
+              child.kind === "completion-collector" ||
+              child.effects.length > 1
+            ) {
+              return true;
+            }
             const [effect] = child.effects;
             return (
               effect !== undefined &&
@@ -900,6 +922,37 @@ function timingXml(steps: readonly MotionPlanStep[]): string {
             );
           }
           if (rendered.length > 0) pendingRootNodeType = undefined;
+          continue;
+        }
+
+        if (node.kind === "completion-collector") {
+          const collectorId = scopeNodeIds.get(`${step.key}:${node.scopeId}`);
+          if (collectorId === undefined) {
+            throw new Error("MotionPlan 完成集合缺少原生时间节点身份");
+          }
+          const condition = nativeStartCondition(
+            effectiveStart,
+            step.key,
+            effectNodeIds,
+            scopeNodeIds,
+            targetGroupIds,
+            conditionNodeIds,
+          );
+          rendered.push(
+            endCollectorTree(
+              collectorId,
+              condition,
+              node.gates,
+              step.key,
+              ids,
+              effectNodeIds,
+              scopeNodeIds,
+              targetGroupIds,
+              conditionNodeIds,
+              pendingRootNodeType,
+            ),
+          );
+          pendingRootNodeType = undefined;
           continue;
         }
 

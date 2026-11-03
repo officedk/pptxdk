@@ -1383,6 +1383,154 @@ function NestedMaxConditionJoin({
   );
 }
 
+type DfsEndCollectorOptions = {
+  readonly longFirst?: boolean;
+  readonly branchOrder?: "p-first" | "q-first";
+  readonly consumerOrder?: "p-first" | "q-first";
+  readonly trigger?: "auto" | "click";
+  readonly wordSources?: boolean;
+  readonly firstText?: string;
+  readonly secondText?: string;
+  readonly emptyFirstLetter?: boolean;
+  readonly pDelayMs?: number;
+  readonly pStartAlias?: boolean;
+};
+
+function DfsEndCollectors({
+  longFirst = false,
+  branchOrder = "p-first",
+  consumerOrder = "p-first",
+  trigger = "auto",
+  wordSources = false,
+  firstText,
+  secondText = "GHIJKLMN",
+  emptyFirstLetter = false,
+  pDelayMs,
+  pStartAlias = false,
+}: DfsEndCollectorOptions) {
+  const host = useMotionScope();
+  const p = useMotionScope();
+  const q = useMotionScope();
+  const a = useMotionScope();
+  const b = useMotionScope();
+  const d = useMotionScope();
+  const e = useMotionScope();
+  const afterP = useMotionScope();
+  const afterQ = useMotionScope();
+  const follower = useMotionScope();
+  const pStartFollower = useMotionScope();
+  const firstSourceText =
+    firstText ?? (longFirst ? "ABCDEFGHIJKLMNOPQRSTUVWXYZ123456" : "AB");
+  const secondSourceText = secondText;
+  const firstSource = wordSources
+    ? createElement(
+        Text,
+        {
+          testId: "dfs-first",
+          x: 8,
+          y: 8,
+          width: 240,
+          height: 24,
+          style: { fontSize: 12 },
+          enter: fade({ by: "word", duration: 600, intervalMs: 200 }),
+        },
+        firstSourceText,
+      )
+    : unknownLetterText(
+        "dfs-first",
+        emptyFirstLetter ? "" : firstSourceText,
+        8,
+      );
+  const secondSource = wordSources
+    ? createElement(
+        Text,
+        {
+          testId: "dfs-second",
+          x: 40,
+          y: 38,
+          width: 240,
+          height: 24,
+          style: { fontSize: 12 },
+          enter: fade({ by: "word", duration: 600, intervalMs: 200 }),
+        },
+        secondSourceText,
+      )
+    : unknownLetterText("dfs-second", secondSourceText, 40);
+
+  const firstBranch = createElement(
+    MotionScope,
+    {
+      scope: p,
+      mode: "sequence",
+      ...(pDelayMs === undefined ? {} : { delay: pDelayMs }),
+    },
+    createElement(MotionScope, { scope: a }, firstSource),
+    createElement(
+      MotionScope,
+      { scope: d, startAt: after(b.end, 11000) },
+      observedShape("dfs-d", "D", 76, "#ED7D31", 100),
+    ),
+  );
+  const secondBranch = createElement(
+    MotionScope,
+    { scope: q, mode: "sequence" },
+    createElement(MotionScope, { scope: b }, secondSource),
+    createElement(
+      MotionScope,
+      { scope: e, startAt: after(a.end, 11000) },
+      observedShape("dfs-e", "E", 104, "#4472C4", 100),
+    ),
+  );
+  const branches =
+    branchOrder === "p-first"
+      ? [firstBranch, secondBranch]
+      : [secondBranch, firstBranch];
+  const pConsumer = createElement(
+    MotionScope,
+    { scope: afterP, startAt: p.end },
+    observedShape("dfs-after-p", "After P", 132, "#70AD47", 100),
+  );
+  const qConsumer = createElement(
+    MotionScope,
+    { scope: afterQ, startAt: q.end },
+    observedShape("dfs-after-q", "After Q", 160, "#A5A5A5", 100),
+  );
+  const consumers =
+    consumerOrder === "p-first"
+      ? [pConsumer, qConsumer]
+      : [qConsumer, pConsumer];
+  const startAliasConsumer = pStartAlias
+    ? createElement(
+        MotionScope,
+        { scope: pStartFollower, startAt: p.start },
+        observedShape("dfs-p-start-alias", "P start", 216, "#5B9BD5", 50),
+      )
+    : undefined;
+  const content = createElement(
+    Fragment,
+    null,
+    createElement(MotionScope, { scope: host, mode: "parallel" }, ...branches),
+    ...consumers,
+    startAliasConsumer,
+    createElement(
+      MotionScope,
+      { scope: follower, startAt: host.end },
+      observedShape("dfs-host-follower", "Host follower", 188, "#5B9BD5", 50),
+    ),
+  );
+  return createElement(
+    Deck,
+    { width: 320, height: 240 },
+    createElement(
+      Slide,
+      {
+        slideId: `dfs-end-collectors-${longFirst ? "long" : "short"}-${branchOrder}-${consumerOrder}-${trigger}-${wordSources ? "word" : "letter"}`,
+      },
+      trigger === "click" ? createElement(Step, { n: 2 }, content) : content,
+    ),
+  );
+}
+
 function IncomparableUnknownJoin({
   firstText,
   trigger,
@@ -3038,6 +3186,416 @@ describe("组件编排作用域", () => {
         );
         return true;
       },
+    );
+  });
+
+  it("保留交叉顺序分支的双成员整体完成及外部消费者", async () => {
+    for (const longFirst of [false, true]) {
+      for (const branchOrder of ["p-first", "q-first"] as const) {
+        for (const consumerOrder of ["p-first", "q-first"] as const) {
+          for (const trigger of ["auto", "click"] as const) {
+            const result = await build(
+              createElement(DfsEndCollectors, {
+                longFirst,
+                branchOrder,
+                consumerOrder,
+                trigger,
+              }),
+            );
+            const slide = result.report.slides[0];
+            const motion = slide?.capabilities?.["motion"] as MotionObservation;
+            const objectId = (testId: string) =>
+              slide?.objects.find(({ testId: id }) => id === testId)?.id;
+            const scopeContaining = (testId: string) =>
+              motion.scopes?.find(({ members }) =>
+                members.some(
+                  (member) =>
+                    member.kind === "object" && member.id === objectId(testId),
+                ),
+              );
+            const firstScope = scopeContaining("dfs-first");
+            const secondScope = scopeContaining("dfs-second");
+            const dScope = scopeContaining("dfs-d");
+            const eScope = scopeContaining("dfs-e");
+            const pScope = motion.scopes?.find(
+              ({ members }) =>
+                members.some(
+                  (member) =>
+                    member.kind === "scope" && member.id === firstScope?.id,
+                ) &&
+                members.some(
+                  (member) =>
+                    member.kind === "scope" && member.id === dScope?.id,
+                ),
+            );
+            const qScope = motion.scopes?.find(
+              ({ members }) =>
+                members.some(
+                  (member) =>
+                    member.kind === "scope" && member.id === secondScope?.id,
+                ) &&
+                members.some(
+                  (member) =>
+                    member.kind === "scope" && member.id === eScope?.id,
+                ),
+            );
+            assert.ok(
+              firstScope && secondScope && dScope && eScope && pScope && qScope,
+            );
+            assert.equal(pScope.completion, "unknown");
+            assert.equal(qScope.completion, "unknown");
+            assert.deepEqual(pScope.members, [
+              { kind: "scope", id: firstScope.id },
+              { kind: "scope", id: dScope.id },
+            ]);
+            assert.deepEqual(qScope.members, [
+              { kind: "scope", id: secondScope.id },
+              { kind: "scope", id: eScope.id },
+            ]);
+            const afterPScope = scopeContaining("dfs-after-p");
+            const afterQScope = scopeContaining("dfs-after-q");
+            const hostFollowerScope = scopeContaining("dfs-host-follower");
+            assert.ok(afterPScope && afterQScope && hostFollowerScope);
+            assert.deepEqual(afterPScope.startAfter, {
+              scopeId: pScope.id,
+              point: "end",
+              offsetMs: 0,
+            });
+            assert.deepEqual(afterQScope.startAfter, {
+              scopeId: qScope.id,
+              point: "end",
+              offsetMs: 0,
+            });
+            const hostScope = motion.scopes?.find(
+              ({ id }) => id === pScope.parentId,
+            );
+            assert.ok(hostScope);
+            assert.deepEqual(
+              hostScope.members,
+              branchOrder === "p-first"
+                ? [
+                    { kind: "scope", id: pScope.id },
+                    { kind: "scope", id: qScope.id },
+                  ]
+                : [
+                    { kind: "scope", id: qScope.id },
+                    { kind: "scope", id: pScope.id },
+                  ],
+            );
+            assert.deepEqual(hostFollowerScope.startAfter, {
+              scopeId: hostScope.id,
+              point: "end",
+              offsetMs: 0,
+            });
+
+            const file = await validatePptx(result.pptx);
+            assert.deepEqual(file.errors, []);
+            assert.deepEqual(file.extensions, []);
+            const fileSlide = file.slides[0];
+            assert.equal(fileSlide?.animations?.[0]?.trigger, trigger);
+            const effects = fileSlide?.animations?.[0]?.effects ?? [];
+            assert.equal(effects.length, 7);
+            assert.equal(
+              new Set(effects.map(({ targetId }) => targetId)).size,
+              7,
+            );
+            const effect = (testId: string) =>
+              effects.find(({ targetId }) => targetId === objectId(testId));
+            const firstEffect = effect("dfs-first");
+            const secondEffect = effect("dfs-second");
+            const dEffect = effect("dfs-d");
+            const eEffect = effect("dfs-e");
+            const afterPEffect = effect("dfs-after-p");
+            const afterQEffect = effect("dfs-after-q");
+            const hostFollowerEffect = effect("dfs-host-follower");
+            assert.ok(
+              firstEffect &&
+                secondEffect &&
+                dEffect &&
+                eEffect &&
+                afterPEffect &&
+                afterQEffect &&
+                hostFollowerEffect,
+            );
+            const containers = fileSlide?.animationContainers ?? [];
+            const containerById = (timingId: number | undefined) =>
+              containers.find(({ timingId: id }) => id === timingId);
+            const effectContainer = (timingId: number) =>
+              containers.find(({ children }) =>
+                children.some(
+                  ({ kind, timingId: childId }) =>
+                    kind === "effect" && childId === timingId,
+                ),
+              );
+            const firstContainer = effectContainer(firstEffect.timingId);
+            const secondContainer = effectContainer(secondEffect.timingId);
+            const dContainer = effectContainer(dEffect.timingId);
+            const eContainer = effectContainer(eEffect.timingId);
+            assert.ok(
+              firstContainer && secondContainer && dContainer && eContainer,
+            );
+            const conditionGates = (
+              consumer: NonNullable<typeof dContainer>,
+            ) => {
+              const join = containerById(consumer.startAfter?.timingId);
+              assert.ok(join);
+              assert.equal(join.endSync, "all");
+              assert.equal(join.durationMs, undefined);
+              assert.equal(join.children.length, 2);
+              return join.children.map(
+                ({ timingId }) => containerById(timingId)?.startAfter,
+              );
+            };
+            const dGates = conditionGates(dContainer);
+            const eGates = conditionGates(eContainer);
+            assert.deepEqual(
+              dGates
+                .map((gate) => [gate?.timingId, gate?.offsetMs])
+                .sort(
+                  ([leftId], [rightId]) => Number(leftId) - Number(rightId),
+                ),
+              [
+                [firstContainer.timingId, 0],
+                [secondContainer.timingId, 11000],
+              ].sort(([leftId], [rightId]) => Number(leftId) - Number(rightId)),
+            );
+            assert.deepEqual(
+              eGates
+                .map((gate) => [gate?.timingId, gate?.offsetMs])
+                .sort(
+                  ([leftId], [rightId]) => Number(leftId) - Number(rightId),
+                ),
+              [
+                [secondContainer.timingId, 0],
+                [firstContainer.timingId, 11000],
+              ].sort(([leftId], [rightId]) => Number(leftId) - Number(rightId)),
+            );
+            const pCollector = containerById(afterPEffect.startAfter?.timingId);
+            const qCollector = containerById(afterQEffect.startAfter?.timingId);
+            const hostContainer = containerById(
+              hostFollowerEffect.startAfter?.timingId,
+            );
+            assert.ok(pCollector && qCollector && hostContainer);
+            for (const collector of [pCollector, qCollector]) {
+              assert.equal(collector.kind, "parallel");
+              assert.equal(collector.endSync, "all");
+              assert.equal(collector.durationMs, undefined);
+              assert.equal(collector.children.length, 2);
+              assert.ok(
+                collector.children.every(({ kind }) => kind === "container"),
+              );
+            }
+            const collectorSources = (collector: typeof pCollector) =>
+              collector.children.map(
+                ({ timingId }) => containerById(timingId)?.startAfter?.timingId,
+              );
+            assert.deepEqual(
+              new Set(collectorSources(pCollector)),
+              new Set([firstContainer.timingId, dContainer.timingId]),
+            );
+            assert.deepEqual(
+              new Set(collectorSources(qCollector)),
+              new Set([secondContainer.timingId, eContainer.timingId]),
+            );
+            assert.equal(pCollector.parentTimingId, hostContainer.timingId);
+            assert.equal(qCollector.parentTimingId, hostContainer.timingId);
+            assert.equal(hostContainer.endSync, "all");
+            assert.ok(
+              !hostContainer.children.some(({ timingId }) =>
+                [
+                  afterPEffect.timingId,
+                  afterQEffect.timingId,
+                  hostFollowerEffect.timingId,
+                ].includes(timingId),
+              ),
+            );
+
+            const slidePart = unzipSync(result.pptx)["ppt/slides/slide1.xml"];
+            assert.ok(slidePart);
+            const xml = strFromU8(slidePart);
+            assertTimingReferencesFollowDefinitions(xml);
+            assert.equal(
+              firstMainSequenceEntryNodeType(xml, 0),
+              trigger === "click" ? "clickEffect" : "afterEffect",
+            );
+          }
+        }
+      }
+    }
+  });
+
+  it("逐词真实单次行为在中英文、空白、标点和空文本上保留正下界", async () => {
+    const texts = ["中文词语", "e\u0301 👩🏽‍💻", "   \t", "，。!?", ""];
+    for (const [index, text] of texts.entries()) {
+      const result = await build(
+        createElement(DfsEndCollectors, {
+          wordSources: true,
+          firstText: text,
+          secondText: text,
+          branchOrder: index % 2 === 0 ? "p-first" : "q-first",
+          consumerOrder: index % 2 === 0 ? "q-first" : "p-first",
+          trigger: index % 2 === 0 ? "auto" : "click",
+        }),
+      );
+      const slide = result.report.slides[0];
+      const motion = slide?.capabilities?.["motion"] as MotionObservation;
+      const first = motion.steps[0]?.effects.find(
+        ({ target }) => target.testId === "dfs-first",
+      );
+      const second = motion.steps[0]?.effects.find(
+        ({ target }) => target.testId === "dfs-second",
+      );
+      assert.ok(first && second);
+      for (const source of [first, second]) {
+        assert.deepEqual(
+          [
+            source.by,
+            source.intervalMs,
+            source.durationMs,
+            source.startMs,
+            source.endMs,
+            source.completion,
+          ],
+          ["word", 200, 600, 0, undefined, "unknown"],
+        );
+      }
+      const sourceScope = motion.scopes?.find(({ members }) =>
+        members.some(
+          (member) =>
+            member.kind === "object" &&
+            (member.id === first.target.id || member.id === second.target.id),
+        ),
+      );
+      assert.equal(sourceScope?.completion, "unknown");
+      assert.equal(sourceScope?.endMs, undefined);
+
+      const file = await validatePptx(result.pptx);
+      assert.deepEqual(file.errors, []);
+      assert.deepEqual(file.extensions, []);
+      const fileSlide = file.slides[0];
+      const effects = fileSlide?.animations?.[0]?.effects ?? [];
+      for (const testId of ["dfs-first", "dfs-second"]) {
+        const targetId = slide?.objects.find(
+          ({ testId: id }) => id === testId,
+        )?.id;
+        const wordEffect = effects.find(({ targetId: id }) => id === targetId);
+        assert.ok(wordEffect);
+        assert.deepEqual(
+          [
+            wordEffect.by,
+            wordEffect.intervalMs,
+            wordEffect.durationMs,
+            wordEffect.completion,
+          ],
+          ["word", 200, 600, "unknown"],
+        );
+      }
+      const slidePart = unzipSync(result.pptx)["ppt/slides/slide1.xml"];
+      assert.ok(slidePart);
+      const xml = strFromU8(slidePart);
+      assert.match(
+        xml,
+        /<p:iterate type="wd"><p:tmAbs val="200"><\/p:tmAbs><\/p:iterate>/u,
+      );
+      assertTimingReferencesFollowDefinitions(xml);
+    }
+  });
+
+  it("真实嵌套成员完成可收集，但零下界成员仍不能作为早宿主监听源", async () => {
+    await assert.rejects(
+      build(
+        createElement(DfsEndCollectors, {
+          emptyFirstLetter: true,
+          trigger: "auto",
+        }),
+      ),
+      (error: unknown) => {
+        assert.ok(error instanceof BuildError);
+        assert.equal(error.diagnostics[0]?.code, "unknown-motion-start");
+        assert.match(
+          error.diagnostics[0]?.message ?? "",
+          /不能证明真实来源结束晚于候选宿主激活/u,
+        );
+        return true;
+      },
+    );
+  });
+
+  it("晚起点别名保留逻辑起点，完成收集器仍从早宿主注册", async () => {
+    const result = await build(
+      createElement(DfsEndCollectors, {
+        pDelayMs: 2500,
+        pStartAlias: true,
+      }),
+    );
+    const slide = result.report.slides[0];
+    const motion = slide?.capabilities?.["motion"] as MotionObservation;
+    const scopeContaining = (testId: string) =>
+      motion.scopes?.find(({ members }) =>
+        members.some(
+          (member) =>
+            member.kind === "object" &&
+            member.id ===
+              slide?.objects.find(({ testId: id }) => id === testId)?.id,
+        ),
+      );
+    const firstScope = scopeContaining("dfs-first");
+    const dScope = scopeContaining("dfs-d");
+    const pScope = motion.scopes?.find(
+      ({ members }) =>
+        members.some(
+          (member) => member.kind === "scope" && member.id === firstScope?.id,
+        ) &&
+        members.some(
+          (member) => member.kind === "scope" && member.id === dScope?.id,
+        ),
+    );
+    const aliasScope = scopeContaining("dfs-p-start-alias");
+    assert.ok(pScope && aliasScope);
+    assert.equal(pScope.startMs, 2500);
+    assert.equal(aliasScope.startMs, 2500);
+    assert.equal(pScope.completion, "unknown");
+
+    const file = await validatePptx(result.pptx);
+    assert.deepEqual(file.errors, []);
+    assert.deepEqual(file.extensions, []);
+    const fileSlide = file.slides[0];
+    const effects = fileSlide?.animations?.[0]?.effects ?? [];
+    const afterPEffect = effects.find(
+      ({ targetId }) =>
+        targetId ===
+        slide?.objects.find(({ testId }) => testId === "dfs-after-p")?.id,
+    );
+    const aliasEffect = effects.find(
+      ({ targetId }) =>
+        targetId ===
+        slide?.objects.find(({ testId }) => testId === "dfs-p-start-alias")?.id,
+    );
+    assert.ok(afterPEffect && aliasEffect);
+    const containers = fileSlide?.animationContainers ?? [];
+    const pCollector = containers.find(
+      ({ timingId }) => timingId === afterPEffect.startAfter?.timingId,
+    );
+    assert.ok(pCollector);
+    assert.equal(pCollector.endSync, "all");
+    assert.equal(pCollector.startAfter, undefined);
+    const slidePart = unzipSync(result.pptx)["ppt/slides/slide1.xml"];
+    assert.ok(slidePart);
+    const xml = strFromU8(slidePart);
+    assertTimingReferencesFollowDefinitions(xml);
+    assert.match(
+      xml,
+      new RegExp(
+        `<p:cTn id="${aliasEffect.timingId}"[^>]*>[\\s\\S]*?<p:cond delay="2500"`,
+        "u",
+      ),
+    );
+    assert.match(
+      xml,
+      new RegExp(
+        `<p:cTn id="${pCollector.timingId}"[^>]*><p:stCondLst><p:cond delay="0"`,
+        "u",
+      ),
     );
   });
 

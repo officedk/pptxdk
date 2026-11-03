@@ -948,7 +948,15 @@ function ConditionJoinStartAlias({
   );
 }
 
-function LateParentRetainedAlias() {
+function LateParentRetainedAlias({
+  trigger = "auto",
+  reverse = false,
+  parentOffsetMs = 10,
+}: {
+  readonly trigger?: "auto" | "click";
+  readonly reverse?: boolean;
+  readonly parentOffsetMs?: number;
+}) {
   const host = useMotionScope();
   const first = useMotionScope();
   const delayed = useMotionScope();
@@ -956,55 +964,65 @@ function LateParentRetainedAlias() {
   const parent = useMotionScope();
   const alias = useMotionScope();
   const afterParent = useMotionScope();
+  const source = createElement(
+    MotionScope,
+    { scope: host, mode: "sequence" },
+    createElement(
+      MotionScope,
+      { scope: first },
+      unknownLetterText(
+        "late-alias-first",
+        "ABCDEFGHIJKLMNOPQRSTUVWXYZ123456",
+        8,
+      ),
+      createElement(
+        MotionScope,
+        { scope: delayed, delay: 1000 },
+        unknownLetterText("late-alias-delayed", "XY", 42),
+      ),
+    ),
+    createElement(
+      MotionScope,
+      { scope: joined, startAt: after(delayed.end, 11000) },
+      observedShape("late-alias-join", "Join", 76, "#ED7D31", 100),
+    ),
+  );
+  const parentNode = createElement(
+    MotionScope,
+    { scope: parent, startAt: after(first.end, parentOffsetMs) },
+    createElement(
+      MotionScope,
+      { scope: alias, startAt: after(joined.start, 19) },
+      observedShape("late-alias-consumer", "Alias", 108, "#C00000", 100, 71),
+    ),
+  );
+  const afterParentNode = createElement(
+    MotionScope,
+    { scope: afterParent, startAt: parent.end },
+    observedShape(
+      "late-alias-after-parent",
+      "After parent",
+      140,
+      "#70AD47",
+      100,
+    ),
+  );
+  const content = reverse
+    ? [afterParentNode, parentNode, source]
+    : [source, parentNode, afterParentNode];
+  const slideContent =
+    trigger === "click"
+      ? createElement(Step, { n: 1 }, ...content)
+      : createElement(Fragment, null, ...content);
   return createElement(
     Deck,
     { width: 320, height: 200 },
     createElement(
       Slide,
-      { slideId: "late-parent-retained-alias" },
-      createElement(
-        MotionScope,
-        { scope: host, mode: "sequence" },
-        createElement(
-          MotionScope,
-          { scope: first },
-          unknownLetterText(
-            "late-alias-first",
-            "ABCDEFGHIJKLMNOPQRSTUVWXYZ123456",
-            8,
-          ),
-          createElement(
-            MotionScope,
-            { scope: delayed, delay: 1000 },
-            unknownLetterText("late-alias-delayed", "XY", 42),
-          ),
-        ),
-        createElement(
-          MotionScope,
-          { scope: joined, startAt: after(delayed.end, 11000) },
-          observedShape("late-alias-join", "Join", 76, "#ED7D31", 100),
-        ),
-      ),
-      createElement(
-        MotionScope,
-        { scope: parent, startAt: after(first.end, 10) },
-        createElement(
-          MotionScope,
-          { scope: alias, startAt: after(joined.start, 19) },
-          observedShape("late-alias-consumer", "Alias", 108, "#C00000", 100),
-        ),
-      ),
-      createElement(
-        MotionScope,
-        { scope: afterParent, startAt: parent.end },
-        observedShape(
-          "late-alias-after-parent",
-          "After parent",
-          140,
-          "#70AD47",
-          100,
-        ),
-      ),
+      {
+        slideId: `late-parent-retained-alias-${trigger}-${reverse}-${parentOffsetMs}`,
+      },
+      slideContent,
     ),
   );
 }
@@ -2173,6 +2191,59 @@ function LayeredMaximumOffsets() {
             movingShape("layered-offset-consumer", 103),
           ),
         ),
+      ),
+    ),
+  );
+}
+
+function SameScopeMaximumOffset({
+  split = false,
+}: {
+  readonly split?: boolean;
+}) {
+  const source = useMotionScope();
+  const parent = useMotionScope();
+  const delayedChild = useMotionScope();
+  const maximum = 4_294_967_295;
+  const sourceText = createElement(
+    Text,
+    {
+      testId: "same-scope-offset-source",
+      x: 0,
+      y: 0,
+      width: 100,
+      height: 20,
+      enter: fade({ by: "letter", duration: 601, intervalMs: 211 }),
+    },
+    "AXY",
+  );
+  const effect = movingShape("same-scope-offset-consumer", 103);
+  const consumer = split
+    ? createElement(
+        MotionScope,
+        { scope: parent, startAt: after(source.end, 1301) },
+        createElement(
+          MotionScope,
+          { scope: delayedChild, delay: maximum },
+          effect,
+        ),
+      )
+    : createElement(
+        MotionScope,
+        { scope: parent, startAt: after(source.end, 1301), delay: maximum },
+        effect,
+      );
+  return createElement(
+    Deck,
+    { width: 320, height: 160 },
+    createElement(
+      Slide,
+      { slideId: `same-scope-maximum-offset-${split ? "split" : "flat"}` },
+      createElement(
+        Fragment,
+        null,
+        createElement(MotionScope, { scope: source }, sourceText),
+        consumer,
       ),
     ),
   );
@@ -3604,17 +3675,110 @@ describe("组件编排作用域", () => {
     );
   });
 
-  it("父作用域晚于条件集合完成时保留未知起点错误", async () => {
-    await assert.rejects(
-      build(createElement(LateParentRetainedAlias)),
-      (error: unknown) => {
-        assert.ok(error instanceof BuildError);
-        assert.ok(
-          error.diagnostics.some(({ code }) => code === "unknown-motion-start"),
-        );
-        return true;
-      },
-    );
+  it("晚父中的 canonical 起点别名按完整来源重基并保留实际起止身份", async () => {
+    for (const trigger of ["auto", "click"] as const) {
+      for (const reverse of [false, true]) {
+        for (const parentOffsetMs of [10, 20_000]) {
+          const result = await build(
+            createElement(LateParentRetainedAlias, {
+              trigger,
+              reverse,
+              parentOffsetMs,
+            }),
+          );
+          const slide = result.report.slides[0];
+          const motion = slide?.capabilities?.["motion"] as MotionObservation;
+          const objectId = (testId: string) =>
+            slide?.objects.find(({ testId: id }) => id === testId)?.id;
+          const scopeContaining = (testId: string) =>
+            motion.scopes?.find(({ members }) =>
+              members.some(
+                (member) =>
+                  member.kind === "object" && member.id === objectId(testId),
+              ),
+            );
+          const firstScope = scopeContaining("late-alias-first");
+          const delayedScope = scopeContaining("late-alias-delayed");
+          const joinedScope = scopeContaining("late-alias-join");
+          const aliasScope = scopeContaining("late-alias-consumer");
+          const parentScope = motion.scopes?.find(({ members }) =>
+            members.some(
+              (member) =>
+                member.kind === "scope" && member.id === aliasScope?.id,
+            ),
+          );
+          const afterParentScope = scopeContaining("late-alias-after-parent");
+          const aliasEffect = motion.steps[0]?.effects.find(
+            ({ target }) => target.testId === "late-alias-consumer",
+          );
+          assert.ok(
+            firstScope &&
+              delayedScope &&
+              joinedScope &&
+              aliasScope &&
+              parentScope &&
+              afterParentScope &&
+              aliasEffect,
+          );
+
+          const joinSources = [
+            { scopeId: firstScope.id, point: "end" as const, offsetMs: 0 },
+            {
+              scopeId: delayedScope.id,
+              point: "end" as const,
+              offsetMs: 11_000,
+            },
+          ];
+          assert.deepEqual(joinedScope.startAfterAll, joinSources);
+          if (parentOffsetMs === 10) {
+            const aliasSources = joinSources.map((source) => ({
+              ...source,
+              offsetMs: source.offsetMs + 19,
+            }));
+            assert.deepEqual(aliasScope.startAfterAll, aliasSources);
+            assert.deepEqual(
+              aliasEffect.startAfterAll,
+              aliasSources.map((source) => ({
+                ...source,
+                offsetMs: source.offsetMs + 71,
+              })),
+            );
+          } else {
+            const parentDominates = {
+              scopeId: firstScope.id,
+              point: "end" as const,
+              offsetMs: parentOffsetMs,
+            };
+            assert.deepEqual(aliasScope.startAfter, parentDominates);
+            assert.deepEqual(aliasEffect.startAfter, {
+              ...parentDominates,
+              offsetMs: parentOffsetMs + 71,
+            });
+          }
+          assert.deepEqual(afterParentScope.startAfter, {
+            scopeId: parentScope.id,
+            point: "end",
+            offsetMs: 0,
+          });
+          assert.equal(aliasEffect.delayMs, 71);
+
+          const file = await validatePptx(result.pptx);
+          assert.deepEqual(file.errors, []);
+          assert.deepEqual(file.extensions, []);
+          const fileEffects = file.slides[0]?.animations?.[0]?.effects ?? [];
+          assert.equal(fileEffects.length, 5);
+          assert.equal(
+            new Set(fileEffects.map(({ targetId }) => targetId)).size,
+            5,
+          );
+          const slidePart = unzipSync(result.pptx)["ppt/slides/slide1.xml"];
+          assert.ok(slidePart);
+          const xml = strFromU8(slidePart);
+          assertTimingReferencesFollowDefinitions(xml);
+          assert.match(xml, /delay="71"/u);
+        }
+      }
+    }
   });
 
   it("父作用域比同一条件集合晚 10 毫秒时把 alias 精确化为 9 毫秒", async () => {
@@ -6654,6 +6818,73 @@ describe("组件编排作用域", () => {
     assert.ok(writtenTimes.includes(4_294_967_295));
     assert.ok(writtenTimes.every((value) => value <= 4_294_967_295));
     assertTimingReferencesFollowDefinitions(xml);
+  });
+
+  it("同一作用域的合法起点偏移与 delay 保留原生字段层", async () => {
+    const maximum = 4_294_967_295;
+    const totalOffset = maximum + 1301;
+    const semanticStarts: unknown[] = [];
+    for (const split of [false, true]) {
+      const result = await build(
+        createElement(SameScopeMaximumOffset, { split }),
+      );
+      const slide = result.report.slides[0];
+      const motion = slide?.capabilities?.["motion"] as MotionObservation;
+      const sourceId = slide?.objects.find(
+        ({ testId }) => testId === "same-scope-offset-source",
+      )?.id;
+      const sourceScope = motion.scopes?.find(({ members }) =>
+        members.some(
+          (member) => member.kind === "object" && member.id === sourceId,
+        ),
+      );
+      const consumerId = slide?.objects.find(
+        ({ testId }) => testId === "same-scope-offset-consumer",
+      )?.id;
+      const consumerScope = motion.scopes?.find(({ members }) =>
+        members.some(
+          (member) => member.kind === "object" && member.id === consumerId,
+        ),
+      );
+      const consumerEffect = motion.steps[0]?.effects.find(
+        ({ target }) => target.testId === "same-scope-offset-consumer",
+      );
+      assert.ok(sourceScope && consumerScope && consumerEffect);
+      assert.deepEqual(consumerScope.startAfter, {
+        scopeId: sourceScope.id,
+        point: "end",
+        offsetMs: totalOffset,
+      });
+      assert.deepEqual(consumerEffect.startAfter, {
+        scopeId: sourceScope.id,
+        point: "end",
+        offsetMs: totalOffset,
+      });
+      assert.equal(consumerScope.delayMs, maximum);
+      assert.equal(motion.scopes?.length, split ? 3 : 2);
+      semanticStarts.push(consumerEffect.startAfter);
+
+      const file = await validatePptx(result.pptx);
+      assert.deepEqual(file.errors, []);
+      assert.deepEqual(file.extensions, []);
+      const effects = file.slides[0]?.animations?.[0]?.effects ?? [];
+      assert.equal(effects.length, 2);
+      assert.equal(
+        effects.filter(({ targetId }) => targetId === consumerId).length,
+        1,
+      );
+      const slidePart = unzipSync(result.pptx)["ppt/slides/slide1.xml"];
+      assert.ok(slidePart);
+      const xml = strFromU8(slidePart);
+      const writtenTimes = [...xml.matchAll(/\b(?:delay|dur)="(\d+)"/gu)].map(
+        ([, value]) => Number(value),
+      );
+      assert.ok(writtenTimes.includes(1301));
+      assert.ok(writtenTimes.includes(maximum));
+      assert.ok(writtenTimes.every((value) => value <= maximum));
+      assertTimingReferencesFollowDefinitions(xml);
+    }
+    assert.deepEqual(semanticStarts[0], semanticStarts[1]);
   });
 
   it("精确条件查询为 scope 与 effect 各保留一次祖先 delay", async () => {

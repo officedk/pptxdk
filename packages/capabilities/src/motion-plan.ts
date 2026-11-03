@@ -126,6 +126,12 @@ export type MotionPlanStart =
   | { readonly kind: "end"; readonly dependency: MotionStartDependency }
   | { readonly kind: "event"; readonly dependency: MotionStartDependency }
   | {
+      readonly kind: "delay-layer";
+      /** 前一原生起点；实际节点在该节点之后再启动。 */
+      readonly start: MotionPlanStart;
+      readonly delayMs: number;
+    }
+  | {
       readonly kind: "condition-join";
       readonly id: string;
       readonly hostScopeId: string;
@@ -149,10 +155,45 @@ export type MotionPlanStartGate =
   | { readonly kind: "end"; readonly dependency: MotionStartDependency }
   | { readonly kind: "begin"; readonly dependency: MotionStartDependency };
 
-function addMotionPlanStartDelay(
+export function motionPlanStartLayers(start: MotionPlanStart): {
+  readonly base: MotionPlanStart;
+  readonly delays: readonly number[];
+} {
+  let base = start;
+  const reversedDelays: number[] = [];
+  while (base.kind === "delay-layer") {
+    reversedDelays.push(base.delayMs);
+    base = base.start;
+  }
+  return { base, delays: reversedDelays.reverse() };
+}
+
+export function addMotionPlanStartDelay(
   start: MotionPlanStart,
   delayMs: number,
 ): MotionPlanStart | undefined {
+  if (
+    !Number.isSafeInteger(delayMs) ||
+    delayMs < 0 ||
+    delayMs > maximumTimeNodeValue
+  ) {
+    return undefined;
+  }
+  if (delayMs === 0) return start;
+  if (start.kind === "delay-layer") {
+    const { base, delays } = motionPlanStartLayers(start);
+    const baseValue =
+      base.kind === "parent-start"
+        ? base.delayMs
+        : base.kind === "end" || base.kind === "event"
+          ? base.dependency.offsetMs
+          : base.kind === "condition-end"
+            ? base.delayMs
+            : 0;
+    const totalDelay = delays.reduce((total, delay) => total + delay, delayMs);
+    if (!Number.isSafeInteger(baseValue + totalDelay)) return undefined;
+    return { kind: "delay-layer", start, delayMs };
+  }
   let delayed: MotionPlanStart;
   if (start.kind === "parent-start") {
     delayed = { kind: start.kind, delayMs: start.delayMs + delayMs };
@@ -185,12 +226,18 @@ function addMotionPlanStartDelay(
         : delayed.kind === "condition-end"
           ? delayed.delayMs
           : undefined;
-  return Number.isSafeInteger(value) &&
+  if (
+    Number.isSafeInteger(value) &&
     value !== undefined &&
     value >= 0 &&
     value <= maximumTimeNodeValue
-    ? delayed
-    : undefined;
+  ) {
+    return delayed;
+  }
+  if (Number.isSafeInteger(value) && value !== undefined && value >= 0) {
+    return { kind: "delay-layer", start, delayMs };
+  }
+  return undefined;
 }
 
 /** 只折叠可证明保持父门槛的本地延迟；其他情况保留真实容器层。 */
@@ -198,6 +245,12 @@ export function composeMotionPlanStarts(
   inherited: MotionPlanStart | undefined,
   child: MotionPlanStart,
 ): MotionPlanStart | undefined {
+  if (child.kind === "delay-layer") {
+    const composedBase = composeMotionPlanStarts(inherited, child.start);
+    return composedBase === undefined
+      ? undefined
+      : addMotionPlanStartDelay(composedBase, child.delayMs);
+  }
   if (child.kind === "condition-join") {
     return inherited === undefined ? child : undefined;
   }
@@ -1560,11 +1613,8 @@ function motionPlan(
           );
         });
         if (!joinEndIsPending) {
-          fail(
-            "unknown-motion-start",
-            "不能证明条件集合完成晚于消费者父作用域激活",
-            path,
-          );
+          // canonical 快路径不安全时，保留完整候选表达交给通用宿主投影。
+          continue;
         }
         const conditionEndDelay = canonical.delayMs + delayMs;
         if (
@@ -1572,11 +1622,8 @@ function motionPlan(
           conditionEndDelay < 0 ||
           conditionEndDelay > maximumTimeNodeValue
         ) {
-          fail(
-            "invalid-motion-time",
-            "条件集合完成偏移必须保持在 ST_TLTime 范围内",
-            path,
-          );
+          // 累计偏移可能由多个合法字段组成，先尝试保留原始候选层。
+          continue;
         }
         return {
           kind: "condition-end",
@@ -1967,6 +2014,15 @@ function motionPlan(
       nativeStart: MotionPlanStart,
       parentStart: TimePoint,
     ): MotionStartDependency | undefined => {
+      if (nativeStart.kind === "delay-layer") {
+        const inherited = reportedDependency(nativeStart.start, parentStart);
+        return inherited === undefined
+          ? undefined
+          : dependencyAtEvent(
+              inherited,
+              inherited.offsetMs + nativeStart.delayMs,
+            );
+      }
       if (nativeStart.kind === "end" || nativeStart.kind === "event") {
         return nativeStart.dependency;
       }
@@ -1985,6 +2041,19 @@ function motionPlan(
       nativeStart: MotionPlanStart,
       parentStart: TimePoint,
     ): readonly MotionStartDependency[] | undefined => {
+      if (nativeStart.kind === "delay-layer") {
+        const inherited = reportedDependencies(nativeStart.start, parentStart);
+        return inherited === undefined
+          ? undefined
+          : Object.freeze(
+              inherited.map((dependency) =>
+                dependencyAtEvent(
+                  dependency,
+                  dependency.offsetMs + nativeStart.delayMs,
+                ),
+              ),
+            );
+      }
       const expandStartDependency = (
         dependency: MotionStartDependency,
         seen: ReadonlySet<string> = new Set(),
@@ -2312,8 +2381,7 @@ function motionPlan(
           scope.path,
         );
       }
-      const nativeStart = resolveNativeStart(
-        startExpression,
+      const nativeStartArguments = [
         parentStart,
         scope.path,
         scopeStartEventId(scope),
@@ -2321,11 +2389,43 @@ function motionPlan(
         parentScope === undefined
           ? undefined
           : {
-              kind: "scope",
+              kind: "scope" as const,
               id: scope.declaration.identity,
               order: scope.order,
             },
-      );
+      ] as const;
+      const nativeFieldWouldOverflow =
+        scope.declaration.delay > 0 &&
+        (startExpression.state === "known"
+          ? parentStart.state === "known" &&
+            startExpression.timeMs - parentStart.timeMs > maximumTimeNodeValue
+          : startExpression.candidates.some(
+              (candidate) => candidate.offsetMs > maximumTimeNodeValue,
+            ));
+      let nativeStart: MotionPlanStart | undefined;
+      if (nativeFieldWouldOverflow) {
+        // 只有累计值超过单个原生字段时，才从声明起点与 delay 两层恢复编码。
+        const resolvedBaseStart = resolveNativeStart(
+          base,
+          ...nativeStartArguments,
+        );
+        nativeStart = addMotionPlanStartDelay(
+          resolvedBaseStart,
+          scope.declaration.delay,
+        );
+      } else {
+        nativeStart = resolveNativeStart(
+          startExpression,
+          ...nativeStartArguments,
+        );
+      }
+      if (nativeStart === undefined) {
+        fail(
+          "invalid-motion-time",
+          "作用域起点的延迟层无法保持为安全整数毫秒",
+          scope.path,
+        );
+      }
       // 别名读取原表达；TimePoint 仅保留多来源候选，避免改写内部事件身份。
       const start = materializeEvent(
         startExpression,
@@ -2382,26 +2482,39 @@ function motionPlan(
           scope.path,
         );
       }
-      if (nativeStart.kind === "condition-join") {
-        conditionJoinsById.set(nativeStart.id, nativeStart);
+      const { base: nativeStartBase, delays: nativeStartDelays } =
+        motionPlanStartLayers(nativeStart);
+      const localDelayMs = nativeStartDelays.reduce(
+        (total, delayMs) => total + delayMs,
+        0,
+      );
+      if (!Number.isSafeInteger(localDelayMs)) {
+        fail(
+          "invalid-motion-time",
+          "作用域起点的累计延迟必须保持为安全整数毫秒",
+          scope.path,
+        );
+      }
+      if (nativeStartBase.kind === "condition-join") {
+        conditionJoinsById.set(nativeStartBase.id, nativeStartBase);
         conditionStartsByEventId.set(scopeStartEventId(scope), {
-          id: nativeStart.id,
+          id: nativeStartBase.id,
           candidates: startExpression.candidates,
-          delayMs: 0,
+          delayMs: localDelayMs,
         });
-      } else if (nativeStart.kind === "condition-end") {
+      } else if (nativeStartBase.kind === "condition-end") {
         conditionStartsByEventId.set(scopeStartEventId(scope), {
-          id: nativeStart.id,
+          id: nativeStartBase.id,
           candidates: startExpression.candidates,
-          delayMs: nativeStart.delayMs,
+          delayMs: nativeStartBase.delayMs + localDelayMs,
         });
-      } else if (nativeStart.kind === "parent-start") {
+      } else if (nativeStartBase.kind === "parent-start") {
         const inherited = conditionStartsByEventId.get(parentStart.eventId);
         if (inherited !== undefined) {
           conditionStartsByEventId.set(scopeStartEventId(scope), {
             id: inherited.id,
             candidates: startExpression.candidates,
-            delayMs: inherited.delayMs + nativeStart.delayMs,
+            delayMs: inherited.delayMs + nativeStartBase.delayMs + localDelayMs,
           });
         }
       }
@@ -2679,9 +2792,7 @@ function motionPlan(
               order: target.order,
             },
       );
-      if (nativeStart.kind === "condition-join") {
-        recordConditionPlacement(nativeStart);
-      }
+      recordStartCondition(nativeStart);
       return {
         kind: "target",
         targetId: target.id,
@@ -2878,10 +2989,25 @@ function motionPlan(
       conditionPlacementsByHost.set(placement.hostScopeId, placements);
     };
 
-    const consumerStart = (start: MotionPlanStart): MotionPlanStart =>
-      start.kind === "condition-join"
-        ? { kind: "condition-end", id: start.id, delayMs: 0 }
-        : start;
+    const recordStartCondition = (start: MotionPlanStart): void => {
+      const { base } = motionPlanStartLayers(start);
+      if (base.kind === "condition-join") {
+        recordConditionPlacement(base);
+      } else if (base.kind === "condition-end") {
+        const join = conditionJoinsById.get(base.id);
+        if (join !== undefined) recordConditionPlacement(join);
+      }
+    };
+
+    const consumerStart = (start: MotionPlanStart): MotionPlanStart => {
+      if (start.kind === "condition-join") {
+        return { kind: "condition-end", id: start.id, delayMs: 0 };
+      }
+      if (start.kind === "delay-layer") {
+        return { ...start, start: consumerStart(start.start) };
+      }
+      return start;
+    };
 
     const conditionEvent = (id: string) => `condition:${id}`;
     const planNodeId = (node: MotionPlanNode): string =>
@@ -2949,21 +3075,23 @@ function motionPlan(
         }
         const collectDependency = (id: string) =>
           rootReferences[rootIndex]?.push({ id, node });
-        if (
-          node.nativeStart.kind === "end" ||
-          node.nativeStart.kind === "event"
-        ) {
-          collectDependency(eventSource(node.nativeStart.dependency));
-        } else if (node.nativeStart.kind === "condition-end") {
-          collectDependency(conditionEvent(node.nativeStart.id));
-        } else if (node.nativeStart.kind === "condition-join") {
-          rootDefinitions.set(conditionEvent(node.nativeStart.id), rootIndex);
-          for (const gate of node.nativeStart.gates) {
-            if (gate.kind === "end" || gate.kind === "begin") {
-              collectDependency(eventSource(gate.dependency));
+        const collectStartDependency = (start: MotionPlanStart): void => {
+          if (start.kind === "delay-layer") {
+            collectStartDependency(start.start);
+          } else if (start.kind === "end" || start.kind === "event") {
+            collectDependency(eventSource(start.dependency));
+          } else if (start.kind === "condition-end") {
+            collectDependency(conditionEvent(start.id));
+          } else if (start.kind === "condition-join") {
+            rootDefinitions.set(conditionEvent(start.id), rootIndex);
+            for (const gate of start.gates) {
+              if (gate.kind === "end" || gate.kind === "begin") {
+                collectDependency(eventSource(gate.dependency));
+              }
             }
           }
-        }
+        };
+        collectStartDependency(node.nativeStart);
         if (node.kind === "scope") {
           for (const placement of node.conditionDefinitionsBefore ?? []) {
             rootDefinitions.set(conditionEvent(placement.join.id), rootIndex);
@@ -3285,9 +3413,7 @@ function motionPlan(
       if (nativeStart === undefined) {
         fail("motion-plan-conflict", "作用域缺少已求解的起点", scope.path);
       }
-      if (nativeStart.kind === "condition-join") {
-        recordConditionPlacement(nativeStart);
-      }
+      recordStartCondition(nativeStart);
       const id = scopeId(scope.declaration.identity, scopes);
       const conditionDefinitionsBefore =
         conditionPlacementsByHost.get(id) ?? [];
@@ -3357,14 +3483,35 @@ function motionPlan(
       }
     };
     const verifyNodeOrder = (node: MotionPlanNode): void => {
-      if (node.nativeStart.kind === "condition-join") {
-        for (const gate of node.nativeStart.gates) {
-          if (gate.kind === "end" || gate.kind === "begin") {
-            verifyEventReference(eventSource(gate.dependency), node);
+      const verifyConditionJoins = (start: MotionPlanStart): void => {
+        if (start.kind === "delay-layer") {
+          verifyConditionJoins(start.start);
+        } else if (start.kind === "condition-join") {
+          for (const gate of start.gates) {
+            if (gate.kind === "end" || gate.kind === "begin") {
+              verifyEventReference(eventSource(gate.dependency), node);
+            }
           }
+          definedConditions.add(conditionEvent(start.id));
         }
-        definedConditions.add(conditionEvent(node.nativeStart.id));
-      }
+      };
+      const verifyStartDependencies = (start: MotionPlanStart): void => {
+        if (start.kind === "delay-layer") {
+          verifyStartDependencies(start.start);
+        } else if (start.kind === "end" || start.kind === "event") {
+          verifyEventReference(eventSource(start.dependency), node);
+        } else if (
+          start.kind === "condition-end" &&
+          !definedConditions.has(conditionEvent(start.id))
+        ) {
+          fail(
+            "unknown-motion-start",
+            "条件集合必须在其消费者之前定义",
+            nodePath(node),
+          );
+        }
+      };
+      verifyConditionJoins(node.nativeStart);
       if (node.kind === "completion-collector") {
         for (const gate of node.gates) {
           if (gate.kind === "end" || gate.kind === "begin") {
@@ -3403,21 +3550,7 @@ function motionPlan(
           );
         }
       }
-      if (
-        node.nativeStart.kind === "end" ||
-        node.nativeStart.kind === "event"
-      ) {
-        verifyEventReference(eventSource(node.nativeStart.dependency), node);
-      } else if (
-        node.nativeStart.kind === "condition-end" &&
-        !definedConditions.has(conditionEvent(node.nativeStart.id))
-      ) {
-        fail(
-          "unknown-motion-start",
-          "条件集合必须在其消费者之前定义",
-          nodePath(node),
-        );
-      }
+      verifyStartDependencies(node.nativeStart);
       if (node.kind === "scope") {
         const placements = node.conditionDefinitionsBefore ?? [];
         const remaining = new Set(placements);

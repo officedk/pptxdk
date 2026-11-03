@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 
 import {
   Deck,
@@ -7,9 +8,11 @@ import {
   Chart,
   Group,
   Image,
+  font,
   MotionScope,
   Shape,
   Slide,
+  Span,
   Text,
   Row,
   Table,
@@ -19,7 +22,7 @@ import {
   type MotionObservation,
 } from "@react-pptx/react-pptx";
 import { validatePptx } from "@react-pptx/validation";
-import { unzipSync } from "fflate";
+import { strFromU8, unzipSync } from "fflate";
 import { createElement } from "react";
 import { describe, it } from "vitest";
 
@@ -29,6 +32,25 @@ const png = new Uint8Array(
     "base64",
   ),
 );
+
+const jost = font("Jost*", [
+  {
+    weight: 400,
+    data: new Uint8Array(
+      readFileSync(
+        new URL("./assets/fonts/Jost-400-Book.ttf", import.meta.url),
+      ),
+    ),
+  },
+  {
+    weight: 700,
+    data: new Uint8Array(
+      readFileSync(
+        new URL("./assets/fonts/Jost-700-Bold.ttf", import.meta.url),
+      ),
+    ),
+  },
+]);
 
 function FrozenMotionDeck() {
   const scope = useMotionScope();
@@ -162,6 +184,53 @@ function ResourceQueryDeck() {
           series: [{ name: "Bookings", values: [17] }],
         },
       }),
+    ),
+  );
+}
+
+function FontResourceQueryDeck() {
+  return createElement(
+    Deck,
+    { width: 320, height: 180 },
+    createElement(
+      Slide,
+      { slideId: "font-resource-query" },
+      createElement(
+        Text,
+        {
+          testId: "fonted-text",
+          x: 8,
+          y: 8,
+          width: 240,
+          height: 36,
+          style: { fontFamily: jost },
+        },
+        "Regular ",
+        createElement(Span, { style: { fontWeight: "bold" } }, "Bold"),
+      ),
+    ),
+  );
+}
+
+function MissingFontResourceQueryDeck() {
+  return createElement(
+    Deck,
+    { width: 320, height: 180 },
+    createElement(
+      Slide,
+      { slideId: "missing-font-resource-query" },
+      createElement(
+        Text,
+        {
+          testId: "font-name-only-text",
+          x: 8,
+          y: 8,
+          width: 240,
+          height: 36,
+          style: { fontFamily: "Aptos" },
+        },
+        "No embedded face",
+      ),
     ),
   );
 }
@@ -306,6 +375,93 @@ describe("只读构建查询", () => {
     const file = await validatePptx(result.pptx);
     assert.deepEqual(file.errors, []);
     assert.equal(file.slides[0]?.objects[0]?.image?.part, imageResource.part);
+  });
+
+  it("仅查询实际写入的嵌入字体及其同次 PPTX 关系", async () => {
+    const defaultResult = await build(createElement(FontResourceQueryDeck));
+    const defaultParts = unzipSync(defaultResult.pptx);
+    assert.equal(
+      defaultResult.query
+        .slide("font-resource-query")
+        .getByTestId("fonted-text")
+        .observe().resources?.length ?? 0,
+      0,
+    );
+    assert.deepEqual(
+      Object.keys(defaultParts).filter((part) => part.startsWith("ppt/fonts/")),
+      [],
+    );
+
+    const missingResult = await build(
+      createElement(MissingFontResourceQueryDeck),
+    );
+    assert.equal(
+      missingResult.query
+        .slide("missing-font-resource-query")
+        .getByTestId("font-name-only-text")
+        .observe().resources?.length ?? 0,
+      0,
+    );
+
+    for (const embedFonts of ["full", "subset"] as const) {
+      const result = await build(createElement(FontResourceQueryDeck), {
+        embedFonts,
+      });
+      const slide = result.query.slide("font-resource-query");
+      const text = slide.getByTestId("fonted-text").observe();
+      const resources = text.resources ?? [];
+      const parts = unzipSync(result.pptx);
+      const presentation = strFromU8(parts["ppt/presentation.xml"]!);
+      const relationships = strFromU8(
+        parts["ppt/_rels/presentation.xml.rels"]!,
+      );
+      const embeddedFontRecords = [
+        ...presentation.matchAll(/<p:embeddedFont>(.*?)<\/p:embeddedFont>/gu),
+      ];
+      const fontRelationships = [
+        ...relationships.matchAll(
+          /<Relationship Id="([^"]+)" Type="http:\/\/schemas\.openxmlformats\.org\/officeDocument\/2006\/relationships\/font" Target="([^"]+)"\/>/gu,
+        ),
+      ];
+      const writtenFontParts = embeddedFontRecords.flatMap(([, record]) => {
+        const family = record?.match(/<p:font typeface="([^"]+)"/u)?.[1];
+        assert.equal(family, "Jost*");
+        return [
+          ...(record?.matchAll(
+            /<p:(regular|bold|italic|boldItalic) r:id="(rId\d+)"\/>/gu,
+          ) ?? []),
+        ].map(([, style, id]) => {
+          const relationship = fontRelationships.find(
+            ([, relationId]) => relationId === id,
+          );
+          assert.ok(relationship?.[2]);
+          return { style, part: `ppt/${relationship[2]}` };
+        });
+      });
+
+      assert.deepEqual(
+        writtenFontParts.map(({ style }) => style),
+        ["regular", "bold"],
+      );
+      assert.equal(resources.length, 2);
+      assert.deepEqual(
+        resources.map(({ part }) => part).sort(),
+        writtenFontParts.map(({ part }) => part).sort(),
+      );
+      assert.ok(
+        resources.every(
+          ({ objectId, part, byteLength }) =>
+            objectId === text.objects[0]?.id &&
+            parts[part]?.byteLength === byteLength,
+        ),
+      );
+      if (embedFonts === "subset") {
+        assert.ok(
+          resources.some(({ part }) => part === "ppt/fonts/font1.fntdata"),
+        );
+      }
+      assert.deepEqual((await validatePptx(result.pptx)).errors, []);
+    }
   });
 
   it("按最近的 testId 实例隔离重复部件并保留多项结果", async () => {

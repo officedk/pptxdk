@@ -1314,6 +1314,20 @@ function motionPlan(
     const requestedScopeEnds = new Set<string>();
     const queryScopes: MotionQueryScopeSource[] = [];
     const queryEffectSources = new Map<string, MotionQueryEffectSource>();
+    // 查询按结构父链补齐作用域；每个来源仍绑定当前步的局部时钟。
+    const queryScopeIdentities = new Set<string>();
+    for (const scope of scopes.values()) {
+      if (!scopeSteps(scope).includes(key)) continue;
+      let current: ScopeState | undefined = scope;
+      while (current !== undefined) {
+        const identity = current.declaration.identity;
+        if (queryScopeIdentities.has(identity)) break;
+        queryScopeIdentities.add(identity);
+        const parentIdentity: string | undefined = current.declaration.parent;
+        current =
+          parentIdentity === undefined ? undefined : scopes.get(parentIdentity);
+      }
+    }
 
     const directMemberForScope = (
       host: ScopeState,
@@ -3025,6 +3039,46 @@ function motionPlan(
       }
     };
     for (const node of nodes) verifyNodeOrder(node);
+    // 仅在原生计划完成后解析缺失祖先的边界，不参与生成排程或写出。
+    const queryScopesByIdentity = new Map(
+      queryScopes.map((scope) => [scope.identity, scope] as const),
+    );
+    for (const scope of scopes.values()) {
+      const identity = scope.declaration.identity;
+      if (
+        !queryScopeIdentities.has(identity) ||
+        queryScopesByIdentity.has(identity)
+      ) {
+        continue;
+      }
+      const start = resolveScopeStart(scope);
+      const end = resolveScopeEnd(scope);
+      queryScopesByIdentity.set(identity, {
+        identity,
+        id: scopeId(identity, scopes),
+        ...(scope.declaration.parent === undefined
+          ? {}
+          : { parentIdentity: scope.declaration.parent }),
+        mode: scope.declaration.mode,
+        ...(scope.declaration.each === undefined
+          ? {}
+          : { eachMs: Math.round(scope.declaration.each) }),
+        delayMs: Math.round(scope.declaration.delay),
+        members: directChildren(scope).map((member) =>
+          member.kind === "scope"
+            ? { kind: "scope" as const, identity: member.id }
+            : { kind: "object" as const, targetId: member.id },
+        ),
+        start: queryMomentSource(start),
+        end: queryMomentSource(end),
+        declaration: scope.declaration,
+      });
+    }
+    queryScopes.length = 0;
+    for (const scope of scopes.values()) {
+      const queryScope = queryScopesByIdentity.get(scope.declaration.identity);
+      if (queryScope !== undefined) queryScopes.push(queryScope);
+    }
     allStepNodes.set(key, nodes);
     const queryCues: MotionQueryCueSource[] = [];
     for (const [cueKey, publisher] of cuePublishers) {

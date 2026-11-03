@@ -16,7 +16,9 @@ import {
   Text,
   useMotionScope,
   observeMotion,
+  type MotionObservation,
 } from "@react-pptx/react-pptx";
+import { validatePptx } from "@react-pptx/validation";
 import { createElement, Fragment } from "react";
 import { describe, it } from "vitest";
 
@@ -202,7 +204,238 @@ function ClickStepsDeck() {
   );
 }
 
+function EmptyIntervalDeck({
+  sourceDuration,
+}: {
+  readonly sourceDuration?: number;
+}) {
+  const source = useMotionScope();
+  const empty = useMotionScope();
+  const finite = useMotionScope();
+  const overlapping = useMotionScope();
+  const infinite = useMotionScope();
+  return createElement(
+    Deck,
+    { width: 120, height: 100 },
+    createElement(
+      Slide,
+      { slideId: "empty-interval" },
+      sourceDuration === undefined
+        ? createElement(
+            MotionScope,
+            { scope: source },
+            createElement(
+              Text,
+              {
+                testId: "unknown-source",
+                x: 0,
+                y: 0,
+                width: 100,
+                height: 20,
+                enter: fade({ by: "word", duration: 100 }),
+              },
+              "first second",
+            ),
+          )
+        : createElement(
+            MotionScope,
+            { scope: source },
+            createElement(Shape, {
+              testId: "known-source",
+              x: 0,
+              y: 0,
+              width: 10,
+              height: 10,
+              fill: "#123456",
+              enter: fade({ duration: sourceDuration }),
+            }),
+          ),
+      createElement(MotionScope, {
+        scope: empty,
+        startAt: after(source.end, 50),
+      }),
+      createElement(
+        MotionScope,
+        { scope: finite, startAt: source.end },
+        createElement(Shape, {
+          testId: "finite-interval",
+          x: 20,
+          y: 0,
+          width: 10,
+          height: 10,
+          fill: "#654321",
+          enter: fade({ duration: 100 }),
+        }),
+      ),
+      createElement(
+        MotionScope,
+        { scope: infinite, startAt: source.end },
+        createElement(Shape, {
+          testId: "unbounded-interval",
+          x: 40,
+          y: 0,
+          width: 10,
+          height: 10,
+          fill: "#abcdef",
+          emphasis: repeat(
+            breathe({ period: 200, from: "#123456", to: "#654321" }),
+            "forever",
+          ),
+        }),
+      ),
+      createElement(
+        MotionScope,
+        { scope: overlapping, startAt: after(source.end, 50) },
+        createElement(Shape, {
+          testId: "overlapping-interval",
+          x: 60,
+          y: 0,
+          width: 10,
+          height: 10,
+          fill: "#fedcba",
+          enter: fade({ duration: 40 }),
+        }),
+      ),
+    ),
+  );
+}
+
+function DeclaredScopeClosureDeck() {
+  const parent = useMotionScope();
+  const empty = useMotionScope();
+  const dependent = useMotionScope();
+  return createElement(
+    Deck,
+    { width: 120, height: 100 },
+    createElement(
+      Slide,
+      { slideId: "scope-closure" },
+      createElement(
+        MotionScope,
+        { scope: parent, delay: 200 },
+        createElement(MotionScope, { scope: empty, delay: 40 }),
+        createElement(MotionScope, {
+          scope: dependent,
+          startAt: after(empty.end, 10),
+        }),
+        createElement(
+          Step,
+          { n: 1 },
+          createElement(Shape, {
+            testId: "click-member",
+            x: 0,
+            y: 0,
+            width: 10,
+            height: 10,
+            fill: "#123456",
+            enter: fade({ duration: 100 }),
+          }),
+        ),
+      ),
+    ),
+  );
+}
+
+function WordMotionDeck() {
+  return createElement(
+    Deck,
+    { width: 120, height: 100 },
+    createElement(
+      Slide,
+      { slideId: "word-projection" },
+      createElement(
+        Text,
+        {
+          testId: "word-text",
+          x: 0,
+          y: 0,
+          width: 100,
+          height: 20,
+          enter: fade({
+            by: "word",
+            duration: 100,
+            easing: { accelerate: 0.2 },
+          }),
+        },
+        "first second",
+      ),
+    ),
+  );
+}
+
 describe("observeMotion", () => {
+  it("把已证明的空半开区间判为不重叠", async () => {
+    for (const sourceDuration of [100, 800, 3000]) {
+      const result = await build(
+        createElement(EmptyIntervalDeck, { sourceDuration }),
+      );
+      const step = observeMotion(
+        result.query.slide("empty-interval").observation,
+      )?.steps[0];
+      assert.ok(step);
+      const empty = step.scopes.find(({ members }) => members.length === 0);
+      const finite = step.effects.find(
+        ({ target }) => target.testId === "finite-interval",
+      );
+      const overlapping = step.effects.find(
+        ({ target }) => target.testId === "overlapping-interval",
+      );
+      assert.ok(empty);
+      assert.ok(finite);
+      assert.ok(overlapping);
+      assert.deepEqual(step.difference(empty.start.ref, empty.end.ref), {
+        state: "known",
+        ms: 0,
+      });
+      assert.deepEqual(step.overlap(empty.ref, finite.ref), {
+        state: "known",
+        value: false,
+      });
+      assert.deepEqual(step.overlap(finite.ref, overlapping.ref), {
+        state: "known",
+        value: true,
+      });
+    }
+
+    const unknownResult = await build(createElement(EmptyIntervalDeck));
+    const unknownStep = observeMotion(
+      unknownResult.query.slide("empty-interval").observation,
+    )?.steps[0];
+    assert.ok(unknownStep);
+    const empty = unknownStep.scopes.find(
+      ({ members }) => members.length === 0,
+    );
+    const finite = unknownStep.effects.find(
+      ({ target }) => target.testId === "finite-interval",
+    );
+    const overlapping = unknownStep.effects.find(
+      ({ target }) => target.testId === "overlapping-interval",
+    );
+    const unbounded = unknownStep.effects.find(
+      ({ target }) => target.testId === "unbounded-interval",
+    );
+    assert.ok(empty);
+    assert.ok(finite);
+    assert.ok(overlapping);
+    assert.ok(unbounded);
+    assert.deepEqual(unknownStep.difference(empty.start.ref, empty.end.ref), {
+      state: "known",
+      ms: 0,
+    });
+    assert.deepEqual(unknownStep.overlap(empty.ref, finite.ref), {
+      state: "known",
+      value: false,
+    });
+    assert.deepEqual(unknownStep.overlap(finite.ref, overlapping.ref), {
+      state: "known",
+      value: true,
+    });
+    assert.deepEqual(unknownStep.overlap(empty.ref, unbounded.ref), {
+      state: "known",
+      value: false,
+    });
+  });
+
   it("保留效果实例、具名时刻声明并查询精确关系", async () => {
     const result = await build(createElement(KnownRelationsDeck));
     const slide = result.query.slide("motion-relations");
@@ -348,6 +581,128 @@ describe("observeMotion", () => {
       complete: true,
       items: [{ effect: finite.ref, result: { state: "known", value: false } }],
     });
+  });
+
+  it("保留跨触发步声明闭包并区分结构父子与本步排程", async () => {
+    const result = await build(createElement(DeclaredScopeClosureDeck));
+    const motion = observeMotion(
+      result.query.slide("scope-closure").observation,
+    );
+    const automatic = motion?.steps.find(({ trigger }) => trigger === "auto");
+    const click = motion?.steps.find(
+      ({ trigger, number }) => trigger === "click" && number === 1,
+    );
+    assert.ok(automatic);
+    assert.ok(click);
+    const automaticParent = automatic.scopes.find(
+      ({ delayMs, parent }) => delayMs === 200 && parent === undefined,
+    );
+    const empty = automatic.scopes.find(
+      ({ delayMs, members, parent }) =>
+        delayMs === 40 && members.length === 0 && parent !== undefined,
+    );
+    const dependent = automatic.scopes.find(
+      ({ delayMs, members, parent }) =>
+        delayMs === 0 && members.length === 0 && parent !== undefined,
+    );
+    const clickParent = click.scopes.find(
+      ({ delayMs, parent }) => delayMs === 200 && parent === undefined,
+    );
+    assert.ok(automaticParent);
+    assert.ok(empty);
+    assert.ok(dependent);
+    assert.ok(clickParent);
+    assert.equal(empty.parent, automaticParent.ref);
+    assert.equal(dependent.parent, automaticParent.ref);
+    assert.deepEqual(
+      automaticParent.members.map(({ ref }) => ref),
+      [empty.ref, dependent.ref],
+    );
+    assert.equal(automaticParent.step, automatic.ref);
+    assert.equal(clickParent.step, click.ref);
+    assert.notEqual(automaticParent.ref, clickParent.ref);
+    assert.deepEqual(
+      clickParent.members.map(({ kind }) => kind),
+      ["effect"],
+    );
+    assert.equal(automatic.effects.length, 0);
+    assert.equal(click.effects.length, 1);
+    assert.deepEqual(
+      [automaticParent.start, empty.start, dependent.start].map(
+        ({ state, ...time }) => [state, "ms" in time ? time.ms : undefined],
+      ),
+      [
+        ["known", 200],
+        ["known", 240],
+        ["known", 250],
+      ],
+    );
+    const reportMotion = result.report.slides[0]?.capabilities?.[
+      "motion"
+    ] as MotionObservation;
+    const reportParent = reportMotion.scopes?.find(
+      ({ id }) => id === automaticParent.ref.id,
+    );
+    assert.deepEqual(
+      reportParent?.members.map(({ kind }) => kind),
+      ["object"],
+    );
+    const file = await validatePptx(result.pptx);
+    assert.deepEqual(
+      file.slides[0]?.animations?.map(({ trigger, effects }) => [
+        trigger,
+        effects.map(
+          ({ targetId }) =>
+            result.report.slides[0]?.objects.find(({ id }) => id === targetId)
+              ?.testId,
+        ),
+      ]),
+      [["click", ["click-member"]]],
+    );
+    assert.ok(
+      automatic.dependencies.some(
+        (dependency) =>
+          dependency.kind === "scope-start" &&
+          dependency.scope === dependent.ref &&
+          dependency.offsetMs === 10,
+      ),
+    );
+  });
+
+  it("只公开效果观察字段并冻结其嵌套值", async () => {
+    const result = await build(createElement(WordMotionDeck));
+    const step = observeMotion(
+      result.query.slide("word-projection").observation,
+    )?.steps[0];
+    assert.ok(step);
+    const effect = step.effects.find(
+      ({ target }) => target.testId === "word-text",
+    );
+    assert.ok(effect);
+    assert.equal(effect.by, "word");
+    assert.equal(effect.durationMs, 100);
+    assert.equal(effect.intervalMs, 10);
+    for (const privateField of [
+      "stepKey",
+      "order",
+      "targetTextBody",
+      "targetFilled",
+      "iterate",
+    ]) {
+      assert.equal(Object.hasOwn(effect, privateField), false);
+    }
+    assert.ok(Object.isFrozen(effect));
+    assert.ok(Object.isFrozen(effect.target));
+    assert.ok(effect.easing);
+    assert.ok(Object.isFrozen(effect.easing));
+    assert.throws(() => {
+      (effect.target as { testId?: string }).testId = "changed";
+    }, TypeError);
+    assert.throws(() => {
+      (effect.easing as { accelerate?: number }).accelerate = 0.8;
+    }, TypeError);
+    assert.equal(effect.target.testId, "word-text");
+    assert.equal(effect.easing.accelerate, 0.2);
   });
 
   it("跨步返回时钟不同；跨构建引用抛查询错误", async () => {

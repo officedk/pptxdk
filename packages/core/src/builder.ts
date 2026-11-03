@@ -124,6 +124,7 @@ type StoredPresentationItem = {
   readonly relationshipType: string;
   readonly contentType: string;
   readonly path: string;
+  readonly resourceOwners: Map<SlideBuildState, Set<number>>;
   readonly bytes?: Uint8Array;
   readonly resourceClaim?: Pick<CapabilityResourceClaim, "kind" | "key">;
   readonly resolveBytes?: (characters: string) => Uint8Array;
@@ -946,6 +947,7 @@ function addPresentationContribution(
   contribution: CapabilityPresentationContribution,
   context: BuildContext,
   path: string,
+  objectId: number,
 ): void {
   const { collection, record, item } = contribution;
   if (
@@ -1069,13 +1071,13 @@ function addPresentationContribution(
   }
   const existingItem = targetRecord.items.get(item.key);
   if (existingItem !== undefined) {
-    if (
+    const conflicts =
       existingItem.identity !== item.identity ||
       existingItem.order !== item.order ||
       existingItem.preview !== preview ||
       existingItem.resourceClaim?.kind !== item.resourceClaim?.kind ||
-      existingItem.resourceClaim?.key !== item.resourceClaim?.key
-    ) {
+      existingItem.resourceClaim?.key !== item.resourceClaim?.key;
+    if (conflicts) {
       context.slide.diagnostics.push(
         diagnostic(
           path,
@@ -1083,6 +1085,11 @@ function addPresentationContribution(
           `文稿级记录 ${record.key} 的项目 ${item.key} 使用了冲突资源`,
         ),
       );
+    } else {
+      const objectIds =
+        existingItem.resourceOwners.get(context.slide) ?? new Set<number>();
+      objectIds.add(objectId);
+      existingItem.resourceOwners.set(context.slide, objectIds);
     }
     return;
   }
@@ -1108,6 +1115,7 @@ function addPresentationContribution(
     relationshipType: item.relationshipType,
     contentType: item.contentType,
     path,
+    resourceOwners: new Map([[context.slide, new Set([objectId])]]),
     ...(item.bytes === undefined ? {} : { bytes: item.bytes }),
     ...(item.resourceClaim === undefined
       ? {}
@@ -1177,6 +1185,15 @@ function finalizePresentationContributions(document: DocumentBuildState): void {
           "ppt/presentation.xml",
           relationships,
         );
+        for (const [slide, objectIds] of item.resourceOwners) {
+          for (const objectId of objectIds) {
+            recordResourceObservation(slide, objectId, {
+              part: item.partPath,
+              contentType: item.contentType,
+              byteLength: bytes.byteLength,
+            });
+          }
+        }
       }
     }
   }
@@ -1759,7 +1776,7 @@ function compileChildren(
         }
       }
       for (const contribution of output.presentationContributions ?? []) {
-        addPresentationContribution(contribution, context, path);
+        addPresentationContribution(contribution, context, path, id);
       }
       for (const warning of output.warnings ?? []) {
         context.document.warnings.push({

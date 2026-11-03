@@ -240,6 +240,58 @@ function freezeMoment(
   return Object.freeze({ ...time, ref }) as MotionMomentObservation;
 }
 
+function projectEffectObservation(
+  source: MotionEffectObservation,
+): MotionEffectObservation {
+  const target = Object.freeze({
+    id: source.target.id,
+    name: source.target.name,
+    ...(source.target.testId === undefined
+      ? {}
+      : { testId: source.target.testId }),
+    ...(source.target.range === undefined
+      ? {}
+      : { range: Object.freeze({ ...source.target.range }) }),
+  });
+  return Object.freeze({
+    target,
+    kind: source.kind,
+    preset: source.preset,
+    durationMs: source.durationMs,
+    ...(source.repeatCount === undefined
+      ? {}
+      : { repeatCount: source.repeatCount }),
+    delayMs: source.delayMs,
+    ...(source.by === undefined ? {} : { by: source.by }),
+    ...(source.intervalMs === undefined
+      ? {}
+      : { intervalMs: source.intervalMs }),
+    ...(source.from === undefined ? {} : { from: source.from }),
+    ...(source.fromColor === undefined ? {} : { fromColor: source.fromColor }),
+    ...(source.toColor === undefined ? {} : { toColor: source.toColor }),
+    ...(source.easing === undefined
+      ? {}
+      : { easing: Object.freeze({ ...source.easing }) }),
+    ...(source.startMs === undefined ? {} : { startMs: source.startMs }),
+    ...(source.endMs === undefined ? {} : { endMs: source.endMs }),
+    ...(source.completion === undefined
+      ? {}
+      : { completion: source.completion }),
+    ...(source.startAfter === undefined
+      ? {}
+      : { startAfter: Object.freeze({ ...source.startAfter }) }),
+    ...(source.startAfterAll === undefined
+      ? {}
+      : {
+          startAfterAll: Object.freeze(
+            source.startAfterAll.map((dependency) =>
+              Object.freeze({ ...dependency }),
+            ),
+          ),
+        }),
+  });
+}
+
 function assertOwnedReference(
   ref: object,
   queryIdentity: object,
@@ -471,30 +523,10 @@ export function createMotionQuery(
         const scope = scopesByIdentity.get(identity);
         return scope === undefined ? [] : [scope];
       });
-      const raw = effect.observation;
-      const observation = Object.freeze({
-        ...raw,
-        target: Object.freeze({
-          ...raw.target,
-          ...(raw.target.range === undefined
-            ? {}
-            : { range: Object.freeze({ ...raw.target.range }) }),
-        }),
-        ...(raw.easing === undefined
-          ? {}
-          : { easing: Object.freeze({ ...raw.easing }) }),
-        ...(raw.startAfter === undefined
-          ? {}
-          : { startAfter: Object.freeze({ ...raw.startAfter }) }),
-        ...(raw.startAfterAll === undefined
-          ? {}
-          : {
-              startAfterAll: Object.freeze(
-                raw.startAfterAll.map((dependency) =>
-                  Object.freeze({ ...dependency }),
-                ),
-              ),
-            }),
+      // MotionPlan 的运行时记录含 writer 私有字段，查询仅复制公开观察字段。
+      const observation = projectEffectObservation(effect.observation);
+      return Object.freeze({
+        ...observation,
         ref,
         effectIndex: effect.effectIndex,
         ...(effect.partIndex === undefined
@@ -504,7 +536,6 @@ export function createMotionQuery(
         start,
         end,
       });
-      return observation;
     });
 
     const scopeObservations = source.scopes.map((scope) => {
@@ -688,6 +719,17 @@ export function createMotionQuery(
           secondEnd === undefined
         ) {
           return { state: "no-natural-completion" };
+        }
+        const isEmpty = (
+          start: MotionReferenceOwner,
+          end: MotionReferenceOwner,
+        ) => {
+          const duration = timeDifference(start, end, source.facts);
+          return duration.state === "known" && duration.ms === 0;
+        };
+        // 半开区间端点相等时是空集；单独检查交叉不等式会把它误判为相交。
+        if (isEmpty(firstStart, firstEnd) || isEmpty(secondStart, secondEnd)) {
+          return { state: "known", value: false };
         }
         return combineOverlap(
           compareBefore(timeDifference(firstStart, secondEnd, source.facts)),

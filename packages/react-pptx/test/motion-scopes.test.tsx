@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   after,
   Box,
+  breathe,
   build,
   BuildError,
   Deck,
@@ -15,6 +16,7 @@ import {
   Step,
   Text,
   useMotionScope,
+  repeat,
   type MotionObservation,
 } from "@react-pptx/react-pptx";
 import { validatePptx } from "@react-pptx/validation";
@@ -65,6 +67,109 @@ function unknownLetterText(testId: string, text: string, y: number) {
       enter: fade({ by: "letter", duration: 1000, intervalMs: 500 }),
     },
     text,
+  );
+}
+
+function SingleSourceUnknownStartAliases({
+  trigger,
+  sourceCompletion = "unknown",
+}: {
+  readonly trigger: "auto" | "click";
+  readonly sourceCompletion?: "known" | "unknown" | "no-natural-completion";
+}) {
+  const source = useMotionScope();
+  const parent = useMotionScope();
+  const alias = useMotionScope();
+  const secondAlias = useMotionScope();
+  const afterParent = useMotionScope();
+  const sourceContent =
+    sourceCompletion === "unknown"
+      ? unknownLetterText("single-alias-source", "TT", 8)
+      : sourceCompletion === "known"
+        ? movingShape("single-alias-source", 100)
+        : createElement(Shape, {
+            testId: "single-alias-source",
+            x: 10,
+            y: 8,
+            width: 20,
+            height: 20,
+            fill: "#164E3D",
+            emphasis: repeat(
+              breathe({ period: 1000, from: "#164E3D", to: "#4ADE80" }),
+              "forever",
+            ),
+          });
+  const content = createElement(
+    Fragment,
+    null,
+    createElement(MotionScope, { scope: source }, sourceContent),
+    createElement(
+      MotionScope,
+      { scope: parent, startAt: after(source.end, 2500) },
+      movingShape("single-alias-parent", 100),
+    ),
+    createElement(
+      MotionScope,
+      { scope: alias, startAt: after(parent.start, 19) },
+      movingShape("single-alias-first", 100),
+    ),
+    createElement(
+      MotionScope,
+      {
+        scope: secondAlias,
+        startAt: after(alias.start, 13),
+        delay: 7,
+      },
+      movingShape("single-alias-second", 100),
+    ),
+    createElement(
+      MotionScope,
+      { scope: afterParent, startAt: parent.end },
+      movingShape("single-alias-after-parent-end", 50),
+    ),
+  );
+  return createElement(
+    Deck,
+    { width: 320, height: 180 },
+    createElement(
+      Slide,
+      { slideId: `single-source-start-alias-${trigger}` },
+      trigger === "click" ? createElement(Step, { n: 1 }, content) : content,
+    ),
+  );
+}
+
+function SingleSourceAliasUnderLaterParent() {
+  const source = useMotionScope();
+  const parent = useMotionScope();
+  const lateParent = useMotionScope();
+  const alias = useMotionScope();
+  return createElement(
+    Deck,
+    { width: 320, height: 180 },
+    createElement(
+      Slide,
+      { slideId: "single-source-alias-under-later-parent" },
+      createElement(
+        MotionScope,
+        { scope: source },
+        unknownLetterText("later-alias-source", "TT", 8),
+      ),
+      createElement(
+        MotionScope,
+        { scope: parent, startAt: after(source.end, 2500) },
+        movingShape("later-alias-parent", 100),
+      ),
+      createElement(
+        MotionScope,
+        { scope: lateParent, startAt: after(parent.end, 200) },
+        createElement(
+          MotionScope,
+          { scope: alias, startAt: after(parent.start, 19) },
+          movingShape("later-alias-consumer", 100),
+        ),
+      ),
+    ),
   );
 }
 
@@ -767,8 +872,10 @@ type IncomparableJoinOptions = {
 
 function ConditionJoinStartAlias({
   parentStartGate,
+  trigger = "auto",
 }: {
   readonly parentStartGate: boolean;
+  readonly trigger?: "auto" | "click";
 }) {
   const chain = useMotionScope();
   const inner = useMotionScope();
@@ -808,34 +915,35 @@ function ConditionJoinStartAlias({
       ),
     ),
   );
+  const content = createElement(
+    Fragment,
+    null,
+    createElement(
+      MotionScope,
+      { scope: chain, mode: "sequence" },
+      innerScope,
+      joinedScope,
+    ),
+    createElement(
+      MotionScope,
+      { scope: alias, startAt: after(joined.start, 19), delay: 23 },
+      observedShape(
+        "alias-consumer",
+        "Alias consumer",
+        122,
+        "#C00000",
+        100,
+        31,
+      ),
+    ),
+  );
   return createElement(
     Deck,
     { width: 320, height: 190 },
     createElement(
       Slide,
-      { slideId: "condition-join-start-alias" },
-      createElement(
-        Fragment,
-        null,
-        createElement(
-          MotionScope,
-          { scope: chain, mode: "sequence" },
-          innerScope,
-          joinedScope,
-        ),
-        createElement(
-          MotionScope,
-          { scope: alias, startAt: after(joined.start, 19), delay: 23 },
-          observedShape(
-            "alias-consumer",
-            "Alias consumer",
-            122,
-            "#C00000",
-            100,
-            31,
-          ),
-        ),
-      ),
+      { slideId: `condition-join-start-alias-${trigger}` },
+      trigger === "click" ? createElement(Step, { n: 1 }, content) : content,
     ),
   );
 }
@@ -2255,6 +2363,348 @@ describe("组件编排作用域", () => {
     );
   });
 
+  it("单一未知 END 经连续起点别名保留真实来源、偏移及点击步入口", async () => {
+    for (const trigger of ["auto", "click"] as const) {
+      const result = await build(
+        createElement(SingleSourceUnknownStartAliases, { trigger }),
+      );
+      const slide = result.report.slides[0];
+      const motion = slide?.capabilities?.["motion"] as MotionObservation;
+      const objectId = (testId: string) =>
+        slide?.objects.find((object) => object.testId === testId)?.id;
+      const scopeContaining = (testId: string) =>
+        motion.scopes?.find(({ members }) =>
+          members.some(
+            (member) =>
+              member.kind === "object" && member.id === objectId(testId),
+          ),
+        );
+      const sourceScope = scopeContaining("single-alias-source");
+      const parentScope = scopeContaining("single-alias-parent");
+      const aliasScope = scopeContaining("single-alias-first");
+      const secondAliasScope = scopeContaining("single-alias-second");
+      const afterParentScope = scopeContaining("single-alias-after-parent-end");
+      assert.ok(
+        sourceScope &&
+          parentScope &&
+          aliasScope &&
+          secondAliasScope &&
+          afterParentScope,
+      );
+      assert.deepEqual(parentScope.startAfter, {
+        scopeId: sourceScope.id,
+        point: "end",
+        offsetMs: 2500,
+      });
+      assert.deepEqual(aliasScope.startAfter, {
+        scopeId: sourceScope.id,
+        point: "end",
+        offsetMs: 2519,
+      });
+      assert.deepEqual(secondAliasScope.startAfter, {
+        scopeId: sourceScope.id,
+        point: "end",
+        offsetMs: 2539,
+      });
+      assert.deepEqual(afterParentScope.startAfter, {
+        scopeId: parentScope.id,
+        point: "end",
+        offsetMs: 0,
+      });
+      assert.equal(sourceScope.startMs, 0);
+      assert.equal(sourceScope.completion, "unknown");
+      assert.equal(sourceScope.endMs, undefined);
+      for (const scope of [parentScope, aliasScope, secondAliasScope]) {
+        assert.equal(scope.completion, "unknown");
+        assert.equal(scope.startMs, undefined);
+        assert.equal(scope.endMs, undefined);
+      }
+
+      const file = await validatePptx(result.pptx);
+      assert.deepEqual(file.errors, []);
+      assert.deepEqual(file.extensions, []);
+      const fileSlide = file.slides[0];
+      const effects = fileSlide?.animations?.[0]?.effects ?? [];
+      assert.equal(fileSlide?.animations?.[0]?.trigger, trigger);
+      assert.equal(effects.length, 5);
+      assert.equal(new Set(effects.map(({ targetId }) => targetId)).size, 5);
+      assert.equal(fileSlide?.objects.length, 5);
+      const effectFor = (testId: string) =>
+        effects.find(({ targetId }) => targetId === objectId(testId));
+      const sourceEffect = effectFor("single-alias-source");
+      const parentEffect = effectFor("single-alias-parent");
+      const aliasEffect = effectFor("single-alias-first");
+      const secondAliasEffect = effectFor("single-alias-second");
+      const afterParentEffect = effectFor("single-alias-after-parent-end");
+      assert.ok(
+        sourceEffect &&
+          parentEffect &&
+          aliasEffect &&
+          secondAliasEffect &&
+          afterParentEffect,
+      );
+      const containers = fileSlide?.animationContainers ?? [];
+      const effectContainer = (timingId: number) =>
+        containers.find(({ children }) =>
+          children.some(
+            ({ kind, timingId: childId }) =>
+              kind === "effect" && childId === timingId,
+          ),
+        );
+      const sourceContainer = effectContainer(sourceEffect.timingId);
+      const parentContainer = effectContainer(parentEffect.timingId);
+      assert.ok(sourceContainer && parentContainer);
+      assert.deepEqual(
+        [aliasEffect.startAfter?.timingId, aliasEffect.startAfter?.offsetMs],
+        [sourceContainer.timingId, 2519],
+      );
+      assert.deepEqual(
+        [
+          secondAliasEffect.startAfter?.timingId,
+          secondAliasEffect.startAfter?.offsetMs,
+        ],
+        [sourceContainer.timingId, 2539],
+      );
+      assert.deepEqual(
+        [
+          afterParentEffect.startAfter?.timingId,
+          afterParentEffect.startAfter?.offsetMs,
+        ],
+        [parentContainer.timingId, 0],
+      );
+      assert.equal(sourceContainer.durationMs, undefined);
+      assert.equal(parentContainer.durationMs, undefined);
+      assert.equal(
+        effectContainer(aliasEffect.timingId)?.durationMs,
+        undefined,
+      );
+      assert.equal(
+        containers.filter(
+          ({ children, durationMs, endSync }) =>
+            endSync === "all" &&
+            durationMs === undefined &&
+            children.length === 2 &&
+            children.every(({ kind, timingId }) => {
+              const gate = containers.find(
+                ({ timingId: id }) => id === timingId,
+              );
+              return (
+                kind === "container" &&
+                gate?.durationMs === 0 &&
+                gate.children.length === 0
+              );
+            }),
+        ).length,
+        0,
+      );
+
+      const slidePart = unzipSync(result.pptx)["ppt/slides/slide1.xml"];
+      assert.ok(slidePart);
+      const xml = strFromU8(slidePart);
+      assertTimingReferencesFollowDefinitions(xml);
+      for (const [effect, delayMs] of [
+        [aliasEffect, 2519],
+        [secondAliasEffect, 2539],
+      ] as const) {
+        assert.match(
+          startConditions(xml, effect.timingId),
+          new RegExp(
+            `<p:cond evt="end" delay="${delayMs}"><p:tn val="${sourceContainer.timingId}"><\\/p:tn><\\/p:cond>`,
+            "u",
+          ),
+        );
+      }
+      assert.match(
+        startConditions(xml, afterParentEffect.timingId),
+        new RegExp(
+          `<p:cond evt="end" delay="0"><p:tn val="${parentContainer.timingId}"><\\/p:tn><\\/p:cond>`,
+          "u",
+        ),
+      );
+    }
+  });
+
+  it("已知起点别名仍保留数值，无自然完成来源仍不可等待", async () => {
+    const result = await build(
+      createElement(SingleSourceUnknownStartAliases, {
+        trigger: "auto",
+        sourceCompletion: "known",
+      }),
+    );
+    const slide = result.report.slides[0];
+    const motion = slide?.capabilities?.["motion"] as MotionObservation;
+    const objectId = (testId: string) =>
+      slide?.objects.find((object) => object.testId === testId)?.id;
+    const scopeContaining = (testId: string) =>
+      motion.scopes?.find(({ members }) =>
+        members.some(
+          (member) =>
+            member.kind === "object" && member.id === objectId(testId),
+        ),
+      );
+    const sourceScope = scopeContaining("single-alias-source");
+    const parentScope = scopeContaining("single-alias-parent");
+    const aliasScope = scopeContaining("single-alias-first");
+    const secondAliasScope = scopeContaining("single-alias-second");
+    const afterParentScope = scopeContaining("single-alias-after-parent-end");
+    assert.ok(
+      sourceScope &&
+        parentScope &&
+        aliasScope &&
+        secondAliasScope &&
+        afterParentScope,
+    );
+    assert.deepEqual(
+      [
+        sourceScope.startMs,
+        sourceScope.endMs,
+        sourceScope.completion,
+        parentScope.startMs,
+        parentScope.endMs,
+        parentScope.completion,
+        aliasScope.startMs,
+        aliasScope.endMs,
+        aliasScope.completion,
+        secondAliasScope.startMs,
+        secondAliasScope.endMs,
+        secondAliasScope.completion,
+        afterParentScope.startMs,
+      ],
+      [
+        0,
+        100,
+        "known",
+        2600,
+        2700,
+        "known",
+        2619,
+        2719,
+        "known",
+        2639,
+        2739,
+        "known",
+        2700,
+      ],
+    );
+
+    const file = await validatePptx(result.pptx);
+    assert.deepEqual(file.errors, []);
+    assert.deepEqual(file.extensions, []);
+    const fileSlide = file.slides[0];
+    const effects = fileSlide?.animations?.[0]?.effects ?? [];
+    assert.equal(effects.length, 5);
+    assert.equal(fileSlide?.objects.length, 5);
+    const aliasEffect = effects.find(
+      ({ targetId }) => targetId === objectId("single-alias-first"),
+    );
+    const secondAliasEffect = effects.find(
+      ({ targetId }) => targetId === objectId("single-alias-second"),
+    );
+    assert.ok(aliasEffect && secondAliasEffect);
+    assert.deepEqual(
+      [aliasEffect.delayMs, aliasEffect.startAfter],
+      [2619, undefined],
+    );
+    assert.deepEqual(
+      [secondAliasEffect.delayMs, secondAliasEffect.startAfter],
+      [2639, undefined],
+    );
+
+    await assert.rejects(
+      build(
+        createElement(SingleSourceUnknownStartAliases, {
+          trigger: "auto",
+          sourceCompletion: "no-natural-completion",
+        }),
+      ),
+      (error: unknown) => {
+        assert.ok(error instanceof BuildError);
+        assert.equal(error.diagnostics[0]?.code, "no-natural-completion");
+        return true;
+      },
+    );
+  });
+
+  it("晚父起点主导别名后仍保留真实父门槛", async () => {
+    const result = await build(
+      createElement(SingleSourceAliasUnderLaterParent),
+    );
+    const slide = result.report.slides[0];
+    const motion = slide?.capabilities?.["motion"] as MotionObservation;
+    const objectId = (testId: string) =>
+      slide?.objects.find(({ testId: id }) => id === testId)?.id;
+    const scopeContaining = (testId: string) =>
+      motion.scopes?.find(({ members }) =>
+        members.some(
+          (member) =>
+            member.kind === "object" && member.id === objectId(testId),
+        ),
+      );
+    const sourceScope = scopeContaining("later-alias-source");
+    const parentScope = scopeContaining("later-alias-parent");
+    const aliasScope = scopeContaining("later-alias-consumer");
+    const lateParentScope = motion.scopes?.find(({ members }) =>
+      members.some(
+        (member) => member.kind === "scope" && member.id === aliasScope?.id,
+      ),
+    );
+    assert.ok(sourceScope && parentScope && aliasScope && lateParentScope);
+    assert.deepEqual(parentScope.startAfter, {
+      scopeId: sourceScope.id,
+      point: "end",
+      offsetMs: 2500,
+    });
+    const lateGate = {
+      scopeId: parentScope.id,
+      point: "end" as const,
+      offsetMs: 200,
+    };
+    assert.deepEqual(lateParentScope.startAfter, lateGate);
+    assert.deepEqual(aliasScope.startAfter, lateGate);
+    assert.equal(aliasScope.startMs, undefined);
+    assert.equal(aliasScope.completion, "unknown");
+    assert.equal(aliasScope.endMs, undefined);
+
+    const file = await validatePptx(result.pptx);
+    assert.deepEqual(file.errors, []);
+    assert.deepEqual(file.extensions, []);
+    const fileSlide = file.slides[0];
+    assert.equal(fileSlide?.objects.length, 3);
+    const effects = fileSlide?.animations?.[0]?.effects ?? [];
+    assert.equal(effects.length, 3);
+    assert.equal(new Set(effects.map(({ targetId }) => targetId)).size, 3);
+    const parentEffect = effects.find(
+      ({ targetId }) => targetId === objectId("later-alias-parent"),
+    );
+    const aliasEffect = effects.find(
+      ({ targetId }) => targetId === objectId("later-alias-consumer"),
+    );
+    assert.ok(parentEffect && aliasEffect);
+    const containers = fileSlide?.animationContainers ?? [];
+    const parentContainer = containers.find(({ children }) =>
+      children.some(
+        ({ kind, timingId }) =>
+          kind === "effect" && timingId === parentEffect.timingId,
+      ),
+    );
+    assert.ok(parentContainer);
+    assert.deepEqual(
+      [aliasEffect.startAfter?.timingId, aliasEffect.startAfter?.offsetMs],
+      [parentContainer.timingId, 200],
+    );
+    const slidePart = unzipSync(result.pptx)["ppt/slides/slide1.xml"];
+    assert.ok(slidePart);
+    const xml = strFromU8(slidePart);
+    assertTimingReferencesFollowDefinitions(xml);
+    assert.match(
+      startConditions(xml, aliasEffect.timingId),
+      new RegExp(
+        `<p:cond evt="end" delay="200"><p:tn val="${parentContainer.timingId}"><\\/p:tn><\\/p:cond>`,
+        "u",
+      ),
+    );
+  });
+
   it("作用域起点可别名到已有条件集合完成并保留来源偏移", async () => {
     for (const parentStartGate of [false, true]) {
       const result = await build(
@@ -2346,7 +2796,11 @@ describe("组件编排作用域", () => {
       const conditionSources = [
         { scopeId: innerScope.id, point: "end" as const, offsetMs: 0 },
         parentStartGate
-          ? { scopeId: chainScope.id, point: "start" as const, offsetMs: 5000 }
+          ? {
+              scopeId: chainScope.id,
+              point: "start" as const,
+              offsetMs: 5000,
+            }
           : {
               scopeId: delayedScope.id,
               point: "end" as const,
@@ -2431,6 +2885,94 @@ describe("组件编排作用域", () => {
         ),
       );
     }
+  });
+
+  it("点击步中的多来源起点别名仍复用唯一条件集合", async () => {
+    const result = await build(
+      createElement(ConditionJoinStartAlias, {
+        parentStartGate: false,
+        trigger: "click",
+      }),
+    );
+    const slide = result.report.slides[0];
+    const motion = slide?.capabilities?.["motion"] as MotionObservation;
+    const objectId = (testId: string) =>
+      slide?.objects.find(({ testId: id }) => id === testId)?.id;
+    const scopeContaining = (testId: string) =>
+      motion.scopes?.find(({ members }) =>
+        members.some(
+          (member) =>
+            member.kind === "object" && member.id === objectId(testId),
+        ),
+      );
+    const delayedScope = scopeContaining("alias-late");
+    const joinedScope = scopeContaining("alias-join-consumer");
+    const aliasScope = scopeContaining("alias-consumer");
+    const innerScope = motion.scopes?.find(
+      ({ members }) =>
+        members.some(
+          (member) =>
+            member.kind === "object" && member.id === objectId("alias-first"),
+        ) &&
+        members.some(
+          (member) => member.kind === "scope" && member.id === delayedScope?.id,
+        ),
+    );
+    assert.ok(delayedScope && joinedScope && aliasScope && innerScope);
+    const sources = [
+      { scopeId: innerScope.id, point: "end" as const, offsetMs: 0 },
+      { scopeId: delayedScope.id, point: "end" as const, offsetMs: 11000 },
+    ];
+    assert.deepEqual(joinedScope.startAfterAll, sources);
+    assert.deepEqual(
+      aliasScope.startAfterAll,
+      sources.map((source) => ({ ...source, offsetMs: source.offsetMs + 42 })),
+    );
+
+    const file = await validatePptx(result.pptx);
+    assert.deepEqual(file.errors, []);
+    assert.deepEqual(file.extensions, []);
+    const fileSlide = file.slides[0];
+    assert.equal(fileSlide?.animations?.[0]?.trigger, "click");
+    assert.equal(fileSlide?.objects.length, 5);
+    const effects = fileSlide?.animations?.[0]?.effects ?? [];
+    assert.equal(effects.length, 5);
+    assert.equal(new Set(effects.map(({ targetId }) => targetId)).size, 5);
+    const aliasEffect = effects.find(
+      ({ targetId }) => targetId === objectId("alias-consumer"),
+    );
+    assert.ok(aliasEffect);
+    const containers = fileSlide?.animationContainers ?? [];
+    const joins = containers.filter(
+      ({ children, durationMs, endSync }) =>
+        endSync === "all" &&
+        durationMs === undefined &&
+        children.length === 2 &&
+        children.every(({ kind, timingId }) => {
+          const gate = containers.find(({ timingId: id }) => id === timingId);
+          return (
+            kind === "container" &&
+            gate?.durationMs === 0 &&
+            gate.children.length === 0
+          );
+        }),
+    );
+    assert.equal(joins.length, 1);
+    assert.deepEqual(
+      [aliasEffect.startAfter?.timingId, aliasEffect.startAfter?.offsetMs],
+      [joins[0]?.timingId, 73],
+    );
+    const slidePart = unzipSync(result.pptx)["ppt/slides/slide1.xml"];
+    assert.ok(slidePart);
+    const xml = strFromU8(slidePart);
+    assertTimingReferencesFollowDefinitions(xml);
+    assert.match(
+      startConditions(xml, aliasEffect.timingId),
+      new RegExp(
+        `<p:cond evt="end" delay="73"><p:tn val="${joins[0]?.timingId}"><\\/p:tn><\\/p:cond>`,
+        "u",
+      ),
+    );
   });
 
   it("父作用域晚于条件集合完成时保留未知起点错误", async () => {

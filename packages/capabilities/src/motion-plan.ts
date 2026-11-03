@@ -61,6 +61,8 @@ export type MotionPlanStep = MotionStepObservation & {
   readonly order: number;
   readonly effects: ScheduledEffect[];
   readonly nodes: readonly MotionPlanNode[];
+  /** 根 with-group 内按首个实际消费节点放置的条件集合。 */
+  readonly conditionDefinitionsBefore?: readonly MotionPlanConditionPlacement[];
 };
 
 /** 真实时序包含树；scope 和多效果对象节点会成为原生并行容器。 */
@@ -971,6 +973,7 @@ function motionScope(value: MotionScopeDeclaration): boolean {
 function motionPlan(
   contributions: readonly CapabilityContribution[],
 ): MotionPlan {
+  const stepRootHostIdentity = "\u0000motion-step-root";
   const scopes = new Map<string, ScopeState>();
   const targets = new Map<number, TargetState>();
   const roots: ScopeMember[] = [];
@@ -1236,6 +1239,10 @@ function motionPlan(
 
   const allScheduledEffects = new Map<string, ScheduledEffect[]>();
   const allStepNodes = new Map<string, MotionPlanNode[]>();
+  const allStepConditionDefinitions = new Map<
+    string,
+    readonly MotionPlanConditionPlacement[]
+  >();
   const addStepEffect = (effect: ScheduledEffect) => {
     const items = allScheduledEffects.get(effect.stepKey) ?? [];
     items.push(effect);
@@ -1278,7 +1285,6 @@ function motionPlan(
     const scheduledObjects = new Set<number>();
     const projectedNodeHosts = new Map<string, string>();
     const projectedEndHosts = new Map<string, string>();
-    const projectedJoinHosts = new Map<string, string>();
     const preservedScopeStarts = new Set<string>();
     let projectionChanged = false;
 
@@ -1331,6 +1337,58 @@ function motionPlan(
         : directMemberForScope(host, containingScope);
     };
 
+    const rootMemberForScope = (identity: string): ScopeMember | undefined => {
+      let current = scopes.get(identity);
+      while (current?.declaration.parent !== undefined) {
+        current = scopes.get(current.declaration.parent);
+      }
+      if (current === undefined || !scopeSteps(current).includes(key)) {
+        return undefined;
+      }
+      return roots.find(
+        (member) =>
+          member.kind === "scope" &&
+          member.id === current?.declaration.identity,
+      );
+    };
+
+    const rootMemberForTarget = (
+      target: TargetState,
+    ): ScopeMember | undefined => {
+      const containingScope = target.value.scopes.at(-1)?.identity;
+      if (containingScope !== undefined) {
+        return rootMemberForScope(containingScope);
+      }
+      return target.stepKey === key
+        ? roots.find(
+            (member) => member.kind === "object" && member.id === target.id,
+          )
+        : undefined;
+    };
+
+    const directRootMemberForDependency = (
+      dependency: MotionStartDependency,
+    ): ScopeMember | undefined => {
+      if ("scopeId" in dependency) {
+        const source = scopeForPlanId(dependency.scopeId);
+        return source === undefined
+          ? undefined
+          : rootMemberForScope(source.declaration.identity);
+      }
+      const source = targets.get(dependency.targetId);
+      return source === undefined ? undefined : rootMemberForTarget(source);
+    };
+
+    const directRootMemberForConsumer = (
+      consumer: ScopeMember,
+    ): ScopeMember | undefined => {
+      if (consumer.kind === "scope") {
+        return rootMemberForScope(consumer.id);
+      }
+      const target = targets.get(consumer.id);
+      return target === undefined ? undefined : rootMemberForTarget(target);
+    };
+
     const memberNodeId = (member: ScopeMember): string =>
       member.kind === "scope"
         ? `scope:${scopeId(member.id, scopes)}`
@@ -1367,7 +1425,7 @@ function motionPlan(
 
     const strictlyAfterParentStart = (
       candidates: readonly TimeCandidate[],
-      parentStart: TimePoint,
+      parentStart: TimePoint | TimeExpression,
     ): boolean => {
       if (parentStart.state === "no-natural-completion") return false;
       if (parentStart.state === "known") {
@@ -1515,10 +1573,10 @@ function motionPlan(
             `多个不可比较的未知起点不满足已核验条件集合前置：${reason}`,
             path,
           );
-        if (hostScope === undefined || consumer === undefined) {
-          return unsupported("需要同一步中的真实宿主和消费成员");
+        if (consumer === undefined) {
+          return unsupported("需要同一步中的真实消费成员");
         }
-        const candidateHosts: ScopeState[] = [];
+        const candidateHosts: (ScopeState | undefined)[] = [];
         let currentHost: ScopeState | undefined = hostScope;
         while (currentHost !== undefined) {
           candidateHosts.push(currentHost);
@@ -1526,18 +1584,26 @@ function motionPlan(
           currentHost =
             parentId === undefined ? undefined : scopes.get(parentId);
         }
+        candidateHosts.push(undefined);
         let lastReason = "没有能够先定义全部来源的真实宿主";
         for (const host of candidateHosts) {
-          const consumerBranch = directConsumerAtHost(
-            host,
-            hostScope,
-            consumer,
+          const isStepRoot = host === undefined;
+          const hostIdentity =
+            host?.declaration.identity ?? stepRootHostIdentity;
+          const rootMembers = roots.filter((member) =>
+            memberExistsInStep(member, key),
           );
+          const consumerBranch = isStepRoot
+            ? directRootMemberForConsumer(consumer)
+            : hostScope === undefined
+              ? undefined
+              : directConsumerAtHost(host, hostScope, consumer);
           if (consumerBranch === undefined) {
             lastReason = "无法定位消费成员在候选宿主中的实际位置";
             continue;
           }
-          const consumerIndex = host.members.findIndex(
+          const hostMembers = isStepRoot ? rootMembers : host.members;
+          const consumerIndex = hostMembers.findIndex(
             (member) =>
               member.kind === consumerBranch.kind &&
               member.id === consumerBranch.id,
@@ -1546,18 +1612,21 @@ function motionPlan(
             lastReason = "无法定位实际消费成员";
             continue;
           }
-          const hostStart = resolveScopeStart(host);
+          const hostStart = isStepRoot ? origin : resolveScopeStart(host);
           if (hostStart.state === "no-natural-completion") {
             lastReason = "候选宿主没有可订阅的起点";
             continue;
           }
           const gates: MotionPlanStartGate[] = [];
+          const subscribedSources: TimeCandidate[] = [];
           let validHost = true;
           let requiresProjection = false;
           for (const candidate of startCandidates) {
             let dependency = candidate.dependency;
             if (
               candidate.eventId === parentStart.eventId &&
+              !isStepRoot &&
+              hostScope !== undefined &&
               host.declaration.identity !== hostScope.declaration.identity
             ) {
               // 父起点保持独立事件身份，避免把多层合法 delay 合成一个字段。
@@ -1603,7 +1672,12 @@ function motionPlan(
                 delayMs,
                 ...(dependency === undefined
                   ? {}
-                  : { sourceDependency: dependency }),
+                  : {
+                      sourceDependency: dependencyAtEvent(
+                        dependency,
+                        candidate.offsetMs,
+                      ),
+                    }),
               });
               continue;
             }
@@ -1630,29 +1704,53 @@ function motionPlan(
               validHost = false;
               break;
             }
-            const sourceIndex = directMemberForDependency(host, dependency);
+            const sourceIndex = isStepRoot
+              ? (() => {
+                  const sourceBranch =
+                    directRootMemberForDependency(dependency);
+                  return sourceBranch === undefined
+                    ? -1
+                    : hostMembers.findIndex(
+                        (member) =>
+                          member.kind === sourceBranch.kind &&
+                          member.id === sourceBranch.id,
+                      );
+                })()
+              : directMemberForDependency(host, dependency);
             if (sourceIndex === consumerIndex) {
               requiresProjection = true;
             }
             if ("scopeId" in dependency && dependency.point === "end") {
               const sourceScope = scopeForPlanId(dependency.scopeId);
-              let current = host;
-              while (sourceScope !== undefined) {
+              if (isStepRoot) {
                 if (
-                  current.declaration.identity ===
-                  sourceScope.declaration.identity
+                  sourceScope !== undefined &&
+                  hostScope !== undefined &&
+                  isAncestorScope(sourceScope, hostScope)
                 ) {
                   lastReason = "来源整体完成会等待其内部宿主结束";
                   validHost = false;
                   break;
                 }
-                const parentId = current.declaration.parent;
-                if (parentId === undefined) break;
-                const parent = scopes.get(parentId);
-                if (parent === undefined) break;
-                current = parent;
+              } else {
+                let current = host;
+                while (sourceScope !== undefined) {
+                  if (
+                    current.declaration.identity ===
+                    sourceScope.declaration.identity
+                  ) {
+                    lastReason = "来源整体完成会等待其内部宿主结束";
+                    validHost = false;
+                    break;
+                  }
+                  const parentId = current.declaration.parent;
+                  if (parentId === undefined) break;
+                  const parent = scopes.get(parentId);
+                  if (parent === undefined) break;
+                  current = parent;
+                }
+                if (!validHost) break;
               }
-              if (!validHost) break;
             }
             const sourceAfterHost =
               facts.lowerBound(hostStart.eventId, candidate.eventId) ??
@@ -1672,6 +1770,7 @@ function motionPlan(
               kind: dependency.point === "start" ? "begin" : "end",
               dependency: dependencyAtEvent(dependency, candidate.offsetMs),
             });
+            subscribedSources.push({ ...candidate, offsetMs: 0 });
             if (dependency.point === "start") {
               const sourceScope = scopeForPlanId(dependency.scopeId);
               if (sourceScope !== undefined) {
@@ -1680,9 +1779,38 @@ function motionPlan(
             }
           }
           if (!validHost) continue;
-          const consumerActivation = requiresProjection
-            ? hostStart
-            : parentStart;
+          if (
+            !isStepRoot &&
+            hostScope !== undefined &&
+            host.declaration.identity !== hostScope.declaration.identity &&
+            !strictlyAfterParentStart(startCandidates, parentStart)
+          ) {
+            // 父作用域尚未激活时，必须把条件和消费者一并移到更早宿主。
+            requiresProjection = true;
+          }
+          if (isStepRoot && hostScope !== undefined) {
+            requiresProjection = true;
+          }
+          const consumerActivation =
+            requiresProjection &&
+            (isStepRoot ||
+              (hostScope !== undefined &&
+                host.declaration.identity !== hostScope.declaration.identity))
+              ? isStepRoot
+                ? hostStart
+                : memberStart(host, consumerBranch)
+              : requiresProjection
+                ? hostStart
+                : parentStart;
+          if (
+            requiresProjection &&
+            subscribedSources.length > 0 &&
+            !strictlyAfterParentStart(subscribedSources, consumerActivation)
+          ) {
+            lastReason =
+              "不能证明条件集合完成晚于消费成员的父作用域激活：真实来源在实际条件宿主激活前已发生";
+            continue;
+          }
           if (!strictlyAfterParentStart(startCandidates, consumerActivation)) {
             lastReason = "不能证明条件集合完成晚于消费成员的父作用域激活";
             continue;
@@ -1690,29 +1818,29 @@ function motionPlan(
           const projectedConsumerId = memberNodeId(consumer);
           if (requiresProjection) {
             const previousHost = projectedNodeHosts.get(projectedConsumerId);
-            if (
-              previousHost !== undefined &&
-              previousHost !== host.declaration.identity
-            ) {
+            if (previousHost !== undefined && previousHost !== hostIdentity) {
               lastReason = "同一消费节点需要多个物理早宿主";
               continue;
             }
-            projectedNodeHosts.set(
-              projectedConsumerId,
-              host.declaration.identity,
-            );
-            markProjectedAncestors(hostScope, host);
+            projectedNodeHosts.set(projectedConsumerId, hostIdentity);
+            if (isStepRoot) {
+              if (hostScope !== undefined) {
+                markProjectedAncestorsAtStepRoot(hostScope);
+              }
+            } else if (hostScope !== undefined) {
+              markProjectedAncestors(hostScope, host);
+            }
           }
           return {
             kind: "condition-join",
             id: eventId,
-            hostScopeId: scopeId(host.declaration.identity, scopes),
-            consumerParentScopeId: scopeId(
-              requiresProjection
-                ? host.declaration.identity
-                : hostScope.declaration.identity,
-              scopes,
-            ),
+            hostScopeId: isStepRoot
+              ? stepRootHostIdentity
+              : scopeId(host.declaration.identity, scopes),
+            consumerParentScopeId:
+              requiresProjection || hostScope === undefined
+                ? hostIdentity
+                : scopeId(hostScope.declaration.identity, scopes),
             beforeNodeId: memberNodeId(
               requiresProjection ? consumer : consumerBranch,
             ),
@@ -1997,6 +2125,11 @@ function motionPlan(
         const original = scopeStartExpressions.get(
           sourceScope.declaration.identity,
         );
+        if (activeChildren(sourceScope).length === 0) {
+          // 空作用域可作为真实时间节点被引用，保留其 START/END 别名层。
+          preservedScopeStarts.add(sourceScope.declaration.identity);
+          return expression;
+        }
         return expression.state === "no-natural-completion" ||
           original?.state !== "unknown"
           ? expression
@@ -2563,6 +2696,11 @@ function motionPlan(
       if (source === undefined || seen.has(source.declaration.identity)) {
         return [candidate];
       }
+      if (!hasActiveMembers(source)) {
+        // 空作用域的 END 等于 START；保留它作为真实时序节点，避免折叠合法偏移层。
+        preservedScopeStarts.add(source.declaration.identity);
+        return [candidate];
+      }
       const original = scopeStartExpressions.get(source.declaration.identity);
       if (
         original === undefined ||
@@ -2626,6 +2764,7 @@ function motionPlan(
       const existingHostId = projectedEndHosts.get(
         actualParent.declaration.identity,
       );
+      if (existingHostId === stepRootHostIdentity) return;
       const existingHost =
         existingHostId === undefined ? undefined : scopes.get(existingHostId);
       if (existingHost !== undefined && isAncestorScope(existingHost, host)) {
@@ -2661,17 +2800,35 @@ function motionPlan(
       }
     }
 
+    function markProjectedAncestorsAtStepRoot(actualParent: ScopeState): void {
+      let current: ScopeState | undefined = actualParent;
+      while (current !== undefined) {
+        projectedEndHosts.set(
+          current.declaration.identity,
+          stepRootHostIdentity,
+        );
+        const parentId: string | undefined = current.declaration.parent;
+        current = parentId === undefined ? undefined : scopes.get(parentId);
+      }
+    }
+
     const recordConditionPlacement = (
       join: Extract<MotionPlanStart, { readonly kind: "condition-join" }>,
     ): void => {
-      const projectedHost = projectedJoinHosts.get(join.id);
+      const projectedHost = projectedNodeHosts.get(join.beforeNodeId);
       const placement =
         projectedHost === undefined
           ? join
           : {
               ...join,
-              hostScopeId: scopeId(projectedHost, scopes),
-              consumerParentScopeId: scopeId(projectedHost, scopes),
+              hostScopeId:
+                projectedHost === stepRootHostIdentity
+                  ? stepRootHostIdentity
+                  : scopeId(projectedHost, scopes),
+              consumerParentScopeId:
+                projectedHost === stepRootHostIdentity
+                  ? stepRootHostIdentity
+                  : scopeId(projectedHost, scopes),
             };
       const placements =
         conditionPlacementsByHost.get(placement.hostScopeId) ?? [];
@@ -2921,7 +3078,6 @@ function motionPlan(
                 consumerId,
                 parentScope.declaration.identity,
               );
-              projectedJoinHosts.set(join.id, parentScope.declaration.identity);
               markProjectedAncestors(actualParent, parentScope);
               projectionChanged = true;
             }
@@ -2946,11 +3102,10 @@ function motionPlan(
 
     const collectorForProjectedScope = (
       scope: ScopeState,
-      host: ScopeState,
+      hostStart: TimePoint,
     ): MotionPlanNode | undefined => {
       const end = ends.get(scope.declaration.identity);
       const memberEnds = scopeCompletionMembers.get(scope.declaration.identity);
-      const hostStart = resolveScopeStart(host);
       if (
         end === undefined ||
         end.state === "no-natural-completion" ||
@@ -3072,7 +3227,10 @@ function motionPlan(
         .filter((candidate): candidate is ScopeState => candidate !== undefined)
         .sort((left, right) => left.order - right.order);
       for (const projectedScope of hostScopes) {
-        const collector = collectorForProjectedScope(projectedScope, scope);
+        const collector = collectorForProjectedScope(
+          projectedScope,
+          resolveScopeStart(scope),
+        );
         if (collector !== undefined) hostLifted.push(collector);
       }
       const allChildren = [...children, ...hostLifted];
@@ -3115,6 +3273,7 @@ function motionPlan(
 
     let rootNodes: MotionPlanNode[] = [];
     let nodes: MotionPlanNode[] = [];
+    let rootConditionDefinitionsBefore: MotionPlanConditionPlacement[] = [];
     while (true) {
       projectionChanged = false;
       conditionPlacementsByHost.clear();
@@ -3132,7 +3291,23 @@ function motionPlan(
         return node === undefined ? [] : [node];
       });
       if (projectionChanged) continue;
-      nodes = sortNativeRoots(rootNodes);
+      rootNodes.push(...(projectedNodesByHost.get(stepRootHostIdentity) ?? []));
+      projectedNodesByHost.delete(stepRootHostIdentity);
+      const projectedRootScopes = [...projectedEndHosts.entries()]
+        .filter(([, host]) => host === stepRootHostIdentity)
+        .map(([scopeIdentity]) => scopes.get(scopeIdentity))
+        .filter(
+          (candidate): candidate is ScopeState =>
+            candidate !== undefined && scopeSteps(candidate).includes(key),
+        )
+        .sort((left, right) => left.order - right.order);
+      for (const projectedScope of projectedRootScopes) {
+        const collector = collectorForProjectedScope(projectedScope, origin);
+        if (collector !== undefined) rootNodes.push(collector);
+      }
+      rootConditionDefinitionsBefore =
+        conditionPlacementsByHost.get(stepRootHostIdentity) ?? [];
+      nodes = sortNativeRoots(rootNodes, rootConditionDefinitionsBefore);
       if (!projectionChanged) break;
     }
     const definedEvents = new Set<string>();
@@ -3241,8 +3416,33 @@ function motionPlan(
         }
       }
     };
-    for (const node of nodes) verifyNodeOrder(node);
+    const remainingRootPlacements = new Set(rootConditionDefinitionsBefore);
+    for (const node of nodes) {
+      const nodeId = planNodeId(node);
+      for (const placement of rootConditionDefinitionsBefore) {
+        if (placement.join.beforeNodeId !== nodeId) continue;
+        for (const gate of placement.join.gates) {
+          if (gate.kind === "end" || gate.kind === "begin") {
+            verifyEventReference(eventSource(gate.dependency), node);
+          }
+        }
+        if (definedConditions.has(conditionEvent(placement.join.id))) {
+          fail(
+            "motion-plan-conflict",
+            "同一步重复定义条件集合",
+            nodePath(node),
+          );
+        }
+        definedConditions.add(conditionEvent(placement.join.id));
+        remainingRootPlacements.delete(placement);
+      }
+      verifyNodeOrder(node);
+    }
+    if (remainingRootPlacements.size > 0) {
+      fail("motion-plan-conflict", "根 with-group 缺少条件集合的实际消费节点");
+    }
     allStepNodes.set(key, nodes);
+    allStepConditionDefinitions.set(key, rootConditionDefinitionsBefore);
   }
 
   const plans = [...stepStates.values()]
@@ -3261,6 +3461,8 @@ function motionPlan(
             left.target.id - right.target.id ||
             left.order - right.order,
         );
+      const conditionDefinitionsBefore =
+        allStepConditionDefinitions.get(step.key) ?? [];
       return {
         key: step.key,
         trigger: step.trigger,
@@ -3268,6 +3470,9 @@ function motionPlan(
         order: step.order,
         effects,
         nodes: allStepNodes.get(step.key) ?? [],
+        ...(conditionDefinitionsBefore.length === 0
+          ? {}
+          : { conditionDefinitionsBefore }),
       } satisfies MotionPlanStep;
     });
 

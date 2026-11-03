@@ -386,7 +386,7 @@ function effectTree(
   buildGroupId?: number,
 ): string {
   if (effect.startAfter !== undefined) {
-    timeNodeValue(effect.startAfter.offsetMs, "完成依赖偏移");
+    validateKnownTime(effect.startAfter.offsetMs, "完成依赖偏移");
   }
   const preset = {
     fade: { id: 10, class: "entr" },
@@ -597,15 +597,17 @@ function timingContainer(
   children: readonly string[],
   nodeType?: string,
 ): string {
+  const isEmpty = children.length === 0;
   return element(
     "p:par",
     undefined,
     element(
       "p:cTn",
-      { id, fill: "hold", nodeType },
+      { id, ...(isEmpty ? { dur: 0 } : {}), fill: "hold", nodeType },
       element("p:stCondLst", undefined, startCondition),
-      endSync(),
-      element("p:childTnLst", undefined, ...children),
+      isEmpty ? undefined : endSync(),
+      // 空作用域的 END 与其未知 START 相同；省略空列表以保持合法 XML。
+      isEmpty ? undefined : element("p:childTnLst", undefined, ...children),
     ),
   );
 }
@@ -780,6 +782,13 @@ function timingXml(steps: readonly MotionPlanStep[]): string {
   };
   for (const step of steps) {
     collectReferencedContainers(step.nodes, step.key);
+    for (const placement of step.conditionDefinitionsBefore ?? []) {
+      for (const gate of placement.join.gates) {
+        if (gate.kind === "end" || gate.kind === "begin") {
+          keepDependencyContainer(gate.dependency, step.key);
+        }
+      }
+    }
   }
 
   const registerNodeIds = (
@@ -815,6 +824,9 @@ function timingXml(steps: readonly MotionPlanStep[]): string {
     }
   };
   for (const step of steps) {
+    for (const placement of step.conditionDefinitionsBefore ?? []) {
+      conditionNodeIds.set(`${step.key}:${placement.join.id}`, ids.take());
+    }
     registerNodeIds(step.nodes, step.key);
   }
   const chartBuildGroupIds = new Map<number, number>();
@@ -1098,6 +1110,7 @@ function timingXml(steps: readonly MotionPlanStep[]): string {
       undefined,
       true,
       step.trigger === "click" ? "clickEffect" : "afterEffect",
+      step.conditionDefinitionsBefore,
     );
     const stepTimingGroups =
       stepChildren.length === 0

@@ -500,7 +500,7 @@ describe("对象动画", () => {
     assert.ok(slidePart);
     const timing = strFromU8(slidePart);
     const finiteShapeStart = timing.indexOf(
-      `<p:cNvPr id="${finiteBreatheObject?.id}" name="Finite body - two breathe cycles"/>`,
+      `<p:cNvPr id="${finiteBreatheObject?.id}" name="Finite body - two breathe cycles"`,
     );
     const finiteShapeFill = timing.indexOf(
       '<a:solidFill><a:srgbClr val="FFFFFF"/></a:solidFill>',

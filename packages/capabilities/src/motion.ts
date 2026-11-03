@@ -1144,13 +1144,13 @@ function timingXml(
   const slideEffects = steps.flatMap((step) =>
     step.effects.map((effect) => effect as TimingEffect),
   );
-  const paragraphBuildTargets = new Set<number>();
+  const declaredParagraphBuildTargets = new Set<number>();
   for (const effect of slideEffects) {
     if (
       effect.targetTextBody &&
       (effect.by === "paragraph" || effect.target.range?.type === "paragraph")
     ) {
-      paragraphBuildTargets.add(effect.target.id);
+      declaredParagraphBuildTargets.add(effect.target.id);
     }
   }
   // 按段构建会负责延迟段落的初始可见性；whole 入口才需要在页面起点隐藏。
@@ -1159,7 +1159,7 @@ function timingXml(
     if (
       effect.kind === "entrance" &&
       isWholeTextProjection(effect) &&
-      !paragraphBuildTargets.has(effect.target.id)
+      !declaredParagraphBuildTargets.has(effect.target.id)
     ) {
       initialVisibilityEffects.set(effect.target.id, effect);
     }
@@ -1168,6 +1168,18 @@ function timingXml(
     (effect) => visibilitySet(timingTarget(effect, undefined), "hidden", ids),
   );
   const nativeProjections: MotionNativeProjection[] = [];
+  const nativeTextEffects: {
+    readonly effect: TimingEffect;
+    readonly declaration: TimingEffect;
+  }[] = [];
+  const collectNativeTextEffect = (
+    effect: TimingEffect,
+    declaration: TimingEffect,
+  ): void => {
+    if (effect.targetTextBody) {
+      nativeTextEffects.push({ effect, declaration });
+    }
+  };
   const memberIds = (members: readonly MotionNativeMember[]): Set<number> => {
     const result = new Set<number>();
     const pending = [...members];
@@ -1257,6 +1269,7 @@ function timingXml(
           ...(targetTextBody ? { buildGroupId: 1 } : {}),
           groupSpinCenter: center,
         };
+        collectNativeTextEffect(projected, effect);
         return effectTree(
           projected,
           index === 0 ? nodeType : "withEffect",
@@ -1286,6 +1299,7 @@ function timingXml(
         ? {}
         : { buildGroupId: textBuildGroupId }),
     };
+    collectNativeTextEffect(nativeEffect, effect);
     return [
       effectTree(
         nativeEffect,
@@ -1526,49 +1540,63 @@ function timingXml(
   >();
   const chartBuildTargets = new Map<number, TimingEffect>();
   const wholeTextArrays = new Map<number, Set<number>>();
-  for (const step of steps) {
-    const wholeTextDeclarations = new Map<number, Set<number>>();
-    for (const effect of step.effects) {
-      if (!effect.targetTextBody) continue;
-      if (!isWholeTextProjection(effect)) continue;
-      const declarations =
-        wholeTextDeclarations.get(effect.target.id) ?? new Set<number>();
-      declarations.add(effect.effectIndex);
-      wholeTextDeclarations.set(effect.target.id, declarations);
+  const paragraphBuildTargets = new Set<number>();
+  const wholeTextDeclarations = new Map<number, Set<number>>();
+  for (const { effect, declaration } of nativeTextEffects) {
+    // 数组构建只统计 Text 自身的声明，Group 投影仍保留其逻辑身份。
+    if (
+      !declaration.targetTextBody ||
+      declaration.target.id !== effect.target.id
+    ) {
+      continue;
     }
-    for (const [targetId, declarations] of wholeTextDeclarations) {
-      if (declarations.size > 1) wholeTextArrays.set(targetId, declarations);
+    if (
+      declaration.by === "paragraph" ||
+      declaration.target.range?.type === "paragraph"
+    ) {
+      paragraphBuildTargets.add(effect.target.id);
     }
+    if (!isWholeTextProjection(declaration)) continue;
+    const declarations =
+      wholeTextDeclarations.get(effect.target.id) ?? new Set<number>();
+    declarations.add(declaration.effectIndex);
+    wholeTextDeclarations.set(effect.target.id, declarations);
+  }
+  for (const [targetId, declarations] of wholeTextDeclarations) {
+    if (declarations.size > 1) wholeTextArrays.set(targetId, declarations);
+  }
+  for (const { effect, declaration } of nativeTextEffects) {
+    const groupId = effect.buildGroupId ?? 0;
+    const key = `${effect.target.id}:${groupId}`;
+    const previous = paragraphBuilds.get(key);
+    const isDeclaredTextEffect =
+      declaration.targetTextBody && declaration.target.id === effect.target.id;
+    const build =
+      groupId === 1
+        ? wholeTextArrays.has(effect.target.id) &&
+          !paragraphBuildTargets.has(effect.target.id)
+          ? "p"
+          : "allAtOnce"
+        : isDeclaredTextEffect &&
+            (declaration.by === "paragraph" ||
+              declaration.target.range?.type === "paragraph")
+          ? "p"
+          : previous?.build;
+    // bldP 按真实写出的文字目标和构建组聚合；不改动作者编排身份。
+    const animBg =
+      groupId === 1 &&
+      (previous?.animBg === true || hasWholeTextBackgroundBehaviors(effect));
+    paragraphBuilds.set(key, {
+      effect,
+      groupId,
+      ...(build === undefined ? {} : { build }),
+      ...(effect.targetHasBackground ? { animBg } : {}),
+    });
   }
   for (const step of steps) {
     for (const effect of step.effects) {
       const timed = effect as TimingEffect;
-      if (timed.targetTextBody) {
-        const groupId = isWholeTextProjection(timed) ? 1 : 0;
-        const key = `${timed.target.id}:${groupId}`;
-        const previous = paragraphBuilds.get(key);
-        const build =
-          groupId === 1
-            ? wholeTextArrays.has(timed.target.id) &&
-              !paragraphBuildTargets.has(timed.target.id)
-              ? "p"
-              : "allAtOnce"
-            : timed.by === "paragraph" ||
-                timed.target.range?.type === "paragraph"
-              ? "p"
-              : previous?.build;
-        // 纯 whole Text 数组须有原生段落构建层，PowerPoint 才会执行各段旋入；
-        // 这是格式表达，不改变 MotionPlan 中作者声明的 whole 目标。
-        const animBg =
-          groupId === 1 &&
-          (previous?.animBg === true || hasWholeTextBackgroundBehaviors(timed));
-        paragraphBuilds.set(key, {
-          effect: timed,
-          groupId,
-          ...(build === undefined ? {} : { build }),
-          ...(timed.targetHasBackground ? { animBg } : {}),
-        });
-      } else if (timed.target.range?.type === "chart") {
+      if (!timed.targetTextBody && timed.target.range?.type === "chart") {
         chartBuildTargets.set(timed.target.id, timed);
       }
     }

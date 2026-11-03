@@ -2748,6 +2748,216 @@ describe("对象动画", () => {
     );
   });
 
+  it("Group Text 段落动画与投影共享文字构建职责", async () => {
+    const result = await build(
+      createElement(
+        Deck,
+        { width: 960, height: 540 },
+        createElement(
+          Slide,
+          { slideId: "group-text-paragraph-build" },
+          createElement(
+            Group,
+            {
+              testId: "paragraph-build-group",
+              emphasis: spin({ duration: 4000, from: 360 }),
+            },
+            createElement(Text, {
+              testId: "paragraph-build-text",
+              x: 100,
+              y: 100,
+              width: 330,
+              height: 160,
+              style: {
+                backgroundColor: "#FEF3C7",
+                borderColor: "#1D4ED8",
+                borderWidth: 2,
+              },
+              enter: fade({ by: "paragraph", duration: 700, delay: 1500 }),
+              children: [
+                createElement(P, { key: "long" }, "A longer paragraph."),
+                createElement(P, { key: "short" }, "A short second paragraph."),
+              ],
+            }),
+            createElement(Shape, {
+              testId: "paragraph-build-shape",
+              x: 550,
+              y: 240,
+              width: 70,
+              height: 70,
+              fill: "#F97316",
+            }),
+          ),
+        ),
+      ),
+    );
+
+    const group = result.report.slides[0]?.objects.find(
+      ({ testId }) => testId === "paragraph-build-group",
+    );
+    const text = group?.members?.find(
+      ({ testId }) => testId === "paragraph-build-text",
+    );
+    assert.ok(text !== undefined);
+
+    const file = await validatePptx(result.pptx);
+    assert.deepEqual(file.errors, []);
+    const effects = file.slides[0]?.animations?.flatMap((step) => step.effects);
+    const projectedSpin = effects?.find(
+      ({ preset, targetId }) => preset === "spin" && targetId === text.id,
+    );
+    assert.deepEqual(
+      [
+        projectedSpin?.nativeBuild,
+        projectedSpin?.nativeBuildGroupId,
+        projectedSpin?.nativeBuildAnimBg,
+      ],
+      ["allAtOnce", 1, true],
+    );
+
+    const xml = strFromU8(unzipSync(result.pptx)["ppt/slides/slide1.xml"]!);
+    assert.match(
+      xml,
+      new RegExp(
+        `<p:bldP spid="${text.id}" grpId="0" build="p" animBg="0">`,
+        "u",
+      ),
+    );
+    assert.match(
+      xml,
+      new RegExp(
+        `<p:bldP spid="${text.id}" grpId="1" build="allAtOnce" animBg="1">`,
+        "u",
+      ),
+    );
+  });
+
+  it("Group Text 逐词投影的构建组无需背景角色", async () => {
+    const result = await build(
+      createElement(
+        Deck,
+        { width: 960, height: 540 },
+        createElement(
+          Slide,
+          { slideId: "group-text-word-build" },
+          createElement(
+            Group,
+            { testId: "word-build-group", emphasis: spin({ duration: 4000 }) },
+            createElement(Text, {
+              testId: "word-build-text",
+              x: 100,
+              y: 100,
+              width: 330,
+              height: 160,
+              enter: fade({ by: "word", duration: 700, delay: 1500 }),
+              children: [
+                createElement(P, { key: "first" }, "A first paragraph."),
+                createElement(P, { key: "second" }, "A second paragraph."),
+              ],
+            }),
+            createElement(Shape, {
+              testId: "word-build-shape",
+              x: 550,
+              y: 240,
+              width: 70,
+              height: 70,
+              fill: "#F97316",
+            }),
+          ),
+        ),
+      ),
+    );
+    const group = result.report.slides[0]?.objects.find(
+      ({ testId }) => testId === "word-build-group",
+    );
+    const text = group?.members?.find(
+      ({ testId }) => testId === "word-build-text",
+    );
+    assert.ok(text !== undefined);
+
+    const file = await validatePptx(result.pptx);
+    assert.deepEqual(file.errors, []);
+    const effects = file.slides[0]?.animations?.flatMap((step) => step.effects);
+    const wordFade = effects?.find(
+      ({ preset, targetId }) => preset === "fade" && targetId === text.id,
+    );
+    const projectedSpin = effects?.find(
+      ({ preset, targetId }) => preset === "spin" && targetId === text.id,
+    );
+    assert.equal(wordFade?.nativeBuildGroupId, 0);
+    assert.deepEqual(
+      [projectedSpin?.nativeBuild, projectedSpin?.nativeBuildGroupId],
+      ["allAtOnce", 1],
+    );
+
+    const xml = strFromU8(unzipSync(result.pptx)["ppt/slides/slide1.xml"]!);
+    assert.match(
+      xml,
+      new RegExp(
+        `<p:bldP spid="${text.id}" grpId="1" build="allAtOnce"></p:bldP>`,
+        "u",
+      ),
+    );
+    assert.match(xml, /<p:iterate type="wd">/u);
+  });
+
+  it("Group Text 同目标的 whole 效果数组共享段落构建组", async () => {
+    const result = await build(
+      createElement(
+        Deck,
+        { width: 960, height: 540 },
+        createElement(
+          Slide,
+          { slideId: "group-text-whole-array-build" },
+          createElement(
+            Group,
+            { testId: "whole-array-group", emphasis: spin({ duration: 4000 }) },
+            createElement(Text, {
+              testId: "whole-array-text",
+              x: 100,
+              y: 100,
+              width: 330,
+              height: 160,
+              enter: fade({ duration: 700 }),
+              emphasis: spin({ duration: 900 }),
+              children: [
+                createElement(P, { key: "first" }, "A first paragraph."),
+                createElement(P, { key: "second" }, "A second paragraph."),
+              ],
+            }),
+            createElement(Shape, {
+              testId: "whole-array-shape",
+              x: 550,
+              y: 240,
+              width: 70,
+              height: 70,
+              fill: "#F97316",
+            }),
+          ),
+        ),
+      ),
+    );
+    const group = result.report.slides[0]?.objects.find(
+      ({ testId }) => testId === "whole-array-group",
+    );
+    const text = group?.members?.find(
+      ({ testId }) => testId === "whole-array-text",
+    );
+    assert.ok(text !== undefined);
+
+    const file = await validatePptx(result.pptx);
+    assert.deepEqual(file.errors, []);
+    const xml = strFromU8(unzipSync(result.pptx)["ppt/slides/slide1.xml"]!);
+    assert.match(
+      xml,
+      new RegExp(`<p:bldP spid="${text.id}" grpId="1" build="p">`, "u"),
+    );
+    assert.doesNotMatch(
+      xml,
+      new RegExp(`<p:bldP spid="${text.id}" grpId="0"`, "u"),
+    );
+  });
+
   it("Group 成员的点击动效仍触发自动步骤中的父 Spin 投影", async () => {
     const result = await build(
       createElement(

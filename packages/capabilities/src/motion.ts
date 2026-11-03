@@ -215,6 +215,29 @@ function attributeNames(value: string): string {
   );
 }
 
+function visibilitySet(
+  targetElement: string,
+  visibility: "visible" | "hidden",
+  ids: TimingIds,
+): string {
+  return element(
+    "p:set",
+    undefined,
+    element(
+      "p:cBhvr",
+      undefined,
+      element(
+        "p:cTn",
+        { id: ids.take(), dur: 1, fill: "hold" },
+        element("p:stCondLst", undefined, element("p:cond", { delay: 0 })),
+      ),
+      targetElement,
+      attributeNames("style.visibility"),
+    ),
+    element("p:to", undefined, element("p:strVal", { val: visibility })),
+  );
+}
+
 function direction(effect: MotionEffectObservation): MotionDirection {
   return typeof effect.from === "string" ? effect.from : "bottom";
 }
@@ -247,12 +270,7 @@ function isWholeTextProjection(effect: TimingEffect): boolean {
 }
 
 function hasWholeTextBackgroundBehaviors(effect: TimingEffect): boolean {
-  return (
-    isWholeTextProjection(effect) &&
-    effect.targetHasBackground &&
-    effect.preset !== "fade" &&
-    effect.preset !== "wipe"
-  );
+  return isWholeTextProjection(effect) && effect.targetHasBackground;
 }
 
 function formulaNumber(value: number): string {
@@ -366,22 +384,7 @@ function behaviorIds(
     timeNodeValue(effect.intervalMs, "动画迭代间隔");
   }
   const show = (targetElement: string) =>
-    element(
-      "p:set",
-      undefined,
-      element(
-        "p:cBhvr",
-        undefined,
-        element(
-          "p:cTn",
-          { id: ids.take(), dur: 1, fill: "hold" },
-          element("p:stCondLst", undefined, element("p:cond", { delay: 0 })),
-        ),
-        targetElement,
-        attributeNames("style.visibility"),
-      ),
-      element("p:to", undefined, element("p:strVal", { val: "visible" })),
-    );
+    visibilitySet(targetElement, "visible", ids);
   const filter = (name: string, targetElement: string) =>
     element(
       "p:animEffect",
@@ -471,6 +474,9 @@ function behaviorIds(
         ...filterTargets().map((targetElement) =>
           filter("fade", targetElement),
         ),
+        ...backgroundTargets().map((targetElement) =>
+          filter("fade", targetElement),
+        ),
       ];
     case "wipe": {
       const filters: Record<MotionDirection, string> = {
@@ -482,6 +488,9 @@ function behaviorIds(
       return [
         showOnce(),
         ...filterTargets().map((targetElement) =>
+          filter(filters[direction(effect)], targetElement),
+        ),
+        ...backgroundTargets().map((targetElement) =>
           filter(filters[direction(effect)], targetElement),
         ),
       ];
@@ -543,6 +552,9 @@ function behaviorIds(
         ...geometry,
         ...backgroundGeometry,
         ...filterTargets().map((targetElement) =>
+          filter("fade", targetElement),
+        ),
+        ...backgroundTargets().map((targetElement) =>
           filter("fade", targetElement),
         ),
       ];
@@ -616,7 +628,10 @@ function behaviorIds(
         ...backgroundTargets().flatMap((targetElement) => [
           singleMotion("ppt_x", position[0], 0, "sum", targetElement),
           singleMotion("ppt_y", position[1], 0, "sum", targetElement),
+          singleMotion("ppt_w", 0, "#ppt_w", false, targetElement),
+          singleMotion("ppt_h", 0, "#ppt_h", false, targetElement),
           rotation(targetElement, "sum"),
+          filter("fade", targetElement),
         ]),
         ...filterTargets().map((targetElement) =>
           filter("fade", targetElement),
@@ -631,10 +646,21 @@ function behaviorIds(
           singleMotion("ppt_h", "#ppt_h", "#ppt_h", false),
         ];
       }
+      const center = geometryCenter(
+        targetBox(effect, "整体文字横向伸展"),
+        dimensions,
+      );
       return [
         showOnce(),
         ...[...positionTargets(), ...backgroundTargets()].flatMap(
           (targetElement) => [
+            singleMotion(
+              "ppt_x",
+              `${formulaNumber(center.x)}-#ppt_x`,
+              0,
+              "sum",
+              targetElement,
+            ),
             singleMotion("ppt_w", 0, "#ppt_w", false, targetElement),
             singleMotion("ppt_h", "#ppt_h", "#ppt_h", false, targetElement),
           ],
@@ -654,6 +680,9 @@ function behaviorIds(
       return [
         showOnce(),
         ...filterTargets().map((targetElement) =>
+          filter("fade", targetElement),
+        ),
+        ...backgroundTargets().map((targetElement) =>
           filter("fade", targetElement),
         ),
         ...targets.flatMap((targetElement) => [
@@ -1112,6 +1141,32 @@ function timingXml(
       }
     }
   }
+  const slideEffects = steps.flatMap((step) =>
+    step.effects.map((effect) => effect as TimingEffect),
+  );
+  const paragraphBuildTargets = new Set<number>();
+  for (const effect of slideEffects) {
+    if (
+      effect.targetTextBody &&
+      (effect.by === "paragraph" || effect.target.range?.type === "paragraph")
+    ) {
+      paragraphBuildTargets.add(effect.target.id);
+    }
+  }
+  // 按段构建会负责延迟段落的初始可见性；whole 入口才需要在页面起点隐藏。
+  const initialVisibilityEffects = new Map<number, TimingEffect>();
+  for (const effect of slideEffects) {
+    if (
+      effect.kind === "entrance" &&
+      isWholeTextProjection(effect) &&
+      !paragraphBuildTargets.has(effect.target.id)
+    ) {
+      initialVisibilityEffects.set(effect.target.id, effect);
+    }
+  }
+  const initialVisibility = [...initialVisibilityEffects.values()].map(
+    (effect) => visibilitySet(timingTarget(effect, undefined), "hidden", ids),
+  );
   const nativeProjections: MotionNativeProjection[] = [];
   const memberIds = (members: readonly MotionNativeMember[]): Set<number> => {
     const result = new Set<number>();
@@ -1138,12 +1193,12 @@ function timingXml(
     startCondition: string,
     effectId: number,
     chartGroupId: number | undefined,
-    siblingEffects: readonly TimingEffect[],
   ): string[] => {
     const members = effect.targetMembers;
     const descendantIds =
       members === undefined ? new Set<number>() : memberIds(members);
-    const hasAnimatedMember = siblingEffects.some(
+    // 子项可由后续点击启动；只检查当前 Step 会遗漏仍活动的父 Group。
+    const hasAnimatedMember = slideEffects.some(
       ({ target }) =>
         target.id !== effect.target.id && descendantIds.has(target.id),
     );
@@ -1177,6 +1232,11 @@ function timingXml(
       const rendered = projectedMembers.map((member, index) => {
         const targetEffectId = index === 0 ? effectId : ids.take();
         nativeEffects.push({ targetId: member.id, timingId: targetEffectId });
+        const memberEffect = slideEffects.find(
+          ({ target }) => target.id === member.id,
+        );
+        // 文字成员需沿用自己的段落数与背景职责，才能在 Group 投影中继续整对象变换。
+        const targetTextBody = memberEffect?.targetTextBody ?? false;
         const projected: TimingEffect = {
           ...groupEffect,
           target: {
@@ -1184,10 +1244,17 @@ function timingXml(
             name: member.name,
             ...(member.testId === undefined ? {} : { testId: member.testId }),
           },
-          targetTextBody: false,
-          targetFilled: false,
-          targetHasBackground: false,
+          targetTextBody,
+          targetFilled: memberEffect?.targetFilled ?? false,
+          targetHasBackground: memberEffect?.targetHasBackground ?? false,
           ...(member.box === undefined ? {} : { targetBox: member.box }),
+          ...(memberEffect?.targetRotationDegrees === undefined
+            ? {}
+            : { targetRotationDegrees: memberEffect.targetRotationDegrees }),
+          ...(memberEffect?.targetParagraphCount === undefined
+            ? {}
+            : { targetParagraphCount: memberEffect.targetParagraphCount }),
+          ...(targetTextBody ? { buildGroupId: 1 } : {}),
           groupSpinCenter: center,
         };
         return effectTree(
@@ -1376,7 +1443,6 @@ function timingXml(
               element("p:cond", { delay: childDelay(effect) }),
               effectId,
               buildGroupId,
-              step.effects,
             );
           });
           rendered.push(
@@ -1415,7 +1481,6 @@ function timingXml(
               effectCondition,
               effectId,
               buildGroupId,
-              step.effects,
             ),
           );
           pendingRootNodeType = undefined;
@@ -1460,18 +1525,11 @@ function timingXml(
     }
   >();
   const chartBuildTargets = new Map<number, TimingEffect>();
-  const paragraphBuildTargets = new Set<number>();
   const wholeTextArrays = new Map<number, Set<number>>();
   for (const step of steps) {
     const wholeTextDeclarations = new Map<number, Set<number>>();
     for (const effect of step.effects) {
       if (!effect.targetTextBody) continue;
-      if (
-        effect.by === "paragraph" ||
-        effect.target.range?.type === "paragraph"
-      ) {
-        paragraphBuildTargets.add(effect.target.id);
-      }
       if (!isWholeTextProjection(effect)) continue;
       const declarations =
         wholeTextDeclarations.get(effect.target.id) ?? new Set<number>();
@@ -1567,7 +1625,12 @@ function timingXml(
               element(
                 "p:cTn",
                 { id: sequenceId, dur: "indefinite", nodeType: "mainSeq" },
-                element("p:childTnLst", undefined, ...stepGroups),
+                element(
+                  "p:childTnLst",
+                  undefined,
+                  ...initialVisibility,
+                  ...stepGroups,
+                ),
               ),
               element(
                 "p:prevCondLst",

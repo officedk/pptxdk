@@ -293,18 +293,32 @@ const textProjectionParagraphRoles: Partial<
     "anim:ppt_y",
     "animEffect:fade",
   ],
-  stretch: ["anim:ppt_w", "anim:ppt_h"],
+  stretch: ["anim:ppt_x", "anim:ppt_w", "anim:ppt_h"],
   spin: ["animRot:r", "anim:ppt_x", "anim:ppt_y"],
 };
 
 const textProjectionBackgroundRoles: Partial<
   Record<FileAnimationEffect["preset"], readonly string[]>
 > = {
-  zoom: ["anim:ppt_x", "anim:ppt_y", "anim:ppt_w", "anim:ppt_h"],
+  fade: ["animEffect:fade"],
+  zoom: [
+    "anim:ppt_x",
+    "anim:ppt_y",
+    "anim:ppt_w",
+    "anim:ppt_h",
+    "animEffect:fade",
+  ],
   fly: ["anim:ppt_x", "anim:ppt_y"],
-  floatUp: ["anim:ppt_x", "anim:ppt_y"],
-  spinIn: ["anim:ppt_x", "anim:ppt_y", "animRot:r"],
-  stretch: ["anim:ppt_w", "anim:ppt_h"],
+  floatUp: ["animEffect:fade", "anim:ppt_x", "anim:ppt_y"],
+  spinIn: [
+    "anim:ppt_x",
+    "anim:ppt_y",
+    "anim:ppt_w",
+    "anim:ppt_h",
+    "animRot:r",
+    "animEffect:fade",
+  ],
+  stretch: ["anim:ppt_x", "anim:ppt_w", "anim:ppt_h"],
   spin: ["animRot:r", "anim:ppt_x", "anim:ppt_y"],
 };
 
@@ -383,7 +397,24 @@ function validWholeTextProjection(
   const backgroundBehaviors = behaviors.filter(
     ({ targetType }) => targetType === "background",
   );
-  if (backgroundBehaviors.length === 0) return true;
+  if (backgroundBehaviors.length === 0) return !animBg;
+  if (preset === "wipe") {
+    const paragraphFilter = behaviors.find(
+      ({ behavior, targetType }) =>
+        behavior === "animEffect" && targetType === "paragraph",
+    )?.filter;
+    return (
+      animBg &&
+      paragraphFilter !== undefined &&
+      backgroundBehaviors.every(
+        ({ targetRange, filter }) =>
+          targetRange === undefined && filter === paragraphFilter,
+      ) &&
+      hasRoles(backgroundBehaviors.map(animationBehaviorRole), [
+        `animEffect:${paragraphFilter}`,
+      ])
+    );
+  }
   const expectedBackgroundRoles = textProjectionBackgroundRoles[preset];
   return (
     animBg &&

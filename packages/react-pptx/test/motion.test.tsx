@@ -2207,6 +2207,640 @@ describe("对象动画", () => {
     );
   });
 
+  it("将 whole Text 滤镜和 SpinIn 尺寸投影到真实背景", async () => {
+    const scenarios = [
+      {
+        preset: "fade",
+        effect: fade({ duration: 4000 }),
+        slideId: "fade-background",
+        roles: ["animEffect:fade"],
+      },
+      {
+        preset: "wipe",
+        effect: wipe({ from: "left", duration: 4000 }),
+        slideId: "wipe-background",
+        roles: ["animEffect:wipe(left)"],
+      },
+      {
+        preset: "zoom",
+        effect: zoom({ duration: 4000 }),
+        slideId: "zoom-background",
+        roles: [
+          "anim:ppt_x",
+          "anim:ppt_y",
+          "anim:ppt_w",
+          "anim:ppt_h",
+          "animEffect:fade",
+        ],
+      },
+      {
+        preset: "floatUp",
+        effect: floatUp({ duration: 4000 }),
+        slideId: "float-up-background",
+        roles: ["animEffect:fade", "anim:ppt_x", "anim:ppt_y"],
+      },
+      {
+        preset: "spinIn",
+        effect: spinIn({ duration: 4000 }),
+        slideId: "spin-in-background",
+        roles: [
+          "anim:ppt_x",
+          "anim:ppt_y",
+          "anim:ppt_w",
+          "anim:ppt_h",
+          "animRot:r",
+          "animEffect:fade",
+        ],
+      },
+    ] as const;
+    const result = await build(
+      createElement(
+        Deck,
+        { width: 1280, height: 900 },
+        ...scenarios.map(({ preset, effect, slideId }) =>
+          createElement(
+            Slide,
+            { key: preset, slideId },
+            createElement(Text, {
+              testId: `${preset}-text`,
+              x: 800,
+              y: 500,
+              width: 400,
+              height: 160,
+              style: {
+                backgroundColor: "#38BDF8",
+                borderColor: "#1D4ED8",
+                borderWidth: 4,
+              },
+              enter: effect,
+              children: [
+                createElement(P, { key: "long" }, "A long first paragraph"),
+                createElement(P, { key: "short" }, "SHORT"),
+              ],
+            }),
+          ),
+        ),
+      ),
+    );
+    const file = await validatePptx(result.pptx);
+    assert.deepEqual(file.errors, []);
+    assert.deepEqual(
+      file.slides.map((slide) => {
+        const effect = slide.animations?.[0]?.effects[0];
+        const backgroundBehaviors = effect?.nativeBehaviors?.filter(
+          ({ targetType }) => targetType === "background",
+        );
+        return [
+          effect?.preset,
+          effect?.nativeBuildAnimBg,
+          backgroundBehaviors?.map(({ behavior, attributeNames, filter }) =>
+            behavior === "animEffect"
+              ? `${behavior}:${filter}`
+              : `${behavior}:${attributeNames[0]}`,
+          ),
+        ];
+      }),
+      scenarios.map(({ preset, roles }) => [preset, true, roles]),
+    );
+
+    const removeBackgroundBehavior = (
+      xml: string,
+      targetId: number,
+      behavior: "anim" | "animEffect",
+      marker: string,
+    ) => {
+      const target = `<p:spTgt spid="${targetId}"><p:bg></p:bg></p:spTgt>`;
+      const selected = [
+        ...xml.matchAll(/<p:(anim|animEffect|animRot)\b[\s\S]*?<\/p:\1>/gu),
+      ].find(
+        ([nativeBehavior]) =>
+          nativeBehavior?.includes(target) === true &&
+          nativeBehavior.includes(marker),
+      )?.[0];
+      assert.ok(
+        selected !== undefined && selected.startsWith(`<p:${behavior}`),
+      );
+      return xml.replace(selected, "");
+    };
+    const originalParts = unzipSync(result.pptx);
+    const spinInSlide = 4;
+    const spinInObjectId = result.report.slides[spinInSlide]?.objects[0]?.id;
+    assert.ok(spinInObjectId !== undefined);
+    const spinInPath = `ppt/slides/slide${spinInSlide + 1}.xml`;
+    const spinInXml = strFromU8(originalParts[spinInPath]!);
+    const missingSpinInWidth = removeBackgroundBehavior(
+      spinInXml,
+      spinInObjectId,
+      "anim",
+      "<p:attrName>ppt_w</p:attrName>",
+    );
+    const invalidSpinInFile = await validatePptx(
+      zipSync({ ...originalParts, [spinInPath]: strToU8(missingSpinInWidth) }),
+    );
+    assert.ok(
+      invalidSpinInFile.errors.some(
+        ({ code }) => code === "invalid-animation-projection-target",
+      ),
+    );
+
+    const fadeObjectId = result.report.slides[0]?.objects[0]?.id;
+    assert.ok(fadeObjectId !== undefined);
+    const fadePath = "ppt/slides/slide1.xml";
+    const fadeXml = strFromU8(originalParts[fadePath]!);
+    const missingFadeFilter = removeBackgroundBehavior(
+      fadeXml,
+      fadeObjectId,
+      "animEffect",
+      'filter="fade"',
+    );
+    const invalidFadeFile = await validatePptx(
+      zipSync({ ...originalParts, [fadePath]: strToU8(missingFadeFilter) }),
+    );
+    assert.ok(
+      invalidFadeFile.errors.some(
+        ({ code }) => code === "inconsistent-animation-background-role",
+      ),
+    );
+  });
+
+  it("whole Stretch 从共同文字中心展开并读回段落和背景位移", async () => {
+    const result = await build(
+      createElement(
+        Deck,
+        { width: 1280, height: 900 },
+        createElement(
+          Slide,
+          { slideId: "whole-stretch-common-center" },
+          createElement(Text, {
+            testId: "stretched-text",
+            x: 800,
+            y: 500,
+            width: 400,
+            height: 160,
+            style: {
+              backgroundColor: "#38BDF8",
+              borderColor: "#1D4ED8",
+              borderWidth: 4,
+            },
+            enter: stretch({ duration: 2000 }),
+            children: [
+              createElement(
+                P,
+                { key: "long" },
+                "A deliberately long first paragraph",
+              ),
+              createElement(P, { key: "short" }, "SHORT"),
+            ],
+          }),
+        ),
+      ),
+    );
+    const file = await validatePptx(result.pptx);
+    assert.deepEqual(file.errors, []);
+    const effect = file.slides[0]?.animations?.[0]?.effects[0];
+    assert.equal(effect?.preset, "stretch");
+    assert.deepEqual(
+      effect?.nativeBehaviors
+        ?.filter(({ attributeNames }) => attributeNames.includes("ppt_x"))
+        .map(({ targetType, targetRange, from, to, additive }) => [
+          targetType,
+          targetRange,
+          from,
+          to,
+          additive,
+        ]),
+      [
+        [
+          "paragraph",
+          { type: "paragraph", start: 0, end: 0 },
+          "0.78125-#ppt_x",
+          "0",
+          "sum",
+        ],
+        [
+          "paragraph",
+          { type: "paragraph", start: 1, end: 1 },
+          "0.78125-#ppt_x",
+          "0",
+          "sum",
+        ],
+        ["background", undefined, "0.78125-#ppt_x", "0", "sum"],
+      ],
+    );
+
+    const textId = result.report.slides[0]?.objects[0]?.id;
+    assert.ok(textId !== undefined);
+    const path = "ppt/slides/slide1.xml";
+    const parts = unzipSync(result.pptx);
+    const xml = strFromU8(parts[path]!);
+    const target = `<p:spTgt spid="${textId}"><p:txEl><p:pRg st="0" end="0"></p:pRg></p:txEl></p:spTgt>`;
+    const missingOffset = [
+      ...xml.matchAll(/<p:anim\b[\s\S]*?<\/p:anim>/gu),
+    ].find(
+      ([nativeBehavior]) =>
+        nativeBehavior?.includes(target) === true &&
+        nativeBehavior.includes("<p:attrName>ppt_x</p:attrName>"),
+    )?.[0];
+    assert.ok(missingOffset !== undefined);
+    const invalidFile = await validatePptx(
+      zipSync({
+        ...parts,
+        [path]: strToU8(xml.replace(missingOffset, "")),
+      }),
+    );
+    assert.ok(
+      invalidFile.errors.some(
+        ({ code }) => code === "invalid-animation-projection-target",
+      ),
+    );
+  });
+
+  it("whole Text 的未来点击入口先隐藏，同时保留 by-P 延迟构建", async () => {
+    const result = await build(
+      createElement(
+        Deck,
+        { width: 960, height: 540 },
+        createElement(
+          Slide,
+          { slideId: "future-whole-text" },
+          createElement(
+            Step,
+            { n: 1 },
+            createElement(
+              Group,
+              {
+                testId: "first-click-group",
+                emphasis: repeat(spin({ duration: 1600 }), 2),
+              },
+              createElement(Shape, {
+                testId: "first-click-member",
+                x: 320,
+                y: 230,
+                width: 82,
+                height: 82,
+                fill: "#F97316",
+              }),
+            ),
+          ),
+          createElement(
+            Step,
+            { n: 2 },
+            createElement(Text, {
+              testId: "future-text",
+              x: 180,
+              y: 405,
+              width: 600,
+              height: 55,
+              enter: fade({ duration: 500 }),
+              children: [
+                createElement(P, { key: "line" }, "Visible on click two"),
+              ],
+            }),
+          ),
+        ),
+        createElement(
+          Slide,
+          { slideId: "paragraph-delay-control" },
+          createElement(Text, {
+            testId: "paragraph-delay-text",
+            x: 130,
+            y: 150,
+            width: 700,
+            height: 290,
+            style: {
+              backgroundColor: "#DBEAFE",
+              borderColor: "#2563EB",
+              borderWidth: 2,
+            },
+            enter: [
+              fly({ duration: 4000, from: "left" }),
+              fade({ by: "paragraph", duration: 700, delay: 1500 }),
+            ],
+            children: [
+              createElement(P, { key: "long" }, "First paragraph"),
+              createElement(P, { key: "short" }, "Second paragraph"),
+            ],
+          }),
+        ),
+      ),
+    );
+    const file = await validatePptx(result.pptx);
+    assert.deepEqual(file.errors, []);
+    const futureTextId = result.report.slides[0]?.objects.find(
+      ({ testId }) => testId === "future-text",
+    )?.id;
+    assert.ok(futureTextId !== undefined);
+    const futureXml = strFromU8(
+      unzipSync(result.pptx)["ppt/slides/slide1.xml"]!,
+    );
+    const visibilitySets = [...futureXml.matchAll(/<p:set>[\s\S]*?<\/p:set>/gu)]
+      .map(([nativeSet]) => nativeSet ?? "")
+      .filter((nativeSet) =>
+        nativeSet.includes(`<p:spTgt spid="${futureTextId}"></p:spTgt>`),
+      )
+      .map((nativeSet) => nativeSet.match(/<p:strVal val="([^"]+)"/u)?.[1]);
+    assert.deepEqual(visibilitySets, ["hidden", "visible"]);
+    const mainSequenceStart = futureXml.indexOf('nodeType="mainSeq"');
+    const firstClickCondition = futureXml.indexOf(
+      'delay="indefinite"',
+      mainSequenceStart,
+    );
+    assert.ok(
+      mainSequenceStart >= 0 &&
+        firstClickCondition >= 0 &&
+        futureXml.indexOf('val="hidden"', mainSequenceStart) <
+          firstClickCondition,
+    );
+    const futureFade = file.slides[0]?.animations?.[1]?.effects.find(
+      ({ targetId, preset }) => targetId === futureTextId && preset === "fade",
+    );
+    assert.deepEqual(
+      [futureFade?.nativeBuild, futureFade?.nativeBuildGroupId],
+      ["allAtOnce", 1],
+    );
+
+    const delayedTextId = result.report.slides[1]?.objects[0]?.id;
+    assert.ok(delayedTextId !== undefined);
+    const delayedXml = strFromU8(
+      unzipSync(result.pptx)["ppt/slides/slide2.xml"]!,
+    );
+    assert.match(
+      delayedXml,
+      new RegExp(`<p:bldP spid="${delayedTextId}" grpId="0" build="p"`, "u"),
+    );
+    assert.doesNotMatch(
+      delayedXml,
+      new RegExp(
+        `<p:set>[\\s\\S]*?<p:spTgt spid="${delayedTextId}"></p:spTgt>[\\s\\S]*?<p:strVal val="hidden"`,
+        "u",
+      ),
+    );
+    assert.equal(
+      file.slides[1]?.animations?.[0]?.effects.find(
+        ({ targetId, preset, targetRange }) =>
+          targetId === delayedTextId &&
+          preset === "fade" &&
+          targetRange?.type === "paragraph" &&
+          targetRange.start === 1,
+      )?.delayMs,
+      2200,
+    );
+  });
+
+  it("Group Spin 投影到 Text 成员时保留段落和背景角色", async () => {
+    const result = await build(
+      createElement(
+        Deck,
+        { width: 960, height: 540 },
+        createElement(
+          Slide,
+          { slideId: "group-text-spin-projection" },
+          createElement(
+            Group,
+            {
+              testId: "text-member-group",
+              emphasis: repeat(spin({ duration: 4000, from: 360 }), 1),
+            },
+            createElement(Text, {
+              testId: "animated-text-member",
+              x: 130,
+              y: 150,
+              width: 400,
+              height: 180,
+              style: {
+                backgroundColor: "#FEF3C7",
+                borderColor: "#1D4ED8",
+                borderWidth: 3,
+              },
+              enter: fade({ duration: 4000 }),
+              children: [
+                createElement(
+                  P,
+                  { key: "long" },
+                  "A longer paragraph remains inside the same native text object.",
+                ),
+                createElement(P, { key: "short" }, "A short second paragraph"),
+              ],
+            }),
+            createElement(Shape, {
+              testId: "static-orange-member",
+              x: 600,
+              y: 220,
+              width: 55,
+              height: 55,
+              fill: "#F97316",
+            }),
+          ),
+        ),
+      ),
+    );
+    const slide = result.report.slides[0];
+    const group = slide?.objects.find(
+      ({ testId }) => testId === "text-member-group",
+    );
+    const text = group?.members?.find(
+      ({ testId }) => testId === "animated-text-member",
+    );
+    const motion = slide?.capabilities?.["motion"] as MotionObservation;
+    const projection = motion.nativeProjections?.find(
+      ({ logicalTargetId, preset }) =>
+        logicalTargetId === group?.id && preset === "spin",
+    );
+    assert.deepEqual(
+      projection?.nativeEffects.map(({ targetId }) => targetId),
+      group?.members?.map(({ id }) => id),
+    );
+
+    const file = await validatePptx(result.pptx);
+    assert.deepEqual(file.errors, []);
+    const fileGroup = file.slides[0]?.objects.find(
+      ({ name }) => name === group?.name,
+    );
+    assert.deepEqual(
+      fileGroup?.members?.map(({ id }) => id),
+      group?.members?.map(({ id }) => id),
+    );
+    const effects = file.slides[0]?.animations?.flatMap((step) => step.effects);
+    const projectedTextSpin = effects?.find(
+      ({ preset, targetId }) => preset === "spin" && targetId === text?.id,
+    );
+    assert.deepEqual(
+      projectedTextSpin?.nativeBehaviors?.map(
+        ({ behavior, targetType, targetRange, attributeNames }) => [
+          behavior,
+          targetType,
+          targetRange,
+          attributeNames,
+        ],
+      ),
+      [
+        [
+          "animRot",
+          "paragraph",
+          { type: "paragraph", start: 0, end: 0 },
+          ["r"],
+        ],
+        [
+          "anim",
+          "paragraph",
+          { type: "paragraph", start: 0, end: 0 },
+          ["ppt_x"],
+        ],
+        [
+          "anim",
+          "paragraph",
+          { type: "paragraph", start: 0, end: 0 },
+          ["ppt_y"],
+        ],
+        [
+          "animRot",
+          "paragraph",
+          { type: "paragraph", start: 1, end: 1 },
+          ["r"],
+        ],
+        [
+          "anim",
+          "paragraph",
+          { type: "paragraph", start: 1, end: 1 },
+          ["ppt_x"],
+        ],
+        [
+          "anim",
+          "paragraph",
+          { type: "paragraph", start: 1, end: 1 },
+          ["ppt_y"],
+        ],
+        ["animRot", "background", undefined, ["r"]],
+        ["anim", "background", undefined, ["ppt_x"]],
+        ["anim", "background", undefined, ["ppt_y"]],
+      ],
+    );
+    assert.deepEqual(
+      [
+        projectedTextSpin?.nativeBuild,
+        projectedTextSpin?.nativeBuildGroupId,
+        projectedTextSpin?.nativeBuildAnimBg,
+      ],
+      ["allAtOnce", 1, true],
+    );
+
+    const textId = text?.id;
+    assert.ok(textId !== undefined);
+    const path = "ppt/slides/slide1.xml";
+    const parts = unzipSync(result.pptx);
+    const xml = strFromU8(parts[path]!);
+    const firstParagraphX = [
+      ...xml.matchAll(/<p:anim\b[\s\S]*?<\/p:anim>/gu),
+    ].find(
+      ([nativeBehavior]) =>
+        nativeBehavior?.includes(
+          `<p:spTgt spid="${textId}"><p:txEl><p:pRg st="0" end="0"></p:pRg></p:txEl></p:spTgt>`,
+        ) === true && nativeBehavior.includes("<p:attrName>ppt_x</p:attrName>"),
+    )?.[0];
+    assert.ok(firstParagraphX !== undefined);
+    const invalidFile = await validatePptx(
+      zipSync({ ...parts, [path]: strToU8(xml.replace(firstParagraphX, "")) }),
+    );
+    assert.ok(
+      invalidFile.errors.some(
+        ({ code }) => code === "invalid-animation-projection-target",
+      ),
+    );
+  });
+
+  it("Group 成员的点击动效仍触发自动步骤中的父 Spin 投影", async () => {
+    const result = await build(
+      createElement(
+        Deck,
+        { width: 960, height: 540 },
+        createElement(
+          Slide,
+          { slideId: "group-cross-step-projection" },
+          createElement(
+            Group,
+            {
+              testId: "cross-step-group",
+              emphasis: repeat(spin({ duration: 8000, from: 360 }), 2),
+            },
+            createElement(Shape, {
+              testId: "cross-step-orange",
+              x: 465,
+              y: 250,
+              width: 58,
+              height: 58,
+              fill: "#F97316",
+            }),
+            createElement(
+              Step,
+              { n: 1 },
+              createElement(Shape, {
+                testId: "cross-step-green",
+                x: 320,
+                y: 230,
+                width: 82,
+                height: 82,
+                fill: "#16A34A",
+                emphasis: repeat(
+                  breathe({
+                    period: 1600,
+                    from: "#16A34A",
+                    to: "#86EFAC",
+                  }),
+                  "forever",
+                ),
+              }),
+            ),
+          ),
+        ),
+      ),
+    );
+    const slide = result.report.slides[0];
+    const group = slide?.objects.find(
+      ({ testId }) => testId === "cross-step-group",
+    );
+    const green = group?.members?.find(
+      ({ testId }) => testId === "cross-step-green",
+    );
+    const motion = slide?.capabilities?.["motion"] as MotionObservation;
+    const steps = motion.steps;
+    assert.equal(steps[0]?.trigger, "auto");
+    assert.equal(steps[1]?.trigger, "click");
+    const projection = motion.nativeProjections?.find(
+      ({ logicalTargetId, preset }) =>
+        logicalTargetId === group?.id && preset === "spin",
+    );
+    const memberIds = group?.members?.map(({ id }) => id) ?? [];
+    assert.deepEqual(
+      projection?.nativeEffects.map(({ targetId }) => targetId),
+      memberIds,
+    );
+    assert.ok(
+      steps[1]?.effects.some(
+        ({ preset, target }) => preset === "breathe" && target.id === green?.id,
+      ),
+    );
+
+    const file = await validatePptx(result.pptx);
+    assert.deepEqual(file.errors, []);
+    const animations = file.slides[0]?.animations ?? [];
+    assert.deepEqual(
+      animations.map(({ trigger, effects }) => [
+        trigger,
+        effects.map(({ preset, targetId }) => [preset, targetId]),
+      ]),
+      [
+        [
+          "auto",
+          [
+            ["spin", memberIds[0]],
+            ["spin", memberIds[1]],
+          ],
+        ],
+        ["click", [["breathe", green?.id]]],
+      ],
+    );
+  });
+
   it("保留原生 Group 并将有限整体 Spin 投影到全部真实成员", async () => {
     const result = await build(
       createElement(

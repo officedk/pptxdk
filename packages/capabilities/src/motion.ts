@@ -460,8 +460,13 @@ function behaviorIds(
         attributeNames("r"),
       ),
     );
+  // 段落构建使用真实 pRg 和独立背景入口，避免整对象可见目标提前解锁后续段落。
   const showOnce = () =>
-    show(wholeText ? timingTarget(effect, undefined) : target());
+    wholeText && effect.kind === "entrance"
+      ? [...paragraphTargets(), ...backgroundTargets()]
+          .map((targetElement) => show(targetElement))
+          .join("")
+      : show(wholeText ? timingTarget(effect, undefined) : target());
   const filterTargets = () => (wholeText ? paragraphTargets() : [target()]);
   const positionTargets = () => (wholeText ? paragraphTargets() : [target()]);
   const backgroundTargets = () =>
@@ -1144,29 +1149,6 @@ function timingXml(
   const slideEffects = steps.flatMap((step) =>
     step.effects.map((effect) => effect as TimingEffect),
   );
-  const declaredParagraphBuildTargets = new Set<number>();
-  for (const effect of slideEffects) {
-    if (
-      effect.targetTextBody &&
-      (effect.by === "paragraph" || effect.target.range?.type === "paragraph")
-    ) {
-      declaredParagraphBuildTargets.add(effect.target.id);
-    }
-  }
-  // 按段构建会负责延迟段落的初始可见性；whole 入口才需要在页面起点隐藏。
-  const initialVisibilityEffects = new Map<number, TimingEffect>();
-  for (const effect of slideEffects) {
-    if (
-      effect.kind === "entrance" &&
-      isWholeTextProjection(effect) &&
-      !declaredParagraphBuildTargets.has(effect.target.id)
-    ) {
-      initialVisibilityEffects.set(effect.target.id, effect);
-    }
-  }
-  const initialVisibility = [...initialVisibilityEffects.values()].map(
-    (effect) => visibilitySet(timingTarget(effect, undefined), "hidden", ids),
-  );
   const nativeProjections: MotionNativeProjection[] = [];
   const nativeTextEffects: {
     readonly effect: TimingEffect;
@@ -1540,7 +1522,7 @@ function timingXml(
   >();
   const chartBuildTargets = new Map<number, TimingEffect>();
   const wholeTextArrays = new Map<number, Set<number>>();
-  const paragraphBuildTargets = new Set<number>();
+  const wholeTextEntranceTargets = new Set<number>();
   const wholeTextDeclarations = new Map<number, Set<number>>();
   for (const { effect, declaration } of nativeTextEffects) {
     // 数组构建只统计 Text 自身的声明，Group 投影仍保留其逻辑身份。
@@ -1550,13 +1532,10 @@ function timingXml(
     ) {
       continue;
     }
-    if (
-      declaration.by === "paragraph" ||
-      declaration.target.range?.type === "paragraph"
-    ) {
-      paragraphBuildTargets.add(effect.target.id);
-    }
     if (!isWholeTextProjection(declaration)) continue;
+    if (declaration.kind === "entrance") {
+      wholeTextEntranceTargets.add(effect.target.id);
+    }
     const declarations =
       wholeTextDeclarations.get(effect.target.id) ?? new Set<number>();
     declarations.add(declaration.effectIndex);
@@ -1571,10 +1550,11 @@ function timingXml(
     const previous = paragraphBuilds.get(key);
     const isDeclaredTextEffect =
       declaration.targetTextBody && declaration.target.id === effect.target.id;
+    // Whole Text 入场按段落构建，保留点击前隐藏和逐段延迟的原生职责。
     const build =
       groupId === 1
-        ? wholeTextArrays.has(effect.target.id) &&
-          !paragraphBuildTargets.has(effect.target.id)
+        ? wholeTextEntranceTargets.has(effect.target.id) ||
+          wholeTextArrays.has(effect.target.id)
           ? "p"
           : "allAtOnce"
         : isDeclaredTextEffect &&
@@ -1653,12 +1633,7 @@ function timingXml(
               element(
                 "p:cTn",
                 { id: sequenceId, dur: "indefinite", nodeType: "mainSeq" },
-                element(
-                  "p:childTnLst",
-                  undefined,
-                  ...initialVisibility,
-                  ...stepGroups,
-                ),
+                element("p:childTnLst", undefined, ...stepGroups),
               ),
               element(
                 "p:prevCondLst",

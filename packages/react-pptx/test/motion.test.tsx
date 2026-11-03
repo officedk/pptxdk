@@ -1072,10 +1072,10 @@ describe("对象动画", () => {
                 { type: "paragraph", start: 0, end: 0 },
                 "paragraph",
               ],
-              ["fly", 1000, undefined, "allAtOnce"],
+              ["fly", 1000, undefined, "paragraph"],
             ]
           : [
-              ["fly", 1000, undefined, "allAtOnce"],
+              ["fly", 1000, undefined, "paragraph"],
               [
                 "fade",
                 100,
@@ -2036,7 +2036,7 @@ describe("对象动画", () => {
         flyEffect?.nativeBuildGroupId,
         flyEffect?.nativeBuildAnimBg,
       ],
-      ["allAtOnce", 1, true],
+      ["paragraph", 1, true],
     );
     assert.deepEqual(
       flyEffect?.nativeBehaviors?.map(
@@ -2049,7 +2049,21 @@ describe("对象动画", () => {
         ],
       ),
       [
-        ["set", "object", undefined, ["style.visibility"], 1],
+        [
+          "set",
+          "paragraph",
+          { type: "paragraph", start: 0, end: 0 },
+          ["style.visibility"],
+          1,
+        ],
+        [
+          "set",
+          "paragraph",
+          { type: "paragraph", start: 1, end: 1 },
+          ["style.visibility"],
+          1,
+        ],
+        ["set", "background", undefined, ["style.visibility"], 1],
         [
           "anim",
           "paragraph",
@@ -2092,8 +2106,8 @@ describe("对象动画", () => {
     const slidePath = "ppt/slides/slide1.xml";
     const slideXml = strFromU8(unzipSync(result.pptx)[slidePath]!);
     const invalidBuildGroup = slideXml.replace(
-      `<p:bldP spid="${textObject?.id}" grpId="1" build="allAtOnce" animBg="1"></p:bldP>`,
-      `<p:bldP spid="${textObject?.id}" grpId="2" build="allAtOnce" animBg="1"></p:bldP>`,
+      `<p:bldP spid="${textObject?.id}" grpId="1" build="p" animBg="1"></p:bldP>`,
+      `<p:bldP spid="${textObject?.id}" grpId="2" build="p" animBg="1"></p:bldP>`,
     );
     assert.notEqual(invalidBuildGroup, slideXml);
     const wrongGroupFile = await validatePptx(
@@ -2128,8 +2142,8 @@ describe("对象动画", () => {
     );
 
     const missingBackgroundRole = slideXml.replace(
-      `<p:bldP spid="${textObject?.id}" grpId="1" build="allAtOnce" animBg="1"></p:bldP>`,
-      `<p:bldP spid="${textObject?.id}" grpId="1" build="allAtOnce" animBg="0"></p:bldP>`,
+      `<p:bldP spid="${textObject?.id}" grpId="1" build="p" animBg="1"></p:bldP>`,
+      `<p:bldP spid="${textObject?.id}" grpId="1" build="p" animBg="0"></p:bldP>`,
     );
     assert.notEqual(missingBackgroundRole, slideXml);
     const missingBackgroundFile = await validatePptx(
@@ -2288,7 +2302,8 @@ describe("对象动画", () => {
       file.slides.map((slide) => {
         const effect = slide.animations?.[0]?.effects[0];
         const backgroundBehaviors = effect?.nativeBehaviors?.filter(
-          ({ targetType }) => targetType === "background",
+          ({ behavior, targetType }) =>
+            targetType === "background" && behavior !== "set",
         );
         return [
           effect?.preset,
@@ -2358,7 +2373,7 @@ describe("对象动画", () => {
     );
     assert.ok(
       invalidFadeFile.errors.some(
-        ({ code }) => code === "inconsistent-animation-background-role",
+        ({ code }) => code === "invalid-animation-projection-target",
       ),
     );
   });
@@ -2455,7 +2470,7 @@ describe("对象动画", () => {
     );
   });
 
-  it("whole Text 的未来点击入口先隐藏，同时保留 by-P 延迟构建", async () => {
+  it("whole Text 入口按段落和背景初始化，同时保留 by-P 延迟构建", async () => {
     const result = await build(
       createElement(
         Deck,
@@ -2491,9 +2506,19 @@ describe("对象动画", () => {
               y: 405,
               width: 600,
               height: 55,
+              style: {
+                backgroundColor: "#FEF3C7",
+                borderColor: "#1D4ED8",
+                borderWidth: 2,
+              },
               enter: fade({ duration: 500 }),
               children: [
-                createElement(P, { key: "line" }, "Visible on click two"),
+                createElement(P, { key: "first" }, "Visible on click two"),
+                createElement(
+                  P,
+                  { key: "second" },
+                  "The second paragraph follows",
+                ),
               ],
             }),
           ),
@@ -2533,13 +2558,19 @@ describe("对象动画", () => {
     const futureXml = strFromU8(
       unzipSync(result.pptx)["ppt/slides/slide1.xml"]!,
     );
-    const visibilitySets = [...futureXml.matchAll(/<p:set>[\s\S]*?<\/p:set>/gu)]
-      .map(([nativeSet]) => nativeSet ?? "")
-      .filter((nativeSet) =>
-        nativeSet.includes(`<p:spTgt spid="${futureTextId}"></p:spTgt>`),
-      )
-      .map((nativeSet) => nativeSet.match(/<p:strVal val="([^"]+)"/u)?.[1]);
-    assert.deepEqual(visibilitySets, ["hidden", "visible"]);
+    const futureFade = file.slides[0]?.animations?.[1]?.effects.find(
+      ({ targetId, preset }) => targetId === futureTextId && preset === "fade",
+    );
+    assert.deepEqual(
+      futureFade?.nativeBehaviors
+        ?.filter(({ behavior }) => behavior === "set")
+        .map(
+          ({ targetType, targetRange, to }) =>
+            `${targetType}:${targetRange?.type === "paragraph" ? `${targetRange.start}-${targetRange.end}` : ""}:${to}`,
+        )
+        .sort(),
+      ["background::visible", "paragraph:0-0:visible", "paragraph:1-1:visible"],
+    );
     const mainSequenceStart = futureXml.indexOf('nodeType="mainSeq"');
     const firstClickCondition = futureXml.indexOf(
       'delay="indefinite"',
@@ -2548,15 +2579,82 @@ describe("对象动画", () => {
     assert.ok(
       mainSequenceStart >= 0 &&
         firstClickCondition >= 0 &&
-        futureXml.indexOf('val="hidden"', mainSequenceStart) <
-          firstClickCondition,
-    );
-    const futureFade = file.slides[0]?.animations?.[1]?.effects.find(
-      ({ targetId, preset }) => targetId === futureTextId && preset === "fade",
+        !futureXml
+          .slice(mainSequenceStart, firstClickCondition)
+          .includes('val="hidden"'),
     );
     assert.deepEqual(
-      [futureFade?.nativeBuild, futureFade?.nativeBuildGroupId],
-      ["allAtOnce", 1],
+      [
+        futureFade?.nativeBuild,
+        futureFade?.nativeBuildGroupId,
+        futureFade?.nativeBuildAnimBg,
+      ],
+      ["paragraph", 1, true],
+    );
+
+    const slidePath = "ppt/slides/slide1.xml";
+    const parts = unzipSync(result.pptx);
+    const visibilitySets = [...futureXml.matchAll(/<p:set>[\s\S]*?<\/p:set>/gu)]
+      .map(([nativeSet]) => nativeSet ?? "")
+      .filter((nativeSet) =>
+        nativeSet.includes(`<p:spTgt spid="${futureTextId}"`),
+      );
+    const firstParagraphSetter = visibilitySets.find((nativeSet) =>
+      nativeSet.includes('<p:pRg st="0" end="0">'),
+    );
+    assert.ok(firstParagraphSetter !== undefined);
+    const missingParagraphRole = await validatePptx(
+      zipSync({
+        ...parts,
+        [slidePath]: strToU8(futureXml.replace(firstParagraphSetter, "")),
+      }),
+    );
+    assert.ok(
+      missingParagraphRole.errors.some(
+        ({ code }) => code === "invalid-animation-projection-target",
+      ),
+    );
+
+    const backgroundSetter = visibilitySets.find((nativeSet) =>
+      nativeSet.includes("<p:bg></p:bg>"),
+    );
+    assert.ok(backgroundSetter !== undefined);
+    const missingBackgroundRole = await validatePptx(
+      zipSync({
+        ...parts,
+        [slidePath]: strToU8(futureXml.replace(backgroundSetter, "")),
+      }),
+    );
+    assert.ok(
+      missingBackgroundRole.errors.some(
+        ({ code }) => code === "invalid-animation-projection-target",
+      ),
+    );
+
+    const duplicatedWholeSetter = firstParagraphSetter
+      .replace(/id="\d+"/u, 'id="99999"')
+      .replace(
+        new RegExp(
+          `<p:spTgt spid="${futureTextId}"><p:txEl><p:pRg st="0" end="0"><\\/p:pRg><\\/p:txEl><\\/p:spTgt>`,
+          "u",
+        ),
+        `<p:spTgt spid="${futureTextId}"></p:spTgt>`,
+      );
+    const wholeRoleMixedWithParagraphRoles = await validatePptx(
+      zipSync({
+        ...parts,
+        [slidePath]: strToU8(
+          futureXml.replace(
+            firstParagraphSetter,
+            `${firstParagraphSetter}${duplicatedWholeSetter}`,
+          ),
+        ),
+      }),
+    );
+    assert.ok(
+      wholeRoleMixedWithParagraphRoles.errors.some(
+        ({ code }) => code === "invalid-animation-projection-target",
+      ),
     );
 
     const delayedTextId = result.report.slides[1]?.objects[0]?.id;
@@ -2721,7 +2819,7 @@ describe("对象动画", () => {
         projectedTextSpin?.nativeBuildGroupId,
         projectedTextSpin?.nativeBuildAnimBg,
       ],
-      ["allAtOnce", 1, true],
+      ["paragraph", 1, true],
     );
 
     const textId = text?.id;
@@ -3223,7 +3321,7 @@ describe("对象动画", () => {
     );
     assert.deepEqual(
       [flyEffect?.nativeBuild, spinEffect?.nativeBuild],
-      ["allAtOnce", "allAtOnce"],
+      ["paragraph", "paragraph"],
     );
     const spinPositions = spinEffect?.nativeBehaviors?.filter(
       ({ attributeNames }) =>
@@ -3388,13 +3486,17 @@ describe("对象动画", () => {
             effect?.nativeBuild,
             effect?.nativeBuildGroupId,
           ],
-          [textObject?.id, expected?.[0], "allAtOnce", 1],
+          [
+            textObject?.id,
+            expected?.[0],
+            expected?.[2] === "enter" ? "paragraph" : "allAtOnce",
+            1,
+          ],
         );
         assert.ok(
           behaviors.every(
-            ({ targetType, behavior }) =>
-              targetType === "paragraph" ||
-              (targetType === "object" && behavior === "set"),
+            ({ targetType }) =>
+              targetType === "paragraph" || targetType === "background",
           ),
         );
         return [

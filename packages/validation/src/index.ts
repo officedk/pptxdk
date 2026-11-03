@@ -341,41 +341,57 @@ function hasRoles(
   );
 }
 
-/** 只有目标和属性逐段符合该预设职责时，才恢复逻辑 whole Text。 */
+/** 按实际段落、背景和可见性目标完整核对后，才恢复逻辑 whole Text。 */
 function validWholeTextProjection(
   preset: FileAnimationEffect["preset"],
   kind: FileAnimationEffect["kind"],
   paragraphCount: number,
+  build: string,
   animBg: boolean,
   behaviors: readonly FileAnimationBehavior[],
 ): boolean {
   const expectedParagraphRoles = textProjectionParagraphRoles[preset];
   if (expectedParagraphRoles === undefined) return false;
 
-  const objectBehaviors = behaviors.filter(
-    ({ targetType }) => targetType === "object",
+  const visibilitySets = behaviors.filter(({ behavior }) => behavior === "set");
+  const visibilityRoles = visibilitySets.map(({ targetType, targetRange }) =>
+    targetType === "paragraph" &&
+    targetRange?.type === "paragraph" &&
+    targetRange.start === targetRange.end
+      ? `paragraph:${targetRange.start}`
+      : targetType === "background" && targetRange === undefined
+        ? "background"
+        : "invalid",
   );
-  const visibilitySets = objectBehaviors.filter(
-    ({ behavior }) => behavior === "set",
-  );
+  const expectedVisibilityRoles =
+    kind === "entrance"
+      ? [
+          ...Array.from(
+            { length: paragraphCount },
+            (_, index) => `paragraph:${index}`,
+          ),
+          ...(animBg ? ["background"] : []),
+        ]
+      : [];
   if (
-    objectBehaviors.length !== visibilitySets.length ||
-    visibilitySets.length !== (kind === "entrance" ? 1 : 0) ||
+    behaviors.some(({ targetType }) => targetType === "object") ||
+    !hasRoles(visibilityRoles, expectedVisibilityRoles) ||
     visibilitySets.some(
-      ({ targetRange, attributeNames, durationMs, to }) =>
-        targetRange !== undefined ||
+      ({ attributeNames, durationMs, to }) =>
         attributeNames.length !== 1 ||
         attributeNames[0] !== "style.visibility" ||
         durationMs !== 1 ||
         to !== "visible",
-    )
+    ) ||
+    (kind === "entrance" && build !== "p")
   ) {
     return false;
   }
 
   for (let index = 0; index < paragraphCount; index += 1) {
     const paragraphBehaviors = behaviors.filter(
-      ({ targetType, targetRange }) =>
+      ({ behavior, targetType, targetRange }) =>
+        behavior !== "set" &&
         targetType === "paragraph" &&
         targetRange?.type === "paragraph" &&
         targetRange.start === index &&
@@ -395,7 +411,8 @@ function validWholeTextProjection(
   }
 
   const backgroundBehaviors = behaviors.filter(
-    ({ targetType }) => targetType === "background",
+    ({ behavior, targetType }) =>
+      behavior !== "set" && targetType === "background",
   );
   if (backgroundBehaviors.length === 0) return !animBg;
   if (preset === "wipe") {
@@ -4312,6 +4329,7 @@ function readSlideAnimations(
           preset,
           kind,
           targetObject?.text?.paragraphs.length ?? 0,
+          paragraphBuild?.build ?? "",
           paragraphBuild?.animBg === true,
           nativeBehaviors,
         )

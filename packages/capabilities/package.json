@@ -77,6 +77,7 @@
     "@react-pptx/core": "workspace:*",
     "fflate": "catalog:",
     "fontkit": "catalog:",
+    "harfbuzzjs": "catalog:",
     "linebreak": "catalog:",
     "react": "catalog:"
   },

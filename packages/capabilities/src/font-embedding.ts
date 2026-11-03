@@ -7,17 +7,20 @@ import {
 } from "@react-pptx/core";
 import * as fontkit from "fontkit";
 
+import { subsetFont } from "./font-subset.ts";
 import type { FontFaceStyle } from "./font.ts";
 
 const fontRelationship =
   "http://schemas.openxmlformats.org/officeDocument/2006/relationships/font";
 const fontContentType = "application/x-fontdata";
+type FontEmbeddingMode = "full" | "subset";
 
 /** 文字序列化最终选择的字体文件和样式；缺少文件也会保留为实际用字要求。 */
 export type FontEmbeddingUse = {
   readonly family: string;
   readonly weight: number;
   readonly style: FontFaceStyle;
+  readonly claimKey: string;
   readonly identity: string;
   readonly bytes?: Uint8Array;
   readonly substitute: boolean;
@@ -51,7 +54,7 @@ function tablesOf(bytes: Uint8Array, use: FontEmbeddingUse): FontTables {
     return fail(
       use,
       "unsupported-font-format",
-      "完整嵌入目前只支持静态 TrueType 轮廓；WOFF、WOFF2、字体集合和 CFF 不受支持",
+      "字体嵌入目前只支持静态 TrueType 轮廓；WOFF、WOFF2、字体集合和 CFF 不受支持",
     );
   }
   const count = view.getUint16(4);
@@ -83,7 +86,7 @@ function tablesOf(bytes: Uint8Array, use: FontEmbeddingUse): FontTables {
     return fail(
       use,
       "unsupported-font-format",
-      "完整嵌入需要包含 OS/2、head、name、glyf 表的静态 TrueType 字体",
+      "字体嵌入需要包含 OS/2、head、name、glyf 表的静态 TrueType 字体",
     );
   }
   const os2 = tables.get("OS/2")!;
@@ -101,7 +104,10 @@ function familyKey(value: string): string {
   return value.trim().replace(/\s+/gu, " ").toLocaleLowerCase("en-US");
 }
 
-function checkedFont(use: FontEmbeddingUse): {
+function checkedFont(
+  use: FontEmbeddingUse,
+  mode: FontEmbeddingMode,
+): {
   readonly font: fontkit.Font;
   readonly tables: FontTables;
   readonly fsType: number;
@@ -111,14 +117,14 @@ function checkedFont(use: FontEmbeddingUse): {
     return fail(
       use,
       "font-not-embeddable",
-      `${use.family} 明确声明 embeddable: false，无法满足完整嵌入请求`,
+      `${use.family} 明确声明 embeddable: false，无法满足字体嵌入请求`,
     );
   }
   if (use.substitute) {
     return fail(
       use,
       "font-substitute-not-embeddable",
-      `${use.family} 使用替代字体度量，不能将该文件作为声明字族嵌入`,
+      `${use.family} 使用替代字体度量，不能满足声明字族的嵌入请求`,
     );
   }
   if (use.bytes === undefined || use.identity === "missing") {
@@ -165,7 +171,14 @@ function checkedFont(use: FontEmbeddingUse): {
     return fail(
       use,
       "font-embedding-preview-print",
-      `${use.family} 的 OS/2 fsType 仅允许预览和打印，不能满足可编辑文稿的完整嵌入请求`,
+      `${use.family} 的 OS/2 fsType 仅允许预览和打印，不能满足可编辑文稿的字体嵌入请求`,
+    );
+  }
+  if (mode === "subset" && (fsType & 0x0100) !== 0) {
+    return fail(
+      use,
+      "font-subsetting-forbidden",
+      `${use.family} 的 OS/2 fsType 禁止对子集化；请改为完整嵌入或取消嵌入请求`,
     );
   }
   if ((fsType & 0x0200) !== 0) {
@@ -207,7 +220,7 @@ function checkedFont(use: FontEmbeddingUse): {
     return fail(
       use,
       "unsupported-font-format",
-      `${use.family} 是可变字体，当前无法完整嵌入`,
+      `${use.family} 是可变字体，当前无法嵌入`,
     );
   }
   if (weightClass !== use.weight) {
@@ -229,6 +242,86 @@ function checkedFont(use: FontEmbeddingUse): {
     );
   }
   return { font, tables, fsType, weightClass };
+}
+
+function subsetBytes(
+  use: FontEmbeddingUse,
+  checked: ReturnType<typeof checkedFont>,
+  characters: string,
+): Uint8Array {
+  const defaultIgnorable = /^\p{Default_Ignorable_Code_Point}$/u;
+  const requiredCharacters = [...new Set(characters)];
+  for (const character of requiredCharacters) {
+    const codePoint = character.codePointAt(0);
+    if (
+      codePoint !== undefined &&
+      !defaultIgnorable.test(character) &&
+      !checked.font.hasGlyphForCodePoint(codePoint)
+    ) {
+      return fail(
+        use,
+        "font-missing-glyph",
+        `${use.family} 的 ${use.weight} ${use.style} 字体缺少实际输出字符 ${character}`,
+      );
+    }
+  }
+
+  let bytes: Uint8Array;
+  try {
+    bytes = subsetFont(use.bytes!, characters);
+  } catch (error) {
+    return fail(
+      use,
+      "font-subsetting-failed",
+      `${use.family} 的字符子集生成失败：${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+
+  let font: fontkit.Font;
+  try {
+    const opened = fontkit.create(
+      Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength),
+    );
+    if (opened.type !== "TTF") throw new Error("子集不是静态 TrueType 字体");
+    font = opened as fontkit.Font;
+    tablesOf(bytes, use);
+  } catch (error) {
+    return fail(
+      use,
+      "font-subsetting-failed",
+      `${use.family} 的字符子集无法独立解析：${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+
+  if (
+    font["OS/2"].usWeightClass !== checked.weightClass ||
+    font["OS/2"].fsType.editable !== checked.font["OS/2"].fsType.editable ||
+    font["OS/2"].fsType.noSubsetting !==
+      checked.font["OS/2"].fsType.noSubsetting ||
+    font["OS/2"].fsSelection.bold !== checked.font["OS/2"].fsSelection.bold ||
+    font["OS/2"].fsSelection.italic !== checked.font["OS/2"].fsSelection.italic
+  ) {
+    return fail(
+      use,
+      "font-subsetting-failed",
+      `${use.family} 的字符子集未保留原字体的嵌入许可和样式`,
+    );
+  }
+  for (const character of requiredCharacters) {
+    const codePoint = character.codePointAt(0);
+    if (
+      codePoint !== undefined &&
+      !defaultIgnorable.test(character) &&
+      !font.hasGlyphForCodePoint(codePoint)
+    ) {
+      return fail(
+        use,
+        "font-subsetting-failed",
+        `${use.family} 的字符子集未保留实际输出字符 ${character}`,
+      );
+    }
+  }
+  return bytes;
 }
 
 function nameString(
@@ -288,19 +381,29 @@ function nameString(
 }
 
 function eot(
-  bytes: Uint8Array,
+  sourceBytes: Uint8Array,
   use: FontEmbeddingUse,
   checked: ReturnType<typeof checkedFont>,
+  payloadBytes: Uint8Array = sourceBytes,
 ): Uint8Array {
   const { tables, fsType, weightClass, font } = checked;
   const os2 = tables.get("OS/2")!;
-  const head = tables.get("head")!;
   const names = tables.get("name")!;
-  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  const view = new DataView(
+    sourceBytes.buffer,
+    sourceBytes.byteOffset,
+    sourceBytes.byteLength,
+  );
+  const payloadTables = tablesOf(payloadBytes, use);
+  const payloadView = new DataView(
+    payloadBytes.buffer,
+    payloadBytes.byteOffset,
+    payloadBytes.byteLength,
+  );
   const os2Version = view.getUint16(os2.offset);
   const field32 = (offset: number) =>
     offset + 4 <= os2.length ? view.getUint32(os2.offset + offset) : 0;
-  const panose = bytes.slice(os2.offset + 32, os2.offset + 42);
+  const panose = sourceBytes.slice(os2.offset + 32, os2.offset + 42);
   const chunks: Uint8Array[] = [];
   const u8 = (value: number) => chunks.push(Uint8Array.of(value));
   const u16 = (value: number) => {
@@ -314,7 +417,7 @@ function eot(
     chunks.push(chunk);
   };
   u32(0);
-  u32(bytes.byteLength);
+  u32(payloadBytes.byteLength);
   u32(0x00020002);
   u32(0);
   chunks.push(panose);
@@ -327,10 +430,11 @@ function eot(
   for (const offset of [78, 82]) {
     u32(os2Version >= 1 && os2.length >= offset + 4 ? field32(offset) : 0);
   }
-  u32(view.getUint32(head.offset + 8));
+  const payloadHead = payloadTables.get("head")!;
+  u32(payloadView.getUint32(payloadHead.offset + 8));
   for (let index = 0; index < 4; index += 1) u32(0);
   for (const id of [1, 2, 5, 4]) {
-    const name = nameString(bytes, names, id, use);
+    const name = nameString(sourceBytes, names, id, use);
     u16(0);
     u16(name.byteLength);
     chunks.push(name);
@@ -343,7 +447,7 @@ function eot(
   u16(0);
   u32(0);
   u32(0);
-  chunks.push(bytes);
+  chunks.push(payloadBytes);
   const size = chunks.reduce((sum, chunk) => sum + chunk.byteLength, 0);
   const output = new Uint8Array(size);
   let offset = 0;
@@ -393,16 +497,16 @@ function slotOrder(value: FontSlot): number {
   return { regular: 0, bold: 1, italic: 2, boldItalic: 3 }[value];
 }
 
-/** 按实际输出字族和样式生成 presentation 字体记录；本轮只支持完整嵌入。 */
+/** 按实际输出字族和样式生成完整字体或文稿字符子集。 */
 export function fontPresentationContributions(
   uses: readonly FontEmbeddingUse[],
-  requested: "full" | undefined,
+  requested: FontEmbeddingMode | undefined,
 ): CapabilityPresentationContribution[] {
   if (requested === undefined) return [];
   const contributions: CapabilityPresentationContribution[] = [];
   const slots = new Map<string, string>();
   for (const use of uses) {
-    const checked = checkedFont(use);
+    const checked = checkedFont(use, requested);
     const styleSlot = slot(use.bold, use.italic);
     const family = xmlEscape(use.family);
     const category = fontCategory(checked.font);
@@ -420,7 +524,12 @@ export function fontPresentationContributions(
     }
     if (existing !== undefined) continue;
     slots.set(itemKey, use.identity);
-    const data = eot(use.bytes!, use, checked);
+    const resourceClaim = { kind: "font-face", key: use.claimKey };
+    const resolveBytes =
+      requested === "subset"
+        ? (characters: string) =>
+            eot(use.bytes!, use, checked, subsetBytes(use, checked, characters))
+        : undefined;
     contributions.push({
       collection: "p:embeddedFontLst",
       presentationAttributes: { embedTrueTypeFonts: "1" },
@@ -437,7 +546,9 @@ export function fontPresentationContributions(
         relationshipType: fontRelationship,
         pathTemplate: "ppt/fonts/font{n}.fntdata",
         contentType: fontContentType,
-        bytes: data,
+        ...(resolveBytes === undefined
+          ? { bytes: eot(use.bytes!, use, checked) }
+          : { resourceClaim, resolveBytes }),
         content: (relationshipId) =>
           `<p:${styleSlot} r:id="${xmlEscape(relationshipId)}"/>`,
       },

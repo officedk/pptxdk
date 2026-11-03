@@ -45,6 +45,7 @@ import {
   type CapabilityModule,
   type RegisteredCapabilityModule,
   type CapabilityResource,
+  type CapabilityResourceClaim,
   type Diagnostic,
   type Extension,
   type LayoutChildReference,
@@ -76,6 +77,21 @@ type MorphObject = {
 
 type MorphNativeKind = "sp" | "pic" | "grpSp" | "table" | "chart";
 
+type StoredPresentationItem = {
+  readonly identity: string;
+  readonly order: number;
+  readonly preview: string;
+  readonly content: string;
+  readonly partPath: string;
+  readonly relationshipId: string;
+  readonly relationshipType: string;
+  readonly contentType: string;
+  readonly path: string;
+  readonly bytes?: Uint8Array;
+  readonly resourceClaim?: Pick<CapabilityResourceClaim, "kind" | "key">;
+  readonly resolveBytes?: (characters: string) => Uint8Array;
+};
+
 type DocumentBuildState = {
   readonly usedExtensions: Set<Extension>;
   readonly warnings: Diagnostic[];
@@ -88,6 +104,7 @@ type DocumentBuildState = {
   readonly packageParts: Map<string, PptxPackagePart>;
   readonly packageRelationships: Map<string, PptxRelationship[]>;
   readonly presentationAttributes: Map<string, string>;
+  readonly presentationPartPaths: Set<string>;
   readonly presentationCollections: Map<
     string,
     {
@@ -98,15 +115,7 @@ type DocumentBuildState = {
           readonly identity: string;
           readonly tagName: string;
           readonly content: string;
-          readonly items: Map<
-            string,
-            {
-              identity: string;
-              order: number;
-              preview: string;
-              content: string;
-            }
-          >;
+          readonly items: Map<string, StoredPresentationItem>;
         }
       >;
     }
@@ -346,12 +355,16 @@ function validateOptions(options: BuildOptions): Target {
       diagnostic("build", "unknown-parameter", `构建选项含未知参数 ${unknown}`),
     ]);
   }
-  if (options.embedFonts !== undefined && options.embedFonts !== "full") {
+  if (
+    options.embedFonts !== undefined &&
+    options.embedFonts !== "full" &&
+    options.embedFonts !== "subset"
+  ) {
     throw new BuildError([
       diagnostic(
         "build.embedFonts",
         "unsupported-font-embedding",
-        "embedFonts 目前只支持 full",
+        "embedFonts 目前只支持 full 或 subset",
       ),
     ]);
   }
@@ -726,8 +739,17 @@ function addPresentationContribution(
     typeof item.pathTemplate !== "string" ||
     typeof item.contentType !== "string" ||
     item.contentType.trim() === "" ||
-    !(item.bytes instanceof Uint8Array) ||
-    item.bytes.byteLength === 0 ||
+    (item.bytes !== undefined &&
+      (!(item.bytes instanceof Uint8Array) || item.bytes.byteLength === 0)) ||
+    (item.bytes === undefined && item.resolveBytes === undefined) ||
+    (item.resourceClaim === undefined) !== (item.resolveBytes === undefined) ||
+    (item.resourceClaim !== undefined &&
+      (typeof item.resourceClaim.kind !== "string" ||
+        item.resourceClaim.kind === "" ||
+        typeof item.resourceClaim.key !== "string" ||
+        item.resourceClaim.key === "")) ||
+    (item.resolveBytes !== undefined &&
+      typeof item.resolveBytes !== "function") ||
     typeof item.content !== "function"
   ) {
     throw new CapabilityError(
@@ -823,7 +845,9 @@ function addPresentationContribution(
     if (
       existingItem.identity !== item.identity ||
       existingItem.order !== item.order ||
-      existingItem.preview !== preview
+      existingItem.preview !== preview ||
+      existingItem.resourceClaim?.kind !== item.resourceClaim?.kind ||
+      existingItem.resourceClaim?.key !== item.resourceClaim?.key
     ) {
       context.slide.diagnostics.push(
         diagnostic(
@@ -838,33 +862,97 @@ function addPresentationContribution(
 
   const sequence = context.document.nextPackagePartId++;
   const partPath = packagePartPath(item.pathTemplate, sequence);
-  if (context.document.packageParts.has(partPath)) {
+  if (
+    context.document.packageParts.has(partPath) ||
+    context.document.presentationPartPaths.has(partPath)
+  ) {
     throw new CapabilityError("duplicate-part", "PPTX 部件路径重复");
   }
+  context.document.presentationPartPaths.add(partPath);
   const relationshipId = `rId${context.document.nextPresentationRelationshipId++}`;
   const content = item.content(relationshipId);
-  context.document.packageParts.set(partPath, {
-    path: partPath,
-    content: new Uint8Array(item.bytes),
-    contentType: item.contentType,
-  });
-  const relationships =
-    context.document.packageRelationships.get("ppt/presentation.xml") ?? [];
-  relationships.push({
-    id: relationshipId,
-    type: item.relationshipType,
-    target: relationshipTarget("ppt/presentation.xml", partPath),
-  });
-  context.document.packageRelationships.set(
-    "ppt/presentation.xml",
-    relationships,
-  );
   targetRecord.items.set(item.key, {
     identity: item.identity,
     order: item.order,
     preview,
     content,
+    partPath,
+    relationshipId,
+    relationshipType: item.relationshipType,
+    contentType: item.contentType,
+    path,
+    ...(item.bytes === undefined ? {} : { bytes: item.bytes }),
+    ...(item.resourceClaim === undefined
+      ? {}
+      : { resourceClaim: item.resourceClaim }),
+    ...(item.resolveBytes === undefined
+      ? {}
+      : { resolveBytes: item.resolveBytes }),
   });
+}
+
+function finalizePresentationContributions(document: DocumentBuildState): void {
+  for (const collection of document.presentationCollections.values()) {
+    for (const record of collection.records.values()) {
+      for (const item of record.items.values()) {
+        let bytes = item.bytes;
+        if (item.resourceClaim !== undefined) {
+          const claimKey = `${item.resourceClaim.kind}\u0000${item.resourceClaim.key}`;
+          const claim = document.resourceClaims.get(claimKey);
+          if (claim === undefined || claim.identity !== item.identity) {
+            throw new BuildError([
+              diagnostic(
+                item.path,
+                "missing-resource-claim",
+                `文稿资源 ${item.resourceClaim.key} 缺少匹配的字符声明`,
+              ),
+            ]);
+          }
+          try {
+            bytes = item.resolveBytes!(claim.characters);
+          } catch (error) {
+            if (error instanceof CapabilityError) {
+              throw new BuildError([
+                diagnostic(error.path ?? item.path, error.code, error.message),
+              ]);
+            }
+            throw new BuildError([
+              diagnostic(
+                item.path,
+                "resource-contribution-failed",
+                error instanceof Error ? error.message : String(error),
+              ),
+            ]);
+          }
+        }
+        if (!(bytes instanceof Uint8Array) || bytes.byteLength === 0) {
+          throw new BuildError([
+            diagnostic(
+              item.path,
+              "invalid-presentation-contribution",
+              "文稿级部件贡献没有生成有效资源字节",
+            ),
+          ]);
+        }
+        document.packageParts.set(item.partPath, {
+          path: item.partPath,
+          content: new Uint8Array(bytes),
+          contentType: item.contentType,
+        });
+        const relationships =
+          document.packageRelationships.get("ppt/presentation.xml") ?? [];
+        relationships.push({
+          id: item.relationshipId,
+          type: item.relationshipType,
+          target: relationshipTarget("ppt/presentation.xml", item.partPath),
+        });
+        document.packageRelationships.set(
+          "ppt/presentation.xml",
+          relationships,
+        );
+      }
+    }
+  }
 }
 
 function presentationContent(document: DocumentBuildState): string {
@@ -1573,6 +1661,7 @@ function compileDocument(
     packageParts: new Map(),
     packageRelationships: new Map(),
     presentationAttributes: new Map(),
+    presentationPartPaths: new Set(),
     presentationCollections: new Map(),
     nextPackagePartId: 1,
     nextPresentationRelationshipId: slides.length + 2,
@@ -1608,6 +1697,7 @@ function compileDocument(
     }
   }
   if (morphDiagnostics.length > 0) throw new BuildError(morphDiagnostics);
+  finalizePresentationContributions(document);
   const parts = pptxParts(
     size,
     builtSlides.map(({ id, shapeXml, slideXml, relationships }) => ({

@@ -63,9 +63,13 @@
   "devDependencies": {
     "@react-pptx/tooling-config": "workspace:*",
     "@react-pptx/validation": "workspace:*",
+    "@types/emscripten": "catalog:",
+    "@types/fontkit": "catalog:",
     "@types/node": "catalog:",
     "@types/react": "catalog:",
     "fflate": "catalog:",
+    "fontkit": "catalog:",
+    "harfbuzzjs": "catalog:",
     "oxfmt": "catalog:",
     "oxlint": "catalog:",
     "oxlint-tsgolint": "catalog:",

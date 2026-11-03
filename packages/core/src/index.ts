@@ -59,6 +59,7 @@ export type {
   CapabilityModule,
   CapabilityOutput,
   CapabilityResource,
+  CapabilityResourceClaim,
   DeckProps,
   Diagnostic,
   ElementProps,

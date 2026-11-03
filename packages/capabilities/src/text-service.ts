@@ -829,6 +829,7 @@ function textResourceClaims(runs: readonly Run[]): {
         family: font.family,
         weight: font.weight,
         style: font.style,
+        claimKey: key,
         identity: font.identity,
         ...(font.data === undefined ? {} : { bytes: font.data }),
         substitute: font.substitute,
@@ -1565,7 +1566,22 @@ export function writeTextBody(
       ? paragraph.runs
       : [{ text: "", style: paragraph.endStyle }],
   );
-  const { resourceClaims, fontUses, warnings } = textResourceClaims(runs);
+  const listRuns = paragraphs.flatMap((paragraph) => {
+    const list = paragraph.style.list;
+    if (list === undefined) return [];
+    const characters =
+      list.type === "bullet" ? (list.character ?? "•") : "0123456789.";
+    return [
+      {
+        text: characters,
+        style: paragraph.runs[0]?.style ?? paragraph.endStyle,
+      },
+    ];
+  });
+  const { resourceClaims, fontUses, warnings } = textResourceClaims([
+    ...runs,
+    ...listRuns,
+  ]);
   let measured: ReturnType<typeof measureParagraphs> | undefined;
   if (layout !== undefined) {
     try {

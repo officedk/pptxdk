@@ -167,6 +167,9 @@ catalogs:
     '@changesets/cli':
       specifier: 3.0.3
       version: 3.0.3
+    '@types/emscripten':
+      specifier: ^1.41.6
+      version: 1.41.6
     '@types/fontkit':
       specifier: ^2.0.9
       version: 2.0.9
@@ -191,6 +194,9 @@ catalogs:
     fontkit:
       specifier: ^2.0.4
       version: 2.0.4
+    harfbuzzjs:
+      specifier: ^1.6.4
+      version: 1.6.4
     linebreak:
       specifier: ^1.1.0
       version: 1.1.0
@@ -342,6 +348,9 @@ importers:
       fontkit:
         specifier: 'catalog:'
         version: 2.0.4
+      harfbuzzjs:
+        specifier: 'catalog:'
+        version: 1.6.4
       linebreak:
         specifier: 'catalog:'
         version: 1.1.0
@@ -435,6 +444,12 @@ importers:
       '@react-pptx/validation':
         specifier: workspace:*
         version: link:../validation
+      '@types/emscripten':
+        specifier: 'catalog:'
+        version: 1.41.6
+      '@types/fontkit':
+        specifier: 'catalog:'
+        version: 2.0.9
       '@types/node':
         specifier: 'catalog:'
         version: 26.6.6
@@ -444,6 +459,12 @@ importers:
       fflate:
         specifier: 'catalog:'
         version: 0.8.3
+      fontkit:
+        specifier: 'catalog:'
+        version: 2.0.4
+      harfbuzzjs:
+        specifier: 'catalog:'
+        version: 1.6.4
       oxfmt:
         specifier: 'catalog:'
         version: 0.74.0
@@ -1194,6 +1215,9 @@ packages:
   '@types/deep-eql@4.0.2':
     resolution: {integrity: sha512-c9h9dVVMigMPc4bwTvC5dxqtqJZwQPePsWjPlpSOnojbor6pGqdk541lfA7AqFQr5pB1BRdq0juY9db81BwyFw==}
 
+  '@types/emscripten@1.41.6':
+    resolution: {integrity: sha512-uN+9i8bFT5CUcZfyIEYDrSueACEyKGbUs5kC/72DGlZZoinh84sJfVV0i8UOJD1asdzkvLPBRrKs41kZ8MdEXg==}
+
   '@types/estree@1.0.10':
     resolution: {integrity: sha512-lTyOMnOcmRBzdCv6/4zUZCrEhV0xrqQiUZBZtVcbmLHBXKLnN8q89v/wKRF/Q0HbwVsqbIG3o5HDoFl9sduM+g==}
 
@@ -1462,6 +1486,9 @@ packages:
   get-east-asian-width@1.7.0:
     resolution: {integrity: sha512-XjH1AECxf0giL2V1aU8vKyRR2ppRUb5c0EvT7zuJTokQ74bNo52zOtghqdWIqrhUD79fo3x0WfKZdOqxF6LG1Q==}
     engines: {node: '>=18'}
+
+  harfbuzzjs@1.6.4:
+    resolution: {integrity: sha512-T/PyfhVt1gGR2Tkf5KJUj1DQFkVBXHw552lS1iLEEDhV1Lukb3eq1pk2ov85kgbT2YUiZtJBTak9w+M7YgzUEQ==}
 
   human-id@4.2.2:
     resolution: {integrity: sha512-Z+8unD6em/MJwyrkWQ2M3wygRGI1+MztbutiNwk1DCuEPXOZRWGjtcMPZYP1exY9iNZMhd7ZOSMQSo9WYtiQRw==}
@@ -2262,6 +2289,8 @@ snapshots:
 
   '@types/deep-eql@4.0.2': {}
 
+  '@types/emscripten@1.41.6': {}
+
   '@types/estree@1.0.10': {}
 
   '@types/fontkit@2.0.9':
@@ -2464,6 +2493,8 @@ snapshots:
   get-caller-file@2.0.5: {}
 
   get-east-asian-width@1.7.0: {}
+
+  harfbuzzjs@1.6.4: {}
 
   human-id@4.2.2: {}
 

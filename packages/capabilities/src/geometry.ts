@@ -3,7 +3,7 @@ import { CapabilityError } from "@react-pptx/core";
 export type PresetGeometry = {
   readonly type: "preset";
   readonly name: string;
-  /** Raw DrawingML adjust values keyed by guide name (adj, adj1, adj2...). */
+  /** 按引导名称（adj、adj1、adj2 等）索引的原始 DrawingML 调整值。 */
   readonly adjust?: Readonly<Record<string, number>>;
 };
 
@@ -34,7 +34,7 @@ export type GeometryPath = {
   readonly stroke?: boolean;
 };
 
-/** Custom geometry in local coordinates; it is scaled to the box assigned by layout. */
+/** 自定义几何采用局部坐标，并缩放到布局分配的边界框。 */
 export type CustomGeometry = {
   readonly type: "custom";
   readonly width: number;
@@ -73,8 +73,8 @@ export function preset(
 }
 
 /**
- * Native block arc (ring segment). Angles are in degrees clockwise from 3 o'clock, like DrawingML;
- * thickness is the ring width as a fraction of the shape's smaller side.
+ * 原生 blockArc（环形弧段）。角度单位为度，从三点钟方向起按顺时针计算，与 DrawingML 一致；
+ * 厚度表示环宽占图形较短边的比例。
  */
 export function blockArc(options: {
   readonly startAngle: number;
@@ -91,30 +91,26 @@ export function blockArc(options: {
   return preset("blockArc", {
     adj1: angle(options.startAngle),
     adj2: angle(options.endAngle),
-    // Keep a legal numeric declaration outside the preset's normal guide range;
-    // the shape compiler reports the range warning without silently clamping it.
+    // 即使数值超出预设的常见引导范围，也保留合法声明；形状编译器会报告范围警告，不会静默截断。
     adj3: Math.round(options.thickness * 100000),
   });
 }
 
 export type PathOptions = {
-  /** Size of the local coordinate space, like an SVG viewBox starting at 0,0. */
+  /** 局部坐标空间的尺寸，类似从 0,0 开始的 SVG viewBox。 */
   readonly viewBox: readonly [width: number, height: number];
   readonly fill?: boolean;
   readonly stroke?: boolean;
-  /** SVG fill-rule of the path data; see `path`. */
+  /** SVG 路径数据的填充规则，见 `path`。 */
   readonly fillRule?: "nonzero" | "evenodd";
 };
 
 /**
- * Custom geometry from SVG path data. Several subpaths in one string form one native path; pass an
- * array for separately drawn paths.
+ * 根据 SVG 路径数据创建自定义几何。一个字符串中的多个子路径构成同一原生路径；分别绘制的路径请传入数组。
  *
- * PPTX has no fill rule, so each application applies its own. With the default `fillRule:
- * "nonzero"` the path is written as drawn: an inner subpath drawn in the opposite direction to the
- * outer one cuts a hole in every application. With `"evenodd"` the subpaths alternate direction by
- * nesting depth, so every application shows the even-odd result. Subpaths that overlap without
- * nesting, or cross themselves, cannot be made to agree this way.
+ * PPTX 没有填充规则，因此不同应用程序会各自解释。默认 `fillRule: "nonzero"` 时按原样写入路径；
+ * 在所有应用程序中，方向与外轮廓相反的内层子路径都会形成孔洞。设置为 `"evenodd"` 时，子路径会按嵌套
+ * 深度交替方向，因此各应用程序显示偶奇填充结果。彼此重叠但未嵌套，或自相交的子路径无法通过这种方式保持一致。
  */
 export function path(
   data: string | readonly string[],
@@ -170,7 +166,7 @@ export function path(
 type Point = { readonly x: number; readonly y: number };
 type Segment = Extract<PathCommand, { op: "L" | "C" | "Q" }>;
 
-/** Splits commands into subpaths; drawing on after Z starts a new one at the last start point. */
+/** 按 Z 命令拆分子路径；Z 后继续绘制时，从上一个子路径的起点开始。 */
 function subpaths(commands: readonly PathCommand[]): PathCommand[][] {
   const result: PathCommand[][] = [];
   let current: PathCommand[] | undefined;
@@ -192,7 +188,7 @@ function subpaths(commands: readonly PathCommand[]): PathCommand[][] {
   return result;
 }
 
-/** The subpath as a polygon, with curves sampled. */
+/** 将子路径表示为多边形，并对曲线采样。 */
 function outline(subpath: readonly PathCommand[]): Point[] {
   const points: Point[] = [];
   let x = 0;
@@ -252,7 +248,7 @@ function contains(polygon: readonly Point[], point: Point): boolean {
   return inside;
 }
 
-/** The same subpath drawn the other way round. */
+/** 反向绘制同一子路径。 */
 function reversed(subpath: readonly PathCommand[]): PathCommand[] {
   const first = subpath[0];
   if (first === undefined || first.op !== "M") return [...subpath];
@@ -301,7 +297,7 @@ function reversed(subpath: readonly PathCommand[]): PathCommand[] {
   return result;
 }
 
-/** Outer contours one way, holes the other, islands in holes the first way again. */
+/** 外轮廓按一种方向绘制，孔洞反向绘制，孔洞中的岛屿再恢复为外轮廓方向。 */
 function alternateByNesting(commands: readonly PathCommand[]): PathCommand[] {
   const parts = subpaths(commands);
   const outlines = parts.map(outline);
@@ -476,7 +472,7 @@ export function parseSvgPath(data: string): PathCommand[] {
   return commands;
 }
 
-/** Converts an SVG elliptical arc to cubic Béziers (SVG implementation notes F.6). */
+/** 按 SVG 实现说明 F.6 将椭圆弧转换为三次贝塞尔曲线。 */
 function arcToCubics(
   x1: number,
   y1: number,

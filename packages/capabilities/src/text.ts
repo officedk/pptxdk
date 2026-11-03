@@ -103,8 +103,14 @@ function height(
   value: unknown,
 ):
   | { readonly contentSized: true }
-  | { readonly contentSized: false; readonly value: number } {
+  | { readonly contentSized: false; readonly value: number | undefined } {
   if (value === "auto" || value === undefined) return { contentSized: true };
+  if (
+    typeof value === "string" &&
+    /^-?(?:\d+(?:\.\d*)?|\.\d+)%$/u.test(value)
+  ) {
+    return { contentSized: false, value: undefined };
+  }
   return { contentSized: false, value: size(value, "height") };
 }
 
@@ -135,13 +141,18 @@ function textStyle(value: unknown): unknown {
 function layoutStyleValue(
   input: CapabilityInput,
   name: "width" | "height",
-): number | "auto" | undefined {
+): number | "auto" | `${number}%` | undefined {
   const value = input.props["style"];
   if (!record(value)) return undefined;
   const dimension = value[name];
-  return typeof dimension === "number" || dimension === "auto"
-    ? dimension
-    : undefined;
+  if (typeof dimension === "number" || dimension === "auto") return dimension;
+  if (
+    typeof dimension === "string" &&
+    /^-?(?:\d+(?:\.\d*)?|\.\d+)%$/u.test(dimension)
+  ) {
+    return dimension as `${number}%`;
+  }
+  return undefined;
 }
 
 function textBoxXml(

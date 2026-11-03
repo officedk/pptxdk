@@ -826,7 +826,7 @@ type TableLayoutModel = {
   readonly claims: { kind: string; key: string; identity: string }[];
 };
 
-/** Shared table-owned track and text sizing used by both LayoutPass and XML emission. */
+/** 供 LayoutPass 与 XML 写出共用的表格轨道和文字尺寸计算。 */
 function tableLayoutModel(
   input: CapabilityInput,
   requestedWidth: number | undefined,

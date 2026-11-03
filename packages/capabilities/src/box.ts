@@ -77,17 +77,21 @@ export const boxCapability: CapabilityModule = {
       box,
       layoutOnlyWhenInvisible: true,
     });
+    const motionTarget = {
+      kind: "shape",
+      name,
+      ...(typeof testId === "string" ? { testId } : {}),
+      textBody: false,
+      filled:
+        style["backgroundColor"] !== undefined ||
+        style["backgroundImage"] !== undefined,
+    } as const;
     const annotations = properties.hasVisibleStyle
-      ? motionAnnotations(input.props, {
-          kind: "shape",
-          name,
-          ...(typeof testId === "string" ? { testId } : {}),
-          textBody: false,
-          filled:
-            style["backgroundColor"] !== undefined ||
-            style["backgroundImage"] !== undefined,
-        })
-      : [];
+      ? motionAnnotations(input.props, motionTarget)
+      : motionAnnotations(
+          { motion: false, __motionContext: input.props["__motionContext"] },
+          motionTarget,
+        );
     return {
       xml: properties.hasVisibleStyle
         ? objectXml(

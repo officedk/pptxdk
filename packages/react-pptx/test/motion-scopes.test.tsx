@@ -650,7 +650,7 @@ function firstMainSequenceEntryNodeType(
   assert.ok(withNode);
   const withChildrenStart = withNode.indexOf("<p:childTnLst>");
   assert.ok(withChildrenStart >= 0);
-  // LibreOffice fixMainSequenceTiming reads the first child of this with-node.
+  // LibreOffice 的 fixMainSequenceTiming 会读取该 with-node 的首个子节点。
   const entryNodes = directTimingChildren(
     withNode.slice(withChildrenStart + listLength),
   );

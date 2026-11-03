@@ -302,7 +302,7 @@ export function composeMotionPlanStarts(
   return addMotionPlanStartDelay(inherited, child.delayMs);
 }
 
-/** The single slide-local result consumed by both the writer and build report. */
+/** 供写入器与构建报告共同使用的单页结果。 */
 export type MotionPlan = {
   readonly steps: readonly MotionPlanStep[];
   readonly observation: MotionObservation;
@@ -1717,11 +1717,10 @@ function motionPlan(
           0,
         );
         if (!Number.isSafeInteger(canonicalDelay)) continue;
-        // Offset belongs to the later alias; it cannot recover a join END
-        // that occurred before the consumer's real parent became active.
+        // 偏移属于较晚的别名，无法恢复在消费者真实父级激活前已发生的 join END。
         const joinEndCandidates = canonical.candidates.map((candidate) => ({
           ...candidate,
-          // The recorded candidates describe the aliased scope start.
+          // 记录的候选项描述别名作用域的起点。
           offsetMs: candidate.offsetMs - canonicalDelay,
         }));
         const joinEndIsPending = joinEndCandidates.some((candidate) => {

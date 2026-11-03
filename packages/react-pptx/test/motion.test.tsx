@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 
 import {
+  Box,
   build,
   BuildError,
   Chart,
@@ -33,7 +34,7 @@ import {
 } from "@react-pptx/react-pptx";
 import { validatePptx } from "@react-pptx/validation";
 import { strFromU8, strToU8, unzipSync, zipSync } from "fflate";
-import { createElement, Fragment } from "react";
+import { createElement, Fragment, type ReactNode } from "react";
 import { describe, it } from "vitest";
 
 const png = new Uint8Array(
@@ -4271,6 +4272,127 @@ describe("对象动画", () => {
         ({ code }) => code === "invalid-animation-kind",
       ),
       JSON.stringify(invalidKindFile.errors),
+    );
+  });
+
+  it("包装组件把动效参数交给正式校验并保留禁用语义", async () => {
+    const animatedShape = (testId: string) =>
+      createElement(Shape, {
+        testId,
+        x: 0,
+        y: 0,
+        width: 20,
+        height: 20,
+        enter: fade({ duration: 100 }),
+      });
+    const scopeDeck = (props: Record<string, unknown>) => {
+      function ScopedMotion() {
+        const scope = useMotionScope();
+        return createElement(
+          MotionScope,
+          { scope, ...props } as never,
+          animatedShape("scope-child"),
+        );
+      }
+      return createElement(
+        Deck,
+        {},
+        createElement(
+          Slide,
+          { slideId: "wrapper-motion-parameters" },
+          createElement(ScopedMotion),
+        ),
+      );
+    };
+    const slideDeck = (child: ReactNode) =>
+      createElement(
+        Deck,
+        {},
+        createElement(Slide, { slideId: "wrapper-motion-parameters" }, child),
+      );
+    const invalidInputs = [
+      {
+        element: scopeDeck({ motion: "false" }),
+        code: "invalid-motion",
+        path: /motion-scope/u,
+      },
+      {
+        element: slideDeck(
+          createElement(
+            Box,
+            {
+              motion: "false" as never,
+              style: { width: 100, height: 80 },
+            },
+            animatedShape("box-child"),
+          ),
+        ),
+        code: "invalid-motion",
+        path: /box/u,
+      },
+      {
+        element: scopeDeck({ delayMs: 800 }),
+        code: "unknown-parameter",
+        path: /motion-scope/u,
+      },
+      {
+        element: slideDeck(
+          createElement(
+            Step,
+            { index: 2 } as never,
+            animatedShape("step-child"),
+          ),
+        ),
+        code: "unknown-parameter",
+        path: /motion-step/u,
+      },
+    ] as const;
+    for (const { element, code, path } of invalidInputs) {
+      await assert.rejects(build(element), (error: unknown) => {
+        assert.ok(error instanceof BuildError);
+        assert.equal(
+          error.diagnostics[0]?.code,
+          code,
+          JSON.stringify(error.diagnostics),
+        );
+        assert.match(error.diagnostics[0]?.path ?? "", path);
+        return true;
+      });
+    }
+
+    const disabledScope = await build(scopeDeck({ motion: false }));
+    const disabledScopeMotion = disabledScope.report.slides[0]?.capabilities?.[
+      "motion"
+    ] as MotionObservation | undefined;
+    assert.ok(disabledScopeMotion);
+    assert.equal(
+      disabledScopeMotion.steps.flatMap(({ effects }) => effects).length,
+      0,
+    );
+    assert.deepEqual(
+      (await validatePptx(disabledScope.pptx)).slides[0]?.animations,
+      undefined,
+    );
+
+    const disabledBox = await build(
+      slideDeck(
+        createElement(
+          Box,
+          {
+            motion: false,
+            style: {
+              width: 100,
+              height: 80,
+              backgroundColor: "#123456",
+            },
+          },
+          animatedShape("disabled-box-child"),
+        ),
+      ),
+    );
+    assert.deepEqual(
+      (await validatePptx(disabledBox.pptx)).slides[0]?.animations,
+      undefined,
     );
   });
 

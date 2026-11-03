@@ -15,7 +15,11 @@ import type {
   MotionObservation,
   MotionStartDependency,
 } from "./motion-api.ts";
-import { maximumTimeNodeValue, motionScopeAnnotation } from "./motion-api.ts";
+import {
+  maximumTimeNodeValue,
+  motionScopeAnnotation,
+  motionStepAnnotation,
+} from "./motion-api.ts";
 import {
   addMotionPlanStartDelay,
   composeMotionPlanStarts,
@@ -2107,6 +2111,12 @@ export const motionCapability: SlideCapabilityModule = Object.freeze({
       declaration: "rp:motion-scope",
       compileDeclaration(input) {
         return [motionScopeAnnotation(input.props)];
+      },
+    } satisfies TransparentCapabilityModule,
+    {
+      declaration: "rp:motion-step",
+      compileDeclaration(input) {
+        return motionStepAnnotation(input.props);
       },
     } satisfies TransparentCapabilityModule,
   ],

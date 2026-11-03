@@ -67,7 +67,7 @@ export type ShapePropertiesOptions = {
   readonly geometry?: Geometry;
   readonly flipH?: boolean;
   readonly flipV?: boolean;
-  /** The shape capability's legacy top-level fill. */
+  /** 形状能力旧有的顶层填充属性。 */
   readonly fill?: ColorValue;
   readonly image?: boolean;
   /** 无可见视觉的布局容器不要求写出原生变换。 */
@@ -482,7 +482,7 @@ function effectsXml(theme: ThemeContext, style: VisualStyleRecord): string {
     : `<a:effectLst>${items.join("")}</a:effectLst>`;
 }
 
-/** One serializer for Shape, Image, Text and visible Box shape properties. */
+/** Shape、Image、Text 与可见 Box 形状属性共用的序列化器。 */
 export function shapePropertiesXml(
   options: ShapePropertiesOptions,
 ): ShapePropertiesResult {

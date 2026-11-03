@@ -227,6 +227,7 @@ type StepDeclaration =
 
 type MotionContextValue = {
   readonly enabled: boolean;
+  readonly motionValue?: unknown;
   readonly step?: StepDeclaration;
   readonly scopes: readonly MotionScopeDeclaration[];
   readonly defaultEnter?:
@@ -280,17 +281,18 @@ export function useMotionScope(): MotionScopeHandle {
 }
 
 /** 显式编排作用域只声明时序关系，不创建布局或原生对象。 */
-export function MotionScope({
-  scope,
-  mode = "parallel",
-  each,
-  delay = 0,
-  startAt,
-  publishStart,
-  publishEnd,
-  motion,
-  children,
-}: MotionScopeProps): ReactNode {
+export function MotionScope(props: MotionScopeProps): ReactNode {
+  const { children, ...publicProps } = props;
+  const {
+    scope,
+    mode = "parallel",
+    each,
+    delay = 0,
+    startAt,
+    publishStart,
+    publishEnd,
+    motion,
+  } = publicProps;
   const parent = useContext(motionContext);
   const parentScope = parent.scopes.at(-1);
   const declaration: MotionScopeDeclaration = Object.freeze({
@@ -312,7 +314,11 @@ export function MotionScope({
   return createElement(
     motionContext.Provider,
     { value: context },
-    createElement("rp:motion-scope", { __motionScope: declaration }, children),
+    createElement(
+      "rp:motion-scope",
+      { ...publicProps, __motionScope: declaration },
+      children,
+    ),
   );
 }
 
@@ -330,10 +336,18 @@ export function Box({
     enabled: parent.enabled && motion !== false,
     ...(defaultEnter === undefined ? {} : { defaultEnter }),
   });
+  const boxContext = Object.freeze({
+    ...context,
+    ...(motion === undefined ? {} : { motionValue: motion }),
+  });
   return createElement(
     motionContext.Provider,
     { value: context },
-    createElement("rp:box", { ...props, __motionContext: context }, children),
+    createElement(
+      "rp:box",
+      { ...props, __motionContext: boxContext },
+      children,
+    ),
   );
 }
 
@@ -493,7 +507,9 @@ export function repeat<E extends Effect>(
 }
 
 /** 一次点击触发一组对象；相同编号的声明共用点击步。 */
-export function Step({ n, children }: StepProps): ReactNode {
+export function Step(props: StepProps): ReactNode {
+  const { children, ...publicProps } = props;
+  const { n } = publicProps;
   const parent = useContext(motionContext);
   const identity = useId();
   const step: StepDeclaration =
@@ -503,7 +519,11 @@ export function Step({ n, children }: StepProps): ReactNode {
   return createElement(
     motionContext.Provider,
     { value: { ...parent, step } },
-    children,
+    createElement(
+      "rp:motion-step",
+      { ...publicProps, __motionStep: step },
+      children,
+    ),
   );
 }
 
@@ -629,6 +649,12 @@ export type MotionObservation = {
 
 function fail(code: string, message: string): never {
   throw new CapabilityError(code, message);
+}
+
+function validateMotionFlag(value: unknown): void {
+  if (value !== undefined && typeof value !== "boolean") {
+    fail("invalid-motion", "motion 必须是布尔值");
+  }
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -1049,10 +1075,22 @@ function validatedPublisher(value: unknown): MotionMoment | undefined {
 export function motionScopeAnnotation(
   input: Readonly<Record<string, unknown>>,
 ): CapabilityAnnotation {
-  const unknown = Object.keys(input).find((key) => key !== "__motionScope");
+  const allowedParameters = new Set([
+    "scope",
+    "mode",
+    "each",
+    "delay",
+    "startAt",
+    "publishStart",
+    "publishEnd",
+    "motion",
+    "__motionScope",
+  ]);
+  const unknown = Object.keys(input).find((key) => !allowedParameters.has(key));
   if (unknown !== undefined) {
     return fail("unknown-parameter", `MotionScope 含未实现参数 ${unknown}`);
   }
+  validateMotionFlag(input["motion"]);
   const value = input["__motionScope"];
   if (!isRecord(value)) {
     return fail("invalid-scope", "MotionScope 缺少作用域声明");
@@ -1127,6 +1165,20 @@ export function motionScopeAnnotation(
   };
 }
 
+/** 校验 Step 包装器参数，保持无视觉声明不进入页面能力观察。 */
+export function motionStepAnnotation(
+  input: Readonly<Record<string, unknown>>,
+): readonly CapabilityAnnotation[] {
+  const unknown = Object.keys(input).find(
+    (key) => key !== "n" && key !== "__motionStep",
+  );
+  if (unknown !== undefined) {
+    return fail("unknown-parameter", `Step 含未实现参数 ${unknown}`);
+  }
+  stepDeclaration(input["__motionStep"]);
+  return [];
+}
+
 function contextValue(value: unknown): MotionContextValue {
   if (value === undefined) return { enabled: true, scopes: [] };
   if (
@@ -1157,10 +1209,12 @@ export function motionAnnotations(
   props: Readonly<Record<string, unknown>>,
   target: MotionTarget,
 ): readonly CapabilityAnnotation[] {
-  if (props["motion"] !== undefined && typeof props["motion"] !== "boolean") {
-    return fail("invalid-motion", "motion 必须是布尔值");
+  validateMotionFlag(props["motion"]);
+  const rawContext = props["__motionContext"];
+  if (isRecord(rawContext)) {
+    validateMotionFlag(rawContext["motionValue"]);
   }
-  const context = contextValue(props["__motionContext"]);
+  const context = contextValue(rawContext);
   if (!context.enabled || props["motion"] === false) return [];
 
   const step = context.step;

@@ -770,7 +770,7 @@ function collectRuns(
         field: {
           id:
             fields.createId?.() ??
-            // The layout-only table normalization never emits this field XML.
+            // 仅用于布局的表格规范化不会写出此域的 XML。
             "00000000-0000-4000-8000-000000000001",
           type: "slidenum",
         },

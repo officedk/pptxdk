@@ -27,6 +27,7 @@ import {
   Text,
   targets,
   transitions,
+  type FontSize,
 } from "@react-pptx/react-pptx";
 import { validatePptx } from "@react-pptx/validation";
 import { strFromU8, strToU8, unzipSync, zipSync } from "fflate";
@@ -2730,6 +2731,105 @@ describe("公开构建入口", () => {
     assert.doesNotMatch(
       strFromU8(parts["ppt/presentation.xml"]!),
       /embeddedFont/u,
+    );
+  });
+
+  it("百分比高度的固定区域保留原生行距并按高度约定度量", async () => {
+    const jost = font("Jost*", [
+      { weight: 400, data: testFont("./assets/fonts/Jost-400-Book.ttf") },
+    ]);
+    const buildRegion = (
+      height: number | "100%" | "auto",
+      fontFamily: string | typeof jost,
+      lineHeight?: FontSize,
+    ) =>
+      build(
+        createElement(
+          Deck,
+          { width: 320, height: 180 },
+          createElement(
+            Slide,
+            { slideId: "fixed-text-region" },
+            createElement(
+              Box,
+              { style: { width: 200, height: 80 } },
+              createElement(
+                Text,
+                {
+                  testId: "fixed-text",
+                  style: {
+                    width: "100%",
+                    height,
+                    fontFamily,
+                    fontSize: 20,
+                    ...(lineHeight === undefined ? {} : { lineHeight }),
+                  },
+                },
+                "Fixed region",
+              ),
+            ),
+          ),
+        ),
+      );
+
+    const namePercent = await buildRegion("100%", "Arial");
+    const namePixels = await buildRegion(80, "Arial");
+    assert.deepEqual(namePercent.pptx, namePixels.pptx);
+    assert.deepEqual(
+      namePercent.report.diagnostics.map(({ severity, code }) => ({
+        severity,
+        code,
+      })),
+      [{ severity: "warning", code: "font-measurement-unavailable" }],
+    );
+    for (const result of [namePercent, namePixels]) {
+      assert.deepEqual(result.report.slides[0]?.objects[0]?.box, {
+        x: 0,
+        y: 0,
+        width: 200,
+        height: 80,
+      });
+      const file = await validatePptx(result.pptx);
+      assert.deepEqual(file.errors, []);
+      const xml = strFromU8(unzipSync(result.pptx)["ppt/slides/slide1.xml"]!);
+      assert.doesNotMatch(xml, /<a:lnSpc>/u);
+    }
+
+    const metricsPercent = await buildRegion("100%", jost);
+    const metricsPixels = await buildRegion(80, jost);
+    assert.deepEqual(metricsPercent.pptx, metricsPixels.pptx);
+    for (const result of [metricsPercent, metricsPixels]) {
+      assert.deepEqual(result.report.slides[0]?.objects[0]?.box, {
+        x: 0,
+        y: 0,
+        width: 200,
+        height: 80,
+      });
+      const file = await validatePptx(result.pptx);
+      assert.deepEqual(file.errors, []);
+      const paragraph = file.slides[0]?.objects[0]?.text?.paragraphs[0];
+      assert.equal(paragraph?.lineSpacingPoints, undefined);
+      assert.equal(paragraph?.runs[0]?.fontFamily, "Jost*");
+      const xml = strFromU8(unzipSync(result.pptx)["ppt/slides/slide1.xml"]!);
+      assert.doesNotMatch(xml, /<a:lnSpc>/u);
+    }
+
+    const explicitLineHeight = await buildRegion("100%", jost, "22pt");
+    const explicitParagraph = (await validatePptx(explicitLineHeight.pptx))
+      .slides[0]?.objects[0]?.text?.paragraphs[0];
+    assert.equal(explicitParagraph?.lineSpacingPoints, 22);
+    assert.match(
+      strFromU8(unzipSync(explicitLineHeight.pptx)["ppt/slides/slide1.xml"]!),
+      /<a:lnSpc><a:spcPts val="2200"\/><\/a:lnSpc>/u,
+    );
+
+    const autoContent = await buildRegion("auto", jost);
+    const autoParagraph = (await validatePptx(autoContent.pptx)).slides[0]
+      ?.objects[0]?.text?.paragraphs[0];
+    assert.equal(typeof autoParagraph?.lineSpacingPoints, "number");
+    assert.match(
+      strFromU8(unzipSync(autoContent.pptx)["ppt/slides/slide1.xml"]!),
+      /<a:lnSpc>/u,
     );
   });
 

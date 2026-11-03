@@ -1077,7 +1077,8 @@ function capabilityContext(
     slideNumber: context.slideNumber,
     createTextFieldId() {
       const serial = context.document.nextTextFieldId++;
-      return `{00000000-0000-4000-8000-${serial.toString(16).padStart(12, "0")}}`;
+      const suffix = serial.toString(16).padStart(12, "0").toUpperCase();
+      return `{00000000-0000-4000-8000-${suffix}}`;
     },
     ...(morphName === undefined ? {} : { morphName }),
     ...(nativeLink === undefined ? {} : { nativeLink }),

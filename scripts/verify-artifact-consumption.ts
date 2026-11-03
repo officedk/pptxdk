@@ -217,6 +217,7 @@ try {
       'import { type ValidationIssue, type ValidationResult } from "@react-pptx/validation";',
       'import { buildFromSource, type BuildFromSourceOptions } from "@react-pptx/react-pptx/node";',
       'const shape: ShapeProps = { testId: "typed", x: 0, y: 0, width: 40, height: 30 };',
+      'const shapeWithSlideNumber: ShapeProps = { ...shape, children: createElement(P, null, "Page ", createElement(SlideNumber, { style: { fontWeight: "bold" } })) };',
       'const linkTarget: LinkTarget = { slideId: "typed-target" };',
       'const background: SlideBackground = linearGradient(45, "#123456", "#abcdef");',
       'const section: SectionProps = { name: "typed-section" };',
@@ -264,7 +265,7 @@ try {
       'const defaultChartResult: Promise<BuildResult> = build(createElement(Deck, {}, createElement(Slide, { slideId: "typed-chart" }, createElement(Chart, defaultChart))));',
       'const chartOnlyResult: Promise<BuildResult> = buildChartOnly(createElement(ChartDeck, {}, createElement(ChartSlide, { slideId: "typed-chart-only" }, createElement(ChartOnly, chartOnly))));',
       'const tableElement = createElement(Table, table, createElement(Row, row, createElement(Cell, cell, "North")));',
-      "void [result, defaultChartResult, chartOnlyResult, contentSizedText, noWrapText, typedBox, granularText, granularChart, validationIssue, validatorProfile, asyncTable, signalOptions, fontEmbeddingOptions, themeInput, themeScope, colorValue, textDefaults, themedDeck, sourceBuild, tableElement, tableObservation, scopeMoment, scopeCompletion, scopeProps, linkTarget, background, section, slideNumber];",
+      "void [result, defaultChartResult, chartOnlyResult, contentSizedText, noWrapText, typedBox, granularText, granularChart, validationIssue, validatorProfile, asyncTable, signalOptions, fontEmbeddingOptions, themeInput, themeScope, colorValue, textDefaults, themedDeck, sourceBuild, tableElement, tableObservation, scopeMoment, scopeCompletion, scopeProps, linkTarget, background, section, slideNumber, shapeWithSlideNumber];",
     ].join("\n"),
   );
   await writeFile(
@@ -274,14 +275,15 @@ try {
   await writeFile(
     join(temporaryDirectory, "consumer-deck.tsx"),
     [
-      'import { Deck, Section, Shape, Slide, SlideNumber, Text, linearGradient } from "@react-pptx/react-pptx";',
+      'import { Deck, P, Section, Shape, Slide, SlideNumber, Text, linearGradient } from "@react-pptx/react-pptx";',
       'import { sourceTitle } from "./consumer-deck-helper.ts";',
       "export default function ConsumerDeck() {",
       "  return (",
       "    <Deck title={sourceTitle} width={120} height={96}>",
       '      <Section name="开场"><Slide slideId="source-cli" background="#EAF2F8" advanceAfter={1500}>',
       '        <Shape testId="source-cli" link={{ slideId: "target-cli" }} name={sourceTitle} x={8} y={8} width={80} height={32} text={sourceTitle} />',
-      '        <Text testId="source-cli-number" x={8} y={48} width={80} height={24}>第 <SlideNumber /></Text>',
+      '        <Shape testId="source-cli-shape-number" x={8} y={40} width={80} height={24}><P>第 <SlideNumber /></P></Shape>',
+      '        <Text testId="source-cli-number" x={8} y={64} width={80} height={24}>第 <SlideNumber /></Text>',
       "      </Slide></Section>",
       '      <Section name="内容"><Slide slideId="target-cli" background={linearGradient(30, "#123456", "#ABCDEF")} /></Section>',
       "    </Deck>",
@@ -305,6 +307,7 @@ try {
       'const installedCliBytes = await readFile("cli-output/installed.pptx");',
       "const installedCliFile = await validatePptx(new Uint8Array(installedCliBytes));",
       'const installedCliNumber = installedCliFile.slides[0]?.objects.find(({ name }) => name === "source-cli-number")?.text?.paragraphs[0]?.runs[1];',
+      'const installedCliShapeNumber = installedCliFile.slides[0]?.objects.find(({ name }) => name === "source-cli-shape-number")?.text?.paragraphs[0]?.runs[1];',
       'const installedCliShape = installedCliFile.slides[0]?.objects.find(({ kind }) => kind === "shape");',
       'const themeResult = await build(createElement(Deck, { theme: defineTheme({ name: "Installed consumer theme", colors: { dk1: "#223344", ink: "accent1", accent1: "#336699", deep: darker("accent1", 0.2), pale: lighter("accent1", 0.4) }, fonts: { major: "Aptos Display", minor: font("Jost*", [{ weight: 400, data: embeddedFontBytes }]) } }), style: { textWrap: "nowrap" } }, createElement(Slide, { slideId: "installed-theme", theme: { colors: { ink: "#C00000" } }, style: { fontSize: 16 } }, createElement(Text, { testId: "installed-theme-text", x: 0, y: 0, width: 100, height: "auto" }, "Installed theme"), createElement(Shape, { testId: "installed-theme-fill", x: 0, y: 40, width: 40, height: 20, fill: "deep" }), createElement(Shape, { testId: "installed-local-fill", x: 48, y: 40, width: 40, height: 20, fill: "ink" }))));',
       "const themeFile = await validatePptx(themeResult.pptx);",
@@ -323,7 +326,7 @@ try {
       'if (installedBoxMotionFile.errors.length !== 0 || installedBoxBefore?.name !== installedBoxAfter?.name || !installedBoxBefore?.name.startsWith("!!") || installedBoxMotionFile.slides[0]?.objects.length !== 2 || !installedBoxEffects.includes("installed-box-before") || !installedBoxEffects.includes("installed-box-child-before")) throw new Error(JSON.stringify({ errors: installedBoxMotionFile.errors, before: installedBoxBefore, after: installedBoxAfter, objects: installedBoxMotionFile.slides[0]?.objects, effects: installedBoxEffects }));',
       'const sourceBuildResult = await buildFromSource("./consumer-deck.tsx");',
       "const installedCliEquivalent = Buffer.from(installedCliBytes).equals(Buffer.from(sourceBuildResult.pptx));",
-      'if (installedCliFile.errors.length !== 0 || installedCliFile.presentation.title !== "安装 CLI 源码标题" || JSON.stringify(installedCliFile.presentation.sections) !== JSON.stringify([{ name: "开场", slideIds: ["source-cli"] }, { name: "内容", slideIds: ["target-cli"] }]) || installedCliFile.slides[0]?.id !== "source-cli" || installedCliFile.slides[0]?.advanceAfterMs !== 1500 || installedCliFile.slides[0]?.background?.type !== "solid" || installedCliShape?.link?.slideId !== "target-cli" || installedCliNumber?.field !== "slidenum" || installedCliNumber.text !== "1" || installedCliFile.slides[1]?.background?.type !== "gradient" || !installedCliEquivalent || sourceBuildResult.report.title !== "安装 CLI 源码标题" || sourceBuildResult.report.slides[0]?.id !== "source-cli" || sourceBuildResult.report.slides[0]?.objects[0]?.link !== "slide:target-cli") throw new Error(JSON.stringify({ errors: installedCliFile.errors, presentation: installedCliFile.presentation, slides: installedCliFile.slides, installedCliEquivalent }));',
+      'if (installedCliFile.errors.length !== 0 || installedCliFile.presentation.title !== "安装 CLI 源码标题" || JSON.stringify(installedCliFile.presentation.sections) !== JSON.stringify([{ name: "开场", slideIds: ["source-cli"] }, { name: "内容", slideIds: ["target-cli"] }]) || installedCliFile.slides[0]?.id !== "source-cli" || installedCliFile.slides[0]?.advanceAfterMs !== 1500 || installedCliFile.slides[0]?.background?.type !== "solid" || installedCliShape?.link?.slideId !== "target-cli" || installedCliNumber?.field !== "slidenum" || installedCliNumber.text !== "1" || installedCliShapeNumber?.field !== "slidenum" || installedCliShapeNumber.text !== "1" || installedCliFile.slides[1]?.background?.type !== "gradient" || !installedCliEquivalent || sourceBuildResult.report.title !== "安装 CLI 源码标题" || sourceBuildResult.report.slides[0]?.id !== "source-cli" || sourceBuildResult.report.slides[0]?.objects[0]?.link !== "slide:target-cli" || sourceBuildResult.report.slides[0]?.objects.find(({ testId }) => testId === "source-cli-shape-number")?.text !== "第 1") throw new Error(JSON.stringify({ errors: installedCliFile.errors, presentation: installedCliFile.presentation, slides: installedCliFile.slides, installedCliEquivalent }));',
       'const transition = transitions.morph({ by: "word", duration: 1200, fallback: transitions.fade() });',
       'function InstalledScopeDeck() { const source = useMotionScope(); const follower = useMotionScope(); return createElement(Deck, { width: 120, height: 96 }, createElement(Slide, { slideId: "installed-motion-scope" }, createElement(MotionScope, { scope: source, mode: "sequence" }, createElement(Shape, { testId: "scope-first", x: 4, y: 4, width: 20, height: 20, enter: fade({ duration: 200 }) }), createElement(Shape, { testId: "scope-second", x: 28, y: 4, width: 20, height: 20, enter: fade({ duration: 100 }) })), createElement(MotionScope, { scope: follower, startAt: after(source.end, 25) }, createElement(Shape, { testId: "scope-follower", x: 52, y: 4, width: 20, height: 20, enter: fade({ duration: 50 }) })))); }',
       "const scopeResult = await build(createElement(InstalledScopeDeck));",
@@ -434,7 +437,7 @@ try {
       'if (!(missingMetrics instanceof BuildError) || missingMetrics.diagnostics[0]?.code !== "font-measurement-unavailable") throw new Error("installed content-sized text did not require explicit font metrics");',
       'await writeFile("artifact.pptx", result.pptx);',
       'await writeFile("artifact-chart.pptx", chartResult.pptx);',
-      'process.stdout.write(JSON.stringify({ installedCliSlideId: installedCliFile.slides[0]?.id, installedCliText: installedCliFile.slides[0]?.objects[0]?.text?.text, installedCliTitle: installedCliFile.presentation.title, installedCliSectionCount: installedCliFile.presentation.sections?.length, installedCliAdvanceAfterMs: installedCliFile.slides[0]?.advanceAfterMs, installedCliLink: installedCliShape?.link, installedCliField: installedCliNumber?.field, installedCliEquivalent, standard: file.profile.standard, schemaPackage: file.profile.schemaValidator.package, schemaPackageVersion: file.profile.schemaValidator.packageVersion, sdkVersion: file.profile.schemaValidator.sdkVersion, officeVersion: file.profile.schemaValidator.officeVersion, applicationEvidence: file.profile.applicationEvidence, slideId: file.slides[0]?.id, group: group.name, groupBox: group.boxEmu, shape: shape.name, shapeText: shape.text.text, shapeBox: shape.boxEmu, text: text.name, textContent: text.text.text, bullet: text.text.paragraphs[0]?.list?.type, image: image.name, mediaType: image.image.contentType, imageBox: image.boxEmu, table: tableObject.name, tableCells: tableObject.table.cells, tableMerges: tableObject.table.merges, tableColumnWidthEmu: tableObject.table.columnWidthsEmu[0], tableBytes: tableResult.pptx.byteLength, contentSizedText: contentSizedText.text.text, contentSizedTextHeightEmu: contentSizedText.boxEmu.height, contentSizedTextLineSpacingPoints: contentSizedText.text.paragraphs[0].lineSpacingPoints, nestedGroup: nestedGroup.name, nestedShape: nestedShape.name, nestedShapeText: nestedShape.text.text, nestedShapeBox: nestedShape.boxEmu, missingMetrics: missingMetrics.diagnostics[0].code, objectIds: [group.id, shape.id, text.id, image.id, nestedGroup.id, nestedShape.id], animations, transition: file.slides[0]?.transition?.kind, durationMs: file.slides[0]?.transition?.durationMs, extensions: file.extensions, forbiddenCode: forbidden.diagnostics[0]?.code, schemaGate: schemaIssue.code, schemaPart: schemaIssue.part, schemaXPath: schemaIssue.xpath, bytes: result.pptx.byteLength, contentSizedBytes: contentSizedResult.pptx.byteLength, embeddedFontPartBytes: embeddedFontPart?.byteLength, embeddedFontPayloadBytes: embeddedFontPayload?.byteLength, embeddedFontFamily: fontEmbeddingFile.slides[0]?.objects[0]?.text?.paragraphs[0]?.runs[0]?.fontFamily, chartKinds: chartObjects.map(({ chart }) => chart?.types[0]), chartEmbeddedWorkbookParts: chartObjects.map(({ chart }) => chart?.embeddedWorkbook?.part), chartBytes: chartResult.pptx.byteLength, cancellationObserved, cancellationCleanups, cancellationListeners: getEventListeners(cancellationController.signal, "abort").length }));',
+      'process.stdout.write(JSON.stringify({ installedCliSlideId: installedCliFile.slides[0]?.id, installedCliText: installedCliFile.slides[0]?.objects[0]?.text?.text, installedCliTitle: installedCliFile.presentation.title, installedCliSectionCount: installedCliFile.presentation.sections?.length, installedCliAdvanceAfterMs: installedCliFile.slides[0]?.advanceAfterMs, installedCliLink: installedCliShape?.link, installedCliField: installedCliNumber?.field, installedCliShapeField: installedCliShapeNumber?.field, installedCliShapeNumber: installedCliShapeNumber?.text, installedCliEquivalent, standard: file.profile.standard, schemaPackage: file.profile.schemaValidator.package, schemaPackageVersion: file.profile.schemaValidator.packageVersion, sdkVersion: file.profile.schemaValidator.sdkVersion, officeVersion: file.profile.schemaValidator.officeVersion, applicationEvidence: file.profile.applicationEvidence, slideId: file.slides[0]?.id, group: group.name, groupBox: group.boxEmu, shape: shape.name, shapeText: shape.text.text, shapeBox: shape.boxEmu, text: text.name, textContent: text.text.text, bullet: text.text.paragraphs[0]?.list?.type, image: image.name, mediaType: image.image.contentType, imageBox: image.boxEmu, table: tableObject.name, tableCells: tableObject.table.cells, tableMerges: tableObject.table.merges, tableColumnWidthEmu: tableObject.table.columnWidthsEmu[0], tableBytes: tableResult.pptx.byteLength, contentSizedText: contentSizedText.text.text, contentSizedTextHeightEmu: contentSizedText.boxEmu.height, contentSizedTextLineSpacingPoints: contentSizedText.text.paragraphs[0].lineSpacingPoints, nestedGroup: nestedGroup.name, nestedShape: nestedShape.name, nestedShapeText: nestedShape.text.text, nestedShapeBox: nestedShape.boxEmu, missingMetrics: missingMetrics.diagnostics[0].code, objectIds: [group.id, shape.id, text.id, image.id, nestedGroup.id, nestedShape.id], animations, transition: file.slides[0]?.transition?.kind, durationMs: file.slides[0]?.transition?.durationMs, extensions: file.extensions, forbiddenCode: forbidden.diagnostics[0]?.code, schemaGate: schemaIssue.code, schemaPart: schemaIssue.part, schemaXPath: schemaIssue.xpath, bytes: result.pptx.byteLength, contentSizedBytes: contentSizedResult.pptx.byteLength, embeddedFontPartBytes: embeddedFontPart?.byteLength, embeddedFontPayloadBytes: embeddedFontPayload?.byteLength, embeddedFontFamily: fontEmbeddingFile.slides[0]?.objects[0]?.text?.paragraphs[0]?.runs[0]?.fontFamily, chartKinds: chartObjects.map(({ chart }) => chart?.types[0]), chartEmbeddedWorkbookParts: chartObjects.map(({ chart }) => chart?.embeddedWorkbook?.part), chartBytes: chartResult.pptx.byteLength, cancellationObserved, cancellationCleanups, cancellationListeners: getEventListeners(cancellationController.signal, "abort").length }));',
     ].join("\n"),
   );
   const cropLoader = join(temporaryDirectory, "reject-text-box.mjs");
@@ -453,19 +456,20 @@ try {
     [
       'import { createElement } from "react";',
       'import { BuildError, createBuilder } from "@react-pptx/core";',
-      'import { Text as TextDeclaration } from "@react-pptx/capabilities/text-elements";',
+      'import { P, SlideNumber, Text as TextDeclaration } from "@react-pptx/capabilities/text-elements";',
       'import { Cell, Row, Table, tableCapability } from "@react-pptx/capabilities/table";',
       'import { Deck, Shape, Slide, shapeCapability } from "@react-pptx/react-pptx/shape";',
       'import { validatePptx } from "@react-pptx/validation";',
       "const build = createBuilder([shapeCapability, tableCapability]);",
-      'const result = await build(createElement(Deck, { width: 120, height: 96 }, createElement(Slide, { slideId: "installed-cropped" }, createElement(Shape, { testId: "installed-shape-text", x: 0, y: 0, width: 90, height: 30, text: "Installed shape text" }), createElement(Table, { testId: "installed-table", x: 0, y: 32, columns: [120], style: { fontSize: 14 } }, createElement(Row, { style: { height: 24 } }, createElement(Cell, null, "Installed table"))))));',
+      'const result = await build(createElement(Deck, { width: 120, height: 96 }, createElement(Slide, { slideId: "installed-cropped" }, createElement(Shape, { testId: "installed-shape-text", x: 0, y: 0, width: 90, height: 30, text: "Installed shape text" }), createElement(Shape, { testId: "installed-shape-number", x: 0, y: 32, width: 90, height: 24 }, createElement(P, null, "Page ", createElement(SlideNumber, null))), createElement(Table, { testId: "installed-table", x: 0, y: 64, columns: [120], style: { fontSize: 14 } }, createElement(Row, { style: { height: 24 } }, createElement(Cell, null, "Installed table"))))));',
       "const file = await validatePptx(result.pptx);",
-      'if (file.errors.length !== 0 || file.slides[0]?.objects[0]?.text?.text !== "Installed shape text" || file.slides[0]?.objects[1]?.kind !== "table" || file.slides[0]?.objects[1]?.table?.cells[0]?.[0] !== "Installed table") throw new Error(JSON.stringify(file.errors));',
+      "const shapeField = file.slides[0]?.objects[1]?.text?.paragraphs[0]?.runs[1];",
+      'if (file.errors.length !== 0 || file.slides[0]?.objects[0]?.text?.text !== "Installed shape text" || file.slides[0]?.objects[1]?.text?.text !== "Page 1" || shapeField?.field !== "slidenum" || shapeField.text !== "1" || file.slides[0]?.objects[2]?.kind !== "table" || file.slides[0]?.objects[2]?.table?.cells[0]?.[0] !== "Installed table") throw new Error(JSON.stringify(file.errors));',
       'function NestedText() { return createElement(TextDeclaration, { testId: "missing-installed-text", x: 0, y: 32, width: 90, height: 30 }, "not registered"); }',
       "let missingText;",
       'try { await build(createElement(Deck, {}, createElement(Slide, { slideId: "nested" }, createElement(NestedText)))); } catch (error) { missingText = error; }',
       'if (!(missingText instanceof BuildError) || missingText.diagnostics[0]?.code !== "missing-capability" || missingText.diagnostics[0]?.path !== "deck/slide[nested]/text[missing-installed-text]") throw new Error("installed nested Text did not report the cropped capability");',
-      "process.stdout.write(JSON.stringify({ shapeText: file.slides[0]?.objects[0]?.text?.text, tableKind: file.slides[0]?.objects[1]?.kind, tableText: file.slides[0]?.objects[1]?.table?.cells[0]?.[0], missingCode: missingText.diagnostics[0]?.code, missingPath: missingText.diagnostics[0]?.path, textBoxImplementationLoaded: false }));",
+      "process.stdout.write(JSON.stringify({ shapeText: file.slides[0]?.objects[0]?.text?.text, shapeField: shapeField.field, shapeFieldText: shapeField.text, tableKind: file.slides[0]?.objects[2]?.kind, tableText: file.slides[0]?.objects[2]?.table?.cells[0]?.[0], missingCode: missingText.diagnostics[0]?.code, missingPath: missingText.diagnostics[0]?.path, textBoxImplementationLoaded: false }));",
     ].join("\n"),
   );
   const devtoolsSentinel = join(temporaryDirectory, "devtools-sentinel.mjs");
@@ -560,6 +564,8 @@ try {
     readonly installedCliAdvanceAfterMs?: number;
     readonly installedCliLink?: { readonly slideId?: string };
     readonly installedCliField?: string;
+    readonly installedCliShapeField?: string;
+    readonly installedCliShapeNumber?: string;
     readonly embeddedFontPartBytes?: number;
     readonly embeddedFontPayloadBytes?: number;
     readonly embeddedFontFamily?: string;
@@ -572,6 +578,8 @@ try {
     summary.installedCliAdvanceAfterMs !== 1500 ||
     summary.installedCliLink?.slideId !== "target-cli" ||
     summary.installedCliField !== "slidenum" ||
+    summary.installedCliShapeField !== "slidenum" ||
+    summary.installedCliShapeNumber !== "1" ||
     summary.installedCliEquivalent !== true ||
     summary.standard !== "ECMA-376 5th edition Transitional" ||
     summary.schemaPackage !== "@ooxml-tools/validate" ||
@@ -674,6 +682,8 @@ try {
   );
   const cropped = JSON.parse(croppedText) as {
     readonly shapeText?: string;
+    readonly shapeField?: string;
+    readonly shapeFieldText?: string;
     readonly tableKind?: string;
     readonly tableText?: string;
     readonly missingCode?: string;
@@ -682,6 +692,8 @@ try {
   };
   if (
     cropped.shapeText !== "Installed shape text" ||
+    cropped.shapeField !== "slidenum" ||
+    cropped.shapeFieldText !== "1" ||
     cropped.tableKind !== "table" ||
     cropped.tableText !== "Installed table" ||
     cropped.missingCode !== "missing-capability" ||

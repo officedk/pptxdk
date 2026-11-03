@@ -499,7 +499,15 @@ function timingXml(steps: readonly MotionPlanStep[]): string {
     for (const effect of step.effects) {
       const timed = effect as TimingEffect;
       if (timed.targetTextBody || timed.target.range?.type === "chart") {
-        buildTargets.set(timed.target.id, timed);
+        const previous = buildTargets.get(timed.target.id);
+        // 原生构建粒度属于整个文字对象，整体效果不能覆盖逐段构建要求。
+        buildTargets.set(
+          timed.target.id,
+          timed.targetTextBody &&
+            (timed.by === "paragraph" || previous?.by === "paragraph")
+            ? { ...timed, by: "paragraph" }
+            : timed,
+        );
       }
     }
   }

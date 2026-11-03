@@ -42,6 +42,155 @@ const png = new Uint8Array(
 );
 
 describe("对象动画", () => {
+  it("段落效果与整体效果并存时保留段落构建且不改变效果顺序", async () => {
+    const cases: readonly {
+      readonly testId: string;
+      readonly paragraphs: readonly string[];
+      readonly paragraphEffectFirst: boolean;
+    }[] = [
+      {
+        testId: "mixed-one-paragraph",
+        paragraphs: ["一段文字😀"],
+        paragraphEffectFirst: true,
+      },
+      {
+        testId: "mixed-two-paragraphs",
+        paragraphs: ["第一段😀", "第二段"],
+        paragraphEffectFirst: false,
+      },
+    ];
+
+    for (const { testId, paragraphs, paragraphEffectFirst } of cases) {
+      const paragraphEffect = fade({ by: "paragraph", duration: 100 });
+      const wholeEffect = fly({ duration: 1000 });
+      const enter = paragraphEffectFirst
+        ? [paragraphEffect, wholeEffect]
+        : [wholeEffect, paragraphEffect];
+      const children =
+        paragraphs.length === 1
+          ? [paragraphs[0]]
+          : paragraphs.map((paragraph, index) =>
+              createElement(P, { key: `${testId}-${index}` }, paragraph),
+            );
+      const result = await build(
+        createElement(
+          Deck,
+          { width: 320, height: 180 },
+          createElement(
+            Slide,
+            { slideId: testId },
+            createElement(
+              Text,
+              {
+                testId,
+                x: 0,
+                y: 0,
+                width: 200,
+                height: 100,
+                enter,
+              },
+              ...children,
+            ),
+          ),
+        ),
+      );
+      const target = result.report.slides[0]?.objects[0];
+      assert.ok(target);
+      const motion = result.report.slides[0]?.capabilities?.[
+        "motion"
+      ] as MotionObservation;
+      assert.deepEqual(
+        motion.steps[0]?.effects.map(
+          ({ target: effectTarget, preset, durationMs, by }) => [
+            effectTarget.testId,
+            preset,
+            durationMs,
+            by,
+            effectTarget.range,
+          ],
+        ),
+        paragraphEffectFirst
+          ? [
+              [
+                testId,
+                "fade",
+                100,
+                "paragraph",
+                { type: "paragraph", start: 0, end: 0 },
+              ],
+              [testId, "fly", 1000, undefined, undefined],
+            ]
+          : [
+              [testId, "fly", 1000, undefined, undefined],
+              [
+                testId,
+                "fade",
+                100,
+                "paragraph",
+                { type: "paragraph", start: 0, end: 0 },
+              ],
+              [
+                testId,
+                "fade",
+                100,
+                "paragraph",
+                { type: "paragraph", start: 1, end: 1 },
+              ],
+            ],
+      );
+
+      const file = await validatePptx(result.pptx);
+      assert.deepEqual(file.errors, []);
+      assert.equal(
+        file.slides[0]?.objects[0]?.text?.paragraphs.length,
+        paragraphs.length,
+      );
+      assert.deepEqual(
+        file.slides[0]?.animations?.[0]?.effects.map(
+          ({ preset, durationMs, targetRange, nativeBuild }) => [
+            preset,
+            durationMs,
+            targetRange,
+            nativeBuild,
+          ],
+        ),
+        paragraphEffectFirst
+          ? [
+              [
+                "fade",
+                100,
+                { type: "paragraph", start: 0, end: 0 },
+                "paragraph",
+              ],
+              ["fly", 1000, undefined, undefined],
+            ]
+          : [
+              ["fly", 1000, undefined, undefined],
+              [
+                "fade",
+                100,
+                { type: "paragraph", start: 0, end: 0 },
+                "paragraph",
+              ],
+              [
+                "fade",
+                100,
+                { type: "paragraph", start: 1, end: 1 },
+                "paragraph",
+              ],
+            ],
+      );
+
+      const slidePart = unzipSync(result.pptx)["ppt/slides/slide1.xml"];
+      assert.ok(slidePart);
+      assert.ok(
+        strFromU8(slidePart).includes(
+          `<p:bldP spid="${target.id}" grpId="0" build="p"></p:bldP>`,
+        ),
+      );
+    }
+  });
+
   it("按原生段落范围逐段生成文字效果并从同次文件读回", async () => {
     const result = await build(
       createElement(

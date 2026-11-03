@@ -76,37 +76,86 @@ describe("School 参考页面", () => {
       ],
       [0, 0, 640, 720, 640, 0, 640, 720],
     );
-    assert.deepEqual(
-      [
-        [
-          layout(agendaLayouts, "school-day-1").x,
-          layout(agendaLayouts, "school-day-1").y,
-        ],
-        [
-          layout(agendaLayouts, "school-day-7").x,
-          layout(agendaLayouts, "school-day-7").y,
-        ],
-        [
-          layout(agendaLayouts, "school-day-17").x,
-          layout(agendaLayouts, "school-day-17").y,
-        ],
-        [
-          layout(agendaLayouts, "school-day-19").x,
-          layout(agendaLayouts, "school-day-19").y,
-        ],
-      ],
-      [
-        [275.6, 44],
-        [206.7, 86.6],
-        [413.4, 129.2],
-        [68.9, 171.8],
-      ],
-    );
-
     const servicesSlide = file.slides[0];
     const agendaSlide = file.slides[1];
     assert.ok(servicesSlide);
     assert.ok(agendaSlide);
+
+    const agendaFileObjects = flattenObjects(agendaSlide.objects);
+    const fileBox = (name: string) => {
+      const object = agendaFileObjects.find(
+        (candidate) => candidate.name === name,
+      );
+      assert.ok(object, `独立读取结果缺少对象 ${name}`);
+      return {
+        x: object.boxEmu.x / 9525,
+        y: object.boxEmu.y / 9525,
+        width: object.boxEmu.width / 9525,
+        height: object.boxEmu.height / 9525,
+      };
+    };
+    const month = fileBox("school-calendar-month");
+    const weekdays = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"].map(
+      (weekday) => fileBox(`school-weekday-${weekday}`),
+    );
+    const sunday = weekdays[0];
+    const saturday = weekdays[6];
+    const firstDay = fileBox("school-day-1-label");
+    assert.ok(sunday);
+    assert.ok(saturday);
+    assert.ok(Math.abs(firstDay.x - 348.652) < 5);
+    assert.ok(Math.abs(firstDay.y - 319.567) < 5);
+    assert.ok(month.y + month.height < sunday.y);
+    assert.ok(sunday.x > 60 && sunday.x < 90);
+    assert.ok(sunday.y > 260 && sunday.y < 290);
+    assert.ok(Math.abs(sunday.x + (7 * sunday.width) / 2 - 320) < 16);
+    const calendarPanel = layout(agendaLayouts, "school-calendar");
+    assert.ok(sunday.x >= calendarPanel.x);
+    assert.ok(
+      saturday.x + saturday.width <= calendarPanel.x + calendarPanel.width,
+    );
+    const lastDay = fileBox("school-day-31-label");
+    assert.ok(
+      lastDay.y + lastDay.height <= calendarPanel.y + calendarPanel.height,
+    );
+    for (const [column, weekday] of weekdays.entries()) {
+      assert.ok(weekday);
+      assert.ok(Math.abs(weekday.x - (sunday.x + column * sunday.width)) < 1);
+      assert.ok(Math.abs(weekday.y - sunday.y) < 1);
+      assert.ok(Math.abs(weekday.width - sunday.width) < 0.1);
+    }
+    assert.ok(Math.abs(firstDay.x - (sunday.x + 4 * sunday.width)) < 1);
+    assert.ok(Math.abs(firstDay.y - (sunday.y + sunday.height)) < 1);
+
+    const octoberFirstColumn = 4;
+    for (let day = 1; day <= 31; day += 1) {
+      const label = fileBox(`school-day-${day}-label`);
+      const calendarOffset = octoberFirstColumn + day - 1;
+      const weekday = weekdays[calendarOffset % 7];
+      assert.ok(weekday);
+      assert.ok(Math.abs(label.x - weekday.x) < 1);
+      assert.ok(
+        Math.abs(
+          label.y -
+            (sunday.y + sunday.height + Math.floor(calendarOffset / 7) * 42.6),
+        ) < 1,
+      );
+    }
+    for (const day of [7, 17, 19]) {
+      const label = fileBox(`school-day-${day}-label`);
+      const highlight = fileBox(`school-day-${day}-highlight`);
+      assert.ok(
+        Math.abs(
+          label.x + label.width / 2 - (highlight.x + highlight.width / 2),
+        ) < 1,
+      );
+      assert.ok(
+        Math.abs(
+          label.y + label.height / 2 - (highlight.y + highlight.height / 2),
+        ) < 1,
+      );
+    }
+
     const servicesText = slideText(servicesSlide.objects);
     const agendaText = slideText(agendaSlide.objects);
     assert.ok(servicesText.includes("Our Services"));

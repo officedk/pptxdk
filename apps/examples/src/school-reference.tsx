@@ -473,7 +473,10 @@ function Calendar({
       </Text>
       <Box
         style={{
-          marginTop: 27.6,
+          // 以日历面板为定位祖先，保留原稿的星期列起点和月份下方关系。
+          position: "absolute",
+          left: 73.1,
+          top: 276.1,
           display: "grid",
           gridTemplateColumns: "repeat(7, 68.9px)",
           gridTemplateRows: "44px repeat(5, 42.6px)",

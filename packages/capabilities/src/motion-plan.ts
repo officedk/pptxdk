@@ -93,6 +93,8 @@ export type MotionPlanNode =
       readonly id: string;
       readonly nativeStart: MotionPlanStart;
       readonly children: readonly MotionPlanNode[];
+      /** 条件集合按真实宿主的直接子项锚点放置。 */
+      readonly conditionDefinitionsBefore?: readonly MotionPlanConditionPlacement[];
     }
   | {
       readonly kind: "target";
@@ -100,6 +102,11 @@ export type MotionPlanNode =
       readonly nativeStart: MotionPlanStart;
       readonly effects: readonly ScheduledEffect[];
     };
+
+/** 计划确定的条件集合定义位置；writer 不再从消费节点推断宿主。 */
+export type MotionPlanConditionPlacement = {
+  readonly join: Extract<MotionPlanStart, { readonly kind: "condition-join" }>;
+};
 
 /** 已求解的起点形式；PPTX 写出只负责序列化，不再判断因果。 */
 export type MotionPlanStart =
@@ -109,6 +116,8 @@ export type MotionPlanStart =
       readonly kind: "condition-join";
       readonly id: string;
       readonly hostScopeId: string;
+      readonly consumerParentScopeId: string;
+      readonly beforeNodeId: string;
       readonly gates: readonly MotionPlanStartGate[];
     }
   | {
@@ -1187,6 +1196,10 @@ function motionPlan(
       string,
       Extract<MotionPlanStart, { readonly kind: "condition-join" }>
     >();
+    const conditionPlacementsByHost = new Map<
+      string,
+      MotionPlanConditionPlacement[]
+    >();
     const conditionStartsByEventId = new Map<
       string,
       {
@@ -1246,6 +1259,73 @@ function motionPlan(
       return containingScope === undefined
         ? undefined
         : directMemberForScope(host, containingScope);
+    };
+
+    const memberNodeId = (member: ScopeMember): string =>
+      member.kind === "scope"
+        ? `scope:${scopeId(member.id, scopes)}`
+        : `target:${member.id}`;
+
+    const directConsumerAtHost = (
+      candidateHost: ScopeState,
+      actualParent: ScopeState,
+      consumer: ScopeMember,
+    ): ScopeMember | undefined => {
+      if (
+        candidateHost.declaration.identity === actualParent.declaration.identity
+      ) {
+        return consumer;
+      }
+      let current =
+        consumer.kind === "scope" ? scopes.get(consumer.id) : actualParent;
+      while (
+        current !== undefined &&
+        current.declaration.parent !== candidateHost.declaration.identity
+      ) {
+        const parentId = current.declaration.parent;
+        if (parentId === undefined) return undefined;
+        current = scopes.get(parentId);
+      }
+      return current === undefined
+        ? undefined
+        : {
+            kind: "scope",
+            id: current.declaration.identity,
+            order: current.order,
+          };
+    };
+
+    const strictlyAfterParentStart = (
+      candidates: readonly TimeCandidate[],
+      parentStart: TimePoint,
+    ): boolean => {
+      if (parentStart.state === "no-natural-completion") return false;
+      if (parentStart.state === "known") {
+        return candidates.some((candidate) => {
+          const earliestTime = facts.earliestTime(
+            candidate.eventId,
+            originEventId,
+          );
+          return (
+            earliestTime !== undefined &&
+            earliestTime + candidate.offsetMs > parentStart.timeMs
+          );
+        });
+      }
+      if (parentStart.candidates.length === 0) return false;
+      // 两侧都是候选最大值；逐个父候选找到严格晚于它的完成候选即可。
+      return parentStart.candidates.every((parentCandidate) =>
+        candidates.some((candidate) => {
+          const lowerBound = facts.lowerBound(
+            parentCandidate.eventId,
+            candidate.eventId,
+          );
+          return (
+            lowerBound !== undefined &&
+            lowerBound + candidate.offsetMs - parentCandidate.offsetMs > 0
+          );
+        }),
+      );
     };
 
     const resolveNativeStart = (
@@ -1363,67 +1443,186 @@ function motionPlan(
             path,
           );
         if (hostScope === undefined || consumer === undefined) {
-          return unsupported("需要同一顺序作用域中的真实成员");
+          return unsupported("需要同一步中的真实宿主和消费成员");
         }
-        if (hostScope.declaration.mode !== "sequence") {
-          return unsupported("需要同一顺序作用域中的真实成员");
+        const candidateHosts: ScopeState[] = [];
+        let currentHost: ScopeState | undefined = hostScope;
+        while (currentHost !== undefined) {
+          candidateHosts.push(currentHost);
+          const parentId: string | undefined = currentHost.declaration.parent;
+          currentHost =
+            parentId === undefined ? undefined : scopes.get(parentId);
         }
-        const host = hostScope;
-        const consumerMember = consumer;
-        const consumerIndex = host.members.findIndex(
-          (member) =>
-            member.kind === consumerMember.kind &&
-            member.id === consumerMember.id,
-        );
-        if (consumerIndex < 0) {
-          return unsupported("无法定位实际消费成员");
-        }
-
-        const gates: MotionPlanStartGate[] = expression.candidates.map(
-          (candidate) => {
+        let lastReason = "没有能够先定义全部来源的真实宿主";
+        for (const host of candidateHosts) {
+          const consumerBranch = directConsumerAtHost(
+            host,
+            hostScope,
+            consumer,
+          );
+          if (consumerBranch === undefined) {
+            lastReason = "无法定位消费成员在候选宿主中的实际位置";
+            continue;
+          }
+          const consumerIndex = host.members.findIndex(
+            (member) =>
+              member.kind === consumerBranch.kind &&
+              member.id === consumerBranch.id,
+          );
+          if (consumerIndex < 0) {
+            lastReason = "无法定位实际消费成员";
+            continue;
+          }
+          const hostStart = resolveScopeStart(host);
+          if (hostStart.state === "no-natural-completion") {
+            lastReason = "候选宿主没有可订阅的起点";
+            continue;
+          }
+          const gates: MotionPlanStartGate[] = [];
+          let validHost = true;
+          for (const candidate of expression.candidates) {
+            let gateCandidate = candidate;
             if (
-              !Number.isSafeInteger(candidate.offsetMs) ||
-              candidate.offsetMs < 0 ||
-              candidate.offsetMs > maximumTimeNodeValue
+              candidate.eventId === parentStart.eventId &&
+              host.declaration.identity !== hostScope.declaration.identity
             ) {
-              return unsupported("完成偏移超出可写范围");
+              // 早宿主必须把消费父起点还原为相对宿主的精确来源或偏移。
+              let current = hostScope;
+              let delayMs = candidate.offsetMs;
+              let rebased = false;
+              while (
+                current.declaration.identity !== host.declaration.identity
+              ) {
+                const currentStart = scopeStartPlans.get(
+                  current.declaration.identity,
+                );
+                if (currentStart?.kind === "parent-start") {
+                  delayMs += currentStart.delayMs;
+                } else if (currentStart?.kind === "end") {
+                  const dependency = currentStart.dependency;
+                  delayMs += dependency.offsetMs;
+                  gateCandidate = {
+                    eventId: dependencyEventId(dependency),
+                    offsetMs: delayMs,
+                    dependency: dependencyAtEvent(dependency, delayMs),
+                  };
+                  rebased = true;
+                  break;
+                } else {
+                  break;
+                }
+                const parentId = current.declaration.parent;
+                const parent =
+                  parentId === undefined ? undefined : scopes.get(parentId);
+                if (parent === undefined) break;
+                current = parent;
+              }
+              if (
+                !rebased &&
+                current.declaration.identity === host.declaration.identity
+              ) {
+                gateCandidate = {
+                  eventId: hostStart.eventId,
+                  offsetMs: delayMs,
+                };
+                rebased = true;
+              }
+              if (!rebased) {
+                lastReason = "消费父起点无法相对早宿主精确表达";
+                validHost = false;
+                break;
+              }
             }
-            if (candidate.eventId === parentStart.eventId) {
-              return { kind: "parent-start", delayMs: candidate.offsetMs };
+            if (
+              !Number.isSafeInteger(gateCandidate.offsetMs) ||
+              gateCandidate.offsetMs < 0 ||
+              gateCandidate.offsetMs > maximumTimeNodeValue
+            ) {
+              lastReason = "完成偏移超出可写范围";
+              validHost = false;
+              break;
             }
-            const dependency = candidate.dependency;
+            if (gateCandidate.eventId === hostStart.eventId) {
+              gates.push({
+                kind: "parent-start",
+                delayMs: gateCandidate.offsetMs,
+              });
+              continue;
+            }
+            const dependency = gateCandidate.dependency;
             if (
               dependency === undefined ||
-              dependencyEventId(dependency) !== candidate.eventId
+              dependency.point !== "end" ||
+              dependencyEventId(dependency) !== gateCandidate.eventId
             ) {
-              return unsupported("来源不是可订阅的真实完成事件");
+              lastReason = "候选宿主起点之外的来源不是可订阅的真实完成事件";
+              validHost = false;
+              break;
             }
             const sourceIndex = directMemberForDependency(host, dependency);
-            const sourceAfterHost = facts.lowerBound(
-              parentStart.eventId,
-              candidate.eventId,
-            );
-            if (sourceIndex === undefined || sourceIndex < 0) {
-              return unsupported("来源不属于消费成员所在的顺序作用域");
+            if (sourceIndex === consumerIndex) {
+              lastReason = "来源与消费成员位于同一宿主分支，不能先于集合定义";
+              validHost = false;
+              break;
             }
-            if (sourceIndex >= consumerIndex) {
-              return unsupported("来源未先于消费成员定义");
+            if ("scopeId" in dependency) {
+              const sourceScope = [...scopes.values()].find(
+                (scope) =>
+                  scopeId(scope.declaration.identity, scopes) ===
+                  dependency.scopeId,
+              );
+              let current = host;
+              while (sourceScope !== undefined) {
+                if (
+                  current.declaration.identity ===
+                  sourceScope.declaration.identity
+                ) {
+                  lastReason = "来源整体完成会等待其内部宿主结束";
+                  validHost = false;
+                  break;
+                }
+                const parentId = current.declaration.parent;
+                if (parentId === undefined) break;
+                const parent = scopes.get(parentId);
+                if (parent === undefined) break;
+                current = parent;
+              }
+              if (!validHost) break;
             }
+            const sourceAfterHost =
+              facts.lowerBound(hostStart.eventId, gateCandidate.eventId) ??
+              (hostStart.state === "known"
+                ? (facts.earliestTime(gateCandidate.eventId, originEventId) ??
+                    Number.NEGATIVE_INFINITY) - hostStart.timeMs
+                : undefined);
             if (sourceAfterHost === undefined || sourceAfterHost <= 0) {
-              return unsupported("不能证明来源自然结束晚于集合订阅");
+              lastReason = "不能证明真实来源结束晚于候选宿主激活";
+              validHost = false;
+              break;
             }
-            return {
+            gates.push({
               kind: "end",
-              dependency: dependencyAtEvent(dependency, candidate.offsetMs),
-            };
-          },
-        );
-        return {
-          kind: "condition-join",
-          id: eventId,
-          hostScopeId: scopeId(host.declaration.identity, scopes),
-          gates,
-        };
+              dependency: dependencyAtEvent(dependency, gateCandidate.offsetMs),
+            });
+          }
+          if (!validHost) continue;
+          if (!strictlyAfterParentStart(expression.candidates, parentStart)) {
+            lastReason = "不能证明条件集合完成晚于消费成员的父作用域激活";
+            continue;
+          }
+          return {
+            kind: "condition-join",
+            id: eventId,
+            hostScopeId: scopeId(host.declaration.identity, scopes),
+            consumerParentScopeId: scopeId(
+              hostScope.declaration.identity,
+              scopes,
+            ),
+            beforeNodeId: memberNodeId(consumerBranch),
+            gates,
+          };
+        }
+        return unsupported(lastReason);
       }
       const [candidate] = expression.candidates;
       if (candidate === undefined) {
@@ -2096,26 +2295,46 @@ function motionPlan(
               id: target.id,
               order: target.order,
             });
+      const nativeStart = resolveNativeStart(
+        start,
+        parentStart,
+        target.path,
+        `target-start:${target.id}`,
+        parent,
+        parent === undefined
+          ? undefined
+          : {
+              kind: "object",
+              id: target.id,
+              order: target.order,
+            },
+      );
+      if (nativeStart.kind === "condition-join") {
+        recordConditionPlacement(nativeStart);
+      }
       return {
         kind: "target",
         targetId: target.id,
-        nativeStart: resolveNativeStart(
-          start,
-          parentStart,
-          target.path,
-          `target-start:${target.id}`,
-          parent,
-          parent === undefined
-            ? undefined
-            : {
-                kind: "object",
-                id: target.id,
-                order: target.order,
-              },
-        ),
+        nativeStart: consumerStart(nativeStart),
         effects,
       };
     };
+
+    const recordConditionPlacement = (
+      join: Extract<MotionPlanStart, { readonly kind: "condition-join" }>,
+    ): void => {
+      const placements = conditionPlacementsByHost.get(join.hostScopeId) ?? [];
+      if (placements.some(({ join: existing }) => existing.id === join.id)) {
+        return;
+      }
+      placements.push({ join });
+      conditionPlacementsByHost.set(join.hostScopeId, placements);
+    };
+
+    const consumerStart = (start: MotionPlanStart): MotionPlanStart =>
+      start.kind === "condition-join"
+        ? { kind: "condition-end", id: start.id, delayMs: 0 }
+        : start;
 
     const conditionEvent = (id: string) => `condition:${id}`;
     const nodePath = (node: MotionPlanNode): string | undefined =>
@@ -2126,6 +2345,7 @@ function motionPlan(
         : targets.get(node.targetId)?.path;
     const sortNativeRoots = (
       rootNodes: readonly MotionPlanNode[],
+      conditionDefinitionsBefore: readonly MotionPlanConditionPlacement[] = [],
     ): MotionPlanNode[] => {
       const rootDefinitions = new Map<string, number>();
       const rootReferences = rootNodes.map(
@@ -2171,12 +2391,42 @@ function motionPlan(
           }
         }
         if (node.kind === "scope") {
+          for (const placement of node.conditionDefinitionsBefore ?? []) {
+            rootDefinitions.set(conditionEvent(placement.join.id), rootIndex);
+            for (const gate of placement.join.gates) {
+              if (gate.kind === "end") {
+                rootReferences[rootIndex]?.push({
+                  id: eventSource(gate.dependency),
+                  node,
+                });
+              }
+            }
+          }
           for (const child of node.children) {
             collectRootDependencies(child, rootIndex);
           }
         }
       };
       rootNodes.forEach((node, index) => collectRootDependencies(node, index));
+
+      for (const placement of conditionDefinitionsBefore) {
+        const consumerIndex = rootNodes.findIndex(
+          (node) =>
+            (node.kind === "scope"
+              ? `scope:${node.id}`
+              : `target:${node.targetId}`) === placement.join.beforeNodeId,
+        );
+        if (consumerIndex < 0) continue;
+        rootDefinitions.set(conditionEvent(placement.join.id), consumerIndex);
+        for (const gate of placement.join.gates) {
+          if (gate.kind === "end") {
+            rootReferences[consumerIndex]?.push({
+              id: eventSource(gate.dependency),
+              node: rootNodes[consumerIndex] as MotionPlanNode,
+            });
+          }
+        }
+      }
 
       // 只调整同一组原生时间节点的序列化顺序，依赖条件本身保持不变。
       const nextRootNodes = rootNodes.map(() => new Set<number>());
@@ -2241,11 +2491,21 @@ function motionPlan(
       if (nativeStart === undefined) {
         fail("motion-plan-conflict", "作用域缺少已求解的起点", scope.path);
       }
+      if (nativeStart.kind === "condition-join") {
+        recordConditionPlacement(nativeStart);
+      }
+      const conditionDefinitionsBefore =
+        conditionPlacementsByHost.get(
+          scopeId(scope.declaration.identity, scopes),
+        ) ?? [];
       return {
         kind: "scope",
         id: scopeId(scope.declaration.identity, scopes),
-        nativeStart,
-        children: sortNativeRoots(children),
+        nativeStart: consumerStart(nativeStart),
+        children: sortNativeRoots(children, conditionDefinitionsBefore),
+        ...(conditionDefinitionsBefore.length === 0
+          ? {}
+          : { conditionDefinitionsBefore }),
       };
     };
 
@@ -2315,7 +2575,39 @@ function motionPlan(
         );
       }
       if (node.kind === "scope") {
-        for (const child of node.children) verifyNodeOrder(child);
+        const placements = node.conditionDefinitionsBefore ?? [];
+        const remaining = new Set(placements);
+        for (const child of node.children) {
+          const childId =
+            child.kind === "scope"
+              ? `scope:${child.id}`
+              : `target:${child.targetId}`;
+          for (const placement of placements) {
+            if (placement.join.beforeNodeId !== childId) continue;
+            for (const gate of placement.join.gates) {
+              if (gate.kind === "end") {
+                verifyEventReference(eventSource(gate.dependency), node);
+              }
+            }
+            if (definedConditions.has(conditionEvent(placement.join.id))) {
+              fail(
+                "motion-plan-conflict",
+                "同一步重复定义条件集合",
+                nodePath(node),
+              );
+            }
+            definedConditions.add(conditionEvent(placement.join.id));
+            remaining.delete(placement);
+          }
+          verifyNodeOrder(child);
+        }
+        if (remaining.size > 0) {
+          fail(
+            "motion-plan-conflict",
+            "条件集合宿主缺少实际插入位置",
+            nodePath(node),
+          );
+        }
       }
     };
     for (const node of nodes) verifyNodeOrder(node);

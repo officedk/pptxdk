@@ -58,7 +58,25 @@ export type MotionPlanStep = MotionStepObservation & {
   readonly key: string;
   readonly order: number;
   readonly effects: ScheduledEffect[];
+  readonly nodes: readonly MotionPlanNode[];
 };
+
+/** 真实时序包含树；scope 和多效果对象节点会成为原生并行容器。 */
+export type MotionPlanNode =
+  | {
+      readonly kind: "scope";
+      readonly id: string;
+      readonly startMs?: number;
+      readonly startAfter?: MotionStartDependency;
+      readonly children: readonly MotionPlanNode[];
+    }
+  | {
+      readonly kind: "target";
+      readonly targetId: number;
+      readonly startMs?: number;
+      readonly startAfter?: MotionStartDependency;
+      readonly effects: readonly ScheduledEffect[];
+    };
 
 /** The single slide-local result consumed by both the writer and build report. */
 export type MotionPlan = {
@@ -172,6 +190,19 @@ function known(timeMs: number): TimePoint {
   return { state: "known", timeMs };
 }
 
+function eventSource(event: MotionStartDependency): string {
+  if ("scopeId" in event) return `scope:${event.scopeId}`;
+  if ("group" in event) return `target:${event.targetId}`;
+  return `effect:${event.targetId}:${event.effectIndex}:${event.partIndex ?? ""}`;
+}
+
+function sameEvent(
+  left: MotionStartDependency,
+  right: MotionStartDependency,
+): boolean {
+  return eventSource(left) === eventSource(right);
+}
+
 function add(time: TimePoint, offsetMs: number): TimePoint {
   if (time.state === "known") return known(time.timeMs + offsetMs);
   if (time.state === "unknown" && time.event !== undefined) {
@@ -194,14 +225,36 @@ function maximum(times: readonly TimePoint[]): TimePoint {
         time.state === "known",
     );
     const onlyZeroBoundary = knownTimes.every(({ timeMs }) => timeMs === 0);
-    const [onlyUnknown] = unknownTimes;
+    const [firstUnknown] = unknownTimes;
+    const events = unknownTimes.map((time) =>
+      time.state === "unknown" ? time.event : undefined,
+    );
+    const sharedEvent =
+      events.length > 0 &&
+      events.every(
+        (event): event is MotionStartDependency =>
+          event !== undefined &&
+          firstUnknown?.state === "unknown" &&
+          firstUnknown.event !== undefined &&
+          sameEvent(event, firstUnknown.event),
+      );
+    if (sharedEvent && onlyZeroBoundary) {
+      const event = events.reduce<MotionStartDependency | undefined>(
+        (latest, current) =>
+          latest === undefined || current.offsetMs > latest.offsetMs
+            ? current
+            : latest,
+        undefined,
+      );
+      return { state: "unknown", ...(event === undefined ? {} : { event }) };
+    }
     return {
       state: "unknown",
       ...(unknownTimes.length === 1 &&
       onlyZeroBoundary &&
-      onlyUnknown?.state === "unknown" &&
-      onlyUnknown.event !== undefined
-        ? { event: onlyUnknown.event }
+      firstUnknown?.state === "unknown" &&
+      firstUnknown.event !== undefined
+        ? { event: firstUnknown.event }
         : {}),
     };
   }
@@ -216,6 +269,7 @@ function maximum(times: readonly TimePoint[]): TimePoint {
 function completion(
   start: TimePoint,
   children: readonly TimePoint[],
+  event: MotionStartDependency,
 ): TimePoint {
   if (
     start.state === "no-natural-completion" ||
@@ -223,11 +277,9 @@ function completion(
   ) {
     return { state: "no-natural-completion" };
   }
-  if (children.length === 1) return children[0] ?? start;
-  if (children.some(({ state }) => state === "unknown")) {
-    return { state: "unknown" };
-  }
-  return maximum([start, ...children]);
+  if (children.length === 0) return start;
+  const end = maximum([start, ...children]);
+  return end.state === "unknown" ? { state: "unknown", event } : end;
 }
 
 function expansionFor(
@@ -620,6 +672,7 @@ function motionPlan(
   }
 
   const allScheduledEffects = new Map<string, ScheduledEffect[]>();
+  const allStepNodes = new Map<string, MotionPlanNode[]>();
   const addStepEffect = (effect: ScheduledEffect) => {
     const items = allScheduledEffects.get(effect.stepKey) ?? [];
     items.push(effect);
@@ -721,9 +774,26 @@ function motionPlan(
           getExpansion(target, effectIndex),
         ),
       );
-      return effectEnds.length === 1
-        ? (effectEnds[0] ?? base)
-        : maximum(effectEnds);
+      const animationNodeCount = target.value.effects.reduce(
+        (count, _effect, effectIndex) => {
+          const expansion = getExpansion(target, effectIndex);
+          return count + (expansion.type === "parts" ? expansion.count : 1);
+        },
+        0,
+      );
+      const end =
+        effectEnds.length === 1 ? (effectEnds[0] ?? base) : maximum(effectEnds);
+      return end.state === "unknown" && animationNodeCount > 1
+        ? {
+            state: "unknown",
+            event: {
+              targetId: target.id,
+              group: "effects",
+              point: "end",
+              offsetMs: 0,
+            },
+          }
+        : end;
     };
 
     const memberStart = (
@@ -803,7 +873,11 @@ function motionPlan(
       // 非活动作用域仍可提供自身边界时刻，但不延长父作用域的整体完成。
       const members = activeChildren(scope);
       const memberEnds = members.map((member) => memberEnd(scope, member));
-      const end = completion(start, memberEnds);
+      const end = completion(start, memberEnds, {
+        scopeId: scopeId(scope.declaration.identity, scopes),
+        point: "end",
+        offsetMs: 0,
+      });
       ends.set(scope.declaration.identity, end);
       resolvingEnds.delete(scope.declaration.identity);
       return end;
@@ -970,6 +1044,77 @@ function motionPlan(
       }
       scheduledObjects.add(target.id);
     }
+
+    const targetNode = (
+      target: TargetState,
+      parent?: ScopeState,
+    ): MotionPlanNode | undefined => {
+      const effects = (allScheduledEffects.get(key) ?? []).filter(
+        (effect) => effect.target.id === target.id,
+      );
+      if (effects.length === 0) return undefined;
+      const start =
+        parent === undefined
+          ? known(0)
+          : memberStart(parent, {
+              kind: "object",
+              id: target.id,
+              order: target.order,
+            });
+      return {
+        kind: "target",
+        targetId: target.id,
+        ...(start.state === "known" ? { startMs: start.timeMs } : {}),
+        ...(start.state === "unknown" && start.event !== undefined
+          ? { startAfter: start.event }
+          : {}),
+        effects,
+      };
+    };
+
+    const scopeNode = (scope: ScopeState): MotionPlanNode | undefined => {
+      const children = activeChildren(scope).flatMap((member) => {
+        if (member.kind === "scope") {
+          const childScope = scopes.get(member.id);
+          if (childScope === undefined) {
+            fail("missing-scope", "编排作用域的成员声明不存在", scope.path);
+          }
+          const node = scopeNode(childScope);
+          return node === undefined ? [] : [node];
+        }
+        const target = targets.get(member.id);
+        if (target === undefined) {
+          fail("invalid-motion", "编排作用域的对象成员声明不存在", scope.path);
+        }
+        const node = targetNode(target, scope);
+        return node === undefined ? [] : [node];
+      });
+      if (children.length === 0) return undefined;
+      const start = resolveScopeStart(scope);
+      return {
+        kind: "scope",
+        id: scopeId(scope.declaration.identity, scopes),
+        ...(start.state === "known" ? { startMs: start.timeMs } : {}),
+        ...(start.state === "unknown" && start.event !== undefined
+          ? { startAfter: start.event }
+          : {}),
+        children,
+      };
+    };
+
+    const nodes = roots.flatMap((member) => {
+      if (member.kind === "scope") {
+        const scope = scopes.get(member.id);
+        if (scope === undefined || !scopeSteps(scope).includes(key)) return [];
+        const node = scopeNode(scope);
+        return node === undefined ? [] : [node];
+      }
+      const target = targets.get(member.id);
+      if (target === undefined || target.stepKey !== key) return [];
+      const node = targetNode(target);
+      return node === undefined ? [] : [node];
+    });
+    allStepNodes.set(key, nodes);
   }
 
   const plans = [...stepStates.values()]
@@ -994,6 +1139,7 @@ function motionPlan(
         ...(step.number === undefined ? {} : { number: step.number }),
         order: step.order,
         effects,
+        nodes: allStepNodes.get(step.key) ?? [],
       } satisfies MotionPlanStep;
     });
 

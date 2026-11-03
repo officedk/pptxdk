@@ -44,13 +44,26 @@ export type MotionTargetRange =
       readonly categoryIndex: number;
     };
 
-export type MotionStartDependency = {
-  readonly targetId: number;
-  readonly effectIndex: number;
-  readonly partIndex?: number;
-  readonly point: "end";
-  readonly offsetMs: number;
-};
+/** 未知起点指向效果、同对象效果集合或真实作用域完成事件。 */
+export type MotionStartDependency =
+  | {
+      readonly targetId: number;
+      readonly effectIndex: number;
+      readonly partIndex?: number;
+      readonly point: "end";
+      readonly offsetMs: number;
+    }
+  | {
+      readonly targetId: number;
+      readonly group: "effects";
+      readonly point: "end";
+      readonly offsetMs: number;
+    }
+  | {
+      readonly scopeId: string;
+      readonly point: "end";
+      readonly offsetMs: number;
+    };
 
 export type Effect = {
   readonly type: "effect";

@@ -12,10 +12,12 @@ import {
   Shape,
   Slide,
   Step,
+  Text,
   useMotionScope,
   type MotionObservation,
 } from "@react-pptx/react-pptx";
 import { validatePptx } from "@react-pptx/validation";
+import { strFromU8, strToU8, unzipSync, zipSync } from "fflate";
 import { createElement, Fragment } from "react";
 import { describe, it } from "vitest";
 
@@ -26,6 +28,25 @@ function movingShape(testId: string, duration: number) {
     y: 0,
     width: 20,
     height: 20,
+    enter: fade({ duration }),
+  });
+}
+
+function observedShape(
+  testId: string,
+  text: string,
+  y: number,
+  fill: string,
+  duration: number,
+) {
+  return createElement(Shape, {
+    testId,
+    x: 10,
+    y,
+    width: 280,
+    height: 24,
+    fill,
+    text,
     enter: fade({ duration }),
   });
 }
@@ -211,6 +232,87 @@ function SequencedScopes() {
           movingShape("parallel-long", 700),
         ),
         movingShape("last", 100),
+      ),
+    ),
+  );
+}
+
+function UnknownCompletionTree() {
+  const outer = useMotionScope();
+  const chain = useMotionScope();
+  const inner = useMotionScope();
+  const selfStarted = useMotionScope();
+  const follower = useMotionScope();
+  return createElement(
+    Deck,
+    { width: 320, height: 180 },
+    createElement(
+      Slide,
+      { slideId: "unknown-completion-tree" },
+      createElement(
+        MotionScope,
+        { scope: outer },
+        createElement(
+          MotionScope,
+          { scope: chain, mode: "sequence" },
+          createElement(
+            MotionScope,
+            { scope: inner, mode: "stagger", each: 1000 },
+            createElement(
+              Text,
+              {
+                testId: "long-first",
+                x: 10,
+                y: 8,
+                width: 300,
+                height: 40,
+                enter: fade({ by: "letter", duration: 1000, intervalMs: 500 }),
+              },
+              "ABCDEFGHIJKLMN",
+            ),
+            createElement(
+              Text,
+              {
+                testId: "short-late",
+                x: 10,
+                y: 45,
+                width: 300,
+                height: 40,
+                enter: fade({ by: "letter", duration: 1000, intervalMs: 500 }),
+              },
+              "AB",
+            ),
+          ),
+          observedShape(
+            "finite-after-unknown",
+            "D: starts after inner.end",
+            122,
+            "#ED7D31",
+            100,
+          ),
+        ),
+        createElement(
+          MotionScope,
+          { scope: selfStarted, startAt: after(chain.start, 4000) },
+          observedShape(
+            "self-started-finite",
+            "Self start +4000 ms (chain.start)",
+            92,
+            "#4472C4",
+            100,
+          ),
+        ),
+      ),
+      createElement(
+        MotionScope,
+        { scope: follower, startAt: outer.end },
+        observedShape(
+          "after-unknown-join",
+          "Outer follower: after outer.end",
+          150,
+          "#70AD47",
+          50,
+        ),
       ),
     ),
   );
@@ -575,6 +677,177 @@ describe("组件编排作用域", () => {
         ["parallel-long", 200],
         ["last", 900],
       ],
+    );
+  });
+
+  it("未知时长的嵌套成员完成后才启动后继，并让外层等待全部成员", async () => {
+    const result = await build(createElement(UnknownCompletionTree));
+    const slide = result.report.slides[0];
+    const motion = slide?.capabilities?.["motion"] as MotionObservation;
+
+    assert.deepEqual(
+      motion.steps[0]?.effects.map(({ target, startMs, endMs }) => [
+        target.testId,
+        startMs,
+        endMs,
+      ]),
+      [
+        ["long-first", 0, undefined],
+        ["short-late", 1000, undefined],
+        ["self-started-finite", 4000, 4100],
+        ["finite-after-unknown", undefined, undefined],
+        ["after-unknown-join", undefined, undefined],
+      ],
+    );
+    const objectId = (testId: string) =>
+      slide?.objects.find((object) => object.testId === testId)?.id;
+    const containsObject = (scopeId: string | undefined, testId: string) =>
+      motion.scopes
+        ?.find(({ id }) => id === scopeId)
+        ?.members.some(
+          (member) =>
+            member.kind === "object" && member.id === objectId(testId),
+        );
+    const innerScope = motion.scopes?.find(
+      ({ members }) =>
+        members.some(
+          (member) =>
+            member.kind === "object" && member.id === objectId("long-first"),
+        ) &&
+        members.some(
+          (member) =>
+            member.kind === "object" && member.id === objectId("short-late"),
+        ),
+    );
+    const chainScope = motion.scopes?.find(
+      ({ members }) =>
+        members.some(
+          (member) => member.kind === "scope" && member.id === innerScope?.id,
+        ) &&
+        members.some(
+          (member) =>
+            member.kind === "object" &&
+            member.id === objectId("finite-after-unknown"),
+        ),
+    );
+    const outerScope = motion.scopes?.find(
+      ({ members }) =>
+        members.some(
+          (member) => member.kind === "scope" && member.id === chainScope?.id,
+        ) &&
+        members.some(
+          (member) =>
+            member.kind === "scope" &&
+            containsObject(member.id, "self-started-finite"),
+        ),
+    );
+    assert.deepEqual(
+      [
+        innerScope?.completion,
+        innerScope?.endMs,
+        chainScope?.completion,
+        chainScope?.endMs,
+      ],
+      ["unknown", undefined, "unknown", undefined],
+    );
+    const finiteFollower = motion.steps[0]?.effects.find(
+      ({ target }) => target.testId === "finite-after-unknown",
+    );
+    const outerWaiter = motion.steps[0]?.effects.find(
+      ({ target }) => target.testId === "after-unknown-join",
+    );
+    assert.equal(
+      finiteFollower?.startAfter &&
+        "scopeId" in finiteFollower.startAfter &&
+        finiteFollower.startAfter.scopeId,
+      innerScope?.id,
+    );
+    assert.deepEqual(
+      [outerScope?.completion, outerScope?.endMs],
+      ["unknown", undefined],
+    );
+    assert.equal(
+      outerWaiter?.startAfter &&
+        "scopeId" in outerWaiter.startAfter &&
+        outerWaiter.startAfter.scopeId,
+      outerScope?.id,
+    );
+    const file = await validatePptx(result.pptx);
+    assert.deepEqual(file.errors, []);
+    assert.deepEqual(file.extensions, []);
+    const fileSlide = file.slides[0];
+    const fileEffects = fileSlide?.animations?.[0]?.effects ?? [];
+    assert.equal(fileEffects.length, 5);
+    const fileEffect = (testId: string) =>
+      fileEffects.find(({ targetId }) => targetId === objectId(testId));
+    for (const testId of ["long-first", "short-late"]) {
+      assert.equal(fileEffect(testId)?.by, "letter");
+      assert.equal(fileEffect(testId)?.completion, "unknown");
+    }
+
+    const longEffect = fileEffect("long-first");
+    const shortEffect = fileEffect("short-late");
+    const finiteAfterUnknown = fileEffect("finite-after-unknown");
+    const outerFollower = fileEffect("after-unknown-join");
+    const containers = fileSlide?.animationContainers ?? [];
+    const inner = containers.find(
+      ({ children, endSync }) =>
+        endSync === "all" &&
+        children.some(
+          ({ kind, timingId }) =>
+            kind === "effect" && timingId === longEffect?.timingId,
+        ) &&
+        children.some(
+          ({ kind, timingId }) =>
+            kind === "effect" && timingId === shortEffect?.timingId,
+        ),
+    );
+    assert.equal(inner?.children.length, 2);
+    assert.equal(inner?.durationMs, undefined);
+    assert.equal(finiteAfterUnknown?.startAfter?.timingId, inner?.timingId);
+    const chain = containers.find(
+      ({ children, endSync }) =>
+        endSync === "all" &&
+        children.some(
+          ({ kind, timingId }) =>
+            kind === "container" && timingId === inner?.timingId,
+        ) &&
+        children.some(
+          ({ kind, timingId }) =>
+            kind === "effect" && timingId === finiteAfterUnknown?.timingId,
+        ),
+    );
+    assert.ok(chain);
+    assert.equal(chain.durationMs, undefined);
+    const outer = containers.find(
+      ({ timingId }) => timingId === chain?.parentTimingId,
+    );
+    assert.equal(outer?.endSync, "all");
+    assert.equal(outer?.durationMs, undefined);
+    assert.equal(outerFollower?.startAfter?.timingId, outer?.timingId);
+
+    const archive = unzipSync(result.pptx);
+    const slidePart = archive["ppt/slides/slide1.xml"];
+    assert.ok(slidePart);
+    const xml = strFromU8(slidePart);
+    const innerStart = xml.indexOf(`<p:cTn id="${inner?.timingId}"`);
+    const returnStart = xml.indexOf('<p:rtn val="all"></p:rtn>', innerStart);
+    assert.ok(innerStart >= 0 && returnStart >= 0);
+    const invalidReturnXml =
+      xml.slice(0, returnStart) +
+      '<p:rtn val="first"></p:rtn>' +
+      xml.slice(returnStart + '<p:rtn val="all"></p:rtn>'.length);
+    archive["ppt/slides/slide1.xml"] = strToU8(invalidReturnXml);
+    const invalidRead = await validatePptx(zipSync(archive));
+    assert.ok(
+      invalidRead.errors.some(
+        ({ code }) => code === "invalid-animation-end-sync",
+      ),
+    );
+    assert.ok(
+      invalidRead.errors.some(
+        ({ code }) => code === "invalid-animation-end-dependency",
+      ),
     );
   });
 

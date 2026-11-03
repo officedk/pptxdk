@@ -81,6 +81,29 @@ describe("School 参考页面", () => {
     assert.ok(servicesSlide);
     assert.ok(agendaSlide);
 
+    const servicesFileObjects = flattenObjects(servicesSlide.objects);
+    const serviceFileBox = (name: string) => {
+      const object = servicesFileObjects.find(
+        (candidate) => candidate.name === name,
+      );
+      assert.ok(object, `独立读取结果缺少对象 ${name}`);
+      return {
+        object,
+        x: object.boxEmu.x / 9525,
+        y: object.boxEmu.y / 9525,
+        width: object.boxEmu.width / 9525,
+        height: object.boxEmu.height / 9525,
+      };
+    };
+    const caption = serviceFileBox("school-service-first-caption");
+    const title = serviceFileBox("school-service-first-title");
+    const body = serviceFileBox("school-service-first-body");
+    assert.ok(Math.abs(title.x - caption.x) < 0.01);
+    assert.ok(Math.abs(title.width - caption.width) < 0.01);
+    assert.ok(title.width >= 217.019);
+    assert.equal(title.object.text?.paragraphs[0]?.alignment, "ctr");
+    assert.ok(Math.abs(body.y - title.y - 42.71) < 0.01);
+
     const agendaFileObjects = flattenObjects(agendaSlide.objects);
     const fileBox = (name: string) => {
       const object = agendaFileObjects.find(
@@ -95,6 +118,14 @@ describe("School 参考页面", () => {
       };
     };
     const month = fileBox("school-calendar-month");
+    assert.ok(month.width >= 212.333);
+    assert.ok(Math.abs(month.x + month.width / 2 - 320) < 0.01);
+    assert.equal(
+      agendaFileObjects.find(
+        (candidate) => candidate.name === "school-calendar-month",
+      )?.text?.paragraphs[0]?.alignment,
+      "ctr",
+    );
     const weekdays = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"].map(
       (weekday) => fileBox(`school-weekday-${weekday}`),
     );

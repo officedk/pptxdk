@@ -348,7 +348,13 @@ function ServiceCard({
         >
           <Text
             testId={`school-service-${id}-title`}
-            style={{ marginTop: 21.8, fontSize: "28pt", fontWeight: 700 }}
+            style={{
+              marginTop: 21.8,
+              alignSelf: "stretch",
+              align: "center",
+              fontSize: "28pt",
+              fontWeight: 700,
+            }}
           >
             {title}
           </Text>
@@ -464,6 +470,8 @@ function Calendar({
         testId="school-calendar-month"
         style={{
           marginTop: 75.8,
+          width: 212.34,
+          align: "center",
           fontSize: "24pt",
           fontWeight: 700,
           color: "lt1",

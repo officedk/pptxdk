@@ -23,6 +23,7 @@ type MotionTarget = {
   readonly name: string;
   readonly testId?: string;
   readonly textBody: boolean;
+  readonly hasTextCharacters?: boolean;
   readonly filled: boolean;
   readonly paragraphCount?: number;
   readonly chartSeriesCount?: number;
@@ -58,7 +59,28 @@ export type MotionPlanStep = MotionStepObservation & {
   readonly key: string;
   readonly order: number;
   readonly effects: ScheduledEffect[];
+  readonly nodes: readonly MotionPlanNode[];
 };
+
+/** 真实时序包含树；scope 和多效果对象节点会成为原生并行容器。 */
+export type MotionPlanNode =
+  | {
+      readonly kind: "scope";
+      readonly id: string;
+      readonly nativeStart: MotionPlanStart;
+      readonly children: readonly MotionPlanNode[];
+    }
+  | {
+      readonly kind: "target";
+      readonly targetId: number;
+      readonly nativeStart: MotionPlanStart;
+      readonly effects: readonly ScheduledEffect[];
+    };
+
+/** 已求解的起点形式；PPTX 写出只负责序列化，不再判断因果。 */
+export type MotionPlanStart =
+  | { readonly kind: "parent-start"; readonly delayMs: number }
+  | { readonly kind: "end"; readonly dependency: MotionStartDependency };
 
 /** The single slide-local result consumed by both the writer and build report. */
 export type MotionPlan = {
@@ -66,9 +88,30 @@ export type MotionPlan = {
   readonly observation: MotionObservation;
 };
 
+type TimeCandidate = {
+  readonly eventId: string;
+  readonly offsetMs: number;
+  readonly dependency?: MotionStartDependency;
+};
+
 type Completion =
-  | { readonly state: "known"; readonly timeMs: number }
-  | { readonly state: "unknown"; readonly event?: MotionStartDependency }
+  | {
+      readonly state: "known";
+      readonly timeMs: number;
+      readonly eventId: string;
+      readonly candidates: readonly TimeCandidate[];
+      readonly dependency?: MotionStartDependency;
+      readonly nativeStart?: MotionPlanStart;
+      readonly reportedStartAfter?: MotionStartDependency;
+    }
+  | {
+      readonly state: "unknown";
+      readonly candidates: readonly TimeCandidate[];
+      readonly eventId: string;
+      readonly dependency?: MotionStartDependency;
+      readonly nativeStart?: MotionPlanStart;
+      readonly reportedStartAfter?: MotionStartDependency;
+    }
   | { readonly state: "no-natural-completion" };
 
 type ScopeMember =
@@ -100,6 +143,15 @@ type StepState = {
 };
 
 type TimePoint = Completion;
+
+type TimeExpression =
+  | {
+      readonly state: "known";
+      readonly timeMs: number;
+      readonly candidates: readonly TimeCandidate[];
+    }
+  | { readonly state: "unknown"; readonly candidates: readonly TimeCandidate[] }
+  | { readonly state: "no-natural-completion" };
 
 type EffectExpansion =
   | { readonly type: "single"; readonly count: 1 }
@@ -168,54 +220,379 @@ function timingParts(timing: MotionTiming): {
     : { moment: timing, offsetMs: 0 };
 }
 
-function known(timeMs: number): TimePoint {
-  return { state: "known", timeMs };
+function eventSource(event: MotionStartDependency): string {
+  if ("scopeId" in event) return `scope:${event.scopeId}`;
+  if ("group" in event) return `target:${event.targetId}`;
+  return `effect:${event.targetId}:${event.effectIndex}:${event.partIndex ?? ""}`;
 }
 
-function add(time: TimePoint, offsetMs: number): TimePoint {
-  if (time.state === "known") return known(time.timeMs + offsetMs);
-  if (time.state === "unknown" && time.event !== undefined) {
+function dependencyAtEvent(
+  dependency: MotionStartDependency,
+  offsetMs = 0,
+): MotionStartDependency {
+  return { ...dependency, offsetMs };
+}
+
+function dependencyEventId(dependency: MotionStartDependency): string {
+  return eventSource(dependency);
+}
+
+function eventTime(
+  eventId: string,
+  state: "known" | "unknown",
+  timeMs?: number,
+  dependency?: MotionStartDependency,
+  nativeStart?: MotionPlanStart,
+  reportedStartAfter?: MotionStartDependency,
+): TimePoint {
+  const candidate: TimeCandidate = {
+    eventId,
+    offsetMs: 0,
+    ...(dependency === undefined
+      ? {}
+      : { dependency: dependencyAtEvent(dependency) }),
+  };
+  if (state === "known") {
+    if (timeMs === undefined) throw new Error("已知时刻缺少数值");
     return {
-      state: "unknown",
-      event: { ...time.event, offsetMs: time.event.offsetMs + offsetMs },
+      state,
+      timeMs,
+      eventId,
+      candidates: [candidate],
+      ...(dependency === undefined ? {} : { dependency }),
+      ...(nativeStart === undefined ? {} : { nativeStart }),
+      ...(reportedStartAfter === undefined ? {} : { reportedStartAfter }),
     };
   }
-  return time;
+  return {
+    state,
+    eventId,
+    candidates: [candidate],
+    ...(dependency === undefined ? {} : { dependency }),
+    ...(nativeStart === undefined ? {} : { nativeStart }),
+    ...(reportedStartAfter === undefined ? {} : { reportedStartAfter }),
+  };
 }
 
-function maximum(times: readonly TimePoint[]): TimePoint {
+class MotionTimingFacts {
+  private readonly successors = new Map<string, Map<string, number>>();
+  // 精确时差可正反推导；反向关系不进入必要前置图的环检查。
+  private readonly exactRelations = new Map<string, Map<string, number>>();
+  private readonly exactTimes = new Map<string, number>();
+
+  setExactTime(eventId: string, timeMs: number, path: string): void {
+    const existing = this.exactTimes.get(eventId);
+    if (existing !== undefined && existing !== timeMs) {
+      fail("motion-plan-conflict", "同一编排事件得到冲突的数值时刻", path);
+    }
+    this.exactTimes.set(eventId, timeMs);
+  }
+
+  exactTime(eventId: string): number | undefined {
+    return this.exactTimes.get(eventId);
+  }
+
+  addExactOffset(
+    before: string,
+    after: string,
+    offsetMs: number,
+    path: string,
+  ): void {
+    const exactBefore = this.exactTime(before);
+    const exactAfter = this.exactTime(after);
+    if (
+      exactBefore !== undefined &&
+      exactAfter !== undefined &&
+      exactAfter - exactBefore !== offsetMs
+    ) {
+      fail("motion-plan-conflict", "精确编排时差与已知时刻冲突", path);
+    }
+    const existing = this.exactRelations.get(before)?.get(after);
+    if (existing !== undefined && existing !== offsetMs) {
+      fail("motion-plan-conflict", "同一编排事件得到冲突的精确时差", path);
+    }
+    const existingReverse = this.exactRelations.get(after)?.get(before);
+    if (existingReverse !== undefined && existingReverse !== -offsetMs) {
+      fail("motion-plan-conflict", "同一编排事件得到冲突的精确时差", path);
+    }
+    const edges = this.exactRelations.get(before) ?? new Map<string, number>();
+    edges.set(after, offsetMs);
+    this.exactRelations.set(before, edges);
+    const reverseEdges =
+      this.exactRelations.get(after) ?? new Map<string, number>();
+    reverseEdges.set(before, -offsetMs);
+    this.exactRelations.set(after, reverseEdges);
+  }
+
+  exactOffset(before: string, after: string): number | undefined {
+    const exactBefore = this.exactTime(before);
+    const exactAfter = this.exactTime(after);
+    const exactDifference =
+      exactBefore === undefined || exactAfter === undefined
+        ? undefined
+        : exactAfter - exactBefore;
+    const relationDifference = this.exactPath(before, after);
+    if (
+      exactDifference !== undefined &&
+      relationDifference !== undefined &&
+      exactDifference !== relationDifference
+    ) {
+      fail("motion-plan-conflict", "精确编排时差与已知时刻冲突");
+    }
+    return relationDifference ?? exactDifference;
+  }
+
+  addLowerBound(
+    before: string,
+    after: string,
+    minimumMs: number,
+    path: string,
+  ): void {
+    if (before === after) {
+      if (minimumMs > 0) {
+        fail("motion-cycle", "编排时刻依赖存在循环", path);
+      }
+      return;
+    }
+    if (this.hasPath(after, before)) {
+      fail("motion-cycle", "编排时刻依赖存在循环", path);
+    }
+    const beforeTime = this.exactTime(before);
+    const afterTime = this.exactTime(after);
+    if (
+      beforeTime !== undefined &&
+      afterTime !== undefined &&
+      afterTime - beforeTime < minimumMs
+    ) {
+      fail("motion-plan-conflict", "编排时差事实与已知时刻冲突", path);
+    }
+    const edges = this.successors.get(before) ?? new Map<string, number>();
+    edges.set(
+      after,
+      Math.max(edges.get(after) ?? Number.NEGATIVE_INFINITY, minimumMs),
+    );
+    this.successors.set(before, edges);
+  }
+
+  lowerBound(before: string, after: string): number | undefined {
+    const exactDifference = this.exactOffset(before, after);
+    const pathDifference = this.longestPath(before, after, new Set());
+    if (exactDifference === undefined) return pathDifference;
+    if (pathDifference === undefined) return exactDifference;
+    if (pathDifference > exactDifference) {
+      fail("motion-plan-conflict", "编排时差事实与精确时差冲突");
+    }
+    return Math.max(exactDifference, pathDifference);
+  }
+
+  earliestTime(eventId: string, originEventId: string): number | undefined {
+    const exact = this.exactTime(eventId);
+    if (exact !== undefined) return exact;
+    return this.lowerBound(originEventId, eventId);
+  }
+
+  private hasPath(from: string, to: string): boolean {
+    if (from === to) return true;
+    const pending = [from];
+    const visited = new Set<string>();
+    while (pending.length > 0) {
+      const current = pending.pop();
+      if (current === undefined || visited.has(current)) continue;
+      visited.add(current);
+      for (const next of this.successors.get(current)?.keys() ?? []) {
+        if (next === to) return true;
+        pending.push(next);
+      }
+    }
+    return false;
+  }
+
+  private longestPath(
+    from: string,
+    to: string,
+    visited: Set<string>,
+  ): number | undefined {
+    if (from === to) return 0;
+    if (visited.has(from)) return undefined;
+    visited.add(from);
+    let longest: number | undefined;
+    for (const [next, weight] of this.successors.get(from) ?? []) {
+      const remaining = this.longestPath(next, to, visited);
+      if (remaining !== undefined) {
+        longest = Math.max(
+          longest ?? Number.NEGATIVE_INFINITY,
+          weight + remaining,
+        );
+      }
+    }
+    visited.delete(from);
+    return longest;
+  }
+
+  private exactPath(from: string, to: string): number | undefined {
+    if (from === to) return 0;
+    const offsets = new Map<string, number>([[from, 0]]);
+    const pending = [from];
+    for (let index = 0; index < pending.length; index += 1) {
+      const current = pending[index];
+      if (current === undefined) continue;
+      const currentOffset = offsets.get(current);
+      if (currentOffset === undefined) continue;
+      for (const [next, difference] of this.exactRelations.get(current) ?? []) {
+        const candidate = currentOffset + difference;
+        const existing = offsets.get(next);
+        if (existing !== undefined) {
+          if (existing !== candidate) {
+            fail("motion-plan-conflict", "同一编排时刻存在冲突的精确关系");
+          }
+          continue;
+        }
+        offsets.set(next, candidate);
+        pending.push(next);
+      }
+    }
+    return offsets.get(to);
+  }
+}
+
+function asExpression(time: TimePoint): TimeExpression {
+  if (time.state === "no-natural-completion") return time;
+  return time.state === "known"
+    ? {
+        state: "known",
+        timeMs: time.timeMs,
+        candidates: time.candidates,
+      }
+    : { state: "unknown", candidates: time.candidates };
+}
+
+function add(
+  time: TimePoint | TimeExpression,
+  offsetMs: number,
+): TimeExpression {
+  if (time.state === "no-natural-completion") return time;
+  const candidates = time.candidates.map((candidate) => ({
+    ...candidate,
+    offsetMs: candidate.offsetMs + offsetMs,
+  }));
+  return time.state === "known"
+    ? { state: "known", timeMs: time.timeMs + offsetMs, candidates }
+    : { state: "unknown", candidates };
+}
+
+function candidateDominates(
+  earlier: TimeCandidate,
+  later: TimeCandidate,
+  facts: MotionTimingFacts,
+): boolean {
+  const difference = facts.lowerBound(earlier.eventId, later.eventId);
+  return (
+    difference !== undefined &&
+    difference + later.offsetMs - earlier.offsetMs >= 0
+  );
+}
+
+function maximum(
+  times: readonly (TimePoint | TimeExpression)[],
+  facts: MotionTimingFacts,
+): TimeExpression {
   if (times.some(({ state }) => state === "no-natural-completion")) {
     return { state: "no-natural-completion" };
   }
-  const unknownTimes = times.filter(({ state }) => state === "unknown");
-  if (unknownTimes.length > 0) {
-    const knownTimes = times.filter(
-      (time): time is { readonly state: "known"; readonly timeMs: number } =>
-        time.state === "known",
+  const candidates = times.flatMap((time) =>
+    time.state === "no-natural-completion" ? [] : time.candidates,
+  );
+  const uniqueByEvent = new Map<string, TimeCandidate>();
+  for (const candidate of candidates) {
+    const current = uniqueByEvent.get(candidate.eventId);
+    if (current === undefined || candidate.offsetMs > current.offsetMs) {
+      uniqueByEvent.set(candidate.eventId, candidate);
+    }
+  }
+  const unique = [...uniqueByEvent.values()];
+  const exactCandidates = unique.map((candidate) => {
+    const timeMs = facts.exactTime(candidate.eventId);
+    return timeMs === undefined ? undefined : timeMs + candidate.offsetMs;
+  });
+  if (exactCandidates.every((timeMs) => timeMs !== undefined)) {
+    const latest = Math.max(
+      0,
+      ...exactCandidates.filter(
+        (timeMs): timeMs is number => timeMs !== undefined,
+      ),
     );
-    const onlyZeroBoundary = knownTimes.every(({ timeMs }) => timeMs === 0);
-    const [onlyUnknown] = unknownTimes;
     return {
-      state: "unknown",
-      ...(unknownTimes.length === 1 &&
-      onlyZeroBoundary &&
-      onlyUnknown?.state === "unknown" &&
-      onlyUnknown.event !== undefined
-        ? { event: onlyUnknown.event }
-        : {}),
+      state: "known",
+      timeMs: latest,
+      candidates: unique.filter(
+        (_candidate, index) => exactCandidates[index] === latest,
+      ),
     };
   }
-  return known(
-    Math.max(
-      0,
-      ...times.map((time) => (time.state === "known" ? time.timeMs : 0)),
-    ),
+
+  const reduced = unique.filter((candidate, index) => {
+    const dominated = unique.some((other, otherIndex) => {
+      if (index === otherIndex) return false;
+      if (!candidateDominates(candidate, other, facts)) return false;
+      const reverse = candidateDominates(other, candidate, facts);
+      return !reverse || otherIndex < index;
+    });
+    return !dominated;
+  });
+  return { state: "unknown", candidates: reduced };
+}
+
+function materializeEvent(
+  expression: TimeExpression,
+  eventId: string,
+  dependency: MotionStartDependency | undefined,
+  facts: MotionTimingFacts,
+  path: string,
+  nativeStart?: MotionPlanStart,
+  reportedStartAfter?: MotionStartDependency,
+): TimePoint {
+  if (expression.state === "no-natural-completion") return expression;
+  for (const candidate of expression.candidates) {
+    facts.addLowerBound(candidate.eventId, eventId, candidate.offsetMs, path);
+  }
+  if (expression.candidates.length === 1) {
+    const [candidate] = expression.candidates;
+    if (candidate !== undefined) {
+      facts.addExactOffset(
+        candidate.eventId,
+        eventId,
+        candidate.offsetMs,
+        path,
+      );
+    }
+  }
+  if (expression.state === "known") {
+    facts.setExactTime(eventId, expression.timeMs, path);
+    return eventTime(
+      eventId,
+      "known",
+      expression.timeMs,
+      dependency,
+      nativeStart,
+      reportedStartAfter,
+    );
+  }
+  return eventTime(
+    eventId,
+    "unknown",
+    undefined,
+    dependency,
+    nativeStart,
+    reportedStartAfter,
   );
 }
 
 function completion(
   start: TimePoint,
   children: readonly TimePoint[],
+  dependency: MotionStartDependency,
+  facts: MotionTimingFacts,
+  path: string,
 ): TimePoint {
   if (
     start.state === "no-natural-completion" ||
@@ -223,11 +600,30 @@ function completion(
   ) {
     return { state: "no-natural-completion" };
   }
-  if (children.length === 1) return children[0] ?? start;
-  if (children.some(({ state }) => state === "unknown")) {
-    return { state: "unknown" };
+  if (children.length === 0) return start;
+  const eventId = dependencyEventId(dependency);
+  for (const member of [start, ...children]) {
+    if (member.state !== "no-natural-completion") {
+      facts.addLowerBound(member.eventId, eventId, 0, path);
+    }
   }
-  return maximum([start, ...children]);
+  const end = maximum([start, ...children], facts);
+  if (end.state === "no-natural-completion") return end;
+  if (end.state === "known") {
+    facts.setExactTime(eventId, end.timeMs, path);
+  }
+  if (end.candidates.length === 1) {
+    const [winner] = end.candidates;
+    if (winner !== undefined) {
+      // 唯一胜出的真实完成事件与整体结束保持精确等价，绝对时刻仍可未知。
+      facts.addLowerBound(winner.eventId, eventId, winner.offsetMs, path);
+      facts.addExactOffset(winner.eventId, eventId, winner.offsetMs, path);
+    }
+  }
+  if (end.state === "known") {
+    return eventTime(eventId, "known", end.timeMs, dependency);
+  }
+  return eventTime(eventId, "unknown", undefined, dependency);
 }
 
 function expansionFor(
@@ -308,41 +704,62 @@ function expansionFor(
 }
 
 function effectEnd(
-  base: TimePoint,
+  base: TimeExpression,
   target: TargetState,
   effect: Effect,
   effectIndex: number,
   expansion: EffectExpansion,
+  facts: MotionTimingFacts,
 ): TimePoint {
-  if (expansion.type === "iterate") {
-    // 原生逐词/逐字节点会自然结束，但本计划不从单次行为时长估算整段时长。
-    return {
-      state: "unknown",
-      event: {
-        targetId: target.id,
-        effectIndex,
-        point: "end",
-        offsetMs: 0,
-      },
-    };
-  }
-  const offset =
-    Math.round(effect.delay) + expansion.count * Math.round(effect.duration);
-  const end = add(base, offset);
-  if (end.state === "known") return end;
-  if (end.state === "no-natural-completion") return end;
   const partIndex =
     expansion.type === "parts" ? expansion.count - 1 : undefined;
-  return {
-    state: "unknown",
-    event: {
-      targetId: target.id,
-      effectIndex,
-      ...(partIndex === undefined ? {} : { partIndex }),
-      point: "end",
-      offsetMs: 0,
-    },
+  const dependency: MotionStartDependency = {
+    targetId: target.id,
+    effectIndex,
+    ...(partIndex === undefined ? {} : { partIndex }),
+    point: "end",
+    offsetMs: 0,
   };
+  const durationMs = Math.round(effect.duration);
+  const startOffsetMs =
+    Math.round(effect.delay) +
+    (partIndex === undefined ? 0 : partIndex * durationMs);
+  const startExpression = add(base, startOffsetMs);
+  if (startExpression.state === "no-natural-completion") {
+    return startExpression;
+  }
+  const startEventId = `effect-start:${target.id}:${effectIndex}:${partIndex ?? ""}`;
+  const start = materializeEvent(
+    startExpression,
+    startEventId,
+    undefined,
+    facts,
+    target.path,
+  );
+  if (start.state === "no-natural-completion") return start;
+
+  const endEventId = dependencyEventId(dependency);
+  const minimumDuration =
+    expansion.type === "iterate" &&
+    expansion.by === "letter" &&
+    target.value.target.hasTextCharacters === true
+      ? durationMs
+      : expansion.type === "iterate"
+        ? 0
+        : durationMs;
+  if (expansion.type === "iterate") {
+    facts.addLowerBound(startEventId, endEventId, minimumDuration, target.path);
+  } else {
+    // 有限行为保留相对时差，不要求效果起点已有绝对数值。
+    facts.addLowerBound(startEventId, endEventId, durationMs, target.path);
+    facts.addExactOffset(startEventId, endEventId, durationMs, target.path);
+  }
+  if (expansion.type !== "iterate" && start.state === "known") {
+    const endMs = start.timeMs + durationMs;
+    facts.setExactTime(endEventId, endMs, target.path);
+    return eventTime(endEventId, "known", endMs, dependency);
+  }
+  return eventTime(endEventId, "unknown", undefined, dependency);
 }
 
 function motionScope(value: MotionScopeDeclaration): boolean {
@@ -620,6 +1037,7 @@ function motionPlan(
   }
 
   const allScheduledEffects = new Map<string, ScheduledEffect[]>();
+  const allStepNodes = new Map<string, MotionPlanNode[]>();
   const addStepEffect = (effect: ScheduledEffect) => {
     const items = allScheduledEffects.get(effect.stepKey) ?? [];
     items.push(effect);
@@ -628,11 +1046,145 @@ function motionPlan(
 
   for (const step of stepStates.values()) {
     const key = step.key;
+    const facts = new MotionTimingFacts();
+    const originEventId = `step-origin:${key}`;
+    facts.setExactTime(originEventId, 0, "");
+    const origin = eventTime(originEventId, "known", 0, undefined, {
+      kind: "parent-start",
+      delayMs: 0,
+    });
     const starts = new Map<string, TimePoint>();
     const ends = new Map<string, TimePoint>();
+    const scopeStartPlans = new Map<string, MotionPlanStart>();
     const resolvingStarts = new Set<string>();
     const resolvingEnds = new Set<string>();
     const scheduledObjects = new Set<number>();
+
+    const resolveNativeStart = (
+      expression: TimeExpression,
+      parentStart: TimePoint,
+      path: string,
+    ): MotionPlanStart => {
+      if (expression.state === "no-natural-completion") {
+        fail("no-natural-completion", "无自然完成的内容不能启动后继效果", path);
+      }
+      if (parentStart.state === "no-natural-completion") {
+        fail(
+          "no-natural-completion",
+          "无自然完成的父作用域不能启动后继效果",
+          path,
+        );
+      }
+      if (expression.state === "known") {
+        if (parentStart.state !== "known") {
+          fail(
+            "unknown-motion-start",
+            "未知父起点后的数值起点没有可验证的合并关系",
+            path,
+          );
+        }
+        const delayMs = expression.timeMs - parentStart.timeMs;
+        if (delayMs < 0) {
+          fail("unknown-motion-start", "子项起点早于其包含作用域", path);
+        }
+        return { kind: "parent-start", delayMs };
+      }
+
+      if (expression.candidates.length !== 1) {
+        fail(
+          "unknown-motion-start",
+          "多个不可比较的未知起点没有已核验的原生合并形式",
+          path,
+        );
+      }
+      const [candidate] = expression.candidates;
+      if (candidate === undefined) {
+        fail(
+          "unknown-motion-start",
+          "未知起点没有可引用的单个原生完成事件",
+          path,
+        );
+      }
+
+      if (candidate.eventId === parentStart.eventId) {
+        return { kind: "parent-start", delayMs: candidate.offsetMs };
+      }
+      if (
+        parentStart.nativeStart?.kind === "end" &&
+        dependencyEventId(parentStart.nativeStart.dependency) ===
+          candidate.eventId
+      ) {
+        const delayMs =
+          candidate.offsetMs - parentStart.nativeStart.dependency.offsetMs;
+        if (delayMs >= 0) return { kind: "parent-start", delayMs };
+      }
+
+      // 保留仍晚于父启动的真实完成事件；仅在它已先于父启动时改用精确偏移。
+      const eventAfterParent =
+        parentStart.eventId === undefined
+          ? undefined
+          : facts.lowerBound(parentStart.eventId, candidate.eventId);
+      const eventAfterKnownParent =
+        parentStart.state === "known"
+          ? facts.earliestTime(candidate.eventId, originEventId)
+          : undefined;
+      const knownParentTime =
+        parentStart.state === "known" ? parentStart.timeMs : undefined;
+      if (
+        candidate.dependency !== undefined &&
+        ((eventAfterParent !== undefined && eventAfterParent >= 0) ||
+          (eventAfterKnownParent !== undefined &&
+            knownParentTime !== undefined &&
+            eventAfterKnownParent >= knownParentTime))
+      ) {
+        return {
+          kind: "end",
+          dependency: dependencyAtEvent(
+            candidate.dependency,
+            candidate.offsetMs,
+          ),
+        };
+      }
+      const exactParentOffset = facts.exactOffset(
+        candidate.eventId,
+        parentStart.eventId,
+      );
+      if (
+        exactParentOffset !== undefined &&
+        candidate.offsetMs >= exactParentOffset
+      ) {
+        return {
+          kind: "parent-start",
+          delayMs: candidate.offsetMs - exactParentOffset,
+        };
+      }
+      fail(
+        "unknown-motion-start",
+        "未知起点没有可证明的父级激活或完成事件来源",
+        path,
+      );
+    };
+
+    const reportedDependency = (
+      nativeStart: MotionPlanStart,
+      parentStart: TimePoint,
+    ): MotionStartDependency | undefined => {
+      if (nativeStart.kind === "end") return nativeStart.dependency;
+      if (parentStart.state === "no-natural-completion") return undefined;
+      const inherited = parentStart.reportedStartAfter;
+      return inherited === undefined
+        ? undefined
+        : dependencyAtEvent(
+            inherited,
+            inherited.offsetMs + nativeStart.delayMs,
+          );
+    };
+
+    const pointExpression = (point: TimePoint): TimeExpression =>
+      asExpression(point);
+
+    const scopeStartEventId = (scope: ScopeState): string =>
+      `scope-start:${scope.declaration.identity}`;
 
     const stepKeysOf = (scope: ScopeState): readonly string[] =>
       scopeSteps(scope);
@@ -688,7 +1240,7 @@ function motionPlan(
     const resolveCueTime = (
       timing: MotionTiming,
       fromPath: string,
-    ): TimePoint => {
+    ): TimeExpression => {
       const { moment, offsetMs } = timingParts(timing);
       return add(resolveMoment(moment, fromPath), offsetMs);
     };
@@ -719,29 +1271,61 @@ function motionPlan(
           effect,
           effectIndex,
           getExpansion(target, effectIndex),
+          facts,
         ),
       );
-      return effectEnds.length === 1
-        ? (effectEnds[0] ?? base)
-        : maximum(effectEnds);
+      const animationNodeCount = target.value.effects.reduce(
+        (count, _effect, effectIndex) => {
+          const expansion = getExpansion(target, effectIndex);
+          return count + (expansion.type === "parts" ? expansion.count : 1);
+        },
+        0,
+      );
+      if (animationNodeCount > 1) {
+        return completion(
+          materializeEvent(
+            base,
+            `target-start:${target.id}`,
+            undefined,
+            facts,
+            target.path,
+          ),
+          effectEnds,
+          {
+            targetId: target.id,
+            group: "effects",
+            point: "end",
+            offsetMs: 0,
+          },
+          facts,
+          target.path,
+        );
+      }
+      return (
+        effectEnds[0] ?? {
+          state: "no-natural-completion",
+        }
+      );
     };
 
     const memberStart = (
       parent: ScopeState,
       member: ScopeMember,
-    ): TimePoint => {
+    ): TimeExpression => {
       const parentStart = resolveScopeStart(parent);
       const active = activeChildren(parent);
       const activeIndex = active.findIndex(
         (candidate) =>
           candidate.kind === member.kind && candidate.id === member.id,
       );
-      if (parent.declaration.mode === "parallel") return parentStart;
+      if (parent.declaration.mode === "parallel") {
+        return pointExpression(parentStart);
+      }
       if (parent.declaration.mode === "stagger") {
-        if (activeIndex < 0) return parentStart;
+        if (activeIndex < 0) return pointExpression(parentStart);
         return add(parentStart, activeIndex * (parent.declaration.each ?? 0));
       }
-      let cursor = parentStart;
+      let cursor = pointExpression(parentStart);
       const direct = directChildren(parent);
       const directIndex = direct.findIndex(
         (candidate) =>
@@ -758,7 +1342,7 @@ function motionPlan(
         ) {
           return { state: "no-natural-completion" };
         }
-        cursor = ended;
+        cursor = pointExpression(ended);
       }
       return cursor;
     };
@@ -770,12 +1354,14 @@ function motionPlan(
         fail("motion-cycle", "编排时刻依赖存在循环", scope.path);
       }
       resolvingStarts.add(scope.declaration.identity);
-      let base: TimePoint = known(0);
+      let parentStart = origin;
+      let base = pointExpression(origin);
       if (scope.declaration.parent !== undefined) {
         const parent = scopes.get(scope.declaration.parent);
         if (parent === undefined) {
           fail("missing-scope", "编排作用域的父实例不存在", scope.path);
         }
+        parentStart = resolveScopeStart(parent);
         base = memberStart(parent, {
           kind: "scope",
           id: scope.declaration.identity,
@@ -784,9 +1370,24 @@ function motionPlan(
       }
       if (scope.declaration.startAt !== undefined) {
         const fromCue = resolveCueTime(scope.declaration.startAt, scope.path);
-        base = maximum([base, fromCue]);
+        base = maximum([base, fromCue], facts);
       }
-      const start = add(base, scope.declaration.delay);
+      const startExpression = add(base, scope.declaration.delay);
+      const nativeStart = resolveNativeStart(
+        startExpression,
+        parentStart,
+        scope.path,
+      );
+      const start = materializeEvent(
+        startExpression,
+        scopeStartEventId(scope),
+        undefined,
+        facts,
+        scope.path,
+        nativeStart,
+        reportedDependency(nativeStart, parentStart),
+      );
+      scopeStartPlans.set(scope.declaration.identity, nativeStart);
       starts.set(scope.declaration.identity, start);
       resolvingStarts.delete(scope.declaration.identity);
       return start;
@@ -803,7 +1404,17 @@ function motionPlan(
       // 非活动作用域仍可提供自身边界时刻，但不延长父作用域的整体完成。
       const members = activeChildren(scope);
       const memberEnds = members.map((member) => memberEnd(scope, member));
-      const end = completion(start, memberEnds);
+      const end = completion(
+        start,
+        memberEnds,
+        {
+          scopeId: scopeId(scope.declaration.identity, scopes),
+          point: "end",
+          offsetMs: 0,
+        },
+        facts,
+        scope.path,
+      );
       ends.set(scope.declaration.identity, end);
       resolvingEnds.delete(scope.declaration.identity);
       return end;
@@ -858,8 +1469,8 @@ function motionPlan(
           : { eachMs: Math.round(scope.declaration.each) }),
         delayMs: Math.round(scope.declaration.delay),
         ...(start.state === "known" ? { startMs: start.timeMs } : {}),
-        ...(start.state === "unknown" && start.event !== undefined
-          ? { startAfter: start.event }
+        ...(start.state === "unknown" && start.reportedStartAfter !== undefined
+          ? { startAfter: start.reportedStartAfter }
           : {}),
         ...(end.state === "known" ? { endMs: end.timeMs } : {}),
         completion: end.state,
@@ -873,10 +1484,14 @@ function motionPlan(
     for (const target of targetsForStep) {
       if (scheduledObjects.has(target.id)) continue;
       const containingScope = target.value.scopes.at(-1)?.identity;
+      const parent =
+        containingScope === undefined ? undefined : scopes.get(containingScope);
+      const parentStart =
+        parent === undefined ? origin : resolveScopeStart(parent);
       const base =
-        containingScope === undefined
-          ? known(0)
-          : memberStart(scopes.get(containingScope)!, {
+        parent === undefined
+          ? pointExpression(origin)
+          : memberStart(parent, {
               kind: "object",
               id: target.id,
               order: target.order,
@@ -906,20 +1521,20 @@ function motionPlan(
               target.path,
             );
           }
-          if (start.state === "unknown" && start.event === undefined) {
-            fail(
-              "unknown-motion-start",
-              "未知起点没有可引用的单个原生完成事件",
-              target.path,
-            );
-          }
+          const nativeStart = resolveNativeStart(
+            start,
+            parentStart,
+            target.path,
+          );
+          const startAfter =
+            start.state === "unknown"
+              ? reportedDependency(nativeStart, parentStart)
+              : undefined;
           const knownStart = start.state === "known" ? start.timeMs : undefined;
-          const end =
-            expansion.type === "iterate"
-              ? { state: "unknown" as const }
-              : knownStart === undefined
-                ? { state: "unknown" as const }
-                : known(knownStart + Math.round(effect.duration));
+          const endMs =
+            expansion.type === "iterate" || knownStart === undefined
+              ? undefined
+              : knownStart + Math.round(effect.duration);
           const from =
             typeof effect.from === "number"
               ? Math.round(effect.from * 60000) / 60000
@@ -945,12 +1560,10 @@ function motionPlan(
             ...(from === undefined ? {} : { from }),
             ...(easing === undefined ? {} : { easing }),
             ...(knownStart === undefined ? {} : { startMs: knownStart }),
-            ...(end.state === "known"
-              ? { endMs: end.timeMs }
-              : { completion: "unknown" as const }),
-            ...(start.state === "unknown" && start.event !== undefined
-              ? { startAfter: start.event }
-              : {}),
+            ...(endMs === undefined
+              ? { completion: "unknown" as const }
+              : { endMs }),
+            ...(startAfter === undefined ? {} : { startAfter }),
             stepKey: key,
             order: target.order + index,
             effectIndex: index,
@@ -970,6 +1583,76 @@ function motionPlan(
       }
       scheduledObjects.add(target.id);
     }
+
+    const targetNode = (
+      target: TargetState,
+      parent?: ScopeState,
+    ): MotionPlanNode | undefined => {
+      const effects = (allScheduledEffects.get(key) ?? []).filter(
+        (effect) => effect.target.id === target.id,
+      );
+      if (effects.length === 0) return undefined;
+      const parentStart =
+        parent === undefined ? origin : resolveScopeStart(parent);
+      const start =
+        parent === undefined
+          ? pointExpression(origin)
+          : memberStart(parent, {
+              kind: "object",
+              id: target.id,
+              order: target.order,
+            });
+      return {
+        kind: "target",
+        targetId: target.id,
+        nativeStart: resolveNativeStart(start, parentStart, target.path),
+        effects,
+      };
+    };
+
+    const scopeNode = (scope: ScopeState): MotionPlanNode | undefined => {
+      const children = activeChildren(scope).flatMap((member) => {
+        if (member.kind === "scope") {
+          const childScope = scopes.get(member.id);
+          if (childScope === undefined) {
+            fail("missing-scope", "编排作用域的成员声明不存在", scope.path);
+          }
+          const node = scopeNode(childScope);
+          return node === undefined ? [] : [node];
+        }
+        const target = targets.get(member.id);
+        if (target === undefined) {
+          fail("invalid-motion", "编排作用域的对象成员声明不存在", scope.path);
+        }
+        const node = targetNode(target, scope);
+        return node === undefined ? [] : [node];
+      });
+      if (children.length === 0) return undefined;
+      const nativeStart = scopeStartPlans.get(scope.declaration.identity);
+      if (nativeStart === undefined) {
+        fail("motion-plan-conflict", "作用域缺少已求解的起点", scope.path);
+      }
+      return {
+        kind: "scope",
+        id: scopeId(scope.declaration.identity, scopes),
+        nativeStart,
+        children,
+      };
+    };
+
+    const nodes = roots.flatMap((member) => {
+      if (member.kind === "scope") {
+        const scope = scopes.get(member.id);
+        if (scope === undefined || !scopeSteps(scope).includes(key)) return [];
+        const node = scopeNode(scope);
+        return node === undefined ? [] : [node];
+      }
+      const target = targets.get(member.id);
+      if (target === undefined || target.stepKey !== key) return [];
+      const node = targetNode(target);
+      return node === undefined ? [] : [node];
+    });
+    allStepNodes.set(key, nodes);
   }
 
   const plans = [...stepStates.values()]
@@ -994,6 +1677,7 @@ function motionPlan(
         ...(step.number === undefined ? {} : { number: step.number }),
         order: step.order,
         effects,
+        nodes: allStepNodes.get(step.key) ?? [],
       } satisfies MotionPlanStep;
     });
 

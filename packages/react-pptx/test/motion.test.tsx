@@ -344,9 +344,13 @@ describe("对象动画", () => {
       ],
       ["letter", 500, 1000, 0, undefined, "unknown"],
     );
+    const sourceScope = motion.scopes?.find(({ members }) =>
+      members.some(
+        (member) => member.kind === "object" && member.id === source?.target.id,
+      ),
+    );
     assert.deepEqual(follower?.startAfter, {
-      targetId: source?.target.id,
-      effectIndex: 0,
+      scopeId: sourceScope?.id,
       point: "end",
       offsetMs: 0,
     });
@@ -364,11 +368,6 @@ describe("对象动画", () => {
       ],
       ["word", 60, 600, 0, undefined, "unknown"],
     );
-    const sourceScope = motion.scopes?.find(({ members }) =>
-      members.some(
-        (member) => member.kind === "object" && member.id === source?.target.id,
-      ),
-    );
     assert.deepEqual(
       [sourceScope?.completion, sourceScope?.startMs, sourceScope?.endMs],
       ["unknown", 0, undefined],
@@ -384,9 +383,11 @@ describe("对象动画", () => {
         followerScope?.completion,
         followerScope?.startMs,
         followerScope?.endMs,
-        followerScope?.startAfter?.targetId,
+        followerScope?.startAfter &&
+          "scopeId" in followerScope.startAfter &&
+          followerScope.startAfter.scopeId,
       ],
-      ["unknown", undefined, undefined, source?.target.id],
+      ["unknown", undefined, undefined, sourceScope?.id],
     );
 
     const file = await validatePptx(result.pptx);
@@ -414,7 +415,7 @@ describe("对象动画", () => {
       ],
       ["letter", 500, 1000, "unknown"],
     );
-    assert.equal(followerFileEffect?.startAfter?.targetId, source?.target.id);
+    assert.equal(followerFileEffect?.startAfter?.source, "container");
     assert.equal(followerFileEffect?.startAfter?.point, "end");
     assert.equal(followerFileEffect?.startAfter?.offsetMs, 0);
     assert.deepEqual(
@@ -427,6 +428,16 @@ describe("对象动画", () => {
       ["word", 60, 600, "unknown"],
     );
     const sourceTimingId = followerFileEffect?.startAfter?.timingId;
+    const sourceContainer = file.slides[0]?.animationContainers?.find(
+      ({ timingId }) => timingId === sourceTimingId,
+    );
+    assert.equal(sourceContainer?.endSync, "all");
+    assert.ok(
+      sourceContainer?.children.some(
+        ({ kind, timingId }) =>
+          kind === "effect" && timingId === sourceFileEffect?.timingId,
+      ),
+    );
     const slidePart = unzipSync(result.pptx)["ppt/slides/slide1.xml"];
     assert.ok(slidePart);
     assert.ok(
@@ -701,6 +712,7 @@ describe("对象动画", () => {
         effects: [
           {
             targetId: target?.id,
+            timingId: 3,
             kind: "entrance",
             preset: "fade",
             durationMs: 800,

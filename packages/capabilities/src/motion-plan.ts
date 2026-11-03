@@ -181,32 +181,42 @@ export function addMotionPlanStartDelay(
   start: MotionPlanStart,
   delayMs: number,
 ): MotionPlanStart | undefined {
-  if (
-    !Number.isSafeInteger(delayMs) ||
-    delayMs < 0 ||
-    delayMs > maximumTimeNodeValue
-  ) {
-    return undefined;
-  }
+  if (!Number.isSafeInteger(delayMs) || delayMs < 0) return undefined;
   if (delayMs === 0) return start;
-  if (start.kind === "delay-layer") {
-    const { base, delays } = motionPlanStartLayers(start);
-    const baseValue =
-      base.kind === "parent-start"
-        ? base.delayMs
-        : base.kind === "end" || base.kind === "event"
-          ? base.dependency.offsetMs
-          : base.kind === "condition-end"
-            ? base.delayMs
-            : 0;
-    const totalDelay = delays.reduce((total, delay) => total + delay, delayMs);
-    if (!Number.isSafeInteger(baseValue + totalDelay)) return undefined;
+  const { base, delays } = motionPlanStartLayers(start);
+  const baseValue =
+    base.kind === "parent-start"
+      ? base.delayMs
+      : base.kind === "end" || base.kind === "event"
+        ? base.dependency.offsetMs
+        : base.kind === "condition-end"
+          ? base.delayMs
+          : 0;
+  const totalDelay = delays.reduce((total, delay) => total + delay, baseValue);
+  if (!Number.isSafeInteger(totalDelay + delayMs)) return undefined;
+
+  let lowered = start;
+  let remaining = delayMs;
+  while (remaining > 0) {
+    const fieldDelay = Math.min(remaining, maximumTimeNodeValue);
+    lowered = addMotionPlanStartDelayField(lowered, fieldDelay);
+    remaining -= fieldDelay;
+  }
+  return lowered;
+}
+
+function addMotionPlanStartDelayField(
+  start: MotionPlanStart,
+  delayMs: number,
+): MotionPlanStart {
+  // 保留底层逻辑来源；尤其不能把 condition-join 改写成缺少原始集合的别名。
+  if (start.kind === "delay-layer" || start.kind === "condition-join") {
     return { kind: "delay-layer", start, delayMs };
   }
   let delayed: MotionPlanStart;
   if (start.kind === "parent-start") {
     delayed = { kind: start.kind, delayMs: start.delayMs + delayMs };
-  } else if (start.kind === "end") {
+  } else if (start.kind === "end" || start.kind === "event") {
     delayed = {
       kind: start.kind,
       dependency: {
@@ -214,16 +224,6 @@ export function addMotionPlanStartDelay(
         offsetMs: start.dependency.offsetMs + delayMs,
       },
     };
-  } else if (start.kind === "event") {
-    delayed = {
-      kind: start.kind,
-      dependency: {
-        ...start.dependency,
-        offsetMs: start.dependency.offsetMs + delayMs,
-      },
-    };
-  } else if (start.kind === "condition-join") {
-    delayed = { kind: "condition-end", id: start.id, delayMs };
   } else {
     delayed = { ...start, delayMs: start.delayMs + delayMs };
   }
@@ -234,19 +234,10 @@ export function addMotionPlanStartDelay(
         ? delayed.dependency.offsetMs
         : delayed.kind === "condition-end"
           ? delayed.delayMs
-          : undefined;
-  if (
-    Number.isSafeInteger(value) &&
-    value !== undefined &&
-    value >= 0 &&
-    value <= maximumTimeNodeValue
-  ) {
-    return delayed;
-  }
-  if (Number.isSafeInteger(value) && value !== undefined && value >= 0) {
-    return { kind: "delay-layer", start, delayMs };
-  }
-  return undefined;
+          : 0;
+  return value <= maximumTimeNodeValue
+    ? delayed
+    : { kind: "delay-layer", start, delayMs };
 }
 
 /** 只折叠可证明保持父门槛的本地延迟；其他情况保留真实容器层。 */
@@ -1042,6 +1033,16 @@ function effectTimingAt(
   }
   const rounds = effect.repeatCount ?? 1;
   const durationMs = Math.round(effect.duration) * rounds;
+  if (
+    start.state === "known" &&
+    !Number.isSafeInteger(start.timeMs + durationMs)
+  ) {
+    fail(
+      "invalid-motion-time",
+      "效果完成时刻必须保持为安全整数毫秒",
+      target.path,
+    );
+  }
   const dependency: MotionStartDependency = {
     targetId: target.id,
     effectIndex,
@@ -1414,7 +1415,7 @@ function motionPlan(
       {
         readonly id: string;
         readonly candidates: readonly TimeCandidate[];
-        readonly delayMs: number;
+        readonly delayLayers: readonly number[];
       }
     >();
     const resolvingStarts = new Set<string>();
@@ -1646,7 +1647,18 @@ function motionPlan(
         if (delayMs < 0) {
           fail("unknown-motion-start", "子项起点早于其包含作用域", path);
         }
-        return { kind: "parent-start", delayMs };
+        const lowered = addMotionPlanStartDelay(
+          { kind: "parent-start", delayMs: 0 },
+          delayMs,
+        );
+        if (lowered === undefined) {
+          fail(
+            "invalid-motion-time",
+            "已知起点的延迟层无法保持为安全整数毫秒",
+            path,
+          );
+        }
+        return lowered;
       }
 
       const parentStartDelay = commonCandidateOffset(
@@ -1655,7 +1667,11 @@ function motionPlan(
       );
       if (parentStartDelay !== undefined && parentStartDelay >= 0) {
         // 仅当每个原始事件都增加相同精确偏移时，才复用父起点。
-        return { kind: "parent-start", delayMs: parentStartDelay };
+        const lowered = addMotionPlanStartDelay(
+          { kind: "parent-start", delayMs: 0 },
+          parentStartDelay,
+        );
+        if (lowered !== undefined) return lowered;
       }
       for (const reference of expression.references) {
         const canonical = conditionStartsByEventId.get(reference.eventId);
@@ -1665,12 +1681,17 @@ function motionPlan(
           canonical.candidates,
         );
         if (delayMs === undefined || delayMs !== reference.offsetMs) continue;
+        const canonicalDelay = canonical.delayLayers.reduce(
+          (total, delay) => total + delay,
+          0,
+        );
+        if (!Number.isSafeInteger(canonicalDelay)) continue;
         // Offset belongs to the later alias; it cannot recover a join END
         // that occurred before the consumer's real parent became active.
         const joinEndCandidates = canonical.candidates.map((candidate) => ({
           ...candidate,
           // The recorded candidates describe the aliased scope start.
-          offsetMs: candidate.offsetMs - canonical.delayMs,
+          offsetMs: candidate.offsetMs - canonicalDelay,
         }));
         const joinEndIsPending = joinEndCandidates.some((candidate) => {
           if (parentStart.state === "known") {
@@ -1701,20 +1722,18 @@ function motionPlan(
           // canonical 快路径不安全时，保留完整候选表达交给通用宿主投影。
           continue;
         }
-        const conditionEndDelay = canonical.delayMs + delayMs;
-        if (
-          !Number.isSafeInteger(conditionEndDelay) ||
-          conditionEndDelay < 0 ||
-          conditionEndDelay > maximumTimeNodeValue
-        ) {
-          // 累计偏移可能由多个合法字段组成，先尝试保留原始候选层。
-          continue;
-        }
-        return {
+        let conditionEndStart: MotionPlanStart = {
           kind: "condition-end",
           id: canonical.id,
-          delayMs: conditionEndDelay,
+          delayMs: 0,
         };
+        for (const delay of canonical.delayLayers) {
+          const next = addMotionPlanStartDelay(conditionEndStart, delay);
+          if (next === undefined) break;
+          conditionEndStart = next;
+        }
+        const lowered = addMotionPlanStartDelay(conditionEndStart, delayMs);
+        if (lowered !== undefined) return lowered;
       }
 
       if (expression.candidates.length !== 1) {
@@ -1985,7 +2004,10 @@ function motionPlan(
               markProjectedAncestors(hostScope, host);
             }
           }
-          return {
+          const join: Extract<
+            MotionPlanStart,
+            { readonly kind: "condition-join" }
+          > = {
             kind: "condition-join",
             id: eventId,
             hostScopeId: isStepRoot
@@ -2000,6 +2022,8 @@ function motionPlan(
             ),
             gates,
           };
+          conditionJoinsById.set(join.id, join);
+          return join;
         }
         return unsupported(lastReason);
       }
@@ -2013,7 +2037,11 @@ function motionPlan(
       }
 
       if (candidate.eventId === parentStart.eventId) {
-        return { kind: "parent-start", delayMs: candidate.offsetMs };
+        const lowered = addMotionPlanStartDelay(
+          { kind: "parent-start", delayMs: 0 },
+          candidate.offsetMs,
+        );
+        if (lowered !== undefined) return lowered;
       }
       if (
         parentStart.nativeStart?.kind === "end" &&
@@ -2022,7 +2050,13 @@ function motionPlan(
       ) {
         const delayMs =
           candidate.offsetMs - parentStart.nativeStart.dependency.offsetMs;
-        if (delayMs >= 0) return { kind: "parent-start", delayMs };
+        if (delayMs >= 0) {
+          const lowered = addMotionPlanStartDelay(
+            { kind: "parent-start", delayMs: 0 },
+            delayMs,
+          );
+          if (lowered !== undefined) return lowered;
+        }
       }
       const sourceStart = scopeForStartEvent(candidate.eventId);
       if (sourceStart !== undefined && candidate.dependency === undefined) {
@@ -2037,7 +2071,11 @@ function motionPlan(
         );
         if (eventAfterParent !== undefined && eventAfterParent > 0) {
           preservedScopeStarts.add(sourceStart.declaration.identity);
-          return { kind: "event", dependency };
+          const lowered = addMotionPlanStartDelay(
+            { kind: "event", dependency: { ...dependency, offsetMs: 0 } },
+            candidate.offsetMs,
+          );
+          if (lowered !== undefined) return lowered;
         }
       }
 
@@ -2059,21 +2097,19 @@ function motionPlan(
             knownParentTime !== undefined &&
             eventAfterKnownParent > knownParentTime))
       ) {
-        return candidate.dependency.point === "start"
-          ? {
-              kind: "event",
-              dependency: dependencyAtEvent(
-                candidate.dependency,
-                candidate.offsetMs,
-              ),
-            }
-          : {
-              kind: "end",
-              dependency: dependencyAtEvent(
-                candidate.dependency,
-                candidate.offsetMs,
-              ),
-            };
+        const lowered = addMotionPlanStartDelay(
+          candidate.dependency.point === "start"
+            ? {
+                kind: "event",
+                dependency: { ...candidate.dependency, offsetMs: 0 },
+              }
+            : {
+                kind: "end",
+                dependency: { ...candidate.dependency, offsetMs: 0 },
+              },
+          candidate.offsetMs,
+        );
+        if (lowered !== undefined) return lowered;
       }
       const exactParentOffset = facts.exactOffset(
         candidate.eventId,
@@ -2083,10 +2119,11 @@ function motionPlan(
         exactParentOffset !== undefined &&
         candidate.offsetMs >= exactParentOffset
       ) {
-        return {
-          kind: "parent-start",
-          delayMs: candidate.offsetMs - exactParentOffset,
-        };
+        const lowered = addMotionPlanStartDelay(
+          { kind: "parent-start", delayMs: 0 },
+          candidate.offsetMs - exactParentOffset,
+        );
+        if (lowered !== undefined) return lowered;
       }
       fail(
         "unknown-motion-start",
@@ -2430,6 +2467,13 @@ function motionPlan(
       if (resolvingStarts.has(scope.declaration.identity)) {
         fail("motion-cycle", "编排时刻依赖存在循环", scope.path);
       }
+      if (scope.declaration.delay > maximumTimeNodeValue) {
+        fail(
+          "invalid-motion-time",
+          "单个作用域延迟字段超出 ST_TLTime 范围",
+          scope.path,
+        );
+      }
       resolvingStarts.add(scope.declaration.identity);
       let parentStart = origin;
       let parentScope: ScopeState | undefined;
@@ -2581,17 +2625,16 @@ function motionPlan(
         );
       }
       if (nativeStartBase.kind === "condition-join") {
-        conditionJoinsById.set(nativeStartBase.id, nativeStartBase);
         conditionStartsByEventId.set(scopeStartEventId(scope), {
           id: nativeStartBase.id,
           candidates: startExpression.candidates,
-          delayMs: localDelayMs,
+          delayLayers: nativeStartDelays,
         });
       } else if (nativeStartBase.kind === "condition-end") {
         conditionStartsByEventId.set(scopeStartEventId(scope), {
           id: nativeStartBase.id,
           candidates: startExpression.candidates,
-          delayMs: nativeStartBase.delayMs + localDelayMs,
+          delayLayers: [nativeStartBase.delayMs, ...nativeStartDelays],
         });
       } else if (nativeStartBase.kind === "parent-start") {
         const inherited = conditionStartsByEventId.get(parentStart.eventId);
@@ -2599,7 +2642,13 @@ function motionPlan(
           conditionStartsByEventId.set(scopeStartEventId(scope), {
             id: inherited.id,
             candidates: startExpression.candidates,
-            delayMs: inherited.delayMs + nativeStartBase.delayMs + localDelayMs,
+            delayLayers: [
+              ...inherited.delayLayers,
+              ...(nativeStartBase.delayMs === 0
+                ? []
+                : [nativeStartBase.delayMs]),
+              ...nativeStartDelays,
+            ],
           });
         }
       }

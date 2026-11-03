@@ -15,6 +15,7 @@ import {
   spin,
   Step,
   Text,
+  observeMotion,
   useMotionScope,
   repeat,
   type MotionObservation,
@@ -2693,6 +2694,125 @@ function OrdinaryComposition() {
       { testId: "native-group" },
       movingShape("group-first", 100),
       movingShape("group-second", 100),
+    ),
+  );
+}
+
+async function assertValidMotionPptx(pptx: Uint8Array) {
+  const file = await validatePptx(pptx);
+  assert.deepEqual(file.errors, []);
+  assert.deepEqual(file.extensions, []);
+  const slidePart = unzipSync(pptx)["ppt/slides/slide1.xml"];
+  assert.ok(slidePart);
+  const xml = strFromU8(slidePart);
+  const writtenTimes = [...xml.matchAll(/\b(?:delay|dur)="(\d+)"/gu)].map(
+    ([, value]) => Number(value),
+  );
+  assert.ok(writtenTimes.every((value) => value <= 4_294_967_295));
+  assert.doesNotMatch(xml, /<p:childTnLst\s*>\s*<\/p:childTnLst>/u);
+  assertTimingReferencesFollowDefinitions(xml);
+  return writtenTimes;
+}
+
+function UniversalDelayLoweringDeck({
+  scenario,
+}: {
+  readonly scenario: "unknown-alias" | "known-alias" | "condition-join";
+}) {
+  const source = useMotionScope();
+  const parent = useMotionScope();
+  const alias = useMotionScope();
+  const chain = useMotionScope();
+  const inner = useMotionScope();
+  const delayed = useMotionScope();
+  const joined = useMotionScope();
+  const maximum = 4_294_967_295;
+  const letterText = (testId: string, value: string, y: number) =>
+    createElement(
+      Text,
+      {
+        testId,
+        x: 10,
+        y,
+        width: 280,
+        height: 32,
+        style: { fontSize: 12 },
+        enter: fade({ by: "letter", duration: 601, intervalMs: 211 }),
+      },
+      value,
+    );
+  const marker = (testId: string, y: number) =>
+    createElement(Shape, {
+      testId,
+      x: 10,
+      y,
+      width: 24,
+      height: 24,
+      fill: "#4472C4",
+      enter: fade({ duration: 103 }),
+    });
+  let children: ReactNode[];
+  if (scenario === "unknown-alias") {
+    children = [
+      createElement(
+        MotionScope,
+        { scope: source },
+        letterText("lowering-source", "AXYZ", 8),
+      ),
+      createElement(
+        MotionScope,
+        { scope: parent, startAt: after(source.end, 1301), delay: maximum },
+        marker("lowering-parent", 50),
+      ),
+      createElement(
+        MotionScope,
+        { scope: alias, startAt: after(parent.start, 19) },
+        marker("lowering-alias", 82),
+      ),
+    ];
+  } else if (scenario === "known-alias") {
+    children = [
+      createElement(
+        MotionScope,
+        { scope: parent, delay: maximum },
+        marker("known-lowering-parent", 50),
+      ),
+      createElement(
+        MotionScope,
+        { scope: alias, startAt: after(parent.start, 19) },
+        marker("known-lowering-alias", 82),
+      ),
+    ];
+  } else {
+    children = [
+      createElement(
+        MotionScope,
+        { scope: chain, mode: "sequence" },
+        createElement(
+          MotionScope,
+          { scope: inner },
+          letterText("join-lowering-a", "AXYZ", 8),
+          createElement(
+            MotionScope,
+            { scope: delayed, delay: 1000 },
+            letterText("join-lowering-b", "BXYZ", 42),
+          ),
+        ),
+        createElement(
+          MotionScope,
+          { scope: joined, startAt: after(delayed.end, 1301), delay: maximum },
+          marker("join-lowering-consumer", 74),
+        ),
+      ),
+    ];
+  }
+  return createElement(
+    Deck,
+    { width: 320, height: 160 },
+    createElement(
+      Slide,
+      { slideId: `universal-delay-${scenario}` },
+      ...children,
     ),
   );
 }
@@ -6932,5 +7052,169 @@ describe("组件编排作用域", () => {
     assert.match(xml, /delay="1368"/u);
     assert.match(xml, /delay="71"/u);
     assertTimingReferencesFollowDefinitions(xml);
+  });
+
+  it("未知 END、合法延迟层与 START 别名按累计时刻报告并查询", async () => {
+    const result = await build(
+      createElement(UniversalDelayLoweringDeck, { scenario: "unknown-alias" }),
+    );
+    const slide = result.report.slides[0];
+    const motion = slide?.capabilities?.["motion"] as MotionObservation;
+    const objectId = (testId: string) =>
+      slide?.objects.find((object) => object.testId === testId)?.id;
+    const containingScope = (testId: string) => {
+      const id = objectId(testId);
+      return motion.scopes?.find(({ members }) =>
+        members.some((member) => member.kind === "object" && member.id === id),
+      );
+    };
+    const source = containingScope("lowering-source");
+    const parent = containingScope("lowering-parent");
+    const alias = containingScope("lowering-alias");
+    const parentEffect = motion.steps[0]?.effects.find(
+      ({ target }) => target.testId === "lowering-parent",
+    );
+    const aliasEffect = motion.steps[0]?.effects.find(
+      ({ target }) => target.testId === "lowering-alias",
+    );
+    assert.ok(source && parent && alias && parentEffect && aliasEffect);
+    assert.deepEqual(parent.startAfter, {
+      scopeId: source.id,
+      point: "end",
+      offsetMs: 4_294_968_596,
+    });
+    assert.deepEqual(alias.startAfter, {
+      scopeId: source.id,
+      point: "end",
+      offsetMs: 4_294_968_615,
+    });
+    assert.deepEqual(parentEffect.startAfter, parent.startAfter);
+    assert.deepEqual(aliasEffect.startAfter, alias.startAfter);
+
+    const query = observeMotion(
+      result.query.slide("universal-delay-unknown-alias").observation,
+    );
+    const step = query?.steps[0];
+    assert.ok(step);
+    const queryParent = step.scopes.find(({ members }) =>
+      members.some(
+        (member) =>
+          member.kind === "effect" &&
+          member.ref.targetId === objectId("lowering-parent"),
+      ),
+    );
+    const queryAlias = step.scopes.find(({ members }) =>
+      members.some(
+        (member) =>
+          member.kind === "effect" &&
+          member.ref.targetId === objectId("lowering-alias"),
+      ),
+    );
+    assert.ok(queryParent && queryAlias);
+    assert.deepEqual(
+      step.difference(queryParent.start.ref, queryAlias.start.ref),
+      { state: "known", ms: 19 },
+    );
+
+    const writtenTimes = await assertValidMotionPptx(result.pptx);
+    assert.ok(writtenTimes.includes(1301));
+    assert.ok(writtenTimes.includes(4_294_967_295));
+  });
+
+  it("已知 parent START 别名继续保留累计值与查询差值", async () => {
+    const result = await build(
+      createElement(UniversalDelayLoweringDeck, { scenario: "known-alias" }),
+    );
+    const slide = result.report.slides[0];
+    const motion = slide?.capabilities?.["motion"] as MotionObservation;
+    const parentId = slide?.objects.find(
+      ({ testId }) => testId === "known-lowering-parent",
+    )?.id;
+    const aliasId = slide?.objects.find(
+      ({ testId }) => testId === "known-lowering-alias",
+    )?.id;
+    const parent = motion.scopes?.find(({ members }) =>
+      members.some(
+        (member) => member.kind === "object" && member.id === parentId,
+      ),
+    );
+    const alias = motion.scopes?.find(({ members }) =>
+      members.some(
+        (member) => member.kind === "object" && member.id === aliasId,
+      ),
+    );
+    assert.ok(parent && alias);
+    assert.equal(parent.startMs, 4_294_967_295);
+    assert.equal(alias.startMs, 4_294_967_314);
+
+    const query = observeMotion(
+      result.query.slide("universal-delay-known-alias").observation,
+    );
+    const step = query?.steps[0];
+    assert.ok(step);
+    const queryParent = step.scopes.find(({ members }) =>
+      members.some(
+        (member) =>
+          member.kind === "effect" && member.ref.targetId === parentId,
+      ),
+    );
+    const queryAlias = step.scopes.find(({ members }) =>
+      members.some(
+        (member) => member.kind === "effect" && member.ref.targetId === aliasId,
+      ),
+    );
+    assert.ok(queryParent && queryAlias);
+    assert.deepEqual(
+      step.difference(queryParent.start.ref, queryAlias.start.ref),
+      { state: "known", ms: 19 },
+    );
+
+    const writtenTimes = await assertValidMotionPptx(result.pptx);
+    assert.ok(writtenTimes.includes(4_294_967_295));
+  });
+
+  it("延迟后的 condition join 保留原始完整来源", async () => {
+    const result = await build(
+      createElement(UniversalDelayLoweringDeck, {
+        scenario: "condition-join",
+      }),
+    );
+    const slide = result.report.slides[0];
+    const motion = slide?.capabilities?.["motion"] as MotionObservation;
+    const objectId = (testId: string) =>
+      slide?.objects.find((object) => object.testId === testId)?.id;
+    const containingScope = (testId: string) => {
+      const id = objectId(testId);
+      return motion.scopes?.find(({ members }) =>
+        members.some((member) => member.kind === "object" && member.id === id),
+      );
+    };
+    const first = containingScope("join-lowering-a");
+    const delayed = containingScope("join-lowering-b");
+    const joined = containingScope("join-lowering-consumer");
+    const effect = motion.steps[0]?.effects.find(
+      ({ target }) => target.testId === "join-lowering-consumer",
+    );
+    assert.ok(first && delayed && joined && effect);
+    const expectedDependencies = [
+      { scopeId: first.id, point: "end", offsetMs: 4_294_967_295 },
+      { scopeId: delayed.id, point: "end", offsetMs: 4_294_968_596 },
+    ];
+    assert.deepEqual(joined.startAfterAll, expectedDependencies);
+    assert.deepEqual(effect.startAfterAll, expectedDependencies);
+
+    const query = observeMotion(
+      result.query.slide("universal-delay-condition-join").observation,
+    );
+    const queryEffect = query?.steps[0]?.effects.find(
+      ({ target }) => target.testId === "join-lowering-consumer",
+    );
+    assert.ok(queryEffect);
+    assert.deepEqual(queryEffect.startAfterAll, expectedDependencies);
+
+    const writtenTimes = await assertValidMotionPptx(result.pptx);
+    assert.ok(writtenTimes.includes(1000));
+    assert.ok(writtenTimes.includes(1301));
+    assert.ok(writtenTimes.includes(4_294_967_295));
   });
 });

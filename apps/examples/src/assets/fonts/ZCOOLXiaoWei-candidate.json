@@ -1,0 +1,17 @@
+{
+  "package": "@expo-google-fonts/zcool-xiaowei",
+  "version": "0.4.1",
+  "tarball": "https://registry.npmjs.org/@expo-google-fonts/zcool-xiaowei/-/zcool-xiaowei-0.4.1.tgz",
+  "fontPath": "400Regular/ZCOOLXiaoWei_400Regular.ttf",
+  "fontBytes": 6302244,
+  "sha256": "f5ffee4980db40005b7d7e76f7e8c7a0f959e87d57c33aeb8c9793a5a1077a35",
+  "licenseSha256": "376018b18c32557477695225f199c009da85ee4e21ddf529919c75ac5fb04aa0",
+  "family": "ZCOOL XiaoWei",
+  "versionName": "Version 1.000",
+  "weight": 400,
+  "staticTrueType": true,
+  "fsType": 0,
+  "numGlyphs": 7019,
+  "sampleCoverage": "中文混排页码销售额ABCD0123456789•()%.fi",
+  "sampleMissingGlyphs": []
+}

@@ -1,10 +1,12 @@
 import assert from "node:assert/strict";
 
-import { build } from "@react-pptx/react-pptx";
+import { build, Deck } from "@react-pptx/react-pptx";
 import { validatePptx } from "@react-pptx/validation";
 import { it } from "vitest";
 
 import { ShowcaseDeck } from "../src/index.ts";
+import { CardsPage } from "../src/templates/cards-page.tsx";
+import { theme } from "../src/theme.ts";
 
 it("地图六次点击累积变色，同期出现地区说明，四页画廊保留连续性与直接导航", async () => {
   const result = await build(<ShowcaseDeck />, { embedFonts: "full" });
@@ -121,3 +123,87 @@ it("地图六次点击累积变色，同期出现地区说明，四页画廊保�
     );
   }
 }, 30_000);
+
+it("真实卡片模板替换中文内容、增减和重排项目后仍保持布局与独立揭示", async () => {
+  const first = {
+    title: "先读标题",
+    body: "一句话给出中心观点。",
+    accent: "#138A83",
+  };
+  const second = {
+    title: "再看依据",
+    body: "正文解释观点背后的关键依据，保留清楚的阅读顺序。",
+    accent: "#E98068",
+  };
+  const third = {
+    title: "最后补充",
+    body: "需要时再补充细节。",
+    accent: "#16324F",
+  };
+  const changed = {
+    ...first,
+    title: "更长的中文标题也能自然换行",
+    body: "正文替换后，卡片仍然保留明确的阅读顺序，并根据内容增加高度，不挤占相邻卡片的空间。",
+  };
+  const variants = [
+    [first, second],
+    [third, changed, second],
+  ];
+  const result = await build(
+    <Deck
+      width={1280}
+      height={720}
+      theme={theme}
+      style={{ fontFamily: "major", fontSize: 24 }}
+    >
+      {variants.map((items, index) => (
+        <CardsPage
+          key={index}
+          slideId={`reuse-${index}`}
+          title="让内容决定卡片的高度"
+          subtitle="替换内容、调整数量与重排项目"
+          items={items}
+        />
+      ))}
+    </Deck>,
+  );
+  assert.deepEqual(result.report.diagnostics, []);
+  const file = await validatePptx(result.pptx);
+  assert.deepEqual(file.errors, []);
+  const bodyWidths: number[] = [];
+  for (const [index, page] of file.slides.entries()) {
+    let previousRight = 0;
+    assert.equal(page.animations?.length, variants[index]!.length);
+    const ids = new Set<number>();
+    for (const [position, step] of (page.animations ?? []).entries()) {
+      const item = variants[index]![position]!;
+      const title = page.objects.find(
+        ({ id }) => id === step.effects[0]?.targetId,
+      )!;
+      const body = page.objects.find(
+        ({ id }) => id === step.effects[1]?.targetId,
+      )!;
+      assert.equal(title.text?.text, item.title);
+      assert.equal(body.text?.text, item.body);
+      assert.deepEqual(
+        step.effects.map(({ durationMs, delayMs }) => [durationMs, delayMs]),
+        [
+          [280, 0],
+          [350, 280],
+        ],
+      );
+      for (const object of [title, body]) {
+        assert.ok(!ids.has(object.id));
+        ids.add(object.id);
+        assert.ok(object.boxEmu!.x >= previousRight);
+        assert.ok(object.boxEmu!.y + object.boxEmu!.height < 720 * 9525);
+        assert.ok(object.boxEmu!.x + object.boxEmu!.width < 1280 * 9525);
+      }
+      assert.equal(body.boxEmu!.x, title.boxEmu!.x);
+      assert.ok(body.boxEmu!.y >= title.boxEmu!.y + title.boxEmu!.height);
+      previousRight = title.boxEmu!.x + title.boxEmu!.width;
+      if (position === 0) bodyWidths.push(body.boxEmu!.width);
+    }
+  }
+  assert.ok(bodyWidths[0]! > bodyWidths[1]!);
+});

@@ -4998,6 +4998,7 @@ function readSlideAnimations(
           targetObject?.kind !== "shape" ||
           (preset === "fillColor" &&
             (autoReverse ||
+              repeatCount !== undefined ||
               attribute(effectTimeNode, "fill") !== "hold" ||
               colorBehavior === undefined ||
               childElements(colorBehavior)
@@ -5012,7 +5013,7 @@ function readSlideAnimations(
               : "invalid-fill-color-animation",
             preset === "breathe"
               ? "呼吸效果必须是 Shape 填充色的正向颜色动画并带原生反向"
-              : "填充色强调必须保持终态且不反向",
+              : "填充色强调必须保持终态且不反向或重复",
           );
           continue;
         }

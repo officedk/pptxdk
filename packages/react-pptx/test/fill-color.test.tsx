@@ -191,7 +191,7 @@ it("多个变色组件的完成时刻能连接后续内容，重排后仍各自�
   }
 });
 
-it("独立检查拒绝丢失终态保持的颜色动画", async () => {
+it("独立检查拒绝丢失终态保持、反向或重复的颜色动画", async () => {
   const result = await build(
     <Deck width={320} height={180}>
       <Slide slideId="hold">
@@ -207,14 +207,16 @@ it("独立检查拒绝丢失终态保持的颜色动画", async () => {
     </Deck>,
   );
   const parts = unzipSync(result.pptx);
-  parts["ppt/slides/slide1.xml"] = strToU8(
-    strFromU8(parts["ppt/slides/slide1.xml"]!).replaceAll(
-      'fill="hold"',
-      'fill="remove"',
-    ),
-  );
-  const file = await validatePptx(zipSync(parts));
-  assert.ok(
-    file.errors.some(({ code }) => code === "invalid-fill-color-animation"),
-  );
+  const original = strFromU8(parts["ppt/slides/slide1.xml"]!);
+  for (const changed of [
+    original.replaceAll('fill="hold"', 'fill="remove"'),
+    original.replace('presetID="9"', 'presetID="9" autoRev="1"'),
+    original.replace('presetID="9"', 'presetID="9" repeatCount="2000"'),
+  ]) {
+    parts["ppt/slides/slide1.xml"] = strToU8(changed);
+    const file = await validatePptx(zipSync(parts));
+    assert.ok(
+      file.errors.some(({ code }) => code === "invalid-fill-color-animation"),
+    );
+  }
 });

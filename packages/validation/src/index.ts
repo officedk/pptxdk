@@ -399,16 +399,23 @@ function parseCenterRotationFormula(
   const number = "(-?(?:\\d+(?:\\.\\d*)?|\\.\\d+))";
   const progress = "(?:\\$|\\(1-\\$\\))";
   const xPattern = new RegExp(
-    `^${number}\\+(\\$\\*)?\\(\\(#ppt_x-${number}\\)\\*cos\\(\\(${number}\\*pi/180\\)\\*${progress}\\)-\\(#ppt_y-${number}\\)\\*${number}\\*sin\\(\\(${number}\\*pi/180\\)\\*${progress}\\)\\)-#ppt_x$`,
+    `^${number}\\+(\\$\\*)?\\(\\(#ppt_x-${number}\\)\\*cos\\(\\(${number}\\*pi/180\\)\\*(?<firstProgress>${progress})\\)-\\(#ppt_y-${number}\\)\\*${number}\\*sin\\(\\(${number}\\*pi/180\\)\\*(?<secondProgress>${progress})\\)\\)-#ppt_x$`,
     "u",
   );
   const yPattern = new RegExp(
-    `^${number}\\+(\\$\\*)?\\(\\(#ppt_x-${number}\\)\\*${number}\\*sin\\(\\(${number}\\*pi/180\\)\\*${progress}\\)\\+\\(#ppt_y-${number}\\)\\*cos\\(\\(${number}\\*pi/180\\)\\*${progress}\\)\\)-#ppt_y$`,
+    `^${number}\\+(\\$\\*)?\\(\\(#ppt_x-${number}\\)\\*${number}\\*sin\\(\\(${number}\\*pi/180\\)\\*(?<firstProgress>${progress})\\)\\+\\(#ppt_y-${number}\\)\\*cos\\(\\(${number}\\*pi/180\\)\\*(?<secondProgress>${progress})\\)\\)-#ppt_y$`,
     "u",
   );
   const match = (axis === "ppt_x" ? xPattern : yPattern).exec(formula);
   if (match === null) return undefined;
-  const captures = match.slice(1);
+  const progressMarker = match.groups?.firstProgress;
+  if (
+    progressMarker === undefined ||
+    progressMarker !== match.groups?.secondProgress
+  ) {
+    return undefined;
+  }
+  const captures = match.slice(1).filter((value) => value !== progressMarker);
   const values = captures.map((value) =>
     value === undefined || value === "" || value === "$*"
       ? undefined
@@ -488,7 +495,7 @@ function parseCenterRotationFormula(
     centerX,
     centerY,
     angleDegrees: angleA,
-    progress: formula.includes(")*$)") ? "increasing" : "decreasing",
+    progress: progressMarker === "$" ? "increasing" : "decreasing",
     scaleToCenter,
     aspectRatio,
   };

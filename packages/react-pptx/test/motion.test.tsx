@@ -4599,6 +4599,37 @@ describe("对象动画", () => {
       groupProjection?.nativeEffects.map(({ targetId }) => targetId),
       negativeGroup?.members?.map(({ id }) => id),
     );
+
+    const positionFormula = negativeSpins[0]?.nativeBehaviors?.find(
+      ({ attributeNames }) => attributeNames.includes("ppt_x"),
+    )?.keyframes?.[0]?.formula;
+    assert.ok(positionFormula !== undefined);
+    const mixedProgressFormula = positionFormula.replace(
+      /(sin\(\([^)]*\*pi\/180\)\*)\$(\))/u,
+      "$1(1-$)$2",
+    );
+    assert.notEqual(mixedProgressFormula, positionFormula);
+    const relativeParts = unzipSync(result.pptx);
+    const relativeSlidePath = "ppt/slides/slide1.xml";
+    const relativeSlideXml = strFromU8(relativeParts[relativeSlidePath]!);
+    assert.ok(relativeSlideXml.includes(`fmla="${positionFormula}"`));
+    const mixedProgressReadback = await validatePptx(
+      zipSync({
+        ...relativeParts,
+        [relativeSlidePath]: strToU8(
+          relativeSlideXml.replace(
+            `fmla="${positionFormula}"`,
+            `fmla="${mixedProgressFormula}"`,
+          ),
+        ),
+      }),
+    );
+    assert.ok(
+      mixedProgressReadback.errors.some(
+        ({ code }) => code === "invalid-animation-progress-formula",
+      ),
+      "相对 Spin 的同一坐标公式不能混用递增和递减进度",
+    );
   });
 
   it("拒绝非法效果参数、缺失的 motion 能力和不存在的文件目标", async () => {

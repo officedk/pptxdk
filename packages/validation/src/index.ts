@@ -266,6 +266,7 @@ export type FileAnimationEffect = {
     | "zoom"
     | "fly"
     | "floatUp"
+    | "floatDown"
     | "spinIn"
     | "stretch"
     | "spin"
@@ -300,6 +301,7 @@ const textProjectionParagraphRoles: Partial<
   ],
   fly: ["anim:ppt_x", "anim:ppt_y"],
   floatUp: ["animEffect:fade", "anim:ppt_x", "anim:ppt_y"],
+  floatDown: ["animEffect:fade", "anim:ppt_x", "anim:ppt_y"],
   spinIn: [
     "anim:ppt_w",
     "anim:ppt_h",
@@ -325,6 +327,7 @@ const textProjectionBackgroundRoles: Partial<
   ],
   fly: ["anim:ppt_x", "anim:ppt_y"],
   floatUp: ["animEffect:fade", "anim:ppt_x", "anim:ppt_y"],
+  floatDown: ["animEffect:fade", "anim:ppt_x", "anim:ppt_y"],
   spinIn: [
     "anim:ppt_x",
     "anim:ppt_y",
@@ -4564,6 +4567,7 @@ function readSlideAnimations(
         17: "stretch",
         22: "wipe",
         42: "floatUp",
+        47: "floatDown",
         49: "spinIn",
         53: "zoom",
       };

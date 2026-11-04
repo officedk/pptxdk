@@ -16,6 +16,7 @@ export {
   Step,
   fade,
   fly,
+  floatDown,
   floatUp,
   motionCapability,
   spin,

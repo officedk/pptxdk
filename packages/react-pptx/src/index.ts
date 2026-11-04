@@ -77,6 +77,7 @@ export {
   breathe,
   fade,
   fly,
+  floatDown,
   floatUp,
   repeat,
   spin,

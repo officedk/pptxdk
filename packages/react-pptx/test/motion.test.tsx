@@ -10,6 +10,7 @@ import {
   breathe,
   fade,
   fly,
+  floatDown,
   floatUp,
   Group,
   Image,
@@ -1799,7 +1800,7 @@ describe("对象动画", () => {
               width: 10,
               height: 10,
               motion: false,
-              enter: fade(),
+              enter: floatDown(),
             }),
             createElement(Shape, {
               testId: "static",
@@ -1965,6 +1966,276 @@ describe("对象动画", () => {
         ["stretch", undefined, undefined],
         ["spin", 225, { decelerate: 1 }],
       ],
+    );
+  });
+
+  it("floatDown 从对象上方淡入并在文件中保留向下位移", async () => {
+    const result = await build(
+      createElement(
+        Deck,
+        { width: 320, height: 180 },
+        createElement(
+          Slide,
+          { slideId: "float-down" },
+          createElement(Shape, {
+            testId: "down-default",
+            x: 20,
+            y: 20,
+            width: 24,
+            height: 24,
+            fill: "#164E3D",
+            enter: floatDown(),
+          }),
+          createElement(Shape, {
+            testId: "down-custom",
+            x: 60,
+            y: 20,
+            width: 24,
+            height: 24,
+            fill: "#164E3D",
+            enter: floatDown({
+              duration: 250,
+              delay: 40,
+              easing: { decelerate: 0.5 },
+            }),
+          }),
+          createElement(Shape, {
+            testId: "up-regression",
+            x: 100,
+            y: 20,
+            width: 24,
+            height: 24,
+            fill: "#164E3D",
+            enter: floatUp(),
+          }),
+        ),
+      ),
+    );
+    const motion = result.report.slides[0]?.capabilities?.[
+      "motion"
+    ] as MotionObservation;
+    assert.deepEqual(
+      motion.steps[0]?.effects.map(
+        ({ target, preset, durationMs, delayMs }) => [
+          target.testId,
+          preset,
+          durationMs,
+          delayMs,
+        ],
+      ),
+      [
+        ["down-default", "floatDown", 500, 0],
+        ["up-regression", "floatUp", 500, 0],
+        ["down-custom", "floatDown", 250, 40],
+      ],
+    );
+
+    const file = await validatePptx(result.pptx);
+    assert.deepEqual(file.errors, []);
+    const fileEffects = file.slides[0]?.animations?.[0]?.effects;
+    assert.deepEqual(
+      fileEffects?.map(({ preset, durationMs, delayMs, easing }) => [
+        preset,
+        durationMs,
+        delayMs,
+        easing,
+      ]),
+      [
+        ["floatDown", 500, 0, undefined],
+        ["floatUp", 500, 0, undefined],
+        ["floatDown", 250, 40, { decelerate: 0.5 }],
+      ],
+    );
+    const downTargetId = result.report.slides[0]?.objects.find(
+      ({ testId }) => testId === "down-default",
+    )?.id;
+    const upTargetId = result.report.slides[0]?.objects.find(
+      ({ testId }) => testId === "up-regression",
+    )?.id;
+    const slideXml = strFromU8(
+      unzipSync(result.pptx)["ppt/slides/slide1.xml"]!,
+    );
+    assert.match(
+      slideXml,
+      /presetID="47" presetClass="entr" presetSubtype="0"/u,
+    );
+    const positionAnimation = (targetId: number | undefined, axis: string) =>
+      [...slideXml.matchAll(/<p:anim\b[\s\S]*?<\/p:anim>/gu)].find(
+        ([behavior]) =>
+          behavior?.includes(`<p:spTgt spid="${targetId}">`) === true &&
+          behavior.includes(`<p:attrName>${axis}</p:attrName>`),
+      )?.[0];
+    const downX = positionAnimation(downTargetId, "ppt_x");
+    const downY = positionAnimation(downTargetId, "ppt_y");
+    assert.ok(downX);
+    assert.ok(downY);
+    assert.deepEqual(
+      [...downX.matchAll(/<p:strVal val="([^"]+)"><\/p:strVal>/gu)].map(
+        ([, value]) => value,
+      ),
+      ["#ppt_x", "#ppt_x"],
+    );
+    assert.deepEqual(
+      [...downY.matchAll(/<p:strVal val="([^"]+)"><\/p:strVal>/gu)].map(
+        ([, value]) => value,
+      ),
+      ["#ppt_y-.1", "#ppt_y"],
+    );
+    const downNativeBehaviors = [
+      ...slideXml.matchAll(/<p:(set|animEffect|anim)\b[\s\S]*?<\/p:\1>/gu),
+    ]
+      .map(([behavior]) => behavior ?? "")
+      .filter((behavior) =>
+        behavior.includes(`<p:spTgt spid="${downTargetId}">`),
+      );
+    assert.deepEqual(
+      downNativeBehaviors.map((behavior) => /^<p:(\w+)/u.exec(behavior)?.[1]),
+      ["set", "animEffect", "anim", "anim"],
+    );
+    assert.match(downNativeBehaviors[0] ?? "", /style\.visibility/u);
+    assert.match(downNativeBehaviors[0] ?? "", /val="visible"/u);
+    assert.match(downNativeBehaviors[1] ?? "", /filter="fade"/u);
+    const upY = positionAnimation(upTargetId, "ppt_y");
+    assert.ok(upY);
+    assert.match(upY, /<p:strVal val="#ppt_y\+\.1"><\/p:strVal>/u);
+  });
+
+  it("floatDown 将组合和有背景的 whole Text 一并向下淡入", async () => {
+    const result = await build(
+      createElement(
+        Deck,
+        { width: 320, height: 180 },
+        createElement(
+          Slide,
+          { slideId: "float-down-targets" },
+          createElement(
+            Group,
+            {
+              testId: "group-down",
+              enter: floatDown({ duration: 250, delay: 35 }),
+            },
+            createElement(Shape, {
+              testId: "group-member",
+              x: 20,
+              y: 20,
+              width: 24,
+              height: 24,
+              fill: "#164E3D",
+            }),
+          ),
+          createElement(
+            Text,
+            {
+              testId: "whole-down",
+              x: 80,
+              y: 20,
+              width: 180,
+              height: 100,
+              style: {
+                backgroundColor: "#38BDF8",
+                borderColor: "#1D4ED8",
+                borderWidth: 2,
+              },
+              enter: floatDown({ duration: 250 }),
+            },
+            createElement(P, { key: "first" }, "First paragraph"),
+            createElement(P, { key: "second" }, "Second paragraph"),
+          ),
+        ),
+      ),
+    );
+
+    const file = await validatePptx(result.pptx);
+    assert.deepEqual(file.errors, []);
+    const reportObjects = result.report.slides[0]?.objects ?? [];
+    const groupId = reportObjects.find(
+      ({ testId }) => testId === "group-down",
+    )?.id;
+    const textId = reportObjects.find(
+      ({ testId }) => testId === "whole-down",
+    )?.id;
+    assert.ok(groupId !== undefined);
+    assert.ok(textId !== undefined);
+
+    const fileEffects =
+      file.slides[0]?.animations?.flatMap(({ effects }) => effects) ?? [];
+    const groupEffect = fileEffects.find(
+      ({ targetId }) => targetId === groupId,
+    );
+    assert.deepEqual(
+      [groupEffect?.preset, groupEffect?.durationMs, groupEffect?.delayMs],
+      ["floatDown", 250, 35],
+    );
+
+    const textEffect = fileEffects.find(({ targetId }) => targetId === textId);
+    assert.deepEqual(
+      [
+        textEffect?.preset,
+        textEffect?.nativeBuild,
+        textEffect?.nativeBuildGroupId,
+        textEffect?.nativeBuildAnimBg,
+        textEffect?.durationMs,
+      ],
+      ["floatDown", "paragraph", 1, true, 250],
+    );
+    const textPositionYs = textEffect?.nativeBehaviors?.filter(
+      ({ behavior, targetType, attributeNames }) =>
+        behavior === "anim" &&
+        targetType === "paragraph" &&
+        attributeNames[0] === "ppt_y",
+    );
+    assert.deepEqual(
+      textPositionYs?.map(({ targetRange, from, to, durationMs }) => [
+        targetRange,
+        from,
+        to,
+        durationMs,
+      ]),
+      [
+        [{ type: "paragraph", start: 0, end: 0 }, "-0.1", "0", 250],
+        [{ type: "paragraph", start: 1, end: 1 }, "-0.1", "0", 250],
+      ],
+    );
+    const textBackgroundY = textEffect?.nativeBehaviors?.find(
+      ({ behavior, targetType, attributeNames }) =>
+        behavior === "anim" &&
+        targetType === "background" &&
+        attributeNames[0] === "ppt_y",
+    );
+    assert.deepEqual(
+      [textBackgroundY?.from, textBackgroundY?.to, textBackgroundY?.durationMs],
+      ["-0.1", "0", 250],
+    );
+    const textPositionX = textEffect?.nativeBehaviors?.find(
+      ({ behavior, targetType, attributeNames }) =>
+        behavior === "anim" &&
+        targetType === "paragraph" &&
+        attributeNames[0] === "ppt_x",
+    );
+    assert.deepEqual([textPositionX?.from, textPositionX?.to], ["0", "0"]);
+    assert.ok(
+      textEffect?.nativeBehaviors?.some(
+        ({ behavior, targetType, filter }) =>
+          behavior === "animEffect" &&
+          targetType === "background" &&
+          filter === "fade",
+      ),
+    );
+
+    const slideXml = strFromU8(
+      unzipSync(result.pptx)["ppt/slides/slide1.xml"]!,
+    );
+    const groupY = [...slideXml.matchAll(/<p:anim\b[\s\S]*?<\/p:anim>/gu)].find(
+      ([behavior]) =>
+        behavior?.includes(`<p:spTgt spid="${groupId}">`) === true &&
+        behavior.includes("<p:attrName>ppt_y</p:attrName>"),
+    )?.[0];
+    assert.ok(groupY);
+    assert.deepEqual(
+      [...groupY.matchAll(/<p:strVal val="([^"]+)"><\/p:strVal>/gu)].map(
+        ([, value]) => value,
+      ),
+      ["#ppt_y-.1", "#ppt_y"],
     );
   });
 
@@ -4159,6 +4430,7 @@ describe("对象动画", () => {
         "invalid-easing",
       ],
       [wipe({ from: null } as never), "invalid-direction"],
+      [floatDown({ from: "top" } as never), "invalid-motion"],
       [fade({ by: "paragraph" }), "invalid-motion-granularity"],
     ] as const) {
       await assert.rejects(

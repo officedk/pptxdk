@@ -24,6 +24,7 @@ export type EffectPreset =
   | "zoom"
   | "fly"
   | "floatUp"
+  | "floatDown"
   | "spinIn"
   | "stretch"
   | "spin"
@@ -427,6 +428,13 @@ export function floatUp(options: EffectOptions = {}): EntranceEffect {
   }) as EntranceEffect;
 }
 
+/** 淡入并从上方向下浮动；缺省时长为 500 毫秒。 */
+export function floatDown(options: EffectOptions = {}): EntranceEffect {
+  return declaration("entrance", "floatDown", options, {
+    duration: 500,
+  }) as EntranceEffect;
+}
+
 /** 放大、旋转并淡入。 */
 export function spinIn(options: EffectOptions = {}): EntranceEffect {
   return declaration("entrance", "spinIn", options, {
@@ -668,6 +676,7 @@ const presets = new Set<EffectPreset>([
   "zoom",
   "fly",
   "floatUp",
+  "floatDown",
   "spinIn",
   "stretch",
   "spin",
@@ -679,6 +688,7 @@ const presetKinds: Readonly<Record<EffectPreset, Effect["kind"]>> = {
   zoom: "entrance",
   fly: "entrance",
   floatUp: "entrance",
+  floatDown: "entrance",
   spinIn: "entrance",
   stretch: "entrance",
   spin: "emphasis",

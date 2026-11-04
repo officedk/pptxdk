@@ -41,6 +41,7 @@ export {
   Step,
   fade,
   fly,
+  floatDown,
   floatUp,
   repeat,
   spin,
@@ -730,15 +731,22 @@ function behaviorIds(
         ),
       ];
     }
-    case "floatUp": {
+    case "floatUp":
+    case "floatDown": {
       if (!wholeText) {
         return [
           showOnce(),
           filter("fade", target()),
           singleMotion("ppt_x", "#ppt_x", "#ppt_x", false),
-          singleMotion("ppt_y", "#ppt_y+.1", "#ppt_y", false),
+          singleMotion(
+            "ppt_y",
+            effect.preset === "floatDown" ? "#ppt_y-.1" : "#ppt_y+.1",
+            "#ppt_y",
+            false,
+          ),
         ];
       }
+      const fromY = effect.preset === "floatDown" ? -0.1 : 0.1;
       const targets = [...positionTargets(), ...backgroundTargets()];
       return [
         showOnce(),
@@ -750,7 +758,7 @@ function behaviorIds(
         ),
         ...targets.flatMap((targetElement) => [
           singleMotion("ppt_x", 0, 0, "sum", targetElement),
-          singleMotion("ppt_y", 0.1, 0, "sum", targetElement),
+          singleMotion("ppt_y", fromY, 0, "sum", targetElement),
         ]),
       ];
     }
@@ -835,6 +843,7 @@ function effectTree(
     zoom: { id: 53, class: "entr" },
     fly: { id: 2, class: "entr" },
     floatUp: { id: 42, class: "entr" },
+    floatDown: { id: 47, class: "entr" },
     spinIn: { id: 49, class: "entr" },
     stretch: { id: 17, class: "entr" },
     spin: { id: 8, class: "emph" },

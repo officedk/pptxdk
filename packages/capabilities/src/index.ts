@@ -71,6 +71,7 @@ export {
   MotionScope,
   fade,
   fly,
+  floatDown,
   floatUp,
   motionCapability,
   repeat,

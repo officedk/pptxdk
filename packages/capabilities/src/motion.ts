@@ -36,6 +36,7 @@ import { registerMotionObservation } from "./motion-query.ts";
 export {
   after,
   breathe,
+  fillColor,
   Box,
   MotionScope,
   Step,
@@ -80,6 +81,7 @@ export type {
   EffectPreset,
   BreatheEffect,
   BreatheOptions,
+  FillColorOptions,
   EmphasisEffect,
   EmphasisEffectDeclaration,
   EntranceEffect,
@@ -285,6 +287,7 @@ function wholeTextRanges(effect: TimingEffect): readonly {
     !effect.targetTextBody ||
     effect.target.range !== undefined ||
     effect.preset === "breathe" ||
+    effect.preset === "fillColor" ||
     effect.by === "word" ||
     effect.by === "letter" ||
     effect.targetParagraphCount === undefined ||
@@ -800,6 +803,7 @@ function behaviorIds(
         progressMotion("ppt_y", position[1]),
       ];
     }
+    case "fillColor":
     case "breathe":
       return [
         element(
@@ -810,7 +814,10 @@ function behaviorIds(
             undefined,
             element("p:cTn", {
               id: ids.take(),
-              dur: Math.round(duration / 2),
+              dur:
+                effect.preset === "breathe"
+                  ? Math.round(duration / 2)
+                  : duration,
               fill: "hold",
             }),
             target(),
@@ -858,6 +865,7 @@ function effectTree(
     stretch: { id: 17, class: "entr" },
     spin: { id: 8, class: "emph" },
     breathe: { id: 0, class: "emph" },
+    fillColor: { id: 9, class: "emph" },
   }[effect.preset];
   const subtype =
     effect.preset === "zoom"

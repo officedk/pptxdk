@@ -258,9 +258,16 @@ describe("react-pptx 单次导出 CLI", () => {
   });
 
   it("对无效参数返回用法状态", async () => {
-    const result = runNode([cli, "--unknown"], import.meta.dirname);
-
-    expect(result.code).toBe(2);
-    expect(result.stderr).toContain("用法");
+    for (const args of [
+      ["--unknown"],
+      ["--embed-fonts"],
+      ["--embed-fonts", "invalid"],
+    ]) {
+      const result = runNode([cli, ...args], import.meta.dirname);
+      expect(result.code).toBe(2);
+      expect(result.stderr).toContain("用法");
+      if (args[0] === "--embed-fonts")
+        expect(result.stderr).toContain("full 或 subset");
+    }
   });
 });

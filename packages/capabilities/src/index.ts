@@ -65,6 +65,7 @@ export type { MorphKey, MorphProps, MorphScope } from "#/morph-api.ts";
 export {
   after,
   breathe,
+  fillColor,
   Box,
   observeMotion,
   Step,
@@ -91,6 +92,7 @@ export type {
   EffectPreset,
   BreatheEffect,
   BreatheOptions,
+  FillColorOptions,
   EmphasisEffect,
   EmphasisEffectDeclaration,
   EntranceEffectDeclaration,

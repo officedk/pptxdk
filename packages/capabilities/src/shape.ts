@@ -339,6 +339,10 @@ export const shapeCapability: CapabilityModule = {
         props["fill"] !== undefined ||
         layoutStyle["backgroundColor"] !== undefined ||
         layoutStyle["backgroundImage"] !== undefined,
+      solidFilled:
+        (props["fill"] ?? layoutStyle["backgroundColor"]) !== undefined &&
+        (props["fill"] ?? layoutStyle["backgroundColor"]) !== "none" &&
+        layoutStyle["backgroundImage"] === undefined,
       box,
       rotationDegrees:
         typeof layoutStyle["rotate"] === "number" ? layoutStyle["rotate"] : 0,

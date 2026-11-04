@@ -40,7 +40,8 @@
       "dependsOn": [
         "@react-pptx/cli#build",
         "@react-pptx/react-pptx#build",
-        "@react-pptx/validation#build"
+        "@react-pptx/validation#build",
+        "@react-pptx/showcase#build"
       ],
       "inputs": [
         "scripts/verify-artifact-consumption.ts",
@@ -58,7 +59,10 @@
         "packages/capabilities/dist/**",
         "packages/react-pptx/dist/**",
         "packages/validation/dist/**",
-        "pnpm-lock.yaml"
+        "pnpm-lock.yaml",
+        "examples/showcase/package.json",
+        "examples/showcase/src/**",
+        "examples/showcase/dist/**"
       ],
       "outputs": [],
       "cache": false,
@@ -105,17 +109,6 @@
           ]
         }
       },
-      "layer:kit": {
-        "dependencies": {
-          "allow": [
-            "layer:tooling",
-            "layer:validation",
-            "layer:core",
-            "layer:capabilities",
-            "layer:entry"
-          ]
-        }
-      },
       "layer:example": {
         "dependencies": {
           "allow": [
@@ -124,7 +117,7 @@
             "layer:core",
             "layer:capabilities",
             "layer:entry",
-            "layer:kit"
+            "layer:application"
           ]
         }
       },

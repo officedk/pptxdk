@@ -28,7 +28,8 @@ export type EffectPreset =
   | "spinIn"
   | "stretch"
   | "spin"
-  | "breathe";
+  | "breathe"
+  | "fillColor";
 
 export type RepeatCount = number | "forever";
 
@@ -132,6 +133,15 @@ export type EntranceEffectDeclaration =
 export type EmphasisEffectDeclaration =
   | EmphasisEffect
   | RepeatedEffect<EmphasisEffect>;
+
+/** 一次性填充色变化；终态保持到页面退出，仅适用于带实色填充的 Shape。 */
+export type FillColorOptions = Pick<
+  EffectOptions,
+  "duration" | "delay" | "easing"
+> & {
+  readonly from: string;
+  readonly to: string;
+};
 
 export type BreatheOptions = {
   /** 完整的暗→亮→暗周期，单位为偶数毫秒。 */
@@ -473,6 +483,17 @@ export function spin(options: SpinOptions = {}): EmphasisEffect {
   ) as EmphasisEffect;
 }
 
+/** 从 from 变为 to 并保持终态；不重复、不反向，缺省时长为 500 毫秒。 */
+export function fillColor(options: FillColorOptions): EmphasisEffect {
+  const { from, to, ...timing } = options;
+  return Object.freeze({
+    ...declaration("emphasis", "fillColor", timing, { duration: 500 }),
+    kind: "emphasis" as const,
+    fromColor: from,
+    toColor: to,
+  });
+}
+
 // 保留结构化 JavaScript 输入中的额外选项，交由正式效果校验诊断。
 const breatheUnknownParameters = Symbol("breathe unknown parameters");
 const breatheOptionNames = new Set([
@@ -570,6 +591,7 @@ type MotionTarget = {
   readonly testId?: string;
   readonly textBody: boolean;
   readonly filled: boolean;
+  readonly solidFilled?: boolean;
   readonly paragraphCount?: number;
   readonly chartSeriesCount?: number;
   readonly chartCategoryCount?: number;
@@ -691,6 +713,7 @@ const presets = new Set<EffectPreset>([
   "stretch",
   "spin",
   "breathe",
+  "fillColor",
 ]);
 const presetKinds: Readonly<Record<EffectPreset, Effect["kind"]>> = {
   fade: "entrance",
@@ -703,6 +726,7 @@ const presetKinds: Readonly<Record<EffectPreset, Effect["kind"]>> = {
   stretch: "entrance",
   spin: "emphasis",
   breathe: "emphasis",
+  fillColor: "emphasis",
 };
 const minimumRotationUnits = -2_147_483_648;
 const maximumRotationUnits = 2_147_483_647;
@@ -732,9 +756,13 @@ const motionGranularities = new Set<MotionGranularity>([
 export const maximumTimeNodeValue = 4_294_967_295;
 const maxRepeatCount = Math.floor(maximumTimeNodeValue / 1000);
 
-function normalizeColor(value: unknown, name: string): string {
+function normalizeColor(
+  value: unknown,
+  name: string,
+  code = "invalid-breathe-color",
+): string {
   if (typeof value !== "string" || !/^#[0-9a-f]{6}$/iu.test(value)) {
-    return fail("invalid-breathe-color", `${name} 必须是 #RRGGBB 颜色`);
+    return fail(code, `${name} 必须是 #RRGGBB 颜色`);
   }
   return value.toUpperCase();
 }
@@ -971,6 +999,20 @@ function validatedEffect(
         "invalid-breathe-colors",
         "breathe.to 必须比 breathe.from 明亮",
       );
+    }
+  } else if (preset === "fillColor") {
+    fromColor = normalizeColor(
+      effectValue["fromColor"],
+      "fillColor.from",
+      "invalid-fill-color",
+    );
+    toColor = normalizeColor(
+      effectValue["toColor"],
+      "fillColor.to",
+      "invalid-fill-color",
+    );
+    if (by !== undefined || interval !== undefined) {
+      return fail("invalid-motion", "fillColor 不支持文字或图表粒度");
     }
   } else if (
     effectValue["fromColor"] !== undefined ||
@@ -1273,6 +1315,18 @@ export function motionAnnotations(
     return fail(
       "invalid-breathe-target",
       "breathe() 需要带实色填充的原生 Shape；Group 需由实际成员分别声明效果",
+    );
+  }
+  if (
+    effects.some(
+      ({ preset }) =>
+        preset === "fillColor" &&
+        (target.kind !== "shape" || !target.solidFilled),
+    )
+  ) {
+    return fail(
+      "invalid-fill-color-target",
+      "fillColor() 需要带实色填充的原生 Shape",
     );
   }
   if (effects.length === 0) return [];

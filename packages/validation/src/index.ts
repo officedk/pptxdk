@@ -272,7 +272,8 @@ export type FileAnimationEffect = {
     | "spinIn"
     | "stretch"
     | "spin"
-    | "breathe";
+    | "breathe"
+    | "fillColor";
   readonly durationMs: number;
   readonly delayMs: number;
   readonly repeatCount?: number | "forever";
@@ -4593,6 +4594,7 @@ function readSlideAnimations(
       > = {
         2: "fly",
         8: "spin",
+        9: "fillColor",
         10: "fade",
         17: "stretch",
         22: "wipe",
@@ -4622,7 +4624,9 @@ function readSlideAnimations(
         continue;
       }
       const expectedKind =
-        preset === "spin" || preset === "breathe" ? "emphasis" : "entrance";
+        preset === "spin" || preset === "breathe" || preset === "fillColor"
+          ? "emphasis"
+          : "entrance";
       if (kind !== expectedKind) {
         issue(
           errors,
@@ -4945,7 +4949,7 @@ function readSlideAnimations(
       const targetRange = fullParagraphProjection ? undefined : ranges[0];
       let fromColor: string | undefined;
       let toColor: string | undefined;
-      if (preset === "breathe") {
+      if (preset === "breathe" || preset === "fillColor") {
         const colorAnimation = colorAnimationNodes[0];
         const colorBehavior =
           colorAnimation === undefined
@@ -4991,13 +4995,24 @@ function readSlideAnimations(
           colorTargetIds[0] !== targetId ||
           fromColor === undefined ||
           toColor === undefined ||
-          targetObject?.kind !== "shape"
+          targetObject?.kind !== "shape" ||
+          (preset === "fillColor" &&
+            (autoReverse ||
+              attribute(effectTimeNode, "fill") !== "hold" ||
+              colorBehavior === undefined ||
+              childElements(colorBehavior)
+                .filter((node) => node.localName === "cTn")
+                .some((node) => attribute(node, "fill") !== "hold")))
         ) {
           issue(
             errors,
             part,
-            "invalid-breathe-animation",
-            "呼吸效果必须是 Shape 填充色的正向颜色动画并带原生反向",
+            preset === "breathe"
+              ? "invalid-breathe-animation"
+              : "invalid-fill-color-animation",
+            preset === "breathe"
+              ? "呼吸效果必须是 Shape 填充色的正向颜色动画并带原生反向"
+              : "填充色强调必须保持终态且不反向",
           );
           continue;
         }

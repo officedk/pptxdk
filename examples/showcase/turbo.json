@@ -1,6 +1,6 @@
 {
   "extends": ["//"],
-  "tags": ["layer:kit"],
+  "tags": ["layer:example"],
   "tasks": {
     "build": {
       "dependsOn": ["^build"],
@@ -38,6 +38,26 @@
       "inputs": [],
       "outputs": [],
       "tags": ["quality:light"]
+    },
+    "test": {
+      "dependsOn": ["build", "^build"],
+      "inputs": [
+        "src/**",
+        "test/**",
+        "package.json",
+        "vitest.config.ts",
+        "tsconfig.node.json"
+      ],
+      "outputs": [],
+      "cache": false,
+      "tags": ["quality:heavy"]
+    },
+    "export:pptx": {
+      "dependsOn": ["build", "^build"],
+      "inputs": ["src/**", "package.json"],
+      "outputs": ["dist/showcase.pptx"],
+      "cache": false,
+      "tags": ["work:on-demand"]
     }
   }
 }

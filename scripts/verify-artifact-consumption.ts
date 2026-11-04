@@ -16,6 +16,7 @@ const packageNames = [
   "@react-pptx/react-pptx",
   "@react-pptx/validation",
   "@react-pptx/cli",
+  "@react-pptx/showcase",
 ] as const;
 
 interface PnpmPackage {
@@ -222,6 +223,7 @@ try {
           "consumer-deck-helper.ts",
           "consumer-deck.tsx",
           "reject-text-box.mjs",
+          "showcase-entry.ts",
           "consumer-cropped.mjs",
           "devtools-sentinel.mjs",
         ],
@@ -247,6 +249,7 @@ try {
     join(temporaryDirectory, "consumer-types.ts"),
     [
       'import { createElement, Suspense, use, useEffect, useState } from "react";',
+      'import { ShowcaseDeck } from "@react-pptx/showcase";',
       'import { after, Box, Cell, Chart, createMorphScope, darker, Deck, defineTheme, fade, font, Group, Image, lighter, linearGradient, MotionScope, P, Row, Section, Shape, Slide, SlideNumber, Span, spin, Step, Table, Text, useMotionScope, build, transitions, type BoxProps, type BuildOptions, type BuildResult, type CellProps, type ChartAxis, type ChartData, type ChartDataLabels, type ChartKind, type ChartLine, type ChartPoint, type ChartProps as DefaultChartProps, type ChartSeries, type ColorValue, type ColumnOrBarChartProps, type GroupProps, type ImageProps, type LineOrAreaChartProps, type LinkTarget, type MotionCompletionState, type MotionGranularity, type MotionMoment, type MotionObservation, type MotionProps, type MotionScopeHandle, type MotionScopeMode, type MotionScopeProps, type NativeTableObservation, type RowProps, type SectionProps, type ShapeProps, type SlideBackground, type SlideNumberProps, type StepProps, type TableColumn, type TableProps, type TableRowStyle, type TableCellStyle, type TableSpacing, type TableStyle, type TableTextStyle, type TableVerticalAlign, type TextProps, type TextStyle, type ThemeInput, type ThemeScope, type Transition } from "@react-pptx/react-pptx";',
       'import { build as buildChartOnly, Chart as ChartOnly, Deck as ChartDeck, Slide as ChartSlide, type ChartProps } from "@react-pptx/react-pptx/chart";',
       'import { observeMotion, type EffectInstanceObservation, type LocatorObservation, type LocatorResourceObservation, type MotionMembership, type MotionQuery, type MotionTime } from "@react-pptx/react-pptx";',
@@ -315,7 +318,7 @@ try {
       'const defaultChartResult: Promise<BuildResult> = build(createElement(Deck, {}, createElement(Slide, { slideId: "typed-chart" }, createElement(Chart, defaultChart))));',
       'const chartOnlyResult: Promise<BuildResult> = buildChartOnly(createElement(ChartDeck, {}, createElement(ChartSlide, { slideId: "typed-chart-only" }, createElement(ChartOnly, chartOnly))));',
       'const tableElement = createElement(Table, table, createElement(Row, row, createElement(Cell, cell, "North")));',
-      "void [result, defaultChartResult, chartOnlyResult, contentSizedText, noWrapText, typedBox, granularText, granularChart, defaultRelativeSpin, compactRelativeSpin, validationIssue, validatorProfile, asyncTable, signalOptions, fontEmbeddingOptions, fontSubsetOptions, themeInput, themeScope, colorValue, textDefaults, themedDeck, sourceBuild, tableElement, tableObservation, scopeMoment, delayedScopeMoment, scopeCompletion, scopeProps, motionScopeElement, scopeConsumer, linkTarget, background, section, slideNumber, shapeWithSlideNumber, consumeQueryTypes];",
+      "void [ShowcaseDeck, result, defaultChartResult, chartOnlyResult, contentSizedText, noWrapText, typedBox, granularText, granularChart, defaultRelativeSpin, compactRelativeSpin, validationIssue, validatorProfile, asyncTable, signalOptions, fontEmbeddingOptions, fontSubsetOptions, themeInput, themeScope, colorValue, textDefaults, themedDeck, sourceBuild, tableElement, tableObservation, scopeMoment, delayedScopeMoment, scopeCompletion, scopeProps, motionScopeElement, scopeConsumer, linkTarget, background, section, slideNumber, shapeWithSlideNumber, consumeQueryTypes];",
     ].join("\n"),
   );
   await writeFile(
@@ -345,6 +348,7 @@ try {
     join(temporaryDirectory, "consumer-runtime.ts"),
     [
       'import { createElement, Suspense, use, useEffect, useState } from "react";',
+      'import { ShowcaseDeck } from "@react-pptx/showcase";',
       'import { after, BuildError, Box, Cell, Chart, createMorphScope, darker, Deck, defineTheme, fade, font, Group, Image, lighter, MotionScope, observeMotion, P, Row, Shape, Slide, Span, spin, Step, Table, Text, useMotionScope, build, targets, transitions, wipe, type MotionObservation } from "@react-pptx/react-pptx";',
       'import { build as buildChartOnly, Chart as ChartOnly, Deck as ChartDeck, Slide as ChartSlide } from "@react-pptx/react-pptx/chart";',
       'import { validatePptx } from "@react-pptx/validation";',
@@ -355,6 +359,13 @@ try {
       'import { buildFromSource } from "@react-pptx/react-pptx/node";',
       'import { build as buildShapeEntry, Deck as ShapeDeck, Shape as ShapeEntryShape, Slide as ShapeSlide, spin as shapeEntrySpin } from "@react-pptx/react-pptx/shape";',
       "type EmbeddedFont = { readonly part: string; readonly weight: number; readonly payload: Uint8Array; readonly parsed: fontkit.Font };",
+      'const showcaseResult = await build(createElement(ShowcaseDeck), { embedFonts: "full" });',
+      'const showcaseFile = await validatePptx(showcaseResult.pptx, { allowedExtensions: ["p14", "p159"] });',
+      'const showcaseCliFile = await validatePptx(new Uint8Array(await readFile("showcase-cli.pptx")), { allowedExtensions: ["p14", "p159"] });',
+      'if (showcaseFile.errors.length || showcaseCliFile.errors.length || showcaseFile.slides.length !== 16 || showcaseResult.report.diagnostics.some(({code, path}) => code !== "overflow" || !path.includes("gallery-")) || JSON.stringify(showcaseFile.slides) !== JSON.stringify(showcaseCliFile.slides)) throw new Error("showcase 安装消费或 CLI 结果不一致");',
+      'const mapSteps = showcaseFile.slides.find(({id}) => id === "world")?.animations;',
+      'if (JSON.stringify(mapSteps?.map(({effects}) => effects.filter(({preset}) => preset === "fillColor").length)) !== "[123,33,54,42,119,24]" || showcaseFile.slides.filter(({transition}) => transition?.kind === "morph").length !== 4) throw new Error("showcase 动效在安装制品中丢失");',
+      'await writeFile("showcase-installed.pptx", showcaseResult.pptx);',
       'const jostMetrics = new Uint8Array(await readFile(new URL("./jost-latin-400-normal.woff2", import.meta.url)));',
       'const embeddedFontBytes = new Uint8Array(await readFile(new URL("./Jost-400-Book.ttf", import.meta.url)));',
       'const installedCliBytes = await readFile("cli-output/installed.pptx");',
@@ -544,8 +555,12 @@ try {
       'if (!(missingMetrics instanceof BuildError) || missingMetrics.diagnostics[0]?.code !== "font-measurement-unavailable") throw new Error("installed content-sized text did not require explicit font metrics");',
       'await writeFile("artifact.pptx", result.pptx);',
       'await writeFile("artifact-chart.pptx", chartResult.pptx);',
-      'process.stdout.write(JSON.stringify({ ...fontSubsetSummary, installedCliSlideId: installedCliFile.slides[0]?.id, installedCliText: installedCliFile.slides[0]?.objects[0]?.text?.text, installedCliTitle: installedCliFile.presentation.title, installedCliSectionCount: installedCliFile.presentation.sections?.length, installedCliAdvanceAfterMs: installedCliFile.slides[0]?.advanceAfterMs, installedCliLink: installedCliShape?.link, installedCliField: installedCliNumber?.field, installedCliShapeField: installedCliShapeNumber?.field, installedCliShapeNumber: installedCliShapeNumber?.text, installedCliEquivalent, standard: file.profile.standard, schemaPackage: file.profile.schemaValidator.package, schemaPackageVersion: file.profile.schemaValidator.packageVersion, sdkVersion: file.profile.schemaValidator.sdkVersion, officeVersion: file.profile.schemaValidator.officeVersion, applicationEvidence: file.profile.applicationEvidence, slideId: file.slides[0]?.id, group: group.name, groupBox: group.boxEmu, shape: shape.name, shapeText: shape.text.text, shapeBox: shape.boxEmu, text: text.name, textContent: text.text.text, bullet: text.text.paragraphs[0]?.list?.type, image: image.name, mediaType: image.image.contentType, imageBox: image.boxEmu, table: tableObject.name, tableCells: tableObject.table.cells, tableMerges: tableObject.table.merges, tableColumnWidthEmu: tableObject.table.columnWidthsEmu[0], tableBytes: tableResult.pptx.byteLength, contentSizedText: contentSizedText.text.text, contentSizedTextHeightEmu: contentSizedText.boxEmu.height, contentSizedTextLineSpacingPoints: contentSizedText.text.paragraphs[0].lineSpacingPoints, nestedGroup: nestedGroup.name, nestedShape: nestedShape.name, nestedShapeText: nestedShape.text.text, nestedShapeBox: nestedShape.boxEmu, missingMetrics: missingMetrics.diagnostics[0].code, objectIds: [group.id, shape.id, text.id, image.id, nestedGroup.id, nestedShape.id], animations, transition: file.slides[0]?.transition?.kind, durationMs: file.slides[0]?.transition?.durationMs, extensions: file.extensions, forbiddenCode: forbidden.diagnostics[0]?.code, schemaGate: schemaIssue.code, schemaPart: schemaIssue.part, schemaXPath: schemaIssue.xpath, bytes: result.pptx.byteLength, contentSizedBytes: contentSizedResult.pptx.byteLength, embeddedFontPartBytes: embeddedFontPart?.byteLength, embeddedFontPayloadBytes: embeddedFontPayload?.byteLength, embeddedFontFamily: fontEmbeddingFile.slides[0]?.objects[0]?.text?.paragraphs[0]?.runs[0]?.fontFamily, chartKinds: chartObjects.map(({ chart }) => chart?.types[0]), chartEmbeddedWorkbookParts: chartObjects.map(({ chart }) => chart?.embeddedWorkbook?.part), chartBytes: chartResult.pptx.byteLength, cancellationObserved, cancellationCleanups, cancellationListeners: getEventListeners(cancellationController.signal, "abort").length }));',
+      'process.stdout.write(JSON.stringify({ showcasePages: showcaseFile.slides.length, ...fontSubsetSummary, installedCliSlideId: installedCliFile.slides[0]?.id, installedCliText: installedCliFile.slides[0]?.objects[0]?.text?.text, installedCliTitle: installedCliFile.presentation.title, installedCliSectionCount: installedCliFile.presentation.sections?.length, installedCliAdvanceAfterMs: installedCliFile.slides[0]?.advanceAfterMs, installedCliLink: installedCliShape?.link, installedCliField: installedCliNumber?.field, installedCliShapeField: installedCliShapeNumber?.field, installedCliShapeNumber: installedCliShapeNumber?.text, installedCliEquivalent, standard: file.profile.standard, schemaPackage: file.profile.schemaValidator.package, schemaPackageVersion: file.profile.schemaValidator.packageVersion, sdkVersion: file.profile.schemaValidator.sdkVersion, officeVersion: file.profile.schemaValidator.officeVersion, applicationEvidence: file.profile.applicationEvidence, slideId: file.slides[0]?.id, group: group.name, groupBox: group.boxEmu, shape: shape.name, shapeText: shape.text.text, shapeBox: shape.boxEmu, text: text.name, textContent: text.text.text, bullet: text.text.paragraphs[0]?.list?.type, image: image.name, mediaType: image.image.contentType, imageBox: image.boxEmu, table: tableObject.name, tableCells: tableObject.table.cells, tableMerges: tableObject.table.merges, tableColumnWidthEmu: tableObject.table.columnWidthsEmu[0], tableBytes: tableResult.pptx.byteLength, contentSizedText: contentSizedText.text.text, contentSizedTextHeightEmu: contentSizedText.boxEmu.height, contentSizedTextLineSpacingPoints: contentSizedText.text.paragraphs[0].lineSpacingPoints, nestedGroup: nestedGroup.name, nestedShape: nestedShape.name, nestedShapeText: nestedShape.text.text, nestedShapeBox: nestedShape.boxEmu, missingMetrics: missingMetrics.diagnostics[0].code, objectIds: [group.id, shape.id, text.id, image.id, nestedGroup.id, nestedShape.id], animations, transition: file.slides[0]?.transition?.kind, durationMs: file.slides[0]?.transition?.durationMs, extensions: file.extensions, forbiddenCode: forbidden.diagnostics[0]?.code, schemaGate: schemaIssue.code, schemaPart: schemaIssue.part, schemaXPath: schemaIssue.xpath, bytes: result.pptx.byteLength, contentSizedBytes: contentSizedResult.pptx.byteLength, embeddedFontPartBytes: embeddedFontPart?.byteLength, embeddedFontPayloadBytes: embeddedFontPayload?.byteLength, embeddedFontFamily: fontEmbeddingFile.slides[0]?.objects[0]?.text?.paragraphs[0]?.runs[0]?.fontFamily, chartKinds: chartObjects.map(({ chart }) => chart?.types[0]), chartEmbeddedWorkbookParts: chartObjects.map(({ chart }) => chart?.embeddedWorkbook?.part), chartBytes: chartResult.pptx.byteLength, cancellationObserved, cancellationCleanups, cancellationListeners: getEventListeners(cancellationController.signal, "abort").length }));',
     ].join("\n"),
+  );
+  await writeFile(
+    join(temporaryDirectory, "showcase-entry.ts"),
+    'export { default } from "@react-pptx/showcase";\n',
   );
   const cropLoader = join(temporaryDirectory, "reject-text-box.mjs");
   await writeFile(
@@ -599,6 +614,7 @@ try {
     "consumer-deck-helper.ts",
     "consumer-deck.tsx",
     "reject-text-box.mjs",
+    "showcase-entry.ts",
     "consumer-cropped.mjs",
     "devtools-sentinel.mjs",
   ].map((file) => join(temporaryDirectory, file));
@@ -671,6 +687,19 @@ try {
   if (!cliOutput.includes("已导出文稿：")) {
     throw new Error(`安装后的 CLI 没有报告成功导出：${cliOutput}`);
   }
+  run(
+    "pnpm",
+    [
+      "exec",
+      "react-pptx",
+      "showcase-entry.ts",
+      "--embed-fonts",
+      "full",
+      "--out",
+      "showcase-cli.pptx",
+    ],
+    temporaryDirectory,
+  );
   const summaryText = run(
     process.execPath,
     ["--import", devtoolsSentinel, "consumer-runtime.ts"],
@@ -697,6 +726,7 @@ try {
     readonly nestedShapeText?: string;
     readonly objectIds?: readonly number[];
     readonly animations?: readonly unknown[];
+    readonly showcasePages?: number;
     readonly transition?: string;
     readonly durationMs?: number;
     readonly extensions?: readonly string[];
@@ -761,6 +791,7 @@ try {
     summary.officeVersion !== "Microsoft365" ||
     summary.applicationEvidence !== "not-validated" ||
     summary.slideId !== "installed" ||
+    summary.showcasePages !== 16 ||
     summary.group !== "packed-group" ||
     summary.shape !== "packed-shape" ||
     summary.shapeText !== "Installed shape text" ||
@@ -864,6 +895,19 @@ try {
   await writeFile(
     join(subsetArtifactDirectory, "font-subset-installed.pptx"),
     await readFile(join(temporaryDirectory, "font-subset-installed.pptx")),
+  );
+  const showcaseArtifacts = join(
+    process.cwd(),
+    ".scratch/consumer-examples/artifacts",
+  );
+  await mkdir(showcaseArtifacts, { recursive: true });
+  await writeFile(
+    join(showcaseArtifacts, "showcase-installed.pptx"),
+    await readFile(join(temporaryDirectory, "showcase-installed.pptx")),
+  );
+  await writeFile(
+    join(showcaseArtifacts, "showcase-cli.pptx"),
+    await readFile(join(temporaryDirectory, "showcase-cli.pptx")),
   );
   const croppedText = run(
     process.execPath,

@@ -2974,7 +2974,7 @@ function motionPlan(
             ...(from === undefined ? {} : { from }),
             ...(easing === undefined ? {} : { easing }),
             ...(knownStart === undefined ? {} : { startMs: knownStart }),
-            ...(effect.preset === "breathe"
+            ...(effect.preset === "breathe" || effect.preset === "fillColor"
               ? {
                   fromColor: effect.fromColor,
                   toColor: effect.toColor,

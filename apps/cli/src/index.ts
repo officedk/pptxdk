@@ -21,6 +21,7 @@ type ParsedArguments = {
   readonly output?: string;
   readonly exportName?: string;
   readonly target?: Target;
+  readonly embedFonts?: "full" | "subset";
   readonly help: boolean;
 };
 
@@ -32,6 +33,7 @@ const usage = [
   "  -o, --out <路径>       PPTX 输出路径，默认写入当前目录下的同名 .pptx 文件",
   "  -e, --export <名称>    使用入口导出的具名组件，默认使用 default",
   "      --target <名称>    使用库公开的输出目标名称",
+  "      --embed-fonts <模式>  嵌入完整字体 full 或已用字形 subset",
   "  -h, --help             显示帮助",
 ].join("\n");
 
@@ -48,6 +50,7 @@ function parseArguments(args: readonly string[]): ParsedArguments {
   let output: string | undefined;
   let exportName: string | undefined;
   let target: Target | undefined;
+  let embedFonts: "full" | "subset" | undefined;
 
   for (let index = 0; index < args.length; index += 1) {
     const argument = args[index]!;
@@ -66,6 +69,14 @@ function parseArguments(args: readonly string[]): ParsedArguments {
         throw new UsageError(`${argument} 后需要导出名称`);
       }
       exportName = value;
+      index += 1;
+      continue;
+    }
+    if (argument === "--embed-fonts") {
+      const value = args[index + 1];
+      if (value !== "full" && value !== "subset")
+        throw new UsageError("--embed-fonts 后需要 full 或 subset");
+      embedFonts = value;
       index += 1;
       continue;
     }
@@ -101,6 +112,7 @@ function parseArguments(args: readonly string[]): ParsedArguments {
     ...(output !== undefined && { output }),
     ...(exportName !== undefined && { exportName }),
     ...(target !== undefined && { target }),
+    ...(embedFonts !== undefined && { embedFonts }),
     help: false,
   };
 }
@@ -167,6 +179,7 @@ export async function runCli(runtime: CliRuntime): Promise<number> {
       }),
       ...(parsed.target !== undefined && { target: parsed.target }),
       ...(runtime.signal !== undefined && { signal: runtime.signal }),
+      ...(parsed.embedFonts !== undefined && { embedFonts: parsed.embedFonts }),
     });
     await writeArtifact(output, result.pptx);
 

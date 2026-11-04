@@ -14,6 +14,7 @@ overrides: {}
 packages:
   - apps/*
   - packages/*
+  - examples/*
 catalog:
   "@changesets/cli": 3.0.3
   "@types/node": ^26.0.0

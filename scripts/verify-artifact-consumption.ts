@@ -16,7 +16,6 @@ const packageNames = [
   "@react-pptx/react-pptx",
   "@react-pptx/validation",
   "@react-pptx/cli",
-  "@react-pptx/examples",
 ] as const;
 
 interface PnpmPackage {
@@ -222,7 +221,6 @@ try {
           "consumer-runtime.ts",
           "consumer-deck-helper.ts",
           "consumer-deck.tsx",
-          "consumer-example-entry.ts",
           "reject-text-box.mjs",
           "consumer-cropped.mjs",
           "devtools-sentinel.mjs",
@@ -256,7 +254,6 @@ try {
       'import { spin as shapeEntrySpin, type SpinOptions as ShapeSpinOptions } from "@react-pptx/react-pptx/shape";',
       'import { type ValidationIssue, type ValidationResult } from "@react-pptx/validation";',
       'import { buildFromSource, type BuildFromSourceOptions } from "@react-pptx/react-pptx/node";',
-      'import salesReport, { capabilityDeck, schoolReferenceDeck } from "@react-pptx/examples/decks";',
       'const shape: ShapeProps = { testId: "typed", x: 0, y: 0, width: 40, height: 30 };',
       'const shapeWithSlideNumber: ShapeProps = { ...shape, children: createElement(P, null, "Page ", createElement(SlideNumber, { style: { fontWeight: "bold" } })) };',
       'const linkTarget: LinkTarget = { slideId: "typed-target" };',
@@ -318,7 +315,7 @@ try {
       'const defaultChartResult: Promise<BuildResult> = build(createElement(Deck, {}, createElement(Slide, { slideId: "typed-chart" }, createElement(Chart, defaultChart))));',
       'const chartOnlyResult: Promise<BuildResult> = buildChartOnly(createElement(ChartDeck, {}, createElement(ChartSlide, { slideId: "typed-chart-only" }, createElement(ChartOnly, chartOnly))));',
       'const tableElement = createElement(Table, table, createElement(Row, row, createElement(Cell, cell, "North")));',
-      "void [result, defaultChartResult, chartOnlyResult, contentSizedText, noWrapText, typedBox, granularText, granularChart, defaultRelativeSpin, compactRelativeSpin, validationIssue, validatorProfile, asyncTable, signalOptions, fontEmbeddingOptions, fontSubsetOptions, themeInput, themeScope, colorValue, textDefaults, themedDeck, sourceBuild, tableElement, tableObservation, scopeMoment, delayedScopeMoment, scopeCompletion, scopeProps, motionScopeElement, scopeConsumer, linkTarget, background, section, slideNumber, shapeWithSlideNumber, consumeQueryTypes, salesReport, capabilityDeck, schoolReferenceDeck];",
+      "void [result, defaultChartResult, chartOnlyResult, contentSizedText, noWrapText, typedBox, granularText, granularChart, defaultRelativeSpin, compactRelativeSpin, validationIssue, validatorProfile, asyncTable, signalOptions, fontEmbeddingOptions, fontSubsetOptions, themeInput, themeScope, colorValue, textDefaults, themedDeck, sourceBuild, tableElement, tableObservation, scopeMoment, delayedScopeMoment, scopeCompletion, scopeProps, motionScopeElement, scopeConsumer, linkTarget, background, section, slideNumber, shapeWithSlideNumber, consumeQueryTypes];",
     ].join("\n"),
   );
   await writeFile(
@@ -344,7 +341,6 @@ try {
       "}",
     ].join("\n"),
   );
-  // Reader 中资源部件路径与关系编号属于封装位置；此处按页面语义和图片字节比较。
   await writeFile(
     join(temporaryDirectory, "consumer-runtime.ts"),
     [
@@ -355,12 +351,9 @@ try {
       'import { strFromU8, strToU8, unzipSync, zipSync, type Unzipped } from "fflate";',
       'import * as fontkit from "fontkit";',
       'import { getEventListeners } from "node:events";',
-      'import { createHash } from "node:crypto";',
       'import { readFile, writeFile } from "node:fs/promises";',
       'import { buildFromSource } from "@react-pptx/react-pptx/node";',
       'import { build as buildShapeEntry, Deck as ShapeDeck, Shape as ShapeEntryShape, Slide as ShapeSlide, spin as shapeEntrySpin } from "@react-pptx/react-pptx/shape";',
-      "type ValidatedFile = Awaited<ReturnType<typeof validatePptx>>;",
-      'type ValidatedObject = ValidatedFile["slides"][number]["objects"][number];',
       "type EmbeddedFont = { readonly part: string; readonly weight: number; readonly payload: Uint8Array; readonly parsed: fontkit.Font };",
       'const jostMetrics = new Uint8Array(await readFile(new URL("./jost-latin-400-normal.woff2", import.meta.url)));',
       'const embeddedFontBytes = new Uint8Array(await readFile(new URL("./Jost-400-Book.ttf", import.meta.url)));',
@@ -402,60 +395,7 @@ try {
       "const installedCliLink = installedCliShape?.link;",
       'const installedCliLinkSlideId = installedCliLink !== undefined && "slideId" in installedCliLink ? installedCliLink.slideId : undefined;',
       'if (installedCliFile.errors.length !== 0 || installedCliFile.presentation.title !== "安装 CLI 源码标题" || JSON.stringify(installedCliFile.presentation.sections) !== JSON.stringify([{ name: "开场", slideIds: ["source-cli"] }, { name: "内容", slideIds: ["target-cli"] }]) || installedCliFile.slides[0]?.id !== "source-cli" || installedCliFile.slides[0]?.advanceAfterMs !== 1500 || installedCliFile.slides[0]?.background?.type !== "solid" || installedCliLinkSlideId !== "target-cli" || installedCliNumber?.field !== "slidenum" || installedCliNumber.text !== "1" || installedCliShapeNumber?.field !== "slidenum" || installedCliShapeNumber.text !== "1" || installedCliFile.slides[1]?.background?.type !== "gradient" || !installedCliEquivalent || sourceBuildResult.report.title !== "安装 CLI 源码标题" || sourceBuildResult.report.slides[0]?.id !== "source-cli" || sourceBuildResult.report.slides[0]?.objects[0]?.link !== "slide:target-cli" || sourceBuildResult.report.slides[0]?.objects.find(({ testId }) => testId === "source-cli-shape-number")?.text !== "第 1") throw new Error(JSON.stringify({ errors: installedCliFile.errors, presentation: installedCliFile.presentation, slides: installedCliFile.slides, installedCliEquivalent }));',
-      'const exampleSource = new URL(import.meta.resolve("@react-pptx/examples/decks"));',
       'const readEmbeddedFonts = (parts: Unzipped): EmbeddedFont[] => Object.entries(parts as Record<string, Uint8Array>).filter(([part]) => part.startsWith("ppt/fonts/") && part.endsWith(".fntdata")).map(([part, bytes]) => { const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength); const payloadLength = view.getUint32(4, true); if (view.getUint32(8, true) !== 0x00020002 || payloadLength <= 0 || payloadLength > bytes.byteLength) throw new Error(`invalid embedded font part ${part}`); const payload = bytes.subarray(bytes.byteLength - payloadLength); const parsed = fontkit.create(Buffer.from(payload)); if (parsed.type !== "TTF") throw new Error(`embedded font part ${part} is not TTF`); return { part, weight: view.getUint32(28, true), payload, parsed }; });',
-      "const readerObject = (object: ValidatedObject): Record<string, unknown> => ({ name: object.name, kind: object.kind, geometry: object.geometry, boxEmu: object.boxEmu, rotationDegrees: object.rotationDegrees, crop: object.crop, link: object.link, groupTransform: object.groupTransform, image: object.image === undefined ? undefined : { contentType: object.image.contentType }, text: object.text, table: object.table, chart: object.chart === undefined ? undefined : { types: object.chart.types, direction: object.chart.direction, grouping: object.chart.grouping, series: object.chart.series, embeddedWorkbook: object.chart.embeddedWorkbook === undefined ? undefined : { sheetName: object.chart.embeddedWorkbook.sheetName, categories: object.chart.embeddedWorkbook.categories, series: object.chart.embeddedWorkbook.series } }, members: (object.members ?? []).map(readerObject) });",
-      "const capabilityDeckContentAndLayout = (file: ValidatedFile) => JSON.stringify({ presentation: file.presentation, slides: file.slides.map(({ objects, ...slide }) => ({ ...slide, objects: objects.map(readerObject) })) });",
-      'const capabilityDeckMediaHashes = (parts: Unzipped) => Object.entries(parts as Record<string, Uint8Array>).filter(([part]) => part.startsWith("ppt/media/")).map(([, bytes]) => createHash("sha256").update(bytes).digest("hex")).sort();',
-      "const representativeDecks = [];",
-      "let defaultCapabilityDeck;",
-      "let defaultCapabilityDeckParts;",
-      'const exampleText = (objects: readonly ValidatedObject[]): string => objects.flatMap(({ text, members = [] }) => { const ownText = typeof text?.text === "string" ? [text.text] : text?.text ?? []; const nestedText = exampleText(members); return nestedText === "" ? ownText : ownText.concat(nestedText); }).join("\\n");',
-      'for (const { name, exportName, title, slideCount } of [{ name: "capability-deck", exportName: "capabilityDeck", title: "灵感实验室 · 原创能力册", slideCount: 12 }, { name: "sales-report", exportName: "default", title: "季度销售经营报告", slideCount: 2 }, { name: "school-reference", exportName: "schoolReferenceDeck", title: "PowerPoint School 参考页", slideCount: 2 }]) {',
-      "  const result = await buildFromSource(exampleSource, { exportName });",
-      "  const file = await validatePptx(result.pptx);",
-      '  const parts = name === "capability-deck" ? unzipSync(result.pptx) : undefined;',
-      "  const embeddedFonts = parts === undefined ? [] : readEmbeddedFonts(parts);",
-      '  if (result.report.diagnostics.some(({ severity }) => severity === "error") || file.errors.length !== 0 || file.presentation.title !== title || file.presentation.slideCount !== slideCount) throw new Error(JSON.stringify({ name, report: result.report.diagnostics, errors: file.errors, presentation: file.presentation }));',
-      '  if (name === "capability-deck") { if (embeddedFonts.length !== 0) throw new Error("默认能力册意外包含嵌入字体"); defaultCapabilityDeck = file; defaultCapabilityDeckParts = parts; }',
-      '  if (name === "capability-deck" && file.slides[0]?.objects.find(({ name: objectName }) => objectName === "cover-observatory-image")?.kind !== "image") throw new Error("安装 examples 未带入能力册图片资源");',
-      '  if (name === "sales-report") { const cells = file.slides.flatMap(({ objects }) => objects).filter(({ kind }) => kind === "table").flatMap(({ table }) => table?.cells.flat() ?? []); if (!cells.includes("北方区") || !cells.includes("云端服务")) throw new Error("安装 examples 未从包内数据资源生成两张销售表"); }',
-      '  if (name === "school-reference" && (!exampleText(file.slides[0]?.objects ?? []).includes("Our Services") || !exampleText(file.slides[1]?.objects ?? []).includes("Agenda Slide"))) throw new Error("安装 examples 未生成服务页与议程页");',
-      '  const sha256 = createHash("sha256").update(result.pptx).digest("hex");',
-      "  await writeFile(`${name}.pptx`, result.pptx);",
-      "  await writeFile(`${name}-build-report.json`, `${JSON.stringify(result.report, null, 2)}\\n`);",
-      "  await writeFile(`${name}-reader.json`, `${JSON.stringify(file, null, 2)}\\n`);",
-      "  await writeFile(`${name}.sha256`, `${sha256}  ${name}.pptx\\n`);",
-      '  representativeDecks.push({ name, title, slideCount, fontMode: "default", ...(name === "capability-deck" ? { embeddedFonts: embeddedFonts.map(({ part, weight, payload, parsed }) => ({ part, family: parsed.familyName, weight, payloadBytes: payload.byteLength, sha256: createHash("sha256").update(payload).digest("hex") })) } : {}), bytes: result.pptx.byteLength, sha256 });',
-      "}",
-      'const capabilityFontModeSizes: Partial<Record<"full" | "subset", { bytes: number; fontPayloadBytes: number }>> = {};',
-      'for (const fontMode of ["full", "subset"] as const) {',
-      "  const name = `capability-deck-${fontMode}`;",
-      '  const title = "灵感实验室 · 原创能力册";',
-      '  const result = await buildFromSource(exampleSource, { exportName: "capabilityDeck", embedFonts: fontMode });',
-      "  const file = await validatePptx(result.pptx);",
-      "  const parts = unzipSync(result.pptx);",
-      "  const fonts = readEmbeddedFonts(parts);",
-      "  const families = new Set(fonts.map(({ parsed }) => parsed.familyName));",
-      '  const jostWeights = fonts.filter(({ parsed }) => parsed.familyName === "Jost*").map(({ weight }) => weight).sort((left, right) => left - right);',
-      '  if (result.report.diagnostics.some(({ severity }) => severity === "error") || file.errors.length !== 0 || file.presentation.title !== title || file.presentation.slideCount !== 12 || fonts.length === 0 || !families.has("Jost*") || !families.has("ZCOOL XiaoWei") || JSON.stringify(jostWeights) !== JSON.stringify([400, 700])) throw new Error(JSON.stringify({ name, report: result.report.diagnostics, errors: file.errors, presentation: file.presentation, fonts: fonts.map(({ part, weight, parsed }) => ({ part, family: parsed.familyName, weight })) }));',
-      "  if (defaultCapabilityDeck === undefined || defaultCapabilityDeckParts === undefined || capabilityDeckContentAndLayout(file) !== capabilityDeckContentAndLayout(defaultCapabilityDeck) || JSON.stringify(capabilityDeckMediaHashes(parts)) !== JSON.stringify(capabilityDeckMediaHashes(defaultCapabilityDeckParts))) throw new Error(`${name} 的页面内容、布局或图片资源与默认能力册不一致`);",
-      '  const embeddedFonts = fonts.map(({ part, weight, payload, parsed }) => ({ part, family: parsed.familyName, weight, payloadBytes: payload.byteLength, sha256: createHash("sha256").update(payload).digest("hex") }));',
-      "  const fontPayloadBytes = embeddedFonts.reduce((total, font) => total + font.payloadBytes, 0);",
-      '  const sha256 = createHash("sha256").update(result.pptx).digest("hex");',
-      "  await writeFile(`${name}.pptx`, result.pptx);",
-      "  await writeFile(`${name}-build-report.json`, `${JSON.stringify(result.report, null, 2)}\\n`);",
-      "  await writeFile(`${name}-reader.json`, `${JSON.stringify(file, null, 2)}\\n`);",
-      "  await writeFile(`${name}.sha256`, `${sha256}  ${name}.pptx\\n`);",
-      "  capabilityFontModeSizes[fontMode] = { bytes: result.pptx.byteLength, fontPayloadBytes };",
-      "  representativeDecks.push({ name, title, slideCount: 12, fontMode, embeddedFonts, bytes: result.pptx.byteLength, sha256 });",
-      "}",
-      "const fullCapabilityFontMode = capabilityFontModeSizes.full;",
-      "const subsetCapabilityFontMode = capabilityFontModeSizes.subset;",
-      "if (fullCapabilityFontMode === undefined || subsetCapabilityFontMode === undefined || subsetCapabilityFontMode.fontPayloadBytes >= fullCapabilityFontMode.fontPayloadBytes || subsetCapabilityFontMode.bytes >= fullCapabilityFontMode.bytes) throw new Error(JSON.stringify({ capabilityFontModeSizes }));",
-      'const installedExampleCliBytes = await readFile("cli-output/installed-sales-report.pptx");',
-      'const installedExampleCliEquivalent = Buffer.from(installedExampleCliBytes).equals(Buffer.from(await readFile("sales-report.pptx")));',
-      'if (!installedExampleCliEquivalent) throw new Error("安装 CLI 与程序化 API 使用同一个已安装 examples 导出入口却生成了不同的销售报告");',
       'const transition = transitions.morph({ by: "word", duration: 1200, fallback: transitions.fade() });',
       'function InstalledScopeDeck() { const source = useMotionScope(); const follower = useMotionScope(); return createElement(Deck, { width: 120, height: 96 }, createElement(Slide, { slideId: "installed-motion-scope" }, createElement(MotionScope, { scope: source, mode: "sequence" }, createElement(Shape, { testId: "scope-first", x: 4, y: 4, width: 20, height: 20, enter: fade({ duration: 200 }) }), createElement(Shape, { testId: "scope-second", x: 28, y: 4, width: 20, height: 20, enter: fade({ duration: 100 }) })), createElement(MotionScope, { scope: follower, startAt: after(source.end, 25) }, createElement(Shape, { testId: "scope-follower", x: 52, y: 4, width: 20, height: 20, enter: fade({ duration: 50 }) })))); }',
       "const scopeResult = await build(createElement(InstalledScopeDeck));",
@@ -604,15 +544,7 @@ try {
       'if (!(missingMetrics instanceof BuildError) || missingMetrics.diagnostics[0]?.code !== "font-measurement-unavailable") throw new Error("installed content-sized text did not require explicit font metrics");',
       'await writeFile("artifact.pptx", result.pptx);',
       'await writeFile("artifact-chart.pptx", chartResult.pptx);',
-      'process.stdout.write(JSON.stringify({ ...fontSubsetSummary, installedCliSlideId: installedCliFile.slides[0]?.id, installedCliText: installedCliFile.slides[0]?.objects[0]?.text?.text, installedCliTitle: installedCliFile.presentation.title, installedCliSectionCount: installedCliFile.presentation.sections?.length, installedCliAdvanceAfterMs: installedCliFile.slides[0]?.advanceAfterMs, installedCliLink: installedCliShape?.link, installedCliField: installedCliNumber?.field, installedCliShapeField: installedCliShapeNumber?.field, installedCliShapeNumber: installedCliShapeNumber?.text, installedCliEquivalent, standard: file.profile.standard, schemaPackage: file.profile.schemaValidator.package, schemaPackageVersion: file.profile.schemaValidator.packageVersion, sdkVersion: file.profile.schemaValidator.sdkVersion, officeVersion: file.profile.schemaValidator.officeVersion, applicationEvidence: file.profile.applicationEvidence, slideId: file.slides[0]?.id, group: group.name, groupBox: group.boxEmu, shape: shape.name, shapeText: shape.text.text, shapeBox: shape.boxEmu, text: text.name, textContent: text.text.text, bullet: text.text.paragraphs[0]?.list?.type, image: image.name, mediaType: image.image.contentType, imageBox: image.boxEmu, table: tableObject.name, tableCells: tableObject.table.cells, tableMerges: tableObject.table.merges, tableColumnWidthEmu: tableObject.table.columnWidthsEmu[0], tableBytes: tableResult.pptx.byteLength, contentSizedText: contentSizedText.text.text, contentSizedTextHeightEmu: contentSizedText.boxEmu.height, contentSizedTextLineSpacingPoints: contentSizedText.text.paragraphs[0].lineSpacingPoints, nestedGroup: nestedGroup.name, nestedShape: nestedShape.name, nestedShapeText: nestedShape.text.text, nestedShapeBox: nestedShape.boxEmu, missingMetrics: missingMetrics.diagnostics[0].code, objectIds: [group.id, shape.id, text.id, image.id, nestedGroup.id, nestedShape.id], animations, transition: file.slides[0]?.transition?.kind, durationMs: file.slides[0]?.transition?.durationMs, extensions: file.extensions, forbiddenCode: forbidden.diagnostics[0]?.code, schemaGate: schemaIssue.code, schemaPart: schemaIssue.part, schemaXPath: schemaIssue.xpath, bytes: result.pptx.byteLength, contentSizedBytes: contentSizedResult.pptx.byteLength, embeddedFontPartBytes: embeddedFontPart?.byteLength, embeddedFontPayloadBytes: embeddedFontPayload?.byteLength, embeddedFontFamily: fontEmbeddingFile.slides[0]?.objects[0]?.text?.paragraphs[0]?.runs[0]?.fontFamily, chartKinds: chartObjects.map(({ chart }) => chart?.types[0]), chartEmbeddedWorkbookParts: chartObjects.map(({ chart }) => chart?.embeddedWorkbook?.part), chartBytes: chartResult.pptx.byteLength, cancellationObserved, cancellationCleanups, cancellationListeners: getEventListeners(cancellationController.signal, "abort").length, representativeDecks, installedExampleCliEquivalent }));',
-    ].join("\n"),
-  );
-  // 通过安装包 exports 解析 CLI 输入，避免依赖工作区或 node_modules 的物理布局。
-  await writeFile(
-    join(temporaryDirectory, "consumer-example-entry.ts"),
-    [
-      'import { fileURLToPath } from "node:url";',
-      'process.stdout.write(fileURLToPath(import.meta.resolve("@react-pptx/examples/decks")));',
+      'process.stdout.write(JSON.stringify({ ...fontSubsetSummary, installedCliSlideId: installedCliFile.slides[0]?.id, installedCliText: installedCliFile.slides[0]?.objects[0]?.text?.text, installedCliTitle: installedCliFile.presentation.title, installedCliSectionCount: installedCliFile.presentation.sections?.length, installedCliAdvanceAfterMs: installedCliFile.slides[0]?.advanceAfterMs, installedCliLink: installedCliShape?.link, installedCliField: installedCliNumber?.field, installedCliShapeField: installedCliShapeNumber?.field, installedCliShapeNumber: installedCliShapeNumber?.text, installedCliEquivalent, standard: file.profile.standard, schemaPackage: file.profile.schemaValidator.package, schemaPackageVersion: file.profile.schemaValidator.packageVersion, sdkVersion: file.profile.schemaValidator.sdkVersion, officeVersion: file.profile.schemaValidator.officeVersion, applicationEvidence: file.profile.applicationEvidence, slideId: file.slides[0]?.id, group: group.name, groupBox: group.boxEmu, shape: shape.name, shapeText: shape.text.text, shapeBox: shape.boxEmu, text: text.name, textContent: text.text.text, bullet: text.text.paragraphs[0]?.list?.type, image: image.name, mediaType: image.image.contentType, imageBox: image.boxEmu, table: tableObject.name, tableCells: tableObject.table.cells, tableMerges: tableObject.table.merges, tableColumnWidthEmu: tableObject.table.columnWidthsEmu[0], tableBytes: tableResult.pptx.byteLength, contentSizedText: contentSizedText.text.text, contentSizedTextHeightEmu: contentSizedText.boxEmu.height, contentSizedTextLineSpacingPoints: contentSizedText.text.paragraphs[0].lineSpacingPoints, nestedGroup: nestedGroup.name, nestedShape: nestedShape.name, nestedShapeText: nestedShape.text.text, nestedShapeBox: nestedShape.boxEmu, missingMetrics: missingMetrics.diagnostics[0].code, objectIds: [group.id, shape.id, text.id, image.id, nestedGroup.id, nestedShape.id], animations, transition: file.slides[0]?.transition?.kind, durationMs: file.slides[0]?.transition?.durationMs, extensions: file.extensions, forbiddenCode: forbidden.diagnostics[0]?.code, schemaGate: schemaIssue.code, schemaPart: schemaIssue.part, schemaXPath: schemaIssue.xpath, bytes: result.pptx.byteLength, contentSizedBytes: contentSizedResult.pptx.byteLength, embeddedFontPartBytes: embeddedFontPart?.byteLength, embeddedFontPayloadBytes: embeddedFontPayload?.byteLength, embeddedFontFamily: fontEmbeddingFile.slides[0]?.objects[0]?.text?.paragraphs[0]?.runs[0]?.fontFamily, chartKinds: chartObjects.map(({ chart }) => chart?.types[0]), chartEmbeddedWorkbookParts: chartObjects.map(({ chart }) => chart?.embeddedWorkbook?.part), chartBytes: chartResult.pptx.byteLength, cancellationObserved, cancellationCleanups, cancellationListeners: getEventListeners(cancellationController.signal, "abort").length }));',
     ].join("\n"),
   );
   const cropLoader = join(temporaryDirectory, "reject-text-box.mjs");
@@ -666,7 +598,6 @@ try {
     "consumer-runtime.ts",
     "consumer-deck-helper.ts",
     "consumer-deck.tsx",
-    "consumer-example-entry.ts",
     "reject-text-box.mjs",
     "consumer-cropped.mjs",
     "devtools-sentinel.mjs",
@@ -726,11 +657,6 @@ try {
       `React ${mode === "development" ? "开发" : "生产"}模式适配验收通过\n`,
     );
   }
-  const exampleEntryPath = run(
-    process.execPath,
-    ["consumer-example-entry.ts"],
-    temporaryDirectory,
-  );
   const cliOutput = run(
     "pnpm",
     [
@@ -744,22 +670,6 @@ try {
   );
   if (!cliOutput.includes("已导出文稿：")) {
     throw new Error(`安装后的 CLI 没有报告成功导出：${cliOutput}`);
-  }
-  const exampleCliOutput = run(
-    "pnpm",
-    [
-      "exec",
-      "react-pptx",
-      exampleEntryPath,
-      "--out",
-      "cli-output/installed-sales-report.pptx",
-    ],
-    temporaryDirectory,
-  );
-  if (!exampleCliOutput.includes("已导出文稿：")) {
-    throw new Error(
-      `安装后的 CLI 没有使用 examples 销售稿源码：${exampleCliOutput}`,
-    );
   }
   const summaryText = run(
     process.execPath,
@@ -832,65 +742,8 @@ try {
     readonly fontSubsetGlyphsMatch?: boolean;
     readonly missingSubsetGlyphCode?: string;
     readonly missingSubsetGlyphPath?: string;
-    readonly representativeDecks?: readonly {
-      readonly name?: string;
-      readonly title?: string;
-      readonly slideCount?: number;
-      readonly fontMode?: "default" | "full" | "subset";
-      readonly embeddedFonts?: readonly {
-        readonly part?: string;
-        readonly family?: string;
-        readonly weight?: number;
-        readonly payloadBytes?: number;
-        readonly sha256?: string;
-      }[];
-      readonly bytes?: number;
-      readonly sha256?: string;
-    }[];
-    readonly installedExampleCliEquivalent?: boolean;
   };
-  const expectedRepresentativeDecks = [
-    ["capability-deck", "灵感实验室 · 原创能力册", 12, "default"],
-    ["sales-report", "季度销售经营报告", 2, "default"],
-    ["school-reference", "PowerPoint School 参考页", 2, "default"],
-    ["capability-deck-full", "灵感实验室 · 原创能力册", 12, "full"],
-    ["capability-deck-subset", "灵感实验室 · 原创能力册", 12, "subset"],
-  ] as const;
-  const defaultCapabilityDeck = summary.representativeDecks?.find(
-    ({ name }) => name === "capability-deck",
-  );
-  const fullCapabilityDeck = summary.representativeDecks?.find(
-    ({ name }) => name === "capability-deck-full",
-  );
-  const subsetCapabilityDeck = summary.representativeDecks?.find(
-    ({ name }) => name === "capability-deck-subset",
-  );
-  const fullCapabilityDeckFonts = fullCapabilityDeck?.embeddedFonts ?? [];
-  const subsetCapabilityDeckFonts = subsetCapabilityDeck?.embeddedFonts ?? [];
   if (
-    summary.installedExampleCliEquivalent !== true ||
-    JSON.stringify(
-      summary.representativeDecks?.map(
-        ({ name, title, slideCount, fontMode }) => [
-          name,
-          title,
-          slideCount,
-          fontMode,
-        ],
-      ),
-    ) !== JSON.stringify(expectedRepresentativeDecks) ||
-    summary.representativeDecks?.some(
-      ({ bytes, sha256 }) =>
-        bytes === undefined ||
-        bytes <= 0 ||
-        !/^[a-f\d]{64}$/u.test(sha256 ?? ""),
-    ) !== false ||
-    defaultCapabilityDeck?.fontMode !== "default" ||
-    defaultCapabilityDeck.embeddedFonts?.length !== 0 ||
-    fullCapabilityDeck?.fontMode !== "full" ||
-    fullCapabilityDeckFonts.length === 0 ||
-    subsetCapabilityDeck?.fontMode !== "subset" ||
-    subsetCapabilityDeckFonts.length === 0 ||
     summary.installedCliSlideId !== "source-cli" ||
     summary.installedCliText !== "安装 CLI 源码标题" ||
     summary.installedCliTitle !== "安装 CLI 源码标题" ||
@@ -994,36 +847,6 @@ try {
   ) {
     throw new Error(`安装制品返回了意外结果：${summaryText}`);
   }
-  const representativeArtifactDirectory = join(
-    process.cwd(),
-    ".scratch/react-pptx-formal/29-artifact-chain-preparation",
-  );
-  await mkdir(representativeArtifactDirectory, { recursive: true });
-  for (const [name] of expectedRepresentativeDecks) {
-    for (const file of [
-      `${name}.pptx`,
-      `${name}-build-report.json`,
-      `${name}-reader.json`,
-      `${name}.sha256`,
-    ]) {
-      await writeFile(
-        join(representativeArtifactDirectory, file),
-        await readFile(join(temporaryDirectory, file)),
-      );
-    }
-  }
-  await writeFile(
-    join(representativeArtifactDirectory, "manifest.json"),
-    `${JSON.stringify(
-      {
-        consumer: "已安装正式制品",
-        cliEquivalent: summary.installedExampleCliEquivalent,
-        decks: summary.representativeDecks,
-      },
-      null,
-      2,
-    )}\n`,
-  );
   const artifactDirectory = join(
     process.cwd(),
     ".scratch/react-pptx-formal/12-artifacts",

@@ -39,7 +39,6 @@
     "//#verify:artifact-consumption": {
       "dependsOn": [
         "@react-pptx/cli#build",
-        "@react-pptx/examples#build",
         "@react-pptx/react-pptx#build",
         "@react-pptx/validation#build"
       ],
@@ -55,9 +54,6 @@
         "packages/capabilities/package.json",
         "packages/react-pptx/package.json",
         "packages/validation/package.json",
-        "apps/examples/package.json",
-        "apps/examples/src/**",
-        "apps/examples/dist/**",
         "packages/core/dist/**",
         "packages/capabilities/dist/**",
         "packages/react-pptx/dist/**",
@@ -106,6 +102,29 @@
             "layer:validation",
             "layer:core",
             "layer:capabilities"
+          ]
+        }
+      },
+      "layer:kit": {
+        "dependencies": {
+          "allow": [
+            "layer:tooling",
+            "layer:validation",
+            "layer:core",
+            "layer:capabilities",
+            "layer:entry"
+          ]
+        }
+      },
+      "layer:example": {
+        "dependencies": {
+          "allow": [
+            "layer:tooling",
+            "layer:validation",
+            "layer:core",
+            "layer:capabilities",
+            "layer:entry",
+            "layer:kit"
           ]
         }
       },

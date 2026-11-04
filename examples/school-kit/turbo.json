@@ -1,6 +1,6 @@
 {
   "extends": ["//"],
-  "tags": ["layer:application"],
+  "tags": ["layer:kit"],
   "tasks": {
     "build": {
       "dependsOn": ["^build"],
@@ -38,19 +38,6 @@
       "inputs": [],
       "outputs": [],
       "tags": ["quality:light"]
-    },
-    "test": {
-      "dependsOn": ["build", "^build"],
-      "inputs": [
-        "src/**",
-        "test/**",
-        "package.json",
-        "vitest.config.ts",
-        "tsconfig.node.json"
-      ],
-      "outputs": ["test-results/**"],
-      "cache": false,
-      "tags": ["quality:heavy"]
     }
   }
 }

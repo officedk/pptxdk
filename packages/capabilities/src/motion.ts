@@ -103,6 +103,7 @@ export type {
   MotionStepObservation,
   RepeatCount,
   RepeatedEffect,
+  SpinOptions,
   StepProps,
 } from "./motion-api.ts";
 
@@ -358,9 +359,14 @@ function rotationFormula(effect: TimingEffect): {
   readonly angle: string;
   readonly degrees: number;
 } {
-  const degrees = typeof effect.from === "number" ? effect.from : 360;
+  const relativeBy = typeof effect.by === "number";
+  const degrees = relativeBy
+    ? effect.by
+    : typeof effect.from === "number"
+      ? effect.from
+      : 360;
   return {
-    angle: `(${formulaNumber(degrees)}*pi/180)*(1-$)`,
+    angle: `(${formulaNumber(degrees)}*pi/180)*${relativeBy ? "$" : "(1-$)"}`,
     degrees,
   };
 }
@@ -504,12 +510,14 @@ function behaviorIds(
   const rotation = (targetElement: string, additive: boolean | "sum" = false) =>
     element(
       "p:animRot",
-      {
-        from: Math.round(
-          (typeof effect.from === "number" ? effect.from : 360) * 60000,
-        ),
-        to: 0,
-      },
+      typeof effect.by === "number"
+        ? { by: Math.round(effect.by * 60000) }
+        : {
+            from: Math.round(
+              (typeof effect.from === "number" ? effect.from : 360) * 60000,
+            ),
+            to: 0,
+          },
       element(
         "p:cBhvr",
         {
@@ -764,7 +772,9 @@ function behaviorIds(
     }
     case "spin": {
       if (!wholeText && effect.groupSpinCenter === undefined) {
-        return [rotation(target())];
+        return [
+          rotation(target(), typeof effect.by === "number" ? "sum" : false),
+        ];
       }
       const center =
         effect.groupSpinCenter ??

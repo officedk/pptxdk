@@ -80,8 +80,8 @@ export type Effect = {
   readonly fromColor?: string;
   readonly toColor?: string;
   readonly easing?: Easing;
-  /** 文字按段落、词或字展开，图表按系列或分类展开。 */
-  readonly by?: MotionGranularity;
+  /** 文字或图表粒度；spin 中表示以度为单位的相对角度。 */
+  readonly by?: MotionGranularity | number;
   /** 逐词或逐字效果中，相邻原生单元的启动间隔。 */
   readonly intervalMs?: number;
 };
@@ -168,6 +168,13 @@ export type EffectOptions = {
   readonly intervalMs?: number;
   /** 按原生段落、词、字、图表系列或分类逐项展开。 */
   readonly by?: MotionGranularity;
+};
+
+export type SpinOptions = Omit<EffectOptions, "by"> & {
+  /** 字符串按文字粒度展开；数字表示相对角度，负数沿相反方向旋转。 */
+  readonly by?: MotionGranularity | number;
+  /** 从指定角度旋转回对象原生朝向。 */
+  readonly from?: number;
 };
 
 export type MotionProps = {
@@ -355,7 +362,9 @@ export function Box({
 function declaration(
   kind: Effect["kind"],
   preset: EffectPreset,
-  options: EffectOptions & object,
+  options: Omit<EffectOptions, "by"> & {
+    readonly by?: Effect["by"];
+  } & object,
   defaults: { readonly duration: number },
   extra: Partial<Pick<Effect, "from">> = {},
 ): Effect {
@@ -449,18 +458,18 @@ export function stretch(options: EffectOptions = {}): EntranceEffect {
   }) as EntranceEffect;
 }
 
-/** 从指定起始角度旋转到对象原生朝向；缺省从 360 度开始。 */
-export function spin(
-  options: EffectOptions & { readonly from?: number } = {},
-): EmphasisEffect {
+/** 从指定角度旋转回初始朝向，或用有符号 by 相对初始角度旋转；默认 from 为 360 度。 */
+export function spin(options: SpinOptions = {}): EmphasisEffect {
   return declaration(
     "emphasis",
     "spin",
     options,
     { duration: 1000 },
-    {
-      from: options.from === undefined ? 360 : options.from,
-    },
+    typeof options.by === "number"
+      ? options.from === undefined
+        ? {}
+        : { from: options.from }
+      : { from: options.from === undefined ? 360 : options.from },
   ) as EmphasisEffect;
 }
 
@@ -600,7 +609,8 @@ export type MotionEffectObservation = {
   /** 完整呼吸周期的总轮数；forever 表示本页持续且无自然完成。 */
   readonly repeatCount?: RepeatCount;
   readonly delayMs: number;
-  readonly by?: MotionGranularity;
+  /** 文字或图表粒度；spin 中为以度表示的相对旋转角。 */
+  readonly by?: MotionGranularity | number;
   readonly intervalMs?: number;
   readonly from?: MotionDirection | number;
   readonly fromColor?: string;
@@ -840,7 +850,23 @@ function validatedEffect(
   }
   const by = effectValue["by"];
   const interval = effectValue["intervalMs"];
-  if (
+  if (preset === "spin" && typeof by === "number") {
+    const units = Math.round(by * 60000);
+    if (
+      !Number.isFinite(by) ||
+      !Number.isSafeInteger(units) ||
+      units < minimumRotationUnits ||
+      units > maximumRotationUnits
+    ) {
+      return fail(
+        "invalid-rotation",
+        "spin 的 by 换算后必须落在有符号 32 位角度范围内",
+      );
+    }
+    if (effectValue["from"] !== undefined) {
+      return fail("invalid-motion", "spin 的 from 与 by 不能同时声明");
+    }
+  } else if (
     by !== undefined &&
     (typeof by !== "string" ||
       !motionGranularities.has(by as MotionGranularity))
@@ -868,18 +894,20 @@ function validatedEffect(
   }
   if (preset === "spin") {
     const from = effectValue["from"];
-    const units = typeof from === "number" ? Math.round(from * 60000) : NaN;
-    if (
-      typeof from !== "number" ||
-      !Number.isFinite(from) ||
-      !Number.isSafeInteger(units) ||
-      units < minimumRotationUnits ||
-      units > maximumRotationUnits
-    ) {
-      return fail(
-        "invalid-rotation",
-        "spin 的 from 换算后必须落在有符号 32 位角度范围内",
-      );
+    if (typeof by !== "number") {
+      const units = typeof from === "number" ? Math.round(from * 60000) : NaN;
+      if (
+        typeof from !== "number" ||
+        !Number.isFinite(from) ||
+        !Number.isSafeInteger(units) ||
+        units < minimumRotationUnits ||
+        units > maximumRotationUnits
+      ) {
+        return fail(
+          "invalid-rotation",
+          "spin 的 from 换算后必须落在有符号 32 位角度范围内",
+        );
+      }
     }
   }
   if (
@@ -988,7 +1016,7 @@ function validatedEffect(
         "重复后的总时长必须保持为精确整数毫秒且单轮不超过原生计时范围",
       );
     }
-    if (by !== undefined) {
+    if (by !== undefined && typeof by !== "number") {
       return fail(
         "unsupported-repeat-combination",
         "重复效果当前不能与逐段、逐词、逐字或图表粒度组合",

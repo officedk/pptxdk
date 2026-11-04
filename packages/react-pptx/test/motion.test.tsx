@@ -25,6 +25,7 @@ import {
   Step,
   Text,
   motionCapability,
+  observeMotion,
   repeat,
   transitionCapability,
   transitions,
@@ -4417,6 +4418,189 @@ describe("对象动画", () => {
     );
   });
 
+  it("相对 Spin 保留对象初态并读回正负旋转角度", async () => {
+    const result = await build(
+      createElement(
+        Deck,
+        { width: 960, height: 540 },
+        createElement(
+          Slide,
+          { slideId: "relative-spin" },
+          createElement(Shape, {
+            testId: "positive-spin-shape",
+            x: 80,
+            y: 60,
+            width: 64,
+            height: 64,
+            style: { rotate: 17 },
+            fill: "#F97316",
+            emphasis: spin({ duration: 1200, by: 120 }),
+          }),
+          createElement(
+            Text,
+            {
+              testId: "legacy-spin-text",
+              x: 80,
+              y: 150,
+              width: 120,
+              height: 40,
+              emphasis: spin({
+                duration: 1200,
+                from: 90,
+                by: "letter",
+                intervalMs: 50,
+              }),
+            },
+            "two words",
+          ),
+          createElement(
+            Group,
+            {
+              testId: "negative-spin-group",
+              emphasis: spin({ duration: 1600, by: -80 }),
+            },
+            createElement(Text, {
+              testId: "negative-spin-text",
+              x: 220,
+              y: 130,
+              width: 240,
+              height: 120,
+              style: { rotate: 12, backgroundColor: "#FEF3C7" },
+              enter: fade({ duration: 100 }),
+              children: [
+                createElement(P, { key: "first" }, "First paragraph"),
+                createElement(P, { key: "second" }, "Second paragraph"),
+              ],
+            }),
+            createElement(Shape, {
+              testId: "negative-spin-member",
+              x: 520,
+              y: 230,
+              width: 64,
+              height: 64,
+              fill: "#1D4ED8",
+            }),
+          ),
+        ),
+      ),
+    );
+    const slide = result.query.slide("relative-spin");
+    const queryEffects = observeMotion(slide.observation)?.steps.flatMap(
+      ({ effects }) => effects,
+    );
+    const positiveQueryEffect = queryEffects?.find(
+      ({ target }) => target.testId === "positive-spin-shape",
+    );
+    const groupQueryEffect = queryEffects?.find(
+      ({ target }) => target.testId === "negative-spin-group",
+    );
+    const legacyQueryEffect = queryEffects?.find(
+      ({ target }) => target.testId === "legacy-spin-text",
+    );
+    assert.equal(positiveQueryEffect?.from, undefined);
+    assert.equal(positiveQueryEffect?.by, 120);
+    assert.equal(groupQueryEffect?.from, undefined);
+    assert.equal(groupQueryEffect?.by, -80);
+    assert.equal(legacyQueryEffect?.from, 90);
+    assert.equal(legacyQueryEffect?.by, "letter");
+    assert.equal(legacyQueryEffect?.intervalMs, 50);
+
+    const file = await validatePptx(result.pptx);
+    assert.deepEqual(file.errors, []);
+    const fileSlide = file.slides[0];
+    const positiveShapeObservation = result.report.slides[0]?.objects.find(
+      ({ testId }) => testId === "positive-spin-shape",
+    );
+    const positiveShape = fileSlide?.objects.find(
+      ({ id }) => id === positiveShapeObservation?.id,
+    );
+    const spinEffects = fileSlide?.animations?.flatMap(
+      ({ effects }) => effects,
+    );
+    const positiveSpin = spinEffects?.find(
+      ({ targetId }) => targetId === positiveShape?.id,
+    );
+    assert.ok(positiveShapeObservation);
+    assert.ok(positiveShape);
+    assert.equal(positiveShape?.rotationDegrees, 17);
+    assert.equal(positiveSpin?.from, undefined);
+    assert.equal(positiveSpin?.by, 120);
+    const positiveRotation = positiveSpin?.nativeBehaviors?.find(
+      ({ behavior }) => behavior === "animRot",
+    );
+    assert.ok(positiveRotation);
+    assert.deepEqual(
+      [
+        positiveRotation.by,
+        positiveRotation.from,
+        positiveRotation.to,
+        positiveRotation.additive,
+      ],
+      ["7200000", undefined, undefined, "sum"],
+    );
+
+    const legacyTextObservation = result.report.slides[0]?.objects.find(
+      ({ testId }) => testId === "legacy-spin-text",
+    );
+    const legacySpin = spinEffects?.find(
+      ({ targetId }) => targetId === legacyTextObservation?.id,
+    );
+    assert.equal(legacySpin?.from, 90);
+    assert.equal(legacySpin?.by, "letter");
+    assert.equal(legacySpin?.intervalMs, 50);
+
+    const negativeGroupObservation = result.report.slides[0]?.objects.find(
+      ({ testId }) => testId === "negative-spin-group",
+    );
+    const negativeGroup = fileSlide?.objects.find(
+      ({ id }) => id === negativeGroupObservation?.id,
+    );
+    const negativeTextObservation = negativeGroupObservation?.members?.find(
+      ({ testId }) => testId === "negative-spin-text",
+    );
+    const negativeText = negativeGroup?.members?.find(
+      ({ id }) => id === negativeTextObservation?.id,
+    );
+    assert.equal(negativeText?.rotationDegrees, 12);
+    const negativeSpins = spinEffects?.filter(
+      ({ preset, targetId }) =>
+        preset === "spin" &&
+        negativeGroup?.members?.some(({ id }) => id === targetId),
+    );
+    assert.ok(negativeSpins && negativeSpins.length >= 2);
+    assert.ok(
+      negativeSpins.every(
+        (effect) =>
+          effect.from === undefined &&
+          effect.by === -80 &&
+          effect.nativeBehaviors?.some(
+            ({ behavior, by, additive }) =>
+              behavior === "animRot" && by === "-4800000" && additive === "sum",
+          ) === true,
+      ),
+    );
+    assert.ok(
+      negativeSpins.some((effect) =>
+        effect.nativeBehaviors?.some(
+          ({ attributeNames, keyframes }) =>
+            attributeNames.includes("ppt_x") &&
+            keyframes?.[0]?.formula?.includes("(-80*pi/180)*$") === true,
+        ),
+      ),
+    );
+    const groupMotion = result.report.slides[0]?.capabilities?.[
+      "motion"
+    ] as MotionObservation;
+    const groupProjection = groupMotion.nativeProjections?.find(
+      ({ logicalTargetId, preset }) =>
+        logicalTargetId === negativeGroup?.id && preset === "spin",
+    );
+    assert.deepEqual(
+      groupProjection?.nativeEffects.map(({ targetId }) => targetId),
+      negativeGroup?.members?.map(({ id }) => id),
+    );
+  });
+
   it("拒绝非法效果参数、缺失的 motion 能力和不存在的文件目标", async () => {
     for (const [effect, code] of [
       [fade({ duration: 0 }), "invalid-duration"],
@@ -4683,6 +4867,21 @@ describe("对象动画", () => {
         testId: "rotation-too-large",
         props: { emphasis: spin({ from: 1e20 }) },
         code: "invalid-rotation",
+      },
+      {
+        testId: "rotation-null-from",
+        props: { emphasis: spin({ from: null } as never) },
+        code: "invalid-rotation",
+      },
+      {
+        testId: "rotation-by-over-int32",
+        props: { emphasis: spin({ by: 40_000 }) },
+        code: "invalid-rotation",
+      },
+      {
+        testId: "rotation-from-and-by",
+        props: { emphasis: spin({ from: 90, by: -90 }) },
+        code: "invalid-motion",
       },
       {
         testId: "spin-in-enter",

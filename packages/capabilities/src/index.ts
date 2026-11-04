@@ -131,6 +131,7 @@ export type {
   MotionQuery,
   RepeatCount,
   RepeatedEffect,
+  SpinOptions,
   StepProps,
 } from "#/motion.ts";
 export type {

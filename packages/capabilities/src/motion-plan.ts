@@ -939,7 +939,9 @@ function expansionFor(
   effect: Effect,
   path: string,
 ): EffectExpansion {
-  if (effect.by === undefined) return { type: "single", count: 1 };
+  if (effect.by === undefined || typeof effect.by === "number") {
+    return { type: "single", count: 1 };
+  }
   if (effect.by === "word" || effect.by === "letter") {
     if (!target.textBody || !target.paragraphCount) {
       fail(
@@ -1192,7 +1194,7 @@ function motionPlan(
     const granularities = new Set(
       target.value.effects
         .map(({ by }) => by)
-        .filter((by): by is MotionGranularity => by !== undefined),
+        .filter((by): by is MotionGranularity => typeof by === "string"),
     );
     const textGranularities = [...granularities].filter(
       (by) => by === "paragraph" || by === "word" || by === "letter",
@@ -2944,6 +2946,10 @@ function motionPlan(
             typeof effect.from === "number"
               ? Math.round(effect.from * 60000) / 60000
               : effect.from;
+          const by =
+            typeof effect.by === "number"
+              ? Math.round(effect.by * 60000) / 60000
+              : effect.by;
           const easing = normalizedEasing(effect.easing);
           const scheduledEffect: ScheduledEffect = {
             target: {
@@ -2961,7 +2967,7 @@ function motionPlan(
               ? {}
               : { repeatCount: effect.repeatCount }),
             delayMs: Math.round(effect.delay),
-            ...(effect.by === undefined ? {} : { by: effect.by }),
+            ...(by === undefined ? {} : { by }),
             ...(expansion.type === "iterate"
               ? { intervalMs: expansion.intervalMs }
               : {}),

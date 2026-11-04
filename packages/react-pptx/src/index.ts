@@ -230,6 +230,7 @@ export type {
   MotionQuery,
   RepeatCount,
   RepeatedEffect,
+  SpinOptions,
   StepProps,
 } from "@react-pptx/capabilities";
 export type {

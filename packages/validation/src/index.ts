@@ -244,6 +244,8 @@ export type FileAnimationBehavior = {
   readonly durationMs?: number;
   readonly from?: string;
   readonly to?: string;
+  /** animRot 的原始相对角度，单位为 DrawingML 的 1/60000 度。 */
+  readonly by?: string;
   readonly calculationMode?: string;
   /** 文件中实际 `p:tav` 的顺序；公式按相邻节点的数值关键值求值。 */
   readonly keyframes?: readonly FileAnimationKeyframe[];
@@ -274,7 +276,7 @@ export type FileAnimationEffect = {
   readonly durationMs: number;
   readonly delayMs: number;
   readonly repeatCount?: number | "forever";
-  readonly by?: "word" | "letter";
+  readonly by?: "word" | "letter" | number;
   readonly intervalMs?: number;
   readonly completion?: "unknown" | "no-natural-completion";
   readonly startAfter?: FileAnimationDependency;
@@ -374,6 +376,7 @@ type CenterRotationFormula = {
   readonly centerX: number;
   readonly centerY: number;
   readonly angleDegrees: number;
+  readonly progress: "increasing" | "decreasing";
   readonly scaleToCenter: boolean;
   readonly aspectRatio: number;
 };
@@ -394,12 +397,13 @@ function parseCenterRotationFormula(
     return undefined;
   }
   const number = "(-?(?:\\d+(?:\\.\\d*)?|\\.\\d+))";
+  const progress = "(?:\\$|\\(1-\\$\\))";
   const xPattern = new RegExp(
-    `^${number}\\+(\\$\\*)?\\(\\(#ppt_x-${number}\\)\\*cos\\(\\(${number}\\*pi/180\\)\\*\\(1-\\$\\)\\)-\\(#ppt_y-${number}\\)\\*${number}\\*sin\\(\\(${number}\\*pi/180\\)\\*\\(1-\\$\\)\\)\\)-#ppt_x$`,
+    `^${number}\\+(\\$\\*)?\\(\\(#ppt_x-${number}\\)\\*cos\\(\\(${number}\\*pi/180\\)\\*${progress}\\)-\\(#ppt_y-${number}\\)\\*${number}\\*sin\\(\\(${number}\\*pi/180\\)\\*${progress}\\)\\)-#ppt_x$`,
     "u",
   );
   const yPattern = new RegExp(
-    `^${number}\\+(\\$\\*)?\\(\\(#ppt_x-${number}\\)\\*${number}\\*sin\\(\\(${number}\\*pi/180\\)\\*\\(1-\\$\\)\\)\\+\\(#ppt_y-${number}\\)\\*cos\\(\\(${number}\\*pi/180\\)\\*\\(1-\\$\\)\\)\\)-#ppt_y$`,
+    `^${number}\\+(\\$\\*)?\\(\\(#ppt_x-${number}\\)\\*${number}\\*sin\\(\\(${number}\\*pi/180\\)\\*${progress}\\)\\+\\(#ppt_y-${number}\\)\\*cos\\(\\(${number}\\*pi/180\\)\\*${progress}\\)\\)-#ppt_y$`,
     "u",
   );
   const match = (axis === "ppt_x" ? xPattern : yPattern).exec(formula);
@@ -484,6 +488,7 @@ function parseCenterRotationFormula(
     centerX,
     centerY,
     angleDegrees: angleA,
+    progress: formula.includes(")*$)") ? "increasing" : "decreasing",
     scaleToCenter,
     aspectRatio,
   };
@@ -633,15 +638,25 @@ function spinAngleForPosition(
 ): number | undefined {
   if (preset === "spin") {
     const rotation = oneBehaviorForTarget(behaviors, position, "animRot", "r");
-    const endpoints = numericEndpoints(rotation);
     if (
       rotation === undefined ||
       rotation.additive !== "sum" ||
-      endpoints === undefined ||
       rotation.durationMs !== position.durationMs
     ) {
       return undefined;
     }
+    if (rotation.by !== undefined) {
+      const units = Number(rotation.by);
+      return Number.isSafeInteger(units) &&
+        units >= -2_147_483_648 &&
+        units <= 2_147_483_647 &&
+        rotation.from === undefined &&
+        rotation.to === undefined
+        ? units / 60000
+        : undefined;
+    }
+    const endpoints = numericEndpoints(rotation);
+    if (endpoints === undefined) return undefined;
     return (endpoints[0] - endpoints[1]) / 60000;
   }
   if (preset !== "spinIn") return undefined;
@@ -713,6 +728,12 @@ function validCenterRotationGeometry(
     if (
       formula === undefined ||
       formula.scaleToCenter !== (preset === "spinIn") ||
+      formula.progress !==
+        (preset === "spin" &&
+        oneBehaviorForTarget(behaviors, position, "animRot", "r")?.by !==
+          undefined
+          ? "increasing"
+          : "decreasing") ||
       !closeGeometryNumber(formula.centerX, firstFormula.centerX) ||
       !closeGeometryNumber(formula.centerY, firstFormula.centerY) ||
       !closeGeometryNumber(formula.angleDegrees, firstFormula.angleDegrees) ||
@@ -4485,6 +4506,7 @@ function readSlideAnimations(
           );
         })();
       const additive = attribute(cBhvr, "additive");
+      const by = attribute(behaviorNode, "by");
       const filter = attribute(behaviorNode, "filter");
       return [
         {
@@ -4496,6 +4518,7 @@ function readSlideAnimations(
           ...(durationMs === undefined ? {} : { durationMs }),
           ...(fromValue === undefined ? {} : { from: fromValue }),
           ...(toValue === undefined ? {} : { to: toValue }),
+          ...(by === "" ? {} : { by }),
           ...(attribute(behaviorNode, "calcmode") === ""
             ? {}
             : { calculationMode: attribute(behaviorNode, "calcmode") }),
@@ -5034,7 +5057,7 @@ function readSlideAnimations(
         continue;
       }
       const iterate = iterateNodes[0];
-      let by: "word" | "letter" | undefined;
+      let by: "word" | "letter" | number | undefined;
       let intervalMs: number | undefined;
       if (iterate !== undefined) {
         const type = attribute(iterate, "type");
@@ -5108,14 +5131,41 @@ function readSlideAnimations(
       )[0];
       const rotationFrom =
         rotation === undefined ? undefined : decimalAttribute(rotation, "from");
-      if (preset === "spin" && rotationFrom === undefined) {
+      const rotationByAttribute =
+        rotation === undefined ? "" : attribute(rotation, "by");
+      const rotationBy =
+        rotationByAttribute === ""
+          ? undefined
+          : decimalAttribute(rotation, "by");
+      const rotationByIsValid =
+        rotationBy !== undefined &&
+        Number.isSafeInteger(rotationBy) &&
+        rotationBy >= -2_147_483_648 &&
+        rotationBy <= 2_147_483_647;
+      if (
+        preset === "spin" &&
+        ((rotationFrom === undefined && !rotationByIsValid) ||
+          (rotationFrom !== undefined && rotationByAttribute !== ""))
+      ) {
         issue(
           errors,
           part,
           "invalid-animation-rotation",
-          "spin 缺少有效起始角度",
+          "spin 必须且只能声明有效起始角度或相对角度",
         );
         continue;
+      }
+      if (preset === "spin" && rotationBy !== undefined && rotationByIsValid) {
+        if (by !== undefined) {
+          issue(
+            errors,
+            part,
+            "invalid-animation-iteration",
+            "spin 的相对旋转不能同时采用文字迭代",
+          );
+          continue;
+        }
+        by = rotationBy / 60000;
       }
       const from =
         direction === undefined
@@ -5161,9 +5211,9 @@ function readSlideAnimations(
         ...(intervalMs === undefined ? {} : { intervalMs }),
         ...(repeatCount === "forever"
           ? { completion: "no-natural-completion" as const }
-          : by === undefined
-            ? {}
-            : { completion: "unknown" as const }),
+          : by === "word" || by === "letter"
+            ? { completion: "unknown" as const }
+            : {}),
         ...(startAfter === undefined ? {} : { startAfter }),
         ...(from === undefined ? {} : { from }),
         ...(fromColor === undefined ? {} : { fromColor }),

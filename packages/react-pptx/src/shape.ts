@@ -57,6 +57,7 @@ export type {
   MotionObservation,
   MotionProps,
   MotionStepObservation,
+  SpinOptions,
   StepProps,
 } from "@react-pptx/capabilities/motion";
 export type { ShapeProps } from "@react-pptx/capabilities/shape";

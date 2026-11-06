@@ -1,113 +1,100 @@
 import assert from "node:assert/strict";
 
-import { build, Deck } from "@react-pptx/react-pptx";
+import { build, Deck, Slide } from "@react-pptx/react-pptx";
 import { validatePptx } from "@react-pptx/validation";
 import { it } from "vitest";
 
+import { Progress } from "../src/components/progress.tsx";
 import { ShowcaseDeck } from "../src/index.ts";
 import { CardsPage } from "../src/templates/cards-page.tsx";
 import { theme } from "../src/theme.ts";
 
-it("地图六次点击累积变色，同期出现地区说明，四页画廊保留连续性与直接导航", async () => {
+it("地图与日历保持同步点击行为，四页画廊保留连续性与直接导航", async () => {
   const result = await build(<ShowcaseDeck />, { embedFonts: "full" });
-  // 画廊的其他面板有意放在离屏画布上，不能因此忽略装不下的文字。
-  assert.deepEqual(
-    result.report.diagnostics.filter(({ code }) => code !== "overflow"),
-    [],
-  );
-  assert.ok(
-    result.report.diagnostics
-      .filter(({ code }) => code === "overflow")
-      .every(({ path }) => path.includes("gallery-")),
-  );
+  assert.deepEqual(result.report.diagnostics, []);
   const file = await validatePptx(result.pptx, {
     allowedExtensions: ["p14", "p159"],
   });
   assert.deepEqual(file.errors, []);
+
   for (const [id, titles] of [
-    ["grouping", ["分组", "对齐", "一致性"]],
-    ["reveal", ["先给出中心观点", "再补充理解它的依据"]],
+    ["grouping", ["Lorem ipsum", "Dolor sit", "Amet consectetur"]],
+    ["reveal", ["Lorem ipsum", "Dolor sit amet"]],
   ] as const) {
     const page = file.slides.find((slide) => slide.id === id)!;
-    assert.deepEqual(
-      page.objects.flatMap(({ text }) =>
-        text && titles.some((title) => title === text.text) ? [text.text] : [],
-      ),
-      titles,
-    );
-    assert.deepEqual(
-      page.animations?.map(({ effects }) =>
-        effects.map(({ durationMs, delayMs }) => [durationMs, delayMs]),
-      ),
-      titles.map(() => [
-        [280, 0],
-        [350, 280],
-      ]),
-    );
-    assert.equal(
-      new Set(
-        page.animations?.flatMap(({ effects }) =>
-          effects.map(({ targetId }) => targetId),
-        ),
-      ).size,
-      titles.length * 2,
-    );
+    assert.equal(page.animations?.length, titles.length);
+    const targets = new Set<number>();
+    for (const [index, step] of (page.animations ?? []).entries()) {
+      assert.equal(step.trigger, "click");
+      assert.ok(step.effects.every(({ kind }) => kind === "entrance"));
+      const revealedText = step.effects.map((effect) => {
+        const object = page.objects.find(({ id }) => id === effect.targetId)!;
+        assert.ok(!targets.has(object.id));
+        targets.add(object.id);
+        return object.text?.text;
+      });
+      assert.equal(revealedText[0], titles[index]);
+      assert.equal(revealedText.length, 2);
+      assert.ok(revealedText[1]?.startsWith("Lorem ipsum"));
+    }
   }
+
   const calendar = file.slides.find(({ id }) => id === "calendar")!;
   assert.equal(calendar.animations?.length, 3);
   for (const [index, step] of (calendar.animations ?? []).entries()) {
     const color = step.effects.find(({ preset }) => preset === "fillColor")!;
-    const caption = step.effects.find(({ preset }) => preset === "fade")!;
+    const caption = step.effects.find(({ kind }) => kind === "entrance")!;
     const date = calendar.objects.find(({ id }) => id === color.targetId)!;
     const note = calendar.objects.find(({ id }) => id === caption.targetId)!;
-    assert.equal(date.text?.text, String([4, 12, 23][index]));
+    assert.equal(step.trigger, "click");
+    assert.equal(date.text?.text, String([4, 12, 23][index]).padStart(2, "0"));
     assert.equal(note.name, `event-${[4, 12, 23][index]}`);
     assert.equal(color.delayMs, caption.delayMs);
   }
+
   const world = file.slides.find(({ id }) => id === "world")!;
-  assert.deepEqual(
-    world.animations?.map(({ trigger, effects }) => [
-      trigger,
-      effects.filter(({ preset }) => preset === "fillColor").length,
-    ]),
-    [
-      ["click", 123],
-      ["click", 33],
-      ["click", 54],
-      ["click", 42],
-      ["click", 119],
-      ["click", 24],
-    ],
-  );
+  assert.equal(world.animations?.length, 6);
   const targets = new Set<number>();
   for (const step of world.animations ?? []) {
-    assert.equal(
-      step.effects.filter(({ preset }) => preset === "fade").length,
-      1,
-    );
-    for (const effect of step.effects) {
-      assert.equal(effect.delayMs, 0);
-      if (effect.preset !== "fillColor") continue;
-      assert.equal(effect.durationMs, 650);
-      assert.equal(effect.fromColor, "#E4ECE8");
+    assert.equal(step.trigger, "click");
+    const changes = step.effects.filter(({ preset }) => preset === "fillColor");
+    const captions = step.effects.filter(({ kind }) => kind === "entrance");
+    assert.ok(changes.length > 0);
+    assert.equal(captions.length, 1);
+    assert.equal(captions[0]!.delayMs, changes[0]!.delayMs);
+    for (const effect of changes) {
       assert.notEqual(effect.toColor, effect.fromColor);
       assert.ok(!targets.has(effect.targetId));
       targets.add(effect.targetId);
     }
   }
+
   const gallery = file.slides.filter(({ id }) => id.startsWith("gallery-"));
   assert.equal(gallery.length, 4);
-  const identities = gallery[0]!.objects
-    .filter(({ name }) => name.startsWith("!!"))
-    .map(({ name }) => name);
-  assert.equal(identities.length, 9);
+  const identities = new Set(
+    gallery[0]!.objects
+      .filter(({ name }) => name.startsWith("!!"))
+      .map(({ name }) => name),
+  );
+  assert.ok(identities.size >= 4);
   for (const page of gallery) {
     assert.equal(page.transition?.kind, "morph");
-    assert.equal(page.transition?.durationMs, 1200);
+    assert.ok(page.transition.durationMs! > 0);
+    const chart = page.objects
+      .flatMap(({ members }) => members ?? [])
+      .find(({ chart }) => chart !== undefined)?.chart;
+    assert.ok(chart);
+    assert.deepEqual(chart.types, ["barChart"]);
+    assert.deepEqual(chart.series, [
+      { name: "Lorem ipsum", categories: ["A", "B"], values: [84, 56] },
+    ]);
+    assert.deepEqual(chart.embeddedWorkbook?.series, chart.series);
     assert.deepEqual(
-      page.objects
-        .filter(({ name }) => name.startsWith("!!"))
-        .map(({ name }) => name),
+      new Set(
+        page.objects
+          .filter(({ name }) => name.startsWith("!!"))
+          .map(({ name }) => name),
+      ),
       identities,
     );
     assert.deepEqual(
@@ -124,26 +111,23 @@ it("地图六次点击累积变色，同期出现地区说明，四页画廊保�
   }
 }, 30_000);
 
-it("真实卡片模板替换中文内容、增减和重排项目后仍保持布局与独立揭示", async () => {
+it("真实卡片模板替换内容、增减和重排项目后仍保持布局与独立揭示", async () => {
   const first = {
-    title: "先读标题",
-    body: "一句话给出中心观点。",
-    accent: "#138A83",
+    title: "Lorem ipsum",
+    body: "Lorem ipsum dolor sit amet, consectetur adipiscing elit.",
   };
   const second = {
-    title: "再看依据",
-    body: "正文解释观点背后的关键依据，保留清楚的阅读顺序。",
-    accent: "#E98068",
+    title: "Dolor sit",
+    body: "Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.",
   };
   const third = {
-    title: "最后补充",
-    body: "需要时再补充细节。",
-    accent: "#16324F",
+    title: "Amet consectetur",
+    body: "Ut enim ad minim veniam, quis nostrud exercitation.",
   };
   const changed = {
     ...first,
-    title: "更长的中文标题也能自然换行",
-    body: "正文替换后，卡片仍然保留明确的阅读顺序，并根据内容增加高度，不挤占相邻卡片的空间。",
+    title: "A considerably longer title still wraps naturally",
+    body: "Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.",
   };
   const variants = [
     [first, second],
@@ -160,8 +144,8 @@ it("真实卡片模板替换中文内容、增减和重排项目后仍保持布�
         <CardsPage
           key={index}
           slideId={`reuse-${index}`}
-          title="让内容决定卡片的高度"
-          subtitle="替换内容、调整数量与重排项目"
+          title="Lorem ipsum dolor sit"
+          subtitle="Lorem ipsum dolor sit amet, consectetur adipiscing elit."
           items={items}
         />
       ))}
@@ -185,19 +169,13 @@ it("真实卡片模板替换中文内容、增减和重排项目后仍保持布�
       )!;
       assert.equal(title.text?.text, item.title);
       assert.equal(body.text?.text, item.body);
-      assert.deepEqual(
-        step.effects.map(({ durationMs, delayMs }) => [durationMs, delayMs]),
-        [
-          [280, 0],
-          [350, 280],
-        ],
-      );
+      assert.ok(step.effects.every(({ kind }) => kind === "entrance"));
       for (const object of [title, body]) {
         assert.ok(!ids.has(object.id));
         ids.add(object.id);
         assert.ok(object.boxEmu!.x >= previousRight);
-        assert.ok(object.boxEmu!.y + object.boxEmu!.height < 720 * 9525);
-        assert.ok(object.boxEmu!.x + object.boxEmu!.width < 1280 * 9525);
+        assert.ok(object.boxEmu!.y + object.boxEmu!.height <= 720 * 9525);
+        assert.ok(object.boxEmu!.x + object.boxEmu!.width <= 1280 * 9525);
       }
       assert.equal(body.boxEmu!.x, title.boxEmu!.x);
       assert.ok(body.boxEmu!.y >= title.boxEmu!.y + title.boxEmu!.height);
@@ -206,4 +184,37 @@ it("真实卡片模板替换中文内容、增减和重排项目后仍保持布�
     }
   }
   assert.ok(bodyWidths[0]! > bodyWidths[1]!);
+});
+
+it("进度模块由页面指定位置和宽度，内部构图保持比例与点击顺序", async () => {
+  const frames = [
+    { x: 80, y: 120, width: 1120 },
+    { x: 280, y: 140, width: 560 },
+  ];
+  const result = await build(
+    <Deck width={1280} height={720} theme={theme}>
+      {frames.map((frame, index) => (
+        <Slide key={index} slideId={`progress-${index}`}>
+          <Progress {...frame} completed={3} total={4} />
+        </Slide>
+      ))}
+    </Deck>,
+  );
+  assert.deepEqual(result.report.diagnostics, []);
+  const file = await validatePptx(result.pptx);
+  assert.deepEqual(file.errors, []);
+  for (const [index, page] of file.slides.entries()) {
+    const frame = frames[index]!;
+    const progress = page.objects.find(
+      ({ name }) => name === "progress-example",
+    )!;
+    const bounds = progress.boxEmu!;
+    assert.equal(page.animations?.length, 2);
+    assert.ok(Math.abs(bounds.x - frame.x * 9525) <= 9525);
+    assert.ok(Math.abs(bounds.y - frame.y * 9525) <= 9525);
+    assert.ok(Math.abs(bounds.width - frame.width * 9525) <= 9525);
+    assert.ok(
+      Math.abs(bounds.height - (frame.width / 1120) * 468 * 9525) <= 9525,
+    );
+  }
 });

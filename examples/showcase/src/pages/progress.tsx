@@ -1,26 +1,41 @@
-import { Text } from "@react-pptx/react-pptx";
+import { Shape, Slide, Text } from "@react-pptx/react-pptx";
 
 import { Progress } from "../components/progress.tsx";
-import { PageFrame } from "../templates/page-frame.tsx";
 import { colors } from "../theme.ts";
 
 export function ProgressPage() {
   return (
-    <PageFrame
-      slideId="progress"
-      title="进度需要分母"
-      subtitle="数值告诉我们多少，分母告诉我们距离完成还有多远。"
-    >
-      <Progress completed={3} total={4} />
+    <Slide slideId="progress" background={colors.ink}>
       <Text
-        x={64}
-        y={580}
-        width={1100}
-        height={60}
-        style={{ fontSize: 20, color: colors.muted }}
+        x={82}
+        y={66}
+        width={500}
+        height={30}
+        style={{
+          fontSize: 16,
+          fontWeight: 700,
+          letterSpacing: 2,
+          color: colors.accentSoft,
+        }}
       >
-        教学示意：四个讲述步骤，已完成其中三个。三种表达使用同一组数据。
+        07 / PROGRESS
       </Text>
-    </PageFrame>
+      <Shape x={930} y={80} width={268} height={2} fill={colors.darkSurface} />
+      <Text
+        x={80}
+        y={124}
+        width={620}
+        height={74}
+        style={{
+          fontSize: 52,
+          lineHeight: 62,
+          fontWeight: 700,
+          color: colors.surface,
+        }}
+      >
+        Steady progress.
+      </Text>
+      <Progress x={80} y={176} width={1120} completed={3} total={4} />
+    </Slide>
   );
 }

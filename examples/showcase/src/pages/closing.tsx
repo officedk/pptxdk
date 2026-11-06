@@ -1,51 +1,72 @@
-import { Box, Slide, Text } from "@react-pptx/react-pptx";
+import { Shape, Slide, Text, preset } from "@react-pptx/react-pptx";
 
 import { colors } from "../theme.ts";
 
 export function ClosingPage() {
   return (
     <Slide slideId="closing" background={colors.ink}>
-      <Box
+      <Shape x={82} y={106} width={52} height={6} fill={colors.current} />
+      <Text
+        x={76}
+        y={184}
+        width={740}
+        height={190}
         style={{
-          position: "absolute",
-          left: 96,
-          top: 130,
-          width: 1080,
-          height: 500,
-          display: "flex",
-          flexDirection: "column",
-          gap: 34,
+          fontSize: 78,
+          fontWeight: 700,
+          lineHeight: 84,
+          color: colors.surface,
         }}
       >
-        <Text
-          width={1080}
-          height="auto"
-          style={{ fontSize: 64, color: colors.paper }}
-        >
-          让表达回到内容
-        </Text>
-        <Text
-          width={1080}
-          height="auto"
-          style={{ fontSize: 34, color: colors.coral }}
-        >
-          层级，让重点可见。
-        </Text>
-        <Text
-          width={1080}
-          height="auto"
-          style={{ fontSize: 34, color: "#7FC9C1" }}
-        >
-          关系，让结构清晰。
-        </Text>
-        <Text
-          width={1080}
-          height="auto"
-          style={{ fontSize: 34, color: colors.paper }}
-        >
-          节奏，让理解逐步发生。
-        </Text>
-      </Box>
+        Make room{`\n`}for ideas.
+      </Text>
+      <Text
+        x={82}
+        y={426}
+        width={480}
+        height={66}
+        style={{ fontSize: 21, lineHeight: 30, color: colors.accentSoft }}
+      >
+        Lorem ipsum dolor sit amet, consectetur adipiscing elit.
+      </Text>
+      <Shape
+        x={954}
+        y={192}
+        width={250}
+        height={250}
+        geometry={preset("ellipse")}
+        fill={colors.accent}
+      />
+      <Shape
+        x={994}
+        y={232}
+        width={170}
+        height={170}
+        geometry={preset("ellipse")}
+        fill={colors.ink}
+      />
+      <Shape
+        x={1059}
+        y={297}
+        width={40}
+        height={40}
+        geometry={preset("ellipse")}
+        fill={colors.current}
+      />
+      <Text
+        x={82}
+        y={642}
+        width={180}
+        height={28}
+        style={{
+          fontSize: 15,
+          fontFamily: "medium",
+          fontWeight: 500,
+          color: colors.surface,
+        }}
+      >
+        16 — 16
+      </Text>
     </Slide>
   );
 }

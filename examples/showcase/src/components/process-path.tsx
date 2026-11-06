@@ -1,8 +1,15 @@
-import { Group, Shape, Step, Text, fade, preset } from "@react-pptx/react-pptx";
+import {
+  Group,
+  Shape,
+  Step,
+  Text,
+  floatUp,
+  preset,
+} from "@react-pptx/react-pptx";
 
-import { colors } from "../theme.ts";
+import { colors, motion } from "../theme.ts";
 
-/** 连线属于整条路径，节点保留原生组合，节点顺序即点击顺序。 */
+/** 编号节点与连接线按内容顺序揭示，每个节点保留为原生组合。 */
 export function ProcessPath({
   nodes,
   x,
@@ -16,48 +23,71 @@ export function ProcessPath({
   readonly width: number;
   readonly firstStep?: number;
 }) {
-  const nodeWidth = (width - (nodes.length - 1) * 40) / nodes.length;
+  const columnWidth = width / nodes.length;
   return (
     <>
-      <Shape
-        x={x + 30}
-        y={y + 50}
-        width={width - 60}
-        height={3}
-        fill={colors.pale}
-      />
-      {nodes.map((node, index) => (
-        <Step key={node.title} n={firstStep + index}>
-          <Group enter={fade({ duration: 400 })}>
-            <Shape
-              x={x + index * (nodeWidth + 40)}
-              y={y}
-              width={nodeWidth}
-              height={190}
-              fill={index === 1 ? colors.teal : colors.ink}
-              geometry={preset("roundRect")}
-            />
-            <Text
-              x={x + index * (nodeWidth + 40) + 24}
-              y={y + 24}
-              width={nodeWidth - 48}
-              height={48}
-              style={{ fontSize: 28, color: colors.paper }}
-            >
-              {node.title}
-            </Text>
-            <Text
-              x={x + index * (nodeWidth + 40) + 24}
-              y={y + 90}
-              width={nodeWidth - 48}
-              height={80}
-              style={{ fontSize: 20, color: colors.paper }}
-            >
-              {node.body}
-            </Text>
-          </Group>
-        </Step>
-      ))}
+      {nodes.map((node, index) => {
+        const center = x + index * columnWidth + columnWidth / 2;
+        return (
+          <Step key={`${node.title}-${index}`} n={firstStep + index}>
+            <Group enter={floatUp({ duration: motion.reveal })}>
+              {index > 0 && (
+                <Shape
+                  x={center - columnWidth + 48}
+                  y={y + 47}
+                  width={columnWidth - 96}
+                  height={3}
+                  fill={colors.accentSoft}
+                />
+              )}
+              <Shape
+                x={center - 48}
+                y={y}
+                width={96}
+                height={96}
+                geometry={preset("ellipse")}
+                fill={colors.accent}
+                text={String(index + 1).padStart(2, "0")}
+                textStyle={{
+                  fontSize: 26,
+                  fontWeight: 700,
+                  color: colors.surface,
+                  align: "center",
+                  verticalAlign: "middle",
+                }}
+              />
+              <Text
+                x={x + index * columnWidth + 18}
+                y={y + 132}
+                width={columnWidth - 36}
+                height={42}
+                style={{
+                  fontSize: 27,
+                  fontWeight: 700,
+                  align: "center",
+                  color: colors.ink,
+                }}
+              >
+                {node.title}
+              </Text>
+              <Text
+                x={x + index * columnWidth + 24}
+                y={y + 190}
+                width={columnWidth - 48}
+                height={88}
+                style={{
+                  fontSize: 18,
+                  lineHeight: 26,
+                  align: "center",
+                  color: colors.muted,
+                }}
+              >
+                {node.body}
+              </Text>
+            </Group>
+          </Step>
+        );
+      })}
     </>
   );
 }

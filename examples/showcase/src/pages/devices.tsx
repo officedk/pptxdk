@@ -1,46 +1,108 @@
-import { Text } from "@react-pptx/react-pptx";
+import { Box, Shape, Slide, Text } from "@react-pptx/react-pptx";
 
 import { DeviceFrame } from "../components/device-frame.tsx";
-import { PageFrame } from "../templates/page-frame.tsx";
 import { colors } from "../theme.ts";
 
-function ExampleContent({ width }: { width: number }) {
+function ExampleContent({ compact = false }: { compact?: boolean }) {
   return (
     <>
       <Text
-        width={width}
+        width={compact ? 120 : 360}
         height="auto"
-        style={{ fontSize: 28, color: colors.teal }}
+        style={{
+          fontSize: compact ? 20 : 34,
+          fontWeight: 700,
+          color: colors.ink,
+        }}
       >
-        内容先行
-      </Text>
-      <Text width={width} height="auto" style={{ fontSize: 22 }}>
-        先说明要表达的内容，再选择合适的展示范围。
+        Lorem ipsum
       </Text>
       <Text
-        width={width}
+        width={compact ? 120 : 390}
         height="auto"
-        style={{ fontSize: 18, color: colors.muted }}
+        style={{
+          fontSize: compact ? 12 : 17,
+          lineHeight: compact ? 17 : 24,
+          color: colors.muted,
+        }}
       >
-        标题、正文与留白，在不同尺寸中保持清晰。
+        {compact
+          ? "Lorem ipsum dolor sit amet."
+          : "Lorem ipsum dolor sit amet, consectetur adipiscing elit."}
       </Text>
+      <Box
+        style={{
+          width: compact ? 120 : 390,
+          height: compact ? 68 : 128,
+          backgroundColor: colors.soft,
+        }}
+      />
+      <Box
+        style={{
+          width: compact ? 74 : 170,
+          height: compact ? 7 : 10,
+          backgroundColor: colors.accent,
+        }}
+      />
     </>
   );
 }
 
 export function DevicesPage() {
   return (
-    <PageFrame
-      slideId="devices"
-      title="给内容一个合适的框"
-      subtitle="外框交代展示情境；真正需要读懂的内容仍然清晰可见。"
-    >
-      <DeviceFrame x={110} y={190} width={310} height={450}>
-        <ExampleContent width={250} />
+    <Slide slideId="devices" background={colors.paper}>
+      <Shape x={80} y={62} width={42} height={5} fill={colors.accent} />
+      <Text
+        x={80}
+        y={112}
+        width={420}
+        height={146}
+        style={{ fontSize: 57, fontWeight: 700, lineHeight: 62 }}
+      >
+        One story.{`\n`}Every screen.
+      </Text>
+      <Text
+        x={82}
+        y={286}
+        width={310}
+        height={94}
+        style={{ fontSize: 19, lineHeight: 27, color: colors.muted }}
+      >
+        Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod
+        tempor.
+      </Text>
+      <DeviceFrame
+        testId="device-desktop"
+        x={558}
+        y={126}
+        width={622}
+        height={410}
+      >
+        <ExampleContent />
       </DeviceFrame>
-      <DeviceFrame x={540} y={235} width={630} height={350}>
-        <ExampleContent width={570} />
+      <DeviceFrame
+        testId="device-phone"
+        x={408}
+        y={326}
+        width={196}
+        height={326}
+      >
+        <ExampleContent compact />
       </DeviceFrame>
-    </PageFrame>
+      <Text
+        x={82}
+        y={640}
+        width={260}
+        height={28}
+        style={{
+          fontSize: 15,
+          fontFamily: "medium",
+          fontWeight: 500,
+          color: colors.muted,
+        }}
+      >
+        09 / DEVICES
+      </Text>
+    </Slide>
   );
 }

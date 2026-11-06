@@ -1,35 +1,63 @@
-import { Text } from "@react-pptx/react-pptx";
+import { Shape, Slide, Text } from "@react-pptx/react-pptx";
 
 import { ProcessPath } from "../components/process-path.tsx";
-import { PageFrame } from "../templates/page-frame.tsx";
 import { colors } from "../theme.ts";
 
 export function ProcessPage() {
   return (
-    <PageFrame
-      slideId="process"
-      title="把过程组织成路径"
-      subtitle="节点说明发生了什么，连线说明下一步去哪里。"
-    >
+    <Slide slideId="process" background={colors.paper}>
+      <Shape x={80} y={62} width={42} height={5} fill={colors.accent} />
+      <Text
+        x={80}
+        y={94}
+        width={760}
+        height={72}
+        style={{ fontSize: 54, lineHeight: 60, fontWeight: 700 }}
+      >
+        Follow the thread.
+      </Text>
+      <Text
+        x={880}
+        y={108}
+        width={320}
+        height={60}
+        style={{ fontSize: 18, lineHeight: 26, color: colors.muted }}
+      >
+        Lorem ipsum dolor sit amet, consectetur adipiscing elit.
+      </Text>
       <ProcessPath
-        x={64}
-        y={240}
-        width={1152}
+        x={80}
+        y={242}
+        width={1120}
         nodes={[
-          { title: "提出问题", body: "明确这段表达要回答的核心问题" },
-          { title: "组织材料", body: "选择能支撑观点的内容与顺序" },
-          { title: "形成表达", body: "用结构和节奏让关系逐步清晰" },
+          {
+            title: "Lorem ipsum",
+            body: "Lorem ipsum dolor sit amet, consectetur adipiscing elit.",
+          },
+          {
+            title: "Dolor sit",
+            body: "Sed do eiusmod tempor incididunt ut labore et dolore.",
+          },
+          {
+            title: "Amet elit",
+            body: "Ut enim ad minim veniam, quis nostrud exercitation.",
+          },
         ]}
       />
       <Text
-        x={64}
-        y={550}
-        width={1100}
-        height={60}
-        style={{ fontSize: 23, color: colors.muted }}
+        x={80}
+        y={622}
+        width={250}
+        height={28}
+        style={{
+          fontSize: 15,
+          fontFamily: "medium",
+          fontWeight: 500,
+          color: colors.muted,
+        }}
       >
-        时间线强调先后；流程图还需要说明依赖与方向。
+        06 / PROCESS
       </Text>
-    </PageFrame>
+    </Slide>
   );
 }

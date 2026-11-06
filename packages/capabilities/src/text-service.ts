@@ -21,6 +21,7 @@ import * as fontkit from "fontkit";
 import LineBreakerImplementation from "linebreak";
 
 import type { FontEmbeddingUse } from "./font-embedding.ts";
+import { matchesFontFamily } from "./font-family.ts";
 import { textShadowXml } from "./visual.ts";
 export type {
   FontReference,
@@ -1047,10 +1048,6 @@ function normalizeParagraphs(
   return paragraphs;
 }
 
-function fontFamilyKey(value: string): string {
-  return value.trim().replace(/\s+/gu, " ").toLocaleLowerCase("en-US");
-}
-
 function measureFace(source: NormalizedFont): MeasureFace {
   if (!source.hasResource || source.data === undefined) {
     throw new CapabilityError(
@@ -1078,10 +1075,7 @@ function measureFace(source: NormalizedFont): MeasureFace {
     }
   }
 
-  if (
-    source.substitute !== true &&
-    fontFamilyKey(parsed.familyName) !== fontFamilyKey(source.family)
-  ) {
+  if (source.substitute !== true && !matchesFontFamily(parsed, source.family)) {
     throw new CapabilityError(
       "font-substitution-required",
       `度量文件声明为 ${parsed.familyName}，要保留输出字体名 ${source.family} 必须显式设置 Font.substitute`,

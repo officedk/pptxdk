@@ -1,73 +1,163 @@
-import { Box, Text } from "@react-pptx/react-pptx";
+import { Box, Slide, Text } from "@react-pptx/react-pptx";
 
-import { PageFrame } from "../templates/page-frame.tsx";
 import { colors } from "../theme.ts";
 
 export function HierarchyPage() {
   return (
-    <PageFrame
-      slideId="hierarchy"
-      title="一页先形成阅读层级"
-      subtitle="同一组内容，有了主次，才有明确的阅读起点。"
-    >
+    <Slide slideId="hierarchy" background={colors.paper}>
+      <Text
+        x={60}
+        y={36}
+        width={350}
+        height={230}
+        style={{
+          fontSize: 210,
+          lineHeight: 210,
+          fontWeight: 700,
+          color: colors.soft,
+        }}
+      >
+        02
+      </Text>
       <Box
         style={{
           position: "absolute",
-          left: 64,
-          top: 210,
-          width: 1152,
+          left: 80,
+          top: 128,
+          width: 1120,
           display: "flex",
-          gap: 64,
+          gap: 100,
         }}
       >
         <Box
           style={{
-            width: 650,
+            width: 590,
             display: "flex",
             flexDirection: "column",
-            gap: 24,
+            gap: 28,
           }}
         >
-          <Text width={650} height="auto" style={{ fontSize: 52 }}>
-            先让人知道{`\n`}这一页要说什么
+          <Text
+            width={500}
+            height="auto"
+            style={{
+              fontSize: 16,
+              fontWeight: 700,
+              letterSpacing: 2,
+              color: colors.accent,
+            }}
+          >
+            CLEAR HIERARCHY
           </Text>
           <Text
-            width={610}
+            width={590}
             height="auto"
-            style={{ fontSize: 25, color: colors.muted }}
+            style={{
+              fontSize: 66,
+              fontWeight: 700,
+              lineHeight: 70,
+              color: colors.ink,
+            }}
           >
-            标题给出结论，正文提供依据。字号、颜色与留白一起建立清晰的阅读顺序。
+            Make the{`\n`}clear choice.
+          </Text>
+          <Text
+            width={440}
+            height="auto"
+            style={{ fontSize: 21, lineHeight: 30, color: colors.muted }}
+          >
+            Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do
+            eiusmod tempor incididunt.
           </Text>
         </Box>
         <Box
           style={{
-            width: 438,
-            padding: 32,
-            backgroundColor: colors.pale,
+            width: 430,
             display: "flex",
             flexDirection: "column",
-            gap: 24,
+            gap: 0,
           }}
         >
-          <Text
-            width={374}
-            height="auto"
-            style={{ fontSize: 32, color: colors.teal }}
+          <Box
+            style={{
+              width: 430,
+              padding: 30,
+              display: "flex",
+              flexDirection: "column",
+              gap: 16,
+              backgroundColor: colors.accent,
+            }}
           >
-            01 结论
-          </Text>
-          <Text width={374} height="auto" style={{ fontSize: 27 }}>
-            02 关键依据
-          </Text>
-          <Text
-            width={374}
-            height="auto"
-            style={{ fontSize: 22, color: colors.muted }}
+            <Text
+              width={370}
+              height="auto"
+              style={{ fontSize: 18, color: colors.soft }}
+            >
+              01 / LOREM
+            </Text>
+            <Text
+              width={370}
+              height="auto"
+              style={{ fontSize: 38, fontWeight: 700, color: colors.surface }}
+            >
+              First things first.
+            </Text>
+          </Box>
+          <Box
+            style={{
+              width: 430,
+              padding: 30,
+              display: "flex",
+              flexDirection: "column",
+              gap: 12,
+              borderWidth: 1,
+              borderColor: colors.soft,
+            }}
           >
-            03 补充说明
-          </Text>
+            <Text
+              width={370}
+              height="auto"
+              style={{ fontSize: 17, color: colors.muted }}
+            >
+              02 / IPSUM
+            </Text>
+            <Text
+              width={370}
+              height="auto"
+              style={{ fontSize: 28, fontFamily: "medium", fontWeight: 500 }}
+            >
+              Dolor sit amet
+            </Text>
+            <Box
+              style={{ width: 44, height: 4, backgroundColor: colors.current }}
+            />
+          </Box>
+          <Box
+            style={{
+              width: 430,
+              padding: 30,
+              display: "flex",
+              flexDirection: "column",
+              gap: 12,
+            }}
+          >
+            <Text
+              width={370}
+              height="auto"
+              style={{ fontSize: 17, color: colors.muted }}
+            >
+              03 / DOLOR
+            </Text>
+            <Text
+              width={370}
+              height="auto"
+              style={{ fontSize: 24, color: colors.muted }}
+            >
+              Consectetur elit
+            </Text>
+          </Box>
         </Box>
       </Box>
-    </PageFrame>
+    </Slide>
   );
 }

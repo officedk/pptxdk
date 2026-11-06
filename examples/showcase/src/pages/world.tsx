@@ -1,53 +1,56 @@
+import { Shape, Slide, Text } from "@react-pptx/react-pptx";
+
 import { WorldMap, type RegionStory } from "../components/world-map.tsx";
-import { PageFrame } from "../templates/page-frame.tsx";
+import { colors } from "../theme.ts";
 
 const regions: readonly RegionStory[] = [
   {
     region: "northAmerica",
-    title: "北美洲",
-    description: "从一个地区开始建立上下文",
-    color: "#138A83",
+    title: "North America",
+    description: "Lorem ipsum dolor sit amet.",
   },
   {
     region: "southAmerica",
-    title: "南美洲",
-    description: "沿着地理关系继续讲述",
-    color: "#E98068",
+    title: "South America",
+    description: "Consectetur adipiscing elit.",
   },
-  {
-    region: "europe",
-    title: "欧洲",
-    description: "小区域也需要清晰的辨识",
-    color: "#4679A0",
-  },
+  { region: "europe", title: "Europe", description: "Sed do eiusmod tempor." },
   {
     region: "africa",
-    title: "非洲",
-    description: "保留前面的强调，累积全貌",
-    color: "#C28B3F",
+    title: "Africa",
+    description: "Incididunt ut labore et dolore.",
   },
-  {
-    region: "asia",
-    title: "亚洲",
-    description: "让视线跟随当前的重点",
-    color: "#7369A4",
-  },
+  { region: "asia", title: "Asia", description: "Ut enim ad minim veniam." },
   {
     region: "oceania",
-    title: "大洋洲",
-    description: "六个地区，组成完整的分组",
-    color: "#438B65",
+    title: "Oceania",
+    description: "Quis nostrud exercitation.",
   },
 ];
 
 export function WorldPage() {
   return (
-    <PageFrame
-      slideId="world"
-      title="在世界地图上逐区讲述"
-      subtitle="一次关注一个地区，已讲述的内容继续留在画面中。"
-    >
-      <WorldMap x={64} y={166} width={1152} regions={regions} />
-    </PageFrame>
+    <Slide slideId="world" background={colors.paper}>
+      <Shape x={64} y={48} width={42} height={5} fill={colors.accent} />
+      <Text
+        x={64}
+        y={76}
+        width={760}
+        height={68}
+        style={{ fontSize: 50, lineHeight: 54, fontWeight: 700 }}
+      >
+        Around the world.
+      </Text>
+      <Text
+        x={950}
+        y={88}
+        width={250}
+        height={28}
+        style={{ fontSize: 15, align: "right", color: colors.muted }}
+      >
+        10 / SIX REGIONS
+      </Text>
+      <WorldMap x={64} y={146} width={1136} regions={regions} />
+    </Slide>
   );
 }

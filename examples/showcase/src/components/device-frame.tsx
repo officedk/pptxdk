@@ -3,22 +3,27 @@ import type { ReactNode } from "react";
 
 import { colors } from "../theme.ts";
 
-/** 子内容在设备内容区内采用普通布局；外框和内容保留在同一个原生组合中。 */
+/** 子内容在屏幕区域内使用普通布局，设备外框与内容保留为同一原生组合。 */
 export function DeviceFrame({
+  testId,
   x,
   y,
   width,
   height,
   children,
 }: {
+  readonly testId: string;
   readonly x: number;
   readonly y: number;
   readonly width: number;
   readonly height: number;
   readonly children: ReactNode;
 }) {
+  const compact = width < 300;
+  const inset = compact ? 9 : 12;
+  const top = compact ? 30 : 38;
   return (
-    <Group>
+    <Group testId={testId}>
       <Shape
         x={x}
         y={y}
@@ -26,32 +31,55 @@ export function DeviceFrame({
         height={height}
         fill={colors.ink}
         geometry={preset("roundRect")}
+        style={{
+          borderRadius: compact ? 12 : 10,
+          boxShadow: { color: colors.ink, blur: 12, distance: 6, angle: 45 },
+        }}
       />
       <Shape
-        x={x + 12}
-        y={y + 36}
-        width={width - 24}
-        height={height - 60}
-        fill="#FFFFFF"
-      />
-      <Shape
-        x={x + width / 2 - 25}
-        y={y + 14}
-        width={50}
-        height={5}
-        fill={colors.muted}
+        x={x + inset}
+        y={y + top}
+        width={width - inset * 2}
+        height={height - top - inset}
+        fill={colors.surface}
         geometry={preset("roundRect")}
+        style={{ borderRadius: compact ? 6 : 4 }}
       />
+      {compact ? (
+        <Shape
+          x={x + width / 2 - 24}
+          y={y + 13}
+          width={48}
+          height={5}
+          fill={colors.muted}
+          geometry={preset("roundRect")}
+          style={{ borderRadius: 2.5 }}
+        />
+      ) : (
+        <>
+          {[0, 1, 2].map((index) => (
+            <Shape
+              key={index}
+              x={x + 24 + index * 14}
+              y={y + 15}
+              width={6}
+              height={6}
+              geometry={preset("ellipse")}
+              fill={index === 0 ? colors.current : colors.accentSoft}
+            />
+          ))}
+        </>
+      )}
       <Box
         style={{
           position: "absolute",
-          left: x + 30,
-          top: y + 60,
-          width: width - 60,
-          height: height - 102,
+          left: x + inset + (compact ? 15 : 28),
+          top: y + top + (compact ? 24 : 30),
+          width: width - (inset + (compact ? 15 : 28)) * 2,
+          height: height - top - inset - (compact ? 44 : 56),
           display: "flex",
           flexDirection: "column",
-          gap: 20,
+          gap: compact ? 14 : 18,
         }}
       >
         {children}

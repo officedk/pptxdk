@@ -2,54 +2,69 @@ import {
   Box,
   MotionScope,
   Text,
-  fade,
+  floatUp,
+  type LayoutStyle,
   useMotionScope,
+  wipe,
 } from "@react-pptx/react-pptx";
 
-import { colors } from "../theme.ts";
+import { colors, motion } from "../theme.ts";
 
 export type CardContent = {
   readonly title: string;
   readonly body: string;
-  readonly accent: string;
 };
 
-/** 卡片只约定内容与宽度；文字按内容定高，内部标题和正文顺序揭示。 */
+/** 内容卡片按阅读顺序揭示标题与正文，尺寸由父布局或 style 决定。 */
 export function InfoCard({
   title,
   body,
-  accent,
-  width,
-}: CardContent & { readonly width: number }) {
+  index = 0,
+  style,
+}: CardContent & {
+  readonly index?: number;
+  readonly style?: LayoutStyle;
+}) {
   const reveal = useMotionScope();
   return (
     <Box
       style={{
         display: "flex",
         flexDirection: "column",
-        width,
-        minHeight: 250,
-        padding: 28,
-        gap: 22,
-        backgroundColor: "#FFFFFF",
+        minHeight: 340,
+        padding: 32,
+        gap: 20,
+        backgroundColor: colors.surface,
         borderWidth: 1,
-        borderColor: accent,
+        borderColor: colors.soft,
+        borderRadius: 6,
+        ...style,
       }}
     >
+      <Box style={{ width: 44, height: 5, backgroundColor: colors.accent }} />
+      <Text
+        height="auto"
+        style={{
+          fontSize: 60,
+          fontFamily: "medium",
+          fontWeight: 500,
+          color: colors.soft,
+        }}
+      >
+        {String(index + 1).padStart(2, "0")}
+      </Text>
       <MotionScope scope={reveal} mode="sequence">
         <Text
-          width={width - 56}
           height="auto"
-          style={{ fontSize: 30, color: accent }}
-          enter={fade({ duration: 280 })}
+          style={{ fontSize: 30, fontWeight: 700, color: colors.ink }}
+          enter={wipe({ from: "left", duration: motion.reveal })}
         >
           {title}
         </Text>
         <Text
-          width={width - 56}
           height="auto"
-          style={{ fontSize: 23, color: colors.ink }}
-          enter={fade({ duration: 350 })}
+          style={{ fontSize: 20, lineHeight: 28, color: colors.muted }}
+          enter={floatUp({ duration: motion.reveal })}
         >
           {body}
         </Text>

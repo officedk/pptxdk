@@ -7,6 +7,7 @@ import {
 } from "@react-pptx/core";
 import * as fontkit from "fontkit";
 
+import { fontFamilyKey, matchesFontFamily } from "./font-family.ts";
 import { subsetFont } from "./font-subset.ts";
 import type { FontFaceStyle } from "./font.ts";
 import { requiresFontGlyph } from "./text-service.ts";
@@ -99,10 +100,6 @@ function tablesOf(bytes: Uint8Array, use: FontEmbeddingUse): FontTables {
     );
   }
   return tables;
-}
-
-function familyKey(value: string): string {
-  return value.trim().replace(/\s+/gu, " ").toLocaleLowerCase("en-US");
 }
 
 function checkedFont(
@@ -210,7 +207,7 @@ function checkedFont(
     );
   }
   const font = opened as fontkit.Font;
-  if (familyKey(font.familyName) !== familyKey(use.family)) {
+  if (!matchesFontFamily(font, use.family)) {
     return fail(
       use,
       "font-family-mismatch",
@@ -512,7 +509,7 @@ export function fontPresentationContributions(
     const family = xmlEscape(use.family);
     const category = fontCategory(checked.font);
     const recordContent = `<p:font typeface="${family}" pitchFamily="${category.pitchFamily}" charset="${category.charset}"/>`;
-    const recordKey = familyKey(use.family);
+    const recordKey = fontFamilyKey(use.family);
     const recordIdentity = `${recordContent}\u0000${category.pitchFamily}\u0000${category.charset}`;
     const itemKey = `${recordKey}\u0000${styleSlot}`;
     const existing = slots.get(itemKey);

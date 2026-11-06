@@ -1,9 +1,9 @@
-import { Box, Slide, Text } from "@react-pptx/react-pptx";
+import { Shape, Slide, Text } from "@react-pptx/react-pptx";
 import type { ReactNode } from "react";
 
 import { colors } from "../theme.ts";
 
-/** 标题区与内容区分开，正文既可组合布局，也可放置局部几何构图。 */
+/** 两页卡片内容共享的页首；具体页面仍可独立选择其他构图。 */
 export function PageFrame({
   slideId,
   title,
@@ -17,28 +17,31 @@ export function PageFrame({
 }) {
   return (
     <Slide slideId={slideId} background={colors.paper}>
-      <Box
+      <Shape x={80} y={58} width={42} height={5} fill={colors.accent} />
+      <Text
+        x={80}
+        y={88}
+        width={760}
+        height={72}
         style={{
-          position: "absolute",
-          left: 64,
-          top: 40,
-          width: 1152,
-          display: "flex",
-          flexDirection: "column",
-          gap: 12,
+          fontSize: 52,
+          lineHeight: 58,
+          fontWeight: 700,
+          color: colors.ink,
         }}
       >
-        <Text width={1152} height="auto" style={{ fontSize: 40 }}>
-          {title}
-        </Text>
-        <Text
-          width={1152}
-          height="auto"
-          style={{ fontSize: 19, color: colors.muted }}
-        >
-          {subtitle}
-        </Text>
-      </Box>
+        {title}
+      </Text>
+      <Text
+        x={870}
+        y={100}
+        width={330}
+        height={90}
+        style={{ fontSize: 18, lineHeight: 25, color: colors.muted }}
+      >
+        {subtitle}
+      </Text>
+      <Shape x={80} y={184} width={1120} height={1} fill={colors.soft} />
       {children}
     </Slide>
   );

@@ -1,76 +1,128 @@
 import {
-  Box,
+  Group,
   Shape,
   Slide,
-  Text,
   Step,
-  fade,
+  Text,
   preset,
+  spinIn,
+  wipe,
 } from "@react-pptx/react-pptx";
 
-import { colors } from "../theme.ts";
+import { colors, motion } from "../theme.ts";
 
-/** 开场页用布局维护文字层级，局部几何构图使用绝对定位。 */
+/** 开场用原生几何标志和分步入场建立整份文稿的视觉语言。 */
 export function OpeningPage() {
   return (
-    <Slide slideId="opening" background={colors.paper}>
-      <Box
+    <Slide slideId="opening" background={colors.accent}>
+      <Text
+        x={82}
+        y={74}
+        width={520}
+        height={30}
         style={{
-          position: "absolute",
-          left: 80,
-          top: 90,
-          width: 700,
-          display: "flex",
-          flexDirection: "column",
-          gap: 26,
+          fontSize: 16,
+          fontWeight: 700,
+          letterSpacing: 2,
+          color: colors.surface,
         }}
       >
+        DESIGN / IN MOTION
+      </Text>
+      <Shape x={82} y={128} width={52} height={6} fill={colors.current} />
+      <Text
+        x={76}
+        y={190}
+        width={660}
+        height={190}
+        style={{
+          fontSize: 84,
+          fontWeight: 700,
+          lineHeight: 88,
+          color: colors.surface,
+        }}
+      >
+        Ideas,{`\n`}in motion.
+      </Text>
+      <Step n={2}>
         <Text
-          width={700}
-          height="auto"
-          style={{ fontSize: 20, color: colors.teal }}
+          x={82}
+          y={432}
+          width={510}
+          height={68}
+          style={{ fontSize: 21, lineHeight: 30, color: colors.soft }}
+          enter={wipe({ from: "left", duration: motion.reveal })}
         >
-          演示表达示例集
+          Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do
+          eiusmod tempor.
         </Text>
-        <Text width={700} height="auto" style={{ fontSize: 64 }}>
-          让信息{`\n`}逐步清晰
-        </Text>
-        <Step n={1}>
-          <Text
-            width={650}
-            height="auto"
-            style={{ fontSize: 26, color: colors.muted }}
-            enter={fade()}
-          >
-            建立层级 · 组织关系 · 留出讲述的节奏
-          </Text>
-        </Step>
-      </Box>
+      </Step>
+      <Step n={1}>
+        <Group
+          testId="opening-mark"
+          enter={spinIn({ duration: motion.settle })}
+        >
+          <Shape
+            x={842}
+            y={150}
+            width={360}
+            height={360}
+            geometry={preset("ellipse")}
+            fill={colors.surface}
+          />
+          <Shape
+            x={874}
+            y={182}
+            width={296}
+            height={296}
+            geometry={preset("ellipse")}
+            fill={colors.accent}
+          />
+          <Shape
+            x={962}
+            y={272}
+            width={120}
+            height={120}
+            geometry={preset("ellipse")}
+            fill={colors.ink}
+          />
+          <Shape
+            x={1012}
+            y={242}
+            width={20}
+            height={180}
+            fill={colors.current}
+          />
+          <Shape
+            x={932}
+            y={322}
+            width={180}
+            height={20}
+            fill={colors.current}
+          />
+        </Group>
+      </Step>
       <Shape
-        x={935}
-        y={180}
-        width={180}
-        height={180}
-        geometry={preset("ellipse")}
-        fill={colors.teal}
-      />
-      <Shape x={875} y={350} width={180} height={180} fill={colors.ink} />
-      <Shape
-        x={1060}
-        y={365}
-        width={90}
-        height={90}
-        geometry={preset("ellipse")}
-        fill={colors.coral}
+        x={1130}
+        y={568}
+        width={54}
+        height={54}
+        fill={colors.ink}
+        style={{ rotate: 12 }}
       />
       <Text
-        x={80}
-        y={640}
-        width={1100}
-        height={34}
-        style={{ fontSize: 16, color: colors.muted }}
+        x={82}
+        y={642}
+        width={180}
+        height={28}
+        style={{
+          fontSize: 15,
+          fontFamily: "medium",
+          fontWeight: 500,
+          color: colors.surface,
+        }}
       >
-        从一页内容，到一段有节奏的讲述
+        01 — 16
       </Text>
     </Slide>
   );

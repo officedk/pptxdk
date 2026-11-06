@@ -2168,6 +2168,40 @@ describe("公开构建入口", () => {
     });
   });
 
+  it("按字体优先字族接收非 RIBBI 字重并保留原生字重映射", async () => {
+    const result = await build(
+      deck(
+        createElement(Text, {
+          testId: "preferred-family-face",
+          x: 24,
+          y: 18,
+          width: 240,
+          height: "auto",
+          style: {
+            fontFamily: font("Darker Grotesque", [
+              { weight: 600, data: darkerGrotesqueSemiBold },
+            ]),
+            fontSize: 20,
+            fontWeight: 600,
+          },
+          children: "SemiBold preferred family",
+        }),
+      ),
+      { embedFonts: "full" },
+    );
+
+    const file = await validatePptx(result.pptx);
+    assert.deepEqual(file.errors, []);
+    assert.equal(
+      file.slides[0]?.objects[0]?.text?.paragraphs[0]?.runs[0]?.fontFamily,
+      "Darker Grotesque",
+    );
+    assert.equal(
+      file.slides[0]?.objects[0]?.text?.paragraphs[0]?.runs[0]?.bold,
+      false,
+    );
+  });
+
   it("度量到固定区域装不下时警告并保留区域、内容和原生默认行距", async () => {
     const result = await build(
       deck(

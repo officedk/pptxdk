@@ -4,20 +4,19 @@ import {
   Shape,
   Step,
   Text,
-  fade,
   fillColor,
   preset,
   useMotionScope,
+  wipe,
 } from "@react-pptx/react-pptx";
 
 import { regionBars, type MapRegionId } from "../assets/world-map.ts";
-import { colors } from "../theme.ts";
+import { colors, motion } from "../theme.ts";
 
 export type RegionStory = {
   readonly region: MapRegionId;
   readonly title: string;
   readonly description: string;
-  readonly color: string;
 };
 
 function Region({
@@ -35,26 +34,26 @@ function Region({
 }) {
   const highlight = useMotionScope();
   const caption = useMotionScope();
-  const scale = (width * 0.7) / 1000;
-  const legendX = x + width * 0.76;
-  const legendY = y + index * 78;
+  const scale = (width * 0.72) / 1000;
+  const legendX = x + width * 0.77;
+  const legendY = y + 24 + index * 76;
   return (
     <Step n={index + 1}>
       <MotionScope scope={highlight}>
         <Group testId={`map-${story.region}`}>
-          {regionBars[story.region].map(([bx, by, bw, bh], i) => (
+          {regionBars[story.region].map(([bx, by, bw, bh], barIndex) => (
             <Shape
-              key={i}
+              key={barIndex}
               x={x + bx * scale}
               y={y + by * scale}
               width={bw * scale}
               height={bh * scale}
               geometry={preset("roundRect")}
-              fill={colors.pale}
+              fill={colors.soft}
               emphasis={fillColor({
-                from: colors.pale,
-                to: story.color,
-                duration: 650,
+                from: colors.soft,
+                to: colors.accent,
+                duration: motion.settle,
               })}
             />
           ))}
@@ -63,30 +62,35 @@ function Region({
       <MotionScope scope={caption} startAt={highlight.start}>
         <Group
           testId={`map-note-${story.region}`}
-          enter={fade({ duration: 350 })}
+          enter={wipe({ from: "left", duration: motion.reveal })}
         >
           <Shape
             x={legendX}
-            y={legendY + 7}
-            width={8}
-            height={26}
-            fill={story.color}
+            y={legendY + 5}
+            width={30}
+            height={4}
+            fill={colors.accent}
           />
           <Text
-            x={legendX + 24}
-            y={legendY}
+            x={legendX + 46}
+            y={legendY - 4}
             width={230}
-            height={38}
-            style={{ fontSize: 24 }}
+            height={36}
+            style={{
+              fontSize: 24,
+              fontFamily: "medium",
+              fontWeight: 500,
+              color: colors.ink,
+            }}
           >
             {story.title}
           </Text>
           <Text
-            x={legendX + 24}
-            y={legendY + 39}
+            x={legendX + 46}
+            y={legendY + 35}
             width={230}
-            height={32}
-            style={{ fontSize: 16, color: colors.muted }}
+            height={42}
+            style={{ fontSize: 15, lineHeight: 20, color: colors.muted }}
           >
             {story.description}
           </Text>
@@ -96,7 +100,7 @@ function Region({
   );
 }
 
-/** 六地区的横条地图与同期说明；regions 的顺序就是六个点击步的顺序。 */
+/** 六地区共用协调的强调色；regions 的顺序就是六个点击步的顺序。 */
 export function WorldMap({
   x,
   y,

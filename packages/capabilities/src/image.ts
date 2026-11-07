@@ -25,7 +25,7 @@ import {
 } from "./motion-api.ts";
 import { shapePropertiesXml } from "./visual.ts";
 
-/** 本地文件路径、file URL 或图片原始字节。 */
+/** Local file path, file URL, or raw image bytes. */
 export type ImageSource = string | URL | Uint8Array;
 
 export type ImageProps = MotionProps &
@@ -35,9 +35,9 @@ export type ImageProps = MotionProps &
     readonly name?: string;
     readonly link?: LinkTarget;
     readonly src: ImageSource;
-    /** 图片的替代说明。 */
+    /** Alternative text for the image. */
     readonly alt?: string;
-    /** 位置和范围以 px 表示；位置缺省为 0，宽高缺省按原图尺寸推导。 */
+    /** Position and bounds in px; position defaults to 0, width and height default to original image dimensions. */
     readonly x?: number;
     readonly y?: number;
     readonly width?: number;
@@ -46,9 +46,9 @@ export type ImageProps = MotionProps &
     readonly flipH?: boolean;
     readonly flipV?: boolean;
     readonly style?: LayoutStyle & ImageVisualStyle;
-    /** `fill` 拉伸，`cover` 居中裁切，`contain` 保留比例；缺省为 `fill`。 */
+    /** `fill` stretches, `cover` crops centered, `contain` preserves aspect ratio; defaults to `fill`. */
     readonly fit?: "fill" | "cover" | "contain";
-    /** 显式裁切每边的原图比例；提供后优先于 `fit`。 */
+    /** Explicit crop fraction for each side of the original image; takes precedence over `fit` when provided. */
     readonly crop?: {
       readonly left?: number;
       readonly top?: number;
@@ -313,7 +313,7 @@ export function readImage(source: unknown): LoadedImage {
   ) {
     throw new CapabilityError(
       "invalid-image-source",
-      "Image.src 必须是文件路径、file URL 或图片字节",
+      "Image.src must be a file path, file URL, or image bytes",
     );
   }
   let bytes: Uint8Array;
@@ -327,14 +327,17 @@ export function readImage(source: unknown): LoadedImage {
             ),
           );
   } catch {
-    throw new CapabilityError("image-read-failed", "图片资源无法读取");
+    throw new CapabilityError(
+      "image-read-failed",
+      "Failed to read image resource",
+    );
   }
   const metadata =
     pngMetadata(bytes) ?? jpegMetadata(bytes) ?? gifMetadata(bytes);
   if (metadata === undefined) {
     throw new CapabilityError(
       "unsupported-image-format",
-      "图片资源内容无效或格式不受支持；仅支持 PNG、JPEG 和 GIF",
+      "Invalid image resource content or unsupported format; only PNG, JPEG, and GIF are supported",
     );
   }
   return { ...metadata, bytes };
@@ -347,7 +350,10 @@ function optionalText(
   const value = props[name];
   if (value === undefined) return undefined;
   if (typeof value !== "string" || value.trim() === "") {
-    throw new CapabilityError("invalid-parameter", `${name} 必须是非空字符串`);
+    throw new CapabilityError(
+      "invalid-parameter",
+      `${name} must be a non-empty string`,
+    );
   }
   return value;
 }
@@ -366,7 +372,7 @@ function dimension(
   ) {
     throw new CapabilityError(
       "invalid-coordinate",
-      `${name} 必须是有限像素数值，宽高必须大于 0，坐标范围为 -1000000 到 1000000`,
+      `${name} must be a finite pixel number, width and height must be greater than 0, and coordinates must be between -1000000 and 1000000`,
     );
   }
   if (isExtent) {
@@ -374,7 +380,7 @@ function dimension(
     if (extentEmu < 1 || extentEmu > maximumShapeExtentEmu) {
       throw new CapabilityError(
         "invalid-coordinate",
-        `${name} 换算后必须在 1 到 ${maximumShapeExtentEmu} EMU 的闭区间内`,
+        `${name} must convert to an EMU value between 1 and ${maximumShapeExtentEmu} inclusive`,
       );
     }
   }
@@ -397,7 +403,10 @@ function requestedDimension(
 function cropValues(value: unknown): Record<string, number> | undefined {
   if (value === undefined) return undefined;
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
-    throw new CapabilityError("invalid-crop", "crop 必须是四边分数对象");
+    throw new CapabilityError(
+      "invalid-crop",
+      "crop must be a four-sided fraction object",
+    );
   }
   const crop = value as Record<string, unknown>;
   const allowed = ["left", "top", "right", "bottom"] as const;
@@ -407,7 +416,7 @@ function cropValues(value: unknown): Record<string, number> | undefined {
   if (unknown !== undefined) {
     throw new CapabilityError(
       "unknown-parameter",
-      `crop 含未知参数 ${unknown}`,
+      `crop contains unknown parameter ${unknown}`,
     );
   }
   const result: Record<string, number> = {};
@@ -422,16 +431,22 @@ function cropValues(value: unknown): Record<string, number> | undefined {
     ) {
       throw new CapabilityError(
         "invalid-crop",
-        `crop.${side} 必须是 0 到 1 之间的有限分数`,
+        `crop.${side} must be a finite fraction between 0 and 1`,
       );
     }
     result[{ left: "l", top: "t", right: "r", bottom: "b" }[side]] = fraction;
   }
   if ((result["l"] ?? 0) + (result["r"] ?? 0) > 1) {
-    throw new CapabilityError("invalid-crop", "crop 左右边之和不能超过 1");
+    throw new CapabilityError(
+      "invalid-crop",
+      "Sum of crop left and right cannot exceed 1",
+    );
   }
   if ((result["t"] ?? 0) + (result["b"] ?? 0) > 1) {
-    throw new CapabilityError("invalid-crop", "crop 上下边之和不能超过 1");
+    throw new CapabilityError(
+      "invalid-crop",
+      "Sum of crop top and bottom cannot exceed 1",
+    );
   }
   return result;
 }
@@ -463,7 +478,7 @@ function imageXml(
   return `<p:pic><p:nvPicPr><p:cNvPr id="${id}" name="${escapedName}"${description}>${linkXml}</p:cNvPr><p:cNvPicPr><a:picLocks noChangeAspect="1"/></p:cNvPicPr><p:nvPr/></p:nvPicPr><p:blipFill><a:blip r:embed="${xmlEscape(relationshipId)}">${alpha}</a:blip>${cropXml}<a:stretch><a:fillRect/></a:stretch></p:blipFill>${properties}</p:pic>`;
 }
 
-/** 图片模块读取并验证正式资源，再输出带媒体关系的原生 picture 对象。 */
+/** Image module reads and validates formal resources, then emits native picture objects with media relationships. */
 export const imageCapability: CapabilityModule = {
   declaration: "rp:image",
   measureLayout(
@@ -501,7 +516,7 @@ export const imageCapability: CapabilityModule = {
     if (unknown !== undefined) {
       throw new CapabilityError(
         "unknown-parameter",
-        `Image 含未实现参数 ${unknown}`,
+        `Image contains unsupported parameter ${unknown}`,
       );
     }
     if (
@@ -509,7 +524,10 @@ export const imageCapability: CapabilityModule = {
         (child) => "props" in child || child.text.trim() !== "",
       )
     ) {
-      throw new CapabilityError("unsupported-children", "Image 不接受子内容");
+      throw new CapabilityError(
+        "unsupported-children",
+        "Image does not accept children",
+      );
     }
 
     const testId = optionalText(props, "testId");
@@ -517,7 +535,7 @@ export const imageCapability: CapabilityModule = {
     const requestedName = optionalText(props, "name");
     const altValue = props["alt"];
     if (altValue !== undefined && typeof altValue !== "string") {
-      throw new CapabilityError("invalid-parameter", "alt 必须是字符串");
+      throw new CapabilityError("invalid-parameter", "alt must be a string");
     }
     const image = readImage(props["src"]);
     const imageStyle =
@@ -554,7 +572,7 @@ export const imageCapability: CapabilityModule = {
     if (fit !== "fill" && fit !== "cover" && fit !== "contain") {
       throw new CapabilityError(
         "unsupported-fit",
-        "fit 必须是 fill、cover 或 contain",
+        "fit must be fill, cover, or contain",
       );
     }
     const crop = cropValues(props["crop"]);
@@ -585,7 +603,7 @@ export const imageCapability: CapabilityModule = {
         box.width = fittedWidth;
       }
     }
-    // contain 派生的尺寸也必须能写成非零 EMU。
+    // Dimensions derived by contain must also be representable as non-zero EMU.
     box.width = dimension(box.width, "width");
     box.height = dimension(box.height, "height");
     const properties = shapePropertiesXml({
@@ -627,7 +645,7 @@ export const imageCapability: CapabilityModule = {
     } catch {
       throw new CapabilityError(
         "invalid-xml-character",
-        "Image.name 或 alt 含 XML 1.0 不允许的字符",
+        "Image.name or alt contains characters not allowed in XML 1.0",
       );
     }
     let relationshipId: string;
@@ -678,7 +696,7 @@ export const imageCapability: CapabilityModule = {
   },
 };
 
-/** 在 React 根树中声明一张由官方图片模块处理的原生图片。 */
+/** Declares a native image handled by the image module within the React tree. */
 export function Image(props: ImageProps): ReactNode {
   return motionElement("rp:image", props);
 }

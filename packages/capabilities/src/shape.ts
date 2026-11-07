@@ -58,11 +58,11 @@ export type ShapeProps = MotionProps &
     readonly height?: number;
     readonly style?: LayoutStyle & VisualStyle & CoreTextStyle;
     readonly fill?: ColorValue;
-    /** 直接写入此形状的原生正文，不创建额外文本框；与 children 互斥。 */
+    /** Directly writes native text into this shape without creating an additional text box; mutually exclusive with children. */
     readonly text?: string;
-    /** 形状正文使用共享文字服务，裁剪文本框能力后仍可写出。 */
+    /** Shape text uses shared text services and can still be emitted when text box capability is omitted. */
     readonly textStyle?: TextStyle;
-    /** 与 Text 共用的原生正文节点，可包含 P、Span 与 SlideNumber。 */
+    /** Native text nodes shared with Text; may contain P, Span, and SlideNumber. */
     readonly children?: ReactNode;
   };
 
@@ -100,7 +100,7 @@ function shapeTextMeasurementStyle(value: unknown): unknown {
   if (typeof value !== "object" || value === null || Array.isArray(value))
     return value;
   const style = value as Record<string, unknown>;
-  // Shape 正文写出时默认 middle；测量也必须使用同一有效 anchor。
+  // Shape text defaults to middle anchor when emitted; measurement must use the same effective anchor.
   return { ...style, verticalAlign: style["verticalAlign"] ?? "middle" };
 }
 
@@ -156,7 +156,7 @@ function shapeTextContent(input: CapabilityInput): readonly unknown[] {
     if (input.children.length > 0) {
       throw new CapabilityError(
         "conflicting-text-content",
-        "Shape.text 与 Shape 子正文不能同时声明",
+        "Shape.text and Shape children text cannot be declared simultaneously",
       );
     }
     return text === "" ? [] : [{ type: "#text", text }];
@@ -178,7 +178,7 @@ function requiredNumber(
   ) {
     throw new CapabilityError(
       "invalid-coordinate",
-      `${name} 必须是有限像素数值，宽高必须大于 0，坐标范围为 -1000000 到 1000000`,
+      `${name} must be a finite pixel number, width and height must be greater than 0, and coordinates must be between -1000000 and 1000000`,
     );
   }
   if (isExtent) {
@@ -186,7 +186,7 @@ function requiredNumber(
     if (extentEmu < 1 || extentEmu > maximumShapeExtentEmu) {
       throw new CapabilityError(
         "invalid-coordinate",
-        `${name} 换算后必须在 1 到 ${maximumShapeExtentEmu} EMU 的闭区间内`,
+        `${name} must convert to an EMU value between 1 and ${maximumShapeExtentEmu} inclusive`,
       );
     }
   }
@@ -200,7 +200,10 @@ function optionalText(
   const value = props[name];
   if (value === undefined) return undefined;
   if (typeof value !== "string" || value.trim() === "") {
-    throw new CapabilityError("invalid-parameter", `${name} 必须是非空字符串`);
+    throw new CapabilityError(
+      "invalid-parameter",
+      `${name} must be a non-empty string`,
+    );
   }
   return value;
 }
@@ -215,7 +218,7 @@ function shapeXml(
   return `<p:sp><p:nvSpPr><p:cNvPr id="${id}" name="${escapedName}">${linkXml}</p:cNvPr><p:cNvSpPr/><p:nvPr/></p:nvSpPr>${properties}${textBody}</p:sp>`;
 }
 
-/** 形状模块独立校验输入、声明原生几何，并生成对应 PresentationML 对象。 */
+/** Shape module independently validates input, declares native geometry, and emits corresponding PresentationML objects. */
 export const shapeCapability: CapabilityModule = {
   declaration: "rp:shape",
   measureLayout(
@@ -262,7 +265,7 @@ export const shapeCapability: CapabilityModule = {
     if (unknown !== undefined) {
       throw new CapabilityError(
         "unknown-parameter",
-        `Shape 含未实现参数 ${unknown}`,
+        `Shape contains unsupported parameter ${unknown}`,
       );
     }
     const testId = optionalText(props, "testId");
@@ -314,7 +317,7 @@ export const shapeCapability: CapabilityModule = {
     });
     const text = props["text"];
     if (text !== undefined && typeof text !== "string") {
-      throw new CapabilityError("invalid-text", "Shape.text 必须是字符串");
+      throw new CapabilityError("invalid-text", "Shape.text must be a string");
     }
     const resolvedTextStyle = shapeTextStyle(props);
     const textChildren = shapeTextContent(input);
@@ -373,7 +376,7 @@ export const shapeCapability: CapabilityModule = {
     } catch {
       throw new CapabilityError(
         "invalid-xml-character",
-        "Shape.name 含 XML 1.0 不允许的字符",
+        "Shape.name contains characters not allowed in XML 1.0",
       );
     }
     return {
@@ -418,7 +421,7 @@ export const shapeCapability: CapabilityModule = {
   },
 };
 
-/** 在 React root 中声明一个由官方形状模块处理的原生对象。 */
+/** Declares a native object handled by the shape module within the React tree. */
 export function Shape(props: ShapeProps): ReactNode {
   return motionElement("rp:shape", props);
 }

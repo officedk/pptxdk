@@ -223,7 +223,7 @@ type MotionReferenceOwner = {
   readonly end?: MotionMomentRef;
 };
 
-// 句柄的所有权只保存在 WeakMap；报告和公开引用不携带构建身份令牌。
+// Handle ownership is preserved only in WeakMap; reports and public references do not carry build identity tokens.
 const referenceOwners = new WeakMap<object, MotionReferenceOwner>();
 const queryByObservation = new WeakMap<object, MotionQuery>();
 
@@ -299,12 +299,15 @@ function assertOwnedReference(
 ): MotionReferenceOwner {
   const owner = referenceOwners.get(ref);
   if (owner === undefined || owner.kind !== kind) {
-    throw new BuildQueryError("invalid-reference", "Motion 查询引用无效");
+    throw new BuildQueryError(
+      "invalid-reference",
+      "Invalid motion query reference",
+    );
   }
   if (owner.query !== queryIdentity) {
     throw new BuildQueryError(
       "foreign-reference",
-      "Motion 查询引用来自其他构建或页面",
+      "Motion query reference belongs to another build or slide",
     );
   }
   return owner;
@@ -427,7 +430,8 @@ export function createMotionQuery(
 
   const steps = sources.map((source) => {
     const stepIdentity = stepIdentities.get(source.key);
-    if (stepIdentity === undefined) throw new Error("Motion 查询步引用丢失");
+    if (stepIdentity === undefined)
+      throw new Error("Missing motion step query reference");
     const stepRef = frozenRef(
       {},
       {
@@ -508,7 +512,8 @@ export function createMotionQuery(
           candidate.effectIndex === effect.effectIndex &&
           candidate.partIndex === effect.partIndex,
       );
-      if (ref === undefined) throw new Error("Motion 效果实例引用丢失");
+      if (ref === undefined)
+        throw new Error("Missing motion effect instance reference");
       const start = makeMoment("effect", ref, "start", effect.start);
       const end = makeMoment("effect", ref, "end", effect.end);
       referenceOwners.set(ref, {
@@ -523,7 +528,7 @@ export function createMotionQuery(
         const scope = scopesByIdentity.get(identity);
         return scope === undefined ? [] : [scope];
       });
-      // MotionPlan 的运行时记录含 writer 私有字段，查询仅复制公开观察字段。
+      // MotionPlan runtime records contain writer-private fields; query copies public observation fields only.
       const observation = projectEffectObservation(effect.observation);
       return Object.freeze({
         ...observation,
@@ -540,7 +545,7 @@ export function createMotionQuery(
 
     const scopeObservations = source.scopes.map((scope) => {
       const ref = scopesByIdentity.get(scope.identity);
-      if (ref === undefined) throw new Error("Motion 作用域引用丢失");
+      if (ref === undefined) throw new Error("Missing MotionScope reference");
       const start = makeMoment("scope", ref, "start", scope.start);
       const end = makeMoment("scope", ref, "end", scope.end);
       referenceOwners.set(ref, {
@@ -727,7 +732,7 @@ export function createMotionQuery(
           const duration = timeDifference(start, end, source.facts);
           return duration.state === "known" && duration.ms === 0;
         };
-        // 半开区间端点相等时是空集；单独检查交叉不等式会把它误判为相交。
+        // A half-open interval with equal endpoints is empty; checking intersection inequalities alone would falsely treat it as overlapping.
         if (isEmpty(firstStart, firstEnd) || isEmpty(secondStart, secondEnd)) {
           return { state: "known", value: false };
         }
@@ -740,7 +745,7 @@ export function createMotionQuery(
         if (!Number.isFinite(ms) || ms < 0) {
           throw new BuildQueryError(
             "invalid-query",
-            "局部时间必须是非负有限毫秒",
+            "Local time must be non-negative finite milliseconds",
           );
         }
         const references = selected ?? effectObservations.map(({ ref }) => ref);
@@ -757,7 +762,8 @@ export function createMotionQuery(
             });
           }
           const effect = effectSourcesByRef.get(effectRef);
-          if (effect === undefined) throw new Error("Motion 查询效果源丢失");
+          if (effect === undefined)
+            throw new Error("Missing motion query effect source");
           return Object.freeze({
             effect: effectRef,
             result: intervalMembership(ms, effect.start.time, effect.end.time),
@@ -784,12 +790,15 @@ function assertInterval(
     owner === undefined ||
     (owner.kind !== "effect" && owner.kind !== "scope")
   ) {
-    throw new BuildQueryError("invalid-reference", "Motion 区间引用无效");
+    throw new BuildQueryError(
+      "invalid-reference",
+      "Invalid motion interval reference",
+    );
   }
   if (owner.query !== queryIdentity) {
     throw new BuildQueryError(
       "foreign-reference",
-      "Motion 查询引用来自其他构建或页面",
+      "Motion query reference belongs to another build or slide",
     );
   }
   return owner;
@@ -802,7 +811,7 @@ export function registerMotionObservation(
   queryByObservation.set(observation, query);
 }
 
-/** 只接受当前构建直接生成的页面观察；文件读回不会伪装成生成结果。 */
+/** Accepts only slide observations directly emitted by the current build; reread files will not masquerade as build results. */
 export function observeMotion(
   slide: SlideObservation,
 ): MotionQuery | undefined {
@@ -811,14 +820,14 @@ export function observeMotion(
   if (typeof capability !== "object" || capability === null) {
     throw new BuildQueryError(
       "unbound-observation",
-      "该 Motion 页面观察不属于当前成功构建",
+      "The motion slide observation does not belong to the current successful build",
     );
   }
   const query = queryByObservation.get(capability);
   if (query === undefined) {
     throw new BuildQueryError(
       "unbound-observation",
-      "该 Motion 页面观察不属于当前成功构建",
+      "The motion slide observation does not belong to the current successful build",
     );
   }
   return query;

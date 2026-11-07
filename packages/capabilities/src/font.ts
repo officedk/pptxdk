@@ -7,7 +7,7 @@ export type {
   FontOptions,
 } from "@react-pptx/core";
 
-/** 创建一个字体值；资源只从调用方提供的字节读取。 */
+/** Creates a Font value; resources are read only from caller-provided bytes. */
 export function font(
   family: string,
   faces: readonly FontFace[] = [],
@@ -21,7 +21,7 @@ export function font(
     (options.embeddable !== undefined &&
       typeof options.embeddable !== "boolean")
   ) {
-    throw new TypeError("Font options.substitute 必须是布尔值");
+    throw new TypeError("Font options.substitute must be a boolean");
   }
   return Object.freeze({
     family,

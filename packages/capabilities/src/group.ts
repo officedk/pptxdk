@@ -21,7 +21,7 @@ import {
   type MotionProps,
 } from "./motion-api.ts";
 
-/** 原生 Group 保留成员关系；style 可让它作为布局子项排列，输出范围取成员几何并集。 */
+/** Native Group preserves member relationships; style allows it to arrange as a layout child, with output bounds computed from the union of member geometries. */
 export type GroupProps = MotionProps &
   MorphProps & {
     readonly testId?: string;
@@ -87,7 +87,10 @@ function optionalText(
   const value = props[name];
   if (value === undefined) return undefined;
   if (typeof value !== "string" || value.trim() === "") {
-    throw new CapabilityError("invalid-parameter", `${name} 必须是非空字符串`);
+    throw new CapabilityError(
+      "invalid-parameter",
+      `${name} must be a non-empty string`,
+    );
   }
   return value;
 }
@@ -97,7 +100,10 @@ function bounds(members: readonly ObjectObservation[]): {
   readonly emu: EmuBox;
 } {
   if (members.length === 0) {
-    throw new CapabilityError("empty-group", "Group 至少需要一个原生对象成员");
+    throw new CapabilityError(
+      "empty-group",
+      "Group requires at least one native object member",
+    );
   }
   const memberBoxes = members.map((member) => {
     const box = member.box;
@@ -112,7 +118,7 @@ function bounds(members: readonly ObjectObservation[]): {
     ) {
       throw new CapabilityError(
         "member-without-geometry",
-        `Group 成员 ${member.name} 缺少可组合的几何范围`,
+        `Group member ${member.name} is missing composable geometry bounds`,
       );
     }
     const x = pxToEmu(box.x);
@@ -138,7 +144,7 @@ function bounds(members: readonly ObjectObservation[]): {
   ) {
     throw new CapabilityError(
       "invalid-group-geometry",
-      "Group 成员范围超出可写入的 PresentationML 尺寸",
+      "Group member bounds exceed writable PresentationML dimensions",
     );
   }
   const emu = { x, y, width, height };
@@ -161,9 +167,12 @@ function groupXml(
   rotation: number | undefined,
   linkXml: string,
 ): string {
-  // 组内坐标与页面坐标保持同一基准，避免成员因重复换算而发生缩放或位移。
+  // Group-internal coordinates share the same baseline with slide coordinates to prevent member scaling or shifting from duplicate conversions.
   if (rotation !== undefined && !Number.isFinite(rotation)) {
-    throw new CapabilityError("invalid-visual-style", "rotate 必须是有限角度");
+    throw new CapabilityError(
+      "invalid-visual-style",
+      "rotate must be a finite angle",
+    );
   }
   const angle =
     rotation === undefined
@@ -172,7 +181,7 @@ function groupXml(
   return `<p:grpSp><p:nvGrpSpPr><p:cNvPr id="${id}" name="${escapedName}">${linkXml}</p:cNvPr><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr><a:xfrm${angle === undefined || angle === 0 ? "" : ` rot="${angle}"`}><a:off x="${box.x}" y="${box.y}"/><a:ext cx="${box.width}" cy="${box.height}"/><a:chOff x="${box.x}" y="${box.y}"/><a:chExt cx="${box.width}" cy="${box.height}"/></a:xfrm></p:grpSpPr>${members}</p:grpSp>`;
 }
 
-/** 将成员保留为原生对象并按最终成员几何写出组合范围；外层布局由 core 求解。 */
+/** Preserves members as native objects and writes group bounds according to final member geometry; outer layout is resolved by core. */
 export const groupCapability: CapabilityModule = {
   declaration: "rp:group",
   compile(input: CapabilityInput, context) {
@@ -182,7 +191,7 @@ export const groupCapability: CapabilityModule = {
     if (unknown !== undefined) {
       throw new CapabilityError(
         "unknown-parameter",
-        `Group 含未实现参数 ${unknown}`,
+        `Group contains unsupported parameter ${unknown}`,
       );
     }
     const testId = optionalText(input.props, "testId");
@@ -194,7 +203,7 @@ export const groupCapability: CapabilityModule = {
     if (outputGeometry.width <= 0 || outputGeometry.height <= 0) {
       throw new CapabilityError(
         "invalid-group-geometry",
-        "Group 布局范围的宽和高必须大于 0",
+        "Group layout width and height must be greater than 0",
       );
     }
     const outputEmu = {
@@ -228,7 +237,7 @@ export const groupCapability: CapabilityModule = {
     } catch {
       throw new CapabilityError(
         "invalid-xml-character",
-        "Group.name 含 XML 1.0 不允许的字符",
+        "Group.name contains characters not allowed in XML 1.0",
       );
     }
     return {
@@ -255,7 +264,7 @@ export const groupCapability: CapabilityModule = {
   },
 };
 
-/** 在 React 根树中声明一个保留原生成员结构的可编辑组合。 */
+/** Declares an editable group preserving native member structure within the React tree. */
 export function Group(props: GroupProps): ReactNode {
   return motionElement("rp:group", props);
 }

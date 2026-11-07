@@ -17,7 +17,7 @@ const fontRelationship =
 const fontContentType = "application/x-fontdata";
 export type FontEmbeddingMode = "full" | "subset";
 
-/** 文字序列化最终选择的字体文件和样式；缺少文件也会保留为实际用字要求。 */
+/** Final font file and style chosen during text serialization; missing files are preserved as actual font requirements. */
 export type FontEmbeddingUse = {
   readonly family: string;
   readonly weight: number;
@@ -47,7 +47,7 @@ function tablesOf(bytes: Uint8Array, use: FontEmbeddingUse): FontTables {
     return fail(
       use,
       "unsupported-font-format",
-      "字体数据不是有效的 TrueType 文件",
+      "Font data is not a valid TrueType file",
     );
   }
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
@@ -56,12 +56,16 @@ function tablesOf(bytes: Uint8Array, use: FontEmbeddingUse): FontTables {
     return fail(
       use,
       "unsupported-font-format",
-      "字体嵌入目前只支持静态 TrueType 轮廓；WOFF、WOFF2、字体集合和 CFF 不受支持",
+      "Font embedding currently only supports static TrueType outlines; WOFF, WOFF2, font collections, and CFF are not supported",
     );
   }
   const count = view.getUint16(4);
   if (12 + count * 16 > bytes.byteLength) {
-    return fail(use, "unsupported-font-format", "字体的 SFNT 表目录不完整");
+    return fail(
+      use,
+      "unsupported-font-format",
+      "Font SFNT table directory is incomplete",
+    );
   }
   const tables = new Map<string, FontTable>();
   for (let index = 0; index < count; index += 1) {
@@ -73,7 +77,7 @@ function tablesOf(bytes: Uint8Array, use: FontEmbeddingUse): FontTables {
       return fail(
         use,
         "unsupported-font-format",
-        `字体表 ${name} 超出文件范围`,
+        `Font table ${name} exceeds file boundaries`,
       );
     }
     tables.set(name, { offset, length });
@@ -88,7 +92,7 @@ function tablesOf(bytes: Uint8Array, use: FontEmbeddingUse): FontTables {
     return fail(
       use,
       "unsupported-font-format",
-      "字体嵌入需要包含 OS/2、head、name、glyf 表的静态 TrueType 字体",
+      "Font embedding requires a static TrueType font containing OS/2, head, name, and glyf tables",
     );
   }
   const os2 = tables.get("OS/2")!;
@@ -96,7 +100,7 @@ function tablesOf(bytes: Uint8Array, use: FontEmbeddingUse): FontTables {
     return fail(
       use,
       "unsupported-font-format",
-      "字体的 OS/2 表缺少字重、fsType 或样式选择字段",
+      "Font OS/2 table is missing weight, fsType, or style selection fields",
     );
   }
   return tables;
@@ -115,21 +119,21 @@ function checkedFont(
     return fail(
       use,
       "font-not-embeddable",
-      `${use.family} 明确声明 embeddable: false，无法满足字体嵌入请求`,
+      `${use.family} explicitly declares embeddable: false and cannot satisfy font embedding request`,
     );
   }
   if (use.substitute) {
     return fail(
       use,
       "font-substitute-not-embeddable",
-      `${use.family} 使用替代字体度量，不能满足声明字族的嵌入请求`,
+      `${use.family} uses substitute font metrics and cannot satisfy embedding request for the declared family`,
     );
   }
   if (use.bytes === undefined || use.identity === "missing") {
     return fail(
       use,
       "font-embedding-resource-missing",
-      `${use.family} ${use.weight} ${use.style} 缺少可嵌入的实际字体资源`,
+      `${use.family} ${use.weight} ${use.style} is missing embeddable font resource`,
     );
   }
 
@@ -138,7 +142,7 @@ function checkedFont(
     return fail(
       use,
       "invalid-font-face",
-      `${use.family} 的字体资源身份与实际字节不一致`,
+      `Font resource identity for ${use.family} does not match actual bytes`,
     );
   }
   const tables = tablesOf(use.bytes, use);
@@ -155,35 +159,35 @@ function checkedFont(
     return fail(
       use,
       "invalid-font-permissions",
-      `${use.family} 的 OS/2 fsType 含无效或保留许可标志`,
+      `OS/2 fsType of ${use.family} contains invalid or reserved permission flags`,
     );
   }
   if (usagePermission === 2) {
     return fail(
       use,
       "font-embedding-restricted",
-      `${use.family} 的 OS/2 fsType 禁止嵌入`,
+      `OS/2 fsType of ${use.family} restricts embedding`,
     );
   }
   if (usagePermission === 4) {
     return fail(
       use,
       "font-embedding-preview-print",
-      `${use.family} 的 OS/2 fsType 仅允许预览和打印，不能满足可编辑文稿的字体嵌入请求`,
+      `OS/2 fsType of ${use.family} permits only preview and print, which cannot satisfy font embedding for editable presentations`,
     );
   }
   if (mode === "subset" && (fsType & 0x0100) !== 0) {
     return fail(
       use,
       "font-subsetting-forbidden",
-      `${use.family} 的 OS/2 fsType 禁止对子集化；请改为完整嵌入或取消嵌入请求`,
+      `OS/2 fsType of ${use.family} forbids subsetting; switch to full embedding or omit embedding request`,
     );
   }
   if ((fsType & 0x0200) !== 0) {
     return fail(
       use,
       "font-embedding-bitmap-only",
-      `${use.family} 的 OS/2 fsType 只允许嵌入位图，不能嵌入 TrueType 轮廓`,
+      `OS/2 fsType of ${use.family} allows bitmap embedding only and cannot embed TrueType outlines`,
     );
   }
 
@@ -196,14 +200,14 @@ function checkedFont(
     return fail(
       use,
       "unsupported-font-format",
-      `${use.family} 的 TrueType 字体表无法解析`,
+      `Failed to parse TrueType font tables for ${use.family}`,
     );
   }
   if (opened.type !== "TTF") {
     return fail(
       use,
       "unsupported-font-format",
-      `${use.family} 的字体数据不是受支持的静态 TrueType 字体`,
+      `Font data for ${use.family} is not a supported static TrueType font`,
     );
   }
   const font = opened;
@@ -211,21 +215,21 @@ function checkedFont(
     return fail(
       use,
       "font-family-mismatch",
-      `字体文件声明的字族 ${font.familyName} 与输出字族 ${use.family} 不一致；如用于度量请显式声明 substitute`,
+      `Font family ${font.familyName} declared in font file does not match output family ${use.family}; declare substitute explicitly if intended for measurement`,
     );
   }
   if (font.variationAxes && Object.keys(font.variationAxes).length > 0) {
     return fail(
       use,
       "unsupported-font-format",
-      `${use.family} 是可变字体，当前无法嵌入`,
+      `${use.family} is a variable font and cannot be embedded currently`,
     );
   }
   if (weightClass !== use.weight) {
     return fail(
       use,
       "font-style-mismatch",
-      `${use.family} 请求 ${use.weight} 字重，但 OS/2 usWeightClass 为 ${weightClass}`,
+      `${use.family} requested ${use.weight} weight, but OS/2 usWeightClass is ${weightClass}`,
     );
   }
   if (
@@ -236,7 +240,7 @@ function checkedFont(
     return fail(
       use,
       "font-style-mismatch",
-      `${use.family} 的 OS/2 fsSelection 与文字实际写出的粗体或斜体样式不一致`,
+      `OS/2 fsSelection of ${use.family} does not match bold or italic styles emitted for text`,
     );
   }
   return { font, tables, fsType, weightClass };
@@ -258,20 +262,20 @@ function subsetBytes(
       return fail(
         use,
         "font-missing-glyph",
-        `${use.family} 的 ${use.weight} ${use.style} 字体缺少实际输出字符 ${character}`,
+        `${use.family} ${use.weight} ${use.style} font is missing glyph for emitted character ${character}`,
       );
     }
   }
 
   let bytes: Uint8Array;
   try {
-    // 覆盖检查忽略非字形码点，但原字符流仍交给 HarfBuzz 保留布局闭包。
+    // Coverage check ignores non-glyph codepoints, but the original character stream is passed to HarfBuzz to retain layout closure.
     bytes = subsetFont(use.bytes!, characters);
   } catch (error) {
     return fail(
       use,
       "font-subsetting-failed",
-      `${use.family} 的字符子集生成失败：${error instanceof Error ? error.message : String(error)}`,
+      `Failed to generate character subset for ${use.family}: ${error instanceof Error ? error.message : String(error)}`,
     );
   }
 
@@ -280,14 +284,15 @@ function subsetBytes(
     const opened = fontkit.create(
       Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength),
     );
-    if (opened.type !== "TTF") throw new Error("子集不是静态 TrueType 字体");
+    if (opened.type !== "TTF")
+      throw new Error("Subset is not a static TrueType font");
     font = opened;
     tablesOf(bytes, use);
   } catch (error) {
     return fail(
       use,
       "font-subsetting-failed",
-      `${use.family} 的字符子集无法独立解析：${error instanceof Error ? error.message : String(error)}`,
+      `Failed to parse character subset for ${use.family} independently: ${error instanceof Error ? error.message : String(error)}`,
     );
   }
 
@@ -302,7 +307,7 @@ function subsetBytes(
     return fail(
       use,
       "font-subsetting-failed",
-      `${use.family} 的字符子集未保留原字体的嵌入许可和样式`,
+      `Character subset for ${use.family} did not retain embedding permissions and styles of the original font`,
     );
   }
   for (const character of requiredCharacters) {
@@ -315,7 +320,7 @@ function subsetBytes(
       return fail(
         use,
         "font-subsetting-failed",
-        `${use.family} 的字符子集未保留实际输出字符 ${character}`,
+        `Character subset for ${use.family} did not retain emitted character ${character}`,
       );
     }
   }
@@ -330,12 +335,20 @@ function nameString(
 ): Uint8Array {
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   if (table.length < 6) {
-    return fail(use, "unsupported-font-format", "字体 name 表不完整");
+    return fail(
+      use,
+      "unsupported-font-format",
+      "Font name table is incomplete",
+    );
   }
   const count = view.getUint16(table.offset + 2);
   const stringsOffset = view.getUint16(table.offset + 4);
   if (6 + count * 12 > table.length || stringsOffset > table.length) {
-    return fail(use, "unsupported-font-format", "字体 name 表记录越界");
+    return fail(
+      use,
+      "unsupported-font-format",
+      "Font name table record out of bounds",
+    );
   }
   let fallback: Uint8Array | undefined;
   for (let index = 0; index < count; index += 1) {
@@ -346,7 +359,11 @@ function nameString(
     const length = view.getUint16(record + 8);
     const offset = stringsOffset + view.getUint16(record + 10);
     if (offset > table.length || length > table.length - offset) {
-      return fail(use, "unsupported-font-format", "字体 name 字符串越界");
+      return fail(
+        use,
+        "unsupported-font-format",
+        "Font name string out of bounds",
+      );
     }
     if (platform !== 0 && platform !== 3) continue;
     const raw = bytes.subarray(
@@ -357,7 +374,7 @@ function nameString(
       return fail(
         use,
         "unsupported-font-format",
-        "字体 name 字符串不是 UTF-16 编码",
+        "Font name string is not UTF-16 encoded",
       );
     }
     const littleEndian = new Uint8Array(raw.byteLength);
@@ -372,7 +389,7 @@ function nameString(
     return fail(
       use,
       "unsupported-font-format",
-      `字体 name 表缺少 EOT 所需的 Unicode 名称字段 ${id}`,
+      `Font name table is missing Unicode name field ${id} required for EOT`,
     );
   }
   return fallback;
@@ -495,7 +512,7 @@ function slotOrder(value: FontSlot): number {
   return { regular: 0, bold: 1, italic: 2, boldItalic: 3 }[value];
 }
 
-/** 按实际输出字族和样式生成完整字体或文稿字符子集。 */
+/** Generates full fonts or presentation character subsets according to emitted families and styles. */
 export function fontPresentationContributions(
   uses: readonly FontEmbeddingUse[],
   requested: FontEmbeddingMode | undefined,
@@ -517,7 +534,7 @@ export function fontPresentationContributions(
       return fail(
         use,
         "conflicting-resource",
-        `${use.family} 的 ${styleSlot} 样式对应多个字体文件`,
+        `${use.family} style slot ${styleSlot} corresponds to multiple font files`,
       );
     }
     if (existing !== undefined) continue;

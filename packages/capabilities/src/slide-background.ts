@@ -16,7 +16,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-/** 页面背景共用主题解析、渐变 writer 与图片资源登记服务。 */
+/** Slide backgrounds share theme resolution, gradient writing, and image resource registration services. */
 export const slideBackgroundCapability: SlideCapabilityModule = {
   declaration: "slide-background",
   slideProp: "background",
@@ -40,7 +40,7 @@ export const slideBackgroundCapability: SlideCapabilityModule = {
         if (unknown !== undefined) {
           throw new CapabilityError(
             "invalid-slide-background",
-            `Slide.background 含未实现参数 ${unknown}`,
+            `Slide.background contains unsupported parameter ${unknown}`,
           );
         }
         const image = readImage(backgroundRecord["image"]);

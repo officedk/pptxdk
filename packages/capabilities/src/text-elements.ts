@@ -33,25 +33,25 @@ export type SlideNumberProps = {
   readonly style?: Omit<TextStyle, "verticalAlign" | "lineHeight" | "textWrap">;
 };
 
-/** 原生文本框；数值高度保留固定区域，auto 高度使用明确字体度量。 */
+/** Native text box; numeric height preserves a fixed region, while auto height uses explicit font measurement. */
 export function Text(props: TextProps): ReactNode {
   return motionElement("rp:text", props);
 }
 
-/** 在文本框中声明原生段落，可设置行距和段落列表语义。 */
+/** Declares a native paragraph within a text box, with line spacing and paragraph list semantics. */
 export function P(props: ParagraphProps): ReactNode {
   return createElement("rp:paragraph", props, props.children);
 }
 
-/** 在段落中声明单独样式的文字片段。 */
+/** Declares an individually styled text run within a paragraph. */
 export function Span(props: SpanProps): ReactNode {
   return createElement("rp:span", props, props.children);
 }
 
-/** 写出由演示文稿应用解析的原生页码字段。 */
+/** Emits a native slide number field resolved by presentation applications. */
 export function SlideNumber(props: SlideNumberProps): ReactNode {
   return createElement("rp:slide-number", props);
 }
 
-/** Shape 的纯文字样式类型；它不依赖文本框组件能力。 */
+/** Pure text style type for Shape; does not depend on the text box capability module. */
 export type ShapeTextStyle = TextStyle;

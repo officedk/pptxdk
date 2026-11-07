@@ -18,7 +18,7 @@ import {
   type ThemeContext,
 } from "@react-pptx/core";
 import * as fontkit from "fontkit";
-// @ts-expect-error -- linebreak 未提供类型，下面只声明所用的断点接口。
+// @ts-expect-error -- linebreak does not provide types; declare the breakpoint interface used below.
 import LineBreakerImplementation from "linebreak";
 
 import type { FontEmbeddingMode, FontEmbeddingUse } from "./font-embedding.ts";
@@ -54,11 +54,11 @@ export type TextResourceClaim = {
   readonly kind: "font-face";
   readonly key: string;
   readonly identity: string;
-  /** 实际输出给该字体样式的文本字符，供后续字体处理继续复用。 */
+  /** Text characters actually emitted for this font style, reused for subsequent font processing. */
   readonly characters: string;
 };
 
-/** 控制符和默认可忽略码点保留在文本流中，但不要求独立 cmap 字形。 */
+/** Retains control characters and default ignorable code points in text stream without requiring standalone cmap glyphs. */
 export function requiresFontGlyph(character: string): boolean {
   return !/^[\p{Cc}\p{Default_Ignorable_Code_Point}]$/u.test(character);
 }
@@ -190,7 +190,7 @@ function escapedXml(value: string): string {
   } catch {
     throw new CapabilityError(
       "invalid-xml-character",
-      "文字内容或字体名称含 XML 1.0 不允许的字符",
+      "Text content or font name contains characters not allowed in XML 1.0",
     );
   }
 }
@@ -208,7 +208,7 @@ function hostChild(value: unknown): value is TextChild {
 function styleRecord(value: unknown, label: string): Record<string, unknown> {
   if (value === undefined) return {};
   if (!record(value)) {
-    throw new CapabilityError("invalid-style", `${label} 必须是对象`);
+    throw new CapabilityError("invalid-style", `${label} must be an object`);
   }
   return value;
 }
@@ -222,7 +222,7 @@ function onlyKnownKeys(
   if (unknown !== undefined) {
     throw new CapabilityError(
       "unknown-style-property",
-      `${label} 含未实现样式 ${unknown}`,
+      `${label} contains unimplemented style ${unknown}`,
     );
   }
 }
@@ -235,7 +235,7 @@ function positiveLength(value: unknown, label: string): number {
     if (match === null) {
       throw new CapabilityError(
         "invalid-text-length",
-        `${label} 必须是正像素数值、px 或 pt 长度`,
+        `${label} must be a positive pixel value or px/pt length`,
       );
     }
     const amount = Number(match[1]);
@@ -243,11 +243,14 @@ function positiveLength(value: unknown, label: string): number {
   } else {
     throw new CapabilityError(
       "invalid-text-length",
-      `${label} 必须是正像素数值、px 或 pt 长度`,
+      `${label} must be a positive pixel value or px/pt length`,
     );
   }
   if (!Number.isFinite(pixels) || pixels <= 0) {
-    throw new CapabilityError("invalid-text-length", `${label} 必须大于 0`);
+    throw new CapabilityError(
+      "invalid-text-length",
+      `${label} must be greater than 0`,
+    );
   }
   return pixels;
 }
@@ -266,7 +269,7 @@ function spacingCentipoints(
       label === "lineHeight"
         ? "invalid-text-length"
         : "invalid-paragraph-spacing",
-      `${label} 换算后必须在 0 到 1584pt 的 DrawingML 范围内`,
+      `${label} converted value must be within DrawingML range of 0 to 1584pt`,
     );
   }
   return value;
@@ -277,7 +280,7 @@ function letterSpacingCentipoints(value: number): number {
   if (!Number.isFinite(value) || points < -400_000 || points > 400_000) {
     throw new CapabilityError(
       "invalid-letter-spacing",
-      "letterSpacing 换算后必须在 -4000 到 4000pt 的 DrawingML 范围内",
+      "letterSpacing converted value must be within DrawingML range of -4000 to 4000pt",
     );
   }
   return points;
@@ -286,11 +289,14 @@ function letterSpacingCentipoints(value: number): number {
 function fontSizePoints(value: FontSize | undefined): number {
   let points: number;
   if (value === undefined) {
-    points = positiveLength(defaultTextStyle.fontSize, "字号") * 0.75;
+    points = positiveLength(defaultTextStyle.fontSize, "fontSize") * 0.75;
   } else if (typeof value === "string" && value.endsWith("pt")) {
     points = Number(value.slice(0, -2));
     if (!Number.isFinite(points) || points <= 0) {
-      throw new CapabilityError("invalid-font-size", "fontSize 必须大于 0");
+      throw new CapabilityError(
+        "invalid-font-size",
+        "fontSize must be greater than 0",
+      );
     }
   } else {
     points = positiveLength(value, "fontSize") * 0.75;
@@ -299,7 +305,7 @@ function fontSizePoints(value: FontSize | undefined): number {
   if (serialized < 100 || serialized > 400_000) {
     throw new CapabilityError(
       "invalid-font-size",
-      "fontSize 换算后必须在 1 到 4000pt 的 DrawingML 范围内",
+      "fontSize converted value must be within DrawingML range of 1 to 4000pt",
     );
   }
   return serialized / 100;
@@ -317,7 +323,7 @@ function weightValue(value: TextStyle["fontWeight"]): number {
   ) {
     throw new CapabilityError(
       "invalid-font-weight",
-      "fontWeight 必须是 normal、bold 或 100 到 900 间的百位整数",
+      "fontWeight must be normal, bold, or a hundreds integer between 100 and 900",
     );
   }
   return value;
@@ -327,19 +333,31 @@ function fontFamilyValue(value: FontReference | undefined): Font {
   if (value === undefined) return { family: "Aptos" };
   if (typeof value === "string") {
     if (value.trim() === "") {
-      throw new CapabilityError("invalid-font-family", "fontFamily 不能为空");
+      throw new CapabilityError(
+        "invalid-font-family",
+        "fontFamily cannot be empty",
+      );
     }
     return { family: value };
   }
   if (!record(value) || typeof value["family"] !== "string") {
-    throw new CapabilityError("invalid-font-family", "fontFamily 必须是字体值");
+    throw new CapabilityError(
+      "invalid-font-family",
+      "fontFamily must be a font value",
+    );
   }
   if (value["family"].trim() === "") {
-    throw new CapabilityError("invalid-font-family", "Font.family 不能为空");
+    throw new CapabilityError(
+      "invalid-font-family",
+      "Font.family cannot be empty",
+    );
   }
   onlyKnownKeys(value, ["family", "faces", "substitute", "embeddable"], "Font");
   if (value["faces"] !== undefined && !Array.isArray(value["faces"])) {
-    throw new CapabilityError("invalid-font-family", "Font.faces 必须是数组");
+    throw new CapabilityError(
+      "invalid-font-family",
+      "Font.faces must be an array",
+    );
   }
   if (
     value["substitute"] !== undefined &&
@@ -347,7 +365,7 @@ function fontFamilyValue(value: FontReference | undefined): Font {
   ) {
     throw new CapabilityError(
       "invalid-font-family",
-      "Font.substitute 必须是布尔值",
+      "Font.substitute must be a boolean",
     );
   }
   if (
@@ -356,7 +374,7 @@ function fontFamilyValue(value: FontReference | undefined): Font {
   ) {
     throw new CapabilityError(
       "invalid-font-family",
-      "Font.embeddable 必须是布尔值",
+      "Font.embeddable must be a boolean",
     );
   }
   return value;
@@ -369,7 +387,7 @@ function normalizedFonts(style: RunStyle): NormalizedFont[] {
   if (faceStyle !== "normal" && faceStyle !== "italic") {
     throw new CapabilityError(
       "invalid-font-style",
-      "fontStyle 只能是 normal 或 italic",
+      "fontStyle must be normal or italic",
     );
   }
   const faces = family.faces ?? [];
@@ -388,7 +406,7 @@ function normalizedFonts(style: RunStyle): NormalizedFont[] {
     ) {
       throw new CapabilityError(
         "invalid-font-face",
-        "Font.faces 含无效字重、样式或资源",
+        "Font.faces contains invalid weight, style, or resource",
       );
     }
   }
@@ -437,7 +455,7 @@ function validateRunStyle(style: RunStyle): RunStyle {
   ) {
     throw new CapabilityError(
       "invalid-text-transform",
-      "textTransform 只能是 none 或 uppercase",
+      "textTransform must be none or uppercase",
     );
   }
   if (
@@ -446,7 +464,7 @@ function validateRunStyle(style: RunStyle): RunStyle {
   ) {
     throw new CapabilityError(
       "invalid-text-decoration",
-      "textDecoration 只能是 none 或 underline",
+      "textDecoration must be none or underline",
     );
   }
   if (style.lang !== undefined) {
@@ -499,7 +517,7 @@ function mergeRunStyle(
   if (child.lang !== undefined) {
     declared["lang"] = child.lang;
   }
-  // P 和 Span 未声明的字段会是 undefined，不能覆盖继承的父级样式。
+  // Undeclared fields in P and Span are undefined and cannot overwrite inherited parent styles.
   const merged = { ...parent, ...declared } as RunStyle;
   if (child.textShadow === "none")
     delete (merged as { textShadow?: Shadow | "none" }).textShadow;
@@ -518,7 +536,7 @@ function outputBold(font: NormalizedFont): boolean {
   const fallback = font.weight >= 600;
   if (!font.hasResource || font.substitute) return fallback;
   try {
-    // 字重数值不能替代字体文件声明的同族粗体样式链接。
+    // Numerical font weight cannot substitute for family bold style link declared by the font file.
     return measureFace(font).font["OS/2"].fsSelection.bold;
   } catch {
     return fallback;
@@ -538,7 +556,7 @@ function validateParagraphDefaults(
   ) {
     throw new CapabilityError(
       "invalid-text-alignment",
-      "align 只能是 left、center、right 或 justify",
+      "align must be left, center, right, or justify",
     );
   }
   if (
@@ -547,7 +565,7 @@ function validateParagraphDefaults(
   ) {
     throw new CapabilityError(
       "invalid-paragraph-spacing",
-      "spacingAfter 必须是有限非负像素数值",
+      "spacingAfter must be a finite non-negative pixel number",
     );
   }
   if (style.spacingAfter !== undefined) {
@@ -599,7 +617,7 @@ function readTextStyle(
   ) {
     throw new CapabilityError(
       "invalid-text-wrap",
-      "textWrap 只能是 normal 或 nowrap",
+      "textWrap must be normal or nowrap",
     );
   }
   if (
@@ -608,7 +626,7 @@ function readTextStyle(
   ) {
     throw new CapabilityError(
       "invalid-vertical-align",
-      "verticalAlign 只能是 top、middle 或 bottom",
+      "verticalAlign must be top, middle, or bottom",
     );
   }
   validateParagraphDefaults(style);
@@ -690,7 +708,7 @@ function validateList(value: TextList): void {
   ) {
     throw new CapabilityError(
       "invalid-list",
-      "list.type 必须是 bullet 或 number",
+      "list.type must be bullet or number",
     );
   }
   onlyKnownKeys(
@@ -704,7 +722,7 @@ function validateList(value: TextList): void {
   if (!Number.isInteger(level) || level < 0 || level > 8) {
     throw new CapabilityError(
       "invalid-list",
-      "list.level 必须是 0 到 8 的整数",
+      "list.level must be an integer between 0 and 8",
     );
   }
   if (value["type"] === "bullet") {
@@ -718,7 +736,7 @@ function validateList(value: TextList): void {
     ) {
       throw new CapabilityError(
         "invalid-list",
-        "项目符号必须是单个 Unicode 字符",
+        "Bullet must be a single Unicode character",
       );
     }
     try {
@@ -726,21 +744,21 @@ function validateList(value: TextList): void {
     } catch {
       throw new CapabilityError(
         "invalid-xml-character",
-        "项目符号含 XML 1.0 不允许的字符",
+        "Bullet contains characters not allowed in XML 1.0",
       );
     }
   } else {
     if (value["style"] !== undefined && value["style"] !== "arabicPeriod") {
       throw new CapabilityError(
         "invalid-list",
-        "编号样式目前只支持 arabicPeriod",
+        "Numbering style currently only supports arabicPeriod",
       );
     }
     const startAt = value["startAt"] ?? 1;
     if (!Number.isInteger(startAt) || startAt < 1 || startAt > 32767) {
       throw new CapabilityError(
         "invalid-list",
-        "编号起始值必须是 1 到 32767 的整数",
+        "Numbering start value must be an integer between 1 and 32767",
       );
     }
   }
@@ -755,7 +773,10 @@ function collectRuns(
 ): void {
   for (const child of children) {
     if (!hostChild(child)) {
-      throw new CapabilityError("invalid-text-child", "文字内容树包含无效节点");
+      throw new CapabilityError(
+        "invalid-text-child",
+        "Text content tree contains invalid nodes",
+      );
     }
     if (child.type === "#text") {
       if (child.text !== "") runs.push({ text: child.text, style });
@@ -764,14 +785,14 @@ function collectRuns(
     if (child.type !== "rp:span" && child.type !== "rp:slide-number") {
       throw new CapabilityError(
         "unsupported-text-child",
-        `${child.type} 不能作为文字段落或 run 使用`,
+        `${child.type} cannot be used as text paragraph or run`,
       );
     }
     const unknown = Object.keys(child.props).find((key) => key !== "style");
     if (unknown !== undefined) {
       throw new CapabilityError(
         "unknown-parameter",
-        `Span 含未实现参数 ${unknown}`,
+        `Span contains unimplemented parameter ${unknown}`,
       );
     }
     const spanStyle = readRunStyle(child.props["style"]);
@@ -780,7 +801,7 @@ function collectRuns(
       if (child.children.length > 0) {
         throw new CapabilityError(
           "invalid-slide-number",
-          "SlideNumber 不能包含子内容",
+          "SlideNumber cannot contain children",
         );
       }
       runs.push({
@@ -789,7 +810,7 @@ function collectRuns(
         field: {
           id:
             fields.createId?.() ??
-            // 仅用于布局的表格规范化不会写出此域的 XML。
+            // Table normalization used only for layout will not emit XML for this field.
             "00000000-0000-4000-8000-000000000001",
           type: "slidenum",
         },
@@ -885,7 +906,7 @@ function textResourceClaims(
       if (!entry.fonts.some(({ identity }) => identity === font.identity)) {
         entry.fonts.push(font);
       }
-      // 字节资源可以合并，但每种实际使用的嵌入策略都须独立校验。
+      // Byte resources can be merged, but each actually used embedding policy must be independently validated.
       const policyKey = `${font.identity}\u0000${font.substitute ? 1 : 0}\u0000${font.embeddable ? 1 : 0}`;
       entry.fontPolicies.set(policyKey, font);
       entry.text.push(
@@ -917,7 +938,7 @@ function textResourceClaims(
       if (!font.hasResource) {
         warnings.push({
           code: "font-measurement-unavailable",
-          message: `未提供 ${font.family} ${font.weight} ${font.style} 的显式字体资源；固定区域文字不会核对实际换行或装入情况`,
+          message: `Explicit font resource is not provided for ${font.family} ${font.weight} ${font.style}; fixed-area text will not verify actual line wrapping or fitting`,
         });
       } else {
         resourceClaims.push({
@@ -932,7 +953,7 @@ function textResourceClaims(
           if (missing.length > 0) {
             const shown = missing.slice(0, 10).join(" ");
             const extra = missing.length - 10;
-            const message = `${font.family} 缺少字符 ${shown}${extra > 0 ? `，另有 ${extra} 个字符` : ""} 的字形`;
+            const message = `${font.family} is missing glyphs for characters ${shown}${extra > 0 ? `, and ${extra} more characters` : ""}`;
             if (embedFonts === "full" || embedFonts === "subset") {
               throw new CapabilityError("font-missing-glyph", message);
             } else {
@@ -1037,7 +1058,10 @@ function normalizeParagraphs(
 
   for (const child of children) {
     if (!hostChild(child)) {
-      throw new CapabilityError("invalid-text-child", "文字内容树包含无效节点");
+      throw new CapabilityError(
+        "invalid-text-child",
+        "Text content tree contains invalid nodes",
+      );
     }
     if (
       child.type === "#text" ||
@@ -1050,7 +1074,7 @@ function normalizeParagraphs(
     if (child.type !== "rp:paragraph") {
       throw new CapabilityError(
         "unsupported-text-child",
-        `${child.type} 不能作为文本框的直接内容`,
+        `${child.type} cannot be used directly in text box`,
       );
     }
     flushInline();
@@ -1058,7 +1082,7 @@ function normalizeParagraphs(
     if (unknown !== undefined) {
       throw new CapabilityError(
         "unknown-parameter",
-        `P 含未实现参数 ${unknown}`,
+        `P contains unimplemented parameter ${unknown}`,
       );
     }
     const style = {
@@ -1106,7 +1130,7 @@ function measureFace(source: NormalizedFont): MeasureFace {
   if (!source.hasResource || source.data === undefined) {
     throw new CapabilityError(
       "font-measurement-unavailable",
-      `内容定高文字缺少 ${source.family} ${source.weight} ${source.style} 的显式字体资源`,
+      `Content-sized text is missing explicit font resource for ${source.family} ${source.weight} ${source.style}`,
     );
   }
 
@@ -1117,14 +1141,14 @@ function measureFace(source: NormalizedFont): MeasureFace {
       const bytes = Buffer.from(data.buffer, data.byteOffset, data.byteLength);
       const opened = fontkit.create(bytes);
       if (!("unitsPerEm" in opened)) {
-        throw new Error("字体集合不属于单字体文件");
+        throw new Error("Font collection is not a single font file");
       }
       parsed = opened;
       measureFaces.set(source.identity, parsed);
     } catch (error) {
       throw new CapabilityError(
         "font-format-unsupported",
-        `无法解析 ${source.family} 的字体度量文件：${error instanceof Error ? error.message : String(error)}`,
+        `Cannot parse font metrics file for ${source.family}: ${error instanceof Error ? error.message : String(error)}`,
       );
     }
   }
@@ -1132,13 +1156,13 @@ function measureFace(source: NormalizedFont): MeasureFace {
   if (!source.substitute && !matchesFontFamily(parsed, source.family)) {
     throw new CapabilityError(
       "font-substitution-required",
-      `度量文件声明为 ${parsed.familyName}，要保留输出字体名 ${source.family} 必须显式设置 Font.substitute`,
+      `Metrics file declares ${parsed.familyName}; retaining output font name ${source.family} requires setting Font.substitute explicitly`,
     );
   }
   if (parsed["OS/2"].usWeightClass !== source.weight) {
     throw new CapabilityError(
       "font-face-mismatch",
-      `${source.family} 的 ${source.weight} ${source.style} 字体值与文件实际字重 ${parsed["OS/2"].usWeightClass} 不符`,
+      `Font value for ${source.family} ${source.weight} ${source.style} does not match file actual weight ${parsed["OS/2"].usWeightClass}`,
     );
   }
   const fileItalic =
@@ -1148,7 +1172,7 @@ function measureFace(source: NormalizedFont): MeasureFace {
   if (fileItalic !== (source.style === "italic")) {
     throw new CapabilityError(
       "font-face-mismatch",
-      `${source.family} 的 ${source.weight} ${source.style} 字体值与文件实际字形样式不符`,
+      `Font value for ${source.family} ${source.weight} ${source.style} does not match file actual glyph style`,
     );
   }
   if (
@@ -1160,7 +1184,7 @@ function measureFace(source: NormalizedFont): MeasureFace {
   ) {
     throw new CapabilityError(
       "font-metrics-invalid",
-      `${source.family} 的字体行距指标无效`,
+      `Font line metrics for ${source.family} are invalid`,
     );
   }
   return { font: parsed, identity: source.identity };
@@ -1181,8 +1205,8 @@ function measureRunFace(style: RunStyle): MeasureFace {
         ? "font-measurement-unavailable"
         : "conflicting-resource",
       unique.length === 0
-        ? "内容定高文字必须为每个实际使用的字重和样式提供字体文件"
-        : "同一字体字重和样式对应多个度量文件，无法确定测量依据",
+        ? "Content-sized text must provide a font file for each actually used weight and style"
+        : "Multiple metrics files found for the same font weight and style; cannot determine measurement basis",
     );
   }
   return measureFace(unique[0]!);
@@ -1320,7 +1344,7 @@ function wrapParagraph(
   for (const lineBreak of breaks) {
     const unitEnd = lineBreak.position;
     const breakContentEnd = trimMandatoryBreakEnd(text, unitStart, unitEnd);
-    // linebreak 把文本末尾的必需换行标为普通结束边界，控制符仍代表空行。
+    // linebreak marks mandatory line breaks at the end of text as normal break boundaries; control chars still represent empty lines.
     const required = lineBreak.required || breakContentEnd < unitEnd;
     const candidateWidth = rangeWidth(
       pieces,
@@ -1422,14 +1446,14 @@ function paragraphLineHeight(paragraph: Paragraph): number {
   let maximum = 0;
   for (const style of styles) {
     const face = measureRunFace(style).font;
-    // DrawingML 行距取字体 ascent - descent + lineGap，再按输出字号缩放。
+    // DrawingML line spacing takes font ascent - descent + lineGap, then scales by output font size.
     const units = face.ascent - face.descent + face.lineGap;
     const lineHeight =
       (units / face.unitsPerEm) * fontSizePoints(style.fontSize) * (4 / 3);
     if (!Number.isFinite(lineHeight) || lineHeight <= 0) {
       throw new CapabilityError(
         "font-metrics-invalid",
-        "字体行距指标必须产生有限正值",
+        "Font line metrics must produce a finite positive value",
       );
     }
     maximum = Math.max(maximum, lineHeight);
@@ -1437,14 +1461,14 @@ function paragraphLineHeight(paragraph: Paragraph): number {
   if (maximum === 0) {
     throw new CapabilityError(
       "font-measurement-unavailable",
-      "内容定高文字缺少可用于确定行距的字体",
+      "Content-sized text is missing font to determine line spacing",
     );
   }
   return spacingCentipoints(maximum, "lineHeight") / 75;
 }
 
 function paragraphBaseline(paragraph: Paragraph): number | undefined {
-  // 混合 run 的首行基线需要逐段文字片段度量，当前结果不包含这类依据。
+  // First line baseline of mixed runs requires measuring individual text fragments; current results do not include such basis.
   if (paragraph.runs.length !== 1 || paragraph.runs[0]!.text === "") {
     return undefined;
   }
@@ -1559,7 +1583,7 @@ function measureParagraphs(
   };
 }
 
-/** 以共享文字服务的实际字体与断行规则返回布局尺寸。 */
+/** Returns layout dimensions based on actual fonts and line breaking rules of shared text service. */
 export function measureTextLayout(
   children: readonly unknown[],
   styleValue: unknown,
@@ -1628,7 +1652,7 @@ export function textInsets(value: unknown): {
   } else if (raw !== undefined) {
     throw new CapabilityError(
       "invalid-text-insets",
-      "padding 必须是数字、二元组或四元组",
+      "padding must be a number, a 2-tuple, or a 4-tuple",
     );
   }
   const result: { top: number; right: number; bottom: number; left: number } = {
@@ -1641,7 +1665,7 @@ export function textInsets(value: unknown): {
     if (typeof amount !== "number" || !Number.isFinite(amount) || amount < 0) {
       throw new CapabilityError(
         "invalid-text-insets",
-        `${name} inset 必须是有限非负像素数值`,
+        `${name} inset must be a finite non-negative pixel number`,
       );
     }
     pxToEmu(amount);
@@ -1649,7 +1673,7 @@ export function textInsets(value: unknown): {
   return result;
 }
 
-/** 为文本框与形状文字共用段落、run、列表和字体资源处理。 */
+/** Shares paragraph, run, list, and font resource processing for text boxes and shape text. */
 export function writeTextBody(
   children: readonly unknown[],
   styleValue: unknown,
@@ -1702,13 +1726,13 @@ export function writeTextBody(
         if (!warnings.some((warning) => warning.code === error.code)) {
           warnings.push({
             code: error.code,
-            message: `未能依据已提供的字体完成文字度量：${error.message}`,
+            message: `Failed to complete text measurement using provided fonts: ${error.message}`,
           });
         }
       } else {
         warnings.push({
           code: "font-measurement-unavailable",
-          message: `未能依据已提供的字体完成文字度量：${error instanceof Error ? error.message : String(error)}`,
+          message: `Failed to complete text measurement using provided fonts: ${error instanceof Error ? error.message : String(error)}`,
         });
       }
     }
@@ -1716,7 +1740,7 @@ export function writeTextBody(
   if (layout?.contentSized === true && measured === undefined) {
     throw new CapabilityError(
       "font-measurement-unavailable",
-      "内容定高文字缺少完整的字体度量依据",
+      "Content-sized text is missing complete font measurement basis",
     );
   }
   if (
@@ -1729,7 +1753,7 @@ export function writeTextBody(
     warnings.push({
       code: "overset",
       message:
-        "按已提供的字体度量，文字超出文本框的宽或高；构建保留原始内容和尺寸",
+        "Based on provided font metrics, text overflows text box width or height; build preserves original content and dimensions",
     });
   }
   const outputParagraphs =
@@ -1762,7 +1786,7 @@ export function writeTextBody(
   };
 }
 
-/** 为原生图表文字生成共享字体样式，并按实际类别、系列和标签文本登记字体 claims。 */
+/** Generates shared font styles for native chart text and registers font claims based on actual categories, series, and label text. */
 export function writeChartTextProperties(
   styleValue: unknown,
   texts: readonly string[],
@@ -1820,30 +1844,33 @@ export function writeChartTextProperties(
   };
 }
 
-/** 把固定像素长度转换成 DrawingML 可表达的 EMU。 */
+/** Converts fixed pixel length into DrawingML EMU. */
 export function textExtent(value: number, label: string): number {
   if (!Number.isFinite(value) || value <= 0) {
     throw new CapabilityError(
       "invalid-text-box",
-      `${label} 必须是有限正像素数值`,
+      `${label} must be a finite positive pixel value`,
     );
   }
   const extent = pxToEmu(value);
   if (extent < 1 || extent > 2_147_483_647) {
     throw new CapabilityError(
       "invalid-text-box",
-      `${label} 换算后超出形状尺寸范围`,
+      `${label} converted value exceeds shape dimension range`,
     );
   }
   return extent;
 }
 
-/** 读取固定区域文本的原始纯文本，供形状和只读报告共用。 */
+/** Reads raw plain text of fixed-area text, shared between shape and read-only report. */
 export function plainText(children: readonly unknown[]): string {
   const result: string[] = [];
   for (const child of children) {
     if (!hostChild(child)) {
-      throw new CapabilityError("invalid-text-child", "文字内容树包含无效节点");
+      throw new CapabilityError(
+        "invalid-text-child",
+        "Text content tree contains invalid nodes",
+      );
     }
     if (child.type === "#text") result.push(child.text);
     else if (child.type === "rp:span" || child.type === "rp:paragraph") {
@@ -1851,7 +1878,7 @@ export function plainText(children: readonly unknown[]): string {
     } else {
       throw new CapabilityError(
         "unsupported-text-child",
-        `${child.type} 不是文本内容`,
+        `${child.type} is not text content`,
       );
     }
   }

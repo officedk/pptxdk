@@ -1,6 +1,6 @@
 import { xmlEscape, type NativeLink } from "@react-pptx/core";
 
-/** 原生对象能力共用同一种点击字段表达，关系与动作由 core 预先解析。 */
+/** Native object capabilities share the same click link representation, with relationships and actions pre-resolved by core. */
 export function nativeLinkXml(link: NativeLink | undefined): string {
   if (link === undefined) return "";
   const attributes = [

@@ -67,7 +67,7 @@ function optionalName(
   if (typeof value !== "string" || value.trim() === "") {
     throw new CapabilityError(
       "invalid-parameter",
-      `${parameter} 必须是非空字符串`,
+      `${parameter} must be a non-empty string`,
     );
   }
   return value;
@@ -82,7 +82,7 @@ function coordinate(value: unknown, label: "x" | "y"): number {
   ) {
     throw new CapabilityError(
       "invalid-text-box",
-      `${label} 必须是 -1000000 到 1000000 间的有限像素数值`,
+      `${label} must be a finite pixel number between -1000000 and 1000000`,
     );
   }
   return value;
@@ -92,7 +92,7 @@ function size(value: unknown, label: "width" | "height"): number {
   if (typeof value !== "number") {
     throw new CapabilityError(
       "invalid-text-box",
-      `${label} 必须是有限正像素数值`,
+      `${label} must be a finite positive pixel number`,
     );
   }
   textExtent(value, label);
@@ -172,7 +172,7 @@ function textBoxXml(
   return `<p:sp><p:nvSpPr><p:cNvPr id="${id}" name="${escapedName}">${linkXml}</p:cNvPr><p:cNvSpPr txBox="1"/><p:nvPr/></p:nvSpPr>${properties}${textBody}</p:sp>`;
 }
 
-/** 固定区域文本框能力；具体文字服务由文本框与其他原生对象共享。 */
+/** Fixed-region text box capability; specific text services are shared by text boxes and other native objects. */
 export const textCapability: CapabilityModule = {
   declaration: "rp:text",
   measureLayout(
@@ -221,7 +221,7 @@ export const textCapability: CapabilityModule = {
     if (unknown !== undefined) {
       throw new CapabilityError(
         "unknown-parameter",
-        `Text 含未实现参数 ${unknown}`,
+        `Text contains unsupported parameter ${unknown}`,
       );
     }
     const testId = optionalName(input.props["testId"], "testId");
@@ -316,7 +316,7 @@ export const textCapability: CapabilityModule = {
     } catch {
       throw new CapabilityError(
         "invalid-xml-character",
-        "Text.name 含 XML 1.0 不允许的字符",
+        "Text.name contains characters not allowed in XML 1.0",
       );
     }
     const output = {

@@ -43,17 +43,17 @@ export type ChartKind = "column" | "bar" | "line" | "area" | "pie" | "doughnut";
 
 export type ChartPoint = {
   readonly color?: ColorValue;
-  /** 覆盖该数据点的数据标签文字颜色。 */
+  /** Overrides data label text color for this data point. */
   readonly labelColor?: ColorValue;
 };
 
 export type ChartSeries = {
   readonly name: string;
-  /** 每个分类对应一个数值；null 在图表与工作簿中保留为空值。 */
+  /** One numeric value per category; null is preserved as empty value in chart and workbook. */
   readonly values: readonly (number | null)[];
-  /** 柱、面积或线的颜色。 */
+  /** Color of column, area, or line. */
   readonly color?: ColorValue;
-  /** 按分类下标覆盖单个点的颜色或数据标签文字颜色。 */
+  /** Overrides color or data label text color for individual points by category index. */
   readonly points?: Readonly<Record<number, ChartPoint>>;
 };
 
@@ -64,23 +64,23 @@ export type ChartData = {
 
 export type ChartLine = {
   readonly color?: ColorValue;
-  /** 线宽，单位为 px。 */
+  /** Line width in px. */
   readonly width?: number;
 };
 
 export type ChartAxis = {
-  /** 是否显示轴及其标签，缺省为 true。 */
+  /** Whether to show the axis and its labels; defaults to true. */
   readonly visible?: boolean;
   readonly min?: number;
   readonly max?: number;
   readonly majorUnit?: number;
-  /** Excel 数字格式，例如 `#,##0`。 */
+  /** Excel number format, e.g. `#,##0`. */
   readonly numberFormat?: string;
-  /** 主网格线；true 使用目标应用默认线型。 */
+  /** Major gridlines; true uses target application default line style. */
   readonly gridlines?: boolean | ChartLine;
-  /** 坐标轴线；false 隐藏轴线。 */
+  /** Axis line; false hides axis line. */
   readonly line?: boolean | ChartLine;
-  /** 轴标签的文字样式。 */
+  /** Text style for axis labels. */
   readonly style?: ChartTextStyle;
 };
 
@@ -109,17 +109,17 @@ type ChartBase = MotionProps &
     readonly width?: number;
     readonly height?: number;
     readonly data: ChartData;
-    /** 省略、false 时隐藏图例。 */
+    /** When omitted or false, hides the legend. */
     readonly legend?: false | "top" | "bottom" | "left" | "right";
     readonly dataLabels?: false | ChartDataLabels;
-    /** 相对图表框的内部绘图区位置，单位为 px。 */
+    /** Internal plot area position relative to chart box, in px. */
     readonly plotArea?: {
       readonly left: number;
       readonly top: number;
       readonly width: number;
       readonly height: number;
     };
-    /** 图表图例、轴和数据标签共用的文字样式。 */
+    /** Text style shared by chart legend, axes, and data labels. */
     readonly style?: ChartTextStyle & LayoutStyle;
   };
 
@@ -132,9 +132,9 @@ type CartesianOptions = {
 export type ColumnOrBarChartProps = ChartBase &
   CartesianOptions & {
     readonly kind: "column" | "bar";
-    /** 分类组之间的空白占柱宽百分比，取值为 0–500。 */
+    /** Gap between category groups as percentage of bar width, range 0–500. */
     readonly gapWidth?: number;
-    /** 同组柱重叠百分比，取值为 -100–100。 */
+    /** Overlap percentage for bars in the same group, range -100–100. */
     readonly overlap?: number;
   };
 
@@ -143,11 +143,11 @@ export type LineOrAreaChartProps = ChartBase &
 
 type PieOptions = {
   /**
-   * 将扇区向外拉开的半径百分比。
-   * 四舍五入后的整数须在当前正式校验支持的 0–2,147,483,647 范围内。
+   * Radial explosion percentage pulling the slice outward.
+   * Rounded integer must be within the 0–2,147,483,647 range supported by current formal validation.
    */
   readonly explosion?: number;
-  /** 第一个扇区的顺时针起始角，范围为 0–360 度，序列化为整数。 */
+  /** Clockwise starting angle of the first slice in degrees (0–360), serialized as integer. */
   readonly firstSliceAngle?: number;
 };
 
@@ -156,7 +156,7 @@ export type PieChartProps = ChartBase & PieOptions & { readonly kind: "pie" };
 export type DoughnutChartProps = ChartBase &
   PieOptions & {
     readonly kind: "doughnut";
-    /** 环形图内孔大小的百分比，范围为 10–90。 */
+    /** Percentage size of doughnut chart center hole, range 10–90. */
     readonly holeSize?: number;
   };
 
@@ -175,9 +175,9 @@ const chartContentType =
 const workbookContentType =
   "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
 const maximumShapeExtentEmu = 2_147_483_647;
-// DrawingML 的 a:ln/@w 上限为 20,116,800 EMU；先验证换算值再序列化。
+// DrawingML a:ln/@w upper limit is 20,116,800 EMU; validate converted value before serializing.
 const maximumLineWidthEmu = 20_116_800;
-// 当前正式校验配置接受的取整值范围为 0–2,147,483,647；此处不是 OOXML 通用格式上限。
+// Current formal validation profile accepts rounded values in range 0–2,147,483,647; not a general OOXML upper limit.
 const maximumExplosionForCurrentValidationProfile = 2_147_483_647;
 const chartOptions: Readonly<Record<ChartKind, readonly string[]>> = {
   column: ["stacking", "valueAxis", "categoryAxis", "gapWidth", "overlap"],
@@ -227,7 +227,10 @@ function onlyKeys(
 ): void {
   const unknown = Object.keys(value).find((key) => !allowed.includes(key));
   if (unknown !== undefined) {
-    fail("unknown-parameter", `${label} 含未实现参数 ${unknown}`);
+    fail(
+      "unknown-parameter",
+      `${label} contains unimplemented parameter ${unknown}`,
+    );
   }
 }
 
@@ -237,7 +240,7 @@ function optionalName(
 ): string | undefined {
   if (value === undefined) return undefined;
   if (typeof value !== "string" || value.trim() === "") {
-    fail("invalid-parameter", `${label} 必须是非空字符串`);
+    fail("invalid-parameter", `${label} must be a non-empty string`);
   }
   return value;
 }
@@ -252,7 +255,7 @@ function coordinate(value: unknown, label: "x" | "y"): number {
   ) {
     fail(
       "invalid-coordinate",
-      `${label} 必须是 -1000000 到 1000000 间的有限像素数值`,
+      `${label} must be a finite pixel value between -1000000 and 1000000`,
     );
   }
   return value;
@@ -260,13 +263,16 @@ function coordinate(value: unknown, label: "x" | "y"): number {
 
 function extent(value: unknown, label: "width" | "height"): number {
   if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) {
-    fail("invalid-coordinate", `${label} 必须是有限正像素数值`);
+    fail(
+      "invalid-coordinate",
+      `${label} must be a finite positive pixel value`,
+    );
   }
   const emu = pxToEmu(value);
   if (emu < 1 || emu > maximumShapeExtentEmu) {
     fail(
       "invalid-coordinate",
-      `${label} 换算后必须在 1 到 ${maximumShapeExtentEmu} EMU 的闭区间内`,
+      `${label} converted value must be within closed interval of 1 to ${maximumShapeExtentEmu} EMU`,
     );
   }
   return value;
@@ -289,12 +295,12 @@ function optionalColor(value: unknown, label: string): ColorValue | undefined {
   ) {
     return value as ColorValue;
   }
-  return fail("invalid-color", `${label} 必须是颜色值或主题令牌`);
+  return fail("invalid-color", `${label} must be a color value or theme token`);
 }
 
 function finiteNumber(value: unknown, label: string): number {
   if (typeof value !== "number" || !Number.isFinite(value)) {
-    fail("invalid-parameter", `${label} 必须是有限数值`);
+    fail("invalid-parameter", `${label} must be a finite number`);
   }
   return value;
 }
@@ -320,8 +326,8 @@ function roundedRange(
     fail(
       "invalid-chart-option",
       boundary === "rounded-result"
-        ? `${label} 四舍五入后必须在 ${minimum} 到 ${maximum} 的范围内`
-        : `${label} 必须在 ${minimum} 到 ${maximum} 的格式范围内`,
+        ? `${label} rounded value must be within range of ${minimum} to ${maximum}`
+        : `${label} must be within format range of ${minimum} to ${maximum}`,
     );
   }
   return rounded;
@@ -331,23 +337,32 @@ function xmlText(value: string, label: string): string {
   try {
     xmlEscape(value);
   } catch {
-    fail("invalid-xml-character", `${label} 含 XML 1.0 不允许的字符`);
+    fail(
+      "invalid-xml-character",
+      `${label} contains characters not allowed in XML 1.0`,
+    );
   }
   return value;
 }
 
 function lineStyle(value: unknown, label: string): ChartLine | undefined {
   if (value === undefined) return undefined;
-  if (!isRecord(value)) fail("invalid-style", `${label} 必须是对象`);
+  if (!isRecord(value)) fail("invalid-style", `${label} must be an object`);
   onlyKeys(value, ["color", "width"], label);
   const color = optionalColor(value["color"], `${label}.color`);
   const width = value["width"];
   if (width !== undefined) {
     if (typeof width !== "number" || !Number.isFinite(width) || width <= 0) {
-      fail("invalid-style", `${label}.width 必须是有限正像素数值`);
+      fail(
+        "invalid-style",
+        `${label}.width must be a finite positive pixel value`,
+      );
     }
     if (pxToEmu(width) > maximumLineWidthEmu) {
-      fail("invalid-style", `${label}.width 换算后超出可写线宽范围`);
+      fail(
+        "invalid-style",
+        `${label}.width converted value exceeds writable line width range`,
+      );
     }
   }
   return {
@@ -362,7 +377,7 @@ function axis(
   kind: "category" | "value",
 ): ChartAxis | undefined {
   if (value === undefined) return undefined;
-  if (!isRecord(value)) fail("invalid-axis", `${label} 必须是对象`);
+  if (!isRecord(value)) fail("invalid-axis", `${label} must be an object`);
   onlyKeys(
     value,
     [
@@ -382,12 +397,15 @@ function axis(
       (key) => value[key] !== undefined,
     );
     if (unsupported !== undefined) {
-      fail("invalid-axis", `${label}.${unsupported} 仅适用于值轴`);
+      fail(
+        "invalid-axis",
+        `${label}.${unsupported} is only applicable to value axis`,
+      );
     }
   }
   const visible = value["visible"];
   if (visible !== undefined && typeof visible !== "boolean") {
-    fail("invalid-axis", `${label}.visible 必须是布尔值`);
+    fail("invalid-axis", `${label}.visible must be a boolean`);
   }
   const min =
     value["min"] === undefined
@@ -402,17 +420,17 @@ function axis(
       ? undefined
       : finiteNumber(value["majorUnit"], `${label}.majorUnit`);
   if (min !== undefined && max !== undefined && min >= max) {
-    fail("invalid-axis", `${label}.min 必须小于 max`);
+    fail("invalid-axis", `${label}.min must be less than max`);
   }
   if (majorUnit !== undefined && majorUnit <= 0) {
-    fail("invalid-axis", `${label}.majorUnit 必须大于 0`);
+    fail("invalid-axis", `${label}.majorUnit must be greater than 0`);
   }
   const numberFormat = value["numberFormat"];
   if (
     numberFormat !== undefined &&
     (typeof numberFormat !== "string" || numberFormat.trim() === "")
   ) {
-    fail("invalid-axis", `${label}.numberFormat 必须是非空字符串`);
+    fail("invalid-axis", `${label}.numberFormat must be a non-empty string`);
   }
   if (typeof numberFormat === "string") {
     xmlText(numberFormat, `${label}.numberFormat`);
@@ -423,11 +441,11 @@ function axis(
     typeof gridlines !== "boolean" &&
     !isRecord(gridlines)
   ) {
-    fail("invalid-axis", `${label}.gridlines 必须是布尔值或线条样式`);
+    fail("invalid-axis", `${label}.gridlines must be a boolean or line style`);
   }
   const line = value["line"];
   if (line !== undefined && typeof line !== "boolean" && !isRecord(line)) {
-    fail("invalid-axis", `${label}.line 必须是布尔值或线条样式`);
+    fail("invalid-axis", `${label}.line must be a boolean or line style`);
   }
   return {
     ...(visible === undefined ? {} : { visible }),
@@ -458,24 +476,30 @@ function axis(
 }
 
 function chartData(value: unknown, kind: ChartKind): ChartData {
-  if (!isRecord(value)) fail("invalid-data", "Chart.data 必须是对象");
+  if (!isRecord(value)) fail("invalid-data", "Chart.data must be an object");
   onlyKeys(value, ["categories", "series"], "Chart.data");
   const categories = value["categories"];
   const series = value["series"];
   if (!Array.isArray(categories) || categories.length === 0) {
-    fail("invalid-data", "Chart.data.categories 必须包含至少一个分类");
+    fail(
+      "invalid-data",
+      "Chart.data.categories must contain at least one category",
+    );
   }
   for (const [index, category] of categories.entries()) {
     if (typeof category !== "string") {
-      fail("invalid-data", `Chart.data.categories[${index}] 必须是字符串`);
+      fail("invalid-data", `Chart.data.categories[${index}] must be a string`);
     }
   }
   if (!Array.isArray(series) || series.length === 0) {
-    fail("invalid-data", "Chart.data.series 必须包含至少一个系列");
+    fail("invalid-data", "Chart.data.series must contain at least one series");
   }
   const checkedSeries: ChartSeries[] = series.map((item, seriesIndex) => {
     if (!isRecord(item)) {
-      fail("invalid-data", `Chart.data.series[${seriesIndex}] 必须是对象`);
+      fail(
+        "invalid-data",
+        `Chart.data.series[${seriesIndex}] must be an object`,
+      );
     }
     onlyKeys(
       item,
@@ -487,13 +511,13 @@ function chartData(value: unknown, kind: ChartKind): ChartData {
     if (typeof name !== "string" || name.trim() === "") {
       fail(
         "invalid-data",
-        `Chart.data.series[${seriesIndex}].name 必须是非空字符串`,
+        `Chart.data.series[${seriesIndex}].name must be a non-empty string`,
       );
     }
     if (!Array.isArray(values) || values.length !== categories.length) {
       fail(
         "invalid-data",
-        `系列「${name}」有 ${Array.isArray(values) ? values.length : 0} 个值，对应 ${categories.length} 个分类`,
+        `Series "${name}" has ${Array.isArray(values) ? values.length : 0} values for ${categories.length} categories`,
       );
     }
     for (let valueIndex = 0; valueIndex < values.length; valueIndex += 1) {
@@ -504,7 +528,7 @@ function chartData(value: unknown, kind: ChartKind): ChartData {
       ) {
         fail(
           "invalid-data",
-          `系列「${name}」的第 ${valueIndex + 1} 个值必须是有限数值或 null`,
+          `Series "${name}" value ${valueIndex + 1} must be a finite number or null`,
         );
       }
       if (
@@ -514,7 +538,7 @@ function chartData(value: unknown, kind: ChartKind): ChartData {
       ) {
         fail(
           "invalid-data",
-          `系列「${name}」的第 ${valueIndex + 1} 个饼图值不能为负数`,
+          `Series "${name}" pie value ${valueIndex + 1} cannot be negative`,
         );
       }
     }
@@ -524,7 +548,7 @@ function chartData(value: unknown, kind: ChartKind): ChartData {
       if (!isRecord(pointsValue)) {
         fail(
           "invalid-data",
-          `系列「${name}」的 points 必须是按分类下标索引的对象`,
+          `Series "${name}" points must be an object indexed by category index`,
         );
       }
       points = {};
@@ -536,26 +560,29 @@ function chartData(value: unknown, kind: ChartKind): ChartData {
           pointIndex < 0 ||
           pointIndex >= categories.length
         ) {
-          fail("invalid-data", `系列「${name}」含越界数据点下标 ${rawIndex}`);
+          fail(
+            "invalid-data",
+            `Series "${name}" contains out-of-bounds data point index ${rawIndex}`,
+          );
         }
         if (!isRecord(pointValue)) {
           fail(
             "invalid-data",
-            `系列「${name}」的数据点 ${rawIndex} 必须是对象`,
+            `Series "${name}" data point ${rawIndex} must be an object`,
           );
         }
         onlyKeys(
           pointValue,
           ["color", "labelColor"],
-          `系列「${name}」的数据点 ${rawIndex}`,
+          `Series "${name}" data point ${rawIndex}`,
         );
         const pointColor = optionalColor(
           pointValue["color"],
-          `系列「${name}」的数据点 ${rawIndex}.color`,
+          `Series "${name}" data point ${rawIndex}.color`,
         );
         const labelColor = optionalColor(
           pointValue["labelColor"],
-          `系列「${name}」的数据点 ${rawIndex}.labelColor`,
+          `Series "${name}" data point ${rawIndex}.labelColor`,
         );
         points[pointIndex] = {
           ...(pointColor === undefined ? {} : { color: pointColor }),
@@ -563,7 +590,7 @@ function chartData(value: unknown, kind: ChartKind): ChartData {
         };
       }
     }
-    const color = optionalColor(item["color"], `系列「${name}」.color`);
+    const color = optionalColor(item["color"], `Series "${name}".color`);
     return {
       name,
       values: values as readonly (number | null)[],
@@ -580,7 +607,7 @@ function labels(
 ): false | ChartDataLabels | undefined {
   if (value === undefined || value === false) return value;
   if (!isRecord(value))
-    fail("invalid-data-labels", "Chart.dataLabels 必须是对象或 false");
+    fail("invalid-data-labels", "Chart.dataLabels must be an object or false");
   onlyKeys(
     value,
     ["value", "percent", "category", "position", "numberFormat", "style"],
@@ -588,7 +615,7 @@ function labels(
   );
   for (const key of ["value", "percent", "category"] as const) {
     if (value[key] !== undefined && typeof value[key] !== "boolean") {
-      fail("invalid-data-labels", `Chart.dataLabels.${key} 必须是布尔值`);
+      fail("invalid-data-labels", `Chart.dataLabels.${key} must be a boolean`);
     }
   }
   const position = value["position"];
@@ -596,8 +623,8 @@ function labels(
     fail(
       "invalid-data-labels",
       typeof position === "string"
-        ? `不支持数据标签位置 ${position}`
-        : "Chart.dataLabels.position 必须是支持的字符串",
+        ? `Unsupported data label position ${position}`
+        : "Chart.dataLabels.position must be a supported string",
     );
   }
   if (
@@ -607,7 +634,10 @@ function labels(
     kind !== "pie" &&
     kind !== "doughnut"
   ) {
-    fail("invalid-data-labels", `${kind} 图表不支持指定数据标签位置`);
+    fail(
+      "invalid-data-labels",
+      `${kind} chart does not support specifying data label position`,
+    );
   }
   const numberFormat = value["numberFormat"];
   if (
@@ -616,7 +646,7 @@ function labels(
   ) {
     fail(
       "invalid-data-labels",
-      "Chart.dataLabels.numberFormat 必须是非空字符串",
+      "Chart.dataLabels.numberFormat must be a non-empty string",
     );
   }
   if (typeof numberFormat === "string") {
@@ -647,7 +677,8 @@ function plotArea(
   box: { readonly width: number; readonly height: number },
 ): ChartProps["plotArea"] {
   if (value === undefined) return undefined;
-  if (!isRecord(value)) fail("invalid-plot-area", "Chart.plotArea 必须是对象");
+  if (!isRecord(value))
+    fail("invalid-plot-area", "Chart.plotArea must be an object");
   onlyKeys(value, ["left", "top", "width", "height"], "Chart.plotArea");
   const entries = ["left", "top", "width", "height"] as const;
   const result = Object.fromEntries(
@@ -664,7 +695,10 @@ function plotArea(
     result.left + result.width > box.width ||
     result.top + result.height > box.height
   ) {
-    fail("invalid-plot-area", "Chart.plotArea 必须位于图表框内且宽高为正数");
+    fail(
+      "invalid-plot-area",
+      "Chart.plotArea must be inside chart box with positive width and height",
+    );
   }
   return result;
 }
@@ -672,7 +706,7 @@ function plotArea(
 const generalNumberCharacters = "0123456789.,-+eE";
 const dateNameCharacters =
   "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
-// 明确给出简体中文 LCID 时，日期名称使用本地化字形，不按英文字符处理。
+// When simplified Chinese LCID is explicitly specified, date names use localized glyphs instead of English characters.
 const dateNameCharactersByLocale: Readonly<Record<string, string>> = {
   "0804": "星期日一二三四五六七八九十年月",
 };
@@ -686,7 +720,7 @@ function dateNameCharactersForLocale(
   if (languageId === undefined) return undefined;
   const normalizedLanguageId = languageId.padStart(4, "0").toUpperCase();
   if (normalizedLanguageId === "0409") return dateNameCharacters;
-  // 明确指定但未登记名称字形的 locale 不伪装成英文。
+  // Locales explicitly specified without registered name glyphs do not masquerade as English.
   return dateNameCharactersByLocale[normalizedLanguageId];
 }
 
@@ -717,7 +751,7 @@ function hasDigitPlaceholderAfter(
   return false;
 }
 
-/** 申领图表数字格式可能显示的字形，不在构建时模拟应用的数值格式化。 */
+/** Claims glyphs that chart number formatting might display, without simulating application-level number formatting at build time. */
 function numberLabelCharacters(
   numberFormat: string | undefined,
   percent = false,
@@ -1102,7 +1136,7 @@ function validateProps(
 ): ChartProps {
   const kind = props["kind"];
   if (typeof kind !== "string" || !Object.hasOwn(chartOptions, kind)) {
-    fail("unsupported-chart-kind", `不支持图表类型 ${String(kind)}`);
+    fail("unsupported-chart-kind", `Unsupported chart kind ${String(kind)}`);
   }
   const chartKind = kind as ChartKind;
   for (const option of allChartOptions) {
@@ -1110,7 +1144,10 @@ function validateProps(
       props[option] !== undefined &&
       !chartOptions[chartKind].includes(option)
     ) {
-      fail("invalid-chart-option", `${chartKind} 图表不支持 ${option}`);
+      fail(
+        "invalid-chart-option",
+        `${chartKind} chart does not support ${option}`,
+      );
     }
   }
   onlyKeys(
@@ -1144,7 +1181,10 @@ function validateProps(
     (chartKind === "pie" || chartKind === "doughnut") &&
     data.series.length !== 1
   ) {
-    fail("invalid-data", `${chartKind} 图表当前仅支持一个数据系列`);
+    fail(
+      "invalid-data",
+      `${chartKind} chart currently only supports a single data series`,
+    );
   }
   const testId = optionalName(props["testId"], "testId");
   const part = optionalName(props["part"], "part");
@@ -1169,13 +1209,13 @@ function validateProps(
   ) {
     fail(
       "invalid-legend",
-      "Chart.legend 必须是 false、top、bottom、left 或 right",
+      "Chart.legend must be false, top, bottom, left, or right",
     );
   }
   const labelsValue = labels(props["dataLabels"], chartKind);
   const stack = props["stacking"];
   if (stack !== undefined && stack !== "stacked" && stack !== "percent") {
-    fail("invalid-stacking", "Chart.stacking 必须是 stacked 或 percent");
+    fail("invalid-stacking", "Chart.stacking must be stacked or percent");
   }
   const gapWidth = props["gapWidth"];
   if (
@@ -1185,7 +1225,7 @@ function validateProps(
       gapWidth < 0 ||
       gapWidth > 500)
   ) {
-    fail("invalid-gap-width", "Chart.gapWidth 必须在 0 到 500 间");
+    fail("invalid-gap-width", "Chart.gapWidth must be between 0 and 500");
   }
   const overlap = props["overlap"];
   if (
@@ -1195,7 +1235,7 @@ function validateProps(
       overlap < -100 ||
       overlap > 100)
   ) {
-    fail("invalid-overlap", "Chart.overlap 必须在 -100 到 100 间");
+    fail("invalid-overlap", "Chart.overlap must be between -100 and 100");
   }
   const checkedPlotArea = plotArea(props["plotArea"], box);
   const explosion =
@@ -1263,7 +1303,7 @@ function validateProps(
   } as ChartProps;
 }
 
-/** 图表模块校验输入，并生成原生图表部件及其嵌入工作簿。 */
+/** Chart module validates input and generates native chart parts with embedded workbook. */
 export const chartCapability: CapabilityModule = {
   declaration: "rp:chart",
   measureLayout(
@@ -1273,7 +1313,7 @@ export const chartCapability: CapabilityModule = {
     if (input.children.length > 0) {
       fail(
         "unsupported-children",
-        "Chart 不接受子内容；图表文字和数据应放入 data",
+        "Chart does not accept children; chart text and data should be passed in data",
       );
     }
     const style = isRecord(input.props["style"]) ? input.props["style"] : {};
@@ -1298,7 +1338,7 @@ export const chartCapability: CapabilityModule = {
     if (input.children.length > 0) {
       fail(
         "unsupported-children",
-        "Chart 不接受子内容；图表文字和数据应放入 data",
+        "Chart does not accept children; chart text and data should be passed in data",
       );
     }
     const props = validateProps({ ...input.props }, context.layoutBox);
@@ -1341,7 +1381,10 @@ export const chartCapability: CapabilityModule = {
       content(relatedRelationshipIds) {
         const [workbookRelationshipId] = relatedRelationshipIds;
         if (workbookRelationshipId === undefined) {
-          fail("invalid-part", "图表部件需要嵌入工作簿关系");
+          fail(
+            "invalid-part",
+            "Chart part requires embedded workbook relationship",
+          );
         }
         return chartPartXml(
           props,
@@ -1397,7 +1440,7 @@ export const chartCapability: CapabilityModule = {
   },
 };
 
-/** 声明一个由官方能力模块编译为原生图表的对象。 */
+/** Declares an object compiled into a native chart by the official capability module. */
 export function Chart(props: ChartProps): ReactNode {
   return motionElement("rp:chart", props);
 }

@@ -408,7 +408,9 @@ function chartPlot(
       );
     default: {
       const exhaustiveCheck: never = props;
-      throw new Error(`不支持的图表类型: ${JSON.stringify(exhaustiveCheck)}`);
+      throw new Error(
+        `Unsupported chart type: ${JSON.stringify(exhaustiveCheck)}`,
+      );
     }
   }
 }

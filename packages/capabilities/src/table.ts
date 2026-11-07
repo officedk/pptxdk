@@ -37,7 +37,7 @@ import {
   type FontSize,
 } from "./text-service.ts";
 
-/** 列宽以 px 表示；Nfr 按剩余宽度分配，auto 使用共享字体度量。 */
+/** Column width in px; Nfr allocates from remaining width, auto uses shared font measurement. */
 export type TableColumn = number | `${number}fr` | "auto";
 
 export type TableVerticalAlign = "top" | "middle" | "bottom";
@@ -64,7 +64,7 @@ export type TableTextStyle = {
 export type TableStyle = TableTextStyle & LayoutStyle;
 
 export type TableRowStyle = TableTextStyle & {
-  /** 未指定时按本行未合并单元格的文字度量确定行高。 */
+  /** When unspecified, row height is determined from text measurement of unmerged cells in this row. */
   readonly height?: number;
   readonly backgroundColor?: ColorValue;
 };
@@ -89,7 +89,7 @@ export type TableProps = MotionProps &
     readonly link?: LinkTarget;
     readonly x?: number;
     readonly y?: number;
-    /** 为 fr 列提供可分配宽度；省略时所有列按内容自然宽度确定。 */
+    /** Provides allocatable width for fr columns; when omitted, all columns are sized to natural content width. */
     readonly width?: number;
     readonly columns: readonly TableColumn[];
     readonly style?: TableStyle;
@@ -265,7 +265,8 @@ function record(
   label: string,
   path?: string,
 ): Record<string, unknown> {
-  if (!isRecord(value)) fail("invalid-parameter", `${label} 必须是对象`, path);
+  if (!isRecord(value))
+    fail("invalid-parameter", `${label} must be an object`, path);
   return value;
 }
 
@@ -277,7 +278,11 @@ function onlyKeys(
 ): void {
   const unknown = Object.keys(value).find((key) => !allowed.includes(key));
   if (unknown !== undefined) {
-    fail("unknown-parameter", `${label} 含未实现参数 ${unknown}`, path);
+    fail(
+      "unknown-parameter",
+      `${label} contains unsupported parameter ${unknown}`,
+      path,
+    );
   }
 }
 
@@ -288,7 +293,7 @@ function optionalName(
 ): string | undefined {
   if (value === undefined) return undefined;
   if (typeof value !== "string" || value.trim() === "") {
-    fail("invalid-parameter", `${label} 必须是非空字符串`, path);
+    fail("invalid-parameter", `${label} must be a non-empty string`, path);
   }
   return value;
 }
@@ -309,7 +314,7 @@ function coordinate(value: unknown, label: "x" | "y"): number {
   ) {
     fail(
       "invalid-table-geometry",
-      `${label} 必须是 -1000000 到 1000000 间的有限像素数值`,
+      `${label} must be a finite pixel number between -1000000 and 1000000`,
     );
   }
   return value;
@@ -317,7 +322,11 @@ function coordinate(value: unknown, label: "x" | "y"): number {
 
 function positiveSize(value: unknown, label: string, path?: string): number {
   if (typeof value !== "number") {
-    fail("invalid-table-geometry", `${label} 必须是有限正像素数值`, path);
+    fail(
+      "invalid-table-geometry",
+      `${label} must be a finite positive pixel number`,
+      path,
+    );
   }
   try {
     textExtent(value, label);
@@ -341,7 +350,7 @@ function color(
     return theme.resolveColor(value as ColorValue);
   } catch (error) {
     if (error instanceof CapabilityError) {
-      fail(error.code, `${label}：${error.message}`, path);
+      fail(error.code, `${label}: ${error.message}`, path);
     }
     throw error;
   }
@@ -355,7 +364,7 @@ function verticalAlign(
   if (typeof value !== "string" || !verticalAlignments.has(value)) {
     fail(
       "invalid-vertical-align",
-      "verticalAlign 只能是 top、middle 或 bottom",
+      "verticalAlign must be top, middle, or bottom",
       path,
     );
   }
@@ -401,20 +410,20 @@ function mergeTextStyle(
 
 function positiveTrack(value: number, label: string): number {
   if (!Number.isFinite(value) || value <= 0) {
-    fail("invalid-table-column", `${label} 必须大于 0`);
+    fail("invalid-table-column", `${label} must be greater than 0`);
   }
   return value;
 }
 
 function parseTracks(value: unknown): Track[] {
   if (!Array.isArray(value) || value.length === 0) {
-    fail("invalid-table-column", "Table.columns 必须是非空数组");
+    fail("invalid-table-column", "Table.columns must be a non-empty array");
   }
   return value.map((column, index) => {
     if (typeof column === "number") {
       return {
         kind: "px",
-        value: positiveTrack(column, `第 ${index + 1} 列宽`),
+        value: positiveTrack(column, `column ${index + 1} width`),
       };
     }
     if (column === "auto") return { kind: "auto" };
@@ -423,13 +432,16 @@ function parseTracks(value: unknown): Track[] {
       if (fraction !== null) {
         return {
           kind: "fr",
-          value: positiveTrack(Number(fraction[1]), `第 ${index + 1} 列比例`),
+          value: positiveTrack(
+            Number(fraction[1]),
+            `column ${index + 1} fraction`,
+          ),
         };
       }
     }
     fail(
       "invalid-table-column",
-      `第 ${index + 1} 列宽无效；请使用正 px 数值、正 "Nfr" 或 "auto"`,
+      `Invalid width for column ${index + 1}; use positive px number, positive "Nfr", or "auto"`,
     );
   });
 }
@@ -441,7 +453,7 @@ function span(
 ): number {
   if (value === undefined) return 1;
   if (typeof value !== "number" || !Number.isInteger(value) || value < 1) {
-    fail("invalid-table-merge", `${label} 必须是正整数`, path);
+    fail("invalid-table-merge", `${label} must be a positive integer`, path);
   }
   return value;
 }
@@ -473,11 +485,19 @@ function spacing(value: unknown, path: string): Edges {
   const values: readonly unknown[] =
     typeof value === "number" ? [value] : Array.isArray(value) ? value : [];
   if (values.length !== 1 && values.length !== 2 && values.length !== 4) {
-    fail("invalid-table-padding", "padding 必须是数字、二元组或四元组", path);
+    fail(
+      "invalid-table-padding",
+      "padding must be a number, a 2-tuple, or a 4-tuple",
+      path,
+    );
   }
   const number = (entry: unknown): number => {
     if (typeof entry !== "number" || !Number.isFinite(entry) || entry < 0) {
-      fail("invalid-table-padding", "单元格内边距必须是有限非负像素数值", path);
+      fail(
+        "invalid-table-padding",
+        "Cell padding must be a finite non-negative pixel number",
+        path,
+      );
     }
     return entry;
   };
@@ -496,7 +516,11 @@ function cellPadding(style: Record<string, unknown>, path: string): Edges {
     const value = style[name];
     if (value === undefined) return fallback;
     if (typeof value !== "number" || !Number.isFinite(value) || value < 0) {
-      fail("invalid-table-padding", `${name} 必须是有限非负像素数值`, path);
+      fail(
+        "invalid-table-padding",
+        `${name} must be a finite non-negative pixel number`,
+        path,
+      );
     }
     return value;
   };
@@ -522,7 +546,11 @@ function mergeBorder(
       !Number.isFinite(widthValue) ||
       widthValue < 0)
   ) {
-    fail("invalid-table-border", "borderWidth 必须是有限非负像素数值", path);
+    fail(
+      "invalid-table-border",
+      "borderWidth must be a finite non-negative pixel number",
+      path,
+    );
   }
   if (
     lineStyle !== undefined &&
@@ -532,7 +560,7 @@ function mergeBorder(
   ) {
     fail(
       "invalid-table-border",
-      "borderStyle 必须是 solid、dashed 或 dotted",
+      "borderStyle must be solid, dashed, or dotted",
       path,
     );
   }
@@ -556,7 +584,7 @@ function pxExtent(value: number, label: string, path?: string): number {
   if (!Number.isSafeInteger(emu) || emu < 1 || emu > maximumExtentEmu) {
     fail(
       "invalid-table-geometry",
-      `${label} 换算后超出表格可写入的尺寸范围`,
+      `${label} exceeds writable table dimension range after conversion`,
       path,
     );
   }
@@ -641,12 +669,15 @@ function prepareRows(
   for (const child of input.children) {
     if (!("props" in child)) {
       if (child.text.trim() !== "") {
-        fail("invalid-table-structure", "Table 中的文字必须放在 Cell 内");
+        fail(
+          "invalid-table-structure",
+          "Text in Table must be placed inside Cell",
+        );
       }
       continue;
     }
     if (child.type !== "rp:row") {
-      fail("invalid-table-structure", "Table 只能直接包含 Row");
+      fail("invalid-table-structure", "Table can only contain Row directly");
     }
     const rowIndex = rows.length;
     const rowPath = identityPath("row", child.props, rowIndex);
@@ -690,14 +721,18 @@ function prepareRows(
         if (cellChild.text.trim() !== "") {
           fail(
             "invalid-table-structure",
-            "Row 中的文字必须放在 Cell 内",
+            "Text in Row must be placed inside Cell",
             rowPath,
           );
         }
         continue;
       }
       if (cellChild.type !== "rp:cell") {
-        fail("invalid-table-structure", "Row 只能直接包含 Cell", rowPath);
+        fail(
+          "invalid-table-structure",
+          "Row can only contain Cell directly",
+          rowPath,
+        );
       }
       const cellPath = `${rowPath}/${identityPath("cell", cellChild.props, cellIndex)}`;
       cellIndex += 1;
@@ -710,7 +745,7 @@ function prepareRows(
       if (column + colSpan > columns.length) {
         fail(
           "invalid-table-merge",
-          `第 ${rowIndex + 1} 行的单元格超出 ${columns.length} 列范围`,
+          `Cells in row ${rowIndex + 1} exceed ${columns.length} column count`,
           cellPath,
         );
       }
@@ -722,7 +757,7 @@ function prepareRows(
       ) {
         fail(
           "invalid-table-merge",
-          `rowSpan ${rowSpan} 越过表格最后一行`,
+          `rowSpan ${rowSpan} extends past the last row of the table`,
           cellPath,
         );
       }
@@ -731,7 +766,7 @@ function prepareRows(
           if (owners.has(`${row}:${col}`)) {
             fail(
               "conflicting-table-merge",
-              "单元格合并区域与已有单元格重叠",
+              "Cell merge region overlaps with an existing cell",
               cellPath,
             );
           }
@@ -772,7 +807,8 @@ function prepareRows(
     }
   }
 
-  if (rows.length === 0) fail("invalid-table-structure", "Table 至少需要一行");
+  if (rows.length === 0)
+    fail("invalid-table-structure", "Table requires at least one row");
   for (let row = 0; row < rows.length; row += 1) {
     const missing = columns.findIndex(
       (_, column) => !owners.has(`${row}:${column}`),
@@ -780,7 +816,7 @@ function prepareRows(
     if (missing >= 0) {
       fail(
         "invalid-table-structure",
-        `第 ${row + 1} 行第 ${missing + 1} 列没有 Cell 或合并单元格覆盖`,
+        `Row ${row + 1}, column ${missing + 1} is not covered by a Cell or merged cell`,
         rows[row]?.path,
       );
     }
@@ -838,7 +874,7 @@ type TableLayoutModel = {
   readonly claims: { kind: string; key: string; identity: string }[];
 };
 
-/** 供 LayoutPass 与 XML 写出共用的表格轨道和文字尺寸计算。 */
+/** Shared calculation of table tracks and text dimensions used by LayoutPass and XML emission. */
 function tableLayoutModel(
   input: CapabilityInput,
   requestedWidth: number | undefined,
@@ -901,7 +937,7 @@ function tableLayoutModel(
       if (measured.measurement === undefined && measured.text.trim() !== "") {
         fail(
           "font-measurement-unavailable",
-          "auto 列需要可用的字体度量；请提供度量字体或改用明确列宽",
+          "auto columns require available font metrics; provide measurement fonts or use explicit column widths",
           cell.path,
         );
       }
@@ -959,15 +995,18 @@ function tableLayoutModel(
     if (actualWidth > requestedWidth + 0.01) {
       warnings.push({
         code: "table-width-overflow",
-        message: `列的最小宽度合计 ${actualWidth}px 超出声明宽度 ${requestedWidth}px；构建保留列宽`,
+        message: `Sum of column minimum widths ${actualWidth}px exceeds declared width ${requestedWidth}px; build preserves column widths`,
       });
     }
   }
   const widthsEmu = widths.map((width, index) =>
-    pxExtent(width, `第 ${index + 1} 列宽`),
+    pxExtent(width, `column ${index + 1} width`),
   );
   if (widthsEmu.reduce((sum, value) => sum + value, 0) > maximumExtentEmu) {
-    fail("invalid-table-geometry", "表格列宽合计超出可写入范围");
+    fail(
+      "invalid-table-geometry",
+      "Total table column width exceeds writable range",
+    );
   }
   const heights = rows.map((row) => row.height ?? 0);
   const widthOf = (cell: ParsedCell) =>
@@ -994,7 +1033,7 @@ function tableLayoutModel(
     if (result.measurement === undefined && result.text.trim() !== "") {
       fail(
         "font-measurement-unavailable",
-        "自动行高需要可用的字体度量；请提供度量字体或为 Row 指定 height",
+        "Automatic row height requires available font metrics; provide measurement fonts or specify height on Row",
         cell.path,
       );
     }
@@ -1028,10 +1067,13 @@ function tableLayoutModel(
     if (height <= 0) heights[index] = 1;
   });
   const heightsEmu = heights.map((height, index) =>
-    pxExtent(height, `第 ${index + 1} 行高`, rows[index]?.path),
+    pxExtent(height, `row ${index + 1} height`, rows[index]?.path),
   );
   if (heightsEmu.reduce((sum, value) => sum + value, 0) > maximumExtentEmu) {
-    fail("invalid-table-geometry", "表格行高合计超出可写入范围");
+    fail(
+      "invalid-table-geometry",
+      "Total table row height exceeds writable range",
+    );
   }
   return {
     columns,
@@ -1046,7 +1088,7 @@ function tableLayoutModel(
   };
 }
 
-/** 表格模块独立校验行列结构，以原生 graphicFrame 和 a:tbl 写入单一对象。 */
+/** Table module independently validates row and column structure, emitting a single object with native graphicFrame and a:tbl. */
 export const tableCapability: CapabilityModule = {
   declaration: "rp:table",
   measureLayout(
@@ -1149,13 +1191,13 @@ export const tableCapability: CapabilityModule = {
         } else {
           warnings.push({
             code: "table-height-underflow",
-            message: `固定行高合计 ${naturalHeight}px 小于布局高度 ${targetHeight}px；构建保留行高`,
+            message: `Sum of fixed row heights ${naturalHeight}px is less than layout height ${targetHeight}px; build preserves row heights`,
           });
         }
       } else if (targetHeight < naturalHeight - 0.01) {
         warnings.push({
           code: "table-height-overflow",
-          message: `行高合计 ${naturalHeight}px 超出布局高度 ${targetHeight}px；构建保留行高`,
+          message: `Sum of row heights ${naturalHeight}px exceeds layout height ${targetHeight}px; build preserves row heights`,
         });
       }
     }
@@ -1193,7 +1235,10 @@ export const tableCapability: CapabilityModule = {
         if (cell === undefined) {
           const owner = owners.get(`${rowIndex}:${column}`);
           if (owner === undefined) {
-            fail("invalid-table-structure", "表格行存在未声明的单元格");
+            fail(
+              "invalid-table-structure",
+              "Table row contains undeclared cells",
+            );
           }
           const hMerge = column > owner.column ? ' hMerge="1"' : "";
           const vMerge = rowIndex > owner.row ? ' vMerge="1"' : "";
@@ -1255,7 +1300,7 @@ export const tableCapability: CapabilityModule = {
     });
     for (const warning of warnings) {
       if (warning.code === "overset") {
-        warning.message = `${warning.message}（表格单元格保留原始内容和声明尺寸）`;
+        warning.message = `${warning.message} (table cell preserves original content and declared dimensions)`;
       }
     }
     const name =
@@ -1264,7 +1309,10 @@ export const tableCapability: CapabilityModule = {
     try {
       escapedName = xmlEscape(name);
     } catch {
-      fail("invalid-xml-character", "Table.name 含 XML 1.0 不允许的字符");
+      fail(
+        "invalid-xml-character",
+        "Table.name contains characters not allowed in XML 1.0",
+      );
     }
     const width = widths.reduce((sum, value) => sum + value, 0);
     const height = heights.reduce((sum, value) => sum + value, 0);
@@ -1378,17 +1426,17 @@ export const tableCapability: CapabilityModule = {
   },
 };
 
-/** 在 React root 中声明由表格模块处理的可编辑原生表格。 */
+/** Declares an editable native table in the React root handled by the table module. */
 export function Table(props: TableProps): ReactNode {
   return motionElement("rp:table", props);
 }
 
-/** 声明原生表格的一行；未指定高度时按该行内容的真实度量计算。 */
+/** Declares a row of a native table; calculated from actual measurement of row content when height is omitted. */
 export function Row(props: RowProps): ReactNode {
   return createElement("rp:row", props, props.children);
 }
 
-/** 声明表格单元格正文与横向、纵向合并范围。 */
+/** Declares table cell content and horizontal / vertical merge spans. */
 export function Cell(props: CellProps): ReactNode {
   return createElement("rp:cell", props, props.children);
 }

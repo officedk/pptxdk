@@ -5,7 +5,7 @@ import {
   type SlideCapabilityModule,
 } from "@react-pptx/core";
 
-/** 转场时长，单位为毫秒；写入 p14:dur 时按最近整数毫秒取整。 */
+/** Transition duration in milliseconds; rounded to the nearest integer millisecond when written to p14:dur. */
 export type TransitionDuration = number;
 export type TransitionDirection = "left" | "right" | "top" | "bottom";
 export type StripsDirection = "leftUp" | "rightUp" | "leftDown" | "rightDown";
@@ -13,7 +13,7 @@ export type TransitionSpeed = "fast" | "med" | "slow";
 
 type TransitionOptions = { readonly duration?: TransitionDuration };
 
-/** 不依赖扩展命名空间的 Transitional 基础转场。 */
+/** Transitional baseline transition that does not depend on extension namespaces. */
 export type StandardTransition =
   | {
       readonly type: "transition";
@@ -33,7 +33,7 @@ export type StandardTransition =
       readonly from: TransitionDirection;
     };
 
-/** p14 Flip 转场；必须给出供其他消费方选择的基础格式 fallback。 */
+/** p14 Flip transition; must provide a baseline format fallback for other consumers. */
 export type FlipTransition = {
   readonly type: "transition";
   readonly kind: "flip";
@@ -42,7 +42,7 @@ export type FlipTransition = {
   readonly fallback: StandardTransition;
 };
 
-/** p159 Morph 转场；必须给出供其他消费方选择的基础格式 fallback。 */
+/** p159 Morph transition; must provide a baseline format fallback for other consumers. */
 export type MorphTransition = {
   readonly type: "transition";
   readonly kind: "morph";
@@ -51,7 +51,7 @@ export type MorphTransition = {
   readonly fallback: StandardTransition;
 };
 
-/** 页面切换声明；输出目标不允许必需机制时，构建会失败。 */
+/** Slide transition declaration; build fails when target does not permit required mechanisms. */
 export type Transition = StandardTransition | FlipTransition | MorphTransition;
 
 type TransitionRecord = Record<string, unknown> & {
@@ -95,12 +95,12 @@ function declaration<Kind extends Transition["kind"]>(
   };
 }
 
-/** 创建按页面切换声明使用的基础与扩展转场值。 */
+/** Creates baseline and extended transition values used for slide transition declarations. */
 export const transitions = Object.freeze({
-  /** 使用基础 fade 效果；默认采用 slow 速度。 */
+  /** Uses baseline fade effect; defaults to slow speed. */
   fade: (options: TransitionOptions = {}): StandardTransition =>
     declaration("fade", options),
-  /** 使用朝向指定对角方向的基础 strips 效果。 */
+  /** Uses baseline strips effect toward the specified diagonal direction. */
   strips: (
     options: TransitionOptions & { readonly direction?: StripsDirection } = {},
   ): StandardTransition =>
@@ -109,7 +109,7 @@ export const transitions = Object.freeze({
       direction:
         options.direction === undefined ? "rightDown" : options.direction,
     }),
-  /** 使用从页面边缘进入的基础 push 效果。 */
+  /** Uses baseline push effect entering from the slide edge. */
   push: (
     options: TransitionOptions & { readonly from?: TransitionDirection } = {},
   ): StandardTransition =>
@@ -117,7 +117,7 @@ export const transitions = Object.freeze({
       ...options,
       from: options.from === undefined ? "bottom" : options.from,
     }),
-  /** 使用 p14 Flip；必须显式提供基础格式 fallback。 */
+  /** Uses p14 Flip; must explicitly provide a baseline format fallback. */
   flip: (
     options: TransitionOptions & {
       readonly direction?: "left" | "right";
@@ -128,7 +128,7 @@ export const transitions = Object.freeze({
       ...options,
       direction: options.direction === undefined ? "right" : options.direction,
     }),
-  /** 使用 p159 Morph；必须显式提供基础格式 fallback。 */
+  /** Uses p159 Morph; must explicitly provide a baseline format fallback. */
   morph: (
     options: TransitionOptions & {
       readonly by?: "object" | "word" | "character";
@@ -149,7 +149,7 @@ function asRecord(value: unknown): TransitionRecord {
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
     return fail(
       "invalid-transition",
-      "Slide.transition 必须是转场 helper 返回的声明值",
+      "Slide.transition must be a declaration value returned by transition helpers",
     );
   }
   return value as TransitionRecord;
@@ -173,7 +173,7 @@ function durationOf(value: TransitionRecord): number | undefined {
   ) {
     return fail(
       "invalid-transition-duration",
-      "转场 duration 必须是 0 到 Number.MAX_SAFE_INTEGER 之间的有限毫秒数",
+      "Transition duration must be a finite millisecond value between 0 and Number.MAX_SAFE_INTEGER",
     );
   }
   return duration;
@@ -209,7 +209,7 @@ function transitionElement(
     ) {
       return fail(
         "invalid-transition-direction",
-        "strips.direction 必须是四种对角方向之一",
+        "strips.direction must be one of the four diagonal directions",
       );
     }
     return `<p:transition${speedAttribute}${durationAttribute}${advanceAttribute}><p:strips dir="${stripDirections[direction as StripsDirection]}"/></p:transition>`;
@@ -219,7 +219,7 @@ function transitionElement(
     if (typeof from !== "string" || !Object.hasOwn(pushDirections, from)) {
       return fail(
         "invalid-transition-direction",
-        "push.from 必须是 left、right、top 或 bottom",
+        "push.from must be left, right, top, or bottom",
       );
     }
     return `<p:transition${speedAttribute}${durationAttribute}${advanceAttribute}><p:push dir="${pushDirections[from as TransitionDirection]}"/></p:transition>`;
@@ -229,7 +229,7 @@ function transitionElement(
     if (direction !== "left" && direction !== "right") {
       return fail(
         "invalid-transition-direction",
-        "flip.direction 必须是 left 或 right",
+        "flip.direction must be left or right",
       );
     }
     return `<p:transition${speedAttribute}${durationAttribute}${advanceAttribute}><p14:flip dir="${direction === "left" ? "l" : "r"}"/></p:transition>`;
@@ -239,12 +239,15 @@ function transitionElement(
     if (by !== "object" && by !== "word" && by !== "character") {
       return fail(
         "invalid-morph-option",
-        "morph.by 必须是 object、word 或 character",
+        "morph.by must be object, word, or character",
       );
     }
     return `<p:transition${speedAttribute}${durationAttribute}${advanceAttribute}><p159:morph option="${morphOptions[by]}"/></p:transition>`;
   }
-  return fail("unsupported-transition", `不支持转场类型 ${String(kind)}`);
+  return fail(
+    "unsupported-transition",
+    `Unsupported transition kind ${String(kind)}`,
+  );
 }
 
 function standardTransition(
@@ -259,7 +262,7 @@ function standardTransition(
   if (kind !== "fade" && kind !== "strips" && kind !== "push") {
     return fail(
       "invalid-transition-fallback",
-      "fallback 必须是 fade、strips 或 push",
+      "fallback must be fade, strips, or push",
     );
   }
   const allowed =
@@ -270,7 +273,10 @@ function standardTransition(
         : ["type", "kind", "duration", "from"];
   const unknown = unknownParameter(value, allowed);
   if (unknown !== undefined) {
-    return fail("unknown-parameter", `转场 fallback 含未知参数 ${unknown}`);
+    return fail(
+      "unknown-parameter",
+      `Transition fallback contains unknown parameter ${unknown}`,
+    );
   }
   const explicitDuration = durationOf(value);
   const effectiveDuration = explicitDuration ?? inheritedDuration;
@@ -297,7 +303,7 @@ function compileTransition(
   if (transition["type"] !== "transition") {
     return fail(
       "invalid-transition",
-      "Slide.transition 缺少有效的转场声明标记",
+      "Slide.transition is missing a valid transition declaration tag",
     );
   }
   const kind = transition["kind"];
@@ -308,7 +314,10 @@ function compileTransition(
     kind !== "flip" &&
     kind !== "morph"
   ) {
-    return fail("unsupported-transition", `不支持转场类型 ${String(kind)}`);
+    return fail(
+      "unsupported-transition",
+      `Unsupported transition kind ${String(kind)}`,
+    );
   }
   const allowed =
     kind === "fade"
@@ -322,7 +331,10 @@ function compileTransition(
             : ["type", "kind", "duration", "by", "fallback"];
   const unknown = unknownParameter(transition, allowed);
   if (unknown !== undefined) {
-    return fail("unknown-parameter", `转场声明含未知参数 ${unknown}`);
+    return fail(
+      "unknown-parameter",
+      `Transition declaration contains unknown parameter ${unknown}`,
+    );
   }
   const duration = durationOf(transition);
   const requiresFallback = kind === "flip" || kind === "morph";
@@ -331,12 +343,15 @@ function compileTransition(
     if (!Object.hasOwn(transition, "fallback")) {
       return fail(
         "missing-transition-fallback",
-        `${kind} 转场必须显式声明 Transitional fallback`,
+        `${kind} transition must explicitly declare a Transitional fallback`,
       );
     }
     const fallbackValue = asRecord(transition["fallback"]);
     if (fallbackValue["type"] !== "transition") {
-      return fail("invalid-transition-fallback", "转场 fallback 声明无效");
+      return fail(
+        "invalid-transition-fallback",
+        "Invalid transition fallback declaration",
+      );
     }
     fallback = standardTransition(fallbackValue, duration, advanceAfter);
   } else if (duration !== undefined) {
@@ -403,7 +418,7 @@ export const transitionCapability: SlideCapabilityModule = Object.freeze({
     ) {
       return fail(
         "invalid-advance-after",
-        "Slide.advanceAfter 必须是 0 到 4294967295 之间的有限毫秒数",
+        "Slide.advanceAfter must be a finite millisecond value between 0 and 4294967295",
       );
     }
     const transitionValue = input.props["transition"];

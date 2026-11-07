@@ -3,7 +3,7 @@ import { CapabilityError } from "@react-pptx/core";
 export type PresetGeometry = {
   readonly type: "preset";
   readonly name: string;
-  /** 按引导名称（adj、adj1、adj2 等）索引的原始 DrawingML 调整值。 */
+  /** Raw DrawingML adjust values indexed by guide name (adj, adj1, adj2, etc.). */
   readonly adjust?: Readonly<Record<string, number>>;
 };
 
@@ -34,7 +34,7 @@ export type GeometryPath = {
   readonly stroke?: boolean;
 };
 
-/** 自定义几何采用局部坐标，并缩放到布局分配的边界框。 */
+/** Custom geometry uses local coordinates and scales to the bounding box allocated by layout. */
 export type CustomGeometry = {
   readonly type: "custom";
   readonly width: number;
@@ -44,7 +44,7 @@ export type CustomGeometry = {
 
 export type Geometry = string | PresetGeometry | CustomGeometry;
 
-/** ECMA-376 ST_ShapeType 的完整 DrawingML 预设几何枚举。 */
+/** Complete DrawingML preset geometry enumeration from ECMA-376 ST_ShapeType. */
 export const presetGeometryNames = new Set(
   [
     "line lineInv triangle rtTriangle rect diamond parallelogram trapezoid nonIsoscelesTrapezoid pentagon hexagon heptagon octagon decagon dodecagon star4 star5 star6 star7 star8 star10 star12 star16 star24 star32 roundRect round1Rect round2SameRect round2DiagRect snipRoundRect snip1Rect snip2SameRect snip2DiagRect plaque ellipse teardrop homePlate chevron pieWedge pie blockArc donut noSmoking rightArrow leftArrow upArrow downArrow stripedRightArrow notchedRightArrow bentUpArrow leftRightArrow upDownArrow leftUpArrow leftRightUpArrow quadArrow leftArrowCallout rightArrowCallout upArrowCallout downArrowCallout leftRightArrowCallout upDownArrowCallout quadArrowCallout bentArrow uturnArrow circularArrow leftCircularArrow leftRightCircularArrow curvedRightArrow curvedLeftArrow curvedUpArrow curvedDownArrow swooshArrow cube can lightningBolt heart sun moon smileyFace irregularSeal1 irregularSeal2 foldedCorner bevel frame halfFrame corner diagStripe chord arc leftBracket rightBracket leftBrace rightBrace bracketPair bracePair straightConnector1 bentConnector2 bentConnector3 bentConnector4 bentConnector5 curvedConnector2 curvedConnector3 curvedConnector4 curvedConnector5 callout1 callout2 callout3 accentCallout1 accentCallout2 accentCallout3 borderCallout1 borderCallout2 borderCallout3 accentBorderCallout1 accentBorderCallout2 accentBorderCallout3 wedgeRectCallout wedgeRoundRectCallout wedgeEllipseCallout cloudCallout cloud ribbon ribbon2 ellipseRibbon ellipseRibbon2 leftRightRibbon verticalScroll horizontalScroll wave doubleWave plus flowChartProcess flowChartDecision flowChartInputOutput flowChartPredefinedProcess flowChartInternalStorage flowChartDocument flowChartMultidocument flowChartTerminator flowChartPreparation flowChartManualInput flowChartManualOperation flowChartConnector flowChartPunchedCard flowChartPunchedTape flowChartSummingJunction flowChartOr flowChartCollate flowChartSort flowChartExtract flowChartMerge flowChartOfflineStorage flowChartOnlineStorage flowChartMagneticTape flowChartMagneticDisk flowChartMagneticDrum flowChartDisplay flowChartDelay flowChartAlternateProcess flowChartOffpageConnector actionButtonBlank actionButtonHome actionButtonHelp actionButtonInformation actionButtonForwardNext actionButtonBackPrevious actionButtonEnd actionButtonBeginning actionButtonReturn actionButtonDocument actionButtonSound actionButtonMovie gear6 gear9 funnel mathPlus mathMinus mathMultiply mathDivide mathEqual mathNotEqual cornerTabs squareTabs plaqueTabs chartX chartStar chartPlus",
@@ -60,12 +60,17 @@ export function preset(
   adjust?: Readonly<Record<string, number>>,
 ): PresetGeometry {
   if (!presetGeometryNames.has(name)) {
-    throw new CapabilityError("unsupported-geometry", `不支持预设几何 ${name}`);
+    throw new CapabilityError(
+      "unsupported-geometry",
+      `Unsupported preset geometry ${name}`,
+    );
   }
   if (adjust !== undefined) {
     for (const [key, value] of Object.entries(adjust)) {
       if (!/^adj(?:[1-9]\d*)?$/u.test(key) || !Number.isSafeInteger(value)) {
-        invalidGeometry(`几何调整 ${key} 必须是 DrawingML 整数参数`);
+        invalidGeometry(
+          `Geometry adjust ${key} must be an integer DrawingML parameter`,
+        );
       }
     }
   }
@@ -73,8 +78,8 @@ export function preset(
 }
 
 /**
- * 原生 blockArc（环形弧段）。角度单位为度，从三点钟方向起按顺时针计算，与 DrawingML 一致；
- * 厚度表示环宽占图形较短边的比例。
+ * Native blockArc (annular arc segment). Angles are in degrees, measured clockwise from 3 o'clock, consistent with DrawingML;
+ * thickness represents the ring width as a fraction of the shape's shorter side.
  */
 export function blockArc(options: {
   readonly startAngle: number;
@@ -83,7 +88,7 @@ export function blockArc(options: {
 }): PresetGeometry {
   for (const key of ["startAngle", "endAngle", "thickness"] as const) {
     if (!Number.isFinite(options[key])) {
-      invalidGeometry(`blockArc.${key} 必须是有限数值`);
+      invalidGeometry(`blockArc.${key} must be a finite number`);
     }
   }
   const angle = (degrees: number) =>
@@ -91,59 +96,59 @@ export function blockArc(options: {
   return preset("blockArc", {
     adj1: angle(options.startAngle),
     adj2: angle(options.endAngle),
-    // 即使数值超出预设的常见引导范围，也保留合法声明；形状编译器会报告范围警告，不会静默截断。
+    // Preserves valid declarations even when values exceed the common guide range of the preset; the shape compiler reports a range warning rather than silently truncating.
     adj3: Math.round(options.thickness * 100000),
   });
 }
 
 export type PathOptions = {
-  /** 局部坐标空间的尺寸，类似从 0,0 开始的 SVG viewBox。 */
+  /** Dimensions of the local coordinate space, similar to an SVG viewBox starting from 0,0. */
   readonly viewBox: readonly [width: number, height: number];
   readonly fill?: boolean;
   readonly stroke?: boolean;
-  /** SVG 路径数据的填充规则，见 `path`。 */
+  /** Fill rule for SVG path data; see `path`. */
   readonly fillRule?: "nonzero" | "evenodd";
 };
 
 /**
- * 根据 SVG 路径数据创建自定义几何。一个字符串中的多个子路径构成同一原生路径；分别绘制的路径请传入数组。
+ * Creates custom geometry from SVG path data. Multiple subpaths in a single string constitute the same native path; pass an array for separately stroked paths.
  *
- * PPTX 没有填充规则，因此不同应用程序会各自解释。默认 `fillRule: "nonzero"` 时按原样写入路径；
- * 在所有应用程序中，方向与外轮廓相反的内层子路径都会形成孔洞。设置为 `"evenodd"` 时，子路径会按嵌套
- * 深度交替方向，因此各应用程序显示偶奇填充结果。彼此重叠但未嵌套，或自相交的子路径无法通过这种方式保持一致。
+ * PPTX does not have fill rules, so different applications interpret them individually. The default `fillRule: "nonzero"` writes paths as-is;
+ * in all applications, inner subpaths whose direction opposes the outer contour form holes. When set to `"evenodd"`, subpaths alternate directions according to nesting
+ * depth, allowing applications to display even-odd fill results. Subpaths that overlap without nesting, or self-intersecting subpaths, cannot achieve consistency this way.
  */
 export function path(
   data: string | readonly string[],
   options: PathOptions,
 ): CustomGeometry {
   if (options.fill !== undefined && typeof options.fill !== "boolean") {
-    invalidGeometry("path.fill 必须是布尔值");
+    invalidGeometry("path.fill must be a boolean");
   }
   if (options.stroke !== undefined && typeof options.stroke !== "boolean") {
-    invalidGeometry("path.stroke 必须是布尔值");
+    invalidGeometry("path.stroke must be a boolean");
   }
   if (
     !Array.isArray(options.viewBox) ||
     options.viewBox.length !== 2 ||
     !options.viewBox.every((value) => Number.isFinite(value) && value > 0)
   ) {
-    invalidGeometry("path.viewBox 必须由两个有限正数构成");
+    invalidGeometry("path.viewBox must consist of two finite positive numbers");
   }
   if (
     options.fillRule !== undefined &&
     !["nonzero", "evenodd"].includes(options.fillRule)
   ) {
-    invalidGeometry("path.fillRule 只能是 nonzero 或 evenodd");
+    invalidGeometry("path.fillRule must be nonzero or evenodd");
   }
   if (typeof data !== "string" && !Array.isArray(data)) {
-    invalidGeometry("path data 必须是 SVG 字符串或字符串数组");
+    invalidGeometry("path data must be an SVG string or an array of strings");
   }
   const list = typeof data === "string" ? [data] : data;
   if (
     list.length === 0 ||
     list.some((item) => typeof item !== "string" || item.trim() === "")
   ) {
-    invalidGeometry("path 必须至少含一个非空 SVG 路径");
+    invalidGeometry("path must contain at least one non-empty SVG path");
   }
   return {
     type: "custom",
@@ -166,7 +171,7 @@ export function path(
 type Point = { readonly x: number; readonly y: number };
 type Segment = Extract<PathCommand, { op: "L" | "C" | "Q" }>;
 
-/** 按 Z 命令拆分子路径；Z 后继续绘制时，从上一个子路径的起点开始。 */
+/** Splits subpaths by Z commands; when drawing continues after Z, it starts from the previous subpath start point. */
 function subpaths(commands: readonly PathCommand[]): PathCommand[][] {
   const result: PathCommand[][] = [];
   let current: PathCommand[] | undefined;
@@ -188,7 +193,7 @@ function subpaths(commands: readonly PathCommand[]): PathCommand[][] {
   return result;
 }
 
-/** 将子路径表示为多边形，并对曲线采样。 */
+/** Represents a subpath as a polygon and samples curves. */
 function outline(subpath: readonly PathCommand[]): Point[] {
   const points: Point[] = [];
   let x = 0;
@@ -248,7 +253,7 @@ function contains(polygon: readonly Point[], point: Point): boolean {
   return inside;
 }
 
-/** 反向绘制同一子路径。 */
+/** Draws the same subpath in reverse order. */
 function reversed(subpath: readonly PathCommand[]): PathCommand[] {
   const first = subpath[0];
   if (first === undefined || first.op !== "M") return [...subpath];
@@ -297,7 +302,7 @@ function reversed(subpath: readonly PathCommand[]): PathCommand[] {
   return result;
 }
 
-/** 外轮廓按一种方向绘制，孔洞反向绘制，孔洞中的岛屿再恢复为外轮廓方向。 */
+/** Outer contours are drawn in one direction, holes are reversed, and islands inside holes restore outer contour direction. */
 function alternateByNesting(commands: readonly PathCommand[]): PathCommand[] {
   const parts = subpaths(commands);
   const outlines = parts.map(outline);
@@ -321,20 +326,24 @@ const tokenPattern =
 
 export function parseSvgPath(data: string): PathCommand[] {
   if (typeof data !== "string" || data.trim() === "") {
-    invalidGeometry("SVG 路径必须是非空字符串");
+    invalidGeometry("SVG path must be a non-empty string");
   }
   const tokens: string[] = [];
   let cursor = 0;
   for (const match of data.matchAll(tokenPattern)) {
     const index = match.index;
     if (!/^[\s,]*$/u.test(data.slice(cursor, index))) {
-      invalidGeometry(`SVG 路径含不支持的字符：${data.slice(cursor, index)}`);
+      invalidGeometry(
+        `SVG path contains unsupported character: ${data.slice(cursor, index)}`,
+      );
     }
     tokens.push(match[0]);
     cursor = index + match[0].length;
   }
   if (!/^[\s,]*$/u.test(data.slice(cursor)) || tokens.length === 0) {
-    invalidGeometry(`SVG 路径含不支持或缺失的参数：${data.slice(cursor)}`);
+    invalidGeometry(
+      `SVG path contains unsupported or missing parameter: ${data.slice(cursor)}`,
+    );
   }
   const commands: PathCommand[] = [];
   let index = 0;
@@ -352,13 +361,14 @@ export function parseSvgPath(data: string): PathCommand[] {
     if (token === undefined || isCommand(token))
       throw new Error(`Invalid SVG path data: ${data}`);
     const value = Number(token);
-    if (!Number.isFinite(value)) invalidGeometry("SVG 路径坐标必须是有限数值");
+    if (!Number.isFinite(value))
+      invalidGeometry("SVG path coordinate must be a finite number");
     return value;
   };
   const flag = (name: string) => {
     const token = tokens[index];
     if (token !== "0" && token !== "1") {
-      invalidGeometry(`SVG 弧线 ${name} 必须是单个 0 或 1`);
+      invalidGeometry(`SVG arc ${name} must be a single 0 or 1`);
     }
     index += 1;
     return token === "1";
@@ -368,7 +378,9 @@ export function parseSvgPath(data: string): PathCommand[] {
       command = tokens[index] ?? "";
       index += 1;
     } else if (command === "") {
-      invalidGeometry("SVG close 命令 Z 后不能跟随隐式参数");
+      invalidGeometry(
+        "SVG close command Z cannot be followed by implicit parameters",
+      );
     }
     const relative = command === command.toLowerCase();
     const upper = command.toUpperCase();
@@ -465,14 +477,15 @@ export function parseSvgPath(data: string): PathCommand[] {
         command = "";
         break;
       default:
-        invalidGeometry(`SVG 路径命令 ${command} 不受支持`);
+        invalidGeometry(`SVG path command ${command} is not supported`);
     }
   }
-  if (commands[0]?.op !== "M") invalidGeometry("SVG 路径必须以移动命令 M 开始");
+  if (commands[0]?.op !== "M")
+    invalidGeometry("SVG path must start with move command M");
   return commands;
 }
 
-/** 按 SVG 实现说明 F.6 将椭圆弧转换为三次贝塞尔曲线。 */
+/** Converts elliptical arcs to cubic Bezier curves per SVG implementation note F.6. */
 function arcToCubics(
   x1: number,
   y1: number,

@@ -49,7 +49,7 @@ export type MotionTargetRange =
       readonly categoryIndex: number;
     };
 
-/** 未知起点约束指向效果、同对象效果集合或真实作用域的起止时刻。 */
+/** Unknown start constraint points to the start or end time of an effect, effect collection for the same object, or real scope. */
 export type MotionStartDependency =
   | {
       readonly targetId: number;
@@ -74,28 +74,28 @@ export type Effect = {
   readonly type: "effect";
   readonly kind: "entrance" | "emphasis";
   readonly preset: EffectPreset;
-  /** 单次原生行为时长；逐词或逐字展开的完成总长保持未知。 */
+  /** Duration of a single native behavior; total completion length when unfolded per-word or per-letter remains unknown. */
   readonly duration: number;
   readonly delay: number;
   readonly from?: MotionDirection | number;
   readonly fromColor?: string;
   readonly toColor?: string;
   readonly easing?: Easing;
-  /** 文字或图表粒度；spin 中表示以度为单位的相对角度。 */
+  /** Text or chart granularity; in spin, represents relative angle in degrees. */
   readonly by?: MotionGranularity | number;
-  /** 逐词或逐字效果中，相邻原生单元的启动间隔。 */
+  /** Launch interval between adjacent native units in per-word or per-letter effects. */
   readonly intervalMs?: number;
 };
 
 export type MotionScopeMode = "parallel" | "sequence" | "stagger";
 
-/** 作用域自然完成状态；无自然完成与时长未知保持区分。 */
+/** Natural completion state of a scope; distinguishes between no natural completion and unknown duration. */
 export type MotionCompletionState =
   | "known"
   | "unknown"
   | "no-natural-completion";
 
-/** 指向某个显式编排作用域边界或其公开命名时刻。 */
+/** Points to an explicit orchestration scope boundary or its publicly named moment. */
 export type MotionMoment = {
   readonly type: "motion-moment";
   readonly scope: string;
@@ -111,7 +111,7 @@ export type MotionMomentOffset = {
 
 export type MotionTiming = MotionMoment | MotionMomentOffset;
 
-/** 一次 hook 调用代表一个组件实例的作用域身份；同名组件实例各有独立身份。 */
+/** A hook invocation represents the scope identity of a component instance; instances with the same component name each have an independent identity. */
 export type MotionScopeHandle = {
   readonly type: "motion-scope-handle";
   readonly identity: string;
@@ -134,7 +134,7 @@ export type EmphasisEffectDeclaration =
   | EmphasisEffect
   | RepeatedEffect<EmphasisEffect>;
 
-/** 一次性填充色变化；终态保持到页面退出，仅适用于带实色填充的 Shape。 */
+/** One-time fill color transition; terminal state is preserved until slide exit, applicable only to Shapes with solid fill. */
 export type FillColorOptions = Pick<
   EffectOptions,
   "duration" | "delay" | "easing"
@@ -144,15 +144,15 @@ export type FillColorOptions = Pick<
 };
 
 export type BreatheOptions = {
-  /** 完整的暗→亮→暗周期，单位为偶数毫秒。 */
+  /** Complete dark->light->dark cycle in even milliseconds. */
   readonly period: number;
-  /** 周期起点的暗色；播放开始时动画从此颜色起步。 */
+  /** Dark color at cycle start; playback begins from this color. */
   readonly from: string;
-  /** 半周期终点的亮色。 */
+  /** Light color at half-cycle end. */
   readonly to: string;
-  /** 相对所属触发起点的延迟，单位为毫秒。 */
+  /** Delay relative to the trigger start, in milliseconds. */
   readonly delay?: number;
-  /** 加速和减速各占完整周期的比例，合计不能超过 1。 */
+  /** Proportions of full cycle for acceleration and deceleration; sum cannot exceed 1. */
   readonly easing?: Easing;
 };
 
@@ -162,39 +162,39 @@ export type BreatheEffect = EmphasisEffect & {
   readonly toColor: string;
 };
 
-/** repeat() 校验后的内部效果；作者必须通过 RepeatedEffect 声明轮数。 */
+/** Internal effect validated after repeat(); authors must declare round count via RepeatedEffect. */
 export type NormalizedEffect = Effect & {
   readonly repeatCount?: RepeatCount;
 };
 
 export type EffectOptions = {
-  /** 单次效果行为时长，单位为毫秒；细粒度展开的完成总长不由此值表示。 */
+  /** Single effect behavior duration in milliseconds; fine-grained unfolding completion length is not represented by this value. */
   readonly duration?: number;
-  /** 相对所属触发起点的延迟，单位为毫秒。 */
+  /** Delay relative to the trigger start, in milliseconds. */
   readonly delay?: number;
-  /** 加速和减速各占时长的比例，合计不能超过 1。 */
+  /** Proportions of duration for acceleration and deceleration; sum cannot exceed 1. */
   readonly easing?: Easing;
-  /** 文字逐词或逐字启动间隔；省略时为单次行为时长的十分之一。 */
+  /** Text per-word or per-letter launch interval; defaults to one tenth of single behavior duration when omitted. */
   readonly intervalMs?: number;
-  /** 按原生段落、词、字、图表系列或分类逐项展开。 */
+  /** Unfold item by item by native paragraph, word, letter, chart series, or category. */
   readonly by?: MotionGranularity;
 };
 
 export type SpinOptions = Omit<EffectOptions, "by"> & {
-  /** 字符串按文字粒度展开；数字表示相对角度，负数沿相反方向旋转。 */
+  /** String unfolds by text granularity; number represents relative angle, negative rotates in opposite direction. */
   readonly by?: MotionGranularity | number;
-  /** 从指定角度旋转回对象原生朝向。 */
+  /** Rotates back to object native orientation from specified angle. */
   readonly from?: number;
 };
 
 export type MotionProps = {
-  /** 对象进入效果；数组中的效果从同一触发起点并行开始。 */
+  /** Object entrance effects; effects in array start in parallel from the same trigger start. */
   readonly enter?:
     | EntranceEffectDeclaration
     | readonly EntranceEffectDeclaration[];
-  /** 对已显示对象应用的强调效果。 */
+  /** Emphasis effect applied to already displayed object. */
   readonly emphasis?: EmphasisEffectDeclaration;
-  /** 设为 false 可禁用此对象及其后代的动效。 */
+  /** Set to false to disable motion for this object and its descendants. */
   readonly motion?: boolean;
 };
 
@@ -211,30 +211,30 @@ export type MotionScopeDeclaration = {
 };
 
 export type MotionScopeProps = {
-  /** 由当前组件实例的 useMotionScope() 创建。 */
+  /** Created by useMotionScope() of the current component instance. */
   readonly scope: MotionScopeHandle;
-  /** 子成员的组合关系，缺省为并行。 */
+  /** Composition relationship of child members, defaults to parallel. */
   readonly mode?: MotionScopeMode;
-  /** stagger 每个直接成员的启动间隔，单位为毫秒。 */
+  /** Stagger launch interval for each direct member, in milliseconds. */
   readonly each?: number;
-  /** 相对父作用域起点的偏移，单位为毫秒。 */
+  /** Offset relative to parent scope start, in milliseconds. */
   readonly delay?: number;
-  /** 从另一个作用域时刻启动，可用 after() 表达偏移。 */
+  /** Launch from another scope moment; after() can be used to express offset. */
   readonly startAt?: MotionTiming;
-  /** 将本作用域起点发布到同属一条编排的命名时刻。 */
+  /** Publish this scope's start time to named moment belonging to the same orchestration. */
   readonly publishStart?: MotionMoment;
-  /** 将本作用域完成时刻发布到同属一条编排的命名时刻。 */
+  /** Publish this scope's completion time to named moment belonging to the same orchestration. */
   readonly publishEnd?: MotionMoment;
-  /** 设为 false 可禁用本作用域及其后代动效。 */
+  /** Set to false to disable motion for this scope and its descendants. */
   readonly motion?: boolean;
   readonly children?: ReactNode;
 };
 
-/** 显式作用域的布局容器外观；Box 本身仍不生成原生对象。 */
+/** Layout container appearance of an explicit scope; Box itself still does not generate a native object. */
 export type BoxProps = CoreBoxProps & Pick<MotionProps, "enter" | "motion">;
 
 export type StepProps = {
-  /** 相同正整数的点击步合并；省略时每个 Step 独立触发。 */
+  /** Merge click steps with the same positive integer; each Step triggers independently when omitted. */
   readonly n?: number;
   readonly children?: ReactNode;
 };
@@ -271,7 +271,7 @@ function moment(
   });
 }
 
-/** 在任意时刻句柄之后安排一个明确的非负偏移。 */
+/** Schedules an explicit non-negative offset after any moment handle. */
 export function after(
   timing: MotionTiming,
   offsetMs: number,
@@ -285,7 +285,7 @@ export function after(
   });
 }
 
-/** 为当前 React 组件实例创建显式编排作用域和可发布的命名时刻。 */
+/** Creates explicit orchestration scope and publishable named moments for current React component instance. */
 export function useMotionScope(): MotionScopeHandle {
   const identity = useId();
   const cue = (name: string): MotionMoment => moment(identity, "named", name);
@@ -298,7 +298,7 @@ export function useMotionScope(): MotionScopeHandle {
   });
 }
 
-/** 显式编排作用域只声明时序关系，不创建布局或原生对象。 */
+/** Explicit orchestration scope only declares timing relationships without creating layout or native objects. */
 export function MotionScope(props: MotionScopeProps): ReactNode {
   const { children, ...publicProps } = props;
   const {
@@ -340,7 +340,7 @@ export function MotionScope(props: MotionScopeProps): ReactNode {
   );
 }
 
-/** 可见 Box 的自有背景和未自带入场的后代可继承默认入场。 */
+/** Visible Box's own background and descendants without entrance effects can inherit default entrance. */
 export function Box({
   enter,
   motion,
@@ -396,14 +396,14 @@ function declaration(
   }) as Effect;
 }
 
-/** 创建纯淡入声明；缺省时长为 500 毫秒。 */
+/** Creates pure fade-in declaration; default duration is 500 ms. */
 export function fade(options: EffectOptions = {}): EntranceEffect {
   return declaration("entrance", "fade", options, {
     duration: 500,
   }) as EntranceEffect;
 }
 
-/** 从指定边缘擦入；缺省方向为 bottom。 */
+/** Wipes in from specified edge; default direction is bottom. */
 export function wipe(
   options: EffectOptions & { readonly from?: MotionDirection } = {},
 ): EntranceEffect {
@@ -418,14 +418,14 @@ export function wipe(
   ) as EntranceEffect;
 }
 
-/** 从原点放大并淡入。 */
+/** Zooms in from origin and fades in. */
 export function zoom(options: EffectOptions = {}): EntranceEffect {
   return declaration("entrance", "zoom", options, {
     duration: 500,
   }) as EntranceEffect;
 }
 
-/** 从指定页面边缘飞入；缺省方向为 bottom。 */
+/** Flies in from specified slide edge; default direction is bottom. */
 export function fly(
   options: EffectOptions & { readonly from?: MotionDirection } = {},
 ): EntranceEffect {
@@ -440,35 +440,35 @@ export function fly(
   ) as EntranceEffect;
 }
 
-/** 淡入并向上浮动。 */
+/** Fades in and floats up. */
 export function floatUp(options: EffectOptions = {}): EntranceEffect {
   return declaration("entrance", "floatUp", options, {
     duration: 500,
   }) as EntranceEffect;
 }
 
-/** 淡入并从上方向下浮动；缺省时长为 500 毫秒。 */
+/** Fades in and floats down from above; default duration is 500 ms. */
 export function floatDown(options: EffectOptions = {}): EntranceEffect {
   return declaration("entrance", "floatDown", options, {
     duration: 500,
   }) as EntranceEffect;
 }
 
-/** 放大、旋转并淡入。 */
+/** Zooms, rotates, and fades in. */
 export function spinIn(options: EffectOptions = {}): EntranceEffect {
   return declaration("entrance", "spinIn", options, {
     duration: 500,
   }) as EntranceEffect;
 }
 
-/** 从中心线展开。 */
+/** Stretches from center line. */
 export function stretch(options: EffectOptions = {}): EntranceEffect {
   return declaration("entrance", "stretch", options, {
     duration: 500,
   }) as EntranceEffect;
 }
 
-/** 从指定角度旋转回初始朝向，或用有符号 by 相对初始角度旋转；默认 from 为 360 度。 */
+/** Rotates back to initial orientation from specified angle, or rotates relative to initial angle using signed by; default from is 360 degrees. */
 export function spin(options: SpinOptions = {}): EmphasisEffect {
   return declaration(
     "emphasis",
@@ -483,7 +483,7 @@ export function spin(options: SpinOptions = {}): EmphasisEffect {
   ) as EmphasisEffect;
 }
 
-/** 从 from 变为 to 并保持终态；不重复、不反向，缺省时长为 500 毫秒。 */
+/** Changes from from to to and maintains terminal state; non-repeating, non-reversing, default duration is 500 ms. */
 export function fillColor(options: FillColorOptions): EmphasisEffect {
   const { from, to, ...timing } = options;
   return Object.freeze({
@@ -494,7 +494,7 @@ export function fillColor(options: FillColorOptions): EmphasisEffect {
   });
 }
 
-// 保留结构化 JavaScript 输入中的额外选项，交由正式效果校验诊断。
+// Retains extra options from structured JavaScript input for formal effect validation diagnostics.
 const breatheUnknownParameters = Symbol("breathe unknown parameters");
 const breatheOptionNames = new Set([
   "period",
@@ -506,7 +506,7 @@ const breatheOptionNames = new Set([
   "intervalMs",
 ]);
 
-/** 声明 Shape 填充色暗→亮的半周期；原生 autoRev 完成反向，形成完整周期。 */
+/** Declares dark->light half-cycle of Shape fill color; native autoRev reverses it to form a full cycle. */
 export function breathe(options: BreatheOptions): BreatheEffect {
   const { period, delay = 0, from, to } = options;
   const optionRecord = options as unknown as Record<string, unknown>;
@@ -536,7 +536,7 @@ export function breathe(options: BreatheOptions): BreatheEffect {
   }) as unknown as BreatheEffect;
 }
 
-/** 将受支持效果包装为指定总轮数；forever 只适用于 breathe。 */
+/** Wraps supported effect with specified total rounds; forever applies only to breathe. */
 export function repeat<E extends Effect>(
   effect: E,
   count: RepeatCount,
@@ -544,7 +544,7 @@ export function repeat<E extends Effect>(
   return Object.freeze({ type: "repeated-effect", effect, count });
 }
 
-/** 一次点击触发一组对象；相同编号的声明共用点击步。 */
+/** A single click triggers a group of objects; declarations with the same number share a click step. */
 export function Step(props: StepProps): ReactNode {
   const { children, ...publicProps } = props;
   const { n } = publicProps;
@@ -565,7 +565,7 @@ export function Step(props: StepProps): ReactNode {
   );
 }
 
-/** 将当前 Step 与禁用状态传给正式原生对象宿主节点。 */
+/** Passes current Step and disabled status to formal native object host node. */
 export function motionElement(
   type: string,
   props: MotionProps & { readonly children?: ReactNode },
@@ -626,12 +626,12 @@ export type MotionEffectObservation = {
   };
   readonly kind: Effect["kind"];
   readonly preset: EffectPreset;
-  /** 单次效果时长；breathe 表示完整往返周期，不代表细粒度展开总长。 */
+  /** Single effect duration; breathe indicates full round-trip cycle, not representing total length of fine-grained unfolding. */
   readonly durationMs: number;
-  /** 完整呼吸周期的总轮数；forever 表示本页持续且无自然完成。 */
+  /** Total rounds of complete breathe cycle; forever indicates persisting on current slide with no natural completion. */
   readonly repeatCount?: RepeatCount;
   readonly delayMs: number;
-  /** 文字或图表粒度；spin 中为以度表示的相对旋转角。 */
+  /** Text or chart granularity; in spin, represents relative rotation angle in degrees. */
   readonly by?: MotionGranularity | number;
   readonly intervalMs?: number;
   readonly from?: MotionDirection | number;
@@ -642,7 +642,7 @@ export type MotionEffectObservation = {
   readonly endMs?: number;
   readonly completion?: Exclude<MotionCompletionState, "known">;
   readonly startAfter?: MotionStartDependency;
-  /** 未知起点由多项真实时刻共同约束时，列出全部来源及相对偏移。 */
+  /** When unknown start is jointly constrained by multiple real moments, lists all sources and relative offsets. */
   readonly startAfterAll?: readonly MotionStartDependency[];
 };
 
@@ -652,7 +652,7 @@ export type MotionStepObservation = {
   readonly effects: readonly MotionEffectObservation[];
 };
 
-/** 一个逻辑 Group 效果在 PPTX 中对应的真实成员效果与 timing 身份。 */
+/** Corresponding real member effects and timing identity in PPTX for a logical Group effect. */
 export type MotionNativeProjection = {
   readonly logicalTargetId: number;
   readonly logicalEffectIndex: number;
@@ -673,7 +673,7 @@ export type MotionScopeObservation = {
   readonly endMs?: number;
   readonly completion: MotionCompletionState;
   readonly startAfter?: MotionStartDependency;
-  /** 未知起点由多项真实时刻共同约束时，列出全部来源及相对偏移。 */
+  /** When unknown start is jointly constrained by multiple real moments, lists all sources and relative offsets. */
   readonly startAfterAll?: readonly MotionStartDependency[];
   readonly members: readonly (
     | { readonly kind: "scope"; readonly id: string }
@@ -693,7 +693,7 @@ function fail(code: string, message: string): never {
 
 function validateMotionFlag(value: unknown): void {
   if (value !== undefined && typeof value !== "boolean") {
-    fail("invalid-motion", "motion 必须是布尔值");
+    fail("invalid-motion", "motion must be a boolean");
   }
 }
 
@@ -752,7 +752,7 @@ const motionGranularities = new Set<MotionGranularity>([
   "category",
 ]);
 
-// ST_TLTime 使用 unsignedInt；repeatCount 的单位是千分之一轮。
+// ST_TLTime uses unsignedInt; repeatCount unit is one thousandth of a round.
 export const maximumTimeNodeValue = 4_294_967_295;
 const maxRepeatCount = Math.floor(maximumTimeNodeValue / 1000);
 
@@ -762,7 +762,7 @@ function normalizeColor(
   code = "invalid-breathe-color",
 ): string {
   if (typeof value !== "string" || !/^#[0-9a-f]{6}$/iu.test(value)) {
-    return fail(code, `${name} 必须是 #RRGGBB 颜色`);
+    return fail(code, `${name} must be a #RRGGBB color`);
   }
   return value.toUpperCase();
 }
@@ -796,11 +796,14 @@ function validatedEffect(
     if (unknownRepeatField !== undefined) {
       return fail(
         "unknown-parameter",
-        `repeat 声明含未实现参数 ${unknownRepeatField}`,
+        `repeat declaration contains unimplemented parameter ${unknownRepeatField}`,
       );
     }
     if (!isRecord(value["effect"]) || value["effect"]["type"] !== "effect") {
-      return fail("invalid-repeat", "repeat 必须直接包装单个效果声明");
+      return fail(
+        "invalid-repeat",
+        "repeat must directly wrap a single effect declaration",
+      );
     }
     repeatCount = value["count"] as RepeatCount;
     effectValue = value["effect"];
@@ -809,8 +812,8 @@ function validatedEffect(
     return fail(
       "invalid-motion",
       expected === "entrance"
-        ? "enter 必须是 fade()、wipe() 等入场效果声明"
-        : "emphasis 必须是 spin() 等强调效果声明",
+        ? "enter must be an entrance effect declaration such as fade() or wipe()"
+        : "emphasis must be an emphasis effect declaration such as spin()",
     );
   }
   const unsupportedBreatheParameters = (
@@ -821,26 +824,32 @@ function validatedEffect(
   if (unsupportedBreatheParameters?.length) {
     return fail(
       "unknown-parameter",
-      `breathe 声明含未实现参数 ${unsupportedBreatheParameters[0]}`,
+      `breathe declaration contains unimplemented parameter ${unsupportedBreatheParameters[0]}`,
     );
   }
   const unknown = Object.keys(effectValue).find(
     (key) => !(effectKeys as readonly string[]).includes(key),
   );
   if (unknown !== undefined) {
-    return fail("unknown-parameter", `动画效果含未实现参数 ${unknown}`);
+    return fail(
+      "unknown-parameter",
+      `Animation effect contains unimplemented parameter ${unknown}`,
+    );
   }
   if (effectValue["kind"] !== expected) {
     return fail(
       "invalid-motion",
       expected === "entrance"
-        ? `${String(effectValue["preset"])}() 是强调效果，应传给 emphasis`
-        : `${String(effectValue["preset"])}() 是入场效果，应传给 enter`,
+        ? `${String(effectValue["preset"])}() is an emphasis effect and should be passed to emphasis`
+        : `${String(effectValue["preset"])}() is an entrance effect and should be passed to enter`,
     );
   }
   const preset = effectValue["preset"];
   if (typeof preset !== "string" || !presets.has(preset as EffectPreset)) {
-    return fail("unsupported-effect", `不支持动画效果 ${String(preset)}`);
+    return fail(
+      "unsupported-effect",
+      `Unsupported animation effect ${String(preset)}`,
+    );
   }
   if (
     preset !== "breathe" &&
@@ -849,8 +858,8 @@ function validatedEffect(
     return fail(
       "invalid-motion",
       expected === "entrance"
-        ? `${preset}() 是强调效果，应传给 emphasis`
-        : `${preset}() 是入场效果，应传给 enter`,
+        ? `${preset}() is an emphasis effect and should be passed to emphasis`
+        : `${preset}() is an entrance effect and should be passed to enter`,
     );
   }
   const duration = effectValue["duration"];
@@ -862,7 +871,10 @@ function validatedEffect(
     Math.round(duration) < 1 ||
     !Number.isSafeInteger(Math.round(duration))
   ) {
-    return fail("invalid-duration", "动画时长必须能写成有限正整数毫秒");
+    return fail(
+      "invalid-duration",
+      "Animation duration must be writable as a finite positive integer in milliseconds",
+    );
   }
   if (
     typeof delay !== "number" ||
@@ -871,10 +883,16 @@ function validatedEffect(
     !Number.isSafeInteger(Math.round(delay)) ||
     !Number.isFinite(Math.round(delay) + Math.round(duration))
   ) {
-    return fail("invalid-delay", "动画延迟必须能写成有限非负整数毫秒");
+    return fail(
+      "invalid-delay",
+      "Animation delay must be writable as a finite non-negative integer in milliseconds",
+    );
   }
   if (preset === "breathe" && Math.round(delay) > maximumTimeNodeValue) {
-    return fail("invalid-delay", "breathe 延迟超出原生计时值范围");
+    return fail(
+      "invalid-delay",
+      "breathe delay exceeds native timing value range",
+    );
   }
   const by = effectValue["by"];
   const interval = effectValue["intervalMs"];
@@ -888,18 +906,24 @@ function validatedEffect(
     ) {
       return fail(
         "invalid-rotation",
-        "spin 的 by 换算后必须落在有符号 32 位角度范围内",
+        "spin by converted value must fall within signed 32-bit angle range",
       );
     }
     if (effectValue["from"] !== undefined) {
-      return fail("invalid-motion", "spin 的 from 与 by 不能同时声明");
+      return fail(
+        "invalid-motion",
+        "spin from and by cannot be declared simultaneously",
+      );
     }
   } else if (
     by !== undefined &&
     (typeof by !== "string" ||
       !motionGranularities.has(by as MotionGranularity))
   ) {
-    return fail("invalid-motion", "by 必须是受支持的文字或图表粒度");
+    return fail(
+      "invalid-motion",
+      "by must be a supported text or chart granularity",
+    );
   }
   if (
     interval !== undefined &&
@@ -910,7 +934,7 @@ function validatedEffect(
   ) {
     return fail(
       "invalid-motion-interval",
-      "intervalMs 仅适用于逐词或逐字效果，且必须是正整数毫秒",
+      "intervalMs applies only to per-word or per-letter effects, and must be a positive integer in milliseconds",
     );
   }
   if (
@@ -918,7 +942,10 @@ function validatedEffect(
     (typeof effectValue["from"] !== "string" ||
       !directions.has(effectValue["from"] as MotionDirection))
   ) {
-    return fail("invalid-direction", `${preset} 的 from 必须是有效方向`);
+    return fail(
+      "invalid-direction",
+      `${preset} from must be a valid direction`,
+    );
   }
   if (preset === "spin") {
     const from = effectValue["from"];
@@ -933,7 +960,7 @@ function validatedEffect(
       ) {
         return fail(
           "invalid-rotation",
-          "spin 的 from 换算后必须落在有符号 32 位角度范围内",
+          "spin from converted value must fall within signed 32-bit angle range",
         );
       }
     }
@@ -944,18 +971,21 @@ function validatedEffect(
     preset !== "spin" &&
     effectValue["from"] !== undefined
   ) {
-    return fail("invalid-motion", `${preset} 不接受 from 参数`);
+    return fail("invalid-motion", `${preset} does not accept from parameter`);
   }
   const easing = effectValue["easing"];
   if (easing !== undefined) {
     if (!isRecord(easing)) {
-      return fail("invalid-easing", "easing 必须是对象");
+      return fail("invalid-easing", "easing must be an object");
     }
     const unknownEasing = Object.keys(easing).find(
       (key) => key !== "accelerate" && key !== "decelerate",
     );
     if (unknownEasing !== undefined) {
-      return fail("unknown-parameter", `easing 含未实现参数 ${unknownEasing}`);
+      return fail(
+        "unknown-parameter",
+        `easing contains unimplemented parameter ${unknownEasing}`,
+      );
     }
     const accelerate = easing["accelerate"] ?? 0;
     const decelerate = easing["decelerate"] ?? 0;
@@ -970,7 +1000,7 @@ function validatedEffect(
     ) {
       return fail(
         "invalid-easing",
-        "easing 的加速、减速比例必须为非负数，且合计不超过 1",
+        "easing accelerate and decelerate proportions must be non-negative and sum to at most 1",
       );
     }
   }
@@ -978,7 +1008,7 @@ function validatedEffect(
   let toColor: string | undefined;
   if (preset === "breathe") {
     if (expected !== "emphasis") {
-      return fail("invalid-motion", "breathe() 必须传给 emphasis");
+      return fail("invalid-motion", "breathe() must be passed to emphasis");
     }
     if (
       typeof duration !== "number" ||
@@ -989,7 +1019,7 @@ function validatedEffect(
     ) {
       return fail(
         "invalid-breathe-period",
-        "breathe 的 period 必须是大于 1 的偶数毫秒，且半周期可写入原生时长",
+        "breathe period must be an even integer in milliseconds greater than 1, and half-period must be writable to native duration",
       );
     }
     fromColor = normalizeColor(effectValue["fromColor"], "breathe.from");
@@ -997,7 +1027,7 @@ function validatedEffect(
     if (relativeLuminance(toColor) <= relativeLuminance(fromColor)) {
       return fail(
         "invalid-breathe-colors",
-        "breathe.to 必须比 breathe.from 明亮",
+        "breathe.to must be brighter than breathe.from",
       );
     }
   } else if (preset === "fillColor") {
@@ -1012,25 +1042,34 @@ function validatedEffect(
       "invalid-fill-color",
     );
     if (by !== undefined || interval !== undefined) {
-      return fail("invalid-motion", "fillColor 不支持文字或图表粒度");
+      return fail(
+        "invalid-motion",
+        "fillColor does not support text or chart granularity",
+      );
     }
   } else if (
     effectValue["fromColor"] !== undefined ||
     effectValue["toColor"] !== undefined
   ) {
-    return fail("invalid-motion", `${String(preset)} 不接受呼吸灯颜色参数`);
+    return fail(
+      "invalid-motion",
+      `${String(preset)} does not accept breathe color parameters`,
+    );
   }
 
   if (repeatDeclared) {
     if (preset !== "spin" && preset !== "breathe") {
       return fail(
         "unsupported-repeat",
-        `${String(preset)} 尚不支持重复；当前仅支持 spin 和 breathe`,
+        `${String(preset)} does not support repetition yet; currently only spin and breathe are supported`,
       );
     }
     if (repeatCount === "forever") {
       if (preset !== "breathe") {
-        return fail("unsupported-repeat", "forever 当前仅支持完整呼吸周期");
+        return fail(
+          "unsupported-repeat",
+          "forever currently only supports complete breathe cycles",
+        );
       }
     } else if (
       typeof repeatCount !== "number" ||
@@ -1040,7 +1079,7 @@ function validatedEffect(
     ) {
       return fail(
         "invalid-repeat-count",
-        `repeat 次数必须是 1 到 ${maxRepeatCount} 的总轮数`,
+        `repeat count must be total rounds between 1 and ${maxRepeatCount}`,
       );
     }
     if (
@@ -1055,13 +1094,13 @@ function validatedEffect(
     ) {
       return fail(
         "invalid-repeat-duration",
-        "重复后的总时长必须保持为精确整数毫秒且单轮不超过原生计时范围",
+        "Repeated total duration must remain an exact integer in milliseconds and single round must not exceed native timing range",
       );
     }
     if (by !== undefined && typeof by !== "number") {
       return fail(
         "unsupported-repeat-combination",
-        "重复效果当前不能与逐段、逐词、逐字或图表粒度组合",
+        "Repeated effects cannot currently be combined with per-paragraph, per-word, per-letter, or chart granularity",
       );
     }
   }
@@ -1076,10 +1115,13 @@ function validatedEffect(
 
 function stepDeclaration(value: unknown): StepDeclaration | undefined {
   if (value === undefined) return undefined;
-  if (!isRecord(value)) return fail("invalid-step", "Step 声明无效");
+  if (!isRecord(value)) return fail("invalid-step", "Invalid Step declaration");
   if (value["mode"] === "automatic") {
     if (typeof value["identity"] !== "string" || value["identity"] === "") {
-      return fail("invalid-step", "自动点击步缺少实例身份");
+      return fail(
+        "invalid-step",
+        "Automatic click step lacks instance identity",
+      );
     }
     return value as unknown as StepDeclaration;
   }
@@ -1090,7 +1132,10 @@ function stepDeclaration(value: unknown): StepDeclaration | undefined {
     !Number.isSafeInteger(number) ||
     number < 1
   ) {
-    return fail("invalid-step", "显式点击步编号必须是正整数");
+    return fail(
+      "invalid-step",
+      "Explicit click step number must be a positive integer",
+    );
   }
   return value as unknown as StepDeclaration;
 }
@@ -1102,7 +1147,10 @@ function listed(value: unknown, many: boolean): readonly unknown[] {
 
 function validatedMoment(value: unknown): MotionMoment {
   if (!isRecord(value) || value["type"] !== "motion-moment") {
-    return fail("invalid-moment", "时刻句柄必须来自 useMotionScope()。");
+    return fail(
+      "invalid-moment",
+      "Moment handle must come from useMotionScope().",
+    );
   }
   const scope = value["scope"];
   const point = value["point"];
@@ -1115,7 +1163,10 @@ function validatedMoment(value: unknown): MotionMoment {
       ? typeof name !== "string" || name.trim() === ""
       : name !== undefined)
   ) {
-    return fail("invalid-moment", "时刻句柄的作用域、类型或名称无效");
+    return fail(
+      "invalid-moment",
+      "Moment handle scope, type, or name is invalid",
+    );
   }
   return value as unknown as MotionMoment;
 }
@@ -1128,7 +1179,10 @@ function validatedTiming(value: unknown): MotionTiming {
       !Number.isSafeInteger(offset) ||
       offset < 0
     ) {
-      return fail("invalid-delay", "时刻偏移必须是有限非负整数毫秒");
+      return fail(
+        "invalid-delay",
+        "Moment offset must be a finite non-negative integer in milliseconds",
+      );
     }
     return Object.freeze({
       type: "motion-offset",
@@ -1145,13 +1199,13 @@ function validatedPublisher(value: unknown): MotionMoment | undefined {
   if (momentValue.point !== "named") {
     return fail(
       "invalid-moment",
-      "publishStart 和 publishEnd 需要命名时刻句柄",
+      "publishStart and publishEnd require named moment handles",
     );
   }
   return momentValue;
 }
 
-/** 将显式作用域宿主编成 motion 页面能力的透明声明。 */
+/** Compiles explicit scope host into transparent declaration for motion slide capability. */
 export function motionScopeAnnotation(
   input: Readonly<Record<string, unknown>>,
 ): CapabilityAnnotation {
@@ -1168,12 +1222,15 @@ export function motionScopeAnnotation(
   ]);
   const unknown = Object.keys(input).find((key) => !allowedParameters.has(key));
   if (unknown !== undefined) {
-    return fail("unknown-parameter", `MotionScope 含未实现参数 ${unknown}`);
+    return fail(
+      "unknown-parameter",
+      `MotionScope contains unimplemented parameter ${unknown}`,
+    );
   }
   validateMotionFlag(input["motion"]);
   const value = input["__motionScope"];
   if (!isRecord(value)) {
-    return fail("invalid-scope", "MotionScope 缺少作用域声明");
+    return fail("invalid-scope", "MotionScope lacks scope declaration");
   }
   const identity = value["identity"];
   const parent = value["parent"];
@@ -1185,7 +1242,7 @@ export function motionScopeAnnotation(
   try {
     normalizedStep = step === undefined ? undefined : stepDeclaration(step);
   } catch {
-    return fail("invalid-scope", "MotionScope 的点击步身份无效");
+    return fail("invalid-scope", "MotionScope click step identity is invalid");
   }
   if (
     typeof identity !== "string" ||
@@ -1193,12 +1250,12 @@ export function motionScopeAnnotation(
     (parent !== undefined && typeof parent !== "string") ||
     (step !== undefined && normalizedStep === undefined)
   ) {
-    return fail("invalid-scope", "MotionScope 的实例身份无效");
+    return fail("invalid-scope", "MotionScope instance identity is invalid");
   }
   if (mode !== "parallel" && mode !== "sequence" && mode !== "stagger") {
     return fail(
       "invalid-scope",
-      "MotionScope 的 mode 必须是 parallel、sequence 或 stagger",
+      "MotionScope mode must be parallel, sequence, or stagger",
     );
   }
   if (
@@ -1207,7 +1264,10 @@ export function motionScopeAnnotation(
     delay < 0 ||
     !Number.isSafeInteger(Math.round(delay))
   ) {
-    return fail("invalid-delay", "MotionScope 的 delay 必须是有限非负整数毫秒");
+    return fail(
+      "invalid-delay",
+      "MotionScope delay must be a finite non-negative integer in milliseconds",
+    );
   }
   if (
     (mode === "stagger" &&
@@ -1219,7 +1279,7 @@ export function motionScopeAnnotation(
   ) {
     return fail(
       "invalid-scope",
-      "stagger 需要非负整数 each，其他 mode 不接受 each",
+      "stagger requires non-negative integer each; other modes do not accept each",
     );
   }
   const startAt =
@@ -1245,7 +1305,7 @@ export function motionScopeAnnotation(
   };
 }
 
-/** 校验 Step 包装器参数，保持无视觉声明不进入页面能力观察。 */
+/** Validates Step wrapper parameters, ensuring non-visual declarations do not enter slide capability observation. */
 export function motionStepAnnotation(
   input: Readonly<Record<string, unknown>>,
 ): readonly CapabilityAnnotation[] {
@@ -1253,7 +1313,10 @@ export function motionStepAnnotation(
     (key) => key !== "n" && key !== "__motionStep",
   );
   if (unknown !== undefined) {
-    return fail("unknown-parameter", `Step 含未实现参数 ${unknown}`);
+    return fail(
+      "unknown-parameter",
+      `Step contains unimplemented parameter ${unknown}`,
+    );
   }
   stepDeclaration(input["__motionStep"]);
   return [];
@@ -1266,7 +1329,7 @@ function contextValue(value: unknown): MotionContextValue {
     typeof value["enabled"] !== "boolean" ||
     !Array.isArray(value["scopes"])
   ) {
-    return fail("invalid-motion", "动效上下文无效");
+    return fail("invalid-motion", "Invalid motion context");
   }
   const step = stepDeclaration(value["step"]);
   const defaultEnter = value["defaultEnter"];
@@ -1284,7 +1347,7 @@ function contextValue(value: unknown): MotionContextValue {
   };
 }
 
-/** 将对象动画声明转成由 motion 页面能力消费的局部注解。 */
+/** Converts object animation declarations into local annotations consumed by motion slide capability. */
 export function motionAnnotations(
   props: Readonly<Record<string, unknown>>,
   target: MotionTarget,
@@ -1314,7 +1377,7 @@ export function motionAnnotations(
   ) {
     return fail(
       "invalid-breathe-target",
-      "breathe() 需要带实色填充的原生 Shape；Group 需由实际成员分别声明效果",
+      "breathe() requires native Shape with solid fill; Group requires effects declared on real members separately",
     );
   }
   if (
@@ -1326,7 +1389,7 @@ export function motionAnnotations(
   ) {
     return fail(
       "invalid-fill-color-target",
-      "fillColor() 需要带实色填充的原生 Shape",
+      "fillColor() requires native Shape with solid fill",
     );
   }
   if (effects.length === 0) return [];

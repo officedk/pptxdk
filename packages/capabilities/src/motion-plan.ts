@@ -92,27 +92,27 @@ export type MotionPlanStep = MotionStepObservation & {
   readonly order: number;
   readonly effects: ScheduledEffect[];
   readonly nodes: readonly MotionPlanNode[];
-  /** 根 with-group 内按首个实际消费节点放置的条件集合。 */
+  /** Condition collection placed by first actual consumer node inside root with-group. */
   readonly conditionDefinitionsBefore?: readonly MotionPlanConditionPlacement[];
 };
 
-/** 真实时序包含树；scope 和多效果对象节点会成为原生并行容器。 */
+/** Real timeline containment tree; scope and multi-effect object nodes become native parallel containers. */
 export type MotionPlanNode =
   | {
       readonly kind: "scope";
       readonly id: string;
       readonly nativeStart: MotionPlanStart;
       readonly children: readonly MotionPlanNode[];
-      /** END 收集器接管了逻辑完成，真实容器只保留逻辑起点。 */
+      /** END collector takes over logical completion; real container preserves only logical start. */
       readonly splitCompletion?: true;
-      /** 即使子节点为空，也保留用于表示起点分层的原生容器。 */
+      /** Native container preserved for start layering even when child nodes are empty. */
       readonly preserveStart?: true;
-      /** 条件集合按真实宿主的直接子项锚点放置。 */
+      /** Condition collection placed by direct child anchor of real host. */
       readonly conditionDefinitionsBefore?: readonly MotionPlanConditionPlacement[];
     }
   | {
       readonly kind: "completion-collector";
-      /** 这个原生容器只代表逻辑作用域的 END，不代表其 START。 */
+      /** This native container represents only the logical scope END, not its START. */
       readonly scopeId: string;
       readonly nativeStart: MotionPlanStart;
       readonly gates: readonly MotionPlanStartGate[];
@@ -124,19 +124,19 @@ export type MotionPlanNode =
       readonly effects: readonly ScheduledEffect[];
     };
 
-/** 计划确定的条件集合定义位置；writer 不再从消费节点推断宿主。 */
+/** Condition collection definition placement determined by plan; writer no longer infers host from consumer node. */
 export type MotionPlanConditionPlacement = {
   readonly join: Extract<MotionPlanStart, { readonly kind: "condition-join" }>;
 };
 
-/** 已求解的起点形式；PPTX 写出只负责序列化，不再判断因果。 */
+/** Resolved start form; PPTX writer handles serialization only, no longer inferring causality. */
 export type MotionPlanStart =
   | { readonly kind: "parent-start"; readonly delayMs: number }
   | { readonly kind: "end"; readonly dependency: MotionStartDependency }
   | { readonly kind: "event"; readonly dependency: MotionStartDependency }
   | {
       readonly kind: "delay-layer";
-      /** 前一原生起点；实际节点在该节点之后再启动。 */
+      /** Previous native start; actual node starts after this node. */
       readonly start: MotionPlanStart;
       readonly delayMs: number;
     }
@@ -158,14 +158,14 @@ export type MotionPlanStartGate =
   | {
       readonly kind: "parent-start";
       readonly delayMs: number;
-      /** 精确等价折叠后仍保留其原始逻辑来源。 */
+      /** Preserves original logical source after exact-equivalence folding. */
       readonly sourceDependency?: MotionStartDependency;
     }
   | { readonly kind: "end"; readonly dependency: MotionStartDependency }
   | { readonly kind: "begin"; readonly dependency: MotionStartDependency }
   | {
       readonly kind: "plan-start";
-      /** 候选偏移已分层时，沿用同一 MotionPlan 起点表达。 */
+      /** Reuses same MotionPlan start representation when candidate offsets are layered. */
       readonly start: MotionPlanStart;
       readonly sourceDependency?: MotionStartDependency;
     };
@@ -240,7 +240,7 @@ function addMotionPlanStartDelayField(
   start: MotionPlanStart,
   delayMs: number,
 ): MotionPlanStart {
-  // 保留底层逻辑来源；尤其不能把 condition-join 改写成缺少原始集合的别名。
+  // Preserve underlying logical source; in particular, condition-join must not be rewritten into alias lacking original collection.
   if (start.kind === "delay-layer" || start.kind === "condition-join") {
     return { kind: "delay-layer", start, delayMs };
   }
@@ -271,7 +271,7 @@ function addMotionPlanStartDelayField(
     : { kind: "delay-layer", start, delayMs };
 }
 
-/** 只折叠可证明保持父门槛的本地延迟；其他情况保留真实容器层。 */
+/** Fold only local delays proven to preserve parent threshold; preserve real container layers otherwise. */
 export function composeMotionPlanStarts(
   inherited: MotionPlanStart | undefined,
   child: MotionPlanStart,
@@ -302,7 +302,7 @@ export function composeMotionPlanStarts(
   return addMotionPlanStartDelay(inherited, child.delayMs);
 }
 
-/** 供写入器与构建报告共同使用的单页结果。 */
+/** Single slide result used jointly by writer and build report. */
 export type MotionPlan = {
   readonly steps: readonly MotionPlanStep[];
   readonly observation: MotionObservation;
@@ -377,7 +377,7 @@ type TimeExpression =
       readonly state: "known";
       readonly timeMs: number;
       readonly candidates: readonly TimeCandidate[];
-      /** 被引用事件身份与候选来源分开保存，供精确别名复用已有时序节点。 */
+      /** Referenced event identity stored separately from candidate source, allowing exact aliases to reuse existing timeline nodes. */
       readonly references: readonly TimeReference[];
     }
   | {
@@ -493,7 +493,8 @@ function eventTime(
       : { dependency: dependencyAtEvent(dependency) }),
   };
   if (state === "known") {
-    if (timeMs === undefined) throw new Error("已知时刻缺少数值");
+    if (timeMs === undefined)
+      throw new Error("Known moment lacks numeric value");
     return {
       state,
       timeMs,
@@ -518,14 +519,18 @@ function eventTime(
 
 class MotionTimingFacts {
   private readonly successors = new Map<string, Map<string, number>>();
-  // 精确时差可正反推导；反向关系不进入必要前置图的环检查。
+  // Exact time differences can be derived in both directions; reverse relations do not enter cycle check of necessary prerequisite graph.
   private readonly exactRelations = new Map<string, Map<string, number>>();
   private readonly exactTimes = new Map<string, number>();
 
   setExactTime(eventId: string, timeMs: number, path: string): void {
     const existing = this.exactTimes.get(eventId);
     if (existing !== undefined && existing !== timeMs) {
-      fail("motion-plan-conflict", "同一编排事件得到冲突的数值时刻", path);
+      fail(
+        "motion-plan-conflict",
+        "Conflicting numeric moments for the same choreography event",
+        path,
+      );
     }
     this.exactTimes.set(eventId, timeMs);
   }
@@ -547,15 +552,27 @@ class MotionTimingFacts {
       exactAfter !== undefined &&
       exactAfter - exactBefore !== offsetMs
     ) {
-      fail("motion-plan-conflict", "精确编排时差与已知时刻冲突", path);
+      fail(
+        "motion-plan-conflict",
+        "Exact choreography time difference conflicts with known moment",
+        path,
+      );
     }
     const existing = this.exactRelations.get(before)?.get(after);
     if (existing !== undefined && existing !== offsetMs) {
-      fail("motion-plan-conflict", "同一编排事件得到冲突的精确时差", path);
+      fail(
+        "motion-plan-conflict",
+        "Conflicting exact time differences for the same choreography event",
+        path,
+      );
     }
     const existingReverse = this.exactRelations.get(after)?.get(before);
     if (existingReverse !== undefined && existingReverse !== -offsetMs) {
-      fail("motion-plan-conflict", "同一编排事件得到冲突的精确时差", path);
+      fail(
+        "motion-plan-conflict",
+        "Conflicting exact time differences for the same choreography event",
+        path,
+      );
     }
     const edges = this.exactRelations.get(before) ?? new Map<string, number>();
     edges.set(after, offsetMs);
@@ -579,7 +596,10 @@ class MotionTimingFacts {
       relationDifference !== undefined &&
       exactDifference !== relationDifference
     ) {
-      fail("motion-plan-conflict", "精确编排时差与已知时刻冲突");
+      fail(
+        "motion-plan-conflict",
+        "Exact choreography time difference conflicts with known moment",
+      );
     }
     return relationDifference ?? exactDifference;
   }
@@ -592,12 +612,20 @@ class MotionTimingFacts {
   ): void {
     if (before === after) {
       if (minimumMs > 0) {
-        fail("motion-cycle", "编排时刻依赖存在循环", path);
+        fail(
+          "motion-cycle",
+          "Choreography moment dependencies contain a cycle",
+          path,
+        );
       }
       return;
     }
     if (this.hasPath(after, before)) {
-      fail("motion-cycle", "编排时刻依赖存在循环", path);
+      fail(
+        "motion-cycle",
+        "Choreography moment dependencies contain a cycle",
+        path,
+      );
     }
     const beforeTime = this.exactTime(before);
     const afterTime = this.exactTime(after);
@@ -606,7 +634,11 @@ class MotionTimingFacts {
       afterTime !== undefined &&
       afterTime - beforeTime < minimumMs
     ) {
-      fail("motion-plan-conflict", "编排时差事实与已知时刻冲突", path);
+      fail(
+        "motion-plan-conflict",
+        "Choreography time difference fact conflicts with known moment",
+        path,
+      );
     }
     const edges = this.successors.get(before) ?? new Map<string, number>();
     edges.set(
@@ -622,7 +654,10 @@ class MotionTimingFacts {
     if (exactDifference === undefined) return pathDifference;
     if (pathDifference === undefined) return exactDifference;
     if (pathDifference > exactDifference) {
-      fail("motion-plan-conflict", "编排时差事实与精确时差冲突");
+      fail(
+        "motion-plan-conflict",
+        "Choreography time difference fact conflicts with exact time difference",
+      );
     }
     return Math.max(exactDifference, pathDifference);
   }
@@ -685,7 +720,10 @@ class MotionTimingFacts {
         const existing = offsets.get(next);
         if (existing !== undefined) {
           if (existing !== candidate) {
-            fail("motion-plan-conflict", "同一编排时刻存在冲突的精确关系");
+            fail(
+              "motion-plan-conflict",
+              "Conflicting exact relations for the same choreography moment",
+            );
           }
           continue;
         }
@@ -923,7 +961,7 @@ function completion(
   if (end.candidates.length === 1) {
     const [winner] = end.candidates;
     if (winner !== undefined) {
-      // 唯一胜出的真实完成事件与整体结束保持精确等价，绝对时刻仍可未知。
+      // The single winning real completion event remains exactly equivalent to overall end; absolute moment may still be unknown.
       facts.addLowerBound(winner.eventId, eventId, winner.offsetMs, path);
       facts.addExactOffset(winner.eventId, eventId, winner.offsetMs, path);
     }
@@ -946,7 +984,7 @@ function expansionFor(
     if (!target.textBody || !target.paragraphCount) {
       fail(
         "invalid-motion-granularity",
-        `by: "${effect.by}" 需要含文字的原生对象`,
+        `by: "${effect.by}" requires native object with text`,
         path,
       );
     }
@@ -963,7 +1001,7 @@ function expansionFor(
     if (!target.textBody || count < 1) {
       fail(
         "invalid-motion-granularity",
-        'by: "paragraph" 需要含段落的原生文字对象',
+        'by: "paragraph" requires native text object with paragraphs',
         path,
       );
     }
@@ -982,7 +1020,7 @@ function expansionFor(
   if (target.kind !== "chart" || seriesCount < 1 || categoryCount < 1) {
     fail(
       "invalid-motion-granularity",
-      `by: "${effect.by}" 需要含数据的原生图表`,
+      `by: "${effect.by}" requires native chart with data`,
       path,
     );
   }
@@ -1072,7 +1110,7 @@ function effectTimingAt(
   ) {
     fail(
       "invalid-motion-time",
-      "效果完成时刻必须保持为安全整数毫秒",
+      "Effect completion moment must be a safe integer in milliseconds",
       target.path,
     );
   }
@@ -1091,12 +1129,12 @@ function effectTimingAt(
       end: eventTime(endEventId, "known", existingEndTime, dependency),
     };
   }
-  // 当前 spTgt 保留整对象的单次行为；逐词即使没有子集也仍有此正下界。
+  // Current spTgt retains single behavior for entire object; by-word still has this positive lower bound even without subsets.
   const minimumDuration = durationMs;
   if (expansion.type === "iterate") {
     facts.addLowerBound(startEventId, endEventId, minimumDuration, target.path);
   } else {
-    // 有限行为保留完整重复后的相对时差，不要求起点已有绝对数值。
+    // Finite behavior preserves relative time difference after full repetitions without requiring absolute numeric start.
     facts.addLowerBound(startEventId, endEventId, durationMs, target.path);
     facts.addExactOffset(startEventId, endEventId, durationMs, target.path);
   }
@@ -1136,7 +1174,7 @@ function motionPlan(
     if (existing !== undefined) return existing;
     const effect = target.value.effects[effectIndex];
     if (effect === undefined) {
-      fail("invalid-motion", "动效效果索引不存在", target.path);
+      fail("invalid-motion", "Motion effect index does not exist", target.path);
     }
     const expansion = expansionFor(target.value.target, effect, target.path);
     effectExpansions.set(key, expansion);
@@ -1148,12 +1186,16 @@ function motionPlan(
     if (isScopeValue(contribution.value)) {
       const declaration = contribution.value.scope;
       if (!motionScope(declaration)) {
-        fail("invalid-scope", "编排作用域声明无效", contribution.path);
+        fail(
+          "invalid-scope",
+          "Choreography scope declaration is invalid",
+          contribution.path,
+        );
       }
       if (scopes.has(declaration.identity)) {
         fail(
           "duplicate-scope",
-          "同一编排作用域身份不能声明两次",
+          "Same choreography scope identity cannot be declared twice",
           contribution.path,
         );
       }
@@ -1168,16 +1210,24 @@ function motionPlan(
     if (!isMotionValue(contribution.value)) {
       fail(
         "invalid-motion",
-        `motion 注解在 ${contribution.path} 中无效`,
+        `motion annotation is invalid at ${contribution.path}`,
         contribution.path,
       );
     }
     if (contribution.targetId === undefined) {
-      fail("invalid-motion", "对象动效缺少原生对象身份", contribution.path);
+      fail(
+        "invalid-motion",
+        "Object motion lacks native object identity",
+        contribution.path,
+      );
     }
     const trigger = stepInfo(contribution.value.step);
     if (targets.has(contribution.targetId)) {
-      fail("invalid-motion", "同一原生对象重复提交动效声明", contribution.path);
+      fail(
+        "invalid-motion",
+        "Same native object repeatedly submitted motion declarations",
+        contribution.path,
+      );
     }
     targets.set(contribution.targetId, {
       id: contribution.targetId,
@@ -1209,7 +1259,7 @@ function motionPlan(
     if (incompatible) {
       fail(
         "invalid-motion-granularity",
-        "同一原生对象的并行动效不能混用不兼容的构建粒度",
+        "Parallel motions on the same native object cannot mix incompatible build granularities",
         target.path,
       );
     }
@@ -1220,7 +1270,11 @@ function motionPlan(
     if (parentId === undefined) continue;
     const parent = scopes.get(parentId);
     if (parent === undefined) {
-      fail("missing-scope", "编排作用域的父实例不存在", scope.path);
+      fail(
+        "missing-scope",
+        "Parent instance of choreography scope does not exist",
+        scope.path,
+      );
     }
     parent.members.push({
       kind: "scope",
@@ -1243,16 +1297,24 @@ function motionPlan(
     let parent: string | undefined;
     for (const declaration of target.value.scopes) {
       if (!motionScope(declaration)) {
-        fail("invalid-scope", "对象包含无效编排作用域路径", target.path);
+        fail(
+          "invalid-scope",
+          "Object contains invalid choreography scope path",
+          target.path,
+        );
       }
       const scope = scopes.get(declaration.identity);
       if (scope === undefined) {
-        fail("missing-scope", "对象引用的编排作用域实例不存在", target.path);
+        fail(
+          "missing-scope",
+          "Choreography scope instance referenced by object does not exist",
+          target.path,
+        );
       }
       if (scope.declaration.parent !== parent) {
         fail(
           "invalid-scope",
-          "对象的编排作用域路径与宿主声明不一致",
+          "Object's choreography scope path does not match host declaration",
           target.path,
         );
       }
@@ -1343,7 +1405,7 @@ function motionPlan(
     ) {
       fail(
         "cross-step-motion",
-        "跨多个点击步的作用域不能发布单一时刻",
+        "Scope spanning multiple click steps cannot publish a single moment",
         scope.path,
       );
     }
@@ -1354,7 +1416,11 @@ function motionPlan(
       if (publisher === undefined) continue;
       const key = momentKey(publisher);
       if (cuePublishers.has(key)) {
-        fail("duplicate-cue", "同一命名时刻不能发布两次", scope.path);
+        fail(
+          "duplicate-cue",
+          "Same named moment cannot be published twice",
+          scope.path,
+        );
       }
       cuePublishers.set(key, {
         scope: scope.declaration.identity,
@@ -1431,7 +1497,7 @@ function motionPlan(
     });
     const starts = new Map<string, TimePoint>();
     const ends = new Map<string, TimePoint>();
-    // 逻辑起点保留来源表达；TimePoint 仍使用命名事件身份供内部完成求解。
+    // Logical start preserves source representation; TimePoint still uses named event identity for internal completion resolution.
     const scopeStartExpressions = new Map<string, TimeExpression>();
     const scopeCompletionMembers = new Map<string, readonly TimePoint[]>();
     const scopeStartPlans = new Map<string, MotionPlanStart>();
@@ -1456,7 +1522,7 @@ function motionPlan(
     const scheduledObjects = new Set<number>();
     const queryScopes: MotionQueryScopeSource[] = [];
     const queryEffectSources = new Map<string, MotionQueryEffectSource>();
-    // 查询按结构父链补齐作用域；每个来源仍绑定当前步的局部时钟。
+    // Query completes scopes along structural parent chain; each source still binds to local clock of current step.
     const queryScopeIdentities = new Set<string>();
     for (const scope of scopes.values()) {
       if (!scopeSteps(scope).includes(key)) continue;
@@ -1466,7 +1532,7 @@ function motionPlan(
         identity = queryDeclarationIndex.get(identity)?.parent;
       }
     }
-    // 作用域边来自声明闭包；对象效果仍按本步活动成员筛选。
+    // Scope edges come from declaration closure; object effects still filter by active members of this step.
     const queryDeclarationMembers = (
       scope: ScopeState,
     ): readonly ScopeMember[] =>
@@ -1635,7 +1701,7 @@ function motionPlan(
         });
       }
       if (parentStart.candidates.length === 0) return false;
-      // 两侧都是候选最大值；逐个父候选找到严格晚于它的完成候选即可。
+      // Both sides are candidate maximums; find a completion candidate strictly later than each parent candidate.
       return parentStart.candidates.every((parentCandidate) =>
         candidates.some((candidate) => {
           const lowerBound = facts.lowerBound(
@@ -1659,12 +1725,16 @@ function motionPlan(
       consumer?: ScopeMember,
     ): MotionPlanStart => {
       if (expression.state === "no-natural-completion") {
-        fail("no-natural-completion", "无自然完成的内容不能启动后继效果", path);
+        fail(
+          "no-natural-completion",
+          "Content without natural completion cannot start subsequent effects",
+          path,
+        );
       }
       if (parentStart.state === "no-natural-completion") {
         fail(
           "no-natural-completion",
-          "无自然完成的父作用域不能启动后继效果",
+          "Parent scope without natural completion cannot start subsequent effects",
           path,
         );
       }
@@ -1672,13 +1742,17 @@ function motionPlan(
         if (parentStart.state !== "known") {
           fail(
             "unknown-motion-start",
-            "未知父起点后的数值起点没有可验证的合并关系",
+            "Numeric start after unknown parent start has no verifiable merge relation",
             path,
           );
         }
         const delayMs = expression.timeMs - parentStart.timeMs;
         if (delayMs < 0) {
-          fail("unknown-motion-start", "子项起点早于其包含作用域", path);
+          fail(
+            "unknown-motion-start",
+            "Child start is earlier than its containing scope",
+            path,
+          );
         }
         const lowered = addMotionPlanStartDelay(
           { kind: "parent-start", delayMs: 0 },
@@ -1687,7 +1761,7 @@ function motionPlan(
         if (lowered === undefined) {
           fail(
             "invalid-motion-time",
-            "已知起点的延迟层无法保持为安全整数毫秒",
+            "Delay layer of known start cannot be preserved as safe integer in milliseconds",
             path,
           );
         }
@@ -1699,7 +1773,7 @@ function motionPlan(
         parentStart.candidates,
       );
       if (parentStartDelay !== undefined && parentStartDelay >= 0) {
-        // 仅当每个原始事件都增加相同精确偏移时，才复用父起点。
+        // Reuse parent start only when every original event increases by the same exact offset.
         const lowered = addMotionPlanStartDelay(
           { kind: "parent-start", delayMs: 0 },
           parentStartDelay,
@@ -1719,10 +1793,10 @@ function motionPlan(
           0,
         );
         if (!Number.isSafeInteger(canonicalDelay)) continue;
-        // 偏移属于较晚的别名，无法恢复在消费者真实父级激活前已发生的 join END。
+        // Offset belongs to later alias; cannot restore join END that occurred before real parent activation of consumer.
         const joinEndCandidates = canonical.candidates.map((candidate) => ({
           ...candidate,
-          // 记录的候选项描述别名作用域的起点。
+          // Recorded candidate describes start of alias scope.
           offsetMs: candidate.offsetMs - canonicalDelay,
         }));
         const joinEndIsPending = joinEndCandidates.some((candidate) => {
@@ -1751,7 +1825,7 @@ function motionPlan(
           );
         });
         if (!joinEndIsPending) {
-          // canonical 快路径不安全时，保留完整候选表达交给通用宿主投影。
+          // When canonical fast path is unsafe, preserve full candidate expression for general host projection.
           continue;
         }
         let conditionEndStart: MotionPlanStart = {
@@ -1775,11 +1849,11 @@ function motionPlan(
         const unsupported = (reason: string): never =>
           fail(
             "unknown-motion-start",
-            `多个不可比较的未知起点不满足已核验条件集合前置：${reason}`,
+            `Multiple incomparable unknown starts do not satisfy verified condition collection prerequisites: ${reason}`,
             path,
           );
         if (consumer === undefined) {
-          return unsupported("需要同一步中的真实消费成员");
+          return unsupported("Requires real consumer member in the same step");
         }
         const candidateHosts: (ScopeState | undefined)[] = [];
         let currentHost: ScopeState | undefined = hostScope;
@@ -1790,7 +1864,7 @@ function motionPlan(
             parentId === undefined ? undefined : scopes.get(parentId);
         }
         candidateHosts.push(undefined);
-        let lastReason = "没有能够先定义全部来源的真实宿主";
+        let lastReason = "No real host can define all sources beforehand";
         for (const host of candidateHosts) {
           const isStepRoot = host === undefined;
           const hostIdentity =
@@ -1804,7 +1878,8 @@ function motionPlan(
               ? undefined
               : directConsumerAtHost(host, hostScope, consumer);
           if (consumerBranch === undefined) {
-            lastReason = "无法定位消费成员在候选宿主中的实际位置";
+            lastReason =
+              "Cannot locate actual position of consumer member in candidate host";
             continue;
           }
           const hostMembers = isStepRoot ? rootMembers : host.members;
@@ -1814,12 +1889,12 @@ function motionPlan(
               member.id === consumerBranch.id,
           );
           if (consumerIndex < 0) {
-            lastReason = "无法定位实际消费成员";
+            lastReason = "Cannot locate actual consumer member";
             continue;
           }
           const hostStart = isStepRoot ? origin : resolveScopeStart(host);
           if (hostStart.state === "no-natural-completion") {
-            lastReason = "候选宿主没有可订阅的起点";
+            lastReason = "Candidate host has no subscribable start";
             continue;
           }
           const gates: MotionPlanStartGate[] = [];
@@ -1864,7 +1939,7 @@ function motionPlan(
               hostScope !== undefined &&
               host.declaration.identity !== hostScope.declaration.identity
             ) {
-              // 父起点保持独立事件身份，避免把多层合法 delay 合成一个字段。
+              // Parent start keeps independent event identity, avoiding merging multi-layer legal delays into a single field.
               dependency = {
                 scopeId: scopeId(hostScope.declaration.identity, scopes),
                 point: "start",
@@ -1875,7 +1950,7 @@ function motionPlan(
               !Number.isSafeInteger(candidate.offsetMs) ||
               candidate.offsetMs < 0
             ) {
-              lastReason = "完成偏移超出安全整数范围";
+              lastReason = "Completion offset exceeds safe integer range";
               validHost = false;
               break;
             }
@@ -1885,7 +1960,8 @@ function motionPlan(
                 candidate.offsetMs,
               );
               if (lowered === undefined || !appendGateStart(lowered)) {
-                lastReason = "父起点候选无法保持为安全整数延迟层";
+                lastReason =
+                  "Parent start candidate cannot be preserved as safe integer delay layer";
                 validHost = false;
                 break;
               }
@@ -1898,12 +1974,13 @@ function motionPlan(
             if (exactHostOffset !== undefined) {
               const delayMs = exactHostOffset + candidate.offsetMs;
               if (!Number.isSafeInteger(delayMs)) {
-                lastReason = "精确宿主累计偏移超出安全整数范围";
+                lastReason =
+                  "Exact host cumulative offset exceeds safe integer range";
                 validHost = false;
                 break;
               }
               if (delayMs >= 0) {
-                // 已发生的来源可由足够大的候选偏移抵消，再折叠成宿主延迟。
+                // Sources that already occurred can be offset by sufficiently large candidate delay, then folded into host delay.
                 const lowered = addMotionPlanStartDelay(
                   { kind: "parent-start", delayMs: 0 },
                   delayMs,
@@ -1916,7 +1993,8 @@ function motionPlan(
                   lowered === undefined ||
                   !appendGateStart(lowered, sourceDependencyAtCandidate)
                 ) {
-                  lastReason = "精确宿主累计偏移无法保持为安全整数延迟层";
+                  lastReason =
+                    "Exact host cumulative offset cannot be preserved as safe integer delay layer";
                   validHost = false;
                   break;
                 }
@@ -1924,7 +2002,8 @@ function motionPlan(
               }
             }
             if (exactHostOffset !== undefined && exactHostOffset < 0) {
-              lastReason = "候选来源已早于宿主激活且不能折叠为合法偏移";
+              lastReason =
+                "Candidate source is already earlier than host activation and cannot fold into a legal offset";
               validHost = false;
               break;
             }
@@ -1942,7 +2021,8 @@ function motionPlan(
               dependency === undefined ||
               !dependencyMatchesEvent(dependency, candidate.eventId)
             ) {
-              lastReason = "候选宿主起点之外的来源没有真实可订阅事件";
+              lastReason =
+                "Sources outside candidate host start have no real subscribable events";
               validHost = false;
               break;
             }
@@ -1970,7 +2050,8 @@ function motionPlan(
                   hostScope !== undefined &&
                   isAncestorScope(sourceScope, hostScope)
                 ) {
-                  lastReason = "来源整体完成会等待其内部宿主结束";
+                  lastReason =
+                    "Overall completion of source would wait for its inner host to finish";
                   validHost = false;
                   break;
                 }
@@ -1981,7 +2062,8 @@ function motionPlan(
                     current.declaration.identity ===
                     sourceScope.declaration.identity
                   ) {
-                    lastReason = "来源整体完成会等待其内部宿主结束";
+                    lastReason =
+                      "Overall completion of source would wait for its inner host to finish";
                     validHost = false;
                     break;
                   }
@@ -2003,8 +2085,8 @@ function motionPlan(
             if (sourceAfterHost === undefined || sourceAfterHost <= 0) {
               lastReason =
                 dependency.point === "end"
-                  ? "不能证明真实来源结束晚于候选宿主激活"
-                  : "不能证明真实起点事件晚于候选宿主激活";
+                  ? "Cannot prove real source end is later than candidate host activation"
+                  : "Cannot prove real start event is later than candidate host activation";
               validHost = false;
               break;
             }
@@ -2021,7 +2103,8 @@ function motionPlan(
               candidate.offsetMs,
             );
             if (lowered === undefined || !appendGateStart(lowered)) {
-              lastReason = "完成依赖无法保持为安全整数延迟层";
+              lastReason =
+                "Completion dependency cannot be preserved as safe integer delay layer";
               validHost = false;
               break;
             }
@@ -2040,7 +2123,7 @@ function motionPlan(
             host.declaration.identity !== hostScope.declaration.identity &&
             !strictlyAfterParentStart(startCandidates, parentStart)
           ) {
-            // 父作用域尚未激活时，必须把条件和消费者一并移到更早宿主。
+            // When parent scope is not yet activated, condition and consumer must be moved together to an earlier host.
             requiresProjection = true;
           }
           if (isStepRoot && hostScope !== undefined) {
@@ -2063,18 +2146,20 @@ function motionPlan(
             !strictlyAfterParentStart(subscribedSources, consumerActivation)
           ) {
             lastReason =
-              "不能证明条件集合完成晚于消费成员的父作用域激活：真实来源在实际条件宿主激活前已发生";
+              "Cannot prove condition collection completion is later than consumer member parent scope activation: real source occurred before actual condition host activation";
             continue;
           }
           if (!strictlyAfterParentStart(startCandidates, consumerActivation)) {
-            lastReason = "不能证明条件集合完成晚于消费成员的父作用域激活";
+            lastReason =
+              "Cannot prove condition collection completion is later than consumer member parent scope activation";
             continue;
           }
           const projectedConsumerId = memberNodeId(consumer);
           if (requiresProjection) {
             const previousHost = projectedNodeHosts.get(projectedConsumerId);
             if (previousHost !== undefined && previousHost !== hostIdentity) {
-              lastReason = "同一消费节点需要多个物理早宿主";
+              lastReason =
+                "Same consumer node requires multiple physical early hosts";
               continue;
             }
             projectedNodeHosts.set(projectedConsumerId, hostIdentity);
@@ -2113,7 +2198,7 @@ function motionPlan(
       if (candidate === undefined) {
         fail(
           "unknown-motion-start",
-          "未知起点没有可引用的单个原生完成事件",
+          "Unknown start has no single native completion event to reference",
           path,
         );
       }
@@ -2161,7 +2246,7 @@ function motionPlan(
         }
       }
 
-      // 保留仍晚于父启动的真实完成事件；仅在它已先于父启动时改用精确偏移。
+      // Preserve real completion event still later than parent start; switch to exact offset only when it already preceded parent start.
       const eventAfterParent =
         parentStart.eventId === undefined
           ? undefined
@@ -2209,7 +2294,7 @@ function motionPlan(
       }
       fail(
         "unknown-motion-start",
-        "未知起点没有可证明的父级激活或完成事件来源",
+        "Unknown start has no provable parent activation or completion event source",
         path,
       );
     };
@@ -2312,7 +2397,7 @@ function motionPlan(
           return gate.sourceDependency === undefined
             ? [
                 {
-                  // 原生数值门相对集合宿主的真实起点，查询也保留该来源。
+                  // Native numeric gate is relative to real start of collection host; query also preserves this source.
                   scopeId: hostScopeId,
                   point: "start",
                   offsetMs: gate.delayMs,
@@ -2349,7 +2434,9 @@ function motionPlan(
       if (nativeStart.kind === "condition-end") {
         const canonical = conditionJoinsById.get(nativeStart.id);
         if (canonical === undefined) {
-          throw new Error("MotionPlan 条件别名缺少原始条件集合");
+          throw new Error(
+            "MotionPlan condition alias lacks original condition collection",
+          );
         }
         const dependencies = canonical.gates.flatMap((gate) =>
           reportedGateDependencies(gate, canonical.hostScopeId),
@@ -2389,7 +2476,7 @@ function motionPlan(
       if (stepKeysOf(scope).length !== 1) {
         fail(
           "cross-step-motion",
-          "单一编排作用域的时刻不能跨点击步确定",
+          "Moment of a single choreography scope cannot be determined across click steps",
           scope.path,
         );
       }
@@ -2401,11 +2488,19 @@ function motionPlan(
     ): TimePoint | TimeExpression => {
       const owner = scopes.get(reference.scope);
       if (owner === undefined) {
-        fail("missing-cue", "时刻句柄对应的编排作用域不存在", fromPath);
+        fail(
+          "missing-cue",
+          "Choreography scope corresponding to moment handle does not exist",
+          fromPath,
+        );
       }
       ensureSingleStep(owner);
       if (scopeSteps(owner)[0] !== key) {
-        fail("cross-step-motion", "时刻依赖不能跨不同点击步", fromPath);
+        fail(
+          "cross-step-motion",
+          "Moment dependencies cannot cross different click steps",
+          fromPath,
+        );
       }
       let sourceScope = owner;
       let point: "start" | "end" = reference.point === "end" ? "end" : "start";
@@ -2414,17 +2509,25 @@ function motionPlan(
         if (publisher === undefined) {
           fail(
             "missing-cue",
-            `没有组件发布命名时刻 ${reference.name ?? ""}`,
+            `No component published named moment ${reference.name ?? ""}`,
             fromPath,
           );
         }
         const publishedScope = scopes.get(publisher.scope);
         if (publishedScope === undefined) {
-          fail("missing-cue", "命名时刻的发布作用域不存在", publisher.path);
+          fail(
+            "missing-cue",
+            "Publishing scope for named moment does not exist",
+            publisher.path,
+          );
         }
         ensureSingleStep(publishedScope);
         if (scopeSteps(publishedScope)[0] !== key) {
-          fail("cross-step-motion", "命名时刻依赖不能跨不同点击步", fromPath);
+          fail(
+            "cross-step-motion",
+            "Named moment dependencies cannot cross different click steps",
+            fromPath,
+          );
         }
         sourceScope = publishedScope;
         point = publisher.point;
@@ -2436,7 +2539,7 @@ function motionPlan(
           sourceScope.declaration.identity,
         );
         if (activeChildren(sourceScope).length === 0) {
-          // 空作用域可作为真实时间节点被引用，保留其 START/END 别名层。
+          // Empty scope can be referenced as real timeline node, preserving its START/END alias layer.
           preservedScopeStarts.add(sourceScope.declaration.identity);
           return expression;
         }
@@ -2466,13 +2569,21 @@ function motionPlan(
       if (member.kind === "scope") {
         const child = scopes.get(member.id);
         if (child === undefined) {
-          fail("missing-scope", "编排作用域的成员声明不存在", parent.path);
+          fail(
+            "missing-scope",
+            "Member declaration of choreography scope does not exist",
+            parent.path,
+          );
         }
         return resolveScopeEnd(child);
       }
       const target = targets.get(member.id);
       if (target === undefined) {
-        fail("invalid-motion", "编排作用域的对象成员声明不存在", parent.path);
+        fail(
+          "invalid-motion",
+          "Object member declaration of choreography scope does not exist",
+          parent.path,
+        );
       }
       const base = memberStart(parent, member);
       const effectEnds = target.value.effects.map((effect, effectIndex) =>
@@ -2562,12 +2673,16 @@ function motionPlan(
       const cached = starts.get(scope.declaration.identity);
       if (cached !== undefined) return cached;
       if (resolvingStarts.has(scope.declaration.identity)) {
-        fail("motion-cycle", "编排时刻依赖存在循环", scope.path);
+        fail(
+          "motion-cycle",
+          "Choreography moment dependencies contain a cycle",
+          scope.path,
+        );
       }
       if (scope.declaration.delay > maximumTimeNodeValue) {
         fail(
           "invalid-motion-time",
-          "单个作用域延迟字段超出 ST_TLTime 范围",
+          "Single scope delay field exceeds ST_TLTime range",
           scope.path,
         );
       }
@@ -2578,7 +2693,11 @@ function motionPlan(
       if (scope.declaration.parent !== undefined) {
         const parent = scopes.get(scope.declaration.parent);
         if (parent === undefined) {
-          fail("missing-scope", "编排作用域的父实例不存在", scope.path);
+          fail(
+            "missing-scope",
+            "Parent instance of choreography scope does not exist",
+            scope.path,
+          );
         }
         parentScope = parent;
         parentStart = resolveScopeStart(parent);
@@ -2596,14 +2715,14 @@ function motionPlan(
       if (startExpression.state === "no-natural-completion") {
         fail(
           "no-natural-completion",
-          "无自然完成的内容不能启动后继效果",
+          "Content without natural completion cannot start subsequent effects",
           scope.path,
         );
       }
       if (parentStart.state === "no-natural-completion") {
         fail(
           "no-natural-completion",
-          "无自然完成的父作用域不能启动后继效果",
+          "Parent scope without natural completion cannot start subsequent effects",
           scope.path,
         );
       }
@@ -2630,7 +2749,7 @@ function motionPlan(
             ));
       let nativeStart: MotionPlanStart | undefined;
       if (nativeFieldWouldOverflow) {
-        // 只有累计值超过单个原生字段时，才从声明起点与 delay 两层恢复编码。
+        // Only when accumulated value exceeds single native field, restore encoding from declared start and delay layers.
         const resolvedBaseStart = resolveNativeStart(
           base,
           ...nativeStartArguments,
@@ -2648,11 +2767,11 @@ function motionPlan(
       if (nativeStart === undefined) {
         fail(
           "invalid-motion-time",
-          "作用域起点的延迟层无法保持为安全整数毫秒",
+          "Delay layer of scope start cannot be preserved as safe integer in milliseconds",
           scope.path,
         );
       }
-      // 别名读取原表达；TimePoint 仅保留多来源候选，避免改写内部事件身份。
+      // Alias reads original expression; TimePoint preserves multi-source candidates only, avoiding rewriting internal event identities.
       const start = materializeEvent(
         startExpression,
         scopeStartEventId(scope),
@@ -2667,7 +2786,7 @@ function motionPlan(
           : undefined,
       );
       if (nativeStart.kind === "parent-start") {
-        // 候选可能沿别名展开到祖先来源；仍把实际父起点门槛记入事实图。
+        // Candidates may expand along aliases to ancestor sources; still record actual parent start threshold into facts graph.
         facts.addLowerBound(
           parentStart.eventId,
           scopeStartEventId(scope),
@@ -2717,7 +2836,7 @@ function motionPlan(
       if (!Number.isSafeInteger(localDelayMs)) {
         fail(
           "invalid-motion-time",
-          "作用域起点的累计延迟必须保持为安全整数毫秒",
+          "Accumulated delay of scope start must be a safe integer in milliseconds",
           scope.path,
         );
       }
@@ -2760,11 +2879,15 @@ function motionPlan(
       const cached = ends.get(scope.declaration.identity);
       if (cached !== undefined) return cached;
       if (resolvingEnds.has(scope.declaration.identity)) {
-        fail("motion-cycle", "编排时刻依赖存在循环", scope.path);
+        fail(
+          "motion-cycle",
+          "Choreography moment dependencies contain a cycle",
+          scope.path,
+        );
       }
       resolvingEnds.add(scope.declaration.identity);
       const start = resolveScopeStart(scope);
-      // 非活动作用域仍可提供自身边界时刻，但不延长父作用域的整体完成。
+      // Inactive scopes can still provide their own boundary moments, but do not extend overall completion of parent scope.
       const members = activeChildren(scope);
       const memberEnds = members.map((member) => memberEnd(scope, member));
       scopeCompletionMembers.set(scope.declaration.identity, memberEnds);
@@ -2793,7 +2916,7 @@ function motionPlan(
       ) {
         fail(
           "cross-step-motion",
-          "顺序和交错作用域不能编排不同点击步",
+          "Sequence and stagger scopes cannot choreograph different click steps",
           scope.path,
         );
       }
@@ -2803,7 +2926,7 @@ function motionPlan(
       ) {
         fail(
           "cross-step-motion",
-          "跨多个点击步的作用域不能从单一时刻启动",
+          "Scope spanning multiple click steps cannot start from a single moment",
           scope.path,
         );
       }
@@ -2905,7 +3028,7 @@ function motionPlan(
           if (start.state === "no-natural-completion") {
             fail(
               "no-natural-completion",
-              "无自然完成的内容不能启动后继效果",
+              "Content without natural completion cannot start subsequent effects",
               target.path,
             );
           }
@@ -3115,7 +3238,7 @@ function motionPlan(
         return [candidate];
       }
       if (!hasActiveMembers(source)) {
-        // 空作用域的 END 等于 START；保留它作为真实时序节点，避免折叠合法偏移层。
+        // Empty scope END equals START; preserve it as real timeline node, avoiding folding legal delay layers.
         preservedScopeStarts.add(source.declaration.identity);
         return [candidate];
       }
@@ -3139,7 +3262,7 @@ function motionPlan(
           if (hasActiveMembers(source)) return [candidate];
           fail(
             "invalid-motion-time",
-            "空作用域起点的合成偏移不能写入单个 ST_TLTime 字段",
+            "Synthesized offset of empty scope start cannot be written to single ST_TLTime field",
             source.path,
           );
         }
@@ -3193,7 +3316,7 @@ function motionPlan(
       ) {
         fail(
           "motion-plan-conflict",
-          "同一逻辑完成不能投影到不相关的物理宿主",
+          "Same logical completion cannot be projected to an unrelated physical host",
           actualParent.path,
         );
       }
@@ -3212,7 +3335,7 @@ function motionPlan(
       if (current === undefined) {
         fail(
           "motion-plan-conflict",
-          "投影宿主不是消费节点的祖先",
+          "Projection host is not an ancestor of consumer node",
           actualParent.path,
         );
       }
@@ -3394,13 +3517,13 @@ function motionPlan(
         }
       }
 
-      // 只调整同一组原生时间节点的序列化顺序，依赖条件本身保持不变。
+      // Adjust only serialization order of the same group of native timeline nodes; dependency conditions remain unchanged.
       const nextRootNodes = rootNodes.map(() => new Set<number>());
       const rootIndegrees = rootNodes.map(() => 0);
       for (const [consumerIndex, references] of rootReferences.entries()) {
         for (const reference of references) {
           const definitionIndex = rootDefinitions.get(reference.id);
-          // 来源可能属于外层同一步根节点；由外层排序和最终顺序检查处理。
+          // Source may belong to outer root node of the same step; handled by outer sort and final order check.
           if (definitionIndex === undefined) continue;
           if (
             definitionIndex !== consumerIndex &&
@@ -3517,7 +3640,7 @@ function motionPlan(
         if (projectionChanged) return [...rootNodes];
         fail(
           "unknown-motion-start",
-          "递归投影后仍存在不能按真实时序定义的节点环",
+          "Node cycles that cannot be defined by real timeline still exist after recursive projection",
           parentScope?.path,
         );
       }
@@ -3550,7 +3673,7 @@ function motionPlan(
         if (memberEnd.state === "no-natural-completion") {
           fail(
             "motion-plan-conflict",
-            "有限作用域完成集合包含无自然完成成员",
+            "Finite scope completion collection contains member without natural completion",
             scope.path,
           );
         }
@@ -3583,7 +3706,7 @@ function motionPlan(
           if (dependency === undefined) {
             fail(
               "invalid-motion-time",
-              "完成集合的精确成员起点无法保持为合法的延迟层",
+              "Exact member start of completion collection cannot be preserved as a legal delay layer",
               scope.path,
             );
           }
@@ -3594,7 +3717,7 @@ function motionPlan(
         ) {
           fail(
             "unknown-motion-start",
-            "不能证明真实成员 END 晚于早宿主激活并可被全体收集",
+            "Cannot prove real member END is later than early host activation and can be collected entirely",
             scope.path,
           );
         }
@@ -3606,7 +3729,7 @@ function motionPlan(
       return {
         kind: "completion-collector",
         scopeId: scopeId(scope.declaration.identity, scopes),
-        // 每项门都引用原直接成员的完整 END；物理宿主 END 不进入这个集合。
+        // Each gate references complete END of original direct member; physical host END does not enter this collection.
         nativeStart: { kind: "parent-start", delayMs: 0 },
         gates,
       };
@@ -3617,13 +3740,21 @@ function motionPlan(
         if (member.kind === "scope") {
           const childScope = scopes.get(member.id);
           if (childScope === undefined) {
-            fail("missing-scope", "编排作用域的成员声明不存在", scope.path);
+            fail(
+              "missing-scope",
+              "Member declaration of choreography scope does not exist",
+              scope.path,
+            );
           }
           return scopeNode(childScope);
         }
         const target = targets.get(member.id);
         if (target === undefined) {
-          fail("invalid-motion", "编排作用域的对象成员声明不存在", scope.path);
+          fail(
+            "invalid-motion",
+            "Object member declaration of choreography scope does not exist",
+            scope.path,
+          );
         }
         const node = targetNode(target, scope);
         if (node === undefined) return [];
@@ -3679,7 +3810,7 @@ function motionPlan(
     ): MotionPlanNode => {
       const nativeStart = scopeStartPlans.get(scope.declaration.identity);
       if (nativeStart === undefined) {
-        fail("motion-plan-conflict", "作用域缺少已求解的起点", scope.path);
+        fail("motion-plan-conflict", "Scope lacks resolved start", scope.path);
       }
       recordStartCondition(nativeStart);
       const id = scopeId(scope.declaration.identity, scopes);
@@ -3745,7 +3876,7 @@ function motionPlan(
       if (!definedEvents.has(id)) {
         fail(
           "unknown-motion-start",
-          `原生完成来源 ${id} 必须在其条件引用之前定义`,
+          `Native completion source ${id} must be defined before its condition reference`,
           nodePath(node),
         );
       }
@@ -3777,7 +3908,7 @@ function motionPlan(
       ) {
         fail(
           "unknown-motion-start",
-          "条件集合必须在其消费者之前定义",
+          "Condition collection must be defined before its consumers",
           nodePath(node),
         );
       }
@@ -3800,7 +3931,7 @@ function motionPlan(
         if (definedEvents.has(eventId)) {
           fail(
             "motion-plan-conflict",
-            "同一作用域重复定义完成事件",
+            "Same scope repeatedly defined completion event",
             nodePath(node),
           );
         }
@@ -3842,7 +3973,7 @@ function motionPlan(
             if (definedConditions.has(conditionEvent(placement.join.id))) {
               fail(
                 "motion-plan-conflict",
-                "同一步重复定义条件集合",
+                "Same step repeatedly defined condition collection",
                 nodePath(node),
               );
             }
@@ -3854,7 +3985,7 @@ function motionPlan(
         if (remaining.size > 0) {
           fail(
             "motion-plan-conflict",
-            "条件集合宿主缺少实际插入位置",
+            "Condition collection host lacks actual insertion position",
             nodePath(node),
           );
         }
@@ -3871,7 +4002,7 @@ function motionPlan(
         if (definedConditions.has(conditionEvent(placement.join.id))) {
           fail(
             "motion-plan-conflict",
-            "同一步重复定义条件集合",
+            "Same step repeatedly defined condition collection",
             nodePath(node),
           );
         }
@@ -3881,9 +4012,12 @@ function motionPlan(
       verifyNodeOrder(node);
     }
     if (remainingRootPlacements.size > 0) {
-      fail("motion-plan-conflict", "根 with-group 缺少条件集合的实际消费节点");
+      fail(
+        "motion-plan-conflict",
+        "Root with-group lacks actual consumer node for condition collection",
+      );
     }
-    // 仅在原生计划完成后解析缺失祖先的边界，不参与生成排程或写出。
+    // Resolves boundaries of missing ancestors only after native plan is complete; does not participate in schedule generation or writing.
     const queryScopesByIdentity = new Map(
       queryScopes.map((scope) => [scope.identity, scope] as const),
     );
@@ -3995,13 +4129,14 @@ function motionPlan(
 
   const querySources: MotionQueryStepSource[] = plans.map((step) => {
     const source = querySourcesByStep.get(step.key);
-    if (source === undefined) throw new Error("MotionPlan 查询步缺失");
+    if (source === undefined)
+      throw new Error("MotionPlan query step is missing");
     const effects = step.effects.map((effect) => {
       const effectSource = source.effectSources.get(
         motionEffectKey(effect.target.id, effect.effectIndex, effect.partIndex),
       );
       if (effectSource === undefined) {
-        throw new Error("MotionPlan 查询效果缺失");
+        throw new Error("MotionPlan query effect is missing");
       }
       return effectSource;
     });

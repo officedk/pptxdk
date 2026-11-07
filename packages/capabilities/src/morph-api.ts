@@ -1,15 +1,15 @@
 import type { LinkTarget, MorphKey } from "@react-pptx/core";
 
 /**
- * 原生对象可用的显式跨页连续性声明。
+ * Explicit cross-slide continuity declaration available to native objects.
  *
- * Morph 会把句柄写入 OOXML 原生对象名称，因此同一对象不能再另设 name。
+ * Morph writes handles into the OOXML native object name, so the same object cannot declare a separate name.
  */
 export type MorphProps = {
   readonly morphKey?: MorphKey;
 };
 
-/** 公开原生对象的点击目标；核心负责把标识解析为文件关系。 */
+/** Click target for public native objects; core is responsible for resolving identifiers into package relationships. */
 export type LinkProps = {
   readonly link?: LinkTarget;
 };

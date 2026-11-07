@@ -114,11 +114,11 @@ type XmlAttributes = Record<string, string | number | boolean | undefined>;
 function invalidMotionTime(field: string): never {
   throw new CapabilityError(
     "invalid-motion-time",
-    `${field} 必须是精确的非负整数毫秒，且实际写入时不得超过 ST_TLTime 范围`,
+    `${field} must be an exact non-negative integer in milliseconds, and must not exceed ST_TLTime range when written`,
   );
 }
 
-// 累计总时长可由 repeat 表达；只有实际投影到 ST_TLTime 的字段受其上限约束。
+// Total accumulated duration can be expressed by repeat; only fields actually projected to ST_TLTime are constrained by its upper limit.
 function validateKnownTime(value: number | undefined, field: string): void {
   if (value !== undefined && (!Number.isSafeInteger(value) || value < 0)) {
     invalidMotionTime(field);
@@ -133,25 +133,34 @@ function timeNodeValue(value: number, field: string): number {
 
 function validateKnownMotionTimes(observation: MotionObservation): void {
   for (const scope of observation.scopes ?? []) {
-    validateKnownTime(scope.delayMs, "编排作用域延迟");
-    validateKnownTime(scope.eachMs, "交错间隔");
-    validateKnownTime(scope.startMs, "编排作用域起点");
-    validateKnownTime(scope.endMs, "编排作用域完成时刻");
-    validateKnownTime(scope.startAfter?.offsetMs, "作用域完成依赖偏移");
+    validateKnownTime(scope.delayMs, "orchestration scope delay");
+    validateKnownTime(scope.eachMs, "stagger interval");
+    validateKnownTime(scope.startMs, "orchestration scope start time");
+    validateKnownTime(scope.endMs, "orchestration scope completion time");
+    validateKnownTime(
+      scope.startAfter?.offsetMs,
+      "scope completion dependency offset",
+    );
     for (const dependency of scope.startAfterAll ?? []) {
-      validateKnownTime(dependency.offsetMs, "作用域起点约束偏移");
+      validateKnownTime(dependency.offsetMs, "scope start constraint offset");
     }
   }
   for (const step of observation.steps) {
     for (const effect of step.effects) {
-      validateKnownTime(effect.durationMs, "动画时长");
-      validateKnownTime(effect.delayMs, "动画延迟");
-      validateKnownTime(effect.intervalMs, "动画迭代间隔");
-      validateKnownTime(effect.startMs, "动画起点");
-      validateKnownTime(effect.endMs, "动画完成时刻");
-      validateKnownTime(effect.startAfter?.offsetMs, "动画完成依赖偏移");
+      validateKnownTime(effect.durationMs, "animation duration");
+      validateKnownTime(effect.delayMs, "animation delay");
+      validateKnownTime(effect.intervalMs, "animation iteration interval");
+      validateKnownTime(effect.startMs, "animation start time");
+      validateKnownTime(effect.endMs, "animation completion time");
+      validateKnownTime(
+        effect.startAfter?.offsetMs,
+        "animation completion dependency offset",
+      );
       for (const dependency of effect.startAfterAll ?? []) {
-        validateKnownTime(dependency.offsetMs, "动画起点约束偏移");
+        validateKnownTime(
+          dependency.offsetMs,
+          "animation start constraint offset",
+        );
       }
     }
   }
@@ -324,7 +333,10 @@ function geometryCenter(
   dimensions: { readonly width: number; readonly height: number },
 ): { readonly x: number; readonly y: number } {
   if (dimensions.width <= 0 || dimensions.height <= 0) {
-    throw new CapabilityError("invalid-motion-page-size", "页面尺寸必须大于 0");
+    throw new CapabilityError(
+      "invalid-motion-page-size",
+      "Slide dimensions must be greater than 0",
+    );
   }
   return {
     x: (box.x + box.width / 2) / dimensions.width,
@@ -332,7 +344,7 @@ function geometryCenter(
   };
 }
 
-/** 共同旋转中心按写入 xfrm 与 sldSz 的整数 EMU 计算，避免读回两种舍入结果。 */
+/** Common rotation center is calculated using integer EMUs from serialized xfrm and sldSz to avoid differing rounding results on readback. */
 function serializedGeometryCenter(
   box: GeometryBox,
   dimensions: { readonly width: number; readonly height: number },
@@ -340,7 +352,10 @@ function serializedGeometryCenter(
   const widthEmu = pxToEmu(dimensions.width);
   const heightEmu = pxToEmu(dimensions.height);
   if (widthEmu <= 0 || heightEmu <= 0) {
-    throw new CapabilityError("invalid-motion-page-size", "页面尺寸必须大于 0");
+    throw new CapabilityError(
+      "invalid-motion-page-size",
+      "Slide dimensions must be greater than 0",
+    );
   }
   return {
     x: (pxToEmu(box.x) + pxToEmu(box.width) / 2) / widthEmu,
@@ -352,7 +367,7 @@ function targetBox(effect: TimingEffect, purpose: string): GeometryBox {
   if (effect.targetBox === undefined) {
     throw new CapabilityError(
       "motion-target-geometry",
-      `${purpose}需要同次布局得到的原生对象范围`,
+      `${purpose} requires native object bounds obtained from the same layout`,
     );
   }
   return effect.targetBox;
@@ -404,7 +419,7 @@ function flyOffset(
   if (box === undefined) {
     throw new CapabilityError(
       "motion-target-geometry",
-      "整体文字入场需要同次布局得到的原生对象范围",
+      "Whole-text entrance requires native object bounds obtained from the same layout",
     );
   }
   const value = direction(effect);
@@ -419,7 +434,9 @@ function flyOffset(
       return { x: 0, y: (dimensions.height - box.y) / dimensions.height };
     default: {
       const exhaustiveCheck: never = value;
-      throw new Error(`不支持的方向: ${JSON.stringify(exhaustiveCheck)}`);
+      throw new Error(
+        `Unsupported direction: ${JSON.stringify(exhaustiveCheck)}`,
+      );
     }
   }
 }
@@ -436,17 +453,17 @@ function behaviorIds(
     ranges.map((range) => timingTarget(effect, range));
   const backgroundTarget = () => timingTarget(effect, undefined, true);
   const duration = effect.durationMs;
-  validateKnownTime(duration, "动画时长");
+  validateKnownTime(duration, "animation duration");
   if (effect.preset === "breathe") {
-    timeNodeValue(Math.round(duration / 2), "呼吸半周期");
+    timeNodeValue(Math.round(duration / 2), "breathe half-period");
   } else {
-    timeNodeValue(duration, "动画行为时长");
+    timeNodeValue(duration, "animation behavior duration");
   }
   if (effect.repeatCount !== undefined && effect.repeatCount !== "forever") {
-    timeNodeValue(effect.repeatCount * 1000, "动画重复次数");
+    timeNodeValue(effect.repeatCount * 1000, "animation repeat count");
   }
   if (effect.intervalMs !== undefined) {
-    timeNodeValue(effect.intervalMs, "动画迭代间隔");
+    timeNodeValue(effect.intervalMs, "animation iteration interval");
   }
   const show = (targetElement: string) =>
     visibilitySet(targetElement, "visible", ids);
@@ -509,7 +526,7 @@ function behaviorIds(
     additive: boolean | "sum",
     targetElement = target(),
   ) => motion(name, from, to, additive, targetElement);
-  // 共同中心位移已是完整进度函数；公式接收 0→1 数值进度，避免函数值被当作端点再次插值。
+  // Common center displacement is already a full progress function; the formula receives 0->1 numeric progress to avoid function values being re-interpolated as endpoints.
   const progressMotion = (
     name: string,
     formula: string,
@@ -541,7 +558,7 @@ function behaviorIds(
         attributeNames("r"),
       ),
     );
-  // 段落构建使用真实 pRg 和独立背景入口，避免整对象可见目标提前解锁后续段落。
+  // Paragraph building uses real pRg and independent background entrance, preventing whole-object visible target from prematurely unlocking subsequent paragraphs.
   const showOnce = () =>
     wholeText && effect.kind === "entrance"
       ? [...paragraphTargets(), ...backgroundTargets()]
@@ -592,7 +609,7 @@ function behaviorIds(
         ];
       }
       const center = geometryCenter(
-        targetBox(effect, "整体文字缩放"),
+        targetBox(effect, "whole-text zoom"),
         dimensions,
       );
       const geometry = targets.flatMap((targetElement) => [
@@ -691,13 +708,13 @@ function behaviorIds(
           filter("fade", target()),
         ];
       }
-      const box = targetBox(effect, "整体文字旋入");
+      const box = targetBox(effect, "whole-text spin-in");
       const center = serializedGeometryCenter(box, dimensions);
       const position = centerRotationDelta(effect, center, dimensions, true);
       const geometry = positionTargets().flatMap((targetElement) => [
         singleMotion("ppt_w", 0, "#ppt_w", false, targetElement),
         singleMotion("ppt_h", 0, "#ppt_h", false, targetElement),
-        // 段落旋转相对文本框原角度表达，不能再把对象角度加进端点。
+        // Paragraph rotation is expressed relative to text box original angle; object angle must not be added to endpoints again.
         singleMotion("style.rotation", 360, 0, false, targetElement),
         progressMotion("ppt_x", position[0], targetElement),
         progressMotion("ppt_y", position[1], targetElement),
@@ -727,7 +744,7 @@ function behaviorIds(
         ];
       }
       const center = geometryCenter(
-        targetBox(effect, "整体文字横向伸展"),
+        targetBox(effect, "whole-text stretch"),
         dimensions,
       );
       return [
@@ -786,7 +803,10 @@ function behaviorIds(
       }
       const center =
         effect.groupSpinCenter ??
-        serializedGeometryCenter(targetBox(effect, "整体文字自转"), dimensions);
+        serializedGeometryCenter(
+          targetBox(effect, "whole-text spin"),
+          dimensions,
+        );
       const position = centerRotationDelta(effect, center, dimensions);
       if (wholeText) {
         return [
@@ -846,7 +866,7 @@ function behaviorIds(
       ];
     default: {
       const exhaustiveCheck: never = effect.preset;
-      throw new Error(`不支持的预设: ${JSON.stringify(exhaustiveCheck)}`);
+      throw new Error(`Unsupported preset: ${JSON.stringify(exhaustiveCheck)}`);
     }
   }
 }
@@ -861,7 +881,10 @@ function effectTree(
   dimensions: { readonly width: number; readonly height: number },
 ): string {
   if (effect.startAfter !== undefined) {
-    validateKnownTime(effect.startAfter.offsetMs, "完成依赖偏移");
+    validateKnownTime(
+      effect.startAfter.offsetMs,
+      "completion dependency offset",
+    );
   }
   const preset = {
     fade: { id: 10, class: "entr" },
@@ -921,7 +944,7 @@ function effectTree(
         : element(
             "p:iterate",
             { type: effect.by === "word" ? "wd" : "lt" },
-            // 单次 dur 只描述当前词或字，不能伪装成整段自然完成时刻。
+            // Single dur only describes current word or letter; cannot masquerade as natural completion time of the entire paragraph.
             element("p:tmAbs", { val: effect.intervalMs }),
           ),
       element(
@@ -993,25 +1016,31 @@ function nativeStartCondition(
 ): string {
   if (start.kind === "parent-start") {
     return element("p:cond", {
-      delay: timeNodeValue(start.delayMs, "动画起点延迟"),
+      delay: timeNodeValue(start.delayMs, "animation start delay"),
     });
   }
   if (start.kind === "condition-join") {
-    throw new Error("MotionPlan 条件集合必须先于其消费者写出");
+    throw new Error(
+      "MotionPlan condition join must be emitted before its consumers",
+    );
   }
   if (start.kind === "delay-layer") {
-    throw new Error("MotionPlan 延迟层必须通过原生时间容器写出");
+    throw new Error(
+      "MotionPlan delay layer must be emitted through native time container",
+    );
   }
   if (start.kind === "condition-end") {
     const conditionId = conditionNodeIds.get(`${stepKey}:${start.id}`);
     if (conditionId === undefined) {
-      throw new Error("MotionPlan 条件集合缺少原生时间节点身份");
+      throw new Error(
+        "MotionPlan condition join is missing native time node identity",
+      );
     }
     return element(
       "p:cond",
       {
         evt: "end",
-        delay: timeNodeValue(start.delayMs, "条件集合完成偏移"),
+        delay: timeNodeValue(start.delayMs, "condition join completion offset"),
       },
       element("p:tn", { val: conditionId }),
     );
@@ -1024,7 +1053,9 @@ function nativeStartCondition(
     targetGroupIds,
   );
   if (dependencyId === undefined) {
-    throw new Error("MotionPlan 完成依赖没有对应的原生时序节点");
+    throw new Error(
+      "MotionPlan completion dependency lacks corresponding native timing node",
+    );
   }
   return element(
     "p:cond",
@@ -1033,14 +1064,17 @@ function nativeStartCondition(
         start.kind === "event" || start.dependency.point === "start"
           ? "begin"
           : "end",
-      delay: timeNodeValue(start.dependency.offsetMs, "完成依赖偏移"),
+      delay: timeNodeValue(
+        start.dependency.offsetMs,
+        "completion dependency offset",
+      ),
     },
     element("p:tn", { val: dependencyId }),
   );
 }
 
 function endSync(): string {
-  // 容器等全部真实子节点自然结束；不从这些子项估算聚合数值时长。
+  // Container waits for all actual child nodes to end naturally; aggregate duration value is not estimated from children.
   return element(
     "p:endSync",
     { evt: "end", delay: 0 },
@@ -1063,7 +1097,7 @@ function timingContainer(
       { id, ...(isEmpty ? { dur: 0 } : {}), fill: "hold", nodeType },
       element("p:stCondLst", undefined, startCondition),
       isEmpty ? undefined : endSync(),
-      // 空作用域的 END 与其未知 START 相同；省略空列表以保持合法 XML。
+      // An empty scope's END matches its unknown START; omit empty list to maintain valid XML.
       isEmpty ? undefined : element("p:childTnLst", undefined, ...children),
     ),
   );
@@ -1080,7 +1114,9 @@ function conditionJoinTree(
 ): string {
   const id = conditionNodeIds.get(`${stepKey}:${start.id}`);
   if (id === undefined) {
-    throw new Error("MotionPlan 条件集合缺少原生时间节点身份");
+    throw new Error(
+      "MotionPlan condition join is missing native time node identity",
+    );
   }
   return endCollectorTree(
     id,
@@ -1107,7 +1143,7 @@ function gateStart(gate: MotionPlanStartGate): MotionPlanStart {
       return gate.start;
     default: {
       const exhaustiveCheck: never = gate;
-      throw new Error(`不支持的 gate: ${JSON.stringify(exhaustiveCheck)}`);
+      throw new Error(`Unsupported gate: ${JSON.stringify(exhaustiveCheck)}`);
     }
   }
 }
@@ -1127,7 +1163,9 @@ function endCollectorTree(
   const gateTree = (gate: MotionPlanStartGate): string => {
     const { base, delays } = motionPlanStartLayers(gateStart(gate));
     if (base.kind === "condition-join") {
-      throw new Error("MotionPlan 原生条件门不能嵌入未定义的条件集合");
+      throw new Error(
+        "MotionPlan native condition gate cannot embed undefined condition joins",
+      );
     }
     const container = (
       start: MotionPlanStart,
@@ -1169,8 +1207,8 @@ function mainSequenceWithGroup(
   id: number,
   children: readonly string[],
 ): string {
-  // mainSeq 的标准 step→with-group→入口节点层级供原生导入识别步首角色。
-  // 分组从步首立即开始，不复制计划起点，也不创建 Shape 或完成来源。
+  // mainSeq standard step->with-group->entry-node hierarchy allows native import to identify step entry roles.
+  // Group starts immediately from step entry without duplicating plan start, nor creating Shape or completion sources.
   return element(
     "p:par",
     undefined,
@@ -1231,7 +1269,7 @@ function timingXml(
     }
   };
 
-  // 只为真实 end 依赖保留聚合节点；无消费者的容器可把起点投影给成员。
+  // Preserve aggregate nodes only for real end dependencies; containers without consumers can project start onto members.
   const collectReferencedContainers = (
     nodes: readonly MotionPlanNode[],
     stepKey: string,
@@ -1314,7 +1352,7 @@ function timingXml(
         effect.target.range?.type === "chart" &&
         !chartBuildGroupIds.has(effect.target.id)
       ) {
-        // bldGraphic 的 grpId 必须关联该图表实际存在的时间节点。
+        // bldGraphic grpId must be associated with an actually existing timing node of that chart.
         const id = effectNodeIds.get(effectKey(effect));
         if (id !== undefined) chartBuildGroupIds.set(effect.target.id, id);
       }
@@ -1365,7 +1403,7 @@ function timingXml(
     const members = effect.targetMembers;
     const descendantIds =
       members === undefined ? new Set<number>() : memberIds(members);
-    // 子项可由后续点击启动；只检查当前 Step 会遗漏仍活动的父 Group。
+    // Children can be triggered by subsequent clicks; checking only current Step misses still-active parent Groups.
     const hasAnimatedMember = slideEffects.some(
       ({ target }) =>
         target.id !== effect.target.id && descendantIds.has(target.id),
@@ -1379,7 +1417,7 @@ function timingXml(
       if (box === undefined) {
         throw new CapabilityError(
           "motion-target-geometry",
-          "原生 Group 自转投影需要同次布局得到的组合范围",
+          "Native Group rotation projection requires combination bounds obtained from the same layout",
         );
       }
       const center = serializedGeometryCenter(box, dimensions);
@@ -1387,7 +1425,7 @@ function timingXml(
       if (projectedMembers.length === 0) {
         throw new CapabilityError(
           "empty-group-projection",
-          "原生 Group 自转需要至少一个真实成员目标",
+          "Native Group rotation requires at least one real member target",
         );
       }
       const nativeEffects: MotionNativeProjection["nativeEffects"][number][] =
@@ -1403,7 +1441,7 @@ function timingXml(
         const memberEffect = slideEffects.find(
           ({ target }) => target.id === member.id,
         );
-        // 文字成员需沿用自己的段落数与背景职责，才能在 Group 投影中继续整对象变换。
+        // Text members must keep their own paragraph count and background role to continue whole-object transformation in Group projection.
         const targetTextBody = memberEffect?.targetTextBody ?? false;
         const projected: TimingEffect = {
           ...groupEffect,
@@ -1468,7 +1506,7 @@ function timingXml(
       ),
     ];
   };
-  // 空步骤只保留查询声明，不为原生时序树写入空的 childTnLst。
+  // Empty steps preserve query declarations only without writing empty childTnLst into native timing tree.
   const stepsWithNativeNodes = steps.filter(({ nodes }) => nodes.length > 0);
   const stepGroups = stepsWithNativeNodes.map((step) => {
     const hasConditionJoin = (start: MotionPlanStart): boolean =>
@@ -1490,9 +1528,9 @@ function timingXml(
             hasPrivateTimingDefinitions(node.children))
         );
       });
-    // 条件 join 要在首个 consumer 前定义，完成 collector 又要收集所有原始 END；
-    // 当前 writer 将每个 gate 与 consumer 放在同一个 step host。只要本步含有这类
-    // 私有定义，就保留整个共享宿主，避免拆分提升根时改变已验证的父节点与定义顺序。
+    // Condition join must be defined before first consumer, and completion collector must collect all original ENDs;
+    // current writer puts each gate and consumer on the same step host. As long as this step contains such
+    // private definitions, preserve the entire shared host to avoid changing verified parent nodes and definition order when promoting roots.
     const preserveStepHost =
       (step.conditionDefinitionsBefore?.length ?? 0) > 0 ||
       hasPrivateTimingDefinitions(step.nodes);
@@ -1508,7 +1546,7 @@ function timingXml(
     const childDelay = (effect: TimingEffect): number =>
       timeNodeValue(
         effect.delayMs + (effect.partIndex ?? 0) * effect.durationMs,
-        "动画对象成员延迟",
+        "animated object member delay",
       );
     type RenderedRootKind =
       | "effect"
@@ -1655,13 +1693,17 @@ function timingXml(
           node.nativeStart,
         );
         if (effectiveStart === undefined) {
-          throw new Error("原生时序投影需要保留延迟分层");
+          throw new Error(
+            "Native timing projection must preserve delay layering",
+          );
         }
         if (effectiveStart.kind === "delay-layer") {
           const { delays } = motionPlanStartLayers(effectiveStart);
           const lastDelay = delays.at(-1);
           if (lastDelay === undefined) {
-            throw new Error("MotionPlan 延迟层缺少实际延迟字段");
+            throw new Error(
+              "MotionPlan delay layer is missing actual delay field",
+            );
           }
           const delayedNode: MotionPlanNode = {
             ...node,
@@ -1702,7 +1744,9 @@ function timingXml(
         if (node.kind === "scope") {
           const scopeId = scopeNodeIds.get(`${step.key}:start:${node.id}`);
           if (scopeId === undefined) {
-            throw new Error("MotionPlan 作用域缺少原生时间节点身份");
+            throw new Error(
+              "MotionPlan scope is missing native time node identity",
+            );
           }
           const needsCompletionNode =
             node.splitCompletion !== true &&
@@ -1710,7 +1754,7 @@ function timingXml(
           const needsStartNode =
             node.preserveStart === true ||
             referencedScopeStartNodes.has(`${step.key}:start:${node.id}`);
-          // 只有计划步自身的根节点能复用 mainSeq step；透明外层被提升时，其后代仍保持原来的逻辑深度。
+          // Only root node of the plan step itself can reuse mainSeq step; when transparent outer layers are promoted, their descendants retain original logical depth.
           const promoteScopeToStep =
             isTopLevel &&
             !preserveStepHost &&
@@ -1777,7 +1821,7 @@ function timingXml(
             const liftedRoots = renderNodes(
               node.children,
               effectiveStart,
-              // 物理上移除无身份包装，不会把后代改成作者声明的步根。
+              // Physically removing identity-less wrapper does not convert descendants into author-declared step roots.
               false,
               pendingRootNodeType,
               node.conditionDefinitionsBefore,
@@ -1798,7 +1842,9 @@ function timingXml(
             `${step.key}:end:${node.scopeId}`,
           );
           if (collectorId === undefined) {
-            throw new Error("MotionPlan 完成集合缺少原生时间节点身份");
+            throw new Error(
+              "MotionPlan completion collection is missing native time node identity",
+            );
           }
           const condition = nativeStartCondition(
             effectiveStart,
@@ -1846,12 +1892,16 @@ function timingXml(
         if (keepTargetGroup) {
           const groupId = targetGroupIds.get(targetGroupKey);
           if (groupId === undefined) {
-            throw new Error("MotionPlan 对象成员缺少原生聚合节点身份");
+            throw new Error(
+              "MotionPlan object member is missing native aggregate node identity",
+            );
           }
           const children = node.effects.flatMap((effect, effectIndex) => {
             const effectId = effectNodeIds.get(effectKey(effect));
             if (effectId === undefined) {
-              throw new Error("MotionPlan 效果缺少原生时间节点身份");
+              throw new Error(
+                "MotionPlan effect is missing native time node identity",
+              );
             }
             const buildGroupId =
               effect.target.range?.type === "chart"
@@ -1865,7 +1915,7 @@ function timingXml(
               buildGroupId,
             );
           });
-          // 原生导入按固定深度识别步首；聚合容器与首真实效果保留各自的角色。
+          // Native import identifies step entry by fixed depth; aggregate container and first real effect retain their respective roles.
           rendered.push(
             renderedRoot(
               timingContainer(
@@ -1885,11 +1935,15 @@ function timingXml(
         for (const [effectIndex, effect] of node.effects.entries()) {
           const effectId = effectNodeIds.get(effectKey(effect));
           if (effectId === undefined) {
-            throw new Error("MotionPlan 效果缺少原生时间节点身份");
+            throw new Error(
+              "MotionPlan effect is missing native time node identity",
+            );
           }
           const localStart = effectStarts[effectIndex];
           if (localStart === undefined) {
-            throw new Error("原生时序投影丢失可编码的动画延迟分层");
+            throw new Error(
+              "Native timing projection lost encodable animation delay layering",
+            );
           }
           let effectStart = localStart;
           const rootNodeType =
@@ -1900,7 +1954,9 @@ function timingXml(
           if (localStart.kind === "delay-layer") {
             const lastDelay = motionPlanStartLayers(localStart).delays.at(-1);
             if (lastDelay === undefined) {
-              throw new Error("MotionPlan 效果延迟层缺少实际延迟字段");
+              throw new Error(
+                "MotionPlan effect delay layer is missing actual delay field",
+              );
             }
             effectStart = { kind: "parent-start", delayMs: lastDelay };
             effectNodeType = effectIndex === 0 ? "afterEffect" : "withEffect";
@@ -1941,7 +1997,7 @@ function timingXml(
       }
       return rendered;
     };
-    // nodeType 仅标记真实步首节点，应用的时刻条件仍完全来自计划。
+    // nodeType only marks true step entry node; application timing conditions remain entirely from the plan.
     const stepChildren = renderNodes(
       step.nodes,
       undefined,
@@ -2008,7 +2064,7 @@ function timingXml(
   const wholeTextEntranceTargets = new Set<number>();
   const wholeTextDeclarations = new Map<number, Set<number>>();
   for (const { effect, declaration } of nativeTextEffects) {
-    // 数组构建只统计 Text 自身的声明，Group 投影仍保留其逻辑身份。
+    // Array building only counts declarations on Text itself; Group projection retains its logical identity.
     if (
       !declaration.targetTextBody ||
       declaration.target.id !== effect.target.id
@@ -2033,7 +2089,7 @@ function timingXml(
     const previous = paragraphBuilds.get(key);
     const isDeclaredTextEffect =
       declaration.targetTextBody && declaration.target.id === effect.target.id;
-    // Whole Text 入场按段落构建，保留点击前隐藏和逐段延迟的原生职责。
+    // Whole-text entrance builds by paragraph, preserving native responsibilities of pre-click hiding and per-paragraph delays.
     const build =
       groupId === 1
         ? wholeTextEntranceTargets.has(effect.target.id) ||
@@ -2045,7 +2101,7 @@ function timingXml(
               declaration.target.range?.type === "paragraph")
           ? "p"
           : previous?.build;
-    // bldP 按真实写出的文字目标和构建组聚合；不改动作者编排身份。
+    // bldP aggregates by actually written text targets and build groups; does not alter author's orchestration identity.
     const animBg =
       groupId === 1 &&
       (previous?.animBg === true || hasWholeTextBackgroundBehaviors(effect));
@@ -2140,7 +2196,7 @@ function timingXml(
   return { xml, nativeProjections };
 }
 
-/** 页面级动画模块写入对象时序，并返回仅描述声明与可确定相对时间的观察。 */
+/** Slide-level motion module writes object timing and returns observation describing declarations and determinable relative times only. */
 export const motionCapability: SlideCapabilityModule = Object.freeze({
   declaration: "motion",
   slideProp: "__motion",
@@ -2181,7 +2237,7 @@ export const motionCapability: SlideCapabilityModule = Object.freeze({
         ? {}
         : { nativeProjections: timing.nativeProjections }),
     } satisfies MotionObservation;
-    // 查询身份必须绑定包含原生投影的最终公开观察对象。
+    // Query identity must bind to final public observation object containing native projections.
     registerMotionObservation(observation, plan.query);
     return {
       xml: timing.xml,

@@ -67,10 +67,10 @@ export type ShapePropertiesOptions = {
   readonly geometry?: Geometry;
   readonly flipH?: boolean;
   readonly flipV?: boolean;
-  /** 形状能力旧有的顶层填充属性。 */
+  /** Legacy top-level fill property of shape capability. */
   readonly fill?: ColorValue;
   readonly image?: boolean;
-  /** 无可见视觉的布局容器不要求写出原生变换。 */
+  /** Layout containers without visible styling do not require emitting native transforms. */
   readonly layoutOnlyWhenInvisible?: boolean;
 };
 
@@ -92,7 +92,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function finite(value: unknown, label: string): number {
   if (typeof value !== "number" || !Number.isFinite(value)) {
-    invalid("invalid-visual-style", `${label} 必须是有限数值`);
+    invalid("invalid-visual-style", `${label} must be a finite number`);
   }
   return value;
 }
@@ -111,7 +111,7 @@ function emu(
   ) {
     invalid(
       "invalid-visual-style",
-      `${label} 换算后必须处于 DrawingML 可写范围`,
+      `${label} must be within writable DrawingML range after conversion`,
     );
   }
   return converted;
@@ -126,7 +126,7 @@ function lineWidthEmu(value: number): number {
   ) {
     invalid(
       "invalid-visual-style",
-      "borderWidth 换算后必须在 1 到 20116800 EMU 的 DrawingML 线宽范围内",
+      "borderWidth must be within the DrawingML line width range of 1 to 20116800 EMU after conversion",
     );
   }
   return converted;
@@ -151,12 +151,16 @@ function shadowValue(
   readonly distance: number;
   readonly angle: number;
 } {
-  if (!isRecord(value)) invalid("invalid-shadow", `${label} 必须是阴影对象`);
+  if (!isRecord(value))
+    invalid("invalid-shadow", `${label} must be a shadow object`);
   const unknown = Object.keys(value).find(
     (key) => !["color", "blur", "distance", "angle"].includes(key),
   );
   if (unknown !== undefined)
-    invalid("invalid-shadow", `${label} 含未实现参数 ${unknown}`);
+    invalid(
+      "invalid-shadow",
+      `${label} contains unsupported parameter ${unknown}`,
+    );
   const blur =
     value["blur"] === undefined ? 4 : finite(value["blur"], `${label}.blur`);
   const distance =
@@ -168,7 +172,10 @@ function shadowValue(
       ? 90
       : finite(value["angle"], `${label}.angle`);
   if (blur < 0 || distance < 0)
-    invalid("invalid-shadow", `${label}.blur 与 distance 必须是非负长度`);
+    invalid(
+      "invalid-shadow",
+      `${label}.blur and distance must be non-negative lengths`,
+    );
   emu(blur, `${label}.blur`);
   emu(distance, `${label}.distance`);
   const colorValue = (value["color"] ?? {
@@ -196,7 +203,7 @@ function transformXml(
     ["flipV", flipV],
   ] as const) {
     if (value !== undefined && typeof value !== "boolean")
-      invalid("invalid-visual-style", `${name} 必须是布尔值`);
+      invalid("invalid-visual-style", `${name} must be a boolean`);
   }
   return `<a:xfrm${rotation === undefined || rotation === 0 ? "" : ` rot="${rotation}"`}${flipH ? ' flipH="1"' : ""}${flipV ? ' flipV="1"' : ""}><a:off x="${emu(box.x, "x", true, true)}" y="${emu(box.y, "y", true, true)}"/><a:ext cx="${emu(box.width, "width", false)}" cy="${emu(box.height, "height", false)}"/></a:xfrm>`;
 }
@@ -206,7 +213,10 @@ function rotationUnits(style: VisualStyleRecord): number | undefined {
   const degrees = finite(style["rotate"], "rotate");
   const units = Math.round((((degrees % 360) + 360) % 360) * 60000);
   if (!Number.isSafeInteger(units) || units < 0 || units > 21_600_000)
-    invalid("invalid-visual-style", "rotate 换算后超出 DrawingML 可写范围");
+    invalid(
+      "invalid-visual-style",
+      "rotate exceeds writable DrawingML range after conversion",
+    );
   return units;
 }
 
@@ -216,7 +226,10 @@ function point(value: number, label: string): string {
     !Number.isSafeInteger(coordinate) ||
     Math.abs(coordinate) > 2_147_483_647
   ) {
-    invalid("invalid-geometry", `${label} 换算后超出 DrawingML 路径坐标范围`);
+    invalid(
+      "invalid-geometry",
+      `${label} exceeds DrawingML path coordinate range after conversion`,
+    );
   }
   return String(coordinate);
 }
@@ -234,24 +247,30 @@ function pathCommandXml(command: PathCommand): string {
     case "Z":
       return "<a:close/>";
     default:
-      return invalid("invalid-geometry", "自定义路径含不支持的命令");
+      return invalid(
+        "invalid-geometry",
+        "Custom path contains unsupported command",
+      );
   }
 }
 
 function customGeometryXml(geometry: CustomGeometry): string {
   if (!isRecord(geometry) || !Array.isArray(geometry.paths))
-    invalid("invalid-geometry", "自定义 geometry 必须包含路径数组");
+    invalid("invalid-geometry", "Custom geometry must contain a paths array");
   const width = finite(geometry.width, "geometry.width");
   const height = finite(geometry.height, "geometry.height");
   if (width <= 0 || height <= 0 || geometry.paths.length === 0) {
-    invalid("invalid-geometry", "自定义几何必须有正 viewBox 和至少一个路径");
+    invalid(
+      "invalid-geometry",
+      "Custom geometry must have a positive viewBox and at least one path",
+    );
   }
   const widthUnits = point(width, "geometry.width");
   const heightUnits = point(height, "geometry.height");
   if (Number(widthUnits) === 0 || Number(heightUnits) === 0) {
     invalid(
       "invalid-geometry",
-      "自定义几何 viewBox 换算后必须在路径坐标空间内保留正宽和正高",
+      "Custom geometry viewBox must retain positive width and height in path coordinate space after conversion",
     );
   }
   const pathList = geometry.paths
@@ -261,7 +280,10 @@ function customGeometryXml(geometry: CustomGeometry): string {
         !Array.isArray(path.commands) ||
         path.commands.length === 0
       ) {
-        invalid("invalid-geometry", `自定义路径 ${index + 1} 必须包含命令`);
+        invalid(
+          "invalid-geometry",
+          `Custom path ${index + 1} must contain commands`,
+        );
       }
       if (
         (path.fill !== undefined && typeof path.fill !== "boolean") ||
@@ -269,7 +291,7 @@ function customGeometryXml(geometry: CustomGeometry): string {
       )
         invalid(
           "invalid-geometry",
-          `自定义路径 ${index + 1} 的 fill/stroke 必须是布尔值`,
+          `fill/stroke for custom path ${index + 1} must be boolean`,
         );
       const commands = path.commands.map(pathCommandXml).join("");
       return `<a:path w="${widthUnits}" h="${heightUnits}"${path.fill === false ? ' fill="none"' : ""}${path.stroke === false ? ' stroke="0"' : ""}>${commands}</a:path>`;
@@ -288,7 +310,7 @@ function geometryXml(
     if (radius !== undefined && radius > 0)
       invalid(
         "unsupported-style-combination",
-        "borderRadius 不能与自定义 geometry 同时使用",
+        "borderRadius cannot be used together with custom geometry",
       );
     return { xml: customGeometryXml(value), name: "custom" };
   }
@@ -305,21 +327,21 @@ function geometryXml(
     name = value["name"];
     if (value["adjust"] !== undefined) {
       if (!isRecord(value["adjust"]))
-        invalid("invalid-geometry", "preset.adjust 必须是对象");
+        invalid("invalid-geometry", "preset.adjust must be an object");
       adjust = { ...value["adjust"] };
     }
   } else
     invalid(
       "invalid-geometry",
-      "geometry 必须是预设名称、preset(...) 或自定义路径",
+      "geometry must be a preset name, preset(...), or custom path",
     );
   if (!presetGeometryNames.has(name))
-    invalid("unsupported-geometry", `不支持预设几何 ${name}`);
+    invalid("unsupported-geometry", `Unsupported preset geometry ${name}`);
   if (radius !== undefined && radius > 0) {
     if (name !== "rect" && name !== "roundRect")
       invalid(
         "unsupported-style-combination",
-        "borderRadius 只适用于 rect 或 roundRect geometry",
+        "borderRadius is only applicable to rect or roundRect geometry",
       );
     name = "roundRect";
     if (adjust["adj"] === undefined) {
@@ -331,13 +353,16 @@ function geometryXml(
         warnings.push({
           code: "geometry-adjustment-range",
           message:
-            "borderRadius 超过短边的一半；已保留原始半径并写入原生调整值",
+            "borderRadius exceeds half of the shorter side; preserved original radius and wrote native adjust value",
         });
     }
   }
   for (const [key, amount] of Object.entries(adjust)) {
     if (!/^adj(?:[1-9]\d*)?$/u.test(key) || !Number.isSafeInteger(amount))
-      invalid("invalid-geometry", `preset.adjust.${key} 必须是有限整数`);
+      invalid(
+        "invalid-geometry",
+        `preset.adjust.${key} must be a finite integer`,
+      );
     if (
       name === "blockArc" &&
       (((key === "adj1" || key === "adj2") &&
@@ -346,7 +371,7 @@ function geometryXml(
     ) {
       warnings.push({
         code: "geometry-adjustment-range",
-        message: `blockArc.${key} 超出常用预设范围；已保留原始调整值`,
+        message: `blockArc.${key} exceeds common preset range; preserved original adjust value`,
       });
     }
   }
@@ -372,7 +397,7 @@ export function fillXml(
   ) {
     invalid(
       "unsupported-style-combination",
-      "Shape.fill 不能与 style.backgroundColor 或 backgroundImage 同时设置",
+      "Shape.fill cannot be set together with style.backgroundColor or backgroundImage",
     );
   }
   if (explicitFill !== undefined)
@@ -382,7 +407,7 @@ export function fillXml(
   if (background !== undefined && image !== undefined)
     invalid(
       "unsupported-style-combination",
-      "backgroundColor 与 backgroundImage 不能同时设置",
+      "backgroundColor and backgroundImage cannot be set simultaneously",
     );
   if (image !== undefined) {
     if (
@@ -394,13 +419,13 @@ export function fillXml(
     ) {
       invalid(
         "invalid-gradient",
-        "backgroundImage 必须是含至少两个色标的线性或径向渐变",
+        "backgroundImage must be a linear or radial gradient with at least two color stops",
       );
     }
     const stops = image["stops"]
       .map((stop: unknown, index: number) => {
         if (!isRecord(stop))
-          invalid("invalid-gradient", `渐变色标 ${index + 1} 无效`);
+          invalid("invalid-gradient", `Gradient stop ${index + 1} is invalid`);
         const position = finite(
           stop["position"],
           `backgroundImage.stops[${index}].position`,
@@ -408,7 +433,7 @@ export function fillXml(
         if (position < 0 || position > 1)
           invalid(
             "invalid-gradient",
-            `渐变色标 ${index + 1} 的 position 必须位于 0 到 1`,
+            `position for gradient stop ${index + 1} must be between 0 and 1`,
           );
         const color = withOpacity(
           theme.resolveColor(stop["color"] as ColorValue),
@@ -440,7 +465,11 @@ function lineXml(
     style["borderWidth"] === undefined
       ? 1
       : finite(style["borderWidth"], "borderWidth");
-  if (width < 0) invalid("invalid-visual-style", "borderWidth 必须是非负数");
+  if (width < 0)
+    invalid(
+      "invalid-visual-style",
+      "borderWidth must be a non-negative number",
+    );
   const styleName = style["borderStyle"];
   if (
     styleName !== undefined &&
@@ -449,7 +478,7 @@ function lineXml(
   )
     invalid(
       "invalid-visual-style",
-      "borderStyle 只能是 solid、dashed 或 dotted",
+      "borderStyle must be solid, dashed, or dotted",
     );
   if (color === undefined || width === 0) return "<a:ln><a:noFill/></a:ln>";
   const dash =
@@ -473,7 +502,7 @@ function effectsXml(theme: ThemeContext, style: VisualStyleRecord): string {
   if (style["softEdge"] !== undefined) {
     const softEdge = finite(style["softEdge"], "softEdge");
     if (softEdge < 0)
-      invalid("invalid-visual-style", "softEdge 必须是非负长度");
+      invalid("invalid-visual-style", "softEdge must be a non-negative length");
     if (softEdge > 0)
       items.push(`<a:softEdge rad="${emu(softEdge, "softEdge", false)}"/>`);
   }
@@ -482,7 +511,7 @@ function effectsXml(theme: ThemeContext, style: VisualStyleRecord): string {
     : `<a:effectLst>${items.join("")}</a:effectLst>`;
 }
 
-/** Shape、Image、Text 与可见 Box 形状属性共用的序列化器。 */
+/** Shared serializer for shape properties of Shape, Image, Text, and visible Box. */
 export function shapePropertiesXml(
   options: ShapePropertiesOptions,
 ): ShapePropertiesResult {
@@ -493,7 +522,7 @@ export function shapePropertiesXml(
       ? undefined
       : finite(style["opacity"], "opacity");
   if (opacity !== undefined && (opacity < 0 || opacity > 1))
-    invalid("invalid-visual-style", "opacity 必须是 0 到 1 之间的数值");
+    invalid("invalid-visual-style", "opacity must be a number between 0 and 1");
   if (
     options.image &&
     (style["backgroundColor"] !== undefined ||
@@ -502,14 +531,17 @@ export function shapePropertiesXml(
   )
     invalid(
       "unsupported-style-combination",
-      "Image 不支持背景填充或 borderRadius",
+      "Image does not support background fill or borderRadius",
     );
   const radius =
     style["borderRadius"] === undefined
       ? undefined
       : finite(style["borderRadius"], "borderRadius");
   if (radius !== undefined && radius < 0)
-    invalid("invalid-visual-style", "borderRadius 必须是非负长度");
+    invalid(
+      "invalid-visual-style",
+      "borderRadius must be a non-negative length",
+    );
   const visualFill = options.image
     ? ""
     : fillXml(theme, style, options.fill, opacity);
@@ -529,7 +561,7 @@ export function shapePropertiesXml(
     box,
     warnings,
   );
-  // 透明布局 Box 不写原生变换，但非法旋转仍是不可写的视觉声明。
+  // Transparent layout Box does not write native transforms, but invalid rotation remains an unwritable visual declaration.
   const rotation = rotationUnits(style);
   const transform =
     options.layoutOnlyWhenInvisible && !hasVisibleStyle

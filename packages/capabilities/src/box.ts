@@ -13,7 +13,7 @@ import { shapePropertiesXml } from "./visual.ts";
 function styleRecord(value: unknown): Record<string, unknown> {
   if (value === undefined) return {};
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
-    throw new CapabilityError("invalid-style", "Box.style 必须是对象");
+    throw new CapabilityError("invalid-style", "Box.style must be an object");
   }
   return value as Record<string, unknown>;
 }
@@ -28,7 +28,7 @@ function objectXml(
   return `<p:sp><p:nvSpPr><p:cNvPr id="${id}" name="${xmlEscape(name)}">${linkXml}</p:cNvPr><p:cNvSpPr/><p:nvPr/></p:nvSpPr>${properties}</p:sp>`;
 }
 
-/** 可见 Box 背景使用同一形状属性 writer；无填充/线/阴影时仅保留布局语义。 */
+/** Visible Box backgrounds use the same shape property writer; boxes without fill, stroke, or shadow retain layout semantics only. */
 export const boxCapability: CapabilityModule = {
   declaration: "rp:box",
   compile(input: CapabilityInput, context) {
@@ -47,25 +47,34 @@ export const boxCapability: CapabilityModule = {
     if (unknown !== undefined) {
       throw new CapabilityError(
         "unknown-parameter",
-        `Box 含未实现参数 ${unknown}`,
+        `Box contains unsupported parameter ${unknown}`,
       );
     }
     const box = context.layoutBox;
     if (box === undefined)
-      throw new CapabilityError("layout-unavailable", "Box 缺少布局结果");
+      throw new CapabilityError(
+        "layout-unavailable",
+        "Box is missing layout results",
+      );
     const testId = input.props["testId"];
     if (
       testId !== undefined &&
       (typeof testId !== "string" || testId.trim() === "")
     ) {
-      throw new CapabilityError("invalid-parameter", "testId 必须是非空字符串");
+      throw new CapabilityError(
+        "invalid-parameter",
+        "testId must be a non-empty string",
+      );
     }
     const part = input.props["part"];
     if (
       part !== undefined &&
       (typeof part !== "string" || part.trim() === "")
     ) {
-      throw new CapabilityError("invalid-parameter", "part 必须是非空字符串");
+      throw new CapabilityError(
+        "invalid-parameter",
+        "part must be a non-empty string",
+      );
     }
     const name =
       context.morphName ??

@@ -599,7 +599,7 @@ describe("几何、对象视觉和文字视觉", () => {
     assert.throws(
       () => path("M 0 0 L 2 ?", { viewBox: [10, 10] }),
       (error: unknown) =>
-        error instanceof Error && error.message.includes("SVG 路径"),
+        error instanceof Error && error.message.includes("SVG path"),
     );
     const invalidCases: readonly [ReturnType<typeof createElement>, string][] =
       [

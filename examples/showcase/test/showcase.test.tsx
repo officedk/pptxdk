@@ -173,14 +173,14 @@ it("真实卡片模板替换内容、增减和重排项目后仍保持布局与�
       for (const object of [title, body]) {
         assert.ok(!ids.has(object.id));
         ids.add(object.id);
-        assert.ok(object.boxEmu!.x >= previousRight);
-        assert.ok(object.boxEmu!.y + object.boxEmu!.height <= 720 * 9525);
-        assert.ok(object.boxEmu!.x + object.boxEmu!.width <= 1280 * 9525);
+        assert.ok(object.boxEmu.x >= previousRight);
+        assert.ok(object.boxEmu.y + object.boxEmu.height <= 720 * 9525);
+        assert.ok(object.boxEmu.x + object.boxEmu.width <= 1280 * 9525);
       }
-      assert.equal(body.boxEmu!.x, title.boxEmu!.x);
-      assert.ok(body.boxEmu!.y >= title.boxEmu!.y + title.boxEmu!.height);
-      previousRight = title.boxEmu!.x + title.boxEmu!.width;
-      if (position === 0) bodyWidths.push(body.boxEmu!.width);
+      assert.equal(body.boxEmu.x, title.boxEmu.x);
+      assert.ok(body.boxEmu.y >= title.boxEmu.y + title.boxEmu.height);
+      previousRight = title.boxEmu.x + title.boxEmu.width;
+      if (position === 0) bodyWidths.push(body.boxEmu.width);
     }
   }
   assert.ok(bodyWidths[0]! > bodyWidths[1]!);
@@ -208,7 +208,7 @@ it("进度模块由页面指定位置和宽度，内部构图保持比例与点�
     const progress = page.objects.find(
       ({ name }) => name === "progress-example",
     )!;
-    const bounds = progress.boxEmu!;
+    const bounds = progress.boxEmu;
     assert.equal(page.animations?.length, 2);
     assert.ok(Math.abs(bounds.x - frame.x * 9525) <= 9525);
     assert.ok(Math.abs(bounds.y - frame.y * 9525) <= 9525);

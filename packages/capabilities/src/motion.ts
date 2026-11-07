@@ -407,7 +407,8 @@ function flyOffset(
       "整体文字入场需要同次布局得到的原生对象范围",
     );
   }
-  switch (direction(effect)) {
+  const value = direction(effect);
+  switch (value) {
     case "left":
       return { x: -(box.x + box.width) / dimensions.width, y: 0 };
     case "right":
@@ -416,6 +417,10 @@ function flyOffset(
       return { x: 0, y: -(box.y + box.height) / dimensions.height };
     case "bottom":
       return { x: 0, y: (dimensions.height - box.y) / dimensions.height };
+    default: {
+      const exhaustiveCheck: never = value;
+      throw new Error(`不支持的方向: ${JSON.stringify(exhaustiveCheck)}`);
+    }
   }
 }
 
@@ -839,6 +844,10 @@ function behaviorIds(
           ),
         ),
       ];
+    default: {
+      const exhaustiveCheck: never = effect.preset;
+      throw new Error(`不支持的预设: ${JSON.stringify(exhaustiveCheck)}`);
+    }
   }
 }
 
@@ -1096,6 +1105,10 @@ function gateStart(gate: MotionPlanStartGate): MotionPlanStart {
       return { kind: "event", dependency: gate.dependency };
     case "plan-start":
       return gate.start;
+    default: {
+      const exhaustiveCheck: never = gate;
+      throw new Error(`不支持的 gate: ${JSON.stringify(exhaustiveCheck)}`);
+    }
   }
 }
 

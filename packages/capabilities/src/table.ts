@@ -522,8 +522,7 @@ function mergeBorder(
       path,
     );
   }
-  const width =
-    (widthValue as number | undefined) ?? (borderColor === undefined ? 0 : 1);
+  const width = widthValue ?? (borderColor === undefined ? 0 : 1);
   if (width === 0) return undefined;
   pxExtent(width, "borderWidth", path);
   return {
@@ -638,7 +637,7 @@ function prepareRows(
     onlyKeys(child.props, tablePartParameters, "Row", rowPath);
     optionalName(child.props["testId"], "testId", rowPath);
     optionalName(child.props["part"], "part", rowPath);
-    const rowStyle = trackStyle(child as CapabilityInput, "row", rowPath);
+    const rowStyle = trackStyle(child, "row", rowPath);
     const heightValue = rowStyle.style["height"];
     const height =
       heightValue === undefined
@@ -722,11 +721,7 @@ function prepareRows(
           }
         }
       }
-      const cellStyle = trackStyle(
-        cellChild as CapabilityInput,
-        "cell",
-        cellPath,
-      );
+      const cellStyle = trackStyle(cellChild, "cell", cellPath);
       const fill =
         color(
           cellStyle.style["backgroundColor"],
@@ -739,7 +734,7 @@ function prepareRows(
         rowVerticalAlign;
       const border = mergeBorder(cellStyle.style, theme, cellPath);
       const cell: ParsedCell = {
-        node: cellChild as ParsedCell["node"],
+        node: cellChild,
         row: rowIndex,
         column,
         rowSpan,

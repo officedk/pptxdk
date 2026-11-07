@@ -237,7 +237,7 @@ function freezeMoment(
   ref: MotionMomentRef,
   time: MotionTime,
 ): MotionMomentObservation {
-  return Object.freeze({ ...time, ref }) as MotionMomentObservation;
+  return Object.freeze({ ...time, ref });
 }
 
 function projectEffectObservation(
@@ -756,7 +756,7 @@ export function createMotionQuery(
               result: unknownDecision("different-step"),
             });
           }
-          const effect = effectSourcesByRef.get(effectRef as object);
+          const effect = effectSourcesByRef.get(effectRef);
           if (effect === undefined) throw new Error("Motion 查询效果源丢失");
           return Object.freeze({
             effect: effectRef,

@@ -28,7 +28,7 @@ export function linearGradient(
       typeof stop === "object" && stop !== null && "position" in stop
         ? stop
         : {
-            color: stop as ColorValue,
+            color: stop,
             position: stops.length === 1 ? 0 : index / (stops.length - 1),
           },
     ),
@@ -44,7 +44,7 @@ export function radialGradient(
       typeof stop === "object" && stop !== null && "position" in stop
         ? stop
         : {
-            color: stop as ColorValue,
+            color: stop,
             position: stops.length === 1 ? 0 : index / (stops.length - 1),
           },
     ),
@@ -306,7 +306,7 @@ function geometryXml(
     if (value["adjust"] !== undefined) {
       if (!isRecord(value["adjust"]))
         invalid("invalid-geometry", "preset.adjust 必须是对象");
-      adjust = { ...value["adjust"] } as Record<string, number>;
+      adjust = { ...value["adjust"] };
     }
   } else
     invalid(

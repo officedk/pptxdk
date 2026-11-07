@@ -425,7 +425,7 @@ function cropValues(value: unknown): Record<string, number> | undefined {
         `crop.${side} 必须是 0 到 1 之间的有限分数`,
       );
     }
-    result[{ left: "l", top: "t", right: "r", bottom: "b" }[side]!] = fraction;
+    result[{ left: "l", top: "t", right: "r", bottom: "b" }[side]] = fraction;
   }
   if ((result["l"] ?? 0) + (result["r"] ?? 0) > 1) {
     throw new CapabilityError("invalid-crop", "crop 左右边之和不能超过 1");

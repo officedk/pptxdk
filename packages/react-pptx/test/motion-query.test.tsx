@@ -733,18 +733,18 @@ describe("observeMotion", () => {
     assert.ok(paragraphScope);
     assert.ok(paragraphParts[0]?.scopes.includes(paragraphScope.ref));
     assert.equal(
-      step.difference(source.end.ref, followers[0]!.start.ref).state,
+      step.difference(source.end.ref, followers[0].start.ref).state,
       "known",
     );
-    assert.deepEqual(step.difference(source.end.ref, followers[0]!.start.ref), {
+    assert.deepEqual(step.difference(source.end.ref, followers[0].start.ref), {
       state: "known",
       ms: 20,
     });
-    assert.deepEqual(step.before(source.end.ref, followers[0]!.start.ref), {
+    assert.deepEqual(step.before(source.end.ref, followers[0].start.ref), {
       state: "known",
       value: true,
     });
-    assert.deepEqual(step.overlap(source.ref, followers[0]!.ref), {
+    assert.deepEqual(step.overlap(source.ref, followers[0].ref), {
       state: "known",
       value: false,
     });

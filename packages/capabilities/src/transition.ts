@@ -127,7 +127,7 @@ export const transitions = Object.freeze({
     declaration("flip", {
       ...options,
       direction: options.direction === undefined ? "right" : options.direction,
-    }) as FlipTransition,
+    }),
   /** 使用 p159 Morph；必须显式提供基础格式 fallback。 */
   morph: (
     options: TransitionOptions & {
@@ -138,7 +138,7 @@ export const transitions = Object.freeze({
     declaration("morph", {
       ...options,
       by: options.by === undefined ? "object" : options.by,
-    }) as MorphTransition,
+    }),
 });
 
 function fail(code: string, message: string): never {

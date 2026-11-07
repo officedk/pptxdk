@@ -249,7 +249,7 @@ export function textStyleFrom(value: unknown): TextStyle {
     Object.entries(value).filter(
       ([key, item]) => textStyleKeys.has(key) && item !== undefined,
     ),
-  ) as TextStyle;
+  );
 }
 
 function nativeSlot(value: string): value is NativeColorSlot {
@@ -272,7 +272,7 @@ function normalizeTheme(input: ThemeInput = {}): Theme {
     name: input.name ?? "Office Theme",
     colors: Object.freeze(colors),
     fonts: Object.freeze(fonts),
-  }) as Theme;
+  });
 }
 
 /** 使用首版 Office 配色和字体填充未提供的主题项。 */
@@ -474,7 +474,7 @@ function resolveColorValue(
     value["lumOff"] === undefined
       ? undefined
       : checkedFraction(value["lumOff"], "lumOff");
-  const slot = value["slot"] as NativeColorSlot;
+  const slot = value["slot"];
   const base = resolveColorName(slot, rootContext(context), depth + 1);
   return {
     hex: shadeHex(base.hex, lumMod, lumOff ?? 0),
@@ -580,9 +580,9 @@ function createContext(
       let raw: string | ThemeShade;
       let alpha: number | undefined;
       if (typeof value === "string" || (record(value) && "slot" in value)) {
-        raw = value as string | ThemeShade;
+        raw = value;
       } else if (record(value) && "color" in value) {
-        raw = value["color"] as string | ThemeShade;
+        raw = value["color"];
         alpha =
           value["alpha"] === undefined
             ? undefined

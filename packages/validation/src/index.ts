@@ -4807,7 +4807,7 @@ function readSlideAnimations(
             }
             return {
               type: "chart" as const,
-              step: step as "gridLegend" | "series" | "category",
+              step: step,
               seriesIndex,
               categoryIndex,
             };

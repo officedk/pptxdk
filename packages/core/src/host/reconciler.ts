@@ -139,6 +139,7 @@ const reconciler = Reconciler<
   shouldSetTextContent: () => false,
   getRootHostContext: () => ({}),
   getChildHostContext: (parent) => parent,
+  // oxlint-disable-next-line typescript/no-unsafe-type-assertion
   getPublicInstance: () => null as never,
   prepareForCommit: () => null,
   resetAfterCommit() {},
@@ -150,7 +151,9 @@ const reconciler = Reconciler<
   getInstanceFromScope: () => null,
   detachDeletedInstance() {},
   bindToConsole: (methodName, args) =>
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion
     Function.prototype.bind.call(
+      // oxlint-disable-next-line typescript/no-unsafe-type-assertion
       console[methodName as "log"],
       console,
       ...(args as unknown[]),
@@ -205,7 +208,9 @@ export async function withHostTree<T>(
   let outcomeError: unknown;
   let cleanupError: { error: unknown } | undefined;
   let cleaning = false;
+  // oxlint-disable-next-line unicorn/consistent-function-scoping
   let resolveCompletion = (): void => {};
+  // oxlint-disable-next-line unicorn/consistent-function-scoping
   let rejectCompletion = (_error: unknown): void => {};
   const completion = new Promise<void>((resolve, reject) => {
     resolveCompletion = resolve;
@@ -221,6 +226,7 @@ export async function withHostTree<T>(
     else rejectCompletion(error);
   };
 
+  // oxlint-disable-next-line unicorn/consistent-function-scoping
   let queueCompletionCheck = (): void => {};
   const root = reconciler.createContainer(
     container,
@@ -241,6 +247,7 @@ export async function withHostTree<T>(
     () => {},
     null,
   );
+  // oxlint-disable-next-line typescript/no-unsafe-type-assertion
   const fiberRoot = root as unknown as FiberRoot;
   const currentDescriptor = Object.getOwnPropertyDescriptor(root, "current");
   let current = fiberRoot.current;
@@ -360,5 +367,6 @@ export async function withHostTree<T>(
   if (finalOutcome !== "completed" || !hasResult) {
     throw new Error("React 构建未产生完成结果");
   }
+  // oxlint-disable-next-line typescript/no-unsafe-type-assertion
   return result as T;
 }

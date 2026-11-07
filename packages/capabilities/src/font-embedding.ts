@@ -206,7 +206,7 @@ function checkedFont(
       `${use.family} 的字体数据不是受支持的静态 TrueType 字体`,
     );
   }
-  const font = opened as fontkit.Font;
+  const font = opened;
   if (!matchesFontFamily(font, use.family)) {
     return fail(
       use,
@@ -281,7 +281,7 @@ function subsetBytes(
       Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength),
     );
     if (opened.type !== "TTF") throw new Error("子集不是静态 TrueType 字体");
-    font = opened as fontkit.Font;
+    font = opened;
     tablesOf(bytes, use);
   } catch (error) {
     return fail(

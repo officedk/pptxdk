@@ -406,6 +406,10 @@ function chartPlot(
           ? el("c:holeSize", { val: props.holeSize ?? 50 })
           : undefined,
       );
+    default: {
+      const exhaustiveCheck: never = props;
+      throw new Error(`不支持的图表类型: ${JSON.stringify(exhaustiveCheck)}`);
+    }
   }
 }
 

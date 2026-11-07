@@ -276,7 +276,7 @@ function textOnlyStyle(value: unknown): TextStyle | undefined {
     chartTextStyleKeys.flatMap((key) =>
       value[key] === undefined ? [] : [[key, value[key]]],
     ),
-  ) as TextStyle;
+  );
 }
 
 function optionalColor(value: unknown, label: string): ColorValue | undefined {
@@ -287,7 +287,7 @@ function optionalColor(value: unknown, label: string): ColorValue | undefined {
   ) {
     return value as ColorValue;
   }
-  fail("invalid-color", `${label} 必须是颜色值或主题令牌`);
+  return fail("invalid-color", `${label} 必须是颜色值或主题令牌`);
 }
 
 function finiteNumber(value: unknown, label: string): number {
@@ -432,9 +432,7 @@ function axis(
     ...(min === undefined ? {} : { min }),
     ...(max === undefined ? {} : { max }),
     ...(majorUnit === undefined ? {} : { majorUnit }),
-    ...(numberFormat === undefined
-      ? {}
-      : { numberFormat: numberFormat as string }),
+    ...(numberFormat === undefined ? {} : { numberFormat: numberFormat }),
     ...(gridlines === undefined
       ? {}
       : {
@@ -635,9 +633,7 @@ function labels(
     ...(position === undefined
       ? {}
       : { position: position as NonNullable<ChartDataLabels["position"]> }),
-    ...(numberFormat === undefined
-      ? {}
-      : { numberFormat: numberFormat as string }),
+    ...(numberFormat === undefined ? {} : { numberFormat: numberFormat }),
     ...(value["style"] === undefined
       ? {}
       : { style: value["style"] as TextStyle }),
@@ -1235,8 +1231,8 @@ function validateProps(
             "category",
           ),
         }),
-    ...(gapWidth === undefined ? {} : { gapWidth: gapWidth as number }),
-    ...(overlap === undefined ? {} : { overlap: overlap as number }),
+    ...(gapWidth === undefined ? {} : { gapWidth: gapWidth }),
+    ...(overlap === undefined ? {} : { overlap: overlap }),
     ...(chartKind === "pie" || chartKind === "doughnut"
       ? {
           ...(explosion === undefined ? {} : { explosion }),

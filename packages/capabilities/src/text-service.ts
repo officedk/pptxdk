@@ -357,7 +357,7 @@ function fontFamilyValue(value: FontReference | undefined): Font {
       "Font.embeddable 必须是布尔值",
     );
   }
-  return value as Font;
+  return value;
 }
 
 function normalizedFonts(style: RunStyle): NormalizedFont[] {
@@ -467,7 +467,7 @@ function readRunStyle(value: unknown): RunStyle {
     ],
     "Span.style",
   );
-  return validateRunStyle(props as RunStyle);
+  return validateRunStyle(props);
 }
 
 function mergeRunStyle(
@@ -488,7 +488,7 @@ function mergeRunStyle(
     }
   }
   if (child.color !== undefined && !isResolvedColor(child.color)) {
-    declared["color"] = theme.resolveColor(child.color as ColorValue);
+    declared["color"] = theme.resolveColor(child.color);
   }
   // P 和 Span 未声明的字段会是 undefined，不能覆盖继承的父级样式。
   const merged = { ...parent, ...declared } as RunStyle;
@@ -615,7 +615,7 @@ function readTextStyle(
     runStyle.fontFamily ?? defaultTextStyle.fontFamily!,
   );
   if (runStyle.color !== undefined && !isResolvedColor(runStyle.color)) {
-    theme.resolveColor(runStyle.color as ColorValue);
+    theme.resolveColor(runStyle.color);
   }
   validateRunStyle({
     ...runStyle,
@@ -1075,7 +1075,7 @@ function measureFace(source: NormalizedFont): MeasureFace {
     }
   }
 
-  if (source.substitute !== true && !matchesFontFamily(parsed, source.family)) {
+  if (!source.substitute && !matchesFontFamily(parsed, source.family)) {
     throw new CapabilityError(
       "font-substitution-required",
       `度量文件声明为 ${parsed.familyName}，要保留输出字体名 ${source.family} 必须显式设置 Font.substitute`,

@@ -56,7 +56,7 @@ function testFont(path: string): Uint8Array {
 function parsedFont(bytes: Uint8Array): fontkit.Font {
   const parsed = fontkit.create(Buffer.from(bytes));
   if (parsed.type !== "TTF") throw new Error("预期静态 TrueType 字体");
-  return parsed as fontkit.Font;
+  return parsed;
 }
 
 function shapedGlyphs(
@@ -1653,7 +1653,7 @@ describe("公开构建入口", () => {
     const parts = unzipSync(result.pptx);
     const embedded = parts["ppt/fonts/font1.fntdata"];
     assert.ok(embedded);
-    const view = new DataView(embedded!.buffer, embedded!.byteOffset);
+    const view = new DataView(embedded.buffer, embedded.byteOffset);
     const payloadStart = view.getUint32(0, true) - original.byteLength;
     assert.equal(view.getUint16(32, true), 0x0108);
     assert.deepEqual(embedded.subarray(payloadStart), noSubsetting);

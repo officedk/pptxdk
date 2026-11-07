@@ -188,6 +188,7 @@ function makeLocator(
       ),
     );
   };
+  // oxlint-disable-next-line unicorn/consistent-function-scoping
   const oneMatch = (
     matches: readonly Locator[],
     label: string,

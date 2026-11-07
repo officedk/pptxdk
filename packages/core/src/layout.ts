@@ -219,7 +219,7 @@ function deriveTheme(
   try {
     return parent.with(scope, style);
   } catch (error) {
-    fail(
+    return fail(
       path,
       error instanceof CapabilityError ? error.code : "invalid-theme-scope",
       error instanceof Error ? error.message : String(error),
@@ -433,7 +433,7 @@ function gridPlacement(
     return { start, span: end - start };
   }
   if (/^\d+$/u.test(text)) return { start: positiveIndex(text), span: 1 };
-  fail(path, "invalid-grid-placement", `不支持网格 placement ${value}`);
+  return fail(path, "invalid-grid-placement", `不支持网格 placement ${value}`);
 }
 
 function gridAlignment(
@@ -561,6 +561,10 @@ function yogaJustify(
       return Justify.SpaceAround;
     case "space-evenly":
       return Justify.SpaceEvenly;
+    default: {
+      const exhaustiveCheck: never = value;
+      throw new Error(`Unsupported justifyContent: ${String(exhaustiveCheck)}`);
+    }
   }
 }
 
@@ -582,6 +586,10 @@ function yogaAlign(
       return Align.Stretch;
     case "baseline":
       return Align.Baseline;
+    default: {
+      const exhaustiveCheck: never = value;
+      throw new Error(`Unsupported alignItems: ${String(exhaustiveCheck)}`);
+    }
   }
 }
 
@@ -605,6 +613,10 @@ function yogaAlignContent(
       return Align.SpaceEvenly;
     case "stretch":
       return Align.Stretch;
+    default: {
+      const exhaustiveCheck: never = value;
+      throw new Error(`Unsupported alignContent: ${String(exhaustiveCheck)}`);
+    }
   }
 }
 
@@ -669,8 +681,7 @@ function readStyle(
       "display 只支持 block、flex、grid 或 none",
     );
   }
-  const resolvedDisplay =
-    (display as LayoutStyle["display"] | undefined) ?? "block";
+  const resolvedDisplay = display ?? "block";
   if (resolvedDisplay === "grid" && value["alignItems"] === "baseline") {
     fail(path, "unsupported-grid-alignment", "网格容器不支持 baseline 对齐");
   }
@@ -883,7 +894,7 @@ function readStyle(
   ) {
     fail(path, "invalid-layout-style", "minHeight 不能大于 maxHeight");
   }
-  return value as LayoutStyle;
+  return value;
 }
 
 function expandedSpacing(
@@ -936,11 +947,11 @@ function setLength(
   const percent =
     typeof value === "string" ? /^(\d+(?:\.\d*)?|\.\d+)%$/u.exec(value) : null;
   if (percent !== null) {
-    (yoga[percentSetter] as (amount: number) => void)(Number(percent[1]));
+    yoga[percentSetter](Number(percent[1]));
     return;
   }
   if (typeof value === "number") {
-    (yoga[pointSetter] as (amount: number) => void)(value);
+    yoga[pointSetter](value);
     return;
   }
   if (value === "auto") {
@@ -1314,7 +1325,7 @@ export class LayoutPass {
       }
       current = current.parent;
     }
-    fail(parent.path, "layout-unavailable", "定位对象不在页面画布内");
+    return fail(parent.path, "layout-unavailable", "定位对象不在页面画布内");
   }
 
   #placeEscaped(node: LayoutNode, containingBlock: GeometryBox): void {
@@ -2254,7 +2265,7 @@ export class LayoutPass {
           ? error.code
           : "layout-measurement-failed";
       const message = error instanceof Error ? error.message : String(error);
-      fail(node.path, code, message);
+      return fail(node.path, code, message);
     }
   }
 

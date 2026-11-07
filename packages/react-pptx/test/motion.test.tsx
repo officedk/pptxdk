@@ -2063,7 +2063,7 @@ describe("对象动画", () => {
     const positionAnimation = (targetId: number | undefined, axis: string) =>
       [...slideXml.matchAll(/<p:anim\b[\s\S]*?<\/p:anim>/gu)].find(
         ([behavior]) =>
-          behavior?.includes(`<p:spTgt spid="${targetId}">`) === true &&
+          behavior?.includes(`<p:spTgt spid="${targetId}">`) &&
           behavior.includes(`<p:attrName>${axis}</p:attrName>`),
       )?.[0];
     const downX = positionAnimation(downTargetId, "ppt_x");
@@ -2228,7 +2228,7 @@ describe("对象动画", () => {
     );
     const groupY = [...slideXml.matchAll(/<p:anim\b[\s\S]*?<\/p:anim>/gu)].find(
       ([behavior]) =>
-        behavior?.includes(`<p:spTgt spid="${groupId}">`) === true &&
+        behavior?.includes(`<p:spTgt spid="${groupId}">`) &&
         behavior.includes("<p:attrName>ppt_y</p:attrName>"),
     )?.[0];
     assert.ok(groupY);
@@ -2602,8 +2602,7 @@ describe("对象动画", () => {
         ...xml.matchAll(/<p:(anim|animEffect|animRot)\b[\s\S]*?<\/p:\1>/gu),
       ].find(
         ([nativeBehavior]) =>
-          nativeBehavior?.includes(target) === true &&
-          nativeBehavior.includes(marker),
+          nativeBehavior?.includes(target) && nativeBehavior.includes(marker),
       )?.[0];
       assert.ok(
         selected !== undefined && selected.startsWith(`<p:${behavior}`),
@@ -2726,7 +2725,7 @@ describe("对象动画", () => {
       ...xml.matchAll(/<p:anim\b[\s\S]*?<\/p:anim>/gu),
     ].find(
       ([nativeBehavior]) =>
-        nativeBehavior?.includes(target) === true &&
+        nativeBehavior?.includes(target) &&
         nativeBehavior.includes("<p:attrName>ppt_x</p:attrName>"),
     )?.[0];
     assert.ok(missingOffset !== undefined);
@@ -3152,7 +3151,7 @@ describe("对象动画", () => {
       ([nativeBehavior]) =>
         nativeBehavior?.includes(
           `<p:spTgt spid="${textId}"><p:txEl><p:pRg st="0" end="0"></p:pRg></p:txEl></p:spTgt>`,
-        ) === true && nativeBehavior.includes("<p:attrName>ppt_x</p:attrName>"),
+        ) && nativeBehavior.includes("<p:attrName>ppt_x</p:attrName>"),
     )?.[0];
     assert.ok(firstParagraphX !== undefined);
     const invalidFile = await validatePptx(

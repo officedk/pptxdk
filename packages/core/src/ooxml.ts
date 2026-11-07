@@ -175,7 +175,9 @@ function themePart(value: Theme): string {
   const minor = isFont(value.fonts.minor)
     ? value.fonts.minor.family
     : value.fonts.minor;
-  const fonts = `<a:fontScheme name="${name}"><a:majorFont><a:latin typeface="${xmlEscape(major)}"/><a:ea typeface=""/><a:cs typeface=""/></a:majorFont><a:minorFont><a:latin typeface="${xmlEscape(minor)}"/><a:ea typeface=""/><a:cs typeface=""/></a:minorFont></a:fontScheme>`;
+  const majorEscaped = xmlEscape(major);
+  const minorEscaped = xmlEscape(minor);
+  const fonts = `<a:fontScheme name="${name}"><a:majorFont><a:latin typeface="${majorEscaped}"/><a:ea typeface="${majorEscaped}"/><a:cs typeface="${majorEscaped}"/></a:majorFont><a:minorFont><a:latin typeface="${minorEscaped}"/><a:ea typeface="${minorEscaped}"/><a:cs typeface="${minorEscaped}"/></a:minorFont></a:fontScheme>`;
   const fill = `<a:solidFill><a:schemeClr val="phClr"/></a:solidFill>`;
   const line = `<a:ln w="6350"><a:solidFill><a:schemeClr val="phClr"/></a:solidFill></a:ln>`;
   const effect = `<a:effectStyle><a:effectLst/></a:effectStyle>`;

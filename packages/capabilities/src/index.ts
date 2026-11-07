@@ -19,7 +19,6 @@ export type {
 export { boxCapability } from "#/box.ts";
 export type {
   GradientStop,
-  ImageVisualStyle,
   LinearGradient,
   RadialGradient,
   Shadow,
@@ -38,15 +37,22 @@ export type {
   ColumnOrBarChartProps,
   DoughnutChartProps,
   LineOrAreaChartProps,
+  ParsedChart,
   PieChartProps,
 } from "#/chart.ts";
 export { Image, imageCapability } from "#/image.ts";
-export type { ImageProps, ImageSource } from "#/image.ts";
+export type {
+  ImageProps,
+  ImageSource,
+  ImageVisualStyle,
+  ParsedImage,
+} from "#/image.ts";
 export { Group, groupCapability } from "#/group.ts";
 export type { GroupProps } from "#/group.ts";
 export { Cell, Row, Table, tableCapability } from "#/table.ts";
 export type {
   CellProps,
+  ParsedTable,
   RowProps,
   TableCellStyle,
   TableColumn,

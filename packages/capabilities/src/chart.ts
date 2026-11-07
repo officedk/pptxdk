@@ -1,15 +1,21 @@
 import {
   CapabilityError,
+  layoutStyleKeys,
+  parseCapabilityLayoutContract,
   pxToEmu,
   xmlEscape,
+  type CapabilityContext,
   type CapabilityInput,
-  type CapabilityModule,
-  type ColorValue,
+  type CapabilityLayoutContract,
   type CapabilityLayoutMeasurement,
   type CapabilityLayoutRequest,
-  type GeometryBox,
+  type CapabilityOutput,
+  type CapabilityParseContext,
+  type CapabilityParseResult,
+  type ColorValue,
   type LayoutStyle,
   type LinkTarget,
+  type ObjectCapabilityModule,
   type ThemeContext,
 } from "@react-pptx/core";
 import type { ReactNode } from "react";
@@ -674,7 +680,7 @@ function labels(
 
 function plotArea(
   value: unknown,
-  box: { readonly width: number; readonly height: number },
+  box?: { readonly width: number; readonly height: number },
 ): ChartProps["plotArea"] {
   if (value === undefined) return undefined;
   if (!isRecord(value))
@@ -692,8 +698,9 @@ function plotArea(
     result.top < 0 ||
     result.width <= 0 ||
     result.height <= 0 ||
-    result.left + result.width > box.width ||
-    result.top + result.height > box.height
+    (box !== undefined &&
+      (result.left + result.width > box.width ||
+        result.top + result.height > box.height))
   ) {
     fail(
       "invalid-plot-area",
@@ -1130,198 +1137,300 @@ function chartResourceClaims(
   };
 }
 
-function validateProps(
-  props: Record<string, unknown>,
-  layoutBox?: GeometryBox,
-): ChartProps {
-  const kind = props["kind"];
-  if (typeof kind !== "string" || !Object.hasOwn(chartOptions, kind)) {
-    fail("unsupported-chart-kind", `Unsupported chart kind ${String(kind)}`);
-  }
-  const chartKind = kind as ChartKind;
-  for (const option of allChartOptions) {
-    if (
-      props[option] !== undefined &&
-      !chartOptions[chartKind].includes(option)
-    ) {
-      fail(
-        "invalid-chart-option",
-        `${chartKind} chart does not support ${option}`,
-      );
-    }
-  }
-  onlyKeys(
-    props,
-    [
-      "testId",
-      "part",
-      "name",
-      "morphKey",
-      "link",
-      "x",
-      "y",
-      "width",
-      "height",
-      "data",
-      "legend",
-      "dataLabels",
-      "plotArea",
-      "style",
-      "kind",
-      ...allChartOptions,
-      "enter",
-      "emphasis",
-      "motion",
-      "__motionContext",
-    ],
-    "Chart",
-  );
-  const data = chartData(props["data"], chartKind);
-  if (
-    (chartKind === "pie" || chartKind === "doughnut") &&
-    data.series.length !== 1
-  ) {
-    fail(
-      "invalid-data",
-      `${chartKind} chart currently only supports a single data series`,
-    );
-  }
-  const testId = optionalName(props["testId"], "testId");
-  const part = optionalName(props["part"], "part");
-  const name = optionalName(props["name"], "name");
-  if (name !== undefined) xmlText(name, "Chart.name");
-  const style = isRecord(props["style"]) ? props["style"] : {};
-  const x = layoutBox?.x ?? coordinate(props["x"], "x");
-  const y = layoutBox?.y ?? coordinate(props["y"], "y");
-  const width =
-    layoutBox?.width ?? extent(props["width"] ?? style["width"], "width");
-  const height =
-    layoutBox?.height ?? extent(props["height"] ?? style["height"], "height");
-  const box = { width, height };
-  const legend = props["legend"];
-  if (
-    legend !== undefined &&
-    legend !== false &&
-    legend !== "top" &&
-    legend !== "bottom" &&
-    legend !== "left" &&
-    legend !== "right"
-  ) {
-    fail(
-      "invalid-legend",
-      "Chart.legend must be false, top, bottom, left, or right",
-    );
-  }
-  const labelsValue = labels(props["dataLabels"], chartKind);
-  const stack = props["stacking"];
-  if (stack !== undefined && stack !== "stacked" && stack !== "percent") {
-    fail("invalid-stacking", "Chart.stacking must be stacked or percent");
-  }
-  const gapWidth = props["gapWidth"];
-  if (
-    gapWidth !== undefined &&
-    (typeof gapWidth !== "number" ||
-      !Number.isFinite(gapWidth) ||
-      gapWidth < 0 ||
-      gapWidth > 500)
-  ) {
-    fail("invalid-gap-width", "Chart.gapWidth must be between 0 and 500");
-  }
-  const overlap = props["overlap"];
-  if (
-    overlap !== undefined &&
-    (typeof overlap !== "number" ||
-      !Number.isFinite(overlap) ||
-      overlap < -100 ||
-      overlap > 100)
-  ) {
-    fail("invalid-overlap", "Chart.overlap must be between -100 and 100");
-  }
-  const checkedPlotArea = plotArea(props["plotArea"], box);
-  const explosion =
-    chartKind === "pie" || chartKind === "doughnut"
-      ? roundedRange(
-          props["explosion"],
-          "Chart.explosion",
-          0,
-          maximumExplosionForCurrentValidationProfile,
-          "rounded-result",
-        )
-      : undefined;
-  const firstSliceAngle =
-    chartKind === "pie" || chartKind === "doughnut"
-      ? roundedRange(props["firstSliceAngle"], "Chart.firstSliceAngle", 0, 360)
-      : undefined;
-  const holeSize =
-    chartKind === "doughnut"
-      ? roundedRange(props["holeSize"], "Chart.holeSize", 10, 90)
-      : undefined;
-  return {
-    ...(testId === undefined ? {} : { testId }),
-    ...(part === undefined ? {} : { part }),
-    ...(name === undefined ? {} : { name }),
-    ...(props["enter"] === undefined ? {} : { enter: props["enter"] }),
-    ...(props["emphasis"] === undefined ? {} : { emphasis: props["emphasis"] }),
-    ...(props["motion"] === undefined ? {} : { motion: props["motion"] }),
-    ...(props["__motionContext"] === undefined
-      ? {}
-      : { __motionContext: props["__motionContext"] }),
-    x,
-    y,
-    width,
-    height,
-    data,
-    kind: chartKind,
-    ...(legend === undefined ? {} : { legend: legend as ChartBase["legend"] }),
-    ...(labelsValue === undefined ? {} : { dataLabels: labelsValue }),
-    ...(checkedPlotArea === undefined ? {} : { plotArea: checkedPlotArea }),
-    ...(props["style"] === undefined
-      ? {}
-      : { style: props["style"] as TextStyle & LayoutStyle }),
-    ...(stack === undefined ? {} : { stacking: stack }),
-    ...(props["valueAxis"] === undefined
-      ? {}
-      : { valueAxis: axis(props["valueAxis"], "Chart.valueAxis", "value") }),
-    ...(props["categoryAxis"] === undefined
-      ? {}
-      : {
-          categoryAxis: axis(
-            props["categoryAxis"],
-            "Chart.categoryAxis",
-            "category",
-          ),
-        }),
-    ...(gapWidth === undefined ? {} : { gapWidth: gapWidth }),
-    ...(overlap === undefined ? {} : { overlap: overlap }),
-    ...(chartKind === "pie" || chartKind === "doughnut"
-      ? {
-          ...(explosion === undefined ? {} : { explosion }),
-          ...(firstSliceAngle === undefined ? {} : { firstSliceAngle }),
-        }
-      : {}),
-    ...(chartKind === "doughnut" && holeSize !== undefined ? { holeSize } : {}),
-  } as ChartProps;
-}
+export type ParsedChart = {
+  readonly testId?: string;
+  readonly part?: string;
+  readonly name?: string;
+  readonly morphKey?: string;
+  readonly link?: LinkTarget;
+  readonly declaredX?: number;
+  readonly declaredY?: number;
+  readonly declaredWidth?: number;
+  readonly declaredHeight?: number;
+  readonly data: ChartData;
+  readonly kind: ChartKind;
+  readonly legend?: ChartBase["legend"];
+  readonly dataLabels?: false | ChartDataLabels;
+  readonly plotArea?: ChartProps["plotArea"];
+  readonly style?: TextStyle & LayoutStyle;
+  readonly stacking?: "stacked" | "percent";
+  readonly valueAxis?: ChartAxis;
+  readonly categoryAxis?: ChartAxis;
+  readonly gapWidth?: number;
+  readonly overlap?: number;
+  readonly explosion?: number;
+  readonly firstSliceAngle?: number;
+  readonly holeSize?: number;
+  readonly enter?: unknown;
+  readonly emphasis?: unknown;
+  readonly motion?: unknown;
+  readonly motionContext?: unknown;
+  readonly contract: CapabilityLayoutContract;
+  readonly rawProps: Readonly<Record<string, unknown>>;
+};
 
 /** Chart module validates input and generates native chart parts with embedded workbook. */
-export const chartCapability: CapabilityModule = {
+export const chartCapability: ObjectCapabilityModule = {
   declaration: "rp:chart",
-  measureLayout(
+
+  parse(
     input: CapabilityInput,
-    request: CapabilityLayoutRequest,
-  ): CapabilityLayoutMeasurement {
+    context: CapabilityParseContext,
+  ): CapabilityParseResult<ParsedChart> {
     if (input.children.length > 0) {
       fail(
         "unsupported-children",
         "Chart does not accept children; chart text and data should be passed in data",
       );
     }
-    const style = isRecord(input.props["style"]) ? input.props["style"] : {};
-    const rawWidth = style["width"] ?? input.props["width"];
-    const rawHeight = style["height"] ?? input.props["height"];
-    const declaredWidth = typeof rawWidth === "number" ? rawWidth : undefined;
+
+    const kind = input.props["kind"];
+    if (typeof kind !== "string" || !Object.hasOwn(chartOptions, kind)) {
+      fail("unsupported-chart-kind", `Unsupported chart kind ${String(kind)}`);
+    }
+    const chartKind = kind as ChartKind;
+
+    for (const option of allChartOptions) {
+      if (
+        input.props[option] !== undefined &&
+        !chartOptions[chartKind].includes(option)
+      ) {
+        fail(
+          "invalid-chart-option",
+          `${chartKind} chart does not support ${option}`,
+        );
+      }
+    }
+
+    onlyKeys(
+      input.props,
+      [
+        "testId",
+        "part",
+        "name",
+        "morphKey",
+        "link",
+        "x",
+        "y",
+        "width",
+        "height",
+        "data",
+        "legend",
+        "dataLabels",
+        "plotArea",
+        "style",
+        "kind",
+        ...allChartOptions,
+        "enter",
+        "emphasis",
+        "motion",
+        "__motionContext",
+      ],
+      "Chart",
+    );
+
+    const allowedStyleKeys = new Set<string>([
+      ...layoutStyleKeys,
+      ...chartTextStyleKeys,
+    ]);
+
+    const contract = parseCapabilityLayoutContract({
+      nativeKind: "graphicFrame",
+      props: input.props,
+      allowedStyleKeys,
+      allowPadding: false,
+      path: context.path,
+    });
+
+    const data = chartData(input.props["data"], chartKind);
+    if (
+      (chartKind === "pie" || chartKind === "doughnut") &&
+      data.series.length !== 1
+    ) {
+      fail(
+        "invalid-data",
+        `${chartKind} chart currently only supports a single data series`,
+      );
+    }
+
+    const testId = optionalName(input.props["testId"], "testId");
+    const part = optionalName(input.props["part"], "part");
+    const name = optionalName(input.props["name"], "name");
+    if (name !== undefined) xmlText(name, "Chart.name");
+
+    const rawWidth =
+      contract.layoutStyle.width ??
+      (input.props["width"] as number | undefined);
+    const rawHeight =
+      contract.layoutStyle.height ??
+      (input.props["height"] as number | undefined);
+    const declaredWidth =
+      rawWidth !== undefined ? extent(rawWidth, "width") : undefined;
     const declaredHeight =
-      typeof rawHeight === "number" ? rawHeight : undefined;
+      rawHeight !== undefined ? extent(rawHeight, "height") : undefined;
+    const declaredX =
+      input.props["x"] !== undefined
+        ? coordinate(input.props["x"], "x")
+        : undefined;
+    const declaredY =
+      input.props["y"] !== undefined
+        ? coordinate(input.props["y"], "y")
+        : undefined;
+
+    const legend = input.props["legend"];
+    if (
+      legend !== undefined &&
+      legend !== false &&
+      legend !== "top" &&
+      legend !== "bottom" &&
+      legend !== "left" &&
+      legend !== "right"
+    ) {
+      fail(
+        "invalid-legend",
+        "Chart.legend must be false, top, bottom, left, or right",
+      );
+    }
+
+    const labelsValue = labels(input.props["dataLabels"], chartKind);
+    const stack = input.props["stacking"];
+    if (stack !== undefined && stack !== "stacked" && stack !== "percent") {
+      fail("invalid-stacking", "Chart.stacking must be stacked or percent");
+    }
+
+    const gapWidth = input.props["gapWidth"];
+    if (
+      gapWidth !== undefined &&
+      (typeof gapWidth !== "number" ||
+        !Number.isFinite(gapWidth) ||
+        gapWidth < 0 ||
+        gapWidth > 500)
+    ) {
+      fail("invalid-gap-width", "Chart.gapWidth must be between 0 and 500");
+    }
+    const overlap = input.props["overlap"];
+    if (
+      overlap !== undefined &&
+      (typeof overlap !== "number" ||
+        !Number.isFinite(overlap) ||
+        overlap < -100 ||
+        overlap > 100)
+    ) {
+      fail("invalid-overlap", "Chart.overlap must be between -100 and 100");
+    }
+
+    const checkedPlotArea = plotArea(
+      input.props["plotArea"],
+      declaredWidth !== undefined && declaredHeight !== undefined
+        ? { width: declaredWidth, height: declaredHeight }
+        : undefined,
+    );
+
+    const explosion =
+      chartKind === "pie" || chartKind === "doughnut"
+        ? roundedRange(
+            input.props["explosion"],
+            "Chart.explosion",
+            0,
+            maximumExplosionForCurrentValidationProfile,
+            "rounded-result",
+          )
+        : undefined;
+    const firstSliceAngle =
+      chartKind === "pie" || chartKind === "doughnut"
+        ? roundedRange(
+            input.props["firstSliceAngle"],
+            "Chart.firstSliceAngle",
+            0,
+            360,
+          )
+        : undefined;
+    const holeSize =
+      chartKind === "doughnut"
+        ? roundedRange(input.props["holeSize"], "Chart.holeSize", 10, 90)
+        : undefined;
+
+    const valueAxis =
+      input.props["valueAxis"] === undefined
+        ? undefined
+        : axis(input.props["valueAxis"], "Chart.valueAxis", "value");
+    const categoryAxis =
+      input.props["categoryAxis"] === undefined
+        ? undefined
+        : axis(input.props["categoryAxis"], "Chart.categoryAxis", "category");
+
+    const parsed: ParsedChart = {
+      kind: chartKind,
+      data,
+      contract,
+      rawProps: input.props,
+      ...(testId === undefined ? {} : { testId }),
+      ...(part === undefined ? {} : { part }),
+      ...(name === undefined ? {} : { name }),
+      ...(input.props["morphKey"] !== undefined
+        ? { morphKey: input.props["morphKey"] as string }
+        : {}),
+      ...(input.props["link"] !== undefined
+        ? { link: input.props["link"] as LinkTarget }
+        : {}),
+      ...(declaredX === undefined ? {} : { declaredX }),
+      ...(declaredY === undefined ? {} : { declaredY }),
+      ...(declaredWidth === undefined ? {} : { declaredWidth }),
+      ...(declaredHeight === undefined ? {} : { declaredHeight }),
+      ...(legend === undefined ? {} : { legend: legend }),
+      ...(labelsValue === undefined ? {} : { dataLabels: labelsValue }),
+      ...(checkedPlotArea === undefined ? {} : { plotArea: checkedPlotArea }),
+      ...(input.props["style"] === undefined
+        ? {}
+        : { style: input.props["style"] as TextStyle & LayoutStyle }),
+      ...(stack === undefined ? {} : { stacking: stack }),
+      ...(valueAxis === undefined ? {} : { valueAxis }),
+      ...(categoryAxis === undefined ? {} : { categoryAxis }),
+      ...(gapWidth === undefined ? {} : { gapWidth }),
+      ...(overlap === undefined ? {} : { overlap }),
+      ...(explosion === undefined ? {} : { explosion }),
+      ...(firstSliceAngle === undefined ? {} : { firstSliceAngle }),
+      ...(holeSize === undefined ? {} : { holeSize }),
+      ...(input.props["enter"] === undefined
+        ? {}
+        : { enter: input.props["enter"] }),
+      ...(input.props["emphasis"] === undefined
+        ? {}
+        : { emphasis: input.props["emphasis"] }),
+      ...(input.props["motion"] === undefined
+        ? {}
+        : { motion: input.props["motion"] }),
+      ...(input.props["__motionContext"] === undefined
+        ? {}
+        : { motionContext: input.props["__motionContext"] }),
+    };
+
+    return { contract, parsed };
+  },
+
+  measureLayout(
+    inputOrParsed: ParsedChart | CapabilityInput,
+    request: CapabilityLayoutRequest,
+  ): CapabilityLayoutMeasurement {
+    const parsed: ParsedChart =
+      "kind" in inputOrParsed && "contract" in inputOrParsed
+        ? inputOrParsed
+        : (
+            this.parse as NonNullable<
+              (
+                input: CapabilityInput,
+                context: CapabilityParseContext,
+              ) => CapabilityParseResult<ParsedChart>
+            >
+          )(inputOrParsed, {
+            path: "Chart",
+            theme: request.theme,
+            options: {},
+            slideNumber: request.slideNumber,
+          }).parsed;
+
+    const declaredWidth = parsed.declaredWidth;
+    const declaredHeight = parsed.declaredHeight;
     const width =
       request.availableWidth ??
       declaredWidth ??
@@ -1334,20 +1443,103 @@ export const chartCapability: CapabilityModule = {
       minContentHeight: declaredHeight ?? 0,
     };
   },
-  compile(input: CapabilityInput, context) {
-    if (input.children.length > 0) {
-      fail(
-        "unsupported-children",
-        "Chart does not accept children; chart text and data should be passed in data",
-      );
+
+  compile(
+    inputOrParsed: ParsedChart | CapabilityInput,
+    context: CapabilityContext,
+  ): CapabilityOutput {
+    const parsed: ParsedChart =
+      "kind" in inputOrParsed && "contract" in inputOrParsed
+        ? inputOrParsed
+        : (
+            this.parse as NonNullable<
+              (
+                input: CapabilityInput,
+                context: CapabilityParseContext,
+              ) => CapabilityParseResult<ParsedChart>
+            >
+          )(inputOrParsed, {
+            path: context.path,
+            theme: context.theme,
+            options: context.options,
+            slideNumber: context.slideNumber,
+          }).parsed;
+
+    const x = context.layoutBox?.x ?? parsed.declaredX ?? 0;
+    const y = context.layoutBox?.y ?? parsed.declaredY ?? 0;
+    const width =
+      context.layoutBox?.width ??
+      parsed.declaredWidth ??
+      (parsed.declaredHeight === undefined
+        ? 320
+        : parsed.declaredHeight * (16 / 9));
+    const height =
+      context.layoutBox?.height ?? parsed.declaredHeight ?? width * (9 / 16);
+    const box = { width, height };
+
+    if (parsed.plotArea !== undefined) {
+      if (
+        parsed.plotArea.left < 0 ||
+        parsed.plotArea.top < 0 ||
+        parsed.plotArea.width <= 0 ||
+        parsed.plotArea.height <= 0 ||
+        parsed.plotArea.left + parsed.plotArea.width > box.width ||
+        parsed.plotArea.top + parsed.plotArea.height > box.height
+      ) {
+        fail(
+          "invalid-plot-area",
+          "Chart.plotArea must be inside chart box with positive width and height",
+        );
+      }
     }
-    const props = validateProps({ ...input.props }, context.layoutBox);
+
+    const props: ChartProps = {
+      ...parsed.rawProps,
+      kind: parsed.kind,
+      data: parsed.data,
+      x,
+      y,
+      width,
+      height,
+      ...(parsed.testId === undefined ? {} : { testId: parsed.testId }),
+      ...(parsed.part === undefined ? {} : { part: parsed.part }),
+      ...(parsed.name === undefined ? {} : { name: parsed.name }),
+      ...(parsed.legend === undefined ? {} : { legend: parsed.legend }),
+      ...(parsed.dataLabels === undefined
+        ? {}
+        : { dataLabels: parsed.dataLabels }),
+      ...(parsed.plotArea === undefined ? {} : { plotArea: parsed.plotArea }),
+      ...(parsed.style === undefined ? {} : { style: parsed.style }),
+      ...(parsed.stacking === undefined ? {} : { stacking: parsed.stacking }),
+      ...(parsed.valueAxis === undefined
+        ? {}
+        : { valueAxis: parsed.valueAxis }),
+      ...(parsed.categoryAxis === undefined
+        ? {}
+        : { categoryAxis: parsed.categoryAxis }),
+      ...(parsed.gapWidth === undefined ? {} : { gapWidth: parsed.gapWidth }),
+      ...(parsed.overlap === undefined ? {} : { overlap: parsed.overlap }),
+      ...(parsed.explosion === undefined
+        ? {}
+        : { explosion: parsed.explosion }),
+      ...(parsed.firstSliceAngle === undefined
+        ? {}
+        : { firstSliceAngle: parsed.firstSliceAngle }),
+      ...(parsed.holeSize === undefined ? {} : { holeSize: parsed.holeSize }),
+      ...(parsed.enter === undefined ? {} : { enter: parsed.enter }),
+      ...(parsed.emphasis === undefined ? {} : { emphasis: parsed.emphasis }),
+      ...(parsed.motion === undefined ? {} : { motion: parsed.motion }),
+      ...(parsed.motionContext === undefined
+        ? {}
+        : { __motionContext: parsed.motionContext }),
+    } as ChartProps;
+
     const name =
       context.morphName ??
       props.name ??
       props.testId ??
       `Chart ${context.id - 1}`;
-    const annotations = motionAnnotations(props, {
+    const annotations = motionAnnotations(parsed.rawProps, {
       kind: "chart",
       name,
       ...(props.testId === undefined ? {} : { testId: props.testId }),

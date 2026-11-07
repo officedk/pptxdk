@@ -3,15 +3,22 @@ import { fileURLToPath } from "node:url";
 
 import {
   CapabilityError,
+  layoutStyleKeys,
+  parseCapabilityLayoutContract,
   pxToEmu,
   xmlEscape,
+  type CapabilityContext,
+  type CapabilityLayoutContract,
   type CapabilityLayoutMeasurement,
   type CapabilityLayoutRequest,
   type CapabilityInput,
-  type CapabilityModule,
-  type ImageVisualStyle,
+  type CapabilityOutput,
+  type CapabilityParseContext,
+  type CapabilityParseResult,
   type LayoutStyle,
   type LinkTarget,
+  type ObjectCapabilityModule,
+  type VisualStyle,
 } from "@react-pptx/core";
 import type { ReactNode } from "react";
 
@@ -24,6 +31,28 @@ import {
   type MotionProps,
 } from "./motion-api.ts";
 import { shapePropertiesXml } from "./visual.ts";
+
+/** Visual styling supported on Image objects. */
+export type ImageVisualStyle = Pick<
+  VisualStyle,
+  | "borderColor"
+  | "borderWidth"
+  | "borderStyle"
+  | "opacity"
+  | "boxShadow"
+  | "softEdge"
+  | "rotate"
+>;
+
+export const imageVisualStyleKeys = new Set([
+  "borderColor",
+  "borderWidth",
+  "borderStyle",
+  "opacity",
+  "boxShadow",
+  "softEdge",
+  "rotate",
+]);
 
 /** Local file path, file URL, or raw image bytes. */
 export type ImageSource = string | URL | Uint8Array;
@@ -57,6 +86,28 @@ export type ImageProps = MotionProps &
     };
     readonly children?: ReactNode;
   };
+
+export type ParsedImage = {
+  readonly testId?: string;
+  readonly part?: string;
+  readonly name?: string;
+  readonly morphKey?: string;
+  readonly link?: LinkTarget;
+  readonly image: LoadedImage;
+  readonly style: Record<string, unknown>;
+  readonly fit: "fill" | "cover" | "contain";
+  readonly crop?: Record<string, number>;
+  readonly alt?: string;
+  readonly geometry?: Geometry;
+  readonly flipH?: boolean;
+  readonly flipV?: boolean;
+  readonly enter?: MotionProps["enter"];
+  readonly emphasis?: MotionProps["emphasis"];
+  readonly motion?: MotionProps["motion"];
+  readonly __motionContext?: unknown;
+  readonly contract: CapabilityLayoutContract;
+  readonly rawProps: Readonly<Record<string, unknown>>;
+};
 
 type ImageMetadata = {
   readonly extension: "png" | "jpeg" | "gif";
@@ -343,9 +394,14 @@ export function readImage(source: unknown): LoadedImage {
   return { ...metadata, bytes };
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
 function optionalText(
   props: Record<string, unknown>,
   name: "testId" | "name" | "part",
+  path?: string,
 ): string | undefined {
   const value = props[name];
   if (value === undefined) return undefined;
@@ -353,6 +409,7 @@ function optionalText(
     throw new CapabilityError(
       "invalid-parameter",
       `${name} must be a non-empty string`,
+      path,
     );
   }
   return value;
@@ -400,15 +457,19 @@ function requestedDimension(
       : undefined;
 }
 
-function cropValues(value: unknown): Record<string, number> | undefined {
+function cropValues(
+  value: unknown,
+  path?: string,
+): Record<string, number> | undefined {
   if (value === undefined) return undefined;
-  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+  if (!isRecord(value)) {
     throw new CapabilityError(
       "invalid-crop",
       "crop must be a four-sided fraction object",
+      path,
     );
   }
-  const crop = value as Record<string, unknown>;
+  const crop = value;
   const allowed = ["left", "top", "right", "bottom"] as const;
   const unknown = Object.keys(crop).find(
     (key) => !(allowed as readonly string[]).includes(key),
@@ -417,6 +478,7 @@ function cropValues(value: unknown): Record<string, number> | undefined {
     throw new CapabilityError(
       "unknown-parameter",
       `crop contains unknown parameter ${unknown}`,
+      path,
     );
   }
   const result: Record<string, number> = {};
@@ -432,6 +494,7 @@ function cropValues(value: unknown): Record<string, number> | undefined {
       throw new CapabilityError(
         "invalid-crop",
         `crop.${side} must be a finite fraction between 0 and 1`,
+        path,
       );
     }
     result[{ left: "l", top: "t", right: "r", bottom: "b" }[side]] = fraction;
@@ -440,12 +503,14 @@ function cropValues(value: unknown): Record<string, number> | undefined {
     throw new CapabilityError(
       "invalid-crop",
       "Sum of crop left and right cannot exceed 1",
+      path,
     );
   }
   if ((result["t"] ?? 0) + (result["b"] ?? 0) > 1) {
     throw new CapabilityError(
       "invalid-crop",
       "Sum of crop top and bottom cannot exceed 1",
+      path,
     );
   }
   return result;
@@ -479,20 +544,149 @@ function imageXml(
 }
 
 /** Image module reads and validates formal resources, then emits native picture objects with media relationships. */
-export const imageCapability: CapabilityModule = {
+export const imageCapability: ObjectCapabilityModule<ParsedImage> = {
   declaration: "rp:image",
-  measureLayout(
+
+  parse(
     input: CapabilityInput,
+    context: CapabilityParseContext,
+  ): CapabilityParseResult<ParsedImage> {
+    const unknown = Object.keys(input.props).find(
+      (key) => !(allowedParameters as readonly string[]).includes(key),
+    );
+    if (unknown !== undefined) {
+      throw new CapabilityError(
+        "unknown-parameter",
+        `Image contains unsupported parameter ${unknown}`,
+        context.path,
+      );
+    }
+    if (
+      input.children.some(
+        (child) => "props" in child || child.text.trim() !== "",
+      )
+    ) {
+      throw new CapabilityError(
+        "unsupported-children",
+        "Image does not accept children",
+        context.path,
+      );
+    }
+
+    const testId = optionalText(input.props, "testId", context.path);
+    const part = optionalText(input.props, "part", context.path);
+    const requestedName = optionalText(input.props, "name", context.path);
+    const altValue = input.props["alt"];
+    if (altValue !== undefined && typeof altValue !== "string") {
+      throw new CapabilityError(
+        "invalid-parameter",
+        "alt must be a string",
+        context.path,
+      );
+    }
+
+    const allowedStyleKeys = new Set<string>([
+      ...layoutStyleKeys,
+      ...imageVisualStyleKeys,
+    ]);
+
+    const contract = parseCapabilityLayoutContract({
+      nativeKind: "pic",
+      props: input.props,
+      allowedStyleKeys,
+      allowPadding: false,
+      path: context.path,
+    });
+
+    const imageStyle = isRecord(input.props["style"])
+      ? input.props["style"]
+      : {};
+
+    const requestedFit = input.props["fit"];
+    const fit = requestedFit === undefined ? "fill" : requestedFit;
+    if (fit !== "fill" && fit !== "cover" && fit !== "contain") {
+      throw new CapabilityError(
+        "unsupported-fit",
+        "fit must be fill, cover, or contain",
+        context.path,
+      );
+    }
+
+    const crop = cropValues(input.props["crop"], context.path);
+    const image = readImage(input.props["src"]);
+
+    const parsed: ParsedImage = {
+      ...(testId !== undefined ? { testId } : {}),
+      ...(part !== undefined ? { part } : {}),
+      ...(requestedName !== undefined ? { name: requestedName } : {}),
+      ...(input.props["morphKey"] !== undefined
+        ? { morphKey: input.props["morphKey"] as string }
+        : {}),
+      ...(input.props["link"] !== undefined
+        ? { link: input.props["link"] as LinkTarget }
+        : {}),
+      ...(altValue !== undefined ? { alt: altValue } : {}),
+      ...(input.props["geometry"] !== undefined
+        ? { geometry: input.props["geometry"] as Geometry }
+        : {}),
+      ...(input.props["flipH"] !== undefined
+        ? { flipH: input.props["flipH"] as boolean }
+        : {}),
+      ...(input.props["flipV"] !== undefined
+        ? { flipV: input.props["flipV"] as boolean }
+        : {}),
+      ...(input.props["enter"] !== undefined
+        ? { enter: input.props["enter"] as MotionProps["enter"] }
+        : {}),
+      ...(input.props["emphasis"] !== undefined
+        ? { emphasis: input.props["emphasis"] as MotionProps["emphasis"] }
+        : {}),
+      ...(input.props["motion"] !== undefined
+        ? { motion: input.props["motion"] as MotionProps["motion"] }
+        : {}),
+      ...(input.props["__motionContext"] !== undefined
+        ? { __motionContext: input.props["__motionContext"] }
+        : {}),
+      image,
+      style: imageStyle,
+      fit,
+      ...(crop !== undefined ? { crop } : {}),
+      contract,
+      rawProps: input.props,
+    };
+
+    return { contract, parsed };
+  },
+
+  measureLayout(
+    inputOrParsed: ParsedImage | CapabilityInput,
     request: CapabilityLayoutRequest,
   ): CapabilityLayoutMeasurement {
-    const props = input.props;
-    const image = readImage(props["src"]);
-    const style =
-      typeof props["style"] === "object" && props["style"] !== null
-        ? (props["style"] as Record<string, unknown>)
-        : {};
-    const requestedWidth = requestedDimension(style, props, "width");
-    const requestedHeight = requestedDimension(style, props, "height");
+    const parsed: ParsedImage =
+      "image" in inputOrParsed && "contract" in inputOrParsed
+        ? inputOrParsed
+        : (
+            this.parse as NonNullable<
+              (
+                input: CapabilityInput,
+                context: CapabilityParseContext,
+              ) => CapabilityParseResult<ParsedImage>
+            >
+          )(inputOrParsed, {
+            path: "Image",
+            theme: request.theme,
+            options: {},
+            slideNumber: request.slideNumber,
+          }).parsed;
+
+    const image = parsed.image;
+    const style = parsed.style;
+    const requestedWidth = requestedDimension(style, parsed.rawProps, "width");
+    const requestedHeight = requestedDimension(
+      style,
+      parsed.rawProps,
+      "height",
+    );
     const declaredWidth =
       typeof requestedWidth === "number" ? requestedWidth : undefined;
     const declaredHeight =
@@ -508,44 +702,42 @@ export const imageCapability: CapabilityModule = {
       minContentHeight: image.height,
     };
   },
-  compile(input: CapabilityInput, context) {
-    const props = input.props;
-    const unknown = Object.keys(props).find(
-      (key) => !(allowedParameters as readonly string[]).includes(key),
-    );
-    if (unknown !== undefined) {
-      throw new CapabilityError(
-        "unknown-parameter",
-        `Image contains unsupported parameter ${unknown}`,
-      );
-    }
-    if (
-      input.children.some(
-        (child) => "props" in child || child.text.trim() !== "",
-      )
-    ) {
-      throw new CapabilityError(
-        "unsupported-children",
-        "Image does not accept children",
-      );
-    }
 
-    const testId = optionalText(props, "testId");
-    const part = optionalText(props, "part");
-    const requestedName = optionalText(props, "name");
-    const altValue = props["alt"];
-    if (altValue !== undefined && typeof altValue !== "string") {
-      throw new CapabilityError("invalid-parameter", "alt must be a string");
-    }
-    const image = readImage(props["src"]);
-    const imageStyle =
-      typeof props["style"] === "object" && props["style"] !== null
-        ? (props["style"] as Record<string, unknown>)
-        : {};
-    const requestedWidth = requestedDimension(imageStyle, props, "width");
-    const requestedHeight = requestedDimension(imageStyle, props, "height");
-    const x = dimension(context.layoutBox?.x ?? props["x"], "x", 0);
-    const y = dimension(context.layoutBox?.y ?? props["y"], "y", 0);
+  compile(
+    parsedOrInput: ParsedImage | CapabilityInput,
+    context: CapabilityContext,
+  ): CapabilityOutput {
+    const parsed: ParsedImage =
+      "image" in parsedOrInput && "contract" in parsedOrInput
+        ? parsedOrInput
+        : (
+            this.parse as NonNullable<
+              (
+                input: CapabilityInput,
+                context: CapabilityParseContext,
+              ) => CapabilityParseResult<ParsedImage>
+            >
+          )(parsedOrInput, {
+            path: context.path,
+            theme: context.theme,
+            options: context.options,
+            slideNumber: context.slideNumber,
+          }).parsed;
+
+    const image = parsed.image;
+    const imageStyle = parsed.style;
+    const requestedWidth = requestedDimension(
+      imageStyle,
+      parsed.rawProps,
+      "width",
+    );
+    const requestedHeight = requestedDimension(
+      imageStyle,
+      parsed.rawProps,
+      "height",
+    );
+    const x = dimension(context.layoutBox?.x ?? parsed.rawProps["x"], "x", 0);
+    const y = dimension(context.layoutBox?.y ?? parsed.rawProps["y"], "y", 0);
     let width: number;
     let height: number;
     if (context.layoutBox !== undefined) {
@@ -567,17 +759,10 @@ export const imageCapability: CapabilityModule = {
     width = dimension(width, "width");
     height = dimension(height, "height");
 
-    const requestedFit = props["fit"];
-    const fit = requestedFit === undefined ? "fill" : requestedFit;
-    if (fit !== "fill" && fit !== "cover" && fit !== "contain") {
-      throw new CapabilityError(
-        "unsupported-fit",
-        "fit must be fill, cover, or contain",
-      );
-    }
-    const crop = cropValues(props["crop"]);
+    const fit = parsed.fit;
+    const crop = parsed.crop;
     const box = { x, y, width, height };
-    const sourceCrop = crop ?? {};
+    const sourceCrop = crop !== undefined ? { ...crop } : {};
     if (crop === undefined && fit === "cover") {
       const imageRatio = image.width / image.height;
       const boxRatio = width / height;
@@ -610,23 +795,20 @@ export const imageCapability: CapabilityModule = {
       theme: context.theme,
       style: imageStyle,
       box,
-      ...(props["geometry"] === undefined
-        ? {}
-        : { geometry: props["geometry"] as Geometry }),
-      ...(props["flipH"] === undefined
-        ? {}
-        : { flipH: props["flipH"] as boolean }),
-      ...(props["flipV"] === undefined
-        ? {}
-        : { flipV: props["flipV"] as boolean }),
+      ...(parsed.geometry === undefined ? {} : { geometry: parsed.geometry }),
+      ...(parsed.flipH === undefined ? {} : { flipH: parsed.flipH }),
+      ...(parsed.flipV === undefined ? {} : { flipV: parsed.flipV }),
       image: true,
     });
     const name =
-      context.morphName ?? requestedName ?? testId ?? `Image ${context.id - 1}`;
-    const annotations = motionAnnotations(props, {
+      context.morphName ??
+      parsed.name ??
+      parsed.testId ??
+      `Image ${context.id - 1}`;
+    const annotations = motionAnnotations(parsed.rawProps, {
       kind: "image",
       name,
-      ...(testId === undefined ? {} : { testId }),
+      ...(parsed.testId === undefined ? {} : { testId: parsed.testId }),
       textBody: false,
       filled: false,
       box,
@@ -641,7 +823,7 @@ export const imageCapability: CapabilityModule = {
     let escapedAlt: string | undefined;
     try {
       escapedName = xmlEscape(name);
-      escapedAlt = altValue === undefined ? undefined : xmlEscape(altValue);
+      escapedAlt = parsed.alt === undefined ? undefined : xmlEscape(parsed.alt);
     } catch {
       throw new CapabilityError(
         "invalid-xml-character",
@@ -683,8 +865,8 @@ export const imageCapability: CapabilityModule = {
         id: context.id,
         kind: "image",
         name,
-        ...(testId === undefined ? {} : { testId }),
-        ...(part === undefined ? {} : { part }),
+        ...(parsed.testId === undefined ? {} : { testId: parsed.testId }),
+        ...(parsed.part === undefined ? {} : { part: parsed.part }),
         box,
       },
       extensions: [],

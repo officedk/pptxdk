@@ -5,6 +5,7 @@ import {
   BuildError,
   build,
   Chart,
+  chartCapability,
   Deck,
   fade,
   font,
@@ -15,7 +16,7 @@ import {
 } from "@react-pptx/react-pptx";
 import { validatePptx } from "@react-pptx/validation";
 import { strFromU8, strToU8, unzipSync, zipSync } from "fflate";
-import { describe, it } from "vitest";
+import { describe, it, vi } from "vitest";
 
 describe("native Cartesian charts", () => {
   it("inherits shared text visual styles across charts, axes, and data labels", async () => {
@@ -1265,6 +1266,150 @@ describe("native Cartesian charts", () => {
         assert.ok(error instanceof BuildError);
         assert.equal(error.diagnostics[0]?.code, "invalid-chart-option");
         assert.match(error.diagnostics[0]?.path ?? "", /chart\[1\]/u);
+        return true;
+      },
+    );
+  });
+
+  it("executes chartCapability.parse exactly once per Chart node during build and reuses parsed model", async () => {
+    const parseSpy = vi.spyOn(chartCapability, "parse");
+    const compileSpy = vi.spyOn(chartCapability, "compile");
+
+    try {
+      const result = await build(
+        <Deck width={960} height={540}>
+          <Slide slideId="single-chart-parse">
+            <Chart
+              testId="piloted-chart"
+              kind="column"
+              x={50}
+              y={50}
+              width={400}
+              height={300}
+              data={{
+                categories: ["Q1", "Q2"],
+                series: [{ name: "Sales", values: [100, 150] }],
+              }}
+              style={{ fontSize: 14, color: "#333333" }}
+            />
+          </Slide>
+        </Deck>,
+      );
+
+      assert.equal(
+        parseSpy.mock.calls.length,
+        1,
+        `Expected chartCapability.parse to be called exactly 1 time, got ${parseSpy.mock.calls.length}`,
+      );
+
+      const parsedResult = parseSpy.mock.results[0]?.value;
+      assert.ok(parsedResult);
+      assert.equal(parsedResult.contract.nativeKind, "graphicFrame");
+      assert.equal(parsedResult.parsed.kind, "column");
+      assert.equal(parsedResult.parsed.data.categories.length, 2);
+
+      assert.equal(compileSpy.mock.calls.length, 1);
+      assert.equal(
+        compileSpy.mock.calls[0]?.[0]?.data,
+        parsedResult.parsed.data,
+      );
+
+      const validation = await validatePptx(result.pptx);
+      assert.deepEqual(validation.errors, []);
+    } finally {
+      parseSpy.mockRestore();
+      compileSpy.mockRestore();
+    }
+  });
+
+  it("rejects textWrap, unknown style properties, and unknown parameters on Chart during parse", async () => {
+    // 1. textWrap rejection
+    await assert.rejects(
+      build(
+        <Deck width={960} height={540}>
+          <Slide slideId="chart-text-wrap">
+            <Chart
+              kind="column"
+              width={200}
+              height={150}
+              data={{ categories: ["A"], series: [{ name: "S", values: [1] }] }}
+              // @ts-expect-error -- textWrap is explicitly rejected on Chart
+              style={{ textWrap: "wrap" }}
+            />
+          </Slide>
+        </Deck>,
+      ),
+      (error: unknown) => {
+        assert.ok(error instanceof BuildError);
+        assert.equal(error.diagnostics[0]?.code, "unknown-style");
+        return true;
+      },
+    );
+
+    // 2. unknown style property rejection
+    await assert.rejects(
+      build(
+        <Deck width={960} height={540}>
+          <Slide slideId="chart-unknown-style">
+            <Chart
+              kind="column"
+              width={200}
+              height={150}
+              data={{ categories: ["A"], series: [{ name: "S", values: [1] }] }}
+              // @ts-expect-error -- testing unknown style property
+              style={{ unknownProp: "forbidden" }}
+            />
+          </Slide>
+        </Deck>,
+      ),
+      (error: unknown) => {
+        assert.ok(error instanceof BuildError);
+        assert.equal(error.diagnostics[0]?.code, "unknown-style");
+        return true;
+      },
+    );
+
+    // 3. unknown parameter rejection
+    await assert.rejects(
+      build(
+        <Deck width={960} height={540}>
+          <Slide slideId="chart-unknown-param">
+            <Chart
+              kind="column"
+              width={200}
+              height={150}
+              data={{ categories: ["A"], series: [{ name: "S", values: [1] }] }}
+              // @ts-expect-error -- testing unknown parameter
+              unknownParameter="forbidden"
+            />
+          </Slide>
+        </Deck>,
+      ),
+      (error: unknown) => {
+        assert.ok(error instanceof BuildError);
+        assert.equal(error.diagnostics[0]?.code, "unknown-parameter");
+        return true;
+      },
+    );
+
+    // 4. padding rejection
+    await assert.rejects(
+      build(
+        <Deck width={960} height={540}>
+          <Slide slideId="chart-padding">
+            <Chart
+              kind="column"
+              width={200}
+              height={150}
+              data={{ categories: ["A"], series: [{ name: "S", values: [1] }] }}
+              style={{ padding: 10 }}
+            />
+          </Slide>
+        </Deck>,
+      ),
+      (error: unknown) => {
+        assert.ok(error instanceof BuildError);
+        assert.equal(error.diagnostics[0]?.code, "invalid-layout-context");
         return true;
       },
     );

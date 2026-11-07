@@ -25,13 +25,13 @@ export {
 export type {
   BoxProps,
   GradientStop,
-  ImageVisualStyle,
   LayoutStyle,
   LinearGradient,
   RadialGradient,
   Shadow,
   VisualStyle,
 } from "@react-pptx/core";
+export type { ImageVisualStyle } from "@react-pptx/capabilities";
 export {
   Step,
   fade,

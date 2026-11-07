@@ -1018,16 +1018,6 @@ export function parseCapabilityLayoutContract(options: {
         options.path,
       );
     }
-    const unknown = Object.keys(rawStyle).find(
-      (key) => rawStyle[key] !== undefined && !allowedStyleKeys.has(key),
-    );
-    if (unknown !== undefined) {
-      throw new CapabilityError(
-        "unknown-style",
-        `style contains unsupported property ${unknown}`,
-        options.path,
-      );
-    }
     if (!allowPadding) {
       const paddingKey = (paddingStyleKeys as readonly string[]).find(
         (key) => rawStyle[key] !== undefined,
@@ -1039,6 +1029,16 @@ export function parseCapabilityLayoutContract(options: {
           options.path,
         );
       }
+    }
+    const unknown = Object.keys(rawStyle).find(
+      (key) => rawStyle[key] !== undefined && !allowedStyleKeys.has(key),
+    );
+    if (unknown !== undefined) {
+      throw new CapabilityError(
+        "unknown-style",
+        `style contains unsupported property ${unknown}`,
+        options.path,
+      );
     }
   }
 
@@ -1436,13 +1436,13 @@ export class LayoutPass {
                 : "invalid-capability-input";
             const message =
               error instanceof Error ? error.message : String(error);
-            return fail(
+            const targetPath =
               error instanceof CapabilityError && error.path !== undefined
-                ? error.path
-                : childPath,
-              code,
-              message,
-            );
+                ? error.path.startsWith(childPath)
+                  ? error.path
+                  : `${childPath}/${error.path}`
+                : childPath;
+            return fail(targetPath, code, message);
           }
         }
         const { contract, parsed } = parseResult;
@@ -2574,7 +2574,13 @@ export class LayoutPass {
           ? error.code
           : "layout-measurement-failed";
       const message = error instanceof Error ? error.message : String(error);
-      return fail(node.path, code, message);
+      const targetPath =
+        error instanceof CapabilityError && error.path !== undefined
+          ? error.path.startsWith(node.path)
+            ? error.path
+            : `${node.path}/${error.path}`
+          : node.path;
+      return fail(targetPath, code, message);
     }
   }
 

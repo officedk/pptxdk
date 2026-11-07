@@ -247,8 +247,7 @@ export const shapeCapability: CapabilityModule = {
       if (
         hasFixedSize &&
         error instanceof CapabilityError &&
-        (error.code === "font-measurement-unavailable" ||
-          error.code === "font-missing-glyph")
+        error.code === "font-measurement-unavailable"
       ) {
         return undefined;
       }
@@ -336,6 +335,7 @@ export const shapeCapability: CapabilityModule = {
           slideNumber: context.slideNumber,
           createId: context.createTextFieldId,
         },
+        context.options.embedFonts,
       );
     }
     const name =

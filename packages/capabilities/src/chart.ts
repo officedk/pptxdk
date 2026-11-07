@@ -22,6 +22,7 @@ import {
 } from "./chart-xml.ts";
 import {
   fontPresentationContributions,
+  type FontEmbeddingMode,
   type FontEmbeddingUse,
 } from "./font-embedding.ts";
 import type { MorphProps } from "./morph-api.ts";
@@ -924,6 +925,7 @@ function chartResourceClaims(
   props: ChartProps,
   data: ChartData,
   theme: ThemeContext,
+  embedFonts?: FontEmbeddingMode,
 ): {
   readonly textStyles: ChartTextStyleXml;
   readonly resourceClaims: readonly TextResourceClaim[];
@@ -967,13 +969,26 @@ function chartResourceClaims(
     chartText,
     "Chart.style",
     theme,
+    embedFonts,
   );
   const resourceClaims: TextResourceClaim[] = [...chart.resourceClaims];
   const fontUses: FontEmbeddingUse[] = chart.fontUses.map((use) => ({
     ...use,
     path: "Chart.style",
   }));
-  const warnings = [...chart.warnings];
+  const warnings: { readonly code: string; readonly message: string }[] = [];
+  const warningKeys = new Set<string>();
+  const addWarnings = (
+    items: readonly { readonly code: string; readonly message: string }[],
+  ) => {
+    for (const item of items) {
+      const key = `${item.code}\u0000${item.message}`;
+      if (warningKeys.has(key)) continue;
+      warningKeys.add(key);
+      warnings.push(item);
+    }
+  };
+  addWarnings(chart.warnings);
   const textStyles: {
     chart: string;
     categoryAxis?: string;
@@ -987,6 +1002,7 @@ function chartResourceClaims(
       data.categories,
       "Chart.categoryAxis.style",
       theme,
+      embedFonts,
     );
     textStyles.categoryAxis = output.xml;
     resourceClaims.push(...output.resourceClaims);
@@ -996,7 +1012,7 @@ function chartResourceClaims(
         path: "Chart.categoryAxis.style",
       })),
     );
-    warnings.push(...output.warnings);
+    addWarnings(output.warnings);
   }
   if (cartesian?.valueAxis?.style !== undefined) {
     const output = writeChartTextProperties(
@@ -1004,6 +1020,7 @@ function chartResourceClaims(
       valueAxisCharacters,
       "Chart.valueAxis.style",
       theme,
+      embedFonts,
     );
     textStyles.valueAxis = output.xml;
     resourceClaims.push(...output.resourceClaims);
@@ -1013,7 +1030,7 @@ function chartResourceClaims(
         path: "Chart.valueAxis.style",
       })),
     );
-    warnings.push(...output.warnings);
+    addWarnings(output.warnings);
   }
   if (props.dataLabels !== undefined && props.dataLabels !== false) {
     if (props.dataLabels.style !== undefined) {
@@ -1022,6 +1039,7 @@ function chartResourceClaims(
         dataLabelTexts(data, props.dataLabels),
         "Chart.dataLabels.style",
         theme,
+        embedFonts,
       );
       textStyles.dataLabels = output.xml;
       resourceClaims.push(...output.resourceClaims);
@@ -1031,7 +1049,7 @@ function chartResourceClaims(
           path: "Chart.dataLabels.style",
         })),
       );
-      warnings.push(...output.warnings);
+      addWarnings(output.warnings);
     }
     for (const [seriesIndex, series] of data.series.entries()) {
       for (const [pointIndex, point] of Object.entries(series.points ?? {})) {
@@ -1049,6 +1067,7 @@ function chartResourceClaims(
           pointText,
           "Chart.dataLabels.point.style",
           theme,
+          embedFonts,
         );
         textStyles.pointLabels ??= new Map();
         textStyles.pointLabels.set(`${seriesIndex}:${pointIndex}`, output.xml);
@@ -1059,7 +1078,7 @@ function chartResourceClaims(
             path: "Chart.dataLabels.point.style",
           })),
         );
-        warnings.push(...output.warnings);
+        addWarnings(output.warnings);
       }
     }
   }
@@ -1306,7 +1325,12 @@ export const chartCapability: CapabilityModule = {
       chartCategoryCount: props.data.categories.length,
     });
     const { textStyles, resourceClaims, fontUses, warnings } =
-      chartResourceClaims(props, props.data, context.theme);
+      chartResourceClaims(
+        props,
+        props.data,
+        context.theme,
+        context.options.embedFonts,
+      );
     const workbook = chartWorkbook(props.data);
     const relationshipId = context.registerPackagePart({
       part: {

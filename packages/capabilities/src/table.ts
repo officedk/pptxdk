@@ -20,6 +20,7 @@ import { createElement, type ReactNode } from "react";
 
 import {
   fontPresentationContributions,
+  type FontEmbeddingMode,
   type FontEmbeddingUse,
 } from "./font-embedding.ts";
 import { nativeLinkXml } from "./identity.ts";
@@ -589,6 +590,7 @@ function textBody(
     readonly slideNumber: number;
     readonly createId?: () => string;
   },
+  embedFonts?: FontEmbeddingMode,
 ): ReturnType<typeof writeTextBody> {
   try {
     return writeTextBody(
@@ -603,6 +605,7 @@ function textBody(
       },
       "table-cell",
       fields,
+      embedFonts,
     );
   } catch (error) {
     if (error instanceof CapabilityError) {
@@ -841,6 +844,7 @@ function tableLayoutModel(
   requestedWidth: number | undefined,
   theme: ThemeContext,
   slideNumber: number,
+  embedFonts?: FontEmbeddingMode,
 ): TableLayoutModel {
   const columns = parseTracks(input.props["columns"]);
   const tableStyle = trackStyle(input, "table");
@@ -882,9 +886,17 @@ function tableLayoutModel(
         track?.kind === "auto" ||
         (track?.kind === "fr" && requestedWidth === undefined);
       if (!needsTrackWidth) continue;
-      const measured = textBody(cell, theme, "max-content", undefined, false, {
-        slideNumber,
-      });
+      const measured = textBody(
+        cell,
+        theme,
+        "max-content",
+        undefined,
+        false,
+        {
+          slideNumber,
+        },
+        embedFonts,
+      );
       addTextResult(measured, cell.path);
       if (measured.measurement === undefined && measured.text.trim() !== "") {
         fail(
@@ -967,9 +979,17 @@ function tableLayoutModel(
       0,
       widthOf(cell) - cell.padding.left - cell.padding.right,
     );
-    const result = textBody(cell, theme, innerWidth, undefined, false, {
-      slideNumber,
-    });
+    const result = textBody(
+      cell,
+      theme,
+      innerWidth,
+      undefined,
+      false,
+      {
+        slideNumber,
+      },
+      embedFonts,
+    );
     addTextResult(result, cell.path);
     if (result.measurement === undefined && result.text.trim() !== "") {
       fail(
@@ -1094,6 +1114,7 @@ export const tableCapability: CapabilityModule = {
       requestedWidth,
       context.theme,
       context.slideNumber,
+      context.options.embedFonts,
     );
     const { columns, rows, cells, widths } = model;
     const heights = [...model.heights];
@@ -1210,6 +1231,7 @@ export const tableCapability: CapabilityModule = {
             slideNumber: context.slideNumber,
             createId: context.createTextFieldId,
           },
+          context.options.embedFonts,
         );
         addTextResult(body, cell.path);
         matrix[rowIndex]![column] = body.text;

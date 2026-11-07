@@ -15,7 +15,7 @@ import { requiresFontGlyph } from "./text-service.ts";
 const fontRelationship =
   "http://schemas.openxmlformats.org/officeDocument/2006/relationships/font";
 const fontContentType = "application/x-fontdata";
-type FontEmbeddingMode = "full" | "subset";
+export type FontEmbeddingMode = "full" | "subset";
 
 /** 文字序列化最终选择的字体文件和样式；缺少文件也会保留为实际用字要求。 */
 export type FontEmbeddingUse = {

@@ -21,7 +21,7 @@ import * as fontkit from "fontkit";
 // @ts-expect-error -- linebreak 未提供类型，下面只声明所用的断点接口。
 import LineBreakerImplementation from "linebreak";
 
-import type { FontEmbeddingUse } from "./font-embedding.ts";
+import type { FontEmbeddingMode, FontEmbeddingUse } from "./font-embedding.ts";
 import { matchesFontFamily } from "./font-family.ts";
 import { textShadowXml } from "./visual.ts";
 export type {
@@ -858,7 +858,10 @@ function runXml(run: Run, theme: ThemeContext): string {
   return `<a:r>${runPropertiesXml(run.style, "a:rPr", theme)}<a:t xml:space="preserve">${text}</a:t></a:r>`;
 }
 
-function textResourceClaims(runs: readonly Run[]): {
+function textResourceClaims(
+  runs: readonly Run[],
+  embedFonts?: FontEmbeddingMode,
+): {
   readonly resourceClaims: TextResourceClaim[];
   readonly fontUses: FontEmbeddingUse[];
   readonly warnings: { readonly code: string; readonly message: string }[];
@@ -923,6 +926,23 @@ function textResourceClaims(runs: readonly Run[]): {
           identity: font.identity,
           characters: entry.text.join(""),
         });
+        const face = fontkitFace(font);
+        if (face !== undefined) {
+          const missing = missingCharacters(face, entry.text.join(""));
+          if (missing.length > 0) {
+            const shown = missing.slice(0, 10).join(" ");
+            const extra = missing.length - 10;
+            const message = `${font.family} 缺少字符 ${shown}${extra > 0 ? `，另有 ${extra} 个字符` : ""} 的字形`;
+            if (embedFonts === "full" || embedFonts === "subset") {
+              throw new CapabilityError("font-missing-glyph", message);
+            } else {
+              warnings.push({
+                code: "font-missing-glyph",
+                message,
+              });
+            }
+          }
+        }
       }
     }
   }
@@ -1168,12 +1188,39 @@ function measureRunFace(style: RunStyle): MeasureFace {
   return measureFace(unique[0]!);
 }
 
-function missingCharacters(face: MeasureFace, text: string): string[] {
+function fontkitFace(source: NormalizedFont): fontkit.Font | undefined {
+  if (!source.hasResource || source.data === undefined) return undefined;
+  let parsed = measureFaces.get(source.identity);
+  if (parsed === undefined) {
+    try {
+      const data = source.data;
+      const bytes = Buffer.from(data.buffer, data.byteOffset, data.byteLength);
+      const opened = fontkit.create(bytes);
+      if (
+        !("unitsPerEm" in opened) ||
+        typeof opened.hasGlyphForCodePoint !== "function"
+      ) {
+        return undefined;
+      }
+      parsed = opened;
+      measureFaces.set(source.identity, parsed);
+    } catch {
+      return undefined;
+    }
+  }
+  return parsed;
+}
+
+function missingCharacters(
+  face: MeasureFace | fontkit.Font,
+  text: string,
+): string[] {
+  const font = "font" in face ? face.font : face;
   const missing = new Set<string>();
   for (const character of text) {
     if (!requiresFontGlyph(character)) continue;
     const codePoint = character.codePointAt(0);
-    if (codePoint !== undefined && !face.font.hasGlyphForCodePoint(codePoint)) {
+    if (codePoint !== undefined && !font.hasGlyphForCodePoint(codePoint)) {
       missing.add(character);
     }
   }
@@ -1424,16 +1471,6 @@ function paragraphPieces(paragraph: Paragraph): {
   for (const run of sourceRuns) {
     const face = measureRunFace(run.style);
     const shown = displayedText(run);
-    const missing = missingCharacters(face, shown);
-    if (missing.length > 0) {
-      const shown = missing.slice(0, 10).join(" ");
-      const extra = missing.length - 10;
-      const family = fontFamilyValue(run.style.fontFamily).family;
-      throw new CapabilityError(
-        "font-missing-glyph",
-        `${family} 缺少字符 ${shown}${extra > 0 ? `，另有 ${extra} 个字符` : ""} 的字形`,
-      );
-    }
     const letterSpacing =
       run.style.letterSpacing === undefined
         ? undefined
@@ -1621,6 +1658,7 @@ export function writeTextBody(
   layout?: TextLayoutRequest,
   destination: TextBodyDestination = "text-box",
   fields: TextFieldContext = { slideNumber: 1 },
+  embedFonts?: FontEmbeddingMode,
 ): TextServiceResult {
   const style = readTextStyle(
     destination === "table-cell"
@@ -1647,10 +1685,10 @@ export function writeTextBody(
       },
     ];
   });
-  const { resourceClaims, fontUses, warnings } = textResourceClaims([
-    ...runs,
-    ...listRuns,
-  ]);
+  const { resourceClaims, fontUses, warnings } = textResourceClaims(
+    [...runs, ...listRuns],
+    embedFonts,
+  );
   let measured: ReturnType<typeof measureParagraphs> | undefined;
   if (layout !== undefined) {
     try {
@@ -1730,6 +1768,7 @@ export function writeChartTextProperties(
   texts: readonly string[],
   label: string,
   theme: ThemeContext,
+  embedFonts?: FontEmbeddingMode,
 ): Pick<
   TextServiceResult,
   "text" | "resourceClaims" | "fontUses" | "warnings"
@@ -1753,7 +1792,10 @@ export function writeChartTextProperties(
   validateRunStyle(runStyle);
   const runs = texts.map((text) => ({ text, style: runStyle }));
   for (const text of texts) escapedXml(text);
-  const { resourceClaims, fontUses, warnings } = textResourceClaims(runs);
+  const { resourceClaims, fontUses, warnings } = textResourceClaims(
+    runs,
+    embedFonts,
+  );
   const defaultProperties = runPropertiesXml(runStyle, "a:defRPr", theme);
   const outputText = texts.join("\n");
   const lineSpacing =

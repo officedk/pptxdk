@@ -1644,7 +1644,7 @@ describe("公开构建入口", () => {
               fontFamily: font("Jost*", [{ weight: 400, data: noSubsetting }]),
             }}
           >
-            完整字体
+            Full font
           </Text>
         </Slide>
       </Deck>,
@@ -1674,7 +1674,7 @@ describe("公开构建入口", () => {
                 ]),
               }}
             >
-              子集字体
+              Subset font
             </Text>
           </Slide>
         </Deck>,
@@ -2058,11 +2058,44 @@ describe("公开构建入口", () => {
     );
   });
 
-  it("内容定高拒绝没有覆盖所需字符的字体文件", async () => {
+  it("content-sized text records warning without embedFonts, and fails with font-missing-glyph when embedding", async () => {
+    const result = await build(
+      deck(
+        createElement(Text, {
+          testId: "content-sized-missing-glyph",
+          x: 0,
+          y: 0,
+          width: 100,
+          height: "auto",
+          style: {
+            fontFamily: font("Jost*", [{ weight: 400, data: jostBook }]),
+            fontSize: 20,
+          },
+          children: "中文",
+        }),
+      ),
+    );
+    assert.ok(result.pptx.byteLength > 0);
+    const warning = result.report.diagnostics.find(
+      ({ code }) => code === "font-missing-glyph",
+    );
+    assert.ok(
+      warning !== undefined,
+      "expected font-missing-glyph warning in report",
+    );
+    assert.equal(warning.severity, "warning");
+    assert.equal(
+      warning.path,
+      "deck/slide[cover]/text[content-sized-missing-glyph]",
+    );
+    assert.ok(warning.message.includes("中"));
+    assert.ok(warning.message.includes("文"));
+
     await assert.rejects(
       build(
         deck(
           createElement(Text, {
+            testId: "content-sized-missing-glyph-full",
             x: 0,
             y: 0,
             width: 100,
@@ -2074,11 +2107,362 @@ describe("公开构建入口", () => {
             children: "中文",
           }),
         ),
+        { embedFonts: "full" },
       ),
       (error: unknown) =>
         error instanceof BuildError &&
         error.diagnostics.some(({ code }) => code === "font-missing-glyph"),
     );
+
+    await assert.rejects(
+      build(
+        deck(
+          createElement(Text, {
+            testId: "content-sized-missing-glyph-subset",
+            x: 0,
+            y: 0,
+            width: 100,
+            height: "auto",
+            style: {
+              fontFamily: font("Jost*", [{ weight: 400, data: jostBook }]),
+              fontSize: 20,
+            },
+            children: "中文",
+          }),
+        ),
+        { embedFonts: "subset" },
+      ),
+      (error: unknown) =>
+        error instanceof BuildError &&
+        error.diagnostics.some(({ code }) => code === "font-missing-glyph"),
+    );
+  });
+
+  describe("unified glyph coverage check", () => {
+    it("reports font-missing-glyph error for fixed-height Text and Shape when embedFonts is full or subset", async () => {
+      // Fixed-height Text with full embedding
+      await assert.rejects(
+        build(
+          deck(
+            createElement(Text, {
+              testId: "fixed-text-full-missing-glyph",
+              x: 0,
+              y: 0,
+              width: 100,
+              height: 50,
+              style: {
+                fontFamily: font("Jost*", [{ weight: 400, data: jostBook }]),
+                fontSize: 20,
+              },
+              children: "中文",
+            }),
+          ),
+          { embedFonts: "full" },
+        ),
+        (error: unknown) =>
+          error instanceof BuildError &&
+          error.diagnostics.some(
+            ({ code, path }) =>
+              code === "font-missing-glyph" &&
+              path === "deck/slide[cover]/text[fixed-text-full-missing-glyph]",
+          ),
+      );
+
+      // Fixed-height Shape with full embedding
+      await assert.rejects(
+        build(
+          deck(
+            createElement(Shape, {
+              testId: "fixed-shape-full-missing-glyph",
+              x: 0,
+              y: 0,
+              width: 100,
+              height: 50,
+              style: {
+                fontFamily: font("Jost*", [{ weight: 400, data: jostBook }]),
+                fontSize: 20,
+              },
+              text: "中文",
+            }),
+          ),
+          { embedFonts: "full" },
+        ),
+        (error: unknown) =>
+          error instanceof BuildError &&
+          error.diagnostics.some(
+            ({ code, path }) =>
+              code === "font-missing-glyph" &&
+              path ===
+                "deck/slide[cover]/shape[fixed-shape-full-missing-glyph]",
+          ),
+      );
+
+      // Fixed-height Shape with subset embedding
+      await assert.rejects(
+        build(
+          deck(
+            createElement(Shape, {
+              testId: "fixed-shape-subset-missing-glyph",
+              x: 0,
+              y: 0,
+              width: 100,
+              height: 50,
+              style: {
+                fontFamily: font("Jost*", [{ weight: 400, data: jostBook }]),
+                fontSize: 20,
+              },
+              text: "中文",
+            }),
+          ),
+          { embedFonts: "subset" },
+        ),
+        (error: unknown) =>
+          error instanceof BuildError &&
+          error.diagnostics.some(
+            ({ code, path }) =>
+              code === "font-missing-glyph" &&
+              path ===
+                "deck/slide[cover]/shape[fixed-shape-subset-missing-glyph]",
+          ),
+      );
+    });
+
+    it("records font-missing-glyph warning and produces PPTX when embedding is not enabled", async () => {
+      // Fixed-height Text without embedFonts
+      const textResult = await build(
+        deck(
+          createElement(Text, {
+            testId: "fixed-text-warn-missing-glyph",
+            x: 0,
+            y: 0,
+            width: 100,
+            height: 50,
+            style: {
+              fontFamily: font("Jost*", [{ weight: 400, data: jostBook }]),
+              fontSize: 20,
+            },
+            children: "中文",
+          }),
+        ),
+      );
+      assert.ok(textResult.pptx.byteLength > 0);
+      const textWarning = textResult.report.diagnostics.find(
+        ({ code }) => code === "font-missing-glyph",
+      );
+      assert.ok(textWarning !== undefined);
+      assert.equal(
+        textWarning.path,
+        "deck/slide[cover]/text[fixed-text-warn-missing-glyph]",
+      );
+      assert.ok(textWarning.message.includes("中"));
+      assert.ok(textWarning.message.includes("文"));
+
+      // Fixed-height Shape without embedFonts
+      const shapeResult = await build(
+        deck(
+          createElement(Shape, {
+            testId: "fixed-shape-warn-missing-glyph",
+            x: 0,
+            y: 0,
+            width: 100,
+            height: 50,
+            style: {
+              fontFamily: font("Jost*", [{ weight: 400, data: jostBook }]),
+              fontSize: 20,
+            },
+            text: "中文",
+          }),
+        ),
+      );
+      assert.ok(shapeResult.pptx.byteLength > 0);
+      const shapeWarning = shapeResult.report.diagnostics.find(
+        ({ code }) => code === "font-missing-glyph",
+      );
+      assert.ok(shapeWarning !== undefined);
+      assert.equal(
+        shapeWarning.path,
+        "deck/slide[cover]/shape[fixed-shape-warn-missing-glyph]",
+      );
+      assert.ok(shapeWarning.message.includes("中"));
+      assert.ok(shapeWarning.message.includes("文"));
+    });
+
+    it("does not report font-missing-glyph when only font family name is declared without font bytes", async () => {
+      const result = await build(
+        deck(
+          createElement(Text, {
+            testId: "name-only-text",
+            x: 0,
+            y: 0,
+            width: 100,
+            height: 50,
+            style: {
+              fontFamily: "CustomFamilyName",
+              fontSize: 20,
+            },
+            children: "中文",
+          }),
+        ),
+      );
+      assert.ok(result.pptx.byteLength > 0);
+      const missingGlyph = result.report.diagnostics.find(
+        ({ code }) => code === "font-missing-glyph",
+      );
+      assert.equal(missingGlyph, undefined);
+      const unavailable = result.report.diagnostics.find(
+        ({ code }) => code === "font-measurement-unavailable",
+      );
+      assert.ok(unavailable !== undefined);
+    });
+
+    it("does not trigger font-missing-glyph for control characters and Default_Ignorable_Code_Point", async () => {
+      // Text with control characters (\r, \n, \t) and ignorable characters (ZWS \u200B, SHY \u00AD, BOM \uFEFF, VS16 \uFE0F)
+      const result = await build(
+        deck(
+          createElement(Text, {
+            testId: "ignorable-chars-text",
+            x: 0,
+            y: 0,
+            width: 200,
+            height: 50,
+            style: {
+              fontFamily: font("Jost*", [{ weight: 400, data: jostBook }]),
+              fontSize: 20,
+            },
+            children: "Hello\r\n\tWorld\u200B\u00AD\uFEFF\uFE0F",
+          }),
+        ),
+        { embedFonts: "full" },
+      );
+      assert.ok(result.pptx.byteLength > 0);
+      const missingGlyph = result.report.diagnostics.find(
+        ({ code }) => code === "font-missing-glyph",
+      );
+      assert.equal(missingGlyph, undefined);
+    });
+
+    it("reports font-missing-glyph error for Table when embedFonts is full, and warning without embedding", async () => {
+      const jost = font("Jost*", [{ weight: 400, data: jostBook }]);
+
+      await assert.rejects(
+        build(
+          deck(
+            createElement(
+              Table,
+              {
+                testId: "table-full-missing-glyph",
+                x: 0,
+                y: 0,
+                columns: [100],
+                style: { fontFamily: jost, fontSize: 14 },
+              },
+              createElement(
+                Row,
+                { testId: "r1" },
+                createElement(Cell, { testId: "c1" }, "中文"),
+              ),
+            ),
+          ),
+          { embedFonts: "full" },
+        ),
+        (error: unknown) =>
+          error instanceof BuildError &&
+          error.diagnostics.some(
+            ({ code, path }) =>
+              code === "font-missing-glyph" &&
+              path ===
+                "deck/slide[cover]/table[table-full-missing-glyph]/row[r1]/cell[c1]",
+          ),
+      );
+
+      const tableResult = await build(
+        deck(
+          createElement(
+            Table,
+            {
+              testId: "table-warn-missing-glyph",
+              x: 0,
+              y: 0,
+              columns: [100],
+              style: { fontFamily: jost, fontSize: 14 },
+            },
+            createElement(
+              Row,
+              { testId: "r1" },
+              createElement(Cell, { testId: "c1" }, "中文"),
+            ),
+          ),
+        ),
+      );
+      assert.ok(tableResult.pptx.byteLength > 0);
+      const tableWarning = tableResult.report.diagnostics.find(
+        ({ code }) => code === "font-missing-glyph",
+      );
+      assert.ok(tableWarning !== undefined);
+      assert.equal(
+        tableWarning.path,
+        "deck/slide[cover]/table[table-warn-missing-glyph]/row[r1]/cell[c1]",
+      );
+    });
+
+    it("reports font-missing-glyph error for Chart when embedFonts is full, and warning without embedding", async () => {
+      const latinFont = font("Jost*", [{ weight: 400, data: jostBook }]);
+
+      await assert.rejects(
+        build(
+          deck(
+            createElement(Chart, {
+              testId: "chart-full-missing-glyph",
+              kind: "pie",
+              x: 0,
+              y: 0,
+              width: 320,
+              height: 220,
+              style: { fontFamily: latinFont },
+              data: {
+                categories: ["甲", "乙"],
+                series: [{ name: "丙", values: [1, 2] }],
+              },
+            }),
+          ),
+          { embedFonts: "full" },
+        ),
+        (error: unknown) =>
+          error instanceof BuildError &&
+          error.diagnostics.some(
+            ({ code, path }) =>
+              code === "font-missing-glyph" &&
+              path === "deck/slide[cover]/chart[chart-full-missing-glyph]",
+          ),
+      );
+
+      const chartResult = await build(
+        deck(
+          createElement(Chart, {
+            testId: "chart-warn-missing-glyph",
+            kind: "pie",
+            x: 0,
+            y: 0,
+            width: 320,
+            height: 220,
+            style: { fontFamily: latinFont },
+            data: {
+              categories: ["甲", "乙"],
+              series: [{ name: "丙", values: [1, 2] }],
+            },
+          }),
+        ),
+      );
+      assert.ok(chartResult.pptx.byteLength > 0);
+      const chartWarning = chartResult.report.diagnostics.find(
+        ({ code }) => code === "font-missing-glyph",
+      );
+      assert.ok(chartWarning !== undefined);
+      assert.equal(
+        chartWarning.path,
+        "deck/slide[cover]/chart[chart-warn-missing-glyph]",
+      );
+    });
   });
 
   it("按准确字重选择度量文件，并要求实际斜体字重资源", async () => {

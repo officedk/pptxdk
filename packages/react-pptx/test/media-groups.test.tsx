@@ -47,8 +47,8 @@ const widePng = new Uint8Array(
   readFileSync(new URL("./assets/wide-20000x1.png", import.meta.url)),
 );
 
-describe("图片与原生组合", () => {
-  it("在嵌套原生组合中保留文字段落、形状文字、媒体关系和成员几何", async () => {
+describe("images and native groups", () => {
+  it("preserves text paragraphs, shape text, media relationships, and member geometry in nested native groups", async () => {
     const result = await build(
       createElement(
         Deck,
@@ -211,7 +211,7 @@ describe("图片与原生组合", () => {
     );
   });
 
-  it("通过公开构建读取图片资源并在实际 PPTX 中建立图片关系", async () => {
+  it("reads image resources through public build and establishes image relationships in actual PPTX", async () => {
     const result = await build(
       createElement(
         Deck,
@@ -267,7 +267,7 @@ describe("图片与原生组合", () => {
     );
   });
 
-  it("从本地路径和 file URL 读取图片资源", async () => {
+  it("reads image resources from local paths and file URLs", async () => {
     const directory = mkdtempSync(join(tmpdir(), "react-pptx-image-"));
     const path = join(directory, "pixel.png");
     writeFileSync(path, png);
@@ -305,7 +305,7 @@ describe("图片与原生组合", () => {
     }
   });
 
-  it("读取 JPEG 与 GIF 固有尺寸并保留其原生资源类型", async () => {
+  it("reads intrinsic dimensions of JPEG and GIF and preserves their native resource types", async () => {
     for (const [src, contentType] of [
       [jpeg, "image/jpeg"],
       [gif, "image/gif"],
@@ -335,7 +335,7 @@ describe("图片与原生组合", () => {
     }
   });
 
-  it("按内容复用媒体部件，并为保留比例模式计算图片尺寸", async () => {
+  it("reuses media parts by content and computes image dimensions for aspect-ratio-preserving modes", async () => {
     const result = await build(
       createElement(
         Deck,
@@ -387,7 +387,7 @@ describe("图片与原生组合", () => {
     );
   });
 
-  it("将 contain 的最终尺寸写入原生图片变换", async () => {
+  it("writes final dimensions of contain to native image transform", async () => {
     const result = await build(
       createElement(
         Deck,
@@ -425,7 +425,7 @@ describe("图片与原生组合", () => {
     );
   });
 
-  it("拒绝 contain 派生后无法表示的极小图片尺寸", async () => {
+  it("rejects unrepresentable tiny image dimensions derived from contain", async () => {
     await assert.rejects(
       build(
         createElement(
@@ -456,7 +456,7 @@ describe("图片与原生组合", () => {
     );
   });
 
-  it("按显式分数裁切并拒绝越界裁切值", async () => {
+  it("crops by explicit fraction and rejects out-of-bounds crop values", async () => {
     const result = await build(
       createElement(
         Deck,
@@ -517,7 +517,7 @@ describe("图片与原生组合", () => {
     }
   });
 
-  it("拒绝无效 fit 值、缺失文件与无法识别的图片内容", async () => {
+  it("rejects invalid fit values, missing files, and unrecognizable image content", async () => {
     const invalidFit = Image as ComponentType<Record<string, unknown>>;
     for (const [props, code] of [
       [
@@ -561,7 +561,7 @@ describe("图片与原生组合", () => {
     }
   });
 
-  it("拒绝缺少 IDAT 数据块的 PNG", async () => {
+  it("rejects PNG missing IDAT chunks", async () => {
     const noIdatPng = new Uint8Array(
       Buffer.from(
         "89504e470d0a1a0a0000000d49484452000000010000000108000000003a7e9b550000000049454e44ae426082",
@@ -592,7 +592,7 @@ describe("图片与原生组合", () => {
     );
   });
 
-  it("拒绝缺少扫描数据和 EOI 标记的 JPEG", async () => {
+  it("rejects JPEG missing scan data and EOI marker", async () => {
     const truncatedJpeg = new Uint8Array(
       Buffer.from("ffd8ffc00011080001000103011100021100031100", "hex"),
     );
@@ -623,7 +623,7 @@ describe("图片与原生组合", () => {
     );
   });
 
-  it("拒绝缺少图像数据块的 GIF", async () => {
+  it("rejects GIF missing image data block", async () => {
     const emptyGif = new Uint8Array(
       Buffer.from("474946383961010001000000003b", "hex"),
     );
@@ -651,7 +651,7 @@ describe("图片与原生组合", () => {
     );
   });
 
-  it("保留嵌套原生组合成员的身份、范围与相对坐标", async () => {
+  it("preserves identities, extents, and relative coordinates of nested native group members", async () => {
     const result = await build(
       createElement(
         Deck,
@@ -802,7 +802,7 @@ describe("图片与原生组合", () => {
     assert.equal(inner?.members?.[0]?.image?.contentType, "image/png");
   });
 
-  it("将 Group 限定为原生组合，并在成员能力被裁剪时准确报错", async () => {
+  it("restricts Group to native groups and reports errors accurately when member capabilities are stripped", async () => {
     const positionedGroup = Group as ComponentType<Record<string, unknown>>;
     await assert.rejects(
       build(

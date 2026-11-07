@@ -17,8 +17,8 @@ import { validatePptx } from "@react-pptx/validation";
 import { strFromU8, strToU8, unzipSync, zipSync } from "fflate";
 import { describe, it } from "vitest";
 
-describe("原生坐标系图表", () => {
-  it("让图表、坐标轴和数据标签继承共享文字视觉样式", async () => {
+describe("native Cartesian charts", () => {
+  it("inherits shared text visual styles across charts, axes, and data labels", async () => {
     const result = await build(
       <Deck>
         <Slide slideId="chart-text-visual">
@@ -78,7 +78,7 @@ describe("原生坐标系图表", () => {
     assert.equal((chartXml.match(/<a:outerShdw/gu) ?? []).length, 3);
   });
 
-  it("登记值轴实际字体资源并检测与图表文字的冲突", async () => {
+  it("registers actual font resources for value axes and detects conflicts with chart text", async () => {
     const jost = new Uint8Array(
       readFileSync(
         new URL("./assets/fonts/Jost-400-Book.ttf", import.meta.url),
@@ -163,7 +163,7 @@ describe("原生坐标系图表", () => {
     );
   });
 
-  it("保留基础动画、点击步与禁用声明，并引用 graphicFrame 对象", async () => {
+  it("preserves basic motion, click steps, and disabled declarations, referencing graphicFrame objects", async () => {
     const result = await build(
       <Deck>
         <Slide slideId="chart-motion">
@@ -320,7 +320,7 @@ describe("原生坐标系图表", () => {
     );
   });
 
-  it("将柱形图、图表缓存和嵌入工作簿写成一致的可编辑数据", async () => {
+  it("writes column charts, chart cache, and embedded workbooks as consistent editable data", async () => {
     const result = await build(
       <Deck width={800} height={600}>
         <Slide slideId="quarterly-sales">
@@ -433,7 +433,7 @@ describe("原生坐标系图表", () => {
     });
   });
 
-  it("逐类写出柱形、条形、折线和面积图及其嵌入工作簿", async () => {
+  it("writes column, bar, line, and area charts and their embedded workbooks by category", async () => {
     const data = {
       categories: ["FY1", "FY2", "FY3"],
       series: [
@@ -632,7 +632,7 @@ describe("原生坐标系图表", () => {
     );
   });
 
-  it("写出原生饼图与环形图并保留适用样式及工作簿数据", async () => {
+  it("writes native pie and doughnut charts while preserving applicable styles and workbook data", async () => {
     const categories = ["线上 & <门店> 😀", "合作门店", "空值"];
     const pieSeries = {
       name: "渠道 & mix",
@@ -779,7 +779,7 @@ describe("原生坐标系图表", () => {
     assert.ok(!pieSheet.includes("<v></v>"));
   });
 
-  it("按当前正式校验配置限制饼图与环形图的最终爆炸值", async () => {
+  it("restricts final explosion values of pie and doughnut charts under current formal validation profile", async () => {
     const data = {
       categories: ["A", "B"],
       series: [{ name: "S", values: [1, 2] }],
@@ -884,7 +884,7 @@ describe("原生坐标系图表", () => {
     }
   });
 
-  it("拒绝饼图系列、数值和参数的非法组合", async () => {
+  it("rejects invalid combinations of pie series, values, and parameters", async () => {
     const base = {
       x: 0,
       y: 0,
@@ -996,7 +996,7 @@ describe("原生坐标系图表", () => {
     }
   });
 
-  it("报告损坏的图表到工作簿部件关系", async () => {
+  it("reports broken chart-to-workbook part relationships", async () => {
     const result = await build(
       <Deck>
         <Slide slideId="invalid-workbook-relation">
@@ -1032,7 +1032,7 @@ describe("原生坐标系图表", () => {
     );
   });
 
-  it("发现图表公式引用了嵌入工作簿中不存在的工作表", async () => {
+  it("detects chart formulas referencing non-existent worksheets in embedded workbooks", async () => {
     const result = await build(
       <Deck>
         <Slide slideId="renamed-chart-sheet">
@@ -1072,7 +1072,7 @@ describe("原生坐标系图表", () => {
     );
   });
 
-  it("轴线和网格线的换算宽度必须落在 DrawingML 范围内", async () => {
+  it("requires converted widths of axis lines and grid lines to fall within DrawingML range", async () => {
     for (const { testId, valueAxis } of [
       { testId: "axis-line-overflow", valueAxis: { line: { width: 1e308 } } },
       {
@@ -1136,7 +1136,7 @@ describe("原生坐标系图表", () => {
     assert.deepEqual((await validatePptx(boundaryResult.pptx)).errors, []);
   });
 
-  it("按每个分类下标拒绝稀疏系列值", async () => {
+  it("rejects sparse series values across category indices", async () => {
     const sparseValues = Array<number>(2);
     await assert.rejects(
       build(
@@ -1169,7 +1169,7 @@ describe("原生坐标系图表", () => {
     );
   });
 
-  it("拒绝分类轴没有写出语义的数值参数", async () => {
+  it("rejects numeric parameters without emission semantics on category axes", async () => {
     for (const [option, value] of [
       ["min", 20],
       ["max", 40],
@@ -1209,7 +1209,7 @@ describe("原生坐标系图表", () => {
     }
   });
 
-  it("以定位构建错误拒绝无效数据和不适用参数组合", async () => {
+  it("rejects invalid data and inapplicable parameter combinations with located build errors", async () => {
     await assert.rejects(
       build(
         <Deck>
@@ -1251,7 +1251,7 @@ describe("原生坐标系图表", () => {
       width: 100,
       height: 100,
       data: { categories: ["A"], series: [{ name: "S", values: [1] }] },
-      // @ts-expect-error -- gapWidth 只适用于柱形和条形图
+      // @ts-expect-error -- gapWidth only applies to column and bar charts
       gapWidth: 40,
     };
     const invalidLine = <Chart {...invalidLineProps} />;

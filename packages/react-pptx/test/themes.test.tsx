@@ -72,8 +72,8 @@ function TestMotionScope({ children }: { readonly children?: ReactNode }) {
   return <MotionScope scope={scope}>{children}</MotionScope>;
 }
 
-describe("公开主题入口", () => {
-  it("主题字体参与内容度量，文字保留 major 字体与原生颜色槽引用", async () => {
+describe("public theme entry", () => {
+  it("participates in content measurement with theme fonts and preserves major font and native color slot references", async () => {
     const result = await build(
       <Deck
         theme={defineTheme({
@@ -129,7 +129,7 @@ describe("公开主题入口", () => {
     assert.match(slide, /<a:schemeClr val="accent1"\/>/u);
   });
 
-  it("Deck minor/dk1 默认值应用于普通文字、形状、表格和图表", async () => {
+  it("applies Deck minor/dk1 defaults to normal text, shapes, tables, and charts", async () => {
     const result = await build(
       <Deck
         theme={defineTheme({
@@ -222,7 +222,7 @@ describe("公开主题入口", () => {
     assert.match(chart, /<a:schemeClr val="tx1"\/>/u);
   });
 
-  it("局部字体和颜色沿 Box、Group、透明 MotionScope 继承且兄弟实例隔离", async () => {
+  it("inherits local fonts and colors along Box, Group, and transparent MotionScope while isolating sibling instances", async () => {
     const result = await build(
       <Deck
         theme={defineTheme({
@@ -441,7 +441,7 @@ describe("公开主题入口", () => {
     assert.match(slideScope, /sz="1350"/u);
   });
 
-  it("别名、明暗变体和透明度沿同一颜色解析器保留原生槽位", async () => {
+  it("preserves native slots for aliases, tint/shade variants, and opacity along the same color resolver", async () => {
     const result = await build(
       <Deck
         theme={defineTheme({
@@ -509,7 +509,7 @@ describe("公开主题入口", () => {
     );
   });
 
-  it("文稿颜色别名在使用处解析最近局部覆盖并保留同名外层引用", async () => {
+  it("resolves nearest local overrides for deck color aliases at usage sites while preserving outer references of the same name", async () => {
     const result = await build(
       <Deck
         theme={defineTheme({
@@ -601,7 +601,7 @@ describe("公开主题入口", () => {
     );
   });
 
-  it("Text、P 和 Span 对同一字体令牌只解析一次", async () => {
+  it("resolves the same font token only once across Text, P, and Span", async () => {
     const result = await build(
       <Deck
         theme={defineTheme({
@@ -643,7 +643,7 @@ describe("公开主题入口", () => {
     );
   });
 
-  it("Deck、Slide、Box 和 Group 的段落默认值参与度量并允许后代覆盖", async () => {
+  it("participates in measurement with paragraph defaults on Deck, Slide, Box, and Group and allows descendant overrides", async () => {
     const result = await build(
       <Deck
         theme={defineTheme({ fonts: { minor: localFont } })}
@@ -803,7 +803,7 @@ describe("公开主题入口", () => {
     assert.match(objectXml(3, "group-default"), /<a:spcPts val="1500"\/>/u);
   });
 
-  it("Group 纯文字默认值不改变原有布局参与条件", async () => {
+  it("does not change original layout participation criteria with text-only defaults on Group", async () => {
     const result = await build(
       <Deck>
         <Slide slideId="text-only-group-style">
@@ -832,7 +832,7 @@ describe("公开主题入口", () => {
     assert.match(slide, /<a:spcPts val="600"\/>/u);
   });
 
-  it("透明 Group 的主题与文字默认值穿过布局节点并隔离外部兄弟", async () => {
+  it("passes theme and text defaults of transparent Group through layout nodes while isolating external siblings", async () => {
     const leaf = (style?: {
       readonly width?: number;
       readonly position?: "relative";
@@ -976,7 +976,7 @@ describe("公开主题入口", () => {
     }
   });
 
-  it("局部主题拒绝未知颜色与字体令牌", async () => {
+  it("rejects unknown color and font tokens in local themes", async () => {
     const theme = defineTheme({
       colors: { ink: "accent1" },
       fonts: { major: "Aptos Display" },
@@ -1032,7 +1032,7 @@ describe("公开主题入口", () => {
     );
   });
 
-  it("并发构建共享文稿主题时保持局部令牌互不污染", async () => {
+  it("keeps local tokens isolated without cross-contamination during concurrent builds sharing a deck theme", async () => {
     const theme = defineTheme({ colors: { ink: "accent1" } });
     const deck = (slideId: string, color: string) => (
       <Deck theme={theme}>
@@ -1070,7 +1070,7 @@ describe("公开主题入口", () => {
     assert.deepEqual((await validatePptx(green.pptx)).errors, []);
   });
 
-  it("局部主题字体进入同一文稿的字型资源记录", async () => {
+  it("includes local theme fonts in font resource records of the same deck", async () => {
     const result = await build(
       <Deck
         theme={defineTheme({ fonts: { major: "Aptos Display" } })}

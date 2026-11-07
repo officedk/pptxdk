@@ -25,8 +25,8 @@ import { validatePptx } from "@react-pptx/validation";
 import { createElement } from "react";
 import { describe, it } from "vitest";
 
-describe("跨页对象连续性", () => {
-  it("只让可见 Box 的自有背景参与原生 Morph，子项仍保持独立", async () => {
+describe("cross-slide object continuity", () => {
+  it("allows only own backgrounds of visible Box elements to participate in native Morph while children remain independent", async () => {
     const scope = createMorphScope();
     const background = scope.handle("card-background");
     const declarations = createElement(
@@ -109,7 +109,7 @@ describe("跨页对象连续性", () => {
     );
   });
 
-  it("通过同一个显式句柄写出相邻页的原生 Morph 对应", async () => {
+  it("emits native Morph correspondences across adjacent slides using the same explicit handle", async () => {
     const scope = createMorphScope();
     const hero = scope.handle("hero");
     const declarations = createElement(
@@ -193,7 +193,7 @@ describe("跨页对象连续性", () => {
     }
   });
 
-  it("透明 Box 和 MotionScope 在页面顶层保留 Morph 对应", async () => {
+  it("preserves Morph correspondences for transparent Box and MotionScope at slide top-level", async () => {
     const key = createMorphScope().handle("hero");
     function MotionWrappedHero() {
       const scope = useMotionScope();
@@ -249,7 +249,7 @@ describe("跨页对象连续性", () => {
     );
   });
 
-  it("隔离重复组件实例中的同名句柄并按显式 scope 匹配", async () => {
+  it("isolates same-named handles across duplicate component instances and matches by explicit scope", async () => {
     const leftScope = createMorphScope();
     const rightScope = createMorphScope();
     const Marker = (props: {
@@ -324,7 +324,7 @@ describe("跨页对象连续性", () => {
     );
   });
 
-  it("并发构建各自分配连续性名称而不互相污染", async () => {
+  it("allocates continuity names independently in concurrent builds without cross-contamination", async () => {
     const sharedScope = createMorphScope();
     const shared = sharedScope.handle("hero");
     const other = createMorphScope().handle("hero");
@@ -390,7 +390,7 @@ describe("跨页对象连续性", () => {
     assert.deepEqual((await validatePptx(second.pptx)).errors, []);
   });
 
-  it("保留文本、形状、图片、组合、表格和图表的同类对象匹配", async () => {
+  it("preserves same-kind object pairings across text, shape, image, group, table, and chart", async () => {
     const scope = createMorphScope();
     const handles = {
       shape: scope.handle("shape"),
@@ -511,7 +511,7 @@ describe("跨页对象连续性", () => {
     );
   });
 
-  it("允许未配对的进入、离开和替换，普通名称不充当连续性句柄", async () => {
+  it("permits unpaired enters, exits, and replacements, and does not treat normal names as continuity handles", async () => {
     const scope = createMorphScope();
     const departing = scope.handle("departing");
     const entering = scope.handle("entering");
@@ -594,7 +594,7 @@ describe("跨页对象连续性", () => {
     assert.ok(!file.slides[0]?.objects[2]?.name.startsWith("!!"));
   });
 
-  it("定位同页重复句柄、透明 Box、Group 内成员和异类配对", async () => {
+  it("identifies duplicate handles on the same slide, transparent Box elements, Group members, and mismatched-kind pairings", async () => {
     const scope = createMorphScope();
     const key = scope.handle("object");
     const image = new Uint8Array(

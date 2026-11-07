@@ -21,8 +21,8 @@ function deck(text: ReturnType<typeof createElement>) {
   );
 }
 
-describe("DrawingML 文字字段范围", () => {
-  it("按字号序列化范围拒绝无效值并接受边界", async () => {
+describe("DrawingML text field ranges", () => {
+  it("rejects invalid values according to font size serialization ranges and accepts boundaries", async () => {
     for (const [fontSize, code] of [
       [0.1, "invalid-font-size"],
       ["6000pt", "invalid-font-size"],
@@ -71,7 +71,7 @@ describe("DrawingML 文字字段范围", () => {
     }
   });
 
-  it("按间距序列化范围拒绝越界并保留合法单位换算", async () => {
+  it("rejects out-of-range values according to spacing serialization ranges and preserves valid unit conversions", async () => {
     for (const style of [
       { lineHeight: "1000000px" },
       { lineHeight: "2112.01px" },
@@ -137,7 +137,7 @@ describe("DrawingML 文字字段范围", () => {
     );
   });
 
-  it("独立文件读取会报告实际越界的字号和段落间距", async () => {
+  it("reports actually out-of-range font sizes and paragraph spacings during standalone file reading", async () => {
     const result = await build(
       deck(
         createElement(

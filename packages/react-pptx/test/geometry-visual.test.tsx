@@ -45,8 +45,8 @@ function deck(children: readonly ReturnType<typeof createElement>[]) {
   );
 }
 
-describe("几何、对象视觉和文字视觉", () => {
-  it("公开构建并独立读取预设、SVG、自定义几何及适用对象视觉", async () => {
+describe("geometry, object visuals, and text visuals", () => {
+  it("publicly builds and independently reads presets, SVG, custom geometries, and applicable object visuals", async () => {
     const result = await build(
       deck([
         createElement(Shape, {
@@ -220,7 +220,7 @@ describe("几何、对象视觉和文字视觉", () => {
     );
   });
 
-  it("允许透明且无原生尺寸的 Box 仅承载布局语义", async () => {
+  it("allows transparent Box elements without native size to carry only layout semantics", async () => {
     const result = await build(
       deck([
         createElement(Box, { key: "empty", testId: "empty-box" }),
@@ -241,7 +241,7 @@ describe("几何、对象视觉和文字视觉", () => {
     );
   });
 
-  it("透明 Box 仍会按可写单位拒绝非法旋转声明", async () => {
+  it("rejects invalid rotation declarations on transparent Box elements according to writable units", async () => {
     for (const rotate of [
       Number.NaN,
       Number.POSITIVE_INFINITY,
@@ -272,7 +272,7 @@ describe("几何、对象视觉和文字视觉", () => {
     }
   });
 
-  it("为复用的预设派生圆角调整值而不改写作者输入", async () => {
+  it("derives corner radius adjustment values for reused presets without mutating author inputs", async () => {
     const geometry = preset("roundRect", Object.freeze({}));
     const result = await build(
       deck([
@@ -307,7 +307,7 @@ describe("几何、对象视觉和文字视觉", () => {
     assert.deepEqual(geometry.adjust, {});
   });
 
-  it("按实际字距量化和大小写展开后的字符边界度量自动高度", async () => {
+  it("measures auto height using character bounds after actual kerning quantization and case transformation", async () => {
     const result = await build(
       deck([
         createElement(Text, {
@@ -371,7 +371,7 @@ describe("几何、对象视觉和文字视觉", () => {
     assert.equal((slideXml.match(/cap="all"/gu) ?? []).length, 2);
   });
 
-  it("定位拒绝 close 后的数字和非 0/1 圆弧旗标", () => {
+  it("rejects numbers following close and non-0/1 arc flags with exact location", () => {
     const child = spawnSync(
       process.execPath,
       [
@@ -399,7 +399,7 @@ describe("几何、对象视觉和文字视觉", () => {
     assert.equal(child.stdout.toString(), "ok");
   });
 
-  it("按 DrawingML 边线最终 EMU 范围拒绝无法写入的宽度", async () => {
+  it("rejects unwritable widths according to final DrawingML stroke EMU bounds", async () => {
     const valid = await build(
       deck([
         createElement(Shape, {
@@ -441,7 +441,7 @@ describe("几何、对象视觉和文字视觉", () => {
     );
   });
 
-  it("拒绝量化后为零的自定义几何路径空间", async () => {
+  it("rejects custom geometry path space that quantizes to zero", async () => {
     await assert.rejects(
       build(
         deck([
@@ -487,7 +487,7 @@ describe("几何、对象视觉和文字视觉", () => {
     );
   });
 
-  it("保留正常断行并让 Text 与 Shape 的 nowrap 共用度量和原生 wrap", async () => {
+  it("preserves normal line breaks and shares measurement and native wrap between nowrap Text and Shape", async () => {
     const content = "alpha beta gamma delta";
     const result = await build(
       deck([
@@ -595,7 +595,7 @@ describe("几何、对象视觉和文字视觉", () => {
     assert.equal((slideXml.match(/<a:bodyPr wrap="none"/gu) ?? []).length, 3);
   });
 
-  it("定位拒绝非法几何、渐变、文本间距和不可表达组合", async () => {
+  it("rejects invalid geometry, gradient, text spacing, and unrepresentable combinations with exact location", async () => {
     assert.throws(
       () => path("M 0 0 L 2 ?", { viewBox: [10, 10] }),
       (error: unknown) =>

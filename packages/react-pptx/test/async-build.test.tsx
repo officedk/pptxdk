@@ -72,20 +72,20 @@ class ErrorBoundary extends Component<
   }
 }
 
-describe("公开构建中的 React 异步内容", () => {
-  it("加载 NODE_ENV 对应的 React 元素实现", () => {
+describe("React asynchronous content in public build", () => {
+  it("loads React element implementation corresponding to NODE_ENV", () => {
     const element = createElement("react-mode-probe");
 
-    // React 19 的开发元素带有 _store；生产元素没有。检查实际模块分支，而非环境变量本身。
+    // React 19 development elements carry _store; production elements do not. Check the actual module branch rather than the environment variable itself.
     assert.equal(
       Object.hasOwn(element, "_store"),
       process.env.NODE_ENV !== "production",
     );
   });
 
-  it("预取消不会执行作者组件或留下 AbortSignal 监听", async () => {
+  it("does not execute author components or leave AbortSignal listeners on pre-cancellation", async () => {
     const controller = new AbortController();
-    const reason = new Error("调用方已取消");
+    const reason = new Error("caller cancelled");
     controller.abort(reason);
     let rendered = 0;
 
@@ -107,9 +107,9 @@ describe("公开构建中的 React 异步内容", () => {
     assert.equal(getEventListeners(controller.signal, "abort").length, 0);
   });
 
-  it("挂起时取消拒绝构建、卸载作者组件并移除监听", async () => {
+  it("rejects build, unmounts author components, and removes listeners when cancelled while suspended", async () => {
     const controller = new AbortController();
-    const reason = new Error("放弃等待异步内容");
+    const reason = new Error("aborted waiting for async content");
     const never = new Promise<string>(() => {});
     const started = Promise.withResolvers<void>();
     let cleaned = 0;
@@ -155,9 +155,9 @@ describe("公开构建中的 React 异步内容", () => {
     assert.equal(getEventListeners(controller.signal, "abort").length, 0);
   });
 
-  it("LayoutEffect 中取消不会重入提交阶段", async () => {
+  it("does not re-enter commit phase when cancelled inside LayoutEffect", async () => {
     const controller = new AbortController();
-    const reason = new Error("LayoutEffect 中取消");
+    const reason = new Error("cancelled inside LayoutEffect");
     let insideLayoutEffect = false;
     let cleanupRanInsideLayoutEffect = false;
 
@@ -188,10 +188,10 @@ describe("公开构建中的 React 异步内容", () => {
     assert.equal(getEventListeners(controller.signal, "abort").length, 0);
   });
 
-  it("取消优先于卸载清理异常，仍完成清理并移除监听", async () => {
+  it("prioritizes cancellation over unmount cleanup exceptions, still completing cleanup and removing listeners", async () => {
     const controller = new AbortController();
-    const reason = new Error("调用方取消优先结束构建");
-    const cleanupFailure = new Error("取消时 cleanup failure");
+    const reason = new Error("caller cancellation ends build with priority");
+    const cleanupFailure = new Error("cleanup failure during cancellation");
     const never = new Promise<string>(() => {});
     const started = Promise.withResolvers<void>();
     let cleaned = 0;
@@ -238,10 +238,10 @@ describe("公开构建中的 React 异步内容", () => {
     assert.equal(file.slides[0]?.objects[0]?.text?.text, "取消后恢复");
   });
 
-  it("并发构建隔离取消，晚到 Promise 不影响另一份真实产物", async () => {
+  it("isolates cancellation across concurrent builds without late Promises affecting another real artifact", async () => {
     const cancelled = new AbortController();
     const continuing = new AbortController();
-    const cancelReason = new Error("只取消第一份构建");
+    const cancelReason = new Error("cancel only the first build");
     const late = Promise.withResolvers<string>();
     const otherContent = Promise.withResolvers<string>();
     const cancelledStarted = Promise.withResolvers<void>();
@@ -323,7 +323,7 @@ describe("公开构建中的 React 异步内容", () => {
     assert.equal(file.slides[0]?.objects[0]?.text?.text, "另一构建的最终内容");
   });
 
-  it("完成先于取消时保留同次构建结果", async () => {
+  it("preserves same build result when completion precedes cancellation", async () => {
     const controller = new AbortController();
     const result = await build(
       deck(
@@ -344,7 +344,7 @@ describe("公开构建中的 React 异步内容", () => {
     const report = result.report;
     const pptx = result.pptx.slice();
 
-    controller.abort(new Error("晚到取消"));
+    controller.abort(new Error("late cancellation"));
     const file = await validatePptx(result.pptx);
 
     assert.equal(getEventListeners(controller.signal, "abort").length, 0);
@@ -354,7 +354,7 @@ describe("公开构建中的 React 异步内容", () => {
     assert.equal(file.slides[0]?.objects[0]?.text?.text, "完成内容");
   });
 
-  it("等待 Suspense 中的稳定 Promise 并生成最终内容", async () => {
+  it("awaits stable Promises inside Suspense and generates final content", async () => {
     const started = Promise.withResolvers<void>();
     let resolveContent: (value: string) => void = () => {};
     const content = new Promise<string>((resolve) => {
@@ -404,7 +404,7 @@ describe("公开构建中的 React 异步内容", () => {
     assert.equal(file.slides[0]?.objects[0]?.text?.text, "最终内容");
   });
 
-  it("混合同步与入口预取内容，并等待嵌套和空 fallback 的最终提交", async () => {
+  it("mixes synchronous and entry-prefetched content, awaiting final commits of nested and empty fallbacks", async () => {
     const outer = Promise.withResolvers<string>();
     const inner = Promise.withResolvers<string>();
     const started = Promise.withResolvers<void>();
@@ -497,7 +497,7 @@ describe("公开构建中的 React 异步内容", () => {
     );
   });
 
-  it("等待同步 Effect 连续更新，即使状态提交没有宿主变化", async () => {
+  it("awaits sequential synchronous Effect updates even when state commits produce no host changes", async () => {
     const updates: number[] = [];
     const stableHost = createElement(
       Text,
@@ -523,7 +523,7 @@ describe("公开构建中的 React 异步内容", () => {
     assert.equal(file.slides[0]?.objects[0]?.text?.text, "宿主文字保持不变");
   });
 
-  it("作者 catch 和错误边界的回退正常生成且不产生业务警告", async () => {
+  it("generates fallbacks from author catches and error boundaries without producing business warnings", async () => {
     const caughtResource = Promise.withResolvers<string>();
     const boundaryResource = Promise.withResolvers<string>();
     const abandonedResource = new Promise<string>(() => {});
@@ -571,8 +571,8 @@ describe("公开构建中的 React 异步内容", () => {
     try {
       const pendingBuild = build(deck(createElement(HandledErrors)));
       await started.promise;
-      caughtResource.reject(new Error("catch 已恢复"));
-      boundaryResource.reject(new Error("边界已恢复"));
+      caughtResource.reject(new Error("catch recovered"));
+      boundaryResource.reject(new Error("boundary recovered"));
 
       const result = await pendingBuild;
       const file = await validatePptx(result.pptx);
@@ -596,9 +596,9 @@ describe("公开构建中的 React 异步内容", () => {
     }
   });
 
-  it("未处理的直接 Effect 异常使构建失败并卸载其他已提交 Effect", async () => {
+  it("fails build on unhandled direct Effect exception and unmounts other committed Effects", async () => {
     const controller = new AbortController();
-    const failure = new Error("直接 Effect 失败");
+    const failure = new Error("direct Effect failed");
     let cleaned = 0;
 
     function DirectEffectFailure() {
@@ -624,7 +624,7 @@ describe("公开构建中的 React 异步内容", () => {
       (error: unknown) => {
         assert.ok(error instanceof BuildError);
         assert.equal(error.diagnostics[0]?.code, "react-render");
-        assert.match(error.message, /直接 Effect 失败/u);
+        assert.match(error.message, /direct Effect failed/u);
         return true;
       },
     );
@@ -641,7 +641,7 @@ describe("公开构建中的 React 异步内容", () => {
     assert.equal(file.slides[0]?.objects[0]?.text?.text, "恢复构建");
   });
 
-  it("正常内容卸载时 passive Effect 清理抛错不会返回成功产物", async () => {
+  it("does not return successful artifacts when passive Effect cleanup throws during normal content unmount", async () => {
     const controller = new AbortController();
     const cleanupFailure = new Error("passive cleanup failure");
 
@@ -685,7 +685,7 @@ describe("公开构建中的 React 异步内容", () => {
     assert.equal(file.slides[0]?.objects[0]?.text?.text, "清理后恢复");
   });
 
-  it("LayoutEffect 清理抛错时仍拒绝并移除取消监听", async () => {
+  it("still rejects and removes cancellation listeners when LayoutEffect cleanup throws", async () => {
     const controller = new AbortController();
     const cleanupFailure = new Error("layout cleanup failure");
 
@@ -716,10 +716,10 @@ describe("公开构建中的 React 异步内容", () => {
     assert.equal(getEventListeners(controller.signal, "abort").length, 0);
   });
 
-  it("未处理并传播到构建入口的 Promise 错误使构建失败", async () => {
+  it("fails build when unhandled Promise errors propagate to the build entry", async () => {
     const resource = Promise.withResolvers<string>();
     const started = Promise.withResolvers<void>();
-    const failure = new Error("未处理的数据错误");
+    const failure = new Error("unhandled data error");
     let cleaned = 0;
 
     function UnhandledResource() {
@@ -741,7 +741,7 @@ describe("公开构建中的 React 异步内容", () => {
     const rejected = assert.rejects(pendingBuild, (error: unknown) => {
       assert.ok(error instanceof BuildError);
       assert.equal(error.diagnostics[0]?.code, "react-render");
-      assert.match(error.message, /未处理的数据错误/u);
+      assert.match(error.message, /unhandled data error/u);
       return true;
     });
     resource.reject(failure);
@@ -749,7 +749,7 @@ describe("公开构建中的 React 异步内容", () => {
     assert.equal(cleaned, 1);
   });
 
-  it("不等待未声明的后台 Effect，完成后的报告与 PPTX 保持不变", async () => {
+  it("does not await undeclared background Effects, keeping report and PPTX unchanged after completion", async () => {
     const late = Promise.withResolvers<string>();
     const started = Promise.withResolvers<void>();
 
@@ -783,7 +783,7 @@ describe("公开构建中的 React 异步内容", () => {
     assert.equal(file.slides[0]?.objects[0]?.text?.text, "已提交内容");
   });
 
-  it("组件内受控 HTTP 数据按实例和并发构建隔离", async () => {
+  it("isolates controlled HTTP data inside components across instances and concurrent builds", async () => {
     const responses = new Map<string, ServerResponse>();
     const requested = Promise.withResolvers<void>();
     const firstInstanceRead = Promise.withResolvers<void>();
@@ -797,7 +797,7 @@ describe("公开构建中的 React 异步内容", () => {
     const server = createServer((request, response) => {
       const path = request.url;
       if (path === undefined) {
-        response.destroy(new Error("请求没有路径"));
+        response.destroy(new Error("request has no pathname"));
         return;
       }
       responses.set(path, response);

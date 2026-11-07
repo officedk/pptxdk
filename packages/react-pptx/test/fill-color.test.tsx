@@ -18,7 +18,7 @@ import { validatePptx } from "@react-pptx/validation";
 import { unzipSync, strFromU8, strToU8, zipSync } from "fflate";
 import { it } from "vitest";
 
-it("填充色强调按点击步变色并保持终态，允许从亮色变为暗色", async () => {
+it("changes color by click step with fill color emphasis and maintains end state, allowing transitions from light to dark", async () => {
   const result = await build(
     <Deck width={320} height={180}>
       <Slide slideId="color">
@@ -56,7 +56,7 @@ it("填充色强调按点击步变色并保持终态，允许从亮色变为暗�
   assert.match(xml, /<p:to><a:srgbClr val="16324F"/);
 });
 
-it("拒绝非法颜色、重复与没有实色填充的目标", async () => {
+it("rejects invalid colors, duplicates, and targets without solid fill", async () => {
   for (const [content, code] of [
     [
       <Shape
@@ -118,7 +118,7 @@ it("拒绝非法颜色、重复与没有实色填充的目标", async () => {
   }
 });
 
-it("多个变色组件的完成时刻能连接后续内容，重排后仍各自独立", async () => {
+it("chains subsequent content from completion cues of multiple color-changing components, remaining independent after reordering", async () => {
   function Region({ name, n }: { name: string; n: number }) {
     const region = useMotionScope();
     const caption = useMotionScope();
@@ -191,7 +191,7 @@ it("多个变色组件的完成时刻能连接后续内容，重排后仍各自�
   }
 });
 
-it("独立检查拒绝丢失终态保持、反向或重复的颜色动画", async () => {
+it("rejects loss of end state hold, inverted, or duplicated color animations during standalone validation", async () => {
   const result = await build(
     <Deck width={320} height={180}>
       <Slide slideId="hold">

@@ -293,8 +293,8 @@ function GroupQueryDeck() {
   );
 }
 
-describe("只读构建查询", () => {
-  it("冻结已经浅冻结的动画作用域及其成员", async () => {
+describe("read-only build query", () => {
+  it("freezes already shallowly frozen motion scopes and their members", async () => {
     const result = await build(createElement(FrozenMotionDeck));
     const motion = result.report.slides[0]?.capabilities?.[
       "motion"
@@ -317,7 +317,7 @@ describe("只读构建查询", () => {
     assert.deepEqual(scope.members, [{ kind: "object", id: 2 }]);
   });
 
-  it("按 testId 定位本次构建中的内容并只观察其对象和正文", async () => {
+  it("locates content in the current build by testId and observes only its objects and text body", async () => {
     const result = await build(createElement(ContentQueryDeck));
     const slide = result.query.slide("content-query");
     const card = slide.getByTestId("sales-card");
@@ -333,7 +333,7 @@ describe("只读构建查询", () => {
     assert.equal(title.observe().objects[0]?.testId, "sales-title");
   });
 
-  it("把图片与图表资源关联到定位对象并核对同次文件字节", async () => {
+  it("associates image and chart resources with located objects and verifies file bytes from the same build", async () => {
     const result = await build(createElement(ResourceQueryDeck));
     const slide = result.query.slide("resource-query");
     const image = slide.getByTestId("cover-image").observe();
@@ -377,7 +377,7 @@ describe("只读构建查询", () => {
     assert.equal(file.slides[0]?.objects[0]?.image?.part, imageResource.part);
   });
 
-  it("仅查询实际写入的嵌入字体及其同次 PPTX 关系", async () => {
+  it("queries only actually written embedded fonts and their relationships in the same PPTX", async () => {
     const defaultResult = await build(createElement(FontResourceQueryDeck));
     const defaultParts = unzipSync(defaultResult.pptx);
     assert.equal(
@@ -464,7 +464,7 @@ describe("只读构建查询", () => {
     }
   });
 
-  it("按最近的 testId 实例隔离重复部件并保留多项结果", async () => {
+  it("isolates repeated parts by nearest testId instance and preserves multiple results", async () => {
     const result = await build(createElement(PartQueryDeck));
     const slide = result.query.slide("part-query");
     const first = slide.getByTestId("sales-first");
@@ -487,7 +487,7 @@ describe("只读构建查询", () => {
     assert.throws(() => first.part("missing"), { code: "missing-match" });
   });
 
-  it("从表格所有者定位行格正文与最终几何而不伪造原生对象", async () => {
+  it("locates cell text body and final geometry from table owner without forging native objects", async () => {
     const result = await build(createElement(TablePartQueryDeck));
     const table = result.query
       .slide("table-part-query")
@@ -510,7 +510,7 @@ describe("只读构建查询", () => {
     assert.equal(table.observe().objects[0]?.kind, "table");
   });
 
-  it("沿 Box 布局和 Group 成员层次遍历且去重原生对象", async () => {
+  it("traverses along Box layout and Group member hierarchies and deduplicates native objects", async () => {
     const result = await build(createElement(GroupQueryDeck));
     const host = result.query.slide("group-query").getByTestId("group-host");
     const group = host.children()[0];

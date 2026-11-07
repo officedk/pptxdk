@@ -464,7 +464,7 @@ function WordMotionDeck() {
 }
 
 describe("observeMotion", () => {
-  it("把已证明的空半开区间判为不重叠", async () => {
+  it("treats proven empty half-open intervals as non-overlapping", async () => {
     for (const sourceDuration of [100, 800, 3000]) {
       const result = await build(
         createElement(EmptyIntervalDeck, { sourceDuration }),
@@ -536,7 +536,7 @@ describe("observeMotion", () => {
     });
   });
 
-  it("按声明闭包保留多层作用域关系且不扩展活动时间", async () => {
+  it("preserves multi-level scope relationships according to declaration closures without extending active time", async () => {
     const result = await build(createElement(DeclarationClosureDeck));
     const file = await validatePptx(result.pptx);
     assert.deepEqual(file.errors, []);
@@ -679,7 +679,7 @@ describe("observeMotion", () => {
     );
   });
 
-  it("保留效果实例、具名时刻声明并查询精确关系", async () => {
+  it("preserves effect instances and named cue declarations and queries precise relationships", async () => {
     const result = await build(createElement(KnownRelationsDeck));
     const slide = result.query.slide("motion-relations");
     const motion = observeMotion(slide.observation);
@@ -773,7 +773,7 @@ describe("observeMotion", () => {
     assert.ok(Object.isFrozen(paragraphScope.members[0]));
   });
 
-  it("覆盖结果保留未知完成和无自然完成项目", async () => {
+  it("coverage results retain items with unknown completion and no natural completion", async () => {
     const result = await build(createElement(MixedIntervalsDeck));
     const slide = result.query.slide("motion-coverage");
     const motion = observeMotion(slide.observation);
@@ -826,7 +826,7 @@ describe("observeMotion", () => {
     });
   });
 
-  it("保留跨触发步声明闭包并区分结构父子与本步排程", async () => {
+  it("preserves cross-step declaration closures and distinguishes structural parent-child from current step schedule", async () => {
     const result = await build(createElement(DeclaredScopeClosureDeck));
     const motion = observeMotion(
       result.query.slide("scope-closure").observation,
@@ -912,7 +912,7 @@ describe("observeMotion", () => {
     );
   });
 
-  it("只公开效果观察字段并冻结其嵌套值", async () => {
+  it("exposes only effect observation fields and freezes their nested values", async () => {
     const result = await build(createElement(WordMotionDeck));
     const step = observeMotion(
       result.query.slide("word-projection").observation,
@@ -948,7 +948,7 @@ describe("observeMotion", () => {
     assert.equal(effect.easing.accelerate, 0.2);
   });
 
-  it("跨步返回时钟不同；跨构建引用抛查询错误", async () => {
+  it("returns different clocks across steps and throws query errors on cross-build references", async () => {
     const first = await build(createElement(ClickStepsDeck));
     const second = await build(createElement(ClickStepsDeck));
     const firstMotion = observeMotion(

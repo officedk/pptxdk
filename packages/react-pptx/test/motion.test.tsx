@@ -291,8 +291,8 @@ function InfiniteSequenceTail({
   );
 }
 
-describe("对象动画", () => {
-  it("有限重复按总轮数进入编排完成与实际文件", async () => {
+describe("object motion", () => {
+  it("enters choreography completion and actual file by total count for finite repeat", async () => {
     const result = await build(createElement(RepeatedSpinDeck));
     const motion = result.report.slides[0]?.capabilities?.[
       "motion"
@@ -329,7 +329,7 @@ describe("对象动画", () => {
     assert.match(timing, /<p:cTn[^>]*presetID="8"[^>]*repeatCount="3000"/u);
   });
 
-  it("连续呼吸保持无自然完成且只等待有限正文作用域", async () => {
+  it("keeps continuous breathe without natural completion and waits only for finite body scopes", async () => {
     const result = await build(createElement(RepeatedAndBreathingDeck));
     const slide = result.report.slides[0];
     const motion = slide?.capabilities?.["motion"] as MotionObservation;
@@ -551,7 +551,7 @@ describe("对象动画", () => {
     );
   });
 
-  it("独立读取器拒绝等待没有自然完成的文件效果", async () => {
+  it("rejects waiting for file effects without natural completion in standalone reader", async () => {
     const result = await build(createElement(RepeatedAndBreathingDeck));
     const parts = unzipSync(result.pptx);
     const slidePath = "ppt/slides/slide1.xml";
@@ -584,7 +584,7 @@ describe("对象动画", () => {
     );
   });
 
-  it("按实际计时字段限制范围并保留可精确表达的长重复", async () => {
+  it("restricts ranges by actual timing fields and preserves precisely representable long repeats", async () => {
     const result = await build(
       createElement(TimeProjectionDeck, {
         outerDelay: 4_294_967_295,
@@ -655,7 +655,7 @@ describe("对象动画", () => {
     );
   });
 
-  it("保留可分别编码的嵌套延迟并拒绝失去整数精度的已知时刻", async () => {
+  it("preserves individually encodable nested delays and rejects known cues losing integer precision", async () => {
     const cases = [
       {
         outerDelay: 4_294_967_295,
@@ -701,7 +701,7 @@ describe("对象动画", () => {
     );
   });
 
-  it("允许顺序末项持续循环并拒绝被它阻挡的顺序后继", async () => {
+  it("permits final sequence items to loop continuously and rejects sequence successors blocked by them", async () => {
     const result = await build(
       createElement(InfiniteSequenceTail, { blockAfter: false }),
     );
@@ -737,7 +737,7 @@ describe("对象动画", () => {
     );
   });
 
-  it("拒绝有限重复的非法次数、效果与呼吸参数", async () => {
+  it("rejects invalid repeat counts, effects, and breathe parameters for finite repeat", async () => {
     const breatheWithGranularity = {
       period: 2000,
       from: "#164E3D",
@@ -912,7 +912,7 @@ describe("对象动画", () => {
     }
   });
 
-  it("呼吸颜色只绑定有填充的 Shape 成员，不绑定原生 Group 容器", async () => {
+  it("binds breathe color only to filled Shape members and not to native Group containers", async () => {
     await assert.rejects(
       build(
         createElement(
@@ -955,7 +955,7 @@ describe("对象动画", () => {
     );
   });
 
-  it("段落效果与整体效果并存时保留段落构建且不改变效果顺序", async () => {
+  it("preserves paragraph build without altering effect order when paragraph effects coexist with whole effects", async () => {
     const cases: readonly {
       readonly testId: string;
       readonly paragraphs: readonly string[];
@@ -1104,7 +1104,7 @@ describe("对象动画", () => {
     }
   });
 
-  it("按原生段落范围逐段生成文字效果并从同次文件读回", async () => {
+  it("generates text effects paragraph by paragraph according to native paragraph ranges and reads back from same file", async () => {
     const result = await build(
       createElement(
         Deck,
@@ -1175,7 +1175,7 @@ describe("对象动画", () => {
     );
   });
 
-  it("保留逐字未知完成并用单个原生 end 事件启动后继", async () => {
+  it("preserves word-by-word unknown completion and starts successors with a single native end event", async () => {
     function LetterAndFollower() {
       const letters = useMotionScope();
       const follower = useMotionScope();
@@ -1360,7 +1360,7 @@ describe("对象动画", () => {
     );
   });
 
-  it("按原生系列和分类范围展开图表效果并保留图表对象", async () => {
+  it("expands chart effects according to native series and category ranges and preserves chart objects", async () => {
     const data = {
       categories: ["Q1", "Q2"],
       series: [
@@ -1561,7 +1561,7 @@ describe("对象动画", () => {
     );
   });
 
-  it("从公开构建声明生成淡入，并从同次 PPTX 读回目标和时间", async () => {
+  it("generates fade from public build declaration and reads back targets and timing from the same PPTX", async () => {
     const effect = fade({
       duration: 800,
       delay: 120,
@@ -1646,7 +1646,7 @@ describe("对象动画", () => {
     );
   });
 
-  it("为基础原生对象能力写入可读回的目标引用", async () => {
+  it("writes readable target references for basic native object capabilities", async () => {
     const result = await build(
       createElement(
         Deck,
@@ -1727,7 +1727,7 @@ describe("对象动画", () => {
     );
   });
 
-  it("点击步按声明身份分组，自动编号不与显式编号合并", async () => {
+  it("groups click steps by declaration identity, not merging auto-numbering with explicit numbering", async () => {
     const result = await build(
       createElement(
         Deck,
@@ -1897,7 +1897,7 @@ describe("对象动画", () => {
     );
   });
 
-  it("写入原型常见的八种基础效果及适用的方向、旋转和 easing 参数", async () => {
+  it("writes eight common basic prototype effects and applicable direction, rotation, and easing parameters", async () => {
     const effects = [
       ["fade", fade({ easing: { accelerate: 0.2, decelerate: 0.3 } }), "enter"],
       ["wipe", wipe({ from: "left" }), "enter"],
@@ -1970,7 +1970,7 @@ describe("对象动画", () => {
     );
   });
 
-  it("floatDown 从对象上方淡入并在文件中保留向下位移", async () => {
+  it("fades in floatDown from above the object and preserves downward displacement in the file", async () => {
     const result = await build(
       createElement(
         Deck,
@@ -2101,7 +2101,7 @@ describe("对象动画", () => {
     assert.match(upY, /<p:strVal val="#ppt_y\+\.1"><\/p:strVal>/u);
   });
 
-  it("floatDown 将组合和有背景的 whole Text 一并向下淡入", async () => {
+  it("fades downward floatDown for groups and whole Text with background together", async () => {
     const result = await build(
       createElement(
         Deck,
@@ -2240,7 +2240,7 @@ describe("对象动画", () => {
     );
   });
 
-  it("将同一原生 Text 的 whole Fly 展开为共同段落位移并读回背景角色", async () => {
+  it("expands whole Fly on the same native Text into shared paragraph displacement and reads back background role", async () => {
     const result = await build(
       createElement(
         Deck,
@@ -2449,7 +2449,7 @@ describe("对象动画", () => {
     );
   });
 
-  it("在 whole 数组的共享文字构建组中保留 Fly 的背景角色", async () => {
+  it("preserves background role of Fly in shared text build group of whole array", async () => {
     const result = await build(
       createElement(
         Deck,
@@ -2494,7 +2494,7 @@ describe("对象动画", () => {
     );
   });
 
-  it("将 whole Text 滤镜和 SpinIn 尺寸投影到真实背景", async () => {
+  it("projects whole Text filter and SpinIn size to actual background", async () => {
     const scenarios = [
       {
         preset: "fade",
@@ -2650,7 +2650,7 @@ describe("对象动画", () => {
     );
   });
 
-  it("whole Stretch 从共同文字中心展开并读回段落和背景位移", async () => {
+  it("expands whole Stretch from common text center and reads back paragraph and background displacement", async () => {
     const result = await build(
       createElement(
         Deck,
@@ -2742,7 +2742,7 @@ describe("对象动画", () => {
     );
   });
 
-  it("whole Text 入口按段落和背景初始化，同时保留 by-P 延迟构建", async () => {
+  it("initializes whole Text entrance by paragraphs and background while preserving by-P deferred build", async () => {
     const result = await build(
       createElement(
         Deck,
@@ -3003,7 +3003,7 @@ describe("对象动画", () => {
     );
   });
 
-  it("Group Spin 投影到 Text 成员时保留段落和背景角色", async () => {
+  it("preserves paragraph and background roles when Group Spin is projected to Text members", async () => {
     const result = await build(
       createElement(
         Deck,
@@ -3164,7 +3164,7 @@ describe("对象动画", () => {
     );
   });
 
-  it("Group Text 段落动画与投影共享文字构建职责", async () => {
+  it("shares text build responsibilities between Group Text paragraph animations and projection", async () => {
     const result = await build(
       createElement(
         Deck,
@@ -3248,7 +3248,7 @@ describe("对象动画", () => {
     );
   });
 
-  it("Group Text 逐词投影的构建组无需背景角色", async () => {
+  it("requires no background role for build group of Group Text word-by-word projection", async () => {
     const result = await build(
       createElement(
         Deck,
@@ -3317,7 +3317,7 @@ describe("对象动画", () => {
     assert.match(xml, /<p:iterate type="wd">/u);
   });
 
-  it("Group Text 同目标的 whole 效果数组共享段落构建组", async () => {
+  it("shares paragraph build groups across whole effect arrays on the same Group Text target", async () => {
     const result = await build(
       createElement(
         Deck,
@@ -3374,7 +3374,7 @@ describe("对象动画", () => {
     );
   });
 
-  it("Group 成员的点击动效仍触发自动步骤中的父 Spin 投影", async () => {
+  it("still triggers parent Spin projection in automatic steps for Group member click motions", async () => {
     const result = await build(
       createElement(
         Deck,
@@ -3467,7 +3467,7 @@ describe("对象动画", () => {
     );
   });
 
-  it("保留原生 Group 并将有限整体 Spin 投影到全部真实成员", async () => {
+  it("preserves native Group and projects finite whole Spin to all real members", async () => {
     const result = await build(
       createElement(
         Deck,
@@ -3589,7 +3589,7 @@ describe("对象动画", () => {
     );
   });
 
-  it("保留原有 Fly 与 SpinIn entrance 数组并为段落输出共同中心偏移", async () => {
+  it("preserves existing Fly and SpinIn entrance arrays and emits common center offset for paragraphs", async () => {
     const result = await build(
       createElement(
         Deck,
@@ -3724,7 +3724,7 @@ describe("对象动画", () => {
     );
   });
 
-  it("为纯 whole Text entrance 数组增加原生段落构建层但保留逻辑 whole target", async () => {
+  it("adds native paragraph build layer for pure whole Text entrance array while preserving logical whole target", async () => {
     const result = await build(
       createElement(
         Deck,
@@ -3798,7 +3798,7 @@ describe("对象动画", () => {
     }
   });
 
-  it("将八种既有 whole Text 预设逐段写出并独立读回全部原生范围", async () => {
+  it("writes eight existing whole Text presets paragraph by paragraph and independently reads back all native ranges", async () => {
     const scenarios = [
       ["fade", fade(), "enter"],
       ["wipe", wipe({ from: "left" }), "enter"],
@@ -3881,7 +3881,7 @@ describe("对象动画", () => {
     );
   });
 
-  it("whole SpinIn 结束于文字框原有旋转角度", async () => {
+  it("ends whole SpinIn at original text box rotation angle", async () => {
     const result = await build(
       createElement(
         Deck,
@@ -3921,7 +3921,7 @@ describe("对象动画", () => {
     );
   });
 
-  it("以实际 EMU 几何读取小数布局的 SpinIn 与 Spin", async () => {
+  it("reads decimal-layout SpinIn and Spin using actual EMU geometry", async () => {
     const result = await build(
       createElement(
         Deck,
@@ -4004,11 +4004,11 @@ describe("对象动画", () => {
       wrongCenterReadback.errors.some(
         ({ code }) => code === "invalid-animation-progress-formula",
       ),
-      "共同中心偏离实际几何 1 EMU 时仍须拒绝",
+      "must reject when common center deviates from actual geometry by 1 EMU",
     );
   });
 
-  it("在坐标、尺寸和页面尺寸跨越 EMU 舍入边界时读回共同中心", async () => {
+  it("reads back common center when coordinates, dimensions, and slide dimensions cross EMU rounding boundaries", async () => {
     const cases = [
       {
         testId: "rounding-down",
@@ -4064,7 +4064,7 @@ describe("对象动画", () => {
     );
   });
 
-  it("共同中心 SpinIn 与 Group Spin 读回完整公式和数值进度", async () => {
+  it("reads back full formulas and numeric progress for common-center SpinIn and Group Spin", async () => {
     const result = await build(
       createElement(
         Deck,
@@ -4311,14 +4311,14 @@ describe("对象动画", () => {
       });
     const invalidGeometryInputs = [
       [
-        "位置函数恒为零",
+        "position function identically zero",
         () =>
           validateSlide(
             rewriteFormulas(firstSlideXml, (formula) => `0*(${formula})`),
           ),
       ],
       [
-        "正弦与余弦互换",
+        "sine and cosine swapped",
         () =>
           validateSlide(
             rewriteFormulas(firstSlideXml, (formula) =>
@@ -4330,7 +4330,7 @@ describe("对象动画", () => {
           ),
       ],
       [
-        "页面纵横比错误",
+        "wrong slide aspect ratio",
         () =>
           validateSlide(
             rewriteFormulas(firstSlideXml, (formula) =>
@@ -4341,7 +4341,7 @@ describe("对象动画", () => {
           ),
       ],
       [
-        "整体文字中心错误",
+        "wrong whole text center",
         () =>
           validateSlide(
             rewriteFormulas(firstSlideXml, (formula) =>
@@ -4358,7 +4358,7 @@ describe("对象动画", () => {
         invalid.errors.some(
           ({ code }) => code === "invalid-animation-progress-formula",
         ),
-        `实际动画 XML 中的${name}必须被拒绝`,
+        `${name} in actual animation XML must be rejected`,
       );
     }
 
@@ -4377,7 +4377,7 @@ describe("对象动画", () => {
       wrongMemberAngle.errors.some(
         ({ code }) => code === "invalid-animation-progress-formula",
       ),
-      "成员位置角度必须与实际 animRot 角度一致",
+      "member position angle must match actual animRot angle",
     );
 
     const wrongMemberCenter = await validateGroupSlide(
@@ -4400,7 +4400,7 @@ describe("对象动画", () => {
       wrongMemberCenter.errors.some(
         ({ code }) => code === "invalid-animation-progress-formula",
       ),
-      "成员位置中心必须符合实际组合几何",
+      "member position center must match actual group geometry",
     );
 
     const zeroFunctionReadback = await validateSlide(
@@ -4413,11 +4413,11 @@ describe("对象动画", () => {
       preservedSpinIn?.nativeBehaviors?.some(
         ({ keyframes }) => keyframes?.[0]?.formula?.startsWith("0*(") === true,
       ),
-      "不支持的公式仍须保留在读回结果中供诊断",
+      "unsupported formulas must still be preserved in readback results for diagnostics",
     );
   });
 
-  it("相对 Spin 保留对象初态并读回正负旋转角度", async () => {
+  it("preserves object initial state for relative Spin and reads back positive and negative rotation angles", async () => {
     const result = await build(
       createElement(
         Deck,
@@ -4627,11 +4627,11 @@ describe("对象动画", () => {
       mixedProgressReadback.errors.some(
         ({ code }) => code === "invalid-animation-progress-formula",
       ),
-      "相对 Spin 的同一坐标公式不能混用递增和递减进度",
+      "the same coordinate formula for relative Spin cannot mix increasing and decreasing progress",
     );
   });
 
-  it("拒绝非法效果参数、缺失的 motion 能力和不存在的文件目标", async () => {
+  it("rejects invalid effect parameters, missing motion capabilities, and non-existent file targets", async () => {
     for (const [effect, code] of [
       [fade({ duration: 0 }), "invalid-duration"],
       [fade({ duration: null } as never), "invalid-duration"],
@@ -4761,7 +4761,7 @@ describe("对象动画", () => {
     );
   });
 
-  it("包装组件把动效参数交给正式校验并保留禁用语义", async () => {
+  it("delegates motion parameters to formal validation in wrapper components and preserves disabled semantics", async () => {
     const animatedShape = (testId: string) =>
       createElement(Shape, {
         testId,
@@ -4882,7 +4882,7 @@ describe("对象动画", () => {
     );
   });
 
-  it("拒绝超出原生角度范围及与效果预设不匹配的声明", async () => {
+  it("rejects declarations exceeding native angle ranges or mismatching effect presets", async () => {
     const cases: readonly {
       readonly testId: string;
       readonly props: Record<string, unknown>;
@@ -4957,7 +4957,7 @@ describe("对象动画", () => {
     }
   });
 
-  it("按固定页面槽位写入转场和动画，与模块注册顺序无关", async () => {
+  it("writes transitions and animations into fixed slide slots regardless of module registration order", async () => {
     const buildReversed = createBuilder([
       motionCapability,
       transitionCapability,

@@ -37,8 +37,8 @@ const wideImage = new Uint8Array(
   readFileSync(new URL("./assets/wide-20000x1.png", import.meta.url)),
 );
 
-describe("公开布局入口", () => {
-  it("Slide 可作为画布网格容器，隐藏子树不输出，zIndex 只改绘制顺序", async () => {
+describe("public layout entry", () => {
+  it("uses Slide as a canvas grid container, omits hidden subtrees, and changes only paint order with zIndex", async () => {
     const result = await build(
       <Deck width={320} height={180}>
         <Slide
@@ -106,7 +106,7 @@ describe("公开布局入口", () => {
     assert.deepEqual((await validatePptx(result.pptx)).errors, []);
   });
 
-  it("Grid 中的 Table 与 Chart 使用各自原生尺寸模型", async () => {
+  it("uses respective native sizing models for Table and Chart inside Grid", async () => {
     const result = await build(
       <Deck width={320} height={240}>
         <Slide slideId="grid-native-layout">
@@ -159,7 +159,7 @@ describe("公开布局入口", () => {
     assert.deepEqual((await validatePptx(result.pptx)).errors, []);
   });
 
-  it("Grid 轨道从容器内边距之后开始", async () => {
+  it("starts Grid tracks after container padding", async () => {
     const result = await build(
       <Deck width={320} height={240}>
         <Slide slideId="grid-padding">
@@ -188,7 +188,7 @@ describe("公开布局入口", () => {
     assert.deepEqual((await validatePptx(result.pptx)).errors, []);
   });
 
-  it("auto 网格轨道尊重文字 min-content 并与原生对象几何一致", async () => {
+  it("respects text min-content for auto grid tracks and matches native object geometry", async () => {
     const result = await build(
       <Deck width={320} height={240}>
         <Slide slideId="grid-min-content">
@@ -237,7 +237,7 @@ describe("公开布局入口", () => {
     );
   });
 
-  it("Grid 项目里的绝对后代仍使用最近的显式定位祖先", async () => {
+  it("uses nearest explicitly positioned ancestor for absolute descendants within Grid items", async () => {
     const result = await build(
       <Deck width={320} height={240}>
         <Slide slideId="grid-absolute-descendant">
@@ -280,7 +280,7 @@ describe("公开布局入口", () => {
     assert.deepEqual((await validatePptx(result.pptx)).errors, []);
   });
 
-  it("拒绝绝对网格项未实现的 placement 与不支持的网格 baseline", async () => {
+  it("rejects unimplemented placement for absolute grid items and unsupported grid baseline", async () => {
     await assert.rejects(
       build(
         <Deck width={320} height={240}>
@@ -312,7 +312,7 @@ describe("公开布局入口", () => {
     );
   });
 
-  it("带布局 style 的 Group 作为原生对象参与父级流布局", async () => {
+  it("participates in parent flow layout as a native object for Group with layout style", async () => {
     const result = await build(
       <Deck width={320} height={140}>
         <Slide slideId="group-flow">
@@ -355,7 +355,7 @@ describe("公开布局入口", () => {
     assert.deepEqual((await validatePptx(result.pptx)).errors, []);
   });
 
-  it("Text 与 Shape.text 将 padding 写入 bodyPr 并参与文字高度和 baseline", async () => {
+  it("writes padding into bodyPr and participates in text height and baseline for Text and Shape.text", async () => {
     const result = await build(
       <Deck width={320} height={160}>
         <Slide slideId="text-insets">
@@ -432,7 +432,7 @@ describe("公开布局入口", () => {
     assert.deepEqual((await validatePptx(result.pptx)).errors, []);
   });
 
-  it("按 repeat/minmax 网格轨道放置内容并满足跨列约束", async () => {
+  it("places content according to repeat/minmax grid tracks and satisfies cross-column constraints", async () => {
     const result = await build(
       <Deck width={320} height={240}>
         <Slide slideId="grid-tracks">
@@ -468,7 +468,7 @@ describe("公开布局入口", () => {
     assert.deepEqual((await validatePptx(result.pptx)).errors, []);
   });
 
-  it("相对定位与绝对定位分别按 containing block 的横纵百分比求值", async () => {
+  it("evaluates relative and absolute positioning by horizontal and vertical percentages of containing block respectively", async () => {
     const result = await build(
       <Deck width={320} height={240}>
         <Slide slideId="position-percent">
@@ -530,7 +530,7 @@ describe("公开布局入口", () => {
     assert.deepEqual((await validatePptx(result.pptx)).errors, []);
   });
 
-  it("直接 Slide 子项的百分比定位以页面为 containing block，static offset 有诊断", async () => {
+  it("uses slide as containing block for percentage positioning of direct Slide children, with diagnostics for static offset", async () => {
     const result = await build(
       <Deck width={320} height={240}>
         <Slide slideId="page-positioning">
@@ -591,7 +591,7 @@ describe("公开布局入口", () => {
     assert.deepEqual((await validatePptx(result.pptx)).errors, []);
   });
 
-  it("显式 display:block 保留块布局，块容器仍拒绝弹性专属属性", async () => {
+  it("preserves block layout with explicit display:block, and rejects flex-specific properties on block containers", async () => {
     const result = await build(
       createElement(
         Deck,
@@ -648,7 +648,7 @@ describe("公开布局入口", () => {
     );
   });
 
-  it("块容器纵向排列并横向拉伸，画布外的显式几何保持原位", async () => {
+  it("stacks vertically and stretches horizontally in block containers, keeping off-canvas explicit geometry in place", async () => {
     const result = await build(
       createElement(
         Deck,
@@ -724,7 +724,7 @@ describe("公开布局入口", () => {
     );
   });
 
-  it("auto 尺寸会覆盖原生对象的显式尺寸并按内容排版", async () => {
+  it("overrides explicit dimensions of native objects with auto dimensions and lays out according to content", async () => {
     const result = await build(
       createElement(
         Deck,
@@ -764,7 +764,7 @@ describe("公开布局入口", () => {
     });
   });
 
-  it("换行弹性容器默认拉伸行，显式 flex-start 仍从行首排列", async () => {
+  it("stretches lines by default in wrapping flex containers, aligning from line start with explicit flex-start", async () => {
     const buildWrapped = (alignContent?: "flex-start") =>
       build(
         createElement(
@@ -819,7 +819,7 @@ describe("公开布局入口", () => {
     );
   });
 
-  it("弹性子项按内容最小宽度收缩，minWidth: 0 解除该下限", async () => {
+  it("shrinks flex items to content min-width, and removes this floor with minWidth: 0", async () => {
     const makeText = (testId: string, minWidth?: number) =>
       createElement(Text, {
         testId,
@@ -917,7 +917,7 @@ describe("公开布局入口", () => {
     );
   });
 
-  it("嵌套自动最小宽度采用后代尺寸与 minWidth 贡献，显式零仍可收缩", async () => {
+  it("uses descendant dimensions and minWidth contributions for nested auto min-width, while explicit zero remains shrinkable", async () => {
     const result = await build(
       createElement(
         Deck,
@@ -1032,7 +1032,7 @@ describe("公开布局入口", () => {
     );
   });
 
-  it("嵌套布局容器保留实例身份，复用同一元素时仍各自求解", async () => {
+  it("preserves instance identities for nested layout containers, solving each independently when reusing identical elements", async () => {
     const card = createElement(
       Box,
       { testId: "card", style: { flex: 1, height: 100 } },
@@ -1105,7 +1105,7 @@ describe("公开布局入口", () => {
     );
   });
 
-  it("原生组合保留成员结构并求解组合内部的透明布局容器", async () => {
+  it("preserves member structure in native groups and solves transparent layout containers inside groups", async () => {
     const result = await build(
       createElement(
         Deck,
@@ -1164,7 +1164,7 @@ describe("公开布局入口", () => {
     });
   });
 
-  it("拒绝块容器上的弹性专属属性，并在块父级忽略弹性子项属性", async () => {
+  it("rejects flex-specific properties on block containers and ignores flex item properties under block parents", async () => {
     await assert.rejects(
       build(
         createElement(
@@ -1210,7 +1210,7 @@ describe("公开布局入口", () => {
     });
   });
 
-  it("容器和子对象越界时保留求解尺寸并返回警告", async () => {
+  it("preserves resolved dimensions and returns warnings when containers and child objects overflow", async () => {
     const result = await build(
       createElement(
         Deck,
@@ -1244,7 +1244,7 @@ describe("公开布局入口", () => {
     assert.equal(file.slides[0]?.objects[0]?.boxEmu.width, 400 * 9525);
   });
 
-  it("图片和形状都按弹性对齐位置写入原生对象", async () => {
+  it("writes native objects for images and shapes according to flex-aligned positions", async () => {
     const result = await build(
       createElement(
         Deck,
@@ -1315,7 +1315,7 @@ describe("公开布局入口", () => {
     );
   });
 
-  it("baseline 按有度量字体的文字基线对齐，并拒绝无依据的文字组合", async () => {
+  it("aligns baseline according to text baselines of measurable fonts and rejects unfounded text combinations", async () => {
     const result = await build(
       createElement(
         Deck,
@@ -1453,7 +1453,7 @@ describe("公开布局入口", () => {
     );
   });
 
-  it("纯盒子与列方向 baseline 使用 Yoga 合成边缘基线", async () => {
+  it("uses Yoga synthesized edge baseline for pure boxes and column-direction baseline", async () => {
     const wrapped = await build(
       createElement(
         Deck,
@@ -1544,7 +1544,7 @@ describe("公开布局入口", () => {
     assert.deepEqual((await validatePptx(column.pptx)).errors, []);
   });
 
-  it("自适应 baseline 行高包含下移文字框并保持后续块位置", async () => {
+  it("includes shifted text boxes in adaptive baseline line height and maintains subsequent block positions", async () => {
     const result = await build(
       createElement(
         Deck,
@@ -1621,7 +1621,7 @@ describe("公开布局入口", () => {
     );
   });
 
-  it("baseline reference 同时参与自动最小值、允许显式解除并穿过简单 Box", async () => {
+  it("participates in automatic minimums, permits explicit release, and passes through simple Box for baseline reference", async () => {
     const baselineText = (testId: string, fontSize: number) =>
       createElement(
         Text,
@@ -1841,7 +1841,7 @@ describe("公开布局入口", () => {
     );
   });
 
-  it("非baseline文字保留弹性stretch与内容定高", async () => {
+  it("preserves flex stretch and content-sized height for non-baseline text", async () => {
     const result = await build(
       createElement(
         Deck,
@@ -1909,7 +1909,7 @@ describe("公开布局入口", () => {
     );
   });
 
-  it("baseline 自动最小高度沿用无文字 flex 容器的子项基线", async () => {
+  it("uses child baselines of text-less flex containers for baseline automatic minimum height", async () => {
     const makeText = () =>
       createElement(
         Text,
@@ -2047,7 +2047,7 @@ describe("公开布局入口", () => {
     );
   });
 
-  it("baseline 子项选择采用 Yoga 对 column 的解析对齐", async () => {
+  it("selects baseline child items adopting Yoga resolved alignment for column", async () => {
     const makeText = () =>
       createElement(
         Text,
@@ -2190,7 +2190,7 @@ describe("公开布局入口", () => {
     );
   });
 
-  it("弹性列保留文字主轴内容高度，minHeight: 0 允许收缩", async () => {
+  it("preserves text main-axis content height in flex column, allowing shrink with minHeight: 0", async () => {
     const columnText = (testId: string, minHeight?: number) =>
       createElement(Text, {
         testId,
@@ -2295,7 +2295,7 @@ describe("公开布局入口", () => {
     );
   });
 
-  it("fr 轨道只把数字 minmax 下界作为约束，行内容仍按下界类型处理", async () => {
+  it("treats only numeric minmax lower bounds as constraints for fr tracks, processing row content by lower-bound type", async () => {
     const result = await build(
       <Deck width={400} height={400}>
         <Slide slideId="fr-minimum-100">
@@ -2437,7 +2437,7 @@ describe("公开布局入口", () => {
     );
   });
 
-  it("自动高度 Grid 保留父布局给出的拉伸或绝对定位高度", async () => {
+  it("preserves stretch or absolutely positioned height provided by parent layout in auto-height Grid", async () => {
     const stretchedGrid = (testId: string) => (
       <Box
         testId={testId}
@@ -2552,7 +2552,7 @@ describe("公开布局入口", () => {
     );
   });
 
-  it("Grid 项百分比尺寸和相对偏移都以所属 area 为依据", async () => {
+  it("evaluates percentage dimensions and relative offsets of Grid items based on their assigned area", async () => {
     const result = await build(
       <Deck width={400} height={300}>
         <Slide slideId="grid-area-percent-size">
@@ -2647,7 +2647,7 @@ describe("公开布局入口", () => {
     );
   });
 
-  it("Table 区分自然宽度的上限测量与精确布局分配", async () => {
+  it("distinguishes upper-bound measurement of natural width from precise layout allocation in Table", async () => {
     const table = (testId: string, style: { readonly width?: number } = {}) => (
       <Table
         testId={testId}
@@ -2819,7 +2819,7 @@ describe("公开布局入口", () => {
     );
   });
 
-  it("Shape.text 默认使用 middle anchor，且只为有效 top 提供文字 baseline", async () => {
+  it("defaults Shape.text to middle anchor and provides text baseline only for valid top anchor", async () => {
     const ordinary = await build(
       <Deck width={400} height={200}>
         <Slide slideId="shape-text-effective-anchors">

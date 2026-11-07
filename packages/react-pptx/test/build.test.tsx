@@ -55,7 +55,7 @@ function testFont(path: string): Uint8Array {
 
 function parsedFont(bytes: Uint8Array): fontkit.Font {
   const parsed = fontkit.create(Buffer.from(bytes));
-  if (parsed.type !== "TTF") throw new Error("预期静态 TrueType 字体");
+  if (parsed.type !== "TTF") throw new Error("expected static TrueType font");
   return parsed;
 }
 
@@ -148,8 +148,8 @@ const darkerGrotesqueSemiBold = testFont(
   "./assets/fonts/DarkerGrotesque-SemiBold.ttf",
 );
 
-describe("公开构建入口", () => {
-  it("按 Text、Table、Chart、大小写和列表的实际字符嵌入 TrueType 子集", async () => {
+describe("public build entry", () => {
+  it("embeds TrueType subsets based on actual characters in Text, Table, Chart, text transform casing, and lists", async () => {
     const cjkFont = font("ZCOOL XiaoWei", [
       { weight: 400, data: zcoolXiaoWei },
     ]);
@@ -277,7 +277,7 @@ describe("公开构建入口", () => {
           (character) => character.codePointAt(0)!,
         ),
       ),
-      // cmap format 4 的结束段必须保留 U+FFFF 哨兵。
+      // The ending segment of cmap format 4 must retain the U+FFFF sentinel.
       0xffff,
     ].sort((left, right) => left - right);
     assert.deepEqual(
@@ -299,7 +299,7 @@ describe("公开构建入口", () => {
     );
   });
 
-  it("图表独占字体子集覆盖刻度、格式字面量、百分比和样式继承", async () => {
+  it("covers scale ticks, format literals, percentages, and style inheritance for chart-exclusive font subsets", async () => {
     const chartFont = font("ZCOOL XiaoWei", [
       { weight: 400, data: zcoolXiaoWei },
     ]);
@@ -565,14 +565,14 @@ describe("公开构建入口", () => {
       for (const character of expected) {
         assert.ok(
           subset.hasGlyphForCodePoint(character.codePointAt(0)!),
-          `${testId} 子集应覆盖 ${character}`,
+          `${testId} subset should cover ${character}`,
         );
       }
       for (const character of absent) {
         assert.equal(
           subset.hasGlyphForCodePoint(character.codePointAt(0)!),
           false,
-          `${testId} 不应把格式控制符 ${character} 当作显示字形`,
+          `${testId} should not treat format control character ${character} as display glyph`,
         );
       }
     }
@@ -611,7 +611,7 @@ describe("公开构建入口", () => {
     );
   });
 
-  it("数值标签忽略专用于文本的第四节", async () => {
+  it("ignores the fourth text-only section for numeric labels", async () => {
     const latinFont = font("Jost*", [{ weight: 400, data: jostBook }]);
     const result = await build(
       deck(
@@ -651,7 +651,7 @@ describe("公开构建入口", () => {
     assert.equal(subset.hasGlyphForCodePoint("元".codePointAt(0)!), false);
   });
 
-  it("locale-only 数值格式不要求货币字形", async () => {
+  it("does not require currency glyphs for locale-only numeric formats", async () => {
     const chartFont = font("ZCOOL XiaoWei", [
       { weight: 400, data: zcoolXiaoWei },
     ]);
@@ -729,7 +729,7 @@ describe("公开构建入口", () => {
     }
   });
 
-  it("字符子集不把换行和制表控制符当作缺失字形", async () => {
+  it("does not treat newline and tab control characters as missing glyphs in character subsets", async () => {
     const jost = font("Jost*", [{ weight: 400, data: jostBook }]);
     for (const [testId, text] of [
       ["subset-lf", "A\nB"],
@@ -770,7 +770,7 @@ describe("公开构建入口", () => {
     }
   });
 
-  it("Shape 正文经共享文字服务度量、写出页码字段并登记实际字符", async () => {
+  it("measures Shape text via shared text service, emits page number fields, and registers actual characters", async () => {
     const pageNumberClaims: string[] = [];
     const shapeModule = shapeCapability as ObjectCapabilityModule;
     const observedShapeCapability: ObjectCapabilityModule = {
@@ -936,7 +936,7 @@ describe("公开构建入口", () => {
     );
   });
 
-  it("Text、Shape、Table 页码字段进入同一 Chart 字符子集", async () => {
+  it("includes Text, Shape, and Table page number fields into the same Chart character subset", async () => {
     const pageFont = font("Jost*", [{ weight: 400, data: jostBook }]);
     const textFields = (count: number) =>
       Array.from({ length: count }, (_, index) =>
@@ -1112,7 +1112,7 @@ describe("公开构建入口", () => {
     );
   });
 
-  it("内容定高文字缺少度量字体时以构建错误拒绝", async () => {
+  it("rejects content-height text with a build error when measurement font is missing", async () => {
     let failure: unknown;
     try {
       await build(
@@ -1144,7 +1144,7 @@ describe("公开构建入口", () => {
     );
   });
 
-  it("按明确 WOFF2 字体指标计算内容高度并写入相同固定行距", async () => {
+  it("computes content height from explicit WOFF2 font metrics and emits identical fixed line spacing", async () => {
     const result = await build(
       deck(
         createElement(Text, {
@@ -1195,7 +1195,7 @@ describe("公开构建入口", () => {
     );
   });
 
-  it("完整嵌入覆盖实际使用的文本框、形状、表格和图表字族样式", async () => {
+  it("covers actually used text box, shape, table, and chart font family styles for full embedding", async () => {
     const installedFont = font("Jost*", [
       { weight: 400, data: jostBook },
       { weight: 700, data: jostBold },
@@ -1335,7 +1335,7 @@ describe("公开构建入口", () => {
     assert.deepEqual((await validatePptx(result.pptx)).errors, []);
   });
 
-  it("按 OS/2 样式链接把 600 字重 SemiBold 写入 regular 槽位", async () => {
+  it("writes 600 weight SemiBold into regular slot according to OS/2 style linking", async () => {
     const result = await build(
       deck(
         createElement(
@@ -1388,7 +1388,7 @@ describe("公开构建入口", () => {
     );
   });
 
-  it("完整嵌入把真实斜体和粗斜体字体映射到对应样式槽", async () => {
+  it("maps real italic and bold-italic fonts to corresponding style slots for full embedding", async () => {
     const jostItalicFaces = font("Jost", [
       { weight: 400, style: "italic", data: jostItalic },
       { weight: 700, style: "italic", data: jostBoldItalic },
@@ -1499,7 +1499,7 @@ describe("公开构建入口", () => {
     }
   });
 
-  it("同一文字中的嵌入限制不受相同字节去重和片段顺序影响", async () => {
+  it("keeps embedding restrictions in identical text unaffected by same-byte deduplication and run order", async () => {
     const policies = [
       {
         label: "not-embeddable",
@@ -1563,7 +1563,7 @@ describe("公开构建入口", () => {
     }
   });
 
-  it("允许的相同字体字节仍合并，默认构建仍不嵌入字体", async () => {
+  it("still merges identical allowed font bytes, while default build still does not embed fonts", async () => {
     const firstAllowed = font("Jost*", [{ weight: 400, data: jostBook }]);
     const secondAllowed = font("Jost*", [{ weight: 400, data: jostBook }]);
     const full = await build(
@@ -1629,7 +1629,7 @@ describe("公开构建入口", () => {
     assert.deepEqual((await validatePptx(notRequested.pptx)).errors, []);
   });
 
-  it("完整嵌入接受 Editable 与 no-subsetting 标志，子集请求按许可拒绝", async () => {
+  it("accepts Editable and no-subsetting flags for full embedding, rejecting subsetting requests by license", async () => {
     const original = jostBook;
     const noSubsetting = withFontFsType(original, 0x0108);
     const result = await build(
@@ -1692,7 +1692,7 @@ describe("公开构建入口", () => {
     );
   });
 
-  it("完整嵌入请求不能跳过缺少资源、格式或权限受限的实际字族", async () => {
+  it("does not allow full embedding requests to bypass missing resources, unsupported formats, or restricted permissions", async () => {
     const cases = [
       {
         label: "font-value-opt-out",
@@ -1887,7 +1887,7 @@ describe("公开构建入口", () => {
     );
   });
 
-  it("按 Unicode 断行机会和字素边界测量中文与超长词", async () => {
+  it("measures Chinese and overly long words according to Unicode line break opportunities and grapheme boundaries", async () => {
     const measureFont = font("Noto Sans CJK SC", [
       { weight: 400, data: notoSansScRegular },
     ]);
@@ -1955,7 +1955,7 @@ describe("公开构建入口", () => {
     );
   });
 
-  it("超宽字素与显式换行各自只计一行且保留尾部空行", async () => {
+  it("counts ultra-wide graphemes and explicit newlines as single lines each and preserves trailing empty lines", async () => {
     const measureFont = font("Noto Sans CJK SC", [
       { weight: 400, data: notoSansScRegular },
     ]);
@@ -2006,7 +2006,7 @@ describe("公开构建入口", () => {
     );
   });
 
-  it("代测字体必须显式声明并保留原输出字体名", async () => {
+  it("requires explicit proxy font declaration and preserves original output font family name", async () => {
     const alternateFace = font(
       "Deck Display Name",
       [{ weight: 400, data: notoSansScRegular }],
@@ -2465,7 +2465,7 @@ describe("公开构建入口", () => {
     });
   });
 
-  it("按准确字重选择度量文件，并要求实际斜体字重资源", async () => {
+  it("selects measurement file by exact weight and requires actual italic weight resources", async () => {
     const jost = font("Jost*", [
       { weight: 400, data: jostBook },
       { weight: 700, data: jostBold },
@@ -2519,7 +2519,7 @@ describe("公开构建入口", () => {
     );
   });
 
-  it("按独立 SemiBold 字族的真实常规样式写入字重映射", async () => {
+  it("writes weight mapping according to real regular style of standalone SemiBold family", async () => {
     const result = await build(
       deck(
         createElement(Text, {
@@ -2552,7 +2552,7 @@ describe("公开构建入口", () => {
     });
   });
 
-  it("按字体优先字族接收非 RIBBI 字重并保留原生字重映射", async () => {
+  it("accepts non-RIBBI weights via typographic family and preserves native weight mapping", async () => {
     const result = await build(
       deck(
         createElement(Text, {
@@ -2586,7 +2586,7 @@ describe("公开构建入口", () => {
     );
   });
 
-  it("度量到固定区域装不下时警告并保留区域、内容和原生默认行距", async () => {
+  it("warns when measured text overflows fixed bounding box, preserving box, content, and native default line spacing", async () => {
     const result = await build(
       deck(
         createElement(
@@ -2629,7 +2629,7 @@ describe("公开构建入口", () => {
     );
   });
 
-  it("带文字形状与文本框共用固定区域装不下诊断", async () => {
+  it("shares fixed bounding box overflow diagnostics across shapes with text and text boxes", async () => {
     const measureFont = font("Noto Sans CJK SC", [
       { weight: 400, data: notoSansScRegular },
     ]);
@@ -2687,7 +2687,7 @@ describe("公开构建入口", () => {
       ["中文中文", "中文中文"],
     );
   });
-  it("在基础及扩展转场前写出页面色彩映射覆盖", async () => {
+  it("emits slide color map overrides prior to basic and extended transitions", async () => {
     const result = await build(
       createElement(
         Deck,
@@ -2721,7 +2721,7 @@ describe("公开构建入口", () => {
     }
   });
 
-  it("并发验证正常的形状与文字产物", async () => {
+  it("concurrently validates normal shape and text artifacts", async () => {
     const shapeResult = await build(
       deck(
         createElement(Shape, {
@@ -2777,7 +2777,7 @@ describe("公开构建入口", () => {
     assert.deepEqual(fileAfterFailure.errors, []);
   });
 
-  it("生成固定区域文字并保留中英与 Unicode 内容", async () => {
+  it("generates fixed bounding box text and preserves Chinese, English, and Unicode content", async () => {
     const content = "固定区域文字 — React + 简体中文 😀";
     const result = await build(
       deck(
@@ -2818,7 +2818,7 @@ describe("公开构建入口", () => {
     assert.ok(result.pptx.byteLength > 0);
   });
 
-  it("把分段样式、固定行距和列表写成原生段落语义", async () => {
+  it("emits run styles, fixed line spacing, and lists as native paragraph semantics", async () => {
     const result = await build(
       deck(
         createElement(
@@ -2913,7 +2913,7 @@ describe("公开构建入口", () => {
     ]);
   });
 
-  it("段落继承文本框文字样式并只覆盖显式声明的字段", async () => {
+  it("inherits text box styling for paragraphs and overrides only explicitly declared fields", async () => {
     const result = await build(
       deck(
         createElement(
@@ -2973,7 +2973,7 @@ describe("公开构建入口", () => {
     );
   });
 
-  it("同名字族、字重和样式引用冲突资源时报告来源", async () => {
+  it("reports origins when conflicting resources are referenced for the same family, weight, and style", async () => {
     const element = deck(
       createElement(
         Text,
@@ -3015,7 +3015,7 @@ describe("公开构建入口", () => {
     });
   });
 
-  it("同一字体值中实际使用的重复字重样式冲突资源会失败", async () => {
+  it("fails when conflicting resources are referenced for actually used duplicate weight and style within same font value", async () => {
     const sharedValue = font("Duplicate Face", [
       { data: new Uint8Array([1, 2]) },
       { weight: 400, style: "normal", data: new Uint8Array([3, 4]) },
@@ -3047,7 +3047,7 @@ describe("公开构建入口", () => {
     );
   });
 
-  it("仅名称引用与唯一同名字体资源共存时保留度量提示且成功构建", async () => {
+  it("preserves measurement hints and builds successfully when name-only references coexist with unique same-named font resource", async () => {
     const result = await build(
       deck(
         createElement(
@@ -3103,7 +3103,7 @@ describe("公开构建入口", () => {
     );
   });
 
-  it("固定区域可只声明字体名，报告度量限制且默认不嵌字体", async () => {
+  it("allows fixed bounding box to declare font family name only, reporting measurement limits without embedding fonts by default", async () => {
     const result = await build(
       deck(
         createElement(
@@ -3152,7 +3152,7 @@ describe("公开构建入口", () => {
     );
   });
 
-  it("百分比高度的固定区域保留原生行距并按高度约定度量", async () => {
+  it("preserves native line spacing for percentage-height fixed bounding boxes and measures per height convention", async () => {
     const jost = font("Jost*", [
       { weight: 400, data: testFont("./assets/fonts/Jost-400-Book.ttf") },
     ]);
@@ -3251,7 +3251,7 @@ describe("公开构建入口", () => {
     );
   });
 
-  it("独立裁剪进程可在未加载文本框实现时生成纯形状和带文字形状", async () => {
+  it("generates plain shapes and shapes with text in standalone trimmed process without loading text box implementation", async () => {
     const directory = await mkdtemp(join(tmpdir(), "react-pptx-text-trim-"));
     try {
       const loader = join(directory, "reject-text-box.mjs");
@@ -3309,9 +3309,9 @@ describe("公开构建入口", () => {
     } finally {
       await rm(directory, { recursive: true, force: true });
     }
-  }, 20_000); // 独立进程首次加载 SDK WASM runtime 约需 10 秒。
+  }, 20_000); // Standalone process takes about 10s to load SDK WASM runtime on first run.
 
-  it("把真实 React 形状生成 Transitional PPTX 并保留只读身份观察", async () => {
+  it("generates Transitional PPTX from real React shapes and preserves read-only identity observation", async () => {
     const result = await build(
       deck(
         createElement(Shape, {
@@ -3361,7 +3361,7 @@ describe("公开构建入口", () => {
     });
   });
 
-  it("对公开构建的同一份 PPTX 执行 SDK 结构校验并保留定位", async () => {
+  it("performs SDK structural validation on the same publicly built PPTX and preserves locations", async () => {
     const result = await build(
       deck(
         createElement(Shape, {
@@ -3489,7 +3489,7 @@ describe("公开构建入口", () => {
     );
   });
 
-  it("从 PPTX 实际读回时保留页面标识中的换行、回车和制表符", async () => {
+  it("preserves newlines, carriage returns, and tabs in slide identifiers when read back from PPTX", async () => {
     const slideIds = [
       "alpha\nbeta",
       "alpha\rbeta",
@@ -3542,7 +3542,7 @@ describe("公开构建入口", () => {
     );
   });
 
-  it("拒绝 XML 1.0 无法表示的对象名称和页面标识并定位来源", async () => {
+  it("rejects object names and slide identifiers that cannot be represented in XML 1.0 and locates source", async () => {
     const invalidObjectName = deck(
       createElement(Shape, {
         testId: "invalid-name",
@@ -3596,7 +3596,7 @@ describe("公开构建入口", () => {
     }
   });
 
-  it("拒绝无法在 EMU 闭区间内表达的形状宽高", async () => {
+  it("rejects shape dimensions that cannot be expressed within closed EMU interval", async () => {
     for (const size of [
       { width: 0.00001, height: 20 },
       { width: 40, height: 0.00001 },
@@ -3627,7 +3627,7 @@ describe("公开构建入口", () => {
     }
   });
 
-  it("独立读取器接受形状宽高的最终 EMU 闭区间边界", async () => {
+  it("accepts final closed EMU interval boundaries for shape dimensions in standalone reader", async () => {
     const result = await build(
       createElement(
         Deck,
@@ -3639,7 +3639,7 @@ describe("公开构建入口", () => {
             testId: "extent-boundary",
             x: 0,
             y: 0,
-            // 该像素值按标准换算后舍入到形状尺寸上界。
+            // This pixel value rounds to the shape size upper bound after standard conversion.
             width: 225457.60073490813,
             height: 0.00006,
           }),
@@ -3654,7 +3654,7 @@ describe("公开构建入口", () => {
     assert.equal(file.slides[0]?.objects[0]?.boxEmu.height, 1);
   });
 
-  it("独立校验器拒绝超过格式上限的形状尺寸", async () => {
+  it("rejects shape dimensions exceeding format upper limit in standalone validator", async () => {
     const result = await build(
       deck(
         createElement(Shape, {
@@ -3688,7 +3688,7 @@ describe("公开构建入口", () => {
     );
   });
 
-  it("按最终 EMU 限制页面尺寸并保留边界内的小数像素", async () => {
+  it("constrains slide dimensions to final EMU limits and preserves fractional pixels within boundaries", async () => {
     const boundary = await build(
       createElement(
         Deck,
@@ -3727,7 +3727,7 @@ describe("公开构建入口", () => {
     }
   });
 
-  it("独立校验器拒绝超出格式范围的实际页面尺寸", async () => {
+  it("rejects actual slide dimensions exceeding format range in standalone validator", async () => {
     const result = await build(
       createElement(
         Deck,
@@ -3756,7 +3756,7 @@ describe("公开构建入口", () => {
     );
   });
 
-  it("独立校验器拒绝低于格式下限的母版版式标识", async () => {
+  it("rejects master layout identifier below format lower limit in standalone validator", async () => {
     const result = await build(
       deck(
         createElement(Shape, {
@@ -3792,7 +3792,7 @@ describe("公开构建入口", () => {
     );
   });
 
-  it("等待真实组件的布局与被动 Effect 提交并完成 root 卸载清理", async () => {
+  it("awaits layout and passive Effect commits of real components and completes root unmount cleanup", async () => {
     const events: string[] = [];
     function EffectShape() {
       useLayoutEffect(() => {
@@ -3830,7 +3830,7 @@ describe("公开构建入口", () => {
     ]);
   });
 
-  it("在声明路径报告未知形状参数与裁剪后缺失的能力", async () => {
+  it("reports unknown shape parameters and trimmed capabilities at declaration path", async () => {
     const UncheckedShape = Shape as ComponentType<Record<string, unknown>>;
     const unknownParameter = deck(
       createElement(UncheckedShape, {
@@ -3878,7 +3878,7 @@ describe("公开构建入口", () => {
     );
   });
 
-  it("显式形状模块沿同一链路遵守基础 Transitional 目标", async () => {
+  it("adheres to basic Transitional target along the same pipeline for explicit shape module", async () => {
     const result = await createBuilder([shapeCapability])(
       deck(
         createElement(Shape, {
@@ -3900,7 +3900,7 @@ describe("公开构建入口", () => {
     assert.equal(file.slides[0]?.objects[0]?.geometry, "triangle");
   });
 
-  it("生成并从同次 PPTX 读回基础页面转场", async () => {
+  it("generates and reads back basic slide transitions from the same PPTX", async () => {
     const result = await build(
       createElement(
         Deck,
@@ -3955,7 +3955,7 @@ describe("公开构建入口", () => {
     );
   });
 
-  it("将每个方向参数写为对应 Transitional 方向代码", async () => {
+  it("emits each direction parameter as corresponding Transitional direction code", async () => {
     const declarations = [
       ...(
         [
@@ -4006,7 +4006,7 @@ describe("公开构建入口", () => {
     );
   });
 
-  it("按时长边界选择基础速度并写入取整后的精确毫秒", async () => {
+  it("selects basic speed based on duration bounds and emits rounded exact milliseconds", async () => {
     const timings = [
       [600, "fast", 600],
       [600.6, "med", 601],
@@ -4040,7 +4040,7 @@ describe("公开构建入口", () => {
     );
   });
 
-  it("独立文件检查发现 Choice 漏报的 p14 时长依赖", async () => {
+  it("detects Choice-omitted p14 duration dependency via standalone file check", async () => {
     const result = await build(
       createElement(
         Deck,
@@ -4073,7 +4073,7 @@ describe("公开构建入口", () => {
     assert.ok(file.errors.some(({ code }) => code === "forbidden-extension"));
   });
 
-  it("精确时长写入 p14 与有依据的 Transitional 速度回退", async () => {
+  it("writes exact duration into p14 with justified Transitional speed fallback", async () => {
     const result = await build(
       createElement(
         Deck,
@@ -4131,7 +4131,7 @@ describe("公开构建入口", () => {
     );
   });
 
-  it("Flip 与 Morph 显式携带兼容分支并核对联合机制需求", async () => {
+  it("includes explicit compatibility branches for Flip and Morph and verifies combination mechanism requirements", async () => {
     const declarations = createElement(
       Deck,
       {},
@@ -4238,7 +4238,7 @@ describe("公开构建入口", () => {
     );
   });
 
-  it("使用扩展转场默认选项并保留基础 fallback 声明", async () => {
+  it("uses extended transition default options and preserves basic fallback declaration", async () => {
     const result = await build(
       createElement(
         Deck,
@@ -4277,7 +4277,7 @@ describe("公开构建入口", () => {
     );
   });
 
-  it("裁剪转场能力后定位被省略的 Slide 声明", async () => {
+  it("locates omitted Slide declarations after trimming transition capabilities", async () => {
     await assert.rejects(
       createBuilder([shapeCapability])(
         createElement(
@@ -4301,7 +4301,7 @@ describe("公开构建入口", () => {
     );
   });
 
-  it("按 Slide 路径拒绝非法时长、方向、选项和 fallback", async () => {
+  it("rejects invalid duration, direction, options, and fallback at Slide path", async () => {
     const invalidTransitions: readonly {
       readonly slideId: string;
       readonly transition: unknown;
@@ -4415,7 +4415,7 @@ describe("公开构建入口", () => {
     }
   });
 
-  it("越界保留原始形状并在生成证据中返回警告", async () => {
+  it("preserves original shapes on out-of-bounds and returns warnings in generated evidence", async () => {
     const result = await build(
       createElement(
         Deck,
@@ -4451,7 +4451,7 @@ describe("公开构建入口", () => {
     });
   });
 
-  it("明确拒绝声明外形状和不能写入的尺寸", async () => {
+  it("explicitly rejects undeclared shapes and unwriteable dimensions", async () => {
     await assert.rejects(
       build(
         deck(

@@ -594,15 +594,25 @@ function assertTimingReferencesFollowDefinitions(xml: string): void {
   for (const match of xml.matchAll(/<p:cTn\b[^>]*\bid="(\d+)"/gu)) {
     const id = match[1];
     assert.ok(id);
-    assert.equal(definitions.has(id), false, `重复的时间节点定义 ${id}`);
+    assert.equal(
+      definitions.has(id),
+      false,
+      `duplicate time node definition ${id}`,
+    );
     definitions.set(id, match.index);
   }
   for (const match of xml.matchAll(/<p:tn\b[^>]*\bval="(\d+)"/gu)) {
     const id = match[1];
     assert.ok(id);
     const definition = definitions.get(id);
-    assert.ok(definition !== undefined, `时间引用 ${id} 没有节点定义`);
-    assert.ok(definition < match.index, `时间引用 ${id} 出现在节点定义之前`);
+    assert.ok(
+      definition !== undefined,
+      `time reference ${id} has no node definition`,
+    );
+    assert.ok(
+      definition < match.index,
+      `time reference ${id} appears before node definition`,
+    );
   }
 }
 
@@ -650,7 +660,7 @@ function firstMainSequenceEntryNodeType(
   assert.ok(withNode);
   const withChildrenStart = withNode.indexOf("<p:childTnLst>");
   assert.ok(withChildrenStart >= 0);
-  // LibreOffice 的 fixMainSequenceTiming 会读取该 with-node 的首个子节点。
+  // LibreOffice's fixMainSequenceTiming reads the first child node of this with-node.
   const entryNodes = directTimingChildren(
     withNode.slice(withChildrenStart + listLength),
   );
@@ -680,7 +690,7 @@ function mainSequenceStepDirectChildIds(
   return directTimingChildren(step.slice(childListStart + listLength)).map(
     (node) => {
       const id = node.match(/<p:cTn\b[^>]*\bid="(\d+)"/u)?.[1];
-      assert.ok(id, "mainSeq 步的直接时间节点缺少身份");
+      assert.ok(id, "direct time node of mainSeq step missing identity");
       return Number(id);
     },
   );
@@ -3116,8 +3126,8 @@ function ExactHostOffsetCancellation() {
   );
 }
 
-describe("组件编排作用域", () => {
-  it("等待交错作用域的全部成员，并允许前向引用完成与命名时刻", async () => {
+describe("component choreography scope", () => {
+  it("waits for all members of staggered scopes and allows forward references to completion and named cues", async () => {
     const result = await build(createElement(StaggeredSource));
     const slide = result.report.slides[0];
     const motion = slide?.capabilities?.["motion"] as MotionObservation;
@@ -3152,7 +3162,7 @@ describe("组件编排作用域", () => {
     );
   });
 
-  it("保留空作用域及其边界时刻，并把整段条件移除报告为缺失引用", async () => {
+  it("preserves empty scopes and their boundary cues and reports removed condition segments as missing references", async () => {
     for (const sourceMode of ["empty", "static", "disabled"] as const) {
       const result = await build(
         createElement(EmptyScopeDeck, { includeSource: true, sourceMode }),
@@ -3199,7 +3209,7 @@ describe("组件编排作用域", () => {
     );
   });
 
-  it("拒绝依赖环和明确跨点击步的作用域起止关系", async () => {
+  it("rejects dependency cycles and explicit cross-click-step scope start-end relationships", async () => {
     await assert.rejects(
       build(createElement(CyclicScopes)),
       (error: unknown) => {
@@ -3219,7 +3229,7 @@ describe("组件编排作用域", () => {
     );
   });
 
-  it("步根 with-group 收集不可比较起点的全部来源 END", async () => {
+  it("collects all source END conditions with incomparable start cues in step root with-group", async () => {
     const result = await build(createElement(IncomparableUnknownStarts));
     const slide = result.report.slides[0];
     const motion = slide?.capabilities?.["motion"] as MotionObservation;
@@ -3272,7 +3282,7 @@ describe("组件编排作用域", () => {
     assertTimingReferencesFollowDefinitions(strFromU8(slidePart));
   });
 
-  it("顺序作用域等待嵌套并行作用域的全部成员", async () => {
+  it("waits for all members of nested parallel scopes in sequential scopes", async () => {
     const result = await build(createElement(SequencedScopes));
     const slide = result.report.slides[0];
     const motion = slide?.capabilities?.["motion"] as MotionObservation;
@@ -3306,7 +3316,7 @@ describe("组件编排作用域", () => {
     );
   });
 
-  it("未知时长的嵌套成员完成后才启动后继，并让外层等待全部成员", async () => {
+  it("starts successors only after nested members of unknown duration complete, letting outer scopes wait for all members", async () => {
     const result = await build(createElement(UnknownCompletionTree));
     const slide = result.report.slides[0];
     const motion = slide?.capabilities?.["motion"] as MotionObservation;
@@ -3482,7 +3492,7 @@ describe("组件编排作用域", () => {
     );
   });
 
-  it("单一未知 END 经连续起点别名保留真实来源、偏移及点击步入口", async () => {
+  it("preserves real source, offset, and click step entry for single unknown END across chained start aliases", async () => {
     for (const trigger of ["auto", "click"] as const) {
       const result = await build(
         createElement(SingleSourceUnknownStartAliases, { trigger }),
@@ -3643,7 +3653,7 @@ describe("组件编排作用域", () => {
     }
   });
 
-  it("已知起点别名仍保留数值，无自然完成来源仍不可等待", async () => {
+  it("preserves numeric values for known start aliases while sources without natural completion remain non-waitable", async () => {
     const result = await build(
       createElement(SingleSourceUnknownStartAliases, {
         trigger: "auto",
@@ -3744,7 +3754,7 @@ describe("组件编排作用域", () => {
     );
   });
 
-  it("晚父起点主导别名后仍保留真实父门槛", async () => {
+  it("retains real parent gate when late parent start dominates an alias", async () => {
     const result = await build(
       createElement(SingleSourceAliasUnderLaterParent),
     );
@@ -3824,7 +3834,7 @@ describe("组件编排作用域", () => {
     );
   });
 
-  it("作用域起点可别名到已有条件集合完成并保留来源偏移", async () => {
+  it("aliases scope start to completion of existing condition joins while preserving source offsets", async () => {
     for (const parentStartGate of [false, true]) {
       const result = await build(
         createElement(ConditionJoinStartAlias, { parentStartGate }),
@@ -3962,7 +3972,7 @@ describe("组件编排作用域", () => {
       assert.equal(
         fileSlide?.objects.length,
         5,
-        "别名复用不得创建用于计时的 Shape",
+        "alias reuse must not create timing Shapes",
       );
 
       const archive = unzipSync(result.pptx);
@@ -4006,7 +4016,7 @@ describe("组件编排作用域", () => {
     }
   });
 
-  it("点击步中的多来源起点别名仍复用唯一条件集合", async () => {
+  it("reuses single condition joins for multi-source start aliases within click steps", async () => {
     const result = await build(
       createElement(ConditionJoinStartAlias, {
         parentStartGate: false,
@@ -4094,7 +4104,7 @@ describe("组件编排作用域", () => {
     );
   });
 
-  it("晚父中的 canonical 起点别名按完整来源重基并保留实际起止身份", async () => {
+  it("rebases canonical start aliases in late parent against full sources and preserves actual start-end identities", async () => {
     for (const trigger of ["auto", "click"] as const) {
       for (const reverse of [false, true]) {
         for (const parentOffsetMs of [10, 20_000]) {
@@ -4200,7 +4210,7 @@ describe("组件编排作用域", () => {
     }
   });
 
-  it("父作用域比同一条件集合晚 10 毫秒时把 alias 精确化为 9 毫秒", async () => {
+  it("refines alias to 9 ms when parent scope is 10 ms later than the same condition join", async () => {
     const result = await build(createElement(SameJoinParentAlias));
     const slide = result.report.slides[0];
     const motion = slide?.capabilities?.["motion"] as MotionObservation;
@@ -4285,7 +4295,7 @@ describe("组件编排作用域", () => {
     );
   });
 
-  it("重排独立起点的计划兄弟以先定义 alias 的真实条件来源", async () => {
+  it("reorders planned siblings with independent starts to define real condition sources of alias first", async () => {
     const result = await build(createElement(ForwardConditionJoinAlias));
     const slide = result.report.slides[0];
     const motion = slide?.capabilities?.["motion"] as MotionObservation;
@@ -4386,7 +4396,7 @@ describe("组件编排作用域", () => {
     );
   });
 
-  it("排序 alias 时同时保留普通作用域完成依赖", async () => {
+  it("preserves normal scope completion dependencies when ordering aliases", async () => {
     const variants: readonly RootEndChainOptions[] = [
       {
         rootOrder: ["alias", "afterAlias", "host", "follower"],
@@ -4488,7 +4498,7 @@ describe("组件编排作用域", () => {
     }
   });
 
-  it("早宿主条件集合保留来源声明顺序、未知时长和点击步入口", async () => {
+  it("preserves source declaration order, unknown duration, and click step entry in early-host condition joins", async () => {
     const variants: readonly EarlyHostParallelJoinOptions[] = [
       { longFirst: false, sourceOrder: "first-late", trigger: "auto" },
       { longFirst: false, sourceOrder: "late-first", trigger: "auto" },
@@ -4629,7 +4639,7 @@ describe("组件编排作用域", () => {
     }
   });
 
-  it("跨并行分支放置条件集合并按来源关系排序两种声明顺序", async () => {
+  it("places condition joins across parallel branches and orders both declaration orders by source relationships", async () => {
     const variants: readonly CrossBranchJoinOptions[] = [
       { kind: "cross-forward", trigger: "auto" },
       { kind: "cross-reverse", trigger: "auto" },
@@ -4773,7 +4783,7 @@ describe("组件编排作用域", () => {
     }
   });
 
-  it("按最大候选逐项证明嵌套条件集合严格晚于其父起点", async () => {
+  it("proves nested condition joins strictly later than parent start item by item using maximum candidates", async () => {
     const variants: readonly Omit<NestedMaxConditionJoinOptions, "control">[] =
       [
         { reverse: false, trigger: "auto" },
@@ -4922,7 +4932,7 @@ describe("组件编排作用域", () => {
     }
   });
 
-  it("部分来源早于消费父起点时提升到步根并继续严格订阅", async () => {
+  it("promotes to step root and continues strict subscription when partial sources precede consuming parent start", async () => {
     const result = await build(
       createElement(NestedMaxConditionJoin, {
         reverse: false,
@@ -4979,7 +4989,7 @@ describe("组件编排作用域", () => {
     assertTimingReferencesFollowDefinitions(strFromU8(slidePart));
   });
 
-  it("保留交叉顺序分支的双成员整体完成及外部消费者", async () => {
+  it("preserves overall completion and external consumers of two members in cross-sequential branches", async () => {
     for (const longFirst of [false, true]) {
       for (const branchOrder of ["p-first", "q-first"] as const) {
         for (const consumerOrder of ["p-first", "q-first"] as const) {
@@ -5214,7 +5224,7 @@ describe("组件编排作用域", () => {
     }
   });
 
-  it("普通并行包装不会改变交叉顺序分支的整体完成", async () => {
+  it("does not change overall completion of cross-sequential branches with standard parallel wrappers", async () => {
     const cases = [
       { wrapP: true, branchOrder: "p-first" as const },
       {
@@ -5291,7 +5301,7 @@ describe("组件编排作用域", () => {
     }
   });
 
-  it("一般未知晚父起点在 stagger 宿主中递归重基并保留 start 别名", async () => {
+  it("recursively rebases general unknown late parent start in stagger host and preserves start alias", async () => {
     const cases = [
       { firstText: "AB", trigger: "auto" as const },
       { firstText: "AB", trigger: "click" as const },
@@ -5394,7 +5404,7 @@ describe("组件编排作用域", () => {
     }
   });
 
-  it("逐词真实单次行为在中英文、空白、标点和空文本上保留正下界", async () => {
+  it("preserves positive lower bounds for word-by-word real single behavior on Chinese/English, whitespace, punctuation, and empty text", async () => {
     const texts = ["中文词语", "e\u0301 👩🏽‍💻", "   \t", "，。!?", ""];
     for (const [index, text] of texts.entries()) {
       const result = await build(
@@ -5471,7 +5481,7 @@ describe("组件编排作用域", () => {
     }
   });
 
-  it("空 letter 仍以目标单次行为提供完成正下界", async () => {
+  it("provides positive lower bounds for completion via target single behavior for empty letter", async () => {
     const result = await build(
       createElement(DfsEndCollectors, {
         emptyFirstLetter: true,
@@ -5517,7 +5527,7 @@ describe("组件编排作用域", () => {
     assertTimingReferencesFollowDefinitions(xml);
   });
 
-  it("晚起点别名保留逻辑起点，完成收集器仍从早宿主注册", async () => {
+  it("preserves logical start for late start alias, while completion collectors still register from early host", async () => {
     const result = await build(
       createElement(DfsEndCollectors, {
         pDelayMs: 2500,
@@ -5595,7 +5605,7 @@ describe("组件编排作用域", () => {
     );
   });
 
-  it("同父顺序成员间保留不可比较的未知完成约束和真实整体完成", async () => {
+  it("preserves incomparable unknown completion constraints and real overall completion between sibling sequential members", async () => {
     const variants: readonly IncomparableJoinOptions[] = [
       { firstText: "AB", trigger: "auto" },
       { firstText: "ABCDEFGHIJKLMNOPQRSTUVWXYZ123456", trigger: "auto" },
@@ -5957,7 +5967,7 @@ describe("组件编排作用域", () => {
     }
   });
 
-  it("透明嵌套与步根未知完成作用域均保留入口角色和完整依赖", async () => {
+  it("preserves entry roles and full dependencies for transparent nesting and step-root unknown completion scopes", async () => {
     for (const directStepRoots of [false, true]) {
       const result = await build(
         createElement(UnknownCompletionEntryDeck, { directStepRoots }),
@@ -6029,25 +6039,29 @@ describe("组件编排作用域", () => {
             mainSequenceStepDirectChildIds(xml, stepIndex).includes(
               source.timingId,
             ),
-            "有真实完成身份的步根作用域应直接承载在 mainSeq 步下",
+            "step root scope with real completion identity should be directly hosted under mainSeq step",
           );
         }
         assert.equal(
           firstMainSequenceEntryNodeType(xml, stepIndex),
           stepIndex === 0 ? "afterEffect" : "clickEffect",
-          "自动步和点击步的入口角色应交给作用域内首个真实执行节点",
+          "entry role of automatic and click steps should be assigned to first real execution node in scope",
         );
         assert.equal(
           mainSequenceStepXml(xml, stepIndex).match(/nodeType="clickEffect"/gu)
             ?.length ?? 0,
           stepIndex === 0 ? 0 : 1,
-          "一个点击步只保留一个真实 clickEffect 入口",
+          "a click step should retain only one real clickEffect entry",
         );
         for (const effect of sourceEffects) {
           const definitions = xml.match(
             new RegExp(`<p:cTn\\b[^>]*\\bid="${effect?.timingId}"`, "gu"),
           );
-          assert.equal(definitions?.length, 1, "真实效果节点应只写出一次");
+          assert.equal(
+            definitions?.length,
+            1,
+            "real effect node should only be emitted once",
+          );
         }
         assert.deepEqual(
           [follower.startAfter?.timingId, follower.startAfter?.offsetMs],
@@ -6064,7 +6078,7 @@ describe("组件编排作用域", () => {
     }
   });
 
-  it("未知外部起点后的顺序成员可依赖实际前驱，且后继等待完整作用域", async () => {
+  it("allows sequential members after unknown external start to depend on actual predecessor with successors waiting for full scope", async () => {
     const result = await build(createElement(UnknownStartSequence, {}));
     const slide = result.report.slides[0];
     const motion = slide?.capabilities?.["motion"] as MotionObservation;
@@ -6135,7 +6149,7 @@ describe("组件编排作用域", () => {
     assert.equal(fileFollower?.startAfter?.timingId, sequence.timingId);
   });
 
-  it("顺序前驱完成覆盖冗余自定起点，保留未知时长与真实整体完成", async () => {
+  it("overrides redundant custom start with sequential predecessor completion, preserving unknown duration and real overall completion", async () => {
     const variants: readonly SequenceStartCausalityOptions[] = [
       {
         sourceUnknown: true,
@@ -6336,7 +6350,7 @@ describe("组件编排作用域", () => {
     }
   });
 
-  it("平行作用域中的完成引用不受兄弟声明顺序影响", async () => {
+  it("keeps completion references in parallel scopes unaffected by sibling declaration order", async () => {
     for (const sourceFirst of [true, false]) {
       const result = await build(
         createElement(ForwardSibling, { sourceFirst }),
@@ -6372,7 +6386,7 @@ describe("组件编排作用域", () => {
     }
   });
 
-  it("未知起点后的并行、交错、嵌套顺序及同一点击步保持可写", async () => {
+  it("keeps parallel, stagger, nested sequential, and same click step writable after unknown start", async () => {
     const variants: readonly UnknownStartSequenceOptions[] = [
       { mode: "parallel" as const },
       { mode: "stagger" as const },
@@ -6390,7 +6404,7 @@ describe("组件编排作用域", () => {
     }
   });
 
-  it("顺序前项以真实自定起点子作用域整体完成后启动", async () => {
+  it("starts sequential prior items after overall completion of subscope with real custom start", async () => {
     const result = await build(createElement(SelfStartedNestedPredecessor));
     const slide = result.report.slides[0];
     const motion = slide?.capabilities?.["motion"] as MotionObservation;
@@ -6482,7 +6496,7 @@ describe("组件编排作用域", () => {
     assert.equal(fileFollower?.startAfter?.timingId, sequence.timingId);
   });
 
-  it("独立读取器拒绝相互等待及包含在自身完成条件中的环", async () => {
+  it("rejects mutual waiting and cycles contained in self completion conditions in standalone reader", async () => {
     const result = await build(createElement(ReaderCycleDeck));
     const original = await validatePptx(result.pptx);
     assert.deepEqual(original.errors, []);
@@ -6524,7 +6538,7 @@ describe("组件编排作用域", () => {
     }
   });
 
-  it("独立读取器把父启动前置传给实际子节点，并接受合法前向引用", async () => {
+  it("propagates parent start prerequisites to actual child nodes and accepts valid forward references in standalone reader", async () => {
     const result = await build(createElement(UnknownStartSequence, {}));
     const original = await validatePptx(result.pptx);
     assert.deepEqual(original.errors, []);
@@ -6589,7 +6603,7 @@ describe("组件编排作用域", () => {
     assert.deepEqual(forwardRead.errors, []);
   });
 
-  it("空子作用域保留顺序边界，但不占交错位置", async () => {
+  it("preserves sequential boundaries for empty subscopes without occupying stagger positions", async () => {
     const sequenceResult = await build(createElement(EmptySequenceMember));
     const sequenceMotion = sequenceResult.report.slides[0]?.capabilities?.[
       "motion"
@@ -6638,7 +6652,7 @@ describe("组件编排作用域", () => {
     assert.deepEqual((await validatePptx(staggerResult.pptx)).errors, []);
   });
 
-  it("非活动延迟子作用域不拉长父完成，且保留自身完成边界", async () => {
+  it("does not extend parent completion with inactive delayed subscopes, preserving own completion boundaries", async () => {
     for (const sourceMode of ["empty", "static", "disabled"] as const) {
       const result = await build(
         createElement(DelayedInactiveSequenceMember, { sourceMode }),
@@ -6678,7 +6692,7 @@ describe("组件编排作用域", () => {
     }
   });
 
-  it("自行指定起点的并行成员仍计入父作用域整体完成", async () => {
+  it("still counts parallel members with custom start into parent scope overall completion", async () => {
     const result = await build(createElement(SelfStartedMember));
     const slide = result.report.slides[0];
     const motion = slide?.capabilities?.["motion"] as MotionObservation;
@@ -6698,7 +6712,7 @@ describe("组件编排作用域", () => {
     assert.deepEqual((await validatePptx(result.pptx)).errors, []);
   });
 
-  it("Box 默认入场只补给没有自带入场的对象，静态和禁用对象不占交错位置", async () => {
+  it("provides Box default entrance only to objects without own entrance, with static and disabled objects not occupying stagger slots", async () => {
     const result = await build(createElement(BoxAndDisabledMembers));
     const slide = result.report.slides[0];
     const motion = slide?.capabilities?.["motion"] as MotionObservation;
@@ -6745,7 +6759,7 @@ describe("组件编排作用域", () => {
     );
   });
 
-  it("可见 Box 背景继承默认入场，但不覆盖子项自有入场或禁用状态", async () => {
+  it("inherits default entrance for visible Box backgrounds without overriding children own entrance or disabled state", async () => {
     const result = await build(
       createElement(
         Deck,
@@ -6829,7 +6843,7 @@ describe("组件编排作用域", () => {
     );
   });
 
-  it("同名组件实例互相隔离，普通函数、Fragment 和原生 Group 不自动成作用域", async () => {
+  it("isolates same-named component instances, with plain functions, Fragment, and native Group not automatically forming scopes", async () => {
     const reused = await build(
       createElement(
         Deck,
@@ -6887,7 +6901,7 @@ describe("组件编排作用域", () => {
     );
   });
 
-  it("晚父的多来源起点可把消费者与条件集合一起提升到早宿主", async () => {
+  it("promotes consumers and condition joins together to early host for multi-source starts of late parent", async () => {
     const result = await build(createElement(LateParentMultipleSourceJoin));
     const slide = result.report.slides[0];
     const motion = slide?.capabilities?.["motion"] as MotionObservation;
@@ -6925,7 +6939,7 @@ describe("组件编排作用域", () => {
     assertTimingReferencesFollowDefinitions(xml);
   });
 
-  it("无显式 MotionScope 宿主时提升到 auto 与 click 步根 with-group", async () => {
+  it("promotes to auto and click step root with-group when lacking explicit MotionScope host", async () => {
     for (const trigger of ["auto", "click"] as const) {
       const result = await build(
         createElement(LateParentRootJoin, { trigger }),
@@ -7016,7 +7030,7 @@ describe("组件编排作用域", () => {
     }
   });
 
-  it("多效果对象在自动与点击步中保留聚合入口和首效果角色", async () => {
+  it("preserves aggregate entry and first-effect role in auto and click steps for multi-effect objects", async () => {
     for (const trigger of ["auto", "click"] as const) {
       for (const includeScopeEndConsumer of [false, true]) {
         const slideId = `target-group-step-entry-${trigger}-${includeScopeEndConsumer}`;
@@ -7158,7 +7172,7 @@ describe("组件编排作用域", () => {
     }
   });
 
-  it("三分支 SCC 提升时迁移自身条件并按全部来源排序", async () => {
+  it("migrates own conditions and orders by all sources when promoting three-branch SCC", async () => {
     const result = await build(createElement(ThreeBranchConditionProjection));
     const slide = result.report.slides[0];
     const motion = slide?.capabilities?.["motion"] as MotionObservation;
@@ -7197,7 +7211,7 @@ describe("组件编排作用域", () => {
       "projection-late-p-start-alias",
     ]) {
       const id = objectId(testId);
-      assert.ok(id, `缺少对象 ${testId}`);
+      assert.ok(id, `missing object ${testId}`);
       assert.equal(targetIds.filter((targetId) => targetId === id).length, 1);
     }
     const branchCases = [
@@ -7263,7 +7277,7 @@ describe("组件编排作用域", () => {
     assertTimingReferencesFollowDefinitions(strFromU8(slidePart));
   });
 
-  it("未知空作用域的 END 别名生成有效空容器并保持起止时刻相同", async () => {
+  it("generates valid empty containers and keeps start and end cues identical for END alias of unknown empty scope", async () => {
     const result = await build(createElement(EmptyUnknownEndAlias));
     const slide = result.report.slides[0];
     const motion = slide?.capabilities?.["motion"] as MotionObservation;
@@ -7313,7 +7327,7 @@ describe("组件编排作用域", () => {
     assertTimingReferencesFollowDefinitions(xml);
   });
 
-  it("空作用域 START 别名保留合法 U32 偏移层", async () => {
+  it("preserves valid U32 offset layer for START alias of empty scope", async () => {
     const result = await build(createElement(EmptyU32StartAlias));
     const slide = result.report.slides[0];
     const motion = slide?.capabilities?.["motion"] as MotionObservation;
@@ -7371,7 +7385,7 @@ describe("组件编排作用域", () => {
     assertTimingReferencesFollowDefinitions(xml);
   });
 
-  it("报告累计偏移可超过 U32 且原生延迟继续分层写出", async () => {
+  it("reports cumulative offset exceeding U32 while native delay continues layered emission", async () => {
     const result = await build(createElement(LayeredMaximumOffsets));
     const slide = result.report.slides[0];
     const motion = slide?.capabilities?.["motion"] as MotionObservation;
@@ -7416,7 +7430,7 @@ describe("组件编排作用域", () => {
     assertTimingReferencesFollowDefinitions(xml);
   });
 
-  it("同一作用域的合法起点偏移与 delay 保留原生字段层", async () => {
+  it("preserves native field layers for valid start offset and delay of the same scope", async () => {
     const maximum = 4_294_967_295;
     const totalOffset = maximum + 1301;
     const semanticStarts: unknown[] = [];
@@ -7483,7 +7497,7 @@ describe("组件编排作用域", () => {
     assert.deepEqual(semanticStarts[0], semanticStarts[1]);
   });
 
-  it("精确条件查询为 scope 与 effect 各保留一次祖先 delay", async () => {
+  it("preserves ancestor delay once each for scope and effect in exact condition query", async () => {
     const result = await build(createElement(ProvenanceOffsetProjection));
     const slide = result.report.slides[0];
     const motion = slide?.capabilities?.["motion"] as MotionObservation;
@@ -7530,7 +7544,7 @@ describe("组件编排作用域", () => {
     assertTimingReferencesFollowDefinitions(xml);
   });
 
-  it("未知 END、合法延迟层与 START 别名按累计时刻报告并查询", async () => {
+  it("reports and queries unknown END, valid delay layer, and START alias by cumulative cues", async () => {
     const result = await build(
       createElement(UniversalDelayLoweringDeck, { scenario: "unknown-alias" }),
     );
@@ -7597,7 +7611,7 @@ describe("组件编排作用域", () => {
     assert.ok(writtenTimes.includes(4_294_967_295));
   });
 
-  it("已知 parent START 别名继续保留累计值与查询差值", async () => {
+  it("preserves cumulative values and query differences for known parent START alias", async () => {
     const result = await build(
       createElement(UniversalDelayLoweringDeck, { scenario: "known-alias" }),
     );
@@ -7649,7 +7663,7 @@ describe("组件编排作用域", () => {
     assert.ok(writtenTimes.includes(4_294_967_295));
   });
 
-  it("延迟后的 condition join 保留原始完整来源", async () => {
+  it("preserves original full sources for delayed condition joins", async () => {
     const result = await build(
       createElement(UniversalDelayLoweringDeck, {
         scenario: "condition-join",
@@ -7694,7 +7708,7 @@ describe("组件编排作用域", () => {
     assert.ok(writtenTimes.includes(4_294_967_295));
   });
 
-  it("晚父中的多来源 START 别名保留分层延迟并生成有效 PPTX", async () => {
+  it("preserves layered delays and generates valid PPTX for multi-source START alias in late parent", async () => {
     const result = await build(createElement(LateParentMultiSourceStartAlias));
     const slide = result.report.slides[0];
     const motion = slide?.capabilities?.["motion"] as MotionObservation;
@@ -7754,7 +7768,7 @@ describe("组件编排作用域", () => {
     assert.ok(writtenTimes.includes(4_294_967_295));
   });
 
-  it("多来源条件将零偏移与超 U32 候选分别分层写出", async () => {
+  it("emits zero offset and over-U32 candidates in separate layers for multi-source conditions", async () => {
     const result = await build(createElement(MultiSourceSpreadOffsetStart));
     const slide = result.report.slides[0];
     const motion = slide?.capabilities?.["motion"] as MotionObservation;
@@ -7789,7 +7803,7 @@ describe("组件编排作用域", () => {
     assert.ok(writtenTimes.includes(4_294_967_295));
   });
 
-  it("精确宿主抵消负来源偏移时使用零时长宿主门避免伪循环", async () => {
+  it("uses zero-duration host gates to prevent pseudo-cycles when exact hosts offset negative source offsets", async () => {
     const result = await build(createElement(ExactHostOffsetCancellation));
     const slide = result.report.slides[0];
     const motion = slide?.capabilities?.["motion"] as MotionObservation;

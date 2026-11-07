@@ -35,8 +35,8 @@ const pixelPng = new Uint8Array([
   0x42, 0x60, 0x82,
 ]);
 
-describe("页面导航", () => {
-  it("页面重排后仍按稳定 slideId 写入内部跳转关系", async () => {
+describe("slide navigation", () => {
+  it("writes internal jump relationships by stable slideId even after slide reordering", async () => {
     const buildWithOrder = async (slideIds: readonly string[]) => {
       const pages = slideIds.map((slideId) =>
         createElement(
@@ -76,7 +76,7 @@ describe("页面导航", () => {
     assert.equal(reordered.report.slides[1]?.objects[0]?.link, "slide:details");
   });
 
-  it("独立读取标题、分节、隐藏与自动翻页、背景和原生页码字段", async () => {
+  it("independently reads title, sections, hidden and auto-advance slides, background, and native slide number fields", async () => {
     const result = await build(
       createElement(
         Deck,
@@ -165,7 +165,7 @@ describe("页面导航", () => {
     );
   });
 
-  it("表格共享文字服务使用当前页序生成页码字段", async () => {
+  it("generates slide number fields using current slide sequence via shared text service in tables", async () => {
     const makeSlide = (slideId: string) =>
       createElement(
         Slide,
@@ -213,7 +213,7 @@ describe("页面导航", () => {
     );
   });
 
-  it("写入并独立读取各原生对象的 URL、内部页面和首页动作", async () => {
+  it("writes and independently reads URLs, internal slides, and first-slide actions for each native object", async () => {
     const result = await build(
       createElement(
         Deck,
@@ -317,7 +317,7 @@ describe("页面导航", () => {
     );
   });
 
-  it("Morph 校验显式内部跳转来源及目标页前一可见页的原生对象类型", async () => {
+  it("validates native object kinds with Morph across explicit internal jump sources and the preceding visible slide of the target", async () => {
     const scope = createMorphScope();
     const hero = scope.handle("hero");
     const declarations = createElement(
@@ -399,7 +399,7 @@ describe("页面导航", () => {
     });
   });
 
-  it("定位缺失跳转目标、重复页面标识及透明 Box 链接", async () => {
+  it("identifies missing jump targets, duplicate slide IDs, and transparent Box links with exact locations", async () => {
     const missingTarget = createElement(
       Deck,
       {},

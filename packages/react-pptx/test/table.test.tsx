@@ -35,8 +35,8 @@ function tableDeck(content: ReactNode): ReactNode {
   );
 }
 
-describe("原生表格", () => {
-  it("裁剪 Text 能力时仍通过共享文字服务写出表格", async () => {
+describe("native tables", () => {
+  it("writes tables through shared text service even when Text capability is stripped", async () => {
     const directory = await mkdtemp(join(tmpdir(), "react-pptx-table-trim-"));
     try {
       const loader = join(directory, "reject-text-box.mjs");
@@ -80,9 +80,9 @@ describe("原生表格", () => {
     } finally {
       await rm(directory, { recursive: true, force: true });
     }
-  }, 20_000); // 独立进程首次加载 Open XML SDK WASM runtime 约需 10 秒。
+  }, 20_000); // Loading Open XML SDK WASM runtime in a separate process takes ~10 seconds on first run.
 
-  it("让表格和单元格文字样式共用字距、大小写、装饰和阴影服务", async () => {
+  it("shares kerning, case, decoration, and shadow services across table and cell text styles", async () => {
     const result = await build(
       tableDeck(
         createElement(
@@ -136,7 +136,7 @@ describe("原生表格", () => {
     assert.equal((slideXml.match(/<a:outerShdw/gu) ?? []).length, 2);
   });
 
-  it("在表格、行或单元格路径定位结构缺口和冲突合并", async () => {
+  it("identifies structural gaps and conflicting merges at table, row, or cell paths", async () => {
     const incomplete = createElement(
       Table,
       { testId: "short", columns: [60, 60] },
@@ -228,7 +228,7 @@ describe("原生表格", () => {
     );
   });
 
-  it("自动行高按真实文字度量展开，显式过小行高则保留并警告", async () => {
+  it("expands auto row height using actual text measurement while preserving explicitly small row height with warning", async () => {
     const style = {
       fontFamily: font("Noto Sans CJK SC", [
         { weight: 400, data: notoSansScRegular },
@@ -397,7 +397,7 @@ describe("原生表格", () => {
     );
   });
 
-  it("矩形合并在首行和首列续格写出跨度，独立读取器拒绝缺失跨度", async () => {
+  it("writes span on first-row and first-column continuation cells for rectangular merges and rejects missing spans in standalone reader", async () => {
     const result = await build(
       createElement(
         Deck,
@@ -453,7 +453,7 @@ describe("原生表格", () => {
     );
   });
 
-  it("写入横向和纵向合并锚点及续格", async () => {
+  it("writes horizontal and vertical merge anchors and continuation cells", async () => {
     const result = await build(
       createElement(
         Deck,
@@ -520,7 +520,7 @@ describe("原生表格", () => {
     ]);
   });
 
-  it("按 px、Nfr 与 auto 列轨道分配原生网格宽度", async () => {
+  it("allocates native grid widths across px, Nfr, and auto column tracks", async () => {
     const result = await build(
       createElement(
         Deck,
@@ -575,7 +575,7 @@ describe("原生表格", () => {
     );
   });
 
-  it("auto 列要求真实字体度量，过窄宽度保留 px 轨道并警告", async () => {
+  it("requires real font measurement for auto columns and preserves px tracks with warning for overly narrow widths", async () => {
     const autoWithoutMetrics = createElement(
       Table,
       { testId: "measured-auto", columns: ["auto"] },
@@ -648,7 +648,7 @@ describe("原生表格", () => {
     );
   });
 
-  it("写入保留样式、行列尺寸和文字的 graphicFrame 表格", async () => {
+  it("writes graphicFrame tables preserving styles, row/column dimensions, and text", async () => {
     const result = await build(
       createElement(
         Deck,
@@ -727,7 +727,7 @@ describe("原生表格", () => {
     });
   });
 
-  it("表格名称只转义一次并在非法 XML 字符处报告构建错误", async () => {
+  it("escapes table names once and reports build errors on invalid XML characters", async () => {
     const testId = 'Q1 & "R&D" <board>';
     const result = await build(
       tableDeck(

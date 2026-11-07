@@ -22,11 +22,11 @@ const sourceLoaders: Readonly<Record<string, Loader>> = {
 };
 
 export type BuildFromSourceOptions = BuildOptions & {
-  /** 用入口模块的具名导出作为文稿；默认读取 `default`。 */
+  /** Use the named export of the entry module as the deck; defaults to "default". */
   readonly exportName?: string;
 };
 
-/** 加载作者源码失败时抛出的错误。 */
+/** Error thrown when loading author deck source fails. */
 export class SourceLoadError extends Error {
   constructor(message: string, options?: ErrorOptions) {
     super(message, options);
@@ -35,7 +35,7 @@ export class SourceLoadError extends Error {
 }
 
 function registerSourceLoader() {
-  // 延迟导入也需要源码转换，因此在整次源码构建期间持有加载钩子。
+  // Deferred imports also require source transformation, so hold the loader hook throughout the source build.
   return registerHooks({
     load(url, context, nextLoad) {
       if (!url.startsWith("file:")) return nextLoad(url, context);
@@ -65,7 +65,9 @@ function registerSourceLoader() {
 function sourceUrl(entry: string | URL): URL {
   if (entry instanceof URL) {
     if (entry.protocol !== "file:") {
-      throw new SourceLoadError("文稿入口必须是本地文件路径或 file URL");
+      throw new SourceLoadError(
+        "Deck entry must be a local file path or file URL",
+      );
     }
     return entry;
   }
@@ -101,7 +103,7 @@ function importSourceModule(
       return;
     }
 
-    // 导入启动后不能中止；接管晚到完成或拒绝，避免拒绝脱离本次调用。
+    // Imports cannot be aborted once initiated; intercept late settlement to prevent unhandled rejection.
     void import(url.href).then(
       (module: Record<string, unknown>) => settle({ kind: "loaded", module }),
       (cause: unknown) => settle({ kind: "failed", cause }),
@@ -122,7 +124,7 @@ async function loadDeck(
     const details =
       cause instanceof Error ? (cause.stack ?? cause.message) : String(cause);
     throw new SourceLoadError(
-      `无法加载文稿源码 ${fileURLToPath(url)}：\n${details}`,
+      `Failed to load deck source at ${fileURLToPath(url)}:\n${details}`,
       {
         cause,
       },
@@ -137,14 +139,15 @@ async function loadDeck(
   }
 
   throw new SourceLoadError(
-    `文稿源码 ${fileURLToPath(url)} 必须导出名为 ${JSON.stringify(exportName)} 的 React 元素或组件`,
+    `Deck source at ${fileURLToPath(url)} must export a React element or component named ${JSON.stringify(exportName)}`,
   );
 }
 
 /**
- * 从 Node.js 本地 ESM 源码入口执行正式构建。TS、TSX、MTS 和 JSX 由本入口加载；
- * 入口及其源码依赖仍按 Node 的文件位置解析。取消信号也覆盖源码导入，并保留原始取消原因。
- * 返回值与 `build` 完全相同。
+ * Run a formal build from a Node.js local ESM source entry. TS, TSX, MTS, and JSX are loaded by this entry;
+ * the entry and its source dependencies are resolved according to Node file locations. Cancellation signals
+ * also cover source import and preserve the original cancellation reason.
+ * The return value is identical to `build`.
  */
 export async function buildFromSource(
   entry: string | URL,

@@ -110,10 +110,22 @@ describe("公开主题入口", () => {
     const slide = strFromU8(parts["ppt/slides/slide1.xml"]!);
     assert.match(theme, /<a:theme[^>]+name="Theme Contract"/u);
     assert.match(theme, /<a:accent1><a:srgbClr val="336699"\/><\/a:accent1>/u);
-    assert.match(theme, /<a:majorFont><a:latin typeface="Theme Metrics Sans"/u);
-    assert.match(theme, /<a:minorFont><a:latin typeface="Jost\*"/u);
-    assert.match(slide, /<a:latin typeface="\+mj-lt"\/>/u);
-    assert.match(slide, /<a:latin typeface="\+mn-lt"\/>/u);
+    assert.match(
+      theme,
+      /<a:majorFont><a:latin typeface="Theme Metrics Sans"\/><a:ea typeface="Theme Metrics Sans"\/><a:cs typeface="Theme Metrics Sans"\/><\/a:majorFont>/u,
+    );
+    assert.match(
+      theme,
+      /<a:minorFont><a:latin typeface="Jost\*"\/><a:ea typeface="Jost\*"\/><a:cs typeface="Jost\*"\/>/u,
+    );
+    assert.match(
+      slide,
+      /<a:latin typeface="\+mj-lt"\/><a:ea typeface="\+mj-ea"\/><a:cs typeface="\+mj-cs"\/>/u,
+    );
+    assert.match(
+      slide,
+      /<a:latin typeface="\+mn-lt"\/><a:ea typeface="\+mn-ea"\/><a:cs typeface="\+mn-cs"\/>/u,
+    );
     assert.match(slide, /<a:schemeClr val="accent1"\/>/u);
   });
 
@@ -1097,5 +1109,79 @@ describe("公开主题入口", () => {
       strFromU8(parts["ppt/theme/theme1.xml"]!),
       /<a:majorFont><a:latin typeface="Aptos Display"/u,
     );
+  });
+
+  it("binds latin, ea, and cs font slots for theme fonts and direct font families", async () => {
+    const result = await build(
+      <Deck
+        theme={defineTheme({
+          name: "Three Font Slots Theme",
+          fonts: { major: cjkFont, minor: localFont },
+        })}
+      >
+        <Slide slideId="font-slots">
+          <Text
+            testId="theme-major"
+            x={0}
+            y={0}
+            width={300}
+            height="auto"
+            style={{ fontFamily: "major" }}
+          >
+            Major Run
+          </Text>
+          <Text
+            testId="theme-minor"
+            x={0}
+            y={50}
+            width={300}
+            height="auto"
+            style={{ fontFamily: "minor" }}
+          >
+            Minor Run
+          </Text>
+          <Text
+            testId="direct-family"
+            x={0}
+            y={100}
+            width={300}
+            height={40}
+            style={{ fontFamily: "Direct Family Face" }}
+          >
+            Direct Family Run
+          </Text>
+        </Slide>
+      </Deck>,
+    );
+
+    const parts = unzipSync(result.pptx);
+    const themeXml = strFromU8(parts["ppt/theme/theme1.xml"]!);
+    const slideXml = strFromU8(parts["ppt/slides/slide1.xml"]!);
+
+    assert.match(
+      themeXml,
+      /<a:majorFont><a:latin typeface="Theme Metrics Sans"\/><a:ea typeface="Theme Metrics Sans"\/><a:cs typeface="Theme Metrics Sans"\/><\/a:majorFont>/u,
+    );
+    assert.match(
+      themeXml,
+      /<a:minorFont><a:latin typeface="Jost\*"\/><a:ea typeface="Jost\*"\/><a:cs typeface="Jost\*"\/>/u,
+    );
+
+    assert.match(
+      slideXml,
+      /<a:latin typeface="\+mj-lt"\/><a:ea typeface="\+mj-ea"\/><a:cs typeface="\+mj-cs"\/>/u,
+    );
+    assert.match(
+      slideXml,
+      /<a:latin typeface="\+mn-lt"\/><a:ea typeface="\+mn-ea"\/><a:cs typeface="\+mn-cs"\/>/u,
+    );
+
+    assert.match(
+      slideXml,
+      /<a:latin typeface="Direct Family Face"\/><a:ea typeface="Direct Family Face"\/><a:cs typeface="Direct Family Face"\/>/u,
+    );
+
+    const file = await validatePptx(result.pptx);
+    assert.deepEqual(file.errors, []);
   });
 });

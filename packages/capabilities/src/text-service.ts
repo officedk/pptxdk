@@ -793,12 +793,25 @@ function runPropertiesXml(
   const color = isResolvedColor(style.color)
     ? style.color
     : theme.resolveColor(style.color ?? "dk1");
-  const typeface =
+  const latinTypeface =
     style.themeFont === "major"
       ? "+mj-lt"
       : style.themeFont === "minor"
         ? "+mn-lt"
         : font.family;
+  const eaTypeface =
+    style.themeFont === "major"
+      ? "+mj-ea"
+      : style.themeFont === "minor"
+        ? "+mn-ea"
+        : font.family;
+  const csTypeface =
+    style.themeFont === "major"
+      ? "+mj-cs"
+      : style.themeFont === "minor"
+        ? "+mn-cs"
+        : font.family;
+  const fontSlots = `<a:latin typeface="${escapedXml(latinTypeface)}"/><a:ea typeface="${escapedXml(eaTypeface)}"/><a:cs typeface="${escapedXml(csTypeface)}"/>`;
   const attributes = [
     `lang="en-US"`,
     `sz="${centipoints(points)}"`,
@@ -810,7 +823,7 @@ function runPropertiesXml(
       ? []
       : [`spc="${letterSpacingCentipoints(style.letterSpacing)}"`]),
   ].join(" ");
-  return `<${tag} ${attributes}><a:solidFill>${resolvedColorXml(color)}</a:solidFill>${textShadowXml(theme, style.textShadow)}<a:latin typeface="${escapedXml(typeface)}"/></${tag}>`;
+  return `<${tag} ${attributes}><a:solidFill>${resolvedColorXml(color)}</a:solidFill>${textShadowXml(theme, style.textShadow)}${fontSlots}</${tag}>`;
 }
 
 function displayedText(run: Run): string {

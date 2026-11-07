@@ -1133,6 +1133,63 @@ function themeTextReader(documents: Documents): ThemeTextReader {
   return { colors, schemeSlots, fonts };
 }
 
+function validateThemeFonts(
+  documents: Documents,
+  errors: ValidationIssue[],
+): void {
+  const part = "ppt/theme/theme1.xml";
+  const theme = documents.get(part)?.documentElement;
+  if (theme == null) return;
+  const themeElements = first(theme, drawingNamespace, "themeElements");
+  if (themeElements === undefined) return;
+  const fontScheme = first(themeElements, drawingNamespace, "fontScheme");
+  if (fontScheme === undefined) {
+    issue(errors, part, "missing-font-scheme", "Theme is missing font scheme");
+    return;
+  }
+  for (const name of ["majorFont", "minorFont"] as const) {
+    const fontSet = first(fontScheme, drawingNamespace, name);
+    if (fontSet === undefined) {
+      issue(
+        errors,
+        part,
+        "missing-theme-font",
+        `Theme font scheme is missing ${name}`,
+      );
+      continue;
+    }
+    const latin = first(fontSet, drawingNamespace, "latin");
+    const ea = first(fontSet, drawingNamespace, "ea");
+    const cs = first(fontSet, drawingNamespace, "cs");
+    if (latin === undefined || ea === undefined || cs === undefined) {
+      issue(
+        errors,
+        part,
+        "invalid-theme-font-slots",
+        `Theme ${name} must define latin, ea, and cs font slots`,
+      );
+      continue;
+    }
+    const latinTypeface = attribute(latin, "typeface");
+    const eaTypeface = attribute(ea, "typeface");
+    const csTypeface = attribute(cs, "typeface");
+    if (
+      latinTypeface === "" ||
+      eaTypeface === "" ||
+      csTypeface === "" ||
+      latinTypeface !== eaTypeface ||
+      latinTypeface !== csTypeface
+    ) {
+      issue(
+        errors,
+        part,
+        "invalid-theme-font-slots",
+        `Theme ${name} must define matching non-empty latin, ea, and cs font slots`,
+      );
+    }
+  }
+}
+
 function shadedThemeColor(hex: string, fill: XmlElement): string {
   const lumMod = decimalAttribute(
     first(fill, drawingNamespace, "lumMod"),
@@ -1231,8 +1288,43 @@ function readTextRun(
     };
 
   const latin = first(properties, drawingNamespace, "latin");
+  const ea = first(properties, drawingNamespace, "ea");
+  const cs = first(properties, drawingNamespace, "cs");
   const fill = first(properties, drawingNamespace, "solidFill");
   const rawFontFamily = latin === undefined ? "" : attribute(latin, "typeface");
+  if (latin !== undefined) {
+    if (ea === undefined || cs === undefined) {
+      issue(
+        errors,
+        part,
+        "missing-font-slot",
+        "Text run is missing East Asian or Complex Script font slot",
+      );
+    } else {
+      const eaTypeface = attribute(ea, "typeface");
+      const csTypeface = attribute(cs, "typeface");
+      const expectedEa =
+        rawFontFamily === "+mj-lt"
+          ? "+mj-ea"
+          : rawFontFamily === "+mn-lt"
+            ? "+mn-ea"
+            : rawFontFamily;
+      const expectedCs =
+        rawFontFamily === "+mj-lt"
+          ? "+mj-cs"
+          : rawFontFamily === "+mn-lt"
+            ? "+mn-cs"
+            : rawFontFamily;
+      if (eaTypeface !== expectedEa || csTypeface !== expectedCs) {
+        issue(
+          errors,
+          part,
+          "mismatched-font-slots",
+          "Text run font slots are inconsistent",
+        );
+      }
+    }
+  }
   const themeFont =
     rawFontFamily === "+mj-lt"
       ? theme.fonts.get("major")
@@ -2360,6 +2452,49 @@ function validateChart(
     return boxEmu === undefined
       ? undefined
       : { id: identity.id, name: identity.name, kind: "chart", boxEmu };
+  }
+  for (const defRPr of descendantsByName(
+    chartXml,
+    drawingNamespace,
+    "defRPr",
+  )) {
+    const latin = first(defRPr, drawingNamespace, "latin");
+    const ea = first(defRPr, drawingNamespace, "ea");
+    const cs = first(defRPr, drawingNamespace, "cs");
+    if (latin !== undefined) {
+      const rawFamily = attribute(latin, "typeface");
+      if (ea === undefined || cs === undefined) {
+        issue(
+          errors,
+          chartPart,
+          "missing-font-slot",
+          "Chart defRPr is missing East Asian or Complex Script font slot",
+        );
+      } else {
+        const eaTypeface = attribute(ea, "typeface");
+        const csTypeface = attribute(cs, "typeface");
+        const expectedEa =
+          rawFamily === "+mj-lt"
+            ? "+mj-ea"
+            : rawFamily === "+mn-lt"
+              ? "+mn-ea"
+              : rawFamily;
+        const expectedCs =
+          rawFamily === "+mj-lt"
+            ? "+mj-cs"
+            : rawFamily === "+mn-lt"
+              ? "+mn-cs"
+              : rawFamily;
+        if (eaTypeface !== expectedEa || csTypeface !== expectedCs) {
+          issue(
+            errors,
+            chartPart,
+            "mismatched-font-slots",
+            "Chart defRPr font slots are inconsistent",
+          );
+        }
+      }
+    }
   }
   const chart = first(chartXml, chartNamespace, "chart");
   const plotArea =
@@ -5641,6 +5776,7 @@ export async function validatePptx(
     drawingNamespace,
     "theme",
   );
+  validateThemeFonts(documents, errors);
   requireRelationship(
     "",
     `${relationshipNamespace}/officeDocument`,

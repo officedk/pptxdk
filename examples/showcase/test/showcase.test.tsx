@@ -9,7 +9,7 @@ import { ShowcaseDeck } from "../src/index.ts";
 import { CardsPage } from "../src/templates/cards-page.tsx";
 import { theme } from "../src/theme.ts";
 
-it("地图与日历保持同步点击行为，四页画廊保留连续性与直接导航", async () => {
+it("map and calendar synchronize click behaviors, four-page gallery preserves continuity and direct navigation", async () => {
   const result = await build(<ShowcaseDeck />, { embedFonts: "full" });
   assert.deepEqual(result.report.diagnostics, []);
   const file = await validatePptx(result.pptx, {
@@ -111,7 +111,7 @@ it("地图与日历保持同步点击行为，四页画廊保留连续性与直�
   }
 }, 30_000);
 
-it("真实卡片模板替换内容、增减和重排项目后仍保持布局与独立揭示", async () => {
+it("cards template preserves layout and independent reveal across content replacements, additions, removals, and reordering", async () => {
   const first = {
     title: "Lorem ipsum",
     body: "Lorem ipsum dolor sit amet, consectetur adipiscing elit.",
@@ -186,7 +186,7 @@ it("真实卡片模板替换内容、增减和重排项目后仍保持布局与�
   assert.ok(bodyWidths[0]! > bodyWidths[1]!);
 });
 
-it("进度模块由页面指定位置和宽度，内部构图保持比例与点击顺序", async () => {
+it("progress module receives position and width from slide while preserving internal proportions and click order", async () => {
   const frames = [
     { x: 80, y: 120, width: 1120 },
     { x: 280, y: 140, width: 560 },

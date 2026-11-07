@@ -1,5 +1,5 @@
-// 参考稿的地区横条几何，已转为本包独立资源；正式生成只读取此数据。
-// 坐标按地图宽度归一到 1000，圆角和颜色由 WorldMap 组件维护。
+// Regional bar geometries from reference deck, converted to standalone package resource; formal generation reads only this data.
+// Coordinates are normalized to 1000 against map width; rounded corners and colors are maintained by the WorldMap component.
 export type MapRegionId =
   | "northAmerica"
   | "southAmerica"

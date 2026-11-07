@@ -11,7 +11,7 @@ import {
 
 import { colors, motion } from "../theme.ts";
 
-/** 开场用原生几何标志和分步入场建立整份文稿的视觉语言。 */
+/** The opening establishes the visual language of the entire deck with native geometric logos and staged entrances. */
 export function OpeningPage() {
   return (
     <Slide slideId="opening" background={colors.accent}>

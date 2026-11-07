@@ -13,7 +13,7 @@ declare global {
 }
 
 const state = globalThis.__reactPptxSourceLoadState;
-if (state === undefined) throw new Error("缺少源码加载测试状态");
+if (state === undefined) throw new Error("Missing source load test state");
 state.started = true;
 await new Promise<void>((_resolve, reject) => {
   state.rejectPending = (reason) => reject(reason);

@@ -28,13 +28,13 @@ type ParsedArguments = {
 class UsageError extends Error {}
 
 const usage = [
-  "用法：react-pptx <文稿.tsx> [选项]",
-  "选项：",
-  "  -o, --out <路径>       PPTX 输出路径，默认写入当前目录下的同名 .pptx 文件",
-  "  -e, --export <名称>    使用入口导出的具名组件，默认使用 default",
-  "      --target <名称>    使用库公开的输出目标名称",
-  "      --embed-fonts <模式>  嵌入完整字体 full 或已用字形 subset",
-  "  -h, --help             显示帮助",
+  "Usage: react-pptx <deck.tsx> [options]",
+  "Options:",
+  "  -o, --out <path>         PPTX output path (defaults to <deck>.pptx in current directory)",
+  "  -e, --export <name>      Named component exported from entry (defaults to default)",
+  "      --target <name>      Target name exposed by library",
+  "      --embed-fonts <mode> Embed full fonts or subset of used glyphs (full or subset)",
+  "  -h, --help               Show help",
 ].join("\n");
 
 function targetByName(name: string): Target | undefined {
@@ -57,7 +57,7 @@ function parseArguments(args: readonly string[]): ParsedArguments {
     if (argument === "--out" || argument === "-o") {
       const value = args[index + 1];
       if (value === undefined || value === "" || value.startsWith("-")) {
-        throw new UsageError(`${argument} 后需要输出路径`);
+        throw new UsageError(`${argument} requires an output path`);
       }
       output = value;
       index += 1;
@@ -66,7 +66,7 @@ function parseArguments(args: readonly string[]): ParsedArguments {
     if (argument === "--export" || argument === "-e") {
       const value = args[index + 1];
       if (value === undefined || value === "" || value.startsWith("-")) {
-        throw new UsageError(`${argument} 后需要导出名称`);
+        throw new UsageError(`${argument} requires an export name`);
       }
       exportName = value;
       index += 1;
@@ -75,7 +75,7 @@ function parseArguments(args: readonly string[]): ParsedArguments {
     if (argument === "--embed-fonts") {
       const value = args[index + 1];
       if (value !== "full" && value !== "subset")
-        throw new UsageError("--embed-fonts 后需要 full 或 subset");
+        throw new UsageError("--embed-fonts requires full or subset");
       embedFonts = value;
       index += 1;
       continue;
@@ -83,30 +83,33 @@ function parseArguments(args: readonly string[]): ParsedArguments {
     if (argument === "--target") {
       const value = args[index + 1];
       if (value === undefined || value === "" || value.startsWith("-")) {
-        throw new UsageError("--target 后需要库公开的输出目标名称");
+        throw new UsageError(
+          "--target requires a target name exposed by library",
+        );
       }
       target = targetByName(value);
       if (target === undefined) {
         const names = Object.values(targets)
           .map(({ name }) => name)
-          .join("、");
+          .join(", ");
         throw new UsageError(
-          `未知输出目标 ${JSON.stringify(value)}；可用值：${names}`,
+          `Unknown target ${JSON.stringify(value)}; available values: ${names}`,
         );
       }
       index += 1;
       continue;
     }
     if (argument.startsWith("-")) {
-      throw new UsageError(`未知参数 ${JSON.stringify(argument)}`);
+      throw new UsageError(`Unknown option ${JSON.stringify(argument)}`);
     }
     if (entry !== undefined) {
-      throw new UsageError("单次导出只接受一个文稿入口");
+      throw new UsageError("Single export accepts only one deck entrypoint");
     }
     entry = argument;
   }
 
-  if (entry === undefined) throw new UsageError("缺少文稿源码入口");
+  if (entry === undefined)
+    throw new UsageError("Missing deck source entrypoint");
   return {
     entry,
     ...(output !== undefined && { output }),
@@ -144,7 +147,7 @@ async function writeArtifact(path: string, bytes: Uint8Array): Promise<void> {
   }
 }
 
-/** 运行一次源码导出；通过 write 接缝返回终端内容和进程退出码。 */
+/** Run a single source export; return terminal content and process exit code via the write seam. */
 export async function runCli(runtime: CliRuntime): Promise<number> {
   let parsed: ParsedArguments;
   try {
@@ -159,7 +162,7 @@ export async function runCli(runtime: CliRuntime): Promise<number> {
     return 0;
   }
   if (runtime.signal?.aborted) {
-    write(runtime, "stderr", "文稿导出已取消\n");
+    write(runtime, "stderr", "Deck export cancelled\n");
     return 130;
   }
 
@@ -168,7 +171,7 @@ export async function runCli(runtime: CliRuntime): Promise<number> {
     parsed.output ?? `${basename(entry, extname(entry))}.pptx`,
   );
   if (entry === output) {
-    write(runtime, "stderr", "输出路径不能覆盖文稿源码\n");
+    write(runtime, "stderr", "Output path cannot overwrite deck source\n");
     return 2;
   }
 
@@ -188,37 +191,41 @@ export async function runCli(runtime: CliRuntime): Promise<number> {
         write(
           runtime,
           "stderr",
-          `警告 ${diagnostic.path} [${diagnostic.code}]：${diagnostic.message}\n`,
+          `Warning ${diagnostic.path} [${diagnostic.code}]: ${diagnostic.message}\n`,
         );
       }
     }
     write(
       runtime,
       "stdout",
-      `已导出文稿：${output}\n页面数：${result.report.slides.length}\n`,
+      `Exported deck: ${output}\nSlides: ${result.report.slides.length}\n`,
     );
     return 0;
   } catch (error) {
     if (runtime.signal?.aborted && error === runtime.signal.reason) {
-      write(runtime, "stderr", "文稿导出已取消\n");
+      write(runtime, "stderr", "Deck export cancelled\n");
       return 130;
     }
     if (error instanceof BuildError) {
-      write(runtime, "stderr", "构建失败：\n");
+      write(runtime, "stderr", "Build failed:\n");
       for (const diagnostic of error.diagnostics) {
         write(
           runtime,
           "stderr",
-          `  ${diagnostic.path} [${diagnostic.code}]：${diagnostic.message}\n`,
+          `  ${diagnostic.path} [${diagnostic.code}]: ${diagnostic.message}\n`,
         );
       }
       return 1;
     }
     if (error instanceof SourceLoadError) {
-      write(runtime, "stderr", `文稿源码接入失败：${error.message}\n`);
+      write(
+        runtime,
+        "stderr",
+        `Failed to load deck source: ${error.message}\n`,
+      );
       return 1;
     }
-    write(runtime, "stderr", `文稿导出失败：${errorMessage(error)}\n`);
+    write(runtime, "stderr", `Deck export failed: ${errorMessage(error)}\n`);
     return 1;
   }
 }

@@ -1,1 +1,1 @@
-export const sourceLabel = "来自源码依赖";
+export const sourceLabel = "From source dependency";

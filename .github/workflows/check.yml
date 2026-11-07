@@ -1,4 +1,4 @@
-name: 校验
+name: Check
 
 on:
   pull_request:
@@ -15,28 +15,28 @@ concurrency:
 
 jobs:
   check:
-    name: 全仓校验
+    name: Workspace Check
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-      - name: 检出源码
+      - name: Checkout source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
           fetch-depth: 1
-      - name: 读取 Node 版本
+      - name: Read Node version
         id: node-runtime
         run: echo "runtime=node@$(jq -er '.engines.node' package.json)" >> "$GITHUB_OUTPUT"
-      - name: 安装 pnpm 与 Node.js
+      - name: Setup pnpm and Node.js
         uses: pnpm/setup@fa36a5ef7dcdefc3a7cb25655c122e00cf6e636e # v3.1.2
         with:
           runtime: ${{ steps.node-runtime.outputs.runtime }}
           install: false
           cache: true
-      - name: 安装依赖
+      - name: Install dependencies
         run: pnpm install --frozen-lockfile
-      - name: 运行轻量校验
+      - name: Run light check
         run: node --conditions=source scripts/task-gates.ts check
-      - name: 运行重型校验
+      - name: Run heavy check
         id: run-heavy-check
         run: node --conditions=source scripts/task-gates.ts check:heavy

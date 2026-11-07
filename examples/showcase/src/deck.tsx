@@ -14,7 +14,7 @@ import { WorldPage } from "./pages/world.tsx";
 import { GalleryPage } from "./templates/gallery-page.tsx";
 import { colors, theme } from "./theme.ts";
 
-/** 页序集中在入口；各页维护自己的内容与讲述顺序。 */
+/** Slide sequence is centralized at the entrypoint; each slide maintains its own content and narrative order. */
 export function ShowcaseDeck() {
   const gallery = createMorphScope();
   return (

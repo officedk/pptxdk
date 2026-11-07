@@ -3,7 +3,7 @@ import type { ReactNode } from "react";
 
 import { colors } from "../theme.ts";
 
-/** 两页卡片内容共享的页首；具体页面仍可独立选择其他构图。 */
+/** Header shared by the two cards pages; individual slides may independently choose other compositions. */
 export function PageFrame({
   slideId,
   title,

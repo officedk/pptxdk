@@ -3,7 +3,7 @@ import type { ReactNode } from "react";
 
 import { colors } from "../theme.ts";
 
-/** 子内容在屏幕区域内使用普通布局，设备外框与内容保留为同一原生组合。 */
+/** Child content uses regular layout inside the screen area; device frame and content are preserved as a single native Group. */
 export function DeviceFrame({
   testId,
   x,

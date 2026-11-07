@@ -100,7 +100,7 @@ function Region({
   );
 }
 
-/** 六地区共用协调的强调色；regions 的顺序就是六个点击步的顺序。 */
+/** Six regions share coordinated accent colors; the order of regions matches the order of the six click steps. */
 export function WorldMap({
   x,
   y,

@@ -15,7 +15,7 @@ import { TransformerPage } from "./pages/transformer.tsx";
 import { VaeGanPage } from "./pages/vae-gan.tsx";
 import { colors, theme } from "./theme.ts";
 
-/** 页序集中在入口；每页围绕一个历史转折组织文案与图示。 */
+/** Slide sequence is centralized at the entrypoint; each slide organizes copy and diagrams around a historical turning point. */
 export function GenerativeAiHistoryDeck() {
   return (
     <Deck

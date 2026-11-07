@@ -1,5 +1,5 @@
 const state = globalThis.__reactPptxSourceLoadState;
-if (state === undefined) throw new Error("缺少源码加载测试状态");
+if (state === undefined) throw new Error("Missing source load test state");
 state.concurrentStarted = true;
 await new Promise<void>((resolve) => {
   state.allowConcurrentImport = resolve;

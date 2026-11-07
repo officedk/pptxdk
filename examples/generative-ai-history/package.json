@@ -1,0 +1,58 @@
+{
+  "name": "@react-pptx/generative-ai-history",
+  "version": "0.0.0",
+  "private": true,
+  "files": [
+    "dist"
+  ],
+  "type": "module",
+  "imports": {
+    "#/*.ts": {
+      "source": "./src/*.ts",
+      "types": "./dist/*.d.ts",
+      "default": "./dist/*.js"
+    },
+    "#/*.tsx": {
+      "source": "./src/*.tsx",
+      "types": "./dist/*.d.ts",
+      "default": "./dist/*.js"
+    }
+  },
+  "exports": {
+    ".": {
+      "source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "format:check": "oxfmt --list-different .",
+    "format:write": "oxfmt --write .",
+    "lint": "oxlint --quiet --format=unix --ignore-pattern node_modules .",
+    "lint:fix": "oxlint --format=unix . --fix",
+    "typecheck": "tsc -p tsconfig.node.json --noEmit --pretty false",
+    "build": "rm -rf dist && tsc -p tsconfig.build.json --pretty false && cp -R src/assets/fonts dist/assets/",
+    "test": "vitest run",
+    "export:pptx": "react-pptx src/index.ts --embed-fonts full --out dist/generative-ai-history.pptx"
+  },
+  "dependencies": {
+    "@react-pptx/react-pptx": "workspace:*",
+    "react": "catalog:"
+  },
+  "devDependencies": {
+    "@react-pptx/cli": "workspace:*",
+    "@react-pptx/tooling-config": "workspace:*",
+    "@react-pptx/validation": "workspace:*",
+    "@types/node": "catalog:",
+    "@types/react": "catalog:",
+    "oxfmt": "catalog:",
+    "oxlint": "catalog:",
+    "oxlint-tsgolint": "catalog:",
+    "typescript-7": "catalog:",
+    "vite": "catalog:",
+    "vitest": "catalog:"
+  },
+  "engines": {
+    "node": "^26.13.0"
+  }
+}

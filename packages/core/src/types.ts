@@ -189,6 +189,14 @@ export type LayoutStyle = {
   readonly zIndex?: number;
 };
 
+export type PaddingStyle = {
+  readonly padding?: LayoutSpacing;
+  readonly paddingTop?: number;
+  readonly paddingRight?: number;
+  readonly paddingBottom?: number;
+  readonly paddingLeft?: number;
+};
+
 /** Transparent layout Box; it arranges children only and does not require generating a corresponding native presentation object. */
 export type BoxProps = ElementProps & {
   readonly testId?: string;

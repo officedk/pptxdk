@@ -1695,11 +1695,12 @@ export function parseTextContent(
   styleValue: unknown,
   theme: ThemeContext,
   fields: TextFieldContext = { slideNumber: 1 },
+  label = "Text.style",
 ): {
   readonly paragraphs: readonly Paragraph[];
   readonly style: ResolvedTextStyle;
 } {
-  const style = readTextStyle(styleValue, "Text.style", theme);
+  const style = readTextStyle(styleValue, label, theme);
   const paragraphs = normalizeParagraphs(children, style, theme, fields);
   return { paragraphs, style };
 }

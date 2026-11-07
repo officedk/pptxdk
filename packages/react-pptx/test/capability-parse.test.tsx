@@ -14,6 +14,7 @@ import {
   Row,
   Cell,
   Shape,
+  shapeCapability,
   Slide,
   Span,
   Table,
@@ -21,6 +22,7 @@ import {
   textCapability,
 } from "@react-pptx/react-pptx";
 import { validatePptx } from "@react-pptx/validation";
+import { strFromU8, unzipSync } from "fflate";
 import { describe, it, vi } from "vitest";
 
 const notoFont = font("Noto Sans CJK SC", [
@@ -474,6 +476,394 @@ describe("Ticket 08: Object capability parse phase, container TextStyle validati
       assert(testIds.includes("sample-table"));
       assert(testIds.includes("sample-chart"));
       assert(testIds.includes("sample-text"));
+    });
+  });
+
+  describe("Ticket 09: Migrate Shape to capability parse, fix text style on children and baseline alignment", () => {
+    it("exposes parse method on shapeCapability module", () => {
+      assert.equal(typeof shapeCapability.parse, "function");
+    });
+
+    it("allows Shape with <P> and <Span> children to set fontSize, color, and padding in style", async () => {
+      const result = await build(
+        <Deck width={960} height={540}>
+          <Slide slideId="shape-children-style-slide">
+            <Shape
+              testId="child-text-shape"
+              x={60}
+              y={70}
+              width={400}
+              height={150}
+              style={{
+                fontFamily: notoFont,
+                fontSize: 24,
+                color: "#ff3300",
+                backgroundColor: "#f5f5f5",
+                borderColor: "#333333",
+                borderWidth: 2,
+                padding: 12,
+              }}
+            >
+              <P>
+                <Span>Child paragraph headline</Span>
+              </P>
+            </Shape>
+          </Slide>
+        </Deck>,
+      );
+
+      assert.deepEqual(result.report.diagnostics, []);
+      const validation = await validatePptx(result.pptx);
+      assert.deepEqual(validation.errors, []);
+
+      const obs = result.report.slides[0]?.objects.find(
+        (o) => o.testId === "child-text-shape",
+      );
+      assert(obs !== undefined, "Expected shape observation");
+      assert.equal(obs.text, "Child paragraph headline");
+
+      const slideXml = strFromU8(
+        unzipSync(result.pptx)["ppt/slides/slide1.xml"]!,
+      );
+      // Verify bodyPr has padding in EMU (12 px = 114300 EMU)
+      assert.match(slideXml, /<a:bodyPr[^>]*lIns="114300"/u);
+      assert.match(slideXml, /<a:bodyPr[^>]*tIns="114300"/u);
+      assert.match(slideXml, /<a:bodyPr[^>]*rIns="114300"/u);
+      assert.match(slideXml, /<a:bodyPr[^>]*bIns="114300"/u);
+      // Verify font size (24 px = 18 pt = 1800 centipoints in DrawingML sz) and color
+      assert.match(slideXml, /<a:rPr[^>]*sz="1800"/u);
+      assert.match(slideXml, /<a:srgbClr val="FF3300"/u);
+    });
+
+    it("aligns Shape with <P> and <Span> children in parent flex container with alignItems: 'baseline'", async () => {
+      const result = await build(
+        <Deck width={960} height={540}>
+          <Slide slideId="shape-child-baseline-slide">
+            <Box
+              style={{
+                display: "flex",
+                flexDirection: "row",
+                alignItems: "baseline",
+                width: 600,
+              }}
+            >
+              <Text
+                testId="baseline-reference-text"
+                width={150}
+                height={100}
+                style={{
+                  fontFamily: notoFont,
+                  fontSize: 20,
+                  verticalAlign: "top",
+                }}
+              >
+                Text Ref
+              </Text>
+              <Shape
+                testId="baseline-child-shape"
+                width={200}
+                height={100}
+                style={{
+                  fontFamily: notoFont,
+                  fontSize: 40,
+                  verticalAlign: "top",
+                  paddingTop: 10,
+                }}
+              >
+                <P>
+                  <Span>Shape Ref</Span>
+                </P>
+              </Shape>
+            </Box>
+          </Slide>
+        </Deck>,
+      );
+
+      assert.deepEqual(result.report.diagnostics, []);
+      const validation = await validatePptx(result.pptx);
+      assert.deepEqual(validation.errors, []);
+
+      const objects = result.report.slides[0]?.objects ?? [];
+      const textObs = objects.find(
+        (o) => o.testId === "baseline-reference-text",
+      );
+      const shapeObs = objects.find((o) => o.testId === "baseline-child-shape");
+      assert(textObs?.box !== undefined && shapeObs?.box !== undefined);
+      // Because shape has larger font (40) and paddingTop (10), text should shift down to align baselines
+      assert(textObs.box.y > shapeObs.box.y);
+    });
+
+    it("fails with baseline-measurement-unavailable when Shape with child text defaults to middle anchor", async () => {
+      await assert.rejects(
+        build(
+          <Deck width={960} height={540}>
+            <Slide slideId="shape-child-middle-baseline-slide">
+              <Box
+                style={{
+                  display: "flex",
+                  flexDirection: "row",
+                  alignItems: "baseline",
+                  width: 500,
+                }}
+              >
+                <Text
+                  testId="reference-text"
+                  width={150}
+                  height={100}
+                  style={{
+                    fontFamily: notoFont,
+                    fontSize: 20,
+                    verticalAlign: "top",
+                  }}
+                >
+                  Ref
+                </Text>
+                <Shape
+                  testId="middle-anchor-child-shape"
+                  width={200}
+                  height={100}
+                  style={{
+                    fontFamily: notoFont,
+                    fontSize: 40,
+                  }}
+                >
+                  <P>
+                    <Span>Middle anchor by default</Span>
+                  </P>
+                </Shape>
+              </Box>
+            </Slide>
+          </Deck>,
+        ),
+        (error: unknown) => {
+          assert(error instanceof BuildError);
+          const diag = error.diagnostics.find(
+            (d) => d.code === "baseline-measurement-unavailable",
+          );
+          assert(
+            diag !== undefined,
+            "Expected baseline-measurement-unavailable diagnostic",
+          );
+          assert.match(diag.path ?? "", /shape\[middle-anchor-child-shape\]/u);
+          return true;
+        },
+      );
+    });
+
+    it("fails with unsupported-baseline-context when Shape without text is placed in baseline propagation context", async () => {
+      await assert.rejects(
+        build(
+          <Deck width={960} height={540}>
+            <Slide slideId="shape-no-text-baseline-slide">
+              <Box
+                style={{
+                  display: "flex",
+                  flexDirection: "row",
+                  alignItems: "baseline",
+                  width: 500,
+                }}
+              >
+                <Text
+                  testId="reference-text"
+                  width={150}
+                  height={100}
+                  style={{
+                    fontFamily: notoFont,
+                    fontSize: 20,
+                    verticalAlign: "top",
+                  }}
+                >
+                  Ref
+                </Text>
+                {/* Single-child Box chain wrapping an empty Shape */}
+                <Box
+                  testId="wrapper-for-empty-shape"
+                  style={{
+                    display: "flex",
+                    flexDirection: "row",
+                    alignSelf: "baseline",
+                  }}
+                >
+                  <Shape testId="textless-shape" width={100} height={100} />
+                </Box>
+              </Box>
+            </Slide>
+          </Deck>,
+        ),
+        (error: unknown) => {
+          assert(error instanceof BuildError);
+          const diag = error.diagnostics.find(
+            (d) => d.code === "unsupported-baseline-context",
+          );
+          assert(
+            diag !== undefined,
+            "Expected unsupported-baseline-context diagnostic for textless shape",
+          );
+          return true;
+        },
+      );
+    });
+
+    it("rejects unknown top-level parameters on Shape", async () => {
+      await assert.rejects(
+        build(
+          <Deck width={960} height={540}>
+            <Slide slideId="unknown-param-slide">
+              <Shape
+                testId="invalid-shape"
+                width={100}
+                height={100}
+                {...({ unsupportedParameter: 42 } as any)}
+              />
+            </Slide>
+          </Deck>,
+        ),
+        (error: unknown) => {
+          assert(error instanceof BuildError);
+          const diag = error.diagnostics.find(
+            (d) => d.code === "unknown-parameter",
+          );
+          assert(diag !== undefined, "Expected unknown-parameter diagnostic");
+          assert.match(
+            diag.message,
+            /Shape contains unsupported parameter unsupportedParameter/u,
+          );
+          return true;
+        },
+      );
+    });
+
+    it("rejects unsupported style properties on Shape", async () => {
+      await assert.rejects(
+        build(
+          <Deck width={960} height={540}>
+            <Slide slideId="unknown-style-slide">
+              <Shape
+                testId="invalid-style-shape"
+                width={100}
+                height={100}
+                style={{ unsupportedStyleProp: "red" } as any}
+              />
+            </Slide>
+          </Deck>,
+        ),
+        (error: unknown) => {
+          assert(error instanceof BuildError);
+          const diag = error.diagnostics.find(
+            (d) => d.code === "unknown-style",
+          );
+          assert(diag !== undefined, "Expected unknown-style diagnostic");
+          assert.match(
+            diag.message,
+            /style contains unsupported property unsupportedStyleProp/u,
+          );
+          return true;
+        },
+      );
+    });
+
+    it("rejects TextStyle and padding in style when Shape bears no text", async () => {
+      // 1. fontSize on Shape without text
+      await assert.rejects(
+        build(
+          <Deck width={960} height={540}>
+            <Slide slideId="textless-shape-font-slide">
+              <Shape
+                testId="textless-font-shape"
+                width={100}
+                height={100}
+                style={{ fontSize: 24 }}
+              />
+            </Slide>
+          </Deck>,
+        ),
+        (error: unknown) => {
+          assert(error instanceof BuildError);
+          const diag = error.diagnostics.find(
+            (d) => d.code === "unknown-style",
+          );
+          assert(
+            diag !== undefined,
+            "Expected unknown-style diagnostic for fontSize on textless shape",
+          );
+          return true;
+        },
+      );
+
+      // 2. padding on Shape without text
+      await assert.rejects(
+        build(
+          <Deck width={960} height={540}>
+            <Slide slideId="textless-shape-padding-slide">
+              <Shape
+                testId="textless-padding-shape"
+                width={100}
+                height={100}
+                style={{ padding: 16 }}
+              />
+            </Slide>
+          </Deck>,
+        ),
+        (error: unknown) => {
+          assert(error instanceof BuildError);
+          const diag = error.diagnostics.find(
+            (d) =>
+              d.code === "invalid-layout-context" || d.code === "unknown-style",
+          );
+          assert(
+            diag !== undefined,
+            "Expected invalid padding diagnostic on textless shape",
+          );
+          return true;
+        },
+      );
+    });
+
+    it("calls shapeCapability.parse once during layout and reuses parsed result in measureLayout and compile", async () => {
+      const parseSpy = vi.spyOn(shapeCapability, "parse");
+      const compileSpy = vi.spyOn(shapeCapability, "compile");
+
+      try {
+        const result = await build(
+          <Deck width={960} height={540}>
+            <Slide slideId="parse-reuse-slide">
+              <Shape
+                testId="reused-shape"
+                x={100}
+                y={100}
+                width={200}
+                height={100}
+                style={{
+                  fontFamily: notoFont,
+                  fontSize: 20,
+                  verticalAlign: "top",
+                  padding: 8,
+                }}
+              >
+                <P>
+                  <Span>Parsed once, reused twice</Span>
+                </P>
+              </Shape>
+            </Slide>
+          </Deck>,
+        );
+
+        assert.deepEqual(result.report.diagnostics, []);
+        assert.equal(
+          parseSpy.mock.calls.length,
+          1,
+          "parse should be called exactly once",
+        );
+
+        // Verify that compile received the parsed object produced by parse
+        const parseReturn = parseSpy.mock.results[0]!.value as {
+          parsed: unknown;
+        };
+        assert.equal(compileSpy.mock.calls[0]![0], parseReturn.parsed);
+      } finally {
+        parseSpy.mockRestore();
+        compileSpy.mockRestore();
+      }
     });
   });
 });

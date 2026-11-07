@@ -86,6 +86,7 @@ export type {
   LayoutObservation,
   LayoutSpacing,
   LayoutStyle,
+  PaddingStyle,
   LinkTarget,
   NativeElementKind,
   NativeLink,

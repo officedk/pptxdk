@@ -2651,10 +2651,25 @@ export class LayoutPass {
   }
 
   #isTextBearing(node: LayoutNode): boolean {
+    if (node.element?.type === "rp:text") return true;
+    if (
+      node.parsed !== undefined &&
+      typeof node.parsed === "object" &&
+      node.parsed !== null
+    ) {
+      if ("hasText" in node.parsed) {
+        return Boolean((node.parsed as { hasText?: boolean }).hasText);
+      }
+      if ("paragraphs" in node.parsed) {
+        return (
+          (node.parsed as { paragraphs?: readonly unknown[] }).paragraphs
+            ?.length !== 0
+        );
+      }
+    }
     return (
-      node.element?.type === "rp:text" ||
-      (typeof node.element?.props["text"] === "string" &&
-        node.element.props["text"] !== "")
+      typeof node.element?.props["text"] === "string" &&
+      node.element.props["text"] !== ""
     );
   }
 
@@ -2716,7 +2731,12 @@ export class LayoutPass {
         );
       }
       for (const participant of participants) {
-        if (!this.#containsText(participant)) continue;
+        if (!this.#containsText(participant)) {
+          if (participant.style.alignSelf === "baseline") {
+            this.#installBaselineMarker(this.#baselineTextLeaf(participant));
+          }
+          continue;
+        }
         this.#installBaselineMarker(this.#baselineTextLeaf(participant));
       }
     }
@@ -2748,14 +2768,18 @@ export class LayoutPass {
             ),
           },
     );
-    if (
-      measurement?.baseline === "unavailable" ||
-      measurement?.baseline === undefined
-    ) {
+    if (measurement?.baseline === "unavailable") {
       fail(
         node.path,
         "baseline-measurement-unavailable",
         "Baseline alignment requires a single text run, top anchor, and explicit font resource",
+      );
+    }
+    if (measurement?.baseline === undefined) {
+      fail(
+        node.path,
+        "unsupported-baseline-context",
+        "Baseline alignment requires a text-bearing capability with baseline support",
       );
     }
 

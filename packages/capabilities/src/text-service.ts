@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 
 import {
+  assertValidLang,
   CapabilityError,
   pxToEmu,
   resolvedColorXml,
@@ -101,6 +102,7 @@ type RunStyle = {
   readonly textTransform?: TextStyle["textTransform"] | undefined;
   readonly textDecoration?: TextStyle["textDecoration"] | undefined;
   readonly textShadow?: Shadow | "none" | undefined;
+  readonly lang?: string | undefined;
 };
 type Run = {
   readonly text: string;
@@ -447,6 +449,9 @@ function validateRunStyle(style: RunStyle): RunStyle {
       "textDecoration 只能是 none 或 underline",
     );
   }
+  if (style.lang !== undefined) {
+    assertValidLang(style.lang);
+  }
   return style;
 }
 
@@ -464,6 +469,7 @@ function readRunStyle(value: unknown): RunStyle {
       "textTransform",
       "textDecoration",
       "textShadow",
+      "lang",
     ],
     "Span.style",
   );
@@ -489,6 +495,9 @@ function mergeRunStyle(
   }
   if (child.color !== undefined && !isResolvedColor(child.color)) {
     declared["color"] = theme.resolveColor(child.color);
+  }
+  if (child.lang !== undefined) {
+    declared["lang"] = child.lang;
   }
   // P 和 Span 未声明的字段会是 undefined，不能覆盖继承的父级样式。
   const merged = { ...parent, ...declared } as RunStyle;
@@ -569,9 +578,13 @@ function readTextStyle(
       "textDecoration",
       "textShadow",
       "textWrap",
+      "lang",
     ],
     label,
   );
+  if (props["lang"] !== undefined) {
+    assertValidLang(props["lang"]);
+  }
   const style = {
     ...defaultTextStyle,
     ...theme.textStyle,
@@ -610,6 +623,7 @@ function readTextStyle(
     textTransform: style.textTransform,
     textDecoration: style.textDecoration,
     textShadow: style.textShadow,
+    lang: style.lang,
   };
   const font = theme.resolveFont(
     runStyle.fontFamily ?? defaultTextStyle.fontFamily!,
@@ -651,9 +665,13 @@ function paragraphStyle(value: unknown): ParagraphStyle {
       "textDecoration",
       "textShadow",
       "list",
+      "lang",
     ],
     "P.style",
   );
+  if (props["lang"] !== undefined) {
+    assertValidLang(props["lang"]);
+  }
   const style = props as ParagraphStyle;
   validateParagraphDefaults(style);
   if (style.lineHeight !== undefined)
@@ -813,7 +831,7 @@ function runPropertiesXml(
         : font.family;
   const fontSlots = `<a:latin typeface="${escapedXml(latinTypeface)}"/><a:ea typeface="${escapedXml(eaTypeface)}"/><a:cs typeface="${escapedXml(csTypeface)}"/>`;
   const attributes = [
-    `lang="en-US"`,
+    ...(style.lang !== undefined ? [`lang="${escapedXml(style.lang)}"`] : []),
     `sz="${centipoints(points)}"`,
     `b="${bold ? 1 : 0}"`,
     `i="${font.style === "italic" ? 1 : 0}"`,
@@ -947,7 +965,7 @@ function paragraphXml(paragraph: Paragraph, theme: ThemeContext): string {
       : `<a:pPr ${attributes.join(" ")}>${lineSpacing}${spacingAfter}${list}</a:pPr>`;
   const endProperties =
     runs.length === 0
-      ? `<a:endParaRPr lang="en-US" sz="${centipoints(fontSizePoints(paragraph.endStyle.fontSize))}"/>`
+      ? `<a:endParaRPr${paragraph.endStyle.lang !== undefined ? ` lang="${escapedXml(paragraph.endStyle.lang)}"` : ""} sz="${centipoints(fontSizePoints(paragraph.endStyle.fontSize))}"/>`
       : "";
   return `<a:p>${pPr}${runs.map((run) => runXml(run, theme)).join("")}${endProperties}</a:p>`;
 }
@@ -969,6 +987,7 @@ function normalizeParagraphs(
     textTransform: textStyle.textTransform,
     textDecoration: textStyle.textDecoration,
     textShadow: textStyle.textShadow,
+    lang: textStyle.lang,
   };
   validateRunStyle(baseRunStyle);
 
@@ -982,6 +1001,7 @@ function normalizeParagraphs(
     ...(textStyle.spacingAfter === undefined
       ? {}
       : { spacingAfter: textStyle.spacingAfter }),
+    ...(textStyle.lang === undefined ? {} : { lang: textStyle.lang }),
   };
   const flushInline = (): void => {
     if (inline.length > 0) {
@@ -1037,6 +1057,7 @@ function normalizeParagraphs(
         textTransform: style.textTransform,
         textDecoration: style.textDecoration,
         textShadow: style.textShadow,
+        lang: style.lang,
       },
       theme,
     );
@@ -1727,6 +1748,7 @@ export function writeChartTextProperties(
     textTransform: style.textTransform,
     textDecoration: style.textDecoration,
     textShadow: style.textShadow,
+    lang: style.lang,
   };
   validateRunStyle(runStyle);
   const runs = texts.map((text) => ({ text, style: runStyle }));
@@ -1745,8 +1767,10 @@ export function writeChartTextProperties(
     style.spacingAfter === undefined || style.spacingAfter === 0
       ? ""
       : `<a:spcAft><a:spcPts val="${spacingCentipoints(style.spacingAfter, "spacingAfter")}"/></a:spcAft>`;
+  const endParaLang =
+    runStyle.lang !== undefined ? ` lang="${escapedXml(runStyle.lang)}"` : "";
   return {
-    xml: `<c:txPr><a:bodyPr anchor="${bodyAnchor(style.verticalAlign)}"/><a:lstStyle/><a:p><a:pPr${paragraphAlignment}>${lineSpacing}${spacingAfter}${defaultProperties}</a:pPr><a:endParaRPr lang="en-US"/></a:p></c:txPr>`,
+    xml: `<c:txPr><a:bodyPr anchor="${bodyAnchor(style.verticalAlign)}"/><a:lstStyle/><a:p><a:pPr${paragraphAlignment}>${lineSpacing}${spacingAfter}${defaultProperties}</a:pPr><a:endParaRPr${endParaLang}/></a:p></c:txPr>`,
     text: outputText,
     resourceClaims,
     fontUses,

@@ -200,6 +200,7 @@ const chartTextStyleKeys = [
   "textTransform",
   "textDecoration",
   "textShadow",
+  "lang",
 ] as const;
 const allChartOptions = [...new Set(Object.values(chartOptions).flat())];
 const positionValues = new Set([

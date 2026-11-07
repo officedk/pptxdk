@@ -138,6 +138,7 @@ export type FileTextRun = {
   readonly bold?: boolean;
   readonly italic?: boolean;
   readonly color?: string;
+  readonly lang?: string;
 };
 
 export type FileTextList =
@@ -1336,6 +1337,7 @@ function readTextRun(
   const bold = attribute(properties, "b");
   const italic = attribute(properties, "i");
   const color = readRunColor(fill, theme);
+  const lang = attribute(properties, "lang");
   return {
     text,
     ...(fieldType === "slidenum" ? { field: "slidenum" as const } : {}),
@@ -1344,6 +1346,7 @@ function readTextRun(
     ...(bold === "" ? {} : { bold: bold === "1" || bold === "true" }),
     ...(italic === "" ? {} : { italic: italic === "1" || italic === "true" }),
     ...(color === undefined ? {} : { color }),
+    ...(lang === "" ? {} : { lang }),
   };
 }
 
@@ -1749,6 +1752,39 @@ function validateTextValueRange(
   }
 }
 
+function isValidBcp47(tag: string): boolean {
+  if (
+    typeof tag !== "string" ||
+    tag.trim() === "" ||
+    !/^[A-Za-z0-9]+(-[A-Za-z0-9]+)*$/.test(tag)
+  ) {
+    return false;
+  }
+  try {
+    const canonical = Intl.getCanonicalLocales(tag);
+    return Array.isArray(canonical) && canonical.length === 1;
+  } catch {
+    return false;
+  }
+}
+
+function validateTextLangAttribute(
+  element: XmlElement | undefined,
+  part: string,
+  errors: ValidationIssue[],
+): void {
+  if (element === undefined || !element.hasAttribute("lang")) return;
+  const lang = element.getAttribute("lang");
+  if (lang === null || !isValidBcp47(lang)) {
+    issue(
+      errors,
+      part,
+      "invalid-text-lang",
+      "Text language lang attribute must be a valid BCP 47 language tag",
+    );
+  }
+}
+
 function validateTextValueRanges(
   shape: XmlElement,
   part: string,
@@ -1766,8 +1802,10 @@ function validateTextBodyValueRanges(
 ): void {
   for (const paragraph of elements(body, drawingNamespace, "p")) {
     for (const run of elements(paragraph, drawingNamespace, "r")) {
+      const rPr = first(run, drawingNamespace, "rPr");
+      validateTextLangAttribute(rPr, part, errors);
       validateTextValueRange(
-        first(run, drawingNamespace, "rPr"),
+        rPr,
         "sz",
         minimumFontSizeCentipoints,
         maximumFontSizeCentipoints,
@@ -1777,8 +1815,14 @@ function validateTextBodyValueRanges(
         "字号",
       );
     }
+    for (const fld of elements(paragraph, drawingNamespace, "fld")) {
+      const rPr = first(fld, drawingNamespace, "rPr");
+      validateTextLangAttribute(rPr, part, errors);
+    }
+    const endParaRPr = first(paragraph, drawingNamespace, "endParaRPr");
+    validateTextLangAttribute(endParaRPr, part, errors);
     validateTextValueRange(
-      first(paragraph, drawingNamespace, "endParaRPr"),
+      endParaRPr,
       "sz",
       minimumFontSizeCentipoints,
       maximumFontSizeCentipoints,
@@ -1788,6 +1832,13 @@ function validateTextBodyValueRanges(
       "字号",
     );
     const properties = first(paragraph, drawingNamespace, "pPr");
+    if (properties !== undefined) {
+      validateTextLangAttribute(
+        first(properties, drawingNamespace, "defRPr"),
+        part,
+        errors,
+      );
+    }
     for (const spacingName of ["lnSpc", "spcAft"] as const) {
       const spacing =
         properties === undefined
@@ -2453,11 +2504,24 @@ function validateChart(
       ? undefined
       : { id: identity.id, name: identity.name, kind: "chart", boxEmu };
   }
+  const chartLang = first(chartXml, chartNamespace, "lang");
+  if (chartLang !== undefined) {
+    const val = attribute(chartLang, "val");
+    if (!isValidBcp47(val)) {
+      issue(
+        errors,
+        chartPart,
+        "invalid-text-lang",
+        "Chart c:lang must be a valid BCP 47 language tag",
+      );
+    }
+  }
   for (const defRPr of descendantsByName(
     chartXml,
     drawingNamespace,
     "defRPr",
   )) {
+    validateTextLangAttribute(defRPr, chartPart, errors);
     const latin = first(defRPr, drawingNamespace, "latin");
     const ea = first(defRPr, drawingNamespace, "ea");
     const cs = first(defRPr, drawingNamespace, "cs");
@@ -2495,6 +2559,13 @@ function validateChart(
         }
       }
     }
+  }
+  for (const endParaRPr of descendantsByName(
+    chartXml,
+    drawingNamespace,
+    "endParaRPr",
+  )) {
+    validateTextLangAttribute(endParaRPr, chartPart, errors);
   }
   const chart = first(chartXml, chartNamespace, "chart");
   const plotArea =

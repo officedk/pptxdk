@@ -46,6 +46,8 @@ export type TextStyle = {
   readonly textShadow?: Shadow | "none";
   /** 文本框按正常断行或保持每行在同一行显示。 */
   readonly textWrap?: "normal" | "nowrap";
+  /** 自然语言（BCP 47 语言标签，如 zh-CN、en-US）。 */
+  readonly lang?: string;
 };
 
 export type GradientStop = {
@@ -234,7 +236,40 @@ const textStyleKeys = new Set([
   "textDecoration",
   "textShadow",
   "textWrap",
+  "lang",
 ]);
+
+/**
+ * Asserts that a value is a valid BCP 47 language tag.
+ * Rejects non-string values, empty or whitespace strings, and malformed tags.
+ */
+export function assertValidLang(value: unknown): string {
+  if (
+    typeof value !== "string" ||
+    value.trim() === "" ||
+    !/^[A-Za-z0-9]+(-[A-Za-z0-9]+)*$/.test(value)
+  ) {
+    throw new CapabilityError(
+      "invalid-text-lang",
+      `Text language must be a valid BCP 47 language tag: ${String(value)}`,
+    );
+  }
+  try {
+    const canonical = Intl.getCanonicalLocales(value);
+    if (!canonical || canonical.length !== 1) {
+      throw new CapabilityError(
+        "invalid-text-lang",
+        `Text language must be a valid BCP 47 language tag: ${value}`,
+      );
+    }
+  } catch {
+    throw new CapabilityError(
+      "invalid-text-lang",
+      `Text language must be a valid BCP 47 language tag: ${value}`,
+    );
+  }
+  return value;
+}
 
 function record(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -245,6 +280,9 @@ export function textStyleFrom(value: unknown): TextStyle {
   if (value === undefined) return {};
   if (!record(value))
     throw new CapabilityError("invalid-style", "style 必须是对象");
+  if (value["lang"] !== undefined) {
+    assertValidLang(value["lang"]);
+  }
   return Object.fromEntries(
     Object.entries(value).filter(
       ([key, item]) => textStyleKeys.has(key) && item !== undefined,
@@ -567,6 +605,9 @@ function createContext(
       if (style !== undefined) {
         if (!record(style)) {
           throw new CapabilityError("invalid-style", "style 必须是对象");
+        }
+        if (style.lang !== undefined) {
+          assertValidLang(style.lang);
         }
         for (const [key, value] of Object.entries(style)) {
           if (textStyleKeys.has(key) && value !== undefined) {

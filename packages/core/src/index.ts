@@ -6,6 +6,7 @@ export type { MorphKey, MorphScope } from "#/morph.ts";
 export { BuildQueryError } from "#/query.ts";
 export { pxToEmu, xmlEscape } from "#/ooxml.ts";
 export {
+  assertValidLang,
   darker,
   defaultTheme,
   defineTheme,

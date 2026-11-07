@@ -152,6 +152,7 @@ const textProperties = new Set([
   "textDecoration",
   "textShadow",
   "textWrap",
+  "lang",
 ]);
 const visualProperties = new Set([
   "backgroundColor",
@@ -213,11 +214,12 @@ function fail(path: string, code: string, message: string): never {
 function deriveTheme(
   parent: ThemeContext,
   scope: ThemeScope | undefined,
-  style: ReturnType<typeof textStyleFrom>,
+  style: unknown,
   path: string,
 ): ThemeContext {
   try {
-    return parent.with(scope, style);
+    const textStyle = style === undefined ? {} : textStyleFrom(style);
+    return parent.with(scope, textStyle);
   } catch (error) {
     return fail(
       path,
@@ -1176,7 +1178,7 @@ export class LayoutPass {
             const groupTheme = deriveTheme(
               themeContext,
               child.props["theme"] as ThemeScope | undefined,
-              textStyleFrom(child.props["style"]),
+              child.props["style"],
               childPath,
             );
             this.#themes.set(child, groupTheme);
@@ -1427,7 +1429,7 @@ export class LayoutPass {
     const theme = deriveTheme(
       themeContext,
       input.props["theme"] as ThemeScope | undefined,
-      textStyleFrom(rawStyle),
+      rawStyle,
       path,
     );
     const yoga = Yoga.Node.create(this.#config);
@@ -1482,7 +1484,7 @@ export class LayoutPass {
     const theme = deriveTheme(
       themeContext,
       input.props["theme"] as ThemeScope | undefined,
-      textStyleFrom(input.props["style"]),
+      input.props["style"],
       path,
     );
     const yoga = Yoga.Node.create(this.#config);

@@ -1,4 +1,5 @@
 import {
+  assertValidLang,
   CapabilityError,
   pxToEmu,
   resolvedColorXml,
@@ -56,6 +57,7 @@ export type TableTextStyle = {
   readonly textTransform?: TextStyle["textTransform"];
   readonly textDecoration?: TextStyle["textDecoration"];
   readonly textShadow?: TextStyle["textShadow"];
+  readonly lang?: string;
 };
 
 export type TableStyle = TableTextStyle & LayoutStyle;
@@ -166,6 +168,7 @@ const textStyleKeys = [
   "textTransform",
   "textDecoration",
   "textShadow",
+  "lang",
 ] as const;
 const rowStyleKeys = ["height", "backgroundColor"] as const;
 const cellStyleKeys = [
@@ -369,6 +372,16 @@ function textStyle(
 } {
   const style = record(styleValue ?? {}, `${label}.style`, path);
   onlyKeys(style, [...textStyleKeys, ...additional], `${label}.style`, path);
+  if (style["lang"] !== undefined) {
+    try {
+      assertValidLang(style["lang"]);
+    } catch (error) {
+      if (error instanceof CapabilityError) {
+        fail(error.code, error.message, path);
+      }
+      throw error;
+    }
+  }
   const textStyle: Record<string, unknown> = {};
   for (const key of textStyleKeys) {
     const value = style[key];
@@ -784,8 +797,9 @@ function mergeCellProperties(
   return `<a:tcPr marL="${pxToEmu(padding.left)}" marR="${pxToEmu(padding.right)}" marT="${pxToEmu(padding.top)}" marB="${pxToEmu(padding.bottom)}" anchor="${vertical === "middle" ? "ctr" : vertical === "bottom" ? "b" : "t"}">${lines}${fillXml(fill)}</a:tcPr>`;
 }
 
-function emptyCell(): string {
-  return '<a:txBody><a:bodyPr/><a:lstStyle/><a:p><a:endParaRPr lang="en-US"/></a:p></a:txBody><a:tcPr/>';
+function emptyCell(lang?: string): string {
+  const langAttr = lang !== undefined ? ` lang="${xmlEscape(lang)}"` : "";
+  return `<a:txBody><a:bodyPr/><a:lstStyle/><a:p><a:endParaRPr${langAttr}/></a:p></a:txBody><a:tcPr/>`;
 }
 
 function frameXml(
@@ -1171,7 +1185,7 @@ export const tableCapability: CapabilityModule = {
               : []),
           ];
           rowCells.push(
-            `<a:tc${hMerge}${vMerge}${spanAttributes.length === 0 ? "" : ` ${spanAttributes.join(" ")}`}>${emptyCell()}</a:tc>`,
+            `<a:tc${hMerge}${vMerge}${spanAttributes.length === 0 ? "" : ` ${spanAttributes.join(" ")}`}>${emptyCell(owner?.textStyle?.["lang"] as string | undefined)}</a:tc>`,
           );
           continue;
         }

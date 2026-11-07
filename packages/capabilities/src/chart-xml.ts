@@ -539,6 +539,10 @@ export function chartPartXml(
   textStyles: ChartTextStyleXml,
   theme: ThemeContext,
 ): string {
+  const chartLang =
+    (typeof props.style?.lang === "string" ? props.style.lang : undefined) ??
+    theme.textStyle.lang ??
+    "en-US";
   return serialize(
     el(
       "c:chartSpace",
@@ -548,7 +552,7 @@ export function chartPartXml(
         "xmlns:r": relationshipNamespace,
       },
       el("c:date1904", { val: false }),
-      el("c:lang", { val: "en-US" }),
+      el("c:lang", { val: chartLang }),
       el("c:roundedCorners", { val: false }),
       el(
         "c:chart",

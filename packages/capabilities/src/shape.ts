@@ -1,4 +1,5 @@
 import {
+  assertValidLang,
   CapabilityError,
   pxToEmu,
   xmlEscape,
@@ -118,6 +119,7 @@ const shapeTextStyleKeys = new Set([
   "textDecoration",
   "textShadow",
   "textWrap",
+  "lang",
 ]);
 
 function shapeTextStyle(props: Readonly<Record<string, unknown>>): unknown {
@@ -127,6 +129,9 @@ function shapeTextStyle(props: Readonly<Record<string, unknown>>): unknown {
     !Array.isArray(props["style"])
       ? (props["style"] as Record<string, unknown>)
       : {};
+  if (layoutStyle["lang"] !== undefined) {
+    assertValidLang(layoutStyle["lang"]);
+  }
   const inherited = Object.fromEntries(
     Object.entries(layoutStyle).filter(([key]) => shapeTextStyleKeys.has(key)),
   );
@@ -138,7 +143,11 @@ function shapeTextStyle(props: Readonly<Record<string, unknown>>): unknown {
     Array.isArray(explicit)
   )
     return explicit;
-  return { ...inherited, ...(explicit as Record<string, unknown>) };
+  const explicitObj = explicit as Record<string, unknown>;
+  if (explicitObj["lang"] !== undefined) {
+    assertValidLang(explicitObj["lang"]);
+  }
+  return { ...inherited, ...explicitObj };
 }
 
 function shapeTextContent(input: CapabilityInput): readonly unknown[] {
@@ -308,12 +317,13 @@ export const shapeCapability: CapabilityModule = {
     if (text !== undefined && typeof text !== "string") {
       throw new CapabilityError("invalid-text", "Shape.text 必须是字符串");
     }
+    const resolvedTextStyle = shapeTextStyle(props);
     const textChildren = shapeTextContent(input);
     let textOutput: ReturnType<typeof writeTextBody> | undefined;
     if (textChildren.length > 0) {
       textOutput = writeTextBody(
         textChildren,
-        shapeTextStyle(props),
+        resolvedTextStyle,
         context.theme,
         "middle",
         {

@@ -87,17 +87,6 @@ export type VisualStyle = {
   readonly rotate?: number;
 };
 
-export type ImageVisualStyle = Pick<
-  VisualStyle,
-  | "borderColor"
-  | "borderWidth"
-  | "borderStyle"
-  | "opacity"
-  | "boxShadow"
-  | "softEdge"
-  | "rotate"
->;
-
 export const nativeColorSlots = [
   "dk1",
   "lt1",

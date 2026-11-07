@@ -6,6 +6,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import {
+  Box,
   build,
   BuildError,
   Cell,
@@ -15,11 +16,12 @@ import {
   Row,
   Slide,
   Table,
+  tableCapability,
 } from "@react-pptx/react-pptx";
 import { validatePptx } from "@react-pptx/validation";
 import { strFromU8, strToU8, unzipSync, zipSync } from "fflate";
 import { createElement, type ReactNode } from "react";
-import { describe, it } from "vitest";
+import { describe, it, vi } from "vitest";
 
 const notoSansScRegular = new Uint8Array(
   readFileSync(
@@ -765,6 +767,152 @@ describe("native tables", () => {
       (error: unknown) =>
         error instanceof BuildError &&
         error.diagnostics.some(({ code }) => code === "invalid-xml-character"),
+    );
+  });
+
+  it("executes tableCapability.parse exactly once per Table node during build and reuses parsed model", async () => {
+    const parseSpy = vi.spyOn(tableCapability, "parse");
+    const measureSpy = vi.spyOn(tableCapability, "measureLayout");
+    const compileSpy = vi.spyOn(tableCapability, "compile");
+
+    try {
+      const result = await build(
+        createElement(
+          Deck,
+          { width: 960, height: 540 },
+          createElement(
+            Slide,
+            { slideId: "single-table-parse" },
+            createElement(
+              Box,
+              { style: { display: "flex", width: 400 } },
+              createElement(
+                Table,
+                {
+                  testId: "piloted-table",
+                  columns: [120, 100],
+                  style: { fontSize: 14, color: "#333333" },
+                },
+                createElement(
+                  Row,
+                  { style: { height: 30 } },
+                  createElement(Cell, null, "Header 1"),
+                  createElement(Cell, null, "Header 2"),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+
+      assert.equal(
+        parseSpy.mock.calls.length,
+        1,
+        `Expected tableCapability.parse to be called exactly 1 time, got ${parseSpy.mock.calls.length}`,
+      );
+
+      const parsedResult = parseSpy.mock.results[0]?.value;
+      assert.ok(parsedResult);
+      assert.equal(parsedResult.contract.nativeKind, "graphicFrame");
+      assert.equal(parsedResult.parsed.rows.length, 1);
+      assert.equal(parsedResult.parsed.cells.length, 2);
+
+      // Verify measureLayout and compile reused the parsed table state directly
+      assert.ok(measureSpy.mock.calls.length >= 1);
+      for (const call of measureSpy.mock.calls) {
+        assert.equal(call[0]?.cells, parsedResult.parsed.cells);
+      }
+      assert.equal(compileSpy.mock.calls.length, 1);
+      assert.equal(
+        compileSpy.mock.calls[0]?.[0]?.cells,
+        parsedResult.parsed.cells,
+      );
+
+      const validation = await validatePptx(result.pptx);
+      assert.deepEqual(validation.errors, []);
+    } finally {
+      parseSpy.mockRestore();
+      measureSpy.mockRestore();
+      compileSpy.mockRestore();
+    }
+  });
+
+  it("rejects unknown parameters and unknown style keys on Table during parse", async () => {
+    await assert.rejects(
+      build(
+        createElement(
+          Deck,
+          { width: 960, height: 540 },
+          createElement(
+            Slide,
+            { slideId: "invalid-table-param" },
+            createElement(
+              Table,
+              // @ts-expect-error -- testing unknown parameter
+              { columns: [100], unknownParam: "forbidden" },
+              createElement(Row, null, createElement(Cell, null, "Text")),
+            ),
+          ),
+        ),
+      ),
+      (error: unknown) => {
+        assert.ok(error instanceof BuildError);
+        assert.equal(error.diagnostics[0]?.code, "unknown-parameter");
+        return true;
+      },
+    );
+
+    await assert.rejects(
+      build(
+        createElement(
+          Deck,
+          { width: 960, height: 540 },
+          createElement(
+            Slide,
+            { slideId: "invalid-table-style" },
+            createElement(
+              Table,
+              {
+                columns: [100],
+                // @ts-expect-error -- testing unknown style property
+                style: { unknownStyleKey: "forbidden" },
+              },
+              createElement(Row, null, createElement(Cell, null, "Text")),
+            ),
+          ),
+        ),
+      ),
+      (error: unknown) => {
+        assert.ok(error instanceof BuildError);
+        assert.equal(error.diagnostics[0]?.code, "unknown-style");
+        return true;
+      },
+    );
+
+    await assert.rejects(
+      build(
+        createElement(
+          Deck,
+          { width: 960, height: 540 },
+          createElement(
+            Slide,
+            { slideId: "invalid-table-padding" },
+            createElement(
+              Table,
+              {
+                columns: [100],
+                style: { padding: 10 },
+              },
+              createElement(Row, null, createElement(Cell, null, "Text")),
+            ),
+          ),
+        ),
+      ),
+      (error: unknown) => {
+        assert.ok(error instanceof BuildError);
+        assert.equal(error.diagnostics[0]?.code, "invalid-layout-context");
+        return true;
+      },
     );
   });
 });

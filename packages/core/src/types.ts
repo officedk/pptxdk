@@ -21,7 +21,6 @@ export type {
   FontReference,
   FontSize,
   GradientStop,
-  ImageVisualStyle,
   LinearGradient,
   FontToken,
   NativeColorSlot,

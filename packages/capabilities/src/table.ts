@@ -1,20 +1,27 @@
 import {
   assertValidLang,
   CapabilityError,
+  layoutStyleKeys,
+  parseCapabilityLayoutContract,
   pxToEmu,
   resolvedColorXml,
   xmlEscape,
+  type CapabilityContext,
   type CapabilityInput,
-  type CapabilityModule,
+  type CapabilityLayoutContract,
   type CapabilityLayoutMeasurement,
   type CapabilityLayoutRequest,
+  type CapabilityOutput,
+  type CapabilityParseContext,
+  type CapabilityParseResult,
+  type ColorValue,
   type LayoutStyle,
   type LinkTarget,
   type NativeTableObservation,
-  type ColorValue,
+  type ObjectCapabilityModule,
   type ResolvedColor,
-  type ThemeContext,
   type TextStyle,
+  type ThemeContext,
 } from "@react-pptx/core";
 import { createElement, type ReactNode } from "react";
 
@@ -182,52 +189,6 @@ const cellStyleKeys = [
   "paddingRight",
   "paddingBottom",
   "paddingLeft",
-] as const;
-const layoutStyleKeys = [
-  "display",
-  "position",
-  "inset",
-  "left",
-  "top",
-  "right",
-  "bottom",
-  "width",
-  "height",
-  "minWidth",
-  "minHeight",
-  "maxWidth",
-  "maxHeight",
-  "margin",
-  "marginTop",
-  "marginRight",
-  "marginBottom",
-  "marginLeft",
-  "padding",
-  "paddingTop",
-  "paddingRight",
-  "paddingBottom",
-  "paddingLeft",
-  "gap",
-  "rowGap",
-  "columnGap",
-  "flexDirection",
-  "flexWrap",
-  "justifyContent",
-  "alignItems",
-  "alignSelf",
-  "alignContent",
-  "flex",
-  "flexGrow",
-  "flexShrink",
-  "flexBasis",
-  "aspectRatio",
-  "gridTemplateColumns",
-  "gridTemplateRows",
-  "gridColumn",
-  "gridRow",
-  "justifyItems",
-  "justifySelf",
-  "zIndex",
 ] as const;
 const tableParameters = [
   "testId",
@@ -862,6 +823,21 @@ function frameXml(
   return `<p:graphicFrame><p:nvGraphicFramePr><p:cNvPr id="${id}" name="${escapedName}">${linkXml}</p:cNvPr><p:cNvGraphicFramePr/><p:nvPr/></p:nvGraphicFramePr><p:xfrm><a:off x="${pxToEmu(x)}" y="${pxToEmu(y)}"/><a:ext cx="${width}" cy="${height}"/></p:xfrm><a:graphic><a:graphicData uri="${tableUri}"><a:tbl><a:tblPr/><a:tblGrid>${columnXml}</a:tblGrid>${rowXml}</a:tbl></a:graphicData></a:graphic></p:graphicFrame>`;
 }
 
+export type ParsedTable = {
+  readonly testId?: string;
+  readonly part?: string;
+  readonly name?: string;
+  readonly morphKey?: string;
+  readonly link?: LinkTarget;
+  readonly columns: readonly Track[];
+  readonly tableStyle: ReturnType<typeof trackStyle>;
+  readonly tableVerticalAlign: TableVerticalAlign;
+  readonly rows: readonly ParsedRow[];
+  readonly cells: readonly ParsedCell[];
+  readonly contract: CapabilityLayoutContract;
+  readonly rawProps: Readonly<Record<string, unknown>>;
+};
+
 type TableLayoutModel = {
   readonly columns: readonly Track[];
   readonly tableStyle: ReturnType<typeof trackStyle>;
@@ -876,23 +852,13 @@ type TableLayoutModel = {
 
 /** Shared calculation of table tracks and text dimensions used by LayoutPass and XML emission. */
 function tableLayoutModel(
-  input: CapabilityInput,
+  parsed: ParsedTable,
   requestedWidth: number | undefined,
   theme: ThemeContext,
   slideNumber: number,
   embedFonts?: FontEmbeddingMode,
 ): TableLayoutModel {
-  const columns = parseTracks(input.props["columns"]);
-  const tableStyle = trackStyle(input, "table");
-  const tableVerticalAlign =
-    verticalAlign(tableStyle.style["verticalAlign"]) ?? "middle";
-  const { rows, cells } = prepareRows(
-    input,
-    columns,
-    tableStyle.textStyle,
-    tableVerticalAlign,
-    theme,
-  );
+  const { columns, tableStyle, rows, cells } = parsed;
   const warnings: { code: string; message: string; path?: string }[] = [];
   const claims: { kind: string; key: string; identity: string }[] = [];
   const warningKeys = new Set<string>();
@@ -1089,21 +1055,99 @@ function tableLayoutModel(
 }
 
 /** Table module independently validates row and column structure, emitting a single object with native graphicFrame and a:tbl. */
-export const tableCapability: CapabilityModule = {
+export const tableCapability: ObjectCapabilityModule<ParsedTable> = {
   declaration: "rp:table",
-  measureLayout(
+
+  parse(
     input: CapabilityInput,
+    context: CapabilityParseContext,
+  ): CapabilityParseResult<ParsedTable> {
+    onlyKeys(input.props, tableParameters, "Table", context.path);
+    const testId = optionalName(input.props["testId"], "testId", context.path);
+    const part = optionalName(input.props["part"], "part", context.path);
+    const requestedName = optionalName(
+      input.props["name"],
+      "name",
+      context.path,
+    );
+
+    const allowedStyleKeys = new Set<string>([
+      ...layoutStyleKeys,
+      ...textStyleKeys,
+    ]);
+
+    const contract = parseCapabilityLayoutContract({
+      nativeKind: "graphicFrame",
+      props: input.props,
+      allowedStyleKeys,
+      allowPadding: false,
+      path: context.path,
+    });
+
+    const columns = parseTracks(input.props["columns"]);
+    const tableStyle = trackStyle(input, "table", context.path);
+    const tableVerticalAlign =
+      verticalAlign(tableStyle.style["verticalAlign"], context.path) ??
+      "middle";
+    const { rows, cells } = prepareRows(
+      input,
+      columns,
+      tableStyle.textStyle,
+      tableVerticalAlign,
+      context.theme,
+    );
+
+    const parsed: ParsedTable = {
+      ...(testId !== undefined ? { testId } : {}),
+      ...(part !== undefined ? { part } : {}),
+      ...(requestedName !== undefined ? { name: requestedName } : {}),
+      ...(input.props["morphKey"] !== undefined
+        ? { morphKey: input.props["morphKey"] as string }
+        : {}),
+      ...(input.props["link"] !== undefined
+        ? { link: input.props["link"] as LinkTarget }
+        : {}),
+      columns,
+      tableStyle,
+      tableVerticalAlign,
+      rows,
+      cells,
+      contract,
+      rawProps: input.props,
+    };
+
+    return { contract, parsed };
+  },
+
+  measureLayout(
+    inputOrParsed: ParsedTable | CapabilityInput,
     request: CapabilityLayoutRequest,
   ): CapabilityLayoutMeasurement {
-    onlyKeys(input.props, tableParameters, "Table");
-    const style = trackStyle(input, "table").style;
-    const declaredWidth = style["width"] ?? input.props["width"];
+    const parsed: ParsedTable =
+      "columns" in inputOrParsed && "contract" in inputOrParsed
+        ? inputOrParsed
+        : (
+            this.parse as NonNullable<
+              (
+                input: CapabilityInput,
+                context: CapabilityParseContext,
+              ) => CapabilityParseResult<ParsedTable>
+            >
+          )(inputOrParsed, {
+            path: "Table",
+            theme: request.theme,
+            options: {},
+            slideNumber: request.slideNumber,
+          }).parsed;
+
+    const declaredWidth =
+      parsed.contract.layoutStyle.width ?? parsed.rawProps["width"];
     const declaredSize =
       typeof declaredWidth === "number"
         ? positiveSize(declaredWidth, "Table.width")
         : undefined;
     const natural = tableLayoutModel(
-      input,
+      parsed,
       undefined,
       request.theme,
       request.slideNumber,
@@ -1125,7 +1169,7 @@ export const tableCapability: CapabilityModule = {
       requestedWidth === undefined
         ? natural
         : tableLayoutModel(
-            input,
+            parsed,
             requestedWidth,
             request.theme,
             request.slideNumber,
@@ -1139,20 +1183,40 @@ export const tableCapability: CapabilityModule = {
       minContentHeight: natural.heights.reduce((sum, value) => sum + value, 0),
     };
   },
-  compile(input, context) {
-    onlyKeys(input.props, tableParameters, "Table");
-    const testId = optionalName(input.props["testId"], "testId");
-    const part = optionalName(input.props["part"], "part");
-    const requestedName = optionalName(input.props["name"], "name");
-    const style = trackStyle(input, "table").style;
-    const declaredWidth = style["width"] ?? input.props["width"];
+
+  compile(
+    inputOrParsed: ParsedTable | CapabilityInput,
+    context: CapabilityContext,
+  ): CapabilityOutput {
+    const parsed: ParsedTable =
+      "columns" in inputOrParsed && "contract" in inputOrParsed
+        ? inputOrParsed
+        : (
+            this.parse as NonNullable<
+              (
+                input: CapabilityInput,
+                context: CapabilityParseContext,
+              ) => CapabilityParseResult<ParsedTable>
+            >
+          )(inputOrParsed, {
+            path: context.path,
+            theme: context.theme,
+            options: context.options,
+            slideNumber: context.slideNumber,
+          }).parsed;
+
+    const testId = parsed.testId;
+    const part = parsed.part;
+    const requestedName = parsed.name;
+    const declaredWidth =
+      parsed.contract.layoutStyle.width ?? parsed.rawProps["width"];
     const requestedWidth =
       context.layoutBox?.width ??
       (typeof declaredWidth === "number"
         ? positiveSize(declaredWidth, "Table.width")
         : undefined);
     const model = tableLayoutModel(
-      input,
+      parsed,
       requestedWidth,
       context.theme,
       context.slideNumber,
@@ -1201,8 +1265,8 @@ export const tableCapability: CapabilityModule = {
         });
       }
     }
-    const x = coordinate(context.layoutBox?.x ?? input.props["x"], "x");
-    const y = coordinate(context.layoutBox?.y ?? input.props["y"], "y");
+    const x = coordinate(context.layoutBox?.x ?? parsed.rawProps["x"], "x");
+    const y = coordinate(context.layoutBox?.y ?? parsed.rawProps["y"], "y");
     const widthOf = (cell: ParsedCell) =>
       widths
         .slice(cell.column, cell.column + cell.colSpan)
@@ -1380,7 +1444,7 @@ export const tableCapability: CapabilityModule = {
         ? { parts: tableParts }
         : {}),
     };
-    const annotations = motionAnnotations(input.props, {
+    const annotations = motionAnnotations(parsed.rawProps, {
       kind: "table",
       name,
       ...(testId === undefined ? {} : { testId }),

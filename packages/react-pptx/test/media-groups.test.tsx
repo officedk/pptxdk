@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 
 import {
+  Box,
   build,
   BuildError,
   createBuilder,
@@ -13,6 +14,7 @@ import {
   Group,
   groupCapability,
   Image,
+  imageCapability,
   P,
   Shape,
   shapeCapability,
@@ -23,7 +25,7 @@ import {
 import { validatePptx } from "@react-pptx/validation";
 import { strFromU8, unzipSync, zipSync } from "fflate";
 import { createElement, type ComponentType } from "react";
-import { describe, it } from "vitest";
+import { describe, it, vi } from "vitest";
 
 const png = new Uint8Array(
   Buffer.from(
@@ -880,6 +882,131 @@ describe("images and native groups", () => {
               /group\[clipped\]\/image\[missing-image\]/u.test(path),
           ),
         );
+        return true;
+      },
+    );
+  });
+
+  it("executes imageCapability.parse and reads image resource exactly once per Image node during build", async () => {
+    const parseSpy = vi.spyOn(imageCapability, "parse");
+    const measureSpy = vi.spyOn(imageCapability, "measureLayout");
+    const compileSpy = vi.spyOn(imageCapability, "compile");
+
+    try {
+      const result = await build(
+        createElement(
+          Deck,
+          { width: 960, height: 540 },
+          createElement(
+            Slide,
+            { slideId: "single-image-read" },
+            createElement(
+              Box,
+              { style: { display: "flex", width: 400 } },
+              createElement(Image, {
+                testId: "single-read-image",
+                src: png,
+                style: { opacity: 0.8 },
+              }),
+            ),
+          ),
+        ),
+      );
+
+      assert.equal(
+        parseSpy.mock.calls.length,
+        1,
+        `Expected imageCapability.parse to be called exactly 1 time, got ${parseSpy.mock.calls.length}`,
+      );
+
+      const parsedResult = parseSpy.mock.results[0]?.value;
+      assert.ok(parsedResult);
+      assert.equal(parsedResult.contract.nativeKind, "pic");
+      assert.equal(parsedResult.parsed.image.width, 1);
+      assert.equal(parsedResult.parsed.image.height, 1);
+
+      // Verify measureLayout and compile reused the parsed image object directly
+      assert.ok(measureSpy.mock.calls.length >= 1);
+      for (const call of measureSpy.mock.calls) {
+        assert.equal(call[0]?.image, parsedResult.parsed.image);
+      }
+      assert.equal(compileSpy.mock.calls.length, 1);
+      assert.equal(
+        compileSpy.mock.calls[0]?.[0]?.image,
+        parsedResult.parsed.image,
+      );
+
+      const validation = await validatePptx(result.pptx);
+      assert.deepEqual(validation.errors, []);
+    } finally {
+      parseSpy.mockRestore();
+      measureSpy.mockRestore();
+      compileSpy.mockRestore();
+    }
+  });
+
+  it("rejects unknown parameters and unknown style keys on Image during parse", async () => {
+    await assert.rejects(
+      build(
+        createElement(
+          Deck,
+          { width: 960, height: 540 },
+          createElement(
+            Slide,
+            { slideId: "invalid-image-param" },
+            // @ts-expect-error -- testing unknown parameter
+            createElement(Image, { src: png, unknownParam: "forbidden" }),
+          ),
+        ),
+      ),
+      (error: unknown) => {
+        assert.ok(error instanceof BuildError);
+        assert.equal(error.diagnostics[0]?.code, "unknown-parameter");
+        return true;
+      },
+    );
+
+    await assert.rejects(
+      build(
+        createElement(
+          Deck,
+          { width: 960, height: 540 },
+          createElement(
+            Slide,
+            { slideId: "invalid-image-style" },
+            createElement(Image, {
+              src: png,
+              // @ts-expect-error -- testing unknown style property
+              style: { unknownStyleKey: "forbidden" },
+            }),
+          ),
+        ),
+      ),
+      (error: unknown) => {
+        assert.ok(error instanceof BuildError);
+        assert.equal(error.diagnostics[0]?.code, "unknown-style");
+        return true;
+      },
+    );
+
+    await assert.rejects(
+      build(
+        createElement(
+          Deck,
+          { width: 960, height: 540 },
+          createElement(
+            Slide,
+            { slideId: "invalid-image-padding" },
+            createElement(Image, {
+              src: png,
+              style: { padding: 10 },
+            }),
+          ),
+        ),
+      ),
+      (error: unknown) => {
+        assert.ok(error instanceof BuildError);
+        assert.equal(error.diagnostics[0]?.code, "invalid-layout-context");
         return true;
       },
     );

@@ -69,7 +69,10 @@ type LocatorEntry = {
 
 function assertQueryName(value: string, label: string): void {
   if (typeof value !== "string" || value.trim() === "") {
-    throw new BuildQueryError("invalid-query", `${label} 必须是非空字符串`);
+    throw new BuildQueryError(
+      "invalid-query",
+      `${label} must be a non-empty string`,
+    );
   }
 }
 
@@ -197,17 +200,17 @@ function makeLocator(
     if (matches.length === 0) {
       throw new BuildQueryError(
         "missing-match",
-        `没有找到 ${label} ${JSON.stringify(value)}`,
+        `No match found for ${label} ${JSON.stringify(value)}`,
       );
     }
     if (matches.length > 1) {
       throw new BuildQueryError(
         "ambiguous-match",
-        `${label} ${JSON.stringify(value)} 匹配了多个内容`,
+        `${label} ${JSON.stringify(value)} matched multiple items`,
       );
     }
     const [match] = matches;
-    if (match === undefined) throw new Error("查询匹配项丢失");
+    if (match === undefined) throw new Error("Query match item missing");
     return match;
   };
   const observe = (): LocatorObservation => {
@@ -263,7 +266,7 @@ function makeLocator(
       return findTestIds(testId);
     },
     part(name: string) {
-      return oneMatch(findParts(name), "部件", name);
+      return oneMatch(findParts(name), "part", name);
     },
     parts(name: string) {
       return findParts(name);
@@ -312,7 +315,7 @@ function slideQuery(
   });
 }
 
-/** 将编译阶段保留的内容引用绑定到同次报告，不复制或重建文稿树。 */
+/** Bind content references retained during the compilation phase to the same report without copying or rebuilding the deck tree. */
 export function createBuildQuery(
   slides: readonly BuildQuerySlideInput[],
 ): BuildQuery {
@@ -331,7 +334,7 @@ export function createBuildQuery(
       if (slide === undefined) {
         throw new BuildQueryError(
           "missing-slide",
-          `没有找到页面标识 ${JSON.stringify(slideId)}`,
+          `No slide found for slideId ${JSON.stringify(slideId)}`,
         );
       }
       return slide;

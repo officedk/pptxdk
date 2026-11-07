@@ -74,9 +74,9 @@ type LayoutNode = {
   readonly children: LayoutNode[];
   readonly escaped: LayoutNode[];
   gridItem?: boolean;
-  /** 网格父项尚未回算 Yoga 子节点时保留已分配的盒高。 */
+  /** Retain allocated box height when the grid parent has not yet recalculated Yoga child nodes. */
   gridAreaHeight?: number;
-  /** 文字需要提供基线时，由外部对象节点转交给内部测量叶节点。 */
+  /** When text needs to provide a baseline, delegated from outer object node to inner measurement leaf node. */
   measureFunction?: MeasureFunction;
   baselineContent?: YogaNode;
   baseline?: number;
@@ -262,13 +262,19 @@ function gridTokens(input: string, path: string): string[] {
   for (const character of input.trim()) {
     if (character === "(") depth += 1;
     if (character === ")") depth -= 1;
-    if (depth < 0) fail(path, "invalid-grid-tracks", "网格轨道括号不匹配");
+    if (depth < 0)
+      fail(
+        path,
+        "invalid-grid-tracks",
+        "Mismatched parentheses in grid tracks",
+      );
     if (/\s/u.test(character) && depth === 0) {
       if (current !== "") tokens.push(current);
       current = "";
     } else current += character;
   }
-  if (depth !== 0) fail(path, "invalid-grid-tracks", "网格轨道括号不匹配");
+  if (depth !== 0)
+    fail(path, "invalid-grid-tracks", "Mismatched parentheses in grid tracks");
   if (current !== "") tokens.push(current);
   return tokens;
 }
@@ -276,7 +282,7 @@ function gridTokens(input: string, path: string): string[] {
 function parseGridPixels(token: string, path: string): number {
   const match = /^(\d+(?:\.\d+)?)(?:px)?$/u.exec(token);
   if (match === null)
-    fail(path, "invalid-grid-tracks", `不支持网格轨道 ${token}`);
+    fail(path, "invalid-grid-tracks", `Unsupported grid track ${token}`);
   return Number(match[1]);
 }
 
@@ -285,7 +291,12 @@ function parseGridBasicTrack(token: string, path: string): GridTrack {
   const fraction = /^(\d+(?:\.\d+)?)fr$/u.exec(token);
   if (fraction !== null) {
     const value = Number(fraction[1]);
-    if (value <= 0) fail(path, "invalid-grid-tracks", "fr 轨道比例必须大于 0");
+    if (value <= 0)
+      fail(
+        path,
+        "invalid-grid-tracks",
+        "fr track fraction must be greater than 0",
+      );
     return { kind: "fr", value, min: 0 };
   }
   return { kind: "px", value: parseGridPixels(token, path) };
@@ -304,11 +315,19 @@ function gridTracks(
     if (repeat !== null) {
       const count = Number(repeat[1]);
       if (!Number.isInteger(count) || count < 1 || count > 128) {
-        fail(path, "invalid-grid-tracks", "repeat 次数必须是 1 到 128 的整数");
+        fail(
+          path,
+          "invalid-grid-tracks",
+          "repeat count must be an integer between 1 and 128",
+        );
       }
       const repeated = gridTokens(repeat[2]!, path).flatMap(parseOne);
       if (repeated.length * count > 128) {
-        fail(path, "invalid-grid-tracks", "展开后的网格轨道不能超过 128 条");
+        fail(
+          path,
+          "invalid-grid-tracks",
+          "Expanded grid tracks cannot exceed 128 tracks",
+        );
       }
       return Array.from({ length: count }, () => repeated).flat();
     }
@@ -333,7 +352,11 @@ function gridTracks(
   };
   const tracks = gridTokens(input, path).flatMap(parseOne);
   if (tracks.length === 0 || tracks.length > 128) {
-    fail(path, "invalid-grid-tracks", "网格轨道必须包含 1 到 128 条轨道");
+    fail(
+      path,
+      "invalid-grid-tracks",
+      "Grid tracks must contain between 1 and 128 tracks",
+    );
   }
   return tracks;
 }
@@ -357,7 +380,7 @@ function distributeFrTracks(
     0,
   );
 
-  // 下界高于初次份额时先冻结该轨道，再按剩余空间分配未冻结轨道。
+  // When a lower bound exceeds the initial share, freeze that track first, then allocate remaining space to unfrozen tracks.
   while (flexible.size > 0) {
     const factorTotal = [...flexible].reduce((sum, index) => {
       const track = trackAt(index);
@@ -401,13 +424,21 @@ function gridPlacement(
   const positiveIndex = (raw: string): number => {
     const result = Number(raw);
     if (!Number.isInteger(result) || result < 1) {
-      fail(path, "invalid-grid-placement", "网格行列号必须是正整数");
+      fail(
+        path,
+        "invalid-grid-placement",
+        "Grid line numbers must be positive integers",
+      );
     }
     return result - 1;
   };
   if (typeof value === "number") {
     if (!Number.isInteger(value) || value < 1) {
-      fail(path, "invalid-grid-placement", "网格行列号必须是正整数");
+      fail(
+        path,
+        "invalid-grid-placement",
+        "Grid line numbers must be positive integers",
+      );
     }
     return { start: value - 1, span: 1 };
   }
@@ -416,14 +447,22 @@ function gridPlacement(
   if (match !== null) {
     const span = Number(match[1]);
     if (span < 1)
-      fail(path, "invalid-grid-placement", "网格 span 必须是正整数");
+      fail(
+        path,
+        "invalid-grid-placement",
+        "Grid span must be a positive integer",
+      );
     return { span };
   }
   match = /^(\d+)\s*\/\s*span\s+(\d+)$/u.exec(text);
   if (match !== null) {
     const span = Number(match[2]);
     if (span < 1)
-      fail(path, "invalid-grid-placement", "网格 span 必须是正整数");
+      fail(
+        path,
+        "invalid-grid-placement",
+        "Grid span must be a positive integer",
+      );
     return { start: positiveIndex(match[1]!), span };
   }
   match = /^(\d+)\s*\/\s*(\d+)$/u.exec(text);
@@ -431,11 +470,19 @@ function gridPlacement(
     const start = positiveIndex(match[1]!);
     const end = positiveIndex(match[2]!);
     if (end <= start)
-      fail(path, "invalid-grid-placement", "网格结束行列号必须大于开始号");
+      fail(
+        path,
+        "invalid-grid-placement",
+        "Grid end line number must be greater than start line number",
+      );
     return { start, span: end - start };
   }
   if (/^\d+$/u.test(text)) return { start: positiveIndex(text), span: 1 };
-  return fail(path, "invalid-grid-placement", `不支持网格 placement ${value}`);
+  return fail(
+    path,
+    "invalid-grid-placement",
+    `Unsupported grid placement ${value}`,
+  );
 }
 
 function gridAlignment(
@@ -459,7 +506,7 @@ function resolvePercent(
   return match === null ? undefined : (Number(match[1]) * basis) / 100;
 }
 
-// 这里只允许共享文字样式属性通过布局白名单；具体校验仍由能力模块负责。
+// Only allow shared text style properties through layout whitelist here; specific validation remains the responsibility of capability modules.
 function allowsSharedTextStyle(type: string): boolean {
   return (
     type === "rp:text" ||
@@ -485,7 +532,7 @@ function label(element: CapabilityElement, index: number): string {
 
 function number(value: unknown, name: string, path: string): number {
   if (typeof value !== "number" || !Number.isFinite(value)) {
-    fail(path, "invalid-layout-style", `${name} 必须是有限像素数值`);
+    fail(path, "invalid-layout-style", `${name} must be a finite pixel number`);
   }
   return value;
 }
@@ -503,18 +550,18 @@ function length(
       fail(
         path,
         "invalid-layout-style",
-        `${name} 必须是像素数值、百分比或 auto`,
+        `${name} must be a pixel number, percentage, or auto`,
       );
     }
     const amount = Number(percent[1]);
     if (!Number.isFinite(amount) || (nonNegative && amount < 0)) {
-      fail(path, "invalid-layout-style", `${name} 不能小于 0`);
+      fail(path, "invalid-layout-style", `${name} cannot be less than 0`);
     }
     return undefined;
   }
   const amount = number(value, name, path);
   if (nonNegative && amount < 0) {
-    fail(path, "invalid-layout-style", `${name} 不能小于 0`);
+    fail(path, "invalid-layout-style", `${name} cannot be less than 0`);
   }
   return amount;
 }
@@ -526,7 +573,11 @@ function spacing(value: unknown, name: string, path: string): Edges {
     return { top: amount, right: amount, bottom: amount, left: amount };
   }
   if (!Array.isArray(value) || (value.length !== 2 && value.length !== 4)) {
-    fail(path, "invalid-layout-style", `${name} 必须是数字、二元组或四元组`);
+    fail(
+      path,
+      "invalid-layout-style",
+      `${name} must be a number, 2-tuple, or 4-tuple`,
+    );
   }
   const values = value.map((item) => number(item, name, path));
   if (values.length === 2) {
@@ -641,7 +692,7 @@ function readStyle(
 ): LayoutStyle {
   if (value === undefined) return {};
   if (!record(value)) {
-    fail(path, "invalid-layout-style", "style 必须是对象");
+    fail(path, "invalid-layout-style", "style must be an object");
   }
   const unknown = Object.keys(value).find(
     (key) =>
@@ -650,7 +701,11 @@ function readStyle(
       !allowedPresentation.has(key),
   );
   if (unknown !== undefined) {
-    fail(path, "unsupported-layout-style", `style 含未实现属性 ${unknown}`);
+    fail(
+      path,
+      "unsupported-layout-style",
+      `style contains unsupported property ${unknown}`,
+    );
   }
   if (
     !isContainer &&
@@ -666,7 +721,7 @@ function readStyle(
     fail(
       path,
       "invalid-layout-context",
-      "容器专属样式不能用于没有布局子项的对象",
+      "Container-only styles cannot be used on objects without layout children",
     );
   }
   const display = value["display"];
@@ -680,12 +735,16 @@ function readStyle(
     fail(
       path,
       "unsupported-layout-value",
-      "display 只支持 block、flex、grid 或 none",
+      "display only supports block, flex, grid, or none",
     );
   }
   const resolvedDisplay = display ?? "block";
   if (resolvedDisplay === "grid" && value["alignItems"] === "baseline") {
-    fail(path, "unsupported-grid-alignment", "网格容器不支持 baseline 对齐");
+    fail(
+      path,
+      "unsupported-grid-alignment",
+      "Grid containers do not support baseline alignment",
+    );
   }
   for (const key of containerProperties) {
     if (
@@ -699,7 +758,7 @@ function readStyle(
       fail(
         path,
         "invalid-layout-context",
-        `${key} 只适用于 display: "flex"${key === "alignItems" ? " 或 grid" : ""} 的容器`,
+        `${key} is only applicable to display: "flex"${key === "alignItems" ? " or grid" : ""} containers`,
       );
     }
   }
@@ -708,7 +767,7 @@ function readStyle(
       fail(
         path,
         "invalid-layout-context",
-        `${key} 只适用于 display: "grid" 的容器`,
+        `${key} is only applicable to display: "grid" containers`,
       );
     }
   }
@@ -724,7 +783,7 @@ function readStyle(
       fail(
         path,
         "unsupported-layout-value",
-        `${name} 不支持取值 ${describe(candidate)}`,
+        `${name} does not support value ${describe(candidate)}`,
       );
     }
   };
@@ -775,19 +834,19 @@ function readStyle(
     fail(
       path,
       "invalid-layout-context",
-      "定位偏移只适用于 relative 或 absolute 元素",
+      "Position offsets are only applicable to relative or absolute elements",
     );
   }
   for (const key of ["flex", "flexGrow", "flexShrink"] as const) {
     const candidate = value[key];
     if (candidate !== undefined && number(candidate, key, path) < 0) {
-      fail(path, "invalid-layout-style", `${key} 不能小于 0`);
+      fail(path, "invalid-layout-style", `${key} cannot be less than 0`);
     }
   }
   for (const key of ["gap", "rowGap", "columnGap"] as const) {
     const candidate = value[key];
     if (candidate !== undefined && number(candidate, key, path) < 0) {
-      fail(path, "invalid-layout-style", `${key} 不能小于 0`);
+      fail(path, "invalid-layout-style", `${key} cannot be less than 0`);
     }
   }
   for (const key of [
@@ -806,14 +865,18 @@ function readStyle(
     ratio !== undefined &&
     (typeof ratio !== "number" || !Number.isFinite(ratio) || ratio <= 0)
   ) {
-    fail(path, "invalid-layout-style", "aspectRatio 必须是有限正数");
+    fail(
+      path,
+      "invalid-layout-style",
+      "aspectRatio must be a finite positive number",
+    );
   }
   const zIndex = value["zIndex"];
   if (
     zIndex !== undefined &&
     (typeof zIndex !== "number" || !Number.isFinite(zIndex))
   ) {
-    fail(path, "invalid-layout-style", "zIndex 必须是有限数值");
+    fail(path, "invalid-layout-style", "zIndex must be a finite number");
   }
   for (const key of ["inset", "left", "top", "right", "bottom"] as const) {
     const candidate = value[key];
@@ -821,7 +884,7 @@ function readStyle(
   }
   for (const key of ["gridTemplateColumns", "gridTemplateRows"] as const) {
     if (value[key] !== undefined && typeof value[key] !== "string") {
-      fail(path, "invalid-layout-style", `${key} 必须是网格轨道字符串`);
+      fail(path, "invalid-layout-style", `${key} must be a grid track string`);
     }
   }
   for (const key of gridItemProperties) {
@@ -832,14 +895,18 @@ function readStyle(
       typeof candidate !== "number" &&
       typeof candidate !== "string"
     ) {
-      fail(path, "invalid-layout-style", `${key} 必须是行列号或 span 声明`);
+      fail(
+        path,
+        "invalid-layout-style",
+        `${key} must be a line number or span declaration`,
+      );
     }
   }
   const padding = value["padding"];
   if (padding !== undefined) {
     const values = spacing(padding, "padding", path);
     if (Object.values(values).some((item) => item < 0)) {
-      fail(path, "invalid-layout-style", "padding 不能小于 0");
+      fail(path, "invalid-layout-style", "padding cannot be less than 0");
     }
   }
   for (const key of [
@@ -850,7 +917,7 @@ function readStyle(
   ] as const) {
     const candidate = value[key];
     if (candidate !== undefined && number(candidate, key, path) < 0) {
-      fail(path, "invalid-layout-style", `${key} 不能小于 0`);
+      fail(path, "invalid-layout-style", `${key} cannot be less than 0`);
     }
   }
   for (const key of [
@@ -872,7 +939,11 @@ function readStyle(
       "paddingLeft",
     ].some((key) => value[key] !== undefined)
   ) {
-    fail(path, "invalid-layout-context", "padding 只适用于布局容器");
+    fail(
+      path,
+      "invalid-layout-context",
+      "padding is only applicable to layout containers",
+    );
   }
   const minWidth = length(value["minWidth"], "minWidth", path);
   const maxWidth = length(value["maxWidth"], "maxWidth", path);
@@ -885,7 +956,11 @@ function readStyle(
     maxWidth !== undefined &&
     minWidth > maxWidth
   ) {
-    fail(path, "invalid-layout-style", "minWidth 不能大于 maxWidth");
+    fail(
+      path,
+      "invalid-layout-style",
+      "minWidth cannot be greater than maxWidth",
+    );
   }
   if (
     typeof value["minHeight"] === "number" &&
@@ -894,7 +969,11 @@ function readStyle(
     maxHeight !== undefined &&
     minHeight > maxHeight
   ) {
-    fail(path, "invalid-layout-style", "minHeight 不能大于 maxHeight");
+    fail(
+      path,
+      "invalid-layout-style",
+      "minHeight cannot be greater than maxHeight",
+    );
   }
   return value;
 }
@@ -981,7 +1060,7 @@ function setPosition(
 }
 
 function layoutPixel(value: number): number {
-  // Yoga 以单精度浮点保存尺寸；按文字服务精度归一到百分之一像素。
+  // Yoga stores dimensions as single-precision floats; normalized to hundredths of a pixel per text service precision.
   return Math.round(value * 100) / 100;
 }
 
@@ -991,7 +1070,7 @@ function objectModule(
   return module !== undefined && "compile" in module;
 }
 
-/** 在能力模块写出原生对象前求解 Box、块与弹性布局。 */
+/** Resolve Box, block, and flex/grid layouts before capability modules write native objects. */
 export class LayoutPass {
   readonly #modules: ReadonlyMap<string, RegisteredCapabilityModule>;
   readonly #dimensions: Dimensions;
@@ -1043,7 +1122,7 @@ export class LayoutPass {
         theme,
       );
       this.#prepareTextBaselines(root);
-      // 固定尺寸父节点可能跳过新建测量树；先初次求解，再标脏测量叶并重算。
+      // Fixed-size parent nodes may skip creating a new measure tree; solve initially, then mark measurement leaves dirty and recalculate.
       rootYoga.calculateLayout(
         this.#dimensions.width,
         this.#dimensions.height,
@@ -1094,7 +1173,7 @@ export class LayoutPass {
   #validateLoose(input: CapabilityElement, path: string): LayoutStyle {
     const module = this.#modules.get(input.type);
     if (!objectModule(module)) return {};
-    // Text、Table 与 Chart 以共享文字服务消费字体属性，布局中仍是叶对象。
+    // Text, Table, and Chart consume font properties via shared text service and remain leaf objects in layout.
     const allowsTextStyle =
       allowsSharedTextStyle(input.type) ||
       (input.type === "rp:shape" &&
@@ -1122,7 +1201,7 @@ export class LayoutPass {
     );
   }
 
-  // 透明 Group 不在布局树中，因此主题上下文必须沿声明树单独传递。
+  // Transparent Groups are not in the layout tree, so theme context must be passed separately along the declaration tree.
   #appendChildren(
     children: readonly CapabilityChild[],
     parentPath: string,
@@ -1170,7 +1249,7 @@ export class LayoutPass {
         }
         this.#validateItemStyle(childStyle, parent, childPath);
         if (!includeObjects) {
-          // Group 的文字默认值只作用于后代，不代表它要成为布局项。
+          // Group text defaults apply only to descendants, not indicating it should become a layout item.
           const optsIntoLayout = Object.keys(childStyle).some(
             (key) => key !== "zIndex" && !textProperties.has(key),
           );
@@ -1289,7 +1368,7 @@ export class LayoutPass {
       fail(
         path,
         "unsupported-grid-positioning",
-        "绝对定位网格项暂不支持网格 placement 或 self alignment",
+        "Absolutely positioned grid items currently do not support grid placement or self alignment",
       );
     }
     if (
@@ -1297,7 +1376,11 @@ export class LayoutPass {
       style.position !== "absolute" &&
       style.alignSelf === "baseline"
     ) {
-      fail(path, "unsupported-grid-alignment", "网格项不支持 baseline 对齐");
+      fail(
+        path,
+        "unsupported-grid-alignment",
+        "Grid items do not support baseline alignment",
+      );
     }
   }
 
@@ -1327,7 +1410,11 @@ export class LayoutPass {
       }
       current = current.parent;
     }
-    return fail(parent.path, "layout-unavailable", "定位对象不在页面画布内");
+    return fail(
+      parent.path,
+      "layout-unavailable",
+      "Positioned object is not within slide canvas",
+    );
   }
 
   #placeEscaped(node: LayoutNode, containingBlock: GeometryBox): void {
@@ -1398,21 +1485,25 @@ export class LayoutPass {
         ].includes(key),
     );
     if (unknown !== undefined) {
-      fail(path, "unknown-parameter", `Box 含未实现参数 ${unknown}`);
+      fail(
+        path,
+        "unknown-parameter",
+        `Box contains unknown parameter ${unknown}`,
+      );
     }
     const testId = input.props["testId"];
     if (
       testId !== undefined &&
       (typeof testId !== "string" || testId.trim() === "")
     ) {
-      fail(path, "invalid-parameter", "testId 必须是非空字符串");
+      fail(path, "invalid-parameter", "testId must be a non-empty string");
     }
     const part = input.props["part"];
     if (
       part !== undefined &&
       (typeof part !== "string" || part.trim() === "")
     ) {
-      fail(path, "invalid-parameter", "part 必须是非空字符串");
+      fail(path, "invalid-parameter", "part must be a non-empty string");
     }
     const rawStyle = input.props["style"];
     const style = readStyle(rawStyle, path, true, true, true, visualProperties);
@@ -1423,7 +1514,7 @@ export class LayoutPass {
       fail(
         path,
         "morph-needs-object",
-        "只有会生成原生背景形状的可见 Box 才能参与 Morph",
+        "Only visible Box elements generating native background shapes can participate in Morph",
       );
     }
     const theme = deriveTheme(
@@ -1472,7 +1563,11 @@ export class LayoutPass {
         ].includes(key),
     );
     if (unknown !== undefined)
-      fail(path, "unknown-parameter", `Group 含未实现参数 ${unknown}`);
+      fail(
+        path,
+        "unknown-parameter",
+        `Group contains unknown parameter ${unknown}`,
+      );
     const style = readStyle(
       input.props["style"],
       path,
@@ -1671,7 +1766,11 @@ export class LayoutPass {
     let cursorColumn = 0;
     const ensureColumns = (count: number) => {
       if (count > 128)
-        fail(node.path, "invalid-grid-placement", "隐式网格列不能超过 128 条");
+        fail(
+          node.path,
+          "invalid-grid-placement",
+          "Implicit grid columns cannot exceed 128 columns",
+        );
       while (columns.length < count) columns.push({ kind: "auto", min: 0 });
     };
     for (const child of children) {
@@ -1724,7 +1823,11 @@ export class LayoutPass {
         }
       }
       if (currentRow + row.span > 128) {
-        fail(child.path, "invalid-grid-placement", "隐式网格行不能超过 128 行");
+        fail(
+          child.path,
+          "invalid-grid-placement",
+          "Implicit grid rows cannot exceed 128 rows",
+        );
       }
       for (let rowOffset = 0; rowOffset < row.span; rowOffset += 1) {
         for (
@@ -1928,14 +2031,14 @@ export class LayoutPass {
       this.#warnOnce(
         node.path,
         "grid-overflow",
-        `网格列的最小尺寸合计 ${model.width}px 超出可用宽度 ${innerWidth}px；构建保留轨道尺寸`,
+        `Grid columns minimum size total ${model.width}px exceeds available width ${innerWidth}px; build retains track dimensions`,
       );
     }
     if (innerHeight !== undefined && model.height > innerHeight + 0.01) {
       this.#warnOnce(
         node.path,
         "grid-overflow",
-        `网格行的最小尺寸合计 ${model.height}px 超出可用高度 ${innerHeight}px；构建保留轨道尺寸`,
+        `Grid rows minimum size total ${model.height}px exceeds available height ${innerHeight}px; build retains track dimensions`,
       );
     }
     if (!hasWidth && outerWidth <= 0) {
@@ -1980,7 +2083,7 @@ export class LayoutPass {
         fail(
           child.path,
           "unsupported-grid-alignment",
-          "网格中的文字 baseline 对齐尚无可靠行基线",
+          "Text baseline alignment in grid does not yet have a reliable row baseline",
         );
       }
       const align = gridAlignment(alignValue);
@@ -2055,7 +2158,7 @@ export class LayoutPass {
         this.#warnOnce(
           child.path,
           "grid-item-overflow",
-          "网格项超出其轨道区域，构建保留声明尺寸",
+          "Grid item overflows its track area; build retains declared dimensions",
         );
       }
       const xAlign =
@@ -2189,7 +2292,7 @@ export class LayoutPass {
     if (flex && style.alignContent !== undefined) {
       yoga.setAlignContent(yogaAlignContent(style.alignContent));
     } else if (flex && style.flexWrap === "wrap") {
-      // Yoga 默认从起始边堆叠弹性行；CSS 默认会拉伸有剩余空间的行。
+      // Yoga stacks flex lines from start edge by default; CSS stretches lines with remaining space by default.
       yoga.setAlignContent(Align.Stretch);
     }
     const grid = style.display === "grid";
@@ -2319,7 +2422,7 @@ export class LayoutPass {
   }
 
   #resolvedChildAlignment(node: LayoutNode, child: LayoutNode): Align {
-    // 使用已应用到 Yoga 的属性，复现其列向 baseline 到 flex-start 的回退。
+    // Use properties applied to Yoga to replicate its column baseline fallback to flex-start.
     const childAlignment = child.yoga.getAlignSelf();
     const alignment =
       childAlignment === Align.Auto
@@ -2337,7 +2440,7 @@ export class LayoutPass {
   }
 
   #baselineParticipants(node: LayoutNode): LayoutNode[] {
-    // 以求解节点的实际属性解析参与者，不读取被非flex父级忽略的原始样式。
+    // Resolve participants using actual properties of layout node, ignoring raw styles dropped by non-flex parents.
     return node.children.filter(
       (child) => this.#resolvedChildAlignment(node, child) === Align.Baseline,
     );
@@ -2364,7 +2467,7 @@ export class LayoutPass {
       fail(
         node.path,
         "unsupported-baseline-context",
-        "文字 baseline 目前只沿单子项 Box 链传播",
+        "Text baseline currently only propagates along single-child Box chains",
       );
     }
     const child = node.children[0]!;
@@ -2391,7 +2494,7 @@ export class LayoutPass {
       fail(
         node.path,
         "unsupported-baseline-context",
-        "文字 baseline 需要不换行的行 Box，且唯一子项的交叉轴位置固定在顶部",
+        "Text baseline requires a nowrap row Box with the only child fixed at the top of the cross axis",
       );
     }
     return this.#baselineTextLeaf(child);
@@ -2405,7 +2508,7 @@ export class LayoutPass {
         fail(
           node.path,
           "unsupported-baseline-context",
-          "文字 baseline 目前要求不换行的行弹性容器",
+          "Text baseline currently requires a nowrap row flex container",
         );
       }
       for (const participant of participants) {
@@ -2424,7 +2527,7 @@ export class LayoutPass {
       fail(
         node.path,
         "baseline-measurement-unavailable",
-        "baseline 对齐需要文字能力提供可靠的字体度量",
+        "Baseline alignment requires reliable font measurement from text capability",
       );
     }
     const rawWidth = node.style.width ?? node.element?.props["width"];
@@ -2445,7 +2548,7 @@ export class LayoutPass {
       fail(
         node.path,
         "baseline-measurement-unavailable",
-        "baseline 对齐需要单一文字 run、top anchor 与显式字体资源",
+        "Baseline alignment requires a single text run, top anchor, and explicit font resource",
       );
     }
 
@@ -2457,7 +2560,7 @@ export class LayoutPass {
     marker.setHeight(0);
     marker.setPositionType(PositionType.Relative);
     marker.setPosition(Edge.Top, measurement.baseline);
-    // 零尺寸相对定位标记只向 Yoga 提供内容基线，不进入语义布局树或 PPTX。
+    // Zero-size relative positioning marker only provides content baseline to Yoga; does not enter semantic layout tree or PPTX.
     marker.setIsReferenceBaseline(true);
 
     node.yoga.unsetMeasureFunc();
@@ -2485,7 +2588,7 @@ export class LayoutPass {
     if (node.baseline !== undefined) return node.baseline;
     if (node.children.length === 0) return node.yoga.getComputedHeight();
 
-    // 与 Yoga Baseline.cpp 相同：先取本行的基线或参考子项，否则取首项。
+    // Same as Yoga Baseline.cpp: take baseline or reference child of this line first, else first item.
     const participants = new Set(this.#baselineParticipants(node));
     const baselineChild = node.children.find(
       (child) => child.yoga.isReferenceBaseline() || participants.has(child),
@@ -2495,7 +2598,7 @@ export class LayoutPass {
       fail(
         node.path,
         "unsupported-baseline-context",
-        "布局子树没有可传播的文字 baseline",
+        "Layout subtree has no propagatable text baseline",
       );
     }
     if (
@@ -2506,7 +2609,7 @@ export class LayoutPass {
       fail(
         node.path,
         "unsupported-baseline-context",
-        "无法在换行的 Box 中可靠确定文字 baseline 所在行",
+        "Cannot reliably determine text baseline row in wrapping Box",
       );
     }
     return child.yoga.getComputedTop() + this.#baselineOffsetWithin(child);
@@ -2516,7 +2619,7 @@ export class LayoutPass {
     const participants = this.#baselineParticipants(node);
     if (!participants.some((child) => this.#containsText(child)))
       return undefined;
-    // 基线行高按最大上升部与最大下降部合成，不回写为固定高度约束。
+    // Baseline line height is composed from max ascent and max descent, not written back as a fixed height constraint.
     let ascent = 0;
     let descent = 0;
     for (const child of participants) {
@@ -2676,7 +2779,8 @@ export class LayoutPass {
           severity: "warning",
           path: node.path,
           code: "overflow",
-          message: "布局容器超出页面画布，构建保留原始声明",
+          message:
+            "Layout container overflows slide canvas; build retains original declaration",
         });
       }
     } else if (node.element !== undefined) {

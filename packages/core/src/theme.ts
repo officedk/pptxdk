@@ -2,14 +2,14 @@ import { CapabilityError } from "#/diagnostics.ts";
 
 export type FontFaceStyle = "normal" | "italic";
 
-/** 字体文件由调用方提供，可用于度量或按构建选项嵌入。 */
+/** Font files provided by the caller can be used for measurement or embedded according to build options. */
 export type FontFace = {
   readonly weight?: number;
   readonly style?: FontFaceStyle;
   readonly data?: Uint8Array;
 };
 
-/** 可在文稿主题和组件之间引用的字体族及其显式度量资源。 */
+/** Font family and explicit measurement resources referenceable across deck themes and components. */
 export type Font = {
   readonly family: string;
   readonly faces?: readonly FontFace[];
@@ -26,7 +26,7 @@ export type FontReference = string | Font;
 export type FontSize = number | `${number}px` | `${number}pt`;
 export type TextAlignment = "left" | "center" | "right" | "justify";
 
-/** 文字对象和容器共用的可继承文字样式字段。 */
+/** Inheritable text style fields shared across text objects and containers. */
 export type TextStyle = {
   readonly fontFamily?: FontReference;
   readonly fontSize?: FontSize;
@@ -35,18 +35,18 @@ export type TextStyle = {
   readonly color?: ColorValue;
   readonly lineHeight?: FontSize;
   readonly verticalAlign?: "top" | "middle" | "bottom";
-  /** 未显式覆盖的段落对齐方式。 */
+  /** Paragraph alignment when not explicitly overridden. */
   readonly align?: TextAlignment;
-  /** 未显式覆盖的段后距，单位为像素。 */
+  /** Paragraph space-after when not explicitly overridden, in pixels. */
   readonly spacingAfter?: number;
-  /** 字符间距，单位为像素。 */
+  /** Character spacing in pixels. */
   readonly letterSpacing?: number;
   readonly textTransform?: "none" | "uppercase";
   readonly textDecoration?: "none" | "underline";
   readonly textShadow?: Shadow | "none";
-  /** 文本框按正常断行或保持每行在同一行显示。 */
+  /** Whether the text box wraps normally or keeps each line on a single line. */
   readonly textWrap?: "normal" | "nowrap";
-  /** 自然语言（BCP 47 语言标签，如 zh-CN、en-US）。 */
+  /** Natural language (BCP 47 language tag, e.g. zh-CN, en-US). */
   readonly lang?: string;
 };
 
@@ -73,7 +73,7 @@ export type Shadow = {
   readonly angle?: number;
 };
 
-/** 由原生 DrawingML 形状、图片、文本框及可见 Box 共用的视觉字段。 */
+/** Visual fields shared across native DrawingML shapes, images, text boxes, and visible Boxes. */
 export type VisualStyle = {
   readonly backgroundColor?: ColorValue;
   readonly backgroundImage?: LinearGradient | RadialGradient;
@@ -115,7 +115,7 @@ export const nativeColorSlots = [
 
 export type NativeColorSlot = (typeof nativeColorSlots)[number];
 
-/** 用 DrawingML 明度变换表示的原生主题颜色。 */
+/** Native theme color represented with DrawingML luminance modulation. */
 export type ThemeShade = {
   readonly slot: NativeColorSlot;
   readonly lumMod: number;
@@ -124,13 +124,13 @@ export type ThemeShade = {
 
 export type ThemeColor = string | ThemeShade;
 
-/** 颜色入口可直接给颜色、主题槽或主题令牌，也可附加透明度。 */
+/** Color entry can directly provide color, theme slot, or theme token, optionally with alpha. */
 export type ColorValue =
   | string
   | ThemeShade
   | { readonly color: string | ThemeShade; readonly alpha?: number };
 
-/** 对颜色入口应用的最终主题值。 */
+/** Final theme value applied to a color entry. */
 export type ResolvedColor = {
   readonly hex: string;
   readonly alpha?: number;
@@ -141,7 +141,7 @@ export type ResolvedColor = {
 
 export type FontToken = FontReference;
 
-/** 文稿级主题输入；major/minor 字体同时写入 PPTX 原生主题。 */
+/** Deck-level theme input; major/minor fonts are simultaneously written to native PPTX theme. */
 export type ThemeInput = {
   readonly name?: string;
   readonly colors?: Partial<Record<NativeColorSlot, string>> &
@@ -162,7 +162,7 @@ export type Theme = {
   } & Readonly<Record<string, FontToken>>;
 };
 
-/** 页面或容器上的局部主题只能替换文稿中已有的颜色与字体令牌。 */
+/** Local theme scopes on slides or containers can only override color and font tokens already present in the deck. */
 export type ThemeScope = {
   readonly colors?: Readonly<Record<string, ThemeColor>>;
   readonly fonts?: Readonly<Record<string, FontToken>>;
@@ -174,7 +174,7 @@ export type ResolvedThemeFont = {
   readonly themeFont?: "major" | "minor";
 };
 
-/** 单次构建中的主题、局部作用域与累计容器文字默认值。 */
+/** Theme, local scopes, and accumulated container text defaults in a single build. */
 export type ThemeContext = {
   readonly theme: Theme;
   readonly textStyle: TextStyle;
@@ -275,11 +275,11 @@ function record(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-/** 从包含布局字段的容器 style 中取出可继承文字字段。 */
+/** Extract inheritable text fields from container style containing layout fields. */
 export function textStyleFrom(value: unknown): TextStyle {
   if (value === undefined) return {};
   if (!record(value))
-    throw new CapabilityError("invalid-style", "style 必须是对象");
+    throw new CapabilityError("invalid-style", "style must be an object");
   if (value["lang"] !== undefined) {
     assertValidLang(value["lang"]);
   }
@@ -299,7 +299,7 @@ export function isFont(value: unknown): value is Font {
 }
 
 function normalizeTheme(input: ThemeInput = {}): Theme {
-  if (!record(input)) throw new TypeError("Theme 必须是对象");
+  if (!record(input)) throw new TypeError("Theme must be an object");
   const colors = { ...officeColors, ...input.colors };
   const fonts = {
     ...input.fonts,
@@ -313,19 +313,19 @@ function normalizeTheme(input: ThemeInput = {}): Theme {
   });
 }
 
-/** 使用首版 Office 配色和字体填充未提供的主题项。 */
+/** Fill unsupplied theme items using initial Office palette and fonts. */
 export function defineTheme(input: ThemeInput = {}): Theme {
   return normalizeTheme(input);
 }
 
 export const defaultTheme = defineTheme();
 
-/** 生成 PowerPoint 原生调色板中的较暗变体。 */
+/** Generate darker variant in PowerPoint native palette. */
 export function darker(slot: NativeColorSlot, amount: number): ThemeShade {
   return { slot, lumMod: 1 - amount };
 }
 
-/** 生成 PowerPoint 原生调色板中的较亮变体。 */
+/** Generate lighter variant in PowerPoint native palette. */
 export function lighter(slot: NativeColorSlot, amount: number): ThemeShade {
   return { slot, lumMod: 1 - amount, lumOff: amount };
 }
@@ -425,7 +425,10 @@ function checkedFraction(value: unknown, label: string): number {
     value < 0 ||
     value > 1
   ) {
-    throw new CapabilityError("invalid-color", `${label} 必须是 0 到 1 的数值`);
+    throw new CapabilityError(
+      "invalid-color",
+      `${label} must be a number between 0 and 1`,
+    );
   }
   return value;
 }
@@ -436,7 +439,10 @@ function resolveColorName(
   depth: number,
 ): ResolvedColor {
   if (depth > 16) {
-    throw new CapabilityError("invalid-color", `颜色令牌循环引用：${raw}`);
+    throw new CapabilityError(
+      "invalid-color",
+      `Circular color token reference: ${raw}`,
+    );
   }
   const value = raw.trim();
   if (value.startsWith("#")) {
@@ -449,7 +455,7 @@ function resolveColorName(
             .join("")
         : digits;
     if (!/^[0-9a-f]{6}([0-9a-f]{2})?$/iu.test(expanded)) {
-      throw new CapabilityError("invalid-color", `颜色值 ${raw} 无效`);
+      throw new CapabilityError("invalid-color", `Invalid color value: ${raw}`);
     }
     const alpha =
       expanded.length === 8
@@ -479,9 +485,12 @@ function resolveColorName(
   }
   const configured = context.theme.colors[value];
   if (configured === undefined) {
-    throw new CapabilityError("invalid-color", `未知颜色或主题令牌 ${raw}`);
+    throw new CapabilityError(
+      "invalid-color",
+      `Unknown color or theme token: ${raw}`,
+    );
   }
-  // 文稿令牌的别名值在实际使用位置解析，才能看到最近作用域的覆盖。
+  // Deck token aliases are resolved at the point of use so they see overrides from the nearest scope.
   return resolveColorValue(configured, context, depth + 1);
 }
 
@@ -505,7 +514,7 @@ function resolveColorValue(
     typeof value["lumMod"] !== "number" ||
     !Number.isFinite(value["lumMod"])
   ) {
-    throw new CapabilityError("invalid-color", "主题明暗值无效");
+    throw new CapabilityError("invalid-color", "Invalid theme shade value");
   }
   const lumMod = checkedFraction(value["lumMod"], "lumMod");
   const lumOff =
@@ -536,7 +545,10 @@ function createContext(
       let checkedScope: ThemeScope | undefined;
       if (nextScope !== undefined) {
         if (!record(nextScope)) {
-          throw new CapabilityError("invalid-theme-scope", "theme 必须是对象");
+          throw new CapabilityError(
+            "invalid-theme-scope",
+            "theme must be an object",
+          );
         }
         const unknown = Object.keys(nextScope).find(
           (key) => key !== "colors" && key !== "fonts",
@@ -544,27 +556,27 @@ function createContext(
         if (unknown !== undefined) {
           throw new CapabilityError(
             "invalid-theme-scope",
-            `局部主题含未实现字段 ${unknown}`,
+            `Local theme scope contains unknown field ${unknown}`,
           );
         }
         const colors = nextScope.colors;
         if (colors !== undefined && !record(colors)) {
           throw new CapabilityError(
             "invalid-theme-scope",
-            "theme.colors 必须是对象",
+            "theme.colors must be an object",
           );
         }
         for (const name of Object.keys(colors ?? {})) {
           if (nativeSlot(name)) {
             throw new CapabilityError(
               "invalid-theme-scope",
-              `局部主题不能重定义原生颜色槽 ${name}`,
+              `Local theme scope cannot redefine native color slot ${name}`,
             );
           }
           if (!Object.hasOwn(theme.colors, name)) {
             throw new CapabilityError(
               "invalid-theme-scope",
-              `主题中没有颜色令牌 ${name}`,
+              `Theme has no color token ${name}`,
             );
           }
         }
@@ -572,14 +584,14 @@ function createContext(
         if (fonts !== undefined && !record(fonts)) {
           throw new CapabilityError(
             "invalid-theme-scope",
-            "theme.fonts 必须是对象",
+            "theme.fonts must be an object",
           );
         }
         for (const [name, font] of Object.entries(fonts ?? {})) {
           if (!Object.hasOwn(theme.fonts, name)) {
             throw new CapabilityError(
               "invalid-theme-scope",
-              `主题中没有字体令牌 ${name}`,
+              `Theme has no font token ${name}`,
             );
           }
           if (
@@ -588,7 +600,7 @@ function createContext(
           ) {
             throw new CapabilityError(
               "invalid-theme-scope",
-              `字体令牌 ${name} 必须替换为字体值或非空字族名`,
+              `Font token ${name} must be replaced with a Font value or non-empty family string`,
             );
           }
         }
@@ -604,7 +616,7 @@ function createContext(
       const nextStyle = { ...context.textStyle };
       if (style !== undefined) {
         if (!record(style)) {
-          throw new CapabilityError("invalid-style", "style 必须是对象");
+          throw new CapabilityError("invalid-style", "style must be an object");
         }
         if (style.lang !== undefined) {
           assertValidLang(style.lang);
@@ -627,9 +639,12 @@ function createContext(
         alpha =
           value["alpha"] === undefined
             ? undefined
-            : checkedFraction(value["alpha"], "颜色透明度");
+            : checkedFraction(value["alpha"], "color alpha");
       } else {
-        throw new CapabilityError("invalid-color", "颜色值格式无效");
+        throw new CapabilityError(
+          "invalid-color",
+          "Invalid color value format",
+        );
       }
       const resolved =
         typeof raw === "string"
@@ -644,7 +659,10 @@ function createContext(
     resolveFont(value: FontReference) {
       if (isFont(value)) return { family: value.family, font: value };
       if (typeof value !== "string" || value.trim() === "") {
-        throw new CapabilityError("invalid-font-family", "fontFamily 不能为空");
+        throw new CapabilityError(
+          "invalid-font-family",
+          "fontFamily cannot be empty",
+        );
       }
       const local = scopeFontValue(context, value);
       const token =
@@ -681,7 +699,7 @@ function createContext(
   return context;
 }
 
-/** 创建一次构建独有的主题链，局部作用域不会写回共享主题对象。 */
+/** Create a theme chain unique to a single build; local scopes do not mutate the shared theme object. */
 export function createThemeContext(
   input?: ThemeInput | Theme,
   style?: TextStyle,
@@ -691,7 +709,7 @@ export function createThemeContext(
     if (unknown !== undefined) {
       throw new CapabilityError(
         "invalid-style",
-        `Deck.style 含未实现文字属性 ${unknown}`,
+        `Deck.style contains unsupported text property ${unknown}`,
       );
     }
   }
@@ -703,7 +721,7 @@ export function createThemeContext(
   );
 }
 
-/** 将原生主题颜色写成 schemeClr，字面颜色写成 srgbClr。 */
+/** Write native theme colors as schemeClr and literal colors as srgbClr. */
 export function resolvedColorXml(value: ResolvedColor): string {
   const children = [
     value.lumMod === undefined

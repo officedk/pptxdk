@@ -194,7 +194,7 @@ function containsSuspendedBoundary(fiber: FiberNode | null): boolean {
   return false;
 }
 
-/** 为一次构建创建专属 React root，等待已声明内容并在序列化后卸载。 */
+/** Create a dedicated React root for a build, wait for declared content, and unmount after serialization. */
 export async function withHostTree<T>(
   element: ReactNode,
   consume: (container: HostContainer) => T,
@@ -218,7 +218,7 @@ export async function withHostTree<T>(
   });
 
   const finish = (next: Exclude<Outcome, "running">, error?: unknown) => {
-    // 首个终态请求锁定结果；已认领的完成不会被后来到达的 abort 回滚。
+    // The first terminal state request locks the outcome; a claimed completion is not rolled back by a later abort.
     if (outcome !== "running") return;
     outcome = next;
     outcomeError = error;
@@ -267,7 +267,9 @@ export async function withHostTree<T>(
       currentDescriptor?.configurable !== true ||
       currentDescriptor.writable !== true
     ) {
-      throw new Error("当前 React root 不支持已验证的提交观察适配");
+      throw new Error(
+        "Current React root does not support verified commit observation adaptation",
+      );
     }
 
     queueCompletionCheck = (): void => {
@@ -365,7 +367,7 @@ export async function withHostTree<T>(
   }
   if (cleanupError !== undefined) throw cleanupError.error;
   if (finalOutcome !== "completed" || !hasResult) {
-    throw new Error("React 构建未产生完成结果");
+    throw new Error("React build did not produce a completion result");
   }
   // oxlint-disable-next-line typescript/no-unsafe-type-assertion
   return result as T;

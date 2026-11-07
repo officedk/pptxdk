@@ -14,7 +14,7 @@ import Yoga, {
 } from "yoga-layout";
 
 import { BuildError, CapabilityError } from "#/diagnostics.ts";
-import { textStyleFrom } from "#/theme.ts";
+import { textStyleFrom, textStyleKeys } from "#/theme.ts";
 import type {
   BuildOptions,
   CapabilityChild,
@@ -156,36 +156,6 @@ const layoutPropertySet = new Set<string>(layoutProperties);
 export const layoutStyleKeys = layoutProperties.filter(
   (key) => !(paddingStyleKeys as readonly string[]).includes(key),
 );
-const textProperties = new Set([
-  "fontFamily",
-  "fontSize",
-  "fontWeight",
-  "fontStyle",
-  "color",
-  "lineHeight",
-  "verticalAlign",
-  "align",
-  "spacingAfter",
-  "letterSpacing",
-  "textTransform",
-  "textDecoration",
-  "textShadow",
-  "textWrap",
-  "lang",
-]);
-const visualProperties = new Set([
-  "backgroundColor",
-  "backgroundImage",
-  "borderColor",
-  "borderWidth",
-  "borderStyle",
-  "borderRadius",
-  "opacity",
-  "boxShadow",
-  "softEdge",
-  "rotate",
-]);
-const groupVisualProperties = new Set(["rotate"]);
 const containerProperties = [
   "flexDirection",
   "flexWrap",
@@ -685,7 +655,6 @@ function readStyle(
   value: unknown,
   path: string,
   isContainer: boolean,
-  isText: boolean,
   allowsPadding = isContainer,
   allowedPresentation: ReadonlySet<string> = new Set(),
 ): LayoutStyle {
@@ -694,10 +663,7 @@ function readStyle(
     fail(path, "invalid-layout-style", "style must be an object");
   }
   const unknown = Object.keys(value).find(
-    (key) =>
-      !layoutPropertySet.has(key) &&
-      !(isText && textProperties.has(key)) &&
-      !allowedPresentation.has(key),
+    (key) => !layoutPropertySet.has(key) && !allowedPresentation.has(key),
   );
   if (unknown !== undefined) {
     fail(
@@ -1033,7 +999,6 @@ export function parseCapabilityLayoutContract(options: {
     rawStyle,
     path,
     isContainer,
-    false,
     allowPadding,
     allowedStyleKeys,
   );
@@ -1216,7 +1181,13 @@ export class LayoutPass {
     slideStyle?: unknown,
   ): LayoutPassResult {
     const rootYoga = Yoga.Node.create(this.#config);
-    const rootStyle = readStyle(slideStyle, parentPath, true, true);
+    const rootStyle = readStyle(
+      slideStyle,
+      parentPath,
+      true,
+      true,
+      textStyleKeys,
+    );
     const root: LayoutNode = {
       yoga: rootYoga,
       style: rootStyle,
@@ -1339,29 +1310,22 @@ export class LayoutPass {
       }
       if (child.type === "rp:box") {
         const module = this.#modules.get(child.type);
-        let childStyle: LayoutStyle;
-        let contract: CapabilityLayoutContract | undefined;
-        let parsed: unknown;
-        if (objectModule(module)) {
-          const result = this.#parseCapability(
-            child,
+        if (!objectModule(module)) {
+          fail(
             childPath,
-            themeContext,
-            module,
-          );
-          contract = result.contract;
-          childStyle = contract.layoutStyle;
-          parsed = result.parsed;
-        } else {
-          childStyle = readStyle(
-            child.props["style"],
-            childPath,
-            true,
-            true,
-            true,
-            visualProperties,
+            "missing-capability",
+            "rp:box capability is required",
           );
         }
+        const result = this.#parseCapability(
+          child,
+          childPath,
+          themeContext,
+          module,
+        );
+        const contract = result.contract;
+        const childStyle = contract.layoutStyle;
+        const parsed = result.parsed;
         if (childStyle.display === "none") {
           this.#markHidden(child);
           return;
@@ -1380,29 +1344,22 @@ export class LayoutPass {
       }
       if (child.type === "rp:group") {
         const module = this.#modules.get(child.type);
-        let childStyle: LayoutStyle;
-        let contract: CapabilityLayoutContract | undefined;
-        let parsed: unknown;
-        if (objectModule(module)) {
-          const result = this.#parseCapability(
-            child,
+        if (!objectModule(module)) {
+          fail(
             childPath,
-            themeContext,
-            module,
-          );
-          contract = result.contract;
-          childStyle = contract.layoutStyle;
-          parsed = result.parsed;
-        } else {
-          childStyle = readStyle(
-            child.props["style"],
-            childPath,
-            true,
-            true,
-            true,
-            groupVisualProperties,
+            "missing-capability",
+            "rp:group capability is required",
           );
         }
+        const result = this.#parseCapability(
+          child,
+          childPath,
+          themeContext,
+          module,
+        );
+        const contract = result.contract;
+        const childStyle = contract.layoutStyle;
+        const parsed = result.parsed;
         if (childStyle.display === "none") {
           this.#markHidden(child);
           return;
@@ -1411,7 +1368,7 @@ export class LayoutPass {
         if (!includeObjects) {
           // Group text defaults apply only to descendants, not indicating it should become a layout item.
           const optsIntoLayout = Object.keys(childStyle).some(
-            (key) => key !== "zIndex" && !textProperties.has(key),
+            (key) => key !== "zIndex" && !textStyleKeys.has(key),
           );
           if (!optsIntoLayout) {
             const groupTheme = deriveTheme(
@@ -1612,13 +1569,11 @@ export class LayoutPass {
     path: string,
     parent: LayoutNode,
     themeContext: ThemeContext,
-    contract?: CapabilityLayoutContract,
+    contract: CapabilityLayoutContract,
     parsed?: unknown,
   ): LayoutNode {
     const rawStyle = input.props["style"];
-    const style =
-      contract?.layoutStyle ??
-      readStyle(rawStyle, path, true, true, true, visualProperties);
+    const style = contract.layoutStyle;
     const theme = deriveTheme(
       themeContext,
       input.props["theme"] as ThemeScope | undefined,
@@ -1635,8 +1590,8 @@ export class LayoutPass {
       children: [],
       parent,
       escaped: [],
+      contract,
       ...(parsed !== undefined ? { parsed } : {}),
-      ...(contract !== undefined ? { contract } : {}),
     };
     this.#themes.set(input, theme);
     this.#applyStyle(yoga, style, parent.style, false, true);
@@ -1649,13 +1604,11 @@ export class LayoutPass {
     path: string,
     parent: LayoutNode,
     themeContext: ThemeContext,
-    contract?: CapabilityLayoutContract,
+    contract: CapabilityLayoutContract,
     parsed?: unknown,
   ): LayoutNode {
     const rawStyle = input.props["style"];
-    const style =
-      contract?.layoutStyle ??
-      readStyle(rawStyle, path, true, true, true, groupVisualProperties);
+    const style = contract.layoutStyle;
     const theme = deriveTheme(
       themeContext,
       input.props["theme"] as ThemeScope | undefined,
@@ -1672,8 +1625,8 @@ export class LayoutPass {
       children: [],
       parent,
       escaped: [],
+      contract,
       ...(parsed !== undefined ? { parsed } : {}),
-      ...(contract !== undefined ? { contract } : {}),
     };
     this.#themes.set(input, theme);
     this.#applyStyle(yoga, style, parent.style, false, true);
@@ -1748,12 +1701,8 @@ export class LayoutPass {
     }
     this.#setDeclaredSize(node);
     if (style.position === "absolute") {
-      const x =
-        contract?.x ??
-        (typeof input.props["x"] === "number" ? input.props["x"] : undefined);
-      const y =
-        contract?.y ??
-        (typeof input.props["y"] === "number" ? input.props["y"] : undefined);
+      const x = contract?.x;
+      const y = contract?.y;
       if (
         style.left === undefined &&
         style.inset === undefined &&
@@ -1798,9 +1747,8 @@ export class LayoutPass {
   #positionLooseGeometry(node: LayoutNode): void {
     const element = node.element;
     if (element === undefined) return;
-    const props = element.props;
-    const x = typeof props["x"] === "number" ? props["x"] : 0;
-    const y = typeof props["y"] === "number" ? props["y"] : 0;
+    const x = node.contract?.x ?? 0;
+    const y = node.contract?.y ?? 0;
     if (node.style.position === "absolute") {
       if (
         node.style.left === undefined &&
@@ -2320,16 +2268,11 @@ export class LayoutPass {
   }
 
   #setDeclaredSize(node: LayoutNode): void {
-    const props = node.element?.props ?? {};
     const style = node.style;
-    const rawWidth = node.contract?.width ?? style.width ?? props["width"];
-    const width = rawWidth;
-    const rawHeight = node.contract?.height ?? style.height ?? props["height"];
-    const height = rawHeight;
-    if (width !== undefined)
-      setLength(node.yoga, "width", width as LayoutLength);
-    if (height !== undefined)
-      setLength(node.yoga, "height", height as LayoutLength);
+    const width = node.contract?.width ?? style.width;
+    const height = node.contract?.height ?? style.height;
+    if (width !== undefined) setLength(node.yoga, "width", width);
+    if (height !== undefined) setLength(node.yoga, "height", height);
   }
 
   #applyStyle(
@@ -2550,35 +2493,27 @@ export class LayoutPass {
     );
   }
 
-  #nodeHasText(node: LayoutNode): boolean {
-    if (
-      node.parsed !== undefined &&
-      typeof node.parsed === "object" &&
-      node.parsed !== null
-    ) {
-      if ("hasText" in node.parsed) {
-        return Boolean((node.parsed as { hasText?: boolean }).hasText);
-      }
-      if ("paragraphs" in node.parsed) {
-        return (
-          (node.parsed as { paragraphs?: readonly unknown[] }).paragraphs
-            ?.length !== 0
-        );
-      }
-    }
-    return false;
-  }
-
-  #containsText(node: LayoutNode): boolean {
+  #hasVerticalOffset(node: LayoutNode): boolean {
     return (
-      this.#nodeHasText(node) ||
-      node.children.some((child) => this.#containsText(child))
+      node.style.top !== undefined ||
+      node.style.marginTop !== undefined ||
+      node.style.bottom !== undefined ||
+      node.style.marginBottom !== undefined
     );
   }
 
-  #baselineTextLeaf(node: LayoutNode): LayoutNode {
-    if (this.#nodeHasText(node)) return node;
-    if (node.element?.type !== "rp:box" || node.children.length !== 1) {
+  #resolveBaselineLeaf(node: LayoutNode): LayoutNode {
+    if (node.element?.type !== "rp:box") {
+      if (node.module?.measureLayout === undefined) {
+        fail(
+          node.path,
+          "unsupported-baseline-context",
+          "Baseline alignment requires a text-bearing capability with baseline support",
+        );
+      }
+      return node;
+    }
+    if (node.children.length !== 1) {
       fail(
         node.path,
         "unsupported-baseline-context",
@@ -2598,13 +2533,13 @@ export class LayoutPass {
       childAlign === "flex-start" ||
       ((childAlign === undefined || childAlign === "auto") &&
         (parentAlign === "start" || parentAlign === "flex-start"));
+    const childHeight = child.contract?.height ?? child.style.height;
     const stretchedFixedHeight =
       (childAlign === undefined ||
         childAlign === "auto" ||
         childAlign === "stretch") &&
       (parentAlign === undefined || parentAlign === "stretch") &&
-      typeof (child.style.height ?? child.element?.props["height"]) ===
-        "number";
+      typeof childHeight === "number";
     if (!simpleRow || (!alignedAtStart && !stretchedFixedHeight)) {
       fail(
         node.path,
@@ -2612,13 +2547,13 @@ export class LayoutPass {
         "Text baseline requires a nowrap row Box with the only child fixed at the top of the cross axis",
       );
     }
-    return this.#baselineTextLeaf(child);
+    return this.#resolveBaselineLeaf(child);
   }
 
   #prepareTextBaselines(node: LayoutNode): void {
     const flexRow = node.style.display === "flex" && rowDirection(node.style);
     const participants = this.#baselineParticipants(node);
-    if (flexRow && participants.some((child) => this.#containsText(child))) {
+    if (flexRow && participants.length > 0) {
       if (node.style.flexWrap === "wrap") {
         fail(
           node.path,
@@ -2627,13 +2562,7 @@ export class LayoutPass {
         );
       }
       for (const participant of participants) {
-        if (!this.#containsText(participant)) {
-          if (participant.style.alignSelf === "baseline") {
-            this.#installBaselineMarker(this.#baselineTextLeaf(participant));
-          }
-          continue;
-        }
-        this.#installBaselineMarker(this.#baselineTextLeaf(participant));
+        this.#installBaselineMarker(this.#resolveBaselineLeaf(participant));
       }
     }
     for (const child of node.children) this.#prepareTextBaselines(child);
@@ -2643,14 +2572,17 @@ export class LayoutPass {
   #installBaselineMarker(node: LayoutNode): void {
     if (node.baselineContent !== undefined) return;
     const measureFunction = node.measureFunction;
-    if (measureFunction === undefined) {
+    if (
+      measureFunction === undefined ||
+      node.module?.measureLayout === undefined
+    ) {
       fail(
         node.path,
-        "baseline-measurement-unavailable",
-        "Baseline alignment requires reliable font measurement from text capability",
+        "unsupported-baseline-context",
+        "Baseline alignment requires a text-bearing capability with baseline support",
       );
     }
-    const rawWidth = node.style.width ?? node.element?.props["width"];
+    const rawWidth = node.contract?.width ?? node.style.width;
     const availableWidth = length(rawWidth, "width", node.path);
     const padding = expandedSpacing(node.style, "padding");
     const measurement = this.#measure(
@@ -2664,18 +2596,21 @@ export class LayoutPass {
             ),
           },
     );
-    if (measurement?.baseline === "unavailable") {
-      fail(
-        node.path,
-        "baseline-measurement-unavailable",
-        "Baseline alignment requires a single text run, top anchor, and explicit font resource",
-      );
-    }
     if (measurement?.baseline === undefined) {
       fail(
         node.path,
         "unsupported-baseline-context",
         "Baseline alignment requires a text-bearing capability with baseline support",
+      );
+    }
+    if (
+      measurement.baseline === "unavailable" ||
+      this.#hasVerticalOffset(node)
+    ) {
+      fail(
+        node.path,
+        "baseline-measurement-unavailable",
+        "Baseline alignment requires a single text run, top anchor, and explicit font resource",
       );
     }
 
@@ -2744,8 +2679,7 @@ export class LayoutPass {
 
   #baselineContentHeight(node: LayoutNode): number | undefined {
     const participants = this.#baselineParticipants(node);
-    if (!participants.some((child) => this.#containsText(child)))
-      return undefined;
+    if (participants.length === 0) return undefined;
     // Baseline line height is composed from max ascent and max descent, not written back as a fixed height constraint.
     let ascent = 0;
     let descent = 0;

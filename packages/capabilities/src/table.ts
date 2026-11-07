@@ -5,6 +5,7 @@ import {
   parseCapabilityLayoutContract,
   pxToEmu,
   resolvedColorXml,
+  textStyleKeys,
   xmlEscape,
   type CapabilityContext,
   type CapabilityInput,
@@ -38,10 +39,13 @@ import {
   type MotionProps,
 } from "./motion-api.ts";
 import {
+  parseTextParagraphs,
   textExtent,
-  writeTextBody,
+  writeTextBodyFromParagraphs,
   type FontReference,
   type FontSize,
+  type Paragraph,
+  type ResolvedTextStyle,
 } from "./text-service.ts";
 
 /** Column width in px; Nfr allocates from remaining width, auto uses shared font measurement. */
@@ -132,16 +136,15 @@ type Edges = {
 };
 
 type ParsedCell = {
-  readonly node: Extract<
-    CapabilityInput["children"][number],
-    { props: unknown }
-  >;
   readonly row: number;
   readonly column: number;
   readonly rowSpan: number;
   readonly colSpan: number;
   readonly path: string;
-  readonly textStyle: Record<string, unknown>;
+  readonly testId?: string;
+  readonly part?: string;
+  readonly paragraphs: readonly Paragraph[];
+  readonly textStyle: ResolvedTextStyle;
   readonly verticalAlign: TableVerticalAlign;
   readonly padding: Edges;
   readonly fill?: ResolvedColor;
@@ -161,23 +164,6 @@ type ParsedRow = {
   readonly verticalAlign?: TableVerticalAlign;
   readonly fill?: ResolvedColor;
 };
-
-const textStyleKeys = [
-  "fontFamily",
-  "fontSize",
-  "fontWeight",
-  "fontStyle",
-  "color",
-  "lineHeight",
-  "verticalAlign",
-  "align",
-  "spacingAfter",
-  "letterSpacing",
-  "textTransform",
-  "textDecoration",
-  "textShadow",
-  "lang",
-] as const;
 const rowStyleKeys = ["height", "backgroundColor"] as const;
 const cellStyleKeys = [
   "backgroundColor",
@@ -580,10 +566,10 @@ function textBody(
     readonly createId?: () => string;
   },
   embedFonts?: FontEmbeddingMode,
-): ReturnType<typeof writeTextBody> {
+): ReturnType<typeof writeTextBodyFromParagraphs> {
   try {
-    return writeTextBody(
-      cell.node.children,
+    return writeTextBodyFromParagraphs(
+      cell.paragraphs,
       cell.textStyle,
       theme,
       cell.verticalAlign,
@@ -593,8 +579,8 @@ function textBody(
         ...(contentSized ? { contentSized: true } : {}),
       },
       "table-cell",
-      fields,
       embedFonts,
+      fields?.createId,
     );
   } catch (error) {
     if (error instanceof CapabilityError) {
@@ -619,6 +605,7 @@ function prepareRows(
   tableTextStyle: Record<string, unknown>,
   tableVerticalAlign: TableVerticalAlign,
   theme: ThemeContext,
+  slideNumber: number,
 ): {
   readonly rows: readonly ParsedRow[];
   readonly cells: readonly ParsedCell[];
@@ -698,8 +685,12 @@ function prepareRows(
       const cellPath = `${rowPath}/${identityPath("cell", cellChild.props, cellIndex)}`;
       cellIndex += 1;
       onlyKeys(cellChild.props, cellParameters, "Cell", cellPath);
-      optionalName(cellChild.props["testId"], "testId", cellPath);
-      optionalName(cellChild.props["part"], "part", cellPath);
+      const cellTestId = optionalName(
+        cellChild.props["testId"],
+        "testId",
+        cellPath,
+      );
+      const cellPart = optionalName(cellChild.props["part"], "part", cellPath);
       while (owners.has(`${rowIndex}:${column}`)) column += 1;
       const colSpan = span(cellChild.props["colSpan"], "colSpan", cellPath);
       const rowSpan = span(cellChild.props["rowSpan"], "rowSpan", cellPath);
@@ -745,14 +736,38 @@ function prepareRows(
         verticalAlign(cellStyle.style["verticalAlign"], cellPath) ??
         rowVerticalAlign;
       const border = mergeBorder(cellStyle.style, theme, cellPath);
+      const cellTextStyle = {
+        ...mergeTextStyle(row.textStyle, cellStyle.textStyle),
+        textWrap: "normal",
+      };
+      let parsedParagraphs: readonly Paragraph[];
+      let parsedTextStyle: ResolvedTextStyle;
+      try {
+        const textResult = parseTextParagraphs(
+          cellChild.children,
+          cellTextStyle,
+          theme,
+          { slideNumber },
+          cellPath,
+        );
+        parsedParagraphs = textResult.paragraphs;
+        parsedTextStyle = textResult.style;
+      } catch (error) {
+        if (error instanceof CapabilityError) {
+          fail(error.code, error.message, cellPath);
+        }
+        throw error;
+      }
       const cell: ParsedCell = {
-        node: cellChild,
         row: rowIndex,
         column,
         rowSpan,
         colSpan,
         path: cellPath,
-        textStyle: mergeTextStyle(row.textStyle, cellStyle.textStyle),
+        ...(cellTestId === undefined ? {} : { testId: cellTestId }),
+        ...(cellPart === undefined ? {} : { part: cellPart }),
+        paragraphs: parsedParagraphs,
+        textStyle: parsedTextStyle,
         verticalAlign: cellVerticalAlign,
         padding: cellPadding(cellStyle.style, cellPath),
         ...(fill === undefined ? {} : { fill }),
@@ -863,7 +878,7 @@ function tableLayoutModel(
   const claims: { kind: string; key: string; identity: string }[] = [];
   const warningKeys = new Set<string>();
   const addTextResult = (
-    result: ReturnType<typeof writeTextBody>,
+    result: ReturnType<typeof writeTextBodyFromParagraphs>,
     path: string,
   ) => {
     for (const warning of result.warnings) {
@@ -1095,6 +1110,7 @@ export const tableCapability: ObjectCapabilityModule<ParsedTable> = {
       tableStyle.textStyle,
       tableVerticalAlign,
       context.theme,
+      context.slideNumber,
     );
 
     const parsed: ParsedTable = {
@@ -1120,19 +1136,9 @@ export const tableCapability: ObjectCapabilityModule<ParsedTable> = {
   },
 
   measureLayout(
-    inputOrParsed: ParsedTable | CapabilityInput,
+    parsed: ParsedTable,
     request: CapabilityLayoutRequest,
   ): CapabilityLayoutMeasurement {
-    const parsed: ParsedTable =
-      "columns" in inputOrParsed && "contract" in inputOrParsed
-        ? inputOrParsed
-        : this.parse(inputOrParsed, {
-            path: "Table",
-            theme: request.theme,
-            options: {},
-            slideNumber: request.slideNumber,
-          }).parsed;
-
     const declaredWidth =
       parsed.contract.layoutStyle.width ?? parsed.rawProps["width"];
     const declaredSize =
@@ -1177,20 +1183,7 @@ export const tableCapability: ObjectCapabilityModule<ParsedTable> = {
     };
   },
 
-  compile(
-    inputOrParsed: ParsedTable | CapabilityInput,
-    context: CapabilityContext,
-  ): CapabilityOutput {
-    const parsed: ParsedTable =
-      "columns" in inputOrParsed && "contract" in inputOrParsed
-        ? inputOrParsed
-        : this.parse(inputOrParsed, {
-            path: context.path,
-            theme: context.theme,
-            options: context.options,
-            slideNumber: context.slideNumber,
-          }).parsed;
-
+  compile(parsed: ParsedTable, context: CapabilityContext): CapabilityOutput {
     const testId = parsed.testId;
     const part = parsed.part;
     const requestedName = parsed.name;
@@ -1215,7 +1208,7 @@ export const tableCapability: ObjectCapabilityModule<ParsedTable> = {
     const fontUses: FontEmbeddingUse[] = [];
     const warningKeys = new Set(model.warningKeys);
     const addTextResult = (
-      result: ReturnType<typeof writeTextBody>,
+      result: ReturnType<typeof writeTextBodyFromParagraphs>,
       path: string,
     ) => {
       for (const warning of result.warnings) {
@@ -1301,7 +1294,7 @@ export const tableCapability: ObjectCapabilityModule<ParsedTable> = {
               : []),
           ];
           rowCells.push(
-            `<a:tc${hMerge}${vMerge}${spanAttributes.length === 0 ? "" : ` ${spanAttributes.join(" ")}`}>${emptyCell(owner?.textStyle?.["lang"] as string | undefined)}</a:tc>`,
+            `<a:tc${hMerge}${vMerge}${spanAttributes.length === 0 ? "" : ` ${spanAttributes.join(" ")}`}>${emptyCell(owner?.textStyle?.["lang"])}</a:tc>`,
           );
           continue;
         }
@@ -1385,12 +1378,8 @@ export const tableCapability: ObjectCapabilityModule<ParsedTable> = {
       })),
       ...cells.map((cell) => ({
         kind: "cell" as const,
-        ...(typeof cell.node.props["testId"] === "string"
-          ? { testId: cell.node.props["testId"] }
-          : {}),
-        ...(typeof cell.node.props["part"] === "string"
-          ? { part: cell.node.props["part"] }
-          : {}),
+        ...(cell.testId === undefined ? {} : { testId: cell.testId }),
+        ...(cell.part === undefined ? {} : { part: cell.part }),
         row: cell.row,
         column: cell.column,
         rowSpan: cell.rowSpan,

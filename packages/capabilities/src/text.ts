@@ -18,6 +18,7 @@ import {
 import { fontPresentationContributions } from "./font-embedding.ts";
 import { nativeLinkXml } from "./identity.ts";
 import { motionAnnotations } from "./motion-api.ts";
+import { layoutStyleValue } from "./style-parse.ts";
 import {
   measureTextLayoutFromParagraphs,
   parseTextContent,
@@ -147,46 +148,11 @@ function height(
   return { contentSized: false, value: size(value, "height") };
 }
 
-const textStyleProperties = new Set([
-  "fontFamily",
-  "fontSize",
-  "fontWeight",
-  "fontStyle",
-  "color",
-  "lineHeight",
-  "verticalAlign",
-  "align",
-  "spacingAfter",
-  "letterSpacing",
-  "textTransform",
-  "textDecoration",
-  "textShadow",
-  "textWrap",
-  "lang",
-]);
-
 function textStyle(value: unknown): unknown {
   if (!record(value)) return value;
   return Object.fromEntries(
-    Object.entries(value).filter(([key]) => textStyleProperties.has(key)),
+    Object.entries(value).filter(([key]) => textStyleKeys.has(key)),
   );
-}
-
-function layoutStyleValue(
-  input: CapabilityInput,
-  name: "width" | "height",
-): number | "auto" | `${number}%` | undefined {
-  const value = input.props["style"];
-  if (!record(value)) return undefined;
-  const dimension = value[name];
-  if (typeof dimension === "number" || dimension === "auto") return dimension;
-  if (
-    typeof dimension === "string" &&
-    /^-?(?:\d+(?:\.\d*)?|\.\d+)%$/u.test(dimension)
-  ) {
-    return dimension as `${number}%`;
-  }
-  return undefined;
 }
 
 function textBoxXml(
@@ -291,19 +257,9 @@ export const textCapability: ObjectCapabilityModule<ParsedText> = {
   },
 
   measureLayout(
-    inputOrParsed: ParsedText | CapabilityInput,
+    parsed: ParsedText,
     request: CapabilityLayoutRequest,
   ): CapabilityLayoutMeasurement | undefined {
-    const parsed: ParsedText =
-      "paragraphs" in inputOrParsed && "contract" in inputOrParsed
-        ? inputOrParsed
-        : this.parse(inputOrParsed, {
-            path: "Text",
-            theme: request.theme,
-            options: {},
-            slideNumber: request.slideNumber,
-          }).parsed;
-
     const insets = parsed.insets;
     const isContentSized = parsed.requestedHeight.contentSized;
     const styleWidth = layoutStyleValue(
@@ -320,11 +276,15 @@ export const textCapability: ObjectCapabilityModule<ParsedText> = {
           : undefined;
 
     try {
-      return measureTextLayoutFromParagraphs(
+      const measured = measureTextLayoutFromParagraphs(
         parsed.paragraphs,
         parsed.textStyle,
         innerWidth,
       );
+      return {
+        ...measured,
+        baseline: measured.baseline ?? "unavailable",
+      };
     } catch (error) {
       if (
         !isContentSized &&
@@ -339,20 +299,7 @@ export const textCapability: ObjectCapabilityModule<ParsedText> = {
     }
   },
 
-  compile(
-    inputOrParsed: ParsedText | CapabilityInput,
-    context: CapabilityContext,
-  ) {
-    const parsed: ParsedText =
-      "paragraphs" in inputOrParsed && "contract" in inputOrParsed
-        ? inputOrParsed
-        : this.parse(inputOrParsed, {
-            path: context.path,
-            theme: context.theme,
-            options: context.options,
-            slideNumber: context.slideNumber,
-          }).parsed;
-
+  compile(parsed: ParsedText, context: CapabilityContext) {
     const insets = parsed.insets;
     const styleWidth = layoutStyleValue(
       { type: "rp:text", props: parsed.rawProps, children: [] },

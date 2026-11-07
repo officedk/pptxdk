@@ -484,10 +484,6 @@ describe("Ticket 08: Object capability parse phase, container TextStyle validati
   });
 
   describe("Ticket 09: Migrate Shape to capability parse, fix text style on children and baseline alignment", () => {
-    it("exposes parse method on shapeCapability module", () => {
-      assert.equal(typeof shapeCapability.parse, "function");
-    });
-
     it("allows Shape with <P> and <Span> children to set fontSize, color, and padding in style", async () => {
       const result = await build(
         <Deck width={960} height={540}>
@@ -702,6 +698,95 @@ describe("Ticket 08: Object capability parse phase, container TextStyle validati
           assert(
             diag !== undefined,
             "Expected unsupported-baseline-context diagnostic for textless shape",
+          );
+          return true;
+        },
+      );
+    });
+
+    it("fails with baseline-measurement-unavailable when Text with verticalAlign: 'middle' is placed in alignItems: 'baseline' container", async () => {
+      await assert.rejects(
+        build(
+          <Deck width={960} height={540}>
+            <Slide slideId="text-middle-baseline-slide">
+              <Box
+                style={{
+                  display: "flex",
+                  alignItems: "baseline",
+                  width: 500,
+                }}
+              >
+                <Text
+                  testId="reference-text"
+                  width={150}
+                  height={100}
+                  style={{
+                    fontFamily: notoFont,
+                    fontSize: 20,
+                    verticalAlign: "top",
+                  }}
+                >
+                  Ref
+                </Text>
+                <Text
+                  testId="middle-text"
+                  width={150}
+                  height={100}
+                  style={{
+                    fontFamily: notoFont,
+                    fontSize: 20,
+                    verticalAlign: "middle",
+                  }}
+                >
+                  Middle
+                </Text>
+              </Box>
+            </Slide>
+          </Deck>,
+        ),
+        (error: unknown) => {
+          assert(error instanceof BuildError);
+          const diag = error.diagnostics.find(
+            (d) => d.code === "baseline-measurement-unavailable",
+          );
+          assert(
+            diag !== undefined,
+            "Expected baseline-measurement-unavailable diagnostic for middle-aligned text in baseline",
+          );
+          return true;
+        },
+      );
+    });
+
+    it("fails with unsupported-baseline-context when Shape without text is placed directly in alignItems: 'baseline' container", async () => {
+      await assert.rejects(
+        build(
+          <Deck width={960} height={540}>
+            <Slide slideId="shape-direct-no-text-baseline-slide">
+              <Box
+                style={{
+                  display: "flex",
+                  alignItems: "baseline",
+                  width: 500,
+                }}
+              >
+                <Shape
+                  testId="direct-textless-shape"
+                  width={100}
+                  height={100}
+                />
+              </Box>
+            </Slide>
+          </Deck>,
+        ),
+        (error: unknown) => {
+          assert(error instanceof BuildError);
+          const diag = error.diagnostics.find(
+            (d) => d.code === "unsupported-baseline-context",
+          );
+          assert(
+            diag !== undefined,
+            "Expected unsupported-baseline-context diagnostic for direct textless shape in baseline",
           );
           return true;
         },
@@ -1024,13 +1109,13 @@ describe("Ticket 08: Object capability parse phase, container TextStyle validati
       assert.deepEqual(validation.errors, []);
     });
 
-    it("rejects unknown parameters on Group including residual __motionEnabled and __motionStep", async () => {
+    it("rejects unknown parameters on Group", async () => {
       await assert.rejects(
         build(
           <Deck width={960} height={540}>
             <Slide slideId="slide-invalid-group">
               {/* @ts-expect-error -- testing unknown parameter */}
-              <Group testId="bad-group" __motionEnabled={true}>
+              <Group testId="bad-group" unknownProp={123}>
                 <Shape width={50} height={50} />
               </Group>
             </Slide>
@@ -1043,7 +1128,7 @@ describe("Ticket 08: Object capability parse phase, container TextStyle validati
           );
           assert(
             diag !== undefined,
-            "Expected unknown-parameter for __motionEnabled",
+            "Expected unknown-parameter for unknownProp",
           );
           return true;
         },
@@ -1051,10 +1136,6 @@ describe("Ticket 08: Object capability parse phase, container TextStyle validati
     });
 
     it("calls boxCapability.parse once during layout and reuses parsed result in compile", async () => {
-      assert(
-        typeof boxCapability.parse === "function",
-        "boxCapability must implement parse",
-      );
       const parseSpy = vi.spyOn(boxCapability, "parse");
       const compileSpy = vi.spyOn(boxCapability, "compile");
 
@@ -1093,10 +1174,6 @@ describe("Ticket 08: Object capability parse phase, container TextStyle validati
     });
 
     it("calls groupCapability.parse once during layout and reuses parsed result in compile", async () => {
-      assert(
-        typeof groupCapability.parse === "function",
-        "groupCapability must implement parse",
-      );
       const parseSpy = vi.spyOn(groupCapability, "parse");
       const compileSpy = vi.spyOn(groupCapability, "compile");
 

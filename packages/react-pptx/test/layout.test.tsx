@@ -1453,44 +1453,46 @@ describe("public layout entry", () => {
     );
   });
 
-  it("uses Yoga synthesized edge baseline for pure boxes and column-direction baseline", async () => {
-    const wrapped = await build(
-      createElement(
-        Deck,
-        { width: 320, height: 240 },
+  it("rejects textless shapes in wrapping baseline container and resolves column-direction baseline", async () => {
+    await assert.rejects(
+      build(
         createElement(
-          Slide,
-          { slideId: "synthetic-wrap-baseline" },
+          Deck,
+          { width: 320, height: 240 },
           createElement(
-            Box,
-            {
-              style: {
-                display: "flex",
-                flexWrap: "wrap",
-                alignItems: "baseline",
-                width: 100,
-                height: 100,
+            Slide,
+            { slideId: "synthetic-wrap-baseline" },
+            createElement(
+              Box,
+              {
+                style: {
+                  display: "flex",
+                  flexWrap: "wrap",
+                  alignItems: "baseline",
+                  width: 100,
+                  height: 100,
+                },
               },
-            },
-            createElement(Shape, {
-              testId: "wrap-first",
-              width: 60,
-              height: 20,
-            }),
-            createElement(Shape, {
-              testId: "wrap-second",
-              width: 60,
-              height: 20,
-            }),
+              createElement(Shape, {
+                testId: "wrap-first",
+                width: 60,
+                height: 20,
+              }),
+              createElement(Shape, {
+                testId: "wrap-second",
+                width: 60,
+                height: 20,
+              }),
+            ),
           ),
         ),
       ),
+      (error: unknown) =>
+        error instanceof BuildError &&
+        error.diagnostics.some(
+          ({ code }) => code === "unsupported-baseline-context",
+        ),
     );
-    assert.deepEqual(
-      wrapped.report.slides[0]?.objects.map(({ box }) => box?.y),
-      [0, 50],
-    );
-    assert.deepEqual((await validatePptx(wrapped.pptx)).errors, []);
 
     const column = await build(
       createElement(
@@ -1906,287 +1908,6 @@ describe("public layout entry", () => {
         { y: 0, height: 60 },
         { y: 0, height: 100 },
       ],
-    );
-  });
-
-  it("uses child baselines of text-less flex containers for baseline automatic minimum height", async () => {
-    const makeText = () =>
-      createElement(
-        Text,
-        {
-          testId: "measured-text",
-          width: 100,
-          height: 60,
-          style: { fontFamily: cjkFont, fontSize: 20 },
-        },
-        "中",
-      );
-    const makeRow = () =>
-      createElement(
-        Box,
-        {
-          testId: "baseline-row",
-          style: { display: "flex", alignItems: "baseline", width: 300 },
-        },
-        makeText(),
-        createElement(
-          Box,
-          {
-            testId: "shape-container",
-            style: {
-              display: "flex",
-              alignItems: "flex-start",
-              width: 100,
-              height: 100,
-            },
-          },
-          createElement(Shape, {
-            testId: "inner-shape",
-            width: 100,
-            height: 20,
-          }),
-        ),
-      );
-    const makeFollowing = () =>
-      createElement(Shape, {
-        testId: "following-shape",
-        width: 100,
-        height: 20,
-        style: { flexShrink: 0 },
-      });
-
-    const natural = await build(
-      createElement(
-        Deck,
-        { width: 400, height: 400 },
-        createElement(
-          Slide,
-          { slideId: "mixed-baseline-natural" },
-          createElement(
-            Box,
-            { style: { width: 300 } },
-            makeRow(),
-            makeFollowing(),
-          ),
-        ),
-      ),
-    );
-    assert.equal(
-      natural.report.slides[0]?.layouts?.find(
-        ({ testId }) => testId === "baseline-row",
-      )?.box.height,
-      103.2,
-    );
-    assert.deepEqual(
-      natural.report.slides[0]?.objects.map(({ testId, box }) => ({
-        testId,
-        y: box?.y,
-      })),
-      [
-        { testId: "measured-text", y: 0 },
-        { testId: "inner-shape", y: 3.2 },
-        { testId: "following-shape", y: 103.2 },
-      ],
-    );
-    const naturalFile = await validatePptx(natural.pptx);
-    assert.deepEqual(naturalFile.errors, []);
-    assert.deepEqual(
-      naturalFile.slides[0]?.objects.map(({ boxEmu }) =>
-        Number((boxEmu.y / 9525).toFixed(2)),
-      ),
-      [0, 3.2, 103.2],
-    );
-
-    const automatic = await build(
-      createElement(
-        Deck,
-        { width: 400, height: 400 },
-        createElement(
-          Slide,
-          { slideId: "mixed-baseline-auto-min" },
-          createElement(
-            Box,
-            {
-              style: {
-                display: "flex",
-                flexDirection: "column",
-                width: 300,
-                height: 200,
-              },
-            },
-            makeRow(),
-            makeFollowing(),
-          ),
-        ),
-      ),
-    );
-    assert.equal(
-      automatic.report.slides[0]?.layouts?.find(
-        ({ testId }) => testId === "baseline-row",
-      )?.box.height,
-      103.2,
-    );
-    assert.deepEqual(
-      automatic.report.slides[0]?.objects.map(({ testId, box }) => ({
-        testId,
-        y: box?.y,
-      })),
-      [
-        { testId: "measured-text", y: 0 },
-        { testId: "inner-shape", y: 3.2 },
-        { testId: "following-shape", y: 103.2 },
-      ],
-    );
-    const automaticFile = await validatePptx(automatic.pptx);
-    assert.deepEqual(automaticFile.errors, []);
-    assert.deepEqual(
-      automaticFile.slides[0]?.objects.map(({ boxEmu }) =>
-        Number((boxEmu.y / 9525).toFixed(2)),
-      ),
-      [0, 3.2, 103.2],
-    );
-  });
-
-  it("selects baseline child items adopting Yoga resolved alignment for column", async () => {
-    const makeText = () =>
-      createElement(
-        Text,
-        {
-          testId: "selection-text",
-          width: 100,
-          height: 60,
-          style: { fontFamily: cjkFont, fontSize: 20 },
-        },
-        "中",
-      );
-    const makeRow = () =>
-      createElement(
-        Box,
-        {
-          testId: "selection-row",
-          style: { display: "flex", alignItems: "baseline", width: 300 },
-        },
-        makeText(),
-        createElement(
-          Box,
-          {
-            testId: "selection-column",
-            style: {
-              display: "flex",
-              flexDirection: "column",
-              alignItems: "flex-start",
-              width: 100,
-              height: 100,
-            },
-          },
-          createElement(Shape, {
-            testId: "selection-first-shape",
-            width: 100,
-            height: 20,
-          }),
-          createElement(Shape, {
-            testId: "selection-second-shape",
-            width: 100,
-            height: 80,
-            style: { alignSelf: "baseline" },
-          }),
-        ),
-      );
-    const makeFollowing = () =>
-      createElement(Shape, {
-        testId: "selection-following-shape",
-        width: 100,
-        height: 20,
-        style: { flexShrink: 0 },
-      });
-    const expectedObjects = [
-      { testId: "selection-text", y: 0 },
-      { testId: "selection-first-shape", y: 3.2 },
-      { testId: "selection-second-shape", y: 23.2 },
-      { testId: "selection-following-shape", y: 103.2 },
-    ];
-
-    const natural = await build(
-      createElement(
-        Deck,
-        { width: 400, height: 400 },
-        createElement(
-          Slide,
-          { slideId: "baseline-selection-natural" },
-          createElement(
-            Box,
-            { style: { width: 300 } },
-            makeRow(),
-            makeFollowing(),
-          ),
-        ),
-      ),
-    );
-    assert.equal(
-      natural.report.slides[0]?.layouts?.find(
-        ({ testId }) => testId === "selection-row",
-      )?.box.height,
-      103.2,
-    );
-    assert.deepEqual(
-      natural.report.slides[0]?.objects.map(({ testId, box }) => ({
-        testId,
-        y: box?.y,
-      })),
-      expectedObjects,
-    );
-    const naturalFile = await validatePptx(natural.pptx);
-    assert.deepEqual(naturalFile.errors, []);
-    assert.deepEqual(
-      naturalFile.slides[0]?.objects.map(({ boxEmu }) =>
-        Number((boxEmu.y / 9525).toFixed(2)),
-      ),
-      [0, 3.2, 23.2, 103.2],
-    );
-
-    const automatic = await build(
-      createElement(
-        Deck,
-        { width: 400, height: 400 },
-        createElement(
-          Slide,
-          { slideId: "baseline-selection-auto-min" },
-          createElement(
-            Box,
-            {
-              style: {
-                display: "flex",
-                flexDirection: "column",
-                width: 300,
-                height: 200,
-              },
-            },
-            makeRow(),
-            makeFollowing(),
-          ),
-        ),
-      ),
-    );
-    assert.equal(
-      automatic.report.slides[0]?.layouts?.find(
-        ({ testId }) => testId === "selection-row",
-      )?.box.height,
-      103.2,
-    );
-    assert.deepEqual(
-      automatic.report.slides[0]?.objects.map(({ testId, box }) => ({
-        testId,
-        y: box?.y,
-      })),
-      expectedObjects,
-    );
-    const automaticFile = await validatePptx(automatic.pptx);
-    assert.deepEqual(automaticFile.errors, []);
-    assert.deepEqual(
-      automaticFile.slides[0]?.objects.map(({ boxEmu }) =>
-        Number((boxEmu.y / 9525).toFixed(2)),
-      ),
-      [0, 3.2, 23.2, 103.2],
     );
   });
 

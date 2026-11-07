@@ -34,6 +34,7 @@ export type {
   PresetGeometry,
 } from "./geometry.ts";
 import { nativeLinkXml } from "./identity.ts";
+import { layoutStyleValue } from "./style-parse.ts";
 export { linearGradient, radialGradient } from "./visual.ts";
 export type { PaddingStyle, VisualStyle } from "@react-pptx/core";
 import { fontPresentationContributions } from "./font-embedding.ts";
@@ -265,25 +266,6 @@ function optionalText(
   return value;
 }
 
-function layoutStyleValue(
-  input: CapabilityInput,
-  name: "width" | "height",
-): number | "auto" | `${number}%` | undefined {
-  const value = input.props["style"];
-  if (typeof value !== "object" || value === null || Array.isArray(value)) {
-    return undefined;
-  }
-  const dimension = (value as Record<string, unknown>)[name];
-  if (typeof dimension === "number" || dimension === "auto") return dimension;
-  if (
-    typeof dimension === "string" &&
-    /^-?(?:\d+(?:\.\d*)?|\.\d+)%$/u.test(dimension)
-  ) {
-    return dimension as `${number}%`;
-  }
-  return undefined;
-}
-
 function height(
   value: unknown,
 ):
@@ -477,19 +459,9 @@ export const shapeCapability: ObjectCapabilityModule<ParsedShape> = {
   },
 
   measureLayout(
-    inputOrParsed: ParsedShape | CapabilityInput,
+    parsed: ParsedShape,
     request: CapabilityLayoutRequest,
   ): CapabilityLayoutMeasurement | undefined {
-    const parsed: ParsedShape =
-      "paragraphs" in inputOrParsed && "contract" in inputOrParsed
-        ? inputOrParsed
-        : this.parse(inputOrParsed, {
-            path: "Shape",
-            theme: request.theme,
-            options: {},
-            slideNumber: request.slideNumber,
-          }).parsed;
-
     if (!parsed.hasText || parsed.paragraphs.length === 0) {
       return { minContentWidth: 0, minContentHeight: 0 };
     }
@@ -546,20 +518,7 @@ export const shapeCapability: ObjectCapabilityModule<ParsedShape> = {
     }
   },
 
-  compile(
-    inputOrParsed: ParsedShape | CapabilityInput,
-    context: CapabilityContext,
-  ) {
-    const parsed: ParsedShape =
-      "paragraphs" in inputOrParsed && "contract" in inputOrParsed
-        ? inputOrParsed
-        : this.parse(inputOrParsed, {
-            path: context.path,
-            theme: context.theme,
-            options: context.options,
-            slideNumber: context.slideNumber,
-          }).parsed;
-
+  compile(parsed: ParsedShape, context: CapabilityContext) {
     const props = parsed.rawProps;
     const testId = parsed.testId;
     const part = parsed.part;

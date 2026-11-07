@@ -197,17 +197,7 @@ export const boxCapability: ObjectCapabilityModule<ParsedBox> = {
     return { contract, parsed };
   },
 
-  compile(inputOrParsed: ParsedBox | CapabilityInput, context) {
-    const parsed: ParsedBox =
-      "hasVisibleStyle" in inputOrParsed && "contract" in inputOrParsed
-        ? inputOrParsed
-        : this.parse(inputOrParsed, {
-            path: context.path,
-            theme: context.theme,
-            options: context.options,
-            slideNumber: context.slideNumber,
-          }).parsed;
-
+  compile(parsed: ParsedBox, context) {
     const box = context.layoutBox;
     if (box === undefined) {
       throw new CapabilityError(

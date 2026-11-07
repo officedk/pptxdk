@@ -5,6 +5,7 @@ import {
   CapabilityError,
   pxToEmu,
   resolvedColorXml,
+  textStyleKeys,
   xmlEscape,
   type ColorValue,
   type Font,
@@ -579,27 +580,7 @@ function readTextStyle(
   theme: ThemeContext,
 ): ResolvedTextStyle {
   const props = styleRecord(value, label);
-  onlyKnownKeys(
-    props,
-    [
-      "fontFamily",
-      "fontSize",
-      "fontWeight",
-      "fontStyle",
-      "color",
-      "lineHeight",
-      "verticalAlign",
-      "align",
-      "spacingAfter",
-      "letterSpacing",
-      "textTransform",
-      "textDecoration",
-      "textShadow",
-      "textWrap",
-      "lang",
-    ],
-    label,
-  );
+  onlyKnownKeys(props, [...textStyleKeys], label);
   if (props["lang"] !== undefined) {
     assertValidLang(props["lang"]);
   }
@@ -1704,6 +1685,8 @@ export function parseTextContent(
   const paragraphs = normalizeParagraphs(children, style, theme, fields);
   return { paragraphs, style };
 }
+
+export const parseTextParagraphs = parseTextContent;
 
 /** Generates PresentationML txBody XML and resource claims directly from pre-parsed paragraphs and styles. */
 export function writeTextBodyFromParagraphs(

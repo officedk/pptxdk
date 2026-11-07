@@ -659,19 +659,9 @@ export const imageCapability: ObjectCapabilityModule<ParsedImage> = {
   },
 
   measureLayout(
-    inputOrParsed: ParsedImage | CapabilityInput,
+    parsed: ParsedImage,
     request: CapabilityLayoutRequest,
   ): CapabilityLayoutMeasurement {
-    const parsed: ParsedImage =
-      "image" in inputOrParsed && "contract" in inputOrParsed
-        ? inputOrParsed
-        : this.parse(inputOrParsed, {
-            path: "Image",
-            theme: request.theme,
-            options: {},
-            slideNumber: request.slideNumber,
-          }).parsed;
-
     const image = parsed.image;
     const style = parsed.style;
     const requestedWidth = requestedDimension(style, parsed.rawProps, "width");
@@ -696,20 +686,7 @@ export const imageCapability: ObjectCapabilityModule<ParsedImage> = {
     };
   },
 
-  compile(
-    parsedOrInput: ParsedImage | CapabilityInput,
-    context: CapabilityContext,
-  ): CapabilityOutput {
-    const parsed: ParsedImage =
-      "image" in parsedOrInput && "contract" in parsedOrInput
-        ? parsedOrInput
-        : this.parse(parsedOrInput, {
-            path: context.path,
-            theme: context.theme,
-            options: context.options,
-            slideNumber: context.slideNumber,
-          }).parsed;
-
+  compile(parsed: ParsedImage, context: CapabilityContext): CapabilityOutput {
     const image = parsed.image;
     const imageStyle = parsed.style;
     const requestedWidth = requestedDimension(

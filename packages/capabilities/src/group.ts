@@ -268,20 +268,7 @@ export const groupCapability: ObjectCapabilityModule<ParsedGroup> = {
     return { contract, parsed };
   },
 
-  compile(
-    inputOrParsed: ParsedGroup | CapabilityInput,
-    context: CapabilityContext,
-  ) {
-    const parsed: ParsedGroup =
-      "contract" in inputOrParsed && "styleRecord" in inputOrParsed
-        ? inputOrParsed
-        : this.parse(inputOrParsed, {
-            path: context.path,
-            theme: context.theme,
-            options: context.options,
-            slideNumber: context.slideNumber,
-          }).parsed;
-
+  compile(parsed: ParsedGroup, context: CapabilityContext) {
     const testId = parsed.testId;
     const part = parsed.part;
     const requestedName = parsed.name;

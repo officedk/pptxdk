@@ -1409,26 +1409,9 @@ export const chartCapability: ObjectCapabilityModule = {
   },
 
   measureLayout(
-    inputOrParsed: ParsedChart | CapabilityInput,
+    parsed: ParsedChart,
     request: CapabilityLayoutRequest,
   ): CapabilityLayoutMeasurement {
-    const parsed: ParsedChart =
-      "kind" in inputOrParsed && "contract" in inputOrParsed
-        ? inputOrParsed
-        : (
-            this.parse as NonNullable<
-              (
-                input: CapabilityInput,
-                context: CapabilityParseContext,
-              ) => CapabilityParseResult<ParsedChart>
-            >
-          )(inputOrParsed, {
-            path: "Chart",
-            theme: request.theme,
-            options: {},
-            slideNumber: request.slideNumber,
-          }).parsed;
-
     const declaredWidth = parsed.declaredWidth;
     const declaredHeight = parsed.declaredHeight;
     const width =
@@ -1444,27 +1427,7 @@ export const chartCapability: ObjectCapabilityModule = {
     };
   },
 
-  compile(
-    inputOrParsed: ParsedChart | CapabilityInput,
-    context: CapabilityContext,
-  ): CapabilityOutput {
-    const parsed: ParsedChart =
-      "kind" in inputOrParsed && "contract" in inputOrParsed
-        ? inputOrParsed
-        : (
-            this.parse as NonNullable<
-              (
-                input: CapabilityInput,
-                context: CapabilityParseContext,
-              ) => CapabilityParseResult<ParsedChart>
-            >
-          )(inputOrParsed, {
-            path: context.path,
-            theme: context.theme,
-            options: context.options,
-            slideNumber: context.slideNumber,
-          }).parsed;
-
+  compile(parsed: ParsedChart, context: CapabilityContext): CapabilityOutput {
     const x = context.layoutBox?.x ?? parsed.declaredX ?? 0;
     const y = context.layoutBox?.y ?? parsed.declaredY ?? 0;
     const width =

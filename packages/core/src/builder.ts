@@ -39,6 +39,7 @@ import {
   type CapabilityPresentationContribution,
   type CapabilityContribution,
   type CapabilityContext,
+  type CapabilityLayoutContract,
   type CapabilityModule,
   type CapabilityParseResult,
   type RegisteredCapabilityModule,
@@ -289,20 +290,6 @@ function nativeObjectName(key: MorphKey, document: DocumentBuildState): string {
     document.morphNames.set(key, name);
   }
   return name;
-}
-
-function hasBoxStyle(style: unknown): boolean {
-  if (typeof style !== "object" || style === null || Array.isArray(style))
-    return false;
-  const s = style as Record<string, unknown>;
-  const borderWidth =
-    s["borderWidth"] === undefined ? 1 : (s["borderWidth"] as number);
-  return (
-    s["backgroundColor"] !== undefined ||
-    s["backgroundImage"] !== undefined ||
-    s["boxShadow"] !== undefined ||
-    (s["borderColor"] !== undefined && borderWidth > 0)
-  );
 }
 
 function usesMorphTransition(node: HostNode): boolean {
@@ -1426,20 +1413,11 @@ function compileChildren(
       const id = context.slide.nextId++;
       const module = context.modules.get("rp:box");
       const parsedResult: CapabilityParseResult | undefined =
-        context.layout.parsed?.get(child) ??
-        (module !== undefined && isObjectCapability(module)
-          ? module.parse(child, {
-              path,
-              theme: context.layout.themes.get(child) ?? context.theme,
-              options: context.options,
-              slideNumber: context.slideNumber,
-            })
-          : undefined);
+        context.layout.parsed?.get(child);
       const parsedBox = parsedResult?.parsed as
         | { hasVisibleStyle?: boolean }
         | undefined;
-      const hasNativeBox =
-        parsedBox?.hasVisibleStyle ?? hasBoxStyle(child.props["style"]);
+      const hasNativeBox = Boolean(parsedBox?.hasVisibleStyle);
       const rawLink = child.props["link"];
       const boxLink =
         rawLink === undefined
@@ -1500,8 +1478,7 @@ function compileChildren(
       if (module !== undefined && isObjectCapability(module)) {
         const objectId = context.slide.nextId++;
         try {
-          const compileInput =
-            parsedResult !== undefined ? parsedResult.parsed : child;
+          const compileInput = parsedResult!.parsed;
           const output = module.compile(
             compileInput,
             capabilityContext(
@@ -1628,7 +1605,7 @@ function compileChildren(
       });
       painted.push({
         sourceOrder: [index],
-        zIndex: paintOrder(child),
+        zIndex: paintOrder(parsedResult?.contract),
         xml: boxXml + compiled.xml,
         objects: [
           ...(boxObservation === undefined ? [] : [boxObservation]),
@@ -1883,7 +1860,7 @@ function compileChildren(
       }
       painted.push({
         sourceOrder: [index],
-        zIndex: paintOrder(child),
+        zIndex: paintOrder(parsedResult.contract),
         xml: output.xml,
         objects: [observation],
         reference: { kind: "object", id: observation.id },
@@ -1929,11 +1906,8 @@ function compareSourceOrder(
   return left.length - right.length;
 }
 
-function paintOrder(child: CapabilityElement): number {
-  const style = child.props["style"];
-  if (typeof style !== "object" || style === null || Array.isArray(style))
-    return 0;
-  const value = (style as Record<string, unknown>)["zIndex"];
+function paintOrder(contract?: CapabilityLayoutContract): number {
+  const value = contract?.layoutStyle.zIndex;
   return typeof value === "number" && Number.isFinite(value) ? value : 0;
 }
 

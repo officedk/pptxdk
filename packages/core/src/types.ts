@@ -1,12 +1,10 @@
 import type { ReactNode } from "react";
 
-import type { MorphKey } from "#/morph.ts";
 import type {
   ThemeContext,
   ThemeInput,
   ThemeScope,
   TextStyle,
-  VisualStyle,
   ColorValue,
   LinearGradient,
   RadialGradient,
@@ -194,16 +192,6 @@ export type PaddingStyle = {
   readonly paddingRight?: number;
   readonly paddingBottom?: number;
   readonly paddingLeft?: number;
-};
-
-/** Transparent layout Box; it arranges children only and does not require generating a corresponding native presentation object. */
-export type BoxProps = ElementProps & {
-  readonly testId?: string;
-  readonly part?: string;
-  readonly morphKey?: MorphKey;
-  readonly link?: LinkTarget;
-  readonly style?: LayoutStyle & TextStyle & VisualStyle;
-  readonly theme?: ThemeScope;
 };
 
 /** Target declaration interpreted by PowerPoint upon clicking an object; internal targets are resolved by stable slideId. */
@@ -544,10 +532,10 @@ export type CapabilityResourceClaim = {
 };
 
 export type ObjectCapabilityModule<TParsed = any> = {
-  /** Host type of the declared component, such as `rp:shape`. */
+  /** Host type of the declared component, such as an object component host name. */
   readonly declaration: string;
   /** Parse the host declaration once before layout, returning the layout contract and parsed state reused by measureLayout and compile. */
-  parse?(
+  parse(
     input: CapabilityInput,
     context: CapabilityParseContext,
   ): CapabilityParseResult<TParsed>;

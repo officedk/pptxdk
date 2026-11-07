@@ -252,16 +252,6 @@ function record(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-export function hasVisibleBoxStyle(value: unknown): boolean {
-  if (!record(value)) return false;
-  return (
-    value["backgroundColor"] !== undefined ||
-    value["backgroundImage"] !== undefined ||
-    value["boxShadow"] !== undefined ||
-    (value["borderColor"] !== undefined && value["borderWidth"] !== 0)
-  );
-}
-
 function describe(value: unknown): string {
   if (typeof value === "string") return `"${value}"`;
   if (typeof value === "number" || typeof value === "boolean") {
@@ -523,16 +513,6 @@ function resolvePercent(
   if (typeof value !== "string") return undefined;
   const match = /^(-?(?:\d+(?:\.\d*)?|\.\d+))%$/u.exec(value);
   return match === null ? undefined : (Number(match[1]) * basis) / 100;
-}
-
-// Only allow shared text style properties through layout whitelist here; specific validation remains the responsibility of capability modules.
-function allowsSharedTextStyle(type: string): boolean {
-  return (
-    type === "rp:text" ||
-    type === "rp:table" ||
-    type === "rp:chart" ||
-    type === "rp:box"
-  );
 }
 
 function identity(element: CapabilityElement): string | undefined {
@@ -1005,9 +985,16 @@ export function parseCapabilityLayoutContract(options: {
   readonly props: Readonly<Record<string, unknown>>;
   readonly allowedStyleKeys: ReadonlySet<string>;
   readonly allowPadding?: boolean;
+  readonly isContainer?: boolean;
   readonly path?: string;
 }): CapabilityLayoutContract {
-  const { nativeKind, props, allowedStyleKeys, allowPadding = false } = options;
+  const {
+    nativeKind,
+    props,
+    allowedStyleKeys,
+    allowPadding = false,
+    isContainer = false,
+  } = options;
   const path = options.path ?? "style";
   const rawStyle = props["style"];
   if (rawStyle !== undefined) {
@@ -1045,7 +1032,7 @@ export function parseCapabilityLayoutContract(options: {
   const layoutStyle = readStyle(
     rawStyle,
     path,
-    false,
+    isContainer,
     false,
     allowPadding,
     allowedStyleKeys,
@@ -1300,35 +1287,39 @@ export class LayoutPass {
     };
   }
 
-  #validateLoose(input: CapabilityElement, path: string): LayoutStyle {
-    const module = this.#modules.get(input.type);
-    if (!objectModule(module)) return {};
-    // Text, Table, and Chart consume font properties via shared text service and remain leaf objects in layout.
-    const allowsTextStyle =
-      allowsSharedTextStyle(input.type) ||
-      (input.type === "rp:shape" &&
-        typeof input.props["text"] === "string" &&
-        input.props["text"] !== "");
-    const isGroup = input.type === "rp:group";
-    const presentation =
-      input.type === "rp:group"
-        ? groupVisualProperties
-        : ["rp:box", "rp:text", "rp:shape", "rp:image"].includes(input.type)
-          ? visualProperties
-          : undefined;
-    const allowsPadding =
-      input.type === "rp:text" ||
-      (input.type === "rp:shape" &&
-        typeof input.props["text"] === "string" &&
-        input.props["text"] !== "");
-    return readStyle(
-      input.props["style"],
-      path,
-      isGroup,
-      allowsTextStyle,
-      allowsPadding,
-      presentation,
-    );
+  #parseCapability(
+    child: CapabilityElement,
+    childPath: string,
+    themeContext: ThemeContext,
+    module: ObjectCapabilityModule,
+  ): CapabilityParseResult {
+    let parseResult = this.#parsedResults.get(child);
+    if (parseResult === undefined) {
+      try {
+        parseResult = module.parse(child, {
+          path: childPath,
+          theme: themeContext,
+          options: this.#options,
+          slideNumber: this.#slideNumber,
+        });
+        this.#parsedResults.set(child, parseResult);
+      } catch (error) {
+        if (error instanceof BuildError) throw error;
+        const code =
+          error instanceof CapabilityError
+            ? error.code
+            : "invalid-capability-input";
+        const message = error instanceof Error ? error.message : String(error);
+        const targetPath =
+          error instanceof CapabilityError && error.path !== undefined
+            ? error.path.startsWith(childPath)
+              ? error.path
+              : `${childPath}/${error.path}`
+            : childPath;
+        return fail(targetPath, code, message);
+      }
+    }
+    return parseResult;
   }
 
   // Transparent Groups are not in the layout tree, so theme context must be passed separately along the declaration tree.
@@ -1347,32 +1338,71 @@ export class LayoutPass {
         return;
       }
       if (child.type === "rp:box") {
-        const childStyle = readStyle(
-          child.props["style"],
-          childPath,
-          true,
-          true,
-          true,
-          visualProperties,
-        );
+        const module = this.#modules.get(child.type);
+        let childStyle: LayoutStyle;
+        let contract: CapabilityLayoutContract | undefined;
+        let parsed: unknown;
+        if (objectModule(module)) {
+          const result = this.#parseCapability(
+            child,
+            childPath,
+            themeContext,
+            module,
+          );
+          contract = result.contract;
+          childStyle = contract.layoutStyle;
+          parsed = result.parsed;
+        } else {
+          childStyle = readStyle(
+            child.props["style"],
+            childPath,
+            true,
+            true,
+            true,
+            visualProperties,
+          );
+        }
         if (childStyle.display === "none") {
           this.#markHidden(child);
           return;
         }
         this.#validateItemStyle(childStyle, parent, childPath);
-        const built = this.#buildBox(child, childPath, parent, themeContext);
+        const built = this.#buildBox(
+          child,
+          childPath,
+          parent,
+          themeContext,
+          contract,
+          parsed,
+        );
         this.#appendLayoutChild(parent, built);
         return;
       }
       if (child.type === "rp:group") {
-        const childStyle = readStyle(
-          child.props["style"],
-          childPath,
-          true,
-          true,
-          true,
-          groupVisualProperties,
-        );
+        const module = this.#modules.get(child.type);
+        let childStyle: LayoutStyle;
+        let contract: CapabilityLayoutContract | undefined;
+        let parsed: unknown;
+        if (objectModule(module)) {
+          const result = this.#parseCapability(
+            child,
+            childPath,
+            themeContext,
+            module,
+          );
+          contract = result.contract;
+          childStyle = contract.layoutStyle;
+          parsed = result.parsed;
+        } else {
+          childStyle = readStyle(
+            child.props["style"],
+            childPath,
+            true,
+            true,
+            true,
+            groupVisualProperties,
+          );
+        }
         if (childStyle.display === "none") {
           this.#markHidden(child);
           return;
@@ -1401,7 +1431,14 @@ export class LayoutPass {
             return;
           }
         }
-        const built = this.#buildGroup(child, childPath, parent, themeContext);
+        const built = this.#buildGroup(
+          child,
+          childPath,
+          parent,
+          themeContext,
+          contract,
+          parsed,
+        );
         this.#appendLayoutChild(parent, built);
         return;
       }
@@ -1417,35 +1454,13 @@ export class LayoutPass {
         );
         return;
       }
-      if (objectModule(module) && module.parse !== undefined) {
-        let parseResult = this.#parsedResults.get(child);
-        if (parseResult === undefined) {
-          try {
-            parseResult = module.parse(child, {
-              path: childPath,
-              theme: themeContext,
-              options: this.#options,
-              slideNumber: this.#slideNumber,
-            });
-            this.#parsedResults.set(child, parseResult);
-          } catch (error) {
-            if (error instanceof BuildError) throw error;
-            const code =
-              error instanceof CapabilityError
-                ? error.code
-                : "invalid-capability-input";
-            const message =
-              error instanceof Error ? error.message : String(error);
-            const targetPath =
-              error instanceof CapabilityError && error.path !== undefined
-                ? error.path.startsWith(childPath)
-                  ? error.path
-                  : `${childPath}/${error.path}`
-                : childPath;
-            return fail(targetPath, code, message);
-          }
-        }
-        const { contract, parsed } = parseResult;
+      if (objectModule(module)) {
+        const { contract, parsed } = this.#parseCapability(
+          child,
+          childPath,
+          themeContext,
+          module,
+        );
         if (contract.layoutStyle.display === "none") {
           this.#markHidden(child);
           return;
@@ -1475,68 +1490,6 @@ export class LayoutPass {
         }
         return;
       }
-      const looseStyle = includeObjects
-        ? undefined
-        : this.#validateLoose(child, childPath);
-      if (looseStyle?.display === "none") {
-        this.#markHidden(child);
-        return;
-      }
-      if (!includeObjects) {
-        this.#themes.set(child, themeContext);
-        if (looseStyle !== undefined)
-          this.#validateItemStyle(looseStyle, parent, childPath);
-        if (looseStyle !== undefined && this.#requiresLooseLayout(looseStyle)) {
-          const built = this.#buildObject(
-            child,
-            childPath,
-            parent,
-            looseStyle,
-            themeContext,
-          );
-          if (built !== undefined) {
-            this.#positionLooseGeometry(built);
-            this.#appendLayoutChild(parent, built);
-          }
-        }
-        return;
-      }
-      if (!objectModule(module)) return;
-      const allowsTextStyle =
-        allowsSharedTextStyle(child.type) ||
-        (child.type === "rp:shape" &&
-          typeof child.props["text"] === "string" &&
-          child.props["text"] !== "");
-      const presentation = ["rp:text", "rp:shape", "rp:image"].includes(
-        child.type,
-      )
-        ? visualProperties
-        : undefined;
-      const childStyle = readStyle(
-        child.props["style"],
-        childPath,
-        false,
-        allowsTextStyle,
-        child.type === "rp:text" ||
-          (child.type === "rp:shape" &&
-            typeof child.props["text"] === "string" &&
-            child.props["text"] !== ""),
-        presentation,
-      );
-      if (childStyle.display === "none") {
-        this.#markHidden(child);
-        return;
-      }
-      this.#validateItemStyle(childStyle, parent, childPath);
-      const layoutChild = this.#buildObject(
-        child,
-        childPath,
-        parent,
-        childStyle,
-        themeContext,
-      );
-      if (layoutChild === undefined) return;
-      this.#appendLayoutChild(parent, layoutChild);
     });
   }
 
@@ -1659,52 +1612,13 @@ export class LayoutPass {
     path: string,
     parent: LayoutNode,
     themeContext: ThemeContext,
+    contract?: CapabilityLayoutContract,
+    parsed?: unknown,
   ): LayoutNode {
-    const unknown = Object.keys(input.props).find(
-      (key) =>
-        ![
-          "testId",
-          "part",
-          "style",
-          "theme",
-          "morphKey",
-          "link",
-          "__motionContext",
-        ].includes(key),
-    );
-    if (unknown !== undefined) {
-      fail(
-        path,
-        "unknown-parameter",
-        `Box contains unknown parameter ${unknown}`,
-      );
-    }
-    const testId = input.props["testId"];
-    if (
-      testId !== undefined &&
-      (typeof testId !== "string" || testId.trim() === "")
-    ) {
-      fail(path, "invalid-parameter", "testId must be a non-empty string");
-    }
-    const part = input.props["part"];
-    if (
-      part !== undefined &&
-      (typeof part !== "string" || part.trim() === "")
-    ) {
-      fail(path, "invalid-parameter", "part must be a non-empty string");
-    }
     const rawStyle = input.props["style"];
-    const style = readStyle(rawStyle, path, true, true, true, visualProperties);
-    if (
-      input.props["morphKey"] !== undefined &&
-      !hasVisibleBoxStyle(rawStyle)
-    ) {
-      fail(
-        path,
-        "morph-needs-object",
-        "Only visible Box elements generating native background shapes can participate in Morph",
-      );
-    }
+    const style =
+      contract?.layoutStyle ??
+      readStyle(rawStyle, path, true, true, true, visualProperties);
     const theme = deriveTheme(
       themeContext,
       input.props["theme"] as ThemeScope | undefined,
@@ -1721,6 +1635,8 @@ export class LayoutPass {
       children: [],
       parent,
       escaped: [],
+      ...(parsed !== undefined ? { parsed } : {}),
+      ...(contract !== undefined ? { contract } : {}),
     };
     this.#themes.set(input, theme);
     this.#applyStyle(yoga, style, parent.style, false, true);
@@ -1733,41 +1649,17 @@ export class LayoutPass {
     path: string,
     parent: LayoutNode,
     themeContext: ThemeContext,
+    contract?: CapabilityLayoutContract,
+    parsed?: unknown,
   ): LayoutNode {
-    const unknown = Object.keys(input.props).find(
-      (key) =>
-        ![
-          "testId",
-          "part",
-          "name",
-          "style",
-          "theme",
-          "enter",
-          "emphasis",
-          "motion",
-          "__motionContext",
-          "__motionEnabled",
-          "__motionStep",
-        ].includes(key),
-    );
-    if (unknown !== undefined)
-      fail(
-        path,
-        "unknown-parameter",
-        `Group contains unknown parameter ${unknown}`,
-      );
-    const style = readStyle(
-      input.props["style"],
-      path,
-      true,
-      true,
-      true,
-      groupVisualProperties,
-    );
+    const rawStyle = input.props["style"];
+    const style =
+      contract?.layoutStyle ??
+      readStyle(rawStyle, path, true, true, true, groupVisualProperties);
     const theme = deriveTheme(
       themeContext,
       input.props["theme"] as ThemeScope | undefined,
-      input.props["style"],
+      rawStyle,
       path,
     );
     const yoga = Yoga.Node.create(this.#config);
@@ -1780,6 +1672,8 @@ export class LayoutPass {
       children: [],
       parent,
       escaped: [],
+      ...(parsed !== undefined ? { parsed } : {}),
+      ...(contract !== undefined ? { contract } : {}),
     };
     this.#themes.set(input, theme);
     this.#applyStyle(yoga, style, parent.style, false, true);
@@ -2656,8 +2550,7 @@ export class LayoutPass {
     );
   }
 
-  #isTextBearing(node: LayoutNode): boolean {
-    if (node.element?.type === "rp:text") return true;
+  #nodeHasText(node: LayoutNode): boolean {
     if (
       node.parsed !== undefined &&
       typeof node.parsed === "object" &&
@@ -2673,21 +2566,18 @@ export class LayoutPass {
         );
       }
     }
-    return (
-      typeof node.element?.props["text"] === "string" &&
-      node.element.props["text"] !== ""
-    );
+    return false;
   }
 
   #containsText(node: LayoutNode): boolean {
     return (
-      this.#isTextBearing(node) ||
+      this.#nodeHasText(node) ||
       node.children.some((child) => this.#containsText(child))
     );
   }
 
   #baselineTextLeaf(node: LayoutNode): LayoutNode {
-    if (this.#isTextBearing(node)) return node;
+    if (this.#nodeHasText(node)) return node;
     if (node.element?.type !== "rp:box" || node.children.length !== 1) {
       fail(
         node.path,

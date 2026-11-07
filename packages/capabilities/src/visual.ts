@@ -524,6 +524,22 @@ function effectsXml(theme: ThemeContext, style: VisualStyleRecord): string {
     : `<a:effectLst>${items.join("")}</a:effectLst>`;
 }
 
+/** Determines whether a Box style specifies visible fill, border, or shadow. */
+export function hasVisibleBoxStyle(
+  style: Readonly<Record<string, unknown>> | undefined,
+): boolean {
+  if (style === undefined || typeof style !== "object" || style === null)
+    return false;
+  const borderWidth =
+    style["borderWidth"] === undefined ? 1 : (style["borderWidth"] as number);
+  return (
+    style["backgroundColor"] !== undefined ||
+    style["backgroundImage"] !== undefined ||
+    (style["borderColor"] !== undefined && borderWidth > 0) ||
+    style["boxShadow"] !== undefined
+  );
+}
+
 /** Shared serializer for shape properties of Shape, Image, Text, and visible Box. */
 export function shapePropertiesXml(
   options: ShapePropertiesOptions,
@@ -560,14 +576,8 @@ export function shapePropertiesXml(
     : fillXml(theme, style, options.fill, opacity);
   const line = lineXml(theme, style, opacity);
   const effects = effectsXml(theme, style);
-  const borderWidth =
-    style["borderWidth"] === undefined ? 1 : (style["borderWidth"] as number);
   const hasVisibleStyle =
-    (options.fill !== undefined && !options.image) ||
-    style["backgroundColor"] !== undefined ||
-    style["backgroundImage"] !== undefined ||
-    (style["borderColor"] !== undefined && borderWidth > 0) ||
-    style["boxShadow"] !== undefined;
+    (options.fill !== undefined && !options.image) || hasVisibleBoxStyle(style);
   const geometry = geometryXml(
     options.geometry,
     options.layoutOnlyWhenInvisible && !hasVisibleStyle ? undefined : radius,

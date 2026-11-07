@@ -1,6 +1,6 @@
 export { createBuilder } from "#/builder.ts";
 export { BuildError, CapabilityError } from "#/diagnostics.ts";
-export { Box, Deck, Section, Slide } from "#/elements.ts";
+export { Deck, Section, Slide } from "#/elements.ts";
 export { createMorphScope } from "#/morph.ts";
 export type { MorphKey, MorphScope } from "#/morph.ts";
 export { BuildQueryError } from "#/query.ts";
@@ -54,7 +54,6 @@ export type {
   BuildOptions,
   BuildReport,
   BuildResult,
-  BoxProps,
   CapabilityLayoutContract,
   CapabilityLayoutMeasurement,
   CapabilityLayoutRequest,

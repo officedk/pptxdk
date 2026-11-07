@@ -1,6 +1,5 @@
 import {
   CapabilityError,
-  type BoxProps as CoreBoxProps,
   type CapabilityAnnotation,
   type GeometryBox,
 } from "@react-pptx/core";
@@ -230,9 +229,6 @@ export type MotionScopeProps = {
   readonly children?: ReactNode;
 };
 
-/** Layout container appearance of an explicit scope; Box itself still does not generate a native object. */
-export type BoxProps = CoreBoxProps & Pick<MotionProps, "enter" | "motion">;
-
 export type StepProps = {
   /** Merge click steps with the same positive integer; each Step triggers independently when omitted. */
   readonly n?: number;
@@ -243,7 +239,7 @@ type StepDeclaration =
   | { readonly mode: "automatic"; readonly identity: string }
   | { readonly mode: "explicit"; readonly number: number };
 
-type MotionContextValue = {
+export type MotionContextValue = {
   readonly enabled: boolean;
   readonly motionValue?: unknown;
   readonly step?: StepDeclaration;
@@ -253,7 +249,7 @@ type MotionContextValue = {
     | readonly EntranceEffectDeclaration[];
 };
 
-const motionContext = createContext<MotionContextValue>({
+export const motionContext = createContext<MotionContextValue>({
   enabled: true,
   scopes: [],
 });
@@ -340,34 +336,7 @@ export function MotionScope(props: MotionScopeProps): ReactNode {
   );
 }
 
-/** Visible Box's own background and descendants without entrance effects can inherit default entrance. */
-export function Box({
-  enter,
-  motion,
-  children,
-  ...props
-}: BoxProps): ReactNode {
-  const parent = useContext(motionContext);
-  const defaultEnter = enter === undefined ? parent.defaultEnter : enter;
-  const context = Object.freeze({
-    ...parent,
-    enabled: parent.enabled && motion !== false,
-    ...(defaultEnter === undefined ? {} : { defaultEnter }),
-  });
-  const boxContext = Object.freeze({
-    ...context,
-    ...(motion === undefined ? {} : { motionValue: motion }),
-  });
-  return createElement(
-    motionContext.Provider,
-    { value: context },
-    createElement(
-      "rp:box",
-      { ...props, __motionContext: boxContext },
-      children,
-    ),
-  );
-}
+export { Box, type BoxProps } from "./box.ts";
 
 function declaration(
   kind: Effect["kind"],

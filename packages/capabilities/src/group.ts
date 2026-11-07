@@ -1,11 +1,21 @@
 import {
   CapabilityError,
+  layoutStyleKeys,
+  paddingStyleKeys,
+  parseCapabilityLayoutContract,
   pxToEmu,
+  textStyleKeys,
   xmlEscape,
+  type CapabilityChild,
+  type CapabilityContext,
   type CapabilityInput,
-  type CapabilityModule,
+  type CapabilityLayoutContract,
+  type CapabilityParseContext,
+  type CapabilityParseResult,
   type LayoutStyle,
   type LinkTarget,
+  type MorphKey,
+  type ObjectCapabilityModule,
   type ObjectObservation,
   type TextStyle,
   type ThemeScope,
@@ -181,10 +191,34 @@ function groupXml(
   return `<p:grpSp><p:nvGrpSpPr><p:cNvPr id="${id}" name="${escapedName}">${linkXml}</p:cNvPr><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr><a:xfrm${angle === undefined || angle === 0 ? "" : ` rot="${angle}"`}><a:off x="${box.x}" y="${box.y}"/><a:ext cx="${box.width}" cy="${box.height}"/><a:chOff x="${box.x}" y="${box.y}"/><a:chExt cx="${box.width}" cy="${box.height}"/></a:xfrm></p:grpSpPr>${members}</p:grpSp>`;
 }
 
+const groupAllowedStyleKeys = new Set<string>([
+  ...layoutStyleKeys,
+  ...paddingStyleKeys,
+  ...textStyleKeys,
+  "rotate",
+]);
+
+export type ParsedGroup = {
+  readonly testId?: string;
+  readonly part?: string;
+  readonly name?: string;
+  readonly morphKey?: MorphKey;
+  readonly link?: LinkTarget;
+  readonly styleRecord: Readonly<Record<string, unknown>>;
+  readonly rotation?: number;
+  readonly contract: CapabilityLayoutContract;
+  readonly rawProps: Readonly<Record<string, unknown>>;
+  readonly children: readonly CapabilityChild[];
+};
+
 /** Preserves members as native objects and writes group bounds according to final member geometry; outer layout is resolved by core. */
-export const groupCapability: CapabilityModule = {
+export const groupCapability: ObjectCapabilityModule<ParsedGroup> = {
   declaration: "rp:group",
-  compile(input: CapabilityInput, context) {
+
+  parse(
+    input: CapabilityInput,
+    context: CapabilityParseContext,
+  ): CapabilityParseResult<ParsedGroup> {
     const unknown = Object.keys(input.props).find(
       (key) => !(allowedParameters as readonly string[]).includes(key),
     );
@@ -197,7 +231,61 @@ export const groupCapability: CapabilityModule = {
     const testId = optionalText(input.props, "testId");
     const part = optionalText(input.props, "part");
     const requestedName = optionalText(input.props, "name");
-    const compiled = context.compileChildren(input.children);
+    const rawStyle = input.props["style"];
+    const styleRecord =
+      typeof rawStyle === "object" &&
+      rawStyle !== null &&
+      !Array.isArray(rawStyle)
+        ? (rawStyle as Record<string, unknown>)
+        : {};
+
+    const contract = parseCapabilityLayoutContract({
+      nativeKind: "grpSp",
+      props: input.props,
+      allowedStyleKeys: groupAllowedStyleKeys,
+      allowPadding: true,
+      isContainer: true,
+      path: context.path,
+    });
+
+    const rotation = styleRecord["rotate"];
+    const parsed: ParsedGroup = {
+      ...(testId !== undefined ? { testId } : {}),
+      ...(part !== undefined ? { part } : {}),
+      ...(requestedName !== undefined ? { name: requestedName } : {}),
+      ...(input.props["morphKey"] !== undefined
+        ? { morphKey: input.props["morphKey"] as MorphKey }
+        : {}),
+      ...(input.props["link"] !== undefined
+        ? { link: input.props["link"] as LinkTarget }
+        : {}),
+      styleRecord,
+      ...(typeof rotation === "number" ? { rotation } : {}),
+      contract,
+      rawProps: input.props,
+      children: input.children,
+    };
+    return { contract, parsed };
+  },
+
+  compile(
+    inputOrParsed: ParsedGroup | CapabilityInput,
+    context: CapabilityContext,
+  ) {
+    const parsed: ParsedGroup =
+      "contract" in inputOrParsed && "styleRecord" in inputOrParsed
+        ? inputOrParsed
+        : this.parse(inputOrParsed, {
+            path: context.path,
+            theme: context.theme,
+            options: context.options,
+            slideNumber: context.slideNumber,
+          }).parsed;
+
+    const testId = parsed.testId;
+    const part = parsed.part;
+    const requestedName = parsed.name;
+    const compiled = context.compileChildren(parsed.children);
     const geometry = bounds(compiled.objects);
     const outputGeometry = context.layoutBox ?? geometry.pixels;
     if (outputGeometry.width <= 0 || outputGeometry.height <= 0) {
@@ -214,14 +302,9 @@ export const groupCapability: CapabilityModule = {
     };
     const name =
       context.morphName ?? requestedName ?? testId ?? `Group ${context.id - 1}`;
-    const style = input.props["style"];
-    const styleRecord =
-      typeof style === "object" && style !== null && !Array.isArray(style)
-        ? (style as Record<string, unknown>)
-        : {};
-    const rotation = styleRecord["rotate"];
+    const rotation = parsed.rotation;
     const members = motionMembers(compiled.objects);
-    const annotations = motionAnnotations(input.props, {
+    const annotations = motionAnnotations(parsed.rawProps, {
       kind: "group",
       name,
       ...(testId === undefined ? {} : { testId }),
@@ -246,7 +329,7 @@ export const groupCapability: CapabilityModule = {
         escapedName,
         outputEmu,
         compiled.xml,
-        rotation === undefined ? undefined : (rotation as number),
+        rotation === undefined ? undefined : rotation,
         nativeLinkXml(context.nativeLink),
       ),
       observation: {

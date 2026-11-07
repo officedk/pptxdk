@@ -297,14 +297,7 @@ export const textCapability: ObjectCapabilityModule<ParsedText> = {
     const parsed: ParsedText =
       "paragraphs" in inputOrParsed && "contract" in inputOrParsed
         ? inputOrParsed
-        : (
-            this.parse as NonNullable<
-              (
-                input: CapabilityInput,
-                context: CapabilityParseContext,
-              ) => CapabilityParseResult<ParsedText>
-            >
-          )(inputOrParsed, {
+        : this.parse(inputOrParsed, {
             path: "Text",
             theme: request.theme,
             options: {},
@@ -353,14 +346,7 @@ export const textCapability: ObjectCapabilityModule<ParsedText> = {
     const parsed: ParsedText =
       "paragraphs" in inputOrParsed && "contract" in inputOrParsed
         ? inputOrParsed
-        : (
-            this.parse as NonNullable<
-              (
-                input: CapabilityInput,
-                context: CapabilityParseContext,
-              ) => CapabilityParseResult<ParsedText>
-            >
-          )(inputOrParsed, {
+        : this.parse(inputOrParsed, {
             path: context.path,
             theme: context.theme,
             options: context.options,

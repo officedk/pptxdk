@@ -2,13 +2,16 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
 import {
+  boxCapability,
   build,
   Box,
   BuildError,
   Chart,
+  createMorphScope,
   Deck,
   font,
   Group,
+  groupCapability,
   Image,
   P,
   Row,
@@ -20,6 +23,7 @@ import {
   Table,
   Text,
   textCapability,
+  transitions,
 } from "@react-pptx/react-pptx";
 import { validatePptx } from "@react-pptx/validation";
 import { strFromU8, unzipSync } from "fflate";
@@ -856,6 +860,265 @@ describe("Ticket 08: Object capability parse phase, container TextStyle validati
         );
 
         // Verify that compile received the parsed object produced by parse
+        const parseReturn = parseSpy.mock.results[0]!.value as {
+          parsed: unknown;
+        };
+        assert.equal(compileSpy.mock.calls[0]![0], parseReturn.parsed);
+      } finally {
+        parseSpy.mockRestore();
+        compileSpy.mockRestore();
+      }
+    });
+  });
+
+  describe("Ticket 11: Unify Box and Group, tighten parse contract, and remove leaf coupling", () => {
+    it("allows Group in flex layout to use morphKey and link", async () => {
+      const morph = createMorphScope();
+      const groupKey = morph.handle("flex-group-key");
+
+      const result = await build(
+        <Deck width={960} height={540}>
+          <Slide slideId="slide-flex-group">
+            <Box style={{ display: "flex", width: 500, height: 300, gap: 10 }}>
+              <Group
+                testId="flex-group"
+                morphKey={groupKey}
+                link={{ url: "https://example.com/target" }}
+                style={{ width: 200, height: 150 }}
+              >
+                <Shape testId="inner-shape" width={100} height={80} />
+              </Group>
+            </Box>
+          </Slide>
+        </Deck>,
+      );
+
+      assert.deepEqual(result.report.diagnostics, []);
+      const validation = await validatePptx(result.pptx);
+      assert.deepEqual(validation.errors, []);
+
+      // Verify the slide XML contains <p:grpSp> with the morph name and hyperlink
+      const unzipped = unzipSync(result.pptx);
+      const slideXml = strFromU8(unzipped["ppt/slides/slide1.xml"]!);
+      assert.match(slideXml, /<p:grpSp>/u);
+      assert.match(slideXml, /name="!*react-pptx-morph-/u);
+      assert.match(slideXml, /<a:hlinkClick/u);
+    });
+
+    it("supports cross-slide Morph pairing between Group objects based on nativeKind", async () => {
+      const morph = createMorphScope();
+      const groupKey = morph.handle("morphing-group");
+
+      const result = await build(
+        <Deck width={960} height={540}>
+          <Slide slideId="slide-1">
+            <Box style={{ display: "flex", width: 400, height: 300 }}>
+              <Group
+                testId="group-start"
+                morphKey={groupKey}
+                style={{ width: 150, height: 100 }}
+              >
+                <Shape width={50} height={50} />
+              </Group>
+            </Box>
+          </Slide>
+          <Slide
+            slideId="slide-2"
+            transition={transitions.morph({ fallback: transitions.fade() })}
+          >
+            <Box style={{ display: "flex", width: 600, height: 400 }}>
+              <Group
+                testId="group-end"
+                morphKey={groupKey}
+                style={{ width: 250, height: 200 }}
+              >
+                <Shape width={80} height={80} />
+              </Group>
+            </Box>
+          </Slide>
+        </Deck>,
+      );
+
+      assert.deepEqual(result.report.diagnostics, []);
+      const validation = await validatePptx(result.pptx);
+      assert.deepEqual(validation.errors, []);
+    });
+
+    it("rejects Morph pairing between objects with different nativeKind (Group grpSp vs Shape sp)", async () => {
+      const morph = createMorphScope();
+      const mismatchedKey = morph.handle("mismatched-key");
+
+      await assert.rejects(
+        build(
+          <Deck width={960} height={540}>
+            <Slide slideId="slide-group">
+              <Group morphKey={mismatchedKey}>
+                <Shape x={0} y={0} width={50} height={50} />
+              </Group>
+            </Slide>
+            <Slide
+              slideId="slide-shape"
+              transition={transitions.morph({ fallback: transitions.fade() })}
+            >
+              <Shape
+                x={0}
+                y={0}
+                morphKey={mismatchedKey}
+                width={80}
+                height={80}
+              />
+            </Slide>
+          </Deck>,
+        ),
+        (error: unknown) => {
+          assert(error instanceof BuildError);
+          const diag = error.diagnostics.find(
+            (d) => d.code === "morph-object-kind-mismatch",
+          );
+          assert(
+            diag !== undefined,
+            "Expected morph-object-kind-mismatch error",
+          );
+          assert.match(diag.message, /grpSp/u);
+          assert.match(diag.message, /sp/u);
+          return true;
+        },
+      );
+    });
+
+    it("allows Morph pairing between Shape and Text because both provide nativeKind sp", async () => {
+      const morph = createMorphScope();
+      const sharedSpKey = morph.handle("shared-sp");
+
+      const result = await build(
+        <Deck width={960} height={540}>
+          <Slide slideId="slide-shape-start">
+            <Shape
+              x={10}
+              y={10}
+              morphKey={sharedSpKey}
+              width={100}
+              height={50}
+            />
+          </Slide>
+          <Slide
+            slideId="slide-text-end"
+            transition={transitions.morph({ fallback: transitions.fade() })}
+          >
+            <Text
+              x={10}
+              y={10}
+              morphKey={sharedSpKey}
+              width={400}
+              height={100}
+              style={{ fontFamily: notoFont }}
+            >
+              Morphing between Shape and Text
+            </Text>
+          </Slide>
+        </Deck>,
+      );
+
+      assert.deepEqual(result.report.diagnostics, []);
+      const validation = await validatePptx(result.pptx);
+      assert.deepEqual(validation.errors, []);
+    });
+
+    it("rejects unknown parameters on Group including residual __motionEnabled and __motionStep", async () => {
+      await assert.rejects(
+        build(
+          <Deck width={960} height={540}>
+            <Slide slideId="slide-invalid-group">
+              {/* @ts-expect-error -- testing unknown parameter */}
+              <Group testId="bad-group" __motionEnabled={true}>
+                <Shape width={50} height={50} />
+              </Group>
+            </Slide>
+          </Deck>,
+        ),
+        (error: unknown) => {
+          assert(error instanceof BuildError);
+          const diag = error.diagnostics.find(
+            (d) => d.code === "unknown-parameter",
+          );
+          assert(
+            diag !== undefined,
+            "Expected unknown-parameter for __motionEnabled",
+          );
+          return true;
+        },
+      );
+    });
+
+    it("calls boxCapability.parse once during layout and reuses parsed result in compile", async () => {
+      assert(
+        typeof boxCapability.parse === "function",
+        "boxCapability must implement parse",
+      );
+      const parseSpy = vi.spyOn(boxCapability, "parse");
+      const compileSpy = vi.spyOn(boxCapability, "compile");
+
+      try {
+        const result = await build(
+          <Deck width={960} height={540}>
+            <Slide slideId="parse-box-slide">
+              <Box
+                testId="visible-box"
+                style={{
+                  width: 200,
+                  height: 100,
+                  backgroundColor: "#2B579A",
+                }}
+              >
+                <Shape width={50} height={50} />
+              </Box>
+            </Slide>
+          </Deck>,
+        );
+
+        assert.deepEqual(result.report.diagnostics, []);
+        assert.equal(
+          parseSpy.mock.calls.length,
+          1,
+          "boxCapability.parse should be called exactly once",
+        );
+        const parseReturn = parseSpy.mock.results[0]!.value as {
+          parsed: unknown;
+        };
+        assert.equal(compileSpy.mock.calls[0]![0], parseReturn.parsed);
+      } finally {
+        parseSpy.mockRestore();
+        compileSpy.mockRestore();
+      }
+    });
+
+    it("calls groupCapability.parse once during layout and reuses parsed result in compile", async () => {
+      assert(
+        typeof groupCapability.parse === "function",
+        "groupCapability must implement parse",
+      );
+      const parseSpy = vi.spyOn(groupCapability, "parse");
+      const compileSpy = vi.spyOn(groupCapability, "compile");
+
+      try {
+        const result = await build(
+          <Deck width={960} height={540}>
+            <Slide slideId="parse-group-slide">
+              <Box style={{ display: "flex", width: 400, height: 200 }}>
+                <Group testId="parsed-group" style={{ width: 100, height: 80 }}>
+                  <Shape width={40} height={40} />
+                </Group>
+              </Box>
+            </Slide>
+          </Deck>,
+        );
+
+        assert.deepEqual(result.report.diagnostics, []);
+        assert.equal(
+          parseSpy.mock.calls.length,
+          1,
+          "groupCapability.parse should be called exactly once",
+        );
         const parseReturn = parseSpy.mock.results[0]!.value as {
           parsed: unknown;
         };

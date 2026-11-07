@@ -665,14 +665,7 @@ export const imageCapability: ObjectCapabilityModule<ParsedImage> = {
     const parsed: ParsedImage =
       "image" in inputOrParsed && "contract" in inputOrParsed
         ? inputOrParsed
-        : (
-            this.parse as NonNullable<
-              (
-                input: CapabilityInput,
-                context: CapabilityParseContext,
-              ) => CapabilityParseResult<ParsedImage>
-            >
-          )(inputOrParsed, {
+        : this.parse(inputOrParsed, {
             path: "Image",
             theme: request.theme,
             options: {},
@@ -710,14 +703,7 @@ export const imageCapability: ObjectCapabilityModule<ParsedImage> = {
     const parsed: ParsedImage =
       "image" in parsedOrInput && "contract" in parsedOrInput
         ? parsedOrInput
-        : (
-            this.parse as NonNullable<
-              (
-                input: CapabilityInput,
-                context: CapabilityParseContext,
-              ) => CapabilityParseResult<ParsedImage>
-            >
-          )(parsedOrInput, {
+        : this.parse(parsedOrInput, {
             path: context.path,
             theme: context.theme,
             options: context.options,

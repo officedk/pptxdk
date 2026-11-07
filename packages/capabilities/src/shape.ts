@@ -483,14 +483,7 @@ export const shapeCapability: ObjectCapabilityModule<ParsedShape> = {
     const parsed: ParsedShape =
       "paragraphs" in inputOrParsed && "contract" in inputOrParsed
         ? inputOrParsed
-        : (
-            this.parse as NonNullable<
-              (
-                input: CapabilityInput,
-                context: CapabilityParseContext,
-              ) => CapabilityParseResult<ParsedShape>
-            >
-          )(inputOrParsed, {
+        : this.parse(inputOrParsed, {
             path: "Shape",
             theme: request.theme,
             options: {},
@@ -560,14 +553,7 @@ export const shapeCapability: ObjectCapabilityModule<ParsedShape> = {
     const parsed: ParsedShape =
       "paragraphs" in inputOrParsed && "contract" in inputOrParsed
         ? inputOrParsed
-        : (
-            this.parse as NonNullable<
-              (
-                input: CapabilityInput,
-                context: CapabilityParseContext,
-              ) => CapabilityParseResult<ParsedShape>
-            >
-          )(inputOrParsed, {
+        : this.parse(inputOrParsed, {
             path: context.path,
             theme: context.theme,
             options: context.options,

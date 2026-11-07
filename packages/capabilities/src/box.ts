@@ -1,14 +1,109 @@
 import {
   CapabilityError,
+  layoutStyleKeys,
+  paddingStyleKeys,
+  parseCapabilityLayoutContract,
+  textStyleKeys,
   xmlEscape,
   type CapabilityInput,
-  type CapabilityModule,
+  type CapabilityLayoutContract,
+  type CapabilityParseContext,
+  type CapabilityParseResult,
   type GeometryBox,
+  type LayoutStyle,
+  type LinkTarget,
+  type MorphKey,
+  type ObjectCapabilityModule,
+  type TextStyle,
+  type ThemeScope,
+  type VisualStyle,
 } from "@react-pptx/core";
+import { createElement, useContext, type Key, type ReactNode } from "react";
 
 import { nativeLinkXml } from "./identity.ts";
-import { motionAnnotations } from "./motion-api.ts";
-import { shapePropertiesXml } from "./visual.ts";
+import type { MorphProps } from "./morph-api.ts";
+import {
+  motionAnnotations,
+  motionContext,
+  type MotionProps,
+} from "./motion-api.ts";
+import {
+  hasVisibleBoxStyle,
+  shapePropertiesXml,
+  visualStyleKeys,
+  type VisualStyleRecord,
+} from "./visual.ts";
+
+/** Layout container appearance with visual styling that optionally generates a native background shape. */
+export type BoxProps = MorphProps &
+  Pick<MotionProps, "enter" | "motion"> & {
+    readonly key?: Key | null;
+    readonly testId?: string;
+    readonly part?: string;
+    readonly link?: LinkTarget;
+    readonly style?: LayoutStyle & TextStyle & VisualStyle;
+    readonly theme?: ThemeScope;
+    readonly children?: ReactNode;
+  };
+
+/** Visible Box's own background and descendants without entrance effects can inherit default entrance. */
+export function Box({
+  enter,
+  motion,
+  children,
+  ...props
+}: BoxProps): ReactNode {
+  const parent = useContext(motionContext);
+  const defaultEnter = enter === undefined ? parent.defaultEnter : enter;
+  const context = Object.freeze({
+    ...parent,
+    enabled: parent.enabled && motion !== false,
+    ...(defaultEnter === undefined ? {} : { defaultEnter }),
+  });
+  const boxContext = Object.freeze({
+    ...context,
+    ...(motion === undefined ? {} : { motionValue: motion }),
+  });
+  return createElement(
+    motionContext.Provider,
+    { value: context },
+    createElement(
+      "rp:box",
+      { ...props, __motionContext: boxContext },
+      children,
+    ),
+  );
+}
+
+const boxAllowedParameters = [
+  "testId",
+  "part",
+  "style",
+  "theme",
+  "morphKey",
+  "link",
+  "enter",
+  "motion",
+  "__motionContext",
+] as const;
+
+const boxAllowedStyleKeys = new Set<string>([
+  ...layoutStyleKeys,
+  ...paddingStyleKeys,
+  ...textStyleKeys,
+  ...visualStyleKeys,
+]);
+
+export type ParsedBox = {
+  readonly testId?: string;
+  readonly part?: string;
+  readonly morphKey?: MorphKey;
+  readonly link?: LinkTarget;
+  readonly styleRecord: VisualStyleRecord;
+  readonly hasVisibleStyle: boolean;
+  readonly contract: CapabilityLayoutContract;
+  readonly rawProps: Readonly<Record<string, unknown>>;
+};
 
 function styleRecord(value: unknown): Record<string, unknown> {
   if (value === undefined) return {};
@@ -29,33 +124,22 @@ function objectXml(
 }
 
 /** Visible Box backgrounds use the same shape property writer; boxes without fill, stroke, or shadow retain layout semantics only. */
-export const boxCapability: CapabilityModule = {
+export const boxCapability: ObjectCapabilityModule<ParsedBox> = {
   declaration: "rp:box",
-  compile(input: CapabilityInput, context) {
+
+  parse(
+    input: CapabilityInput,
+    context: CapabilityParseContext,
+  ): CapabilityParseResult<ParsedBox> {
     const unknown = Object.keys(input.props).find(
-      (key) =>
-        ![
-          "testId",
-          "part",
-          "style",
-          "theme",
-          "morphKey",
-          "link",
-          "__motionContext",
-        ].includes(key),
+      (key) => !(boxAllowedParameters as readonly string[]).includes(key),
     );
     if (unknown !== undefined) {
       throw new CapabilityError(
         "unknown-parameter",
-        `Box contains unsupported parameter ${unknown}`,
+        `Box contains unknown parameter ${unknown}`,
       );
     }
-    const box = context.layoutBox;
-    if (box === undefined)
-      throw new CapabilityError(
-        "layout-unavailable",
-        "Box is missing layout results",
-      );
     const testId = input.props["testId"];
     if (
       testId !== undefined &&
@@ -76,10 +160,67 @@ export const boxCapability: CapabilityModule = {
         "part must be a non-empty string",
       );
     }
+
+    const style = styleRecord(input.props["style"]);
+    const hasVisibleStyle = hasVisibleBoxStyle(style);
+    if (input.props["morphKey"] !== undefined && !hasVisibleStyle) {
+      throw new CapabilityError(
+        "morph-needs-object",
+        "Only visible Box elements generating native background shapes can participate in Morph",
+      );
+    }
+
+    const contract = parseCapabilityLayoutContract({
+      nativeKind: "sp",
+      props: input.props,
+      allowedStyleKeys: boxAllowedStyleKeys,
+      allowPadding: true,
+      isContainer: true,
+      path: context.path,
+    });
+
+    const parsed: ParsedBox = {
+      ...(typeof testId === "string" ? { testId } : {}),
+      ...(typeof part === "string" ? { part } : {}),
+      ...(input.props["morphKey"] !== undefined
+        ? { morphKey: input.props["morphKey"] as MorphKey }
+        : {}),
+      ...(input.props["link"] !== undefined
+        ? { link: input.props["link"] as LinkTarget }
+        : {}),
+      styleRecord: style,
+      hasVisibleStyle,
+      contract,
+      rawProps: input.props,
+    };
+
+    return { contract, parsed };
+  },
+
+  compile(inputOrParsed: ParsedBox | CapabilityInput, context) {
+    const parsed: ParsedBox =
+      "hasVisibleStyle" in inputOrParsed && "contract" in inputOrParsed
+        ? inputOrParsed
+        : this.parse(inputOrParsed, {
+            path: context.path,
+            theme: context.theme,
+            options: context.options,
+            slideNumber: context.slideNumber,
+          }).parsed;
+
+    const box = context.layoutBox;
+    if (box === undefined) {
+      throw new CapabilityError(
+        "layout-unavailable",
+        "Box is missing layout results",
+      );
+    }
+    const testId = parsed.testId;
+    const part = parsed.part;
     const name =
       context.morphName ??
       (typeof testId === "string" ? testId : `Box ${context.id - 1}`);
-    const style = styleRecord(input.props["style"]);
+    const style = parsed.styleRecord;
     const properties = shapePropertiesXml({
       theme: context.theme,
       style,
@@ -96,9 +237,12 @@ export const boxCapability: CapabilityModule = {
         style["backgroundImage"] !== undefined,
     } as const;
     const annotations = properties.hasVisibleStyle
-      ? motionAnnotations(input.props, motionTarget)
+      ? motionAnnotations(parsed.rawProps, motionTarget)
       : motionAnnotations(
-          { motion: false, __motionContext: input.props["__motionContext"] },
+          {
+            motion: false,
+            __motionContext: parsed.rawProps["__motionContext"],
+          },
           motionTarget,
         );
     return {

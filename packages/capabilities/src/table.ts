@@ -1126,14 +1126,7 @@ export const tableCapability: ObjectCapabilityModule<ParsedTable> = {
     const parsed: ParsedTable =
       "columns" in inputOrParsed && "contract" in inputOrParsed
         ? inputOrParsed
-        : (
-            this.parse as NonNullable<
-              (
-                input: CapabilityInput,
-                context: CapabilityParseContext,
-              ) => CapabilityParseResult<ParsedTable>
-            >
-          )(inputOrParsed, {
+        : this.parse(inputOrParsed, {
             path: "Table",
             theme: request.theme,
             options: {},
@@ -1191,14 +1184,7 @@ export const tableCapability: ObjectCapabilityModule<ParsedTable> = {
     const parsed: ParsedTable =
       "columns" in inputOrParsed && "contract" in inputOrParsed
         ? inputOrParsed
-        : (
-            this.parse as NonNullable<
-              (
-                input: CapabilityInput,
-                context: CapabilityParseContext,
-              ) => CapabilityParseResult<ParsedTable>
-            >
-          )(inputOrParsed, {
+        : this.parse(inputOrParsed, {
             path: context.path,
             theme: context.theme,
             options: context.options,

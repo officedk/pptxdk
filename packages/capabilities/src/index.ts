@@ -16,7 +16,8 @@ export type {
   PresetGeometry,
   ShapeProps,
 } from "#/shape.ts";
-export { boxCapability } from "#/box.ts";
+export { Box, boxCapability, type BoxProps, type ParsedBox } from "#/box.ts";
+export { hasVisibleBoxStyle } from "#/visual.ts";
 export type {
   GradientStop,
   LinearGradient,
@@ -73,7 +74,6 @@ export {
   after,
   breathe,
   fillColor,
-  Box,
   observeMotion,
   Step,
   MotionScope,
@@ -91,7 +91,6 @@ export {
   zoom,
 } from "#/motion.ts";
 export type {
-  BoxProps,
   EffectInstanceObservation,
   Easing,
   Effect,

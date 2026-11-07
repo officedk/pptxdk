@@ -11,7 +11,8 @@ export const build = createBuilder([
   motionCapability,
 ]);
 
-export { Box, Deck, formatBaseline, targets } from "@react-pptx/core";
+export { Deck, formatBaseline, targets } from "@react-pptx/core";
+export { Box, type BoxProps } from "@react-pptx/capabilities/box";
 export { Slide } from "./slide.ts";
 export {
   Shape,
@@ -23,7 +24,6 @@ export {
   shapeCapability,
 } from "@react-pptx/capabilities/shape";
 export type {
-  BoxProps,
   GradientStop,
   LayoutStyle,
   LinearGradient,

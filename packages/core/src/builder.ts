@@ -6,11 +6,7 @@ import type { ReactNode } from "react";
 import { CapabilityError, BuildError } from "#/diagnostics.ts";
 import { HostNode, type HostChild, type HostContainer } from "#/host/nodes.ts";
 import { withHostTree } from "#/host/reconciler.ts";
-import {
-  hasVisibleBoxStyle,
-  LayoutPass,
-  type LayoutPassResult,
-} from "#/layout.ts";
+import { LayoutPass, type LayoutPassResult } from "#/layout.ts";
 import { getMorphKeyLabel, isMorphKey, type MorphKey } from "#/morph.ts";
 import {
   assertXml10Characters,
@@ -104,7 +100,7 @@ type ResolvedDocument = {
 };
 
 type MorphObject = {
-  readonly kind: MorphNativeKind;
+  readonly kind: NativeElementKind;
   readonly name: string;
   readonly path: string;
 };
@@ -113,8 +109,6 @@ type CompiledLink = {
   readonly nativeLink: NativeLink;
   readonly summary: string;
 };
-
-type MorphNativeKind = NativeElementKind | "table" | "chart";
 
 type StoredPresentationItem = {
   readonly identity: string;
@@ -297,13 +291,18 @@ function nativeObjectName(key: MorphKey, document: DocumentBuildState): string {
   return name;
 }
 
-function morphNativeKind(kind: string): MorphNativeKind | undefined {
-  // Text and shape are both p:sp; Morph pairs objects by top-level slide PresentationML native object kind.
-  if (kind === "shape" || kind === "text") return "sp";
-  if (kind === "image") return "pic";
-  if (kind === "group") return "grpSp";
-  if (kind === "table" || kind === "chart") return kind;
-  return undefined;
+function hasBoxStyle(style: unknown): boolean {
+  if (typeof style !== "object" || style === null || Array.isArray(style))
+    return false;
+  const s = style as Record<string, unknown>;
+  const borderWidth =
+    s["borderWidth"] === undefined ? 1 : (s["borderWidth"] as number);
+  return (
+    s["backgroundColor"] !== undefined ||
+    s["backgroundImage"] !== undefined ||
+    s["boxShadow"] !== undefined ||
+    (s["borderColor"] !== undefined && borderWidth > 0)
+  );
 }
 
 function usesMorphTransition(node: HostNode): boolean {
@@ -1426,7 +1425,21 @@ function compileChildren(
       }
       const id = context.slide.nextId++;
       const module = context.modules.get("rp:box");
-      const hasNativeBox = hasVisibleBoxStyle(child.props["style"]);
+      const parsedResult: CapabilityParseResult | undefined =
+        context.layout.parsed?.get(child) ??
+        (module !== undefined && isObjectCapability(module)
+          ? module.parse(child, {
+              path,
+              theme: context.layout.themes.get(child) ?? context.theme,
+              options: context.options,
+              slideNumber: context.slideNumber,
+            })
+          : undefined);
+      const parsedBox = parsedResult?.parsed as
+        | { hasVisibleStyle?: boolean }
+        | undefined;
+      const hasNativeBox =
+        parsedBox?.hasVisibleStyle ?? hasBoxStyle(child.props["style"]);
       const rawLink = child.props["link"];
       const boxLink =
         rawLink === undefined
@@ -1460,7 +1473,7 @@ function compileChildren(
               "Morph only matches top-level slide objects; place morphKey on Group to move the entire group",
             ),
           );
-        } else if (!hasVisibleBoxStyle(child.props["style"])) {
+        } else if (!hasNativeBox) {
           context.slide.diagnostics.push(
             diagnostic(
               path,
@@ -1487,8 +1500,10 @@ function compileChildren(
       if (module !== undefined && isObjectCapability(module)) {
         const objectId = context.slide.nextId++;
         try {
+          const compileInput =
+            parsedResult !== undefined ? parsedResult.parsed : child;
           const output = module.compile(
-            child,
+            compileInput,
             capabilityContext(
               context,
               child,
@@ -1509,16 +1524,13 @@ function compileChildren(
               ...(boxLink === undefined ? {} : { link: boxLink.summary }),
             };
             if (morphKey !== undefined && morphName !== undefined) {
-              const nativeKind = morphNativeKind(output.observation.kind);
-              if (
-                output.observation.name !== morphName ||
-                nativeKind === undefined
-              ) {
+              const nativeKind = parsedResult?.contract?.nativeKind ?? "sp";
+              if (output.observation.name !== morphName) {
                 context.slide.diagnostics.push(
                   diagnostic(
                     path,
                     "unsupported-morph-object",
-                    "rp:box did not write morphKey to a supported native background shape name",
+                    "Box did not write morphKey to a supported native background shape name",
                   ),
                 );
               } else if (!context.slide.morphObjects.has(morphKey)) {
@@ -1572,7 +1584,7 @@ function compileChildren(
                 ),
           );
         }
-      } else if (hasVisibleBoxStyle(child.props["style"])) {
+      } else if (hasNativeBox) {
         context.slide.diagnostics.push(
           diagnostic(
             path,
@@ -1742,18 +1754,15 @@ function compileChildren(
     const theme = context.layout.themes.get(child) ?? context.theme;
     const compiledLink = registerLink(child.props["link"], context, path);
     try {
-      const parsedResult: CapabilityParseResult | undefined =
+      const parsedResult: CapabilityParseResult =
         context.layout.parsed?.get(child) ??
-        (module.parse !== undefined
-          ? module.parse(input, {
-              path,
-              theme,
-              options: context.options,
-              slideNumber: context.slideNumber,
-            })
-          : undefined);
-      const compileInput =
-        parsedResult !== undefined ? parsedResult.parsed : input;
+        module.parse(input, {
+          path,
+          theme,
+          options: context.options,
+          slideNumber: context.slideNumber,
+        });
+      const compileInput = parsedResult.parsed;
       const output = module.compile(
         compileInput,
         capabilityContext(
@@ -1769,23 +1778,13 @@ function compileChildren(
         ),
       );
       if (morphKey !== undefined && morphName !== undefined) {
-        const nativeKind =
-          parsedResult?.contract?.nativeKind ??
-          morphNativeKind(output.observation.kind);
+        const nativeKind = parsedResult.contract.nativeKind;
         if (output.observation.name !== morphName) {
           context.slide.diagnostics.push(
             diagnostic(
               path,
               "unsupported-morph-object",
               `${child.type} did not write morphKey to native object name, cannot participate in Morph matching`,
-            ),
-          );
-        } else if (nativeKind === undefined) {
-          context.slide.diagnostics.push(
-            diagnostic(
-              path,
-              "unsupported-morph-object",
-              `${output.observation.kind} produced by ${child.type} is not a supported Morph native object kind`,
             ),
           );
         } else if (!context.slide.morphObjects.has(morphKey)) {

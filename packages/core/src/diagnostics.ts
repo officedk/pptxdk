@@ -20,7 +20,7 @@ export class CapabilityError extends Error {
   readonly code: string;
   readonly path: string | undefined;
 
-  /** 子路径相对触发能力的原生对象，方便定位对象内部的单元格声明。 */
+  /** Subpath relative to the native object triggering the capability, facilitating localization of cell declarations inside the object. */
   constructor(code: string, message: string, path?: string) {
     super(message);
     this.name = "CapabilityError";

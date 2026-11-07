@@ -1,34 +1,36 @@
 const morphKeyBrand: unique symbol = Symbol("MorphKey");
 const morphKeyLabel: unique symbol = Symbol("MorphKeyLabel");
 
-/** 由 MorphScope 创建、用于显式声明跨页对象连续性的句柄。 */
+/** Handle created by MorphScope to explicitly declare cross-slide object continuity. */
 export type MorphKey = {
   readonly [morphKeyBrand]: true;
   readonly [morphKeyLabel]: string;
 };
 
 /**
- * 同一组件逻辑实例的连续性句柄工厂。
+ * Continuity handle factory for a single logical component instance.
  *
- * 跨页复用时传递同一个 MorphScope；同页重复组件各自创建作用域。若在 React 组件中创建，
- * 请用 useMemo 或 useState 保持作用域稳定；普通函数组件边界不会自动建立作用域。
+ * Pass the same MorphScope when reusing across slides; duplicated components on the same slide each create their own scope. When created in a React component,
+ * use useMemo or useState to keep the scope stable; ordinary function component boundaries do not automatically establish a scope.
  */
 export type MorphScope = {
-  /** 在此作用域内按名称取得稳定句柄。 */
+  /** Obtain a stable handle by name within this scope. */
   handle(name: string): MorphKey;
 };
 
 /**
- * 创建独立的连续性作用域；句柄只在显式复用时才会跨页对应。
+ * Create an independent continuity scope; handles correspond across slides only when explicitly reused.
  *
- * 在 React 组件内创建时，应以 useMemo 或 useState 保持返回值稳定；跨页对应必须复用同一作用域。
+ * When created in a React component, use useMemo or useState to keep the return value stable; cross-slide correspondence requires reusing the same scope.
  */
 export function createMorphScope(): MorphScope {
   const handles = new Map<string, MorphKey>();
   return Object.freeze({
     handle(name: string): MorphKey {
       if (typeof name !== "string" || name.trim() === "") {
-        throw new TypeError("MorphScope.handle(name) 需要非空名称");
+        throw new TypeError(
+          "MorphScope.handle(name) requires a non-empty name",
+        );
       }
       let handle = handles.get(name);
       if (handle === undefined) {

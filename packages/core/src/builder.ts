@@ -217,7 +217,7 @@ function diagnostic(path: string, code: string, message: string): Diagnostic {
 
 function deepFreeze<T>(value: T): T {
   if (typeof value !== "object" || value === null) return value;
-  // 能力观察可能已浅冻结；仍需递归冻结其中尚未冻结的子值。
+  // Capability observations might be shallow-frozen; still recursively freeze any unfrozen child values.
   if (!Object.isFrozen(value)) Object.freeze(value);
   for (const child of Object.values(value)) deepFreeze(child);
   return value;
@@ -296,7 +296,7 @@ function nativeObjectName(key: MorphKey, document: DocumentBuildState): string {
 }
 
 function morphNativeKind(kind: string): MorphNativeKind | undefined {
-  // 文本与形状同为 p:sp；Morph 按页面顶层 PresentationML 原生对象类型配对。
+  // Text and shape are both p:sp; Morph pairs objects by top-level slide PresentationML native object kind.
   if (kind === "shape" || kind === "text") return "sp";
   if (kind === "image") return "pic";
   if (kind === "group") return "grpSp";
@@ -319,7 +319,7 @@ function validateTarget(target: Target | undefined): Target {
   const value = target ?? targets.transitional;
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
     throw new BuildError([
-      diagnostic("build.target", "invalid-target", "输出目标必须是对象"),
+      diagnostic("build.target", "invalid-target", "Target must be an object"),
     ]);
   }
   const record = value as unknown as Record<string, unknown>;
@@ -329,13 +329,17 @@ function validateTarget(target: Target | undefined): Target {
       diagnostic(
         "build.target",
         "unknown-parameter",
-        `输出目标含未知参数 ${unknown}`,
+        `Target contains unknown parameter ${unknown}`,
       ),
     ]);
   }
   if (typeof record["name"] !== "string" || record["name"].trim() === "") {
     throw new BuildError([
-      diagnostic("build.target", "invalid-target", "输出目标需要非空名称"),
+      diagnostic(
+        "build.target",
+        "invalid-target",
+        "Target requires a non-empty name",
+      ),
     ]);
   }
   if (record["format"] !== formatBaseline) {
@@ -343,7 +347,7 @@ function validateTarget(target: Target | undefined): Target {
       diagnostic(
         "build.target",
         "unsupported-format",
-        `本构建仅写出 ${formatBaseline}`,
+        `This build only emits ${formatBaseline}`,
       ),
     ]);
   }
@@ -352,7 +356,7 @@ function validateTarget(target: Target | undefined): Target {
       diagnostic(
         "build.target",
         "invalid-target",
-        "输出目标 extensions 必须是数组",
+        "Target extensions must be an array",
       ),
     ]);
   }
@@ -363,7 +367,7 @@ function validateTarget(target: Target | undefined): Target {
         diagnostic(
           "build.target",
           "unsupported-extension",
-          `不支持输出目标扩展 ${String(extension)}`,
+          `Unsupported target extension ${String(extension)}`,
         ),
       ]);
     }
@@ -372,7 +376,7 @@ function validateTarget(target: Target | undefined): Target {
         diagnostic(
           "build.target",
           "duplicate-extension",
-          `输出目标重复声明 ${extension}`,
+          `Duplicate target extension declaration ${extension}`,
         ),
       ]);
     }
@@ -392,13 +396,17 @@ function validateOptions(options: BuildOptions): Target {
     Array.isArray(options)
   ) {
     throw new BuildError([
-      diagnostic("build", "invalid-options", "构建选项必须是对象"),
+      diagnostic("build", "invalid-options", "Build options must be an object"),
     ]);
   }
   const unknown = ownKeys(options, ["target", "signal", "embedFonts"]);
   if (unknown !== undefined) {
     throw new BuildError([
-      diagnostic("build", "unknown-parameter", `构建选项含未知参数 ${unknown}`),
+      diagnostic(
+        "build",
+        "unknown-parameter",
+        `Build options contain unknown parameter ${unknown}`,
+      ),
     ]);
   }
   if (
@@ -410,7 +418,7 @@ function validateOptions(options: BuildOptions): Target {
       diagnostic(
         "build.embedFonts",
         "unsupported-font-embedding",
-        "embedFonts 目前只支持 full 或 subset",
+        "embedFonts currently only supports 'full' or 'subset'",
       ),
     ]);
   }
@@ -420,7 +428,11 @@ function validateOptions(options: BuildOptions): Target {
 function positiveDimension(value: unknown, label: string): number {
   if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) {
     throw new BuildError([
-      diagnostic("deck", "invalid-dimension", `${label} 必须是有限正像素数值`),
+      diagnostic(
+        "deck",
+        "invalid-dimension",
+        `${label} must be a finite positive pixel value`,
+      ),
     ]);
   }
   const sizeEmu = pxToEmu(value);
@@ -429,7 +441,7 @@ function positiveDimension(value: unknown, label: string): number {
       diagnostic(
         "deck",
         "invalid-dimension",
-        `${label} 换算后的页面尺寸必须在 ${minimumSlideSizeEmu} 到 ${maximumSlideSizeEmu} EMU 的闭区间内`,
+        `${label} converted slide size must be within the closed interval of ${minimumSlideSizeEmu} to ${maximumSlideSizeEmu} EMU`,
       ),
     ]);
   }
@@ -446,7 +458,11 @@ function deckDimensions(node: HostNode): Dimensions {
   ]);
   if (unknown !== undefined) {
     throw new BuildError([
-      diagnostic("deck", "unknown-parameter", `Deck 含未知参数 ${unknown}`),
+      diagnostic(
+        "deck",
+        "unknown-parameter",
+        `Deck contains unknown parameter ${unknown}`,
+      ),
     ]);
   }
   return {
@@ -462,17 +478,25 @@ function resolveSlides(
   const decks = childNodes(container.children);
   if (decks.length !== 1 || decks[0]?.type !== "rp:deck") {
     throw new BuildError([
-      diagnostic("deck", "document-root", "构建内容必须只有一个 Deck 根组件"),
+      diagnostic(
+        "deck",
+        "document-root",
+        "Build content must have exactly one Deck root component",
+      ),
     ]);
   }
   const deck = decks[0];
   if (deck === undefined)
     throw new BuildError([
-      diagnostic("deck", "document-root", "缺少 Deck 根组件"),
+      diagnostic("deck", "document-root", "Missing Deck root component"),
     ]);
   if (nonWhitespaceText(container.children)) {
     throw new BuildError([
-      diagnostic("deck", "unexpected-text", "Deck 根组件外不能有文本"),
+      diagnostic(
+        "deck",
+        "unexpected-text",
+        "No text allowed outside the Deck root component",
+      ),
     ]);
   }
   if (nonWhitespaceText(deck.children)) {
@@ -480,7 +504,7 @@ function resolveSlides(
       diagnostic(
         "deck",
         "unexpected-text",
-        "Deck 只能包含 Slide 页面和 Section 分节",
+        "Deck can only contain Slide and Section components",
       ),
     ]);
   }
@@ -490,7 +514,7 @@ function resolveSlides(
     topLevel.length !== deck.children.filter(isHostNode).length
   ) {
     throw new BuildError([
-      diagnostic("deck", "missing-slide", "Deck 至少需要一个 Slide 页面"),
+      diagnostic("deck", "missing-slide", "Deck requires at least one Slide"),
     ]);
   }
   const sectioned = topLevel.some((node) => node.type === "rp:section");
@@ -507,7 +531,7 @@ function resolveSlides(
           diagnostic(
             `deck/${componentLabel(node, index)}`,
             "mixed-sections",
-            "使用 Section 分节时，每个页面都必须属于一个 Section",
+            "When using Section, every slide must belong to a Section",
           ),
         ]);
       }
@@ -517,7 +541,7 @@ function resolveSlides(
           diagnostic(
             `deck/section[${index + 1}]`,
             "unknown-section-property",
-            `Section 不支持属性 ${unknown}`,
+            `Section does not support property ${unknown}`,
           ),
         ]);
       }
@@ -527,7 +551,7 @@ function resolveSlides(
           diagnostic(
             `deck/section[${index + 1}]`,
             "invalid-section-name",
-            "Section.name 必须是非空字符串",
+            "Section.name must be a non-empty string",
           ),
         ]);
       }
@@ -538,7 +562,7 @@ function resolveSlides(
           diagnostic(
             `deck/section[${name}]`,
             "invalid-xml-character",
-            "Section.name 含 XML 1.0 不允许的字符",
+            "Section.name contains characters not allowed in XML 1.0",
           ),
         ]);
       }
@@ -547,7 +571,7 @@ function resolveSlides(
           diagnostic(
             `deck/section[${name}]`,
             "unexpected-section-text",
-            "Section 只能包含 Slide 页面",
+            "Section can only contain Slide components",
           ),
         ]);
       }
@@ -560,7 +584,7 @@ function resolveSlides(
             diagnostic(
               `deck/section[${name}]/${componentLabel(member, memberIndex)}`,
               "nested-section",
-              "Section 只能包含 Slide 页面，不能嵌套 Section",
+              "Section can only contain Slide components and cannot nest Section components",
             ),
           ]);
         }
@@ -574,7 +598,7 @@ function resolveSlides(
           diagnostic(
             `deck/${componentLabel(node, index)}`,
             "unexpected-declaration",
-            "Deck 的直接子项必须是 Slide 或 Section",
+            "Direct children of Deck must be Slide or Section",
           ),
         ]);
       }
@@ -583,7 +607,7 @@ function resolveSlides(
   }
   if (candidates.length === 0) {
     throw new BuildError([
-      diagnostic("deck", "missing-slide", "Deck 至少需要一个 Slide 页面"),
+      diagnostic("deck", "missing-slide", "Deck requires at least one Slide"),
     ]);
   }
   const ids = new Set<string>();
@@ -605,7 +629,7 @@ function resolveSlides(
         diagnostic(
           `deck/slide[${label}]`,
           "missing-capability",
-          `没有注册 Slide.${unknown} 的能力模块`,
+          `No capability module registered for Slide.${unknown}`,
         ),
       ]);
     }
@@ -615,7 +639,7 @@ function resolveSlides(
         diagnostic(
           `deck/slide[${index + 1}]`,
           "invalid-slide-id",
-          "Slide.slideId 必须是非空字符串",
+          "Slide.slideId must be a non-empty string",
         ),
       ]);
     }
@@ -626,7 +650,7 @@ function resolveSlides(
         diagnostic(
           `deck/slide[${index + 1}]`,
           "invalid-xml-character",
-          "Slide.slideId 含 XML 1.0 不允许的字符",
+          "Slide.slideId contains characters not allowed in XML 1.0",
         ),
       ]);
     }
@@ -635,7 +659,7 @@ function resolveSlides(
         diagnostic(
           `deck/slide[${id}]`,
           "duplicate-slide-id",
-          `页面标识 ${id} 重复`,
+          `Duplicate slideId "${id}"`,
         ),
       ]);
     }
@@ -646,7 +670,7 @@ function resolveSlides(
         diagnostic(
           `deck/slide[${id}]`,
           "invalid-hidden-slide",
-          "Slide.hidden 必须是布尔值",
+          "Slide.hidden must be a boolean",
         ),
       ]);
     }
@@ -662,7 +686,7 @@ function resolveSlides(
         diagnostic(
           `deck/slide[${id}]`,
           "invalid-advance-after",
-          "Slide.advanceAfter 必须是 0 到 4294967295 之间的有限毫秒数",
+          "Slide.advanceAfter must be a finite millisecond value between 0 and 4294967295",
         ),
       ]);
     }
@@ -697,7 +721,10 @@ function addResource(
     !(resource.bytes instanceof Uint8Array) ||
     resource.bytes.byteLength === 0
   ) {
-    throw new CapabilityError("invalid-resource", "资源必须包含非空二进制内容");
+    throw new CapabilityError(
+      "invalid-resource",
+      "Resource must contain non-empty binary content",
+    );
   }
   if (
     typeof resource.extension !== "string" ||
@@ -707,20 +734,23 @@ function addResource(
     typeof resource.relationshipType !== "string" ||
     resource.relationshipType.trim() === ""
   ) {
-    throw new CapabilityError("invalid-resource", "资源的格式或关系类型无效");
+    throw new CapabilityError(
+      "invalid-resource",
+      "Resource format or relationship type is invalid",
+    );
   }
   const extension = resource.extension.toLowerCase();
   if (extension === "xml" || extension === "rels") {
     throw new CapabilityError(
       "invalid-resource",
-      `资源扩展名 .${extension} 与 PPTX 核心部件冲突`,
+      `Resource extension .${extension} conflicts with core PPTX parts`,
     );
   }
   const knownType = context.document.resourceTypes.get(extension);
   if (knownType !== undefined && knownType !== resource.contentType) {
     throw new CapabilityError(
       "conflicting-resource-type",
-      `资源扩展名 .${extension} 对应多个内容类型`,
+      `Resource extension .${extension} corresponds to multiple content types`,
     );
   }
   context.document.resourceTypes.set(extension, resource.contentType);
@@ -730,7 +760,7 @@ function addResource(
   } catch {
     throw new CapabilityError(
       "invalid-resource",
-      "资源关系含 XML 不允许的字符",
+      "Resource relationship contains characters not allowed in XML",
     );
   }
 
@@ -808,7 +838,7 @@ function packagePartPath(template: string, sequence: number): string {
   ) {
     throw new CapabilityError(
       "invalid-part",
-      "原生部件路径必须是安全的包内路径并含一个部件序号",
+      "Native part path must be a safe package-relative path containing a single part number",
     );
   }
   return template.replace("{n}", String(sequence));
@@ -841,7 +871,7 @@ function addPackagePart(
   ) {
     throw new CapabilityError(
       "invalid-part",
-      "原生部件或其相关部件的格式与关系无效",
+      "Native part or its related parts format and relationships are invalid",
     );
   }
   try {
@@ -856,7 +886,7 @@ function addPackagePart(
   } catch {
     throw new CapabilityError(
       "invalid-part",
-      "原生部件的内容类型或关系含 XML 1.0 不允许的字符",
+      "Native part content type or relationship contains characters not allowed in XML 1.0",
     );
   }
 
@@ -881,7 +911,10 @@ function addPackagePart(
       ? content.length > 0
       : content instanceof Uint8Array && content.byteLength > 0)
   ) {
-    throw new CapabilityError("invalid-part", "原生部件必须包含内容");
+    throw new CapabilityError(
+      "invalid-part",
+      "Native part must contain content",
+    );
   }
   const relatedPaths = new Set(related.map(({ path }) => path));
   if (
@@ -890,7 +923,7 @@ function addPackagePart(
     relatedPaths.has(partPath) ||
     related.some(({ path }) => context.document.packageParts.has(path))
   ) {
-    throw new CapabilityError("duplicate-part", "PPTX 部件路径重复");
+    throw new CapabilityError("duplicate-part", "Duplicate PPTX part path");
   }
   if (objectId !== undefined) {
     recordResourceObservation(context.slide, objectId, {
@@ -983,7 +1016,7 @@ function addPresentationContribution(
   ) {
     throw new CapabilityError(
       "invalid-presentation-contribution",
-      "文稿级部件贡献的记录、关系或资源无效",
+      "Presentation-level contribution record, relationship, or resource is invalid",
     );
   }
   try {
@@ -1002,7 +1035,7 @@ function addPresentationContribution(
   } catch {
     throw new CapabilityError(
       "invalid-presentation-contribution",
-      "文稿级部件贡献含无效 XML 名称或字符",
+      "Presentation-level contribution contains invalid XML name or characters",
     );
   }
 
@@ -1015,7 +1048,7 @@ function addPresentationContribution(
         diagnostic(
           path,
           "conflicting-presentation-attribute",
-          `presentation 属性 ${name} 的贡献值冲突`,
+          `Conflicting contribution value for presentation attribute ${name}`,
         ),
       );
     } else {
@@ -1047,7 +1080,7 @@ function addPresentationContribution(
       diagnostic(
         path,
         "conflicting-presentation-record",
-        `文稿级记录 ${record.key} 的声明冲突`,
+        `Conflicting declaration for presentation-level record ${record.key}`,
       ),
     );
     return;
@@ -1060,13 +1093,13 @@ function addPresentationContribution(
   } catch {
     throw new CapabilityError(
       "invalid-presentation-contribution",
-      "文稿级部件贡献无法生成 XML 内容",
+      "Presentation-level contribution failed to generate XML content",
     );
   }
   if (preview.trim() === "") {
     throw new CapabilityError(
       "invalid-presentation-contribution",
-      "文稿级部件贡献必须生成内容",
+      "Presentation-level contribution must generate content",
     );
   }
   const existingItem = targetRecord.items.get(item.key);
@@ -1082,7 +1115,7 @@ function addPresentationContribution(
         diagnostic(
           path,
           "conflicting-presentation-item",
-          `文稿级记录 ${record.key} 的项目 ${item.key} 使用了冲突资源`,
+          `Presentation-level record ${record.key} item ${item.key} uses conflicting resources`,
         ),
       );
     } else {
@@ -1100,7 +1133,7 @@ function addPresentationContribution(
     context.document.packageParts.has(partPath) ||
     context.document.presentationPartPaths.has(partPath)
   ) {
-    throw new CapabilityError("duplicate-part", "PPTX 部件路径重复");
+    throw new CapabilityError("duplicate-part", "Duplicate PPTX part path");
   }
   context.document.presentationPartPaths.add(partPath);
   const relationshipId = `rId${context.document.nextPresentationRelationshipId++}`;
@@ -1139,7 +1172,7 @@ function finalizePresentationContributions(document: DocumentBuildState): void {
               diagnostic(
                 item.path,
                 "missing-resource-claim",
-                `文稿资源 ${item.resourceClaim.key} 缺少匹配的字符声明`,
+                `Presentation resource ${item.resourceClaim.key} is missing matching character claims`,
               ),
             ]);
           }
@@ -1165,7 +1198,7 @@ function finalizePresentationContributions(document: DocumentBuildState): void {
             diagnostic(
               item.path,
               "invalid-presentation-contribution",
-              "文稿级部件贡献没有生成有效资源字节",
+              "Presentation-level contribution did not produce valid resource bytes",
             ),
           ]);
         }
@@ -1272,14 +1305,14 @@ function registerLink(
     context.slide.diagnostics.push(diagnostic(path, "invalid-link", message));
   };
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
-    reportInvalid("link 必须指定 slideId、url 或 home 动作");
+    reportInvalid("link must specify slideId, url, or home action");
     return undefined;
   }
   const entries = Object.entries(value).filter(
     ([, target]) => target !== undefined,
   );
   if (entries.length !== 1) {
-    reportInvalid("link 必须且只能指定一个目标");
+    reportInvalid("link must specify exactly one target");
     return undefined;
   }
   const [kind, target] = entries[0] ?? [];
@@ -1290,7 +1323,7 @@ function registerLink(
         diagnostic(
           path,
           "missing-link-target",
-          `没有页面标识为 ${JSON.stringify(target)} 的目标页面`,
+          `No target slide with slideId ${JSON.stringify(target)}`,
         ),
       );
       return undefined;
@@ -1321,7 +1354,7 @@ function registerLink(
     try {
       url = new URL(target);
     } catch {
-      reportInvalid("link.url 必须是绝对 URL");
+      reportInvalid("link.url must be an absolute URL");
       return undefined;
     }
     const relationshipKey = `link:url:${url.href}`;
@@ -1347,7 +1380,7 @@ function registerLink(
       summary: "home",
     };
   }
-  reportInvalid("link 支持 { slideId }、{ url } 或 { action: 'home' }");
+  reportInvalid("link supports { slideId }, { url }, or { action: 'home' }");
   return undefined;
 }
 
@@ -1366,7 +1399,7 @@ function compileChildren(
           diagnostic(
             `${parentPath}/${capabilityLabel(child, index)}`,
             "unexpected-text",
-            "原生对象容器不能直接包含文本",
+            "Native object container cannot directly contain text",
           ),
         );
       }
@@ -1381,7 +1414,11 @@ function compileChildren(
       const box = context.layout.boxes.get(child);
       if (box === undefined) {
         context.slide.diagnostics.push(
-          diagnostic(path, "layout-unavailable", "Box 缺少布局结果"),
+          diagnostic(
+            path,
+            "layout-unavailable",
+            "Box is missing layout result",
+          ),
         );
         return;
       }
@@ -1398,7 +1435,7 @@ function compileChildren(
                 diagnostic(
                   path,
                   "link-needs-object",
-                  "透明 Box 不生成可点击对象；请将 link 放到可见 Box 或 Group 上",
+                  "Transparent Box does not produce clickable objects; attach link to a visible Box or Group",
                 ),
               ),
               undefined);
@@ -1410,7 +1447,7 @@ function compileChildren(
             diagnostic(
               path,
               "invalid-morph-key",
-              "morphKey 必须由 createMorphScope().handle(name) 创建",
+              "morphKey must be created by createMorphScope().handle(name)",
             ),
           );
         } else if (insideGroup) {
@@ -1418,7 +1455,7 @@ function compileChildren(
             diagnostic(
               path,
               "morph-inside-group",
-              "Morph 只匹配页面顶层对象；请把 morphKey 放到 Group 上以移动整个组合",
+              "Morph only matches top-level slide objects; place morphKey on Group to move the entire group",
             ),
           );
         } else if (!hasVisibleBoxStyle(child.props["style"])) {
@@ -1426,7 +1463,7 @@ function compileChildren(
             diagnostic(
               path,
               "morph-needs-object",
-              "只有会生成原生背景形状的可见 Box 才能参与 Morph",
+              "Only visible Box generating native background shapes can participate in Morph",
             ),
           );
         } else {
@@ -1437,7 +1474,7 @@ function compileChildren(
               diagnostic(
                 path,
                 "duplicate-morph-key",
-                `Morph 句柄 “${getMorphKeyLabel(morphKey)}” 在此页重复使用；同一页只能声明一次`,
+                `Morph handle "${getMorphKeyLabel(morphKey)}" reused on this slide; can only be declared once per slide`,
               ),
             );
           }
@@ -1479,7 +1516,7 @@ function compileChildren(
                   diagnostic(
                     path,
                     "unsupported-morph-object",
-                    "rp:box 未将 morphKey 写入可支持的原生背景形状名称",
+                    "rp:box did not write morphKey to a supported native background shape name",
                   ),
                 );
               } else if (!context.slide.morphObjects.has(morphKey)) {
@@ -1495,7 +1532,7 @@ function compileChildren(
               diagnostic(
                 path,
                 "morph-needs-object",
-                "只有会生成原生背景形状的可见 Box 才能参与 Morph",
+                "Only visible Box generating native background shapes can participate in Morph",
               ),
             );
           }
@@ -1538,7 +1575,7 @@ function compileChildren(
           diagnostic(
             path,
             "missing-capability",
-            "可见 Box 需要注册 rp:box 形状写出能力",
+            "Visible Box requires registered rp:box shape capability",
           ),
         );
       }
@@ -1593,7 +1630,7 @@ function compileChildren(
         diagnostic(
           path,
           "missing-capability",
-          `没有注册 ${child.type} 的能力模块`,
+          `No capability module registered for ${child.type}`,
         ),
       );
       return;
@@ -1606,7 +1643,7 @@ function compileChildren(
           diagnostic(
             path,
             "invalid-morph-key",
-            "morphKey 必须由 createMorphScope().handle(name) 创建",
+            "morphKey must be created by createMorphScope().handle(name)",
           ),
         );
       } else if (insideGroup) {
@@ -1614,7 +1651,7 @@ function compileChildren(
           diagnostic(
             path,
             "morph-inside-group",
-            "Morph 只匹配页面顶层对象；请把 morphKey 放到 Group 上以移动整个组合",
+            "Morph only matches top-level slide objects; place morphKey on Group to move the entire group",
           ),
         );
       } else if (
@@ -1625,7 +1662,7 @@ function compileChildren(
           diagnostic(
             path,
             "morph-needs-object",
-            "morphKey 只能用于会生成原生对象的能力",
+            "morphKey can only be used with capabilities that produce native objects",
           ),
         );
       } else if (child.props["name"] !== undefined) {
@@ -1633,7 +1670,7 @@ function compileChildren(
           diagnostic(
             path,
             "morph-object-name-conflict",
-            "morphKey 和 name 都要占用原生对象名称；请只指定其中一个",
+            "Both morphKey and name claim native object names; specify only one",
           ),
         );
       } else {
@@ -1645,7 +1682,7 @@ function compileChildren(
             diagnostic(
               path,
               "duplicate-morph-key",
-              `Morph 句柄 “${getMorphKeyLabel(morphKey)}” 在此页重复使用；同一页只能声明一次`,
+              `Morph handle "${getMorphKeyLabel(morphKey)}" reused on this slide; can only be declared once per slide`,
             ),
           );
         }
@@ -1678,7 +1715,7 @@ function compileChildren(
         insideGroup,
       );
       content.push(...compiled.content);
-      // 透明声明不占绘制层级；其子项携带自己的层序并与兄弟一同排序。
+      // Transparent declarations do not occupy paint order; children carry their own order and sort with siblings.
       painted.push(
         ...compiled.paintLayers.map((layer) => ({
           ...layer,
@@ -1692,7 +1729,7 @@ function compileChildren(
         diagnostic(
           path,
           "missing-capability",
-          `没有注册 ${child.type} 的能力模块`,
+          `No capability module registered for ${child.type}`,
         ),
       );
       return;
@@ -1724,7 +1761,7 @@ function compileChildren(
             diagnostic(
               path,
               "unsupported-morph-object",
-              `${child.type} 未将 morphKey 写入原生对象名称，不能参与 Morph 对应`,
+              `${child.type} did not write morphKey to native object name, cannot participate in Morph matching`,
             ),
           );
         } else if (nativeKind === undefined) {
@@ -1732,7 +1769,7 @@ function compileChildren(
             diagnostic(
               path,
               "unsupported-morph-object",
-              `${child.type} 生成的 ${output.observation.kind} 不是已支持的 Morph 原生对象类型`,
+              `${output.observation.kind} produced by ${child.type} is not a supported Morph native object kind`,
             ),
           );
         } else if (!context.slide.morphObjects.has(morphKey)) {
@@ -1749,7 +1786,7 @@ function compileChildren(
             diagnostic(
               path,
               "forbidden-mechanism",
-              `输出目标禁止 ${extension}`,
+              `Target forbids ${extension}`,
             ),
           );
         } else {
@@ -1764,7 +1801,7 @@ function compileChildren(
             diagnostic(
               path,
               "conflicting-resource",
-              `资源 ${claim.key} 与 ${existing.path} 使用了冲突定义`,
+              `Resource ${claim.key} has conflicting definition with ${existing.path}`,
             ),
           );
         } else {
@@ -1824,7 +1861,8 @@ function compileChildren(
             severity: "warning",
             path,
             code: "overflow",
-            message: "对象超出页面画布，构建保留原始声明",
+            message:
+              "Object overflows slide canvas; build retains original declaration",
           });
         }
       }
@@ -1889,7 +1927,8 @@ function tableContentNodes(object: ObjectObservation): QueryContentNode[] {
   if (parts === undefined) return [];
   const nodeAt = (partIndex: number): QueryContentNode => {
     const part = parts[partIndex];
-    if (part === undefined) throw new Error("表格查询部件索引不存在");
+    if (part === undefined)
+      throw new Error("Table query part index does not exist");
     return {
       ...(part.testId === undefined ? {} : { testId: part.testId }),
       ...(part.part === undefined ? {} : { part: part.part }),
@@ -1940,7 +1979,7 @@ function compileSlide(
   const path = `deck/slide[${id}]`;
   if (nonWhitespaceText(node.children)) {
     slide.diagnostics.push(
-      diagnostic(path, "unexpected-text", "Slide 页面不能直接包含文本"),
+      diagnostic(path, "unexpected-text", "Slide cannot directly contain text"),
     );
   }
   const children = node.children.map(capabilityChild);
@@ -2016,7 +2055,7 @@ function compileSlide(
             diagnostic(
               path,
               "forbidden-mechanism",
-              `输出目标禁止 ${extension}`,
+              `Target forbids ${extension}`,
             ),
           );
         } else {
@@ -2049,7 +2088,7 @@ function compileSlide(
         diagnostic(
           contribution.path,
           "missing-capability",
-          `没有注册 ${contribution.capability} 的能力模块`,
+          `No capability module registered for ${contribution.capability}`,
         ),
       );
     }
@@ -2098,13 +2137,13 @@ function compileDocument(
   const deck = childNodes(container.children)[0];
   if (deck === undefined)
     throw new BuildError([
-      diagnostic("deck", "document-root", "缺少 Deck 根组件"),
+      diagnostic("deck", "document-root", "Missing Deck root component"),
     ]);
   const size = deckDimensions(deck);
   const title = deck.props["title"];
   if (title !== undefined && typeof title !== "string") {
     throw new BuildError([
-      diagnostic("deck", "invalid-title", "Deck.title 必须是字符串"),
+      diagnostic("deck", "invalid-title", "Deck.title must be a string"),
     ]);
   }
   if (typeof title === "string") {
@@ -2115,7 +2154,7 @@ function compileDocument(
         diagnostic(
           "deck",
           "invalid-title",
-          "Deck.title 含 XML 1.0 不允许的字符",
+          "Deck.title contains characters not allowed in XML 1.0",
         ),
       ]);
     }
@@ -2138,7 +2177,7 @@ function compileDocument(
       diagnostic(
         "deck/sections",
         "forbidden-mechanism",
-        "当前输出目标禁止 p14 分节机制",
+        "Current target forbids p14 section mechanism",
       ),
     ]);
   }
@@ -2210,7 +2249,7 @@ function compileDocument(
           diagnostic(
             object.path,
             "morph-object-kind-mismatch",
-            `原生对象 ${object.name}（句柄 “${getMorphKeyLabel(key)}”）在来源页 ${slides[sourceIndex]?.id} 对应 ${source.kind}，当前页对应 ${object.kind}；仅支持相同原生对象类型`,
+            `Native object ${object.name} (handle "${getMorphKeyLabel(key)}") corresponds to ${source.kind} on source slide ${slides[sourceIndex]?.id} and ${object.kind} on current slide; only matching native object kinds are supported`,
           ),
         );
       }
@@ -2305,7 +2344,7 @@ export function createBuilder(modules: readonly CapabilityModule[]) {
           diagnostic(
             "build.modules",
             "duplicate-capability",
-            "能力模块声明重复",
+            "Duplicate capability module declaration",
           ),
         ]);
       }

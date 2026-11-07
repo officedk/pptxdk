@@ -44,7 +44,7 @@ export const formatBaseline = "ECMA-376 5th edition Transitional" as const;
 
 export type Extension = "p14" | "p159";
 
-/** 页面背景可采用主题颜色、共享视觉 writer 支持的渐变，或正式图片资源输入。 */
+/** Slide background can use theme colors, gradients supported by the shared visual writer, or formal image resource inputs. */
 export type SlideBackground =
   | ColorValue
   | LinearGradient
@@ -72,11 +72,11 @@ export const targets = Object.freeze({
 
 export type BuildOptions = {
   readonly target?: Target;
-  /** 明确请求嵌入文稿实际使用字体的完整文件或字符子集；默认不嵌入。 */
+  /** Explicitly request embedding full files or character subsets of fonts actually used by the deck; no embedding by default. */
   readonly embedFonts?: "full" | "subset";
   /**
-   * 单次构建的协作式取消信号；未指定时没有默认超时。
-   * 完成、未处理错误与取消以首次确定的终态为准，完成后取消不会改变结果。
+   * Cooperative cancellation signal for a single build; no default timeout when unspecified.
+   * Completion, unhandled errors, and cancellation follow the first established terminal state; cancelling after completion does not alter the result.
    */
   readonly signal?: AbortSignal;
 };
@@ -88,7 +88,7 @@ export type GeometryBox = {
   readonly height: number;
 };
 
-/** 固定画布长度；数值按像素解释，百分比按所属布局区域求值。 */
+/** Fixed canvas length; numeric values are interpreted in pixels, percentages are evaluated against the parent layout region. */
 export type LayoutLength = number | `${number}%` | "auto";
 
 export type LayoutSpacing =
@@ -96,7 +96,7 @@ export type LayoutSpacing =
   | readonly [vertical: number, horizontal: number]
   | readonly [top: number, right: number, bottom: number, left: number];
 
-/** 固定画布 CSS 布局子集；数值长度按像素解释。 */
+/** Fixed canvas CSS layout subset; numeric lengths are interpreted in pixels. */
 export type LayoutStyle = {
   readonly display?: "block" | "flex" | "grid" | "none";
   readonly position?: "static" | "relative" | "absolute";
@@ -189,7 +189,7 @@ export type LayoutStyle = {
   readonly zIndex?: number;
 };
 
-/** 透明布局容器；它只安排子项，不要求生成对应的原生演示对象。 */
+/** Transparent layout Box; it arranges children only and does not require generating a corresponding native presentation object. */
 export type BoxProps = ElementProps & {
   readonly testId?: string;
   readonly part?: string;
@@ -199,13 +199,13 @@ export type BoxProps = ElementProps & {
   readonly theme?: ThemeScope;
 };
 
-/** 对象点击后由 PowerPoint 解释的目标声明；内部目标按稳定页面标识解析。 */
+/** Target declaration interpreted by PowerPoint upon clicking an object; internal targets are resolved by stable slideId. */
 export type LinkTarget =
   | { readonly slideId: string }
   | { readonly url: string }
   | { readonly action: "home" };
 
-/** 已由核心登记为关系或页面动作、供原生对象能力写入的链接属性。 */
+/** Link properties registered by core as relationships or slide actions for native object capabilities to write out. */
 export type NativeLink = {
   readonly relationshipId?: string;
   readonly action?: string;
@@ -238,11 +238,11 @@ export type LayoutObservation = {
   readonly children: readonly LayoutChildReference[];
 };
 
-/** 表格报告保留零基行列索引，与其原生合并范围一一对应。 */
+/** Table report retains zero-based row and column indexes, corresponding one-to-one with native merge extents. */
 export type NativeTableObservation = {
   readonly columnWidths: readonly number[];
   readonly rowHeights: readonly number[];
-  /** 被合并覆盖的格子留空，合并锚点保存单元格正文。 */
+  /** Cells covered by a merge remain empty, while merge anchors retain cell body text. */
   readonly cells: readonly (readonly string[])[];
   readonly merges: readonly {
     readonly row: number;
@@ -250,7 +250,7 @@ export type NativeTableObservation = {
     readonly rowSpan: number;
     readonly colSpan: number;
   }[];
-  /** 行与格的身份和最终几何由表格模块在共享布局结果中提交。 */
+  /** Identities and final geometries of rows and cells are submitted by the table module in shared layout results. */
   readonly parts?: readonly NativeTablePartObservation[];
 };
 
@@ -316,7 +316,7 @@ export type LocatorResourceObservation = ResourceObservation & {
   readonly objectId: number;
 };
 
-/** 对本次成功构建中的正式内容进行只读定位与字段观察。 */
+/** Read-only locator and field observation for formal content in a successful build. */
 export type Locator = {
   getByTestId(testId: string): Locator;
   getAllByTestId(testId: string): readonly Locator[];
@@ -339,7 +339,7 @@ export type BuildQuery = {
   slide(slideId: string): SlideQuery;
 };
 
-/** React 宿主树中的通用节点，不暴露 React 或渲染器内部对象。 */
+/** Generic node in the React host tree, without exposing React or renderer internal objects. */
 export type CapabilityElement = {
   readonly type: string;
   readonly props: Readonly<Record<string, unknown>>;
@@ -357,18 +357,18 @@ export type CapabilityChildren = {
   readonly objects: readonly ObjectObservation[];
 };
 
-/** 能力模块随原生对象提交、供同名页面模块消费的声明数据。 */
+/** Declaration data submitted by capability modules alongside native objects for consumption by slide modules of the same name. */
 export type CapabilityAnnotation = {
   readonly capability: string;
   readonly value: unknown;
 };
 
-/** 核心补充对象身份和诊断位置后传给页面模块的声明数据。 */
+/** Declaration data passed to slide modules after core supplements object identity and diagnostic locations. */
 export type CapabilityContribution = CapabilityAnnotation & {
   readonly path: string;
-  /** 原生对象声明才带有此身份；透明能力声明不生成对象 ID。 */
+  /** Only native object declarations carry this identity; transparent capability declarations do not generate object IDs. */
   readonly targetId?: number;
-  /** 页面宿主树中的前序位置，用于保留透明声明和对象成员顺序。 */
+  /** Preorder index in the slide host tree to preserve ordering of transparent declarations and object members. */
   readonly order: number;
 };
 
@@ -379,15 +379,15 @@ export type CapabilityResource = {
   readonly relationshipType: string;
 };
 
-/** 一个页面原生部件，以及它通过部件关系引用的二进制资源。 */
+/** A slide native part and binary resources it references via part relationships. */
 export type CapabilityPackagePart = {
   readonly part: {
-    /** 包内相对路径模板，必须恰含一个 `{n}` 部件序号。 */
+    /** Relative package path template, which must contain exactly one `{n}` part sequence number. */
     readonly pathTemplate: string;
     readonly contentType: string;
   };
   readonly relationshipType: string;
-  /** 接收相关部件关系标识，按 relatedParts 顺序对应。 */
+  /** Receives related part relationship IDs corresponding to relatedParts order. */
   readonly content: (
     relatedRelationshipIds: readonly string[],
   ) => string | Uint8Array;
@@ -402,28 +402,28 @@ export type CapabilityPackagePart = {
 export type CapabilityContext = {
   readonly id: number;
   readonly path: string;
-  /** 当前元素可用的文稿主题、局部颜色作用域与容器文字默认值。 */
+  /** Deck theme, local color scope, and container text defaults available to the current element. */
   readonly theme: ThemeContext;
-  /** 本次构建选项；能力模块自行解释其负责的选项。 */
+  /** Options for the current build; capability modules interpret their respective options. */
   readonly options: BuildOptions;
-  /** 当前页面在文稿中的实际序号，供共享文字服务写出页码字段。 */
+  /** 1-based slide number in the deck, used by shared text service to write slide number fields. */
   readonly slideNumber: number;
-  /** 为本次文稿中的原生文字字段分配稳定且互不重复的标识。 */
+  /** Allocate stable and unique IDs for native text fields in the current deck. */
   readonly createTextFieldId: () => string;
-  /** 由核心解析并登记的对象点击关系，能力写入所属 p:cNvPr。 */
+  /** Object click relationship resolved and registered by core, written by capability into p:cNvPr. */
   readonly nativeLink?: NativeLink;
   readonly layoutBox?: GeometryBox;
-  /** 将显式连续性句柄转换成 OOXML 对象名称；未声明连续性的对象不带此值。 */
+  /** Convert an explicit continuity handle into an OOXML object name; objects without declared continuity omit this value. */
   readonly morphName?: string;
-  /** 使用同一组已注册模块递归编译原生子对象。 */
+  /** Recursively compile native child objects using the same registered modules. */
   compileChildren(children: readonly CapabilityChild[]): CapabilityChildren;
-  /** 将二进制资源加入 PPTX，并返回当前页面对应的关系标识。 */
+  /** Add binary resource to the PPTX package and return the relationship ID for the current slide. */
   registerResource(resource: CapabilityResource): string;
-  /** 注册当前页面引用的原生部件及其直接关联的二进制部件。 */
+  /** Register a native part referenced by the current slide and its directly associated binary parts. */
   registerPackagePart(part: CapabilityPackagePart): string;
 };
 
-/** 一个文稿级 XML 记录中的资源项，由核心统一分配部件与关系标识。 */
+/** A resource item within a presentation-level XML record, with part and relationship IDs assigned uniformly by core. */
 export type CapabilityPresentationContribution = {
   readonly collection: string;
   readonly presentationAttributes?: Readonly<Record<string, string>>;
@@ -436,76 +436,76 @@ export type CapabilityPresentationContribution = {
   readonly item: {
     readonly key: string;
     readonly identity: string;
-    /** 同一记录中兄弟关系项的模式顺序。 */
+    /** Schema order of sibling relationship items within the same record. */
     readonly order: number;
     readonly relationshipType: string;
     readonly pathTemplate: string;
     readonly contentType: string;
     readonly bytes?: Uint8Array;
-    /** 需要等待文稿字符收集完成时，指向对应的共享资源声明。 */
+    /** Points to the corresponding shared resource claim when awaiting completion of deck character collection. */
     readonly resourceClaim?: { readonly kind: string; readonly key: string };
-    /** 核心聚合该资源声明的字符后调用一次，返回最终写入的部件字节。 */
+    /** Called once after core aggregates characters for this resource claim, returning final part bytes to write. */
     readonly resolveBytes?: (characters: string) => Uint8Array;
     readonly content: (relationshipId: string) => string;
   };
 };
 
 export type CapabilityLayoutRequest = {
-  /** 当前布局算法可提供的内容宽度，单位为像素。 */
+  /** Content width provided by the current layout algorithm in pixels. */
   readonly availableWidth?: number;
-  /** 可用宽度是可收缩的上限，还是布局必须分配的精确宽度。 */
+  /** Whether available width is a shrinkable upper bound or an exact width the layout must allocate. */
   readonly widthMode?: "at-most" | "exactly";
-  /** 度量与对象写出共享的主题、局部作用域和容器文字默认值。 */
+  /** Theme, local scope, and container text defaults shared between measurement and object compilation. */
   readonly theme: ThemeContext;
-  /** 当前页面在文稿中的实际序号，供共享文字服务度量原生页码字段。 */
+  /** 1-based slide number in the deck, used by shared text service to measure native slide number fields. */
   readonly slideNumber: number;
 };
 
-/** 能力模块可提供的固有尺寸及主轴 min-content 尺寸，均以像素表示。 */
+/** Intrinsic size and main-axis min-content size provided by capability modules, in pixels. */
 export type CapabilityLayoutMeasurement = {
-  /** 按请求宽度排版后的自然宽度。 */
+  /** Natural width after typesetting at the requested width. */
   readonly width?: number;
-  /** 按请求宽度排版后的自然高度。 */
+  /** Natural height after typesetting at the requested width. */
   readonly height?: number;
-  /** 计算宽度方向自动最小尺寸时采用的最小内容宽度。 */
+  /** Minimum content width used when computing automatic minimum size along the width axis. */
   readonly minContentWidth?: number;
-  /** 计算高度方向自动最小尺寸时采用的最小内容高度。 */
+  /** Minimum content height used when computing automatic minimum size along the height axis. */
   readonly minContentHeight?: number;
-  /** 有可靠文字度量时，首行基线距对象顶边的像素距离。 */
+  /** Distance in pixels from the object top edge to the first line baseline when reliable text measurement is available. */
   readonly baseline?: number;
 };
 
 export type CapabilityOutput = {
-  /** 一个 Transitional PresentationML 对象，作为正式 slide shape tree 的子节点写入。 */
+  /** A Transitional PresentationML object written as a child of the slide shape tree. */
   readonly xml: string;
   readonly observation: ObjectObservation;
   readonly extensions: readonly Extension[];
-  /** 由对应页面能力编译的对象级声明，例如动效。 */
+  /** Object-level declarations compiled by the corresponding slide capability, such as motion. */
   readonly annotations?: readonly CapabilityAnnotation[];
   readonly resourceClaims?: readonly CapabilityResourceClaim[];
-  /** 由对象实际使用的资源构成、需要挂接到 presentation 的记录项。 */
+  /** Record items composed of resources actually used by objects that must attach to the presentation. */
   readonly presentationContributions?: readonly CapabilityPresentationContribution[];
   readonly warnings?: readonly {
     readonly code: string;
     readonly message: string;
-    /** 相对原生对象的子路径，用于精确定位单元格诊断。 */
+    /** Subpath relative to the native object, used for precisely locating cell diagnostics. */
     readonly path?: string;
   }[];
 };
 
-/** 能力向文稿范围资源处理提供的声明；字符内容由同一生产文字服务生成。 */
+/** Claim provided by capability to deck-scoped resource processing; character content is generated by the shared text service. */
 export type CapabilityResourceClaim = {
   readonly kind: string;
   readonly key: string;
   readonly identity: string;
-  /** 来自共享文字服务的实际输出文字，供后续字体资源处理使用。 */
+  /** Actual output text from the shared text service, used for subsequent font resource processing. */
   readonly characters?: string;
 };
 
 export type ObjectCapabilityModule = {
-  /** 声明组件的宿主类型，例如 `rp:shape`。 */
+  /** Host type of the declared component, such as `rp:shape`. */
   readonly declaration: string;
-  /** 布局需要固有尺寸或主轴最小内容尺寸时，使用能力自身的内容度量提供依据。 */
+  /** Provides measurement basis using the capability's own content measurement when layout requires intrinsic or main-axis min-content size. */
   measureLayout?(
     input: CapabilityInput,
     request: CapabilityLayoutRequest,
@@ -513,9 +513,9 @@ export type ObjectCapabilityModule = {
   compile(input: CapabilityInput, context: CapabilityContext): CapabilityOutput;
 };
 
-/** 不生成原生对象、只向所属页面能力提交声明的透明宿主节点。 */
+/** Transparent host node that does not generate native objects, submitting declarations only to its parent slide capability. */
 export type TransparentCapabilityModule = {
-  /** 声明组件生成的宿主类型，例如 `rp:motion-scope`。 */
+  /** Host type generated by the declared component, such as `rp:motion-scope`. */
   readonly declaration: string;
   compileDeclaration(
     input: CapabilityInput,
@@ -534,24 +534,24 @@ export type SlideCapabilityContext = {
 };
 
 export type SlideCapabilityOutput = {
-  /** 由核心放入页面属性区的格式内容。 */
+  /** Formatted content placed into the slide property region by core. */
   readonly xml: string;
   readonly extensions: readonly Extension[];
   readonly observation?: unknown;
 };
 
 export type SlideCapabilityModule = {
-  /** 该模块负责的 Slide 属性名。 */
+  /** Slide property name handled by this module. */
   readonly slideProp: string;
-  /** 同一模块共同消费的页面属性，例如转场与自动翻页时刻。 */
+  /** Slide properties jointly consumed by the same module, such as transition and advance timing. */
   readonly slideProps?: readonly string[];
-  /** 按 PresentationML 的固定子元素顺序写入页面。 */
+  /** Written to the slide following PresentationML fixed child element order. */
   readonly slot: SlideCapabilitySlot;
-  /** 无论 Slide 是否提供对应属性，均运行一次。 */
+  /** Runs once regardless of whether Slide provides the corresponding property. */
   readonly always?: boolean;
-  /** 报告中的稳定能力键。 */
+  /** Stable capability key in reports. */
   readonly declaration: string;
-  /** 由该能力自行接线、供内部透明声明宿主使用的处理器。 */
+  /** Handlers wired by this capability for internal transparent declaration hosts. */
   readonly transparentDeclarations?: readonly TransparentCapabilityModule[];
   compileSlide(
     input: CapabilityInput,
@@ -561,7 +561,7 @@ export type SlideCapabilityModule = {
 
 export type CapabilityModule = ObjectCapabilityModule | SlideCapabilityModule;
 
-/** Builder 内部注册的模块，透明声明只能由页面能力模块拥有。 */
+/** Modules registered inside Builder; transparent declarations can only be owned by slide capability modules. */
 export type RegisteredCapabilityModule =
   | CapabilityModule
   | TransparentCapabilityModule;
@@ -595,7 +595,7 @@ export type SlideProps = ElementProps & {
   readonly background?: SlideBackground;
 };
 
-/** 将若干页面组织为 PowerPoint 中可折叠的平面分节。 */
+/** Organizes slides into collapsible flat sections in PowerPoint. */
 export type SectionProps = ElementProps & {
   readonly name: string;
 };

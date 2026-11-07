@@ -19,14 +19,14 @@ export function assertXml10Characters(value: string): void {
         codePoint === 0xfffe ||
         codePoint === 0xffff)
     ) {
-      throw new Error("字符串包含 XML 1.0 不允许的字符");
+      throw new Error("String contains characters not allowed in XML 1.0");
     }
   }
 }
 
 export function xmlEscape(value: string): string {
   assertXml10Characters(value);
-  // XML 会规范化属性中的原始空白，字符引用可以保留身份值。
+  // XML normalizes raw whitespace in attributes; character references preserve identity values.
   return value
     .replace(/&/gu, "&amp;")
     .replace(/</gu, "&lt;")
@@ -162,7 +162,7 @@ function themePart(value: Theme): string {
     .map((slot) => {
       const color = value.colors[slot];
       if (!/^#[0-9a-f]{6}$/iu.test(color)) {
-        throw new Error(`Theme.colors.${slot} 必须是 #RRGGBB 颜色`);
+        throw new Error(`Theme.colors.${slot} must be a #RRGGBB color`);
       }
       const schemeName =
         slot === "hlink" ? "hlink" : slot === "folHlink" ? "folHlink" : slot;
@@ -190,7 +190,7 @@ function themePart(value: Theme): string {
 function master(): string {
   const colorMap =
     '<p:clrMap bg1="lt1" tx1="dk1" bg2="lt2" tx2="dk2" accent1="accent1" accent2="accent2" accent3="accent3" accent4="accent4" accent5="accent5" accent6="accent6" hlink="hlink" folHlink="folHlink"/>';
-  // 单母版、单版式骨架必须避开 ID 冲突，因此版式取下一个合法值。
+  // Single master and single layout skeleton must avoid ID collision, so the layout takes the next valid value.
   return xmlDocument(
     `<p:sldMaster xmlns:a="${namespaces.a}" xmlns:r="${namespaces.r}" xmlns:p="${namespaces.p}"><p:cSld name="Office Theme"><p:spTree>${emptyShapeTree}</p:spTree></p:cSld>${colorMap}<p:sldLayoutIdLst><p:sldLayoutId id="${minimumSlideLayoutId + 1}" r:id="rId1"/></p:sldLayoutIdLst><p:txStyles><p:titleStyle/><p:bodyStyle/><p:otherStyle/></p:txStyles></p:sldMaster>`,
   );

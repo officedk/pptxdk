@@ -35,7 +35,7 @@ const schemaValidatorProfile = {
   officeVersion: schemaValidatorOfficeVersion,
 } as const;
 const validationScope =
-  "Open XML SDK 3.0.2 在 Microsoft365 配置下实现的 Transitional 包、Schema 与约束校验；另由本地读取器独立核对 OPC 关系、内容类型及页面、形状、图片、组合、文字与转场结构，并逐支核对转场 Choice／Fallback 的 Requires 和目标扩展限制。SDK 的 MC 仅按其支持选择 Choice 或 Fallback；p14／p159 的所有兼容分支及未知扩展不保证均被 Schema 验证。校验不等于完整标准认证或应用证据。";
+  "Open XML SDK 3.0.2 under Microsoft365 profile Transitional package, schema, and constraint validation; local reader independently verifies OPC relationships, content types, and slide, shape, image, group, text, and transition structures, and verifies transition Choice/Fallback Requires and target extension constraints branch by branch. SDK MC selects Choice or Fallback solely according to its support; all compatibility branches and unknown extensions for p14/p159 are not guaranteed to be schema-validated. Validation does not equal full standard certification or application evidence.";
 const applicationEvidence = "not-validated";
 const minimumSlideLayoutId = 2_147_483_648;
 const maximumSlideLayoutId = 4_294_967_295;
@@ -46,7 +46,7 @@ const maximumShapeExtentEmu = 2_147_483_647;
 const minimumFontSizeCentipoints = 100;
 const maximumFontSizeCentipoints = 400_000;
 const maximumTextSpacingCentipoints = 158_400;
-// 外部 SDK 用共享文件编号关联输入；串行调用可避免并发覆盖，失败后队列仍会释放。
+// The external SDK correlates input using shared file IDs; serializing calls avoids concurrent overwrites, and the queue releases even on failure.
 let schemaValidationQueue: Promise<void> = Promise.resolve();
 
 export type ValidationIssue = {
@@ -67,7 +67,7 @@ export type FileObject = {
     readonly width: number;
     readonly height: number;
   };
-  /** 实际 a:xfrm@rot；未出现时表示原始角度为 0°。 */
+  /** Actual a:xfrm@rot; indicates original angle of 0° when absent. */
   readonly rotationDegrees?: number;
   readonly image?: {
     readonly relationshipId: string;
@@ -235,7 +235,7 @@ export type FileAnimationKeyframe = {
   readonly valueType?: string;
 };
 
-/** 实际文件行为节点；`from`/`to` 是端点视图，含公式时完整轨迹保存在 keyframes。 */
+/** Actual file behavior node; `from`/`to` are endpoint views; keyframes store the full trajectory when formulas are present. */
 export type FileAnimationBehavior = {
   readonly behavior: "set" | "anim" | "animEffect" | "animRot" | "animClr";
   readonly targetId: number;
@@ -245,10 +245,10 @@ export type FileAnimationBehavior = {
   readonly durationMs?: number;
   readonly from?: string;
   readonly to?: string;
-  /** animRot 的原始相对角度，单位为 DrawingML 的 1/60000 度。 */
+  /** Raw relative angle of animRot, in 1/60000ths of a degree per DrawingML. */
   readonly by?: string;
   readonly calculationMode?: string;
-  /** 文件中实际 `p:tav` 的顺序；公式按相邻节点的数值关键值求值。 */
+  /** Actual p:tav order in the file; formulas evaluate against numerical key values of adjacent nodes. */
   readonly keyframes?: readonly FileAnimationKeyframe[];
   readonly additive?: string;
   readonly filter?: string;
@@ -372,7 +372,7 @@ function isPositionBehavior(behavior: FileAnimationBehavior): boolean {
   );
 }
 
-/** 限定读取器本轮写出的共同中心旋转公式，不执行通用公式求值。 */
+/** Scoped to the common-center rotation formula emitted in this round; does not perform general formula evaluation. */
 type CenterRotationFormula = {
   readonly axis: "ppt_x" | "ppt_y";
   readonly centerX: number;
@@ -503,7 +503,7 @@ function parseCenterRotationFormula(
   };
 }
 
-/** 校验共同几何的进度载体，不推演公式在任意时刻的位置。 */
+/** Progress carrier for validating shared geometry; does not extrapolate formula positions at arbitrary points in time. */
 function validCenterRotationProgress(behavior: FileAnimationBehavior): boolean {
   const keyframes = behavior.keyframes;
   return (
@@ -544,7 +544,7 @@ function hasCompletePositionAxes(
 function hasConsistentPositionFormulas(
   behaviors: readonly FileAnimationBehavior[],
 ): boolean {
-  // 同一时间节点内实际写出的段落、背景与成员必须共享参数关系。
+  // Paragraphs, backgrounds, and members emitted within the same timing node must share parameter relationships.
   const formulas = behaviors
     .filter(isPositionBehavior)
     .map(parseCenterRotationFormula);
@@ -709,7 +709,7 @@ function spinAngleForPosition(
   return endpoints[0] - endpoints[1];
 }
 
-/** 按页面尺寸、对象几何和对应的原生旋转／缩放参数核对实际位置公式。 */
+/** Checks actual position formulas against slide dimensions, object geometry, and corresponding native rotation/scale parameters. */
 function validCenterRotationGeometry(
   preset: FileAnimationEffect["preset"],
   behaviors: readonly FileAnimationBehavior[],
@@ -777,7 +777,7 @@ function validCenterRotationGeometry(
   });
 }
 
-/** 按实际段落、背景和可见性目标完整核对后，才恢复逻辑 whole Text。 */
+/** Recovers logical whole Text only after complete verification against actual paragraphs, background, and visibility targets. */
 function validWholeTextProjection(
   preset: FileAnimationEffect["preset"],
   kind: FileAnimationEffect["kind"],
@@ -892,7 +892,7 @@ export type FileTransition = {
 export type ValidationExtension = "p14" | "p159";
 
 export type ValidationOptions = {
-  /** 拒绝实际文件使用的目标未允许扩展；省略时只做结构读取。 */
+  /** Rejects target extensions used in the actual file that are not permitted; performs structural reading only when omitted. */
   readonly allowedExtensions?: readonly ValidationExtension[];
 };
 
@@ -971,7 +971,7 @@ async function validateStandardStructure(
       {
         part: "",
         code: "schema-validator-failed",
-        message: `Open XML SDK 结构校验器执行失败：${error instanceof Error ? error.message : String(error)}`,
+        message: `Open XML SDK structural validator failed: ${error instanceof Error ? error.message : String(error)}`,
       },
     ];
   }
@@ -1279,7 +1279,12 @@ function readTextRun(
         fieldId,
       ))
   ) {
-    issue(errors, part, "invalid-text-field", "原生文字字段类型或标识无效");
+    issue(
+      errors,
+      part,
+      "invalid-text-field",
+      "Native text field type or identifier is invalid",
+    );
   }
   const properties = first(run, drawingNamespace, "rPr");
   if (properties === undefined)
@@ -1451,7 +1456,8 @@ function parseXmlFiles(files: XmlFiles, errors: ValidationIssue[]): Documents {
         strFromU8(bytes),
         "application/xml",
       );
-      if (document.documentElement === null) throw new Error("XML 缺少根元素");
+      if (document.documentElement === null)
+        throw new Error("XML missing root element");
       documents.set(part, document);
     } catch (error) {
       issue(
@@ -1502,7 +1508,7 @@ function checkRelationships(
         errors,
         path,
         "invalid-relationships-root",
-        "关系部件根元素不符合 OPC 命名空间",
+        "Relationships part root element does not match OPC namespace",
       );
       continue;
     }
@@ -1524,12 +1530,17 @@ function checkRelationships(
           errors,
           path,
           "invalid-relationship",
-          "关系缺少 Id、Type 或 Target",
+          "Relationship missing Id, Type, or Target",
         );
         continue;
       }
       if (entries.has(id))
-        issue(errors, path, "duplicate-relationship-id", `关系标识 ${id} 重复`);
+        issue(
+          errors,
+          path,
+          "duplicate-relationship-id",
+          `Duplicate relationship identifier ${id}`,
+        );
       entries.set(id, relationship);
       if (mode !== "External") {
         const resolved = relationshipTargetPath(source, target);
@@ -1538,7 +1549,7 @@ function checkRelationships(
             errors,
             path,
             "missing-relationship-target",
-            `关系目标 ${target} 不存在`,
+            `Relationship target ${target} does not exist`,
           );
         }
       }
@@ -1556,7 +1567,7 @@ function validateContentTypes(
   const part = "[Content_Types].xml";
   const document = documents.get(part);
   if (document === undefined) {
-    issue(errors, part, "missing-content-types", "缺少内容类型部件");
+    issue(errors, part, "missing-content-types", "Missing content types part");
     return { defaults: new Map(), overrides: new Map() };
   }
   const root = document.documentElement;
@@ -1569,7 +1580,7 @@ function validateContentTypes(
       errors,
       part,
       "invalid-content-types-root",
-      "内容类型部件根元素不符合 OPC 命名空间",
+      "Content types part root element does not match OPC namespace",
     );
     return { defaults: new Map(), overrides: new Map() };
   }
@@ -1605,7 +1616,12 @@ function validateContentTypes(
   ];
   for (const [path, contentType] of required) {
     if (overrides.get(path) !== contentType) {
-      issue(errors, part, "missing-content-type", `${path} 缺少预期内容类型`);
+      issue(
+        errors,
+        part,
+        "missing-content-type",
+        `${path} missing expected content type`,
+      );
     }
   }
   for (const path of Object.keys(files).filter((entry) =>
@@ -1615,7 +1631,12 @@ function validateContentTypes(
       overrides.get(`/${path}`) !==
       "application/vnd.openxmlformats-officedocument.presentationml.slide+xml"
     ) {
-      issue(errors, part, "missing-content-type", `/${path} 缺少页面内容类型`);
+      issue(
+        errors,
+        part,
+        "missing-content-type",
+        `/${path} missing slide content type`,
+      );
     }
   }
   return { defaults, overrides };
@@ -1678,7 +1699,7 @@ function requireRelationship(
       errors,
       source === "" ? "_rels/.rels" : source,
       "missing-required-relationship",
-      `缺少指向 ${targetPath} 的关系`,
+      `Missing relationship pointing to ${targetPath}`,
     );
   }
 }
@@ -1696,7 +1717,12 @@ function requireRoot(
     root.namespaceURI !== namespace ||
     root.localName !== localName
   ) {
-    issue(errors, path, "invalid-part-root", `部件根元素应为 ${localName}`);
+    issue(
+      errors,
+      path,
+      "invalid-part-root",
+      `Part root element should be ${localName}`,
+    );
   }
 }
 
@@ -1724,7 +1750,7 @@ function validateSlideLayoutIds(
         errors,
         part,
         "invalid-slide-layout-id",
-        `母版版式标识 ${attribute(layoutId, "id")} 必须是 ${minimumSlideLayoutId} 至 ${maximumSlideLayoutId} 的整数`,
+        `Master layout identifier ${attribute(layoutId, "id")} must be an integer between ${minimumSlideLayoutId} and ${maximumSlideLayoutId}`,
       );
     }
   }
@@ -1747,7 +1773,7 @@ function validateTextValueRange(
       errors,
       part,
       code,
-      `${label}字段必须是 ${minimum} 到 ${maximum} 间的整数`,
+      `${label} field must be an integer between ${minimum} and ${maximum}`,
     );
   }
 }
@@ -1812,7 +1838,7 @@ function validateTextBodyValueRanges(
         part,
         errors,
         "invalid-font-size",
-        "字号",
+        "font-size",
       );
     }
     for (const fld of elements(paragraph, drawingNamespace, "fld")) {
@@ -1829,7 +1855,7 @@ function validateTextBodyValueRanges(
       part,
       errors,
       "invalid-font-size",
-      "字号",
+      "font-size",
     );
     const properties = first(paragraph, drawingNamespace, "pPr");
     if (properties !== undefined) {
@@ -1854,7 +1880,7 @@ function validateTextBodyValueRanges(
         part,
         errors,
         "invalid-text-spacing",
-        "段落间距",
+        "text-spacing",
       );
     }
   }
@@ -1888,7 +1914,12 @@ function validateShape(
   const name =
     drawingProperties === undefined ? "" : attribute(drawingProperties, "name");
   if (id === undefined || name === "") {
-    issue(errors, part, "invalid-shape-identity", "形状缺少有效对象标识或名称");
+    issue(
+      errors,
+      part,
+      "invalid-shape-identity",
+      "Shape missing valid object identifier or name",
+    );
     return undefined;
   }
   const properties = first(shape, presentationNamespace, "spPr");
@@ -1898,7 +1929,7 @@ function validateShape(
       errors,
       part,
       "missing-shape-geometry",
-      `形状 ${name} 缺少 preset geometry`,
+      `Shape ${name} missing preset geometry`,
     );
     return undefined;
   }
@@ -1933,7 +1964,7 @@ function validateShape(
       errors,
       part,
       "invalid-shape-transform",
-      `形状 ${name} 的坐标或尺寸无效`,
+      `Shape ${name} coordinates or dimensions are invalid`,
     );
     return undefined;
   }
@@ -1970,7 +2001,7 @@ function objectIdentity(
       errors,
       part,
       `invalid-${kind}-identity`,
-      `${kind} 缺少有效对象标识或名称`,
+      `${kind} missing valid object identifier or name`,
     );
     return undefined;
   }
@@ -2010,7 +2041,7 @@ function transformBox(
       errors,
       part,
       `invalid-${kind}-transform`,
-      `${kind} ${name} 的坐标或尺寸无效`,
+      `${kind} ${name} coordinates or dimensions are invalid`,
     );
     return undefined;
   }
@@ -2037,7 +2068,7 @@ function validatePicture(
       errors,
       part,
       "missing-picture-geometry",
-      `图片 ${identity.name} 缺少几何`,
+      `Image ${identity.name} missing geometry`,
     );
     return undefined;
   }
@@ -2072,7 +2103,7 @@ function validatePicture(
         errors,
         part,
         "invalid-picture-crop",
-        `图片 ${identity.name} 的裁切值无效`,
+        `Image ${identity.name} crop values are invalid`,
       );
       continue;
     }
@@ -2083,7 +2114,7 @@ function validatePicture(
       errors,
       part,
       "invalid-picture-crop",
-      `图片 ${identity.name} 左右裁切越界`,
+      `Image ${identity.name} horizontal crop out of bounds`,
     );
   }
   if ((crop.top ?? 0) + (crop.bottom ?? 0) > 100000) {
@@ -2091,7 +2122,7 @@ function validatePicture(
       errors,
       part,
       "invalid-picture-crop",
-      `图片 ${identity.name} 上下裁切越界`,
+      `Image ${identity.name} vertical crop out of bounds`,
     );
   }
   const relationshipId =
@@ -2103,7 +2134,7 @@ function validatePicture(
       errors,
       part,
       "missing-image-relationship",
-      `图片 ${identity.name} 引用的关系 ${relationshipId} 不存在`,
+      `Image ${identity.name} references non-existent relationship ${relationshipId}`,
     );
   } else if (
     attribute(relationship, "Type") !== `${relationshipNamespace}/image` ||
@@ -2113,7 +2144,7 @@ function validatePicture(
       errors,
       part,
       "invalid-image-relationship",
-      `图片 ${identity.name} 必须引用包内图片部件`,
+      `Image ${identity.name} must reference package image part`,
     );
   } else {
     const imagePart = relationshipTargetPath(
@@ -2141,7 +2172,7 @@ function validatePicture(
         errors,
         part,
         "invalid-image-part",
-        `图片 ${identity.name} 的媒体部件缺失或内容类型无效`,
+        `Image ${identity.name} media part is missing or content type is invalid`,
       );
     } else {
       image = { relationshipId, part: imagePart, contentType };
@@ -2186,7 +2217,7 @@ function chartStringCache(
       errors,
       part,
       "invalid-chart-cache",
-      "图表字符串引用缺少公式或缓存数量",
+      "Chart string reference missing formula or cache count",
     );
     return undefined;
   }
@@ -2202,7 +2233,12 @@ function chartStringCache(
       index >= values.length ||
       value == null
     ) {
-      issue(errors, part, "invalid-chart-cache", "图表字符串缓存含无效数据点");
+      issue(
+        errors,
+        part,
+        "invalid-chart-cache",
+        "Chart string cache contains invalid data points",
+      );
       continue;
     }
     values[index] = value;
@@ -2231,7 +2267,7 @@ function chartNumberCache(
       errors,
       part,
       "invalid-chart-cache",
-      "图表数值引用缺少公式或缓存数量",
+      "Chart numeric reference missing formula or cache count",
     );
     return undefined;
   }
@@ -2248,7 +2284,12 @@ function chartNumberCache(
       index >= values.length ||
       !Number.isFinite(value)
     ) {
-      issue(errors, part, "invalid-chart-cache", "图表数值缓存含无效数据点");
+      issue(
+        errors,
+        part,
+        "invalid-chart-cache",
+        "Chart numeric cache contains invalid data points",
+      );
       continue;
     }
     values[index] = value;
@@ -2278,7 +2319,9 @@ function readEmbeddedWorkbook(
       errors,
       part,
       "invalid-embedded-workbook",
-      error instanceof Error ? error.message : "嵌入工作簿不是有效 ZIP 部件",
+      error instanceof Error
+        ? error.message
+        : "Embedded workbook is not a valid ZIP part",
     );
     return undefined;
   }
@@ -2304,7 +2347,7 @@ function readEmbeddedWorkbook(
       errors,
       part,
       "invalid-embedded-workbook",
-      "嵌入工作簿缺少 xl/workbook.xml",
+      "Embedded workbook missing xl/workbook.xml",
     );
     return undefined;
   }
@@ -2324,7 +2367,7 @@ function readEmbeddedWorkbook(
       errors,
       part,
       "invalid-embedded-workbook",
-      "嵌入工作簿缺少有效工作表关系",
+      "Embedded workbook missing valid worksheet relationship",
     );
     return undefined;
   }
@@ -2342,7 +2385,7 @@ function readEmbeddedWorkbook(
       errors,
       part,
       "invalid-embedded-workbook",
-      "嵌入工作簿工作表部件无效",
+      "Embedded workbook worksheet part is invalid",
     );
     return undefined;
   }
@@ -2370,7 +2413,7 @@ function readEmbeddedWorkbook(
         errors,
         part,
         "incomplete-embedded-workbook",
-        `工作簿缺少 A${index + 2} 分类`,
+        `Workbook missing category A${index + 2}`,
       );
     }
     return category ?? "";
@@ -2383,7 +2426,7 @@ function readEmbeddedWorkbook(
         errors,
         part,
         "incomplete-embedded-workbook",
-        `工作簿缺少 ${column}1 系列名称`,
+        `Workbook missing series name ${column}1`,
       );
     }
     const values = Array.from({ length: categoryCount }, (_, row) => {
@@ -2395,7 +2438,7 @@ function readEmbeddedWorkbook(
           errors,
           part,
           "invalid-embedded-workbook-value",
-          `工作簿 ${column}${row + 2} 不是有限数值`,
+          `Workbook ${column}${row + 2} is not a finite number`,
         );
         return null;
       }
@@ -2412,7 +2455,7 @@ function readEmbeddedWorkbook(
         errors,
         part,
         "chart-workbook-mismatch",
-        `图表系列 ${expected.name} 与嵌入工作簿内容不一致`,
+        `Chart series ${expected.name} does not match embedded workbook content`,
       );
     }
     return {
@@ -2476,7 +2519,7 @@ function validateChart(
       errors,
       part,
       "invalid-chart-relationship",
-      `图表 ${identity.name} 缺少包内 chart 关系`,
+      `Chart ${identity.name} missing package chart relationship`,
     );
     return boxEmu === undefined
       ? undefined
@@ -2498,7 +2541,7 @@ function validateChart(
       errors,
       chartPart,
       "invalid-chart-part",
-      `图表 ${identity.name} 的部件或内容类型无效`,
+      `Chart ${identity.name} part or content type is invalid`,
     );
     return boxEmu === undefined
       ? undefined
@@ -2580,7 +2623,12 @@ function validateChart(
           elements(plotArea, chartNamespace, "doughnutChart"),
         );
   if (typeNodes.length === 0) {
-    issue(errors, chartPart, "missing-chart-type", "图表部件缺少原生图表类型");
+    issue(
+      errors,
+      chartPart,
+      "missing-chart-type",
+      "Chart part missing native chart type",
+    );
   }
   const types = typeNodes
     .map(({ localName }) => localName)
@@ -2594,7 +2642,12 @@ function validateChart(
         )
       : undefined;
   if (direction !== undefined && direction !== "bar" && direction !== "col") {
-    issue(errors, chartPart, "invalid-chart-direction", "图表条形方向无效");
+    issue(
+      errors,
+      chartPart,
+      "invalid-chart-direction",
+      "Chart bar direction is invalid",
+    );
   }
   const grouping =
     firstType === undefined
@@ -2650,7 +2703,7 @@ function validateChart(
           errors,
           chartPart,
           "invalid-chart-series",
-          "图表系列名称、分类和值数量不一致",
+          "Chart series names, categories, and values counts do not match",
         );
       }
       const name = nameCache.values[0] ?? "";
@@ -2683,7 +2736,7 @@ function validateChart(
       errors,
       chartPart,
       "invalid-workbook-relationship",
-      "图表缺少嵌入工作簿 package 关系",
+      "Chart missing embedded workbook package relationship",
     );
   } else {
     const workbookPart = relationshipTargetPath(
@@ -2700,7 +2753,7 @@ function validateChart(
         errors,
         workbookPart,
         "invalid-embedded-workbook",
-        "图表嵌入工作簿部件或内容类型无效",
+        "Chart embedded workbook part or content type is invalid",
       );
     } else {
       embeddedWorkbook = readEmbeddedWorkbook(
@@ -2730,7 +2783,7 @@ function validateChart(
         errors,
         chartPart,
         "invalid-chart-formula",
-        `图表系列 ${series[index]?.name ?? index + 1} 未引用对应工作簿单元格`,
+        `Chart series ${series[index]?.name ?? index + 1} does not reference corresponding workbook cell`,
       );
     }
     const workbookValues = workbookSeries[index];
@@ -2750,7 +2803,7 @@ function validateChart(
         errors,
         chartPart,
         "chart-workbook-mismatch",
-        `图表系列 ${chartValues.name} 的缓存与工作簿不一致`,
+        `Chart series ${chartValues.name} cache does not match workbook`,
       );
     }
   }
@@ -2821,7 +2874,7 @@ function validateGroup(
       errors,
       part,
       "invalid-group-transform",
-      `组合 ${identity.name} 缺少有效的成员坐标范围`,
+      `Group ${identity.name} missing valid member coordinate bounds`,
     );
   }
   const members = readObjects(
@@ -2835,7 +2888,12 @@ function validateGroup(
     theme,
   );
   if (members.length === 0) {
-    issue(errors, part, "empty-group", `组合 ${identity.name} 没有原生成员`);
+    issue(
+      errors,
+      part,
+      "empty-group",
+      `Group ${identity.name} has no native members`,
+    );
   }
   if (boxEmu === undefined) return undefined;
   return {
@@ -2876,7 +2934,12 @@ function tableSpan(
   if (!cell.hasAttribute(name)) return 1;
   const value = integerAttribute(cell, name);
   if (value === undefined || value < 1) {
-    issue(errors, part, "invalid-table-merge", `${name} 必须是正整数`);
+    issue(
+      errors,
+      part,
+      "invalid-table-merge",
+      `${name} must be a positive integer`,
+    );
     return 1;
   }
   return value;
@@ -2891,7 +2954,7 @@ function tableMergeFlag(
   const value = attribute(cell, name);
   if (value === "" || value === "0" || value === "false") return false;
   if (value === "1" || value === "true") return true;
-  issue(errors, part, "invalid-table-merge", `${name} 必须是布尔值`);
+  issue(errors, part, "invalid-table-merge", `${name} must be a boolean`);
   return false;
 }
 
@@ -2903,7 +2966,12 @@ function tableCellText(
 ): FileText {
   const body = first(cell, drawingNamespace, "txBody");
   if (body === undefined) {
-    issue(errors, part, "missing-table-cell-text", "表格单元格缺少 a:txBody");
+    issue(
+      errors,
+      part,
+      "missing-table-cell-text",
+      "Table cell missing a:txBody",
+    );
     return { text: "", paragraphs: [] };
   }
   validateTextBodyValueRanges(body, part, errors);
@@ -2913,7 +2981,7 @@ function tableCellText(
   return { text: paragraphs.map(({ text }) => text).join("\n"), paragraphs };
 }
 
-/** 独立读取表格网格与合并覆盖，不调用生产表格模块的计算结果。 */
+/** Independently reads table grid and merge overlays without calling production table module calculation results. */
 function validateTable(
   frame: XmlElement,
   part: string,
@@ -2948,7 +3016,7 @@ function validateTable(
       errors,
       part,
       "invalid-table-graphic",
-      `表格 ${identity.name} 缺少 DrawingML 表格内容`,
+      `Table ${identity.name} missing DrawingML table content`,
     );
     return undefined;
   }
@@ -2960,7 +3028,7 @@ function validateTable(
       errors,
       part,
       "invalid-table-grid",
-      `表格 ${identity.name} 缺少列网格`,
+      `Table ${identity.name} missing column grid`,
     );
   }
   const columnWidthsEmu = columns.map((column, index) => {
@@ -2970,7 +3038,7 @@ function validateTable(
         errors,
         part,
         "invalid-table-grid",
-        `表格 ${identity.name} 第 ${index + 1} 列宽无效`,
+        `Table ${identity.name} column ${index + 1} width is invalid`,
       );
       return 0;
     }
@@ -2982,7 +3050,7 @@ function validateTable(
       errors,
       part,
       "invalid-table-grid",
-      `表格 ${identity.name} 至少需要一行`,
+      `Table ${identity.name} requires at least one row`,
     );
   }
   const rowHeightsEmu: number[] = [];
@@ -2994,7 +3062,7 @@ function validateTable(
         errors,
         part,
         "invalid-table-grid",
-        `表格 ${identity.name} 第 ${rowIndex + 1} 行高无效`,
+        `Table ${identity.name} row ${rowIndex + 1} height is invalid`,
       );
       rowHeightsEmu.push(0);
     } else rowHeightsEmu.push(height);
@@ -3004,7 +3072,7 @@ function validateTable(
         errors,
         part,
         "invalid-table-grid",
-        `表格 ${identity.name} 第 ${rowIndex + 1} 行含 ${cells.length} 个格子，列网格含 ${columns.length} 列`,
+        `Table ${identity.name} row ${rowIndex + 1} contains ${cells.length} cells, while column grid contains ${columns.length} columns`,
       );
     }
     rowCells.push(cells);
@@ -3065,7 +3133,7 @@ function validateTable(
           errors,
           part,
           "invalid-table-merge",
-          `表格 ${identity.name} 的合并范围越界`,
+          `Table ${identity.name} merge range out of bounds`,
         );
       }
       const owner = { row: rowIndex, column, rowSpan, colSpan };
@@ -3085,7 +3153,7 @@ function validateTable(
               errors,
               part,
               "conflicting-table-merge",
-              `表格 ${identity.name} 的合并范围重叠`,
+              `Table ${identity.name} merge ranges overlap`,
             );
           else owners.set(key, owner);
         }
@@ -3105,7 +3173,7 @@ function validateTable(
           errors,
           part,
           "invalid-table-grid",
-          `表格 ${identity.name} 的第 ${rowIndex + 1} 行第 ${column + 1} 列没有有效单元格`,
+          `Table ${identity.name} row ${rowIndex + 1} column ${column + 1} has no valid cell`,
         );
         continue;
       }
@@ -3126,7 +3194,7 @@ function validateTable(
           errors,
           part,
           "invalid-table-merge",
-          `表格 ${identity.name} 的合并续格标记或跨度与锚点范围不一致`,
+          `Table ${identity.name} merge continuation flags or spans do not match anchor range`,
         );
       }
     }
@@ -3141,7 +3209,7 @@ function validateTable(
       errors,
       part,
       "invalid-table-transform",
-      `表格 ${identity.name} 的框架尺寸与行列网格合计不一致`,
+      `Table ${identity.name} frame dimensions do not match row and column grid sum`,
     );
   }
   if (boxEmu === undefined) return undefined;
@@ -3271,7 +3339,12 @@ function readObjectLink(
     click.getAttributeNS(relationshipNamespace, "id") ?? "";
   const action = attribute(click, "action");
   if (!click.hasAttributeNS(relationshipNamespace, "id")) {
-    issue(errors, part, "invalid-object-link", "对象链接缺少关系标识属性");
+    issue(
+      errors,
+      part,
+      "invalid-object-link",
+      "Object link missing relationship ID attribute",
+    );
     return undefined;
   }
   if (relationshipId === "") {
@@ -3282,7 +3355,7 @@ function readObjectLink(
       errors,
       part,
       "invalid-object-link",
-      "对象链接缺少有效关系或 home 动作",
+      "Object link missing valid relationship or home action",
     );
     return undefined;
   }
@@ -3292,7 +3365,7 @@ function readObjectLink(
       errors,
       part,
       "missing-object-link-relationship",
-      `对象链接引用不存在的关系 ${relationshipId}`,
+      `Object link references non-existent relationship ${relationshipId}`,
     );
     return undefined;
   }
@@ -3304,7 +3377,7 @@ function readObjectLink(
         errors,
         part,
         "invalid-object-link",
-        "URL 链接必须使用外部 hyperlink 关系",
+        "URL link must use external hyperlink relationship",
       );
       return undefined;
     }
@@ -3316,7 +3389,7 @@ function readObjectLink(
         errors,
         part,
         "invalid-object-link-url",
-        "外部链接关系的目标不是绝对 URL",
+        "External link relationship target is not an absolute URL",
       );
       return undefined;
     }
@@ -3327,7 +3400,7 @@ function readObjectLink(
         errors,
         part,
         "invalid-object-link",
-        "页面跳转必须使用内部 slide 关系和跳转动作",
+        "Slide jump must use internal slide relationship and jump action",
       );
       return undefined;
     }
@@ -3347,7 +3420,7 @@ function readObjectLink(
         errors,
         part,
         "invalid-object-link-target",
-        "页面跳转目标缺少稳定标识",
+        "Slide jump target missing stable slide identifier",
       );
       return undefined;
     }
@@ -3357,7 +3430,7 @@ function readObjectLink(
     errors,
     part,
     "invalid-object-link",
-    "对象链接关系类型不是 hyperlink 或 slide",
+    "Object link relationship type is not hyperlink or slide",
   );
   return undefined;
 }
@@ -3382,7 +3455,12 @@ function readSlideBackground(
   if (background === undefined) return undefined;
   const properties = first(background, presentationNamespace, "bgPr");
   if (properties === undefined) {
-    issue(errors, part, "invalid-slide-background", "页面背景缺少 bgPr");
+    issue(
+      errors,
+      part,
+      "invalid-slide-background",
+      "Slide background missing bgPr",
+    );
     return undefined;
   }
   const picture = first(properties, drawingNamespace, "blipFill");
@@ -3404,7 +3482,7 @@ function readSlideBackground(
         errors,
         part,
         "invalid-slide-background-image",
-        "页面图片背景缺少有效的内部 image 关系",
+        "Slide image background missing valid internal image relationship",
       );
       return undefined;
     }
@@ -3423,7 +3501,7 @@ function readSlideBackground(
         errors,
         part,
         "invalid-slide-background-image",
-        "页面图片背景目标缺少有效图片内容或内容类型",
+        "Slide image background target missing valid image content or content type",
       );
       return undefined;
     }
@@ -3441,7 +3519,7 @@ function readSlideBackground(
           errors,
           part,
           "invalid-slide-background-gradient",
-          "渐变色标位置无效",
+          "Gradient stop position is invalid",
         );
       }
       const color = readRunColor(stop, theme);
@@ -3455,7 +3533,7 @@ function readSlideBackground(
         errors,
         part,
         "invalid-slide-background-gradient",
-        "页面渐变至少需要两个色标",
+        "Slide gradient requires at least two stops",
       );
     }
     const linear = first(gradient, drawingNamespace, "lin");
@@ -3476,7 +3554,12 @@ function readSlideBackground(
     const color = readRunColor(solid, theme);
     return { type: "solid", ...(color === undefined ? {} : { color }) };
   }
-  issue(errors, part, "invalid-slide-background", "页面背景缺少受支持的填充");
+  issue(
+    errors,
+    part,
+    "invalid-slide-background",
+    "Slide background missing supported fill",
+  );
   return undefined;
 }
 
@@ -3540,7 +3623,7 @@ function readTransitionElement(
       errors,
       part,
       "invalid-transition-speed",
-      `未知转场速度 ${speedValue}`,
+      `Unknown transition speed ${speedValue}`,
     );
   }
   const durationValue = transition.getAttributeNS(p14Namespace, "dur");
@@ -3553,7 +3636,7 @@ function readTransitionElement(
         errors,
         part,
         "invalid-transition-duration",
-        "p14:dur 不是有效时长",
+        "p14:dur is not a valid duration",
       );
     }
   }
@@ -3566,7 +3649,7 @@ function readTransitionElement(
       errors,
       part,
       "invalid-transition-effect",
-      "转场必须恰好包含一个效果元素",
+      "Transition must contain exactly one effect element",
     );
   }
   const effect = effects[0];
@@ -3579,20 +3662,30 @@ function readTransitionElement(
       kind = "strips";
       direction = attribute(effect, "dir");
       if (!["lu", "ru", "ld", "rd"].includes(direction)) {
-        issue(errors, part, "invalid-transition-direction", "strips.dir 无效");
+        issue(
+          errors,
+          part,
+          "invalid-transition-direction",
+          "strips.dir is invalid",
+        );
       }
     } else if (effect.localName === "push") {
       kind = "push";
       direction = attribute(effect, "dir");
       if (!["l", "r", "u", "d"].includes(direction)) {
-        issue(errors, part, "invalid-transition-direction", "push.dir 无效");
+        issue(
+          errors,
+          part,
+          "invalid-transition-direction",
+          "push.dir is invalid",
+        );
       }
     } else {
       issue(
         errors,
         part,
         "unsupported-transition-effect",
-        `不支持转场效果 p:${effect.localName}`,
+        `Unsupported transition effect p:${effect.localName}`,
       );
     }
   } else if (
@@ -3607,7 +3700,7 @@ function readTransitionElement(
         errors,
         part,
         "invalid-transition-direction",
-        "flip.dir 必须是 l 或 r",
+        "flip.dir must be l or r",
       );
     }
   } else if (
@@ -3621,13 +3714,18 @@ function readTransitionElement(
     else if (option === "byWord") by = "word";
     else if (option === "byChar") by = "character";
     else
-      issue(errors, part, "invalid-morph-option", `未知 Morph 选项 ${option}`);
+      issue(
+        errors,
+        part,
+        "invalid-morph-option",
+        `Unknown Morph option ${option}`,
+      );
   } else if (effect !== undefined) {
     issue(
       errors,
       part,
       "unsupported-transition-effect",
-      "转场效果使用未知命名空间",
+      "Transition effect uses unknown namespace",
     );
   }
   if (!insideChoice && extensions.size > 0) {
@@ -3635,7 +3733,7 @@ function readTransitionElement(
       errors,
       part,
       "extension-outside-choice",
-      "p14／p159 转场机制必须放在 mc:Choice 内",
+      "p14/p159 transition mechanisms must be placed within mc:Choice",
     );
   }
   const result: FileTransition = {
@@ -3664,7 +3762,7 @@ function readAlternateTransition(
       errors,
       part,
       "invalid-transition-alternate",
-      "转场兼容分支必须包含一个 Choice 和一个 Fallback",
+      "Transition compatibility branches must contain one Choice and one Fallback",
     );
   }
   const choice = choices[0];
@@ -3687,7 +3785,7 @@ function readAlternateTransition(
       errors,
       part,
       "invalid-transition-alternate",
-      "转场兼容分支的 Choice 和 Fallback 都必须包含 p:transition",
+      "Both Choice and Fallback of transition compatibility branches must contain p:transition",
     );
     return { extensions: new Set() };
   }
@@ -3713,7 +3811,7 @@ function readAlternateTransition(
       errors,
       part,
       "invalid-transition-fallback",
-      "转场 Fallback 必须使用 Transitional 基础效果",
+      "Transition Fallback must use Transitional base effect",
     );
   }
   const required = new Set<ValidationExtension>();
@@ -3728,7 +3826,7 @@ function readAlternateTransition(
         errors,
         part,
         "unsupported-extension",
-        `转场 Choice 要求不支持的命名空间 ${prefix}`,
+        `Transition Choice requires unsupported namespace ${prefix}`,
       );
     } else {
       required.add(extension);
@@ -3740,7 +3838,7 @@ function readAlternateTransition(
         errors,
         part,
         "missing-extension-requirement",
-        `转场 Choice 使用 ${extension}，但 Requires 未声明该机制`,
+        `Transition Choice uses ${extension}, but Requires does not declare this mechanism`,
       );
     }
   }
@@ -3750,7 +3848,7 @@ function readAlternateTransition(
         errors,
         part,
         "unused-extension-requirement",
-        `转场 Choice 声明了未使用的 ${extension} 机制`,
+        `Transition Choice declares unused ${extension} mechanism`,
       );
     }
   }
@@ -3787,7 +3885,12 @@ function readSlideTransition(
         child.localName === "AlternateContent"),
   );
   if (candidates.length > 1) {
-    issue(errors, part, "duplicate-transition", "页面包含多个转场声明");
+    issue(
+      errors,
+      part,
+      "duplicate-transition",
+      "Slide contains multiple transition declarations",
+    );
   }
   const candidate = candidates[0];
   if (candidate === undefined) return { extensions: new Set() };
@@ -3838,7 +3941,7 @@ function readAdvanceAfter(
       errors,
       part,
       "inconsistent-advance-after",
-      "转场兼容分支的自动翻页时刻必须是相同的非负整数毫秒数",
+      "Automatic advance timing for transition compatibility branches must be identical non-negative integer milliseconds",
     );
     return undefined;
   }
@@ -3925,7 +4028,7 @@ type MotionTargetGeometry = {
   readonly supported: boolean;
 };
 
-/** 按实际组合 off/ext/chOff/chExt 把成员中心映射到页面坐标。 */
+/** Maps member center to slide coordinates using actual group off/ext/chOff/chExt. */
 function motionTargetGeometry(
   objects: readonly FileObject[],
   targetId: number,
@@ -4024,7 +4127,12 @@ function readSlideAnimations(
   const timingNodes = elements(slide, presentationNamespace, "timing");
   if (timingNodes.length === 0) return undefined;
   if (timingNodes.length > 1) {
-    issue(errors, part, "duplicate-timing", "页面包含多个动画时序声明");
+    issue(
+      errors,
+      part,
+      "duplicate-timing",
+      "Slide contains multiple timing declarations",
+    );
   }
   const timing = timingNodes[0];
   if (timing === undefined) return undefined;
@@ -4040,7 +4148,12 @@ function readSlideAnimations(
   )) {
     const id = positiveIntegerValue(attribute(timeNode, "id"));
     if (id === undefined) {
-      issue(errors, part, "invalid-animation-id", "动画 cTn 缺少正整数 id");
+      issue(
+        errors,
+        part,
+        "invalid-animation-id",
+        "Animation cTn missing positive integer id",
+      );
       continue;
     }
     if (timeIds.has(id)) {
@@ -4048,7 +4161,7 @@ function readSlideAnimations(
         errors,
         part,
         "duplicate-animation-id",
-        `动画时间节点 id ${id} 重复`,
+        `Duplicate animation timing node id ${id}`,
       );
     }
     timeIds.add(id);
@@ -4100,7 +4213,12 @@ function readSlideAnimations(
       timeNode === undefined ? "" : attribute(timeNode, "id"),
     );
     if (timeNode === undefined || timingId === undefined) {
-      issue(errors, part, "invalid-animation-tree", "动画容器缺少有效 cTn");
+      issue(
+        errors,
+        part,
+        "invalid-animation-tree",
+        "Animation container missing valid cTn",
+      );
       return undefined;
     }
     const isEffect = attribute(timeNode, "presetID") !== "";
@@ -4123,7 +4241,7 @@ function readSlideAnimations(
         errors,
         part,
         "duplicate-animation-id",
-        `动画时间节点 id ${timingId} 重复`,
+        `Duplicate animation timing node id ${timingId}`,
       );
       return undefined;
     }
@@ -4156,7 +4274,7 @@ function readSlideAnimations(
         errors,
         part,
         "invalid-animation-end-sync",
-        "动画聚合容器必须等待所有成员的 end 事件",
+        "Animation aggregation container must wait for end events of all members",
       );
       continue;
     }
@@ -4228,7 +4346,7 @@ function readSlideAnimations(
         errors,
         part,
         "invalid-animation-end-dependency",
-        "动画 end 依赖必须指向另一个可自然完成的效果或全体成员容器",
+        "Animation end dependency must point to another naturally completable effect or all-members container",
       );
       continue;
     }
@@ -4240,7 +4358,7 @@ function readSlideAnimations(
         errors,
         part,
         "no-natural-completion",
-        "动画完成依赖不能引用没有自然完成的无限效果或作用域",
+        "Animation completion dependency cannot reference infinite effects or scopes without natural completion",
       );
       continue;
     }
@@ -4271,7 +4389,7 @@ function readSlideAnimations(
     );
     requireBefore(startEvent, endEvent);
     if (node.parentTimingId !== undefined) {
-      // 子节点继承父节点的启动前置；父完成不代表子完成。
+      // Child nodes inherit parent start prerequisites; parent completion does not imply child completion.
       requireBefore(timingEvent(node.parentTimingId, "start"), startEvent);
     }
     const startDependency = dependencyByTimingId.get(node.timingId);
@@ -4308,7 +4426,7 @@ function readSlideAnimations(
       errors,
       part,
       "invalid-animation-end-dependency",
-      "动画完成依赖包含等待环，无法自然结束",
+      "Animation completion dependency contains wait cycle and cannot end naturally",
     );
   }
 
@@ -4387,7 +4505,7 @@ function readSlideAnimations(
           errors,
           part,
           "invalid-paragraph-build-group",
-          "文字构建声明需要有效的原生对象和非负组标识",
+          "Text build declaration requires valid native object and non-negative group identifier",
         );
         continue;
       }
@@ -4397,7 +4515,7 @@ function readSlideAnimations(
           errors,
           part,
           "duplicate-paragraph-build-group",
-          `文字对象 ${targetId} 的构建组 ${groupId} 重复`,
+          `Duplicate build group ${groupId} for text object ${targetId}`,
         );
       }
       const animBgText = attribute(build, "animBg");
@@ -4416,7 +4534,7 @@ function readSlideAnimations(
           errors,
           part,
           "inconsistent-animation-background-role",
-          `文字构建组 ${key} 的 animBg 必须与该组实际 spTgt/bg 行为一致`,
+          `animBg for text build group ${key} must match actual spTgt/bg behavior of the group`,
         );
       }
     }
@@ -4426,7 +4544,7 @@ function readSlideAnimations(
           errors,
           part,
           "missing-animation-background-build",
-          `背景行为所在文字构建组 ${key} 缺少 bldP 声明`,
+          `Text build group ${key} with background behavior missing bldP declaration`,
         );
       }
     }
@@ -4447,7 +4565,7 @@ function readSlideAnimations(
           errors,
           part,
           "invalid-chart-build-group",
-          "图表构建声明必须关联同一图表的原生时间节点",
+          "Chart build declaration must associate with native timing node of the same chart",
         );
         continue;
       }
@@ -4482,7 +4600,7 @@ function readSlideAnimations(
       errors,
       part,
       "invalid-animation-tree",
-      "动画时序缺少 mainSeq 点击步列表",
+      "Animation timing missing mainSeq click step list",
     );
     return { steps: [], containers };
   }
@@ -4533,7 +4651,7 @@ function readSlideAnimations(
           errors,
           part,
           "invalid-animation-delay",
-          "动画容器延迟必须是非负整数毫秒",
+          "Animation container delay must be non-negative integer milliseconds",
         );
         return;
       }
@@ -4752,7 +4870,7 @@ function readSlideAnimations(
   )) {
     const stepTimeNode = first(stepNode, presentationNamespace, "cTn");
     if (stepTimeNode === undefined) {
-      issue(errors, part, "invalid-animation-step", "点击步缺少 cTn");
+      issue(errors, part, "invalid-animation-step", "Click step missing cTn");
       continue;
     }
     const stepConditions = first(
@@ -4825,7 +4943,7 @@ function readSlideAnimations(
           errors,
           part,
           "unsupported-animation",
-          `不支持动画预设 ${presetClass}#${presetId}`,
+          `Unsupported animation preset ${presetClass}#${presetId}`,
         );
         continue;
       }
@@ -4838,7 +4956,7 @@ function readSlideAnimations(
           errors,
           part,
           "invalid-animation-kind",
-          `${preset} 的 presetClass 必须是 ${expectedKind === "emphasis" ? "emph" : "entr"}`,
+          `presetClass for ${preset} must be ${expectedKind === "emphasis" ? "emph" : "entr"}`,
         );
         continue;
       }
@@ -4861,7 +4979,7 @@ function readSlideAnimations(
           errors,
           part,
           "invalid-animation-delay",
-          "动画效果延迟必须是非负整数毫秒",
+          "Animation effect delay must be non-negative integer milliseconds",
         );
         continue;
       }
@@ -4881,7 +4999,7 @@ function readSlideAnimations(
             errors,
             part,
             "invalid-animation-repeat",
-            "动画 repeatCount 必须是千分之一计数中的完整正整数轮数",
+            "Animation repeatCount must be a whole positive integer number of cycles in thousandths",
           );
           continue;
         }
@@ -4918,8 +5036,8 @@ function readSlideAnimations(
             ? "invalid-breathe-cycle"
             : "invalid-animation-duration",
           preset === "breathe"
-            ? "呼吸周期必须由正向颜色动画和原生反向组成"
-            : "动画行为缺少正整数时长",
+            ? "Breathe cycle must consist of forward color animation and native reverse"
+            : "Animation behavior missing positive integer duration",
         );
         continue;
       }
@@ -4944,7 +5062,7 @@ function readSlideAnimations(
           errors,
           part,
           "invalid-animation-target",
-          "一个动画效果必须指向唯一原生对象",
+          "An animation effect must target a single native object",
         );
         continue;
       }
@@ -4954,7 +5072,7 @@ function readSlideAnimations(
           errors,
           part,
           "missing-animation-target",
-          `动画目标 ${String(targetId)} 不存在`,
+          `Animation target ${String(targetId)} does not exist`,
         );
         continue;
       }
@@ -4975,7 +5093,7 @@ function readSlideAnimations(
                 errors,
                 part,
                 "invalid-animation-target-range",
-                "文字动画段落范围必须是有效的非负闭区间",
+                "Text animation paragraph range must be a valid non-negative closed interval",
               );
               invalidRange = true;
               return undefined;
@@ -5006,7 +5124,7 @@ function readSlideAnimations(
                 errors,
                 part,
                 "invalid-animation-target-range",
-                "图表动画范围缺少有效的系列、分类或展开步骤",
+                "Chart animation range missing valid series, category, or expand step",
               );
               invalidRange = true;
               return undefined;
@@ -5047,7 +5165,7 @@ function readSlideAnimations(
           errors,
           part,
           "inconsistent-animation-behavior-duration",
-          "同一效果的原生行为必须保留相同时长，可见性初始化固定为 1ms",
+          "Native behaviors of the same effect must retain identical duration, with visibility initialization fixed at 1ms",
         );
         continue;
       }
@@ -5068,7 +5186,7 @@ function readSlideAnimations(
       const paragraphIndexes = new Set(
         paragraphRanges.map(({ start }) => start),
       );
-      // grpId=1 的 build=p 表示完整段落投影；即使所有 pRg 都被删掉也必须校验。
+      // build=p with grpId=1 represents full paragraph projection; must be validated even if all pRg are omitted.
       const requiresFullParagraphProjection =
         nativeBuildGroupId === 1 &&
         paragraphBuild?.build === "p" &&
@@ -5093,7 +5211,7 @@ function readSlideAnimations(
           errors,
           part,
           "inconsistent-animation-target-range",
-          "同一动画的行为节点必须使用一致范围，整体文字投影则必须覆盖全部段落",
+          "Behavior nodes of the same animation must use consistent ranges; whole text projection must cover all paragraphs",
         );
         continue;
       }
@@ -5106,7 +5224,7 @@ function readSlideAnimations(
           errors,
           part,
           "invalid-animation-target-range",
-          "逐段文字目标必须关联同组 build=p 的原生构建声明",
+          "Paragraph-by-paragraph text targets must associate with native build declaration of the same group with build=p",
         );
         continue;
       }
@@ -5125,7 +5243,7 @@ function readSlideAnimations(
           errors,
           part,
           "invalid-animation-projection-target",
-          "整体文字投影的初始化、段落属性或背景职责不符合对应预设",
+          "Initialization, paragraph properties, or background role of whole text projection do not match corresponding preset",
         );
         continue;
       }
@@ -5149,7 +5267,7 @@ function readSlideAnimations(
           errors,
           part,
           "invalid-animation-progress-formula",
-          "共同中心自转的位置公式不受支持或与实际几何、角度、缩放及进度参数不一致",
+          "Position formula for common-center spin is unsupported or does not match actual geometry, angle, scale, and progress parameters",
         );
       }
       const targetRange = fullParagraphProjection ? undefined : ranges[0];
@@ -5218,8 +5336,8 @@ function readSlideAnimations(
               ? "invalid-breathe-animation"
               : "invalid-fill-color-animation",
             preset === "breathe"
-              ? "呼吸效果必须是 Shape 填充色的正向颜色动画并带原生反向"
-              : "填充色强调必须保持终态且不反向或重复",
+              ? "Breathe effect must be forward color animation on Shape fill with native reverse"
+              : "Fill color emphasis must retain final state and not reverse or repeat",
           );
           continue;
         }
@@ -5237,7 +5355,7 @@ function readSlideAnimations(
           errors,
           part,
           "invalid-animation-target-range",
-          "文字动画段落范围超出目标原生文字对象",
+          "Text animation paragraph range exceeds target native text object",
         );
         continue;
       }
@@ -5267,7 +5385,7 @@ function readSlideAnimations(
           errors,
           part,
           "invalid-animation-target-range",
-          "图表动画范围超出原生图表中的系列或分类",
+          "Chart animation range exceeds series or categories in native chart",
         );
         continue;
       }
@@ -5281,7 +5399,7 @@ function readSlideAnimations(
           errors,
           part,
           "invalid-animation-iteration",
-          "一个动画效果只能包含一个原生迭代声明",
+          "An animation effect can contain only one native iterate declaration",
         );
         continue;
       }
@@ -5307,7 +5425,7 @@ function readSlideAnimations(
             errors,
             part,
             "invalid-animation-iteration",
-            "文字迭代必须为逐词或逐字，带正整数绝对间隔，并指向原生文字对象",
+            "Text iterate must be word-by-word or letter-by-letter with positive integer absolute interval targeting native text object",
           );
           continue;
         }
@@ -5349,7 +5467,7 @@ function readSlideAnimations(
           errors,
           part,
           "invalid-animation-direction",
-          `${preset} 缺少有效方向`,
+          `${preset} missing valid direction`,
         );
         continue;
       }
@@ -5380,7 +5498,7 @@ function readSlideAnimations(
           errors,
           part,
           "invalid-animation-rotation",
-          "spin 必须且只能声明有效起始角度或相对角度",
+          "spin must declare valid starting angle or relative angle, and only one of them",
         );
         continue;
       }
@@ -5390,7 +5508,7 @@ function readSlideAnimations(
             errors,
             part,
             "invalid-animation-iteration",
-            "spin 的相对旋转不能同时采用文字迭代",
+            "Relative rotation for spin cannot combine with text iterate",
           );
           continue;
         }
@@ -5469,7 +5587,12 @@ function readCoreTitle(
   const part = relationshipTargetPath("", attribute(relationship, "Target"));
   const root = documents.get(part)?.documentElement;
   if (root == null || root.localName !== "coreProperties") {
-    issue(errors, part, "invalid-core-properties", "文稿元数据部件根元素无效");
+    issue(
+      errors,
+      part,
+      "invalid-core-properties",
+      "Presentation metadata part root element is invalid",
+    );
     return undefined;
   }
   const title = first(root, "http://purl.org/dc/elements/1.1/", "title");
@@ -5492,7 +5615,12 @@ function readSections(
   const sections = elements(list, p14Namespace, "section").map((section) => {
     const name = attribute(section, "name");
     if (name.trim() === "") {
-      issue(errors, part, "invalid-section-name", "页面分节名称不能为空");
+      issue(
+        errors,
+        part,
+        "invalid-section-name",
+        "Section name cannot be empty",
+      );
     }
     const ids = first(section, p14Namespace, "sldIdLst");
     const sectionSlideIds = (
@@ -5505,7 +5633,7 @@ function readSections(
           errors,
           part,
           "missing-section-slide",
-          `分节引用不存在的页面 ID ${presentationId}`,
+          `Section references non-existent slide ID ${presentationId}`,
         );
         return [];
       }
@@ -5514,7 +5642,7 @@ function readSections(
           errors,
           part,
           "duplicate-section-slide",
-          `页面 ID ${presentationId} 在多个分节中出现`,
+          `Slide ID ${presentationId} appears in multiple sections`,
         );
       }
       assigned.add(presentationId);
@@ -5529,7 +5657,7 @@ function readSections(
         errors,
         part,
         "unassigned-section-slide",
-        `页面 ID ${id} 未分配到分节`,
+        `Slide ID ${id} not assigned to any section`,
       );
     }
   }
@@ -5563,7 +5691,7 @@ function readPresentation(
       errors,
       part,
       "invalid-presentation",
-      "缺少 Transitional PresentationML 根部件",
+      "Missing Transitional PresentationML root part",
     );
     return {
       presentation: { slideCount: 0 },
@@ -5586,7 +5714,7 @@ function readPresentation(
       errors,
       part,
       "invalid-slide-size",
-      `页面尺寸必须在 ${minimumSlideSizeEmu} 到 ${maximumSlideSizeEmu} EMU 的闭区间内`,
+      `Slide size must be within the closed interval of ${minimumSlideSizeEmu} to ${maximumSlideSizeEmu} EMU`,
     );
   }
   const ids = first(root, presentationNamespace, "sldIdLst");
@@ -5600,14 +5728,19 @@ function readPresentation(
   slideIds.forEach((slideId, index) => {
     const presentationId = attribute(slideId, "id");
     if (!/^\d+$/u.test(presentationId)) {
-      issue(errors, part, "invalid-slide-id", `页面 ${index + 1} 缺少数值 ID`);
+      issue(
+        errors,
+        part,
+        "invalid-slide-id",
+        `Slide ${index + 1} missing numeric ID`,
+      );
     }
     if (presentationSlideIds.has(presentationId)) {
       issue(
         errors,
         part,
         "duplicate-slide-id",
-        `页面 ID ${presentationId} 重复`,
+        `Duplicate slide ID ${presentationId}`,
       );
     }
     const relationshipId =
@@ -5618,7 +5751,7 @@ function readPresentation(
         errors,
         part,
         "missing-slide-relationship",
-        `页面 ${index + 1} 缺少对应关系`,
+        `Slide ${index + 1} missing corresponding relationship`,
       );
       return;
     }
@@ -5637,7 +5770,7 @@ function readPresentation(
         errors,
         slidePath,
         "invalid-slide",
-        "页面关系目标不是有效的 Transitional 页面部件",
+        "Slide relationship target is not a valid Transitional slide part",
       );
       return;
     }
@@ -5647,7 +5780,12 @@ function readPresentation(
         ? undefined
         : first(commonSlideData, presentationNamespace, "spTree");
     if (slideTree === undefined) {
-      issue(errors, slidePath, "missing-shape-tree", "页面缺少 shape tree");
+      issue(
+        errors,
+        slidePath,
+        "missing-shape-tree",
+        "Slide missing shape tree",
+      );
       return;
     }
     const objects = readObjects(
@@ -5694,7 +5832,7 @@ function readPresentation(
           errors,
           slidePath,
           "duplicate-object-id",
-          `对象标识 ${object.id} 重复`,
+          `Duplicate object identifier ${object.id}`,
         );
       }
       seenIds.add(object.id);
@@ -5703,14 +5841,19 @@ function readPresentation(
     const stableSlideId =
       commonSlideData === undefined ? "" : attribute(commonSlideData, "name");
     if (stableSlideId === "") {
-      issue(errors, slidePath, "missing-stable-slide-id", "页面缺少稳定标识");
+      issue(
+        errors,
+        slidePath,
+        "missing-stable-slide-id",
+        "Slide missing stable slide identifier",
+      );
     }
     if (stableSlideIds.has(stableSlideId)) {
       issue(
         errors,
         slidePath,
         "duplicate-stable-slide-id",
-        `页面标识 ${stableSlideId} 重复`,
+        `Duplicate slide identifier ${stableSlideId}`,
       );
     }
     stableSlideIds.add(stableSlideId);
@@ -5751,13 +5894,13 @@ function readPresentation(
   });
   const title = readCoreTitle(documents, relationships, errors);
   if (slideIds.length === 0)
-    issue(errors, part, "missing-slides", "Presentation 不含页面");
+    issue(errors, part, "missing-slides", "Presentation contains no slides");
   if (files["ppt/theme/theme1.xml"] === undefined) {
     issue(
       errors,
       "ppt/theme/theme1.xml",
       "missing-theme",
-      "缺少必要的主题部件",
+      "Missing required theme part",
     );
   }
   return {
@@ -5776,9 +5919,9 @@ function readPresentation(
 }
 
 /**
- * 对同一份 PPTX 字节执行 SDK 结构校验并独立读取页面对象、几何和原生文字，
- * 不读取构建报告。allowedExtensions 会约束本地读取器发现的所有转场兼容分支；
- * SDK 的 MC 分支选择和扩展覆盖有限，校验结果不代表应用证据。
+ * Executes SDK structural validation on the same PPTX bytes and independently reads slide objects, geometry, and native text,
+ * without reading build reports. allowedExtensions constrains all transition compatibility branches discovered by the local reader;
+ * SDK MC branch selection and extension coverage are limited; validation results do not represent application evidence.
  */
 export async function validatePptx(
   input: Uint8Array,
@@ -5821,7 +5964,7 @@ export async function validatePptx(
     "ppt/theme/theme1.xml",
   ]) {
     if (files[requiredPart] === undefined)
-      issue(errors, requiredPart, "missing-part", "PPTX 缺少必要部件");
+      issue(errors, requiredPart, "missing-part", "PPTX missing required part");
   }
   const relationships = checkRelationships(files, documents, errors);
   const contentTypes = validateContentTypes(files, documents, errors);
@@ -5908,7 +6051,7 @@ export async function validatePptx(
         errors,
         "ppt/slides",
         "forbidden-extension",
-        `输出目标禁止实际文件使用 ${extension}`,
+        `Target forbids actual file usage of ${extension}`,
       );
     }
   }

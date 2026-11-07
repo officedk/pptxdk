@@ -58,6 +58,7 @@ export type {
   TableVerticalAlign,
 } from "#/table.ts";
 export { font, P, SlideNumber, Span, Text, textCapability } from "#/text.ts";
+export type { ParsedText } from "#/text.ts";
 export { transitionCapability, transitions } from "#/transition.ts";
 export { slideBackgroundCapability } from "#/slide-background.ts";
 export { createMorphScope } from "#/morph-api.ts";

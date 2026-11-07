@@ -81,7 +81,7 @@ export type TextLayoutMeasurement = {
   readonly height: number;
   readonly minContentWidth: number;
   readonly minContentHeight: number;
-  readonly baseline?: number;
+  readonly baseline?: number | "unavailable";
 };
 
 type HostText = { readonly type: "#text"; readonly text: string };
@@ -104,16 +104,16 @@ type RunStyle = {
   readonly textShadow?: Shadow | "none" | undefined;
   readonly lang?: string | undefined;
 };
-type Run = {
+export type Run = {
   readonly text: string;
   readonly style: RunStyle;
   readonly field?: { readonly id: string; readonly type: "slidenum" };
 };
-type TextFieldContext = {
+export type TextFieldContext = {
   readonly slideNumber: number;
   readonly createId?: () => string;
 };
-type Paragraph = {
+export type Paragraph = {
   readonly runs: readonly Run[];
   readonly style: ParagraphStyle;
   readonly endStyle: RunStyle;
@@ -543,7 +543,7 @@ function outputBold(font: NormalizedFont): boolean {
   }
 }
 
-type ResolvedTextStyle = TextStyle & {
+export type ResolvedTextStyle = TextStyle & {
   readonly themeFont?: "major" | "minor";
 };
 
@@ -1583,6 +1583,42 @@ function measureParagraphs(
   };
 }
 
+/** Returns layout dimensions based on actual fonts and line breaking rules from normalized paragraphs. */
+export function measureTextLayoutFromParagraphs(
+  paragraphs: readonly Paragraph[],
+  style: ResolvedTextStyle | TextStyle,
+  availableWidth?: number,
+): TextLayoutMeasurement {
+  const measured = measureParagraphs(
+    paragraphs,
+    availableWidth ?? Number.POSITIVE_INFINITY,
+  );
+  const minContentWidth = Math.max(
+    0,
+    ...paragraphs.map(paragraphMinContentWidth),
+  );
+  let baseline: number | "unavailable" | undefined;
+  if (style.verticalAlign === undefined || style.verticalAlign === "top") {
+    if (paragraphs[0] === undefined) {
+      baseline = undefined;
+    } else {
+      try {
+        const val = paragraphBaseline(paragraphs[0]);
+        baseline = val ?? "unavailable";
+      } catch {
+        baseline = "unavailable";
+      }
+    }
+  }
+  return {
+    width: measured.width,
+    height: measured.height,
+    minContentWidth,
+    minContentHeight: measured.height,
+    ...(baseline === undefined ? {} : { baseline }),
+  };
+}
+
 /** Returns layout dimensions based on actual fonts and line breaking rules of shared text service. */
 export function measureTextLayout(
   children: readonly unknown[],
@@ -1595,27 +1631,7 @@ export function measureTextLayout(
   const paragraphs = normalizeParagraphs(children, style, theme, {
     slideNumber,
   });
-  const measured = measureParagraphs(
-    paragraphs,
-    availableWidth ?? Number.POSITIVE_INFINITY,
-  );
-  const minContentWidth = Math.max(
-    0,
-    ...paragraphs.map(paragraphMinContentWidth),
-  );
-  const baseline =
-    style.verticalAlign === undefined || style.verticalAlign === "top"
-      ? paragraphs[0] === undefined
-        ? undefined
-        : paragraphBaseline(paragraphs[0])
-      : undefined;
-  return {
-    width: measured.width,
-    height: measured.height,
-    minContentWidth,
-    minContentHeight: measured.height,
-    ...(baseline === undefined ? {} : { baseline }),
-  };
+  return measureTextLayoutFromParagraphs(paragraphs, style, availableWidth);
 }
 
 function bodyAnchor(verticalAlign: TextStyle["verticalAlign"]): string {
@@ -1673,31 +1689,55 @@ export function textInsets(value: unknown): {
   return result;
 }
 
-/** Shares paragraph, run, list, and font resource processing for text boxes and shape text. */
-export function writeTextBody(
+/** Parses text children, validates element structure, and resolves paragraphs and text styles once. */
+export function parseTextContent(
   children: readonly unknown[],
   styleValue: unknown,
+  theme: ThemeContext,
+  fields: TextFieldContext = { slideNumber: 1 },
+): {
+  readonly paragraphs: readonly Paragraph[];
+  readonly style: ResolvedTextStyle;
+} {
+  const style = readTextStyle(styleValue, "Text.style", theme);
+  const paragraphs = normalizeParagraphs(children, style, theme, fields);
+  return { paragraphs, style };
+}
+
+/** Generates PresentationML txBody XML and resource claims directly from pre-parsed paragraphs and styles. */
+export function writeTextBodyFromParagraphs(
+  paragraphs: readonly Paragraph[],
+  style: ResolvedTextStyle | TextStyle,
   theme: ThemeContext,
   verticalAlign: TextStyle["verticalAlign"] = "top",
   layout?: TextLayoutRequest,
   destination: TextBodyDestination = "text-box",
-  fields: TextFieldContext = { slideNumber: 1 },
   embedFonts?: FontEmbeddingMode,
+  createFieldId?: () => string,
 ): TextServiceResult {
-  const style = readTextStyle(
-    destination === "table-cell"
-      ? { ...styleRecord(styleValue, "Text.style"), textWrap: "normal" }
-      : styleValue,
-    "Text.style",
-    theme,
-  );
-  const paragraphs = normalizeParagraphs(children, style, theme, fields);
-  const runs = paragraphs.flatMap((paragraph) =>
+  const resolvedParagraphs =
+    createFieldId !== undefined
+      ? paragraphs.map((paragraph) => ({
+          ...paragraph,
+          runs: paragraph.runs.map((run) =>
+            run.field !== undefined
+              ? {
+                  ...run,
+                  field: {
+                    ...run.field,
+                    id: createFieldId(),
+                  },
+                }
+              : run,
+          ),
+        }))
+      : paragraphs;
+  const runs = resolvedParagraphs.flatMap((paragraph) =>
     paragraph.runs.length > 0
       ? paragraph.runs
       : [{ text: "", style: paragraph.endStyle }],
   );
-  const listRuns = paragraphs.flatMap((paragraph) => {
+  const listRuns = resolvedParagraphs.flatMap((paragraph) => {
     const list = paragraph.style.list;
     if (list === undefined) return [];
     const characters =
@@ -1717,7 +1757,7 @@ export function writeTextBody(
   if (layout !== undefined) {
     try {
       measured = measureParagraphs(
-        paragraphs,
+        resolvedParagraphs,
         layout.width === "max-content" ? Number.MAX_VALUE : layout.width,
       );
     } catch (error) {
@@ -1758,14 +1798,14 @@ export function writeTextBody(
   }
   const outputParagraphs =
     layout?.contentSized === true && measured !== undefined
-      ? paragraphs.map((paragraph, index) => ({
+      ? resolvedParagraphs.map((paragraph, index) => ({
           ...paragraph,
           style: {
             ...paragraph.style,
             lineHeight: measured.paragraphs[index]!.lineHeight,
           },
         }))
-      : paragraphs;
+      : resolvedParagraphs;
   const text = outputParagraphs
     .map(({ runs }) => runs.map(({ text: part }) => part).join(""))
     .join("\n");
@@ -1784,6 +1824,36 @@ export function writeTextBody(
       : { measurement: { width: measured.width, height: measured.height } }),
     warnings,
   };
+}
+
+/** Shares paragraph, run, list, and font resource processing for text boxes and shape text. */
+export function writeTextBody(
+  children: readonly unknown[],
+  styleValue: unknown,
+  theme: ThemeContext,
+  verticalAlign: TextStyle["verticalAlign"] = "top",
+  layout?: TextLayoutRequest,
+  destination: TextBodyDestination = "text-box",
+  fields: TextFieldContext = { slideNumber: 1 },
+  embedFonts?: FontEmbeddingMode,
+): TextServiceResult {
+  const style = readTextStyle(
+    destination === "table-cell"
+      ? { ...styleRecord(styleValue, "Text.style"), textWrap: "normal" }
+      : styleValue,
+    "Text.style",
+    theme,
+  );
+  const paragraphs = normalizeParagraphs(children, style, theme, fields);
+  return writeTextBodyFromParagraphs(
+    paragraphs,
+    style,
+    theme,
+    verticalAlign,
+    layout,
+    destination,
+    embedFonts,
+  );
 }
 
 /** Generates shared font styles for native chart text and registers font claims based on actual categories, series, and label text. */

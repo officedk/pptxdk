@@ -221,7 +221,7 @@ const contextRecords = new WeakMap<
   }
 >();
 
-const textStyleKeys = new Set([
+export const textStyleKeys = new Set([
   "fontFamily",
   "fontSize",
   "fontWeight",
@@ -238,6 +238,338 @@ const textStyleKeys = new Set([
   "textWrap",
   "lang",
 ]);
+
+/**
+ * Validates inheritable text style fields shared across text objects and containers.
+ */
+export function validateTextStyle(
+  style: Readonly<Record<string, unknown>>,
+  theme?: ThemeContext,
+): TextStyle {
+  if (style["fontFamily"] !== undefined) {
+    const value = style["fontFamily"];
+    if (typeof value !== "string" && !isFont(value)) {
+      throw new CapabilityError(
+        "invalid-font-family",
+        "fontFamily must be a font value or non-empty family string",
+      );
+    }
+    if (typeof value === "string") {
+      if (value.trim() === "") {
+        throw new CapabilityError(
+          "invalid-font-family",
+          "fontFamily cannot be empty",
+        );
+      }
+      if (theme !== undefined) {
+        theme.resolveFont(value);
+      }
+    } else if (isFont(value)) {
+      if (typeof value.family !== "string" || value.family.trim() === "") {
+        throw new CapabilityError(
+          "invalid-font-family",
+          "Font.family cannot be empty",
+        );
+      }
+      if (value.faces !== undefined && !Array.isArray(value.faces)) {
+        throw new CapabilityError(
+          "invalid-font-family",
+          "Font.faces must be an array",
+        );
+      }
+      if (
+        value.substitute !== undefined &&
+        typeof value.substitute !== "boolean"
+      ) {
+        throw new CapabilityError(
+          "invalid-font-family",
+          "Font.substitute must be a boolean",
+        );
+      }
+      if (
+        value.embeddable !== undefined &&
+        typeof value.embeddable !== "boolean"
+      ) {
+        throw new CapabilityError(
+          "invalid-font-family",
+          "Font.embeddable must be a boolean",
+        );
+      }
+    }
+  }
+
+  if (style["fontSize"] !== undefined) {
+    const value = style["fontSize"];
+    let pixels: number;
+    if (typeof value === "number") {
+      pixels = value;
+    } else if (typeof value === "string") {
+      const match = /^(\d+(?:\.\d+)?)(px|pt)$/u.exec(value);
+      if (match === null) {
+        throw new CapabilityError(
+          "invalid-text-length",
+          "fontSize must be a positive pixel value or px/pt length",
+        );
+      }
+      const amount = Number(match[1]);
+      pixels = match[2] === "pt" ? (amount * 4) / 3 : amount;
+    } else {
+      throw new CapabilityError(
+        "invalid-text-length",
+        "fontSize must be a positive pixel value or px/pt length",
+      );
+    }
+    if (!Number.isFinite(pixels) || pixels <= 0) {
+      throw new CapabilityError(
+        "invalid-font-size",
+        "fontSize must be greater than 0",
+      );
+    }
+    const points =
+      typeof value === "string" && value.endsWith("pt")
+        ? Number(value.slice(0, -2))
+        : pixels * 0.75;
+    if (!Number.isFinite(points) || points <= 0) {
+      throw new CapabilityError(
+        "invalid-font-size",
+        "fontSize must be greater than 0",
+      );
+    }
+    const serialized = Math.round(points * 100);
+    if (serialized < 100 || serialized > 400_000) {
+      throw new CapabilityError(
+        "invalid-font-size",
+        "fontSize converted value must be within DrawingML range of 1 to 4000pt",
+      );
+    }
+  }
+
+  if (style["fontWeight"] !== undefined) {
+    const value = style["fontWeight"];
+    if (value !== "normal" && value !== "bold") {
+      if (
+        typeof value !== "number" ||
+        !Number.isInteger(value) ||
+        value < 100 ||
+        value > 900 ||
+        value % 100 !== 0
+      ) {
+        throw new CapabilityError(
+          "invalid-font-weight",
+          "fontWeight must be normal, bold, or a hundreds integer between 100 and 900",
+        );
+      }
+    }
+  }
+
+  if (style["fontStyle"] !== undefined) {
+    const value = style["fontStyle"];
+    if (value !== "normal" && value !== "italic") {
+      throw new CapabilityError(
+        "invalid-font-style",
+        "fontStyle must be normal or italic",
+      );
+    }
+  }
+
+  if (style["color"] !== undefined) {
+    const value = style["color"];
+    if (theme !== undefined) {
+      theme.resolveColor(value as ColorValue);
+    } else {
+      if (
+        typeof value !== "string" &&
+        (!record(value) || (!("slot" in value) && !("color" in value)))
+      ) {
+        throw new CapabilityError(
+          "invalid-color",
+          "Invalid color value format",
+        );
+      }
+    }
+  }
+
+  if (style["lineHeight"] !== undefined) {
+    const value = style["lineHeight"];
+    let pixels: number;
+    if (typeof value === "number") {
+      pixels = value;
+    } else if (typeof value === "string") {
+      const match = /^(\d+(?:\.\d+)?)(px|pt)$/u.exec(value);
+      if (match === null) {
+        throw new CapabilityError(
+          "invalid-text-length",
+          "lineHeight must be a positive pixel value or px/pt length",
+        );
+      }
+      const amount = Number(match[1]);
+      pixels = match[2] === "pt" ? (amount * 4) / 3 : amount;
+    } else {
+      throw new CapabilityError(
+        "invalid-text-length",
+        "lineHeight must be a positive pixel value or px/pt length",
+      );
+    }
+    if (!Number.isFinite(pixels) || pixels <= 0) {
+      throw new CapabilityError(
+        "invalid-text-length",
+        "lineHeight must be greater than 0",
+      );
+    }
+    const centipoints = Math.round(pixels * 75);
+    if (centipoints < 0 || centipoints > 158_400) {
+      throw new CapabilityError(
+        "invalid-text-length",
+        "lineHeight converted value must be within DrawingML range of 0 to 1584pt",
+      );
+    }
+  }
+
+  if (style["verticalAlign"] !== undefined) {
+    const value = style["verticalAlign"];
+    if (value !== "top" && value !== "middle" && value !== "bottom") {
+      throw new CapabilityError(
+        "invalid-vertical-align",
+        "verticalAlign must be top, middle, or bottom",
+      );
+    }
+  }
+
+  if (style["align"] !== undefined) {
+    const value = style["align"];
+    if (!["left", "center", "right", "justify"].includes(value as string)) {
+      throw new CapabilityError(
+        "invalid-text-alignment",
+        "align must be left, center, right, or justify",
+      );
+    }
+  }
+
+  if (style["spacingAfter"] !== undefined) {
+    const value = style["spacingAfter"];
+    if (typeof value !== "number" || !Number.isFinite(value) || value < 0) {
+      throw new CapabilityError(
+        "invalid-paragraph-spacing",
+        "spacingAfter must be a finite non-negative pixel number",
+      );
+    }
+    const centipoints = Math.round(value * 75);
+    if (centipoints < 0 || centipoints > 158_400) {
+      throw new CapabilityError(
+        "invalid-paragraph-spacing",
+        "spacingAfter converted value must be within DrawingML range of 0 to 1584pt",
+      );
+    }
+  }
+
+  if (style["letterSpacing"] !== undefined) {
+    const value = style["letterSpacing"];
+    if (typeof value !== "number" || !Number.isFinite(value)) {
+      throw new CapabilityError(
+        "invalid-letter-spacing",
+        "letterSpacing converted value must be within DrawingML range of -4000 to 4000pt",
+      );
+    }
+    const points = Math.round(value * 75);
+    if (points < -400_000 || points > 400_000) {
+      throw new CapabilityError(
+        "invalid-letter-spacing",
+        "letterSpacing converted value must be within DrawingML range of -4000 to 4000pt",
+      );
+    }
+  }
+
+  if (style["textTransform"] !== undefined) {
+    const value = style["textTransform"];
+    if (value !== "none" && value !== "uppercase") {
+      throw new CapabilityError(
+        "invalid-text-transform",
+        "textTransform must be none or uppercase",
+      );
+    }
+  }
+
+  if (style["textDecoration"] !== undefined) {
+    const value = style["textDecoration"];
+    if (value !== "none" && value !== "underline") {
+      throw new CapabilityError(
+        "invalid-text-decoration",
+        "textDecoration must be none or underline",
+      );
+    }
+  }
+
+  if (style["textWrap"] !== undefined) {
+    const value = style["textWrap"];
+    if (value !== "normal" && value !== "nowrap") {
+      throw new CapabilityError(
+        "invalid-text-wrap",
+        "textWrap must be normal or nowrap",
+      );
+    }
+  }
+
+  if (style["textShadow"] !== undefined && style["textShadow"] !== "none") {
+    const value = style["textShadow"];
+    if (!record(value)) {
+      throw new CapabilityError(
+        "invalid-shadow",
+        "textShadow must be a shadow object",
+      );
+    }
+    const unknown = Object.keys(value).find(
+      (k) => !["color", "blur", "distance", "angle"].includes(k),
+    );
+    if (unknown !== undefined) {
+      throw new CapabilityError(
+        "invalid-shadow",
+        `textShadow contains unsupported parameter ${unknown}`,
+      );
+    }
+    if (
+      value["blur"] !== undefined &&
+      (typeof value["blur"] !== "number" ||
+        !Number.isFinite(value["blur"]) ||
+        value["blur"] < 0)
+    ) {
+      throw new CapabilityError(
+        "invalid-shadow",
+        "textShadow.blur and distance must be non-negative lengths",
+      );
+    }
+    if (
+      value["distance"] !== undefined &&
+      (typeof value["distance"] !== "number" ||
+        !Number.isFinite(value["distance"]) ||
+        value["distance"] < 0)
+    ) {
+      throw new CapabilityError(
+        "invalid-shadow",
+        "textShadow.blur and distance must be non-negative lengths",
+      );
+    }
+    if (
+      value["angle"] !== undefined &&
+      (typeof value["angle"] !== "number" || !Number.isFinite(value["angle"]))
+    ) {
+      throw new CapabilityError(
+        "invalid-shadow",
+        "textShadow.angle must be a finite number",
+      );
+    }
+    if (value["color"] !== undefined) {
+      if (theme !== undefined) {
+        theme.resolveColor(value["color"] as ColorValue);
+      }
+    }
+  }
+
+  if (style["lang"] !== undefined) {
+    assertValidLang(style["lang"]);
+  }
+
+  return style;
+}
 
 /**
  * Asserts that a value is a valid BCP 47 language tag.
@@ -276,18 +608,17 @@ function record(value: unknown): value is Record<string, unknown> {
 }
 
 /** Extract inheritable text fields from container style containing layout fields. */
-export function textStyleFrom(value: unknown): TextStyle {
+export function textStyleFrom(value: unknown, theme?: ThemeContext): TextStyle {
   if (value === undefined) return {};
   if (!record(value))
     throw new CapabilityError("invalid-style", "style must be an object");
-  if (value["lang"] !== undefined) {
-    assertValidLang(value["lang"]);
+  const extracted: Record<string, unknown> = {};
+  for (const [key, item] of Object.entries(value)) {
+    if (textStyleKeys.has(key) && item !== undefined) {
+      extracted[key] = item;
+    }
   }
-  return Object.fromEntries(
-    Object.entries(value).filter(
-      ([key, item]) => textStyleKeys.has(key) && item !== undefined,
-    ),
-  );
+  return validateTextStyle(extracted, theme);
 }
 
 function nativeSlot(value: string): value is NativeColorSlot {
@@ -613,20 +944,15 @@ function createContext(
             : { fonts: Object.freeze({ ...fonts }) }),
         });
       }
-      const nextStyle = { ...context.textStyle };
-      if (style !== undefined) {
-        if (!record(style)) {
-          throw new CapabilityError("invalid-style", "style must be an object");
-        }
-        if (style.lang !== undefined) {
-          assertValidLang(style.lang);
-        }
-        for (const [key, value] of Object.entries(style)) {
-          if (textStyleKeys.has(key) && value !== undefined) {
-            (nextStyle as Record<string, unknown>)[key] = value;
-          }
-        }
-      }
+      const candidateContext = createContext(
+        theme,
+        context,
+        checkedScope,
+        context.textStyle,
+      );
+      const validated =
+        style === undefined ? {} : textStyleFrom(style, candidateContext);
+      const nextStyle = { ...context.textStyle, ...validated };
       return createContext(theme, context, checkedScope, nextStyle);
     },
     resolveColor(value: ColorValue) {
@@ -705,6 +1031,9 @@ export function createThemeContext(
   style?: TextStyle,
 ): ThemeContext {
   if (style !== undefined) {
+    if (!record(style)) {
+      throw new CapabilityError("invalid-style", "style must be an object");
+    }
     const unknown = Object.keys(style).find((key) => !textStyleKeys.has(key));
     if (unknown !== undefined) {
       throw new CapabilityError(
@@ -713,11 +1042,13 @@ export function createThemeContext(
       );
     }
   }
+  const theme = normalizeTheme(input);
+  const initialContext = createContext(theme, undefined, undefined, {});
   return createContext(
-    normalizeTheme(input),
+    theme,
     undefined,
     undefined,
-    textStyleFrom(style),
+    textStyleFrom(style, initialContext),
   );
 }
 

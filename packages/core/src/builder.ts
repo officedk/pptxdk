@@ -44,6 +44,7 @@ import {
   type CapabilityContribution,
   type CapabilityContext,
   type CapabilityModule,
+  type CapabilityParseResult,
   type RegisteredCapabilityModule,
   type CapabilityResource,
   type CapabilityResourceClaim,
@@ -51,6 +52,7 @@ import {
   type Extension,
   type LayoutChildReference,
   type LayoutObservation,
+  type NativeElementKind,
   type ObjectCapabilityModule,
   type ObjectObservation,
   type NativeLink,
@@ -112,7 +114,7 @@ type CompiledLink = {
   readonly summary: string;
 };
 
-type MorphNativeKind = "sp" | "pic" | "grpSp" | "table" | "chart";
+type MorphNativeKind = NativeElementKind | "table" | "chart";
 
 type StoredPresentationItem = {
   readonly identity: string;
@@ -1740,8 +1742,20 @@ function compileChildren(
     const theme = context.layout.themes.get(child) ?? context.theme;
     const compiledLink = registerLink(child.props["link"], context, path);
     try {
+      const parsedResult: CapabilityParseResult | undefined =
+        context.layout.parsed?.get(child) ??
+        (module.parse !== undefined
+          ? module.parse(input, {
+              path,
+              theme,
+              options: context.options,
+              slideNumber: context.slideNumber,
+            })
+          : undefined);
+      const compileInput =
+        parsedResult !== undefined ? parsedResult.parsed : input;
       const output = module.compile(
-        input,
+        compileInput,
         capabilityContext(
           context,
           child,
@@ -1755,7 +1769,9 @@ function compileChildren(
         ),
       );
       if (morphKey !== undefined && morphName !== undefined) {
-        const nativeKind = morphNativeKind(output.observation.kind);
+        const nativeKind =
+          parsedResult?.contract?.nativeKind ??
+          morphNativeKind(output.observation.kind);
         if (output.observation.name !== morphName) {
           context.slide.diagnostics.push(
             diagnostic(
@@ -1993,7 +2009,7 @@ function compileSlide(
     if (!(error instanceof CapabilityError)) throw error;
     throw new BuildError([diagnostic(path, error.code, error.message)]);
   }
-  const layout = new LayoutPass(modules, dimensions, index).run(
+  const layout = new LayoutPass(modules, dimensions, index, options).run(
     children,
     path,
     theme,

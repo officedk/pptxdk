@@ -1,22 +1,33 @@
 import {
   CapabilityError,
   xmlEscape,
+  layoutStyleKeys,
+  paddingStyleKeys,
+  parseCapabilityLayoutContract,
+  textStyleKeys,
+  type CapabilityContext,
+  type CapabilityInput,
+  type CapabilityLayoutContract,
   type CapabilityLayoutMeasurement,
   type CapabilityLayoutRequest,
-  type CapabilityInput,
-  type CapabilityModule,
+  type ObjectCapabilityModule,
+  type CapabilityParseContext,
+  type CapabilityParseResult,
 } from "@react-pptx/core";
 
 import { fontPresentationContributions } from "./font-embedding.ts";
 import { nativeLinkXml } from "./identity.ts";
 import { motionAnnotations } from "./motion-api.ts";
 import {
-  measureTextLayout,
+  measureTextLayoutFromParagraphs,
+  parseTextContent,
   textInsets,
   textExtent,
-  writeTextBody,
+  writeTextBodyFromParagraphs,
+  type Paragraph,
+  type ResolvedTextStyle,
 } from "./text-service.ts";
-import { shapePropertiesXml } from "./visual.ts";
+import { shapePropertiesXml, visualStyleKeys } from "./visual.ts";
 
 export { P, SlideNumber, Span, Text } from "./text-elements.ts";
 export type {
@@ -36,6 +47,28 @@ export type {
   TextList,
   TextStyle,
 } from "./text-service.ts";
+
+export type ParsedText = {
+  readonly testId?: string | undefined;
+  readonly part?: string | undefined;
+  readonly name?: string | undefined;
+  readonly morphKey?: unknown;
+  readonly link?: unknown;
+  readonly visualStyle: Readonly<Record<string, unknown>>;
+  readonly insets: {
+    readonly top: number;
+    readonly right: number;
+    readonly bottom: number;
+    readonly left: number;
+  };
+  readonly paragraphs: readonly Paragraph[];
+  readonly textStyle: ResolvedTextStyle;
+  readonly requestedHeight:
+    | { readonly contentSized: true }
+    | { readonly contentSized: false; readonly value: number | undefined };
+  readonly contract: CapabilityLayoutContract;
+  readonly rawProps: Readonly<Record<string, unknown>>;
+};
 
 const allowedParameters = [
   "testId",
@@ -173,48 +206,13 @@ function textBoxXml(
 }
 
 /** Fixed-region text box capability; specific text services are shared by text boxes and other native objects. */
-export const textCapability: CapabilityModule = {
+export const textCapability: ObjectCapabilityModule<ParsedText> = {
   declaration: "rp:text",
-  measureLayout(
+
+  parse(
     input: CapabilityInput,
-    request: CapabilityLayoutRequest,
-  ): CapabilityLayoutMeasurement | undefined {
-    const style = textStyle(input.props["style"]);
-    const insets = textInsets(input.props["style"]);
-    const heightStyle = layoutStyleValue(input, "height");
-    const isContentSized =
-      heightStyle === "auto" ||
-      (heightStyle === undefined &&
-        (input.props["height"] === "auto" ||
-          input.props["height"] === undefined));
-    const width =
-      request.availableWidth ??
-      layoutStyleValue(input, "width") ??
-      input.props["width"];
-    try {
-      return measureTextLayout(
-        input.children,
-        style,
-        request.theme,
-        request.availableWidth !== undefined
-          ? request.availableWidth
-          : typeof width === "number"
-            ? Math.max(0, width - insets.left - insets.right)
-            : undefined,
-        request.slideNumber,
-      );
-    } catch (error) {
-      if (
-        !isContentSized &&
-        error instanceof CapabilityError &&
-        error.code === "font-measurement-unavailable"
-      ) {
-        return undefined;
-      }
-      throw error;
-    }
-  },
-  compile(input: CapabilityInput, context) {
+    context: CapabilityParseContext,
+  ): CapabilityParseResult<ParsedText> {
     const unknown = Object.keys(input.props).find(
       (key) => !(allowedParameters as readonly string[]).includes(key),
     );
@@ -222,23 +220,176 @@ export const textCapability: CapabilityModule = {
       throw new CapabilityError(
         "unknown-parameter",
         `Text contains unsupported parameter ${unknown}`,
+        context.path,
       );
     }
     const testId = optionalName(input.props["testId"], "testId");
     const part = optionalName(input.props["part"], "part");
     const requestedName = optionalName(input.props["name"], "name");
+
+    if (input.props["x"] !== undefined) coordinate(input.props["x"], "x");
+    if (input.props["y"] !== undefined) coordinate(input.props["y"], "y");
+    if (
+      input.props["width"] !== undefined &&
+      typeof input.props["width"] === "number"
+    ) {
+      size(input.props["width"], "width");
+    }
+
+    const allowedStyleKeys = new Set<string>([
+      ...layoutStyleKeys,
+      ...paddingStyleKeys,
+      ...textStyleKeys,
+      ...visualStyleKeys,
+    ]);
+
+    const contract = parseCapabilityLayoutContract({
+      nativeKind: "sp",
+      props: input.props,
+      allowedStyleKeys,
+      allowPadding: true,
+      path: context.path,
+    });
+
     const insets = textInsets(input.props["style"]);
-    const styleWidth = layoutStyleValue(input, "width");
     const styleHeight = layoutStyleValue(input, "height");
+    const requestedHeight = height(styleHeight ?? input.props["height"]);
+
+    const { paragraphs, style: parsedTextStyle } = parseTextContent(
+      input.children,
+      textStyle(input.props["style"]),
+      context.theme,
+      {
+        slideNumber: context.slideNumber,
+      },
+    );
+
+    const visualStyle = record(input.props["style"])
+      ? input.props["style"]
+      : {};
+
+    const parsed: ParsedText = {
+      ...(testId !== undefined ? { testId } : {}),
+      ...(part !== undefined ? { part } : {}),
+      ...(requestedName !== undefined ? { name: requestedName } : {}),
+      ...(input.props["morphKey"] !== undefined
+        ? { morphKey: input.props["morphKey"] }
+        : {}),
+      ...(input.props["link"] !== undefined
+        ? { link: input.props["link"] }
+        : {}),
+      visualStyle,
+      insets,
+      paragraphs,
+      textStyle: parsedTextStyle,
+      requestedHeight,
+      contract,
+      rawProps: input.props,
+    };
+
+    return { contract, parsed };
+  },
+
+  measureLayout(
+    inputOrParsed: ParsedText | CapabilityInput,
+    request: CapabilityLayoutRequest,
+  ): CapabilityLayoutMeasurement | undefined {
+    const parsed: ParsedText =
+      "paragraphs" in inputOrParsed && "contract" in inputOrParsed
+        ? inputOrParsed
+        : (
+            this.parse as NonNullable<
+              (
+                input: CapabilityInput,
+                context: CapabilityParseContext,
+              ) => CapabilityParseResult<ParsedText>
+            >
+          )(inputOrParsed, {
+            path: "Text",
+            theme: request.theme,
+            options: {},
+            slideNumber: request.slideNumber,
+          }).parsed;
+
+    const insets = parsed.insets;
+    const isContentSized = parsed.requestedHeight.contentSized;
+    const styleWidth = layoutStyleValue(
+      { type: "rp:text", props: parsed.rawProps, children: [] },
+      "width",
+    );
+    const width =
+      request.availableWidth ?? styleWidth ?? parsed.rawProps["width"];
+    const innerWidth =
+      request.availableWidth !== undefined
+        ? request.availableWidth
+        : typeof width === "number"
+          ? Math.max(0, width - insets.left - insets.right)
+          : undefined;
+
+    try {
+      return measureTextLayoutFromParagraphs(
+        parsed.paragraphs,
+        parsed.textStyle,
+        innerWidth,
+      );
+    } catch (error) {
+      if (
+        !isContentSized &&
+        error instanceof CapabilityError &&
+        error.code === "font-measurement-unavailable"
+      ) {
+        return {
+          baseline: "unavailable",
+        };
+      }
+      throw error;
+    }
+  },
+
+  compile(
+    inputOrParsed: ParsedText | CapabilityInput,
+    context: CapabilityContext,
+  ) {
+    const parsed: ParsedText =
+      "paragraphs" in inputOrParsed && "contract" in inputOrParsed
+        ? inputOrParsed
+        : (
+            this.parse as NonNullable<
+              (
+                input: CapabilityInput,
+                context: CapabilityParseContext,
+              ) => CapabilityParseResult<ParsedText>
+            >
+          )(inputOrParsed, {
+            path: context.path,
+            theme: context.theme,
+            options: context.options,
+            slideNumber: context.slideNumber,
+          }).parsed;
+
+    const insets = parsed.insets;
+    const styleWidth = layoutStyleValue(
+      { type: "rp:text", props: parsed.rawProps, children: [] },
+      "width",
+    );
     const dimensions = {
-      x: coordinate(context.layoutBox?.x ?? input.props["x"], "x"),
-      y: coordinate(context.layoutBox?.y ?? input.props["y"], "y"),
+      x: coordinate(
+        context.layoutBox?.x ?? parsed.contract.x ?? parsed.rawProps["x"],
+        "x",
+      ),
+      y: coordinate(
+        context.layoutBox?.y ?? parsed.contract.y ?? parsed.rawProps["y"],
+        "y",
+      ),
       width: size(
-        context.layoutBox?.width ?? styleWidth ?? input.props["width"],
+        context.layoutBox?.width ??
+          parsed.contract.width ??
+          styleWidth ??
+          parsed.rawProps["width"],
         "width",
       ),
     };
-    const requestedHeight = height(styleHeight ?? input.props["height"]);
+    const requestedHeight = parsed.requestedHeight;
     const measuredHeight = requestedHeight.contentSized
       ? undefined
       : requestedHeight.value;
@@ -251,9 +402,9 @@ export const textCapability: CapabilityModule = {
       outputHeight === undefined
         ? undefined
         : Math.max(0, outputHeight - insets.top - insets.bottom);
-    const body = writeTextBody(
-      input.children,
-      textStyle(input.props["style"]),
+    const body = writeTextBodyFromParagraphs(
+      parsed.paragraphs,
+      parsed.textStyle,
       context.theme,
       "top",
       {
@@ -263,11 +414,8 @@ export const textCapability: CapabilityModule = {
         insets,
       },
       "text-box",
-      {
-        slideNumber: context.slideNumber,
-        createId: context.createTextFieldId,
-      },
       context.options.embedFonts,
+      context.createTextFieldId,
     );
     const box = {
       ...dimensions,
@@ -281,20 +429,21 @@ export const textCapability: CapabilityModule = {
         "height",
       ),
     };
-    const visualStyle = record(input.props["style"])
-      ? input.props["style"]
-      : {};
+    const visualStyle = parsed.visualStyle;
     const properties = shapePropertiesXml({
       theme: context.theme,
       style: visualStyle,
       box,
     });
     const name =
-      context.morphName ?? requestedName ?? testId ?? `Text ${context.id - 1}`;
-    const annotations = motionAnnotations(input.props, {
+      context.morphName ??
+      parsed.name ??
+      parsed.testId ??
+      `Text ${context.id - 1}`;
+    const annotations = motionAnnotations(parsed.rawProps, {
       kind: "text",
       name,
-      ...(testId === undefined ? {} : { testId }),
+      ...(parsed.testId === undefined ? {} : { testId: parsed.testId }),
       textBody: true,
       filled:
         visualStyle["backgroundColor"] !== undefined ||
@@ -332,8 +481,8 @@ export const textCapability: CapabilityModule = {
         id: context.id,
         kind: "text",
         name,
-        ...(testId === undefined ? {} : { testId }),
-        ...(part === undefined ? {} : { part }),
+        ...(parsed.testId === undefined ? {} : { testId: parsed.testId }),
+        ...(parsed.part === undefined ? {} : { part: parsed.part }),
         box,
         text: body.text,
       },

@@ -461,6 +461,40 @@ export type CapabilityLayoutRequest = {
   readonly slideNumber: number;
 };
 
+export type NativeElementKind =
+  | "sp"
+  | "pic"
+  | "grpSp"
+  | "graphicFrame"
+  | "cxnSp";
+
+export type CapabilityLayoutContract = {
+  readonly nativeKind: NativeElementKind;
+  readonly x?: number;
+  readonly y?: number;
+  readonly width?: number | `${number}%` | "auto";
+  readonly height?: number | `${number}%` | "auto";
+  readonly layoutStyle: LayoutStyle;
+  readonly padding?: {
+    readonly top: number;
+    readonly right: number;
+    readonly bottom: number;
+    readonly left: number;
+  };
+};
+
+export type CapabilityParseContext = {
+  readonly path: string;
+  readonly theme: ThemeContext;
+  readonly options: BuildOptions;
+  readonly slideNumber: number;
+};
+
+export type CapabilityParseResult<TParsed = unknown> = {
+  readonly contract: CapabilityLayoutContract;
+  readonly parsed: TParsed;
+};
+
 /** Intrinsic size and main-axis min-content size provided by capability modules, in pixels. */
 export type CapabilityLayoutMeasurement = {
   /** Natural width after typesetting at the requested width. */
@@ -471,8 +505,8 @@ export type CapabilityLayoutMeasurement = {
   readonly minContentWidth?: number;
   /** Minimum content height used when computing automatic minimum size along the height axis. */
   readonly minContentHeight?: number;
-  /** Distance in pixels from the object top edge to the first line baseline when reliable text measurement is available. */
-  readonly baseline?: number;
+  /** Distance in pixels from the object top edge to the first line baseline when reliable text measurement is available, or `"unavailable"` when the object bears text whose baseline cannot be measured. */
+  readonly baseline?: number | "unavailable";
 };
 
 export type CapabilityOutput = {
@@ -502,15 +536,20 @@ export type CapabilityResourceClaim = {
   readonly characters?: string;
 };
 
-export type ObjectCapabilityModule = {
+export type ObjectCapabilityModule<TParsed = any> = {
   /** Host type of the declared component, such as `rp:shape`. */
   readonly declaration: string;
+  /** Parse the host declaration once before layout, returning the layout contract and parsed state reused by measureLayout and compile. */
+  parse?(
+    input: CapabilityInput,
+    context: CapabilityParseContext,
+  ): CapabilityParseResult<TParsed>;
   /** Provides measurement basis using the capability's own content measurement when layout requires intrinsic or main-axis min-content size. */
   measureLayout?(
-    input: CapabilityInput,
+    parsed: TParsed,
     request: CapabilityLayoutRequest,
   ): CapabilityLayoutMeasurement | undefined;
-  compile(input: CapabilityInput, context: CapabilityContext): CapabilityOutput;
+  compile(parsed: TParsed, context: CapabilityContext): CapabilityOutput;
 };
 
 /** Transparent host node that does not generate native objects, submitting declarations only to its parent slide capability. */

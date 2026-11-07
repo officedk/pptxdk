@@ -14,7 +14,14 @@ export {
   lighter,
   nativeColorSlots,
   resolvedColorXml,
+  textStyleKeys,
+  validateTextStyle,
 } from "#/theme.ts";
+export {
+  layoutStyleKeys,
+  paddingStyleKeys,
+  parseCapabilityLayoutContract,
+} from "#/layout.ts";
 export { formatBaseline, targets } from "#/types.ts";
 export type {
   ColorValue,
@@ -49,8 +56,11 @@ export type {
   BuildReport,
   BuildResult,
   BoxProps,
+  CapabilityLayoutContract,
   CapabilityLayoutMeasurement,
   CapabilityLayoutRequest,
+  CapabilityParseContext,
+  CapabilityParseResult,
   CapabilityChild,
   CapabilityChildren,
   CapabilityAnnotation,
@@ -77,6 +87,7 @@ export type {
   LayoutSpacing,
   LayoutStyle,
   LinkTarget,
+  NativeElementKind,
   NativeLink,
   ObjectCapabilityModule,
   ObjectObservation,

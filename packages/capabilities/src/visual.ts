@@ -60,6 +60,19 @@ export type ShapeBox = {
 };
 export type VisualStyleRecord = Readonly<Record<string, unknown>>;
 
+export const visualStyleKeys = [
+  "backgroundColor",
+  "backgroundImage",
+  "borderColor",
+  "borderWidth",
+  "borderStyle",
+  "borderRadius",
+  "opacity",
+  "boxShadow",
+  "softEdge",
+  "rotate",
+] as const;
+
 export type ShapePropertiesOptions = {
   readonly theme: ThemeContext;
   readonly style: VisualStyleRecord;

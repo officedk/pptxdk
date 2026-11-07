@@ -16,14 +16,18 @@ import Yoga, {
 import { BuildError, CapabilityError } from "#/diagnostics.ts";
 import { textStyleFrom } from "#/theme.ts";
 import type {
+  BuildOptions,
   CapabilityChild,
   CapabilityElement,
+  CapabilityLayoutContract,
   CapabilityLayoutMeasurement,
+  CapabilityParseResult,
   RegisteredCapabilityModule,
   Diagnostic,
   GeometryBox,
   LayoutLength,
   LayoutStyle,
+  NativeElementKind,
   ThemeContext,
   ThemeScope,
   ObjectCapabilityModule,
@@ -79,7 +83,9 @@ type LayoutNode = {
   /** When text needs to provide a baseline, delegated from outer object node to inner measurement leaf node. */
   measureFunction?: MeasureFunction;
   baselineContent?: YogaNode;
-  baseline?: number;
+  baseline?: number | undefined;
+  parsed?: unknown;
+  contract?: CapabilityLayoutContract | undefined;
 };
 
 export type LayoutPassResult = {
@@ -87,7 +93,16 @@ export type LayoutPassResult = {
   readonly themes: WeakMap<CapabilityElement, ThemeContext>;
   readonly hidden: WeakSet<CapabilityElement>;
   readonly warnings: readonly Diagnostic[];
+  readonly parsed?: WeakMap<CapabilityElement, CapabilityParseResult>;
 };
+
+export const paddingStyleKeys = [
+  "padding",
+  "paddingTop",
+  "paddingRight",
+  "paddingBottom",
+  "paddingLeft",
+] as const;
 
 const layoutProperties = [
   "display",
@@ -137,6 +152,10 @@ const layoutProperties = [
 ] as const;
 
 const layoutPropertySet = new Set<string>(layoutProperties);
+
+export const layoutStyleKeys = layoutProperties.filter(
+  (key) => !(paddingStyleKeys as readonly string[]).includes(key),
+);
 const textProperties = new Set([
   "fontFamily",
   "fontSize",
@@ -978,6 +997,109 @@ function readStyle(
   return value;
 }
 
+/**
+ * Parses and validates host props into a CapabilityLayoutContract for object capabilities.
+ */
+export function parseCapabilityLayoutContract(options: {
+  readonly nativeKind: NativeElementKind;
+  readonly props: Readonly<Record<string, unknown>>;
+  readonly allowedStyleKeys: ReadonlySet<string>;
+  readonly allowPadding?: boolean;
+  readonly path?: string;
+}): CapabilityLayoutContract {
+  const { nativeKind, props, allowedStyleKeys, allowPadding = false } = options;
+  const path = options.path ?? "style";
+  const rawStyle = props["style"];
+  if (rawStyle !== undefined) {
+    if (!record(rawStyle)) {
+      throw new CapabilityError(
+        "invalid-style",
+        "style must be an object",
+        options.path,
+      );
+    }
+    const unknown = Object.keys(rawStyle).find(
+      (key) => rawStyle[key] !== undefined && !allowedStyleKeys.has(key),
+    );
+    if (unknown !== undefined) {
+      throw new CapabilityError(
+        "unknown-style",
+        `style contains unsupported property ${unknown}`,
+        options.path,
+      );
+    }
+    if (!allowPadding) {
+      const paddingKey = (paddingStyleKeys as readonly string[]).find(
+        (key) => rawStyle[key] !== undefined,
+      );
+      if (paddingKey !== undefined) {
+        throw new CapabilityError(
+          "invalid-layout-context",
+          "padding is only applicable to layout containers",
+          options.path,
+        );
+      }
+    }
+  }
+
+  const layoutStyle = readStyle(
+    rawStyle,
+    path,
+    false,
+    false,
+    allowPadding,
+    allowedStyleKeys,
+  );
+
+  let padding:
+    | {
+        readonly top: number;
+        readonly right: number;
+        readonly bottom: number;
+        readonly left: number;
+      }
+    | undefined;
+  if (allowPadding && rawStyle !== undefined) {
+    const hasPadding = (paddingStyleKeys as readonly string[]).some(
+      (key) => rawStyle[key] !== undefined,
+    );
+    if (hasPadding) {
+      const edges = expandedSpacing(layoutStyle, "padding");
+      padding = {
+        top: edges.top,
+        right: edges.right,
+        bottom: edges.bottom,
+        left: edges.left,
+      };
+    }
+  }
+
+  const x = typeof props["x"] === "number" ? props["x"] : undefined;
+  const y = typeof props["y"] === "number" ? props["y"] : undefined;
+  const styleWidth = rawStyle !== undefined ? rawStyle["width"] : undefined;
+  const styleHeight = rawStyle !== undefined ? rawStyle["height"] : undefined;
+  const width = (styleWidth ?? props["width"]) as
+    | number
+    | `${number}%`
+    | "auto"
+    | undefined;
+  const height = (styleHeight ?? props["height"]) as
+    | number
+    | `${number}%`
+    | "auto"
+    | undefined;
+
+  return {
+    nativeKind,
+    ...(x === undefined ? {} : { x }),
+    ...(y === undefined ? {} : { y }),
+    ...(width === undefined ? {} : { width }),
+    ...(height === undefined ? {} : { height }),
+    layoutStyle,
+    ...(padding === undefined ? {} : { padding }),
+  };
+}
+
 function expandedSpacing(
   style: LayoutStyle,
   kind: "margin" | "padding",
@@ -1075,10 +1197,15 @@ export class LayoutPass {
   readonly #modules: ReadonlyMap<string, RegisteredCapabilityModule>;
   readonly #dimensions: Dimensions;
   readonly #slideNumber: number;
+  readonly #options: BuildOptions;
   readonly #config = Yoga.Config.create();
   readonly #boxes = new WeakMap<CapabilityElement, GeometryBox>();
   readonly #themes = new WeakMap<CapabilityElement, ThemeContext>();
   readonly #hidden = new WeakSet<CapabilityElement>();
+  readonly #parsedResults = new WeakMap<
+    CapabilityElement,
+    CapabilityParseResult
+  >();
   readonly #warnings: Diagnostic[] = [];
   readonly #warningKeys = new Set<string>();
 
@@ -1086,10 +1213,12 @@ export class LayoutPass {
     modules: ReadonlyMap<string, RegisteredCapabilityModule>,
     dimensions: Dimensions,
     slideNumber = 1,
+    options: BuildOptions = {},
   ) {
     this.#modules = modules;
     this.#dimensions = dimensions;
     this.#slideNumber = slideNumber;
+    this.#options = options;
     this.#config.setPointScaleFactor(0);
   }
 
@@ -1167,6 +1296,7 @@ export class LayoutPass {
       themes: this.#themes,
       hidden: this.#hidden,
       warnings: this.#warnings,
+      parsed: this.#parsedResults,
     };
   }
 
@@ -1275,13 +1405,6 @@ export class LayoutPass {
         this.#appendLayoutChild(parent, built);
         return;
       }
-      const looseStyle = includeObjects
-        ? undefined
-        : this.#validateLoose(child, childPath);
-      if (looseStyle?.display === "none") {
-        this.#markHidden(child);
-        return;
-      }
       const module = this.#modules.get(child.type);
       if (module !== undefined && "compileDeclaration" in module) {
         this.#themes.set(child, themeContext);
@@ -1292,6 +1415,71 @@ export class LayoutPass {
           includeObjects,
           themeContext,
         );
+        return;
+      }
+      if (objectModule(module) && module.parse !== undefined) {
+        let parseResult = this.#parsedResults.get(child);
+        if (parseResult === undefined) {
+          try {
+            parseResult = module.parse(child, {
+              path: childPath,
+              theme: themeContext,
+              options: this.#options,
+              slideNumber: this.#slideNumber,
+            });
+            this.#parsedResults.set(child, parseResult);
+          } catch (error) {
+            if (error instanceof BuildError) throw error;
+            const code =
+              error instanceof CapabilityError
+                ? error.code
+                : "invalid-capability-input";
+            const message =
+              error instanceof Error ? error.message : String(error);
+            return fail(
+              error instanceof CapabilityError && error.path !== undefined
+                ? error.path
+                : childPath,
+              code,
+              message,
+            );
+          }
+        }
+        const { contract, parsed } = parseResult;
+        if (contract.layoutStyle.display === "none") {
+          this.#markHidden(child);
+          return;
+        }
+        this.#validateItemStyle(contract.layoutStyle, parent, childPath);
+        const built = this.#buildObject(
+          child,
+          childPath,
+          parent,
+          contract.layoutStyle,
+          themeContext,
+          parsed,
+          contract,
+        );
+        if (!includeObjects) {
+          if (
+            built !== undefined &&
+            this.#requiresLooseLayout(contract.layoutStyle)
+          ) {
+            this.#positionLooseGeometry(built);
+            this.#appendLayoutChild(parent, built);
+          }
+          return;
+        }
+        if (built !== undefined) {
+          this.#appendLayoutChild(parent, built);
+        }
+        return;
+      }
+      const looseStyle = includeObjects
+        ? undefined
+        : this.#validateLoose(child, childPath);
+      if (looseStyle?.display === "none") {
+        this.#markHidden(child);
         return;
       }
       if (!includeObjects) {
@@ -1637,6 +1825,8 @@ export class LayoutPass {
     parent: LayoutNode,
     style: LayoutStyle,
     themeContext: ThemeContext,
+    parsed?: unknown,
+    contract?: CapabilityLayoutContract,
   ): LayoutNode | undefined {
     const module = this.#modules.get(input.type);
     if (!objectModule(module)) return undefined;
@@ -1651,26 +1841,40 @@ export class LayoutPass {
       children: [],
       parent,
       escaped: [],
+      ...(parsed !== undefined ? { parsed } : {}),
+      ...(contract !== undefined ? { contract } : {}),
     };
     this.#themes.set(input, themeContext);
     this.#applyStyle(yoga, style, parent.style, false, false);
+    if (contract?.padding !== undefined) {
+      yoga.setPadding(Edge.Top, contract.padding.top);
+      yoga.setPadding(Edge.Right, contract.padding.right);
+      yoga.setPadding(Edge.Bottom, contract.padding.bottom);
+      yoga.setPadding(Edge.Left, contract.padding.left);
+    }
     this.#setDeclaredSize(node);
     if (style.position === "absolute") {
+      const x =
+        contract?.x ??
+        (typeof input.props["x"] === "number" ? input.props["x"] : undefined);
+      const y =
+        contract?.y ??
+        (typeof input.props["y"] === "number" ? input.props["y"] : undefined);
       if (
         style.left === undefined &&
         style.inset === undefined &&
         style.right === undefined &&
-        typeof input.props["x"] === "number"
+        x !== undefined
       ) {
-        yoga.setPosition(Edge.Left, input.props["x"]);
+        yoga.setPosition(Edge.Left, x);
       }
       if (
         style.top === undefined &&
         style.inset === undefined &&
         style.bottom === undefined &&
-        typeof input.props["y"] === "number"
+        y !== undefined
       ) {
-        yoga.setPosition(Edge.Top, input.props["y"]);
+        yoga.setPosition(Edge.Top, y);
       }
     }
     if (module.measureLayout !== undefined) {
@@ -2224,9 +2428,9 @@ export class LayoutPass {
   #setDeclaredSize(node: LayoutNode): void {
     const props = node.element?.props ?? {};
     const style = node.style;
-    const rawWidth = style.width ?? props["width"];
+    const rawWidth = node.contract?.width ?? style.width ?? props["width"];
     const width = rawWidth;
-    const rawHeight = style.height ?? props["height"];
+    const rawHeight = node.contract?.height ?? style.height ?? props["height"];
     const height = rawHeight;
     if (width !== undefined)
       setLength(node.yoga, "width", width as LayoutLength);
@@ -2358,7 +2562,7 @@ export class LayoutPass {
       return undefined;
     }
     try {
-      return node.module.measureLayout(node.element, {
+      return node.module.measureLayout(node.parsed ?? node.element, {
         ...request,
         theme: node.theme,
         slideNumber: this.#slideNumber,
@@ -2544,7 +2748,10 @@ export class LayoutPass {
             ),
           },
     );
-    if (measurement?.baseline === undefined) {
+    if (
+      measurement?.baseline === "unavailable" ||
+      measurement?.baseline === undefined
+    ) {
       fail(
         node.path,
         "baseline-measurement-unavailable",

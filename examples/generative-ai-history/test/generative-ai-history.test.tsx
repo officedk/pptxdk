@@ -6,7 +6,7 @@ import { it } from "vitest";
 
 import { GenerativeAiHistoryDeck } from "../src/index.ts";
 
-it("完整文稿保留十四页、可编辑图表与有效对象边界", async () => {
+it("full deck preserves 14 slides, editable chart, and valid object boundaries", async () => {
   const result = await build(<GenerativeAiHistoryDeck />, {
     embedFonts: "full",
   });
@@ -40,15 +40,21 @@ it("完整文稿保留十四页、可编辑图表与有效对象边界", async (
   for (const slide of file.slides) {
     for (const object of slide.objects) {
       if (object.boxEmu === undefined) continue;
-      assert.ok(object.boxEmu.x >= 0, `${slide.id}/${object.name} 超出左边界`);
-      assert.ok(object.boxEmu.y >= 0, `${slide.id}/${object.name} 超出上边界`);
+      assert.ok(
+        object.boxEmu.x >= 0,
+        `${slide.id}/${object.name} overflows left boundary`,
+      );
+      assert.ok(
+        object.boxEmu.y >= 0,
+        `${slide.id}/${object.name} overflows top boundary`,
+      );
       assert.ok(
         object.boxEmu.x + object.boxEmu.width <= 1280 * 9525,
-        `${slide.id}/${object.name} 超出右边界`,
+        `${slide.id}/${object.name} overflows right boundary`,
       );
       assert.ok(
         object.boxEmu.y + object.boxEmu.height <= 720 * 9525,
-        `${slide.id}/${object.name} 超出下边界`,
+        `${slide.id}/${object.name} overflows bottom boundary`,
       );
     }
   }
@@ -63,7 +69,7 @@ it("完整文稿保留十四页、可编辑图表与有效对象边界", async (
           object.text?.text === label &&
           object.geometry?.startsWith("flowChart"),
       ),
-      `${label} 应使用原生流程图几何并内嵌文字`,
+      `${label} should use native flowchart geometry and embedded text`,
     );
   }
   assert.equal(

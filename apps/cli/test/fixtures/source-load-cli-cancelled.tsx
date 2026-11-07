@@ -4,7 +4,7 @@ await new Promise<void>((_resolve, reject) => {
   const keepAlive = setInterval(() => {}, 1000);
   process.once("SIGINT", () => {
     clearInterval(keepAlive);
-    reject(new Error("作者源码准备已协作取消"));
+    reject(new Error("Author source preparation cooperatively cancelled"));
   });
   process.stdout.write("__react_pptx_source_load_cancel_ready__\n");
 });

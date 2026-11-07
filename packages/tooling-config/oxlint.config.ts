@@ -1,12 +1,12 @@
 import { defineConfig } from "oxlint";
 
-// Oxc 的 erasing-op 规则尚不拒绝枚举、运行时命名空间和参数属性；
-// 可擦除语法以 TypeScript 7 的 erasableSyntaxOnly 检查为准。
+// Oxc's erasing-op rule does not reject enums, runtime namespaces, or parameter properties yet;
+// erasable syntax relies on TypeScript 7's erasableSyntaxOnly check.
 export default defineConfig({
   categories: { correctness: "error", suspicious: "warn" },
-  // 包图允许校验工具作为开发依赖；生产源码不能反向依赖文件检查实现。
+  // Package graph allows validation tools as devDependencies; production source must not depend on file inspection implementations.
   overrides: [
-    // 包入口允许预先建立；业务文件仍接受空文件检查。
+    // Package entrypoints may be pre-created; business files still undergo empty file checks.
     { files: ["**/src/index.ts"], rules: { "unicorn/no-empty-file": "off" } },
     {
       files: ["**/src/**"],
@@ -17,7 +17,8 @@ export default defineConfig({
             patterns: [
               {
                 group: ["@react-pptx/validation", "@react-pptx/validation/*"],
-                message: "文件校验只供测试使用，请在 test 中消费实际构建产物。",
+                message:
+                  "File validation is for testing only; consume actual build artifacts in tests.",
               },
             ],
           },

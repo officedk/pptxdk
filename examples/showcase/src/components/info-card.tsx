@@ -15,7 +15,7 @@ export type CardContent = {
   readonly body: string;
 };
 
-/** 内容卡片按阅读顺序揭示标题与正文，尺寸由父布局或 style 决定。 */
+/** Content cards reveal title and body in reading order; dimensions are determined by parent layout or style. */
 export function InfoCard({
   title,
   body,

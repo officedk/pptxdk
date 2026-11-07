@@ -255,7 +255,7 @@ function GalleryPanel({
   );
 }
 
-/** 四个聚焦状态共享连续画布；栏宽变化替代离屏面板，导航支持直接访问与返回。 */
+/** Four focus states share a continuous canvas; column width changes replace off-screen panels, and navigation supports direct access and return. */
 export function GalleryPage({
   focus,
   scope,

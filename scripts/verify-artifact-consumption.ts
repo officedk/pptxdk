@@ -50,8 +50,8 @@ function run(
       [result.stderr.trim(), result.stdout.trim()].find(
         (output) => output !== "",
       ) ??
-      "子进程失败";
-    throw new Error(`${command} ${args.join(" ")} 失败：${reason}`);
+      "Child process failed";
+    throw new Error(`${command} ${args.join(" ")} failed: ${reason}`);
   }
   return result.stdout.trim();
 }
@@ -61,7 +61,9 @@ function installedVersion(entry: PnpmListEntry, packageName: string): string {
     entry.dependencies?.[packageName]?.version ??
     entry.devDependencies?.[packageName]?.version;
   if (version === undefined) {
-    throw new Error(`工作区没有为制品消费配置 ${packageName}`);
+    throw new Error(
+      `Workspace has not configured ${packageName} for artifact consumption`,
+    );
   }
   return version;
 }
@@ -71,7 +73,7 @@ const workspacePackage = JSON.parse(
 ) as PnpmPackage;
 if (workspacePackage.packageManager === undefined) {
   throw new Error(
-    "根 package.json 缺少 packageManager，无法固定临时消费者的 pnpm 版本",
+    "Root package.json is missing packageManager; cannot pin temporary consumer pnpm version",
   );
 }
 const coreDependencies = JSON.parse(
@@ -91,13 +93,17 @@ const coreDependencies = JSON.parse(
 ) as readonly PnpmListEntry[];
 const core = coreDependencies[0];
 if (core === undefined) {
-  throw new Error("pnpm 未返回 @react-pptx/core 的安装依赖");
+  throw new Error(
+    "pnpm did not return installed dependencies for @react-pptx/core",
+  );
 }
 if (
   installedVersion(core, "react") !== "19.3.1" ||
   installedVersion(core, "react-reconciler") !== "0.34.0"
 ) {
-  throw new Error("制品消费验收要求 React 19.3.1 与 react-reconciler 0.34.0");
+  throw new Error(
+    "Artifact consumption acceptance requires React 19.3.1 and react-reconciler 0.34.0",
+  );
 }
 const reactPptxDependencies = JSON.parse(
   run("pnpm", [
@@ -113,7 +119,9 @@ const reactPptxDependencies = JSON.parse(
 ) as readonly PnpmListEntry[];
 const reactPptx = reactPptxDependencies[0];
 if (reactPptx === undefined) {
-  throw new Error("pnpm 未返回 @react-pptx/react-pptx 的安装依赖");
+  throw new Error(
+    "pnpm did not return installed dependencies for @react-pptx/react-pptx",
+  );
 }
 const capabilitiesDependencies = JSON.parse(
   run("pnpm", [
@@ -129,7 +137,9 @@ const capabilitiesDependencies = JSON.parse(
 ) as readonly PnpmListEntry[];
 const capabilities = capabilitiesDependencies[0];
 if (capabilities === undefined) {
-  throw new Error("pnpm 未返回 @react-pptx/capabilities 的安装依赖");
+  throw new Error(
+    "pnpm did not return installed dependencies for @react-pptx/capabilities",
+  );
 }
 
 const temporaryDirectory = await mkdtemp(
@@ -165,7 +175,7 @@ try {
     );
     if (packedFiles.length !== 1) {
       throw new Error(
-        `${name} 应生成一个 tarball，实际生成 ${packedFiles.length} 个`,
+        `${name} should produce one tarball, but generated ${packedFiles.length}`,
       );
     }
     const localPackage = `file:./${packedFiles[0]}`;
@@ -362,9 +372,9 @@ try {
       'const showcaseResult = await build(createElement(ShowcaseDeck), { embedFonts: "full" });',
       'const showcaseFile = await validatePptx(showcaseResult.pptx, { allowedExtensions: ["p14", "p159"] });',
       'const showcaseCliFile = await validatePptx(new Uint8Array(await readFile("showcase-cli.pptx")), { allowedExtensions: ["p14", "p159"] });',
-      'if (showcaseFile.errors.length || showcaseCliFile.errors.length || showcaseFile.slides.length !== 16 || showcaseResult.report.diagnostics.some(({code, path}) => code !== "overflow" || !path.includes("gallery-")) || JSON.stringify(showcaseFile.slides) !== JSON.stringify(showcaseCliFile.slides)) throw new Error("showcase 安装消费或 CLI 结果不一致");',
+      'if (showcaseFile.errors.length || showcaseCliFile.errors.length || showcaseFile.slides.length !== 16 || showcaseResult.report.diagnostics.some(({code, path}) => code !== "overflow" || !path.includes("gallery-")) || JSON.stringify(showcaseFile.slides) !== JSON.stringify(showcaseCliFile.slides)) throw new Error("Showcase installed consumption or CLI results differ");',
       'const mapSteps = showcaseFile.slides.find(({id}) => id === "world")?.animations;',
-      'if (JSON.stringify(mapSteps?.map(({effects}) => effects.filter(({preset}) => preset === "fillColor").length)) !== "[123,33,54,42,119,24]" || showcaseFile.slides.filter(({transition}) => transition?.kind === "morph").length !== 4) throw new Error("showcase 动效在安装制品中丢失");',
+      'if (JSON.stringify(mapSteps?.map(({effects}) => effects.filter(({preset}) => preset === "fillColor").length)) !== "[123,33,54,42,119,24]" || showcaseFile.slides.filter(({transition}) => transition?.kind === "morph").length !== 4) throw new Error("Showcase animations lost in installed artifact");',
       'await writeFile("showcase-installed.pptx", showcaseResult.pptx);',
       'const jostMetrics = new Uint8Array(await readFile(new URL("./jost-latin-400-normal.woff2", import.meta.url)));',
       'const embeddedFontBytes = new Uint8Array(await readFile(new URL("./Jost-400-Book.ttf", import.meta.url)));',
@@ -487,12 +497,12 @@ try {
       "const neverResource = new Promise<string>(() => {});",
       "let cancellationCleanups = 0;",
       'function CancelledContent() { useEffect(() => { cancellationStarted.resolve(); return () => { cancellationCleanups += 1; }; }, []); return createElement(Suspense, { fallback: createElement(Text, { x: 0, y: 0, width: 90, height: 36 }, "安装制品加载占位") }, createElement(AsyncText, { promise: neverResource })); }',
-      'const cancellationReason = new Error("安装制品调用方取消");',
+      'const cancellationReason = new Error("Installed artifact caller cancellation");',
       'const cancellationBuild = build(createElement(Deck, { width: 120, height: 96 }, createElement(Slide, { slideId: "installed-cancelled" }, createElement(CancelledContent))), { signal: cancellationController.signal });',
       "let cancellationObserved = false;",
-      'const cancellationRejected = cancellationBuild.then(() => { throw new Error("安装制品取消后仍返回了产物"); }, error => { if (error !== cancellationReason) throw error; cancellationObserved = true; });',
+      'const cancellationRejected = cancellationBuild.then(() => { throw new Error("Installed artifact returned output despite cancellation"); }, error => { if (error !== cancellationReason) throw error; cancellationObserved = true; });',
       "await cancellationStarted.promise;",
-      'if (getEventListeners(cancellationController.signal, "abort").length !== 1) throw new Error("安装制品没有监听调用方取消");',
+      'if (getEventListeners(cancellationController.signal, "abort").length !== 1) throw new Error("Installed artifact did not listen to caller cancellation");',
       "cancellationController.abort(cancellationReason);",
       "await cancellationRejected;",
       'if (!cancellationObserved || cancellationCleanups !== 1 || getEventListeners(cancellationController.signal, "abort").length !== 0) throw new Error(JSON.stringify({ cancellationObserved, cancellationCleanups, abortListeners: getEventListeners(cancellationController.signal, "abort").length }));',
@@ -670,7 +680,7 @@ try {
       { ...process.env, NODE_ENV: mode },
     );
     process.stdout.write(
-      `React ${mode === "development" ? "开发" : "生产"}模式适配验收通过\n`,
+      `React ${mode === "development" ? "development" : "production"} mode adaptation acceptance passed\n`,
     );
   }
   const cliOutput = run(
@@ -684,8 +694,10 @@ try {
     ],
     temporaryDirectory,
   );
-  if (!cliOutput.includes("已导出文稿：")) {
-    throw new Error(`安装后的 CLI 没有报告成功导出：${cliOutput}`);
+  if (!cliOutput.includes("Exported deck:")) {
+    throw new Error(
+      `Installed CLI did not report successful export: ${cliOutput}`,
+    );
   }
   run(
     "pnpm",
@@ -876,7 +888,9 @@ try {
     summary.missingSubsetGlyphPath !==
       "deck/slide[installed-font-subset-missing-glyph]/text[installed-subset-font-missing-glyph]"
   ) {
-    throw new Error(`安装制品返回了意外结果：${summaryText}`);
+    throw new Error(
+      `Installed artifact returned unexpected results: ${summaryText}`,
+    );
   }
   const artifactDirectory = join(
     process.cwd(),
@@ -934,10 +948,12 @@ try {
     cropped.missingPath !== "deck/slide[nested]/text[missing-installed-text]" ||
     cropped.textBoxImplementationLoaded !== false
   ) {
-    throw new Error(`安装制品裁剪入口返回了意外结果：${croppedText}`);
+    throw new Error(
+      `Installed artifact cropped entrypoint returned unexpected results: ${croppedText}`,
+    );
   }
   process.stdout.write(
-    `正式制品消费通过：${summaryText}\n安装制品裁剪通过：${croppedText}\n`,
+    `Formal artifact consumption passed: ${summaryText}\nInstalled artifact crop passed: ${croppedText}\n`,
   );
 } finally {
   await rm(temporaryDirectory, { recursive: true, force: true });

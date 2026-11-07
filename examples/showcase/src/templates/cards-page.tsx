@@ -3,7 +3,7 @@ import { Box, Step } from "@react-pptx/react-pptx";
 import { InfoCard, type CardContent } from "../components/info-card.tsx";
 import { PageFrame } from "./page-frame.tsx";
 
-/** 卡片共享可用宽度，每张卡片封装自己的阅读顺序。 */
+/** Cards share available width; each card encapsulates its own reading order. */
 export function CardsPage({
   slideId,
   title,

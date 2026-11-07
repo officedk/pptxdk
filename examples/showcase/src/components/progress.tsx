@@ -11,7 +11,7 @@ import {
 
 import { colors, motion } from "../theme.ts";
 
-/** 数值、分段条形和环形共享同一分子与分母；x、y、width 指定页面位置和整体宽度，构图随宽度等比缩放。 */
+/** Values, segmented bars, and rings share the same numerator and denominator; x, y, width specify slide position and total width, composition scales proportionally with width. */
 export function Progress({
   completed,
   total,

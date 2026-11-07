@@ -9,7 +9,7 @@ import {
 
 import { colors, motion } from "../theme.ts";
 
-/** 编号节点与连接线按内容顺序揭示，每个节点保留为原生组合。 */
+/** Numbered nodes and connectors are revealed in content order; each node is preserved as a native Group. */
 export function ProcessPath({
   nodes,
   x,

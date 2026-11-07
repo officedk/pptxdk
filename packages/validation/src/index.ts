@@ -1899,6 +1899,39 @@ function readGeometryName(properties: XmlElement | undefined): string {
   return paths.length === 0 ? "" : "custom";
 }
 
+const validLineEndTypes = new Set([
+  "none",
+  "triangle",
+  "stealth",
+  "arrow",
+  "diamond",
+  "oval",
+]);
+
+function validateLineProperties(
+  properties: XmlElement | undefined,
+  part: string,
+  errors: ValidationIssue[],
+): void {
+  if (properties === undefined) return;
+  const line = first(properties, drawingNamespace, "ln");
+  if (line === undefined) return;
+  for (const endName of ["headEnd", "tailEnd"] as const) {
+    const end = first(line, drawingNamespace, endName);
+    if (end !== undefined && end.hasAttribute("type")) {
+      const type = attribute(end, "type");
+      if (!validLineEndTypes.has(type)) {
+        issue(
+          errors,
+          part,
+          "invalid-line-end-type",
+          `Line end ${endName} has invalid type "${type}". Expected one of: none, triangle, stealth, arrow, diamond, oval`,
+        );
+      }
+    }
+  }
+}
+
 function validateShape(
   shape: XmlElement,
   part: string,
@@ -1969,6 +2002,7 @@ function validateShape(
     return undefined;
   }
   validateTextValueRanges(shape, part, errors);
+  validateLineProperties(properties, part, errors);
   const text = readTextBody(shape, theme, part, errors);
   return {
     id,
@@ -2178,6 +2212,7 @@ function validatePicture(
       image = { relationshipId, part: imagePart, contentType };
     }
   }
+  validateLineProperties(properties, part, errors);
   if (boxEmu === undefined) return undefined;
   return {
     id: identity.id,

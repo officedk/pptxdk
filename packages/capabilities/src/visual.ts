@@ -8,6 +8,7 @@ import {
   type RadialGradient,
   type ResolvedColor,
   type ThemeContext,
+  type VisualStyle as CoreVisualStyle,
 } from "@react-pptx/core";
 
 import {
@@ -59,6 +60,32 @@ export type ShapeBox = {
   readonly height: number;
 };
 export type VisualStyleRecord = Readonly<Record<string, unknown>>;
+
+export type ArrowType =
+  | "none"
+  | "triangle"
+  | "stealth"
+  | "arrow"
+  | "diamond"
+  | "oval";
+
+export const arrowTypes = [
+  "none",
+  "triangle",
+  "stealth",
+  "arrow",
+  "diamond",
+  "oval",
+] as const;
+
+export type LineEndStyle = {
+  readonly startArrow?: ArrowType;
+  readonly endArrow?: ArrowType;
+};
+
+export const lineEndStyleKeys = ["startArrow", "endArrow"] as const;
+
+export type ShapeVisualStyle = CoreVisualStyle & LineEndStyle;
 
 export const visualStyleKeys = [
   "backgroundColor",
@@ -493,6 +520,28 @@ function lineXml(
       "invalid-visual-style",
       "borderStyle must be solid, dashed, or dotted",
     );
+  const startArrow = style["startArrow"];
+  if (
+    startArrow !== undefined &&
+    (typeof startArrow !== "string" ||
+      !arrowTypes.includes(startArrow as ArrowType))
+  ) {
+    invalid(
+      "invalid-visual-style",
+      "startArrow must be none, triangle, stealth, arrow, diamond, or oval",
+    );
+  }
+  const endArrow = style["endArrow"];
+  if (
+    endArrow !== undefined &&
+    (typeof endArrow !== "string" ||
+      !arrowTypes.includes(endArrow as ArrowType))
+  ) {
+    invalid(
+      "invalid-visual-style",
+      "endArrow must be none, triangle, stealth, arrow, diamond, or oval",
+    );
+  }
   if (color === undefined || width === 0) return "<a:ln><a:noFill/></a:ln>";
   const dash =
     styleName === "dashed"
@@ -500,7 +549,11 @@ function lineXml(
       : styleName === "dotted"
         ? "sysDot"
         : undefined;
-  return `<a:ln w="${lineWidthEmu(width)}"><a:solidFill>${resolvedColorXml(withOpacity(theme.resolveColor(color as ColorValue), opacity))}</a:solidFill>${dash === undefined ? "" : `<a:prstDash val="${dash}"/>`}</a:ln>`;
+  const headEnd =
+    startArrow === undefined ? "" : `<a:headEnd type="${startArrow}"/>`;
+  const tailEnd =
+    endArrow === undefined ? "" : `<a:tailEnd type="${endArrow}"/>`;
+  return `<a:ln w="${lineWidthEmu(width)}"><a:solidFill>${resolvedColorXml(withOpacity(theme.resolveColor(color as ColorValue), opacity))}</a:solidFill>${dash === undefined ? "" : `<a:prstDash val="${dash}"/>`}${headEnd}${tailEnd}</a:ln>`;
 }
 
 function effectsXml(theme: ThemeContext, style: VisualStyleRecord): string {

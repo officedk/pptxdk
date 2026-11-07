@@ -19,7 +19,6 @@ import {
   type LinkTarget,
   type ObjectCapabilityModule,
   type PaddingStyle,
-  type VisualStyle,
 } from "@react-pptx/core";
 import type { ReactNode } from "react";
 
@@ -55,8 +54,10 @@ import {
   type TextStyle,
 } from "./text-service.ts";
 import {
+  lineEndStyleKeys,
   shapePropertiesXml,
   visualStyleKeys,
+  type ShapeVisualStyle,
   type VisualStyleRecord,
 } from "./visual.ts";
 
@@ -73,7 +74,7 @@ export type ShapeProps = MotionProps &
     readonly y?: number;
     readonly width?: number;
     readonly height?: number;
-    readonly style?: LayoutStyle & VisualStyle & TextStyle & PaddingStyle;
+    readonly style?: LayoutStyle & ShapeVisualStyle & TextStyle & PaddingStyle;
     readonly fill?: ColorValue;
     /** Directly writes native text into this shape without creating an additional text box; mutually exclusive with children. */
     readonly text?: string;
@@ -135,6 +136,14 @@ const allowedParameters = [
   "emphasis",
   "motion",
   "__motionContext",
+] as const;
+
+export const shapeStyleKeys = [
+  ...layoutStyleKeys,
+  ...visualStyleKeys,
+  ...lineEndStyleKeys,
+  ...textStyleKeys,
+  ...paddingStyleKeys,
 ] as const;
 
 function record(input: unknown): Record<string, unknown> {
@@ -359,6 +368,7 @@ export const shapeCapability: ObjectCapabilityModule<ParsedShape> = {
     const allowedStyleKeys = new Set<string>([
       ...layoutStyleKeys,
       ...visualStyleKeys,
+      ...lineEndStyleKeys,
       ...(hasText ? [...textStyleKeys, ...paddingStyleKeys] : []),
     ]);
 

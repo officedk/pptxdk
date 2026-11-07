@@ -1,4 +1,9 @@
-import type { LayoutStyle, LinkTarget, VisualStyle } from "@react-pptx/core";
+import type {
+  LayoutStyle,
+  LinkTarget,
+  PaddingStyle,
+  VisualStyle as CoreVisualStyle,
+} from "@react-pptx/core";
 import { createElement, type ReactNode } from "react";
 
 import type { MorphProps } from "./morph-api.ts";
@@ -15,7 +20,7 @@ export type TextProps = MotionProps &
     readonly y?: number;
     readonly width?: number;
     readonly height?: number | "auto";
-    readonly style?: TextStyle & LayoutStyle & VisualStyle;
+    readonly style?: LayoutStyle & PaddingStyle & TextStyle & CoreVisualStyle;
     readonly children?: ReactNode;
   };
 

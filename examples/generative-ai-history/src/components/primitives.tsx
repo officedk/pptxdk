@@ -62,18 +62,19 @@ export function Arrow({
   readonly color?: ColorValue;
 }) {
   return (
-    <>
-      <Rule x={x} y={y + 7} width={width - 9} color={color} thickness={2} />
-      <Shape
-        geometry={preset("triangle")}
-        x={x + width - 12}
-        y={y}
-        width={14}
-        height={16}
-        fill={color}
-        style={{ rotate: 90 }}
-      />
-    </>
+    <Shape
+      geometry={preset("line")}
+      x={x}
+      y={y + 8}
+      width={width}
+      height={1}
+      fill={transparent}
+      style={{
+        borderColor: color,
+        borderWidth: 2,
+        endArrow: "triangle",
+      }}
+    />
   );
 }
 

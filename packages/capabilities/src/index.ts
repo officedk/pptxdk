@@ -15,9 +15,17 @@ export type {
   PathOptions,
   PresetGeometry,
   ShapeProps,
+  shapeStyleKeys,
 } from "#/shape.ts";
 export { Box, boxCapability, type BoxProps, type ParsedBox } from "#/box.ts";
-export { hasVisibleBoxStyle } from "#/visual.ts";
+export {
+  arrowTypes,
+  hasVisibleBoxStyle,
+  lineEndStyleKeys,
+  type ArrowType,
+  type LineEndStyle,
+  type ShapeVisualStyle,
+} from "#/visual.ts";
 export type {
   GradientStop,
   LinearGradient,

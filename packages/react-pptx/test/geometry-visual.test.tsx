@@ -662,4 +662,253 @@ describe("geometry, object visuals, and text visuals", () => {
       );
     }
   });
+
+  it("writes valid DrawingML headEnd and tailEnd line arrows on preset and custom path shapes", async () => {
+    const result = await build(
+      deck([
+        createElement(Shape, {
+          testId: "arrow-line",
+          x: 10,
+          y: 20,
+          width: 100,
+          height: 1,
+          geometry: preset("line"),
+          style: {
+            borderColor: "accent1",
+            borderWidth: 2,
+            startArrow: "oval",
+            endArrow: "triangle",
+          },
+        }),
+        createElement(Shape, {
+          testId: "arrow-path",
+          x: 20,
+          y: 40,
+          width: 150,
+          height: 80,
+          geometry: path("M 0 0 L 150 80", {
+            viewBox: [150, 80],
+            fill: false,
+          }),
+          style: {
+            borderColor: "accent2",
+            borderWidth: 1.5,
+            borderStyle: "dashed",
+            startArrow: "stealth",
+            endArrow: "diamond",
+          },
+        }),
+        createElement(Shape, {
+          testId: "arrow-none-arrow",
+          x: 30,
+          y: 60,
+          width: 80,
+          height: 1,
+          geometry: preset("line"),
+          style: {
+            borderColor: "accent3",
+            borderWidth: 1,
+            startArrow: "none",
+            endArrow: "arrow",
+          },
+        }),
+      ]),
+    );
+
+    assert.deepEqual(result.report.diagnostics, []);
+    const file = await validatePptx(result.pptx);
+    assert.deepEqual(file.errors, []);
+
+    const parts = unzipSync(result.pptx);
+    const slideXml = strFromU8(parts["ppt/slides/slide1.xml"]!);
+
+    // Verify headEnd and tailEnd elements exist
+    assert.ok(slideXml.includes('<a:headEnd type="oval"/>'));
+    assert.ok(slideXml.includes('<a:tailEnd type="triangle"/>'));
+    assert.ok(slideXml.includes('<a:headEnd type="stealth"/>'));
+    assert.ok(slideXml.includes('<a:tailEnd type="diamond"/>'));
+    assert.ok(slideXml.includes('<a:headEnd type="none"/>'));
+    assert.ok(slideXml.includes('<a:tailEnd type="arrow"/>'));
+
+    // Verify DrawingML schema child element order: solidFill -> prstDash -> headEnd -> tailEnd
+    const dashedLineMatch = slideXml.match(
+      /<a:ln [^>]*>(.*?)<a:prstDash val="dash"\/>(.*?)<a:headEnd type="stealth"\/>(.*?)<a:tailEnd type="diamond"\/>.*?<\/a:ln>/s,
+    );
+    assert.ok(
+      dashedLineMatch,
+      "Dashed line elements must appear in DrawingML schema sequence",
+    );
+    assert.ok(dashedLineMatch[1]?.includes("<a:solidFill>"));
+  });
+
+  it("rejects invalid line arrow types on Shape style", async () => {
+    for (const invalidType of ["circle", "bar", "unknown", 123] as const) {
+      await assert.rejects(
+        build(
+          deck([
+            createElement(Shape, {
+              testId: "bad-start-arrow",
+              x: 10,
+              y: 20,
+              width: 100,
+              height: 1,
+              geometry: preset("line"),
+              style: {
+                borderColor: "accent1",
+                borderWidth: 2,
+                startArrow: invalidType as any,
+              },
+            }),
+          ]),
+        ),
+        (error: unknown) =>
+          error instanceof BuildError &&
+          error.diagnostics.some(
+            (diag) =>
+              diag.code === "invalid-visual-style" &&
+              diag.message.includes("startArrow"),
+          ),
+      );
+
+      await assert.rejects(
+        build(
+          deck([
+            createElement(Shape, {
+              testId: "bad-end-arrow",
+              x: 10,
+              y: 20,
+              width: 100,
+              height: 1,
+              geometry: preset("line"),
+              style: {
+                borderColor: "accent1",
+                borderWidth: 2,
+                endArrow: invalidType as any,
+              },
+            }),
+          ]),
+        ),
+        (error: unknown) =>
+          error instanceof BuildError &&
+          error.diagnostics.some(
+            (diag) =>
+              diag.code === "invalid-visual-style" &&
+              diag.message.includes("endArrow"),
+          ),
+      );
+    }
+  });
+
+  it("validates line end type attributes during validatePptx", async () => {
+    const valid = await build(
+      deck([
+        createElement(Shape, {
+          testId: "arrow-sample",
+          x: 10,
+          y: 20,
+          width: 100,
+          height: 1,
+          geometry: preset("line"),
+          style: {
+            borderColor: "accent1",
+            borderWidth: 2,
+            endArrow: "triangle",
+          },
+        }),
+      ]),
+    );
+
+    const parts = unzipSync(valid.pptx);
+    const originalSlideXml = strFromU8(parts["ppt/slides/slide1.xml"]!);
+    // Corrupt the tailEnd type attribute
+    const corruptedSlideXml = originalSlideXml.replace(
+      'type="triangle"',
+      'type="curly"',
+    );
+    parts["ppt/slides/slide1.xml"] = new TextEncoder().encode(
+      corruptedSlideXml,
+    );
+
+    const { zipSync } = await import("fflate");
+    const corruptedPptx = zipSync(parts);
+    const file = await validatePptx(corruptedPptx);
+    assert.ok(
+      file.errors.some((err) => err.code === "invalid-line-end-type"),
+      "Expected invalid-line-end-type error on corrupted line end type",
+    );
+  });
+
+  it("rejects startArrow and endArrow on Box and Text with invalid-style", async () => {
+    await assert.rejects(
+      build(
+        <Deck width={960} height={540}>
+          <Slide slideId="box-start-arrow">
+            {/* @ts-expect-error -- testing unknown style on Box */}
+            <Box style={{ startArrow: "triangle" }} />
+          </Slide>
+        </Deck>,
+      ),
+      (error: unknown) =>
+        error instanceof BuildError &&
+        error.diagnostics.some(
+          (diag) =>
+            (diag.code === "invalid-style" || diag.code === "unknown-style") &&
+            diag.message.includes("startArrow"),
+        ),
+    );
+
+    await assert.rejects(
+      build(
+        <Deck width={960} height={540}>
+          <Slide slideId="box-end-arrow">
+            {/* @ts-expect-error -- testing unknown style on Box */}
+            <Box style={{ endArrow: "triangle" }} />
+          </Slide>
+        </Deck>,
+      ),
+      (error: unknown) =>
+        error instanceof BuildError &&
+        error.diagnostics.some(
+          (diag) =>
+            (diag.code === "invalid-style" || diag.code === "unknown-style") &&
+            diag.message.includes("endArrow"),
+        ),
+    );
+
+    await assert.rejects(
+      build(
+        <Deck width={960} height={540}>
+          <Slide slideId="text-start-arrow">
+            {/* @ts-expect-error -- testing unknown style on Text */}
+            <Text style={{ startArrow: "triangle" }}>Hello</Text>
+          </Slide>
+        </Deck>,
+      ),
+      (error: unknown) =>
+        error instanceof BuildError &&
+        error.diagnostics.some(
+          (diag) =>
+            (diag.code === "invalid-style" || diag.code === "unknown-style") &&
+            diag.message.includes("startArrow"),
+        ),
+    );
+
+    await assert.rejects(
+      build(
+        <Deck width={960} height={540}>
+          <Slide slideId="text-end-arrow">
+            {/* @ts-expect-error -- testing unknown style on Text */}
+            <Text style={{ endArrow: "triangle" }}>Hello</Text>
+          </Slide>
+        </Deck>,
+      ),
+      (error: unknown) =>
+        error instanceof BuildError &&
+        error.diagnostics.some(
+          (diag) =>
+            (diag.code === "invalid-style" || diag.code === "unknown-style") &&
+            diag.message.includes("endArrow"),
+        ),
+    );
+  });
 });

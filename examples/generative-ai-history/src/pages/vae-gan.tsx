@@ -165,16 +165,11 @@ export function VaeGanPage() {
         width={1280}
         height={720}
         fill={transparent}
-        style={{ borderColor: colors.cobalt, borderWidth: 2 }}
-      />
-      <Shape
-        geometry="triangle"
-        x={1046}
-        y={434}
-        width={16}
-        height={16}
-        fill={colors.cobalt}
-        style={{ rotate: 180 }}
+        style={{
+          borderColor: colors.cobalt,
+          borderWidth: 2,
+          endArrow: "triangle",
+        }}
       />
       <FlowLabel kind="data" x={714} y={448} text="真实样本" width={160} />
       <FlowArrow x={886} y={466} width={40} color={colors.cyan} />
@@ -189,15 +184,11 @@ export function VaeGanPage() {
         width={1280}
         height={720}
         fill={transparent}
-        style={{ borderColor: colors.sun, borderWidth: 2 }}
-      />
-      <Shape
-        geometry="triangle"
-        x={914}
-        y={398}
-        width={16}
-        height={16}
-        fill={colors.sun}
+        style={{
+          borderColor: colors.sun,
+          borderWidth: 2,
+          endArrow: "triangle",
+        }}
       />
       <Text
         x={714}

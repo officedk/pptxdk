@@ -20,4 +20,14 @@ export function SourceDeck() {
   );
 }
 
+export function OverflowDeck() {
+  return (
+    <Deck width={120} height={96}>
+      <Slide slideId="overflow">
+        <Shape testId="overflow-shape" x={100} y={8} width={40} height={32} />
+      </Slide>
+    </Deck>
+  );
+}
+
 export default SourceDeck;

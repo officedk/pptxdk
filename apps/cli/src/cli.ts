@@ -1,4 +1,6 @@
 #!/usr/bin/env node
+import { nodeCliOutput } from "@ykdz/cli-contract/node";
+
 import { runCli } from "./index.ts";
 
 const interrupt = new AbortController();
@@ -9,10 +11,7 @@ try {
   process.exitCode = await runCli({
     argv: process.argv,
     signal: interrupt.signal,
-    write: ({ destination, chunk }) => {
-      const stream = destination === "stdout" ? process.stdout : process.stderr;
-      stream.write(chunk);
-    },
+    write: nodeCliOutput({ stdout: process.stdout, stderr: process.stderr }),
   });
 } finally {
   process.removeListener("SIGINT", onInterrupt);

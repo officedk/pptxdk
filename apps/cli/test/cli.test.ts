@@ -7,6 +7,8 @@ import { join } from "node:path";
 import { validatePptx } from "@react-pptx/validation";
 import { describe, expect, it } from "vitest";
 
+import { runCli } from "../src/index.ts";
+
 const fixture = (name: string) => join(import.meta.dirname, "fixtures", name);
 const cli = join(import.meta.dirname, "../dist/cli.js");
 const waitForClose = (child: ReturnType<typeof spawn>) =>
@@ -258,16 +260,211 @@ describe("react-pptx CLI single export", () => {
   });
 
   it("returns usage status for invalid arguments", async () => {
-    for (const args of [
-      ["--unknown"],
-      ["--embed-fonts"],
-      ["--embed-fonts", "invalid"],
-    ]) {
-      const result = runNode([cli, ...args], import.meta.dirname);
-      expect(result.code).toBe(2);
-      expect(result.stderr).toContain("Usage:");
-      if (args[0] === "--embed-fonts")
-        expect(result.stderr).toContain("full or subset");
+    const help = runNode([cli, "--help"], import.meta.dirname);
+    expect(help.code).toBe(0);
+    expect(help.stdout).toContain("Usage");
+    expect(help.stdout).toContain("react-pptx <entry>");
+    expect(help.stdout).toContain("--embed-fonts <embedFonts>");
+    expect(help.stdout).toContain('(choices: "full", "subset")');
+
+    const unknown = runNode([cli, "--unknown"], import.meta.dirname);
+    expect(unknown.code).toBe(2);
+    expect(JSON.parse(unknown.stderr)).toMatchObject({
+      schemaVersion: "2",
+      command: "reactPptx",
+      kind: "usageFailure",
+      helpArgv: ["react-pptx", "--help"],
+      issues: [{ code: "unknownOption", option: "--unknown", position: 0 }],
+    });
+
+    const missingValue = runNode([cli, "--embed-fonts"], import.meta.dirname);
+    expect(missingValue.code).toBe(2);
+    expect(JSON.parse(missingValue.stderr)).toMatchObject({
+      schemaVersion: "2",
+      command: "reactPptx",
+      kind: "usageFailure",
+      issues: [
+        {
+          code: "missingOptionValue",
+          field: "embedFonts",
+          option: "--embed-fonts",
+          position: 0,
+        },
+      ],
+    });
+
+    const invalidChoice = runNode(
+      [cli, fixture("source deck.tsx"), "--embed-fonts", "invalid"],
+      import.meta.dirname,
+    );
+    expect(invalidChoice.code).toBe(2);
+    expect(JSON.parse(invalidChoice.stderr)).toMatchObject({
+      schemaVersion: "2",
+      command: "reactPptx",
+      kind: "usageFailure",
+      issues: [
+        {
+          code: "invalidFieldChoice",
+          field: "embedFonts",
+          value: "invalid",
+          choices: ["full", "subset"],
+        },
+      ],
+    });
+
+    const invalidTarget = runNode(
+      [cli, fixture("source deck.tsx"), "--target", "invalid"],
+      import.meta.dirname,
+    );
+    expect(invalidTarget.code).toBe(2);
+    expect(JSON.parse(invalidTarget.stderr)).toMatchObject({
+      schemaVersion: "2",
+      command: "reactPptx",
+      kind: "usageFailure",
+      issues: [
+        {
+          code: "invalidFieldChoice",
+          field: "target",
+          value: "invalid",
+          choices: ["transitional", "baseline-only"],
+        },
+      ],
+    });
+  });
+
+  it("projects structured and text contract outcomes and handles output stream failures", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "react-pptx cli "));
+    try {
+      const source = fixture("source deck.tsx");
+      const broken = fixture("broken deck.tsx");
+      const textOut = join(directory, "overflow-text.pptx");
+      const structuredOut = join(directory, "overflow-structured.pptx");
+
+      const runWithMemoryOutput = async (args: readonly string[]) => {
+        let stdout = "";
+        let stderr = "";
+        const code = await runCli({
+          argv: ["node", "react-pptx", ...args],
+          cwd: directory,
+          write: ({ destination, chunk }) => {
+            if (destination === "stdout") stdout += chunk;
+            else stderr += chunk;
+          },
+        });
+        return { code, stdout, stderr };
+      };
+
+      const textWarning = await runWithMemoryOutput([
+        source,
+        "--export",
+        "OverflowDeck",
+        "--out",
+        textOut,
+      ]);
+      expect(textWarning.code).toBe(0);
+      expect(textWarning.stderr).toBe("");
+      expect(textWarning.stdout).toContain(
+        "Warning deck/slide[overflow]/shape[overflow-shape] [overflow]:",
+      );
+      expect(textWarning.stdout).toContain(`Exported deck: ${textOut}`);
+      expect(textWarning.stdout).toContain("Slides: 1");
+
+      const structuredSuccess = await runWithMemoryOutput([
+        source,
+        "--export",
+        "OverflowDeck",
+        "--out",
+        structuredOut,
+        "--output-format",
+        "structured",
+      ]);
+      expect(structuredSuccess.code).toBe(0);
+      expect(structuredSuccess.stderr).toBe("");
+      expect(JSON.parse(structuredSuccess.stdout)).toMatchObject({
+        schemaVersion: "2",
+        command: "reactPptx",
+        kind: "data",
+        variant: "exported",
+        data: {
+          output: structuredOut,
+          slides: 1,
+          warnings: [
+            {
+              path: "deck/slide[overflow]/shape[overflow-shape]",
+              code: "overflow",
+            },
+          ],
+        },
+      });
+
+      const structuredOverwrite = await runWithMemoryOutput([
+        source,
+        "--out",
+        source,
+        "--output-format",
+        "structured",
+      ]);
+      expect(structuredOverwrite.code).toBe(2);
+      expect(structuredOverwrite.stdout).toBe("");
+      expect(JSON.parse(structuredOverwrite.stderr)).toEqual({
+        schemaVersion: "2",
+        command: "reactPptx",
+        kind: "failure",
+        variant: "invalidOutput",
+        data: {
+          entry: source,
+          output: source,
+        },
+      });
+
+      const structuredBuildFailure = await runWithMemoryOutput([
+        broken,
+        "--out",
+        join(directory, "never.pptx"),
+        "--output-format",
+        "structured",
+      ]);
+      expect(structuredBuildFailure.code).toBe(1);
+      expect(structuredBuildFailure.stdout).toBe("");
+      expect(JSON.parse(structuredBuildFailure.stderr)).toMatchObject({
+        schemaVersion: "2",
+        command: "reactPptx",
+        kind: "failure",
+        variant: "buildFailed",
+        data: {
+          diagnostics: [
+            {
+              path: "deck/slide[broken]/shape[broken-shape]",
+              code: "invalid-coordinate",
+            },
+          ],
+        },
+      });
+
+      const brokenPipeCode = await runCli({
+        argv: ["node", "react-pptx", "--help"],
+        cwd: directory,
+        write: async () => {
+          throw Object.assign(new Error("broken pipe"), { code: "EPIPE" });
+        },
+      });
+      expect(brokenPipeCode).toBe(0);
+
+      let diagnosticStderr = "";
+      const writeFailureCode = await runCli({
+        argv: ["node", "react-pptx", "--help"],
+        cwd: directory,
+        write: async ({ destination, chunk }) => {
+          if (destination === "stdout") {
+            throw new Error("disk full");
+          }
+          diagnosticStderr += chunk;
+        },
+      });
+      expect(writeFailureCode).toBe(70);
+      expect(diagnosticStderr).toContain("Command execution failed");
+    } finally {
+      await rm(directory, { recursive: true, force: true });
     }
   });
 });

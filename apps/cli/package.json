@@ -31,7 +31,9 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@react-pptx/react-pptx": "workspace:*"
+    "@react-pptx/react-pptx": "workspace:*",
+    "@ykdz/cli-contract": "catalog:",
+    "zod": "catalog:"
   },
   "devDependencies": {
     "@react-pptx/tooling-config": "workspace:*",

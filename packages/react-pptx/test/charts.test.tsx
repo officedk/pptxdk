@@ -465,7 +465,7 @@ describe("native Cartesian charts", () => {
             dataLabels={{
               value: true,
               category: true,
-              position: "outsideEnd",
+              position: "insideBase",
               style: {
                 fontSize: "12pt",
                 lineHeight: "20pt",
@@ -598,7 +598,7 @@ describe("native Cartesian charts", () => {
     assert.ok(columnXml.includes('<a:srgbClr val="888888"/>'));
     assert.ok(columnXml.includes('<a:srgbClr val="FFFFFF"/>'));
     assert.ok(columnXml.includes("<c:dLbl>"));
-    assert.ok(columnXml.includes('<c:dLblPos val="outEnd"/>'));
+    assert.ok(columnXml.includes('<c:dLblPos val="inBase"/>'));
     assert.ok(columnXml.includes('<a:bodyPr anchor="ctr"/>'));
     assert.ok(columnXml.includes('<a:lnSpc><a:spcPts val="2000"/></a:lnSpc>'));
     assert.ok(
@@ -695,7 +695,6 @@ describe("native Cartesian charts", () => {
             dataLabels={{
               value: true,
               category: true,
-              position: "center",
             }}
           />
         </Slide>
@@ -759,7 +758,9 @@ describe("native Cartesian charts", () => {
     assert.ok(doughnutXml.includes('<c:explosion val="400"/>'));
     assert.ok(doughnutXml.includes('<c:firstSliceAng val="360"/>'));
     assert.ok(doughnutXml.includes('<c:holeSize val="90"/>'));
-    assert.ok(doughnutXml.includes('<c:dLblPos val="ctr"/>'));
+    assert.ok(!doughnutXml.includes("<c:dLblPos"));
+    assert.ok(doughnutXml.includes('<c:showVal val="1"/>'));
+    assert.ok(doughnutXml.includes('<c:showCatName val="1"/>'));
     assert.ok(!doughnutXml.includes("<c:legend>"));
     assert.ok(!doughnutXml.includes("<c:catAx"));
     assert.ok(!doughnutXml.includes("<c:valAx"));
@@ -906,6 +907,7 @@ describe("native Cartesian charts", () => {
     const invalidCases: {
       readonly testId: string;
       readonly code: string;
+      readonly message?: string;
       readonly props: ChartProps;
     }[] = [
       {
@@ -973,9 +975,65 @@ describe("native Cartesian charts", () => {
           stacking: "stacked",
         } as unknown as ChartProps,
       },
+      {
+        testId: "doughnut-label-position",
+        code: "invalid-data-labels",
+        message:
+          "Office does not allow dLblPos for doughnutChart series data labels",
+        props: {
+          ...base,
+          kind: "doughnut",
+          dataLabels: { value: true, position: "bestFit" },
+        } as unknown as ChartProps,
+      },
+      {
+        testId: "pie-inside-base-label-position",
+        code: "invalid-data-labels",
+        message:
+          'Office does not allow dLblPos="inBase" for pieChart series data labels',
+        props: {
+          ...base,
+          kind: "pie",
+          dataLabels: { value: true, position: "insideBase" },
+        } as unknown as ChartProps,
+      },
+      {
+        testId: "column-best-fit-label-position",
+        code: "invalid-data-labels",
+        message:
+          'Office does not allow dLblPos="bestFit" for barChart series data labels',
+        props: {
+          ...base,
+          kind: "column",
+          dataLabels: { value: true, position: "bestFit" },
+        } as unknown as ChartProps,
+      },
+      {
+        testId: "stacked-column-outside-end-label-position",
+        code: "invalid-data-labels",
+        message:
+          'Office does not allow dLblPos="outEnd" for stacked barChart series data labels',
+        props: {
+          ...base,
+          kind: "column",
+          stacking: "stacked",
+          dataLabels: { value: true, position: "outsideEnd" },
+        } as unknown as ChartProps,
+      },
+      {
+        testId: "line-explicit-data-label-position",
+        code: "invalid-data-labels",
+        message:
+          "Chart generation does not expose explicit data label positions for line charts",
+        props: {
+          ...base,
+          kind: "line",
+          dataLabels: { value: true, position: "center" },
+        } as unknown as ChartProps,
+      },
     ];
 
-    for (const { testId, code, props } of invalidCases) {
+    for (const { testId, code, message, props } of invalidCases) {
       await assert.rejects(
         build(
           <Deck>
@@ -987,6 +1045,9 @@ describe("native Cartesian charts", () => {
         (error: unknown) => {
           assert.ok(error instanceof BuildError);
           assert.equal(error.diagnostics[0]?.code, code);
+          if (message !== undefined) {
+            assert.equal(error.diagnostics[0]?.message, message);
+          }
           assert.match(
             error.diagnostics[0]?.path ?? "",
             new RegExp(`chart\\[${testId}\\]`, "u"),
@@ -995,6 +1056,108 @@ describe("native Cartesian charts", () => {
         },
       );
     }
+  });
+
+  it("validates data label positions by chart group and series ancestor", async () => {
+    const result = await build(
+      <Deck>
+        <Slide slideId="chart-label-position-context">
+          <Chart
+            testId="line-label-position"
+            kind="line"
+            x={0}
+            y={0}
+            width={200}
+            height={120}
+            data={{ categories: ["A"], series: [{ name: "S", values: [1] }] }}
+            dataLabels={{ value: true }}
+          />
+          <Chart
+            testId="clustered-label-position"
+            kind="column"
+            x={220}
+            y={0}
+            width={200}
+            height={120}
+            data={{ categories: ["A"], series: [{ name: "S", values: [1] }] }}
+            dataLabels={{ value: true, position: "outsideEnd" }}
+          />
+          <Chart
+            testId="doughnut-label-position"
+            kind="doughnut"
+            x={440}
+            y={0}
+            width={200}
+            height={120}
+            data={{ categories: ["A"], series: [{ name: "S", values: [1] }] }}
+            dataLabels={{ value: true }}
+          />
+        </Slide>
+      </Deck>,
+    );
+    const originalParts = unzipSync(result.pptx);
+    assert.deepEqual((await validatePptx(result.pptx)).errors, []);
+    const linePath = "ppt/charts/chart1.xml";
+    const clusteredPath = "ppt/charts/chart2.xml";
+    const doughnutPath = "ppt/charts/chart3.xml";
+    const lineXml = strFromU8(originalParts[linePath]!);
+    const clusteredXml = strFromU8(originalParts[clusteredPath]!);
+    const doughnutXml = strFromU8(originalParts[doughnutPath]!);
+    const lineWithValidPositions = lineXml
+      .replace("<c:showLegendKey", '<c:dLblPos val="l"/><c:showLegendKey')
+      .replace(
+        "</c:ser><c:marker",
+        '</c:ser><c:dLbls><c:dLblPos val="bestFit"/></c:dLbls><c:marker',
+      );
+    assert.notEqual(lineWithValidPositions, lineXml);
+    const validParts = unzipSync(result.pptx);
+    validParts[linePath] = strToU8(lineWithValidPositions);
+    assert.deepEqual((await validatePptx(zipSync(validParts))).errors, []);
+
+    const lineWithInvalidSeriesPosition = lineXml.replace(
+      "<c:showLegendKey",
+      '<c:dLblPos val="bestFit"/><c:showLegendKey',
+    );
+    assert.notEqual(lineWithInvalidSeriesPosition, lineXml);
+    const invalidLineParts = unzipSync(result.pptx);
+    invalidLineParts[linePath] = strToU8(lineWithInvalidSeriesPosition);
+    const invalidLine = await validatePptx(zipSync(invalidLineParts));
+    assert.ok(
+      invalidLine.errors.some(
+        ({ code, part }) =>
+          code === "invalid-data-label-position" && part === linePath,
+      ),
+    );
+
+    const stackedWithInvalidPosition = clusteredXml.replace(
+      '<c:grouping val="clustered"/>',
+      '<c:grouping val="stacked"/>',
+    );
+    assert.notEqual(stackedWithInvalidPosition, clusteredXml);
+    const invalidStackedParts = unzipSync(result.pptx);
+    invalidStackedParts[clusteredPath] = strToU8(stackedWithInvalidPosition);
+    const invalidStacked = await validatePptx(zipSync(invalidStackedParts));
+    assert.ok(
+      invalidStacked.errors.some(
+        ({ code, part }) =>
+          code === "invalid-data-label-position" && part === clusteredPath,
+      ),
+    );
+
+    const doughnutWithInvalidPosition = doughnutXml.replace(
+      "<c:showLegendKey",
+      '<c:dLblPos val="ctr"/><c:showLegendKey',
+    );
+    assert.notEqual(doughnutWithInvalidPosition, doughnutXml);
+    const invalidDoughnutParts = unzipSync(result.pptx);
+    invalidDoughnutParts[doughnutPath] = strToU8(doughnutWithInvalidPosition);
+    const invalidDoughnut = await validatePptx(zipSync(invalidDoughnutParts));
+    assert.ok(
+      invalidDoughnut.errors.some(
+        ({ code, part }) =>
+          code === "invalid-data-label-position" && part === doughnutPath,
+      ),
+    );
   });
 
   it("reports broken chart-to-workbook part relationships", async () => {
@@ -1211,6 +1374,52 @@ describe("native Cartesian charts", () => {
   });
 
   it("rejects invalid data and inapplicable parameter combinations with located build errors", async () => {
+    const invalidDoughnutLabels: ChartProps = {
+      kind: "doughnut",
+      data: { categories: ["A"], series: [{ name: "S", values: [1] }] },
+      // @ts-expect-error -- doughnut chart groups do not allow explicit label positions
+      dataLabels: { position: "center" },
+    };
+    // @ts-expect-error -- pie chart groups do not allow insideBase labels
+    const invalidPieLabels: ChartProps = {
+      kind: "pie",
+      data: { categories: ["A"], series: [{ name: "S", values: [1] }] },
+      dataLabels: { position: "insideBase" },
+    };
+    // @ts-expect-error -- bestFit labels are unsupported for bar chart groups
+    const invalidColumnLabels: ChartProps = {
+      kind: "column",
+      data: { categories: ["A"], series: [{ name: "S", values: [1] }] },
+      dataLabels: { position: "bestFit" },
+    };
+    // @ts-expect-error -- stacked bar chart groups do not allow outsideEnd labels
+    const invalidStackedColumnLabels: ChartProps = {
+      kind: "column",
+      stacking: "stacked",
+      data: { categories: ["A"], series: [{ name: "S", values: [1] }] },
+      dataLabels: { position: "outsideEnd" },
+    };
+    const invalidLineLabels: ChartProps = {
+      kind: "line",
+      data: { categories: ["A"], series: [{ name: "S", values: [1] }] },
+      // @ts-expect-error -- line chart data label positions are not exposed by Chart
+      dataLabels: { position: "center" },
+    };
+    const invalidAreaLabels: ChartProps = {
+      kind: "area",
+      data: { categories: ["A"], series: [{ name: "S", values: [1] }] },
+      // @ts-expect-error -- area chart groups do not allow explicit label positions
+      dataLabels: { position: "insideEnd" },
+    };
+    void [
+      invalidDoughnutLabels,
+      invalidPieLabels,
+      invalidColumnLabels,
+      invalidStackedColumnLabels,
+      invalidLineLabels,
+      invalidAreaLabels,
+    ];
+
     await assert.rejects(
       build(
         <Deck>

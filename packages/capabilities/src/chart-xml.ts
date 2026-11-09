@@ -206,11 +206,7 @@ function dataLabels(
     outsideEnd: "outEnd",
     bestFit: "bestFit",
   } as const;
-  const hasPosition =
-    kind === "column" ||
-    kind === "bar" ||
-    kind === "pie" ||
-    kind === "doughnut";
+  const hasPosition = kind === "column" || kind === "bar" || kind === "pie";
   const settings = (textStyle: string | undefined) => [
     labels.numberFormat === undefined
       ? undefined

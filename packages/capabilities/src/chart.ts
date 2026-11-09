@@ -90,16 +90,21 @@ export type ChartAxis = {
   readonly style?: ChartTextStyle;
 };
 
-export type ChartDataLabels = {
+type ChartDataLabelPosition =
+  | "center"
+  | "insideEnd"
+  | "insideBase"
+  | "outsideEnd"
+  | "bestFit";
+
+/** Data label settings; ChartProps narrows position by chart group and stacking. */
+export type ChartDataLabels<
+  Position extends ChartDataLabelPosition = ChartDataLabelPosition,
+> = {
   readonly value?: boolean;
   readonly percent?: boolean;
   readonly category?: boolean;
-  readonly position?:
-    | "center"
-    | "insideEnd"
-    | "insideBase"
-    | "outsideEnd"
-    | "bestFit";
+  readonly position?: Position;
   readonly numberFormat?: string;
   readonly style?: ChartTextStyle;
 };
@@ -117,7 +122,6 @@ type ChartBase = MotionProps &
     readonly data: ChartData;
     /** When omitted or false, hides the legend. */
     readonly legend?: false | "top" | "bottom" | "left" | "right";
-    readonly dataLabels?: false | ChartDataLabels;
     /** Internal plot area position relative to chart box, in px. */
     readonly plotArea?: {
       readonly left: number;
@@ -130,9 +134,30 @@ type ChartBase = MotionProps &
   };
 
 type CartesianOptions = {
-  readonly stacking?: "stacked" | "percent";
   readonly valueAxis?: ChartAxis;
   readonly categoryAxis?: ChartAxis;
+};
+
+type DataLabelsWithoutPosition =
+  | false
+  | (Omit<ChartDataLabels, "position"> & { readonly position?: never });
+
+type ColumnOrBarUnstackedOptions = {
+  readonly stacking?: undefined;
+  readonly dataLabels?:
+    | false
+    | ChartDataLabels<"center" | "insideEnd" | "insideBase" | "outsideEnd">;
+};
+
+type ColumnOrBarStackedOptions = {
+  readonly stacking: "stacked" | "percent";
+  readonly dataLabels?:
+    | false
+    | ChartDataLabels<"center" | "insideEnd" | "insideBase">;
+};
+
+type CartesianStacking = {
+  readonly stacking?: "stacked" | "percent";
 };
 
 export type ColumnOrBarChartProps = ChartBase &
@@ -142,10 +167,14 @@ export type ColumnOrBarChartProps = ChartBase &
     readonly gapWidth?: number;
     /** Overlap percentage for bars in the same group, range -100–100. */
     readonly overlap?: number;
-  };
+  } & (ColumnOrBarUnstackedOptions | ColumnOrBarStackedOptions);
 
 export type LineOrAreaChartProps = ChartBase &
-  CartesianOptions & { readonly kind: "line" | "area" };
+  CartesianOptions &
+  CartesianStacking & {
+    readonly kind: "line" | "area";
+    readonly dataLabels?: DataLabelsWithoutPosition;
+  };
 
 type PieOptions = {
   /**
@@ -157,13 +186,20 @@ type PieOptions = {
   readonly firstSliceAngle?: number;
 };
 
-export type PieChartProps = ChartBase & PieOptions & { readonly kind: "pie" };
+export type PieChartProps = ChartBase &
+  PieOptions & {
+    readonly kind: "pie";
+    readonly dataLabels?:
+      | false
+      | ChartDataLabels<"center" | "insideEnd" | "outsideEnd" | "bestFit">;
+  };
 
 export type DoughnutChartProps = ChartBase &
   PieOptions & {
     readonly kind: "doughnut";
     /** Percentage size of doughnut chart center hole, range 10–90. */
     readonly holeSize?: number;
+    readonly dataLabels?: DataLabelsWithoutPosition;
   };
 
 export type ChartProps =
@@ -610,6 +646,7 @@ function chartData(value: unknown, kind: ChartKind): ChartData {
 function labels(
   value: unknown,
   kind: ChartKind,
+  stacking?: "stacked" | "percent",
 ): false | ChartDataLabels | undefined {
   if (value === undefined || value === false) return value;
   if (!isRecord(value))
@@ -637,12 +674,36 @@ function labels(
     position !== undefined &&
     kind !== "column" &&
     kind !== "bar" &&
-    kind !== "pie" &&
-    kind !== "doughnut"
+    kind !== "pie"
+  ) {
+    const reason =
+      kind === "doughnut"
+        ? "Office does not allow dLblPos for doughnutChart series data labels"
+        : kind === "area"
+          ? "Office does not allow dLblPos for areaChart series data labels"
+          : "Chart generation does not expose explicit data label positions for line charts";
+    fail("invalid-data-labels", reason);
+  }
+  if (kind === "pie" && position === "insideBase") {
+    fail(
+      "invalid-data-labels",
+      'Office does not allow dLblPos="inBase" for pieChart series data labels',
+    );
+  }
+  if ((kind === "column" || kind === "bar") && position === "bestFit") {
+    fail(
+      "invalid-data-labels",
+      'Office does not allow dLblPos="bestFit" for barChart series data labels',
+    );
+  }
+  if (
+    (kind === "column" || kind === "bar") &&
+    stacking !== undefined &&
+    position === "outsideEnd"
   ) {
     fail(
       "invalid-data-labels",
-      `${kind} chart does not support specifying data label position`,
+      'Office does not allow dLblPos="outEnd" for stacked barChart series data labels',
     );
   }
   const numberFormat = value["numberFormat"];
@@ -1292,11 +1353,11 @@ export const chartCapability: ObjectCapabilityModule = {
       );
     }
 
-    const labelsValue = labels(input.props["dataLabels"], chartKind);
     const stack = input.props["stacking"];
     if (stack !== undefined && stack !== "stacked" && stack !== "percent") {
       fail("invalid-stacking", "Chart.stacking must be stacked or percent");
     }
+    const labelsValue = labels(input.props["dataLabels"], chartKind, stack);
 
     const gapWidth = input.props["gapWidth"];
     if (

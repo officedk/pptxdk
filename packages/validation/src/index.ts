@@ -2507,6 +2507,27 @@ function readEmbeddedWorkbook(
   };
 }
 
+function officeAllowsSeriesDataLabelPosition(
+  chartType: string | null,
+  grouping: string,
+  position: string,
+): boolean {
+  if (chartType === "pieChart") {
+    return ["bestFit", "outEnd", "inEnd", "ctr"].includes(position);
+  }
+  if (chartType === "barChart") {
+    const supported = ["ctr", "inEnd", "inBase"];
+    if (grouping !== "stacked" && grouping !== "percentStacked") {
+      supported.push("outEnd");
+    }
+    return supported.includes(position);
+  }
+  if (chartType === "lineChart") {
+    return ["l", "r", "b", "t", "ctr"].includes(position);
+  }
+  return false;
+}
+
 function validateChart(
   frame: XmlElement,
   part: string,
@@ -2698,6 +2719,47 @@ function validateChart(
     readonly values: string;
   }[] = [];
   for (const typeNode of typeNodes) {
+    const typeGrouping = attribute(
+      first(typeNode, chartNamespace, "grouping") ?? typeNode,
+      "val",
+    );
+    for (const positionNode of descendantsByName(
+      typeNode,
+      chartNamespace,
+      "dLblPos",
+    )) {
+      let ancestor = positionNode.parentNode;
+      let hasSeriesAncestor = false;
+      while (ancestor !== null && ancestor !== typeNode) {
+        if (
+          ancestor.nodeType === 1 &&
+          ancestor.namespaceURI === chartNamespace &&
+          ancestor.localName === "ser"
+        ) {
+          hasSeriesAncestor = true;
+          break;
+        }
+        ancestor = ancestor.parentNode;
+      }
+      // MS-OI29500 §2.1.1456 applies chart-group restrictions only below c:ser.
+      if (!hasSeriesAncestor) continue;
+
+      const posVal = attribute(positionNode, "val");
+      if (
+        !officeAllowsSeriesDataLabelPosition(
+          typeNode.localName,
+          typeGrouping,
+          posVal,
+        )
+      ) {
+        issue(
+          errors,
+          chartPart,
+          "invalid-data-label-position",
+          `Office does not allow dLblPos="${posVal}" in ${typeNode.localName ?? ""}`,
+        );
+      }
+    }
     for (const chartSeries of elements(typeNode, chartNamespace, "ser")) {
       const title = first(chartSeries, chartNamespace, "tx");
       const nameCache = chartStringCache(

@@ -13,6 +13,7 @@ import {
 } from "@react-pptx/react-pptx";
 
 import {
+  EnteredShapeText,
   MetricCard,
   PanelCard,
   SemanticTag,
@@ -234,7 +235,7 @@ export function DualPipePage() {
         <Step>
           <MotionScope scope={overlapScope} mode="stagger" each={110}>
             {overlapSubStages.map((row, rIdx) => (
-              <Shape
+              <EnteredShapeText
                 key={row.lane}
                 testId={`dualpipe-lane-${rIdx}`}
                 x={710}
@@ -242,7 +243,7 @@ export function DualPipePage() {
                 width={122}
                 height={36}
                 fill={rIdx === 0 ? colors.computeSoft : colors.commSoft}
-                style={{
+                shapeStyle={{
                   borderColor: rIdx === 0 ? colors.compute : colors.comm,
                   borderWidth: 1,
                 }}
@@ -258,7 +259,7 @@ export function DualPipePage() {
             ))}
             {overlapSubStages.flatMap((row, rIdx) =>
               row.items.map((item, iIdx) => (
-                <Shape
+                <EnteredShapeText
                   key={`${rIdx}-${iIdx}`}
                   testId={`dualpipe-overlap-${rIdx}-${iIdx}`}
                   x={item.x}

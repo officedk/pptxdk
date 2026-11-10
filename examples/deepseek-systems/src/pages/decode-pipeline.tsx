@@ -11,6 +11,7 @@ import {
 } from "@react-pptx/react-pptx";
 
 import {
+  EnteredShapeText,
   MetricCard,
   PanelCard,
   Rule,
@@ -280,7 +281,7 @@ export function DecodePipelinePage({ scope }: { readonly scope: MorphScope }) {
             {fiveStages.map((s, idx) => {
               const colX = 222 + idx * 198;
               return (
-                <Shape
+                <EnteredShapeText
                   key={`head-${s.step}`}
                   testId={`decode-stage-head-${idx}`}
                   x={colX}
@@ -305,7 +306,7 @@ export function DecodePipelinePage({ scope }: { readonly scope: MorphScope }) {
               const colX = 222 + idx * 198;
               const mbAIsComm = s.mbA.includes("IBGDA");
               return (
-                <Shape
+                <EnteredShapeText
                   key={`mba-${s.step}`}
                   testId={`decode-stage-mba-${idx}`}
                   x={colX}
@@ -328,7 +329,7 @@ export function DecodePipelinePage({ scope }: { readonly scope: MorphScope }) {
               const colX = 222 + idx * 198;
               const mbBIsComm = s.mbB.includes("IBGDA");
               return (
-                <Shape
+                <EnteredShapeText
                   key={`mbb-${s.step}`}
                   testId={`decode-stage-mbb-${idx}`}
                   x={colX}

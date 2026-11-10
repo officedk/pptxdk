@@ -159,11 +159,12 @@ export function MlaMoeEfficiencyPage() {
           height={272}
           style={{ fontFamily: "body", fontSize: 12, color: colors.ink }}
           data={{
+            // Keep full model names and parameter counts visible on narrow category axes.
             categories: [
-              "DeepSeek-V2 (21B/236B)",
-              "DeepSeek-V3 (37B/671B)",
-              "Qwen-2.5 72B (Dense)",
-              "LLaMA-3.1 405B (Dense)",
+              "DeepSeek-V2\n(21B/236B)",
+              "DeepSeek-V3\n(37B/671B)",
+              "Qwen-2.5 72B\n(Dense)",
+              "LLaMA-3.1 405B\n(Dense)",
             ],
             series: [
               {

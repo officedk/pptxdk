@@ -1,4 +1,15 @@
-import { Shape, Text, preset } from "@react-pptx/react-pptx";
+import {
+  MotionScope,
+  Shape,
+  Text,
+  preset,
+  useMotionScope,
+} from "@react-pptx/react-pptx";
+import type {
+  EntranceEffectDeclaration,
+  ShapeProps,
+  TextStyle,
+} from "@react-pptx/react-pptx";
 import type { ReactNode } from "react";
 
 import { colors } from "../theme.ts";
@@ -55,6 +66,59 @@ export function Rule({
   readonly color?: string;
 }) {
   return <Shape x={x} y={y} width={width} height={height} fill={color} />;
+}
+
+/** Keeps a separately editable fill and label on one entrance moment in its parent's stagger. */
+export function EnteredShapeText({
+  testId,
+  x,
+  y,
+  width,
+  height,
+  fill,
+  shapeStyle,
+  text,
+  textStyle,
+  enter,
+}: {
+  readonly testId: string;
+  readonly x: number;
+  readonly y: number;
+  readonly width: number;
+  readonly height: number;
+  readonly fill: NonNullable<ShapeProps["fill"]>;
+  readonly shapeStyle?: NonNullable<ShapeProps["style"]>;
+  readonly text: string;
+  readonly textStyle: TextStyle;
+  readonly enter: EntranceEffectDeclaration;
+}) {
+  const scope = useMotionScope();
+
+  return (
+    <MotionScope scope={scope}>
+      <Shape
+        testId={`${testId}-background`}
+        x={x}
+        y={y}
+        width={width}
+        height={height}
+        fill={fill}
+        {...(shapeStyle === undefined ? {} : { style: shapeStyle })}
+        enter={enter}
+      />
+      <Text
+        testId={testId}
+        x={x}
+        y={y}
+        width={width}
+        height={height}
+        style={textStyle}
+        enter={enter}
+      >
+        {text}
+      </Text>
+    </MotionScope>
+  );
 }
 
 /** Elevated wafer-white surface panel with 1px structural hairline border and optional top/left semantic accent bar. */

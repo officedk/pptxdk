@@ -28,7 +28,7 @@ export function MlaMoeEfficiencyPage() {
         <Chart
           testId="mla-kv-cache-chart"
           kind="bar"
-          enter={wipe({ by: "category", from: "left", duration: 460 })}
+          enter={wipe({ from: "left", duration: 460 })}
           x={66}
           y={168}
           width={544}
@@ -152,7 +152,7 @@ export function MlaMoeEfficiencyPage() {
         <Chart
           testId="moe-training-flops-chart"
           kind="column"
-          enter={wipe({ by: "category", duration: 460 })}
+          enter={wipe({ duration: 460 })}
           x={662}
           y={168}
           width={552}

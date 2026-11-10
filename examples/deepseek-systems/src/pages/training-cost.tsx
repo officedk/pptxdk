@@ -50,6 +50,7 @@ export function TrainingCostPage() {
       source="数据源：DeepSeek-V3 Technical Report (arXiv:2412.19437) Table 1，按 $2 / H800 GPU 小时租赁价格核算"
     >
       {/* Left Panel: Column Chart + Stacked Percent Bar Chart */}
+      {/* These three charts use one full chart wipe because WPS replayed category cues as repeated full chart wipes. */}
       <PanelCard
         x={48}
         y={108}
@@ -63,7 +64,7 @@ export function TrainingCostPage() {
         <Chart
           testId="training-hours-chart"
           kind="column"
-          enter={wipe({ by: "category", duration: 460 })}
+          enter={wipe({ duration: 460 })}
           x={66}
           y={168}
           width={520}

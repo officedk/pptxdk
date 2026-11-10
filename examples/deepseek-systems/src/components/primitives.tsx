@@ -1,4 +1,5 @@
 import {
+  Group,
   MotionScope,
   Shape,
   Text,
@@ -232,6 +233,7 @@ export function MetricCard({
   tone = "compute",
   dark = false,
   testId,
+  enter,
 }: {
   readonly x: number;
   readonly y: number;
@@ -243,6 +245,7 @@ export function MetricCard({
   readonly tone?: SemanticTone;
   readonly dark?: boolean;
   readonly testId?: string;
+  readonly enter?: EntranceEffectDeclaration;
 }) {
   const palette = tonePalette[tone];
   const valueColor = dark
@@ -252,7 +255,7 @@ export function MetricCard({
         ? colors.commBright
         : colors.computeBright
     : palette.text;
-  return (
+  const card = (
     <>
       <Shape
         {...(testId === undefined ? {} : { testId })}
@@ -310,6 +313,7 @@ export function MetricCard({
       </Text>
     </>
   );
+  return enter === undefined ? card : <Group enter={enter}>{card}</Group>;
 }
 
 /** Semantic pill / tag for pipeline stages, operators, or legend callouts. */

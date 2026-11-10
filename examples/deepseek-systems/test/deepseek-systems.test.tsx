@@ -37,6 +37,92 @@ it("full deck preserves 14 slides, native charts and tables, morph continuity, c
     ],
   );
 
+  const openingSlide = file.slides.find(({ id }) => id === "opening")!;
+  const kpis = [
+    {
+      testId: "opening-kpi-1",
+      label: "单 Token 激活参数 / 总参数量 (MoE)",
+      value: "37B / 671B",
+      caption:
+        "每层 1 共享专家 + 256 路由专家（Top-8 激活），另附 14B MTP 模块",
+    },
+    {
+      testId: "opening-kpi-2",
+      label: "MLA 每 Token KV 缓存显存占用 (BF16)",
+      value: "70.27 KB",
+      caption:
+        "仅为 Qwen-2.5 72B (327.7 KB) 的 21.4%、LLaMA-3.1 405B (516.1 KB) 的 13.6%",
+    },
+    {
+      testId: "opening-kpi-3",
+      label: "14.8T 完整训练 GPU 小时与折算总成本",
+      value: "2.788M h / $5.576M",
+      caption:
+        "按 $2 / H800 小时核算，预训练 2,664K 小时，全程 0 次 Loss 尖峰回滚",
+    },
+    {
+      testId: "opening-kpi-4",
+      label: "24 小时生产环境单节点吞吐与理论成本利润率",
+      value: "73.7k / 14.8k tok/s · 545%",
+      caption:
+        "Prefill 4 节点 EP32 / Decode 18 节点 EP144，日均 226.75 节点服务 608B 输入",
+    },
+  ];
+  const kpiGroups = kpis.map(({ testId, label, value, caption }) => {
+    const groups = openingSlide.objects.filter(
+      (object) =>
+        object.kind === "group" &&
+        object.members?.some((member) => member.name === testId),
+    );
+    assert.equal(groups.length, 1, `${testId} should be one native group`);
+
+    const [group] = groups;
+    assert.ok(group);
+    assert.deepEqual(
+      group.members
+        ?.filter((member) => member.text !== undefined)
+        .map((member) => member.text?.text),
+      [label, value, caption],
+      `${testId} should keep all card text in its animated group`,
+    );
+    assert.equal(
+      group.members?.filter(
+        (member) => member.kind === "shape" && member.text === undefined,
+      ).length,
+      2,
+      `${testId} should group its background and accent`,
+    );
+
+    return group.id;
+  });
+  const kpiEffects = (openingSlide.animations ?? []).flatMap((step) =>
+    step.effects
+      .filter((effect) => kpiGroups.includes(effect.targetId))
+      .map((effect) => ({ trigger: step.trigger, effect })),
+  );
+  assert.equal(kpiEffects.length, 4);
+  assert.deepEqual(
+    kpiEffects
+      .map(({ trigger, effect }) => [
+        trigger,
+        effect.preset,
+        effect.durationMs,
+        effect.delayMs,
+      ])
+      .sort((left, right) => Number(left[3]) - Number(right[3])),
+    [
+      ["auto", "floatUp", 420, 0],
+      ["auto", "floatUp", 420, 120],
+      ["auto", "floatUp", 420, 240],
+      ["auto", "floatUp", 420, 360],
+    ],
+  );
+  assert.equal(
+    openingSlide.animations?.some((step) => step.trigger === "click"),
+    false,
+    "KPI entrances should not add a click step",
+  );
+
   for (const slide of file.slides) {
     for (const object of slide.objects) {
       if (object.boxEmu === undefined) continue;

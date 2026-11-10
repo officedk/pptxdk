@@ -229,92 +229,59 @@ export function OpeningPage() {
       </Text>
 
       <MotionScope scope={kpiScope} mode="stagger" each={120}>
-        <Shape
+        <MetricCard
           testId="opening-kpi-1"
           enter={floatUp({ duration: 420 })}
           x={816}
           y={118}
           width={408}
           height={122}
-          fill={colors.obsidianCard}
-          style={{ borderColor: colors.darkLine, borderWidth: 1 }}
+          label="单 Token 激活参数 / 总参数量 (MoE)"
+          value="37B / 671B"
+          caption="每层 1 共享专家 + 256 路由专家（Top-8 激活），另附 14B MTP 模块"
+          tone="compute"
+          dark
         />
-        <Shape
+        <MetricCard
           testId="opening-kpi-2"
           enter={floatUp({ duration: 420 })}
           x={816}
           y={256}
           width={408}
           height={122}
-          fill={colors.obsidianCard}
-          style={{ borderColor: colors.darkLine, borderWidth: 1 }}
+          label="MLA 每 Token KV 缓存显存占用 (BF16)"
+          value="70.27 KB"
+          caption="仅为 Qwen-2.5 72B (327.7 KB) 的 21.4%、LLaMA-3.1 405B (516.1 KB) 的 13.6%"
+          tone="comm"
+          dark
         />
-        <Shape
+        <MetricCard
           testId="opening-kpi-3"
           enter={floatUp({ duration: 420 })}
           x={816}
           y={394}
           width={408}
           height={122}
-          fill={colors.obsidianCard}
-          style={{ borderColor: colors.darkLine, borderWidth: 1 }}
+          label="14.8T 完整训练 GPU 小时与折算总成本"
+          value="2.788M h / $5.576M"
+          caption="按 $2 / H800 小时核算，预训练 2,664K 小时，全程 0 次 Loss 尖峰回滚"
+          tone="copper"
+          dark
         />
-        <Shape
+        <MetricCard
           testId="opening-kpi-4"
           enter={floatUp({ duration: 420 })}
           x={816}
           y={532}
           width={408}
           height={112}
-          fill={colors.obsidianCard}
-          style={{ borderColor: colors.darkLine, borderWidth: 1 }}
+          label="24 小时生产环境单节点吞吐与理论成本利润率"
+          value="73.7k / 14.8k tok/s · 545%"
+          caption="Prefill 4 节点 EP32 / Decode 18 节点 EP144，日均 226.75 节点服务 608B 输入"
+          tone="comm"
+          dark
         />
       </MotionScope>
-
-      <MetricCard
-        x={816}
-        y={118}
-        width={408}
-        height={122}
-        label="单 Token 激活参数 / 总参数量 (MoE)"
-        value="37B / 671B"
-        caption="每层 1 共享专家 + 256 路由专家（Top-8 激活），另附 14B MTP 模块"
-        tone="compute"
-        dark
-      />
-      <MetricCard
-        x={816}
-        y={256}
-        width={408}
-        height={122}
-        label="MLA 每 Token KV 缓存显存占用 (BF16)"
-        value="70.27 KB"
-        caption="仅为 Qwen-2.5 72B (327.7 KB) 的 21.4%、LLaMA-3.1 405B (516.1 KB) 的 13.6%"
-        tone="comm"
-        dark
-      />
-      <MetricCard
-        x={816}
-        y={394}
-        width={408}
-        height={122}
-        label="14.8T 完整训练 GPU 小时与折算总成本"
-        value="2.788M h / $5.576M"
-        caption="按 $2 / H800 小时核算，预训练 2,664K 小时，全程 0 次 Loss 尖峰回滚"
-        tone="copper"
-        dark
-      />
-      <MetricCard
-        x={816}
-        y={532}
-        width={408}
-        height={112}
-        label="24 小时生产环境单节点吞吐与理论成本利润率"
-        value="73.7k / 14.8k tok/s · 545%"
-        caption="Prefill 4 节点 EP32 / Decode 18 节点 EP144，日均 226.75 节点服务 608B 输入"
-        tone="comm"
-        dark
-      />
 
       {/* Footer */}
       <Rule x={56} y={672} width={1168} height={1} color={colors.darkLine} />

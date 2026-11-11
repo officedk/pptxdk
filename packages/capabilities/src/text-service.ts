@@ -1911,6 +1911,64 @@ export function writeChartTextProperties(
   };
 }
 
+/** Emits a native chart or axis title with actual run properties, not canvas text. */
+export function writeChartTitle(
+  text: string,
+  styleValue: unknown,
+  label: string,
+  theme: ThemeContext,
+  embedFonts?: FontEmbeddingMode,
+): Pick<
+  TextServiceResult,
+  "text" | "resourceClaims" | "fontUses" | "warnings"
+> & {
+  readonly xml: string;
+} {
+  const style = readTextStyle(styleValue, label, theme);
+  const runStyle: RunStyle = {
+    fontFamily: style.fontFamily,
+    fontSize: style.fontSize,
+    fontWeight: style.fontWeight,
+    fontStyle: style.fontStyle,
+    color: style.color,
+    themeFont: style.themeFont,
+    letterSpacing: style.letterSpacing,
+    textTransform: style.textTransform,
+    textDecoration: style.textDecoration,
+    textShadow: style.textShadow,
+    lang: style.lang,
+  };
+  validateRunStyle(runStyle);
+  const escapedText = escapedXml(text);
+  const { resourceClaims, fontUses, warnings } = textResourceClaims(
+    [{ text, style: runStyle }],
+    embedFonts,
+  );
+  const runProperties = runPropertiesXml(runStyle, "a:rPr", theme);
+  const defaultProperties = runPropertiesXml(runStyle, "a:defRPr", theme);
+  const lineSpacing =
+    style.lineHeight === undefined
+      ? ""
+      : `<a:lnSpc><a:spcPts val="${spacingCentipoints(positiveLength(style.lineHeight, "lineHeight"), "lineHeight")}"/></a:lnSpc>`;
+  const alignment = alignmentValue(style.align);
+  const paragraphAlignment =
+    alignment === undefined ? "" : ` algn="${alignment}"`;
+  const spacingAfter =
+    style.spacingAfter === undefined || style.spacingAfter === 0
+      ? ""
+      : `<a:spcAft><a:spcPts val="${spacingCentipoints(style.spacingAfter, "spacingAfter")}"/></a:spcAft>`;
+  const endParaLang =
+    runStyle.lang !== undefined ? ` lang="${escapedXml(runStyle.lang)}"` : "";
+  const bodyProperties = `<a:bodyPr anchor="${bodyAnchor(style.verticalAlign)}"/>`;
+  return {
+    xml: `<c:title><c:tx><c:rich>${bodyProperties}<a:lstStyle/><a:p><a:pPr${paragraphAlignment}>${lineSpacing}${spacingAfter}${defaultProperties}</a:pPr><a:r>${runProperties}<a:t>${escapedText}</a:t></a:r><a:endParaRPr${endParaLang}/></a:p></c:rich></c:tx><c:overlay val="0"/><c:txPr>${bodyProperties}<a:lstStyle/><a:p><a:pPr${paragraphAlignment}>${lineSpacing}${spacingAfter}${defaultProperties}</a:pPr><a:endParaRPr${endParaLang}/></a:p></c:txPr></c:title>`,
+    text,
+    resourceClaims,
+    fontUses,
+    warnings,
+  };
+}
+
 /** Converts fixed pixel length into DrawingML EMU. */
 export function textExtent(value: number, label: string): number {
   if (!Number.isFinite(value) || value <= 0) {

@@ -126,10 +126,48 @@ export type FileChartSeries = {
   readonly groupIndex: number;
 };
 
+/** Locally observed data-label settings; absent fields are not set by the XML node. */
+export type FileChartDataLabel = {
+  readonly value?: boolean;
+  readonly percent?: boolean;
+  readonly category?: boolean;
+  readonly position?:
+    | "center"
+    | "insideEnd"
+    | "insideBase"
+    | "outsideEnd"
+    | "bestFit";
+  readonly numberFormat?: string;
+};
+
+/** Effective series labels and local point overrides reconstructed from chart XML. */
+export type FileChartSeriesDataLabels = {
+  readonly seriesIndex: number;
+  /** Series-level settings merged with any chart-group dLbls base. `false` is c:delete. */
+  readonly dataLabels?: false | FileChartDataLabel;
+  /** Point-level c:dLbl overrides by native c:idx. `false` is c:delete. */
+  readonly pointDataLabels?: Readonly<
+    Record<number, false | FileChartDataLabel>
+  >;
+};
+
 export type FileChartAxis = {
   readonly id: number;
   readonly kind: "category" | "value";
   readonly crossAxisId: number;
+  readonly title?: string;
+  readonly orientation?: "minMax" | "maxMin";
+  readonly logBase?: number;
+  readonly min?: number;
+  readonly max?: number;
+  readonly majorUnit?: number;
+  readonly minorUnit?: number;
+  readonly numberFormat?: string;
+  readonly majorTickMark?: string;
+  readonly minorTickMark?: string;
+  readonly tickLabelPosition?: string;
+  readonly crosses?: string;
+  readonly crossesAt?: number;
 };
 
 export type FileChartGroup = {
@@ -146,10 +184,14 @@ export type FileChart = {
   readonly types: readonly string[];
   readonly direction?: "col" | "bar";
   readonly grouping?: string;
+  readonly title?: string;
+  readonly displayBlanksAs?: "gap" | "zero" | "span";
   /** Flattened series in chart-group order and native c:order order. */
   readonly series: readonly FileChartSeries[];
   readonly groups: readonly FileChartGroup[];
   readonly axes: readonly FileChartAxis[];
+  /** Data-label observations in native series order; omitted when no labels are declared. */
+  readonly seriesDataLabels?: readonly FileChartSeriesDataLabels[];
   readonly embeddedWorkbook?: {
     readonly part: string;
     readonly sheetName: string;
@@ -2775,6 +2817,83 @@ function readEmbeddedWorkbook(
   };
 }
 
+function booleanAttribute(
+  element: XmlElement | undefined,
+): boolean | undefined {
+  if (element === undefined) return undefined;
+  const value = attribute(element, "val");
+  if (value === "" || value === "1" || value === "true") return true;
+  if (value === "0" || value === "false") return false;
+  return undefined;
+}
+
+function mergeFileDataLabels(
+  base: false | FileChartDataLabel | undefined,
+  override: false | FileChartDataLabel | undefined,
+): false | FileChartDataLabel | undefined {
+  if (override === undefined) return base;
+  if (override === false) return false;
+  if (base === false || base === undefined) return override;
+  return { ...base, ...override };
+}
+
+function readDataLabelSettings(
+  node: XmlElement | undefined,
+  chartType: string | null,
+  part: string,
+  errors: ValidationIssue[],
+): false | FileChartDataLabel | undefined {
+  if (node === undefined) return undefined;
+  const deleteNode = first(node, chartNamespace, "delete");
+  if (deleteNode !== undefined && booleanAttribute(deleteNode) !== false) {
+    return false;
+  }
+  const settings: {
+    value?: boolean;
+    percent?: boolean;
+    category?: boolean;
+    position?: Exclude<FileChartDataLabel["position"], undefined>;
+    numberFormat?: string;
+  } = {};
+  const numberFormatNode = first(node, chartNamespace, "numFmt");
+  if (numberFormatNode !== undefined) {
+    const numberFormat = attribute(numberFormatNode, "formatCode");
+    if (numberFormat !== "") settings.numberFormat = numberFormat;
+  }
+  const positionNode = first(node, chartNamespace, "dLblPos");
+  if (positionNode !== undefined) {
+    const position = attribute(positionNode, "val");
+    if (position === "ctr") settings.position = "center";
+    else if (position === "inEnd") settings.position = "insideEnd";
+    else if (position === "inBase") settings.position = "insideBase";
+    else if (position === "outEnd") settings.position = "outsideEnd";
+    else if (position === "bestFit") settings.position = "bestFit";
+  }
+  const value = booleanAttribute(first(node, chartNamespace, "showVal"));
+  if (value !== undefined) settings.value = value;
+  const category = booleanAttribute(first(node, chartNamespace, "showCatName"));
+  if (category !== undefined) settings.category = category;
+  const percent = booleanAttribute(first(node, chartNamespace, "showPercent"));
+  if (percent !== undefined) {
+    settings.percent = percent;
+    if (
+      percent &&
+      chartType !== "pieChart" &&
+      chartType !== "doughnutChart" &&
+      chartType !== "ofPieChart" &&
+      chartType !== "pie3DChart"
+    ) {
+      issue(
+        errors,
+        part,
+        "invalid-data-label-percent",
+        `Office does not allow showPercent in ${chartType ?? "this chart type"}`,
+      );
+    }
+  }
+  return settings;
+}
+
 function officeAllowsSeriesDataLabelPosition(
   chartType: string | null,
   grouping: string,
@@ -2794,6 +2913,22 @@ function officeAllowsSeriesDataLabelPosition(
     return ["l", "r", "b", "t", "ctr"].includes(position);
   }
   return false;
+}
+
+function nativeChartTitleText(
+  title: XmlElement | undefined,
+  theme: ThemeTextReader,
+  part: string,
+  errors: ValidationIssue[],
+): string | undefined {
+  if (title === undefined) return undefined;
+  const tx = first(title, chartNamespace, "tx");
+  const rich = tx === undefined ? undefined : first(tx, chartNamespace, "rich");
+  if (rich === undefined) return undefined;
+  const text = elements(rich, drawingNamespace, "p")
+    .map((paragraph) => readParagraph(paragraph, theme, part, errors).text)
+    .join("\n");
+  return text === "" ? undefined : text;
 }
 
 function validateChart(
@@ -3010,6 +3145,7 @@ function validateChart(
   }
   const axes: FileChartAxis[] = [];
   const axisById = new Map<number, FileChartAxis>();
+  const textTheme = themeTextReader(documents);
   for (const axisNode of axisNodes) {
     const id = integerAttribute(first(axisNode, chartNamespace, "axId"), "val");
     const crossAxisId = integerAttribute(
@@ -3034,10 +3170,110 @@ function validateChart(
       );
       continue;
     }
+    const scaling = first(axisNode, chartNamespace, "scaling");
+    const orientation =
+      scaling === undefined
+        ? ""
+        : attribute(
+            first(scaling, chartNamespace, "orientation") ?? scaling,
+            "val",
+          );
+    if (
+      orientation !== "" &&
+      orientation !== "minMax" &&
+      orientation !== "maxMin"
+    ) {
+      issue(
+        errors,
+        chartPart,
+        "invalid-chart-axis",
+        `Chart axis ${id} has an invalid orientation`,
+      );
+    }
+    const logBase =
+      scaling === undefined
+        ? undefined
+        : decimalAttribute(first(scaling, chartNamespace, "logBase"), "val");
+    if (logBase !== undefined && (logBase < 2 || logBase > 1000)) {
+      issue(
+        errors,
+        chartPart,
+        "invalid-chart-axis",
+        `Chart axis ${id} has a logarithmic base outside 2 to 1000`,
+      );
+    }
+    const min =
+      scaling === undefined
+        ? undefined
+        : decimalAttribute(first(scaling, chartNamespace, "min"), "val");
+    const max =
+      scaling === undefined
+        ? undefined
+        : decimalAttribute(first(scaling, chartNamespace, "max"), "val");
+    const majorUnit = decimalAttribute(
+      first(axisNode, chartNamespace, "majorUnit"),
+      "val",
+    );
+    const minorUnit = decimalAttribute(
+      first(axisNode, chartNamespace, "minorUnit"),
+      "val",
+    );
+    const numberFormatNode = first(axisNode, chartNamespace, "numFmt");
+    const numberFormat =
+      numberFormatNode === undefined
+        ? ""
+        : attribute(numberFormatNode, "formatCode");
+    const majorTickMark = attribute(
+      first(axisNode, chartNamespace, "majorTickMark") ?? axisNode,
+      "val",
+    );
+    const minorTickMark = attribute(
+      first(axisNode, chartNamespace, "minorTickMark") ?? axisNode,
+      "val",
+    );
+    const tickLabelPosition = attribute(
+      first(axisNode, chartNamespace, "tickLblPos") ?? axisNode,
+      "val",
+    );
+    const crosses = attribute(
+      first(axisNode, chartNamespace, "crosses") ?? axisNode,
+      "val",
+    );
+    const crossesAt = decimalAttribute(
+      first(axisNode, chartNamespace, "crossesAt"),
+      "val",
+    );
+    const title = nativeChartTitleText(
+      first(axisNode, chartNamespace, "title"),
+      textTheme,
+      chartPart,
+      errors,
+    );
     const axis: FileChartAxis = {
       id,
       kind: axisNode.localName === "catAx" ? "category" : "value",
       crossAxisId,
+      ...(title === undefined ? {} : { title }),
+      ...(orientation === "maxMin" ? { orientation } : {}),
+      ...(logBase === undefined ? {} : { logBase }),
+      ...(min === undefined ? {} : { min }),
+      ...(max === undefined ? {} : { max }),
+      ...(majorUnit === undefined ? {} : { majorUnit }),
+      ...(minorUnit === undefined ? {} : { minorUnit }),
+      ...(numberFormat === "" || numberFormat === "General"
+        ? {}
+        : { numberFormat }),
+      ...(majorTickMark === "" || majorTickMark === "none"
+        ? {}
+        : { majorTickMark }),
+      ...(minorTickMark === "" || minorTickMark === "none"
+        ? {}
+        : { minorTickMark }),
+      ...(tickLabelPosition === "" || tickLabelPosition === "nextTo"
+        ? {}
+        : { tickLabelPosition }),
+      ...(crosses === "" || crosses === "autoZero" ? {} : { crosses }),
+      ...(crossesAt === undefined ? {} : { crossesAt }),
     };
     axes.push(axis);
     axisById.set(id, axis);
@@ -3057,12 +3293,19 @@ function validateChart(
   const series: FileChartSeries[] = [];
   const formulaSeries: ChartFormulaSeries[] = [];
   const groups: FileChartGroup[] = [];
+  const seriesDataLabels: FileChartSeriesDataLabels[] = [];
   const seenSeriesIndexes = new Set<number>();
   const seenSeriesOrders = new Set<number>();
   for (const [groupIndex, typeNode] of typeNodes.entries()) {
     const typeGrouping = attribute(
       first(typeNode, chartNamespace, "grouping") ?? typeNode,
       "val",
+    );
+    const groupDataLabels = readDataLabelSettings(
+      first(typeNode, chartNamespace, "dLbls"),
+      typeNode.localName,
+      chartPart,
+      errors,
     );
     const axisIds = elements(typeNode, chartNamespace, "axId").flatMap(
       (axisId) => {
@@ -3167,6 +3410,7 @@ function validateChart(
       readonly order: number;
       readonly series: FileChartSeries;
       readonly formula: ChartFormulaReference;
+      readonly labels?: FileChartSeriesDataLabels;
     }[] = [];
     for (const chartSeries of elements(typeNode, chartNamespace, "ser")) {
       const index = integerAttribute(
@@ -3243,9 +3487,54 @@ function validateChart(
           "Chart series names, categories, and values counts do not match",
         );
       }
+      const seriesLabelsNode = first(chartSeries, chartNamespace, "dLbls");
+      const seriesLabels = readDataLabelSettings(
+        seriesLabelsNode,
+        typeNode.localName,
+        chartPart,
+        errors,
+      );
+      const effectiveLabels = mergeFileDataLabels(
+        groupDataLabels,
+        seriesLabels,
+      );
+      const pointDataLabels: Record<number, false | FileChartDataLabel> = {};
+      for (const pointLabel of elements(
+        seriesLabelsNode ?? chartSeries,
+        chartNamespace,
+        "dLbl",
+      )) {
+        const pointIndex = integerAttribute(
+          first(pointLabel, chartNamespace, "idx"),
+          "val",
+        );
+        if (pointIndex === undefined || pointIndex < 0) continue;
+        const pointSettings = readDataLabelSettings(
+          pointLabel,
+          typeNode.localName,
+          chartPart,
+          errors,
+        );
+        if (pointSettings === undefined) continue;
+        pointDataLabels[pointIndex] = pointSettings;
+      }
       const name = nameCache.values[0] ?? "";
       pending.push({
         order,
+        ...(effectiveLabels === undefined &&
+        Object.keys(pointDataLabels).length === 0
+          ? {}
+          : {
+              labels: {
+                seriesIndex: index,
+                ...(effectiveLabels === undefined
+                  ? {}
+                  : { dataLabels: effectiveLabels }),
+                ...(Object.keys(pointDataLabels).length === 0
+                  ? {}
+                  : { pointDataLabels }),
+              },
+            }),
         series: {
           name,
           categories: categoryCache.values,
@@ -3264,6 +3553,7 @@ function validateChart(
     pending.sort((left, right) => left.order - right.order);
     for (const item of pending) {
       series.push(item.series);
+      if (item.labels !== undefined) seriesDataLabels.push(item.labels);
       formulaSeries.push({
         series: item.series,
         formula: item.formula,
@@ -3356,15 +3646,49 @@ function validateChart(
     }
   }
   if (boxEmu === undefined) return undefined;
+  const titleText =
+    chart === undefined
+      ? undefined
+      : nativeChartTitleText(
+          first(chart, chartNamespace, "title"),
+          textTheme,
+          chartPart,
+          errors,
+        );
+  const displayBlanksAsNode =
+    chart === undefined
+      ? undefined
+      : first(chart, chartNamespace, "dispBlanksAs");
+  const displayBlanksAsValue =
+    displayBlanksAsNode === undefined
+      ? ""
+      : attribute(displayBlanksAsNode, "val");
+  const displayBlanksAs =
+    displayBlanksAsValue === "gap" ||
+    displayBlanksAsValue === "zero" ||
+    displayBlanksAsValue === "span"
+      ? displayBlanksAsValue
+      : undefined;
+  if (displayBlanksAsValue !== "" && displayBlanksAs === undefined) {
+    issue(
+      errors,
+      chartPart,
+      "invalid-chart-missing-values",
+      "Chart displayBlanksAs must be gap, zero, or span",
+    );
+  }
   const chartObservation: FileChart = {
     types,
     ...(direction === undefined
       ? {}
       : { direction: direction as "bar" | "col" }),
     ...(grouping === undefined || grouping === "" ? {} : { grouping }),
+    ...(titleText === undefined ? {} : { title: titleText }),
+    ...(displayBlanksAs === undefined ? {} : { displayBlanksAs }),
     series,
     groups,
     axes,
+    ...(seriesDataLabels.length === 0 ? {} : { seriesDataLabels }),
     ...(embeddedWorkbook === undefined ? {} : { embeddedWorkbook }),
   };
   return {

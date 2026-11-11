@@ -501,7 +501,14 @@ describe("native Cartesian charts", () => {
       ],
       axes: [
         { id: 111111, kind: "category", crossAxisId: 222222 },
-        { id: 222222, kind: "value", crossAxisId: 111111 },
+        {
+          id: 222222,
+          kind: "value",
+          crossAxisId: 111111,
+          max: 40,
+          majorUnit: 10,
+          numberFormat: "#,##0",
+        },
       ],
       embeddedWorkbook: {
         part: "ppt/embeddings/Microsoft_Excel_Worksheet1.xlsx",
@@ -594,7 +601,6 @@ describe("native Cartesian charts", () => {
                 stacking: "percent",
                 gapWidth: 100,
                 dataLabels: {
-                  percent: true,
                   value: true,
                   category: true,
                   position: "insideEnd",
@@ -701,7 +707,7 @@ describe("native Cartesian charts", () => {
     const columnXml = strFromU8(parts["ppt/charts/chart1.xml"]!);
     assert.ok(columnXml.includes('<c:legendPos val="t"/>'));
     assert.ok(columnXml.includes('<c:gapWidth val="40"/>'));
-    assert.ok(columnXml.includes('<c:overlap val="100"/>'));
+    assert.ok(columnXml.includes('<c:overlap val="-10"/>'));
     assert.ok(columnXml.includes('<c:max val="10"/>'));
     assert.ok(columnXml.includes('<c:majorUnit val="2"/>'));
     assert.ok(columnXml.includes('<a:ln w="9525">'));
@@ -716,9 +722,7 @@ describe("native Cartesian charts", () => {
     assert.ok(columnXml.includes('<a:bodyPr anchor="ctr"/>'));
     assert.ok(columnXml.includes('<a:lnSpc><a:spcPts val="2000"/></a:lnSpc>'));
     assert.ok(
-      strFromU8(parts["ppt/charts/chart2.xml"]!).includes(
-        '<c:showPercent val="1"/>',
-      ),
+      !strFromU8(parts["ppt/charts/chart2.xml"]!).includes("showPercent"),
     );
     assert.ok(
       strFromU8(parts["ppt/charts/chart3.xml"]!).includes("<c:lineChart>"),
@@ -1933,9 +1937,23 @@ describe("native Cartesian charts", () => {
       y: 16,
       width: 420,
       height: 260,
+      title: { text: "Dual entry", style: { fontSize: "14pt" } },
+      displayBlanksAs: "zero",
       axes: {
-        period: { kind: "category" },
-        amount: { kind: "value", min: 0, max: 40, majorUnit: 10 },
+        period: {
+          kind: "category",
+          title: "Period",
+          majorTickMark: "out",
+        },
+        amount: {
+          kind: "value",
+          title: "Amount",
+          min: 0,
+          max: 40,
+          majorUnit: 10,
+          reversed: true,
+          tickLabelPosition: "high",
+        },
       },
       groups: [
         {

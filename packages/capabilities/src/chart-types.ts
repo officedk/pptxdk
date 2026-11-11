@@ -12,10 +12,39 @@ export type ChartTextStyle = Omit<TextStyle, "textWrap">;
 
 export type ChartKind = "column" | "bar" | "line" | "area" | "pie" | "doughnut";
 
+/** Native chart or axis title text with an optional text-style override. */
+export type ChartTitle =
+  | string
+  | {
+      readonly text: string;
+      readonly style?: ChartTextStyle;
+    };
+
+/** Native preset stroke patterns for chart axes, gridlines, series, and points. */
+export type ChartLineDash =
+  | "solid"
+  | "dash"
+  | "dot"
+  | "dashDot"
+  | "longDash"
+  | "longDashDot"
+  | "longDashDotDot";
+
+export type ChartLine = {
+  readonly color?: ColorValue;
+  /** Line width in px. */
+  readonly width?: number;
+  readonly dash?: ChartLineDash;
+};
+
 export type ChartPoint = {
   readonly color?: ColorValue;
+  /** Stroke or border override for this data point. */
+  readonly line?: ChartLine;
   /** Overrides data label text color for this data point. */
   readonly labelColor?: ColorValue;
+  /** Display, position, and number-format overrides for this point's data label. */
+  readonly dataLabels?: false | ChartDataLabelOverride;
 };
 
 export type ChartSeries = {
@@ -24,7 +53,11 @@ export type ChartSeries = {
   readonly values: readonly (number | null)[];
   /** Color of column, area, line, or pie slice. */
   readonly color?: ColorValue;
-  /** Overrides color or data label text color for individual points by position. */
+  /** Stroke or border override; for line charts it controls the series line. */
+  readonly line?: ChartLine;
+  /** Display, position, and number-format overrides for this series' data labels. */
+  readonly dataLabels?: false | ChartDataLabelOverride;
+  /** Overrides color, line, or data label text color for individual points by position. */
   readonly points?: Readonly<Record<number, ChartPoint>>;
 };
 
@@ -41,21 +74,41 @@ export type SharedCategoryData = {
 
 export type ChartGroupData = SharedCategoryData;
 
-export type ChartLine = {
-  readonly color?: ColorValue;
-  /** Line width in px. */
-  readonly width?: number;
-};
+export type ChartTickMark = "none" | "in" | "out" | "cross";
+
+export type ChartTickLabelPosition = "nextTo" | "high" | "low" | "none";
+
+/** Where the crossing axis is placed relative to this axis. */
+export type ChartAxisCrossing = "autoZero" | "max" | "min";
+
+/** Chart-wide rendering of null category values; supported values depend on chart kind and stacking. */
+export type ChartDisplayBlanksAs = "gap" | "zero" | "span";
 
 type ChartAxisBase = {
   /** Whether to show the axis and its labels; defaults to true. */
   readonly visible?: boolean;
   /** Major gridlines; true uses target application default line style. */
   readonly gridlines?: boolean | ChartLine;
+  /** Minor gridlines; true uses target application default line style. */
+  readonly minorGridlines?: boolean | ChartLine;
   /** Axis line; false hides axis line. */
   readonly line?: boolean | ChartLine;
   /** Text style for axis labels. */
   readonly style?: ChartTextStyle;
+  /** Native axis title; omitted declares no axis title. */
+  readonly title?: ChartTitle;
+  /** Major tick marks; defaults to none. */
+  readonly majorTickMark?: ChartTickMark;
+  /** Minor tick marks; defaults to none. */
+  readonly minorTickMark?: ChartTickMark;
+  /** Label position relative to the axis; defaults to nextTo. */
+  readonly tickLabelPosition?: ChartTickLabelPosition;
+  /** Reverses the axis direction with native maxMin orientation. */
+  readonly reversed?: boolean;
+  /** Places the crossing axis using a semantic position. */
+  readonly crosses?: ChartAxisCrossing;
+  /** Places the crossing axis at a value; category axes use a one-based category position. */
+  readonly crossesAt?: number;
 };
 
 export type ChartCategoryAxis = ChartAxisBase & {
@@ -67,8 +120,11 @@ export type ChartValueAxis = ChartAxisBase & {
   readonly min?: number;
   readonly max?: number;
   readonly majorUnit?: number;
+  readonly minorUnit?: number;
   /** Excel number format, e.g. `#,##0`. */
   readonly numberFormat?: string;
+  /** Logarithmic base; only value axes support a logarithmic scale. */
+  readonly logBase?: number;
 };
 
 export type ChartAxis = ChartCategoryAxis | ChartValueAxis;
@@ -100,6 +156,14 @@ export type ChartDataLabels<
   readonly numberFormat?: string;
   readonly style?: ChartTextStyle;
 };
+
+/**
+ * Series- or point-level data-label overrides.
+ *
+ * Omitted display and position fields inherit from the enclosing group or series. An explicit
+ * `false` suppresses labels at that level. Data-label text style remains a group-level field.
+ */
+export type ChartDataLabelOverride = Omit<ChartDataLabels, "style">;
 
 type ChartGroupBase = {
   readonly data: ChartGroupData;
@@ -200,6 +264,10 @@ export type ChartBase = MotionProps &
     readonly axes?: ChartAxes;
     /** Groups are composed in declared order; each group owns its own series. */
     readonly groups: readonly ChartGroup[];
+    /** Native chart title; omitted declares no chart title. */
+    readonly title?: ChartTitle;
+    /** Native chart-wide blank rendering; omitted leaves the chart-kind default. */
+    readonly displayBlanksAs?: ChartDisplayBlanksAs;
     /** When omitted or false, hides the legend. */
     readonly legend?: false | "top" | "bottom" | "left" | "right";
     /** Internal plot area position relative to chart box, in px. */

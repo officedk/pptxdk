@@ -390,6 +390,7 @@ export type { NotesDeclarationProps } from "./notes-declaration.ts";
 export type {
   ChartAxis,
   ChartAxisCrossing,
+  ChartAxisPosition,
   ChartAxisReferences,
   ChartCategoryAxis,
   ChartCategoryAxisReferences,
@@ -420,6 +421,8 @@ export type {
   ChartXYAxisReferences,
   ColumnOrBarChartGroup,
   DoughnutChartGroup,
+  IndependentCategoryData,
+  IndependentCategorySeries,
   LineOrAreaChartGroup,
   PieChartGroup,
   ScatterChartGroup,

@@ -43,6 +43,7 @@ export type {
 export type {
   ChartAxis,
   ChartAxisCrossing,
+  ChartAxisPosition,
   ChartAxisReferences,
   ChartCategoryAxis,
   ChartCategoryAxisReferences,
@@ -73,6 +74,8 @@ export type {
   ChartXYAxisReferences,
   ColumnOrBarChartGroup,
   DoughnutChartGroup,
+  IndependentCategoryData,
+  IndependentCategorySeries,
   LineOrAreaChartGroup,
   PieChartGroup,
   ScatterChartGroup,

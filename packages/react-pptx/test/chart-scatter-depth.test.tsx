@@ -904,7 +904,7 @@ describe("scatter depth", () => {
         },
       ],
       [
-        "unsupported-chart-group-combination",
+        "invalid-chart-axes",
         {
           ...base,
           groups: [

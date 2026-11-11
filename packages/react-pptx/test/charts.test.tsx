@@ -1226,10 +1226,10 @@ describe("native Cartesian charts", () => {
         } as unknown as ChartProps,
       },
       {
-        id: "line-explicit-data-label-position",
+        id: "line-invalid-data-label-position",
         code: "invalid-data-labels",
         message:
-          "Chart generation does not expose explicit data label positions for line charts",
+          'Office does not allow dLblPos="bestFit" for lineChart series data labels',
         props: {
           ...base,
           groups: [
@@ -1237,7 +1237,7 @@ describe("native Cartesian charts", () => {
               kind: "line",
               data,
               series,
-              dataLabels: { value: true, position: "center" },
+              dataLabels: { value: true, position: "bestFit" },
             },
           ],
         } as unknown as ChartProps,
@@ -1682,7 +1682,7 @@ describe("native Cartesian charts", () => {
           kind: "line",
           data: singleData,
           series: singleSeries,
-          dataLabels: { position: "center" },
+          dataLabels: { position: "bestFit" },
         },
       ],
     } as unknown as ChartProps;

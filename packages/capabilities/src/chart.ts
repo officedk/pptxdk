@@ -20,7 +20,7 @@ import {
 } from "@react-pptx/core/capability";
 import { CommonNode } from "@react-pptx/core/document";
 
-import { mergeDataLabels } from "./chart-labels.ts";
+import { chartDataLabelPositions, mergeDataLabels } from "./chart-labels.ts";
 import type {
   ChartAxis,
   ChartAxisCrossing,
@@ -32,6 +32,8 @@ import type {
   ChartKind,
   ChartLine,
   ChartLineDash,
+  ChartMarker,
+  ChartMarkerSymbol,
   ChartPoint,
   ChartProps,
   ChartSeries,
@@ -101,13 +103,7 @@ const chartTextStyleKeys = [
   "textShadow",
   "lang",
 ] as const;
-const positionValues = new Set([
-  "center",
-  "insideEnd",
-  "insideBase",
-  "outsideEnd",
-  "bestFit",
-]);
+const positionValues = new Set(Object.keys(chartDataLabelPositions));
 const lineDashValues = new Set<ChartLineDash>([
   "solid",
   "dash",
@@ -129,6 +125,19 @@ const displayBlanksAsValues = new Set<ChartDisplayBlanksAs>([
   "gap",
   "zero",
   "span",
+]);
+const markerSymbolValues = new Set<ChartMarkerSymbol>([
+  "auto",
+  "circle",
+  "dash",
+  "diamond",
+  "dot",
+  "none",
+  "plus",
+  "square",
+  "star",
+  "triangle",
+  "x",
 ]);
 const cartesianKinds = new Set<ChartKind>(["column", "bar", "line", "area"]);
 
@@ -315,6 +324,71 @@ function lineStyle(value: unknown, label: string): ChartLine | undefined {
     ...(width === undefined ? {} : { width }),
     ...(dash === undefined ? {} : { dash: dash as ChartLineDash }),
   };
+}
+
+function markerStyle(
+  value: unknown,
+  label: string,
+  kind: ChartKind,
+): boolean | ChartMarker | undefined {
+  if (value === undefined) return undefined;
+  if (kind !== "line") {
+    fail(
+      "invalid-marker",
+      `${label} is only applicable to line chart series and points`,
+    );
+  }
+  if (value === true || value === false) return value;
+  if (!isRecord(value)) {
+    fail("invalid-marker", `${label} must be a boolean or marker object`);
+  }
+  onlyKeys(value, ["symbol", "size", "fill", "line"], label);
+  const symbol = value["symbol"];
+  if (
+    symbol !== undefined &&
+    !markerSymbolValues.has(symbol as ChartMarkerSymbol)
+  ) {
+    fail(
+      "invalid-marker",
+      `${label}.symbol must be auto, circle, dash, diamond, dot, none, plus, square, star, triangle, or x`,
+    );
+  }
+  const size = value["size"];
+  if (
+    size !== undefined &&
+    (typeof size !== "number" ||
+      !Number.isSafeInteger(size) ||
+      size < 2 ||
+      size > 72)
+  ) {
+    fail(
+      "invalid-marker",
+      `${label}.size must be an integer between 2 and 72 points`,
+    );
+  }
+  const fill = optionalColor(value["fill"], `${label}.fill`);
+  const line = lineStyle(value["line"], `${label}.line`);
+  return {
+    ...(symbol === undefined ? {} : { symbol: symbol as ChartMarkerSymbol }),
+    ...(size === undefined ? {} : { size }),
+    ...(fill === undefined ? {} : { fill }),
+    ...(line === undefined ? {} : { line }),
+  };
+}
+
+function smoothStyle(
+  value: unknown,
+  label: string,
+  kind: ChartKind,
+): boolean | undefined {
+  if (value === undefined) return undefined;
+  if (kind !== "line") {
+    fail("invalid-smooth", `${label} is only applicable to line chart series`);
+  }
+  if (typeof value !== "boolean") {
+    fail("invalid-smooth", `${label} must be a boolean`);
+  }
+  return value;
 }
 
 function chartTitleValue(
@@ -665,7 +739,17 @@ function chartSeriesList(
     }
     onlyKeys(
       item,
-      ["name", "values", "color", "line", "explosion", "dataLabels", "points"],
+      [
+        "name",
+        "values",
+        "color",
+        "line",
+        "explosion",
+        "dataLabels",
+        "marker",
+        "smooth",
+        "points",
+      ],
       seriesLabel,
     );
     const name = item["name"];
@@ -732,7 +816,14 @@ function chartSeriesList(
         }
         onlyKeys(
           pointValue,
-          ["color", "line", "explosion", "labelColor", "dataLabels"],
+          [
+            "color",
+            "line",
+            "explosion",
+            "marker",
+            "labelColor",
+            "dataLabels",
+          ],
           `Series "${name}" data point ${rawIndex}`,
         );
         const pointColor = optionalColor(
@@ -742,6 +833,11 @@ function chartSeriesList(
         const pointLine = lineStyle(
           pointValue["line"],
           `Series "${name}" data point ${rawIndex}.line`,
+        );
+        const pointMarker = markerStyle(
+          pointValue["marker"],
+          `Series "${name}" data point ${rawIndex}.marker`,
+          kind,
         );
         const labelColor = optionalColor(
           pointValue["labelColor"],
@@ -766,6 +862,7 @@ function chartSeriesList(
           ...(pointExplosion === undefined
             ? {}
             : { explosion: pointExplosion }),
+          ...(pointMarker === undefined ? {} : { marker: pointMarker }),
           ...(labelColor === undefined ? {} : { labelColor }),
           ...(pointLabels === undefined ? {} : { dataLabels: pointLabels }),
         };
@@ -778,6 +875,8 @@ function chartSeriesList(
       `Series "${name}" explosion`,
       kind,
     );
+    const marker = markerStyle(item["marker"], `Series "${name}".marker`, kind);
+    const smooth = smoothStyle(item["smooth"], `Series "${name}".smooth`, kind);
     const seriesLabels = labels(
       item["dataLabels"],
       kind,
@@ -793,6 +892,8 @@ function chartSeriesList(
       ...(line === undefined ? {} : { line }),
       ...(seriesExplosion === undefined ? {} : { explosion: seriesExplosion }),
       ...(seriesLabels === undefined ? {} : { dataLabels: seriesLabels }),
+      ...(marker === undefined ? {} : { marker }),
+      ...(smooth === undefined ? {} : { smooth }),
       ...(points === undefined ? {} : { points }),
     };
   });
@@ -842,41 +943,75 @@ function labels(
         : `${label}.position must be a supported string`,
     );
   }
-  if (
-    position !== undefined &&
-    kind !== "column" &&
-    kind !== "bar" &&
-    kind !== "pie"
-  ) {
-    const reason =
-      kind === "doughnut"
-        ? "Office does not allow dLblPos for doughnutChart series data labels"
-        : kind === "area"
-          ? "Office does not allow dLblPos for areaChart series data labels"
-          : "Chart generation does not expose explicit data label positions for line charts";
-    fail("invalid-data-labels", reason);
-  }
-  if (kind === "pie" && position === "insideBase") {
-    fail(
-      "invalid-data-labels",
-      'Office does not allow dLblPos="inBase" for pieChart series data labels',
-    );
-  }
-  if ((kind === "column" || kind === "bar") && position === "bestFit") {
-    fail(
-      "invalid-data-labels",
-      'Office does not allow dLblPos="bestFit" for barChart series data labels',
-    );
-  }
-  if (
-    (kind === "column" || kind === "bar") &&
-    stacking !== undefined &&
-    position === "outsideEnd"
-  ) {
-    fail(
-      "invalid-data-labels",
-      'Office does not allow dLblPos="outEnd" for stacked barChart series data labels',
-    );
+  if (position !== undefined) {
+    const mapped =
+      chartDataLabelPositions[
+        position as NonNullable<ChartDataLabels["position"]>
+      ];
+    if (kind === "area") {
+      fail(
+        "invalid-data-labels",
+        "Office does not allow dLblPos for areaChart series data labels",
+      );
+    }
+    if (kind === "doughnut") {
+      fail(
+        "invalid-data-labels",
+        "Office does not allow dLblPos for doughnutChart series data labels",
+      );
+    }
+    if (kind === "line") {
+      if (
+        !["left", "right", "bottom", "top", "center"].includes(
+          position as string,
+        )
+      ) {
+        fail(
+          "invalid-data-labels",
+          `Office does not allow dLblPos="${mapped}" for lineChart series data labels`,
+        );
+      }
+    } else if (kind === "pie") {
+      if (position === "insideBase") {
+        fail(
+          "invalid-data-labels",
+          'Office does not allow dLblPos="inBase" for pieChart series data labels',
+        );
+      }
+      if (
+        !["center", "insideEnd", "outsideEnd", "bestFit"].includes(
+          position as string,
+        )
+      ) {
+        fail(
+          "invalid-data-labels",
+          `Office does not allow dLblPos="${mapped}" for pieChart series data labels`,
+        );
+      }
+    } else {
+      if (position === "bestFit") {
+        fail(
+          "invalid-data-labels",
+          'Office does not allow dLblPos="bestFit" for barChart series data labels',
+        );
+      }
+      if (stacking !== undefined && position === "outsideEnd") {
+        fail(
+          "invalid-data-labels",
+          'Office does not allow dLblPos="outEnd" for stacked barChart series data labels',
+        );
+      }
+      const allowed =
+        stacking === undefined
+          ? ["center", "insideEnd", "insideBase", "outsideEnd"]
+          : ["center", "insideEnd", "insideBase"];
+      if (!allowed.includes(position as string)) {
+        fail(
+          "invalid-data-labels",
+          `Office does not allow dLblPos="${mapped}" for barChart series data labels`,
+        );
+      }
+    }
   }
   const numberFormat = value["numberFormat"];
   if (
@@ -2297,6 +2432,8 @@ export type {
   ChartKind,
   ChartLine,
   ChartLineDash,
+  ChartMarker,
+  ChartMarkerSymbol,
   ChartPoint,
   ChartProps,
   ChartSeries,

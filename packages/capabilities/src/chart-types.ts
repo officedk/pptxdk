@@ -37,10 +37,38 @@ export type ChartLine = {
   readonly dash?: ChartLineDash;
 };
 
+/** Native marker symbol; `picture` is excluded until picture markers have a resource contract. */
+export type ChartMarkerSymbol =
+  | "auto"
+  | "circle"
+  | "dash"
+  | "diamond"
+  | "dot"
+  | "none"
+  | "plus"
+  | "square"
+  | "star"
+  | "triangle"
+  | "x";
+
+/** Marker formatting for a line series or one of its points. */
+export type ChartMarker = {
+  /** Marker symbol; defaults to circle when markers are enabled. */
+  readonly symbol?: ChartMarkerSymbol;
+  /** Marker size in points, from 2 to 72. */
+  readonly size?: number;
+  /** Marker fill; omitted leaves the native series or theme default. */
+  readonly fill?: ColorValue;
+  /** Marker outline; omitted leaves the native series or theme default. */
+  readonly line?: ChartLine;
+};
+
 export type ChartPoint = {
   readonly color?: ColorValue;
   /** Stroke or border override for this data point. */
   readonly line?: ChartLine;
+  /** Marker override for this point; applies only to line charts. */
+  readonly marker?: boolean | ChartMarker;
   /**
    * Radial explosion percentage for this pie or doughnut slice.
    * Overrides the series and chart-group defaults for this point.
@@ -67,7 +95,11 @@ export type ChartSeries = {
   readonly explosion?: number;
   /** Display, position, number-format, leader-line, and hide overrides for this series. */
   readonly dataLabels?: false | ChartSeriesDataLabelOverride;
-  /** Overrides color, line, or data label text color for individual points by position. */
+  /** Marker settings; applies only to line charts and is hidden when omitted or false. */
+  readonly marker?: boolean | ChartMarker;
+  /** Whether the line uses the native smoothing flag; applies only to line charts. */
+  readonly smooth?: boolean;
+  /** Overrides color, line, marker, or data label text color for points by position. */
   readonly points?: Readonly<Record<number, ChartPoint>>;
 };
 
@@ -148,12 +180,16 @@ export type ChartAxisReferences = {
   readonly value: string;
 };
 
-type ChartDataLabelPosition =
+export type ChartDataLabelPosition =
   | "center"
   | "insideEnd"
   | "insideBase"
   | "outsideEnd"
-  | "bestFit";
+  | "bestFit"
+  | "left"
+  | "right"
+  | "bottom"
+  | "top";
 
 /**
  * Native data-label settings; group types narrow position by chart kind and stacking.
@@ -237,11 +273,23 @@ export type ColumnOrBarChartGroup = CartesianGroupBase &
       } & ColumnOrBarStackedOptions)
   );
 
-export type LineOrAreaChartGroup = CartesianGroupBase &
+type LineDataLabels =
+  | false
+  | ChartDataLabels<"left" | "right" | "bottom" | "top" | "center">;
+
+export type LineChartGroup = CartesianGroupBase &
   CartesianStacking & {
-    readonly kind: "line" | "area";
+    readonly kind: "line";
+    readonly dataLabels?: LineDataLabels;
+  };
+
+export type AreaChartGroup = CartesianGroupBase &
+  CartesianStacking & {
+    readonly kind: "area";
     readonly dataLabels?: DataLabelsWithoutPosition;
   };
+
+export type LineOrAreaChartGroup = LineChartGroup | AreaChartGroup;
 
 type PieOptions = {
   /**

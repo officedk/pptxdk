@@ -58,7 +58,8 @@ function fileSeries(
   groupIndex = 0,
 ): FileChartSeries[] {
   return series.map((item, index) => ({
-    ...item,
+    name: item.name,
+    values: item.values,
     categories,
     index,
     order: index,

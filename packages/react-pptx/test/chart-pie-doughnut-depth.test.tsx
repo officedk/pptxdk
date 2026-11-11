@@ -42,7 +42,7 @@ async function rejectsWithCode(
     ),
     (error: unknown) => {
       assert.ok(error instanceof BuildError);
-      assert.equal(error.diagnostics[0]?.code, code);
+      assert.equal(error.diagnostics[0]?.code, code, id);
       if (message !== undefined) {
         assert.equal(error.diagnostics[0]?.message, message);
       }
@@ -552,7 +552,9 @@ describe("pie and doughnut depth", () => {
       },
       {
         id: "pie-series-marker",
-        code: "unknown-parameter",
+        code: "invalid-marker",
+        message:
+          'Series "S".marker is only applicable to line chart series and points',
         props: {
           ...base,
           groups: [
@@ -572,7 +574,8 @@ describe("pie and doughnut depth", () => {
       },
       {
         id: "pie-series-smooth",
-        code: "unknown-parameter",
+        code: "invalid-smooth",
+        message: 'Series "S".smooth is only applicable to line chart series',
         props: {
           ...base,
           groups: [

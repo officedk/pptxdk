@@ -1,4 +1,19 @@
-import type { ChartDataLabels } from "./chart-types.ts";
+import type { ChartDataLabelPosition, ChartDataLabels } from "./chart-types.ts";
+
+/** Maps semantic label positions to native c:dLblPos values. */
+export const chartDataLabelPositions: Readonly<
+  Record<ChartDataLabelPosition, string>
+> = {
+  center: "ctr",
+  insideEnd: "inEnd",
+  insideBase: "inBase",
+  outsideEnd: "outEnd",
+  bestFit: "bestFit",
+  left: "l",
+  right: "r",
+  bottom: "b",
+  top: "t",
+};
 
 /**
  * Merges a more local data-label declaration over its inherited settings.

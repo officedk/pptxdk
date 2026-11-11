@@ -169,6 +169,8 @@ export type ThemeContext = {
   readonly theme: Theme;
   readonly textStyle: TextStyle;
   with(scope?: ThemeScope, style?: TextStyle): ThemeContext;
+  /** Replaces the accumulated container text defaults while retaining the same theme scope chain. */
+  withTextStyle(style: TextStyle): ThemeContext;
   resolveColor(value: ColorValue): ResolvedColor;
   resolveFont(value: FontReference): ResolvedThemeFont;
 };
@@ -945,6 +947,14 @@ function createContext(
         style === undefined ? {} : textStyleFrom(style, candidateContext);
       const nextStyle = { ...context.textStyle, ...validated };
       return createContext(theme, context, checkedScope, nextStyle);
+    },
+    withTextStyle(style) {
+      return createContext(
+        theme,
+        context,
+        undefined,
+        textStyleFrom(style, context),
+      );
     },
     resolveColor(value: ColorValue) {
       let raw: string | ThemeShade;

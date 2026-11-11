@@ -5,7 +5,9 @@ import {
   ConcurrentRoot,
 } from "react-reconciler/constants.js";
 
+import type { DeclarationContainer } from "#/declaration.ts";
 import {
+  declarationFromHost,
   HostNode,
   type HostChild,
   type HostContainer,
@@ -194,12 +196,14 @@ function containsSuspendedBoundary(fiber: FiberNode | null): boolean {
   return false;
 }
 
-/** Create a dedicated React root for a build, wait for declared content, and unmount after serialization. */
-export async function withHostTree<T>(
+/**
+ * Runs a dedicated React root to completion, hands off a declaration snapshot, then unmounts and
+ * cleans up. The returned tree no longer depends on React updates or the finished root.
+ */
+export async function expandHostTree(
   element: ReactNode,
-  consume: (container: HostContainer) => T,
   signal?: AbortSignal,
-): Promise<T> {
+): Promise<DeclarationContainer> {
   if (signal?.aborted) throw signal.reason;
 
   const container: HostContainer = { children: [] };
@@ -256,8 +260,7 @@ export async function withHostTree<T>(
   let revision = 0;
   let operationError: unknown;
   let operationFailed = false;
-  let result: T | undefined;
-  let hasResult = false;
+  let declaration: DeclarationContainer | undefined;
 
   const currentOutcome = (): Outcome => outcome;
   const onAbort = (): void => finish("cancelled", signal?.reason);
@@ -319,8 +322,7 @@ export async function withHostTree<T>(
     try {
       await completion;
       if (currentOutcome() === "completed") {
-        result = consume(container);
-        hasResult = true;
+        declaration = declarationFromHost(container);
       }
     } catch (error) {
       operationFailed = true;
@@ -366,9 +368,8 @@ export async function withHostTree<T>(
     throw outcomeError;
   }
   if (cleanupError !== undefined) throw cleanupError.error;
-  if (finalOutcome !== "completed" || !hasResult) {
-    throw new Error("React build did not produce a completion result");
+  if (finalOutcome !== "completed" || declaration === undefined) {
+    throw new Error("React expansion did not produce a declaration");
   }
-  // oxlint-disable-next-line typescript/no-unsafe-type-assertion
-  return result as T;
+  return declaration;
 }

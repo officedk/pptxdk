@@ -3830,6 +3830,61 @@ describe("public build entry", () => {
     ]);
   });
 
+  it("runs the shared formal build only after React unmount cleanup", async () => {
+    let cleaned = 0;
+    const cleanupSeenAtParse: number[] = [];
+    const cleanupSeenAtCompile: number[] = [];
+    const shapeModule = shapeCapability as ObjectCapabilityModule;
+    const observedShape: ObjectCapabilityModule = {
+      ...shapeModule,
+      parse(input, context) {
+        cleanupSeenAtParse.push(cleaned);
+        return shapeModule.parse(input, context);
+      },
+      compile(parsed, context) {
+        cleanupSeenAtCompile.push(cleaned);
+        return shapeModule.compile(parsed, context);
+      },
+    };
+
+    function CleanupBeforeBuild() {
+      useLayoutEffect(
+        () => () => {
+          cleaned += 1;
+        },
+        [],
+      );
+      useEffect(
+        () => () => {
+          cleaned += 1;
+        },
+        [],
+      );
+      return createElement(Shape, {
+        testId: "cleanup-before-build",
+        x: 0,
+        y: 0,
+        width: 240,
+        height: 48,
+        text: "Cleanup before build",
+      });
+    }
+
+    const result = await createBuilder([observedShape])(
+      deck(createElement(CleanupBeforeBuild)),
+    );
+
+    assert.equal(cleaned, 2);
+    assert.deepEqual(cleanupSeenAtParse, [2]);
+    assert.deepEqual(cleanupSeenAtCompile, [2]);
+    const file = await validatePptx(result.pptx);
+    assert.deepEqual(file.errors, []);
+    assert.equal(
+      file.slides[0]?.objects[0]?.text?.text,
+      "Cleanup before build",
+    );
+  });
+
   it("reports unknown shape parameters and trimmed capabilities at declaration path", async () => {
     const UncheckedShape = Shape as ComponentType<Record<string, unknown>>;
     const unknownParameter = deck(

@@ -264,7 +264,10 @@ function dataLabels(
     if (labels.leaderLines === undefined) return [];
     const visible = hasVisibleContent(labels);
     if (labels.leaderLines === false) {
-      return [el("c:showLeaderLines", { val: false })];
+      // Office requires a visible sibling whenever showLeaderLines is present, including
+      // the false value. Omitting the element keeps the labels disabled without the
+      // invalid empty display group.
+      return visible ? [el("c:showLeaderLines", { val: false })] : [];
     }
     if (!visible) return [];
     return [

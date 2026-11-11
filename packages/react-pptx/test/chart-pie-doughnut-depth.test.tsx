@@ -52,6 +52,63 @@ async function rejectsWithCode(
   );
 }
 
+function labelCaseChart(
+  id: string,
+  kind: "pie" | "doughnut",
+  groupLabels: unknown,
+  seriesLabels: unknown,
+): ChartProps {
+  return {
+    id,
+    x: 0,
+    y: 0,
+    width: 400,
+    height: 300,
+    groups: [
+      {
+        kind,
+        data: { kind: "shared-categories", categories: ["A", "A", "C"] },
+        explosion: 10,
+        firstSliceAngle: 30,
+        ...(kind === "doughnut" ? { holeSize: 55 } : {}),
+        dataLabels: groupLabels,
+        series: [
+          {
+            name: "S",
+            values: [1, null, 3],
+            explosion: 0,
+            dataLabels: seriesLabels,
+            points: {
+              0: { color: "#FF0000", explosion: 0 },
+              1: { color: "#00FF00" },
+              2: { color: "#0000FF", explosion: 5 },
+            },
+          },
+        ],
+      },
+    ],
+  } as unknown as ChartProps;
+}
+
+async function buildLabelCase(
+  id: string,
+  props: ChartProps,
+  entry: "react" | "document",
+) {
+  if (entry === "react") {
+    return build(
+      <Deck>
+        <Slide id={id}>
+          <Chart {...props} />
+        </Slide>
+      </Deck>,
+    );
+  }
+  return buildDocument(
+    deck().append(documentSlide({ id }).append(documentChart(props))),
+  );
+}
+
 describe("pie and doughnut depth", () => {
   it("writes native pie options, leader lines, and series/point overrides", async () => {
     const categories = ["Direct", "Partner", "Direct", "Online"];
@@ -753,10 +810,287 @@ describe("pie and doughnut depth", () => {
           ],
         },
       },
+      {
+        id: "pie-leader-lines-series-hides-value",
+        code: "invalid-data-labels",
+        message:
+          "leaderLines requires at least one visible data label value, percent, or category",
+        props: {
+          ...base,
+          groups: [
+            {
+              kind: "pie",
+              data,
+              series: [
+                {
+                  name: "S",
+                  values: [1, 2],
+                  dataLabels: { value: false },
+                },
+              ],
+              dataLabels: { leaderLines: true },
+            },
+          ],
+        },
+      },
     ];
 
     for (const { id, code, message, props } of cases) {
       await rejectsWithCode({ ...props, id }, code, message);
     }
+  });
+
+  it("writes effective leader-line declarations across group and series overrides", async () => {
+    type LabelCase = {
+      readonly id: string;
+      readonly groupLabels: unknown;
+      readonly seriesLabels: unknown;
+      readonly verify: (
+        labels: false | FileChartDataLabel | undefined,
+        xml: string,
+        caseId: string,
+      ) => void;
+    };
+    const cases: readonly LabelCase[] = [
+      {
+        id: "series-overrides-leader-lines",
+        groupLabels: { leaderLines: true },
+        seriesLabels: { value: true, leaderLines: false },
+        verify(labels, xml, caseId) {
+          const settings = labelSettings(labels);
+          assert.equal(settings?.value, true, caseId);
+          assert.equal(settings?.leaderLines, false, caseId);
+          assert.ok(xml.includes('<c:showVal val="1"/>'), caseId);
+          assert.ok(xml.includes('<c:showLeaderLines val="0"/>'), caseId);
+          assert.ok(!xml.includes("<c:leaderLines"), caseId);
+        },
+      },
+      {
+        id: "series-hides-group-labels",
+        groupLabels: { leaderLines: true },
+        seriesLabels: false,
+        verify(labels, xml, caseId) {
+          assert.equal(labels, false, caseId);
+          assert.ok(
+            xml.includes('<c:dLbls><c:delete val="1"/></c:dLbls>'),
+            caseId,
+          );
+          assert.ok(!xml.includes("showLeaderLines"), caseId);
+        },
+      },
+      {
+        id: "false-only-without-visible-labels",
+        groupLabels: { leaderLines: false },
+        seriesLabels: undefined,
+        verify(labels, xml, caseId) {
+          const settings = labelSettings(labels);
+          assert.equal(settings?.value, false, caseId);
+          assert.equal(settings?.category, false, caseId);
+          assert.equal(settings?.percent, false, caseId);
+          assert.equal(settings?.leaderLines, undefined, caseId);
+          assert.ok(xml.includes('<c:showVal val="0"/>'), caseId);
+          assert.ok(!xml.includes("showLeaderLines"), caseId);
+        },
+      },
+      {
+        id: "visible-group-label-series-disables-leader-lines",
+        groupLabels: { value: true, leaderLines: true },
+        seriesLabels: { leaderLines: false },
+        verify(labels, xml, caseId) {
+          const settings = labelSettings(labels);
+          assert.equal(settings?.value, true, caseId);
+          assert.equal(settings?.leaderLines, false, caseId);
+          assert.ok(xml.includes('<c:showVal val="1"/>'), caseId);
+          assert.ok(xml.includes('<c:showLeaderLines val="0"/>'), caseId);
+          assert.ok(!xml.includes("<c:leaderLines"), caseId);
+        },
+      },
+      {
+        id: "visible-group-label-leader-line-style",
+        groupLabels: {
+          value: true,
+          leaderLines: { color: "#112233", width: 2, dash: "dot" },
+        },
+        seriesLabels: undefined,
+        verify(labels, xml, caseId) {
+          const settings = labelSettings(labels);
+          assert.equal(settings?.value, true, caseId);
+          assert.equal(settings?.leaderLines, true, caseId);
+          assert.deepEqual(
+            settings?.leaderLine,
+            { color: "#112233", widthEmu: 19050, dash: "dot" },
+            caseId,
+          );
+          assert.ok(xml.includes('<c:showLeaderLines val="1"/>'), caseId);
+          assert.ok(xml.includes("<c:leaderLines>"), caseId);
+          assert.ok(xml.includes('<a:ln w="19050">'), caseId);
+        },
+      },
+    ];
+
+    for (const kind of ["pie", "doughnut"] as const) {
+      for (const entry of ["react", "document"] as const) {
+        for (const current of cases) {
+          const id = `${kind}-${current.id}-${entry}`;
+          const props = labelCaseChart(
+            id,
+            kind,
+            current.groupLabels,
+            current.seriesLabels,
+          );
+          const result = await buildLabelCase(id, props, entry);
+          const file = await validatePptx(result.pptx);
+          assert.deepEqual(file.errors, [], id);
+          current.verify(
+            file.slides[0]?.objects[0]?.chart?.seriesDataLabels?.[0]
+              ?.dataLabels,
+            chartXml(unzipSync(result.pptx), 1),
+            id,
+          );
+        }
+      }
+    }
+  });
+
+  it("keeps inherited leader lines when a series adds a visible label", async () => {
+    for (const kind of ["pie", "doughnut"] as const) {
+      for (const entry of ["react", "document"] as const) {
+        const id = `${kind}-series-adds-visible-label-${entry}`;
+        const props = labelCaseChart(
+          id,
+          kind,
+          { leaderLines: true },
+          { value: true },
+        );
+        const result = await buildLabelCase(id, props, entry);
+        const file = await validatePptx(result.pptx);
+        assert.deepEqual(file.errors, [], id);
+        const settings = labelSettings(
+          file.slides[0]?.objects[0]?.chart?.seriesDataLabels?.[0]?.dataLabels,
+        );
+        assert.equal(settings?.value, true, id);
+        assert.equal(settings?.leaderLines, true, id);
+        const xml = chartXml(unzipSync(result.pptx), 1);
+        assert.ok(xml.includes('<c:showLeaderLines val="1"/>'), id);
+        assert.ok(xml.includes("<c:leaderLines"), id);
+      }
+    }
+  });
+
+  it("keeps group label inheritance across multiple series overrides", async () => {
+    const result = await build(
+      <Deck>
+        <Slide id="multi-series-label-inheritance">
+          <Chart
+            id="multi-series-label-inheritance"
+            x={0}
+            y={0}
+            width={400}
+            height={300}
+            groups={[
+              {
+                kind: "column",
+                data: {
+                  kind: "shared-categories",
+                  categories: ["A", "B"],
+                },
+                dataLabels: { value: true, position: "outsideEnd" },
+                series: [
+                  { name: "Inherited", values: [1, 2] },
+                  { name: "Hidden", values: [2, 3], dataLabels: false },
+                  {
+                    name: "Override",
+                    values: [3, 4],
+                    dataLabels: { position: "insideEnd", numberFormat: "0.0" },
+                  },
+                ],
+              },
+            ]}
+          />
+        </Slide>
+      </Deck>,
+    );
+    const file = await validatePptx(result.pptx);
+    assert.deepEqual(file.errors, []);
+    const labels = file.slides[0]?.objects[0]?.chart?.seriesDataLabels;
+    assert.equal(labelSettings(labels?.[0]?.dataLabels)?.value, true);
+    assert.equal(
+      labelSettings(labels?.[0]?.dataLabels)?.position,
+      "outsideEnd",
+    );
+    assert.equal(labels?.[1]?.dataLabels, false);
+    assert.equal(labelSettings(labels?.[2]?.dataLabels)?.value, true);
+    assert.equal(labelSettings(labels?.[2]?.dataLabels)?.position, "insideEnd");
+    assert.equal(labelSettings(labels?.[2]?.dataLabels)?.numberFormat, "0.0");
+    const xml = chartXml(unzipSync(result.pptx), 1);
+    assert.equal(xml.match(/<c:showVal val="1"\/>/gu)?.length, 2);
+    assert.ok(xml.includes('<c:dLbls><c:delete val="1"/></c:dLbls>'));
+  });
+
+  it("rejects showLeaderLines without a visible sibling label", async () => {
+    const result = await build(
+      <Deck>
+        <Slide id="reader-leader-lines-without-labels">
+          <Chart
+            id="reader-leader-lines-without-labels"
+            x={0}
+            y={0}
+            width={240}
+            height={160}
+            groups={[
+              {
+                kind: "pie",
+                data: {
+                  kind: "shared-categories",
+                  categories: ["A", "B"],
+                },
+                series: [{ name: "S", values: [1, 2] }],
+                dataLabels: { value: false },
+              },
+            ]}
+          />
+        </Slide>
+      </Deck>,
+    );
+    const source = unzipSync(result.pptx);
+    const chartPath = "ppt/charts/chart1.xml";
+    const xml = strFromU8(source[chartPath]!);
+    assert.ok(xml.includes('<c:showVal val="0"/>'));
+
+    for (const [name, value] of [
+      ["false", "0"],
+      ["true", "1"],
+    ] as const) {
+      const mutated = xml.replace(
+        '<c:showBubbleSize val="0"/>',
+        `<c:showBubbleSize val="0"/><c:showLeaderLines val="${value}"/>`,
+      );
+      assert.notEqual(mutated, xml);
+      const file = await validatePptx(
+        zipSync({ ...source, [chartPath]: strToU8(mutated) }),
+      );
+      assert.ok(
+        file.errors.some(
+          ({ code, message }) =>
+            code === "invalid-data-label-leader-lines" &&
+            message.includes("visible"),
+        ),
+        name,
+      );
+    }
+
+    const withVisibleSibling = xml
+      .replace('<c:showSerName val="0"/>', '<c:showSerName val="1"/>')
+      .replace(
+        '<c:showBubbleSize val="0"/>',
+        '<c:showBubbleSize val="0"/><c:showLeaderLines val="0"/>',
+      );
+    const visibleSiblingFile = await validatePptx(
+      zipSync({
+        ...source,
+        [chartPath]: strToU8(withVisibleSibling),
+      }),
+    );
+    assert.deepEqual(visibleSiblingFile.errors, []);
   });
 });

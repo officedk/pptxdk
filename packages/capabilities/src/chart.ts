@@ -1121,32 +1121,22 @@ function hasVisibleDataLabels(
   );
 }
 
-function leaderLineTargets(
+function hasLeaderLinesWithoutVisibleLabels(
   groupLabels: false | ChartDataLabels | undefined,
   series: readonly ChartSeries[],
-): {
-  readonly declared: boolean;
-  readonly visible: boolean;
-} {
-  const candidates: (false | ChartDataLabels | undefined)[] = [groupLabels];
-  for (const item of series) {
-    candidates.push(mergeDataLabels(groupLabels, item.dataLabels));
-  }
-  return {
-    declared: candidates.some(
-      (candidate) =>
-        candidate !== undefined &&
-        candidate !== false &&
-        candidate.leaderLines !== undefined &&
-        candidate.leaderLines !== false,
-    ),
-    visible: candidates.some(
-      (candidate) =>
-        hasVisibleDataLabels(candidate) &&
-        candidate.leaderLines !== undefined &&
-        candidate.leaderLines !== false,
-    ),
-  };
+): boolean {
+  // Only the effective labels written to each series dLbls matter. A group declaration that
+  // every series overrides is not written and must not create an extra validation target.
+  return series.some((item) => {
+    const labels = mergeDataLabels(groupLabels, item.dataLabels);
+    return (
+      labels !== undefined &&
+      labels !== false &&
+      labels.leaderLines !== undefined &&
+      labels.leaderLines !== false &&
+      !hasVisibleDataLabels(labels)
+    );
+  });
 }
 
 type ParsedGroupDraft = {
@@ -1225,14 +1215,14 @@ function chartGroupDrafts(value: unknown): ParsedGroupDraft[] {
       true,
       true,
     );
-    if (chartKind === "pie" || chartKind === "doughnut") {
-      const leaderLines = leaderLineTargets(labelsValue, series);
-      if (leaderLines.declared && !leaderLines.visible) {
-        fail(
-          "invalid-data-labels",
-          "leaderLines requires at least one visible data label value, percent, or category",
-        );
-      }
+    if (
+      (chartKind === "pie" || chartKind === "doughnut") &&
+      hasLeaderLinesWithoutVisibleLabels(labelsValue, series)
+    ) {
+      fail(
+        "invalid-data-labels",
+        "leaderLines requires at least one visible data label value, percent, or category",
+      );
     }
     const gapWidth = item["gapWidth"];
     if (

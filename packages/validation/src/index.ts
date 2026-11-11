@@ -2890,6 +2890,12 @@ function readChartLine(
   };
 }
 
+function hasVisibleDataLabelItem(node: XmlElement): boolean {
+  return ["showVal", "showCatName", "showSerName", "showPercent"].some(
+    (name) => booleanAttribute(first(node, chartNamespace, name)) === true,
+  );
+}
+
 function readDataLabelSettings(
   node: XmlElement | undefined,
   chartType: string | null,
@@ -2968,6 +2974,15 @@ function readDataLabelSettings(
         part,
         "invalid-data-label-leader-lines",
         `Office does not allow showLeaderLines in ${chartType ?? "this chart type"}`,
+      );
+    }
+    // The Office constraint applies whenever the element is present, including false.
+    if (!hasVisibleDataLabelItem(node)) {
+      issue(
+        errors,
+        part,
+        "invalid-data-label-leader-lines",
+        "showLeaderLines requires at least one visible sibling value, category, series name, or percent label",
       );
     }
   }

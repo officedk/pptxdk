@@ -461,6 +461,7 @@ function behaviorIds(
   effect: TimingEffect,
   ids: TimingIds,
   dimensions: { readonly width: number; readonly height: number },
+  mixedShapeText: boolean,
 ): readonly string[] {
   const ranges = wholeTextRanges(effect);
   const wholeText = ranges.length > 0;
@@ -585,6 +586,113 @@ function behaviorIds(
   const positionTargets = () => (wholeText ? paragraphTargets() : [target()]);
   const backgroundTargets = () =>
     wholeText && effect.targetHasBackground ? [backgroundTarget()] : [];
+  // A whole Shape entrance owns the object target for visibility and fill geometry. When the same
+  // shape also has paragraph-targeted effects, applications keep that text in separate paragraph
+  // builds, so the shape displacement must be repeated on complete pRg targets. Relative formulas
+  // preserve each paragraph's local placement instead of copying the whole-object center.
+  const mixedShapeRanges =
+    isWholeShapeTextEntrance(effect) && mixedShapeText
+      ? Array.from(
+          { length: effect.targetParagraphCount ?? 0 },
+          (_, index) => ({
+            type: "paragraph" as const,
+            start: index,
+            end: index,
+          }),
+        )
+      : [];
+  const mixedShapeTargets = mixedShapeRanges.map((range) =>
+    timingTarget(effect, range),
+  );
+  const mixedShapeGeometry = (): string[] => {
+    if (mixedShapeTargets.length === 0) return [];
+    switch (effect.preset) {
+      case "fly": {
+        const offset = flyOffset(effect, dimensions);
+        return mixedShapeTargets.flatMap((targetElement) => [
+          singleMotion(
+            "ppt_x",
+            formulaOffset("#ppt_x", offset.x),
+            "#ppt_x",
+            true,
+            targetElement,
+          ),
+          singleMotion(
+            "ppt_y",
+            formulaOffset("#ppt_y", offset.y),
+            "#ppt_y",
+            true,
+            targetElement,
+          ),
+        ]);
+      }
+      case "zoom": {
+        const center = geometryCenter(
+          targetBox(effect, "whole-text zoom"),
+          dimensions,
+        );
+        return mixedShapeTargets.flatMap((targetElement) => [
+          singleMotion(
+            "ppt_x",
+            `${formulaNumber(center.x)}-#ppt_x`,
+            0,
+            "sum",
+            targetElement,
+          ),
+          singleMotion(
+            "ppt_y",
+            `${formulaNumber(center.y)}-#ppt_y`,
+            0,
+            "sum",
+            targetElement,
+          ),
+          singleMotion("ppt_w", 0, "#ppt_w", false, targetElement),
+          singleMotion("ppt_h", 0, "#ppt_h", false, targetElement),
+        ]);
+      }
+      case "spinIn": {
+        const center = serializedGeometryCenter(
+          targetBox(effect, "whole-text spin-in"),
+          dimensions,
+        );
+        const position = centerRotationDelta(effect, center, dimensions, true);
+        return mixedShapeTargets.flatMap((targetElement) => [
+          singleMotion("ppt_w", 0, "#ppt_w", false, targetElement),
+          singleMotion("ppt_h", 0, "#ppt_h", false, targetElement),
+          singleMotion("style.rotation", 360, 0, false, targetElement),
+          progressMotion("ppt_x", position[0], targetElement),
+          progressMotion("ppt_y", position[1], targetElement),
+        ]);
+      }
+      case "stretch": {
+        const center = geometryCenter(
+          targetBox(effect, "whole-text stretch"),
+          dimensions,
+        );
+        return mixedShapeTargets.flatMap((targetElement) => [
+          singleMotion(
+            "ppt_x",
+            `${formulaNumber(center.x)}-#ppt_x`,
+            0,
+            "sum",
+            targetElement,
+          ),
+          singleMotion("ppt_w", 0, "#ppt_w", false, targetElement),
+          singleMotion("ppt_h", "#ppt_h", "#ppt_h", false, targetElement),
+        ]);
+      }
+      case "floatUp":
+      case "floatDown": {
+        const fromY = effect.preset === "floatDown" ? -0.1 : 0.1;
+        return mixedShapeTargets.flatMap((targetElement) => [
+          singleMotion("ppt_x", 0, 0, "sum", targetElement),
+          singleMotion("ppt_y", fromY, 0, "sum", targetElement),
+        ]);
+      }
+      default:
+        return [];
+    }
+  };
 
   switch (effect.preset) {
     case "fade":
@@ -622,6 +730,7 @@ function behaviorIds(
           singleMotion("ppt_w", 0, "#ppt_w", false),
           singleMotion("ppt_h", 0, "#ppt_h", false),
           filter("fade", target()),
+          ...mixedShapeGeometry(),
         ];
       }
       const center = geometryCenter(
@@ -691,6 +800,7 @@ function behaviorIds(
           showOnce(),
           singleMotion("ppt_x", x, "#ppt_x", true),
           singleMotion("ppt_y", y, "#ppt_y", true),
+          ...mixedShapeGeometry(),
         ];
       }
       const offset = flyOffset(effect, dimensions);
@@ -722,6 +832,7 @@ function behaviorIds(
           singleMotion("ppt_h", 0, "#ppt_h", false),
           singleMotion("style.rotation", 360, 0, false),
           filter("fade", target()),
+          ...mixedShapeGeometry(),
         ];
       }
       const box = targetBox(effect, "whole-text spin-in");
@@ -757,6 +868,7 @@ function behaviorIds(
           showOnce(),
           singleMotion("ppt_w", 0, "#ppt_w", false),
           singleMotion("ppt_h", "#ppt_h", "#ppt_h", false),
+          ...mixedShapeGeometry(),
         ];
       }
       const center = geometryCenter(
@@ -793,6 +905,7 @@ function behaviorIds(
             "#ppt_y",
             false,
           ),
+          ...mixedShapeGeometry(),
         ];
       }
       const fromY = effect.preset === "floatDown" ? -0.1 : 0.1;
@@ -895,6 +1008,7 @@ function effectTree(
   effectId: number,
   buildGroupId: number | undefined,
   dimensions: { readonly width: number; readonly height: number },
+  mixedShapeText: boolean,
 ): string {
   if (effect.startAfter !== undefined) {
     validateKnownTime(
@@ -966,7 +1080,7 @@ function effectTree(
       element(
         "p:childTnLst",
         undefined,
-        ...behaviorIds(effect, ids, dimensions),
+        ...behaviorIds(effect, ids, dimensions, mixedShapeText),
       ),
     ),
   );
@@ -1379,6 +1493,16 @@ function timingXml(
   const slideEffects = steps.flatMap((step) =>
     step.effects.map((effect) => effect as TimingEffect),
   );
+  // Only explicit paragraph targets split native text layers; a whole Shape entrance on the same
+  // object must then cover those layers with matching geometry.
+  const paragraphTextTargets = new Set(
+    slideEffects
+      .filter(
+        (effect) =>
+          effect.targetTextBody && effect.target.range?.type === "paragraph",
+      )
+      .map((effect) => effect.target.id),
+  );
   const nativeProjections: MotionNativeProjection[] = [];
   const nativeTextEffects: {
     readonly effect: TimingEffect;
@@ -1418,6 +1542,7 @@ function timingXml(
     effectId: number,
     chartGroupId: number | undefined,
   ): string[] => {
+    const mixedShapeText = paragraphTextTargets.has(effect.target.id);
     const members = effect.targetMembers;
     const descendantIds =
       members === undefined ? new Set<number>() : memberIds(members);
@@ -1493,6 +1618,7 @@ function timingXml(
           targetEffectId,
           undefined,
           dimensions,
+          false,
         );
       });
       nativeProjections.push({
@@ -1524,6 +1650,7 @@ function timingXml(
         effectId,
         chartGroupId,
         dimensions,
+        mixedShapeText,
       ),
     ];
   };

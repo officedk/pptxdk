@@ -3185,6 +3185,185 @@ describe("object motion", () => {
     );
   });
 
+  it("keeps whole-object shape displacement on paragraph text split into native builds", async () => {
+    const result = await build(
+      createElement(
+        Deck,
+        { width: 960, height: 540 },
+        createElement(
+          Slide,
+          { id: "mixed-shape-entrance" },
+          createElement(
+            Step,
+            { n: 1 },
+            createElement(
+              Shape,
+              {
+                id: "mixed-shape-entry",
+                x: 100,
+                y: 100,
+                width: 400,
+                height: 160,
+                fill: "#0070C0",
+                textStyle: { fontSize: 20, color: "#FFFFFF" },
+                enter: [
+                  fly({ duration: 4000 }),
+                  fade({ by: "paragraph", duration: 700, delay: 1500 }),
+                ],
+              },
+              createElement(P, { key: "first" }, "First paragraph"),
+              createElement(P, { key: "second" }, "Second paragraph"),
+            ),
+          ),
+        ),
+      ),
+    );
+    const shape = result.report.slides[0]?.objects.find(
+      ({ authorId: testId }) => testId === "mixed-shape-entry",
+    );
+    assert.ok(shape !== undefined);
+    const motion = result.report.slides[0]?.capabilities?.[
+      "motion"
+    ] as MotionObservation;
+    assert.deepEqual(
+      motion.steps[0]?.effects.map(({ target, preset, by, endMs }) => [
+        target.authorId,
+        preset,
+        by,
+        endMs,
+      ]),
+      [
+        ["mixed-shape-entry", "fly", undefined, 4000],
+        ["mixed-shape-entry", "fade", "paragraph", 2200],
+        ["mixed-shape-entry", "fade", "paragraph", 2900],
+      ],
+    );
+
+    const file = await validatePptx(result.pptx);
+    assert.deepEqual(file.errors, []);
+    const effects = file.slides[0]?.animations?.flatMap((step) => step.effects);
+    const flyEffect = effects?.find(({ preset }) => preset === "fly");
+    assert.equal(flyEffect?.targetRange, undefined);
+    assert.deepEqual(
+      [
+        flyEffect?.nativeBuild,
+        flyEffect?.nativeBuildGroupId,
+        flyEffect?.nativeBuildAnimBg,
+      ],
+      ["paragraph", 0, true],
+    );
+    assert.deepEqual(
+      flyEffect?.nativeBehaviors?.map(
+        ({ behavior, targetType, targetRange, attributeNames }) => [
+          behavior,
+          targetType,
+          targetRange,
+          attributeNames,
+        ],
+      ),
+      [
+        ["set", "object", undefined, ["style.visibility"]],
+        ["anim", "object", undefined, ["ppt_x"]],
+        ["anim", "object", undefined, ["ppt_y"]],
+        [
+          "anim",
+          "paragraph",
+          { type: "paragraph", start: 0, end: 0 },
+          ["ppt_x"],
+        ],
+        [
+          "anim",
+          "paragraph",
+          { type: "paragraph", start: 0, end: 0 },
+          ["ppt_y"],
+        ],
+        [
+          "anim",
+          "paragraph",
+          { type: "paragraph", start: 1, end: 1 },
+          ["ppt_x"],
+        ],
+        [
+          "anim",
+          "paragraph",
+          { type: "paragraph", start: 1, end: 1 },
+          ["ppt_y"],
+        ],
+      ],
+    );
+    // Paragraph geometry uses the Shape displacement while retaining each paragraph's local position.
+    const firstParagraphY = flyEffect?.nativeBehaviors?.find(
+      ({ targetType, targetRange, attributeNames }) =>
+        targetType === "paragraph" &&
+        targetRange?.type === "paragraph" &&
+        targetRange.start === 0 &&
+        attributeNames.includes("ppt_y"),
+    );
+    assert.match(firstParagraphY?.from ?? "", /^#ppt_y\+/u);
+    assert.equal(firstParagraphY?.to, "#ppt_y");
+    assert.deepEqual(
+      effects
+        ?.filter(({ preset }) => preset === "fade")
+        .map(({ targetRange }) => targetRange),
+      [
+        { type: "paragraph", start: 0, end: 0 },
+        { type: "paragraph", start: 1, end: 1 },
+      ],
+    );
+
+    const slideXml = strFromU8(
+      unzipSync(result.pptx)["ppt/slides/slide1.xml"]!,
+    );
+    assert.doesNotMatch(
+      slideXml,
+      new RegExp(`<p:spTgt spid="${shape.id}"><p:bg>`, "u"),
+    );
+
+    const flyBehavior = (axis: string, paragraph: number): string => {
+      const block = [...slideXml.matchAll(/<p:anim\b[\s\S]*?<\/p:anim>/gu)]
+        .map(([behavior]) => behavior ?? "")
+        .find(
+          (behavior) =>
+            behavior.includes(`<p:pRg st="${paragraph}" end="${paragraph}">`) &&
+            behavior.includes(`<p:attrName>${axis}</p:attrName>`),
+        );
+      assert.ok(block !== undefined);
+      return block;
+    };
+    const missingAxis = rewriteSlideXml(result.pptx, (xml) =>
+      xml.replace(flyBehavior("ppt_y", 1), ""),
+    );
+    assert.ok(
+      (await validatePptx(missingAxis)).errors.some(
+        ({ code }) => code === "inconsistent-animation-target-range",
+      ),
+    );
+    const missingParagraph = rewriteSlideXml(result.pptx, (xml) =>
+      xml
+        .replace(flyBehavior("ppt_x", 1), "")
+        .replace(flyBehavior("ppt_y", 1), ""),
+    );
+    assert.ok(
+      (await validatePptx(missingParagraph)).errors.some(
+        ({ code }) => code === "inconsistent-animation-target-range",
+      ),
+    );
+    const wrongTarget = rewriteSlideXml(result.pptx, (xml) =>
+      xml.replace(
+        flyBehavior("ppt_x", 0),
+        flyBehavior("ppt_x", 0).replace(
+          `<p:spTgt spid="${shape.id}">`,
+          `<p:spTgt spid="${shape.id + 100}">`,
+        ),
+      ),
+    );
+    assert.ok(
+      (await validatePptx(wrongTarget)).errors.some(
+        ({ code }) => code === "invalid-animation-target",
+      ),
+    );
+  });
+
   it("keeps explicit paragraph granularity on a shape with its own text and background", async () => {
     const result = await build(
       createElement(

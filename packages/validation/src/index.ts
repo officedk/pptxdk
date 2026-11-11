@@ -426,6 +426,41 @@ const textProjectionBackgroundRoles: Partial<
   spin: ["animRot:r", "anim:ppt_x", "anim:ppt_y"],
 };
 
+// Shapes keep whole-object visibility and fill geometry while paragraph-targeted effects split text
+// into native paragraph builds; this role pairing is the mixed projection this writer can produce.
+const mixedWholeObjectRoles: Partial<
+  Record<FileAnimationEffect["preset"], readonly string[]>
+> = {
+  zoom: ["anim:ppt_w", "anim:ppt_h", "animEffect:fade"],
+  fly: ["anim:ppt_x", "anim:ppt_y"],
+  floatUp: ["animEffect:fade", "anim:ppt_x", "anim:ppt_y"],
+  floatDown: ["animEffect:fade", "anim:ppt_x", "anim:ppt_y"],
+  spinIn: [
+    "anim:ppt_w",
+    "anim:ppt_h",
+    "anim:style.rotation",
+    "animEffect:fade",
+  ],
+  stretch: ["anim:ppt_x", "anim:ppt_w", "anim:ppt_h"],
+};
+
+const mixedParagraphGeometryRoles: Partial<
+  Record<FileAnimationEffect["preset"], readonly string[]>
+> = {
+  zoom: ["anim:ppt_x", "anim:ppt_y", "anim:ppt_w", "anim:ppt_h"],
+  fly: ["anim:ppt_x", "anim:ppt_y"],
+  floatUp: ["anim:ppt_x", "anim:ppt_y"],
+  floatDown: ["anim:ppt_x", "anim:ppt_y"],
+  spinIn: [
+    "anim:ppt_w",
+    "anim:ppt_h",
+    "anim:style.rotation",
+    "anim:ppt_x",
+    "anim:ppt_y",
+  ],
+  stretch: ["anim:ppt_x", "anim:ppt_w", "anim:ppt_h"],
+};
+
 function animationBehaviorRole(behavior: FileAnimationBehavior): string {
   return behavior.behavior === "animEffect"
     ? `${behavior.behavior}:${behavior.filter ?? ""}`
@@ -857,6 +892,89 @@ function validCenterRotationGeometry(
       angle !== undefined && closeGeometryNumber(formula.angleDegrees, angle)
     );
   });
+}
+
+/**
+ * Accepts a whole Shape entrance that keeps object visibility/fill geometry while repeating the
+ * displacement on every paragraph of the same native target. It requires complete paragraph coverage,
+ * exact per-layer roles, and complete position axes, so partial or misdirected projections still fail
+ * the general range consistency check.
+ */
+function validMixedWholeParagraphGeometry(
+  preset: FileAnimationEffect["preset"],
+  kind: FileAnimationEffect["kind"],
+  paragraphCount: number,
+  targetId: number,
+  build: string,
+  animBg: boolean,
+  behaviors: readonly FileAnimationBehavior[],
+): boolean {
+  const wholeRoles = mixedWholeObjectRoles[preset];
+  const paragraphRoles = mixedParagraphGeometryRoles[preset];
+  if (
+    kind !== "entrance" ||
+    wholeRoles === undefined ||
+    paragraphRoles === undefined ||
+    paragraphCount < 1 ||
+    build !== "p" ||
+    !animBg
+  ) {
+    return false;
+  }
+  const visibilitySets = behaviors.filter(({ behavior }) => behavior === "set");
+  const [visibility] = visibilitySets;
+  if (
+    visibilitySets.length !== 1 ||
+    visibility === undefined ||
+    visibility.targetId !== targetId ||
+    visibility.targetType !== "object" ||
+    visibility.attributeNames.length !== 1 ||
+    visibility.attributeNames[0] !== "style.visibility" ||
+    visibility.durationMs !== 1 ||
+    visibility.to !== "visible"
+  ) {
+    return false;
+  }
+  const wholeBehaviors = behaviors.filter(
+    ({ behavior, targetId: behaviorTargetId, targetType }) =>
+      behavior !== "set" &&
+      behaviorTargetId === targetId &&
+      targetType === "object",
+  );
+  if (!hasRoles(wholeBehaviors.map(animationBehaviorRole), wholeRoles)) {
+    return false;
+  }
+  const paragraphBehaviors = behaviors.filter(
+    ({ behavior, targetType }) =>
+      behavior !== "set" && targetType === "paragraph",
+  );
+  if (
+    paragraphBehaviors.length !== paragraphCount * paragraphRoles.length ||
+    paragraphBehaviors.some(
+      ({ targetId: behaviorTargetId }) => behaviorTargetId !== targetId,
+    )
+  ) {
+    return false;
+  }
+  for (let index = 0; index < paragraphCount; index += 1) {
+    const roles = paragraphBehaviors
+      .filter(
+        ({ targetRange }) =>
+          targetRange?.type === "paragraph" &&
+          targetRange.start === index &&
+          targetRange.end === index,
+      )
+      .map(animationBehaviorRole);
+    if (!hasRoles(roles, paragraphRoles)) return false;
+  }
+  return !behaviors.some(
+    ({ behavior, targetType }) =>
+      targetType === "background" ||
+      targetType === "chart" ||
+      (behavior !== "set" &&
+        targetType !== "object" &&
+        targetType !== "paragraph"),
+  );
 }
 
 /** Recovers logical whole Text only after complete verification against actual paragraphs, background, and visibility targets. */
@@ -6137,7 +6255,33 @@ function readSlideAnimations(
         targetObject.text.paragraphs.every((_, index) =>
           paragraphIndexes.has(index),
         );
-      if (rangeSignatures.size > 1 && !fullParagraphProjection) {
+      const mixedWholeParagraphProjection =
+        targetObject?.text !== undefined &&
+        targetObject.text.paragraphs.length > 0 &&
+        paragraphRanges.length > 0 &&
+        ranges.some((range) => range === undefined) &&
+        ranges.every(
+          (range) => range === undefined || range.type === "paragraph",
+        ) &&
+        paragraphRanges.every(({ start, end }) => start === end) &&
+        paragraphIndexes.size === targetObject.text.paragraphs.length &&
+        targetObject.text.paragraphs.every((_, index) =>
+          paragraphIndexes.has(index),
+        ) &&
+        validMixedWholeParagraphGeometry(
+          preset,
+          kind,
+          targetObject.text.paragraphs.length,
+          targetId,
+          paragraphBuild?.build ?? "",
+          paragraphBuild?.animBg === true,
+          nativeBehaviors,
+        );
+      if (
+        rangeSignatures.size > 1 &&
+        !fullParagraphProjection &&
+        !mixedWholeParagraphProjection
+      ) {
         issue(
           errors,
           part,
@@ -6201,7 +6345,10 @@ function readSlideAnimations(
           "Position formula for common-center spin is unsupported or does not match actual geometry, angle, scale, and progress parameters",
         );
       }
-      const targetRange = fullParagraphProjection ? undefined : ranges[0];
+      const targetRange =
+        fullParagraphProjection || mixedWholeParagraphProjection
+          ? undefined
+          : ranges[0];
       let fromColor: string | undefined;
       let toColor: string | undefined;
       if (preset === "breathe" || preset === "fillColor") {
@@ -6532,6 +6679,7 @@ function readSlideAnimations(
                 : { nativeBuildAnimBg: paragraphBuild.animBg }),
             }),
         ...(fullParagraphProjection ||
+        mixedWholeParagraphProjection ||
         nativeBehaviors.some(
           ({ targetType, additive }) =>
             targetType === "background" || additive === "sum",

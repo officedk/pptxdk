@@ -1132,9 +1132,12 @@ function scatterChartSeries(
   if (seriesCells.x === undefined || seriesCells.y === undefined) {
     throw new Error("Scatter chart series is missing workbook columns");
   }
+  // MS-OE376 2.1.1642d: Office loads scatterStyle "marker" as "lineMarker" and
+  // keeps a connecting line unless the series disables it. Markers-only intent
+  // therefore needs an explicit series noFill rather than the group enum alone.
   const itemShape =
     group.line === undefined || group.line === false
-      ? undefined
+      ? el("c:spPr", null, el("a:ln", null, el("a:noFill")))
       : seriesShape("line", series.color, series.line, theme);
   const points = Object.entries<ChartPoint>(series.points ?? {}).flatMap(
     ([pointIndex, point]) => {

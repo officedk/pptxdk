@@ -2,6 +2,7 @@ import type {
   LayoutStyle,
   LinkTarget,
   PaddingStyle,
+  SlideBackground,
   TextStyle,
   ThemeInput,
   ThemeScope,
@@ -16,6 +17,10 @@ import {
 
 import { boxCapability, type BoxDeclarationProps } from "./box.ts";
 import { font } from "./font.ts";
+import { groupCapability, type GroupDeclarationProps } from "./group.ts";
+import { imageCapability, type ImageDeclarationProps } from "./image.ts";
+import { shapeCapability, type ShapeDeclarationProps } from "./shape.ts";
+import { slideBackgroundCapability } from "./slide-background.ts";
 import type {
   ParagraphDeclarationProps,
   SlideNumberDeclarationProps,
@@ -29,6 +34,10 @@ import { transitionCapability, type Transition } from "./transition.ts";
  * External addresses such as link URLs are stored as address values at authoring time. Content
  * referenced by an address (including resource paths accepted by a capability) is read during each
  * formal build; creating an authoring node does not snapshot external file content.
+ *
+ * Image byte sources are isolated when accepted by `image()` or `set()`, so later changes to the
+ * caller's buffer do not alter the document. Path and URL sources keep their address value instead
+ * and are loaded again by every formal build.
  */
 
 export type DeckAuthorProps = {
@@ -42,6 +51,7 @@ export type DeckAuthorProps = {
 export type SlideAuthorProps = {
   readonly slideId: string;
   readonly transition?: Transition;
+  readonly background?: SlideBackground;
   readonly theme?: ThemeScope;
   readonly style?: TextStyle & Omit<LayoutStyle, "zIndex">;
   readonly hidden?: boolean;
@@ -53,6 +63,9 @@ export type SectionAuthorProps = {
 };
 
 export type BoxAuthorProps = BoxDeclarationProps;
+export type ImageAuthorProps = ImageDeclarationProps;
+export type GroupAuthorProps = GroupDeclarationProps;
+export type ShapeAuthorProps = ShapeDeclarationProps;
 export type TextAuthorProps = TextDeclarationProps;
 export type ParagraphAuthorProps = ParagraphDeclarationProps;
 export type SpanAuthorProps = SpanDeclarationProps;
@@ -70,10 +83,25 @@ export type BoxNode = CommonContainer<
   BoxAuthorProps,
   LayoutStyle & TextStyle & VisualStyle
 >;
+export type ShapeNode = RichTextContainer<
+  "shape",
+  ShapeDeclarationProps,
+  NonNullable<ShapeDeclarationProps["style"]>
+>;
 export type TextNode = RichTextContainer<
   "text",
   TextAuthorProps,
   LayoutStyle & PaddingStyle & TextStyle & VisualStyle
+>;
+export type ImageNode = CommonNode<
+  "image",
+  ImageDeclarationProps,
+  NonNullable<ImageDeclarationProps["style"]>
+>;
+export type GroupNode = CommonContainer<
+  "group",
+  GroupDeclarationProps,
+  NonNullable<GroupDeclarationProps["style"]>
 >;
 export type ParagraphNode = RichTextContainer<
   "paragraph",
@@ -142,6 +170,33 @@ export function box(props: BoxAuthorProps = {}): BoxNode {
   return new CommonContainer("box", "rp:box", props);
 }
 
+/** Creates a native shape whose geometry, visuals, and rich text remain editable after attachment. */
+export function shape(props: ShapeAuthorProps = {}): ShapeNode {
+  return new RichTextContainer<
+    "shape",
+    ShapeDeclarationProps,
+    NonNullable<ShapeDeclarationProps["style"]>
+  >("shape", "rp:shape", props);
+}
+
+/** Creates a native image whose source bytes, crop, fit, and visuals remain editable after attachment. */
+export function image(props: ImageAuthorProps): ImageNode {
+  return new CommonNode<
+    "image",
+    ImageDeclarationProps,
+    NonNullable<ImageDeclarationProps["style"]>
+  >("image", "rp:image", props);
+}
+
+/** Creates a native group preserving member identity, local theme, and layout children. */
+export function group(props: GroupAuthorProps = {}): GroupNode {
+  return new CommonContainer<
+    "group",
+    GroupDeclarationProps,
+    NonNullable<GroupDeclarationProps["style"]>
+  >("group", "rp:group", props);
+}
+
 /** Creates a text box whose original reference remains editable after attachment. */
 export function text(content?: TextContent, props?: TextAuthorProps): TextNode;
 export function text(...content: readonly TextContent[]): TextNode;
@@ -207,6 +262,10 @@ export function slideNumber(
 /** Baseline capabilities enabled by the public document build; factories never register capabilities. */
 export const documentCapabilities = Object.freeze([
   boxCapability,
+  groupCapability,
+  imageCapability,
+  shapeCapability,
+  slideBackgroundCapability,
   textCapability,
   transitionCapability,
 ] as const);

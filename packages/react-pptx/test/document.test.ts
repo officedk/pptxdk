@@ -411,11 +411,17 @@ registerHooks({
 });
 
 const entry = await import("@react-pptx/react-pptx/document");
+const png = new Uint8Array(
+  Buffer.from(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/n1sAAAAASUVORK5CYII=",
+    "base64",
+  ),
+);
 const document = entry
   .deck({ width: 960, height: 540 })
   .append(
     entry
-      .slide({ slideId: "pure" })
+      .slide({ slideId: "pure", background: "#112233" })
       .append(
         entry
           .box()
@@ -425,11 +431,42 @@ const document = entry
               .text("No React")
               .set({ x: 8, y: 8, width: 320, height: 40 }),
           ),
+        entry.shape({
+          testId: "pure-shape",
+          geometry: "hexagon",
+          x: 8,
+          y: 140,
+          width: 120,
+          height: 60,
+          text: "Shape",
+          style: { backgroundColor: "#336699" },
+        }),
+        entry.image({
+          testId: "pure-image",
+          src: png,
+          x: 140,
+          y: 140,
+          width: 80,
+          height: 60,
+          fit: "cover",
+        }),
+        entry.group({ testId: "pure-group" }).append(
+          entry.shape({
+            testId: "pure-group-shape",
+            x: 240,
+            y: 140,
+            width: 60,
+            height: 40,
+          }),
+        ),
       ),
   );
 const result = await entry.build(document);
 if (result.report.slides[0]?.id !== "pure") {
   throw new Error("pure document build did not produce the expected slide");
+}
+if (result.report.slides[0]?.objects.length !== 4) {
+  throw new Error("pure document build did not produce native objects");
 }
 process.stdout.write("ok");
 `;

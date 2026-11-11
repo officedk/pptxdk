@@ -1,13 +1,15 @@
 import {
   CapabilityError,
-  xmlEscape,
   type CapabilityInput,
   type SlideBackground,
   type SlideCapabilityModule,
-} from "@react-pptx/core";
+} from "@react-pptx/core/capability";
 
 import { readImage } from "./image.ts";
-import { fillXml } from "./visual.ts";
+import {
+  slideBackgroundFillXml,
+  slideBackgroundImageXml,
+} from "./slide-background-xml.ts";
 
 const imageRelationship =
   "http://schemas.openxmlformats.org/officeDocument/2006/relationships/image";
@@ -51,7 +53,7 @@ export const slideBackgroundCapability: SlideCapabilityModule = {
           relationshipType: imageRelationship,
         });
         return {
-          xml: `<p:bg><p:bgPr><a:blipFill><a:blip r:embed="${xmlEscape(relationshipId)}"/><a:srcRect/><a:stretch><a:fillRect/></a:stretch></a:blipFill><a:effectLst/></p:bgPr></p:bg>`,
+          xml: slideBackgroundImageXml(relationshipId),
           extensions: [],
         };
       }
@@ -62,7 +64,7 @@ export const slideBackgroundCapability: SlideCapabilityModule = {
           ? { backgroundImage: backgroundRecord }
           : { backgroundColor: background };
       return {
-        xml: `<p:bg><p:bgPr>${fillXml(context.theme, style, undefined, undefined)}<a:effectLst/></p:bgPr></p:bg>`,
+        xml: slideBackgroundFillXml(context.theme, style),
         extensions: [],
       };
     } catch (error) {

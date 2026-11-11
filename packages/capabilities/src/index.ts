@@ -1,5 +1,4 @@
 export {
-  Shape,
   blockArc,
   linearGradient,
   path,
@@ -14,9 +13,10 @@ export type {
   PathCommand,
   PathOptions,
   PresetGeometry,
-  ShapeProps,
   shapeStyleKeys,
 } from "#/shape.ts";
+export { Shape } from "#/shape-elements.ts";
+export type { ShapeProps } from "#/shape-elements.ts";
 export { boxCapability, type ParsedBox } from "#/box.ts";
 export { Box, type BoxProps } from "#/box-elements.ts";
 export {
@@ -50,15 +50,19 @@ export type {
   ParsedChart,
   PieChartProps,
 } from "#/chart.ts";
-export { Image, imageCapability } from "#/image.ts";
+export { imageCapability } from "#/image.ts";
 export type {
-  ImageProps,
+  ImageDeclarationProps,
   ImageSource,
   ImageVisualStyle,
   ParsedImage,
 } from "#/image.ts";
-export { Group, groupCapability } from "#/group.ts";
-export type { GroupProps } from "#/group.ts";
+export { Image } from "#/image-elements.ts";
+export type { ImageProps } from "#/image-elements.ts";
+export { groupCapability } from "#/group.ts";
+export type { GroupDeclarationProps } from "#/group.ts";
+export { Group } from "#/group-elements.ts";
+export type { GroupProps } from "#/group-elements.ts";
 export { Cell, Row, Table, tableCapability } from "#/table.ts";
 export type {
   CellProps,

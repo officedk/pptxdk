@@ -20,16 +20,15 @@ import {
   type TextStyle,
   type ThemeScope,
   type VisualStyle,
-} from "@react-pptx/core";
-import type { ReactNode } from "react";
+} from "@react-pptx/core/capability";
 
+import { groupXml } from "./group-xml.ts";
 import { nativeLinkXml } from "./identity.ts";
 import type { MorphProps } from "./morph-api.ts";
 import { motionAnnotations, type MotionProps } from "./motion-api.ts";
-import { motionElement } from "./motion-elements.ts";
 
 /** Native Group preserves member relationships; style allows it to arrange as a layout child, with output bounds computed from the union of member geometries. */
-export type GroupProps = MotionProps &
+export type GroupDeclarationProps = MotionProps &
   MorphProps & {
     readonly testId?: string;
     readonly part?: string;
@@ -37,7 +36,6 @@ export type GroupProps = MotionProps &
     readonly link?: LinkTarget;
     readonly style?: LayoutStyle & TextStyle & Pick<VisualStyle, "rotate">;
     readonly theme?: ThemeScope;
-    readonly children?: ReactNode;
   };
 
 const allowedParameters = [
@@ -166,28 +164,6 @@ function bounds(members: readonly ObjectObservation[]): {
   };
 }
 
-function groupXml(
-  id: number,
-  escapedName: string,
-  box: EmuBox,
-  members: string,
-  rotation: number | undefined,
-  linkXml: string,
-): string {
-  // Group-internal coordinates share the same baseline with slide coordinates to prevent member scaling or shifting from duplicate conversions.
-  if (rotation !== undefined && !Number.isFinite(rotation)) {
-    throw new CapabilityError(
-      "invalid-visual-style",
-      "rotate must be a finite angle",
-    );
-  }
-  const angle =
-    rotation === undefined
-      ? undefined
-      : Math.round((((rotation % 360) + 360) % 360) * 60000);
-  return `<p:grpSp><p:nvGrpSpPr><p:cNvPr id="${id}" name="${escapedName}">${linkXml}</p:cNvPr><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr><a:xfrm${angle === undefined || angle === 0 ? "" : ` rot="${angle}"`}><a:off x="${box.x}" y="${box.y}"/><a:ext cx="${box.width}" cy="${box.height}"/><a:chOff x="${box.x}" y="${box.y}"/><a:chExt cx="${box.width}" cy="${box.height}"/></a:xfrm></p:grpSpPr>${members}</p:grpSp>`;
-}
-
 const groupAllowedStyleKeys = new Set<string>([
   ...layoutStyleKeys,
   ...paddingStyleKeys,
@@ -246,6 +222,12 @@ export const groupCapability: ObjectCapabilityModule<ParsedGroup> = {
     });
 
     const rotation = styleRecord["rotate"];
+    if (typeof rotation === "number" && !Number.isFinite(rotation)) {
+      throw new CapabilityError(
+        "invalid-visual-style",
+        "rotate must be a finite angle",
+      );
+    }
     const parsed: ParsedGroup = {
       ...(testId !== undefined ? { testId } : {}),
       ...(part !== undefined ? { part } : {}),
@@ -330,8 +312,3 @@ export const groupCapability: ObjectCapabilityModule<ParsedGroup> = {
     };
   },
 };
-
-/** Declares an editable group preserving native member structure within the React tree. */
-export function Group(props: GroupProps): ReactNode {
-  return motionElement("rp:group", props);
-}

@@ -29,6 +29,11 @@
       "types": "./dist/shape.d.ts",
       "default": "./dist/shape.js"
     },
+    "./shape-elements": {
+      "source": "./src/shape-elements.ts",
+      "types": "./dist/shape-elements.d.ts",
+      "default": "./dist/shape-elements.js"
+    },
     "./box": {
       "source": "./src/box.ts",
       "types": "./dist/box.d.ts",
@@ -78,6 +83,26 @@
       "source": "./src/motion.ts",
       "types": "./dist/motion.d.ts",
       "default": "./dist/motion.js"
+    },
+    "./image": {
+      "source": "./src/image.ts",
+      "types": "./dist/image.d.ts",
+      "default": "./dist/image.js"
+    },
+    "./image-elements": {
+      "source": "./src/image-elements.ts",
+      "types": "./dist/image-elements.d.ts",
+      "default": "./dist/image-elements.js"
+    },
+    "./group": {
+      "source": "./src/group.ts",
+      "types": "./dist/group.d.ts",
+      "default": "./dist/group.js"
+    },
+    "./group-elements": {
+      "source": "./src/group-elements.ts",
+      "types": "./dist/group-elements.d.ts",
+      "default": "./dist/group-elements.js"
     }
   },
   "scripts": {

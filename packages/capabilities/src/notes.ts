@@ -1,5 +1,6 @@
 import {
   CapabilityError,
+  themeXml,
   xmlEscape,
   type CapabilityInput,
   type SlideCapabilityModule,
@@ -18,7 +19,8 @@ import {
   notesSlideRelationshipType,
   notesSlideXml,
   slideRelationshipType,
-  themePath,
+  themeContentType,
+  themePathTemplate,
   themeRelationshipType,
 } from "./notes-xml.ts";
 import {
@@ -164,6 +166,16 @@ export const notesCapability: SlideCapabilityModule = Object.freeze({
       context.options.embedFonts,
       context.createTextFieldId,
     );
+    // The notes master needs its own theme part: PowerPoint rejects a notes master that shares the
+    // slide master's theme. Register the theme first so the notes master relationship can resolve
+    // to this distinct OPC part, then serialize the same author theme values into it.
+    context.registerSharedPart("notes-theme", {
+      part: {
+        pathTemplate: themePathTemplate,
+        contentType: themeContentType,
+      },
+      content: () => themeXml(context.theme.theme),
+    });
     context.registerSharedPart("notes-master", {
       part: {
         pathTemplate: notesMasterPathTemplate,
@@ -173,7 +185,7 @@ export const notesCapability: SlideCapabilityModule = Object.freeze({
       relationships: [
         {
           relationshipType: themeRelationshipType,
-          target: { kind: "path", path: themePath },
+          target: { kind: "part", key: "notes-theme" },
         },
       ],
       presentationElement: {

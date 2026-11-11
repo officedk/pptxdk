@@ -19,14 +19,13 @@ import {
   type LinkTarget,
   type ObjectCapabilityModule,
   type VisualStyle,
-} from "@react-pptx/core";
-import type { ReactNode } from "react";
+} from "@react-pptx/core/capability";
 
 import type { Geometry } from "./geometry.ts";
 import { nativeLinkXml } from "./identity.ts";
+import { imageXml } from "./image-xml.ts";
 import type { MorphProps } from "./morph-api.ts";
 import { motionAnnotations, type MotionProps } from "./motion-api.ts";
-import { motionElement } from "./motion-elements.ts";
 import { shapePropertiesXml } from "./visual.ts";
 
 /** Visual styling supported on Image objects. */
@@ -54,7 +53,7 @@ export const imageVisualStyleKeys = new Set([
 /** Local file path, file URL, or raw image bytes. */
 export type ImageSource = string | URL | Uint8Array;
 
-export type ImageProps = MotionProps &
+export type ImageDeclarationProps = MotionProps &
   MorphProps & {
     readonly testId?: string;
     readonly part?: string;
@@ -81,7 +80,6 @@ export type ImageProps = MotionProps &
       readonly right?: number;
       readonly bottom?: number;
     };
-    readonly children?: ReactNode;
   };
 
 export type ParsedImage = {
@@ -513,33 +511,6 @@ function cropValues(
   return result;
 }
 
-function imageXml(
-  id: number,
-  escapedName: string,
-  escapedAlt: string | undefined,
-  relationshipId: string,
-  box: { x: number; y: number; width: number; height: number },
-  crop: Record<string, number>,
-  properties: string,
-  opacity: number | undefined,
-  linkXml: string,
-): string {
-  const description = escapedAlt === undefined ? "" : ` descr="${escapedAlt}"`;
-  const cropXml =
-    Object.keys(crop).length === 0
-      ? ""
-      : `<a:srcRect${Object.entries(crop)
-          .map(
-            ([side, fraction]) => ` ${side}="${Math.round(fraction * 100000)}"`,
-          )
-          .join("")}/>`;
-  const alpha =
-    opacity === undefined
-      ? ""
-      : `<a:alphaModFix amt="${Math.round(opacity * 100000)}"/>`;
-  return `<p:pic><p:nvPicPr><p:cNvPr id="${id}" name="${escapedName}"${description}>${linkXml}</p:cNvPr><p:cNvPicPr><a:picLocks noChangeAspect="1"/></p:cNvPicPr><p:nvPr/></p:nvPicPr><p:blipFill><a:blip r:embed="${xmlEscape(relationshipId)}">${alpha}</a:blip>${cropXml}<a:stretch><a:fillRect/></a:stretch></p:blipFill>${properties}</p:pic>`;
-}
-
 /** Image module reads and validates formal resources, then emits native picture objects with media relationships. */
 export const imageCapability: ObjectCapabilityModule<ParsedImage> = {
   declaration: "rp:image",
@@ -837,8 +808,3 @@ export const imageCapability: ObjectCapabilityModule<ParsedImage> = {
     };
   },
 };
-
-/** Declares a native image handled by the image module within the React tree. */
-export function Image(props: ImageProps): ReactNode {
-  return motionElement("rp:image", props);
-}

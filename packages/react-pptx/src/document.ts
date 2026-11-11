@@ -15,8 +15,11 @@ export {
   deck,
   documentCapabilities,
   font,
+  group,
+  image,
   paragraph,
   section,
+  shape,
   slide,
   slideNumber,
   span,
@@ -27,10 +30,16 @@ export type {
   DeckAuthorProps,
   DeckNode,
   BoxNode,
+  GroupAuthorProps,
+  GroupNode,
+  ImageAuthorProps,
+  ImageNode,
   ParagraphAuthorProps,
   ParagraphContent,
   ParagraphNode,
   SectionAuthorProps,
+  ShapeAuthorProps,
+  ShapeNode,
   SectionNode,
   SlideAuthorProps,
   SlideNode,
@@ -51,6 +60,25 @@ export {
   targets,
 } from "@react-pptx/core/build";
 export { createDocumentBuild } from "@react-pptx/core/document";
+export {
+  blockArc,
+  linearGradient,
+  path,
+  preset,
+  radialGradient,
+} from "@react-pptx/capabilities/shape";
+export type {
+  CustomGeometry,
+  Geometry,
+  GeometryPath,
+  PathCommand,
+  PathOptions,
+  PresetGeometry,
+} from "@react-pptx/capabilities/shape";
+export type {
+  ImageSource,
+  ImageVisualStyle,
+} from "@react-pptx/capabilities/image";
 export type {
   BuildOptions,
   BuildReport,
@@ -110,4 +138,5 @@ export type {
   LayoutSpacing,
   LayoutStyle,
   LinkTarget,
+  SlideBackground,
 } from "@react-pptx/core/capability";

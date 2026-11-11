@@ -14,8 +14,8 @@ export const build = createBuilder([
 export { Deck, formatBaseline, targets } from "@react-pptx/core";
 export { Box, type BoxProps } from "@react-pptx/capabilities/box-elements";
 export { Slide } from "./slide.ts";
+export { Shape } from "@react-pptx/capabilities/shape-elements";
 export {
-  Shape,
   blockArc,
   linearGradient,
   path,
@@ -60,7 +60,7 @@ export type {
   SpinOptions,
   StepProps,
 } from "@react-pptx/capabilities/motion";
-export type { ShapeProps } from "@react-pptx/capabilities/shape";
+export type { ShapeProps } from "@react-pptx/capabilities/shape-elements";
 export type {
   CustomGeometry,
   Geometry,

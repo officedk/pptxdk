@@ -19,8 +19,7 @@ import {
   type LinkTarget,
   type ObjectCapabilityModule,
   type PaddingStyle,
-} from "@react-pptx/core";
-import type { ReactNode } from "react";
+} from "@react-pptx/core/capability";
 
 import type { Geometry } from "./geometry.ts";
 export { blockArc, path, preset } from "./geometry.ts";
@@ -33,13 +32,13 @@ export type {
   PresetGeometry,
 } from "./geometry.ts";
 import { nativeLinkXml } from "./identity.ts";
+import { shapeXml } from "./shape-xml.ts";
 import { layoutStyleValue } from "./style-parse.ts";
 export { linearGradient, radialGradient } from "./visual.ts";
-export type { PaddingStyle, VisualStyle } from "@react-pptx/core";
+export type { PaddingStyle, VisualStyle } from "@react-pptx/core/capability";
 import { fontPresentationContributions } from "./font-embedding.ts";
 import type { MorphProps } from "./morph-api.ts";
 import { motionAnnotations, type MotionProps } from "./motion-api.ts";
-import { motionElement } from "./motion-elements.ts";
 import {
   measureTextLayoutFromParagraphs,
   parseTextContent,
@@ -58,7 +57,7 @@ import {
   type VisualStyleRecord,
 } from "./visual.ts";
 
-export type ShapeProps = MotionProps &
+export type ShapeDeclarationProps = MotionProps &
   MorphProps & {
     readonly link?: LinkTarget;
     readonly testId?: string;
@@ -77,8 +76,6 @@ export type ShapeProps = MotionProps &
     readonly text?: string;
     /** Shape text uses shared text services and can still be emitted when text box capability is omitted. */
     readonly textStyle?: TextStyle;
-    /** Native text nodes shared with Text; may contain P, Span, and SlideNumber. */
-    readonly children?: ReactNode;
   };
 
 export type ParsedShape = {
@@ -288,16 +285,6 @@ function height(
     contentSized: false,
     value: typeof value === "number" ? value : undefined,
   };
-}
-
-function shapeXml(
-  id: number,
-  escapedName: string,
-  properties: string,
-  textBody: string,
-  linkXml: string,
-): string {
-  return `<p:sp><p:nvSpPr><p:cNvPr id="${id}" name="${escapedName}">${linkXml}</p:cNvPr><p:cNvSpPr/><p:nvPr/></p:nvSpPr>${properties}${textBody}</p:sp>`;
 }
 
 /** Shape module independently validates input, declares native geometry, and emits corresponding PresentationML objects. */
@@ -670,8 +657,3 @@ export const shapeCapability: ObjectCapabilityModule<ParsedShape> = {
     };
   },
 };
-
-/** Declares a native object handled by the shape module within the React tree. */
-export function Shape(props: ShapeProps): ReactNode {
-  return motionElement("rp:shape", props);
-}

@@ -1,4 +1,7 @@
-import type { ChartDataLabelPosition, ChartDataLabels } from "./chart-types.ts";
+import type {
+  ChartDataLabelPosition,
+  ChartDataLabelSettings,
+} from "./chart-types.ts";
 
 /** Maps semantic label positions to native c:dLblPos values. */
 export const chartDataLabelPositions: Readonly<
@@ -22,9 +25,9 @@ export const chartDataLabelPositions: Readonly<
  * this is a field-level merge rather than a whole-object replacement.
  */
 export function mergeDataLabels(
-  base: false | ChartDataLabels | undefined,
-  override: false | ChartDataLabels | undefined,
-): false | ChartDataLabels | undefined {
+  base: false | ChartDataLabelSettings | undefined,
+  override: false | ChartDataLabelSettings | undefined,
+): false | ChartDataLabelSettings | undefined {
   if (override === undefined) return base;
   if (override === false) return false;
   if (base === false || base === undefined) return override;

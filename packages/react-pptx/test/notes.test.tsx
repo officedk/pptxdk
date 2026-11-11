@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { posix } from "node:path";
 
 import {
   appendJSX,
@@ -100,7 +101,8 @@ describe("rich-text speaker notes", () => {
       notesRead.masterPart,
       /^ppt\/notesMasters\/notesMaster\d+\.xml$/u,
     );
-    assert.equal(notesRead.themePart, "ppt/theme/theme1.xml");
+    assert.notEqual(notesRead.themePart, "ppt/theme/theme1.xml");
+    assert.match(notesRead.themePart ?? "", /^ppt\/theme\/theme\d+\.xml$/u);
     assert.deepEqual(notesRead.placeholder, { type: "body", index: 1 });
     assert.equal(notesRead.text.paragraphs[0]?.runs[0]?.fontSizePt, 12);
     assert.equal(notesRead.text.paragraphs[0]?.lineSpacingPoints, undefined);
@@ -119,6 +121,90 @@ describe("rich-text speaker notes", () => {
     assert.match(
       presentationXml(result.pptx),
       /<p:notesMasterIdLst><p:notesMasterId r:id="rId\d+"\/><\/p:notesMasterIdLst><p:sldIdLst>/u,
+    );
+  });
+
+  it("writes an independent notes master theme part while preserving the author theme", async () => {
+    const document = deck({
+      width: 960,
+      height: 540,
+      theme: {
+        name: "Notes Theme Contract",
+        colors: { accent1: "#336699", brand: "#123456" },
+        fonts: { major: jost, minor: jost },
+      },
+    }).append(
+      slide({
+        id: "notes-theme",
+        theme: { colors: { brand: "#ABCDEF" } },
+      }).append(
+        notes(
+          paragraph([
+            span("Theme-aware notes", {
+              style: { color: "brand" },
+            }),
+          ]),
+        ),
+      ),
+    );
+
+    const result = await build(document);
+    const read = await validatePptx(result.pptx);
+    assert.deepEqual(read.errors, []);
+    const notesRead = read.slides[0]?.notes;
+    assert.ok(notesRead?.themePart);
+    const parts = unzipSync(result.pptx);
+
+    const masterRelsPath = posix.join(
+      posix.dirname(notesRead.masterPart),
+      "_rels",
+      `${posix.basename(notesRead.masterPart)}.rels`,
+    );
+    const masterRels = strFromU8(parts[masterRelsPath]!);
+    const masterThemes = [
+      ...masterRels.matchAll(/Type="[^"]*\/theme" Target="([^"]+)"\/>/gu),
+    ].map((match) => match[1]!);
+    assert.equal(masterThemes.length, 1);
+    const masterThemePath = posix.join(
+      posix.dirname(notesRead.masterPart),
+      masterThemes[0]!,
+    );
+    assert.equal(notesRead.themePart, masterThemePath);
+
+    const slideMasterRels = strFromU8(
+      parts["ppt/slideMasters/_rels/slideMaster1.xml.rels"]!,
+    );
+    const slideThemeTarget = /Type="[^"]*\/theme" Target="([^"]+)"\/>/u.exec(
+      slideMasterRels,
+    )?.[1];
+    assert.ok(slideThemeTarget);
+    const slideThemePath = posix.join("ppt/slideMasters", slideThemeTarget);
+    assert.notEqual(masterThemePath, slideThemePath);
+    assert.ok(parts[masterThemePath]);
+    assert.ok(parts[slideThemePath]);
+
+    const theme = strFromU8(parts[masterThemePath]!);
+    assert.match(theme, /<a:theme[^>]+name="Notes Theme Contract"/u);
+    assert.match(theme, /<a:accent1><a:srgbClr val="336699"\/><\/a:accent1>/u);
+    assert.match(theme, /<a:minorFont><a:latin typeface="Jost\*"/u);
+    assert.equal(theme, strFromU8(parts[slideThemePath]!));
+
+    const run = notesRead.text.paragraphs[0]?.runs[0];
+    assert.equal(run?.color, "#ABCDEF");
+    assert.equal(run?.fontFamily, "Jost*");
+
+    const presentationRels = strFromU8(
+      parts["ppt/_rels/presentation.xml.rels"]!,
+    );
+    assert.doesNotMatch(presentationRels, /Type="[^"]*\/theme"/u);
+
+    const contentTypes = strFromU8(parts["[Content_Types].xml"]!);
+    assert.match(
+      contentTypes,
+      new RegExp(
+        `PartName="/${masterThemePath}" ContentType="application/vnd.openxmlformats-officedocument.theme\\+xml"`,
+        "u",
+      ),
     );
   });
 

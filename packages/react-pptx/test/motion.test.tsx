@@ -3234,6 +3234,22 @@ describe("object motion", () => {
         ),
       ),
     );
+    const motion = result.report.slides[0]?.capabilities?.[
+      "motion"
+    ] as MotionObservation;
+    assert.deepEqual(
+      motion.steps[0]?.effects.map(({ target, preset, by, endMs }) => [
+        target.authorId,
+        preset,
+        by,
+        endMs,
+      ]),
+      [
+        ["mixed-fly-shape", "fly", undefined, 4000],
+        ["mixed-fly-shape", "fade", "paragraph", 2200],
+        ["mixed-fly-shape", "fade", "paragraph", 2900],
+      ],
+    );
     const file = await validatePptx(result.pptx);
     assert.deepEqual(file.errors, []);
     const effects =

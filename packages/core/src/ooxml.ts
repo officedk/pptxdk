@@ -155,7 +155,14 @@ function contentTypes(
   );
 }
 
-function themePart(value: Theme): string {
+/**
+ * Serializes a resolved deck theme as a native theme part.
+ *
+ * Capability modules that own a master part (for example the notes master) can write a second
+ * theme part from the same author theme, keeping a distinct OPC identity while preserving its
+ * colors and fonts.
+ */
+export function themeXml(value: Theme): string {
   const name = xmlEscape(value.name);
   const colors = `<a:clrScheme name="${name}">${nativeColorSlots
     .map((slot) => {
@@ -342,7 +349,7 @@ export function pptxParts(
         target: "../slideMasters/slideMaster1.xml",
       },
     ]),
-    "ppt/theme/theme1.xml": themePart(themeValue),
+    "ppt/theme/theme1.xml": themeXml(themeValue),
   };
   slides.forEach(({ shapeXml, slideXml, backgroundXml, hidden }, index) => {
     parts[`ppt/slides/slide${index + 1}.xml`] = slide(

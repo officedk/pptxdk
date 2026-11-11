@@ -20,18 +20,21 @@ import {
 } from "@react-pptx/core/capability";
 import { CommonNode } from "@react-pptx/core/document";
 
-import { mergeDataLabels } from "./chart-labels.ts";
+import { chartDataLabelPositions, mergeDataLabels } from "./chart-labels.ts";
 import type {
   ChartAxis,
   ChartAxisCrossing,
-  ChartAxisReferences,
   ChartCategoryAxis,
+  ChartCategoryAxisReferences,
+  ChartDataLabelSettings,
   ChartDataLabels,
   ChartDisplayBlanksAs,
   ChartGroupData,
   ChartKind,
   ChartLine,
   ChartLineDash,
+  ChartMarker,
+  ChartMarkerSymbol,
   ChartPoint,
   ChartProps,
   ChartSeries,
@@ -39,6 +42,12 @@ import type {
   ChartTickMark,
   ChartTitle,
   ChartValueAxis,
+  ChartXYAxisReferences,
+  ScatterChartPoint,
+  ScatterChartSeries,
+  ScatterData,
+  ScatterDataLabelOverride,
+  ScatterLine,
   SharedCategoryData,
 } from "./chart-types.ts";
 import {
@@ -75,6 +84,8 @@ const maximumLineWidthEmu = 20_116_800;
 const maximumExplosionForCurrentValidationProfile = 2_147_483_647;
 const categoryAxisId = 111111;
 const valueAxisId = 222222;
+const scatterXAxisId = 333333;
+const scatterYAxisId = 444444;
 
 const chartOptions: Readonly<Record<ChartKind, readonly string[]>> = {
   column: ["stacking", "gapWidth", "overlap"],
@@ -83,8 +94,10 @@ const chartOptions: Readonly<Record<ChartKind, readonly string[]>> = {
   area: ["stacking"],
   pie: ["explosion", "firstSliceAngle"],
   doughnut: ["explosion", "firstSliceAngle", "holeSize"],
+  scatter: [],
 };
 const allGroupOptions = [...new Set(Object.values(chartOptions).flat())];
+const scatterGroupOptions = ["line", "markers"] as const;
 const chartTextStyleKeys = [
   "fontFamily",
   "fontSize",
@@ -101,13 +114,7 @@ const chartTextStyleKeys = [
   "textShadow",
   "lang",
 ] as const;
-const positionValues = new Set([
-  "center",
-  "insideEnd",
-  "insideBase",
-  "outsideEnd",
-  "bestFit",
-]);
+const positionValues = new Set(Object.keys(chartDataLabelPositions));
 const lineDashValues = new Set<ChartLineDash>([
   "solid",
   "dash",
@@ -129,6 +136,19 @@ const displayBlanksAsValues = new Set<ChartDisplayBlanksAs>([
   "gap",
   "zero",
   "span",
+]);
+const markerSymbolValues = new Set<ChartMarkerSymbol>([
+  "auto",
+  "circle",
+  "dash",
+  "diamond",
+  "dot",
+  "none",
+  "plus",
+  "square",
+  "star",
+  "triangle",
+  "x",
 ]);
 const cartesianKinds = new Set<ChartKind>(["column", "bar", "line", "area"]);
 
@@ -262,6 +282,27 @@ function xmlText(value: string, label: string): string {
   return value;
 }
 
+function pieExplosion(
+  value: unknown,
+  label: string,
+  kind: ChartKind,
+): number | undefined {
+  if (value === undefined) return undefined;
+  if (kind !== "pie" && kind !== "doughnut") {
+    fail(
+      "invalid-chart-option",
+      `${label} is only supported for pie and doughnut charts`,
+    );
+  }
+  return roundedRange(
+    value,
+    label,
+    0,
+    maximumExplosionForCurrentValidationProfile,
+    "rounded-result",
+  );
+}
+
 function lineStyle(value: unknown, label: string): ChartLine | undefined {
   if (value === undefined) return undefined;
   if (!isRecord(value)) fail("invalid-style", `${label} must be an object`);
@@ -294,6 +335,71 @@ function lineStyle(value: unknown, label: string): ChartLine | undefined {
     ...(width === undefined ? {} : { width }),
     ...(dash === undefined ? {} : { dash: dash as ChartLineDash }),
   };
+}
+
+function markerStyle(
+  value: unknown,
+  label: string,
+  kind: ChartKind,
+): boolean | ChartMarker | undefined {
+  if (value === undefined) return undefined;
+  if (kind !== "line" && kind !== "scatter") {
+    fail(
+      "invalid-marker",
+      `${label} is only applicable to line and scatter chart series and points`,
+    );
+  }
+  if (value === true || value === false) return value;
+  if (!isRecord(value)) {
+    fail("invalid-marker", `${label} must be a boolean or marker object`);
+  }
+  onlyKeys(value, ["symbol", "size", "fill", "line"], label);
+  const symbol = value["symbol"];
+  if (
+    symbol !== undefined &&
+    !markerSymbolValues.has(symbol as ChartMarkerSymbol)
+  ) {
+    fail(
+      "invalid-marker",
+      `${label}.symbol must be auto, circle, dash, diamond, dot, none, plus, square, star, triangle, or x`,
+    );
+  }
+  const size = value["size"];
+  if (
+    size !== undefined &&
+    (typeof size !== "number" ||
+      !Number.isSafeInteger(size) ||
+      size < 2 ||
+      size > 72)
+  ) {
+    fail(
+      "invalid-marker",
+      `${label}.size must be an integer between 2 and 72 points`,
+    );
+  }
+  const fill = optionalColor(value["fill"], `${label}.fill`);
+  const line = lineStyle(value["line"], `${label}.line`);
+  return {
+    ...(symbol === undefined ? {} : { symbol: symbol as ChartMarkerSymbol }),
+    ...(size === undefined ? {} : { size }),
+    ...(fill === undefined ? {} : { fill }),
+    ...(line === undefined ? {} : { line }),
+  };
+}
+
+function smoothStyle(
+  value: unknown,
+  label: string,
+  kind: ChartKind,
+): boolean | undefined {
+  if (value === undefined) return undefined;
+  if (kind !== "line") {
+    fail("invalid-smooth", `${label} is only applicable to line chart series`);
+  }
+  if (typeof value !== "boolean") {
+    fail("invalid-smooth", `${label} must be a boolean`);
+  }
+  return value;
 }
 
 function chartTitleValue(
@@ -627,6 +733,205 @@ function sharedCategoryData(value: unknown, label: string): SharedCategoryData {
   };
 }
 
+function scatterLabelOverride(
+  settings: false | ChartDataLabelSettings,
+): false | ScatterDataLabelOverride {
+  if (settings === false) return false;
+  // labels() has already restricted scatter positions and inapplicable content switches.
+  return settings as ScatterDataLabelOverride;
+}
+
+function scatterData(value: unknown, label: string): ScatterData {
+  if (!isRecord(value)) fail("invalid-data", `${label} must be an object`);
+  if (value["kind"] !== "xy") {
+    fail("invalid-data", `${label}.kind must be "xy" for a scatter group`);
+  }
+  onlyKeys(value, ["kind"], label);
+  return { kind: "xy" };
+}
+
+function coordinateList(
+  value: unknown,
+  label: string,
+): readonly (number | null)[] {
+  if (!Array.isArray(value) || value.length === 0) {
+    fail("invalid-data", `${label} must contain at least one observation`);
+  }
+  for (const [index, coordinate] of value.entries()) {
+    if (
+      coordinate !== null &&
+      (typeof coordinate !== "number" || !Number.isFinite(coordinate))
+    ) {
+      fail(
+        "invalid-data",
+        `${label}[${index}] must be a finite number or null`,
+      );
+    }
+  }
+  return value as (number | null)[];
+}
+
+function scatterSeriesPoints(
+  value: unknown,
+  markers: boolean,
+  observationCount: number,
+  label: string,
+): Record<number, ScatterChartPoint> | undefined {
+  if (value === undefined) return undefined;
+  if (!isRecord(value)) {
+    fail(
+      "invalid-data",
+      `${label} points must be an object indexed by observation position`,
+    );
+  }
+  const points: Record<number, ScatterChartPoint> = {};
+  for (const [rawIndex, pointValue] of Object.entries(value)) {
+    const pointIndex = Number(rawIndex);
+    if (
+      !/^\d+$/u.test(rawIndex) ||
+      !Number.isSafeInteger(pointIndex) ||
+      pointIndex < 0 ||
+      pointIndex >= observationCount
+    ) {
+      fail(
+        "invalid-data",
+        `${label} contains out-of-bounds data point index ${rawIndex}`,
+      );
+    }
+    if (!isRecord(pointValue)) {
+      fail("invalid-data", `${label} data point ${rawIndex} must be an object`);
+    }
+    onlyKeys(
+      pointValue,
+      ["color", "line", "marker", "labelColor", "dataLabels"],
+      `${label} data point ${rawIndex}`,
+    );
+    const pointColor = optionalColor(
+      pointValue["color"],
+      `${label} data point ${rawIndex}.color`,
+    );
+    const pointLine = lineStyle(
+      pointValue["line"],
+      `${label} data point ${rawIndex}.line`,
+    );
+    const pointMarker = markerStyle(
+      pointValue["marker"],
+      `${label} data point ${rawIndex}.marker`,
+      "scatter",
+    );
+    if (
+      markers === false &&
+      pointMarker !== undefined &&
+      pointMarker !== false
+    ) {
+      fail(
+        "invalid-marker",
+        `${label} data point ${rawIndex}.marker requires the scatter group to enable markers`,
+      );
+    }
+    const labelColor = optionalColor(
+      pointValue["labelColor"],
+      `${label} data point ${rawIndex}.labelColor`,
+    );
+    const pointLabels = labels(
+      pointValue["dataLabels"],
+      "scatter",
+      undefined,
+      `${label} data point ${rawIndex} dataLabels`,
+      false,
+    );
+    points[pointIndex] = {
+      ...(pointColor === undefined ? {} : { color: pointColor }),
+      ...(pointLine === undefined ? {} : { line: pointLine }),
+      ...(pointMarker === undefined ? {} : { marker: pointMarker }),
+      ...(labelColor === undefined ? {} : { labelColor }),
+      ...(pointLabels === undefined
+        ? {}
+        : { dataLabels: scatterLabelOverride(pointLabels) }),
+    };
+  }
+  return points;
+}
+
+function scatterSeriesList(
+  value: unknown,
+  line: ScatterLine | undefined,
+  markers: boolean,
+  label: string,
+): ScatterChartSeries[] {
+  if (!Array.isArray(value) || value.length === 0) {
+    fail("invalid-data", `${label} must contain at least one series`);
+  }
+  return value.map((item, seriesIndex) => {
+    const seriesLabel = `${label}[${seriesIndex}]`;
+    if (!isRecord(item)) {
+      fail("invalid-data", `${seriesLabel} must be an object`);
+    }
+    onlyKeys(
+      item,
+      ["name", "x", "y", "color", "line", "dataLabels", "marker", "points"],
+      seriesLabel,
+    );
+    const name = item["name"];
+    if (typeof name !== "string" || name.trim() === "") {
+      fail("invalid-data", `${seriesLabel}.name must be a non-empty string`);
+    }
+    const x = coordinateList(item["x"], `${seriesLabel}.x`);
+    const y = coordinateList(item["y"], `${seriesLabel}.y`);
+    if (x.length !== y.length) {
+      fail(
+        "invalid-data",
+        `Series "${name}" has ${x.length} X and ${y.length} Y observations`,
+      );
+    }
+    const color = optionalColor(item["color"], `Series "${name}".color`);
+    const seriesLine = lineStyle(item["line"], `Series "${name}".line`);
+    const showLine = line !== undefined && line !== false;
+    if (!showLine && seriesLine !== undefined) {
+      fail(
+        "invalid-line",
+        `Series "${name}".line requires a connecting line on its scatter group`,
+      );
+    }
+    const marker = markerStyle(
+      item["marker"],
+      `Series "${name}".marker`,
+      "scatter",
+    );
+    if (markers === false && marker !== undefined && marker !== false) {
+      fail(
+        "invalid-marker",
+        `Series "${name}".marker requires the scatter group to enable markers`,
+      );
+    }
+    const seriesLabels = labels(
+      item["dataLabels"],
+      "scatter",
+      undefined,
+      `Series "${name}" dataLabels`,
+      false,
+    );
+    const points = scatterSeriesPoints(
+      item["points"],
+      markers,
+      x.length,
+      `Series "${name}"`,
+    );
+    return {
+      name,
+      x,
+      y,
+      ...(color === undefined ? {} : { color }),
+      ...(seriesLine === undefined ? {} : { line: seriesLine }),
+      ...(seriesLabels === undefined
+        ? {}
+        : { dataLabels: scatterLabelOverride(seriesLabels) }),
+      ...(marker === undefined ? {} : { marker }),
+      ...(points === undefined ? {} : { points }),
+    };
+  });
+}
+
 function chartSeriesList(
   value: unknown,
   categories: readonly string[],
@@ -644,7 +949,17 @@ function chartSeriesList(
     }
     onlyKeys(
       item,
-      ["name", "values", "color", "line", "dataLabels", "points"],
+      [
+        "name",
+        "values",
+        "color",
+        "line",
+        "explosion",
+        "dataLabels",
+        "marker",
+        "smooth",
+        "points",
+      ],
       seriesLabel,
     );
     const name = item["name"];
@@ -711,7 +1026,7 @@ function chartSeriesList(
         }
         onlyKeys(
           pointValue,
-          ["color", "line", "labelColor", "dataLabels"],
+          ["color", "line", "explosion", "marker", "labelColor", "dataLabels"],
           `Series "${name}" data point ${rawIndex}`,
         );
         const pointColor = optionalColor(
@@ -722,9 +1037,19 @@ function chartSeriesList(
           pointValue["line"],
           `Series "${name}" data point ${rawIndex}.line`,
         );
+        const pointMarker = markerStyle(
+          pointValue["marker"],
+          `Series "${name}" data point ${rawIndex}.marker`,
+          kind,
+        );
         const labelColor = optionalColor(
           pointValue["labelColor"],
           `Series "${name}" data point ${rawIndex}.labelColor`,
+        );
+        const pointExplosion = pieExplosion(
+          pointValue["explosion"],
+          `Series "${name}" data point ${rawIndex} explosion`,
+          kind,
         );
         const pointLabels = labels(
           pointValue["dataLabels"],
@@ -732,10 +1057,15 @@ function chartSeriesList(
           stacking,
           `Series "${name}" data point ${rawIndex} dataLabels`,
           false,
+          false,
         );
         points[pointIndex] = {
           ...(pointColor === undefined ? {} : { color: pointColor }),
           ...(pointLine === undefined ? {} : { line: pointLine }),
+          ...(pointExplosion === undefined
+            ? {}
+            : { explosion: pointExplosion }),
+          ...(pointMarker === undefined ? {} : { marker: pointMarker }),
           ...(labelColor === undefined ? {} : { labelColor }),
           ...(pointLabels === undefined ? {} : { dataLabels: pointLabels }),
         };
@@ -743,19 +1073,30 @@ function chartSeriesList(
     }
     const color = optionalColor(item["color"], `Series "${name}".color`);
     const line = lineStyle(item["line"], `Series "${name}".line`);
+    const seriesExplosion = pieExplosion(
+      item["explosion"],
+      `Series "${name}" explosion`,
+      kind,
+    );
+    const marker = markerStyle(item["marker"], `Series "${name}".marker`, kind);
+    const smooth = smoothStyle(item["smooth"], `Series "${name}".smooth`, kind);
     const seriesLabels = labels(
       item["dataLabels"],
       kind,
       stacking,
       `Series "${name}" dataLabels`,
       false,
+      true,
     );
     return {
       name,
       values: values as readonly (number | null)[],
       ...(color === undefined ? {} : { color }),
       ...(line === undefined ? {} : { line }),
+      ...(seriesExplosion === undefined ? {} : { explosion: seriesExplosion }),
       ...(seriesLabels === undefined ? {} : { dataLabels: seriesLabels }),
+      ...(marker === undefined ? {} : { marker }),
+      ...(smooth === undefined ? {} : { smooth }),
       ...(points === undefined ? {} : { points }),
     };
   });
@@ -767,15 +1108,23 @@ function labels(
   stacking: "stacked" | "percent" | undefined,
   label: string,
   allowStyle = true,
-): false | ChartDataLabels | undefined {
+  allowLeaderLines = false,
+): false | ChartDataLabelSettings | undefined {
   if (value === undefined || value === false) return value;
   if (!isRecord(value))
     fail("invalid-data-labels", `${label} must be an object or false`);
   onlyKeys(
     value,
-    allowStyle
-      ? ["value", "percent", "category", "position", "numberFormat", "style"]
-      : ["value", "percent", "category", "position", "numberFormat"],
+    [
+      "value",
+      "percent",
+      "category",
+      "xValue",
+      "position",
+      "numberFormat",
+      ...(allowStyle ? ["style"] : []),
+      ...(allowLeaderLines ? ["leaderLines"] : []),
+    ],
     label,
   );
   for (const key of ["value", "percent", "category"] as const) {
@@ -783,10 +1132,27 @@ function labels(
       fail("invalid-data-labels", `${label}.${key} must be a boolean`);
     }
   }
+  if (value["xValue"] !== undefined) {
+    if (typeof value["xValue"] !== "boolean") {
+      fail("invalid-data-labels", `${label}.xValue must be a boolean`);
+    }
+    if (kind !== "scatter") {
+      fail(
+        "invalid-data-labels",
+        `${label}.xValue is only supported for scatter charts`,
+      );
+    }
+  }
   if (value["percent"] === true && kind !== "pie" && kind !== "doughnut") {
     fail(
       "invalid-data-labels",
       `${label}.percent is only supported for pie and doughnut charts`,
+    );
+  }
+  if (kind === "scatter" && value["category"] === true) {
+    fail(
+      "invalid-data-labels",
+      `${label}.category is not applicable to scatter charts; X values are not category labels`,
     );
   }
   const position = value["position"];
@@ -798,41 +1164,86 @@ function labels(
         : `${label}.position must be a supported string`,
     );
   }
-  if (
-    position !== undefined &&
-    kind !== "column" &&
-    kind !== "bar" &&
-    kind !== "pie"
-  ) {
-    const reason =
-      kind === "doughnut"
-        ? "Office does not allow dLblPos for doughnutChart series data labels"
-        : kind === "area"
-          ? "Office does not allow dLblPos for areaChart series data labels"
-          : "Chart generation does not expose explicit data label positions for line charts";
-    fail("invalid-data-labels", reason);
-  }
-  if (kind === "pie" && position === "insideBase") {
-    fail(
-      "invalid-data-labels",
-      'Office does not allow dLblPos="inBase" for pieChart series data labels',
-    );
-  }
-  if ((kind === "column" || kind === "bar") && position === "bestFit") {
-    fail(
-      "invalid-data-labels",
-      'Office does not allow dLblPos="bestFit" for barChart series data labels',
-    );
-  }
-  if (
-    (kind === "column" || kind === "bar") &&
-    stacking !== undefined &&
-    position === "outsideEnd"
-  ) {
-    fail(
-      "invalid-data-labels",
-      'Office does not allow dLblPos="outEnd" for stacked barChart series data labels',
-    );
+  if (position !== undefined) {
+    const mapped =
+      chartDataLabelPositions[
+        position as NonNullable<ChartDataLabels["position"]>
+      ];
+    if (kind === "area") {
+      fail(
+        "invalid-data-labels",
+        "Office does not allow dLblPos for areaChart series data labels",
+      );
+    }
+    if (kind === "doughnut") {
+      fail(
+        "invalid-data-labels",
+        "Office does not allow dLblPos for doughnutChart series data labels",
+      );
+    }
+    if (kind === "scatter") {
+      if (
+        !["left", "right", "bottom", "top", "center"].includes(
+          position as string,
+        )
+      ) {
+        fail(
+          "invalid-data-labels",
+          `Office does not allow dLblPos="${mapped}" for scatterChart series data labels`,
+        );
+      }
+    } else if (kind === "line") {
+      if (
+        !["left", "right", "bottom", "top", "center"].includes(
+          position as string,
+        )
+      ) {
+        fail(
+          "invalid-data-labels",
+          `Office does not allow dLblPos="${mapped}" for lineChart series data labels`,
+        );
+      }
+    } else if (kind === "pie") {
+      if (position === "insideBase") {
+        fail(
+          "invalid-data-labels",
+          'Office does not allow dLblPos="inBase" for pieChart series data labels',
+        );
+      }
+      if (
+        !["center", "insideEnd", "outsideEnd", "bestFit"].includes(
+          position as string,
+        )
+      ) {
+        fail(
+          "invalid-data-labels",
+          `Office does not allow dLblPos="${mapped}" for pieChart series data labels`,
+        );
+      }
+    } else {
+      if (position === "bestFit") {
+        fail(
+          "invalid-data-labels",
+          'Office does not allow dLblPos="bestFit" for barChart series data labels',
+        );
+      }
+      if (stacking !== undefined && position === "outsideEnd") {
+        fail(
+          "invalid-data-labels",
+          'Office does not allow dLblPos="outEnd" for stacked barChart series data labels',
+        );
+      }
+      const allowed =
+        stacking === undefined
+          ? ["center", "insideEnd", "insideBase", "outsideEnd"]
+          : ["center", "insideEnd", "insideBase"];
+      if (!allowed.includes(position as string)) {
+        fail(
+          "invalid-data-labels",
+          `Office does not allow dLblPos="${mapped}" for barChart series data labels`,
+        );
+      }
+    }
   }
   const numberFormat = value["numberFormat"];
   if (
@@ -847,6 +1258,21 @@ function labels(
   if (typeof numberFormat === "string") {
     xmlText(numberFormat, `${label}.numberFormat`);
   }
+  const rawLeaderLines = value["leaderLines"];
+  let leaderLines: boolean | ChartLine | undefined;
+  if (rawLeaderLines !== undefined) {
+    if (kind !== "pie" && kind !== "doughnut") {
+      fail(
+        "invalid-data-labels",
+        "leaderLines is only supported for pie and doughnut charts",
+      );
+    }
+    if (typeof rawLeaderLines === "boolean") {
+      leaderLines = rawLeaderLines;
+    } else {
+      leaderLines = lineStyle(rawLeaderLines, `${label}.leaderLines`)!;
+    }
+  }
   return {
     ...(value["value"] === undefined
       ? {}
@@ -857,10 +1283,14 @@ function labels(
     ...(value["category"] === undefined
       ? {}
       : { category: value["category"] as boolean }),
+    ...(value["xValue"] === undefined
+      ? {}
+      : { xValue: value["xValue"] as boolean }),
     ...(position === undefined
       ? {}
       : { position: position as NonNullable<ChartDataLabels["position"]> }),
     ...(numberFormat === undefined ? {} : { numberFormat: numberFormat }),
+    ...(leaderLines === undefined ? {} : { leaderLines }),
     ...(allowStyle && value["style"] !== undefined
       ? { style: value["style"] as TextStyle }
       : {}),
@@ -899,10 +1329,10 @@ function plotArea(
   return result;
 }
 
-function axisReferences(
+function categoryAxisReferences(
   value: unknown,
   label: string,
-): ChartAxisReferences | undefined {
+): { readonly category: string; readonly value: string } | undefined {
   if (value === undefined) return undefined;
   if (!isRecord(value))
     fail("invalid-chart-axes", `${label} must be an object`);
@@ -923,19 +1353,90 @@ function axisReferences(
   return { category, value: valueAxis };
 }
 
-type ParsedGroupDraft = {
-  readonly kind: ChartKind;
-  readonly data: ChartGroupData;
-  readonly series: readonly ChartSeries[];
-  readonly axes?: ChartAxisReferences;
-  readonly dataLabels?: false | ChartDataLabels;
-  readonly stacking?: "stacked" | "percent";
-  readonly gapWidth?: number;
-  readonly overlap?: number;
-  readonly explosion?: number;
-  readonly firstSliceAngle?: number;
-  readonly holeSize?: number;
-};
+function scatterAxisReferences(
+  value: unknown,
+  label: string,
+): ChartXYAxisReferences | undefined {
+  if (value === undefined) return undefined;
+  if (!isRecord(value))
+    fail("invalid-chart-axes", `${label} must be an object`);
+  onlyKeys(value, ["x", "y"], label);
+  const x = value["x"];
+  const y = value["y"];
+  if (
+    typeof x !== "string" ||
+    x.trim() === "" ||
+    typeof y !== "string" ||
+    y.trim() === ""
+  ) {
+    fail(
+      "invalid-chart-axes",
+      `${label} must name both an X and a Y value axis`,
+    );
+  }
+  if (x === y) {
+    fail(
+      "invalid-chart-axes",
+      `${label} must reference two distinct X and Y value axes`,
+    );
+  }
+  return { x, y };
+}
+
+function hasVisibleDataLabels(
+  value: false | ChartDataLabelSettings | undefined,
+): value is ChartDataLabelSettings {
+  return (
+    value !== undefined &&
+    value !== false &&
+    (value.value === true ||
+      value.percent === true ||
+      value.category === true ||
+      value.xValue === true)
+  );
+}
+
+function hasLeaderLinesWithoutVisibleLabels(
+  groupLabels: false | ChartDataLabelSettings | undefined,
+  series: readonly ChartSeries[],
+): boolean {
+  // Only the effective labels written to each series dLbls matter. A group declaration that
+  // every series overrides is not written and must not create an extra validation target.
+  return series.some((item) => {
+    const labels = mergeDataLabels(groupLabels, item.dataLabels);
+    return (
+      labels !== undefined &&
+      labels !== false &&
+      labels.leaderLines !== undefined &&
+      labels.leaderLines !== false &&
+      !hasVisibleDataLabels(labels)
+    );
+  });
+}
+
+type ParsedGroupDraft =
+  | {
+      readonly kind: Exclude<ChartKind, "scatter">;
+      readonly data: ChartGroupData;
+      readonly series: readonly ChartSeries[];
+      readonly axes?: ChartCategoryAxisReferences;
+      readonly dataLabels?: false | ChartDataLabelSettings;
+      readonly stacking?: "stacked" | "percent";
+      readonly gapWidth?: number;
+      readonly overlap?: number;
+      readonly explosion?: number;
+      readonly firstSliceAngle?: number;
+      readonly holeSize?: number;
+    }
+  | {
+      readonly kind: "scatter";
+      readonly data: ScatterData;
+      readonly series: readonly ScatterChartSeries[];
+      readonly axes?: ChartXYAxisReferences;
+      readonly dataLabels?: false | ChartDataLabelSettings;
+      readonly line?: ScatterLine;
+      readonly markers: boolean;
+    };
 
 function chartGroupDrafts(value: unknown): ParsedGroupDraft[] {
   if (!Array.isArray(value) || value.length === 0) {
@@ -951,7 +1452,15 @@ function chartGroupDrafts(value: unknown): ParsedGroupDraft[] {
     }
     onlyKeys(
       item,
-      ["kind", "data", "series", "axes", "dataLabels", ...allGroupOptions],
+      [
+        "kind",
+        "data",
+        "series",
+        "axes",
+        "dataLabels",
+        ...allGroupOptions,
+        ...scatterGroupOptions,
+      ],
       label,
     );
     const kind = item["kind"];
@@ -969,6 +1478,63 @@ function chartGroupDrafts(value: unknown): ParsedGroupDraft[] {
           `${chartKind} chart group does not support ${option}`,
         );
       }
+    }
+    for (const option of scatterGroupOptions) {
+      if (item[option] !== undefined && chartKind !== "scatter") {
+        fail(
+          "invalid-chart-option",
+          `${chartKind} chart group does not support ${option}`,
+        );
+      }
+    }
+    if (chartKind === "scatter") {
+      const lineValue = item["line"];
+      if (
+        lineValue !== undefined &&
+        lineValue !== false &&
+        lineValue !== "straight" &&
+        lineValue !== "smooth"
+      ) {
+        fail(
+          "invalid-scatter-line",
+          `${label}.line must be false, straight, or smooth`,
+        );
+      }
+      const line = lineValue as ScatterLine | undefined;
+      const markersValue = item["markers"];
+      if (markersValue !== undefined && typeof markersValue !== "boolean") {
+        fail("invalid-scatter-markers", `${label}.markers must be a boolean`);
+      }
+      const markers = markersValue ?? true;
+      if ((line === undefined || line === false) && !markers) {
+        fail(
+          "invalid-scatter-presentation",
+          `${label} must draw markers or a connecting line`,
+        );
+      }
+      const data = scatterData(item["data"], `${label}.data`);
+      const series = scatterSeriesList(
+        item["series"],
+        line,
+        markers,
+        `${label}.series`,
+      );
+      const labelsValue = labels(
+        item["dataLabels"],
+        chartKind,
+        undefined,
+        "Chart group dataLabels",
+      );
+      const axes = scatterAxisReferences(item["axes"], `${label}.axes`);
+      return {
+        kind: chartKind,
+        data,
+        series,
+        markers,
+        ...(axes === undefined ? {} : { axes }),
+        ...(labelsValue === undefined ? {} : { dataLabels: labelsValue }),
+        ...(line === undefined ? {} : { line }),
+      };
     }
     const stack = item["stacking"];
     if (stack !== undefined && stack !== "stacked" && stack !== "percent") {
@@ -996,7 +1562,18 @@ function chartGroupDrafts(value: unknown): ParsedGroupDraft[] {
       chartKind,
       stack,
       "Chart group dataLabels",
+      true,
+      true,
     );
+    if (
+      (chartKind === "pie" || chartKind === "doughnut") &&
+      hasLeaderLinesWithoutVisibleLabels(labelsValue, series)
+    ) {
+      fail(
+        "invalid-data-labels",
+        "leaderLines requires at least one visible data label value, percent, or category",
+      );
+    }
     const gapWidth = item["gapWidth"];
     if (
       gapWidth !== undefined &&
@@ -1040,7 +1617,7 @@ function chartGroupDrafts(value: unknown): ParsedGroupDraft[] {
       chartKind === "doughnut"
         ? roundedRange(item["holeSize"], `${label}.holeSize`, 10, 90)
         : undefined;
-    const axes = axisReferences(item["axes"], `${label}.axes`);
+    const axes = categoryAxisReferences(item["axes"], `${label}.axes`);
     if (!cartesianKinds.has(chartKind) && axes !== undefined) {
       fail(
         "invalid-chart-axes",
@@ -1070,23 +1647,34 @@ export type ParsedChartSeries = ChartSeries & {
   readonly seriesIndex: number;
 };
 
+export type ParsedScatterSeries = ScatterChartSeries & {
+  readonly groupIndex: number;
+  readonly groupSeriesIndex: number;
+  /** Derived once from group order and group-local series order. */
+  readonly seriesIndex: number;
+};
+
 export type ParsedChartAxis = {
   readonly name: string;
-  readonly role: "category" | "value";
+  /** Scatter axes use x/y roles; both remain native value axes. */
+  readonly role: "category" | "value" | "x" | "y";
   readonly id: number;
   readonly crossAxisId: number;
   readonly spec: ChartAxis;
 };
 
-export type ParsedChartGroup = {
-  readonly kind: ChartKind;
+type ParsedGroupBase = {
+  readonly dataLabels?: false | ChartDataLabelSettings;
+};
+
+type ParsedCategoryChartGroup = ParsedGroupBase & {
+  readonly kind: Exclude<ChartKind, "scatter">;
   readonly data: ChartGroupData;
   readonly series: readonly ParsedChartSeries[];
   readonly axes?: {
     readonly category: ParsedChartAxis;
     readonly value: ParsedChartAxis;
   };
-  readonly dataLabels?: false | ChartDataLabels;
   readonly stacking?: "stacked" | "percent";
   readonly gapWidth?: number;
   readonly overlap?: number;
@@ -1094,6 +1682,22 @@ export type ParsedChartGroup = {
   readonly firstSliceAngle?: number;
   readonly holeSize?: number;
 };
+
+type ParsedScatterChartGroup = ParsedGroupBase & {
+  readonly kind: "scatter";
+  readonly data: ScatterData;
+  readonly series: readonly ParsedScatterSeries[];
+  readonly axes?: {
+    readonly x: ParsedChartAxis;
+    readonly y: ParsedChartAxis;
+  };
+  readonly line?: ScatterLine;
+  readonly markers: boolean;
+};
+
+export type ParsedChartGroup =
+  | ParsedCategoryChartGroup
+  | ParsedScatterChartGroup;
 
 export type ParsedChart = {
   readonly name?: string;
@@ -1106,7 +1710,7 @@ export type ParsedChart = {
   readonly axes: readonly ParsedChartAxis[];
   readonly groups: readonly ParsedChartGroup[];
   /** Flattened series view with the same objects owned by their groups. */
-  readonly series: readonly ParsedChartSeries[];
+  readonly series: readonly (ParsedChartSeries | ParsedScatterSeries)[];
   readonly categories: readonly string[];
   readonly title?: ChartTitle;
   readonly displayBlanksAs?: ChartDisplayBlanksAs;
@@ -1127,7 +1731,26 @@ function parsedAxes(
   axes: ParsedChartAxis[];
   groupAxes: (ParsedChartGroup["axes"] | undefined)[];
 } {
-  const cartesian = groups.every((group) => cartesianKinds.has(group.kind));
+  const scatterGroups = groups.every((group) => group.kind === "scatter");
+  if (scatterGroups) {
+    return parsedScatterAxes(
+      value,
+      groups as readonly Extract<ParsedGroupDraft, { kind: "scatter" }>[],
+    );
+  }
+  if (groups.some((group) => group.kind === "scatter")) {
+    fail(
+      "unsupported-chart-group-combination",
+      "Scatter groups cannot be combined with other chart group kinds",
+    );
+  }
+  const categoryGroups = groups as readonly Extract<
+    ParsedGroupDraft,
+    { kind: Exclude<ChartKind, "scatter"> }
+  >[];
+  const cartesian = categoryGroups.every((group) =>
+    cartesianKinds.has(group.kind),
+  );
   if (!cartesian) {
     if (groups.length !== 1) {
       fail(
@@ -1143,7 +1766,7 @@ function parsedAxes(
     }
     return { axes: [], groupAxes: [undefined] };
   }
-  if (new Set(groups.map(({ kind }) => kind)).size !== 1) {
+  if (new Set(categoryGroups.map(({ kind }) => kind)).size !== 1) {
     fail(
       "unsupported-chart-group-combination",
       "Mixed chart group kinds are not supported by this migration",
@@ -1218,7 +1841,7 @@ function parsedAxes(
     crossAxisId: categoryAxisId,
     spec: valueAxis.spec,
   };
-  const groupAxes = groups.map((group) => {
+  const groupAxes = categoryGroups.map((group) => {
     let references = group.axes;
     if (references === undefined) {
       if (
@@ -1273,6 +1896,120 @@ function parsedAxes(
   return { axes: [categoryParsed, valueParsed], groupAxes };
 }
 
+function parsedScatterAxes(
+  value: unknown,
+  groups: readonly Extract<ParsedGroupDraft, { kind: "scatter" }>[],
+): {
+  axes: ParsedChartAxis[];
+  groupAxes: (ParsedChartGroup["axes"] | undefined)[];
+} {
+  let entries: { name: string; spec: ChartValueAxis }[];
+  if (value === undefined) {
+    entries = [
+      { name: "x", spec: { kind: "value" } },
+      { name: "y", spec: { kind: "value" } },
+    ];
+  } else {
+    if (!isRecord(value)) fail("invalid-axis", "Chart.axes must be an object");
+    entries = Object.entries(value).map(([name, spec]) => {
+      if (name.trim() === "") {
+        fail("invalid-axis", "Chart.axes names must be non-empty strings");
+      }
+      if (!isRecord(spec)) {
+        fail("invalid-axis", `Chart.axes.${name} must be an object`);
+      }
+      if (spec["kind"] !== "value") {
+        fail(
+          "invalid-chart-axis-role",
+          `Chart.axes.${name}.kind must be "value" for a scatter chart`,
+        );
+      }
+      return {
+        name,
+        spec: axis(spec, `Chart.axes.${name}`, "value") as ChartValueAxis,
+      };
+    });
+  }
+  if (entries.length !== 2) {
+    fail("invalid-axis", "A scatter chart must define exactly two value axes");
+  }
+  const firstReferences = groups[0]!.axes;
+  const xName =
+    firstReferences?.x ??
+    (entries.some(({ name }) => name === "x") ? "x" : undefined);
+  const yName =
+    firstReferences?.y ??
+    (entries.some(({ name }) => name === "y") ? "y" : undefined);
+  if (xName === undefined || yName === undefined) {
+    fail(
+      "invalid-chart-axes",
+      "Scatter chart groups must reference chart-level axes when custom axis names are declared",
+    );
+  }
+  if (xName === yName) {
+    fail(
+      "invalid-chart-axes",
+      "Scatter chart groups must reference distinct X and Y value axes",
+    );
+  }
+  const xEntry = entries.find(({ name }) => name === xName);
+  const yEntry = entries.find(({ name }) => name === yName);
+  if (xEntry === undefined) {
+    fail(
+      "unknown-chart-axis",
+      `Scatter chart group references unknown X axis "${xName}"`,
+    );
+  }
+  if (yEntry === undefined) {
+    fail(
+      "unknown-chart-axis",
+      `Scatter chart group references unknown Y axis "${yName}"`,
+    );
+  }
+  if (
+    entries.some(({ name }) => name !== xEntry.name && name !== yEntry.name)
+  ) {
+    fail(
+      "unsupported-chart-axis",
+      "This migration supports one X and one Y value axis per scatter chart",
+    );
+  }
+  const xParsed: ParsedChartAxis = {
+    name: xEntry.name,
+    role: "x",
+    id: scatterXAxisId,
+    crossAxisId: scatterYAxisId,
+    spec: xEntry.spec,
+  };
+  const yParsed: ParsedChartAxis = {
+    name: yEntry.name,
+    role: "y",
+    id: scatterYAxisId,
+    crossAxisId: scatterXAxisId,
+    spec: yEntry.spec,
+  };
+  const groupAxes = groups.map((group) => {
+    const references = group.axes;
+    if (references === undefined) {
+      if (xName !== "x" || yName !== "y") {
+        fail(
+          "invalid-chart-axes",
+          "Scatter chart groups must reference chart-level axes when custom axis names are declared",
+        );
+      }
+      return { x: xParsed, y: yParsed };
+    }
+    if (references.x !== xName || references.y !== yName) {
+      fail(
+        "unknown-chart-axis",
+        "Scatter chart group axis references must match the declared chart-level axes",
+      );
+    }
+    return { x: xParsed, y: yParsed };
+  });
+  return { axes: [xParsed, yParsed], groupAxes };
+}
+
 function displayBlanksAs(
   value: unknown,
   groups: readonly ParsedGroupDraft[],
@@ -1289,23 +2026,31 @@ function displayBlanksAs(
   }
   const requested = value as ChartDisplayBlanksAs;
   const unsupported = groups.find((group) => {
-    const allowed =
-      group.kind === "line"
-        ? group.stacking === undefined
-          ? new Set<ChartDisplayBlanksAs>(["gap", "zero", "span"])
-          : new Set<ChartDisplayBlanksAs>(["zero"])
-        : group.kind === "area"
-          ? group.stacking === undefined
-            ? new Set<ChartDisplayBlanksAs>(["gap", "zero"])
-            : new Set<ChartDisplayBlanksAs>(["zero"])
-          : new Set<ChartDisplayBlanksAs>(["gap", "zero"]);
-    return !allowed.has(requested);
+    if (group.kind === "scatter") {
+      // Span needs a connecting line; markers-only groups cannot span the missing point.
+      return (
+        requested === "span" &&
+        (group.line === undefined || group.line === false)
+      );
+    }
+    if (group.kind === "line") {
+      return group.stacking === undefined
+        ? !["gap", "zero", "span"].includes(requested)
+        : requested !== "zero";
+    }
+    if (group.kind === "area") {
+      return group.stacking === undefined
+        ? !["gap", "zero"].includes(requested)
+        : requested !== "zero";
+    }
+    return !["gap", "zero"].includes(requested);
   });
   if (unsupported !== undefined) {
-    fail(
-      "invalid-chart-missing-values",
-      `${unsupported.kind}${unsupported.stacking === undefined ? "" : ` ${unsupported.stacking}`} chart does not support displayBlanksAs "${requested}"`,
-    );
+    const detail =
+      unsupported.kind === "scatter"
+        ? `scatter chart group without a connecting line does not support displayBlanksAs "${requested}"`
+        : `${unsupported.kind}${unsupported.stacking === undefined ? "" : ` ${unsupported.stacking}`} chart does not support displayBlanksAs "${requested}"`;
+    fail("invalid-chart-missing-values", detail);
   }
   return requested;
 }
@@ -1362,18 +2107,21 @@ export const chartCapability: ObjectCapabilityModule = {
     });
 
     const drafts = chartGroupDrafts(input.props["groups"]);
-    if (drafts.length > 1) {
+    if (drafts.length > 1 && drafts[0]!.kind !== "scatter") {
       for (const group of drafts.slice(1)) {
-        if (
-          group.data.categories.length !== drafts[0]!.data.categories.length
-        ) {
+        if (group.kind === "scatter") continue;
+        const first = drafts[0] as Extract<
+          ParsedGroupDraft,
+          { kind: Exclude<ChartKind, "scatter"> }
+        >;
+        if (group.data.categories.length !== first.data.categories.length) {
           fail(
             "chart-category-domain-mismatch",
             "Chart groups sharing a category axis must have the same ordered category domain",
           );
         }
         for (const [index, category] of group.data.categories.entries()) {
-          if (category !== drafts[0]!.data.categories[index]) {
+          if (category !== first.data.categories[index]) {
             fail(
               "chart-category-domain-mismatch",
               "Chart groups sharing a category axis must have the same ordered category domain",
@@ -1386,13 +2134,40 @@ export const chartCapability: ObjectCapabilityModule = {
 
     let seriesIndex = 0;
     const groups: ParsedChartGroup[] = drafts.map((draft, groupIndex) => {
+      if (draft.kind === "scatter") {
+        const series = draft.series.map((item, groupSeriesIndex) => ({
+          ...item,
+          groupIndex,
+          groupSeriesIndex,
+          seriesIndex: seriesIndex++,
+        }));
+        const parsedGroupAxes = groupAxes[groupIndex] as
+          | { readonly x: ParsedChartAxis; readonly y: ParsedChartAxis }
+          | undefined;
+        return {
+          kind: "scatter",
+          data: draft.data,
+          series,
+          markers: draft.markers,
+          ...(parsedGroupAxes === undefined ? {} : { axes: parsedGroupAxes }),
+          ...(draft.dataLabels === undefined
+            ? {}
+            : { dataLabels: draft.dataLabels }),
+          ...(draft.line === undefined ? {} : { line: draft.line }),
+        };
+      }
       const series = draft.series.map((item, groupSeriesIndex) => ({
         ...item,
         groupIndex,
         groupSeriesIndex,
         seriesIndex: seriesIndex++,
       }));
-      const parsedGroupAxes = groupAxes[groupIndex];
+      const parsedGroupAxes = groupAxes[groupIndex] as
+        | {
+            readonly category: ParsedChartAxis;
+            readonly value: ParsedChartAxis;
+          }
+        | undefined;
       return {
         kind: draft.kind,
         data: draft.data,
@@ -1413,8 +2188,12 @@ export const chartCapability: ObjectCapabilityModule = {
         ...(draft.holeSize === undefined ? {} : { holeSize: draft.holeSize }),
       };
     });
-    const series = groups.flatMap((group) => group.series);
-    const categories = groups[0]!.data.categories;
+    const series = groups.flatMap(
+      (group): readonly (ParsedChartSeries | ParsedScatterSeries)[] =>
+        group.series,
+    );
+    const categories =
+      groups[0]!.kind === "scatter" ? [] : groups[0]!.data.categories;
 
     const name = optionalName(input.props["name"], "name");
     if (name !== undefined) xmlText(name, "Chart.name");
@@ -1833,16 +2612,16 @@ function numberLabelCharacters(
 
 function effectiveSeriesLabels(
   group: ParsedChartGroup,
-  series: ParsedChartSeries,
-): false | ChartDataLabels | undefined {
+  series: ParsedChartSeries | ParsedScatterSeries,
+): false | ChartDataLabelSettings | undefined {
   return mergeDataLabels(group.dataLabels, series.dataLabels);
 }
 
 function effectivePointLabels(
   group: ParsedChartGroup,
-  series: ParsedChartSeries,
+  series: ParsedChartSeries | ParsedScatterSeries,
   index: number,
-): false | ChartDataLabels | undefined {
+): false | ChartDataLabelSettings | undefined {
   return mergeDataLabels(
     effectiveSeriesLabels(group, series),
     series.points?.[index]?.dataLabels,
@@ -1851,11 +2630,33 @@ function effectivePointLabels(
 
 function pointDataLabelTexts(
   group: ParsedChartGroup,
-  series: ParsedChartSeries,
-  labels: ChartDataLabels,
+  series: ParsedChartSeries | ParsedScatterSeries,
+  labels: ChartDataLabelSettings,
   index: number,
 ): string[] {
-  if (series.values[index] === null || series.values[index] === undefined) {
+  if (group.kind === "scatter") {
+    const scatter = series as ParsedScatterSeries;
+    const texts: string[] = [];
+    const numericText = () =>
+      numberLabelCharacters(labels.numberFormat, labels.percent === true);
+    if (
+      (labels.value === true || labels.percent === true) &&
+      scatter.y[index] !== null &&
+      scatter.y[index] !== undefined
+    ) {
+      texts.push(numericText());
+    }
+    if (
+      labels.xValue === true &&
+      scatter.x[index] !== null &&
+      scatter.x[index] !== undefined
+    ) {
+      texts.push(numericText());
+    }
+    return texts;
+  }
+  const value = (series as ParsedChartSeries).values[index];
+  if (value === null || value === undefined) {
     return [];
   }
   const texts: string[] = [];
@@ -1864,14 +2665,20 @@ function pointDataLabelTexts(
       numberLabelCharacters(labels.numberFormat, labels.percent === true),
     );
   }
-  if (labels.category === true) texts.push(group.data.categories[index]!);
+  if (labels.category === true) {
+    texts.push((group as ParsedCategoryChartGroup).data.categories[index]!);
+  }
   return texts;
 }
 
 function groupDataLabelTexts(group: ParsedChartGroup): string[] {
   const texts: string[] = [];
   for (const series of group.series) {
-    for (const index of series.values.keys()) {
+    const count =
+      group.kind === "scatter"
+        ? (series as ParsedScatterSeries).x.length
+        : (series as ParsedChartSeries).values.length;
+    for (let index = 0; index < count; index += 1) {
       const labels = effectivePointLabels(group, series, index);
       if (labels === undefined || labels === false) continue;
       texts.push(...pointDataLabelTexts(group, series, labels, index));
@@ -1912,7 +2719,9 @@ function chartResourceClaims(
   }[];
 } {
   const categoryAxes = parsed.axes.filter(({ role }) => role === "category");
-  const valueAxes = parsed.axes.filter(({ role }) => role === "value");
+  const valueAxes = parsed.axes.filter(
+    ({ role }) => role === "value" || role === "x" || role === "y",
+  );
   const dataLabelText = parsed.groups.flatMap((group) =>
     group.dataLabels !== undefined &&
     group.dataLabels !== false &&
@@ -1925,22 +2734,23 @@ function chartResourceClaims(
     ...parsed.series.map(({ name }) => name),
     ...dataLabelText,
   ];
-  const valueAxisCharacters =
-    valueAxes.length === 0 || valueAxes[0]!.spec.visible === false
+  const percentStacked = parsed.groups.some(
+    (group) => group.kind !== "scatter" && group.stacking === "percent",
+  );
+  const axisCharacters = (spec: ChartAxis): string[] =>
+    spec.visible === false
       ? []
       : [
           numberLabelCharacters(
-            valueAxes[0]!.spec.kind === "value"
-              ? valueAxes[0]!.spec.numberFormat
-              : undefined,
-            parsed.groups.some(({ stacking }) => stacking === "percent"),
+            spec.kind === "value" ? spec.numberFormat : undefined,
+            percentStacked,
           ),
         ];
-  valueAxes.forEach(({ spec }) => {
+  for (const { spec } of valueAxes) {
     if (spec.visible !== false && spec.style === undefined) {
-      chartText.push(...valueAxisCharacters);
+      chartText.push(...axisCharacters(spec));
     }
-  });
+  }
   const chartStyle = textOnlyStyle(parsed.style);
   const chart = writeChartTextProperties(
     chartStyle,
@@ -1973,6 +2783,8 @@ function chartResourceClaims(
     axisTitles?: Map<string, string>;
     categoryAxis?: string;
     valueAxis?: string;
+    xAxis?: string;
+    yAxis?: string;
     groupDataLabels?: Map<number, string>;
     pointLabels?: Map<string, string>;
   } = { chart: chart.xml };
@@ -2035,16 +2847,18 @@ function chartResourceClaims(
       addWarnings(output.warnings);
     }
   }
-  for (const { name, spec } of valueAxes) {
+  for (const { name, role, spec } of valueAxes) {
     if (spec.style !== undefined) {
       const output = writeChartTextProperties(
         mergeTextStyle(chartStyle, spec.style),
-        valueAxisCharacters,
+        axisCharacters(spec),
         `Chart.axes.${name}.style`,
         theme,
         embedFonts,
       );
-      textStyles.valueAxis = output.xml;
+      if (role === "x") textStyles.xAxis = output.xml;
+      else if (role === "y") textStyles.yAxis = output.xml;
+      else textStyles.valueAxis = output.xml;
       resourceClaims.push(...output.resourceClaims);
       fontUses.push(
         ...output.fontUses.map((use) => ({
@@ -2180,6 +2994,7 @@ export type {
   ChartAxisCrossing,
   ChartAxisReferences,
   ChartCategoryAxis,
+  ChartCategoryAxisReferences,
   ChartDataLabelOverride,
   ChartDataLabels,
   ChartDisplayBlanksAs,
@@ -2188,17 +3003,28 @@ export type {
   ChartKind,
   ChartLine,
   ChartLineDash,
+  ChartMarker,
+  ChartMarkerSymbol,
   ChartPoint,
   ChartProps,
   ChartSeries,
+  ChartSeriesDataLabelOverride,
   ChartTextStyle,
   ChartTickLabelPosition,
   ChartTickMark,
   ChartTitle,
   ChartValueAxis,
+  ChartXYAxisReferences,
   ColumnOrBarChartGroup,
   DoughnutChartGroup,
   LineOrAreaChartGroup,
   PieChartGroup,
+  ScatterChartGroup,
+  ScatterChartPoint,
+  ScatterChartSeries,
+  ScatterData,
+  ScatterDataLabelOverride,
+  ScatterDataLabels,
+  ScatterLine,
   SharedCategoryData,
 } from "./chart-types.ts";

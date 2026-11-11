@@ -835,16 +835,24 @@ describe("native Cartesian charts", () => {
       file.slides[0]?.objects.map(({ chart }) => chart?.types),
       [["pieChart"], ["doughnutChart"]],
     );
-    const observedPie = fileSeries(categories, [
+    const workbookPie = fileSeries(categories, [
       { name: "渠道 & mix", values: [72.5, 27.5, null] },
     ]);
-    const observedDoughnut = fileSeries(categories, [
+    const workbookDoughnut = fileSeries(categories, [
       { name: "Q1", values: [10, null, 30] },
     ]);
+    const observedPie = workbookPie.map((item) => ({
+      ...item,
+      explosion: 26,
+    }));
+    const observedDoughnut = workbookDoughnut.map((item) => ({
+      ...item,
+      explosion: 400,
+    }));
     assert.deepEqual(file.slides[0]?.objects[0]?.chart?.series, observedPie);
     assert.deepEqual(
       file.slides[0]?.objects[0]?.chart?.embeddedWorkbook?.series,
-      observedPie,
+      workbookPie,
     );
     assert.deepEqual(
       file.slides[0]?.objects[1]?.chart?.series,
@@ -852,7 +860,7 @@ describe("native Cartesian charts", () => {
     );
     assert.deepEqual(
       file.slides[0]?.objects[1]?.chart?.embeddedWorkbook?.series,
-      observedDoughnut,
+      workbookDoughnut,
     );
 
     const pieXml = strFromU8(parts["ppt/charts/chart1.xml"]!);
@@ -1218,10 +1226,10 @@ describe("native Cartesian charts", () => {
         } as unknown as ChartProps,
       },
       {
-        id: "line-explicit-data-label-position",
+        id: "line-invalid-data-label-position",
         code: "invalid-data-labels",
         message:
-          "Chart generation does not expose explicit data label positions for line charts",
+          'Office does not allow dLblPos="bestFit" for lineChart series data labels',
         props: {
           ...base,
           groups: [
@@ -1229,7 +1237,7 @@ describe("native Cartesian charts", () => {
               kind: "line",
               data,
               series,
-              dataLabels: { value: true, position: "center" },
+              dataLabels: { value: true, position: "bestFit" },
             },
           ],
         } as unknown as ChartProps,
@@ -1674,7 +1682,7 @@ describe("native Cartesian charts", () => {
           kind: "line",
           data: singleData,
           series: singleSeries,
-          dataLabels: { position: "center" },
+          dataLabels: { position: "bestFit" },
         },
       ],
     } as unknown as ChartProps;

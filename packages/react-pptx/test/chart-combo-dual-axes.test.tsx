@@ -1218,7 +1218,7 @@ describe("chart combination and dual-axis topology", () => {
           logBase: 10,
           numberFormat: "0.0",
           gridlines: true,
-          crosses: "max",
+          crosses: "min",
           style: { fontSize: "12pt", color: "#445566" },
           majorTickMark: "out",
           tickLabelPosition: "high",
@@ -1328,7 +1328,7 @@ describe("chart combination and dual-axis topology", () => {
           numberFormat: "0.0",
           majorTickMark: "out",
           tickLabelPosition: "high",
-          crosses: "max",
+          crosses: "min",
           majorGridlines: true,
           minorGridlines: undefined,
         },
@@ -1345,7 +1345,7 @@ describe("chart combination and dual-axis topology", () => {
           numberFormat: undefined,
           majorTickMark: undefined,
           tickLabelPosition: undefined,
-          crosses: undefined,
+          crosses: "min",
           majorGridlines: undefined,
           minorGridlines: undefined,
         },
@@ -1362,7 +1362,7 @@ describe("chart combination and dual-axis topology", () => {
           numberFormat: "0%",
           majorTickMark: "in",
           tickLabelPosition: undefined,
-          crosses: undefined,
+          crosses: "min",
           majorGridlines: undefined,
           minorGridlines: true,
         },
@@ -1865,7 +1865,180 @@ describe("chart combination and dual-axis topology", () => {
     const chartPath = "ppt/charts/chart1.xml";
     const xml = strFromU8(parts[chartPath]!);
     parts[chartPath] = strToU8(
-      xml.replace('<c:crosses val="max"/>', '<c:crosses val="autoZero"/>'),
+      xml.replace('<c:crosses val="max"/>', '<c:crosses val="min"/>'),
+    );
+    const file = await validatePptx(zipSync(parts));
+    assert.ok(
+      file.errors.some(({ code }) => code === "invalid-chart-axis"),
+      JSON.stringify(file.errors),
+    );
+  });
+
+  it("diagnoses an explicit max crossing that conflicts with a reversed position", async () => {
+    await assert.rejects(
+      buildSingleChart({
+        x: 10,
+        y: 10,
+        width: 640,
+        height: 360,
+        axes: {
+          category: { kind: "category", position: "top" },
+          value: {
+            kind: "value",
+            position: "right",
+            reversed: true,
+            crosses: "max",
+            min: 1,
+            max: 100,
+          },
+        },
+        groups: [
+          {
+            kind: "column",
+            axes: { category: "category", value: "value" },
+            data: { kind: "shared-categories", categories: ["A", "B"] },
+            series: [{ name: "S", values: [10, 90] }],
+          },
+        ],
+      }),
+      (error: unknown) => {
+        assert.ok(error instanceof BuildError);
+        assert.equal(error.diagnostics[0]?.code, "invalid-chart-axes");
+        return true;
+      },
+    );
+  });
+
+  it("maps an explicit left side to an endpoint crossing instead of autoZero", async () => {
+    const result = await buildSingleChart({
+      x: 10,
+      y: 10,
+      width: 640,
+      height: 360,
+      axes: {
+        x: { kind: "value", min: -10, max: 10 },
+        y: { kind: "value", position: "left", min: 1, max: 3 },
+      },
+      groups: [
+        {
+          kind: "scatter",
+          axes: { x: "x", y: "y" },
+          data: { kind: "xy" },
+          line: "straight",
+          series: [{ name: "S", x: [-5, 5], y: [1, 2] }],
+        },
+      ],
+    });
+    const file = await validatePptx(result.pptx);
+    assert.deepEqual(file.errors, []);
+    const chart = file.slides[0]?.objects[0]?.chart;
+    assert.ok(chart);
+    assert.deepEqual(
+      chart.axes.map(({ kind, position, crosses }) => [
+        kind,
+        position,
+        crosses,
+      ]),
+      [
+        ["value", "bottom", "min"],
+        ["value", "left", undefined],
+      ],
+    );
+    const xml = chartXml(result.pptx);
+    assert.equal((xml.match(/<c:crosses val="min"\/>/gu) ?? []).length, 1);
+    assert.equal((xml.match(/<c:crosses val="autoZero"\/>/gu) ?? []).length, 1);
+  });
+
+  it("keeps autoZero for undeclared primary defaults", async () => {
+    const result = await buildSingleChart({
+      x: 10,
+      y: 10,
+      width: 640,
+      height: 360,
+      axes: {
+        x: { kind: "value", min: -10, max: 10 },
+        y: { kind: "value", min: 1, max: 3 },
+      },
+      groups: [
+        {
+          kind: "scatter",
+          axes: { x: "x", y: "y" },
+          data: { kind: "xy" },
+          series: [{ name: "S", x: [-5, 5], y: [1, 2] }],
+        },
+      ],
+    });
+    const file = await validatePptx(result.pptx);
+    assert.deepEqual(file.errors, []);
+    const xml = chartXml(result.pptx);
+    assert.ok(!xml.includes('<c:crosses val="min"/>'));
+    assert.ok(!xml.includes('<c:crosses val="max"/>'));
+    assert.equal((xml.match(/<c:crosses val="autoZero"\/>/gu) ?? []).length, 2);
+  });
+
+  it("does not treat an unknown autoZero as an edge in the reader", async () => {
+    const result = await buildSingleChart({
+      x: 10,
+      y: 10,
+      width: 640,
+      height: 360,
+      axes: {
+        category: { kind: "category" },
+        value: { kind: "value", min: -10, max: 10 },
+      },
+      groups: [
+        {
+          kind: "column",
+          axes: { category: "category", value: "value" },
+          data: { kind: "shared-categories", categories: ["A", "B"] },
+          series: [{ name: "S", values: [-5, 5] }],
+        },
+      ],
+    });
+    const parts = unzipSync(result.pptx);
+    const chartPath = "ppt/charts/chart1.xml";
+    const xml = strFromU8(parts[chartPath]!);
+    parts[chartPath] = strToU8(
+      xml.replace('<c:axPos val="b"/>', '<c:axPos val="t"/>'),
+    );
+    const file = await validatePptx(zipSync(parts));
+    assert.ok(
+      !file.errors.some(({ code }) => code === "invalid-chart-axis"),
+      JSON.stringify(file.errors),
+    );
+  });
+
+  it("reads a reversed endpoint crossing against the physical side", async () => {
+    const result = await buildSingleChart({
+      x: 10,
+      y: 10,
+      width: 640,
+      height: 360,
+      axes: {
+        category: { kind: "category", position: "bottom" },
+        value: {
+          kind: "value",
+          position: "left",
+          reversed: true,
+          crosses: "max",
+          min: 1,
+          max: 100,
+        },
+      },
+      groups: [
+        {
+          kind: "column",
+          axes: { category: "category", value: "value" },
+          data: { kind: "shared-categories", categories: ["A", "B"] },
+          series: [{ name: "S", values: [10, 90] }],
+        },
+      ],
+    });
+    const parts = unzipSync(result.pptx);
+    const chartPath = "ppt/charts/chart1.xml";
+    const xml = strFromU8(parts[chartPath]!);
+    parts[chartPath] = strToU8(
+      xml.replace('<c:axPos val="b"/>', '<c:axPos val="t"/>'),
     );
     const file = await validatePptx(zipSync(parts));
     assert.ok(

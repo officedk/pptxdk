@@ -2102,28 +2102,66 @@ function parsedAxes(
     claimPosition(axis, position);
   }
 
+  const maxSide = (direction: "horizontal" | "vertical") =>
+    direction === "vertical" ? "right" : "top";
+  const endpointSideForCrossing = (
+    source: ParsedAxisDraft,
+    crossingValue: "min" | "max",
+    targetDirection: "horizontal" | "vertical",
+  ): ChartAxisPosition => {
+    // A reversed source puts the maximum value at the opposite physical end.
+    const maxAtFarEnd = source.spec.reversed !== true;
+    if (targetDirection === "vertical") {
+      return (crossingValue === "max") === maxAtFarEnd ? "right" : "left";
+    }
+    return (crossingValue === "max") === maxAtFarEnd ? "top" : "bottom";
+  };
   const crossingSideForPartner = (
     crossing: ParsedAxisCrossing,
-    partnerDirection: "horizontal" | "vertical",
+    source: ParsedAxisDraft,
+    targetDirection: "horizontal" | "vertical",
   ): ChartAxisPosition | undefined => {
     if (crossing.kind !== "crosses") return undefined;
-    if (partnerDirection === "vertical") {
-      return crossing.value === "max" ? "right" : "left";
-    }
-    return crossing.value === "max" ? "top" : "bottom";
+    // autoZero is not an endpoint: its physical side depends on the actual scale
+    // and cannot be inferred without native auto-scaling.
+    if (crossing.value === "autoZero") return undefined;
+    return endpointSideForCrossing(source, crossing.value, targetDirection);
   };
-  const maxSide = (direction: "horizontal" | "vertical") =>
-    direction === "horizontal" ? "right" : "top";
+  const crossingValueForSide = (
+    source: ParsedAxisDraft,
+    targetDirection: "horizontal" | "vertical",
+    side: ChartAxisPosition,
+  ): "min" | "max" => {
+    const maxAtFarEnd = source.spec.reversed !== true;
+    if (targetDirection === "vertical") {
+      const rightIsMax = maxAtFarEnd;
+      return side === "right"
+        ? rightIsMax
+          ? "max"
+          : "min"
+        : rightIsMax
+          ? "min"
+          : "max";
+    }
+    const topIsMax = maxAtFarEnd;
+    return side === "top"
+      ? topIsMax
+        ? "max"
+        : "min"
+      : topIsMax
+        ? "min"
+        : "max";
+  };
 
   // Office ignores c:axPos and positions an axis from the crossing control on its
-  // perpendicular axis. Reject explicit crossings or positions that disagree before
-  // deriving the effective sides. See MS-OI29500 Part 1 Section 21.2.2.10.
+  // perpendicular axis. Explicit min/max crossings are checked with the source
+  // orientation; autoZero is left to native auto-scaling. See MS-OI29500 21.2.2.10.
   for (const axis of firstUse) {
     const sides = partnersOf(axis).flatMap((partner) => {
       const side =
         partner.crossing === undefined
           ? undefined
-          : crossingSideForPartner(partner.crossing, axis.direction!);
+          : crossingSideForPartner(partner.crossing, partner, axis.direction!);
       return side === undefined ? [] : [side];
     });
     const unique = new Set(sides);
@@ -2154,6 +2192,7 @@ function parsedAxes(
       for (const partner of partnersOf(axis)) {
         const wanted = crossingSideForPartner(
           axis.crossing,
+          axis,
           partner.direction!,
         );
         if (wanted === undefined) continue;
@@ -2190,7 +2229,17 @@ function parsedAxes(
         );
       }
       const side = sides[0]!;
-      const value = side === maxSide(axis.direction!) ? "max" : "autoZero";
+      const targetDirection = partners[0]!.direction!;
+      // Explicit positions and secondary defaults must land on an endpoint.
+      // Primary defaults keep the previous autoZero behavior.
+      const edgeRequested = partners.some(
+        (partner) =>
+          partner.spec.position !== undefined ||
+          partner.position === maxSide(partner.direction!),
+      );
+      const value = edgeRequested
+        ? crossingValueForSide(axis, targetDirection, side)
+        : "autoZero";
       if (axis.crossing?.kind !== "crosses" || axis.crossing.value !== value) {
         axis.crossing = { kind: "crosses", value };
         changed = true;
@@ -2199,7 +2248,11 @@ function parsedAxes(
     for (const axis of firstUse) {
       const sides = partnersOf(axis).flatMap((partner) => {
         if (partner.crossing?.kind !== "crosses") return [];
-        const side = crossingSideForPartner(partner.crossing, axis.direction!);
+        const side = crossingSideForPartner(
+          partner.crossing,
+          partner,
+          axis.direction!,
+        );
         return side === undefined ? [] : [side];
       });
       const unique = new Set(sides);

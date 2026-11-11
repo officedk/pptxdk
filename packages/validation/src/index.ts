@@ -4224,57 +4224,55 @@ function validateChart(
         axis !== undefined && axisDirectionById.get(axis.id) === "vertical",
     );
     if (horizontal === undefined || vertical === undefined) continue;
-    if (horizontal.crossesAt === undefined) {
-      const horizontalCrosses = horizontal.crosses ?? "autoZero";
-      if (
-        horizontalCrosses === "max" &&
-        vertical.position !== undefined &&
-        vertical.position !== "right"
-      ) {
-        issue(
-          errors,
-          chartPart,
-          "invalid-chart-axis",
-          `Chart axis ${vertical.id} is at ${vertical.position} but its horizontal crossing axis uses max`,
-        );
+    const endpointSide = (
+      source: FileChartAxis,
+      crossing: string,
+      targetDirection: "horizontal" | "vertical",
+    ): "bottom" | "left" | "right" | "top" | undefined => {
+      if (crossing === "autoZero" || crossing === "") return undefined;
+      if (crossing !== "min" && crossing !== "max") return undefined;
+      // A reversed source puts its maximum value at the opposite physical end.
+      const maxAtFarEnd = source.orientation !== "maxMin";
+      if (targetDirection === "vertical") {
+        return (crossing === "max") === maxAtFarEnd ? "right" : "left";
       }
+      return (crossing === "max") === maxAtFarEnd ? "top" : "bottom";
+    };
+    if (horizontal.crossesAt === undefined) {
+      const wanted = endpointSide(
+        horizontal,
+        horizontal.crosses ?? "autoZero",
+        "vertical",
+      );
       if (
-        (horizontalCrosses === "autoZero" || horizontalCrosses === "min") &&
+        wanted !== undefined &&
         vertical.position !== undefined &&
-        vertical.position !== "left"
+        vertical.position !== wanted
       ) {
         issue(
           errors,
           chartPart,
           "invalid-chart-axis",
-          `Chart axis ${vertical.id} is at ${vertical.position} but its horizontal crossing axis does not use max`,
+          `Chart axis ${vertical.id} is at ${vertical.position} but its horizontal crossing axis resolves to ${wanted}`,
         );
       }
     }
     if (vertical.crossesAt === undefined) {
-      const verticalCrosses = vertical.crosses ?? "autoZero";
+      const wanted = endpointSide(
+        vertical,
+        vertical.crosses ?? "autoZero",
+        "horizontal",
+      );
       if (
-        verticalCrosses === "max" &&
+        wanted !== undefined &&
         horizontal.position !== undefined &&
-        horizontal.position !== "top"
+        horizontal.position !== wanted
       ) {
         issue(
           errors,
           chartPart,
           "invalid-chart-axis",
-          `Chart axis ${horizontal.id} is at ${horizontal.position} but its vertical crossing axis uses max`,
-        );
-      }
-      if (
-        (verticalCrosses === "autoZero" || verticalCrosses === "min") &&
-        horizontal.position !== undefined &&
-        horizontal.position !== "bottom"
-      ) {
-        issue(
-          errors,
-          chartPart,
-          "invalid-chart-axis",
-          `Chart axis ${horizontal.id} is at ${horizontal.position} but its vertical crossing axis does not use max`,
+          `Chart axis ${horizontal.id} is at ${horizontal.position} but its vertical crossing axis resolves to ${wanted}`,
         );
       }
     }

@@ -111,6 +111,13 @@ export type FileObject = {
   };
 };
 
+/** Native chart line formatting observed from c:spPr/a:ln. */
+export type FileChartLine = {
+  readonly color?: string;
+  readonly widthEmu?: number;
+  readonly dash?: string;
+};
+
 export type FileChartSeries = {
   readonly name: string;
   readonly categories: readonly string[];
@@ -124,6 +131,10 @@ export type FileChartSeries = {
   readonly order: number;
   /** Position of the owning chart group in c:plotArea order. */
   readonly groupIndex: number;
+  /** Native c:explosion on this series, when present. */
+  readonly explosion?: number;
+  /** Native c:dPt/c:explosion values by point index. */
+  readonly pointExplosions?: Readonly<Record<number, number>>;
 };
 
 /** Locally observed data-label settings; absent fields are not set by the XML node. */
@@ -138,6 +149,10 @@ export type FileChartDataLabel = {
     | "outsideEnd"
     | "bestFit";
   readonly numberFormat?: string;
+  /** Native c:showLeaderLines; true or false only when explicitly present. */
+  readonly leaderLines?: boolean;
+  /** Native c:leaderLines/c:spPr/a:ln formatting, when specified. */
+  readonly leaderLine?: FileChartLine;
 };
 
 /** Effective series labels and local point overrides reconstructed from chart XML. */
@@ -178,6 +193,10 @@ export type FileChartGroup = {
   readonly axisIds: readonly number[];
   /** Native series ids in c:order order. */
   readonly seriesIndices: readonly number[];
+  /** Native c:firstSliceAng for pie and doughnut groups. */
+  readonly firstSliceAngle?: number;
+  /** Native c:holeSize for doughnut groups. */
+  readonly holeSize?: number;
 };
 
 export type FileChart = {
@@ -2837,11 +2856,33 @@ function mergeFileDataLabels(
   return { ...base, ...override };
 }
 
+function readChartLine(
+  line: XmlElement | undefined,
+  theme: ThemeTextReader,
+): FileChartLine | undefined {
+  if (line === undefined) return undefined;
+  const color = readRunColor(first(line, drawingNamespace, "solidFill"), theme);
+  const widthEmu = integerAttribute(line, "w");
+  const dashValue = attribute(
+    first(line, drawingNamespace, "prstDash") ?? line,
+    "val",
+  );
+  if (color === undefined && widthEmu === undefined && dashValue === "") {
+    return undefined;
+  }
+  return {
+    ...(color === undefined ? {} : { color }),
+    ...(widthEmu === undefined ? {} : { widthEmu }),
+    ...(dashValue === "" ? {} : { dash: dashValue }),
+  };
+}
+
 function readDataLabelSettings(
   node: XmlElement | undefined,
   chartType: string | null,
   part: string,
   errors: ValidationIssue[],
+  theme: ThemeTextReader,
 ): false | FileChartDataLabel | undefined {
   if (node === undefined) return undefined;
   const deleteNode = first(node, chartNamespace, "delete");
@@ -2854,6 +2895,8 @@ function readDataLabelSettings(
     category?: boolean;
     position?: Exclude<FileChartDataLabel["position"], undefined>;
     numberFormat?: string;
+    leaderLines?: boolean;
+    leaderLine?: FileChartLine;
   } = {};
   const numberFormatNode = first(node, chartNamespace, "numFmt");
   if (numberFormatNode !== undefined) {
@@ -2888,6 +2931,44 @@ function readDataLabelSettings(
         part,
         "invalid-data-label-percent",
         `Office does not allow showPercent in ${chartType ?? "this chart type"}`,
+      );
+    }
+  }
+  const showLeaderLines = booleanAttribute(
+    first(node, chartNamespace, "showLeaderLines"),
+  );
+  if (showLeaderLines !== undefined) {
+    settings.leaderLines = showLeaderLines;
+    if (
+      showLeaderLines &&
+      chartType !== "pieChart" &&
+      chartType !== "doughnutChart" &&
+      chartType !== "ofPieChart" &&
+      chartType !== "pie3DChart"
+    ) {
+      issue(
+        errors,
+        part,
+        "invalid-data-label-leader-lines",
+        `Office does not allow showLeaderLines in ${chartType ?? "this chart type"}`,
+      );
+    }
+  }
+  const leaderLinesNode =
+    first(node, chartNamespace, "leaderLines") ?? undefined;
+  if (leaderLinesNode !== undefined) {
+    const shape = first(leaderLinesNode, chartNamespace, "spPr");
+    const line = readChartLine(
+      shape === undefined ? undefined : first(shape, drawingNamespace, "ln"),
+      theme,
+    );
+    if (line !== undefined) settings.leaderLine = line;
+    if (settings.leaderLines !== true) {
+      issue(
+        errors,
+        part,
+        "invalid-data-label-leader-lines",
+        "leaderLines requires a sibling showLeaderLines value of true",
       );
     }
   }
@@ -3306,6 +3387,7 @@ function validateChart(
       typeNode.localName,
       chartPart,
       errors,
+      textTheme,
     );
     const axisIds = elements(typeNode, chartNamespace, "axId").flatMap(
       (axisId) => {
@@ -3493,6 +3575,7 @@ function validateChart(
         typeNode.localName,
         chartPart,
         errors,
+        textTheme,
       );
       const effectiveLabels = mergeFileDataLabels(
         groupDataLabels,
@@ -3514,11 +3597,30 @@ function validateChart(
           typeNode.localName,
           chartPart,
           errors,
+          textTheme,
         );
         if (pointSettings === undefined) continue;
         pointDataLabels[pointIndex] = pointSettings;
       }
       const name = nameCache.values[0] ?? "";
+      const explosion = integerAttribute(
+        first(chartSeries, chartNamespace, "explosion"),
+        "val",
+      );
+      const pointExplosions: Record<number, number> = {};
+      for (const point of elements(chartSeries, chartNamespace, "dPt")) {
+        const pointIndex = integerAttribute(
+          first(point, chartNamespace, "idx"),
+          "val",
+        );
+        const pointExplosion = integerAttribute(
+          first(point, chartNamespace, "explosion"),
+          "val",
+        );
+        if (pointIndex !== undefined && pointExplosion !== undefined) {
+          pointExplosions[pointIndex] = pointExplosion;
+        }
+      }
       pending.push({
         order,
         ...(effectiveLabels === undefined &&
@@ -3542,6 +3644,10 @@ function validateChart(
           index,
           order,
           groupIndex,
+          ...(explosion === undefined ? {} : { explosion }),
+          ...(Object.keys(pointExplosions).length === 0
+            ? {}
+            : { pointExplosions }),
         },
         formula: {
           name: nameCache.formula,
@@ -3566,6 +3672,33 @@ function validateChart(
             "val",
           )
         : undefined;
+    const firstSliceAngle = integerAttribute(
+      first(typeNode, chartNamespace, "firstSliceAng"),
+      "val",
+    );
+    const holeSize = integerAttribute(
+      first(typeNode, chartNamespace, "holeSize"),
+      "val",
+    );
+    if (
+      firstSliceAngle !== undefined &&
+      (firstSliceAngle < 0 || firstSliceAngle > 360)
+    ) {
+      issue(
+        errors,
+        chartPart,
+        "invalid-chart-option",
+        `Chart group firstSliceAng must be between 0 and 360`,
+      );
+    }
+    if (holeSize !== undefined && (holeSize < 10 || holeSize > 90)) {
+      issue(
+        errors,
+        chartPart,
+        "invalid-chart-option",
+        `Doughnut holeSize must be between 10 and 90`,
+      );
+    }
     groups.push({
       type: typeNode.localName ?? "",
       ...(groupDirection === "bar" || groupDirection === "col"
@@ -3574,6 +3707,8 @@ function validateChart(
       ...(typeGrouping === "" ? {} : { grouping: typeGrouping }),
       axisIds,
       seriesIndices: pending.map(({ series: item }) => item.index),
+      ...(firstSliceAngle === undefined ? {} : { firstSliceAngle }),
+      ...(holeSize === undefined ? {} : { holeSize }),
     });
   }
 

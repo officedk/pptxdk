@@ -367,6 +367,10 @@ describe("table and chart authoring through the common document", () => {
               ? []
               : [111111, 222222],
           seriesIndices: series.map(({ index: seriesIndex }) => seriesIndex),
+          ...(type === "pieChart" ? { firstSliceAngle: 0 } : {}),
+          ...(type === "doughnutChart"
+            ? { firstSliceAngle: 0, holeSize: 55 }
+            : {}),
         },
       ]);
       assert.deepEqual(

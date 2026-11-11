@@ -18,6 +18,7 @@ import {
   type ThemeScope,
   type VisualStyle,
 } from "@react-pptx/core/capability";
+import { CommonContainer } from "@react-pptx/core/document";
 
 import { nativeLinkXml } from "./identity.ts";
 import type { MorphProps } from "./morph-api.ts";
@@ -38,6 +39,21 @@ export type BoxDeclarationProps = MorphProps &
     readonly style?: LayoutStyle & TextStyle & VisualStyle;
     readonly theme?: ThemeScope;
   };
+
+/** Creates the editable layout container shared by the command factory and the Box JSX element. */
+export function createBoxNode(
+  props: BoxDeclarationProps,
+): CommonContainer<
+  "box",
+  BoxDeclarationProps,
+  NonNullable<BoxDeclarationProps["style"]>
+> {
+  return new CommonContainer<
+    "box",
+    BoxDeclarationProps,
+    NonNullable<BoxDeclarationProps["style"]>
+  >("box", "rp:box", props);
+}
 
 const boxAllowedParameters = [
   "testId",

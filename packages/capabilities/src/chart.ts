@@ -1,5 +1,6 @@
 import {
   CapabilityError,
+  CommonNode,
   layoutStyleKeys,
   parseCapabilityLayoutContract,
   pxToEmu,
@@ -18,6 +19,7 @@ import {
   type ObjectCapabilityModule,
   type ThemeContext,
 } from "@react-pptx/core";
+import { hostNodeCreator } from "@react-pptx/core/document";
 import type { ReactNode } from "react";
 
 import {
@@ -1653,7 +1655,14 @@ export const chartCapability: ObjectCapabilityModule = {
   },
 };
 
+function createChartNode(props: ChartProps): CommonNode<"chart", ChartProps> {
+  return new CommonNode("chart", "rp:chart", props);
+}
+
 /** Declares an object compiled into a native chart by the official capability module. */
 export function Chart(props: ChartProps): ReactNode {
-  return motionElement("rp:chart", props);
+  return motionElement("rp:chart", {
+    ...props,
+    [hostNodeCreator]: createChartNode,
+  });
 }

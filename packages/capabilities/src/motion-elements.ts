@@ -1,3 +1,4 @@
+import { CommonContainer, hostNodeCreator } from "@react-pptx/core/document";
 import {
   createContext,
   createElement,
@@ -37,6 +38,18 @@ function moment(
     point,
     ...(name === undefined ? {} : { name }),
   });
+}
+
+function createMotionScopeNode(
+  props: Readonly<Record<string, unknown>>,
+): CommonContainer<"motion-scope"> {
+  return new CommonContainer("motion-scope", "rp:motion-scope", props);
+}
+
+function createMotionStepNode(
+  props: Readonly<Record<string, unknown>>,
+): CommonContainer<"motion-step"> {
+  return new CommonContainer("motion-step", "rp:motion-step", props);
 }
 
 /** Creates explicit orchestration scope and publishable named moments for current React component instance. */
@@ -88,7 +101,11 @@ export function MotionScope(props: MotionScopeProps): ReactNode {
     { value: context },
     createElement(
       "rp:motion-scope",
-      { ...publicProps, __motionScope: declaration },
+      {
+        ...publicProps,
+        __motionScope: declaration,
+        [hostNodeCreator]: createMotionScopeNode,
+      },
       children,
     ),
   );
@@ -109,7 +126,11 @@ export function Step(props: StepProps): ReactNode {
     { value: { ...parent, step } },
     createElement(
       "rp:motion-step",
-      { ...publicProps, __motionStep: step },
+      {
+        ...publicProps,
+        __motionStep: step,
+        [hostNodeCreator]: createMotionStepNode,
+      },
       children,
     ),
   );
@@ -118,7 +139,10 @@ export function Step(props: StepProps): ReactNode {
 /** Passes current Step and disabled status to the formal native object host node. */
 export function motionElement(
   type: string,
-  props: MotionProps & { readonly children?: ReactNode },
+  props: MotionProps & {
+    readonly children?: ReactNode;
+    readonly [hostNodeCreator]?: unknown;
+  },
 ): ReactNode {
   const parent = useContext(motionContext);
   const enabled = parent.enabled && props.motion !== false;

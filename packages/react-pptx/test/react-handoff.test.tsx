@@ -7,11 +7,21 @@ import {
   CommonNode,
   Deck,
   expandDocument,
+  P,
   RichTextContainer,
+  Shape,
   Slide,
+  Span,
   Text,
 } from "@react-pptx/react-pptx";
-import { build as buildDocument } from "@react-pptx/react-pptx/document";
+import {
+  build as buildDocument,
+  deck,
+  paragraph,
+  shape,
+  slide,
+  span,
+} from "@react-pptx/react-pptx/document";
 import { validatePptx } from "@react-pptx/validation";
 import { strFromU8, unzipSync } from "fflate";
 import {
@@ -45,6 +55,16 @@ function findTextNode(
       return child;
     }
     const found = findTextNode(child, testId);
+    if (found !== undefined) return found;
+  }
+  return undefined;
+}
+
+function findNode(parent: CommonNode, kind: string): CommonNode | undefined {
+  for (const child of parent.children) {
+    if (!(child instanceof CommonNode)) continue;
+    if (child.kind === kind) return child;
+    const found = findNode(child, kind);
     if (found !== undefined) return found;
   }
   return undefined;
@@ -109,6 +129,50 @@ describe("public React handoff", () => {
     assert.doesNotMatch(firstXml, /Second edit/u);
     assert.deepEqual(first.report, firstReport);
     assert.deepEqual(first.pptx, firstPptx);
+  });
+
+  it("edits JSX shape rich text through the same node contract as the command factory", async () => {
+    const props = {
+      testId: "handoff-shape",
+      x: 20,
+      y: 24,
+      width: 320,
+      height: 96,
+    };
+    const expanded = await expandDocument(
+      reactDeck(
+        createElement(
+          Shape,
+          props,
+          createElement(P, null, createElement(Span, null, "Original")),
+        ),
+      ),
+    );
+    const shapeNode = findNode(expanded, "shape");
+    assert.ok(shapeNode instanceof RichTextContainer);
+
+    const first = await buildDocument(expanded);
+    assert.deepEqual((await validatePptx(first.pptx)).errors, []);
+    assert.equal(first.report.slides[0]?.objects[0]?.text, "Original");
+
+    shapeNode.content(paragraph().content(span("Edited")));
+    const second = await buildDocument(expanded);
+    assert.deepEqual((await validatePptx(second.pptx)).errors, []);
+    assert.equal(second.report.slides[0]?.objects[0]?.text, "Edited");
+    assert.match(slideXml(second), /Edited/u);
+    assert.equal(first.report.slides[0]?.objects[0]?.text, "Original");
+    assert.doesNotMatch(slideXml(first), /Edited/u);
+
+    const commandShape = shape(props).content(
+      paragraph().content(span("Original")),
+    );
+    const commandDocument = deck({ width: 960, height: 540 }).append(
+      slide({ slideId: "handoff" }).append(commandShape),
+    );
+    commandShape.content(paragraph().content(span("Edited")));
+    const commandResult = await buildDocument(commandDocument);
+    assert.deepEqual((await validatePptx(commandResult.pptx)).errors, []);
+    assert.equal(commandResult.report.slides[0]?.objects[0]?.text, "Edited");
   });
 
   it("fails public expansion when React unmount cleanup throws", async () => {

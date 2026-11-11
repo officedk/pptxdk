@@ -6,7 +6,16 @@ import {
 } from "#/document-internals.ts";
 import { createFormalBuild } from "#/formal-build.ts";
 import { snapshotValue } from "#/input-values.ts";
-import type { BuildOptions, BuildResult, CapabilityModule } from "#/types.ts";
+import type { TextStyle } from "#/theme.ts";
+import type {
+  BuildOptions,
+  BuildResult,
+  CapabilityModule,
+  DeckProps,
+  LayoutStyle,
+  SectionProps,
+  SlideProps,
+} from "#/types.ts";
 
 export type DocumentProps = Readonly<Record<string, unknown>>;
 export type DocumentStyle = Readonly<Record<string, unknown>>;
@@ -22,6 +31,26 @@ export type StyleUpdate<Style extends object> = {
 };
 
 export type RichTextItem = string | CommonNode;
+
+/**
+ * Internal React host prop carrying the editable-node creator for one declaration type.
+ *
+ * A JSX host element knows which common node class its capability declares. The adapter removes
+ * this value before the declaration reaches the formal build, so it is not author content and the
+ * adapter does not need a separate tag-to-node-class table.
+ */
+export const hostNodeCreator = "__reactPptxNodeCreator";
+
+/**
+ * Creates the editable node shared by a command factory and the matching JSX host element.
+ *
+ * Both authoring entries use the same creator, keeping the node identity returned by expansion and
+ * factory construction aligned with the operations their public types expose.
+ */
+export type DocumentNodeCreator<
+  Props extends object = Readonly<Record<string, unknown>>,
+  Node extends CommonNode = CommonNode,
+> = (props: Props) => Node;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -346,6 +375,27 @@ export class RichTextContainer<
     this.insertRichTextItems(items, true);
     return this;
   }
+}
+
+/** Creates the editable Deck node used by both React host expansion and command authoring. */
+export function createDeckNode<Props extends object = DeckProps>(
+  props: Props,
+): CommonContainer<"deck", Props, TextStyle> {
+  return new CommonContainer("deck", "rp:deck", props);
+}
+
+/** Creates the editable Slide node used by both React host expansion and command authoring. */
+export function createSlideNode<Props extends object = SlideProps>(
+  props: Props,
+): CommonContainer<"slide", Props, TextStyle & Omit<LayoutStyle, "zIndex">> {
+  return new CommonContainer("slide", "rp:slide", props);
+}
+
+/** Creates the editable Section node used by both React host expansion and command authoring. */
+export function createSectionNode<Props extends object = SectionProps>(
+  props: Props,
+): CommonContainer<"section", Props> {
+  return new CommonContainer("section", "rp:section", props);
 }
 
 export function createDocumentBuild(modules: readonly CapabilityModule[]) {

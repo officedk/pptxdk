@@ -5,7 +5,11 @@ import {
   replaceDeclarationProps,
   setDeclarationText,
 } from "#/document-internals.ts";
-import { CommonContainer, CommonNode, RichTextContainer } from "#/document.ts";
+import {
+  CommonNode,
+  hostNodeCreator,
+  type DocumentNodeCreator,
+} from "#/document.ts";
 
 /** Renderer-side root during a single React expansion; it does not own a second document tree. */
 export type HostContainer = { children: DeclarationChild[] };
@@ -32,63 +36,39 @@ export class ReactTextNode implements DeclarationText {
 }
 
 /**
- * Structure-only tag mapping for the shared node classes.
- *
- * It selects which common node type a React host tag becomes so public editing types match the
- * declaration; it does not decide capability support or property rules. Unknown or trimmed
- * capabilities are still diagnosed by the formal build.
- */
-const richTextDeclarations = new Set([
-  "rp:text",
-  "rp:paragraph",
-  "rp:span",
-  "rp:cell",
-]);
-
-const structuralDeclarations = new Set([
-  "rp:deck",
-  "rp:slide",
-  "rp:section",
-  "rp:box",
-  "rp:group",
-  "rp:table",
-  "rp:row",
-  "rp:motion-scope",
-  "rp:motion-step",
-]);
-
-/**
  * Nodes whose React tree has been handed to a caller. Renderer teardown and late React work must
  * not edit the completed document, so adapter mutations targeting a handed-off entry are ignored.
  * Author operations on the returned nodes are unaffected.
  */
 const handedOff = new WeakSet<object>();
 
-function withoutChildren(
+function withoutHostMetadata(
   props: Readonly<Record<string, unknown>>,
 ): Readonly<Record<string, unknown>> {
-  if (!("children" in props)) return props;
-  const { children: _children, ...rest } = props;
-  return rest;
+  const {
+    children: _children,
+    [hostNodeCreator]: _create,
+    ...declaration
+  } = props;
+  return declaration;
 }
 
 function declarationKind(type: string): string {
   return type.startsWith("rp:") ? type.slice(3) : type;
 }
 
+function isDocumentNodeCreator(value: unknown): value is DocumentNodeCreator {
+  return typeof value === "function";
+}
+
 export function createHostInstance(
   type: string,
   props: Readonly<Record<string, unknown>>,
 ): CommonNode {
-  const kind = declarationKind(type);
-  const declaration = withoutChildren(props);
-  if (richTextDeclarations.has(type)) {
-    return new RichTextContainer(kind, type, declaration);
-  }
-  if (structuralDeclarations.has(type)) {
-    return new CommonContainer(kind, type, declaration);
-  }
-  return new CommonNode(kind, type, declaration);
+  const create = props[hostNodeCreator];
+  const declaration = withoutHostMetadata(props);
+  if (isDocumentNodeCreator(create)) return create(declaration);
+  return new CommonNode(declarationKind(type), type, declaration);
 }
 
 export function createHostText(text: string): ReactTextNode {
@@ -107,7 +87,7 @@ export function updateHostInstance(
   if (handedOff.has(instance)) return;
   // React commits all current JSX props at once, unlike author updates that patch only provided
   // fields. Replace the declaration so fields absent from this commit do not survive.
-  instance[replaceDeclarationProps](withoutChildren(props));
+  instance[replaceDeclarationProps](withoutHostMetadata(props));
 }
 
 export function attachHostChild(

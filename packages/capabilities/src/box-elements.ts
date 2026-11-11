@@ -1,6 +1,7 @@
+import { hostNodeCreator } from "@react-pptx/core/document";
 import { createElement, useContext, type Key, type ReactNode } from "react";
 
-import type { BoxDeclarationProps } from "./box.ts";
+import { createBoxNode, type BoxDeclarationProps } from "./box.ts";
 import { motionContext } from "./motion-elements.ts";
 
 export type BoxProps = BoxDeclarationProps & {
@@ -31,7 +32,11 @@ export function Box({
     { value: context },
     createElement(
       "rp:box",
-      { ...props, __motionContext: boxContext },
+      {
+        ...props,
+        __motionContext: boxContext,
+        [hostNodeCreator]: createBoxNode,
+      },
       children,
     ),
   );

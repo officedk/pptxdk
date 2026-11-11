@@ -1,10 +1,12 @@
 import { motionCapability } from "@react-pptx/capabilities/motion";
+import { notesCapability } from "@react-pptx/capabilities/notes";
 import { textCapability } from "@react-pptx/capabilities/text";
 import { transitionCapability } from "@react-pptx/capabilities/transition";
 import { createBuilder } from "@react-pptx/core";
 
 export const build = createBuilder([
   textCapability,
+  notesCapability,
   transitionCapability,
   motionCapability,
 ]);
@@ -14,6 +16,8 @@ export { Box, type BoxProps } from "@react-pptx/capabilities/box-elements";
 export { Slide } from "./slide.ts";
 export { font, textCapability } from "@react-pptx/capabilities/text";
 export { P, Span, Text } from "@react-pptx/capabilities/text-elements";
+export { Notes } from "@react-pptx/capabilities/notes-elements";
+export { notesCapability } from "@react-pptx/capabilities/notes";
 export { createBuilder } from "@react-pptx/core";
 export { Step } from "@react-pptx/capabilities/motion-elements";
 export {
@@ -69,6 +73,11 @@ export type {
   ParagraphProps,
   TextProps,
 } from "@react-pptx/capabilities/text-elements";
+export type {
+  NotesDeclarationProps,
+  NotesNode,
+} from "@react-pptx/capabilities/notes-declaration";
+export type { NotesProps } from "@react-pptx/capabilities/notes-elements";
 export type { SlideProps } from "./slide.ts";
 export {
   transitionCapability,

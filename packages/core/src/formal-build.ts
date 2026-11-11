@@ -42,7 +42,10 @@ import {
   type CapabilityChildren,
   type CapabilityInput,
   type CapabilityPackagePart,
+  type CapabilityPartRelationship,
   type CapabilityPresentationContribution,
+  type CapabilitySharedPackagePart,
+  type CapabilitySlidePackagePart,
   type CapabilityContribution,
   type CapabilityContext,
   type CapabilityLayoutContract,
@@ -163,6 +166,18 @@ type DocumentBuildState = {
       >;
     }
   >;
+  readonly sharedParts: Map<
+    string,
+    {
+      readonly path: string;
+      readonly relationshipId: string;
+      readonly descriptor: CapabilitySharedPackagePart;
+    }
+  >;
+  readonly presentationElements: {
+    readonly position: "before-slides" | "after-notes-size";
+    readonly content: string;
+  }[];
   nextPackagePartId: number;
   nextPresentationRelationshipId: number;
   readonly morphNames: Map<MorphKey, string>;
@@ -184,6 +199,11 @@ type SlideBuildState = {
   readonly contributions: CapabilityContribution[];
   readonly morphObjects: Map<MorphKey, MorphObject>;
   readonly linkedSlideIndexes: Set<number>;
+};
+
+type PackageBuildContext = {
+  readonly document: DocumentBuildState;
+  readonly slide: SlideBuildState;
 };
 
 type BuildContext = {
@@ -263,6 +283,7 @@ function capabilityChild(child: DeclarationChild): CapabilityChild {
     type: child.type,
     props: child.props,
     children: child.children.map(capabilityChild),
+    ...(child.pageAffiliated === true ? { pageAffiliated: true } : {}),
   };
 }
 
@@ -954,6 +975,301 @@ function addPackagePart(
   return relationshipId;
 }
 
+function packagePath(value: unknown, label: string): string {
+  if (
+    typeof value !== "string" ||
+    !/^(?:[a-z0-9_-]+\/)*[a-z0-9_-]+\.[a-z0-9]+$/iu.test(value)
+  ) {
+    throw new CapabilityError(
+      "invalid-part",
+      `${label} must be a safe package-relative path`,
+    );
+  }
+  return value;
+}
+
+function packagePartDescriptor(
+  part: { readonly pathTemplate?: unknown; readonly contentType?: unknown },
+  relationshipType: unknown,
+  relationships: unknown,
+  content: unknown,
+  label: string,
+  allowsSlideTarget = false,
+): {
+  readonly pathTemplate: string;
+  readonly contentType: string;
+  readonly relationshipType: string;
+  readonly relationships: readonly CapabilityPartRelationship[];
+} {
+  if (
+    typeof part.pathTemplate !== "string" ||
+    typeof part.contentType !== "string" ||
+    part.contentType.trim() === "" ||
+    typeof relationshipType !== "string" ||
+    relationshipType.trim() === "" ||
+    typeof content !== "function" ||
+    (relationships !== undefined && !Array.isArray(relationships)) ||
+    (Array.isArray(relationships) &&
+      relationships.some(
+        (relationship) =>
+          typeof relationship !== "object" ||
+          relationship === null ||
+          typeof relationship.relationshipType !== "string" ||
+          relationship.relationshipType.trim() === "" ||
+          typeof relationship.target !== "object" ||
+          relationship.target === null ||
+          !["slide", "part", "path"].includes(relationship.target.kind) ||
+          (relationship.target.kind === "part" &&
+            (typeof relationship.target.key !== "string" ||
+              relationship.target.key === "")) ||
+          (relationship.target.kind === "path" &&
+            typeof relationship.target.path !== "string") ||
+          (relationship.target.kind === "slide" && !allowsSlideTarget),
+      ))
+  ) {
+    throw new CapabilityError(
+      "invalid-part",
+      `${label} declaration is invalid`,
+    );
+  }
+  try {
+    assertXml10Characters(part.contentType);
+    assertXml10Characters(relationshipType);
+    for (const relationship of relationships ?? []) {
+      assertXml10Characters(relationship.relationshipType);
+      if (relationship.target.kind === "part") {
+        assertXml10Characters(relationship.target.key);
+      } else if (relationship.target.kind === "path") {
+        assertXml10Characters(relationship.target.path);
+      }
+    }
+  } catch {
+    throw new CapabilityError(
+      "invalid-part",
+      `${label} contains characters not allowed in XML 1.0`,
+    );
+  }
+  return {
+    pathTemplate: part.pathTemplate,
+    contentType: part.contentType,
+    relationshipType,
+    relationships: relationships ?? [],
+  };
+}
+
+function targetPartPath(
+  target: CapabilityPartRelationship["target"],
+  context: PackageBuildContext,
+): string {
+  if (target.kind === "slide") {
+    return `ppt/slides/slide${context.slide.index}.xml`;
+  }
+  if (target.kind === "part") {
+    const shared = context.document.sharedParts.get(target.key);
+    if (shared === undefined) {
+      throw new CapabilityError(
+        "missing-part-target",
+        `Package part relationship references unregistered shared part ${JSON.stringify(target.key)}`,
+      );
+    }
+    return shared.path;
+  }
+  return packagePath(target.path, "Package part relationship target");
+}
+
+function partContent(
+  content: string | Uint8Array,
+  label: string,
+): string | Uint8Array {
+  if (
+    !(typeof content === "string"
+      ? content.length > 0
+      : content instanceof Uint8Array && content.byteLength > 0)
+  ) {
+    throw new CapabilityError("invalid-part", `${label} must contain content`);
+  }
+  if (typeof content === "string") assertXml10Characters(content);
+  return content;
+}
+
+function addSlidePackagePart(
+  part: CapabilitySlidePackagePart,
+  context: PackageBuildContext,
+): string {
+  const descriptor = packagePartDescriptor(
+    part.part,
+    part.slideRelationshipType,
+    part.relationships,
+    part.content,
+    "slide part",
+    true,
+  );
+  const sequence = context.document.nextPackagePartId++;
+  const partPath = packagePartPath(descriptor.pathTemplate, sequence);
+  if (
+    context.document.packageParts.has(partPath) ||
+    context.document.presentationPartPaths.has(partPath)
+  ) {
+    throw new CapabilityError("duplicate-part", "Duplicate PPTX part path");
+  }
+  const relationships = descriptor.relationships.map((relationship, index) => ({
+    id: `rId${index + 1}`,
+    type: relationship.relationshipType,
+    target: relationshipTarget(
+      partPath,
+      targetPartPath(relationship.target, context),
+    ),
+  }));
+  const content = partContent(
+    part.content(relationships.map(({ id }) => id)),
+    "Slide part",
+  );
+  context.document.presentationPartPaths.add(partPath);
+  context.document.packageParts.set(partPath, {
+    path: partPath,
+    content,
+    contentType: descriptor.contentType,
+  });
+  if (relationships.length > 0) {
+    context.document.packageRelationships.set(partPath, relationships);
+  }
+  const relationshipId = `rId${context.slide.relationships.length + 2}`;
+  context.slide.relationships.push({
+    id: relationshipId,
+    type: descriptor.relationshipType,
+    target: relationshipTarget(
+      `ppt/slides/slide${context.slide.index}.xml`,
+      partPath,
+    ),
+  });
+  return relationshipId;
+}
+
+function addSharedPackagePart(
+  key: string,
+  part: CapabilitySharedPackagePart,
+  context: PackageBuildContext,
+): { readonly path: string; readonly relationshipId: string } {
+  if (typeof key !== "string" || key.trim() === "") {
+    throw new CapabilityError(
+      "invalid-part",
+      "Shared part key must be a non-empty string",
+    );
+  }
+  const descriptor = packagePartDescriptor(
+    part.part,
+    part.presentationRelationshipType,
+    part.relationships,
+    part.content,
+    "shared part",
+  );
+  const existing = context.document.sharedParts.get(key);
+  if (existing !== undefined) {
+    const same =
+      existing.descriptor.part.pathTemplate === descriptor.pathTemplate &&
+      existing.descriptor.part.contentType === descriptor.contentType &&
+      existing.descriptor.presentationRelationshipType ===
+        descriptor.relationshipType &&
+      JSON.stringify(existing.descriptor.relationships ?? []) ===
+        JSON.stringify(descriptor.relationships);
+    if (!same) {
+      throw new CapabilityError(
+        "conflicting-shared-part",
+        `Shared part ${JSON.stringify(key)} has conflicting declarations`,
+      );
+    }
+    return {
+      path: existing.path,
+      relationshipId: existing.relationshipId,
+    };
+  }
+  const sequence = context.document.nextPackagePartId++;
+  const partPath = packagePartPath(descriptor.pathTemplate, sequence);
+  if (
+    context.document.packageParts.has(partPath) ||
+    context.document.presentationPartPaths.has(partPath)
+  ) {
+    throw new CapabilityError("duplicate-part", "Duplicate PPTX part path");
+  }
+  const relationships = descriptor.relationships.map((relationship, index) => ({
+    id: `rId${index + 1}`,
+    type: relationship.relationshipType,
+    target: relationshipTarget(
+      partPath,
+      targetPartPath(relationship.target, context),
+    ),
+  }));
+  const content = partContent(
+    part.content(relationships.map(({ id }) => id)),
+    "Shared part",
+  );
+  context.document.presentationPartPaths.add(partPath);
+  context.document.packageParts.set(partPath, {
+    path: partPath,
+    content,
+    contentType: descriptor.contentType,
+  });
+  if (relationships.length > 0) {
+    context.document.packageRelationships.set(partPath, relationships);
+  }
+  const relationshipId = `rId${context.document.nextPresentationRelationshipId++}`;
+  const presentationRelationships =
+    context.document.packageRelationships.get("ppt/presentation.xml") ?? [];
+  presentationRelationships.push({
+    id: relationshipId,
+    type: descriptor.relationshipType,
+    target: relationshipTarget("ppt/presentation.xml", partPath),
+  });
+  context.document.packageRelationships.set(
+    "ppt/presentation.xml",
+    presentationRelationships,
+  );
+  const element = part.presentationElement;
+  if (element !== undefined) {
+    if (
+      (element.position !== "before-slides" &&
+        element.position !== "after-notes-size") ||
+      typeof element.content !== "function"
+    ) {
+      throw new CapabilityError(
+        "invalid-part",
+        "Shared part presentation element declaration is invalid",
+      );
+    }
+    const xml = element.content(relationshipId);
+    if (typeof xml !== "string" || xml.trim() === "") {
+      throw new CapabilityError(
+        "invalid-part",
+        "Shared part presentation element must generate content",
+      );
+    }
+    assertXml10Characters(xml);
+    context.document.presentationElements.push({
+      position: element.position,
+      content: xml,
+    });
+  }
+  context.document.sharedParts.set(key, {
+    path: partPath,
+    relationshipId,
+    descriptor: {
+      part: {
+        pathTemplate: descriptor.pathTemplate,
+        contentType: descriptor.contentType,
+      },
+      presentationRelationshipType: descriptor.relationshipType,
+      ...(part.relationships === undefined
+        ? {}
+        : { relationships: descriptor.relationships }),
+      ...(part.presentationElement === undefined
+        ? {}
+        : { presentationElement: part.presentationElement }),
+      content: part.content,
+    },
+  });
+  return { path: partPath, relationshipId };
+}
+
 function xmlName(value: string): boolean {
   return /^(?:[A-Za-z_][A-Za-z0-9_.-]*:)?[A-Za-z_][A-Za-z0-9_.-]*$/u.test(
     value,
@@ -962,9 +1278,9 @@ function xmlName(value: string): boolean {
 
 function addPresentationContribution(
   contribution: CapabilityPresentationContribution,
-  context: BuildContext,
+  context: PackageBuildContext,
   path: string,
-  objectId: number,
+  objectId?: number,
 ): void {
   const { collection, record, item } = contribution;
   if (
@@ -1105,7 +1421,7 @@ function addPresentationContribution(
     } else {
       const objectIds =
         existingItem.resourceOwners.get(context.slide) ?? new Set<number>();
-      objectIds.add(objectId);
+      if (objectId !== undefined) objectIds.add(objectId);
       existingItem.resourceOwners.set(context.slide, objectIds);
     }
     return;
@@ -1132,7 +1448,12 @@ function addPresentationContribution(
     relationshipType: item.relationshipType,
     contentType: item.contentType,
     path,
-    resourceOwners: new Map([[context.slide, new Set([objectId])]]),
+    resourceOwners: new Map([
+      [
+        context.slide,
+        objectId === undefined ? new Set<number>() : new Set([objectId]),
+      ],
+    ]),
     ...(item.bytes === undefined ? {} : { bytes: item.bytes }),
     ...(item.resourceClaim === undefined
       ? {}
@@ -1216,8 +1537,11 @@ function finalizePresentationContributions(document: DocumentBuildState): void {
   }
 }
 
-function presentationContent(document: DocumentBuildState): string {
-  return [...document.presentationCollections.values()]
+function presentationContent(document: DocumentBuildState): {
+  readonly beforeSlides: string;
+  readonly afterNotesSize: string;
+} {
+  const rendered = [...document.presentationCollections.values()]
     .map(
       ({ tagName, records }) =>
         `<${tagName}>${[...records.values()]
@@ -1231,6 +1555,15 @@ function presentationContent(document: DocumentBuildState): string {
           .join("")}</${tagName}>`,
     )
     .join("");
+  const elements = (position: "before-slides" | "after-notes-size") =>
+    document.presentationElements
+      .filter((element) => element.position === position)
+      .map(({ content }) => content)
+      .join("");
+  return {
+    beforeSlides: elements("before-slides"),
+    afterNotesSize: rendered + elements("after-notes-size"),
+  };
 }
 
 function capabilityContext(
@@ -1672,6 +2005,11 @@ function compileChildren(
       }
     }
     if ("compileDeclaration" in module) {
+      if (module.children === "owned") {
+        // Owned subtrees belong to their capability and never become slide content. The same
+        // declarations were already reported by the structure-only collection pass.
+        return;
+      }
       try {
         for (const annotation of module.compileDeclaration(child, { path })) {
           context.slide.contributions.push({
@@ -1968,6 +2306,77 @@ function resolveContributions(
   return resolved;
 }
 
+function collectOwnedContributions(
+  children: readonly CapabilityChild[],
+  modules: ReadonlyMap<string, RegisteredCapabilityModule>,
+  slide: SlideBuildState,
+  parentPath: string,
+  order: { value: number },
+  hidden: WeakSet<CapabilityElement>,
+): void {
+  children.forEach((child, index) => {
+    if (!("props" in child)) return;
+    const path = `${parentPath}/${capabilityLabel(child, index)}`;
+    const module = modules.get(child.type);
+    if (
+      module !== undefined &&
+      "compileDeclaration" in module &&
+      module.children === "owned"
+    ) {
+      try {
+        for (const annotation of module.compileDeclaration(child, { path })) {
+          slide.contributions.push({
+            ...annotation,
+            path,
+            order: order.value++,
+            declaration: child,
+          });
+        }
+      } catch (error) {
+        slide.diagnostics.push(
+          error instanceof CapabilityError
+            ? diagnostic(
+                error.path === undefined ? path : `${path}/${error.path}`,
+                error.code,
+                error.message,
+              )
+            : diagnostic(
+                path,
+                "capability-failure",
+                error instanceof Error ? error.message : String(error),
+              ),
+        );
+      }
+      // The owning capability consumes this subtree; do not treat its children as slide content.
+      return;
+    }
+    if (child.pageAffiliated === true) {
+      // A page-affiliated declaration is not canvas content. Layout prunes hidden canvas parents,
+      // so this structure-only walk reports a trimmed owner that layout can no longer reach.
+      if (module === undefined && hidden.has(child)) {
+        slide.diagnostics.push(
+          diagnostic(
+            path,
+            "missing-capability",
+            `No capability module registered for ${child.type}`,
+          ),
+        );
+      }
+      return;
+    }
+    // Owned declarations are page-affiliated even below a hidden canvas parent, so this
+    // structure-only walk still reaches them.
+    collectOwnedContributions(
+      child.children,
+      modules,
+      slide,
+      path,
+      order,
+      hidden,
+    );
+  });
+}
+
 function compileSlide(
   resolved: ResolvedSlide,
   modules: ReadonlyMap<string, RegisteredCapabilityModule>,
@@ -2024,6 +2433,15 @@ function compileSlide(
     node.props["style"],
   );
   document.warnings.push(...layout.warnings);
+  const ownedOrder = { value: 0 };
+  collectOwnedContributions(
+    children,
+    modules,
+    slide,
+    path,
+    ownedOrder,
+    layout.hidden,
+  );
   const compiled = compileChildren(
     children,
     {
@@ -2079,8 +2497,21 @@ function compileSlide(
         contributions,
         children,
         theme,
+        options,
+        slideNumber: index,
+        createTextFieldId() {
+          const serial = document.nextTextFieldId++;
+          const suffix = serial.toString(16).padStart(12, "0").toUpperCase();
+          return `{00000000-0000-4000-8000-${suffix}}`;
+        },
         registerResource(resource) {
           return addResource(resource, { document, slide });
+        },
+        registerPackagePart(part) {
+          return addSlidePackagePart(part, { document, slide });
+        },
+        registerSharedPart(key, part) {
+          return addSharedPackagePart(key, part, { document, slide });
         },
       });
       if (module.slot === "background") backgroundXml += output.xml;
@@ -2100,6 +2531,36 @@ function compileSlide(
         } else {
           document.usedExtensions.add(extension);
         }
+      }
+      for (const claim of output.resourceClaims ?? []) {
+        const claimKey = `${claim.kind}\u0000${claim.key}`;
+        const existing = document.resourceClaims.get(claimKey);
+        if (existing !== undefined && existing.identity !== claim.identity) {
+          slide.diagnostics.push(
+            diagnostic(
+              path,
+              "conflicting-resource",
+              `Resource ${claim.key} has conflicting definition with ${existing.path}`,
+            ),
+          );
+        } else {
+          document.resourceClaims.set(claimKey, {
+            identity: claim.identity,
+            path: existing?.path ?? path,
+            characters: (existing?.characters ?? "") + (claim.characters ?? ""),
+          });
+        }
+      }
+      for (const contribution of output.presentationContributions ?? []) {
+        addPresentationContribution(contribution, { document, slide }, path);
+      }
+      for (const warning of output.warnings ?? []) {
+        document.warnings.push({
+          severity: "warning",
+          path: warning.path === undefined ? path : `${path}/${warning.path}`,
+          code: warning.code,
+          message: warning.message,
+        });
       }
     } catch (error) {
       slide.diagnostics.push(
@@ -2233,6 +2694,8 @@ function compileDocument(
     presentationAttributes: new Map(),
     presentationPartPaths: new Set(),
     presentationCollections: new Map(),
+    sharedParts: new Map(),
+    presentationElements: [],
     nextPackagePartId: 1,
     nextPresentationRelationshipId: slides.length + 2,
     morphNames: new Map(),

@@ -15,7 +15,12 @@ export {
 } from "#/theme.ts";
 export { createMorphScope, getMorphKeyLabel, isMorphKey } from "#/morph.ts";
 export type { MorphKey, MorphScope } from "#/morph.ts";
-export { assertXml10Characters, pxToEmu, xmlEscape } from "#/ooxml.ts";
+export {
+  assertXml10Characters,
+  pxToEmu,
+  xmlDocument,
+  xmlEscape,
+} from "#/ooxml.ts";
 export {
   layoutStyleKeys,
   paddingStyleKeys,
@@ -62,6 +67,10 @@ export type {
   CapabilityOutput,
   CapabilityPackagePart,
   CapabilityParseContext,
+  CapabilityPartRelationship,
+  CapabilityPartRelationshipTarget,
+  CapabilitySharedPackagePart,
+  CapabilitySlidePackagePart,
   CapabilityParseResult,
   CapabilityPresentationContribution,
   CapabilityResource,

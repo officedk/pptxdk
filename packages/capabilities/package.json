@@ -74,6 +74,21 @@
       "types": "./dist/text-elements.d.ts",
       "default": "./dist/text-elements.js"
     },
+    "./notes": {
+      "source": "./src/notes.ts",
+      "types": "./dist/notes.d.ts",
+      "default": "./dist/notes.js"
+    },
+    "./notes-elements": {
+      "source": "./src/notes-elements.ts",
+      "types": "./dist/notes-elements.d.ts",
+      "default": "./dist/notes-elements.js"
+    },
+    "./notes-declaration": {
+      "source": "./src/notes-declaration.ts",
+      "types": "./dist/notes-declaration.d.ts",
+      "default": "./dist/notes-declaration.js"
+    },
     "./table": {
       "source": "./src/table.ts",
       "types": "./dist/table.d.ts",

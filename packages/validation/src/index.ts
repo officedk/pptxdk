@@ -191,6 +191,17 @@ export type FileText = {
   readonly paragraphs: readonly FileTextParagraph[];
 };
 
+export type FileNotes = {
+  readonly part: string;
+  readonly masterPart: string;
+  readonly themePart?: string;
+  readonly placeholder: {
+    readonly type: "body";
+    readonly index?: number;
+  };
+  readonly text: FileText;
+};
+
 export type FileSlide = {
   readonly id: string;
   readonly hidden?: boolean;
@@ -201,6 +212,7 @@ export type FileSlide = {
   readonly transition?: FileTransition;
   readonly animations?: readonly FileAnimationStep[];
   readonly animationContainers?: readonly FileAnimationContainer[];
+  readonly notes?: FileNotes;
 };
 
 export type FileAnimationContainer = {
@@ -1089,8 +1101,12 @@ const themeColorSlots = [
   "folHlink",
 ] as const;
 
-function themeTextReader(documents: Documents): ThemeTextReader {
-  const theme = documents.get("ppt/theme/theme1.xml")?.documentElement;
+function themeTextReader(
+  documents: Documents,
+  themePath = "ppt/theme/theme1.xml",
+  masterPath = "ppt/slideMasters/slideMaster1.xml",
+): ThemeTextReader {
+  const theme = documents.get(themePath)?.documentElement;
   const themeElements =
     theme == null ? undefined : first(theme, drawingNamespace, "themeElements");
   const colorScheme =
@@ -1141,9 +1157,7 @@ function themeTextReader(documents: Documents): ThemeTextReader {
     if (family !== "") fonts.set(token, family);
   }
 
-  const master = documents.get(
-    "ppt/slideMasters/slideMaster1.xml",
-  )?.documentElement;
+  const master = documents.get(masterPath)?.documentElement;
   const colorMap =
     master == null ? undefined : first(master, presentationNamespace, "clrMap");
   const schemeSlots = new Map<string, string>();
@@ -1664,6 +1678,36 @@ function validateContentTypes(
         part,
         "missing-content-type",
         `/${path} missing slide content type`,
+      );
+    }
+  }
+  for (const path of Object.keys(files).filter((entry) =>
+    /^ppt\/notesSlides\/notesSlide\d+\.xml$/u.test(entry),
+  )) {
+    if (
+      overrides.get(`/${path}`) !==
+      "application/vnd.openxmlformats-officedocument.presentationml.notesSlide+xml"
+    ) {
+      issue(
+        errors,
+        part,
+        "missing-content-type",
+        `/${path} missing notes slide content type`,
+      );
+    }
+  }
+  for (const path of Object.keys(files).filter((entry) =>
+    /^ppt\/notesMasters\/notesMaster\d+\.xml$/u.test(entry),
+  )) {
+    if (
+      overrides.get(`/${path}`) !==
+      "application/vnd.openxmlformats-officedocument.presentationml.notesMaster+xml"
+    ) {
+      issue(
+        errors,
+        part,
+        "missing-content-type",
+        `/${path} missing notes master content type`,
       );
     }
   }
@@ -6174,6 +6218,196 @@ function readSections(
   return { sections, used: true };
 }
 
+function notesRelationship(
+  relationships: Map<string, Map<string, XmlElement>>,
+  source: string,
+  type: string,
+): XmlElement[] {
+  return [...(relationships.get(source)?.values() ?? [])].filter(
+    (relationship) => attribute(relationship, "Type") === type,
+  );
+}
+
+function readNotes(
+  slidePath: string,
+  files: XmlFiles,
+  documents: Documents,
+  relationships: Map<string, Map<string, XmlElement>>,
+  theme: ThemeTextReader,
+  errors: ValidationIssue[],
+): FileNotes | undefined {
+  const notesSlides = notesRelationship(
+    relationships,
+    slidePath,
+    `${relationshipNamespace}/notesSlide`,
+  );
+  if (notesSlides.length === 0) return undefined;
+  if (notesSlides.length > 1) {
+    issue(
+      errors,
+      slidePath,
+      "duplicate-notes-slide-relationship",
+      "Slide has more than one notes slide relationship",
+    );
+  }
+  const notesPath = relationshipTargetPath(
+    slidePath,
+    attribute(notesSlides[0]!, "Target"),
+  );
+  const notesRoot = documents.get(notesPath)?.documentElement;
+  if (
+    notesRoot == null ||
+    notesRoot.localName !== "notes" ||
+    notesRoot.namespaceURI !== presentationNamespace
+  ) {
+    issue(
+      errors,
+      notesPath,
+      "invalid-notes-slide",
+      "Notes slide relationship target is not a valid Transitional notes slide part",
+    );
+    return undefined;
+  }
+  const slideRelations = notesRelationship(
+    relationships,
+    notesPath,
+    `${relationshipNamespace}/slide`,
+  );
+  if (
+    slideRelations.length !== 1 ||
+    relationshipTargetPath(
+      notesPath,
+      attribute(slideRelations[0]!, "Target"),
+    ) !== slidePath
+  ) {
+    issue(
+      errors,
+      notesPath,
+      "notes-slide-target-mismatch",
+      "Notes slide must reference its owning slide exactly once",
+    );
+  }
+  const masters = notesRelationship(
+    relationships,
+    notesPath,
+    `${relationshipNamespace}/notesMaster`,
+  );
+  if (masters.length !== 1) {
+    issue(
+      errors,
+      notesPath,
+      "notes-master-relationship",
+      "Notes slide must reference exactly one notes master",
+    );
+    return undefined;
+  }
+  const masterPath = relationshipTargetPath(
+    notesPath,
+    attribute(masters[0]!, "Target"),
+  );
+  const masterRoot = documents.get(masterPath)?.documentElement;
+  if (
+    masterRoot == null ||
+    masterRoot.localName !== "notesMaster" ||
+    masterRoot.namespaceURI !== presentationNamespace
+  ) {
+    issue(
+      errors,
+      masterPath,
+      "invalid-notes-master",
+      "Notes master relationship target is not a valid Transitional notes master part",
+    );
+    return undefined;
+  }
+  const masterThemes = notesRelationship(
+    relationships,
+    masterPath,
+    `${relationshipNamespace}/theme`,
+  );
+  const themePath =
+    masterThemes.length === 1
+      ? relationshipTargetPath(
+          masterPath,
+          attribute(masterThemes[0]!, "Target"),
+        )
+      : undefined;
+  if (themePath === undefined) {
+    issue(
+      errors,
+      masterPath,
+      "notes-master-theme-relationship",
+      "Notes master must reference exactly one theme",
+    );
+  }
+  const notesTheme =
+    themePath === undefined
+      ? theme
+      : themeTextReader(documents, themePath, masterPath);
+  const commonSlideData = first(notesRoot, presentationNamespace, "cSld");
+  const slideTree =
+    commonSlideData === undefined
+      ? undefined
+      : first(commonSlideData, presentationNamespace, "spTree");
+  if (slideTree === undefined) {
+    issue(
+      errors,
+      notesPath,
+      "missing-notes-shape-tree",
+      "Notes slide missing shape tree",
+    );
+    return undefined;
+  }
+  const bodies = elements(slideTree, presentationNamespace, "sp").filter(
+    (shape) => {
+      const nonVisual = first(shape, presentationNamespace, "nvSpPr");
+      const properties =
+        nonVisual === undefined
+          ? undefined
+          : first(nonVisual, presentationNamespace, "nvPr");
+      const placeholder =
+        properties === undefined
+          ? undefined
+          : first(properties, presentationNamespace, "ph");
+      return (
+        placeholder !== undefined && attribute(placeholder, "type") === "body"
+      );
+    },
+  );
+  if (bodies.length !== 1) {
+    issue(
+      errors,
+      notesPath,
+      "notes-body-placeholder",
+      "Notes slide must contain exactly one body placeholder",
+    );
+    if (bodies.length === 0) return undefined;
+  }
+  const body = readTextBody(bodies[0]!, notesTheme, notesPath, errors);
+  if (body === undefined) {
+    issue(
+      errors,
+      notesPath,
+      "missing-notes-text-body",
+      "Notes body placeholder missing text body",
+    );
+    return undefined;
+  }
+  const nonVisual = first(bodies[0]!, presentationNamespace, "nvSpPr")!;
+  const properties = first(nonVisual, presentationNamespace, "nvPr")!;
+  const placeholderElement = first(properties, presentationNamespace, "ph")!;
+  const placeholderIndex = integerAttribute(placeholderElement, "idx");
+  return {
+    part: notesPath,
+    masterPart: masterPath,
+    ...(themePath === undefined ? {} : { themePart: themePath }),
+    placeholder: {
+      type: "body",
+      ...(placeholderIndex === undefined ? {} : { index: placeholderIndex }),
+    },
+    text: body,
+  };
+}
+
 function readPresentation(
   files: XmlFiles,
   documents: Documents,
@@ -6329,6 +6563,14 @@ function readPresentation(
       },
       errors,
     );
+    const notes = readNotes(
+      slidePath,
+      files,
+      documents,
+      relationships,
+      textTheme,
+      errors,
+    );
     for (const extension of transition.extensions) {
       usedExtensions.add(extension);
     }
@@ -6383,6 +6625,7 @@ function readPresentation(
             animations: animationRead.steps,
             animationContainers: animationRead.containers,
           }),
+      ...(notes === undefined ? {} : { notes }),
     });
   });
   const sectionResult = readSections(

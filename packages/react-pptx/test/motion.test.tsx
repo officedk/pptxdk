@@ -35,6 +35,16 @@ import {
   wipe,
   zoom,
 } from "@react-pptx/react-pptx";
+import {
+  build as buildDocument,
+  deck as documentDeck,
+  fade as documentFade,
+  fly as documentFly,
+  paragraph as documentParagraph,
+  shape as documentShape,
+  slide as documentSlide,
+  step as documentStep,
+} from "@react-pptx/react-pptx/document";
 import { validatePptx } from "@react-pptx/validation";
 import { strFromU8, strToU8, unzipSync, zipSync } from "fflate";
 import { createElement, Fragment, type ReactNode } from "react";
@@ -57,6 +67,22 @@ function rewriteSlideXml(
   const next = rewrite(xml);
   assert.notEqual(next, xml);
   return zipSync({ ...parts, [path]: strToU8(next) });
+}
+
+function animationEffectBlocks(xml: string): {
+  readonly block: string;
+  readonly timingId: number;
+  readonly presetId: number;
+}[] {
+  return [
+    ...xml.matchAll(
+      /<p:par><p:cTn id="(\d+)"[^>]*presetID="(\d+)"[^>]*>[\s\S]*?<\/p:par>/gu,
+    ),
+  ].map(([block, timingId, presetId]) => ({
+    block,
+    timingId: Number(timingId),
+    presetId: Number(presetId),
+  }));
 }
 
 function renumberTimingNodeIds(xml: string, offset: number): string {
@@ -3182,6 +3208,845 @@ describe("object motion", () => {
         `<p:bldP spid="${shape.id}" grpId="0" animBg="1"></p:bldP>`,
         "u",
       ),
+    );
+  });
+
+  it("keeps whole Fade and Wipe without geometry companions when paragraph effects exist", async () => {
+    for (const [id, whole] of [
+      ["mixed-fade", fade({ duration: 4000 })],
+      ["mixed-wipe", wipe({ duration: 4000 })],
+    ] as const) {
+      const result = await build(
+        createElement(
+          Deck,
+          { width: 960, height: 540 },
+          createElement(
+            Slide,
+            { id },
+            createElement(
+              Step,
+              { n: 1 },
+              createElement(
+                Shape,
+                {
+                  id: `${id}-shape`,
+                  x: 100,
+                  y: 100,
+                  width: 400,
+                  height: 160,
+                  fill: "#0070C0",
+                  textStyle: { fontSize: 20, color: "#FFFFFF" },
+                  enter: [
+                    whole,
+                    fade({ by: "paragraph", duration: 700, delay: 1500 }),
+                  ],
+                },
+                createElement(P, { key: "first" }, "First paragraph"),
+                createElement(P, { key: "second" }, "Second paragraph"),
+              ),
+            ),
+          ),
+        ),
+      );
+      const file = await validatePptx(result.pptx);
+      assert.deepEqual(file.errors, [], id);
+      const effects =
+        file.slides[0]?.animations?.flatMap((step) => step.effects) ?? [];
+      assert.equal(effects.length, 3, id);
+      assert.equal(
+        effects.filter(
+          ({ preset }) => preset === (id === "mixed-fade" ? "fade" : "wipe"),
+        ).length,
+        id === "mixed-fade" ? 3 : 1,
+        id,
+      );
+      const slideXml = strFromU8(
+        unzipSync(result.pptx)["ppt/slides/slide1.xml"]!,
+      );
+      assert.doesNotMatch(slideXml, /<p:childTnLst><\/p:childTnLst>/u);
+      const wholeBlock = animationEffectBlocks(slideXml).find(
+        ({ block, presetId }) =>
+          (presetId === 10 || presetId === 22) &&
+          block.includes('nodeType="clickEffect"'),
+      );
+      assert.ok(wholeBlock !== undefined);
+      assert.doesNotMatch(wholeBlock.block, /<p:pRg/u);
+    }
+  });
+
+  it("splits a mixed whole Shape Fly into one synchronized geometry companion per paragraph", async () => {
+    const result = await build(
+      createElement(
+        Deck,
+        { width: 960, height: 540 },
+        createElement(
+          Slide,
+          { id: "mixed-fly" },
+          createElement(
+            Step,
+            { n: 1 },
+            createElement(
+              Shape,
+              {
+                id: "mixed-fly-shape",
+                x: 100,
+                y: 100,
+                width: 400,
+                height: 160,
+                fill: "#0070C0",
+                textStyle: { fontSize: 20, color: "#FFFFFF" },
+                enter: [
+                  fly({ duration: 4000 }),
+                  fade({ by: "paragraph", duration: 700, delay: 1500 }),
+                ],
+              },
+              createElement(P, { key: "first" }, "First paragraph"),
+              createElement(P, { key: "second" }, "Second paragraph"),
+            ),
+          ),
+        ),
+      ),
+    );
+    const shapeId = result.report.slides[0]?.objects.find(
+      ({ authorId }) => authorId === "mixed-fly-shape",
+    )?.id;
+    assert.ok(shapeId !== undefined);
+    const motion = result.report.slides[0]?.capabilities?.[
+      "motion"
+    ] as MotionObservation;
+    assert.deepEqual(
+      motion.steps[0]?.effects.map(({ target, preset, by, endMs }) => [
+        target.authorId,
+        preset,
+        by,
+        endMs,
+      ]),
+      [
+        ["mixed-fly-shape", "fly", undefined, 4000],
+        ["mixed-fly-shape", "fade", "paragraph", 2200],
+        ["mixed-fly-shape", "fade", "paragraph", 2900],
+      ],
+    );
+    const file = await validatePptx(result.pptx);
+    assert.deepEqual(file.errors, []);
+    const effects =
+      file.slides[0]?.animations?.flatMap((step) => step.effects) ?? [];
+    const flyEffects = effects.filter(({ preset }) => preset === "fly");
+    assert.equal(flyEffects.length, 3);
+    const whole = flyEffects.find(
+      ({ targetRange }) => targetRange === undefined,
+    );
+    assert.ok(whole !== undefined);
+    assert.deepEqual(
+      [
+        whole.nativeBuild,
+        whole.nativeBuildGroupId,
+        whole.nativeBuildAnimBg,
+        whole.delayMs,
+        whole.durationMs,
+      ],
+      ["paragraph", 0, true, 0, 4000],
+    );
+    const companions = flyEffects
+      .filter(({ targetRange }) => targetRange?.type === "paragraph")
+      .sort(
+        (left, right) =>
+          (left.targetRange?.type === "paragraph"
+            ? left.targetRange.start
+            : 0) -
+          (right.targetRange?.type === "paragraph"
+            ? right.targetRange.start
+            : 0),
+      );
+    assert.deepEqual(
+      companions.map(
+        ({
+          targetRange,
+          delayMs,
+          durationMs,
+          nativeBuild,
+          nativeBuildGroupId,
+          nativeBuildAnimBg,
+        }) => [
+          targetRange,
+          delayMs,
+          durationMs,
+          nativeBuild,
+          nativeBuildGroupId,
+          nativeBuildAnimBg,
+        ],
+      ),
+      [
+        [
+          { type: "paragraph", start: 0, end: 0 },
+          0,
+          4000,
+          "paragraph",
+          0,
+          true,
+        ],
+        [
+          { type: "paragraph", start: 1, end: 1 },
+          0,
+          4000,
+          "paragraph",
+          0,
+          true,
+        ],
+      ],
+    );
+
+    const slideXml = strFromU8(
+      unzipSync(result.pptx)["ppt/slides/slide1.xml"]!,
+    );
+    const blocks = animationEffectBlocks(slideXml);
+    const flyBlocks = blocks.filter(({ presetId }) => presetId === 2);
+    assert.equal(flyBlocks.length, 3);
+    const wholeBlock = flyBlocks.find(({ block }) =>
+      block.includes('nodeType="clickEffect"'),
+    );
+    assert.ok(wholeBlock !== undefined);
+    const companionBlocks = flyBlocks
+      .filter(({ block }) => block.includes('nodeType="withEffect"'))
+      .sort(
+        (left, right) =>
+          Number(/<p:pRg st="(\d+)"/u.exec(left.block)?.[1]) -
+          Number(/<p:pRg st="(\d+)"/u.exec(right.block)?.[1]),
+      );
+    assert.equal(companionBlocks.length, 2);
+    const fadeBlocks = blocks.filter(({ presetId }) => presetId === 10);
+    assert.equal(fadeBlocks.length, 2);
+    const order = [
+      wholeBlock.block,
+      fadeBlocks[0]?.block ?? "",
+      fadeBlocks[1]?.block ?? "",
+      companionBlocks[0]?.block ?? "",
+      companionBlocks[1]?.block ?? "",
+    ].map((block) => slideXml.indexOf(block));
+    assert.deepEqual(
+      order,
+      [...order].sort((left, right) => left - right),
+    );
+
+    const attributes = (block: string): string[] =>
+      [...block.matchAll(/<p:attrName>([^<]+)<\/p:attrName>/gu)].map(
+        ([, name]) => name ?? "",
+      );
+    assert.deepEqual(attributes(wholeBlock.block), [
+      "style.visibility",
+      "ppt_x",
+      "ppt_y",
+    ]);
+    assert.doesNotMatch(wholeBlock.block, /<p:pRg/u);
+    assert.deepEqual(
+      companionBlocks.map(({ block }) => ({
+        range: /<p:pRg st="(\d+)" end="(\d+)">/u.exec(block)?.slice(1),
+        attributes: attributes(block),
+        set: block.includes("<p:set>"),
+      })),
+      [
+        { range: ["0", "0"], attributes: ["ppt_x", "ppt_y"], set: false },
+        { range: ["1", "1"], attributes: ["ppt_x", "ppt_y"], set: false },
+      ],
+    );
+    assert.match(
+      companionBlocks[0]?.block ?? "",
+      /#ppt_y\+0\.814814814814815/u,
+    );
+    assert.doesNotMatch(slideXml, /<p:bg>/u);
+
+    const removeOne = rewriteSlideXml(result.pptx, (xml) =>
+      xml.replace(companionBlocks[0]?.block ?? "", ""),
+    );
+    assert.ok(
+      (await validatePptx(removeOne)).errors.some(
+        ({ code }) => code === "inconsistent-animation-target-range",
+      ),
+    );
+    const removeAll = rewriteSlideXml(result.pptx, (xml) =>
+      xml
+        .replace(companionBlocks[0]?.block ?? "", "")
+        .replace(companionBlocks[1]?.block ?? "", ""),
+    );
+    const removeAllErrors = (await validatePptx(removeAll)).errors;
+    assert.equal(
+      removeAllErrors.filter(
+        ({ code }) => code === "inconsistent-animation-target-range",
+      ).length,
+      2,
+    );
+    const wrongDelay = rewriteSlideXml(result.pptx, (xml) =>
+      xml.replace(
+        companionBlocks[0]?.block ?? "",
+        (companionBlocks[0]?.block ?? "").replace(
+          '<p:cond delay="0">',
+          '<p:cond delay="50">',
+        ),
+      ),
+    );
+    assert.ok(
+      (await validatePptx(wrongDelay)).errors.some(
+        ({ code }) => code === "invalid-animation-projection-target",
+      ),
+    );
+    const wrongRepeat = rewriteSlideXml(result.pptx, (xml) =>
+      xml.replace(
+        companionBlocks[0]?.block ?? "",
+        (companionBlocks[0]?.block ?? "").replace(
+          '<p:cTn id="',
+          '<p:cTn repeatCount="2000" id="',
+        ),
+      ),
+    );
+    assert.ok(
+      (await validatePptx(wrongRepeat)).errors.some(
+        ({ code }) => code === "invalid-animation-projection-target",
+      ),
+    );
+    const wrongAxis = rewriteSlideXml(result.pptx, (xml) =>
+      xml.replace(
+        companionBlocks[0]?.block ?? "",
+        (companionBlocks[0]?.block ?? "").replace(
+          "<p:attrName>ppt_y</p:attrName>",
+          "<p:attrName>ppt_x</p:attrName>",
+        ),
+      ),
+    );
+    assert.ok(
+      (await validatePptx(wrongAxis)).errors.some(
+        ({ code }) => code === "invalid-animation-projection-target",
+      ),
+    );
+    const backgroundPrimary = rewriteSlideXml(result.pptx, (xml) =>
+      xml.replace(
+        wholeBlock.block,
+        wholeBlock.block.replaceAll(
+          `<p:spTgt spid="${shapeId}"></p:spTgt>`,
+          `<p:spTgt spid="${shapeId}"><p:bg></p:bg></p:spTgt>`,
+        ),
+      ),
+    );
+    assert.deepEqual((await validatePptx(backgroundPrimary)).errors, []);
+    const mixedPrimaryRoles = rewriteSlideXml(result.pptx, (xml) =>
+      xml.replace(
+        wholeBlock.block,
+        wholeBlock.block.replace(
+          `<p:spTgt spid="${shapeId}"></p:spTgt>`,
+          `<p:spTgt spid="${shapeId}"><p:bg></p:bg></p:spTgt>`,
+        ),
+      ),
+    );
+    assert.ok(
+      (await validatePptx(mixedPrimaryRoles)).errors.some(
+        ({ code }) => code === "invalid-animation-projection-target",
+      ),
+    );
+    const wrongWholeAxis = rewriteSlideXml(result.pptx, (xml) =>
+      xml.replace(
+        wholeBlock.block,
+        wholeBlock.block.replace(
+          "<p:attrName>ppt_y</p:attrName>",
+          "<p:attrName>ppt_x</p:attrName>",
+        ),
+      ),
+    );
+    assert.ok(
+      (await validatePptx(wrongWholeAxis)).errors.some(
+        ({ code }) => code === "invalid-animation-projection-target",
+      ),
+    );
+  });
+
+  it("keeps whole Stretch and SpinIn roles on the object while companions carry paragraph geometry", async () => {
+    const cases = [
+      {
+        id: "mixed-stretch",
+        effect: stretch({ duration: 4000 }),
+        preset: "stretch",
+        wholeAttributes: ["style.visibility", "ppt_w", "ppt_h"],
+        companionAttributes: ["ppt_x", "ppt_w", "ppt_h"],
+      },
+      {
+        id: "mixed-spin-in",
+        effect: spinIn({ duration: 4000 }),
+        preset: "spinIn",
+        wholeAttributes: [
+          "style.visibility",
+          "ppt_w",
+          "ppt_h",
+          "style.rotation",
+        ],
+        companionAttributes: [
+          "ppt_w",
+          "ppt_h",
+          "style.rotation",
+          "ppt_x",
+          "ppt_y",
+        ],
+      },
+    ];
+    for (const item of cases) {
+      const result = await build(
+        createElement(
+          Deck,
+          { width: 960, height: 540 },
+          createElement(
+            Slide,
+            { id: item.id },
+            createElement(
+              Step,
+              { n: 1 },
+              createElement(
+                Shape,
+                {
+                  id: `${item.id}-shape`,
+                  x: 100,
+                  y: 100,
+                  width: 400,
+                  height: 160,
+                  fill: "#0070C0",
+                  textStyle: { fontSize: 20, color: "#FFFFFF" },
+                  enter: [
+                    item.effect,
+                    fade({ by: "paragraph", duration: 700, delay: 1500 }),
+                  ],
+                },
+                createElement(P, { key: "first" }, "First paragraph"),
+                createElement(P, { key: "second" }, "Second paragraph"),
+              ),
+            ),
+          ),
+        ),
+      );
+      const file = await validatePptx(result.pptx);
+      assert.deepEqual(file.errors, [], item.id);
+      const effects =
+        file.slides[0]?.animations?.flatMap((step) => step.effects) ?? [];
+      const geometryEffects = effects.filter(
+        ({ preset }) => preset === item.preset,
+      );
+      assert.equal(geometryEffects.length, 3, item.id);
+      assert.equal(
+        geometryEffects.filter(({ targetRange }) => targetRange === undefined)
+          .length,
+        1,
+        item.id,
+      );
+      assert.deepEqual(
+        geometryEffects
+          .filter(({ targetRange }) => targetRange?.type === "paragraph")
+          .map(({ targetRange }) => targetRange),
+        [
+          { type: "paragraph", start: 0, end: 0 },
+          { type: "paragraph", start: 1, end: 1 },
+        ],
+        item.id,
+      );
+      const slideXml = strFromU8(
+        unzipSync(result.pptx)["ppt/slides/slide1.xml"]!,
+      );
+      const blocks = animationEffectBlocks(slideXml);
+      const geometryBlocks = blocks.filter(
+        ({ presetId }) => presetId === (item.preset === "stretch" ? 17 : 49),
+      );
+      assert.equal(geometryBlocks.length, 3, item.id);
+      const wholeBlock = geometryBlocks.find(({ block }) =>
+        block.includes('nodeType="clickEffect"'),
+      );
+      assert.ok(wholeBlock !== undefined);
+      const companionBlocks = geometryBlocks.filter(({ block }) =>
+        block.includes('nodeType="withEffect"'),
+      );
+      assert.equal(companionBlocks.length, 2, item.id);
+      const attributes = (block: string): string[] =>
+        [...block.matchAll(/<p:attrName>([^<]+)<\/p:attrName>/gu)].map(
+          ([, name]) => name ?? "",
+        );
+      assert.deepEqual(attributes(wholeBlock.block), item.wholeAttributes);
+      for (const companion of companionBlocks) {
+        assert.deepEqual(attributes(companion.block), item.companionAttributes);
+        assert.doesNotMatch(companion.block, /<p:set>/u);
+      }
+      if (item.preset === "spinIn") {
+        const spinCompanion = companionBlocks[0]?.block ?? "";
+        assert.equal(
+          (spinCompanion.match(/additive="base"/gu) ?? []).length,
+          2,
+        );
+        assert.doesNotMatch(spinCompanion, /-#ppt_x|-#ppt_y/u);
+        assert.match(spinCompanion, /fmla="[^"]*\$\*\(/u);
+      }
+    }
+  });
+
+  it("rejects sum, delta, or identity coordinates on mixed SpinIn companions", async () => {
+    const result = await build(
+      createElement(
+        Deck,
+        { width: 960, height: 540 },
+        createElement(
+          Slide,
+          { id: "mixed-spin-negative" },
+          createElement(
+            Step,
+            { n: 1 },
+            createElement(
+              Shape,
+              {
+                id: "mixed-spin-negative-shape",
+                x: 100,
+                y: 100,
+                width: 400,
+                height: 160,
+                fill: "#0070C0",
+                textStyle: { fontSize: 20, color: "#FFFFFF" },
+                enter: [
+                  spinIn({ duration: 1000 }),
+                  fade({ by: "paragraph", duration: 700, delay: 300 }),
+                ],
+              },
+              createElement(P, { key: "first" }, "First paragraph"),
+              createElement(P, { key: "second" }, "Second paragraph"),
+            ),
+          ),
+        ),
+      ),
+    );
+    assert.deepEqual((await validatePptx(result.pptx)).errors, []);
+    const slideXml = strFromU8(
+      unzipSync(result.pptx)["ppt/slides/slide1.xml"]!,
+    );
+    const companion = animationEffectBlocks(slideXml).find(
+      ({ block, presetId }) =>
+        presetId === 49 && block.includes('nodeType="withEffect"'),
+    )?.block;
+    assert.ok(companion !== undefined);
+    const sumCoordinates = rewriteSlideXml(result.pptx, (xml) =>
+      xml.replace(
+        companion,
+        companion.replace(
+          '<p:cBhvr additive="base">',
+          '<p:cBhvr additive="sum">',
+        ),
+      ),
+    );
+    assert.ok(
+      (await validatePptx(sumCoordinates)).errors.some(
+        ({ code }) => code === "invalid-animation-progress-formula",
+      ),
+    );
+    const deltaCoordinates = rewriteSlideXml(result.pptx, (xml) =>
+      xml.replace(
+        companion,
+        companion.replace(
+          /<p:tav tm="0" fmla="([^"]*)">/u,
+          '<p:tav tm="0" fmla="$1-#ppt_x">',
+        ),
+      ),
+    );
+    assert.ok(
+      (await validatePptx(deltaCoordinates)).errors.some(
+        ({ code }) => code === "invalid-animation-progress-formula",
+      ),
+    );
+    const identityCoordinates = rewriteSlideXml(result.pptx, (xml) =>
+      xml.replace(
+        companion,
+        companion.replace(
+          /<p:tav tm="0" fmla="[^"]*">/u,
+          '<p:tav tm="0" fmla="#ppt_x">',
+        ),
+      ),
+    );
+    assert.ok(
+      (await validatePptx(identityCoordinates)).errors.some(
+        ({ code }) => code === "invalid-animation-progress-formula",
+      ),
+    );
+  });
+
+  it("matches companions to each non-overlapping whole effect instance", async () => {
+    const cases = [
+      {
+        id: "sequential-fly-instances",
+        enter: [
+          fly({ duration: 1000 }),
+          fly({ duration: 2000, delay: 1200 }),
+          fade({ by: "paragraph", duration: 700, delay: 300 }),
+        ],
+      },
+      {
+        id: "same-duration-fly-instances",
+        enter: [
+          fly({ duration: 1000 }),
+          fly({ duration: 1000, delay: 1200 }),
+          fade({ by: "paragraph", duration: 700, delay: 300 }),
+        ],
+      },
+      {
+        id: "same-parameter-fly-instances",
+        enter: [
+          fly({ duration: 1000 }),
+          fly({ duration: 1000 }),
+          fade({ by: "paragraph", duration: 700, delay: 300 }),
+        ],
+      },
+      {
+        id: "two-spin-in-instances",
+        enter: [
+          spinIn({ duration: 1000 }),
+          spinIn({ duration: 1000, delay: 1200 }),
+          fade({ by: "paragraph", duration: 700, delay: 300 }),
+        ],
+      },
+      {
+        id: "fly-and-spin-in-instances",
+        enter: [
+          fly({ duration: 1000 }),
+          spinIn({ duration: 1000, delay: 1200 }),
+          fade({ by: "paragraph", duration: 700, delay: 300 }),
+        ],
+      },
+    ] as const;
+    for (const item of cases) {
+      const result = await build(
+        createElement(
+          Deck,
+          { width: 960, height: 540 },
+          createElement(
+            Slide,
+            { id: item.id },
+            createElement(
+              Step,
+              { n: 1 },
+              createElement(
+                Shape,
+                {
+                  id: `${item.id}-shape`,
+                  x: 100,
+                  y: 100,
+                  width: 400,
+                  height: 160,
+                  fill: "#0070C0",
+                  textStyle: { fontSize: 20, color: "#FFFFFF" },
+                  enter: item.enter,
+                },
+                createElement(P, { key: "first" }, "First paragraph"),
+                createElement(P, { key: "second" }, "Second paragraph"),
+              ),
+            ),
+          ),
+        ),
+      );
+      const file = await validatePptx(result.pptx);
+      assert.deepEqual(file.errors, [], item.id);
+      const motion = result.report.slides[0]?.capabilities?.[
+        "motion"
+      ] as MotionObservation;
+      assert.equal(motion.steps[0]?.effects.length, 4, item.id);
+    }
+
+    const documentResult = await buildDocument(
+      documentDeck({ width: 960, height: 540 }).append(
+        documentSlide({ id: "document-same-fly-instances" }).append(
+          documentStep({ n: 1 }).append(
+            documentShape({
+              id: "document-same-fly-instances-shape",
+              x: 100,
+              y: 100,
+              width: 400,
+              height: 160,
+              fill: "#0070C0",
+              textStyle: { fontSize: 20, color: "#FFFFFF" },
+              enter: [
+                documentFly({ duration: 1000 }),
+                documentFly({ duration: 1000 }),
+                documentFade({ by: "paragraph", duration: 700, delay: 300 }),
+              ],
+            }).content(
+              documentParagraph("First paragraph"),
+              documentParagraph("Second paragraph"),
+            ),
+          ),
+        ),
+      ),
+    );
+    assert.deepEqual((await validatePptx(documentResult.pptx)).errors, []);
+  });
+
+  it("rejects missing or extra companions in same-parameter whole effect instances", async () => {
+    const result = await build(
+      createElement(
+        Deck,
+        { width: 960, height: 540 },
+        createElement(
+          Slide,
+          { id: "same-parameter-companion-negatives" },
+          createElement(
+            Step,
+            { n: 1 },
+            createElement(
+              Shape,
+              {
+                id: "same-parameter-companion-shape",
+                x: 100,
+                y: 100,
+                width: 400,
+                height: 160,
+                fill: "#0070C0",
+                textStyle: { fontSize: 20, color: "#FFFFFF" },
+                enter: [
+                  fly({ duration: 1000 }),
+                  fly({ duration: 1000 }),
+                  fade({ by: "paragraph", duration: 700, delay: 300 }),
+                ],
+              },
+              createElement(P, { key: "first" }, "First paragraph"),
+              createElement(P, { key: "second" }, "Second paragraph"),
+            ),
+          ),
+        ),
+      ),
+    );
+    assert.deepEqual((await validatePptx(result.pptx)).errors, []);
+    const slideXml = strFromU8(
+      unzipSync(result.pptx)["ppt/slides/slide1.xml"]!,
+    );
+    const companions = animationEffectBlocks(slideXml)
+      .filter(
+        ({ block, presetId }) =>
+          presetId === 2 &&
+          block.includes('nodeType="withEffect"') &&
+          block.includes("<p:pRg"),
+      )
+      .map(({ block }) => block);
+    assert.equal(companions.length, 4);
+    const missingOne = rewriteSlideXml(result.pptx, (xml) =>
+      xml.replace(companions[0] ?? "", ""),
+    );
+    assert.ok(
+      (await validatePptx(missingOne)).errors.some(
+        ({ code }) =>
+          code === "inconsistent-animation-target-range" ||
+          code === "invalid-animation-projection-target",
+      ),
+    );
+    const extraCompanion = (companions[0] ?? "").replace(
+      /\bid="(\d+)"/gu,
+      (_match, id: string) => `id="${Number(id) + 10000}"`,
+    );
+    const extraOne = rewriteSlideXml(result.pptx, (xml) =>
+      xml.replace(
+        companions[0] ?? "",
+        `${companions[0] ?? ""}${extraCompanion}`,
+      ),
+    );
+    assert.ok(
+      (await validatePptx(extraOne)).errors.some(
+        ({ code }) => code === "invalid-animation-projection-target",
+      ),
+    );
+  });
+
+  it("keeps cued delayed mixed projection companions synchronized with the whole completion", async () => {
+    function CuedMixedProjectionDeck() {
+      const source = useMotionScope();
+      const mixed = useMotionScope();
+      const follower = useMotionScope();
+      return createElement(
+        Deck,
+        { width: 960, height: 540 },
+        createElement(
+          Slide,
+          { id: "mixed-scheduling" },
+          createElement(
+            Step,
+            { n: 1 },
+            createElement(
+              MotionScope,
+              { scope: source, publishEnd: source.cue("ready") },
+              createElement(Shape, {
+                id: "schedule-source",
+                x: 20,
+                y: 20,
+                width: 80,
+                height: 40,
+                fill: "#336699",
+                enter: fade({ duration: 100 }),
+              }),
+            ),
+            createElement(
+              MotionScope,
+              {
+                scope: mixed,
+                startAt: after(source.cue("ready"), 120),
+                publishEnd: mixed.cue("done"),
+              },
+              createElement(
+                Shape,
+                {
+                  id: "schedule-mixed",
+                  x: 100,
+                  y: 100,
+                  width: 400,
+                  height: 160,
+                  fill: "#0070C0",
+                  textStyle: { fontSize: 20, color: "#FFFFFF" },
+                  enter: [
+                    fly({ duration: 4000, delay: 100 }),
+                    fade({ by: "paragraph", duration: 700, delay: 1500 }),
+                  ],
+                  emphasis: repeat(spin({ duration: 500 }), 2),
+                },
+                createElement(P, { key: "first" }, "First paragraph"),
+                createElement(P, { key: "second" }, "Second paragraph"),
+              ),
+            ),
+            createElement(
+              MotionScope,
+              { scope: follower, startAt: after(mixed.cue("done"), 20) },
+              createElement(Shape, {
+                id: "schedule-follower",
+                x: 20,
+                y: 80,
+                width: 80,
+                height: 40,
+                fill: "#993366",
+                enter: fade({ duration: 100 }),
+              }),
+            ),
+          ),
+        ),
+      );
+    }
+
+    const result = await build(createElement(CuedMixedProjectionDeck));
+    const file = await validatePptx(result.pptx);
+    assert.deepEqual(file.errors, []);
+    const effects =
+      file.slides[0]?.animations?.flatMap((step) => step.effects) ?? [];
+    const flyEffects = effects.filter(({ preset }) => preset === "fly");
+    assert.equal(flyEffects.length, 3);
+    assert.deepEqual(
+      [...new Set(flyEffects.map(({ delayMs }) => delayMs))],
+      [320],
+    );
+    assert.ok(flyEffects.every(({ durationMs }) => durationMs === 4000));
+    const spinEffect = effects.find(({ preset }) => preset === "spin");
+    assert.deepEqual([spinEffect?.repeatCount, spinEffect?.delayMs], [2, 220]);
+    const followerObject = result.report.slides[0]?.objects.find(
+      ({ authorId }) => authorId === "schedule-follower",
+    );
+    const followerEffect = effects.find(
+      ({ targetId }) => targetId === followerObject?.id,
+    );
+    const wholeFly = flyEffects.find(
+      ({ targetRange }) => targetRange === undefined,
+    );
+    assert.ok(wholeFly !== undefined);
+    assert.equal(
+      followerEffect?.delayMs,
+      wholeFly.delayMs + wholeFly.durationMs + 20,
     );
   });
 

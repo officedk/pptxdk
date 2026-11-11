@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 
 import {
   build,
@@ -16,7 +15,7 @@ import {
   slide as documentSlide,
 } from "@react-pptx/react-pptx/document";
 import { validatePptx } from "@react-pptx/validation";
-import { strFromU8, unzipSync, type Unzipped } from "fflate";
+import { strFromU8, strToU8, unzipSync, zipSync, type Unzipped } from "fflate";
 import { describe, it } from "vitest";
 
 function chartXml(parts: Unzipped, index = 1): string {
@@ -343,19 +342,49 @@ describe("zero-observation custom error bars", () => {
     assert.deepEqual(emptyResult.pptx, emptyPptx);
   });
 
-  for (const file of ["custom-both.pptx", "custom-plus.pptx"]) {
-    it(`rejects the recorded inverse custom source in ${file}`, async () => {
-      const bytes = new Uint8Array(
-        readFileSync(
-          new URL(`./assets/native-23-zero-custom/${file}`, import.meta.url),
-        ),
+  for (const [name, errorBars] of [
+    ["both", customBoth],
+    [
+      "plus",
+      {
+        type: "custom" as const,
+        include: "plus" as const,
+        plus: [],
+      },
+    ],
+  ] as const) {
+    it(`rejects a real inverse custom source rebuilt from the ${name} zero chart`, async () => {
+      const source = await build(
+        <Deck width={800} height={600}>
+          <Slide id="inverse-custom">
+            <Chart
+              id="inverse-custom"
+              x={10}
+              y={10}
+              width={760}
+              height={560}
+              groups={lineZeroGroups(errorBars)}
+            />
+          </Slide>
+        </Deck>,
       );
-      const result = await validatePptx(bytes);
+      const parts = unzipSync(source.pptx);
+      const chartPath = "ppt/charts/chart1.xml";
+      const original = chartXml(parts);
+      const inverse = (side: "plus" | "minus", column: string) =>
+        `<c:${side}><c:numRef><c:f>Sheet1!$${column}$2:$${column}$1</c:f><c:numCache><c:formatCode>General</c:formatCode><c:ptCount val="0"/></c:numCache></c:numRef></c:${side}>`;
+      let mutated = original.replace(numLitZero("plus"), inverse("plus", "C"));
+      if (name === "both") {
+        mutated = mutated.replace(numLitZero("minus"), inverse("minus", "D"));
+      }
+      assert.notEqual(mutated, original);
+      const result = await validatePptx(
+        zipSync({ ...parts, [chartPath]: strToU8(mutated) }),
+      );
       assert.ok(
         result.errors.some(
           ({ code, part }) =>
-            code === "invalid-chart-formula" &&
-            part === "ppt/charts/chart1.xml",
+            code === "invalid-chart-formula" && part === chartPath,
         ),
         JSON.stringify(result.errors),
       );

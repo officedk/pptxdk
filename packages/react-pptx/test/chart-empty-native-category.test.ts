@@ -1,111 +1,233 @@
 import assert from "node:assert/strict";
-import { createHash } from "node:crypto";
-import { readFileSync } from "node:fs";
 
+import type { ChartGroup } from "@react-pptx/react-pptx";
+import {
+  build as buildDocument,
+  chart as documentChart,
+  deck,
+  slide as documentSlide,
+} from "@react-pptx/react-pptx/document";
 import { validatePptx } from "@react-pptx/validation";
+import { strFromU8, strToU8, unzipSync, zipSync } from "fflate";
 import { describe, it } from "vitest";
 
-type CategoryFixture = {
-  readonly file: string;
-  readonly sha256: string;
-  readonly mismatch: boolean;
-  readonly check?: (
-    series: readonly {
-      readonly name: string;
-      readonly categories?: readonly string[];
-      readonly values?: readonly (number | null)[];
-      readonly x?: readonly (number | null)[];
-      readonly y?: readonly (number | null)[];
-    }[],
-  ) => void;
+type ChartSeriesObservation = {
+  readonly name: string;
+  readonly categories?: readonly string[];
+  readonly values?: readonly (number | null)[];
+  readonly x?: readonly (number | null)[];
+  readonly y?: readonly (number | null)[];
 };
 
-const fixtures: readonly CategoryFixture[] = [
+const columnZero: readonly ChartGroup[] = [
   {
-    file: "category-source.pptx",
-    sha256: "cb729891318efbd58683444828dabf4127160b7abe3cbcbfa9a34bc68fa62476",
-    mismatch: false,
-  },
-  {
-    file: "category-category-only.pptx",
-    sha256: "d924f88f8dbc8cf40ecde9b4eeded6226d6559481a5c68c507c745a445dfc51e",
-    mismatch: true,
-  },
-  {
-    file: "category-value-only.pptx",
-    sha256: "7aea0bfb480147eb5495649e6212ef849cf741ba6f701b9bd239498f3e138406",
-    mismatch: true,
-  },
-  {
-    file: "rings-source.pptx",
-    sha256: "24e65124c1de0681ac6f98e9fa5eb98c6d1cb4b5fe9fce87461e181abd6db17e",
-    mismatch: false,
-    check: (series) => {
-      assert.deepEqual(series[0]?.categories, []);
-      assert.deepEqual(series[1]?.categories, ["A", "B"]);
-      assert.deepEqual(series[1]?.values, [2, 3]);
-    },
-  },
-  {
-    file: "rings-category-only.pptx",
-    sha256: "5c84d66ae2423f0a44031acdacc4013bb1e6497e7202001f85a7f979df1a9af4",
-    mismatch: true,
-    check: (series) => {
-      assert.deepEqual(series[0]?.categories, []);
-      assert.deepEqual(series[1]?.categories, ["A", "B"]);
-      assert.deepEqual(series[1]?.values, [2, 3]);
-    },
-  },
-  {
-    file: "rings-value-only.pptx",
-    sha256: "8648544fdf5a97baa44ff45950f3a4a967e3a65229d63b5f0f4f17dd0833c20f",
-    mismatch: true,
-    check: (series) => {
-      assert.deepEqual(series[0]?.categories, []);
-      assert.deepEqual(series[1]?.categories, ["A", "B"]);
-    },
-  },
-  {
-    file: "scatter-category-only.pptx",
-    sha256: "add98f8b0c3a26de7b0897b968eb0f32bd6cfff59c6a8acb1bffc1ecc90a3f9e",
-    mismatch: false,
-    check: (series) => {
-      assert.deepEqual(series[0]?.x, []);
-      assert.deepEqual(series[0]?.y, []);
-      assert.deepEqual(series[1]?.x, [1]);
-      assert.deepEqual(series[1]?.y, [2]);
-    },
+    kind: "column",
+    data: { kind: "shared-categories", categories: [] },
+    series: [{ name: "Empty", values: [] }],
   },
 ];
 
-describe("native zero-source category column ownership", () => {
-  for (const fixture of fixtures) {
-    it(`checks the owning category column in ${fixture.file}`, async () => {
-      const bytes = new Uint8Array(
-        readFileSync(
-          new URL(
-            `./assets/native-23-zero-category/${fixture.file}`,
-            import.meta.url,
-          ),
-        ),
+const independentRings: readonly ChartGroup[] = [
+  {
+    kind: "doughnut",
+    data: { kind: "independent-categories" },
+    series: [
+      { name: "Empty", categories: [], values: [] },
+      { name: "Filled", categories: ["A", "B"], values: [2, 3] },
+    ],
+  },
+];
+
+const mixedScatter: readonly ChartGroup[] = [
+  {
+    kind: "scatter",
+    data: { kind: "xy" },
+    series: [
+      { name: "Empty", x: [], y: [] },
+      { name: "Filled", x: [1], y: [2] },
+    ],
+  },
+];
+
+async function buildChart(groups: readonly ChartGroup[]): Promise<{
+  readonly pptx: Uint8Array;
+  readonly chart: NonNullable<ReturnType<typeof chartFromResult>>;
+}> {
+  const result = await buildDocument(
+    deck({ width: 800, height: 600 }).append(
+      documentSlide({ id: "zero-category-column" }).append(
+        documentChart({
+          id: "zero-category-column",
+          x: 10,
+          y: 10,
+          width: 760,
+          height: 560,
+          groups,
+        }),
+      ),
+    ),
+  );
+  const file = await validatePptx(result.pptx);
+  assert.deepEqual(file.errors, []);
+  const chart = chartFromResult(file);
+  assert.ok(chart);
+  return { pptx: result.pptx, chart };
+}
+
+function chartFromResult(
+  file: Awaited<ReturnType<typeof validatePptx>>,
+):
+  | NonNullable<
+      NonNullable<
+        Awaited<
+          ReturnType<typeof validatePptx>
+        >["slides"][number]["objects"][number]
+      >["chart"]
+    >
+  | undefined {
+  return file.slides[0]?.objects[0]?.chart;
+}
+
+async function withWorkbookCell(
+  pptx: Uint8Array,
+  reference: string,
+  cellXml: string,
+): Promise<Uint8Array> {
+  const file = await validatePptx(pptx);
+  const workbookPart =
+    file.slides[0]?.objects[0]?.chart?.embeddedWorkbook?.part;
+  assert.ok(workbookPart);
+  const parts = unzipSync(pptx);
+  const workbook = unzipSync(parts[workbookPart]!);
+  const sheetPath = "xl/worksheets/sheet1.xml";
+  const sheet = strFromU8(workbook[sheetPath]!);
+  const row = Number(/(\d+)$/u.exec(reference)?.[1]);
+  assert.ok(Number.isSafeInteger(row) && row >= 2);
+  const rowTag = `<row r="${row}">`;
+  const nextSheet = sheet.includes(rowTag)
+    ? sheet.replace(rowTag, `${rowTag}${cellXml}`)
+    : sheet.replace(
+        "</sheetData>",
+        `<row r="${row}">${cellXml}</row></sheetData>`,
       );
-      assert.equal(
-        createHash("sha256").update(bytes).digest("hex"),
-        fixture.sha256,
-      );
-      const result = await validatePptx(bytes);
-      const chart = result.slides[0]?.objects[0]?.chart;
-      assert.ok(chart);
-      fixture.check?.(chart.series);
-      const targetMismatch = result.errors.filter(
-        ({ code, part }) =>
-          code === "chart-workbook-mismatch" &&
-          part === "ppt/charts/chart1.xml",
-      );
-      assert.equal(targetMismatch.length, fixture.mismatch ? 1 : 0);
-      if (!fixture.mismatch) {
-        assert.deepEqual(result.errors, []);
-      }
-    });
-  }
+  return zipSync({
+    ...parts,
+    [workbookPart]: zipSync({
+      ...workbook,
+      [sheetPath]: strToU8(nextSheet),
+    }),
+  });
+}
+
+function categoryOnlyLabel(): string {
+  return '<c r="A2" t="inlineStr"><is><t>New category</t></is></c>';
+}
+
+function valueOnlyCell(): string {
+  return '<c r="B2"><v>9</v></c>';
+}
+
+function assertMismatch(file: Awaited<ReturnType<typeof validatePptx>>): void {
+  assert.ok(
+    file.errors.some(
+      ({ code, part }) =>
+        code === "chart-workbook-mismatch" && part === "ppt/charts/chart1.xml",
+    ),
+    JSON.stringify(file.errors),
+  );
+}
+
+function assertSeries(
+  series: readonly ChartSeriesObservation[],
+  expected: readonly ChartSeriesObservation[],
+): void {
+  assert.deepEqual(
+    series.map(({ name, categories, values, x, y }) =>
+      categories === undefined ? { name, x, y } : { name, categories, values },
+    ),
+    expected,
+  );
+}
+
+describe("generated zero-source category column ownership", () => {
+  it("keeps the unmodified category source valid", async () => {
+    const result = await buildChart(columnZero);
+    assert.deepEqual(result.chart.series[0]?.categories, []);
+  });
+
+  it("detects a new label in the owned category column", async () => {
+    const source = await buildChart(columnZero);
+    const result = await validatePptx(
+      await withWorkbookCell(source.pptx, "A2", categoryOnlyLabel()),
+    );
+    assertMismatch(result);
+    assert.deepEqual(
+      result.slides[0]?.objects[0]?.chart?.series[0]?.categories,
+      [],
+    );
+    assert.deepEqual(
+      result.slides[0]?.objects[0]?.chart?.embeddedWorkbook?.categories,
+      [],
+    );
+  });
+
+  it("keeps the existing numeric value-column mismatch", async () => {
+    const source = await buildChart(columnZero);
+    const result = await validatePptx(
+      await withWorkbookCell(source.pptx, "B2", valueOnlyCell()),
+    );
+    assertMismatch(result);
+  });
+
+  it("keeps independent-ring sources valid when the zero ring has no label", async () => {
+    const result = await buildChart(independentRings);
+    assertSeries(result.chart.series as readonly ChartSeriesObservation[], [
+      { name: "Empty", categories: [], values: [] },
+      { name: "Filled", categories: ["A", "B"], values: [2, 3] },
+    ]);
+  });
+
+  it("detects the zero ring's owned category column without touching the filled ring", async () => {
+    const source = await buildChart(independentRings);
+    const result = await validatePptx(
+      await withWorkbookCell(source.pptx, "A2", categoryOnlyLabel()),
+    );
+    assertMismatch(result);
+    assertSeries(
+      result.slides[0]?.objects[0]?.chart
+        ?.series as readonly ChartSeriesObservation[],
+      [
+        { name: "Empty", categories: [], values: [] },
+        { name: "Filled", categories: ["A", "B"], values: [2, 3] },
+      ],
+    );
+  });
+
+  it("keeps the independent-ring numeric value-column mismatch", async () => {
+    const source = await buildChart(independentRings);
+    const result = await validatePptx(
+      await withWorkbookCell(source.pptx, "B2", valueOnlyCell()),
+    );
+    assertMismatch(result);
+    assert.deepEqual(
+      result.slides[0]?.objects[0]?.chart?.series[1]?.values,
+      [2, 3],
+    );
+  });
+
+  it("does not treat the scatter A column as owned by the zero series", async () => {
+    const source = await buildChart(mixedScatter);
+    const result = await validatePptx(
+      await withWorkbookCell(source.pptx, "A2", categoryOnlyLabel()),
+    );
+    assert.deepEqual(result.errors, []);
+    assertSeries(
+      result.slides[0]?.objects[0]?.chart
+        ?.series as readonly ChartSeriesObservation[],
+      [
+        { name: "Empty", x: [], y: [] },
+        { name: "Filled", x: [1], y: [2] },
+      ],
+    );
+  });
 });

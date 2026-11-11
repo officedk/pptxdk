@@ -23,8 +23,12 @@ import {
 } from "@react-pptx/react-pptx/document";
 import { validatePptx } from "@react-pptx/validation";
 import { strFromU8, unzipSync } from "fflate";
+import * as fontkit from "fontkit";
 import { describe, it } from "vitest";
 
+const jostBoldBytes = new Uint8Array(
+  readFileSync(new URL("./assets/fonts/Jost-700-Bold.ttf", import.meta.url)),
+);
 const jost = font("Jost*", [
   {
     weight: 400,
@@ -36,11 +40,7 @@ const jost = font("Jost*", [
   },
   {
     weight: 700,
-    data: new Uint8Array(
-      readFileSync(
-        new URL("./assets/fonts/Jost-700-Bold.ttf", import.meta.url),
-      ),
-    ),
+    data: jostBoldBytes,
   },
 ]);
 const heroImage = new Uint8Array(
@@ -1082,5 +1082,175 @@ describe("mixed layout, layering, and component reflow", () => {
         error instanceof BuildError &&
         error.diagnostics[0]?.code === "invalid-layout-context",
     );
+  });
+
+  it("keeps intrinsic content width in the native file while constrained text wraps and flows", async () => {
+    const label = "Open report";
+    const labelStyle = {
+      fontFamily: "minor",
+      fontSize: 13,
+      fontWeight: "bold",
+      color: "dk1",
+      height: "auto",
+    } as const;
+    const columnStyle = {
+      display: "flex",
+      flexDirection: "column",
+      alignItems: "flex-start",
+      width: 400,
+      padding: 20,
+      gap: 6,
+    } as const;
+
+    const reactResult = await build(
+      <Deck width={400} height={300} theme={mixedTheme}>
+        <Slide id="intrinsic-precision">
+          <Box id="column" style={columnStyle}>
+            <Box
+              id="cta"
+              style={{
+                backgroundColor: "accent2",
+                padding: [8, 16],
+                borderRadius: 12,
+              }}
+            >
+              <Text id="cta-label" style={labelStyle}>
+                {label}
+              </Text>
+            </Box>
+            <Box
+              id="after-cta"
+              style={{ width: 20, height: 10, backgroundColor: "accent1" }}
+            />
+            <Box id="narrow" style={{ width: 60, backgroundColor: "lt1" }}>
+              <Text id="narrow-label" style={labelStyle}>
+                {label}
+              </Text>
+            </Box>
+            <Box
+              id="after-narrow"
+              style={{ width: 20, height: 10, backgroundColor: "accent1" }}
+            />
+            <Text
+              id="overset-label"
+              style={{ ...labelStyle, width: 60, height: 10 }}
+            >
+              {label}
+            </Text>
+          </Box>
+        </Slide>
+      </Deck>,
+    );
+    const documentResult = await buildDocument(
+      authorDeck({ width: 400, height: 300, theme: mixedTheme }).append(
+        authorSlide({ id: "intrinsic-precision" }).append(
+          authorBox({ id: "column", style: columnStyle }).append(
+            authorBox({
+              id: "cta",
+              style: {
+                backgroundColor: "accent2",
+                padding: [8, 16],
+                borderRadius: 12,
+              },
+            }).append(
+              authorText(label, { id: "cta-label", style: labelStyle }),
+            ),
+            authorBox({
+              id: "after-cta",
+              style: { width: 20, height: 10, backgroundColor: "accent1" },
+            }),
+            authorBox({
+              id: "narrow",
+              style: { width: 60, backgroundColor: "lt1" },
+            }).append(
+              authorText(label, { id: "narrow-label", style: labelStyle }),
+            ),
+            authorBox({
+              id: "after-narrow",
+              style: { width: 20, height: 10, backgroundColor: "accent1" },
+            }),
+            authorText(label, {
+              id: "overset-label",
+              style: { ...labelStyle, width: 60, height: 10 },
+            }),
+          ),
+        ),
+      ),
+    );
+
+    const face = fontkit.create(Buffer.from(jostBoldBytes));
+    if (face.type !== "TTF") throw new Error("expected a static TrueType font");
+    const measuredWidth = Math.round(
+      (face.layout(label).advanceWidth / face.unitsPerEm) * 13 * 9525,
+    );
+
+    for (const [entry, result] of [
+      ["react", reactResult],
+      ["document", documentResult],
+    ] as const) {
+      assert.deepEqual(
+        result.report.diagnostics.map(({ code, path }) => ({ code, path })),
+        [
+          {
+            code: "overset",
+            path: "deck/slide[intrinsic-precision]/box[column]/text[overset-label]",
+          },
+        ],
+        entry,
+      );
+      const file = await validatePptx(result.pptx);
+      assert.deepEqual(file.errors, [], entry);
+      const objectIds = new Map(
+        (result.report.slides[0]?.objects ?? []).flatMap((object) =>
+          object.authorId === undefined
+            ? []
+            : [[object.authorId, object.id] as const],
+        ),
+      );
+      const nativeBox = (authorId: string) => {
+        const id = objectIds.get(authorId);
+        assert.ok(id !== undefined, `${entry}: missing object ${authorId}`);
+        const object = file.slides[0]?.objects.find(
+          (candidate) => candidate.id === id,
+        );
+        assert.ok(object, `${entry}: missing native object ${authorId}`);
+        return object.boxEmu;
+      };
+
+      const labelWidth = nativeBox("cta-label").width;
+      assert.ok(
+        labelWidth >= measuredWidth,
+        `${entry}: intrinsic width ${labelWidth} EMU is shorter than measured ${measuredWidth} EMU`,
+      );
+      assert.ok(
+        Math.abs(nativeBox("cta").width - labelWidth - 32 * 9525) <= 1,
+        `${entry}: CTA parent lost its 32px horizontal padding`,
+      );
+      assert.ok(
+        Math.abs(
+          nativeBox("cta").height - nativeBox("cta-label").height - 16 * 9525,
+        ) <= 1,
+        `${entry}: CTA parent lost its 16px vertical padding`,
+      );
+      assert.ok(
+        Math.abs(
+          nativeBox("after-cta").y -
+            (nativeBox("cta").y + nativeBox("cta").height + 6 * 9525),
+        ) <= 1,
+        `${entry}: content after the CTA did not follow its measured height`,
+      );
+
+      assert.equal(nativeBox("narrow").width, 60 * 9525, entry);
+      assert.ok(
+        nativeBox("narrow-label").height > nativeBox("cta-label").height,
+        `${entry}: text constrained to a 60px parent did not wrap to a taller box`,
+      );
+      assert.ok(
+        nativeBox("after-narrow").y >=
+          nativeBox("narrow").y + nativeBox("narrow").height,
+        `${entry}: content after the narrow card overlapped it`,
+      );
+      assert.equal(nativeBox("overset-label").height, 10 * 9525, entry);
+    }
   });
 });

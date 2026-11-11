@@ -56,6 +56,7 @@ import {
   type CapabilityResourceClaim,
   type Diagnostic,
   type Extension,
+  type GeometryBox,
   type LayoutChildReference,
   type LayoutObservation,
   type NativeElementKind,
@@ -246,6 +247,28 @@ function deepFreeze<T>(value: T): T {
   if (!Object.isFrozen(value)) Object.freeze(value);
   for (const child of Object.values(value)) deepFreeze(child);
   return value;
+}
+
+function reportBox(box: GeometryBox): GeometryBox {
+  // Reports round solved geometry for display; compile and native output retain the layout solver's precision.
+  return {
+    x: Math.round(box.x * 100) / 100,
+    y: Math.round(box.y * 100) / 100,
+    width: Math.round(box.width * 100) / 100,
+    height: Math.round(box.height * 100) / 100,
+  };
+}
+
+function reportObservation(observation: ObjectObservation): ObjectObservation {
+  return {
+    ...observation,
+    ...(observation.box === undefined
+      ? {}
+      : { box: reportBox(observation.box) }),
+    ...(observation.members === undefined
+      ? {}
+      : { members: observation.members.map(reportObservation) }),
+  };
 }
 
 function ownKeys(
@@ -1825,12 +1848,12 @@ function compileChildren(
           );
           boxXml = output.xml;
           if (output.xml !== "") {
-            boxObservation = {
+            boxObservation = reportObservation({
               ...output.observation,
               id: objectId,
               ...(authorId === undefined ? {} : { authorId }),
               ...(boxLink === undefined ? {} : { link: boxLink.summary }),
-            };
+            });
             if (morphKey !== undefined && morphName !== undefined) {
               const nativeKind = parsedResult?.contract?.nativeKind ?? "sp";
               if (output.observation.name !== morphName) {
@@ -1911,7 +1934,7 @@ function compileChildren(
       context.slide.layouts.push({
         id,
         ...(authorId === undefined ? {} : { authorId }),
-        box,
+        box: reportBox(box),
         children: [
           ...(boxObservation === undefined
             ? []
@@ -2159,12 +2182,12 @@ function compileChildren(
           declaration: child,
         });
       }
-      const observation = {
+      const observation = reportObservation({
         ...output.observation,
         id,
         ...(authorId === undefined ? {} : { authorId }),
         ...(compiledLink === undefined ? {} : { link: compiledLink.summary }),
-      };
+      });
       content.push({
         ...(authorId === undefined ? {} : { authorId }),
         reference: { kind: "object", id: observation.id },
@@ -2173,8 +2196,8 @@ function compileChildren(
           ...tableContentNodes(observation),
         ],
       });
-      if (observation.box !== undefined) {
-        const box = observation.box;
+      if (output.observation.box !== undefined) {
+        const box = output.observation.box;
         if (
           box.x < 0 ||
           box.y < 0 ||

@@ -40,8 +40,8 @@ type MotionTarget = {
   readonly textBody: boolean;
   readonly filled: boolean;
   readonly paragraphCount?: number;
-  readonly chartSeriesCount?: number;
-  readonly chartCategoryCount?: number;
+  /** Original point count for every chart-wide series, in formal series order. */
+  readonly chartSeriesPointCounts?: readonly number[];
   readonly box?: GeometryBox;
   readonly rotationDegrees?: number;
   readonly hasBackground?: boolean;
@@ -1016,20 +1016,58 @@ function expansionFor(
       })),
     };
   }
-  const seriesCount = target.chartSeriesCount ?? 0;
-  const categoryCount = target.chartCategoryCount ?? 0;
-  if (
-    target.kind !== "chart" ||
-    seriesCount < 1 ||
-    (effect.by === "category" && categoryCount < 1)
-  ) {
+  const pointCounts = target.chartSeriesPointCounts ?? [];
+  if (target.kind !== "chart") {
     fail(
       "invalid-motion-granularity",
-      `by: "${effect.by}" requires native chart with data`,
+      `by: "${effect.by}" requires native chart`,
       path,
     );
   }
-  const count = effect.by === "series" ? seriesCount : categoryCount;
+  const pointCount = Math.max(0, ...pointCounts);
+  let dataRanges: MotionTargetRange[];
+  // Ranges keep original array slots: category batches name every point position, while point
+  // batches enumerate only existing (series, point) pairs and never compress later indices.
+  if (effect.by === "series") {
+    dataRanges = pointCounts.map((_, seriesIndex) => ({
+      type: "chart",
+      step: "series",
+      seriesIndex,
+      categoryIndex: -4,
+    }));
+  } else if (effect.by === "category") {
+    dataRanges = Array.from({ length: pointCount }, (_, categoryIndex) => ({
+      type: "chart",
+      step: "category",
+      seriesIndex: -4,
+      categoryIndex,
+    }));
+  } else if (effect.by === "seriesElements") {
+    dataRanges = pointCounts.flatMap((count, seriesIndex) =>
+      Array.from({ length: count }, (_, categoryIndex) => ({
+        type: "chart" as const,
+        step: "ptInSeries" as const,
+        seriesIndex,
+        categoryIndex,
+      })),
+    );
+  } else {
+    dataRanges = Array.from({ length: pointCount }).flatMap(
+      (_, categoryIndex) =>
+        pointCounts.flatMap((count, seriesIndex) =>
+          categoryIndex < count
+            ? [
+                {
+                  type: "chart" as const,
+                  step: "ptInCategory" as const,
+                  seriesIndex,
+                  categoryIndex,
+                },
+              ]
+            : [],
+        ),
+    );
+  }
   const ranges: MotionTargetRange[] = [
     {
       type: "chart",
@@ -1037,21 +1075,7 @@ function expansionFor(
       seriesIndex: -3,
       categoryIndex: -3,
     },
-    ...Array.from({ length: count }, (_, index) =>
-      effect.by === "series"
-        ? {
-            type: "chart" as const,
-            step: "series" as const,
-            seriesIndex: index,
-            categoryIndex: -4,
-          }
-        : {
-            type: "chart" as const,
-            step: "category" as const,
-            seriesIndex: -4,
-            categoryIndex: index,
-          },
-    ),
+    ...dataRanges,
   ];
   return { type: "parts", count: ranges.length, ranges };
 }
@@ -1255,7 +1279,11 @@ function motionPlan(
       (by) => by === "paragraph" || by === "word" || by === "letter",
     );
     const chartGranularities = [...granularities].filter(
-      (by) => by === "series" || by === "category",
+      (by) =>
+        by === "series" ||
+        by === "category" ||
+        by === "seriesElements" ||
+        by === "categoryElements",
     );
     const incompatible =
       target.value.target.kind === "chart"

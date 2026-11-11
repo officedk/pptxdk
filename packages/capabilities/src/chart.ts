@@ -3159,7 +3159,6 @@ export const chartCapability: ObjectCapabilityModule = {
     }
 
     const name = context.morphName ?? parsed.name ?? `Chart ${context.id - 1}`;
-    const firstKind = parsed.groups[0]!.kind;
     const annotations = motionAnnotations(parsed.rawProps, {
       kind: "chart",
       name,
@@ -3167,12 +3166,13 @@ export const chartCapability: ObjectCapabilityModule = {
         ? {}
         : { authorId: parsed.rawProps["id"] as string }),
       textBody: false,
-      filled: firstKind !== "line",
+      // Chart ranges own their gridLegend step; a chart has no whole-text fill/background flag.
+      filled: false,
       box,
       rotationDegrees: 0,
-      hasBackground: firstKind !== "line",
-      chartSeriesCount: parsed.series.length,
-      chartCategoryCount: parsed.categoryCount,
+      chartSeriesPointCounts: parsed.series.map((series) =>
+        "x" in series ? series.x.length : series.values.length,
+      ),
     });
     const { textStyles, resourceClaims, fontUses, warnings } =
       chartResourceClaims(parsed, context.theme, context.options.embedFonts);

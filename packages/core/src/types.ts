@@ -39,7 +39,7 @@ export type {
 
 export const formatBaseline = "ECMA-376 5th edition Transitional" as const;
 
-export type Extension = "p14" | "p159";
+export type Extension = "p14" | "p159" | "c15";
 
 /** Slide background can use theme colors, gradients supported by the shared visual writer, or formal image resource inputs. */
 export type SlideBackground =
@@ -58,7 +58,7 @@ export const targets = Object.freeze({
   transitional: Object.freeze({
     name: "transitional",
     format: formatBaseline,
-    extensions: Object.freeze(["p14", "p159"] as const),
+    extensions: Object.freeze(["p14", "p159", "c15"] as const),
   }),
   baselineOnly: Object.freeze({
     name: "baseline-only",

@@ -121,6 +121,8 @@ export type ChartGroupData = SharedCategoryData;
  * Explicitly declares that each doughnut series owns its own category domain.
  *
  * Categories remain on the series so the group owns no parallel per-series lookup.
+ * Native category labels use a c15 datalabelsRange scoped to the owning series, and an
+ * explicit legend still describes only the first declared ring's category positions.
  */
 export type IndependentCategoryData = {
   readonly kind: "independent-categories";
@@ -362,7 +364,12 @@ export type ChartBase = MotionProps &
     readonly title?: ChartTitle;
     /** Native chart-wide blank rendering; omitted leaves the chart-kind default. */
     readonly displayBlanksAs?: ChartDisplayBlanksAs;
-    /** When omitted or false, hides the legend. */
+    /**
+     * When omitted or false, hides the legend. For an independent-category doughnut the
+     * native legend explains the first declared ring's ordered category positions; trailing
+     * entries beyond that ring's category count are deleted, and other rings rely on their
+     * own data labels. No legend can select or merge another ring's category domain.
+     */
     readonly legend?: false | "top" | "bottom" | "left" | "right";
     /** Internal plot area position relative to chart box, in px. */
     readonly plotArea?: {

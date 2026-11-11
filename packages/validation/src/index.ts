@@ -21,6 +21,10 @@ const contentTypeNamespace =
 const p14Namespace = "http://schemas.microsoft.com/office/powerpoint/2010/main";
 const p159Namespace =
   "http://schemas.microsoft.com/office/powerpoint/2015/09/main";
+const c15Namespace = "http://schemas.microsoft.com/office/drawing/2012/chart";
+const chartCategoryRangeExtensionUri = "{02D57815-91ED-43cb-92C2-25804820EDAC}";
+const chartDataLabelRangeExtensionUri =
+  "{CE6537A1-D6FC-4f65-9D91-7224C49458BB}";
 const markupCompatibilityNamespace =
   "http://schemas.openxmlformats.org/markup-compatibility/2006";
 const transitionalStandard = "ECMA-376 5th edition Transitional";
@@ -35,7 +39,7 @@ const schemaValidatorProfile = {
   officeVersion: schemaValidatorOfficeVersion,
 } as const;
 const validationScope =
-  "Open XML SDK 3.0.2 under Microsoft365 profile Transitional package, schema, and constraint validation; local reader independently verifies OPC relationships, content types, and slide, shape, image, group, text, and transition structures, and verifies transition Choice/Fallback Requires and target extension constraints branch by branch. SDK MC selects Choice or Fallback solely according to its support; all compatibility branches and unknown extensions for p14/p159 are not guaranteed to be schema-validated. Validation does not equal full standard certification or application evidence.";
+  "Open XML SDK 3.0.2 under Microsoft365 profile Transitional package, schema, and constraint validation; local reader independently verifies OPC relationships, content types, and slide, shape, image, group, text, and transition structures, and verifies transition Choice/Fallback Requires and target extension constraints branch by branch. SDK MC selects Choice or Fallback solely according to its support; all compatibility branches and unknown extensions for p14/p159/c15 are not guaranteed to be schema-validated. Validation does not equal full standard certification or application evidence.";
 const applicationEvidence = "not-validated";
 const minimumSlideLayoutId = 2_147_483_648;
 const maximumSlideLayoutId = 4_294_967_295;
@@ -118,6 +122,18 @@ export type FileChartLine = {
   readonly dash?: string;
 };
 
+/** Native c15 datalabelsRange observed on a chart series. */
+export type FileChartDataLabelRange = {
+  readonly formula: string;
+  readonly categories?: readonly string[];
+  /**
+   * `series-category` only when the range formula exactly matches this series' c:cat
+   * formula; arbitrary custom ranges remain `custom` and are never treated as the
+   * owning category domain.
+   */
+  readonly source: "series-category" | "custom";
+};
+
 export type FileChartSeries = {
   readonly name: string;
   readonly categories: readonly string[];
@@ -142,6 +158,12 @@ export type FileChartSeries = {
   readonly explosion?: number;
   /** Native c:dPt/c:explosion values by point index. */
   readonly pointExplosions?: Readonly<Record<number, number>>;
+  /** Native c15 datalabelsRange on this series, when present. */
+  readonly datalabelsRange?: FileChartDataLabelRange;
+  /** Native c15 showDataLabelsRange on this series' dLbls, when explicitly present. */
+  readonly showDataLabelsRange?: boolean;
+  /** Native c15 showDataLabelsRange on individual dLbl nodes, when explicitly present. */
+  readonly pointShowDataLabelsRange?: Readonly<Record<number, boolean>>;
 };
 
 /** Locally observed data-label settings; absent fields are not set by the XML node. */
@@ -212,6 +234,8 @@ export type FileChartGroup = {
 
 export type FileChart = {
   readonly types: readonly string[];
+  /** Native chart extensions actually observed in this chart part. */
+  readonly extensions?: readonly ValidationExtension[];
   readonly direction?: "col" | "bar";
   readonly grouping?: string;
   readonly title?: string;
@@ -1001,7 +1025,7 @@ export type FileTransition = {
   readonly fallback?: FileTransition;
 };
 
-export type ValidationExtension = "p14" | "p159";
+export type ValidationExtension = "p14" | "p159" | "c15";
 
 export type ValidationOptions = {
   /** Rejects target extensions used in the actual file that are not permitted; performs structural reading only when omitted. */
@@ -2425,6 +2449,85 @@ function chartStringCache(
   return { formula, values };
 }
 
+function chartExtensionChild(
+  node: XmlElement | undefined,
+  uri: string,
+  localName: string,
+): XmlElement | undefined {
+  if (node === undefined) return undefined;
+  const extensionList = first(node, chartNamespace, "extLst");
+  if (extensionList === undefined) return undefined;
+  for (const extension of elements(extensionList, chartNamespace, "ext")) {
+    if (attribute(extension, "uri") !== uri) continue;
+    for (const child of childElements(extension)) {
+      if (
+        child.namespaceURI === c15Namespace &&
+        child.localName === localName
+      ) {
+        return child;
+      }
+    }
+  }
+  return undefined;
+}
+
+function chartStringDataCache(
+  cache: XmlElement | undefined,
+  part: string,
+  errors: ValidationIssue[],
+): string[] | undefined {
+  const count = integerAttribute(
+    cache === undefined ? undefined : first(cache, chartNamespace, "ptCount"),
+    "val",
+  );
+  if (count === undefined || count < 0) {
+    issue(
+      errors,
+      part,
+      "invalid-chart-data-label-range",
+      "c15 dlblRangeCache is missing a valid point count",
+    );
+    return undefined;
+  }
+  if (count === 0) return [];
+  const values = Array.from({ length: count }, () => "");
+  for (const point of cache === undefined
+    ? []
+    : elements(cache, chartNamespace, "pt")) {
+    const index = integerAttribute(point, "idx");
+    const value = first(point, chartNamespace, "v")?.textContent;
+    if (
+      index === undefined ||
+      index < 0 ||
+      index >= values.length ||
+      value == null
+    ) {
+      issue(
+        errors,
+        part,
+        "invalid-chart-data-label-range",
+        "c15 dlblRangeCache contains invalid data points",
+      );
+      continue;
+    }
+    values[index] = value;
+  }
+  return values;
+}
+
+function containsChartExtensionNamespace(
+  root: XmlElement,
+  namespace: string,
+): boolean {
+  const stack: XmlElement[] = [root];
+  while (stack.length > 0) {
+    const current = stack.pop()!;
+    if (current.namespaceURI === namespace) return true;
+    stack.push(...childElements(current));
+  }
+  return false;
+}
+
 function chartNumberCache(
   reference: XmlElement | undefined,
   part: string,
@@ -3601,6 +3704,67 @@ function validateChart(
           "Chart series names, categories, and values counts do not match",
         );
       }
+      const rangeNode = chartExtensionChild(
+        chartSeries,
+        chartCategoryRangeExtensionUri,
+        "datalabelsRange",
+      );
+      let datalabelsRange: FileChartDataLabelRange | undefined;
+      const rangeFormula =
+        rangeNode === undefined
+          ? ""
+          : (first(rangeNode, c15Namespace, "f")?.textContent ?? "");
+      const rangeCacheNode =
+        rangeNode === undefined
+          ? undefined
+          : first(rangeNode, c15Namespace, "dlblRangeCache");
+      const rangeCache =
+        rangeCacheNode === undefined
+          ? undefined
+          : chartStringDataCache(rangeCacheNode, chartPart, errors);
+      if (rangeNode !== undefined) {
+        if (rangeFormula === "") {
+          issue(
+            errors,
+            chartPart,
+            "invalid-chart-data-label-range",
+            "c15 datalabelsRange is missing a formula",
+          );
+        } else if (rangeCacheNode === undefined) {
+          issue(
+            errors,
+            chartPart,
+            "invalid-chart-data-label-range",
+            "c15 datalabelsRange is missing dlblRangeCache",
+          );
+        } else {
+          const source =
+            rangeFormula === categoryCache.formula
+              ? "series-category"
+              : "custom";
+          if (
+            source === "series-category" &&
+            (rangeCache === undefined ||
+              rangeCache.length !== categoryCache.values.length ||
+              rangeCache.some(
+                (value, cacheIndex) =>
+                  value !== categoryCache.values[cacheIndex],
+              ))
+          ) {
+            issue(
+              errors,
+              chartPart,
+              "invalid-chart-data-label-range",
+              "c15 category range cache does not match the series category cache",
+            );
+          }
+          datalabelsRange = {
+            formula: rangeFormula,
+            ...(rangeCache === undefined ? {} : { categories: rangeCache }),
+            source,
+          };
+        }
+      }
       const seriesLabelsNode = first(chartSeries, chartNamespace, "dLbls");
       const seriesLabels = readDataLabelSettings(
         seriesLabelsNode,
@@ -3609,11 +3773,38 @@ function validateChart(
         errors,
         textTheme,
       );
+      const seriesRangeFieldNode = chartExtensionChild(
+        seriesLabelsNode,
+        chartDataLabelRangeExtensionUri,
+        "showDataLabelsRange",
+      );
+      let showDataLabelsRange: boolean | undefined;
+      if (seriesRangeFieldNode !== undefined) {
+        const enabled = booleanAttribute(seriesRangeFieldNode);
+        if (enabled === undefined) {
+          issue(
+            errors,
+            chartPart,
+            "invalid-chart-data-label-range",
+            "c15 showDataLabelsRange must be a boolean",
+          );
+        } else if (datalabelsRange === undefined) {
+          issue(
+            errors,
+            chartPart,
+            "invalid-chart-data-label-range",
+            "c15 showDataLabelsRange requires datalabelsRange on the same series",
+          );
+        } else {
+          showDataLabelsRange = enabled;
+        }
+      }
       const effectiveLabels = mergeFileDataLabels(
         groupDataLabels,
         seriesLabels,
       );
       const pointDataLabels: Record<number, false | FileChartDataLabel> = {};
+      const pointShowDataLabelsRange: Record<number, boolean> = {};
       for (const pointLabel of elements(
         seriesLabelsNode ?? chartSeries,
         chartNamespace,
@@ -3631,6 +3822,38 @@ function validateChart(
           errors,
           textTheme,
         );
+        const pointRangeFieldNode = chartExtensionChild(
+          pointLabel,
+          chartDataLabelRangeExtensionUri,
+          "showDataLabelsRange",
+        );
+        if (pointRangeFieldNode !== undefined) {
+          const enabled = booleanAttribute(pointRangeFieldNode);
+          if (enabled === undefined) {
+            issue(
+              errors,
+              chartPart,
+              "invalid-chart-data-label-range",
+              "c15 point showDataLabelsRange must be a boolean",
+            );
+          } else if (datalabelsRange === undefined) {
+            issue(
+              errors,
+              chartPart,
+              "invalid-chart-data-label-range",
+              "c15 point showDataLabelsRange requires datalabelsRange on the same series",
+            );
+          } else if (pointIndex >= valueCache.values.length) {
+            issue(
+              errors,
+              chartPart,
+              "invalid-chart-data-label-range",
+              `c15 point showDataLabelsRange references unknown point ${pointIndex}`,
+            );
+          } else {
+            pointShowDataLabelsRange[pointIndex] = enabled;
+          }
+        }
         if (pointSettings === undefined) continue;
         pointDataLabels[pointIndex] = pointSettings;
       }
@@ -3741,6 +3964,11 @@ function validateChart(
           ...(Object.keys(pointExplosions).length === 0
             ? {}
             : { pointExplosions }),
+          ...(datalabelsRange === undefined ? {} : { datalabelsRange }),
+          ...(showDataLabelsRange === undefined ? {} : { showDataLabelsRange }),
+          ...(Object.keys(pointShowDataLabelsRange).length === 0
+            ? {}
+            : { pointShowDataLabelsRange }),
           ...(marker === undefined ? {} : { marker }),
           ...(smooth === true ? { smooth: true } : {}),
         },
@@ -3909,6 +4137,9 @@ function validateChart(
   }
   const chartObservation: FileChart = {
     types,
+    ...(containsChartExtensionNamespace(chartXml, c15Namespace)
+      ? { extensions: ["c15" as const] }
+      : {}),
     ...(direction === undefined
       ? {}
       : { direction: direction as "bar" | "col" }),
@@ -4675,6 +4906,7 @@ function extensionForNamespace(
 ): ValidationExtension | undefined {
   if (namespace === p14Namespace) return "p14";
   if (namespace === p159Namespace) return "p159";
+  if (namespace === c15Namespace) return "c15";
   return undefined;
 }
 
@@ -7298,6 +7530,17 @@ function readPresentation(
       ...(notes === undefined ? {} : { notes }),
     });
   });
+  const pendingExtensions = slides.flatMap((slide) => [...slide.objects]);
+  while (pendingExtensions.length > 0) {
+    const object = pendingExtensions.pop();
+    if (object === undefined) continue;
+    if (object.kind === "chart") {
+      for (const extension of object.chart?.extensions ?? []) {
+        usedExtensions.add(extension);
+      }
+    }
+    pendingExtensions.push(...(object.members ?? []));
+  }
   const sectionResult = readSections(
     root,
     slideIds,

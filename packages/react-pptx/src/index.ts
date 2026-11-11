@@ -179,6 +179,7 @@ export type {
   LinkTarget,
   SectionProps,
   Target,
+  Extension,
   NativeColorSlot,
   Theme,
   ThemeColor,

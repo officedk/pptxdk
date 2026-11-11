@@ -365,7 +365,7 @@ function validateTarget(target: Target | undefined): Target {
   }
   const extensions: Extension[] = [];
   for (const extension of record["extensions"]) {
-    if (extension !== "p14" && extension !== "p159") {
+    if (extension !== "p14" && extension !== "p159" && extension !== "c15") {
       throw new BuildError([
         diagnostic(
           "build.target",

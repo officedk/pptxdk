@@ -47,6 +47,7 @@ import type {
 import {
   chartFrameXml,
   chartPartXml,
+  chartUsesCategoryLabelRange,
   chartWorkbook,
   type ChartTextStyleXml,
 } from "./chart-xml.ts";
@@ -1853,6 +1854,7 @@ export const chartCapability: ObjectCapabilityModule = {
     });
     const { textStyles, resourceClaims, fontUses, warnings } =
       chartResourceClaims(parsed, context.theme, context.options.embedFonts);
+    const usesCategoryLabelRange = chartUsesCategoryLabelRange(parsed);
     const workbook = chartWorkbook(parsed);
     const relationshipId = context.registerPackagePart({
       part: {
@@ -1899,7 +1901,7 @@ export const chartCapability: ObjectCapabilityModule = {
         name,
         box,
       },
-      extensions: [],
+      extensions: usesCategoryLabelRange ? ["c15"] : [],
       ...(annotations.length === 0 ? {} : { annotations }),
       resourceClaims,
       presentationContributions: fontPresentationContributions(

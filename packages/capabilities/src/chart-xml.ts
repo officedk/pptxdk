@@ -30,6 +30,10 @@ const drawingNamespace =
 const relationshipNamespace =
   "http://schemas.openxmlformats.org/officeDocument/2006/relationships";
 const sheet = "Sheet1";
+// Microsoft chart extensions used only by independent doughnut category labels.
+const c15Namespace = "http://schemas.microsoft.com/office/drawing/2012/chart";
+const categoryRangeExtensionUri = "{02D57815-91ED-43cb-92C2-25804820EDAC}";
+const dataLabelRangeExtensionUri = "{CE6537A1-D6FC-4f65-9D91-7224C49458BB}";
 
 type XmlAttributes = Readonly<
   Record<string, string | number | boolean | undefined>
@@ -233,6 +237,12 @@ function transparent(): XmlElement {
   return el("c:spPr", null, el("a:noFill"), el("a:ln", null, el("a:noFill")));
 }
 
+type CategoryLabelRange = {
+  /** Workbook range matching the series-owned ordered categories. */
+  readonly formula: string;
+  readonly categories: readonly string[];
+};
+
 export type ChartTextStyleXml = {
   readonly chart: string;
   readonly title?: string;
@@ -243,12 +253,55 @@ export type ChartTextStyleXml = {
   readonly pointLabels?: ReadonlyMap<string, string>;
 };
 
+function categoryLabelFieldExtension(enabled: boolean): XmlElement {
+  return el(
+    "c:extLst",
+    null,
+    el(
+      "c:ext",
+      { uri: dataLabelRangeExtensionUri, "xmlns:c15": c15Namespace },
+      el("c15:showDataLabelsRange", { val: enabled }),
+    ),
+  );
+}
+
+function categoryRangeExtension(range: CategoryLabelRange): XmlElement {
+  return el(
+    "c:extLst",
+    null,
+    el(
+      "c:ext",
+      { uri: categoryRangeExtensionUri, "xmlns:c15": c15Namespace },
+      el(
+        "c15:datalabelsRange",
+        null,
+        el("c15:f", null, range.formula),
+        el(
+          "c15:dlblRangeCache",
+          null,
+          el("c:ptCount", { val: range.categories.length }),
+          range.categories.map((category, index) =>
+            el("c:pt", { idx: index }, el("c:v", null, category)),
+          ),
+        ),
+      ),
+    ),
+  );
+}
+
+function categoryLabelsEnabled(
+  labels: false | ChartDataLabels | undefined,
+): boolean {
+  return labels !== undefined && labels !== false && labels.category === true;
+}
+
 function dataLabels(
   group: ParsedChartGroup,
   series: ParsedChartSeries,
   groupIndex: number,
   textStyles: ChartTextStyleXml,
   theme: ThemeContext,
+  categoryRange: CategoryLabelRange | undefined,
 ): XmlElement | undefined {
   const seriesLabels = mergeDataLabels(group.dataLabels, series.dataLabels);
   const hasPosition =
@@ -285,6 +338,7 @@ function dataLabels(
     labels: ChartDataLabels,
     textStyle: string | undefined,
     includeLeaderLines: boolean,
+    categoryField: boolean,
   ) => [
     labels.numberFormat === undefined
       ? undefined
@@ -301,13 +355,18 @@ function dataLabels(
         }),
     el("c:showLegendKey", { val: false }),
     el("c:showVal", { val: labels.value ?? false }),
-    el("c:showCatName", { val: labels.category ?? false }),
+    el("c:showCatName", {
+      val: categoryRange === undefined ? (labels.category ?? false) : false,
+    }),
     el("c:showSerName", { val: false }),
     group.kind === "pie" || group.kind === "doughnut"
       ? el("c:showPercent", { val: labels.percent ?? false })
       : undefined,
     el("c:showBubbleSize", { val: false }),
     includeLeaderLines ? leaderLineSettings(labels) : undefined,
+    categoryField
+      ? categoryLabelFieldExtension(categoryLabelsEnabled(labels))
+      : undefined,
   ];
   const groupStyle = textStyles.groupDataLabels?.get(groupIndex);
   const pointBase = seriesLabels === false ? {} : seriesLabels;
@@ -340,7 +399,7 @@ function dataLabels(
           "c:dLbl",
           null,
           el("c:idx", { val: index }),
-          settings(effective, style, false),
+          settings(effective, style, false, categoryRange !== undefined),
         ),
       ];
     },
@@ -355,7 +414,12 @@ function dataLabels(
   if (base === false) {
     return el("c:dLbls", null, el("c:delete", { val: true }));
   }
-  return el("c:dLbls", null, pointLabels, settings(base, groupStyle, true));
+  return el(
+    "c:dLbls",
+    null,
+    pointLabels,
+    settings(base, groupStyle, true, categoryRange !== undefined),
+  );
 }
 
 function seriesShape(
@@ -452,6 +516,44 @@ function seriesCells(
   };
 }
 
+function categoryLabelRange(
+  group: ParsedChartGroup,
+  series: ParsedChartSeries,
+  cells: SeriesCells,
+): CategoryLabelRange | undefined {
+  if (
+    group.kind !== "doughnut" ||
+    group.data.kind !== "independent-categories"
+  ) {
+    return undefined;
+  }
+  const seriesLabels = mergeDataLabels(group.dataLabels, series.dataLabels);
+  const pointBase = seriesLabels === false ? {} : seriesLabels;
+  const seriesNeedsLabels = categoryLabelsEnabled(seriesLabels);
+  const pointNeedsLabels = Object.values(series.points ?? {}).some((point) =>
+    categoryLabelsEnabled(mergeDataLabels(pointBase, point.dataLabels)),
+  );
+  if (!seriesNeedsLabels && !pointNeedsLabels) return undefined;
+  const categoryColumn = columnName(cells.categoryColumn - 1);
+  return {
+    formula: `${sheet}!$${categoryColumn}$2:$${categoryColumn}$${cells.rows + 1}`,
+    categories: series.categories,
+  };
+}
+
+export function chartUsesCategoryLabelRange(parsed: ParsedChart): boolean {
+  return parsed.groups.some(
+    (group) =>
+      group.kind === "doughnut" &&
+      group.data.kind === "independent-categories" &&
+      group.series.some(
+        (series) =>
+          categoryLabelRange(group, series, seriesCells(group, series)) !==
+          undefined,
+      ),
+  );
+}
+
 function chartSeries(
   group: ParsedChartGroup,
   series: ParsedChartSeries,
@@ -463,6 +565,7 @@ function chartSeries(
   const categoryColumn = columnName(cells.categoryColumn - 1);
   const valueColumn = columnName(cells.valueColumn - 1);
   const rows = cells.rows + 1;
+  const categoryRange = categoryLabelRange(group, series, cells);
   const kind: ChartKind = group.kind;
   const bar = kind === "column" || kind === "bar";
   const lineChart = kind === "line";
@@ -512,7 +615,7 @@ function chartSeries(
       ? el("c:explosion", { val: Math.round(seriesExplosion) })
       : undefined,
     points,
-    dataLabels(group, series, groupIndex, textStyles, theme),
+    dataLabels(group, series, groupIndex, textStyles, theme, categoryRange),
     el(
       "c:cat",
       null,
@@ -530,6 +633,9 @@ function chartSeries(
       ),
     ),
     lineChart ? el("c:smooth", { val: series.smooth ?? false }) : undefined,
+    categoryRange === undefined
+      ? undefined
+      : categoryRangeExtension(categoryRange),
   );
 }
 
@@ -770,6 +876,39 @@ const legendPositions = {
   right: "r",
 } as const;
 
+/**
+ * An independent-category doughnut legend explains the first declared ring's ordered
+ * category positions. Native legend entries beyond that domain would otherwise describe
+ * positions no first-ring category owns; delete only those trailing entries.
+ */
+function independentLegendEntries(parsed: ParsedChart): XmlElement[] {
+  if (parsed.groups.length !== 1) return [];
+  const group = parsed.groups[0]!;
+  if (
+    group.kind !== "doughnut" ||
+    group.data.kind !== "independent-categories"
+  ) {
+    return [];
+  }
+  const first = group.series[0];
+  if (first === undefined) return [];
+  const firstCount = first.categories.length;
+  const maximumCount = Math.max(
+    firstCount,
+    ...group.series.map((series) => series.categories.length),
+  );
+  return Array.from(
+    { length: Math.max(0, maximumCount - firstCount) },
+    (_, offset) =>
+      el(
+        "c:legendEntry",
+        null,
+        el("c:idx", { val: firstCount + offset }),
+        el("c:delete", { val: true }),
+      ),
+  );
+}
+
 function plotLayout(
   parsed: ParsedChart,
   box: { readonly width: number; readonly height: number },
@@ -838,6 +977,7 @@ export function chartPartXml(
               "c:legend",
               null,
               el("c:legendPos", { val: legendPositions[parsed.legend] }),
+              independentLegendEntries(parsed),
               el("c:overlay", { val: false }),
             ),
         el("c:plotVisOnly", { val: true }),

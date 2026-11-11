@@ -278,12 +278,17 @@ describe("multi-ring doughnut charts", () => {
     );
     assert.deepEqual(chart.groups[0]?.seriesIndices, [0, 1, 2]);
     assert.equal(chart.seriesDataLabels?.length, 3);
-    for (const labels of chart.seriesDataLabels ?? []) {
+    for (const [index, labels] of (chart.seriesDataLabels ?? []).entries()) {
       assert.deepEqual(labels.dataLabels, {
         value: true,
-        category: true,
+        category: false,
         percent: false,
       });
+      assert.equal(
+        chart.series[index]?.datalabelsRange?.source,
+        "series-category",
+      );
+      assert.equal(chart.series[index]?.showDataLabelsRange, true);
     }
     assert.equal(chart.embeddedWorkbook?.series.length, 3);
     for (const [index, workbookSeries] of (

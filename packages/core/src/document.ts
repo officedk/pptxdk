@@ -102,15 +102,23 @@ export class CommonNode<
 > implements DeclarationNode {
   readonly type: string;
   readonly kind: Kind;
+  /** Page-affiliated declarations are reached below hidden canvas parents by the formal build. */
+  readonly pageAffiliated: boolean;
   #props: Readonly<Record<string, unknown>>;
   #children: DeclarationChild[] = [];
   #childrenView: readonly DeclarationChild[] = Object.freeze([]);
   #parent: CommonNode | undefined;
   #owner: CommonNode | undefined;
 
-  constructor(kind: Kind, type: string, props: Props = {} as Props) {
+  constructor(
+    kind: Kind,
+    type: string,
+    props: Props = {} as Props,
+    options: { readonly pageAffiliated?: boolean } = {},
+  ) {
     this.kind = kind;
     this.type = type;
+    this.pageAffiliated = options.pageAffiliated === true;
     this.#props = normalizeProps(props as Readonly<Record<string, unknown>>);
     if (kind === "deck") this.#owner = this;
   }

@@ -25,5 +25,6 @@ export function createNotesNode(props: NotesDeclarationProps): NotesNode {
     "notes",
     "rp:notes",
     props,
+    { pageAffiliated: true },
   );
 }

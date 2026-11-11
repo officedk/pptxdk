@@ -15,6 +15,14 @@ export type DeclarationNode = {
   readonly type: string;
   readonly props: Readonly<Record<string, unknown>>;
   readonly children: readonly DeclarationChild[];
+  /**
+   * Declaration belongs to the page rather than its slide canvas.
+   *
+   * The formal build still reaches page-affiliated declarations below hidden canvas parents, so a
+   * trimmed owning capability is diagnosed instead of being pruned with the hidden subtree.
+   * Capability registration still decides whether the declaration is consumed and generated.
+   */
+  readonly pageAffiliated?: boolean;
 };
 
 export type DeclarationChild = DeclarationNode | DeclarationText;

@@ -344,6 +344,8 @@ export type CapabilityElement = {
   readonly type: string;
   readonly props: Readonly<Record<string, unknown>>;
   readonly children: readonly CapabilityChild[];
+  /** Page-affiliated declaration that remains part of the page below hidden canvas parents. */
+  readonly pageAffiliated?: boolean;
 };
 
 export type CapabilityChild =

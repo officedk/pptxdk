@@ -285,6 +285,51 @@ describe("rich-text speaker notes", () => {
     );
   });
 
+  it("diagnoses hidden page-affiliated notes when the Notes capability is trimmed", async () => {
+    const document = deck().append(
+      slide({ id: "hidden" }).append(
+        box({ style: { display: "none" } }).append(notes("hidden notes")),
+      ),
+    );
+    const full = await build(document);
+    const fullRead = await validatePptx(full.pptx);
+    assert.deepEqual(fullRead.errors, []);
+    assert.equal(fullRead.slides[0]?.notes?.text.text, "hidden notes");
+    assert.deepEqual(full.report.slides[0]?.objects, []);
+
+    const trimmed = createDocumentBuild(
+      documentCapabilities.filter((module) => module !== notesCapability),
+    );
+    assert.deepEqual(
+      (await rejectedDiagnostics(trimmed(document))).map(({ code, path }) => ({
+        code,
+        path,
+      })),
+      [
+        {
+          code: "missing-capability",
+          path: "deck/slide[hidden]/box[1]/notes[1]",
+        },
+      ],
+    );
+  });
+
+  it("keeps pruning hidden canvas content whose capability is trimmed", async () => {
+    const trimmedText = createDocumentBuild(
+      documentCapabilities.filter((module) => module !== textCapability),
+    );
+    const document = deck().append(
+      slide({ id: "hidden-canvas" }).append(
+        box({ style: { display: "none" } }).append(
+          text("hidden ordinary content"),
+        ),
+      ),
+    );
+    const result = await trimmedText(document);
+    assert.deepEqual(result.report.slides[0]?.objects, []);
+    assert.deepEqual(result.report.diagnostics, []);
+  });
+
   it("builds notes from the shared text service when the Text capability is trimmed", async () => {
     const notesOnlyBuild = createDocumentBuild(
       documentCapabilities.filter((module) => module !== textCapability),

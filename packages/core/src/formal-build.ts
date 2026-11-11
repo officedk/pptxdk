@@ -283,6 +283,7 @@ function capabilityChild(child: DeclarationChild): CapabilityChild {
     type: child.type,
     props: child.props,
     children: child.children.map(capabilityChild),
+    ...(child.pageAffiliated === true ? { pageAffiliated: true } : {}),
   };
 }
 
@@ -2311,6 +2312,7 @@ function collectOwnedContributions(
   slide: SlideBuildState,
   parentPath: string,
   order: { value: number },
+  hidden: WeakSet<CapabilityElement>,
 ): void {
   children.forEach((child, index) => {
     if (!("props" in child)) return;
@@ -2348,9 +2350,30 @@ function collectOwnedContributions(
       // The owning capability consumes this subtree; do not treat its children as slide content.
       return;
     }
+    if (child.pageAffiliated === true) {
+      // A page-affiliated declaration is not canvas content. Layout prunes hidden canvas parents,
+      // so this structure-only walk reports a trimmed owner that layout can no longer reach.
+      if (module === undefined && hidden.has(child)) {
+        slide.diagnostics.push(
+          diagnostic(
+            path,
+            "missing-capability",
+            `No capability module registered for ${child.type}`,
+          ),
+        );
+      }
+      return;
+    }
     // Owned declarations are page-affiliated even below a hidden canvas parent, so this
     // structure-only walk still reaches them.
-    collectOwnedContributions(child.children, modules, slide, path, order);
+    collectOwnedContributions(
+      child.children,
+      modules,
+      slide,
+      path,
+      order,
+      hidden,
+    );
   });
 }
 
@@ -2393,8 +2416,6 @@ function compileSlide(
     );
   }
   const children = node.children.map(capabilityChild);
-  const ownedOrder = { value: 0 };
-  collectOwnedContributions(children, modules, slide, path, ownedOrder);
   let theme: ThemeContext;
   try {
     theme = documentTheme.with(
@@ -2412,6 +2433,15 @@ function compileSlide(
     node.props["style"],
   );
   document.warnings.push(...layout.warnings);
+  const ownedOrder = { value: 0 };
+  collectOwnedContributions(
+    children,
+    modules,
+    slide,
+    path,
+    ownedOrder,
+    layout.hidden,
+  );
   const compiled = compileChildren(
     children,
     {

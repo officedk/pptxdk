@@ -1017,26 +1017,14 @@ function expansionFor(
     };
   }
   const pointCounts = target.chartSeriesPointCounts ?? [];
-  if (target.kind !== "chart" || pointCounts.length < 1) {
+  if (target.kind !== "chart") {
     fail(
       "invalid-motion-granularity",
-      `by: "${effect.by}" requires native chart with data`,
+      `by: "${effect.by}" requires native chart`,
       path,
     );
   }
   const pointCount = Math.max(0, ...pointCounts);
-  if (
-    (effect.by === "category" ||
-      effect.by === "seriesElements" ||
-      effect.by === "categoryElements") &&
-    pointCount < 1
-  ) {
-    fail(
-      "invalid-motion-granularity",
-      `by: "${effect.by}" requires native chart with data`,
-      path,
-    );
-  }
   let dataRanges: MotionTargetRange[];
   // Ranges keep original array slots: category batches name every point position, while point
   // batches enumerate only existing (series, point) pairs and never compress later indices.

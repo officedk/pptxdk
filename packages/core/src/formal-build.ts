@@ -2326,7 +2326,8 @@ function compileDocument(
  * The formal build performs validation, layout, choreography, resource coordination, and packaging
  * without executing React lifecycle or importing React at runtime. React execution hands off its
  * declaration tree before this function runs, and the same implementation serves later authoring
- * entries.
+ * entries. The shared editable document should expose this declaration view directly; do not add a
+ * document-to-host reverse tree or a second compiler.
  */
 export function createFormalBuild(modules: readonly CapabilityModule[]) {
   const bound = new Map<string, RegisteredCapabilityModule>();

@@ -28,11 +28,12 @@ export type HostChild = HostNode | HostText;
 export type HostContainer = { readonly children: HostChild[] };
 
 /**
- * Copies the completed host tree into plain declarations before React cleanup.
+ * Copies the completed host tree into the plain declaration view used by the formal build.
  *
- * Unmounting deletes host nodes from their parents, so the formal build must not read the live tree
- * after cleanup. The snapshot shares already-owned author values and does not create another
- * long-lived content model.
+ * This is the temporary ticket-01 migration bridge: React unmount deletes host nodes, so the formal
+ * build cannot read the live tree after cleanup. Later authoring tickets must make React create and
+ * update the shared editable nodes directly and delete this full-tree copy; do not extend it into a
+ * second long-lived content model.
  */
 export function declarationFromHost(
   container: HostContainer,

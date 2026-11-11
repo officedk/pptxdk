@@ -459,14 +459,44 @@ const document = entry
             height: 40,
           }),
         ),
+        entry
+          .table({
+            testId: "pure-table",
+            x: 8,
+            y: 220,
+            width: 240,
+            columns: [80, "1fr"],
+            style: { fontSize: 12 },
+          })
+          .append(
+            entry
+              .row({ style: { height: 24 } })
+              .append(entry.cell("Pure table"), entry.cell("42")),
+          ),
+        entry.chart({
+          testId: "pure-chart",
+          kind: "column",
+          x: 260,
+          y: 220,
+          width: 240,
+          height: 140,
+          data: {
+            categories: ["Q1"],
+            series: [{ name: "Series", values: [1] }],
+          },
+        }),
       ),
   );
 const result = await entry.build(document);
 if (result.report.slides[0]?.id !== "pure") {
   throw new Error("pure document build did not produce the expected slide");
 }
-if (result.report.slides[0]?.objects.length !== 4) {
+if (result.report.slides[0]?.objects.length !== 6) {
   throw new Error("pure document build did not produce native objects");
+}
+const objects = result.report.slides[0]?.objects;
+if (objects?.[4]?.kind !== "table" || objects?.[5]?.kind !== "chart") {
+  throw new Error("pure document build did not produce table and chart objects");
 }
 process.stdout.write("ok");
 `;

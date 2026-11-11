@@ -152,9 +152,13 @@ export type FileChartSeries = {
 
 /** Locally observed data-label settings; absent fields are not set by the XML node. */
 export type FileChartDataLabel = {
+  /** Native c:showVal; for scatter this displays the Y coordinate. */
   readonly value?: boolean;
   readonly percent?: boolean;
+  /** Native c:showCatName for category charts; scatter reports the horizontal value as xValue. */
   readonly category?: boolean;
+  /** Native c:showCatName for scatter charts; this displays the X coordinate. */
+  readonly xValue?: boolean;
   readonly position?:
     | "center"
     | "insideEnd"
@@ -3009,6 +3013,7 @@ function readDataLabelSettings(
     value?: boolean;
     percent?: boolean;
     category?: boolean;
+    xValue?: boolean;
     position?: Exclude<FileChartDataLabel["position"], undefined>;
     numberFormat?: string;
     leaderLines?: boolean;
@@ -3034,8 +3039,13 @@ function readDataLabelSettings(
   }
   const value = booleanAttribute(first(node, chartNamespace, "showVal"));
   if (value !== undefined) settings.value = value;
-  const category = booleanAttribute(first(node, chartNamespace, "showCatName"));
-  if (category !== undefined) settings.category = category;
+  const horizontal = booleanAttribute(
+    first(node, chartNamespace, "showCatName"),
+  );
+  if (horizontal !== undefined) {
+    if (chartType === "scatterChart") settings.xValue = horizontal;
+    else settings.category = horizontal;
+  }
   const percent = booleanAttribute(first(node, chartNamespace, "showPercent"));
   if (percent !== undefined) {
     settings.percent = percent;
@@ -4146,6 +4156,20 @@ function validateChart(
       chartPart,
       "invalid-chart-missing-values",
       "Chart displayBlanksAs must be gap, zero, or span",
+    );
+  }
+  if (
+    displayBlanksAs === "span" &&
+    groups.some(
+      ({ type, scatterStyle }) =>
+        type === "scatterChart" && scatterStyle === "marker",
+    )
+  ) {
+    issue(
+      errors,
+      chartPart,
+      "invalid-chart-missing-values",
+      "Scatter chart displayBlanksAs span requires a connecting line in every scatter group",
     );
   }
   const chartObservation: FileChart = {

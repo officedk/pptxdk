@@ -26,6 +26,7 @@ import type {
   ChartAxisCrossing,
   ChartCategoryAxis,
   ChartCategoryAxisReferences,
+  ChartDataLabelSettings,
   ChartDataLabels,
   ChartDisplayBlanksAs,
   ChartGroupData,
@@ -42,8 +43,10 @@ import type {
   ChartTitle,
   ChartValueAxis,
   ChartXYAxisReferences,
+  ScatterChartPoint,
   ScatterChartSeries,
   ScatterData,
+  ScatterDataLabelOverride,
   ScatterLine,
   SharedCategoryData,
 } from "./chart-types.ts";
@@ -730,6 +733,14 @@ function sharedCategoryData(value: unknown, label: string): SharedCategoryData {
   };
 }
 
+function scatterLabelOverride(
+  settings: false | ChartDataLabelSettings,
+): false | ScatterDataLabelOverride {
+  if (settings === false) return false;
+  // labels() has already restricted scatter positions and inapplicable content switches.
+  return settings as ScatterDataLabelOverride;
+}
+
 function scatterData(value: unknown, label: string): ScatterData {
   if (!isRecord(value)) fail("invalid-data", `${label} must be an object`);
   if (value["kind"] !== "xy") {
@@ -765,7 +776,7 @@ function scatterSeriesPoints(
   markers: boolean,
   observationCount: number,
   label: string,
-): Record<number, ChartPoint> | undefined {
+): Record<number, ScatterChartPoint> | undefined {
   if (value === undefined) return undefined;
   if (!isRecord(value)) {
     fail(
@@ -773,7 +784,7 @@ function scatterSeriesPoints(
       `${label} points must be an object indexed by observation position`,
     );
   }
-  const points: Record<number, ChartPoint> = {};
+  const points: Record<number, ScatterChartPoint> = {};
   for (const [rawIndex, pointValue] of Object.entries(value)) {
     const pointIndex = Number(rawIndex);
     if (
@@ -834,7 +845,9 @@ function scatterSeriesPoints(
       ...(pointLine === undefined ? {} : { line: pointLine }),
       ...(pointMarker === undefined ? {} : { marker: pointMarker }),
       ...(labelColor === undefined ? {} : { labelColor }),
-      ...(pointLabels === undefined ? {} : { dataLabels: pointLabels }),
+      ...(pointLabels === undefined
+        ? {}
+        : { dataLabels: scatterLabelOverride(pointLabels) }),
     };
   }
   return points;
@@ -910,7 +923,9 @@ function scatterSeriesList(
       y,
       ...(color === undefined ? {} : { color }),
       ...(seriesLine === undefined ? {} : { line: seriesLine }),
-      ...(seriesLabels === undefined ? {} : { dataLabels: seriesLabels }),
+      ...(seriesLabels === undefined
+        ? {}
+        : { dataLabels: scatterLabelOverride(seriesLabels) }),
       ...(marker === undefined ? {} : { marker }),
       ...(points === undefined ? {} : { points }),
     };
@@ -1094,7 +1109,7 @@ function labels(
   label: string,
   allowStyle = true,
   allowLeaderLines = false,
-): false | ChartDataLabels | undefined {
+): false | ChartDataLabelSettings | undefined {
   if (value === undefined || value === false) return value;
   if (!isRecord(value))
     fail("invalid-data-labels", `${label} must be an object or false`);
@@ -1104,6 +1119,7 @@ function labels(
       "value",
       "percent",
       "category",
+      "xValue",
       "position",
       "numberFormat",
       ...(allowStyle ? ["style"] : []),
@@ -1114,6 +1130,17 @@ function labels(
   for (const key of ["value", "percent", "category"] as const) {
     if (value[key] !== undefined && typeof value[key] !== "boolean") {
       fail("invalid-data-labels", `${label}.${key} must be a boolean`);
+    }
+  }
+  if (value["xValue"] !== undefined) {
+    if (typeof value["xValue"] !== "boolean") {
+      fail("invalid-data-labels", `${label}.xValue must be a boolean`);
+    }
+    if (kind !== "scatter") {
+      fail(
+        "invalid-data-labels",
+        `${label}.xValue is only supported for scatter charts`,
+      );
     }
   }
   if (value["percent"] === true && kind !== "pie" && kind !== "doughnut") {
@@ -1256,6 +1283,9 @@ function labels(
     ...(value["category"] === undefined
       ? {}
       : { category: value["category"] as boolean }),
+    ...(value["xValue"] === undefined
+      ? {}
+      : { xValue: value["xValue"] as boolean }),
     ...(position === undefined
       ? {}
       : { position: position as NonNullable<ChartDataLabels["position"]> }),
@@ -1354,17 +1384,20 @@ function scatterAxisReferences(
 }
 
 function hasVisibleDataLabels(
-  value: false | ChartDataLabels | undefined,
-): value is ChartDataLabels {
+  value: false | ChartDataLabelSettings | undefined,
+): value is ChartDataLabelSettings {
   return (
     value !== undefined &&
     value !== false &&
-    (value.value === true || value.percent === true || value.category === true)
+    (value.value === true ||
+      value.percent === true ||
+      value.category === true ||
+      value.xValue === true)
   );
 }
 
 function hasLeaderLinesWithoutVisibleLabels(
-  groupLabels: false | ChartDataLabels | undefined,
+  groupLabels: false | ChartDataLabelSettings | undefined,
   series: readonly ChartSeries[],
 ): boolean {
   // Only the effective labels written to each series dLbls matter. A group declaration that
@@ -1387,7 +1420,7 @@ type ParsedGroupDraft =
       readonly data: ChartGroupData;
       readonly series: readonly ChartSeries[];
       readonly axes?: ChartCategoryAxisReferences;
-      readonly dataLabels?: false | ChartDataLabels;
+      readonly dataLabels?: false | ChartDataLabelSettings;
       readonly stacking?: "stacked" | "percent";
       readonly gapWidth?: number;
       readonly overlap?: number;
@@ -1400,7 +1433,7 @@ type ParsedGroupDraft =
       readonly data: ScatterData;
       readonly series: readonly ScatterChartSeries[];
       readonly axes?: ChartXYAxisReferences;
-      readonly dataLabels?: false | ChartDataLabels;
+      readonly dataLabels?: false | ChartDataLabelSettings;
       readonly line?: ScatterLine;
       readonly markers: boolean;
     };
@@ -1631,7 +1664,7 @@ export type ParsedChartAxis = {
 };
 
 type ParsedGroupBase = {
-  readonly dataLabels?: false | ChartDataLabels;
+  readonly dataLabels?: false | ChartDataLabelSettings;
 };
 
 type ParsedCategoryChartGroup = ParsedGroupBase & {
@@ -1993,7 +2026,13 @@ function displayBlanksAs(
   }
   const requested = value as ChartDisplayBlanksAs;
   const unsupported = groups.find((group) => {
-    if (group.kind === "scatter") return true;
+    if (group.kind === "scatter") {
+      // Span needs a connecting line; markers-only groups cannot span the missing point.
+      return (
+        requested === "span" &&
+        (group.line === undefined || group.line === false)
+      );
+    }
     if (group.kind === "line") {
       return group.stacking === undefined
         ? !["gap", "zero", "span"].includes(requested)
@@ -2009,7 +2048,7 @@ function displayBlanksAs(
   if (unsupported !== undefined) {
     const detail =
       unsupported.kind === "scatter"
-        ? "scatter charts preserve null X/Y coordinates and do not use displayBlanksAs"
+        ? `scatter chart group without a connecting line does not support displayBlanksAs "${requested}"`
         : `${unsupported.kind}${unsupported.stacking === undefined ? "" : ` ${unsupported.stacking}`} chart does not support displayBlanksAs "${requested}"`;
     fail("invalid-chart-missing-values", detail);
   }
@@ -2574,7 +2613,7 @@ function numberLabelCharacters(
 function effectiveSeriesLabels(
   group: ParsedChartGroup,
   series: ParsedChartSeries | ParsedScatterSeries,
-): false | ChartDataLabels | undefined {
+): false | ChartDataLabelSettings | undefined {
   return mergeDataLabels(group.dataLabels, series.dataLabels);
 }
 
@@ -2582,7 +2621,7 @@ function effectivePointLabels(
   group: ParsedChartGroup,
   series: ParsedChartSeries | ParsedScatterSeries,
   index: number,
-): false | ChartDataLabels | undefined {
+): false | ChartDataLabelSettings | undefined {
   return mergeDataLabels(
     effectiveSeriesLabels(group, series),
     series.points?.[index]?.dataLabels,
@@ -2592,13 +2631,31 @@ function effectivePointLabels(
 function pointDataLabelTexts(
   group: ParsedChartGroup,
   series: ParsedChartSeries | ParsedScatterSeries,
-  labels: ChartDataLabels,
+  labels: ChartDataLabelSettings,
   index: number,
 ): string[] {
-  const value =
-    group.kind === "scatter"
-      ? (series as ParsedScatterSeries).y[index]
-      : (series as ParsedChartSeries).values[index];
+  if (group.kind === "scatter") {
+    const scatter = series as ParsedScatterSeries;
+    const texts: string[] = [];
+    const numericText = () =>
+      numberLabelCharacters(labels.numberFormat, labels.percent === true);
+    if (
+      (labels.value === true || labels.percent === true) &&
+      scatter.y[index] !== null &&
+      scatter.y[index] !== undefined
+    ) {
+      texts.push(numericText());
+    }
+    if (
+      labels.xValue === true &&
+      scatter.x[index] !== null &&
+      scatter.x[index] !== undefined
+    ) {
+      texts.push(numericText());
+    }
+    return texts;
+  }
+  const value = (series as ParsedChartSeries).values[index];
   if (value === null || value === undefined) {
     return [];
   }
@@ -2608,7 +2665,7 @@ function pointDataLabelTexts(
       numberLabelCharacters(labels.numberFormat, labels.percent === true),
     );
   }
-  if (labels.category === true && group.kind !== "scatter") {
+  if (labels.category === true) {
     texts.push((group as ParsedCategoryChartGroup).data.categories[index]!);
   }
   return texts;
@@ -2966,6 +3023,8 @@ export type {
   ScatterChartPoint,
   ScatterChartSeries,
   ScatterData,
+  ScatterDataLabelOverride,
+  ScatterDataLabels,
   ScatterLine,
   SharedCategoryData,
 } from "./chart-types.ts";

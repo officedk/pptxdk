@@ -70,6 +70,8 @@ export type {
   ScatterChartPoint,
   ScatterChartSeries,
   ScatterData,
+  ScatterDataLabelOverride,
+  ScatterDataLabels,
   ScatterLine,
   SharedCategoryData,
 } from "#/chart.ts";

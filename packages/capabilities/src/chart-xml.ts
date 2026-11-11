@@ -11,7 +11,7 @@ import { strToU8, zipSync } from "fflate";
 import { chartDataLabelPositions, mergeDataLabels } from "./chart-labels.ts";
 import type {
   ChartAxis,
-  ChartDataLabels,
+  ChartDataLabelSettings,
   ChartKind,
   ChartLine,
   ChartMarker,
@@ -261,11 +261,12 @@ function dataLabels(
     group.kind === "line" ||
     group.kind === "pie" ||
     group.kind === "scatter";
-  const hasVisibleContent = (labels: ChartDataLabels) =>
+  const hasVisibleContent = (labels: ChartDataLabelSettings) =>
     labels.value === true ||
     labels.percent === true ||
-    labels.category === true;
-  const leaderLineSettings = (labels: ChartDataLabels) => {
+    labels.category === true ||
+    labels.xValue === true;
+  const leaderLineSettings = (labels: ChartDataLabelSettings) => {
     if (labels.leaderLines === undefined) return [];
     const visible = hasVisibleContent(labels);
     if (labels.leaderLines === false) {
@@ -287,7 +288,7 @@ function dataLabels(
     ];
   };
   const settings = (
-    labels: ChartDataLabels,
+    labels: ChartDataLabelSettings,
     textStyle: string | undefined,
     includeLeaderLines: boolean,
   ) => [
@@ -306,7 +307,11 @@ function dataLabels(
         }),
     el("c:showLegendKey", { val: false }),
     el("c:showVal", { val: labels.value ?? false }),
-    el("c:showCatName", { val: labels.category ?? false }),
+    // Scatter showCatName displays the horizontal X value; category charts keep category labels.
+    el("c:showCatName", {
+      val:
+        (group.kind === "scatter" ? labels.xValue : labels.category) ?? false,
+    }),
     el("c:showSerName", { val: false }),
     group.kind === "pie" || group.kind === "doughnut"
       ? el("c:showPercent", { val: labels.percent ?? false })

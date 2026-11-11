@@ -114,15 +114,43 @@ export type ChartSeries = ChartSeriesFormat & {
   readonly smooth?: boolean;
 };
 
+type ScatterDataLabelContent = {
+  /** Display the Y coordinate as the label value. */
+  readonly value?: boolean;
+  /** Display the X coordinate; `value` keeps its Y meaning when both are enabled. */
+  readonly xValue?: boolean;
+  /** Label position; omitted inherits the enclosing chart group or series. */
+  readonly position?: "left" | "right" | "bottom" | "top" | "center";
+  /** Excel number format applied to each displayed coordinate. */
+  readonly numberFormat?: string;
+};
+
+/**
+ * Scatter label settings where `value` is the Y coordinate and `xValue` is the X coordinate.
+ *
+ * Category and percent content are not applicable to scatter labels and are diagnosed when
+ * declared. Position, number format, and the group text style follow the shared label contract.
+ */
+export type ScatterDataLabels = ScatterDataLabelContent & {
+  /** Text style for scatter labels; series and points inherit it. */
+  readonly style?: ChartTextStyle;
+};
+
+/** Series- and point-level scatter label overrides; text style remains a chart-group field. */
+export type ScatterDataLabelOverride = ScatterDataLabelContent;
+
+/** Scatter point formatting; pie and doughnut explosion does not apply. */
+export type ScatterChartPoint = Omit<ChartPoint, "explosion" | "dataLabels"> & {
+  /** Display, position, and number-format overrides for this point's data label. */
+  readonly dataLabels?: false | ScatterDataLabelOverride;
+};
+
 /**
  * Scatter series with independent numeric X/Y observations.
  *
  * X and Y share one observation slot at each array position. Either coordinate may be null
  * without changing the slot, its point formatting, or the other coordinate.
  */
-/** Scatter point formatting; pie and doughnut explosion does not apply. */
-export type ScatterChartPoint = Omit<ChartPoint, "explosion">;
-
 export type ScatterChartSeries = Omit<
   ChartSeriesFormat,
   "smooth" | "explosion" | "points" | "dataLabels"
@@ -132,7 +160,7 @@ export type ScatterChartSeries = Omit<
   /** One numeric Y coordinate per observation slot; null preserves a missing Y. */
   readonly y: readonly (number | null)[];
   /** Display, position, and number-format overrides for this series' data labels. */
-  readonly dataLabels?: false | ChartDataLabelOverride;
+  readonly dataLabels?: false | ScatterDataLabelOverride;
   /** Overrides color, line, marker, or data label text color for points by position. */
   readonly points?: Readonly<Record<number, ScatterChartPoint>>;
 };
@@ -274,6 +302,11 @@ export type ChartDataLabelOverride = Omit<
 /** Series-level data-label overrides; leader lines are valid on native series `dLbls`. */
 export type ChartSeriesDataLabelOverride = Omit<ChartDataLabels, "style">;
 
+/** Parsed label shape shared across chart kinds; xValue is populated only for scatter. */
+export type ChartDataLabelSettings = ChartDataLabels & {
+  readonly xValue?: boolean;
+};
+
 type ChartGroupBase = {
   readonly data: ChartGroupData;
   readonly series: readonly ChartSeries[];
@@ -386,9 +419,7 @@ export type ScatterChartGroup = {
   readonly line?: ScatterLine;
   /** Whether markers are drawn; defaults to true. A group must draw markers or a line. */
   readonly markers?: boolean;
-  readonly dataLabels?:
-    | false
-    | ChartDataLabels<"left" | "right" | "bottom" | "top" | "center">;
+  readonly dataLabels?: false | ScatterDataLabels;
 };
 
 export type ChartGroup =

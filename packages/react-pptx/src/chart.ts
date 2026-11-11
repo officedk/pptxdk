@@ -73,6 +73,8 @@ export type {
   ScatterChartPoint,
   ScatterChartSeries,
   ScatterData,
+  ScatterDataLabelOverride,
+  ScatterDataLabels,
   ScatterLine,
   SharedCategoryData,
 } from "@react-pptx/capabilities/chart";

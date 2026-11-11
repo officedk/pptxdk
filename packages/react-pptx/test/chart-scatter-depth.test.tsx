@@ -16,7 +16,7 @@ import {
   deck,
   slide as documentSlide,
 } from "@react-pptx/react-pptx/document";
-import { validatePptx } from "@react-pptx/validation";
+import { validatePptx, type FileChartDataLabel } from "@react-pptx/validation";
 import { strFromU8, strToU8, unzipSync, zipSync, type Unzipped } from "fflate";
 import { describe, it } from "vitest";
 
@@ -41,6 +41,13 @@ async function rejectsWithCode(props: ChartProps, code: string): Promise<void> {
   );
 }
 
+function fileLabel(
+  value: false | FileChartDataLabel | undefined,
+): FileChartDataLabel {
+  assert.ok(value !== false && value !== undefined);
+  return value;
+}
+
 function xyGroup(
   series: ScatterChartGroup["series"],
   extra: Omit<ScatterChartGroup, "kind" | "data" | "series"> = {},
@@ -51,6 +58,48 @@ function xyGroup(
     series,
     ...extra,
   };
+}
+
+async function buildInEntry(
+  entry: "document" | "react",
+  props: ChartProps,
+): Promise<Uint8Array> {
+  const id = "scatter-entry";
+  if (entry === "document") {
+    return (
+      await buildDocument(
+        deck({ width: 480, height: 320 }).append(
+          documentSlide({ id }).append(documentChart({ ...props, id })),
+        ),
+      )
+    ).pptx;
+  }
+  return (
+    await build(
+      <Deck width={480} height={320}>
+        <Slide id={id}>
+          <Chart {...props} id={id} />
+        </Slide>
+      </Deck>,
+    )
+  ).pptx;
+}
+
+async function rejectsInBothEntries(
+  props: ChartProps,
+  code: string,
+): Promise<void> {
+  for (const entry of ["document", "react"] as const) {
+    await assert.rejects(
+      buildInEntry(entry, props),
+      (error: unknown) => {
+        assert.ok(error instanceof BuildError);
+        assert.equal(error.diagnostics[0]?.code, code);
+        return true;
+      },
+      `${entry} entry should reject with ${code}`,
+    );
+  }
 }
 
 describe("scatter depth", () => {
@@ -406,6 +455,222 @@ describe("scatter depth", () => {
     assert.ok(worksheet.includes('r="E3"'));
   });
 
+  it("applies blank rendering only where the participating groups draw a line", async () => {
+    const lineGroup = xyGroup(
+      [{ name: "Line", x: [1, 2, 3], y: [10, null, 30] }],
+      { line: "straight", markers: false },
+    );
+    const markerGroup = xyGroup([
+      { name: "Marker", x: [1, 2, 3], y: [10, null, 30] },
+    ]);
+    const matrix: readonly {
+      readonly mode: "gap" | "zero" | "span";
+      readonly groups: readonly ScatterChartGroup[];
+    }[] = [
+      { mode: "gap", groups: [markerGroup] },
+      { mode: "zero", groups: [markerGroup] },
+      { mode: "gap", groups: [lineGroup] },
+      { mode: "zero", groups: [lineGroup] },
+      { mode: "span", groups: [lineGroup] },
+      {
+        mode: "span",
+        groups: [
+          lineGroup,
+          xyGroup([{ name: "Smooth", x: [2, 3], y: [20, 40] }], {
+            line: "smooth",
+          }),
+        ],
+      },
+    ];
+    for (const entry of ["document", "react"] as const) {
+      for (const { mode, groups } of matrix) {
+        const pptx = await buildInEntry(entry, {
+          x: 10,
+          y: 10,
+          width: 320,
+          height: 220,
+          displayBlanksAs: mode,
+          groups,
+        });
+        const file = await validatePptx(pptx);
+        assert.deepEqual(file.errors, []);
+        const chart = file.slides[0]?.objects[0]?.chart;
+        assert.equal(chart?.displayBlanksAs, mode);
+        assert.deepEqual(chart?.series[0]?.x, [1, 2, 3]);
+        assert.deepEqual(chart?.series[0]?.y, [10, null, 30]);
+        const parts = unzipSync(pptx);
+        const xml = chartXml(parts, 1);
+        assert.ok(xml.includes(`<c:dispBlanksAs val="${mode}"/>`));
+        assert.ok(
+          xml.includes(
+            '<c:numCache><c:formatCode>General</c:formatCode><c:ptCount val="3"/><c:pt idx="0"><c:v>10</c:v></c:pt><c:pt idx="2"><c:v>30</c:v></c:pt></c:numCache>',
+          ),
+        );
+        const workbookPath = chart?.embeddedWorkbook?.part;
+        assert.ok(workbookPath);
+        const worksheet = strFromU8(
+          unzipSync(parts[workbookPath]!)["xl/worksheets/sheet1.xml"]!,
+        );
+        assert.ok(worksheet.includes('r="B3"'));
+        assert.ok(worksheet.includes('r="C2"'));
+        assert.ok(worksheet.includes('r="C4"'));
+        assert.ok(!worksheet.includes('r="C3"'));
+      }
+    }
+  });
+
+  it("rejects span when any participating scatter group has no connecting line", async () => {
+    const base = {
+      x: 10,
+      y: 10,
+      width: 320,
+      height: 220,
+      displayBlanksAs: "span" as const,
+    };
+    const lineGroup = xyGroup([{ name: "Line", x: [1, 2], y: [3, 4] }], {
+      line: "straight",
+    });
+    const markerGroup = xyGroup([{ name: "Marker", x: [1, 2], y: [3, 4] }]);
+    await rejectsInBothEntries(
+      { ...base, groups: [markerGroup] },
+      "invalid-chart-missing-values",
+    );
+    await rejectsInBothEntries(
+      { ...base, groups: [lineGroup, markerGroup] },
+      "invalid-chart-missing-values",
+    );
+    await rejectsInBothEntries(
+      { ...base, groups: [markerGroup, lineGroup] },
+      "invalid-chart-missing-values",
+    );
+  });
+
+  it("writes scatter X and Y label content through group, series, and point inheritance", async () => {
+    const props: ChartProps = {
+      x: 10,
+      y: 10,
+      width: 340,
+      height: 240,
+      groups: [
+        xyGroup(
+          [
+            { name: "Both", x: [1, 2, 3], y: [10, 20, 30] },
+            {
+              name: "Y only",
+              x: [4, 5],
+              y: [40, 50],
+              dataLabels: { xValue: false },
+            },
+            {
+              name: "X only",
+              x: [6, 7],
+              y: [60, 70],
+              dataLabels: { value: false },
+            },
+            {
+              name: "Point overrides",
+              x: [8, 9, 10],
+              y: [80, 90, 100],
+              points: {
+                0: { dataLabels: { xValue: false } },
+                1: { dataLabels: { value: false } },
+                2: { dataLabels: { numberFormat: "0", position: "top" } },
+              },
+            },
+            {
+              name: "Recovered point",
+              x: [13, 14],
+              y: [15, 16],
+              dataLabels: false,
+              points: { 1: { dataLabels: { xValue: true } } },
+            },
+            {
+              name: "Missing coordinates",
+              x: [null, 12],
+              y: [13, null],
+              dataLabels: { value: true, xValue: true },
+            },
+          ],
+          {
+            dataLabels: {
+              value: true,
+              xValue: true,
+              position: "right",
+              numberFormat: "0.0",
+            },
+          },
+        ),
+      ],
+    };
+    for (const entry of ["document", "react"] as const) {
+      const pptx = await buildInEntry(entry, props);
+      const file = await validatePptx(pptx);
+      assert.deepEqual(file.errors, []);
+      const chart = file.slides[0]?.objects[0]?.chart;
+      const labelSettings = (index: number) =>
+        chart?.seriesDataLabels?.find((labels) => labels.seriesIndex === index);
+      const both = fileLabel(labelSettings(0)?.dataLabels);
+      assert.deepEqual(
+        [both.value, both.xValue, both.position, both.numberFormat],
+        [true, true, "right", "0.0"],
+      );
+      const yOnly = fileLabel(labelSettings(1)?.dataLabels);
+      assert.deepEqual([yOnly.value, yOnly.xValue], [true, false]);
+      const xOnly = fileLabel(labelSettings(2)?.dataLabels);
+      assert.deepEqual([xOnly.value, xOnly.xValue], [false, true]);
+      const overrides = labelSettings(3)?.pointDataLabels;
+      assert.deepEqual(Object.keys(overrides ?? {}), ["0", "1", "2"]);
+      const pointZero = fileLabel(overrides?.[0]);
+      assert.deepEqual([pointZero.value, pointZero.xValue], [true, false]);
+      const pointOne = fileLabel(overrides?.[1]);
+      assert.deepEqual([pointOne.value, pointOne.xValue], [false, true]);
+      const override = fileLabel(overrides?.[2]);
+      assert.deepEqual(
+        [
+          override.value,
+          override.xValue,
+          override.position,
+          override.numberFormat,
+        ],
+        [true, true, "top", "0"],
+      );
+      const recovered = fileLabel(labelSettings(4)?.dataLabels);
+      assert.deepEqual([recovered.value, recovered.xValue], [false, false]);
+      assert.equal(
+        fileLabel(labelSettings(4)?.pointDataLabels?.[1]).xValue,
+        true,
+      );
+      const missing = fileLabel(labelSettings(5)?.dataLabels);
+      assert.deepEqual([missing.value, missing.xValue], [true, true]);
+      assert.deepEqual(chart?.series[5]?.x, [null, 12]);
+      assert.deepEqual(chart?.series[5]?.y, [13, null]);
+
+      const xml = chartXml(unzipSync(pptx), 1);
+      const seriesBlocks = xml.split("<c:ser>").slice(1);
+      assert.ok(seriesBlocks[0]!.includes('<c:showVal val="1"/>'));
+      assert.ok(seriesBlocks[0]!.includes('<c:showCatName val="1"/>'));
+      assert.ok(seriesBlocks[1]!.includes('<c:showVal val="1"/>'));
+      assert.ok(seriesBlocks[1]!.includes('<c:showCatName val="0"/>'));
+      assert.ok(seriesBlocks[2]!.includes('<c:showVal val="0"/>'));
+      assert.ok(seriesBlocks[2]!.includes('<c:showCatName val="1"/>'));
+      const pointBlocks = seriesBlocks[3]!.split("<c:dLbl>").slice(1);
+      assert.ok(pointBlocks[0]!.includes('<c:idx val="0"/>'));
+      assert.ok(pointBlocks[0]!.includes('<c:showCatName val="0"/>'));
+      assert.ok(pointBlocks[1]!.includes('<c:idx val="1"/>'));
+      assert.ok(pointBlocks[1]!.includes('<c:showVal val="0"/>'));
+      assert.ok(pointBlocks[2]!.includes('<c:idx val="2"/>'));
+      assert.ok(pointBlocks[2]!.includes('<c:showCatName val="1"/>'));
+      assert.ok(
+        pointBlocks[2]!.includes('<c:numFmt formatCode="0" sourceLinked="0"/>'),
+      );
+      assert.ok(pointBlocks[2]!.includes('<c:dLblPos val="t"/>'));
+      assert.ok(seriesBlocks[4]!.includes("<c:dLbls>"));
+      const recoveredBlocks = seriesBlocks[4]!.split("<c:dLbl>").slice(1);
+      assert.ok(recoveredBlocks[0]!.includes('<c:idx val="1"/>'));
+      assert.ok(recoveredBlocks[0]!.includes('<c:showCatName val="1"/>'));
+    }
+  });
+
   it("diagnoses invalid and inapplicable scatter declarations", async () => {
     const categoryData = {
       kind: "shared-categories" as const,
@@ -477,7 +742,7 @@ describe("scatter depth", () => {
           ],
         },
       ],
-      ["invalid-chart-missing-values", { ...base, displayBlanksAs: "zero" }],
+      ["invalid-chart-missing-values", { ...base, displayBlanksAs: "span" }],
       [
         "invalid-chart-option",
         {
@@ -559,7 +824,7 @@ describe("scatter depth", () => {
           ...base,
           groups: [
             xyGroup([{ name: "S", x: [1], y: [2] }], {
-              dataLabels: { value: true, category: true },
+              dataLabels: { value: true, category: true } as never,
             }),
           ],
         },
@@ -570,7 +835,7 @@ describe("scatter depth", () => {
           ...base,
           groups: [
             xyGroup([{ name: "S", x: [1], y: [2] }], {
-              dataLabels: { percent: true },
+              dataLabels: { percent: true } as never,
             }),
           ],
         },
@@ -694,6 +959,37 @@ describe("scatter depth", () => {
     for (const [code, props] of cases) {
       await rejectsWithCode(props, code);
     }
+    await rejectsInBothEntries(
+      {
+        ...base,
+        groups: [
+          xyGroup([{ name: "S", x: [1], y: [2] }], {
+            dataLabels: { xValue: "yes" } as never,
+          }),
+        ],
+      },
+      "invalid-data-labels",
+    );
+  });
+
+  it("rejects X value labels outside scatter charts in both entries", async () => {
+    await rejectsInBothEntries(
+      {
+        x: 10,
+        y: 10,
+        width: 320,
+        height: 220,
+        groups: [
+          {
+            kind: "column",
+            data: { kind: "shared-categories", categories: ["A"] },
+            series: [{ name: "S", values: [1] }],
+            dataLabels: { xValue: true },
+          } as never,
+        ],
+      },
+      "invalid-data-labels",
+    );
   });
 
   it("builds scatter series motion and rejects category granularity", async () => {
@@ -749,6 +1045,72 @@ describe("scatter depth", () => {
         return true;
       },
     );
+  });
+
+  it("diagnoses marker-only span from actual scatter XML independently", async () => {
+    const lineGroup = xyGroup([{ name: "Line", x: [1, 2], y: [3, 4] }], {
+      line: "straight",
+    });
+    const markerGroup = xyGroup([{ name: "Marker", x: [1, 2], y: [3, 4] }]);
+    const linePptx = await buildInEntry("document", {
+      x: 10,
+      y: 10,
+      width: 320,
+      height: 220,
+      displayBlanksAs: "span",
+      groups: [lineGroup],
+    });
+    assert.deepEqual((await validatePptx(linePptx)).errors, []);
+
+    const markerPptx = await buildInEntry("document", {
+      x: 10,
+      y: 10,
+      width: 320,
+      height: 220,
+      groups: [markerGroup],
+    });
+    const markerParts = unzipSync(markerPptx);
+    const path = "ppt/charts/chart1.xml";
+    const withSpan = (parts: Unzipped) =>
+      zipSync({
+        ...parts,
+        [path]: strToU8(
+          chartXml(parts, 1).replace(
+            "</c:chart>",
+            '<c:dispBlanksAs val="span"/></c:chart>',
+          ),
+        ),
+      });
+    const markerFile = await validatePptx(withSpan(markerParts));
+    assert.ok(
+      markerFile.errors.some(
+        ({ code }) => code === "invalid-chart-missing-values",
+      ),
+    );
+
+    const mixedPptx = await buildInEntry("document", {
+      x: 10,
+      y: 10,
+      width: 320,
+      height: 220,
+      groups: [lineGroup, markerGroup],
+    });
+    const mixedFile = await validatePptx(withSpan(unzipSync(mixedPptx)));
+    assert.ok(
+      mixedFile.errors.some(
+        ({ code }) => code === "invalid-chart-missing-values",
+      ),
+    );
+
+    const markerGap = await buildInEntry("document", {
+      x: 10,
+      y: 10,
+      width: 320,
+      height: 220,
+      displayBlanksAs: "gap",
+      groups: [markerGroup],
+    });
+    assert.deepEqual((await validatePptx(markerGap)).errors, []);
   });
 
   it("reads scatter caches independently and rejects malformed native scatter XML", async () => {

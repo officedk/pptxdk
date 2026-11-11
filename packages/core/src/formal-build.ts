@@ -56,6 +56,7 @@ import {
   type CapabilityResourceClaim,
   type Diagnostic,
   type Extension,
+  type GeometryBox,
   type LayoutChildReference,
   type LayoutObservation,
   type NativeElementKind,
@@ -199,6 +200,7 @@ type SlideBuildState = {
   readonly contributions: CapabilityContribution[];
   readonly morphObjects: Map<MorphKey, MorphObject>;
   readonly linkedSlideIndexes: Set<number>;
+  readonly layoutDerivedObjectIds: Set<number>;
 };
 
 type PackageBuildContext = {
@@ -246,6 +248,46 @@ function deepFreeze<T>(value: T): T {
   if (!Object.isFrozen(value)) Object.freeze(value);
   for (const child of Object.values(value)) deepFreeze(child);
   return value;
+}
+
+function reportBox(box: GeometryBox): GeometryBox {
+  // Reports show layout-derived geometry at hundredths of a pixel; capability measurement fallbacks keep their measured values.
+  return {
+    x: Math.round(box.x * 100) / 100,
+    y: Math.round(box.y * 100) / 100,
+    width: Math.round(box.width * 100) / 100,
+    height: Math.round(box.height * 100) / 100,
+  };
+}
+
+function projectObservation(
+  observation: ObjectObservation,
+  layoutDerivedObjectIds: ReadonlySet<number>,
+): ObjectObservation {
+  const box =
+    observation.box !== undefined && layoutDerivedObjectIds.has(observation.id)
+      ? reportBox(observation.box)
+      : observation.box;
+  const members =
+    observation.members === undefined
+      ? undefined
+      : observation.members.map((member) =>
+          projectObservation(member, layoutDerivedObjectIds),
+        );
+  return {
+    ...observation,
+    ...(box === undefined || box === observation.box ? {} : { box }),
+    ...(members === undefined ? {} : { members }),
+  };
+}
+
+function projectObservations(
+  observations: readonly ObjectObservation[],
+  layoutDerivedObjectIds: ReadonlySet<number>,
+): readonly ObjectObservation[] {
+  return observations.map((observation) =>
+    projectObservation(observation, layoutDerivedObjectIds),
+  );
 }
 
 function ownKeys(
@@ -1879,6 +1921,7 @@ function compileChildren(
               ...(authorId === undefined ? {} : { authorId }),
               ...(boxLink === undefined ? {} : { link: boxLink.summary }),
             };
+            context.slide.layoutDerivedObjectIds.add(objectId);
             if (morphKey !== undefined && morphName !== undefined) {
               const nativeKind = parsedResult?.contract?.nativeKind ?? "sp";
               if (output.observation.name !== morphName) {
@@ -1959,7 +2002,7 @@ function compileChildren(
       context.slide.layouts.push({
         id,
         ...(authorId === undefined ? {} : { authorId }),
-        box,
+        box: reportBox(box),
         children: [
           ...(boxObservation === undefined
             ? []
@@ -2213,6 +2256,7 @@ function compileChildren(
         ...(authorId === undefined ? {} : { authorId }),
         ...(compiledLink === undefined ? {} : { link: compiledLink.summary }),
       };
+      if (layoutBox !== undefined) context.slide.layoutDerivedObjectIds.add(id);
       content.push({
         ...(authorId === undefined ? {} : { authorId }),
         reference: { kind: "object", id: observation.id },
@@ -2221,8 +2265,8 @@ function compileChildren(
           ...tableContentNodes(observation),
         ],
       });
-      if (observation.box !== undefined) {
-        const box = observation.box;
+      if (output.observation.box !== undefined) {
+        const box = output.observation.box;
         if (
           box.x < 0 ||
           box.y < 0 ||
@@ -2456,6 +2500,7 @@ function compileSlide(
     contentChildrenByObjectId: new Map(),
     contributions: [],
     morphObjects: new Map(),
+    layoutDerivedObjectIds: new Set(),
   };
   const path = `deck/slide[${id}]`;
   if (nonWhitespaceText(node.children)) {
@@ -2650,7 +2695,10 @@ function compileSlide(
     ...(section === undefined ? {} : { section }),
     hidden,
     ...(advanceAfter === undefined ? {} : { advanceAfter }),
-    objects: compiled.objects,
+    objects: projectObservations(
+      compiled.objects,
+      slide.layoutDerivedObjectIds,
+    ),
     layouts: [...slide.layouts].sort((left, right) => left.id - right.id),
     content: compiled.content,
     resources: slide.resourceObservations,

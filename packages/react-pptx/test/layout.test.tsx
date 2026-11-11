@@ -188,6 +188,355 @@ describe("public layout entry", () => {
     assert.deepEqual((await validatePptx(result.pptx)).errors, []);
   });
 
+  it("offsets auto-placed grid items by the flow grid origin", async () => {
+    const result = await build(
+      <Deck width={1280} height={720}>
+        <Slide slideId="grid-origin">
+          <Box
+            testId="frame"
+            style={{
+              display: "flex",
+              flexDirection: "row",
+              width: 1280,
+              height: 720,
+              padding: 48,
+              gap: 24,
+            }}
+          >
+            <Box
+              testId="sidebar"
+              style={{ width: 300, height: 624, backgroundColor: "#172033" }}
+            />
+            <Box
+              testId="grid"
+              style={{
+                display: "grid",
+                width: 820,
+                height: 512,
+                gridTemplateColumns: "1fr 1fr",
+                gridAutoRows: "1fr",
+                gap: 18,
+                backgroundColor: "#EFF3F8",
+              }}
+            >
+              <Box
+                testId="card-a"
+                style={{ backgroundColor: "#FFFFFF", padding: 18 }}
+              >
+                <Text
+                  testId="card-a-text"
+                  style={{ fontFamily: cjkFont, fontSize: 20 }}
+                >
+                  A
+                </Text>
+              </Box>
+              <Box
+                testId="card-b"
+                style={{ backgroundColor: "#FFFFFF", padding: 18 }}
+              >
+                <Text
+                  testId="card-b-text"
+                  style={{ fontFamily: cjkFont, fontSize: 20 }}
+                >
+                  B
+                </Text>
+              </Box>
+            </Box>
+          </Box>
+        </Slide>
+      </Deck>,
+    );
+    const file = await validatePptx(result.pptx);
+    assert.deepEqual(file.errors, []);
+    const fileBox = (name: string) => {
+      const object = file.slides[0]?.objects.find(
+        (candidate) => candidate.name === name,
+      );
+      assert.ok(object, `missing object ${name}`);
+      return {
+        x: object.boxEmu.x / 9525,
+        y: object.boxEmu.y / 9525,
+        width: object.boxEmu.width / 9525,
+        height: object.boxEmu.height / 9525,
+      };
+    };
+
+    assert.deepEqual(fileBox("grid"), {
+      x: 372,
+      y: 48,
+      width: 820,
+      height: 512,
+    });
+    assert.deepEqual(fileBox("card-a"), {
+      x: 372,
+      y: 48,
+      width: 401,
+      height: 512,
+    });
+    assert.deepEqual(fileBox("card-b"), {
+      x: 791,
+      y: 48,
+      width: 401,
+      height: 512,
+    });
+    assert.deepEqual(
+      { x: fileBox("card-a-text").x, y: fileBox("card-a-text").y },
+      { x: 390, y: 66 },
+    );
+    assert.deepEqual(
+      { x: fileBox("card-b-text").x, y: fileBox("card-b-text").y },
+      { x: 809, y: 66 },
+    );
+  });
+
+  it("places nested grid tracks from a nonzero flow grid origin", async () => {
+    const result = await build(
+      <Deck width={1280} height={720}>
+        <Slide slideId="grid-nested-origin">
+          <Box
+            testId="frame"
+            style={{
+              display: "flex",
+              flexDirection: "row",
+              width: 1280,
+              height: 720,
+              padding: 48,
+              gap: 24,
+            }}
+          >
+            <Box
+              testId="sidebar"
+              style={{ width: 300, height: 624, backgroundColor: "#172033" }}
+            />
+            <Box
+              testId="grid"
+              style={{
+                display: "grid",
+                width: 820,
+                height: 512,
+                padding: 20,
+                gap: 18,
+                gridTemplateColumns: "1fr 1fr",
+                gridTemplateRows: "100px",
+                gridAutoRows: "auto",
+                backgroundColor: "#EFF3F8",
+              }}
+            >
+              <Box
+                testId="spanning-card"
+                style={{
+                  gridColumn: "span 2",
+                  backgroundColor: "#FFFFFF",
+                }}
+              />
+              <Box
+                testId="nested-grid"
+                style={{
+                  display: "grid",
+                  gridColumn: 1,
+                  gridRow: 2,
+                  width: 200,
+                  height: 150,
+                  padding: 10,
+                  gap: 10,
+                  gridTemplateColumns: "1fr 1fr",
+                  gridTemplateRows: "1fr",
+                  backgroundColor: "#DDE5EF",
+                }}
+              >
+                <Box
+                  testId="nested-cell-a"
+                  style={{ backgroundColor: "#FFFFFF" }}
+                />
+                <Box
+                  testId="nested-cell-b"
+                  style={{ backgroundColor: "#FFFFFF" }}
+                />
+              </Box>
+            </Box>
+          </Box>
+        </Slide>
+      </Deck>,
+    );
+    const file = await validatePptx(result.pptx);
+    assert.deepEqual(file.errors, []);
+    const objectBox = (name: string) => {
+      const object = file.slides[0]?.objects.find(
+        (candidate) => candidate.name === name,
+      );
+      assert.ok(object, `missing object ${name}`);
+      return {
+        x: object.boxEmu.x / 9525,
+        y: object.boxEmu.y / 9525,
+        width: object.boxEmu.width / 9525,
+        height: object.boxEmu.height / 9525,
+      };
+    };
+
+    assert.deepEqual(objectBox("spanning-card"), {
+      x: 392,
+      y: 68,
+      width: 780,
+      height: 100,
+    });
+    assert.deepEqual(objectBox("nested-grid"), {
+      x: 392,
+      y: 186,
+      width: 200,
+      height: 150,
+    });
+    assert.deepEqual(objectBox("nested-cell-a"), {
+      x: 402,
+      y: 196,
+      width: 85,
+      height: 130,
+    });
+    assert.deepEqual(objectBox("nested-cell-b"), {
+      x: 497,
+      y: 196,
+      width: 85,
+      height: 130,
+    });
+  });
+
+  it("keeps author absolute descendants anchored to the nearest positioned ancestor", async () => {
+    const result = await build(
+      <Deck width={640} height={480}>
+        <Slide slideId="grid-absolute-origin">
+          <Box
+            testId="anchor"
+            style={{
+              position: "relative",
+              width: 400,
+              height: 300,
+              padding: 40,
+              backgroundColor: "#EFF3F8",
+            }}
+          >
+            <Box
+              testId="static-grid"
+              style={{
+                display: "grid",
+                width: 300,
+                height: 200,
+                padding: 20,
+                gridTemplateColumns: "1fr",
+                gridTemplateRows: "1fr",
+                backgroundColor: "#DDE5EF",
+              }}
+            >
+              <Box
+                testId="static-grid-item"
+                style={{ backgroundColor: "#FFFFFF" }}
+              >
+                <Shape
+                  testId="item-absolute"
+                  style={{
+                    position: "absolute",
+                    left: 12,
+                    top: 14,
+                    width: 10,
+                    height: 10,
+                  }}
+                />
+              </Box>
+              <Shape
+                testId="grid-absolute"
+                style={{
+                  position: "absolute",
+                  left: 30,
+                  top: 40,
+                  width: 10,
+                  height: 10,
+                }}
+              />
+            </Box>
+          </Box>
+          <Box
+            testId="relative-anchor"
+            style={{
+              position: "absolute",
+              left: 100,
+              top: 50,
+              width: 300,
+              height: 200,
+              backgroundColor: "#EFF3F8",
+            }}
+          >
+            <Box
+              testId="relative-grid"
+              style={{
+                position: "relative",
+                display: "grid",
+                width: 200,
+                height: 100,
+                gridTemplateColumns: "1fr",
+                gridTemplateRows: "1fr",
+                backgroundColor: "#DDE5EF",
+              }}
+            >
+              <Shape
+                testId="relative-grid-absolute"
+                style={{
+                  position: "absolute",
+                  left: 5,
+                  top: 6,
+                  width: 10,
+                  height: 10,
+                }}
+              />
+            </Box>
+          </Box>
+        </Slide>
+      </Deck>,
+    );
+    const file = await validatePptx(result.pptx);
+    assert.deepEqual(file.errors, []);
+    const objectBox = (name: string) => {
+      const object = file.slides[0]?.objects.find(
+        (candidate) => candidate.name === name,
+      );
+      assert.ok(object, `missing object ${name}`);
+      return {
+        x: object.boxEmu.x / 9525,
+        y: object.boxEmu.y / 9525,
+        width: object.boxEmu.width / 9525,
+        height: object.boxEmu.height / 9525,
+      };
+    };
+
+    assert.deepEqual(objectBox("static-grid"), {
+      x: 40,
+      y: 40,
+      width: 300,
+      height: 200,
+    });
+    assert.deepEqual(objectBox("item-absolute"), {
+      x: 12,
+      y: 14,
+      width: 10,
+      height: 10,
+    });
+    assert.deepEqual(objectBox("grid-absolute"), {
+      x: 30,
+      y: 40,
+      width: 10,
+      height: 10,
+    });
+    assert.deepEqual(objectBox("relative-grid"), {
+      x: 100,
+      y: 50,
+      width: 200,
+      height: 100,
+    });
+    assert.deepEqual(objectBox("relative-grid-absolute"), {
+      x: 105,
+      y: 56,
+      width: 10,
+      height: 10,
+    });
+  });
+
   it("respects text min-content for auto grid tracks and matches native object geometry", async () => {
     const result = await build(
       <Deck width={320} height={240}>

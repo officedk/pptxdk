@@ -1018,7 +1018,11 @@ function expansionFor(
   }
   const seriesCount = target.chartSeriesCount ?? 0;
   const categoryCount = target.chartCategoryCount ?? 0;
-  if (target.kind !== "chart" || seriesCount < 1 || categoryCount < 1) {
+  if (
+    target.kind !== "chart" ||
+    seriesCount < 1 ||
+    (effect.by === "category" && categoryCount < 1)
+  ) {
     fail(
       "invalid-motion-granularity",
       `by: "${effect.by}" requires native chart with data`,

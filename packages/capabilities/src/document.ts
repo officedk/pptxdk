@@ -392,6 +392,7 @@ export type {
   ChartAxisCrossing,
   ChartAxisReferences,
   ChartCategoryAxis,
+  ChartCategoryAxisReferences,
   ChartDataLabelOverride,
   ChartDataLabels,
   ChartDisplayBlanksAs,
@@ -409,10 +410,15 @@ export type {
   ChartTickMark,
   ChartTitle,
   ChartValueAxis,
+  ChartXYAxisReferences,
   ColumnOrBarChartGroup,
   DoughnutChartGroup,
   LineOrAreaChartGroup,
   PieChartGroup,
+  ScatterChartGroup,
+  ScatterChartSeries,
+  ScatterData,
+  ScatterLine,
   SharedCategoryData,
 } from "./chart.ts";
 export type {

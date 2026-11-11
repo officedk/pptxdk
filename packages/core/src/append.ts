@@ -11,12 +11,17 @@ function collectAnonymousIds(parent: CommonNode, ids: Set<string>): void {
   }
 }
 
+/**
+ * Finds the node whose direct children share the appended nodes' naming scope.
+ *
+ * Named nodes, pages, and the deck start a scope. Anonymous nodes stay transparent, so an
+ * ownerless anonymous tree keeps one scope rooted at its outermost node even before attachment.
+ */
 function scopeOwner(target: CommonNode): CommonNode {
-  for (
-    let current: CommonNode | undefined = target;
-    current !== undefined;
-    current = current.parent
-  ) {
+  let current: CommonNode | undefined = target;
+  let outermost = target;
+  for (; current !== undefined; current = current.parent) {
+    outermost = current;
     if (
       current.id !== undefined ||
       current.kind === "slide" ||
@@ -25,7 +30,7 @@ function scopeOwner(target: CommonNode): CommonNode {
       return current;
     }
   }
-  return target;
+  return outermost;
 }
 
 /** Collects the slide ids the formal deck model sees directly or through one Section level. */

@@ -23,7 +23,14 @@ import {
   useMotionScope,
   type MotionObservation,
 } from "@react-pptx/react-pptx";
-import { build as buildDocument, text } from "@react-pptx/react-pptx/document";
+import {
+  box,
+  build as buildDocument,
+  deck,
+  shape,
+  slide,
+  text,
+} from "@react-pptx/react-pptx/document";
 import { validatePptx } from "@react-pptx/validation";
 import { strFromU8, unzipSync } from "fflate";
 import {
@@ -479,6 +486,118 @@ describe("public React fragment append", () => {
     assert.equal(target.query.get("late").node, external);
     assert.equal(target.query.getAll("late").length, 1);
     assert.equal(target.query.getAll("fragment-only").length, 0);
+  });
+
+  it("checks the full anonymous parent scope before appending", async () => {
+    const gate = Promise.withResolvers<void>();
+    const started = Promise.withResolvers<void>();
+    const root = box();
+    const wrapper = box();
+    const target = box();
+    root.append(wrapper);
+    wrapper.append(
+      shape({ id: "duplicate", x: 0, y: 0, width: 10, height: 10 }),
+      target,
+    );
+    const before = [...root.children];
+
+    function Started() {
+      useEffect(() => {
+        started.resolve();
+      }, []);
+      return null;
+    }
+    function LateDuplicate() {
+      use(gate.promise);
+      return createElement(Shape, {
+        id: "duplicate",
+        x: 10,
+        y: 0,
+        width: 10,
+        height: 10,
+      });
+    }
+
+    const appending = appendJSX(
+      target,
+      createElement(
+        Fragment,
+        null,
+        createElement(Started),
+        createElement(
+          Suspense,
+          { fallback: null },
+          createElement(Box, null, createElement(LateDuplicate)),
+        ),
+      ),
+    );
+    await started.promise;
+    const external = shape({
+      id: "external",
+      x: 0,
+      y: 20,
+      width: 10,
+      height: 10,
+    });
+    root.append(external);
+
+    gate.resolve();
+    await assert.rejects(appending, (error: unknown) => {
+      assert.ok(error instanceof BuildError);
+      assert.equal(error.diagnostics[0]?.code, "duplicate-author-id");
+      return true;
+    });
+    assert.deepEqual([...root.children], [...before, external]);
+    assert.equal(target.children.length, 0);
+    assert.equal(root.query.getAll("duplicate").length, 1);
+    assert.equal(root.query.get("external").node, external);
+  });
+
+  it("keeps ownerless named scopes reusable and later buildable", async () => {
+    const root = box();
+    const group = box({ id: "group" });
+    const target = box();
+    group.append(target);
+    root.append(
+      shape({ id: "shared", x: 0, y: 0, width: 10, height: 10 }),
+      group,
+    );
+
+    const unique = await appendJSX(
+      root,
+      createElement(Shape, {
+        id: "unique",
+        x: 10,
+        y: 0,
+        width: 10,
+        height: 10,
+      }),
+    );
+    assert.equal(root.query.get("unique").node, unique[0]);
+
+    const reused = await appendJSX(
+      target,
+      createElement(Shape, {
+        id: "shared",
+        x: 0,
+        y: 0,
+        width: 10,
+        height: 10,
+      }),
+    );
+    assert.equal(group.query.get("shared").node, reused[0]);
+    assert.equal(root.query.getAll("shared").length, 1);
+
+    const result = await buildDocument(
+      deck({ width: 320, height: 180 }).append(
+        slide({ id: "main" }).append(root),
+      ),
+    );
+    assert.deepEqual((await validatePptx(result.pptx)).errors, []);
+    const authorIds =
+      result.report.slides[0]?.objects.map(({ authorId }) => authorId) ?? [];
+    assert.equal(authorIds.filter((id) => id === "shared").length, 2);
+    assert.ok(authorIds.includes("unique"));
   });
 
   it("rejects unhandled expansion and cleanup failures without touching the target", async () => {

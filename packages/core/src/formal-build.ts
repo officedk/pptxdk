@@ -44,7 +44,6 @@ import {
   type CapabilityLayoutContract,
   type CapabilityModule,
   type CapabilityParseResult,
-  type ContributionResolver,
   type RegisteredCapabilityModule,
   type CapabilityResource,
   type CapabilityResourceClaim,
@@ -1957,19 +1956,20 @@ function resolveContributions(
   modules: ReadonlyMap<string, RegisteredCapabilityModule>,
 ): readonly CapabilityContribution[] {
   let resolved = contributions;
-  const applied = new Set<ContributionResolver>();
+  const applied = new Set<string>();
   for (const module of modules.values()) {
     if (!("resolveContributions" in module)) continue;
     const resolver = module.resolveContributions;
-    // A full writer and its trimmed-build companion may share one resolver; apply it once.
-    if (resolver === undefined || applied.has(resolver)) continue;
-    applied.add(resolver);
+    if (resolver === undefined) continue;
     const capability =
       "capability" in module ? module.capability : module.declaration;
+    // A full writer and its trimmed-build companion may both resolve one capability; apply once.
+    if (applied.has(capability)) continue;
     const owned = resolved.filter(
       (contribution) => contribution.capability === capability,
     );
     if (owned.length === 0) continue;
+    applied.add(capability);
     const effective = resolver(children, owned);
     const next: CapabilityContribution[] = [];
     let inserted = false;

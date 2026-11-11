@@ -72,7 +72,8 @@ export type DeckAuthorProps = {
 };
 
 export type SlideAuthorProps = {
-  readonly slideId: string;
+  readonly id?: string;
+  readonly slideId?: string;
   readonly transition?: Transition;
   readonly background?: SlideBackground;
   readonly theme?: ThemeScope;

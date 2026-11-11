@@ -61,6 +61,7 @@ import {
 export type ShapeDeclarationProps = MotionProps &
   MorphProps & {
     readonly link?: LinkTarget;
+    readonly id?: string;
     readonly testId?: string;
     readonly part?: string;
     readonly name?: string;
@@ -125,6 +126,7 @@ export function createShapeNode(
 const maximumShapeExtentEmu = 2_147_483_647;
 
 const allowedParameters = [
+  "id",
   "testId",
   "part",
   "name",

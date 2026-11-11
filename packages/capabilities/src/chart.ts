@@ -110,6 +110,7 @@ export type ChartDataLabels<
 
 type ChartBase = MotionProps &
   MorphProps & {
+    readonly id?: string;
     readonly testId?: string;
     readonly part?: string;
     readonly name?: string;
@@ -1265,6 +1266,7 @@ export const chartCapability: ObjectCapabilityModule = {
     onlyKeys(
       input.props,
       [
+        "id",
         "testId",
         "part",
         "name",

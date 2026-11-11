@@ -13,6 +13,7 @@ import type { ParagraphStyle, TextStyle } from "./text-service.ts";
 /** Pure text box declaration shared by JSX and command authoring. */
 export type TextDeclarationProps = MotionProps &
   MorphProps & {
+    readonly id?: string;
     readonly testId?: string;
     readonly part?: string;
     readonly name?: string;
@@ -25,14 +26,17 @@ export type TextDeclarationProps = MotionProps &
   };
 
 export type ParagraphDeclarationProps = {
+  readonly id?: string;
   readonly style?: ParagraphStyle;
 };
 
 export type SpanDeclarationProps = {
+  readonly id?: string;
   readonly style?: Omit<TextStyle, "verticalAlign" | "lineHeight" | "textWrap">;
 };
 
 export type SlideNumberDeclarationProps = {
+  readonly id?: string;
   readonly style?: Omit<TextStyle, "verticalAlign" | "lineHeight" | "textWrap">;
 };
 

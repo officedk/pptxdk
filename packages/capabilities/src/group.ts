@@ -31,6 +31,7 @@ import { motionAnnotations, type MotionProps } from "./motion-api.ts";
 /** Native Group preserves member relationships; style allows it to arrange as a layout child, with output bounds computed from the union of member geometries. */
 export type GroupDeclarationProps = MotionProps &
   MorphProps & {
+    readonly id?: string;
     readonly testId?: string;
     readonly part?: string;
     readonly name?: string;
@@ -55,6 +56,7 @@ export function createGroupNode(
 }
 
 const allowedParameters = [
+  "id",
   "testId",
   "part",
   "name",

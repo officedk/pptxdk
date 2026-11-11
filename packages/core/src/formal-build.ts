@@ -64,6 +64,7 @@ import {
 
 type SlideBuild = {
   readonly id: string;
+  readonly authorId?: string;
   readonly index: number;
   readonly section?: string;
   readonly hidden: boolean;
@@ -86,6 +87,7 @@ type SlideBuild = {
 type ResolvedSlide = {
   readonly node: DeclarationNode;
   readonly id: string;
+  readonly authorId?: string;
   readonly index: number;
   readonly section?: string;
   readonly hidden?: boolean;
@@ -255,9 +257,14 @@ function childNodes(children: readonly DeclarationChild[]): DeclarationNode[] {
   return children.filter(isDeclarationNode);
 }
 
+function valueIdentity(props: Readonly<Record<string, unknown>>): unknown {
+  const testId = props["testId"];
+  return testId === undefined ? props["id"] : testId;
+}
+
 function componentLabel(node: DeclarationNode, index: number): string {
   const type = node.type.startsWith("rp:") ? node.type.slice(3) : node.type;
-  const identity = node.props["testId"];
+  const identity = valueIdentity(node.props);
   const label =
     typeof identity === "string" && identity.trim() !== ""
       ? identity
@@ -277,7 +284,7 @@ function capabilityChild(child: DeclarationChild): CapabilityChild {
 function capabilityLabel(child: CapabilityChild, index: number): string {
   if (!("props" in child)) return `text[${index + 1}]`;
   const type = child.type.startsWith("rp:") ? child.type.slice(3) : child.type;
-  const identity = child.props["testId"];
+  const identity = valueIdentity(child.props);
   const label =
     typeof identity === "string" && identity.trim() !== ""
       ? identity
@@ -461,6 +468,52 @@ function deckDimensions(node: DeclarationNode): Dimensions {
   };
 }
 
+function readAuthorId(value: unknown, path: string): string | undefined {
+  if (value === undefined) return undefined;
+  if (typeof value !== "string" || value.trim() === "") {
+    throw new BuildError([
+      diagnostic(path, "invalid-author-id", "id must be a non-empty string"),
+    ]);
+  }
+  return value;
+}
+
+/**
+ * Validates new author ids on one slide using the same scopes the author query traverses.
+ *
+ * A node's own id belongs to its parent scope; its descendants belong to a new scope only when the
+ * node declares an id. Anonymous layout nodes therefore stay transparent, while a page remains the
+ * root scope even for legacy slides without a new id.
+ */
+function validateAuthorIdScopes(
+  node: DeclarationNode,
+  path: string,
+  scope: Set<string>,
+): void {
+  node.children.forEach((child, index) => {
+    if (!isDeclarationNode(child)) return;
+    const childPath = `${path}/${componentLabel(child, index)}`;
+    const id = readAuthorId(child.props["id"], childPath);
+    if (id !== undefined) {
+      if (scope.has(id)) {
+        throw new BuildError([
+          diagnostic(
+            childPath,
+            "duplicate-author-id",
+            `Duplicate author id ${JSON.stringify(id)} in the same scope`,
+          ),
+        ]);
+      }
+      scope.add(id);
+    }
+    validateAuthorIdScopes(
+      child,
+      childPath,
+      id === undefined ? scope : new Set(),
+    );
+  });
+}
+
 function resolveSlides(
   container: DeclarationContainer,
   modules: ReadonlyMap<string, RegisteredCapabilityModule>,
@@ -601,20 +654,24 @@ function resolveSlides(
     ]);
   }
   const ids = new Set<string>();
+  const authorIds = new Set<string>();
   const slideProperties = [...modules.values()]
     .filter(isSlideCapability)
     .flatMap((module) => module.slideProps ?? [module.slideProp]);
   const slides = candidates.map(({ node, section, sectionIndex }, index) => {
     const unknown = ownKeys(node.props, [
+      "id",
       "slideId",
       "theme",
       "style",
       "hidden",
       ...slideProperties,
     ]);
+    const authorId = readAuthorId(node.props["id"], `deck/slide[${index + 1}]`);
+    const rawSlideId = node.props["slideId"];
     if (unknown !== undefined) {
-      const rawId = node.props["slideId"];
-      const label = typeof rawId === "string" ? rawId : index + 1;
+      const label =
+        authorId ?? (typeof rawSlideId === "string" ? rawSlideId : index + 1);
       throw new BuildError([
         diagnostic(
           `deck/slide[${label}]`,
@@ -623,8 +680,10 @@ function resolveSlides(
         ),
       ]);
     }
-    const id = node.props["slideId"];
-    if (typeof id !== "string" || id.trim() === "") {
+    if (
+      rawSlideId !== undefined &&
+      (typeof rawSlideId !== "string" || rawSlideId.trim() === "")
+    ) {
       throw new BuildError([
         diagnostic(
           `deck/slide[${index + 1}]`,
@@ -633,27 +692,52 @@ function resolveSlides(
         ),
       ]);
     }
-    try {
-      assertXml10Characters(id);
-    } catch {
+    if (rawSlideId === undefined && authorId === undefined) {
       throw new BuildError([
         diagnostic(
           `deck/slide[${index + 1}]`,
-          "invalid-xml-character",
-          "Slide.slideId contains characters not allowed in XML 1.0",
+          "invalid-slide-id",
+          "Slide must declare id or slideId as a non-empty string",
         ),
       ]);
+    }
+    if (typeof rawSlideId === "string") {
+      try {
+        assertXml10Characters(rawSlideId);
+      } catch {
+        throw new BuildError([
+          diagnostic(
+            `deck/slide[${index + 1}]`,
+            "invalid-xml-character",
+            "Slide.slideId contains characters not allowed in XML 1.0",
+          ),
+        ]);
+      }
+    }
+    const id = typeof rawSlideId === "string" ? rawSlideId : authorId!;
+    if (authorId !== undefined) {
+      if (authorIds.has(authorId)) {
+        throw new BuildError([
+          diagnostic(
+            `deck/slide[${authorId}]`,
+            "duplicate-author-id",
+            `Duplicate Slide.id ${JSON.stringify(authorId)} in the deck`,
+          ),
+        ]);
+      }
+      authorIds.add(authorId);
     }
     if (ids.has(id)) {
       throw new BuildError([
         diagnostic(
           `deck/slide[${id}]`,
           "duplicate-slide-id",
-          `Duplicate slideId "${id}"`,
+          `Duplicate slide identity "${id}"`,
         ),
       ]);
     }
     ids.add(id);
+    validateAuthorIdScopes(node, `deck/slide[${id}]`, new Set());
     const hidden = node.props["hidden"];
     if (hidden !== undefined && typeof hidden !== "boolean") {
       throw new BuildError([
@@ -683,6 +767,7 @@ function resolveSlides(
     const resolved = {
       node,
       id,
+      ...(authorId === undefined ? {} : { authorId }),
       index: index + 1,
       ...(section === undefined ? {} : { section }),
       ...(hidden === undefined ? {} : { hidden }),
@@ -1398,6 +1483,7 @@ function compileChildren(
 
     if (context.layout.hidden.has(child)) return;
     const path = `${parentPath}/${capabilityLabel(child, index)}`;
+    const authorId = readAuthorId(child.props["id"], path);
     const order = context.slide.nextNodeOrder++;
     const requestedMorphKey = child.props["morphKey"];
     if (child.type === "rp:box") {
@@ -1581,6 +1667,7 @@ function compileChildren(
       const testId = child.props["testId"];
       context.slide.layouts.push({
         id,
+        ...(authorId === undefined ? {} : { authorId }),
         ...(typeof testId === "string" ? { testId } : {}),
         ...(typeof child.props["part"] === "string"
           ? { part: child.props["part"] }
@@ -1594,6 +1681,7 @@ function compileChildren(
         ],
       });
       content.push({
+        ...(authorId === undefined ? {} : { authorId }),
         ...(typeof testId === "string" ? { testId } : {}),
         ...(typeof child.props["part"] === "string"
           ? { part: child.props["part"] }
@@ -1828,9 +1916,11 @@ function compileChildren(
       const observation = {
         ...output.observation,
         id,
+        ...(authorId === undefined ? {} : { authorId }),
         ...(compiledLink === undefined ? {} : { link: compiledLink.summary }),
       };
       content.push({
+        ...(authorId === undefined ? {} : { authorId }),
         ...(typeof child.props["testId"] === "string"
           ? { testId: child.props["testId"] }
           : {}),
@@ -1921,6 +2011,7 @@ function tableContentNodes(object: ObjectObservation): QueryContentNode[] {
     if (part === undefined)
       throw new Error("Table query part index does not exist");
     return {
+      ...(part.authorId === undefined ? {} : { authorId: part.authorId }),
       ...(part.testId === undefined ? {} : { testId: part.testId }),
       ...(part.part === undefined ? {} : { part: part.part }),
       reference: { kind: "table-part", tableId: object.id, partIndex },
@@ -1952,7 +2043,15 @@ function compileSlide(
   options: BuildOptions,
   documentTheme: ThemeContext,
 ): SlideBuild {
-  const { node, id, index, section, hidden = false, advanceAfter } = resolved;
+  const {
+    node,
+    id,
+    authorId,
+    index,
+    section,
+    hidden = false,
+    advanceAfter,
+  } = resolved;
   const slide: SlideBuildState = {
     index,
     nextId: 2,
@@ -2087,6 +2186,7 @@ function compileSlide(
   if (slide.diagnostics.length > 0) throw new BuildError(slide.diagnostics);
   return {
     id,
+    ...(authorId === undefined ? {} : { authorId }),
     index,
     ...(section === undefined ? {} : { section }),
     hidden,
@@ -2286,6 +2386,7 @@ function compileDocument(
   );
   const slideObservations: SlideObservation[] = builtSlides.map((slide) => ({
     id: slide.id,
+    ...(slide.authorId === undefined ? {} : { authorId: slide.authorId }),
     index: slide.index,
     ...(slide.section === undefined ? {} : { section: slide.section }),
     ...(slide.hidden ? { hidden: true } : {}),

@@ -1,8 +1,15 @@
 export { createBuilder, expandDocument } from "#/builder.ts";
 export type { ExpandDocumentOptions, ExpandedDocument } from "#/builder.ts";
 export { BuildError, CapabilityError } from "#/diagnostics.ts";
-export { CommonContainer, CommonNode, RichTextContainer } from "#/document.ts";
+export {
+  AuthorQuery,
+  AuthorQueryError,
+  CommonContainer,
+  CommonNode,
+  RichTextContainer,
+} from "#/document.ts";
 export type {
+  AuthorNodeGuard,
   DocumentProps,
   DocumentStyle,
   DocumentUpdate,

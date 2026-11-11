@@ -56,6 +56,7 @@ export type ImageSource = string | URL | Uint8Array;
 
 export type ImageDeclarationProps = MotionProps &
   MorphProps & {
+    readonly id?: string;
     readonly testId?: string;
     readonly part?: string;
     readonly name?: string;
@@ -130,6 +131,7 @@ type ImageMetadata = {
 export type LoadedImage = ImageMetadata & { readonly bytes: Uint8Array };
 
 const allowedParameters = [
+  "id",
   "testId",
   "part",
   "name",

@@ -59,7 +59,11 @@ export {
   formatBaseline,
   targets,
 } from "@react-pptx/core/build";
-export { createDocumentBuild } from "@react-pptx/core/document";
+export {
+  AuthorQuery,
+  AuthorQueryError,
+  createDocumentBuild,
+} from "@react-pptx/core/document";
 export {
   blockArc,
   linearGradient,
@@ -92,6 +96,7 @@ export type {
   Target,
 } from "@react-pptx/core/build";
 export type {
+  AuthorNodeGuard,
   CommonContainer,
   CommonNode,
   DocumentProps,

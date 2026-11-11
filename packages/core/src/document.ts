@@ -120,6 +120,22 @@ export class CommonNode<
     return snapshotValue(this.#props);
   }
 
+  /** Author id declared on this node, ignoring non-string values rejected by the formal build. */
+  get id(): string | undefined {
+    const value = this.#props["id"];
+    return typeof value === "string" && value.trim() !== "" ? value : undefined;
+  }
+
+  /** Current parent container, or undefined while detached. */
+  get parent(): CommonNode | undefined {
+    return this.#parent;
+  }
+
+  /** Scoped author query rooted at this node; it searches children and stops at the next named scope. */
+  get query(): AuthorQuery<this> {
+    return new AuthorQuery(this);
+  }
+
   /** Read-only child declaration view; node entries keep their editable identity. */
   get children(): readonly DeclarationChild[] {
     return this.#childrenView;
@@ -374,6 +390,160 @@ export class RichTextContainer<
   content(...items: readonly RichTextItem[]): this {
     this.insertRichTextItems(items, true);
     return this;
+  }
+}
+
+/** Public type-narrowing predicate used by scoped author queries. */
+export type AuthorNodeGuard<Node extends CommonNode> = (
+  node: CommonNode,
+) => node is Node;
+
+/** Explicit failures raised by scoped author queries instead of returning unchecked nodes. */
+export class AuthorQueryError extends Error {
+  readonly code: "invalid-id" | "missing-id" | "ambiguous-id" | "type-mismatch";
+
+  constructor(code: AuthorQueryError["code"], message: string) {
+    super(message);
+    this.code = code;
+    this.name = "AuthorQueryError";
+  }
+}
+
+function assertAuthorId(id: string): void {
+  if (typeof id !== "string" || id.trim() === "") {
+    throw new AuthorQueryError(
+      "invalid-id",
+      "Author id must be a non-empty string",
+    );
+  }
+}
+
+function authorIdOf(node: CommonNode): string | undefined {
+  const value = node.props["id"];
+  return typeof value === "string" && value.trim() !== "" ? value : undefined;
+}
+
+function authorPath(node: CommonNode): string {
+  const segments: string[] = [];
+  for (
+    let current: CommonNode | undefined = node;
+    current !== undefined;
+    current = current.parent
+  ) {
+    if (current.parent === undefined && current.kind === "deck") {
+      segments.unshift("deck");
+      continue;
+    }
+    const slideId =
+      current.kind === "slide" && typeof current.props["slideId"] === "string"
+        ? current.props["slideId"]
+        : undefined;
+    const id = authorIdOf(current) ?? slideId;
+    segments.unshift(
+      id === undefined ? current.kind : `${current.kind}[${id}]`,
+    );
+  }
+  return segments.join("/");
+}
+
+/**
+ * Author-facing locator over the live editable document.
+ *
+ * A query is scoped to one node. Lookups traverse anonymous layout nodes but stop at the next node
+ * declaring an author id, so callers descend explicitly through named scopes. Page nodes remain
+ * boundaries even when a legacy slide lacks the new author id. Returned `.node` values are the same
+ * editable instances the document holds; they are never build observations.
+ */
+export class AuthorQuery<Node extends CommonNode = CommonNode> {
+  readonly #node: Node;
+
+  constructor(node: Node) {
+    this.#node = node;
+  }
+
+  /** Editable node at this query scope. */
+  get node(): Node {
+    return this.#node;
+  }
+
+  /** Readable path derived from the current parent chain and declared author ids. */
+  get path(): string {
+    return authorPath(this.#node);
+  }
+
+  /** Returns the single editable node named `id` in this scope. */
+  get(id: string): AuthorQuery {
+    assertAuthorId(id);
+    return this.#one(id, "get");
+  }
+
+  /** Lists every node named `id` in this scope; duplicates remain visible to callers before build validation. */
+  getAll(id: string): readonly AuthorQuery[] {
+    assertAuthorId(id);
+    return Object.freeze(
+      this.#matches(id).map((match) => new AuthorQuery(match)),
+    );
+  }
+
+  /**
+   * Returns the node named `id` after checking the caller's type predicate.
+   *
+   * Missing, ambiguous, and type-mismatched results throw `AuthorQueryError` with distinct codes so
+   * callers never need an unchecked assertion to reach an editable capability node.
+   */
+  getAs<Selected extends CommonNode>(
+    id: string,
+    guard: AuthorNodeGuard<Selected>,
+  ): Selected {
+    const match = this.#one(id, "getAs").node;
+    if (!guard(match)) {
+      throw new AuthorQueryError(
+        "type-mismatch",
+        `Author id ${JSON.stringify(id)} does not match the expected node type`,
+      );
+    }
+    return match;
+  }
+
+  #one(id: string, operation: string): AuthorQuery {
+    assertAuthorId(id);
+    const matches = this.#matches(id);
+    if (matches.length === 0) {
+      throw new AuthorQueryError(
+        "missing-id",
+        `No author node found for id ${JSON.stringify(id)} in ${this.path}`,
+      );
+    }
+    if (matches.length > 1) {
+      throw new AuthorQueryError(
+        "ambiguous-id",
+        `Author id ${JSON.stringify(id)} is duplicated in ${this.path}`,
+      );
+    }
+    const [match] = matches;
+    if (match === undefined) {
+      throw new AuthorQueryError(
+        "missing-id",
+        `${operation} could not resolve author id ${JSON.stringify(id)}`,
+      );
+    }
+    return new AuthorQuery(match);
+  }
+
+  #matches(id: string): readonly CommonNode[] {
+    const matches: CommonNode[] = [];
+    const visit = (parent: CommonNode): void => {
+      for (const child of parent.children) {
+        if (!(child instanceof CommonNode)) continue;
+        const childId = authorIdOf(child);
+        if (childId === id) matches.push(child);
+        else if (childId === undefined && child.kind !== "slide") {
+          visit(child);
+        }
+      }
+    };
+    visit(this.#node);
+    return matches;
   }
 }
 

@@ -1169,9 +1169,14 @@ export function chartWorkbook(parsed: ParsedChart): Uint8Array {
     "http://schemas.openxmlformats.org/spreadsheetml/2006/main";
   const officeRelationships = relationshipNamespace;
   const cells = chartCells(parsed);
-  const headerCells: XmlElement[] = [];
-  for (const { column } of cells.categoryColumns.values()) {
-    headerCells.push(inlineString(`${columnName(column)}1`, " "));
+  const headerCells: XmlElement[] = [inlineString("A1", " ")];
+  for (const { column } of [
+    ...cells.categoryColumns.values(),
+    ...cells.axislessCategoryColumns.values(),
+  ]) {
+    if (column !== 0) {
+      headerCells.push(inlineString(`${columnName(column)}1`, " "));
+    }
   }
   for (const group of parsed.groups) {
     for (const series of group.series) {

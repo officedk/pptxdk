@@ -4360,16 +4360,17 @@ function validateChart(
   }
   if (
     displayBlanksAs === "span" &&
-    groups.some(
-      ({ type, scatterStyle }) =>
-        type === "scatterChart" && scatterStyle === "marker",
-    )
+    groups.some(({ type, grouping: groupGrouping, scatterStyle }) => {
+      if (type === "lineChart") return groupGrouping !== "standard";
+      if (type === "scatterChart") return scatterStyle === "marker";
+      return true;
+    })
   ) {
     issue(
       errors,
       chartPart,
       "invalid-chart-missing-values",
-      "Scatter chart displayBlanksAs span requires a connecting line in every scatter group",
+      "Chart displayBlanksAs span requires a connecting line in every group",
     );
   }
   const chartObservation: FileChart = {

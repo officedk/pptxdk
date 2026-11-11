@@ -1780,7 +1780,6 @@ function axisEntries(
   readonly axisless: boolean;
 } {
   const scatterOnly = groups.every((group) => group.kind === "scatter");
-  const cartesianOnly = groups.every((group) => cartesianKinds.has(group.kind));
   if (
     groups.every((group) => group.kind === "pie" || group.kind === "doughnut")
   ) {
@@ -1816,13 +1815,6 @@ function axisEntries(
       "Charts that combine different group kinds must declare chart-level axes and explicit group references",
     );
   }
-  if (!scatterOnly && !cartesianOnly && value === undefined) {
-    fail(
-      "invalid-chart-axes",
-      "Charts that combine category and scatter groups must declare chart-level axes",
-    );
-  }
-
   let entries: { name: string; spec: ChartAxis }[];
   if (value === undefined) {
     entries = scatterOnly

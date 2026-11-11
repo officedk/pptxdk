@@ -297,6 +297,12 @@ describe("chart combination and dual-axis topology", () => {
           data: { kind: "shared-categories", categories: ["Q1", "Q2"] },
           series: [{ name: "Share", values: [10, 90] }],
         },
+        {
+          kind: "area",
+          axes: { category: "period", value: "amount" },
+          data: { kind: "shared-categories", categories: ["Q1", "Q2"] },
+          series: [{ name: "Area amount", values: [2, 4] }],
+        },
       ],
     });
     const file = await validatePptx(result.pptx);
@@ -304,6 +310,14 @@ describe("chart combination and dual-axis topology", () => {
     const chart = file.slides[0]?.objects[0]?.chart;
     assert.ok(chart);
     assert.equal(chart.axes.length, 3);
+    assert.deepEqual(
+      chart.groups.map(({ axisIds }) => axisIds),
+      [
+        [111111, 222222],
+        [111111, 333333],
+        [111111, 222222],
+      ],
+    );
     assert.deepEqual(
       chart.axes.map(({ id, kind, position, crossAxisId }) => ({
         id,
@@ -1121,6 +1135,21 @@ describe("chart combination and dual-axis topology", () => {
       mutate((xml) => xml.replaceAll("222222", "4294967296")),
       "invalid-chart-axis",
     );
+    await expectError(
+      mutate((xml) =>
+        xml.replace(
+          '<c:axId val="111111"/><c:axId val="222222"/>',
+          '<c:axId val="999999"/><c:axId val="222222"/>',
+        ),
+      ),
+      "unknown-chart-axis",
+    );
+    await expectError(
+      mutate((xml) =>
+        xml.replace("</c:chart>", '<c:dispBlanksAs val="span"/></c:chart>'),
+      ),
+      "invalid-chart-missing-values",
+    );
 
     const shared = await buildSingleChart({
       x: 10,
@@ -1541,5 +1570,112 @@ describe("chart combination and dual-axis topology", () => {
       file.errors.some(({ code }) => code === "invalid-chart-axis"),
       JSON.stringify(file.errors),
     );
+  });
+
+  it("writes same-kind bar dual axes with vertical categories and horizontal values", async () => {
+    const result = await buildSingleChart({
+      x: 10,
+      y: 10,
+      width: 880,
+      height: 480,
+      axes: {
+        primaryCategory: {
+          kind: "category",
+          position: "left",
+          title: "Primary category",
+        },
+        primaryValue: {
+          kind: "value",
+          position: "bottom",
+          min: 0,
+          max: 20,
+        },
+        secondaryCategory: {
+          kind: "category",
+          position: "right",
+          title: "Secondary category",
+        },
+        secondaryValue: {
+          kind: "value",
+          position: "top",
+          min: 0,
+          max: 100,
+          numberFormat: "0%",
+        },
+      },
+      groups: [
+        {
+          kind: "bar",
+          axes: {
+            category: "primaryCategory",
+            value: "primaryValue",
+          },
+          data: { kind: "shared-categories", categories: ["North", "South"] },
+          series: [{ name: "Primary", values: [6, 14] }],
+        },
+        {
+          kind: "bar",
+          axes: {
+            category: "secondaryCategory",
+            value: "secondaryValue",
+          },
+          data: { kind: "shared-categories", categories: ["East", "West"] },
+          series: [{ name: "Secondary", values: [45, 80] }],
+        },
+      ],
+    });
+    const file = await validatePptx(result.pptx);
+    assert.deepEqual(file.errors, []);
+    const chart = file.slides[0]?.objects[0]?.chart;
+    assert.ok(chart);
+    assert.deepEqual(chart.types, ["barChart", "barChart"]);
+    assert.deepEqual(
+      chart.groups.map(({ direction, axisIds }) => [direction, axisIds]),
+      [
+        ["bar", [111111, 222222]],
+        ["bar", [333333, 444444]],
+      ],
+    );
+    assert.deepEqual(
+      chart.axes.map(({ id, kind, position, crossAxisId }) => ({
+        id,
+        kind,
+        position,
+        crossAxisId,
+      })),
+      [
+        {
+          id: 111111,
+          kind: "category",
+          position: "left",
+          crossAxisId: 222222,
+        },
+        {
+          id: 222222,
+          kind: "value",
+          position: "bottom",
+          crossAxisId: 111111,
+        },
+        {
+          id: 333333,
+          kind: "category",
+          position: "right",
+          crossAxisId: 444444,
+        },
+        {
+          id: 444444,
+          kind: "value",
+          position: "top",
+          crossAxisId: 333333,
+        },
+      ],
+    );
+    const xml = chartXml(result.pptx);
+    assert.equal((xml.match(/<c:catAx>/gu) ?? []).length, 2);
+    assert.equal((xml.match(/<c:valAx>/gu) ?? []).length, 2);
+    assert.match(xml, /<c:axPos val="l"\/>/u);
+    assert.match(xml, /<c:axPos val="r"\/>/u);
+    assert.match(xml, /<c:axPos val="b"\/>/u);
+    assert.match(xml, /<c:axPos val="t"\/>/u);
   });
 });

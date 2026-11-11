@@ -117,7 +117,10 @@ export type FileChartSeries = {
   readonly values: readonly (number | null)[];
   /** Native c:idx, the chart-wide series identity. */
   readonly index: number;
-  /** Native c:order, the series order within its chart group. */
+  /**
+   * Native c:order. The formal writer derives it from the chart-wide series index,
+   * not from the group-local position.
+   */
   readonly order: number;
   /** Position of the owning chart group in c:plotArea order. */
   readonly groupIndex: number;

@@ -384,7 +384,7 @@ type ChartAxisBase = {
   readonly tickLabelPosition?: ChartTickLabelPosition;
   /** Reverses the axis direction with native maxMin orientation. */
   readonly reversed?: boolean;
-  /** Physical side of the axis; must match its resolved horizontal or vertical direction. */
+  /** Nominal axPos side of the axis; omitted positions keep native autoZero and may be interior. */
   readonly position?: ChartAxisPosition;
   /** Places the crossing axis using a semantic position. */
   readonly crosses?: ChartAxisCrossing;

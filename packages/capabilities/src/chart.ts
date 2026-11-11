@@ -2158,7 +2158,7 @@ export type ParsedScatterSeries = ScatterChartSeries & {
   readonly seriesIndex: number;
 };
 
-/** Native crossing control written on one axis to position its perpendicular axis. */
+/** Native c:crosses/crossesAt on this axis; positions this axis in its crossAx partner domain. */
 export type ParsedAxisCrossing =
   | { readonly kind: "crosses"; readonly value: ChartAxisCrossing }
   | { readonly kind: "crossesAt"; readonly value: number };
@@ -2169,7 +2169,7 @@ export type ParsedChartAxis = {
   readonly crossAxisId: number;
   /** Physical direction derived from every group reference to this axis. */
   readonly direction: "horizontal" | "vertical";
-  /** Effective physical side derived from crossing controls, not from axPos alone. */
+  /** Nominal axPos side; interior/autoZero crossings may not resolve to an edge. */
   readonly position: ChartAxisPosition;
   /** Effective native crossing control; explicit author values are preserved. */
   readonly crossing: ParsedAxisCrossing;
@@ -2618,6 +2618,28 @@ function parsedAxes(
     }
     return (crossing.value === "max") === maxAtFarEnd ? "top" : "bottom";
   };
+  // A known finite value domain proves an interior crossing cannot realize an
+  // explicit edge position. Unknown auto-scale domains stay undecided.
+  const crossesKnownValueInterior = (
+    crossing: ParsedAxisCrossing,
+    partner: ParsedAxisDraft,
+  ): boolean => {
+    if (partner.spec.kind !== "value") return false;
+    const min = partner.spec.min;
+    const max = partner.spec.max;
+    if (min === undefined || max === undefined) return false;
+    const low = Math.min(min, max);
+    const high = Math.max(min, max);
+    if (crossing.kind === "crossesAt") {
+      return crossing.value > low && crossing.value < high;
+    }
+    return (
+      crossing.kind === "crosses" &&
+      crossing.value === "autoZero" &&
+      low < 0 &&
+      high > 0
+    );
+  };
   const sameCrossing = (left: ParsedAxisCrossing, right: ParsedAxisCrossing) =>
     left.kind === right.kind &&
     (left.kind === "crossesAt"
@@ -2631,6 +2653,15 @@ function parsedAxes(
     for (const partner of partnersOf(axis)) {
       const crossing = explicitCrossing(partner);
       if (crossing === undefined) continue;
+      if (
+        axis.spec.position !== undefined &&
+        crossesKnownValueInterior(crossing, partner)
+      ) {
+        fail(
+          "invalid-chart-axes",
+          `Chart axis "${axis.name}" position "${axis.spec.position}" conflicts with the known interior crossing on "${partner.name}"`,
+        );
+      }
       const position = positionForRawCrossing(
         crossing,
         partner,

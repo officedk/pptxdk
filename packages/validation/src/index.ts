@@ -4901,76 +4901,39 @@ function validateChart(
       ...(holeSize === undefined ? {} : { holeSize }),
     });
   }
-  for (const group of groups) {
+  const endpointSide = (
+    source: FileChartAxis,
+    crossing: string,
+    targetDirection: "horizontal" | "vertical",
+  ): "bottom" | "left" | "right" | "top" | undefined => {
+    if (crossing === "autoZero" || crossing === "") return undefined;
+    if (crossing !== "min" && crossing !== "max") return undefined;
+    // A reversed partner puts its maximum value at the opposite physical end.
+    const maxAtFarEnd = source.orientation !== "maxMin";
+    if (targetDirection === "vertical") {
+      return (crossing === "max") === maxAtFarEnd ? "right" : "left";
+    }
+    return (crossing === "max") === maxAtFarEnd ? "top" : "bottom";
+  };
+  for (const axis of axes) {
+    const direction = axisDirectionById.get(axis.id);
+    if (direction === undefined) continue;
+    const partner = axisById.get(axis.crossAxisId);
+    if (partner === undefined || partner.id === axis.id) continue;
+    if (axisDirectionById.get(partner.id) === direction) continue;
+    if (axis.crossesAt !== undefined) continue;
+    const wanted = endpointSide(partner, axis.crosses ?? "autoZero", direction);
     if (
-      group.type === "pieChart" ||
-      group.type === "doughnutChart" ||
-      group.axisIds.length !== 2
+      wanted !== undefined &&
+      axis.position !== undefined &&
+      axis.position !== wanted
     ) {
-      continue;
-    }
-    const resolved = group.axisIds.map((id) => axisById.get(id));
-    if (resolved.some((axis) => axis === undefined)) continue;
-    const horizontal = resolved.find(
-      (axis) =>
-        axis !== undefined && axisDirectionById.get(axis.id) === "horizontal",
-    );
-    const vertical = resolved.find(
-      (axis) =>
-        axis !== undefined && axisDirectionById.get(axis.id) === "vertical",
-    );
-    if (horizontal === undefined || vertical === undefined) continue;
-    const endpointSide = (
-      source: FileChartAxis,
-      crossing: string,
-      targetDirection: "horizontal" | "vertical",
-    ): "bottom" | "left" | "right" | "top" | undefined => {
-      if (crossing === "autoZero" || crossing === "") return undefined;
-      if (crossing !== "min" && crossing !== "max") return undefined;
-      // A reversed source puts its maximum value at the opposite physical end.
-      const maxAtFarEnd = source.orientation !== "maxMin";
-      if (targetDirection === "vertical") {
-        return (crossing === "max") === maxAtFarEnd ? "right" : "left";
-      }
-      return (crossing === "max") === maxAtFarEnd ? "top" : "bottom";
-    };
-    if (horizontal.crossesAt === undefined) {
-      const wanted = endpointSide(
-        vertical,
-        horizontal.crosses ?? "autoZero",
-        "horizontal",
+      issue(
+        errors,
+        chartPart,
+        "invalid-chart-axis",
+        `Chart axis ${axis.id} is at ${axis.position} but its own crossing resolves to ${wanted}`,
       );
-      if (
-        wanted !== undefined &&
-        horizontal.position !== undefined &&
-        horizontal.position !== wanted
-      ) {
-        issue(
-          errors,
-          chartPart,
-          "invalid-chart-axis",
-          `Chart axis ${horizontal.id} is at ${horizontal.position} but its own crossing resolves to ${wanted}`,
-        );
-      }
-    }
-    if (vertical.crossesAt === undefined) {
-      const wanted = endpointSide(
-        horizontal,
-        vertical.crosses ?? "autoZero",
-        "vertical",
-      );
-      if (
-        wanted !== undefined &&
-        vertical.position !== undefined &&
-        vertical.position !== wanted
-      ) {
-        issue(
-          errors,
-          chartPart,
-          "invalid-chart-axis",
-          `Chart axis ${vertical.id} is at ${vertical.position} but its own crossing resolves to ${wanted}`,
-        );
-      }
     }
   }
 

@@ -381,11 +381,11 @@ function errorBarChannelKey(
 }
 
 /**
- * Allocates one workbook column per declared custom error-bar side after every data column.
- *
+ * Allocates one workbook column per declared custom error-bar side after the unique
+ * `chartCells()` data columns. Those columns can include multiple category and XY ranges,
+ * so this function appends after `cells.nextColumn` instead of assuming a single A column.
  * Both the chart writer and the workbook writer consume this mapping so a formula and its
- * cells cannot drift apart. Category data occupies A plus one value column per series; XY data
- * occupies A plus X/Y pairs. A category custom series always has the channel identity `value`;
+ * cells cannot drift apart. A category custom series always has the channel identity `value`;
  * the writer decides separately whether the native element stores x or y errDir. Null magnitudes
  * keep their original slot through numRef indices.
  */
@@ -1232,8 +1232,8 @@ function axisXml(
     el("c:axId", { val: axis.id }),
     axisScaling(spec, !category),
     el("c:delete", { val: spec.visible === false }),
-    // Office derives the real side from crossing controls; keep axPos consistent
-    // with the resolved crossing so native saves and readers observe the same side.
+    // axPos is a nominal side; an internal crossesAt/autoZero control can still
+    // place the axis away from a plot-area edge.
     el("c:axPos", { val: axisPositionCodes[axis.position] }),
     gridlines(spec, "major", theme),
     gridlines(spec, "minor", theme),

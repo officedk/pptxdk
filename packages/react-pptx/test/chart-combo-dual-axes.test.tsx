@@ -2175,4 +2175,198 @@ describe("chart combination and dual-axis topology", () => {
     const xml = chartXml(result.pptx);
     assert.match(xml, /<c:crossesAt val="2"\/>/u);
   });
+
+  it("rejects a known interior crossesAt that contradicts an explicit side", async () => {
+    const config: ChartProps = {
+      x: 10,
+      y: 10,
+      width: 640,
+      height: 360,
+      axes: {
+        category: { kind: "category", position: "bottom" },
+        value: { kind: "value", min: 0, max: 10, crossesAt: 5 },
+      },
+      groups: [
+        {
+          kind: "column",
+          axes: { category: "category", value: "value" },
+          data: { kind: "shared-categories", categories: ["A", "B"] },
+          series: [{ name: "S", values: [2, 8] }],
+        },
+      ],
+    };
+    const rejects = async (promise: Promise<unknown>) => {
+      await assert.rejects(promise, (error: unknown) => {
+        assert.ok(error instanceof BuildError);
+        assert.equal(error.diagnostics[0]?.code, "invalid-chart-axes");
+        return true;
+      });
+    };
+    await rejects(buildSingleChart(config));
+    await rejects(
+      buildDocument(
+        deck({ width: 960, height: 540 }).append(
+          documentSlide({ id: "combo" }).append(documentChart(config)),
+        ),
+      ),
+    );
+
+    const legal = {
+      ...config,
+      axes: {
+        category: { kind: "category" as const },
+        value: { kind: "value" as const, min: 0, max: 10, crossesAt: 5 },
+      },
+    };
+    const result = await buildSingleChart(legal);
+    const file = await validatePptx(result.pptx);
+    assert.deepEqual(file.errors, []);
+    const chart = file.slides[0]?.objects[0]?.chart;
+    assert.equal(
+      chart?.axes.find(({ kind }) => kind === "category")?.crossesAt,
+      5,
+    );
+  });
+
+  it("rejects a known interior autoZero that contradicts an explicit side", async () => {
+    const config: ChartProps = {
+      x: 10,
+      y: 10,
+      width: 640,
+      height: 360,
+      axes: {
+        category: { kind: "category", position: "top" },
+        value: { kind: "value", min: -10, max: 10, crosses: "autoZero" },
+      },
+      groups: [
+        {
+          kind: "column",
+          axes: { category: "category", value: "value" },
+          data: { kind: "shared-categories", categories: ["A", "B"] },
+          series: [{ name: "S", values: [-2, 8] }],
+        },
+      ],
+    };
+    const rejects = async (promise: Promise<unknown>) => {
+      await assert.rejects(promise, (error: unknown) => {
+        assert.ok(error instanceof BuildError);
+        assert.equal(error.diagnostics[0]?.code, "invalid-chart-axes");
+        return true;
+      });
+    };
+    await rejects(buildSingleChart(config));
+    await rejects(
+      buildDocument(
+        deck({ width: 960, height: 540 }).append(
+          documentSlide({ id: "combo" }).append(documentChart(config)),
+        ),
+      ),
+    );
+
+    const legal = {
+      ...config,
+      axes: {
+        category: { kind: "category" as const },
+        value: {
+          kind: "value" as const,
+          min: -10,
+          max: 10,
+          crosses: "autoZero" as const,
+        },
+      },
+    };
+    const result = await buildSingleChart(legal);
+    const file = await validatePptx(result.pptx);
+    assert.deepEqual(file.errors, []);
+  });
+
+  it("keeps a known endpoint crossing on an explicit side", async () => {
+    const result = await buildSingleChart({
+      x: 10,
+      y: 10,
+      width: 640,
+      height: 360,
+      axes: {
+        category: { kind: "category", position: "bottom" },
+        value: { kind: "value", min: 0, max: 10, crosses: "min" },
+      },
+      groups: [
+        {
+          kind: "column",
+          axes: { category: "category", value: "value" },
+          data: { kind: "shared-categories", categories: ["A", "B"] },
+          series: [{ name: "S", values: [2, 8] }],
+        },
+      ],
+    });
+    const file = await validatePptx(result.pptx);
+    assert.deepEqual(file.errors, []);
+    const chart = file.slides[0]?.objects[0]?.chart;
+    assert.equal(
+      chart?.axes.find(({ kind }) => kind === "category")?.position,
+      "bottom",
+    );
+  });
+
+  it("reads crossing sides from the actual crossAxis partner", async () => {
+    const result = await buildSingleChart({
+      x: 10,
+      y: 10,
+      width: 640,
+      height: 360,
+      axes: {
+        firstCategory: { kind: "category", position: "bottom" },
+        firstValue: { kind: "value", position: "left", min: 0, max: 10 },
+        secondCategory: {
+          kind: "category",
+          position: "top",
+          reversed: true,
+        },
+        secondValue: { kind: "value", position: "right", min: 0, max: 10 },
+      },
+      groups: [
+        {
+          kind: "column",
+          axes: { category: "firstCategory", value: "firstValue" },
+          data: { kind: "shared-categories", categories: ["A", "B"] },
+          series: [{ name: "First", values: [2, 8] }],
+        },
+        {
+          kind: "column",
+          axes: { category: "secondCategory", value: "secondValue" },
+          data: { kind: "shared-categories", categories: ["C", "D"] },
+          series: [{ name: "Second", values: [3, 9] }],
+        },
+      ],
+    });
+    const original = await validatePptx(result.pptx);
+    assert.deepEqual(original.errors, []);
+
+    const parts = unzipSync(result.pptx);
+    const chartPath = "ppt/charts/chart1.xml";
+    const xml = strFromU8(parts[chartPath]!);
+    const firstValueBlock =
+      /<c:valAx><c:axId val="222222"\/>[\s\S]*?<\/c:valAx>/u;
+    const crossGrouped = xml.replace(firstValueBlock, (block) =>
+      block.replace('<c:crossAx val="111111"/>', '<c:crossAx val="333333"/>'),
+    );
+    parts[chartPath] = strToU8(crossGrouped);
+    const wrong = await validatePptx(zipSync(parts));
+    assert.ok(
+      wrong.errors.some(
+        ({ code, message }) =>
+          code === "invalid-chart-axis" &&
+          message.includes("222222") &&
+          message.includes("right"),
+      ),
+      JSON.stringify(wrong.errors),
+    );
+
+    const moved = crossGrouped.replace(firstValueBlock, (block) =>
+      block.replace('<c:axPos val="l"/>', '<c:axPos val="r"/>'),
+    );
+    parts[chartPath] = strToU8(moved);
+    const fixed = await validatePptx(zipSync(parts));
+    assert.deepEqual(fixed.errors, []);
+  });
 });

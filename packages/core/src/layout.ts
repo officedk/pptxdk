@@ -2327,13 +2327,22 @@ export class LayoutPass {
   ): void {
     const display = style.display ?? "block";
     yoga.setDisplay(display === "none" ? Display.None : Display.Flex);
+    const positioned =
+      style.position === "absolute" || style.position === "relative" || isRoot;
     yoga.setPositionType(
       style.position === "absolute"
         ? PositionType.Absolute
-        : style.position === "relative" || isRoot
+        : positioned
           ? PositionType.Relative
           : PositionType.Static,
     );
+    if (!positioned && display === "grid") {
+      // Grid items are placed with absolute positions local to the grid area. A
+      // static grid must form a containing block so those positions resolve
+      // against the grid, not the page. Author absolute descendants escape to
+      // the nearest positioned ancestor before layout, so their contract holds.
+      yoga.setAlwaysFormsContainingBlock(true);
+    }
     for (const [edge, value] of [
       [Edge.Left, style.left ?? style.inset],
       [Edge.Top, style.top ?? style.inset],

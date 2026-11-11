@@ -37,9 +37,6 @@ export {
   after,
   breathe,
   fillColor,
-  Box,
-  MotionScope,
-  Step,
   fade,
   fly,
   floatDown,
@@ -48,10 +45,11 @@ export {
   spin,
   spinIn,
   stretch,
-  useMotionScope,
   wipe,
   zoom,
 } from "./motion-api.ts";
+export { Box, MotionScope, Step, useMotionScope } from "./motion-elements.ts";
+export type { BoxProps } from "./motion-elements.ts";
 export { observeMotion } from "./motion-query.ts";
 export type {
   EffectInstanceObservation,
@@ -74,7 +72,6 @@ export type {
   MotionTime,
 } from "./motion-query.ts";
 export type {
-  BoxProps,
   Easing,
   Effect,
   EffectOptions,

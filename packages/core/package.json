@@ -28,6 +28,21 @@
       "source": "./src/build.ts",
       "types": "./dist/build.d.ts",
       "default": "./dist/build.js"
+    },
+    "./capability": {
+      "source": "./src/capability.ts",
+      "types": "./dist/capability.d.ts",
+      "default": "./dist/capability.js"
+    },
+    "./document": {
+      "source": "./src/document.ts",
+      "types": "./dist/document.d.ts",
+      "default": "./dist/document.js"
+    },
+    "./theme": {
+      "source": "./src/theme.ts",
+      "types": "./dist/theme.d.ts",
+      "default": "./dist/theme.js"
     }
   },
   "scripts": {

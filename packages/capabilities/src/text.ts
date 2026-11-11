@@ -13,7 +13,7 @@ import {
   type ObjectCapabilityModule,
   type CapabilityParseContext,
   type CapabilityParseResult,
-} from "@react-pptx/core";
+} from "@react-pptx/core/capability";
 
 import { fontPresentationContributions } from "./font-embedding.ts";
 import { nativeLinkXml } from "./identity.ts";
@@ -28,16 +28,16 @@ import {
   type Paragraph,
   type ResolvedTextStyle,
 } from "./text-service.ts";
+import { textBoxXml } from "./text-xml.ts";
 import { shapePropertiesXml, visualStyleKeys } from "./visual.ts";
 
-export { P, SlideNumber, Span, Text } from "./text-elements.ts";
 export type {
-  ParagraphProps,
-  SlideNumberProps,
+  ParagraphDeclarationProps,
+  SlideNumberDeclarationProps,
   ShapeTextStyle,
-  SpanProps,
-  TextProps,
-} from "./text-elements.ts";
+  SpanDeclarationProps,
+  TextDeclarationProps,
+} from "./text-declaration.ts";
 export { font } from "./font.ts";
 export type { Font, FontFace, FontFaceStyle, FontOptions } from "./font.ts";
 export type {
@@ -153,22 +153,6 @@ function textStyle(value: unknown): unknown {
   return Object.fromEntries(
     Object.entries(value).filter(([key]) => textStyleKeys.has(key)),
   );
-}
-
-function textBoxXml(
-  id: number,
-  escapedName: string,
-  box: {
-    readonly x: number;
-    readonly y: number;
-    readonly width: number;
-    readonly height: number;
-  },
-  textBody: string,
-  properties: string,
-  linkXml: string,
-): string {
-  return `<p:sp><p:nvSpPr><p:cNvPr id="${id}" name="${escapedName}">${linkXml}</p:cNvPr><p:cNvSpPr txBox="1"/><p:nvPr/></p:nvSpPr>${properties}${textBody}</p:sp>`;
 }
 
 /** Fixed-region text box capability; specific text services are shared by text boxes and other native objects. */

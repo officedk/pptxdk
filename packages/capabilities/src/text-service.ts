@@ -17,7 +17,7 @@ import {
   type TextAlignment,
   type TextStyle,
   type ThemeContext,
-} from "@react-pptx/core";
+} from "@react-pptx/core/capability";
 import * as fontkit from "fontkit";
 // @ts-expect-error -- linebreak does not provide types; declare the breakpoint interface used below.
 import LineBreakerImplementation from "linebreak";
@@ -30,7 +30,7 @@ export type {
   FontSize,
   TextAlignment,
   TextStyle,
-} from "@react-pptx/core";
+} from "@react-pptx/core/capability";
 
 export type TextList =
   | {

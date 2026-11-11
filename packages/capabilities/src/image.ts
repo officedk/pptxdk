@@ -25,11 +25,8 @@ import type { ReactNode } from "react";
 import type { Geometry } from "./geometry.ts";
 import { nativeLinkXml } from "./identity.ts";
 import type { MorphProps } from "./morph-api.ts";
-import {
-  motionAnnotations,
-  motionElement,
-  type MotionProps,
-} from "./motion-api.ts";
+import { motionAnnotations, type MotionProps } from "./motion-api.ts";
+import { motionElement } from "./motion-elements.ts";
 import { shapePropertiesXml } from "./visual.ts";
 
 /** Visual styling supported on Image objects. */

@@ -25,11 +25,8 @@ import type { ReactNode } from "react";
 
 import { nativeLinkXml } from "./identity.ts";
 import type { MorphProps } from "./morph-api.ts";
-import {
-  motionAnnotations,
-  motionElement,
-  type MotionProps,
-} from "./motion-api.ts";
+import { motionAnnotations, type MotionProps } from "./motion-api.ts";
+import { motionElement } from "./motion-elements.ts";
 
 /** Native Group preserves member relationships; style allows it to arrange as a layout child, with output bounds computed from the union of member geometries. */
 export type GroupProps = MotionProps &

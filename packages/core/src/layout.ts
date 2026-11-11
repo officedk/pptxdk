@@ -2233,8 +2233,11 @@ export class LayoutPass {
       if (!heightSpecified && childStyle.aspectRatio === undefined) {
         child.yoga.setHeight(Math.max(0, height));
       }
-      const usedWidth = child.yoga.getComputedWidth() || width;
-      const usedHeight = child.yoga.getComputedHeight() || height;
+      // Recalculate after assigning the stretched size; the previous natural-size pass may
+      // still hold the content height and would report a false track overflow.
+      const finalSize = this.#naturalSize(child, width);
+      const usedWidth = finalSize.width || width;
+      const usedHeight = finalSize.height || height;
       if (child.style.display === "grid" && !heightSpecified) {
         child.gridAreaHeight = height;
       }

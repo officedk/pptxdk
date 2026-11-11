@@ -15,7 +15,7 @@ import {
   slide as documentSlide,
 } from "@react-pptx/react-pptx/document";
 import { validatePptx, type FileChartDataLabel } from "@react-pptx/validation";
-import { strFromU8, unzipSync, type Unzipped } from "fflate";
+import { strFromU8, strToU8, unzipSync, zipSync, type Unzipped } from "fflate";
 import { describe, it } from "vitest";
 
 function chartXml(parts: Unzipped, index: number): string {
@@ -447,6 +447,67 @@ describe("pie and doughnut depth", () => {
     assert.ok(xml.includes('<c:dLbl><c:idx val="0"/>'));
     assert.ok(!xml.includes('<c:dLbl><c:idx val="1"/>'));
     assert.ok(!xml.includes('<c:dLbls><c:delete val="1"/></c:dLbls>'));
+  });
+
+  it("rejects native leader lines outside pie and doughnut charts", async () => {
+    const result = await build(
+      <Deck>
+        <Slide id="column-leader-line-reader">
+          <Chart
+            id="column-leader-line-reader"
+            x={0}
+            y={0}
+            width={240}
+            height={160}
+            groups={[
+              {
+                kind: "column",
+                data: {
+                  kind: "shared-categories",
+                  categories: ["A", "B"],
+                },
+                series: [{ name: "S", values: [1, 2] }],
+                dataLabels: { value: true },
+              },
+            ]}
+          />
+        </Slide>
+      </Deck>,
+    );
+    const source = unzipSync(result.pptx);
+    const chartPath = "ppt/charts/chart1.xml";
+    const xml = strFromU8(source[chartPath]!);
+    const withLeaderLines = xml.replace(
+      "</c:dLbls>",
+      '<c:showLeaderLines val="1"/><c:leaderLines/></c:dLbls>',
+    );
+    assert.notEqual(withLeaderLines, xml);
+    const withLeaderLinesFile = await validatePptx(
+      zipSync({ ...source, [chartPath]: strToU8(withLeaderLines) }),
+    );
+    assert.ok(
+      withLeaderLinesFile.errors.some(
+        ({ code }) => code === "invalid-data-label-leader-lines",
+      ),
+    );
+
+    const withoutShowLeaderLines = xml.replace(
+      "</c:dLbls>",
+      "<c:leaderLines/></c:dLbls>",
+    );
+    const withoutShowFile = await validatePptx(
+      zipSync({
+        ...source,
+        [chartPath]: strToU8(withoutShowLeaderLines),
+      }),
+    );
+    assert.ok(
+      withoutShowFile.errors.some(
+        ({ code, message }) =>
+          code === "invalid-data-label-leader-lines" &&
+          message.includes("showLeaderLines"),
+      ),
+    );
   });
 
   it("rejects inapplicable pie, doughnut, and label combinations", async () => {

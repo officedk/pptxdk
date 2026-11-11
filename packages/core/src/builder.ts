@@ -1,12 +1,13 @@
 import type { ReactNode } from "react";
 
+import { assertAppendableAuthorIds } from "#/append.ts";
 import { BuildError } from "#/diagnostics.ts";
-import type { CommonContainer } from "#/document.ts";
+import type { CommonContainer, CommonNode } from "#/document.ts";
 import {
   createCompletedDeclarationBuild,
   validateOptions,
 } from "#/formal-build.ts";
-import { expandReactDocument } from "#/host/reconciler.ts";
+import { expandReactDocument, expandReactFragment } from "#/host/reconciler.ts";
 import type {
   BuildOptions,
   BuildResult,
@@ -18,10 +19,10 @@ function diagnostic(path: string, code: string, message: string): Diagnostic {
   return { severity: "error", path, code, message };
 }
 
-function reactFailure(error: unknown): BuildError {
+function reactFailure(error: unknown, path = "deck"): BuildError {
   return new BuildError([
     diagnostic(
-      "deck",
+      path,
       "react-render",
       error instanceof Error ? error.message : String(error),
     ),
@@ -35,6 +36,9 @@ export type ExpandDocumentOptions = {
    */
   readonly signal?: AbortSignal;
 };
+
+/** Options for one JSX fragment append; cancellation covers expansion and cleanup only. */
+export type AppendJSXOptions = ExpandDocumentOptions;
 
 /** Completed editable document handed off by React expansion. */
 export type ExpandedDocument = CommonContainer<"deck">;
@@ -58,6 +62,50 @@ export async function expandDocument(
     if (signal?.aborted && error === signal.reason) throw error;
     if (error instanceof BuildError) throw error;
     throw reactFailure(error);
+  }
+}
+
+function appendFailure(error: unknown): BuildError {
+  return new BuildError([
+    diagnostic(
+      "fragment",
+      "append",
+      error instanceof Error ? error.message : String(error),
+    ),
+  ]);
+}
+
+/**
+ * Public React append entry: expands one standalone JSX fragment, waits for final content and
+ * cleanup, then appends its top-level editable nodes to `target` as one batch.
+ *
+ * The fragment runs in its own root, so React context comes from the fragment or an explicit
+ * Provider inside it; the target's finished root is not revived. Expansion, unhandled errors,
+ * cancellation, cleanup failures, and id conflicts leave the target unchanged. Id conflicts are
+ * checked against the target's current structure at commit time, so edits made while the fragment
+ * expands are respected. The returned nodes are the exact instances now owned by the target.
+ */
+export async function appendJSX(
+  target: CommonContainer,
+  element: ReactNode,
+  options: AppendJSXOptions = {},
+): Promise<readonly CommonNode[]> {
+  const signal = options.signal;
+  let nodes: readonly CommonNode[];
+  try {
+    nodes = await expandReactFragment(element, signal);
+  } catch (error) {
+    if (signal?.aborted && error === signal.reason) throw error;
+    if (error instanceof BuildError) throw error;
+    throw reactFailure(error, "fragment");
+  }
+  try {
+    assertAppendableAuthorIds(target, nodes);
+    target.append(...nodes);
+    return nodes;
+  } catch (error) {
+    if (error instanceof BuildError) throw error;
+    throw appendFailure(error);
   }
 }
 

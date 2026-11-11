@@ -1,5 +1,9 @@
-export { createBuilder, expandDocument } from "#/builder.ts";
-export type { ExpandDocumentOptions, ExpandedDocument } from "#/builder.ts";
+export { appendJSX, createBuilder, expandDocument } from "#/builder.ts";
+export type {
+  AppendJSXOptions,
+  ExpandDocumentOptions,
+  ExpandedDocument,
+} from "#/builder.ts";
 export { BuildError, CapabilityError } from "#/diagnostics.ts";
 export {
   AuthorQuery,

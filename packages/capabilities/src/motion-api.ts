@@ -1230,6 +1230,7 @@ export function motionScopeAnnotation(
   return {
     capability: "motion",
     value: Object.freeze({ type: "scope", scope }),
+    resolveContributions: resolveMotionContributions,
   };
 }
 
@@ -1304,6 +1305,9 @@ export function motionAnnotations(
       capability: "motion",
       optional: value.effects.length === 0,
       value,
+      // Attach the resolver even for an empty local declaration: an inherited Box default may still
+      // make this object's motion required when the timing writer is trimmed.
+      resolveContributions: resolveMotionContributions,
     },
   ];
 }

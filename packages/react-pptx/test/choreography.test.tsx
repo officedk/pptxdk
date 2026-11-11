@@ -251,11 +251,23 @@ describe("plain authoring choreography", () => {
   });
 
   it("checks trimmed capabilities against the structure-resolved motion", async () => {
-    const cropped = createDocumentBuild(
+    const manualModules = [jsx.boxCapability, jsx.shapeCapability] as const;
+    const filtered = createDocumentBuild(
       documentCapabilities.filter(
         (capability) => capability.declaration !== "motion",
       ),
     );
+    const fullBuilds = [
+      ["default-full", build],
+      [
+        "manual-full",
+        createDocumentBuild([...manualModules, jsx.motionCapability]),
+      ],
+    ] as const;
+    const croppedBuilds = [
+      ["default-filtered", filtered],
+      ["manual-cropped", createDocumentBuild(manualModules)],
+    ] as const;
     const style = { width: 100, height: 60 };
     const scenarios = [
       {
@@ -338,40 +350,64 @@ describe("plain authoring choreography", () => {
       const document = deck({ width: 320, height: 180 }).append(
         slide({ slideId: scenario.name }).append(scenario.content),
       );
-      const full = await build(document);
-      assert.equal(hasTimingXml(full), scenario.fullTiming, scenario.name);
-      assert.deepEqual((await validatePptx(full.pptx)).errors, []);
+      for (const [mode, run] of fullBuilds) {
+        const result = await run(document);
+        assert.equal(
+          hasTimingXml(result),
+          scenario.fullTiming,
+          `${scenario.name} ${mode}`,
+        );
+        assert.deepEqual(
+          (await validatePptx(result.pptx)).errors,
+          [],
+          `${scenario.name} ${mode}`,
+        );
+      }
 
-      if (scenario.cropped === "missing") {
-        await assert.rejects(cropped(document), (error: unknown) => {
-          assert.ok(error instanceof BuildError);
-          assert.ok(
-            error.diagnostics.some(
-              ({ code, path }) =>
-                code === "missing-capability" &&
-                path.includes("shape[") &&
-                path.includes(
-                  scenario.name === "local-override" ? "override" : "inherited",
-                ),
-            ),
-            scenario.name,
+      for (const [mode, run] of croppedBuilds) {
+        if (scenario.cropped === "missing") {
+          await assert.rejects(run(document), (error: unknown) => {
+            assert.ok(error instanceof BuildError);
+            assert.ok(
+              error.diagnostics.some(
+                ({ code, path }) =>
+                  code === "missing-capability" &&
+                  path.includes("shape[") &&
+                  path.includes(
+                    scenario.name === "local-override"
+                      ? "override"
+                      : "inherited",
+                  ),
+              ),
+              `${scenario.name} ${mode}`,
+            );
+            return true;
+          });
+        } else {
+          const result = await run(document);
+          assert.equal(hasTimingXml(result), false, `${scenario.name} ${mode}`);
+          assert.deepEqual(
+            (await validatePptx(result.pptx)).errors,
+            [],
+            `${scenario.name} ${mode}`,
           );
-          return true;
-        });
-      } else {
-        const result = await cropped(document);
-        assert.equal(hasTimingXml(result), false, scenario.name);
-        assert.deepEqual((await validatePptx(result.pptx)).errors, []);
+        }
       }
     }
   });
 
   it("checks trimmed JSX capabilities against the structure-resolved motion", async () => {
-    const cropped = createDocumentBuild(
+    const manualModules = [jsx.boxCapability, jsx.shapeCapability] as const;
+    const filtered = createDocumentBuild(
       documentCapabilities.filter(
         (capability) => capability.declaration !== "motion",
       ),
     );
+    const manualFull = jsx.createBuilder([
+      ...manualModules,
+      jsx.motionCapability,
+    ]);
+    const manualCropped = jsx.createBuilder(manualModules);
     const style = { width: 100, height: 60 };
     const cases = [
       {
@@ -427,27 +463,50 @@ describe("plain authoring choreography", () => {
 
     for (const scenario of cases) {
       const expanded = await jsx.expandDocument(scenario.element);
-      const full = await build(expanded);
-      assert.equal(hasTimingXml(full), scenario.fullTiming, scenario.name);
-      assert.deepEqual((await validatePptx(full.pptx)).errors, []);
-
-      if (scenario.cropped === "missing") {
-        await assert.rejects(cropped(expanded), (error: unknown) => {
-          assert.ok(error instanceof BuildError);
-          assert.ok(
-            error.diagnostics.some(
-              ({ code, path }) =>
-                code === "missing-capability" &&
-                path.includes(`shape[${scenario.name}]`),
-            ),
-            scenario.name,
+      const fullBuilds = [
+        ["default-full", () => build(expanded)],
+        ["manual-full", () => manualFull(scenario.element)],
+      ] as const;
+      const croppedBuilds = [
+        ["default-filtered", () => filtered(expanded)],
+        ["manual-cropped", () => manualCropped(scenario.element)],
+      ] as const;
+      for (const [mode, run] of fullBuilds) {
+        const result = await run();
+        assert.equal(
+          hasTimingXml(result),
+          scenario.fullTiming,
+          `${scenario.name} ${mode}`,
+        );
+        assert.deepEqual(
+          (await validatePptx(result.pptx)).errors,
+          [],
+          `${scenario.name} ${mode}`,
+        );
+      }
+      for (const [mode, run] of croppedBuilds) {
+        if (scenario.cropped === "missing") {
+          await assert.rejects(run, (error: unknown) => {
+            assert.ok(error instanceof BuildError);
+            assert.ok(
+              error.diagnostics.some(
+                ({ code, path }) =>
+                  code === "missing-capability" &&
+                  path.includes(`shape[${scenario.name}]`),
+              ),
+              `${scenario.name} ${mode}`,
+            );
+            return true;
+          });
+        } else {
+          const result = await run();
+          assert.equal(hasTimingXml(result), false, `${scenario.name} ${mode}`);
+          assert.deepEqual(
+            (await validatePptx(result.pptx)).errors,
+            [],
+            `${scenario.name} ${mode}`,
           );
-          return true;
-        });
-      } else {
-        const result = await cropped(expanded);
-        assert.equal(hasTimingXml(result), false, scenario.name);
-        assert.deepEqual((await validatePptx(result.pptx)).errors, []);
+        }
       }
     }
   });

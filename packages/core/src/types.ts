@@ -367,6 +367,15 @@ export type CapabilityAnnotation = {
    * existing missing-capability diagnostic.
    */
   readonly optional?: boolean;
+  /**
+   * Resolver owned by the capability that produced this annotation.
+   *
+   * Producers attach it to every local declaration, including optional ones, so the formal build finds
+   * the resolver from effective contributions rather than from registered modules or their order. The
+   * build applies it once per capability before slide output and missing-capability checks, so a trimmed
+   * writer does not change how the remaining declarations are interpreted.
+   */
+  readonly resolveContributions?: ContributionResolver;
 };
 
 /** Declaration data passed to slide modules after core supplements object identity and diagnostic locations. */
@@ -614,32 +623,13 @@ export type SlideCapabilityModule = {
   readonly declaration: string;
   /** Handlers wired by this capability for internal transparent declaration hosts. */
   readonly transparentDeclarations?: readonly TransparentCapabilityModule[];
-  /** Resolves this capability's contributions before slide output and missing-capability checks. */
-  readonly resolveContributions?: ContributionResolver;
   compileSlide(
     input: CapabilityInput,
     context: SlideCapabilityContext,
   ): SlideCapabilityOutput;
 };
 
-/**
- * Build-phase module that resolves another capability's contributions even when its writer is trimmed.
- *
- * A capability that derives effective annotations from document structure registers this companion so
- * missing-capability checks use the same resolved semantics as the full build. It produces no output.
- */
-export type ContributionCapabilityModule = {
-  /** Unique registration key; this is not an author declaration type. */
-  readonly declaration: string;
-  /** Capability whose annotations this module resolves. */
-  readonly capability: string;
-  readonly resolveContributions: ContributionResolver;
-};
-
-export type CapabilityModule =
-  | ObjectCapabilityModule
-  | SlideCapabilityModule
-  | ContributionCapabilityModule;
+export type CapabilityModule = ObjectCapabilityModule | SlideCapabilityModule;
 
 /** Modules registered inside Builder; transparent declarations can only be owned by slide capability modules. */
 export type RegisteredCapabilityModule =

@@ -3,7 +3,6 @@ import {
   pxToEmu,
   xmlEscape,
   type CapabilityInput,
-  type ContributionCapabilityModule,
   type GeometryBox,
   type SlideCapabilityModule,
   type TransparentCapabilityModule,
@@ -20,7 +19,6 @@ import {
   maximumTimeNodeValue,
   motionScopeAnnotation,
   motionStepAnnotation,
-  resolveMotionContributions,
 } from "./motion-api.ts";
 import {
   addMotionPlanStartDelay,
@@ -2194,26 +2192,12 @@ function timingXml(
   return { xml, nativeProjections };
 }
 
-/**
- * Resolves motion annotations against the current document tree even when the timing writer is trimmed.
- *
- * The default document assembly keeps this companion registered so missing-capability checks use the
- * same inherited defaults and disabled ancestor chains as a full build.
- */
-export const motionStructureCapability: ContributionCapabilityModule =
-  Object.freeze({
-    declaration: "motion-structure",
-    capability: "motion",
-    resolveContributions: resolveMotionContributions,
-  });
-
 /** Slide-level motion module writes object timing and returns observation describing declarations and determinable relative times only. */
 export const motionCapability: SlideCapabilityModule = Object.freeze({
   declaration: "motion",
   slideProp: "motion",
   slot: "timing",
   always: true,
-  resolveContributions: resolveMotionContributions,
   transparentDeclarations: [
     {
       declaration: "rp:motion-scope",

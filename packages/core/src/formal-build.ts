@@ -1953,29 +1953,27 @@ function tableContentNodes(object: ObjectObservation): QueryContentNode[] {
 function resolveContributions(
   children: readonly CapabilityChild[],
   contributions: readonly CapabilityContribution[],
-  modules: ReadonlyMap<string, RegisteredCapabilityModule>,
 ): readonly CapabilityContribution[] {
   let resolved = contributions;
   const applied = new Set<string>();
-  for (const module of modules.values()) {
-    if (!("resolveContributions" in module)) continue;
-    const resolver = module.resolveContributions;
-    if (resolver === undefined) continue;
-    const capability =
-      "capability" in module ? module.capability : module.declaration;
-    // A full writer and its trimmed-build companion may both resolve one capability; apply once.
+  for (const contribution of contributions) {
+    const capability = contribution.capability;
+    // A resolver is carried by the actual declarations of its capability; module registration and
+    // order do not decide whether structure-derived semantics apply.
     if (applied.has(capability)) continue;
+    const resolver = contribution.resolveContributions;
+    if (resolver === undefined) continue;
     const owned = resolved.filter(
-      (contribution) => contribution.capability === capability,
+      (candidate) => candidate.capability === capability,
     );
     if (owned.length === 0) continue;
     applied.add(capability);
     const effective = resolver(children, owned);
     const next: CapabilityContribution[] = [];
     let inserted = false;
-    for (const contribution of resolved) {
-      if (contribution.capability !== capability) {
-        next.push(contribution);
+    for (const candidate of resolved) {
+      if (candidate.capability !== capability) {
+        next.push(candidate);
       } else if (!inserted) {
         next.push(...effective);
         inserted = true;
@@ -2051,11 +2049,7 @@ function compileSlide(
   );
   let contributions: readonly CapabilityContribution[] = slide.contributions;
   try {
-    contributions = resolveContributions(
-      children,
-      slide.contributions,
-      modules,
-    );
+    contributions = resolveContributions(children, slide.contributions);
   } catch (error) {
     slide.diagnostics.push(
       error instanceof CapabilityError

@@ -9,6 +9,7 @@ import {
   P,
   Slide,
   Span,
+  textCapability,
 } from "@react-pptx/react-pptx";
 import {
   build,
@@ -282,6 +283,22 @@ describe("rich-text speaker notes", () => {
       (await rejectedDiagnostics(build(duplicateIds)))[0]?.code,
       "duplicate-author-id",
     );
+  });
+
+  it("builds notes from the shared text service when the Text capability is trimmed", async () => {
+    const notesOnlyBuild = createDocumentBuild(
+      documentCapabilities.filter((module) => module !== textCapability),
+    );
+    const document = deck({ width: 960, height: 540 }).append(
+      slide({ id: "notes-only" }).append(
+        notes([paragraph("Only notes"), paragraph()], { id: "speech" }),
+      ),
+    );
+    const result = await notesOnlyBuild(document);
+    const read = await validatePptx(result.pptx);
+    assert.deepEqual(read.errors, []);
+    assert.equal(read.slides[0]?.notes?.text.text, "Only notes\n");
+    assert.deepEqual(result.report.slides[0]?.objects, []);
   });
 
   it("rebuilds moved and edited notes while the previous build stays fixed", async () => {

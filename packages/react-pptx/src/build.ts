@@ -14,5 +14,6 @@ export type {
   DeclarationNode,
   DeclarationText,
   Diagnostic,
+  Extension,
   Target,
 } from "@react-pptx/core/build";

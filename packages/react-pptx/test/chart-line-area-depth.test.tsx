@@ -178,7 +178,7 @@ describe("line and area depth", () => {
     const workbookPath = chart?.embeddedWorkbook?.part;
     assert.ok(workbookPath);
     const worksheet = strFromU8(
-      unzipSync(parts[workbookPath])["xl/worksheets/sheet1.xml"]!,
+      unzipSync(parts[workbookPath]!)["xl/worksheets/sheet1.xml"]!,
     );
     assert.ok(worksheet.includes("Q1"));
     assert.ok(worksheet.includes("Actual"));
@@ -279,7 +279,7 @@ describe("line and area depth", () => {
     }
     const worksheets = charts?.map((chart) =>
       strFromU8(
-        unzipSync(parts[chart!.embeddedWorkbook!.part])[
+        unzipSync(parts[chart!.embeddedWorkbook!.part]!)[
           "xl/worksheets/sheet1.xml"
         ]!,
       ),
@@ -342,7 +342,11 @@ describe("line and area depth", () => {
               kind: "line",
               data,
               series: [
-                { name: "S", values: [1, 2], marker: { symbol: "picture" } },
+                {
+                  name: "S",
+                  values: [1, 2],
+                  marker: { symbol: "picture" as never },
+                },
               ],
             },
           ],

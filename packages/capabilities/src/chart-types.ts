@@ -125,12 +125,14 @@ export type ScatterChartPoint = Omit<ChartPoint, "explosion">;
 
 export type ScatterChartSeries = Omit<
   ChartSeriesFormat,
-  "smooth" | "explosion" | "points"
+  "smooth" | "explosion" | "points" | "dataLabels"
 > & {
   /** One numeric X coordinate per observation slot; null preserves a missing X. */
   readonly x: readonly (number | null)[];
   /** One numeric Y coordinate per observation slot; null preserves a missing Y. */
   readonly y: readonly (number | null)[];
+  /** Display, position, and number-format overrides for this series' data labels. */
+  readonly dataLabels?: false | ChartDataLabelOverride;
   /** Overrides color, line, marker, or data label text color for points by position. */
   readonly points?: Readonly<Record<number, ScatterChartPoint>>;
 };

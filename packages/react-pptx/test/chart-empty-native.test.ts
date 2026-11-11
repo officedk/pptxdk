@@ -233,3 +233,45 @@ describe("native filled workbook with a full rebound range", () => {
     }
   });
 });
+
+describe("WPS native series UI binding", () => {
+  it("reads the saved A/B categories and 3/7 values on p1", async () => {
+    const bytes = new Uint8Array(
+      readFileSync(
+        new URL(
+          "./assets/native-23-absent/23-absent-wps-series-ui.pptx",
+          import.meta.url,
+        ),
+      ),
+    );
+    assert.equal(
+      createHash("sha256").update(bytes).digest("hex"),
+      "4787cd57af84b24f977a6f69e3433e144b7158521b3325bfe63b499a4af13001",
+    );
+    const file = await validatePptx(bytes);
+    const object = file.slides[0]?.objects[0];
+    assert.equal(object?.kind, "chart");
+    assert.ok(object?.chart);
+    assertSeries(object.chart.series[0]!, {
+      name: "North",
+      categories: ["A", "B"],
+      values: [3, 7],
+    });
+    const workbookSeries = object.chart.embeddedWorkbook?.series;
+    assert.equal(workbookSeries?.length, 1);
+    assertSeries(workbookSeries[0]!, {
+      name: "North",
+      categories: ["A", "B"],
+      values: [3, 7],
+    });
+    assert.deepEqual(
+      file.errors.filter(
+        ({ code, part }) =>
+          part === "ppt/charts/chart1.xml" &&
+          (code === "invalid-chart-cache" ||
+            code === "chart-workbook-mismatch"),
+      ),
+      [],
+    );
+  });
+});

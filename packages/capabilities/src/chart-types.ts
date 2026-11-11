@@ -69,6 +69,11 @@ export type ChartPoint = {
   readonly line?: ChartLine;
   /** Marker override for this point; applies only to line charts. */
   readonly marker?: boolean | ChartMarker;
+  /**
+   * Radial explosion percentage for this pie or doughnut slice.
+   * Overrides the series and chart-group defaults for this point.
+   */
+  readonly explosion?: number;
   /** Overrides data label text color for this data point. */
   readonly labelColor?: ColorValue;
   /** Display, position, and number-format overrides for this point's data label. */
@@ -83,8 +88,13 @@ export type ChartSeries = {
   readonly color?: ColorValue;
   /** Stroke or border override; for line charts it controls the series line. */
   readonly line?: ChartLine;
-  /** Display, position, and number-format overrides for this series' data labels. */
-  readonly dataLabels?: false | ChartDataLabelOverride;
+  /**
+   * Radial explosion percentage for the pie or doughnut series.
+   * Overrides the chart-group default; point values override this series default.
+   */
+  readonly explosion?: number;
+  /** Display, position, number-format, leader-line, and hide overrides for this series. */
+  readonly dataLabels?: false | ChartSeriesDataLabelOverride;
   /** Marker settings; applies only to line charts and is hidden when omitted or false. */
   readonly marker?: boolean | ChartMarker;
   /** Whether the line uses the native smoothing flag; applies only to line charts. */
@@ -196,7 +206,13 @@ export type ChartDataLabelPosition =
   | "bottom"
   | "top";
 
-/** Data label settings; group types narrow position by chart kind and stacking. */
+/**
+ * Native data-label settings; group types narrow position by chart kind and stacking.
+ *
+ * Leader lines are only written for pie and doughnut labels that display at least one of
+ * value, percent, or category. `true` uses the target application's default leader-line
+ * style; an object sets the native line color, width, and dash.
+ */
 export type ChartDataLabels<
   Position extends ChartDataLabelPosition = ChartDataLabelPosition,
 > = {
@@ -205,16 +221,24 @@ export type ChartDataLabels<
   readonly category?: boolean;
   readonly position?: Position;
   readonly numberFormat?: string;
+  readonly leaderLines?: boolean | ChartLine;
   readonly style?: ChartTextStyle;
 };
 
 /**
- * Series- or point-level data-label overrides.
+ * Point-level data-label overrides.
  *
- * Omitted display and position fields inherit from the enclosing group or series. An explicit
- * `false` suppresses labels at that level. Data-label text style remains a group-level field.
+ * Omitted display and position fields inherit from the enclosing chart group or series. An explicit
+ * `false` suppresses labels at that level. Data-label text style and leader lines remain
+ * group or series fields because native point labels cannot carry leader-line formatting.
  */
-export type ChartDataLabelOverride = Omit<ChartDataLabels, "style">;
+export type ChartDataLabelOverride = Omit<
+  ChartDataLabels,
+  "style" | "leaderLines"
+>;
+
+/** Series-level data-label overrides; leader lines are valid on native series `dLbls`. */
+export type ChartSeriesDataLabelOverride = Omit<ChartDataLabels, "style">;
 
 type ChartGroupBase = {
   readonly data: ChartGroupData;

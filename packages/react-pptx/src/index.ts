@@ -97,6 +97,7 @@ export type {
   ChartPoint,
   ChartProps,
   ChartSeries,
+  ChartSeriesDataLabelOverride,
   ChartTickLabelPosition,
   ChartTickMark,
   ChartTitle,

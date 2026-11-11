@@ -153,6 +153,16 @@ function color(value: ColorValue, theme: ThemeContext): XmlRaw {
   return { raw: resolvedColorXml(theme.resolveColor(value)) };
 }
 
+const presetDashValues = {
+  solid: "solid",
+  dash: "dash",
+  dot: "dot",
+  dashDot: "dashDot",
+  longDash: "lgDash",
+  longDashDot: "lgDashDot",
+  longDashDotDot: "lgDashDotDot",
+} as const;
+
 function chartLine(
   value: ChartLine | undefined,
   theme: ThemeContext,
@@ -162,6 +172,9 @@ function chartLine(
     "a:ln",
     { w: pxToEmu(value.width ?? 1) },
     el("a:solidFill", null, color(value.color ?? "dk1", theme)),
+    value.dash === undefined
+      ? undefined
+      : el("a:prstDash", { val: presetDashValues[value.dash] }),
   );
 }
 
@@ -185,6 +198,8 @@ function transparent(): XmlElement {
 
 export type ChartTextStyleXml = {
   readonly chart: string;
+  readonly title?: string;
+  readonly axisTitles?: ReadonlyMap<string, string>;
   readonly categoryAxis?: string;
   readonly valueAxis?: string;
   readonly groupDataLabels?: ReadonlyMap<number, string>;
@@ -251,6 +266,73 @@ function dataLabels(
   );
 }
 
+function seriesShape(
+  kind: ChartKind,
+  itemColor: ColorValue | undefined,
+  line: ChartLine | undefined,
+  theme: ThemeContext,
+): XmlElement | undefined {
+  if (kind === "line") {
+    const stroke =
+      line === undefined
+        ? itemColor === undefined
+          ? undefined
+          : { color: itemColor }
+        : {
+            ...line,
+            ...(line.color === undefined && itemColor !== undefined
+              ? { color: itemColor }
+              : {}),
+          };
+    return stroke === undefined
+      ? undefined
+      : el("c:spPr", null, chartLine(stroke, theme));
+  }
+  if (itemColor === undefined && line === undefined) return undefined;
+  return el(
+    "c:spPr",
+    null,
+    itemColor === undefined
+      ? undefined
+      : el("a:solidFill", null, color(itemColor, theme)),
+    line === undefined ? undefined : chartLine(line, theme),
+  );
+}
+
+function pointShape(
+  kind: ChartKind,
+  point: ChartPoint,
+  theme: ThemeContext,
+): XmlElement | undefined {
+  const line =
+    kind === "line"
+      ? point.line === undefined
+        ? point.color === undefined
+          ? undefined
+          : { color: point.color }
+        : {
+            ...point.line,
+            ...(point.line.color === undefined && point.color !== undefined
+              ? { color: point.color }
+              : {}),
+          }
+      : point.line;
+  if (kind === "line") {
+    return line === undefined
+      ? undefined
+      : el("c:spPr", null, chartLine(line, theme));
+  }
+  if (point.color === undefined && line === undefined) return undefined;
+  return el(
+    "c:spPr",
+    null,
+    point.color === undefined
+      ? undefined
+      : el("a:solidFill", null, color(point.color, theme)),
+    line === undefined ? undefined : chartLine(line, theme),
+  );
+}
+
 function chartSeries(
   group: ParsedChartGroup,
   series: ParsedChartSeries,
@@ -264,27 +346,11 @@ function chartSeries(
   const bar = kind === "column" || kind === "bar";
   const lineChart = kind === "line";
   const pie = kind === "pie" || kind === "doughnut";
-  const itemShape =
-    series.color === undefined
-      ? undefined
-      : lineChart
-        ? el(
-            "c:spPr",
-            null,
-            el(
-              "a:ln",
-              null,
-              el("a:solidFill", null, color(series.color, theme)),
-            ),
-          )
-        : el(
-            "c:spPr",
-            null,
-            el("a:solidFill", null, color(series.color, theme)),
-          );
+  const itemShape = seriesShape(kind, series.color, series.line, theme);
   const points = Object.entries<ChartPoint>(series.points ?? {}).flatMap(
     ([pointIndex, point]) => {
-      if (point.color === undefined) return [];
+      const shape = pointShape(kind, point, theme);
+      if (shape === undefined) return [];
       return [
         el(
           "c:dPt",
@@ -292,17 +358,7 @@ function chartSeries(
           el("c:idx", { val: Number(pointIndex) }),
           bar ? el("c:invertIfNegative", { val: false }) : undefined,
           bar ? el("c:bubble3D", { val: false }) : undefined,
-          el(
-            "c:spPr",
-            null,
-            lineChart
-              ? el(
-                  "a:ln",
-                  null,
-                  el("a:solidFill", null, color(point.color, theme)),
-                )
-              : el("a:solidFill", null, color(point.color, theme)),
-          ),
+          shape,
         ),
       ];
     },
@@ -373,11 +429,11 @@ function chartGroup(
         el("c:varyColors", { val: false }),
         items,
         el("c:gapWidth", { val: Math.round(group.gapWidth ?? 150) }),
-        group.stacking !== undefined
-          ? el("c:overlap", { val: 100 })
-          : group.overlap === undefined
+        group.overlap !== undefined
+          ? el("c:overlap", { val: Math.round(group.overlap) })
+          : group.stacking === undefined
             ? undefined
-            : el("c:overlap", { val: Math.round(group.overlap) }),
+            : el("c:overlap", { val: 100 }),
         axes,
       );
     case "line":
@@ -432,17 +488,24 @@ function lineXml(
 
 function gridlines(
   value: ChartAxis | undefined,
+  kind: "major" | "minor",
   theme: ThemeContext,
 ): XmlElement | undefined {
-  if (value?.gridlines === undefined || value.gridlines === false)
-    return undefined;
+  const setting = kind === "major" ? value?.gridlines : value?.minorGridlines;
+  if (setting === undefined || setting === false) return undefined;
   return el(
-    "c:majorGridlines",
+    kind === "major" ? "c:majorGridlines" : "c:minorGridlines",
     null,
-    value.gridlines === true
-      ? undefined
-      : shapeProperties(value.gridlines, theme),
+    setting === true ? undefined : shapeProperties(setting, theme),
   );
+}
+
+function axisTitle(
+  spec: ChartAxis,
+  textStyles: ChartTextStyleXml,
+  name: string,
+): XmlRaw | undefined {
+  return raw(textStyles.axisTitles?.get(name));
 }
 
 function parsedAxis(
@@ -450,6 +513,32 @@ function parsedAxis(
   role: "category" | "value",
 ): ParsedChartAxis | undefined {
   return axes.find((axis) => axis.role === role);
+}
+
+function axisScaling(spec: ChartAxis, valueAxis: boolean): XmlElement {
+  const valueSpec = valueAxis
+    ? (spec as Extract<ChartAxis, { kind: "value" }>)
+    : undefined;
+  return el(
+    "c:scaling",
+    null,
+    valueSpec?.logBase === undefined
+      ? undefined
+      : el("c:logBase", { val: valueSpec.logBase }),
+    el("c:orientation", { val: spec.reversed === true ? "maxMin" : "minMax" }),
+    valueSpec?.max === undefined
+      ? undefined
+      : el("c:max", { val: valueSpec.max }),
+    valueSpec?.min === undefined
+      ? undefined
+      : el("c:min", { val: valueSpec.min }),
+  );
+}
+
+function axisCrossing(spec: ChartAxis): XmlElement {
+  return spec.crossesAt === undefined
+    ? el("c:crosses", { val: spec.crosses ?? "autoZero" })
+    : el("c:crossesAt", { val: spec.crossesAt });
 }
 
 function axes(
@@ -477,18 +566,22 @@ function axes(
       "c:catAx",
       null,
       el("c:axId", { val: category.id }),
-      el("c:scaling", null, el("c:orientation", { val: "minMax" })),
+      axisScaling(categorySpec, false),
       el("c:delete", { val: categorySpec.visible === false }),
       el("c:axPos", { val: horizontal ? "l" : "b" }),
-      gridlines(categorySpec, theme),
+      gridlines(categorySpec, "major", theme),
+      gridlines(categorySpec, "minor", theme),
+      axisTitle(categorySpec, textStyles, category.name),
       el("c:numFmt", { formatCode: "General", sourceLinked: true }),
-      el("c:majorTickMark", { val: "none" }),
-      el("c:minorTickMark", { val: "none" }),
-      el("c:tickLblPos", { val: "nextTo" }),
+      el("c:majorTickMark", { val: categorySpec.majorTickMark ?? "none" }),
+      el("c:minorTickMark", { val: categorySpec.minorTickMark ?? "none" }),
+      el("c:tickLblPos", {
+        val: categorySpec.tickLabelPosition ?? "nextTo",
+      }),
       lineXml(categorySpec.line, theme),
       raw(textStyles.categoryAxis),
       el("c:crossAx", { val: value.id }),
-      el("c:crosses", { val: "autoZero" }),
+      axisCrossing(categorySpec),
       el("c:auto", { val: true }),
       el("c:lblAlgn", { val: "ctr" }),
       el("c:lblOffset", { val: 100 }),
@@ -498,37 +591,34 @@ function axes(
       "c:valAx",
       null,
       el("c:axId", { val: value.id }),
-      el(
-        "c:scaling",
-        null,
-        el("c:orientation", { val: "minMax" }),
-        valueSpec.max === undefined
-          ? undefined
-          : el("c:max", { val: valueSpec.max }),
-        valueSpec.min === undefined
-          ? undefined
-          : el("c:min", { val: valueSpec.min }),
-      ),
+      axisScaling(valueSpec, true),
       el("c:delete", { val: valueSpec.visible === false }),
       el("c:axPos", { val: horizontal ? "b" : "l" }),
-      gridlines(valueSpec, theme),
+      gridlines(valueSpec, "major", theme),
+      gridlines(valueSpec, "minor", theme),
+      axisTitle(valueSpec, textStyles, value.name),
       el("c:numFmt", {
         formatCode: valueSpec.numberFormat ?? "General",
         sourceLinked: valueSpec.numberFormat === undefined,
       }),
-      el("c:majorTickMark", { val: "none" }),
-      el("c:minorTickMark", { val: "none" }),
-      el("c:tickLblPos", { val: "nextTo" }),
+      el("c:majorTickMark", { val: valueSpec.majorTickMark ?? "none" }),
+      el("c:minorTickMark", { val: valueSpec.minorTickMark ?? "none" }),
+      el("c:tickLblPos", {
+        val: valueSpec.tickLabelPosition ?? "nextTo",
+      }),
       lineXml(valueSpec.line, theme),
       raw(textStyles.valueAxis),
       el("c:crossAx", { val: category.id }),
-      el("c:crosses", { val: "autoZero" }),
+      axisCrossing(valueSpec),
       el("c:crossBetween", {
         val: firstKind === "area" ? "midCat" : "between",
       }),
       valueSpec.majorUnit === undefined
         ? undefined
         : el("c:majorUnit", { val: valueSpec.majorUnit }),
+      valueSpec.minorUnit === undefined
+        ? undefined
+        : el("c:minorUnit", { val: valueSpec.minorUnit }),
     ),
   ];
 }
@@ -590,7 +680,8 @@ export function chartPartXml(
       el(
         "c:chart",
         null,
-        el("c:autoTitleDeleted", { val: true }),
+        raw(textStyles.title),
+        el("c:autoTitleDeleted", { val: parsed.title === undefined }),
         el(
           "c:plotArea",
           null,
@@ -610,7 +701,9 @@ export function chartPartXml(
               el("c:overlay", { val: false }),
             ),
         el("c:plotVisOnly", { val: true }),
-        el("c:dispBlanksAs", { val: "gap" }),
+        parsed.displayBlanksAs === undefined
+          ? undefined
+          : el("c:dispBlanksAs", { val: parsed.displayBlanksAs }),
       ),
       transparent(),
       raw(textStyles.chart),

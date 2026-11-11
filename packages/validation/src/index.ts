@@ -130,6 +130,19 @@ export type FileChartAxis = {
   readonly id: number;
   readonly kind: "category" | "value";
   readonly crossAxisId: number;
+  readonly title?: string;
+  readonly orientation?: "minMax" | "maxMin";
+  readonly logBase?: number;
+  readonly min?: number;
+  readonly max?: number;
+  readonly majorUnit?: number;
+  readonly minorUnit?: number;
+  readonly numberFormat?: string;
+  readonly majorTickMark?: string;
+  readonly minorTickMark?: string;
+  readonly tickLabelPosition?: string;
+  readonly crosses?: string;
+  readonly crossesAt?: number;
 };
 
 export type FileChartGroup = {
@@ -146,6 +159,8 @@ export type FileChart = {
   readonly types: readonly string[];
   readonly direction?: "col" | "bar";
   readonly grouping?: string;
+  readonly title?: string;
+  readonly displayBlanksAs?: "gap" | "zero" | "span";
   /** Flattened series in chart-group order and native c:order order. */
   readonly series: readonly FileChartSeries[];
   readonly groups: readonly FileChartGroup[];
@@ -2752,6 +2767,22 @@ function officeAllowsSeriesDataLabelPosition(
   return false;
 }
 
+function nativeChartTitleText(
+  title: XmlElement | undefined,
+  theme: ThemeTextReader,
+  part: string,
+  errors: ValidationIssue[],
+): string | undefined {
+  if (title === undefined) return undefined;
+  const tx = first(title, chartNamespace, "tx");
+  const rich = tx === undefined ? undefined : first(tx, chartNamespace, "rich");
+  if (rich === undefined) return undefined;
+  const text = elements(rich, drawingNamespace, "p")
+    .map((paragraph) => readParagraph(paragraph, theme, part, errors).text)
+    .join("\n");
+  return text === "" ? undefined : text;
+}
+
 function validateChart(
   frame: XmlElement,
   part: string,
@@ -2966,6 +2997,7 @@ function validateChart(
   }
   const axes: FileChartAxis[] = [];
   const axisById = new Map<number, FileChartAxis>();
+  const textTheme = themeTextReader(documents);
   for (const axisNode of axisNodes) {
     const id = integerAttribute(first(axisNode, chartNamespace, "axId"), "val");
     const crossAxisId = integerAttribute(
@@ -2990,10 +3022,110 @@ function validateChart(
       );
       continue;
     }
+    const scaling = first(axisNode, chartNamespace, "scaling");
+    const orientation =
+      scaling === undefined
+        ? ""
+        : attribute(
+            first(scaling, chartNamespace, "orientation") ?? scaling,
+            "val",
+          );
+    if (
+      orientation !== "" &&
+      orientation !== "minMax" &&
+      orientation !== "maxMin"
+    ) {
+      issue(
+        errors,
+        chartPart,
+        "invalid-chart-axis",
+        `Chart axis ${id} has an invalid orientation`,
+      );
+    }
+    const logBase =
+      scaling === undefined
+        ? undefined
+        : decimalAttribute(first(scaling, chartNamespace, "logBase"), "val");
+    if (logBase !== undefined && (logBase < 2 || logBase > 1000)) {
+      issue(
+        errors,
+        chartPart,
+        "invalid-chart-axis",
+        `Chart axis ${id} has a logarithmic base outside 2 to 1000`,
+      );
+    }
+    const min =
+      scaling === undefined
+        ? undefined
+        : decimalAttribute(first(scaling, chartNamespace, "min"), "val");
+    const max =
+      scaling === undefined
+        ? undefined
+        : decimalAttribute(first(scaling, chartNamespace, "max"), "val");
+    const majorUnit = decimalAttribute(
+      first(axisNode, chartNamespace, "majorUnit"),
+      "val",
+    );
+    const minorUnit = decimalAttribute(
+      first(axisNode, chartNamespace, "minorUnit"),
+      "val",
+    );
+    const numberFormatNode = first(axisNode, chartNamespace, "numFmt");
+    const numberFormat =
+      numberFormatNode === undefined
+        ? ""
+        : attribute(numberFormatNode, "formatCode");
+    const majorTickMark = attribute(
+      first(axisNode, chartNamespace, "majorTickMark") ?? axisNode,
+      "val",
+    );
+    const minorTickMark = attribute(
+      first(axisNode, chartNamespace, "minorTickMark") ?? axisNode,
+      "val",
+    );
+    const tickLabelPosition = attribute(
+      first(axisNode, chartNamespace, "tickLblPos") ?? axisNode,
+      "val",
+    );
+    const crosses = attribute(
+      first(axisNode, chartNamespace, "crosses") ?? axisNode,
+      "val",
+    );
+    const crossesAt = decimalAttribute(
+      first(axisNode, chartNamespace, "crossesAt"),
+      "val",
+    );
+    const title = nativeChartTitleText(
+      first(axisNode, chartNamespace, "title"),
+      textTheme,
+      chartPart,
+      errors,
+    );
     const axis: FileChartAxis = {
       id,
       kind: axisNode.localName === "catAx" ? "category" : "value",
       crossAxisId,
+      ...(title === undefined ? {} : { title }),
+      ...(orientation === "maxMin" ? { orientation } : {}),
+      ...(logBase === undefined ? {} : { logBase }),
+      ...(min === undefined ? {} : { min }),
+      ...(max === undefined ? {} : { max }),
+      ...(majorUnit === undefined ? {} : { majorUnit }),
+      ...(minorUnit === undefined ? {} : { minorUnit }),
+      ...(numberFormat === "" || numberFormat === "General"
+        ? {}
+        : { numberFormat }),
+      ...(majorTickMark === "" || majorTickMark === "none"
+        ? {}
+        : { majorTickMark }),
+      ...(minorTickMark === "" || minorTickMark === "none"
+        ? {}
+        : { minorTickMark }),
+      ...(tickLabelPosition === "" || tickLabelPosition === "nextTo"
+        ? {}
+        : { tickLabelPosition }),
+      ...(crosses === "" || crosses === "autoZero" ? {} : { crosses }),
+      ...(crossesAt === undefined ? {} : { crossesAt }),
     };
     axes.push(axis);
     axisById.set(id, axis);
@@ -3312,12 +3444,45 @@ function validateChart(
     }
   }
   if (boxEmu === undefined) return undefined;
+  const titleText =
+    chart === undefined
+      ? undefined
+      : nativeChartTitleText(
+          first(chart, chartNamespace, "title"),
+          textTheme,
+          chartPart,
+          errors,
+        );
+  const displayBlanksAsNode =
+    chart === undefined
+      ? undefined
+      : first(chart, chartNamespace, "dispBlanksAs");
+  const displayBlanksAsValue =
+    displayBlanksAsNode === undefined
+      ? ""
+      : attribute(displayBlanksAsNode, "val");
+  const displayBlanksAs =
+    displayBlanksAsValue === "gap" ||
+    displayBlanksAsValue === "zero" ||
+    displayBlanksAsValue === "span"
+      ? displayBlanksAsValue
+      : undefined;
+  if (displayBlanksAsValue !== "" && displayBlanksAs === undefined) {
+    issue(
+      errors,
+      chartPart,
+      "invalid-chart-missing-values",
+      "Chart displayBlanksAs must be gap, zero, or span",
+    );
+  }
   const chartObservation: FileChart = {
     types,
     ...(direction === undefined
       ? {}
       : { direction: direction as "bar" | "col" }),
     ...(grouping === undefined || grouping === "" ? {} : { grouping }),
+    ...(titleText === undefined ? {} : { title: titleText }),
+    ...(displayBlanksAs === undefined ? {} : { displayBlanksAs }),
     series,
     groups,
     axes,

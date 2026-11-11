@@ -123,7 +123,21 @@ export type {
   PathOptions,
   PresetGeometry,
 } from "@react-pptx/capabilities";
-export { createBuilder } from "@react-pptx/core";
+export { createBuilder, expandDocument } from "@react-pptx/core";
+export {
+  CommonContainer,
+  CommonNode,
+  RichTextContainer,
+} from "@react-pptx/core";
+export type {
+  DocumentProps,
+  DocumentStyle,
+  DocumentUpdate,
+  ExpandDocumentOptions,
+  ExpandedDocument,
+  RichTextItem,
+  StyleUpdate,
+} from "@react-pptx/core";
 export type {
   BuildQuery,
   BuildOptions,

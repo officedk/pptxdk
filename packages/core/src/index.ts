@@ -1,5 +1,14 @@
-export { createBuilder } from "#/builder.ts";
+export { createBuilder, expandDocument } from "#/builder.ts";
+export type { ExpandDocumentOptions, ExpandedDocument } from "#/builder.ts";
 export { BuildError, CapabilityError } from "#/diagnostics.ts";
+export { CommonContainer, CommonNode, RichTextContainer } from "#/document.ts";
+export type {
+  DocumentProps,
+  DocumentStyle,
+  DocumentUpdate,
+  RichTextItem,
+  StyleUpdate,
+} from "#/document.ts";
 export { Deck, Section, Slide } from "#/elements.ts";
 export { createMorphScope } from "#/morph.ts";
 export type { MorphKey, MorphScope } from "#/morph.ts";

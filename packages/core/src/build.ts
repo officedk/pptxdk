@@ -7,6 +7,7 @@ export type {
   BuildResult,
   CapabilityModule,
   Diagnostic,
+  Extension,
   Target,
 } from "#/types.ts";
 export type {

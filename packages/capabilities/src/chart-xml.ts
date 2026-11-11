@@ -116,6 +116,124 @@ function columnName(index: number): string {
   return name;
 }
 
+type ChartSeriesCells = {
+  readonly nameColumn: number;
+  readonly category?: {
+    readonly column: number;
+    readonly pointCount: number;
+  };
+  readonly value?: {
+    readonly column: number;
+  };
+  readonly x?: {
+    readonly column: number;
+    readonly pointCount: number;
+  };
+  readonly y?: {
+    readonly column: number;
+    readonly pointCount: number;
+  };
+};
+
+type ChartCells = {
+  readonly categoryColumns: ReadonlyMap<
+    string,
+    { readonly column: number; readonly categories: readonly string[] }
+  >;
+  readonly axislessCategoryColumns: ReadonlyMap<
+    number,
+    { readonly column: number; readonly categories: readonly string[] }
+  >;
+  readonly series: ReadonlyMap<number, ChartSeriesCells>;
+};
+
+/**
+ * Assigns workbook columns for every parsed series once.
+ *
+ * Category axes own the leading columns because several groups may share one ordered domain;
+ * each remaining category series owns one value column, and every scatter series owns its own
+ * X and Y columns. Both c:ser formulas and the embedded workbook read this mapping.
+ */
+function chartCells(parsed: ParsedChart): ChartCells {
+  const categoryColumns = new Map<
+    string,
+    { column: number; categories: readonly string[] }
+  >();
+  const axislessCategoryColumns = new Map<
+    number,
+    { column: number; categories: readonly string[] }
+  >();
+  let nextColumn = 0;
+  for (const [groupIndex, group] of parsed.groups.entries()) {
+    if (group.kind === "scatter") continue;
+    if (group.axes === undefined) {
+      // Pie and doughnut groups have no axis identity; only one group may exist.
+      axislessCategoryColumns.set(groupIndex, {
+        column: nextColumn,
+        categories: group.data.categories,
+      });
+      nextColumn += 1;
+      continue;
+    }
+    const name = group.axes.category.name;
+    if (categoryColumns.has(name)) continue;
+    categoryColumns.set(name, {
+      column: nextColumn,
+      categories: group.data.categories,
+    });
+    nextColumn += 1;
+  }
+  if (
+    categoryColumns.size === 0 &&
+    axislessCategoryColumns.size === 0 &&
+    parsed.groups.some((group) => group.kind === "scatter")
+  ) {
+    // Preserve the established scatter workbook layout: column A stays blank and the first
+    // series starts in B. Mixed charts begin series columns after their category columns.
+    nextColumn = 1;
+  }
+  const series = new Map<number, ChartSeriesCells>();
+  for (const [groupIndex, group] of parsed.groups.entries()) {
+    if (group.kind === "scatter") {
+      for (const item of group.series) {
+        series.set(item.seriesIndex, {
+          nameColumn: nextColumn,
+          x: { column: nextColumn, pointCount: item.x.length },
+          y: { column: nextColumn + 1, pointCount: item.y.length },
+        });
+        nextColumn += 2;
+      }
+      continue;
+    }
+    const category =
+      group.axes === undefined
+        ? axislessCategoryColumns.get(groupIndex)
+        : categoryColumns.get(group.axes.category.name);
+    if (category === undefined) {
+      throw new Error(
+        "Category chart group is missing its workbook category column",
+      );
+    }
+    for (const item of group.series) {
+      series.set(item.seriesIndex, {
+        nameColumn: nextColumn,
+        category: {
+          column: category.column,
+          pointCount: group.data.categories.length,
+        },
+        value: { column: nextColumn },
+      });
+      nextColumn += 1;
+    }
+  }
+  return { categoryColumns, axislessCategoryColumns, series };
+}
+
+function rangeFormula(column: number, pointCount: number): string {
+  const name = columnName(column);
+  return `${sheet}!$${name}$2:$${name}$${pointCount + 1}`;
+}
+
 function strRef(formula: string, values: readonly string[]): XmlElement {
   return el(
     "c:strRef",
@@ -239,10 +357,7 @@ export type ChartTextStyleXml = {
   readonly chart: string;
   readonly title?: string;
   readonly axisTitles?: ReadonlyMap<string, string>;
-  readonly categoryAxis?: string;
-  readonly valueAxis?: string;
-  readonly xAxis?: string;
-  readonly yAxis?: string;
+  readonly axisStyles?: ReadonlyMap<string, string>;
   readonly groupDataLabels?: ReadonlyMap<number, string>;
   readonly pointLabels?: ReadonlyMap<string, string>;
 };
@@ -438,12 +553,16 @@ function pointShape(
 function categoryChartSeries(
   group: Extract<ParsedChartGroup, { kind: Exclude<ChartKind, "scatter"> }>,
   series: ParsedChartSeries,
+  seriesCells: ChartSeriesCells,
   groupIndex: number,
   textStyles: ChartTextStyleXml,
   theme: ThemeContext,
 ): XmlElement {
-  const rows = group.data.categories.length + 1;
-  const column = columnName(series.seriesIndex + 1);
+  const category = seriesCells.category;
+  const value = seriesCells.value;
+  if (category === undefined || value === undefined) {
+    throw new Error("Category chart series is missing workbook columns");
+  }
   const kind: ChartKind = group.kind;
   const bar = kind === "column" || kind === "bar";
   const lineChart = kind === "line";
@@ -485,7 +604,13 @@ function categoryChartSeries(
     null,
     el("c:idx", { val: series.seriesIndex }),
     el("c:order", { val: series.seriesIndex }),
-    el("c:tx", null, strRef(`${sheet}!$${column}$1`, [series.name])),
+    el(
+      "c:tx",
+      null,
+      strRef(`${sheet}!$${columnName(seriesCells.nameColumn)}$1`, [
+        series.name,
+      ]),
+    ),
     itemShape,
     bar ? el("c:invertIfNegative", { val: false }) : undefined,
     lineChart ? chartMarker(series.marker, theme) : undefined,
@@ -497,12 +622,15 @@ function categoryChartSeries(
     el(
       "c:cat",
       null,
-      strRef(`${sheet}!$A$2:$A$${rows}`, group.data.categories),
+      strRef(
+        rangeFormula(category.column, category.pointCount),
+        group.data.categories,
+      ),
     ),
     el(
       "c:val",
       null,
-      numRef(`${sheet}!$${column}$2:$${column}$${rows}`, series.values),
+      numRef(rangeFormula(value.column, category.pointCount), series.values),
     ),
     lineChart ? el("c:smooth", { val: series.smooth ?? false }) : undefined,
   );
@@ -539,13 +667,14 @@ function scatterMarkerXml(
 function scatterChartSeries(
   group: Extract<ParsedChartGroup, { kind: "scatter" }>,
   series: ParsedScatterSeries,
+  seriesCells: ChartSeriesCells,
   groupIndex: number,
   textStyles: ChartTextStyleXml,
   theme: ThemeContext,
 ): XmlElement {
-  const rows = series.x.length + 1;
-  const xColumn = columnName(series.seriesIndex * 2 + 1);
-  const yColumn = columnName(series.seriesIndex * 2 + 2);
+  if (seriesCells.x === undefined || seriesCells.y === undefined) {
+    throw new Error("Scatter chart series is missing workbook columns");
+  }
   const itemShape =
     group.line === undefined || group.line === false
       ? undefined
@@ -574,7 +703,13 @@ function scatterChartSeries(
     null,
     el("c:idx", { val: series.seriesIndex }),
     el("c:order", { val: series.seriesIndex }),
-    el("c:tx", null, strRef(`${sheet}!$${xColumn}$1`, [series.name])),
+    el(
+      "c:tx",
+      null,
+      strRef(`${sheet}!$${columnName(seriesCells.nameColumn)}$1`, [
+        series.name,
+      ]),
+    ),
     itemShape,
     scatterMarkerXml(group, series, theme),
     points,
@@ -582,12 +717,18 @@ function scatterChartSeries(
     el(
       "c:xVal",
       null,
-      numRef(`${sheet}!$${xColumn}$2:$${xColumn}$${rows}`, series.x),
+      numRef(
+        rangeFormula(seriesCells.x.column, seriesCells.x.pointCount),
+        series.x,
+      ),
     ),
     el(
       "c:yVal",
       null,
-      numRef(`${sheet}!$${yColumn}$2:$${yColumn}$${rows}`, series.y),
+      numRef(
+        rangeFormula(seriesCells.y.column, seriesCells.y.pointCount),
+        series.y,
+      ),
     ),
     group.line === "smooth" || group.line === "straight"
       ? el("c:smooth", { val: group.line === "smooth" })
@@ -619,12 +760,29 @@ function scatterStyle(
 function chartGroup(
   group: ParsedChartGroup,
   groupIndex: number,
+  cells: ChartCells,
   textStyles: ChartTextStyleXml,
   theme: ThemeContext,
 ): XmlElement {
+  const seriesCell = (seriesIndex: number): ChartSeriesCells => {
+    const value = cells.series.get(seriesIndex);
+    if (value === undefined) {
+      throw new Error(
+        `Chart series ${seriesIndex} is missing workbook columns`,
+      );
+    }
+    return value;
+  };
   if (group.kind === "scatter") {
     const items = group.series.map((item) =>
-      scatterChartSeries(group, item, groupIndex, textStyles, theme),
+      scatterChartSeries(
+        group,
+        item,
+        seriesCell(item.seriesIndex),
+        groupIndex,
+        textStyles,
+        theme,
+      ),
     );
     if (group.axes === undefined) {
       throw new Error("Scatter chart group is missing resolved X and Y axes");
@@ -640,7 +798,14 @@ function chartGroup(
     );
   }
   const items = group.series.map((item) =>
-    categoryChartSeries(group, item, groupIndex, textStyles, theme),
+    categoryChartSeries(
+      group,
+      item,
+      seriesCell(item.seriesIndex),
+      groupIndex,
+      textStyles,
+      theme,
+    ),
   );
   const axes =
     group.axes === undefined
@@ -733,13 +898,6 @@ function axisTitle(
   return raw(textStyles.axisTitles?.get(name));
 }
 
-function parsedAxis(
-  axes: readonly ParsedChartAxis[],
-  role: "category" | "value",
-): ParsedChartAxis | undefined {
-  return axes.find((axis) => axis.role === role);
-}
-
 function axisScaling(spec: ChartAxis, valueAxis: boolean): XmlElement {
   const valueSpec = valueAxis
     ? (spec as Extract<ChartAxis, { kind: "value" }>)
@@ -766,43 +924,77 @@ function axisCrossing(spec: ChartAxis): XmlElement {
     : el("c:crossesAt", { val: spec.crossesAt });
 }
 
-function scatterAxisXml(
+const axisPositionCodes = {
+  bottom: "b",
+  top: "t",
+  left: "l",
+  right: "r",
+} as const;
+
+function axisCrossBetween(
+  parsed: ParsedChart,
+  axis: ParsedChartAxis,
+): "between" | "midCat" {
+  let categoryUse = false;
+  let areaOnly = true;
+  for (const group of parsed.groups) {
+    if (group.kind === "scatter" || group.axes === undefined) continue;
+    if (group.axes.value !== axis) continue;
+    categoryUse = true;
+    if (group.kind !== "area") areaOnly = false;
+  }
+  // Scatter value axes keep the previous midCat candidate; category combinations use between
+  // unless every category group sharing the axis is an area chart.
+  if (!categoryUse) return "midCat";
+  return areaOnly ? "midCat" : "between";
+}
+
+function axisXml(
+  parsed: ParsedChart,
   axis: ParsedChartAxis,
   textStyles: ChartTextStyleXml,
-  horizontal: boolean,
   theme: ThemeContext,
 ): XmlElement {
-  const spec = axis.spec as ChartValueAxis;
+  const spec = axis.spec;
+  const category = spec.kind === "category";
+  const valueSpec = category ? undefined : (spec as ChartValueAxis);
   return el(
-    "c:valAx",
+    category ? "c:catAx" : "c:valAx",
     null,
     el("c:axId", { val: axis.id }),
-    axisScaling(spec, true),
+    axisScaling(spec, !category),
     el("c:delete", { val: spec.visible === false }),
-    el("c:axPos", { val: horizontal ? "b" : "l" }),
+    el("c:axPos", { val: axisPositionCodes[axis.position] }),
     gridlines(spec, "major", theme),
     gridlines(spec, "minor", theme),
     axisTitle(spec, textStyles, axis.name),
     el("c:numFmt", {
-      formatCode: spec.numberFormat ?? "General",
-      sourceLinked: spec.numberFormat === undefined,
+      formatCode: category ? "General" : (valueSpec?.numberFormat ?? "General"),
+      sourceLinked: category || valueSpec?.numberFormat === undefined,
     }),
     el("c:majorTickMark", { val: spec.majorTickMark ?? "none" }),
     el("c:minorTickMark", { val: spec.minorTickMark ?? "none" }),
-    el("c:tickLblPos", {
-      val: spec.tickLabelPosition ?? "nextTo",
-    }),
+    el("c:tickLblPos", { val: spec.tickLabelPosition ?? "nextTo" }),
     lineXml(spec.line, theme),
-    raw(horizontal ? textStyles.xAxis : textStyles.yAxis),
+    raw(textStyles.axisStyles?.get(axis.name)),
     el("c:crossAx", { val: axis.crossAxisId }),
     axisCrossing(spec),
-    el("c:crossBetween", { val: "midCat" }),
-    spec.majorUnit === undefined
-      ? undefined
-      : el("c:majorUnit", { val: spec.majorUnit }),
-    spec.minorUnit === undefined
-      ? undefined
-      : el("c:minorUnit", { val: spec.minorUnit }),
+    category
+      ? [
+          el("c:auto", { val: true }),
+          el("c:lblAlgn", { val: "ctr" }),
+          el("c:lblOffset", { val: 100 }),
+          el("c:noMultiLvlLbl", { val: false }),
+        ]
+      : [
+          el("c:crossBetween", { val: axisCrossBetween(parsed, axis) }),
+          valueSpec?.majorUnit === undefined
+            ? undefined
+            : el("c:majorUnit", { val: valueSpec.majorUnit }),
+          valueSpec?.minorUnit === undefined
+            ? undefined
+            : el("c:minorUnit", { val: valueSpec.minorUnit }),
+        ],
   );
 }
 
@@ -811,92 +1003,7 @@ function axes(
   textStyles: ChartTextStyleXml,
   theme: ThemeContext,
 ): XmlElement[] {
-  if (parsed.groups[0]?.kind === "scatter") {
-    const x = parsed.axes.find(({ role }) => role === "x");
-    const y = parsed.axes.find(({ role }) => role === "y");
-    if (x === undefined || y === undefined) {
-      throw new Error("Scatter chart is missing resolved X or Y axis");
-    }
-    return [
-      scatterAxisXml(x, textStyles, true, theme),
-      scatterAxisXml(y, textStyles, false, theme),
-    ];
-  }
-  if (parsed.groups[0]?.axes === undefined) return [];
-  const category = parsedAxis(parsed.axes, "category");
-  const value = parsedAxis(parsed.axes, "value");
-  if (category === undefined || value === undefined) {
-    throw new Error(
-      "Cartesian chart is missing resolved category or value axis",
-    );
-  }
-  const categorySpec = category.spec as Extract<
-    ChartAxis,
-    { kind: "category" }
-  >;
-  const valueSpec = value.spec as Extract<ChartAxis, { kind: "value" }>;
-  const horizontal = parsed.groups[0].kind === "bar";
-  const firstKind = parsed.groups[0].kind;
-  return [
-    el(
-      "c:catAx",
-      null,
-      el("c:axId", { val: category.id }),
-      axisScaling(categorySpec, false),
-      el("c:delete", { val: categorySpec.visible === false }),
-      el("c:axPos", { val: horizontal ? "l" : "b" }),
-      gridlines(categorySpec, "major", theme),
-      gridlines(categorySpec, "minor", theme),
-      axisTitle(categorySpec, textStyles, category.name),
-      el("c:numFmt", { formatCode: "General", sourceLinked: true }),
-      el("c:majorTickMark", { val: categorySpec.majorTickMark ?? "none" }),
-      el("c:minorTickMark", { val: categorySpec.minorTickMark ?? "none" }),
-      el("c:tickLblPos", {
-        val: categorySpec.tickLabelPosition ?? "nextTo",
-      }),
-      lineXml(categorySpec.line, theme),
-      raw(textStyles.categoryAxis),
-      el("c:crossAx", { val: value.id }),
-      axisCrossing(categorySpec),
-      el("c:auto", { val: true }),
-      el("c:lblAlgn", { val: "ctr" }),
-      el("c:lblOffset", { val: 100 }),
-      el("c:noMultiLvlLbl", { val: false }),
-    ),
-    el(
-      "c:valAx",
-      null,
-      el("c:axId", { val: value.id }),
-      axisScaling(valueSpec, true),
-      el("c:delete", { val: valueSpec.visible === false }),
-      el("c:axPos", { val: horizontal ? "b" : "l" }),
-      gridlines(valueSpec, "major", theme),
-      gridlines(valueSpec, "minor", theme),
-      axisTitle(valueSpec, textStyles, value.name),
-      el("c:numFmt", {
-        formatCode: valueSpec.numberFormat ?? "General",
-        sourceLinked: valueSpec.numberFormat === undefined,
-      }),
-      el("c:majorTickMark", { val: valueSpec.majorTickMark ?? "none" }),
-      el("c:minorTickMark", { val: valueSpec.minorTickMark ?? "none" }),
-      el("c:tickLblPos", {
-        val: valueSpec.tickLabelPosition ?? "nextTo",
-      }),
-      lineXml(valueSpec.line, theme),
-      raw(textStyles.valueAxis),
-      el("c:crossAx", { val: category.id }),
-      axisCrossing(valueSpec),
-      el("c:crossBetween", {
-        val: firstKind === "area" ? "midCat" : "between",
-      }),
-      valueSpec.majorUnit === undefined
-        ? undefined
-        : el("c:majorUnit", { val: valueSpec.majorUnit }),
-      valueSpec.minorUnit === undefined
-        ? undefined
-        : el("c:minorUnit", { val: valueSpec.minorUnit }),
-    ),
-  ];
+  return parsed.axes.map((axis) => axisXml(parsed, axis, textStyles, theme));
 }
 
 const legendPositions = {
@@ -942,6 +1049,7 @@ export function chartPartXml(
     (typeof parsed.style?.lang === "string" ? parsed.style.lang : undefined) ??
     theme.textStyle.lang ??
     "en-US";
+  const cells = chartCells(parsed);
   return serialize(
     el(
       "c:chartSpace",
@@ -963,7 +1071,7 @@ export function chartPartXml(
           null,
           plotLayout(parsed, box),
           parsed.groups.map((group, groupIndex) =>
-            chartGroup(group, groupIndex, textStyles, theme),
+            chartGroup(group, groupIndex, cells, textStyles, theme),
           ),
           axes(parsed, textStyles, theme),
           transparent(),
@@ -1060,97 +1168,100 @@ export function chartWorkbook(parsed: ParsedChart): Uint8Array {
   const spreadsheet =
     "http://schemas.openxmlformats.org/spreadsheetml/2006/main";
   const officeRelationships = relationshipNamespace;
-  const scatter = parsed.groups[0]?.kind === "scatter";
-  const headerCells: XmlElement[] = [inlineString("A1", " ")];
-  if (scatter) {
-    for (const group of parsed.groups) {
-      if (group.kind !== "scatter") continue;
-      for (const item of group.series) {
-        const xColumn = columnName(item.seriesIndex * 2 + 1);
-        const yColumn = columnName(item.seriesIndex * 2 + 2);
-        headerCells.push(
-          inlineString(`${xColumn}1`, item.name),
-          inlineString(`${yColumn}1`, "Y"),
+  const cells = chartCells(parsed);
+  const headerCells: XmlElement[] = [];
+  for (const { column } of cells.categoryColumns.values()) {
+    headerCells.push(inlineString(`${columnName(column)}1`, " "));
+  }
+  for (const group of parsed.groups) {
+    for (const series of group.series) {
+      const item = cells.series.get(series.seriesIndex);
+      if (item === undefined) {
+        throw new Error(
+          `Chart series ${series.seriesIndex} is missing workbook columns`,
+        );
+      }
+      headerCells.push(
+        inlineString(`${columnName(item.nameColumn)}1`, series.name),
+      );
+      if (group.kind === "scatter" && item.y !== undefined) {
+        headerCells.push(inlineString(`${columnName(item.y.column)}1`, "Y"));
+      }
+    }
+  }
+  const rows = new Map<number, XmlElement[]>();
+  const addCell = (row: number, cell: XmlElement | undefined) => {
+    if (cell === undefined) return;
+    const items = rows.get(row);
+    if (items === undefined) rows.set(row, [cell]);
+    else items.push(cell);
+  };
+  const categoryRanges = [
+    ...cells.categoryColumns.values(),
+    ...cells.axislessCategoryColumns.values(),
+  ];
+  for (const { column, categories } of categoryRanges) {
+    for (const [index, category] of categories.entries()) {
+      const row = index + 2;
+      addCell(row, inlineString(`${columnName(column)}${row}`, category));
+    }
+  }
+  for (const group of parsed.groups) {
+    for (const series of group.series) {
+      const item = cells.series.get(series.seriesIndex);
+      if (item === undefined) continue;
+      if (group.kind === "scatter") {
+        const scatter = series as ParsedScatterSeries;
+        for (let index = 0; index < scatter.x.length; index += 1) {
+          const row = index + 2;
+          const x = scatter.x[index];
+          const y = scatter.y[index];
+          if (x !== null && x !== undefined && item.x !== undefined) {
+            addCell(
+              row,
+              el(
+                "c",
+                { r: `${columnName(item.x.column)}${row}` },
+                el("v", null, String(x)),
+              ),
+            );
+          }
+          if (y !== null && y !== undefined && item.y !== undefined) {
+            addCell(
+              row,
+              el(
+                "c",
+                { r: `${columnName(item.y.column)}${row}` },
+                el("v", null, String(y)),
+              ),
+            );
+          }
+        }
+        continue;
+      }
+      const category = series as ParsedChartSeries;
+      for (let index = 0; index < category.values.length; index += 1) {
+        const value = category.values[index];
+        if (value === null || value === undefined || item.value === undefined) {
+          continue;
+        }
+        const row = index + 2;
+        addCell(
+          row,
+          el(
+            "c",
+            { r: `${columnName(item.value.column)}${row}` },
+            el("v", null, String(value)),
+          ),
         );
       }
     }
-  } else {
-    for (const item of parsed.series as readonly ParsedChartSeries[]) {
-      headerCells.push(
-        inlineString(`${columnName(item.seriesIndex + 1)}1`, item.name),
-      );
-    }
   }
   const header = el("row", { r: 1 }, headerCells);
-  const rows: XmlElement[] = [];
-  if (scatter) {
-    const scatterGroups = parsed.groups.filter(
-      (group): group is Extract<ParsedChartGroup, { kind: "scatter" }> =>
-        group.kind === "scatter",
-    );
-    const observationCount = Math.max(
-      0,
-      ...scatterGroups.flatMap((group) =>
-        group.series.map((item) => item.x.length),
-      ),
-    );
-    for (
-      let observation = 0;
-      observation < observationCount;
-      observation += 1
-    ) {
-      const cells = scatterGroups.flatMap((group) =>
-        group.series.flatMap((item) => {
-          const row = observation + 2;
-          const x = item.x[observation];
-          const y = item.y[observation];
-          return [
-            x === null || x === undefined
-              ? undefined
-              : el(
-                  "c",
-                  {
-                    r: `${columnName(item.seriesIndex * 2 + 1)}${row}`,
-                  },
-                  el("v", null, String(x)),
-                ),
-            y === null || y === undefined
-              ? undefined
-              : el(
-                  "c",
-                  {
-                    r: `${columnName(item.seriesIndex * 2 + 2)}${row}`,
-                  },
-                  el("v", null, String(y)),
-                ),
-          ];
-        }),
-      );
-      rows.push(el("row", { r: observation + 2 }, cells));
-    }
-  } else {
-    for (const [row, category] of parsed.categories.entries()) {
-      rows.push(
-        el(
-          "row",
-          { r: row + 2 },
-          inlineString(`A${row + 2}`, category),
-          (parsed.series as readonly ParsedChartSeries[]).flatMap((item) => {
-            const value = item.values[row];
-            return value === null || value === undefined
-              ? []
-              : [
-                  el(
-                    "c",
-                    { r: `${columnName(item.seriesIndex + 1)}${row + 2}` },
-                    el("v", null, String(value)),
-                  ),
-                ];
-          }),
-        ),
-      );
-    }
-  }
+  const rowXml = [...rows.entries()]
+    .sort(([left], [right]) => left - right)
+    .map(([row, items]) => el("row", { r: row }, items));
+
   const parts: Record<string, XmlElement> = {
     "[Content_Types].xml": el(
       "Types",
@@ -1211,7 +1322,7 @@ export function chartWorkbook(parsed: ParsedChart): Uint8Array {
     "xl/worksheets/sheet1.xml": el(
       "worksheet",
       { xmlns: spreadsheet },
-      el("sheetData", null, header, rows),
+      el("sheetData", null, header, rowXml),
     ),
     "xl/styles.xml": el(
       "styleSheet",

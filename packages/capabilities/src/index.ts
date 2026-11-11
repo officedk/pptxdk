@@ -38,6 +38,7 @@ export { chartCapability } from "#/chart.ts";
 export type {
   ChartAxis,
   ChartAxisCrossing,
+  ChartAxisPosition,
   ChartAxisReferences,
   ChartCategoryAxis,
   ChartCategoryAxisReferences,

@@ -96,6 +96,7 @@ export type TableCellStyle = TableTextStyle & {
 
 export type TableDeclarationProps = MotionProps &
   MorphProps & {
+    readonly id?: string;
     readonly testId?: string;
     readonly part?: string;
     readonly name?: string;
@@ -109,6 +110,7 @@ export type TableDeclarationProps = MotionProps &
   };
 
 type TablePartDeclarationProps = {
+  readonly id?: string;
   readonly testId?: string;
   readonly part?: string;
 };
@@ -136,6 +138,7 @@ type ParsedCell = {
   readonly rowSpan: number;
   readonly colSpan: number;
   readonly path: string;
+  readonly authorId?: string;
   readonly testId?: string;
   readonly part?: string;
   readonly paragraphs: readonly Paragraph[];
@@ -148,6 +151,7 @@ type ParsedCell = {
 
 type ParsedRow = {
   readonly path: string;
+  readonly authorId?: string;
   readonly testId?: string;
   readonly part?: string;
   readonly height?: number;
@@ -168,6 +172,7 @@ const cellStyleKeys = [
   "paddingLeft",
 ] as const;
 const tableParameters = [
+  "id",
   "testId",
   "part",
   "name",
@@ -183,7 +188,7 @@ const tableParameters = [
   "emphasis",
   "motion",
 ] as const;
-const tablePartParameters = ["testId", "part", "style"] as const;
+const tablePartParameters = ["id", "testId", "part", "style"] as const;
 const cellParameters = [...tablePartParameters, "colSpan", "rowSpan"] as const;
 const verticalAlignments = new Set(["top", "middle", "bottom"]);
 const maximumExtentEmu = 2_147_483_647;
@@ -224,7 +229,7 @@ function onlyKeys(
 
 function optionalName(
   value: unknown,
-  label: "testId" | "name" | "part",
+  label: "id" | "testId" | "name" | "part",
   path?: string,
 ): string | undefined {
   if (value === undefined) return undefined;
@@ -567,7 +572,7 @@ function identityPath(
   props: Readonly<Record<string, unknown>>,
   index: number,
 ): string {
-  const identity = props["testId"] ?? props["part"];
+  const identity = props["testId"] ?? props["part"] ?? props["id"];
   return `${type}[${pathLabel(identity, String(index + 1))}]`;
 }
 
@@ -602,6 +607,7 @@ function prepareRows(
     const rowIndex = rows.length;
     const rowPath = identityPath("row", child.props, rowIndex);
     onlyKeys(child.props, tablePartParameters, "Row", rowPath);
+    const rowAuthorId = optionalName(child.props["id"], "id", rowPath);
     optionalName(child.props["testId"], "testId", rowPath);
     optionalName(child.props["part"], "part", rowPath);
     const rowStyle = trackStyle(child, "row", rowPath);
@@ -621,6 +627,7 @@ function prepareRows(
       tableVerticalAlign;
     const row: ParsedRow = {
       path: rowPath,
+      ...(rowAuthorId === undefined ? {} : { authorId: rowAuthorId }),
       ...(typeof child.props["testId"] === "string"
         ? { testId: child.props["testId"] }
         : {}),
@@ -657,6 +664,7 @@ function prepareRows(
       const cellPath = `${rowPath}/${identityPath("cell", cellChild.props, cellIndex)}`;
       cellIndex += 1;
       onlyKeys(cellChild.props, cellParameters, "Cell", cellPath);
+      const cellAuthorId = optionalName(cellChild.props["id"], "id", cellPath);
       const cellTestId = optionalName(
         cellChild.props["testId"],
         "testId",
@@ -736,6 +744,7 @@ function prepareRows(
         rowSpan,
         colSpan,
         path: cellPath,
+        ...(cellAuthorId === undefined ? {} : { authorId: cellAuthorId }),
         ...(cellTestId === undefined ? {} : { testId: cellTestId }),
         ...(cellPart === undefined ? {} : { part: cellPart }),
         paragraphs: parsedParagraphs,
@@ -1297,6 +1306,7 @@ export const tableCapability: ObjectCapabilityModule<ParsedTable> = {
     const tableParts = [
       ...rows.map((row, rowIndex) => ({
         kind: "row" as const,
+        ...(row.authorId === undefined ? {} : { authorId: row.authorId }),
         ...(row.testId === undefined ? {} : { testId: row.testId }),
         ...(row.part === undefined ? {} : { part: row.part }),
         row: rowIndex,
@@ -1312,6 +1322,7 @@ export const tableCapability: ObjectCapabilityModule<ParsedTable> = {
       })),
       ...cells.map((cell) => ({
         kind: "cell" as const,
+        ...(cell.authorId === undefined ? {} : { authorId: cell.authorId }),
         ...(cell.testId === undefined ? {} : { testId: cell.testId }),
         ...(cell.part === undefined ? {} : { part: cell.part }),
         row: cell.row,
@@ -1348,7 +1359,8 @@ export const tableCapability: ObjectCapabilityModule<ParsedTable> = {
           colSpan,
         })),
       ...(tableParts.some(
-        ({ testId, part }) => testId !== undefined || part !== undefined,
+        ({ authorId, testId, part }) =>
+          authorId !== undefined || testId !== undefined || part !== undefined,
       )
         ? { parts: tableParts }
         : {}),

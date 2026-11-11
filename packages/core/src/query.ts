@@ -41,6 +41,7 @@ export type QueryContentReference =
     };
 
 export type QueryContentNode = {
+  readonly authorId?: string;
   readonly testId?: string;
   readonly part?: string;
   readonly reference: QueryContentReference;
@@ -56,6 +57,7 @@ export type BuildQuerySlideInput = {
 };
 
 type QueryNode = {
+  readonly authorId?: string;
   readonly testId?: string;
   readonly part?: string;
   readonly reference?: QueryContentReference;
@@ -112,9 +114,18 @@ function collectDescendantEntries(
   });
 }
 
+/** Entries visible from one author scope: anonymous nodes stay transparent, named nodes are boundaries. */
+function collectScopedEntries(node: QueryNode): LocatorEntry[] {
+  return node.children.flatMap((child) => [
+    { node: child },
+    ...(child.authorId === undefined ? collectScopedEntries(child) : []),
+  ]);
+}
+
 function queryNode(node: QueryContentNode): QueryNode {
   const children = node.children.map((child) => queryNode(child));
   return Object.freeze({
+    ...(node.authorId === undefined ? {} : { authorId: node.authorId }),
     ...(node.testId === undefined ? {} : { testId: node.testId }),
     ...(node.part === undefined ? {} : { part: node.part }),
     reference: node.reference,
@@ -152,6 +163,16 @@ function makeLocator(
         makeLocator(descendant, layouts, objectsById, resourcesByObjectId),
       ),
     );
+  const findAuthorIds = (id: string): readonly Locator[] => {
+    assertQueryName(id, "id");
+    return Object.freeze(
+      collectScopedEntries(entry.node)
+        .filter(({ node }) => node.authorId === id)
+        .map(({ node }) =>
+          makeLocator({ node }, layouts, objectsById, resourcesByObjectId),
+        ),
+    );
+  };
   const findTestIds = (testId: string): readonly Locator[] => {
     assertQueryName(testId, "testId");
     return Object.freeze(
@@ -247,6 +268,9 @@ function makeLocator(
     );
     return Object.freeze({
       evidence: "generation",
+      ...(entry.node.authorId === undefined
+        ? {}
+        : { authorId: entry.node.authorId }),
       ...(entry.node.testId === undefined ? {} : { testId: entry.node.testId }),
       ...(entry.node.part === undefined ? {} : { part: entry.node.part }),
       ...(box === undefined ? {} : { box }),
@@ -259,6 +283,12 @@ function makeLocator(
   };
 
   return Object.freeze({
+    get(id: string) {
+      return oneMatch(findAuthorIds(id), "id", id);
+    },
+    getAll(id: string) {
+      return findAuthorIds(id);
+    },
     getByTestId(testId: string) {
       return oneMatch(findTestIds(testId), "testId", testId);
     },
@@ -310,6 +340,9 @@ function slideQuery(
   return Object.freeze({
     ...locator,
     id: observation.id,
+    ...(observation.authorId === undefined
+      ? {}
+      : { authorId: observation.authorId }),
     index: observation.index,
     observation,
   });
@@ -325,6 +358,11 @@ export function createBuildQuery(
     ),
   );
   const byId = new Map(queries.map((slide) => [slide.id, slide] as const));
+  const byAuthorId = new Map(
+    queries.flatMap((slide) =>
+      slide.authorId === undefined ? [] : [[slide.authorId, slide] as const],
+    ),
+  );
   return Object.freeze({
     evidence: "generation" as const,
     slides: queries,
@@ -335,6 +373,17 @@ export function createBuildQuery(
         throw new BuildQueryError(
           "missing-slide",
           `No slide found for slideId ${JSON.stringify(slideId)}`,
+        );
+      }
+      return slide;
+    },
+    getSlide(id: string) {
+      assertQueryName(id, "id");
+      const slide = byAuthorId.get(id);
+      if (slide === undefined) {
+        throw new BuildQueryError(
+          "missing-slide",
+          `No slide found for author id ${JSON.stringify(id)}`,
         );
       }
       return slide;

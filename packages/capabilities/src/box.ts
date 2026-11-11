@@ -37,6 +37,7 @@ import {
 /** Layout container appearance with visual styling that optionally generates a native background shape. */
 export type BoxDeclarationProps = MorphProps &
   Pick<MotionProps, "enter" | "motion"> & {
+    readonly id?: string;
     readonly testId?: string;
     readonly part?: string;
     readonly link?: LinkTarget;
@@ -60,6 +61,7 @@ export function createBoxNode(
 }
 
 const boxAllowedParameters = [
+  "id",
   "testId",
   "part",
   "style",

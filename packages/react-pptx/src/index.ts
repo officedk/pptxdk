@@ -26,6 +26,8 @@ export const build = createBuilder([
 ]);
 
 export {
+  AuthorQuery,
+  AuthorQueryError,
   BuildError,
   BuildQueryError,
   Deck,
@@ -140,6 +142,7 @@ export type {
   StyleUpdate,
 } from "@react-pptx/core";
 export type {
+  AuthorNodeGuard,
   BuildQuery,
   BuildOptions,
   BuildReport,

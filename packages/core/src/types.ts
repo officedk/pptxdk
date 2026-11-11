@@ -212,6 +212,8 @@ export type ObjectObservation = {
   readonly id: number;
   readonly kind: string;
   readonly name: string;
+  /** Author id declared on the source node; numeric `id` remains the build observation identity. */
+  readonly authorId?: string;
   readonly testId?: string;
   readonly part?: string;
   readonly geometry?: string;
@@ -229,6 +231,7 @@ export type LayoutChildReference = {
 
 export type LayoutObservation = {
   readonly id: number;
+  readonly authorId?: string;
   readonly testId?: string;
   readonly part?: string;
   readonly box: GeometryBox;
@@ -253,6 +256,7 @@ export type NativeTableObservation = {
 
 export type NativeTablePartObservation = {
   readonly kind: "row" | "cell";
+  readonly authorId?: string;
   readonly testId?: string;
   readonly part?: string;
   readonly row: number;
@@ -265,6 +269,8 @@ export type NativeTablePartObservation = {
 
 export type SlideObservation = {
   readonly id: string;
+  /** Author id declared on the Slide; legacy `slideId` remains the observation identity. */
+  readonly authorId?: string;
   readonly index: number;
   readonly section?: string;
   readonly hidden?: boolean;
@@ -295,6 +301,7 @@ export type BuildResult = {
 
 export type LocatorObservation = {
   readonly evidence: "generation";
+  readonly authorId?: string;
   readonly testId?: string;
   readonly part?: string;
   readonly box?: GeometryBox;
@@ -315,6 +322,10 @@ export type LocatorResourceObservation = ResourceObservation & {
 
 /** Read-only locator and field observation for formal content in a successful build. */
 export type Locator = {
+  /** Finds one author id in this locator scope without crossing the next named scope. */
+  get(id: string): Locator;
+  /** Lists matches for an author id in this locator scope; duplicates are already rejected by the build. */
+  getAll(id: string): readonly Locator[];
   getByTestId(testId: string): Locator;
   getAllByTestId(testId: string): readonly Locator[];
   part(name: string): Locator;
@@ -326,6 +337,7 @@ export type Locator = {
 
 export type SlideQuery = Locator & {
   readonly id: string;
+  readonly authorId?: string;
   readonly index: number;
   readonly observation: SlideObservation;
 };
@@ -333,7 +345,10 @@ export type SlideQuery = Locator & {
 export type BuildQuery = {
   readonly evidence: "generation";
   readonly slides: readonly SlideQuery[];
+  /** Legacy slideId lookup retained until the identity consumer migration. */
   slide(slideId: string): SlideQuery;
+  /** New author id lookup for pages, independent of the legacy slideId field. */
+  getSlide(id: string): SlideQuery;
 };
 
 /** Generic node in the React host tree, without exposing React or renderer internal objects. */
@@ -656,7 +671,10 @@ export type DeckProps = ElementProps & {
 };
 
 export type SlideProps = ElementProps & {
-  readonly slideId: string;
+  /** Scoped author id for the page; unique within the deck. */
+  readonly id?: string;
+  /** Legacy page identity retained until the identity consumer migration. */
+  readonly slideId?: string;
   readonly transition?: unknown;
   readonly theme?: ThemeScope;
   readonly style?: TextStyle & Omit<LayoutStyle, "zIndex">;

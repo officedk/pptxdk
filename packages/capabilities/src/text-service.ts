@@ -114,6 +114,15 @@ export type TextFieldContext = {
   readonly slideNumber: number;
   readonly createId?: () => string;
 };
+
+/**
+ * Author metadata accepted on P, Span, and SlideNumber declarations.
+ *
+ * Scoped id validation belongs to the formal build around these nodes; the shared text parser must
+ * skip the field while resolving styles instead of reporting it as an unimplemented parameter.
+ */
+const textAuthorMetadataKeys: ReadonlySet<string> = new Set(["id"]);
+
 export type Paragraph = {
   readonly runs: readonly Run[];
   readonly style: ParagraphStyle;
@@ -769,7 +778,9 @@ function collectRuns(
         `${child.type} cannot be used as text paragraph or run`,
       );
     }
-    const unknown = Object.keys(child.props).find((key) => key !== "style");
+    const unknown = Object.keys(child.props).find(
+      (key) => key !== "style" && !textAuthorMetadataKeys.has(key),
+    );
     if (unknown !== undefined) {
       throw new CapabilityError(
         "unknown-parameter",
@@ -1059,7 +1070,9 @@ function normalizeParagraphs(
       );
     }
     flushInline();
-    const unknown = Object.keys(child.props).find((key) => key !== "style");
+    const unknown = Object.keys(child.props).find(
+      (key) => key !== "style" && !textAuthorMetadataKeys.has(key),
+    );
     if (unknown !== undefined) {
       throw new CapabilityError(
         "unknown-parameter",

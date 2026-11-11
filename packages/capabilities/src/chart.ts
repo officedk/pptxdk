@@ -2620,6 +2620,26 @@ function parsedAxes(
   };
   // A known finite value domain proves an interior crossing cannot realize an
   // explicit edge position. Unknown auto-scale domains stay undecided.
+  const knownValueEndpoint = (
+    crossing: ParsedAxisCrossing,
+    partner: ParsedAxisDraft,
+  ): "min" | "max" | undefined => {
+    if (partner.spec.kind !== "value") return undefined;
+    const min = partner.spec.min;
+    const max = partner.spec.max;
+    if (min === undefined || max === undefined || min === max) return undefined;
+    if (crossing.kind === "crossesAt") {
+      if (crossing.value === min) return "min";
+      if (crossing.value === max) return "max";
+      return undefined;
+    }
+    if (crossing.kind !== "crosses" || crossing.value !== "autoZero") {
+      return undefined;
+    }
+    if (min === 0) return "min";
+    if (max === 0) return "max";
+    return undefined;
+  };
   const crossesKnownValueInterior = (
     crossing: ParsedAxisCrossing,
     partner: ParsedAxisDraft,
@@ -2653,14 +2673,27 @@ function parsedAxes(
     for (const partner of partnersOf(axis)) {
       const crossing = explicitCrossing(partner);
       if (crossing === undefined) continue;
-      if (
-        axis.spec.position !== undefined &&
-        crossesKnownValueInterior(crossing, partner)
-      ) {
-        fail(
-          "invalid-chart-axes",
-          `Chart axis "${axis.name}" position "${axis.spec.position}" conflicts with the known interior crossing on "${partner.name}"`,
-        );
+      if (axis.spec.position !== undefined) {
+        if (crossesKnownValueInterior(crossing, partner)) {
+          fail(
+            "invalid-chart-axes",
+            `Chart axis "${axis.name}" position "${axis.spec.position}" conflicts with the known interior crossing on "${partner.name}"`,
+          );
+        }
+        const endpoint = knownValueEndpoint(crossing, partner);
+        if (endpoint !== undefined) {
+          const edge = positionForRawCrossing(
+            { kind: "crosses", value: endpoint },
+            partner,
+            axis.direction!,
+          );
+          if (edge !== undefined && edge !== axis.spec.position) {
+            fail(
+              "invalid-chart-axes",
+              `Chart axis "${axis.name}" position "${axis.spec.position}" conflicts with the known crossing endpoint on "${partner.name}"`,
+            );
+          }
+        }
       }
       const position = positionForRawCrossing(
         crossing,

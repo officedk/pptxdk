@@ -2369,4 +2369,110 @@ describe("chart combination and dual-axis topology", () => {
     const fixed = await validatePptx(zipSync(parts));
     assert.deepEqual(fixed.errors, []);
   });
+
+  it("checks known crossesAt endpoints against explicit sides", async () => {
+    const make = (
+      position: "bottom" | "top",
+      value: {
+        readonly kind: "value";
+        readonly min: number;
+        readonly max: number;
+        readonly crossesAt?: number;
+        readonly crosses?: "autoZero";
+        readonly reversed?: boolean;
+      },
+    ): ChartProps => ({
+      x: 10,
+      y: 10,
+      width: 640,
+      height: 360,
+      axes: {
+        category: { kind: "category", position },
+        value,
+      },
+      groups: [
+        {
+          kind: "column",
+          axes: { category: "category", value: "value" },
+          data: { kind: "shared-categories", categories: ["A", "B"] },
+          series: [{ name: "S", values: [2, 8] }],
+        },
+      ],
+    });
+    const documentBuild = (config: ChartProps) =>
+      buildDocument(
+        deck({ width: 960, height: 540 }).append(
+          documentSlide({ id: "combo" }).append(documentChart(config)),
+        ),
+      );
+    const rejects = async (promise: Promise<unknown>) => {
+      await assert.rejects(promise, (error: unknown) => {
+        assert.ok(error instanceof BuildError);
+        assert.equal(error.diagnostics[0]?.code, "invalid-chart-axes");
+        return true;
+      });
+    };
+    const topZero = make("top", {
+      kind: "value",
+      min: 0,
+      max: 10,
+      crossesAt: 0,
+    });
+    await rejects(buildSingleChart(topZero));
+    await rejects(documentBuild(topZero));
+
+    for (const config of [
+      make("bottom", { kind: "value", min: 0, max: 10, crossesAt: 0 }),
+      make("top", { kind: "value", min: 0, max: 10, crossesAt: 10 }),
+    ]) {
+      const file = await validatePptx((await buildSingleChart(config)).pptx);
+      assert.deepEqual(file.errors, []);
+    }
+    await rejects(
+      buildSingleChart(
+        make("bottom", { kind: "value", min: 0, max: 10, crossesAt: 10 }),
+      ),
+    );
+    await rejects(
+      buildSingleChart(
+        make("bottom", {
+          kind: "value",
+          min: 0,
+          max: 10,
+          reversed: true,
+          crossesAt: 0,
+        }),
+      ),
+    );
+    const reversedTop = await buildSingleChart(
+      make("top", {
+        kind: "value",
+        min: 0,
+        max: 10,
+        reversed: true,
+        crossesAt: 0,
+      }),
+    );
+    assert.deepEqual((await validatePptx(reversedTop.pptx)).errors, []);
+
+    await rejects(
+      buildSingleChart(
+        make("top", {
+          kind: "value",
+          min: 0,
+          max: 10,
+          crosses: "autoZero",
+        }),
+      ),
+    );
+    const zeroBottom = await buildSingleChart(
+      make("bottom", {
+        kind: "value",
+        min: 0,
+        max: 10,
+        crosses: "autoZero",
+      }),
+    );
+    assert.deepEqual((await validatePptx(zeroBottom.pptx)).errors, []);
+  });
 });

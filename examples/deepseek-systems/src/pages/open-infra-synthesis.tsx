@@ -89,7 +89,7 @@ const hardwareReflections = [
 export function OpenInfraSynthesisPage() {
   return (
     <SlideFrame
-      slideId="open-infra-synthesis"
+      id="open-infra-synthesis"
       dark
       kicker="04 · 全栈开源基础设施全景与下一代 AI 芯片协同设计 / Open-Source Week · ISCA '25"
       title="总结：模型—算子—网络—存储全栈闭环与下一代硬件协同演进"

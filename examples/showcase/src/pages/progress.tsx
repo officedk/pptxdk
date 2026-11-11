@@ -5,7 +5,7 @@ import { colors } from "../theme.ts";
 
 export function ProgressPage() {
   return (
-    <Slide slideId="progress" background={colors.ink}>
+    <Slide id="progress" background={colors.ink}>
       <Text
         x={82}
         y={66}

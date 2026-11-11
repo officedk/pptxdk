@@ -97,8 +97,6 @@ export type TableCellStyle = TableTextStyle & {
 export type TableDeclarationProps = MotionProps &
   MorphProps & {
     readonly id?: string;
-    readonly testId?: string;
-    readonly part?: string;
     readonly name?: string;
     readonly link?: LinkTarget;
     readonly x?: number;
@@ -111,8 +109,6 @@ export type TableDeclarationProps = MotionProps &
 
 type TablePartDeclarationProps = {
   readonly id?: string;
-  readonly testId?: string;
-  readonly part?: string;
 };
 
 export type RowDeclarationProps = TablePartDeclarationProps & {
@@ -139,8 +135,6 @@ type ParsedCell = {
   readonly colSpan: number;
   readonly path: string;
   readonly authorId?: string;
-  readonly testId?: string;
-  readonly part?: string;
   readonly paragraphs: readonly Paragraph[];
   readonly textStyle: ResolvedTextStyle;
   readonly verticalAlign: TableVerticalAlign;
@@ -152,8 +146,6 @@ type ParsedCell = {
 type ParsedRow = {
   readonly path: string;
   readonly authorId?: string;
-  readonly testId?: string;
-  readonly part?: string;
   readonly height?: number;
   readonly textStyle: Record<string, unknown>;
   readonly verticalAlign?: TableVerticalAlign;
@@ -173,8 +165,6 @@ const cellStyleKeys = [
 ] as const;
 const tableParameters = [
   "id",
-  "testId",
-  "part",
   "name",
   "morphKey",
   "link",
@@ -188,7 +178,7 @@ const tableParameters = [
   "emphasis",
   "motion",
 ] as const;
-const tablePartParameters = ["id", "testId", "part", "style"] as const;
+const tablePartParameters = ["id", "style"] as const;
 const cellParameters = [...tablePartParameters, "colSpan", "rowSpan"] as const;
 const verticalAlignments = new Set(["top", "middle", "bottom"]);
 const maximumExtentEmu = 2_147_483_647;
@@ -229,7 +219,7 @@ function onlyKeys(
 
 function optionalName(
   value: unknown,
-  label: "id" | "testId" | "name" | "part",
+  label: "id" | "name",
   path?: string,
 ): string | undefined {
   if (value === undefined) return undefined;
@@ -572,8 +562,7 @@ function identityPath(
   props: Readonly<Record<string, unknown>>,
   index: number,
 ): string {
-  const identity = props["testId"] ?? props["part"] ?? props["id"];
-  return `${type}[${pathLabel(identity, String(index + 1))}]`;
+  return `${type}[${pathLabel(props["id"], String(index + 1))}]`;
 }
 
 function prepareRows(
@@ -608,8 +597,6 @@ function prepareRows(
     const rowPath = identityPath("row", child.props, rowIndex);
     onlyKeys(child.props, tablePartParameters, "Row", rowPath);
     const rowAuthorId = optionalName(child.props["id"], "id", rowPath);
-    optionalName(child.props["testId"], "testId", rowPath);
-    optionalName(child.props["part"], "part", rowPath);
     const rowStyle = trackStyle(child, "row", rowPath);
     const heightValue = rowStyle.style["height"];
     const height =
@@ -628,12 +615,6 @@ function prepareRows(
     const row: ParsedRow = {
       path: rowPath,
       ...(rowAuthorId === undefined ? {} : { authorId: rowAuthorId }),
-      ...(typeof child.props["testId"] === "string"
-        ? { testId: child.props["testId"] }
-        : {}),
-      ...(typeof child.props["part"] === "string"
-        ? { part: child.props["part"] }
-        : {}),
       ...(height === undefined ? {} : { height }),
       textStyle: mergeTextStyle(tableTextStyle, rowStyle.textStyle),
       verticalAlign: rowVerticalAlign,
@@ -665,12 +646,6 @@ function prepareRows(
       cellIndex += 1;
       onlyKeys(cellChild.props, cellParameters, "Cell", cellPath);
       const cellAuthorId = optionalName(cellChild.props["id"], "id", cellPath);
-      const cellTestId = optionalName(
-        cellChild.props["testId"],
-        "testId",
-        cellPath,
-      );
-      const cellPart = optionalName(cellChild.props["part"], "part", cellPath);
       while (owners.has(`${rowIndex}:${column}`)) column += 1;
       const colSpan = span(cellChild.props["colSpan"], "colSpan", cellPath);
       const rowSpan = span(cellChild.props["rowSpan"], "rowSpan", cellPath);
@@ -745,8 +720,6 @@ function prepareRows(
         colSpan,
         path: cellPath,
         ...(cellAuthorId === undefined ? {} : { authorId: cellAuthorId }),
-        ...(cellTestId === undefined ? {} : { testId: cellTestId }),
-        ...(cellPart === undefined ? {} : { part: cellPart }),
         paragraphs: parsedParagraphs,
         textStyle: parsedTextStyle,
         verticalAlign: cellVerticalAlign,
@@ -782,8 +755,6 @@ function prepareRows(
 }
 
 export type ParsedTable = {
-  readonly testId?: string;
-  readonly part?: string;
   readonly name?: string;
   readonly morphKey?: string;
   readonly link?: LinkTarget;
@@ -1021,8 +992,6 @@ export const tableCapability: ObjectCapabilityModule<ParsedTable> = {
     context: CapabilityParseContext,
   ): CapabilityParseResult<ParsedTable> {
     onlyKeys(input.props, tableParameters, "Table", context.path);
-    const testId = optionalName(input.props["testId"], "testId", context.path);
-    const part = optionalName(input.props["part"], "part", context.path);
     const requestedName = optionalName(
       input.props["name"],
       "name",
@@ -1057,8 +1026,6 @@ export const tableCapability: ObjectCapabilityModule<ParsedTable> = {
     );
 
     const parsed: ParsedTable = {
-      ...(testId !== undefined ? { testId } : {}),
-      ...(part !== undefined ? { part } : {}),
       ...(requestedName !== undefined ? { name: requestedName } : {}),
       ...(input.props["morphKey"] !== undefined
         ? { morphKey: input.props["morphKey"] as string }
@@ -1127,8 +1094,6 @@ export const tableCapability: ObjectCapabilityModule<ParsedTable> = {
   },
 
   compile(parsed: ParsedTable, context: CapabilityContext): CapabilityOutput {
-    const testId = parsed.testId;
-    const part = parsed.part;
     const requestedName = parsed.name;
     const declaredWidth =
       parsed.contract.layoutStyle.width ?? parsed.rawProps["width"];
@@ -1290,7 +1255,7 @@ export const tableCapability: ObjectCapabilityModule<ParsedTable> = {
       }
     }
     const name =
-      context.morphName ?? requestedName ?? testId ?? `Table ${context.id - 1}`;
+      context.morphName ?? requestedName ?? `Table ${context.id - 1}`;
     let escapedName: string;
     try {
       escapedName = xmlEscape(name);
@@ -1307,8 +1272,6 @@ export const tableCapability: ObjectCapabilityModule<ParsedTable> = {
       ...rows.map((row, rowIndex) => ({
         kind: "row" as const,
         ...(row.authorId === undefined ? {} : { authorId: row.authorId }),
-        ...(row.testId === undefined ? {} : { testId: row.testId }),
-        ...(row.part === undefined ? {} : { part: row.part }),
         row: rowIndex,
         box: {
           x,
@@ -1323,8 +1286,6 @@ export const tableCapability: ObjectCapabilityModule<ParsedTable> = {
       ...cells.map((cell) => ({
         kind: "cell" as const,
         ...(cell.authorId === undefined ? {} : { authorId: cell.authorId }),
-        ...(cell.testId === undefined ? {} : { testId: cell.testId }),
-        ...(cell.part === undefined ? {} : { part: cell.part }),
         row: cell.row,
         column: cell.column,
         rowSpan: cell.rowSpan,
@@ -1358,17 +1319,16 @@ export const tableCapability: ObjectCapabilityModule<ParsedTable> = {
           rowSpan,
           colSpan,
         })),
-      ...(tableParts.some(
-        ({ authorId, testId, part }) =>
-          authorId !== undefined || testId !== undefined || part !== undefined,
-      )
+      ...(tableParts.some(({ authorId }) => authorId !== undefined)
         ? { parts: tableParts }
         : {}),
     };
     const annotations = motionAnnotations(parsed.rawProps, {
       kind: "table",
       name,
-      ...(testId === undefined ? {} : { testId }),
+      ...(parsed.rawProps["id"] === undefined
+        ? {}
+        : { authorId: parsed.rawProps["id"] as string }),
       textBody: true,
       filled: cells.some(
         (cell) => cell.fill !== undefined || rows[cell.row]?.fill !== undefined,
@@ -1394,8 +1354,6 @@ export const tableCapability: ObjectCapabilityModule<ParsedTable> = {
         id: context.id,
         kind: "table",
         name,
-        ...(testId === undefined ? {} : { testId }),
-        ...(part === undefined ? {} : { part }),
         box,
         table: observation,
       },

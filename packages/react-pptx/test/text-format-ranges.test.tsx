@@ -17,7 +17,7 @@ function deck(text: ReturnType<typeof createElement>) {
   return createElement(
     Deck,
     { width: 960, height: 540 },
-    createElement(Slide, { slideId: "cover" }, text),
+    createElement(Slide, { id: "cover" }, text),
   );
 }
 

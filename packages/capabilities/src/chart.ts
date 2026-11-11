@@ -108,8 +108,6 @@ export type ChartDataLabels<
 type ChartBase = MotionProps &
   MorphProps & {
     readonly id?: string;
-    readonly testId?: string;
-    readonly part?: string;
     readonly name?: string;
     readonly link?: LinkTarget;
     readonly x?: number;
@@ -273,10 +271,7 @@ function onlyKeys(
   }
 }
 
-function optionalName(
-  value: unknown,
-  label: "testId" | "name" | "part",
-): string | undefined {
+function optionalName(value: unknown, label: "name"): string | undefined {
   if (value === undefined) return undefined;
   if (typeof value !== "string" || value.trim() === "") {
     fail("invalid-parameter", `${label} must be a non-empty string`);
@@ -1196,8 +1191,6 @@ function chartResourceClaims(
 }
 
 export type ParsedChart = {
-  readonly testId?: string;
-  readonly part?: string;
   readonly name?: string;
   readonly morphKey?: string;
   readonly link?: LinkTarget;
@@ -1263,8 +1256,6 @@ export const chartCapability: ObjectCapabilityModule = {
       input.props,
       [
         "id",
-        "testId",
-        "part",
         "name",
         "morphKey",
         "link",
@@ -1310,8 +1301,6 @@ export const chartCapability: ObjectCapabilityModule = {
       );
     }
 
-    const testId = optionalName(input.props["testId"], "testId");
-    const part = optionalName(input.props["part"], "part");
     const name = optionalName(input.props["name"], "name");
     if (name !== undefined) xmlText(name, "Chart.name");
 
@@ -1421,8 +1410,6 @@ export const chartCapability: ObjectCapabilityModule = {
       data,
       contract,
       rawProps: input.props,
-      ...(testId === undefined ? {} : { testId }),
-      ...(part === undefined ? {} : { part }),
       ...(name === undefined ? {} : { name }),
       ...(input.props["morphKey"] !== undefined
         ? { morphKey: input.props["morphKey"] as string }
@@ -1518,8 +1505,6 @@ export const chartCapability: ObjectCapabilityModule = {
       y,
       width,
       height,
-      ...(parsed.testId === undefined ? {} : { testId: parsed.testId }),
-      ...(parsed.part === undefined ? {} : { part: parsed.part }),
       ...(parsed.name === undefined ? {} : { name: parsed.name }),
       ...(parsed.legend === undefined ? {} : { legend: parsed.legend }),
       ...(parsed.dataLabels === undefined
@@ -1548,15 +1533,11 @@ export const chartCapability: ObjectCapabilityModule = {
       ...(parsed.motion === undefined ? {} : { motion: parsed.motion }),
     } as ChartProps;
 
-    const name =
-      context.morphName ??
-      props.name ??
-      props.testId ??
-      `Chart ${context.id - 1}`;
+    const name = context.morphName ?? props.name ?? `Chart ${context.id - 1}`;
     const annotations = motionAnnotations(parsed.rawProps, {
       kind: "chart",
       name,
-      ...(props.testId === undefined ? {} : { testId: props.testId }),
+      ...(props.id === undefined ? {} : { authorId: props.id }),
       textBody: false,
       filled: props.kind !== "line",
       box: {
@@ -1625,8 +1606,6 @@ export const chartCapability: ObjectCapabilityModule = {
         id: context.id,
         kind: "chart",
         name,
-        ...(props.testId === undefined ? {} : { testId: props.testId }),
-        ...(props.part === undefined ? {} : { part: props.part }),
         box: {
           x: props.x!,
           y: props.y!,

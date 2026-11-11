@@ -38,7 +38,7 @@ function effectMap(motion: MotionObservation | undefined) {
   return new Map(
     motion?.steps
       .flatMap((entry) => entry.effects)
-      .map((effect) => [effect.target.testId, effect]) ?? [],
+      .map((effect) => [effect.target.authorId, effect]) ?? [],
   );
 }
 
@@ -53,11 +53,11 @@ describe("plain authoring choreography", () => {
     const follower = createMotionScopeHandle();
     const ready = source.cue("ready");
     const document = deck({ width: 320, height: 180 }).append(
-      slide({ slideId: "pure-choreography" }).append(
+      slide({ id: "pure-choreography" }).append(
         step({ n: 1 }).append(
           motionScope(source, { publishEnd: ready }).append(
             shape({
-              testId: "source",
+              id: "source",
               x: 10,
               y: 10,
               width: 40,
@@ -70,7 +70,7 @@ describe("plain authoring choreography", () => {
             delay: 5,
           }).append(
             shape({
-              testId: "follower",
+              id: "follower",
               x: 10,
               y: 40,
               width: 40,
@@ -81,7 +81,7 @@ describe("plain authoring choreography", () => {
         ),
         step().append(
           shape({
-            testId: "independent-step",
+            id: "independent-step",
             x: 10,
             y: 70,
             width: 40,
@@ -100,7 +100,7 @@ describe("plain authoring choreography", () => {
         entry.trigger,
         entry.number,
         entry.effects.map(({ target, startMs, endMs }) => [
-          target.testId,
+          target.authorId,
           startMs,
           endMs,
         ]),
@@ -143,9 +143,9 @@ describe("plain authoring choreography", () => {
 
   it("derives Box default entrance and disabled ancestor chains from the current tree", async () => {
     const document = deck({ width: 320, height: 180 }).append(
-      slide({ slideId: "derived-defaults" }).append(
+      slide({ id: "derived-defaults" }).append(
         box({
-          testId: "outer",
+          id: "outer",
           enter: fade({ duration: 200, delay: 800 }),
           style: {
             width: 200,
@@ -154,7 +154,7 @@ describe("plain authoring choreography", () => {
           },
         }).append(
           box({
-            testId: "inner-background",
+            id: "inner-background",
             style: {
               width: 120,
               height: 60,
@@ -162,7 +162,7 @@ describe("plain authoring choreography", () => {
             },
           }).append(
             shape({
-              testId: "inherited-child",
+              id: "inherited-child",
               x: 4,
               y: 4,
               width: 20,
@@ -170,7 +170,7 @@ describe("plain authoring choreography", () => {
             }),
           ),
           shape({
-            testId: "own-entry-child",
+            id: "own-entry-child",
             x: 40,
             y: 4,
             width: 20,
@@ -179,7 +179,7 @@ describe("plain authoring choreography", () => {
           }),
         ),
         box({
-          testId: "disabled",
+          id: "disabled",
           motion: false,
           enter: fade({ duration: 300 }),
           style: {
@@ -189,7 +189,7 @@ describe("plain authoring choreography", () => {
           },
         }).append(
           shape({
-            testId: "disabled-child",
+            id: "disabled-child",
             x: 4,
             y: 4,
             width: 20,
@@ -197,7 +197,7 @@ describe("plain authoring choreography", () => {
             enter: fade(),
           }),
           shape({
-            testId: "disabled-reenabled",
+            id: "disabled-reenabled",
             motion: true,
             x: 28,
             y: 4,
@@ -207,12 +207,12 @@ describe("plain authoring choreography", () => {
           }),
         ),
         box({
-          testId: "transparent-default",
+          id: "transparent-default",
           enter: fade({ duration: 70 }),
           style: { width: 100, height: 40 },
         }).append(
           shape({
-            testId: "transparent-child",
+            id: "transparent-child",
             x: 4,
             y: 4,
             width: 20,
@@ -274,7 +274,7 @@ describe("plain authoring choreography", () => {
         name: "inherited-default",
         content: box({ enter: fade({ duration: 70 }), style }).append(
           shape({
-            testId: "inherited",
+            id: "inherited",
             x: 4,
             y: 4,
             width: 20,
@@ -288,7 +288,7 @@ describe("plain authoring choreography", () => {
         name: "disabled-explicit",
         content: box({ motion: false, enter: fade(), style }).append(
           shape({
-            testId: "disabled",
+            id: "disabled",
             x: 4,
             y: 4,
             width: 20,
@@ -303,7 +303,7 @@ describe("plain authoring choreography", () => {
         name: "plain",
         content: box({ style }).append(
           shape({
-            testId: "plain",
+            id: "plain",
             x: 4,
             y: 4,
             width: 20,
@@ -317,7 +317,7 @@ describe("plain authoring choreography", () => {
         name: "local-override",
         content: box({ enter: fade({ duration: 70 }), style }).append(
           shape({
-            testId: "override",
+            id: "override",
             x: 4,
             y: 4,
             width: 20,
@@ -332,7 +332,7 @@ describe("plain authoring choreography", () => {
         name: "disabled-reenabled",
         content: box({ motion: false, enter: fade(), style }).append(
           shape({
-            testId: "reenabled",
+            id: "reenabled",
             motion: true,
             x: 4,
             y: 4,
@@ -348,7 +348,7 @@ describe("plain authoring choreography", () => {
 
     for (const scenario of scenarios) {
       const document = deck({ width: 320, height: 180 }).append(
-        slide({ slideId: scenario.name }).append(scenario.content),
+        slide({ id: scenario.name }).append(scenario.content),
       );
       for (const [mode, run] of fullBuilds) {
         const result = await run(document);
@@ -417,12 +417,12 @@ describe("plain authoring choreography", () => {
           { width: 320, height: 180 },
           createElement(
             jsx.Slide,
-            { slideId: "jsx-inherited" },
+            { id: "jsx-inherited" },
             createElement(
               jsx.Box,
               { enter: fade({ duration: 70 }), style },
               createElement(jsx.Shape, {
-                testId: "jsx-inherited",
+                id: "jsx-inherited",
                 x: 4,
                 y: 4,
                 width: 20,
@@ -441,12 +441,12 @@ describe("plain authoring choreography", () => {
           { width: 320, height: 180 },
           createElement(
             jsx.Slide,
-            { slideId: "jsx-disabled" },
+            { id: "jsx-disabled" },
             createElement(
               jsx.Box,
               { motion: false, enter: fade(), style },
               createElement(jsx.Shape, {
-                testId: "jsx-disabled",
+                id: "jsx-disabled",
                 x: 4,
                 y: 4,
                 width: 20,
@@ -515,7 +515,7 @@ describe("plain authoring choreography", () => {
     const firstScope = createMotionScopeHandle();
     const secondScope = createMotionScopeHandle();
     const moved = shape({
-      testId: "moved",
+      id: "moved",
       x: 10,
       y: 10,
       width: 40,
@@ -525,7 +525,7 @@ describe("plain authoring choreography", () => {
     const firstTarget = motionScope(firstScope).append(moved);
     const secondTarget = motionScope(secondScope);
     const document = deck({ width: 320, height: 180 }).append(
-      slide({ slideId: "move-scope" }).append(
+      slide({ id: "move-scope" }).append(
         step({ n: 1 }).append(firstTarget),
         step({ n: 2 }).append(secondTarget),
       ),
@@ -535,7 +535,7 @@ describe("plain authoring choreography", () => {
     assert.deepEqual(
       motionOf(before).steps.map((entry) => [
         entry.number,
-        entry.effects.map(({ target }) => target.testId),
+        entry.effects.map(({ target }) => target.authorId),
       ]),
       [
         [1, ["moved"]],
@@ -548,7 +548,7 @@ describe("plain authoring choreography", () => {
     assert.deepEqual(
       motionOf(afterMove).steps.map((entry) => [
         entry.number,
-        entry.effects.map(({ target }) => target.testId),
+        entry.effects.map(({ target }) => target.authorId),
       ]),
       [
         [1, []],
@@ -573,7 +573,7 @@ describe("plain authoring choreography", () => {
     const outerScope = motionScope(outer);
     const innerScope = motionScope(inner).append(
       shape({
-        testId: "nested",
+        id: "nested",
         x: 10,
         y: 10,
         width: 40,
@@ -582,7 +582,7 @@ describe("plain authoring choreography", () => {
       }),
     );
     const document = deck({ width: 320, height: 180 }).append(
-      slide({ slideId: "move-scope-parent" }).append(outerScope, innerScope),
+      slide({ id: "move-scope-parent" }).append(outerScope, innerScope),
     );
 
     const before = await build(document);
@@ -615,7 +615,7 @@ describe("plain authoring choreography", () => {
     const ready = source.cue("ready");
     const sourceScope = motionScope(source, { publishEnd: ready }).append(
       shape({
-        testId: "source",
+        id: "source",
         x: 10,
         y: 10,
         width: 40,
@@ -627,7 +627,7 @@ describe("plain authoring choreography", () => {
       startAt: after(ready, 10),
     }).append(
       shape({
-        testId: "follower",
+        id: "follower",
         x: 10,
         y: 40,
         width: 40,
@@ -636,7 +636,7 @@ describe("plain authoring choreography", () => {
       }),
     );
     const document = deck({ width: 320, height: 180 }).append(
-      slide({ slideId: "broken-reference" }).append(sourceScope, followerScope),
+      slide({ id: "broken-reference" }).append(sourceScope, followerScope),
     );
     assert.deepEqual(
       (await validatePptx((await build(document)).pptx)).errors,
@@ -667,7 +667,7 @@ describe("plain authoring choreography", () => {
       offsetMs: 40,
     };
     const first = shape({
-      testId: "first",
+      id: "first",
       x: 10,
       y: 10,
       width: 40,
@@ -675,11 +675,11 @@ describe("plain authoring choreography", () => {
       enter: fade(),
     });
     const document = deck({ width: 320, height: 180 }).append(
-      slide({ slideId: "associations" }).append(
+      slide({ id: "associations" }).append(
         motionScope(scope, { publishEnd: cue }).append(first),
         motionScope(createMotionScopeHandle(), { startAt: timing }).append(
           shape({
-            testId: "second",
+            id: "second",
             x: 10,
             y: 40,
             width: 40,
@@ -688,7 +688,7 @@ describe("plain authoring choreography", () => {
           }),
         ),
       ),
-      slide({ slideId: "associations-next" }).append(
+      slide({ id: "associations-next" }).append(
         box({
           morphKey: continuity,
           style: { width: 80, height: 40, backgroundColor: "#123456" },
@@ -700,7 +700,7 @@ describe("plain authoring choreography", () => {
     assert.deepEqual((await validatePptx(result.pptx)).errors, []);
     const effects = [...effectMap(motionOf(result)).values()];
     assert.equal(
-      effects.find(({ target }) => target.testId === "second")?.startMs,
+      effects.find(({ target }) => target.authorId === "second")?.startMs,
       540,
     );
     assert.equal(first.props["morphKey"], undefined);
@@ -717,10 +717,10 @@ describe("plain authoring choreography", () => {
     const pureFollower = createMotionScopeHandle();
     const pureCue = pureSource.cue("ready");
     const pureDocument = deck({ width: 320, height: 180 }).append(
-      slide({ slideId: "equivalent" }).append(
+      slide({ id: "equivalent" }).append(
         step({ n: 1 }).append(
           box({
-            testId: "card",
+            id: "card",
             enter: fade({ duration: 200, delay: 50 }),
             style: {
               width: 200,
@@ -729,7 +729,7 @@ describe("plain authoring choreography", () => {
             },
           }).append(
             shape({
-              testId: "card-child",
+              id: "card-child",
               x: 8,
               y: 8,
               width: 40,
@@ -738,7 +738,7 @@ describe("plain authoring choreography", () => {
           ),
           motionScope(pureSource, { publishEnd: pureCue }).append(
             shape({
-              testId: "source",
+              id: "source",
               x: 10,
               y: 20,
               width: 40,
@@ -750,7 +750,7 @@ describe("plain authoring choreography", () => {
             startAt: after(pureCue, 20),
           }).append(
             shape({
-              testId: "follower",
+              id: "follower",
               x: 10,
               y: 50,
               width: 40,
@@ -761,7 +761,7 @@ describe("plain authoring choreography", () => {
         ),
         step().append(
           shape({
-            testId: "independent",
+            id: "independent",
             x: 10,
             y: 80,
             width: 40,
@@ -780,14 +780,14 @@ describe("plain authoring choreography", () => {
         { width: 320, height: 180 },
         createElement(
           jsx.Slide,
-          { slideId: "equivalent" },
+          { id: "equivalent" },
           createElement(
             jsx.Step,
             { n: 1 },
             createElement(
               jsx.Box,
               {
-                testId: "card",
+                id: "card",
                 enter: fade({ duration: 200, delay: 50 }),
                 style: {
                   width: 200,
@@ -796,7 +796,7 @@ describe("plain authoring choreography", () => {
                 },
               },
               createElement(jsx.Shape, {
-                testId: "card-child",
+                id: "card-child",
                 x: 8,
                 y: 8,
                 width: 40,
@@ -807,7 +807,7 @@ describe("plain authoring choreography", () => {
               jsx.MotionScope,
               { scope: source, publishEnd: source.cue("ready") },
               createElement(jsx.Shape, {
-                testId: "source",
+                id: "source",
                 x: 10,
                 y: 20,
                 width: 40,
@@ -819,7 +819,7 @@ describe("plain authoring choreography", () => {
               jsx.MotionScope,
               { scope: follower, startAt: after(source.cue("ready"), 20) },
               createElement(jsx.Shape, {
-                testId: "follower",
+                id: "follower",
                 x: 10,
                 y: 50,
                 width: 40,
@@ -832,7 +832,7 @@ describe("plain authoring choreography", () => {
             jsx.Step,
             {},
             createElement(jsx.Shape, {
-              testId: "independent",
+              id: "independent",
               x: 10,
               y: 80,
               width: 40,
@@ -849,23 +849,19 @@ describe("plain authoring choreography", () => {
       jsx.build(createElement(EquivalentDeck)),
     ]);
     assert.deepEqual(
-      pureResult.report.slides[0]?.objects.map(({ testId, kind, box }) => [
-        testId,
-        kind,
-        box,
-      ]),
-      jsxResult.report.slides[0]?.objects.map(({ testId, kind, box }) => [
-        testId,
-        kind,
-        box,
-      ]),
+      pureResult.report.slides[0]?.objects.map(
+        ({ authorId: testId, kind, box }) => [testId, kind, box],
+      ),
+      jsxResult.report.slides[0]?.objects.map(
+        ({ authorId: testId, kind, box }) => [testId, kind, box],
+      ),
     );
     const normalize = (motion: MotionObservation) => ({
       steps: motion.steps.map((entry) => [
         entry.trigger,
         entry.number,
         entry.effects.map(({ target, preset, startMs, endMs, durationMs }) => [
-          target.testId,
+          target.authorId,
           preset,
           startMs,
           endMs,
@@ -898,7 +894,7 @@ describe("plain authoring choreography", () => {
     const style = { width: 100, height: 50, backgroundColor: "#336699" };
     const document = deck({ width: 320, height: 180 }).append(
       slide({
-        slideId: "first",
+        id: "first",
         transition: transitions.morph({
           duration: 1000,
           by: "object",
@@ -907,8 +903,8 @@ describe("plain authoring choreography", () => {
       }).append(
         box({ morphKey: hero, style }),
         shape({
-          testId: "next",
-          link: { slideId: "second" },
+          id: "next",
+          link: { id: "second" },
           x: 10,
           y: 70,
           width: 40,
@@ -916,7 +912,7 @@ describe("plain authoring choreography", () => {
           fill: "#112233",
         }),
       ),
-      slide({ slideId: "second" }).append(box({ morphKey: hero, style })),
+      slide({ id: "second" }).append(box({ morphKey: hero, style })),
     );
 
     const result = await build(document);

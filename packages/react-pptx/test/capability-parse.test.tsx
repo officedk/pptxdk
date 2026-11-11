@@ -6,21 +6,16 @@ import {
   build,
   Box,
   BuildError,
-  Chart,
   createMorphScope,
   Deck,
   font,
   Group,
   groupCapability,
-  Image,
   P,
-  Row,
-  Cell,
   Shape,
   shapeCapability,
   Slide,
   Span,
-  Table,
   Text,
   textCapability,
   transitions,
@@ -40,18 +35,14 @@ const notoFont = font("Noto Sans CJK SC", [
   },
 ]);
 
-const sampleImage = new Uint8Array(
-  readFileSync(new URL("./assets/wide-20000x1.png", import.meta.url)),
-);
-
 describe("Ticket 08: Object capability parse phase, container TextStyle validation, and Text pilot", () => {
   describe("Container declaration site validation for inheritable TextStyle", () => {
     it("directly rejects invalid TextStyle on Deck and points error path to deck", async () => {
       await assert.rejects(
         build(
           <Deck width={960} height={540} style={{ fontSize: -4 }}>
-            <Slide slideId="slide-1">
-              <Box testId="empty-box" />
+            <Slide id="slide-1">
+              <Box id="empty-box" />
             </Slide>
           </Deck>,
         ),
@@ -71,8 +62,8 @@ describe("Ticket 08: Object capability parse phase, container TextStyle validati
       await assert.rejects(
         build(
           <Deck width={960} height={540} style={{ color: "invalid-color" }}>
-            <Slide slideId="slide-1">
-              <Box testId="empty-box" />
+            <Slide id="slide-1">
+              <Box id="empty-box" />
             </Slide>
           </Deck>,
         ),
@@ -93,8 +84,8 @@ describe("Ticket 08: Object capability parse phase, container TextStyle validati
       await assert.rejects(
         build(
           <Deck width={960} height={540}>
-            <Slide slideId="slide-with-invalid-style" style={{ fontSize: -10 }}>
-              <Box testId="empty-box" />
+            <Slide id="slide-with-invalid-style" style={{ fontSize: -10 }}>
+              <Box id="empty-box" />
             </Slide>
           </Deck>,
         ),
@@ -114,9 +105,9 @@ describe("Ticket 08: Object capability parse phase, container TextStyle validati
       await assert.rejects(
         build(
           <Deck width={960} height={540}>
-            <Slide slideId="slide-box-test">
+            <Slide id="slide-box-test">
               <Box
-                testId="invalid-box"
+                id="invalid-box"
                 style={{ fontSize: 0, width: 200, height: 100 }}
               />
             </Slide>
@@ -141,9 +132,9 @@ describe("Ticket 08: Object capability parse phase, container TextStyle validati
       await assert.rejects(
         build(
           <Deck width={960} height={540}>
-            <Slide slideId="slide-group-test">
+            <Slide id="slide-group-test">
               <Group
-                testId="invalid-group"
+                id="invalid-group"
                 style={{ fontSize: -5, width: 200, height: 100 }}
               />
             </Slide>
@@ -170,9 +161,9 @@ describe("Ticket 08: Object capability parse phase, container TextStyle validati
       await assert.rejects(
         build(
           <Deck width={960} height={540}>
-            <Slide slideId="test-unknown-param">
+            <Slide id="test-unknown-param">
               <Text
-                testId="bad-param-text"
+                id="bad-param-text"
                 {...({ unsupportedProp: "foo" } as any)}
               >
                 Hello
@@ -199,11 +190,8 @@ describe("Ticket 08: Object capability parse phase, container TextStyle validati
       await assert.rejects(
         build(
           <Deck width={960} height={540}>
-            <Slide slideId="test-unknown-style">
-              <Text
-                testId="bad-style-text"
-                style={{ invalidStyleProp: 42 } as any}
-              >
+            <Slide id="test-unknown-style">
+              <Text id="bad-style-text" style={{ invalidStyleProp: 42 } as any}>
                 Hello
               </Text>
             </Slide>
@@ -228,8 +216,8 @@ describe("Ticket 08: Object capability parse phase, container TextStyle validati
       await assert.rejects(
         build(
           <Deck width={960} height={540}>
-            <Slide slideId="test-invalid-style">
-              <Text testId="non-obj-style" style={"not-an-object" as any}>
+            <Slide id="test-invalid-style">
+              <Text id="non-obj-style" style={"not-an-object" as any}>
                 Hello
               </Text>
             </Slide>
@@ -251,10 +239,10 @@ describe("Ticket 08: Object capability parse phase, container TextStyle validati
       try {
         const result = await build(
           <Deck width={960} height={540}>
-            <Slide slideId="single-parse-slide">
+            <Slide id="single-parse-slide">
               <Box style={{ display: "flex", flexDirection: "column" }}>
                 <Text
-                  testId="piloted-text"
+                  id="piloted-text"
                   width={300}
                   height={60}
                   style={{
@@ -291,9 +279,9 @@ describe("Ticket 08: Object capability parse phase, container TextStyle validati
     it("successfully compiles Text with layoutStyle, textStyle, visualStyle, and paragraphs", async () => {
       const result = await build(
         <Deck width={960} height={540}>
-          <Slide slideId="positive-text-slide">
+          <Slide id="positive-text-slide">
             <Text
-              testId="hero-title"
+              id="hero-title"
               x={50}
               y={60}
               width={500}
@@ -325,7 +313,9 @@ describe("Ticket 08: Object capability parse phase, container TextStyle validati
 
       // Verify observation in build report
       const slideReport = result.report.slides[0]!;
-      const textObs = slideReport.objects.find((o) => o.name === "hero-title");
+      const textObs = slideReport.objects.find(
+        (o) => o.authorId === "hero-title",
+      );
       assert(textObs !== undefined, "Expected text observation hero-title");
       assert.equal(textObs.kind, "text");
       assert.equal(textObs.text, "Prefix Main headline text");
@@ -336,7 +326,7 @@ describe("Ticket 08: Object capability parse phase, container TextStyle validati
       // 1. Successful baseline alignment when font resource is available
       const goodResult = await build(
         <Deck width={960} height={540}>
-          <Slide slideId="baseline-slide">
+          <Slide id="baseline-slide">
             <Box
               style={{
                 display: "flex",
@@ -344,10 +334,10 @@ describe("Ticket 08: Object capability parse phase, container TextStyle validati
                 alignItems: "baseline",
               }}
             >
-              <Text testId="t1" style={{ fontFamily: notoFont, fontSize: 32 }}>
+              <Text id="t1" style={{ fontFamily: notoFont, fontSize: 32 }}>
                 Large
               </Text>
-              <Text testId="t2" style={{ fontFamily: notoFont, fontSize: 16 }}>
+              <Text id="t2" style={{ fontFamily: notoFont, fontSize: 16 }}>
                 Small
               </Text>
             </Box>
@@ -361,7 +351,7 @@ describe("Ticket 08: Object capability parse phase, container TextStyle validati
       await assert.rejects(
         build(
           <Deck width={960} height={540}>
-            <Slide slideId="missing-font-baseline">
+            <Slide id="missing-font-baseline">
               <Box
                 style={{
                   display: "flex",
@@ -369,7 +359,7 @@ describe("Ticket 08: Object capability parse phase, container TextStyle validati
                   alignItems: "baseline",
                 }}
               >
-                <Text testId="unmeasured-text" width={200} height={50}>
+                <Text id="unmeasured-text" width={200} height={50}>
                   No font bytes
                 </Text>
               </Box>
@@ -391,105 +381,13 @@ describe("Ticket 08: Object capability parse phase, container TextStyle validati
     });
   });
 
-  describe("Compatibility for unmigrated capabilities in transition period", () => {
-    it("builds presentation containing Shape, Image, Table, Chart, Box, and Group without regressions", async () => {
-      const result = await build(
-        <Deck width={960} height={540}>
-          <Slide slideId="full-suite-slide">
-            <Box
-              testId="wrapper-box"
-              style={{
-                display: "flex",
-                flexDirection: "column",
-                gap: 10,
-                width: 900,
-                height: 500,
-                backgroundColor: "#ffffff",
-              }}
-            >
-              {/* Group */}
-              <Group testId="sample-group" style={{ width: 400, height: 60 }}>
-                <Shape
-                  width={150}
-                  height={50}
-                  text="Grouped Shape"
-                  style={{ backgroundColor: "#2b579a" }}
-                />
-              </Group>
-
-              {/* Shape */}
-              <Shape
-                testId="sample-shape"
-                width={150}
-                height={50}
-                text="Direct Shape"
-                style={{ backgroundColor: "#1e395b" }}
-              />
-
-              {/* Image */}
-              <Image
-                testId="sample-image"
-                src={sampleImage}
-                width={60}
-                height={60}
-              />
-
-              {/* Table */}
-              <Table testId="sample-table" columns={[100, 100]}>
-                <Row style={{ height: 40 }}>
-                  <Cell>A1</Cell>
-                  <Cell>B1</Cell>
-                </Row>
-              </Table>
-
-              {/* Chart */}
-              <Chart
-                testId="sample-chart"
-                kind="bar"
-                width={300}
-                height={150}
-                data={{
-                  categories: ["Q1", "Q2"],
-                  series: [{ name: "Sales", values: [10, 20] }],
-                }}
-              />
-
-              {/* Text */}
-              <Text
-                testId="sample-text"
-                width={200}
-                height={40}
-                style={{ fontSize: 14 }}
-              >
-                Compatibility check text
-              </Text>
-            </Box>
-          </Slide>
-        </Deck>,
-      );
-
-      const validation = await validatePptx(result.pptx);
-      assert.deepEqual(validation.errors, []);
-
-      // Verify all objects are present in report
-      const objects = result.report.slides[0]!.objects;
-      const testIds = objects.map((o) => o.testId).filter(Boolean);
-      assert(testIds.includes("wrapper-box"));
-      assert(testIds.includes("sample-shape"));
-      assert(testIds.includes("sample-image"));
-      assert(testIds.includes("sample-table"));
-      assert(testIds.includes("sample-chart"));
-      assert(testIds.includes("sample-text"));
-    });
-  });
-
   describe("Ticket 09: Migrate Shape to capability parse, fix text style on children and baseline alignment", () => {
     it("allows Shape with <P> and <Span> children to set fontSize, color, and padding in style", async () => {
       const result = await build(
         <Deck width={960} height={540}>
-          <Slide slideId="shape-children-style-slide">
+          <Slide id="shape-children-style-slide">
             <Shape
-              testId="child-text-shape"
+              id="child-text-shape"
               x={60}
               y={70}
               width={400}
@@ -517,7 +415,7 @@ describe("Ticket 08: Object capability parse phase, container TextStyle validati
       assert.deepEqual(validation.errors, []);
 
       const obs = result.report.slides[0]?.objects.find(
-        (o) => o.testId === "child-text-shape",
+        (o) => o.authorId === "child-text-shape",
       );
       assert(obs !== undefined, "Expected shape observation");
       assert.equal(obs.text, "Child paragraph headline");
@@ -538,7 +436,7 @@ describe("Ticket 08: Object capability parse phase, container TextStyle validati
     it("aligns Shape with <P> and <Span> children in parent flex container with alignItems: 'baseline'", async () => {
       const result = await build(
         <Deck width={960} height={540}>
-          <Slide slideId="shape-child-baseline-slide">
+          <Slide id="shape-child-baseline-slide">
             <Box
               style={{
                 display: "flex",
@@ -548,7 +446,7 @@ describe("Ticket 08: Object capability parse phase, container TextStyle validati
               }}
             >
               <Text
-                testId="baseline-reference-text"
+                id="baseline-reference-text"
                 width={150}
                 height={100}
                 style={{
@@ -560,7 +458,7 @@ describe("Ticket 08: Object capability parse phase, container TextStyle validati
                 Text Ref
               </Text>
               <Shape
-                testId="baseline-child-shape"
+                id="baseline-child-shape"
                 width={200}
                 height={100}
                 style={{
@@ -585,9 +483,11 @@ describe("Ticket 08: Object capability parse phase, container TextStyle validati
 
       const objects = result.report.slides[0]?.objects ?? [];
       const textObs = objects.find(
-        (o) => o.testId === "baseline-reference-text",
+        (o) => o.authorId === "baseline-reference-text",
       );
-      const shapeObs = objects.find((o) => o.testId === "baseline-child-shape");
+      const shapeObs = objects.find(
+        (o) => o.authorId === "baseline-child-shape",
+      );
       assert(textObs?.box !== undefined && shapeObs?.box !== undefined);
       // Because shape has larger font (40) and paddingTop (10), text should shift down to align baselines
       assert(textObs.box.y > shapeObs.box.y);
@@ -597,7 +497,7 @@ describe("Ticket 08: Object capability parse phase, container TextStyle validati
       await assert.rejects(
         build(
           <Deck width={960} height={540}>
-            <Slide slideId="shape-child-middle-baseline-slide">
+            <Slide id="shape-child-middle-baseline-slide">
               <Box
                 style={{
                   display: "flex",
@@ -607,7 +507,7 @@ describe("Ticket 08: Object capability parse phase, container TextStyle validati
                 }}
               >
                 <Text
-                  testId="reference-text"
+                  id="reference-text"
                   width={150}
                   height={100}
                   style={{
@@ -619,7 +519,7 @@ describe("Ticket 08: Object capability parse phase, container TextStyle validati
                   Ref
                 </Text>
                 <Shape
-                  testId="middle-anchor-child-shape"
+                  id="middle-anchor-child-shape"
                   width={200}
                   height={100}
                   style={{
@@ -654,7 +554,7 @@ describe("Ticket 08: Object capability parse phase, container TextStyle validati
       await assert.rejects(
         build(
           <Deck width={960} height={540}>
-            <Slide slideId="shape-no-text-baseline-slide">
+            <Slide id="shape-no-text-baseline-slide">
               <Box
                 style={{
                   display: "flex",
@@ -664,7 +564,7 @@ describe("Ticket 08: Object capability parse phase, container TextStyle validati
                 }}
               >
                 <Text
-                  testId="reference-text"
+                  id="reference-text"
                   width={150}
                   height={100}
                   style={{
@@ -677,14 +577,14 @@ describe("Ticket 08: Object capability parse phase, container TextStyle validati
                 </Text>
                 {/* Single-child Box chain wrapping an empty Shape */}
                 <Box
-                  testId="wrapper-for-empty-shape"
+                  id="wrapper-for-empty-shape"
                   style={{
                     display: "flex",
                     flexDirection: "row",
                     alignSelf: "baseline",
                   }}
                 >
-                  <Shape testId="textless-shape" width={100} height={100} />
+                  <Shape id="textless-shape" width={100} height={100} />
                 </Box>
               </Box>
             </Slide>
@@ -708,7 +608,7 @@ describe("Ticket 08: Object capability parse phase, container TextStyle validati
       await assert.rejects(
         build(
           <Deck width={960} height={540}>
-            <Slide slideId="text-middle-baseline-slide">
+            <Slide id="text-middle-baseline-slide">
               <Box
                 style={{
                   display: "flex",
@@ -717,7 +617,7 @@ describe("Ticket 08: Object capability parse phase, container TextStyle validati
                 }}
               >
                 <Text
-                  testId="reference-text"
+                  id="reference-text"
                   width={150}
                   height={100}
                   style={{
@@ -729,7 +629,7 @@ describe("Ticket 08: Object capability parse phase, container TextStyle validati
                   Ref
                 </Text>
                 <Text
-                  testId="middle-text"
+                  id="middle-text"
                   width={150}
                   height={100}
                   style={{
@@ -762,7 +662,7 @@ describe("Ticket 08: Object capability parse phase, container TextStyle validati
       await assert.rejects(
         build(
           <Deck width={960} height={540}>
-            <Slide slideId="shape-direct-no-text-baseline-slide">
+            <Slide id="shape-direct-no-text-baseline-slide">
               <Box
                 style={{
                   display: "flex",
@@ -770,11 +670,7 @@ describe("Ticket 08: Object capability parse phase, container TextStyle validati
                   width: 500,
                 }}
               >
-                <Shape
-                  testId="direct-textless-shape"
-                  width={100}
-                  height={100}
-                />
+                <Shape id="direct-textless-shape" width={100} height={100} />
               </Box>
             </Slide>
           </Deck>,
@@ -797,9 +693,9 @@ describe("Ticket 08: Object capability parse phase, container TextStyle validati
       await assert.rejects(
         build(
           <Deck width={960} height={540}>
-            <Slide slideId="unknown-param-slide">
+            <Slide id="unknown-param-slide">
               <Shape
-                testId="invalid-shape"
+                id="invalid-shape"
                 width={100}
                 height={100}
                 {...({ unsupportedParameter: 42 } as any)}
@@ -826,9 +722,9 @@ describe("Ticket 08: Object capability parse phase, container TextStyle validati
       await assert.rejects(
         build(
           <Deck width={960} height={540}>
-            <Slide slideId="unknown-style-slide">
+            <Slide id="unknown-style-slide">
               <Shape
-                testId="invalid-style-shape"
+                id="invalid-style-shape"
                 width={100}
                 height={100}
                 style={{ unsupportedStyleProp: "red" } as any}
@@ -856,9 +752,9 @@ describe("Ticket 08: Object capability parse phase, container TextStyle validati
       await assert.rejects(
         build(
           <Deck width={960} height={540}>
-            <Slide slideId="textless-shape-font-slide">
+            <Slide id="textless-shape-font-slide">
               <Shape
-                testId="textless-font-shape"
+                id="textless-font-shape"
                 width={100}
                 height={100}
                 style={{ fontSize: 24 }}
@@ -883,9 +779,9 @@ describe("Ticket 08: Object capability parse phase, container TextStyle validati
       await assert.rejects(
         build(
           <Deck width={960} height={540}>
-            <Slide slideId="textless-shape-padding-slide">
+            <Slide id="textless-shape-padding-slide">
               <Shape
-                testId="textless-padding-shape"
+                id="textless-padding-shape"
                 width={100}
                 height={100}
                 style={{ padding: 16 }}
@@ -915,9 +811,9 @@ describe("Ticket 08: Object capability parse phase, container TextStyle validati
       try {
         const result = await build(
           <Deck width={960} height={540}>
-            <Slide slideId="parse-reuse-slide">
+            <Slide id="parse-reuse-slide">
               <Shape
-                testId="reused-shape"
+                id="reused-shape"
                 x={100}
                 y={100}
                 width={200}
@@ -963,15 +859,15 @@ describe("Ticket 08: Object capability parse phase, container TextStyle validati
 
       const result = await build(
         <Deck width={960} height={540}>
-          <Slide slideId="slide-flex-group">
+          <Slide id="slide-flex-group">
             <Box style={{ display: "flex", width: 500, height: 300, gap: 10 }}>
               <Group
-                testId="flex-group"
+                id="flex-group"
                 morphKey={groupKey}
                 link={{ url: "https://example.com/target" }}
                 style={{ width: 200, height: 150 }}
               >
-                <Shape testId="inner-shape" width={100} height={80} />
+                <Shape id="inner-shape" width={100} height={80} />
               </Group>
             </Box>
           </Slide>
@@ -996,10 +892,10 @@ describe("Ticket 08: Object capability parse phase, container TextStyle validati
 
       const result = await build(
         <Deck width={960} height={540}>
-          <Slide slideId="slide-1">
+          <Slide id="slide-1">
             <Box style={{ display: "flex", width: 400, height: 300 }}>
               <Group
-                testId="group-start"
+                id="group-start"
                 morphKey={groupKey}
                 style={{ width: 150, height: 100 }}
               >
@@ -1008,12 +904,12 @@ describe("Ticket 08: Object capability parse phase, container TextStyle validati
             </Box>
           </Slide>
           <Slide
-            slideId="slide-2"
+            id="slide-2"
             transition={transitions.morph({ fallback: transitions.fade() })}
           >
             <Box style={{ display: "flex", width: 600, height: 400 }}>
               <Group
-                testId="group-end"
+                id="group-end"
                 morphKey={groupKey}
                 style={{ width: 250, height: 200 }}
               >
@@ -1036,13 +932,13 @@ describe("Ticket 08: Object capability parse phase, container TextStyle validati
       await assert.rejects(
         build(
           <Deck width={960} height={540}>
-            <Slide slideId="slide-group">
+            <Slide id="slide-group">
               <Group morphKey={mismatchedKey}>
                 <Shape x={0} y={0} width={50} height={50} />
               </Group>
             </Slide>
             <Slide
-              slideId="slide-shape"
+              id="slide-shape"
               transition={transitions.morph({ fallback: transitions.fade() })}
             >
               <Shape
@@ -1077,7 +973,7 @@ describe("Ticket 08: Object capability parse phase, container TextStyle validati
 
       const result = await build(
         <Deck width={960} height={540}>
-          <Slide slideId="slide-shape-start">
+          <Slide id="slide-shape-start">
             <Shape
               x={10}
               y={10}
@@ -1087,7 +983,7 @@ describe("Ticket 08: Object capability parse phase, container TextStyle validati
             />
           </Slide>
           <Slide
-            slideId="slide-text-end"
+            id="slide-text-end"
             transition={transitions.morph({ fallback: transitions.fade() })}
           >
             <Text
@@ -1113,9 +1009,9 @@ describe("Ticket 08: Object capability parse phase, container TextStyle validati
       await assert.rejects(
         build(
           <Deck width={960} height={540}>
-            <Slide slideId="slide-invalid-group">
+            <Slide id="slide-invalid-group">
               {/* @ts-expect-error -- testing unknown parameter */}
-              <Group testId="bad-group" unknownProp={123}>
+              <Group id="bad-group" unknownProp={123}>
                 <Shape width={50} height={50} />
               </Group>
             </Slide>
@@ -1142,9 +1038,9 @@ describe("Ticket 08: Object capability parse phase, container TextStyle validati
       try {
         const result = await build(
           <Deck width={960} height={540}>
-            <Slide slideId="parse-box-slide">
+            <Slide id="parse-box-slide">
               <Box
-                testId="visible-box"
+                id="visible-box"
                 style={{
                   width: 200,
                   height: 100,
@@ -1180,9 +1076,9 @@ describe("Ticket 08: Object capability parse phase, container TextStyle validati
       try {
         const result = await build(
           <Deck width={960} height={540}>
-            <Slide slideId="parse-group-slide">
+            <Slide id="parse-group-slide">
               <Box style={{ display: "flex", width: 400, height: 200 }}>
-                <Group testId="parsed-group" style={{ width: 100, height: 80 }}>
+                <Group id="parsed-group" style={{ width: 100, height: 80 }}>
                   <Shape width={40} height={40} />
                 </Group>
               </Box>

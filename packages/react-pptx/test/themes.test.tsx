@@ -72,6 +72,26 @@ function TestMotionScope({ children }: { readonly children?: ReactNode }) {
   return <MotionScope scope={scope}>{children}</MotionScope>;
 }
 
+type NamedReportObject = {
+  readonly id: number;
+  readonly authorId?: string;
+  readonly members?: readonly NamedReportObject[];
+};
+
+function findAuthorObject(
+  objects: readonly NamedReportObject[] | undefined,
+  authorId: string,
+): NamedReportObject | undefined {
+  const pending = [...(objects ?? [])];
+  while (pending.length > 0) {
+    const object = pending.shift();
+    if (object === undefined) break;
+    if (object.authorId === authorId) return object;
+    pending.push(...(object.members ?? []));
+  }
+  return undefined;
+}
+
 describe("public theme entry", () => {
   it("participates in content measurement with theme fonts and preserves major font and native color slot references", async () => {
     const result = await build(
@@ -83,12 +103,12 @@ describe("public theme entry", () => {
         })}
         style={{ fontFamily: "major", fontSize: 20, color: "ink" }}
       >
-        <Slide slideId="theme">
-          <Text testId="measured" x={0} y={0} width={400} height="auto">
+        <Slide id="theme">
+          <Text id="measured" x={0} y={0} width={400} height="auto">
             中文 A é
           </Text>
           <Text
-            testId="minor-font"
+            id="minor-font"
             x={0}
             y={60}
             width={400}
@@ -138,12 +158,12 @@ describe("public theme entry", () => {
           fonts: { minor: localFont },
         })}
       >
-        <Slide slideId="theme-defaults">
-          <Text testId="default-text" x={0} y={0} width={220} height="auto">
+        <Slide id="theme-defaults">
+          <Text id="default-text" x={0} y={0} width={220} height="auto">
             Default text
           </Text>
           <Text
-            testId="explicit-minor"
+            id="explicit-minor"
             x={0}
             y={50}
             width={220}
@@ -153,20 +173,20 @@ describe("public theme entry", () => {
             Default text
           </Text>
           <Shape
-            testId="default-shape-text"
+            id="default-shape-text"
             x={0}
             y={100}
             width={180}
             height={48}
             text="Shape text"
           />
-          <Table testId="default-table" columns={[160]} x={0} y={160}>
+          <Table id="default-table" columns={[160]} x={0} y={160}>
             <Row>
               <Cell>Cell text</Cell>
             </Row>
           </Table>
           <Chart
-            testId="default-chart"
+            id="default-chart"
             kind="column"
             x={200}
             y={160}
@@ -184,10 +204,10 @@ describe("public theme entry", () => {
 
     const reportObjects = result.report.slides[0]?.objects ?? [];
     const defaultMeasurement = reportObjects.find(
-      (object) => object.testId === "default-text",
+      (object) => object.authorId === "default-text",
     )?.box?.height;
     const explicitMeasurement = reportObjects.find(
-      (object) => object.testId === "explicit-minor",
+      (object) => object.authorId === "explicit-minor",
     )?.box?.height;
     assert.equal(defaultMeasurement, explicitMeasurement);
 
@@ -195,7 +215,8 @@ describe("public theme entry", () => {
     assert.deepEqual(file.errors, []);
     const objects = file.slides[0]?.objects ?? [];
     const run = (testId: string, text: string) => {
-      const object = objects.find(({ name }) => name === testId);
+      const id = findAuthorObject(result.report.slides[0]?.objects, testId)?.id;
+      const object = objects.find((candidate) => candidate.id === id);
       assert.ok(object, `missing ${testId}`);
       const paragraphs =
         object.text?.paragraphs ?? object.table?.cellTexts[0]?.text.paragraphs;
@@ -235,9 +256,9 @@ describe("public theme entry", () => {
         })}
         style={{ fontFamily: "major", fontSize: 20, color: "ink" }}
       >
-        <Slide slideId="scopes">
+        <Slide id="scopes">
           <Box
-            testId="local-box"
+            id="local-box"
             style={{
               width: 600,
               height: 400,
@@ -248,9 +269,9 @@ describe("public theme entry", () => {
             theme={{ colors: { ink: "#C00000" }, fonts: { major: localFont } }}
           >
             <TestMotionScope>
-              <Group testId="local-group" style={{ fontSize: 18 }}>
+              <Group id="local-group" style={{ fontSize: 18 }}>
                 <Text
-                  testId="local-text"
+                  id="local-text"
                   width={300}
                   height="auto"
                   style={{ fontSize: 20 }}
@@ -258,7 +279,7 @@ describe("public theme entry", () => {
                   Local scope
                 </Text>
                 <Shape
-                  testId="local-shape"
+                  id="local-shape"
                   x={0}
                   y={60}
                   width={180}
@@ -268,7 +289,7 @@ describe("public theme entry", () => {
                 />
               </Group>
             </TestMotionScope>
-            <Table testId="local-table" columns={[180]} x={0} y={150}>
+            <Table id="local-table" columns={[180]} x={0} y={150}>
               <Row>
                 <Cell
                   style={{
@@ -282,7 +303,7 @@ describe("public theme entry", () => {
               </Row>
             </Table>
             <Chart
-              testId="local-chart"
+              id="local-chart"
               kind="column"
               x={200}
               y={150}
@@ -316,18 +337,18 @@ describe("public theme entry", () => {
               }}
             />
             <Box
-              testId="nested-box"
+              id="nested-box"
               style={{ width: 180, height: 60 }}
               theme={{
                 colors: { ink: "#008040", brand: "ink" },
                 fonts: { major: cjkFont },
               }}
             >
-              <Text testId="nested-text" width={150} height="auto">
+              <Text id="nested-text" width={150} height="auto">
                 Nested scope
               </Text>
               <Shape
-                testId="nested-shape"
+                id="nested-shape"
                 x={0}
                 y={30}
                 width={40}
@@ -335,27 +356,27 @@ describe("public theme entry", () => {
                 fill="brand"
               />
             </Box>
-            <Text testId="outer-after" width={300} height="auto">
+            <Text id="outer-after" width={300} height="auto">
               Outer scope again
             </Text>
           </Box>
-          <Text testId="sibling-text" x={0} y={300} width={300} height="auto">
+          <Text id="sibling-text" x={0} y={300} width={300} height="auto">
             Global scope
           </Text>
         </Slide>
         <Slide
-          slideId="slide-scope"
+          id="slide-scope"
           theme={{
             colors: { ink: "#123456" },
             fonts: { major: localFont, minor: cjkFont },
           }}
           style={{ fontSize: 18 }}
         >
-          <Text testId="slide-text" x={0} y={0} width={300} height="auto">
+          <Text id="slide-text" x={0} y={0} width={300} height="auto">
             Slide defaults
           </Text>
           <Text
-            testId="slide-minor"
+            id="slide-minor"
             x={0}
             y={60}
             width={300}
@@ -370,14 +391,15 @@ describe("public theme entry", () => {
 
     const textObjects = result.report.slides[0]?.objects ?? [];
     const box = result.report.slides[0]?.layouts?.find(
-      (layout) => layout.testId === "local-box",
+      (layout) => layout.authorId === "local-box",
     );
     assert.ok(box);
     const localHeight = textObjects
-      .find((object) => object.testId === "local-group")
-      ?.members?.find((object) => object.testId === "local-text")?.box?.height;
+      .find((object) => object.authorId === "local-group")
+      ?.members?.find((object) => object.authorId === "local-text")
+      ?.box?.height;
     const siblingHeight = textObjects.find(
-      (object) => object.testId === "sibling-text",
+      (object) => object.authorId === "sibling-text",
     )?.box?.height;
     assert.equal(typeof localHeight, "number");
     assert.equal(typeof siblingHeight, "number");
@@ -388,14 +410,19 @@ describe("public theme entry", () => {
     const parts = unzipSync(result.pptx);
     const slide = strFromU8(parts["ppt/slides/slide1.xml"]!);
     const chart = strFromU8(parts["ppt/charts/chart1.xml"]!);
-    const tableStart = slide.indexOf('name="local-table"');
+    const tableId = findAuthorObject(
+      result.report.slides[0]?.objects,
+      "local-table",
+    )?.id;
+    const tableStart = slide.indexOf(`id="${tableId}"`);
     const tableEnd = slide.indexOf("</p:graphicFrame>", tableStart);
     const table = slide.slice(tableStart, tableEnd);
     const categoryAxis = /<c:catAx>.*?<\/c:catAx>/su.exec(chart)?.[0];
     const valueAxis = /<c:valAx>.*?<\/c:valAx>/su.exec(chart)?.[0];
     const dataLabels = /<c:dLbls>.*?<\/c:dLbls>/su.exec(chart)?.[0];
     const objectXml = (name: string) => {
-      const start = slide.indexOf(`name="${name}"`);
+      const id = findAuthorObject(result.report.slides[0]?.objects, name)?.id;
+      const start = slide.indexOf(`id="${id}"`);
       assert.notEqual(start, -1, `missing native object ${name}`);
       return slide.slice(start, slide.indexOf("</p:sp>", start));
     };
@@ -453,33 +480,12 @@ describe("public theme entry", () => {
           },
         })}
       >
-        <Slide slideId="colors">
+        <Slide id="colors">
+          <Shape id="alias" x={0} y={0} width={80} height={40} fill="brand" />
+          <Shape id="pale" x={90} y={0} width={80} height={40} fill="pale" />
+          <Shape id="deep" x={180} y={0} width={80} height={40} fill="deep" />
           <Shape
-            testId="alias"
-            x={0}
-            y={0}
-            width={80}
-            height={40}
-            fill="brand"
-          />
-          <Shape
-            testId="pale"
-            x={90}
-            y={0}
-            width={80}
-            height={40}
-            fill="pale"
-          />
-          <Shape
-            testId="deep"
-            x={180}
-            y={0}
-            width={80}
-            height={40}
-            fill="deep"
-          />
-          <Shape
-            testId="alpha"
+            id="alpha"
             x={270}
             y={0}
             width={80}
@@ -487,7 +493,7 @@ describe("public theme entry", () => {
             fill={{ color: "brand", alpha: 0.5 }}
           />
           <Shape
-            testId="short-alpha"
+            id="short-alpha"
             x={360}
             y={0}
             width={80}
@@ -520,9 +526,9 @@ describe("public theme entry", () => {
           },
         })}
       >
-        <Slide slideId="local-alias" theme={{ colors: { ink: "#C00000" } }}>
+        <Slide id="local-alias" theme={{ colors: { ink: "#C00000" } }}>
           <Text
-            testId="alias-text"
+            id="alias-text"
             x={0}
             y={0}
             width={180}
@@ -532,7 +538,7 @@ describe("public theme entry", () => {
             Alias text
           </Text>
           <Shape
-            testId="alias-shape"
+            id="alias-shape"
             x={0}
             y={50}
             width={100}
@@ -541,7 +547,7 @@ describe("public theme entry", () => {
             text="Alias shape"
             textStyle={{ color: "chain" }}
           />
-          <Table testId="alias-table" columns={[140]} x={0} y={90}>
+          <Table id="alias-table" columns={[140]} x={0} y={90}>
             <Row style={{ height: 36 }}>
               <Cell style={{ color: "chain", backgroundColor: "chain" }}>
                 Alias cell
@@ -549,7 +555,7 @@ describe("public theme entry", () => {
             </Row>
           </Table>
           <Chart
-            testId="alias-chart"
+            id="alias-chart"
             kind="column"
             x={160}
             y={90}
@@ -562,12 +568,12 @@ describe("public theme entry", () => {
             }}
           />
           <Box
-            testId="same-name-scope"
+            id="same-name-scope"
             style={{ width: 100, height: 40 }}
             theme={{ colors: { ink: "ink" } }}
           >
             <Shape
-              testId="same-name-shape"
+              id="same-name-shape"
               x={0}
               y={0}
               width={80}
@@ -583,17 +589,22 @@ describe("public theme entry", () => {
     const parts = unzipSync(result.pptx);
     const slide = strFromU8(parts["ppt/slides/slide1.xml"]!);
     const chart = strFromU8(parts["ppt/charts/chart1.xml"]!);
-    assert.match(slide, /name="alias-text"[\s\S]*?<a:srgbClr val="C00000"\/>/u);
-    assert.match(
-      slide,
-      /name="alias-shape"[\s\S]*?<a:srgbClr val="C00000"\/>/u,
-    );
-    assert.match(
-      slide,
-      /name="alias-table"[\s\S]*?<a:srgbClr val="C00000"\/>/u,
-    );
+    for (const authorId of ["alias-text", "alias-shape", "alias-table"]) {
+      const id = findAuthorObject(
+        result.report.slides[0]?.objects,
+        authorId,
+      )?.id;
+      assert.match(
+        slide,
+        new RegExp(`id="${id}"[\\s\\S]*?<a:srgbClr val="C00000"/>`, "u"),
+      );
+    }
     assert.match(chart, /<a:srgbClr val="C00000"\/>/u);
-    const sameNameStart = slide.indexOf('name="same-name-shape"');
+    const sameNameId = findAuthorObject(
+      result.report.slides[0]?.objects,
+      "same-name-shape",
+    )?.id;
+    const sameNameStart = slide.indexOf(`id="${sameNameId}"`);
     assert.notEqual(sameNameStart, -1);
     assert.match(
       slide.slice(sameNameStart, sameNameStart + 1200),
@@ -608,9 +619,9 @@ describe("public theme entry", () => {
           fonts: { body: "Aptos", Aptos: "Courier New" },
         })}
       >
-        <Slide slideId="font-token-once">
+        <Slide id="font-token-once">
           <Text
-            testId="font-token-once"
+            id="font-token-once"
             x={0}
             y={0}
             width={300}
@@ -627,9 +638,11 @@ describe("public theme entry", () => {
 
     const file = await validatePptx(result.pptx);
     assert.deepEqual(file.errors, []);
-    const object = file.slides[0]?.objects.find(
-      ({ name }) => name === "font-token-once",
-    );
+    const fontTokenId = findAuthorObject(
+      result.report.slides[0]?.objects,
+      "font-token-once",
+    )?.id;
+    const object = file.slides[0]?.objects.find(({ id }) => id === fontTokenId);
     const runs = object?.text?.paragraphs.flatMap(({ runs: paragraphRuns }) =>
       paragraphRuns.map(({ text, fontFamily }) => ({ text, fontFamily })),
     );
@@ -649,13 +662,13 @@ describe("public theme entry", () => {
         theme={defineTheme({ fonts: { minor: localFont } })}
         style={{ align: "center", spacingAfter: 16 }}
       >
-        <Slide slideId="deck-paragraph-defaults">
-          <Text testId="deck-auto" x={0} y={0} width={280} height="auto">
+        <Slide id="deck-paragraph-defaults">
+          <Text id="deck-auto" x={0} y={0} width={280} height="auto">
             <P>First paragraph</P>
             <P>Second paragraph</P>
           </Text>
           <Text
-            testId="deck-zero-gap"
+            id="deck-zero-gap"
             x={300}
             y={0}
             width={280}
@@ -666,7 +679,7 @@ describe("public theme entry", () => {
             <P>Second paragraph</P>
           </Text>
           <Chart
-            testId="deck-paragraph-chart"
+            id="deck-paragraph-chart"
             kind="column"
             x={0}
             y={160}
@@ -679,27 +692,27 @@ describe("public theme entry", () => {
           />
         </Slide>
         <Slide
-          slideId="slide-paragraph-defaults"
+          id="slide-paragraph-defaults"
           style={{ align: "right", spacingAfter: 12 }}
         >
-          <Text testId="slide-default" x={0} y={0} width={280} height={100}>
+          <Text id="slide-default" x={0} y={0} width={280} height={100}>
             <P>First paragraph</P>
             <P>Second paragraph</P>
           </Text>
         </Slide>
-        <Slide slideId="box-paragraph-defaults">
+        <Slide id="box-paragraph-defaults">
           <Box
-            testId="paragraph-box"
+            id="paragraph-box"
             style={{ width: 600, height: 260, align: "left", spacingAfter: 8 }}
           >
-            <Text testId="box-auto" x={0} y={0} width={280} height="auto">
+            <Text id="box-auto" x={0} y={0} width={280} height="auto">
               <P>First paragraph</P>
               <P style={{ align: "right", spacingAfter: 4 }}>
                 Second paragraph override
               </P>
             </Text>
             <Text
-              testId="box-zero-gap"
+              id="box-zero-gap"
               x={300}
               y={0}
               width={280}
@@ -710,12 +723,12 @@ describe("public theme entry", () => {
               <P>Second paragraph</P>
             </Text>
           </Box>
-          <Text testId="box-sibling" x={0} y={280} width={280} height={100}>
+          <Text id="box-sibling" x={0} y={280} width={280} height={100}>
             <P>First paragraph</P>
             <P>Second paragraph</P>
           </Text>
           <Box
-            testId="second-paragraph-box"
+            id="second-paragraph-box"
             style={{
               width: 600,
               height: 140,
@@ -723,24 +736,18 @@ describe("public theme entry", () => {
               spacingAfter: 10,
             }}
           >
-            <Text
-              testId="second-box-default"
-              x={0}
-              y={0}
-              width={280}
-              height={100}
-            >
+            <Text id="second-box-default" x={0} y={0} width={280} height={100}>
               <P>First paragraph</P>
               <P>Second paragraph</P>
             </Text>
           </Box>
         </Slide>
-        <Slide slideId="group-paragraph-defaults">
+        <Slide id="group-paragraph-defaults">
           <Group
-            testId="paragraph-group"
+            id="paragraph-group"
             style={{ align: "justify", spacingAfter: 20 }}
           >
-            <Text testId="group-default" x={0} y={0} width={280} height={100}>
+            <Text id="group-default" x={0} y={0} width={280} height={100}>
               <P>First paragraph</P>
               <P>Second paragraph</P>
             </Text>
@@ -751,7 +758,7 @@ describe("public theme entry", () => {
 
     const measuredHeight = (testId: string, slideIndex: number) => {
       const object = result.report.slides[slideIndex]?.objects.find(
-        ({ testId: objectTestId }) => objectTestId === testId,
+        ({ authorId: objectTestId }) => objectTestId === testId,
       );
       const height = object?.box?.height;
       if (typeof height !== "number") assert.fail(`missing ${testId}`);
@@ -778,7 +785,11 @@ describe("public theme entry", () => {
       strFromU8(unzipSync(result.pptx)[`ppt/slides/slide${index + 1}.xml`]!);
     const objectXml = (index: number, testId: string) => {
       const xml = slideXml(index);
-      const start = xml.indexOf(`name="${testId}"`);
+      const id = findAuthorObject(
+        result.report.slides[index]?.objects,
+        testId,
+      )?.id;
+      const start = xml.indexOf(`id="${id}"`);
       assert.notEqual(start, -1, `missing ${testId}`);
       const end = xml.indexOf("</p:sp>", start);
       return xml.slice(start, end);
@@ -806,12 +817,12 @@ describe("public theme entry", () => {
   it("does not change original layout participation criteria with text-only defaults on Group", async () => {
     const result = await build(
       <Deck>
-        <Slide slideId="text-only-group-style">
+        <Slide id="text-only-group-style">
           <Group
-            testId="text-only-group"
+            id="text-only-group"
             style={{ align: "center", spacingAfter: 8 }}
           >
-            <Text testId="group-child" x={10} y={20} width={120} height={40}>
+            <Text id="group-child" x={10} y={20} width={120} height={40}>
               <P>First paragraph</P>
               <P>Second paragraph</P>
             </Text>
@@ -821,14 +832,18 @@ describe("public theme entry", () => {
     );
 
     const group = result.report.slides[0]?.objects.find(
-      ({ testId }) => testId === "text-only-group",
+      ({ authorId: testId }) => testId === "text-only-group",
     );
     const child = group?.members?.find(
-      ({ testId }) => testId === "group-child",
+      ({ authorId: testId }) => testId === "group-child",
     );
     assert.deepEqual(child?.box, { x: 10, y: 20, width: 120, height: 40 });
     const slide = strFromU8(unzipSync(result.pptx)["ppt/slides/slide1.xml"]!);
-    assert.match(slide, /name="text-only-group"[\s\S]*?algn="ctr"/u);
+    const groupId = findAuthorObject(
+      result.report.slides[0]?.objects,
+      "text-only-group",
+    )?.id;
+    assert.match(slide, new RegExp(`id="${groupId}"[\\s\\S]*?algn="ctr"`, "u"));
     assert.match(slide, /<a:spcPts val="600"\/>/u);
   });
 
@@ -838,7 +853,7 @@ describe("public theme entry", () => {
       readonly position?: "relative";
     }) => (
       <Text
-        testId="leaf"
+        id="leaf"
         x={10}
         y={20}
         width={300}
@@ -849,30 +864,27 @@ describe("public theme entry", () => {
         <P>Second paragraph</P>
       </Text>
     );
-    const variants: { readonly slideId: string; readonly child: ReactNode }[] =
-      [
-        { slideId: "direct", child: leaf() },
-        {
-          slideId: "box",
-          child: <Box style={{ width: 400 }}>{leaf()}</Box>,
-        },
-        {
-          slideId: "nested-layout-group",
-          child: (
-            <Group style={{ display: "flex", width: 400 }}>{leaf()}</Group>
-          ),
-        },
-        { slideId: "styled-leaf", child: leaf({ width: 300 }) },
-        { slideId: "relative-leaf", child: leaf({ position: "relative" }) },
-        {
-          slideId: "motion-box",
-          child: (
-            <TestMotionScope>
-              <Box style={{ width: 400 }}>{leaf()}</Box>
-            </TestMotionScope>
-          ),
-        },
-      ];
+    const variants: { readonly id: string; readonly child: ReactNode }[] = [
+      { id: "direct", child: leaf() },
+      {
+        id: "box",
+        child: <Box style={{ width: 400 }}>{leaf()}</Box>,
+      },
+      {
+        id: "nested-layout-group",
+        child: <Group style={{ display: "flex", width: 400 }}>{leaf()}</Group>,
+      },
+      { id: "styled-leaf", child: leaf({ width: 300 }) },
+      { id: "relative-leaf", child: leaf({ position: "relative" }) },
+      {
+        id: "motion-box",
+        child: (
+          <TestMotionScope>
+            <Box style={{ width: 400 }}>{leaf()}</Box>
+          </TestMotionScope>
+        ),
+      },
+    ];
     const result = await build(
       <Deck
         theme={defineTheme({
@@ -880,10 +892,10 @@ describe("public theme entry", () => {
           fonts: { minor: cjkFont, body: cjkFont },
         })}
       >
-        {variants.map(({ slideId, child }) => (
-          <Slide slideId={slideId} key={slideId}>
+        {variants.map(({ id: slideId, child }) => (
+          <Slide id={slideId} key={slideId}>
             <Group
-              testId="outer-group"
+              id="outer-group"
               theme={{
                 colors: { ink: "#C00000" },
                 fonts: { minor: localFont, body: localFont },
@@ -893,7 +905,7 @@ describe("public theme entry", () => {
               {child}
             </Group>
             <Text
-              testId="sibling"
+              id="sibling"
               x={10}
               y={120}
               width={300}
@@ -917,26 +929,27 @@ describe("public theme entry", () => {
       while (pending.length > 0) {
         const object = pending.shift();
         if (object === undefined) break;
-        if (object.testId === testId) return object;
+        if (object.authorId === testId) return object;
         pending.push(...(object.members ?? []));
       }
       assert.fail(`missing report object ${testId}`);
     };
-    const findFileObject = (
-      objects: NonNullable<(typeof file.slides)[number]>["objects"],
-      testId: string,
-    ) => {
-      const pending = [...objects];
+    const findFileObject = (slideIndex: number, testId: string) => {
+      const id = findReportObject(
+        result.report.slides[slideIndex]?.objects ?? [],
+        testId,
+      ).id;
+      const pending = [...(file.slides[slideIndex]?.objects ?? [])];
       while (pending.length > 0) {
         const object = pending.shift();
         if (object === undefined) break;
-        if (object.name === testId) return object;
+        if (object.id === id) return object;
         pending.push(...(object.members ?? []));
       }
       assert.fail(`missing file object ${testId}`);
     };
 
-    for (const [index, { slideId }] of variants.entries()) {
+    for (const [index, { id: slideId }] of variants.entries()) {
       const reportSlide = result.report.slides[index];
       const fileSlide = file.slides[index];
       assert.ok(reportSlide);
@@ -947,7 +960,7 @@ describe("public theme entry", () => {
         assert.deepEqual(text.box, { x: 10, y: 20, width: 300, height: 81.36 });
       }
 
-      const output = findFileObject(fileSlide.objects, "leaf");
+      const output = findFileObject(index, "leaf");
       const runs = output.text?.paragraphs.flatMap(
         ({ runs: paragraphRuns }) => paragraphRuns,
       );
@@ -958,7 +971,7 @@ describe("public theme entry", () => {
         assert.equal(run.color, "#C00000");
       }
 
-      const sibling = findFileObject(fileSlide.objects, "sibling");
+      const sibling = findFileObject(index, "sibling");
       const siblingRun = sibling.text?.paragraphs
         .flatMap(({ runs: paragraphRuns }) => paragraphRuns)
         .find(({ text: value }) => value.includes("Outside the Group"));
@@ -968,7 +981,11 @@ describe("public theme entry", () => {
       const slide = strFromU8(
         unzipSync(result.pptx)[`ppt/slides/slide${index + 1}.xml`]!,
       );
-      const start = slide.indexOf('name="leaf"');
+      const leafId = findAuthorObject(
+        result.report.slides[index]?.objects,
+        "leaf",
+      )?.id;
+      const start = slide.indexOf(`id="${leafId}"`);
       assert.notEqual(start, -1);
       const objectXml = slide.slice(start, slide.indexOf("</p:sp>", start));
       assert.match(objectXml, /algn="ctr"/u);
@@ -983,18 +1000,13 @@ describe("public theme entry", () => {
     });
     const scopedDeck = (scope: unknown) => (
       <Deck theme={theme}>
-        <Slide slideId="invalid-scope">
+        <Slide id="invalid-scope">
           <Box
-            testId="scope"
+            id="scope"
             style={{ width: 100, height: 50 }}
             theme={scope as ThemeScope}
           >
-            <Text
-              testId="sample"
-              width={80}
-              height="auto"
-              style={{ color: "ink" }}
-            >
+            <Text id="sample" width={80} height="auto" style={{ color: "ink" }}>
               Sample
             </Text>
           </Box>
@@ -1036,20 +1048,13 @@ describe("public theme entry", () => {
     const theme = defineTheme({ colors: { ink: "accent1" } });
     const deck = (slideId: string, color: string) => (
       <Deck theme={theme}>
-        <Slide slideId={slideId}>
+        <Slide id={slideId}>
           <Box
-            testId="scope"
+            id="scope"
             style={{ width: 100, height: 50 }}
             theme={{ colors: { ink: color } }}
           >
-            <Shape
-              testId="sample"
-              x={0}
-              y={0}
-              width={80}
-              height={40}
-              fill="ink"
-            />
+            <Shape id="sample" x={0} y={0} width={80} height={40} fill="ink" />
           </Box>
         </Slide>
       </Deck>
@@ -1077,11 +1082,11 @@ describe("public theme entry", () => {
         style={{ fontFamily: "major", fontSize: 20 }}
       >
         <Slide
-          slideId="local-font"
+          id="local-font"
           theme={{ fonts: { major: italicFont } }}
           style={{ fontStyle: "italic" }}
         >
-          <Text testId="italic" x={0} y={0} width={300} height="auto">
+          <Text id="italic" x={0} y={0} width={300} height="auto">
             Local font resource{" "}
             <Span style={{ fontFamily: "major" }}>inline resource</Span>
           </Text>
@@ -1099,8 +1104,12 @@ describe("public theme entry", () => {
     assert.ok(Object.keys(parts).some((path) => path.startsWith("ppt/fonts/")));
     assert.match(slide, /<a:latin typeface="Jost"\/>/u);
     assert.match(slide, /i="1"/u);
+    const italicId = findAuthorObject(
+      result.report.slides[0]?.objects,
+      "italic",
+    )?.id;
     const inline = file.slides[0]?.objects
-      .find(({ name }) => name === "italic")
+      .find(({ id }) => id === italicId)
       ?.text?.paragraphs.flatMap(({ runs }) => runs)
       .find(({ text }) => text.includes("inline resource"));
     assert.equal(inline?.fontFamily, "Jost");
@@ -1119,9 +1128,9 @@ describe("public theme entry", () => {
           fonts: { major: cjkFont, minor: localFont },
         })}
       >
-        <Slide slideId="font-slots">
+        <Slide id="font-slots">
           <Text
-            testId="theme-major"
+            id="theme-major"
             x={0}
             y={0}
             width={300}
@@ -1131,7 +1140,7 @@ describe("public theme entry", () => {
             Major Run
           </Text>
           <Text
-            testId="theme-minor"
+            id="theme-minor"
             x={0}
             y={50}
             width={300}
@@ -1141,7 +1150,7 @@ describe("public theme entry", () => {
             Minor Run
           </Text>
           <Text
-            testId="direct-family"
+            id="direct-family"
             x={0}
             y={100}
             width={300}

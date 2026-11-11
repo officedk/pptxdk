@@ -67,7 +67,7 @@ export function DualPipePage() {
 
   return (
     <SlideFrame
-      slideId="dualpipe"
+      id="dualpipe"
       kicker="02 · 跨节点训练并行与通信隐藏 / DualPipe · EP64 · 零张量并行"
       title="DualPipe 双向流水线并行：以对称微批次交错隐藏跨节点专家通信"
       takeaway="2,048 卡 H800 集群单日吞吐 272.8B Tokens，零 TP 消除高昂跨卡同步"
@@ -237,7 +237,7 @@ export function DualPipePage() {
             {overlapSubStages.map((row, rIdx) => (
               <EnteredShapeText
                 key={row.lane}
-                testId={`dualpipe-lane-${rIdx}`}
+                id={`dualpipe-lane-${rIdx}`}
                 x={710}
                 y={174 + rIdx * 48}
                 width={122}
@@ -261,7 +261,7 @@ export function DualPipePage() {
               row.items.map((item, iIdx) => (
                 <EnteredShapeText
                   key={`${rIdx}-${iIdx}`}
-                  testId={`dualpipe-overlap-${rIdx}-${iIdx}`}
+                  id={`dualpipe-overlap-${rIdx}-${iIdx}`}
                   x={item.x}
                   y={174 + rIdx * 48}
                   width={item.w}
@@ -331,7 +331,7 @@ export function DualPipePage() {
         tone="steel"
       >
         <Table
-          testId="dualpipe-table"
+          id="dualpipe-table"
           x={66}
           y={438}
           width={792}

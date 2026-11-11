@@ -58,7 +58,7 @@ export function R1RlDistillPage() {
 
   return (
     <SlideFrame
-      slideId="r1-rl-distill"
+      id="r1-rl-distill"
       kicker="04 · 强化学习推理涌现与蒸馏迁移 / DeepSeek-R1-Zero · GRPO · Distillation"
       title="GRPO 强化学习与四阶段演化：无需价值网络激发自发反思与小模型蒸馏"
       takeaway="R1-Distill-32B 在 AIME 2024 达 72.6%，全面超越 OpenAI o1-mini (63.6%)"
@@ -167,7 +167,7 @@ export function R1RlDistillPage() {
               return (
                 <Shape
                   key={st.step}
-                  testId={`r1-stage-card-${idx}`}
+                  id={`r1-stage-card-${idx}`}
                   x={cardX}
                   y={170}
                   width={178}
@@ -268,7 +268,7 @@ export function R1RlDistillPage() {
         tone="copper"
       >
         <Chart
-          testId="r1-distill-chart"
+          id="r1-distill-chart"
           kind="column"
           x={64}
           y={426}

@@ -73,7 +73,7 @@ describe("native content in the common document", () => {
     );
     const hero = createMorphScope().handle("shape-hero");
     const node = shape({
-      testId: "editable-shape",
+      id: "editable-shape",
       morphKey: hero,
       geometry: "hexagon",
       x: 20,
@@ -84,14 +84,14 @@ describe("native content in the common document", () => {
       style,
     }).append(body);
     const document = deck({ width: 960, height: 540 }).append(
-      slide({ slideId: "shape" }).append(node),
+      slide({ id: "shape" }).append(node),
     );
 
     const first = await build(document);
     assert.deepEqual((await validatePptx(first.pptx)).errors, []);
     const firstObject = first.report.slides[0]?.objects[0];
     assert.equal(firstObject?.kind, "shape");
-    assert.equal(firstObject?.testId, "editable-shape");
+    assert.equal(firstObject?.authorId, "editable-shape");
     assert.equal(firstObject?.text, "Shape body");
     assert.match(firstObject?.name ?? "", /^!!react-pptx-morph-/u);
     const firstXml = slideXml(first);
@@ -129,7 +129,8 @@ describe("native content in the common document", () => {
   it("creates editable native groups whose members, local theme, and appearance rebuild", async () => {
     const localTheme = { colors: { ink: "#112233" } };
     const member = shape({
-      testId: "group-shape",
+      id: "group-shape",
+      name: "group-shape",
       x: 20,
       y: 24,
       width: 120,
@@ -137,7 +138,8 @@ describe("native content in the common document", () => {
       style: { backgroundColor: "ink", borderWidth: 1 },
     });
     const badge = image({
-      testId: "group-image",
+      id: "group-image",
+      name: "group-image",
       src: png,
       x: 160,
       y: 24,
@@ -145,7 +147,7 @@ describe("native content in the common document", () => {
       height: 40,
     });
     const node = group({
-      testId: "editable-group",
+      id: "editable-group",
       style: { rotate: 12 },
       theme: localTheme,
     }).append(member, badge);
@@ -153,7 +155,7 @@ describe("native content in the common document", () => {
       width: 960,
       height: 540,
       theme: { colors: { ink: "#223344" } },
-    }).append(slide({ slideId: "group" }).append(node));
+    }).append(slide({ id: "group" }).append(node));
 
     const first = await build(document);
     assert.deepEqual((await validatePptx(first.pptx)).errors, []);
@@ -185,12 +187,12 @@ describe("native content in the common document", () => {
 
   it("creates editable slide backgrounds and local themes through the common document", async () => {
     const node = slide({
-      slideId: "appearance",
+      id: "appearance",
       background: "#112233",
       theme: { colors: { ink: "#223344" } },
     }).append(
       shape({
-        testId: "theme-shape",
+        id: "theme-shape",
         x: 20,
         y: 24,
         width: 120,
@@ -240,7 +242,7 @@ describe("native content in the common document", () => {
   it("creates editable images with media relationships and value-isolated bytes", async () => {
     const source = new Uint8Array(png);
     const node = image({
-      testId: "photo",
+      id: "photo",
       src: source,
       alt: "Picture",
       x: 32,
@@ -262,7 +264,7 @@ describe("native content in the common document", () => {
       },
     });
     const document = deck({ width: 960, height: 540 }).append(
-      slide({ slideId: "image" }).append(node),
+      slide({ id: "image" }).append(node),
     );
 
     const first = await build(document);
@@ -270,7 +272,7 @@ describe("native content in the common document", () => {
     assert.deepEqual(firstFile.errors, []);
     const firstObject = first.report.slides[0]?.objects[0];
     assert.equal(firstObject?.kind, "image");
-    assert.equal(firstObject?.testId, "photo");
+    assert.equal(firstObject?.authorId, "photo");
     assert.deepEqual(firstObject?.box, {
       x: 32,
       y: 48,
@@ -314,14 +316,14 @@ describe("native content in the common document", () => {
 
   it("keeps native capability registration explicit for trimmed builds", async () => {
     const node = shape({
-      testId: "trimmed-shape",
+      id: "trimmed-shape",
       x: 10,
       y: 10,
       width: 40,
       height: 30,
     });
     const document = deck({ width: 960, height: 540 }).append(
-      slide({ slideId: "trimmed" }).append(node),
+      slide({ id: "trimmed" }).append(node),
     );
 
     await assert.rejects(
@@ -338,9 +340,9 @@ describe("native content in the common document", () => {
 
   it("matches the React entry for representative native objects", async () => {
     const commandDocument = deck({ width: 960, height: 540 }).append(
-      slide({ slideId: "native" }).append(
+      slide({ id: "native" }).append(
         shape({
-          testId: "shape",
+          id: "shape",
           geometry: "ellipse",
           x: 12,
           y: 16,
@@ -350,7 +352,7 @@ describe("native content in the common document", () => {
           style: { backgroundColor: "#336699", borderWidth: 1 },
         }),
         image({
-          testId: "image",
+          id: "image",
           src: png,
           x: 150,
           y: 16,
@@ -359,9 +361,9 @@ describe("native content in the common document", () => {
           fit: "cover",
           style: { borderColor: "#AA0000", borderWidth: 1 },
         }),
-        group({ testId: "group" }).append(
+        group({ id: "group" }).append(
           shape({
-            testId: "group-shape",
+            id: "group-shape",
             x: 260,
             y: 16,
             width: 60,
@@ -376,9 +378,9 @@ describe("native content in the common document", () => {
       { width: 960, height: 540 },
       createElement(
         Slide,
-        { slideId: "native" },
+        { id: "native" },
         createElement(ReactShape, {
-          testId: "shape",
+          id: "shape",
           geometry: "ellipse",
           x: 12,
           y: 16,
@@ -388,7 +390,7 @@ describe("native content in the common document", () => {
           style: { backgroundColor: "#336699", borderWidth: 1 },
         }),
         createElement(ReactImage, {
-          testId: "image",
+          id: "image",
           src: png,
           x: 150,
           y: 16,
@@ -399,9 +401,9 @@ describe("native content in the common document", () => {
         }),
         createElement(
           ReactGroup,
-          { testId: "group" },
+          { id: "group" },
           createElement(ReactShape, {
-            testId: "group-shape",
+            id: "group-shape",
             x: 260,
             y: 16,
             width: 60,

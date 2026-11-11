@@ -4,7 +4,7 @@ import { colors } from "../theme.ts";
 
 export function HierarchyPage() {
   return (
-    <Slide slideId="hierarchy" background={colors.paper}>
+    <Slide id="hierarchy" background={colors.paper}>
       <Text
         x={60}
         y={36}

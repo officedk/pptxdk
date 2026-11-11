@@ -30,7 +30,7 @@ const regions: readonly RegionStory[] = [
 
 export function WorldPage() {
   return (
-    <Slide slideId="world" background={colors.paper}>
+    <Slide id="world" background={colors.paper}>
       <Shape x={64} y={48} width={42} height={5} fill={colors.accent} />
       <Text
         x={64}

@@ -60,7 +60,7 @@ const eras = [
 export function TimelinePage() {
   return (
     <SlideFrame
-      slideId="timeline"
+      id="timeline"
       chapter="导览｜七十四年的四次转向"
       title="这不是一次突然的降临"
       number={2}

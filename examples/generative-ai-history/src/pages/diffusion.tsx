@@ -115,7 +115,7 @@ const milestones = [
 export function DiffusionPage() {
   return (
     <SlideFrame
-      slideId="diffusion"
+      id="diffusion"
       chapter="媒介｜文字成为图像的条件"
       title="2020–2022｜图像从噪声中显影"
       number={7}

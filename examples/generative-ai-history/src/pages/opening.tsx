@@ -5,7 +5,7 @@ import { colors } from "../theme.ts";
 
 export function OpeningPage() {
   return (
-    <Slide slideId="opening" background={colors.indigo}>
+    <Slide id="opening" background={colors.indigo}>
       <Text
         x={72}
         y={64}

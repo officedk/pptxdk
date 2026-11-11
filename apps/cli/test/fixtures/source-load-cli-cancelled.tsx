@@ -12,7 +12,7 @@ await new Promise<void>((_resolve, reject) => {
 export default function SourceLoadCancelledDeck() {
   return (
     <Deck>
-      <Slide slideId="cancelled-source-load" />
+      <Slide id="cancelled-source-load" />
     </Deck>
   );
 }

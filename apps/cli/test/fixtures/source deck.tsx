@@ -5,9 +5,9 @@ import { sourceLabel } from "./source-label.ts";
 export function SourceDeck() {
   return (
     <Deck width={120} height={96}>
-      <Slide slideId="source">
+      <Slide id="source">
         <Shape
-          testId="source-shape"
+          id="source-shape"
           name={sourceLabel}
           x={8}
           y={8}
@@ -23,8 +23,8 @@ export function SourceDeck() {
 export function OverflowDeck() {
   return (
     <Deck width={120} height={96}>
-      <Slide slideId="overflow">
-        <Shape testId="overflow-shape" x={100} y={8} width={40} height={32} />
+      <Slide id="overflow">
+        <Shape id="overflow-shape" x={100} y={8} width={40} height={32} />
       </Slide>
     </Deck>
   );

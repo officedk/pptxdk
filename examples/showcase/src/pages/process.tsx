@@ -5,7 +5,7 @@ import { colors } from "../theme.ts";
 
 export function ProcessPage() {
   return (
-    <Slide slideId="process" background={colors.paper}>
+    <Slide id="process" background={colors.paper}>
       <Shape x={80} y={62} width={42} height={5} fill={colors.accent} />
       <Text
         x={80}

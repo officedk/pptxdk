@@ -40,7 +40,7 @@ function Region({
   return (
     <Step n={index + 1}>
       <MotionScope scope={highlight}>
-        <Group testId={`map-${story.region}`}>
+        <Group id={`map-${story.region}`}>
           {regionBars[story.region].map(([bx, by, bw, bh], barIndex) => (
             <Shape
               key={barIndex}
@@ -61,7 +61,7 @@ function Region({
       </MotionScope>
       <MotionScope scope={caption} startAt={highlight.start}>
         <Group
-          testId={`map-note-${story.region}`}
+          id={`map-note-${story.region}`}
           enter={wipe({ from: "left", duration: motion.reveal })}
         >
           <Shape

@@ -42,8 +42,6 @@ export type QueryContentReference =
 
 export type QueryContentNode = {
   readonly authorId?: string;
-  readonly testId?: string;
-  readonly part?: string;
   readonly reference: QueryContentReference;
   readonly children: readonly QueryContentNode[];
 };
@@ -58,15 +56,12 @@ export type BuildQuerySlideInput = {
 
 type QueryNode = {
   readonly authorId?: string;
-  readonly testId?: string;
-  readonly part?: string;
   readonly reference?: QueryContentReference;
   readonly children: readonly QueryNode[];
 };
 
 type LocatorEntry = {
   readonly node: QueryNode;
-  readonly partOwner?: QueryNode;
 };
 
 function assertQueryName(value: string, label: string): void {
@@ -101,17 +96,11 @@ function collectObjects(
   }
 }
 
-function collectDescendantEntries(
-  node: QueryNode,
-  partOwner?: QueryNode,
-): LocatorEntry[] {
-  return node.children.flatMap((child) => {
-    const owner = child.testId === undefined ? partOwner : child;
-    return [
-      { node: child, ...(owner === undefined ? {} : { partOwner: owner }) },
-      ...collectDescendantEntries(child, owner),
-    ];
-  });
+function collectDescendantEntries(node: QueryNode): LocatorEntry[] {
+  return node.children.flatMap((child) => [
+    { node: child },
+    ...collectDescendantEntries(child),
+  ]);
 }
 
 /** Entries visible from one author scope: anonymous nodes stay transparent, named nodes are boundaries. */
@@ -126,8 +115,6 @@ function queryNode(node: QueryContentNode): QueryNode {
   const children = node.children.map((child) => queryNode(child));
   return Object.freeze({
     ...(node.authorId === undefined ? {} : { authorId: node.authorId }),
-    ...(node.testId === undefined ? {} : { testId: node.testId }),
-    ...(node.part === undefined ? {} : { part: node.part }),
     reference: node.reference,
     children: Object.freeze(children),
   });
@@ -142,24 +129,12 @@ function makeLocator(
   const childLocators = (): readonly Locator[] =>
     Object.freeze(
       entry.node.children.map((child) =>
-        makeLocator(
-          {
-            node: child,
-            ...(child.testId === undefined
-              ? entry.partOwner === undefined
-                ? {}
-                : { partOwner: entry.partOwner }
-              : { partOwner: child }),
-          },
-          layouts,
-          objectsById,
-          resourcesByObjectId,
-        ),
+        makeLocator({ node: child }, layouts, objectsById, resourcesByObjectId),
       ),
     );
   const descendants = (): readonly Locator[] =>
     Object.freeze(
-      collectDescendantEntries(entry.node, entry.partOwner).map((descendant) =>
+      collectDescendantEntries(entry.node).map((descendant) =>
         makeLocator(descendant, layouts, objectsById, resourcesByObjectId),
       ),
     );
@@ -171,45 +146,6 @@ function makeLocator(
         .map(({ node }) =>
           makeLocator({ node }, layouts, objectsById, resourcesByObjectId),
         ),
-    );
-  };
-  const findTestIds = (testId: string): readonly Locator[] => {
-    assertQueryName(testId, "testId");
-    return Object.freeze(
-      collectDescendantEntries(entry.node, entry.partOwner)
-        .filter(({ node }) => node.testId === testId)
-        .map(({ node }) =>
-          makeLocator(
-            { node, partOwner: node },
-            layouts,
-            objectsById,
-            resourcesByObjectId,
-          ),
-        ),
-    );
-  };
-  const findParts = (name: string): readonly Locator[] => {
-    assertQueryName(name, "part");
-    const owner = entry.partOwner;
-    const matches: LocatorEntry[] = [];
-    const visit = (node: QueryNode, activeOwner?: QueryNode) => {
-      const currentOwner = node.testId === undefined ? activeOwner : node;
-      if (
-        node.part === name &&
-        (owner === undefined || currentOwner === owner)
-      ) {
-        matches.push({
-          node,
-          ...(currentOwner === undefined ? {} : { partOwner: currentOwner }),
-        });
-      }
-      for (const child of node.children) visit(child, currentOwner);
-    };
-    visit(entry.node, owner);
-    return Object.freeze(
-      matches.map((match) =>
-        makeLocator(match, layouts, objectsById, resourcesByObjectId),
-      ),
     );
   };
   // oxlint-disable-next-line unicorn/consistent-function-scoping
@@ -271,8 +207,6 @@ function makeLocator(
       ...(entry.node.authorId === undefined
         ? {}
         : { authorId: entry.node.authorId }),
-      ...(entry.node.testId === undefined ? {} : { testId: entry.node.testId }),
-      ...(entry.node.part === undefined ? {} : { part: entry.node.part }),
       ...(box === undefined ? {} : { box }),
       ...(observedText === undefined ? {} : { text: observedText }),
       objects: Object.freeze(objects),
@@ -288,18 +222,6 @@ function makeLocator(
     },
     getAll(id: string) {
       return findAuthorIds(id);
-    },
-    getByTestId(testId: string) {
-      return oneMatch(findTestIds(testId), "testId", testId);
-    },
-    getAllByTestId(testId: string) {
-      return findTestIds(testId);
-    },
-    part(name: string) {
-      return oneMatch(findParts(name), "part", name);
-    },
-    parts(name: string) {
-      return findParts(name);
     },
     children: childLocators,
     descendants,
@@ -358,28 +280,12 @@ export function createBuildQuery(
     ),
   );
   const byId = new Map(queries.map((slide) => [slide.id, slide] as const));
-  const byAuthorId = new Map(
-    queries.flatMap((slide) =>
-      slide.authorId === undefined ? [] : [[slide.authorId, slide] as const],
-    ),
-  );
   return Object.freeze({
     evidence: "generation" as const,
     slides: queries,
-    slide(slideId: string) {
-      assertQueryName(slideId, "slideId");
-      const slide = byId.get(slideId);
-      if (slide === undefined) {
-        throw new BuildQueryError(
-          "missing-slide",
-          `No slide found for slideId ${JSON.stringify(slideId)}`,
-        );
-      }
-      return slide;
-    },
     getSlide(id: string) {
       assertQueryName(id, "id");
-      const slide = byAuthorId.get(id);
+      const slide = byId.get(id);
       if (slide === undefined) {
         throw new BuildQueryError(
           "missing-slide",

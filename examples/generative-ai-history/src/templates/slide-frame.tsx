@@ -4,7 +4,7 @@ import type { ReactNode } from "react";
 import { colors } from "../theme.ts";
 
 export function SlideFrame({
-  slideId,
+  id,
   chapter,
   title,
   number,
@@ -12,7 +12,7 @@ export function SlideFrame({
   dark = false,
   children,
 }: {
-  readonly slideId: string;
+  readonly id: string;
   readonly chapter: string;
   readonly title: string;
   readonly number: number;
@@ -23,7 +23,7 @@ export function SlideFrame({
   const ink = dark ? colors.paperBright : colors.ink;
   const secondary = dark ? colors.mist : colors.muted;
   return (
-    <Slide slideId={slideId} background={dark ? colors.indigo : colors.paper}>
+    <Slide id={id} background={dark ? colors.indigo : colors.paper}>
       <Text
         x={64}
         y={30}

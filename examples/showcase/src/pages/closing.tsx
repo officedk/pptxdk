@@ -4,7 +4,7 @@ import { colors } from "../theme.ts";
 
 export function ClosingPage() {
   return (
-    <Slide slideId="closing" background={colors.ink}>
+    <Slide id="closing" background={colors.ink}>
       <Shape x={82} y={106} width={52} height={6} fill={colors.current} />
       <Text
         x={76}

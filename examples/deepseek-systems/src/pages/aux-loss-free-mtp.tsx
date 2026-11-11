@@ -18,7 +18,7 @@ const routedExperts = [
 export function AuxLossFreeMtpPage() {
   return (
     <SlideFrame
-      slideId="aux-loss-free-mtp"
+      id="aux-loss-free-mtp"
       kicker="01 · 模型架构基座｜无辅助损失负载均衡与多 Token 预测 (MTP)"
       title="动态偏置路由消除辅助损失干扰，14B MTP 模块兼顾表征强化与 1.8× 投机解码"
       takeaway="核心设计：偏置项仅参与 Top-K 专家选择，门控权重仍取原始亲和度，实现零精度损失均衡"
@@ -168,7 +168,7 @@ export function AuxLossFreeMtpPage() {
             return (
               <Shape
                 key={expert.id}
-                testId={`routed-expert-${expert.id}`}
+                id={`routed-expert-${expert.id}`}
                 x={exX}
                 y={exY}
                 width={90}

@@ -22,9 +22,9 @@ describe("native Cartesian charts", () => {
   it("inherits shared text visual styles across charts, axes, and data labels", async () => {
     const result = await build(
       <Deck>
-        <Slide slideId="chart-text-visual">
+        <Slide id="chart-text-visual">
           <Chart
-            testId="chart-text-visual"
+            id="chart-text-visual"
             kind="column"
             x={0}
             y={0}
@@ -107,9 +107,9 @@ describe("native Cartesian charts", () => {
     );
     const result = await build(
       <Deck>
-        <Slide slideId="value-axis-font">
+        <Slide id="value-axis-font">
           <Chart
-            testId="value-axis-font"
+            id="value-axis-font"
             kind="column"
             x={0}
             y={0}
@@ -134,9 +134,9 @@ describe("native Cartesian charts", () => {
     await assert.rejects(
       build(
         <Deck>
-          <Slide slideId="value-axis-font-conflict">
+          <Slide id="value-axis-font-conflict">
             <Chart
-              testId="value-axis-font-conflict"
+              id="value-axis-font-conflict"
               kind="column"
               x={0}
               y={0}
@@ -167,9 +167,10 @@ describe("native Cartesian charts", () => {
   it("preserves basic motion, click steps, and disabled declarations, referencing graphicFrame objects", async () => {
     const result = await build(
       <Deck>
-        <Slide slideId="chart-motion">
+        <Slide id="chart-motion">
           <Chart
-            testId="entering-chart"
+            id="entering-chart"
+            name="entering-chart"
             kind="column"
             x={0}
             y={0}
@@ -181,7 +182,8 @@ describe("native Cartesian charts", () => {
           />
           <Step n={3}>
             <Chart
-              testId="click-chart"
+              id="click-chart"
+              name="click-chart"
               kind="line"
               x={220}
               y={0}
@@ -192,7 +194,8 @@ describe("native Cartesian charts", () => {
             />
           </Step>
           <Chart
-            testId="disabled-chart"
+            id="disabled-chart"
+            name="disabled-chart"
             kind="area"
             x={440}
             y={0}
@@ -216,7 +219,7 @@ describe("native Cartesian charts", () => {
               target: {
                 id: entering?.id,
                 name: "entering-chart",
-                testId: "entering-chart",
+                authorId: "entering-chart",
               },
               kind: "entrance",
               preset: "fade",
@@ -229,7 +232,7 @@ describe("native Cartesian charts", () => {
               target: {
                 id: entering?.id,
                 name: "entering-chart",
-                testId: "entering-chart",
+                authorId: "entering-chart",
               },
               kind: "emphasis",
               preset: "spin",
@@ -249,7 +252,7 @@ describe("native Cartesian charts", () => {
               target: {
                 id: clicking?.id,
                 name: "click-chart",
-                testId: "click-chart",
+                authorId: "click-chart",
               },
               kind: "entrance",
               preset: "fade",
@@ -295,9 +298,9 @@ describe("native Cartesian charts", () => {
     await assert.rejects(
       build(
         <Deck>
-          <Slide slideId="invalid-chart-motion">
+          <Slide id="invalid-chart-motion">
             <Chart
-              testId="invalid-motion"
+              id="invalid-motion"
               kind="column"
               x={0}
               y={0}
@@ -324,9 +327,10 @@ describe("native Cartesian charts", () => {
   it("writes column charts, chart cache, and embedded workbooks as consistent editable data", async () => {
     const result = await build(
       <Deck width={800} height={600}>
-        <Slide slideId="quarterly-sales">
+        <Slide id="quarterly-sales">
           <Chart
-            testId="sales"
+            id="sales"
+            name="sales"
             kind="column"
             x={32}
             y={48}
@@ -353,7 +357,7 @@ describe("native Cartesian charts", () => {
       id: 2,
       kind: "chart",
       name: "sales",
-      testId: "sales",
+      authorId: "sales",
       box: { x: 32, y: 48, width: 560, height: 360 },
     });
 
@@ -449,9 +453,9 @@ describe("native Cartesian charts", () => {
     } as const;
     const result = await build(
       <Deck width={640} height={480}>
-        <Slide slideId="chart-types">
+        <Slide id="chart-types">
           <Chart
-            testId="column"
+            id="column"
             kind="column"
             x={0}
             y={0}
@@ -488,7 +492,7 @@ describe("native Cartesian charts", () => {
             plotArea={{ left: 24, top: 16, width: 260, height: 160 }}
           />
           <Chart
-            testId="bar"
+            id="bar"
             kind="bar"
             x={0}
             y={210}
@@ -505,7 +509,7 @@ describe("native Cartesian charts", () => {
             }}
           />
           <Chart
-            testId="line"
+            id="line"
             kind="line"
             x={310}
             y={0}
@@ -517,7 +521,7 @@ describe("native Cartesian charts", () => {
             style={{ fontFamily: "Aptos", fontSize: "12pt", color: "#224466" }}
           />
           <Chart
-            testId="area"
+            id="area"
             kind="area"
             x={310}
             y={210}
@@ -528,9 +532,9 @@ describe("native Cartesian charts", () => {
             legend={false}
           />
         </Slide>
-        <Slide slideId="second-page">
+        <Slide id="second-page">
           <Chart
-            testId="second-page-chart"
+            id="second-page-chart"
             kind="column"
             x={0}
             y={0}
@@ -654,9 +658,10 @@ describe("native Cartesian charts", () => {
     } as const;
     const result = await build(
       <Deck width={800} height={600}>
-        <Slide slideId="pie-and-doughnut">
+        <Slide id="pie-and-doughnut">
           <Chart
-            testId="pie"
+            id="pie"
+            name="pie"
             kind="pie"
             x={20}
             y={20}
@@ -681,7 +686,8 @@ describe("native Cartesian charts", () => {
             }}
           />
           <Chart
-            testId="doughnut"
+            id="doughnut"
+            name="doughnut"
             kind="doughnut"
             x={410}
             y={20}
@@ -706,7 +712,7 @@ describe("native Cartesian charts", () => {
     assert.deepEqual(file.errors, []);
     const chartObjects = result.report.slides[0]?.objects ?? [];
     assert.deepEqual(
-      chartObjects.map(({ kind, name, testId }) => [kind, name, testId]),
+      chartObjects.map(({ kind, name, authorId }) => [kind, name, authorId]),
       [
         ["chart", "pie", "pie"],
         ["chart", "doughnut", "doughnut"],
@@ -796,12 +802,12 @@ describe("native Cartesian charts", () => {
     const kinds = ["pie", "doughnut"] as const;
     const result = await build(
       <Deck>
-        <Slide slideId="explosion-supported-range">
+        <Slide id="explosion-supported-range">
           {kinds.flatMap((kind) =>
             acceptedValues.map(([label, explosion]) => (
               <Chart
                 key={`${kind}-${label}`}
-                testId={`${kind}-${label}`}
+                id={`${kind}-${label}`}
                 kind={kind}
                 x={0}
                 y={0}
@@ -858,9 +864,9 @@ describe("native Cartesian charts", () => {
         await assert.rejects(
           build(
             <Deck>
-              <Slide slideId={testId}>
+              <Slide id={testId}>
                 <Chart
-                  testId={testId}
+                  id={testId}
                   kind={kind}
                   x={0}
                   y={0}
@@ -905,23 +911,23 @@ describe("native Cartesian charts", () => {
       ],
     } as const;
     const invalidCases: {
-      readonly testId: string;
+      readonly id: string;
       readonly code: string;
       readonly message?: string;
       readonly props: ChartProps;
     }[] = [
       {
-        testId: "pie-series-count",
+        id: "pie-series-count",
         code: "invalid-data",
         props: { ...base, kind: "pie", data: twoSeries },
       },
       {
-        testId: "doughnut-series-count",
+        id: "doughnut-series-count",
         code: "invalid-data",
         props: { ...base, kind: "doughnut", data: twoSeries },
       },
       {
-        testId: "pie-negative-value",
+        id: "pie-negative-value",
         code: "invalid-data",
         props: {
           ...base,
@@ -933,32 +939,32 @@ describe("native Cartesian charts", () => {
         },
       },
       {
-        testId: "pie-angle-overflow",
+        id: "pie-angle-overflow",
         code: "invalid-chart-option",
         props: { ...base, kind: "pie", firstSliceAngle: 360.1 },
       },
       {
-        testId: "doughnut-hole-underflow",
+        id: "doughnut-hole-underflow",
         code: "invalid-chart-option",
         props: { ...base, kind: "doughnut", holeSize: 9.9 },
       },
       {
-        testId: "doughnut-hole-overflow",
+        id: "doughnut-hole-overflow",
         code: "invalid-chart-option",
         props: { ...base, kind: "doughnut", holeSize: 90.1 },
       },
       {
-        testId: "pie-explosion-underflow",
+        id: "pie-explosion-underflow",
         code: "invalid-chart-option",
         props: { ...base, kind: "pie", explosion: -1 },
       },
       {
-        testId: "pie-explosion-overflow",
+        id: "pie-explosion-overflow",
         code: "invalid-chart-option",
         props: { ...base, kind: "pie", explosion: 4_294_967_296 },
       },
       {
-        testId: "pie-hole-size",
+        id: "pie-hole-size",
         code: "invalid-chart-option",
         props: {
           ...base,
@@ -967,7 +973,7 @@ describe("native Cartesian charts", () => {
         } as unknown as ChartProps,
       },
       {
-        testId: "doughnut-stacking",
+        id: "doughnut-stacking",
         code: "invalid-chart-option",
         props: {
           ...base,
@@ -976,7 +982,7 @@ describe("native Cartesian charts", () => {
         } as unknown as ChartProps,
       },
       {
-        testId: "doughnut-label-position",
+        id: "doughnut-label-position",
         code: "invalid-data-labels",
         message:
           "Office does not allow dLblPos for doughnutChart series data labels",
@@ -987,7 +993,7 @@ describe("native Cartesian charts", () => {
         } as unknown as ChartProps,
       },
       {
-        testId: "pie-inside-base-label-position",
+        id: "pie-inside-base-label-position",
         code: "invalid-data-labels",
         message:
           'Office does not allow dLblPos="inBase" for pieChart series data labels',
@@ -998,7 +1004,7 @@ describe("native Cartesian charts", () => {
         } as unknown as ChartProps,
       },
       {
-        testId: "column-best-fit-label-position",
+        id: "column-best-fit-label-position",
         code: "invalid-data-labels",
         message:
           'Office does not allow dLblPos="bestFit" for barChart series data labels',
@@ -1009,7 +1015,7 @@ describe("native Cartesian charts", () => {
         } as unknown as ChartProps,
       },
       {
-        testId: "stacked-column-outside-end-label-position",
+        id: "stacked-column-outside-end-label-position",
         code: "invalid-data-labels",
         message:
           'Office does not allow dLblPos="outEnd" for stacked barChart series data labels',
@@ -1021,7 +1027,7 @@ describe("native Cartesian charts", () => {
         } as unknown as ChartProps,
       },
       {
-        testId: "line-explicit-data-label-position",
+        id: "line-explicit-data-label-position",
         code: "invalid-data-labels",
         message:
           "Chart generation does not expose explicit data label positions for line charts",
@@ -1033,12 +1039,12 @@ describe("native Cartesian charts", () => {
       },
     ];
 
-    for (const { testId, code, message, props } of invalidCases) {
+    for (const { id, code, message, props } of invalidCases) {
       await assert.rejects(
         build(
           <Deck>
-            <Slide slideId={testId}>
-              <Chart testId={testId} {...props} />
+            <Slide id={id}>
+              <Chart id={id} {...props} />
             </Slide>
           </Deck>,
         ),
@@ -1050,7 +1056,7 @@ describe("native Cartesian charts", () => {
           }
           assert.match(
             error.diagnostics[0]?.path ?? "",
-            new RegExp(`chart\\[${testId}\\]`, "u"),
+            new RegExp(`chart\\[${id}\\]`, "u"),
           );
           return true;
         },
@@ -1061,9 +1067,9 @@ describe("native Cartesian charts", () => {
   it("validates data label positions by chart group and series ancestor", async () => {
     const result = await build(
       <Deck>
-        <Slide slideId="chart-label-position-context">
+        <Slide id="chart-label-position-context">
           <Chart
-            testId="line-label-position"
+            id="line-label-position"
             kind="line"
             x={0}
             y={0}
@@ -1073,7 +1079,7 @@ describe("native Cartesian charts", () => {
             dataLabels={{ value: true }}
           />
           <Chart
-            testId="clustered-label-position"
+            id="clustered-label-position"
             kind="column"
             x={220}
             y={0}
@@ -1083,7 +1089,7 @@ describe("native Cartesian charts", () => {
             dataLabels={{ value: true, position: "outsideEnd" }}
           />
           <Chart
-            testId="doughnut-label-position"
+            id="doughnut-label-position"
             kind="doughnut"
             x={440}
             y={0}
@@ -1163,9 +1169,9 @@ describe("native Cartesian charts", () => {
   it("reports broken chart-to-workbook part relationships", async () => {
     const result = await build(
       <Deck>
-        <Slide slideId="invalid-workbook-relation">
+        <Slide id="invalid-workbook-relation">
           <Chart
-            testId="missing-workbook-relation"
+            id="missing-workbook-relation"
             kind="line"
             x={0}
             y={0}
@@ -1199,9 +1205,9 @@ describe("native Cartesian charts", () => {
   it("detects chart formulas referencing non-existent worksheets in embedded workbooks", async () => {
     const result = await build(
       <Deck>
-        <Slide slideId="renamed-chart-sheet">
+        <Slide id="renamed-chart-sheet">
           <Chart
-            testId="renamed-chart-sheet"
+            id="renamed-chart-sheet"
             kind="line"
             x={0}
             y={0}
@@ -1237,19 +1243,19 @@ describe("native Cartesian charts", () => {
   });
 
   it("requires converted widths of axis lines and grid lines to fall within DrawingML range", async () => {
-    for (const { testId, valueAxis } of [
-      { testId: "axis-line-overflow", valueAxis: { line: { width: 1e308 } } },
+    for (const { id, valueAxis } of [
+      { id: "axis-line-overflow", valueAxis: { line: { width: 1e308 } } },
       {
-        testId: "axis-gridline-overflow",
+        id: "axis-gridline-overflow",
         valueAxis: { gridlines: { width: 20_116_801 / 9525 } },
       },
     ]) {
       await assert.rejects(
         build(
           <Deck>
-            <Slide slideId={testId}>
+            <Slide id={id}>
               <Chart
-                testId={testId}
+                id={id}
                 kind="column"
                 x={0}
                 y={0}
@@ -1269,7 +1275,7 @@ describe("native Cartesian charts", () => {
           assert.equal(error.diagnostics[0]?.code, "invalid-style");
           assert.match(
             error.diagnostics[0]?.path ?? "",
-            new RegExp(`chart\\[${testId}\\]`, "u"),
+            new RegExp(`chart\\[${id}\\]`, "u"),
           );
           return true;
         },
@@ -1279,9 +1285,9 @@ describe("native Cartesian charts", () => {
     const maximumWidth = 20_116_800 / 9525;
     const boundaryResult = await build(
       <Deck>
-        <Slide slideId="maximum-axis-line-width">
+        <Slide id="maximum-axis-line-width">
           <Chart
-            testId="maximum-axis-line-width"
+            id="maximum-axis-line-width"
             kind="column"
             x={0}
             y={0}
@@ -1305,9 +1311,9 @@ describe("native Cartesian charts", () => {
     await assert.rejects(
       build(
         <Deck>
-          <Slide slideId="sparse-chart-data">
+          <Slide id="sparse-chart-data">
             <Chart
-              testId="sparse-values"
+              id="sparse-values"
               kind="column"
               x={0}
               y={0}
@@ -1343,9 +1349,9 @@ describe("native Cartesian charts", () => {
       await assert.rejects(
         build(
           <Deck>
-            <Slide slideId={`category-axis-${option}`}>
+            <Slide id={`category-axis-${option}`}>
               <Chart
-                testId="category-axis-option"
+                id="category-axis-option"
                 kind="column"
                 x={0}
                 y={0}
@@ -1423,9 +1429,9 @@ describe("native Cartesian charts", () => {
     await assert.rejects(
       build(
         <Deck>
-          <Slide slideId="invalid-data">
+          <Slide id="invalid-data">
             <Chart
-              testId="mismatched"
+              id="mismatched"
               kind="column"
               x={0}
               y={0}
@@ -1468,7 +1474,7 @@ describe("native Cartesian charts", () => {
     await assert.rejects(
       build(
         <Deck>
-          <Slide slideId="invalid-combination">{invalidLine}</Slide>
+          <Slide id="invalid-combination">{invalidLine}</Slide>
         </Deck>,
       ),
       (error: unknown) => {
@@ -1487,9 +1493,9 @@ describe("native Cartesian charts", () => {
     try {
       const result = await build(
         <Deck width={960} height={540}>
-          <Slide slideId="single-chart-parse">
+          <Slide id="single-chart-parse">
             <Chart
-              testId="piloted-chart"
+              id="piloted-chart"
               kind="column"
               x={50}
               y={50}
@@ -1536,7 +1542,7 @@ describe("native Cartesian charts", () => {
     await assert.rejects(
       build(
         <Deck width={960} height={540}>
-          <Slide slideId="chart-text-wrap">
+          <Slide id="chart-text-wrap">
             <Chart
               kind="column"
               width={200}
@@ -1559,7 +1565,7 @@ describe("native Cartesian charts", () => {
     await assert.rejects(
       build(
         <Deck width={960} height={540}>
-          <Slide slideId="chart-unknown-style">
+          <Slide id="chart-unknown-style">
             <Chart
               kind="column"
               width={200}
@@ -1582,7 +1588,7 @@ describe("native Cartesian charts", () => {
     await assert.rejects(
       build(
         <Deck width={960} height={540}>
-          <Slide slideId="chart-unknown-param">
+          <Slide id="chart-unknown-param">
             <Chart
               kind="column"
               width={200}
@@ -1605,7 +1611,7 @@ describe("native Cartesian charts", () => {
     await assert.rejects(
       build(
         <Deck width={960} height={540}>
-          <Slide slideId="chart-padding">
+          <Slide id="chart-padding">
             <Chart
               kind="column"
               width={200}

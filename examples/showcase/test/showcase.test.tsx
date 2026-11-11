@@ -46,9 +46,12 @@ it("map and calendar synchronize click behaviors, four-page gallery preserves co
     const caption = step.effects.find(({ kind }) => kind === "entrance")!;
     const date = calendar.objects.find(({ id }) => id === color.targetId)!;
     const note = calendar.objects.find(({ id }) => id === caption.targetId)!;
+    const noteAuthorId = result.report.slides
+      .find(({ id }) => id === "calendar")
+      ?.objects.find(({ id }) => id === note.id)?.authorId;
     assert.equal(step.trigger, "click");
     assert.equal(date.text?.text, String([4, 12, 23][index]).padStart(2, "0"));
-    assert.equal(note.name, `event-${[4, 12, 23][index]}`);
+    assert.equal(noteAuthorId, `event-${[4, 12, 23][index]}`);
     assert.equal(color.delayMs, caption.delayMs);
   }
 
@@ -143,7 +146,7 @@ it("cards template preserves layout and independent reveal across content replac
       {variants.map((items, index) => (
         <CardsPage
           key={index}
-          slideId={`reuse-${index}`}
+          id={`reuse-${index}`}
           title="Lorem ipsum dolor sit"
           subtitle="Lorem ipsum dolor sit amet, consectetur adipiscing elit."
           items={items}
@@ -194,7 +197,7 @@ it("progress module receives position and width from slide while preserving inte
   const result = await build(
     <Deck width={1280} height={720} theme={theme}>
       {frames.map((frame, index) => (
-        <Slide key={index} slideId={`progress-${index}`}>
+        <Slide key={index} id={`progress-${index}`}>
           <Progress {...frame} completed={3} total={4} />
         </Slide>
       ))}
@@ -205,9 +208,10 @@ it("progress module receives position and width from slide while preserving inte
   assert.deepEqual(file.errors, []);
   for (const [index, page] of file.slides.entries()) {
     const frame = frames[index]!;
-    const progress = page.objects.find(
-      ({ name }) => name === "progress-example",
-    )!;
+    const progressId = result.report.slides[index]?.objects.find(
+      ({ authorId }) => authorId === "progress-example",
+    )?.id;
+    const progress = page.objects.find(({ id }) => id === progressId)!;
     const bounds = progress.boxEmu;
     assert.equal(page.animations?.length, 2);
     assert.ok(Math.abs(bounds.x - frame.x * 9525) <= 9525);

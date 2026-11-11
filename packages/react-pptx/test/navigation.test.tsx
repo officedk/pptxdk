@@ -36,16 +36,16 @@ const pixelPng = new Uint8Array([
 ]);
 
 describe("slide navigation", () => {
-  it("writes internal jump relationships by stable slideId even after slide reordering", async () => {
+  it("writes internal jump relationships by stable author id even after slide reordering", async () => {
     const buildWithOrder = async (slideIds: readonly string[]) => {
-      const pages = slideIds.map((slideId) =>
+      const pages = slideIds.map((id) =>
         createElement(
           Slide,
-          { key: slideId, slideId },
-          slideId === "home"
+          { key: id, id },
+          id === "home"
             ? createElement(Text, {
-                testId: "open-details",
-                link: { slideId: "details" },
+                id: "open-details",
+                link: { id: "details" },
                 x: 0,
                 y: 0,
                 width: 120,
@@ -87,7 +87,7 @@ describe("slide navigation", () => {
           createElement(
             Slide,
             {
-              slideId: "opening",
+              id: "opening",
               hidden: true,
               advanceAfter: 3539,
               background: "#112233",
@@ -121,7 +121,7 @@ describe("slide navigation", () => {
           createElement(
             Slide,
             {
-              slideId: "gradient",
+              id: "gradient",
               background: linearGradient(45, "#112233", "#abcdef"),
             },
             createElement(
@@ -132,7 +132,7 @@ describe("slide navigation", () => {
             ),
           ),
           createElement(Slide, {
-            slideId: "image",
+            id: "image",
             background: { image: pixelPng },
           }),
         ),
@@ -166,13 +166,13 @@ describe("slide navigation", () => {
   });
 
   it("generates slide number fields using current slide sequence via shared text service in tables", async () => {
-    const makeSlide = (slideId: string) =>
+    const makeSlide = (id: string) =>
       createElement(
         Slide,
-        { key: slideId, slideId },
+        { key: id, id },
         createElement(
           Table,
-          { testId: `number-${slideId}`, x: 10, y: 10, columns: [160] },
+          { id: `number-${id}`, x: 10, y: 10, columns: [160] },
           createElement(
             Row,
             { style: { height: 32 } },
@@ -220,9 +220,10 @@ describe("slide navigation", () => {
         {},
         createElement(
           Slide,
-          { slideId: "source" },
+          { id: "source" },
           createElement(Shape, {
-            testId: "shape-url",
+            id: "shape-url",
+            name: "shape-url",
             link: { url: "https://example.org/path?q=1" },
             x: 0,
             y: 0,
@@ -230,8 +231,9 @@ describe("slide navigation", () => {
             height: 30,
           }),
           createElement(Text, {
-            testId: "text-link",
-            link: { slideId: "target" },
+            id: "text-link",
+            name: "text-link",
+            link: { id: "target" },
             x: 50,
             y: 0,
             width: 80,
@@ -239,8 +241,9 @@ describe("slide navigation", () => {
             children: "go",
           }),
           createElement(Image, {
-            testId: "image-link",
-            link: { slideId: "target" },
+            id: "image-link",
+            name: "image-link",
+            link: { id: "target" },
             src: pixelPng,
             x: 140,
             y: 0,
@@ -249,9 +252,9 @@ describe("slide navigation", () => {
           }),
           createElement(
             Group,
-            { testId: "group-home", link: { action: "home" } },
+            { id: "group-home", name: "group-home", link: { action: "home" } },
             createElement(Shape, {
-              testId: "group-member",
+              id: "group-member",
               x: 200,
               y: 0,
               width: 40,
@@ -259,8 +262,8 @@ describe("slide navigation", () => {
             }),
           ),
           createElement(Box, {
-            testId: "visible-box-link",
-            link: { slideId: "target" },
+            id: "visible-box-link",
+            link: { id: "target" },
             style: {
               position: "absolute",
               left: 0,
@@ -273,8 +276,9 @@ describe("slide navigation", () => {
           createElement(
             Table,
             {
-              testId: "table-link",
-              link: { slideId: "target" },
+              id: "table-link",
+              name: "table-link",
+              link: { id: "target" },
               columns: [60],
             },
             createElement(
@@ -284,8 +288,9 @@ describe("slide navigation", () => {
             ),
           ),
           createElement(Chart, {
-            testId: "chart-link",
-            link: { slideId: "target" },
+            id: "chart-link",
+            name: "chart-link",
+            link: { id: "target" },
             kind: "line",
             x: 0,
             y: 100,
@@ -297,14 +302,18 @@ describe("slide navigation", () => {
             },
           }),
         ),
-        createElement(Slide, { slideId: "target" }),
+        createElement(Slide, { id: "target" }),
       ),
     );
     const file = await validatePptx(result.pptx);
     assert.deepEqual(file.errors, []);
     const source = file.slides[0];
     assert.deepEqual(
-      source?.objects.map(({ name, link }) => [name, link]),
+      source?.objects.map(({ id, link }) => [
+        result.report.slides[0]?.objects.find((object) => object.id === id)
+          ?.authorId,
+        link,
+      ]),
       [
         ["shape-url", { url: "https://example.org/path?q=1" }],
         ["text-link", { slideId: "target" }],
@@ -325,10 +334,10 @@ describe("slide navigation", () => {
       {},
       createElement(
         Slide,
-        { slideId: "linked-source" },
+        { id: "linked-source" },
         createElement(Shape, {
-          testId: "source-shape",
-          link: { slideId: "morph-target" },
+          id: "source-shape",
+          link: { id: "morph-target" },
           morphKey: hero,
           x: 0,
           y: 0,
@@ -336,15 +345,15 @@ describe("slide navigation", () => {
           height: 30,
         }),
       ),
-      createElement(Slide, { slideId: "hidden-intermediate", hidden: true }),
+      createElement(Slide, { id: "hidden-intermediate", hidden: true }),
       createElement(
         Slide,
         {
-          slideId: "morph-target",
+          id: "morph-target",
           transition: transitions.morph({ fallback: transitions.fade() }),
         },
         createElement(Shape, {
-          testId: "target-shape",
+          id: "target-shape",
           morphKey: hero,
           x: 80,
           y: 0,
@@ -361,9 +370,9 @@ describe("slide navigation", () => {
       {},
       createElement(
         Slide,
-        { slideId: "linked-source" },
+        { id: "linked-source" },
         createElement(Shape, {
-          link: { slideId: "morph-target" },
+          link: { id: "morph-target" },
           morphKey: hero,
           x: 0,
           y: 0,
@@ -371,11 +380,11 @@ describe("slide navigation", () => {
           height: 30,
         }),
       ),
-      createElement(Slide, { slideId: "middle" }),
+      createElement(Slide, { id: "middle" }),
       createElement(
         Slide,
         {
-          slideId: "morph-target",
+          id: "morph-target",
           transition: transitions.morph({ fallback: transitions.fade() }),
         },
         createElement(Image, {
@@ -399,15 +408,15 @@ describe("slide navigation", () => {
     });
   });
 
-  it("identifies missing jump targets, duplicate slide IDs, and transparent Box links with exact locations", async () => {
+  it("identifies missing jump targets, duplicate author ids, and transparent Box links with exact locations", async () => {
     const missingTarget = createElement(
       Deck,
       {},
       createElement(
         Slide,
-        { slideId: "source" },
+        { id: "source" },
         createElement(Text, {
-          link: { slideId: "missing" },
+          link: { id: "missing" },
           x: 0,
           y: 0,
           width: 80,
@@ -426,12 +435,12 @@ describe("slide navigation", () => {
     const duplicateIds = createElement(
       Deck,
       {},
-      createElement(Slide, { slideId: "same" }),
-      createElement(Slide, { slideId: "same" }),
+      createElement(Slide, { id: "same" }),
+      createElement(Slide, { id: "same" }),
     );
     await assert.rejects(build(duplicateIds), (error: unknown) => {
       assert.ok(error instanceof BuildError);
-      assert.equal(error.diagnostics[0]?.code, "duplicate-slide-id");
+      assert.equal(error.diagnostics[0]?.code, "duplicate-author-id");
       return true;
     });
 
@@ -440,7 +449,7 @@ describe("slide navigation", () => {
       {},
       createElement(
         Slide,
-        { slideId: "source" },
+        { id: "source" },
         createElement(
           Box,
           { link: { action: "home" } },

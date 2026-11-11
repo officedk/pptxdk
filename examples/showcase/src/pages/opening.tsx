@@ -14,7 +14,7 @@ import { colors, motion } from "../theme.ts";
 /** The opening establishes the visual language of the entire deck with native geometric logos and staged entrances. */
 export function OpeningPage() {
   return (
-    <Slide slideId="opening" background={colors.accent}>
+    <Slide id="opening" background={colors.accent}>
       <Text
         x={82}
         y={74}
@@ -58,10 +58,7 @@ export function OpeningPage() {
         </Text>
       </Step>
       <Step n={1}>
-        <Group
-          testId="opening-mark"
-          enter={spinIn({ duration: motion.settle })}
-        >
+        <Group id="opening-mark" enter={spinIn({ duration: motion.settle })}>
           <Shape
             x={842}
             y={150}

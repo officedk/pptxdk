@@ -40,7 +40,7 @@ export function OpeningPage() {
 
   return (
     <Slide
-      slideId="opening"
+      id="opening"
       background={colors.obsidian}
       transition={transitions.fade({ duration: 500 })}
     >
@@ -132,7 +132,7 @@ export function OpeningPage() {
         return (
           <Shape
             key={pillar.code}
-            testId={`opening-pillar-${index + 1}`}
+            id={`opening-pillar-${index + 1}`}
             x={56}
             y={y}
             width={728}
@@ -230,7 +230,7 @@ export function OpeningPage() {
 
       <MotionScope scope={kpiScope} mode="stagger" each={120}>
         <MetricCard
-          testId="opening-kpi-1"
+          id="opening-kpi-1"
           enter={floatUp({ duration: 420 })}
           x={816}
           y={118}
@@ -243,7 +243,7 @@ export function OpeningPage() {
           dark
         />
         <MetricCard
-          testId="opening-kpi-2"
+          id="opening-kpi-2"
           enter={floatUp({ duration: 420 })}
           x={816}
           y={256}
@@ -256,7 +256,7 @@ export function OpeningPage() {
           dark
         />
         <MetricCard
-          testId="opening-kpi-3"
+          id="opening-kpi-3"
           enter={floatUp({ duration: 420 })}
           x={816}
           y={394}
@@ -269,7 +269,7 @@ export function OpeningPage() {
           dark
         />
         <MetricCard
-          testId="opening-kpi-4"
+          id="opening-kpi-4"
           enter={floatUp({ duration: 420 })}
           x={816}
           y={532}

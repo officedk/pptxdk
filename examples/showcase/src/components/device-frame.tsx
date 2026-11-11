@@ -5,14 +5,14 @@ import { colors } from "../theme.ts";
 
 /** Child content uses regular layout inside the screen area; device frame and content are preserved as a single native Group. */
 export function DeviceFrame({
-  testId,
+  id,
   x,
   y,
   width,
   height,
   children,
 }: {
-  readonly testId: string;
+  readonly id: string;
   readonly x: number;
   readonly y: number;
   readonly width: number;
@@ -23,7 +23,7 @@ export function DeviceFrame({
   const inset = compact ? 9 : 12;
   const top = compact ? 30 : 38;
   return (
-    <Group testId={testId}>
+    <Group id={id}>
       <Shape
         x={x}
         y={y}

@@ -35,7 +35,7 @@ export function Progress({
   const segmentGap = size(10);
   const segmentWidth = (size(622) - (total - 1) * segmentGap) / total;
   return (
-    <Group testId="progress-example">
+    <Group id="progress-example">
       <Text
         x={x}
         y={localY(56)}

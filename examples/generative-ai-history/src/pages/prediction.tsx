@@ -14,7 +14,7 @@ const candidates = [
 export function PredictionPage() {
   return (
     <SlideFrame
-      slideId="prediction"
+      id="prediction"
       chapter="起点｜把创造改写为概率问题"
       title="先学会预测，再谈创造"
       number={3}

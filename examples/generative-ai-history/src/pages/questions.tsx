@@ -29,7 +29,7 @@ const questions = [
 export function QuestionsPage() {
   return (
     <SlideFrame
-      slideId="questions"
+      id="questions"
       chapter="开放问题｜历史仍在书写"
       title="下一章，由约束共同写成"
       number={12}

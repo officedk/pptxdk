@@ -33,7 +33,7 @@ function tableDeck(content: ReactNode): ReactNode {
   return createElement(
     Deck,
     { width: 960, height: 540 },
-    createElement(Slide, { slideId: "invalid" }, content),
+    createElement(Slide, { id: "invalid" }, content),
   );
 }
 
@@ -65,7 +65,7 @@ describe("native tables", () => {
           'import { tableCapability } from "@react-pptx/capabilities/table";',
           'import { validatePptx } from "@react-pptx/validation";',
           "const build = createBuilder([tableCapability]);",
-          'const result = await build(createElement(Deck, { width: 160, height: 96 }, createElement(Slide, { slideId: "trimmed" }, createElement(Table, { testId: "only-table", columns: [80] }, createElement(Row, { style: { height: 40 } }, createElement(Cell, null, "table survives Text crop"))))));',
+          'const result = await build(createElement(Deck, { width: 160, height: 96 }, createElement(Slide, { id: "trimmed" }, createElement(Table, { id: "only-table", columns: [80] }, createElement(Row, { style: { height: 40 } }, createElement(Cell, null, "table survives Text crop"))))));',
           "const file = await validatePptx(result.pptx);",
           'if (file.errors.length !== 0 || file.slides[0]?.objects.length !== 1 || file.slides[0]?.objects[0]?.kind !== "table") throw new Error(JSON.stringify(file.errors));',
           "process.stdout.write(JSON.stringify({ kind: file.slides[0]?.objects[0]?.kind, text: file.slides[0]?.objects[0]?.table?.cells[0]?.[0] }));",
@@ -91,7 +91,7 @@ describe("native tables", () => {
         createElement(
           Table,
           {
-            testId: "text-style-table",
+            id: "text-style-table",
             columns: [160],
             style: {
               fontFamily: "Aptos",
@@ -142,11 +142,11 @@ describe("native tables", () => {
   it("identifies structural gaps and conflicting merges at table, row, or cell paths", async () => {
     const incomplete = createElement(
       Table,
-      { testId: "short", columns: [60, 60] },
+      { id: "short", columns: [60, 60] },
       createElement(
         Row,
-        { testId: "missing" },
-        createElement(Cell, { testId: "only" }, "One"),
+        { id: "missing" },
+        createElement(Cell, { id: "only" }, "One"),
       ),
     );
     await assert.rejects(build(tableDeck(incomplete)), (error: unknown) => {
@@ -165,11 +165,11 @@ describe("native tables", () => {
 
     const outOfBounds = createElement(
       Table,
-      { testId: "wide", columns: [60, 60] },
+      { id: "wide", columns: [60, 60] },
       createElement(
         Row,
-        { testId: "overflow" },
-        createElement(Cell, { testId: "too-wide", colSpan: 3 }, "Too wide"),
+        { id: "overflow" },
+        createElement(Cell, { id: "too-wide", colSpan: 3 }, "Too wide"),
       ),
     );
     await assert.rejects(build(tableDeck(outOfBounds)), (error: unknown) => {
@@ -184,18 +184,18 @@ describe("native tables", () => {
 
     const conflicting = createElement(
       Table,
-      { testId: "conflict", columns: [60, 60, 60] },
+      { id: "conflict", columns: [60, 60, 60] },
       createElement(
         Row,
-        { testId: "first" },
+        { id: "first" },
         createElement(Cell, { rowSpan: 2 }, "Left"),
         createElement(Cell, null, "Centre"),
         createElement(Cell, { rowSpan: 2 }, "Right"),
       ),
       createElement(
         Row,
-        { testId: "second" },
-        createElement(Cell, { testId: "overlap", colSpan: 2 }, "Conflict"),
+        { id: "second" },
+        createElement(Cell, { id: "overlap", colSpan: 2 }, "Conflict"),
       ),
     );
     await assert.rejects(build(tableDeck(conflicting)), (error: unknown) => {
@@ -210,11 +210,11 @@ describe("native tables", () => {
 
     const trailingRowSpan = createElement(
       Table,
-      { testId: "trailing", columns: [60] },
+      { id: "trailing", columns: [60] },
       createElement(
         Row,
-        { testId: "last" },
-        createElement(Cell, { testId: "too-tall", rowSpan: 2 }, "Too tall"),
+        { id: "last" },
+        createElement(Cell, { id: "too-tall", rowSpan: 2 }, "Too tall"),
       ),
     );
     await assert.rejects(
@@ -244,10 +244,10 @@ describe("native tables", () => {
         { width: 960, height: 540 },
         createElement(
           Slide,
-          { slideId: "automatic" },
+          { id: "automatic" },
           createElement(
             Table,
-            { testId: "automatic-row", columns: [30], style },
+            { id: "automatic-row", columns: [30], style },
             createElement(
               Row,
               null,
@@ -286,10 +286,10 @@ describe("native tables", () => {
         { width: 960, height: 540 },
         createElement(
           Slide,
-          { slideId: "spanning-automatic" },
+          { id: "spanning-automatic" },
           createElement(
             Table,
-            { testId: "spanning-automatic", columns: [32, 32], style },
+            { id: "spanning-automatic", columns: [32, 32], style },
             createElement(
               Row,
               null,
@@ -326,16 +326,16 @@ describe("native tables", () => {
         { width: 960, height: 540 },
         createElement(
           Slide,
-          { slideId: "fixed" },
+          { id: "fixed" },
           createElement(
             Table,
-            { testId: "fixed-row", columns: [30], style },
+            { id: "fixed-row", columns: [30], style },
             createElement(
               Row,
-              { testId: "short", style: { height: 20 } },
+              { id: "short", style: { height: 20 } },
               createElement(
                 Cell,
-                { testId: "long", style: { padding: 2 } },
+                { id: "long", style: { padding: 2 } },
                 "中文中文",
               ),
             ),
@@ -378,10 +378,10 @@ describe("native tables", () => {
         { width: 960, height: 540 },
         createElement(
           Slide,
-          { slideId: "explicit-line-height" },
+          { id: "explicit-line-height" },
           createElement(
             Table,
-            { testId: "explicit-line-height", columns: [60], style },
+            { id: "explicit-line-height", columns: [60], style },
             createElement(
               Row,
               { style: { height: 40 } },
@@ -407,10 +407,10 @@ describe("native tables", () => {
         { width: 960, height: 540 },
         createElement(
           Slide,
-          { slideId: "rectangle-merge" },
+          { id: "rectangle-merge" },
           createElement(
             Table,
-            { testId: "rectangle-merge", columns: [60, 60] },
+            { id: "rectangle-merge", columns: [60, 60] },
             createElement(
               Row,
               { style: { height: 24 } },
@@ -463,11 +463,11 @@ describe("native tables", () => {
         { width: 960, height: 540 },
         createElement(
           Slide,
-          { slideId: "merged" },
+          { id: "merged" },
           createElement(
             Table,
             {
-              testId: "merged-table",
+              id: "merged-table",
               columns: [50, 50, 50],
               style: {
                 fontFamily: font("Noto Sans CJK SC", [
@@ -530,11 +530,11 @@ describe("native tables", () => {
         { width: 960, height: 540 },
         createElement(
           Slide,
-          { slideId: "tracks" },
+          { id: "tracks" },
           createElement(
             Table,
             {
-              testId: "tracks",
+              id: "tracks",
               x: 10,
               y: 12,
               width: 180,
@@ -581,7 +581,7 @@ describe("native tables", () => {
   it("requires real font measurement for auto columns and preserves px tracks with warning for overly narrow widths", async () => {
     const autoWithoutMetrics = createElement(
       Table,
-      { testId: "measured-auto", columns: ["auto"] },
+      { id: "measured-auto", columns: ["auto"] },
       createElement(
         Row,
         { style: { height: 24 } },
@@ -610,11 +610,11 @@ describe("native tables", () => {
         { width: 960, height: 540 },
         createElement(
           Slide,
-          { slideId: "narrow" },
+          { id: "narrow" },
           createElement(
             Table,
             {
-              testId: "preserved-px",
+              id: "preserved-px",
               x: 0,
               y: 0,
               width: 120,
@@ -658,11 +658,12 @@ describe("native tables", () => {
         { width: 960, height: 540 },
         createElement(
           Slide,
-          { slideId: "comparison" },
+          { id: "comparison" },
           createElement(
             Table,
             {
-              testId: "plans",
+              id: "plans",
+              name: "plans",
               x: 12,
               y: 8,
               columns: [80, 80],
@@ -695,7 +696,7 @@ describe("native tables", () => {
       id: 2,
       kind: "table",
       name: "plans",
-      testId: "plans",
+      authorId: "plans",
       box: { x: 12, y: 8, width: 160, height: 56 },
       table: {
         columnWidths: [80, 80],
@@ -736,7 +737,7 @@ describe("native tables", () => {
       tableDeck(
         createElement(
           Table,
-          { testId, columns: [60] },
+          { id: testId, name: testId, columns: [60] },
           createElement(
             Row,
             { style: { height: 40 } },
@@ -746,7 +747,7 @@ describe("native tables", () => {
       ),
     );
     assert.equal(result.report.slides[0]?.objects[0]?.name, testId);
-    assert.equal(result.report.slides[0]?.objects[0]?.testId, testId);
+    assert.equal(result.report.slides[0]?.objects[0]?.authorId, testId);
     const file = await validatePptx(result.pptx);
     assert.deepEqual(file.errors, []);
     assert.equal(file.slides[0]?.objects[0]?.name, testId);
@@ -783,14 +784,14 @@ describe("native tables", () => {
           { width: 960, height: 540 },
           createElement(
             Slide,
-            { slideId: "single-table-parse" },
+            { id: "single-table-parse" },
             createElement(
               Box,
               { style: { display: "flex", width: 400 } },
               createElement(
                 Table,
                 {
-                  testId: "piloted-table",
+                  id: "piloted-table",
                   columns: [120, 100],
                   style: { fontSize: 14, color: "#333333" },
                 },
@@ -846,7 +847,7 @@ describe("native tables", () => {
           { width: 960, height: 540 },
           createElement(
             Slide,
-            { slideId: "invalid-table-param" },
+            { id: "invalid-table-param" },
             createElement(
               Table,
               // @ts-expect-error -- testing unknown parameter
@@ -870,7 +871,7 @@ describe("native tables", () => {
           { width: 960, height: 540 },
           createElement(
             Slide,
-            { slideId: "invalid-table-style" },
+            { id: "invalid-table-style" },
             createElement(
               Table,
               {
@@ -897,7 +898,7 @@ describe("native tables", () => {
           { width: 960, height: 540 },
           createElement(
             Slide,
-            { slideId: "invalid-table-padding" },
+            { id: "invalid-table-padding" },
             createElement(
               Table,
               {

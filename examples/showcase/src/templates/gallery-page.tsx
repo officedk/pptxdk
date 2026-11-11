@@ -97,7 +97,7 @@ function GalleryPanel({
   );
   return (
     <Group
-      testId={`gallery-panel-${topic.id}`}
+      id={`gallery-panel-${topic.id}`}
       morphKey={scope.handle(`panel-${topic.id}`)}
     >
       <Shape
@@ -132,7 +132,7 @@ function GalleryPanel({
       </Text>
       {index === 0 && (
         <Chart
-          testId="contrast-chart"
+          id="contrast-chart"
           kind="column"
           x={contentX}
           y={contentY}
@@ -265,7 +265,7 @@ export function GalleryPage({
 }) {
   return (
     <Slide
-      slideId={`gallery-${galleryTopics[focus]!.id}`}
+      id={`gallery-${galleryTopics[focus]!.id}`}
       background={colors.ink}
       transition={transitions.morph({
         duration: motion.morph,
@@ -307,8 +307,8 @@ export function GalleryPage({
         <Shape
           key={topic.id}
           morphKey={scope.handle(`navigation-${topic.id}`)}
-          link={{ slideId: `gallery-${topic.id}` }}
-          testId={`navigation-${topic.id}`}
+          link={{ id: `gallery-${topic.id}` }}
+          id={`navigation-${topic.id}`}
           x={86 + index * 284}
           y={584}
           width={260}

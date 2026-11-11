@@ -57,12 +57,13 @@ describe("images and native groups", () => {
         { width: 960, height: 540 },
         createElement(
           Slide,
-          { slideId: "mixed-group" },
+          { id: "mixed-group" },
           createElement(
             Group,
-            { testId: "outer-group" },
+            { id: "outer-group", name: "outer-group" },
             createElement(Shape, {
-              testId: "shape-text",
+              id: "shape-text",
+              name: "shape-text",
               geometry: "hexagon",
               x: 20,
               y: 24,
@@ -73,7 +74,8 @@ describe("images and native groups", () => {
             createElement(
               Text,
               {
-                testId: "paragraph-text",
+                id: "paragraph-text",
+                name: "paragraph-text",
                 x: 160,
                 y: 24,
                 width: 360,
@@ -88,7 +90,8 @@ describe("images and native groups", () => {
               ),
             ),
             createElement(Image, {
-              testId: "group-image",
+              id: "group-image",
+              name: "group-image",
               src: png,
               x: 20,
               y: 120,
@@ -98,9 +101,10 @@ describe("images and native groups", () => {
             }),
             createElement(
               Group,
-              { testId: "inner-group" },
+              { id: "inner-group", name: "inner-group" },
               createElement(Shape, {
-                testId: "inner-shape",
+                id: "inner-shape",
+                name: "inner-shape",
                 x: 190,
                 y: 80,
                 width: 40,
@@ -220,9 +224,10 @@ describe("images and native groups", () => {
         { width: 960, height: 540 },
         createElement(
           Slide,
-          { slideId: "media" },
+          { id: "media" },
           createElement(Image, {
-            testId: "cover-photo",
+            id: "cover-photo",
+            name: "cover-photo",
             src: png,
             alt: "封面照片",
             x: 32,
@@ -240,7 +245,7 @@ describe("images and native groups", () => {
         id: 2,
         kind: "image",
         name: "cover-photo",
-        testId: "cover-photo",
+        authorId: "cover-photo",
         box: { x: 32, y: 48, width: 120, height: 72 },
       },
     ]);
@@ -281,9 +286,9 @@ describe("images and native groups", () => {
             { width: 960, height: 540 },
             createElement(
               Slide,
-              { slideId: "local-image" },
+              { id: "local-image" },
               createElement(Image, {
-                testId: "local-image",
+                id: "local-image",
                 src: source,
               }),
             ),
@@ -318,8 +323,8 @@ describe("images and native groups", () => {
           { width: 960, height: 540 },
           createElement(
             Slide,
-            { slideId: contentType },
-            createElement(Image, { testId: contentType, src }),
+            { id: contentType },
+            createElement(Image, { id: contentType, src }),
           ),
         ),
       );
@@ -344,9 +349,9 @@ describe("images and native groups", () => {
         { width: 960, height: 540 },
         createElement(
           Slide,
-          { slideId: "reuse" },
+          { id: "reuse" },
           createElement(Image, {
-            testId: "contained",
+            id: "contained",
             src: png,
             x: 32,
             y: 48,
@@ -355,7 +360,7 @@ describe("images and native groups", () => {
             fit: "contain",
           }),
           createElement(Image, {
-            testId: "duplicate",
+            id: "duplicate",
             src: png,
             x: 200,
             y: 48,
@@ -396,9 +401,9 @@ describe("images and native groups", () => {
         { width: 960, height: 540 },
         createElement(
           Slide,
-          { slideId: "contain-transform" },
+          { id: "contain-transform" },
           createElement(Image, {
-            testId: "contained-square",
+            id: "contained-square",
             src: png,
             x: 20,
             y: 30,
@@ -435,9 +440,9 @@ describe("images and native groups", () => {
           { width: 960, height: 540 },
           createElement(
             Slide,
-            { slideId: "tiny-contain" },
+            { id: "tiny-contain" },
             createElement(Image, {
-              testId: "tiny-contain",
+              id: "tiny-contain",
               src: widePng,
               width: 1,
               height: 1,
@@ -465,9 +470,9 @@ describe("images and native groups", () => {
         { width: 960, height: 540 },
         createElement(
           Slide,
-          { slideId: "crop" },
+          { id: "crop" },
           createElement(Image, {
-            testId: "cropped",
+            id: "cropped",
             src: png,
             x: 0,
             y: 0,
@@ -498,9 +503,9 @@ describe("images and native groups", () => {
             { width: 960, height: 540 },
             createElement(
               Slide,
-              { slideId: `bad-crop-${index}` },
+              { id: `bad-crop-${index}` },
               createElement(Image, {
-                testId: `bad-crop-${index}`,
+                id: `bad-crop-${index}`,
                 src: png,
                 width: 120,
                 height: 72,
@@ -523,18 +528,18 @@ describe("images and native groups", () => {
     const invalidFit = Image as ComponentType<Record<string, unknown>>;
     for (const [props, code] of [
       [
-        { testId: "bad-fit", src: png, width: 120, height: 72, fit: "stretch" },
+        { id: "bad-fit", src: png, width: 120, height: 72, fit: "stretch" },
         "unsupported-fit",
       ],
       [
         {
-          testId: "missing",
+          id: "missing",
           src: new URL("file:///tmp/react-pptx-no-image.png"),
         },
         "image-read-failed",
       ],
       [
-        { testId: "unknown-format", src: new Uint8Array([1, 2, 3, 4]) },
+        { id: "unknown-format", src: new Uint8Array([1, 2, 3, 4]) },
         "unsupported-image-format",
       ],
     ] as const) {
@@ -545,7 +550,7 @@ describe("images and native groups", () => {
             { width: 960, height: 540 },
             createElement(
               Slide,
-              { slideId: "invalid-image" },
+              { id: "invalid-image" },
               createElement(invalidFit, props),
             ),
           ),
@@ -577,9 +582,9 @@ describe("images and native groups", () => {
           { width: 960, height: 540 },
           createElement(
             Slide,
-            { slideId: "no-idat" },
+            { id: "no-idat" },
             createElement(Image, {
-              testId: "no-idat",
+              id: "no-idat",
               src: noIdatPng,
             }),
           ),
@@ -605,9 +610,9 @@ describe("images and native groups", () => {
           { width: 960, height: 540 },
           createElement(
             Slide,
-            { slideId: "truncated-jpeg" },
+            { id: "truncated-jpeg" },
             createElement(Image, {
-              testId: "truncated-jpeg",
+              id: "truncated-jpeg",
               src: truncatedJpeg,
             }),
           ),
@@ -636,9 +641,9 @@ describe("images and native groups", () => {
           { width: 960, height: 540 },
           createElement(
             Slide,
-            { slideId: "empty-gif" },
+            { id: "empty-gif" },
             createElement(Image, {
-              testId: "empty-gif",
+              id: "empty-gif",
               src: emptyGif,
             }),
           ),
@@ -660,12 +665,13 @@ describe("images and native groups", () => {
         { width: 960, height: 540 },
         createElement(
           Slide,
-          { slideId: "groups" },
+          { id: "groups" },
           createElement(
             Group,
-            { testId: "outer" },
+            { id: "outer", name: "outer" },
             createElement(Shape, {
-              testId: "left",
+              id: "left",
+              name: "left",
               x: 20,
               y: 30,
               width: 40,
@@ -673,9 +679,10 @@ describe("images and native groups", () => {
             }),
             createElement(
               Group,
-              { testId: "inner" },
+              { id: "inner", name: "inner" },
               createElement(Image, {
-                testId: "photo",
+                id: "photo",
+                name: "photo",
                 src: png,
                 x: 100,
                 y: 50,
@@ -683,7 +690,8 @@ describe("images and native groups", () => {
                 height: 40,
               }),
               createElement(Shape, {
-                testId: "right",
+                id: "right",
+                name: "right",
                 x: 150,
                 y: 90,
                 width: 20,
@@ -700,14 +708,14 @@ describe("images and native groups", () => {
         id: 2,
         kind: "group",
         name: "outer",
-        testId: "outer",
+        authorId: "outer",
         box: { x: 20, y: 30, width: 160, height: 70 },
         members: [
           {
             id: 3,
             kind: "shape",
             name: "left",
-            testId: "left",
+            authorId: "left",
             geometry: "rect",
             box: { x: 20, y: 30, width: 40, height: 30 },
           },
@@ -715,21 +723,21 @@ describe("images and native groups", () => {
             id: 4,
             kind: "group",
             name: "inner",
-            testId: "inner",
+            authorId: "inner",
             box: { x: 100, y: 50, width: 80, height: 50 },
             members: [
               {
                 id: 5,
                 kind: "image",
                 name: "photo",
-                testId: "photo",
+                authorId: "photo",
                 box: { x: 100, y: 50, width: 80, height: 40 },
               },
               {
                 id: 6,
                 kind: "shape",
                 name: "right",
-                testId: "right",
+                authorId: "right",
                 geometry: "rect",
                 box: { x: 150, y: 90, width: 20, height: 10 },
               },
@@ -813,12 +821,12 @@ describe("images and native groups", () => {
           { width: 960, height: 540 },
           createElement(
             Slide,
-            { slideId: "group-props" },
+            { id: "group-props" },
             createElement(
               positionedGroup,
-              { testId: "not-a-box", x: 20 },
+              { id: "not-a-box", x: 20 },
               createElement(Shape, {
-                testId: "member",
+                id: "member",
                 x: 20,
                 y: 30,
                 width: 40,
@@ -843,8 +851,8 @@ describe("images and native groups", () => {
           { width: 960, height: 540 },
           createElement(
             Slide,
-            { slideId: "empty-group" },
-            createElement(Group, { testId: "empty" }),
+            { id: "empty-group" },
+            createElement(Group, { id: "empty" }),
           ),
         ),
       ),
@@ -864,11 +872,11 @@ describe("images and native groups", () => {
           { width: 960, height: 540 },
           createElement(
             Slide,
-            { slideId: "clipped-group" },
+            { id: "clipped-group" },
             createElement(
               Group,
-              { testId: "clipped" },
-              createElement(Image, { testId: "missing-image", src: png }),
+              { id: "clipped" },
+              createElement(Image, { id: "missing-image", src: png }),
             ),
           ),
         ),
@@ -899,12 +907,12 @@ describe("images and native groups", () => {
           { width: 960, height: 540 },
           createElement(
             Slide,
-            { slideId: "single-image-read" },
+            { id: "single-image-read" },
             createElement(
               Box,
               { style: { display: "flex", width: 400 } },
               createElement(Image, {
-                testId: "single-read-image",
+                id: "single-read-image",
                 src: png,
                 style: { opacity: 0.8 },
               }),
@@ -953,7 +961,7 @@ describe("images and native groups", () => {
           { width: 960, height: 540 },
           createElement(
             Slide,
-            { slideId: "invalid-image-param" },
+            { id: "invalid-image-param" },
             // @ts-expect-error -- testing unknown parameter
             createElement(Image, { src: png, unknownParam: "forbidden" }),
           ),
@@ -973,7 +981,7 @@ describe("images and native groups", () => {
           { width: 960, height: 540 },
           createElement(
             Slide,
-            { slideId: "invalid-image-style" },
+            { id: "invalid-image-style" },
             createElement(Image, {
               src: png,
               // @ts-expect-error -- testing unknown style property
@@ -996,7 +1004,7 @@ describe("images and native groups", () => {
           { width: 960, height: 540 },
           createElement(
             Slide,
-            { slideId: "invalid-image-padding" },
+            { id: "invalid-image-padding" },
             createElement(Image, {
               src: png,
               style: { padding: 10 },

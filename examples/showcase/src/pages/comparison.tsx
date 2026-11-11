@@ -13,7 +13,7 @@ import { colors, motion } from "../theme.ts";
 
 export function ComparisonPage() {
   return (
-    <Slide slideId="comparison" background={colors.paper}>
+    <Slide id="comparison" background={colors.paper}>
       <Shape x={0} y={0} width={610} height={720} fill={colors.accent} />
       <Text
         x={72}

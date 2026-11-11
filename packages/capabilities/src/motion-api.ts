@@ -496,7 +496,7 @@ export function repeat<E extends Effect>(
 type MotionTarget = {
   readonly kind: string;
   readonly name: string;
-  readonly testId?: string;
+  readonly authorId?: string;
   readonly textBody: boolean;
   readonly filled: boolean;
   readonly solidFilled?: boolean;
@@ -513,7 +513,7 @@ type MotionNativeMember = {
   readonly id: number;
   readonly kind: string;
   readonly name: string;
-  readonly testId?: string;
+  readonly authorId?: string;
   readonly box?: GeometryBox;
   readonly members?: readonly MotionNativeMember[];
 };
@@ -550,7 +550,7 @@ export type MotionEffectObservation = {
   readonly target: {
     readonly id: number;
     readonly name: string;
-    readonly testId?: string;
+    readonly authorId?: string;
     readonly range?: MotionTargetRange;
   };
   readonly kind: Effect["kind"];

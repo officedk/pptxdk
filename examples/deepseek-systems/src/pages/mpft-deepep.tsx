@@ -34,7 +34,7 @@ const dualModes = [
 export function MpftDeepEpPage() {
   return (
     <SlideFrame
-      slideId="mpft-deepep"
+      id="mpft-deepep"
       kicker="02 · 多平面集群网络与专家通信库 / MPFT · DeepEP · IBGDA"
       title="多平面胖树网络 (MPFT) 与 DeepEP：两级两层交换撑起万卡级专家通信"
       takeaway="相比三层胖树集群造价降低约 40%，跨机 All-to-All 实测达 58 GB/s"
@@ -53,7 +53,7 @@ export function MpftDeepEpPage() {
         tone="comm"
       >
         <Chart
-          testId="deepep-bandwidth-chart"
+          id="deepep-bandwidth-chart"
           kind="column"
           x={64}
           y={168}

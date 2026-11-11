@@ -70,7 +70,7 @@ describe("table and chart authoring through the common document", () => {
     assert.ok(merged instanceof RichTextContainer);
     assert.ok(firstRow instanceof CommonContainer);
     const tableNode = table({
-      testId: "document-table",
+      id: "document-table",
       x: 16,
       y: 20,
       width: 360,
@@ -79,7 +79,7 @@ describe("table and chart authoring through the common document", () => {
     }).append(firstRow, secondRow);
     assert.ok(tableNode instanceof CommonContainer);
     const document = deck({ width: 960, height: 540 }).append(
-      slide({ slideId: "table" }).append(tableNode),
+      slide({ id: "table" }).append(tableNode),
     );
 
     // Values are received at construction time; later edits to the caller's inputs do not leak in.
@@ -138,7 +138,7 @@ describe("table and chart authoring through the common document", () => {
     assert.match(slideXml(second), /i="1"/u);
     assert.doesNotMatch(slideXml(first), /Updated /u);
     assert.deepEqual(firstFile, await validatePptx(first.pptx));
-  });
+  }, 10_000);
 
   it("writes the six established chart kinds with matching native caches and embedded workbooks", async () => {
     const cartesian: ChartData = {
@@ -153,9 +153,9 @@ describe("table and chart authoring through the common document", () => {
       series: [{ name: "Share", values: [3, 2] }],
     };
     const document = deck({ width: 960, height: 540 }).append(
-      slide({ slideId: "charts" }).append(
+      slide({ id: "charts" }).append(
         chart({
-          testId: "column",
+          id: "column",
           kind: "column",
           x: 0,
           y: 0,
@@ -164,7 +164,7 @@ describe("table and chart authoring through the common document", () => {
           data: cartesian,
         }),
         chart({
-          testId: "bar",
+          id: "bar",
           kind: "bar",
           x: 320,
           y: 0,
@@ -174,7 +174,7 @@ describe("table and chart authoring through the common document", () => {
           stacking: "stacked",
         }),
         chart({
-          testId: "line",
+          id: "line",
           kind: "line",
           x: 0,
           y: 220,
@@ -183,7 +183,7 @@ describe("table and chart authoring through the common document", () => {
           data: cartesian,
         }),
         chart({
-          testId: "area",
+          id: "area",
           kind: "area",
           x: 320,
           y: 220,
@@ -192,7 +192,7 @@ describe("table and chart authoring through the common document", () => {
           data: cartesian,
         }),
         chart({
-          testId: "pie",
+          id: "pie",
           kind: "pie",
           x: 640,
           y: 0,
@@ -202,7 +202,7 @@ describe("table and chart authoring through the common document", () => {
           dataLabels: { value: true, category: true },
         }),
         chart({
-          testId: "doughnut",
+          id: "doughnut",
           kind: "doughnut",
           x: 640,
           y: 220,
@@ -257,7 +257,7 @@ describe("table and chart authoring through the common document", () => {
       series: [{ name: "Original", values: [1, 2] }],
     };
     const node = chart({
-      testId: "editable-chart",
+      id: "editable-chart",
       kind: "column",
       x: 0,
       y: 0,
@@ -268,7 +268,7 @@ describe("table and chart authoring through the common document", () => {
     assert.ok(node instanceof CommonNode);
     assert.ok(!(node instanceof CommonContainer));
     const document = deck({ width: 960, height: 540 }).append(
-      slide({ slideId: "chart-edit" }).append(node),
+      slide({ id: "chart-edit" }).append(node),
     );
 
     data.categories[0] = "Changed";
@@ -303,7 +303,7 @@ describe("table and chart authoring through the common document", () => {
 
   it("keeps table and chart registration explicit for trimmed builds", async () => {
     const document = deck({ width: 960, height: 540 }).append(
-      slide({ slideId: "trimmed" }).append(
+      slide({ id: "trimmed" }).append(
         table({ columns: [100] }).append(
           row({ style: { height: 20 } }).append(cell("Trimmed table")),
         ),

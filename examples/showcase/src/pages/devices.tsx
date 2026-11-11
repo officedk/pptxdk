@@ -50,7 +50,7 @@ function ExampleContent({ compact = false }: { compact?: boolean }) {
 
 export function DevicesPage() {
   return (
-    <Slide slideId="devices" background={colors.paper}>
+    <Slide id="devices" background={colors.paper}>
       <Shape x={80} y={62} width={42} height={5} fill={colors.accent} />
       <Text
         x={80}
@@ -71,22 +71,10 @@ export function DevicesPage() {
         Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod
         tempor.
       </Text>
-      <DeviceFrame
-        testId="device-desktop"
-        x={558}
-        y={126}
-        width={622}
-        height={410}
-      >
+      <DeviceFrame id="device-desktop" x={558} y={126} width={622} height={410}>
         <ExampleContent />
       </DeviceFrame>
-      <DeviceFrame
-        testId="device-phone"
-        x={408}
-        y={326}
-        width={196}
-        height={326}
-      >
+      <DeviceFrame id="device-phone" x={408} y={326} width={196} height={326}>
         <ExampleContent compact />
       </DeviceFrame>
       <Text

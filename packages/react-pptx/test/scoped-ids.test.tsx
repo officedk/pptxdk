@@ -16,6 +16,8 @@ import {
   Text,
   build,
   expandDocument,
+  fade,
+  observeMotion,
 } from "@react-pptx/react-pptx";
 import {
   box,
@@ -581,6 +583,29 @@ describe("scoped author ids", () => {
         ({ authorId }) => authorId === "sales",
       ),
     );
+  });
+
+  it("carries scoped author ids into formal motion observations", async () => {
+    const result = await build(
+      <Deck width={320} height={180}>
+        <Slide id="motion-ids">
+          <Shape
+            id="entrance"
+            x={0}
+            y={0}
+            width={20}
+            height={20}
+            enter={fade({ duration: 100 })}
+          />
+        </Slide>
+      </Deck>,
+    );
+    const motion = observeMotion(
+      result.query.getSlide("motion-ids").observation,
+    );
+    const effect = motion?.steps[0]?.effects[0];
+    assert.equal(effect?.target.authorId, "entrance");
+    assert.equal(effect?.target.id, result.report.slides[0]?.objects[0]?.id);
   });
 
   it("matches React expansion and command authoring through the same formal build", async () => {

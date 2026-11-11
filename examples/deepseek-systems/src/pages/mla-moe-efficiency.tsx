@@ -7,7 +7,7 @@ import { colors } from "../theme.ts";
 export function MlaMoeEfficiencyPage() {
   return (
     <SlideFrame
-      slideId="mla-moe-efficiency"
+      id="mla-moe-efficiency"
       kicker="01 · 模型架构基座｜MLA 键值压缩与 DeepSeekMoE 算力效率"
       title="MLA 将每 Token KV 缓存压至 70.3 KB，MoE 使单 Token 训练算力降至稠密模型 1/9.8"
       takeaway="ISCA '25 实测对比：KV 缓存较 LLaMA-3.1 405B 缩减 86.4%，单 Token 训练仅 250 GFLOPS"
@@ -26,7 +26,7 @@ export function MlaMoeEfficiencyPage() {
         tone="compute"
       >
         <Chart
-          testId="mla-kv-cache-chart"
+          id="mla-kv-cache-chart"
           kind="bar"
           enter={wipe({ from: "left", duration: 460 })}
           x={66}
@@ -150,7 +150,7 @@ export function MlaMoeEfficiencyPage() {
         tone="comm"
       >
         <Chart
-          testId="moe-training-flops-chart"
+          id="moe-training-flops-chart"
           kind="column"
           enter={wipe({ duration: 460 })}
           x={662}

@@ -56,7 +56,7 @@ export function PdDisaggregationPage({
 }) {
   return (
     <SlideFrame
-      slideId="pd-disaggregation"
+      id="pd-disaggregation"
       kicker="03 · 大规模专家并行 (EP) 与 PD 分离推理架构 / Prefill EP32 · Decode EP144"
       title="Prefill-Decode 分离推理架构：针对算力密集与访存密集实施差异化并行"
       takeaway="Prefill 32 卡高吞吐饱和算力，Decode 144 卡大 EP 释放 100% 计算 SM"
@@ -75,7 +75,7 @@ export function PdDisaggregationPage({
         tone="compute"
       >
         <Table
-          testId="pd-comparison-table"
+          id="pd-comparison-table"
           x={66}
           y={168}
           width={1148}
@@ -192,7 +192,7 @@ export function PdDisaggregationPage({
         tone="compute"
       >
         <Shape
-          testId="morph-sm-frame"
+          id="morph-sm-frame"
           morphKey={scope.handle("sm-frame")}
           x={68}
           y={490}
@@ -202,7 +202,7 @@ export function PdDisaggregationPage({
           style={{ borderColor: colors.line, borderWidth: 1 }}
         />
         <Shape
-          testId="morph-sm-mode-tag"
+          id="morph-sm-mode-tag"
           morphKey={scope.handle("sm-mode-tag")}
           x={84}
           y={502}
@@ -237,7 +237,7 @@ export function PdDisaggregationPage({
 
         {/* 108 Compute SMs bar (width 414 of 508) */}
         <Shape
-          testId="morph-sm-compute-bar"
+          id="morph-sm-compute-bar"
           morphKey={scope.handle("sm-compute-bar")}
           x={84}
           y={536}
@@ -254,7 +254,7 @@ export function PdDisaggregationPage({
         />
         {/* 24 Comm SMs bar (width 94 of 508) */}
         <Shape
-          testId="morph-sm-comm-bar"
+          id="morph-sm-comm-bar"
           morphKey={scope.handle("sm-comm-bar")}
           x={498}
           y={536}

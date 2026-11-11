@@ -36,7 +36,7 @@ type StepDeclaration =
 type MotionTarget = {
   readonly kind: string;
   readonly name: string;
-  readonly testId?: string;
+  readonly authorId?: string;
   readonly textBody: boolean;
   readonly filled: boolean;
   readonly paragraphCount?: number;
@@ -52,7 +52,7 @@ type MotionNativeMember = {
   readonly id: number;
   readonly kind: string;
   readonly name: string;
-  readonly testId?: string;
+  readonly authorId?: string;
   readonly box?: GeometryBox;
   readonly members?: readonly MotionNativeMember[];
 };
@@ -3078,9 +3078,9 @@ function motionPlan(
             target: {
               id: target.id,
               name: target.value.target.name,
-              ...(target.value.target.testId === undefined
+              ...(target.value.target.authorId === undefined
                 ? {}
-                : { testId: target.value.target.testId }),
+                : { authorId: target.value.target.authorId }),
               ...("range" in entry ? { range: entry.range } : {}),
             },
             kind: effect.kind,

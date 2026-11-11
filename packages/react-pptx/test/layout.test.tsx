@@ -37,12 +37,55 @@ const wideImage = new Uint8Array(
   readFileSync(new URL("./assets/wide-20000x1.png", import.meta.url)),
 );
 
+type ReportObject = {
+  readonly id: number;
+  readonly authorId?: string;
+  readonly members?: readonly ReportObject[];
+};
+
+function authorIdsByObjectId(
+  objects: readonly ReportObject[] | undefined,
+  ids = new Map<number, string>(),
+): Map<number, string> {
+  for (const object of objects ?? []) {
+    if (object.authorId !== undefined) ids.set(object.id, object.authorId);
+    authorIdsByObjectId(object.members, ids);
+  }
+  return ids;
+}
+
+function nativeByAuthor(
+  result: Awaited<ReturnType<typeof build>>,
+  file: Awaited<ReturnType<typeof validatePptx>>,
+  slideIndex: number,
+) {
+  const ids = authorIdsByObjectId(result.report.slides[slideIndex]?.objects);
+  return new Map(
+    (file.slides[slideIndex]?.objects ?? []).flatMap((object) => {
+      const authorId = ids.get(object.id);
+      return authorId === undefined ? [] : [[authorId, object] as const];
+    }),
+  );
+}
+
+function nativeBoxByAuthor(
+  result: Awaited<ReturnType<typeof build>>,
+  file: Awaited<ReturnType<typeof validatePptx>>,
+  slideIndex: number,
+) {
+  return new Map(
+    [...nativeByAuthor(result, file, slideIndex)].map(
+      ([authorId, object]) => [authorId, object.boxEmu] as const,
+    ),
+  );
+}
+
 describe("public layout entry", () => {
   it("uses Slide as a canvas grid container, omits hidden subtrees, and changes only paint order with zIndex", async () => {
     const result = await build(
       <Deck width={320} height={180}>
         <Slide
-          slideId="slide-grid"
+          id="slide-grid"
           style={{
             display: "grid",
             gridTemplateColumns: "2fr 1fr",
@@ -50,20 +93,22 @@ describe("public layout entry", () => {
           }}
         >
           <Shape
-            testId="front"
+            id="front"
+            name="front"
             height={30}
             enter={fade()}
             style={{ aspectRatio: 2, zIndex: 1 }}
           />
           <Shape
-            testId="back"
+            id="back"
+            name="back"
             width={100}
             height={40}
             enter={fade()}
             style={{ gridColumn: 2, gridRow: 1, zIndex: -1 }}
           />
           <Shape
-            testId="hidden"
+            id="hidden"
             style={{ display: "none", width: 500, height: 500 }}
           />
         </Slide>
@@ -71,18 +116,22 @@ describe("public layout entry", () => {
     );
 
     assert.deepEqual(
-      result.report.slides[0]?.objects.map(({ id, testId, box }) => ({
+      result.report.slides[0]?.objects.map(({ id, authorId, box }) => ({
         id,
-        testId,
+        authorId,
         box,
       })),
       [
         {
           id: 3,
-          testId: "back",
+          authorId: "back",
           box: { x: 213.33, y: 0, width: 100, height: 40 },
         },
-        { id: 2, testId: "front", box: { x: 0, y: 0, width: 60, height: 30 } },
+        {
+          id: 2,
+          authorId: "front",
+          box: { x: 0, y: 0, width: 60, height: 30 },
+        },
       ],
     );
     const slideXml = strFromU8(
@@ -95,12 +144,12 @@ describe("public layout entry", () => {
     const motion = result.report.slides[0]?.capabilities?.["motion"] as {
       readonly steps: readonly {
         readonly effects: readonly {
-          readonly target: { readonly testId?: string };
+          readonly target: { readonly authorId?: string };
         }[];
       }[];
     };
     assert.deepEqual(
-      motion.steps[0]?.effects.map(({ target }) => target.testId),
+      motion.steps[0]?.effects.map(({ target }) => target.authorId),
       ["front", "back"],
     );
     assert.deepEqual((await validatePptx(result.pptx)).errors, []);
@@ -109,9 +158,9 @@ describe("public layout entry", () => {
   it("uses respective native sizing models for Table and Chart inside Grid", async () => {
     const result = await build(
       <Deck width={320} height={240}>
-        <Slide slideId="grid-native-layout">
+        <Slide id="grid-native-layout">
           <Box
-            testId="grid-native"
+            id="grid-native"
             style={{
               display: "grid",
               width: 300,
@@ -122,7 +171,7 @@ describe("public layout entry", () => {
             }}
           >
             <Table
-              testId="grid-table"
+              id="grid-table"
               columns={["1fr"]}
               style={{ fontFamily: cjkFont, fontSize: 12, gridColumn: 1 }}
             >
@@ -131,7 +180,7 @@ describe("public layout entry", () => {
               </Row>
             </Table>
             <Chart
-              testId="grid-chart"
+              id="grid-chart"
               kind="line"
               style={{ gridColumn: 2 }}
               data={{ categories: ["A"], series: [{ name: "S", values: [1] }] }}
@@ -142,16 +191,16 @@ describe("public layout entry", () => {
     );
     const objects = result.report.slides[0]?.objects ?? [];
     assert.deepEqual(
-      objects.map(({ kind, testId, box }) => ({ kind, testId, box })),
+      objects.map(({ kind, authorId, box }) => ({ kind, authorId, box })),
       [
         {
           kind: "table",
-          testId: "grid-table",
+          authorId: "grid-table",
           box: { x: 0, y: 0, width: 145, height: 180 },
         },
         {
           kind: "chart",
-          testId: "grid-chart",
+          authorId: "grid-chart",
           box: { x: 155, y: 0, width: 145, height: 180 },
         },
       ],
@@ -162,7 +211,7 @@ describe("public layout entry", () => {
   it("starts Grid tracks after container padding", async () => {
     const result = await build(
       <Deck width={320} height={240}>
-        <Slide slideId="grid-padding">
+        <Slide id="grid-padding">
           <Box
             style={{
               display: "grid",
@@ -173,7 +222,7 @@ describe("public layout entry", () => {
               gridTemplateRows: "1fr",
             }}
           >
-            <Shape testId="inside-padding" />
+            <Shape id="inside-padding" />
           </Box>
         </Slide>
       </Deck>,
@@ -191,9 +240,9 @@ describe("public layout entry", () => {
   it("offsets auto-placed grid items by the flow grid origin", async () => {
     const result = await build(
       <Deck width={1280} height={720}>
-        <Slide slideId="grid-origin">
+        <Slide id="grid-origin">
           <Box
-            testId="frame"
+            id="frame"
             style={{
               display: "flex",
               flexDirection: "row",
@@ -204,11 +253,11 @@ describe("public layout entry", () => {
             }}
           >
             <Box
-              testId="sidebar"
+              id="sidebar"
               style={{ width: 300, height: 624, backgroundColor: "#172033" }}
             />
             <Box
-              testId="grid"
+              id="grid"
               style={{
                 display: "grid",
                 width: 820,
@@ -220,22 +269,22 @@ describe("public layout entry", () => {
               }}
             >
               <Box
-                testId="card-a"
+                id="card-a"
                 style={{ backgroundColor: "#FFFFFF", padding: 18 }}
               >
                 <Text
-                  testId="card-a-text"
+                  id="card-a-text"
                   style={{ fontFamily: cjkFont, fontSize: 20 }}
                 >
                   A
                 </Text>
               </Box>
               <Box
-                testId="card-b"
+                id="card-b"
                 style={{ backgroundColor: "#FFFFFF", padding: 18 }}
               >
                 <Text
-                  testId="card-b-text"
+                  id="card-b-text"
                   style={{ fontFamily: cjkFont, fontSize: 20 }}
                 >
                   B
@@ -249,8 +298,11 @@ describe("public layout entry", () => {
     const file = await validatePptx(result.pptx);
     assert.deepEqual(file.errors, []);
     const fileBox = (name: string) => {
+      const id = result.report.slides[0]?.objects.find(
+        (candidate) => candidate.authorId === name,
+      )?.id;
       const object = file.slides[0]?.objects.find(
-        (candidate) => candidate.name === name,
+        (candidate) => candidate.id === id,
       );
       assert.ok(object, `missing object ${name}`);
       return {
@@ -292,9 +344,9 @@ describe("public layout entry", () => {
   it("places nested grid tracks from a nonzero flow grid origin", async () => {
     const result = await build(
       <Deck width={1280} height={720}>
-        <Slide slideId="grid-nested-origin">
+        <Slide id="grid-nested-origin">
           <Box
-            testId="frame"
+            id="frame"
             style={{
               display: "flex",
               flexDirection: "row",
@@ -305,11 +357,11 @@ describe("public layout entry", () => {
             }}
           >
             <Box
-              testId="sidebar"
+              id="sidebar"
               style={{ width: 300, height: 624, backgroundColor: "#172033" }}
             />
             <Box
-              testId="grid"
+              id="grid"
               style={{
                 display: "grid",
                 width: 820,
@@ -323,14 +375,14 @@ describe("public layout entry", () => {
               }}
             >
               <Box
-                testId="spanning-card"
+                id="spanning-card"
                 style={{
                   gridColumn: "span 2",
                   backgroundColor: "#FFFFFF",
                 }}
               />
               <Box
-                testId="nested-grid"
+                id="nested-grid"
                 style={{
                   display: "grid",
                   gridColumn: 1,
@@ -345,11 +397,11 @@ describe("public layout entry", () => {
                 }}
               >
                 <Box
-                  testId="nested-cell-a"
+                  id="nested-cell-a"
                   style={{ backgroundColor: "#FFFFFF" }}
                 />
                 <Box
-                  testId="nested-cell-b"
+                  id="nested-cell-b"
                   style={{ backgroundColor: "#FFFFFF" }}
                 />
               </Box>
@@ -361,8 +413,11 @@ describe("public layout entry", () => {
     const file = await validatePptx(result.pptx);
     assert.deepEqual(file.errors, []);
     const objectBox = (name: string) => {
+      const id = result.report.slides[0]?.objects.find(
+        (candidate) => candidate.authorId === name,
+      )?.id;
       const object = file.slides[0]?.objects.find(
-        (candidate) => candidate.name === name,
+        (candidate) => candidate.id === id,
       );
       assert.ok(object, `missing object ${name}`);
       return {
@@ -402,9 +457,9 @@ describe("public layout entry", () => {
   it("keeps author absolute descendants anchored to the nearest positioned ancestor", async () => {
     const result = await build(
       <Deck width={640} height={480}>
-        <Slide slideId="grid-absolute-origin">
+        <Slide id="grid-absolute-origin">
           <Box
-            testId="anchor"
+            id="anchor"
             style={{
               position: "relative",
               width: 400,
@@ -414,7 +469,7 @@ describe("public layout entry", () => {
             }}
           >
             <Box
-              testId="static-grid"
+              id="static-grid"
               style={{
                 display: "grid",
                 width: 300,
@@ -425,12 +480,9 @@ describe("public layout entry", () => {
                 backgroundColor: "#DDE5EF",
               }}
             >
-              <Box
-                testId="static-grid-item"
-                style={{ backgroundColor: "#FFFFFF" }}
-              >
+              <Box id="static-grid-item" style={{ backgroundColor: "#FFFFFF" }}>
                 <Shape
-                  testId="item-absolute"
+                  id="item-absolute"
                   style={{
                     position: "absolute",
                     left: 12,
@@ -441,7 +493,7 @@ describe("public layout entry", () => {
                 />
               </Box>
               <Shape
-                testId="grid-absolute"
+                id="grid-absolute"
                 style={{
                   position: "absolute",
                   left: 30,
@@ -453,7 +505,7 @@ describe("public layout entry", () => {
             </Box>
           </Box>
           <Box
-            testId="relative-anchor"
+            id="relative-anchor"
             style={{
               position: "absolute",
               left: 100,
@@ -464,7 +516,7 @@ describe("public layout entry", () => {
             }}
           >
             <Box
-              testId="relative-grid"
+              id="relative-grid"
               style={{
                 position: "relative",
                 display: "grid",
@@ -476,7 +528,7 @@ describe("public layout entry", () => {
               }}
             >
               <Shape
-                testId="relative-grid-absolute"
+                id="relative-grid-absolute"
                 style={{
                   position: "absolute",
                   left: 5,
@@ -493,8 +545,11 @@ describe("public layout entry", () => {
     const file = await validatePptx(result.pptx);
     assert.deepEqual(file.errors, []);
     const objectBox = (name: string) => {
+      const id = result.report.slides[0]?.objects.find(
+        (candidate) => candidate.authorId === name,
+      )?.id;
       const object = file.slides[0]?.objects.find(
-        (candidate) => candidate.name === name,
+        (candidate) => candidate.id === id,
       );
       assert.ok(object, `missing object ${name}`);
       return {
@@ -540,7 +595,7 @@ describe("public layout entry", () => {
   it("respects text min-content for auto grid tracks and matches native object geometry", async () => {
     const result = await build(
       <Deck width={320} height={240}>
-        <Slide slideId="grid-min-content">
+        <Slide id="grid-min-content">
           <Box
             style={{
               display: "grid",
@@ -552,20 +607,22 @@ describe("public layout entry", () => {
             }}
           >
             <Text
-              testId="min-content"
+              id="min-content"
               style={{ fontFamily: cjkFont, fontSize: 20 }}
             >
               WWWW
             </Text>
-            <Shape testId="after-min-content" width={20} height={20} />
+            <Shape id="after-min-content" width={20} height={20} />
           </Box>
         </Slide>
       </Deck>,
     );
     const objects = result.report.slides[0]?.objects ?? [];
-    const text = objects.find(({ testId }) => testId === "min-content");
+    const text = objects.find(
+      ({ authorId: testId }) => testId === "min-content",
+    );
     const afterText = objects.find(
-      ({ testId }) => testId === "after-min-content",
+      ({ authorId: testId }) => testId === "after-min-content",
     );
     assert.ok(text?.box !== undefined && text.box.width > 0);
     assert.equal(afterText?.box?.x, text.box.x + text.box.width + 10);
@@ -573,7 +630,7 @@ describe("public layout entry", () => {
     const file = await validatePptx(result.pptx);
     assert.deepEqual(file.errors, []);
     const nativeText = file.slides[0]?.objects.find(
-      ({ name }) => name === "min-content",
+      ({ id }) => id === text?.id,
     );
     assert.deepEqual(
       {
@@ -589,7 +646,7 @@ describe("public layout entry", () => {
   it("uses nearest explicitly positioned ancestor for absolute descendants within Grid items", async () => {
     const result = await build(
       <Deck width={320} height={240}>
-        <Slide slideId="grid-absolute-descendant">
+        <Slide id="grid-absolute-descendant">
           <Box style={{ position: "relative", width: 200, height: 120 }}>
             <Box
               style={{
@@ -604,7 +661,7 @@ describe("public layout entry", () => {
             >
               <Box style={{ width: 50, height: 40 }}>
                 <Shape
-                  testId="absolute-descendant"
+                  id="absolute-descendant"
                   style={{
                     position: "absolute",
                     left: 10,
@@ -633,10 +690,10 @@ describe("public layout entry", () => {
     await assert.rejects(
       build(
         <Deck width={320} height={240}>
-          <Slide slideId="absolute-grid-placement">
+          <Slide id="absolute-grid-placement">
             <Box style={{ display: "grid", width: 200, height: 100 }}>
               <Shape
-                testId="misplaced"
+                id="misplaced"
                 style={{ position: "absolute", gridColumn: 1 }}
               />
             </Box>
@@ -650,7 +707,7 @@ describe("public layout entry", () => {
     await assert.rejects(
       build(
         <Deck width={320} height={240}>
-          <Slide slideId="grid-baseline">
+          <Slide id="grid-baseline">
             <Box style={{ display: "grid", alignItems: "baseline" }} />
           </Slide>
         </Deck>,
@@ -664,10 +721,10 @@ describe("public layout entry", () => {
   it("participates in parent flow layout as a native object for Group with layout style", async () => {
     const result = await build(
       <Deck width={320} height={140}>
-        <Slide slideId="group-flow">
+        <Slide id="group-flow">
           <Box style={{ display: "flex", width: 300, height: 100, gap: 10 }}>
             <Group
-              testId="flow-group"
+              id="flow-group"
               style={{
                 display: "flex",
                 flexDirection: "row",
@@ -676,28 +733,31 @@ describe("public layout entry", () => {
                 height: 60,
               }}
             >
-              <Shape testId="group-a" width={20} height={20} />
-              <Shape testId="group-b" width={20} height={20} />
+              <Shape id="group-a" width={20} height={20} />
+              <Shape id="group-b" width={20} height={20} />
             </Group>
-            <Shape testId="after-group" width={30} height={30} />
+            <Shape id="after-group" width={30} height={30} />
           </Box>
         </Slide>
       </Deck>,
     );
     const group = result.report.slides[0]?.objects.find(
-      ({ testId }) => testId === "flow-group",
+      ({ authorId: testId }) => testId === "flow-group",
     );
     assert.deepEqual(group?.box, { x: 0, y: 0, width: 100, height: 60 });
     assert.deepEqual(
-      group?.members?.map(({ testId, box }) => ({ testId, box })),
+      group?.members?.map(({ authorId: testId, box }) => ({
+        authorId: testId,
+        box,
+      })),
       [
-        { testId: "group-a", box: { x: 0, y: 0, width: 20, height: 20 } },
-        { testId: "group-b", box: { x: 25, y: 0, width: 20, height: 20 } },
+        { authorId: "group-a", box: { x: 0, y: 0, width: 20, height: 20 } },
+        { authorId: "group-b", box: { x: 25, y: 0, width: 20, height: 20 } },
       ],
     );
     assert.deepEqual(
       result.report.slides[0]?.objects.find(
-        ({ testId }) => testId === "after-group",
+        ({ authorId: testId }) => testId === "after-group",
       )?.box,
       { x: 110, y: 0, width: 30, height: 30 },
     );
@@ -707,10 +767,10 @@ describe("public layout entry", () => {
   it("writes padding into bodyPr and participates in text height and baseline for Text and Shape.text", async () => {
     const result = await build(
       <Deck width={320} height={160}>
-        <Slide slideId="text-insets">
+        <Slide id="text-insets">
           <Box style={{ display: "flex", alignItems: "baseline", width: 300 }}>
             <Text
-              testId="plain-text"
+              id="plain-text"
               width={80}
               height="auto"
               style={{ fontFamily: cjkFont, fontSize: 20 }}
@@ -718,7 +778,7 @@ describe("public layout entry", () => {
               AB
             </Text>
             <Text
-              testId="padded-text"
+              id="padded-text"
               width={80}
               height="auto"
               style={{ fontFamily: cjkFont, fontSize: 20, padding: [10, 4] }}
@@ -726,7 +786,7 @@ describe("public layout entry", () => {
               AB
             </Text>
             <Shape
-              testId="padded-shape"
+              id="padded-shape"
               width={100}
               height={50}
               text="中文中文中文"
@@ -747,18 +807,24 @@ describe("public layout entry", () => {
       </Deck>,
     );
     const objects = result.report.slides[0]?.objects ?? [];
-    const plain = objects.find(({ testId }) => testId === "plain-text")?.box;
-    const padded = objects.find(({ testId }) => testId === "padded-text")?.box;
+    const plain = objects.find(
+      ({ authorId: testId }) => testId === "plain-text",
+    )?.box;
+    const padded = objects.find(
+      ({ authorId: testId }) => testId === "padded-text",
+    )?.box;
     assert.equal(padded?.height, (plain?.height ?? 0) + 20);
     assert.equal(padded?.y, (plain?.y ?? 0) - 10);
-    const shape = objects.find(({ testId }) => testId === "padded-shape")?.box;
+    const shape = objects.find(
+      ({ authorId: testId }) => testId === "padded-shape",
+    )?.box;
     assert.deepEqual(shape, { x: 160, y: 8, width: 100, height: 50 });
     const slideXml = strFromU8(
       unzipSync(result.pptx)["ppt/slides/slide1.xml"]!,
     );
     const bodyPrFor = (testId: string) => {
       const id = objects.find(
-        ({ testId: objectTestId }) => objectTestId === testId,
+        ({ authorId: objectTestId }) => objectTestId === testId,
       )?.id;
       const start = slideXml.indexOf(`id="${id}"`);
       const body = slideXml.indexOf("<a:bodyPr", start);
@@ -784,9 +850,9 @@ describe("public layout entry", () => {
   it("places content according to repeat/minmax grid tracks and satisfies cross-column constraints", async () => {
     const result = await build(
       <Deck width={320} height={240}>
-        <Slide slideId="grid-tracks">
+        <Slide id="grid-tracks">
           <Box
-            testId="grid"
+            id="grid"
             style={{
               display: "grid",
               width: 200,
@@ -797,21 +863,21 @@ describe("public layout entry", () => {
               rowGap: 5,
             }}
           >
-            <Shape testId="first" height={20} />
-            <Shape testId="span" height={10} style={{ gridColumn: "span 2" }} />
+            <Shape id="first" height={20} />
+            <Shape id="span" height={10} style={{ gridColumn: "span 2" }} />
           </Box>
         </Slide>
       </Deck>,
     );
 
     assert.deepEqual(
-      result.report.slides[0]?.objects.map(({ testId, box }) => ({
-        testId,
+      result.report.slides[0]?.objects.map(({ authorId: testId, box }) => ({
+        id: testId,
         box,
       })),
       [
-        { testId: "first", box: { x: 0, y: 0, width: 95, height: 20 } },
-        { testId: "span", box: { x: 0, y: 25, width: 200, height: 10 } },
+        { id: "first", box: { x: 0, y: 0, width: 95, height: 20 } },
+        { id: "span", box: { x: 0, y: 25, width: 200, height: 10 } },
       ],
     );
     assert.deepEqual((await validatePptx(result.pptx)).errors, []);
@@ -822,7 +888,7 @@ describe("public layout entry", () => {
       "Service revenue grew in every region this quarter, led by managed services.";
     const cardGrid = (name: string, width: number) => (
       <Box
-        testId={`${name}-grid`}
+        id={`${name}-grid`}
         style={{
           display: "grid",
           width,
@@ -836,7 +902,7 @@ describe("public layout entry", () => {
         }}
       >
         <Box
-          testId={`${name}-heading`}
+          id={`${name}-heading`}
           style={{
             gridColumn: "2 / span 2",
             gridRow: 1,
@@ -848,7 +914,7 @@ describe("public layout entry", () => {
           </Text>
         </Box>
         <Box
-          testId={`${name}-feature`}
+          id={`${name}-feature`}
           style={{
             gridColumn: 1,
             gridRow: "1 / span 3",
@@ -858,7 +924,7 @@ describe("public layout entry", () => {
           <Text style={{ fontFamily: cjkFont, fontSize: 14 }}>Lead</Text>
         </Box>
         <Box
-          testId={`${name}-metric`}
+          id={`${name}-metric`}
           style={{
             gridColumn: 2,
             gridRow: 2,
@@ -868,7 +934,7 @@ describe("public layout entry", () => {
           <Text style={{ fontFamily: cjkFont, fontSize: 14 }}>North 42%</Text>
         </Box>
         <Box
-          testId={`${name}-notes`}
+          id={`${name}-notes`}
           style={{
             gridColumn: 3,
             gridRow: 2,
@@ -876,14 +942,14 @@ describe("public layout entry", () => {
           }}
         >
           <Text
-            testId={`${name}-notes-text`}
+            id={`${name}-notes-text`}
             style={{ fontFamily: cjkFont, fontSize: 14 }}
           >
             {notes}
           </Text>
         </Box>
         <Box
-          testId={`${name}-summary`}
+          id={`${name}-summary`}
           style={{
             gridColumn: "2 / span 2",
             gridRow: 3,
@@ -895,15 +961,15 @@ describe("public layout entry", () => {
 
     const result = await build(
       <Deck width={800} height={400}>
-        <Slide slideId="grid-auto-wide">{cardGrid("wide", 600)}</Slide>
-        <Slide slideId="grid-auto-narrow">{cardGrid("narrow", 360)}</Slide>
+        <Slide id="grid-auto-wide">{cardGrid("wide", 600)}</Slide>
+        <Slide id="grid-auto-narrow">{cardGrid("narrow", 360)}</Slide>
       </Deck>,
     );
 
     const layoutMap = (slideIndex: number) =>
       new Map(
         (result.report.slides[slideIndex]?.layouts ?? []).flatMap(
-          ({ testId, box }) =>
+          ({ authorId: testId, box }) =>
             testId === undefined ? [] : [[testId, box] as const],
         ),
       );
@@ -970,12 +1036,7 @@ describe("public layout entry", () => {
       [0, "wide"],
       [1, "narrow"],
     ] as const) {
-      const native = new Map(
-        (file.slides[index]?.objects ?? []).map((object) => [
-          object.name,
-          object,
-        ]),
-      );
+      const native = nativeByAuthor(result, file, index);
       for (const card of ["heading", "feature", "metric", "notes", "summary"]) {
         const object = native.get(`${name}-${card}`);
         assert.ok(object !== undefined, `missing native card ${name}-${card}`);
@@ -996,7 +1057,7 @@ describe("public layout entry", () => {
   it("distributes implicit fr rows from gridAutoRows and retains fixed implicit rows across container heights", async () => {
     const board = (name: string, height: number) => (
       <Box
-        testId={`${name}-board`}
+        id={`${name}-board`}
         style={{
           display: "grid",
           width: 320,
@@ -1009,28 +1070,26 @@ describe("public layout entry", () => {
         }}
       >
         <Shape
-          testId={`${name}-header`}
+          id={`${name}-header`}
           style={{ gridColumn: "span 3", gridRow: 1 }}
         />
-        <Shape testId={`${name}-top`} style={{ gridColumn: "span 3" }} />
-        <Shape testId={`${name}-middle`} style={{ gridColumn: "span 3" }} />
-        <Shape testId={`${name}-bottom`} style={{ gridColumn: "span 3" }} />
+        <Shape id={`${name}-top`} style={{ gridColumn: "span 3" }} />
+        <Shape id={`${name}-middle`} style={{ gridColumn: "span 3" }} />
+        <Shape id={`${name}-bottom`} style={{ gridColumn: "span 3" }} />
       </Box>
     );
     const result = await build(
       <Deck width={400} height={600}>
-        <Slide slideId="grid-auto-tall">{board("tall", 300)}</Slide>
-        <Slide slideId="grid-auto-medium">{board("medium", 220)}</Slide>
-        <Slide slideId="grid-auto-constrained">
-          {board("constrained", 140)}
-        </Slide>
+        <Slide id="grid-auto-tall">{board("tall", 300)}</Slide>
+        <Slide id="grid-auto-medium">{board("medium", 220)}</Slide>
+        <Slide id="grid-auto-constrained">{board("constrained", 140)}</Slide>
       </Deck>,
     );
 
     const objects = (slideIndex: number) =>
       new Map(
         (result.report.slides[slideIndex]?.objects ?? []).flatMap(
-          ({ testId, box }) =>
+          ({ authorId: testId, box }) =>
             testId === undefined || box === undefined
               ? []
               : [[testId, box] as const],
@@ -1114,11 +1173,7 @@ describe("public layout entry", () => {
       [1, "medium"],
       [2, "constrained"],
     ] as const) {
-      const native = new Map(
-        (file.slides[index]?.objects ?? []).map(
-          ({ name: objectName, boxEmu }) => [objectName, boxEmu],
-        ),
-      );
+      const native = nativeBoxByAuthor(result, file, index);
       for (const part of ["header", "top", "middle", "bottom"]) {
         const object = native.get(`${name}-${part}`);
         const reported = objects(index).get(`${name}-${part}`);
@@ -1139,9 +1194,9 @@ describe("public layout entry", () => {
   it("keeps zero-minimum fr implicit rows on their share when spanning content overflows", async () => {
     const result = await build(
       <Deck width={320} height={240}>
-        <Slide slideId="grid-auto-zero-fr-span">
+        <Slide id="grid-auto-zero-fr-span">
           <Box
-            testId="zero-fr-span-grid"
+            id="zero-fr-span-grid"
             style={{
               display: "grid",
               width: 200,
@@ -1151,24 +1206,22 @@ describe("public layout entry", () => {
             }}
           >
             <Shape
-              testId="zero-fr-spanning"
+              id="zero-fr-spanning"
               height={100}
               style={{ gridColumn: 1, gridRow: "1 / span 2" }}
             />
-            <Shape
-              testId="zero-fr-second"
-              style={{ gridColumn: 2, gridRow: 2 }}
-            />
+            <Shape id="zero-fr-second" style={{ gridColumn: 2, gridRow: 2 }} />
           </Box>
         </Slide>
       </Deck>,
     );
 
     const objects = new Map(
-      (result.report.slides[0]?.objects ?? []).flatMap(({ testId, box }) =>
-        testId === undefined || box === undefined
-          ? []
-          : [[testId, box] as const],
+      (result.report.slides[0]?.objects ?? []).flatMap(
+        ({ authorId: testId, box }) =>
+          testId === undefined || box === undefined
+            ? []
+            : [[testId, box] as const],
       ),
     );
     assert.deepEqual(objects.get("zero-fr-spanning"), {
@@ -1195,9 +1248,7 @@ describe("public layout entry", () => {
 
     const file = await validatePptx(result.pptx);
     assert.deepEqual(file.errors, []);
-    const native = new Map(
-      (file.slides[0]?.objects ?? []).map(({ name, boxEmu }) => [name, boxEmu]),
-    );
+    const native = nativeBoxByAuthor(result, file, 0);
     for (const id of ["zero-fr-spanning", "zero-fr-second"]) {
       const object = native.get(id);
       const reported = objects.get(id);
@@ -1217,9 +1268,9 @@ describe("public layout entry", () => {
   it("grows auto and content-minimum fr rows but not fixed rows for spanning content", async () => {
     const result = await build(
       <Deck width={320} height={400}>
-        <Slide slideId="grid-auto-span-growth">
+        <Slide id="grid-auto-span-growth">
           <Box
-            testId="growth-grid"
+            id="growth-grid"
             style={{
               display: "grid",
               width: 200,
@@ -1230,27 +1281,27 @@ describe("public layout entry", () => {
             }}
           >
             <Shape
-              testId="growth-span"
+              id="growth-span"
               height={210}
               style={{ gridColumn: 1, gridRow: "1 / span 4" }}
             />
             <Shape
-              testId="growth-auto-explicit"
+              id="growth-auto-explicit"
               height={10}
               style={{ gridColumn: 2, gridRow: 1 }}
             />
             <Shape
-              testId="growth-auto-implicit"
+              id="growth-auto-implicit"
               height={10}
               style={{ gridColumn: 2, gridRow: 2 }}
             />
             <Shape
-              testId="growth-fr-implicit"
+              id="growth-fr-implicit"
               height={10}
               style={{ gridColumn: 2, gridRow: 3 }}
             />
             <Shape
-              testId="growth-fixed-implicit"
+              id="growth-fixed-implicit"
               height={10}
               style={{ gridColumn: 2, gridRow: 4 }}
             />
@@ -1260,10 +1311,11 @@ describe("public layout entry", () => {
     );
 
     const objects = new Map(
-      (result.report.slides[0]?.objects ?? []).flatMap(({ testId, box }) =>
-        testId === undefined || box === undefined
-          ? []
-          : [[testId, box] as const],
+      (result.report.slides[0]?.objects ?? []).flatMap(
+        ({ authorId: testId, box }) =>
+          testId === undefined || box === undefined
+            ? []
+            : [[testId, box] as const],
       ),
     );
     assert.deepEqual(objects.get("growth-span"), {
@@ -1300,9 +1352,7 @@ describe("public layout entry", () => {
 
     const file = await validatePptx(result.pptx);
     assert.deepEqual(file.errors, []);
-    const native = new Map(
-      (file.slides[0]?.objects ?? []).map(({ name, boxEmu }) => [name, boxEmu]),
-    );
+    const native = nativeBoxByAuthor(result, file, 0);
     for (const id of [
       "growth-span",
       "growth-auto-explicit",
@@ -1328,9 +1378,9 @@ describe("public layout entry", () => {
   it("retains fixed implicit rows and reports grid and text constraint failures", async () => {
     const result = await build(
       <Deck width={320} height={240}>
-        <Slide slideId="grid-auto-constraints">
+        <Slide id="grid-auto-constraints">
           <Box
-            testId="constraint-grid"
+            id="constraint-grid"
             style={{
               display: "grid",
               width: 300,
@@ -1340,9 +1390,9 @@ describe("public layout entry", () => {
               gridAutoRows: "30px",
             }}
           >
-            <Shape testId="constraint-header" />
+            <Shape id="constraint-header" />
             <Shape
-              testId="overset-card"
+              id="overset-card"
               width={60}
               height={30}
               text="中文中文中文中文"
@@ -1352,12 +1402,12 @@ describe("public layout entry", () => {
                 verticalAlign: "top",
               }}
             />
-            <Shape testId="tall-card" height={50} />
+            <Shape id="tall-card" height={50} />
           </Box>
         </Slide>
-        <Slide slideId="grid-auto-overflow">
+        <Slide id="grid-auto-overflow">
           <Box
-            testId="overflow-grid"
+            id="overflow-grid"
             style={{
               display: "grid",
               width: 300,
@@ -1367,9 +1417,9 @@ describe("public layout entry", () => {
               gridAutoRows: "30px",
             }}
           >
-            <Shape testId="overflow-header" />
-            <Shape testId="overflow-card" height={10} />
-            <Shape testId="overflow-extra" height={10} />
+            <Shape id="overflow-header" />
+            <Shape id="overflow-card" height={10} />
+            <Shape id="overflow-extra" height={10} />
           </Box>
         </Slide>
       </Deck>,
@@ -1383,41 +1433,41 @@ describe("public layout entry", () => {
       height: 100,
     });
     assert.deepEqual(
-      result.report.slides[0]?.objects.map(({ testId, box }) => ({
-        testId,
+      result.report.slides[0]?.objects.map(({ authorId: testId, box }) => ({
+        id: testId,
         box,
       })),
       [
         {
-          testId: "constraint-header",
+          id: "constraint-header",
           box: { x: 0, y: 0, width: 300, height: 20 },
         },
         {
-          testId: "overset-card",
+          id: "overset-card",
           box: { x: 0, y: 20, width: 60, height: 30 },
         },
         {
-          testId: "tall-card",
+          id: "tall-card",
           box: { x: 0, y: 50, width: 300, height: 50 },
         },
       ],
     );
     assert.deepEqual(
-      result.report.slides[1]?.objects.map(({ testId, box }) => ({
-        testId,
+      result.report.slides[1]?.objects.map(({ authorId: testId, box }) => ({
+        id: testId,
         box,
       })),
       [
         {
-          testId: "overflow-header",
+          id: "overflow-header",
           box: { x: 0, y: 0, width: 300, height: 20 },
         },
         {
-          testId: "overflow-card",
+          id: "overflow-card",
           box: { x: 0, y: 20, width: 300, height: 10 },
         },
         {
-          testId: "overflow-extra",
+          id: "overflow-extra",
           box: { x: 0, y: 50, width: 300, height: 10 },
         },
       ],
@@ -1461,16 +1511,11 @@ describe("public layout entry", () => {
       [0, ["constraint-header", "overset-card", "tall-card"]],
       [1, ["overflow-header", "overflow-card", "overflow-extra"]],
     ] as const) {
-      const native = new Map(
-        (file.slides[index]?.objects ?? []).map(({ name, boxEmu }) => [
-          name,
-          boxEmu,
-        ]),
-      );
+      const native = nativeBoxByAuthor(result, file, index);
       for (const id of ids) {
         const object = native.get(id);
         const reported = result.report.slides[index]?.objects.find(
-          ({ testId }) => testId === id,
+          ({ authorId: testId }) => testId === id,
         )?.box;
         assert.ok(object !== undefined && reported !== undefined);
         assert.deepEqual(
@@ -1490,7 +1535,7 @@ describe("public layout entry", () => {
     await assert.rejects(
       build(
         <Deck width={320} height={240}>
-          <Slide slideId="unsupported-grid-auto-row">
+          <Slide id="unsupported-grid-auto-row">
             <Box
               style={{ display: "grid", gridAutoRows: "fit-content(100px)" }}
             />
@@ -1505,7 +1550,7 @@ describe("public layout entry", () => {
     await assert.rejects(
       build(
         <Deck width={320} height={240}>
-          <Slide slideId="empty-grid-auto-row">
+          <Slide id="empty-grid-auto-row">
             <Box style={{ display: "grid", gridAutoRows: "" }} />
           </Slide>
         </Deck>,
@@ -1517,7 +1562,7 @@ describe("public layout entry", () => {
     await assert.rejects(
       build(
         <Deck width={320} height={240}>
-          <Slide slideId="block-grid-auto-row">
+          <Slide id="block-grid-auto-row">
             <Box style={{ gridAutoRows: "20px" }} />
           </Slide>
         </Deck>,
@@ -1531,14 +1576,14 @@ describe("public layout entry", () => {
   it("evaluates relative and absolute positioning by horizontal and vertical percentages of containing block respectively", async () => {
     const result = await build(
       <Deck width={320} height={240}>
-        <Slide slideId="position-percent">
+        <Slide id="position-percent">
           <Box
-            testId="anchor"
+            id="anchor"
             style={{ position: "relative", width: 200, height: 100 }}
           >
             <Box style={{ width: 100, height: 40 }}>
               <Shape
-                testId="absolute"
+                id="absolute"
                 style={{
                   position: "absolute",
                   left: "10%",
@@ -1549,13 +1594,13 @@ describe("public layout entry", () => {
               />
             </Box>
             <Shape
-              testId="relative"
+              id="relative"
               width={50}
               height={20}
               style={{ position: "relative", left: "10%", top: "50%" }}
             />
             <Shape
-              testId="absolute-native-coordinates"
+              id="absolute-native-coordinates"
               x={70}
               y={30}
               width={10}
@@ -1568,22 +1613,22 @@ describe("public layout entry", () => {
     );
 
     assert.deepEqual(
-      result.report.slides[0]?.objects.map(({ testId, box }) => ({
-        testId,
+      result.report.slides[0]?.objects.map(({ authorId: testId, box }) => ({
+        id: testId,
         box,
       })),
       [
-        { testId: "absolute", box: { x: 20, y: 20, width: 50, height: 10 } },
-        { testId: "relative", box: { x: 20, y: 90, width: 50, height: 20 } },
+        { id: "absolute", box: { x: 20, y: 20, width: 50, height: 10 } },
+        { id: "relative", box: { x: 20, y: 90, width: 50, height: 20 } },
         {
-          testId: "absolute-native-coordinates",
+          id: "absolute-native-coordinates",
           box: { x: 70, y: 30, width: 10, height: 10 },
         },
       ],
     );
     assert.deepEqual(
       result.report.slides[0]?.objects.find(
-        ({ testId }) => testId === "absolute-native-coordinates",
+        ({ authorId: testId }) => testId === "absolute-native-coordinates",
       )?.box,
       { x: 70, y: 30, width: 10, height: 10 },
     );
@@ -1593,9 +1638,9 @@ describe("public layout entry", () => {
   it("uses slide as containing block for percentage positioning of direct Slide children, with diagnostics for static offset", async () => {
     const result = await build(
       <Deck width={320} height={240}>
-        <Slide slideId="page-positioning">
+        <Slide id="page-positioning">
           <Shape
-            testId="page-absolute"
+            id="page-absolute"
             style={{
               position: "absolute",
               right: "10%",
@@ -1605,7 +1650,7 @@ describe("public layout entry", () => {
             }}
           />
           <Shape
-            testId="page-relative"
+            id="page-relative"
             x={10}
             y={20}
             width={20}
@@ -1616,17 +1661,17 @@ describe("public layout entry", () => {
       </Deck>,
     );
     assert.deepEqual(
-      result.report.slides[0]?.objects.map(({ testId, box }) => ({
-        testId,
+      result.report.slides[0]?.objects.map(({ authorId: testId, box }) => ({
+        id: testId,
         box,
       })),
       [
         {
-          testId: "page-absolute",
+          id: "page-absolute",
           box: { x: 208, y: 206, width: 80, height: 10 },
         },
         {
-          testId: "page-relative",
+          id: "page-relative",
           box: { x: 42, y: 44, width: 20, height: 10 },
         },
       ],
@@ -1634,9 +1679,9 @@ describe("public layout entry", () => {
     await assert.rejects(
       build(
         <Deck width={320} height={240}>
-          <Slide slideId="static-offset">
+          <Slide id="static-offset">
             <Shape
-              testId="invalid-offset"
+              id="invalid-offset"
               width={20}
               height={10}
               style={{ left: 10 }}
@@ -1658,14 +1703,14 @@ describe("public layout entry", () => {
         { width: 320, height: 240 },
         createElement(
           Slide,
-          { slideId: "explicit-block-layout" },
+          { id: "explicit-block-layout" },
           createElement(
             Box,
             {
-              testId: "block",
+              id: "block",
               style: { display: "block", width: 100, height: 100 },
             },
-            createElement(Shape, { testId: "member", height: 20 }),
+            createElement(Shape, { id: "member", height: 20 }),
           ),
         ),
       ),
@@ -1690,9 +1735,9 @@ describe("public layout entry", () => {
           { width: 320, height: 240 },
           createElement(
             Slide,
-            { slideId: "invalid-block-flex-style" },
+            { id: "invalid-block-flex-style" },
             createElement(Box, {
-              testId: "block",
+              id: "block",
               style: { display: "block", justifyContent: "center" },
             }),
           ),
@@ -1715,21 +1760,21 @@ describe("public layout entry", () => {
         { width: 320, height: 240 },
         createElement(
           Slide,
-          { slideId: "block-layout" },
+          { id: "block-layout" },
           createElement(
             Box,
-            { testId: "column", style: { width: 200, height: 10 } },
+            { id: "column", style: { width: 200, height: 10 } },
             createElement(Shape, {
-              testId: "first",
+              id: "first",
               height: 20,
             }),
             createElement(Shape, {
-              testId: "second",
+              id: "second",
               height: 10,
             }),
           ),
           createElement(Shape, {
-            testId: "explicit",
+            id: "explicit",
             x: 24,
             y: 32,
             width: 50,
@@ -1740,26 +1785,26 @@ describe("public layout entry", () => {
     );
 
     assert.deepEqual(
-      result.report.slides[0]?.objects.map(({ testId, box }) => ({
-        testId,
+      result.report.slides[0]?.objects.map(({ authorId: testId, box }) => ({
+        id: testId,
         box,
       })),
       [
         {
-          testId: "first",
+          id: "first",
           box: { x: 0, y: 0, width: 200, height: 20 },
         },
         {
-          testId: "second",
+          id: "second",
           box: { x: 0, y: 20, width: 200, height: 10 },
         },
         {
-          testId: "explicit",
+          id: "explicit",
           box: { x: 24, y: 32, width: 50, height: 40 },
         },
       ],
     );
-    assert.equal(result.report.slides[0]?.layouts?.[0]?.testId, "column");
+    assert.equal(result.report.slides[0]?.layouts?.[0]?.authorId, "column");
     assert.deepEqual(result.report.slides[0]?.layouts?.[0]?.box, {
       x: 0,
       y: 0,
@@ -1791,12 +1836,12 @@ describe("public layout entry", () => {
         { width: 320, height: 240 },
         createElement(
           Slide,
-          { slideId: "auto-layout-size" },
+          { id: "auto-layout-size" },
           createElement(
             Box,
             { style: { width: 100, height: 100 } },
             createElement(Shape, {
-              testId: "auto-text-shape",
+              id: "auto-text-shape",
               width: 20,
               height: 10,
               text: "中文中文中文",
@@ -1833,8 +1878,7 @@ describe("public layout entry", () => {
           createElement(
             Slide,
             {
-              slideId:
-                alignContent === undefined ? "wrap-stretch" : "wrap-start",
+              id: alignContent === undefined ? "wrap-stretch" : "wrap-start",
             },
             createElement(
               Box,
@@ -1847,8 +1891,8 @@ describe("public layout entry", () => {
                   ...(alignContent === undefined ? {} : { alignContent }),
                 },
               },
-              createElement(Shape, { testId: "first", width: 60, height: 20 }),
-              createElement(Shape, { testId: "second", width: 60, height: 20 }),
+              createElement(Shape, { id: "first", width: 60, height: 20 }),
+              createElement(Shape, { id: "second", width: 60, height: 20 }),
             ),
           ),
         ),
@@ -1882,7 +1926,7 @@ describe("public layout entry", () => {
   it("shrinks flex items to content min-width, and removes this floor with minWidth: 0", async () => {
     const makeText = (testId: string, minWidth?: number) =>
       createElement(Text, {
-        testId,
+        id: testId,
         width: 100,
         height: "auto",
         style: {
@@ -1898,11 +1942,11 @@ describe("public layout entry", () => {
         { width: 320, height: 500 },
         createElement(
           Slide,
-          { slideId: "flex-min-content" },
+          { id: "flex-min-content" },
           createElement(
             Box,
             {
-              testId: "constrained",
+              id: "constrained",
               style: { display: "flex", width: 30, height: 200 },
             },
             makeText("constrained-a"),
@@ -1911,7 +1955,7 @@ describe("public layout entry", () => {
           createElement(
             Box,
             {
-              testId: "released",
+              id: "released",
               style: { display: "flex", width: 30, height: 200 },
             },
             makeText("released-a", 0),
@@ -1922,25 +1966,25 @@ describe("public layout entry", () => {
     );
 
     assert.deepEqual(
-      result.report.slides[0]?.objects.map(({ testId, box }) => ({
-        testId,
+      result.report.slides[0]?.objects.map(({ authorId: testId, box }) => ({
+        id: testId,
         box,
       })),
       [
         {
-          testId: "constrained-a",
+          id: "constrained-a",
           box: { x: 0, y: 0, width: 20, height: 200 },
         },
         {
-          testId: "constrained-b",
+          id: "constrained-b",
           box: { x: 20, y: 0, width: 20, height: 200 },
         },
         {
-          testId: "released-a",
+          id: "released-a",
           box: { x: 0, y: 200, width: 15, height: 200 },
         },
         {
-          testId: "released-b",
+          id: "released-b",
           box: { x: 15, y: 200, width: 15, height: 200 },
         },
       ],
@@ -1984,18 +2028,18 @@ describe("public layout entry", () => {
         { width: 320, height: 240 },
         createElement(
           Slide,
-          { slideId: "nested-minimums" },
+          { id: "nested-minimums" },
           createElement(
             Box,
             {
-              testId: "fixed-parent",
+              id: "fixed-parent",
               style: { display: "flex", width: 100, height: 60 },
             },
             createElement(
               Box,
-              { testId: "fixed-content" },
+              { id: "fixed-content" },
               createElement(Shape, {
-                testId: "fixed-shape",
+                id: "fixed-shape",
                 width: 200,
                 height: 20,
               }),
@@ -2004,14 +2048,14 @@ describe("public layout entry", () => {
           createElement(
             Box,
             {
-              testId: "min-parent",
+              id: "min-parent",
               style: { display: "flex", width: 100, height: 60 },
             },
             createElement(
               Box,
-              { testId: "min-content" },
+              { id: "min-content" },
               createElement(Shape, {
-                testId: "min-shape",
+                id: "min-shape",
                 width: 20,
                 height: 20,
                 style: { minWidth: 150 },
@@ -2021,14 +2065,14 @@ describe("public layout entry", () => {
           createElement(
             Box,
             {
-              testId: "released-parent",
+              id: "released-parent",
               style: { display: "flex", width: 100, height: 60 },
             },
             createElement(
               Box,
-              { testId: "released-content", style: { minWidth: 0 } },
+              { id: "released-content", style: { minWidth: 0 } },
               createElement(Shape, {
-                testId: "released-shape",
+                id: "released-shape",
                 width: 200,
                 height: 20,
               }),
@@ -2037,14 +2081,14 @@ describe("public layout entry", () => {
           createElement(
             Box,
             {
-              testId: "margin-parent",
+              id: "margin-parent",
               style: { display: "flex", width: 100, height: 60 },
             },
             createElement(
               Box,
-              { testId: "margin-content" },
+              { id: "margin-content" },
               createElement(Shape, {
-                testId: "margin-shape",
+                id: "margin-shape",
                 width: 100,
                 height: 20,
                 style: { marginLeft: 10, marginRight: 15 },
@@ -2057,22 +2101,22 @@ describe("public layout entry", () => {
 
     const layouts = result.report.slides[0]?.layouts ?? [];
     const layoutWidth = (testId: string) =>
-      layouts.find((layout) => layout.testId === testId)?.box.width;
+      layouts.find((layout) => layout.authorId === testId)?.box.width;
     assert.equal(layoutWidth("fixed-content"), 200);
     assert.equal(layoutWidth("min-content"), 150);
     assert.equal(layoutWidth("released-content"), 100);
     assert.equal(layoutWidth("margin-content"), 125);
     assert.deepEqual(
-      result.report.slides[0]?.objects.map(({ testId, box }) => ({
-        testId,
+      result.report.slides[0]?.objects.map(({ authorId: testId, box }) => ({
+        id: testId,
         x: box?.x,
         width: box?.width,
       })),
       [
-        { testId: "fixed-shape", x: 0, width: 200 },
-        { testId: "min-shape", x: 0, width: 150 },
-        { testId: "released-shape", x: 0, width: 200 },
-        { testId: "margin-shape", x: 10, width: 100 },
+        { id: "fixed-shape", x: 0, width: 200 },
+        { id: "min-shape", x: 0, width: 150 },
+        { id: "released-shape", x: 0, width: 200 },
+        { id: "margin-shape", x: 10, width: 100 },
       ],
     );
 
@@ -2093,54 +2137,57 @@ describe("public layout entry", () => {
   });
 
   it("preserves instance identities for nested layout containers, solving each independently when reusing identical elements", async () => {
-    const card = createElement(
-      Box,
-      { testId: "card", style: { flex: 1, height: 100 } },
-      createElement(Shape, { testId: "card-shape", height: 20 }),
-    );
+    const card = (id: string) =>
+      createElement(
+        Box,
+        { id, style: { flex: 1, height: 100 } },
+        createElement(Shape, { id: "card-shape", height: 20 }),
+      );
     const result = await build(
       createElement(
         Deck,
         { width: 320, height: 240 },
         createElement(
           Slide,
-          { slideId: "reused-layout" },
+          { id: "reused-layout" },
           createElement(
             Box,
             {
-              testId: "row",
+              id: "row",
               style: { display: "flex", width: 300, height: 120 },
             },
-            card,
-            card,
+            card("card-a"),
+            card("card-b"),
           ),
         ),
       ),
     );
 
     assert.deepEqual(
-      result.report.slides[0]?.objects.map(({ testId, box }) => ({
-        testId,
+      result.report.slides[0]?.objects.map(({ authorId: testId, box }) => ({
+        id: testId,
         box,
       })),
       [
         {
-          testId: "card-shape",
+          id: "card-shape",
           box: { x: 0, y: 0, width: 150, height: 20 },
         },
         {
-          testId: "card-shape",
+          id: "card-shape",
           box: { x: 150, y: 0, width: 150, height: 20 },
         },
       ],
     );
     const layouts = result.report.slides[0]?.layouts ?? [];
     assert.deepEqual(
-      layouts.map(({ testId }) => testId),
-      ["row", "card", "card"],
+      layouts.map(({ authorId: testId }) => testId),
+      ["row", "card-a", "card-b"],
     );
-    const row = layouts.find(({ testId }) => testId === "row");
-    const cards = layouts.filter(({ testId }) => testId === "card");
+    const row = layouts.find(({ authorId: testId }) => testId === "row");
+    const cards = layouts.filter(({ authorId: testId }) =>
+      testId?.startsWith("card-"),
+    );
     assert.equal(row?.box.width, 300);
     assert.equal(cards.length, 2);
     assert.deepEqual(
@@ -2172,17 +2219,21 @@ describe("public layout entry", () => {
         { width: 320, height: 240 },
         createElement(
           Slide,
-          { slideId: "group-with-layout" },
+          { id: "group-with-layout" },
           createElement(
             Group,
-            { testId: "native-group" },
+            { id: "native-group" },
             createElement(
               Box,
               {
-                testId: "inner-box",
+                id: "inner-box",
                 style: { width: 100, height: 100 },
               },
-              createElement(Shape, { testId: "group-member", height: 20 }),
+              createElement(Shape, {
+                id: "group-member",
+                name: "group-member",
+                height: 20,
+              }),
             ),
           ),
         ),
@@ -2192,7 +2243,7 @@ describe("public layout entry", () => {
     const group = result.report.slides[0]?.objects[0];
     const member = group?.members?.[0];
     assert.equal(group?.kind, "group");
-    assert.equal(group?.testId, "native-group");
+    assert.equal(group?.authorId, "native-group");
     assert.deepEqual(member?.box, {
       x: 0,
       y: 0,
@@ -2200,7 +2251,7 @@ describe("public layout entry", () => {
       height: 20,
     });
     const layout = result.report.slides[0]?.layouts?.[0];
-    assert.equal(layout?.testId, "inner-box");
+    assert.equal(layout?.authorId, "inner-box");
     assert.deepEqual(layout?.box, {
       x: 0,
       y: 0,
@@ -2232,7 +2283,7 @@ describe("public layout entry", () => {
           { width: 320, height: 240 },
           createElement(
             Slide,
-            { slideId: "invalid-context" },
+            { id: "invalid-context" },
             createElement(Box, { style: { justifyContent: "center" } }),
           ),
         ),
@@ -2248,12 +2299,12 @@ describe("public layout entry", () => {
         { width: 320, height: 240 },
         createElement(
           Slide,
-          { slideId: "ignored-item-style" },
+          { id: "ignored-item-style" },
           createElement(
             Box,
             { style: { width: 100 } },
             createElement(Shape, {
-              testId: "block-item",
+              id: "block-item",
               width: 30,
               height: 10,
               style: { flex: 1, alignSelf: "baseline" },
@@ -2277,11 +2328,11 @@ describe("public layout entry", () => {
         { width: 320, height: 240 },
         createElement(
           Slide,
-          { slideId: "overflow" },
+          { id: "overflow" },
           createElement(
             Box,
-            { testId: "wide-container", style: { width: 400, height: 50 } },
-            createElement(Shape, { testId: "wide-shape", height: 10 }),
+            { id: "wide-container", style: { width: 400, height: 50 } },
+            createElement(Shape, { id: "wide-shape", height: 10 }),
           ),
         ),
       ),
@@ -2311,11 +2362,11 @@ describe("public layout entry", () => {
         { width: 320, height: 240 },
         createElement(
           Slide,
-          { slideId: "aligned-objects" },
+          { id: "aligned-objects" },
           createElement(
             Box,
             {
-              testId: "toolbar",
+              id: "toolbar",
               style: {
                 display: "flex",
                 width: 100,
@@ -2325,13 +2376,13 @@ describe("public layout entry", () => {
               },
             },
             createElement(Image, {
-              testId: "logo",
+              id: "logo",
               src: wideImage,
               width: 30,
               height: 20,
             }),
             createElement(Shape, {
-              testId: "action",
+              id: "action",
               width: 20,
               height: 20,
             }),
@@ -2341,20 +2392,20 @@ describe("public layout entry", () => {
     );
 
     assert.deepEqual(
-      result.report.slides[0]?.objects.map(({ kind, testId, box }) => ({
+      result.report.slides[0]?.objects.map(({ kind, authorId, box }) => ({
         kind,
-        testId,
+        authorId,
         box,
       })),
       [
         {
           kind: "image",
-          testId: "logo",
+          authorId: "logo",
           box: { x: 0, y: 40, width: 30, height: 20 },
         },
         {
           kind: "shape",
-          testId: "action",
+          authorId: "action",
           box: { x: 80, y: 40, width: 20, height: 20 },
         },
       ],
@@ -2382,7 +2433,7 @@ describe("public layout entry", () => {
         { width: 320, height: 240 },
         createElement(
           Slide,
-          { slideId: "text-baseline" },
+          { id: "text-baseline" },
           createElement(
             Box,
             {
@@ -2396,7 +2447,7 @@ describe("public layout entry", () => {
             createElement(
               Text,
               {
-                testId: "small-text",
+                id: "small-text",
                 width: 100,
                 height: 60,
                 style: { fontFamily: cjkFont, fontSize: 20 },
@@ -2406,7 +2457,7 @@ describe("public layout entry", () => {
             createElement(
               Text,
               {
-                testId: "large-text",
+                id: "large-text",
                 width: 100,
                 height: 60,
                 style: { fontFamily: cjkFont, fontSize: 40 },
@@ -2419,13 +2470,13 @@ describe("public layout entry", () => {
     );
 
     assert.deepEqual(
-      result.report.slides[0]?.objects.map(({ testId, box }) => ({
-        testId,
+      result.report.slides[0]?.objects.map(({ authorId: testId, box }) => ({
+        id: testId,
         y: box?.y,
       })),
       [
-        { testId: "small-text", y: 23.2 },
-        { testId: "large-text", y: 0 },
+        { id: "small-text", y: 23.2 },
+        { id: "large-text", y: 0 },
       ],
     );
     const file = await validatePptx(result.pptx);
@@ -2442,7 +2493,7 @@ describe("public layout entry", () => {
           { width: 320, height: 240 },
           createElement(
             Slide,
-            { slideId: "unmeasured-baseline" },
+            { id: "unmeasured-baseline" },
             createElement(
               Box,
               {
@@ -2455,7 +2506,7 @@ describe("public layout entry", () => {
               },
               createElement(
                 Text,
-                { testId: "unmeasured-text", width: 100, height: 60 },
+                { id: "unmeasured-text", width: 100, height: 60 },
                 "text",
               ),
             ),
@@ -2479,7 +2530,7 @@ describe("public layout entry", () => {
           { width: 320, height: 240 },
           createElement(
             Slide,
-            { slideId: "wrapped-text-baseline" },
+            { id: "wrapped-text-baseline" },
             createElement(
               Box,
               {
@@ -2494,7 +2545,7 @@ describe("public layout entry", () => {
               createElement(
                 Text,
                 {
-                  testId: "wrapped-text",
+                  id: "wrapped-text",
                   width: 60,
                   height: 20,
                   style: { fontFamily: cjkFont, fontSize: 20 },
@@ -2521,7 +2572,7 @@ describe("public layout entry", () => {
           { width: 320, height: 240 },
           createElement(
             Slide,
-            { slideId: "synthetic-wrap-baseline" },
+            { id: "synthetic-wrap-baseline" },
             createElement(
               Box,
               {
@@ -2534,12 +2585,12 @@ describe("public layout entry", () => {
                 },
               },
               createElement(Shape, {
-                testId: "wrap-first",
+                id: "wrap-first",
                 width: 60,
                 height: 20,
               }),
               createElement(Shape, {
-                testId: "wrap-second",
+                id: "wrap-second",
                 width: 60,
                 height: 20,
               }),
@@ -2560,7 +2611,7 @@ describe("public layout entry", () => {
         { width: 320, height: 240 },
         createElement(
           Slide,
-          { slideId: "synthetic-column-baseline" },
+          { id: "synthetic-column-baseline" },
           createElement(
             Box,
             {
@@ -2575,7 +2626,7 @@ describe("public layout entry", () => {
             createElement(
               Text,
               {
-                testId: "column-small-text",
+                id: "column-small-text",
                 width: 100,
                 height: 40,
                 style: { fontFamily: "Aptos", fontSize: 20 },
@@ -2583,13 +2634,13 @@ describe("public layout entry", () => {
               "中",
             ),
             createElement(Image, {
-              testId: "column-image",
+              id: "column-image",
               src: wideImage,
               width: 30,
               height: 20,
             }),
             createElement(Shape, {
-              testId: "column-shape",
+              id: "column-shape",
               width: 80,
               height: 20,
             }),
@@ -2613,14 +2664,14 @@ describe("public layout entry", () => {
         { width: 320, height: 240 },
         createElement(
           Slide,
-          { slideId: "natural-baseline-height" },
+          { id: "natural-baseline-height" },
           createElement(
             Box,
             { style: { width: 300 } },
             createElement(
               Box,
               {
-                testId: "baseline-row",
+                id: "baseline-row",
                 style: {
                   display: "flex",
                   alignItems: "baseline",
@@ -2630,7 +2681,7 @@ describe("public layout entry", () => {
               createElement(
                 Text,
                 {
-                  testId: "small-text",
+                  id: "small-text",
                   width: 100,
                   height: 60,
                   style: { fontFamily: cjkFont, fontSize: 20 },
@@ -2640,7 +2691,7 @@ describe("public layout entry", () => {
               createElement(
                 Text,
                 {
-                  testId: "large-text",
+                  id: "large-text",
                   width: 100,
                   height: 60,
                   style: { fontFamily: cjkFont, fontSize: 40 },
@@ -2649,7 +2700,7 @@ describe("public layout entry", () => {
               ),
             ),
             createElement(Shape, {
-              testId: "following-block",
+              id: "following-block",
               width: 100,
               height: 20,
             }),
@@ -2660,18 +2711,19 @@ describe("public layout entry", () => {
 
     const layouts = result.report.slides[0]?.layouts ?? [];
     assert.equal(
-      layouts.find(({ testId }) => testId === "baseline-row")?.box.height,
+      layouts.find(({ authorId: testId }) => testId === "baseline-row")?.box
+        .height,
       83.2,
     );
     assert.deepEqual(
-      result.report.slides[0]?.objects.map(({ testId, box }) => ({
-        testId,
+      result.report.slides[0]?.objects.map(({ authorId: testId, box }) => ({
+        id: testId,
         y: box?.y,
       })),
       [
-        { testId: "small-text", y: 23.2 },
-        { testId: "large-text", y: 0 },
-        { testId: "following-block", y: 83.2 },
+        { id: "small-text", y: 23.2 },
+        { id: "large-text", y: 0 },
+        { id: "following-block", y: 83.2 },
       ],
     );
 
@@ -2688,7 +2740,7 @@ describe("public layout entry", () => {
       createElement(
         Text,
         {
-          testId,
+          id: testId,
           width: 100,
           height: 60,
           style: { fontFamily: cjkFont, fontSize },
@@ -2703,13 +2755,12 @@ describe("public layout entry", () => {
           createElement(
             Slide,
             {
-              slideId:
-                minHeight === 0 ? "baseline-min-zero" : "baseline-auto-min",
+              id: minHeight === 0 ? "baseline-min-zero" : "baseline-auto-min",
             },
             createElement(
               Box,
               {
-                testId: "column",
+                id: "column",
                 style: {
                   display: "flex",
                   flexDirection: "column",
@@ -2720,7 +2771,7 @@ describe("public layout entry", () => {
               createElement(
                 Box,
                 {
-                  testId: "baseline-row",
+                  id: "baseline-row",
                   style: {
                     display: "flex",
                     alignItems: "baseline",
@@ -2732,7 +2783,7 @@ describe("public layout entry", () => {
                 baselineText("large-text", 40),
               ),
               createElement(Shape, {
-                testId: "following-block",
+                id: "following-block",
                 width: 100,
                 height: 20,
                 style: { flexShrink: 0 },
@@ -2745,12 +2796,13 @@ describe("public layout entry", () => {
     const autoMin = await buildColumn();
     const autoLayouts = autoMin.report.slides[0]?.layouts ?? [];
     assert.equal(
-      autoLayouts.find(({ testId }) => testId === "baseline-row")?.box.height,
+      autoLayouts.find(({ authorId: testId }) => testId === "baseline-row")?.box
+        .height,
       83.2,
     );
     assert.equal(
       autoMin.report.slides[0]?.objects.find(
-        ({ testId }) => testId === "following-block",
+        ({ authorId: testId }) => testId === "following-block",
       )?.box?.y,
       83.2,
     );
@@ -2762,28 +2814,31 @@ describe("public layout entry", () => {
       ),
       [23.2, 0, 83.2],
     );
+    const followingId = autoMin.report.slides[0]?.objects.find(
+      ({ authorId }) => authorId === "following-block",
+    )?.id;
     assert.equal(
-      autoFile.slides[0]?.objects.find(({ name }) => name === "following-block")
-        ?.boxEmu.y,
+      autoFile.slides[0]?.objects.find(({ id }) => id === followingId)?.boxEmu
+        .y,
       83.2 * 9525,
     );
 
     const released = await buildColumn(0);
     const releasedLayouts = released.report.slides[0]?.layouts ?? [];
     assert.equal(
-      releasedLayouts.find(({ testId }) => testId === "baseline-row")?.box
-        .height,
+      releasedLayouts.find(({ authorId: testId }) => testId === "baseline-row")
+        ?.box.height,
       50,
     );
     assert.deepEqual(
-      released.report.slides[0]?.objects.map(({ testId, box }) => ({
-        testId,
+      released.report.slides[0]?.objects.map(({ authorId: testId, box }) => ({
+        id: testId,
         y: box?.y,
       })),
       [
-        { testId: "small-text", y: 23.2 },
-        { testId: "large-text", y: 0 },
-        { testId: "following-block", y: 50 },
+        { id: "small-text", y: 23.2 },
+        { id: "large-text", y: 0 },
+        { id: "following-block", y: 50 },
       ],
     );
     const releasedFile = await validatePptx(released.pptx);
@@ -2801,7 +2856,7 @@ describe("public layout entry", () => {
         { width: 320, height: 120 },
         createElement(
           Slide,
-          { slideId: "nested-text-baseline" },
+          { id: "nested-text-baseline" },
           createElement(
             Box,
             {
@@ -2815,7 +2870,7 @@ describe("public layout entry", () => {
             createElement(
               Box,
               {
-                testId: "small-wrapper",
+                id: "small-wrapper",
                 style: { display: "flex", width: 100, height: 60 },
               },
               baselineText("wrapped-small-text", 20),
@@ -2823,7 +2878,7 @@ describe("public layout entry", () => {
             createElement(
               Box,
               {
-                testId: "large-wrapper",
+                id: "large-wrapper",
                 style: { display: "flex", width: 100, height: 60 },
               },
               baselineText("wrapped-large-text", 40),
@@ -2835,23 +2890,23 @@ describe("public layout entry", () => {
     assert.deepEqual(
       nested.report.slides[0]?.layouts
         ?.filter(
-          ({ testId }) =>
+          ({ authorId: testId }) =>
             testId === "small-wrapper" || testId === "large-wrapper",
         )
-        .map(({ testId, box }) => ({ testId, y: box.y })),
+        .map(({ authorId: testId, box }) => ({ authorId: testId, y: box.y })),
       [
-        { testId: "small-wrapper", y: 23.2 },
-        { testId: "large-wrapper", y: 0 },
+        { authorId: "small-wrapper", y: 23.2 },
+        { authorId: "large-wrapper", y: 0 },
       ],
     );
     assert.deepEqual(
-      nested.report.slides[0]?.objects.map(({ testId, box }) => ({
-        testId,
+      nested.report.slides[0]?.objects.map(({ authorId: testId, box }) => ({
+        id: testId,
         y: box?.y,
       })),
       [
-        { testId: "wrapped-small-text", y: 23.2 },
-        { testId: "wrapped-large-text", y: 0 },
+        { id: "wrapped-small-text", y: 23.2 },
+        { id: "wrapped-large-text", y: 0 },
       ],
     );
     const nestedFile = await validatePptx(nested.pptx);
@@ -2872,7 +2927,7 @@ describe("public layout entry", () => {
           { width: 320, height: 120 },
           createElement(
             Slide,
-            { slideId: "complex-text-baseline-wrapper" },
+            { id: "complex-text-baseline-wrapper" },
             createElement(
               Box,
               {
@@ -2910,7 +2965,7 @@ describe("public layout entry", () => {
         { width: 320, height: 120 },
         createElement(
           Slide,
-          { slideId: "text-stretch-without-baseline" },
+          { id: "text-stretch-without-baseline" },
           createElement(
             Box,
             {
@@ -2924,7 +2979,7 @@ describe("public layout entry", () => {
             createElement(
               Text,
               {
-                testId: "fixed-text",
+                id: "fixed-text",
                 width: 100,
                 height: 60,
                 style: { fontFamily: cjkFont, fontSize: 20 },
@@ -2934,7 +2989,7 @@ describe("public layout entry", () => {
             createElement(
               Text,
               {
-                testId: "content-sized-text",
+                id: "content-sized-text",
                 width: 100,
                 height: "auto",
                 style: { fontFamily: cjkFont, fontSize: 20 },
@@ -2947,14 +3002,14 @@ describe("public layout entry", () => {
     );
 
     assert.deepEqual(
-      result.report.slides[0]?.objects.map(({ testId, box }) => ({
-        testId,
+      result.report.slides[0]?.objects.map(({ authorId: testId, box }) => ({
+        id: testId,
         y: box?.y,
         height: box?.height,
       })),
       [
-        { testId: "fixed-text", y: 0, height: 60 },
-        { testId: "content-sized-text", y: 0, height: 100 },
+        { id: "fixed-text", y: 0, height: 60 },
+        { id: "content-sized-text", y: 0, height: 100 },
       ],
     );
     const file = await validatePptx(result.pptx);
@@ -2974,7 +3029,7 @@ describe("public layout entry", () => {
   it("preserves text main-axis content height in flex column, allowing shrink with minHeight: 0", async () => {
     const columnText = (testId: string, minHeight?: number) =>
       createElement(Text, {
-        testId,
+        id: testId,
         width: 20,
         height: "auto",
         style: {
@@ -2990,11 +3045,11 @@ describe("public layout entry", () => {
         { width: 320, height: 700 },
         createElement(
           Slide,
-          { slideId: "column-min-content" },
+          { id: "column-min-content" },
           createElement(
             Box,
             {
-              testId: "constrained-column",
+              id: "constrained-column",
               style: {
                 display: "flex",
                 flexDirection: "column",
@@ -3008,7 +3063,7 @@ describe("public layout entry", () => {
           createElement(
             Box,
             {
-              testId: "released-column",
+              id: "released-column",
               style: {
                 display: "flex",
                 flexDirection: "column",
@@ -3024,25 +3079,25 @@ describe("public layout entry", () => {
     );
 
     assert.deepEqual(
-      result.report.slides[0]?.objects.map(({ testId, box }) => ({
-        testId,
+      result.report.slides[0]?.objects.map(({ authorId: testId, box }) => ({
+        id: testId,
         box,
       })),
       [
         {
-          testId: "column-a",
+          id: "column-a",
           box: { x: 0, y: 0, width: 20, height: 173.76 },
         },
         {
-          testId: "column-b",
+          id: "column-b",
           box: { x: 0, y: 173.76, width: 20, height: 173.76 },
         },
         {
-          testId: "released-column-a",
+          id: "released-column-a",
           box: { x: 0, y: 300, width: 20, height: 150 },
         },
         {
-          testId: "released-column-b",
+          id: "released-column-b",
           box: { x: 0, y: 450, width: 20, height: 150 },
         },
       ],
@@ -3079,7 +3134,7 @@ describe("public layout entry", () => {
   it("treats only numeric minmax lower bounds as constraints for fr tracks, processing row content by lower-bound type", async () => {
     const result = await build(
       <Deck width={400} height={400}>
-        <Slide slideId="fr-minimum-100">
+        <Slide id="fr-minimum-100">
           <Box
             style={{
               display: "grid",
@@ -3089,11 +3144,11 @@ describe("public layout entry", () => {
               gridTemplateRows: "1fr",
             }}
           >
-            <Shape testId="lower-100-first" />
-            <Shape testId="lower-100-second" />
+            <Shape id="lower-100-first" />
+            <Shape id="lower-100-second" />
           </Box>
         </Slide>
-        <Slide slideId="fr-minimum-200">
+        <Slide id="fr-minimum-200">
           <Box
             style={{
               display: "grid",
@@ -3103,11 +3158,11 @@ describe("public layout entry", () => {
               gridTemplateRows: "1fr",
             }}
           >
-            <Shape testId="lower-200-first" />
-            <Shape testId="lower-200-second" />
+            <Shape id="lower-200-first" />
+            <Shape id="lower-200-second" />
           </Box>
         </Slide>
-        <Slide slideId="fr-row-numeric-minimum">
+        <Slide id="fr-row-numeric-minimum">
           <Box
             style={{
               display: "grid",
@@ -3117,11 +3172,11 @@ describe("public layout entry", () => {
               gridTemplateRows: "minmax(20px, 1fr) 1fr",
             }}
           >
-            <Shape testId="row-minimum-first" />
-            <Shape testId="row-minimum-second" />
+            <Shape id="row-minimum-first" />
+            <Shape id="row-minimum-second" />
           </Box>
         </Slide>
-        <Slide slideId="fr-row-zero-minimum-overflow">
+        <Slide id="fr-row-zero-minimum-overflow">
           <Box
             style={{
               display: "grid",
@@ -3131,11 +3186,11 @@ describe("public layout entry", () => {
               gridTemplateRows: "minmax(0px, 1fr) 1fr",
             }}
           >
-            <Shape testId="row-zero-first" width={20} height={200} />
-            <Shape testId="row-zero-second" width={20} height={10} />
+            <Shape id="row-zero-first" width={20} height={200} />
+            <Shape id="row-zero-second" width={20} height={10} />
           </Box>
         </Slide>
-        <Slide slideId="fr-row-auto-content-minimum">
+        <Slide id="fr-row-auto-content-minimum">
           <Box
             style={{
               display: "grid",
@@ -3145,8 +3200,8 @@ describe("public layout entry", () => {
               gridTemplateRows: "minmax(auto, 1fr) 1fr",
             }}
           >
-            <Shape testId="row-auto-first" width={20} height={200} />
-            <Shape testId="row-auto-second" width={20} height={10} />
+            <Shape id="row-auto-first" width={20} height={200} />
+            <Shape id="row-auto-second" width={20} height={10} />
           </Box>
         </Slide>
       </Deck>,
@@ -3221,7 +3276,7 @@ describe("public layout entry", () => {
   it("preserves stretch or absolutely positioned height provided by parent layout in auto-height Grid", async () => {
     const stretchedGrid = (testId: string) => (
       <Box
-        testId={testId}
+        id={testId}
         style={{
           display: "grid",
           width: 100,
@@ -3229,18 +3284,18 @@ describe("public layout entry", () => {
           gridTemplateRows: "1fr 1fr",
         }}
       >
-        <Shape testId={`${testId}-first`} width={20} height={20} />
-        <Shape testId={`${testId}-second`} width={20} height={20} />
+        <Shape id={`${testId}-first`} width={20} height={20} />
+        <Shape id={`${testId}-second`} width={20} height={20} />
       </Box>
     );
     const result = await build(
       <Deck width={400} height={300}>
-        <Slide slideId="grid-in-flex-stretch">
+        <Slide id="grid-in-flex-stretch">
           <Box style={{ display: "flex", width: 300, height: 100 }}>
             {stretchedGrid("flex-inner-grid")}
           </Box>
         </Slide>
-        <Slide slideId="grid-in-grid-stretch">
+        <Slide id="grid-in-grid-stretch">
           <Box
             style={{
               display: "grid",
@@ -3253,10 +3308,10 @@ describe("public layout entry", () => {
             {stretchedGrid("grid-inner-grid")}
           </Box>
         </Slide>
-        <Slide slideId="grid-in-absolute-inset">
+        <Slide id="grid-in-absolute-inset">
           <Box style={{ position: "relative", width: 300, height: 100 }}>
             <Box
-              testId="absolute-inner-grid"
+              id="absolute-inner-grid"
               style={{
                 display: "grid",
                 position: "absolute",
@@ -3265,23 +3320,15 @@ describe("public layout entry", () => {
                 gridTemplateRows: "1fr 1fr",
               }}
             >
-              <Shape
-                testId="absolute-inner-grid-first"
-                width={20}
-                height={20}
-              />
-              <Shape
-                testId="absolute-inner-grid-second"
-                width={20}
-                height={20}
-              />
+              <Shape id="absolute-inner-grid-first" width={20} height={20} />
+              <Shape id="absolute-inner-grid-second" width={20} height={20} />
             </Box>
           </Box>
         </Slide>
-        <Slide slideId="grid-content-auto-height">
+        <Slide id="grid-content-auto-height">
           <Box style={{ display: "block", width: 100 }}>
             <Box
-              testId="content-inner-grid"
+              id="content-inner-grid"
               style={{
                 display: "grid",
                 width: 100,
@@ -3289,12 +3336,8 @@ describe("public layout entry", () => {
                 gridTemplateRows: "auto auto",
               }}
             >
-              <Shape testId="content-inner-grid-first" width={20} height={20} />
-              <Shape
-                testId="content-inner-grid-second"
-                width={20}
-                height={20}
-              />
+              <Shape id="content-inner-grid-first" width={20} height={20} />
+              <Shape id="content-inner-grid-second" width={20} height={20} />
             </Box>
           </Box>
         </Slide>
@@ -3309,7 +3352,9 @@ describe("public layout entry", () => {
           "absolute-inner-grid",
           "content-inner-grid",
         ][index];
-        return slide?.layouts?.find(({ testId }) => testId === layoutId)?.box;
+        return slide?.layouts?.find(
+          ({ authorId: testId }) => testId === layoutId,
+        )?.box;
       }),
       [
         { x: 0, y: 0, width: 100, height: 100 },
@@ -3336,7 +3381,7 @@ describe("public layout entry", () => {
   it("evaluates percentage dimensions and relative offsets of Grid items based on their assigned area", async () => {
     const result = await build(
       <Deck width={400} height={300}>
-        <Slide slideId="grid-area-percent-size">
+        <Slide id="grid-area-percent-size">
           <Box
             style={{
               display: "grid",
@@ -3347,18 +3392,18 @@ describe("public layout entry", () => {
             }}
           >
             <Shape
-              testId="percent-width-in-area"
+              id="percent-width-in-area"
               height={20}
               style={{ width: "50%", margin: [0, 10] }}
             />
             <Shape
-              testId="percent-height-in-area"
+              id="percent-height-in-area"
               width={20}
               style={{ height: "50%", margin: [10, 0] }}
             />
           </Box>
         </Slide>
-        <Slide slideId="grid-area-relative-offset">
+        <Slide id="grid-area-relative-offset">
           <Box
             style={{
               display: "grid",
@@ -3369,13 +3414,13 @@ describe("public layout entry", () => {
             }}
           >
             <Shape
-              testId="relative-first-cell"
+              id="relative-first-cell"
               width={20}
               height={10}
               style={{ position: "relative", left: "10%", top: "10%" }}
             />
             <Shape
-              testId="relative-spanning-area"
+              id="relative-spanning-area"
               width={20}
               height={10}
               style={{
@@ -3431,7 +3476,7 @@ describe("public layout entry", () => {
   it("distinguishes upper-bound measurement of natural width from precise layout allocation in Table", async () => {
     const table = (testId: string, style: { readonly width?: number } = {}) => (
       <Table
-        testId={testId}
+        id={testId}
         columns={[80]}
         style={{ fontFamily: cjkFont, fontSize: 12, ...style }}
       >
@@ -3442,8 +3487,8 @@ describe("public layout entry", () => {
     );
     const result = await build(
       <Deck width={600} height={400}>
-        <Slide slideId="table-natural-control">{table("natural")}</Slide>
-        <Slide slideId="table-flex-natural">
+        <Slide id="table-natural-control">{table("natural")}</Slide>
+        <Slide id="table-flex-natural">
           <Box
             style={{
               display: "flex",
@@ -3454,15 +3499,15 @@ describe("public layout entry", () => {
             }}
           >
             {table("flex-natural")}
-            <Shape testId="flex-after-natural" width={100} height={20} />
+            <Shape id="flex-after-natural" width={100} height={20} />
           </Box>
         </Slide>
-        <Slide slideId="table-block-stretch">
+        <Slide id="table-block-stretch">
           <Box style={{ display: "block", width: 200 }}>
             {table("stretched")}
           </Box>
         </Slide>
-        <Slide slideId="table-flex-explicit-width">
+        <Slide id="table-flex-explicit-width">
           <Box
             style={{
               display: "flex",
@@ -3473,7 +3518,7 @@ describe("public layout entry", () => {
             }}
           >
             {table("explicit", { width: 120 })}
-            <Shape testId="flex-after-explicit" width={100} height={20} />
+            <Shape id="flex-after-explicit" width={100} height={20} />
           </Box>
         </Slide>
       </Deck>,
@@ -3481,8 +3526,8 @@ describe("public layout entry", () => {
 
     assert.deepEqual(
       result.report.slides.map((slide) =>
-        slide?.objects.map(({ testId, box, table }) => ({
-          testId,
+        slide?.objects.map(({ authorId: testId, box, table }) => ({
+          id: testId,
           box,
           columns: table?.columnWidths,
           rows: table?.rowHeights,
@@ -3491,7 +3536,7 @@ describe("public layout entry", () => {
       [
         [
           {
-            testId: "natural",
+            id: "natural",
             box: { x: 0, y: 0, width: 80, height: 40 },
             columns: [80],
             rows: [40],
@@ -3499,13 +3544,13 @@ describe("public layout entry", () => {
         ],
         [
           {
-            testId: "flex-natural",
+            id: "flex-natural",
             box: { x: 0, y: 0, width: 80, height: 40 },
             columns: [80],
             rows: [40],
           },
           {
-            testId: "flex-after-natural",
+            id: "flex-after-natural",
             box: { x: 90, y: 0, width: 100, height: 20 },
             columns: undefined,
             rows: undefined,
@@ -3513,7 +3558,7 @@ describe("public layout entry", () => {
         ],
         [
           {
-            testId: "stretched",
+            id: "stretched",
             box: { x: 0, y: 0, width: 200, height: 40 },
             columns: [200],
             rows: [40],
@@ -3521,13 +3566,13 @@ describe("public layout entry", () => {
         ],
         [
           {
-            testId: "explicit",
+            id: "explicit",
             box: { x: 0, y: 0, width: 120, height: 40 },
             columns: [120],
             rows: [40],
           },
           {
-            testId: "flex-after-explicit",
+            id: "flex-after-explicit",
             box: { x: 130, y: 0, width: 100, height: 20 },
             columns: undefined,
             rows: undefined,
@@ -3603,10 +3648,10 @@ describe("public layout entry", () => {
   it("defaults Shape.text to middle anchor and provides text baseline only for valid top anchor", async () => {
     const ordinary = await build(
       <Deck width={400} height={200}>
-        <Slide slideId="shape-text-effective-anchors">
+        <Slide id="shape-text-effective-anchors">
           <Box style={{ display: "flex", width: 210, height: 100, gap: 10 }}>
             <Shape
-              testId="default-middle-shape"
+              id="default-middle-shape"
               width={100}
               height={100}
               text="中"
@@ -3614,7 +3659,7 @@ describe("public layout entry", () => {
               style={{ padding: 10 }}
             />
             <Shape
-              testId="explicit-top-shape"
+              id="explicit-top-shape"
               width={100}
               height={100}
               text="中"
@@ -3635,7 +3680,7 @@ describe("public layout entry", () => {
     );
     const anchorFor = (testId: string) => {
       const id = ordinary.report.slides[0]?.objects.find(
-        ({ testId: objectTestId }) => objectTestId === testId,
+        ({ authorId: objectTestId }) => objectTestId === testId,
       )?.id;
       const start = ordinaryXml.indexOf(`id="${id}"`);
       const body = ordinaryXml.indexOf("<a:bodyPr", start);
@@ -3648,10 +3693,10 @@ describe("public layout entry", () => {
 
     const topBaseline = await build(
       <Deck width={400} height={200}>
-        <Slide slideId="shape-text-top-baseline">
+        <Slide id="shape-text-top-baseline">
           <Box style={{ display: "flex", alignItems: "baseline", width: 300 }}>
             <Text
-              testId="top-baseline-text"
+              id="top-baseline-text"
               width={100}
               height={100}
               style={{
@@ -3663,7 +3708,7 @@ describe("public layout entry", () => {
               中
             </Text>
             <Shape
-              testId="top-baseline-shape"
+              id="top-baseline-shape"
               width={100}
               height={100}
               text="中"
@@ -3678,13 +3723,15 @@ describe("public layout entry", () => {
       </Deck>,
     );
     assert.deepEqual(
-      topBaseline.report.slides[0]?.objects.map(({ testId, box }) => ({
-        testId,
-        y: box?.y,
-      })),
+      topBaseline.report.slides[0]?.objects.map(
+        ({ authorId: testId, box }) => ({
+          id: testId,
+          y: box?.y,
+        }),
+      ),
       [
-        { testId: "top-baseline-text", y: 23.2 },
-        { testId: "top-baseline-shape", y: 0 },
+        { id: "top-baseline-text", y: 23.2 },
+        { id: "top-baseline-shape", y: 0 },
       ],
     );
     const topBaselineFile = await validatePptx(topBaseline.pptx);
@@ -3697,12 +3744,12 @@ describe("public layout entry", () => {
     await assert.rejects(
       build(
         <Deck width={400} height={200}>
-          <Slide slideId="shape-text-middle-baseline">
+          <Slide id="shape-text-middle-baseline">
             <Box
               style={{ display: "flex", alignItems: "baseline", width: 300 }}
             >
               <Text
-                testId="top-text"
+                id="top-text"
                 width={100}
                 height={100}
                 style={{
@@ -3714,7 +3761,7 @@ describe("public layout entry", () => {
                 中
               </Text>
               <Shape
-                testId="middle-shape"
+                id="middle-shape"
                 width={100}
                 height={100}
                 text="中"

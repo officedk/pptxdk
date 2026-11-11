@@ -41,7 +41,7 @@ function deck(children: readonly ReturnType<typeof createElement>[]) {
   return createElement(
     Deck,
     { width: 960, height: 540 },
-    createElement(Slide, { slideId: "geometry-visual" }, ...children),
+    createElement(Slide, { id: "geometry-visual" }, ...children),
   );
 }
 
@@ -51,10 +51,11 @@ describe("geometry, object visuals, and text visuals", () => {
       deck([
         createElement(Shape, {
           key: "preset",
-          testId: "preset-callout",
+          id: "preset-callout",
           geometry: preset("wedgeRoundRectCallout", {
             adj1: 28_000,
             adj2: 42_000,
+            adj3: 16_667,
           }),
           x: 10,
           y: 10,
@@ -78,7 +79,7 @@ describe("geometry, object visuals, and text visuals", () => {
         }),
         createElement(Shape, {
           key: "arc",
-          testId: "block-arc",
+          id: "block-arc",
           geometry: blockArc({
             startAngle: 20,
             endAngle: 260,
@@ -95,7 +96,7 @@ describe("geometry, object visuals, and text visuals", () => {
         }),
         createElement(Shape, {
           key: "svg",
-          testId: "svg-path",
+          id: "svg-path",
           geometry: path(
             [
               "M 8 8 H 92 V 92 H 8 Z",
@@ -111,7 +112,7 @@ describe("geometry, object visuals, and text visuals", () => {
         }),
         createElement(Image, {
           key: "image",
-          testId: "styled-image",
+          id: "styled-image",
           src: imageBytes,
           x: 430,
           y: 10,
@@ -128,7 +129,7 @@ describe("geometry, object visuals, and text visuals", () => {
         }),
         createElement(Text, {
           key: "text",
-          testId: "styled-text",
+          id: "styled-text",
           x: 570,
           y: 10,
           width: 160,
@@ -146,10 +147,10 @@ describe("geometry, object visuals, and text visuals", () => {
         }),
         createElement(Group, {
           key: "group",
-          testId: "rotated-group",
+          id: "rotated-group",
           style: { rotate: 12 },
           children: createElement(Shape, {
-            testId: "group-member",
+            id: "group-member",
             x: 760,
             y: 10,
             width: 80,
@@ -159,7 +160,7 @@ describe("geometry, object visuals, and text visuals", () => {
         }),
         createElement(Box, {
           key: "box-visible",
-          testId: "visible-box",
+          id: "visible-box",
           style: {
             width: 70,
             height: 50,
@@ -170,7 +171,7 @@ describe("geometry, object visuals, and text visuals", () => {
         }),
         createElement(Box, {
           key: "box-transparent",
-          testId: "transparent-box",
+          id: "transparent-box",
           style: { width: 70, height: 50 },
         }),
       ]),
@@ -206,10 +207,10 @@ describe("geometry, object visuals, and text visuals", () => {
     const observed = result.report.slides[0]!.objects;
     assert.ok(
       observed.some(
-        (item) => item.testId === "visible-box" && item.kind === "shape",
+        (item) => item.authorId === "visible-box" && item.kind === "shape",
       ),
     );
-    assert.ok(!observed.some((item) => item.testId === "transparent-box"));
+    assert.ok(!observed.some((item) => item.authorId === "transparent-box"));
     assert.ok(
       file.slides[0]!.objects.some((item) => item.geometry === "custom"),
     );
@@ -223,10 +224,10 @@ describe("geometry, object visuals, and text visuals", () => {
   it("allows transparent Box elements without native size to carry only layout semantics", async () => {
     const result = await build(
       deck([
-        createElement(Box, { key: "empty", testId: "empty-box" }),
+        createElement(Box, { key: "empty", id: "empty-box" }),
         createElement(Box, {
           key: "zero-height",
-          testId: "zero-height-box",
+          id: "zero-height-box",
           style: { width: 100, height: 0, rotate: 15 },
         }),
       ]),
@@ -236,7 +237,8 @@ describe("geometry, object visuals, and text visuals", () => {
     assert.deepEqual(file.errors, []);
     assert.ok(
       !result.report.slides[0]?.objects.some(
-        ({ testId }) => testId === "empty-box" || testId === "zero-height-box",
+        ({ authorId: testId }) =>
+          testId === "empty-box" || testId === "zero-height-box",
       ),
     );
   });
@@ -251,7 +253,7 @@ describe("geometry, object visuals, and text visuals", () => {
         build(
           deck([
             createElement(Box, {
-              testId: "badrotate",
+              id: "badrotate",
               style: {
                 width: 100,
                 height: 20,
@@ -312,7 +314,7 @@ describe("geometry, object visuals, and text visuals", () => {
       deck([
         createElement(Text, {
           key: "spacing-decimal",
-          testId: "spacing-decimal",
+          id: "spacing-decimal",
           x: 0,
           y: 0,
           width: 300.42,
@@ -322,7 +324,7 @@ describe("geometry, object visuals, and text visuals", () => {
         }),
         createElement(Text, {
           key: "spacing-equivalent",
-          testId: "spacing-equivalent",
+          id: "spacing-equivalent",
           x: 0,
           y: 60,
           width: 300.42,
@@ -336,7 +338,7 @@ describe("geometry, object visuals, and text visuals", () => {
         }),
         createElement(Text, {
           key: "uppercase-expansion",
-          testId: "uppercase-expansion",
+          id: "uppercase-expansion",
           x: 0,
           y: 120,
           width: 16.44,
@@ -346,7 +348,7 @@ describe("geometry, object visuals, and text visuals", () => {
         }),
         createElement(Text, {
           key: "uppercase-literal",
-          testId: "uppercase-literal",
+          id: "uppercase-literal",
           x: 0,
           y: 240,
           width: 16.44,
@@ -360,7 +362,7 @@ describe("geometry, object visuals, and text visuals", () => {
     assert.deepEqual(file.errors, []);
     const objects = result.report.slides[0]?.objects ?? [];
     const height = (testId: string) =>
-      objects.find((object) => object.testId === testId)?.box?.height;
+      objects.find((object) => object.authorId === testId)?.box?.height;
 
     assert.equal(height("spacing-decimal"), height("spacing-equivalent"));
     assert.equal(height("uppercase-expansion"), height("uppercase-literal"));
@@ -422,7 +424,7 @@ describe("geometry, object visuals, and text visuals", () => {
       build(
         deck([
           createElement(Shape, {
-            testId: "line-too-wide",
+            id: "line-too-wide",
             x: 0,
             y: 0,
             width: 30,
@@ -446,7 +448,7 @@ describe("geometry, object visuals, and text visuals", () => {
       build(
         deck([
           createElement(Shape, {
-            testId: "tiny-view-box",
+            id: "tiny-view-box",
             x: 0,
             y: 0,
             width: 100,
@@ -470,7 +472,7 @@ describe("geometry, object visuals, and text visuals", () => {
     const valid = await build(
       deck([
         createElement(Shape, {
-          testId: "one-unit-view-box",
+          id: "one-unit-view-box",
           x: 0,
           y: 0,
           width: 100,
@@ -493,7 +495,7 @@ describe("geometry, object visuals, and text visuals", () => {
       deck([
         createElement(Text, {
           key: "normal-wrap",
-          testId: "normal-wrap",
+          id: "normal-wrap",
           x: 0,
           y: 0,
           width: 30,
@@ -503,7 +505,7 @@ describe("geometry, object visuals, and text visuals", () => {
         }),
         createElement(Text, {
           key: "no-wrap",
-          testId: "no-wrap",
+          id: "no-wrap",
           x: 80,
           y: 0,
           width: 30,
@@ -513,7 +515,7 @@ describe("geometry, object visuals, and text visuals", () => {
         }),
         createElement(Box, {
           key: "normal-min-content",
-          testId: "normal-min-content",
+          id: "normal-min-content",
           style: {
             display: "flex",
             flexDirection: "row",
@@ -524,13 +526,13 @@ describe("geometry, object visuals, and text visuals", () => {
           children: [
             createElement(Text, {
               key: "normal-flex-text",
-              testId: "normal-flex-text",
+              id: "normal-flex-text",
               style: { fontFamily: jost, fontSize: 20, textWrap: "normal" },
               children: content,
             }),
             createElement(Shape, {
               key: "normal-flex-marker",
-              testId: "normal-flex-marker",
+              id: "normal-flex-marker",
               width: 20,
               height: 20,
             }),
@@ -538,7 +540,7 @@ describe("geometry, object visuals, and text visuals", () => {
         }),
         createElement(Box, {
           key: "nowrap-min-content",
-          testId: "nowrap-min-content",
+          id: "nowrap-min-content",
           style: {
             display: "flex",
             flexDirection: "row",
@@ -549,13 +551,13 @@ describe("geometry, object visuals, and text visuals", () => {
           children: [
             createElement(Text, {
               key: "nowrap-flex-text",
-              testId: "nowrap-flex-text",
+              id: "nowrap-flex-text",
               style: { fontFamily: jost, fontSize: 20, textWrap: "nowrap" },
               children: content,
             }),
             createElement(Shape, {
               key: "nowrap-flex-marker",
-              testId: "nowrap-flex-marker",
+              id: "nowrap-flex-marker",
               width: 20,
               height: 20,
               style: { minWidth: 1 },
@@ -564,7 +566,7 @@ describe("geometry, object visuals, and text visuals", () => {
         }),
         createElement(Shape, {
           key: "shape-no-wrap",
-          testId: "shape-no-wrap",
+          id: "shape-no-wrap",
           x: 300,
           y: 0,
           width: 100,
@@ -579,7 +581,7 @@ describe("geometry, object visuals, and text visuals", () => {
     assert.deepEqual(file.errors, []);
     const objects = result.report.slides[0]?.objects ?? [];
     const object = (testId: string) =>
-      objects.find((candidate) => candidate.testId === testId);
+      objects.find((candidate) => candidate.authorId === testId);
     assert.ok(
       (object("normal-wrap")?.box?.height ?? 0) >
         (object("no-wrap")?.box?.height ?? 0),
@@ -667,7 +669,7 @@ describe("geometry, object visuals, and text visuals", () => {
     const result = await build(
       deck([
         createElement(Shape, {
-          testId: "arrow-line",
+          id: "arrow-line",
           x: 10,
           y: 20,
           width: 100,
@@ -681,7 +683,7 @@ describe("geometry, object visuals, and text visuals", () => {
           },
         }),
         createElement(Shape, {
-          testId: "arrow-path",
+          id: "arrow-path",
           x: 20,
           y: 40,
           width: 150,
@@ -699,7 +701,7 @@ describe("geometry, object visuals, and text visuals", () => {
           },
         }),
         createElement(Shape, {
-          testId: "arrow-none-arrow",
+          id: "arrow-none-arrow",
           x: 30,
           y: 60,
           width: 80,
@@ -747,7 +749,7 @@ describe("geometry, object visuals, and text visuals", () => {
         build(
           deck([
             createElement(Shape, {
-              testId: "bad-start-arrow",
+              id: "bad-start-arrow",
               x: 10,
               y: 20,
               width: 100,
@@ -774,7 +776,7 @@ describe("geometry, object visuals, and text visuals", () => {
         build(
           deck([
             createElement(Shape, {
-              testId: "bad-end-arrow",
+              id: "bad-end-arrow",
               x: 10,
               y: 20,
               width: 100,
@@ -803,7 +805,7 @@ describe("geometry, object visuals, and text visuals", () => {
     const valid = await build(
       deck([
         createElement(Shape, {
-          testId: "arrow-sample",
+          id: "arrow-sample",
           x: 10,
           y: 20,
           width: 100,
@@ -842,7 +844,7 @@ describe("geometry, object visuals, and text visuals", () => {
     await assert.rejects(
       build(
         <Deck width={960} height={540}>
-          <Slide slideId="box-start-arrow">
+          <Slide id="box-start-arrow">
             {/* @ts-expect-error -- testing unknown style on Box */}
             <Box style={{ startArrow: "triangle" }} />
           </Slide>
@@ -860,7 +862,7 @@ describe("geometry, object visuals, and text visuals", () => {
     await assert.rejects(
       build(
         <Deck width={960} height={540}>
-          <Slide slideId="box-end-arrow">
+          <Slide id="box-end-arrow">
             {/* @ts-expect-error -- testing unknown style on Box */}
             <Box style={{ endArrow: "triangle" }} />
           </Slide>
@@ -878,7 +880,7 @@ describe("geometry, object visuals, and text visuals", () => {
     await assert.rejects(
       build(
         <Deck width={960} height={540}>
-          <Slide slideId="text-start-arrow">
+          <Slide id="text-start-arrow">
             {/* @ts-expect-error -- testing unknown style on Text */}
             <Text style={{ startArrow: "triangle" }}>Hello</Text>
           </Slide>
@@ -896,7 +898,7 @@ describe("geometry, object visuals, and text visuals", () => {
     await assert.rejects(
       build(
         <Deck width={960} height={540}>
-          <Slide slideId="text-end-arrow">
+          <Slide id="text-end-arrow">
             {/* @ts-expect-error -- testing unknown style on Text */}
             <Text style={{ endArrow: "triangle" }}>Hello</Text>
           </Slide>

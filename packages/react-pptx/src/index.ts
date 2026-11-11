@@ -126,13 +126,14 @@ export type {
   PathOptions,
   PresetGeometry,
 } from "@react-pptx/capabilities";
-export { createBuilder, expandDocument } from "@react-pptx/core";
+export { appendJSX, createBuilder, expandDocument } from "@react-pptx/core";
 export {
   CommonContainer,
   CommonNode,
   RichTextContainer,
 } from "@react-pptx/core";
 export type {
+  AppendJSXOptions,
   DocumentProps,
   DocumentStyle,
   DocumentUpdate,

@@ -3,7 +3,7 @@ import {
   type CapabilityInput,
   type Extension,
   type SlideCapabilityModule,
-} from "@react-pptx/core";
+} from "@react-pptx/core/capability";
 
 /** Transition duration in milliseconds; rounded to the nearest integer millisecond when written to p14:dur. */
 export type TransitionDuration = number;

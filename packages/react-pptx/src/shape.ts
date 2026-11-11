@@ -12,7 +12,7 @@ export const build = createBuilder([
 ]);
 
 export { Deck, formatBaseline, targets } from "@react-pptx/core";
-export { Box, type BoxProps } from "@react-pptx/capabilities/box";
+export { Box, type BoxProps } from "@react-pptx/capabilities/box-elements";
 export { Slide } from "./slide.ts";
 export {
   Shape,

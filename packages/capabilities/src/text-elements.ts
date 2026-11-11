@@ -1,42 +1,34 @@
-import type {
-  LayoutStyle,
-  LinkTarget,
-  PaddingStyle,
-  VisualStyle as CoreVisualStyle,
-} from "@react-pptx/core";
 import { createElement, type ReactNode } from "react";
 
-import type { MorphProps } from "./morph-api.ts";
-import { motionElement, type MotionProps } from "./motion-api.ts";
-import type { ParagraphStyle, TextStyle } from "./text-service.ts";
+import { motionElement } from "./motion-elements.ts";
+import type {
+  ParagraphDeclarationProps,
+  SlideNumberDeclarationProps,
+  SpanDeclarationProps,
+  TextDeclarationProps,
+} from "./text-declaration.ts";
 
-export type TextProps = MotionProps &
-  MorphProps & {
-    readonly testId?: string;
-    readonly part?: string;
-    readonly name?: string;
-    readonly link?: LinkTarget;
-    readonly x?: number;
-    readonly y?: number;
-    readonly width?: number;
-    readonly height?: number | "auto";
-    readonly style?: LayoutStyle & PaddingStyle & TextStyle & CoreVisualStyle;
-    readonly children?: ReactNode;
-  };
+export type {
+  ParagraphDeclarationProps,
+  ShapeTextStyle,
+  SlideNumberDeclarationProps,
+  SpanDeclarationProps,
+  TextDeclarationProps,
+} from "./text-declaration.ts";
 
-export type ParagraphProps = {
-  readonly style?: ParagraphStyle;
+export type TextProps = TextDeclarationProps & {
   readonly children?: ReactNode;
 };
 
-export type SpanProps = {
-  readonly style?: Omit<TextStyle, "verticalAlign" | "lineHeight" | "textWrap">;
+export type ParagraphProps = ParagraphDeclarationProps & {
   readonly children?: ReactNode;
 };
 
-export type SlideNumberProps = {
-  readonly style?: Omit<TextStyle, "verticalAlign" | "lineHeight" | "textWrap">;
+export type SpanProps = SpanDeclarationProps & {
+  readonly children?: ReactNode;
 };
+
+export type SlideNumberProps = SlideNumberDeclarationProps;
 
 /** Native text box; numeric height preserves a fixed region, while auto height uses explicit font measurement. */
 export function Text(props: TextProps): ReactNode {
@@ -57,6 +49,3 @@ export function Span(props: SpanProps): ReactNode {
 export function SlideNumber(props: SlideNumberProps): ReactNode {
   return createElement("rp:slide-number", props);
 }
-
-/** Pure text style type for Shape; does not depend on the text box capability module. */
-export type ShapeTextStyle = TextStyle;

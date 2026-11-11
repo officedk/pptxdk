@@ -17,16 +17,11 @@ import {
   type TextStyle,
   type ThemeScope,
   type VisualStyle,
-} from "@react-pptx/core";
-import { createElement, useContext, type Key, type ReactNode } from "react";
+} from "@react-pptx/core/capability";
 
 import { nativeLinkXml } from "./identity.ts";
 import type { MorphProps } from "./morph-api.ts";
-import {
-  motionAnnotations,
-  motionContext,
-  type MotionProps,
-} from "./motion-api.ts";
+import { motionAnnotations, type MotionProps } from "./motion-api.ts";
 import {
   hasVisibleBoxStyle,
   shapePropertiesXml,
@@ -35,45 +30,14 @@ import {
 } from "./visual.ts";
 
 /** Layout container appearance with visual styling that optionally generates a native background shape. */
-export type BoxProps = MorphProps &
+export type BoxDeclarationProps = MorphProps &
   Pick<MotionProps, "enter" | "motion"> & {
-    readonly key?: Key | null;
     readonly testId?: string;
     readonly part?: string;
     readonly link?: LinkTarget;
     readonly style?: LayoutStyle & TextStyle & VisualStyle;
     readonly theme?: ThemeScope;
-    readonly children?: ReactNode;
   };
-
-/** Visible Box's own background and descendants without entrance effects can inherit default entrance. */
-export function Box({
-  enter,
-  motion,
-  children,
-  ...props
-}: BoxProps): ReactNode {
-  const parent = useContext(motionContext);
-  const defaultEnter = enter === undefined ? parent.defaultEnter : enter;
-  const context = Object.freeze({
-    ...parent,
-    enabled: parent.enabled && motion !== false,
-    ...(defaultEnter === undefined ? {} : { defaultEnter }),
-  });
-  const boxContext = Object.freeze({
-    ...context,
-    ...(motion === undefined ? {} : { motionValue: motion }),
-  });
-  return createElement(
-    motionContext.Provider,
-    { value: context },
-    createElement(
-      "rp:box",
-      { ...props, __motionContext: boxContext },
-      children,
-    ),
-  );
-}
 
 const boxAllowedParameters = [
   "testId",

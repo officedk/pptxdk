@@ -1,4 +1,5 @@
 import { CapabilityError } from "#/diagnostics.ts";
+import { snapshotValue } from "#/input-values.ts";
 
 export type FontFaceStyle = "normal" | "italic";
 
@@ -620,16 +621,17 @@ export function isFont(value: unknown): value is Font {
 
 function normalizeTheme(input: ThemeInput = {}): Theme {
   if (!record(input)) throw new TypeError("Theme must be an object");
-  const colors = { ...officeColors, ...input.colors };
-  const fonts = {
+  // Theme values are content inputs: isolate nested shades, font declarations, and font bytes.
+  const colors = snapshotValue({ ...officeColors, ...input.colors });
+  const fonts = snapshotValue({
     ...input.fonts,
     major: input.fonts?.major ?? "Aptos Display",
     minor: input.fonts?.minor ?? "Aptos",
-  };
+  });
   return Object.freeze({
     name: input.name ?? "Office Theme",
-    colors: Object.freeze(colors),
-    fonts: Object.freeze(fonts),
+    colors,
+    fonts,
   });
 }
 

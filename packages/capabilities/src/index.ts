@@ -17,7 +17,8 @@ export type {
   ShapeProps,
   shapeStyleKeys,
 } from "#/shape.ts";
-export { Box, boxCapability, type BoxProps, type ParsedBox } from "#/box.ts";
+export { boxCapability, type ParsedBox } from "#/box.ts";
+export { Box, type BoxProps } from "#/box-elements.ts";
 export {
   arrowTypes,
   hasVisibleBoxStyle,
@@ -72,7 +73,8 @@ export type {
   TableTextStyle,
   TableVerticalAlign,
 } from "#/table.ts";
-export { font, P, SlideNumber, Span, Text, textCapability } from "#/text.ts";
+export { font, textCapability } from "#/text.ts";
+export { P, SlideNumber, Span, Text } from "#/text-elements.ts";
 export type { ParsedText } from "#/text.ts";
 export { transitionCapability, transitions } from "#/transition.ts";
 export { slideBackgroundCapability } from "#/slide-background.ts";
@@ -157,16 +159,22 @@ export type {
   FontOptions,
   FontReference,
   FontSize,
-  ParagraphProps,
+  ParagraphDeclarationProps,
   ParagraphStyle,
-  SlideNumberProps,
   ShapeTextStyle,
-  SpanProps,
+  SlideNumberDeclarationProps,
+  SpanDeclarationProps,
   TextAlignment,
+  TextDeclarationProps,
   TextList,
-  TextProps,
   TextStyle,
 } from "#/text.ts";
+export type {
+  ParagraphProps,
+  SlideNumberProps,
+  SpanProps,
+  TextProps,
+} from "#/text-elements.ts";
 export type {
   FlipTransition,
   MorphTransition,

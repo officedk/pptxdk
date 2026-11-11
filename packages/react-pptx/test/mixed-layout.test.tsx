@@ -1185,6 +1185,10 @@ describe("mixed layout, layering, and component reflow", () => {
     const measuredWidth = Math.round(
       (face.layout(label).advanceWidth / face.unitsPerEm) * 13 * 9525,
     );
+    // Jost Bold 13px "Open report" shaped advances: natural 717071 EMU, native 1/8pt
+    // grid 717550 EMU, and 9.8pt at the 1/20pt grid 721360 EMU. The last is the
+    // conservative candidate the native file must cover.
+    const nativeQuantizedWidth = 721360;
 
     for (const [entry, result] of [
       ["react", reactResult],
@@ -1223,6 +1227,10 @@ describe("mixed layout, layering, and component reflow", () => {
       assert.ok(
         labelWidth >= measuredWidth,
         `${entry}: intrinsic width ${labelWidth} EMU is shorter than measured ${measuredWidth} EMU`,
+      );
+      assert.ok(
+        labelWidth >= nativeQuantizedWidth,
+        `${entry}: intrinsic width ${labelWidth} EMU is shorter than the native-quantized candidate ${nativeQuantizedWidth} EMU`,
       );
       assert.ok(
         Math.abs(nativeBox("cta").width - labelWidth - 32 * 9525) <= 1,

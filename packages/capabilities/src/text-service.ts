@@ -1251,7 +1251,16 @@ function rangeWidth(
   start: number,
   end: number,
 ): number {
-  let width = 0;
+  // Native text layout quantizes each shaped glyph advance. PowerPoint rounds to 1/8 pt;
+  // WPS normalizes the effective size to 0.1 pt and rounds to 1/20 pt. Keep the widest
+  // whole-range candidate so intrinsic wrapping stays conservative without changing the
+  // author's size. The graph is evidenced for the current desktop sample, not all engines.
+  const nativeEighthPointGrid = 8;
+  const nativeTenthPointGrid = 20;
+  let natural = 0;
+  let eighthPoint = 0;
+  let tenthPoint = 0;
+  let spacing = 0;
   for (const piece of pieces) {
     const from = Math.max(start, piece.start);
     const to = Math.min(end, piece.end);
@@ -1264,14 +1273,22 @@ function rangeWidth(
       if (requiresFontGlyph(character)) visible += character;
     }
     if (visible === "") continue;
-    const advance = piece.face.font.layout(visible).advanceWidth;
-    const pixels = fontSizePoints(piece.style.fontSize) * (4 / 3);
+    const face = piece.face.font;
+    const points = fontSizePoints(piece.style.fontSize);
+    const tenths = Math.round(points * 10) / 10;
+    for (const position of face.layout(visible).positions) {
+      const advance = (position.xAdvance / face.unitsPerEm) * points;
+      natural += advance;
+      eighthPoint +=
+        Math.round(advance * nativeEighthPointGrid) / nativeEighthPointGrid;
+      const tenthAdvance = (position.xAdvance / face.unitsPerEm) * tenths;
+      tenthPoint +=
+        Math.round(tenthAdvance * nativeTenthPointGrid) / nativeTenthPointGrid;
+    }
     const characterCount = Array.from(graphemes.segment(transformed)).length;
-    width +=
-      (advance / piece.face.font.unitsPerEm) * pixels +
-      (piece.style.letterSpacing ?? 0) * characterCount;
+    spacing += (piece.style.letterSpacing ?? 0) * characterCount;
   }
-  return width;
+  return Math.max(natural, eighthPoint, tenthPoint) * (4 / 3) + spacing;
 }
 
 function trimLineEnd(text: string, start: number, end: number): number {

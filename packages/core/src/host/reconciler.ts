@@ -223,17 +223,18 @@ function completedDocument(container: HostContainer): CommonContainer<"deck"> {
 }
 
 /**
- * Runs a dedicated React root to completion and hands off the completed common document.
+ * Runs one dedicated React root to completion and hands off content selected from its final commit.
  *
  * React creates and updates the same `CommonNode` instances the caller receives. On completion the
  * candidate is closed to further adapter edits before renderer teardown, then the root is unmounted
- * and its listeners/adapter state are cleaned up. The document is returned only when both expansion
+ * and its listeners/adapter state are cleaned up. The candidate is returned only when both expansion
  * and cleanup succeed; unhandled errors, cancellation, and cleanup failures reject the expansion.
  */
-export async function expandReactDocument(
+async function expandReactRoot<Result>(
   element: ReactNode,
-  signal?: AbortSignal,
-): Promise<CommonContainer<"deck">> {
+  signal: AbortSignal | undefined,
+  select: (container: HostContainer) => Result,
+): Promise<Result> {
   if (signal?.aborted) throw signal.reason;
 
   const container: HostContainer = { children: [] };
@@ -290,7 +291,7 @@ export async function expandReactDocument(
   let revision = 0;
   let operationError: unknown;
   let operationFailed = false;
-  let candidate: CommonContainer<"deck"> | undefined;
+  let candidate: Result | undefined;
   let rootError: BuildError | undefined;
 
   const currentOutcome = (): Outcome => outcome;
@@ -354,8 +355,7 @@ export async function expandReactDocument(
       await completion;
       if (currentOutcome() === "completed") {
         try {
-          candidate = completedDocument(container);
-          lockHandoffTree(candidate);
+          candidate = select(container);
         } catch (error) {
           if (error instanceof BuildError) rootError = error;
           else throw error;
@@ -407,7 +407,59 @@ export async function expandReactDocument(
   if (cleanupError !== undefined) throw cleanupError.error;
   if (rootError !== undefined) throw rootError;
   if (finalOutcome !== "completed" || candidate === undefined) {
-    throw new Error("React expansion did not produce a document");
+    throw new Error("React expansion did not produce handoff content");
   }
   return candidate;
+}
+
+/**
+ * Runs a dedicated React root to completion and hands off the completed common document.
+ *
+ * The document is returned only when both expansion and cleanup succeed; unhandled errors,
+ * cancellation, and cleanup failures reject the expansion.
+ */
+export async function expandReactDocument(
+  element: ReactNode,
+  signal?: AbortSignal,
+): Promise<CommonContainer<"deck">> {
+  return expandReactRoot(element, signal, (container) => {
+    const candidate = completedDocument(container);
+    lockHandoffTree(candidate);
+    return candidate;
+  });
+}
+
+function completedFragment(container: HostContainer): readonly CommonNode[] {
+  const nodes = container.children.filter(
+    (child): child is CommonNode => child instanceof CommonNode,
+  );
+  if (
+    container.children.some(
+      (child) => "text" in child && child.text.trim() !== "",
+    )
+  ) {
+    throw new BuildError([
+      diagnostic(
+        "fragment",
+        "unexpected-text",
+        "No text allowed outside an editable node in an appended JSX fragment",
+      ),
+    ]);
+  }
+  const frozen = Object.freeze(nodes);
+  for (const node of frozen) lockHandoffTree(node);
+  return frozen;
+}
+
+/**
+ * Runs a dedicated React root to completion and hands off top-level editable nodes from a fragment.
+ *
+ * The same renderer, completion wait, cleanup, and handoff lock as `expandReactDocument` apply; the
+ * fragment does not need a Deck root because it is staged ownerless until the caller appends it.
+ */
+export async function expandReactFragment(
+  element: ReactNode,
+  signal?: AbortSignal,
+): Promise<readonly CommonNode[]> {
+  return expandReactRoot(element, signal, completedFragment);
 }

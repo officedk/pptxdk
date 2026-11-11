@@ -2,10 +2,14 @@ import { createHash } from "node:crypto";
 
 import { strToU8, zipSync } from "fflate";
 
-import type {
-  DeclarationChild,
-  DeclarationContainer,
-  DeclarationNode,
+import { readAuthorId, validateAuthorIdScopes } from "#/author-ids.ts";
+import {
+  componentLabel,
+  declarationIdentity,
+  isDeclarationNode,
+  type DeclarationChild,
+  type DeclarationContainer,
+  type DeclarationNode,
 } from "#/declaration.ts";
 import { CapabilityError, BuildError } from "#/diagnostics.ts";
 import { LayoutPass, type LayoutPassResult } from "#/layout.ts";
@@ -231,10 +235,6 @@ function ownKeys(
   return Object.keys(value).find((key) => !allowed.includes(key));
 }
 
-function isDeclarationNode(child: DeclarationChild): child is DeclarationNode {
-  return "props" in child;
-}
-
 function isSlideCapability(
   module: RegisteredCapabilityModule,
 ): module is SlideCapabilityModule {
@@ -257,21 +257,6 @@ function childNodes(children: readonly DeclarationChild[]): DeclarationNode[] {
   return children.filter(isDeclarationNode);
 }
 
-function valueIdentity(props: Readonly<Record<string, unknown>>): unknown {
-  const testId = props["testId"];
-  return testId === undefined ? props["id"] : testId;
-}
-
-function componentLabel(node: DeclarationNode, index: number): string {
-  const type = node.type.startsWith("rp:") ? node.type.slice(3) : node.type;
-  const identity = valueIdentity(node.props);
-  const label =
-    typeof identity === "string" && identity.trim() !== ""
-      ? identity
-      : String(index + 1);
-  return `${type}[${label}]`;
-}
-
 function capabilityChild(child: DeclarationChild): CapabilityChild {
   if (!isDeclarationNode(child)) return { type: "#text", text: child.text };
   return {
@@ -284,7 +269,7 @@ function capabilityChild(child: DeclarationChild): CapabilityChild {
 function capabilityLabel(child: CapabilityChild, index: number): string {
   if (!("props" in child)) return `text[${index + 1}]`;
   const type = child.type.startsWith("rp:") ? child.type.slice(3) : child.type;
-  const identity = valueIdentity(child.props);
+  const identity = declarationIdentity(child.props);
   const label =
     typeof identity === "string" && identity.trim() !== ""
       ? identity
@@ -466,52 +451,6 @@ function deckDimensions(node: DeclarationNode): Dimensions {
     width: positiveDimension(node.props["width"] ?? 1280, "Deck.width"),
     height: positiveDimension(node.props["height"] ?? 720, "Deck.height"),
   };
-}
-
-function readAuthorId(value: unknown, path: string): string | undefined {
-  if (value === undefined) return undefined;
-  if (typeof value !== "string" || value.trim() === "") {
-    throw new BuildError([
-      diagnostic(path, "invalid-author-id", "id must be a non-empty string"),
-    ]);
-  }
-  return value;
-}
-
-/**
- * Validates new author ids on one slide using the same scopes the author query traverses.
- *
- * A node's own id belongs to its parent scope; its descendants belong to a new scope only when the
- * node declares an id. Anonymous layout nodes therefore stay transparent, while a page remains the
- * root scope even for legacy slides without a new id.
- */
-function validateAuthorIdScopes(
-  node: DeclarationNode,
-  path: string,
-  scope: Set<string>,
-): void {
-  node.children.forEach((child, index) => {
-    if (!isDeclarationNode(child)) return;
-    const childPath = `${path}/${componentLabel(child, index)}`;
-    const id = readAuthorId(child.props["id"], childPath);
-    if (id !== undefined) {
-      if (scope.has(id)) {
-        throw new BuildError([
-          diagnostic(
-            childPath,
-            "duplicate-author-id",
-            `Duplicate author id ${JSON.stringify(id)} in the same scope`,
-          ),
-        ]);
-      }
-      scope.add(id);
-    }
-    validateAuthorIdScopes(
-      child,
-      childPath,
-      id === undefined ? scope : new Set(),
-    );
-  });
 }
 
 function resolveSlides(

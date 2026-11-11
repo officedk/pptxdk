@@ -87,7 +87,7 @@ export type ChartSeries = {
   readonly dataLabels?: false | ChartDataLabelOverride;
   /** Marker settings; applies only to line charts and is hidden when omitted or false. */
   readonly marker?: boolean | ChartMarker;
-  /** Whether the line is drawn with Catmull-Rom smoothing; applies only to line charts. */
+  /** Whether the line uses the native smoothing flag; applies only to line charts. */
   readonly smooth?: boolean;
   /** Overrides color, line, marker, or data label text color for points by position. */
   readonly points?: Readonly<Record<number, ChartPoint>>;

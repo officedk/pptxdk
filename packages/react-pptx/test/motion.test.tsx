@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 
 import {
+  after,
   Box,
   build,
   BuildError,
@@ -2765,6 +2766,550 @@ describe("object motion", () => {
     assert.ok(
       invalidFile.errors.some(
         ({ code }) => code === "invalid-animation-projection-target",
+      ),
+    );
+  });
+
+  it("writes a whole-object entrance for a shape whose own text has a visible background", async () => {
+    const result = await build(
+      createElement(
+        Deck,
+        { width: 960, height: 540 },
+        createElement(
+          Slide,
+          { id: "whole-shape-entrance" },
+          createElement(
+            Step,
+            { n: 1 },
+            createElement(Shape, {
+              id: "whole-shape-entry",
+              x: 120,
+              y: 140,
+              width: 360,
+              height: 96,
+              fill: "#0070C0",
+              text: "Whole shape entrance",
+              textStyle: { fontSize: 20, color: "#FFFFFF" },
+              enter: fade({ duration: 300 }),
+            }),
+          ),
+        ),
+      ),
+    );
+    const shape = result.report.slides[0]?.objects.find(
+      ({ authorId: testId }) => testId === "whole-shape-entry",
+    );
+    assert.ok(shape !== undefined);
+    const motion = result.report.slides[0]?.capabilities?.[
+      "motion"
+    ] as MotionObservation;
+    assert.deepEqual(
+      motion.steps[0]?.effects.map(({ target, preset }) => [
+        target.authorId,
+        preset,
+      ]),
+      [["whole-shape-entry", "fade"]],
+    );
+
+    const file = await validatePptx(result.pptx);
+    assert.deepEqual(file.errors, []);
+    const effect = file.slides[0]?.animations?.[0]?.effects[0];
+    assert.deepEqual(
+      [
+        effect?.targetId,
+        effect?.targetRange,
+        effect?.preset,
+        effect?.kind,
+        effect?.durationMs,
+      ],
+      [shape.id, undefined, "fade", "entrance", 300],
+    );
+    // Native whole-shape Fade carries the background inside the object target instead of a separate p:bg branch.
+    assert.deepEqual(
+      [
+        effect?.nativeBuild,
+        effect?.nativeBuildGroupId,
+        effect?.nativeBuildAnimBg,
+      ],
+      [undefined, 0, true],
+    );
+
+    const slideXml = strFromU8(
+      unzipSync(result.pptx)["ppt/slides/slide1.xml"]!,
+    );
+    const wholeTarget = `<p:spTgt spid="${shape.id}"></p:spTgt>`;
+    const wholeBehaviors = [
+      ...slideXml.matchAll(/<p:(set|animEffect)\b[^>]*>[\s\S]*?<\/p:\1>/gu),
+    ]
+      .map(([behavior]) => behavior ?? "")
+      .filter((behavior) => behavior.includes(wholeTarget));
+    assert.deepEqual(
+      wholeBehaviors.map((behavior) =>
+        behavior.startsWith("<p:set") ? "set" : "animEffect",
+      ),
+      ["set", "animEffect"],
+    );
+    assert.doesNotMatch(
+      slideXml,
+      new RegExp(`<p:spTgt spid="${shape.id}"><p:txEl>`, "u"),
+    );
+    assert.doesNotMatch(
+      slideXml,
+      new RegExp(`<p:spTgt spid="${shape.id}"><p:bg>`, "u"),
+    );
+    assert.match(
+      slideXml,
+      new RegExp(
+        `<p:bldP spid="${shape.id}" grpId="0" animBg="1"></p:bldP>`,
+        "u",
+      ),
+    );
+  });
+
+  it("keeps explicit paragraph granularity on a shape with its own text and background", async () => {
+    const result = await build(
+      createElement(
+        Deck,
+        { width: 960, height: 540 },
+        createElement(
+          Slide,
+          { id: "shape-paragraph-entrance" },
+          createElement(
+            Step,
+            { n: 1 },
+            createElement(
+              Shape,
+              {
+                id: "paragraph-shape-entry",
+                x: 120,
+                y: 140,
+                width: 360,
+                height: 140,
+                fill: "#0070C0",
+                textStyle: { fontSize: 20, color: "#FFFFFF" },
+                enter: fade({ by: "paragraph", duration: 300 }),
+              },
+              createElement(P, { key: "first" }, "First paragraph"),
+              createElement(P, { key: "second" }, "Second paragraph"),
+            ),
+          ),
+        ),
+      ),
+    );
+    const shape = result.report.slides[0]?.objects.find(
+      ({ authorId: testId }) => testId === "paragraph-shape-entry",
+    );
+    assert.ok(shape !== undefined);
+    const motion = result.report.slides[0]?.capabilities?.[
+      "motion"
+    ] as MotionObservation;
+    assert.deepEqual(
+      motion.steps[0]?.effects.map(({ target }) => target.range),
+      [
+        { type: "paragraph", start: 0, end: 0 },
+        { type: "paragraph", start: 1, end: 1 },
+      ],
+    );
+
+    const file = await validatePptx(result.pptx);
+    assert.deepEqual(file.errors, []);
+    assert.deepEqual(
+      file.slides[0]?.animations?.[0]?.effects.map(
+        ({ targetRange, nativeBuild }) => [targetRange, nativeBuild],
+      ),
+      [
+        [{ type: "paragraph", start: 0, end: 0 }, "paragraph"],
+        [{ type: "paragraph", start: 1, end: 1 }, "paragraph"],
+      ],
+    );
+    const slideXml = strFromU8(
+      unzipSync(result.pptx)["ppt/slides/slide1.xml"]!,
+    );
+    assert.match(
+      slideXml,
+      new RegExp(
+        `<p:spTgt spid="${shape.id}"><p:txEl><p:pRg st="0" end="0">`,
+        "u",
+      ),
+    );
+    assert.match(
+      slideXml,
+      new RegExp(`<p:bldP spid="${shape.id}" grpId="0" build="p"`, "u"),
+    );
+    assert.doesNotMatch(
+      slideXml,
+      new RegExp(`<p:spTgt spid="${shape.id}"></p:spTgt>`, "u"),
+    );
+  });
+
+  it("keeps multi-paragraph shape text and effect arrays on whole-object targets", async () => {
+    const result = await build(
+      createElement(
+        Deck,
+        { width: 960, height: 540 },
+        createElement(
+          Slide,
+          { id: "whole-shape-array" },
+          createElement(
+            Step,
+            { n: 1 },
+            createElement(
+              Shape,
+              {
+                id: "whole-shape-array-entry",
+                x: 120,
+                y: 140,
+                width: 360,
+                height: 140,
+                fill: "#F97316",
+                textStyle: { fontSize: 20, color: "#111827" },
+                enter: [
+                  fade({ duration: 200 }),
+                  fly({ from: "left", duration: 300 }),
+                ],
+              },
+              createElement(P, { key: "first" }, "First paragraph"),
+              createElement(P, { key: "second" }, "Second paragraph"),
+            ),
+          ),
+        ),
+      ),
+    );
+    const shape = result.report.slides[0]?.objects.find(
+      ({ authorId: testId }) => testId === "whole-shape-array-entry",
+    );
+    assert.ok(shape !== undefined);
+    const motion = result.report.slides[0]?.capabilities?.[
+      "motion"
+    ] as MotionObservation;
+    assert.deepEqual(
+      motion.steps[0]?.effects.map(({ target, preset }) => [
+        target.range,
+        preset,
+      ]),
+      [
+        [undefined, "fade"],
+        [undefined, "fly"],
+      ],
+    );
+
+    const file = await validatePptx(result.pptx);
+    assert.deepEqual(file.errors, []);
+    assert.deepEqual(
+      file.slides[0]?.animations?.[0]?.effects.map(
+        ({ targetRange, preset }) => [targetRange, preset],
+      ),
+      [
+        [undefined, "fade"],
+        [undefined, "fly"],
+      ],
+    );
+    const slideXml = strFromU8(
+      unzipSync(result.pptx)["ppt/slides/slide1.xml"]!,
+    );
+    assert.doesNotMatch(
+      slideXml,
+      new RegExp(`<p:spTgt spid="${shape.id}"><p:txEl>`, "u"),
+    );
+    assert.doesNotMatch(
+      slideXml,
+      new RegExp(`<p:spTgt spid="${shape.id}"><p:bg>`, "u"),
+    );
+    assert.equal(
+      slideXml.match(
+        new RegExp(
+          `<p:bldP spid="${shape.id}" grpId="0" animBg="1"></p:bldP>`,
+          "gu",
+        ),
+      )?.length,
+      1,
+    );
+  });
+
+  it("checks every build target of a whole-object shape before accepting animBg", async () => {
+    const result = await build(
+      createElement(
+        Deck,
+        { width: 960, height: 540 },
+        createElement(
+          Slide,
+          { id: "whole-shape-background-role" },
+          createElement(
+            Step,
+            { n: 1 },
+            createElement(
+              Shape,
+              {
+                id: "whole-shape-background-role-entry",
+                x: 120,
+                y: 140,
+                width: 360,
+                height: 140,
+                fill: "#0070C0",
+                textStyle: { fontSize: 20, color: "#FFFFFF" },
+                enter: fade({ duration: 300 }),
+              },
+              createElement(P, { key: "first" }, "First paragraph"),
+              createElement(P, { key: "second" }, "Second paragraph"),
+            ),
+          ),
+        ),
+      ),
+    );
+    const shape = result.report.slides[0]?.objects.find(
+      ({ authorId: testId }) => testId === "whole-shape-background-role-entry",
+    );
+    assert.ok(shape !== undefined);
+    const initialFile = await validatePptx(result.pptx);
+    assert.deepEqual(initialFile.errors, []);
+    assert.deepEqual(
+      [
+        initialFile.slides[0]?.animations?.[0]?.effects[0]?.nativeBuild,
+        initialFile.slides[0]?.animations?.[0]?.effects[0]?.nativeBuildAnimBg,
+      ],
+      [undefined, true],
+    );
+
+    const path = "ppt/slides/slide1.xml";
+    const parts = unzipSync(result.pptx);
+    const xml = strFromU8(parts[path]!);
+    const shapeTarget = `<p:spTgt spid="${shape.id}"></p:spTgt>`;
+    const backgroundTarget = `<p:spTgt spid="${shape.id}"><p:bg></p:bg></p:spTgt>`;
+    const behavior = (tag: "set" | "animEffect"): string => {
+      const found = xml.match(
+        new RegExp(`<p:${tag}\\b[\\s\\S]*?</p:${tag}>`, "u"),
+      )?.[0];
+      assert.ok(found !== undefined);
+      return found;
+    };
+    const setTargetToBackground = (tag: "set" | "animEffect"): string =>
+      xml.replace(
+        behavior(tag),
+        behavior(tag).replace(shapeTarget, backgroundTarget),
+      );
+    const buildWithAnimBg = (source: string, animBg: "0" | "1"): string =>
+      source.replace(
+        `<p:bldP spid="${shape.id}" grpId="0" animBg="1"></p:bldP>`,
+        `<p:bldP spid="${shape.id}" grpId="0" animBg="${animBg}"></p:bldP>`,
+      );
+    const assertBackgroundRoleRejected = async (
+      slideXml: string,
+    ): Promise<void> => {
+      assert.notEqual(slideXml, xml);
+      const file = await validatePptx(
+        zipSync({ ...parts, [path]: strToU8(slideXml) }),
+      );
+      assert.ok(
+        file.errors.some(
+          ({ code }) => code === "inconsistent-animation-background-role",
+        ),
+      );
+    };
+
+    // Either behavior may carry the real background branch; the other whole target must not
+    // exempt the group from the animBg check.
+    await assertBackgroundRoleRejected(
+      buildWithAnimBg(setTargetToBackground("set"), "0"),
+    );
+    await assertBackgroundRoleRejected(
+      buildWithAnimBg(setTargetToBackground("animEffect"), "0"),
+    );
+
+    // Native whole-object targets without a background branch may still declare animBg=false.
+    const wholeWithoutAnimBg = buildWithAnimBg(xml, "0");
+    assert.notEqual(wholeWithoutAnimBg, xml);
+    const wholeFile = await validatePptx(
+      zipSync({ ...parts, [path]: strToU8(wholeWithoutAnimBg) }),
+    );
+    assert.deepEqual(wholeFile.errors, []);
+    assert.equal(
+      wholeFile.slides[0]?.animations?.[0]?.effects[0]?.nativeBuildAnimBg,
+      false,
+    );
+  });
+
+  it("keeps split background and ordinary build readers valid beside whole-object roles", async () => {
+    const result = await build(
+      createElement(
+        Deck,
+        { width: 960, height: 540 },
+        createElement(
+          Slide,
+          { id: "split-background" },
+          createElement(
+            Step,
+            { n: 1 },
+            createElement(Text, {
+              id: "split-background-text",
+              x: 100,
+              y: 100,
+              width: 400,
+              height: 160,
+              style: {
+                backgroundColor: "#FEF3C7",
+                borderColor: "#1D4ED8",
+                borderWidth: 2,
+              },
+              enter: fade({ duration: 300 }),
+              children: [
+                createElement(P, { key: "first" }, "First paragraph"),
+                createElement(P, { key: "second" }, "Second paragraph"),
+              ],
+            }),
+          ),
+        ),
+        createElement(
+          Slide,
+          { id: "paragraph-modes" },
+          createElement(
+            Step,
+            { n: 1 },
+            createElement(Text, {
+              id: "word-text",
+              x: 100,
+              y: 100,
+              width: 400,
+              height: 120,
+              enter: fade({ by: "word" }),
+              children: [createElement(P, { key: "one" }, "Word one two")],
+            }),
+            createElement(Text, {
+              id: "letter-text",
+              x: 100,
+              y: 300,
+              width: 400,
+              height: 120,
+              enter: fade({ by: "letter" }),
+              children: [createElement(P, { key: "one" }, "Letter")],
+            }),
+          ),
+        ),
+        createElement(
+          Slide,
+          { id: "group-and-array" },
+          createElement(
+            Step,
+            { n: 1 },
+            createElement(
+              Group,
+              {
+                id: "group-entry",
+                emphasis: spin({ duration: 1000 }),
+              },
+              createElement(Shape, {
+                id: "group-shape",
+                x: 100,
+                y: 100,
+                width: 80,
+                height: 80,
+                fill: "#F97316",
+              }),
+              createElement(Text, {
+                id: "group-text",
+                x: 200,
+                y: 100,
+                width: 200,
+                height: 80,
+                enter: fade(),
+                children: [createElement(P, { key: "one" }, "Group text")],
+              }),
+            ),
+            createElement(
+              Shape,
+              {
+                id: "array-shape",
+                x: 100,
+                y: 300,
+                width: 300,
+                height: 120,
+                fill: "#0070C0",
+                textStyle: { fontSize: 20 },
+                enter: [fade(), fly({ from: "left" })],
+              },
+              createElement(P, { key: "one" }, "Array text"),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    const file = await validatePptx(result.pptx);
+    assert.deepEqual(file.errors, []);
+    const splitText = result.report.slides[0]?.objects.find(
+      ({ authorId: testId }) => testId === "split-background-text",
+    );
+    assert.ok(splitText !== undefined);
+    const splitEffect = file.slides[0]?.animations?.[0]?.effects[0];
+    assert.deepEqual(
+      [
+        splitEffect?.targetId,
+        splitEffect?.nativeBuild,
+        splitEffect?.nativeBuildGroupId,
+        splitEffect?.nativeBuildAnimBg,
+      ],
+      [splitText.id, "paragraph", 1, true],
+    );
+
+    function CuedDeck() {
+      const source = useMotionScope();
+      const follower = useMotionScope();
+      return createElement(
+        Deck,
+        { width: 960, height: 540 },
+        createElement(
+          Slide,
+          { id: "cue" },
+          createElement(
+            Step,
+            { n: 1 },
+            createElement(
+              MotionScope,
+              { scope: source, publishEnd: source.cue("ready") },
+              createElement(Shape, {
+                id: "cue-source",
+                x: 20,
+                y: 20,
+                width: 80,
+                height: 40,
+                fill: "#336699",
+                enter: fade(),
+              }),
+            ),
+            createElement(
+              MotionScope,
+              { scope: follower, startAt: after(source.cue("ready"), 20) },
+              createElement(Shape, {
+                id: "cue-follower",
+                x: 20,
+                y: 80,
+                width: 80,
+                height: 40,
+                fill: "#993366",
+                enter: fade(),
+              }),
+            ),
+          ),
+        ),
+      );
+    }
+
+    const cueResult = await build(createElement(CuedDeck));
+    assert.deepEqual((await validatePptx(cueResult.pptx)).errors, []);
+
+    const path = "ppt/slides/slide1.xml";
+    const parts = unzipSync(result.pptx);
+    const xml = strFromU8(parts[path]!);
+    const wrongAnimBg = xml.replace(
+      `<p:bldP spid="${splitText.id}" grpId="1" build="p" animBg="1"></p:bldP>`,
+      `<p:bldP spid="${splitText.id}" grpId="1" build="p" animBg="0"></p:bldP>`,
+    );
+    assert.notEqual(wrongAnimBg, xml);
+    const wrongFile = await validatePptx(
+      zipSync({ ...parts, [path]: strToU8(wrongAnimBg) }),
+    );
+    assert.ok(
+      wrongFile.errors.some(
+        ({ code }) => code === "inconsistent-animation-background-role",
       ),
     );
   });

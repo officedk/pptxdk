@@ -34,13 +34,20 @@ export type MotionGranularity =
   | "word"
   | "letter"
   | "series"
-  | "category";
+  | "category"
+  | "seriesElements"
+  | "categoryElements";
 
 export type MotionTargetRange =
   | { readonly type: "paragraph"; readonly start: number; readonly end: number }
   | {
       readonly type: "chart";
-      readonly step: "gridLegend" | "series" | "category";
+      readonly step:
+        | "gridLegend"
+        | "series"
+        | "category"
+        | "ptInSeries"
+        | "ptInCategory";
       readonly seriesIndex: number;
       readonly categoryIndex: number;
     };
@@ -172,7 +179,7 @@ export type EffectOptions = {
   readonly easing?: Easing;
   /** Text per-word or per-letter launch interval; defaults to one tenth of single behavior duration when omitted. */
   readonly intervalMs?: number;
-  /** Unfold item by item by native paragraph, word, letter, chart series, or category. */
+  /** Unfold item by item by native paragraph, word, letter, chart series, category, series points, or category points. */
   readonly by?: MotionGranularity;
 };
 
@@ -501,8 +508,8 @@ type MotionTarget = {
   readonly filled: boolean;
   readonly solidFilled?: boolean;
   readonly paragraphCount?: number;
-  readonly chartSeriesCount?: number;
-  readonly chartCategoryCount?: number;
+  /** Original point count for every chart-wide series, in formal series order. */
+  readonly chartSeriesPointCounts?: readonly number[];
   readonly box?: GeometryBox;
   readonly rotationDegrees?: number;
   readonly hasBackground?: boolean;
@@ -680,6 +687,8 @@ const motionGranularities = new Set<MotionGranularity>([
   "letter",
   "series",
   "category",
+  "seriesElements",
+  "categoryElements",
 ]);
 
 // ST_TLTime uses unsignedInt; repeatCount unit is one thousandth of a round.

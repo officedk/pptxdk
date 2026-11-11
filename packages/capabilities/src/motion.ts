@@ -249,6 +249,25 @@ function timingTarget(
   );
 }
 
+type NativeChartBuild = "series" | "category" | "seriesEl" | "categoryEl";
+
+function nativeChartBuild(
+  by: TimingEffect["by"],
+): NativeChartBuild | undefined {
+  switch (by) {
+    case "series":
+      return "series";
+    case "category":
+      return "category";
+    case "seriesElements":
+      return "seriesEl";
+    case "categoryElements":
+      return "categoryEl";
+    default:
+      return undefined;
+  }
+}
+
 function attributeNames(value: string): string {
   return element(
     "p:attrNameLst",
@@ -2155,19 +2174,20 @@ function timingXml(
       }),
     ),
     ...[...chartBuildTargets.values()].map((effect) => {
-      const by =
-        effect.target.range?.type === "chart"
-          ? effect.target.range.step
-          : undefined;
+      const build = nativeChartBuild(effect.by);
       return element(
         "p:bldGraphic",
         {
           spid: effect.target.id,
           grpId: chartBuildGroupIds.get(effect.target.id),
         },
-        by === "series" || by === "category"
-          ? element("p:bldSub", undefined, element("a:bldChart", { bld: by }))
-          : element("p:bldAsOne", undefined),
+        build === undefined
+          ? element("p:bldAsOne", undefined)
+          : element(
+              "p:bldSub",
+              undefined,
+              element("a:bldChart", { bld: build }),
+            ),
       );
     }),
   ];

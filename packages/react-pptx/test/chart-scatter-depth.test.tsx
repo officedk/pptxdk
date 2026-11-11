@@ -992,17 +992,31 @@ describe("scatter depth", () => {
     );
   });
 
-  it("builds scatter series motion and rejects category granularity", async () => {
+  it("builds scatter series and category batch motion from original observation slots", async () => {
     const result = await build(
       <Deck width={480} height={300}>
         <Slide id="scatter-motion">
           <Chart
-            id="scatter-motion"
+            id="scatter-series-motion"
             x={10}
             y={10}
-            width={300}
+            width={220}
             height={220}
             enter={fade({ by: "series", duration: 400 })}
+            groups={[
+              xyGroup([
+                { name: "North", x: [1, 2, 4], y: [2, 4, 8] },
+                { name: "South", x: [1, 3], y: [5, 10] },
+              ]),
+            ]}
+          />
+          <Chart
+            id="scatter-category-motion"
+            x={240}
+            y={10}
+            width={220}
+            height={220}
+            enter={fade({ by: "category", duration: 400 })}
             groups={[
               xyGroup([
                 { name: "North", x: [1, 2, 4], y: [2, 4, 8] },
@@ -1022,29 +1036,10 @@ describe("scatter depth", () => {
     assert.ok(slideXml.includes('seriesIdx="1"'));
     assert.ok(slideXml.includes('bldStep="series"'));
     assert.ok(slideXml.includes('<a:bldChart bld="series">'));
-
-    await assert.rejects(
-      build(
-        <Deck width={480} height={300}>
-          <Slide id="scatter-category-motion">
-            <Chart
-              id="scatter-category-motion"
-              x={10}
-              y={10}
-              width={300}
-              height={220}
-              enter={fade({ by: "category", duration: 400 })}
-              groups={[xyGroup([{ name: "North", x: [1, 2], y: [2, 4] }])]}
-            />
-          </Slide>
-        </Deck>,
-      ),
-      (error: unknown) => {
-        assert.ok(error instanceof BuildError);
-        assert.equal(error.diagnostics[0]?.code, "invalid-motion-granularity");
-        return true;
-      },
-    );
+    assert.ok(slideXml.includes('categoryIdx="0"'));
+    assert.ok(slideXml.includes('categoryIdx="2"'));
+    assert.ok(slideXml.includes('bldStep="category"'));
+    assert.ok(slideXml.includes('<a:bldChart bld="category">'));
   });
 
   it("diagnoses marker-only span from actual scatter XML independently", async () => {

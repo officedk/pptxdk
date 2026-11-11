@@ -418,7 +418,12 @@ export type FileAnimationTargetRange =
   | { readonly type: "paragraph"; readonly start: number; readonly end: number }
   | {
       readonly type: "chart";
-      readonly step: "gridLegend" | "series" | "category";
+      readonly step:
+        | "gridLegend"
+        | "series"
+        | "category"
+        | "ptInSeries"
+        | "ptInCategory";
       readonly seriesIndex: number;
       readonly categoryIndex: number;
     };
@@ -453,7 +458,13 @@ export type FileAnimationEffect = {
   readonly targetId: number;
   readonly timingId: number;
   readonly targetRange?: FileAnimationTargetRange;
-  readonly nativeBuild?: "paragraph" | "allAtOnce" | "series" | "category";
+  readonly nativeBuild?:
+    | "paragraph"
+    | "allAtOnce"
+    | "series"
+    | "category"
+    | "seriesEl"
+    | "categoryEl";
   readonly nativeBuildGroupId?: number;
   readonly nativeBuildAnimBg?: boolean;
   readonly nativeBehaviors?: readonly FileAnimationBehavior[];
@@ -6559,7 +6570,10 @@ function readSlideAnimations(
     string,
     { readonly build: string; readonly animBg?: boolean }
   >();
-  const chartBuilds = new Map<string, "all" | "series" | "category">();
+  const chartBuilds = new Map<
+    string,
+    "all" | "series" | "category" | "seriesEl" | "categoryEl"
+  >();
   const declaredChartBuildGroups = new Set<string>();
   if (buildList !== undefined) {
     for (const build of elements(buildList, presentationNamespace, "bldP")) {
@@ -6689,7 +6703,13 @@ function readSlideAnimations(
             ? undefined
             : "all"
           : attribute(chartBuild, "bld");
-      if (mode === "all" || mode === "series" || mode === "category") {
+      if (
+        mode === "all" ||
+        mode === "series" ||
+        mode === "category" ||
+        mode === "seriesEl" ||
+        mode === "categoryEl"
+      ) {
         chartBuilds.set(key, mode);
       } else {
         issue(
@@ -6840,7 +6860,11 @@ function readSlideAnimations(
       if (
         seriesIndex === undefined ||
         categoryIndex === undefined ||
-        (step !== "gridLegend" && step !== "series" && step !== "category")
+        (step !== "gridLegend" &&
+          step !== "series" &&
+          step !== "category" &&
+          step !== "ptInSeries" &&
+          step !== "ptInCategory")
       ) {
         return undefined;
       }
@@ -7233,7 +7257,9 @@ function readSlideAnimations(
               categoryIndex === undefined ||
               (step !== "gridLegend" &&
                 step !== "series" &&
-                step !== "category")
+                step !== "category" &&
+                step !== "ptInSeries" &&
+                step !== "ptInCategory")
             ) {
               issue(
                 errors,
@@ -7459,11 +7485,13 @@ function readSlideAnimations(
           continue;
         }
       }
-      const chartSeriesCount = targetObject?.chart?.series.length ?? 0;
-      const chartCategories = targetObject?.chart?.series.find(
-        (item) => item.categories !== undefined,
-      )?.categories;
-      const chartCategoryCount = chartCategories?.length ?? 0;
+      const chartSeries = targetObject?.chart?.series ?? [];
+      const chartCategoryCount = Math.max(
+        0,
+        ...chartSeries.map(
+          (item) => item.x?.length ?? item.values?.length ?? 0,
+        ),
+      );
       if (
         targetRange?.type === "paragraph" &&
         (targetObject?.text === undefined ||
@@ -7527,40 +7555,90 @@ function readSlideAnimations(
             );
             continue;
           }
-        } else if (chartBuild !== targetRange.step) {
-          issue(
-            errors,
-            part,
-            "invalid-animation-target-range",
-            "Chart animation step does not match native chart build mode",
-          );
-          continue;
-        } else if (
-          targetRange.step === "series" &&
-          (targetRange.seriesIndex < 0 ||
-            targetRange.categoryIndex !== -4 ||
-            targetRange.seriesIndex >= chartSeriesCount)
-        ) {
-          issue(
-            errors,
-            part,
-            "invalid-animation-target-range",
-            "Chart series animation range exceeds series in native chart",
-          );
-          continue;
-        } else if (
-          targetRange.step === "category" &&
-          (targetRange.seriesIndex !== -4 ||
-            targetRange.categoryIndex < 0 ||
-            targetRange.categoryIndex >= chartCategoryCount)
-        ) {
-          issue(
-            errors,
-            part,
-            "invalid-animation-target-range",
-            "Chart category animation range exceeds categories in native chart",
-          );
-          continue;
+        } else {
+          const expectedBuild =
+            targetRange.step === "ptInSeries"
+              ? "seriesEl"
+              : targetRange.step === "ptInCategory"
+                ? "categoryEl"
+                : targetRange.step;
+          if (chartBuild !== expectedBuild) {
+            issue(
+              errors,
+              part,
+              "invalid-animation-target-range",
+              "Chart animation step does not match native chart build mode",
+            );
+            continue;
+          }
+          if (
+            targetRange.step === "series" &&
+            (targetRange.seriesIndex < 0 ||
+              targetRange.categoryIndex !== -4 ||
+              !chartSeries.some(
+                ({ index }) => index === targetRange.seriesIndex,
+              ))
+          ) {
+            issue(
+              errors,
+              part,
+              "invalid-animation-target-range",
+              "Chart series animation range exceeds series in native chart",
+            );
+            continue;
+          }
+          if (
+            targetRange.step === "category" &&
+            (targetRange.seriesIndex !== -4 ||
+              targetRange.categoryIndex < 0 ||
+              targetRange.categoryIndex >= chartCategoryCount)
+          ) {
+            issue(
+              errors,
+              part,
+              "invalid-animation-target-range",
+              "Chart category animation range exceeds categories in native chart",
+            );
+            continue;
+          }
+          if (
+            targetRange.step === "ptInSeries" ||
+            targetRange.step === "ptInCategory"
+          ) {
+            if (targetRange.seriesIndex < 0 || targetRange.categoryIndex < 0) {
+              issue(
+                errors,
+                part,
+                "invalid-animation-target-range",
+                "Chart point animation must use non-negative series and category indices",
+              );
+              continue;
+            }
+            const series = chartSeries.find(
+              ({ index }) => index === targetRange.seriesIndex,
+            );
+            if (series === undefined) {
+              issue(
+                errors,
+                part,
+                "invalid-animation-target-range",
+                "Chart point animation targets a series that does not exist in native chart",
+              );
+              continue;
+            }
+            // Bound a point by its owning series cache, not by the longest series or the number
+            // of series declarations.
+            const pointCount = series.x?.length ?? series.values?.length ?? 0;
+            if (targetRange.categoryIndex >= pointCount) {
+              issue(
+                errors,
+                part,
+                "invalid-animation-target-range",
+                "Chart point animation range exceeds points in native chart series",
+              );
+              continue;
+            }
+          }
         }
       }
       const iterateNodes = elements(
@@ -7703,7 +7781,10 @@ function readSlideAnimations(
           ? "paragraph"
           : paragraphBuild?.build === "allAtOnce"
             ? "allAtOnce"
-            : chartBuild === "series" || chartBuild === "category"
+            : chartBuild === "series" ||
+                chartBuild === "category" ||
+                chartBuild === "seriesEl" ||
+                chartBuild === "categoryEl"
               ? chartBuild
               : undefined;
       effects.push({

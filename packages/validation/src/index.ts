@@ -115,13 +115,38 @@ export type FileChartSeries = {
   readonly name: string;
   readonly categories: readonly string[];
   readonly values: readonly (number | null)[];
+  /** Native c:idx, the chart-wide series identity. */
+  readonly index: number;
+  /** Native c:order, the series order within its chart group. */
+  readonly order: number;
+  /** Position of the owning chart group in c:plotArea order. */
+  readonly groupIndex: number;
+};
+
+export type FileChartAxis = {
+  readonly id: number;
+  readonly kind: "category" | "value";
+  readonly crossAxisId: number;
+};
+
+export type FileChartGroup = {
+  readonly type: string;
+  readonly direction?: "col" | "bar";
+  readonly grouping?: string;
+  /** c:axId references in native order; empty for pie and doughnut groups. */
+  readonly axisIds: readonly number[];
+  /** Native series ids in c:order order. */
+  readonly seriesIndices: readonly number[];
 };
 
 export type FileChart = {
   readonly types: readonly string[];
   readonly direction?: "col" | "bar";
   readonly grouping?: string;
+  /** Flattened series in chart-group order and native c:order order. */
   readonly series: readonly FileChartSeries[];
+  readonly groups: readonly FileChartGroup[];
+  readonly axes: readonly FileChartAxis[];
   readonly embeddedWorkbook?: {
     readonly part: string;
     readonly sheetName: string;
@@ -2363,10 +2388,80 @@ function spreadsheetStringText(element: XmlElement): string {
   return text;
 }
 
+type ChartFormulaReference = {
+  readonly name: string;
+  readonly categories: string;
+  readonly values: string;
+};
+
+type ChartFormulaSeries = {
+  readonly series: FileChartSeries;
+  readonly formula: ChartFormulaReference;
+};
+
+type FormulaRange = {
+  readonly sheetName: string;
+  readonly startColumn: number;
+  readonly startRow: number;
+  readonly endColumn: number;
+  readonly endRow: number;
+  readonly hasRange: boolean;
+};
+
+function spreadsheetColumnNumber(column: string): number | undefined {
+  let value = 0;
+  for (const character of column) {
+    const digit = character.charCodeAt(0) - 65;
+    if (digit < 0 || digit > 25) return undefined;
+    value = value * 26 + digit + 1;
+  }
+  return value === 0 ? undefined : value;
+}
+
+/** Parses only the A1 references emitted by the chart writer, never arbitrary Excel formulas. */
+function chartFormulaRange(
+  formula: string,
+  expectedSheet: string,
+): FormulaRange | undefined {
+  const match =
+    /^(?:'((?:[^']|'')+)'|([^!]+))!\$?([A-Z]+)\$?(\d+)(?::\$?([A-Z]+)\$?(\d+))?$/u.exec(
+      formula,
+    );
+  if (match === null) return undefined;
+  const rawSheet = match[1] ?? match[2] ?? "";
+  const sheetName =
+    match[1] === undefined ? rawSheet : rawSheet.replace(/''/gu, "'");
+  if (sheetName !== expectedSheet) return undefined;
+  const startColumn = spreadsheetColumnNumber(match[3]!);
+  const startRow = Number(match[4]);
+  const endColumn =
+    match[5] === undefined ? startColumn : spreadsheetColumnNumber(match[5]);
+  const endRow = match[6] === undefined ? startRow : Number(match[6]);
+  if (
+    startColumn === undefined ||
+    endColumn === undefined ||
+    !Number.isSafeInteger(startRow) ||
+    !Number.isSafeInteger(endRow) ||
+    startRow < 1 ||
+    endRow < startRow
+  ) {
+    return undefined;
+  }
+  return {
+    sheetName,
+    startColumn,
+    startRow,
+    endColumn,
+    endRow,
+    hasRange: match[6] !== undefined,
+  };
+}
+
 function readEmbeddedWorkbook(
   part: string,
+  chartPart: string,
   bytes: Uint8Array,
-  series: readonly FileChartSeries[],
+  formulaSeries: readonly ChartFormulaSeries[],
   errors: ValidationIssue[],
 ): FileChart["embeddedWorkbook"] {
   let files: XmlFiles;
@@ -2516,69 +2611,119 @@ function readEmbeddedWorkbook(
       if (reference !== "") cells.set(reference, value);
     }
   }
-  const categoryCount = series[0]?.categories.length ?? 0;
-  const categories = Array.from({ length: categoryCount }, (_, index) => {
-    const category = cells.get(`A${index + 2}`);
-    if (category === undefined) {
-      issue(
-        errors,
-        part,
-        "incomplete-embedded-workbook",
-        `Workbook missing category A${index + 2}`,
-      );
-    }
-    return category ?? "";
-  });
-  const workbookSeries = series.map((expected, index) => {
-    const column = spreadsheetColumn(index + 1);
-    const name = cells.get(`${column}1`);
-    if (name === undefined) {
-      issue(
-        errors,
-        part,
-        "incomplete-embedded-workbook",
-        `Workbook missing series name ${column}1`,
-      );
-    }
-    const values = Array.from({ length: categoryCount }, (_, row) => {
-      const text = cells.get(`${column}${row + 2}`);
-      if (text === undefined) return null;
-      const value = Number(text);
-      if (!Number.isFinite(value)) {
-        issue(
-          errors,
-          part,
-          "invalid-embedded-workbook-value",
-          `Workbook ${column}${row + 2} is not a finite number`,
-        );
-        return null;
-      }
-      return value;
-    });
+
+  const cellAt = (column: number, row: number) =>
+    cells.get(`${spreadsheetColumn(column - 1)}${row}`);
+
+  const workbookSeries: FileChartSeries[] = [];
+  for (const { series, formula } of formulaSeries) {
+    const nameRange = chartFormulaRange(formula.name, sheetName);
+    const categoryRange = chartFormulaRange(formula.categories, sheetName);
+    const valueRange = chartFormulaRange(formula.values, sheetName);
     if (
-      name !== expected.name ||
-      categories.some(
-        (category, row) => category !== expected.categories[row],
-      ) ||
-      values.some((value, row) => value !== expected.values[row])
+      nameRange === undefined ||
+      categoryRange === undefined ||
+      valueRange === undefined ||
+      nameRange.hasRange ||
+      !categoryRange.hasRange ||
+      !valueRange.hasRange ||
+      categoryRange.startColumn !== categoryRange.endColumn ||
+      valueRange.startColumn !== valueRange.endColumn ||
+      categoryRange.startRow !== valueRange.startRow ||
+      categoryRange.endRow !== valueRange.endRow
     ) {
       issue(
         errors,
+        chartPart,
+        "invalid-chart-formula",
+        `Chart series ${series.name} does not reference corresponding workbook cell`,
+      );
+      continue;
+    }
+    if (
+      nameRange.startRow < 1 ||
+      categoryRange.startRow < 2 ||
+      categoryRange.endRow - categoryRange.startRow + 1 !==
+        series.categories.length ||
+      valueRange.endRow - valueRange.startRow + 1 !== series.values.length
+    ) {
+      issue(
+        errors,
+        chartPart,
+        "invalid-chart-formula",
+        `Chart series ${series.name} does not reference corresponding workbook cell`,
+      );
+      continue;
+    }
+    const nameCell = cellAt(nameRange.startColumn, nameRange.startRow);
+    if (nameCell === undefined) {
+      issue(
+        errors,
         part,
-        "chart-workbook-mismatch",
-        `Chart series ${expected.name} does not match embedded workbook content`,
+        "incomplete-embedded-workbook",
+        `Workbook missing series name ${spreadsheetColumn(nameRange.startColumn - 1)}${nameRange.startRow}`,
       );
     }
-    return {
-      name: name ?? "",
+    const categories = Array.from(
+      { length: categoryRange.endRow - categoryRange.startRow + 1 },
+      (_, index) => {
+        const row = categoryRange.startRow + index;
+        const category = cellAt(categoryRange.startColumn, row);
+        if (category === undefined) {
+          issue(
+            errors,
+            part,
+            "incomplete-embedded-workbook",
+            `Workbook missing category ${spreadsheetColumn(categoryRange.startColumn - 1)}${row}`,
+          );
+        }
+        return category ?? "";
+      },
+    );
+    const values = Array.from(
+      { length: valueRange.endRow - valueRange.startRow + 1 },
+      (_, index) => {
+        const row = valueRange.startRow + index;
+        const text = cellAt(valueRange.startColumn, row);
+        if (text === undefined) return null;
+        const value = Number(text);
+        if (!Number.isFinite(value)) {
+          issue(
+            errors,
+            part,
+            "invalid-embedded-workbook-value",
+            `Workbook ${spreadsheetColumn(valueRange.startColumn - 1)}${row} is not a finite number`,
+          );
+          return null;
+        }
+        return value;
+      },
+    );
+    if (
+      nameCell !== series.name ||
+      categories.some((category, row) => category !== series.categories[row]) ||
+      values.some((value, row) => value !== series.values[row])
+    ) {
+      issue(
+        errors,
+        chartPart,
+        "chart-workbook-mismatch",
+        `Chart series ${series.name} does not match embedded workbook content`,
+      );
+    }
+    workbookSeries.push({
+      name: nameCell ?? "",
       categories,
       values,
-    };
-  });
+      index: series.index,
+      order: series.order,
+      groupIndex: series.groupIndex,
+    });
+  }
   return {
     part,
     sheetName,
-    categories,
+    categories: workbookSeries[0]?.categories ?? [],
     series: workbookSeries,
   };
 }
@@ -2745,15 +2890,28 @@ function validateChart(
   const chart = first(chartXml, chartNamespace, "chart");
   const plotArea =
     chart === undefined ? undefined : first(chart, chartNamespace, "plotArea");
-  const typeNodes =
-    plotArea === undefined
-      ? []
-      : elements(plotArea, chartNamespace, "barChart").concat(
-          elements(plotArea, chartNamespace, "lineChart"),
-          elements(plotArea, chartNamespace, "areaChart"),
-          elements(plotArea, chartNamespace, "pieChart"),
-          elements(plotArea, chartNamespace, "doughnutChart"),
-        );
+  const chartTypeNames = new Set([
+    "barChart",
+    "lineChart",
+    "areaChart",
+    "pieChart",
+    "doughnutChart",
+  ]);
+  const typeNodes: XmlElement[] = [];
+  for (
+    let child = plotArea?.firstChild ?? null;
+    child !== null;
+    child = child.nextSibling
+  ) {
+    if (
+      child.nodeType === 1 &&
+      child.namespaceURI === chartNamespace &&
+      typeof child.localName === "string" &&
+      chartTypeNames.has(child.localName)
+    ) {
+      typeNodes.push(child as XmlElement);
+    }
+  }
   if (typeNodes.length === 0) {
     issue(
       errors,
@@ -2788,17 +2946,138 @@ function validateChart(
           first(firstType, chartNamespace, "grouping") ?? firstType,
           "val",
         );
+
+  const axisNodes: XmlElement[] = [];
+  for (
+    let child = plotArea?.firstChild ?? null;
+    child !== null;
+    child = child.nextSibling
+  ) {
+    if (
+      child.nodeType === 1 &&
+      child.namespaceURI === chartNamespace &&
+      (child.localName === "catAx" || child.localName === "valAx")
+    ) {
+      axisNodes.push(child as XmlElement);
+    }
+  }
+  const axes: FileChartAxis[] = [];
+  const axisById = new Map<number, FileChartAxis>();
+  for (const axisNode of axisNodes) {
+    const id = integerAttribute(first(axisNode, chartNamespace, "axId"), "val");
+    const crossAxisId = integerAttribute(
+      first(axisNode, chartNamespace, "crossAx"),
+      "val",
+    );
+    if (id === undefined || id < 0 || crossAxisId === undefined) {
+      issue(
+        errors,
+        chartPart,
+        "invalid-chart-axis",
+        "Chart axis is missing a valid numeric id or crossing axis",
+      );
+      continue;
+    }
+    if (axisById.has(id)) {
+      issue(
+        errors,
+        chartPart,
+        "invalid-chart-axis",
+        `Chart axis id ${id} is duplicated`,
+      );
+      continue;
+    }
+    const axis: FileChartAxis = {
+      id,
+      kind: axisNode.localName === "catAx" ? "category" : "value",
+      crossAxisId,
+    };
+    axes.push(axis);
+    axisById.set(id, axis);
+  }
+  for (const axis of axes) {
+    const crossAxis = axisById.get(axis.crossAxisId);
+    if (crossAxis === undefined || crossAxis.crossAxisId !== axis.id) {
+      issue(
+        errors,
+        chartPart,
+        "invalid-chart-axis",
+        `Chart axis ${axis.id} has an invalid crossing axis`,
+      );
+    }
+  }
+
   const series: FileChartSeries[] = [];
-  const formulas: {
-    readonly name: string;
-    readonly categories: string;
-    readonly values: string;
-  }[] = [];
-  for (const typeNode of typeNodes) {
+  const formulaSeries: ChartFormulaSeries[] = [];
+  const groups: FileChartGroup[] = [];
+  const seenSeriesIndexes = new Set<number>();
+  const seenSeriesOrders = new Set<number>();
+  for (const [groupIndex, typeNode] of typeNodes.entries()) {
     const typeGrouping = attribute(
       first(typeNode, chartNamespace, "grouping") ?? typeNode,
       "val",
     );
+    const axisIds = elements(typeNode, chartNamespace, "axId").flatMap(
+      (axisId) => {
+        const value = integerAttribute(axisId, "val");
+        if (value === undefined || value < 0) {
+          issue(
+            errors,
+            chartPart,
+            "invalid-chart-axis",
+            "Chart group contains an invalid axis reference",
+          );
+          return [];
+        }
+        return [value];
+      },
+    );
+    if (
+      typeNode.localName === "pieChart" ||
+      typeNode.localName === "doughnutChart"
+    ) {
+      if (axisIds.length !== 0) {
+        issue(
+          errors,
+          chartPart,
+          "invalid-chart-axis",
+          "Pie and doughnut chart groups do not reference category or value axes",
+        );
+      }
+    } else if (axisIds.length !== 2) {
+      issue(
+        errors,
+        chartPart,
+        "invalid-chart-axis",
+        "Cartesian chart group must reference a category axis and a value axis",
+      );
+    } else {
+      const roles = axisIds.map((id) => {
+        const axis = axisById.get(id);
+        if (axis === undefined) {
+          issue(
+            errors,
+            chartPart,
+            "unknown-chart-axis",
+            `Chart group references unknown axis id ${id}`,
+          );
+          return undefined;
+        }
+        return axis.kind;
+      });
+      if (
+        !roles.includes("category") ||
+        !roles.includes("value") ||
+        new Set(roles).size !== 2
+      ) {
+        issue(
+          errors,
+          chartPart,
+          "invalid-chart-axis-role",
+          "Chart group axis references must include one category axis and one value axis",
+        );
+      }
+    }
     for (const positionNode of descendantsByName(
       typeNode,
       chartNamespace,
@@ -2836,7 +3115,45 @@ function validateChart(
         );
       }
     }
+
+    const pending: {
+      readonly order: number;
+      readonly series: FileChartSeries;
+      readonly formula: ChartFormulaReference;
+    }[] = [];
     for (const chartSeries of elements(typeNode, chartNamespace, "ser")) {
+      const index = integerAttribute(
+        first(chartSeries, chartNamespace, "idx"),
+        "val",
+      );
+      const order = integerAttribute(
+        first(chartSeries, chartNamespace, "order"),
+        "val",
+      );
+      if (
+        index === undefined ||
+        index < 0 ||
+        order === undefined ||
+        order < 0
+      ) {
+        issue(
+          errors,
+          chartPart,
+          "invalid-chart-series-index",
+          "Chart series is missing a valid non-negative c:idx or c:order",
+        );
+        continue;
+      }
+      if (seenSeriesIndexes.has(index) || seenSeriesOrders.has(order)) {
+        issue(
+          errors,
+          chartPart,
+          "invalid-chart-series-index",
+          `Chart series index ${index} or order ${order} is duplicated`,
+        );
+      }
+      seenSeriesIndexes.add(index);
+      seenSeriesOrders.add(order);
       const title = first(chartSeries, chartNamespace, "tx");
       const nameCache = chartStringCache(
         title === undefined
@@ -2880,18 +3197,49 @@ function validateChart(
         );
       }
       const name = nameCache.values[0] ?? "";
-      series.push({
-        name,
-        categories: categoryCache.values,
-        values: valueCache.values,
-      });
-      formulas.push({
-        name: nameCache.formula,
-        categories: categoryCache.formula,
-        values: valueCache.formula,
+      pending.push({
+        order,
+        series: {
+          name,
+          categories: categoryCache.values,
+          values: valueCache.values,
+          index,
+          order,
+          groupIndex,
+        },
+        formula: {
+          name: nameCache.formula,
+          categories: categoryCache.formula,
+          values: valueCache.formula,
+        },
       });
     }
+    pending.sort((left, right) => left.order - right.order);
+    for (const item of pending) {
+      series.push(item.series);
+      formulaSeries.push({
+        series: item.series,
+        formula: item.formula,
+      });
+    }
+    const groupDirection =
+      typeNode.localName === "barChart"
+        ? attribute(
+            first(typeNode, chartNamespace, "barDir") ?? typeNode,
+            "val",
+          )
+        : undefined;
+    groups.push({
+      type: typeNode.localName ?? "",
+      ...(groupDirection === "bar" || groupDirection === "col"
+        ? { direction: groupDirection }
+        : {}),
+      ...(typeGrouping === "" ? {} : { grouping: typeGrouping }),
+      axisIds,
+      seriesIndices: pending.map(({ series: item }) => item.index),
+    });
   }
+
   const externalData = first(chartXml, chartNamespace, "externalData");
   const workbookRelationshipId =
     externalData?.getAttributeNS(relationshipNamespace, "id") ?? "";
@@ -2931,52 +3279,32 @@ function validateChart(
     } else {
       embeddedWorkbook = readEmbeddedWorkbook(
         workbookPart,
+        chartPart,
         workbookBytes,
-        series,
+        formulaSeries,
         errors,
       );
     }
   }
   const workbookSeries = embeddedWorkbook?.series ?? [];
-  const formulaSheetName = embeddedWorkbook?.sheetName ?? "";
-  for (const [index, formula] of formulas.entries()) {
-    const column = spreadsheetColumn(index + 1);
-    const lastRow = (series[index]?.categories.length ?? 0) + 1;
-    const expected = {
-      name: `${formulaSheetName}!$${column}$1`,
-      categories: `${formulaSheetName}!$A$2:$A$${lastRow}`,
-      values: `${formulaSheetName}!$${column}$2:$${column}$${lastRow}`,
-    };
+  const chartSeriesById = new Map(series.map((item) => [item.index, item]));
+  for (const workbookItem of workbookSeries) {
+    const chartValue = chartSeriesById.get(workbookItem.index);
     if (
-      formula.name !== expected.name ||
-      formula.categories !== expected.categories ||
-      formula.values !== expected.values
-    ) {
-      issue(
-        errors,
-        chartPart,
-        "invalid-chart-formula",
-        `Chart series ${series[index]?.name ?? index + 1} does not reference corresponding workbook cell`,
-      );
-    }
-    const workbookValues = workbookSeries[index];
-    const chartValues = series[index];
-    if (
-      workbookValues !== undefined &&
-      chartValues !== undefined &&
-      (workbookValues.name !== chartValues.name ||
-        workbookValues.categories.some(
-          (category, row) => category !== chartValues.categories[row],
+      chartValue !== undefined &&
+      (workbookItem.name !== chartValue.name ||
+        workbookItem.categories.some(
+          (category, row) => category !== chartValue.categories[row],
         ) ||
-        workbookValues.values.some(
-          (value, row) => value !== chartValues.values[row],
+        workbookItem.values.some(
+          (value, row) => value !== chartValue.values[row],
         ))
     ) {
       issue(
         errors,
         chartPart,
         "chart-workbook-mismatch",
-        `Chart series ${chartValues.name} cache does not match workbook`,
+        `Chart series ${chartValue.name} cache does not match workbook`,
       );
     }
   }
@@ -2988,6 +3316,8 @@ function validateChart(
       : { direction: direction as "bar" | "col" }),
     ...(grouping === undefined || grouping === "" ? {} : { grouping }),
     series,
+    groups,
+    axes,
     ...(embeddedWorkbook === undefined ? {} : { embeddedWorkbook }),
   };
   return {

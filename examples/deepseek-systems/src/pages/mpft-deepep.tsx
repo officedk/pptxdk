@@ -54,7 +54,6 @@ export function MpftDeepEpPage() {
       >
         <Chart
           id="deepep-bandwidth-chart"
-          kind="column"
           x={64}
           y={168}
           width={556}
@@ -64,41 +63,51 @@ export function MpftDeepEpPage() {
             fontSize: 10.5,
             color: colors.ink,
           }}
-          data={{
-            categories: epScaleCategories,
-            series: [
-              {
-                name: "Dispatch 分发带宽 (GB/s)",
-                values: dispatchBandwidth,
-                color: colors.compute,
-              },
-              {
-                name: "Combine 聚合带宽 (GB/s)",
-                values: combineBandwidth,
-                color: colors.comm,
-              },
-            ],
-          }}
           legend="top"
-          dataLabels={{
-            value: true,
-            position: "outsideEnd",
-            numberFormat: "0.0",
-            style: { fontFamily: "body", fontSize: 10, color: colors.ink },
+          axes={{
+            category: {
+              kind: "category",
+              line: { color: colors.steel, width: 1 },
+              style: { fontFamily: "body", fontSize: 10.5, color: colors.ink },
+            },
+            value: {
+              kind: "value",
+              min: 0,
+              max: 70,
+              majorUnit: 14,
+              numberFormat: "0",
+              gridlines: { color: colors.line, width: 1 },
+              line: false,
+              style: { fontFamily: "body", fontSize: 10, color: colors.muted },
+            },
           }}
-          valueAxis={{
-            min: 0,
-            max: 70,
-            majorUnit: 14,
-            numberFormat: "0",
-            gridlines: { color: colors.line, width: 1 },
-            line: false,
-            style: { fontFamily: "body", fontSize: 10, color: colors.muted },
-          }}
-          categoryAxis={{
-            line: { color: colors.steel, width: 1 },
-            style: { fontFamily: "body", fontSize: 10.5, color: colors.ink },
-          }}
+          groups={[
+            {
+              kind: "column",
+              data: {
+                kind: "shared-categories",
+                categories: epScaleCategories,
+              },
+              series: [
+                {
+                  name: "Dispatch 分发带宽 (GB/s)",
+                  values: dispatchBandwidth,
+                  color: colors.compute,
+                },
+                {
+                  name: "Combine 聚合带宽 (GB/s)",
+                  values: combineBandwidth,
+                  color: colors.comm,
+                },
+              ],
+              dataLabels: {
+                value: true,
+                position: "outsideEnd",
+                numberFormat: "0.0",
+                style: { fontFamily: "body", fontSize: 10, color: colors.ink },
+              },
+            },
+          ]}
         />
         <Text
           x={68}

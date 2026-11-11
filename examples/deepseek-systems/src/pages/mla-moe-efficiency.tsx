@@ -27,54 +27,67 @@ export function MlaMoeEfficiencyPage() {
       >
         <Chart
           id="mla-kv-cache-chart"
-          kind="bar"
           enter={wipe({ from: "left", duration: 460 })}
           x={66}
           y={168}
           width={544}
           height={272}
           style={{ fontFamily: "body", fontSize: 12, color: colors.ink }}
-          data={{
-            categories: [
-              "DeepSeek-V3 (MLA)",
-              "Qwen-2.5 72B (GQA)",
-              "LLaMA-3.1 405B (GQA)",
-            ],
-            series: [
-              {
-                name: "每 Token KV 缓存大小 (KB)",
-                values: [70.272, 327.68, 516.096],
-                color: colors.baseline,
-                points: {
-                  0: { color: colors.compute, labelColor: colors.compute },
-                  1: { color: colors.baseline, labelColor: colors.steel },
-                  2: { color: colors.baseline, labelColor: colors.steel },
+          legend={false}
+          plotArea={{ left: 146, top: 18, width: 344, height: 204 }}
+          axes={{
+            category: {
+              kind: "category",
+              line: { color: colors.steel, width: 1 },
+              style: { fontFamily: "body", fontSize: 12, color: colors.ink },
+            },
+            value: {
+              kind: "value",
+              min: 0,
+              max: 600,
+              majorUnit: 150,
+              numberFormat: '0" KB"',
+              gridlines: { color: colors.line, width: 1 },
+              line: false,
+              style: { fontFamily: "body", fontSize: 11, color: colors.muted },
+            },
+          }}
+          groups={[
+            {
+              kind: "bar",
+              data: {
+                kind: "shared-categories",
+                categories: [
+                  "DeepSeek-V3 (MLA)",
+                  "Qwen-2.5 72B (GQA)",
+                  "LLaMA-3.1 405B (GQA)",
+                ],
+              },
+              series: [
+                {
+                  name: "每 Token KV 缓存大小 (KB)",
+                  values: [70.272, 327.68, 516.096],
+                  color: colors.baseline,
+                  points: {
+                    0: { color: colors.compute, labelColor: colors.compute },
+                    1: { color: colors.baseline, labelColor: colors.steel },
+                    2: { color: colors.baseline, labelColor: colors.steel },
+                  },
+                },
+              ],
+              gapWidth: 72,
+              dataLabels: {
+                value: true,
+                position: "outsideEnd",
+                numberFormat: '0.0" KB"',
+                style: {
+                  fontFamily: "body",
+                  fontSize: 11.5,
+                  color: colors.ink,
                 },
               },
-            ],
-          }}
-          legend={false}
-          gapWidth={72}
-          plotArea={{ left: 146, top: 18, width: 344, height: 204 }}
-          dataLabels={{
-            value: true,
-            position: "outsideEnd",
-            numberFormat: '0.0" KB"',
-            style: { fontFamily: "body", fontSize: 11.5, color: colors.ink },
-          }}
-          valueAxis={{
-            min: 0,
-            max: 600,
-            majorUnit: 150,
-            numberFormat: '0" KB"',
-            gridlines: { color: colors.line, width: 1 },
-            line: false,
-            style: { fontFamily: "body", fontSize: 11, color: colors.muted },
-          }}
-          categoryAxis={{
-            line: { color: colors.steel, width: 1 },
-            style: { fontFamily: "body", fontSize: 12, color: colors.ink },
-          }}
+            },
+          ]}
         />
 
         {/* MLA Low-Rank Compression Schematic */}
@@ -151,57 +164,70 @@ export function MlaMoeEfficiencyPage() {
       >
         <Chart
           id="moe-training-flops-chart"
-          kind="column"
           enter={wipe({ duration: 460 })}
           x={662}
           y={168}
           width={552}
           height={272}
           style={{ fontFamily: "body", fontSize: 12, color: colors.ink }}
-          data={{
-            // Keep full model names and parameter counts visible on narrow category axes.
-            categories: [
-              "DeepSeek-V2\n(21B/236B)",
-              "DeepSeek-V3\n(37B/671B)",
-              "Qwen-2.5 72B\n(Dense)",
-              "LLaMA-3.1 405B\n(Dense)",
-            ],
-            series: [
-              {
-                name: "单 Token 训练算力 (GFLOPS)",
-                values: [155, 250, 394, 2448],
-                color: colors.baseline,
-                points: {
-                  0: { color: colors.comm, labelColor: colors.commText },
-                  1: { color: colors.compute, labelColor: colors.compute },
-                  2: { color: colors.baseline, labelColor: colors.steel },
-                  3: { color: colors.copper, labelColor: colors.copperText },
+          legend={false}
+          plotArea={{ left: 58, top: 24, width: 474, height: 194 }}
+          axes={{
+            category: {
+              kind: "category",
+              line: { color: colors.steel, width: 1 },
+              style: { fontFamily: "body", fontSize: 11, color: colors.ink },
+            },
+            value: {
+              kind: "value",
+              min: 0,
+              max: 2800,
+              majorUnit: 700,
+              numberFormat: "#,##0",
+              gridlines: { color: colors.line, width: 1 },
+              line: false,
+              style: { fontFamily: "body", fontSize: 11, color: colors.muted },
+            },
+          }}
+          groups={[
+            {
+              kind: "column",
+              data: {
+                kind: "shared-categories",
+                // Keep full model names and parameter counts visible on narrow category axes.
+                categories: [
+                  "DeepSeek-V2\n(21B/236B)",
+                  "DeepSeek-V3\n(37B/671B)",
+                  "Qwen-2.5 72B\n(Dense)",
+                  "LLaMA-3.1 405B\n(Dense)",
+                ],
+              },
+              series: [
+                {
+                  name: "单 Token 训练算力 (GFLOPS)",
+                  values: [155, 250, 394, 2448],
+                  color: colors.baseline,
+                  points: {
+                    0: { color: colors.comm, labelColor: colors.commText },
+                    1: { color: colors.compute, labelColor: colors.compute },
+                    2: { color: colors.baseline, labelColor: colors.steel },
+                    3: { color: colors.copper, labelColor: colors.copperText },
+                  },
+                },
+              ],
+              gapWidth: 85,
+              dataLabels: {
+                value: true,
+                position: "outsideEnd",
+                numberFormat: '#,##0" G"',
+                style: {
+                  fontFamily: "body",
+                  fontSize: 11.5,
+                  color: colors.ink,
                 },
               },
-            ],
-          }}
-          legend={false}
-          gapWidth={85}
-          plotArea={{ left: 58, top: 24, width: 474, height: 194 }}
-          dataLabels={{
-            value: true,
-            position: "outsideEnd",
-            numberFormat: '#,##0" G"',
-            style: { fontFamily: "body", fontSize: 11.5, color: colors.ink },
-          }}
-          valueAxis={{
-            min: 0,
-            max: 2800,
-            majorUnit: 700,
-            numberFormat: "#,##0",
-            gridlines: { color: colors.line, width: 1 },
-            line: false,
-            style: { fontFamily: "body", fontSize: 11, color: colors.muted },
-          }}
-          categoryAxis={{
-            line: { color: colors.steel, width: 1 },
-            style: { fontFamily: "body", fontSize: 11, color: colors.ink },
-          }}
+            },
+          ]}
         />
 
         {/* MoE vs Dense Comparison Box */}

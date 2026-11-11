@@ -219,16 +219,18 @@ describe("public build entry", () => {
           ),
           createElement(Chart, {
             id: "subset-chart",
-            kind: "column",
             x: 280,
             y: 128,
             width: 320,
             height: 220,
             style: { fontFamily: cjkFont },
-            data: {
-              categories: ["销售图"],
-              series: [{ name: "金额", values: [12] }],
-            },
+            groups: [
+              {
+                kind: "column",
+                data: { kind: "shared-categories", categories: ["销售图"] },
+                series: [{ name: "金额", values: [12] }],
+              },
+            ],
           }),
         ),
       ),
@@ -309,16 +311,18 @@ describe("public build entry", () => {
         id: "subset-chart-default-axis",
         chart: createElement(Chart, {
           id: "subset-chart-default-axis",
-          kind: "column",
           x: 0,
           y: 0,
           width: 320,
           height: 220,
           style: { fontFamily: chartFont },
-          data: {
-            categories: ["甲"],
-            series: [{ name: "乙", values: [12] }],
-          },
+          groups: [
+            {
+              kind: "column",
+              data: { kind: "shared-categories", categories: ["甲"] },
+              series: [{ name: "乙", values: [12] }],
+            },
+          ],
         }),
         expected: Array.from("0123456789"),
         absent: [],
@@ -327,17 +331,19 @@ describe("public build entry", () => {
         id: "subset-chart-percent-axis",
         chart: createElement(Chart, {
           id: "subset-chart-percent-axis",
-          kind: "column",
-          stacking: "percent",
           x: 0,
           y: 0,
           width: 320,
           height: 220,
           style: { fontFamily: chartFont },
-          data: {
-            categories: ["甲"],
-            series: [{ name: "乙", values: [12] }],
-          },
+          groups: [
+            {
+              kind: "column",
+              stacking: "percent",
+              data: { kind: "shared-categories", categories: ["甲"] },
+              series: [{ name: "乙", values: [12] }],
+            },
+          ],
         }),
         expected: Array.from("0123456789%"),
         absent: [],
@@ -346,23 +352,29 @@ describe("public build entry", () => {
         id: "subset-chart-formatted-axis",
         chart: createElement(Chart, {
           id: "subset-chart-formatted-axis",
-          kind: "column",
           x: 0,
           y: 0,
           width: 320,
           height: 220,
           style: { fontFamily: chartFont },
-          valueAxis: {
-            min: 0,
-            max: 20,
-            majorUnit: 5,
-            numberFormat: '#,##0"元"',
-            style: { fontSize: 14 },
+          axes: {
+            category: { kind: "category" },
+            value: {
+              kind: "value",
+              min: 0,
+              max: 20,
+              majorUnit: 5,
+              numberFormat: '#,##0"元"',
+              style: { fontSize: 14 },
+            },
           },
-          data: {
-            categories: ["甲"],
-            series: [{ name: "乙", values: [12] }],
-          },
+          groups: [
+            {
+              kind: "column",
+              data: { kind: "shared-categories", categories: ["甲"] },
+              series: [{ name: "乙", values: [12] }],
+            },
+          ],
         }),
         expected: Array.from("0123456789,元"),
         absent: ["#", '"'],
@@ -371,21 +383,23 @@ describe("public build entry", () => {
         id: "subset-chart-formatted-label",
         chart: createElement(Chart, {
           id: "subset-chart-formatted-label",
-          kind: "pie",
           x: 0,
           y: 0,
           width: 320,
           height: 220,
           style: { fontFamily: chartFont },
-          dataLabels: {
-            value: true,
-            numberFormat: '0"元"',
-            style: { fontSize: 14 },
-          },
-          data: {
-            categories: ["甲", "乙"],
-            series: [{ name: "丙", values: [1, 2] }],
-          },
+          groups: [
+            {
+              kind: "pie",
+              dataLabels: {
+                value: true,
+                numberFormat: '0"元"',
+                style: { fontSize: 14 },
+              },
+              data: { kind: "shared-categories", categories: ["甲", "乙"] },
+              series: [{ name: "丙", values: [1, 2] }],
+            },
+          ],
         }),
         expected: Array.from("0123456789元"),
         absent: ['"'],
@@ -394,17 +408,19 @@ describe("public build entry", () => {
         id: "subset-chart-percent-label",
         chart: createElement(Chart, {
           id: "subset-chart-percent-label",
-          kind: "pie",
           x: 0,
           y: 0,
           width: 320,
           height: 220,
           style: { fontFamily: chartFont },
-          dataLabels: { percent: true, style: { fontSize: 14 } },
-          data: {
-            categories: ["甲", "乙"],
-            series: [{ name: "丙", values: [1, 2] }],
-          },
+          groups: [
+            {
+              kind: "pie",
+              dataLabels: { percent: true, style: { fontSize: 14 } },
+              data: { kind: "shared-categories", categories: ["甲", "乙"] },
+              series: [{ name: "丙", values: [1, 2] }],
+            },
+          ],
         }),
         expected: Array.from("0123456789%"),
         absent: [],
@@ -413,21 +429,23 @@ describe("public build entry", () => {
         id: "subset-chart-locale-only-label",
         chart: createElement(Chart, {
           id: "subset-chart-locale-only-label",
-          kind: "pie",
           x: 0,
           y: 0,
           width: 320,
           height: 220,
           style: { fontFamily: chartFont },
-          dataLabels: {
-            value: true,
-            numberFormat: "[$-409]0",
-            style: { fontSize: 14 },
-          },
-          data: {
-            categories: ["甲"],
-            series: [{ name: "乙", values: [12] }],
-          },
+          groups: [
+            {
+              kind: "pie",
+              dataLabels: {
+                value: true,
+                numberFormat: "[$-409]0",
+                style: { fontSize: 14 },
+              },
+              data: { kind: "shared-categories", categories: ["甲"] },
+              series: [{ name: "乙", values: [12] }],
+            },
+          ],
         }),
         expected: Array.from("0123456789"),
         absent: ["$", "[", "]"],
@@ -436,21 +454,23 @@ describe("public build entry", () => {
         id: "subset-chart-currency-literal-label",
         chart: createElement(Chart, {
           id: "subset-chart-currency-literal-label",
-          kind: "pie",
           x: 0,
           y: 0,
           width: 320,
           height: 220,
           style: { fontFamily: chartFont },
-          dataLabels: {
-            value: true,
-            numberFormat: "[$￥-804]#,##0.00",
-            style: { fontSize: 14 },
-          },
-          data: {
-            categories: ["甲"],
-            series: [{ name: "乙", values: [12] }],
-          },
+          groups: [
+            {
+              kind: "pie",
+              dataLabels: {
+                value: true,
+                numberFormat: "[$￥-804]#,##0.00",
+                style: { fontSize: 14 },
+              },
+              data: { kind: "shared-categories", categories: ["甲"] },
+              series: [{ name: "乙", values: [12] }],
+            },
+          ],
         }),
         expected: Array.from("0123456789￥,."),
         absent: ["$", "#", "[", "]"],
@@ -459,21 +479,23 @@ describe("public build entry", () => {
         id: "subset-chart-condition-color-label",
         chart: createElement(Chart, {
           id: "subset-chart-condition-color-label",
-          kind: "pie",
           x: 0,
           y: 0,
           width: 320,
           height: 220,
           style: { fontFamily: chartFont },
-          dataLabels: {
-            value: true,
-            numberFormat: '[Red][>=100]0"元";[Blue][<100]0"分"',
-            style: { fontSize: 14 },
-          },
-          data: {
-            categories: ["甲"],
-            series: [{ name: "乙", values: [12] }],
-          },
+          groups: [
+            {
+              kind: "pie",
+              dataLabels: {
+                value: true,
+                numberFormat: '[Red][>=100]0"元";[Blue][<100]0"分"',
+                style: { fontSize: 14 },
+              },
+              data: { kind: "shared-categories", categories: ["甲"] },
+              series: [{ name: "乙", values: [12] }],
+            },
+          ],
         }),
         expected: Array.from("0123456789元分"),
         absent: Array.from("[]<>RedBlu"),
@@ -482,21 +504,23 @@ describe("public build entry", () => {
         id: "subset-chart-escaped-literal-label",
         chart: createElement(Chart, {
           id: "subset-chart-escaped-literal-label",
-          kind: "pie",
           x: 0,
           y: 0,
           width: 320,
           height: 220,
           style: { fontFamily: chartFont },
-          dataLabels: {
-            value: true,
-            numberFormat: "0\\元",
-            style: { fontSize: 14 },
-          },
-          data: {
-            categories: ["甲"],
-            series: [{ name: "乙", values: [12] }],
-          },
+          groups: [
+            {
+              kind: "pie",
+              dataLabels: {
+                value: true,
+                numberFormat: "0\\元",
+                style: { fontSize: 14 },
+              },
+              data: { kind: "shared-categories", categories: ["甲"] },
+              series: [{ name: "乙", values: [12] }],
+            },
+          ],
         }),
         expected: Array.from("0123456789元"),
         absent: ["\\"],
@@ -505,21 +529,23 @@ describe("public build entry", () => {
         id: "subset-chart-chinese-date-name-label",
         chart: createElement(Chart, {
           id: "subset-chart-chinese-date-name-label",
-          kind: "pie",
           x: 0,
           y: 0,
           width: 320,
           height: 220,
           style: { fontFamily: chartFont },
-          dataLabels: {
-            value: true,
-            numberFormat: "[$-804]dddd",
-            style: { fontSize: 14 },
-          },
-          data: {
-            categories: ["甲"],
-            series: [{ name: "乙", values: [12] }],
-          },
+          groups: [
+            {
+              kind: "pie",
+              dataLabels: {
+                value: true,
+                numberFormat: "[$-804]dddd",
+                style: { fontSize: 14 },
+              },
+              data: { kind: "shared-categories", categories: ["甲"] },
+              series: [{ name: "乙", values: [12] }],
+            },
+          ],
         }),
         expected: Array.from("0123456789星期日一二三四五六"),
         absent: ["A", "J", "S"],
@@ -528,21 +554,23 @@ describe("public build entry", () => {
         id: "subset-chart-question-placeholder-label",
         chart: createElement(Chart, {
           id: "subset-chart-question-placeholder-label",
-          kind: "pie",
           x: 0,
           y: 0,
           width: 320,
           height: 220,
           style: { fontFamily: chartFont },
-          dataLabels: {
-            value: true,
-            numberFormat: "??",
-            style: { fontSize: 14 },
-          },
-          data: {
-            categories: ["甲"],
-            series: [{ name: "乙", values: [12] }],
-          },
+          groups: [
+            {
+              kind: "pie",
+              dataLabels: {
+                value: true,
+                numberFormat: "??",
+                style: { fontSize: 14 },
+              },
+              data: { kind: "shared-categories", categories: ["甲"] },
+              series: [{ name: "乙", values: [12] }],
+            },
+          ],
         }),
         expected: Array.from("0123456789 "),
         absent: ["?"],
@@ -584,21 +612,23 @@ describe("public build entry", () => {
         deck(
           createElement(Chart, {
             id: "subset-chart-label-style-missing-glyph",
-            kind: "pie",
             x: 0,
             y: 0,
             width: 320,
             height: 220,
             style: { fontFamily: chartFont },
-            dataLabels: {
-              value: true,
-              numberFormat: '0"元"',
-              style: { fontFamily: latinFont },
-            },
-            data: {
-              categories: ["甲", "乙"],
-              series: [{ name: "丙", values: [1, 2] }],
-            },
+            groups: [
+              {
+                kind: "pie",
+                dataLabels: {
+                  value: true,
+                  numberFormat: '0"元"',
+                  style: { fontFamily: latinFont },
+                },
+                data: { kind: "shared-categories", categories: ["甲", "乙"] },
+                series: [{ name: "丙", values: [1, 2] }],
+              },
+            ],
           }),
         ),
         { embedFonts: "subset" },
@@ -618,21 +648,23 @@ describe("public build entry", () => {
       deck(
         createElement(Chart, {
           id: "subset-chart-fourth-text-section",
-          kind: "pie",
           x: 0,
           y: 0,
           width: 320,
           height: 220,
           style: { fontFamily: latinFont },
-          dataLabels: {
-            value: true,
-            numberFormat: '0;0;0;"元"@',
-            style: { fontSize: 14 },
-          },
-          data: {
-            categories: ["A"],
-            series: [{ name: "B", values: [12] }],
-          },
+          groups: [
+            {
+              kind: "pie",
+              dataLabels: {
+                value: true,
+                numberFormat: '0;0;0;"元"@',
+                style: { fontSize: 14 },
+              },
+              data: { kind: "shared-categories", categories: ["A"] },
+              series: [{ name: "B", values: [12] }],
+            },
+          ],
         }),
       ),
       { embedFonts: "subset" },
@@ -660,16 +692,18 @@ describe("public build entry", () => {
       deck(
         createElement(Chart, {
           id: "subset-chart-locale-only-source",
-          kind: "column",
           x: 0,
           y: 0,
           width: 320,
           height: 220,
           style: { fontFamily: chartFont },
-          data: {
-            categories: ["甲"],
-            series: [{ name: "乙", values: [12] }],
-          },
+          groups: [
+            {
+              kind: "column",
+              data: { kind: "shared-categories", categories: ["甲"] },
+              series: [{ name: "乙", values: [12] }],
+            },
+          ],
         }),
       ),
       { embedFonts: "subset" },
@@ -693,21 +727,23 @@ describe("public build entry", () => {
       deck(
         createElement(Chart, {
           id: "subset-chart-locale-only-label-narrow-font",
-          kind: "pie",
           x: 0,
           y: 0,
           width: 320,
           height: 220,
           style: { fontFamily: narrowFont },
-          dataLabels: {
-            value: true,
-            numberFormat: "[$-409]0",
-            style: { fontSize: 14 },
-          },
-          data: {
-            categories: ["甲"],
-            series: [{ name: "乙", values: [12] }],
-          },
+          groups: [
+            {
+              kind: "pie",
+              dataLabels: {
+                value: true,
+                numberFormat: "[$-409]0",
+                style: { fontSize: 14 },
+              },
+              data: { kind: "shared-categories", categories: ["甲"] },
+              series: [{ name: "乙", values: [12] }],
+            },
+          ],
         }),
       ),
       { embedFonts: "subset" },
@@ -1035,20 +1071,22 @@ describe("public build entry", () => {
           ),
           createElement(Chart, {
             id: "page-field-chart",
-            kind: "pie",
             x: 110,
             y: 0,
             width: 200,
             height: 220,
             style: { fontFamily: pageFont },
-            dataLabels: {
-              value: true,
-              numberFormat: '0;0;0;"元"@',
-            },
-            data: {
-              categories: ["A"],
-              series: [{ name: "B", values: [12] }],
-            },
+            groups: [
+              {
+                kind: "pie",
+                dataLabels: {
+                  value: true,
+                  numberFormat: '0;0;0;"元"@',
+                },
+                data: { kind: "shared-categories", categories: ["A"] },
+                series: [{ name: "B", values: [12] }],
+              },
+            ],
           }),
         ),
       ),
@@ -1265,17 +1303,22 @@ describe("public build entry", () => {
           ),
           createElement(Chart, {
             id: "embedded-font-chart",
-            kind: "line",
             x: 300,
             y: 18,
             width: 400,
             height: 240,
             style: { fontFamily: installedFont },
-            valueAxis: { style: { fontWeight: "bold" } },
-            data: {
-              categories: ["Q1", "Q2"],
-              series: [{ name: "Sales", values: [12, 18] }],
+            axes: {
+              category: { kind: "category" },
+              value: { kind: "value", style: { fontWeight: "bold" } },
             },
+            groups: [
+              {
+                kind: "line",
+                data: { kind: "shared-categories", categories: ["Q1", "Q2"] },
+                series: [{ name: "Sales", values: [12, 18] }],
+              },
+            ],
           }),
         ),
       ),
@@ -2414,16 +2457,18 @@ describe("public build entry", () => {
           deck(
             createElement(Chart, {
               id: "chart-full-missing-glyph",
-              kind: "pie",
               x: 0,
               y: 0,
               width: 320,
               height: 220,
               style: { fontFamily: latinFont },
-              data: {
-                categories: ["甲", "乙"],
-                series: [{ name: "丙", values: [1, 2] }],
-              },
+              groups: [
+                {
+                  kind: "pie",
+                  data: { kind: "shared-categories", categories: ["甲", "乙"] },
+                  series: [{ name: "丙", values: [1, 2] }],
+                },
+              ],
             }),
           ),
           { embedFonts: "full" },
@@ -2441,16 +2486,18 @@ describe("public build entry", () => {
         deck(
           createElement(Chart, {
             id: "chart-warn-missing-glyph",
-            kind: "pie",
             x: 0,
             y: 0,
             width: 320,
             height: 220,
             style: { fontFamily: latinFont },
-            data: {
-              categories: ["甲", "乙"],
-              series: [{ name: "丙", values: [1, 2] }],
-            },
+            groups: [
+              {
+                kind: "pie",
+                data: { kind: "shared-categories", categories: ["甲", "乙"] },
+                series: [{ name: "丙", values: [1, 2] }],
+              },
+            ],
           }),
         ),
       );

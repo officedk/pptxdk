@@ -181,9 +181,14 @@ describe("public layout entry", () => {
             </Table>
             <Chart
               id="grid-chart"
-              kind="line"
               style={{ gridColumn: 2 }}
-              data={{ categories: ["A"], series: [{ name: "S", values: [1] }] }}
+              groups={[
+                {
+                  kind: "line",
+                  data: { kind: "shared-categories", categories: ["A"] },
+                  series: [{ name: "S", values: [1] }],
+                },
+              ]}
             />
           </Box>
         </Slide>
@@ -1593,11 +1598,13 @@ describe("public layout entry", () => {
           >
             <Chart
               id="stretch-chart"
-              kind="column"
-              data={{
-                categories: ["A"],
-                series: [{ name: "S", values: [1] }],
-              }}
+              groups={[
+                {
+                  kind: "column",
+                  data: { kind: "shared-categories", categories: ["A"] },
+                  series: [{ name: "S", values: [1] }],
+                },
+              ]}
             />
           </Box>
         </Slide>

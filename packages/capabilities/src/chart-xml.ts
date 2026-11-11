@@ -10,13 +10,15 @@ import { strToU8, zipSync } from "fflate";
 
 import type {
   ChartAxis,
-  ChartData,
-  ChartDataLabels,
   ChartKind,
   ChartLine,
   ChartPoint,
-  ChartProps,
-  ChartSeries,
+} from "./chart-types.ts";
+import type {
+  ParsedChart,
+  ParsedChartAxis,
+  ParsedChartGroup,
+  ParsedChartSeries,
 } from "./chart.ts";
 
 const chartNamespace = "http://schemas.openxmlformats.org/drawingml/2006/chart";
@@ -24,8 +26,6 @@ const drawingNamespace =
   "http://schemas.openxmlformats.org/drawingml/2006/main";
 const relationshipNamespace =
   "http://schemas.openxmlformats.org/officeDocument/2006/relationships";
-const categoryAxisId = 111111;
-const valueAxisId = 222222;
 const sheet = "Sheet1";
 
 type XmlAttributes = Readonly<
@@ -187,17 +187,17 @@ export type ChartTextStyleXml = {
   readonly chart: string;
   readonly categoryAxis?: string;
   readonly valueAxis?: string;
-  readonly dataLabels?: string;
+  readonly groupDataLabels?: ReadonlyMap<number, string>;
   readonly pointLabels?: ReadonlyMap<string, string>;
 };
 
 function dataLabels(
-  kind: ChartKind,
-  labels: ChartDataLabels | false | undefined,
-  series: ChartSeries,
-  seriesIndex: number,
+  group: ParsedChartGroup,
+  series: ParsedChartSeries,
+  groupIndex: number,
   textStyles: ChartTextStyleXml,
 ): XmlElement | undefined {
+  const labels = group.dataLabels;
   if (labels === undefined || labels === false) return undefined;
   const positions = {
     center: "ctr",
@@ -206,7 +206,8 @@ function dataLabels(
     outsideEnd: "outEnd",
     bestFit: "bestFit",
   } as const;
-  const hasPosition = kind === "column" || kind === "bar" || kind === "pie";
+  const hasPosition =
+    group.kind === "column" || group.kind === "bar" || group.kind === "pie";
   const settings = (textStyle: string | undefined) => [
     labels.numberFormat === undefined
       ? undefined
@@ -228,7 +229,9 @@ function dataLabels(
   ];
   const pointLabels = Object.entries<ChartPoint>(series.points ?? {}).flatMap(
     ([pointIndex, point]) => {
-      const style = textStyles.pointLabels?.get(`${seriesIndex}:${pointIndex}`);
+      const style = textStyles.pointLabels?.get(
+        `${series.seriesIndex}:${pointIndex}`,
+      );
       if (point.labelColor === undefined || style === undefined) return [];
       return [
         el(
@@ -240,35 +243,46 @@ function dataLabels(
       ];
     },
   );
-  return el("c:dLbls", null, pointLabels, settings(textStyles.dataLabels));
+  return el(
+    "c:dLbls",
+    null,
+    pointLabels,
+    settings(textStyles.groupDataLabels?.get(groupIndex)),
+  );
 }
 
 function chartSeries(
-  kind: ChartKind,
-  data: ChartData,
-  item: ChartSeries,
-  index: number,
-  labels: ChartDataLabels | false | undefined,
+  group: ParsedChartGroup,
+  series: ParsedChartSeries,
+  groupIndex: number,
   textStyles: ChartTextStyleXml,
-  explosion: number | undefined,
   theme: ThemeContext,
 ): XmlElement {
-  const rows = data.categories.length + 1;
-  const column = columnName(index + 1);
+  const rows = group.data.categories.length + 1;
+  const column = columnName(series.seriesIndex + 1);
+  const kind: ChartKind = group.kind;
   const bar = kind === "column" || kind === "bar";
   const lineChart = kind === "line";
   const pie = kind === "pie" || kind === "doughnut";
   const itemShape =
-    item.color === undefined
+    series.color === undefined
       ? undefined
       : lineChart
         ? el(
             "c:spPr",
             null,
-            el("a:ln", null, el("a:solidFill", null, color(item.color, theme))),
+            el(
+              "a:ln",
+              null,
+              el("a:solidFill", null, color(series.color, theme)),
+            ),
           )
-        : el("c:spPr", null, el("a:solidFill", null, color(item.color, theme)));
-  const points = Object.entries<ChartPoint>(item.points ?? {}).flatMap(
+        : el(
+            "c:spPr",
+            null,
+            el("a:solidFill", null, color(series.color, theme)),
+          );
+  const points = Object.entries<ChartPoint>(series.points ?? {}).flatMap(
     ([pointIndex, point]) => {
       if (point.color === undefined) return [];
       return [
@@ -296,24 +310,28 @@ function chartSeries(
   return el(
     "c:ser",
     null,
-    el("c:idx", { val: index }),
-    el("c:order", { val: index }),
-    el("c:tx", null, strRef(`${sheet}!$${column}$1`, [item.name])),
+    el("c:idx", { val: series.seriesIndex }),
+    el("c:order", { val: series.seriesIndex }),
+    el("c:tx", null, strRef(`${sheet}!$${column}$1`, [series.name])),
     itemShape,
     bar ? el("c:invertIfNegative", { val: false }) : undefined,
     lineChart
       ? el("c:marker", null, el("c:symbol", { val: "none" }))
       : undefined,
-    pie && explosion !== undefined
-      ? el("c:explosion", { val: Math.round(explosion) })
+    pie && group.explosion !== undefined
+      ? el("c:explosion", { val: Math.round(group.explosion) })
       : undefined,
     points,
-    dataLabels(kind, labels, item, index, textStyles),
-    el("c:cat", null, strRef(`${sheet}!$A$2:$A$${rows}`, data.categories)),
+    dataLabels(group, series, groupIndex, textStyles),
+    el(
+      "c:cat",
+      null,
+      strRef(`${sheet}!$A$2:$A$${rows}`, group.data.categories),
+    ),
     el(
       "c:val",
       null,
-      numRef(`${sheet}!$${column}$2:$${column}$${rows}`, item.values),
+      numRef(`${sheet}!$${column}$2:$${column}$${rows}`, series.values),
     ),
     lineChart ? el("c:smooth", { val: false }) : undefined,
   );
@@ -328,54 +346,45 @@ function grouping(
   return fallback;
 }
 
-function chartPlot(
-  props: ChartProps,
+function chartGroup(
+  group: ParsedChartGroup,
+  groupIndex: number,
   textStyles: ChartTextStyleXml,
   theme: ThemeContext,
 ): XmlElement {
-  const explosion =
-    props.kind === "pie" || props.kind === "doughnut"
-      ? props.explosion
-      : undefined;
-  const items = props.data.series.map((item, index) =>
-    chartSeries(
-      props.kind,
-      props.data,
-      item,
-      index,
-      props.dataLabels,
-      textStyles,
-      explosion,
-      theme,
-    ),
+  const items = group.series.map((item) =>
+    chartSeries(group, item, groupIndex, textStyles, theme),
   );
-  const axes = [
-    el("c:axId", { val: categoryAxisId }),
-    el("c:axId", { val: valueAxisId }),
-  ];
-  switch (props.kind) {
+  const axes =
+    group.axes === undefined
+      ? []
+      : [
+          el("c:axId", { val: group.axes.category.id }),
+          el("c:axId", { val: group.axes.value.id }),
+        ];
+  switch (group.kind) {
     case "column":
     case "bar":
       return el(
         "c:barChart",
         null,
-        el("c:barDir", { val: props.kind === "bar" ? "bar" : "col" }),
-        el("c:grouping", { val: grouping(props.stacking, "clustered") }),
+        el("c:barDir", { val: group.kind === "bar" ? "bar" : "col" }),
+        el("c:grouping", { val: grouping(group.stacking, "clustered") }),
         el("c:varyColors", { val: false }),
         items,
-        el("c:gapWidth", { val: Math.round(props.gapWidth ?? 150) }),
-        props.stacking !== undefined
+        el("c:gapWidth", { val: Math.round(group.gapWidth ?? 150) }),
+        group.stacking !== undefined
           ? el("c:overlap", { val: 100 })
-          : props.overlap === undefined
+          : group.overlap === undefined
             ? undefined
-            : el("c:overlap", { val: Math.round(props.overlap) }),
+            : el("c:overlap", { val: Math.round(group.overlap) }),
         axes,
       );
     case "line":
       return el(
         "c:lineChart",
         null,
-        el("c:grouping", { val: grouping(props.stacking, "standard") }),
+        el("c:grouping", { val: grouping(group.stacking, "standard") }),
         el("c:varyColors", { val: false }),
         items,
         el("c:marker", { val: true }),
@@ -385,7 +394,7 @@ function chartPlot(
       return el(
         "c:areaChart",
         null,
-        el("c:grouping", { val: grouping(props.stacking, "standard") }),
+        el("c:grouping", { val: grouping(group.stacking, "standard") }),
         el("c:varyColors", { val: false }),
         items,
         axes,
@@ -393,19 +402,19 @@ function chartPlot(
     case "pie":
     case "doughnut":
       return el(
-        props.kind === "pie" ? "c:pieChart" : "c:doughnutChart",
+        group.kind === "pie" ? "c:pieChart" : "c:doughnutChart",
         null,
         el("c:varyColors", { val: true }),
         items,
-        el("c:firstSliceAng", { val: props.firstSliceAngle ?? 0 }),
-        props.kind === "doughnut"
-          ? el("c:holeSize", { val: props.holeSize ?? 50 })
+        el("c:firstSliceAng", { val: group.firstSliceAngle ?? 0 }),
+        group.kind === "doughnut"
+          ? el("c:holeSize", { val: group.holeSize ?? 50 })
           : undefined,
       );
     default: {
-      const exhaustiveCheck: never = props;
+      const exhaustiveCheck: never = group.kind;
       throw new Error(
-        `Unsupported chart type: ${JSON.stringify(exhaustiveCheck)}`,
+        `Unsupported chart kind: ${JSON.stringify(exhaustiveCheck)}`,
       );
     }
   }
@@ -436,31 +445,49 @@ function gridlines(
   );
 }
 
+function parsedAxis(
+  axes: readonly ParsedChartAxis[],
+  role: "category" | "value",
+): ParsedChartAxis | undefined {
+  return axes.find((axis) => axis.role === role);
+}
+
 function axes(
-  props: ChartProps,
+  parsed: ParsedChart,
   textStyles: ChartTextStyleXml,
   theme: ThemeContext,
 ): XmlElement[] {
-  if (props.kind === "pie" || props.kind === "doughnut") return [];
-  const category = props.categoryAxis;
-  const value = props.valueAxis;
-  const horizontal = props.kind === "bar";
+  if (parsed.groups[0]?.axes === undefined) return [];
+  const category = parsedAxis(parsed.axes, "category");
+  const value = parsedAxis(parsed.axes, "value");
+  if (category === undefined || value === undefined) {
+    throw new Error(
+      "Cartesian chart is missing resolved category or value axis",
+    );
+  }
+  const categorySpec = category.spec as Extract<
+    ChartAxis,
+    { kind: "category" }
+  >;
+  const valueSpec = value.spec as Extract<ChartAxis, { kind: "value" }>;
+  const horizontal = parsed.groups[0].kind === "bar";
+  const firstKind = parsed.groups[0].kind;
   return [
     el(
       "c:catAx",
       null,
-      el("c:axId", { val: categoryAxisId }),
+      el("c:axId", { val: category.id }),
       el("c:scaling", null, el("c:orientation", { val: "minMax" })),
-      el("c:delete", { val: category?.visible === false }),
+      el("c:delete", { val: categorySpec.visible === false }),
       el("c:axPos", { val: horizontal ? "l" : "b" }),
-      gridlines(category, theme),
+      gridlines(categorySpec, theme),
       el("c:numFmt", { formatCode: "General", sourceLinked: true }),
       el("c:majorTickMark", { val: "none" }),
       el("c:minorTickMark", { val: "none" }),
       el("c:tickLblPos", { val: "nextTo" }),
-      lineXml(category?.line, theme),
+      lineXml(categorySpec.line, theme),
       raw(textStyles.categoryAxis),
-      el("c:crossAx", { val: valueAxisId }),
+      el("c:crossAx", { val: value.id }),
       el("c:crosses", { val: "autoZero" }),
       el("c:auto", { val: true }),
       el("c:lblAlgn", { val: "ctr" }),
@@ -470,34 +497,38 @@ function axes(
     el(
       "c:valAx",
       null,
-      el("c:axId", { val: valueAxisId }),
+      el("c:axId", { val: value.id }),
       el(
         "c:scaling",
         null,
         el("c:orientation", { val: "minMax" }),
-        value?.max === undefined ? undefined : el("c:max", { val: value.max }),
-        value?.min === undefined ? undefined : el("c:min", { val: value.min }),
+        valueSpec.max === undefined
+          ? undefined
+          : el("c:max", { val: valueSpec.max }),
+        valueSpec.min === undefined
+          ? undefined
+          : el("c:min", { val: valueSpec.min }),
       ),
-      el("c:delete", { val: value?.visible === false }),
+      el("c:delete", { val: valueSpec.visible === false }),
       el("c:axPos", { val: horizontal ? "b" : "l" }),
-      gridlines(value, theme),
+      gridlines(valueSpec, theme),
       el("c:numFmt", {
-        formatCode: value?.numberFormat ?? "General",
-        sourceLinked: value?.numberFormat === undefined,
+        formatCode: valueSpec.numberFormat ?? "General",
+        sourceLinked: valueSpec.numberFormat === undefined,
       }),
       el("c:majorTickMark", { val: "none" }),
       el("c:minorTickMark", { val: "none" }),
       el("c:tickLblPos", { val: "nextTo" }),
-      lineXml(value?.line, theme),
+      lineXml(valueSpec.line, theme),
       raw(textStyles.valueAxis),
-      el("c:crossAx", { val: categoryAxisId }),
+      el("c:crossAx", { val: category.id }),
       el("c:crosses", { val: "autoZero" }),
       el("c:crossBetween", {
-        val: props.kind === "area" ? "midCat" : "between",
+        val: firstKind === "area" ? "midCat" : "between",
       }),
-      value?.majorUnit === undefined
+      valueSpec.majorUnit === undefined
         ? undefined
-        : el("c:majorUnit", { val: value.majorUnit }),
+        : el("c:majorUnit", { val: valueSpec.majorUnit }),
     ),
   ];
 }
@@ -509,8 +540,11 @@ const legendPositions = {
   right: "r",
 } as const;
 
-function plotLayout(props: ChartProps): XmlElement {
-  const area = props.plotArea;
+function plotLayout(
+  parsed: ParsedChart,
+  box: { readonly width: number; readonly height: number },
+): XmlElement {
+  const area = parsed.plotArea;
   if (area === undefined) return el("c:layout");
   const fraction = (value: number, total: number) =>
     Math.round((value / total) * 1e6) / 1e6;
@@ -523,22 +557,23 @@ function plotLayout(props: ChartProps): XmlElement {
       el("c:layoutTarget", { val: "inner" }),
       el("c:xMode", { val: "edge" }),
       el("c:yMode", { val: "edge" }),
-      el("c:x", { val: fraction(area.left, props.width ?? 1) }),
-      el("c:y", { val: fraction(area.top, props.height ?? 1) }),
-      el("c:w", { val: fraction(area.width, props.width ?? 1) }),
-      el("c:h", { val: fraction(area.height, props.height ?? 1) }),
+      el("c:x", { val: fraction(area.left, box.width) }),
+      el("c:y", { val: fraction(area.top, box.height) }),
+      el("c:w", { val: fraction(area.width, box.width) }),
+      el("c:h", { val: fraction(area.height, box.height) }),
     ),
   );
 }
 
 export function chartPartXml(
-  props: ChartProps,
+  parsed: ParsedChart,
+  box: { readonly width: number; readonly height: number },
   relatedRelationshipId: string,
   textStyles: ChartTextStyleXml,
   theme: ThemeContext,
 ): string {
   const chartLang =
-    (typeof props.style?.lang === "string" ? props.style.lang : undefined) ??
+    (typeof parsed.style?.lang === "string" ? parsed.style.lang : undefined) ??
     theme.textStyle.lang ??
     "en-US";
   return serialize(
@@ -559,17 +594,19 @@ export function chartPartXml(
         el(
           "c:plotArea",
           null,
-          plotLayout(props),
-          chartPlot(props, textStyles, theme),
-          axes(props, textStyles, theme),
+          plotLayout(parsed, box),
+          parsed.groups.map((group, groupIndex) =>
+            chartGroup(group, groupIndex, textStyles, theme),
+          ),
+          axes(parsed, textStyles, theme),
           transparent(),
         ),
-        props.legend === undefined || props.legend === false
+        parsed.legend === undefined || parsed.legend === false
           ? undefined
           : el(
               "c:legend",
               null,
-              el("c:legendPos", { val: legendPositions[props.legend] }),
+              el("c:legendPos", { val: legendPositions[parsed.legend] }),
               el("c:overlay", { val: false }),
             ),
         el("c:plotVisOnly", { val: true }),
@@ -650,7 +687,7 @@ function inlineString(reference: string, value: string): XmlElement {
   );
 }
 
-export function chartWorkbook(data: ChartData): Uint8Array {
+export function chartWorkbook(parsed: ParsedChart): Uint8Array {
   const spreadsheet =
     "http://schemas.openxmlformats.org/spreadsheetml/2006/main";
   const officeRelationships = relationshipNamespace;
@@ -658,23 +695,23 @@ export function chartWorkbook(data: ChartData): Uint8Array {
     "row",
     { r: 1 },
     inlineString("A1", " "),
-    data.series.map((item, index) =>
-      inlineString(`${columnName(index + 1)}1`, item.name),
+    parsed.series.map((item) =>
+      inlineString(`${columnName(item.seriesIndex + 1)}1`, item.name),
     ),
   );
-  const rows = data.categories.map((category, row) =>
+  const rows = parsed.categories.map((category, row) =>
     el(
       "row",
       { r: row + 2 },
       inlineString(`A${row + 2}`, category),
-      data.series.flatMap((item, index) => {
+      parsed.series.flatMap((item) => {
         const value = item.values[row];
         return value === null || value === undefined
           ? []
           : [
               el(
                 "c",
-                { r: `${columnName(index + 1)}${row + 2}` },
+                { r: `${columnName(item.seriesIndex + 1)}${row + 2}` },
                 el("v", null, String(value)),
               ),
             ];

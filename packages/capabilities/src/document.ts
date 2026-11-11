@@ -214,7 +214,7 @@ function splitContent<Props extends object>(
   );
   return {
     content,
-    props: hasProps ? (last as Props) : undefined,
+    props: hasProps ? last : undefined,
   };
 }
 
@@ -362,17 +362,22 @@ export type { LinkTarget, ParsedText, Transition };
 
 export type {
   ChartAxis,
-  ChartData,
+  ChartAxisReferences,
+  ChartCategoryAxis,
   ChartDataLabels,
+  ChartGroup,
+  ChartGroupData,
   ChartKind,
   ChartLine,
   ChartPoint,
   ChartProps,
   ChartSeries,
-  ColumnOrBarChartProps,
-  DoughnutChartProps,
-  LineOrAreaChartProps,
-  PieChartProps,
+  ChartValueAxis,
+  ColumnOrBarChartGroup,
+  DoughnutChartGroup,
+  LineOrAreaChartGroup,
+  PieChartGroup,
+  SharedCategoryData,
 } from "./chart.ts";
 export type {
   TableCellStyle,

@@ -140,18 +140,20 @@ function plainDeck() {
       ),
       chart({
         id: "revenue",
-        kind: "column",
         x: 480,
         y: 220,
         width: 400,
         height: 220,
-        data: {
-          categories: ["Q1", "Q2"],
-          series: [
-            { name: "North", values: [12, 18] },
-            { name: "South", values: [9, 15] },
-          ],
-        },
+        groups: [
+          {
+            kind: "column",
+            data: { kind: "shared-categories", categories: ["Q1", "Q2"] },
+            series: [
+              { name: "North", values: [12, 18] },
+              { name: "South", values: [9, 15] },
+            ],
+          },
+        ],
       }),
       step({ n: 1 }).append(
         shape({
@@ -292,18 +294,20 @@ function ReactDeck() {
         </Table>
         <Chart
           id="revenue"
-          kind="column"
           x={480}
           y={220}
           width={400}
           height={220}
-          data={{
-            categories: ["Q1", "Q2"],
-            series: [
-              { name: "North", values: [12, 18] },
-              { name: "South", values: [9, 15] },
-            ],
-          }}
+          groups={[
+            {
+              kind: "column",
+              data: { kind: "shared-categories", categories: ["Q1", "Q2"] },
+              series: [
+                { name: "North", values: [12, 18] },
+                { name: "South", values: [9, 15] },
+              ],
+            },
+          ]}
         />
         <Step n={1}>
           <Shape

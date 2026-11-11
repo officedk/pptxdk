@@ -187,16 +187,18 @@ describe("public theme entry", () => {
           </Table>
           <Chart
             id="default-chart"
-            kind="column"
             x={200}
             y={160}
             width={300}
             height={180}
-            data={{
-              categories: ["Jan"],
-              series: [{ name: "Revenue", values: [2] }],
-            }}
-            dataLabels={{ value: true }}
+            groups={[
+              {
+                kind: "column",
+                data: { kind: "shared-categories", categories: ["Jan"] },
+                series: [{ name: "Revenue", values: [2] }],
+                dataLabels: { value: true },
+              },
+            ]}
           />
         </Slide>
       </Deck>,
@@ -304,37 +306,43 @@ describe("public theme entry", () => {
             </Table>
             <Chart
               id="local-chart"
-              kind="column"
               x={200}
               y={150}
               width={220}
               height={120}
               style={{ fontFamily: "major", color: "ink" }}
-              data={{
-                categories: ["A"],
-                series: [
-                  {
-                    name: "Local",
-                    values: [1],
-                    color: "ink",
-                    points: { 0: { color: "accent1", labelColor: "ink" } },
+              axes={{
+                category: {
+                  kind: "category",
+                  style: { fontFamily: "major", color: "ink" },
+                  line: { color: "ink" },
+                  gridlines: { color: "accent1" },
+                },
+                value: {
+                  kind: "value",
+                  style: { fontFamily: "major", color: "ink" },
+                  line: { color: { color: "ink", alpha: 0.5 } },
+                  gridlines: { color: "accent1" },
+                },
+              }}
+              groups={[
+                {
+                  kind: "column",
+                  data: { kind: "shared-categories", categories: ["A"] },
+                  series: [
+                    {
+                      name: "Local",
+                      values: [1],
+                      color: "ink",
+                      points: { 0: { color: "accent1", labelColor: "ink" } },
+                    },
+                  ],
+                  dataLabels: {
+                    value: true,
+                    style: { fontFamily: "major", color: "ink" },
                   },
-                ],
-              }}
-              dataLabels={{
-                value: true,
-                style: { fontFamily: "major", color: "ink" },
-              }}
-              categoryAxis={{
-                style: { fontFamily: "major", color: "ink" },
-                line: { color: "ink" },
-                gridlines: { color: "accent1" },
-              }}
-              valueAxis={{
-                style: { fontFamily: "major", color: "ink" },
-                line: { color: { color: "ink", alpha: 0.5 } },
-                gridlines: { color: "accent1" },
-              }}
+                },
+              ]}
             />
             <Box
               id="nested-box"
@@ -556,16 +564,18 @@ describe("public theme entry", () => {
           </Table>
           <Chart
             id="alias-chart"
-            kind="column"
             x={160}
             y={90}
             width={240}
             height={150}
             style={{ color: "chain" }}
-            data={{
-              categories: ["A"],
-              series: [{ name: "Alias series", values: [1], color: "chain" }],
-            }}
+            groups={[
+              {
+                kind: "column",
+                data: { kind: "shared-categories", categories: ["A"] },
+                series: [{ name: "Alias series", values: [1], color: "chain" }],
+              },
+            ]}
           />
           <Box
             id="same-name-scope"
@@ -680,15 +690,17 @@ describe("public theme entry", () => {
           </Text>
           <Chart
             id="deck-paragraph-chart"
-            kind="column"
             x={0}
             y={160}
             width={280}
             height={160}
-            data={{
-              categories: ["A"],
-              series: [{ name: "Series", values: [1] }],
-            }}
+            groups={[
+              {
+                kind: "column",
+                data: { kind: "shared-categories", categories: ["A"] },
+                series: [{ name: "Series", values: [1] }],
+              },
+            ]}
           />
         </Slide>
         <Slide

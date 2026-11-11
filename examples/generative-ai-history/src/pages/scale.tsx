@@ -24,49 +24,58 @@ export function ScalePage() {
       </Text>
       <Chart
         id="gpt-parameters"
-        kind="column"
         x={64}
         y={196}
         width={742}
         height={394}
         style={{ fontFamily: "body", fontSize: 14, color: colors.ink }}
-        data={{
-          categories: ["GPT-1 · 2018", "GPT-2 · 2019", "GPT-3 · 2020"],
-          series: [
-            {
-              name: "参数量（十亿）",
-              values: [0.117, 1.5, 175],
-              color: colors.cobalt,
-              points: {
-                0: { color: colors.cyan, labelColor: colors.ink },
-                1: { color: colors.cobalt, labelColor: colors.ink },
-                2: { color: colors.sun, labelColor: colors.ink },
-              },
-            },
-          ],
-        }}
         legend={false}
-        gapWidth={76}
         plotArea={{ left: 70, top: 24, width: 620, height: 292 }}
-        dataLabels={{
-          value: true,
-          position: "outsideEnd",
-          numberFormat: '0.0##"B"',
-          style: { fontFamily: "body", fontSize: 15, color: colors.ink },
+        axes={{
+          category: {
+            kind: "category",
+            line: { color: colors.cobalt, width: 1 },
+            style: { fontFamily: "body", fontSize: 14, color: colors.ink },
+          },
+          value: {
+            kind: "value",
+            min: 0,
+            max: 200,
+            majorUnit: 50,
+            numberFormat: '0"B"',
+            gridlines: { color: colors.line, width: 1 },
+            line: false,
+            style: { fontFamily: "body", fontSize: 12, color: colors.muted },
+          },
         }}
-        valueAxis={{
-          min: 0,
-          max: 200,
-          majorUnit: 50,
-          numberFormat: '0"B"',
-          gridlines: { color: colors.line, width: 1 },
-          line: false,
-          style: { fontFamily: "body", fontSize: 12, color: colors.muted },
-        }}
-        categoryAxis={{
-          line: { color: colors.cobalt, width: 1 },
-          style: { fontFamily: "body", fontSize: 14, color: colors.ink },
-        }}
+        groups={[
+          {
+            kind: "column",
+            data: {
+              kind: "shared-categories",
+              categories: ["GPT-1 · 2018", "GPT-2 · 2019", "GPT-3 · 2020"],
+            },
+            series: [
+              {
+                name: "参数量（十亿）",
+                values: [0.117, 1.5, 175],
+                color: colors.cobalt,
+                points: {
+                  0: { color: colors.cyan, labelColor: colors.ink },
+                  1: { color: colors.cobalt, labelColor: colors.ink },
+                  2: { color: colors.sun, labelColor: colors.ink },
+                },
+              },
+            ],
+            gapWidth: 76,
+            dataLabels: {
+              value: true,
+              position: "outsideEnd",
+              numberFormat: '0.0##"B"',
+              style: { fontFamily: "body", fontSize: 15, color: colors.ink },
+            },
+          },
+        ]}
       />
       <Text
         x={64}

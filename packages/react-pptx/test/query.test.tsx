@@ -172,15 +172,17 @@ function ResourceQueryDeck() {
       }),
       createElement(Chart, {
         id: "sales-chart",
-        kind: "column",
         x: 130,
         y: 0,
         width: 160,
         height: 120,
-        data: {
-          categories: ["Q1"],
-          series: [{ name: "Bookings", values: [17] }],
-        },
+        groups: [
+          {
+            kind: "column",
+            data: { kind: "shared-categories", categories: ["Q1"] },
+            series: [{ name: "Bookings", values: [17] }],
+          },
+        ],
       }),
     ),
   );

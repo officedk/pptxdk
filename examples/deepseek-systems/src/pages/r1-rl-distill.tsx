@@ -269,7 +269,6 @@ export function R1RlDistillPage() {
       >
         <Chart
           id="r1-distill-chart"
-          kind="column"
           x={64}
           y={426}
           width={836}
@@ -279,41 +278,51 @@ export function R1RlDistillPage() {
             fontSize: 10,
             color: colors.ink,
           }}
-          data={{
-            categories: distillCategories,
-            series: [
-              {
-                name: "AIME 2024 Pass@1 (%)",
-                values: aime2024Scores,
-                color: colors.copper,
-              },
-              {
-                name: "MATH-500 Pass@1 (%)",
-                values: math500Scores,
-                color: colors.compute,
-              },
-            ],
-          }}
           legend="top"
-          dataLabels={{
-            value: true,
-            position: "outsideEnd",
-            numberFormat: "0.0",
-            style: { fontFamily: "body", fontSize: 9.5, color: colors.ink },
+          axes={{
+            category: {
+              kind: "category",
+              line: { color: colors.steel, width: 1 },
+              style: { fontFamily: "body", fontSize: 10, color: colors.ink },
+            },
+            value: {
+              kind: "value",
+              min: 0,
+              max: 105,
+              majorUnit: 25,
+              numberFormat: '0"%"',
+              gridlines: { color: colors.line, width: 1 },
+              line: false,
+              style: { fontFamily: "body", fontSize: 10, color: colors.muted },
+            },
           }}
-          valueAxis={{
-            min: 0,
-            max: 105,
-            majorUnit: 25,
-            numberFormat: '0"%"',
-            gridlines: { color: colors.line, width: 1 },
-            line: false,
-            style: { fontFamily: "body", fontSize: 10, color: colors.muted },
-          }}
-          categoryAxis={{
-            line: { color: colors.steel, width: 1 },
-            style: { fontFamily: "body", fontSize: 10, color: colors.ink },
-          }}
+          groups={[
+            {
+              kind: "column",
+              data: {
+                kind: "shared-categories",
+                categories: distillCategories,
+              },
+              series: [
+                {
+                  name: "AIME 2024 Pass@1 (%)",
+                  values: aime2024Scores,
+                  color: colors.copper,
+                },
+                {
+                  name: "MATH-500 Pass@1 (%)",
+                  values: math500Scores,
+                  color: colors.compute,
+                },
+              ],
+              dataLabels: {
+                value: true,
+                position: "outsideEnd",
+                numberFormat: "0.0",
+                style: { fontFamily: "body", fontSize: 9.5, color: colors.ink },
+              },
+            },
+          ]}
         />
 
         {/* Right callout card inside bottom panel */}

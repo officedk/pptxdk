@@ -309,9 +309,17 @@ describe("text language (lang) validation", () => {
                 y={0}
                 width={300}
                 height={200}
-                kind="bar"
-                data={sampleChartData}
                 style={{ lang: "invalid_chart" }}
+                groups={[
+                  {
+                    kind: "bar",
+                    data: {
+                      kind: "shared-categories",
+                      categories: sampleChartData.categories,
+                    },
+                    series: sampleChartData.series,
+                  },
+                ]}
               />
             </Slide>
           </Deck>,
@@ -414,8 +422,16 @@ describe("omission of lang attribute when undeclared", () => {
             y={50}
             width={300}
             height={200}
-            kind="bar"
-            data={sampleChartData}
+            groups={[
+              {
+                kind: "bar",
+                data: {
+                  kind: "shared-categories",
+                  categories: sampleChartData.categories,
+                },
+                series: sampleChartData.series,
+              },
+            ]}
           />
         </Slide>
       </Deck>,
@@ -508,8 +524,16 @@ describe("inheritance and local overrides of text language (lang)", () => {
             y={50}
             width={300}
             height={200}
-            kind="bar"
-            data={sampleChartData}
+            groups={[
+              {
+                kind: "bar",
+                data: {
+                  kind: "shared-categories",
+                  categories: sampleChartData.categories,
+                },
+                series: sampleChartData.series,
+              },
+            ]}
           />
         </Slide>
 
@@ -538,9 +562,17 @@ describe("inheritance and local overrides of text language (lang)", () => {
             y={50}
             width={300}
             height={200}
-            kind="bar"
-            data={sampleChartData}
             style={{ lang: "it-IT" }}
+            groups={[
+              {
+                kind: "bar",
+                data: {
+                  kind: "shared-categories",
+                  categories: sampleChartData.categories,
+                },
+                series: sampleChartData.series,
+              },
+            ]}
           />
         </Slide>
       </Deck>,
@@ -664,8 +696,16 @@ describe("artifact validator (validatePptx) lang checks", () => {
             y={50}
             width={300}
             height={200}
-            kind="bar"
-            data={sampleChartData}
+            groups={[
+              {
+                kind: "bar",
+                data: {
+                  kind: "shared-categories",
+                  categories: sampleChartData.categories,
+                },
+                series: sampleChartData.series,
+              },
+            ]}
           />
         </Slide>
       </Deck>,

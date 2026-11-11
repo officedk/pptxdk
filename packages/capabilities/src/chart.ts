@@ -20,6 +20,7 @@ import {
 } from "@react-pptx/core/capability";
 import { CommonNode } from "@react-pptx/core/document";
 
+import { chartDataLabelPositions, mergeDataLabels } from "./chart-labels.ts";
 import type {
   ChartAxis,
   ChartAxisCrossing,
@@ -102,13 +103,7 @@ const chartTextStyleKeys = [
   "textShadow",
   "lang",
 ] as const;
-const positionValues = new Set([
-  "center",
-  "insideEnd",
-  "insideBase",
-  "outsideEnd",
-  "bestFit",
-]);
+const positionValues = new Set(Object.keys(chartDataLabelPositions));
 const lineDashValues = new Set<ChartLineDash>([
   "solid",
   "dash",
@@ -710,6 +705,7 @@ function chartSeriesList(
   value: unknown,
   categories: readonly string[],
   kind: ChartKind,
+  stacking: "stacked" | "percent" | undefined,
   label: string,
 ): ChartSeries[] {
   if (!Array.isArray(value) || value.length === 0) {
@@ -722,7 +718,16 @@ function chartSeriesList(
     }
     onlyKeys(
       item,
-      ["name", "values", "color", "line", "marker", "smooth", "points"],
+      [
+        "name",
+        "values",
+        "color",
+        "line",
+        "dataLabels",
+        "marker",
+        "smooth",
+        "points",
+      ],
       seriesLabel,
     );
     const name = item["name"];
@@ -789,7 +794,7 @@ function chartSeriesList(
         }
         onlyKeys(
           pointValue,
-          ["color", "line", "marker", "labelColor"],
+          ["color", "line", "marker", "labelColor", "dataLabels"],
           `Series "${name}" data point ${rawIndex}`,
         );
         const pointColor = optionalColor(
@@ -809,11 +814,19 @@ function chartSeriesList(
           pointValue["labelColor"],
           `Series "${name}" data point ${rawIndex}.labelColor`,
         );
+        const pointLabels = labels(
+          pointValue["dataLabels"],
+          kind,
+          stacking,
+          `Series "${name}" data point ${rawIndex} dataLabels`,
+          false,
+        );
         points[pointIndex] = {
           ...(pointColor === undefined ? {} : { color: pointColor }),
           ...(pointLine === undefined ? {} : { line: pointLine }),
           ...(pointMarker === undefined ? {} : { marker: pointMarker }),
           ...(labelColor === undefined ? {} : { labelColor }),
+          ...(pointLabels === undefined ? {} : { dataLabels: pointLabels }),
         };
       }
     }
@@ -821,11 +834,19 @@ function chartSeriesList(
     const line = lineStyle(item["line"], `Series "${name}".line`);
     const marker = markerStyle(item["marker"], `Series "${name}".marker`, kind);
     const smooth = smoothStyle(item["smooth"], `Series "${name}".smooth`, kind);
+    const seriesLabels = labels(
+      item["dataLabels"],
+      kind,
+      stacking,
+      `Series "${name}" dataLabels`,
+      false,
+    );
     return {
       name,
       values: values as readonly (number | null)[],
       ...(color === undefined ? {} : { color }),
       ...(line === undefined ? {} : { line }),
+      ...(seriesLabels === undefined ? {} : { dataLabels: seriesLabels }),
       ...(marker === undefined ? {} : { marker }),
       ...(smooth === undefined ? {} : { smooth }),
       ...(points === undefined ? {} : { points }),
@@ -836,26 +857,30 @@ function chartSeriesList(
 function labels(
   value: unknown,
   kind: ChartKind,
-  stacking?: "stacked" | "percent",
+  stacking: "stacked" | "percent" | undefined,
+  label: string,
+  allowStyle = true,
 ): false | ChartDataLabels | undefined {
   if (value === undefined || value === false) return value;
   if (!isRecord(value))
-    fail(
-      "invalid-data-labels",
-      "Chart group dataLabels must be an object or false",
-    );
+    fail("invalid-data-labels", `${label} must be an object or false`);
   onlyKeys(
     value,
-    ["value", "percent", "category", "position", "numberFormat", "style"],
-    "Chart group dataLabels",
+    allowStyle
+      ? ["value", "percent", "category", "position", "numberFormat", "style"]
+      : ["value", "percent", "category", "position", "numberFormat"],
+    label,
   );
   for (const key of ["value", "percent", "category"] as const) {
     if (value[key] !== undefined && typeof value[key] !== "boolean") {
-      fail(
-        "invalid-data-labels",
-        `Chart group dataLabels.${key} must be a boolean`,
-      );
+      fail("invalid-data-labels", `${label}.${key} must be a boolean`);
     }
+  }
+  if (value["percent"] === true && kind !== "pie" && kind !== "doughnut") {
+    fail(
+      "invalid-data-labels",
+      `${label}.percent is only supported for pie and doughnut charts`,
+    );
   }
   const position = value["position"];
   if (position !== undefined && !positionValues.has(position as string)) {
@@ -863,44 +888,78 @@ function labels(
       "invalid-data-labels",
       typeof position === "string"
         ? `Unsupported data label position ${position}`
-        : "Chart group dataLabels.position must be a supported string",
+        : `${label}.position must be a supported string`,
     );
   }
-  if (
-    position !== undefined &&
-    kind !== "column" &&
-    kind !== "bar" &&
-    kind !== "pie"
-  ) {
-    const reason =
-      kind === "doughnut"
-        ? "Office does not allow dLblPos for doughnutChart series data labels"
-        : kind === "area"
-          ? "Office does not allow dLblPos for areaChart series data labels"
-          : "Chart generation does not expose explicit data label positions for line charts";
-    fail("invalid-data-labels", reason);
-  }
-  if (kind === "pie" && position === "insideBase") {
-    fail(
-      "invalid-data-labels",
-      'Office does not allow dLblPos="inBase" for pieChart series data labels',
-    );
-  }
-  if ((kind === "column" || kind === "bar") && position === "bestFit") {
-    fail(
-      "invalid-data-labels",
-      'Office does not allow dLblPos="bestFit" for barChart series data labels',
-    );
-  }
-  if (
-    (kind === "column" || kind === "bar") &&
-    stacking !== undefined &&
-    position === "outsideEnd"
-  ) {
-    fail(
-      "invalid-data-labels",
-      'Office does not allow dLblPos="outEnd" for stacked barChart series data labels',
-    );
+  if (position !== undefined) {
+    const mapped =
+      chartDataLabelPositions[
+        position as NonNullable<ChartDataLabels["position"]>
+      ];
+    if (kind === "area") {
+      fail(
+        "invalid-data-labels",
+        "Office does not allow dLblPos for areaChart series data labels",
+      );
+    }
+    if (kind === "doughnut") {
+      fail(
+        "invalid-data-labels",
+        "Office does not allow dLblPos for doughnutChart series data labels",
+      );
+    }
+    if (kind === "line") {
+      if (
+        !["left", "right", "bottom", "top", "center"].includes(
+          position as string,
+        )
+      ) {
+        fail(
+          "invalid-data-labels",
+          `Office does not allow dLblPos="${mapped}" for lineChart series data labels`,
+        );
+      }
+    } else if (kind === "pie") {
+      if (position === "insideBase") {
+        fail(
+          "invalid-data-labels",
+          'Office does not allow dLblPos="inBase" for pieChart series data labels',
+        );
+      }
+      if (
+        !["center", "insideEnd", "outsideEnd", "bestFit"].includes(
+          position as string,
+        )
+      ) {
+        fail(
+          "invalid-data-labels",
+          `Office does not allow dLblPos="${mapped}" for pieChart series data labels`,
+        );
+      }
+    } else {
+      if (position === "bestFit") {
+        fail(
+          "invalid-data-labels",
+          'Office does not allow dLblPos="bestFit" for barChart series data labels',
+        );
+      }
+      if (stacking !== undefined && position === "outsideEnd") {
+        fail(
+          "invalid-data-labels",
+          'Office does not allow dLblPos="outEnd" for stacked barChart series data labels',
+        );
+      }
+      const allowed =
+        stacking === undefined
+          ? ["center", "insideEnd", "insideBase", "outsideEnd"]
+          : ["center", "insideEnd", "insideBase"];
+      if (!allowed.includes(position as string)) {
+        fail(
+          "invalid-data-labels",
+          `Office does not allow dLblPos="${mapped}" for barChart series data labels`,
+        );
+      }
+    }
   }
   const numberFormat = value["numberFormat"];
   if (
@@ -909,11 +968,11 @@ function labels(
   ) {
     fail(
       "invalid-data-labels",
-      "Chart group dataLabels.numberFormat must be a non-empty string",
+      `${label}.numberFormat must be a non-empty string`,
     );
   }
   if (typeof numberFormat === "string") {
-    xmlText(numberFormat, "Chart group dataLabels.numberFormat");
+    xmlText(numberFormat, `${label}.numberFormat`);
   }
   return {
     ...(value["value"] === undefined
@@ -929,9 +988,9 @@ function labels(
       ? {}
       : { position: position as NonNullable<ChartDataLabels["position"]> }),
     ...(numberFormat === undefined ? {} : { numberFormat: numberFormat }),
-    ...(value["style"] === undefined
-      ? {}
-      : { style: value["style"] as TextStyle }),
+    ...(allowStyle && value["style"] !== undefined
+      ? { style: value["style"] as TextStyle }
+      : {}),
   };
 }
 
@@ -1038,11 +1097,16 @@ function chartGroupDrafts(value: unknown): ParsedGroupDraft[] {
         );
       }
     }
+    const stack = item["stacking"];
+    if (stack !== undefined && stack !== "stacked" && stack !== "percent") {
+      fail("invalid-stacking", `${label}.stacking must be stacked or percent`);
+    }
     const data = sharedCategoryData(item["data"], `${label}.data`);
     const series = chartSeriesList(
       item["series"],
       data.categories,
       chartKind,
+      stack,
       `${label}.series`,
     );
     if (
@@ -1054,11 +1118,12 @@ function chartGroupDrafts(value: unknown): ParsedGroupDraft[] {
         `${chartKind} chart currently only supports a single data series`,
       );
     }
-    const stack = item["stacking"];
-    if (stack !== undefined && stack !== "stacked" && stack !== "percent") {
-      fail("invalid-stacking", `${label}.stacking must be stacked or percent`);
-    }
-    const labelsValue = labels(item["dataLabels"], chartKind, stack);
+    const labelsValue = labels(
+      item["dataLabels"],
+      chartKind,
+      stack,
+      "Chart group dataLabels",
+    );
     const gapWidth = item["gapWidth"];
     if (
       gapWidth !== undefined &&
@@ -1893,42 +1958,53 @@ function numberLabelCharacters(
   return [...characters].join("");
 }
 
-function groupDataLabelTexts(
+function effectiveSeriesLabels(
   group: ParsedChartGroup,
-  labels: ChartDataLabels | false | undefined,
-): string[] {
-  if (labels === undefined || labels === false) return [];
-  const texts: string[] = [];
-  const numericLabels =
-    labels.value === true || labels.percent === true
-      ? numberLabelCharacters(labels.numberFormat, labels.percent === true)
-      : "";
-  for (const series of group.series) {
-    for (const [index, number] of series.values.entries()) {
-      if (number === null) continue;
-      if (numericLabels !== "") texts.push(numericLabels);
-      if (labels.category === true) texts.push(group.data.categories[index]!);
-    }
-  }
-  return texts;
+  series: ParsedChartSeries,
+): false | ChartDataLabels | undefined {
+  return mergeDataLabels(group.dataLabels, series.dataLabels);
+}
+
+function effectivePointLabels(
+  group: ParsedChartGroup,
+  series: ParsedChartSeries,
+  index: number,
+): false | ChartDataLabels | undefined {
+  return mergeDataLabels(
+    effectiveSeriesLabels(group, series),
+    series.points?.[index]?.dataLabels,
+  );
 }
 
 function pointDataLabelTexts(
   group: ParsedChartGroup,
+  series: ParsedChartSeries,
   labels: ChartDataLabels,
   index: number,
 ): string[] {
-  if (group.series.some((series) => series.values[index] !== null)) {
-    const texts: string[] = [];
-    if (labels.value === true || labels.percent === true) {
-      texts.push(
-        numberLabelCharacters(labels.numberFormat, labels.percent === true),
-      );
-    }
-    if (labels.category === true) texts.push(group.data.categories[index]!);
-    return texts;
+  if (series.values[index] === null || series.values[index] === undefined) {
+    return [];
   }
-  return [];
+  const texts: string[] = [];
+  if (labels.value === true || labels.percent === true) {
+    texts.push(
+      numberLabelCharacters(labels.numberFormat, labels.percent === true),
+    );
+  }
+  if (labels.category === true) texts.push(group.data.categories[index]!);
+  return texts;
+}
+
+function groupDataLabelTexts(group: ParsedChartGroup): string[] {
+  const texts: string[] = [];
+  for (const series of group.series) {
+    for (const index of series.values.keys()) {
+      const labels = effectivePointLabels(group, series, index);
+      if (labels === undefined || labels === false) continue;
+      texts.push(...pointDataLabelTexts(group, series, labels, index));
+    }
+  }
+  return texts;
 }
 
 function mergeTextStyle(
@@ -1965,11 +2041,11 @@ function chartResourceClaims(
   const categoryAxes = parsed.axes.filter(({ role }) => role === "category");
   const valueAxes = parsed.axes.filter(({ role }) => role === "value");
   const dataLabelText = parsed.groups.flatMap((group) =>
-    group.dataLabels === undefined ||
-    group.dataLabels === false ||
+    group.dataLabels !== undefined &&
+    group.dataLabels !== false &&
     group.dataLabels.style !== undefined
       ? []
-      : groupDataLabelTexts(group, group.dataLabels),
+      : groupDataLabelTexts(group),
   );
   const chartText = [
     ...parsed.categories,
@@ -2131,11 +2207,14 @@ function chartResourceClaims(
   }
   for (const [groupIndex, group] of parsed.groups.entries()) {
     const groupLabels = group.dataLabels;
-    if (groupLabels === undefined || groupLabels === false) continue;
-    if (groupLabels.style !== undefined) {
+    if (
+      groupLabels !== undefined &&
+      groupLabels !== false &&
+      groupLabels.style !== undefined
+    ) {
       const output = writeChartTextProperties(
         mergeTextStyle(chartStyle, groupLabels.style),
-        groupDataLabelTexts(group, groupLabels),
+        groupDataLabelTexts(group),
         `Chart.groups[${groupIndex}].dataLabels.style`,
         theme,
         embedFonts,
@@ -2151,17 +2230,26 @@ function chartResourceClaims(
       );
       addWarnings(output.warnings);
     }
+    const groupLabelStyle =
+      groupLabels !== undefined && groupLabels !== false
+        ? groupLabels.style
+        : undefined;
     for (const series of group.series) {
       for (const [pointIndex, point] of Object.entries(series.points ?? {})) {
         if (point.labelColor === undefined) continue;
         const index = Number(pointIndex);
-        const number = series.values[index];
-        if (number === null || number === undefined) continue;
-        const pointText = pointDataLabelTexts(group, groupLabels, index);
+        const pointLabels = effectivePointLabels(group, series, index);
+        if (pointLabels === undefined || pointLabels === false) continue;
+        const pointText = pointDataLabelTexts(
+          group,
+          series,
+          pointLabels,
+          index,
+        );
         if (pointText.length === 0) continue;
         const output = writeChartTextProperties(
           mergeTextStyle(chartStyle, {
-            ...groupLabels.style,
+            ...groupLabelStyle,
             color: point.labelColor,
           }),
           pointText,
@@ -2219,6 +2307,7 @@ export type {
   ChartAxisCrossing,
   ChartAxisReferences,
   ChartCategoryAxis,
+  ChartDataLabelOverride,
   ChartDataLabels,
   ChartDisplayBlanksAs,
   ChartGroup,

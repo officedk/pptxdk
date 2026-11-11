@@ -40,7 +40,7 @@ async function rejectsWithCode(props: ChartProps, code: string): Promise<void> {
 }
 
 describe("line and area depth", () => {
-  it("writes line markers, smooth lines, and shared chart formatting from both author entries", async () => {
+  it("writes native line markers, smooth flags, formats, and shared chart settings", async () => {
     const result = await build(
       <Deck width={640} height={400}>
         <Slide id="line-depth">
@@ -173,7 +173,7 @@ describe("line and area depth", () => {
         '<c:idx val="2"/><c:marker><c:symbol val="none"/></c:marker>',
       ),
     );
-    assert.ok(xml.includes('<c:showPercent val="0"/>'));
+    assert.ok(!xml.includes("<c:showPercent"));
 
     const workbookPath = chart?.embeddedWorkbook?.part;
     assert.ok(workbookPath);
@@ -543,5 +543,240 @@ describe("line and area depth", () => {
           code === "invalid-chart-series-format" && message.includes("smooth"),
       ),
     );
+  });
+  it("writes line label positions and series/point overrides while keeping area labels position-free", async () => {
+    const props: ChartProps = {
+      id: "line-label-overrides",
+      x: 0,
+      y: 0,
+      width: 360,
+      height: 240,
+      groups: [
+        {
+          kind: "line",
+          data: { kind: "shared-categories", categories: ["A", "B", "C"] },
+          dataLabels: {
+            value: true,
+            category: true,
+            position: "right",
+            numberFormat: "#,##0.0",
+          },
+          series: [
+            {
+              name: "S0",
+              values: [1, 2, 3],
+              dataLabels: {
+                value: true,
+                position: "left",
+                numberFormat: "0.0",
+              },
+              points: {
+                1: {
+                  dataLabels: {
+                    numberFormat: "0.00",
+                    position: "bottom",
+                  },
+                },
+                2: { dataLabels: false },
+              },
+            },
+            {
+              name: "S1",
+              values: [4, 5, 6],
+              dataLabels: {
+                category: true,
+                position: "top",
+                numberFormat: "0",
+              },
+            },
+          ],
+        },
+      ],
+    };
+    const results = [
+      await build(
+        <Deck width={480} height={320}>
+          <Slide id="react-line-labels">
+            <Chart {...props} />
+          </Slide>
+        </Deck>,
+      ),
+      await buildDocument(
+        deck({ width: 480, height: 320 }).append(
+          documentSlide({ id: "document-line-labels" }).append(
+            documentChart(props),
+          ),
+        ),
+      ),
+    ];
+    for (const result of results) {
+      const file = await validatePptx(result.pptx);
+      assert.deepEqual(file.errors, []);
+      const chart = file.slides[0]?.objects[0]?.chart;
+      assert.deepEqual(chart?.seriesDataLabels, [
+        {
+          seriesIndex: 0,
+          dataLabels: {
+            numberFormat: "0.0",
+            position: "left",
+            value: true,
+            category: true,
+          },
+          pointDataLabels: {
+            1: {
+              numberFormat: "0.00",
+              position: "bottom",
+              value: true,
+              category: true,
+            },
+            2: false,
+          },
+        },
+        {
+          seriesIndex: 1,
+          dataLabels: {
+            numberFormat: "0",
+            position: "top",
+            value: true,
+            category: true,
+          },
+        },
+      ]);
+      const xml = chartXml(unzipSync(result.pptx), 1);
+      assert.ok(xml.includes('<c:dLblPos val="l"/>'));
+      assert.ok(xml.includes('<c:dLblPos val="b"/>'));
+      assert.ok(xml.includes('<c:dLblPos val="t"/>'));
+      assert.ok(!xml.includes('<c:dLblPos val="r"/>'));
+      assert.ok(!xml.includes('<c:dLblPos val="bestFit"/>'));
+    }
+
+    const areaResult = await build(
+      <Deck width={480} height={320}>
+        <Slide id="area-labels">
+          <Chart
+            id="area-labels"
+            x={0}
+            y={0}
+            width={360}
+            height={240}
+            groups={[
+              {
+                kind: "area",
+                data: { kind: "shared-categories", categories: ["A", "B"] },
+                dataLabels: { value: true, numberFormat: "#,##0.0" },
+                series: [
+                  {
+                    name: "S",
+                    values: [1, 2],
+                    dataLabels: { numberFormat: "0.0" },
+                    points: { 1: { dataLabels: false } },
+                  },
+                ],
+              },
+            ]}
+          />
+        </Slide>
+      </Deck>,
+    );
+    const areaFile = await validatePptx(areaResult.pptx);
+    assert.deepEqual(areaFile.errors, []);
+    assert.deepEqual(areaFile.slides[0]?.objects[0]?.chart?.seriesDataLabels, [
+      {
+        seriesIndex: 0,
+        dataLabels: {
+          numberFormat: "0.0",
+          value: true,
+          category: false,
+        },
+        pointDataLabels: { 1: false },
+      },
+    ]);
+    assert.ok(!chartXml(unzipSync(areaResult.pptx), 1).includes("<c:dLblPos"));
+
+    const invalidCases: readonly [ChartProps, string][] = [
+      [
+        {
+          groups: [
+            {
+              kind: "line",
+              data: { kind: "shared-categories", categories: ["A"] },
+              dataLabels: { position: "outsideEnd" },
+              series: [{ name: "S", values: [1] }],
+            },
+          ],
+        } as unknown as ChartProps,
+        "invalid-data-labels",
+      ],
+      [
+        {
+          groups: [
+            {
+              kind: "line",
+              data: { kind: "shared-categories", categories: ["A"] },
+              series: [
+                {
+                  name: "S",
+                  values: [1],
+                  dataLabels: { position: "bestFit" },
+                },
+              ],
+            },
+          ],
+        } as ChartProps,
+        "invalid-data-labels",
+      ],
+      [
+        {
+          groups: [
+            {
+              kind: "line",
+              data: { kind: "shared-categories", categories: ["A"] },
+              series: [
+                {
+                  name: "S",
+                  values: [1],
+                  points: { 0: { dataLabels: { position: "insideEnd" } } },
+                },
+              ],
+            },
+          ],
+        } as ChartProps,
+        "invalid-data-labels",
+      ],
+      [
+        {
+          groups: [
+            {
+              kind: "line",
+              data: { kind: "shared-categories", categories: ["A"] },
+              series: [
+                {
+                  name: "S",
+                  values: [1],
+                  dataLabels: { percent: true },
+                },
+              ],
+            },
+          ],
+        } as ChartProps,
+        "invalid-data-labels",
+      ],
+      [
+        {
+          groups: [
+            {
+              kind: "area",
+              data: { kind: "shared-categories", categories: ["A"] },
+              dataLabels: { position: "left" },
+              series: [{ name: "S", values: [1] }],
+            },
+          ],
+        } as unknown as ChartProps,
+        "invalid-data-labels",
+      ],
+    ];
+    for (const [caseProps, code] of invalidCases) {
+      await rejectsWithCode(caseProps, code);
+    }
   });
 });

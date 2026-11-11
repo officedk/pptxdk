@@ -601,7 +601,6 @@ describe("native Cartesian charts", () => {
                 stacking: "percent",
                 gapWidth: 100,
                 dataLabels: {
-                  percent: true,
                   value: true,
                   category: true,
                   position: "insideEnd",
@@ -723,9 +722,7 @@ describe("native Cartesian charts", () => {
     assert.ok(columnXml.includes('<a:bodyPr anchor="ctr"/>'));
     assert.ok(columnXml.includes('<a:lnSpc><a:spcPts val="2000"/></a:lnSpc>'));
     assert.ok(
-      strFromU8(parts["ppt/charts/chart2.xml"]!).includes(
-        '<c:showPercent val="1"/>',
-      ),
+      !strFromU8(parts["ppt/charts/chart2.xml"]!).includes("showPercent"),
     );
     assert.ok(
       strFromU8(parts["ppt/charts/chart3.xml"]!).includes("<c:lineChart>"),
@@ -1221,10 +1218,10 @@ describe("native Cartesian charts", () => {
         } as unknown as ChartProps,
       },
       {
-        id: "line-explicit-data-label-position",
+        id: "line-invalid-data-label-position",
         code: "invalid-data-labels",
         message:
-          "Chart generation does not expose explicit data label positions for line charts",
+          'Office does not allow dLblPos="bestFit" for lineChart series data labels',
         props: {
           ...base,
           groups: [
@@ -1232,7 +1229,7 @@ describe("native Cartesian charts", () => {
               kind: "line",
               data,
               series,
-              dataLabels: { value: true, position: "center" },
+              dataLabels: { value: true, position: "bestFit" },
             },
           ],
         } as unknown as ChartProps,
@@ -1677,7 +1674,7 @@ describe("native Cartesian charts", () => {
           kind: "line",
           data: singleData,
           series: singleSeries,
-          dataLabels: { position: "center" },
+          dataLabels: { position: "bestFit" },
         },
       ],
     } as unknown as ChartProps;

@@ -71,6 +71,8 @@ export type ChartPoint = {
   readonly marker?: boolean | ChartMarker;
   /** Overrides data label text color for this data point. */
   readonly labelColor?: ColorValue;
+  /** Display, position, and number-format overrides for this point's data label. */
+  readonly dataLabels?: false | ChartDataLabelOverride;
 };
 
 export type ChartSeries = {
@@ -81,6 +83,8 @@ export type ChartSeries = {
   readonly color?: ColorValue;
   /** Stroke or border override; for line charts it controls the series line. */
   readonly line?: ChartLine;
+  /** Display, position, and number-format overrides for this series' data labels. */
+  readonly dataLabels?: false | ChartDataLabelOverride;
   /** Marker settings; applies only to line charts and is hidden when omitted or false. */
   readonly marker?: boolean | ChartMarker;
   /** Whether the line is drawn with Catmull-Rom smoothing; applies only to line charts. */
@@ -166,12 +170,16 @@ export type ChartAxisReferences = {
   readonly value: string;
 };
 
-type ChartDataLabelPosition =
+export type ChartDataLabelPosition =
   | "center"
   | "insideEnd"
   | "insideBase"
   | "outsideEnd"
-  | "bestFit";
+  | "bestFit"
+  | "left"
+  | "right"
+  | "bottom"
+  | "top";
 
 /** Data label settings; group types narrow position by chart kind and stacking. */
 export type ChartDataLabels<
@@ -184,6 +192,14 @@ export type ChartDataLabels<
   readonly numberFormat?: string;
   readonly style?: ChartTextStyle;
 };
+
+/**
+ * Series- or point-level data-label overrides.
+ *
+ * Omitted display and position fields inherit from the enclosing group or series. An explicit
+ * `false` suppresses labels at that level. Data-label text style remains a group-level field.
+ */
+export type ChartDataLabelOverride = Omit<ChartDataLabels, "style">;
 
 type ChartGroupBase = {
   readonly data: ChartGroupData;
@@ -233,11 +249,23 @@ export type ColumnOrBarChartGroup = CartesianGroupBase &
       } & ColumnOrBarStackedOptions)
   );
 
-export type LineOrAreaChartGroup = CartesianGroupBase &
+type LineDataLabels =
+  | false
+  | ChartDataLabels<"left" | "right" | "bottom" | "top" | "center">;
+
+export type LineChartGroup = CartesianGroupBase &
   CartesianStacking & {
-    readonly kind: "line" | "area";
+    readonly kind: "line";
+    readonly dataLabels?: LineDataLabels;
+  };
+
+export type AreaChartGroup = CartesianGroupBase &
+  CartesianStacking & {
+    readonly kind: "area";
     readonly dataLabels?: DataLabelsWithoutPosition;
   };
+
+export type LineOrAreaChartGroup = LineChartGroup | AreaChartGroup;
 
 type PieOptions = {
   /**

@@ -44,6 +44,7 @@ export type {
   ChartAxisCrossing,
   ChartAxisReferences,
   ChartCategoryAxis,
+  ChartDataLabelOverride,
   ChartDataLabels,
   ChartDisplayBlanksAs,
   ChartGroup,

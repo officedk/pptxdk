@@ -346,6 +346,66 @@ describe("scatter depth", () => {
     assert.ok(worksheet.includes('r="C6"'));
   });
 
+  it("preserves all-missing and all-zero observations without fabricating values", async () => {
+    const result = await buildDocument(
+      deck({ width: 480, height: 300 }).append(
+        documentSlide({ id: "all-missing-and-zero" }).append(
+          documentChart({
+            id: "all-missing-and-zero",
+            x: 10,
+            y: 10,
+            width: 400,
+            height: 240,
+            groups: [
+              xyGroup([
+                {
+                  name: "All null",
+                  x: [null, null],
+                  y: [null, null],
+                },
+                {
+                  name: "All zero",
+                  x: [0, 0],
+                  y: [0, 0],
+                },
+              ]),
+            ],
+          }),
+        ),
+      ),
+    );
+    const file = await validatePptx(result.pptx);
+    assert.deepEqual(file.errors, []);
+    const chart = file.slides[0]?.objects[0]?.chart;
+    assert.deepEqual(chart?.series[0]?.x, [null, null]);
+    assert.deepEqual(chart?.series[0]?.y, [null, null]);
+    assert.deepEqual(chart?.series[1]?.x, [0, 0]);
+    assert.deepEqual(chart?.series[1]?.y, [0, 0]);
+    const parts = unzipSync(result.pptx);
+    const xml = chartXml(parts, 1);
+    assert.ok(
+      xml.includes(
+        '<c:numCache><c:formatCode>General</c:formatCode><c:ptCount val="2"/></c:numCache>',
+      ),
+    );
+    assert.ok(
+      xml.includes(
+        '<c:numCache><c:formatCode>General</c:formatCode><c:ptCount val="2"/><c:pt idx="0"><c:v>0</c:v></c:pt><c:pt idx="1"><c:v>0</c:v></c:pt></c:numCache>',
+      ),
+    );
+    const workbookPath = chart?.embeddedWorkbook?.part;
+    assert.ok(workbookPath);
+    const worksheet = strFromU8(
+      unzipSync(parts[workbookPath]!)["xl/worksheets/sheet1.xml"]!,
+    );
+    assert.ok(!worksheet.includes('r="B2"'));
+    assert.ok(!worksheet.includes('r="C2"'));
+    assert.ok(worksheet.includes('r="D2"'));
+    assert.ok(worksheet.includes('r="E2"'));
+    assert.ok(worksheet.includes('r="D3"'));
+    assert.ok(worksheet.includes('r="E3"'));
+  });
+
   it("diagnoses invalid and inapplicable scatter declarations", async () => {
     const categoryData = {
       kind: "shared-categories" as const,

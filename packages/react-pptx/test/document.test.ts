@@ -268,6 +268,32 @@ describe("public document authoring entry", () => {
     );
   });
 
+  it("isolates author style objects at creation and update like the React cleanup handoff", async () => {
+    const creationStyle = { color: "#FF0000" };
+    const title = text("Owned input", { style: creationStyle }).set({
+      x: 0,
+      y: 0,
+      width: 200,
+      height: 40,
+    });
+    const document = deck({ width: 960, height: 540 }).append(
+      slide({ slideId: "style-alias" }).append(title),
+    );
+
+    // Simulates React useLayoutEffect cleanup mutating the caller's original style object.
+    creationStyle.color = "#0000FF";
+    const created = await build(document);
+    assert.match(slideXml(created), /FF0000/u);
+    assert.doesNotMatch(slideXml(created), /0000FF/u);
+
+    const updateStyle = { color: "#00AA00" };
+    title.style(updateStyle);
+    updateStyle.color = "#0000FF";
+    const updated = await build(document);
+    assert.match(slideXml(updated), /00AA00/u);
+    assert.doesNotMatch(slideXml(updated), /0000FF/u);
+  });
+
   it("uses measured text at the build call time and keeps the cancellation contract", async () => {
     const themeFont = font(
       "Document Metric",

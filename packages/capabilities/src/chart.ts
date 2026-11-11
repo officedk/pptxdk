@@ -1,6 +1,5 @@
 import {
   CapabilityError,
-  CommonNode,
   layoutStyleKeys,
   parseCapabilityLayoutContract,
   pxToEmu,
@@ -18,9 +17,8 @@ import {
   type LinkTarget,
   type ObjectCapabilityModule,
   type ThemeContext,
-} from "@react-pptx/core";
-import { hostNodeCreator } from "@react-pptx/core/document";
-import type { ReactNode } from "react";
+} from "@react-pptx/core/capability";
+import { CommonNode } from "@react-pptx/core/document";
 
 import {
   chartFrameXml,
@@ -35,7 +33,6 @@ import {
 } from "./font-embedding.ts";
 import type { MorphProps } from "./morph-api.ts";
 import { motionAnnotations, type MotionProps } from "./motion-api.ts";
-import { motionElement } from "./motion-elements.ts";
 import {
   writeChartTextProperties,
   type TextResourceClaim,
@@ -1657,14 +1654,17 @@ export const chartCapability: ObjectCapabilityModule = {
   },
 };
 
-function createChartNode(props: ChartProps): CommonNode<"chart", ChartProps> {
-  return new CommonNode("chart", "rp:chart", props);
-}
+export type ChartNode = CommonNode<
+  "chart",
+  ChartProps,
+  NonNullable<ChartProps["style"]>
+>;
 
-/** Declares an object compiled into a native chart by the official capability module. */
-export function Chart(props: ChartProps): ReactNode {
-  return motionElement("rp:chart", {
-    ...props,
-    [hostNodeCreator]: createChartNode,
-  });
+/** Creates the editable native chart shared by the command factory and the Chart JSX element. */
+export function createChartNode(props: ChartProps): ChartNode {
+  return new CommonNode<"chart", ChartProps, NonNullable<ChartProps["style"]>>(
+    "chart",
+    "rp:chart",
+    props,
+  );
 }

@@ -3,15 +3,19 @@ import assert from "node:assert/strict";
 import {
   build,
   BuildError,
+  Cell,
+  Chart,
   CommonContainer,
   CommonNode,
   Deck,
   expandDocument,
   P,
   RichTextContainer,
+  Row,
   Shape,
   Slide,
   Span,
+  Table,
   Text,
 } from "@react-pptx/react-pptx";
 import {
@@ -173,6 +177,82 @@ describe("public React handoff", () => {
     const commandResult = await buildDocument(commandDocument);
     assert.deepEqual((await validatePptx(commandResult.pptx)).errors, []);
     assert.equal(commandResult.report.slides[0]?.objects[0]?.text, "Edited");
+  });
+
+  it("edits expanded table and chart nodes through the shared common document", async () => {
+    const expanded = await expandDocument(
+      reactDeck([
+        createElement(
+          Table,
+          { testId: "handoff-table", width: 240, columns: [120, 120] },
+          createElement(
+            Row,
+            { style: { height: 30 } },
+            createElement(Cell, { testId: "handoff-cell" }, "Original"),
+            createElement(Cell, null, "Value"),
+          ),
+        ),
+        createElement(Chart, {
+          testId: "handoff-chart",
+          kind: "column",
+          x: 0,
+          y: 40,
+          width: 240,
+          height: 160,
+          data: {
+            categories: ["Q1"],
+            series: [{ name: "Original", values: [1] }],
+          },
+        }),
+      ]),
+    );
+
+    const tableNode = findNode(expanded, "table");
+    assert.ok(tableNode instanceof CommonContainer);
+    const cellNode = findNode(tableNode, "cell");
+    assert.ok(cellNode instanceof RichTextContainer);
+    const chartNode = findNode(expanded, "chart");
+    assert.ok(chartNode instanceof CommonNode);
+
+    const first = await buildDocument(expanded);
+    const firstFile = await validatePptx(first.pptx);
+    assert.deepEqual(firstFile.errors, []);
+    assert.equal(
+      firstFile.slides[0]?.objects.find(({ kind }) => kind === "table")?.table
+        ?.cells[0]?.[0],
+      "Original",
+    );
+    assert.deepEqual(
+      firstFile.slides[0]?.objects.find(({ kind }) => kind === "chart")?.chart
+        ?.series,
+      [{ name: "Original", categories: ["Q1"], values: [1] }],
+    );
+
+    cellNode.content("Edited cell");
+    chartNode.set({
+      data: {
+        categories: ["R1"],
+        series: [{ name: "Revised", values: [7] }],
+      },
+    });
+    const second = await buildDocument(expanded);
+    const secondFile = await validatePptx(second.pptx);
+    assert.deepEqual(secondFile.errors, []);
+    assert.equal(
+      secondFile.slides[0]?.objects.find(({ kind }) => kind === "table")?.table
+        ?.cells[0]?.[0],
+      "Edited cell",
+    );
+    assert.deepEqual(
+      secondFile.slides[0]?.objects.find(({ kind }) => kind === "chart")?.chart
+        ?.series,
+      [{ name: "Revised", categories: ["R1"], values: [7] }],
+    );
+    assert.equal(
+      firstFile.slides[0]?.objects.find(({ kind }) => kind === "table")?.table
+        ?.cells[0]?.[0],
+      "Original",
+    );
   });
 
   it("fails public expansion when React unmount cleanup throws", async () => {

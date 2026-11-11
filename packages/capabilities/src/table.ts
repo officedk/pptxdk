@@ -4,7 +4,6 @@ import {
   layoutStyleKeys,
   parseCapabilityLayoutContract,
   pxToEmu,
-  resolvedColorXml,
   textStyleKeys,
   xmlEscape,
   type CapabilityContext,
@@ -23,13 +22,8 @@ import {
   type ResolvedColor,
   type TextStyle,
   type ThemeContext,
-} from "@react-pptx/core";
-import {
-  CommonContainer,
-  hostNodeCreator,
-  RichTextContainer,
-} from "@react-pptx/core/document";
-import { createElement, type ReactNode } from "react";
+} from "@react-pptx/core/capability";
+import { CommonContainer, RichTextContainer } from "@react-pptx/core/document";
 
 import {
   fontPresentationContributions,
@@ -39,7 +33,13 @@ import {
 import { nativeLinkXml } from "./identity.ts";
 import type { MorphProps } from "./morph-api.ts";
 import { motionAnnotations, type MotionProps } from "./motion-api.ts";
-import { motionElement } from "./motion-elements.ts";
+import {
+  emptyTableCellXml,
+  tableCellPropertiesXml,
+  tableFrameXml,
+  type TableCellBorder,
+  type TableCellPadding,
+} from "./table-xml.ts";
 import {
   parseTextParagraphs,
   textExtent,
@@ -94,7 +94,7 @@ export type TableCellStyle = TableTextStyle & {
   readonly paddingLeft?: number;
 };
 
-export type TableProps = MotionProps &
+export type TableDeclarationProps = MotionProps &
   MorphProps & {
     readonly id?: string;
     readonly testId?: string;
@@ -107,21 +107,19 @@ export type TableProps = MotionProps &
     readonly width?: number;
     readonly columns: readonly TableColumn[];
     readonly style?: TableStyle;
-    readonly children?: ReactNode;
   };
 
-type TablePartProps = {
+type TablePartDeclarationProps = {
   readonly id?: string;
   readonly testId?: string;
   readonly part?: string;
-  readonly children?: ReactNode;
 };
 
-export type RowProps = TablePartProps & {
+export type RowDeclarationProps = TablePartDeclarationProps & {
   readonly style?: TableRowStyle;
 };
 
-export type CellProps = TablePartProps & {
+export type CellDeclarationProps = TablePartDeclarationProps & {
   readonly colSpan?: number;
   readonly rowSpan?: number;
   readonly style?: TableCellStyle;
@@ -132,12 +130,7 @@ type Track =
   | { readonly kind: "fr"; readonly value: number }
   | { readonly kind: "auto" };
 
-type Edges = {
-  readonly top: number;
-  readonly right: number;
-  readonly bottom: number;
-  readonly left: number;
-};
+type Edges = TableCellPadding;
 
 type ParsedCell = {
   readonly row: number;
@@ -153,11 +146,7 @@ type ParsedCell = {
   readonly verticalAlign: TableVerticalAlign;
   readonly padding: Edges;
   readonly fill?: ResolvedColor;
-  readonly border?: {
-    readonly color: ResolvedColor;
-    readonly width: number;
-    readonly dash: "solid" | "dash" | "dot";
-  };
+  readonly border?: TableCellBorder;
 };
 
 type ParsedRow = {
@@ -204,7 +193,6 @@ const tablePartParameters = ["id", "testId", "part", "style"] as const;
 const cellParameters = [...tablePartParameters, "colSpan", "rowSpan"] as const;
 const verticalAlignments = new Set(["top", "middle", "bottom"]);
 const maximumExtentEmu = 2_147_483_647;
-const tableUri = "http://schemas.openxmlformats.org/drawingml/2006/table";
 
 function fail(code: string, message: string, path?: string): never {
   throw new CapabilityError(code, message, path);
@@ -545,23 +533,6 @@ function pxExtent(value: number, label: string, path?: string): number {
   return emu;
 }
 
-function fillXml(value: ResolvedColor | undefined): string {
-  return value === undefined
-    ? "<a:noFill/>"
-    : `<a:solidFill>${resolvedColorXml(value)}</a:solidFill>`;
-}
-
-function lineXml(
-  side: "L" | "R" | "T" | "B",
-  border: ParsedCell["border"],
-): string {
-  if (border === undefined) return `<a:ln${side}><a:noFill/></a:ln${side}>`;
-  const width = Math.max(1, pxToEmu(border.width));
-  const dash =
-    border.dash === "solid" ? "" : `<a:prstDash val="${border.dash}"/>`;
-  return `<a:ln${side} w="${width}"><a:solidFill>${resolvedColorXml(border.color)}</a:solidFill>${dash}</a:ln${side}>`;
-}
-
 function textBody(
   cell: ParsedCell,
   theme: ThemeContext,
@@ -809,44 +780,6 @@ function prepareRows(
     }
   }
   return { rows, cells };
-}
-
-function mergeCellProperties(
-  padding: Edges,
-  vertical: TableVerticalAlign,
-  border: ParsedCell["border"],
-  fill: ResolvedColor | undefined,
-): string {
-  const lines = (["L", "R", "T", "B"] as const)
-    .map((side) => lineXml(side, border))
-    .join("");
-  return `<a:tcPr marL="${pxToEmu(padding.left)}" marR="${pxToEmu(padding.right)}" marT="${pxToEmu(padding.top)}" marB="${pxToEmu(padding.bottom)}" anchor="${vertical === "middle" ? "ctr" : vertical === "bottom" ? "b" : "t"}">${lines}${fillXml(fill)}</a:tcPr>`;
-}
-
-function emptyCell(lang?: string): string {
-  const langAttr = lang !== undefined ? ` lang="${xmlEscape(lang)}"` : "";
-  return `<a:txBody><a:bodyPr/><a:lstStyle/><a:p><a:endParaRPr${langAttr}/></a:p></a:txBody><a:tcPr/>`;
-}
-
-function frameXml(
-  id: number,
-  escapedName: string,
-  x: number,
-  y: number,
-  widths: readonly number[],
-  heights: readonly number[],
-  rows: readonly string[],
-  linkXml: string,
-): string {
-  const columnXml = widths
-    .map((width) => `<a:gridCol w="${pxToEmu(width)}"/>`)
-    .join("");
-  const rowXml = rows
-    .map((cells, row) => `<a:tr h="${pxToEmu(heights[row]!)}">${cells}</a:tr>`)
-    .join("");
-  const width = widths.reduce((sum, value) => sum + pxToEmu(value), 0);
-  const height = heights.reduce((sum, value) => sum + pxToEmu(value), 0);
-  return `<p:graphicFrame><p:nvGraphicFramePr><p:cNvPr id="${id}" name="${escapedName}">${linkXml}</p:cNvPr><p:cNvGraphicFramePr/><p:nvPr/></p:nvGraphicFramePr><p:xfrm><a:off x="${pxToEmu(x)}" y="${pxToEmu(y)}"/><a:ext cx="${width}" cy="${height}"/></p:xfrm><a:graphic><a:graphicData uri="${tableUri}"><a:tbl><a:tblPr/><a:tblGrid>${columnXml}</a:tblGrid>${rowXml}</a:tbl></a:graphicData></a:graphic></p:graphicFrame>`;
 }
 
 export type ParsedTable = {
@@ -1305,7 +1238,7 @@ export const tableCapability: ObjectCapabilityModule<ParsedTable> = {
               : []),
           ];
           rowCells.push(
-            `<a:tc${hMerge}${vMerge}${spanAttributes.length === 0 ? "" : ` ${spanAttributes.join(" ")}`}>${emptyCell(owner?.textStyle?.["lang"])}</a:tc>`,
+            `<a:tc${hMerge}${vMerge}${spanAttributes.length === 0 ? "" : ` ${spanAttributes.join(" ")}`}>${emptyTableCellXml(owner?.textStyle?.["lang"])}</a:tc>`,
           );
           continue;
         }
@@ -1342,7 +1275,7 @@ export const tableCapability: ObjectCapabilityModule<ParsedTable> = {
           spanAttributes.length === 0 ? "" : ` ${spanAttributes.join(" ")}`;
         const rowFill = rows[cell.row]?.fill;
         const fill = cell.fill ?? rowFill;
-        const properties = mergeCellProperties(
+        const properties = tableCellPropertiesXml(
           cell.padding,
           cell.verticalAlign,
           cell.border,
@@ -1448,7 +1381,7 @@ export const tableCapability: ObjectCapabilityModule<ParsedTable> = {
       ),
     });
     return {
-      xml: frameXml(
+      xml: tableFrameXml(
         context.id,
         escapedName,
         x,
@@ -1479,44 +1412,45 @@ export const tableCapability: ObjectCapabilityModule<ParsedTable> = {
   },
 };
 
-function createTableNode(
-  props: TableProps,
-): CommonContainer<"table", TableProps> {
-  return new CommonContainer("table", "rp:table", props);
+export type TableNode = CommonContainer<
+  "table",
+  TableDeclarationProps,
+  NonNullable<TableDeclarationProps["style"]>
+>;
+export type RowNode = CommonContainer<
+  "row",
+  RowDeclarationProps,
+  NonNullable<RowDeclarationProps["style"]>
+>;
+export type CellNode = RichTextContainer<
+  "cell",
+  CellDeclarationProps,
+  NonNullable<CellDeclarationProps["style"]>
+>;
+
+/** Creates the editable native table shared by the command factory and the Table JSX element. */
+export function createTableNode(props: TableDeclarationProps): TableNode {
+  return new CommonContainer<
+    "table",
+    TableDeclarationProps,
+    NonNullable<TableDeclarationProps["style"]>
+  >("table", "rp:table", props);
 }
 
-function createRowNode(props: RowProps): CommonContainer<"row", RowProps> {
-  return new CommonContainer("row", "rp:row", props);
+/** Creates the editable row shared by command authoring and the Row JSX element. */
+export function createRowNode(props: RowDeclarationProps): RowNode {
+  return new CommonContainer<
+    "row",
+    RowDeclarationProps,
+    NonNullable<RowDeclarationProps["style"]>
+  >("row", "rp:row", props);
 }
 
-function createCellNode(
-  props: CellProps,
-): RichTextContainer<"cell", CellProps> {
-  return new RichTextContainer("cell", "rp:cell", props);
-}
-
-/** Declares an editable native table in the React root handled by the table module. */
-export function Table(props: TableProps): ReactNode {
-  return motionElement("rp:table", {
-    ...props,
-    [hostNodeCreator]: createTableNode,
-  });
-}
-
-/** Declares a row of a native table; calculated from actual measurement of row content when height is omitted. */
-export function Row(props: RowProps): ReactNode {
-  return createElement(
-    "rp:row",
-    { ...props, [hostNodeCreator]: createRowNode },
-    props.children,
-  );
-}
-
-/** Declares table cell content and horizontal / vertical merge spans. */
-export function Cell(props: CellProps): ReactNode {
-  return createElement(
-    "rp:cell",
-    { ...props, [hostNodeCreator]: createCellNode },
-    props.children,
-  );
+/** Creates the editable rich-text cell shared by command authoring and the Cell JSX element. */
+export function createCellNode(props: CellDeclarationProps): CellNode {
+  return new RichTextContainer<
+    "cell",
+    CellDeclarationProps,
+    NonNullable<CellDeclarationProps["style"]>
+  >("cell", "rp:cell", props);
 }

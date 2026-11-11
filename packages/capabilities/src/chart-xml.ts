@@ -315,6 +315,21 @@ function numRef(
   );
 }
 
+/** Literal numeric data source; zero-observation custom error bars use zero points. */
+function numLit(values: readonly (number | null)[]): XmlElement {
+  return el(
+    "c:numLit",
+    null,
+    el("c:formatCode", null, "General"),
+    el("c:ptCount", { val: values.length }),
+    values.flatMap((value, index) =>
+      value === null
+        ? []
+        : [el("c:pt", { idx: index }, el("c:v", null, String(value)))],
+    ),
+  );
+}
+
 function color(value: ColorValue, theme: ThemeContext): XmlRaw {
   return { raw: resolvedColorXml(theme.resolveColor(value)) };
 }
@@ -535,14 +550,22 @@ function errorBarXml(
   if (bars.type === "custom") {
     if (bars.plus !== undefined) {
       const values = channel("plus");
-      plus = el("c:plus", null, numRef(errorBarFormula(values), values.values));
+      plus = el(
+        "c:plus",
+        null,
+        values.values.length === 0
+          ? numLit(values.values)
+          : numRef(errorBarFormula(values), values.values),
+      );
     }
     if (bars.minus !== undefined) {
       const values = channel("minus");
       minus = el(
         "c:minus",
         null,
-        numRef(errorBarFormula(values), values.values),
+        values.values.length === 0
+          ? numLit(values.values)
+          : numRef(errorBarFormula(values), values.values),
       );
     }
   }
@@ -912,7 +935,8 @@ function categoryLabelRange(
 ): CategoryLabelRange | undefined {
   if (
     group.kind !== "doughnut" ||
-    group.data.kind !== "independent-categories"
+    group.data.kind !== "independent-categories" ||
+    series.categories.length === 0
   ) {
     return undefined;
   }
@@ -1039,19 +1063,28 @@ function categoryChartSeries(
           channels,
           theme,
         ),
-    el(
-      "c:cat",
-      null,
-      strRef(
-        rangeFormula(category.column, category.pointCount),
-        series.categories,
-      ),
-    ),
-    el(
-      "c:val",
-      null,
-      numRef(rangeFormula(value.column, category.pointCount), series.values),
-    ),
+    // A true zero-observation series omits both optional data-source wrappers. An empty
+    // wrapper is not equivalent, and the source must stay absent after native save.
+    series.values.length === 0
+      ? undefined
+      : el(
+          "c:cat",
+          null,
+          strRef(
+            rangeFormula(category.column, category.pointCount),
+            series.categories,
+          ),
+        ),
+    series.values.length === 0
+      ? undefined
+      : el(
+          "c:val",
+          null,
+          numRef(
+            rangeFormula(value.column, category.pointCount),
+            series.values,
+          ),
+        ),
     lineChart ? el("c:smooth", { val: series.smooth ?? false }) : undefined,
     categoryRange === undefined
       ? undefined
@@ -1161,22 +1194,27 @@ function scatterChartSeries(
           channels,
           theme,
         ),
-    el(
-      "c:xVal",
-      null,
-      numRef(
-        rangeFormula(seriesCells.x.column, seriesCells.x.pointCount),
-        series.x,
-      ),
-    ),
-    el(
-      "c:yVal",
-      null,
-      numRef(
-        rangeFormula(seriesCells.y.column, seriesCells.y.pointCount),
-        series.y,
-      ),
-    ),
+    // Scatter X/Y are one paired data source; omit both wrappers for zero observations.
+    series.x.length === 0
+      ? undefined
+      : el(
+          "c:xVal",
+          null,
+          numRef(
+            rangeFormula(seriesCells.x.column, seriesCells.x.pointCount),
+            series.x,
+          ),
+        ),
+    series.x.length === 0
+      ? undefined
+      : el(
+          "c:yVal",
+          null,
+          numRef(
+            rangeFormula(seriesCells.y.column, seriesCells.y.pointCount),
+            series.y,
+          ),
+        ),
     group.line === "smooth" || group.line === "straight"
       ? el("c:smooth", { val: group.line === "smooth" })
       : undefined,

@@ -118,6 +118,40 @@ export type FileChartLine = {
   readonly dash?: string;
 };
 
+/** One side of native custom error-bar magnitudes. */
+export type FileChartErrorBarValues = {
+  /** Whether the values come from c:numRef or c:numLit. */
+  readonly source: "reference" | "literal";
+  /** Present for reference values; absent for literals, which have no workbook formula. */
+  readonly formula?: string;
+  /** One magnitude per original series slot; null keeps a missing slot. */
+  readonly values: readonly (number | null)[];
+};
+
+export type FileChartErrorBar = {
+  /**
+   * Resolved direction. When errDir is absent, Office defaults to x for horizontal bar
+   * charts and y for every other chart type.
+   */
+  readonly direction: "x" | "y";
+  /** Set only when the file stores errDir explicitly. */
+  readonly declaredDirection?: "x" | "y";
+  readonly include: "both" | "plus" | "minus";
+  readonly type:
+    | "fixed"
+    | "percentage"
+    | "standardDeviation"
+    | "standardError"
+    | "custom";
+  /** Set only when noEndCap is explicitly stored; false means no end cap is drawn. */
+  readonly endCap?: boolean;
+  readonly value?: number;
+  readonly line?: FileChartLine;
+  /** Present for custom error bars and, as an Office save exception, for other types. */
+  readonly plus?: FileChartErrorBarValues;
+  readonly minus?: FileChartErrorBarValues;
+};
+
 export type FileChartSeries = {
   readonly name: string;
   /** Category chart series only: one label per group category position. */
@@ -148,6 +182,8 @@ export type FileChartSeries = {
   readonly explosion?: number;
   /** Native c:dPt/c:explosion values by point index. */
   readonly pointExplosions?: Readonly<Record<number, number>>;
+  /** Native c:errBars observations in file order. */
+  readonly errorBars?: readonly FileChartErrorBar[];
 };
 
 /** Locally observed data-label settings; absent fields are not set by the XML node. */
@@ -2491,6 +2527,49 @@ function chartNumberCache(
   return { formula, values };
 }
 
+function chartNumberLiteral(
+  literal: XmlElement | undefined,
+  part: string,
+  errors: ValidationIssue[],
+): ChartCache<number | null> | undefined {
+  if (literal === undefined) return undefined;
+  const count = integerAttribute(
+    first(literal, chartNamespace, "ptCount"),
+    "val",
+  );
+  if (count === undefined || count < 0) {
+    issue(
+      errors,
+      part,
+      "invalid-chart-cache",
+      "Chart numeric literal missing a valid point count",
+    );
+    return undefined;
+  }
+  const values: (number | null)[] = Array.from({ length: count }, () => null);
+  for (const point of elements(literal, chartNamespace, "pt")) {
+    const index = integerAttribute(point, "idx");
+    const text = first(point, chartNamespace, "v")?.textContent;
+    const value = text === undefined ? NaN : Number(text);
+    if (
+      index === undefined ||
+      index < 0 ||
+      index >= values.length ||
+      !Number.isFinite(value)
+    ) {
+      issue(
+        errors,
+        part,
+        "invalid-chart-cache",
+        "Chart numeric literal contains invalid data points",
+      );
+      continue;
+    }
+    values[index] = value;
+  }
+  return { formula: "", values };
+}
+
 function spreadsheetColumn(index: number): string {
   let column = "";
   for (let value = index + 1; value > 0; value = Math.floor((value - 1) / 26)) {
@@ -2528,6 +2607,11 @@ type ChartFormulaReference = {
   readonly values?: string;
   readonly x?: string;
   readonly y?: string;
+  readonly errorBars?: readonly {
+    readonly direction: "x" | "y";
+    readonly plus?: string;
+    readonly minus?: string;
+  }[];
 };
 
 type ChartFormulaSeries = {
@@ -2769,6 +2853,64 @@ function readEmbeddedWorkbook(
       return value;
     });
 
+  const readWorkbookErrorBars = (
+    series: FileChartSeries,
+    formula: ChartFormulaReference,
+    pointCount: number,
+  ): FileChartErrorBar[] => {
+    const result: FileChartErrorBar[] = [];
+    for (const bar of series.errorBars ?? []) {
+      const reference = formula.errorBars?.find(
+        (item) => item.direction === bar.direction,
+      );
+      const readSide = (
+        side: "plus" | "minus",
+      ): FileChartErrorBarValues | undefined => {
+        const chartValues = bar[side];
+        if (chartValues === undefined) return undefined;
+        const sideFormula = reference?.[side];
+        if (sideFormula === undefined) return chartValues;
+        const range = chartFormulaRange(sideFormula, sheetName);
+        if (
+          range === undefined ||
+          !range.hasRange ||
+          range.startColumn !== range.endColumn ||
+          range.startRow < 2 ||
+          range.endRow - range.startRow + 1 !== pointCount
+        ) {
+          issue(
+            errors,
+            chartPart,
+            "invalid-chart-formula",
+            `Error bar ${side} for series ${series.name} does not reference a single workbook column`,
+          );
+          return chartValues;
+        }
+        const values = readNumberRange(range);
+        if (
+          values.length !== chartValues.values.length ||
+          values.some((value, index) => value !== chartValues.values[index])
+        ) {
+          issue(
+            errors,
+            chartPart,
+            "chart-workbook-mismatch",
+            `Error bar ${side} for series ${series.name} does not match embedded workbook content`,
+          );
+        }
+        return { ...chartValues, values };
+      };
+      const plus = readSide("plus");
+      const minus = readSide("minus");
+      result.push({
+        ...bar,
+        ...(plus === undefined ? {} : { plus }),
+        ...(minus === undefined ? {} : { minus }),
+      });
+    }
+    return result;
+  };
+
   const workbookSeries: FileChartSeries[] = [];
   for (const { series, formula } of formulaSeries) {
     const nameRange = chartFormulaRange(formula.name, sheetName);
@@ -2823,6 +2965,7 @@ function readEmbeddedWorkbook(
       }
       const x = readNumberRange(xRange);
       const y = readNumberRange(yRange);
+      const errorBars = readWorkbookErrorBars(series, formula, xValues.length);
       if (
         nameCell !== series.name ||
         x.some((value, row) => value !== xValues[row]) ||
@@ -2844,6 +2987,7 @@ function readEmbeddedWorkbook(
         groupIndex: series.groupIndex,
         ...(series.marker === undefined ? {} : { marker: series.marker }),
         ...(series.smooth === undefined ? {} : { smooth: series.smooth }),
+        ...(errorBars.length === 0 ? {} : { errorBars }),
       });
       continue;
     }
@@ -2914,6 +3058,7 @@ function readEmbeddedWorkbook(
       },
     );
     const workbookValues = readNumberRange(valueRange);
+    const errorBars = readWorkbookErrorBars(series, formula, values.length);
     if (
       nameCell !== series.name ||
       workbookCategories.some(
@@ -2937,6 +3082,7 @@ function readEmbeddedWorkbook(
       groupIndex: series.groupIndex,
       ...(series.marker === undefined ? {} : { marker: series.marker }),
       ...(series.smooth === undefined ? {} : { smooth: series.smooth }),
+      ...(errorBars.length === 0 ? {} : { errorBars }),
     });
   }
   const workbookCategories = workbookSeries[0]?.categories;
@@ -2989,6 +3135,243 @@ function readChartLine(
     ...(widthEmu === undefined ? {} : { widthEmu }),
     ...(dashValue === "" ? {} : { dash: dashValue }),
   };
+}
+
+function readErrorBarSide(
+  node: XmlElement,
+  side: "plus" | "minus",
+  pointCount: number,
+  chartPart: string,
+  errors: ValidationIssue[],
+): FileChartErrorBarValues | undefined {
+  const sideNode = first(node, chartNamespace, side);
+  if (sideNode === undefined) return undefined;
+  const reference = first(sideNode, chartNamespace, "numRef");
+  const literal = first(sideNode, chartNamespace, "numLit");
+  if (reference !== undefined && literal !== undefined) {
+    issue(
+      errors,
+      chartPart,
+      "invalid-chart-error-bars",
+      `Error bar ${side} must use either numRef or numLit, not both`,
+    );
+    return undefined;
+  }
+  let values: FileChartErrorBarValues;
+  if (reference !== undefined) {
+    const cache = chartNumberCache(reference, chartPart, errors);
+    if (cache === undefined) return undefined;
+    values = {
+      source: "reference",
+      formula: cache.formula,
+      values: cache.values,
+    };
+  } else if (literal !== undefined) {
+    const parsed = chartNumberLiteral(literal, chartPart, errors);
+    if (parsed === undefined) return undefined;
+    values = { source: "literal", values: parsed.values };
+  } else {
+    issue(
+      errors,
+      chartPart,
+      "invalid-chart-error-bars",
+      `Error bar ${side} is missing numRef or numLit`,
+    );
+    return undefined;
+  }
+  if (values.values.length !== pointCount) {
+    issue(
+      errors,
+      chartPart,
+      "invalid-chart-error-bars",
+      `Error bar ${side} has ${values.values.length} values for ${pointCount} series slots`,
+    );
+  }
+  values.values.forEach((value, index) => {
+    if (value !== null && value < 0) {
+      issue(
+        errors,
+        chartPart,
+        "invalid-chart-error-bars",
+        `Error bar ${side} value ${index} must be non-negative`,
+      );
+    }
+  });
+  return values;
+}
+
+const chartErrorBarIncludeValues = new Set<string>(["both", "plus", "minus"]);
+const chartErrorBarValueTypes = new Map<
+  string,
+  "fixed" | "percentage" | "standardDeviation" | "standardError" | "custom"
+>([
+  ["cust", "custom"],
+  ["fixedVal", "fixed"],
+  ["percentage", "percentage"],
+  ["stdDev", "standardDeviation"],
+  ["stdErr", "standardError"],
+]);
+
+function readChartErrorBars(
+  chartSeries: XmlElement,
+  chartType: string | null,
+  barDirection: string,
+  pointCount: number,
+  chartPart: string,
+  errors: ValidationIssue[],
+  theme: ThemeTextReader,
+): FileChartErrorBar[] {
+  if (
+    (chartType === "pieChart" || chartType === "doughnutChart") &&
+    first(chartSeries, chartNamespace, "errBars") !== undefined
+  ) {
+    issue(
+      errors,
+      chartPart,
+      "invalid-chart-error-bars",
+      "Pie and doughnut chart series do not support native error bars",
+    );
+  }
+  const bars: FileChartErrorBar[] = [];
+  const seenDirections = new Set<"x" | "y">();
+  for (const node of elements(chartSeries, chartNamespace, "errBars")) {
+    const directionNode = first(node, chartNamespace, "errDir");
+    const directionValue =
+      directionNode === undefined ? "" : attribute(directionNode, "val");
+    if (
+      directionValue !== "" &&
+      directionValue !== "x" &&
+      directionValue !== "y"
+    ) {
+      issue(
+        errors,
+        chartPart,
+        "invalid-chart-error-bars",
+        `Error bar direction must be x or y, not ${directionValue}`,
+      );
+    }
+    const declaredDirection =
+      directionValue === "x" || directionValue === "y"
+        ? directionValue
+        : undefined;
+    const defaultDirection =
+      chartType === "barChart" && barDirection === "bar" ? "x" : "y";
+    const direction = declaredDirection ?? defaultDirection;
+    if (seenDirections.has(direction)) {
+      issue(
+        errors,
+        chartPart,
+        "invalid-chart-error-bars",
+        `Chart series declares more than one ${direction} error bar`,
+      );
+    }
+    seenDirections.add(direction);
+    const includeValue = attribute(
+      first(node, chartNamespace, "errBarType") ?? node,
+      "val",
+    );
+    const include = chartErrorBarIncludeValues.has(includeValue)
+      ? (includeValue as "both" | "plus" | "minus")
+      : undefined;
+    if (include === undefined) {
+      issue(
+        errors,
+        chartPart,
+        "invalid-chart-error-bars",
+        "Error bar must declare errBarType both, plus, or minus",
+      );
+    }
+    const typeValue = attribute(
+      first(node, chartNamespace, "errValType") ?? node,
+      "val",
+    );
+    const type = chartErrorBarValueTypes.get(typeValue);
+    if (type === undefined) {
+      issue(
+        errors,
+        chartPart,
+        "invalid-chart-error-bars",
+        `Error bar has unsupported errValType ${typeValue}`,
+      );
+    }
+    if (include === undefined || type === undefined) continue;
+    const noEndCap = booleanAttribute(first(node, chartNamespace, "noEndCap"));
+    const value = decimalAttribute(first(node, chartNamespace, "val"), "val");
+    if (
+      (type === "fixed" ||
+        type === "percentage" ||
+        type === "standardDeviation") &&
+      value === undefined
+    ) {
+      issue(
+        errors,
+        chartPart,
+        "invalid-chart-error-bars",
+        "Fixed, percentage, and standard-deviation error bars require c:val",
+      );
+    }
+    if (value !== undefined && value < 0) {
+      issue(
+        errors,
+        chartPart,
+        "invalid-chart-error-bars",
+        "Error bar c:val must be non-negative",
+      );
+    }
+    const shapeProperties = first(node, chartNamespace, "spPr");
+    const line = readChartLine(
+      shapeProperties === undefined
+        ? undefined
+        : first(shapeProperties, drawingNamespace, "ln"),
+      theme,
+    );
+    const plus = readErrorBarSide(node, "plus", pointCount, chartPart, errors);
+    const minus = readErrorBarSide(
+      node,
+      "minus",
+      pointCount,
+      chartPart,
+      errors,
+    );
+    if (type === "custom") {
+      if (include === "both" && (plus === undefined || minus === undefined)) {
+        issue(
+          errors,
+          chartPart,
+          "invalid-chart-error-bars",
+          "Custom both error bars require plus and minus values",
+        );
+      }
+      if (include === "plus" && plus === undefined) {
+        issue(
+          errors,
+          chartPart,
+          "invalid-chart-error-bars",
+          "Custom plus error bars require plus values",
+        );
+      }
+      if (include === "minus" && minus === undefined) {
+        issue(
+          errors,
+          chartPart,
+          "invalid-chart-error-bars",
+          "Custom minus error bars require minus values",
+        );
+      }
+    }
+    bars.push({
+      direction,
+      ...(declaredDirection === undefined ? {} : { declaredDirection }),
+      include,
+      type,
+      ...(noEndCap === undefined ? {} : { endCap: !noEndCap }),
+      ...(value === undefined ? {} : { value }),
+      ...(line === undefined ? {} : { line }),
+      ...(plus === undefined ? {} : { plus }),
+      ...(minus === undefined ? {} : { minus }),
+    });
+  }
+  return bars;
 }
 
 function hasVisibleDataLabelItem(node: XmlElement): boolean {
@@ -3518,6 +3901,13 @@ function validateChart(
   const seenSeriesIndexes = new Set<number>();
   const seenSeriesOrders = new Set<number>();
   for (const [groupIndex, typeNode] of typeNodes.entries()) {
+    const groupBarDirection =
+      typeNode.localName === "barChart"
+        ? attribute(
+            first(typeNode, chartNamespace, "barDir") ?? typeNode,
+            "val",
+          )
+        : "";
     const typeGrouping = attribute(
       first(typeNode, chartNamespace, "grouping") ?? typeNode,
       "val",
@@ -3782,6 +4172,32 @@ function validateChart(
           );
         }
       }
+      const errorBars = readChartErrorBars(
+        chartSeries,
+        typeNode.localName,
+        groupBarDirection,
+        scatterSeries
+          ? (xCache?.values.length ?? 0)
+          : (categoryCache?.values.length ?? 0),
+        chartPart,
+        errors,
+        textTheme,
+      );
+      const errorBarFormulas = errorBars.flatMap((bar) => {
+        const plus =
+          bar.plus?.source === "reference" ? bar.plus.formula : undefined;
+        const minus =
+          bar.minus?.source === "reference" ? bar.minus.formula : undefined;
+        return plus === undefined && minus === undefined
+          ? []
+          : [
+              {
+                direction: bar.direction,
+                ...(plus === undefined ? {} : { plus }),
+                ...(minus === undefined ? {} : { minus }),
+              },
+            ];
+      });
       const seriesLabelsNode = first(chartSeries, chartNamespace, "dLbls");
       const seriesLabels = readDataLabelSettings(
         seriesLabelsNode,
@@ -3922,11 +4338,15 @@ function validateChart(
             groupIndex,
             ...(marker === undefined ? {} : { marker }),
             ...(smooth === true ? { smooth: true } : {}),
+            ...(errorBars.length === 0 ? {} : { errorBars }),
           },
           formula: {
             name: nameCache?.formula ?? "",
             x: xCache.formula,
             y: yCache.formula,
+            ...(errorBarFormulas.length === 0
+              ? {}
+              : { errorBars: errorBarFormulas }),
           },
         });
       } else if (categoryCache !== undefined && valueCache !== undefined) {
@@ -3946,11 +4366,15 @@ function validateChart(
               : { pointExplosions }),
             ...(marker === undefined ? {} : { marker }),
             ...(smooth === true ? { smooth: true } : {}),
+            ...(errorBars.length === 0 ? {} : { errorBars }),
           },
           formula: {
             name: nameCache?.formula ?? "",
             categories: categoryCache.formula,
             values: valueCache.formula,
+            ...(errorBarFormulas.length === 0
+              ? {}
+              : { errorBars: errorBarFormulas }),
           },
         });
       }

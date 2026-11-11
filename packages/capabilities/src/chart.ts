@@ -29,6 +29,9 @@ import type {
   ChartDataLabelSettings,
   ChartDataLabels,
   ChartDisplayBlanksAs,
+  ChartErrorBarInclude,
+  ChartErrorBars,
+  ChartErrorBarValues,
   ChartGroupData,
   ChartKind,
   ChartLine,
@@ -47,6 +50,7 @@ import type {
   ScatterChartSeries,
   ScatterData,
   ScatterDataLabelOverride,
+  ScatterErrorBars,
   ScatterLine,
   SharedCategoryData,
 } from "./chart-types.ts";
@@ -132,6 +136,18 @@ const tickLabelPositionValues = new Set<ChartTickLabelPosition>([
   "none",
 ]);
 const crossingValues = new Set<ChartAxisCrossing>(["autoZero", "max", "min"]);
+const errorBarIncludes = new Set<ChartErrorBarInclude>([
+  "both",
+  "plus",
+  "minus",
+]);
+const errorBarTypes = new Set<ChartErrorBars["type"]>([
+  "fixed",
+  "percentage",
+  "standardDeviation",
+  "standardError",
+  "custom",
+]);
 const displayBlanksAsValues = new Set<ChartDisplayBlanksAs>([
   "gap",
   "zero",
@@ -853,6 +869,203 @@ function scatterSeriesPoints(
   return points;
 }
 
+function errorBarValueList(
+  value: unknown,
+  pointCount: number,
+  label: string,
+): ChartErrorBarValues {
+  if (!Array.isArray(value) || value.length !== pointCount) {
+    fail(
+      "invalid-error-bars",
+      `${label} must contain one magnitude per original series slot (${pointCount})`,
+    );
+  }
+  for (const [index, magnitude] of value.entries()) {
+    if (magnitude === null) continue;
+    if (
+      typeof magnitude !== "number" ||
+      !Number.isFinite(magnitude) ||
+      magnitude < 0
+    ) {
+      fail(
+        "invalid-error-bars",
+        `${label}[${index}] must be a non-negative finite number or null`,
+      );
+    }
+  }
+  return value as ChartErrorBarValues;
+}
+
+function errorBarConfig(
+  value: unknown,
+  pointCount: number,
+  label: string,
+): ChartErrorBars {
+  if (!isRecord(value)) {
+    fail("invalid-error-bars", `${label} must be an object`);
+  }
+  onlyKeys(
+    value,
+    ["type", "include", "endCap", "line", "value", "plus", "minus"],
+    label,
+  );
+  const type = value["type"];
+  if (
+    typeof type !== "string" ||
+    !errorBarTypes.has(type as ChartErrorBars["type"])
+  ) {
+    fail(
+      "invalid-error-bars",
+      `${label}.type must be fixed, percentage, standardDeviation, standardError, or custom`,
+    );
+  }
+  const include = value["include"];
+  if (
+    include !== undefined &&
+    (typeof include !== "string" ||
+      !errorBarIncludes.has(include as ChartErrorBarInclude))
+  ) {
+    fail("invalid-error-bars", `${label}.include must be both, plus, or minus`);
+  }
+  const endCap = value["endCap"];
+  if (endCap !== undefined && typeof endCap !== "boolean") {
+    fail("invalid-error-bars", `${label}.endCap must be a boolean`);
+  }
+  const line = lineStyle(value["line"], `${label}.line`);
+  const style = {
+    ...(endCap === undefined ? {} : { endCap }),
+    ...(line === undefined ? {} : { line }),
+  };
+  if (type === "custom") {
+    if (value["value"] !== undefined) {
+      fail(
+        "invalid-error-bars",
+        `${label}.value is not valid for custom error bars`,
+      );
+    }
+    const plus =
+      value["plus"] === undefined
+        ? undefined
+        : errorBarValueList(value["plus"], pointCount, `${label}.plus`);
+    const minus =
+      value["minus"] === undefined
+        ? undefined
+        : errorBarValueList(value["minus"], pointCount, `${label}.minus`);
+    const includedSides = (include ?? "both") as ChartErrorBarInclude;
+    if (includedSides === "plus" && minus !== undefined) {
+      fail(
+        "invalid-error-bars",
+        `${label}.minus requires include to be both or minus`,
+      );
+    }
+    if (includedSides === "minus" && plus !== undefined) {
+      fail(
+        "invalid-error-bars",
+        `${label}.plus requires include to be both or plus`,
+      );
+    }
+    if (
+      (includedSides === "both" &&
+        (plus === undefined || minus === undefined)) ||
+      (includedSides === "plus" && plus === undefined) ||
+      (includedSides === "minus" && minus === undefined)
+    ) {
+      fail(
+        "invalid-error-bars",
+        `${label} must declare plus and minus for include both, or only the included side`,
+      );
+    }
+    return {
+      type: "custom",
+      plus,
+      minus,
+      ...(include === undefined
+        ? {}
+        : { include: include as ChartErrorBarInclude }),
+      ...style,
+    } as ChartErrorBars;
+  }
+  if (value["plus"] !== undefined || value["minus"] !== undefined) {
+    fail(
+      "invalid-error-bars",
+      `${label}.plus and ${label}.minus apply only to custom error bars`,
+    );
+  }
+  if (type === "standardError") {
+    if (value["value"] !== undefined) {
+      fail(
+        "invalid-error-bars",
+        `${label}.value is not valid for standardError error bars`,
+      );
+    }
+    return {
+      type,
+      ...(include === undefined
+        ? {}
+        : { include: include as ChartErrorBarInclude }),
+      ...style,
+    } as ChartErrorBars;
+  }
+  const amount = value["value"];
+  if (typeof amount !== "number" || !Number.isFinite(amount) || amount < 0) {
+    fail(
+      "invalid-error-bars",
+      `${label}.value must be a non-negative finite magnitude`,
+    );
+  }
+  return {
+    type,
+    value: amount,
+    ...(include === undefined
+      ? {}
+      : { include: include as ChartErrorBarInclude }),
+    ...style,
+  } as ChartErrorBars;
+}
+
+function categoryErrorBars(
+  value: unknown,
+  kind: ChartKind,
+  pointCount: number,
+  label: string,
+): ChartErrorBars | undefined {
+  if (value === undefined) return undefined;
+  if (kind === "pie" || kind === "doughnut") {
+    fail(
+      "invalid-error-bars",
+      `${kind} charts do not support native error bars`,
+    );
+  }
+  return errorBarConfig(value, pointCount, label);
+}
+
+function scatterErrorBars(
+  value: unknown,
+  pointCount: number,
+  label: string,
+): ScatterErrorBars | undefined {
+  if (value === undefined) return undefined;
+  if (!isRecord(value)) {
+    fail("invalid-error-bars", `${label} must be an object`);
+  }
+  onlyKeys(value, ["x", "y"], label);
+  const x =
+    value["x"] === undefined
+      ? undefined
+      : errorBarConfig(value["x"], pointCount, `${label}.x`);
+  const y =
+    value["y"] === undefined
+      ? undefined
+      : errorBarConfig(value["y"], pointCount, `${label}.y`);
+  if (x === undefined && y === undefined) {
+    fail("invalid-error-bars", `${label} must declare x, y, or both`);
+  }
+  return {
+    ...(x === undefined ? {} : { x }),
+    ...(y === undefined ? {} : { y }),
+  };
+}
+
 function scatterSeriesList(
   value: unknown,
   line: ScatterLine | undefined,
@@ -869,7 +1082,17 @@ function scatterSeriesList(
     }
     onlyKeys(
       item,
-      ["name", "x", "y", "color", "line", "dataLabels", "marker", "points"],
+      [
+        "name",
+        "x",
+        "y",
+        "color",
+        "line",
+        "dataLabels",
+        "marker",
+        "points",
+        "errorBars",
+      ],
       seriesLabel,
     );
     const name = item["name"];
@@ -917,6 +1140,11 @@ function scatterSeriesList(
       x.length,
       `Series "${name}"`,
     );
+    const errorBars = scatterErrorBars(
+      item["errorBars"],
+      x.length,
+      `Series "${name}".errorBars`,
+    );
     return {
       name,
       x,
@@ -928,6 +1156,7 @@ function scatterSeriesList(
         : { dataLabels: scatterLabelOverride(seriesLabels) }),
       ...(marker === undefined ? {} : { marker }),
       ...(points === undefined ? {} : { points }),
+      ...(errorBars === undefined ? {} : { errorBars }),
     };
   });
 }
@@ -959,6 +1188,7 @@ function chartSeriesList(
         "marker",
         "smooth",
         "points",
+        "errorBars",
       ],
       seriesLabel,
     );
@@ -1088,6 +1318,12 @@ function chartSeriesList(
       false,
       true,
     );
+    const errorBars = categoryErrorBars(
+      item["errorBars"],
+      kind,
+      categories.length,
+      `Series "${name}".errorBars`,
+    );
     return {
       name,
       values: values as readonly (number | null)[],
@@ -1098,6 +1334,7 @@ function chartSeriesList(
       ...(marker === undefined ? {} : { marker }),
       ...(smooth === undefined ? {} : { smooth }),
       ...(points === undefined ? {} : { points }),
+      ...(errorBars === undefined ? {} : { errorBars }),
     };
   });
 }
@@ -2995,9 +3232,13 @@ export type {
   ChartAxisReferences,
   ChartCategoryAxis,
   ChartCategoryAxisReferences,
+  ChartCustomErrorBars,
   ChartDataLabelOverride,
   ChartDataLabels,
   ChartDisplayBlanksAs,
+  ChartErrorBarInclude,
+  ChartErrorBars,
+  ChartErrorBarValues,
   ChartGroup,
   ChartGroupData,
   ChartKind,
@@ -3025,6 +3266,7 @@ export type {
   ScatterData,
   ScatterDataLabelOverride,
   ScatterDataLabels,
+  ScatterErrorBars,
   ScatterLine,
   SharedCategoryData,
 } from "./chart-types.ts";

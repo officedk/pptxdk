@@ -1,0 +1,839 @@
+import assert from "node:assert/strict";
+
+import {
+  BuildError,
+  build,
+  Chart,
+  Deck,
+  Slide,
+  type ChartProps,
+  type ChartGroup,
+  type ChartSeries,
+  type ScatterChartGroup,
+} from "@react-pptx/react-pptx";
+import {
+  build as buildDocument,
+  chart as documentChart,
+  deck,
+  slide as documentSlide,
+} from "@react-pptx/react-pptx/document";
+import { validatePptx } from "@react-pptx/validation";
+import { strFromU8, strToU8, unzipSync, zipSync } from "fflate";
+import { describe, it } from "vitest";
+
+function chartParts(pptx: Uint8Array): {
+  readonly chart: (index: number) => string;
+  readonly workbook: (part: string) => string;
+} {
+  const parts = unzipSync(pptx);
+  return {
+    chart: (index) => strFromU8(parts[`ppt/charts/chart${index}.xml`]!),
+    workbook: (part) =>
+      strFromU8(unzipSync(parts[part]!)["xl/worksheets/sheet1.xml"]!),
+  };
+}
+
+async function buildInEntry(
+  entry: "document" | "react",
+  props: ChartProps,
+): Promise<Uint8Array> {
+  const id = "error-bars-entry";
+  if (entry === "document") {
+    return (
+      await buildDocument(
+        deck({ width: 480, height: 320 }).append(
+          documentSlide({ id }).append(documentChart({ ...props, id })),
+        ),
+      )
+    ).pptx;
+  }
+  return (
+    await build(
+      <Deck width={480} height={320}>
+        <Slide id={id}>
+          <Chart {...props} id={id} />
+        </Slide>
+      </Deck>,
+    )
+  ).pptx;
+}
+
+function columnChart(
+  series: readonly ChartSeries[],
+  kind: "column" | "bar" | "line" = "column",
+): ChartProps {
+  return {
+    x: 0,
+    y: 0,
+    width: 400,
+    height: 260,
+    groups: [
+      {
+        kind,
+        data: {
+          kind: "shared-categories",
+          categories: ["North", "South", "East"],
+        },
+        series,
+      } as ChartGroup,
+    ],
+  };
+}
+
+async function rejectsWithCode(props: ChartProps, code: string): Promise<void> {
+  for (const entry of ["document", "react"] as const) {
+    await assert.rejects(
+      buildInEntry(entry, props),
+      (error: unknown) => {
+        assert.ok(error instanceof BuildError);
+        assert.equal(error.diagnostics[0]?.code, code);
+        return true;
+      },
+      `${entry} entry should reject with ${code}`,
+    );
+  }
+}
+
+function areaSeries(file: Awaited<ReturnType<typeof validatePptx>>) {
+  return file.slides[0]?.objects[0]?.chart?.series[0];
+}
+
+function stackedSeries(file: Awaited<ReturnType<typeof validatePptx>>) {
+  return file.slides[1]?.objects[0]?.chart?.series[0];
+}
+
+describe("native chart error bars", () => {
+  it("writes a fixed category error bar without forcing an invalid direction", async () => {
+    const props = columnChart([
+      {
+        name: "Revenue",
+        values: [1, 2, 3],
+        errorBars: { type: "fixed", value: 0.5 },
+      },
+    ]);
+    const result = await build(
+      <Deck width={480} height={320}>
+        <Slide id="error-bars">
+          <Chart {...props} id="error-bars" />
+        </Slide>
+      </Deck>,
+    );
+    const file = await validatePptx(result.pptx);
+    assert.deepEqual(file.errors, []);
+    const series = file.slides[0]?.objects[0]?.chart?.series[0];
+    assert.deepEqual(series?.errorBars, [
+      { direction: "y", include: "both", type: "fixed", value: 0.5 },
+    ]);
+
+    const xml = chartParts(result.pptx).chart(1);
+    assert.ok(!xml.includes("<c:errDir"));
+    assert.ok(xml.includes("<c:errBarType"));
+    assert.ok(xml.includes("<c:errValType"));
+    assert.ok(xml.includes("<c:val"));
+  });
+
+  it("keeps bar direction horizontal and line direction vertical with caps and stroke", async () => {
+    const bar = columnChart(
+      [
+        {
+          name: "Revenue",
+          values: [1, 2, 3],
+          errorBars: {
+            type: "fixed",
+            value: 2,
+            endCap: false,
+            line: { color: "#112233", width: 2, dash: "dash" },
+          },
+        },
+      ],
+      "bar",
+    );
+    const line = columnChart(
+      [
+        {
+          name: "Revenue",
+          values: [1, 2, 3],
+          errorBars: { type: "percentage", value: 10, include: "plus" },
+        },
+      ],
+      "line",
+    );
+    const result = await build(
+      <Deck width={480} height={640}>
+        <Slide id="bar">
+          <Chart {...bar} id="bar" />
+        </Slide>
+        <Slide id="line">
+          <Chart {...line} id="line" />
+        </Slide>
+      </Deck>,
+    );
+    const file = await validatePptx(result.pptx);
+    assert.deepEqual(file.errors, []);
+    assert.deepEqual(file.slides[0]?.objects[0]?.chart?.series[0]?.errorBars, [
+      {
+        direction: "x",
+        include: "both",
+        type: "fixed",
+        endCap: false,
+        value: 2,
+        line: { color: "#112233", widthEmu: 19_050, dash: "dash" },
+      },
+    ]);
+    assert.deepEqual(file.slides[1]?.objects[0]?.chart?.series[0]?.errorBars, [
+      {
+        direction: "y",
+        declaredDirection: "y",
+        include: "plus",
+        type: "percentage",
+        value: 10,
+      },
+    ]);
+    const parts = chartParts(result.pptx);
+    const barXml = parts.chart(1);
+    assert.ok(!barXml.includes("<c:errDir"));
+    assert.ok(barXml.includes('<c:noEndCap val="1"/>'));
+    assert.ok(barXml.includes('<a:ln w="19050">'));
+    assert.ok(barXml.includes('<a:prstDash val="dash"/>'));
+    const lineXml = parts.chart(2);
+    assert.ok(lineXml.includes('<c:errDir val="y"/>'));
+    assert.ok(!lineXml.includes("<c:noEndCap"));
+    assert.ok(lineXml.includes('<c:errBarType val="plus"/>'));
+    assert.ok(lineXml.includes('<c:errValType val="percentage"/>'));
+  });
+
+  it("writes independent scatter X and Y custom channels without collapsing null slots", async () => {
+    const group: ScatterChartGroup = {
+      kind: "scatter",
+      data: { kind: "xy" },
+      series: [
+        {
+          name: "Observed",
+          x: [1, 2, 7],
+          y: [3, 5, null],
+          errorBars: {
+            x: { type: "fixed", value: 0.5 },
+            y: {
+              type: "custom",
+              plus: [0.4, null, 0.8],
+              minus: [0.1, 0.2, 0.3],
+              endCap: false,
+              line: { color: "#446688", width: 2, dash: "dash" },
+            },
+          },
+        },
+        {
+          name: "Short",
+          x: [1.5, 6],
+          y: [2, 7],
+          errorBars: { y: { type: "standardDeviation", value: 2 } },
+        },
+      ],
+    };
+    const props: ChartProps = {
+      x: 0,
+      y: 0,
+      width: 420,
+      height: 260,
+      groups: [group],
+    };
+    const result = await build(
+      <Deck width={480} height={320}>
+        <Slide id="scatter">
+          <Chart {...props} id="scatter" />
+        </Slide>
+      </Deck>,
+    );
+    const file = await validatePptx(result.pptx);
+    assert.deepEqual(file.errors, []);
+    const chart = file.slides[0]?.objects[0]?.chart;
+    assert.deepEqual(chart?.series[0]?.errorBars, [
+      {
+        direction: "x",
+        declaredDirection: "x",
+        include: "both",
+        type: "fixed",
+        value: 0.5,
+      },
+      {
+        direction: "y",
+        declaredDirection: "y",
+        include: "both",
+        type: "custom",
+        endCap: false,
+        line: { color: "#446688", widthEmu: 19_050, dash: "dash" },
+        plus: {
+          source: "reference",
+          formula: "Sheet1!$F$2:$F$4",
+          values: [0.4, null, 0.8],
+        },
+        minus: {
+          source: "reference",
+          formula: "Sheet1!$G$2:$G$4",
+          values: [0.1, 0.2, 0.3],
+        },
+      },
+    ]);
+    assert.deepEqual(chart?.series[1]?.errorBars, [
+      {
+        direction: "y",
+        declaredDirection: "y",
+        include: "both",
+        type: "standardDeviation",
+        value: 2,
+      },
+    ]);
+    assert.deepEqual(
+      chart?.embeddedWorkbook?.series[0]?.errorBars?.[1]?.plus?.values,
+      [0.4, null, 0.8],
+    );
+    assert.equal(
+      chart?.embeddedWorkbook?.series[0]?.errorBars?.[1]?.plus?.formula,
+      "Sheet1!$F$2:$F$4",
+    );
+
+    const parts = chartParts(result.pptx);
+    const xml = parts.chart(1);
+    assert.ok(xml.includes('<c:errDir val="x"/>'));
+    assert.ok(xml.includes('<c:errDir val="y"/>'));
+    assert.ok(xml.includes("<c:plus>"));
+    assert.ok(xml.includes("<c:minus>"));
+    assert.ok(xml.includes('<c:ptCount val="3"/>'));
+    assert.ok(xml.includes('<c:pt idx="0">'));
+    assert.ok(xml.includes('<c:pt idx="2">'));
+    assert.ok(!xml.includes('<c:pt idx="1"><c:v>0.4'));
+    const workbook = chart?.embeddedWorkbook?.part;
+    assert.ok(workbook);
+    const sheet = parts.workbook(workbook);
+    assert.ok(sheet.includes("Observed Y +"));
+    assert.ok(sheet.includes("Observed Y -"));
+    assert.ok(sheet.includes('r="F2"'));
+    assert.ok(sheet.includes('r="G4"'));
+    assert.ok(!sheet.includes('r="F3"'));
+  });
+
+  it("keeps declared error values after the source arrays are mutated", async () => {
+    const plus = [0.4, 0.5, 0.6];
+    const minus = [0.1, 0.2, 0.3];
+    const series: ChartSeries = {
+      name: "Snapshotted",
+      values: [1, 2, 3],
+      errorBars: { type: "custom", plus, minus },
+    };
+    const node = documentChart(columnChart([series]));
+    const document = deck({ width: 480, height: 320 }).append(
+      documentSlide({ id: "snapshot" }).append(node),
+    );
+    plus[0] = 99;
+    minus[2] = 99;
+    const first = await buildDocument(document);
+    const firstFile = await validatePptx(first.pptx);
+    assert.deepEqual(
+      firstFile.slides[0]?.objects[0]?.chart?.series[0]?.errorBars?.[0]?.plus
+        ?.values,
+      [0.4, 0.5, 0.6],
+    );
+    assert.deepEqual(
+      firstFile.slides[0]?.objects[0]?.chart?.series[0]?.errorBars?.[0]?.minus
+        ?.values,
+      [0.1, 0.2, 0.3],
+    );
+
+    node.set({
+      groups: [
+        {
+          kind: "column",
+          data: {
+            kind: "shared-categories",
+            categories: ["North", "South", "East"],
+          },
+          series: [
+            {
+              name: "Snapshotted",
+              values: [1, 2, 3],
+              errorBars: { type: "fixed", value: 7 },
+            },
+          ],
+        },
+      ],
+    });
+    const second = await buildDocument(document);
+    const secondFile = await validatePptx(second.pptx);
+    assert.deepEqual(
+      secondFile.slides[0]?.objects[0]?.chart?.series[0]?.errorBars,
+      [{ direction: "y", include: "both", type: "fixed", value: 7 }],
+    );
+    assert.deepEqual(
+      firstFile.slides[0]?.objects[0]?.chart?.series[0]?.errorBars?.[0]?.plus
+        ?.values,
+      [0.4, 0.5, 0.6],
+    );
+  });
+
+  it("rejects inapplicable charts and invalid error-bar declarations", async () => {
+    const base = columnChart([{ name: "Only", values: [1, 2, 3] }]);
+    await rejectsWithCode(
+      {
+        ...base,
+        groups: [
+          {
+            kind: "pie",
+            data: {
+              kind: "shared-categories",
+              categories: ["A", "B", "C"],
+            },
+            series: [
+              {
+                name: "Only",
+                values: [1, 2, 3],
+                errorBars: { type: "fixed", value: 1 },
+              },
+            ],
+          },
+        ],
+      },
+      "invalid-error-bars",
+    );
+    await rejectsWithCode(
+      {
+        ...base,
+        groups: [
+          {
+            kind: "scatter",
+            data: { kind: "xy" },
+            series: [
+              {
+                name: "Only",
+                x: [1, 2],
+                y: [1, 2],
+                errorBars: {} as never,
+              },
+            ],
+          },
+        ],
+      },
+      "invalid-error-bars",
+    );
+    await rejectsWithCode(
+      columnChart([
+        {
+          name: "Only",
+          values: [1, 2, 3],
+          errorBars: { type: "custom", plus: [1], minus: [1, 2, 3] },
+        },
+      ]),
+      "invalid-error-bars",
+    );
+    await rejectsWithCode(
+      columnChart([
+        {
+          name: "Only",
+          values: [1, 2, 3],
+          errorBars: { type: "custom", plus: [1, 2, -3], minus: [1, 2, 3] },
+        },
+      ]),
+      "invalid-error-bars",
+    );
+    await rejectsWithCode(
+      columnChart([
+        {
+          name: "Only",
+          values: [1, 2, 3],
+          errorBars: {
+            type: "custom",
+            include: "plus",
+            minus: [1, 2, 3],
+          } as never,
+        },
+      ]),
+      "invalid-error-bars",
+    );
+    await rejectsWithCode(
+      columnChart([
+        {
+          name: "Only",
+          values: [1, 2, 3],
+          errorBars: { type: "standardError", value: 2 } as never,
+        },
+      ]),
+      "invalid-error-bars",
+    );
+    await rejectsWithCode(
+      columnChart([
+        {
+          name: "Only",
+          values: [1, 2, 3],
+          errorBars: { type: "fixed" } as never,
+        },
+      ]),
+      "invalid-error-bars",
+    );
+    await rejectsWithCode(
+      columnChart([
+        {
+          name: "Only",
+          values: [1, 2, 3],
+          errorBars: { type: "fixed", value: 1, plus: [1, 1, 1] } as never,
+        },
+      ]),
+      "invalid-error-bars",
+    );
+    await rejectsWithCode(
+      columnChart([
+        {
+          name: "Only",
+          values: [1, 2, 3],
+          errorBars: {
+            type: "fixed",
+            value: 1,
+            x: { type: "fixed", value: 1 },
+          } as never,
+        },
+      ]),
+      "unknown-parameter",
+    );
+    await rejectsWithCode(
+      columnChart([
+        {
+          name: "Only",
+          values: [1, 2, 3],
+          errorBars: { type: "fixed", value: -1 },
+        },
+      ]),
+      "invalid-error-bars",
+    );
+    await rejectsWithCode(
+      columnChart([
+        {
+          name: "Only",
+          values: [1, 2, 3],
+          errorBars: { type: "percentage", value: Number.NaN },
+        },
+      ]),
+      "invalid-error-bars",
+    );
+    await rejectsWithCode(
+      columnChart([
+        {
+          name: "Only",
+          values: [1, 2, 3],
+          errorBars: {
+            type: "custom",
+            plus: Array<number | null>(3),
+            minus: [1, 2, 3],
+          },
+        },
+      ]),
+      "invalid-error-bars",
+    );
+    await rejectsWithCode(
+      columnChart([
+        {
+          name: "Only",
+          values: [1, 2, 3],
+          errorBars: {
+            type: "custom",
+            plus: [1, Number.POSITIVE_INFINITY, 3],
+            minus: [1, 2, 3],
+          },
+        },
+      ]),
+      "invalid-error-bars",
+    );
+    await rejectsWithCode(
+      columnChart([
+        {
+          name: "Only",
+          values: [1, 2, 3],
+          errorBars: { type: "custom", plus: [1, 2, 3] } as never,
+        },
+      ]),
+      "invalid-error-bars",
+    );
+    await rejectsWithCode(
+      columnChart([
+        {
+          name: "Only",
+          values: [1, 2, 3],
+          errorBars: { type: "fixed", value: 1, include: "sideways" } as never,
+        },
+      ]),
+      "invalid-error-bars",
+    );
+    await rejectsWithCode(
+      columnChart([
+        {
+          name: "Only",
+          values: [1, 2, 3],
+          errorBars: { type: "bogus", value: 1 } as never,
+        },
+      ]),
+      "invalid-error-bars",
+    );
+    await rejectsWithCode(
+      columnChart([
+        {
+          name: "Only",
+          values: [1, 2, 3],
+          errorBars: { type: "fixed", value: 1, endCap: "yes" } as never,
+        },
+      ]),
+      "invalid-error-bars",
+    );
+    await rejectsWithCode(
+      columnChart([
+        {
+          name: "Only",
+          values: [1, 2, 3],
+          errorBars: {
+            type: "fixed",
+            value: 1,
+            line: { width: 0 },
+          },
+        },
+      ]),
+      "invalid-style",
+    );
+  });
+
+  it("writes standard error, single-sided custom bars, and stacked groups", async () => {
+    const area: ChartProps = {
+      x: 0,
+      y: 0,
+      width: 420,
+      height: 260,
+      groups: [
+        {
+          kind: "area",
+          data: {
+            kind: "shared-categories",
+            categories: ["Q1", "Q2", "Q3"],
+          },
+          series: [
+            {
+              name: "Area",
+              values: [1, 2, 3],
+              errorBars: { type: "standardError", include: "plus" },
+            },
+          ],
+        },
+      ],
+    };
+    const stacked: ChartProps = {
+      x: 0,
+      y: 0,
+      width: 420,
+      height: 260,
+      groups: [
+        {
+          kind: "column",
+          stacking: "stacked",
+          data: {
+            kind: "shared-categories",
+            categories: ["Q1", "Q2", "Q3"],
+          },
+          series: [
+            {
+              name: "Stacked",
+              values: [1, 2, 3],
+              errorBars: {
+                type: "custom",
+                include: "minus",
+                minus: [0.1, 0.2, 0.3],
+              },
+            },
+          ],
+        },
+      ],
+    };
+    const result = await build(
+      <Deck width={480} height={640}>
+        <Slide id="area">
+          <Chart {...area} id="area" />
+        </Slide>
+        <Slide id="stacked">
+          <Chart {...stacked} id="stacked" />
+        </Slide>
+      </Deck>,
+    );
+    const file = await validatePptx(result.pptx);
+    assert.deepEqual(file.errors, []);
+    assert.deepEqual(areaSeries(file)?.errorBars, [
+      {
+        direction: "y",
+        include: "plus",
+        type: "standardError",
+      },
+    ]);
+    assert.deepEqual(stackedSeries(file)?.errorBars, [
+      {
+        direction: "y",
+        include: "minus",
+        type: "custom",
+        minus: {
+          source: "reference",
+          formula: "Sheet1!$C$2:$C$4",
+          values: [0.1, 0.2, 0.3],
+        },
+      },
+    ]);
+    const parts = chartParts(result.pptx);
+    const areaXml = parts.chart(1);
+    assert.ok(areaXml.includes('<c:errValType val="stdErr"/>'));
+    assert.ok(!areaXml.includes("<c:val val="));
+    assert.ok(areaXml.includes('<c:errBarType val="plus"/>'));
+    const stackedXml = parts.chart(2);
+    assert.ok(stackedXml.includes('<c:grouping val="stacked"/>'));
+    assert.ok(stackedXml.includes("<c:minus>"));
+    assert.ok(!stackedXml.includes("<c:plus>"));
+  });
+
+  it("reads literal custom values and flags corrupted actual-file error bars", async () => {
+    const props = columnChart([
+      {
+        name: "Observed",
+        values: [1, 2, 3],
+        errorBars: {
+          type: "custom",
+          plus: [0.4, null, 0.8],
+          minus: [0.1, 0.2, 0.3],
+        },
+      },
+    ]);
+    const result = await build(
+      <Deck width={480} height={320}>
+        <Slide id="literal">
+          <Chart {...props} id="literal" />
+        </Slide>
+      </Deck>,
+    );
+    const original = unzipSync(result.pptx);
+    const chartPath = "ppt/charts/chart1.xml";
+    const originalXml = strFromU8(original[chartPath]!);
+
+    const literal = originalXml.replace(
+      /<c:plus><c:numRef>.*?<\/c:numRef><\/c:plus>/u,
+      '<c:plus><c:numLit><c:ptCount val="3"/><c:pt idx="0"><c:v>0.4</c:v></c:pt><c:pt idx="2"><c:v>0.8</c:v></c:pt></c:numLit></c:plus>',
+    );
+    assert.notEqual(literal, originalXml);
+    const literalParts = unzipSync(result.pptx);
+    literalParts[chartPath] = strToU8(literal);
+    const literalFile = await validatePptx(zipSync(literalParts));
+    assert.deepEqual(literalFile.errors, []);
+    assert.deepEqual(
+      literalFile.slides[0]?.objects[0]?.chart?.series[0]?.errorBars?.[0]?.plus,
+      {
+        source: "literal",
+        values: [0.4, null, 0.8],
+      },
+    );
+
+    const duplicateStart = originalXml.indexOf("<c:errBars>");
+    const duplicateEnd =
+      originalXml.indexOf("</c:errBars>") + "</c:errBars>".length;
+    const duplicate =
+      originalXml.slice(0, duplicateEnd) +
+      originalXml.slice(duplicateStart, duplicateEnd) +
+      originalXml.slice(duplicateEnd);
+    const duplicateParts = unzipSync(result.pptx);
+    duplicateParts[chartPath] = strToU8(duplicate);
+    const duplicateFile = await validatePptx(zipSync(duplicateParts));
+    assert.ok(
+      duplicateFile.errors.some(
+        ({ code, message }) =>
+          code === "invalid-chart-error-bars" &&
+          message.includes("more than one"),
+      ),
+    );
+
+    const mismatched = originalXml.replace(
+      '<c:pt idx="0"><c:v>0.4</c:v></c:pt>',
+      '<c:pt idx="0"><c:v>9.4</c:v></c:pt>',
+    );
+    assert.notEqual(mismatched, originalXml);
+    const mismatchParts = unzipSync(result.pptx);
+    mismatchParts[chartPath] = strToU8(mismatched);
+    const mismatchFile = await validatePptx(zipSync(mismatchParts));
+    assert.ok(
+      mismatchFile.errors.some(
+        ({ code }) => code === "chart-workbook-mismatch",
+      ),
+    );
+
+    const savedAsStandardError = originalXml.replace(
+      '<c:errValType val="cust"/>',
+      '<c:errValType val="stdErr"/>',
+    );
+    assert.notEqual(savedAsStandardError, originalXml);
+    const savedParts = unzipSync(result.pptx);
+    savedParts[chartPath] = strToU8(savedAsStandardError);
+    const savedFile = await validatePptx(zipSync(savedParts));
+    assert.deepEqual(savedFile.errors, []);
+    assert.equal(
+      savedFile.slides[0]?.objects[0]?.chart?.series[0]?.errorBars?.[0]?.type,
+      "standardError",
+    );
+    assert.ok(
+      savedFile.slides[0]?.objects[0]?.chart?.series[0]?.errorBars?.[0]?.plus,
+    );
+
+    const negative = originalXml.replace(
+      '<c:pt idx="0"><c:v>0.4</c:v></c:pt>',
+      '<c:pt idx="0"><c:v>-0.4</c:v></c:pt>',
+    );
+    const negativeParts = unzipSync(result.pptx);
+    negativeParts[chartPath] = strToU8(negative);
+    const negativeFile = await validatePptx(zipSync(negativeParts));
+    assert.ok(
+      negativeFile.errors.some(
+        ({ code, message }) =>
+          code === "invalid-chart-error-bars" &&
+          message.includes("non-negative"),
+      ),
+    );
+  });
+
+  it("leaves charts without error bars unchanged", async () => {
+    const props = columnChart([{ name: "Plain", values: [1, 2, 3] }]);
+    const result = await build(
+      <Deck width={480} height={320}>
+        <Slide id="plain">
+          <Chart {...props} id="plain" />
+        </Slide>
+      </Deck>,
+    );
+    const file = await validatePptx(result.pptx);
+    assert.deepEqual(file.errors, []);
+    assert.equal(
+      file.slides[0]?.objects[0]?.chart?.series[0]?.errorBars,
+      undefined,
+    );
+    assert.ok(!chartParts(result.pptx).chart(1).includes("<c:errBars"));
+  });
+
+  it("builds the same declarations through the document and React entries", async () => {
+    const props = columnChart([
+      {
+        name: "Revenue",
+        values: [1, 2, 3],
+        errorBars: {
+          type: "custom",
+          plus: [0.4, null, 0.8],
+          minus: [0.1, 0.2, 0.3],
+          include: "both",
+          line: { color: "#336699", width: 1 },
+        },
+      },
+    ]);
+    const documentFile = await validatePptx(
+      await buildInEntry("document", props),
+    );
+    const reactFile = await validatePptx(await buildInEntry("react", props));
+    assert.deepEqual(documentFile.errors, []);
+    assert.deepEqual(reactFile.errors, []);
+    assert.deepEqual(
+      reactFile.slides[0]?.objects[0]?.chart?.series[0]?.errorBars,
+      documentFile.slides[0]?.objects[0]?.chart?.series[0]?.errorBars,
+    );
+  });
+});

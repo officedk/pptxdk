@@ -118,6 +118,36 @@ export type FileChartLine = {
   readonly dash?: string;
 };
 
+/** Native trendline type observed from c:trendlineType. */
+export type FileChartTrendlineType =
+  | "linear"
+  | "exponential"
+  | "logarithmic"
+  | "polynomial"
+  | "power"
+  | "movingAverage";
+
+/** One native c:trendline owned by a series, with only explicitly present options. */
+export type FileChartTrendline = {
+  readonly type: FileChartTrendlineType;
+  /** Native c:order; required for polynomial and absent for other types. */
+  readonly order?: number;
+  /** Native c:period; required for movingAverage and absent for other types. */
+  readonly period?: number;
+  /** Native c:forward in category positions or scatter X units. */
+  readonly forward?: number;
+  /** Native c:backward in category positions or scatter X units. */
+  readonly backward?: number;
+  /** Native c:intercept; applies only to exponential, linear, and polynomial. */
+  readonly intercept?: number;
+  /** Explicit c:dispEq; Office ignores it for movingAverage, though the marker is valid. */
+  readonly displayEquation?: boolean;
+  /** Explicit c:dispRSqr; Office ignores it for movingAverage, though the marker is valid. */
+  readonly displayRSquared?: boolean;
+  /** Native c:spPr/a:ln stroke formatting. */
+  readonly line?: FileChartLine;
+};
+
 export type FileChartSeries = {
   readonly name: string;
   /** Category chart series only: one label per group category position. */
@@ -148,6 +178,8 @@ export type FileChartSeries = {
   readonly explosion?: number;
   /** Native c:dPt/c:explosion values by point index. */
   readonly pointExplosions?: Readonly<Record<number, number>>;
+  /** Native trendlines owned by this series, in chart XML order. */
+  readonly trendlines?: readonly FileChartTrendline[];
 };
 
 /** Locally observed data-label settings; absent fields are not set by the XML node. */
@@ -2991,6 +3023,228 @@ function readChartLine(
   };
 }
 
+const chartTrendlineTypes = new Map<string, FileChartTrendlineType>([
+  ["linear", "linear"],
+  ["exp", "exponential"],
+  ["log", "logarithmic"],
+  ["poly", "polynomial"],
+  ["power", "power"],
+  ["movingAvg", "movingAverage"],
+]);
+
+function trendlineGroupApplies(chartType: string, grouping: string): boolean {
+  if (chartType === "scatterChart") return true;
+  if (chartType === "barChart") {
+    return grouping === "" || grouping === "clustered";
+  }
+  if (chartType === "lineChart" || chartType === "areaChart") {
+    return grouping === "" || grouping === "standard";
+  }
+  return false;
+}
+
+function readChartTrendlines(
+  series: XmlElement,
+  chartType: string,
+  grouping: string,
+  pointCount: number,
+  part: string,
+  errors: ValidationIssue[],
+  theme: ThemeTextReader,
+): FileChartTrendline[] | undefined {
+  const trendlineNodes = elements(series, chartNamespace, "trendline");
+  if (trendlineNodes.length === 0) return undefined;
+  const applies = trendlineGroupApplies(chartType, grouping);
+  const result: FileChartTrendline[] = [];
+  for (const [index, node] of trendlineNodes.entries()) {
+    const label = `Chart series trendline ${index + 1}`;
+    if (!applies) {
+      issue(
+        errors,
+        part,
+        "invalid-chart-trendline",
+        `${label} is not allowed in ${chartType} with grouping ${grouping || "default"}`,
+      );
+    }
+    const typeNode = first(node, chartNamespace, "trendlineType");
+    const typeValue = typeNode === undefined ? "" : attribute(typeNode, "val");
+    const nativeType = chartTrendlineTypes.get(typeValue);
+    if (nativeType === undefined) {
+      issue(
+        errors,
+        part,
+        "invalid-chart-trendline",
+        `${label} has an invalid or missing trendlineType`,
+      );
+      continue;
+    }
+    const type = nativeType;
+    const trendline: {
+      type: FileChartTrendlineType;
+      order?: number;
+      period?: number;
+      forward?: number;
+      backward?: number;
+      intercept?: number;
+      displayEquation?: boolean;
+      displayRSquared?: boolean;
+      line?: FileChartLine;
+    } = { type };
+
+    const orderNode = first(node, chartNamespace, "order");
+    const order = integerAttribute(orderNode, "val");
+    if (type === "polynomial") {
+      if (orderNode === undefined || order === undefined) {
+        issue(
+          errors,
+          part,
+          "invalid-chart-trendline",
+          `${label} polynomial trendline is missing an integer order`,
+        );
+      } else if (order < 2 || order > 6) {
+        issue(
+          errors,
+          part,
+          "invalid-chart-trendline",
+          `${label} polynomial order must be between 2 and 6`,
+        );
+      } else {
+        trendline.order = order;
+      }
+    } else if (orderNode !== undefined) {
+      issue(
+        errors,
+        part,
+        "invalid-chart-trendline",
+        `${label} order is only allowed for polynomial trendlines`,
+      );
+    }
+
+    const periodNode = first(node, chartNamespace, "period");
+    const period = integerAttribute(periodNode, "val");
+    if (type === "movingAverage") {
+      if (periodNode === undefined || period === undefined) {
+        issue(
+          errors,
+          part,
+          "invalid-chart-trendline",
+          `${label} moving average trendline is missing an integer period`,
+        );
+      } else if (period < 2 || period > 255) {
+        issue(
+          errors,
+          part,
+          "invalid-chart-trendline",
+          `${label} moving average period must be between 2 and 255`,
+        );
+      } else if (period >= pointCount) {
+        issue(
+          errors,
+          part,
+          "invalid-chart-trendline",
+          `${label} moving average period must be less than the series point count ${pointCount}`,
+        );
+      } else {
+        trendline.period = period;
+      }
+    } else if (periodNode !== undefined) {
+      issue(
+        errors,
+        part,
+        "invalid-chart-trendline",
+        `${label} period is only allowed for moving average trendlines`,
+      );
+    }
+
+    for (const [field, name] of [
+      ["forward", "forward"],
+      ["backward", "backward"],
+    ] as const) {
+      const forecastNode = first(node, chartNamespace, name);
+      if (forecastNode === undefined) continue;
+      const forecast = decimalAttribute(forecastNode, "val");
+      if (forecast === undefined || forecast <= 0) {
+        issue(
+          errors,
+          part,
+          "invalid-chart-trendline",
+          `${label} ${field} must be a positive finite number`,
+        );
+        continue;
+      }
+      if (
+        chartType !== "scatterChart" &&
+        Math.abs(forecast * 2 - Math.round(forecast * 2)) > 1e-9
+      ) {
+        issue(
+          errors,
+          part,
+          "invalid-chart-trendline",
+          `${label} ${field} must be a multiple of 0.5 for category charts`,
+        );
+      }
+      trendline[field] = forecast;
+    }
+
+    const interceptNode = first(node, chartNamespace, "intercept");
+    if (interceptNode !== undefined) {
+      const intercept = decimalAttribute(interceptNode, "val");
+      if (
+        type !== "linear" &&
+        type !== "exponential" &&
+        type !== "polynomial"
+      ) {
+        issue(
+          errors,
+          part,
+          "invalid-chart-trendline",
+          `${label} intercept is only allowed for linear, exponential, and polynomial trendlines`,
+        );
+      } else if (intercept === undefined) {
+        issue(
+          errors,
+          part,
+          "invalid-chart-trendline",
+          `${label} intercept must be a finite number`,
+        );
+      } else {
+        trendline.intercept = intercept;
+      }
+    }
+
+    for (const [field, name] of [
+      ["displayEquation", "dispEq"],
+      ["displayRSquared", "dispRSqr"],
+    ] as const) {
+      const displayNode = first(node, chartNamespace, name);
+      if (displayNode === undefined) continue;
+      const display = booleanAttribute(displayNode);
+      if (display === undefined) {
+        issue(
+          errors,
+          part,
+          "invalid-chart-trendline",
+          `${label} ${name} must be a boolean`,
+        );
+      } else {
+        // Office ignores these display markers for moving-average trendlines, but the markers
+        // remain valid explicit XML. Observe them without turning the native ignore rule into a
+        // file error; the file format is not narrowed to the author API's supported combinations.
+        trendline[field] = display;
+      }
+    }
+
+    const shape = first(node, chartNamespace, "spPr");
+    const line = readChartLine(
+      shape === undefined ? undefined : first(shape, drawingNamespace, "ln"),
+      theme,
+    );
+    if (line !== undefined) trendline.line = line;
+    result.push(trendline);
+  }
+  return result;
+}
+
 function hasVisibleDataLabelItem(node: XmlElement): boolean {
   return ["showVal", "showCatName", "showSerName", "showPercent"].some(
     (name) => booleanAttribute(first(node, chartNamespace, name)) === true,
@@ -3782,6 +4036,17 @@ function validateChart(
           );
         }
       }
+      const trendlines = readChartTrendlines(
+        chartSeries,
+        typeNode.localName ?? "",
+        typeGrouping,
+        scatterSeries
+          ? (xCache?.values.length ?? 0)
+          : (categoryCache?.values.length ?? 0),
+        chartPart,
+        errors,
+        textTheme,
+      );
       const seriesLabelsNode = first(chartSeries, chartNamespace, "dLbls");
       const seriesLabels = readDataLabelSettings(
         seriesLabelsNode,
@@ -3922,6 +4187,7 @@ function validateChart(
             groupIndex,
             ...(marker === undefined ? {} : { marker }),
             ...(smooth === true ? { smooth: true } : {}),
+            ...(trendlines === undefined ? {} : { trendlines }),
           },
           formula: {
             name: nameCache?.formula ?? "",
@@ -3946,6 +4212,7 @@ function validateChart(
               : { pointExplosions }),
             ...(marker === undefined ? {} : { marker }),
             ...(smooth === true ? { smooth: true } : {}),
+            ...(trendlines === undefined ? {} : { trendlines }),
           },
           formula: {
             name: nameCache?.formula ?? "",

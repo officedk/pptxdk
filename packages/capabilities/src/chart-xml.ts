@@ -16,6 +16,7 @@ import type {
   ChartLine,
   ChartMarker,
   ChartPoint,
+  ChartTrendline,
   ChartValueAxis,
 } from "./chart-types.ts";
 import type {
@@ -435,6 +436,57 @@ function pointShape(
   );
 }
 
+function trendlineXml(value: ChartTrendline, theme: ThemeContext): XmlElement {
+  const type =
+    value.type === "movingAverage"
+      ? "movingAvg"
+      : value.type === "polynomial"
+        ? "poly"
+        : value.type === "exponential"
+          ? "exp"
+          : value.type === "logarithmic"
+            ? "log"
+            : value.type;
+  return el(
+    "c:trendline",
+    null,
+    value.line === undefined
+      ? undefined
+      : el("c:spPr", null, chartLine(value.line, theme)),
+    el("c:trendlineType", { val: type }),
+    // CT_Trendline order: order, period, forecast, intercept, R-squared, equation.
+    value.type === "polynomial"
+      ? el("c:order", { val: value.order })
+      : undefined,
+    value.type === "movingAverage"
+      ? el("c:period", { val: value.period })
+      : undefined,
+    value.forward === undefined
+      ? undefined
+      : el("c:forward", { val: value.forward }),
+    value.backward === undefined
+      ? undefined
+      : el("c:backward", { val: value.backward }),
+    value.type === "linear" ||
+      value.type === "exponential" ||
+      value.type === "polynomial"
+      ? value.intercept === undefined
+        ? undefined
+        : el("c:intercept", { val: value.intercept })
+      : undefined,
+    value.type === "movingAverage"
+      ? undefined
+      : value.displayRSquared === undefined
+        ? undefined
+        : el("c:dispRSqr", { val: value.displayRSquared }),
+    value.type === "movingAverage"
+      ? undefined
+      : value.displayEquation === undefined
+        ? undefined
+        : el("c:dispEq", { val: value.displayEquation }),
+  );
+}
+
 function categoryChartSeries(
   group: Extract<ParsedChartGroup, { kind: Exclude<ChartKind, "scatter"> }>,
   series: ParsedChartSeries,
@@ -494,6 +546,9 @@ function categoryChartSeries(
       : undefined,
     points,
     dataLabels(group, series, groupIndex, textStyles, theme),
+    (series.trendlines ?? []).map((trendline) =>
+      trendlineXml(trendline, theme),
+    ),
     el(
       "c:cat",
       null,
@@ -579,6 +634,9 @@ function scatterChartSeries(
     scatterMarkerXml(group, series, theme),
     points,
     dataLabels(group, series, groupIndex, textStyles, theme),
+    (series.trendlines ?? []).map((trendline) =>
+      trendlineXml(trendline, theme),
+    ),
     el(
       "c:xVal",
       null,

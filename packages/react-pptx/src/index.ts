@@ -102,6 +102,8 @@ export type {
   ChartTickLabelPosition,
   ChartTickMark,
   ChartTitle,
+  ChartTrendline,
+  ChartTrendlineType,
   ChartValueAxis,
   ChartXYAxisReferences,
   ColumnOrBarChartGroup,

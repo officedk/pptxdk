@@ -11,13 +11,15 @@ export const notesMasterContentType =
   "application/vnd.openxmlformats-officedocument.presentationml.notesMaster+xml";
 export const notesSlideContentType =
   "application/vnd.openxmlformats-officedocument.presentationml.notesSlide+xml";
+export const themeContentType =
+  "application/vnd.openxmlformats-officedocument.theme+xml";
 export const notesMasterRelationshipType = `${relationshipNamespace}/notesMaster`;
 export const notesSlideRelationshipType = `${relationshipNamespace}/notesSlide`;
 export const themeRelationshipType = `${relationshipNamespace}/theme`;
 export const slideRelationshipType = `${relationshipNamespace}/slide`;
 export const notesMasterPathTemplate = "ppt/notesMasters/notesMaster{n}.xml";
 export const notesSlidePathTemplate = "ppt/notesSlides/notesSlide{n}.xml";
-export const themePath = "ppt/theme/theme1.xml";
+export const themePathTemplate = "ppt/theme/theme{n}.xml";
 
 const colorMap =
   '<p:clrMap bg1="lt1" tx1="dk1" bg2="lt2" tx2="dk2" accent1="accent1" accent2="accent2" accent3="accent3" accent4="accent4" accent5="accent5" accent6="accent6" hlink="hlink" folHlink="folHlink"/>';
@@ -31,8 +33,8 @@ function groupShapeTree(shapes: string): string {
  *
  * The master is intentionally fixed rather than author-composed: it supplies the slide-image and
  * body placeholders plus the notes text defaults, while the page's notes body carries the actual
- * rich-text content. The notes theme relationship points at the deck theme so page theme tokens and
- * embedded font resources keep their normal ownership.
+ * rich-text content. Its theme relationship targets a notes-owned theme part with the deck theme
+ * values, so the notes master never shares the slide master's theme part.
  */
 export function notesMasterXml(): string {
   const slideImage =

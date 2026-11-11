@@ -1,29 +1,14 @@
-import {
-  boxCapability,
-  chartCapability,
-  groupCapability,
-  imageCapability,
-  motionCapability,
-  shapeCapability,
-  slideBackgroundCapability,
-  textCapability,
-  tableCapability,
-  transitionCapability,
-} from "@react-pptx/capabilities";
+import { documentCapabilities } from "@react-pptx/capabilities/document";
 import { createBuilder } from "@react-pptx/core";
 
-export const build = createBuilder([
-  boxCapability,
-  chartCapability,
-  groupCapability,
-  imageCapability,
-  motionCapability,
-  shapeCapability,
-  textCapability,
-  tableCapability,
-  transitionCapability,
-  slideBackgroundCapability,
-]);
+/**
+ * Default React one-call export. It composes real expansion with the same formal build used by the
+ * plain document entry; both entries share one default capability list.
+ */
+export const build = createBuilder(documentCapabilities);
+
+/** Default capability list shared by the React one-call entry and the plain document entry. */
+export { documentCapabilities };
 
 export {
   AuthorQuery,

@@ -319,7 +319,7 @@ export type Locator = {
   get(id: string): Locator;
   /** Lists matches for an author id in this locator scope; duplicates are already rejected by the build. */
   getAll(id: string): readonly Locator[];
-  /** Direct author child entries; anonymous entries remain transparent while named nodes are boundaries. */
+  /** Direct structural child locators, including anonymous and named nodes. */
   children(): readonly Locator[];
   descendants(): readonly Locator[];
   observe(): LocatorObservation;

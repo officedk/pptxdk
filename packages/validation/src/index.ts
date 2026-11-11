@@ -115,6 +115,13 @@ export type FileChartSeries = {
   readonly name: string;
   readonly categories: readonly string[];
   readonly values: readonly (number | null)[];
+  /** Native line-series marker symbol and optional size. */
+  readonly marker?: {
+    readonly symbol: string;
+    readonly size?: number;
+  };
+  /** Native line-series smoothing flag. */
+  readonly smooth?: boolean;
   /** Native c:idx, the chart-wide series identity. */
   readonly index: number;
   /**
@@ -136,7 +143,11 @@ export type FileChartDataLabel = {
     | "insideEnd"
     | "insideBase"
     | "outsideEnd"
-    | "bestFit";
+    | "bestFit"
+    | "left"
+    | "right"
+    | "bottom"
+    | "top";
   readonly numberFormat?: string;
 };
 
@@ -2807,6 +2818,8 @@ function readEmbeddedWorkbook(
       index: series.index,
       order: series.order,
       groupIndex: series.groupIndex,
+      ...(series.marker === undefined ? {} : { marker: series.marker }),
+      ...(series.smooth === undefined ? {} : { smooth: series.smooth }),
     });
   }
   return {
@@ -2868,6 +2881,10 @@ function readDataLabelSettings(
     else if (position === "inBase") settings.position = "insideBase";
     else if (position === "outEnd") settings.position = "outsideEnd";
     else if (position === "bestFit") settings.position = "bestFit";
+    else if (position === "l") settings.position = "left";
+    else if (position === "r") settings.position = "right";
+    else if (position === "b") settings.position = "bottom";
+    else if (position === "t") settings.position = "top";
   }
   const value = booleanAttribute(first(node, chartNamespace, "showVal"));
   if (value !== undefined) settings.value = value;
@@ -3519,6 +3536,67 @@ function validateChart(
         pointDataLabels[pointIndex] = pointSettings;
       }
       const name = nameCache.values[0] ?? "";
+      const markerNode = first(chartSeries, chartNamespace, "marker");
+      const smoothNode = first(chartSeries, chartNamespace, "smooth");
+      if (
+        typeNode.localName !== "lineChart" &&
+        (markerNode !== undefined || smoothNode !== undefined)
+      ) {
+        issue(
+          errors,
+          chartPart,
+          "invalid-chart-series-format",
+          "Only line chart series support native markers and smoothing",
+        );
+      }
+      let marker: FileChartSeries["marker"];
+      if (markerNode !== undefined) {
+        const symbol = attribute(
+          first(markerNode, chartNamespace, "symbol") ?? markerNode,
+          "val",
+        );
+        const sizeNode = first(markerNode, chartNamespace, "size");
+        const size =
+          sizeNode === undefined
+            ? undefined
+            : integerAttribute(sizeNode, "val");
+        if (symbol === "") {
+          issue(
+            errors,
+            chartPart,
+            "invalid-chart-series-format",
+            "Chart series marker is missing a symbol",
+          );
+        } else if (size !== undefined && (size < 2 || size > 72)) {
+          issue(
+            errors,
+            chartPart,
+            "invalid-chart-series-format",
+            "Chart series marker size must be between 2 and 72 points",
+          );
+        } else if (symbol !== "none") {
+          marker = {
+            symbol,
+            ...(size === undefined ? {} : { size }),
+          };
+        }
+      }
+      const smoothValue =
+        smoothNode === undefined ? "" : attribute(smoothNode, "val");
+      const smooth =
+        smoothValue === "1" || smoothValue === "true"
+          ? true
+          : smoothValue === "0" || smoothValue === "false"
+            ? false
+            : undefined;
+      if (smoothValue !== "" && smooth === undefined) {
+        issue(
+          errors,
+          chartPart,
+          "invalid-chart-series-format",
+          "Chart series smooth must be a boolean value",
+        );
+      }
       pending.push({
         order,
         ...(effectiveLabels === undefined &&
@@ -3542,6 +3620,8 @@ function validateChart(
           index,
           order,
           groupIndex,
+          ...(marker === undefined ? {} : { marker }),
+          ...(smooth === true ? { smooth: true } : {}),
         },
         formula: {
           name: nameCache.formula,

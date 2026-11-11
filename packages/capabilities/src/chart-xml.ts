@@ -8,12 +8,13 @@ import {
 } from "@react-pptx/core/capability";
 import { strToU8, zipSync } from "fflate";
 
-import { mergeDataLabels } from "./chart-labels.ts";
+import { chartDataLabelPositions, mergeDataLabels } from "./chart-labels.ts";
 import type {
   ChartAxis,
   ChartDataLabels,
   ChartKind,
   ChartLine,
+  ChartMarker,
   ChartPoint,
 } from "./chart-types.ts";
 import type {
@@ -180,6 +181,40 @@ function chartLine(
   );
 }
 
+function markerShapeProperties(
+  value: ChartMarker,
+  theme: ThemeContext,
+): XmlElement | undefined {
+  if (value.fill === undefined && value.line === undefined) return undefined;
+  return el(
+    "c:spPr",
+    null,
+    value.fill === undefined
+      ? undefined
+      : el("a:solidFill", null, color(value.fill, theme)),
+    value.line === undefined ? undefined : chartLine(value.line, theme),
+  );
+}
+
+function chartMarker(
+  value: boolean | ChartMarker | undefined,
+  theme: ThemeContext,
+): XmlElement {
+  if (value === undefined || value === false) {
+    return el("c:marker", null, el("c:symbol", { val: "none" }));
+  }
+  if (value === true) {
+    return el("c:marker", null, el("c:symbol", { val: "circle" }));
+  }
+  return el(
+    "c:marker",
+    null,
+    el("c:symbol", { val: value.symbol ?? "circle" }),
+    value.size === undefined ? undefined : el("c:size", { val: value.size }),
+    markerShapeProperties(value, theme),
+  );
+}
+
 function shapeProperties(
   value: "none" | ChartLine | undefined,
   theme: ThemeContext,
@@ -215,15 +250,11 @@ function dataLabels(
   textStyles: ChartTextStyleXml,
 ): XmlElement | undefined {
   const seriesLabels = mergeDataLabels(group.dataLabels, series.dataLabels);
-  const positions = {
-    center: "ctr",
-    insideEnd: "inEnd",
-    insideBase: "inBase",
-    outsideEnd: "outEnd",
-    bestFit: "bestFit",
-  } as const;
   const hasPosition =
-    group.kind === "column" || group.kind === "bar" || group.kind === "pie";
+    group.kind === "column" ||
+    group.kind === "bar" ||
+    group.kind === "line" ||
+    group.kind === "pie";
   const settings = (labels: ChartDataLabels, textStyle: string | undefined) => [
     labels.numberFormat === undefined
       ? undefined
@@ -235,7 +266,9 @@ function dataLabels(
     raw(textStyle),
     labels.position === undefined || !hasPosition
       ? undefined
-      : el("c:dLblPos", { val: positions[labels.position] }),
+      : el("c:dLblPos", {
+          val: chartDataLabelPositions[labels.position],
+        }),
     el("c:showLegendKey", { val: false }),
     el("c:showVal", { val: labels.value ?? false }),
     el("c:showCatName", { val: labels.category ?? false }),
@@ -382,7 +415,11 @@ function chartSeries(
   const points = Object.entries<ChartPoint>(series.points ?? {}).flatMap(
     ([pointIndex, point]) => {
       const shape = pointShape(kind, point, theme);
-      if (shape === undefined) return [];
+      const marker =
+        lineChart && point.marker !== undefined
+          ? chartMarker(point.marker, theme)
+          : undefined;
+      if (shape === undefined && marker === undefined) return [];
       return [
         el(
           "c:dPt",
@@ -390,6 +427,7 @@ function chartSeries(
           el("c:idx", { val: Number(pointIndex) }),
           bar ? el("c:invertIfNegative", { val: false }) : undefined,
           bar ? el("c:bubble3D", { val: false }) : undefined,
+          marker,
           shape,
         ),
       ];
@@ -403,9 +441,7 @@ function chartSeries(
     el("c:tx", null, strRef(`${sheet}!$${column}$1`, [series.name])),
     itemShape,
     bar ? el("c:invertIfNegative", { val: false }) : undefined,
-    lineChart
-      ? el("c:marker", null, el("c:symbol", { val: "none" }))
-      : undefined,
+    lineChart ? chartMarker(series.marker, theme) : undefined,
     pie && group.explosion !== undefined
       ? el("c:explosion", { val: Math.round(group.explosion) })
       : undefined,
@@ -421,7 +457,7 @@ function chartSeries(
       null,
       numRef(`${sheet}!$${column}$2:$${column}$${rows}`, series.values),
     ),
-    lineChart ? el("c:smooth", { val: false }) : undefined,
+    lineChart ? el("c:smooth", { val: series.smooth ?? false }) : undefined,
   );
 }
 

@@ -3202,11 +3202,81 @@ function chartFormulaRange(
   };
 }
 
+/**
+ * Returns the workbook category column owned by each category-series group.
+ *
+ * Shared category groups consume one category column per unique native category axis, in plot
+ * order. An axisless pie/doughnut owns one shared column unless its series name columns skip
+ * cells, which is the independent-ring layout where each ring owns category immediately before
+ * its value column. Scatter series own no category column.
+ */
+function zeroCategoryColumnBySeries(
+  groups: readonly FileChartGroup[],
+  axes: readonly FileChartAxis[],
+  formulaSeries: readonly ChartFormulaSeries[],
+  sheetName: string,
+): ReadonlyMap<number, number> {
+  const axisKind = new Map(axes.map((axis) => [axis.id, axis.kind]));
+  const categoryColumnByAxis = new Map<number, number>();
+  let nextCategoryColumn = 0;
+  for (const group of groups) {
+    if (group.type === "scatterChart" || group.axisIds.length === 0) continue;
+    const categoryId = group.axisIds.find(
+      (id) => axisKind.get(id) === "category",
+    );
+    if (categoryId === undefined || categoryColumnByAxis.has(categoryId)) {
+      continue;
+    }
+    categoryColumnByAxis.set(categoryId, nextCategoryColumn + 1);
+    nextCategoryColumn += 1;
+  }
+  const valueColumnBySeries = new Map<number, number>();
+  for (const { series, formula } of formulaSeries) {
+    const range = chartFormulaRange(formula.name, sheetName);
+    if (range !== undefined) {
+      valueColumnBySeries.set(series.index, range.startColumn);
+    }
+  }
+  const result = new Map<number, number>();
+  for (const group of groups) {
+    if (group.type === "scatterChart") continue;
+    if (group.axisIds.length === 0) {
+      const valueColumns = group.seriesIndices
+        .map((index) => valueColumnBySeries.get(index))
+        .filter((value): value is number => value !== undefined)
+        .sort((left, right) => left - right);
+      const independent =
+        valueColumns.length > 1 &&
+        valueColumns.at(-1)! - valueColumns[0]! + 1 !== valueColumns.length;
+      for (const index of group.seriesIndices) {
+        const valueColumn = valueColumnBySeries.get(index);
+        if (valueColumn === undefined) continue;
+        result.set(index, independent ? valueColumn - 1 : 1);
+      }
+      continue;
+    }
+    const categoryId = group.axisIds.find(
+      (id) => axisKind.get(id) === "category",
+    );
+    const categoryColumn =
+      categoryId === undefined
+        ? undefined
+        : categoryColumnByAxis.get(categoryId);
+    if (categoryColumn === undefined) continue;
+    for (const index of group.seriesIndices) {
+      result.set(index, categoryColumn);
+    }
+  }
+  return result;
+}
+
 function readEmbeddedWorkbook(
   part: string,
   chartPart: string,
   bytes: Uint8Array,
   formulaSeries: readonly ChartFormulaSeries[],
+  groups: readonly FileChartGroup[],
+  axes: readonly FileChartAxis[],
   errors: ValidationIssue[],
 ): FileChart["embeddedWorkbook"] {
   let files: XmlFiles;
@@ -3359,6 +3429,13 @@ function readEmbeddedWorkbook(
 
   const cellAt = (column: number, row: number) =>
     cells.get(`${spreadsheetColumn(column - 1)}${row}`);
+
+  const zeroCategoryColumns = zeroCategoryColumnBySeries(
+    groups,
+    axes,
+    formulaSeries,
+    sheetName,
+  );
 
   const columnHasData = (column: number): boolean => {
     const letter = spreadsheetColumn(column - 1);
@@ -3651,7 +3728,12 @@ function readEmbeddedWorkbook(
         );
         continue;
       }
-      if (nameCell !== series.name || columnHasData(nameRange.startColumn)) {
+      const categoryColumn = zeroCategoryColumns.get(series.index);
+      if (
+        nameCell !== series.name ||
+        columnHasData(nameRange.startColumn) ||
+        (categoryColumn !== undefined && columnHasData(categoryColumn))
+      ) {
         issue(
           errors,
           chartPart,
@@ -5828,6 +5910,8 @@ function validateChart(
         chartPart,
         workbookBytes,
         formulaSeries,
+        groups,
+        axes,
         errors,
       );
     }

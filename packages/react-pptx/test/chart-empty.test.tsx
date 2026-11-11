@@ -430,6 +430,32 @@ describe("editable empty charts", () => {
     assert.equal((emptyXml.match(/<c:cat>/gu) ?? []).length, 1);
     assert.equal((emptyXml.match(/<c:val>/gu) ?? []).length, 1);
     const emptyPptx = emptyResult.pptx.slice();
+    const workbookPart = emptyChart?.embeddedWorkbook?.part;
+    assert.ok(workbookPart);
+    const workbook = unzipSync(emptyParts[workbookPart]!);
+    const sheetPath = "xl/worksheets/sheet1.xml";
+    const ownedCategoryLabel = strFromU8(workbook[sheetPath]!).replace(
+      "</sheetData>",
+      '<row r="4"><c r="A4" t="inlineStr"><is><t>Owner only</t></is></c></row></sheetData>',
+    );
+    const mutated = await validatePptx(
+      zipSync({
+        ...emptyParts,
+        [workbookPart]: zipSync({
+          ...workbook,
+          [sheetPath]: strToU8(ownedCategoryLabel),
+        }),
+      }),
+    );
+    assert.ok(
+      mutated.errors.some(
+        ({ code, part }) =>
+          code === "chart-workbook-mismatch" &&
+          part === "ppt/charts/chart1.xml",
+      ),
+      JSON.stringify(mutated.errors),
+    );
+    assert.deepEqual(emptyResult.pptx, emptyPptx);
 
     node.set({
       groups: [

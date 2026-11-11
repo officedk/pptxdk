@@ -166,6 +166,8 @@ export type LayoutStyle = {
   readonly aspectRatio?: number;
   readonly gridTemplateColumns?: string;
   readonly gridTemplateRows?: string;
+  /** Track sizes for implicit Grid rows, cycling in order like CSS `grid-auto-rows`; defaults to `auto`. */
+  readonly gridAutoRows?: string;
   readonly gridColumn?: number | string;
   readonly gridRow?: number | string;
   readonly justifyItems?:

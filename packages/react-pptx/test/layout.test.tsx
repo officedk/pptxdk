@@ -468,6 +468,528 @@ describe("public layout entry", () => {
     assert.deepEqual((await validatePptx(result.pptx)).errors, []);
   });
 
+  it("lays out spanning cards across explicit and implicit rows configured by gridAutoRows", async () => {
+    const notes =
+      "Service revenue grew in every region this quarter, led by managed services.";
+    const cardGrid = (name: string, width: number) => (
+      <Box
+        testId={`${name}-grid`}
+        style={{
+          display: "grid",
+          width,
+          height: 300,
+          gridTemplateColumns: "1fr 1fr 1fr",
+          gridTemplateRows: "48px",
+          gridAutoRows: "auto 72px",
+          columnGap: 12,
+          rowGap: 12,
+          backgroundColor: "#ffffff",
+        }}
+      >
+        <Box
+          testId={`${name}-heading`}
+          style={{
+            gridColumn: "2 / span 2",
+            gridRow: 1,
+            backgroundColor: "#2b579a",
+          }}
+        >
+          <Text style={{ fontFamily: cjkFont, fontSize: 18, color: "#ffffff" }}>
+            Quarterly review
+          </Text>
+        </Box>
+        <Box
+          testId={`${name}-feature`}
+          style={{
+            gridColumn: 1,
+            gridRow: "1 / span 3",
+            backgroundColor: "#e8f4fd",
+          }}
+        >
+          <Text style={{ fontFamily: cjkFont, fontSize: 14 }}>Lead</Text>
+        </Box>
+        <Box
+          testId={`${name}-metric`}
+          style={{
+            gridColumn: 2,
+            gridRow: 2,
+            backgroundColor: "#e8f4fd",
+          }}
+        >
+          <Text style={{ fontFamily: cjkFont, fontSize: 14 }}>North 42%</Text>
+        </Box>
+        <Box
+          testId={`${name}-notes`}
+          style={{
+            gridColumn: 3,
+            gridRow: 2,
+            backgroundColor: "#e8f4fd",
+          }}
+        >
+          <Text
+            testId={`${name}-notes-text`}
+            style={{ fontFamily: cjkFont, fontSize: 14 }}
+          >
+            {notes}
+          </Text>
+        </Box>
+        <Box
+          testId={`${name}-summary`}
+          style={{
+            gridColumn: "2 / span 2",
+            gridRow: 3,
+            backgroundColor: "#e8f4fd",
+          }}
+        />
+      </Box>
+    );
+
+    const result = await build(
+      <Deck width={800} height={400}>
+        <Slide slideId="grid-auto-wide">{cardGrid("wide", 600)}</Slide>
+        <Slide slideId="grid-auto-narrow">{cardGrid("narrow", 360)}</Slide>
+      </Deck>,
+    );
+
+    const layoutMap = (slideIndex: number) =>
+      new Map(
+        (result.report.slides[slideIndex]?.layouts ?? []).flatMap(
+          ({ testId, box }) =>
+            testId === undefined ? [] : [[testId, box] as const],
+        ),
+      );
+    const wide = layoutMap(0);
+    const narrow = layoutMap(1);
+    const wideRow = wide.get("wide-metric")?.height ?? 0;
+    const narrowRow = narrow.get("narrow-metric")?.height ?? 0;
+
+    assert.deepEqual(wide.get("wide-heading"), {
+      x: 204,
+      y: 0,
+      width: 396,
+      height: 48,
+    });
+    assert.deepEqual(wide.get("wide-feature"), {
+      x: 0,
+      y: 0,
+      width: 192,
+      height: wideRow + 144,
+    });
+    assert.deepEqual(wide.get("wide-metric"), {
+      x: 204,
+      y: 60,
+      width: 192,
+      height: wideRow,
+    });
+    assert.deepEqual(wide.get("wide-notes"), {
+      x: 408,
+      y: 60,
+      width: 192,
+      height: wideRow,
+    });
+    assert.deepEqual(wide.get("wide-summary"), {
+      x: 204,
+      y: 60 + wideRow + 12,
+      width: 396,
+      height: 72,
+    });
+    assert.ok(
+      wideRow > 40,
+      "wrapped card text should make the auto implicit row taller than one line",
+    );
+    assert.ok(
+      narrowRow > wideRow,
+      "narrower fr columns should wrap card text into a taller implicit row",
+    );
+    assert.deepEqual(narrow.get("narrow-feature"), {
+      x: 0,
+      y: 0,
+      width: 112,
+      height: narrowRow + 144,
+    });
+    assert.deepEqual(narrow.get("narrow-summary"), {
+      x: 124,
+      y: 60 + narrowRow + 12,
+      width: 236,
+      height: 72,
+    });
+    assert.deepEqual(result.report.diagnostics, []);
+
+    const file = await validatePptx(result.pptx);
+    assert.deepEqual(file.errors, []);
+    for (const [index, name] of [
+      [0, "wide"],
+      [1, "narrow"],
+    ] as const) {
+      const native = new Map(
+        (file.slides[index]?.objects ?? []).map((object) => [
+          object.name,
+          object,
+        ]),
+      );
+      for (const card of ["heading", "feature", "metric", "notes", "summary"]) {
+        const object = native.get(`${name}-${card}`);
+        assert.ok(object !== undefined, `missing native card ${name}-${card}`);
+        assert.deepEqual(
+          {
+            x: object.boxEmu.x / 9525,
+            y: object.boxEmu.y / 9525,
+            width: object.boxEmu.width / 9525,
+            height: object.boxEmu.height / 9525,
+          },
+          layoutMap(index).get(`${name}-${card}`),
+        );
+      }
+      assert.equal(native.get(`${name}-notes-text`)?.text?.text, notes);
+    }
+  });
+
+  it("distributes implicit fr rows from gridAutoRows and retains fixed implicit rows across container heights", async () => {
+    const board = (name: string, height: number) => (
+      <Box
+        testId={`${name}-board`}
+        style={{
+          display: "grid",
+          width: 320,
+          height,
+          gridTemplateColumns: "100px 100px 100px",
+          gridTemplateRows: "20px",
+          gridAutoRows: "minmax(40px, 1fr) 60px",
+          columnGap: 10,
+          rowGap: 10,
+        }}
+      >
+        <Shape
+          testId={`${name}-header`}
+          style={{ gridColumn: "span 3", gridRow: 1 }}
+        />
+        <Shape testId={`${name}-top`} style={{ gridColumn: "span 3" }} />
+        <Shape testId={`${name}-middle`} style={{ gridColumn: "span 3" }} />
+        <Shape testId={`${name}-bottom`} style={{ gridColumn: "span 3" }} />
+      </Box>
+    );
+    const result = await build(
+      <Deck width={400} height={600}>
+        <Slide slideId="grid-auto-tall">{board("tall", 300)}</Slide>
+        <Slide slideId="grid-auto-medium">{board("medium", 220)}</Slide>
+        <Slide slideId="grid-auto-constrained">
+          {board("constrained", 140)}
+        </Slide>
+      </Deck>,
+    );
+
+    const objects = (slideIndex: number) =>
+      new Map(
+        (result.report.slides[slideIndex]?.objects ?? []).flatMap(
+          ({ testId, box }) =>
+            testId === undefined || box === undefined
+              ? []
+              : [[testId, box] as const],
+        ),
+      );
+    const tall = objects(0);
+    assert.deepEqual(tall.get("tall-header"), {
+      x: 0,
+      y: 0,
+      width: 320,
+      height: 20,
+    });
+    assert.deepEqual(tall.get("tall-top"), {
+      x: 0,
+      y: 30,
+      width: 320,
+      height: 95,
+    });
+    assert.deepEqual(tall.get("tall-middle"), {
+      x: 0,
+      y: 135,
+      width: 320,
+      height: 60,
+    });
+    assert.deepEqual(tall.get("tall-bottom"), {
+      x: 0,
+      y: 205,
+      width: 320,
+      height: 95,
+    });
+
+    const medium = objects(1);
+    assert.deepEqual(medium.get("medium-top"), {
+      x: 0,
+      y: 30,
+      width: 320,
+      height: 55,
+    });
+    assert.deepEqual(medium.get("medium-middle"), {
+      x: 0,
+      y: 95,
+      width: 320,
+      height: 60,
+    });
+    assert.deepEqual(medium.get("medium-bottom"), {
+      x: 0,
+      y: 165,
+      width: 320,
+      height: 55,
+    });
+
+    const constrained = objects(2);
+    assert.deepEqual(constrained.get("constrained-top"), {
+      x: 0,
+      y: 30,
+      width: 320,
+      height: 40,
+    });
+    assert.deepEqual(constrained.get("constrained-middle"), {
+      x: 0,
+      y: 80,
+      width: 320,
+      height: 60,
+    });
+    assert.deepEqual(constrained.get("constrained-bottom"), {
+      x: 0,
+      y: 150,
+      width: 320,
+      height: 40,
+    });
+    assert.deepEqual(
+      result.report.diagnostics.map(({ code }) => code),
+      ["grid-overflow"],
+    );
+    assert.equal(result.report.slides[2]?.layouts?.[0]?.box.height, 140);
+
+    const file = await validatePptx(result.pptx);
+    assert.deepEqual(file.errors, []);
+    for (const [index, name] of [
+      [0, "tall"],
+      [1, "medium"],
+      [2, "constrained"],
+    ] as const) {
+      const native = new Map(
+        (file.slides[index]?.objects ?? []).map(
+          ({ name: objectName, boxEmu }) => [objectName, boxEmu],
+        ),
+      );
+      for (const part of ["header", "top", "middle", "bottom"]) {
+        const object = native.get(`${name}-${part}`);
+        const reported = objects(index).get(`${name}-${part}`);
+        assert.ok(object !== undefined && reported !== undefined);
+        assert.deepEqual(
+          {
+            x: object.x / 9525,
+            y: object.y / 9525,
+            width: object.width / 9525,
+            height: object.height / 9525,
+          },
+          reported,
+        );
+      }
+    }
+  });
+
+  it("retains fixed implicit rows and reports grid and text constraint failures", async () => {
+    const result = await build(
+      <Deck width={320} height={240}>
+        <Slide slideId="grid-auto-constraints">
+          <Box
+            testId="constraint-grid"
+            style={{
+              display: "grid",
+              width: 300,
+              height: 100,
+              gridTemplateColumns: "300px",
+              gridTemplateRows: "20px",
+              gridAutoRows: "30px",
+            }}
+          >
+            <Shape testId="constraint-header" />
+            <Shape
+              testId="overset-card"
+              width={60}
+              height={30}
+              text="中文中文中文中文"
+              textStyle={{
+                fontFamily: cjkFont,
+                fontSize: 20,
+                verticalAlign: "top",
+              }}
+            />
+            <Shape testId="tall-card" height={50} />
+          </Box>
+        </Slide>
+        <Slide slideId="grid-auto-overflow">
+          <Box
+            testId="overflow-grid"
+            style={{
+              display: "grid",
+              width: 300,
+              height: 40,
+              gridTemplateColumns: "300px",
+              gridTemplateRows: "20px",
+              gridAutoRows: "30px",
+            }}
+          >
+            <Shape testId="overflow-header" />
+            <Shape testId="overflow-card" height={10} />
+            <Shape testId="overflow-extra" height={10} />
+          </Box>
+        </Slide>
+      </Deck>,
+    );
+
+    const layouts = result.report.slides[0]?.layouts ?? [];
+    assert.deepEqual(layouts[0]?.box, {
+      x: 0,
+      y: 0,
+      width: 300,
+      height: 100,
+    });
+    assert.deepEqual(
+      result.report.slides[0]?.objects.map(({ testId, box }) => ({
+        testId,
+        box,
+      })),
+      [
+        {
+          testId: "constraint-header",
+          box: { x: 0, y: 0, width: 300, height: 20 },
+        },
+        {
+          testId: "overset-card",
+          box: { x: 0, y: 20, width: 60, height: 30 },
+        },
+        {
+          testId: "tall-card",
+          box: { x: 0, y: 50, width: 300, height: 50 },
+        },
+      ],
+    );
+    assert.deepEqual(
+      result.report.slides[1]?.objects.map(({ testId, box }) => ({
+        testId,
+        box,
+      })),
+      [
+        {
+          testId: "overflow-header",
+          box: { x: 0, y: 0, width: 300, height: 20 },
+        },
+        {
+          testId: "overflow-card",
+          box: { x: 0, y: 20, width: 300, height: 10 },
+        },
+        {
+          testId: "overflow-extra",
+          box: { x: 0, y: 50, width: 300, height: 10 },
+        },
+      ],
+    );
+    const diagnostic = (code: string) =>
+      result.report.diagnostics.find((item) => item.code === code);
+    assert.deepEqual(
+      {
+        severity: diagnostic("overset")?.severity,
+        path: diagnostic("overset")?.path,
+      },
+      {
+        severity: "warning",
+        path: "deck/slide[grid-auto-constraints]/box[constraint-grid]/shape[overset-card]",
+      },
+    );
+    assert.deepEqual(
+      {
+        severity: diagnostic("grid-item-overflow")?.severity,
+        path: diagnostic("grid-item-overflow")?.path,
+      },
+      {
+        severity: "warning",
+        path: "deck/slide[grid-auto-constraints]/box[constraint-grid]/shape[tall-card]",
+      },
+    );
+    assert.deepEqual(
+      {
+        severity: diagnostic("grid-overflow")?.severity,
+        path: diagnostic("grid-overflow")?.path,
+      },
+      {
+        severity: "warning",
+        path: "deck/slide[grid-auto-overflow]/box[overflow-grid]",
+      },
+    );
+
+    const file = await validatePptx(result.pptx);
+    assert.deepEqual(file.errors, []);
+    for (const [index, ids] of [
+      [0, ["constraint-header", "overset-card", "tall-card"]],
+      [1, ["overflow-header", "overflow-card", "overflow-extra"]],
+    ] as const) {
+      const native = new Map(
+        (file.slides[index]?.objects ?? []).map(({ name, boxEmu }) => [
+          name,
+          boxEmu,
+        ]),
+      );
+      for (const id of ids) {
+        const object = native.get(id);
+        const reported = result.report.slides[index]?.objects.find(
+          ({ testId }) => testId === id,
+        )?.box;
+        assert.ok(object !== undefined && reported !== undefined);
+        assert.deepEqual(
+          {
+            x: object.x / 9525,
+            y: object.y / 9525,
+            width: object.width / 9525,
+            height: object.height / 9525,
+          },
+          reported,
+        );
+      }
+    }
+  });
+
+  it("rejects unsupported gridAutoRows declarations instead of ignoring them", async () => {
+    await assert.rejects(
+      build(
+        <Deck width={320} height={240}>
+          <Slide slideId="unsupported-grid-auto-row">
+            <Box
+              style={{ display: "grid", gridAutoRows: "fit-content(100px)" }}
+            />
+          </Slide>
+        </Deck>,
+      ),
+      (error: unknown) =>
+        error instanceof BuildError &&
+        error.diagnostics[0]?.code === "invalid-grid-tracks" &&
+        error.diagnostics[0]?.message.includes("fit-content"),
+    );
+    await assert.rejects(
+      build(
+        <Deck width={320} height={240}>
+          <Slide slideId="empty-grid-auto-row">
+            <Box style={{ display: "grid", gridAutoRows: "" }} />
+          </Slide>
+        </Deck>,
+      ),
+      (error: unknown) =>
+        error instanceof BuildError &&
+        error.diagnostics[0]?.code === "invalid-grid-tracks",
+    );
+    await assert.rejects(
+      build(
+        <Deck width={320} height={240}>
+          <Slide slideId="block-grid-auto-row">
+            <Box style={{ gridAutoRows: "20px" }} />
+          </Slide>
+        </Deck>,
+      ),
+      (error: unknown) =>
+        error instanceof BuildError &&
+        error.diagnostics[0]?.code === "invalid-layout-context",
+    );
+  });
+
   it("evaluates relative and absolute positioning by horizontal and vertical percentages of containing block respectively", async () => {
     const result = await build(
       <Deck width={320} height={240}>

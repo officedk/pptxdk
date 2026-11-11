@@ -1,4 +1,5 @@
-import { BuildQueryError, type SlideObservation } from "@react-pptx/core";
+import type { SlideObservation } from "@react-pptx/core/capability";
+import { BuildQueryError } from "@react-pptx/core/query";
 
 import type {
   MotionEffectObservation,

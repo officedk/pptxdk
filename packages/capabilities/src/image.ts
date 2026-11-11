@@ -115,7 +115,6 @@ export type ParsedImage = {
   readonly enter?: MotionProps["enter"];
   readonly emphasis?: MotionProps["emphasis"];
   readonly motion?: MotionProps["motion"];
-  readonly __motionContext?: unknown;
   readonly contract: CapabilityLayoutContract;
   readonly rawProps: Readonly<Record<string, unknown>>;
 };
@@ -150,7 +149,6 @@ const allowedParameters = [
   "enter",
   "emphasis",
   "motion",
-  "__motionContext",
 ] as const;
 const maximumShapeExtentEmu = 2_147_483_647;
 
@@ -627,9 +625,6 @@ export const imageCapability: ObjectCapabilityModule<ParsedImage> = {
         : {}),
       ...(input.props["motion"] !== undefined
         ? { motion: input.props["motion"] as MotionProps["motion"] }
-        : {}),
-      ...(input.props["__motionContext"] !== undefined
-        ? { __motionContext: input.props["__motionContext"] }
         : {}),
       image,
       style: imageStyle,

@@ -1224,7 +1224,6 @@ export type ParsedChart = {
   readonly enter?: unknown;
   readonly emphasis?: unknown;
   readonly motion?: unknown;
-  readonly motionContext?: unknown;
   readonly contract: CapabilityLayoutContract;
   readonly rawProps: Readonly<Record<string, unknown>>;
 };
@@ -1284,7 +1283,6 @@ export const chartCapability: ObjectCapabilityModule = {
         "enter",
         "emphasis",
         "motion",
-        "__motionContext",
       ],
       "Chart",
     );
@@ -1460,9 +1458,6 @@ export const chartCapability: ObjectCapabilityModule = {
       ...(input.props["motion"] === undefined
         ? {}
         : { motion: input.props["motion"] }),
-      ...(input.props["__motionContext"] === undefined
-        ? {}
-        : { motionContext: input.props["__motionContext"] }),
     };
 
     return { contract, parsed };
@@ -1552,9 +1547,6 @@ export const chartCapability: ObjectCapabilityModule = {
       ...(parsed.enter === undefined ? {} : { enter: parsed.enter }),
       ...(parsed.emphasis === undefined ? {} : { emphasis: parsed.emphasis }),
       ...(parsed.motion === undefined ? {} : { motion: parsed.motion }),
-      ...(parsed.motionContext === undefined
-        ? {}
-        : { __motionContext: parsed.motionContext }),
     } as ChartProps;
 
     const name =

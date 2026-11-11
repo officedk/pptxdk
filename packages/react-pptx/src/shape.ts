@@ -32,8 +32,8 @@ export type {
   VisualStyle,
 } from "@react-pptx/core";
 export type { ImageVisualStyle } from "@react-pptx/capabilities";
+export { Step } from "@react-pptx/capabilities/motion-elements";
 export {
-  Step,
   fade,
   fly,
   floatDown,

@@ -1536,6 +1536,7 @@ function compileChildren(
                 path,
                 targetId: boxObservation.id,
                 order,
+                declaration: child,
               });
             }
           }
@@ -1684,7 +1685,12 @@ function compileChildren(
     if ("compileDeclaration" in module) {
       try {
         for (const annotation of module.compileDeclaration(child, { path })) {
-          context.slide.contributions.push({ ...annotation, path, order });
+          context.slide.contributions.push({
+            ...annotation,
+            path,
+            order,
+            declaration: child,
+          });
         }
       } catch (error) {
         context.slide.diagnostics.push(
@@ -1823,6 +1829,7 @@ function compileChildren(
           path,
           targetId: id,
           order,
+          declaration: child,
         });
       }
       const observation = {
@@ -2030,6 +2037,7 @@ function compileSlide(
         path,
         dimensions,
         contributions: slide.contributions,
+        children,
         theme,
         registerResource(resource) {
           return addResource(resource, { document, slide });
@@ -2066,6 +2074,7 @@ function compileSlide(
     }
   }
   for (const contribution of slide.contributions) {
+    if (contribution.optional) continue;
     const consumer = modules.get(contribution.capability);
     if (
       consumer === undefined ||

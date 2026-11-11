@@ -53,6 +53,7 @@ export type {
   CapabilityAnnotation,
   CapabilityChild,
   CapabilityContext,
+  CapabilityContribution,
   CapabilityInput,
   CapabilityLayoutContract,
   CapabilityLayoutMeasurement,
@@ -83,5 +84,7 @@ export type {
   SlideCapabilityModule,
   SlideCapabilityOutput,
   SlideCapabilitySlot,
+  SlideObservation,
   Target,
+  TransparentCapabilityModule,
 } from "#/types.ts";

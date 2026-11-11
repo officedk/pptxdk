@@ -358,6 +358,14 @@ export type CapabilityChildren = {
 export type CapabilityAnnotation = {
   readonly capability: string;
   readonly value: unknown;
+  /**
+   * Annotation that may remain unconsumed when its slide capability is trimmed.
+   *
+   * Object capabilities emit optional local declarations (for example an object awaiting an inherited
+   * default effect) without making the capability mandatory. Required annotations keep the existing
+   * missing-capability diagnostic.
+   */
+  readonly optional?: boolean;
 };
 
 /** Declaration data passed to slide modules after core supplements object identity and diagnostic locations. */
@@ -367,6 +375,8 @@ export type CapabilityContribution = CapabilityAnnotation & {
   readonly targetId?: number;
   /** Preorder index in the slide host tree to preserve ordering of transparent declarations and object members. */
   readonly order: number;
+  /** Build-local declaration view that produced this contribution; never retained on an editable node. */
+  readonly declaration?: CapabilityElement;
 };
 
 export type CapabilityResource = {
@@ -565,6 +575,8 @@ export type SlideCapabilityContext = {
   readonly path: string;
   readonly dimensions: { readonly width: number; readonly height: number };
   readonly contributions: readonly CapabilityContribution[];
+  /** Declaration views already mapped for this build, shared with the compiled slide tree. */
+  readonly children: readonly CapabilityChild[];
   readonly theme: ThemeContext;
   readonly registerResource: (resource: CapabilityResource) => string;
 };

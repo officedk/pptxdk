@@ -6,7 +6,7 @@ import {
   type GeometryBox,
   type SlideCapabilityModule,
   type TransparentCapabilityModule,
-} from "@react-pptx/core";
+} from "@react-pptx/core/capability";
 
 import type {
   MotionDirection,
@@ -19,6 +19,7 @@ import {
   maximumTimeNodeValue,
   motionScopeAnnotation,
   motionStepAnnotation,
+  resolveMotionContributions,
 } from "./motion-api.ts";
 import {
   addMotionPlanStartDelay,
@@ -36,6 +37,7 @@ import { registerMotionObservation } from "./motion-query.ts";
 export {
   after,
   breathe,
+  createMotionScopeHandle,
   fillColor,
   fade,
   fly,
@@ -48,8 +50,6 @@ export {
   wipe,
   zoom,
 } from "./motion-api.ts";
-export { Box, MotionScope, Step, useMotionScope } from "./motion-elements.ts";
-export type { BoxProps } from "./motion-elements.ts";
 export { observeMotion } from "./motion-query.ts";
 export type {
   EffectInstanceObservation,
@@ -2196,7 +2196,7 @@ function timingXml(
 /** Slide-level motion module writes object timing and returns observation describing declarations and determinable relative times only. */
 export const motionCapability: SlideCapabilityModule = Object.freeze({
   declaration: "motion",
-  slideProp: "__motion",
+  slideProp: "motion",
   slot: "timing",
   always: true,
   transparentDeclarations: [
@@ -2214,7 +2214,9 @@ export const motionCapability: SlideCapabilityModule = Object.freeze({
     } satisfies TransparentCapabilityModule,
   ],
   compileSlide(_input: CapabilityInput, context) {
-    const plan = compileMotionPlan(context.contributions);
+    const plan = compileMotionPlan(
+      resolveMotionContributions(context.children, context.contributions),
+    );
     validateKnownMotionTimes(plan.observation);
     const hasEffects = plan.steps.some((step) => step.effects.length > 0);
     if (!hasEffects) {

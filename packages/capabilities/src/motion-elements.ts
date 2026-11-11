@@ -1,142 +1,57 @@
-import { CommonContainer, hostNodeCreator } from "@react-pptx/core/document";
-import {
-  createContext,
-  createElement,
-  useContext,
-  useId,
-  type ReactNode,
-} from "react";
+import { hostNodeCreator } from "@react-pptx/core/document";
+import { createElement, useState, type ReactNode } from "react";
 
-import type {
-  MotionContextValue,
-  MotionMoment,
-  MotionMomentOffset,
-  MotionProps,
-  MotionScopeDeclaration,
-  MotionScopeHandle,
-  MotionScopeProps,
-  MotionTiming,
-  StepDeclaration,
-  StepProps,
+import {
+  createMotionScopeHandle,
+  createMotionScopeNode,
+  createMotionStepIdentity,
+  createMotionStepNode,
+  type MotionProps,
+  type MotionScopeHandle,
+  type MotionScopeProps,
+  type StepProps,
 } from "./motion-api.ts";
 
 export { Box, type BoxProps } from "./box-elements.ts";
 
-export const motionContext = createContext<MotionContextValue>({
-  enabled: true,
-  scopes: [],
-});
-
-function moment(
-  scope: string,
-  point: MotionMoment["point"],
-  name?: string,
-): MotionMoment {
-  return Object.freeze({
-    type: "motion-moment",
-    scope,
-    point,
-    ...(name === undefined ? {} : { name }),
-  });
-}
-
-function createMotionScopeNode(
-  props: Readonly<Record<string, unknown>>,
-): CommonContainer<"motion-scope"> {
-  return new CommonContainer("motion-scope", "rp:motion-scope", props);
-}
-
-function createMotionStepNode(
-  props: Readonly<Record<string, unknown>>,
-): CommonContainer<"motion-step"> {
-  return new CommonContainer("motion-step", "rp:motion-step", props);
-}
-
-/** Creates explicit orchestration scope and publishable named moments for current React component instance. */
+/**
+ * Keeps one pure scope identity for the lifetime of this component instance.
+ *
+ * The React hook only stores the plain handle; scope parent chains, click steps, and inheritance are
+ * derived by the build from the document structure, so moving content does not carry React state.
+ */
 export function useMotionScope(): MotionScopeHandle {
-  const identity = useId();
-  const cue = (name: string): MotionMoment => moment(identity, "named", name);
-  return Object.freeze({
-    type: "motion-scope-handle",
-    identity,
-    start: moment(identity, "start"),
-    end: moment(identity, "end"),
-    cue,
-  });
+  const [handle] = useState(createMotionScopeHandle);
+  return handle;
 }
 
 /** Explicit orchestration scope only declares timing relationships without creating layout or native objects. */
 export function MotionScope(props: MotionScopeProps): ReactNode {
-  const { children, ...publicProps } = props;
-  const {
-    scope,
-    mode = "parallel",
-    each,
-    delay = 0,
-    startAt,
-    publishStart,
-    publishEnd,
-    motion,
-  } = publicProps;
-  const parent = useContext(motionContext);
-  const parentScope = parent.scopes.at(-1);
-  const declaration: MotionScopeDeclaration = Object.freeze({
-    identity: scope.identity,
-    ...(parentScope === undefined ? {} : { parent: parentScope.identity }),
-    ...(parent.step === undefined ? {} : { step: parent.step }),
-    mode,
-    delay,
-    ...(each === undefined ? {} : { each }),
-    ...(startAt === undefined ? {} : { startAt }),
-    ...(publishStart === undefined ? {} : { publishStart }),
-    ...(publishEnd === undefined ? {} : { publishEnd }),
-  });
-  const context = Object.freeze({
-    ...parent,
-    enabled: parent.enabled && motion !== false,
-    scopes: Object.freeze([...parent.scopes, declaration]),
-  });
+  const { children, ...declaration } = props;
   return createElement(
-    motionContext.Provider,
-    { value: context },
-    createElement(
-      "rp:motion-scope",
-      {
-        ...publicProps,
-        __motionScope: declaration,
-        [hostNodeCreator]: createMotionScopeNode,
-      },
-      children,
-    ),
+    "rp:motion-scope",
+    { ...declaration, [hostNodeCreator]: createMotionScopeNode },
+    children,
   );
 }
 
 /** A single click triggers a group of objects; declarations with the same number share a click step. */
 export function Step(props: StepProps): ReactNode {
-  const { children, ...publicProps } = props;
-  const { n } = publicProps;
-  const parent = useContext(motionContext);
-  const identity = useId();
-  const step: StepDeclaration =
-    n === undefined
-      ? { mode: "automatic", identity }
-      : { mode: "explicit", number: n };
+  const { children, ...declaration } = props;
+  const [stepIdentity] = useState(createMotionStepIdentity);
   return createElement(
-    motionContext.Provider,
-    { value: { ...parent, step } },
-    createElement(
-      "rp:motion-step",
-      {
-        ...publicProps,
-        __motionStep: step,
-        [hostNodeCreator]: createMotionStepNode,
-      },
-      children,
-    ),
+    "rp:motion-step",
+    { ...declaration, stepIdentity, [hostNodeCreator]: createMotionStepNode },
+    children,
   );
 }
 
-/** Passes current Step and disabled status to the formal native object host node. */
+/**
+ * Passes local motion props to a native object host.
+ *
+ * Object capabilities emit only local declarations; inherited scope, step, default entrance, and
+ * disabled ancestors are resolved by the formal build from the current document.
+ */
 export function motionElement(
   type: string,
   props: MotionProps & {
@@ -144,19 +59,5 @@ export function motionElement(
     readonly [hostNodeCreator]?: unknown;
   },
 ): ReactNode {
-  const parent = useContext(motionContext);
-  const enabled = parent.enabled && props.motion !== false;
-  const context = Object.freeze({ ...parent, enabled });
-  const host = createElement(
-    type,
-    {
-      ...props,
-      __motionContext: context,
-    },
-    props.children,
-  );
-  if (enabled === parent.enabled) return host;
-  return createElement(motionContext.Provider, { value: context }, host);
+  return createElement(type, props, props.children);
 }
-
-export type { MotionMoment, MotionMomentOffset, MotionTiming };

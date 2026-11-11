@@ -145,7 +145,6 @@ const allowedParameters = [
   "enter",
   "emphasis",
   "motion",
-  "__motionContext",
 ] as const;
 
 export const shapeStyleKeys = [

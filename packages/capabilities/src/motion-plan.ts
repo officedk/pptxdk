@@ -2,7 +2,7 @@ import {
   CapabilityError,
   type CapabilityContribution,
   type GeometryBox,
-} from "@react-pptx/core";
+} from "@react-pptx/core/capability";
 
 import { maximumTimeNodeValue } from "./motion-api.ts";
 import type {

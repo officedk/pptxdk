@@ -2340,6 +2340,29 @@ function spreadsheetColumn(index: number): string {
   return column;
 }
 
+/** Reads the visible text of a spreadsheet string item, including rich-text runs but excluding phonetic runs. */
+function spreadsheetStringText(element: XmlElement): string {
+  let text = "";
+  for (
+    let child = element.firstChild;
+    child !== null;
+    child = child.nextSibling
+  ) {
+    if (
+      child.nodeType !== 1 ||
+      child.namespaceURI !== spreadsheetNamespace ||
+      child.localName === "rPh"
+    ) {
+      continue;
+    }
+    text +=
+      child.localName === "t"
+        ? (child.textContent ?? "")
+        : spreadsheetStringText(child as XmlElement);
+  }
+  return text;
+}
+
 function readEmbeddedWorkbook(
   part: string,
   bytes: Uint8Array,
@@ -2424,6 +2447,41 @@ function readEmbeddedWorkbook(
     );
     return undefined;
   }
+  // PowerPoint stores embedded chart workbook strings in sharedStrings and
+  // references them from cells with t="s"; the cell value is an index, not text.
+  const sharedStringsRelationship = [
+    ...(relationships.get(workbookPart)?.values() ?? []),
+  ].find(
+    (entry) =>
+      attribute(entry, "Type") === `${relationshipNamespace}/sharedStrings` &&
+      attribute(entry, "TargetMode") !== "External",
+  );
+  let sharedStrings: readonly string[] | undefined;
+  if (sharedStringsRelationship !== undefined) {
+    const sharedStringsPart = relationshipTargetPath(
+      workbookPart,
+      attribute(sharedStringsRelationship, "Target"),
+    );
+    const sharedStringsRoot = documents.get(sharedStringsPart)?.documentElement;
+    if (
+      sharedStringsRoot == null ||
+      sharedStringsRoot.namespaceURI !== spreadsheetNamespace ||
+      sharedStringsRoot.localName !== "sst"
+    ) {
+      issue(
+        errors,
+        part,
+        "invalid-embedded-workbook",
+        "Embedded workbook shared strings part is invalid",
+      );
+    } else {
+      sharedStrings = elements(
+        sharedStringsRoot,
+        spreadsheetNamespace,
+        "si",
+      ).map(spreadsheetStringText);
+    }
+  }
   const sheetData = first(worksheet, spreadsheetNamespace, "sheetData");
   const cells = new Map<string, string>();
   for (const row of sheetData === undefined
@@ -2431,12 +2489,30 @@ function readEmbeddedWorkbook(
     : elements(sheetData, spreadsheetNamespace, "row")) {
     for (const cell of elements(row, spreadsheetNamespace, "c")) {
       const reference = attribute(cell, "r");
+      const type = attribute(cell, "t");
       const inline = first(cell, spreadsheetNamespace, "is");
-      const value =
-        attribute(cell, "t") === "inlineStr"
-          ? (first(inline ?? cell, spreadsheetNamespace, "t")?.textContent ??
-            "")
-          : (first(cell, spreadsheetNamespace, "v")?.textContent ?? "");
+      let value = "";
+      if (type === "inlineStr") {
+        value = inline === undefined ? "" : spreadsheetStringText(inline);
+      } else if (type === "s") {
+        const text = first(cell, spreadsheetNamespace, "v")?.textContent ?? "";
+        const index = text.trim() === "" ? Number.NaN : Number(text);
+        const entry = Number.isInteger(index)
+          ? sharedStrings?.[index]
+          : undefined;
+        if (entry === undefined) {
+          issue(
+            errors,
+            part,
+            "invalid-embedded-workbook-value",
+            `Workbook ${reference} shared string index is invalid`,
+          );
+        } else {
+          value = entry;
+        }
+      } else {
+        value = first(cell, spreadsheetNamespace, "v")?.textContent ?? "";
+      }
       if (reference !== "") cells.set(reference, value);
     }
   }
@@ -3296,19 +3372,10 @@ function validateTable(
       }
     }
   }
-  const widthEmu = columnWidthsEmu.reduce((sum, width) => sum + width, 0);
-  const heightEmu = rowHeightsEmu.reduce((sum, height) => sum + height, 0);
-  if (
-    boxEmu !== undefined &&
-    (boxEmu.width !== widthEmu || boxEmu.height !== heightEmu)
-  ) {
-    issue(
-      errors,
-      part,
-      "invalid-table-transform",
-      `Table ${identity.name} frame dimensions do not match row and column grid sum`,
-    );
-  }
+  // ISO/IEC 29500-1 defines row heights (21.1.3.18) and column widths
+  // (21.1.3.2) independently from the graphic frame's displayed extents
+  // (20.1.7.3). Native applications may normalize the frame without rewriting
+  // the grid, so keep both raw observations and do not reject the combination.
   if (boxEmu === undefined) return undefined;
   return {
     id: identity.id,

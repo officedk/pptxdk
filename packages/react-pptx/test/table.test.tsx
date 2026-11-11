@@ -456,6 +456,119 @@ describe("native tables", () => {
     );
   });
 
+  it("keeps the raw table frame and grid when a native save normalizes the frame", async () => {
+    const result = await build(
+      tableDeck(
+        createElement(
+          Table,
+          { columns: [100, 100] },
+          createElement(
+            Row,
+            { style: { height: 24 } },
+            createElement(Cell, null, "A"),
+            createElement(Cell, null, "B"),
+          ),
+        ),
+      ),
+    );
+    const baseline = await validatePptx(result.pptx);
+    assert.deepEqual(baseline.errors, []);
+    const table = baseline.slides[0]?.objects[0];
+    assert.equal(table?.kind, "table");
+    const rowHeight = table?.table?.rowHeightsEmu.reduce(
+      (sum, height) => sum + height,
+      0,
+    );
+    assert.equal(rowHeight, 24 * 9525);
+    const nativeFrameHeight = rowHeight + 151511;
+    const slidePath = "ppt/slides/slide1.xml";
+    const parts = unzipSync(result.pptx);
+    const slide = strFromU8(parts[slidePath]!);
+    const normalized = slide.replace(
+      /(<p:graphicFrame>[\s\S]*?<a:ext cx="\d+" cy=")\d+("[^>]*>[\s\S]*?<a:tbl>)/u,
+      (_match, prefix: string, suffix: string) =>
+        `${prefix}${nativeFrameHeight}${suffix}`,
+    );
+    assert.notEqual(normalized, slide);
+    parts[slidePath] = strToU8(normalized);
+
+    const file = await validatePptx(zipSync(parts));
+    assert.deepEqual(file.errors, []);
+    const observed = file.slides[0]?.objects[0];
+    assert.equal(observed?.boxEmu.height, nativeFrameHeight);
+    assert.equal(
+      observed?.table?.rowHeightsEmu.reduce((sum, height) => sum + height, 0),
+      rowHeight,
+    );
+  });
+
+  it("still rejects invalid table frame extents and grid dimensions", async () => {
+    const result = await build(
+      tableDeck(
+        createElement(
+          Table,
+          { columns: [100, 100] },
+          createElement(
+            Row,
+            { style: { height: 24 } },
+            createElement(Cell, null, "A"),
+            createElement(Cell, null, "B"),
+          ),
+        ),
+      ),
+    );
+    const slidePath = "ppt/slides/slide1.xml";
+    const parts = unzipSync(result.pptx);
+    const slide = strFromU8(parts[slidePath]!);
+    const withSlide = (xml: string) =>
+      validatePptx(zipSync({ ...parts, [slidePath]: strToU8(xml) }));
+
+    const zeroHeight = slide.replace(
+      /(<p:graphicFrame>[\s\S]*?<a:ext cx="\d+" cy=")\d+("[^>]*>[\s\S]*?<a:tbl>)/u,
+      (_match, prefix: string, suffix: string) => `${prefix}0${suffix}`,
+    );
+    assert.notEqual(zeroHeight, slide);
+    assert.equal(
+      (await withSlide(zeroHeight)).errors.filter(
+        ({ code }) => code === "invalid-table-transform",
+      ).length,
+      1,
+    );
+
+    const zeroWidth = slide.replace(
+      /(<p:graphicFrame>[\s\S]*?<a:ext cx=")\d+(" cy="\d+"[^>]*>[\s\S]*?<a:tbl>)/u,
+      (_match, prefix: string, suffix: string) => `${prefix}0${suffix}`,
+    );
+    assert.notEqual(zeroWidth, slide);
+    assert.equal(
+      (await withSlide(zeroWidth)).errors.filter(
+        ({ code }) => code === "invalid-table-transform",
+      ).length,
+      1,
+    );
+
+    const zeroColumn = slide.replace(
+      /<a:gridCol w="\d+"\/>/u,
+      '<a:gridCol w="0"/>',
+    );
+    assert.notEqual(zeroColumn, slide);
+    assert.equal(
+      (await withSlide(zeroColumn)).errors.filter(
+        ({ code }) => code === "invalid-table-grid",
+      ).length,
+      1,
+    );
+
+    const zeroRow = slide.replace(/<a:tr h="\d+">/u, '<a:tr h="0">');
+    assert.notEqual(zeroRow, slide);
+    assert.equal(
+      (await withSlide(zeroRow)).errors.filter(
+        ({ code }) => code === "invalid-table-grid",
+      ).length,
+      1,
+    );
+  });
+
   it("writes horizontal and vertical merge anchors and continuation cells", async () => {
     const result = await build(
       createElement(

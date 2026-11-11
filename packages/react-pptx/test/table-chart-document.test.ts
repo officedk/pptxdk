@@ -23,7 +23,7 @@ import {
   type TableColumn,
 } from "@react-pptx/react-pptx/document";
 import { validatePptx } from "@react-pptx/validation";
-import { strFromU8, unzipSync } from "fflate";
+import { strFromU8, strToU8, unzipSync, zipSync } from "fflate";
 import { describe, it } from "vitest";
 
 const notoSansScRegular = new Uint8Array(
@@ -50,6 +50,68 @@ function chartObject(
   assert.equal(object?.kind, "chart");
   assert.ok(object.chart !== undefined);
   return object.chart;
+}
+
+const relationshipNamespace =
+  "http://schemas.openxmlformats.org/officeDocument/2006/relationships";
+
+/**
+ * Rewrites the workbook emitted by the formal chart writer into the shared-string
+ * representation PowerPoint uses for embedded chart workbooks, with one
+ * rich-text shared string. The workbook stays a real OOXML package; only the
+ * storage encoding of string cells changes.
+ */
+function sharedStringWorkbook(
+  pptx: Uint8Array,
+  mutate?: (sheetXml: string) => string,
+): Uint8Array {
+  const parts = unzipSync(pptx);
+  const workbookPart = Object.keys(parts).find((name) =>
+    /^ppt\/embeddings\/.*\.xlsx$/u.test(name),
+  );
+  assert.ok(workbookPart !== undefined);
+  const workbook = unzipSync(parts[workbookPart]!);
+  const sheetPath = "xl/worksheets/sheet1.xml";
+  const originalSheet = strFromU8(workbook[sheetPath]!);
+  const sheet = mutate === undefined ? originalSheet : mutate(originalSheet);
+  const shared: string[] = [];
+  const sharedIndex = (value: string): number => {
+    const index = shared.indexOf(value);
+    if (index !== -1) return index;
+    shared.push(value);
+    return shared.length - 1;
+  };
+  const converted = sheet.replace(
+    /<c r="([A-Z]+\d+)" t="inlineStr"><is><t(?: xml:space="preserve")?>([^<]*)<\/t><\/is><\/c>/gu,
+    (_match, reference: string, value: string) =>
+      `<c r="${reference}" t="s"><v>${sharedIndex(value)}</v></c>`,
+  );
+  assert.notEqual(converted, sheet);
+  workbook[sheetPath] = strToU8(converted);
+  const sharedStrings = shared
+    .map((value) =>
+      value === "Q1"
+        ? "<si><r><rPr><b/></rPr><t>Q</t></r><r><t>1</t></r></si>"
+        : `<si><t xml:space="preserve">${value}</t></si>`,
+    )
+    .join("");
+  workbook["xl/sharedStrings.xml"] = strToU8(
+    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" count="${shared.length}" uniqueCount="${shared.length}">${sharedStrings}</sst>`,
+  );
+  workbook["[Content_Types].xml"] = strToU8(
+    strFromU8(workbook["[Content_Types].xml"]!).replace(
+      "</Types>",
+      '<Override PartName="/xl/sharedStrings.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sharedStrings+xml"/></Types>',
+    ),
+  );
+  workbook["xl/_rels/workbook.xml.rels"] = strToU8(
+    strFromU8(workbook["xl/_rels/workbook.xml.rels"]!).replace(
+      "</Relationships>",
+      `<Relationship Id="rId3" Type="${relationshipNamespace}/sharedStrings" Target="sharedStrings.xml"/></Relationships>`,
+    ),
+  );
+  parts[workbookPart] = zipSync(workbook);
+  return zipSync(parts);
 }
 
 describe("table and chart authoring through the common document", () => {
@@ -249,6 +311,93 @@ describe("table and chart authoring through the common document", () => {
       ).length,
       6,
     );
+  });
+
+  it("resolves shared-string and rich-text chart workbook cells through the workbook relationship", async () => {
+    const data: ChartData = {
+      categories: ["Q1", "Q2"],
+      series: [
+        { name: "North", values: [121, 135] },
+        { name: "South", values: [90, 105] },
+      ],
+    };
+    const result = await build(
+      deck({ width: 960, height: 540 }).append(
+        slide({ slideId: "shared-strings" }).append(
+          chart({
+            testId: "shared-strings-chart",
+            kind: "column",
+            x: 0,
+            y: 0,
+            width: 300,
+            height: 200,
+            data,
+          }),
+        ),
+      ),
+    );
+
+    const file = await validatePptx(sharedStringWorkbook(result.pptx));
+    assert.deepEqual(file.errors, []);
+    const chartValue = chartObject(file, 0);
+    const expectedSeries = data.series.map((item) => ({
+      ...item,
+      categories: data.categories,
+    }));
+    assert.deepEqual(chartValue.series, expectedSeries);
+    assert.deepEqual(chartValue.embeddedWorkbook?.categories, data.categories);
+    assert.deepEqual(chartValue.embeddedWorkbook?.series, expectedSeries);
+  });
+
+  it("keeps chart workbook mismatches after shared-string resolution", async () => {
+    const data: ChartData = {
+      categories: ["Q1", "Q2"],
+      series: [
+        { name: "North", values: [121, 135] },
+        { name: "South", values: [90, 105] },
+      ],
+    };
+    const result = await build(
+      deck({ width: 960, height: 540 }).append(
+        slide({ slideId: "shared-strings-mismatch" }).append(
+          chart({
+            testId: "shared-strings-mismatch-chart",
+            kind: "column",
+            x: 0,
+            y: 0,
+            width: 300,
+            height: 200,
+            data,
+          }),
+        ),
+      ),
+    );
+    const rewritten = sharedStringWorkbook(result.pptx, (sheet) => {
+      const mutated = sheet.replace(
+        '<c r="B3"><v>135</v></c>',
+        '<c r="B3"><v>999</v></c>',
+      );
+      assert.notEqual(mutated, sheet);
+      return mutated;
+    });
+
+    const file = await validatePptx(rewritten);
+    const mismatches = file.errors.filter(
+      ({ code }) => code === "chart-workbook-mismatch",
+    );
+    assert.deepEqual(file.errors, mismatches);
+    assert.deepEqual(
+      mismatches.map(({ message }) => message),
+      [
+        "Chart series North does not match embedded workbook content",
+        "Chart series North cache does not match workbook",
+      ],
+    );
+    const chartValue = chartObject(file, 0);
+    assert.deepEqual(chartValue.embeddedWorkbook?.series, [
+      { name: "North", categories: ["Q1", "Q2"], values: [121, 999] },
+      { name: "South", categories: ["Q1", "Q2"], values: [90, 105] },
+    ]);
   });
 
   it("isolates nested chart data and applies explicit updates only to later builds", async () => {

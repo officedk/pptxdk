@@ -441,7 +441,7 @@ const mixedWholeObjectRoles: Partial<
     "anim:style.rotation",
     "animEffect:fade",
   ],
-  stretch: ["anim:ppt_x", "anim:ppt_w", "anim:ppt_h"],
+  stretch: ["anim:ppt_w", "anim:ppt_h"],
 };
 
 const mixedParagraphGeometryRoles: Partial<

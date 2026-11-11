@@ -24,6 +24,11 @@
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
     },
+    "./build": {
+      "source": "./src/build.ts",
+      "types": "./dist/build.d.ts",
+      "default": "./dist/build.js"
+    },
     "./node": {
       "source": "./src/node.ts",
       "types": "./dist/node.d.ts",

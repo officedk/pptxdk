@@ -2330,6 +2330,40 @@ function compileDocument(
  * document-to-host reverse tree or a second compiler.
  */
 export function createFormalBuild(modules: readonly CapabilityModule[]) {
+  const bound = bindCapabilityModules(modules);
+
+  return function buildDeclaration(
+    declaration: DeclarationContainer,
+    options: BuildOptions = {},
+  ): BuildResult {
+    const target = validateOptions(options);
+    if (options.signal?.aborted) throw options.signal.reason;
+    return compileDocument(declaration, bound, target, options);
+  };
+}
+
+/**
+ * Internal React composition entry. React expansion has already locked its completion when the
+ * declaration is handed off, so a cleanup abort must not be treated as cancelling it. The original
+ * options, including the caller's signal, still reach capability parse and compile contexts.
+ */
+export function createCompletedDeclarationBuild(
+  modules: readonly CapabilityModule[],
+) {
+  const bound = bindCapabilityModules(modules);
+
+  return function buildCompletedDeclaration(
+    declaration: DeclarationContainer,
+    options: BuildOptions = {},
+  ): BuildResult {
+    const target = validateOptions(options);
+    return compileDocument(declaration, bound, target, options);
+  };
+}
+
+function bindCapabilityModules(
+  modules: readonly CapabilityModule[],
+): ReadonlyMap<string, RegisteredCapabilityModule> {
   const bound = new Map<string, RegisteredCapabilityModule>();
   for (const module of modules) {
     const declarations = [
@@ -2351,13 +2385,5 @@ export function createFormalBuild(modules: readonly CapabilityModule[]) {
       bound.set(declaration.declaration, declaration);
     }
   }
-
-  return function buildDeclaration(
-    declaration: DeclarationContainer,
-    options: BuildOptions = {},
-  ): BuildResult {
-    const target = validateOptions(options);
-    if (options.signal?.aborted) throw options.signal.reason;
-    return compileDocument(declaration, bound, target, options);
-  };
+  return bound;
 }

@@ -1,7 +1,10 @@
 import type { ReactNode } from "react";
 
 import { BuildError } from "#/diagnostics.ts";
-import { createFormalBuild, validateOptions } from "#/formal-build.ts";
+import {
+  createCompletedDeclarationBuild,
+  validateOptions,
+} from "#/formal-build.ts";
 import { expandHostTree } from "#/host/reconciler.ts";
 import type {
   BuildOptions,
@@ -23,7 +26,7 @@ function diagnostic(path: string, code: string, message: string): Diagnostic {
  * semantics.
  */
 export function createBuilder(modules: readonly CapabilityModule[]) {
-  const formalBuild = createFormalBuild(modules);
+  const formalBuild = createCompletedDeclarationBuild(modules);
 
   return async function build(
     element: ReactNode,
@@ -33,6 +36,9 @@ export function createBuilder(modules: readonly CapabilityModule[]) {
     validateOptions(options);
     try {
       const declaration = await expandHostTree(element, options.signal);
+      // Expansion locks its first terminal state before unmount cleanup runs. The completed
+      // declaration build therefore does not re-check the signal, while preserving the original
+      // options for capability parse and compile.
       return formalBuild(declaration, options);
     } catch (error) {
       if (options.signal?.aborted && error === options.signal.reason) {

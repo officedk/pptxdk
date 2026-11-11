@@ -27,6 +27,7 @@ import {
   Text,
   targets,
   transitions,
+  type BuildOptions,
   type FontSize,
 } from "@react-pptx/react-pptx";
 import { validatePptx } from "@react-pptx/validation";
@@ -3883,6 +3884,52 @@ describe("public build entry", () => {
       file.slides[0]?.objects[0]?.text?.text,
       "Cleanup before build",
     );
+  });
+
+  it("keeps original build options visible to capability parse and compile", async () => {
+    const controller = new AbortController();
+    const shapeModule = shapeCapability as ObjectCapabilityModule;
+    const parseOptions: BuildOptions[] = [];
+    const compileOptions: BuildOptions[] = [];
+    const observedShape: ObjectCapabilityModule = {
+      ...shapeModule,
+      parse(input, context) {
+        parseOptions.push(context.options);
+        return shapeModule.parse(input, context);
+      },
+      compile(parsed, context) {
+        compileOptions.push(context.options);
+        return shapeModule.compile(parsed, context);
+      },
+    };
+
+    const result = await createBuilder([observedShape])(
+      deck(
+        createElement(Shape, {
+          testId: "options-visible-to-capabilities",
+          geometry: "triangle",
+          x: 0,
+          y: 0,
+          width: 80,
+          height: 60,
+        }),
+      ),
+      {
+        signal: controller.signal,
+        target: targets.baselineOnly,
+        embedFonts: "full",
+      },
+    );
+
+    assert.equal(parseOptions.length, 1);
+    assert.equal(compileOptions.length, 1);
+    for (const options of [parseOptions[0], compileOptions[0]]) {
+      assert.equal(options?.signal, controller.signal);
+      assert.equal(options?.target, targets.baselineOnly);
+      assert.equal(options?.embedFonts, "full");
+    }
+    const file = await validatePptx(result.pptx);
+    assert.deepEqual(file.errors, []);
   });
 
   it("reports unknown shape parameters and trimmed capabilities at declaration path", async () => {

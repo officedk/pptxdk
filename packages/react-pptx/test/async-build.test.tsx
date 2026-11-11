@@ -354,6 +354,43 @@ describe("React asynchronous content in public build", () => {
     assert.equal(file.slides[0]?.objects[0]?.text?.text, "完成内容");
   });
 
+  it("keeps the completed result when layout cleanup aborts the shared signal during unmount", async () => {
+    const controller = new AbortController();
+    const reason = new Error("cleanup abort after completion");
+    let cleanupRan = false;
+
+    function AbortsDuringLayoutCleanup() {
+      useLayoutEffect(
+        () => () => {
+          cleanupRan = true;
+          controller.abort(reason);
+        },
+        [],
+      );
+      return createElement(
+        Text,
+        {
+          testId: "cleanup-abort",
+          x: 0,
+          y: 0,
+          width: 240,
+          height: 48,
+        },
+        "完成内容",
+      );
+    }
+
+    const result = await build(deck(createElement(AbortsDuringLayoutCleanup)), {
+      signal: controller.signal,
+    });
+    const file = await validatePptx(result.pptx);
+
+    assert.equal(cleanupRan, true);
+    assert.equal(getEventListeners(controller.signal, "abort").length, 0);
+    assert.deepEqual(file.errors, []);
+    assert.equal(file.slides[0]?.objects[0]?.text?.text, "完成内容");
+  });
+
   it("awaits stable Promises inside Suspense and generates final content", async () => {
     const started = Promise.withResolvers<void>();
     let resolveContent: (value: string) => void = () => {};

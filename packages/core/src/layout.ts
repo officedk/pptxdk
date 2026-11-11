@@ -56,6 +56,10 @@ type GridPlacement = {
   readonly rowSpan: number;
   readonly columnSpan: number;
 };
+type ContentGrowableGridTrack = Extract<
+  GridTrack,
+  { readonly kind: "auto" | "fr" }
+>;
 type GridModel = {
   readonly placements: readonly GridPlacement[];
   readonly widths: readonly number[];
@@ -355,6 +359,18 @@ function gridAutoRowTracks(
       "gridAutoRows must contain at least 1 track",
     );
   return tracks;
+}
+
+// Only auto rows and fr rows with an auto minimum accept intrinsic content growth. Fixed rows and
+// zero-minimum fr rows keep the size assigned by the grid, including when spanning content overlaps
+// them and is reported as overflow instead of rewriting track sizes.
+function rowTrackGrowsWithContent(
+  track: GridTrack,
+): track is ContentGrowableGridTrack {
+  return (
+    track.kind === "auto" ||
+    (track.kind === "fr" && track.contentMinimum === true)
+  );
 }
 
 function distributeFrTracks(
@@ -2014,8 +2030,7 @@ export class LayoutPass {
     for (const placement of placements) {
       if (placement.rowSpan !== 1) continue;
       const track = rowTrackAt(placement.row);
-      if (track.kind === "px" || (track.kind === "fr" && !track.contentMinimum))
-        continue;
+      if (!rowTrackGrowsWithContent(track)) continue;
       const margin = expandedSpacing(placement.node.style, "margin");
       const size = this.#naturalSize(
         placement.node,
@@ -2048,7 +2063,7 @@ export class LayoutPass {
       const growable = Array.from(
         { length: placement.rowSpan },
         (_, index) => placement.row + index,
-      ).filter((index) => rowTrackAt(index).kind !== "px");
+      ).filter((index) => rowTrackGrowsWithContent(rowTrackAt(index)));
       if (growable.length === 0) continue;
       for (const index of growable) {
         rowHeights[index] =

@@ -63,7 +63,6 @@ export function FrontierBenchmarksPage() {
       >
         <Chart
           id="frontier-benchmark-chart"
-          kind="column"
           x={64}
           y={170}
           width={752}
@@ -73,46 +72,56 @@ export function FrontierBenchmarksPage() {
             fontSize: 10.5,
             color: colors.ink,
           }}
-          data={{
-            categories: benchmarkCategories,
-            series: [
-              {
-                name: "DeepSeek-R1 (开源推理)",
-                values: r1Scores,
-                color: colors.copper,
-              },
-              {
-                name: "OpenAI o1-1217 (闭源推理)",
-                values: o1Scores,
-                color: colors.baseline,
-              },
-              {
-                name: "DeepSeek-V3 (开源 MoE 基座)",
-                values: v3Scores,
-                color: colors.compute,
-              },
-              {
-                name: "Claude-3.5-Sonnet-1022",
-                values: sonnetScores,
-                color: colors.comm,
-              },
-            ],
-          }}
           legend="top"
-          dataLabels={false}
-          valueAxis={{
-            min: 0,
-            max: 105,
-            majorUnit: 25,
-            numberFormat: '0"%"',
-            gridlines: { color: colors.line, width: 1 },
-            line: false,
-            style: { fontFamily: "body", fontSize: 10, color: colors.muted },
+          axes={{
+            category: {
+              kind: "category",
+              line: { color: colors.steel, width: 1 },
+              style: { fontFamily: "body", fontSize: 10.5, color: colors.ink },
+            },
+            value: {
+              kind: "value",
+              min: 0,
+              max: 105,
+              majorUnit: 25,
+              numberFormat: '0"%"',
+              gridlines: { color: colors.line, width: 1 },
+              line: false,
+              style: { fontFamily: "body", fontSize: 10, color: colors.muted },
+            },
           }}
-          categoryAxis={{
-            line: { color: colors.steel, width: 1 },
-            style: { fontFamily: "body", fontSize: 10.5, color: colors.ink },
-          }}
+          groups={[
+            {
+              kind: "column",
+              data: {
+                kind: "shared-categories",
+                categories: benchmarkCategories,
+              },
+              series: [
+                {
+                  name: "DeepSeek-R1 (开源推理)",
+                  values: r1Scores,
+                  color: colors.copper,
+                },
+                {
+                  name: "OpenAI o1-1217 (闭源推理)",
+                  values: o1Scores,
+                  color: colors.baseline,
+                },
+                {
+                  name: "DeepSeek-V3 (开源 MoE 基座)",
+                  values: v3Scores,
+                  color: colors.compute,
+                },
+                {
+                  name: "Claude-3.5-Sonnet-1022",
+                  values: sonnetScores,
+                  color: colors.comm,
+                },
+              ],
+              dataLabels: false,
+            },
+          ]}
         />
         <Rule x={66} y={596} width={748} />
         <Text

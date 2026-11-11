@@ -133,50 +133,11 @@ function GalleryPanel({
       {index === 0 && (
         <Chart
           id="contrast-chart"
-          kind="column"
           x={contentX}
           y={contentY}
           width={584 * scale}
           height={196 * scale}
-          data={{
-            categories: ["A", "B"],
-            series: [
-              {
-                name: "Lorem ipsum",
-                values: [84, 56],
-                color: colors.accent,
-                points: { 1: { color: colors.ink } },
-              },
-            ],
-          }}
-          gapWidth={80}
           legend={false}
-          dataLabels={
-            active
-              ? {
-                  value: true,
-                  position: "outsideEnd",
-                  style: {
-                    fontSize: 16,
-                    fontFamily: "medium",
-                    fontWeight: 500,
-                    color: colors.ink,
-                  },
-                }
-              : false
-          }
-          categoryAxis={{
-            visible: active,
-            line: { color: colors.soft, width: 1 },
-            gridlines: false,
-            style: {
-              fontSize: 20 * scale,
-              fontFamily: "chart",
-              fontWeight: 700,
-              color: colors.ink,
-            },
-          }}
-          valueAxis={{ visible: false, min: 0, max: 100, gridlines: false }}
           plotArea={{
             left: 8 * scale,
             top: 8 * scale,
@@ -188,6 +149,54 @@ function GalleryPanel({
             fontFamily: "chart",
             color: colors.ink,
           }}
+          axes={{
+            category: {
+              kind: "category",
+              visible: active,
+              line: { color: colors.soft, width: 1 },
+              gridlines: false,
+              style: {
+                fontSize: 20 * scale,
+                fontFamily: "chart",
+                fontWeight: 700,
+                color: colors.ink,
+              },
+            },
+            value: {
+              kind: "value",
+              visible: false,
+              min: 0,
+              max: 100,
+              gridlines: false,
+            },
+          }}
+          groups={[
+            {
+              kind: "column",
+              data: { kind: "shared-categories", categories: ["A", "B"] },
+              series: [
+                {
+                  name: "Lorem ipsum",
+                  values: [84, 56],
+                  color: colors.accent,
+                  points: { 1: { color: colors.ink } },
+                },
+              ],
+              gapWidth: 80,
+              dataLabels: active
+                ? {
+                    value: true,
+                    position: "outsideEnd",
+                    style: {
+                      fontSize: 16,
+                      fontFamily: "medium",
+                      fontWeight: 500,
+                      color: colors.ink,
+                    },
+                  }
+                : false,
+            },
+          ]}
         />
       )}
       {index === 1 && (

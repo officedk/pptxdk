@@ -37,19 +37,24 @@ export type {
 export { chartCapability } from "#/chart.ts";
 export type {
   ChartAxis,
-  ChartData,
+  ChartAxisReferences,
+  ChartCategoryAxis,
   ChartDataLabels,
+  ChartGroup,
+  ChartGroupData,
   ChartKind,
   ChartLine,
   ChartNode,
   ChartPoint,
   ChartProps,
   ChartSeries,
-  ColumnOrBarChartProps,
-  DoughnutChartProps,
-  LineOrAreaChartProps,
+  ChartValueAxis,
+  ColumnOrBarChartGroup,
+  DoughnutChartGroup,
+  LineOrAreaChartGroup,
   ParsedChart,
-  PieChartProps,
+  PieChartGroup,
+  SharedCategoryData,
 } from "#/chart.ts";
 export { Chart } from "#/chart-elements.ts";
 export { imageCapability } from "#/image.ts";

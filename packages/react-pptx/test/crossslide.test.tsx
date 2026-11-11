@@ -474,12 +474,17 @@ describe("cross-slide object continuity", () => {
       createElement(Chart, {
         morphKey: handles.chart,
         id: `chart-${suffix}`,
-        kind: "column",
         x: offset,
         y: 200,
         width: 160,
         height: 100,
-        data: { categories: ["A"], series: [{ name: "S", values: [1] }] },
+        groups: [
+          {
+            kind: "column",
+            data: { kind: "shared-categories", categories: ["A"] },
+            series: [{ name: "S", values: [1] }],
+          },
+        ],
       }),
     ];
     const result = await build(

@@ -392,7 +392,6 @@ export function Fp8KernelsPage() {
       >
         <Chart
           id="fp8-kernels-chart"
-          kind="column"
           x={696}
           y={168}
           width={520}
@@ -402,41 +401,51 @@ export function Fp8KernelsPage() {
             fontSize: 10.5,
             color: colors.ink,
           }}
-          data={{
-            categories: kernelCompareCategories,
-            series: [
-              {
-                name: "常规通用实现基准 (%)",
-                values: baselinePerfRate,
-                color: colors.baseline,
-              },
-              {
-                name: "DeepSeek 开源算子实测 (%)",
-                values: kernelPerfRate,
-                color: colors.copper,
-              },
-            ],
-          }}
           legend="top"
-          dataLabels={{
-            value: true,
-            position: "outsideEnd",
-            numberFormat: '0.0"%"',
-            style: { fontFamily: "body", fontSize: 10, color: colors.ink },
+          axes={{
+            category: {
+              kind: "category",
+              line: { color: colors.steel, width: 1 },
+              style: { fontFamily: "body", fontSize: 10.5, color: colors.ink },
+            },
+            value: {
+              kind: "value",
+              min: 0,
+              max: 100,
+              majorUnit: 25,
+              numberFormat: '0"%"',
+              gridlines: { color: colors.line, width: 1 },
+              line: false,
+              style: { fontFamily: "body", fontSize: 10, color: colors.muted },
+            },
           }}
-          valueAxis={{
-            min: 0,
-            max: 100,
-            majorUnit: 25,
-            numberFormat: '0"%"',
-            gridlines: { color: colors.line, width: 1 },
-            line: false,
-            style: { fontFamily: "body", fontSize: 10, color: colors.muted },
-          }}
-          categoryAxis={{
-            line: { color: colors.steel, width: 1 },
-            style: { fontFamily: "body", fontSize: 10.5, color: colors.ink },
-          }}
+          groups={[
+            {
+              kind: "column",
+              data: {
+                kind: "shared-categories",
+                categories: kernelCompareCategories,
+              },
+              series: [
+                {
+                  name: "常规通用实现基准 (%)",
+                  values: baselinePerfRate,
+                  color: colors.baseline,
+                },
+                {
+                  name: "DeepSeek 开源算子实测 (%)",
+                  values: kernelPerfRate,
+                  color: colors.copper,
+                },
+              ],
+              dataLabels: {
+                value: true,
+                position: "outsideEnd",
+                numberFormat: '0.0"%"',
+                style: { fontFamily: "body", fontSize: 10, color: colors.ink },
+              },
+            },
+          ]}
         />
         <Text
           x={698}

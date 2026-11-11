@@ -20,6 +20,20 @@ import {
 } from "@react-pptx/core/capability";
 import { CommonNode } from "@react-pptx/core/document";
 
+import type {
+  ChartAxis,
+  ChartAxisReferences,
+  ChartCategoryAxis,
+  ChartDataLabels,
+  ChartGroupData,
+  ChartKind,
+  ChartLine,
+  ChartPoint,
+  ChartProps,
+  ChartSeries,
+  ChartValueAxis,
+  SharedCategoryData,
+} from "./chart-types.ts";
 import {
   chartFrameXml,
   chartPartXml,
@@ -31,177 +45,12 @@ import {
   type FontEmbeddingMode,
   type FontEmbeddingUse,
 } from "./font-embedding.ts";
-import type { MorphProps } from "./morph-api.ts";
-import { motionAnnotations, type MotionProps } from "./motion-api.ts";
+import { motionAnnotations } from "./motion-api.ts";
 import {
   writeChartTextProperties,
   type TextResourceClaim,
 } from "./text-service.ts";
 import type { TextStyle } from "./text-service.ts";
-
-type ChartTextStyle = Omit<TextStyle, "textWrap">;
-
-export type ChartKind = "column" | "bar" | "line" | "area" | "pie" | "doughnut";
-
-export type ChartPoint = {
-  readonly color?: ColorValue;
-  /** Overrides data label text color for this data point. */
-  readonly labelColor?: ColorValue;
-};
-
-export type ChartSeries = {
-  readonly name: string;
-  /** One numeric value per category; null is preserved as empty value in chart and workbook. */
-  readonly values: readonly (number | null)[];
-  /** Color of column, area, or line. */
-  readonly color?: ColorValue;
-  /** Overrides color or data label text color for individual points by category index. */
-  readonly points?: Readonly<Record<number, ChartPoint>>;
-};
-
-export type ChartData = {
-  readonly categories: readonly string[];
-  readonly series: readonly ChartSeries[];
-};
-
-export type ChartLine = {
-  readonly color?: ColorValue;
-  /** Line width in px. */
-  readonly width?: number;
-};
-
-export type ChartAxis = {
-  /** Whether to show the axis and its labels; defaults to true. */
-  readonly visible?: boolean;
-  readonly min?: number;
-  readonly max?: number;
-  readonly majorUnit?: number;
-  /** Excel number format, e.g. `#,##0`. */
-  readonly numberFormat?: string;
-  /** Major gridlines; true uses target application default line style. */
-  readonly gridlines?: boolean | ChartLine;
-  /** Axis line; false hides axis line. */
-  readonly line?: boolean | ChartLine;
-  /** Text style for axis labels. */
-  readonly style?: ChartTextStyle;
-};
-
-type ChartDataLabelPosition =
-  | "center"
-  | "insideEnd"
-  | "insideBase"
-  | "outsideEnd"
-  | "bestFit";
-
-/** Data label settings; ChartProps narrows position by chart group and stacking. */
-export type ChartDataLabels<
-  Position extends ChartDataLabelPosition = ChartDataLabelPosition,
-> = {
-  readonly value?: boolean;
-  readonly percent?: boolean;
-  readonly category?: boolean;
-  readonly position?: Position;
-  readonly numberFormat?: string;
-  readonly style?: ChartTextStyle;
-};
-
-type ChartBase = MotionProps &
-  MorphProps & {
-    readonly id?: string;
-    readonly name?: string;
-    readonly link?: LinkTarget;
-    readonly x?: number;
-    readonly y?: number;
-    readonly width?: number;
-    readonly height?: number;
-    readonly data: ChartData;
-    /** When omitted or false, hides the legend. */
-    readonly legend?: false | "top" | "bottom" | "left" | "right";
-    /** Internal plot area position relative to chart box, in px. */
-    readonly plotArea?: {
-      readonly left: number;
-      readonly top: number;
-      readonly width: number;
-      readonly height: number;
-    };
-    /** Text style shared by chart legend, axes, and data labels. */
-    readonly style?: ChartTextStyle & LayoutStyle;
-  };
-
-type CartesianOptions = {
-  readonly valueAxis?: ChartAxis;
-  readonly categoryAxis?: ChartAxis;
-};
-
-type DataLabelsWithoutPosition =
-  | false
-  | (Omit<ChartDataLabels, "position"> & { readonly position?: never });
-
-type ColumnOrBarUnstackedOptions = {
-  readonly stacking?: undefined;
-  readonly dataLabels?:
-    | false
-    | ChartDataLabels<"center" | "insideEnd" | "insideBase" | "outsideEnd">;
-};
-
-type ColumnOrBarStackedOptions = {
-  readonly stacking: "stacked" | "percent";
-  readonly dataLabels?:
-    | false
-    | ChartDataLabels<"center" | "insideEnd" | "insideBase">;
-};
-
-type CartesianStacking = {
-  readonly stacking?: "stacked" | "percent";
-};
-
-export type ColumnOrBarChartProps = ChartBase &
-  CartesianOptions & {
-    readonly kind: "column" | "bar";
-    /** Gap between category groups as percentage of bar width, range 0–500. */
-    readonly gapWidth?: number;
-    /** Overlap percentage for bars in the same group, range -100–100. */
-    readonly overlap?: number;
-  } & (ColumnOrBarUnstackedOptions | ColumnOrBarStackedOptions);
-
-export type LineOrAreaChartProps = ChartBase &
-  CartesianOptions &
-  CartesianStacking & {
-    readonly kind: "line" | "area";
-    readonly dataLabels?: DataLabelsWithoutPosition;
-  };
-
-type PieOptions = {
-  /**
-   * Radial explosion percentage pulling the slice outward.
-   * Rounded integer must be within the 0–2,147,483,647 range supported by current formal validation.
-   */
-  readonly explosion?: number;
-  /** Clockwise starting angle of the first slice in degrees (0–360), serialized as integer. */
-  readonly firstSliceAngle?: number;
-};
-
-export type PieChartProps = ChartBase &
-  PieOptions & {
-    readonly kind: "pie";
-    readonly dataLabels?:
-      | false
-      | ChartDataLabels<"center" | "insideEnd" | "outsideEnd" | "bestFit">;
-  };
-
-export type DoughnutChartProps = ChartBase &
-  PieOptions & {
-    readonly kind: "doughnut";
-    /** Percentage size of doughnut chart center hole, range 10–90. */
-    readonly holeSize?: number;
-    readonly dataLabels?: DataLabelsWithoutPosition;
-  };
-
-export type ChartProps =
-  | ColumnOrBarChartProps
-  | LineOrAreaChartProps
-  | PieChartProps
-  | DoughnutChartProps;
 
 const chartRelationship =
   "http://schemas.openxmlformats.org/officeDocument/2006/relationships/chart";
@@ -216,14 +65,18 @@ const maximumShapeExtentEmu = 2_147_483_647;
 const maximumLineWidthEmu = 20_116_800;
 // Current formal validation profile accepts rounded values in range 0–2,147,483,647; not a general OOXML upper limit.
 const maximumExplosionForCurrentValidationProfile = 2_147_483_647;
+const categoryAxisId = 111111;
+const valueAxisId = 222222;
+
 const chartOptions: Readonly<Record<ChartKind, readonly string[]>> = {
-  column: ["stacking", "valueAxis", "categoryAxis", "gapWidth", "overlap"],
-  bar: ["stacking", "valueAxis", "categoryAxis", "gapWidth", "overlap"],
-  line: ["stacking", "valueAxis", "categoryAxis"],
-  area: ["stacking", "valueAxis", "categoryAxis"],
+  column: ["stacking", "gapWidth", "overlap"],
+  bar: ["stacking", "gapWidth", "overlap"],
+  line: ["stacking"],
+  area: ["stacking"],
   pie: ["explosion", "firstSliceAngle"],
   doughnut: ["explosion", "firstSliceAngle", "holeSize"],
 };
+const allGroupOptions = [...new Set(Object.values(chartOptions).flat())];
 const chartTextStyleKeys = [
   "fontFamily",
   "fontSize",
@@ -240,7 +93,6 @@ const chartTextStyleKeys = [
   "textShadow",
   "lang",
 ] as const;
-const allChartOptions = [...new Set(Object.values(chartOptions).flat())];
 const positionValues = new Set([
   "center",
   "insideEnd",
@@ -248,6 +100,7 @@ const positionValues = new Set([
   "outsideEnd",
   "bestFit",
 ]);
+const cartesianKinds = new Set<ChartKind>(["column", "bar", "line", "area"]);
 
 function fail(code: string, message: string): never {
   throw new CapabilityError(code, message);
@@ -408,13 +261,13 @@ function lineStyle(value: unknown, label: string): ChartLine | undefined {
 function axis(
   value: unknown,
   label: string,
-  kind: "category" | "value",
-): ChartAxis | undefined {
-  if (value === undefined) return undefined;
+  expected: "category" | "value",
+): ChartAxis {
   if (!isRecord(value)) fail("invalid-axis", `${label} must be an object`);
   onlyKeys(
     value,
     [
+      "kind",
       "visible",
       "min",
       "max",
@@ -426,7 +279,14 @@ function axis(
     ],
     label,
   );
-  if (kind === "category") {
+  const kind = value["kind"];
+  if (kind !== expected) {
+    fail(
+      "invalid-chart-axis-role",
+      `${label} must declare kind "${expected}" as referenced by its chart group`,
+    );
+  }
+  if (expected === "category") {
     const unsupported = ["min", "max", "majorUnit", "numberFormat"].find(
       (key) => value[key] !== undefined,
     );
@@ -442,24 +302,24 @@ function axis(
     fail("invalid-axis", `${label}.visible must be a boolean`);
   }
   const min =
-    value["min"] === undefined
-      ? undefined
-      : finiteNumber(value["min"], `${label}.min`);
+    expected === "value" && value["min"] !== undefined
+      ? finiteNumber(value["min"], `${label}.min`)
+      : undefined;
   const max =
-    value["max"] === undefined
-      ? undefined
-      : finiteNumber(value["max"], `${label}.max`);
+    expected === "value" && value["max"] !== undefined
+      ? finiteNumber(value["max"], `${label}.max`)
+      : undefined;
   const majorUnit =
-    value["majorUnit"] === undefined
-      ? undefined
-      : finiteNumber(value["majorUnit"], `${label}.majorUnit`);
+    expected === "value" && value["majorUnit"] !== undefined
+      ? finiteNumber(value["majorUnit"], `${label}.majorUnit`)
+      : undefined;
   if (min !== undefined && max !== undefined && min >= max) {
     fail("invalid-axis", `${label}.min must be less than max`);
   }
   if (majorUnit !== undefined && majorUnit <= 0) {
     fail("invalid-axis", `${label}.majorUnit must be greater than 0`);
   }
-  const numberFormat = value["numberFormat"];
+  const numberFormat = expected === "value" ? value["numberFormat"] : undefined;
   if (
     numberFormat !== undefined &&
     (typeof numberFormat !== "string" || numberFormat.trim() === "")
@@ -481,12 +341,8 @@ function axis(
   if (line !== undefined && typeof line !== "boolean" && !isRecord(line)) {
     fail("invalid-axis", `${label}.line must be a boolean or line style`);
   }
-  return {
+  const common = {
     ...(visible === undefined ? {} : { visible }),
-    ...(min === undefined ? {} : { min }),
-    ...(max === undefined ? {} : { max }),
-    ...(majorUnit === undefined ? {} : { majorUnit }),
-    ...(numberFormat === undefined ? {} : { numberFormat: numberFormat }),
     ...(gridlines === undefined
       ? {}
       : {
@@ -507,46 +363,72 @@ function axis(
       ? {}
       : { style: value["style"] as TextStyle }),
   };
+  if (expected === "category") {
+    return { kind: expected, ...common } satisfies ChartCategoryAxis;
+  }
+  return {
+    kind: expected,
+    ...common,
+    ...(min === undefined ? {} : { min }),
+    ...(max === undefined ? {} : { max }),
+    ...(majorUnit === undefined ? {} : { majorUnit }),
+    ...(numberFormat === undefined ? {} : { numberFormat }),
+  } satisfies ChartValueAxis;
 }
 
-function chartData(value: unknown, kind: ChartKind): ChartData {
-  if (!isRecord(value)) fail("invalid-data", "Chart.data must be an object");
-  onlyKeys(value, ["categories", "series"], "Chart.data");
+function sharedCategoryData(value: unknown, label: string): SharedCategoryData {
+  if (!isRecord(value)) fail("invalid-data", `${label} must be an object`);
+  onlyKeys(value, ["kind", "categories"], label);
+  const kind = value["kind"];
+  if (kind === "independent-categories") {
+    fail(
+      "unsupported-chart-data",
+      `${label}.kind "independent-categories" is not supported by the migrated chart kinds`,
+    );
+  }
+  if (kind !== "shared-categories") {
+    fail(
+      "invalid-data",
+      `${label}.kind must be "shared-categories" for this chart group`,
+    );
+  }
   const categories = value["categories"];
-  const series = value["series"];
   if (!Array.isArray(categories) || categories.length === 0) {
     fail(
       "invalid-data",
-      "Chart.data.categories must contain at least one category",
+      `${label}.categories must contain at least one category`,
     );
   }
   for (const [index, category] of categories.entries()) {
     if (typeof category !== "string") {
-      fail("invalid-data", `Chart.data.categories[${index}] must be a string`);
+      fail("invalid-data", `${label}.categories[${index}] must be a string`);
     }
   }
-  if (!Array.isArray(series) || series.length === 0) {
-    fail("invalid-data", "Chart.data.series must contain at least one series");
+  return {
+    kind: "shared-categories",
+    categories: categories as string[],
+  };
+}
+
+function chartSeriesList(
+  value: unknown,
+  categories: readonly string[],
+  kind: ChartKind,
+  label: string,
+): ChartSeries[] {
+  if (!Array.isArray(value) || value.length === 0) {
+    fail("invalid-data", `${label} must contain at least one series`);
   }
-  const checkedSeries: ChartSeries[] = series.map((item, seriesIndex) => {
+  return value.map((item, seriesIndex) => {
+    const seriesLabel = `${label}[${seriesIndex}]`;
     if (!isRecord(item)) {
-      fail(
-        "invalid-data",
-        `Chart.data.series[${seriesIndex}] must be an object`,
-      );
+      fail("invalid-data", `${seriesLabel} must be an object`);
     }
-    onlyKeys(
-      item,
-      ["name", "values", "color", "points"],
-      `Chart.data.series[${seriesIndex}]`,
-    );
+    onlyKeys(item, ["name", "values", "color", "points"], seriesLabel);
     const name = item["name"];
     const values = item["values"];
     if (typeof name !== "string" || name.trim() === "") {
-      fail(
-        "invalid-data",
-        `Chart.data.series[${seriesIndex}].name must be a non-empty string`,
-      );
+      fail("invalid-data", `${seriesLabel}.name must be a non-empty string`);
     }
     if (!Array.isArray(values) || values.length !== categories.length) {
       fail(
@@ -567,7 +449,7 @@ function chartData(value: unknown, kind: ChartKind): ChartData {
       }
       if (
         (kind === "pie" || kind === "doughnut") &&
-        typeof value === "number" &&
+        value !== null &&
         value < 0
       ) {
         fail(
@@ -582,7 +464,7 @@ function chartData(value: unknown, kind: ChartKind): ChartData {
       if (!isRecord(pointsValue)) {
         fail(
           "invalid-data",
-          `Series "${name}" points must be an object indexed by category index`,
+          `Series "${name}" points must be an object indexed by category position`,
         );
       }
       points = {};
@@ -632,7 +514,6 @@ function chartData(value: unknown, kind: ChartKind): ChartData {
       ...(points === undefined ? {} : { points }),
     };
   });
-  return { categories: categories as string[], series: checkedSeries };
 }
 
 function labels(
@@ -642,15 +523,21 @@ function labels(
 ): false | ChartDataLabels | undefined {
   if (value === undefined || value === false) return value;
   if (!isRecord(value))
-    fail("invalid-data-labels", "Chart.dataLabels must be an object or false");
+    fail(
+      "invalid-data-labels",
+      "Chart group dataLabels must be an object or false",
+    );
   onlyKeys(
     value,
     ["value", "percent", "category", "position", "numberFormat", "style"],
-    "Chart.dataLabels",
+    "Chart group dataLabels",
   );
   for (const key of ["value", "percent", "category"] as const) {
     if (value[key] !== undefined && typeof value[key] !== "boolean") {
-      fail("invalid-data-labels", `Chart.dataLabels.${key} must be a boolean`);
+      fail(
+        "invalid-data-labels",
+        `Chart group dataLabels.${key} must be a boolean`,
+      );
     }
   }
   const position = value["position"];
@@ -659,7 +546,7 @@ function labels(
       "invalid-data-labels",
       typeof position === "string"
         ? `Unsupported data label position ${position}`
-        : "Chart.dataLabels.position must be a supported string",
+        : "Chart group dataLabels.position must be a supported string",
     );
   }
   if (
@@ -705,11 +592,11 @@ function labels(
   ) {
     fail(
       "invalid-data-labels",
-      "Chart.dataLabels.numberFormat must be a non-empty string",
+      "Chart group dataLabels.numberFormat must be a non-empty string",
     );
   }
   if (typeof numberFormat === "string") {
-    xmlText(numberFormat, "Chart.dataLabels.numberFormat");
+    xmlText(numberFormat, "Chart group dataLabels.numberFormat");
   }
   return {
     ...(value["value"] === undefined
@@ -762,6 +649,680 @@ function plotArea(
   }
   return result;
 }
+
+function axisReferences(
+  value: unknown,
+  label: string,
+): ChartAxisReferences | undefined {
+  if (value === undefined) return undefined;
+  if (!isRecord(value))
+    fail("invalid-chart-axes", `${label} must be an object`);
+  onlyKeys(value, ["category", "value"], label);
+  const category = value["category"];
+  const valueAxis = value["value"];
+  if (
+    typeof category !== "string" ||
+    category.trim() === "" ||
+    typeof valueAxis !== "string" ||
+    valueAxis.trim() === ""
+  ) {
+    fail(
+      "invalid-chart-axes",
+      `${label} must name both a category and a value axis`,
+    );
+  }
+  return { category, value: valueAxis };
+}
+
+type ParsedGroupDraft = {
+  readonly kind: ChartKind;
+  readonly data: ChartGroupData;
+  readonly series: readonly ChartSeries[];
+  readonly axes?: ChartAxisReferences;
+  readonly dataLabels?: false | ChartDataLabels;
+  readonly stacking?: "stacked" | "percent";
+  readonly gapWidth?: number;
+  readonly overlap?: number;
+  readonly explosion?: number;
+  readonly firstSliceAngle?: number;
+  readonly holeSize?: number;
+};
+
+function chartGroupDrafts(value: unknown): ParsedGroupDraft[] {
+  if (!Array.isArray(value) || value.length === 0) {
+    fail(
+      "invalid-chart-groups",
+      "Chart.groups must contain at least one group",
+    );
+  }
+  return value.map((item, groupIndex) => {
+    const label = `Chart.groups[${groupIndex}]`;
+    if (!isRecord(item)) {
+      fail("invalid-chart-groups", `${label} must be an object`);
+    }
+    onlyKeys(
+      item,
+      ["kind", "data", "series", "axes", "dataLabels", ...allGroupOptions],
+      label,
+    );
+    const kind = item["kind"];
+    if (typeof kind !== "string" || !Object.hasOwn(chartOptions, kind)) {
+      fail("unsupported-chart-kind", `Unsupported chart kind ${String(kind)}`);
+    }
+    const chartKind = kind as ChartKind;
+    for (const option of allGroupOptions) {
+      if (
+        item[option] !== undefined &&
+        !chartOptions[chartKind].includes(option)
+      ) {
+        fail(
+          "invalid-chart-option",
+          `${chartKind} chart group does not support ${option}`,
+        );
+      }
+    }
+    const data = sharedCategoryData(item["data"], `${label}.data`);
+    const series = chartSeriesList(
+      item["series"],
+      data.categories,
+      chartKind,
+      `${label}.series`,
+    );
+    if (
+      (chartKind === "pie" || chartKind === "doughnut") &&
+      series.length !== 1
+    ) {
+      fail(
+        "invalid-data",
+        `${chartKind} chart currently only supports a single data series`,
+      );
+    }
+    const stack = item["stacking"];
+    if (stack !== undefined && stack !== "stacked" && stack !== "percent") {
+      fail("invalid-stacking", `${label}.stacking must be stacked or percent`);
+    }
+    const labelsValue = labels(item["dataLabels"], chartKind, stack);
+    const gapWidth = item["gapWidth"];
+    if (
+      gapWidth !== undefined &&
+      (typeof gapWidth !== "number" ||
+        !Number.isFinite(gapWidth) ||
+        gapWidth < 0 ||
+        gapWidth > 500)
+    ) {
+      fail("invalid-gap-width", `${label}.gapWidth must be between 0 and 500`);
+    }
+    const overlap = item["overlap"];
+    if (
+      overlap !== undefined &&
+      (typeof overlap !== "number" ||
+        !Number.isFinite(overlap) ||
+        overlap < -100 ||
+        overlap > 100)
+    ) {
+      fail("invalid-overlap", `${label}.overlap must be between -100 and 100`);
+    }
+    const explosion =
+      chartKind === "pie" || chartKind === "doughnut"
+        ? roundedRange(
+            item["explosion"],
+            `${label}.explosion`,
+            0,
+            maximumExplosionForCurrentValidationProfile,
+            "rounded-result",
+          )
+        : undefined;
+    const firstSliceAngle =
+      chartKind === "pie" || chartKind === "doughnut"
+        ? roundedRange(
+            item["firstSliceAngle"],
+            `${label}.firstSliceAngle`,
+            0,
+            360,
+          )
+        : undefined;
+    const holeSize =
+      chartKind === "doughnut"
+        ? roundedRange(item["holeSize"], `${label}.holeSize`, 10, 90)
+        : undefined;
+    const axes = axisReferences(item["axes"], `${label}.axes`);
+    if (!cartesianKinds.has(chartKind) && axes !== undefined) {
+      fail(
+        "invalid-chart-axes",
+        `${chartKind} chart group does not use category or value axes`,
+      );
+    }
+    return {
+      kind: chartKind,
+      data,
+      series,
+      ...(axes === undefined ? {} : { axes }),
+      ...(labelsValue === undefined ? {} : { dataLabels: labelsValue }),
+      ...(stack === undefined ? {} : { stacking: stack }),
+      ...(gapWidth === undefined ? {} : { gapWidth }),
+      ...(overlap === undefined ? {} : { overlap }),
+      ...(explosion === undefined ? {} : { explosion }),
+      ...(firstSliceAngle === undefined ? {} : { firstSliceAngle }),
+      ...(holeSize === undefined ? {} : { holeSize }),
+    };
+  });
+}
+
+export type ParsedChartSeries = ChartSeries & {
+  readonly groupIndex: number;
+  readonly groupSeriesIndex: number;
+  /** Derived once from group order and group-local series order. */
+  readonly seriesIndex: number;
+};
+
+export type ParsedChartAxis = {
+  readonly name: string;
+  readonly role: "category" | "value";
+  readonly id: number;
+  readonly crossAxisId: number;
+  readonly spec: ChartAxis;
+};
+
+export type ParsedChartGroup = {
+  readonly kind: ChartKind;
+  readonly data: ChartGroupData;
+  readonly series: readonly ParsedChartSeries[];
+  readonly axes?: {
+    readonly category: ParsedChartAxis;
+    readonly value: ParsedChartAxis;
+  };
+  readonly dataLabels?: false | ChartDataLabels;
+  readonly stacking?: "stacked" | "percent";
+  readonly gapWidth?: number;
+  readonly overlap?: number;
+  readonly explosion?: number;
+  readonly firstSliceAngle?: number;
+  readonly holeSize?: number;
+};
+
+export type ParsedChart = {
+  readonly name?: string;
+  readonly morphKey?: string;
+  readonly link?: LinkTarget;
+  readonly declaredX?: number;
+  readonly declaredY?: number;
+  readonly declaredWidth?: number;
+  readonly declaredHeight?: number;
+  readonly axes: readonly ParsedChartAxis[];
+  readonly groups: readonly ParsedChartGroup[];
+  /** Flattened series view with the same objects owned by their groups. */
+  readonly series: readonly ParsedChartSeries[];
+  readonly categories: readonly string[];
+  readonly legend?: ChartProps["legend"];
+  readonly plotArea?: ChartProps["plotArea"];
+  readonly style?: TextStyle & LayoutStyle;
+  readonly enter?: unknown;
+  readonly emphasis?: unknown;
+  readonly motion?: unknown;
+  readonly contract: CapabilityLayoutContract;
+  readonly rawProps: Readonly<Record<string, unknown>>;
+};
+
+function parsedAxes(
+  value: unknown,
+  groups: readonly ParsedGroupDraft[],
+): {
+  axes: ParsedChartAxis[];
+  groupAxes: (ParsedChartGroup["axes"] | undefined)[];
+} {
+  const cartesian = groups.every((group) => cartesianKinds.has(group.kind));
+  if (!cartesian) {
+    if (groups.length !== 1) {
+      fail(
+        "unsupported-chart-group-combination",
+        "Pie and doughnut charts support one chart group",
+      );
+    }
+    if (value !== undefined) {
+      fail(
+        "invalid-chart-axes",
+        "Pie and doughnut charts do not use category or value axes",
+      );
+    }
+    return { axes: [], groupAxes: [undefined] };
+  }
+  if (new Set(groups.map(({ kind }) => kind)).size !== 1) {
+    fail(
+      "unsupported-chart-group-combination",
+      "Mixed chart group kinds are not supported by this migration",
+    );
+  }
+
+  let entries: { name: string; spec: ChartAxis }[];
+  const explicit = value !== undefined;
+  if (value === undefined) {
+    entries = [
+      { name: "category", spec: { kind: "category" } },
+      { name: "value", spec: { kind: "value" } },
+    ];
+  } else {
+    if (!isRecord(value)) fail("invalid-axis", "Chart.axes must be an object");
+    entries = Object.entries(value).map(([name, spec]) => {
+      if (name.trim() === "") {
+        fail("invalid-axis", "Chart.axes names must be non-empty strings");
+      }
+      if (!isRecord(spec)) {
+        fail("invalid-axis", `Chart.axes.${name} must be an object`);
+      }
+      const kind = spec["kind"];
+      if (kind !== "category" && kind !== "value") {
+        fail(
+          "invalid-chart-axis-role",
+          `Chart.axes.${name}.kind must be "category" or "value"`,
+        );
+      }
+      return {
+        name,
+        spec: axis(spec, `Chart.axes.${name}`, kind),
+      };
+    });
+    if (entries.length === 0) {
+      fail(
+        "invalid-axis",
+        "Chart.axes must define a category and a value axis",
+      );
+    }
+  }
+
+  const category = entries.find(({ spec }) => spec.kind === "category");
+  const valueAxis = entries.find(({ spec }) => spec.kind === "value");
+  if (category === undefined || valueAxis === undefined) {
+    fail(
+      "invalid-axis",
+      "Chart.axes must define exactly one category axis and one value axis",
+    );
+  }
+  if (
+    entries.some(
+      ({ name }) => name !== category.name && name !== valueAxis.name,
+    )
+  ) {
+    fail(
+      "unsupported-chart-axis",
+      "This migration supports one category axis and one value axis per chart",
+    );
+  }
+  const categoryParsed: ParsedChartAxis = {
+    name: category.name,
+    role: "category",
+    id: categoryAxisId,
+    crossAxisId: valueAxisId,
+    spec: category.spec,
+  };
+  const valueParsed: ParsedChartAxis = {
+    name: valueAxis.name,
+    role: "value",
+    id: valueAxisId,
+    crossAxisId: categoryAxisId,
+    spec: valueAxis.spec,
+  };
+  const groupAxes = groups.map((group) => {
+    let references = group.axes;
+    if (references === undefined) {
+      if (
+        explicit &&
+        !(category.name === "category" && valueAxis.name === "value")
+      ) {
+        fail(
+          "invalid-chart-axes",
+          "Chart groups must reference chart-level axes when custom axis names are declared",
+        );
+      }
+      references = { category: category.name, value: valueAxis.name };
+    }
+    if (
+      references.category !== "category" &&
+      references.category !== category.name
+    ) {
+      if (entries.some(({ name }) => name === references.category)) {
+        fail(
+          "invalid-chart-axis-role",
+          `Chart group category axis "${references.category}" is not a category axis`,
+        );
+      }
+      fail(
+        "unknown-chart-axis",
+        `Chart group references unknown category axis "${references.category}"`,
+      );
+    }
+    if (references.value !== "value" && references.value !== valueAxis.name) {
+      if (entries.some(({ name }) => name === references.value)) {
+        fail(
+          "invalid-chart-axis-role",
+          `Chart group value axis "${references.value}" is not a value axis`,
+        );
+      }
+      fail(
+        "unknown-chart-axis",
+        `Chart group references unknown value axis "${references.value}"`,
+      );
+    }
+    if (
+      references.category !== category.name ||
+      references.value !== valueAxis.name
+    ) {
+      fail(
+        "unknown-chart-axis",
+        "Chart group axis references must match the declared chart-level axes",
+      );
+    }
+    return { category: categoryParsed, value: valueParsed };
+  });
+  return { axes: [categoryParsed, valueParsed], groupAxes };
+}
+
+/** Chart module validates input and generates native chart parts with embedded workbook. */
+export const chartCapability: ObjectCapabilityModule = {
+  declaration: "rp:chart",
+
+  parse(
+    input: CapabilityInput,
+    context: CapabilityParseContext,
+  ): CapabilityParseResult<ParsedChart> {
+    if (input.children.length > 0) {
+      fail(
+        "unsupported-children",
+        "Chart does not accept children; chart text and data should be passed in groups",
+      );
+    }
+    onlyKeys(
+      input.props,
+      [
+        "id",
+        "name",
+        "morphKey",
+        "link",
+        "x",
+        "y",
+        "width",
+        "height",
+        "axes",
+        "groups",
+        "legend",
+        "plotArea",
+        "style",
+        "enter",
+        "emphasis",
+        "motion",
+      ],
+      "Chart",
+    );
+
+    const allowedStyleKeys = new Set<string>([
+      ...layoutStyleKeys,
+      ...chartTextStyleKeys,
+    ]);
+    const contract = parseCapabilityLayoutContract({
+      nativeKind: "graphicFrame",
+      props: input.props,
+      allowedStyleKeys,
+      allowPadding: false,
+      path: context.path,
+    });
+
+    const drafts = chartGroupDrafts(input.props["groups"]);
+    if (drafts.length > 1) {
+      for (const group of drafts.slice(1)) {
+        if (
+          group.data.categories.length !== drafts[0]!.data.categories.length
+        ) {
+          fail(
+            "chart-category-domain-mismatch",
+            "Chart groups sharing a category axis must have the same ordered category domain",
+          );
+        }
+        for (const [index, category] of group.data.categories.entries()) {
+          if (category !== drafts[0]!.data.categories[index]) {
+            fail(
+              "chart-category-domain-mismatch",
+              "Chart groups sharing a category axis must have the same ordered category domain",
+            );
+          }
+        }
+      }
+    }
+    const { axes, groupAxes } = parsedAxes(input.props["axes"], drafts);
+
+    let seriesIndex = 0;
+    const groups: ParsedChartGroup[] = drafts.map((draft, groupIndex) => {
+      const series = draft.series.map((item, groupSeriesIndex) => ({
+        ...item,
+        groupIndex,
+        groupSeriesIndex,
+        seriesIndex: seriesIndex++,
+      }));
+      const parsedGroupAxes = groupAxes[groupIndex];
+      return {
+        kind: draft.kind,
+        data: draft.data,
+        series,
+        ...(parsedGroupAxes === undefined ? {} : { axes: parsedGroupAxes }),
+        ...(draft.dataLabels === undefined
+          ? {}
+          : { dataLabels: draft.dataLabels }),
+        ...(draft.stacking === undefined ? {} : { stacking: draft.stacking }),
+        ...(draft.gapWidth === undefined ? {} : { gapWidth: draft.gapWidth }),
+        ...(draft.overlap === undefined ? {} : { overlap: draft.overlap }),
+        ...(draft.explosion === undefined
+          ? {}
+          : { explosion: draft.explosion }),
+        ...(draft.firstSliceAngle === undefined
+          ? {}
+          : { firstSliceAngle: draft.firstSliceAngle }),
+        ...(draft.holeSize === undefined ? {} : { holeSize: draft.holeSize }),
+      };
+    });
+    const series = groups.flatMap((group) => group.series);
+    const categories = groups[0]!.data.categories;
+
+    const name = optionalName(input.props["name"], "name");
+    if (name !== undefined) xmlText(name, "Chart.name");
+
+    const rawWidth =
+      contract.layoutStyle.width ??
+      (input.props["width"] as number | undefined);
+    const rawHeight =
+      contract.layoutStyle.height ??
+      (input.props["height"] as number | undefined);
+    const declaredWidth =
+      rawWidth !== undefined ? extent(rawWidth, "width") : undefined;
+    const declaredHeight =
+      rawHeight !== undefined ? extent(rawHeight, "height") : undefined;
+    const declaredX =
+      input.props["x"] !== undefined
+        ? coordinate(input.props["x"], "x")
+        : undefined;
+    const declaredY =
+      input.props["y"] !== undefined
+        ? coordinate(input.props["y"], "y")
+        : undefined;
+
+    const legend = input.props["legend"];
+    if (
+      legend !== undefined &&
+      legend !== false &&
+      legend !== "top" &&
+      legend !== "bottom" &&
+      legend !== "left" &&
+      legend !== "right"
+    ) {
+      fail(
+        "invalid-legend",
+        "Chart.legend must be false, top, bottom, left, or right",
+      );
+    }
+    const checkedPlotArea = plotArea(
+      input.props["plotArea"],
+      declaredWidth !== undefined && declaredHeight !== undefined
+        ? { width: declaredWidth, height: declaredHeight }
+        : undefined,
+    );
+
+    const parsed: ParsedChart = {
+      axes,
+      groups,
+      series,
+      categories,
+      contract,
+      rawProps: input.props,
+      ...(name === undefined ? {} : { name }),
+      ...(input.props["morphKey"] !== undefined
+        ? { morphKey: input.props["morphKey"] as string }
+        : {}),
+      ...(input.props["link"] !== undefined
+        ? { link: input.props["link"] as LinkTarget }
+        : {}),
+      ...(declaredX === undefined ? {} : { declaredX }),
+      ...(declaredY === undefined ? {} : { declaredY }),
+      ...(declaredWidth === undefined ? {} : { declaredWidth }),
+      ...(declaredHeight === undefined ? {} : { declaredHeight }),
+      ...(legend === undefined ? {} : { legend: legend }),
+      ...(checkedPlotArea === undefined ? {} : { plotArea: checkedPlotArea }),
+      ...(input.props["style"] === undefined
+        ? {}
+        : { style: input.props["style"] as TextStyle & LayoutStyle }),
+      ...(input.props["enter"] === undefined
+        ? {}
+        : { enter: input.props["enter"] }),
+      ...(input.props["emphasis"] === undefined
+        ? {}
+        : { emphasis: input.props["emphasis"] }),
+      ...(input.props["motion"] === undefined
+        ? {}
+        : { motion: input.props["motion"] }),
+    };
+
+    return { contract, parsed };
+  },
+
+  measureLayout(
+    parsed: ParsedChart,
+    request: CapabilityLayoutRequest,
+  ): CapabilityLayoutMeasurement {
+    const declaredWidth = parsed.declaredWidth;
+    const declaredHeight = parsed.declaredHeight;
+    const width =
+      request.availableWidth ??
+      declaredWidth ??
+      (declaredHeight === undefined ? 320 : declaredHeight * (16 / 9));
+    const height = declaredHeight ?? width * (9 / 16);
+    return {
+      width,
+      height,
+      minContentWidth: declaredWidth ?? 0,
+      minContentHeight: declaredHeight ?? 0,
+    };
+  },
+
+  compile(parsed: ParsedChart, context: CapabilityContext): CapabilityOutput {
+    const x = context.layoutBox?.x ?? parsed.declaredX ?? 0;
+    const y = context.layoutBox?.y ?? parsed.declaredY ?? 0;
+    const width =
+      context.layoutBox?.width ??
+      parsed.declaredWidth ??
+      (parsed.declaredHeight === undefined
+        ? 320
+        : parsed.declaredHeight * (16 / 9));
+    const height =
+      context.layoutBox?.height ?? parsed.declaredHeight ?? width * (9 / 16);
+    const box = { x, y, width, height };
+
+    if (parsed.plotArea !== undefined) {
+      if (
+        parsed.plotArea.left < 0 ||
+        parsed.plotArea.top < 0 ||
+        parsed.plotArea.width <= 0 ||
+        parsed.plotArea.height <= 0 ||
+        parsed.plotArea.left + parsed.plotArea.width > box.width ||
+        parsed.plotArea.top + parsed.plotArea.height > box.height
+      ) {
+        fail(
+          "invalid-plot-area",
+          "Chart.plotArea must be inside chart box with positive width and height",
+        );
+      }
+    }
+
+    const name = context.morphName ?? parsed.name ?? `Chart ${context.id - 1}`;
+    const firstKind = parsed.groups[0]!.kind;
+    const annotations = motionAnnotations(parsed.rawProps, {
+      kind: "chart",
+      name,
+      ...(parsed.rawProps["id"] === undefined
+        ? {}
+        : { authorId: parsed.rawProps["id"] as string }),
+      textBody: false,
+      filled: firstKind !== "line",
+      box,
+      rotationDegrees: 0,
+      hasBackground: firstKind !== "line",
+      chartSeriesCount: parsed.series.length,
+      chartCategoryCount: parsed.categories.length,
+    });
+    const { textStyles, resourceClaims, fontUses, warnings } =
+      chartResourceClaims(parsed, context.theme, context.options.embedFonts);
+    const workbook = chartWorkbook(parsed);
+    const relationshipId = context.registerPackagePart({
+      part: {
+        pathTemplate: "ppt/charts/chart{n}.xml",
+        contentType: chartContentType,
+      },
+      relationshipType: chartRelationship,
+      content(relatedRelationshipIds) {
+        const [workbookRelationshipId] = relatedRelationshipIds;
+        if (workbookRelationshipId === undefined) {
+          fail(
+            "invalid-part",
+            "Chart part requires embedded workbook relationship",
+          );
+        }
+        return chartPartXml(
+          parsed,
+          box,
+          workbookRelationshipId,
+          textStyles,
+          context.theme,
+        );
+      },
+      relatedParts: [
+        {
+          pathTemplate: "ppt/embeddings/Microsoft_Excel_Worksheet{n}.xlsx",
+          contentType: workbookContentType,
+          relationshipType: packageRelationship,
+          bytes: workbook,
+        },
+      ],
+    });
+    return {
+      xml: chartFrameXml(
+        context.id,
+        name,
+        box,
+        relationshipId,
+        context.nativeLink,
+      ),
+      observation: {
+        id: context.id,
+        kind: "chart",
+        name,
+        box,
+      },
+      extensions: [],
+      ...(annotations.length === 0 ? {} : { annotations }),
+      resourceClaims,
+      presentationContributions: fontPresentationContributions(
+        fontUses,
+        context.options.embedFonts,
+      ),
+      warnings,
+    };
+  },
+};
 
 const generalNumberCharacters = "0123456789.,-+eE";
 const dateNameCharacters =
@@ -970,39 +1531,39 @@ function numberLabelCharacters(
   return [...characters].join("");
 }
 
-function dataLabelTexts(
-  data: ChartData,
-  value: ChartDataLabels | false | undefined,
+function groupDataLabelTexts(
+  group: ParsedChartGroup,
+  labels: ChartDataLabels | false | undefined,
 ): string[] {
-  if (value === undefined || value === false) return [];
+  if (labels === undefined || labels === false) return [];
   const texts: string[] = [];
   const numericLabels =
-    value.value === true || value.percent === true
-      ? numberLabelCharacters(value.numberFormat, value.percent === true)
+    labels.value === true || labels.percent === true
+      ? numberLabelCharacters(labels.numberFormat, labels.percent === true)
       : "";
-  for (const series of data.series) {
+  for (const series of group.series) {
     for (const [index, number] of series.values.entries()) {
       if (number === null) continue;
       if (numericLabels !== "") texts.push(numericLabels);
-      if (value.category === true) texts.push(data.categories[index]!);
+      if (labels.category === true) texts.push(group.data.categories[index]!);
     }
   }
   return texts;
 }
 
 function pointDataLabelTexts(
-  data: ChartData,
+  group: ParsedChartGroup,
   labels: ChartDataLabels,
   index: number,
 ): string[] {
-  if (data.series.some((series) => series.values[index] !== null)) {
+  if (group.series.some((series) => series.values[index] !== null)) {
     const texts: string[] = [];
     if (labels.value === true || labels.percent === true) {
       texts.push(
         numberLabelCharacters(labels.numberFormat, labels.percent === true),
       );
     }
-    if (labels.category === true) texts.push(data.categories[index]!);
+    if (labels.category === true) texts.push(group.data.categories[index]!);
     return texts;
   }
   return [];
@@ -1016,8 +1577,7 @@ function mergeTextStyle(
 }
 
 function chartResourceClaims(
-  props: ChartProps,
-  data: ChartData,
+  parsed: ParsedChart,
   theme: ThemeContext,
   embedFonts?: FontEmbeddingMode,
 ): {
@@ -1029,35 +1589,37 @@ function chartResourceClaims(
     readonly message: string;
   }[];
 } {
-  const cartesian =
-    props.kind === "pie" || props.kind === "doughnut" ? undefined : props;
-  const dataLabelText = dataLabelTexts(data, props.dataLabels);
+  const categoryAxes = parsed.axes.filter(({ role }) => role === "category");
+  const valueAxes = parsed.axes.filter(({ role }) => role === "value");
+  const dataLabelText = parsed.groups.flatMap((group) =>
+    group.dataLabels === undefined ||
+    group.dataLabels === false ||
+    group.dataLabels.style !== undefined
+      ? []
+      : groupDataLabelTexts(group, group.dataLabels),
+  );
   const chartText = [
-    ...data.categories,
-    ...data.series.map(({ name }) => name),
-    ...(props.dataLabels === undefined ||
-    props.dataLabels === false ||
-    props.dataLabels.style === undefined
-      ? dataLabelText
-      : []),
+    ...parsed.categories,
+    ...parsed.series.map(({ name }) => name),
+    ...dataLabelText,
   ];
   const valueAxisCharacters =
-    cartesian?.valueAxis?.visible === false
+    valueAxes.length === 0 || valueAxes[0]!.spec.visible === false
       ? []
       : [
           numberLabelCharacters(
-            cartesian?.valueAxis?.numberFormat,
-            cartesian?.stacking === "percent",
+            valueAxes[0]!.spec.kind === "value"
+              ? valueAxes[0]!.spec.numberFormat
+              : undefined,
+            parsed.groups.some(({ stacking }) => stacking === "percent"),
           ),
         ];
-  if (
-    cartesian !== undefined &&
-    cartesian.valueAxis?.visible !== false &&
-    cartesian.valueAxis?.style === undefined
-  ) {
-    chartText.push(...valueAxisCharacters);
-  }
-  const chartStyle = textOnlyStyle(props.style);
+  valueAxes.forEach(({ spec }) => {
+    if (spec.visible !== false && spec.style === undefined) {
+      chartText.push(...valueAxisCharacters);
+    }
+  });
+  const chartStyle = textOnlyStyle(parsed.style);
   const chart = writeChartTextProperties(
     chartStyle,
     chartText,
@@ -1087,14 +1649,15 @@ function chartResourceClaims(
     chart: string;
     categoryAxis?: string;
     valueAxis?: string;
-    dataLabels?: string;
+    groupDataLabels?: Map<number, string>;
     pointLabels?: Map<string, string>;
   } = { chart: chart.xml };
-  if (cartesian?.categoryAxis?.style !== undefined) {
+  for (const { name, spec } of categoryAxes) {
+    if (spec.style === undefined) continue;
     const output = writeChartTextProperties(
-      mergeTextStyle(chartStyle, cartesian.categoryAxis.style),
-      data.categories,
-      "Chart.categoryAxis.style",
+      mergeTextStyle(chartStyle, spec.style),
+      parsed.categories,
+      `Chart.axes.${name}.style`,
       theme,
       embedFonts,
     );
@@ -1103,16 +1666,17 @@ function chartResourceClaims(
     fontUses.push(
       ...output.fontUses.map((use) => ({
         ...use,
-        path: "Chart.categoryAxis.style",
+        path: `Chart.axes.${name}.style`,
       })),
     );
     addWarnings(output.warnings);
   }
-  if (cartesian?.valueAxis?.style !== undefined) {
+  for (const { name, spec } of valueAxes) {
+    if (spec.style === undefined) continue;
     const output = writeChartTextProperties(
-      mergeTextStyle(chartStyle, cartesian.valueAxis.style),
+      mergeTextStyle(chartStyle, spec.style),
       valueAxisCharacters,
-      "Chart.valueAxis.style",
+      `Chart.axes.${name}.style`,
       theme,
       embedFonts,
     );
@@ -1121,41 +1685,44 @@ function chartResourceClaims(
     fontUses.push(
       ...output.fontUses.map((use) => ({
         ...use,
-        path: "Chart.valueAxis.style",
+        path: `Chart.axes.${name}.style`,
       })),
     );
     addWarnings(output.warnings);
   }
-  if (props.dataLabels !== undefined && props.dataLabels !== false) {
-    if (props.dataLabels.style !== undefined) {
+  for (const [groupIndex, group] of parsed.groups.entries()) {
+    const groupLabels = group.dataLabels;
+    if (groupLabels === undefined || groupLabels === false) continue;
+    if (groupLabels.style !== undefined) {
       const output = writeChartTextProperties(
-        mergeTextStyle(chartStyle, props.dataLabels.style),
-        dataLabelTexts(data, props.dataLabels),
-        "Chart.dataLabels.style",
+        mergeTextStyle(chartStyle, groupLabels.style),
+        groupDataLabelTexts(group, groupLabels),
+        `Chart.groups[${groupIndex}].dataLabels.style`,
         theme,
         embedFonts,
       );
-      textStyles.dataLabels = output.xml;
+      textStyles.groupDataLabels ??= new Map();
+      textStyles.groupDataLabels.set(groupIndex, output.xml);
       resourceClaims.push(...output.resourceClaims);
       fontUses.push(
         ...output.fontUses.map((use) => ({
           ...use,
-          path: "Chart.dataLabels.style",
+          path: `Chart.groups[${groupIndex}].dataLabels.style`,
         })),
       );
       addWarnings(output.warnings);
     }
-    for (const [seriesIndex, series] of data.series.entries()) {
+    for (const series of group.series) {
       for (const [pointIndex, point] of Object.entries(series.points ?? {})) {
         if (point.labelColor === undefined) continue;
         const index = Number(pointIndex);
         const number = series.values[index];
         if (number === null || number === undefined) continue;
-        const pointText = pointDataLabelTexts(data, props.dataLabels, index);
+        const pointText = pointDataLabelTexts(group, groupLabels, index);
         if (pointText.length === 0) continue;
         const output = writeChartTextProperties(
           mergeTextStyle(chartStyle, {
-            ...props.dataLabels.style,
+            ...groupLabels.style,
             color: point.labelColor,
           }),
           pointText,
@@ -1164,7 +1731,10 @@ function chartResourceClaims(
           embedFonts,
         );
         textStyles.pointLabels ??= new Map();
-        textStyles.pointLabels.set(`${seriesIndex}:${pointIndex}`, output.xml);
+        textStyles.pointLabels.set(
+          `${series.seriesIndex}:${pointIndex}`,
+          output.xml,
+        );
         resourceClaims.push(...output.resourceClaims);
         fontUses.push(
           ...output.fontUses.map((use) => ({
@@ -1190,441 +1760,6 @@ function chartResourceClaims(
   };
 }
 
-export type ParsedChart = {
-  readonly name?: string;
-  readonly morphKey?: string;
-  readonly link?: LinkTarget;
-  readonly declaredX?: number;
-  readonly declaredY?: number;
-  readonly declaredWidth?: number;
-  readonly declaredHeight?: number;
-  readonly data: ChartData;
-  readonly kind: ChartKind;
-  readonly legend?: ChartBase["legend"];
-  readonly dataLabels?: false | ChartDataLabels;
-  readonly plotArea?: ChartProps["plotArea"];
-  readonly style?: TextStyle & LayoutStyle;
-  readonly stacking?: "stacked" | "percent";
-  readonly valueAxis?: ChartAxis;
-  readonly categoryAxis?: ChartAxis;
-  readonly gapWidth?: number;
-  readonly overlap?: number;
-  readonly explosion?: number;
-  readonly firstSliceAngle?: number;
-  readonly holeSize?: number;
-  readonly enter?: unknown;
-  readonly emphasis?: unknown;
-  readonly motion?: unknown;
-  readonly contract: CapabilityLayoutContract;
-  readonly rawProps: Readonly<Record<string, unknown>>;
-};
-
-/** Chart module validates input and generates native chart parts with embedded workbook. */
-export const chartCapability: ObjectCapabilityModule = {
-  declaration: "rp:chart",
-
-  parse(
-    input: CapabilityInput,
-    context: CapabilityParseContext,
-  ): CapabilityParseResult<ParsedChart> {
-    if (input.children.length > 0) {
-      fail(
-        "unsupported-children",
-        "Chart does not accept children; chart text and data should be passed in data",
-      );
-    }
-
-    const kind = input.props["kind"];
-    if (typeof kind !== "string" || !Object.hasOwn(chartOptions, kind)) {
-      fail("unsupported-chart-kind", `Unsupported chart kind ${String(kind)}`);
-    }
-    const chartKind = kind as ChartKind;
-
-    for (const option of allChartOptions) {
-      if (
-        input.props[option] !== undefined &&
-        !chartOptions[chartKind].includes(option)
-      ) {
-        fail(
-          "invalid-chart-option",
-          `${chartKind} chart does not support ${option}`,
-        );
-      }
-    }
-
-    onlyKeys(
-      input.props,
-      [
-        "id",
-        "name",
-        "morphKey",
-        "link",
-        "x",
-        "y",
-        "width",
-        "height",
-        "data",
-        "legend",
-        "dataLabels",
-        "plotArea",
-        "style",
-        "kind",
-        ...allChartOptions,
-        "enter",
-        "emphasis",
-        "motion",
-      ],
-      "Chart",
-    );
-
-    const allowedStyleKeys = new Set<string>([
-      ...layoutStyleKeys,
-      ...chartTextStyleKeys,
-    ]);
-
-    const contract = parseCapabilityLayoutContract({
-      nativeKind: "graphicFrame",
-      props: input.props,
-      allowedStyleKeys,
-      allowPadding: false,
-      path: context.path,
-    });
-
-    const data = chartData(input.props["data"], chartKind);
-    if (
-      (chartKind === "pie" || chartKind === "doughnut") &&
-      data.series.length !== 1
-    ) {
-      fail(
-        "invalid-data",
-        `${chartKind} chart currently only supports a single data series`,
-      );
-    }
-
-    const name = optionalName(input.props["name"], "name");
-    if (name !== undefined) xmlText(name, "Chart.name");
-
-    const rawWidth =
-      contract.layoutStyle.width ??
-      (input.props["width"] as number | undefined);
-    const rawHeight =
-      contract.layoutStyle.height ??
-      (input.props["height"] as number | undefined);
-    const declaredWidth =
-      rawWidth !== undefined ? extent(rawWidth, "width") : undefined;
-    const declaredHeight =
-      rawHeight !== undefined ? extent(rawHeight, "height") : undefined;
-    const declaredX =
-      input.props["x"] !== undefined
-        ? coordinate(input.props["x"], "x")
-        : undefined;
-    const declaredY =
-      input.props["y"] !== undefined
-        ? coordinate(input.props["y"], "y")
-        : undefined;
-
-    const legend = input.props["legend"];
-    if (
-      legend !== undefined &&
-      legend !== false &&
-      legend !== "top" &&
-      legend !== "bottom" &&
-      legend !== "left" &&
-      legend !== "right"
-    ) {
-      fail(
-        "invalid-legend",
-        "Chart.legend must be false, top, bottom, left, or right",
-      );
-    }
-
-    const stack = input.props["stacking"];
-    if (stack !== undefined && stack !== "stacked" && stack !== "percent") {
-      fail("invalid-stacking", "Chart.stacking must be stacked or percent");
-    }
-    const labelsValue = labels(input.props["dataLabels"], chartKind, stack);
-
-    const gapWidth = input.props["gapWidth"];
-    if (
-      gapWidth !== undefined &&
-      (typeof gapWidth !== "number" ||
-        !Number.isFinite(gapWidth) ||
-        gapWidth < 0 ||
-        gapWidth > 500)
-    ) {
-      fail("invalid-gap-width", "Chart.gapWidth must be between 0 and 500");
-    }
-    const overlap = input.props["overlap"];
-    if (
-      overlap !== undefined &&
-      (typeof overlap !== "number" ||
-        !Number.isFinite(overlap) ||
-        overlap < -100 ||
-        overlap > 100)
-    ) {
-      fail("invalid-overlap", "Chart.overlap must be between -100 and 100");
-    }
-
-    const checkedPlotArea = plotArea(
-      input.props["plotArea"],
-      declaredWidth !== undefined && declaredHeight !== undefined
-        ? { width: declaredWidth, height: declaredHeight }
-        : undefined,
-    );
-
-    const explosion =
-      chartKind === "pie" || chartKind === "doughnut"
-        ? roundedRange(
-            input.props["explosion"],
-            "Chart.explosion",
-            0,
-            maximumExplosionForCurrentValidationProfile,
-            "rounded-result",
-          )
-        : undefined;
-    const firstSliceAngle =
-      chartKind === "pie" || chartKind === "doughnut"
-        ? roundedRange(
-            input.props["firstSliceAngle"],
-            "Chart.firstSliceAngle",
-            0,
-            360,
-          )
-        : undefined;
-    const holeSize =
-      chartKind === "doughnut"
-        ? roundedRange(input.props["holeSize"], "Chart.holeSize", 10, 90)
-        : undefined;
-
-    const valueAxis =
-      input.props["valueAxis"] === undefined
-        ? undefined
-        : axis(input.props["valueAxis"], "Chart.valueAxis", "value");
-    const categoryAxis =
-      input.props["categoryAxis"] === undefined
-        ? undefined
-        : axis(input.props["categoryAxis"], "Chart.categoryAxis", "category");
-
-    const parsed: ParsedChart = {
-      kind: chartKind,
-      data,
-      contract,
-      rawProps: input.props,
-      ...(name === undefined ? {} : { name }),
-      ...(input.props["morphKey"] !== undefined
-        ? { morphKey: input.props["morphKey"] as string }
-        : {}),
-      ...(input.props["link"] !== undefined
-        ? { link: input.props["link"] as LinkTarget }
-        : {}),
-      ...(declaredX === undefined ? {} : { declaredX }),
-      ...(declaredY === undefined ? {} : { declaredY }),
-      ...(declaredWidth === undefined ? {} : { declaredWidth }),
-      ...(declaredHeight === undefined ? {} : { declaredHeight }),
-      ...(legend === undefined ? {} : { legend: legend }),
-      ...(labelsValue === undefined ? {} : { dataLabels: labelsValue }),
-      ...(checkedPlotArea === undefined ? {} : { plotArea: checkedPlotArea }),
-      ...(input.props["style"] === undefined
-        ? {}
-        : { style: input.props["style"] as TextStyle & LayoutStyle }),
-      ...(stack === undefined ? {} : { stacking: stack }),
-      ...(valueAxis === undefined ? {} : { valueAxis }),
-      ...(categoryAxis === undefined ? {} : { categoryAxis }),
-      ...(gapWidth === undefined ? {} : { gapWidth }),
-      ...(overlap === undefined ? {} : { overlap }),
-      ...(explosion === undefined ? {} : { explosion }),
-      ...(firstSliceAngle === undefined ? {} : { firstSliceAngle }),
-      ...(holeSize === undefined ? {} : { holeSize }),
-      ...(input.props["enter"] === undefined
-        ? {}
-        : { enter: input.props["enter"] }),
-      ...(input.props["emphasis"] === undefined
-        ? {}
-        : { emphasis: input.props["emphasis"] }),
-      ...(input.props["motion"] === undefined
-        ? {}
-        : { motion: input.props["motion"] }),
-    };
-
-    return { contract, parsed };
-  },
-
-  measureLayout(
-    parsed: ParsedChart,
-    request: CapabilityLayoutRequest,
-  ): CapabilityLayoutMeasurement {
-    const declaredWidth = parsed.declaredWidth;
-    const declaredHeight = parsed.declaredHeight;
-    const width =
-      request.availableWidth ??
-      declaredWidth ??
-      (declaredHeight === undefined ? 320 : declaredHeight * (16 / 9));
-    const height = declaredHeight ?? width * (9 / 16);
-    return {
-      width,
-      height,
-      minContentWidth: declaredWidth ?? 0,
-      minContentHeight: declaredHeight ?? 0,
-    };
-  },
-
-  compile(parsed: ParsedChart, context: CapabilityContext): CapabilityOutput {
-    const x = context.layoutBox?.x ?? parsed.declaredX ?? 0;
-    const y = context.layoutBox?.y ?? parsed.declaredY ?? 0;
-    const width =
-      context.layoutBox?.width ??
-      parsed.declaredWidth ??
-      (parsed.declaredHeight === undefined
-        ? 320
-        : parsed.declaredHeight * (16 / 9));
-    const height =
-      context.layoutBox?.height ?? parsed.declaredHeight ?? width * (9 / 16);
-    const box = { width, height };
-
-    if (parsed.plotArea !== undefined) {
-      if (
-        parsed.plotArea.left < 0 ||
-        parsed.plotArea.top < 0 ||
-        parsed.plotArea.width <= 0 ||
-        parsed.plotArea.height <= 0 ||
-        parsed.plotArea.left + parsed.plotArea.width > box.width ||
-        parsed.plotArea.top + parsed.plotArea.height > box.height
-      ) {
-        fail(
-          "invalid-plot-area",
-          "Chart.plotArea must be inside chart box with positive width and height",
-        );
-      }
-    }
-
-    const props: ChartProps = {
-      ...parsed.rawProps,
-      kind: parsed.kind,
-      data: parsed.data,
-      x,
-      y,
-      width,
-      height,
-      ...(parsed.name === undefined ? {} : { name: parsed.name }),
-      ...(parsed.legend === undefined ? {} : { legend: parsed.legend }),
-      ...(parsed.dataLabels === undefined
-        ? {}
-        : { dataLabels: parsed.dataLabels }),
-      ...(parsed.plotArea === undefined ? {} : { plotArea: parsed.plotArea }),
-      ...(parsed.style === undefined ? {} : { style: parsed.style }),
-      ...(parsed.stacking === undefined ? {} : { stacking: parsed.stacking }),
-      ...(parsed.valueAxis === undefined
-        ? {}
-        : { valueAxis: parsed.valueAxis }),
-      ...(parsed.categoryAxis === undefined
-        ? {}
-        : { categoryAxis: parsed.categoryAxis }),
-      ...(parsed.gapWidth === undefined ? {} : { gapWidth: parsed.gapWidth }),
-      ...(parsed.overlap === undefined ? {} : { overlap: parsed.overlap }),
-      ...(parsed.explosion === undefined
-        ? {}
-        : { explosion: parsed.explosion }),
-      ...(parsed.firstSliceAngle === undefined
-        ? {}
-        : { firstSliceAngle: parsed.firstSliceAngle }),
-      ...(parsed.holeSize === undefined ? {} : { holeSize: parsed.holeSize }),
-      ...(parsed.enter === undefined ? {} : { enter: parsed.enter }),
-      ...(parsed.emphasis === undefined ? {} : { emphasis: parsed.emphasis }),
-      ...(parsed.motion === undefined ? {} : { motion: parsed.motion }),
-    } as ChartProps;
-
-    const name = context.morphName ?? props.name ?? `Chart ${context.id - 1}`;
-    const annotations = motionAnnotations(parsed.rawProps, {
-      kind: "chart",
-      name,
-      ...(props.id === undefined ? {} : { authorId: props.id }),
-      textBody: false,
-      filled: props.kind !== "line",
-      box: {
-        x: props.x!,
-        y: props.y!,
-        width: props.width!,
-        height: props.height!,
-      },
-      rotationDegrees: 0,
-      hasBackground: props.kind !== "line",
-      chartSeriesCount: props.data.series.length,
-      chartCategoryCount: props.data.categories.length,
-    });
-    const { textStyles, resourceClaims, fontUses, warnings } =
-      chartResourceClaims(
-        props,
-        props.data,
-        context.theme,
-        context.options.embedFonts,
-      );
-    const workbook = chartWorkbook(props.data);
-    const relationshipId = context.registerPackagePart({
-      part: {
-        pathTemplate: "ppt/charts/chart{n}.xml",
-        contentType: chartContentType,
-      },
-      relationshipType: chartRelationship,
-      content(relatedRelationshipIds) {
-        const [workbookRelationshipId] = relatedRelationshipIds;
-        if (workbookRelationshipId === undefined) {
-          fail(
-            "invalid-part",
-            "Chart part requires embedded workbook relationship",
-          );
-        }
-        return chartPartXml(
-          props,
-          workbookRelationshipId,
-          textStyles,
-          context.theme,
-        );
-      },
-      relatedParts: [
-        {
-          pathTemplate: "ppt/embeddings/Microsoft_Excel_Worksheet{n}.xlsx",
-          contentType: workbookContentType,
-          relationshipType: packageRelationship,
-          bytes: workbook,
-        },
-      ],
-    });
-    return {
-      xml: chartFrameXml(
-        context.id,
-        name,
-        {
-          x: props.x!,
-          y: props.y!,
-          width: props.width!,
-          height: props.height!,
-        },
-        relationshipId,
-        context.nativeLink,
-      ),
-      observation: {
-        id: context.id,
-        kind: "chart",
-        name,
-        box: {
-          x: props.x!,
-          y: props.y!,
-          width: props.width!,
-          height: props.height!,
-        },
-      },
-      extensions: [],
-      ...(annotations.length === 0 ? {} : { annotations }),
-      resourceClaims,
-      presentationContributions: fontPresentationContributions(
-        fontUses,
-        context.options.embedFonts,
-      ),
-      warnings,
-    };
-  },
-};
-
 export type ChartNode = CommonNode<
   "chart",
   ChartProps,
@@ -1639,3 +1774,24 @@ export function createChartNode(props: ChartProps): ChartNode {
     props,
   );
 }
+
+export type {
+  ChartAxis,
+  ChartAxisReferences,
+  ChartCategoryAxis,
+  ChartDataLabels,
+  ChartGroup,
+  ChartGroupData,
+  ChartKind,
+  ChartLine,
+  ChartPoint,
+  ChartProps,
+  ChartSeries,
+  ChartTextStyle,
+  ChartValueAxis,
+  ColumnOrBarChartGroup,
+  DoughnutChartGroup,
+  LineOrAreaChartGroup,
+  PieChartGroup,
+  SharedCategoryData,
+} from "./chart-types.ts";

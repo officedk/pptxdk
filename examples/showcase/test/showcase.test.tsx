@@ -89,7 +89,14 @@ it("map and calendar synchronize click behaviors, four-page gallery preserves co
     assert.ok(chart);
     assert.deepEqual(chart.types, ["barChart"]);
     assert.deepEqual(chart.series, [
-      { name: "Lorem ipsum", categories: ["A", "B"], values: [84, 56] },
+      {
+        name: "Lorem ipsum",
+        categories: ["A", "B"],
+        values: [84, 56],
+        index: 0,
+        order: 0,
+        groupIndex: 0,
+      },
     ]);
     assert.deepEqual(chart.embeddedWorkbook?.series, chart.series);
     assert.deepEqual(

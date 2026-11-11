@@ -548,15 +548,17 @@ describe("scoped author ids", () => {
         <Slide id="parts">
           <Chart
             id="sales"
-            kind="column"
             x={10}
             y={10}
             width={200}
             height={120}
-            data={{
-              categories: ["Q1"],
-              series: [{ name: "Bookings", values: [4] }],
-            }}
+            groups={[
+              {
+                kind: "column",
+                data: { kind: "shared-categories", categories: ["Q1"] },
+                series: [{ name: "Bookings", values: [4] }],
+              },
+            ]}
           />
           <Table
             id="grid"

@@ -96,7 +96,6 @@ export function ProductionMetricsPage() {
       >
         <Chart
           id="node-occupancy-chart"
-          kind="area"
           x={62}
           y={272}
           width={392}
@@ -106,39 +105,46 @@ export function ProductionMetricsPage() {
             fontSize: 10,
             color: colors.ink,
           }}
-          data={{
-            categories: timeSlots,
-            series: [
-              {
-                name: "在线推理 H800 节点数 (8xGPU/节点)",
-                values: nodeOccupancyValues,
-                color: "#9EBDF5",
-              },
-            ],
-          }}
           legend="top"
-          dataLabels={{
-            value: true,
-            numberFormat: "0",
-            style: {
-              fontFamily: "body",
-              fontSize: 9.5,
-              color: colors.steel,
+          axes={{
+            category: {
+              kind: "category",
+              line: { color: colors.steel, width: 1 },
+              style: { fontFamily: "body", fontSize: 10, color: colors.ink },
+            },
+            value: {
+              kind: "value",
+              min: 0,
+              max: 320,
+              majorUnit: 80,
+              numberFormat: "0",
+              gridlines: { color: colors.line, width: 1 },
+              line: false,
+              style: { fontFamily: "body", fontSize: 10, color: colors.muted },
             },
           }}
-          valueAxis={{
-            min: 0,
-            max: 320,
-            majorUnit: 80,
-            numberFormat: "0",
-            gridlines: { color: colors.line, width: 1 },
-            line: false,
-            style: { fontFamily: "body", fontSize: 10, color: colors.muted },
-          }}
-          categoryAxis={{
-            line: { color: colors.steel, width: 1 },
-            style: { fontFamily: "body", fontSize: 10, color: colors.ink },
-          }}
+          groups={[
+            {
+              kind: "area",
+              data: { kind: "shared-categories", categories: timeSlots },
+              series: [
+                {
+                  name: "在线推理 H800 节点数 (8xGPU/节点)",
+                  values: nodeOccupancyValues,
+                  color: "#9EBDF5",
+                },
+              ],
+              dataLabels: {
+                value: true,
+                numberFormat: "0",
+                style: {
+                  fontFamily: "body",
+                  fontSize: 9.5,
+                  color: colors.steel,
+                },
+              },
+            },
+          ]}
         />
         <Rule x={64} y={576} width={388} />
         <Text
@@ -170,8 +176,6 @@ export function ProductionMetricsPage() {
       >
         <Chart
           id="kv-cache-hit-chart"
-          kind="doughnut"
-          holeSize={58}
           x={500}
           y={272}
           width={308}
@@ -181,25 +185,36 @@ export function ProductionMetricsPage() {
             fontSize: 10.5,
             color: colors.ink,
           }}
-          data={{
-            categories: ["3FS 缓存命中 (342B)", "未命中重算 (266B)"],
-            series: [
-              {
-                name: "输入 Token 占比 (%)",
-                values: [56.3, 43.7],
-                points: {
-                  0: { color: colors.comm, labelColor: "#FFFFFF" },
-                  1: { color: colors.baseline, labelColor: colors.ink },
+          legend="bottom"
+          groups={[
+            {
+              kind: "doughnut",
+              data: {
+                kind: "shared-categories",
+                categories: ["3FS 缓存命中 (342B)", "未命中重算 (266B)"],
+              },
+              series: [
+                {
+                  name: "输入 Token 占比 (%)",
+                  values: [56.3, 43.7],
+                  points: {
+                    0: { color: colors.comm, labelColor: "#FFFFFF" },
+                    1: { color: colors.baseline, labelColor: colors.ink },
+                  },
+                },
+              ],
+              holeSize: 58,
+              dataLabels: {
+                value: true,
+                numberFormat: '0.0"%"',
+                style: {
+                  fontFamily: "body",
+                  fontSize: 10.5,
+                  color: colors.ink,
                 },
               },
-            ],
-          }}
-          legend="bottom"
-          dataLabels={{
-            value: true,
-            numberFormat: '0.0"%"',
-            style: { fontFamily: "body", fontSize: 10.5, color: colors.ink },
-          }}
+            },
+          ]}
         />
         <Rule x={500} y={576} width={308} />
         <Text
@@ -231,7 +246,6 @@ export function ProductionMetricsPage() {
       >
         <Chart
           id="cost-revenue-chart"
-          kind="column"
           x={854}
           y={272}
           width={364}
@@ -241,46 +255,56 @@ export function ProductionMetricsPage() {
             fontSize: 10,
             color: colors.ink,
           }}
-          data={{
-            categories: costRevenueCategories,
-            series: [
-              {
-                name: "单日金额 ($K USD)",
-                values: costRevenueValues,
-                color: colors.compute,
-                points: {
-                  0: { color: colors.steel, labelColor: colors.steel },
-                  1: { color: colors.comm, labelColor: colors.commText },
-                  2: { color: colors.compute, labelColor: colors.compute },
-                  3: { color: colors.copper, labelColor: colors.copperText },
-                  4: {
-                    color: colors.copperText,
-                    labelColor: colors.copperText,
+          legend={false}
+          axes={{
+            category: {
+              kind: "category",
+              line: { color: colors.steel, width: 1 },
+              style: { fontFamily: "body", fontSize: 10, color: colors.ink },
+            },
+            value: {
+              kind: "value",
+              min: 0,
+              max: 640,
+              majorUnit: 160,
+              numberFormat: '"$"0',
+              gridlines: { color: colors.line, width: 1 },
+              line: false,
+              style: { fontFamily: "body", fontSize: 10, color: colors.muted },
+            },
+          }}
+          groups={[
+            {
+              kind: "column",
+              data: {
+                kind: "shared-categories",
+                categories: costRevenueCategories,
+              },
+              series: [
+                {
+                  name: "单日金额 ($K USD)",
+                  values: costRevenueValues,
+                  color: colors.compute,
+                  points: {
+                    0: { color: colors.steel, labelColor: colors.steel },
+                    1: { color: colors.comm, labelColor: colors.commText },
+                    2: { color: colors.compute, labelColor: colors.compute },
+                    3: { color: colors.copper, labelColor: colors.copperText },
+                    4: {
+                      color: colors.copperText,
+                      labelColor: colors.copperText,
+                    },
                   },
                 },
+              ],
+              dataLabels: {
+                value: true,
+                position: "outsideEnd",
+                numberFormat: '"$"0.0"K"',
+                style: { fontFamily: "body", fontSize: 9.5, color: colors.ink },
               },
-            ],
-          }}
-          legend={false}
-          dataLabels={{
-            value: true,
-            position: "outsideEnd",
-            numberFormat: '"$"0.0"K"',
-            style: { fontFamily: "body", fontSize: 9.5, color: colors.ink },
-          }}
-          valueAxis={{
-            min: 0,
-            max: 640,
-            majorUnit: 160,
-            numberFormat: '"$"0',
-            gridlines: { color: colors.line, width: 1 },
-            line: false,
-            style: { fontFamily: "body", fontSize: 10, color: colors.muted },
-          }}
-          categoryAxis={{
-            line: { color: colors.steel, width: 1 },
-            style: { fontFamily: "body", fontSize: 10, color: colors.ink },
-          }}
+            },
+          ]}
         />
         <Rule x={856} y={576} width={360} />
         <Text

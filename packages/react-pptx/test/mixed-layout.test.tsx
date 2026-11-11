@@ -184,9 +184,17 @@ function SidebarScene() {
           </Box>
           <Chart
             id="revenue-chart"
-            kind="column"
             style={{ minHeight: 0 }}
-            data={revenueChartData}
+            groups={[
+              {
+                kind: "column",
+                data: {
+                  kind: "shared-categories",
+                  categories: revenueChartData.categories,
+                },
+                series: revenueChartData.series,
+              },
+            ]}
           />
           <Text
             id="footer"
@@ -540,9 +548,17 @@ function authorSidebarScene() {
         ),
         authorChart({
           id: "revenue-chart",
-          kind: "column",
           style: { minHeight: 0 },
-          data: revenueChartData,
+          groups: [
+            {
+              kind: "column",
+              data: {
+                kind: "shared-categories",
+                categories: revenueChartData.categories,
+              },
+              series: revenueChartData.series,
+            },
+          ],
         }),
         authorText("Source: finance system, unaudited.", {
           id: "footer",

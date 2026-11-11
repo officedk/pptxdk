@@ -88,6 +88,9 @@ it("full deck preserves 14 slides, editable chart, and valid object boundaries",
       name: "参数量（十亿）",
       categories: ["GPT-1 · 2018", "GPT-2 · 2019", "GPT-3 · 2020"],
       values: [0.117, 1.5, 175],
+      index: 0,
+      order: 0,
+      groupIndex: 0,
     },
   ]);
   assert.deepEqual(chart.embeddedWorkbook?.series, chart.series);

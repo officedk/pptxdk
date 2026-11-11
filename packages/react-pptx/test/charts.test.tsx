@@ -13,10 +13,32 @@ import {
   spin,
   Step,
   type ChartProps,
+  type ChartSeries,
 } from "@react-pptx/react-pptx";
-import { validatePptx } from "@react-pptx/validation";
+import {
+  build as buildDocument,
+  chart as documentChart,
+  deck,
+  slide as documentSlide,
+} from "@react-pptx/react-pptx/document";
+import { validatePptx, type FileChartSeries } from "@react-pptx/validation";
 import { strFromU8, strToU8, unzipSync, zipSync } from "fflate";
 import { describe, it, vi } from "vitest";
+
+function fileSeries(
+  categories: readonly string[],
+  series: readonly ChartSeries[],
+  groupIndex = 0,
+): FileChartSeries[] {
+  return series.map((item, index) => ({
+    name: item.name,
+    categories,
+    values: item.values,
+    index,
+    order: index,
+    groupIndex,
+  }));
+}
 
 describe("native Cartesian charts", () => {
   it("inherits shared text visual styles across charts, axes, and data labels", async () => {
@@ -25,15 +47,10 @@ describe("native Cartesian charts", () => {
         <Slide id="chart-text-visual">
           <Chart
             id="chart-text-visual"
-            kind="column"
             x={0}
             y={0}
             width={240}
             height={160}
-            data={{
-              categories: ["ßeta"],
-              series: [{ name: "Series", values: [1] }],
-            }}
             style={{
               fontFamily: "Aptos",
               fontSize: "12pt",
@@ -42,23 +59,34 @@ describe("native Cartesian charts", () => {
               textDecoration: "underline",
               textShadow: { color: "accent3", blur: 2 },
             }}
-            categoryAxis={{
-              style: {
-                letterSpacing: 2,
-                textTransform: "uppercase",
-                textDecoration: "underline",
-                textShadow: { color: "accent4", blur: 1 },
+            axes={{
+              category: {
+                kind: "category",
+                style: {
+                  letterSpacing: 2,
+                  textTransform: "uppercase",
+                  textDecoration: "underline",
+                  textShadow: { color: "accent4", blur: 1 },
+                },
               },
+              value: { kind: "value" },
             }}
-            dataLabels={{
-              category: true,
-              style: {
-                letterSpacing: 1.5,
-                textTransform: "uppercase",
-                textDecoration: "underline",
-                textShadow: { color: "accent5", blur: 1 },
+            groups={[
+              {
+                kind: "column",
+                data: { kind: "shared-categories", categories: ["ßeta"] },
+                series: [{ name: "Series", values: [1] }],
+                dataLabels: {
+                  category: true,
+                  style: {
+                    letterSpacing: 1.5,
+                    textTransform: "uppercase",
+                    textDecoration: "underline",
+                    textShadow: { color: "accent5", blur: 1 },
+                  },
+                },
               },
-            }}
+            ]}
           />
         </Slide>
       </Deck>,
@@ -110,14 +138,22 @@ describe("native Cartesian charts", () => {
         <Slide id="value-axis-font">
           <Chart
             id="value-axis-font"
-            kind="column"
             x={0}
             y={0}
             width={200}
             height={120}
-            data={{ categories: ["A"], series: [{ name: "S", values: [1] }] }}
             style={{ fontFamily: primaryFont }}
-            valueAxis={{ style: { fontFamily: sameFont } }}
+            axes={{
+              category: { kind: "category" },
+              value: { kind: "value", style: { fontFamily: sameFont } },
+            }}
+            groups={[
+              {
+                kind: "column",
+                data: { kind: "shared-categories", categories: ["A"] },
+                series: [{ name: "S", values: [1] }],
+              },
+            ]}
           />
         </Slide>
       </Deck>,
@@ -137,17 +173,25 @@ describe("native Cartesian charts", () => {
           <Slide id="value-axis-font-conflict">
             <Chart
               id="value-axis-font-conflict"
-              kind="column"
               x={0}
               y={0}
               width={200}
               height={120}
-              data={{
-                categories: ["A"],
-                series: [{ name: "S", values: [1] }],
-              }}
               style={{ fontFamily: primaryFont }}
-              valueAxis={{ style: { fontFamily: conflictingFont } }}
+              axes={{
+                category: { kind: "category" },
+                value: {
+                  kind: "value",
+                  style: { fontFamily: conflictingFont },
+                },
+              }}
+              groups={[
+                {
+                  kind: "column",
+                  data: { kind: "shared-categories", categories: ["A"] },
+                  series: [{ name: "S", values: [1] }],
+                },
+              ]}
             />
           </Slide>
         </Deck>,
@@ -171,39 +215,54 @@ describe("native Cartesian charts", () => {
           <Chart
             id="entering-chart"
             name="entering-chart"
-            kind="column"
             x={0}
             y={0}
             width={200}
             height={120}
-            data={{ categories: ["A"], series: [{ name: "S", values: [1] }] }}
             enter={fade({ duration: 700 })}
             emphasis={spin({ duration: 250, from: 180 })}
+            groups={[
+              {
+                kind: "column",
+                data: { kind: "shared-categories", categories: ["A"] },
+                series: [{ name: "S", values: [1] }],
+              },
+            ]}
           />
           <Step n={3}>
             <Chart
               id="click-chart"
               name="click-chart"
-              kind="line"
               x={220}
               y={0}
               width={200}
               height={120}
-              data={{ categories: ["A"], series: [{ name: "S", values: [1] }] }}
               enter={fade({ duration: 300 })}
+              groups={[
+                {
+                  kind: "line",
+                  data: { kind: "shared-categories", categories: ["A"] },
+                  series: [{ name: "S", values: [1] }],
+                },
+              ]}
             />
           </Step>
           <Chart
             id="disabled-chart"
             name="disabled-chart"
-            kind="area"
             x={440}
             y={0}
             width={200}
             height={120}
-            data={{ categories: ["A"], series: [{ name: "S", values: [1] }] }}
             enter={fade()}
             motion={false}
+            groups={[
+              {
+                kind: "area",
+                data: { kind: "shared-categories", categories: ["A"] },
+                series: [{ name: "S", values: [1] }],
+              },
+            ]}
           />
         </Slide>
       </Deck>,
@@ -301,13 +360,18 @@ describe("native Cartesian charts", () => {
           <Slide id="invalid-chart-motion">
             <Chart
               id="invalid-motion"
-              kind="column"
               x={0}
               y={0}
               width={200}
               height={120}
-              data={{ categories: ["A"], series: [{ name: "S", values: [1] }] }}
               enter={fade({ duration: 0 })}
+              groups={[
+                {
+                  kind: "column",
+                  data: { kind: "shared-categories", categories: ["A"] },
+                  series: [{ name: "S", values: [1] }],
+                },
+              ]}
             />
           </Slide>
         </Deck>,
@@ -331,23 +395,36 @@ describe("native Cartesian charts", () => {
           <Chart
             id="sales"
             name="sales"
-            kind="column"
             x={32}
             y={48}
             width={560}
             height={360}
-            data={{
-              categories: ["一季度", "二季度"],
-              series: [
-                { name: "北区", values: [14, null], color: "#336699" },
-                { name: "南区", values: [21, 28] },
-              ],
-            }}
             legend="right"
-            gapWidth={80}
-            overlap={-25}
-            valueAxis={{ max: 40, majorUnit: 10, numberFormat: "#,##0" }}
             plotArea={{ left: 56, top: 24, width: 440, height: 290 }}
+            axes={{
+              category: { kind: "category" },
+              value: {
+                kind: "value",
+                max: 40,
+                majorUnit: 10,
+                numberFormat: "#,##0",
+              },
+            }}
+            groups={[
+              {
+                kind: "column",
+                data: {
+                  kind: "shared-categories",
+                  categories: ["一季度", "二季度"],
+                },
+                series: [
+                  { name: "北区", values: [14, null], color: "#336699" },
+                  { name: "南区", values: [21, 28] },
+                ],
+                gapWidth: 80,
+                overlap: -25,
+              },
+            ]}
           />
         </Slide>
       </Deck>,
@@ -402,38 +479,35 @@ describe("native Cartesian charts", () => {
 
     const file = await validatePptx(result.pptx);
     assert.deepEqual(file.errors, []);
+    const categories = ["一季度", "二季度"];
+    const series = [
+      { name: "北区", values: [14, null] },
+      { name: "南区", values: [21, 28] },
+    ];
+    const observed = fileSeries(categories, series);
     assert.deepEqual(file.slides[0]?.objects[0]?.chart, {
       types: ["barChart"],
       direction: "col",
       grouping: "clustered",
-      series: [
+      series: observed,
+      groups: [
         {
-          name: "北区",
-          categories: ["一季度", "二季度"],
-          values: [14, null],
+          type: "barChart",
+          direction: "col",
+          grouping: "clustered",
+          axisIds: [111111, 222222],
+          seriesIndices: [0, 1],
         },
-        {
-          name: "南区",
-          categories: ["一季度", "二季度"],
-          values: [21, 28],
-        },
+      ],
+      axes: [
+        { id: 111111, kind: "category", crossAxisId: 222222 },
+        { id: 222222, kind: "value", crossAxisId: 111111 },
       ],
       embeddedWorkbook: {
         part: "ppt/embeddings/Microsoft_Excel_Worksheet1.xlsx",
         sheetName: "Sheet1",
-        categories: ["一季度", "二季度"],
-        series: [
-          {
-            name: "北区",
-            categories: ["一季度", "二季度"],
-            values: [14, null],
-          },
-          {
-            name: "南区",
-            categories: ["一季度", "二季度"],
-            values: [21, 28],
-          },
-        ],
+        categories,
+        series: observed,
       },
     });
   });
@@ -456,91 +530,135 @@ describe("native Cartesian charts", () => {
         <Slide id="chart-types">
           <Chart
             id="column"
-            kind="column"
             x={0}
             y={0}
             width={300}
             height={200}
-            data={data}
-            stacking="stacked"
-            gapWidth={40}
-            overlap={-10}
             legend="top"
-            dataLabels={{
-              value: true,
-              category: true,
-              position: "insideBase",
-              style: {
-                fontSize: "12pt",
-                lineHeight: "20pt",
-                verticalAlign: "middle",
+            plotArea={{ left: 24, top: 16, width: 260, height: 160 }}
+            axes={{
+              category: {
+                kind: "category",
+                visible: true,
+                line: { color: "#112233", width: 1 },
+                gridlines: true,
+              },
+              value: {
+                kind: "value",
+                min: 0,
+                max: 10,
+                majorUnit: 2,
+                numberFormat: "0.0",
+                gridlines: { color: "#888888", width: 0.5 },
+                line: false,
               },
             }}
-            categoryAxis={{
-              visible: true,
-              line: { color: "#112233", width: 1 },
-              gridlines: true,
-            }}
-            valueAxis={{
-              min: 0,
-              max: 10,
-              majorUnit: 2,
-              numberFormat: "0.0",
-              gridlines: { color: "#888888", width: 0.5 },
-              line: false,
-            }}
-            plotArea={{ left: 24, top: 16, width: 260, height: 160 }}
+            groups={[
+              {
+                kind: "column",
+                data: {
+                  kind: "shared-categories",
+                  categories: data.categories,
+                },
+                series: data.series,
+                stacking: "stacked",
+                gapWidth: 40,
+                overlap: -10,
+                dataLabels: {
+                  value: true,
+                  category: true,
+                  position: "insideBase",
+                  style: {
+                    fontSize: "12pt",
+                    lineHeight: "20pt",
+                    verticalAlign: "middle",
+                  },
+                },
+              },
+            ]}
           />
           <Chart
             id="bar"
-            kind="bar"
             x={0}
             y={210}
             width={300}
             height={200}
-            data={data}
-            stacking="percent"
-            gapWidth={100}
-            dataLabels={{
-              percent: true,
-              value: true,
-              category: true,
-              position: "insideEnd",
-            }}
+            groups={[
+              {
+                kind: "bar",
+                data: {
+                  kind: "shared-categories",
+                  categories: data.categories,
+                },
+                series: data.series,
+                stacking: "percent",
+                gapWidth: 100,
+                dataLabels: {
+                  percent: true,
+                  value: true,
+                  category: true,
+                  position: "insideEnd",
+                },
+              },
+            ]}
           />
           <Chart
             id="line"
-            kind="line"
             x={310}
             y={0}
             width={300}
             height={200}
-            data={data}
-            stacking="stacked"
-            dataLabels={{ value: true, category: true }}
             style={{ fontFamily: "Aptos", fontSize: "12pt", color: "#224466" }}
+            groups={[
+              {
+                kind: "line",
+                data: {
+                  kind: "shared-categories",
+                  categories: data.categories,
+                },
+                series: data.series,
+                stacking: "stacked",
+                dataLabels: { value: true, category: true },
+              },
+            ]}
           />
           <Chart
             id="area"
-            kind="area"
             x={310}
             y={210}
             width={300}
             height={200}
-            data={data}
-            stacking="percent"
             legend={false}
+            groups={[
+              {
+                kind: "area",
+                data: {
+                  kind: "shared-categories",
+                  categories: data.categories,
+                },
+                series: data.series,
+                stacking: "percent",
+              },
+            ]}
           />
         </Slide>
         <Slide id="second-page">
           <Chart
             id="second-page-chart"
-            kind="column"
             x={0}
             y={0}
             width={200}
             height={120}
-            data={data}
+            groups={[
+              {
+                kind: "column",
+                data: {
+                  kind: "shared-categories",
+                  categories: data.categories,
+                },
+                series: data.series,
+              },
+            ]}
           />
         </Slide>
       </Deck>,
@@ -553,18 +671,10 @@ describe("native Cartesian charts", () => {
     const expectedTypes = ["barChart", "barChart", "lineChart", "areaChart"];
     for (const [index, expectedType] of expectedTypes.entries()) {
       assert.deepEqual(charts?.[index]?.types, [expectedType]);
-      assert.deepEqual(charts?.[index]?.series, [
-        {
-          name: "Primary",
-          categories: ["FY1", "FY2", "FY3"],
-          values: [6, 0, null],
-        },
-        {
-          name: "Secondary",
-          categories: ["FY1", "FY2", "FY3"],
-          values: [2, 4, 8],
-        },
-      ]);
+      assert.deepEqual(
+        charts?.[index]?.series,
+        fileSeries(["FY1", "FY2", "FY3"], data.series),
+      );
       assert.deepEqual(
         charts?.[index]?.embeddedWorkbook?.series,
         charts?.[index]?.series,
@@ -622,18 +732,7 @@ describe("native Cartesian charts", () => {
     );
     assert.deepEqual(
       file.slides[1]?.objects[0]?.chart?.embeddedWorkbook?.series,
-      [
-        {
-          name: "Primary",
-          categories: ["FY1", "FY2", "FY3"],
-          values: [6, 0, null],
-        },
-        {
-          name: "Secondary",
-          categories: ["FY1", "FY2", "FY3"],
-          values: [2, 4, 8],
-        },
-      ],
+      fileSeries(["FY1", "FY2", "FY3"], data.series),
     );
   });
 
@@ -662,46 +761,56 @@ describe("native Cartesian charts", () => {
           <Chart
             id="pie"
             name="pie"
-            kind="pie"
             x={20}
             y={20}
             width={350}
             height={350}
-            data={{ categories, series: [pieSeries] }}
-            explosion={25.5}
-            firstSliceAngle={359.5}
             enter={fade({ duration: 500 })}
             legend="top"
-            dataLabels={{
-              value: true,
-              percent: true,
-              category: true,
-              position: "outsideEnd",
-              numberFormat: "0.0%",
-              style: {
-                fontFamily: "Aptos",
-                fontSize: "12pt",
-                color: "#112233",
+            groups={[
+              {
+                kind: "pie",
+                data: { kind: "shared-categories", categories: categories },
+                series: [pieSeries],
+                explosion: 25.5,
+                firstSliceAngle: 359.5,
+                dataLabels: {
+                  value: true,
+                  percent: true,
+                  category: true,
+                  position: "outsideEnd",
+                  numberFormat: "0.0%",
+                  style: {
+                    fontFamily: "Aptos",
+                    fontSize: "12pt",
+                    color: "#112233",
+                  },
+                },
               },
-            }}
+            ]}
           />
           <Chart
             id="doughnut"
             name="doughnut"
-            kind="doughnut"
             x={410}
             y={20}
             width={350}
             height={350}
-            data={{ categories, series: [doughnutSeries] }}
-            explosion={400}
-            firstSliceAngle={360}
-            holeSize={89.5}
             legend={false}
-            dataLabels={{
-              value: true,
-              category: true,
-            }}
+            groups={[
+              {
+                kind: "doughnut",
+                data: { kind: "shared-categories", categories: categories },
+                series: [doughnutSeries],
+                explosion: 400,
+                firstSliceAngle: 360,
+                holeSize: 89.5,
+                dataLabels: {
+                  value: true,
+                  category: true,
+                },
+              },
+            ]}
           />
         </Slide>
       </Deck>,
@@ -722,19 +831,24 @@ describe("native Cartesian charts", () => {
       file.slides[0]?.objects.map(({ chart }) => chart?.types),
       [["pieChart"], ["doughnutChart"]],
     );
-    assert.deepEqual(file.slides[0]?.objects[0]?.chart?.series, [
-      { name: "渠道 & mix", categories, values: [72.5, 27.5, null] },
+    const observedPie = fileSeries(categories, [
+      { name: "渠道 & mix", values: [72.5, 27.5, null] },
     ]);
+    const observedDoughnut = fileSeries(categories, [
+      { name: "Q1", values: [10, null, 30] },
+    ]);
+    assert.deepEqual(file.slides[0]?.objects[0]?.chart?.series, observedPie);
     assert.deepEqual(
       file.slides[0]?.objects[0]?.chart?.embeddedWorkbook?.series,
-      [{ name: "渠道 & mix", categories, values: [72.5, 27.5, null] }],
+      observedPie,
     );
-    assert.deepEqual(file.slides[0]?.objects[1]?.chart?.series, [
-      { name: "Q1", categories, values: [10, null, 30] },
-    ]);
+    assert.deepEqual(
+      file.slides[0]?.objects[1]?.chart?.series,
+      observedDoughnut,
+    );
     assert.deepEqual(
       file.slides[0]?.objects[1]?.chart?.embeddedWorkbook?.series,
-      [{ name: "Q1", categories, values: [10, null, 30] }],
+      observedDoughnut,
     );
 
     const pieXml = strFromU8(parts["ppt/charts/chart1.xml"]!);
@@ -808,13 +922,21 @@ describe("native Cartesian charts", () => {
               <Chart
                 key={`${kind}-${label}`}
                 id={`${kind}-${label}`}
-                kind={kind}
                 x={0}
                 y={0}
                 width={200}
                 height={120}
-                data={data}
-                explosion={explosion}
+                groups={[
+                  {
+                    kind: kind,
+                    data: {
+                      kind: "shared-categories",
+                      categories: data.categories,
+                    },
+                    series: data.series,
+                    explosion: explosion,
+                  },
+                ]}
               />
             )),
           )}
@@ -867,13 +989,21 @@ describe("native Cartesian charts", () => {
               <Slide id={testId}>
                 <Chart
                   id={testId}
-                  kind={kind}
                   x={0}
                   y={0}
                   width={200}
                   height={120}
-                  data={data}
-                  explosion={explosion}
+                  groups={[
+                    {
+                      kind: kind,
+                      data: {
+                        kind: "shared-categories",
+                        categories: data.categories,
+                      },
+                      series: data.series,
+                      explosion: explosion,
+                    },
+                  ]}
                 />
               </Slide>
             </Deck>,
@@ -893,22 +1023,20 @@ describe("native Cartesian charts", () => {
   });
 
   it("rejects invalid combinations of pie series, values, and parameters", async () => {
+    const data = {
+      kind: "shared-categories" as const,
+      categories: ["A", "B"],
+    };
+    const series = [{ name: "S", values: [1, 2] }];
+    const twoSeries = [
+      { name: "S", values: [1, 2] },
+      { name: "T", values: [3, 4] },
+    ];
     const base = {
       x: 0,
       y: 0,
       width: 200,
       height: 120,
-      data: {
-        categories: ["A", "B"],
-        series: [{ name: "S", values: [1, 2] }],
-      },
-    } as const;
-    const twoSeries = {
-      ...base.data,
-      series: [
-        { name: "S", values: [1, 2] },
-        { name: "T", values: [3, 4] },
-      ],
     } as const;
     const invalidCases: {
       readonly id: string;
@@ -919,67 +1047,102 @@ describe("native Cartesian charts", () => {
       {
         id: "pie-series-count",
         code: "invalid-data",
-        props: { ...base, kind: "pie", data: twoSeries },
+        props: {
+          ...base,
+          groups: [{ kind: "pie", data, series: twoSeries }],
+        },
       },
       {
         id: "doughnut-series-count",
         code: "invalid-data",
-        props: { ...base, kind: "doughnut", data: twoSeries },
+        props: {
+          ...base,
+          groups: [{ kind: "doughnut", data, series: twoSeries }],
+        },
       },
       {
         id: "pie-negative-value",
         code: "invalid-data",
         props: {
           ...base,
-          kind: "pie",
-          data: {
-            categories: ["A", "B"],
-            series: [{ name: "S", values: [1, -2] }],
-          },
+          groups: [
+            {
+              kind: "pie",
+              data,
+              series: [{ name: "S", values: [1, -2] }],
+            },
+          ],
         },
       },
       {
         id: "pie-angle-overflow",
         code: "invalid-chart-option",
-        props: { ...base, kind: "pie", firstSliceAngle: 360.1 },
+        props: {
+          ...base,
+          groups: [{ kind: "pie", data, series, firstSliceAngle: 360.1 }],
+        },
       },
       {
         id: "doughnut-hole-underflow",
         code: "invalid-chart-option",
-        props: { ...base, kind: "doughnut", holeSize: 9.9 },
+        props: {
+          ...base,
+          groups: [{ kind: "doughnut", data, series, holeSize: 9.9 }],
+        },
       },
       {
         id: "doughnut-hole-overflow",
         code: "invalid-chart-option",
-        props: { ...base, kind: "doughnut", holeSize: 90.1 },
+        props: {
+          ...base,
+          groups: [{ kind: "doughnut", data, series, holeSize: 90.1 }],
+        },
       },
       {
         id: "pie-explosion-underflow",
         code: "invalid-chart-option",
-        props: { ...base, kind: "pie", explosion: -1 },
+        props: {
+          ...base,
+          groups: [{ kind: "pie", data, series, explosion: -1 }],
+        },
       },
       {
         id: "pie-explosion-overflow",
         code: "invalid-chart-option",
-        props: { ...base, kind: "pie", explosion: 4_294_967_296 },
+        props: {
+          ...base,
+          groups: [{ kind: "pie", data, series, explosion: 4_294_967_296 }],
+        },
       },
       {
         id: "pie-hole-size",
         code: "invalid-chart-option",
         props: {
           ...base,
-          kind: "pie",
-          holeSize: 50,
-        } as unknown as ChartProps,
+          groups: [
+            {
+              kind: "pie",
+              data,
+              series,
+              holeSize: 50,
+            } as unknown as ChartProps["groups"][number],
+          ],
+        },
       },
       {
         id: "doughnut-stacking",
         code: "invalid-chart-option",
         props: {
           ...base,
-          kind: "doughnut",
-          stacking: "stacked",
-        } as unknown as ChartProps,
+          groups: [
+            {
+              kind: "doughnut",
+              data,
+              series,
+              stacking: "stacked",
+            } as unknown as ChartProps["groups"][number],
+          ],
+        },
       },
       {
         id: "doughnut-label-position",
@@ -988,8 +1151,14 @@ describe("native Cartesian charts", () => {
           "Office does not allow dLblPos for doughnutChart series data labels",
         props: {
           ...base,
-          kind: "doughnut",
-          dataLabels: { value: true, position: "bestFit" },
+          groups: [
+            {
+              kind: "doughnut",
+              data,
+              series,
+              dataLabels: { value: true, position: "bestFit" },
+            },
+          ],
         } as unknown as ChartProps,
       },
       {
@@ -999,8 +1168,14 @@ describe("native Cartesian charts", () => {
           'Office does not allow dLblPos="inBase" for pieChart series data labels',
         props: {
           ...base,
-          kind: "pie",
-          dataLabels: { value: true, position: "insideBase" },
+          groups: [
+            {
+              kind: "pie",
+              data,
+              series,
+              dataLabels: { value: true, position: "insideBase" },
+            },
+          ],
         } as unknown as ChartProps,
       },
       {
@@ -1010,8 +1185,14 @@ describe("native Cartesian charts", () => {
           'Office does not allow dLblPos="bestFit" for barChart series data labels',
         props: {
           ...base,
-          kind: "column",
-          dataLabels: { value: true, position: "bestFit" },
+          groups: [
+            {
+              kind: "column",
+              data,
+              series,
+              dataLabels: { value: true, position: "bestFit" },
+            },
+          ],
         } as unknown as ChartProps,
       },
       {
@@ -1021,9 +1202,15 @@ describe("native Cartesian charts", () => {
           'Office does not allow dLblPos="outEnd" for stacked barChart series data labels',
         props: {
           ...base,
-          kind: "column",
-          stacking: "stacked",
-          dataLabels: { value: true, position: "outsideEnd" },
+          groups: [
+            {
+              kind: "column",
+              data,
+              series,
+              stacking: "stacked",
+              dataLabels: { value: true, position: "outsideEnd" },
+            },
+          ],
         } as unknown as ChartProps,
       },
       {
@@ -1033,8 +1220,14 @@ describe("native Cartesian charts", () => {
           "Chart generation does not expose explicit data label positions for line charts",
         props: {
           ...base,
-          kind: "line",
-          dataLabels: { value: true, position: "center" },
+          groups: [
+            {
+              kind: "line",
+              data,
+              series,
+              dataLabels: { value: true, position: "center" },
+            },
+          ],
         } as unknown as ChartProps,
       },
     ];
@@ -1070,33 +1263,48 @@ describe("native Cartesian charts", () => {
         <Slide id="chart-label-position-context">
           <Chart
             id="line-label-position"
-            kind="line"
             x={0}
             y={0}
             width={200}
             height={120}
-            data={{ categories: ["A"], series: [{ name: "S", values: [1] }] }}
-            dataLabels={{ value: true }}
+            groups={[
+              {
+                kind: "line",
+                data: { kind: "shared-categories", categories: ["A"] },
+                series: [{ name: "S", values: [1] }],
+                dataLabels: { value: true },
+              },
+            ]}
           />
           <Chart
             id="clustered-label-position"
-            kind="column"
             x={220}
             y={0}
             width={200}
             height={120}
-            data={{ categories: ["A"], series: [{ name: "S", values: [1] }] }}
-            dataLabels={{ value: true, position: "outsideEnd" }}
+            groups={[
+              {
+                kind: "column",
+                data: { kind: "shared-categories", categories: ["A"] },
+                series: [{ name: "S", values: [1] }],
+                dataLabels: { value: true, position: "outsideEnd" },
+              },
+            ]}
           />
           <Chart
             id="doughnut-label-position"
-            kind="doughnut"
             x={440}
             y={0}
             width={200}
             height={120}
-            data={{ categories: ["A"], series: [{ name: "S", values: [1] }] }}
-            dataLabels={{ value: true }}
+            groups={[
+              {
+                kind: "doughnut",
+                data: { kind: "shared-categories", categories: ["A"] },
+                series: [{ name: "S", values: [1] }],
+                dataLabels: { value: true },
+              },
+            ]}
           />
         </Slide>
       </Deck>,
@@ -1172,12 +1380,17 @@ describe("native Cartesian charts", () => {
         <Slide id="invalid-workbook-relation">
           <Chart
             id="missing-workbook-relation"
-            kind="line"
             x={0}
             y={0}
             width={200}
             height={120}
-            data={{ categories: ["A"], series: [{ name: "S", values: [1] }] }}
+            groups={[
+              {
+                kind: "line",
+                data: { kind: "shared-categories", categories: ["A"] },
+                series: [{ name: "S", values: [1] }],
+              },
+            ]}
           />
         </Slide>
       </Deck>,
@@ -1208,12 +1421,17 @@ describe("native Cartesian charts", () => {
         <Slide id="renamed-chart-sheet">
           <Chart
             id="renamed-chart-sheet"
-            kind="line"
             x={0}
             y={0}
             width={200}
             height={120}
-            data={{ categories: ["A"], series: [{ name: "S", values: [1] }] }}
+            groups={[
+              {
+                kind: "line",
+                data: { kind: "shared-categories", categories: ["A"] },
+                series: [{ name: "S", values: [1] }],
+              },
+            ]}
           />
         </Slide>
       </Deck>,
@@ -1256,16 +1474,21 @@ describe("native Cartesian charts", () => {
             <Slide id={id}>
               <Chart
                 id={id}
-                kind="column"
                 x={0}
                 y={0}
                 width={200}
                 height={120}
-                data={{
-                  categories: ["A"],
-                  series: [{ name: "S", values: [1] }],
+                axes={{
+                  category: { kind: "category" },
+                  value: { kind: "value", ...valueAxis },
                 }}
-                valueAxis={valueAxis}
+                groups={[
+                  {
+                    kind: "column",
+                    data: { kind: "shared-categories", categories: ["A"] },
+                    series: [{ name: "S", values: [1] }],
+                  },
+                ]}
               />
             </Slide>
           </Deck>,
@@ -1288,13 +1511,21 @@ describe("native Cartesian charts", () => {
         <Slide id="maximum-axis-line-width">
           <Chart
             id="maximum-axis-line-width"
-            kind="column"
             x={0}
             y={0}
             width={200}
             height={120}
-            data={{ categories: ["A"], series: [{ name: "S", values: [1] }] }}
-            valueAxis={{ line: { width: maximumWidth } }}
+            axes={{
+              category: { kind: "category" },
+              value: { kind: "value", line: { width: maximumWidth } },
+            }}
+            groups={[
+              {
+                kind: "column",
+                data: { kind: "shared-categories", categories: ["A"] },
+                series: [{ name: "S", values: [1] }],
+              },
+            ]}
           />
         </Slide>
       </Deck>,
@@ -1314,15 +1545,17 @@ describe("native Cartesian charts", () => {
           <Slide id="sparse-chart-data">
             <Chart
               id="sparse-values"
-              kind="column"
               x={0}
               y={0}
               width={200}
               height={120}
-              data={{
-                categories: ["A", "B"],
-                series: [{ name: "S", values: sparseValues }],
-              }}
+              groups={[
+                {
+                  kind: "column",
+                  data: { kind: "shared-categories", categories: ["A", "B"] },
+                  series: [{ name: "S", values: sparseValues }],
+                },
+              ]}
             />
           </Slide>
         </Deck>,
@@ -1352,16 +1585,21 @@ describe("native Cartesian charts", () => {
             <Slide id={`category-axis-${option}`}>
               <Chart
                 id="category-axis-option"
-                kind="column"
                 x={0}
                 y={0}
                 width={200}
                 height={120}
-                data={{
-                  categories: ["A"],
-                  series: [{ name: "S", values: [1] }],
+                axes={{
+                  category: { kind: "category", [option]: value },
+                  value: { kind: "value" },
                 }}
-                categoryAxis={{ [option]: value }}
+                groups={[
+                  {
+                    kind: "column",
+                    data: { kind: "shared-categories", categories: ["A"] },
+                    series: [{ name: "S", values: [1] }],
+                  },
+                ]}
               />
             </Slide>
           </Deck>,
@@ -1380,43 +1618,72 @@ describe("native Cartesian charts", () => {
   });
 
   it("rejects invalid data and inapplicable parameter combinations with located build errors", async () => {
+    const singleData = {
+      kind: "shared-categories" as const,
+      categories: ["A"],
+    };
+    const singleSeries = [{ name: "S", values: [1] }];
     const invalidDoughnutLabels: ChartProps = {
-      kind: "doughnut",
-      data: { categories: ["A"], series: [{ name: "S", values: [1] }] },
-      // @ts-expect-error -- doughnut chart groups do not allow explicit label positions
-      dataLabels: { position: "center" },
-    };
-    // @ts-expect-error -- pie chart groups do not allow insideBase labels
+      groups: [
+        {
+          kind: "doughnut",
+          data: singleData,
+          series: singleSeries,
+          dataLabels: { position: "center" },
+        },
+      ],
+    } as unknown as ChartProps;
     const invalidPieLabels: ChartProps = {
-      kind: "pie",
-      data: { categories: ["A"], series: [{ name: "S", values: [1] }] },
-      dataLabels: { position: "insideBase" },
-    };
-    // @ts-expect-error -- bestFit labels are unsupported for bar chart groups
+      groups: [
+        {
+          kind: "pie",
+          data: singleData,
+          series: singleSeries,
+          dataLabels: { position: "insideBase" },
+        },
+      ],
+    } as unknown as ChartProps;
     const invalidColumnLabels: ChartProps = {
-      kind: "column",
-      data: { categories: ["A"], series: [{ name: "S", values: [1] }] },
-      dataLabels: { position: "bestFit" },
-    };
-    // @ts-expect-error -- stacked bar chart groups do not allow outsideEnd labels
+      groups: [
+        {
+          kind: "column",
+          data: singleData,
+          series: singleSeries,
+          dataLabels: { position: "bestFit" },
+        },
+      ],
+    } as unknown as ChartProps;
     const invalidStackedColumnLabels: ChartProps = {
-      kind: "column",
-      stacking: "stacked",
-      data: { categories: ["A"], series: [{ name: "S", values: [1] }] },
-      dataLabels: { position: "outsideEnd" },
-    };
+      groups: [
+        {
+          kind: "column",
+          data: singleData,
+          series: singleSeries,
+          stacking: "stacked",
+          dataLabels: { position: "outsideEnd" },
+        },
+      ],
+    } as unknown as ChartProps;
     const invalidLineLabels: ChartProps = {
-      kind: "line",
-      data: { categories: ["A"], series: [{ name: "S", values: [1] }] },
-      // @ts-expect-error -- line chart data label positions are not exposed by Chart
-      dataLabels: { position: "center" },
-    };
+      groups: [
+        {
+          kind: "line",
+          data: singleData,
+          series: singleSeries,
+          dataLabels: { position: "center" },
+        },
+      ],
+    } as unknown as ChartProps;
     const invalidAreaLabels: ChartProps = {
-      kind: "area",
-      data: { categories: ["A"], series: [{ name: "S", values: [1] }] },
-      // @ts-expect-error -- area chart groups do not allow explicit label positions
-      dataLabels: { position: "insideEnd" },
-    };
+      groups: [
+        {
+          kind: "area",
+          data: singleData,
+          series: singleSeries,
+          dataLabels: { position: "insideEnd" },
+        },
+      ],
+    } as unknown as ChartProps;
     void [
       invalidDoughnutLabels,
       invalidPieLabels,
@@ -1432,15 +1699,17 @@ describe("native Cartesian charts", () => {
           <Slide id="invalid-data">
             <Chart
               id="mismatched"
-              kind="column"
               x={0}
               y={0}
               width={200}
               height={120}
-              data={{
-                categories: ["A", "B"],
-                series: [{ name: "S", values: [1] }],
-              }}
+              groups={[
+                {
+                  kind: "column",
+                  data: { kind: "shared-categories", categories: ["A", "B"] },
+                  series: [{ name: "S", values: [1] }],
+                },
+              ]}
             />
           </Slide>
         </Deck>,
@@ -1461,15 +1730,19 @@ describe("native Cartesian charts", () => {
     );
 
     const invalidLineProps: ChartProps = {
-      kind: "line",
       x: 0,
       y: 0,
       width: 100,
       height: 100,
-      data: { categories: ["A"], series: [{ name: "S", values: [1] }] },
-      // @ts-expect-error -- gapWidth only applies to column and bar charts
-      gapWidth: 40,
-    };
+      groups: [
+        {
+          kind: "line",
+          data: singleData,
+          series: singleSeries,
+          gapWidth: 40,
+        },
+      ],
+    } as unknown as ChartProps;
     const invalidLine = <Chart {...invalidLineProps} />;
     await assert.rejects(
       build(
@@ -1496,16 +1769,18 @@ describe("native Cartesian charts", () => {
           <Slide id="single-chart-parse">
             <Chart
               id="piloted-chart"
-              kind="column"
               x={50}
               y={50}
               width={400}
               height={300}
-              data={{
-                categories: ["Q1", "Q2"],
-                series: [{ name: "Sales", values: [100, 150] }],
-              }}
               style={{ fontSize: 14, color: "#333333" }}
+              groups={[
+                {
+                  kind: "column",
+                  data: { kind: "shared-categories", categories: ["Q1", "Q2"] },
+                  series: [{ name: "Sales", values: [100, 150] }],
+                },
+              ]}
             />
           </Slide>
         </Deck>,
@@ -1520,13 +1795,15 @@ describe("native Cartesian charts", () => {
       const parsedResult = parseSpy.mock.results[0]?.value;
       assert.ok(parsedResult);
       assert.equal(parsedResult.contract.nativeKind, "graphicFrame");
-      assert.equal(parsedResult.parsed.kind, "column");
-      assert.equal(parsedResult.parsed.data.categories.length, 2);
+      assert.equal(parsedResult.parsed.groups[0]?.kind, "column");
+      assert.equal(parsedResult.parsed.categories.length, 2);
+      assert.equal(parsedResult.parsed.series.length, 1);
+      assert.equal(parsedResult.parsed.series[0]?.seriesIndex, 0);
 
       assert.equal(compileSpy.mock.calls.length, 1);
       assert.equal(
-        compileSpy.mock.calls[0]?.[0]?.data,
-        parsedResult.parsed.data,
+        compileSpy.mock.calls[0]?.[0]?.groups,
+        parsedResult.parsed.groups,
       );
 
       const validation = await validatePptx(result.pptx);
@@ -1544,12 +1821,17 @@ describe("native Cartesian charts", () => {
         <Deck width={960} height={540}>
           <Slide id="chart-text-wrap">
             <Chart
-              kind="column"
               width={200}
               height={150}
-              data={{ categories: ["A"], series: [{ name: "S", values: [1] }] }}
               // @ts-expect-error -- textWrap is explicitly rejected on Chart
               style={{ textWrap: "wrap" }}
+              groups={[
+                {
+                  kind: "column",
+                  data: { kind: "shared-categories", categories: ["A"] },
+                  series: [{ name: "S", values: [1] }],
+                },
+              ]}
             />
           </Slide>
         </Deck>,
@@ -1567,12 +1849,17 @@ describe("native Cartesian charts", () => {
         <Deck width={960} height={540}>
           <Slide id="chart-unknown-style">
             <Chart
-              kind="column"
               width={200}
               height={150}
-              data={{ categories: ["A"], series: [{ name: "S", values: [1] }] }}
               // @ts-expect-error -- testing unknown style property
               style={{ unknownProp: "forbidden" }}
+              groups={[
+                {
+                  kind: "column",
+                  data: { kind: "shared-categories", categories: ["A"] },
+                  series: [{ name: "S", values: [1] }],
+                },
+              ]}
             />
           </Slide>
         </Deck>,
@@ -1590,12 +1877,17 @@ describe("native Cartesian charts", () => {
         <Deck width={960} height={540}>
           <Slide id="chart-unknown-param">
             <Chart
-              kind="column"
               width={200}
               height={150}
-              data={{ categories: ["A"], series: [{ name: "S", values: [1] }] }}
               // @ts-expect-error -- testing unknown parameter
               unknownParameter="forbidden"
+              groups={[
+                {
+                  kind: "column",
+                  data: { kind: "shared-categories", categories: ["A"] },
+                  series: [{ name: "S", values: [1] }],
+                },
+              ]}
             />
           </Slide>
         </Deck>,
@@ -1613,11 +1905,16 @@ describe("native Cartesian charts", () => {
         <Deck width={960} height={540}>
           <Slide id="chart-padding">
             <Chart
-              kind="column"
               width={200}
               height={150}
-              data={{ categories: ["A"], series: [{ name: "S", values: [1] }] }}
               style={{ padding: 10 }}
+              groups={[
+                {
+                  kind: "column",
+                  data: { kind: "shared-categories", categories: ["A"] },
+                  series: [{ name: "S", values: [1] }],
+                },
+              ]}
             />
           </Slide>
         </Deck>,
@@ -1628,5 +1925,64 @@ describe("native Cartesian charts", () => {
         return true;
       },
     );
+  });
+  it("produces the same native chart from the React and command entries", async () => {
+    const config: ChartProps = {
+      id: "dual-entry-chart",
+      x: 12,
+      y: 16,
+      width: 420,
+      height: 260,
+      axes: {
+        period: { kind: "category" },
+        amount: { kind: "value", min: 0, max: 40, majorUnit: 10 },
+      },
+      groups: [
+        {
+          kind: "column",
+          axes: { category: "period", value: "amount" },
+          data: {
+            kind: "shared-categories",
+            categories: ["Q1", "Q1", "Q3"],
+          },
+          series: [{ name: "North", values: [14, null, 18] }],
+        },
+      ],
+    };
+    const reactResult = await build(
+      <Deck width={640} height={480}>
+        <Slide id="dual-entry">
+          <Chart {...config} />
+        </Slide>
+      </Deck>,
+    );
+    const documentResult = await buildDocument(
+      deck({ width: 640, height: 480 }).append(
+        documentSlide({ id: "dual-entry" }).append(documentChart(config)),
+      ),
+    );
+    const reactFile = await validatePptx(reactResult.pptx);
+    const documentFile = await validatePptx(documentResult.pptx);
+    assert.deepEqual(reactFile.errors, []);
+    assert.deepEqual(documentFile.errors, []);
+    assert.deepEqual(
+      reactFile.slides[0]?.objects[0]?.chart,
+      documentFile.slides[0]?.objects[0]?.chart,
+    );
+    const reactParts = unzipSync(reactResult.pptx);
+    const documentParts = unzipSync(documentResult.pptx);
+    assert.equal(
+      strFromU8(reactParts["ppt/charts/chart1.xml"]!),
+      strFromU8(documentParts["ppt/charts/chart1.xml"]!),
+    );
+    assert.deepEqual(reactFile.slides[0]?.objects[0]?.chart?.groups, [
+      {
+        type: "barChart",
+        direction: "col",
+        grouping: "clustered",
+        axisIds: [111111, 222222],
+        seriesIndices: [0],
+      },
+    ]);
   });
 });

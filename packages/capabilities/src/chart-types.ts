@@ -175,6 +175,79 @@ export type ChartTrendline =
       readonly displayRSquared?: never;
     });
 
+/** One native error-bar magnitude or a null slot; null keeps the original position. */
+export type ChartErrorBarValues = readonly (number | null)[];
+
+/** Which side of each data point carries the error bar. */
+export type ChartErrorBarInclude = "both" | "plus" | "minus";
+
+type ChartErrorBarStyle = {
+  /** Whether to draw the native end cap; defaults to true. */
+  readonly endCap?: boolean;
+  /** Error-bar stroke; omitted leaves the target application default. */
+  readonly line?: ChartLine;
+};
+
+type ChartAmountErrorBars = ChartErrorBarStyle & {
+  readonly include?: ChartErrorBarInclude;
+  /** Native fixed value, percentage, or standard-deviation multiplier. */
+  readonly type: "fixed" | "percentage" | "standardDeviation";
+  /** Non-negative magnitude interpreted by the native chart engine. */
+  readonly value: number;
+  readonly plus?: never;
+  readonly minus?: never;
+};
+
+type ChartStandardErrorBars = ChartErrorBarStyle & {
+  readonly include?: ChartErrorBarInclude;
+  /** Native standard error; the target application computes the magnitude. */
+  readonly type: "standardError";
+  readonly value?: never;
+  readonly plus?: never;
+  readonly minus?: never;
+};
+
+type ChartCustomErrorBarsBase = ChartErrorBarStyle & {
+  readonly type: "custom";
+  readonly value?: never;
+};
+
+/**
+ * Custom plus and minus magnitudes, each aligned with the original series slots.
+ *
+ * Both sides are required when `include` is omitted or `both`; otherwise only the
+ * included side is declared. A null magnitude preserves that slot without shifting
+ * later points. The native application determines how null and short data render.
+ */
+export type ChartCustomErrorBars =
+  | (ChartCustomErrorBarsBase & {
+      readonly include?: "both";
+      readonly plus: ChartErrorBarValues;
+      readonly minus: ChartErrorBarValues;
+    })
+  | (ChartCustomErrorBarsBase & {
+      readonly include: "plus";
+      readonly plus: ChartErrorBarValues;
+      readonly minus?: never;
+    })
+  | (ChartCustomErrorBarsBase & {
+      readonly include: "minus";
+      readonly minus: ChartErrorBarValues;
+      readonly plus?: never;
+    });
+
+/** Native error bars owned by a category series; the value axis is their direction. */
+export type ChartErrorBars =
+  | ChartAmountErrorBars
+  | ChartStandardErrorBars
+  | ChartCustomErrorBars;
+
+/** Scatter series error bars, declared independently for the X and Y axes. */
+export type ScatterErrorBars = {
+  readonly x?: ChartErrorBars;
+  readonly y?: ChartErrorBars;
+};
+
 type ChartSeriesFormat = {
   readonly name: string;
   /** Color of column, area, line, pie slice, or scatter markers. */
@@ -202,6 +275,8 @@ export type ChartSeries = ChartSeriesFormat & {
   readonly values: readonly (number | null)[];
   /** Whether the line uses the native smoothing flag; applies only to line charts. */
   readonly smooth?: boolean;
+  /** Native error bars along this series' value direction. */
+  readonly errorBars?: ChartErrorBars;
 };
 
 type ScatterDataLabelContent = {
@@ -253,6 +328,8 @@ export type ScatterChartSeries = Omit<
   readonly dataLabels?: false | ScatterDataLabelOverride;
   /** Overrides color, line, marker, or data label text color for points by position. */
   readonly points?: Readonly<Record<number, ScatterChartPoint>>;
+  /** Native X and Y error bars, declared independently. */
+  readonly errorBars?: ScatterErrorBars;
 };
 
 /**

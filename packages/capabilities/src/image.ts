@@ -20,6 +20,7 @@ import {
   type ObjectCapabilityModule,
   type VisualStyle,
 } from "@react-pptx/core/capability";
+import { CommonNode } from "@react-pptx/core/document";
 
 import type { Geometry } from "./geometry.ts";
 import { nativeLinkXml } from "./identity.ts";
@@ -81,6 +82,21 @@ export type ImageDeclarationProps = MotionProps &
       readonly bottom?: number;
     };
   };
+
+/** Creates the editable native image shared by the command factory and the Image JSX element. */
+export function createImageNode(
+  props: ImageDeclarationProps,
+): CommonNode<
+  "image",
+  ImageDeclarationProps,
+  NonNullable<ImageDeclarationProps["style"]>
+> {
+  return new CommonNode<
+    "image",
+    ImageDeclarationProps,
+    NonNullable<ImageDeclarationProps["style"]>
+  >("image", "rp:image", props);
+}
 
 export type ParsedImage = {
   readonly testId?: string;

@@ -11,21 +11,44 @@ import type {
 import {
   CommonContainer,
   CommonNode,
+  createDeckNode,
+  createSectionNode,
+  createSlideNode,
   RichTextContainer,
   type RichTextItem,
 } from "@react-pptx/core/document";
 
-import { boxCapability, type BoxDeclarationProps } from "./box.ts";
+import {
+  boxCapability,
+  createBoxNode,
+  type BoxDeclarationProps,
+} from "./box.ts";
 import { font } from "./font.ts";
-import { groupCapability, type GroupDeclarationProps } from "./group.ts";
-import { imageCapability, type ImageDeclarationProps } from "./image.ts";
-import { shapeCapability, type ShapeDeclarationProps } from "./shape.ts";
+import {
+  createGroupNode,
+  groupCapability,
+  type GroupDeclarationProps,
+} from "./group.ts";
+import {
+  createImageNode,
+  imageCapability,
+  type ImageDeclarationProps,
+} from "./image.ts";
+import {
+  createShapeNode,
+  shapeCapability,
+  type ShapeDeclarationProps,
+} from "./shape.ts";
 import { slideBackgroundCapability } from "./slide-background.ts";
-import type {
-  ParagraphDeclarationProps,
-  SlideNumberDeclarationProps,
-  SpanDeclarationProps,
-  TextDeclarationProps,
+import {
+  createParagraphNode,
+  createSlideNumberNode,
+  createSpanNode,
+  createTextNode,
+  type ParagraphDeclarationProps,
+  type SlideNumberDeclarationProps,
+  type SpanDeclarationProps,
+  type TextDeclarationProps,
 } from "./text-declaration.ts";
 import { textCapability, type ParsedText } from "./text.ts";
 import { transitionCapability, type Transition } from "./transition.ts";
@@ -155,46 +178,34 @@ function splitContent<Props extends object>(
 }
 
 export function deck(props: DeckAuthorProps = {}): DeckNode {
-  return new CommonContainer("deck", "rp:deck", props);
+  return createDeckNode(props);
 }
 
 export function slide(props: SlideAuthorProps): SlideNode {
-  return new CommonContainer("slide", "rp:slide", props);
+  return createSlideNode(props);
 }
 
 export function section(props: SectionAuthorProps): SectionNode {
-  return new CommonContainer("section", "rp:section", props);
+  return createSectionNode(props);
 }
 
 export function box(props: BoxAuthorProps = {}): BoxNode {
-  return new CommonContainer("box", "rp:box", props);
+  return createBoxNode(props);
 }
 
 /** Creates a native shape whose geometry, visuals, and rich text remain editable after attachment. */
 export function shape(props: ShapeAuthorProps = {}): ShapeNode {
-  return new RichTextContainer<
-    "shape",
-    ShapeDeclarationProps,
-    NonNullable<ShapeDeclarationProps["style"]>
-  >("shape", "rp:shape", props);
+  return createShapeNode(props);
 }
 
 /** Creates a native image whose source bytes, crop, fit, and visuals remain editable after attachment. */
 export function image(props: ImageAuthorProps): ImageNode {
-  return new CommonNode<
-    "image",
-    ImageDeclarationProps,
-    NonNullable<ImageDeclarationProps["style"]>
-  >("image", "rp:image", props);
+  return createImageNode(props);
 }
 
 /** Creates a native group preserving member identity, local theme, and layout children. */
 export function group(props: GroupAuthorProps = {}): GroupNode {
-  return new CommonContainer<
-    "group",
-    GroupDeclarationProps,
-    NonNullable<GroupDeclarationProps["style"]>
-  >("group", "rp:group", props);
+  return createGroupNode(props);
 }
 
 /** Creates a text box whose original reference remains editable after attachment. */
@@ -204,11 +215,7 @@ export function text(
   ...args: readonly (TextContent | TextAuthorProps | undefined)[]
 ): TextNode {
   const { content, props } = splitContent(args);
-  const node = new RichTextContainer<
-    "text",
-    TextAuthorProps,
-    LayoutStyle & PaddingStyle & TextStyle & VisualStyle
-  >("text", "rp:text", props ?? {});
+  const node = createTextNode(props ?? {});
   node.content(...content);
   return node;
 }
@@ -224,11 +231,7 @@ export function paragraph(
   ...args: readonly (ParagraphContent | ParagraphAuthorProps | undefined)[]
 ): ParagraphNode {
   const { content, props } = splitContent(args);
-  const node = new RichTextContainer<
-    "paragraph",
-    ParagraphAuthorProps,
-    NonNullable<ParagraphDeclarationProps["style"]>
-  >("paragraph", "rp:paragraph", props ?? {});
+  const node = createParagraphNode(props ?? {});
   node.content(...content);
   return node;
 }
@@ -239,11 +242,7 @@ export function span(
   ...args: readonly (SpanContent | SpanAuthorProps | undefined)[]
 ): SpanNode {
   const { content, props } = splitContent(args);
-  const node = new RichTextContainer<
-    "span",
-    SpanAuthorProps,
-    NonNullable<SpanDeclarationProps["style"]>
-  >("span", "rp:span", props ?? {});
+  const node = createSpanNode(props ?? {});
   node.content(...content);
   return node;
 }
@@ -252,11 +251,7 @@ export function span(
 export function slideNumber(
   props: SlideNumberAuthorProps = {},
 ): SlideNumberNode {
-  return new CommonNode<
-    "slide-number",
-    SlideNumberAuthorProps,
-    NonNullable<SlideNumberDeclarationProps["style"]>
-  >("slide-number", "rp:slide-number", props);
+  return createSlideNumberNode(props);
 }
 
 /** Baseline capabilities enabled by the public document build; factories never register capabilities. */

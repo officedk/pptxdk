@@ -1,6 +1,7 @@
+import { hostNodeCreator } from "@react-pptx/core/document";
 import type { ReactNode } from "react";
 
-import type { GroupDeclarationProps } from "./group.ts";
+import { createGroupNode, type GroupDeclarationProps } from "./group.ts";
 import { motionElement } from "./motion-elements.ts";
 
 export type GroupProps = GroupDeclarationProps & {
@@ -9,5 +10,8 @@ export type GroupProps = GroupDeclarationProps & {
 
 /** Declares an editable group preserving native member structure within the React tree. */
 export function Group(props: GroupProps): ReactNode {
-  return motionElement("rp:group", props);
+  return motionElement("rp:group", {
+    ...props,
+    [hostNodeCreator]: createGroupNode,
+  });
 }

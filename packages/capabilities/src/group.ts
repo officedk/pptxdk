@@ -21,6 +21,7 @@ import {
   type ThemeScope,
   type VisualStyle,
 } from "@react-pptx/core/capability";
+import { CommonContainer } from "@react-pptx/core/document";
 
 import { groupXml } from "./group-xml.ts";
 import { nativeLinkXml } from "./identity.ts";
@@ -37,6 +38,21 @@ export type GroupDeclarationProps = MotionProps &
     readonly style?: LayoutStyle & TextStyle & Pick<VisualStyle, "rotate">;
     readonly theme?: ThemeScope;
   };
+
+/** Creates the editable native group shared by the command factory and the Group JSX element. */
+export function createGroupNode(
+  props: GroupDeclarationProps,
+): CommonContainer<
+  "group",
+  GroupDeclarationProps,
+  NonNullable<GroupDeclarationProps["style"]>
+> {
+  return new CommonContainer<
+    "group",
+    GroupDeclarationProps,
+    NonNullable<GroupDeclarationProps["style"]>
+  >("group", "rp:group", props);
+}
 
 const allowedParameters = [
   "testId",

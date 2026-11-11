@@ -20,6 +20,7 @@ import {
   type ObjectCapabilityModule,
   type PaddingStyle,
 } from "@react-pptx/core/capability";
+import { RichTextContainer } from "@react-pptx/core/document";
 
 import type { Geometry } from "./geometry.ts";
 export { blockArc, path, preset } from "./geometry.ts";
@@ -105,6 +106,21 @@ export type ParsedShape = {
   readonly contract: CapabilityLayoutContract;
   readonly rawProps: Readonly<Record<string, unknown>>;
 };
+
+/** Creates the editable native shape shared by the command factory and the Shape JSX element. */
+export function createShapeNode(
+  props: ShapeDeclarationProps,
+): RichTextContainer<
+  "shape",
+  ShapeDeclarationProps,
+  NonNullable<ShapeDeclarationProps["style"]>
+> {
+  return new RichTextContainer<
+    "shape",
+    ShapeDeclarationProps,
+    NonNullable<ShapeDeclarationProps["style"]>
+  >("shape", "rp:shape", props);
+}
 
 const maximumShapeExtentEmu = 2_147_483_647;
 

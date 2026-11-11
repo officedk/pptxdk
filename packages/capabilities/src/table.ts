@@ -24,6 +24,11 @@ import {
   type TextStyle,
   type ThemeContext,
 } from "@react-pptx/core";
+import {
+  CommonContainer,
+  hostNodeCreator,
+  RichTextContainer,
+} from "@react-pptx/core/document";
 import { createElement, type ReactNode } from "react";
 
 import {
@@ -1462,17 +1467,44 @@ export const tableCapability: ObjectCapabilityModule<ParsedTable> = {
   },
 };
 
+function createTableNode(
+  props: TableProps,
+): CommonContainer<"table", TableProps> {
+  return new CommonContainer("table", "rp:table", props);
+}
+
+function createRowNode(props: RowProps): CommonContainer<"row", RowProps> {
+  return new CommonContainer("row", "rp:row", props);
+}
+
+function createCellNode(
+  props: CellProps,
+): RichTextContainer<"cell", CellProps> {
+  return new RichTextContainer("cell", "rp:cell", props);
+}
+
 /** Declares an editable native table in the React root handled by the table module. */
 export function Table(props: TableProps): ReactNode {
-  return motionElement("rp:table", props);
+  return motionElement("rp:table", {
+    ...props,
+    [hostNodeCreator]: createTableNode,
+  });
 }
 
 /** Declares a row of a native table; calculated from actual measurement of row content when height is omitted. */
 export function Row(props: RowProps): ReactNode {
-  return createElement("rp:row", props, props.children);
+  return createElement(
+    "rp:row",
+    { ...props, [hostNodeCreator]: createRowNode },
+    props.children,
+  );
 }
 
 /** Declares table cell content and horizontal / vertical merge spans. */
 export function Cell(props: CellProps): ReactNode {
-  return createElement("rp:cell", props, props.children);
+  return createElement(
+    "rp:cell",
+    { ...props, [hostNodeCreator]: createCellNode },
+    props.children,
+  );
 }

@@ -8,7 +8,6 @@ import {
   Slide,
   type ChartErrorBars,
   type ChartGroup,
-  type ChartProps,
 } from "@react-pptx/react-pptx";
 import {
   build as buildDocument,

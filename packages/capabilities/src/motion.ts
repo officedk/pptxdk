@@ -201,6 +201,25 @@ type TimingEffect = MotionEffectObservation & {
   readonly groupSpinCenter?: { readonly x: number; readonly y: number };
 };
 
+type MixedShapeCompanion = {
+  readonly range: {
+    readonly type: "paragraph";
+    readonly start: number;
+    readonly end: number;
+  };
+  readonly behaviors: readonly string[];
+};
+
+type BehaviorProjection = {
+  readonly primary: readonly string[];
+  readonly companions: readonly MixedShapeCompanion[];
+};
+
+type EffectTreeProjection = {
+  readonly primary: string;
+  readonly companions: readonly string[];
+};
+
 type MotionNativeMember = {
   readonly id: number;
   readonly kind: string;
@@ -429,6 +448,7 @@ function centerRotationDelta(
   center: { readonly x: number; readonly y: number },
   dimensions: { readonly width: number; readonly height: number },
   scaleToCenter = false,
+  absolute = false,
 ): readonly [string, string] {
   const widthEmu = pxToEmu(dimensions.width);
   const heightEmu = pxToEmu(dimensions.height);
@@ -437,13 +457,15 @@ function centerRotationDelta(
   const centerX = formulaNumber(center.x);
   const centerY = formulaNumber(center.y);
   const { angle } = rotationFormula(effect);
-  const deltaX = scaleToCenter
-    ? `${centerX}+$*((#ppt_x-${centerX})*cos(${angle})-(#ppt_y-${centerY})*${ratioX}*sin(${angle}))-#ppt_x`
-    : `${centerX}+((#ppt_x-${centerX})*cos(${angle})-(#ppt_y-${centerY})*${ratioX}*sin(${angle}))-#ppt_x`;
-  const deltaY = scaleToCenter
-    ? `${centerY}+$*((#ppt_x-${centerX})*${ratioY}*sin(${angle})+(#ppt_y-${centerY})*cos(${angle}))-#ppt_y`
-    : `${centerY}+((#ppt_x-${centerX})*${ratioY}*sin(${angle})+(#ppt_y-${centerY})*cos(${angle}))-#ppt_y`;
-  return [deltaX, deltaY];
+  const positionX = scaleToCenter
+    ? `${centerX}+$*((#ppt_x-${centerX})*cos(${angle})-(#ppt_y-${centerY})*${ratioX}*sin(${angle}))`
+    : `${centerX}+((#ppt_x-${centerX})*cos(${angle})-(#ppt_y-${centerY})*${ratioX}*sin(${angle}))`;
+  const positionY = scaleToCenter
+    ? `${centerY}+$*((#ppt_x-${centerX})*${ratioY}*sin(${angle})+(#ppt_y-${centerY})*cos(${angle}))`
+    : `${centerY}+((#ppt_x-${centerX})*${ratioY}*sin(${angle})+(#ppt_y-${centerY})*cos(${angle}))`;
+  return absolute
+    ? [positionX, positionY]
+    : [`${positionX}-#ppt_x`, `${positionY}-#ppt_y`];
 }
 
 function flyOffset(
@@ -480,7 +502,8 @@ function behaviorIds(
   effect: TimingEffect,
   ids: TimingIds,
   dimensions: { readonly width: number; readonly height: number },
-): readonly string[] {
+  mixedShapeText: boolean,
+): BehaviorProjection {
   const ranges = wholeTextRanges(effect);
   const wholeText = ranges.length > 0;
   const target = () => timingTarget(effect);
@@ -521,7 +544,7 @@ function behaviorIds(
     name: string,
     from: string | number,
     to: string | number,
-    additive: boolean | "sum",
+    additive: boolean | "sum" | "base",
     targetElement: string,
     progressFormula?: string,
   ) =>
@@ -566,7 +589,8 @@ function behaviorIds(
     name: string,
     formula: string,
     targetElement = target(),
-  ) => motion(name, 0, 1, "sum", targetElement, formula);
+    additive: "sum" | "base" = "sum",
+  ) => motion(name, 0, 1, additive, targetElement, formula);
   const rotation = (targetElement: string, additive: boolean | "sum" = false) =>
     element(
       "p:animRot",
@@ -604,69 +628,48 @@ function behaviorIds(
   const positionTargets = () => (wholeText ? paragraphTargets() : [target()]);
   const backgroundTargets = () =>
     wholeText && effect.targetHasBackground ? [backgroundTarget()] : [];
-
-  switch (effect.preset) {
-    case "fade":
-      return [
-        showOnce(),
-        ...filterTargets().map((targetElement) =>
-          filter("fade", targetElement),
-        ),
-        ...backgroundTargets().map((targetElement) =>
-          filter("fade", targetElement),
-        ),
-      ];
-    case "wipe": {
-      const filters: Record<MotionDirection, string> = {
-        top: "wipe(up)",
-        right: "wipe(right)",
-        bottom: "wipe(down)",
-        left: "wipe(left)",
-      };
-      return [
-        showOnce(),
-        ...filterTargets().map((targetElement) =>
-          filter(filters[direction(effect)], targetElement),
-        ),
-        ...backgroundTargets().map((targetElement) =>
-          filter(filters[direction(effect)], targetElement),
-        ),
-      ];
-    }
-    case "zoom": {
-      const targets = positionTargets();
-      if (!wholeText) {
+  // A whole Shape entrance owns the object target for visibility and fill geometry. When the same
+  // shape also has paragraph-targeted effects, applications keep that text in separate paragraph
+  // builds, so the shape displacement must be repeated on complete pRg targets. Relative formulas
+  // preserve each paragraph's local placement instead of copying the whole-object center.
+  const mixedShapeRanges =
+    isWholeShapeTextEntrance(effect) && mixedShapeText
+      ? Array.from(
+          { length: effect.targetParagraphCount ?? 0 },
+          (_, index) => ({
+            type: "paragraph" as const,
+            start: index,
+            end: index,
+          }),
+        )
+      : [];
+  const mixedShapeGeometryForTarget = (targetElement: string): string[] => {
+    switch (effect.preset) {
+      case "fly": {
+        const offset = flyOffset(effect, dimensions);
         return [
-          showOnce(),
-          singleMotion("ppt_w", 0, "#ppt_w", false),
-          singleMotion("ppt_h", 0, "#ppt_h", false),
-          filter("fade", target()),
+          singleMotion(
+            "ppt_x",
+            formulaOffset("#ppt_x", offset.x),
+            "#ppt_x",
+            true,
+            targetElement,
+          ),
+          singleMotion(
+            "ppt_y",
+            formulaOffset("#ppt_y", offset.y),
+            "#ppt_y",
+            true,
+            targetElement,
+          ),
         ];
       }
-      const center = geometryCenter(
-        targetBox(effect, "whole-text zoom"),
-        dimensions,
-      );
-      const geometry = targets.flatMap((targetElement) => [
-        singleMotion(
-          "ppt_x",
-          `${formulaNumber(center.x)}-#ppt_x`,
-          0,
-          "sum",
-          targetElement,
-        ),
-        singleMotion(
-          "ppt_y",
-          `${formulaNumber(center.y)}-#ppt_y`,
-          0,
-          "sum",
-          targetElement,
-        ),
-        singleMotion("ppt_w", 0, "#ppt_w", false, targetElement),
-        singleMotion("ppt_h", 0, "#ppt_h", false, targetElement),
-      ]);
-      const backgroundGeometry = backgroundTargets().flatMap(
-        (targetElement) => [
+      case "zoom": {
+        const center = geometryCenter(
+          targetBox(effect, "whole-text zoom"),
+          dimensions,
+        );
+        return [
           singleMotion(
             "ppt_x",
             `${formulaNumber(center.x)}-#ppt_x`,
@@ -683,38 +686,173 @@ function behaviorIds(
           ),
           singleMotion("ppt_w", 0, "#ppt_w", false, targetElement),
           singleMotion("ppt_h", 0, "#ppt_h", false, targetElement),
-        ],
-      );
-      return [
-        showOnce(),
-        ...geometry,
-        ...backgroundGeometry,
-        ...filterTargets().map((targetElement) =>
-          filter("fade", targetElement),
-        ),
-        ...backgroundTargets().map((targetElement) =>
-          filter("fade", targetElement),
-        ),
-      ];
-    }
-    case "fly": {
-      const flyFrom: Record<MotionDirection, readonly [string, string]> = {
-        left: ["0-#ppt_w/2", "#ppt_y"],
-        right: ["1+#ppt_w/2", "#ppt_y"],
-        top: ["#ppt_x", "0-#ppt_h/2"],
-        bottom: ["#ppt_x", "1+#ppt_h/2"],
-      };
-      if (!wholeText) {
-        const [x, y] = flyFrom[direction(effect)];
-        return [
-          showOnce(),
-          singleMotion("ppt_x", x, "#ppt_x", true),
-          singleMotion("ppt_y", y, "#ppt_y", true),
         ];
       }
-      const offset = flyOffset(effect, dimensions);
-      const geometries = [...positionTargets(), ...backgroundTargets()].flatMap(
-        (targetElement) => [
+      case "spinIn": {
+        const center = serializedGeometryCenter(
+          targetBox(effect, "whole-text spin-in"),
+          dimensions,
+        );
+        // Mixed Shape paragraph companions use the absolute common-center position on a base
+        // behavior; the whole/Text/Group delta-sum expression stays unchanged.
+        const position = centerRotationDelta(
+          effect,
+          center,
+          dimensions,
+          true,
+          true,
+        );
+        return [
+          singleMotion("ppt_w", 0, "#ppt_w", false, targetElement),
+          singleMotion("ppt_h", 0, "#ppt_h", false, targetElement),
+          singleMotion("style.rotation", 360, 0, false, targetElement),
+          progressMotion("ppt_x", position[0], targetElement, "base"),
+          progressMotion("ppt_y", position[1], targetElement, "base"),
+        ];
+      }
+      case "stretch": {
+        const center = geometryCenter(
+          targetBox(effect, "whole-text stretch"),
+          dimensions,
+        );
+        return [
+          singleMotion(
+            "ppt_x",
+            `${formulaNumber(center.x)}-#ppt_x`,
+            0,
+            "sum",
+            targetElement,
+          ),
+          singleMotion("ppt_w", 0, "#ppt_w", false, targetElement),
+          singleMotion("ppt_h", "#ppt_h", "#ppt_h", false, targetElement),
+        ];
+      }
+      case "floatUp":
+      case "floatDown": {
+        const fromY = effect.preset === "floatDown" ? -0.1 : 0.1;
+        return [
+          singleMotion("ppt_x", 0, 0, "sum", targetElement),
+          singleMotion("ppt_y", fromY, 0, "sum", targetElement),
+        ];
+      }
+      default:
+        return [];
+    }
+  };
+
+  const primaryBehaviors = (): readonly string[] => {
+    switch (effect.preset) {
+      case "fade":
+        return [
+          showOnce(),
+          ...filterTargets().map((targetElement) =>
+            filter("fade", targetElement),
+          ),
+          ...backgroundTargets().map((targetElement) =>
+            filter("fade", targetElement),
+          ),
+        ];
+      case "wipe": {
+        const filters: Record<MotionDirection, string> = {
+          top: "wipe(up)",
+          right: "wipe(right)",
+          bottom: "wipe(down)",
+          left: "wipe(left)",
+        };
+        return [
+          showOnce(),
+          ...filterTargets().map((targetElement) =>
+            filter(filters[direction(effect)], targetElement),
+          ),
+          ...backgroundTargets().map((targetElement) =>
+            filter(filters[direction(effect)], targetElement),
+          ),
+        ];
+      }
+      case "zoom": {
+        const targets = positionTargets();
+        if (!wholeText) {
+          return [
+            showOnce(),
+            singleMotion("ppt_w", 0, "#ppt_w", false),
+            singleMotion("ppt_h", 0, "#ppt_h", false),
+            filter("fade", target()),
+          ];
+        }
+        const center = geometryCenter(
+          targetBox(effect, "whole-text zoom"),
+          dimensions,
+        );
+        const geometry = targets.flatMap((targetElement) => [
+          singleMotion(
+            "ppt_x",
+            `${formulaNumber(center.x)}-#ppt_x`,
+            0,
+            "sum",
+            targetElement,
+          ),
+          singleMotion(
+            "ppt_y",
+            `${formulaNumber(center.y)}-#ppt_y`,
+            0,
+            "sum",
+            targetElement,
+          ),
+          singleMotion("ppt_w", 0, "#ppt_w", false, targetElement),
+          singleMotion("ppt_h", 0, "#ppt_h", false, targetElement),
+        ]);
+        const backgroundGeometry = backgroundTargets().flatMap(
+          (targetElement) => [
+            singleMotion(
+              "ppt_x",
+              `${formulaNumber(center.x)}-#ppt_x`,
+              0,
+              "sum",
+              targetElement,
+            ),
+            singleMotion(
+              "ppt_y",
+              `${formulaNumber(center.y)}-#ppt_y`,
+              0,
+              "sum",
+              targetElement,
+            ),
+            singleMotion("ppt_w", 0, "#ppt_w", false, targetElement),
+            singleMotion("ppt_h", 0, "#ppt_h", false, targetElement),
+          ],
+        );
+        return [
+          showOnce(),
+          ...geometry,
+          ...backgroundGeometry,
+          ...filterTargets().map((targetElement) =>
+            filter("fade", targetElement),
+          ),
+          ...backgroundTargets().map((targetElement) =>
+            filter("fade", targetElement),
+          ),
+        ];
+      }
+      case "fly": {
+        const flyFrom: Record<MotionDirection, readonly [string, string]> = {
+          left: ["0-#ppt_w/2", "#ppt_y"],
+          right: ["1+#ppt_w/2", "#ppt_y"],
+          top: ["#ppt_x", "0-#ppt_h/2"],
+          bottom: ["#ppt_x", "1+#ppt_h/2"],
+        };
+        if (!wholeText) {
+          const [x, y] = flyFrom[direction(effect)];
+          return [
+            showOnce(),
+            singleMotion("ppt_x", x, "#ppt_x", true),
+            singleMotion("ppt_y", y, "#ppt_y", true),
+          ];
+        }
+        const offset = flyOffset(effect, dimensions);
+        const geometries = [
+          ...positionTargets(),
+          ...backgroundTargets(),
+        ].flatMap((targetElement) => [
           singleMotion(
             "ppt_x",
             formulaOffset("#ppt_x", offset.x),
@@ -729,191 +867,202 @@ function behaviorIds(
             true,
             targetElement,
           ),
-        ],
-      );
-      return [showOnce(), ...geometries];
-    }
-    case "spinIn": {
-      if (!wholeText) {
-        return [
-          showOnce(),
-          singleMotion("ppt_w", 0, "#ppt_w", false),
-          singleMotion("ppt_h", 0, "#ppt_h", false),
-          singleMotion("style.rotation", 360, 0, false),
-          filter("fade", target()),
-        ];
+        ]);
+        return [showOnce(), ...geometries];
       }
-      const box = targetBox(effect, "whole-text spin-in");
-      const center = serializedGeometryCenter(box, dimensions);
-      const position = centerRotationDelta(effect, center, dimensions, true);
-      const geometry = positionTargets().flatMap((targetElement) => [
-        singleMotion("ppt_w", 0, "#ppt_w", false, targetElement),
-        singleMotion("ppt_h", 0, "#ppt_h", false, targetElement),
-        // Paragraph rotation is expressed relative to text box original angle; object angle must not be added to endpoints again.
-        singleMotion("style.rotation", 360, 0, false, targetElement),
-        progressMotion("ppt_x", position[0], targetElement),
-        progressMotion("ppt_y", position[1], targetElement),
-      ]);
-      return [
-        showOnce(),
-        ...geometry,
-        ...backgroundTargets().flatMap((targetElement) => [
-          progressMotion("ppt_x", position[0], targetElement),
-          progressMotion("ppt_y", position[1], targetElement),
+      case "spinIn": {
+        if (!wholeText) {
+          return [
+            showOnce(),
+            singleMotion("ppt_w", 0, "#ppt_w", false),
+            singleMotion("ppt_h", 0, "#ppt_h", false),
+            singleMotion("style.rotation", 360, 0, false),
+            filter("fade", target()),
+          ];
+        }
+        const box = targetBox(effect, "whole-text spin-in");
+        const center = serializedGeometryCenter(box, dimensions);
+        const position = centerRotationDelta(effect, center, dimensions, true);
+        const geometry = positionTargets().flatMap((targetElement) => [
           singleMotion("ppt_w", 0, "#ppt_w", false, targetElement),
           singleMotion("ppt_h", 0, "#ppt_h", false, targetElement),
-          rotation(targetElement, "sum"),
-          filter("fade", targetElement),
-        ]),
-        ...filterTargets().map((targetElement) =>
-          filter("fade", targetElement),
-        ),
-      ];
-    }
-    case "stretch": {
-      if (!wholeText) {
+          // Paragraph rotation is expressed relative to text box original angle; object angle must not be added to endpoints again.
+          singleMotion("style.rotation", 360, 0, false, targetElement),
+          progressMotion("ppt_x", position[0], targetElement),
+          progressMotion("ppt_y", position[1], targetElement),
+        ]);
         return [
           showOnce(),
-          singleMotion("ppt_w", 0, "#ppt_w", false),
-          singleMotion("ppt_h", "#ppt_h", "#ppt_h", false),
-        ];
-      }
-      const center = geometryCenter(
-        targetBox(effect, "whole-text stretch"),
-        dimensions,
-      );
-      return [
-        showOnce(),
-        ...[...positionTargets(), ...backgroundTargets()].flatMap(
-          (targetElement) => [
-            singleMotion(
-              "ppt_x",
-              `${formulaNumber(center.x)}-#ppt_x`,
-              0,
-              "sum",
-              targetElement,
-            ),
+          ...geometry,
+          ...backgroundTargets().flatMap((targetElement) => [
+            progressMotion("ppt_x", position[0], targetElement),
+            progressMotion("ppt_y", position[1], targetElement),
             singleMotion("ppt_w", 0, "#ppt_w", false, targetElement),
-            singleMotion("ppt_h", "#ppt_h", "#ppt_h", false, targetElement),
-          ],
-        ),
-      ];
-    }
-    case "floatUp":
-    case "floatDown": {
-      if (!wholeText) {
-        return [
-          showOnce(),
-          filter("fade", target()),
-          singleMotion("ppt_x", "#ppt_x", "#ppt_x", false),
-          singleMotion(
-            "ppt_y",
-            effect.preset === "floatDown" ? "#ppt_y-.1" : "#ppt_y+.1",
-            "#ppt_y",
-            false,
+            singleMotion("ppt_h", 0, "#ppt_h", false, targetElement),
+            rotation(targetElement, "sum"),
+            filter("fade", targetElement),
+          ]),
+          ...filterTargets().map((targetElement) =>
+            filter("fade", targetElement),
           ),
         ];
       }
-      const fromY = effect.preset === "floatDown" ? -0.1 : 0.1;
-      const targets = [...positionTargets(), ...backgroundTargets()];
-      return [
-        showOnce(),
-        ...filterTargets().map((targetElement) =>
-          filter("fade", targetElement),
-        ),
-        ...backgroundTargets().map((targetElement) =>
-          filter("fade", targetElement),
-        ),
-        ...targets.flatMap((targetElement) => [
-          singleMotion("ppt_x", 0, 0, "sum", targetElement),
-          singleMotion("ppt_y", fromY, 0, "sum", targetElement),
-        ]),
-      ];
-    }
-    case "spin": {
-      if (!wholeText && effect.groupSpinCenter === undefined) {
-        return [
-          rotation(target(), typeof effect.by === "number" ? "sum" : false),
-        ];
-      }
-      const center =
-        effect.groupSpinCenter ??
-        serializedGeometryCenter(
-          targetBox(effect, "whole-text spin"),
+      case "stretch": {
+        if (!wholeText) {
+          return [
+            showOnce(),
+            singleMotion("ppt_w", 0, "#ppt_w", false),
+            singleMotion("ppt_h", "#ppt_h", "#ppt_h", false),
+          ];
+        }
+        const center = geometryCenter(
+          targetBox(effect, "whole-text stretch"),
           dimensions,
         );
-      const position = centerRotationDelta(effect, center, dimensions);
-      if (wholeText) {
         return [
-          ...positionTargets().flatMap((targetElement) => [
-            rotation(targetElement, "sum"),
-            progressMotion("ppt_x", position[0], targetElement),
-            progressMotion("ppt_y", position[1], targetElement),
-          ]),
-          ...backgroundTargets().flatMap((targetElement) => [
-            rotation(targetElement, "sum"),
-            progressMotion("ppt_x", position[0], targetElement),
-            progressMotion("ppt_y", position[1], targetElement),
+          showOnce(),
+          ...[...positionTargets(), ...backgroundTargets()].flatMap(
+            (targetElement) => [
+              singleMotion(
+                "ppt_x",
+                `${formulaNumber(center.x)}-#ppt_x`,
+                0,
+                "sum",
+                targetElement,
+              ),
+              singleMotion("ppt_w", 0, "#ppt_w", false, targetElement),
+              singleMotion("ppt_h", "#ppt_h", "#ppt_h", false, targetElement),
+            ],
+          ),
+        ];
+      }
+      case "floatUp":
+      case "floatDown": {
+        if (!wholeText) {
+          return [
+            showOnce(),
+            filter("fade", target()),
+            singleMotion("ppt_x", "#ppt_x", "#ppt_x", false),
+            singleMotion(
+              "ppt_y",
+              effect.preset === "floatDown" ? "#ppt_y-.1" : "#ppt_y+.1",
+              "#ppt_y",
+              false,
+            ),
+          ];
+        }
+        const fromY = effect.preset === "floatDown" ? -0.1 : 0.1;
+        const targets = [...positionTargets(), ...backgroundTargets()];
+        return [
+          showOnce(),
+          ...filterTargets().map((targetElement) =>
+            filter("fade", targetElement),
+          ),
+          ...backgroundTargets().map((targetElement) =>
+            filter("fade", targetElement),
+          ),
+          ...targets.flatMap((targetElement) => [
+            singleMotion("ppt_x", 0, 0, "sum", targetElement),
+            singleMotion("ppt_y", fromY, 0, "sum", targetElement),
           ]),
         ];
       }
-      return [
-        rotation(target(), "sum"),
-        progressMotion("ppt_x", position[0]),
-        progressMotion("ppt_y", position[1]),
-      ];
+      case "spin": {
+        if (!wholeText && effect.groupSpinCenter === undefined) {
+          return [
+            rotation(target(), typeof effect.by === "number" ? "sum" : false),
+          ];
+        }
+        const center =
+          effect.groupSpinCenter ??
+          serializedGeometryCenter(
+            targetBox(effect, "whole-text spin"),
+            dimensions,
+          );
+        const position = centerRotationDelta(effect, center, dimensions);
+        if (wholeText) {
+          return [
+            ...positionTargets().flatMap((targetElement) => [
+              rotation(targetElement, "sum"),
+              progressMotion("ppt_x", position[0], targetElement),
+              progressMotion("ppt_y", position[1], targetElement),
+            ]),
+            ...backgroundTargets().flatMap((targetElement) => [
+              rotation(targetElement, "sum"),
+              progressMotion("ppt_x", position[0], targetElement),
+              progressMotion("ppt_y", position[1], targetElement),
+            ]),
+          ];
+        }
+        return [
+          rotation(target(), "sum"),
+          progressMotion("ppt_x", position[0]),
+          progressMotion("ppt_y", position[1]),
+        ];
+      }
+      case "fillColor":
+      case "breathe":
+        return [
+          element(
+            "p:animClr",
+            { clrSpc: "rgb" },
+            element(
+              "p:cBhvr",
+              undefined,
+              element("p:cTn", {
+                id: ids.take(),
+                dur:
+                  effect.preset === "breathe"
+                    ? Math.round(duration / 2)
+                    : duration,
+                fill: "hold",
+              }),
+              target(),
+              attributeNames("fillcolor"),
+            ),
+            element(
+              "p:from",
+              undefined,
+              element("a:srgbClr", {
+                val: effect.fromColor?.slice(1),
+              }),
+            ),
+            element(
+              "p:to",
+              undefined,
+              element("a:srgbClr", {
+                val: effect.toColor?.slice(1),
+              }),
+            ),
+          ),
+        ];
+      default: {
+        const exhaustiveCheck: never = effect.preset;
+        throw new Error(
+          `Unsupported preset: ${JSON.stringify(exhaustiveCheck)}`,
+        );
+      }
     }
-    case "fillColor":
-    case "breathe":
-      return [
-        element(
-          "p:animClr",
-          { clrSpc: "rgb" },
-          element(
-            "p:cBhvr",
-            undefined,
-            element("p:cTn", {
-              id: ids.take(),
-              dur:
-                effect.preset === "breathe"
-                  ? Math.round(duration / 2)
-                  : duration,
-              fill: "hold",
-            }),
-            target(),
-            attributeNames("fillcolor"),
-          ),
-          element(
-            "p:from",
-            undefined,
-            element("a:srgbClr", {
-              val: effect.fromColor?.slice(1),
-            }),
-          ),
-          element(
-            "p:to",
-            undefined,
-            element("a:srgbClr", {
-              val: effect.toColor?.slice(1),
-            }),
-          ),
-        ),
-      ];
-    default: {
-      const exhaustiveCheck: never = effect.preset;
-      throw new Error(`Unsupported preset: ${JSON.stringify(exhaustiveCheck)}`);
-    }
-  }
+  };
+  const primary = primaryBehaviors();
+  const companions = mixedShapeRanges
+    .map((range) => ({
+      range,
+      behaviors: mixedShapeGeometryForTarget(timingTarget(effect, range)),
+    }))
+    // Effects such as Fade and Wipe have no displacement to project; an empty companion
+    // would write an invalid empty childTnLst.
+    .filter(({ behaviors }) => behaviors.length > 0);
+  return { primary, companions };
 }
 
-function effectTree(
+function effectTreeXml(
   effect: TimingEffect,
   nodeType: string,
   startCondition: string,
-  ids: TimingIds,
   effectId: number,
   buildGroupId: number | undefined,
-  dimensions: { readonly width: number; readonly height: number },
+  behaviors: readonly string[],
 ): string {
   if (effect.startAfter !== undefined) {
     validateKnownTime(
@@ -982,13 +1131,42 @@ function effectTree(
             // Single dur only describes current word or letter; cannot masquerade as natural completion time of the entire paragraph.
             element("p:tmAbs", { val: effect.intervalMs }),
           ),
-      element(
-        "p:childTnLst",
-        undefined,
-        ...behaviorIds(effect, ids, dimensions),
-      ),
+      element("p:childTnLst", undefined, ...behaviors),
     ),
   );
+}
+
+function effectTree(
+  effect: TimingEffect,
+  nodeType: string,
+  startCondition: string,
+  ids: TimingIds,
+  effectId: number,
+  buildGroupId: number | undefined,
+  dimensions: { readonly width: number; readonly height: number },
+  mixedShapeText: boolean,
+): EffectTreeProjection {
+  const projection = behaviorIds(effect, ids, dimensions, mixedShapeText);
+  return {
+    primary: effectTreeXml(
+      effect,
+      nodeType,
+      startCondition,
+      effectId,
+      buildGroupId,
+      projection.primary,
+    ),
+    companions: projection.companions.map((companion) =>
+      effectTreeXml(
+        effect,
+        "withEffect",
+        startCondition,
+        ids.take(),
+        buildGroupId,
+        companion.behaviors,
+      ),
+    ),
+  };
 }
 
 function effectKey(effect: TimingEffect): string {
@@ -1398,6 +1576,16 @@ function timingXml(
   const slideEffects = steps.flatMap((step) =>
     step.effects.map((effect) => effect as TimingEffect),
   );
+  // Only explicit paragraph targets split native text layers; a whole Shape entrance on the same
+  // object must then cover those layers with matching geometry.
+  const paragraphTextTargets = new Set(
+    slideEffects
+      .filter(
+        (effect) =>
+          effect.targetTextBody && effect.target.range?.type === "paragraph",
+      )
+      .map((effect) => effect.target.id),
+  );
   const nativeProjections: MotionNativeProjection[] = [];
   const nativeTextEffects: {
     readonly effect: TimingEffect;
@@ -1436,7 +1624,11 @@ function timingXml(
     startCondition: string,
     effectId: number,
     chartGroupId: number | undefined,
-  ): string[] => {
+  ): {
+    readonly primary: readonly string[];
+    readonly companions: readonly string[];
+  } => {
+    const mixedShapeText = paragraphTextTargets.has(effect.target.id);
     const members = effect.targetMembers;
     const descendantIds =
       members === undefined ? new Set<number>() : memberIds(members);
@@ -1512,7 +1704,8 @@ function timingXml(
           targetEffectId,
           undefined,
           dimensions,
-        );
+          false,
+        ).primary;
       });
       nativeProjections.push({
         logicalTargetId: effect.target.id,
@@ -1520,7 +1713,7 @@ function timingXml(
         preset: effect.preset,
         nativeEffects,
       });
-      return rendered;
+      return { primary: rendered, companions: [] };
     }
     const textBuildGroupId = effect.targetTextBody
       ? isWholeTextProjection(effect)
@@ -1534,17 +1727,20 @@ function timingXml(
         : { buildGroupId: textBuildGroupId }),
     };
     collectNativeTextEffect(nativeEffect, effect);
-    return [
-      effectTree(
-        nativeEffect,
-        nodeType,
-        startCondition,
-        ids,
-        effectId,
-        chartGroupId,
-        dimensions,
-      ),
-    ];
+    const projection = effectTree(
+      nativeEffect,
+      nodeType,
+      startCondition,
+      ids,
+      effectId,
+      chartGroupId,
+      dimensions,
+      mixedShapeText,
+    );
+    return {
+      primary: [projection.primary],
+      companions: projection.companions,
+    };
   };
   // Empty steps preserve query declarations only without writing empty childTnLst into native timing tree.
   const stepsWithNativeNodes = steps.filter(({ nodes }) => nodes.length > 0);
@@ -1696,6 +1892,9 @@ function timingXml(
       conditionDefinitionsBefore: readonly MotionPlanConditionPlacement[] = [],
     ): RenderedRoot[] => {
       const rendered: RenderedRoot[] = [];
+      // Native companions are deferred to the end of this parent layer so the proven S order
+      // (whole effect, ordinary siblings, then target geometry) is preserved without a second plan.
+      const deferredCompanions: RenderedRoot[] = [];
       let pendingRootNodeType = firstRootNodeType;
       for (const [index, node] of nodes.entries()) {
         const nodeId =
@@ -1936,7 +2135,9 @@ function timingXml(
               "MotionPlan object member is missing native aggregate node identity",
             );
           }
-          const children = node.effects.flatMap((effect, effectIndex) => {
+          const primaryChildren: string[] = [];
+          const companionChildren: string[] = [];
+          for (const [effectIndex, effect] of node.effects.entries()) {
             const effectId = effectNodeIds.get(effectKey(effect));
             if (effectId === undefined) {
               throw new Error(
@@ -1947,14 +2148,17 @@ function timingXml(
               effect.target.range?.type === "chart"
                 ? chartBuildGroupIds.get(effect.target.id)
                 : undefined;
-            return renderedEffect(
+            const projection = renderedEffect(
               effect,
               effectIndex === 0 ? "afterEffect" : "withEffect",
               element("p:cond", { delay: childDelay(effect) }),
               effectId,
               buildGroupId,
             );
-          });
+            primaryChildren.push(...projection.primary);
+            companionChildren.push(...projection.companions);
+          }
+          const children = [...primaryChildren, ...companionChildren];
           // Native import identifies step entry by fixed depth; aggregate container and first real effect retain their respective roles.
           rendered.push(
             renderedRoot(
@@ -2013,28 +2217,41 @@ function timingXml(
             effect.target.range?.type === "chart"
               ? chartBuildGroupIds.get(effect.target.id)
               : undefined;
-          const effectTrees = renderedEffect(
+          const projection = renderedEffect(
             effect,
             effectNodeType,
             effectCondition,
             effectId,
             buildGroupId,
           );
-          rendered.push(
-            ...(localStart.kind === "delay-layer"
-              ? wrapDelayLayers(
-                  localStart,
-                  effectRoots(effectTrees, false),
-                  rootNodeType,
-                )
-              : effectRoots(
-                  effectTrees,
-                  effectIndex === 0 && pendingRootNodeType !== undefined,
-                )),
-          );
+          if (localStart.kind === "delay-layer") {
+            // The delay wrapper is part of the whole projection; primary and companions share
+            // exactly one wrapper instead of duplicating the authored delay.
+            rendered.push(
+              ...wrapDelayLayers(
+                localStart,
+                effectRoots(
+                  [...projection.primary, ...projection.companions],
+                  false,
+                ),
+                rootNodeType,
+              ),
+            );
+          } else {
+            rendered.push(
+              ...effectRoots(
+                projection.primary,
+                effectIndex === 0 && pendingRootNodeType !== undefined,
+              ),
+            );
+            deferredCompanions.push(
+              ...effectRoots(projection.companions, false),
+            );
+          }
           pendingRootNodeType = undefined;
         }
       }
+      rendered.push(...deferredCompanions);
       return rendered;
     };
     // nodeType only marks true step entry node; application timing conditions remain entirely from the plan.

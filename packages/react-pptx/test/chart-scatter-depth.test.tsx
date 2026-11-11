@@ -714,7 +714,7 @@ describe("scatter depth", () => {
       ],
       [
         "invalid-data",
-        { ...base, groups: [xyGroup([{ name: "S", x: [], y: [] }])] },
+        { ...base, groups: [xyGroup([{ name: "S", x: [], y: [3] }])] },
       ],
       [
         "invalid-data",

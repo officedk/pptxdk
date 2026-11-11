@@ -87,6 +87,88 @@ export type ChartPoint = {
   readonly dataLabels?: false | ChartDataLabelOverride;
 };
 
+/** Native chart trendline type; `movingAverage` is the sixth Office trendline choice. */
+export type ChartTrendlineType =
+  | "linear"
+  | "exponential"
+  | "logarithmic"
+  | "polynomial"
+  | "power"
+  | "movingAverage";
+
+type ChartTrendlineBase = {
+  /** Trendline stroke; omitted leaves the target application default. */
+  readonly line?: ChartLine;
+  /** Forecast extension after the plotted data, in category positions or scatter X units. */
+  readonly forward?: number;
+  /** Forecast extension before the plotted data, in category positions or scatter X units. */
+  readonly backward?: number;
+};
+
+type ChartTrendlineDisplay = {
+  /** Display the native trendline equation. */
+  readonly displayEquation?: boolean;
+  /** Display the native R-squared value. */
+  readonly displayRSquared?: boolean;
+};
+
+/**
+ * One native trendline owned by a series.
+ *
+ * Office supports multiple trendlines on one series, so this is a list on the series rather than a
+ * single chart-level analysis option. `order` is required for polynomial, `period` for moving
+ * average; `intercept` applies to exponential, linear, and polynomial only. A moving average has
+ * no equation or R-squared label, so those fields are not part of its type. The applicable chart
+ * kinds and value domains are enforced by the capability parse, not inferred from this union alone.
+ */
+export type ChartTrendline =
+  | (ChartTrendlineBase &
+      ChartTrendlineDisplay & {
+        readonly type: "linear";
+        /** Value where the trendline crosses the value axis; omitted fits it. */
+        readonly intercept?: number;
+        readonly order?: never;
+        readonly period?: never;
+      })
+  | (ChartTrendlineBase &
+      ChartTrendlineDisplay & {
+        readonly type: "exponential";
+        readonly intercept?: number;
+        readonly order?: never;
+        readonly period?: never;
+      })
+  | (ChartTrendlineBase &
+      ChartTrendlineDisplay & {
+        readonly type: "logarithmic";
+        readonly intercept?: never;
+        readonly order?: never;
+        readonly period?: never;
+      })
+  | (ChartTrendlineBase &
+      ChartTrendlineDisplay & {
+        readonly type: "polynomial";
+        /** Polynomial order required by Office for this type, an integer from 2 through 6. */
+        readonly order: number;
+        readonly intercept?: number;
+        readonly period?: never;
+      })
+  | (ChartTrendlineBase &
+      ChartTrendlineDisplay & {
+        readonly type: "power";
+        readonly intercept?: never;
+        readonly order?: never;
+        readonly period?: never;
+      })
+  | (ChartTrendlineBase & {
+      readonly type: "movingAverage";
+      /** Moving-average period, an integer from 2 through 255 and below the series point count. */
+      readonly period: number;
+      readonly intercept?: never;
+      readonly order?: never;
+      readonly displayEquation?: never;
+      readonly displayRSquared?: never;
+    });
+
 type ChartSeriesFormat = {
   readonly name: string;
   /** Color of column, area, line, pie slice, or scatter markers. */
@@ -104,6 +186,8 @@ type ChartSeriesFormat = {
   readonly marker?: boolean | ChartMarker;
   /** Overrides color, line, marker, or data label text color for points by position. */
   readonly points?: Readonly<Record<number, ChartPoint>>;
+  /** Native analysis trendlines owned by this series, in declaration order. */
+  readonly trendlines?: readonly ChartTrendline[];
 };
 
 /** Category chart series: one value per ordered group category position. */

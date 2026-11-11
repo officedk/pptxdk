@@ -240,7 +240,8 @@ type ErrorBarDirection = "value" | "x" | "y";
 
 type ErrorBarChannel = {
   readonly seriesIndex: number;
-  readonly direction: ErrorBarDirection;
+  /** Author-facing series axis; category custom channels always use value. */
+  readonly channelDirection: ErrorBarDirection;
   readonly side: "plus" | "minus";
   readonly column: number;
   readonly pointCount: number;
@@ -252,10 +253,10 @@ type ErrorBarChannelMap = ReadonlyMap<string, ErrorBarChannel>;
 
 function errorBarChannelKey(
   seriesIndex: number,
-  direction: ErrorBarDirection,
+  channelDirection: ErrorBarDirection,
   side: "plus" | "minus",
 ): string {
-  return `${seriesIndex}:${direction}:${side}`;
+  return `${seriesIndex}:${channelDirection}:${side}`;
 }
 
 /**
@@ -263,7 +264,9 @@ function errorBarChannelKey(
  *
  * Both the chart writer and the workbook writer consume this mapping so a formula and its
  * cells cannot drift apart. Category data occupies A plus one value column per series; XY data
- * occupies A plus X/Y pairs. Null magnitudes keep their original slot through numRef indices.
+ * occupies A plus X/Y pairs. A category custom series always has the channel identity `value`;
+ * the writer decides separately whether the native element stores x or y errDir. Null magnitudes
+ * keep their original slot through numRef indices.
  */
 function errorBarChannels(parsed: ParsedChart): ErrorBarChannelMap {
   const scatter =
@@ -283,7 +286,7 @@ function errorBarChannels(parsed: ParsedChart): ErrorBarChannelMap {
   const add = (
     seriesIndex: number,
     seriesName: string,
-    direction: ErrorBarDirection,
+    channelDirection: ErrorBarDirection,
     bars: ChartErrorBars | undefined,
     pointCount: number,
     axisLabel: string,
@@ -293,9 +296,9 @@ function errorBarChannels(parsed: ParsedChart): ErrorBarChannelMap {
       const values = bars[side];
       if (values === undefined) continue;
       const header = `${seriesName}${axisLabel === "" ? "" : ` ${axisLabel}`} ${side === "plus" ? "+" : "-"}`;
-      channels.set(errorBarChannelKey(seriesIndex, direction, side), {
+      channels.set(errorBarChannelKey(seriesIndex, channelDirection, side), {
         seriesIndex,
-        direction,
+        channelDirection,
         side,
         column: nextColumn,
         pointCount,
@@ -351,16 +354,25 @@ const errorBarValueTypes = {
   standardError: "stdErr",
 } as const;
 
+/**
+ * Writes one native error-bar element.
+ *
+ * `channelDirection` selects the author-facing series axis used by the workbook map; category
+ * custom bars always use `value` even when their native `errDir` is `y`. `nativeDirection` is
+ * the serialized c:errDir: scatters emit their X/Y axis, line emits y, and bar/column/area rely
+ * on the documented application default by omitting the element.
+ */
 function errorBarXml(
   bars: ChartErrorBars,
-  direction: ErrorBarDirection,
+  channelDirection: ErrorBarDirection,
+  nativeDirection: "x" | "y" | undefined,
   seriesIndex: number,
   channels: ErrorBarChannelMap,
   theme: ThemeContext,
 ): XmlElement {
   const channel = (side: "plus" | "minus"): ErrorBarChannel => {
     const result = channels.get(
-      errorBarChannelKey(seriesIndex, direction, side),
+      errorBarChannelKey(seriesIndex, channelDirection, side),
     );
     if (result === undefined) {
       throw new Error("Missing workbook channel for a custom error bar");
@@ -386,7 +398,9 @@ function errorBarXml(
   return el(
     "c:errBars",
     null,
-    direction === "value" ? undefined : el("c:errDir", { val: direction }),
+    nativeDirection === undefined
+      ? undefined
+      : el("c:errDir", { val: nativeDirection }),
     el("c:errBarType", { val: bars.include ?? "both" }),
     el("c:errValType", { val: errorBarValueTypes[bars.type] }),
     bars.endCap === false ? el("c:noEndCap", { val: true }) : undefined,
@@ -665,7 +679,8 @@ function categoryChartSeries(
       ? undefined
       : errorBarXml(
           series.errorBars,
-          group.kind === "line" ? "y" : "value",
+          "value",
+          group.kind === "line" ? "y" : undefined,
           series.seriesIndex,
           channels,
           theme,
@@ -761,6 +776,7 @@ function scatterChartSeries(
       : errorBarXml(
           series.errorBars.x,
           "x",
+          "x",
           series.seriesIndex,
           channels,
           theme,
@@ -769,6 +785,7 @@ function scatterChartSeries(
       ? undefined
       : errorBarXml(
           series.errorBars.y,
+          "y",
           "y",
           series.seriesIndex,
           channels,
@@ -1331,7 +1348,7 @@ export function chartWorkbook(parsed: ParsedChart): Uint8Array {
           }),
         ),
         ...channels.flatMap((channel) => {
-          if (channel.direction === "value") return [];
+          if (channel.channelDirection === "value") return [];
           const value = channel.values[observation];
           if (
             observation >= channel.pointCount ||
@@ -1375,7 +1392,7 @@ export function chartWorkbook(parsed: ParsedChart): Uint8Array {
           channels.flatMap((channel) => {
             const value = channel.values[row];
             if (
-              channel.direction !== "value" ||
+              channel.channelDirection !== "value" ||
               value === null ||
               value === undefined
             ) {

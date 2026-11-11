@@ -811,6 +811,133 @@ describe("native chart error bars", () => {
     assert.ok(!chartParts(result.pptx).chart(1).includes("<c:errBars"));
   });
 
+  it("builds line custom error bars for both and single sides through both entries", async () => {
+    const props = (include: "both" | "plus" | "minus"): ChartProps => ({
+      x: 0,
+      y: 0,
+      width: 400,
+      height: 260,
+      groups: [
+        {
+          kind: "line",
+          data: {
+            kind: "shared-categories",
+            categories: ["Alpha", "Alpha", "Beta"],
+          },
+          series: [
+            {
+              name: "Observed",
+              values: [1, null, 3],
+              errorBars:
+                include === "plus"
+                  ? {
+                      type: "custom",
+                      include: "plus",
+                      plus: [0.4, null, 0.8],
+                      endCap: false,
+                      line: { color: "#112233", width: 2, dash: "dash" },
+                    }
+                  : include === "minus"
+                    ? {
+                        type: "custom",
+                        include: "minus",
+                        minus: [0.1, 0.2, 0.3],
+                        endCap: false,
+                        line: { color: "#112233", width: 2, dash: "dash" },
+                      }
+                    : {
+                        type: "custom",
+                        plus: [0.4, null, 0.8],
+                        minus: [0.1, 0.2, 0.3],
+                        endCap: false,
+                        line: { color: "#112233", width: 2, dash: "dash" },
+                      },
+            },
+          ],
+        },
+      ],
+    });
+    for (const entry of ["document", "react"] as const) {
+      for (const include of ["both", "plus", "minus"] as const) {
+        const pptx = await buildInEntry(entry, props(include));
+        const file = await validatePptx(pptx);
+        assert.deepEqual(
+          file.errors,
+          [],
+          `${entry} ${include} line custom error bars should validate`,
+        );
+        const chart = file.slides[0]?.objects[0]?.chart;
+        const bar = chart?.series[0]?.errorBars?.[0];
+        assert.ok(bar, `${entry} ${include} should expose an error bar`);
+        assert.equal(bar.direction, "y");
+        assert.equal(bar.declaredDirection, "y");
+        assert.equal(bar.include, include);
+        assert.equal(bar.type, "custom");
+        assert.equal(bar.endCap, false);
+        assert.deepEqual(bar.line, {
+          color: "#112233",
+          widthEmu: 19_050,
+          dash: "dash",
+        });
+        if (include === "minus") {
+          assert.equal(bar.plus, undefined);
+        } else {
+          assert.deepEqual(bar.plus, {
+            source: "reference",
+            formula: "Sheet1!$C$2:$C$4",
+            values: [0.4, null, 0.8],
+          });
+          assert.deepEqual(
+            chart?.embeddedWorkbook?.series[0]?.errorBars?.[0]?.plus?.values,
+            [0.4, null, 0.8],
+          );
+        }
+        if (include === "plus") {
+          assert.equal(bar.minus, undefined);
+        } else {
+          assert.deepEqual(bar.minus, {
+            source: "reference",
+            formula:
+              include === "both" ? "Sheet1!$D$2:$D$4" : "Sheet1!$C$2:$C$4",
+            values: [0.1, 0.2, 0.3],
+          });
+          assert.deepEqual(
+            chart?.embeddedWorkbook?.series[0]?.errorBars?.[0]?.minus?.values,
+            [0.1, 0.2, 0.3],
+          );
+        }
+        const parts = chartParts(pptx);
+        const xml = parts.chart(1);
+        assert.ok(xml.includes('<c:errDir val="y"/>'));
+        assert.equal(xml.includes("<c:plus>"), include !== "minus");
+        assert.equal(xml.includes("<c:minus>"), include !== "plus");
+        const workbook = chart?.embeddedWorkbook?.part;
+        assert.ok(workbook);
+        const sheet = parts.workbook(workbook);
+        assert.equal(sheet.includes("Observed +"), include !== "minus");
+        assert.equal(sheet.includes("Observed -"), include !== "plus");
+        if (include === "both") {
+          assert.ok(sheet.includes('r="C2"'));
+          assert.ok(sheet.includes('r="C4"'));
+          assert.ok(!sheet.includes('r="C3"'));
+          assert.ok(sheet.includes('r="D2"'));
+          assert.ok(sheet.includes('r="D3"'));
+          assert.ok(sheet.includes('r="D4"'));
+        } else if (include === "plus") {
+          assert.ok(sheet.includes('r="C2"'));
+          assert.ok(sheet.includes('r="C4"'));
+          assert.ok(!sheet.includes('r="C3"'));
+          assert.ok(!sheet.includes('r="D2"'));
+        } else {
+          assert.ok(sheet.includes('r="C2"'));
+          assert.ok(sheet.includes('r="C3"'));
+          assert.ok(sheet.includes('r="C4"'));
+          assert.ok(!sheet.includes('r="D2"'));
+        }
+      }
+    }
+  });
+
   it("builds the same declarations through the document and React entries", async () => {
     const props = columnChart([
       {

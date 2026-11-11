@@ -269,6 +269,9 @@ describe("editable empty charts", () => {
     const parts = unzipSync(result.pptx);
     const xml = chartXml(parts);
     assert.equal(xml.match(/<c:ser>/gu)?.length, 3);
+    assert.ok(xml.includes('<a:srgbClr val="336699"/>'));
+    assert.ok(xml.includes('<a:srgbClr val="AA5500"/>'));
+    assert.ok(xml.includes('<a:srgbClr val="117744"/>'));
     assert.equal(
       xml.match(
         /<c:numCache><c:formatCode>General<\/c:formatCode><c:ptCount val="0"\/><\/c:numCache>/gu,

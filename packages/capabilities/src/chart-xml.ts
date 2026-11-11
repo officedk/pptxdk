@@ -912,7 +912,8 @@ function categoryLabelRange(
 ): CategoryLabelRange | undefined {
   if (
     group.kind !== "doughnut" ||
-    group.data.kind !== "independent-categories"
+    group.data.kind !== "independent-categories" ||
+    series.categories.length === 0
   ) {
     return undefined;
   }
@@ -1039,19 +1040,28 @@ function categoryChartSeries(
           channels,
           theme,
         ),
-    el(
-      "c:cat",
-      null,
-      strRef(
-        rangeFormula(category.column, category.pointCount),
-        series.categories,
-      ),
-    ),
-    el(
-      "c:val",
-      null,
-      numRef(rangeFormula(value.column, category.pointCount), series.values),
-    ),
+    // A true zero-observation series omits both optional data-source wrappers. An empty
+    // wrapper is not equivalent, and the source must stay absent after native save.
+    series.values.length === 0
+      ? undefined
+      : el(
+          "c:cat",
+          null,
+          strRef(
+            rangeFormula(category.column, category.pointCount),
+            series.categories,
+          ),
+        ),
+    series.values.length === 0
+      ? undefined
+      : el(
+          "c:val",
+          null,
+          numRef(
+            rangeFormula(value.column, category.pointCount),
+            series.values,
+          ),
+        ),
     lineChart ? el("c:smooth", { val: series.smooth ?? false }) : undefined,
     categoryRange === undefined
       ? undefined
@@ -1161,22 +1171,27 @@ function scatterChartSeries(
           channels,
           theme,
         ),
-    el(
-      "c:xVal",
-      null,
-      numRef(
-        rangeFormula(seriesCells.x.column, seriesCells.x.pointCount),
-        series.x,
-      ),
-    ),
-    el(
-      "c:yVal",
-      null,
-      numRef(
-        rangeFormula(seriesCells.y.column, seriesCells.y.pointCount),
-        series.y,
-      ),
-    ),
+    // Scatter X/Y are one paired data source; omit both wrappers for zero observations.
+    series.x.length === 0
+      ? undefined
+      : el(
+          "c:xVal",
+          null,
+          numRef(
+            rangeFormula(seriesCells.x.column, seriesCells.x.pointCount),
+            series.x,
+          ),
+        ),
+    series.x.length === 0
+      ? undefined
+      : el(
+          "c:yVal",
+          null,
+          numRef(
+            rangeFormula(seriesCells.y.column, seriesCells.y.pointCount),
+            series.y,
+          ),
+        ),
     group.line === "smooth" || group.line === "straight"
       ? el("c:smooth", { val: group.line === "smooth" })
       : undefined,

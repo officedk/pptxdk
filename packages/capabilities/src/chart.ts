@@ -1420,8 +1420,8 @@ function independentCategoryData(
 }
 
 function seriesCategories(value: unknown, label: string): readonly string[] {
-  if (!Array.isArray(value) || value.length === 0) {
-    fail("invalid-data", `${label} must contain at least one category`);
+  if (!Array.isArray(value)) {
+    fail("invalid-data", `${label} must be an array of categories`);
   }
   for (const [index, category] of value.entries()) {
     if (typeof category !== "string") {

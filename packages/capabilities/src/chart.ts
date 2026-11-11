@@ -31,6 +31,8 @@ import type {
   ChartKind,
   ChartLine,
   ChartLineDash,
+  ChartMarker,
+  ChartMarkerSymbol,
   ChartPoint,
   ChartProps,
   ChartSeries,
@@ -128,6 +130,19 @@ const displayBlanksAsValues = new Set<ChartDisplayBlanksAs>([
   "gap",
   "zero",
   "span",
+]);
+const markerSymbolValues = new Set<ChartMarkerSymbol>([
+  "auto",
+  "circle",
+  "dash",
+  "diamond",
+  "dot",
+  "none",
+  "plus",
+  "square",
+  "star",
+  "triangle",
+  "x",
 ]);
 const cartesianKinds = new Set<ChartKind>(["column", "bar", "line", "area"]);
 
@@ -293,6 +308,71 @@ function lineStyle(value: unknown, label: string): ChartLine | undefined {
     ...(width === undefined ? {} : { width }),
     ...(dash === undefined ? {} : { dash: dash as ChartLineDash }),
   };
+}
+
+function markerStyle(
+  value: unknown,
+  label: string,
+  kind: ChartKind,
+): boolean | ChartMarker | undefined {
+  if (value === undefined) return undefined;
+  if (kind !== "line") {
+    fail(
+      "invalid-marker",
+      `${label} is only applicable to line chart series and points`,
+    );
+  }
+  if (value === true || value === false) return value;
+  if (!isRecord(value)) {
+    fail("invalid-marker", `${label} must be a boolean or marker object`);
+  }
+  onlyKeys(value, ["symbol", "size", "fill", "line"], label);
+  const symbol = value["symbol"];
+  if (
+    symbol !== undefined &&
+    !markerSymbolValues.has(symbol as ChartMarkerSymbol)
+  ) {
+    fail(
+      "invalid-marker",
+      `${label}.symbol must be auto, circle, dash, diamond, dot, none, plus, square, star, triangle, or x`,
+    );
+  }
+  const size = value["size"];
+  if (
+    size !== undefined &&
+    (typeof size !== "number" ||
+      !Number.isSafeInteger(size) ||
+      size < 2 ||
+      size > 72)
+  ) {
+    fail(
+      "invalid-marker",
+      `${label}.size must be an integer between 2 and 72 points`,
+    );
+  }
+  const fill = optionalColor(value["fill"], `${label}.fill`);
+  const line = lineStyle(value["line"], `${label}.line`);
+  return {
+    ...(symbol === undefined ? {} : { symbol: symbol as ChartMarkerSymbol }),
+    ...(size === undefined ? {} : { size }),
+    ...(fill === undefined ? {} : { fill }),
+    ...(line === undefined ? {} : { line }),
+  };
+}
+
+function smoothStyle(
+  value: unknown,
+  label: string,
+  kind: ChartKind,
+): boolean | undefined {
+  if (value === undefined) return undefined;
+  if (kind !== "line") {
+    fail("invalid-smooth", `${label} is only applicable to line chart series`);
+  }
+  if (typeof value !== "boolean") {
+    fail("invalid-smooth", `${label} must be a boolean`);
+  }
+  return value;
 }
 
 function chartTitleValue(
@@ -640,7 +720,11 @@ function chartSeriesList(
     if (!isRecord(item)) {
       fail("invalid-data", `${seriesLabel} must be an object`);
     }
-    onlyKeys(item, ["name", "values", "color", "line", "points"], seriesLabel);
+    onlyKeys(
+      item,
+      ["name", "values", "color", "line", "marker", "smooth", "points"],
+      seriesLabel,
+    );
     const name = item["name"];
     const values = item["values"];
     if (typeof name !== "string" || name.trim() === "") {
@@ -705,7 +789,7 @@ function chartSeriesList(
         }
         onlyKeys(
           pointValue,
-          ["color", "line", "labelColor"],
+          ["color", "line", "marker", "labelColor"],
           `Series "${name}" data point ${rawIndex}`,
         );
         const pointColor = optionalColor(
@@ -716,6 +800,11 @@ function chartSeriesList(
           pointValue["line"],
           `Series "${name}" data point ${rawIndex}.line`,
         );
+        const pointMarker = markerStyle(
+          pointValue["marker"],
+          `Series "${name}" data point ${rawIndex}.marker`,
+          kind,
+        );
         const labelColor = optionalColor(
           pointValue["labelColor"],
           `Series "${name}" data point ${rawIndex}.labelColor`,
@@ -723,17 +812,22 @@ function chartSeriesList(
         points[pointIndex] = {
           ...(pointColor === undefined ? {} : { color: pointColor }),
           ...(pointLine === undefined ? {} : { line: pointLine }),
+          ...(pointMarker === undefined ? {} : { marker: pointMarker }),
           ...(labelColor === undefined ? {} : { labelColor }),
         };
       }
     }
     const color = optionalColor(item["color"], `Series "${name}".color`);
     const line = lineStyle(item["line"], `Series "${name}".line`);
+    const marker = markerStyle(item["marker"], `Series "${name}".marker`, kind);
+    const smooth = smoothStyle(item["smooth"], `Series "${name}".smooth`, kind);
     return {
       name,
       values: values as readonly (number | null)[],
       ...(color === undefined ? {} : { color }),
       ...(line === undefined ? {} : { line }),
+      ...(marker === undefined ? {} : { marker }),
+      ...(smooth === undefined ? {} : { smooth }),
       ...(points === undefined ? {} : { points }),
     };
   });
@@ -2132,6 +2226,8 @@ export type {
   ChartKind,
   ChartLine,
   ChartLineDash,
+  ChartMarker,
+  ChartMarkerSymbol,
   ChartPoint,
   ChartProps,
   ChartSeries,

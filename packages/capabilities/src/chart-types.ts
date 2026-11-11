@@ -37,10 +37,38 @@ export type ChartLine = {
   readonly dash?: ChartLineDash;
 };
 
+/** Native marker symbol; `picture` is excluded until picture markers have a resource contract. */
+export type ChartMarkerSymbol =
+  | "auto"
+  | "circle"
+  | "dash"
+  | "diamond"
+  | "dot"
+  | "none"
+  | "plus"
+  | "square"
+  | "star"
+  | "triangle"
+  | "x";
+
+/** Marker formatting for a line series or one of its points. */
+export type ChartMarker = {
+  /** Marker symbol; defaults to circle when markers are enabled. */
+  readonly symbol?: ChartMarkerSymbol;
+  /** Marker size in points, from 2 to 72. */
+  readonly size?: number;
+  /** Marker fill; omitted leaves the native series or theme default. */
+  readonly fill?: ColorValue;
+  /** Marker outline; omitted leaves the native series or theme default. */
+  readonly line?: ChartLine;
+};
+
 export type ChartPoint = {
   readonly color?: ColorValue;
   /** Stroke or border override for this data point. */
   readonly line?: ChartLine;
+  /** Marker override for this point; applies only to line charts. */
+  readonly marker?: boolean | ChartMarker;
   /** Overrides data label text color for this data point. */
   readonly labelColor?: ColorValue;
 };
@@ -53,7 +81,11 @@ export type ChartSeries = {
   readonly color?: ColorValue;
   /** Stroke or border override; for line charts it controls the series line. */
   readonly line?: ChartLine;
-  /** Overrides color, line, or data label text color for individual points by position. */
+  /** Marker settings; applies only to line charts and is hidden when omitted or false. */
+  readonly marker?: boolean | ChartMarker;
+  /** Whether the line is drawn with Catmull-Rom smoothing; applies only to line charts. */
+  readonly smooth?: boolean;
+  /** Overrides color, line, marker, or data label text color for points by position. */
   readonly points?: Readonly<Record<number, ChartPoint>>;
 };
 

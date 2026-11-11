@@ -51,6 +51,8 @@ export type {
   ChartKind,
   ChartLine,
   ChartLineDash,
+  ChartMarker,
+  ChartMarkerSymbol,
   ChartNode,
   ChartPoint,
   ChartProps,

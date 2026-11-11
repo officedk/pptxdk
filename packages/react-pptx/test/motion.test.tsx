@@ -47,6 +47,32 @@ const png = new Uint8Array(
   ),
 );
 
+function rewriteSlideXml(
+  pptx: Uint8Array,
+  rewrite: (xml: string) => string,
+): Uint8Array {
+  const path = "ppt/slides/slide1.xml";
+  const parts = unzipSync(pptx);
+  const xml = strFromU8(parts[path]!);
+  const next = rewrite(xml);
+  assert.notEqual(next, xml);
+  return zipSync({ ...parts, [path]: strToU8(next) });
+}
+
+function renumberTimingNodeIds(xml: string, offset: number): string {
+  return xml
+    .replace(
+      /(<p:cTn\b[^>]*\bid=")(\d+)(")/gu,
+      (_match, prefix: string, id: string, suffix: string) =>
+        `${prefix}${Number(id) + offset}${suffix}`,
+    )
+    .replace(
+      /(<p:tn\b[^>]*\bval=")(\d+)(")/gu,
+      (_match, prefix: string, id: string, suffix: string) =>
+        `${prefix}${Number(id) + offset}${suffix}`,
+    );
+}
+
 function RepeatedSpinDeck() {
   const body = useMotionScope();
   return createElement(
@@ -1582,6 +1608,299 @@ describe("object motion", () => {
           800,
         ],
       ],
+    );
+  });
+
+  it("associates chart builds with actual chart effects by target and group after native timing renumbering", async () => {
+    const data = {
+      categories: ["Q1", "Q2"],
+      series: [
+        { name: "North", values: [10, 20] },
+        { name: "South", values: [12, 18] },
+      ],
+    };
+    const chart = (testId: string, x: number) =>
+      createElement(Chart, {
+        id: testId,
+        name: testId,
+        x,
+        y: 10,
+        width: 210,
+        height: 200,
+        groups: [
+          {
+            kind: "column" as const,
+            data: {
+              kind: "shared-categories" as const,
+              categories: data.categories,
+            },
+            series: data.series,
+          },
+        ],
+        enter: fade({ by: "series", duration: 400 }),
+      });
+    const result = await build(
+      createElement(
+        Deck,
+        { width: 480, height: 270 },
+        createElement(
+          Slide,
+          { id: "chart-build-groups" },
+          chart("first-chart", 10),
+          chart("second-chart", 240),
+        ),
+      ),
+    );
+
+    const source = await validatePptx(result.pptx);
+    assert.deepEqual(source.errors, []);
+    assert.equal(source.slides[0]?.objects.length, 2);
+
+    const slidePath = "ppt/slides/slide1.xml";
+    const slideXml = strFromU8(unzipSync(result.pptx)[slidePath]!);
+    const declared = [
+      ...slideXml.matchAll(/<p:bldGraphic spid="(\d+)" grpId="(\d+)">/gu),
+    ].map((match) => ({
+      targetId: Number(match[1]),
+      groupId: Number(match[2]),
+    }));
+    assert.equal(declared.length, 2);
+    const [first, second] = declared;
+    assert.ok(first !== undefined && second !== undefined);
+    assert.notEqual(first.targetId, second.targetId);
+    assert.notEqual(first.groupId, second.groupId);
+
+    const cases: readonly [string, Uint8Array][] = [
+      [
+        "renumbered timing nodes",
+        rewriteSlideXml(result.pptx, (xml) => renumberTimingNodeIds(xml, 100)),
+      ],
+      [
+        "shared group number across charts",
+        rewriteSlideXml(result.pptx, (xml) =>
+          xml.replaceAll(
+            `grpId="${second.groupId}"`,
+            `grpId="${first.groupId}"`,
+          ),
+        ),
+      ],
+      [
+        "zero group number",
+        rewriteSlideXml(result.pptx, (xml) =>
+          xml.replaceAll(`grpId="${first.groupId}"`, 'grpId="0"'),
+        ),
+      ],
+    ];
+    for (const [label, pptx] of cases) {
+      const read = await validatePptx(pptx);
+      assert.deepEqual(read.errors, [], label);
+      const effects = read.slides[0]?.animations?.[0]?.effects ?? [];
+      assert.equal(effects.length, 6, label);
+      assert.deepEqual(
+        effects.map(({ nativeBuild }) => nativeBuild),
+        Array.from({ length: 6 }, () => "series"),
+        label,
+      );
+    }
+  });
+
+  it("rejects invalid chart build group associations and ranges", async () => {
+    const data = {
+      categories: ["Q1", "Q2"],
+      series: [
+        { name: "North", values: [10, 20] },
+        { name: "South", values: [12, 18] },
+      ],
+    };
+    const chart = (testId: string, x: number) =>
+      createElement(Chart, {
+        id: testId,
+        name: testId,
+        x,
+        y: 10,
+        width: 210,
+        height: 200,
+        groups: [
+          {
+            kind: "column" as const,
+            data: {
+              kind: "shared-categories" as const,
+              categories: data.categories,
+            },
+            series: data.series,
+          },
+        ],
+        enter: fade({ by: "series", duration: 400 }),
+      });
+    const result = await build(
+      createElement(
+        Deck,
+        { width: 480, height: 270 },
+        createElement(
+          Slide,
+          { id: "chart-build-negative" },
+          createElement(Shape, {
+            id: "not-a-chart",
+            x: 240,
+            y: 220,
+            width: 40,
+            height: 40,
+          }),
+          chart("first-chart", 10),
+          chart("second-chart", 260),
+        ),
+      ),
+    );
+
+    const source = await validatePptx(result.pptx);
+    assert.deepEqual(source.errors, []);
+    const objects = source.slides[0]?.objects ?? [];
+    const charts = objects.filter(({ kind }) => kind === "chart");
+    const shape = objects.find(({ kind }) => kind === "shape");
+    assert.equal(charts.length, 2);
+    assert.ok(shape !== undefined);
+    const [firstChart, secondChart] = charts;
+    assert.ok(firstChart !== undefined && secondChart !== undefined);
+
+    const slidePath = "ppt/slides/slide1.xml";
+    const slideXml = strFromU8(unzipSync(result.pptx)[slidePath]!);
+    const buildElements = [
+      ...slideXml.matchAll(/<p:bldGraphic\b[\s\S]*?<\/p:bldGraphic>/gu),
+    ].map((match) => match[0]);
+    assert.equal(buildElements.length, 2);
+    const firstBuildElement = buildElements.find((element) =>
+      element.includes(`spid="${firstChart.id}"`),
+    );
+    const secondBuildElement = buildElements.find((element) =>
+      element.includes(`spid="${secondChart.id}"`),
+    );
+    assert.ok(firstBuildElement !== undefined);
+    assert.ok(secondBuildElement !== undefined);
+    const firstGroupMatch = firstBuildElement.match(/grpId="(\d+)"/u);
+    const secondGroupMatch = secondBuildElement.match(/grpId="(\d+)"/u);
+    assert.ok(firstGroupMatch !== null && secondGroupMatch !== null);
+    const firstGroup = Number(firstGroupMatch[1]);
+    const secondGroup = Number(secondGroupMatch[1]);
+    assert.notEqual(firstGroup, secondGroup);
+    const firstBuild = (spid: number, grpId: number): string =>
+      `<p:bldGraphic spid="${spid}" grpId="${grpId}">`;
+
+    const expectMutationError = async (
+      label: string,
+      mutate: (xml: string) => string,
+      code: string,
+      message: RegExp,
+      absent: readonly string[] = [],
+    ): Promise<void> => {
+      const read = await validatePptx(rewriteSlideXml(result.pptx, mutate));
+      assert.ok(
+        read.errors.some(
+          (error) => error.code === code && message.test(error.message),
+        ),
+        `${label}: ${JSON.stringify(read.errors)}`,
+      );
+      for (const absentCode of absent) {
+        assert.equal(
+          read.errors.some((error) => error.code === absentCode),
+          false,
+          `${label}: ${JSON.stringify(read.errors)}`,
+        );
+      }
+    };
+
+    await expectMutationError(
+      "nonexistent target",
+      (xml) =>
+        xml.replace(
+          firstBuildElement,
+          firstBuildElement.replace(`spid="${firstChart.id}"`, 'spid="9999"'),
+        ),
+      "invalid-chart-build-group",
+      /does not exist/u,
+    );
+    await expectMutationError(
+      "non-chart target",
+      (xml) =>
+        xml.replace(
+          firstBuildElement,
+          firstBuildElement.replace(
+            `spid="${firstChart.id}"`,
+            `spid="${shape.id}"`,
+          ),
+        ),
+      "invalid-chart-build-group",
+      /not a chart object/u,
+    );
+    await expectMutationError(
+      "unused group",
+      (xml) =>
+        xml.replace(
+          firstBuildElement,
+          firstBuildElement.replace(`grpId="${firstGroup}"`, 'grpId="777"'),
+        ),
+      "invalid-chart-build-group",
+      /actual chart animation effect/u,
+      ["invalid-animation-target-range"],
+    );
+    await expectMutationError(
+      "effect uses another chart group",
+      (xml) =>
+        xml
+          .replaceAll(`grpId="${firstGroup}"`, `grpId="${secondGroup}"`)
+          .replace(
+            firstBuild(firstChart.id, secondGroup),
+            firstBuild(firstChart.id, firstGroup),
+          ),
+      "invalid-chart-build-group",
+      /build declaration of the same chart group/u,
+      ["invalid-animation-target-range"],
+    );
+    await expectMutationError(
+      "missing declaration",
+      (xml) => xml.replace(firstBuildElement, ""),
+      "invalid-chart-build-group",
+      /build declaration of the same chart group/u,
+      ["invalid-animation-target-range"],
+    );
+    await expectMutationError(
+      "duplicate pair",
+      (xml) =>
+        xml.replace(firstBuildElement, firstBuildElement + firstBuildElement),
+      "duplicate-chart-build-group",
+      /Duplicate build group/u,
+    );
+    await expectMutationError(
+      "series range overflow",
+      (xml) =>
+        xml.replaceAll(
+          'seriesIdx="0" categoryIdx="-4"',
+          'seriesIdx="3" categoryIdx="-4"',
+        ),
+      "invalid-animation-target-range",
+      /exceeds series/u,
+      ["invalid-chart-build-group"],
+    );
+    await expectMutationError(
+      "build mode mismatch",
+      (xml) =>
+        xml.replace(
+          firstBuildElement,
+          firstBuildElement.replace('bld="series"', 'bld="category"'),
+        ),
+      "invalid-animation-target-range",
+      /does not match native chart build mode/u,
+      ["invalid-chart-build-group"],
+    );
+    await expectMutationError(
+      "gridLegend sentinel",
+      (xml) =>
+        xml.replaceAll(
+          'seriesIdx="-3" categoryIdx="-3"',
+          'seriesIdx="-2" categoryIdx="-3"',
+        ),
+      "invalid-animation-target-range",
+      /native -3 sentinel/u,
+      ["invalid-chart-build-group"],
     );
   });
 

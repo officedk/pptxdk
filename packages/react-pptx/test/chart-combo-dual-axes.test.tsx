@@ -274,7 +274,7 @@ describe("chart combination and dual-axis topology", () => {
     }
   });
 
-  it("projects a shared category axis to a hidden companion for left and right values", async () => {
+  it("projects a shared category axis with raw owner crossings for left and right values", async () => {
     const categories = ["A", "A", "B"];
     const result = await buildSingleChart({
       x: 10,
@@ -321,12 +321,12 @@ describe("chart combination and dual-axis topology", () => {
     assert.deepEqual(file.errors, []);
     const chart = file.slides[0]?.objects[0]?.chart;
     assert.ok(chart);
-    assert.equal(chart.axes.length, 4);
+    assert.equal(chart.axes.length, 3);
     assert.deepEqual(
       chart.groups.map(({ axisIds }) => axisIds),
       [
         [111111, 222222],
-        [333333, 444444],
+        [111111, 333333],
         [111111, 222222],
       ],
     );
@@ -344,28 +344,21 @@ describe("chart combination and dual-axis topology", () => {
           kind: "category",
           position: "bottom",
           crossAxisId: 222222,
-          crosses: "min",
+          crosses: undefined,
         },
         {
           id: 222222,
           kind: "value",
           position: "left",
           crossAxisId: 111111,
-          crosses: undefined,
+          crosses: "min",
         },
         {
           id: 333333,
-          kind: "category",
-          position: "bottom",
-          crossAxisId: 444444,
-          crosses: "max",
-        },
-        {
-          id: 444444,
           kind: "value",
           position: "right",
-          crossAxisId: 333333,
-          crosses: undefined,
+          crossAxisId: 111111,
+          crosses: "max",
         },
       ],
     );
@@ -380,7 +373,6 @@ describe("chart combination and dual-axis topology", () => {
         { domain: categories, values: [2, 4, 6] },
       ],
     );
-    assert.deepEqual(chart.categoryFormulas, ["Sheet1!$A$2:$A$4"]);
     assert.deepEqual(
       chart.embeddedWorkbook?.series.map(({ categories: domain, values }) => [
         domain,
@@ -393,9 +385,8 @@ describe("chart combination and dual-axis topology", () => {
       ],
     );
     const xml = chartXml(result.pptx);
-    assert.equal((xml.match(/<c:catAx>/gu) ?? []).length, 2);
+    assert.equal((xml.match(/<c:catAx>/gu) ?? []).length, 1);
     assert.equal((xml.match(/<c:valAx>/gu) ?? []).length, 2);
-    assert.equal((xml.match(/<c:delete val="1"\/>/gu) ?? []).length, 1);
     assert.equal((xml.match(/<a:t>Period<\/a:t>/gu) ?? []).length, 1);
     assert.equal((xml.match(/Sheet1!\$A\$2:\$A\$4/gu) ?? []).length, 3);
     assert.match(xml, /<c:crosses val="min"\/>/u);
@@ -1359,7 +1350,7 @@ describe("chart combination and dual-axis topology", () => {
           numberFormat: undefined,
           majorTickMark: "cross",
           tickLabelPosition: undefined,
-          crosses: "max",
+          crosses: "min",
           majorGridlines: undefined,
           minorGridlines: undefined,
         },
@@ -1376,7 +1367,7 @@ describe("chart combination and dual-axis topology", () => {
           numberFormat: "0.0",
           majorTickMark: "out",
           tickLabelPosition: "high",
-          crosses: "min",
+          crosses: "max",
           majorGridlines: true,
           minorGridlines: undefined,
         },
@@ -1555,37 +1546,7 @@ describe("chart combination and dual-axis topology", () => {
     assert.match(categorySlide, /categoryIdx="2"/u);
   });
 
-  it("rejects shared axis sides and reads a self-crossing axis as invalid", async () => {
-    await assert.rejects(
-      buildSingleChart({
-        axes: {
-          firstCategory: { kind: "category", position: "top" },
-          firstValue: { kind: "value" },
-          secondCategory: { kind: "category", position: "top" },
-          secondValue: { kind: "value" },
-        },
-        groups: [
-          {
-            kind: "column",
-            axes: { category: "firstCategory", value: "firstValue" },
-            data: { kind: "shared-categories", categories: ["A"] },
-            series: [{ name: "First", values: [1] }],
-          },
-          {
-            kind: "column",
-            axes: { category: "secondCategory", value: "secondValue" },
-            data: { kind: "shared-categories", categories: ["B"] },
-            series: [{ name: "Second", values: [2] }],
-          },
-        ],
-      }),
-      (error: unknown) => {
-        assert.ok(error instanceof BuildError);
-        assert.equal(error.diagnostics[0]?.code, "invalid-chart-axes");
-        return true;
-      },
-    );
-
+  it("reads a self-crossing axis as invalid", async () => {
     const result = await buildSingleChart({
       axes: {
         category: { kind: "category" },
@@ -1729,7 +1690,7 @@ describe("chart combination and dual-axis topology", () => {
     assert.match(xml, /<c:axPos val="t"\/>/u);
   });
 
-  it("maps a single value-axis position to the horizontal crossing control", async () => {
+  it("maps a single value-axis position to its own crossing control", async () => {
     const result = await buildSingleChart({
       x: 10,
       y: 10,
@@ -1759,8 +1720,8 @@ describe("chart combination and dual-axis topology", () => {
         crosses,
       ]),
       [
-        ["category", "bottom", "max"],
-        ["value", "right", undefined],
+        ["category", "bottom", undefined],
+        ["value", "right", "max"],
       ],
     );
     const xml = chartXml(result.pptx);
@@ -1802,71 +1763,20 @@ describe("chart combination and dual-axis topology", () => {
         {
           kind: "category",
           position: "bottom",
+          crosses: undefined,
+          crossesAt: 1,
+        },
+        {
+          kind: "value",
+          position: "right",
           crosses: "max",
           crossesAt: undefined,
         },
-        { kind: "value", position: "right", crosses: undefined, crossesAt: 1 },
       ],
     );
     const xml = chartXml(result.pptx);
     assert.match(xml, /<c:crosses val="max"\/>/u);
     assert.match(xml, /<c:crossesAt val="1"\/>/u);
-  });
-
-  it("rejects conflicting sides on shared numeric axes", async () => {
-    const categoryData = {
-      kind: "shared-categories" as const,
-      categories: ["A", "B"],
-    };
-    const rejects = async (props: ChartProps) => {
-      await assert.rejects(buildSingleChart(props), (error: unknown) => {
-        assert.ok(error instanceof BuildError);
-        assert.equal(error.diagnostics[0]?.code, "invalid-chart-axes");
-        return true;
-      });
-    };
-    await rejects({
-      axes: {
-        period: { kind: "category", position: "bottom" },
-        value: { kind: "value" },
-        scatterX: { kind: "value", position: "top" },
-      },
-      groups: [
-        {
-          kind: "column",
-          axes: { category: "period", value: "value" },
-          data: categoryData,
-          series: [{ name: "Bars", values: [1, 2] }],
-        },
-        {
-          kind: "scatter",
-          axes: { x: "scatterX", y: "value" },
-          data: { kind: "xy" },
-          series: [{ name: "Dots", x: [1, 2], y: [3, 4] }],
-        },
-      ],
-    });
-    await rejects({
-      axes: {
-        category: { kind: "category", position: "left" },
-        barValue: { kind: "value" },
-        scatterY: { kind: "value", position: "right" },
-      },
-      groups: [
-        {
-          kind: "bar",
-          axes: { category: "category", value: "barValue" },
-          data: categoryData,
-          series: [{ name: "Bars", values: [1, 2] }],
-        },
-        {
-          kind: "scatter",
-          axes: { x: "barValue", y: "scatterY" },
-          data: { kind: "xy" },
-          series: [{ name: "Dots", x: [1, 2], y: [3, 4] }],
-        },
-      ],
-    });
   });
 
   it("reads a crossing and axis-position mismatch as a validator error", async () => {
@@ -1967,8 +1877,8 @@ describe("chart combination and dual-axis topology", () => {
         crosses,
       ]),
       [
-        ["value", "bottom", "min"],
-        ["value", "left", undefined],
+        ["value", "bottom", undefined],
+        ["value", "left", "min"],
       ],
     );
     const xml = chartXml(result.pptx);
@@ -2061,6 +1971,31 @@ describe("chart combination and dual-axis topology", () => {
         },
       ],
     });
+    const original = await validatePptx(result.pptx);
+    assert.deepEqual(original.errors, []);
+    const originalChart = original.slides[0]?.objects[0]?.chart;
+    assert.deepEqual(
+      originalChart?.axes.map(({ id, position, crosses, orientation }) => ({
+        id,
+        position,
+        crosses,
+        orientation,
+      })),
+      [
+        {
+          id: 111111,
+          position: "bottom",
+          crosses: "max",
+          orientation: undefined,
+        },
+        {
+          id: 222222,
+          position: "left",
+          crosses: "min",
+          orientation: "maxMin",
+        },
+      ],
+    );
     const parts = unzipSync(result.pptx);
     const chartPath = "ppt/charts/chart1.xml";
     const xml = strFromU8(parts[chartPath]!);
@@ -2105,21 +2040,24 @@ describe("chart combination and dual-axis topology", () => {
     assert.deepEqual(file.errors, []);
     const chart = file.slides[0]?.objects[0]?.chart;
     assert.ok(chart);
-    assert.equal(chart.axes.length, 4);
+    assert.equal(chart.axes.length, 3);
     assert.deepEqual(
-      chart.axes.map(({ kind, position }) => [kind, position]),
+      chart.axes.map(({ kind, position, crosses }) => [
+        kind,
+        position,
+        crosses,
+      ]),
       [
-        ["category", "bottom"],
-        ["value", "left"],
-        ["category", "bottom"],
-        ["value", "right"],
+        ["category", "bottom", undefined],
+        ["value", "left", "min"],
+        ["value", "right", "max"],
       ],
     );
     assert.deepEqual(
       chart.groups.map(({ type, axisIds }) => [type, axisIds]),
       [
         ["lineChart", [111111, 222222]],
-        ["lineChart", [333333, 444444]],
+        ["lineChart", [111111, 333333]],
       ],
     );
     assert.deepEqual(
@@ -2132,7 +2070,6 @@ describe("chart combination and dual-axis topology", () => {
         { domain: categories, values: [10, 20, null] },
       ],
     );
-    assert.deepEqual(chart.categoryFormulas, ["Sheet1!$A$2:$A$4"]);
     assert.deepEqual(
       chart.embeddedWorkbook?.series.map(({ categories: domain, values }) => [
         domain,
@@ -2143,6 +2080,10 @@ describe("chart combination and dual-axis topology", () => {
         [categories, [10, 20, null]],
       ],
     );
+    const xml = chartXml(result.pptx);
+    assert.equal((xml.match(/<c:catAx>/gu) ?? []).length, 1);
+    assert.equal((xml.match(/<c:valAx>/gu) ?? []).length, 2);
+    assert.equal((xml.match(/Sheet1!\$A\$2:\$A\$4/gu) ?? []).length, 2);
   });
 
   it("keeps the shared category domain under group reorder", async () => {
@@ -2182,7 +2123,7 @@ describe("chart combination and dual-axis topology", () => {
       assert.deepEqual(file.errors, []);
       const chart = file.slides[0]?.objects[0]?.chart;
       assert.ok(chart);
-      assert.equal(chart.axes.length, 4);
+      assert.equal(chart.axes.length, 3);
       assert.deepEqual(
         chart.groups.map(({ axisIds }) => axisIds.length),
         [2, 2],
@@ -2191,8 +2132,47 @@ describe("chart combination and dual-axis topology", () => {
         chart.series.map(({ name }) => name),
         order,
       );
-      assert.deepEqual(chart.categoryFormulas, ["Sheet1!$A$2:$A$4"]);
       assert.deepEqual(chart.embeddedWorkbook?.categories, categories);
+      const xml = chartXml(result.pptx);
+      assert.equal((xml.match(/Sheet1!\$A\$2:\$A\$4/gu) ?? []).length, 2);
     }
+  });
+
+  it("moves an author category crossesAt to the raw value-axis owner", async () => {
+    const result = await buildSingleChart({
+      x: 10,
+      y: 10,
+      width: 640,
+      height: 360,
+      axes: {
+        category: { kind: "category", crossesAt: 2 },
+        value: { kind: "value", min: 0, max: 10 },
+      },
+      groups: [
+        {
+          kind: "column",
+          axes: { category: "category", value: "value" },
+          data: { kind: "shared-categories", categories: ["A", "B"] },
+          series: [{ name: "S", values: [2, 8] }],
+        },
+      ],
+    });
+    const file = await validatePptx(result.pptx);
+    assert.deepEqual(file.errors, []);
+    const chart = file.slides[0]?.objects[0]?.chart;
+    assert.ok(chart);
+    assert.deepEqual(
+      chart.axes.map(({ kind, crosses, crossesAt }) => ({
+        kind,
+        crosses,
+        crossesAt,
+      })),
+      [
+        { kind: "category", crosses: undefined, crossesAt: undefined },
+        { kind: "value", crosses: undefined, crossesAt: 2 },
+      ],
+    );
+    const xml = chartXml(result.pptx);
+    assert.match(xml, /<c:crossesAt val="2"\/>/u);
   });
 });

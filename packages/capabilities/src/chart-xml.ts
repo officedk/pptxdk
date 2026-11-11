@@ -12,10 +12,12 @@ import { chartDataLabelPositions, mergeDataLabels } from "./chart-labels.ts";
 import type {
   ChartAxis,
   ChartDataLabelSettings,
+  ChartErrorBars,
   ChartKind,
   ChartLine,
   ChartMarker,
   ChartPoint,
+  ChartTrendline,
   ChartValueAxis,
 } from "./chart-types.ts";
 import type {
@@ -146,6 +148,7 @@ type ChartCells = {
     { readonly column: number; readonly categories: readonly string[] }
   >;
   readonly series: ReadonlyMap<number, ChartSeriesCells>;
+  readonly nextColumn: number;
 };
 
 /**
@@ -176,7 +179,7 @@ function chartCells(parsed: ParsedChart): ChartCells {
       nextColumn += 1;
       continue;
     }
-    const name = group.axes.category.logicalName;
+    const name = group.axes.category.name;
     if (categoryColumns.has(name)) continue;
     categoryColumns.set(name, {
       column: nextColumn,
@@ -209,7 +212,7 @@ function chartCells(parsed: ParsedChart): ChartCells {
     const category =
       group.axes === undefined
         ? axislessCategoryColumns.get(groupIndex)
-        : categoryColumns.get(group.axes.category.logicalName);
+        : categoryColumns.get(group.axes.category.name);
     if (category === undefined) {
       throw new Error(
         "Category chart group is missing its workbook category column",
@@ -227,7 +230,7 @@ function chartCells(parsed: ParsedChart): ChartCells {
       nextColumn += 1;
     }
   }
-  return { categoryColumns, axislessCategoryColumns, series };
+  return { categoryColumns, axislessCategoryColumns, series, nextColumn };
 }
 
 function rangeFormula(column: number, pointCount: number): string {
@@ -352,6 +355,176 @@ function shapeProperties(
 
 function transparent(): XmlElement {
   return el("c:spPr", null, el("a:noFill"), el("a:ln", null, el("a:noFill")));
+}
+
+type ErrorBarDirection = "value" | "x" | "y";
+
+type ErrorBarChannel = {
+  readonly seriesIndex: number;
+  /** Author-facing series axis; category custom channels always use value. */
+  readonly channelDirection: ErrorBarDirection;
+  readonly side: "plus" | "minus";
+  readonly column: number;
+  readonly pointCount: number;
+  readonly values: readonly (number | null)[];
+  readonly header: string;
+};
+
+type ErrorBarChannelMap = ReadonlyMap<string, ErrorBarChannel>;
+
+function errorBarChannelKey(
+  seriesIndex: number,
+  channelDirection: ErrorBarDirection,
+  side: "plus" | "minus",
+): string {
+  return `${seriesIndex}:${channelDirection}:${side}`;
+}
+
+/**
+ * Allocates one workbook column per declared custom error-bar side after every data column.
+ *
+ * Both the chart writer and the workbook writer consume this mapping so a formula and its
+ * cells cannot drift apart. Category data occupies A plus one value column per series; XY data
+ * occupies A plus X/Y pairs. A category custom series always has the channel identity `value`;
+ * the writer decides separately whether the native element stores x or y errDir. Null magnitudes
+ * keep their original slot through numRef indices.
+ */
+function errorBarChannels(
+  parsed: ParsedChart,
+  startColumn: number,
+): ErrorBarChannelMap {
+  let nextColumn = startColumn;
+  const channels = new Map<string, ErrorBarChannel>();
+  const add = (
+    seriesIndex: number,
+    seriesName: string,
+    channelDirection: ErrorBarDirection,
+    bars: ChartErrorBars | undefined,
+    pointCount: number,
+    axisLabel: string,
+  ): void => {
+    if (bars === undefined || bars.type !== "custom") return;
+    for (const side of ["plus", "minus"] as const) {
+      const values = bars[side];
+      if (values === undefined) continue;
+      const header = `${seriesName}${axisLabel === "" ? "" : ` ${axisLabel}`} ${side === "plus" ? "+" : "-"}`;
+      channels.set(errorBarChannelKey(seriesIndex, channelDirection, side), {
+        seriesIndex,
+        channelDirection,
+        side,
+        column: nextColumn,
+        pointCount,
+        values,
+        header,
+      });
+      nextColumn += 1;
+    }
+  };
+  for (const series of parsed.series) {
+    if (series.errorBars === undefined) continue;
+    if ("x" in series) {
+      add(
+        series.seriesIndex,
+        series.name,
+        "x",
+        series.errorBars.x,
+        series.x.length,
+        "X",
+      );
+      add(
+        series.seriesIndex,
+        series.name,
+        "y",
+        series.errorBars.y,
+        series.y.length,
+        "Y",
+      );
+    } else {
+      add(
+        series.seriesIndex,
+        series.name,
+        "value",
+        series.errorBars,
+        series.values.length,
+        "",
+      );
+    }
+  }
+  return channels;
+}
+
+function errorBarFormula(channel: ErrorBarChannel): string {
+  const column = columnName(channel.column - 1);
+  return `${sheet}!$${column}$2:$${column}$${channel.pointCount + 1}`;
+}
+
+const errorBarValueTypes = {
+  custom: "cust",
+  fixed: "fixedVal",
+  percentage: "percentage",
+  standardDeviation: "stdDev",
+  standardError: "stdErr",
+} as const;
+
+/**
+ * Writes one native error-bar element.
+ *
+ * `channelDirection` selects the author-facing series axis used by the workbook map; category
+ * custom bars always use `value` even when their native `errDir` is `y`. `nativeDirection` is
+ * the serialized c:errDir: scatters emit their X/Y axis, line emits y, and bar/column/area rely
+ * on the documented application default by omitting the element.
+ */
+function errorBarXml(
+  bars: ChartErrorBars,
+  channelDirection: ErrorBarDirection,
+  nativeDirection: "x" | "y" | undefined,
+  seriesIndex: number,
+  channels: ErrorBarChannelMap,
+  theme: ThemeContext,
+): XmlElement {
+  const channel = (side: "plus" | "minus"): ErrorBarChannel => {
+    const result = channels.get(
+      errorBarChannelKey(seriesIndex, channelDirection, side),
+    );
+    if (result === undefined) {
+      throw new Error("Missing workbook channel for a custom error bar");
+    }
+    return result;
+  };
+  let plus: XmlElement | undefined;
+  let minus: XmlElement | undefined;
+  if (bars.type === "custom") {
+    if (bars.plus !== undefined) {
+      const values = channel("plus");
+      plus = el("c:plus", null, numRef(errorBarFormula(values), values.values));
+    }
+    if (bars.minus !== undefined) {
+      const values = channel("minus");
+      minus = el(
+        "c:minus",
+        null,
+        numRef(errorBarFormula(values), values.values),
+      );
+    }
+  }
+  return el(
+    "c:errBars",
+    null,
+    nativeDirection === undefined
+      ? undefined
+      : el("c:errDir", { val: nativeDirection }),
+    el("c:errBarType", { val: bars.include ?? "both" }),
+    el("c:errValType", { val: errorBarValueTypes[bars.type] }),
+    bars.endCap === false ? el("c:noEndCap", { val: true }) : undefined,
+    plus,
+    minus,
+    bars.type === "custom" || bars.type === "standardError"
+      ? undefined
+      : el("c:val", { val: bars.value }),
+    bars.line === undefined
+      ? undefined
+      : el("c:spPr", null, chartLine(bars.line, theme)),
+  );
 }
 
 export type ChartTextStyleXml = {
@@ -551,12 +724,64 @@ function pointShape(
   );
 }
 
+function trendlineXml(value: ChartTrendline, theme: ThemeContext): XmlElement {
+  const type =
+    value.type === "movingAverage"
+      ? "movingAvg"
+      : value.type === "polynomial"
+        ? "poly"
+        : value.type === "exponential"
+          ? "exp"
+          : value.type === "logarithmic"
+            ? "log"
+            : value.type;
+  return el(
+    "c:trendline",
+    null,
+    value.line === undefined
+      ? undefined
+      : el("c:spPr", null, chartLine(value.line, theme)),
+    el("c:trendlineType", { val: type }),
+    // CT_Trendline order: order, period, forecast, intercept, R-squared, equation.
+    value.type === "polynomial"
+      ? el("c:order", { val: value.order })
+      : undefined,
+    value.type === "movingAverage"
+      ? el("c:period", { val: value.period })
+      : undefined,
+    value.forward === undefined
+      ? undefined
+      : el("c:forward", { val: value.forward }),
+    value.backward === undefined
+      ? undefined
+      : el("c:backward", { val: value.backward }),
+    value.type === "linear" ||
+      value.type === "exponential" ||
+      value.type === "polynomial"
+      ? value.intercept === undefined
+        ? undefined
+        : el("c:intercept", { val: value.intercept })
+      : undefined,
+    value.type === "movingAverage"
+      ? undefined
+      : value.displayRSquared === undefined
+        ? undefined
+        : el("c:dispRSqr", { val: value.displayRSquared }),
+    value.type === "movingAverage"
+      ? undefined
+      : value.displayEquation === undefined
+        ? undefined
+        : el("c:dispEq", { val: value.displayEquation }),
+  );
+}
+
 function categoryChartSeries(
   group: Extract<ParsedChartGroup, { kind: Exclude<ChartKind, "scatter"> }>,
   series: ParsedChartSeries,
   seriesCells: ChartSeriesCells,
   groupIndex: number,
   textStyles: ChartTextStyleXml,
+  channels: ErrorBarChannelMap,
   theme: ThemeContext,
 ): XmlElement {
   const category = seriesCells.category;
@@ -620,6 +845,19 @@ function categoryChartSeries(
       : undefined,
     points,
     dataLabels(group, series, groupIndex, textStyles, theme),
+    (series.trendlines ?? []).map((trendline) =>
+      trendlineXml(trendline, theme),
+    ),
+    series.errorBars === undefined
+      ? undefined
+      : errorBarXml(
+          series.errorBars,
+          "value",
+          group.kind === "line" ? "y" : undefined,
+          series.seriesIndex,
+          channels,
+          theme,
+        ),
     el(
       "c:cat",
       null,
@@ -671,6 +909,7 @@ function scatterChartSeries(
   seriesCells: ChartSeriesCells,
   groupIndex: number,
   textStyles: ChartTextStyleXml,
+  channels: ErrorBarChannelMap,
   theme: ThemeContext,
 ): XmlElement {
   if (seriesCells.x === undefined || seriesCells.y === undefined) {
@@ -715,6 +954,29 @@ function scatterChartSeries(
     scatterMarkerXml(group, series, theme),
     points,
     dataLabels(group, series, groupIndex, textStyles, theme),
+    (series.trendlines ?? []).map((trendline) =>
+      trendlineXml(trendline, theme),
+    ),
+    series.errorBars?.x === undefined
+      ? undefined
+      : errorBarXml(
+          series.errorBars.x,
+          "x",
+          "x",
+          series.seriesIndex,
+          channels,
+          theme,
+        ),
+    series.errorBars?.y === undefined
+      ? undefined
+      : errorBarXml(
+          series.errorBars.y,
+          "y",
+          "y",
+          series.seriesIndex,
+          channels,
+          theme,
+        ),
     el(
       "c:xVal",
       null,
@@ -763,6 +1025,7 @@ function chartGroup(
   groupIndex: number,
   cells: ChartCells,
   textStyles: ChartTextStyleXml,
+  channels: ErrorBarChannelMap,
   theme: ThemeContext,
 ): XmlElement {
   const seriesCell = (seriesIndex: number): ChartSeriesCells => {
@@ -782,6 +1045,7 @@ function chartGroup(
         seriesCell(item.seriesIndex),
         groupIndex,
         textStyles,
+        channels,
         theme,
       ),
     );
@@ -805,6 +1069,7 @@ function chartGroup(
       seriesCell(item.seriesIndex),
       groupIndex,
       textStyles,
+      channels,
       theme,
     ),
   );
@@ -919,6 +1184,8 @@ function axisScaling(spec: ChartAxis, valueAxis: boolean): XmlElement {
   );
 }
 
+// Raw OOXML crossing owner: this field positions this axis inside its crossAx
+// partner's domain. Author crossings are adapted to this partner owner in parse.
 function axisCrossing(crossing: ParsedAxisCrossing): XmlElement {
   return crossing.kind === "crossesAt"
     ? el("c:crossesAt", { val: crossing.value })
@@ -1053,6 +1320,7 @@ export function chartPartXml(
     theme.textStyle.lang ??
     "en-US";
   const cells = chartCells(parsed);
+  const channels = errorBarChannels(parsed, cells.nextColumn + 1);
   return serialize(
     el(
       "c:chartSpace",
@@ -1074,7 +1342,7 @@ export function chartPartXml(
           null,
           plotLayout(parsed, box),
           parsed.groups.map((group, groupIndex) =>
-            chartGroup(group, groupIndex, cells, textStyles, theme),
+            chartGroup(group, groupIndex, cells, textStyles, channels, theme),
           ),
           axes(parsed, textStyles, theme),
           transparent(),
@@ -1172,6 +1440,7 @@ export function chartWorkbook(parsed: ParsedChart): Uint8Array {
     "http://schemas.openxmlformats.org/spreadsheetml/2006/main";
   const officeRelationships = relationshipNamespace;
   const cells = chartCells(parsed);
+  const channels = [...errorBarChannels(parsed, cells.nextColumn + 1).values()];
   const headerCells: XmlElement[] = [inlineString("A1", " ")];
   for (const { column } of [
     ...cells.categoryColumns.values(),
@@ -1265,11 +1534,29 @@ export function chartWorkbook(parsed: ParsedChart): Uint8Array {
       }
     }
   }
+  for (const channel of channels) {
+    headerCells.push(
+      inlineString(`${columnName(channel.column - 1)}1`, channel.header),
+    );
+  }
   const header = el("row", { r: 1 }, headerCells);
+  for (const channel of channels) {
+    for (let index = 0; index < channel.pointCount; index += 1) {
+      const value = channel.values[index];
+      if (value === null || value === undefined) continue;
+      addCell(
+        index + 2,
+        el(
+          "c",
+          { r: `${columnName(channel.column - 1)}${index + 2}` },
+          el("v", null, String(value)),
+        ),
+      );
+    }
+  }
   const rowXml = [...rows.entries()]
     .sort(([left], [right]) => left - right)
     .map(([row, items]) => el("row", { r: row }, items));
-
   const parts: Record<string, XmlElement> = {
     "[Content_Types].xml": el(
       "Types",

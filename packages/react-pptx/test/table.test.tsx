@@ -61,7 +61,8 @@ describe("native tables", () => {
         [
           'import { createElement } from "react";',
           'import { Deck, Slide, createBuilder } from "@react-pptx/core";',
-          'import { Cell, Row, Table, tableCapability } from "@react-pptx/capabilities/table";',
+          'import { Cell, Row, Table } from "@react-pptx/capabilities/table-elements";',
+          'import { tableCapability } from "@react-pptx/capabilities/table";',
           'import { validatePptx } from "@react-pptx/validation";',
           "const build = createBuilder([tableCapability]);",
           'const result = await build(createElement(Deck, { width: 160, height: 96 }, createElement(Slide, { slideId: "trimmed" }, createElement(Table, { testId: "only-table", columns: [80] }, createElement(Row, { style: { height: 40 } }, createElement(Cell, null, "table survives Text crop"))))));',

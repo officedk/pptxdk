@@ -75,6 +75,8 @@ export type {
   LinkTarget,
   NativeElementKind,
   NativeLink,
+  NativeTableObservation,
+  NativeTablePartObservation,
   ObjectCapabilityModule,
   ObjectObservation,
   PaddingStyle,

@@ -11,7 +11,8 @@ export const build = createBuilder([
 
 export { Deck, formatBaseline, targets } from "@react-pptx/core";
 export { Slide } from "./slide.ts";
-export { Chart, chartCapability } from "@react-pptx/capabilities/chart";
+export { Chart } from "@react-pptx/capabilities/chart-elements";
+export { chartCapability } from "@react-pptx/capabilities/chart";
 export {
   Step,
   fade,

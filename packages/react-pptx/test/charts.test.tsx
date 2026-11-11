@@ -500,11 +500,19 @@ describe("native Cartesian charts", () => {
         },
       ],
       axes: [
-        { id: 111111, kind: "category", crossAxisId: 222222 },
+        {
+          id: 111111,
+          kind: "category",
+          crossAxisId: 222222,
+          position: "bottom",
+          visible: true,
+        },
         {
           id: 222222,
           kind: "value",
           crossAxisId: 111111,
+          position: "left",
+          visible: true,
           max: 40,
           majorUnit: 10,
           numberFormat: "#,##0",

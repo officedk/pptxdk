@@ -374,6 +374,9 @@ export type ChartTickLabelPosition = "nextTo" | "high" | "low" | "none";
 /** Where the crossing axis is placed relative to this axis. */
 export type ChartAxisCrossing = "autoZero" | "max" | "min";
 
+/** Physical side of an axis, derived from its horizontal or vertical direction. */
+export type ChartAxisPosition = "bottom" | "top" | "left" | "right";
+
 /** Chart-wide rendering of null category values; supported values depend on chart kind and stacking. */
 export type ChartDisplayBlanksAs = "gap" | "zero" | "span";
 
@@ -398,6 +401,8 @@ type ChartAxisBase = {
   readonly tickLabelPosition?: ChartTickLabelPosition;
   /** Reverses the axis direction with native maxMin orientation. */
   readonly reversed?: boolean;
+  /** Requested physical edge; omitted positions are derived from native crossing and topology. */
+  readonly position?: ChartAxisPosition;
   /** Places the crossing axis using a semantic position. */
   readonly crosses?: ChartAxisCrossing;
   /** Places the crossing axis at a value; category axes use a one-based category position. */

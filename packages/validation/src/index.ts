@@ -9,6 +9,7 @@ const presentationNamespace =
 const drawingNamespace =
   "http://schemas.openxmlformats.org/drawingml/2006/main";
 const chartNamespace = "http://schemas.openxmlformats.org/drawingml/2006/chart";
+const maximumChartAxisId = 4_294_967_295;
 const spreadsheetNamespace =
   "http://schemas.openxmlformats.org/spreadsheetml/2006/main";
 const tableUri = "http://schemas.openxmlformats.org/drawingml/2006/table";
@@ -283,6 +284,14 @@ export type FileChartAxis = {
   /** Scatter charts expose numeric X and Y roles while both remain native value axes. */
   readonly role?: "x" | "y";
   readonly crossAxisId: number;
+  /** Native c:axPos, expressed as the side of the plot area. */
+  readonly position?: "bottom" | "top" | "left" | "right";
+  /** Native c:delete visibility; present when the file explicitly declares it. */
+  readonly visible?: boolean;
+  /** Native c:majorGridlines presence. */
+  readonly majorGridlines?: boolean;
+  /** Native c:minorGridlines presence. */
+  readonly minorGridlines?: boolean;
   readonly title?: string;
   readonly orientation?: "minMax" | "maxMin";
   readonly logBase?: number;
@@ -294,7 +303,12 @@ export type FileChartAxis = {
   readonly majorTickMark?: string;
   readonly minorTickMark?: string;
   readonly tickLabelPosition?: string;
+  /**
+   * Native c:crosses on this axis. Per OOXML it positions this axis inside its
+   * crossing partner's domain, not the perpendicular axis on this axis.
+   */
   readonly crosses?: string;
+  /** Native c:crossesAt, expressed in the crossing partner's category or value domain. */
   readonly crossesAt?: number;
 };
 
@@ -4106,6 +4120,7 @@ function validateChart(
   }
   const axes: FileChartAxis[] = [];
   const axisById = new Map<number, FileChartAxis>();
+  const axisDirectionById = new Map<number, "horizontal" | "vertical">();
   const textTheme = themeTextReader(documents);
   for (const axisNode of axisNodes) {
     const id = integerAttribute(first(axisNode, chartNamespace, "axId"), "val");
@@ -4113,7 +4128,14 @@ function validateChart(
       first(axisNode, chartNamespace, "crossAx"),
       "val",
     );
-    if (id === undefined || id < 0 || crossAxisId === undefined) {
+    if (
+      id === undefined ||
+      id < 0 ||
+      id > maximumChartAxisId ||
+      crossAxisId === undefined ||
+      crossAxisId < 0 ||
+      crossAxisId > maximumChartAxisId
+    ) {
       issue(
         errors,
         chartPart,
@@ -4131,6 +4153,47 @@ function validateChart(
       );
       continue;
     }
+    const axisPositionNode = first(axisNode, chartNamespace, "axPos");
+    const axisPositionValue =
+      axisPositionNode === undefined ? "" : attribute(axisPositionNode, "val");
+    const position =
+      axisPositionValue === "b"
+        ? "bottom"
+        : axisPositionValue === "t"
+          ? "top"
+          : axisPositionValue === "l"
+            ? "left"
+            : axisPositionValue === "r"
+              ? "right"
+              : undefined;
+    if (position === undefined) {
+      issue(
+        errors,
+        chartPart,
+        "invalid-chart-axis",
+        `Chart axis ${id} has an invalid position`,
+      );
+    } else {
+      axisDirectionById.set(
+        id,
+        position === "bottom" || position === "top" ? "horizontal" : "vertical",
+      );
+    }
+    const deleteNode = first(axisNode, chartNamespace, "delete");
+    const deleted = booleanAttribute(deleteNode);
+    const visible = deleted === undefined ? undefined : !deleted;
+    if (deleteNode !== undefined && deleted === undefined) {
+      issue(
+        errors,
+        chartPart,
+        "invalid-chart-axis",
+        `Chart axis ${id} has an invalid delete value`,
+      );
+    }
+    const majorGridlines =
+      first(axisNode, chartNamespace, "majorGridlines") !== undefined;
+    const minorGridlines =
+      first(axisNode, chartNamespace, "minorGridlines") !== undefined;
     const scaling = first(axisNode, chartNamespace, "scaling");
     const orientation =
       scaling === undefined
@@ -4214,6 +4277,10 @@ function validateChart(
       id,
       kind: axisNode.localName === "catAx" ? "category" : "value",
       crossAxisId,
+      ...(position === undefined ? {} : { position }),
+      ...(visible === undefined ? {} : { visible }),
+      ...(majorGridlines ? { majorGridlines } : {}),
+      ...(minorGridlines ? { minorGridlines } : {}),
       ...(title === undefined ? {} : { title }),
       ...(orientation === "maxMin" ? { orientation } : {}),
       ...(logBase === undefined ? {} : { logBase }),
@@ -4239,14 +4306,46 @@ function validateChart(
     axes.push(axis);
     axisById.set(id, axis);
   }
+  if (axes.length > 4) {
+    issue(
+      errors,
+      chartPart,
+      "invalid-chart-axis",
+      "Chart must not declare more than four axes",
+    );
+  }
   for (const axis of axes) {
     const crossAxis = axisById.get(axis.crossAxisId);
-    if (crossAxis === undefined || crossAxis.crossAxisId !== axis.id) {
+    if (crossAxis === undefined) {
       issue(
         errors,
         chartPart,
         "invalid-chart-axis",
-        `Chart axis ${axis.id} has an invalid crossing axis`,
+        `Chart axis ${axis.id} references a missing crossing axis`,
+      );
+      continue;
+    }
+    if (crossAxis.id === axis.id) {
+      issue(
+        errors,
+        chartPart,
+        "invalid-chart-axis",
+        `Chart axis ${axis.id} cannot cross itself`,
+      );
+      continue;
+    }
+    const direction = axisDirectionById.get(axis.id);
+    const crossDirection = axisDirectionById.get(crossAxis.id);
+    if (
+      direction !== undefined &&
+      crossDirection !== undefined &&
+      direction === crossDirection
+    ) {
+      issue(
+        errors,
+        chartPart,
+        "invalid-chart-axis",
+        `Chart axis ${axis.id} must cross a perpendicular axis`,
       );
     }
   }
@@ -4314,7 +4413,14 @@ function validateChart(
           : "Cartesian chart group must reference a category axis and a value axis",
       );
     } else {
-      const roles = axisIds.map((id) => {
+      const groupDirection =
+        typeNode.localName === "barChart"
+          ? attribute(
+              first(typeNode, chartNamespace, "barDir") ?? typeNode,
+              "val",
+            )
+          : undefined;
+      const resolved = axisIds.map((id) => {
         const axis = axisById.get(id);
         if (axis === undefined) {
           issue(
@@ -4325,24 +4431,99 @@ function validateChart(
           );
           return undefined;
         }
-        return axis.kind;
+        return axis;
       });
-      if (
-        scatterType
-          ? roles.some((role) => role !== "value") ||
-            new Set(axisIds).size !== 2
-          : !roles.includes("category") ||
-            !roles.includes("value") ||
-            new Set(roles).size !== 2
-      ) {
-        issue(
-          errors,
-          chartPart,
-          "invalid-chart-axis-role",
-          scatterType
-            ? "Scatter chart group axis references must include two distinct value axes"
-            : "Chart group axis references must include one category axis and one value axis",
+      const directions = resolved.map((axis) =>
+        axis === undefined ? undefined : axisDirectionById.get(axis.id),
+      );
+      if (scatterType) {
+        const values = resolved.filter(
+          (axis): axis is FileChartAxis => axis?.kind === "value",
         );
+        if (
+          resolved.some((axis) => axis === undefined) ||
+          resolved.length !== 2 ||
+          values.length !== 2 ||
+          new Set(axisIds).size !== 2
+        ) {
+          issue(
+            errors,
+            chartPart,
+            "invalid-chart-axis-role",
+            "Scatter chart group axis references must include two distinct value axes",
+          );
+        } else if (
+          directions.includes(undefined) ||
+          new Set(directions).size !== 2
+        ) {
+          issue(
+            errors,
+            chartPart,
+            "invalid-chart-axis",
+            "Scatter chart group must reference one horizontal X and one vertical Y axis",
+          );
+        } else {
+          for (const axis of values) {
+            const role =
+              axisDirectionById.get(axis.id) === "horizontal" ? "x" : "y";
+            const mutable = axis as { role?: "x" | "y" };
+            if (mutable.role !== undefined && mutable.role !== role) {
+              issue(
+                errors,
+                chartPart,
+                "invalid-chart-axis-role",
+                `Chart axis ${axis.id} is referenced as both X and Y`,
+              );
+            }
+            mutable.role = role;
+          }
+        }
+      } else {
+        const category = resolved.find(
+          (axis): axis is FileChartAxis => axis?.kind === "category",
+        );
+        const valueAxis = resolved.find(
+          (axis): axis is FileChartAxis => axis?.kind === "value",
+        );
+        if (
+          resolved.some((axis) => axis === undefined) ||
+          resolved.length !== 2 ||
+          new Set(axisIds).size !== 2 ||
+          category === undefined ||
+          valueAxis === undefined
+        ) {
+          issue(
+            errors,
+            chartPart,
+            "invalid-chart-axis-role",
+            "Chart group axis references must include one category axis and one value axis",
+          );
+        } else {
+          const expectedCategoryDirection =
+            groupDirection === "bar" ? "vertical" : "horizontal";
+          const expectedValueDirection =
+            expectedCategoryDirection === "vertical"
+              ? "horizontal"
+              : "vertical";
+          if (
+            axisDirectionById.get(category.id) !== expectedCategoryDirection
+          ) {
+            issue(
+              errors,
+              chartPart,
+              "invalid-chart-axis",
+              `Chart group category axis ${category.id} has the wrong orientation`,
+            );
+          }
+          if (axisDirectionById.get(valueAxis.id) !== expectedValueDirection) {
+            issue(
+              errors,
+              chartPart,
+              "invalid-chart-axis",
+              `Chart group value axis ${valueAxis.id} has the wrong orientation`,
+            );
+          }
+        }
       }
     }
     for (const positionNode of descendantsByName(
@@ -4950,15 +5131,75 @@ function validateChart(
       ...(holeSize === undefined ? {} : { holeSize }),
     });
   }
-  if (types.includes("scatterChart")) {
-    const scatterGroups = groups.filter(({ type }) => type === "scatterChart");
-    for (const scatterGroup of scatterGroups) {
-      scatterGroup.axisIds.forEach((id, index) => {
-        const axis = axisById.get(id);
-        if (axis !== undefined) {
-          (axis as { role?: "x" | "y" }).role = index === 0 ? "x" : "y";
-        }
-      });
+  const endpointSide = (
+    source: FileChartAxis,
+    crossing: string,
+    targetDirection: "horizontal" | "vertical",
+  ): "bottom" | "left" | "right" | "top" | undefined => {
+    if (crossing === "autoZero" || crossing === "") return undefined;
+    if (crossing !== "min" && crossing !== "max") return undefined;
+    // A reversed partner puts its maximum value at the opposite physical end.
+    const maxAtFarEnd = source.orientation !== "maxMin";
+    if (targetDirection === "vertical") {
+      return (crossing === "max") === maxAtFarEnd ? "right" : "left";
+    }
+    return (crossing === "max") === maxAtFarEnd ? "top" : "bottom";
+  };
+  for (const axis of axes) {
+    const direction = axisDirectionById.get(axis.id);
+    if (direction === undefined) continue;
+    const partner = axisById.get(axis.crossAxisId);
+    if (partner === undefined || partner.id === axis.id) continue;
+    if (axisDirectionById.get(partner.id) === direction) continue;
+    if (axis.crossesAt !== undefined) continue;
+    const wanted = endpointSide(partner, axis.crosses ?? "autoZero", direction);
+    if (
+      wanted !== undefined &&
+      axis.position !== undefined &&
+      axis.position !== wanted
+    ) {
+      issue(
+        errors,
+        chartPart,
+        "invalid-chart-axis",
+        `Chart axis ${axis.id} is at ${axis.position} but its own crossing resolves to ${wanted}`,
+      );
+    }
+  }
+
+  const categoryDomains = new Map<number, readonly string[]>();
+  for (const [groupIndex, group] of groups.entries()) {
+    if (
+      group.type === "scatterChart" ||
+      group.type === "pieChart" ||
+      group.type === "doughnutChart"
+    ) {
+      continue;
+    }
+    const categoryAxisId = group.axisIds.find(
+      (id) => axisById.get(id)?.kind === "category",
+    );
+    if (categoryAxisId === undefined) continue;
+    for (const item of series) {
+      if (item.groupIndex !== groupIndex) continue;
+      const categories = item.categories;
+      if (categories === undefined) continue;
+      const existing = categoryDomains.get(categoryAxisId);
+      if (existing === undefined) {
+        categoryDomains.set(categoryAxisId, categories);
+        continue;
+      }
+      if (
+        existing.length !== categories.length ||
+        existing.some((category, index) => category !== categories[index])
+      ) {
+        issue(
+          errors,
+          chartPart,
+          "chart-category-domain-mismatch",
+          `Chart groups sharing category axis ${categoryAxisId} must have the same ordered category domain`,
+        );
+      }
     }
   }
 
@@ -5081,16 +5322,17 @@ function validateChart(
   }
   if (
     displayBlanksAs === "span" &&
-    groups.some(
-      ({ type, scatterStyle }) =>
-        type === "scatterChart" && scatterStyle === "marker",
-    )
+    groups.some(({ type, grouping: groupGrouping, scatterStyle }) => {
+      if (type === "lineChart") return groupGrouping !== "standard";
+      if (type === "scatterChart") return scatterStyle === "marker";
+      return true;
+    })
   ) {
     issue(
       errors,
       chartPart,
       "invalid-chart-missing-values",
-      "Scatter chart displayBlanksAs span requires a connecting line in every scatter group",
+      "Chart displayBlanksAs span requires a connecting line in every group",
     );
   }
   const chartObservation: FileChart = {

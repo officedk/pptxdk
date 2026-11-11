@@ -24,6 +24,7 @@ import { chartDataLabelPositions, mergeDataLabels } from "./chart-labels.ts";
 import type {
   ChartAxis,
   ChartAxisCrossing,
+  ChartAxisPosition,
   ChartCategoryAxis,
   ChartCategoryAxisReferences,
   ChartDataLabelSettings,
@@ -90,10 +91,6 @@ const maximumShapeExtentEmu = 2_147_483_647;
 const maximumLineWidthEmu = 20_116_800;
 // Current formal validation profile accepts rounded values in range 0–2,147,483,647; not a general OOXML upper limit.
 const maximumExplosionForCurrentValidationProfile = 2_147_483_647;
-const categoryAxisId = 111111;
-const valueAxisId = 222222;
-const scatterXAxisId = 333333;
-const scatterYAxisId = 444444;
 
 const chartOptions: Readonly<Record<ChartKind, readonly string[]>> = {
   column: ["stacking", "gapWidth", "overlap"],
@@ -140,6 +137,15 @@ const tickLabelPositionValues = new Set<ChartTickLabelPosition>([
   "none",
 ]);
 const crossingValues = new Set<ChartAxisCrossing>(["autoZero", "max", "min"]);
+const axisPositionValues = new Set<ChartAxisPosition>([
+  "bottom",
+  "top",
+  "left",
+  "right",
+]);
+const horizontalAxisPositions = ["bottom", "top"] as const;
+const verticalAxisPositions = ["left", "right"] as const;
+const nativeAxisIds = [111111, 222222, 333333, 444444] as const;
 const errorBarIncludes = new Set<ChartErrorBarInclude>([
   "both",
   "plus",
@@ -492,6 +498,7 @@ function axis(
       "minorTickMark",
       "tickLabelPosition",
       "reversed",
+      "position",
       "crosses",
       "crossesAt",
     ],
@@ -637,6 +644,16 @@ function axis(
   if (reversed !== undefined && typeof reversed !== "boolean") {
     fail("invalid-axis", `${label}.reversed must be a boolean`);
   }
+  const position = value["position"];
+  if (
+    position !== undefined &&
+    !axisPositionValues.has(position as ChartAxisPosition)
+  ) {
+    fail(
+      "invalid-axis",
+      `${label}.position must be bottom, top, left, or right`,
+    );
+  }
   const crosses = value["crosses"];
   if (
     crosses !== undefined &&
@@ -709,6 +726,9 @@ function axis(
       ? {}
       : { tickLabelPosition: tickLabelPosition as ChartTickLabelPosition }),
     ...(reversed === undefined ? {} : { reversed }),
+    ...(position === undefined
+      ? {}
+      : { position: position as ChartAxisPosition }),
     ...(crosses === undefined ? {} : { crosses: crosses as ChartAxisCrossing }),
     ...(crossesAt === undefined ? {} : { crossesAt }),
   };
@@ -2189,12 +2209,21 @@ export type ParsedScatterSeries = ScatterChartSeries & {
   readonly seriesIndex: number;
 };
 
+/** Native c:crosses/crossesAt on this axis; positions this axis in its crossAx partner domain. */
+export type ParsedAxisCrossing =
+  | { readonly kind: "crosses"; readonly value: ChartAxisCrossing }
+  | { readonly kind: "crossesAt"; readonly value: number };
+
 export type ParsedChartAxis = {
   readonly name: string;
-  /** Scatter axes use x/y roles; both remain native value axes. */
-  readonly role: "category" | "value" | "x" | "y";
   readonly id: number;
   readonly crossAxisId: number;
+  /** Physical direction derived from every group reference to this axis. */
+  readonly direction: "horizontal" | "vertical";
+  /** Nominal axPos side; interior/autoZero crossings may not resolve to an edge. */
+  readonly position: ChartAxisPosition;
+  /** Effective native crossing control; explicit author values are preserved. */
+  readonly crossing: ParsedAxisCrossing;
   readonly spec: ChartAxis;
 };
 
@@ -2246,6 +2275,7 @@ export type ParsedChart = {
   readonly groups: readonly ParsedChartGroup[];
   /** Flattened series view with the same objects owned by their groups. */
   readonly series: readonly (ParsedChartSeries | ParsedScatterSeries)[];
+  /** Labels of the first category group; each group keeps its own domain. */
   readonly categories: readonly string[];
   /** Largest category point count across category series; scatter groups contribute zero. */
   readonly categoryCount: number;
@@ -2261,34 +2291,41 @@ export type ParsedChart = {
   readonly rawProps: Readonly<Record<string, unknown>>;
 };
 
-function parsedAxes(
+type ParsedAxisDraft = {
+  readonly name: string;
+  readonly spec: ChartAxis;
+  direction?: "horizontal" | "vertical";
+  position?: ChartAxisPosition;
+  crossing?: ParsedAxisCrossing;
+  id?: number;
+  crossAxisId?: number;
+};
+
+type ResolvedGroupAxes =
+  | {
+      readonly kind: "category";
+      readonly category: ParsedAxisDraft;
+      readonly value: ParsedAxisDraft;
+    }
+  | {
+      readonly kind: "scatter";
+      readonly x: ParsedAxisDraft;
+      readonly y: ParsedAxisDraft;
+    };
+
+const nativeAxisIdLimit = nativeAxisIds.length;
+
+function axisEntries(
   value: unknown,
   groups: readonly ParsedGroupDraft[],
 ): {
-  axes: ParsedChartAxis[];
-  groupAxes: (ParsedChartGroup["axes"] | undefined)[];
+  readonly entries: { name: string; spec: ChartAxis }[];
+  readonly axisless: boolean;
 } {
-  const scatterGroups = groups.every((group) => group.kind === "scatter");
-  if (scatterGroups) {
-    return parsedScatterAxes(
-      value,
-      groups as readonly Extract<ParsedGroupDraft, { kind: "scatter" }>[],
-    );
-  }
-  if (groups.some((group) => group.kind === "scatter")) {
-    fail(
-      "unsupported-chart-group-combination",
-      "Scatter groups cannot be combined with other chart group kinds",
-    );
-  }
-  const categoryGroups = groups as readonly Extract<
-    ParsedGroupDraft,
-    { kind: Exclude<ChartKind, "scatter"> }
-  >[];
-  const cartesian = categoryGroups.every((group) =>
-    cartesianKinds.has(group.kind),
-  );
-  if (!cartesian) {
+  const scatterOnly = groups.every((group) => group.kind === "scatter");
+  if (
+    groups.every((group) => group.kind === "pie" || group.kind === "doughnut")
+  ) {
     if (groups.length !== 1) {
       fail(
         "unsupported-chart-group-combination",
@@ -2301,22 +2338,37 @@ function parsedAxes(
         "Pie and doughnut charts do not use category or value axes",
       );
     }
-    return { axes: [], groupAxes: [undefined] };
+    return { entries: [], axisless: true };
   }
-  if (new Set(categoryGroups.map(({ kind }) => kind)).size !== 1) {
+  if (
+    groups.some((group) => group.kind === "pie" || group.kind === "doughnut")
+  ) {
     fail(
       "unsupported-chart-group-combination",
-      "Mixed chart group kinds are not supported by this migration",
+      "Pie and doughnut charts support one chart group",
     );
   }
-
+  if (
+    value === undefined &&
+    !scatterOnly &&
+    new Set(groups.map((group) => group.kind)).size > 1
+  ) {
+    fail(
+      "invalid-chart-axes",
+      "Charts that combine different group kinds must declare chart-level axes and explicit group references",
+    );
+  }
   let entries: { name: string; spec: ChartAxis }[];
-  const explicit = value !== undefined;
   if (value === undefined) {
-    entries = [
-      { name: "category", spec: { kind: "category" } },
-      { name: "value", spec: { kind: "value" } },
-    ];
+    entries = scatterOnly
+      ? [
+          { name: "x", spec: { kind: "value" } },
+          { name: "y", spec: { kind: "value" } },
+        ]
+      : [
+          { name: "category", spec: { kind: "category" } },
+          { name: "value", spec: { kind: "value" } },
+        ];
   } else {
     if (!isRecord(value)) fail("invalid-axis", "Chart.axes must be an object");
     entries = Object.entries(value).map(([name, spec]) => {
@@ -2338,213 +2390,447 @@ function parsedAxes(
         spec: axis(spec, `Chart.axes.${name}`, kind),
       };
     });
-    if (entries.length === 0) {
-      fail(
-        "invalid-axis",
-        "Chart.axes must define a category and a value axis",
-      );
-    }
   }
-
-  const category = entries.find(({ spec }) => spec.kind === "category");
-  const valueAxis = entries.find(({ spec }) => spec.kind === "value");
-  if (category === undefined || valueAxis === undefined) {
-    fail(
-      "invalid-axis",
-      "Chart.axes must define exactly one category axis and one value axis",
-    );
+  if (entries.length === 0) {
+    fail("invalid-axis", "Chart.axes must define at least one axis");
   }
-  if (
-    entries.some(
-      ({ name }) => name !== category.name && name !== valueAxis.name,
-    )
-  ) {
+  if (entries.length > nativeAxisIdLimit) {
     fail(
       "unsupported-chart-axis",
-      "This migration supports one category axis and one value axis per chart",
+      "Office supports at most four chart axes per chart",
     );
   }
-  const categoryParsed: ParsedChartAxis = {
-    name: category.name,
-    role: "category",
-    id: categoryAxisId,
-    crossAxisId: valueAxisId,
-    spec: category.spec,
-  };
-  const valueParsed: ParsedChartAxis = {
-    name: valueAxis.name,
-    role: "value",
-    id: valueAxisId,
-    crossAxisId: categoryAxisId,
-    spec: valueAxis.spec,
-  };
-  const groupAxes = categoryGroups.map((group) => {
-    let references = group.axes;
-    if (references === undefined) {
-      if (
-        explicit &&
-        !(category.name === "category" && valueAxis.name === "value")
-      ) {
-        fail(
-          "invalid-chart-axes",
-          "Chart groups must reference chart-level axes when custom axis names are declared",
-        );
-      }
-      references = { category: category.name, value: valueAxis.name };
-    }
-    if (
-      references.category !== "category" &&
-      references.category !== category.name
-    ) {
-      if (entries.some(({ name }) => name === references.category)) {
-        fail(
-          "invalid-chart-axis-role",
-          `Chart group category axis "${references.category}" is not a category axis`,
-        );
-      }
-      fail(
-        "unknown-chart-axis",
-        `Chart group references unknown category axis "${references.category}"`,
-      );
-    }
-    if (references.value !== "value" && references.value !== valueAxis.name) {
-      if (entries.some(({ name }) => name === references.value)) {
-        fail(
-          "invalid-chart-axis-role",
-          `Chart group value axis "${references.value}" is not a value axis`,
-        );
-      }
-      fail(
-        "unknown-chart-axis",
-        `Chart group references unknown value axis "${references.value}"`,
-      );
-    }
-    if (
-      references.category !== category.name ||
-      references.value !== valueAxis.name
-    ) {
-      fail(
-        "unknown-chart-axis",
-        "Chart group axis references must match the declared chart-level axes",
-      );
-    }
-    return { category: categoryParsed, value: valueParsed };
-  });
-  return { axes: [categoryParsed, valueParsed], groupAxes };
+  return { entries, axisless: false };
 }
 
-function parsedScatterAxes(
+function parsedAxes(
   value: unknown,
-  groups: readonly Extract<ParsedGroupDraft, { kind: "scatter" }>[],
+  groups: readonly ParsedGroupDraft[],
 ): {
   axes: ParsedChartAxis[];
   groupAxes: (ParsedChartGroup["axes"] | undefined)[];
 } {
-  let entries: { name: string; spec: ChartValueAxis }[];
-  if (value === undefined) {
-    entries = [
-      { name: "x", spec: { kind: "value" } },
-      { name: "y", spec: { kind: "value" } },
-    ];
-  } else {
-    if (!isRecord(value)) fail("invalid-axis", "Chart.axes must be an object");
-    entries = Object.entries(value).map(([name, spec]) => {
-      if (name.trim() === "") {
-        fail("invalid-axis", "Chart.axes names must be non-empty strings");
-      }
-      if (!isRecord(spec)) {
-        fail("invalid-axis", `Chart.axes.${name} must be an object`);
-      }
-      if (spec["kind"] !== "value") {
-        fail(
-          "invalid-chart-axis-role",
-          `Chart.axes.${name}.kind must be "value" for a scatter chart`,
-        );
-      }
-      return {
-        name,
-        spec: axis(spec, `Chart.axes.${name}`, "value") as ChartValueAxis,
-      };
-    });
+  const { entries, axisless } = axisEntries(value, groups);
+  if (axisless) {
+    return { axes: [], groupAxes: groups.map(() => undefined) };
   }
-  if (entries.length !== 2) {
-    fail("invalid-axis", "A scatter chart must define exactly two value axes");
-  }
-  const firstReferences = groups[0]!.axes;
-  const xName =
-    firstReferences?.x ??
-    (entries.some(({ name }) => name === "x") ? "x" : undefined);
-  const yName =
-    firstReferences?.y ??
-    (entries.some(({ name }) => name === "y") ? "y" : undefined);
-  if (xName === undefined || yName === undefined) {
-    fail(
-      "invalid-chart-axes",
-      "Scatter chart groups must reference chart-level axes when custom axis names are declared",
-    );
-  }
-  if (xName === yName) {
-    fail(
-      "invalid-chart-axes",
-      "Scatter chart groups must reference distinct X and Y value axes",
-    );
-  }
-  const xEntry = entries.find(({ name }) => name === xName);
-  const yEntry = entries.find(({ name }) => name === yName);
-  if (xEntry === undefined) {
-    fail(
-      "unknown-chart-axis",
-      `Scatter chart group references unknown X axis "${xName}"`,
-    );
-  }
-  if (yEntry === undefined) {
-    fail(
-      "unknown-chart-axis",
-      `Scatter chart group references unknown Y axis "${yName}"`,
-    );
-  }
-  if (
-    entries.some(({ name }) => name !== xEntry.name && name !== yEntry.name)
-  ) {
-    fail(
-      "unsupported-chart-axis",
-      "This migration supports one X and one Y value axis per scatter chart",
-    );
-  }
-  const xParsed: ParsedChartAxis = {
-    name: xEntry.name,
-    role: "x",
-    id: scatterXAxisId,
-    crossAxisId: scatterYAxisId,
-    spec: xEntry.spec,
-  };
-  const yParsed: ParsedChartAxis = {
-    name: yEntry.name,
-    role: "y",
-    id: scatterYAxisId,
-    crossAxisId: scatterXAxisId,
-    spec: yEntry.spec,
-  };
-  const groupAxes = groups.map((group) => {
-    const references = group.axes;
-    if (references === undefined) {
-      if (xName !== "x" || yName !== "y") {
-        fail(
-          "invalid-chart-axes",
-          "Scatter chart groups must reference chart-level axes when custom axis names are declared",
-        );
-      }
-      return { x: xParsed, y: yParsed };
+
+  const entryByName = new Map(entries.map((entry) => [entry.name, entry]));
+  const draftByName = new Map<string, ParsedAxisDraft>();
+  const firstUse: ParsedAxisDraft[] = [];
+  const resolvedGroups: ResolvedGroupAxes[] = [];
+
+  const resolve = (
+    name: string,
+    expected: "category" | "value",
+    label: string,
+  ): ParsedAxisDraft => {
+    const entry = entryByName.get(name);
+    if (entry === undefined) {
+      fail("unknown-chart-axis", `${label} references unknown axis "${name}"`);
     }
-    if (references.x !== xName || references.y !== yName) {
+    if (entry.spec.kind !== expected) {
       fail(
-        "unknown-chart-axis",
-        "Scatter chart group axis references must match the declared chart-level axes",
+        "invalid-chart-axis-role",
+        `${label} references "${name}", which is not a ${expected} axis`,
       );
     }
-    return { x: xParsed, y: yParsed };
-  });
-  return { axes: [xParsed, yParsed], groupAxes };
+    let draft = draftByName.get(name);
+    if (draft === undefined) {
+      draft = { name, spec: entry.spec };
+      draftByName.set(name, draft);
+    }
+    if (!firstUse.includes(draft)) firstUse.push(draft);
+    return draft;
+  };
+
+  const assignDirection = (
+    axis: ParsedAxisDraft,
+    direction: "horizontal" | "vertical",
+  ): void => {
+    if (axis.direction !== undefined && axis.direction !== direction) {
+      fail(
+        "invalid-chart-axes",
+        `Chart axis "${axis.name}" cannot be both horizontal and vertical`,
+      );
+    }
+    axis.direction = direction;
+  };
+
+  const defaultPair = (
+    first: string,
+    second: string,
+    kind: "category" | "value",
+  ) =>
+    entries.length === 2 &&
+    entryByName.get(first)?.spec.kind === kind &&
+    entryByName.get(second)?.spec.kind === "value";
+
+  for (const [groupIndex, group] of groups.entries()) {
+    const label = `Chart.groups[${groupIndex}]`;
+    if (group.kind === "scatter") {
+      let references = group.axes;
+      if (references === undefined) {
+        if (!defaultPair("x", "y", "value")) {
+          fail(
+            "invalid-chart-axes",
+            `${label} must reference chart-level X and Y axes`,
+          );
+        }
+        references = { x: "x", y: "y" };
+      }
+      const x = resolve(references.x, "value", `${label} X`);
+      const y = resolve(references.y, "value", `${label} Y`);
+      if (x === y) {
+        fail(
+          "invalid-chart-axes",
+          `${label} must reference distinct X and Y value axes`,
+        );
+      }
+      assignDirection(x, "horizontal");
+      assignDirection(y, "vertical");
+      resolvedGroups.push({ kind: "scatter", x, y });
+      continue;
+    }
+
+    let references = group.axes;
+    if (references === undefined) {
+      if (!defaultPair("category", "value", "category")) {
+        fail(
+          "invalid-chart-axes",
+          `${label} must reference chart-level category and value axes`,
+        );
+      }
+      references = { category: "category", value: "value" };
+    }
+    const category = resolve(
+      references.category,
+      "category",
+      `${label} category axis`,
+    );
+    const valueAxis = resolve(references.value, "value", `${label} value axis`);
+    if (category === valueAxis) {
+      fail(
+        "invalid-chart-axes",
+        `${label} must reference distinct category and value axes`,
+      );
+    }
+    if (group.kind === "bar") {
+      assignDirection(category, "vertical");
+      assignDirection(valueAxis, "horizontal");
+    } else {
+      assignDirection(category, "horizontal");
+      assignDirection(valueAxis, "vertical");
+    }
+    resolvedGroups.push({ kind: "category", category, value: valueAxis });
+  }
+
+  for (const entry of entries) {
+    if (!firstUse.some((axis) => axis.name === entry.name)) {
+      fail(
+        "invalid-chart-axes",
+        `Chart axis "${entry.name}" is not referenced by any chart group`,
+      );
+    }
+  }
+
+  const partnersByAxis = new Map<ParsedAxisDraft, ParsedAxisDraft[]>();
+  const addPartner = (left: ParsedAxisDraft, right: ParsedAxisDraft) => {
+    const leftPartners = partnersByAxis.get(left);
+    if (leftPartners === undefined) partnersByAxis.set(left, [right]);
+    else if (!leftPartners.includes(right)) leftPartners.push(right);
+  };
+  for (const group of resolvedGroups) {
+    const first = group.kind === "category" ? group.category : group.x;
+    const second = group.kind === "category" ? group.value : group.y;
+    addPartner(first, second);
+    addPartner(second, first);
+  }
+  const partnersOf = (axis: ParsedAxisDraft): readonly ParsedAxisDraft[] =>
+    partnersByAxis.get(axis) ?? [];
+  const sharesPartner = (left: ParsedAxisDraft, right: ParsedAxisDraft) =>
+    partnersOf(left).some((partner) => partnersOf(right).includes(partner));
+
+  const explicitCrossing = (
+    axis: ParsedAxisDraft,
+  ): ParsedAxisCrossing | undefined => {
+    if (axis.spec.crossesAt !== undefined) {
+      return { kind: "crossesAt", value: axis.spec.crossesAt };
+    }
+    if (axis.spec.crosses !== undefined) {
+      return { kind: "crosses", value: axis.spec.crosses };
+    }
+    return undefined;
+  };
+
+  const positionAxes = new Map<ChartAxisPosition, ParsedAxisDraft[]>();
+  const claimPosition = (
+    axis: ParsedAxisDraft,
+    position: ChartAxisPosition,
+  ) => {
+    const occupants = positionAxes.get(position) ?? [];
+    axis.position = position;
+    if (occupants.length === 0) positionAxes.set(position, [axis]);
+    else occupants.push(axis);
+  };
+  for (const axis of firstUse) {
+    const position = axis.spec.position;
+    if (position === undefined) continue;
+    const allowed =
+      axis.direction === "horizontal"
+        ? horizontalAxisPositions
+        : verticalAxisPositions;
+    if (!(allowed as readonly string[]).includes(position)) {
+      fail(
+        "invalid-chart-axes",
+        `Chart axis "${axis.name}" position "${position}" does not match its ${axis.direction} direction`,
+      );
+    }
+    claimPosition(axis, position);
+  }
+  for (const axis of firstUse) {
+    if (axis.position !== undefined) continue;
+    const allowed =
+      axis.direction === "horizontal"
+        ? horizontalAxisPositions
+        : verticalAxisPositions;
+    // Defaults may share a side when the axes share a perpendicular partner; explicit
+    // requests are not forced to the same side.
+    const shared = firstUse.find(
+      (other) =>
+        other !== axis &&
+        other.position !== undefined &&
+        other.direction === axis.direction &&
+        sharesPartner(axis, other),
+    );
+    if (shared !== undefined) {
+      claimPosition(axis, shared.position!);
+      continue;
+    }
+    const position = allowed.find((item) => !positionAxes.has(item));
+    if (position === undefined) {
+      fail(
+        "unsupported-chart-axis",
+        `Office supports at most two independent ${axis.direction} axes per chart`,
+      );
+    }
+    claimPosition(axis, position);
+  }
+
+  const maxSide = (direction: "horizontal" | "vertical") =>
+    direction === "vertical" ? "right" : "top";
+  const rawCrossingForPosition = (
+    axis: ParsedAxisDraft,
+    partner: ParsedAxisDraft,
+    position: ChartAxisPosition,
+  ): ParsedAxisCrossing => {
+    const edgeRequested =
+      axis.spec.position !== undefined || position === maxSide(axis.direction!);
+    if (!edgeRequested) return { kind: "crosses", value: "autoZero" };
+    const partnerReversed = partner.spec.reversed === true;
+    if (axis.direction === "vertical") {
+      const rightIsMax = !partnerReversed;
+      return {
+        kind: "crosses",
+        value:
+          position === "right"
+            ? rightIsMax
+              ? "max"
+              : "min"
+            : rightIsMax
+              ? "min"
+              : "max",
+      };
+    }
+    const topIsMax = !partnerReversed;
+    return {
+      kind: "crosses",
+      value:
+        position === "top"
+          ? topIsMax
+            ? "max"
+            : "min"
+          : topIsMax
+            ? "min"
+            : "max",
+    };
+  };
+  const positionForRawCrossing = (
+    crossing: ParsedAxisCrossing,
+    partner: ParsedAxisDraft,
+    direction: "horizontal" | "vertical",
+  ): ChartAxisPosition | undefined => {
+    if (crossing.kind !== "crosses" || crossing.value === "autoZero") {
+      return undefined;
+    }
+    const maxAtFarEnd = partner.spec.reversed !== true;
+    if (direction === "vertical") {
+      return (crossing.value === "max") === maxAtFarEnd ? "right" : "left";
+    }
+    return (crossing.value === "max") === maxAtFarEnd ? "top" : "bottom";
+  };
+  // A known finite value domain proves an interior crossing cannot realize an
+  // explicit edge position. Unknown auto-scale domains stay undecided.
+  const knownValueEndpoint = (
+    crossing: ParsedAxisCrossing,
+    partner: ParsedAxisDraft,
+  ): "min" | "max" | undefined => {
+    if (partner.spec.kind !== "value") return undefined;
+    const min = partner.spec.min;
+    const max = partner.spec.max;
+    if (min === undefined || max === undefined || min === max) return undefined;
+    if (crossing.kind === "crossesAt") {
+      if (crossing.value === min) return "min";
+      if (crossing.value === max) return "max";
+      return undefined;
+    }
+    if (crossing.kind !== "crosses" || crossing.value !== "autoZero") {
+      return undefined;
+    }
+    if (min === 0) return "min";
+    if (max === 0) return "max";
+    return undefined;
+  };
+  const crossesKnownValueInterior = (
+    crossing: ParsedAxisCrossing,
+    partner: ParsedAxisDraft,
+  ): boolean => {
+    if (partner.spec.kind !== "value") return false;
+    const min = partner.spec.min;
+    const max = partner.spec.max;
+    if (min === undefined || max === undefined) return false;
+    const low = Math.min(min, max);
+    const high = Math.max(min, max);
+    if (crossing.kind === "crossesAt") {
+      return crossing.value > low && crossing.value < high;
+    }
+    return (
+      crossing.kind === "crosses" &&
+      crossing.value === "autoZero" &&
+      low < 0 &&
+      high > 0
+    );
+  };
+  const sameCrossing = (left: ParsedAxisCrossing, right: ParsedAxisCrossing) =>
+    left.kind === right.kind &&
+    (left.kind === "crossesAt"
+      ? right.kind === "crossesAt" && left.value === right.value
+      : right.kind === "crosses" && left.value === right.value);
+
+  // An author crossing on axis B positions B's perpendicular partner A. The raw OOXML
+  // field lives on A and positions A in B's domain, so adapt authors to the raw owner.
+  for (const axis of firstUse) {
+    const desired = new Set<ChartAxisPosition>();
+    for (const partner of partnersOf(axis)) {
+      const crossing = explicitCrossing(partner);
+      if (crossing === undefined) continue;
+      if (axis.spec.position !== undefined) {
+        if (crossesKnownValueInterior(crossing, partner)) {
+          fail(
+            "invalid-chart-axes",
+            `Chart axis "${axis.name}" position "${axis.spec.position}" conflicts with the known interior crossing on "${partner.name}"`,
+          );
+        }
+        const endpoint = knownValueEndpoint(crossing, partner);
+        if (endpoint !== undefined) {
+          const edge = positionForRawCrossing(
+            { kind: "crosses", value: endpoint },
+            partner,
+            axis.direction!,
+          );
+          if (edge !== undefined && edge !== axis.spec.position) {
+            fail(
+              "invalid-chart-axes",
+              `Chart axis "${axis.name}" position "${axis.spec.position}" conflicts with the known crossing endpoint on "${partner.name}"`,
+            );
+          }
+        }
+      }
+      const position = positionForRawCrossing(
+        crossing,
+        partner,
+        axis.direction!,
+      );
+      if (position !== undefined) desired.add(position);
+    }
+    if (desired.size > 1) {
+      fail(
+        "invalid-chart-axes",
+        `Explicit crossings on axes crossing "${axis.name}" disagree on its physical side`,
+      );
+    }
+    const wanted = [...desired][0];
+    if (wanted === undefined) continue;
+    if (axis.spec.position !== undefined && axis.spec.position !== wanted) {
+      fail(
+        "invalid-chart-axes",
+        `Chart axis "${axis.name}" position "${axis.spec.position}" conflicts with its explicit crossing controls`,
+      );
+    }
+    axis.position = wanted;
+  }
+
+  for (const axis of firstUse) {
+    let crossing: ParsedAxisCrossing | undefined;
+    for (const partner of partnersOf(axis)) {
+      const candidate =
+        explicitCrossing(partner) ??
+        rawCrossingForPosition(axis, partner, axis.position!);
+      if (crossing === undefined) {
+        crossing = candidate;
+        continue;
+      }
+      if (!sameCrossing(crossing, candidate)) {
+        fail(
+          "invalid-chart-axes",
+          `Shared crossing controls for axis "${axis.name}" disagree; use an explicit position or separate axes`,
+        );
+      }
+    }
+    if (crossing === undefined) {
+      fail(
+        "invalid-chart-axes",
+        `Chart axis "${axis.name}" is not crossed by another axis`,
+      );
+    }
+    axis.crossing = crossing;
+  }
+
+  for (const [index, axis] of firstUse.entries()) {
+    axis.id = nativeAxisIds[index]!;
+  }
+  for (const group of resolvedGroups) {
+    const first = group.kind === "category" ? group.category : group.x;
+    const second = group.kind === "category" ? group.value : group.y;
+    first.crossAxisId ??= second.id!;
+    second.crossAxisId ??= first.id!;
+  }
+
+  const parsed = firstUse.map((axis) => ({
+    name: axis.name,
+    id: axis.id!,
+    crossAxisId: axis.crossAxisId!,
+    direction: axis.direction!,
+    position: axis.position!,
+    crossing: axis.crossing!,
+    spec: axis.spec,
+  }));
+
+  const parsedByDraft = new Map(
+    firstUse.map((axis, index) => [axis, parsed[index]!]),
+  );
+  const groupAxes = resolvedGroups.map((group) =>
+    group.kind === "category"
+      ? {
+          category: parsedByDraft.get(group.category)!,
+          value: parsedByDraft.get(group.value)!,
+        }
+      : {
+          x: parsedByDraft.get(group.x)!,
+          y: parsedByDraft.get(group.y)!,
+        },
+  );
+  return { axes: parsed, groupAxes };
 }
 
 function displayBlanksAs(
@@ -2644,31 +2930,34 @@ export const chartCapability: ObjectCapabilityModule = {
     });
 
     const drafts = chartGroupDrafts(input.props["groups"]);
-    const sharedDomains = drafts.flatMap((group) =>
-      group.kind !== "scatter" && group.data.kind === "shared-categories"
-        ? [group.data.categories]
-        : [],
-    );
-    if (sharedDomains.length > 1) {
-      const first = sharedDomains[0]!;
-      for (const categories of sharedDomains.slice(1)) {
-        if (categories.length !== first.length) {
-          fail(
-            "chart-category-domain-mismatch",
-            "Chart groups sharing a category axis must have the same ordered category domain",
-          );
-        }
-        for (const [index, category] of categories.entries()) {
-          if (category !== first[index]) {
-            fail(
-              "chart-category-domain-mismatch",
-              "Chart groups sharing a category axis must have the same ordered category domain",
-            );
+    const { axes, groupAxes } = parsedAxes(input.props["axes"], drafts);
+    const categoryDomains = new Map<string, readonly string[]>();
+    for (const [groupIndex, draft] of drafts.entries()) {
+      if (draft.kind === "scatter") continue;
+      if (draft.data.kind !== "shared-categories") continue;
+      const resolved = groupAxes[groupIndex] as
+        | {
+            readonly category: ParsedChartAxis;
+            readonly value: ParsedChartAxis;
           }
-        }
+        | undefined;
+      if (resolved === undefined) continue;
+      const domain = draft.data.categories;
+      const existing = categoryDomains.get(resolved.category.name);
+      if (existing === undefined) {
+        categoryDomains.set(resolved.category.name, domain);
+        continue;
+      }
+      if (
+        existing.length !== domain.length ||
+        existing.some((category, index) => category !== domain[index])
+      ) {
+        fail(
+          "chart-category-domain-mismatch",
+          `Chart groups sharing category axis "${resolved.category.name}" must have the same ordered category domain`,
+        );
       }
     }
-    const { axes, groupAxes } = parsedAxes(input.props["axes"], drafts);
 
     let seriesIndex = 0;
     const groups: ParsedChartGroup[] = drafts.map((draft, groupIndex) => {
@@ -3264,10 +3553,16 @@ function chartResourceClaims(
     readonly message: string;
   }[];
 } {
-  const categoryAxes = parsed.axes.filter(({ role }) => role === "category");
-  const valueAxes = parsed.axes.filter(
-    ({ role }) => role === "value" || role === "x" || role === "y",
-  );
+  const categoryLabels = new Map<string, readonly string[]>();
+  for (const group of parsed.groups) {
+    if (group.kind === "scatter" || group.axes === undefined) continue;
+    categoryLabels.set(
+      group.axes.category.name,
+      group.data.kind === "independent-categories"
+        ? (group.series[0]?.categories ?? [])
+        : group.data.categories,
+    );
+  }
   const dataLabelText = parsed.groups.flatMap((group) =>
     group.dataLabels !== undefined &&
     group.dataLabels !== false &&
@@ -3294,8 +3589,12 @@ function chartResourceClaims(
             percentStacked,
           ),
         ];
-  for (const { spec } of valueAxes) {
-    if (spec.visible !== false && spec.style === undefined) {
+  for (const { spec } of parsed.axes) {
+    if (
+      spec.kind === "value" &&
+      spec.visible !== false &&
+      spec.style === undefined
+    ) {
       chartText.push(...axisCharacters(spec));
     }
   }
@@ -3329,10 +3628,7 @@ function chartResourceClaims(
     chart: string;
     title?: string;
     axisTitles?: Map<string, string>;
-    categoryAxis?: string;
-    valueAxis?: string;
-    xAxis?: string;
-    yAxis?: string;
+    axisStyles?: Map<string, string>;
     groupDataLabels?: Map<number, string>;
     pointLabels?: Map<string, string>;
   } = { chart: chart.xml };
@@ -3352,61 +3648,19 @@ function chartResourceClaims(
     );
     addWarnings(output.warnings);
   }
-  for (const { name, spec } of categoryAxes) {
+  for (const { name, spec } of parsed.axes) {
     if (spec.style !== undefined) {
       const output = writeChartTextProperties(
         mergeTextStyle(chartStyle, spec.style),
-        parsed.categories,
+        spec.kind === "category"
+          ? (categoryLabels.get(name) ?? [])
+          : axisCharacters(spec),
         `Chart.axes.${name}.style`,
         theme,
         embedFonts,
       );
-      textStyles.categoryAxis = output.xml;
-      resourceClaims.push(...output.resourceClaims);
-      fontUses.push(
-        ...output.fontUses.map((use) => ({
-          ...use,
-          path: `Chart.axes.${name}.style`,
-        })),
-      );
-      addWarnings(output.warnings);
-    }
-    const axisTitle = titleParts(spec.title);
-    if (axisTitle !== undefined) {
-      const output = writeChartTitle(
-        axisTitle.text,
-        mergeTextStyle(
-          mergeTextStyle(chartStyle, spec.style ?? {}),
-          axisTitle.style ?? {},
-        ),
-        `Chart.axes.${name}.title`,
-        theme,
-        embedFonts,
-      );
-      textStyles.axisTitles ??= new Map();
-      textStyles.axisTitles.set(name, output.xml);
-      resourceClaims.push(...output.resourceClaims);
-      fontUses.push(
-        ...output.fontUses.map((use) => ({
-          ...use,
-          path: `Chart.axes.${name}.title`,
-        })),
-      );
-      addWarnings(output.warnings);
-    }
-  }
-  for (const { name, role, spec } of valueAxes) {
-    if (spec.style !== undefined) {
-      const output = writeChartTextProperties(
-        mergeTextStyle(chartStyle, spec.style),
-        axisCharacters(spec),
-        `Chart.axes.${name}.style`,
-        theme,
-        embedFonts,
-      );
-      if (role === "x") textStyles.xAxis = output.xml;
-      else if (role === "y") textStyles.yAxis = output.xml;
-      else textStyles.valueAxis = output.xml;
+      textStyles.axisStyles ??= new Map();
+      textStyles.axisStyles.set(name, output.xml);
       resourceClaims.push(...output.resourceClaims);
       fontUses.push(
         ...output.fontUses.map((use) => ({
@@ -3540,6 +3794,7 @@ export function createChartNode(props: ChartProps): ChartNode {
 export type {
   ChartAxis,
   ChartAxisCrossing,
+  ChartAxisPosition,
   ChartAxisReferences,
   ChartCategoryAxis,
   ChartCategoryAxisReferences,

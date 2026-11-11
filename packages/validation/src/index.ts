@@ -4205,6 +4205,81 @@ function validateChart(
       ...(holeSize === undefined ? {} : { holeSize }),
     });
   }
+  for (const group of groups) {
+    if (
+      group.type === "pieChart" ||
+      group.type === "doughnutChart" ||
+      group.axisIds.length !== 2
+    ) {
+      continue;
+    }
+    const resolved = group.axisIds.map((id) => axisById.get(id));
+    if (resolved.some((axis) => axis === undefined)) continue;
+    const horizontal = resolved.find(
+      (axis) =>
+        axis !== undefined && axisDirectionById.get(axis.id) === "horizontal",
+    );
+    const vertical = resolved.find(
+      (axis) =>
+        axis !== undefined && axisDirectionById.get(axis.id) === "vertical",
+    );
+    if (horizontal === undefined || vertical === undefined) continue;
+    if (horizontal.crossesAt === undefined) {
+      const horizontalCrosses = horizontal.crosses ?? "autoZero";
+      if (
+        horizontalCrosses === "max" &&
+        vertical.position !== undefined &&
+        vertical.position !== "right"
+      ) {
+        issue(
+          errors,
+          chartPart,
+          "invalid-chart-axis",
+          `Chart axis ${vertical.id} is at ${vertical.position} but its horizontal crossing axis uses max`,
+        );
+      }
+      if (
+        (horizontalCrosses === "autoZero" || horizontalCrosses === "min") &&
+        vertical.position !== undefined &&
+        vertical.position !== "left"
+      ) {
+        issue(
+          errors,
+          chartPart,
+          "invalid-chart-axis",
+          `Chart axis ${vertical.id} is at ${vertical.position} but its horizontal crossing axis does not use max`,
+        );
+      }
+    }
+    if (vertical.crossesAt === undefined) {
+      const verticalCrosses = vertical.crosses ?? "autoZero";
+      if (
+        verticalCrosses === "max" &&
+        horizontal.position !== undefined &&
+        horizontal.position !== "top"
+      ) {
+        issue(
+          errors,
+          chartPart,
+          "invalid-chart-axis",
+          `Chart axis ${horizontal.id} is at ${horizontal.position} but its vertical crossing axis uses max`,
+        );
+      }
+      if (
+        (verticalCrosses === "autoZero" || verticalCrosses === "min") &&
+        horizontal.position !== undefined &&
+        horizontal.position !== "bottom"
+      ) {
+        issue(
+          errors,
+          chartPart,
+          "invalid-chart-axis",
+          `Chart axis ${horizontal.id} is at ${horizontal.position} but its vertical crossing axis does not use max`,
+        );
+      }
+    }
+  }
+
   const categoryDomains = new Map<number, readonly string[]>();
   for (const [groupIndex, group] of groups.entries()) {
     if (

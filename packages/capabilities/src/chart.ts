@@ -1674,14 +1674,21 @@ export type ParsedScatterSeries = ScatterChartSeries & {
   readonly seriesIndex: number;
 };
 
+/** Native crossing control written on one axis to position its perpendicular axis. */
+export type ParsedAxisCrossing =
+  | { readonly kind: "crosses"; readonly value: ChartAxisCrossing }
+  | { readonly kind: "crossesAt"; readonly value: number };
+
 export type ParsedChartAxis = {
   readonly name: string;
   readonly id: number;
   readonly crossAxisId: number;
   /** Physical direction derived from every group reference to this axis. */
   readonly direction: "horizontal" | "vertical";
-  /** Physical side; the first horizontal axis defaults to bottom, the second to top. */
+  /** Effective physical side derived from crossing controls, not from axPos alone. */
   readonly position: ChartAxisPosition;
+  /** Effective native crossing control; explicit author values are preserved. */
+  readonly crossing: ParsedAxisCrossing;
   readonly spec: ChartAxis;
 };
 
@@ -1754,6 +1761,7 @@ type ParsedAxisDraft = {
   readonly spec: ChartAxis;
   direction?: "horizontal" | "vertical";
   position?: ChartAxisPosition;
+  crossing?: ParsedAxisCrossing;
   id?: number;
   crossAxisId?: number;
 };
@@ -1991,7 +1999,49 @@ function parsedAxes(
     }
   }
 
-  const usedPositions = new Set<ChartAxisPosition>();
+  const partnersByAxis = new Map<ParsedAxisDraft, ParsedAxisDraft[]>();
+  const addPartner = (left: ParsedAxisDraft, right: ParsedAxisDraft) => {
+    const leftPartners = partnersByAxis.get(left);
+    if (leftPartners === undefined) partnersByAxis.set(left, [right]);
+    else if (!leftPartners.includes(right)) leftPartners.push(right);
+  };
+  for (const group of resolvedGroups) {
+    const first = group.kind === "category" ? group.category : group.x;
+    const second = group.kind === "category" ? group.value : group.y;
+    addPartner(first, second);
+    addPartner(second, first);
+  }
+  const partnersOf = (axis: ParsedAxisDraft): readonly ParsedAxisDraft[] =>
+    partnersByAxis.get(axis) ?? [];
+  const sharesPartner = (left: ParsedAxisDraft, right: ParsedAxisDraft) =>
+    partnersOf(left).some((partner) => partnersOf(right).includes(partner));
+
+  const explicitCrossing = (
+    axis: ParsedAxisDraft,
+  ): ParsedAxisCrossing | undefined => {
+    if (axis.spec.crossesAt !== undefined) {
+      return { kind: "crossesAt", value: axis.spec.crossesAt };
+    }
+    if (axis.spec.crosses !== undefined) {
+      return { kind: "crosses", value: axis.spec.crosses };
+    }
+    return undefined;
+  };
+  for (const axis of firstUse) {
+    const crossing = explicitCrossing(axis);
+    if (crossing !== undefined) axis.crossing = crossing;
+  }
+
+  const positionAxes = new Map<ChartAxisPosition, ParsedAxisDraft[]>();
+  const claimPosition = (
+    axis: ParsedAxisDraft,
+    position: ChartAxisPosition,
+  ) => {
+    const occupants = positionAxes.get(position) ?? [];
+    axis.position = position;
+    if (occupants.length === 0) positionAxes.set(position, [axis]);
+    else occupants.push(axis);
+  };
   for (const axis of firstUse) {
     const position = axis.spec.position;
     if (position === undefined) continue;
@@ -2005,14 +2055,14 @@ function parsedAxes(
         `Chart axis "${axis.name}" position "${position}" does not match its ${axis.direction} direction`,
       );
     }
-    if (usedPositions.has(position)) {
+    const occupants = positionAxes.get(position) ?? [];
+    if (occupants.some((other) => !sharesPartner(axis, other))) {
       fail(
         "invalid-chart-axes",
-        `Chart axes cannot share the "${position}" position`,
+        `Chart axes cannot share the "${position}" position unless they share a crossing axis`,
       );
     }
-    usedPositions.add(position);
-    axis.position = position;
+    claimPosition(axis, position);
   }
   for (const axis of firstUse) {
     if (axis.position !== undefined) continue;
@@ -2020,15 +2070,164 @@ function parsedAxes(
       axis.direction === "horizontal"
         ? horizontalAxisPositions
         : verticalAxisPositions;
-    const position = allowed.find((item) => !usedPositions.has(item));
+    // A shared crossing axis has one native crossing control, so every perpendicular
+    // axis using it must land on the same side. Independent axis components can still
+    // use opposite sides.
+    const shared = firstUse.find(
+      (other) =>
+        other !== axis &&
+        other.position !== undefined &&
+        other.direction === axis.direction &&
+        sharesPartner(axis, other),
+    );
+    if (shared !== undefined) {
+      const position = shared.position!;
+      const occupants = positionAxes.get(position) ?? [];
+      if (occupants.some((other) => !sharesPartner(axis, other))) {
+        fail(
+          "invalid-chart-axes",
+          `Chart axes cannot share the "${position}" position unless they share a crossing axis`,
+        );
+      }
+      claimPosition(axis, position);
+      continue;
+    }
+    const position = allowed.find((item) => !positionAxes.has(item));
     if (position === undefined) {
       fail(
         "unsupported-chart-axis",
-        `Office supports at most two ${axis.direction} axes per chart`,
+        `Office supports at most two independent ${axis.direction} axes per chart`,
       );
     }
-    usedPositions.add(position);
-    axis.position = position;
+    claimPosition(axis, position);
+  }
+
+  const crossingSideForPartner = (
+    crossing: ParsedAxisCrossing,
+    partnerDirection: "horizontal" | "vertical",
+  ): ChartAxisPosition | undefined => {
+    if (crossing.kind !== "crosses") return undefined;
+    if (partnerDirection === "vertical") {
+      return crossing.value === "max" ? "right" : "left";
+    }
+    return crossing.value === "max" ? "top" : "bottom";
+  };
+  const maxSide = (direction: "horizontal" | "vertical") =>
+    direction === "horizontal" ? "right" : "top";
+
+  // Office ignores c:axPos and positions an axis from the crossing control on its
+  // perpendicular axis. Reject explicit crossings or positions that disagree before
+  // deriving the effective sides. See MS-OI29500 Part 1 Section 21.2.2.10.
+  for (const axis of firstUse) {
+    const sides = partnersOf(axis).flatMap((partner) => {
+      const side =
+        partner.crossing === undefined
+          ? undefined
+          : crossingSideForPartner(partner.crossing, axis.direction!);
+      return side === undefined ? [] : [side];
+    });
+    const unique = new Set(sides);
+    if (unique.size > 1) {
+      fail(
+        "invalid-chart-axes",
+        `Explicit crossings on axes crossing "${axis.name}" disagree on its physical side`,
+      );
+    }
+    const side = [...unique][0];
+    if (
+      side !== undefined &&
+      axis.spec.position !== undefined &&
+      axis.spec.position !== side
+    ) {
+      fail(
+        "invalid-chart-axes",
+        `Chart axis "${axis.name}" position "${axis.spec.position}" conflicts with its explicit crossing controls`,
+      );
+    }
+  }
+
+  let stable = false;
+  for (let iteration = 0; iteration < 8; iteration += 1) {
+    let changed = false;
+    for (const axis of firstUse) {
+      if (axis.crossing?.kind !== "crosses") continue;
+      for (const partner of partnersOf(axis)) {
+        const wanted = crossingSideForPartner(
+          axis.crossing,
+          partner.direction!,
+        );
+        if (wanted === undefined) continue;
+        if (
+          partner.spec.position !== undefined &&
+          partner.position !== wanted
+        ) {
+          fail(
+            "invalid-chart-axes",
+            `Chart axis "${partner.name}" position "${partner.position}" conflicts with the explicit crossing on "${axis.name}"`,
+          );
+        }
+        if (partner.position !== wanted) {
+          partner.position = wanted;
+          changed = true;
+        }
+      }
+    }
+    for (const axis of firstUse) {
+      if (explicitCrossing(axis) !== undefined) continue;
+      const partners = partnersOf(axis);
+      if (partners.length === 0) {
+        fail(
+          "invalid-chart-axes",
+          `Chart axis "${axis.name}" is not crossed by another axis`,
+        );
+      }
+      const sides = partners.map((partner) => partner.position!);
+      const unique = new Set(sides);
+      if (unique.size !== 1) {
+        fail(
+          "invalid-chart-axes",
+          `Chart axis "${axis.name}" cannot position crossing axes on different sides; declare the same position or use independent axes`,
+        );
+      }
+      const side = sides[0]!;
+      const value = side === maxSide(axis.direction!) ? "max" : "autoZero";
+      if (axis.crossing?.kind !== "crosses" || axis.crossing.value !== value) {
+        axis.crossing = { kind: "crosses", value };
+        changed = true;
+      }
+    }
+    for (const axis of firstUse) {
+      const sides = partnersOf(axis).flatMap((partner) => {
+        if (partner.crossing?.kind !== "crosses") return [];
+        const side = crossingSideForPartner(partner.crossing, axis.direction!);
+        return side === undefined ? [] : [side];
+      });
+      const unique = new Set(sides);
+      if (unique.size > 1) {
+        fail(
+          "invalid-chart-axes",
+          `Crossing axes of "${axis.name}" disagree on its physical side`,
+        );
+      }
+      const wanted = [...unique][0];
+      if (wanted !== undefined && axis.position !== wanted) {
+        if (axis.spec.position !== undefined) {
+          fail(
+            "invalid-chart-axes",
+            `Chart axis "${axis.name}" position "${axis.spec.position}" conflicts with its derived crossing side`,
+          );
+        }
+        axis.position = wanted;
+        changed = true;
+      }
+    }
+    if (!changed) {
+      stable = true;
+      break;
+    }
+  }
+  if (!stable) {
+    fail("invalid-chart-axes", "Chart axis positions do not converge");
   }
 
   for (const [index, axis] of firstUse.entries()) {
@@ -2047,8 +2246,10 @@ function parsedAxes(
     crossAxisId: axis.crossAxisId!,
     direction: axis.direction!,
     position: axis.position!,
+    crossing: axis.crossing!,
     spec: axis.spec,
   }));
+
   const parsedByDraft = new Map(
     firstUse.map((axis, index) => [axis, parsed[index]!]),
   );

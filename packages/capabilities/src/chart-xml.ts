@@ -19,6 +19,7 @@ import type {
   ChartValueAxis,
 } from "./chart-types.ts";
 import type {
+  ParsedAxisCrossing,
   ParsedChart,
   ParsedChartAxis,
   ParsedChartGroup,
@@ -918,10 +919,10 @@ function axisScaling(spec: ChartAxis, valueAxis: boolean): XmlElement {
   );
 }
 
-function axisCrossing(spec: ChartAxis): XmlElement {
-  return spec.crossesAt === undefined
-    ? el("c:crosses", { val: spec.crosses ?? "autoZero" })
-    : el("c:crossesAt", { val: spec.crossesAt });
+function axisCrossing(crossing: ParsedAxisCrossing): XmlElement {
+  return crossing.kind === "crossesAt"
+    ? el("c:crossesAt", { val: crossing.value })
+    : el("c:crosses", { val: crossing.value });
 }
 
 const axisPositionCodes = {
@@ -964,6 +965,8 @@ function axisXml(
     el("c:axId", { val: axis.id }),
     axisScaling(spec, !category),
     el("c:delete", { val: spec.visible === false }),
+    // Office derives the real side from crossing controls; keep axPos consistent
+    // with the resolved crossing so native saves and readers observe the same side.
     el("c:axPos", { val: axisPositionCodes[axis.position] }),
     gridlines(spec, "major", theme),
     gridlines(spec, "minor", theme),
@@ -978,7 +981,7 @@ function axisXml(
     lineXml(spec.line, theme),
     raw(textStyles.axisStyles?.get(axis.name)),
     el("c:crossAx", { val: axis.crossAxisId }),
-    axisCrossing(spec),
+    axisCrossing(axis.crossing),
     category
       ? [
           el("c:auto", { val: true }),

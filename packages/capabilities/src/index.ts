@@ -96,8 +96,7 @@ export {
   breathe,
   fillColor,
   observeMotion,
-  Step,
-  MotionScope,
+  createMotionScopeHandle,
   fade,
   fly,
   floatDown,
@@ -107,10 +106,10 @@ export {
   spin,
   spinIn,
   stretch,
-  useMotionScope,
   wipe,
   zoom,
 } from "#/motion.ts";
+export { MotionScope, Step, useMotionScope } from "#/motion-elements.ts";
 export type {
   EffectInstanceObservation,
   Easing,

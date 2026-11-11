@@ -15,8 +15,8 @@ export { Slide } from "./slide.ts";
 export { font, textCapability } from "@react-pptx/capabilities/text";
 export { P, Span, Text } from "@react-pptx/capabilities/text-elements";
 export { createBuilder } from "@react-pptx/core";
+export { Step } from "@react-pptx/capabilities/motion-elements";
 export {
-  Step,
   fade,
   fly,
   floatDown,

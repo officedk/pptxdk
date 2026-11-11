@@ -53,6 +53,7 @@ export type {
   CapabilityAnnotation,
   CapabilityChild,
   CapabilityContext,
+  CapabilityContribution,
   CapabilityInput,
   CapabilityLayoutContract,
   CapabilityLayoutMeasurement,
@@ -65,6 +66,7 @@ export type {
   CapabilityPresentationContribution,
   CapabilityResource,
   CapabilityResourceClaim,
+  ContributionResolver,
   Diagnostic,
   Extension,
   GeometryBox,
@@ -85,5 +87,7 @@ export type {
   SlideCapabilityModule,
   SlideCapabilityOutput,
   SlideCapabilitySlot,
+  SlideObservation,
   Target,
+  TransparentCapabilityModule,
 } from "#/types.ts";

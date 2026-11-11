@@ -22,7 +22,11 @@ import { CommonContainer } from "@react-pptx/core/document";
 
 import { nativeLinkXml } from "./identity.ts";
 import type { MorphProps } from "./morph-api.ts";
-import { motionAnnotations, type MotionProps } from "./motion-api.ts";
+import {
+  motionAnnotations,
+  validateMotionFlag,
+  type MotionProps,
+} from "./motion-api.ts";
 import {
   hasVisibleBoxStyle,
   shapePropertiesXml,
@@ -64,7 +68,6 @@ const boxAllowedParameters = [
   "link",
   "enter",
   "motion",
-  "__motionContext",
 ] as const;
 
 const boxAllowedStyleKeys = new Set<string>([
@@ -141,6 +144,7 @@ export const boxCapability: ObjectCapabilityModule<ParsedBox> = {
       );
     }
 
+    validateMotionFlag(input.props["motion"]);
     const style = styleRecord(input.props["style"]);
     const hasVisibleStyle = hasVisibleBoxStyle(style);
     if (input.props["morphKey"] !== undefined && !hasVisibleStyle) {
@@ -208,13 +212,7 @@ export const boxCapability: ObjectCapabilityModule<ParsedBox> = {
     } as const;
     const annotations = properties.hasVisibleStyle
       ? motionAnnotations(parsed.rawProps, motionTarget)
-      : motionAnnotations(
-          {
-            motion: false,
-            __motionContext: parsed.rawProps["__motionContext"],
-          },
-          motionTarget,
-        );
+      : [];
     return {
       xml: properties.hasVisibleStyle
         ? objectXml(

@@ -48,6 +48,7 @@ export {
   Image,
   Group,
   createMorphScope,
+  createMotionScopeHandle,
   Shape,
   blockArc,
   linearGradient,

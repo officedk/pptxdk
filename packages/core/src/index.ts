@@ -80,6 +80,7 @@ export type {
   CapabilityOutput,
   CapabilityResource,
   CapabilityResourceClaim,
+  ContributionResolver,
   DeckProps,
   Diagnostic,
   ElementProps,

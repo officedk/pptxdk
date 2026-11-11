@@ -1,43 +1,23 @@
 import { hostNodeCreator } from "@react-pptx/core/document";
-import { createElement, useContext, type Key, type ReactNode } from "react";
+import { createElement, type Key, type ReactNode } from "react";
 
 import { createBoxNode, type BoxDeclarationProps } from "./box.ts";
-import { motionContext } from "./motion-elements.ts";
 
 export type BoxProps = BoxDeclarationProps & {
   readonly key?: Key | null;
   readonly children?: ReactNode;
 };
 
-/** Visible Box's own background and descendants without entrance effects can inherit default entrance. */
-export function Box({
-  enter,
-  motion,
-  children,
-  ...props
-}: BoxProps): ReactNode {
-  const parent = useContext(motionContext);
-  const defaultEnter = enter === undefined ? parent.defaultEnter : enter;
-  const context = Object.freeze({
-    ...parent,
-    enabled: parent.enabled && motion !== false,
-    ...(defaultEnter === undefined ? {} : { defaultEnter }),
-  });
-  const boxContext = Object.freeze({
-    ...context,
-    ...(motion === undefined ? {} : { motionValue: motion }),
-  });
+/**
+ * Visible Box backgrounds and descendants inherit its entrance only when they do not declare one.
+ *
+ * The local `enter` and `motion` values stay on the editable node. Inheritance is derived by the next
+ * formal build from the current document, so a moved Box does not leave a stale provider context.
+ */
+export function Box({ children, ...props }: BoxProps): ReactNode {
   return createElement(
-    motionContext.Provider,
-    { value: context },
-    createElement(
-      "rp:box",
-      {
-        ...props,
-        __motionContext: boxContext,
-        [hostNodeCreator]: createBoxNode,
-      },
-      children,
-    ),
+    "rp:box",
+    { ...props, [hostNodeCreator]: createBoxNode },
+    children,
   );
 }

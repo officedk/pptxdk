@@ -13,8 +13,8 @@ export { Deck, formatBaseline, targets } from "@react-pptx/core";
 export { Slide } from "./slide.ts";
 export { Chart } from "@react-pptx/capabilities/chart-elements";
 export { chartCapability } from "@react-pptx/capabilities/chart";
+export { Step } from "@react-pptx/capabilities/motion-elements";
 export {
-  Step,
   fade,
   fly,
   floatDown,

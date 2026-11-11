@@ -1536,6 +1536,7 @@ function compileChildren(
                 path,
                 targetId: boxObservation.id,
                 order,
+                declaration: child,
               });
             }
           }
@@ -1684,7 +1685,12 @@ function compileChildren(
     if ("compileDeclaration" in module) {
       try {
         for (const annotation of module.compileDeclaration(child, { path })) {
-          context.slide.contributions.push({ ...annotation, path, order });
+          context.slide.contributions.push({
+            ...annotation,
+            path,
+            order,
+            declaration: child,
+          });
         }
       } catch (error) {
         context.slide.diagnostics.push(
@@ -1823,6 +1829,7 @@ function compileChildren(
           path,
           targetId: id,
           order,
+          declaration: child,
         });
       }
       const observation = {
@@ -1943,6 +1950,40 @@ function tableContentNodes(object: ObjectObservation): QueryContentNode[] {
   );
 }
 
+function resolveContributions(
+  children: readonly CapabilityChild[],
+  contributions: readonly CapabilityContribution[],
+): readonly CapabilityContribution[] {
+  let resolved = contributions;
+  const applied = new Set<string>();
+  for (const contribution of contributions) {
+    const capability = contribution.capability;
+    // A resolver is carried by the actual declarations of its capability; module registration and
+    // order do not decide whether structure-derived semantics apply.
+    if (applied.has(capability)) continue;
+    const resolver = contribution.resolveContributions;
+    if (resolver === undefined) continue;
+    const owned = resolved.filter(
+      (candidate) => candidate.capability === capability,
+    );
+    if (owned.length === 0) continue;
+    applied.add(capability);
+    const effective = resolver(children, owned);
+    const next: CapabilityContribution[] = [];
+    let inserted = false;
+    for (const candidate of resolved) {
+      if (candidate.capability !== capability) {
+        next.push(candidate);
+      } else if (!inserted) {
+        next.push(...effective);
+        inserted = true;
+      }
+    }
+    resolved = next;
+  }
+  return resolved;
+}
+
 function compileSlide(
   resolved: ResolvedSlide,
   modules: ReadonlyMap<string, RegisteredCapabilityModule>,
@@ -2006,6 +2047,20 @@ function compileSlide(
     },
     path,
   );
+  let contributions: readonly CapabilityContribution[] = slide.contributions;
+  try {
+    contributions = resolveContributions(children, slide.contributions);
+  } catch (error) {
+    slide.diagnostics.push(
+      error instanceof CapabilityError
+        ? diagnostic(error.path ?? path, error.code, error.message)
+        : diagnostic(
+            path,
+            "capability-failure",
+            error instanceof Error ? error.message : String(error),
+          ),
+    );
+  }
   const slideXml: {
     readonly slot: SlideCapabilitySlot;
     readonly xml: string;
@@ -2029,7 +2084,8 @@ function compileSlide(
       const output = module.compileSlide(input, {
         path,
         dimensions,
-        contributions: slide.contributions,
+        contributions,
+        children,
         theme,
         registerResource(resource) {
           return addResource(resource, { document, slide });
@@ -2065,7 +2121,8 @@ function compileSlide(
       );
     }
   }
-  for (const contribution of slide.contributions) {
+  for (const contribution of contributions) {
+    if (contribution.optional) continue;
     const consumer = modules.get(contribution.capability);
     if (
       consumer === undefined ||

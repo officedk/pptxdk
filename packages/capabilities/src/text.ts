@@ -86,7 +86,6 @@ const allowedParameters = [
   "enter",
   "emphasis",
   "motion",
-  "__motionContext",
 ] as const;
 
 function record(value: unknown): value is Record<string, unknown> {

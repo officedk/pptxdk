@@ -182,7 +182,6 @@ const tableParameters = [
   "enter",
   "emphasis",
   "motion",
-  "__motionContext",
 ] as const;
 const tablePartParameters = ["testId", "part", "style"] as const;
 const cellParameters = [...tablePartParameters, "colSpan", "rowSpan"] as const;

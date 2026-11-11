@@ -6,7 +6,7 @@ import {
   type GeometryBox,
   type SlideCapabilityModule,
   type TransparentCapabilityModule,
-} from "@react-pptx/core";
+} from "@react-pptx/core/capability";
 
 import type {
   MotionDirection,
@@ -36,6 +36,7 @@ import { registerMotionObservation } from "./motion-query.ts";
 export {
   after,
   breathe,
+  createMotionScopeHandle,
   fillColor,
   fade,
   fly,
@@ -48,8 +49,6 @@ export {
   wipe,
   zoom,
 } from "./motion-api.ts";
-export { Box, MotionScope, Step, useMotionScope } from "./motion-elements.ts";
-export type { BoxProps } from "./motion-elements.ts";
 export { observeMotion } from "./motion-query.ts";
 export type {
   EffectInstanceObservation,
@@ -2196,7 +2195,7 @@ function timingXml(
 /** Slide-level motion module writes object timing and returns observation describing declarations and determinable relative times only. */
 export const motionCapability: SlideCapabilityModule = Object.freeze({
   declaration: "motion",
-  slideProp: "__motion",
+  slideProp: "motion",
   slot: "timing",
   always: true,
   transparentDeclarations: [

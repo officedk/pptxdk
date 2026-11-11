@@ -1,8 +1,11 @@
 import {
   CapabilityError,
   type CapabilityAnnotation,
+  type CapabilityChild,
+  type CapabilityContribution,
   type GeometryBox,
 } from "@react-pptx/core/capability";
+import { CommonContainer } from "@react-pptx/core/document";
 import type { ReactNode } from "react";
 
 export type MotionDirection = "left" | "right" | "top" | "bottom";
@@ -233,15 +236,73 @@ export type StepDeclaration =
   | { readonly mode: "automatic"; readonly identity: string }
   | { readonly mode: "explicit"; readonly number: number };
 
-export type MotionContextValue = {
-  readonly enabled: boolean;
-  readonly motionValue?: unknown;
-  readonly step?: StepDeclaration;
-  readonly scopes: readonly MotionScopeDeclaration[];
-  readonly defaultEnter?:
-    | EntranceEffectDeclaration
-    | readonly EntranceEffectDeclaration[];
+/** Plain authoring scope props; React children stay on the JSX entry. */
+export type MotionScopeAuthorProps = Omit<MotionScopeProps, "children">;
+export type MotionStepAuthorProps = Pick<StepProps, "n">;
+
+type MotionStepNodeProps = MotionStepAuthorProps & {
+  /** Build-local identity of an automatic Step, created once when the host node is created. */
+  readonly stepIdentity: string;
 };
+
+type MotionScopeNodeProps = MotionScopeAuthorProps;
+
+/** Creates the editable orchestration scope shared by the command factory and the JSX entry. */
+export function createMotionScopeNode(
+  props: MotionScopeNodeProps,
+): CommonContainer<"motion-scope", MotionScopeNodeProps> {
+  return new CommonContainer("motion-scope", "rp:motion-scope", props);
+}
+
+/** Creates the editable click-step container shared by the command factory and the JSX entry. */
+export function createMotionStepNode(
+  props: MotionStepNodeProps,
+): CommonContainer<"motion-step", MotionStepNodeProps> {
+  return new CommonContainer("motion-step", "rp:motion-step", props);
+}
+
+let nextMotionIdentity = 1;
+
+function createMotionIdentity(kind: "scope" | "step"): string {
+  return `react-pptx-${kind}-${nextMotionIdentity++}`;
+}
+
+/**
+ * Creates a React-independent scope identity and its start/end/named moments.
+ *
+ * The returned handle keeps its identity when nodes are moved or rebuilt. React authoring keeps one
+ * handle per component instance and passes it to `MotionScope`, while plain authoring can create it
+ * directly. Cues are values derived from the same identity, not React keys or author ids.
+ */
+export function createMotionScopeHandle(): MotionScopeHandle {
+  const identity = createMotionIdentity("scope");
+  const moment = (point: MotionMoment["point"], name?: string): MotionMoment =>
+    Object.freeze({
+      type: "motion-moment",
+      scope: identity,
+      point,
+      ...(name === undefined ? {} : { name }),
+    });
+  return Object.freeze({
+    type: "motion-scope-handle",
+    identity,
+    start: moment("start"),
+    end: moment("end"),
+    cue(name: string): MotionMoment {
+      if (typeof name !== "string" || name.trim() === "") {
+        throw new TypeError(
+          "MotionScopeHandle.cue(name) requires a non-empty name",
+        );
+      }
+      return moment("named", name);
+    },
+  });
+}
+
+/** Creates the stable identity used by an automatic Step host without React. */
+export function createMotionStepIdentity(): string {
+  return createMotionIdentity("step");
+}
 
 /** Schedules an explicit non-negative offset after any moment handle. */
 export function after(
@@ -464,6 +525,27 @@ type MotionValue = {
   readonly effects: readonly NormalizedEffect[];
 };
 
+/** Local object declaration before inherited scope, step, default effect, and disabled ancestors are resolved. */
+type LocalMotionValue = {
+  readonly target: MotionTarget;
+  readonly enterDeclared: boolean;
+  readonly effects: readonly NormalizedEffect[];
+};
+
+type MotionFrame = {
+  readonly enabled: boolean;
+  readonly step?: StepDeclaration;
+  readonly scopes: readonly MotionScopeDeclaration[];
+  readonly defaultEnter?:
+    | EntranceEffectDeclaration
+    | readonly EntranceEffectDeclaration[];
+};
+
+type LocalScopeValue = {
+  readonly type: "scope";
+  readonly scope: MotionScopeDeclaration;
+};
+
 export type MotionEffectObservation = {
   readonly target: {
     readonly id: number;
@@ -538,7 +620,8 @@ function fail(code: string, message: string): never {
   throw new CapabilityError(code, message);
 }
 
-function validateMotionFlag(value: unknown): void {
+/** Validates the local motion enable flag during capability parsing. */
+export function validateMotionFlag(value: unknown): void {
   if (value !== undefined && typeof value !== "boolean") {
     fail("invalid-motion", "motion must be a boolean");
   }
@@ -960,21 +1043,21 @@ function validatedEffect(
   };
 }
 
-function stepDeclaration(value: unknown): StepDeclaration | undefined {
-  if (value === undefined) return undefined;
-  if (!isRecord(value)) return fail("invalid-step", "Invalid Step declaration");
-  if (value["mode"] === "automatic") {
-    if (typeof value["identity"] !== "string" || value["identity"] === "") {
+function stepDeclarationFromProps(
+  props: Readonly<Record<string, unknown>>,
+): StepDeclaration {
+  const number = props["n"];
+  if (number === undefined) {
+    const identity = props["stepIdentity"];
+    if (typeof identity !== "string" || identity === "") {
       return fail(
         "invalid-step",
         "Automatic click step lacks instance identity",
       );
     }
-    return value as unknown as StepDeclaration;
+    return Object.freeze({ mode: "automatic" as const, identity });
   }
-  const number = value["number"];
   if (
-    value["mode"] !== "explicit" ||
     typeof number !== "number" ||
     !Number.isSafeInteger(number) ||
     number < 1
@@ -984,7 +1067,7 @@ function stepDeclaration(value: unknown): StepDeclaration | undefined {
       "Explicit click step number must be a positive integer",
     );
   }
-  return value as unknown as StepDeclaration;
+  return Object.freeze({ mode: "explicit" as const, number });
 }
 
 function listed(value: unknown, many: boolean): readonly unknown[] {
@@ -996,7 +1079,7 @@ function validatedMoment(value: unknown): MotionMoment {
   if (!isRecord(value) || value["type"] !== "motion-moment") {
     return fail(
       "invalid-moment",
-      "Moment handle must come from useMotionScope().",
+      "Moment handle must come from a motion scope handle.",
     );
   }
   const scope = value["scope"];
@@ -1052,10 +1135,18 @@ function validatedPublisher(value: unknown): MotionMoment | undefined {
   return momentValue;
 }
 
-/** Compiles explicit scope host into transparent declaration for motion slide capability. */
-export function motionScopeAnnotation(
-  input: Readonly<Record<string, unknown>>,
-): CapabilityAnnotation {
+function isMotionScopeHandle(value: unknown): value is MotionScopeHandle {
+  return (
+    isRecord(value) &&
+    value["type"] === "motion-scope-handle" &&
+    typeof value["identity"] === "string" &&
+    value["identity"] !== ""
+  );
+}
+
+function localScopeDeclaration(
+  props: Readonly<Record<string, unknown>>,
+): MotionScopeDeclaration {
   const allowedParameters = new Set([
     "scope",
     "mode",
@@ -1065,40 +1156,25 @@ export function motionScopeAnnotation(
     "publishStart",
     "publishEnd",
     "motion",
-    "__motionScope",
   ]);
-  const unknown = Object.keys(input).find((key) => !allowedParameters.has(key));
+  const unknown = Object.keys(props).find((key) => !allowedParameters.has(key));
   if (unknown !== undefined) {
     return fail(
       "unknown-parameter",
       `MotionScope contains unimplemented parameter ${unknown}`,
     );
   }
-  validateMotionFlag(input["motion"]);
-  const value = input["__motionScope"];
-  if (!isRecord(value)) {
-    return fail("invalid-scope", "MotionScope lacks scope declaration");
+  validateMotionFlag(props["motion"]);
+  const handle = props["scope"];
+  if (!isMotionScopeHandle(handle)) {
+    return fail(
+      "invalid-scope",
+      "MotionScope requires a handle created by createMotionScopeHandle() or useMotionScope()",
+    );
   }
-  const identity = value["identity"];
-  const parent = value["parent"];
-  const step = value["step"];
-  const mode = value["mode"];
-  const delay = value["delay"];
-  const each = value["each"];
-  let normalizedStep: StepDeclaration | undefined;
-  try {
-    normalizedStep = step === undefined ? undefined : stepDeclaration(step);
-  } catch {
-    return fail("invalid-scope", "MotionScope click step identity is invalid");
-  }
-  if (
-    typeof identity !== "string" ||
-    identity === "" ||
-    (parent !== undefined && typeof parent !== "string") ||
-    (step !== undefined && normalizedStep === undefined)
-  ) {
-    return fail("invalid-scope", "MotionScope instance identity is invalid");
-  }
+  const mode = props["mode"] ?? "parallel";
+  const delay = props["delay"] ?? 0;
+  const each = props["each"];
   if (mode !== "parallel" && mode !== "sequence" && mode !== "stagger") {
     return fail(
       "invalid-scope",
@@ -1130,15 +1206,13 @@ export function motionScopeAnnotation(
     );
   }
   const startAt =
-    value["startAt"] === undefined
+    props["startAt"] === undefined
       ? undefined
-      : validatedTiming(value["startAt"]);
-  const publishStart = validatedPublisher(value["publishStart"]);
-  const publishEnd = validatedPublisher(value["publishEnd"]);
-  const scope: MotionScopeDeclaration = Object.freeze({
-    identity,
-    ...(typeof parent === "string" ? { parent } : {}),
-    ...(normalizedStep === undefined ? {} : { step: normalizedStep }),
+      : validatedTiming(props["startAt"]);
+  const publishStart = validatedPublisher(props["publishStart"]);
+  const publishEnd = validatedPublisher(props["publishEnd"]);
+  return Object.freeze({
+    identity: handle.identity,
     mode,
     delay: Math.round(delay),
     ...(typeof each === "number" ? { each: Math.round(each) } : {}),
@@ -1146,18 +1220,26 @@ export function motionScopeAnnotation(
     ...(publishStart === undefined ? {} : { publishStart }),
     ...(publishEnd === undefined ? {} : { publishEnd }),
   });
+}
+
+/** Compiles explicit scope host into a local declaration resolved against the current document tree. */
+export function motionScopeAnnotation(
+  input: Readonly<Record<string, unknown>>,
+): CapabilityAnnotation {
+  const scope = localScopeDeclaration(input);
   return {
     capability: "motion",
     value: Object.freeze({ type: "scope", scope }),
+    resolveContributions: resolveMotionContributions,
   };
 }
 
-/** Validates Step wrapper parameters, ensuring non-visual declarations do not enter slide capability observation. */
+/** Validates Step wrapper parameters; step ancestry is derived from the build-time tree. */
 export function motionStepAnnotation(
   input: Readonly<Record<string, unknown>>,
 ): readonly CapabilityAnnotation[] {
   const unknown = Object.keys(input).find(
-    (key) => key !== "n" && key !== "__motionStep",
+    (key) => key !== "n" && key !== "stepIdentity",
   );
   if (unknown !== undefined) {
     return fail(
@@ -1165,51 +1247,15 @@ export function motionStepAnnotation(
       `Step contains unimplemented parameter ${unknown}`,
     );
   }
-  stepDeclaration(input["__motionStep"]);
+  stepDeclarationFromProps(input);
   return [];
 }
 
-function contextValue(value: unknown): MotionContextValue {
-  if (value === undefined) return { enabled: true, scopes: [] };
-  if (
-    !isRecord(value) ||
-    typeof value["enabled"] !== "boolean" ||
-    !Array.isArray(value["scopes"])
-  ) {
-    return fail("invalid-motion", "Invalid motion context");
-  }
-  const step = stepDeclaration(value["step"]);
-  const defaultEnter = value["defaultEnter"];
-  return {
-    enabled: value["enabled"],
-    scopes: value["scopes"] as MotionScopeDeclaration[],
-    ...(step === undefined ? {} : { step }),
-    ...(defaultEnter === undefined
-      ? {}
-      : {
-          defaultEnter: defaultEnter as
-            | EntranceEffectDeclaration
-            | readonly EntranceEffectDeclaration[],
-        }),
-  };
-}
-
-/** Converts object animation declarations into local annotations consumed by motion slide capability. */
-export function motionAnnotations(
+function localMotionValue(
   props: Readonly<Record<string, unknown>>,
   target: MotionTarget,
-): readonly CapabilityAnnotation[] {
-  validateMotionFlag(props["motion"]);
-  const rawContext = props["__motionContext"];
-  if (isRecord(rawContext)) {
-    validateMotionFlag(rawContext["motionValue"]);
-  }
-  const context = contextValue(rawContext);
-  if (!context.enabled || props["motion"] === false) return [];
-
-  const step = context.step;
-  const enter =
-    props["enter"] === undefined ? context.defaultEnter : props["enter"];
+): LocalMotionValue {
+  const enter = props["enter"];
   const effects = [
     ...listed(enter, true).map((value) => validatedEffect(value, "entrance")),
     ...listed(props["emphasis"], false).map((value) =>
@@ -1239,15 +1285,180 @@ export function motionAnnotations(
       "fillColor() requires native Shape with solid fill",
     );
   }
-  if (effects.length === 0) return [];
-  const annotation: CapabilityAnnotation = {
-    capability: "motion",
-    value: Object.freeze({
-      target: Object.freeze({ ...target }),
-      ...(step === undefined ? {} : { step }),
-      scopes: context.scopes,
-      effects: Object.freeze(effects),
-    } satisfies MotionValue),
+  return Object.freeze({
+    target: Object.freeze({ ...target }),
+    enterDeclared: enter !== undefined,
+    effects: Object.freeze(effects),
+  });
+}
+
+/** Converts object animation declarations into local annotations consumed by motion slide capability. */
+export function motionAnnotations(
+  props: Readonly<Record<string, unknown>>,
+  target: MotionTarget,
+): readonly CapabilityAnnotation[] {
+  validateMotionFlag(props["motion"]);
+  if (props["motion"] === false) return [];
+  const value = localMotionValue(props, target);
+  return [
+    {
+      capability: "motion",
+      optional: value.effects.length === 0,
+      value,
+      // Attach the resolver even for an empty local declaration: an inherited Box default may still
+      // make this object's motion required when the timing writer is trimmed.
+      resolveContributions: resolveMotionContributions,
+    },
+  ];
+}
+
+function isLocalMotionValue(value: unknown): value is LocalMotionValue {
+  return (
+    isRecord(value) &&
+    isRecord(value["target"]) &&
+    typeof value["enterDeclared"] === "boolean" &&
+    Array.isArray(value["effects"])
+  );
+}
+
+function isLocalScopeValue(value: unknown): value is LocalScopeValue {
+  return (
+    isRecord(value) &&
+    value["type"] === "scope" &&
+    isRecord(value["scope"]) &&
+    typeof value["scope"]["identity"] === "string"
+  );
+}
+
+function entranceEffects(
+  value: unknown,
+  path: string,
+): readonly NormalizedEffect[] {
+  try {
+    return listed(value, true).map((effect) =>
+      validatedEffect(effect, "entrance"),
+    );
+  } catch (error) {
+    if (error instanceof CapabilityError) {
+      throw new CapabilityError(error.code, error.message, path);
+    }
+    throw error;
+  }
+}
+
+function motionContainer(declaration: string): boolean {
+  return (
+    declaration === "rp:box" ||
+    declaration === "rp:group" ||
+    declaration === "rp:motion-scope"
+  );
+}
+
+/**
+ * Resolves local motion declarations against the current declaration tree.
+ *
+ * Scope parent chains, nearest click step, inherited Box default entrance, and disabled ancestor
+ * chains are derived from this build's structure. Nothing here is stored on the editable nodes, so
+ * moving or appending content changes the next build's choreography without stale React context.
+ *
+ * The build passes only this capability's contributions, then uses the effective result for both
+ * timing output and missing-capability checks.
+ */
+export function resolveMotionContributions(
+  children: readonly CapabilityChild[],
+  contributions: readonly CapabilityContribution[],
+): readonly CapabilityContribution[] {
+  const byDeclaration = new WeakMap<
+    object,
+    readonly CapabilityContribution[]
+  >();
+  for (const contribution of contributions) {
+    const declaration = contribution.declaration;
+    if (declaration === undefined) continue;
+    const existing = byDeclaration.get(declaration);
+    byDeclaration.set(
+      declaration,
+      existing === undefined ? [contribution] : [...existing, contribution],
+    );
+  }
+
+  const resolved: CapabilityContribution[] = [];
+  const visit = (node: CapabilityChild, frame: MotionFrame): void => {
+    if (!("props" in node)) return;
+    const localContributions = byDeclaration.get(node) ?? [];
+    let childFrame = frame;
+
+    if (node.type === "rp:motion-scope") {
+      const enabled = frame.enabled && node.props["motion"] !== false;
+      const scopeContribution = localContributions.find((contribution) =>
+        isLocalScopeValue(contribution.value),
+      );
+      if (scopeContribution !== undefined) {
+        const local = scopeContribution.value as LocalScopeValue;
+        const parent = frame.scopes.at(-1);
+        const scope: MotionScopeDeclaration = Object.freeze({
+          ...local.scope,
+          ...(parent === undefined ? {} : { parent: parent.identity }),
+          ...(frame.step === undefined ? {} : { step: frame.step }),
+        });
+        resolved.push(
+          Object.freeze({
+            ...scopeContribution,
+            value: Object.freeze({ type: "scope" as const, scope }),
+          }),
+        );
+        childFrame = {
+          ...frame,
+          enabled,
+          scopes: Object.freeze([...frame.scopes, scope]),
+        };
+      } else {
+        childFrame = { ...frame, enabled };
+      }
+    } else if (node.type === "rp:motion-step") {
+      childFrame = { ...frame, step: stepDeclarationFromProps(node.props) };
+    } else {
+      const localContribution = localContributions.find((contribution) =>
+        isLocalMotionValue(contribution.value),
+      );
+      let defaultEnter = frame.defaultEnter;
+      if (node.type === "rp:box" && node.props["enter"] !== undefined) {
+        defaultEnter = node.props["enter"] as
+          | EntranceEffectDeclaration
+          | readonly EntranceEffectDeclaration[];
+      }
+      const enabled = frame.enabled && node.props["motion"] !== false;
+      if (localContribution !== undefined && enabled) {
+        const local = localContribution.value as LocalMotionValue;
+        const inherited = local.enterDeclared
+          ? []
+          : entranceEffects(defaultEnter, localContribution.path);
+        const effects = Object.freeze([...inherited, ...local.effects]);
+        if (effects.length > 0) {
+          resolved.push(
+            Object.freeze({
+              ...localContribution,
+              optional: false,
+              value: Object.freeze({
+                target: local.target,
+                ...(frame.step === undefined ? {} : { step: frame.step }),
+                scopes: frame.scopes,
+                effects,
+              } satisfies MotionValue),
+            }),
+          );
+        }
+      }
+      childFrame = {
+        ...frame,
+        ...(motionContainer(node.type) ? { enabled } : {}),
+        ...(node.type === "rp:box" ? { defaultEnter } : {}),
+      };
+    }
+
+    for (const child of node.children) visit(child, childFrame);
   };
-  return [annotation];
+
+  for (const node of children) visit(node, { enabled: true, scopes: [] });
+  return resolved;
 }

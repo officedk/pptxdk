@@ -94,6 +94,11 @@
       "types": "./dist/motion.d.ts",
       "default": "./dist/motion.js"
     },
+    "./motion-elements": {
+      "source": "./src/motion-elements.ts",
+      "types": "./dist/motion-elements.d.ts",
+      "default": "./dist/motion-elements.js"
+    },
     "./image": {
       "source": "./src/image.ts",
       "types": "./dist/image.d.ts",

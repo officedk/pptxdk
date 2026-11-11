@@ -39,6 +39,11 @@
       "types": "./dist/document.d.ts",
       "default": "./dist/document.js"
     },
+    "./query": {
+      "source": "./src/query.ts",
+      "types": "./dist/query.d.ts",
+      "default": "./dist/query.js"
+    },
     "./theme": {
       "source": "./src/theme.ts",
       "types": "./dist/theme.d.ts",

@@ -41,6 +41,16 @@ import {
   type ImageDeclarationProps,
 } from "./image.ts";
 import {
+  createMotionScopeHandle,
+  createMotionScopeNode,
+  createMotionStepIdentity,
+  createMotionStepNode,
+  type MotionScopeAuthorProps,
+  type MotionScopeHandle,
+  type MotionStepAuthorProps,
+} from "./motion-api.ts";
+import { motionCapability } from "./motion.ts";
+import {
   createShapeNode,
   shapeCapability,
   type ShapeDeclarationProps,
@@ -162,6 +172,14 @@ export type SlideNumberNode = CommonNode<
   "slide-number",
   SlideNumberAuthorProps,
   NonNullable<SlideNumberDeclarationProps["style"]>
+>;
+export type MotionScopeNode = CommonContainer<
+  "motion-scope",
+  MotionScopeAuthorProps
+>;
+export type MotionStepNode = CommonContainer<
+  "motion-step",
+  MotionStepAuthorProps
 >;
 export type { CellNode, ChartNode, RowNode, TableNode };
 
@@ -304,12 +322,29 @@ export function slideNumber(
   return createSlideNumberNode(props);
 }
 
+/** Creates an orchestration scope whose parent chain and click step are derived by each build. */
+export function motionScope(
+  scope: MotionScopeHandle,
+  props: Omit<MotionScopeAuthorProps, "scope"> = {},
+): MotionScopeNode {
+  return createMotionScopeNode({ ...props, scope });
+}
+
+/** Creates a click-step container; omitted n gives this Step its own independent trigger. */
+export function step(props: MotionStepAuthorProps = {}): MotionStepNode {
+  return createMotionStepNode({
+    ...props,
+    stepIdentity: createMotionStepIdentity(),
+  });
+}
+
 /** Baseline capabilities enabled by the public document build; factories never register capabilities. */
 export const documentCapabilities = Object.freeze([
   boxCapability,
   chartCapability,
   groupCapability,
   imageCapability,
+  motionCapability,
   shapeCapability,
   slideBackgroundCapability,
   tableCapability,
@@ -317,7 +352,12 @@ export const documentCapabilities = Object.freeze([
   transitionCapability,
 ] as const);
 
-export { font };
+export { createMotionScopeHandle, font };
+export type {
+  MotionScopeAuthorProps,
+  MotionScopeHandle,
+  MotionStepAuthorProps,
+} from "./motion-api.ts";
 export type { LinkTarget, ParsedText, Transition };
 
 export type {

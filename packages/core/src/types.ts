@@ -358,6 +358,24 @@ export type CapabilityChildren = {
 export type CapabilityAnnotation = {
   readonly capability: string;
   readonly value: unknown;
+  /**
+   * Annotation that may remain unconsumed when its capability's writer is trimmed.
+   *
+   * Object capabilities emit optional local declarations (for example an object awaiting an inherited
+   * default effect). Capability-owned contribution resolution runs before missing-capability checks and
+   * turns declarations with actual effects into required contributions; required annotations keep the
+   * existing missing-capability diagnostic.
+   */
+  readonly optional?: boolean;
+  /**
+   * Resolver owned by the capability that produced this annotation.
+   *
+   * Producers attach it to every local declaration, including optional ones, so the formal build finds
+   * the resolver from effective contributions rather than from registered modules or their order. The
+   * build applies it once per capability before slide output and missing-capability checks, so a trimmed
+   * writer does not change how the remaining declarations are interpreted.
+   */
+  readonly resolveContributions?: ContributionResolver;
 };
 
 /** Declaration data passed to slide modules after core supplements object identity and diagnostic locations. */
@@ -367,7 +385,21 @@ export type CapabilityContribution = CapabilityAnnotation & {
   readonly targetId?: number;
   /** Preorder index in the slide host tree to preserve ordering of transparent declarations and object members. */
   readonly order: number;
+  /** Build-local declaration view that produced this contribution; never retained on an editable node. */
+  readonly declaration?: CapabilityElement;
 };
+
+/**
+ * Derives effective annotations for one capability from the current build tree.
+ *
+ * The build calls this before slide output and missing-capability checks, with only that capability's
+ * contributions. The result must contain the effective replacements; hiding an annotation here also
+ * means it no longer makes a trimmed capability mandatory.
+ */
+export type ContributionResolver = (
+  children: readonly CapabilityChild[],
+  contributions: readonly CapabilityContribution[],
+) => readonly CapabilityContribution[];
 
 export type CapabilityResource = {
   readonly bytes: Uint8Array;
@@ -565,6 +597,8 @@ export type SlideCapabilityContext = {
   readonly path: string;
   readonly dimensions: { readonly width: number; readonly height: number };
   readonly contributions: readonly CapabilityContribution[];
+  /** Declaration views already mapped for this build, shared with the compiled slide tree. */
+  readonly children: readonly CapabilityChild[];
   readonly theme: ThemeContext;
   readonly registerResource: (resource: CapabilityResource) => string;
 };

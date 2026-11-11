@@ -4962,6 +4962,7 @@ function readSlideAnimations(
   const paragraphBuildKey = (targetId: number, groupId: number): string =>
     `${targetId}:${groupId}`;
   const backgroundBuildGroups = new Set<string>();
+  const wholeObjectBuildGroups = new Set<string>();
   for (const node of timingTreeNodes.values()) {
     if (node.kind !== "effect") continue;
     const target = descendantsByName(
@@ -4976,12 +4977,21 @@ function readSlideAnimations(
     const groupId = nonNegativeIntegerValue(
       attribute(node.timeNode, "grpId") || "0",
     );
+    if (targetId === undefined || groupId === undefined) continue;
     if (
-      targetId !== undefined &&
-      groupId !== undefined &&
       descendantsByName(node.timeNode, presentationNamespace, "bg").length > 0
     ) {
       backgroundBuildGroups.add(paragraphBuildKey(targetId, groupId));
+    }
+    // A whole-object text effect keeps the shape fill and text in one native target and may
+    // declare animBg without a separate spTgt/bg branch.
+    if (
+      target !== undefined &&
+      first(target, presentationNamespace, "txEl") === undefined &&
+      first(target, presentationNamespace, "bg") === undefined &&
+      findObjectById(objects, targetId)?.text !== undefined
+    ) {
+      wholeObjectBuildGroups.add(paragraphBuildKey(targetId, groupId));
     }
   }
   const paragraphBuilds = new Map<
@@ -5026,7 +5036,10 @@ function readSlideAnimations(
       });
     }
     for (const [key, build] of paragraphBuilds) {
-      if ((build.animBg === true) !== backgroundBuildGroups.has(key)) {
+      if (
+        (build.animBg === true) !== backgroundBuildGroups.has(key) &&
+        !wholeObjectBuildGroups.has(key)
+      ) {
         issue(
           errors,
           part,

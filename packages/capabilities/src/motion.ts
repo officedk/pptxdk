@@ -189,6 +189,7 @@ class TimingIds {
 type TimingEffect = MotionEffectObservation & {
   readonly effectIndex: number;
   readonly partIndex?: number;
+  readonly targetKind: string;
   readonly targetTextBody: boolean;
   readonly targetFilled: boolean;
   readonly targetBox?: GeometryBox;
@@ -283,11 +284,30 @@ function direction(effect: MotionEffectObservation): MotionDirection {
   return typeof effect.from === "string" ? effect.from : "bottom";
 }
 
+/**
+ * Shape.text is native text inside the shape object, not a standalone text box. A whole entrance on
+ * such a shape must keep its fill and text in one object target so applications cannot reveal the
+ * background before the text. Standalone Text and explicit granularity keep their text projection.
+ */
+function isWholeShapeTextEntrance(effect: TimingEffect): boolean {
+  return (
+    effect.kind === "entrance" &&
+    effect.targetKind === "shape" &&
+    effect.targetTextBody &&
+    effect.targetHasBackground &&
+    effect.target.range === undefined &&
+    effect.by !== "paragraph" &&
+    effect.by !== "word" &&
+    effect.by !== "letter"
+  );
+}
+
 function wholeTextRanges(effect: TimingEffect): readonly {
   readonly type: "paragraph";
   readonly start: number;
   readonly end: number;
 }[] {
+  if (isWholeShapeTextEntrance(effect)) return [];
   if (
     !effect.targetTextBody ||
     effect.target.range !== undefined ||
@@ -554,7 +574,7 @@ function behaviorIds(
         attributeNames("r"),
       ),
     );
-  // Paragraph building uses real pRg and independent background entrance, preventing whole-object visible target from prematurely unlocking subsequent paragraphs.
+  // Paragraph projection keeps real pRg and an independent background branch so a whole-object visible target cannot prematurely unlock subsequent paragraphs; whole Shape text entrances use that object target intentionally.
   const showOnce = () =>
     wholeText && effect.kind === "entrance"
       ? [...paragraphTargets(), ...backgroundTargets()]
@@ -1450,6 +1470,7 @@ function timingXml(
           },
           targetTextBody,
           targetFilled: memberEffect?.targetFilled ?? false,
+          targetKind: member.kind,
           targetHasBackground: memberEffect?.targetHasBackground ?? false,
           ...(member.box === undefined ? {} : { targetBox: member.box }),
           ...(memberEffect?.targetRotationDegrees === undefined
@@ -2087,6 +2108,9 @@ function timingXml(
     const previous = paragraphBuilds.get(key);
     const isDeclaredTextEffect =
       declaration.targetTextBody && declaration.target.id === effect.target.id;
+    const wholeShape =
+      isWholeShapeTextEntrance(effect) &&
+      declaration.target.id === effect.target.id;
     // Whole-text entrance builds by paragraph, preserving native responsibilities of pre-click hiding and per-paragraph delays.
     const build =
       groupId === 1
@@ -2101,8 +2125,9 @@ function timingXml(
           : previous?.build;
     // bldP aggregates by actually written text targets and build groups; does not alter author's orchestration identity.
     const animBg =
-      groupId === 1 &&
-      (previous?.animBg === true || hasWholeTextBackgroundBehaviors(effect));
+      previous?.animBg === true ||
+      (groupId === 1 && hasWholeTextBackgroundBehaviors(effect)) ||
+      (wholeShape && effect.targetHasBackground);
     paragraphBuilds.set(key, {
       effect,
       groupId,

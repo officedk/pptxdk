@@ -2769,6 +2769,262 @@ describe("object motion", () => {
     );
   });
 
+  it("writes a whole-object entrance for a shape whose own text has a visible background", async () => {
+    const result = await build(
+      createElement(
+        Deck,
+        { width: 960, height: 540 },
+        createElement(
+          Slide,
+          { id: "whole-shape-entrance" },
+          createElement(
+            Step,
+            { n: 1 },
+            createElement(Shape, {
+              id: "whole-shape-entry",
+              x: 120,
+              y: 140,
+              width: 360,
+              height: 96,
+              fill: "#0070C0",
+              text: "Whole shape entrance",
+              textStyle: { fontSize: 20, color: "#FFFFFF" },
+              enter: fade({ duration: 300 }),
+            }),
+          ),
+        ),
+      ),
+    );
+    const shape = result.report.slides[0]?.objects.find(
+      ({ authorId: testId }) => testId === "whole-shape-entry",
+    );
+    assert.ok(shape !== undefined);
+    const motion = result.report.slides[0]?.capabilities?.[
+      "motion"
+    ] as MotionObservation;
+    assert.deepEqual(
+      motion.steps[0]?.effects.map(({ target, preset }) => [
+        target.authorId,
+        preset,
+      ]),
+      [["whole-shape-entry", "fade"]],
+    );
+
+    const file = await validatePptx(result.pptx);
+    assert.deepEqual(file.errors, []);
+    const effect = file.slides[0]?.animations?.[0]?.effects[0];
+    assert.deepEqual(
+      [
+        effect?.targetId,
+        effect?.targetRange,
+        effect?.preset,
+        effect?.kind,
+        effect?.durationMs,
+      ],
+      [shape.id, undefined, "fade", "entrance", 300],
+    );
+    // Native whole-shape Fade carries the background inside the object target instead of a separate p:bg branch.
+    assert.deepEqual(
+      [
+        effect?.nativeBuild,
+        effect?.nativeBuildGroupId,
+        effect?.nativeBuildAnimBg,
+      ],
+      [undefined, 0, true],
+    );
+
+    const slideXml = strFromU8(
+      unzipSync(result.pptx)["ppt/slides/slide1.xml"]!,
+    );
+    const wholeTarget = `<p:spTgt spid="${shape.id}"></p:spTgt>`;
+    const wholeBehaviors = [
+      ...slideXml.matchAll(/<p:(set|animEffect)\b[^>]*>[\s\S]*?<\/p:\1>/gu),
+    ]
+      .map(([behavior]) => behavior ?? "")
+      .filter((behavior) => behavior.includes(wholeTarget));
+    assert.deepEqual(
+      wholeBehaviors.map((behavior) =>
+        behavior.startsWith("<p:set") ? "set" : "animEffect",
+      ),
+      ["set", "animEffect"],
+    );
+    assert.doesNotMatch(
+      slideXml,
+      new RegExp(`<p:spTgt spid="${shape.id}"><p:txEl>`, "u"),
+    );
+    assert.doesNotMatch(
+      slideXml,
+      new RegExp(`<p:spTgt spid="${shape.id}"><p:bg>`, "u"),
+    );
+    assert.match(
+      slideXml,
+      new RegExp(
+        `<p:bldP spid="${shape.id}" grpId="0" animBg="1"></p:bldP>`,
+        "u",
+      ),
+    );
+  });
+
+  it("keeps explicit paragraph granularity on a shape with its own text and background", async () => {
+    const result = await build(
+      createElement(
+        Deck,
+        { width: 960, height: 540 },
+        createElement(
+          Slide,
+          { id: "shape-paragraph-entrance" },
+          createElement(
+            Step,
+            { n: 1 },
+            createElement(
+              Shape,
+              {
+                id: "paragraph-shape-entry",
+                x: 120,
+                y: 140,
+                width: 360,
+                height: 140,
+                fill: "#0070C0",
+                textStyle: { fontSize: 20, color: "#FFFFFF" },
+                enter: fade({ by: "paragraph", duration: 300 }),
+              },
+              createElement(P, { key: "first" }, "First paragraph"),
+              createElement(P, { key: "second" }, "Second paragraph"),
+            ),
+          ),
+        ),
+      ),
+    );
+    const shape = result.report.slides[0]?.objects.find(
+      ({ authorId: testId }) => testId === "paragraph-shape-entry",
+    );
+    assert.ok(shape !== undefined);
+    const motion = result.report.slides[0]?.capabilities?.[
+      "motion"
+    ] as MotionObservation;
+    assert.deepEqual(
+      motion.steps[0]?.effects.map(({ target }) => target.range),
+      [
+        { type: "paragraph", start: 0, end: 0 },
+        { type: "paragraph", start: 1, end: 1 },
+      ],
+    );
+
+    const file = await validatePptx(result.pptx);
+    assert.deepEqual(file.errors, []);
+    assert.deepEqual(
+      file.slides[0]?.animations?.[0]?.effects.map(
+        ({ targetRange, nativeBuild }) => [targetRange, nativeBuild],
+      ),
+      [
+        [{ type: "paragraph", start: 0, end: 0 }, "paragraph"],
+        [{ type: "paragraph", start: 1, end: 1 }, "paragraph"],
+      ],
+    );
+    const slideXml = strFromU8(
+      unzipSync(result.pptx)["ppt/slides/slide1.xml"]!,
+    );
+    assert.match(
+      slideXml,
+      new RegExp(
+        `<p:spTgt spid="${shape.id}"><p:txEl><p:pRg st="0" end="0">`,
+        "u",
+      ),
+    );
+    assert.match(
+      slideXml,
+      new RegExp(`<p:bldP spid="${shape.id}" grpId="0" build="p"`, "u"),
+    );
+    assert.doesNotMatch(
+      slideXml,
+      new RegExp(`<p:spTgt spid="${shape.id}"></p:spTgt>`, "u"),
+    );
+  });
+
+  it("keeps multi-paragraph shape text and effect arrays on whole-object targets", async () => {
+    const result = await build(
+      createElement(
+        Deck,
+        { width: 960, height: 540 },
+        createElement(
+          Slide,
+          { id: "whole-shape-array" },
+          createElement(
+            Step,
+            { n: 1 },
+            createElement(
+              Shape,
+              {
+                id: "whole-shape-array-entry",
+                x: 120,
+                y: 140,
+                width: 360,
+                height: 140,
+                fill: "#F97316",
+                textStyle: { fontSize: 20, color: "#111827" },
+                enter: [
+                  fade({ duration: 200 }),
+                  fly({ from: "left", duration: 300 }),
+                ],
+              },
+              createElement(P, { key: "first" }, "First paragraph"),
+              createElement(P, { key: "second" }, "Second paragraph"),
+            ),
+          ),
+        ),
+      ),
+    );
+    const shape = result.report.slides[0]?.objects.find(
+      ({ authorId: testId }) => testId === "whole-shape-array-entry",
+    );
+    assert.ok(shape !== undefined);
+    const motion = result.report.slides[0]?.capabilities?.[
+      "motion"
+    ] as MotionObservation;
+    assert.deepEqual(
+      motion.steps[0]?.effects.map(({ target, preset }) => [
+        target.range,
+        preset,
+      ]),
+      [
+        [undefined, "fade"],
+        [undefined, "fly"],
+      ],
+    );
+
+    const file = await validatePptx(result.pptx);
+    assert.deepEqual(file.errors, []);
+    assert.deepEqual(
+      file.slides[0]?.animations?.[0]?.effects.map(
+        ({ targetRange, preset }) => [targetRange, preset],
+      ),
+      [
+        [undefined, "fade"],
+        [undefined, "fly"],
+      ],
+    );
+    const slideXml = strFromU8(
+      unzipSync(result.pptx)["ppt/slides/slide1.xml"]!,
+    );
+    assert.doesNotMatch(
+      slideXml,
+      new RegExp(`<p:spTgt spid="${shape.id}"><p:txEl>`, "u"),
+    );
+    assert.doesNotMatch(
+      slideXml,
+      new RegExp(`<p:spTgt spid="${shape.id}"><p:bg>`, "u"),
+    );
+    assert.equal(
+      slideXml.match(
+        new RegExp(
+          `<p:bldP spid="${shape.id}" grpId="0" animBg="1"></p:bldP>`,
+          "gu",
+        ),
+      )?.length,
+      1,
+    );
+  });
+
   it("initializes whole Text entrance by paragraphs and background while preserving by-P deferred build", async () => {
     const result = await build(
       createElement(

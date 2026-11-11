@@ -74,6 +74,7 @@ type ScheduledEffect = MotionEffectObservation & {
   readonly order: number;
   readonly effectIndex: number;
   readonly partIndex?: number;
+  readonly targetKind: string;
   readonly targetTextBody: boolean;
   readonly targetFilled: boolean;
   readonly targetBox?: GeometryBox;
@@ -3114,6 +3115,7 @@ function motionPlan(
             order: target.order + index,
             effectIndex: index,
             ...(partIndex === undefined ? {} : { partIndex }),
+            targetKind: target.value.target.kind,
             targetTextBody: target.value.target.textBody,
             targetFilled: target.value.target.filled,
             ...(target.value.target.box === undefined
@@ -4170,6 +4172,7 @@ function motionPlan(
             ({
               stepKey: _stepKey,
               order: _order,
+              targetKind: _targetKind,
               targetTextBody: _targetTextBody,
               targetFilled: _targetFilled,
               targetBox: _targetBox,

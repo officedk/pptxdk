@@ -87,6 +87,167 @@ export type ChartPoint = {
   readonly dataLabels?: false | ChartDataLabelOverride;
 };
 
+/** Native chart trendline type; `movingAverage` is the sixth Office trendline choice. */
+export type ChartTrendlineType =
+  | "linear"
+  | "exponential"
+  | "logarithmic"
+  | "polynomial"
+  | "power"
+  | "movingAverage";
+
+type ChartTrendlineBase = {
+  /** Trendline stroke; omitted leaves the target application default. */
+  readonly line?: ChartLine;
+  /**
+   * Forecast extension after the plotted data, in category positions or scatter X units.
+   * Must be greater than 0; category charts require a multiple of 0.5.
+   */
+  readonly forward?: number;
+  /**
+   * Forecast extension before the plotted data, in category positions or scatter X units.
+   * Must be greater than 0; category charts require a multiple of 0.5.
+   */
+  readonly backward?: number;
+};
+
+type ChartTrendlineDisplay = {
+  /** Display the native trendline equation. */
+  readonly displayEquation?: boolean;
+  /** Display the native R-squared value. */
+  readonly displayRSquared?: boolean;
+};
+
+/**
+ * One native trendline owned by a series.
+ *
+ * Office supports multiple trendlines on one series, so this is a list on the series rather than a
+ * single chart-level analysis option. `order` is required for polynomial, `period` for moving
+ * average; `intercept` applies to exponential, linear, and polynomial only. A moving average has
+ * no equation or R-squared label, so those fields are not part of its type. The applicable chart
+ * kinds and value domains are enforced by the capability parse, not inferred from this union alone.
+ */
+export type ChartTrendline =
+  | (ChartTrendlineBase &
+      ChartTrendlineDisplay & {
+        readonly type: "linear";
+        /** Value where the trendline crosses the value axis; omitted fits it. */
+        readonly intercept?: number;
+        readonly order?: never;
+        readonly period?: never;
+      })
+  | (ChartTrendlineBase &
+      ChartTrendlineDisplay & {
+        readonly type: "exponential";
+        readonly intercept?: number;
+        readonly order?: never;
+        readonly period?: never;
+      })
+  | (ChartTrendlineBase &
+      ChartTrendlineDisplay & {
+        readonly type: "logarithmic";
+        readonly intercept?: never;
+        readonly order?: never;
+        readonly period?: never;
+      })
+  | (ChartTrendlineBase &
+      ChartTrendlineDisplay & {
+        readonly type: "polynomial";
+        /** Polynomial order required by Office for this type, an integer from 2 through 6. */
+        readonly order: number;
+        readonly intercept?: number;
+        readonly period?: never;
+      })
+  | (ChartTrendlineBase &
+      ChartTrendlineDisplay & {
+        readonly type: "power";
+        readonly intercept?: never;
+        readonly order?: never;
+        readonly period?: never;
+      })
+  | (ChartTrendlineBase & {
+      readonly type: "movingAverage";
+      /** Moving-average period, an integer from 2 through 255 and below the series point count. */
+      readonly period: number;
+      readonly intercept?: never;
+      readonly order?: never;
+      readonly displayEquation?: never;
+      readonly displayRSquared?: never;
+    });
+
+/** One native error-bar magnitude or a null slot; null keeps the original position. */
+export type ChartErrorBarValues = readonly (number | null)[];
+
+/** Which side of each data point carries the error bar. */
+export type ChartErrorBarInclude = "both" | "plus" | "minus";
+
+type ChartErrorBarStyle = {
+  /** Whether to draw the native end cap; defaults to true. */
+  readonly endCap?: boolean;
+  /** Error-bar stroke; omitted leaves the target application default. */
+  readonly line?: ChartLine;
+};
+
+type ChartAmountErrorBars = ChartErrorBarStyle & {
+  readonly include?: ChartErrorBarInclude;
+  /** Native fixed value, percentage, or standard-deviation multiplier. */
+  readonly type: "fixed" | "percentage" | "standardDeviation";
+  /** Non-negative magnitude interpreted by the native chart engine. */
+  readonly value: number;
+  readonly plus?: never;
+  readonly minus?: never;
+};
+
+type ChartStandardErrorBars = ChartErrorBarStyle & {
+  readonly include?: ChartErrorBarInclude;
+  /** Native standard error; the target application computes the magnitude. */
+  readonly type: "standardError";
+  readonly value?: never;
+  readonly plus?: never;
+  readonly minus?: never;
+};
+
+type ChartCustomErrorBarsBase = ChartErrorBarStyle & {
+  readonly type: "custom";
+  readonly value?: never;
+};
+
+/**
+ * Custom plus and minus magnitudes, each aligned with the original series slots.
+ *
+ * Both sides are required when `include` is omitted or `both`; otherwise only the
+ * included side is declared. A null magnitude preserves that slot without shifting
+ * later points. The native application determines how null and short data render.
+ */
+export type ChartCustomErrorBars =
+  | (ChartCustomErrorBarsBase & {
+      readonly include?: "both";
+      readonly plus: ChartErrorBarValues;
+      readonly minus: ChartErrorBarValues;
+    })
+  | (ChartCustomErrorBarsBase & {
+      readonly include: "plus";
+      readonly plus: ChartErrorBarValues;
+      readonly minus?: never;
+    })
+  | (ChartCustomErrorBarsBase & {
+      readonly include: "minus";
+      readonly minus: ChartErrorBarValues;
+      readonly plus?: never;
+    });
+
+/** Native error bars owned by a category series; the value axis is their direction. */
+export type ChartErrorBars =
+  | ChartAmountErrorBars
+  | ChartStandardErrorBars
+  | ChartCustomErrorBars;
+
+/** Scatter series error bars, declared independently for the X and Y axes. */
+export type ScatterErrorBars = {
+  readonly x?: ChartErrorBars;
+  readonly y?: ChartErrorBars;
+};
+
 type ChartSeriesFormat = {
   readonly name: string;
   /** Color of column, area, line, pie slice, or scatter markers. */
@@ -104,6 +265,8 @@ type ChartSeriesFormat = {
   readonly marker?: boolean | ChartMarker;
   /** Overrides color, line, marker, or data label text color for points by position. */
   readonly points?: Readonly<Record<number, ChartPoint>>;
+  /** Native analysis trendlines owned by this series, in declaration order. */
+  readonly trendlines?: readonly ChartTrendline[];
 };
 
 /** Category chart series: one value per ordered group category position. */
@@ -112,6 +275,8 @@ export type ChartSeries = ChartSeriesFormat & {
   readonly values: readonly (number | null)[];
   /** Whether the line uses the native smoothing flag; applies only to line charts. */
   readonly smooth?: boolean;
+  /** Native error bars along this series' value direction. */
+  readonly errorBars?: ChartErrorBars;
 };
 
 type ScatterDataLabelContent = {
@@ -163,6 +328,8 @@ export type ScatterChartSeries = Omit<
   readonly dataLabels?: false | ScatterDataLabelOverride;
   /** Overrides color, line, marker, or data label text color for points by position. */
   readonly points?: Readonly<Record<number, ScatterChartPoint>>;
+  /** Native X and Y error bars, declared independently. */
+  readonly errorBars?: ScatterErrorBars;
 };
 
 /**

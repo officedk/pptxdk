@@ -29,6 +29,9 @@ import type {
   ChartDataLabelSettings,
   ChartDataLabels,
   ChartDisplayBlanksAs,
+  ChartErrorBarInclude,
+  ChartErrorBars,
+  ChartErrorBarValues,
   ChartGroupData,
   ChartKind,
   ChartLine,
@@ -41,12 +44,15 @@ import type {
   ChartTickLabelPosition,
   ChartTickMark,
   ChartTitle,
+  ChartTrendline,
+  ChartTrendlineType,
   ChartValueAxis,
   ChartXYAxisReferences,
   ScatterChartPoint,
   ScatterChartSeries,
   ScatterData,
   ScatterDataLabelOverride,
+  ScatterErrorBars,
   ScatterLine,
   SharedCategoryData,
 } from "./chart-types.ts";
@@ -132,6 +138,18 @@ const tickLabelPositionValues = new Set<ChartTickLabelPosition>([
   "none",
 ]);
 const crossingValues = new Set<ChartAxisCrossing>(["autoZero", "max", "min"]);
+const errorBarIncludes = new Set<ChartErrorBarInclude>([
+  "both",
+  "plus",
+  "minus",
+]);
+const errorBarTypes = new Set<ChartErrorBars["type"]>([
+  "fixed",
+  "percentage",
+  "standardDeviation",
+  "standardError",
+  "custom",
+]);
 const displayBlanksAsValues = new Set<ChartDisplayBlanksAs>([
   "gap",
   "zero",
@@ -149,6 +167,14 @@ const markerSymbolValues = new Set<ChartMarkerSymbol>([
   "star",
   "triangle",
   "x",
+]);
+const trendlineTypes = new Set<ChartTrendlineType>([
+  "linear",
+  "exponential",
+  "logarithmic",
+  "polynomial",
+  "power",
+  "movingAverage",
 ]);
 const cartesianKinds = new Set<ChartKind>(["column", "bar", "line", "area"]);
 
@@ -853,6 +879,409 @@ function scatterSeriesPoints(
   return points;
 }
 
+function trendlineForecast(
+  value: unknown,
+  label: string,
+  kind: ChartKind,
+): number | undefined {
+  if (value === undefined) return undefined;
+  const forecast = finiteNumber(value, label);
+  if (forecast <= 0) {
+    fail("invalid-trendline", `${label} must be greater than 0`);
+  }
+  // The OOXML standard expresses category-chart forecasts in half-category units.
+  if (
+    kind !== "scatter" &&
+    Math.abs(forecast * 2 - Math.round(forecast * 2)) > 1e-9
+  ) {
+    fail(
+      "invalid-trendline",
+      `${label} must be a multiple of 0.5 for category charts`,
+    );
+  }
+  return forecast;
+}
+
+function trendlineList(
+  value: unknown,
+  kind: ChartKind,
+  stacking: "stacked" | "percent" | undefined,
+  pointCount: number,
+  fitPoints: readonly { readonly x: number; readonly y: number }[],
+  label: string,
+): ChartTrendline[] | undefined {
+  if (value === undefined) return undefined;
+  if (!Array.isArray(value)) {
+    fail("invalid-trendline", `${label} must be an array`);
+  }
+  if ((kind === "pie" || kind === "doughnut") && value.length > 0) {
+    fail(
+      "invalid-trendline",
+      `${kind} charts do not support native trendlines`,
+    );
+  }
+  if (stacking !== undefined && value.length > 0) {
+    fail(
+      "invalid-trendline",
+      `${kind} trendlines are not supported on stacked or percent-stacked groups`,
+    );
+  }
+  return value.map((item, index) => {
+    const itemLabel = `${label}[${index}]`;
+    if (!isRecord(item)) {
+      fail("invalid-trendline", `${itemLabel} must be an object`);
+    }
+    const type = item["type"];
+    if (
+      typeof type !== "string" ||
+      !trendlineTypes.has(type as ChartTrendlineType)
+    ) {
+      fail(
+        "invalid-trendline",
+        `${itemLabel}.type must be linear, exponential, logarithmic, polynomial, power, or movingAverage`,
+      );
+    }
+    const trendlineType = type as ChartTrendlineType;
+    onlyKeys(
+      item,
+      [
+        "type",
+        "line",
+        "forward",
+        "backward",
+        "intercept",
+        "order",
+        "period",
+        "displayEquation",
+        "displayRSquared",
+      ],
+      itemLabel,
+    );
+    for (const flag of ["displayEquation", "displayRSquared"] as const) {
+      if (item[flag] !== undefined && typeof item[flag] !== "boolean") {
+        fail("invalid-trendline", `${itemLabel}.${flag} must be a boolean`);
+      }
+    }
+    const order = item["order"];
+    if (trendlineType === "polynomial") {
+      if (
+        typeof order !== "number" ||
+        !Number.isSafeInteger(order) ||
+        order < 2 ||
+        order > 6
+      ) {
+        fail(
+          "invalid-trendline",
+          `${itemLabel}.order is required for polynomial trendlines and must be an integer from 2 through 6`,
+        );
+      }
+    } else if (order !== undefined) {
+      fail(
+        "invalid-trendline",
+        `${itemLabel}.order applies only to polynomial trendlines`,
+      );
+    }
+    const period = item["period"];
+    if (trendlineType === "movingAverage") {
+      if (
+        typeof period !== "number" ||
+        !Number.isSafeInteger(period) ||
+        period < 2 ||
+        period > 255
+      ) {
+        fail(
+          "invalid-trendline",
+          `${itemLabel}.period is required for movingAverage trendlines and must be an integer from 2 through 255`,
+        );
+      }
+      if (period >= pointCount) {
+        fail(
+          "invalid-trendline",
+          `${itemLabel}.period must be less than the series point count ${pointCount}`,
+        );
+      }
+      if (
+        item["displayEquation"] !== undefined ||
+        item["displayRSquared"] !== undefined
+      ) {
+        fail(
+          "invalid-trendline",
+          `${itemLabel} cannot display an equation or R-squared value for a movingAverage trendline`,
+        );
+      }
+    } else if (period !== undefined) {
+      fail(
+        "invalid-trendline",
+        `${itemLabel}.period applies only to movingAverage trendlines`,
+      );
+    }
+    const intercept = item["intercept"];
+    if (
+      intercept !== undefined &&
+      !["linear", "exponential", "polynomial"].includes(trendlineType)
+    ) {
+      fail(
+        "invalid-trendline",
+        `${itemLabel}.intercept applies only to linear, exponential, and polynomial trendlines`,
+      );
+    }
+    const parsedIntercept =
+      intercept === undefined
+        ? undefined
+        : finiteNumber(intercept, `${itemLabel}.intercept`);
+    const line = lineStyle(item["line"], `${itemLabel}.line`);
+    const forward = trendlineForecast(
+      item["forward"],
+      `${itemLabel}.forward`,
+      kind,
+    );
+    const backward = trendlineForecast(
+      item["backward"],
+      `${itemLabel}.backward`,
+      kind,
+    );
+
+    // The fitting domain uses real observations only. Category charts use one-based category
+    // positions because their serialized data has string labels, not a numeric X domain; scatter
+    // charts use the declared X coordinate. Null slots stay in the series data and never become 0.
+    if (trendlineType === "logarithmic" && fitPoints.some(({ x }) => x <= 0)) {
+      fail(
+        "invalid-trendline-domain",
+        `${itemLabel}.type logarithmic requires positive X values (category positions or scatter X)`,
+      );
+    }
+    if (trendlineType === "exponential" && fitPoints.some(({ y }) => y <= 0)) {
+      fail(
+        "invalid-trendline-domain",
+        `${itemLabel}.type exponential requires positive Y values`,
+      );
+    }
+    if (
+      trendlineType === "power" &&
+      fitPoints.some(({ x, y }) => x <= 0 || y <= 0)
+    ) {
+      fail(
+        "invalid-trendline-domain",
+        `${itemLabel}.type power requires positive X and Y values`,
+      );
+    }
+    return {
+      type: trendlineType,
+      ...(line === undefined ? {} : { line }),
+      ...(forward === undefined ? {} : { forward }),
+      ...(backward === undefined ? {} : { backward }),
+      ...(parsedIntercept === undefined ? {} : { intercept: parsedIntercept }),
+      ...(trendlineType === "polynomial" ? { order: order as number } : {}),
+      ...(trendlineType === "movingAverage"
+        ? { period: period as number }
+        : {}),
+      ...(item["displayEquation"] === undefined
+        ? {}
+        : { displayEquation: item["displayEquation"] as boolean }),
+      ...(item["displayRSquared"] === undefined
+        ? {}
+        : { displayRSquared: item["displayRSquared"] as boolean }),
+    } as ChartTrendline;
+  });
+}
+
+function errorBarValueList(
+  value: unknown,
+  pointCount: number,
+  label: string,
+): ChartErrorBarValues {
+  if (!Array.isArray(value) || value.length !== pointCount) {
+    fail(
+      "invalid-error-bars",
+      `${label} must contain one magnitude per original series slot (${pointCount})`,
+    );
+  }
+  for (const [index, magnitude] of value.entries()) {
+    if (magnitude === null) continue;
+    if (
+      typeof magnitude !== "number" ||
+      !Number.isFinite(magnitude) ||
+      magnitude < 0
+    ) {
+      fail(
+        "invalid-error-bars",
+        `${label}[${index}] must be a non-negative finite number or null`,
+      );
+    }
+  }
+  return value as ChartErrorBarValues;
+}
+
+function errorBarConfig(
+  value: unknown,
+  pointCount: number,
+  label: string,
+): ChartErrorBars {
+  if (!isRecord(value)) {
+    fail("invalid-error-bars", `${label} must be an object`);
+  }
+  onlyKeys(
+    value,
+    ["type", "include", "endCap", "line", "value", "plus", "minus"],
+    label,
+  );
+  const type = value["type"];
+  if (
+    typeof type !== "string" ||
+    !errorBarTypes.has(type as ChartErrorBars["type"])
+  ) {
+    fail(
+      "invalid-error-bars",
+      `${label}.type must be fixed, percentage, standardDeviation, standardError, or custom`,
+    );
+  }
+  const include = value["include"];
+  if (
+    include !== undefined &&
+    (typeof include !== "string" ||
+      !errorBarIncludes.has(include as ChartErrorBarInclude))
+  ) {
+    fail("invalid-error-bars", `${label}.include must be both, plus, or minus`);
+  }
+  const endCap = value["endCap"];
+  if (endCap !== undefined && typeof endCap !== "boolean") {
+    fail("invalid-error-bars", `${label}.endCap must be a boolean`);
+  }
+  const line = lineStyle(value["line"], `${label}.line`);
+  const style = {
+    ...(endCap === undefined ? {} : { endCap }),
+    ...(line === undefined ? {} : { line }),
+  };
+  if (type === "custom") {
+    if (value["value"] !== undefined) {
+      fail(
+        "invalid-error-bars",
+        `${label}.value is not valid for custom error bars`,
+      );
+    }
+    const plus =
+      value["plus"] === undefined
+        ? undefined
+        : errorBarValueList(value["plus"], pointCount, `${label}.plus`);
+    const minus =
+      value["minus"] === undefined
+        ? undefined
+        : errorBarValueList(value["minus"], pointCount, `${label}.minus`);
+    const includedSides = (include ?? "both") as ChartErrorBarInclude;
+    if (includedSides === "plus" && minus !== undefined) {
+      fail(
+        "invalid-error-bars",
+        `${label}.minus requires include to be both or minus`,
+      );
+    }
+    if (includedSides === "minus" && plus !== undefined) {
+      fail(
+        "invalid-error-bars",
+        `${label}.plus requires include to be both or plus`,
+      );
+    }
+    if (
+      (includedSides === "both" &&
+        (plus === undefined || minus === undefined)) ||
+      (includedSides === "plus" && plus === undefined) ||
+      (includedSides === "minus" && minus === undefined)
+    ) {
+      fail(
+        "invalid-error-bars",
+        `${label} must declare plus and minus for include both, or only the included side`,
+      );
+    }
+    return {
+      type: "custom",
+      plus,
+      minus,
+      ...(include === undefined
+        ? {}
+        : { include: include as ChartErrorBarInclude }),
+      ...style,
+    } as ChartErrorBars;
+  }
+  if (value["plus"] !== undefined || value["minus"] !== undefined) {
+    fail(
+      "invalid-error-bars",
+      `${label}.plus and ${label}.minus apply only to custom error bars`,
+    );
+  }
+  if (type === "standardError") {
+    if (value["value"] !== undefined) {
+      fail(
+        "invalid-error-bars",
+        `${label}.value is not valid for standardError error bars`,
+      );
+    }
+    return {
+      type,
+      ...(include === undefined
+        ? {}
+        : { include: include as ChartErrorBarInclude }),
+      ...style,
+    } as ChartErrorBars;
+  }
+  const amount = value["value"];
+  if (typeof amount !== "number" || !Number.isFinite(amount) || amount < 0) {
+    fail(
+      "invalid-error-bars",
+      `${label}.value must be a non-negative finite magnitude`,
+    );
+  }
+  return {
+    type,
+    value: amount,
+    ...(include === undefined
+      ? {}
+      : { include: include as ChartErrorBarInclude }),
+    ...style,
+  } as ChartErrorBars;
+}
+
+function categoryErrorBars(
+  value: unknown,
+  kind: ChartKind,
+  pointCount: number,
+  label: string,
+): ChartErrorBars | undefined {
+  if (value === undefined) return undefined;
+  if (kind === "pie" || kind === "doughnut") {
+    fail(
+      "invalid-error-bars",
+      `${kind} charts do not support native error bars`,
+    );
+  }
+  return errorBarConfig(value, pointCount, label);
+}
+
+function scatterErrorBars(
+  value: unknown,
+  pointCount: number,
+  label: string,
+): ScatterErrorBars | undefined {
+  if (value === undefined) return undefined;
+  if (!isRecord(value)) {
+    fail("invalid-error-bars", `${label} must be an object`);
+  }
+  onlyKeys(value, ["x", "y"], label);
+  const x =
+    value["x"] === undefined
+      ? undefined
+      : errorBarConfig(value["x"], pointCount, `${label}.x`);
+  const y =
+    value["y"] === undefined
+      ? undefined
+      : errorBarConfig(value["y"], pointCount, `${label}.y`);
+  if (x === undefined && y === undefined) {
+    fail("invalid-error-bars", `${label} must declare x, y, or both`);
+  }
+  return {
+    ...(x === undefined ? {} : { x }),
+    ...(y === undefined ? {} : { y }),
+  };
+}
+
 function scatterSeriesList(
   value: unknown,
   line: ScatterLine | undefined,
@@ -869,7 +1298,18 @@ function scatterSeriesList(
     }
     onlyKeys(
       item,
-      ["name", "x", "y", "color", "line", "dataLabels", "marker", "points"],
+      [
+        "name",
+        "x",
+        "y",
+        "color",
+        "line",
+        "dataLabels",
+        "marker",
+        "points",
+        "trendlines",
+        "errorBars",
+      ],
       seriesLabel,
     );
     const name = item["name"];
@@ -884,6 +1324,19 @@ function scatterSeriesList(
         `Series "${name}" has ${x.length} X and ${y.length} Y observations`,
       );
     }
+    const trendlineOptions = trendlineList(
+      item["trendlines"],
+      "scatter",
+      undefined,
+      x.length,
+      x.flatMap((xValue, pointIndex) => {
+        const yValue = y[pointIndex];
+        return xValue === null || yValue === null || yValue === undefined
+          ? []
+          : [{ x: xValue, y: yValue }];
+      }),
+      `Series "${name}".trendlines`,
+    );
     const color = optionalColor(item["color"], `Series "${name}".color`);
     const seriesLine = lineStyle(item["line"], `Series "${name}".line`);
     const showLine = line !== undefined && line !== false;
@@ -917,6 +1370,11 @@ function scatterSeriesList(
       x.length,
       `Series "${name}"`,
     );
+    const errorBars = scatterErrorBars(
+      item["errorBars"],
+      x.length,
+      `Series "${name}".errorBars`,
+    );
     return {
       name,
       x,
@@ -928,6 +1386,10 @@ function scatterSeriesList(
         : { dataLabels: scatterLabelOverride(seriesLabels) }),
       ...(marker === undefined ? {} : { marker }),
       ...(points === undefined ? {} : { points }),
+      ...(trendlineOptions === undefined
+        ? {}
+        : { trendlines: trendlineOptions }),
+      ...(errorBars === undefined ? {} : { errorBars }),
     };
   });
 }
@@ -959,6 +1421,8 @@ function chartSeriesList(
         "marker",
         "smooth",
         "points",
+        "trendlines",
+        "errorBars",
       ],
       seriesLabel,
     );
@@ -995,6 +1459,16 @@ function chartSeriesList(
         );
       }
     }
+    const trendlineOptions = trendlineList(
+      item["trendlines"],
+      kind,
+      stacking,
+      categories.length,
+      values.flatMap((value, pointIndex) =>
+        value === null ? [] : [{ x: pointIndex + 1, y: value }],
+      ),
+      `Series "${name}".trendlines`,
+    );
     const pointsValue = item["points"];
     let points: Record<number, ChartPoint> | undefined;
     if (pointsValue !== undefined) {
@@ -1088,6 +1562,12 @@ function chartSeriesList(
       false,
       true,
     );
+    const errorBars = categoryErrorBars(
+      item["errorBars"],
+      kind,
+      categories.length,
+      `Series "${name}".errorBars`,
+    );
     return {
       name,
       values: values as readonly (number | null)[],
@@ -1098,6 +1578,10 @@ function chartSeriesList(
       ...(marker === undefined ? {} : { marker }),
       ...(smooth === undefined ? {} : { smooth }),
       ...(points === undefined ? {} : { points }),
+      ...(trendlineOptions === undefined
+        ? {}
+        : { trendlines: trendlineOptions }),
+      ...(errorBars === undefined ? {} : { errorBars }),
     };
   });
 }
@@ -2995,9 +3479,13 @@ export type {
   ChartAxisReferences,
   ChartCategoryAxis,
   ChartCategoryAxisReferences,
+  ChartCustomErrorBars,
   ChartDataLabelOverride,
   ChartDataLabels,
   ChartDisplayBlanksAs,
+  ChartErrorBarInclude,
+  ChartErrorBars,
+  ChartErrorBarValues,
   ChartGroup,
   ChartGroupData,
   ChartKind,
@@ -3013,6 +3501,8 @@ export type {
   ChartTickLabelPosition,
   ChartTickMark,
   ChartTitle,
+  ChartTrendline,
+  ChartTrendlineType,
   ChartValueAxis,
   ChartXYAxisReferences,
   ColumnOrBarChartGroup,
@@ -3025,6 +3515,7 @@ export type {
   ScatterData,
   ScatterDataLabelOverride,
   ScatterDataLabels,
+  ScatterErrorBars,
   ScatterLine,
   SharedCategoryData,
 } from "./chart-types.ts";

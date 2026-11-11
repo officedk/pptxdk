@@ -245,6 +245,8 @@ export type FileChart = {
   readonly axes: readonly FileChartAxis[];
   /** Data-label observations in native series order; omitted when no labels are declared. */
   readonly seriesDataLabels?: readonly FileChartSeriesDataLabels[];
+  /** c:cat formulas shared by more than one physical category axis. */
+  readonly categoryFormulas?: readonly string[];
   readonly embeddedWorkbook?: {
     readonly part: string;
     readonly sheetName: string;
@@ -4314,6 +4316,42 @@ function validateChart(
     }
   }
 
+  const categoryFormulaAxes = new Map<string, Set<number>>();
+  const categoryFormulaDomains = new Map<string, readonly string[]>();
+  for (const item of formulaSeries) {
+    if (item.series.x !== undefined) continue;
+    const group = groups[item.series.groupIndex];
+    const categoryAxisId = group?.axisIds.find(
+      (id) => axisById.get(id)?.kind === "category",
+    );
+    const formula = item.formula.categories;
+    if (categoryAxisId === undefined || formula === undefined) continue;
+    const axes = categoryFormulaAxes.get(formula) ?? new Set<number>();
+    axes.add(categoryAxisId);
+    categoryFormulaAxes.set(formula, axes);
+    const categories = item.series.categories;
+    if (categories === undefined) continue;
+    const existing = categoryFormulaDomains.get(formula);
+    if (existing === undefined) {
+      categoryFormulaDomains.set(formula, categories);
+      continue;
+    }
+    if (
+      existing.length !== categories.length ||
+      existing.some((category, index) => category !== categories[index])
+    ) {
+      issue(
+        errors,
+        chartPart,
+        "chart-category-domain-mismatch",
+        `Chart series sharing category formula ${formula} must have the same ordered category domain`,
+      );
+    }
+  }
+  const categoryFormulas = [...categoryFormulaAxes.entries()]
+    .filter(([, axes]) => axes.size > 1)
+    .map(([formula]) => formula);
+
   const externalData = first(chartXml, chartNamespace, "externalData");
   const workbookRelationshipId =
     externalData?.getAttributeNS(relationshipNamespace, "id") ?? "";
@@ -4458,6 +4496,7 @@ function validateChart(
     groups,
     axes,
     ...(seriesDataLabels.length === 0 ? {} : { seriesDataLabels }),
+    ...(categoryFormulas.length === 0 ? {} : { categoryFormulas }),
     ...(embeddedWorkbook === undefined ? {} : { embeddedWorkbook }),
   };
   return {

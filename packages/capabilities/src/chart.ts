@@ -1680,7 +1680,10 @@ export type ParsedAxisCrossing =
   | { readonly kind: "crossesAt"; readonly value: number };
 
 export type ParsedChartAxis = {
+  /** Physical axis name; a companion may differ from the author's logical name. */
   readonly name: string;
+  /** Author category/value axis name shared by physical companion axes. */
+  readonly logicalName: string;
   readonly id: number;
   readonly crossAxisId: number;
   /** Physical direction derived from every group reference to this axis. */
@@ -1758,6 +1761,7 @@ export type ParsedChart = {
 
 type ParsedAxisDraft = {
   readonly name: string;
+  readonly logicalName: string;
   readonly spec: ChartAxis;
   direction?: "horizontal" | "vertical";
   position?: ChartAxisPosition;
@@ -1902,7 +1906,7 @@ function parsedAxes(
     }
     let draft = draftByName.get(name);
     if (draft === undefined) {
-      draft = { name, spec: entry.spec };
+      draft = { name, logicalName: name, spec: entry.spec };
       draftByName.set(name, draft);
     }
     if (!firstUse.includes(draft)) firstUse.push(draft);
@@ -2102,6 +2106,94 @@ function parsedAxes(
     claimPosition(axis, position);
   }
 
+  let chartGroups: ResolvedGroupAxes[] = resolvedGroups;
+  const chartAxes: ParsedAxisDraft[] = [...firstUse];
+  const usedNames = new Set(firstUse.map((axis) => axis.name));
+  for (const axis of firstUse) {
+    if (axis.spec.kind !== "category" || axis.direction === undefined) continue;
+    const valuePartners = partnersOf(axis).filter(
+      (partner) => partner.spec.kind === "value",
+    );
+    if (valuePartners.length < 2) continue;
+    const sides = new Set(valuePartners.map((partner) => partner.position));
+    if (sides.size !== 2) continue;
+    if (axis.spec.crosses !== undefined || axis.spec.crossesAt !== undefined) {
+      fail(
+        "invalid-chart-axes",
+        `Shared category axis "${axis.name}" with opposite value sides cannot use explicit crossing controls`,
+      );
+    }
+    if (valuePartners.length !== 2) {
+      fail(
+        "unsupported-chart-axis",
+        `Shared category axis "${axis.name}" supports at most two opposite-side value axes`,
+      );
+    }
+    const secondaryValue = valuePartners[1]!;
+    let companionName = `${axis.name}::secondary`;
+    let suffix = 1;
+    while (usedNames.has(companionName)) {
+      suffix += 1;
+      companionName = `${axis.name}::secondary${suffix}`;
+    }
+    usedNames.add(companionName);
+    const companion: ParsedAxisDraft = {
+      name: companionName,
+      logicalName: axis.logicalName,
+      spec: {
+        kind: "category",
+        visible: false,
+        gridlines: false,
+        minorGridlines: false,
+        line: false,
+        majorTickMark: "none",
+        minorTickMark: "none",
+        tickLabelPosition: "none",
+        ...(axis.spec.reversed === undefined
+          ? {}
+          : { reversed: axis.spec.reversed }),
+      } satisfies ChartCategoryAxis,
+      direction: axis.direction,
+      position: axis.position!,
+    };
+    chartAxes.push(companion);
+    chartGroups = chartGroups.map((group): ResolvedGroupAxes => {
+      if (
+        group.kind === "category" &&
+        group.category === axis &&
+        group.value === secondaryValue
+      ) {
+        return { ...group, category: companion };
+      }
+      return group;
+    });
+  }
+  void chartAxes;
+
+  const physicalAxes: ParsedAxisDraft[] = [];
+  const notePhysical = (axis: ParsedAxisDraft) => {
+    if (!physicalAxes.includes(axis)) physicalAxes.push(axis);
+  };
+  for (const group of chartGroups) {
+    const first = group.kind === "category" ? group.category : group.x;
+    const second = group.kind === "category" ? group.value : group.y;
+    notePhysical(first);
+    notePhysical(second);
+  }
+  if (physicalAxes.length > nativeAxisIdLimit) {
+    fail(
+      "unsupported-chart-axis",
+      "Office supports at most four physical chart axes per chart",
+    );
+  }
+  partnersByAxis.clear();
+  for (const group of chartGroups) {
+    const first = group.kind === "category" ? group.category : group.x;
+    const second = group.kind === "category" ? group.value : group.y;
+    addPartner(first, second);
+    addPartner(second, first);
+  }
+
   const maxSide = (direction: "horizontal" | "vertical") =>
     direction === "vertical" ? "right" : "top";
   const endpointSideForCrossing = (
@@ -2156,7 +2248,7 @@ function parsedAxes(
   // Office ignores c:axPos and positions an axis from the crossing control on its
   // perpendicular axis. Explicit min/max crossings are checked with the source
   // orientation; autoZero is left to native auto-scaling. See MS-OI29500 21.2.2.10.
-  for (const axis of firstUse) {
+  for (const axis of physicalAxes) {
     const sides = partnersOf(axis).flatMap((partner) => {
       const side =
         partner.crossing === undefined
@@ -2187,7 +2279,7 @@ function parsedAxes(
   let stable = false;
   for (let iteration = 0; iteration < 8; iteration += 1) {
     let changed = false;
-    for (const axis of firstUse) {
+    for (const axis of physicalAxes) {
       if (axis.crossing?.kind !== "crosses") continue;
       for (const partner of partnersOf(axis)) {
         const wanted = crossingSideForPartner(
@@ -2211,7 +2303,7 @@ function parsedAxes(
         }
       }
     }
-    for (const axis of firstUse) {
+    for (const axis of physicalAxes) {
       if (explicitCrossing(axis) !== undefined) continue;
       const partners = partnersOf(axis);
       if (partners.length === 0) {
@@ -2245,7 +2337,7 @@ function parsedAxes(
         changed = true;
       }
     }
-    for (const axis of firstUse) {
+    for (const axis of physicalAxes) {
       const sides = partnersOf(axis).flatMap((partner) => {
         if (partner.crossing?.kind !== "crosses") return [];
         const side = crossingSideForPartner(
@@ -2283,18 +2375,19 @@ function parsedAxes(
     fail("invalid-chart-axes", "Chart axis positions do not converge");
   }
 
-  for (const [index, axis] of firstUse.entries()) {
+  for (const [index, axis] of physicalAxes.entries()) {
     axis.id = nativeAxisIds[index]!;
   }
-  for (const group of resolvedGroups) {
+  for (const group of chartGroups) {
     const first = group.kind === "category" ? group.category : group.x;
     const second = group.kind === "category" ? group.value : group.y;
     first.crossAxisId ??= second.id!;
     second.crossAxisId ??= first.id!;
   }
 
-  const parsed = firstUse.map((axis) => ({
+  const parsed = physicalAxes.map((axis) => ({
     name: axis.name,
+    logicalName: axis.logicalName,
     id: axis.id!,
     crossAxisId: axis.crossAxisId!,
     direction: axis.direction!,
@@ -2304,9 +2397,9 @@ function parsedAxes(
   }));
 
   const parsedByDraft = new Map(
-    firstUse.map((axis, index) => [axis, parsed[index]!]),
+    physicalAxes.map((axis, index) => [axis, parsed[index]!]),
   );
-  const groupAxes = resolvedGroups.map((group) =>
+  const groupAxes = chartGroups.map((group) =>
     group.kind === "category"
       ? {
           category: parsedByDraft.get(group.category)!,
@@ -3047,7 +3140,7 @@ function chartResourceClaims(
   const categoryLabels = new Map<string, readonly string[]>();
   for (const group of parsed.groups) {
     if (group.kind === "scatter" || group.axes === undefined) continue;
-    categoryLabels.set(group.axes.category.name, group.data.categories);
+    categoryLabels.set(group.axes.category.logicalName, group.data.categories);
   }
   const dataLabelText = parsed.groups.flatMap((group) =>
     group.dataLabels !== undefined &&

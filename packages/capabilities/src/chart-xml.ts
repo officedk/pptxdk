@@ -176,7 +176,7 @@ function chartCells(parsed: ParsedChart): ChartCells {
       nextColumn += 1;
       continue;
     }
-    const name = group.axes.category.name;
+    const name = group.axes.category.logicalName;
     if (categoryColumns.has(name)) continue;
     categoryColumns.set(name, {
       column: nextColumn,
@@ -209,7 +209,7 @@ function chartCells(parsed: ParsedChart): ChartCells {
     const category =
       group.axes === undefined
         ? axislessCategoryColumns.get(groupIndex)
-        : categoryColumns.get(group.axes.category.name);
+        : categoryColumns.get(group.axes.category.logicalName);
     if (category === undefined) {
       throw new Error(
         "Category chart group is missing its workbook category column",

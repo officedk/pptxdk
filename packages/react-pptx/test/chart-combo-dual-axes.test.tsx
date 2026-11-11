@@ -274,35 +274,46 @@ describe("chart combination and dual-axis topology", () => {
     }
   });
 
-  it("lets two value axes share one category axis without reciprocal crossings", async () => {
+  it("projects a shared category axis to a hidden companion for left and right values", async () => {
+    const categories = ["A", "A", "B"];
     const result = await buildSingleChart({
       x: 10,
       y: 10,
       width: 880,
       height: 480,
       axes: {
-        period: { kind: "category" },
-        amount: { kind: "value", min: 0, max: 10 },
-        share: { kind: "value", min: 0, max: 100, numberFormat: "0%" },
+        period: {
+          kind: "category",
+          title: "Period",
+          style: { fontSize: "9pt", color: "#333333" },
+        },
+        amount: { kind: "value", position: "left", min: 0, max: 10 },
+        share: {
+          kind: "value",
+          position: "right",
+          min: 0,
+          max: 1,
+          numberFormat: "0%",
+        },
       },
       groups: [
         {
           kind: "column",
           axes: { category: "period", value: "amount" },
-          data: { kind: "shared-categories", categories: ["Q1", "Q2"] },
-          series: [{ name: "Amount", values: [1, 9] }],
+          data: { kind: "shared-categories", categories },
+          series: [{ name: "Amount", values: [1, null, 3] }],
         },
         {
           kind: "line",
           axes: { category: "period", value: "share" },
-          data: { kind: "shared-categories", categories: ["Q1", "Q2"] },
-          series: [{ name: "Share", values: [10, 90] }],
+          data: { kind: "shared-categories", categories },
+          series: [{ name: "Share", values: [0.35, null, 0.9] }],
         },
         {
           kind: "area",
           axes: { category: "period", value: "amount" },
-          data: { kind: "shared-categories", categories: ["Q1", "Q2"] },
-          series: [{ name: "Area amount", values: [2, 4] }],
+          data: { kind: "shared-categories", categories },
+          series: [{ name: "Area amount", values: [2, 4, 6] }],
         },
       ],
     });
@@ -310,21 +321,22 @@ describe("chart combination and dual-axis topology", () => {
     assert.deepEqual(file.errors, []);
     const chart = file.slides[0]?.objects[0]?.chart;
     assert.ok(chart);
-    assert.equal(chart.axes.length, 3);
+    assert.equal(chart.axes.length, 4);
     assert.deepEqual(
       chart.groups.map(({ axisIds }) => axisIds),
       [
         [111111, 222222],
-        [111111, 333333],
+        [333333, 444444],
         [111111, 222222],
       ],
     );
     assert.deepEqual(
-      chart.axes.map(({ id, kind, position, crossAxisId }) => ({
+      chart.axes.map(({ id, kind, position, crossAxisId, crosses }) => ({
         id,
         kind,
         position,
         crossAxisId,
+        crosses,
       })),
       [
         {
@@ -332,26 +344,62 @@ describe("chart combination and dual-axis topology", () => {
           kind: "category",
           position: "bottom",
           crossAxisId: 222222,
+          crosses: "min",
         },
         {
           id: 222222,
           kind: "value",
           position: "left",
           crossAxisId: 111111,
+          crosses: undefined,
         },
         {
           id: 333333,
+          kind: "category",
+          position: "bottom",
+          crossAxisId: 444444,
+          crosses: "max",
+        },
+        {
+          id: 444444,
           kind: "value",
-          position: "left",
-          crossAxisId: 111111,
+          position: "right",
+          crossAxisId: 333333,
+          crosses: undefined,
         },
       ],
     );
+    assert.deepEqual(
+      chart.series.map(({ categories: domain, values }) => ({
+        domain,
+        values,
+      })),
+      [
+        { domain: categories, values: [1, null, 3] },
+        { domain: categories, values: [0.35, null, 0.9] },
+        { domain: categories, values: [2, 4, 6] },
+      ],
+    );
+    assert.deepEqual(chart.categoryFormulas, ["Sheet1!$A$2:$A$4"]);
+    assert.deepEqual(
+      chart.embeddedWorkbook?.series.map(({ categories: domain, values }) => [
+        domain,
+        values,
+      ]),
+      [
+        [categories, [1, null, 3]],
+        [categories, [0.35, null, 0.9]],
+        [categories, [2, 4, 6]],
+      ],
+    );
     const xml = chartXml(result.pptx);
-    assert.equal((xml.match(/<c:catAx>/gu) ?? []).length, 1);
+    assert.equal((xml.match(/<c:catAx>/gu) ?? []).length, 2);
     assert.equal((xml.match(/<c:valAx>/gu) ?? []).length, 2);
-    assert.equal((xml.match(/<c:crossAx val="111111"\/>/gu) ?? []).length, 2);
-    assert.ok(!xml.includes('<c:axPos val="r"/>'));
+    assert.equal((xml.match(/<c:delete val="1"\/>/gu) ?? []).length, 1);
+    assert.equal((xml.match(/<a:t>Period<\/a:t>/gu) ?? []).length, 1);
+    assert.equal((xml.match(/Sheet1!\$A\$2:\$A\$4/gu) ?? []).length, 3);
+    assert.match(xml, /<c:crosses val="min"\/>/u);
+    assert.match(xml, /<c:crosses val="max"\/>/u);
   });
 
   it("writes two independent scatter axis pairs with unequal observations", async () => {
@@ -1765,7 +1813,7 @@ describe("chart combination and dual-axis topology", () => {
     assert.match(xml, /<c:crossesAt val="1"\/>/u);
   });
 
-  it("rejects conflicting sides on axes that share a crossing axis", async () => {
+  it("rejects conflicting sides on shared numeric axes", async () => {
     const categoryData = {
       kind: "shared-categories" as const,
       categories: ["A", "B"],
@@ -1777,27 +1825,6 @@ describe("chart combination and dual-axis topology", () => {
         return true;
       });
     };
-    await rejects({
-      axes: {
-        category: { kind: "category" },
-        amount: { kind: "value", position: "left" },
-        share: { kind: "value", position: "right" },
-      },
-      groups: [
-        {
-          kind: "column",
-          axes: { category: "category", value: "amount" },
-          data: categoryData,
-          series: [{ name: "Amount", values: [1, 2] }],
-        },
-        {
-          kind: "line",
-          axes: { category: "category", value: "share" },
-          data: categoryData,
-          series: [{ name: "Share", values: [3, 4] }],
-        },
-      ],
-    });
     await rejects({
       axes: {
         period: { kind: "category", position: "bottom" },
@@ -2045,5 +2072,127 @@ describe("chart combination and dual-axis topology", () => {
       file.errors.some(({ code }) => code === "invalid-chart-axis"),
       JSON.stringify(file.errors),
     );
+  });
+
+  it("projects a shared category axis for line-line groups", async () => {
+    const categories = ["A", "A", "B"];
+    const result = await buildSingleChart({
+      x: 10,
+      y: 10,
+      width: 640,
+      height: 360,
+      axes: {
+        category: { kind: "category" },
+        low: { kind: "value", position: "left", min: 0, max: 10 },
+        high: { kind: "value", position: "right", min: 0, max: 100 },
+      },
+      groups: [
+        {
+          kind: "line",
+          axes: { category: "category", value: "low" },
+          data: { kind: "shared-categories", categories },
+          series: [{ name: "Low", values: [1, null, 3] }],
+        },
+        {
+          kind: "line",
+          axes: { category: "category", value: "high" },
+          data: { kind: "shared-categories", categories },
+          series: [{ name: "High", values: [10, 20, null] }],
+        },
+      ],
+    });
+    const file = await validatePptx(result.pptx);
+    assert.deepEqual(file.errors, []);
+    const chart = file.slides[0]?.objects[0]?.chart;
+    assert.ok(chart);
+    assert.equal(chart.axes.length, 4);
+    assert.deepEqual(
+      chart.axes.map(({ kind, position }) => [kind, position]),
+      [
+        ["category", "bottom"],
+        ["value", "left"],
+        ["category", "bottom"],
+        ["value", "right"],
+      ],
+    );
+    assert.deepEqual(
+      chart.groups.map(({ type, axisIds }) => [type, axisIds]),
+      [
+        ["lineChart", [111111, 222222]],
+        ["lineChart", [333333, 444444]],
+      ],
+    );
+    assert.deepEqual(
+      chart.series.map(({ categories: domain, values }) => ({
+        domain,
+        values,
+      })),
+      [
+        { domain: categories, values: [1, null, 3] },
+        { domain: categories, values: [10, 20, null] },
+      ],
+    );
+    assert.deepEqual(chart.categoryFormulas, ["Sheet1!$A$2:$A$4"]);
+    assert.deepEqual(
+      chart.embeddedWorkbook?.series.map(({ categories: domain, values }) => [
+        domain,
+        values,
+      ]),
+      [
+        [categories, [1, null, 3]],
+        [categories, [10, 20, null]],
+      ],
+    );
+  });
+
+  it("keeps the shared category domain under group reorder", async () => {
+    const categories = ["A", "A", "B"];
+    const buildOrder = async (order: readonly ("left" | "right")[]) =>
+      buildSingleChart({
+        x: 10,
+        y: 10,
+        width: 640,
+        height: 360,
+        axes: {
+          category: { kind: "category" },
+          left: { kind: "value", position: "left", min: 0, max: 10 },
+          right: { kind: "value", position: "right", min: 0, max: 100 },
+        },
+        groups: order.map((side) => ({
+          kind: "column" as const,
+          axes: {
+            category: "category",
+            value: side,
+          },
+          data: { kind: "shared-categories" as const, categories },
+          series: [
+            {
+              name: side,
+              values: side === "left" ? [1, null, 3] : [10, 20, null],
+            },
+          ],
+        })),
+      });
+    for (const order of [
+      ["left", "right"],
+      ["right", "left"],
+    ] as const) {
+      const result = await buildOrder(order);
+      const file = await validatePptx(result.pptx);
+      assert.deepEqual(file.errors, []);
+      const chart = file.slides[0]?.objects[0]?.chart;
+      assert.ok(chart);
+      assert.equal(chart.axes.length, 4);
+      assert.deepEqual(
+        chart.groups.map(({ axisIds }) => axisIds.length),
+        [2, 2],
+      );
+      assert.deepEqual(
+        chart.series.map(({ name }) => name),
+        order,
+      );
+      assert.deepEqual(chart.categoryFormulas, ["Sheet1!$A$2:$A$4"]);
+      assert.deepEqual(chart.embeddedWorkbook?.categories, categories);
+    }
   });
 });

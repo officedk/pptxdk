@@ -248,6 +248,7 @@ function dataLabels(
   series: ParsedChartSeries,
   groupIndex: number,
   textStyles: ChartTextStyleXml,
+  theme: ThemeContext,
 ): XmlElement | undefined {
   const seriesLabels = mergeDataLabels(group.dataLabels, series.dataLabels);
   const hasPosition =
@@ -255,7 +256,36 @@ function dataLabels(
     group.kind === "bar" ||
     group.kind === "line" ||
     group.kind === "pie";
-  const settings = (labels: ChartDataLabels, textStyle: string | undefined) => [
+  const hasVisibleContent = (labels: ChartDataLabels) =>
+    labels.value === true ||
+    labels.percent === true ||
+    labels.category === true;
+  const leaderLineSettings = (labels: ChartDataLabels) => {
+    if (labels.leaderLines === undefined) return [];
+    const visible = hasVisibleContent(labels);
+    if (labels.leaderLines === false) {
+      // Office requires a visible sibling whenever showLeaderLines is present, including
+      // the false value. Omitting the element keeps the labels disabled without the
+      // invalid empty display group.
+      return visible ? [el("c:showLeaderLines", { val: false })] : [];
+    }
+    if (!visible) return [];
+    return [
+      el("c:showLeaderLines", { val: true }),
+      el(
+        "c:leaderLines",
+        null,
+        typeof labels.leaderLines === "object"
+          ? el("c:spPr", null, chartLine(labels.leaderLines, theme))
+          : undefined,
+      ),
+    ];
+  };
+  const settings = (
+    labels: ChartDataLabels,
+    textStyle: string | undefined,
+    includeLeaderLines: boolean,
+  ) => [
     labels.numberFormat === undefined
       ? undefined
       : el("c:numFmt", {
@@ -277,11 +307,8 @@ function dataLabels(
       ? el("c:showPercent", { val: labels.percent ?? false })
       : undefined,
     el("c:showBubbleSize", { val: false }),
+    includeLeaderLines ? leaderLineSettings(labels) : undefined,
   ];
-  const hasVisibleContent = (labels: ChartDataLabels) =>
-    labels.value === true ||
-    labels.percent === true ||
-    labels.category === true;
   const groupStyle = textStyles.groupDataLabels?.get(groupIndex);
   const pointBase = seriesLabels === false ? {} : seriesLabels;
   const pointLabels = Object.entries<ChartPoint>(series.points ?? {}).flatMap(
@@ -313,7 +340,7 @@ function dataLabels(
           "c:dLbl",
           null,
           el("c:idx", { val: index }),
-          settings(effective, style),
+          settings(effective, style, false),
         ),
       ];
     },
@@ -328,7 +355,7 @@ function dataLabels(
   if (base === false) {
     return el("c:dLbls", null, el("c:delete", { val: true }));
   }
-  return el("c:dLbls", null, pointLabels, settings(base, groupStyle));
+  return el("c:dLbls", null, pointLabels, settings(base, groupStyle, true));
 }
 
 function seriesShape(
@@ -412,6 +439,7 @@ function chartSeries(
   const lineChart = kind === "line";
   const pie = kind === "pie" || kind === "doughnut";
   const itemShape = seriesShape(kind, series.color, series.line, theme);
+  const seriesExplosion = series.explosion ?? group.explosion;
   const points = Object.entries<ChartPoint>(series.points ?? {}).flatMap(
     ([pointIndex, point]) => {
       const shape = pointShape(kind, point, theme);
@@ -419,7 +447,13 @@ function chartSeries(
         lineChart && point.marker !== undefined
           ? chartMarker(point.marker, theme)
           : undefined;
-      if (shape === undefined && marker === undefined) return [];
+      if (
+        shape === undefined &&
+        marker === undefined &&
+        point.explosion === undefined
+      ) {
+        return [];
+      }
       return [
         el(
           "c:dPt",
@@ -428,6 +462,9 @@ function chartSeries(
           bar ? el("c:invertIfNegative", { val: false }) : undefined,
           bar ? el("c:bubble3D", { val: false }) : undefined,
           marker,
+          point.explosion === undefined
+            ? undefined
+            : el("c:explosion", { val: Math.round(point.explosion) }),
           shape,
         ),
       ];
@@ -442,11 +479,11 @@ function chartSeries(
     itemShape,
     bar ? el("c:invertIfNegative", { val: false }) : undefined,
     lineChart ? chartMarker(series.marker, theme) : undefined,
-    pie && group.explosion !== undefined
-      ? el("c:explosion", { val: Math.round(group.explosion) })
+    pie && seriesExplosion !== undefined
+      ? el("c:explosion", { val: Math.round(seriesExplosion) })
       : undefined,
     points,
-    dataLabels(group, series, groupIndex, textStyles),
+    dataLabels(group, series, groupIndex, textStyles, theme),
     el(
       "c:cat",
       null,

@@ -1014,10 +1014,14 @@ function behaviorIds(
     }
   };
   const primary = primaryBehaviors();
-  const companions = mixedShapeRanges.map((range) => ({
-    range,
-    behaviors: mixedShapeGeometryForTarget(timingTarget(effect, range)),
-  }));
+  const companions = mixedShapeRanges
+    .map((range) => ({
+      range,
+      behaviors: mixedShapeGeometryForTarget(timingTarget(effect, range)),
+    }))
+    // Effects such as Fade and Wipe have no displacement to project; an empty companion
+    // would write an invalid empty childTnLst.
+    .filter(({ behaviors }) => behaviors.length > 0);
   return { primary, companions };
 }
 

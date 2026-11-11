@@ -967,7 +967,8 @@ function validWholeShapeProjectionObject(
     visibilitySets.length !== 1 ||
     visibility === undefined ||
     visibility.targetId !== targetId ||
-    visibility.targetType !== "object" ||
+    (visibility.targetType !== "object" &&
+      visibility.targetType !== "background") ||
     visibility.attributeNames.length !== 1 ||
     visibility.attributeNames[0] !== "style.visibility" ||
     visibility.durationMs !== 1 ||
@@ -975,18 +976,19 @@ function validWholeShapeProjectionObject(
   ) {
     return false;
   }
-  const objectBehaviors = behaviors.filter(
+  const primaryTargetType = visibility.targetType;
+  const primaryBehaviors = behaviors.filter(
     ({ behavior }) => behavior !== "set",
   );
   if (
-    objectBehaviors.some(
+    primaryBehaviors.some(
       ({ targetId: behaviorTargetId, targetType }) =>
-        behaviorTargetId !== targetId || targetType !== "object",
+        behaviorTargetId !== targetId || targetType !== primaryTargetType,
     )
   ) {
     return false;
   }
-  return hasRoles(objectBehaviors.map(animationBehaviorRole), roles);
+  return hasRoles(primaryBehaviors.map(animationBehaviorRole), roles);
 }
 
 /** Verifies one companion effect carries only the exact geometry roles for one paragraph. */

@@ -816,14 +816,7 @@ function chartSeriesList(
         }
         onlyKeys(
           pointValue,
-          [
-            "color",
-            "line",
-            "explosion",
-            "marker",
-            "labelColor",
-            "dataLabels",
-          ],
+          ["color", "line", "explosion", "marker", "labelColor", "dataLabels"],
           `Series "${name}" data point ${rawIndex}`,
         );
         const pointColor = optionalColor(

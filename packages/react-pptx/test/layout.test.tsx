@@ -1573,6 +1573,95 @@ describe("public layout entry", () => {
     );
   });
 
+  it("compares stretched grid items with their assigned area after filling the track", async () => {
+    const result = await build(
+      <Deck
+        width={320}
+        height={320}
+        theme={{ fonts: { major: cjkFont, minor: cjkFont } }}
+      >
+        <Slide id="grid-stretched-chart">
+          <Box
+            id="stretch-chart-grid"
+            style={{
+              display: "grid",
+              width: 300,
+              height: 100,
+              gridTemplateColumns: "1fr",
+              gridTemplateRows: "minmax(0, 1fr)",
+            }}
+          >
+            <Chart
+              id="stretch-chart"
+              kind="column"
+              data={{
+                categories: ["A"],
+                series: [{ name: "S", values: [1] }],
+              }}
+            />
+          </Box>
+        </Slide>
+        <Slide id="grid-true-overflow">
+          <Box
+            id="true-overflow-grid"
+            style={{
+              display: "grid",
+              width: 300,
+              height: 200,
+              gridTemplateColumns: "1fr",
+              gridTemplateRows: "100px 100px",
+            }}
+          >
+            <Shape id="tall-grid-item" height={180} />
+            <Shape
+              id="minimum-grid-item"
+              width={20}
+              height={10}
+              style={{ minHeight: 180 }}
+            />
+          </Box>
+        </Slide>
+      </Deck>,
+    );
+
+    assert.deepEqual(result.report.slides[0]?.objects[0]?.box, {
+      x: 0,
+      y: 0,
+      width: 300,
+      height: 100,
+    });
+    assert.deepEqual(
+      result.report.slides[1]?.objects.map(({ box }) => box),
+      [
+        { x: 0, y: 0, width: 300, height: 180 },
+        { x: 0, y: 100, width: 20, height: 180 },
+      ],
+    );
+    assert.deepEqual(
+      result.report.diagnostics.map(({ path, code }) => ({ path, code })),
+      [
+        {
+          path: "deck/slide[grid-true-overflow]/box[true-overflow-grid]/shape[tall-grid-item]",
+          code: "grid-item-overflow",
+        },
+        {
+          path: "deck/slide[grid-true-overflow]/box[true-overflow-grid]/shape[minimum-grid-item]",
+          code: "grid-item-overflow",
+        },
+      ],
+    );
+
+    const file = await validatePptx(result.pptx);
+    assert.deepEqual(file.errors, []);
+    assert.deepEqual(
+      file.slides[0]?.objects.map(({ boxEmu }) => ({
+        width: boxEmu.width / 9525,
+        height: boxEmu.height / 9525,
+      })),
+      [{ width: 300, height: 100 }],
+    );
+  });
+
   it("evaluates relative and absolute positioning by horizontal and vertical percentages of containing block respectively", async () => {
     const result = await build(
       <Deck width={320} height={240}>

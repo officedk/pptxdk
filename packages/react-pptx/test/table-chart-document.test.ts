@@ -374,13 +374,26 @@ describe("table and chart authoring through the common document", () => {
             : {}),
         },
       ]);
+      const horizontalBar = direction === "bar";
       assert.deepEqual(
         value.axes,
         type === "pieChart" || type === "doughnutChart"
           ? []
           : [
-              { id: 111111, kind: "category", crossAxisId: 222222 },
-              { id: 222222, kind: "value", crossAxisId: 111111 },
+              {
+                id: 111111,
+                kind: "category",
+                crossAxisId: 222222,
+                position: horizontalBar ? "left" : "bottom",
+                visible: true,
+              },
+              {
+                id: 222222,
+                kind: "value",
+                crossAxisId: 111111,
+                position: horizontalBar ? "bottom" : "left",
+                visible: true,
+              },
             ],
       );
       assert.deepEqual(value.embeddedWorkbook?.categories, categories);
@@ -867,10 +880,9 @@ describe("table and chart authoring through the common document", () => {
               height: 200,
               groups: [
                 {
-                  kind: "doughnut",
+                  kind: "column",
                   data: {
                     kind: "independent-categories",
-                    categories: ["A"],
                   } as never,
                   series: [{ name: "S", values: [1] }],
                 },
@@ -881,7 +893,7 @@ describe("table and chart authoring through the common document", () => {
       ),
       (error: unknown) => {
         assert.ok(error instanceof BuildError);
-        assert.equal(error.diagnostics[0]?.code, "unsupported-chart-data");
+        assert.equal(error.diagnostics[0]?.code, "invalid-data");
         return true;
       },
     );
@@ -915,40 +927,6 @@ describe("table and chart authoring through the common document", () => {
         assert.equal(
           error.diagnostics[0]?.code,
           "chart-category-domain-mismatch",
-        );
-        return true;
-      },
-    );
-
-    await assert.rejects(
-      build(
-        deck({ width: 400, height: 300 }).append(
-          slide({ id: "mixed-groups" }).append(
-            chart({
-              id: "mixed-groups",
-              width: 300,
-              height: 200,
-              groups: [
-                {
-                  kind: "column",
-                  data,
-                  series: [{ name: "A", values: [1, 2] }],
-                },
-                {
-                  kind: "line",
-                  data,
-                  series: [{ name: "B", values: [2, 4] }],
-                },
-              ],
-            }),
-          ),
-        ),
-      ),
-      (error: unknown) => {
-        assert.ok(error instanceof BuildError);
-        assert.equal(
-          error.diagnostics[0]?.code,
-          "unsupported-chart-group-combination",
         );
         return true;
       },

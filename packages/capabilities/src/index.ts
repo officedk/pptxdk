@@ -38,6 +38,7 @@ export { chartCapability } from "#/chart.ts";
 export type {
   ChartAxis,
   ChartAxisCrossing,
+  ChartAxisPosition,
   ChartAxisReferences,
   ChartCategoryAxis,
   ChartCategoryAxisReferences,
@@ -69,6 +70,8 @@ export type {
   ChartXYAxisReferences,
   ColumnOrBarChartGroup,
   DoughnutChartGroup,
+  IndependentCategoryData,
+  IndependentCategorySeries,
   LineOrAreaChartGroup,
   ParsedChart,
   PieChartGroup,

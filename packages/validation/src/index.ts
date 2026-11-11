@@ -9,6 +9,7 @@ const presentationNamespace =
 const drawingNamespace =
   "http://schemas.openxmlformats.org/drawingml/2006/main";
 const chartNamespace = "http://schemas.openxmlformats.org/drawingml/2006/chart";
+const maximumChartAxisId = 4_294_967_295;
 const spreadsheetNamespace =
   "http://schemas.openxmlformats.org/spreadsheetml/2006/main";
 const tableUri = "http://schemas.openxmlformats.org/drawingml/2006/table";
@@ -21,6 +22,10 @@ const contentTypeNamespace =
 const p14Namespace = "http://schemas.microsoft.com/office/powerpoint/2010/main";
 const p159Namespace =
   "http://schemas.microsoft.com/office/powerpoint/2015/09/main";
+const c15Namespace = "http://schemas.microsoft.com/office/drawing/2012/chart";
+const chartCategoryRangeExtensionUri = "{02D57815-91ED-43cb-92C2-25804820EDAC}";
+const chartDataLabelRangeExtensionUri =
+  "{CE6537A1-D6FC-4f65-9D91-7224C49458BB}";
 const markupCompatibilityNamespace =
   "http://schemas.openxmlformats.org/markup-compatibility/2006";
 const transitionalStandard = "ECMA-376 5th edition Transitional";
@@ -35,7 +40,7 @@ const schemaValidatorProfile = {
   officeVersion: schemaValidatorOfficeVersion,
 } as const;
 const validationScope =
-  "Open XML SDK 3.0.2 under Microsoft365 profile Transitional package, schema, and constraint validation; local reader independently verifies OPC relationships, content types, and slide, shape, image, group, text, and transition structures, and verifies transition Choice/Fallback Requires and target extension constraints branch by branch. SDK MC selects Choice or Fallback solely according to its support; all compatibility branches and unknown extensions for p14/p159 are not guaranteed to be schema-validated. Validation does not equal full standard certification or application evidence.";
+  "Open XML SDK 3.0.2 under Microsoft365 profile Transitional package, schema, and constraint validation; local reader independently verifies OPC relationships, content types, and slide, shape, image, group, text, and transition structures, and verifies transition Choice/Fallback Requires and target extension constraints branch by branch. SDK MC selects Choice or Fallback solely according to its support; all compatibility branches and unknown extensions for p14/p159/c15 are not guaranteed to be schema-validated. Validation does not equal full standard certification or application evidence.";
 const applicationEvidence = "not-validated";
 const minimumSlideLayoutId = 2_147_483_648;
 const maximumSlideLayoutId = 4_294_967_295;
@@ -182,6 +187,18 @@ export type FileChartErrorBar = {
   readonly minus?: FileChartErrorBarValues;
 };
 
+/** Native c15 datalabelsRange observed on a chart series. */
+export type FileChartDataLabelRange = {
+  readonly formula: string;
+  readonly categories?: readonly string[];
+  /**
+   * `series-category` only when the range formula exactly matches this series' c:cat
+   * formula; arbitrary custom ranges remain `custom` and are never treated as the
+   * owning category domain.
+   */
+  readonly source: "series-category" | "custom";
+};
+
 export type FileChartSeries = {
   readonly name: string;
   /** Category chart series only: one label per group category position. */
@@ -216,6 +233,12 @@ export type FileChartSeries = {
   readonly trendlines?: readonly FileChartTrendline[];
   /** Native c:errBars observations in file order. */
   readonly errorBars?: readonly FileChartErrorBar[];
+  /** Native c15 datalabelsRange on this series, when present. */
+  readonly datalabelsRange?: FileChartDataLabelRange;
+  /** Native c15 showDataLabelsRange on this series' dLbls, when explicitly present. */
+  readonly showDataLabelsRange?: boolean;
+  /** Native c15 showDataLabelsRange on individual dLbl nodes, when explicitly present. */
+  readonly pointShowDataLabelsRange?: Readonly<Record<number, boolean>>;
 };
 
 /** Locally observed data-label settings; absent fields are not set by the XML node. */
@@ -261,6 +284,14 @@ export type FileChartAxis = {
   /** Scatter charts expose numeric X and Y roles while both remain native value axes. */
   readonly role?: "x" | "y";
   readonly crossAxisId: number;
+  /** Native c:axPos, expressed as the side of the plot area. */
+  readonly position?: "bottom" | "top" | "left" | "right";
+  /** Native c:delete visibility; present when the file explicitly declares it. */
+  readonly visible?: boolean;
+  /** Native c:majorGridlines presence. */
+  readonly majorGridlines?: boolean;
+  /** Native c:minorGridlines presence. */
+  readonly minorGridlines?: boolean;
   readonly title?: string;
   readonly orientation?: "minMax" | "maxMin";
   readonly logBase?: number;
@@ -272,7 +303,12 @@ export type FileChartAxis = {
   readonly majorTickMark?: string;
   readonly minorTickMark?: string;
   readonly tickLabelPosition?: string;
+  /**
+   * Native c:crosses on this axis. Per OOXML it positions this axis inside its
+   * crossing partner's domain, not the perpendicular axis on this axis.
+   */
   readonly crosses?: string;
+  /** Native c:crossesAt, expressed in the crossing partner's category or value domain. */
   readonly crossesAt?: number;
 };
 
@@ -294,6 +330,8 @@ export type FileChartGroup = {
 
 export type FileChart = {
   readonly types: readonly string[];
+  /** Native chart extensions actually observed in this chart part. */
+  readonly extensions?: readonly ValidationExtension[];
   readonly direction?: "col" | "bar";
   readonly grouping?: string;
   readonly title?: string;
@@ -1084,7 +1122,7 @@ export type FileTransition = {
   readonly fallback?: FileTransition;
 };
 
-export type ValidationExtension = "p14" | "p159";
+export type ValidationExtension = "p14" | "p159" | "c15";
 
 export type ValidationOptions = {
   /** Rejects target extensions used in the actual file that are not permitted; performs structural reading only when omitted. */
@@ -2506,6 +2544,85 @@ function chartStringCache(
     values[index] = value;
   }
   return { formula, values };
+}
+
+function chartExtensionChild(
+  node: XmlElement | undefined,
+  uri: string,
+  localName: string,
+): XmlElement | undefined {
+  if (node === undefined) return undefined;
+  const extensionList = first(node, chartNamespace, "extLst");
+  if (extensionList === undefined) return undefined;
+  for (const extension of elements(extensionList, chartNamespace, "ext")) {
+    if (attribute(extension, "uri") !== uri) continue;
+    for (const child of childElements(extension)) {
+      if (
+        child.namespaceURI === c15Namespace &&
+        child.localName === localName
+      ) {
+        return child;
+      }
+    }
+  }
+  return undefined;
+}
+
+function chartStringDataCache(
+  cache: XmlElement | undefined,
+  part: string,
+  errors: ValidationIssue[],
+): string[] | undefined {
+  const count = integerAttribute(
+    cache === undefined ? undefined : first(cache, chartNamespace, "ptCount"),
+    "val",
+  );
+  if (count === undefined || count < 0) {
+    issue(
+      errors,
+      part,
+      "invalid-chart-data-label-range",
+      "c15 dlblRangeCache is missing a valid point count",
+    );
+    return undefined;
+  }
+  if (count === 0) return [];
+  const values = Array.from({ length: count }, () => "");
+  for (const point of cache === undefined
+    ? []
+    : elements(cache, chartNamespace, "pt")) {
+    const index = integerAttribute(point, "idx");
+    const value = first(point, chartNamespace, "v")?.textContent;
+    if (
+      index === undefined ||
+      index < 0 ||
+      index >= values.length ||
+      value == null
+    ) {
+      issue(
+        errors,
+        part,
+        "invalid-chart-data-label-range",
+        "c15 dlblRangeCache contains invalid data points",
+      );
+      continue;
+    }
+    values[index] = value;
+  }
+  return values;
+}
+
+function containsChartExtensionNamespace(
+  root: XmlElement,
+  namespace: string,
+): boolean {
+  const stack: XmlElement[] = [root];
+  while (stack.length > 0) {
+    const current = stack.pop()!;
+    if (current.namespaceURI === namespace) return true;
+    stack.push(...childElements(current));
+  }
+  return false;
 }
 
 function chartNumberCache(
@@ -4005,6 +4122,7 @@ function validateChart(
   }
   const axes: FileChartAxis[] = [];
   const axisById = new Map<number, FileChartAxis>();
+  const axisDirectionById = new Map<number, "horizontal" | "vertical">();
   const textTheme = themeTextReader(documents);
   for (const axisNode of axisNodes) {
     const id = integerAttribute(first(axisNode, chartNamespace, "axId"), "val");
@@ -4012,7 +4130,14 @@ function validateChart(
       first(axisNode, chartNamespace, "crossAx"),
       "val",
     );
-    if (id === undefined || id < 0 || crossAxisId === undefined) {
+    if (
+      id === undefined ||
+      id < 0 ||
+      id > maximumChartAxisId ||
+      crossAxisId === undefined ||
+      crossAxisId < 0 ||
+      crossAxisId > maximumChartAxisId
+    ) {
       issue(
         errors,
         chartPart,
@@ -4030,6 +4155,47 @@ function validateChart(
       );
       continue;
     }
+    const axisPositionNode = first(axisNode, chartNamespace, "axPos");
+    const axisPositionValue =
+      axisPositionNode === undefined ? "" : attribute(axisPositionNode, "val");
+    const position =
+      axisPositionValue === "b"
+        ? "bottom"
+        : axisPositionValue === "t"
+          ? "top"
+          : axisPositionValue === "l"
+            ? "left"
+            : axisPositionValue === "r"
+              ? "right"
+              : undefined;
+    if (position === undefined) {
+      issue(
+        errors,
+        chartPart,
+        "invalid-chart-axis",
+        `Chart axis ${id} has an invalid position`,
+      );
+    } else {
+      axisDirectionById.set(
+        id,
+        position === "bottom" || position === "top" ? "horizontal" : "vertical",
+      );
+    }
+    const deleteNode = first(axisNode, chartNamespace, "delete");
+    const deleted = booleanAttribute(deleteNode);
+    const visible = deleted === undefined ? undefined : !deleted;
+    if (deleteNode !== undefined && deleted === undefined) {
+      issue(
+        errors,
+        chartPart,
+        "invalid-chart-axis",
+        `Chart axis ${id} has an invalid delete value`,
+      );
+    }
+    const majorGridlines =
+      first(axisNode, chartNamespace, "majorGridlines") !== undefined;
+    const minorGridlines =
+      first(axisNode, chartNamespace, "minorGridlines") !== undefined;
     const scaling = first(axisNode, chartNamespace, "scaling");
     const orientation =
       scaling === undefined
@@ -4113,6 +4279,10 @@ function validateChart(
       id,
       kind: axisNode.localName === "catAx" ? "category" : "value",
       crossAxisId,
+      ...(position === undefined ? {} : { position }),
+      ...(visible === undefined ? {} : { visible }),
+      ...(majorGridlines ? { majorGridlines } : {}),
+      ...(minorGridlines ? { minorGridlines } : {}),
       ...(title === undefined ? {} : { title }),
       ...(orientation === "maxMin" ? { orientation } : {}),
       ...(logBase === undefined ? {} : { logBase }),
@@ -4138,14 +4308,46 @@ function validateChart(
     axes.push(axis);
     axisById.set(id, axis);
   }
+  if (axes.length > 4) {
+    issue(
+      errors,
+      chartPart,
+      "invalid-chart-axis",
+      "Chart must not declare more than four axes",
+    );
+  }
   for (const axis of axes) {
     const crossAxis = axisById.get(axis.crossAxisId);
-    if (crossAxis === undefined || crossAxis.crossAxisId !== axis.id) {
+    if (crossAxis === undefined) {
       issue(
         errors,
         chartPart,
         "invalid-chart-axis",
-        `Chart axis ${axis.id} has an invalid crossing axis`,
+        `Chart axis ${axis.id} references a missing crossing axis`,
+      );
+      continue;
+    }
+    if (crossAxis.id === axis.id) {
+      issue(
+        errors,
+        chartPart,
+        "invalid-chart-axis",
+        `Chart axis ${axis.id} cannot cross itself`,
+      );
+      continue;
+    }
+    const direction = axisDirectionById.get(axis.id);
+    const crossDirection = axisDirectionById.get(crossAxis.id);
+    if (
+      direction !== undefined &&
+      crossDirection !== undefined &&
+      direction === crossDirection
+    ) {
+      issue(
+        errors,
+        chartPart,
+        "invalid-chart-axis",
+        `Chart axis ${axis.id} must cross a perpendicular axis`,
       );
     }
   }
@@ -4213,7 +4415,14 @@ function validateChart(
           : "Cartesian chart group must reference a category axis and a value axis",
       );
     } else {
-      const roles = axisIds.map((id) => {
+      const groupDirection =
+        typeNode.localName === "barChart"
+          ? attribute(
+              first(typeNode, chartNamespace, "barDir") ?? typeNode,
+              "val",
+            )
+          : undefined;
+      const resolved = axisIds.map((id) => {
         const axis = axisById.get(id);
         if (axis === undefined) {
           issue(
@@ -4224,24 +4433,99 @@ function validateChart(
           );
           return undefined;
         }
-        return axis.kind;
+        return axis;
       });
-      if (
-        scatterType
-          ? roles.some((role) => role !== "value") ||
-            new Set(axisIds).size !== 2
-          : !roles.includes("category") ||
-            !roles.includes("value") ||
-            new Set(roles).size !== 2
-      ) {
-        issue(
-          errors,
-          chartPart,
-          "invalid-chart-axis-role",
-          scatterType
-            ? "Scatter chart group axis references must include two distinct value axes"
-            : "Chart group axis references must include one category axis and one value axis",
+      const directions = resolved.map((axis) =>
+        axis === undefined ? undefined : axisDirectionById.get(axis.id),
+      );
+      if (scatterType) {
+        const values = resolved.filter(
+          (axis): axis is FileChartAxis => axis?.kind === "value",
         );
+        if (
+          resolved.some((axis) => axis === undefined) ||
+          resolved.length !== 2 ||
+          values.length !== 2 ||
+          new Set(axisIds).size !== 2
+        ) {
+          issue(
+            errors,
+            chartPart,
+            "invalid-chart-axis-role",
+            "Scatter chart group axis references must include two distinct value axes",
+          );
+        } else if (
+          directions.includes(undefined) ||
+          new Set(directions).size !== 2
+        ) {
+          issue(
+            errors,
+            chartPart,
+            "invalid-chart-axis",
+            "Scatter chart group must reference one horizontal X and one vertical Y axis",
+          );
+        } else {
+          for (const axis of values) {
+            const role =
+              axisDirectionById.get(axis.id) === "horizontal" ? "x" : "y";
+            const mutable = axis as { role?: "x" | "y" };
+            if (mutable.role !== undefined && mutable.role !== role) {
+              issue(
+                errors,
+                chartPart,
+                "invalid-chart-axis-role",
+                `Chart axis ${axis.id} is referenced as both X and Y`,
+              );
+            }
+            mutable.role = role;
+          }
+        }
+      } else {
+        const category = resolved.find(
+          (axis): axis is FileChartAxis => axis?.kind === "category",
+        );
+        const valueAxis = resolved.find(
+          (axis): axis is FileChartAxis => axis?.kind === "value",
+        );
+        if (
+          resolved.some((axis) => axis === undefined) ||
+          resolved.length !== 2 ||
+          new Set(axisIds).size !== 2 ||
+          category === undefined ||
+          valueAxis === undefined
+        ) {
+          issue(
+            errors,
+            chartPart,
+            "invalid-chart-axis-role",
+            "Chart group axis references must include one category axis and one value axis",
+          );
+        } else {
+          const expectedCategoryDirection =
+            groupDirection === "bar" ? "vertical" : "horizontal";
+          const expectedValueDirection =
+            expectedCategoryDirection === "vertical"
+              ? "horizontal"
+              : "vertical";
+          if (
+            axisDirectionById.get(category.id) !== expectedCategoryDirection
+          ) {
+            issue(
+              errors,
+              chartPart,
+              "invalid-chart-axis",
+              `Chart group category axis ${category.id} has the wrong orientation`,
+            );
+          }
+          if (axisDirectionById.get(valueAxis.id) !== expectedValueDirection) {
+            issue(
+              errors,
+              chartPart,
+              "invalid-chart-axis",
+              `Chart group value axis ${valueAxis.id} has the wrong orientation`,
+            );
+          }
+        }
       }
     }
     for (const positionNode of descendantsByName(
@@ -4465,6 +4749,70 @@ function validateChart(
               },
             ];
       });
+      let datalabelsRange: FileChartDataLabelRange | undefined;
+      let showDataLabelsRange: boolean | undefined;
+      if (!scatterSeries && categoryCache !== undefined) {
+        const rangeNode = chartExtensionChild(
+          chartSeries,
+          chartCategoryRangeExtensionUri,
+          "datalabelsRange",
+        );
+        const rangeFormula =
+          rangeNode === undefined
+            ? ""
+            : (first(rangeNode, c15Namespace, "f")?.textContent ?? "");
+        const rangeCacheNode =
+          rangeNode === undefined
+            ? undefined
+            : first(rangeNode, c15Namespace, "dlblRangeCache");
+        const rangeCache =
+          rangeCacheNode === undefined
+            ? undefined
+            : chartStringDataCache(rangeCacheNode, chartPart, errors);
+        if (rangeNode !== undefined) {
+          if (rangeFormula === "") {
+            issue(
+              errors,
+              chartPart,
+              "invalid-chart-data-label-range",
+              "c15 datalabelsRange is missing a formula",
+            );
+          } else if (rangeCacheNode === undefined) {
+            issue(
+              errors,
+              chartPart,
+              "invalid-chart-data-label-range",
+              "c15 datalabelsRange is missing dlblRangeCache",
+            );
+          } else {
+            const source =
+              rangeFormula === categoryCache.formula
+                ? "series-category"
+                : "custom";
+            if (
+              source === "series-category" &&
+              (rangeCache === undefined ||
+                rangeCache.length !== categoryCache.values.length ||
+                rangeCache.some(
+                  (value, cacheIndex) =>
+                    value !== categoryCache.values[cacheIndex],
+                ))
+            ) {
+              issue(
+                errors,
+                chartPart,
+                "invalid-chart-data-label-range",
+                "c15 category range cache differs from the series category cache",
+              );
+            }
+            datalabelsRange = {
+              formula: rangeFormula,
+              ...(rangeCache === undefined ? {} : { categories: rangeCache }),
+              source,
+            };
+          }
+        }
+      }
       const seriesLabelsNode = first(chartSeries, chartNamespace, "dLbls");
       const seriesLabels = readDataLabelSettings(
         seriesLabelsNode,
@@ -4473,11 +4821,39 @@ function validateChart(
         errors,
         textTheme,
       );
+      if (!scatterSeries && categoryCache !== undefined) {
+        const seriesRangeFieldNode = chartExtensionChild(
+          seriesLabelsNode,
+          chartDataLabelRangeExtensionUri,
+          "showDataLabelsRange",
+        );
+        if (seriesRangeFieldNode !== undefined) {
+          const enabled = booleanAttribute(seriesRangeFieldNode);
+          if (enabled === undefined) {
+            issue(
+              errors,
+              chartPart,
+              "invalid-chart-data-label-range",
+              "c15 showDataLabelsRange must be a boolean",
+            );
+          } else if (datalabelsRange === undefined) {
+            issue(
+              errors,
+              chartPart,
+              "invalid-chart-data-label-range",
+              "c15 showDataLabelsRange requires datalabelsRange on the same series",
+            );
+          } else {
+            showDataLabelsRange = enabled;
+          }
+        }
+      }
       const effectiveLabels = mergeFileDataLabels(
         groupDataLabels,
         seriesLabels,
       );
       const pointDataLabels: Record<number, false | FileChartDataLabel> = {};
+      const pointShowDataLabelsRange: Record<number, boolean> = {};
       for (const pointLabel of elements(
         seriesLabelsNode ?? chartSeries,
         chartNamespace,
@@ -4495,6 +4871,34 @@ function validateChart(
           errors,
           textTheme,
         );
+        if (!scatterSeries && datalabelsRange !== undefined) {
+          const pointRangeFieldNode = chartExtensionChild(
+            pointLabel,
+            chartDataLabelRangeExtensionUri,
+            "showDataLabelsRange",
+          );
+          if (pointRangeFieldNode !== undefined) {
+            const enabled = booleanAttribute(pointRangeFieldNode);
+            const pointCount = valueCache?.values.length ?? 0;
+            if (enabled === undefined) {
+              issue(
+                errors,
+                chartPart,
+                "invalid-chart-data-label-range",
+                "c15 point showDataLabelsRange must be a boolean",
+              );
+            } else if (pointIndex >= pointCount) {
+              issue(
+                errors,
+                chartPart,
+                "invalid-chart-data-label-range",
+                `c15 point showDataLabelsRange references unknown point ${pointIndex}`,
+              );
+            } else {
+              pointShowDataLabelsRange[pointIndex] = enabled;
+            }
+          }
+        }
         if (pointSettings === undefined) continue;
         pointDataLabels[pointIndex] = pointSettings;
       }
@@ -4632,6 +5036,13 @@ function validateChart(
             ...(Object.keys(pointExplosions).length === 0
               ? {}
               : { pointExplosions }),
+            ...(datalabelsRange === undefined ? {} : { datalabelsRange }),
+            ...(showDataLabelsRange === undefined
+              ? {}
+              : { showDataLabelsRange }),
+            ...(Object.keys(pointShowDataLabelsRange).length === 0
+              ? {}
+              : { pointShowDataLabelsRange }),
             ...(marker === undefined ? {} : { marker }),
             ...(smooth === true ? { smooth: true } : {}),
             ...(trendlines === undefined ? {} : { trendlines }),
@@ -4722,15 +5133,75 @@ function validateChart(
       ...(holeSize === undefined ? {} : { holeSize }),
     });
   }
-  if (types.includes("scatterChart")) {
-    const scatterGroups = groups.filter(({ type }) => type === "scatterChart");
-    for (const scatterGroup of scatterGroups) {
-      scatterGroup.axisIds.forEach((id, index) => {
-        const axis = axisById.get(id);
-        if (axis !== undefined) {
-          (axis as { role?: "x" | "y" }).role = index === 0 ? "x" : "y";
-        }
-      });
+  const endpointSide = (
+    source: FileChartAxis,
+    crossing: string,
+    targetDirection: "horizontal" | "vertical",
+  ): "bottom" | "left" | "right" | "top" | undefined => {
+    if (crossing === "autoZero" || crossing === "") return undefined;
+    if (crossing !== "min" && crossing !== "max") return undefined;
+    // A reversed partner puts its maximum value at the opposite physical end.
+    const maxAtFarEnd = source.orientation !== "maxMin";
+    if (targetDirection === "vertical") {
+      return (crossing === "max") === maxAtFarEnd ? "right" : "left";
+    }
+    return (crossing === "max") === maxAtFarEnd ? "top" : "bottom";
+  };
+  for (const axis of axes) {
+    const direction = axisDirectionById.get(axis.id);
+    if (direction === undefined) continue;
+    const partner = axisById.get(axis.crossAxisId);
+    if (partner === undefined || partner.id === axis.id) continue;
+    if (axisDirectionById.get(partner.id) === direction) continue;
+    if (axis.crossesAt !== undefined) continue;
+    const wanted = endpointSide(partner, axis.crosses ?? "autoZero", direction);
+    if (
+      wanted !== undefined &&
+      axis.position !== undefined &&
+      axis.position !== wanted
+    ) {
+      issue(
+        errors,
+        chartPart,
+        "invalid-chart-axis",
+        `Chart axis ${axis.id} is at ${axis.position} but its own crossing resolves to ${wanted}`,
+      );
+    }
+  }
+
+  const categoryDomains = new Map<number, readonly string[]>();
+  for (const [groupIndex, group] of groups.entries()) {
+    if (
+      group.type === "scatterChart" ||
+      group.type === "pieChart" ||
+      group.type === "doughnutChart"
+    ) {
+      continue;
+    }
+    const categoryAxisId = group.axisIds.find(
+      (id) => axisById.get(id)?.kind === "category",
+    );
+    if (categoryAxisId === undefined) continue;
+    for (const item of series) {
+      if (item.groupIndex !== groupIndex) continue;
+      const categories = item.categories;
+      if (categories === undefined) continue;
+      const existing = categoryDomains.get(categoryAxisId);
+      if (existing === undefined) {
+        categoryDomains.set(categoryAxisId, categories);
+        continue;
+      }
+      if (
+        existing.length !== categories.length ||
+        existing.some((category, index) => category !== categories[index])
+      ) {
+        issue(
+          errors,
+          chartPart,
+          "chart-category-domain-mismatch",
+          `Chart groups sharing category axis ${categoryAxisId} must have the same ordered category domain`,
+        );
+      }
     }
   }
 
@@ -4853,20 +5324,24 @@ function validateChart(
   }
   if (
     displayBlanksAs === "span" &&
-    groups.some(
-      ({ type, scatterStyle }) =>
-        type === "scatterChart" && scatterStyle === "marker",
-    )
+    groups.some(({ type, grouping: groupGrouping, scatterStyle }) => {
+      if (type === "lineChart") return groupGrouping !== "standard";
+      if (type === "scatterChart") return scatterStyle === "marker";
+      return true;
+    })
   ) {
     issue(
       errors,
       chartPart,
       "invalid-chart-missing-values",
-      "Scatter chart displayBlanksAs span requires a connecting line in every scatter group",
+      "Chart displayBlanksAs span requires a connecting line in every group",
     );
   }
   const chartObservation: FileChart = {
     types,
+    ...(containsChartExtensionNamespace(chartXml, c15Namespace)
+      ? { extensions: ["c15" as const] }
+      : {}),
     ...(direction === undefined
       ? {}
       : { direction: direction as "bar" | "col" }),
@@ -5633,6 +6108,7 @@ function extensionForNamespace(
 ): ValidationExtension | undefined {
   if (namespace === p14Namespace) return "p14";
   if (namespace === p159Namespace) return "p159";
+  if (namespace === c15Namespace) return "c15";
   return undefined;
 }
 
@@ -7462,10 +7938,13 @@ function readSlideAnimations(
         }
       }
       const chartSeriesCount = targetObject?.chart?.series.length ?? 0;
-      const chartCategories = targetObject?.chart?.series.find(
-        (item) => item.categories !== undefined,
-      )?.categories;
-      const chartCategoryCount = chartCategories?.length ?? 0;
+      // Independent rings may have different point counts; keep every real slot addressable.
+      const chartCategoryCount = Math.max(
+        0,
+        ...(targetObject?.chart?.series.map(
+          (series) => series.categories?.length ?? 0,
+        ) ?? []),
+      );
       if (
         targetRange?.type === "paragraph" &&
         (targetObject?.text === undefined ||
@@ -8253,6 +8732,17 @@ function readPresentation(
       ...(notes === undefined ? {} : { notes }),
     });
   });
+  const pendingExtensions = slides.flatMap((slide) => [...slide.objects]);
+  while (pendingExtensions.length > 0) {
+    const object = pendingExtensions.pop();
+    if (object === undefined) continue;
+    if (object.kind === "chart") {
+      for (const extension of object.chart?.extensions ?? []) {
+        usedExtensions.add(extension);
+      }
+    }
+    pendingExtensions.push(...(object.members ?? []));
+  }
   const sectionResult = readSections(
     root,
     slideIds,

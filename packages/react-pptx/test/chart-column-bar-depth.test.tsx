@@ -519,4 +519,186 @@ describe("column and bar depth", () => {
     );
     assert.ok(!worksheet.includes("<v></v>"));
   });
+
+  it("overrides series and point label display, position, and number format through both authoring entries", async () => {
+    const props: ChartProps = {
+      id: "label-overrides",
+      x: 0,
+      y: 0,
+      width: 360,
+      height: 240,
+      groups: [
+        {
+          kind: "column",
+          data: { kind: "shared-categories", categories: ["A", "B", "C"] },
+          dataLabels: {
+            value: true,
+            category: true,
+            position: "outsideEnd",
+            numberFormat: "0.00",
+          },
+          series: [
+            {
+              name: "Override",
+              values: [10, 20, 30],
+              dataLabels: { value: true, numberFormat: "0.0" },
+              points: {
+                1: {
+                  dataLabels: { numberFormat: "0.000", position: "insideEnd" },
+                },
+                2: { dataLabels: false },
+              },
+            },
+            { name: "Hidden", values: [5, 6, 7], dataLabels: false },
+            {
+              name: "Category",
+              values: [1, 2, 3],
+              dataLabels: { value: false, category: true, numberFormat: "0" },
+            },
+          ],
+        },
+      ],
+    };
+    const results = [
+      await build(
+        <Deck width={480} height={320}>
+          <Slide id="react-label-overrides">
+            <Chart {...props} />
+          </Slide>
+        </Deck>,
+      ),
+      await buildDocument(
+        deck({ width: 480, height: 320 }).append(
+          documentSlide({ id: "document-label-overrides" }).append(
+            documentChart(props),
+          ),
+        ),
+      ),
+    ];
+
+    for (const result of results) {
+      const file = await validatePptx(result.pptx);
+      assert.deepEqual(file.errors, []);
+      const chart = file.slides[0]?.objects[0]?.chart;
+      assert.deepEqual(chart?.seriesDataLabels, [
+        {
+          seriesIndex: 0,
+          dataLabels: {
+            value: true,
+            category: true,
+            position: "outsideEnd",
+            numberFormat: "0.0",
+          },
+          pointDataLabels: {
+            1: {
+              value: true,
+              category: true,
+              numberFormat: "0.000",
+              position: "insideEnd",
+            },
+            2: false,
+          },
+        },
+        { seriesIndex: 1, dataLabels: false },
+        {
+          seriesIndex: 2,
+          dataLabels: {
+            value: false,
+            category: true,
+            position: "outsideEnd",
+            numberFormat: "0",
+          },
+        },
+      ]);
+
+      const xml = chartXml(unzipSync(result.pptx), 1);
+      const seriesXml = [...xml.matchAll(/<c:ser>(.*?)<\/c:ser>/gsu)].map(
+        (match) => match[1]!,
+      );
+      assert.equal(seriesXml.length, 3);
+      assert.ok(
+        seriesXml[0]!.includes('<c:numFmt formatCode="0.0" sourceLinked="0"/>'),
+      );
+      assert.ok(
+        seriesXml[0]!.includes(
+          '<c:dLbl><c:idx val="1"/><c:numFmt formatCode="0.000" sourceLinked="0"/>',
+        ),
+      );
+      assert.ok(seriesXml[0]!.includes('<c:dLblPos val="inEnd"/>'));
+      assert.ok(
+        seriesXml[0]!.includes(
+          '<c:dLbl><c:idx val="2"/><c:delete val="1"/></c:dLbl>',
+        ),
+      );
+      assert.ok(
+        seriesXml[1]!.includes('<c:dLbls><c:delete val="1"/></c:dLbls>'),
+      );
+      assert.ok(seriesXml[2]!.includes('<c:showVal val="0"/>'));
+      assert.ok(seriesXml[2]!.includes('<c:showCatName val="1"/>'));
+      assert.ok(
+        seriesXml[2]!.includes('<c:numFmt formatCode="0" sourceLinked="0"/>'),
+      );
+      assert.ok(!xml.includes("showPercent"));
+    }
+  });
+
+  it("diagnoses percent data labels outside pie and doughnut charts", async () => {
+    const data = {
+      kind: "shared-categories" as const,
+      categories: ["A"],
+    };
+    const base = { x: 0, y: 0, width: 200, height: 120 };
+    await rejectsWithCode(
+      {
+        ...base,
+        groups: [
+          {
+            kind: "column",
+            data,
+            series: [{ name: "S", values: [1] }],
+            dataLabels: { percent: true },
+          },
+        ],
+      },
+      "invalid-data-labels",
+    );
+    await rejectsWithCode(
+      {
+        ...base,
+        groups: [
+          {
+            kind: "bar",
+            data,
+            series: [
+              {
+                name: "S",
+                values: [1],
+                dataLabels: { percent: true },
+              },
+            ],
+          },
+        ],
+      },
+      "invalid-data-labels",
+    );
+    await rejectsWithCode(
+      {
+        ...base,
+        groups: [
+          {
+            kind: "column",
+            data,
+            series: [
+              {
+                name: "S",
+                values: [1],
+                points: { 0: { dataLabels: { percent: true } } },
+              },
+            ],
+          },
+        ],
+      },
+      "invalid-data-labels",
+    );
+  });
 });

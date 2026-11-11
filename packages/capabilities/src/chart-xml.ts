@@ -8,8 +8,10 @@ import {
 } from "@react-pptx/core/capability";
 import { strToU8, zipSync } from "fflate";
 
+import { mergeDataLabels } from "./chart-labels.ts";
 import type {
   ChartAxis,
+  ChartDataLabels,
   ChartKind,
   ChartLine,
   ChartPoint,
@@ -212,8 +214,7 @@ function dataLabels(
   groupIndex: number,
   textStyles: ChartTextStyleXml,
 ): XmlElement | undefined {
-  const labels = group.dataLabels;
-  if (labels === undefined || labels === false) return undefined;
+  const seriesLabels = mergeDataLabels(group.dataLabels, series.dataLabels);
   const positions = {
     center: "ctr",
     insideEnd: "inEnd",
@@ -223,7 +224,7 @@ function dataLabels(
   } as const;
   const hasPosition =
     group.kind === "column" || group.kind === "bar" || group.kind === "pie";
-  const settings = (textStyle: string | undefined) => [
+  const settings = (labels: ChartDataLabels, textStyle: string | undefined) => [
     labels.numberFormat === undefined
       ? undefined
       : el("c:numFmt", {
@@ -239,31 +240,62 @@ function dataLabels(
     el("c:showVal", { val: labels.value ?? false }),
     el("c:showCatName", { val: labels.category ?? false }),
     el("c:showSerName", { val: false }),
-    el("c:showPercent", { val: labels.percent ?? false }),
+    group.kind === "pie" || group.kind === "doughnut"
+      ? el("c:showPercent", { val: labels.percent ?? false })
+      : undefined,
     el("c:showBubbleSize", { val: false }),
   ];
+  const hasVisibleContent = (labels: ChartDataLabels) =>
+    labels.value === true ||
+    labels.percent === true ||
+    labels.category === true;
+  const groupStyle = textStyles.groupDataLabels?.get(groupIndex);
+  const pointBase = seriesLabels === false ? {} : seriesLabels;
   const pointLabels = Object.entries<ChartPoint>(series.points ?? {}).flatMap(
     ([pointIndex, point]) => {
-      const style = textStyles.pointLabels?.get(
-        `${series.seriesIndex}:${pointIndex}`,
-      );
-      if (point.labelColor === undefined || style === undefined) return [];
+      if (point.dataLabels === undefined && point.labelColor === undefined) {
+        return [];
+      }
+      const index = Number(pointIndex);
+      const effective = mergeDataLabels(pointBase, point.dataLabels);
+      if (effective === false) {
+        return [
+          el(
+            "c:dLbl",
+            null,
+            el("c:idx", { val: index }),
+            el("c:delete", { val: true }),
+          ),
+        ];
+      }
+      if (effective === undefined) return [];
+      if (point.dataLabels === undefined && !hasVisibleContent(effective)) {
+        return [];
+      }
+      const style =
+        textStyles.pointLabels?.get(`${series.seriesIndex}:${pointIndex}`) ??
+        groupStyle;
       return [
         el(
           "c:dLbl",
           null,
-          el("c:idx", { val: Number(pointIndex) }),
-          settings(style),
+          el("c:idx", { val: index }),
+          settings(effective, style),
         ),
       ];
     },
   );
-  return el(
-    "c:dLbls",
-    null,
-    pointLabels,
-    settings(textStyles.groupDataLabels?.get(groupIndex)),
-  );
+  const base =
+    seriesLabels === false
+      ? pointLabels.length > 0
+        ? {}
+        : false
+      : (seriesLabels ?? (pointLabels.length > 0 ? {} : undefined));
+  if (base === undefined) return undefined;
+  if (base === false) {
+    return el("c:dLbls", null, el("c:delete", { val: true }));
+  }
+  return el("c:dLbls", null, pointLabels, settings(base, groupStyle));
 }
 
 function seriesShape(

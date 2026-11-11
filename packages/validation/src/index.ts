@@ -5082,9 +5082,13 @@ function readSlideAnimations(
   const timing = timingNodes[0];
   if (timing === undefined) return undefined;
 
+  const buildGroupKey = (targetId: number, groupId: number): string =>
+    `${targetId}:${groupId}`;
   const timeIds = new Set<number>();
   const effectTimeIds = new Set<number>();
   const effectTargets = new Map<number, number>();
+  // Native build groups pair an object with a non-negative group number; group numbers need not be timing ids.
+  const effectGroups = new Set<string>();
   const effectsWithoutNaturalCompletion = new Set<number>();
   for (const timeNode of descendantsByName(
     timing,
@@ -5125,7 +5129,15 @@ function readSlideAnimations(
       const uniqueTargetIds = new Set(targetIds);
       if (uniqueTargetIds.size === 1 && targetIds.length > 0) {
         const [targetId] = uniqueTargetIds;
-        if (targetId !== undefined) effectTargets.set(id, targetId);
+        if (targetId !== undefined) {
+          effectTargets.set(id, targetId);
+          const groupId = nonNegativeIntegerValue(
+            attribute(timeNode, "grpId") || "0",
+          );
+          if (groupId !== undefined) {
+            effectGroups.add(buildGroupKey(targetId, groupId));
+          }
+        }
       }
     }
   }
@@ -5407,8 +5419,6 @@ function readSlideAnimations(
     });
 
   const buildList = first(timing, presentationNamespace, "bldLst");
-  const paragraphBuildKey = (targetId: number, groupId: number): string =>
-    `${targetId}:${groupId}`;
   const backgroundBuildGroups = new Set<string>();
   const wholeObjectBuildGroups = new Set<string>();
   for (const node of timingTreeNodes.values()) {
@@ -5426,7 +5436,7 @@ function readSlideAnimations(
     )) {
       const targetId = positiveIntegerValue(attribute(target, "spid"));
       if (targetId === undefined) continue;
-      const key = paragraphBuildKey(targetId, groupId);
+      const key = buildGroupKey(targetId, groupId);
       if (first(target, presentationNamespace, "bg") !== undefined) {
         backgroundBuildGroups.add(key);
       } else if (
@@ -5443,8 +5453,8 @@ function readSlideAnimations(
     string,
     { readonly build: string; readonly animBg?: boolean }
   >();
-  const chartBuilds = new Map<number, "all" | "series" | "category">();
-  const chartBuildGroupIds = new Map<number, number>();
+  const chartBuilds = new Map<string, "all" | "series" | "category">();
+  const declaredChartBuildGroups = new Set<string>();
   if (buildList !== undefined) {
     for (const build of elements(buildList, presentationNamespace, "bldP")) {
       const targetId = positiveIntegerValue(attribute(build, "spid"));
@@ -5461,7 +5471,7 @@ function readSlideAnimations(
         );
         continue;
       }
-      const key = paragraphBuildKey(targetId, groupId);
+      const key = buildGroupKey(targetId, groupId);
       if (paragraphBuilds.has(key)) {
         issue(
           errors,
@@ -5510,22 +5520,58 @@ function readSlideAnimations(
       "bldGraphic",
     )) {
       const targetId = positiveIntegerValue(attribute(build, "spid"));
-      if (targetId === undefined) continue;
-      const groupId = positiveIntegerValue(attribute(build, "grpId"));
-      if (
-        groupId === undefined ||
-        !timeIds.has(groupId) ||
-        effectTargets.get(groupId) !== targetId
-      ) {
+      const groupText = attribute(build, "grpId");
+      const groupId = nonNegativeIntegerValue(
+        groupText === "" ? "0" : groupText,
+      );
+      if (targetId === undefined || groupId === undefined) {
         issue(
           errors,
           part,
           "invalid-chart-build-group",
-          "Chart build declaration must associate with native timing node of the same chart",
+          "Chart build declaration requires valid native object and non-negative group identifier",
         );
         continue;
       }
-      chartBuildGroupIds.set(targetId, groupId);
+      const key = buildGroupKey(targetId, groupId);
+      if (declaredChartBuildGroups.has(key)) {
+        issue(
+          errors,
+          part,
+          "duplicate-chart-build-group",
+          `Duplicate build group ${groupId} for chart object ${targetId}`,
+        );
+        continue;
+      }
+      declaredChartBuildGroups.add(key);
+      const targetObject = findObjectById(objects, targetId);
+      if (targetObject === undefined) {
+        issue(
+          errors,
+          part,
+          "invalid-chart-build-group",
+          `Chart build declaration target ${targetId} does not exist`,
+        );
+        continue;
+      }
+      if (targetObject.kind !== "chart") {
+        issue(
+          errors,
+          part,
+          "invalid-chart-build-group",
+          `Chart build declaration target ${targetId} is not a chart object`,
+        );
+        continue;
+      }
+      if (!effectGroups.has(key)) {
+        issue(
+          errors,
+          part,
+          "invalid-chart-build-group",
+          `Chart build declaration must associate with an actual chart animation effect of group ${groupId}`,
+        );
+        continue;
+      }
       const subBuild = first(build, presentationNamespace, "bldSub");
       const chartBuild =
         subBuild === undefined
@@ -5538,7 +5584,14 @@ function readSlideAnimations(
             : "all"
           : attribute(chartBuild, "bld");
       if (mode === "all" || mode === "series" || mode === "category") {
-        chartBuilds.set(targetId, mode);
+        chartBuilds.set(key, mode);
+      } else {
+        issue(
+          errors,
+          part,
+          "invalid-chart-build-group",
+          "Chart build declaration is missing a supported native build mode",
+        );
       }
     }
   }
@@ -6103,12 +6156,14 @@ function readSlideAnimations(
       const nativeBuildGroupId = nonNegativeIntegerValue(
         attribute(effectTimeNode, "grpId") || "0",
       );
-      const paragraphBuild =
+      const effectBuildGroup =
         nativeBuildGroupId === undefined
           ? undefined
-          : paragraphBuilds.get(
-              paragraphBuildKey(targetId, nativeBuildGroupId),
-            );
+          : buildGroupKey(targetId, nativeBuildGroupId);
+      const paragraphBuild =
+        effectBuildGroup === undefined
+          ? undefined
+          : paragraphBuilds.get(effectBuildGroup);
       const nativeBehaviors = nativeBehaviorsOf(effectTimeNode);
       if (
         nativeBehaviors.some(({ behavior, durationMs: behaviorDuration }) =>
@@ -6315,35 +6370,90 @@ function readSlideAnimations(
         );
         continue;
       }
-      if (
-        targetRange?.type === "chart" &&
-        (targetObject?.kind !== "chart" ||
-          integerAttribute(effectTimeNode, "grpId") !==
-            chartBuildGroupIds.get(targetId) ||
-          (targetRange.step !== "gridLegend" &&
-            chartBuilds.get(targetId) !== targetRange.step) ||
-          chartBuilds.get(targetId) === undefined ||
-          (targetRange.step === "gridLegend" &&
-            chartBuilds.get(targetId) === "all") ||
-          (targetRange.step === "gridLegend" &&
-            (targetRange.seriesIndex !== -3 ||
-              targetRange.categoryIndex !== -3)) ||
-          (targetRange.step === "series" &&
-            (targetRange.seriesIndex < 0 ||
-              targetRange.categoryIndex !== -4 ||
-              targetRange.seriesIndex >= chartSeriesCount)) ||
-          (targetRange.step === "category" &&
-            (targetRange.seriesIndex !== -4 ||
-              targetRange.categoryIndex < 0 ||
-              targetRange.categoryIndex >= chartCategoryCount)))
-      ) {
-        issue(
-          errors,
-          part,
-          "invalid-animation-target-range",
-          "Chart animation range exceeds series or categories in native chart",
-        );
-        continue;
+      if (targetRange?.type === "chart") {
+        if (targetObject?.kind !== "chart") {
+          issue(
+            errors,
+            part,
+            "invalid-animation-target-range",
+            "Chart animation range targets a non-chart native object",
+          );
+          continue;
+        }
+        if (
+          effectBuildGroup === undefined ||
+          !declaredChartBuildGroups.has(effectBuildGroup)
+        ) {
+          issue(
+            errors,
+            part,
+            "invalid-chart-build-group",
+            "Chart animation effect must associate with a build declaration of the same chart group",
+          );
+          continue;
+        }
+        const chartBuild = chartBuilds.get(effectBuildGroup);
+        if (chartBuild === undefined) {
+          // The declaration was invalid and already diagnosed.
+          continue;
+        }
+        if (targetRange.step === "gridLegend") {
+          if (chartBuild === "all") {
+            issue(
+              errors,
+              part,
+              "invalid-animation-target-range",
+              "Grid and legend animation requires a series or category chart build",
+            );
+            continue;
+          }
+          if (
+            targetRange.seriesIndex !== -3 ||
+            targetRange.categoryIndex !== -3
+          ) {
+            issue(
+              errors,
+              part,
+              "invalid-animation-target-range",
+              "Chart gridLegend animation must use native -3 sentinel indices",
+            );
+            continue;
+          }
+        } else if (chartBuild !== targetRange.step) {
+          issue(
+            errors,
+            part,
+            "invalid-animation-target-range",
+            "Chart animation step does not match native chart build mode",
+          );
+          continue;
+        } else if (
+          targetRange.step === "series" &&
+          (targetRange.seriesIndex < 0 ||
+            targetRange.categoryIndex !== -4 ||
+            targetRange.seriesIndex >= chartSeriesCount)
+        ) {
+          issue(
+            errors,
+            part,
+            "invalid-animation-target-range",
+            "Chart series animation range exceeds series in native chart",
+          );
+          continue;
+        } else if (
+          targetRange.step === "category" &&
+          (targetRange.seriesIndex !== -4 ||
+            targetRange.categoryIndex < 0 ||
+            targetRange.categoryIndex >= chartCategoryCount)
+        ) {
+          issue(
+            errors,
+            part,
+            "invalid-animation-target-range",
+            "Chart category animation range exceeds categories in native chart",
+          );
+          continue;
+        }
       }
       const iterateNodes = elements(
         effectTimeNode,
@@ -6374,8 +6484,8 @@ function readSlideAnimations(
           value < 1 ||
           targetRange !== undefined ||
           targetObject?.text === undefined ||
-          nativeBuildGroupId === undefined ||
-          !paragraphBuilds.has(paragraphBuildKey(targetId, nativeBuildGroupId))
+          effectBuildGroup === undefined ||
+          !paragraphBuilds.has(effectBuildGroup)
         ) {
           issue(
             errors,
@@ -6476,7 +6586,10 @@ function readSlideAnimations(
             ? undefined
             : rotationFrom / 60000
           : direction;
-      const chartBuild = chartBuilds.get(targetId);
+      const chartBuild =
+        effectBuildGroup === undefined
+          ? undefined
+          : chartBuilds.get(effectBuildGroup);
       const nativeBuild =
         paragraphBuild?.build === "p"
           ? "paragraph"

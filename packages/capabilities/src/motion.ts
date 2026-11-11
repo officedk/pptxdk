@@ -1368,7 +1368,9 @@ function timingXml(
         effect.target.range?.type === "chart" &&
         !chartBuildGroupIds.has(effect.target.id)
       ) {
-        // bldGraphic grpId must be associated with an actually existing timing node of that chart.
+        // The generator reuses the first chart effect's timing id as this chart's group number.
+        // Native build groups are (spid, grpId) pairs; a reader must not treat the group number as
+        // a timing node id.
         const id = effectNodeIds.get(effectKey(effect));
         if (id !== undefined) chartBuildGroupIds.set(effect.target.id, id);
       }

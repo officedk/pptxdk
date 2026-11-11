@@ -554,10 +554,82 @@ describe("trendlines", () => {
         )
         .replace(
           '<c:order val="2"/>',
-          '<c:period val="2"/><c:dispEq val="1"/>',
+          '<c:period val="2"/><c:intercept val="0"/>',
         ),
       "invalid-chart-trendline",
     );
+  });
+
+  it("accepts ignored moving-average display markers in real PPTX XML", async () => {
+    for (const entry of ["document", "react"] as const) {
+      const pptx = await buildInEntry(
+        entry,
+        categoryChart([
+          {
+            name: "Average",
+            values: [1, 2, 3, 4, 5],
+            trendlines: [{ type: "movingAverage", period: 2 }],
+          },
+        ]),
+      );
+      const parts = unzipSync(pptx);
+      const path = "ppt/charts/chart1.xml";
+      const original = strFromU8(parts[path]!);
+      const anchor = '<c:trendlineType val="movingAvg"/><c:period val="2"/>';
+      assert.ok(original.includes(anchor));
+      for (const name of ["dispRSqr", "dispEq"] as const) {
+        for (const value of ["0", "1"] as const) {
+          const xml = original.replace(
+            anchor,
+            `${anchor}<c:${name} val="${value}"/>`,
+          );
+          assert.notEqual(xml, original);
+          const file = await validatePptx(
+            zipSync({ ...parts, [path]: strToU8(xml) }),
+          );
+          assert.deepEqual(file.errors, [], `${entry} ${name}=${value}`);
+          const line = trendlines(
+            file.slides[0]?.objects[0]?.chart?.series[0]?.trendlines,
+          )[0];
+          assert.equal(line?.type, "movingAverage");
+          assert.equal(
+            name === "dispEq" ? line?.displayEquation : line?.displayRSquared,
+            value === "1",
+            `${entry} ${name}=${value} observation`,
+          );
+        }
+      }
+      const both = original.replace(
+        anchor,
+        `${anchor}<c:dispRSqr val="1"/><c:dispEq val="0"/>`,
+      );
+      const bothFile = await validatePptx(
+        zipSync({ ...parts, [path]: strToU8(both) }),
+      );
+      assert.deepEqual(bothFile.errors, [], `${entry} both markers`);
+      const bothLine = trendlines(
+        bothFile.slides[0]?.objects[0]?.chart?.series[0]?.trendlines,
+      )[0];
+      assert.deepEqual(
+        [bothLine?.displayRSquared, bothLine?.displayEquation],
+        [true, false],
+      );
+
+      // The ignored display markers do not relax a real moving-average order error.
+      const badOrder = original.replace(
+        anchor,
+        '<c:trendlineType val="movingAvg"/><c:order val="2"/><c:period val="2"/>',
+      );
+      const badOrderFile = await validatePptx(
+        zipSync({ ...parts, [path]: strToU8(badOrder) }),
+      );
+      assert.ok(
+        badOrderFile.errors.some(
+          ({ code }) => code === "invalid-chart-trendline",
+        ),
+        `${entry} moving-average order must stay invalid`,
+      );
+    }
   });
 
   it("keeps charts without analysis declarations unchanged", async () => {

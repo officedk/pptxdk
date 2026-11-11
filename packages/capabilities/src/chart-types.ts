@@ -99,9 +99,15 @@ export type ChartTrendlineType =
 type ChartTrendlineBase = {
   /** Trendline stroke; omitted leaves the target application default. */
   readonly line?: ChartLine;
-  /** Forecast extension after the plotted data, in category positions or scatter X units. */
+  /**
+   * Forecast extension after the plotted data, in category positions or scatter X units.
+   * Must be greater than 0; category charts require a multiple of 0.5.
+   */
   readonly forward?: number;
-  /** Forecast extension before the plotted data, in category positions or scatter X units. */
+  /**
+   * Forecast extension before the plotted data, in category positions or scatter X units.
+   * Must be greater than 0; category charts require a multiple of 0.5.
+   */
   readonly backward?: number;
 };
 

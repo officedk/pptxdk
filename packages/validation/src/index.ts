@@ -140,7 +140,9 @@ export type FileChartTrendline = {
   readonly backward?: number;
   /** Native c:intercept; applies only to exponential, linear, and polynomial. */
   readonly intercept?: number;
+  /** Explicit c:dispEq; Office ignores it for movingAverage, though the marker is valid. */
   readonly displayEquation?: boolean;
+  /** Explicit c:dispRSqr; Office ignores it for movingAverage, though the marker is valid. */
   readonly displayRSquared?: boolean;
   /** Native c:spPr/a:ln stroke formatting. */
   readonly line?: FileChartLine;
@@ -3224,14 +3226,10 @@ function readChartTrendlines(
           "invalid-chart-trendline",
           `${label} ${name} must be a boolean`,
         );
-      } else if (type === "movingAverage") {
-        issue(
-          errors,
-          part,
-          "invalid-chart-trendline",
-          `${label} moving average trendline cannot display an equation or R-squared value`,
-        );
       } else {
+        // Office ignores these display markers for moving-average trendlines, but the markers
+        // remain valid explicit XML. Observe them without turning the native ignore rule into a
+        // file error; the file format is not narrowed to the author API's supported combinations.
         trendline[field] = display;
       }
     }

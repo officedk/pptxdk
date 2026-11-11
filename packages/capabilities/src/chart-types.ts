@@ -43,6 +43,8 @@ export type ChartPoint = {
   readonly line?: ChartLine;
   /** Overrides data label text color for this data point. */
   readonly labelColor?: ColorValue;
+  /** Display, position, and number-format overrides for this point's data label. */
+  readonly dataLabels?: false | ChartDataLabelOverride;
 };
 
 export type ChartSeries = {
@@ -53,6 +55,8 @@ export type ChartSeries = {
   readonly color?: ColorValue;
   /** Stroke or border override; for line charts it controls the series line. */
   readonly line?: ChartLine;
+  /** Display, position, and number-format overrides for this series' data labels. */
+  readonly dataLabels?: false | ChartDataLabelOverride;
   /** Overrides color, line, or data label text color for individual points by position. */
   readonly points?: Readonly<Record<number, ChartPoint>>;
 };
@@ -152,6 +156,14 @@ export type ChartDataLabels<
   readonly numberFormat?: string;
   readonly style?: ChartTextStyle;
 };
+
+/**
+ * Series- or point-level data-label overrides.
+ *
+ * Omitted display and position fields inherit from the enclosing group or series. An explicit
+ * `false` suppresses labels at that level. Data-label text style remains a group-level field.
+ */
+export type ChartDataLabelOverride = Omit<ChartDataLabels, "style">;
 
 type ChartGroupBase = {
   readonly data: ChartGroupData;

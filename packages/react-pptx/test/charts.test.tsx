@@ -601,7 +601,6 @@ describe("native Cartesian charts", () => {
                 stacking: "percent",
                 gapWidth: 100,
                 dataLabels: {
-                  percent: true,
                   value: true,
                   category: true,
                   position: "insideEnd",
@@ -723,9 +722,7 @@ describe("native Cartesian charts", () => {
     assert.ok(columnXml.includes('<a:bodyPr anchor="ctr"/>'));
     assert.ok(columnXml.includes('<a:lnSpc><a:spcPts val="2000"/></a:lnSpc>'));
     assert.ok(
-      strFromU8(parts["ppt/charts/chart2.xml"]!).includes(
-        '<c:showPercent val="1"/>',
-      ),
+      !strFromU8(parts["ppt/charts/chart2.xml"]!).includes("showPercent"),
     );
     assert.ok(
       strFromU8(parts["ppt/charts/chart3.xml"]!).includes("<c:lineChart>"),

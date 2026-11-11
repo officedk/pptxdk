@@ -5009,33 +5009,30 @@ function readSlideAnimations(
   const wholeObjectBuildGroups = new Set<string>();
   for (const node of timingTreeNodes.values()) {
     if (node.kind !== "effect") continue;
-    const target = descendantsByName(
-      node.timeNode,
-      presentationNamespace,
-      "spTgt",
-    )[0];
-    const targetId =
-      target === undefined
-        ? undefined
-        : positiveIntegerValue(attribute(target, "spid"));
     const groupId = nonNegativeIntegerValue(
       attribute(node.timeNode, "grpId") || "0",
     );
-    if (targetId === undefined || groupId === undefined) continue;
-    if (
-      descendantsByName(node.timeNode, presentationNamespace, "bg").length > 0
-    ) {
-      backgroundBuildGroups.add(paragraphBuildKey(targetId, groupId));
-    }
-    // A whole-object text effect keeps the shape fill and text in one native target and may
-    // declare animBg without a separate spTgt/bg branch.
-    if (
-      target !== undefined &&
-      first(target, presentationNamespace, "txEl") === undefined &&
-      first(target, presentationNamespace, "bg") === undefined &&
-      findObjectById(objects, targetId)?.text !== undefined
-    ) {
-      wholeObjectBuildGroups.add(paragraphBuildKey(targetId, groupId));
+    if (groupId === undefined) continue;
+    // An effect can carry several behavior targets; classify every target so traversal order
+    // cannot change the group's background role.
+    for (const target of descendantsByName(
+      node.timeNode,
+      presentationNamespace,
+      "spTgt",
+    )) {
+      const targetId = positiveIntegerValue(attribute(target, "spid"));
+      if (targetId === undefined) continue;
+      const key = paragraphBuildKey(targetId, groupId);
+      if (first(target, presentationNamespace, "bg") !== undefined) {
+        backgroundBuildGroups.add(key);
+      } else if (
+        first(target, presentationNamespace, "txEl") === undefined &&
+        findObjectById(objects, targetId)?.text !== undefined
+      ) {
+        // A whole-object text effect keeps the shape fill and text in one native target and may
+        // declare animBg without a separate spTgt/bg branch.
+        wholeObjectBuildGroups.add(key);
+      }
     }
   }
   const paragraphBuilds = new Map<
@@ -5080,9 +5077,10 @@ function readSlideAnimations(
       });
     }
     for (const [key, build] of paragraphBuilds) {
+      const hasBackgroundBehavior = backgroundBuildGroups.has(key);
       if (
-        (build.animBg === true) !== backgroundBuildGroups.has(key) &&
-        !wholeObjectBuildGroups.has(key)
+        (build.animBg === true) !== hasBackgroundBehavior &&
+        !(wholeObjectBuildGroups.has(key) && !hasBackgroundBehavior)
       ) {
         issue(
           errors,

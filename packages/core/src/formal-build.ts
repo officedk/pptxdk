@@ -200,6 +200,7 @@ type SlideBuildState = {
   readonly contributions: CapabilityContribution[];
   readonly morphObjects: Map<MorphKey, MorphObject>;
   readonly linkedSlideIndexes: Set<number>;
+  readonly layoutDerivedObjectIds: Set<number>;
 };
 
 type PackageBuildContext = {
@@ -259,13 +260,34 @@ function reportBox(box: GeometryBox): GeometryBox {
   };
 }
 
-function reportObservation(
+function projectObservation(
   observation: ObjectObservation,
-  layoutBox: GeometryBox | undefined,
+  layoutDerivedObjectIds: ReadonlySet<number>,
 ): ObjectObservation {
-  return observation.box === undefined || layoutBox === undefined
-    ? observation
-    : { ...observation, box: reportBox(observation.box) };
+  const box =
+    observation.box !== undefined && layoutDerivedObjectIds.has(observation.id)
+      ? reportBox(observation.box)
+      : observation.box;
+  const members =
+    observation.members === undefined
+      ? undefined
+      : observation.members.map((member) =>
+          projectObservation(member, layoutDerivedObjectIds),
+        );
+  return {
+    ...observation,
+    ...(box === undefined || box === observation.box ? {} : { box }),
+    ...(members === undefined ? {} : { members }),
+  };
+}
+
+function projectObservations(
+  observations: readonly ObjectObservation[],
+  layoutDerivedObjectIds: ReadonlySet<number>,
+): readonly ObjectObservation[] {
+  return observations.map((observation) =>
+    projectObservation(observation, layoutDerivedObjectIds),
+  );
 }
 
 function ownKeys(
@@ -1845,15 +1867,13 @@ function compileChildren(
           );
           boxXml = output.xml;
           if (output.xml !== "") {
-            boxObservation = reportObservation(
-              {
-                ...output.observation,
-                id: objectId,
-                ...(authorId === undefined ? {} : { authorId }),
-                ...(boxLink === undefined ? {} : { link: boxLink.summary }),
-              },
-              box,
-            );
+            boxObservation = {
+              ...output.observation,
+              id: objectId,
+              ...(authorId === undefined ? {} : { authorId }),
+              ...(boxLink === undefined ? {} : { link: boxLink.summary }),
+            };
+            context.slide.layoutDerivedObjectIds.add(objectId);
             if (morphKey !== undefined && morphName !== undefined) {
               const nativeKind = parsedResult?.contract?.nativeKind ?? "sp";
               if (output.observation.name !== morphName) {
@@ -2182,15 +2202,13 @@ function compileChildren(
           declaration: child,
         });
       }
-      const observation = reportObservation(
-        {
-          ...output.observation,
-          id,
-          ...(authorId === undefined ? {} : { authorId }),
-          ...(compiledLink === undefined ? {} : { link: compiledLink.summary }),
-        },
-        layoutBox,
-      );
+      const observation = {
+        ...output.observation,
+        id,
+        ...(authorId === undefined ? {} : { authorId }),
+        ...(compiledLink === undefined ? {} : { link: compiledLink.summary }),
+      };
+      if (layoutBox !== undefined) context.slide.layoutDerivedObjectIds.add(id);
       content.push({
         ...(authorId === undefined ? {} : { authorId }),
         reference: { kind: "object", id: observation.id },
@@ -2434,6 +2452,7 @@ function compileSlide(
     contentChildrenByObjectId: new Map(),
     contributions: [],
     morphObjects: new Map(),
+    layoutDerivedObjectIds: new Set(),
   };
   const path = `deck/slide[${id}]`;
   if (nonWhitespaceText(node.children)) {
@@ -2628,7 +2647,10 @@ function compileSlide(
     ...(section === undefined ? {} : { section }),
     hidden,
     ...(advanceAfter === undefined ? {} : { advanceAfter }),
-    objects: compiled.objects,
+    objects: projectObservations(
+      compiled.objects,
+      slide.layoutDerivedObjectIds,
+    ),
     layouts: [...slide.layouts].sort((left, right) => left.id - right.id),
     content: compiled.content,
     resources: slide.resourceObservations,

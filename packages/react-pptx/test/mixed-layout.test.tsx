@@ -8,6 +8,7 @@ import {
   Chart,
   Deck,
   font,
+  Group,
   Image,
   Slide,
   Text,
@@ -17,6 +18,7 @@ import {
   build as buildDocument,
   chart as authorChart,
   deck as authorDeck,
+  group as authorGroup,
   image as authorImage,
   slide as authorSlide,
   text as authorText,
@@ -1251,6 +1253,164 @@ describe("mixed layout, layering, and component reflow", () => {
         `${entry}: content after the narrow card overlapped it`,
       );
       assert.equal(nativeBox("overset-label").height, 10 * 9525, entry);
+    }
+  });
+
+  it("writes group extents from the union of precise member geometry", async () => {
+    const memberWidth = 74.39453125;
+    const memberWidthEmu = Math.round(memberWidth * 9525);
+    const reactResult = await build(
+      <Deck width={400} height={300} theme={mixedTheme}>
+        <Slide id="group-precision">
+          <Group id="top-group">
+            <Box
+              id="top-member"
+              style={{
+                width: memberWidth,
+                height: 20,
+                backgroundColor: "accent1",
+              }}
+            />
+          </Group>
+          <Group id="nested-outer">
+            <Group id="nested-inner">
+              <Box
+                id="nested-member"
+                style={{
+                  width: memberWidth,
+                  height: 20,
+                  backgroundColor: "accent2",
+                }}
+              />
+            </Group>
+          </Group>
+          <Group id="fixed-group" style={{ width: 100, height: 20 }}>
+            <Box
+              id="fixed-member"
+              style={{
+                width: memberWidth,
+                height: 20,
+                backgroundColor: "accent3",
+              }}
+            />
+          </Group>
+        </Slide>
+      </Deck>,
+    );
+    const documentResult = await buildDocument(
+      authorDeck({ width: 400, height: 300, theme: mixedTheme }).append(
+        authorSlide({ id: "group-precision" }).append(
+          authorGroup({ id: "top-group" }).append(
+            authorBox({
+              id: "top-member",
+              style: {
+                width: memberWidth,
+                height: 20,
+                backgroundColor: "accent1",
+              },
+            }),
+          ),
+          authorGroup({ id: "nested-outer" }).append(
+            authorGroup({ id: "nested-inner" }).append(
+              authorBox({
+                id: "nested-member",
+                style: {
+                  width: memberWidth,
+                  height: 20,
+                  backgroundColor: "accent2",
+                },
+              }),
+            ),
+          ),
+          authorGroup({
+            id: "fixed-group",
+            style: { width: 100, height: 20 },
+          }).append(
+            authorBox({
+              id: "fixed-member",
+              style: {
+                width: memberWidth,
+                height: 20,
+                backgroundColor: "accent3",
+              },
+            }),
+          ),
+        ),
+      ),
+    );
+
+    for (const [entry, result] of [
+      ["react", reactResult],
+      ["document", documentResult],
+    ] as const) {
+      assert.deepEqual(result.report.diagnostics, [], entry);
+      const file = await validatePptx(result.pptx);
+      assert.deepEqual(file.errors, [], entry);
+      const reportIds = new Map<string, number>();
+      const collectReportIds = (
+        objects: readonly {
+          readonly authorId?: string;
+          readonly id: number;
+          readonly members?: readonly unknown[];
+        }[],
+      ) => {
+        for (const object of objects) {
+          if (object.authorId !== undefined)
+            reportIds.set(object.authorId, object.id);
+          if (object.members !== undefined)
+            collectReportIds(
+              object.members as readonly {
+                readonly authorId?: string;
+                readonly id: number;
+                readonly members?: readonly unknown[];
+              }[],
+            );
+        }
+      };
+      collectReportIds(result.report.slides[0]?.objects ?? []);
+      const nativeObjects = new Map<
+        number,
+        { readonly boxEmu: { readonly width: number; readonly height: number } }
+      >();
+      const collectNative = (
+        objects: readonly {
+          readonly id: number;
+          readonly boxEmu: { readonly width: number; readonly height: number };
+          readonly members?: readonly unknown[];
+        }[],
+      ) => {
+        for (const object of objects) {
+          nativeObjects.set(object.id, object);
+          if (object.members !== undefined)
+            collectNative(
+              object.members as readonly {
+                readonly id: number;
+                readonly boxEmu: {
+                  readonly width: number;
+                  readonly height: number;
+                };
+                readonly members?: readonly unknown[];
+              }[],
+            );
+        }
+      };
+      collectNative(file.slides[0]?.objects ?? []);
+      const nativeBox = (authorId: string) => {
+        const id = reportIds.get(authorId);
+        assert.ok(id !== undefined, `${entry}: missing object ${authorId}`);
+        const object = nativeObjects.get(id);
+        assert.ok(object, `${entry}: missing native object ${authorId}`);
+        return object.boxEmu;
+      };
+
+      assert.equal(nativeBox("top-member").width, memberWidthEmu, entry);
+      assert.equal(nativeBox("top-group").width, memberWidthEmu, entry);
+      assert.equal(nativeBox("nested-member").width, memberWidthEmu, entry);
+      assert.equal(nativeBox("nested-inner").width, memberWidthEmu, entry);
+      assert.equal(nativeBox("nested-outer").width, memberWidthEmu, entry);
+      assert.equal(nativeBox("top-group").height, 20 * 9525, entry);
+      assert.equal(nativeBox("fixed-group").width, 100 * 9525, entry);
+      assert.equal(nativeBox("fixed-member").width, memberWidthEmu, entry);
     }
   });
 });

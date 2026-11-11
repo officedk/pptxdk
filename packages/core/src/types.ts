@@ -359,11 +359,12 @@ export type CapabilityAnnotation = {
   readonly capability: string;
   readonly value: unknown;
   /**
-   * Annotation that may remain unconsumed when its slide capability is trimmed.
+   * Annotation that may remain unconsumed when its capability's writer is trimmed.
    *
    * Object capabilities emit optional local declarations (for example an object awaiting an inherited
-   * default effect) without making the capability mandatory. Required annotations keep the existing
-   * missing-capability diagnostic.
+   * default effect). Capability-owned contribution resolution runs before missing-capability checks and
+   * turns declarations with actual effects into required contributions; required annotations keep the
+   * existing missing-capability diagnostic.
    */
   readonly optional?: boolean;
 };
@@ -378,6 +379,18 @@ export type CapabilityContribution = CapabilityAnnotation & {
   /** Build-local declaration view that produced this contribution; never retained on an editable node. */
   readonly declaration?: CapabilityElement;
 };
+
+/**
+ * Derives effective annotations for one capability from the current build tree.
+ *
+ * The build calls this before slide output and missing-capability checks, with only that capability's
+ * contributions. The result must contain the effective replacements; hiding an annotation here also
+ * means it no longer makes a trimmed capability mandatory.
+ */
+export type ContributionResolver = (
+  children: readonly CapabilityChild[],
+  contributions: readonly CapabilityContribution[],
+) => readonly CapabilityContribution[];
 
 export type CapabilityResource = {
   readonly bytes: Uint8Array;
@@ -601,13 +614,32 @@ export type SlideCapabilityModule = {
   readonly declaration: string;
   /** Handlers wired by this capability for internal transparent declaration hosts. */
   readonly transparentDeclarations?: readonly TransparentCapabilityModule[];
+  /** Resolves this capability's contributions before slide output and missing-capability checks. */
+  readonly resolveContributions?: ContributionResolver;
   compileSlide(
     input: CapabilityInput,
     context: SlideCapabilityContext,
   ): SlideCapabilityOutput;
 };
 
-export type CapabilityModule = ObjectCapabilityModule | SlideCapabilityModule;
+/**
+ * Build-phase module that resolves another capability's contributions even when its writer is trimmed.
+ *
+ * A capability that derives effective annotations from document structure registers this companion so
+ * missing-capability checks use the same resolved semantics as the full build. It produces no output.
+ */
+export type ContributionCapabilityModule = {
+  /** Unique registration key; this is not an author declaration type. */
+  readonly declaration: string;
+  /** Capability whose annotations this module resolves. */
+  readonly capability: string;
+  readonly resolveContributions: ContributionResolver;
+};
+
+export type CapabilityModule =
+  | ObjectCapabilityModule
+  | SlideCapabilityModule
+  | ContributionCapabilityModule;
 
 /** Modules registered inside Builder; transparent declarations can only be owned by slide capability modules. */
 export type RegisteredCapabilityModule =

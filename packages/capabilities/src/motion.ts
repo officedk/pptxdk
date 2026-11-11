@@ -3,6 +3,7 @@ import {
   pxToEmu,
   xmlEscape,
   type CapabilityInput,
+  type ContributionCapabilityModule,
   type GeometryBox,
   type SlideCapabilityModule,
   type TransparentCapabilityModule,
@@ -2193,12 +2194,26 @@ function timingXml(
   return { xml, nativeProjections };
 }
 
+/**
+ * Resolves motion annotations against the current document tree even when the timing writer is trimmed.
+ *
+ * The default document assembly keeps this companion registered so missing-capability checks use the
+ * same inherited defaults and disabled ancestor chains as a full build.
+ */
+export const motionStructureCapability: ContributionCapabilityModule =
+  Object.freeze({
+    declaration: "motion-structure",
+    capability: "motion",
+    resolveContributions: resolveMotionContributions,
+  });
+
 /** Slide-level motion module writes object timing and returns observation describing declarations and determinable relative times only. */
 export const motionCapability: SlideCapabilityModule = Object.freeze({
   declaration: "motion",
   slideProp: "motion",
   slot: "timing",
   always: true,
+  resolveContributions: resolveMotionContributions,
   transparentDeclarations: [
     {
       declaration: "rp:motion-scope",
@@ -2214,9 +2229,7 @@ export const motionCapability: SlideCapabilityModule = Object.freeze({
     } satisfies TransparentCapabilityModule,
   ],
   compileSlide(_input: CapabilityInput, context) {
-    const plan = compileMotionPlan(
-      resolveMotionContributions(context.children, context.contributions),
-    );
+    const plan = compileMotionPlan(context.contributions);
     validateKnownMotionTimes(plan.observation);
     const hasEffects = plan.steps.some((step) => step.effects.length > 0);
     if (!hasEffects) {

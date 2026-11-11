@@ -1356,6 +1356,9 @@ function motionContainer(declaration: string): boolean {
  * Scope parent chains, nearest click step, inherited Box default entrance, and disabled ancestor
  * chains are derived from this build's structure. Nothing here is stored on the editable nodes, so
  * moving or appending content changes the next build's choreography without stale React context.
+ *
+ * The build passes only this capability's contributions, then uses the effective result for both
+ * timing output and missing-capability checks.
  */
 export function resolveMotionContributions(
   children: readonly CapabilityChild[],

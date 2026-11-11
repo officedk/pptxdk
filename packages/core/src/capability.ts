@@ -66,6 +66,8 @@ export type {
   CapabilityPresentationContribution,
   CapabilityResource,
   CapabilityResourceClaim,
+  ContributionCapabilityModule,
+  ContributionResolver,
   Diagnostic,
   Extension,
   GeometryBox,

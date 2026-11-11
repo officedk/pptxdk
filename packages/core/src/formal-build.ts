@@ -44,6 +44,7 @@ import {
   type CapabilityLayoutContract,
   type CapabilityModule,
   type CapabilityParseResult,
+  type ContributionResolver,
   type RegisteredCapabilityModule,
   type CapabilityResource,
   type CapabilityResourceClaim,
@@ -1950,6 +1951,41 @@ function tableContentNodes(object: ObjectObservation): QueryContentNode[] {
   );
 }
 
+function resolveContributions(
+  children: readonly CapabilityChild[],
+  contributions: readonly CapabilityContribution[],
+  modules: ReadonlyMap<string, RegisteredCapabilityModule>,
+): readonly CapabilityContribution[] {
+  let resolved = contributions;
+  const applied = new Set<ContributionResolver>();
+  for (const module of modules.values()) {
+    if (!("resolveContributions" in module)) continue;
+    const resolver = module.resolveContributions;
+    // A full writer and its trimmed-build companion may share one resolver; apply it once.
+    if (resolver === undefined || applied.has(resolver)) continue;
+    applied.add(resolver);
+    const capability =
+      "capability" in module ? module.capability : module.declaration;
+    const owned = resolved.filter(
+      (contribution) => contribution.capability === capability,
+    );
+    if (owned.length === 0) continue;
+    const effective = resolver(children, owned);
+    const next: CapabilityContribution[] = [];
+    let inserted = false;
+    for (const contribution of resolved) {
+      if (contribution.capability !== capability) {
+        next.push(contribution);
+      } else if (!inserted) {
+        next.push(...effective);
+        inserted = true;
+      }
+    }
+    resolved = next;
+  }
+  return resolved;
+}
+
 function compileSlide(
   resolved: ResolvedSlide,
   modules: ReadonlyMap<string, RegisteredCapabilityModule>,
@@ -2013,6 +2049,24 @@ function compileSlide(
     },
     path,
   );
+  let contributions: readonly CapabilityContribution[] = slide.contributions;
+  try {
+    contributions = resolveContributions(
+      children,
+      slide.contributions,
+      modules,
+    );
+  } catch (error) {
+    slide.diagnostics.push(
+      error instanceof CapabilityError
+        ? diagnostic(error.path ?? path, error.code, error.message)
+        : diagnostic(
+            path,
+            "capability-failure",
+            error instanceof Error ? error.message : String(error),
+          ),
+    );
+  }
   const slideXml: {
     readonly slot: SlideCapabilitySlot;
     readonly xml: string;
@@ -2036,7 +2090,7 @@ function compileSlide(
       const output = module.compileSlide(input, {
         path,
         dimensions,
-        contributions: slide.contributions,
+        contributions,
         children,
         theme,
         registerResource(resource) {
@@ -2073,7 +2127,7 @@ function compileSlide(
       );
     }
   }
-  for (const contribution of slide.contributions) {
+  for (const contribution of contributions) {
     if (contribution.optional) continue;
     const consumer = modules.get(contribution.capability);
     if (

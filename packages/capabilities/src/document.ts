@@ -43,7 +43,7 @@ import {
   type MotionScopeHandle,
   type MotionStepAuthorProps,
 } from "./motion-api.ts";
-import { motionCapability } from "./motion.ts";
+import { motionCapability, motionStructureCapability } from "./motion.ts";
 import {
   createShapeNode,
   shapeCapability,
@@ -294,6 +294,7 @@ export const documentCapabilities = Object.freeze([
   groupCapability,
   imageCapability,
   motionCapability,
+  motionStructureCapability,
   shapeCapability,
   slideBackgroundCapability,
   textCapability,

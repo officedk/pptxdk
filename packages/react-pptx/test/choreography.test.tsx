@@ -6,9 +6,11 @@ import {
   box,
   build,
   BuildError,
+  createDocumentBuild,
   createMorphScope,
   createMotionScopeHandle,
   deck,
+  documentCapabilities,
   fade,
   motionScope,
   observeMotion,
@@ -19,6 +21,7 @@ import {
   type MotionObservation,
 } from "@react-pptx/react-pptx/document";
 import { validatePptx } from "@react-pptx/validation";
+import { strFromU8, unzipSync } from "fflate";
 import { createElement } from "react";
 import { describe, it } from "vitest";
 
@@ -37,6 +40,11 @@ function effectMap(motion: MotionObservation | undefined) {
       .flatMap((entry) => entry.effects)
       .map((effect) => [effect.target.testId, effect]) ?? [],
   );
+}
+
+function hasTimingXml(result: { readonly pptx: Uint8Array }): boolean {
+  const xml = strFromU8(unzipSync(result.pptx)["ppt/slides/slide1.xml"]!);
+  return xml.includes("<p:timing");
 }
 
 describe("plain authoring choreography", () => {
@@ -240,6 +248,208 @@ describe("plain authoring choreography", () => {
     assert.equal(effects.has("disabled-child"), false);
     assert.equal(effects.has("disabled-reenabled"), false);
     assert.equal(effects.has("transparent-default"), false);
+  });
+
+  it("checks trimmed capabilities against the structure-resolved motion", async () => {
+    const cropped = createDocumentBuild(
+      documentCapabilities.filter(
+        (capability) => capability.declaration !== "motion",
+      ),
+    );
+    const style = { width: 100, height: 60 };
+    const scenarios = [
+      {
+        name: "inherited-default",
+        content: box({ enter: fade({ duration: 70 }), style }).append(
+          shape({
+            testId: "inherited",
+            x: 4,
+            y: 4,
+            width: 20,
+            height: 20,
+          }),
+        ),
+        fullTiming: true,
+        cropped: "missing",
+      },
+      {
+        name: "disabled-explicit",
+        content: box({ motion: false, enter: fade(), style }).append(
+          shape({
+            testId: "disabled",
+            x: 4,
+            y: 4,
+            width: 20,
+            height: 20,
+            enter: fade(),
+          }),
+        ),
+        fullTiming: false,
+        cropped: "silent",
+      },
+      {
+        name: "plain",
+        content: box({ style }).append(
+          shape({
+            testId: "plain",
+            x: 4,
+            y: 4,
+            width: 20,
+            height: 20,
+          }),
+        ),
+        fullTiming: false,
+        cropped: "silent",
+      },
+      {
+        name: "local-override",
+        content: box({ enter: fade({ duration: 70 }), style }).append(
+          shape({
+            testId: "override",
+            x: 4,
+            y: 4,
+            width: 20,
+            height: 20,
+            enter: fade({ duration: 20 }),
+          }),
+        ),
+        fullTiming: true,
+        cropped: "missing",
+      },
+      {
+        name: "disabled-reenabled",
+        content: box({ motion: false, enter: fade(), style }).append(
+          shape({
+            testId: "reenabled",
+            motion: true,
+            x: 4,
+            y: 4,
+            width: 20,
+            height: 20,
+            enter: fade(),
+          }),
+        ),
+        fullTiming: false,
+        cropped: "silent",
+      },
+    ] as const;
+
+    for (const scenario of scenarios) {
+      const document = deck({ width: 320, height: 180 }).append(
+        slide({ slideId: scenario.name }).append(scenario.content),
+      );
+      const full = await build(document);
+      assert.equal(hasTimingXml(full), scenario.fullTiming, scenario.name);
+      assert.deepEqual((await validatePptx(full.pptx)).errors, []);
+
+      if (scenario.cropped === "missing") {
+        await assert.rejects(cropped(document), (error: unknown) => {
+          assert.ok(error instanceof BuildError);
+          assert.ok(
+            error.diagnostics.some(
+              ({ code, path }) =>
+                code === "missing-capability" &&
+                path.includes("shape[") &&
+                path.includes(
+                  scenario.name === "local-override" ? "override" : "inherited",
+                ),
+            ),
+            scenario.name,
+          );
+          return true;
+        });
+      } else {
+        const result = await cropped(document);
+        assert.equal(hasTimingXml(result), false, scenario.name);
+        assert.deepEqual((await validatePptx(result.pptx)).errors, []);
+      }
+    }
+  });
+
+  it("checks trimmed JSX capabilities against the structure-resolved motion", async () => {
+    const cropped = createDocumentBuild(
+      documentCapabilities.filter(
+        (capability) => capability.declaration !== "motion",
+      ),
+    );
+    const style = { width: 100, height: 60 };
+    const cases = [
+      {
+        name: "jsx-inherited",
+        element: createElement(
+          jsx.Deck,
+          { width: 320, height: 180 },
+          createElement(
+            jsx.Slide,
+            { slideId: "jsx-inherited" },
+            createElement(
+              jsx.Box,
+              { enter: fade({ duration: 70 }), style },
+              createElement(jsx.Shape, {
+                testId: "jsx-inherited",
+                x: 4,
+                y: 4,
+                width: 20,
+                height: 20,
+              }),
+            ),
+          ),
+        ),
+        fullTiming: true,
+        cropped: "missing",
+      },
+      {
+        name: "jsx-disabled",
+        element: createElement(
+          jsx.Deck,
+          { width: 320, height: 180 },
+          createElement(
+            jsx.Slide,
+            { slideId: "jsx-disabled" },
+            createElement(
+              jsx.Box,
+              { motion: false, enter: fade(), style },
+              createElement(jsx.Shape, {
+                testId: "jsx-disabled",
+                x: 4,
+                y: 4,
+                width: 20,
+                height: 20,
+                enter: fade(),
+              }),
+            ),
+          ),
+        ),
+        fullTiming: false,
+        cropped: "silent",
+      },
+    ] as const;
+
+    for (const scenario of cases) {
+      const expanded = await jsx.expandDocument(scenario.element);
+      const full = await build(expanded);
+      assert.equal(hasTimingXml(full), scenario.fullTiming, scenario.name);
+      assert.deepEqual((await validatePptx(full.pptx)).errors, []);
+
+      if (scenario.cropped === "missing") {
+        await assert.rejects(cropped(expanded), (error: unknown) => {
+          assert.ok(error instanceof BuildError);
+          assert.ok(
+            error.diagnostics.some(
+              ({ code, path }) =>
+                code === "missing-capability" &&
+                path.includes(`shape[${scenario.name}]`),
+            ),
+            scenario.name,
+          );
+          return true;
+        });
+      } else {
+        const result = await cropped(expanded);
+        assert.equal(hasTimingXml(result), false, scenario.name);
+        assert.deepEqual((await validatePptx(result.pptx)).errors, []);
+      }
+    }
   });
 
   it("re-derives scope and click step after an explicit same-document move", async () => {

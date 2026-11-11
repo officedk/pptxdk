@@ -250,7 +250,7 @@ function deepFreeze<T>(value: T): T {
 }
 
 function reportBox(box: GeometryBox): GeometryBox {
-  // Reports round solved geometry for display; compile and native output retain the layout solver's precision.
+  // Reports show layout-derived geometry at hundredths of a pixel; capability measurement fallbacks keep their measured values.
   return {
     x: Math.round(box.x * 100) / 100,
     y: Math.round(box.y * 100) / 100,
@@ -259,16 +259,13 @@ function reportBox(box: GeometryBox): GeometryBox {
   };
 }
 
-function reportObservation(observation: ObjectObservation): ObjectObservation {
-  return {
-    ...observation,
-    ...(observation.box === undefined
-      ? {}
-      : { box: reportBox(observation.box) }),
-    ...(observation.members === undefined
-      ? {}
-      : { members: observation.members.map(reportObservation) }),
-  };
+function reportObservation(
+  observation: ObjectObservation,
+  layoutBox: GeometryBox | undefined,
+): ObjectObservation {
+  return observation.box === undefined || layoutBox === undefined
+    ? observation
+    : { ...observation, box: reportBox(observation.box) };
 }
 
 function ownKeys(
@@ -1848,12 +1845,15 @@ function compileChildren(
           );
           boxXml = output.xml;
           if (output.xml !== "") {
-            boxObservation = reportObservation({
-              ...output.observation,
-              id: objectId,
-              ...(authorId === undefined ? {} : { authorId }),
-              ...(boxLink === undefined ? {} : { link: boxLink.summary }),
-            });
+            boxObservation = reportObservation(
+              {
+                ...output.observation,
+                id: objectId,
+                ...(authorId === undefined ? {} : { authorId }),
+                ...(boxLink === undefined ? {} : { link: boxLink.summary }),
+              },
+              box,
+            );
             if (morphKey !== undefined && morphName !== undefined) {
               const nativeKind = parsedResult?.contract?.nativeKind ?? "sp";
               if (output.observation.name !== morphName) {
@@ -2182,12 +2182,15 @@ function compileChildren(
           declaration: child,
         });
       }
-      const observation = reportObservation({
-        ...output.observation,
-        id,
-        ...(authorId === undefined ? {} : { authorId }),
-        ...(compiledLink === undefined ? {} : { link: compiledLink.summary }),
-      });
+      const observation = reportObservation(
+        {
+          ...output.observation,
+          id,
+          ...(authorId === undefined ? {} : { authorId }),
+          ...(compiledLink === undefined ? {} : { link: compiledLink.summary }),
+        },
+        layoutBox,
+      );
       content.push({
         ...(authorId === undefined ? {} : { authorId }),
         reference: { kind: "object", id: observation.id },

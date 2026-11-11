@@ -258,7 +258,10 @@ export function pptxParts(
   resources: readonly PptxPackageResource[] = [],
   packageParts: readonly PptxPackagePart[] = [],
   packageRelationships: readonly PptxPackageRelationshipSet[] = [],
-  presentationContent = "",
+  presentationContent: {
+    readonly beforeSlides?: string;
+    readonly afterNotesSize?: string;
+  } = {},
   presentationAttributes: readonly { name: string; value: string }[] = [],
   themeValue: Theme = defaultTheme,
   title?: string,
@@ -283,7 +286,7 @@ export function pptxParts(
       ({ sourcePath }) => sourcePath === "ppt/presentation.xml",
     )?.relationships ?? [];
   const presentation = xmlDocument(
-    `<p:presentation xmlns:a="${namespaces.a}" xmlns:r="${namespaces.r}" xmlns:p="${namespaces.p}"${presentationAttributeXml}><p:sldMasterIdLst><p:sldMasterId id="2147483648" r:id="rId1"/></p:sldMasterIdLst><p:sldIdLst>${slideIds}</p:sldIdLst><p:sldSz cx="${pxToEmu(size.width)}" cy="${pxToEmu(size.height)}"/><p:notesSz cx="6858000" cy="9144000"/>${presentationContent}${sectionListXml(sections)}</p:presentation>`,
+    `<p:presentation xmlns:a="${namespaces.a}" xmlns:r="${namespaces.r}" xmlns:p="${namespaces.p}"${presentationAttributeXml}><p:sldMasterIdLst><p:sldMasterId id="2147483648" r:id="rId1"/></p:sldMasterIdLst>${presentationContent.beforeSlides ?? ""}<p:sldIdLst>${slideIds}</p:sldIdLst><p:sldSz cx="${pxToEmu(size.width)}" cy="${pxToEmu(size.height)}"/><p:notesSz cx="6858000" cy="9144000"/>${presentationContent.afterNotesSize ?? ""}${sectionListXml(sections)}</p:presentation>`,
   );
   const parts: Record<string, string | Uint8Array> = {
     "[Content_Types].xml": contentTypes(

@@ -4619,7 +4619,7 @@ function validateChart(
                 errors,
                 chartPart,
                 "invalid-chart-data-label-range",
-                "c15 category range cache does not match the series category cache",
+                "c15 category range cache differs from the series category cache",
               );
             }
             datalabelsRange = {

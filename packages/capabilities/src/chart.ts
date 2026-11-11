@@ -716,11 +716,8 @@ function sharedCategoryData(value: unknown, label: string): SharedCategoryData {
     );
   }
   const categories = value["categories"];
-  if (!Array.isArray(categories) || categories.length === 0) {
-    fail(
-      "invalid-data",
-      `${label}.categories must contain at least one category`,
-    );
+  if (!Array.isArray(categories)) {
+    fail("invalid-data", `${label}.categories must be an array of categories`);
   }
   for (const [index, category] of categories.entries()) {
     if (typeof category !== "string") {
@@ -754,8 +751,8 @@ function coordinateList(
   value: unknown,
   label: string,
 ): readonly (number | null)[] {
-  if (!Array.isArray(value) || value.length === 0) {
-    fail("invalid-data", `${label} must contain at least one observation`);
+  if (!Array.isArray(value)) {
+    fail("invalid-data", `${label} must be an array of observations`);
   }
   for (const [index, coordinate] of value.entries()) {
     if (

@@ -442,6 +442,8 @@ function categoryChartSeries(
   textStyles: ChartTextStyleXml,
   theme: ThemeContext,
 ): XmlElement {
+  // With no categories this names the empty range before the first data row while the cache
+  // keeps zero points; the workbook therefore has headers but no data cells to fabricate.
   const rows = group.data.categories.length + 1;
   const column = columnName(series.seriesIndex + 1);
   const kind: ChartKind = group.kind;
@@ -543,6 +545,8 @@ function scatterChartSeries(
   textStyles: ChartTextStyleXml,
   theme: ThemeContext,
 ): XmlElement {
+  // Empty X/Y arrays use the same empty-range convention and keep zero cached observations.
+  // Empty X/Y arrays use the same empty-range convention and keep zero cached observations.
   const rows = series.x.length + 1;
   const xColumn = columnName(series.seriesIndex * 2 + 1);
   const yColumn = columnName(series.seriesIndex * 2 + 2);

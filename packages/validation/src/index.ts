@@ -2579,7 +2579,9 @@ function chartFormulaRange(
     !Number.isSafeInteger(startRow) ||
     !Number.isSafeInteger(endRow) ||
     startRow < 1 ||
-    endRow < startRow
+    // A zero-observation chart keeps its data reference in the empty range
+    // immediately before its first data row, for example `$A$2:$A$1`.
+    endRow < startRow - 1
   ) {
     return undefined;
   }

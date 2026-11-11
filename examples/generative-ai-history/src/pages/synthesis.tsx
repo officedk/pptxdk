@@ -32,7 +32,7 @@ const rows = [
 export function SynthesisPage() {
   return (
     <SlideFrame
-      slideId="synthesis"
+      id="synthesis"
       chapter="收束｜技术不同，问题相通"
       title="七十四年，一条未变的主线"
       number={11}

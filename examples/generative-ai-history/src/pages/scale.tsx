@@ -7,7 +7,7 @@ import { colors } from "../theme.ts";
 export function ScalePage() {
   return (
     <SlideFrame
-      slideId="scale"
+      id="scale"
       chapter="规模｜GPT 系列的三次跨越"
       title="2018–2020｜规模成为方法"
       number={6}
@@ -23,7 +23,7 @@ export function ScalePage() {
         参数量（十亿，线性刻度）
       </Text>
       <Chart
-        testId="gpt-parameters"
+        id="gpt-parameters"
         kind="column"
         x={64}
         y={196}

@@ -204,7 +204,7 @@ type MotionNativeMember = {
   readonly id: number;
   readonly kind: string;
   readonly name: string;
-  readonly testId?: string;
+  readonly authorId?: string;
   readonly box?: GeometryBox;
   readonly members?: readonly MotionNativeMember[];
 };
@@ -1444,7 +1444,9 @@ function timingXml(
           target: {
             id: member.id,
             name: member.name,
-            ...(member.testId === undefined ? {} : { testId: member.testId }),
+            ...(member.authorId === undefined
+              ? {}
+              : { authorId: member.authorId }),
           },
           targetTextBody,
           targetFilled: memberEffect?.targetFilled ?? false,

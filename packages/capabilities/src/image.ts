@@ -57,8 +57,6 @@ export type ImageSource = string | URL | Uint8Array;
 export type ImageDeclarationProps = MotionProps &
   MorphProps & {
     readonly id?: string;
-    readonly testId?: string;
-    readonly part?: string;
     readonly name?: string;
     readonly link?: LinkTarget;
     readonly src: ImageSource;
@@ -100,8 +98,6 @@ export function createImageNode(
 }
 
 export type ParsedImage = {
-  readonly testId?: string;
-  readonly part?: string;
   readonly name?: string;
   readonly morphKey?: string;
   readonly link?: LinkTarget;
@@ -131,8 +127,6 @@ export type LoadedImage = ImageMetadata & { readonly bytes: Uint8Array };
 
 const allowedParameters = [
   "id",
-  "testId",
-  "part",
   "name",
   "morphKey",
   "link",
@@ -411,7 +405,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function optionalText(
   props: Record<string, unknown>,
-  name: "testId" | "name" | "part",
+  name: "name",
   path?: string,
 ): string | undefined {
   const value = props[name];
@@ -557,8 +551,6 @@ export const imageCapability: ObjectCapabilityModule<ParsedImage> = {
       );
     }
 
-    const testId = optionalText(input.props, "testId", context.path);
-    const part = optionalText(input.props, "part", context.path);
     const requestedName = optionalText(input.props, "name", context.path);
     const altValue = input.props["alt"];
     if (altValue !== undefined && typeof altValue !== "string") {
@@ -600,8 +592,6 @@ export const imageCapability: ObjectCapabilityModule<ParsedImage> = {
     const image = readImage(input.props["src"]);
 
     const parsed: ParsedImage = {
-      ...(testId !== undefined ? { testId } : {}),
-      ...(part !== undefined ? { part } : {}),
       ...(requestedName !== undefined ? { name: requestedName } : {}),
       ...(input.props["morphKey"] !== undefined
         ? { morphKey: input.props["morphKey"] as string }
@@ -744,15 +734,13 @@ export const imageCapability: ObjectCapabilityModule<ParsedImage> = {
       ...(parsed.flipV === undefined ? {} : { flipV: parsed.flipV }),
       image: true,
     });
-    const name =
-      context.morphName ??
-      parsed.name ??
-      parsed.testId ??
-      `Image ${context.id - 1}`;
+    const name = context.morphName ?? parsed.name ?? `Image ${context.id - 1}`;
     const annotations = motionAnnotations(parsed.rawProps, {
       kind: "image",
       name,
-      ...(parsed.testId === undefined ? {} : { testId: parsed.testId }),
+      ...(typeof parsed.rawProps["id"] === "string"
+        ? { authorId: parsed.rawProps["id"] }
+        : {}),
       textBody: false,
       filled: false,
       box,
@@ -809,8 +797,6 @@ export const imageCapability: ObjectCapabilityModule<ParsedImage> = {
         id: context.id,
         kind: "image",
         name,
-        ...(parsed.testId === undefined ? {} : { testId: parsed.testId }),
-        ...(parsed.part === undefined ? {} : { part: parsed.part }),
         box,
       },
       extensions: [],

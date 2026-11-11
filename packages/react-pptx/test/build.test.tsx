@@ -46,7 +46,7 @@ function deck(shape: ReturnType<typeof createElement>) {
   return createElement(
     Deck,
     { width: 960, height: 540 },
-    createElement(Slide, { slideId: "cover" }, shape),
+    createElement(Slide, { id: "cover" }, shape),
   );
 }
 
@@ -161,11 +161,11 @@ describe("public build entry", () => {
         { width: 960, height: 540 },
         createElement(
           Slide,
-          { slideId: "font-subset" },
+          { id: "font-subset" },
           createElement(
             Text,
             {
-              testId: "subset-text",
+              id: "subset-text",
               x: 8,
               y: 8,
               width: 640,
@@ -192,7 +192,7 @@ describe("public build entry", () => {
           createElement(
             Text,
             {
-              testId: "subset-latin",
+              id: "subset-latin",
               x: 8,
               y: 80,
               width: 300,
@@ -204,7 +204,7 @@ describe("public build entry", () => {
           createElement(
             Table,
             {
-              testId: "subset-table",
+              id: "subset-table",
               x: 8,
               y: 128,
               width: 240,
@@ -218,7 +218,7 @@ describe("public build entry", () => {
             ),
           ),
           createElement(Chart, {
-            testId: "subset-chart",
+            id: "subset-chart",
             kind: "column",
             x: 280,
             y: 128,
@@ -306,9 +306,9 @@ describe("public build entry", () => {
     ]);
     const chartCases = [
       {
-        testId: "subset-chart-default-axis",
+        id: "subset-chart-default-axis",
         chart: createElement(Chart, {
-          testId: "subset-chart-default-axis",
+          id: "subset-chart-default-axis",
           kind: "column",
           x: 0,
           y: 0,
@@ -324,9 +324,9 @@ describe("public build entry", () => {
         absent: [],
       },
       {
-        testId: "subset-chart-percent-axis",
+        id: "subset-chart-percent-axis",
         chart: createElement(Chart, {
-          testId: "subset-chart-percent-axis",
+          id: "subset-chart-percent-axis",
           kind: "column",
           stacking: "percent",
           x: 0,
@@ -343,9 +343,9 @@ describe("public build entry", () => {
         absent: [],
       },
       {
-        testId: "subset-chart-formatted-axis",
+        id: "subset-chart-formatted-axis",
         chart: createElement(Chart, {
-          testId: "subset-chart-formatted-axis",
+          id: "subset-chart-formatted-axis",
           kind: "column",
           x: 0,
           y: 0,
@@ -368,9 +368,9 @@ describe("public build entry", () => {
         absent: ["#", '"'],
       },
       {
-        testId: "subset-chart-formatted-label",
+        id: "subset-chart-formatted-label",
         chart: createElement(Chart, {
-          testId: "subset-chart-formatted-label",
+          id: "subset-chart-formatted-label",
           kind: "pie",
           x: 0,
           y: 0,
@@ -391,9 +391,9 @@ describe("public build entry", () => {
         absent: ['"'],
       },
       {
-        testId: "subset-chart-percent-label",
+        id: "subset-chart-percent-label",
         chart: createElement(Chart, {
-          testId: "subset-chart-percent-label",
+          id: "subset-chart-percent-label",
           kind: "pie",
           x: 0,
           y: 0,
@@ -410,9 +410,9 @@ describe("public build entry", () => {
         absent: [],
       },
       {
-        testId: "subset-chart-locale-only-label",
+        id: "subset-chart-locale-only-label",
         chart: createElement(Chart, {
-          testId: "subset-chart-locale-only-label",
+          id: "subset-chart-locale-only-label",
           kind: "pie",
           x: 0,
           y: 0,
@@ -433,9 +433,9 @@ describe("public build entry", () => {
         absent: ["$", "[", "]"],
       },
       {
-        testId: "subset-chart-currency-literal-label",
+        id: "subset-chart-currency-literal-label",
         chart: createElement(Chart, {
-          testId: "subset-chart-currency-literal-label",
+          id: "subset-chart-currency-literal-label",
           kind: "pie",
           x: 0,
           y: 0,
@@ -456,9 +456,9 @@ describe("public build entry", () => {
         absent: ["$", "#", "[", "]"],
       },
       {
-        testId: "subset-chart-condition-color-label",
+        id: "subset-chart-condition-color-label",
         chart: createElement(Chart, {
-          testId: "subset-chart-condition-color-label",
+          id: "subset-chart-condition-color-label",
           kind: "pie",
           x: 0,
           y: 0,
@@ -479,9 +479,9 @@ describe("public build entry", () => {
         absent: Array.from("[]<>RedBlu"),
       },
       {
-        testId: "subset-chart-escaped-literal-label",
+        id: "subset-chart-escaped-literal-label",
         chart: createElement(Chart, {
-          testId: "subset-chart-escaped-literal-label",
+          id: "subset-chart-escaped-literal-label",
           kind: "pie",
           x: 0,
           y: 0,
@@ -502,9 +502,9 @@ describe("public build entry", () => {
         absent: ["\\"],
       },
       {
-        testId: "subset-chart-chinese-date-name-label",
+        id: "subset-chart-chinese-date-name-label",
         chart: createElement(Chart, {
-          testId: "subset-chart-chinese-date-name-label",
+          id: "subset-chart-chinese-date-name-label",
           kind: "pie",
           x: 0,
           y: 0,
@@ -525,9 +525,9 @@ describe("public build entry", () => {
         absent: ["A", "J", "S"],
       },
       {
-        testId: "subset-chart-question-placeholder-label",
+        id: "subset-chart-question-placeholder-label",
         chart: createElement(Chart, {
-          testId: "subset-chart-question-placeholder-label",
+          id: "subset-chart-question-placeholder-label",
           kind: "pie",
           x: 0,
           y: 0,
@@ -549,7 +549,7 @@ describe("public build entry", () => {
       },
     ] as const;
 
-    for (const { testId, chart, expected, absent } of chartCases) {
+    for (const { id, chart, expected, absent } of chartCases) {
       const result = await build(deck(chart), { embedFonts: "subset" });
       assert.deepEqual(result.report.diagnostics, []);
       assert.deepEqual((await validatePptx(result.pptx)).errors, []);
@@ -566,14 +566,14 @@ describe("public build entry", () => {
       for (const character of expected) {
         assert.ok(
           subset.hasGlyphForCodePoint(character.codePointAt(0)!),
-          `${testId} subset should cover ${character}`,
+          `${id} subset should cover ${character}`,
         );
       }
       for (const character of absent) {
         assert.equal(
           subset.hasGlyphForCodePoint(character.codePointAt(0)!),
           false,
-          `${testId} should not treat format control character ${character} as display glyph`,
+          `${id} should not treat format control character ${character} as display glyph`,
         );
       }
     }
@@ -583,7 +583,7 @@ describe("public build entry", () => {
       build(
         deck(
           createElement(Chart, {
-            testId: "subset-chart-label-style-missing-glyph",
+            id: "subset-chart-label-style-missing-glyph",
             kind: "pie",
             x: 0,
             y: 0,
@@ -617,7 +617,7 @@ describe("public build entry", () => {
     const result = await build(
       deck(
         createElement(Chart, {
-          testId: "subset-chart-fourth-text-section",
+          id: "subset-chart-fourth-text-section",
           kind: "pie",
           x: 0,
           y: 0,
@@ -659,7 +659,7 @@ describe("public build entry", () => {
     const axisResult = await build(
       deck(
         createElement(Chart, {
-          testId: "subset-chart-locale-only-source",
+          id: "subset-chart-locale-only-source",
           kind: "column",
           x: 0,
           y: 0,
@@ -692,7 +692,7 @@ describe("public build entry", () => {
     const result = await build(
       deck(
         createElement(Chart, {
-          testId: "subset-chart-locale-only-label-narrow-font",
+          id: "subset-chart-locale-only-label-narrow-font",
           kind: "pie",
           x: 0,
           y: 0,
@@ -742,7 +742,7 @@ describe("public build entry", () => {
           createElement(
             Text,
             {
-              testId,
+              id: testId,
               x: 0,
               y: 0,
               width: 320,
@@ -804,7 +804,7 @@ describe("public build entry", () => {
         createElement(
           Shape,
           {
-            testId: `field-shape-${pageNumber}`,
+            id: `field-shape-${pageNumber}`,
             textStyle: {
               fontFamily: measurementFont,
               fontSize: 20,
@@ -824,7 +824,7 @@ describe("public build entry", () => {
           ),
         ),
         createElement(Shape, {
-          testId: `literal-shape-${pageNumber}`,
+          id: `literal-shape-${pageNumber}`,
           text: `Page ${pageNumber}`,
           textStyle: {
             fontFamily: measurementFont,
@@ -842,7 +842,7 @@ describe("public build entry", () => {
           const pageNumber = index + 1;
           return createElement(
             Slide,
-            { key: pageNumber, slideId: `shape-field-${pageNumber}` },
+            { key: pageNumber, id: `shape-field-${pageNumber}` },
             pageNumber === 1 || pageNumber === 10
               ? pageShapes(pageNumber)
               : null,
@@ -853,11 +853,11 @@ describe("public build entry", () => {
 
     const fieldShape = (pageNumber: number) =>
       result.report.slides[pageNumber - 1]?.objects.find(
-        ({ testId }) => testId === `field-shape-${pageNumber}`,
+        ({ authorId: testId }) => testId === `field-shape-${pageNumber}`,
       );
     const literalShape = (pageNumber: number) =>
       result.report.slides[pageNumber - 1]?.objects.find(
-        ({ testId }) => testId === `literal-shape-${pageNumber}`,
+        ({ authorId: testId }) => testId === `literal-shape-${pageNumber}`,
       );
     assert.equal(fieldShape(1)?.text, "Page 1");
     assert.equal(fieldShape(10)?.text, "Page 10");
@@ -918,7 +918,7 @@ describe("public build entry", () => {
           createElement(
             Shape,
             {
-              testId: "conflicting-shape-body",
+              id: "conflicting-shape-body",
               x: 10,
               y: 10,
               width: 100,
@@ -949,11 +949,11 @@ describe("public build entry", () => {
         { width: 320, height: 240 },
         createElement(
           Slide,
-          { slideId: "field-first" },
+          { id: "field-first" },
           createElement(
             Text,
             {
-              testId: "text-first",
+              id: "text-first",
               x: 0,
               y: 0,
               width: 100,
@@ -965,7 +965,7 @@ describe("public build entry", () => {
           createElement(
             Shape,
             {
-              testId: "shape-first",
+              id: "shape-first",
               x: 0,
               y: 40,
               width: 100,
@@ -977,7 +977,7 @@ describe("public build entry", () => {
           createElement(
             Table,
             {
-              testId: "table-first",
+              id: "table-first",
               x: 0,
               y: 80,
               columns: [100],
@@ -992,11 +992,11 @@ describe("public build entry", () => {
         ),
         createElement(
           Slide,
-          { slideId: "field-second" },
+          { id: "field-second" },
           createElement(
             Text,
             {
-              testId: "text-second",
+              id: "text-second",
               x: 0,
               y: 0,
               width: 100,
@@ -1008,7 +1008,7 @@ describe("public build entry", () => {
           createElement(
             Shape,
             {
-              testId: "shape-second",
+              id: "shape-second",
               x: 0,
               y: 40,
               width: 100,
@@ -1020,7 +1020,7 @@ describe("public build entry", () => {
           createElement(
             Table,
             {
-              testId: "table-second",
+              id: "table-second",
               x: 0,
               y: 80,
               columns: [50, 50],
@@ -1034,7 +1034,7 @@ describe("public build entry", () => {
             ),
           ),
           createElement(Chart, {
-            testId: "page-field-chart",
+            id: "page-field-chart",
             kind: "pie",
             x: 110,
             y: 0,
@@ -1119,7 +1119,7 @@ describe("public build entry", () => {
       await build(
         deck(
           createElement(Text, {
-            testId: "missing-content-metrics",
+            id: "missing-content-metrics",
             x: 24,
             y: 18,
             width: 240,
@@ -1149,7 +1149,7 @@ describe("public build entry", () => {
     const result = await build(
       deck(
         createElement(Text, {
-          testId: "measured-mixed-text",
+          id: "measured-mixed-text",
           x: 24,
           y: 18,
           width: 400,
@@ -1208,11 +1208,11 @@ describe("public build entry", () => {
         { width: 960, height: 540 },
         createElement(
           Slide,
-          { slideId: "font-embedding" },
+          { id: "font-embedding" },
           createElement(
             Text,
             {
-              testId: "embedded-font-bold-first",
+              id: "embedded-font-bold-first",
               x: 24,
               y: 18,
               width: 240,
@@ -1224,7 +1224,7 @@ describe("public build entry", () => {
           createElement(
             Text,
             {
-              testId: "embedded-font-text",
+              id: "embedded-font-text",
               x: 24,
               y: 18,
               width: 240,
@@ -1235,7 +1235,7 @@ describe("public build entry", () => {
             createElement(Span, { style: { fontWeight: "bold" } }, "bold"),
           ),
           createElement(Shape, {
-            testId: "embedded-font-shape",
+            id: "embedded-font-shape",
             x: 24,
             y: 64,
             width: 240,
@@ -1246,7 +1246,7 @@ describe("public build entry", () => {
           createElement(
             Table,
             {
-              testId: "embedded-font-table",
+              id: "embedded-font-table",
               x: 24,
               y: 110,
               width: 240,
@@ -1264,7 +1264,7 @@ describe("public build entry", () => {
             ),
           ),
           createElement(Chart, {
-            testId: "embedded-font-chart",
+            id: "embedded-font-chart",
             kind: "line",
             x: 300,
             y: 18,
@@ -1342,7 +1342,7 @@ describe("public build entry", () => {
         createElement(
           Text,
           {
-            testId: "embedded-semibold",
+            id: "embedded-semibold",
             x: 24,
             y: 18,
             width: 240,
@@ -1400,11 +1400,11 @@ describe("public build entry", () => {
         { width: 960, height: 540 },
         createElement(
           Slide,
-          { slideId: "italic-font-slots" },
+          { id: "italic-font-slots" },
           createElement(
             Text,
             {
-              testId: "italic-font",
+              id: "italic-font",
               x: 24,
               y: 18,
               width: 240,
@@ -1416,7 +1416,7 @@ describe("public build entry", () => {
           createElement(
             Text,
             {
-              testId: "bold-italic-font",
+              id: "bold-italic-font",
               x: 24,
               y: 60,
               width: 240,
@@ -1539,7 +1539,7 @@ describe("public build entry", () => {
               createElement(
                 Text,
                 {
-                  testId,
+                  id: testId,
                   x: 24,
                   y: 18,
                   width: 240,
@@ -1571,7 +1571,7 @@ describe("public build entry", () => {
       deck(
         createElement(
           Text,
-          { testId: "same-font-bytes", x: 24, y: 18, width: 240, height: 36 },
+          { id: "same-font-bytes", x: 24, y: 18, width: 240, height: 36 },
           createElement(Span, { style: { fontFamily: firstAllowed } }, "first"),
           createElement(
             Span,
@@ -1596,7 +1596,7 @@ describe("public build entry", () => {
         createElement(
           Text,
           {
-            testId: "default-font-policy",
+            id: "default-font-policy",
             x: 24,
             y: 18,
             width: 240,
@@ -1635,7 +1635,7 @@ describe("public build entry", () => {
     const noSubsetting = withFontFsType(original, 0x0108);
     const result = await build(
       <Deck>
-        <Slide slideId="font-no-subsetting">
+        <Slide id="font-no-subsetting">
           <Text
             x={0}
             y={0}
@@ -1662,9 +1662,9 @@ describe("public build entry", () => {
     await assert.rejects(
       build(
         <Deck>
-          <Slide slideId="font-no-subsetting-subset">
+          <Slide id="font-no-subsetting-subset">
             <Text
-              testId="font-no-subsetting-subset"
+              id="font-no-subsetting-subset"
               x={0}
               y={0}
               width={100}
@@ -1763,7 +1763,7 @@ describe("public build entry", () => {
             createElement(
               Text,
               {
-                testId: label,
+                id: label,
                 x: 24,
                 y: 18,
                 width: 240,
@@ -1793,7 +1793,7 @@ describe("public build entry", () => {
           createElement(
             Text,
             {
-              testId: "subset-unsupported-woff2",
+              id: "subset-unsupported-woff2",
               x: 24,
               y: 18,
               width: 240,
@@ -1823,7 +1823,7 @@ describe("public build entry", () => {
           createElement(
             Text,
             {
-              testId: "subset-missing-glyph",
+              id: "subset-missing-glyph",
               x: 24,
               y: 18,
               width: 240,
@@ -1855,7 +1855,7 @@ describe("public build entry", () => {
         createElement(
           Text,
           {
-            testId: "font-value-opt-out-default",
+            id: "font-value-opt-out-default",
             x: 24,
             y: 18,
             width: 240,
@@ -1898,9 +1898,9 @@ describe("public build entry", () => {
         { width: 960, height: 540 },
         createElement(
           Slide,
-          { slideId: "cover" },
+          { id: "cover" },
           createElement(Text, {
-            testId: "cjk-breaks",
+            id: "cjk-breaks",
             x: 0,
             y: 0,
             width: 20,
@@ -1909,7 +1909,7 @@ describe("public build entry", () => {
             children: "中文",
           }),
           createElement(Text, {
-            testId: "long-word-breaks",
+            id: "long-word-breaks",
             x: 40,
             y: 0,
             width: 1,
@@ -1918,7 +1918,7 @@ describe("public build entry", () => {
             children: "abcdef",
           }),
           createElement(Text, {
-            testId: "combining-grapheme",
+            id: "combining-grapheme",
             x: 80,
             y: 0,
             width: 1,
@@ -1931,14 +1931,14 @@ describe("public build entry", () => {
     );
 
     assert.deepEqual(
-      result.report.slides[0]?.objects.map(({ testId, box }) => ({
-        testId,
+      result.report.slides[0]?.objects.map(({ authorId: testId, box }) => ({
+        id: testId,
         height: box?.height,
       })),
       [
-        { testId: "cjk-breaks", height: 57.92 },
-        { testId: "long-word-breaks", height: 173.76 },
-        { testId: "combining-grapheme", height: 28.96 },
+        { id: "cjk-breaks", height: 57.92 },
+        { id: "long-word-breaks", height: 173.76 },
+        { id: "combining-grapheme", height: 28.96 },
       ],
     );
     assert.deepEqual(
@@ -1966,9 +1966,9 @@ describe("public build entry", () => {
         { width: 960, height: 540 },
         createElement(
           Slide,
-          { slideId: "cover" },
+          { id: "cover" },
           createElement(Text, {
-            testId: "wide-grapheme-hard-break",
+            id: "wide-grapheme-hard-break",
             x: 0,
             y: 0,
             width: 1,
@@ -1977,7 +1977,7 @@ describe("public build entry", () => {
             children: "a\nb",
           }),
           createElement(Text, {
-            testId: "trailing-hard-break",
+            id: "trailing-hard-break",
             x: 40,
             y: 0,
             width: 100,
@@ -2016,7 +2016,7 @@ describe("public build entry", () => {
     const result = await build(
       deck(
         createElement(Text, {
-          testId: "substituted-font",
+          id: "substituted-font",
           x: 0,
           y: 0,
           width: 100,
@@ -2063,7 +2063,7 @@ describe("public build entry", () => {
     const result = await build(
       deck(
         createElement(Text, {
-          testId: "content-sized-missing-glyph",
+          id: "content-sized-missing-glyph",
           x: 0,
           y: 0,
           width: 100,
@@ -2096,7 +2096,7 @@ describe("public build entry", () => {
       build(
         deck(
           createElement(Text, {
-            testId: "content-sized-missing-glyph-full",
+            id: "content-sized-missing-glyph-full",
             x: 0,
             y: 0,
             width: 100,
@@ -2119,7 +2119,7 @@ describe("public build entry", () => {
       build(
         deck(
           createElement(Text, {
-            testId: "content-sized-missing-glyph-subset",
+            id: "content-sized-missing-glyph-subset",
             x: 0,
             y: 0,
             width: 100,
@@ -2146,7 +2146,7 @@ describe("public build entry", () => {
         build(
           deck(
             createElement(Text, {
-              testId: "fixed-text-full-missing-glyph",
+              id: "fixed-text-full-missing-glyph",
               x: 0,
               y: 0,
               width: 100,
@@ -2174,7 +2174,7 @@ describe("public build entry", () => {
         build(
           deck(
             createElement(Shape, {
-              testId: "fixed-shape-full-missing-glyph",
+              id: "fixed-shape-full-missing-glyph",
               x: 0,
               y: 0,
               width: 100,
@@ -2203,7 +2203,7 @@ describe("public build entry", () => {
         build(
           deck(
             createElement(Shape, {
-              testId: "fixed-shape-subset-missing-glyph",
+              id: "fixed-shape-subset-missing-glyph",
               x: 0,
               y: 0,
               width: 100,
@@ -2233,7 +2233,7 @@ describe("public build entry", () => {
       const textResult = await build(
         deck(
           createElement(Text, {
-            testId: "fixed-text-warn-missing-glyph",
+            id: "fixed-text-warn-missing-glyph",
             x: 0,
             y: 0,
             width: 100,
@@ -2262,7 +2262,7 @@ describe("public build entry", () => {
       const shapeResult = await build(
         deck(
           createElement(Shape, {
-            testId: "fixed-shape-warn-missing-glyph",
+            id: "fixed-shape-warn-missing-glyph",
             x: 0,
             y: 0,
             width: 100,
@@ -2292,7 +2292,7 @@ describe("public build entry", () => {
       const result = await build(
         deck(
           createElement(Text, {
-            testId: "name-only-text",
+            id: "name-only-text",
             x: 0,
             y: 0,
             width: 100,
@@ -2321,7 +2321,7 @@ describe("public build entry", () => {
       const result = await build(
         deck(
           createElement(Text, {
-            testId: "ignorable-chars-text",
+            id: "ignorable-chars-text",
             x: 0,
             y: 0,
             width: 200,
@@ -2351,7 +2351,7 @@ describe("public build entry", () => {
             createElement(
               Table,
               {
-                testId: "table-full-missing-glyph",
+                id: "table-full-missing-glyph",
                 x: 0,
                 y: 0,
                 columns: [100],
@@ -2359,8 +2359,8 @@ describe("public build entry", () => {
               },
               createElement(
                 Row,
-                { testId: "r1" },
-                createElement(Cell, { testId: "c1" }, "中文"),
+                { id: "r1" },
+                createElement(Cell, { id: "c1" }, "中文"),
               ),
             ),
           ),
@@ -2381,7 +2381,7 @@ describe("public build entry", () => {
           createElement(
             Table,
             {
-              testId: "table-warn-missing-glyph",
+              id: "table-warn-missing-glyph",
               x: 0,
               y: 0,
               columns: [100],
@@ -2389,8 +2389,8 @@ describe("public build entry", () => {
             },
             createElement(
               Row,
-              { testId: "r1" },
-              createElement(Cell, { testId: "c1" }, "中文"),
+              { id: "r1" },
+              createElement(Cell, { id: "c1" }, "中文"),
             ),
           ),
         ),
@@ -2413,7 +2413,7 @@ describe("public build entry", () => {
         build(
           deck(
             createElement(Chart, {
-              testId: "chart-full-missing-glyph",
+              id: "chart-full-missing-glyph",
               kind: "pie",
               x: 0,
               y: 0,
@@ -2440,7 +2440,7 @@ describe("public build entry", () => {
       const chartResult = await build(
         deck(
           createElement(Chart, {
-            testId: "chart-warn-missing-glyph",
+            id: "chart-warn-missing-glyph",
             kind: "pie",
             x: 0,
             y: 0,
@@ -2524,7 +2524,7 @@ describe("public build entry", () => {
     const result = await build(
       deck(
         createElement(Text, {
-          testId: "semibold-family-regular-face",
+          id: "semibold-family-regular-face",
           x: 24,
           y: 18,
           width: 240,
@@ -2557,7 +2557,7 @@ describe("public build entry", () => {
     const result = await build(
       deck(
         createElement(Text, {
-          testId: "preferred-family-face",
+          id: "preferred-family-face",
           x: 24,
           y: 18,
           width: 240,
@@ -2593,7 +2593,7 @@ describe("public build entry", () => {
         createElement(
           Text,
           {
-            testId: "fixed-overset",
+            id: "fixed-overset",
             x: 24,
             y: 18,
             width: 20,
@@ -2640,9 +2640,9 @@ describe("public build entry", () => {
         { width: 960, height: 540 },
         createElement(
           Slide,
-          { slideId: "cover" },
+          { id: "cover" },
           createElement(Text, {
-            testId: "overset-text",
+            id: "overset-text",
             x: 0,
             y: 0,
             width: 20,
@@ -2651,7 +2651,7 @@ describe("public build entry", () => {
             children: "中文中文",
           }),
           createElement(Shape, {
-            testId: "overset-shape",
+            id: "overset-shape",
             x: 40,
             y: 0,
             width: 20,
@@ -2694,15 +2694,15 @@ describe("public build entry", () => {
         Deck,
         {},
         createElement(Slide, {
-          slideId: "fade-order",
+          id: "fade-order",
           transition: transitions.fade(),
         }),
         createElement(Slide, {
-          slideId: "flip-order",
+          id: "flip-order",
           transition: transitions.flip({ fallback: transitions.fade() }),
         }),
         createElement(Slide, {
-          slideId: "morph-order",
+          id: "morph-order",
           transition: transitions.morph({ fallback: transitions.push() }),
         }),
       ),
@@ -2726,7 +2726,7 @@ describe("public build entry", () => {
     const shapeResult = await build(
       deck(
         createElement(Shape, {
-          testId: "concurrent-shape",
+          id: "concurrent-shape",
           x: 0,
           y: 0,
           width: 120,
@@ -2783,7 +2783,7 @@ describe("public build entry", () => {
     const result = await build(
       deck(
         createElement(Text, {
-          testId: "mixed-text",
+          id: "mixed-text",
           x: 32,
           y: 24,
           width: 360,
@@ -2825,7 +2825,7 @@ describe("public build entry", () => {
         createElement(
           Text,
           {
-            testId: "formatted-text",
+            id: "formatted-text",
             x: 24,
             y: 32,
             width: 420,
@@ -2920,7 +2920,7 @@ describe("public build entry", () => {
         createElement(
           Text,
           {
-            testId: "paragraph-inherited-style",
+            id: "paragraph-inherited-style",
             x: 24,
             y: 32,
             width: 420,
@@ -2978,7 +2978,7 @@ describe("public build entry", () => {
     const element = deck(
       createElement(
         Text,
-        { testId: "font-conflict", x: 12, y: 12, width: 300, height: 80 },
+        { id: "font-conflict", x: 12, y: 12, width: 300, height: 80 },
         createElement(
           P,
           {},
@@ -3027,7 +3027,7 @@ describe("public build entry", () => {
         deck(
           createElement(
             Text,
-            { testId: "duplicate-face", x: 12, y: 12, width: 300, height: 80 },
+            { id: "duplicate-face", x: 12, y: 12, width: 300, height: 80 },
             createElement(
               Span,
               { style: { fontFamily: sharedValue } },
@@ -3054,7 +3054,7 @@ describe("public build entry", () => {
         createElement(
           Text,
           {
-            testId: "font-name-with-resource",
+            id: "font-name-with-resource",
             x: 12,
             y: 12,
             width: 300,
@@ -3110,7 +3110,7 @@ describe("public build entry", () => {
         createElement(
           Text,
           {
-            testId: "missing-metrics",
+            id: "missing-metrics",
             x: 0,
             y: 0,
             width: 280,
@@ -3168,14 +3168,14 @@ describe("public build entry", () => {
           { width: 320, height: 180 },
           createElement(
             Slide,
-            { slideId: "fixed-text-region" },
+            { id: "fixed-text-region" },
             createElement(
               Box,
               { style: { width: 200, height: 80 } },
               createElement(
                 Text,
                 {
-                  testId: "fixed-text",
+                  id: "fixed-text",
                   style: {
                     width: "100%",
                     height,
@@ -3280,12 +3280,12 @@ describe("public build entry", () => {
             'import { Text as TextDeclaration } from "@react-pptx/capabilities/text-elements";',
             'import { build, Deck, Shape, Slide } from "@react-pptx/react-pptx/shape";',
             'import { validatePptx } from "@react-pptx/validation";',
-            'const result = await build(createElement(Deck, { width: 120, height: 96 }, createElement(Slide, { slideId: "trimmed" }, createElement(Shape, { testId: "plain", x: 0, y: 0, width: 20, height: 20 }), createElement(Shape, { testId: "labeled", x: 24, y: 0, width: 60, height: 20, text: "形状文字 — Shape text" }), createElement(Shape, { testId: "empty-label", x: 90, y: 0, width: 20, height: 20, text: "" }))));',
+            'const result = await build(createElement(Deck, { width: 120, height: 96 }, createElement(Slide, { id: "trimmed" }, createElement(Shape, { id: "plain", name: "plain", x: 0, y: 0, width: 20, height: 20 }), createElement(Shape, { id: "labeled", name: "labeled", x: 24, y: 0, width: 60, height: 20, text: "形状文字 — Shape text" }), createElement(Shape, { id: "empty-label", name: "empty-label", x: 90, y: 0, width: 20, height: 20, text: "" }))));',
             "const file = await validatePptx(result.pptx);",
             'if (file.errors.length !== 0 || result.report.slides[0]?.objects[1]?.text !== "形状文字 — Shape text" || file.slides[0]?.objects[1]?.text?.text !== "形状文字 — Shape text" || file.slides[0]?.objects[2]?.text !== undefined) throw new Error(JSON.stringify(file.errors));',
-            'function NestedText() { return createElement(TextDeclaration, { testId: "missing-text", x: 0, y: 0, width: 20, height: 20 }, "not available"); }',
+            'function NestedText() { return createElement(TextDeclaration, { id: "missing-text", x: 0, y: 0, width: 20, height: 20 }, "not available"); }',
             "let missingText;",
-            'try { await build(createElement(Deck, {}, createElement(Slide, { slideId: "nested" }, createElement(NestedText)))); } catch (error) { missingText = error; }',
+            'try { await build(createElement(Deck, {}, createElement(Slide, { id: "nested" }, createElement(NestedText)))); } catch (error) { missingText = error; }',
             'if (!(missingText instanceof BuildError) || missingText.diagnostics[0]?.code !== "missing-capability" || !missingText.diagnostics[0]?.path.includes("text[missing-text]")) throw new Error("nested Text did not produce a located missing-capability error");',
             'process.stdout.write(JSON.stringify({ kinds: file.slides[0]?.objects.map(({ name, text }) => [name, text?.text ?? ""]), missing: missingText.diagnostics[0], loaded: false }));',
           ].join("\n"),
@@ -3316,7 +3316,8 @@ describe("public build entry", () => {
     const result = await build(
       deck(
         createElement(Shape, {
-          testId: "badge",
+          id: "badge",
+          name: "badge",
           geometry: "ellipse",
           x: 32,
           y: 48,
@@ -3339,7 +3340,7 @@ describe("public build entry", () => {
         id: 2,
         kind: "shape",
         name: "badge",
-        testId: "badge",
+        authorId: "badge",
         geometry: "ellipse",
         box: { x: 32, y: 48, width: 120, height: 72 },
       },
@@ -3366,7 +3367,7 @@ describe("public build entry", () => {
     const result = await build(
       deck(
         createElement(Shape, {
-          testId: "schema-gate",
+          id: "schema-gate",
           x: 0,
           y: 0,
           width: 120,
@@ -3503,9 +3504,9 @@ describe("public build entry", () => {
         { width: 960, height: 540 },
         createElement(
           Slide,
-          { slideId: slideIds[0] },
+          { id: slideIds[0] },
           createElement(Shape, {
-            testId: "object-name",
+            id: "object-name",
             name: "object\nname\r\tend",
             x: 0,
             y: 0,
@@ -3513,16 +3514,15 @@ describe("public build entry", () => {
             height: 30,
           }),
           createElement(Shape, {
-            testId: "test\nid",
+            id: "test\nid",
+            name: "test\nid",
             x: 50,
             y: 0,
             width: 40,
             height: 30,
           }),
         ),
-        ...slideIds
-          .slice(1)
-          .map((slideId) => createElement(Slide, { slideId })),
+        ...slideIds.slice(1).map((id) => createElement(Slide, { id })),
       ),
     );
 
@@ -3546,17 +3546,8 @@ describe("public build entry", () => {
   it("rejects object names and slide identifiers that cannot be represented in XML 1.0 and locates source", async () => {
     const invalidObjectName = deck(
       createElement(Shape, {
-        testId: "invalid-name",
+        id: "invalid-name",
         name: "hello\u0000world",
-        x: 0,
-        y: 0,
-        width: 40,
-        height: 30,
-      }),
-    );
-    const invalidTestId = deck(
-      createElement(Shape, {
-        testId: "hello\u0000world",
         x: 0,
         y: 0,
         width: 40,
@@ -3567,7 +3558,7 @@ describe("public build entry", () => {
       createElement(
         Text,
         {
-          testId: "invalid-text",
+          id: "invalid-text",
           x: 0,
           y: 0,
           width: 40,
@@ -3579,12 +3570,11 @@ describe("public build entry", () => {
     const invalidSlideId = createElement(
       Deck,
       { width: 960, height: 540 },
-      createElement(Slide, { slideId: "alpha\u0000beta" }),
+      createElement(Slide, { id: "alpha\u0000beta" }),
     );
 
     for (const [element, path] of [
       [invalidObjectName, /slide\[cover\].*shape\[invalid-name\]/u],
-      [invalidTestId, /slide\[cover\].*shape\[/u],
       [invalidText, /slide\[cover\].*text\[invalid-text\]/u],
       [invalidSlideId, /slide\[1\]/u],
     ] as const) {
@@ -3608,7 +3598,7 @@ describe("public build entry", () => {
         build(
           deck(
             createElement(Shape, {
-              testId: "too-small",
+              id: "too-small",
               x: 0,
               y: 0,
               ...size,
@@ -3635,9 +3625,9 @@ describe("public build entry", () => {
         { width: 5376, height: 5376 },
         createElement(
           Slide,
-          { slideId: "extent-boundary" },
+          { id: "extent-boundary" },
           createElement(Shape, {
-            testId: "extent-boundary",
+            id: "extent-boundary",
             x: 0,
             y: 0,
             // This pixel value rounds to the shape size upper bound after standard conversion.
@@ -3659,7 +3649,7 @@ describe("public build entry", () => {
     const result = await build(
       deck(
         createElement(Shape, {
-          testId: "oversized",
+          id: "oversized",
           x: 0,
           y: 0,
           width: 40,
@@ -3694,7 +3684,7 @@ describe("public build entry", () => {
       createElement(
         Deck,
         { width: 95.99995, height: 5376.00005 },
-        createElement(Slide, { slideId: "boundary" }),
+        createElement(Slide, { id: "boundary" }),
       ),
     );
     const boundaryFile = await validatePptx(boundary.pptx);
@@ -3715,7 +3705,7 @@ describe("public build entry", () => {
           createElement(
             Deck,
             size,
-            createElement(Slide, { slideId: "invalid-size" }),
+            createElement(Slide, { id: "invalid-size" }),
           ),
         ),
         (error: unknown) => {
@@ -3733,7 +3723,7 @@ describe("public build entry", () => {
       createElement(
         Deck,
         { width: 96, height: 5376 },
-        createElement(Slide, { slideId: "size" }),
+        createElement(Slide, { id: "size" }),
       ),
     );
     const parts = unzipSync(result.pptx);
@@ -3761,7 +3751,8 @@ describe("public build entry", () => {
     const result = await build(
       deck(
         createElement(Shape, {
-          testId: "badge",
+          id: "badge",
+          name: "badge",
           geometry: "ellipse",
           x: 32,
           y: 48,
@@ -3809,7 +3800,7 @@ describe("public build entry", () => {
         };
       }, []);
       return createElement(Shape, {
-        testId: "from-component",
+        id: "from-component",
         x: 8,
         y: 9,
         width: 40,
@@ -3820,7 +3811,7 @@ describe("public build entry", () => {
     const result = await build(deck(createElement(EffectShape)));
 
     assert.deepEqual(
-      result.report.slides[0]?.objects.map(({ testId }) => testId),
+      result.report.slides[0]?.objects.map(({ authorId: testId }) => testId),
       ["from-component"],
     );
     assert.deepEqual(events.sort(), [
@@ -3862,7 +3853,7 @@ describe("public build entry", () => {
         [],
       );
       return createElement(Shape, {
-        testId: "cleanup-before-build",
+        id: "cleanup-before-build",
         x: 0,
         y: 0,
         width: 240,
@@ -3906,7 +3897,7 @@ describe("public build entry", () => {
     const result = await createBuilder([observedShape])(
       deck(
         createElement(Shape, {
-          testId: "options-visible-to-capabilities",
+          id: "options-visible-to-capabilities",
           geometry: "triangle",
           x: 0,
           y: 0,
@@ -3936,7 +3927,7 @@ describe("public build entry", () => {
     const UncheckedShape = Shape as ComponentType<Record<string, unknown>>;
     const unknownParameter = deck(
       createElement(UncheckedShape, {
-        testId: "unknown-prop",
+        id: "unknown-prop",
         x: 0,
         y: 0,
         width: 20,
@@ -3960,7 +3951,7 @@ describe("public build entry", () => {
       clippedBuild(
         deck(
           createElement(Shape, {
-            testId: "trimmed-shape",
+            id: "trimmed-shape",
             x: 0,
             y: 0,
             width: 20,
@@ -3984,7 +3975,7 @@ describe("public build entry", () => {
     const result = await createBuilder([shapeCapability])(
       deck(
         createElement(Shape, {
-          testId: "triangle",
+          id: "triangle",
           geometry: "triangle",
           x: 0,
           y: 0,
@@ -4008,23 +3999,23 @@ describe("public build entry", () => {
         Deck,
         { width: 960, height: 540 },
         createElement(Slide, {
-          slideId: "fade",
+          id: "fade",
           transition: transitions.fade(),
         }),
         createElement(Slide, {
-          slideId: "strips",
+          id: "strips",
           transition: transitions.strips({ direction: "leftUp" }),
         }),
         createElement(Slide, {
-          slideId: "push",
+          id: "push",
           transition: transitions.push({ from: "top" }),
         }),
         createElement(Slide, {
-          slideId: "strips-default",
+          id: "strips-default",
           transition: transitions.strips(),
         }),
         createElement(Slide, {
-          slideId: "push-default",
+          id: "push-default",
           transition: transitions.push(),
         }),
       ),
@@ -4068,7 +4059,7 @@ describe("public build entry", () => {
         ] as const
       ).map(([direction], index) =>
         createElement(Slide, {
-          slideId: `strips-${index}`,
+          id: `strips-${index}`,
           transition: transitions.strips({ direction }),
         }),
       ),
@@ -4081,7 +4072,7 @@ describe("public build entry", () => {
         ] as const
       ).map(([from], index) =>
         createElement(Slide, {
-          slideId: `push-${index}`,
+          id: `push-${index}`,
           transition: transitions.push({ from }),
         }),
       ),
@@ -4122,7 +4113,7 @@ describe("public build entry", () => {
         {},
         ...timings.map(([duration], index) =>
           createElement(Slide, {
-            slideId: `duration-${index}`,
+            id: `duration-${index}`,
             transition: transitions.fade({ duration }),
           }),
         ),
@@ -4148,7 +4139,7 @@ describe("public build entry", () => {
         Deck,
         {},
         createElement(Slide, {
-          slideId: "morph-duration",
+          id: "morph-duration",
           transition: transitions.morph({
             duration: 1200,
             fallback: transitions.fade(),
@@ -4181,7 +4172,7 @@ describe("public build entry", () => {
         Deck,
         {},
         createElement(Slide, {
-          slideId: "timed",
+          id: "timed",
           transition: transitions.fade({ duration: 777 }),
         }),
       ),
@@ -4218,7 +4209,7 @@ describe("public build entry", () => {
           Deck,
           {},
           createElement(Slide, {
-            slideId: "baseline-only",
+            id: "baseline-only",
             transition: transitions.fade({ duration: 777 }),
           }),
         ),
@@ -4238,14 +4229,14 @@ describe("public build entry", () => {
       Deck,
       {},
       createElement(Slide, {
-        slideId: "flip",
+        id: "flip",
         transition: transitions.flip({
           direction: "left",
           fallback: transitions.fade(),
         }),
       }),
       createElement(Slide, {
-        slideId: "morph",
+        id: "morph",
         transition: transitions.morph({
           by: "character",
           duration: 1200,
@@ -4346,11 +4337,11 @@ describe("public build entry", () => {
         Deck,
         {},
         createElement(Slide, {
-          slideId: "flip-default",
+          id: "flip-default",
           transition: transitions.flip({ fallback: transitions.strips() }),
         }),
         createElement(Slide, {
-          slideId: "morph-default",
+          id: "morph-default",
           transition: transitions.morph({ fallback: transitions.fade() }),
         }),
       ),
@@ -4386,7 +4377,7 @@ describe("public build entry", () => {
           Deck,
           {},
           createElement(Slide, {
-            slideId: "missing-transition-module",
+            id: "missing-transition-module",
             transition: transitions.fade(),
           }),
         ),
@@ -4405,22 +4396,22 @@ describe("public build entry", () => {
 
   it("rejects invalid duration, direction, options, and fallback at Slide path", async () => {
     const invalidTransitions: readonly {
-      readonly slideId: string;
+      readonly id: string;
       readonly transition: unknown;
       readonly code: string;
     }[] = [
       {
-        slideId: "negative-duration",
+        id: "negative-duration",
         transition: transitions.fade({ duration: -1 }),
         code: "invalid-transition-duration",
       },
       {
-        slideId: "non-finite-duration",
+        id: "non-finite-duration",
         transition: transitions.fade({ duration: Number.POSITIVE_INFINITY }),
         code: "invalid-transition-duration",
       },
       {
-        slideId: "unknown-parameter",
+        id: "unknown-parameter",
         transition: transitions.fade({
           duration: 600,
           surprise: true,
@@ -4428,27 +4419,27 @@ describe("public build entry", () => {
         code: "unknown-parameter",
       },
       {
-        slideId: "null-strips-direction",
+        id: "null-strips-direction",
         transition: transitions.strips({ direction: null as never }),
         code: "invalid-transition-direction",
       },
       {
-        slideId: "invalid-strips-direction",
+        id: "invalid-strips-direction",
         transition: transitions.strips({ direction: "diagonal" as never }),
         code: "invalid-transition-direction",
       },
       {
-        slideId: "null-push-direction",
+        id: "null-push-direction",
         transition: transitions.push({ from: null as never }),
         code: "invalid-transition-direction",
       },
       {
-        slideId: "invalid-push-direction",
+        id: "invalid-push-direction",
         transition: transitions.push({ from: "center" as never }),
         code: "invalid-transition-direction",
       },
       {
-        slideId: "null-flip-direction",
+        id: "null-flip-direction",
         transition: transitions.flip({
           direction: null as never,
           fallback: transitions.fade(),
@@ -4456,12 +4447,12 @@ describe("public build entry", () => {
         code: "invalid-transition-direction",
       },
       {
-        slideId: "missing-flip-fallback",
+        id: "missing-flip-fallback",
         transition: transitions.flip({} as never),
         code: "missing-transition-fallback",
       },
       {
-        slideId: "null-morph-option",
+        id: "null-morph-option",
         transition: transitions.morph({
           by: null as never,
           fallback: transitions.fade(),
@@ -4469,7 +4460,7 @@ describe("public build entry", () => {
         code: "invalid-morph-option",
       },
       {
-        slideId: "invalid-morph-option",
+        id: "invalid-morph-option",
         transition: transitions.morph({
           by: "sentence" as never,
           fallback: transitions.fade(),
@@ -4477,12 +4468,12 @@ describe("public build entry", () => {
         code: "invalid-morph-option",
       },
       {
-        slideId: "helper-kind-and-unknown-option",
+        id: "helper-kind-and-unknown-option",
         transition: transitions.fade({ kind: "push", from: "left" } as never),
         code: "unknown-parameter",
       },
       {
-        slideId: "extension-fallback",
+        id: "extension-fallback",
         transition: transitions.flip({
           fallback: transitions.morph({
             fallback: transitions.fade(),
@@ -4499,7 +4490,7 @@ describe("public build entry", () => {
             Deck,
             {},
             createElement(Slide, {
-              slideId: invalid.slideId,
+              id: invalid.id,
               transition: invalid.transition as never,
             }),
           ),
@@ -4507,10 +4498,7 @@ describe("public build entry", () => {
         (error: unknown) => {
           assert.ok(error instanceof BuildError);
           assert.equal(error.diagnostics[0]?.code, invalid.code);
-          assert.equal(
-            error.diagnostics[0]?.path,
-            `deck/slide[${invalid.slideId}]`,
-          );
+          assert.equal(error.diagnostics[0]?.path, `deck/slide[${invalid.id}]`);
           return true;
         },
       );
@@ -4524,9 +4512,9 @@ describe("public build entry", () => {
         { width: 100, height: 100 },
         createElement(
           Slide,
-          { slideId: "cover" },
+          { id: "cover" },
           createElement(Shape, {
-            testId: "overflowing",
+            id: "overflowing",
             x: 90,
             y: 70,
             width: 30,
@@ -4558,7 +4546,7 @@ describe("public build entry", () => {
       build(
         deck(
           createElement(Shape, {
-            testId: "unknown-geometry",
+            id: "unknown-geometry",
             geometry: "madeUpShape",
             x: 0,
             y: 0,
@@ -4578,7 +4566,7 @@ describe("public build entry", () => {
       build(
         deck(
           createElement(Shape, {
-            testId: "zero-size",
+            id: "zero-size",
             x: 0,
             y: 0,
             width: 0,

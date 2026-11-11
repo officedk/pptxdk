@@ -50,8 +50,6 @@ export type {
 } from "./text-service.ts";
 
 export type ParsedText = {
-  readonly testId?: string | undefined;
-  readonly part?: string | undefined;
   readonly name?: string | undefined;
   readonly morphKey?: unknown;
   readonly link?: unknown;
@@ -73,8 +71,6 @@ export type ParsedText = {
 
 const allowedParameters = [
   "id",
-  "testId",
-  "part",
   "name",
   "morphKey",
   "link",
@@ -93,10 +89,7 @@ function record(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function optionalName(
-  value: unknown,
-  parameter: "testId" | "name" | "part",
-): string | undefined {
+function optionalName(value: unknown, parameter: "name"): string | undefined {
   if (value === undefined) return undefined;
   if (typeof value !== "string" || value.trim() === "") {
     throw new CapabilityError(
@@ -173,8 +166,6 @@ export const textCapability: ObjectCapabilityModule<ParsedText> = {
         context.path,
       );
     }
-    const testId = optionalName(input.props["testId"], "testId");
-    const part = optionalName(input.props["part"], "part");
     const requestedName = optionalName(input.props["name"], "name");
 
     if (input.props["x"] !== undefined) coordinate(input.props["x"], "x");
@@ -219,8 +210,6 @@ export const textCapability: ObjectCapabilityModule<ParsedText> = {
       : {};
 
     const parsed: ParsedText = {
-      ...(testId !== undefined ? { testId } : {}),
-      ...(part !== undefined ? { part } : {}),
       ...(requestedName !== undefined ? { name: requestedName } : {}),
       ...(input.props["morphKey"] !== undefined
         ? { morphKey: input.props["morphKey"] }
@@ -352,15 +341,13 @@ export const textCapability: ObjectCapabilityModule<ParsedText> = {
       style: visualStyle,
       box,
     });
-    const name =
-      context.morphName ??
-      parsed.name ??
-      parsed.testId ??
-      `Text ${context.id - 1}`;
+    const name = context.morphName ?? parsed.name ?? `Text ${context.id - 1}`;
     const annotations = motionAnnotations(parsed.rawProps, {
       kind: "text",
       name,
-      ...(parsed.testId === undefined ? {} : { testId: parsed.testId }),
+      ...(typeof parsed.rawProps["id"] === "string"
+        ? { authorId: parsed.rawProps["id"] }
+        : {}),
       textBody: true,
       filled:
         visualStyle["backgroundColor"] !== undefined ||
@@ -398,8 +385,6 @@ export const textCapability: ObjectCapabilityModule<ParsedText> = {
         id: context.id,
         kind: "text",
         name,
-        ...(parsed.testId === undefined ? {} : { testId: parsed.testId }),
-        ...(parsed.part === undefined ? {} : { part: parsed.part }),
         box,
         text: body.text,
       },

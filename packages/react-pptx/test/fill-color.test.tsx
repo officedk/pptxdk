@@ -21,7 +21,7 @@ import { it } from "vitest";
 it("changes color by click step with fill color emphasis and maintains end state, allowing transitions from light to dark", async () => {
   const result = await build(
     <Deck width={320} height={180}>
-      <Slide slideId="color">
+      <Slide id="color">
         <Step n={1}>
           <Shape
             x={20}
@@ -106,7 +106,7 @@ it("rejects invalid colors, duplicates, and targets without solid fill", async (
     await assert.rejects(
       build(
         <Deck width={320} height={180}>
-          <Slide slideId="invalid">{content}</Slide>
+          <Slide id="invalid">{content}</Slide>
         </Deck>,
       ),
       (error: unknown) => {
@@ -126,7 +126,8 @@ it("chains subsequent content from completion cues of multiple color-changing co
       <Step n={n}>
         <MotionScope scope={region}>
           <Shape
-            testId={name}
+            id={name}
+            name={name}
             x={20}
             y={n * 40}
             width={50}
@@ -141,7 +142,8 @@ it("chains subsequent content from completion cues of multiple color-changing co
         </MotionScope>
         <MotionScope scope={caption} startAt={region.end}>
           <Shape
-            testId={`${name}-caption`}
+            id={`${name}-caption`}
+            name={`${name}-caption`}
             x={80}
             y={n * 40}
             width={100}
@@ -159,7 +161,7 @@ it("chains subsequent content from completion cues of multiple color-changing co
   ]) {
     const result = await build(
       <Deck width={320} height={180}>
-        <Slide slideId="regions">
+        <Slide id="regions">
           {names.map((name, index) => (
             <Region key={name} name={name} n={index + 1} />
           ))}
@@ -194,7 +196,7 @@ it("chains subsequent content from completion cues of multiple color-changing co
 it("rejects loss of end state hold, inverted, or duplicated color animations during standalone validation", async () => {
   const result = await build(
     <Deck width={320} height={180}>
-      <Slide slideId="hold">
+      <Slide id="hold">
         <Shape
           x={0}
           y={0}

@@ -8,7 +8,7 @@ import { colors, transparent } from "../theme.ts";
 export function FrontierPage() {
   return (
     <SlideFrame
-      slideId="frontier"
+      id="frontier"
       chapter="前沿｜视频、实时交互与推理"
       title="2024｜生成的边界继续外移"
       number={10}

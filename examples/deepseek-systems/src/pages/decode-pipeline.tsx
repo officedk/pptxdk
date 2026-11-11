@@ -59,7 +59,7 @@ export function DecodePipelinePage({ scope }: { readonly scope: MorphScope }) {
 
   return (
     <SlideFrame
-      slideId="decode-pipeline"
+      id="decode-pipeline"
       kicker="03 · 大规模专家并行 (EP144) 与 5 阶段解码流水线 / IBGDA · EPLB"
       title="Decode 5 阶段双微批次流水与 EPLB：零 SM 通信损耗下的极致低延迟"
       takeaway="IBGDA 纯硬件异步通信释放全部 132 个 SM，EPLB 冗余复制消除尾延迟"
@@ -83,7 +83,7 @@ export function DecodePipelinePage({ scope }: { readonly scope: MorphScope }) {
         tone="comm"
       >
         <Shape
-          testId="morph-sm-frame"
+          id="morph-sm-frame"
           morphKey={scope.handle("sm-frame")}
           x={68}
           y={170}
@@ -93,7 +93,7 @@ export function DecodePipelinePage({ scope }: { readonly scope: MorphScope }) {
           style={{ borderColor: colors.comm, borderWidth: 1 }}
         />
         <Shape
-          testId="morph-sm-mode-tag"
+          id="morph-sm-mode-tag"
           morphKey={scope.handle("sm-mode-tag")}
           x={84}
           y={182}
@@ -128,7 +128,7 @@ export function DecodePipelinePage({ scope }: { readonly scope: MorphScope }) {
 
         {/* 132 Compute SMs expanded across the full bar */}
         <Shape
-          testId="morph-sm-compute-bar"
+          id="morph-sm-compute-bar"
           morphKey={scope.handle("sm-compute-bar")}
           x={84}
           y={216}
@@ -146,7 +146,7 @@ export function DecodePipelinePage({ scope }: { readonly scope: MorphScope }) {
 
         {/* Morphed 0 Comm SM hardware RDMA offload badge */}
         <Shape
-          testId="morph-sm-comm-bar"
+          id="morph-sm-comm-bar"
           morphKey={scope.handle("sm-comm-bar")}
           x={548}
           y={216}
@@ -283,7 +283,7 @@ export function DecodePipelinePage({ scope }: { readonly scope: MorphScope }) {
               return (
                 <EnteredShapeText
                   key={`head-${s.step}`}
-                  testId={`decode-stage-head-${idx}`}
+                  id={`decode-stage-head-${idx}`}
                   x={colX}
                   y={426}
                   width={186}
@@ -308,7 +308,7 @@ export function DecodePipelinePage({ scope }: { readonly scope: MorphScope }) {
               return (
                 <EnteredShapeText
                   key={`mba-${s.step}`}
-                  testId={`decode-stage-mba-${idx}`}
+                  id={`decode-stage-mba-${idx}`}
                   x={colX}
                   y={466}
                   width={186}
@@ -331,7 +331,7 @@ export function DecodePipelinePage({ scope }: { readonly scope: MorphScope }) {
               return (
                 <EnteredShapeText
                   key={`mbb-${s.step}`}
-                  testId={`decode-stage-mbb-${idx}`}
+                  id={`decode-stage-mbb-${idx}`}
                   x={colX}
                   y={526}
                   width={186}

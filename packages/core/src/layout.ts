@@ -519,10 +519,8 @@ function resolvePercent(
 }
 
 function identity(element: CapabilityElement): string | undefined {
-  const testId = element.props["testId"];
-  return typeof testId === "string" && testId.trim() !== ""
-    ? testId
-    : undefined;
+  const id = element.props["id"];
+  return typeof id === "string" && id.trim() !== "" ? id : undefined;
 }
 
 function label(element: CapabilityElement, index: number): string {

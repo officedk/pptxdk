@@ -43,7 +43,7 @@ const highlightRows = [
 export function FrontierBenchmarksPage() {
   return (
     <SlideFrame
-      slideId="frontier-benchmarks"
+      id="frontier-benchmarks"
       kicker="04 · 前沿基准全面对齐 / DeepSeek-R1 · DeepSeek-V3 · OpenAI o1-1217 · Claude-3.5-Sonnet"
       title="多维前沿基准评测：开源权重全面对齐第一梯队闭源推理旗舰"
       takeaway="MATH-500 达 97.3%、Codeforces 超越 96.3% 人类选手，V3 领跑非推理开源模型"
@@ -62,7 +62,7 @@ export function FrontierBenchmarksPage() {
         tone="copper"
       >
         <Chart
-          testId="frontier-benchmark-chart"
+          id="frontier-benchmark-chart"
           kind="column"
           x={64}
           y={170}

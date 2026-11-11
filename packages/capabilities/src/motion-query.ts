@@ -247,9 +247,9 @@ function projectEffectObservation(
   const target = Object.freeze({
     id: source.target.id,
     name: source.target.name,
-    ...(source.target.testId === undefined
+    ...(source.target.authorId === undefined
       ? {}
-      : { testId: source.target.testId }),
+      : { authorId: source.target.authorId }),
     ...(source.target.range === undefined
       ? {}
       : { range: Object.freeze({ ...source.target.range }) }),

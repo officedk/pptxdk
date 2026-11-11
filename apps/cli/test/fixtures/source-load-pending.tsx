@@ -22,7 +22,7 @@ await new Promise<void>((_resolve, reject) => {
 export default function PendingSourceDeck() {
   return (
     <Deck>
-      <Slide slideId="pending-source" />
+      <Slide id="pending-source" />
     </Deck>
   );
 }

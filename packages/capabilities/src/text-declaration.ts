@@ -14,8 +14,6 @@ import type { ParagraphStyle, TextStyle } from "./text-service.ts";
 export type TextDeclarationProps = MotionProps &
   MorphProps & {
     readonly id?: string;
-    readonly testId?: string;
-    readonly part?: string;
     readonly name?: string;
     readonly link?: LinkTarget;
     readonly x?: number;

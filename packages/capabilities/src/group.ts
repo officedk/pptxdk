@@ -32,8 +32,6 @@ import { motionAnnotations, type MotionProps } from "./motion-api.ts";
 export type GroupDeclarationProps = MotionProps &
   MorphProps & {
     readonly id?: string;
-    readonly testId?: string;
-    readonly part?: string;
     readonly name?: string;
     readonly link?: LinkTarget;
     readonly style?: LayoutStyle & TextStyle & Pick<VisualStyle, "rotate">;
@@ -57,8 +55,6 @@ export function createGroupNode(
 
 const allowedParameters = [
   "id",
-  "testId",
-  "part",
   "name",
   "morphKey",
   "link",
@@ -82,7 +78,7 @@ type MotionNativeMember = {
   readonly id: number;
   readonly kind: string;
   readonly name: string;
-  readonly testId?: string;
+  readonly authorId?: string;
   readonly box?: NonNullable<ObjectObservation["box"]>;
   readonly members?: readonly MotionNativeMember[];
 };
@@ -94,7 +90,7 @@ function motionMembers(
     id: object.id,
     kind: object.kind,
     name: object.name,
-    ...(object.testId === undefined ? {} : { testId: object.testId }),
+    ...(object.authorId === undefined ? {} : { authorId: object.authorId }),
     ...(object.box === undefined ? {} : { box: object.box }),
     ...(object.members === undefined
       ? {}
@@ -104,7 +100,7 @@ function motionMembers(
 
 function optionalText(
   props: Readonly<Record<string, unknown>>,
-  name: "testId" | "name" | "part",
+  name: "name",
 ): string | undefined {
   const value = props[name];
   if (value === undefined) return undefined;
@@ -189,8 +185,6 @@ const groupAllowedStyleKeys = new Set<string>([
 ]);
 
 export type ParsedGroup = {
-  readonly testId?: string;
-  readonly part?: string;
   readonly name?: string;
   readonly morphKey?: MorphKey;
   readonly link?: LinkTarget;
@@ -218,8 +212,6 @@ export const groupCapability: ObjectCapabilityModule<ParsedGroup> = {
         `Group contains unsupported parameter ${unknown}`,
       );
     }
-    const testId = optionalText(input.props, "testId");
-    const part = optionalText(input.props, "part");
     const requestedName = optionalText(input.props, "name");
     const rawStyle = input.props["style"];
     const styleRecord =
@@ -246,8 +238,6 @@ export const groupCapability: ObjectCapabilityModule<ParsedGroup> = {
       );
     }
     const parsed: ParsedGroup = {
-      ...(testId !== undefined ? { testId } : {}),
-      ...(part !== undefined ? { part } : {}),
       ...(requestedName !== undefined ? { name: requestedName } : {}),
       ...(input.props["morphKey"] !== undefined
         ? { morphKey: input.props["morphKey"] as MorphKey }
@@ -265,8 +255,6 @@ export const groupCapability: ObjectCapabilityModule<ParsedGroup> = {
   },
 
   compile(parsed: ParsedGroup, context: CapabilityContext) {
-    const testId = parsed.testId;
-    const part = parsed.part;
     const requestedName = parsed.name;
     const compiled = context.compileChildren(parsed.children);
     const geometry = bounds(compiled.objects);
@@ -284,13 +272,15 @@ export const groupCapability: ObjectCapabilityModule<ParsedGroup> = {
       height: pxToEmu(outputGeometry.height),
     };
     const name =
-      context.morphName ?? requestedName ?? testId ?? `Group ${context.id - 1}`;
+      context.morphName ?? requestedName ?? `Group ${context.id - 1}`;
     const rotation = parsed.rotation;
     const members = motionMembers(compiled.objects);
     const annotations = motionAnnotations(parsed.rawProps, {
       kind: "group",
       name,
-      ...(testId === undefined ? {} : { testId }),
+      ...(typeof parsed.rawProps["id"] === "string"
+        ? { authorId: parsed.rawProps["id"] }
+        : {}),
       textBody: false,
       filled: false,
       box: outputGeometry,
@@ -319,8 +309,6 @@ export const groupCapability: ObjectCapabilityModule<ParsedGroup> = {
         id: context.id,
         kind: "group",
         name,
-        ...(testId === undefined ? {} : { testId }),
-        ...(part === undefined ? {} : { part }),
         box: outputGeometry,
         members: compiled.objects,
       },

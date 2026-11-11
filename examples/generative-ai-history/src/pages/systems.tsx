@@ -39,7 +39,7 @@ const nodes = [
 export function SystemsPage() {
   return (
     <SlideFrame
-      slideId="systems"
+      id="systems"
       chapter="系统｜模型与外部环境协同"
       title="2023｜从单个模型，到协同系统"
       number={9}

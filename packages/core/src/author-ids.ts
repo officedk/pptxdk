@@ -27,11 +27,11 @@ export function readAuthorId(value: unknown, path: string): string | undefined {
 }
 
 /**
- * Validates new author ids on one page using the same scopes the author query traverses.
+ * Validates author ids on one page using the same scopes the author query traverses.
  *
  * A node's own id belongs to its parent scope; its descendants belong to a new scope only when the
- * node declares an id. Anonymous layout nodes therefore stay transparent, while a page remains the
- * root scope even for legacy slides without the new author id.
+ * node declares an id. Anonymous layout nodes therefore stay transparent, while each page is the
+ * root author scope.
  */
 export function validateAuthorIdScopes(
   node: DeclarationNode,

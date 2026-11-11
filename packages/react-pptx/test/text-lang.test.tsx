@@ -39,7 +39,7 @@ describe("text language (lang) validation", () => {
             // @ts-expect-error non-string lang
             style={{ lang: 123 }}
           >
-            <Slide slideId="cover">
+            <Slide id="cover">
               <Text x={0} y={0} width={200} height={100}>
                 Deck non-string lang
               </Text>
@@ -59,7 +59,7 @@ describe("text language (lang) validation", () => {
         await build(
           <Deck>
             <Slide
-              slideId="cover"
+              id="cover"
               // @ts-expect-error non-string lang
               style={{ lang: true }}
             >
@@ -83,7 +83,7 @@ describe("text language (lang) validation", () => {
       async () => {
         await build(
           <Deck style={{ lang: "invalid_tag" }}>
-            <Slide slideId="cover">
+            <Slide id="cover">
               <Text x={0} y={0} width={200} height={100}>
                 Deck invalid lang
               </Text>
@@ -104,7 +104,7 @@ describe("text language (lang) validation", () => {
       async () => {
         await build(
           <Deck>
-            <Slide slideId="cover" style={{ lang: "" }}>
+            <Slide id="cover" style={{ lang: "" }}>
               <Text x={0} y={0} width={200} height={100}>
                 Slide empty lang
               </Text>
@@ -125,7 +125,7 @@ describe("text language (lang) validation", () => {
       async () => {
         await build(
           <Deck>
-            <Slide slideId="cover">
+            <Slide id="cover">
               <Box style={{ lang: "zh_CN" }}>
                 <Text x={0} y={0} width={200} height={100}>
                   Box invalid lang
@@ -148,7 +148,7 @@ describe("text language (lang) validation", () => {
       async () => {
         await build(
           <Deck>
-            <Slide slideId="cover">
+            <Slide id="cover">
               <Group style={{ lang: "zh..CN" }}>
                 <Text x={0} y={0} width={200} height={100}>
                   Group invalid lang
@@ -171,7 +171,7 @@ describe("text language (lang) validation", () => {
       async () => {
         await build(
           <Deck>
-            <Slide slideId="cover">
+            <Slide id="cover">
               <Text
                 x={0}
                 y={0}
@@ -198,7 +198,7 @@ describe("text language (lang) validation", () => {
       async () => {
         await build(
           <Deck>
-            <Slide slideId="cover">
+            <Slide id="cover">
               <Shape
                 x={0}
                 y={0}
@@ -224,7 +224,7 @@ describe("text language (lang) validation", () => {
       async () => {
         await build(
           <Deck>
-            <Slide slideId="cover">
+            <Slide id="cover">
               <Table columns={[200]} style={{ lang: "invalid lang" }}>
                 <Row style={{ height: 40 }}>
                   <Cell>
@@ -251,7 +251,7 @@ describe("text language (lang) validation", () => {
       async () => {
         await build(
           <Deck>
-            <Slide slideId="cover">
+            <Slide id="cover">
               <Table columns={[200]}>
                 <Row style={{ height: 40, lang: "invalid_row" }}>
                   <Cell>
@@ -276,7 +276,7 @@ describe("text language (lang) validation", () => {
       async () => {
         await build(
           <Deck>
-            <Slide slideId="cover">
+            <Slide id="cover">
               <Table columns={[200]}>
                 <Row style={{ height: 40 }}>
                   <Cell style={{ lang: "invalid_cell" }}>
@@ -303,7 +303,7 @@ describe("text language (lang) validation", () => {
       async () => {
         await build(
           <Deck>
-            <Slide slideId="cover">
+            <Slide id="cover">
               <Chart
                 x={0}
                 y={0}
@@ -330,7 +330,7 @@ describe("text language (lang) validation", () => {
       async () => {
         await build(
           <Deck>
-            <Slide slideId="cover">
+            <Slide id="cover">
               <Text x={0} y={0} width={200} height={100}>
                 <P style={{ lang: "bad_p" }}>
                   <Span>Paragraph content</Span>
@@ -351,7 +351,7 @@ describe("text language (lang) validation", () => {
       async () => {
         await build(
           <Deck>
-            <Slide slideId="cover">
+            <Slide id="cover">
               <Text x={0} y={0} width={200} height={100}>
                 <P>
                   <Span style={{ lang: "bad_span" }}>Span content</Span>
@@ -374,7 +374,7 @@ describe("omission of lang attribute when undeclared", () => {
   it("omits lang attribute on a:rPr, a:defRPr, and a:endParaRPr when lang is not declared", async () => {
     const result = await build(
       <Deck>
-        <Slide slideId="slide-undeclared">
+        <Slide id="slide-undeclared">
           <Text x={50} y={50} width={300} height={150}>
             <P>
               <Span>Run text</Span>
@@ -466,7 +466,7 @@ describe("inheritance and local overrides of text language (lang)", () => {
     const result = await build(
       <Deck style={{ lang: "zh-CN" }}>
         {/* Slide 1: inherits zh-CN from Deck */}
-        <Slide slideId="slide-inherit">
+        <Slide id="slide-inherit">
           <Text x={50} y={50} width={300} height={100}>
             <P>
               <Span>Inherited zh-CN run</Span>
@@ -514,7 +514,7 @@ describe("inheritance and local overrides of text language (lang)", () => {
         </Slide>
 
         {/* Slide 2: overrides lang to en-US */}
-        <Slide slideId="slide-override" style={{ lang: "en-US" }}>
+        <Slide id="slide-override" style={{ lang: "en-US" }}>
           <Box style={{ width: 320, height: 180, lang: "de-DE" }}>
             <Text x={10} y={10} width={300} height={150}>
               <P>
@@ -633,7 +633,7 @@ describe("artifact validator (validatePptx) lang checks", () => {
   it("rejects invalid lang attribute in slide text XML", async () => {
     const result = await build(
       <Deck style={{ lang: "zh-CN" }}>
-        <Slide slideId="valid-slide">
+        <Slide id="valid-slide">
           <Text x={50} y={50} width={200} height={100}>
             Hello
           </Text>
@@ -658,7 +658,7 @@ describe("artifact validator (validatePptx) lang checks", () => {
   it("rejects invalid c:lang in chart XML", async () => {
     const result = await build(
       <Deck style={{ lang: "zh-CN" }}>
-        <Slide slideId="valid-chart-slide">
+        <Slide id="valid-chart-slide">
           <Chart
             x={50}
             y={50}

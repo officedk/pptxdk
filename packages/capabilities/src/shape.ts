@@ -62,8 +62,6 @@ export type ShapeDeclarationProps = MotionProps &
   MorphProps & {
     readonly link?: LinkTarget;
     readonly id?: string;
-    readonly testId?: string;
-    readonly part?: string;
     readonly name?: string;
     readonly geometry?: Geometry;
     readonly flipH?: boolean;
@@ -81,8 +79,6 @@ export type ShapeDeclarationProps = MotionProps &
   };
 
 export type ParsedShape = {
-  readonly testId?: string | undefined;
-  readonly part?: string | undefined;
   readonly name?: string | undefined;
   readonly morphKey?: unknown;
   readonly link?: unknown;
@@ -127,8 +123,6 @@ const maximumShapeExtentEmu = 2_147_483_647;
 
 const allowedParameters = [
   "id",
-  "testId",
-  "part",
   "name",
   "morphKey",
   "link",
@@ -271,7 +265,7 @@ function requiredNumber(
 
 function optionalText(
   props: Record<string, unknown>,
-  name: "testId" | "name" | "part",
+  name: "name",
   path?: string,
 ): string | undefined {
   const value = props[name];
@@ -323,8 +317,6 @@ export const shapeCapability: ObjectCapabilityModule<ParsedShape> = {
       );
     }
 
-    const testId = optionalText(input.props, "testId", context.path);
-    const part = optionalText(input.props, "part", context.path);
     const requestedName = optionalText(input.props, "name", context.path);
 
     if (input.props["x"] !== undefined) {
@@ -434,8 +426,6 @@ export const shapeCapability: ObjectCapabilityModule<ParsedShape> = {
     });
 
     const parsed: ParsedShape = {
-      ...(testId !== undefined ? { testId } : {}),
-      ...(part !== undefined ? { part } : {}),
       ...(requestedName !== undefined ? { name: requestedName } : {}),
       ...(input.props["morphKey"] !== undefined
         ? { morphKey: input.props["morphKey"] }
@@ -531,8 +521,6 @@ export const shapeCapability: ObjectCapabilityModule<ParsedShape> = {
 
   compile(parsed: ParsedShape, context: CapabilityContext) {
     const props = parsed.rawProps;
-    const testId = parsed.testId;
-    const part = parsed.part;
     const requestedName = parsed.name;
     const geometry = parsed.geometry;
     const layoutStyle = parsed.visualStyle;
@@ -595,11 +583,11 @@ export const shapeCapability: ObjectCapabilityModule<ParsedShape> = {
       );
     }
     const name =
-      context.morphName ?? requestedName ?? testId ?? `Shape ${context.id - 1}`;
+      context.morphName ?? requestedName ?? `Shape ${context.id - 1}`;
     const annotations = motionAnnotations(props, {
       kind: "shape",
       name,
-      ...(testId === undefined ? {} : { testId }),
+      ...(typeof props["id"] === "string" ? { authorId: props["id"] } : {}),
       textBody: textOutput !== undefined,
       filled:
         props["fill"] !== undefined ||
@@ -645,8 +633,6 @@ export const shapeCapability: ObjectCapabilityModule<ParsedShape> = {
         id: context.id,
         kind: "shape",
         name,
-        ...(testId === undefined ? {} : { testId }),
-        ...(part === undefined ? {} : { part }),
         geometry: properties.geometryName,
         box,
         ...(textOutput === undefined

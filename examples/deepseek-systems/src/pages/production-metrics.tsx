@@ -34,7 +34,7 @@ const costRevenueValues = [87.1, 47.9, 146.3, 367.9, 562.0] as const;
 export function ProductionMetricsPage() {
   return (
     <SlideFrame
-      slideId="production-metrics"
+      id="production-metrics"
       kicker="03 · 线上生产环境 24 小时运行实测 / 2025-02-27 12:00 至 02-28 12:00 (UTC+8)"
       title="生产环境 24 小时全量运行实测：608B 输入与 168B 输出背后的能效比"
       takeaway="日均占用 226.75 节点 ($87.1K 成本)，按 R1 定价折算理论利润率达 545%"
@@ -95,7 +95,7 @@ export function ProductionMetricsPage() {
         tone="compute"
       >
         <Chart
-          testId="node-occupancy-chart"
+          id="node-occupancy-chart"
           kind="area"
           x={62}
           y={272}
@@ -169,7 +169,7 @@ export function ProductionMetricsPage() {
         tone="comm"
       >
         <Chart
-          testId="kv-cache-hit-chart"
+          id="kv-cache-hit-chart"
           kind="doughnut"
           holeSize={58}
           x={500}
@@ -230,7 +230,7 @@ export function ProductionMetricsPage() {
         tone="copper"
       >
         <Chart
-          testId="cost-revenue-chart"
+          id="cost-revenue-chart"
           kind="column"
           x={854}
           y={272}

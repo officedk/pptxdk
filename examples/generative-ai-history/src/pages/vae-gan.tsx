@@ -67,7 +67,7 @@ function FlowArrow({
 export function VaeGanPage() {
   return (
     <SlideFrame
-      slideId="vae-gan"
+      id="vae-gan"
       chapter="架构｜两条不同的生成路线"
       title="2013–2014｜生成有了自己的模型"
       number={4}

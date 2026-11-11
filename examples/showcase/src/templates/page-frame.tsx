@@ -5,18 +5,18 @@ import { colors } from "../theme.ts";
 
 /** Header shared by the two cards pages; individual slides may independently choose other compositions. */
 export function PageFrame({
-  slideId,
+  id,
   title,
   subtitle,
   children,
 }: {
-  readonly slideId: string;
+  readonly id: string;
   readonly title: string;
   readonly subtitle: string;
   readonly children: ReactNode;
 }) {
   return (
-    <Slide slideId={slideId} background={colors.paper}>
+    <Slide id={id} background={colors.paper}>
       <Shape x={80} y={58} width={42} height={5} fill={colors.accent} />
       <Text
         x={80}

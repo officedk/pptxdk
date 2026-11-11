@@ -53,7 +53,7 @@ describe("public document authoring entry", () => {
         width: 800,
       })
       .append(title, body);
-    const cover = slide({ slideId: "cover" }).append(card);
+    const cover = slide({ id: "cover" }).append(card);
     const document = deck({ width: 960, height: 540 }).append(cover);
 
     const first = await build(document);
@@ -82,20 +82,20 @@ describe("public document authoring entry", () => {
   });
 
   it("enforces single parents, explicit same-document moves, removal, and document ownership", async () => {
-    const first = box({ testId: "first" }).style({
+    const first = box({ id: "first" }).style({
       backgroundColor: "#FFFFFF",
       width: 120,
       height: 40,
     });
-    const second = box({ testId: "second" }).style({
+    const second = box({ id: "second" }).style({
       backgroundColor: "#FFFFFF",
       width: 120,
       height: 40,
     });
-    const slideA = slide({ slideId: "a" }).append(first);
-    const slideB = slide({ slideId: "b" }).append(second);
+    const slideA = slide({ id: "a" }).append(first);
+    const slideB = slide({ id: "b" }).append(second);
     const document = deck({ width: 960, height: 540 }).append(slideA, slideB);
-    const otherSlide = slide({ slideId: "other" });
+    const otherSlide = slide({ id: "other" });
     const other = deck({ width: 960, height: 540 }).append(otherSlide);
 
     assert.throws(() => slideA.append(first), /already attached/u);
@@ -114,7 +114,7 @@ describe("public document authoring entry", () => {
     assert.throws(() => first.moveTo(otherSlide), /another document/u);
     slideA.append(first);
 
-    const moved = box({ testId: "moved" }).style({
+    const moved = box({ id: "moved" }).style({
       backgroundColor: "#FFFFFF",
       width: 80,
       height: 30,
@@ -124,15 +124,19 @@ describe("public document authoring entry", () => {
     const movedResult = await build(document);
     const movedSlideB = movedResult.report.slides.find(({ id }) => id === "b");
     const movedSlideA = movedResult.report.slides.find(({ id }) => id === "a");
-    assert.ok(movedSlideB?.objects.some(({ testId }) => testId === "moved"));
-    assert.ok(movedSlideA?.objects.every(({ testId }) => testId !== "moved"));
+    assert.ok(
+      movedSlideB?.objects.some(({ authorId: testId }) => testId === "moved"),
+    );
+    assert.ok(
+      movedSlideA?.objects.every(({ authorId: testId }) => testId !== "moved"),
+    );
 
     moved.moveTo(slideA, first);
     const reordered = await build(document);
     assert.deepEqual(
       reordered.report.slides
         .find(({ id }) => id === "a")
-        ?.objects.map(({ testId }) => testId),
+        ?.objects.map(({ authorId: testId }) => testId),
       ["moved", "first"],
     );
 
@@ -147,7 +151,7 @@ describe("public document authoring entry", () => {
     assert.deepEqual(
       (await build(document)).report.slides
         .find(({ id }) => id === "a")
-        ?.objects.map(({ testId }) => testId),
+        ?.objects.map(({ authorId: testId }) => testId),
       ["first", "moved"],
     );
   });
@@ -188,7 +192,7 @@ describe("public document authoring entry", () => {
       width: 960,
       height: 540,
       theme: { colors, fonts: { minor: themeFont } },
-    }).append(slide({ slideId: "values" }).append(parent));
+    }).append(slide({ id: "values" }).append(parent));
 
     sourceFontBytes[0] = 0;
     themeFont.faces![0]!.data![0] = 0;
@@ -277,7 +281,7 @@ describe("public document authoring entry", () => {
       height: 40,
     });
     const document = deck({ width: 960, height: 540 }).append(
-      slide({ slideId: "style-alias" }).append(title),
+      slide({ id: "style-alias" }).append(title),
     );
 
     // Simulates React useLayoutEffect cleanup mutating the caller's original style object.
@@ -309,7 +313,7 @@ describe("public document authoring entry", () => {
       width: 960,
       height: 540,
       theme: { fonts: { minor: themeFont } },
-    }).append(slide({ slideId: "timing" }).append(title));
+    }).append(slide({ id: "timing" }).append(title));
 
     const firstPromise = build(document);
     title.content("A much longer heading that wraps onto several lines");
@@ -326,7 +330,7 @@ describe("public document authoring entry", () => {
     title.content("Third revision");
     assert.match(slideXml(second), /much longer/u);
     assert.doesNotMatch(slideXml(second), /Third revision/u);
-    assert.equal(first.query.slide("timing").observation.id, "timing");
+    assert.equal(first.query.getSlide("timing").observation.id, "timing");
 
     const controller = new AbortController();
     const reason = new Error("caller cancelled");
@@ -363,10 +367,8 @@ describe("public document authoring entry", () => {
       height: 24,
     });
     const document = deck({ width: 960, height: 540 }).append(
-      slide({ slideId: "first" }).append(
-        box({ morphKey: hero, style: morphStyle }),
-      ),
-      slide({ slideId: "second" }).append(
+      slide({ id: "first" }).append(box({ morphKey: hero, style: morphStyle })),
+      slide({ id: "second" }).append(
         box({ morphKey: hero, style: morphStyle }),
         numbered,
         footer,
@@ -421,7 +423,7 @@ const document = entry
   .deck({ width: 960, height: 540 })
   .append(
     entry
-      .slide({ slideId: "pure", background: "#112233" })
+      .slide({ id: "pure", background: "#112233" })
       .append(
         entry
           .box()
@@ -432,7 +434,7 @@ const document = entry
               .set({ x: 8, y: 8, width: 320, height: 40 }),
           ),
         entry.shape({
-          testId: "pure-shape",
+          id: "pure-shape",
           geometry: "hexagon",
           x: 8,
           y: 140,
@@ -442,7 +444,7 @@ const document = entry
           style: { backgroundColor: "#336699" },
         }),
         entry.image({
-          testId: "pure-image",
+          id: "pure-image",
           src: png,
           x: 140,
           y: 140,
@@ -450,9 +452,9 @@ const document = entry
           height: 60,
           fit: "cover",
         }),
-        entry.group({ testId: "pure-group" }).append(
+        entry.group({ id: "pure-group" }).append(
           entry.shape({
-            testId: "pure-group-shape",
+            id: "pure-group-shape",
             x: 240,
             y: 140,
             width: 60,
@@ -461,7 +463,7 @@ const document = entry
         ),
         entry
           .table({
-            testId: "pure-table",
+            id: "pure-table",
             x: 8,
             y: 220,
             width: 240,
@@ -474,7 +476,7 @@ const document = entry
               .append(entry.cell("Pure table"), entry.cell("42")),
           ),
         entry.chart({
-          testId: "pure-chart",
+          id: "pure-chart",
           kind: "column",
           x: 260,
           y: 220,

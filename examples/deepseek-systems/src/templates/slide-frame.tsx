@@ -47,7 +47,7 @@ const badgePalette: Record<
  * Places an action-title header, semantic takeaway banner, and source/slide-number footer.
  */
 export function SlideFrame({
-  slideId,
+  id,
   kicker,
   title,
   takeaway,
@@ -57,7 +57,7 @@ export function SlideFrame({
   transition = transitions.fade({ duration: 480 }),
   children,
 }: {
-  readonly slideId: string;
+  readonly id: string;
   readonly kicker: string;
   readonly title: string;
   readonly takeaway?: string;
@@ -74,7 +74,7 @@ export function SlideFrame({
 
   return (
     <Slide
-      slideId={slideId}
+      id={id}
       background={dark ? colors.obsidian : colors.paper}
       transition={transition}
     >

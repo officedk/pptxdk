@@ -434,11 +434,7 @@ function authorPath(node: CommonNode): string {
       segments.unshift("deck");
       continue;
     }
-    const slideId =
-      current.kind === "slide" && typeof current.props["slideId"] === "string"
-        ? current.props["slideId"]
-        : undefined;
-    const id = authorIdOf(current) ?? slideId;
+    const id = authorIdOf(current);
     segments.unshift(
       id === undefined ? current.kind : `${current.kind}[${id}]`,
     );
@@ -450,9 +446,9 @@ function authorPath(node: CommonNode): string {
  * Author-facing locator over the live editable document.
  *
  * A query is scoped to one node. Lookups traverse anonymous layout nodes but stop at the next node
- * declaring an author id, so callers descend explicitly through named scopes. Page nodes remain
- * boundaries even when a legacy slide lacks the new author id. Returned `.node` values are the same
- * editable instances the document holds; they are never build observations.
+ * declaring an author id, so callers descend explicitly through named scopes. Pages always declare
+ * their author id and act as the root author scope. Returned `.node` values are the same editable
+ * instances the document holds; they are never build observations.
  */
 export class AuthorQuery<Node extends CommonNode = CommonNode> {
   readonly #node: Node;
@@ -543,9 +539,7 @@ export class AuthorQuery<Node extends CommonNode = CommonNode> {
         if (!(child instanceof CommonNode)) continue;
         const childId = authorIdOf(child);
         if (childId === id) matches.push(child);
-        else if (childId === undefined && child.kind !== "slide") {
-          visit(child);
-        }
+        else if (childId === undefined) visit(child);
       }
     };
     visit(this.#node);

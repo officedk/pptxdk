@@ -10,7 +10,7 @@ export function SourcesPage({ page }: { readonly page: 1 | 2 }) {
   const items = sources.slice(page === 1 ? 0 : 9, page === 1 ? 9 : 18);
   return (
     <SlideFrame
-      slideId={`sources-${page}`}
+      id={`sources-${page}`}
       chapter="附录｜原始论文与官方发布"
       title={
         page === 1 ? "史料与延伸阅读｜基础与架构" : "史料与延伸阅读｜系统与前沿"

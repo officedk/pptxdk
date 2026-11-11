@@ -22,7 +22,7 @@ const baselinePerfRate = [58.0, 48.0, 56.0] as const;
 export function Fp8KernelsPage() {
   return (
     <SlideFrame
-      slideId="fp8-kernels"
+      id="fp8-kernels"
       kicker="02 · 细粒度低比特训练与算子微架构 / FP8 · FlashMLA · DeepGEMM"
       title="细粒度 FP8 混合精度与 Hopper 算子优化：逼近 H800 物理屋顶线"
       takeaway="1x128 激活切片 + 128x128 权重分块量化，相对 BF16 训练误差低于 0.25%"
@@ -391,7 +391,7 @@ export function Fp8KernelsPage() {
         tone="copper"
       >
         <Chart
-          testId="fp8-kernels-chart"
+          id="fp8-kernels-chart"
           kind="column"
           x={696}
           y={168}

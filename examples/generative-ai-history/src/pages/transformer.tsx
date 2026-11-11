@@ -13,7 +13,7 @@ export function TransformerPage() {
   const queryY = 238;
   return (
     <SlideFrame
-      slideId="transformer"
+      id="transformer"
       chapter="架构｜Attention Is All You Need"
       title="2017｜注意力重写了序列建模"
       number={5}

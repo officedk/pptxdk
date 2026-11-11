@@ -6,7 +6,7 @@ import { colors } from "../theme.ts";
 
 export function CombinationPage() {
   return (
-    <Slide slideId="combination" background={colors.paper}>
+    <Slide id="combination" background={colors.paper}>
       <Shape x={0} y={0} width={410} height={720} fill={colors.ink} />
       <Text
         x={60}

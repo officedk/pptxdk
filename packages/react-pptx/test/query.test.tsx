@@ -59,12 +59,12 @@ function FrozenMotionDeck() {
     { width: 160, height: 100 },
     createElement(
       Slide,
-      { slideId: "frozen-motion" },
+      { id: "frozen-motion" },
       createElement(
         MotionScope,
         { scope },
         createElement(Shape, {
-          testId: "moving-shape",
+          id: "moving-shape",
           x: 0,
           y: 0,
           width: 20,
@@ -82,16 +82,16 @@ function ContentQueryDeck() {
     { width: 320, height: 180 },
     createElement(
       Slide,
-      { slideId: "content-query" },
+      { id: "content-query" },
       createElement(
         Box,
         {
-          testId: "sales-card",
+          id: "sales-card",
           style: { width: 200, height: 100, backgroundColor: "#FFFFFF" },
         },
         createElement(
           Text,
-          { testId: "sales-title", x: 12, y: 16, width: 160, height: 32 },
+          { id: "sales-title", x: 12, y: 16, width: 160, height: 32 },
           "Quarterly sales",
         ),
       ),
@@ -105,24 +105,22 @@ function PartQueryDeck() {
     { width: 320, height: 180 },
     createElement(
       Slide,
-      { slideId: "part-query" },
+      { id: "part-query" },
       createElement(
         Box,
         {
-          testId: "sales-first",
-          part: "first-card",
+          id: "sales-first",
           style: { width: 140, height: 100 },
         },
         createElement(
           Text,
-          { part: "title", x: 0, y: 0, width: 100, height: 20 },
+          { id: "title", x: 0, y: 0, width: 100, height: 20 },
           "First sales",
         ),
         createElement(
           Text,
           {
-            testId: "featured-title",
-            part: "title",
+            id: "featured-title",
             x: 0,
             y: 24,
             width: 100,
@@ -132,24 +130,24 @@ function PartQueryDeck() {
         ),
         createElement(
           Text,
-          { testId: "shared-test-id", x: 0, y: 48, width: 100, height: 20 },
+          { id: "first-match", x: 0, y: 48, width: 100, height: 20 },
           "First match",
         ),
       ),
       createElement(
         Box,
         {
-          testId: "sales-second",
+          id: "sales-second",
           style: { width: 140, height: 100, left: 150, position: "absolute" },
         },
         createElement(
           Text,
-          { part: "title", x: 0, y: 0, width: 100, height: 20 },
+          { id: "title", x: 0, y: 0, width: 100, height: 20 },
           "Second sales",
         ),
         createElement(
           Text,
-          { testId: "shared-test-id", x: 0, y: 24, width: 100, height: 20 },
+          { id: "second-match", x: 0, y: 24, width: 100, height: 20 },
           "Second match",
         ),
       ),
@@ -163,9 +161,9 @@ function ResourceQueryDeck() {
     { width: 320, height: 180 },
     createElement(
       Slide,
-      { slideId: "resource-query" },
+      { id: "resource-query" },
       createElement(Image, {
-        testId: "cover-image",
+        id: "cover-image",
         src: png,
         x: 0,
         y: 0,
@@ -173,7 +171,7 @@ function ResourceQueryDeck() {
         height: 80,
       }),
       createElement(Chart, {
-        testId: "sales-chart",
+        id: "sales-chart",
         kind: "column",
         x: 130,
         y: 0,
@@ -194,11 +192,11 @@ function FontResourceQueryDeck() {
     { width: 320, height: 180 },
     createElement(
       Slide,
-      { slideId: "font-resource-query" },
+      { id: "font-resource-query" },
       createElement(
         Text,
         {
-          testId: "fonted-text",
+          id: "fonted-text",
           x: 8,
           y: 8,
           width: 240,
@@ -218,11 +216,11 @@ function MissingFontResourceQueryDeck() {
     { width: 320, height: 180 },
     createElement(
       Slide,
-      { slideId: "missing-font-resource-query" },
+      { id: "missing-font-resource-query" },
       createElement(
         Text,
         {
-          testId: "font-name-only-text",
+          id: "font-name-only-text",
           x: 8,
           y: 8,
           width: 240,
@@ -241,11 +239,11 @@ function TablePartQueryDeck() {
     { width: 320, height: 180 },
     createElement(
       Slide,
-      { slideId: "table-part-query" },
+      { id: "table-part-query" },
       createElement(
         Table,
         {
-          testId: "forecast-table",
+          id: "forecast-table",
           x: 16,
           y: 16,
           columns: [80, 80],
@@ -253,9 +251,9 @@ function TablePartQueryDeck() {
         },
         createElement(
           Row,
-          { part: "first-row", style: { height: 24 } },
-          createElement(Cell, { part: "metric" }, "Bookings"),
-          createElement(Cell, { part: "value" }, "17"),
+          { id: "first-row", style: { height: 24 } },
+          createElement(Cell, { id: "metric" }, "Bookings"),
+          createElement(Cell, { id: "value" }, "17"),
         ),
       ),
     ),
@@ -268,18 +266,18 @@ function GroupQueryDeck() {
     { width: 320, height: 180 },
     createElement(
       Slide,
-      { slideId: "group-query" },
+      { id: "group-query" },
       createElement(
         Box,
-        { testId: "group-host", style: { width: 160, height: 100 } },
+        { id: "group-host", style: { width: 160, height: 100 } },
         createElement(
           Group,
-          { testId: "native-group", part: "native-group" },
+          { id: "native-group" },
           createElement(
             Box,
-            { testId: "group-box", style: { width: 80, height: 50 } },
+            { id: "group-box", style: { width: 80, height: 50 } },
             createElement(Shape, {
-              testId: "group-member",
+              id: "group-member",
               x: 0,
               y: 0,
               width: 20,
@@ -317,11 +315,11 @@ describe("read-only build query", () => {
     assert.deepEqual(scope.members, [{ kind: "object", id: 2 }]);
   });
 
-  it("locates content in the current build by testId and observes only its objects and text body", async () => {
+  it("locates content in the current build by author id and observes only its objects and text body", async () => {
     const result = await build(createElement(ContentQueryDeck));
-    const slide = result.query.slide("content-query");
-    const card = slide.getByTestId("sales-card");
-    const title = card.getByTestId("sales-title");
+    const slide = result.query.getSlide("content-query");
+    const card = slide.get("sales-card");
+    const title = card.get("sales-title");
 
     assert.equal(result.query.evidence, "generation");
     assert.equal(slide.id, "content-query");
@@ -330,14 +328,14 @@ describe("read-only build query", () => {
       ["shape", "text"],
     );
     assert.equal(title.observe().text, "Quarterly sales");
-    assert.equal(title.observe().objects[0]?.testId, "sales-title");
+    assert.equal(title.observe().objects[0]?.authorId, "sales-title");
   });
 
   it("associates image and chart resources with located objects and verifies file bytes from the same build", async () => {
     const result = await build(createElement(ResourceQueryDeck));
-    const slide = result.query.slide("resource-query");
-    const image = slide.getByTestId("cover-image").observe();
-    const chart = slide.getByTestId("sales-chart").observe();
+    const slide = result.query.getSlide("resource-query");
+    const image = slide.get("cover-image").observe();
+    const chart = slide.get("sales-chart").observe();
     const imageResource = image.resources?.[0];
 
     assert.equal(imageResource?.contentType, "image/png");
@@ -382,8 +380,8 @@ describe("read-only build query", () => {
     const defaultParts = unzipSync(defaultResult.pptx);
     assert.equal(
       defaultResult.query
-        .slide("font-resource-query")
-        .getByTestId("fonted-text")
+        .getSlide("font-resource-query")
+        .get("fonted-text")
         .observe().resources?.length ?? 0,
       0,
     );
@@ -397,8 +395,8 @@ describe("read-only build query", () => {
     );
     assert.equal(
       missingResult.query
-        .slide("missing-font-resource-query")
-        .getByTestId("font-name-only-text")
+        .getSlide("missing-font-resource-query")
+        .get("font-name-only-text")
         .observe().resources?.length ?? 0,
       0,
     );
@@ -407,8 +405,8 @@ describe("read-only build query", () => {
       const result = await build(createElement(FontResourceQueryDeck), {
         embedFonts,
       });
-      const slide = result.query.slide("font-resource-query");
-      const text = slide.getByTestId("fonted-text").observe();
+      const slide = result.query.getSlide("font-resource-query");
+      const text = slide.get("fonted-text").observe();
       const resources = text.resources ?? [];
       const parts = unzipSync(result.pptx);
       const presentation = strFromU8(parts["ppt/presentation.xml"]!);
@@ -464,37 +462,31 @@ describe("read-only build query", () => {
     }
   });
 
-  it("isolates repeated parts by nearest testId instance and preserves multiple results", async () => {
+  it("keeps anonymous layers transparent and stops at each named author scope", async () => {
     const result = await build(createElement(PartQueryDeck));
-    const slide = result.query.slide("part-query");
-    const first = slide.getByTestId("sales-first");
-    const second = slide.getByTestId("sales-second");
-    const duplicateMatches = slide.getAllByTestId("shared-test-id");
+    const slide = result.query.getSlide("part-query");
+    const first = slide.get("sales-first");
+    const second = slide.get("sales-second");
 
-    assert.equal(first.part("title").observe().text, "First sales");
-    assert.equal(second.part("title").observe().text, "Second sales");
+    assert.equal(first.get("title").observe().text, "First sales");
+    assert.equal(second.get("title").observe().text, "Second sales");
     assert.equal(
-      slide.part("first-card").observe().text,
+      first.observe().text,
       "First sales\nNested feature\nFirst match",
     );
-    assert.equal(first.parts("title").length, 1);
-    assert.equal(slide.parts("title").length, 3);
-    assert.throws(() => slide.part("title"), { code: "ambiguous-match" });
-    assert.equal(duplicateMatches.length, 2);
-    assert.throws(() => slide.getByTestId("shared-test-id"), {
-      code: "ambiguous-match",
-    });
-    assert.throws(() => first.part("missing"), { code: "missing-match" });
+    assert.deepEqual(slide.getAll("title"), []);
+    assert.throws(() => slide.get("title"), { code: "missing-match" });
+    assert.throws(() => first.get("missing"), { code: "missing-match" });
   });
 
   it("locates cell text body and final geometry from table owner without forging native objects", async () => {
     const result = await build(createElement(TablePartQueryDeck));
     const table = result.query
-      .slide("table-part-query")
-      .getByTestId("forecast-table");
-    const row = table.part("first-row");
-    const metric = table.part("metric");
-    const value = table.part("value");
+      .getSlide("table-part-query")
+      .get("forecast-table");
+    const row = table.get("first-row");
+    const metric = row.get("metric");
+    const value = row.get("value");
 
     assert.equal(row.observe().text, "Bookings\t17");
     assert.equal(row.children().length, 2);
@@ -512,18 +504,15 @@ describe("read-only build query", () => {
 
   it("traverses along Box layout and Group member hierarchies and deduplicates native objects", async () => {
     const result = await build(createElement(GroupQueryDeck));
-    const host = result.query.slide("group-query").getByTestId("group-host");
+    const host = result.query.getSlide("group-query").get("group-host");
     const group = host.children()[0];
     const groupBox = group?.children()[0];
 
     assert.ok(group);
     assert.ok(groupBox);
+    assert.equal(group.observe().objects[0]?.kind, "group");
     assert.equal(
-      group.part("native-group").observe().objects[0]?.kind,
-      "group",
-    );
-    assert.equal(
-      group.getByTestId("group-member").observe().objects[0]?.kind,
+      groupBox.get("group-member").observe().objects[0]?.kind,
       "shape",
     );
     assert.equal(groupBox.observe().box?.width, 80);

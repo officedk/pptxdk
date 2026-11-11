@@ -32,12 +32,11 @@ export function isDeclarationNode(child: unknown): child is DeclarationNode {
   );
 }
 
-/** Author-visible identity used in diagnostic labels; test ids take precedence while legacy fields remain. */
+/** Author-visible identity used in diagnostic labels; the scoped author id is the only identity. */
 export function declarationIdentity(
   props: Readonly<Record<string, unknown>>,
 ): unknown {
-  const testId = props["testId"];
-  return testId === undefined ? props["id"] : testId;
+  return props["id"];
 }
 
 /** Diagnostic label for a child declaration, matching the existing build path vocabulary. */

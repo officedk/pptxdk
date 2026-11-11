@@ -53,7 +53,7 @@ const archLayers = [
 export function ThreeFsPage() {
   return (
     <SlideFrame
-      slideId="three-fs"
+      id="three-fs"
       kicker="02 · 存算分离全闪并行文件系统 / 3FS · CRAQ · Smallpond"
       title="3FS 分布式文件系统与 Smallpond：聚合 6.6 TiB/s 随机读与推理 KV 卸载"
       takeaway="180 存储节点聚合读取达 6.6 TiB/s，110.5 TiB GraySort 仅耗时 30 分 14 秒"
@@ -204,7 +204,7 @@ export function ThreeFsPage() {
         tone="comm"
       >
         <Chart
-          testId="three-fs-chart"
+          id="three-fs-chart"
           kind="bar"
           x={696}
           y={274}

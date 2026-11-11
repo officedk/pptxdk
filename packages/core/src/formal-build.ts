@@ -592,7 +592,6 @@ function resolveSlides(
       diagnostic("deck", "missing-slide", "Deck requires at least one Slide"),
     ]);
   }
-  const ids = new Set<string>();
   const authorIds = new Set<string>();
   const slideProperties = [...modules.values()]
     .filter(isSlideCapability)
@@ -600,17 +599,14 @@ function resolveSlides(
   const slides = candidates.map(({ node, section, sectionIndex }, index) => {
     const unknown = ownKeys(node.props, [
       "id",
-      "slideId",
       "theme",
       "style",
       "hidden",
       ...slideProperties,
     ]);
     const authorId = readAuthorId(node.props["id"], `deck/slide[${index + 1}]`);
-    const rawSlideId = node.props["slideId"];
     if (unknown !== undefined) {
-      const label =
-        authorId ?? (typeof rawSlideId === "string" ? rawSlideId : index + 1);
+      const label = authorId ?? index + 1;
       throw new BuildError([
         diagnostic(
           `deck/slide[${label}]`,
@@ -619,63 +615,37 @@ function resolveSlides(
         ),
       ]);
     }
-    if (
-      rawSlideId !== undefined &&
-      (typeof rawSlideId !== "string" || rawSlideId.trim() === "")
-    ) {
+    if (authorId === undefined) {
       throw new BuildError([
         diagnostic(
           `deck/slide[${index + 1}]`,
-          "invalid-slide-id",
-          "Slide.slideId must be a non-empty string",
+          "invalid-author-id",
+          "Slide must declare id as a non-empty string",
         ),
       ]);
     }
-    if (rawSlideId === undefined && authorId === undefined) {
+    try {
+      assertXml10Characters(authorId);
+    } catch {
       throw new BuildError([
         diagnostic(
           `deck/slide[${index + 1}]`,
-          "invalid-slide-id",
-          "Slide must declare id or slideId as a non-empty string",
+          "invalid-xml-character",
+          "Slide.id contains characters not allowed in XML 1.0",
         ),
       ]);
     }
-    if (typeof rawSlideId === "string") {
-      try {
-        assertXml10Characters(rawSlideId);
-      } catch {
-        throw new BuildError([
-          diagnostic(
-            `deck/slide[${index + 1}]`,
-            "invalid-xml-character",
-            "Slide.slideId contains characters not allowed in XML 1.0",
-          ),
-        ]);
-      }
-    }
-    const id = typeof rawSlideId === "string" ? rawSlideId : authorId!;
-    if (authorId !== undefined) {
-      if (authorIds.has(authorId)) {
-        throw new BuildError([
-          diagnostic(
-            `deck/slide[${authorId}]`,
-            "duplicate-author-id",
-            `Duplicate Slide.id ${JSON.stringify(authorId)} in the deck`,
-          ),
-        ]);
-      }
-      authorIds.add(authorId);
-    }
-    if (ids.has(id)) {
+    const id = authorId;
+    if (authorIds.has(authorId)) {
       throw new BuildError([
         diagnostic(
-          `deck/slide[${id}]`,
-          "duplicate-slide-id",
-          `Duplicate slide identity "${id}"`,
+          `deck/slide[${authorId}]`,
+          "duplicate-author-id",
+          `Duplicate Slide.id ${JSON.stringify(authorId)} in the deck`,
         ),
       ]);
     }
-    ids.add(id);
+    authorIds.add(authorId);
     validateAuthorIdScopes(node, `deck/slide[${id}]`, new Set());
     const hidden = node.props["hidden"];
     if (hidden !== undefined && typeof hidden !== "boolean") {
@@ -1319,7 +1289,7 @@ function registerLink(
     context.slide.diagnostics.push(diagnostic(path, "invalid-link", message));
   };
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
-    reportInvalid("link must specify slideId, url, or home action");
+    reportInvalid("link must specify id, url, or home action");
     return undefined;
   }
   const entries = Object.entries(value).filter(
@@ -1330,14 +1300,14 @@ function registerLink(
     return undefined;
   }
   const [kind, target] = entries[0] ?? [];
-  if (kind === "slideId" && typeof target === "string") {
+  if (kind === "id" && typeof target === "string") {
     const targetIndex = context.document.slideIndexById.get(target);
     if (targetIndex === undefined) {
       context.slide.diagnostics.push(
         diagnostic(
           path,
           "missing-link-target",
-          `No target slide with slideId ${JSON.stringify(target)}`,
+          `No target slide with author id ${JSON.stringify(target)}`,
         ),
       );
       return undefined;
@@ -1394,7 +1364,7 @@ function registerLink(
       summary: "home",
     };
   }
-  reportInvalid("link supports { slideId }, { url }, or { action: 'home' }");
+  reportInvalid("link supports { id }, { url }, or { action: 'home' }");
   return undefined;
 }
 
@@ -1525,6 +1495,7 @@ function compileChildren(
             boxObservation = {
               ...output.observation,
               id: objectId,
+              ...(authorId === undefined ? {} : { authorId }),
               ...(boxLink === undefined ? {} : { link: boxLink.summary }),
             };
             if (morphKey !== undefined && morphName !== undefined) {
@@ -1604,14 +1575,9 @@ function compileChildren(
         path,
         insideGroup,
       );
-      const testId = child.props["testId"];
       context.slide.layouts.push({
         id,
         ...(authorId === undefined ? {} : { authorId }),
-        ...(typeof testId === "string" ? { testId } : {}),
-        ...(typeof child.props["part"] === "string"
-          ? { part: child.props["part"] }
-          : {}),
         box,
         children: [
           ...(boxObservation === undefined
@@ -1622,10 +1588,6 @@ function compileChildren(
       });
       content.push({
         ...(authorId === undefined ? {} : { authorId }),
-        ...(typeof testId === "string" ? { testId } : {}),
-        ...(typeof child.props["part"] === "string"
-          ? { part: child.props["part"] }
-          : {}),
         reference: {
           kind: "layout",
           id,
@@ -1867,12 +1829,6 @@ function compileChildren(
       };
       content.push({
         ...(authorId === undefined ? {} : { authorId }),
-        ...(typeof child.props["testId"] === "string"
-          ? { testId: child.props["testId"] }
-          : {}),
-        ...(typeof observation.part === "string"
-          ? { part: observation.part }
-          : {}),
         reference: { kind: "object", id: observation.id },
         children: [
           ...(context.slide.contentChildrenByObjectId.get(id) ?? []),
@@ -1958,8 +1914,6 @@ function tableContentNodes(object: ObjectObservation): QueryContentNode[] {
       throw new Error("Table query part index does not exist");
     return {
       ...(part.authorId === undefined ? {} : { authorId: part.authorId }),
-      ...(part.testId === undefined ? {} : { testId: part.testId }),
-      ...(part.part === undefined ? {} : { part: part.part }),
       reference: { kind: "table-part", tableId: object.id, partIndex },
       children: [],
     };

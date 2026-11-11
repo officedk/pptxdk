@@ -71,7 +71,7 @@ export function Rule({
 
 /** Keeps a separately editable fill and label on one entrance moment in its parent's stagger. */
 export function EnteredShapeText({
-  testId,
+  id,
   x,
   y,
   width,
@@ -82,7 +82,7 @@ export function EnteredShapeText({
   textStyle,
   enter,
 }: {
-  readonly testId: string;
+  readonly id: string;
   readonly x: number;
   readonly y: number;
   readonly width: number;
@@ -98,7 +98,7 @@ export function EnteredShapeText({
   return (
     <MotionScope scope={scope}>
       <Shape
-        testId={`${testId}-background`}
+        id={`${id}-background`}
         x={x}
         y={y}
         width={width}
@@ -108,7 +108,7 @@ export function EnteredShapeText({
         enter={enter}
       />
       <Text
-        testId={testId}
+        id={id}
         x={x}
         y={y}
         width={width}
@@ -135,7 +135,7 @@ export function PanelCard({
   accentSide = "top",
   fill = colors.surface,
   borderColor = colors.line,
-  testId,
+  id,
   children,
 }: {
   readonly x: number;
@@ -149,14 +149,14 @@ export function PanelCard({
   readonly accentSide?: "top" | "left" | "none";
   readonly fill?: string;
   readonly borderColor?: string;
-  readonly testId?: string;
+  readonly id?: string;
   readonly children?: ReactNode;
 }) {
   const palette = tonePalette[tone];
   return (
     <>
       <Shape
-        {...(testId === undefined ? {} : { testId })}
+        {...(id === undefined ? {} : { id })}
         x={x}
         y={y}
         width={width}
@@ -232,7 +232,7 @@ export function MetricCard({
   caption,
   tone = "compute",
   dark = false,
-  testId,
+  id,
   enter,
 }: {
   readonly x: number;
@@ -244,7 +244,7 @@ export function MetricCard({
   readonly caption: string;
   readonly tone?: SemanticTone;
   readonly dark?: boolean;
-  readonly testId?: string;
+  readonly id?: string;
   readonly enter?: EntranceEffectDeclaration;
 }) {
   const palette = tonePalette[tone];
@@ -258,7 +258,7 @@ export function MetricCard({
   const card = (
     <>
       <Shape
-        {...(testId === undefined ? {} : { testId })}
+        {...(id === undefined ? {} : { id })}
         x={x}
         y={y}
         width={width}

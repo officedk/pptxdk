@@ -38,8 +38,6 @@ import {
 export type BoxDeclarationProps = MorphProps &
   Pick<MotionProps, "enter" | "motion"> & {
     readonly id?: string;
-    readonly testId?: string;
-    readonly part?: string;
     readonly link?: LinkTarget;
     readonly style?: LayoutStyle & TextStyle & VisualStyle;
     readonly theme?: ThemeScope;
@@ -62,8 +60,6 @@ export function createBoxNode(
 
 const boxAllowedParameters = [
   "id",
-  "testId",
-  "part",
   "style",
   "theme",
   "morphKey",
@@ -80,8 +76,6 @@ const boxAllowedStyleKeys = new Set<string>([
 ]);
 
 export type ParsedBox = {
-  readonly testId?: string;
-  readonly part?: string;
   readonly morphKey?: MorphKey;
   readonly link?: LinkTarget;
   readonly styleRecord: VisualStyleRecord;
@@ -125,27 +119,6 @@ export const boxCapability: ObjectCapabilityModule<ParsedBox> = {
         `Box contains unknown parameter ${unknown}`,
       );
     }
-    const testId = input.props["testId"];
-    if (
-      testId !== undefined &&
-      (typeof testId !== "string" || testId.trim() === "")
-    ) {
-      throw new CapabilityError(
-        "invalid-parameter",
-        "testId must be a non-empty string",
-      );
-    }
-    const part = input.props["part"];
-    if (
-      part !== undefined &&
-      (typeof part !== "string" || part.trim() === "")
-    ) {
-      throw new CapabilityError(
-        "invalid-parameter",
-        "part must be a non-empty string",
-      );
-    }
-
     validateMotionFlag(input.props["motion"]);
     const style = styleRecord(input.props["style"]);
     const hasVisibleStyle = hasVisibleBoxStyle(style);
@@ -166,8 +139,6 @@ export const boxCapability: ObjectCapabilityModule<ParsedBox> = {
     });
 
     const parsed: ParsedBox = {
-      ...(typeof testId === "string" ? { testId } : {}),
-      ...(typeof part === "string" ? { part } : {}),
       ...(input.props["morphKey"] !== undefined
         ? { morphKey: input.props["morphKey"] as MorphKey }
         : {}),
@@ -191,11 +162,7 @@ export const boxCapability: ObjectCapabilityModule<ParsedBox> = {
         "Box is missing layout results",
       );
     }
-    const testId = parsed.testId;
-    const part = parsed.part;
-    const name =
-      context.morphName ??
-      (typeof testId === "string" ? testId : `Box ${context.id - 1}`);
+    const name = context.morphName ?? `Box ${context.id - 1}`;
     const style = parsed.styleRecord;
     const properties = shapePropertiesXml({
       theme: context.theme,
@@ -206,7 +173,9 @@ export const boxCapability: ObjectCapabilityModule<ParsedBox> = {
     const motionTarget = {
       kind: "shape",
       name,
-      ...(typeof testId === "string" ? { testId } : {}),
+      ...(typeof parsed.rawProps["id"] === "string"
+        ? { authorId: parsed.rawProps["id"] }
+        : {}),
       textBody: false,
       filled:
         style["backgroundColor"] !== undefined ||
@@ -229,8 +198,6 @@ export const boxCapability: ObjectCapabilityModule<ParsedBox> = {
         id: context.id,
         kind: "shape",
         name,
-        ...(typeof testId === "string" ? { testId } : {}),
-        ...(typeof part === "string" ? { part } : {}),
         geometry: properties.geometryName,
         box,
       },

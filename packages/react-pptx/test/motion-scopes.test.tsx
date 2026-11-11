@@ -27,7 +27,7 @@ import { describe, it } from "vitest";
 
 function movingShape(testId: string, duration: number) {
   return createElement(Shape, {
-    testId,
+    id: testId,
     x: 0,
     y: 0,
     width: 20,
@@ -45,7 +45,7 @@ function observedShape(
   delay = 0,
 ) {
   return createElement(Shape, {
-    testId,
+    id: testId,
     x: 10,
     y,
     width: 280,
@@ -60,7 +60,7 @@ function unknownLetterText(testId: string, text: string, y: number) {
   return createElement(
     Text,
     {
-      testId,
+      id: testId,
       x: 10,
       y,
       width: 280,
@@ -88,7 +88,7 @@ function TargetGroupStepEntry({
       MotionScope,
       { scope: sequence, mode: "sequence" },
       createElement(Shape, {
-        testId: "target-group-step-entry-source",
+        id: "target-group-step-entry-source",
         x: 5,
         y: 5,
         width: 150,
@@ -130,7 +130,7 @@ function TargetGroupStepEntry({
     { width: 320, height: 180 },
     createElement(
       Slide,
-      { slideId },
+      { id: slideId },
       trigger === "click" ? createElement(Step, { n: 1 }, content) : content,
     ),
   );
@@ -154,7 +154,7 @@ function SingleSourceUnknownStartAliases({
       : sourceCompletion === "known"
         ? movingShape("single-alias-source", 100)
         : createElement(Shape, {
-            testId: "single-alias-source",
+            id: "single-alias-source",
             x: 10,
             y: 8,
             width: 20,
@@ -199,7 +199,7 @@ function SingleSourceUnknownStartAliases({
     { width: 320, height: 180 },
     createElement(
       Slide,
-      { slideId: `single-source-start-alias-${trigger}` },
+      { id: `single-source-start-alias-${trigger}` },
       trigger === "click" ? createElement(Step, { n: 1 }, content) : content,
     ),
   );
@@ -215,7 +215,7 @@ function SingleSourceAliasUnderLaterParent() {
     { width: 320, height: 180 },
     createElement(
       Slide,
-      { slideId: "single-source-alias-under-later-parent" },
+      { id: "single-source-alias-under-later-parent" },
       createElement(
         MotionScope,
         { scope: source },
@@ -290,7 +290,7 @@ function UnknownStartSequence({
   return createElement(
     Deck,
     { width: 320, height: 180 },
-    createElement(Slide, { slideId: "unknown-start-sequence" }, content),
+    createElement(Slide, { id: "unknown-start-sequence" }, content),
   );
 }
 
@@ -304,7 +304,7 @@ function SelfStartedNestedPredecessor() {
     { width: 320, height: 180 },
     createElement(
       Slide,
-      { slideId: "self-started-nested-predecessor" },
+      { id: "self-started-nested-predecessor" },
       createElement(
         MotionScope,
         { scope: source },
@@ -369,7 +369,7 @@ function SequenceStartCausality({
     ? createElement(
         Text,
         {
-          testId: "causality-source",
+          id: "causality-source",
           x: 10,
           y: 8,
           width: 280,
@@ -383,7 +383,7 @@ function SequenceStartCausality({
     ? createElement(
         Text,
         {
-          testId: "causality-first",
+          id: "causality-first",
           x: 10,
           y: 48,
           width: 280,
@@ -421,7 +421,7 @@ function SequenceStartCausality({
     { width: 320, height: 180 },
     createElement(
       Slide,
-      { slideId: "sequence-start-causality" },
+      { id: "sequence-start-causality" },
       explicitStep
         ? createElement(Step, { n: 2 }, content)
         : automaticClickStep
@@ -453,7 +453,7 @@ function ForwardSibling({ sourceFirst }: ForwardSiblingOptions) {
     { width: 320, height: 180 },
     createElement(
       Slide,
-      { slideId: "forward-sibling" },
+      { id: "forward-sibling" },
       createElement(
         MotionScope,
         { scope: activator },
@@ -484,7 +484,7 @@ function IncomparableUnknownStarts() {
     { width: 320, height: 180 },
     createElement(
       Slide,
-      { slideId: "incomparable-unknown-starts" },
+      { id: "incomparable-unknown-starts" },
       createElement(
         MotionScope,
         { scope: firstSource },
@@ -518,7 +518,7 @@ function ReaderCycleDeck() {
     { width: 320, height: 180 },
     createElement(
       Slide,
-      { slideId: "reader-completion-cycle" },
+      { id: "reader-completion-cycle" },
       createElement(
         MotionScope,
         { scope: first },
@@ -722,7 +722,7 @@ function StaggeredSource() {
     { width: 320, height: 180 },
     createElement(
       Slide,
-      { slideId: "scope-order" },
+      { id: "scope-order" },
       createElement(
         MotionScope,
         { scope: directFollower, startAt: after(source.end, 50) },
@@ -768,7 +768,7 @@ function EmptyScopeDeck({
       ? null
       : sourceMode === "static"
         ? createElement(Shape, {
-            testId: "static-source",
+            id: "static-source",
             x: 0,
             y: 0,
             width: 20,
@@ -781,7 +781,7 @@ function EmptyScopeDeck({
     { width: 320, height: 180 },
     createElement(
       Slide,
-      { slideId: "empty-scope" },
+      { id: "empty-scope" },
       includeSource
         ? createElement(
             MotionScope,
@@ -826,7 +826,7 @@ function CyclicScopes() {
     { width: 320, height: 180 },
     createElement(
       Slide,
-      { slideId: "cycle" },
+      { id: "cycle" },
       createElement(
         MotionScope,
         { scope: first, startAt: second.end },
@@ -849,7 +849,7 @@ function CrossStepScopes() {
     { width: 320, height: 180 },
     createElement(
       Slide,
-      { slideId: "cross-step" },
+      { id: "cross-step" },
       createElement(
         Step,
         { n: 1 },
@@ -880,7 +880,7 @@ function SequencedScopes() {
     { width: 320, height: 180 },
     createElement(
       Slide,
-      { slideId: "sequence" },
+      { id: "sequence" },
       createElement(
         MotionScope,
         { scope: sequence, mode: "sequence" },
@@ -908,7 +908,7 @@ function UnknownCompletionTree() {
     { width: 320, height: 180 },
     createElement(
       Slide,
-      { slideId: "unknown-completion-tree" },
+      { id: "unknown-completion-tree" },
       createElement(
         MotionScope,
         { scope: outer },
@@ -921,7 +921,7 @@ function UnknownCompletionTree() {
             createElement(
               Text,
               {
-                testId: "long-first",
+                id: "long-first",
                 x: 10,
                 y: 8,
                 width: 300,
@@ -933,7 +933,7 @@ function UnknownCompletionTree() {
             createElement(
               Text,
               {
-                testId: "short-late",
+                id: "short-late",
                 x: 10,
                 y: 45,
                 width: 300,
@@ -1059,7 +1059,7 @@ function ConditionJoinStartAlias({
     { width: 320, height: 190 },
     createElement(
       Slide,
-      { slideId: `condition-join-start-alias-${trigger}` },
+      { id: `condition-join-start-alias-${trigger}` },
       trigger === "click" ? createElement(Step, { n: 1 }, content) : content,
     ),
   );
@@ -1137,7 +1137,7 @@ function LateParentRetainedAlias({
     createElement(
       Slide,
       {
-        slideId: `late-parent-retained-alias-${trigger}-${reverse}-${parentOffsetMs}`,
+        id: `late-parent-retained-alias-${trigger}-${reverse}-${parentOffsetMs}`,
       },
       slideContent,
     ),
@@ -1157,7 +1157,7 @@ function SameJoinParentAlias() {
     { width: 320, height: 180 },
     createElement(
       Slide,
-      { slideId: "same-join-parent-alias" },
+      { id: "same-join-parent-alias" },
       createElement(
         Fragment,
         null,
@@ -1240,7 +1240,7 @@ function ForwardConditionJoinAlias() {
     { width: 320, height: 200 },
     createElement(
       Slide,
-      { slideId: "forward-condition-join-alias" },
+      { id: "forward-condition-join-alias" },
       createElement(
         Fragment,
         null,
@@ -1320,7 +1320,7 @@ function ForwardConditionJoinOrdinaryEndChain({
     MotionScope,
     { scope: targetGroupSequence, mode: "sequence" },
     createElement(Shape, {
-      testId: "chain-target-group-source",
+      id: "chain-target-group-source",
       x: 10,
       y: 220,
       width: 280,
@@ -1386,7 +1386,7 @@ function ForwardConditionJoinOrdinaryEndChain({
     { width: 320, height: 280 },
     createElement(
       Slide,
-      { slideId: "forward-condition-join-ordinary-end-chain" },
+      { id: "forward-condition-join-ordinary-end-chain" },
       explicitStep ? createElement(Step, { n: 2 }, roots) : roots,
     ),
   );
@@ -1412,7 +1412,7 @@ function EarlyHostParallelJoin({
   const firstSource = createElement(
     Text,
     {
-      testId: "early-host-first",
+      id: "early-host-first",
       x: 10,
       y: 8,
       width: 300,
@@ -1428,7 +1428,7 @@ function EarlyHostParallelJoin({
     createElement(
       Text,
       {
-        testId: "early-host-late",
+        id: "early-host-late",
         x: 10,
         y: 40,
         width: 300,
@@ -1481,7 +1481,7 @@ function EarlyHostParallelJoin({
     { width: 320, height: 170 },
     createElement(
       Slide,
-      { slideId: `early-host-${longFirst ? "long" : "short"}-${trigger}` },
+      { id: `early-host-${longFirst ? "long" : "short"}-${trigger}` },
       trigger === "click" ? createElement(Step, { n: 2 }, content) : content,
     ),
   );
@@ -1551,7 +1551,7 @@ function CrossBranchConditionJoin({ kind, trigger }: CrossBranchJoinOptions) {
     { width: 320, height: 170 },
     createElement(
       Slide,
-      { slideId: `${kind}-${trigger}` },
+      { id: `${kind}-${trigger}` },
       trigger === "click" ? createElement(Step, { n: 2 }, content) : content,
     ),
   );
@@ -1620,7 +1620,7 @@ function NestedMaxConditionJoin({
     { width: 320, height: 170 },
     createElement(
       Slide,
-      { slideId: `nested-max-${reverse ? "reverse" : "forward"}-${trigger}` },
+      { id: `nested-max-${reverse ? "reverse" : "forward"}-${trigger}` },
       trigger === "click" ? createElement(Step, { n: 1 }, content) : content,
     ),
   );
@@ -1681,7 +1681,7 @@ function DfsEndCollectors({
     ? createElement(
         Text,
         {
-          testId: "dfs-first",
+          id: "dfs-first",
           x: 8,
           y: 8,
           width: 240,
@@ -1700,7 +1700,7 @@ function DfsEndCollectors({
     ? createElement(
         Text,
         {
-          testId: "dfs-second",
+          id: "dfs-second",
           x: 40,
           y: 38,
           width: 240,
@@ -1817,7 +1817,7 @@ function DfsEndCollectors({
     createElement(
       Slide,
       {
-        slideId: `dfs-end-collectors-${longFirst ? "long" : "short"}-${branchOrder}-${consumerOrder}-${trigger}-${wordSources ? "word" : "letter"}`,
+        id: `dfs-end-collectors-${longFirst ? "long" : "short"}-${branchOrder}-${consumerOrder}-${trigger}-${wordSources ? "word" : "letter"}`,
       },
       trigger === "click" ? createElement(Step, { n: 2 }, content) : content,
     ),
@@ -1849,7 +1849,7 @@ function B20RecursiveProjection({ firstText, trigger }: B20ProjectionOptions) {
     createElement(
       Text,
       {
-        testId: "b20-parent-source",
+        id: "b20-parent-source",
         x: 10,
         y: 8,
         width: 280,
@@ -1869,7 +1869,7 @@ function B20RecursiveProjection({ firstText, trigger }: B20ProjectionOptions) {
       createElement(
         Text,
         {
-          testId: "b20-a",
+          id: "b20-a",
           x: 10,
           y: 38,
           width: 280,
@@ -1895,7 +1895,7 @@ function B20RecursiveProjection({ firstText, trigger }: B20ProjectionOptions) {
       createElement(
         Text,
         {
-          testId: "b20-b",
+          id: "b20-b",
           x: 10,
           y: 106,
           width: 280,
@@ -1952,7 +1952,7 @@ function B20RecursiveProjection({ firstText, trigger }: B20ProjectionOptions) {
     { width: 360, height: 340 },
     createElement(
       Slide,
-      { slideId: `b20-${firstText.length}-${trigger}` },
+      { id: `b20-${firstText.length}-${trigger}` },
       trigger === "click" ? createElement(Step, { n: 2 }, content) : content,
     ),
   );
@@ -1969,7 +1969,7 @@ function LateParentMultipleSourceJoin() {
     { width: 320, height: 180 },
     createElement(
       Slide,
-      { slideId: "late-parent-multiple-source-join" },
+      { id: "late-parent-multiple-source-join" },
       createElement(
         MotionScope,
         { scope: host },
@@ -2034,7 +2034,7 @@ function LateParentRootJoin({
     { width: 320, height: 180 },
     createElement(
       Slide,
-      { slideId: `late-parent-root-${trigger}` },
+      { id: `late-parent-root-${trigger}` },
       trigger === "click" ? createElement(Step, { n: 2 }, content) : content,
     ),
   );
@@ -2095,7 +2095,7 @@ function ThreeBranchConditionProjection() {
     createElement(
       Text,
       {
-        testId,
+        id: testId,
         x: 0,
         y,
         width: 150,
@@ -2111,7 +2111,7 @@ function ThreeBranchConditionProjection() {
     );
   const timedShape = (testId: string, delay = 71) =>
     createElement(Shape, {
-      testId,
+      id: testId,
       x: 0,
       y: 40,
       width: 20,
@@ -2207,11 +2207,7 @@ function ThreeBranchConditionProjection() {
   return createElement(
     Deck,
     { width: 360, height: 320 },
-    createElement(
-      Slide,
-      { slideId: "three-branch-condition-projection" },
-      content,
-    ),
+    createElement(Slide, { id: "three-branch-condition-projection" }, content),
   );
 }
 
@@ -2224,7 +2220,7 @@ function EmptyUnknownEndAlias() {
     { width: 320, height: 160 },
     createElement(
       Slide,
-      { slideId: "empty-unknown-end-alias" },
+      { id: "empty-unknown-end-alias" },
       createElement(
         Fragment,
         null,
@@ -2257,7 +2253,7 @@ function EmptyU32StartAlias() {
     { width: 320, height: 160 },
     createElement(
       Slide,
-      { slideId: "empty-u32-start-alias" },
+      { id: "empty-u32-start-alias" },
       createElement(
         Fragment,
         null,
@@ -2290,7 +2286,7 @@ function LayeredMaximumOffsets() {
     { width: 320, height: 160 },
     createElement(
       Slide,
-      { slideId: "layered-maximum-offsets" },
+      { id: "layered-maximum-offsets" },
       createElement(
         Fragment,
         null,
@@ -2325,7 +2321,7 @@ function SameScopeMaximumOffset({
   const sourceText = createElement(
     Text,
     {
-      testId: "same-scope-offset-source",
+      id: "same-scope-offset-source",
       x: 0,
       y: 0,
       width: 100,
@@ -2355,7 +2351,7 @@ function SameScopeMaximumOffset({
     { width: 320, height: 160 },
     createElement(
       Slide,
-      { slideId: `same-scope-maximum-offset-${split ? "split" : "flat"}` },
+      { id: `same-scope-maximum-offset-${split ? "split" : "flat"}` },
       createElement(
         Fragment,
         null,
@@ -2372,7 +2368,7 @@ function ProvenanceOffsetProjection() {
   const prefix = useMotionScope();
   const parent = useMotionScope();
   const prefixEffect = createElement(Shape, {
-    testId: "provenance-prefix",
+    id: "provenance-prefix",
     x: 8,
     y: 8,
     width: 80,
@@ -2381,7 +2377,7 @@ function ProvenanceOffsetProjection() {
     enter: fade({ duration: 10_000 }),
   });
   const parentEffect = createElement(Shape, {
-    testId: "provenance-consumer",
+    id: "provenance-consumer",
     x: 8,
     y: 48,
     width: 80,
@@ -2394,7 +2390,7 @@ function ProvenanceOffsetProjection() {
     { width: 320, height: 160 },
     createElement(
       Slide,
-      { slideId: "provenance-offset-projection" },
+      { id: "provenance-offset-projection" },
       createElement(
         Fragment,
         null,
@@ -2437,7 +2433,7 @@ function IncomparableUnknownJoin({
   const source = createElement(
     Text,
     {
-      testId: "join-parent-source",
+      id: "join-parent-source",
       x: 10,
       y: 8,
       width: 300,
@@ -2450,7 +2446,7 @@ function IncomparableUnknownJoin({
   const first = createElement(
     Text,
     {
-      testId: "join-first",
+      id: "join-first",
       x: 10,
       y: 8,
       width: 300,
@@ -2463,7 +2459,7 @@ function IncomparableUnknownJoin({
   const late = createElement(
     Text,
     {
-      testId: "join-late",
+      id: "join-late",
       x: 10,
       y: 42,
       width: 300,
@@ -2530,7 +2526,7 @@ function IncomparableUnknownJoin({
   return createElement(
     Deck,
     { width: 320, height: 190 },
-    createElement(Slide, { slideId: "incomparable-unknown-join" }, stepped),
+    createElement(Slide, { id: "incomparable-unknown-join" }, stepped),
   );
 }
 
@@ -2593,7 +2589,7 @@ function UnknownCompletionEntryDeck({
     { width: 320, height: 180 },
     createElement(
       Slide,
-      { slideId: "unknown-completion-entry" },
+      { id: "unknown-completion-entry" },
       ...autoRoots,
       createElement(Step, { n: 1 }, ...clickRoots),
     ),
@@ -2610,7 +2606,7 @@ function EmptySequenceMember() {
     { width: 320, height: 180 },
     createElement(
       Slide,
-      { slideId: "empty-sequence-member" },
+      { id: "empty-sequence-member" },
       createElement(
         MotionScope,
         { scope: sequence, mode: "sequence" },
@@ -2645,7 +2641,7 @@ function DelayedInactiveSequenceMember({
       ? null
       : sourceMode === "static"
         ? createElement(Shape, {
-            testId: "static-source",
+            id: "static-source",
             x: 0,
             y: 0,
             width: 20,
@@ -2658,7 +2654,7 @@ function DelayedInactiveSequenceMember({
     { width: 320, height: 180 },
     createElement(
       Slide,
-      { slideId: "delayed-inactive-sequence-member" },
+      { id: "delayed-inactive-sequence-member" },
       createElement(
         MotionScope,
         { scope: sequence, mode: "sequence" },
@@ -2696,7 +2692,7 @@ function EmptyStaggerMember() {
     { width: 320, height: 180 },
     createElement(
       Slide,
-      { slideId: "empty-stagger-member" },
+      { id: "empty-stagger-member" },
       createElement(
         MotionScope,
         { scope: stagger, mode: "stagger", each: 100 },
@@ -2718,7 +2714,7 @@ function SelfStartedMember() {
     { width: 320, height: 180 },
     createElement(
       Slide,
-      { slideId: "self-started-member" },
+      { id: "self-started-member" },
       createElement(
         MotionScope,
         { scope: group },
@@ -2749,19 +2745,19 @@ function BoxAndDisabledMembers() {
     { width: 320, height: 180 },
     createElement(
       Slide,
-      { slideId: "box-motion" },
+      { id: "box-motion" },
       createElement(
         Box,
         { enter: fade({ delay: 800 }) },
         createElement(Shape, {
-          testId: "box-default",
+          id: "box-default",
           x: 0,
           y: 0,
           width: 20,
           height: 20,
         }),
         createElement(Shape, {
-          testId: "own-entry",
+          id: "own-entry",
           x: 24,
           y: 0,
           width: 20,
@@ -2774,7 +2770,7 @@ function BoxAndDisabledMembers() {
         { scope: stagger, mode: "stagger", each: 100 },
         movingShape("stagger-first", 100),
         createElement(Shape, {
-          testId: "static",
+          id: "static",
           x: 48,
           y: 0,
           width: 20,
@@ -2818,7 +2814,7 @@ function OrdinaryComposition() {
     movingShape("function-first", 100),
     createElement(
       Group,
-      { testId: "native-group" },
+      { id: "native-group" },
       movingShape("group-first", 100),
       movingShape("group-second", 100),
     ),
@@ -2858,7 +2854,7 @@ function UniversalDelayLoweringDeck({
     createElement(
       Text,
       {
-        testId,
+        id: testId,
         x: 10,
         y,
         width: 280,
@@ -2870,7 +2866,7 @@ function UniversalDelayLoweringDeck({
     );
   const marker = (testId: string, y: number) =>
     createElement(Shape, {
-      testId,
+      id: testId,
       x: 10,
       y,
       width: 24,
@@ -2936,11 +2932,7 @@ function UniversalDelayLoweringDeck({
   return createElement(
     Deck,
     { width: 320, height: 160 },
-    createElement(
-      Slide,
-      { slideId: `universal-delay-${scenario}` },
-      ...children,
-    ),
+    createElement(Slide, { id: `universal-delay-${scenario}` }, ...children),
   );
 }
 
@@ -2957,7 +2949,7 @@ function LateParentMultiSourceStartAlias() {
     createElement(
       Text,
       {
-        testId,
+        id: testId,
         x: 10,
         y,
         width: 280,
@@ -3006,7 +2998,7 @@ function LateParentMultiSourceStartAlias() {
   return createElement(
     Deck,
     { width: 320, height: 180 },
-    createElement(Slide, { slideId: "multisource-late-start-alias" }, content),
+    createElement(Slide, { id: "multisource-late-start-alias" }, content),
   );
 }
 
@@ -3049,7 +3041,7 @@ function MultiSourceSpreadOffsetStart() {
   return createElement(
     Deck,
     { width: 320, height: 180 },
-    createElement(Slide, { slideId: "multisource-spread-offset" }, content),
+    createElement(Slide, { id: "multisource-spread-offset" }, content),
   );
 }
 
@@ -3067,7 +3059,7 @@ function ExactHostOffsetCancellation() {
     createElement(
       Text,
       {
-        testId,
+        id: testId,
         x: 0,
         y: 0,
         width: 80,
@@ -3078,7 +3070,7 @@ function ExactHostOffsetCancellation() {
     );
   const shape = (testId: string) =>
     createElement(Shape, {
-      testId,
+      id: testId,
       x: 0,
       y: 40,
       width: 20,
@@ -3115,7 +3107,7 @@ function ExactHostOffsetCancellation() {
     { width: 320, height: 120 },
     createElement(
       Slide,
-      { slideId: "exact-host-offset-cancellation" },
+      { id: "exact-host-offset-cancellation" },
       createElement(
         MotionScope,
         { scope: host, mode: "parallel" },
@@ -3132,7 +3124,7 @@ describe("component choreography scope", () => {
     const slide = result.report.slides[0];
     const motion = slide?.capabilities?.["motion"] as MotionObservation;
     const times = motion.steps[0]?.effects.map(({ target, startMs, endMs }) => [
-      target.testId,
+      target.authorId,
       startMs,
       endMs,
     ]);
@@ -3149,7 +3141,7 @@ describe("component choreography scope", () => {
     assert.deepEqual(file.errors, []);
     assert.deepEqual(
       file.slides[0]?.animations?.[0]?.effects.map(({ targetId, delayMs }) => [
-        slide?.objects.find(({ id }) => id === targetId)?.testId,
+        slide?.objects.find(({ id }) => id === targetId)?.authorId,
         delayMs,
       ]),
       [
@@ -3180,7 +3172,7 @@ describe("component choreography scope", () => {
       });
       assert.deepEqual(
         motion.steps[0]?.effects.map(({ target, startMs }) => [
-          target.testId,
+          target.authorId,
           startMs,
         ]),
         [
@@ -3234,7 +3226,7 @@ describe("component choreography scope", () => {
     const slide = result.report.slides[0];
     const motion = slide?.capabilities?.["motion"] as MotionObservation;
     const objectId = (testId: string) =>
-      slide?.objects.find(({ testId: id }) => id === testId)?.id;
+      slide?.objects.find(({ authorId: id }) => id === testId)?.id;
     const scopeContaining = (testId: string) =>
       motion.scopes?.find(({ members }) =>
         members.some(
@@ -3288,7 +3280,7 @@ describe("component choreography scope", () => {
     const motion = slide?.capabilities?.["motion"] as MotionObservation;
     assert.deepEqual(
       motion.steps[0]?.effects.map(({ target, startMs, endMs }) => [
-        target.testId,
+        target.authorId,
         startMs,
         endMs,
       ]),
@@ -3304,7 +3296,7 @@ describe("component choreography scope", () => {
     assert.deepEqual(file.errors, []);
     assert.deepEqual(
       file.slides[0]?.animations?.[0]?.effects.map(({ targetId, delayMs }) => [
-        slide?.objects.find(({ id }) => id === targetId)?.testId,
+        slide?.objects.find(({ id }) => id === targetId)?.authorId,
         delayMs,
       ]),
       [
@@ -3323,7 +3315,7 @@ describe("component choreography scope", () => {
 
     assert.deepEqual(
       motion.steps[0]?.effects.map(({ target, startMs, endMs }) => [
-        target.testId,
+        target.authorId,
         startMs,
         endMs,
       ]),
@@ -3336,7 +3328,7 @@ describe("component choreography scope", () => {
       ],
     );
     const objectId = (testId: string) =>
-      slide?.objects.find((object) => object.testId === testId)?.id;
+      slide?.objects.find((object) => object.authorId === testId)?.id;
     const containsObject = (scopeId: string | undefined, testId: string) =>
       motion.scopes
         ?.find(({ id }) => id === scopeId)
@@ -3387,10 +3379,10 @@ describe("component choreography scope", () => {
       ["unknown", undefined, "unknown", undefined],
     );
     const finiteFollower = motion.steps[0]?.effects.find(
-      ({ target }) => target.testId === "finite-after-unknown",
+      ({ target }) => target.authorId === "finite-after-unknown",
     );
     const outerWaiter = motion.steps[0]?.effects.find(
-      ({ target }) => target.testId === "after-unknown-join",
+      ({ target }) => target.authorId === "after-unknown-join",
     );
     assert.equal(
       finiteFollower?.startAfter &&
@@ -3500,7 +3492,7 @@ describe("component choreography scope", () => {
       const slide = result.report.slides[0];
       const motion = slide?.capabilities?.["motion"] as MotionObservation;
       const objectId = (testId: string) =>
-        slide?.objects.find((object) => object.testId === testId)?.id;
+        slide?.objects.find((object) => object.authorId === testId)?.id;
       const scopeContaining = (testId: string) =>
         motion.scopes?.find(({ members }) =>
           members.some(
@@ -3663,7 +3655,7 @@ describe("component choreography scope", () => {
     const slide = result.report.slides[0];
     const motion = slide?.capabilities?.["motion"] as MotionObservation;
     const objectId = (testId: string) =>
-      slide?.objects.find((object) => object.testId === testId)?.id;
+      slide?.objects.find((object) => object.authorId === testId)?.id;
     const scopeContaining = (testId: string) =>
       motion.scopes?.find(({ members }) =>
         members.some(
@@ -3761,7 +3753,7 @@ describe("component choreography scope", () => {
     const slide = result.report.slides[0];
     const motion = slide?.capabilities?.["motion"] as MotionObservation;
     const objectId = (testId: string) =>
-      slide?.objects.find(({ testId: id }) => id === testId)?.id;
+      slide?.objects.find(({ authorId: id }) => id === testId)?.id;
     const scopeContaining = (testId: string) =>
       motion.scopes?.find(({ members }) =>
         members.some(
@@ -3842,7 +3834,7 @@ describe("component choreography scope", () => {
       const slide = result.report.slides[0];
       const motion = slide?.capabilities?.["motion"] as MotionObservation;
       const objectId = (testId: string) =>
-        slide?.objects.find(({ testId: id }) => id === testId)?.id;
+        slide?.objects.find(({ authorId: id }) => id === testId)?.id;
       const scopeContaining = (testId: string) =>
         motion.scopes?.find(({ members }) =>
           members.some(
@@ -3866,10 +3858,10 @@ describe("component choreography scope", () => {
       const aliasScope = scopeContaining("alias-consumer");
       const parentAliasScope = scopeContaining("parent-alias-consumer");
       const aliasEffect = motion.steps[0]?.effects.find(
-        ({ target }) => target.testId === "alias-consumer",
+        ({ target }) => target.authorId === "alias-consumer",
       );
       const parentAliasEffect = motion.steps[0]?.effects.find(
-        ({ target }) => target.testId === "parent-alias-consumer",
+        ({ target }) => target.authorId === "parent-alias-consumer",
       );
       const file = await validatePptx(result.pptx);
       assert.deepEqual(file.errors, []);
@@ -4026,7 +4018,7 @@ describe("component choreography scope", () => {
     const slide = result.report.slides[0];
     const motion = slide?.capabilities?.["motion"] as MotionObservation;
     const objectId = (testId: string) =>
-      slide?.objects.find(({ testId: id }) => id === testId)?.id;
+      slide?.objects.find(({ authorId: id }) => id === testId)?.id;
     const scopeContaining = (testId: string) =>
       motion.scopes?.find(({ members }) =>
         members.some(
@@ -4118,7 +4110,7 @@ describe("component choreography scope", () => {
           const slide = result.report.slides[0];
           const motion = slide?.capabilities?.["motion"] as MotionObservation;
           const objectId = (testId: string) =>
-            slide?.objects.find(({ testId: id }) => id === testId)?.id;
+            slide?.objects.find(({ authorId: id }) => id === testId)?.id;
           const scopeContaining = (testId: string) =>
             motion.scopes?.find(({ members }) =>
               members.some(
@@ -4138,7 +4130,7 @@ describe("component choreography scope", () => {
           );
           const afterParentScope = scopeContaining("late-alias-after-parent");
           const aliasEffect = motion.steps[0]?.effects.find(
-            ({ target }) => target.testId === "late-alias-consumer",
+            ({ target }) => target.authorId === "late-alias-consumer",
           );
           assert.ok(
             firstScope &&
@@ -4215,7 +4207,7 @@ describe("component choreography scope", () => {
     const slide = result.report.slides[0];
     const motion = slide?.capabilities?.["motion"] as MotionObservation;
     const objectId = (testId: string) =>
-      slide?.objects.find(({ testId: id }) => id === testId)?.id;
+      slide?.objects.find(({ authorId: id }) => id === testId)?.id;
     const scopeContaining = (testId: string) =>
       motion.scopes?.find(({ members }) =>
         members.some(
@@ -4300,7 +4292,7 @@ describe("component choreography scope", () => {
     const slide = result.report.slides[0];
     const motion = slide?.capabilities?.["motion"] as MotionObservation;
     const objectId = (testId: string) =>
-      slide?.objects.find(({ testId: id }) => id === testId)?.id;
+      slide?.objects.find(({ authorId: id }) => id === testId)?.id;
     const aliasScope = motion.scopes?.find(({ members }) =>
       members.some(
         (member) =>
@@ -4327,7 +4319,7 @@ describe("component choreography scope", () => {
         ),
     );
     const aliasEffect = motion.steps[0]?.effects.find(
-      ({ target }) => target.testId === "forward-alias-consumer",
+      ({ target }) => target.authorId === "forward-alias-consumer",
     );
     assert.ok(aliasScope && innerScope && delayedScope && aliasEffect);
     assert.deepEqual(aliasScope.startAfterAll, [
@@ -4425,7 +4417,7 @@ describe("component choreography scope", () => {
       const slide = result.report.slides[0];
       const motion = slide?.capabilities?.["motion"] as MotionObservation;
       const objectId = (testId: string) =>
-        slide?.objects.find(({ testId: id }) => id === testId)?.id;
+        slide?.objects.find(({ authorId: id }) => id === testId)?.id;
       const scopeContaining = (testId: string) =>
         motion.scopes?.find(({ members }) =>
           members.some(
@@ -4514,7 +4506,7 @@ describe("component choreography scope", () => {
       const slide = result.report.slides[0];
       const motion = slide?.capabilities?.["motion"] as MotionObservation;
       const objectId = (testId: string) =>
-        slide?.objects.find(({ testId: id }) => id === testId)?.id;
+        slide?.objects.find(({ authorId: id }) => id === testId)?.id;
       const scopeContaining = (testId: string) =>
         motion.scopes?.find(({ members }) =>
           members.some(
@@ -4655,7 +4647,7 @@ describe("component choreography scope", () => {
       const slide = result.report.slides[0];
       const motion = slide?.capabilities?.["motion"] as MotionObservation;
       const objectId = (testId: string) =>
-        slide?.objects.find(({ testId: id }) => id === testId)?.id;
+        slide?.objects.find(({ authorId: id }) => id === testId)?.id;
       const scopeContaining = (testId: string) =>
         motion.scopes?.find(({ members }) =>
           members.some(
@@ -4800,7 +4792,7 @@ describe("component choreography scope", () => {
         const slide = result.report.slides[0];
         const motion = slide?.capabilities?.["motion"] as MotionObservation;
         const objectId = (testId: string) =>
-          slide?.objects.find(({ testId: id }) => id === testId)?.id;
+          slide?.objects.find(({ authorId: id }) => id === testId)?.id;
         const scopeContaining = (testId: string) =>
           motion.scopes?.find(({ members }) =>
             members.some(
@@ -4943,7 +4935,7 @@ describe("component choreography scope", () => {
     const slide = result.report.slides[0];
     const motion = slide?.capabilities?.["motion"] as MotionObservation;
     const objectId = (testId: string) =>
-      slide?.objects.find(({ testId: id }) => id === testId)?.id;
+      slide?.objects.find(({ authorId: id }) => id === testId)?.id;
     const consumerScope = motion.scopes?.find(({ members }) =>
       members.some(
         (member) =>
@@ -5005,7 +4997,7 @@ describe("component choreography scope", () => {
             const slide = result.report.slides[0];
             const motion = slide?.capabilities?.["motion"] as MotionObservation;
             const objectId = (testId: string) =>
-              slide?.objects.find(({ testId: id }) => id === testId)?.id;
+              slide?.objects.find(({ authorId: id }) => id === testId)?.id;
             const scopeContaining = (testId: string) =>
               motion.scopes?.find(({ members }) =>
                 members.some(
@@ -5245,7 +5237,7 @@ describe("component choreography scope", () => {
       const slide = result.report.slides[0];
       const motion = slide?.capabilities?.["motion"] as MotionObservation;
       const objectId = (testId: string) =>
-        slide?.objects.find(({ testId: id }) => id === testId)?.id;
+        slide?.objects.find(({ authorId: id }) => id === testId)?.id;
       const scopeContaining = (testId: string) =>
         motion.scopes?.find(({ members }) =>
           members.some(
@@ -5321,7 +5313,7 @@ describe("component choreography scope", () => {
       const slide = result.report.slides[0];
       const motion = slide?.capabilities?.["motion"] as MotionObservation;
       const objectId = (testId: string) =>
-        slide?.objects.find(({ testId: id }) => id === testId)?.id;
+        slide?.objects.find(({ authorId: id }) => id === testId)?.id;
       const scopeContaining = (testId: string) =>
         motion.scopes?.find(({ members }) =>
           members.some(
@@ -5420,10 +5412,10 @@ describe("component choreography scope", () => {
       const slide = result.report.slides[0];
       const motion = slide?.capabilities?.["motion"] as MotionObservation;
       const first = motion.steps[0]?.effects.find(
-        ({ target }) => target.testId === "dfs-first",
+        ({ target }) => target.authorId === "dfs-first",
       );
       const second = motion.steps[0]?.effects.find(
-        ({ target }) => target.testId === "dfs-second",
+        ({ target }) => target.authorId === "dfs-second",
       );
       assert.ok(first && second);
       for (const source of [first, second]) {
@@ -5456,7 +5448,7 @@ describe("component choreography scope", () => {
       const effects = fileSlide?.animations?.[0]?.effects ?? [];
       for (const testId of ["dfs-first", "dfs-second"]) {
         const targetId = slide?.objects.find(
-          ({ testId: id }) => id === testId,
+          ({ authorId: id }) => id === testId,
         )?.id;
         const wordEffect = effects.find(({ targetId: id }) => id === targetId);
         assert.ok(wordEffect);
@@ -5491,7 +5483,7 @@ describe("component choreography scope", () => {
     const slide = result.report.slides[0];
     const motion = slide?.capabilities?.["motion"] as MotionObservation;
     const sourceId = slide?.objects.find(
-      ({ testId }) => testId === "dfs-first",
+      ({ authorId: testId }) => testId === "dfs-first",
     )?.id;
     const sourceScope = motion.scopes?.find(({ members }) =>
       members.some(
@@ -5542,7 +5534,7 @@ describe("component choreography scope", () => {
           (member) =>
             member.kind === "object" &&
             member.id ===
-              slide?.objects.find(({ testId: id }) => id === testId)?.id,
+              slide?.objects.find(({ authorId: id }) => id === testId)?.id,
         ),
       );
     const firstScope = scopeContaining("dfs-first");
@@ -5570,12 +5562,15 @@ describe("component choreography scope", () => {
     const afterPEffect = effects.find(
       ({ targetId }) =>
         targetId ===
-        slide?.objects.find(({ testId }) => testId === "dfs-after-p")?.id,
+        slide?.objects.find(({ authorId: testId }) => testId === "dfs-after-p")
+          ?.id,
     );
     const aliasEffect = effects.find(
       ({ targetId }) =>
         targetId ===
-        slide?.objects.find(({ testId }) => testId === "dfs-p-start-alias")?.id,
+        slide?.objects.find(
+          ({ authorId: testId }) => testId === "dfs-p-start-alias",
+        )?.id,
     );
     assert.ok(afterPEffect && aliasEffect);
     const containers = fileSlide?.animationContainers ?? [];
@@ -5652,7 +5647,7 @@ describe("component choreography scope", () => {
       const slide = result.report.slides[0];
       const motion = slide?.capabilities?.["motion"] as MotionObservation;
       const objectId = (testId: string) =>
-        slide?.objects.find(({ testId: id }) => id === testId)?.id;
+        slide?.objects.find(({ authorId: id }) => id === testId)?.id;
       const scopeContaining = (testId: string) =>
         motion.scopes?.find(({ members }) =>
           members.some(
@@ -5717,16 +5712,16 @@ describe("component choreography scope", () => {
         offsetMs: dependency.offsetMs + (options.effectDelayMs ?? 0),
       }));
       const firstObservation = motion.steps[0]?.effects.find(
-        ({ target }) => target.testId === "join-first",
+        ({ target }) => target.authorId === "join-first",
       );
       const lateObservation = motion.steps[0]?.effects.find(
-        ({ target }) => target.testId === "join-late",
+        ({ target }) => target.authorId === "join-late",
       );
       const afterJoinObservation = motion.steps[0]?.effects.find(
-        ({ target }) => target.testId === "join-after",
+        ({ target }) => target.authorId === "join-after",
       );
       const followerObservation = motion.steps[0]?.effects.find(
-        ({ target }) => target.testId === "join-follower",
+        ({ target }) => target.authorId === "join-follower",
       );
       assert.deepEqual(
         [firstObservation?.completion, firstObservation?.endMs],
@@ -5993,7 +5988,7 @@ describe("component choreography scope", () => {
       );
 
       const objectId = (testId: string) =>
-        slide?.objects.find(({ testId: id }) => id === testId)?.id;
+        slide?.objects.find(({ authorId: id }) => id === testId)?.id;
       const fileEffects = file.slides[0]?.animations?.flatMap(
         ({ effects }) => effects,
       );
@@ -6083,18 +6078,18 @@ describe("component choreography scope", () => {
     const slide = result.report.slides[0];
     const motion = slide?.capabilities?.["motion"] as MotionObservation;
     const objectId = (testId: string) =>
-      slide?.objects.find((object) => object.testId === testId)?.id;
+      slide?.objects.find((object) => object.authorId === testId)?.id;
     const source = motion.steps[0]?.effects.find(
-      ({ target }) => target.testId === "unknown-source",
+      ({ target }) => target.authorId === "unknown-source",
     );
     const first = motion.steps[0]?.effects.find(
-      ({ target }) => target.testId === "sequence-first",
+      ({ target }) => target.authorId === "sequence-first",
     );
     const second = motion.steps[0]?.effects.find(
-      ({ target }) => target.testId === "sequence-second",
+      ({ target }) => target.authorId === "sequence-second",
     );
     const follower = motion.steps[0]?.effects.find(
-      ({ target }) => target.testId === "sequence-follower",
+      ({ target }) => target.authorId === "sequence-follower",
     );
     assert.deepEqual(
       [source?.completion, source?.endMs, first?.startMs, second?.startMs],
@@ -6219,18 +6214,18 @@ describe("component choreography scope", () => {
       const slide = result.report.slides[0];
       const motion = slide?.capabilities?.["motion"] as MotionObservation;
       const objectId = (testId: string) =>
-        slide?.objects.find(({ testId: id }) => id === testId)?.id;
+        slide?.objects.find(({ authorId: id }) => id === testId)?.id;
       const source = motion.steps[0]?.effects.find(
-        ({ target }) => target.testId === "causality-source",
+        ({ target }) => target.authorId === "causality-source",
       );
       const first = motion.steps[0]?.effects.find(
-        ({ target }) => target.testId === "causality-first",
+        ({ target }) => target.authorId === "causality-first",
       );
       const second = motion.steps[0]?.effects.find(
-        ({ target }) => target.testId === "causality-second",
+        ({ target }) => target.authorId === "causality-second",
       );
       const follower = motion.steps[0]?.effects.find(
-        ({ target }) => target.testId === "causality-follower",
+        ({ target }) => target.authorId === "causality-follower",
       );
 
       if (options.sourceUnknown) {
@@ -6357,7 +6352,7 @@ describe("component choreography scope", () => {
       );
       const slide = result.report.slides[0];
       const objectId = (testId: string) =>
-        slide?.objects.find(({ testId: id }) => id === testId)?.id;
+        slide?.objects.find(({ authorId: id }) => id === testId)?.id;
       const file = await validatePptx(result.pptx);
       assert.deepEqual(file.errors, []);
       const effects = file.slides[0]?.animations?.[0]?.effects ?? [];
@@ -6409,7 +6404,7 @@ describe("component choreography scope", () => {
     const slide = result.report.slides[0];
     const motion = slide?.capabilities?.["motion"] as MotionObservation;
     const objectId = (testId: string) =>
-      slide?.objects.find((object) => object.testId === testId)?.id;
+      slide?.objects.find((object) => object.authorId === testId)?.id;
     const predecessorScope = motion.scopes?.find(
       ({ members }) =>
         members.some(
@@ -6424,10 +6419,10 @@ describe("component choreography scope", () => {
         ),
     );
     const first = motion.steps[0]?.effects.find(
-      ({ target }) => target.testId === "after-predecessor",
+      ({ target }) => target.authorId === "after-predecessor",
     );
     const follower = motion.steps[0]?.effects.find(
-      ({ target }) => target.testId === "after-self-started-sequence",
+      ({ target }) => target.authorId === "after-self-started-sequence",
     );
     assert.deepEqual(
       [predecessorScope?.completion, predecessorScope?.endMs],
@@ -6544,7 +6539,7 @@ describe("component choreography scope", () => {
     assert.deepEqual(original.errors, []);
     const slide = result.report.slides[0];
     const objectId = (testId: string) =>
-      slide?.objects.find(({ testId: id }) => id === testId)?.id;
+      slide?.objects.find(({ authorId: id }) => id === testId)?.id;
     const effects = original.slides[0]?.animations?.[0]?.effects ?? [];
     const sourceEffect = effects.find(
       ({ targetId }) => targetId === objectId("unknown-source"),
@@ -6610,7 +6605,7 @@ describe("component choreography scope", () => {
     ] as MotionObservation;
     assert.deepEqual(
       sequenceMotion.steps[0]?.effects.map(({ target, startMs, endMs }) => [
-        target.testId,
+        target.authorId,
         startMs,
         endMs,
       ]),
@@ -6641,7 +6636,7 @@ describe("component choreography scope", () => {
     ] as MotionObservation;
     assert.deepEqual(
       staggerMotion.steps[0]?.effects.map(({ target, startMs }) => [
-        target.testId,
+        target.authorId,
         startMs,
       ]),
       [
@@ -6661,7 +6656,7 @@ describe("component choreography scope", () => {
       const motion = slide?.capabilities?.["motion"] as MotionObservation;
       assert.deepEqual(
         motion.steps[0]?.effects.map(({ target, startMs, endMs }) => [
-          target.testId,
+          target.authorId,
           startMs,
           endMs,
         ]),
@@ -6678,7 +6673,7 @@ describe("component choreography scope", () => {
       assert.deepEqual(
         file.slides[0]?.animations?.[0]?.effects.map(
           ({ targetId, delayMs }) => [
-            slide?.objects.find(({ id }) => id === targetId)?.testId,
+            slide?.objects.find(({ id }) => id === targetId)?.authorId,
             delayMs,
           ],
         ),
@@ -6698,7 +6693,7 @@ describe("component choreography scope", () => {
     const motion = slide?.capabilities?.["motion"] as MotionObservation;
     assert.deepEqual(
       motion.steps[0]?.effects.map(({ target, startMs, endMs }) => [
-        target.testId,
+        target.authorId,
         startMs,
         endMs,
       ]),
@@ -6718,7 +6713,7 @@ describe("component choreography scope", () => {
     const motion = slide?.capabilities?.["motion"] as MotionObservation;
     assert.deepEqual(
       motion.steps[0]?.effects.map(({ target, startMs, delayMs }) => [
-        target.testId,
+        target.authorId,
         startMs,
         delayMs,
       ]),
@@ -6733,13 +6728,15 @@ describe("component choreography scope", () => {
     assert.deepEqual(
       stagger?.members.map((member) =>
         member.kind === "object"
-          ? slide?.objects.find(({ id }) => id === member.id)?.testId
+          ? slide?.objects.find(({ id }) => id === member.id)?.authorId
           : member.kind,
       ),
       ["stagger-first", "stagger-second"],
     );
     assert.equal(
-      slide?.objects.some(({ testId }) => testId === "disabled-descendant"),
+      slide?.objects.some(
+        ({ authorId: testId }) => testId === "disabled-descendant",
+      ),
       true,
     );
 
@@ -6747,7 +6744,7 @@ describe("component choreography scope", () => {
     assert.deepEqual(file.errors, []);
     assert.deepEqual(
       file.slides[0]?.animations?.[0]?.effects.map(({ targetId, delayMs }) => [
-        slide?.objects.find(({ id }) => id === targetId)?.testId,
+        slide?.objects.find(({ id }) => id === targetId)?.authorId,
         delayMs,
       ]),
       [
@@ -6766,23 +6763,23 @@ describe("component choreography scope", () => {
         { width: 320, height: 180 },
         createElement(
           Slide,
-          { slideId: "visible-box-motion" },
+          { id: "visible-box-motion" },
           createElement(
             Box,
             {
-              testId: "visible-background",
+              id: "visible-background",
               enter: fade({ duration: 200, delay: 800 }),
               style: { width: 120, height: 80, backgroundColor: "accent1" },
             },
             createElement(Shape, {
-              testId: "inherited-child",
+              id: "inherited-child",
               x: 0,
               y: 0,
               width: 20,
               height: 20,
             }),
             createElement(Shape, {
-              testId: "own-entry-child",
+              id: "own-entry-child",
               x: 24,
               y: 0,
               width: 20,
@@ -6793,13 +6790,13 @@ describe("component choreography scope", () => {
           createElement(
             Box,
             {
-              testId: "disabled-background",
+              id: "disabled-background",
               motion: false,
               enter: fade(),
               style: { width: 100, height: 60, backgroundColor: "accent2" },
             },
             createElement(Shape, {
-              testId: "disabled-child",
+              id: "disabled-child",
               x: 0,
               y: 0,
               width: 20,
@@ -6818,7 +6815,7 @@ describe("component choreography scope", () => {
     assert.deepEqual(
       motion.steps[0]?.effects.map(
         ({ target, startMs, delayMs, durationMs }) => [
-          target.testId,
+          target.authorId,
           startMs,
           delayMs,
           durationMs,
@@ -6832,7 +6829,7 @@ describe("component choreography scope", () => {
     );
     assert.deepEqual(
       file.slides[0]?.animations?.[0]?.effects.map(({ targetId, delayMs }) => [
-        slide?.objects.find(({ id }) => id === targetId)?.testId,
+        slide?.objects.find(({ id }) => id === targetId)?.authorId,
         delayMs,
       ]),
       [
@@ -6850,9 +6847,9 @@ describe("component choreography scope", () => {
         { width: 320, height: 180 },
         createElement(
           Slide,
-          { slideId: "reused" },
-          createElement(ReusedNamedScope),
-          createElement(ReusedNamedScope),
+          { id: "reused" },
+          createElement(Box, { id: "left" }, createElement(ReusedNamedScope)),
+          createElement(Box, { id: "right" }, createElement(ReusedNamedScope)),
         ),
       ),
     );
@@ -6861,7 +6858,7 @@ describe("component choreography scope", () => {
     ] as MotionObservation;
     assert.deepEqual(
       reusedMotion.steps[0]?.effects.map(({ target, startMs }) => [
-        target.testId,
+        target.authorId,
         startMs,
       ]),
       [
@@ -6879,7 +6876,7 @@ describe("component choreography scope", () => {
         { width: 320, height: 180 },
         createElement(
           Slide,
-          { slideId: "ordinary" },
+          { id: "ordinary" },
           createElement(OrdinaryComposition),
         ),
       ),
@@ -6890,7 +6887,7 @@ describe("component choreography scope", () => {
     assert.equal(ordinaryMotion.scopes, undefined);
     assert.deepEqual(
       ordinaryMotion.steps[0]?.effects.map(({ target, startMs }) => [
-        target.testId,
+        target.authorId,
         startMs,
       ]),
       [
@@ -6906,7 +6903,7 @@ describe("component choreography scope", () => {
     const slide = result.report.slides[0];
     const motion = slide?.capabilities?.["motion"] as MotionObservation;
     const objectId = (testId: string) =>
-      slide?.objects.find(({ testId: id }) => id === testId)?.id;
+      slide?.objects.find(({ authorId: id }) => id === testId)?.id;
     const scopeContaining = (testId: string) =>
       motion.scopes?.find(({ members }) =>
         members.some(
@@ -6947,7 +6944,7 @@ describe("component choreography scope", () => {
       const slide = result.report.slides[0];
       const motion = slide?.capabilities?.["motion"] as MotionObservation;
       const objectId = (testId: string) =>
-        slide?.objects.find(({ testId: id }) => id === testId)?.id;
+        slide?.objects.find(({ authorId: id }) => id === testId)?.id;
       const scopeContaining = (testId: string) =>
         motion.scopes?.find(({ members }) =>
           members.some(
@@ -7044,7 +7041,7 @@ describe("component choreography scope", () => {
         assert.ok(slide);
         const motion = slide.capabilities?.["motion"] as MotionObservation;
         const sourceId = slide.objects.find(
-          ({ testId }) => testId === "target-group-step-entry-source",
+          ({ authorId: testId }) => testId === "target-group-step-entry-source",
         )?.id;
         assert.ok(sourceId);
         const sourceEffects = motion.steps[0]?.effects.filter(
@@ -7069,7 +7066,7 @@ describe("component choreography scope", () => {
         );
         const sequenceFollowerEffect = motion.steps[0]?.effects.find(
           ({ target }) =>
-            target.testId === "target-group-step-entry-sequence-follower",
+            target.authorId === "target-group-step-entry-sequence-follower",
         );
         assert.ok(sourceScope && sequenceFollowerEffect);
         assert.equal(sourceScope.completion, "unknown");
@@ -7082,7 +7079,7 @@ describe("component choreography scope", () => {
         if (includeScopeEndConsumer) {
           const externalFollowerEffect = motion.steps[0]?.effects.find(
             ({ target }) =>
-              target.testId === "target-group-step-entry-external-follower",
+              target.authorId === "target-group-step-entry-external-follower",
           );
           assert.ok(externalFollowerEffect);
           assert.deepEqual(externalFollowerEffect.startAfter, {
@@ -7092,7 +7089,7 @@ describe("component choreography scope", () => {
           });
         }
 
-        const query = observeMotion(result.query.slide(slideId).observation);
+        const query = observeMotion(result.query.getSlide(slideId).observation);
         const queryStep = query?.steps[0];
         assert.equal(queryStep?.trigger, trigger);
         assert.deepEqual(
@@ -7185,7 +7182,7 @@ describe("component choreography scope", () => {
     assert.equal(effects.length, 15);
     assert.equal(new Set(targetIds).size, 15);
     const objectId = (testId: string) =>
-      slide?.objects.find(({ testId: id }) => id === testId)?.id;
+      slide?.objects.find(({ authorId: id }) => id === testId)?.id;
     const scopeContaining = (testId: string) =>
       motion.scopes?.find(({ members }) =>
         members.some(
@@ -7282,7 +7279,7 @@ describe("component choreography scope", () => {
     const slide = result.report.slides[0];
     const motion = slide?.capabilities?.["motion"] as MotionObservation;
     const sourceId = slide?.objects.find(
-      ({ testId }) => testId === "empty-end-source",
+      ({ authorId: testId }) => testId === "empty-end-source",
     )?.id;
     const source = motion.scopes?.find(({ members }) =>
       members.some(
@@ -7304,7 +7301,7 @@ describe("component choreography scope", () => {
           member.kind === "object" &&
           member.id ===
             slide?.objects.find(
-              ({ testId }) => testId === "empty-end-alias-consumer",
+              ({ authorId: testId }) => testId === "empty-end-alias-consumer",
             )?.id,
       ),
     );
@@ -7332,7 +7329,7 @@ describe("component choreography scope", () => {
     const slide = result.report.slides[0];
     const motion = slide?.capabilities?.["motion"] as MotionObservation;
     const sourceId = slide?.objects.find(
-      ({ testId }) => testId === "empty-u32-source",
+      ({ authorId: testId }) => testId === "empty-u32-source",
     )?.id;
     const source = motion.scopes?.find(({ members }) =>
       members.some(
@@ -7354,7 +7351,7 @@ describe("component choreography scope", () => {
           member.kind === "object" &&
           member.id ===
             slide?.objects.find(
-              ({ testId }) => testId === "empty-u32-alias-consumer",
+              ({ authorId: testId }) => testId === "empty-u32-alias-consumer",
             )?.id,
       ),
     );
@@ -7390,7 +7387,7 @@ describe("component choreography scope", () => {
     const slide = result.report.slides[0];
     const motion = slide?.capabilities?.["motion"] as MotionObservation;
     const sourceId = slide?.objects.find(
-      ({ testId }) => testId === "layered-offset-source",
+      ({ authorId: testId }) => testId === "layered-offset-source",
     )?.id;
     const source = motion.scopes?.find(({ members }) =>
       members.some(
@@ -7398,7 +7395,7 @@ describe("component choreography scope", () => {
       ),
     );
     const consumerId = slide?.objects.find(
-      ({ testId }) => testId === "layered-offset-consumer",
+      ({ authorId: testId }) => testId === "layered-offset-consumer",
     )?.id;
     const consumerScope = motion.scopes?.find(({ members }) =>
       members.some(
@@ -7406,7 +7403,7 @@ describe("component choreography scope", () => {
       ),
     );
     const consumerEffect = motion.steps[0]?.effects.find(
-      ({ target }) => target.testId === "layered-offset-consumer",
+      ({ target }) => target.authorId === "layered-offset-consumer",
     );
     assert.ok(source && consumerScope && consumerEffect);
     assert.deepEqual(consumerEffect.startAfter, {
@@ -7441,7 +7438,7 @@ describe("component choreography scope", () => {
       const slide = result.report.slides[0];
       const motion = slide?.capabilities?.["motion"] as MotionObservation;
       const sourceId = slide?.objects.find(
-        ({ testId }) => testId === "same-scope-offset-source",
+        ({ authorId: testId }) => testId === "same-scope-offset-source",
       )?.id;
       const sourceScope = motion.scopes?.find(({ members }) =>
         members.some(
@@ -7449,7 +7446,7 @@ describe("component choreography scope", () => {
         ),
       );
       const consumerId = slide?.objects.find(
-        ({ testId }) => testId === "same-scope-offset-consumer",
+        ({ authorId: testId }) => testId === "same-scope-offset-consumer",
       )?.id;
       const consumerScope = motion.scopes?.find(({ members }) =>
         members.some(
@@ -7457,7 +7454,7 @@ describe("component choreography scope", () => {
         ),
       );
       const consumerEffect = motion.steps[0]?.effects.find(
-        ({ target }) => target.testId === "same-scope-offset-consumer",
+        ({ target }) => target.authorId === "same-scope-offset-consumer",
       );
       assert.ok(sourceScope && consumerScope && consumerEffect);
       assert.deepEqual(consumerScope.startAfter, {
@@ -7502,10 +7499,10 @@ describe("component choreography scope", () => {
     const slide = result.report.slides[0];
     const motion = slide?.capabilities?.["motion"] as MotionObservation;
     const prefixId = slide?.objects.find(
-      ({ testId }) => testId === "provenance-prefix",
+      ({ authorId: testId }) => testId === "provenance-prefix",
     )?.id;
     const sourceId = slide?.objects.find(
-      ({ testId }) => testId === "provenance-source",
+      ({ authorId: testId }) => testId === "provenance-source",
     )?.id;
     const containingScope = (targetId: number | undefined) =>
       motion.scopes?.find(({ members }) =>
@@ -7516,11 +7513,11 @@ describe("component choreography scope", () => {
     const prefixScope = containingScope(prefixId);
     const sourceScope = containingScope(sourceId);
     const consumerId = slide?.objects.find(
-      ({ testId }) => testId === "provenance-consumer",
+      ({ authorId: testId }) => testId === "provenance-consumer",
     )?.id;
     const consumerScope = containingScope(consumerId);
     const consumerEffect = motion.steps[0]?.effects.find(
-      ({ target }) => target.testId === "provenance-consumer",
+      ({ target }) => target.authorId === "provenance-consumer",
     );
     assert.ok(prefixScope && sourceScope && consumerScope && consumerEffect);
     assert.deepEqual(consumerScope.startAfterAll, [
@@ -7551,7 +7548,7 @@ describe("component choreography scope", () => {
     const slide = result.report.slides[0];
     const motion = slide?.capabilities?.["motion"] as MotionObservation;
     const objectId = (testId: string) =>
-      slide?.objects.find((object) => object.testId === testId)?.id;
+      slide?.objects.find((object) => object.authorId === testId)?.id;
     const containingScope = (testId: string) => {
       const id = objectId(testId);
       return motion.scopes?.find(({ members }) =>
@@ -7562,10 +7559,10 @@ describe("component choreography scope", () => {
     const parent = containingScope("lowering-parent");
     const alias = containingScope("lowering-alias");
     const parentEffect = motion.steps[0]?.effects.find(
-      ({ target }) => target.testId === "lowering-parent",
+      ({ target }) => target.authorId === "lowering-parent",
     );
     const aliasEffect = motion.steps[0]?.effects.find(
-      ({ target }) => target.testId === "lowering-alias",
+      ({ target }) => target.authorId === "lowering-alias",
     );
     assert.ok(source && parent && alias && parentEffect && aliasEffect);
     assert.deepEqual(parent.startAfter, {
@@ -7582,7 +7579,7 @@ describe("component choreography scope", () => {
     assert.deepEqual(aliasEffect.startAfter, alias.startAfter);
 
     const query = observeMotion(
-      result.query.slide("universal-delay-unknown-alias").observation,
+      result.query.getSlide("universal-delay-unknown-alias").observation,
     );
     const step = query?.steps[0];
     assert.ok(step);
@@ -7618,10 +7615,10 @@ describe("component choreography scope", () => {
     const slide = result.report.slides[0];
     const motion = slide?.capabilities?.["motion"] as MotionObservation;
     const parentId = slide?.objects.find(
-      ({ testId }) => testId === "known-lowering-parent",
+      ({ authorId: testId }) => testId === "known-lowering-parent",
     )?.id;
     const aliasId = slide?.objects.find(
-      ({ testId }) => testId === "known-lowering-alias",
+      ({ authorId: testId }) => testId === "known-lowering-alias",
     )?.id;
     const parent = motion.scopes?.find(({ members }) =>
       members.some(
@@ -7638,7 +7635,7 @@ describe("component choreography scope", () => {
     assert.equal(alias.startMs, 4_294_967_314);
 
     const query = observeMotion(
-      result.query.slide("universal-delay-known-alias").observation,
+      result.query.getSlide("universal-delay-known-alias").observation,
     );
     const step = query?.steps[0];
     assert.ok(step);
@@ -7672,7 +7669,7 @@ describe("component choreography scope", () => {
     const slide = result.report.slides[0];
     const motion = slide?.capabilities?.["motion"] as MotionObservation;
     const objectId = (testId: string) =>
-      slide?.objects.find((object) => object.testId === testId)?.id;
+      slide?.objects.find((object) => object.authorId === testId)?.id;
     const containingScope = (testId: string) => {
       const id = objectId(testId);
       return motion.scopes?.find(({ members }) =>
@@ -7683,7 +7680,7 @@ describe("component choreography scope", () => {
     const delayed = containingScope("join-lowering-b");
     const joined = containingScope("join-lowering-consumer");
     const effect = motion.steps[0]?.effects.find(
-      ({ target }) => target.testId === "join-lowering-consumer",
+      ({ target }) => target.authorId === "join-lowering-consumer",
     );
     assert.ok(first && delayed && joined && effect);
     const expectedDependencies = [
@@ -7694,10 +7691,10 @@ describe("component choreography scope", () => {
     assert.deepEqual(effect.startAfterAll, expectedDependencies);
 
     const query = observeMotion(
-      result.query.slide("universal-delay-condition-join").observation,
+      result.query.getSlide("universal-delay-condition-join").observation,
     );
     const queryEffect = query?.steps[0]?.effects.find(
-      ({ target }) => target.testId === "join-lowering-consumer",
+      ({ target }) => target.authorId === "join-lowering-consumer",
     );
     assert.ok(queryEffect);
     assert.deepEqual(queryEffect.startAfterAll, expectedDependencies);
@@ -7713,7 +7710,9 @@ describe("component choreography scope", () => {
     const slide = result.report.slides[0];
     const motion = slide?.capabilities?.["motion"] as MotionObservation;
     const scopeContainingObject = (testId: string) => {
-      const id = slide?.objects.find((object) => object.testId === testId)?.id;
+      const id = slide?.objects.find(
+        (object) => object.authorId === testId,
+      )?.id;
       return motion.scopes?.find(({ members }) =>
         members.some((member) => member.kind === "object" && member.id === id),
       );
@@ -7752,16 +7751,16 @@ describe("component choreography scope", () => {
     assert.equal(
       motion.steps[0]?.effects.filter(
         ({ target }) =>
-          target.testId === "multisource-late-join" ||
-          target.testId === "multisource-late-alias",
+          target.authorId === "multisource-late-join" ||
+          target.authorId === "multisource-late-alias",
       ).length,
       2,
     );
     const query = observeMotion(
-      result.query.slide("multisource-late-start-alias").observation,
+      result.query.getSlide("multisource-late-start-alias").observation,
     );
     const queryAlias = query?.steps[0]?.effects.find(
-      ({ target }) => target.testId === "multisource-late-alias",
+      ({ target }) => target.authorId === "multisource-late-alias",
     );
     assert.deepEqual(queryAlias?.startAfterAll, expectedAliasDependencies);
     const writtenTimes = await assertValidMotionPptx(result.pptx);
@@ -7773,7 +7772,9 @@ describe("component choreography scope", () => {
     const slide = result.report.slides[0];
     const motion = slide?.capabilities?.["motion"] as MotionObservation;
     const scopeContainingObject = (testId: string) => {
-      const id = slide?.objects.find((object) => object.testId === testId)?.id;
+      const id = slide?.objects.find(
+        (object) => object.authorId === testId,
+      )?.id;
       return motion.scopes?.find(({ members }) =>
         members.some((member) => member.kind === "object" && member.id === id),
       );
@@ -7793,10 +7794,10 @@ describe("component choreography scope", () => {
     ];
     assert.deepEqual(joined.startAfterAll, expectedDependencies);
     const query = observeMotion(
-      result.query.slide("multisource-spread-offset").observation,
+      result.query.getSlide("multisource-spread-offset").observation,
     );
     const queryEffect = query?.steps[0]?.effects.find(
-      ({ target }) => target.testId === "spread-offset-join",
+      ({ target }) => target.authorId === "spread-offset-join",
     );
     assert.deepEqual(queryEffect?.startAfterAll, expectedDependencies);
     const writtenTimes = await assertValidMotionPptx(result.pptx);
@@ -7808,7 +7809,9 @@ describe("component choreography scope", () => {
     const slide = result.report.slides[0];
     const motion = slide?.capabilities?.["motion"] as MotionObservation;
     const scopeContainingObject = (testId: string) => {
-      const id = slide?.objects.find((object) => object.testId === testId)?.id;
+      const id = slide?.objects.find(
+        (object) => object.authorId === testId,
+      )?.id;
       return motion.scopes?.find(({ members }) =>
         members.some((member) => member.kind === "object" && member.id === id),
       );
@@ -7840,23 +7843,25 @@ describe("component choreography scope", () => {
     assert.deepEqual(afterB.startAfterAll, expectedAfterB);
     const reportEffects = motion.steps[0]?.effects ?? [];
     assert.deepEqual(
-      reportEffects.find(({ target }) => target.testId === "D")?.startAfterAll,
-      expectedAfterA,
-    );
-    assert.deepEqual(
-      reportEffects.find(({ target }) => target.testId === "E")?.startAfterAll,
-      expectedAfterB,
-    );
-    const query = observeMotion(
-      result.query.slide("exact-host-offset-cancellation").observation,
-    );
-    assert.deepEqual(
-      query?.steps[0]?.effects.find(({ target }) => target.testId === "D")
+      reportEffects.find(({ target }) => target.authorId === "D")
         ?.startAfterAll,
       expectedAfterA,
     );
     assert.deepEqual(
-      query?.steps[0]?.effects.find(({ target }) => target.testId === "E")
+      reportEffects.find(({ target }) => target.authorId === "E")
+        ?.startAfterAll,
+      expectedAfterB,
+    );
+    const query = observeMotion(
+      result.query.getSlide("exact-host-offset-cancellation").observation,
+    );
+    assert.deepEqual(
+      query?.steps[0]?.effects.find(({ target }) => target.authorId === "D")
+        ?.startAfterAll,
+      expectedAfterA,
+    );
+    assert.deepEqual(
+      query?.steps[0]?.effects.find(({ target }) => target.authorId === "E")
         ?.startAfterAll,
       expectedAfterB,
     );

@@ -5,18 +5,18 @@ import { PageFrame } from "./page-frame.tsx";
 
 /** Cards share available width; each card encapsulates its own reading order. */
 export function CardsPage({
-  slideId,
+  id,
   title,
   subtitle,
   items,
 }: {
-  readonly slideId: string;
+  readonly id: string;
   readonly title: string;
   readonly subtitle: string;
   readonly items: readonly CardContent[];
 }) {
   return (
-    <PageFrame slideId={slideId} title={title} subtitle={subtitle}>
+    <PageFrame id={id} title={title} subtitle={subtitle}>
       <Box
         style={{
           position: "absolute",

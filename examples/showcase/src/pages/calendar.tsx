@@ -39,7 +39,7 @@ function DateCell({
 }) {
   return (
     <Shape
-      testId={`date-${day}`}
+      id={`date-${day}`}
       x={80 + ((day - 1) % 7) * 88}
       y={248 + Math.floor((day - 1) / 7) * 72}
       width={76}
@@ -84,7 +84,7 @@ function CalendarEvent({
       </MotionScope>
       <MotionScope scope={note} startAt={date.start}>
         <Group
-          testId={`event-${event.day}`}
+          id={`event-${event.day}`}
           enter={floatUp({ duration: motion.reveal })}
         >
           <Shape x={790} y={y} width={5} height={88} fill={colors.accent} />
@@ -119,7 +119,7 @@ function CalendarEvent({
 
 export function CalendarPage() {
   return (
-    <Slide slideId="calendar" background={colors.paper}>
+    <Slide id="calendar" background={colors.paper}>
       <Shape x={80} y={58} width={42} height={5} fill={colors.accent} />
       <Text
         x={80}

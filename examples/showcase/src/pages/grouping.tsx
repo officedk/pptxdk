@@ -3,7 +3,7 @@ import { CardsPage } from "../templates/cards-page.tsx";
 export function GroupingPage() {
   return (
     <CardsPage
-      slideId="grouping"
+      id="grouping"
       title="Order from fragments."
       subtitle="Lorem ipsum dolor sit amet, consectetur adipiscing elit."
       items={[
@@ -27,7 +27,7 @@ export function GroupingPage() {
 export function RevealPage() {
   return (
     <CardsPage
-      slideId="reveal"
+      id="reveal"
       title="One idea at a time."
       subtitle="Lorem ipsum dolor sit amet, consectetur adipiscing elit."
       items={[

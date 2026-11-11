@@ -41,7 +41,7 @@ function reactDeck(children: ReactNode) {
   return createElement(
     Deck,
     { width: 960, height: 540 },
-    createElement(Slide, { slideId: "handoff" }, children),
+    createElement(Slide, { id: "handoff" }, children),
   );
 }
 
@@ -49,16 +49,13 @@ function slideXml(result: { readonly pptx: Uint8Array }, index = 1): string {
   return strFromU8(unzipSync(result.pptx)[`ppt/slides/slide${index}.xml`]!);
 }
 
-function findTextNode(
-  parent: CommonNode,
-  testId: string,
-): CommonNode | undefined {
+function findTextNode(parent: CommonNode, id: string): CommonNode | undefined {
   for (const child of parent.children) {
     if (!(child instanceof CommonNode)) continue;
-    if (child.kind === "text" && child.props["testId"] === testId) {
+    if (child.kind === "text" && child.props["id"] === id) {
       return child;
     }
-    const found = findTextNode(child, testId);
+    const found = findTextNode(child, id);
     if (found !== undefined) return found;
   }
   return undefined;
@@ -92,7 +89,7 @@ describe("public React handoff", () => {
       return createElement(
         Text,
         {
-          testId: "handoff-title",
+          id: "handoff-title",
           x: 0,
           y: 0,
           width: 640,
@@ -137,7 +134,7 @@ describe("public React handoff", () => {
 
   it("edits JSX shape rich text through the same node contract as the command factory", async () => {
     const props = {
-      testId: "handoff-shape",
+      id: "handoff-shape",
       x: 20,
       y: 24,
       width: 320,
@@ -171,7 +168,7 @@ describe("public React handoff", () => {
       paragraph().content(span("Original")),
     );
     const commandDocument = deck({ width: 960, height: 540 }).append(
-      slide({ slideId: "handoff" }).append(commandShape),
+      slide({ id: "handoff" }).append(commandShape),
     );
     commandShape.content(paragraph().content(span("Edited")));
     const commandResult = await buildDocument(commandDocument);
@@ -184,16 +181,16 @@ describe("public React handoff", () => {
       reactDeck([
         createElement(
           Table,
-          { testId: "handoff-table", width: 240, columns: [120, 120] },
+          { id: "handoff-table", width: 240, columns: [120, 120] },
           createElement(
             Row,
             { style: { height: 30 } },
-            createElement(Cell, { testId: "handoff-cell" }, "Original"),
+            createElement(Cell, { id: "handoff-cell" }, "Original"),
             createElement(Cell, null, "Value"),
           ),
         ),
         createElement(Chart, {
-          testId: "handoff-chart",
+          id: "handoff-chart",
           kind: "column",
           x: 0,
           y: 40,
@@ -294,7 +291,7 @@ describe("public React handoff", () => {
       return createElement(
         Text,
         {
-          testId: "cleanup-style",
+          id: "cleanup-style",
           x: 0,
           y: 0,
           width: 640,
@@ -333,7 +330,7 @@ describe("public React handoff", () => {
       return createElement(
         Text,
         {
-          ...(step === 0 ? { testId: "changing-style" } : {}),
+          ...(step === 0 ? { id: "changing-style" } : {}),
           x: 0,
           y: 0,
           width: 640,
@@ -355,14 +352,14 @@ describe("public React handoff", () => {
     assert.deepEqual(file.errors, []);
     assert.equal(run?.color, "#0000FF");
     assert.equal(run?.fontSizePt, 18);
-    assert.equal(result.report.slides[0]?.objects[0]?.testId, undefined);
+    assert.equal(result.report.slides[0]?.objects[0]?.authorId, undefined);
   });
 
   it("creates an independent document on repeated expansion instead of merging manual edits", async () => {
     function StaticContent() {
       return createElement(
         Text,
-        { testId: "repeat", x: 0, y: 0, width: 640, height: 48 },
+        { id: "repeat", x: 0, y: 0, width: 640, height: 48 },
         "Original",
       );
     }

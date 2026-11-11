@@ -38,17 +38,22 @@ it("full deck preserves 14 slides, native charts and tables, morph continuity, c
   );
 
   const openingSlide = file.slides.find(({ id }) => id === "opening")!;
-  const kpiTestIds = Array.from(
+  const kpiAuthorIds = Array.from(
     { length: 4 },
     (_, index) => `opening-kpi-${index + 1}`,
   );
-  const kpiGroups = kpiTestIds.map((testId) => {
+  const kpiGroups = kpiAuthorIds.map((authorId) => {
+    const groupId = result.report.slides
+      .find(({ id }) => id === "opening")
+      ?.objects.find(
+        (object) =>
+          object.kind === "group" &&
+          object.members?.some(({ authorId: value }) => value === authorId),
+      )?.id;
     const groups = openingSlide.objects.filter(
-      (object) =>
-        object.kind === "group" &&
-        object.members?.some((member) => member.name === testId),
+      (object) => object.kind === "group" && object.id === groupId,
     );
-    assert.equal(groups.length, 1, `${testId} should be one native group`);
+    assert.equal(groups.length, 1, `${authorId} should be one native group`);
 
     const [group] = groups;
     assert.ok(group);
@@ -56,17 +61,17 @@ it("full deck preserves 14 slides, native charts and tables, morph continuity, c
       group.members
         ?.filter((member) => member.text !== undefined)
         .map((member) => member.text?.text) ?? [];
-    assert.equal(cardTexts.length, 3, `${testId} should group all card text`);
+    assert.equal(cardTexts.length, 3, `${authorId} should group all card text`);
     assert.ok(
       cardTexts.every((text) => (text?.trim().length ?? 0) > 0),
-      `${testId} should keep the card text non-empty`,
+      `${authorId} should keep the card text non-empty`,
     );
     assert.equal(
       group.members?.filter(
         (member) => member.kind === "shape" && member.text === undefined,
       ).length,
       2,
-      `${testId} should group its background and accent`,
+      `${authorId} should group its background and accent`,
     );
 
     return group.id;

@@ -32,7 +32,7 @@ function KnownRelationsDeck() {
     { width: 120, height: 100 },
     createElement(
       Slide,
-      { slideId: "motion-relations" },
+      { id: "motion-relations" },
       createElement(
         Fragment,
         null,
@@ -40,7 +40,7 @@ function KnownRelationsDeck() {
           MotionScope,
           { scope: source, publishEnd: source.cue("ready") },
           createElement(Shape, {
-            testId: "source",
+            id: "source",
             x: 0,
             y: 0,
             width: 10,
@@ -55,7 +55,7 @@ function KnownRelationsDeck() {
           createElement(
             Text,
             {
-              testId: "paragraph-parts",
+              id: "paragraph-parts",
               x: 0,
               y: 20,
               width: 100,
@@ -70,7 +70,7 @@ function KnownRelationsDeck() {
           MotionScope,
           { scope: touching, startAt: source.end },
           createElement(Shape, {
-            testId: "touching",
+            id: "touching",
             x: 40,
             y: 0,
             width: 10,
@@ -86,7 +86,7 @@ function KnownRelationsDeck() {
             startAt: after(source.cue("ready"), 20),
           },
           createElement(Shape, {
-            testId: "follower",
+            id: "follower",
             x: 20,
             y: 0,
             width: 10,
@@ -114,7 +114,7 @@ function DeclarationClosureDeck() {
     { width: 120, height: 100 },
     createElement(
       Slide,
-      { slideId: "motion-declaration-closure" },
+      { id: "motion-declaration-closure" },
       createElement(
         MotionScope,
         { scope: top, delay: 10 },
@@ -134,7 +134,7 @@ function DeclarationClosureDeck() {
             Step,
             { n: 1 },
             createElement(Shape, {
-              testId: "closure-click",
+              id: "closure-click",
               x: 0,
               y: 0,
               width: 10,
@@ -149,7 +149,7 @@ function DeclarationClosureDeck() {
               Step,
               { n: 1 },
               createElement(Shape, {
-                testId: "closure-deep-one-click",
+                id: "closure-deep-one-click",
                 x: 15,
                 y: 0,
                 width: 10,
@@ -164,7 +164,7 @@ function DeclarationClosureDeck() {
                 Step,
                 { n: 1 },
                 createElement(Shape, {
-                  testId: "closure-deep-two-click",
+                  id: "closure-deep-two-click",
                   x: 30,
                   y: 0,
                   width: 10,
@@ -179,7 +179,7 @@ function DeclarationClosureDeck() {
                   Step,
                   { n: 1 },
                   createElement(Shape, {
-                    testId: "closure-deep-three-click",
+                    id: "closure-deep-three-click",
                     x: 45,
                     y: 0,
                     width: 10,
@@ -208,7 +208,7 @@ function MixedIntervalsDeck() {
     { width: 120, height: 100 },
     createElement(
       Slide,
-      { slideId: "motion-coverage" },
+      { id: "motion-coverage" },
       createElement(
         Fragment,
         null,
@@ -218,7 +218,7 @@ function MixedIntervalsDeck() {
           createElement(
             Text,
             {
-              testId: "unknown-words",
+              id: "unknown-words",
               x: 0,
               y: 0,
               width: 100,
@@ -232,7 +232,7 @@ function MixedIntervalsDeck() {
           MotionScope,
           { scope: follower, startAt: words.end },
           createElement(Shape, {
-            testId: "unknown-start-finite-end",
+            id: "unknown-start-finite-end",
             x: 40,
             y: 0,
             width: 10,
@@ -242,7 +242,7 @@ function MixedIntervalsDeck() {
           }),
         ),
         createElement(Shape, {
-          testId: "known-finite",
+          id: "known-finite",
           x: 0,
           y: 30,
           width: 10,
@@ -251,7 +251,7 @@ function MixedIntervalsDeck() {
           enter: fade({ duration: 100 }),
         }),
         createElement(Shape, {
-          testId: "no-natural-end",
+          id: "no-natural-end",
           x: 20,
           y: 30,
           width: 10,
@@ -273,12 +273,12 @@ function ClickStepsDeck() {
     { width: 120, height: 100 },
     createElement(
       Slide,
-      { slideId: "motion-steps" },
+      { id: "motion-steps" },
       createElement(
         Step,
         { n: 1 },
         createElement(Shape, {
-          testId: "first-click",
+          id: "first-click",
           x: 0,
           y: 0,
           width: 10,
@@ -291,7 +291,7 @@ function ClickStepsDeck() {
         Step,
         { n: 2 },
         createElement(Shape, {
-          testId: "second-click",
+          id: "second-click",
           x: 20,
           y: 0,
           width: 10,
@@ -319,7 +319,7 @@ function EmptyIntervalDeck({
     { width: 120, height: 100 },
     createElement(
       Slide,
-      { slideId: "empty-interval" },
+      { id: "empty-interval" },
       sourceDuration === undefined
         ? createElement(
             MotionScope,
@@ -327,7 +327,7 @@ function EmptyIntervalDeck({
             createElement(
               Text,
               {
-                testId: "unknown-source",
+                id: "unknown-source",
                 x: 0,
                 y: 0,
                 width: 100,
@@ -341,7 +341,7 @@ function EmptyIntervalDeck({
             MotionScope,
             { scope: source },
             createElement(Shape, {
-              testId: "known-source",
+              id: "known-source",
               x: 0,
               y: 0,
               width: 10,
@@ -358,7 +358,7 @@ function EmptyIntervalDeck({
         MotionScope,
         { scope: finite, startAt: source.end },
         createElement(Shape, {
-          testId: "finite-interval",
+          id: "finite-interval",
           x: 20,
           y: 0,
           width: 10,
@@ -371,7 +371,7 @@ function EmptyIntervalDeck({
         MotionScope,
         { scope: infinite, startAt: source.end },
         createElement(Shape, {
-          testId: "unbounded-interval",
+          id: "unbounded-interval",
           x: 40,
           y: 0,
           width: 10,
@@ -387,7 +387,7 @@ function EmptyIntervalDeck({
         MotionScope,
         { scope: overlapping, startAt: after(source.end, 50) },
         createElement(Shape, {
-          testId: "overlapping-interval",
+          id: "overlapping-interval",
           x: 60,
           y: 0,
           width: 10,
@@ -409,7 +409,7 @@ function DeclaredScopeClosureDeck() {
     { width: 120, height: 100 },
     createElement(
       Slide,
-      { slideId: "scope-closure" },
+      { id: "scope-closure" },
       createElement(
         MotionScope,
         { scope: parent, delay: 200 },
@@ -422,7 +422,7 @@ function DeclaredScopeClosureDeck() {
           Step,
           { n: 1 },
           createElement(Shape, {
-            testId: "click-member",
+            id: "click-member",
             x: 0,
             y: 0,
             width: 10,
@@ -442,11 +442,11 @@ function WordMotionDeck() {
     { width: 120, height: 100 },
     createElement(
       Slide,
-      { slideId: "word-projection" },
+      { id: "word-projection" },
       createElement(
         Text,
         {
-          testId: "word-text",
+          id: "word-text",
           x: 0,
           y: 0,
           width: 100,
@@ -470,15 +470,15 @@ describe("observeMotion", () => {
         createElement(EmptyIntervalDeck, { sourceDuration }),
       );
       const step = observeMotion(
-        result.query.slide("empty-interval").observation,
+        result.query.getSlide("empty-interval").observation,
       )?.steps[0];
       assert.ok(step);
       const empty = step.scopes.find(({ members }) => members.length === 0);
       const finite = step.effects.find(
-        ({ target }) => target.testId === "finite-interval",
+        ({ target }) => target.authorId === "finite-interval",
       );
       const overlapping = step.effects.find(
-        ({ target }) => target.testId === "overlapping-interval",
+        ({ target }) => target.authorId === "overlapping-interval",
       );
       assert.ok(empty);
       assert.ok(finite);
@@ -499,20 +499,20 @@ describe("observeMotion", () => {
 
     const unknownResult = await build(createElement(EmptyIntervalDeck));
     const unknownStep = observeMotion(
-      unknownResult.query.slide("empty-interval").observation,
+      unknownResult.query.getSlide("empty-interval").observation,
     )?.steps[0];
     assert.ok(unknownStep);
     const empty = unknownStep.scopes.find(
       ({ members }) => members.length === 0,
     );
     const finite = unknownStep.effects.find(
-      ({ target }) => target.testId === "finite-interval",
+      ({ target }) => target.authorId === "finite-interval",
     );
     const overlapping = unknownStep.effects.find(
-      ({ target }) => target.testId === "overlapping-interval",
+      ({ target }) => target.authorId === "overlapping-interval",
     );
     const unbounded = unknownStep.effects.find(
-      ({ target }) => target.testId === "unbounded-interval",
+      ({ target }) => target.authorId === "unbounded-interval",
     );
     assert.ok(empty);
     assert.ok(finite);
@@ -541,7 +541,7 @@ describe("observeMotion", () => {
     const file = await validatePptx(result.pptx);
     assert.deepEqual(file.errors, []);
     const motion = observeMotion(
-      result.query.slide("motion-declaration-closure").observation,
+      result.query.getSlide("motion-declaration-closure").observation,
     );
     const automatic = motion?.steps.find(({ trigger }) => trigger === "auto");
     const click = motion?.steps.find(
@@ -643,7 +643,7 @@ describe("observeMotion", () => {
     const clickParent = click.scopes.find(({ delayMs }) => delayMs === 200);
     const clickDeepOne = click.scopes.find(({ delayMs }) => delayMs === 31);
     const clickEffect = click.effects.find(
-      ({ target }) => target.testId === "closure-click",
+      ({ target }) => target.authorId === "closure-click",
     );
     assert.ok(clickTop);
     assert.ok(clickParent);
@@ -681,7 +681,7 @@ describe("observeMotion", () => {
 
   it("preserves effect instances and named cue declarations and queries precise relationships", async () => {
     const result = await build(createElement(KnownRelationsDeck));
-    const slide = result.query.slide("motion-relations");
+    const slide = result.query.getSlide("motion-relations");
     const motion = observeMotion(slide.observation);
 
     assert.equal(motion?.evidence, "generation");
@@ -689,13 +689,13 @@ describe("observeMotion", () => {
     const step = motion?.steps[0];
     assert.ok(step);
     const source = step.effects.find(
-      ({ target }) => target.testId === "source",
+      ({ target }) => target.authorId === "source",
     );
     const followers = step.effects.filter(
-      ({ target }) => target.testId === "follower",
+      ({ target }) => target.authorId === "follower",
     );
     const touching = step.effects.find(
-      ({ target }) => target.testId === "touching",
+      ({ target }) => target.authorId === "touching",
     );
     assert.ok(source);
     assert.ok(touching);
@@ -705,7 +705,7 @@ describe("observeMotion", () => {
       [0, 1],
     );
     const paragraphParts = step.effects.filter(
-      ({ target }) => target.testId === "paragraph-parts",
+      ({ target }) => target.authorId === "paragraph-parts",
     );
     assert.deepEqual(
       followers.map(({ start }) => start.state),
@@ -775,7 +775,7 @@ describe("observeMotion", () => {
 
   it("coverage results retain items with unknown completion and no natural completion", async () => {
     const result = await build(createElement(MixedIntervalsDeck));
-    const slide = result.query.slide("motion-coverage");
+    const slide = result.query.getSlide("motion-coverage");
     const motion = observeMotion(slide.observation);
     const step = motion?.steps[0];
     assert.ok(step);
@@ -801,14 +801,14 @@ describe("observeMotion", () => {
       1,
     );
     const finite = step.effects.find(
-      ({ target }) => target.testId === "known-finite",
+      ({ target }) => target.authorId === "known-finite",
     );
     assert.ok(finite);
     const wordEffect = step.effects.find(
-      ({ target }) => target.testId === "unknown-words",
+      ({ target }) => target.authorId === "unknown-words",
     );
     const follower = step.effects.find(
-      ({ target }) => target.testId === "unknown-start-finite-end",
+      ({ target }) => target.authorId === "unknown-start-finite-end",
     );
     assert.ok(wordEffect);
     assert.ok(follower);
@@ -829,7 +829,7 @@ describe("observeMotion", () => {
   it("preserves cross-step declaration closures and distinguishes structural parent-child from current step schedule", async () => {
     const result = await build(createElement(DeclaredScopeClosureDeck));
     const motion = observeMotion(
-      result.query.slide("scope-closure").observation,
+      result.query.getSlide("scope-closure").observation,
     );
     const automatic = motion?.steps.find(({ trigger }) => trigger === "auto");
     const click = motion?.steps.find(
@@ -897,7 +897,7 @@ describe("observeMotion", () => {
         effects.map(
           ({ targetId }) =>
             result.report.slides[0]?.objects.find(({ id }) => id === targetId)
-              ?.testId,
+              ?.authorId,
         ),
       ]),
       [["click", ["click-member"]]],
@@ -915,11 +915,11 @@ describe("observeMotion", () => {
   it("exposes only effect observation fields and freezes their nested values", async () => {
     const result = await build(createElement(WordMotionDeck));
     const step = observeMotion(
-      result.query.slide("word-projection").observation,
+      result.query.getSlide("word-projection").observation,
     )?.steps[0];
     assert.ok(step);
     const effect = step.effects.find(
-      ({ target }) => target.testId === "word-text",
+      ({ target }) => target.authorId === "word-text",
     );
     assert.ok(effect);
     assert.equal(effect.by, "word");
@@ -939,12 +939,12 @@ describe("observeMotion", () => {
     assert.ok(effect.easing);
     assert.ok(Object.isFrozen(effect.easing));
     assert.throws(() => {
-      (effect.target as { testId?: string }).testId = "changed";
+      (effect.target as { authorId?: string }).authorId = "changed";
     }, TypeError);
     assert.throws(() => {
       (effect.easing as { accelerate?: number }).accelerate = 0.8;
     }, TypeError);
-    assert.equal(effect.target.testId, "word-text");
+    assert.equal(effect.target.authorId, "word-text");
     assert.equal(effect.easing.accelerate, 0.2);
   });
 
@@ -952,10 +952,10 @@ describe("observeMotion", () => {
     const first = await build(createElement(ClickStepsDeck));
     const second = await build(createElement(ClickStepsDeck));
     const firstMotion = observeMotion(
-      first.query.slide("motion-steps").observation,
+      first.query.getSlide("motion-steps").observation,
     );
     const secondMotion = observeMotion(
-      second.query.slide("motion-steps").observation,
+      second.query.getSlide("motion-steps").observation,
     );
     assert.equal(firstMotion?.steps.length, 2);
     assert.equal(secondMotion?.steps.length, 2);
@@ -990,19 +990,18 @@ describe("observeMotion", () => {
         error instanceof BuildQueryError && error.code === "foreign-reference",
     );
     assert.equal(
-      observeMotion(first.query.slide("motion-steps").observation),
+      observeMotion(first.query.getSlide("motion-steps").observation),
       firstMotion,
     );
     assert.throws(
       () =>
         observeMotion({
-          ...first.query.slide("motion-steps").observation,
+          ...first.query.getSlide("motion-steps").observation,
           capabilities: {
-            ...first.query.slide("motion-steps").observation.capabilities,
+            ...first.query.getSlide("motion-steps").observation.capabilities,
             motion: {
-              ...(first.query.slide("motion-steps").observation.capabilities?.[
-                "motion"
-              ] as object),
+              ...(first.query.getSlide("motion-steps").observation
+                .capabilities?.["motion"] as object),
             },
           },
         }),

@@ -34,16 +34,16 @@ describe("cross-slide object continuity", () => {
       {},
       createElement(
         Slide,
-        { slideId: "card-before" },
+        { id: "card-before" },
         createElement(
           Box,
           {
-            testId: "card-before",
+            id: "card-before",
             morphKey: background,
             style: { width: 160, height: 100, backgroundColor: "accent1" },
           },
           createElement(Shape, {
-            testId: "card-child-before",
+            id: "card-child-before",
             x: 12,
             y: 12,
             width: 40,
@@ -54,18 +54,18 @@ describe("cross-slide object continuity", () => {
       createElement(
         Slide,
         {
-          slideId: "card-after",
+          id: "card-after",
           transition: transitions.morph({ fallback: transitions.fade() }),
         },
         createElement(
           Box,
           {
-            testId: "card-after",
+            id: "card-after",
             morphKey: background,
             style: { width: 180, height: 110, backgroundColor: "accent2" },
           },
           createElement(Shape, {
-            testId: "card-child-after",
+            id: "card-child-after",
             x: 16,
             y: 16,
             width: 44,
@@ -82,16 +82,19 @@ describe("cross-slide object continuity", () => {
     assert.deepEqual(file.errors, []);
     assert.deepEqual(
       result.report.slides.map(({ objects }) =>
-        objects.map(({ testId, kind }) => ({ testId, kind })),
+        objects.map(({ authorId: testId, kind }) => ({
+          authorId: testId,
+          kind,
+        })),
       ),
       [
         [
-          { testId: "card-before", kind: "shape" },
-          { testId: "card-child-before", kind: "shape" },
+          { authorId: "card-before", kind: "shape" },
+          { authorId: "card-child-before", kind: "shape" },
         ],
         [
-          { testId: "card-after", kind: "shape" },
-          { testId: "card-child-after", kind: "shape" },
+          { authorId: "card-after", kind: "shape" },
+          { authorId: "card-child-after", kind: "shape" },
         ],
       ],
     );
@@ -117,9 +120,9 @@ describe("cross-slide object continuity", () => {
       { width: 960, height: 540 },
       createElement(
         Slide,
-        { slideId: "before" },
+        { id: "before" },
         createElement(Shape, {
-          testId: "hero-before",
+          id: "hero-before",
           morphKey: hero,
           x: 24,
           y: 24,
@@ -131,14 +134,14 @@ describe("cross-slide object continuity", () => {
       createElement(
         Slide,
         {
-          slideId: "after",
+          id: "after",
           transition: transitions.morph({
             duration: 1200,
             fallback: transitions.fade(),
           }),
         },
         createElement(Shape, {
-          testId: "hero-after",
+          id: "hero-after",
           morphKey: hero,
           x: 280,
           y: 80,
@@ -154,8 +157,8 @@ describe("cross-slide object continuity", () => {
     const [before, after] = result.report.slides;
     assert.equal(before?.objects[0]?.name, after?.objects[0]?.name);
     assert.match(before?.objects[0]?.name ?? "", /^!!/u);
-    assert.equal(before?.objects[0]?.testId, "hero-before");
-    assert.equal(after?.objects[0]?.testId, "hero-after");
+    assert.equal(before?.objects[0]?.authorId, "hero-before");
+    assert.equal(after?.objects[0]?.authorId, "hero-after");
 
     const file = await validatePptx(result.pptx, {
       allowedExtensions: ["p14", "p159"],
@@ -215,7 +218,7 @@ describe("cross-slide object continuity", () => {
         {},
         createElement(
           Slide,
-          { slideId: "before" },
+          { id: "before" },
           createElement(
             Box,
             { style: { width: 100, height: 80 } },
@@ -231,7 +234,7 @@ describe("cross-slide object continuity", () => {
         createElement(
           Slide,
           {
-            slideId: "after",
+            id: "after",
             transition: transitions.morph({ fallback: transitions.fade() }),
           },
           createElement(MotionWrappedHero),
@@ -254,12 +257,12 @@ describe("cross-slide object continuity", () => {
     const rightScope = createMorphScope();
     const Marker = (props: {
       readonly scope: ReturnType<typeof createMorphScope>;
-      readonly testId: string;
+      readonly id: string;
       readonly x: number;
     }) =>
       createElement(Shape, {
         morphKey: props.scope.handle("marker"),
-        testId: props.testId,
+        id: props.id,
         x: props.x,
         y: 20,
         width: 80,
@@ -272,32 +275,32 @@ describe("cross-slide object continuity", () => {
         {},
         createElement(
           Slide,
-          { slideId: "before" },
+          { id: "before" },
           createElement(Marker, {
             scope: leftScope,
-            testId: "left-before",
+            id: "left-before",
             x: 20,
           }),
           createElement(Marker, {
             scope: rightScope,
-            testId: "right-before",
+            id: "right-before",
             x: 160,
           }),
         ),
         createElement(
           Slide,
           {
-            slideId: "after",
+            id: "after",
             transition: transitions.morph({ fallback: transitions.fade() }),
           },
           createElement(Marker, {
             scope: rightScope,
-            testId: "right-after",
+            id: "right-after",
             x: 300,
           }),
           createElement(Marker, {
             scope: leftScope,
-            testId: "left-after",
+            id: "left-after",
             x: 440,
           }),
         ),
@@ -310,10 +313,18 @@ describe("cross-slide object continuity", () => {
     assert.deepEqual(file.errors, []);
     const before = result.report.slides[0]?.objects ?? [];
     const after = result.report.slides[1]?.objects ?? [];
-    const leftBefore = before.find(({ testId }) => testId === "left-before");
-    const leftAfter = after.find(({ testId }) => testId === "left-after");
-    const rightBefore = before.find(({ testId }) => testId === "right-before");
-    const rightAfter = after.find(({ testId }) => testId === "right-after");
+    const leftBefore = before.find(
+      ({ authorId: testId }) => testId === "left-before",
+    );
+    const leftAfter = after.find(
+      ({ authorId: testId }) => testId === "left-after",
+    );
+    const rightBefore = before.find(
+      ({ authorId: testId }) => testId === "right-before",
+    );
+    const rightAfter = after.find(
+      ({ authorId: testId }) => testId === "right-after",
+    );
     assert.equal(leftBefore?.name, leftAfter?.name);
     assert.equal(rightBefore?.name, rightAfter?.name);
     assert.notEqual(leftBefore?.name, rightBefore?.name);
@@ -334,7 +345,7 @@ describe("cross-slide object continuity", () => {
         {},
         createElement(
           Slide,
-          { slideId: "before" },
+          { id: "before" },
           ...(leading === undefined
             ? []
             : [
@@ -357,7 +368,7 @@ describe("cross-slide object continuity", () => {
         createElement(
           Slide,
           {
-            slideId: "after",
+            id: "after",
             transition: transitions.morph({ fallback: transitions.fade() }),
           },
           createElement(Shape, {
@@ -406,7 +417,7 @@ describe("cross-slide object continuity", () => {
     const objects = (suffix: string, offset: number) => [
       createElement(Shape, {
         morphKey: handles.shape,
-        testId: `shape-${suffix}`,
+        id: `shape-${suffix}`,
         x: offset,
         y: 10,
         width: 60,
@@ -416,7 +427,7 @@ describe("cross-slide object continuity", () => {
         Text,
         {
           morphKey: handles.text,
-          testId: `text-${suffix}`,
+          id: `text-${suffix}`,
           x: offset,
           y: 60,
           width: 100,
@@ -427,7 +438,7 @@ describe("cross-slide object continuity", () => {
       ),
       createElement(Image, {
         morphKey: handles.image,
-        testId: `image-${suffix}`,
+        id: `image-${suffix}`,
         src: image,
         x: offset,
         y: 100,
@@ -438,7 +449,7 @@ describe("cross-slide object continuity", () => {
         Group,
         {
           morphKey: handles.group,
-          testId: `group-${suffix}`,
+          id: `group-${suffix}`,
         },
         createElement(Shape, {
           x: offset + 80,
@@ -451,7 +462,7 @@ describe("cross-slide object continuity", () => {
         Table,
         {
           morphKey: handles.table,
-          testId: `table-${suffix}`,
+          id: `table-${suffix}`,
           columns: [80],
         },
         createElement(
@@ -462,7 +473,7 @@ describe("cross-slide object continuity", () => {
       ),
       createElement(Chart, {
         morphKey: handles.chart,
-        testId: `chart-${suffix}`,
+        id: `chart-${suffix}`,
         kind: "column",
         x: offset,
         y: 200,
@@ -475,11 +486,11 @@ describe("cross-slide object continuity", () => {
       createElement(
         Deck,
         {},
-        createElement(Slide, { slideId: "before" }, ...objects("before", 20)),
+        createElement(Slide, { id: "before" }, ...objects("before", 20)),
         createElement(
           Slide,
           {
-            slideId: "after",
+            id: "after",
             transition: transitions.morph({ fallback: transitions.fade() }),
           },
           ...objects("after", 320),
@@ -493,10 +504,10 @@ describe("cross-slide object continuity", () => {
     assert.deepEqual(file.errors, []);
     for (const handle of Object.keys(handles)) {
       const before = result.report.slides[0]?.objects.find(
-        ({ testId }) => testId === `${handle}-before`,
+        ({ authorId: testId }) => testId === `${handle}-before`,
       );
       const after = result.report.slides[1]?.objects.find(
-        ({ testId }) => testId === `${handle}-after`,
+        ({ authorId: testId }) => testId === `${handle}-after`,
       );
       assert.equal(before?.name, after?.name, `${handle} report name`);
       assert.ok(before?.name.startsWith("!!"), `${handle} native Morph name`);
@@ -523,7 +534,7 @@ describe("cross-slide object continuity", () => {
         {},
         createElement(
           Slide,
-          { slideId: "before" },
+          { id: "before" },
           createElement(Shape, {
             morphKey: departing,
             x: 10,
@@ -549,7 +560,7 @@ describe("cross-slide object continuity", () => {
         createElement(
           Slide,
           {
-            slideId: "after",
+            id: "after",
             transition: transitions.morph({ fallback: transitions.fade() }),
           },
           createElement(Shape, {
@@ -634,7 +645,7 @@ describe("cross-slide object continuity", () => {
           {},
           createElement(
             Slide,
-            { slideId: "invalid-handle" },
+            { id: "invalid-handle" },
             createElement(Shape, {
               morphKey: "ordinary string" as never,
               x: 0,
@@ -652,7 +663,7 @@ describe("cross-slide object continuity", () => {
           {},
           createElement(
             Slide,
-            { slideId: "name-conflict" },
+            { id: "name-conflict" },
             createElement(Shape, {
               morphKey: key,
               name: "ordinary object name",
@@ -671,7 +682,7 @@ describe("cross-slide object continuity", () => {
           {},
           createElement(
             Slide,
-            { slideId: "duplicate" },
+            { id: "duplicate" },
             createElement(Shape, {
               morphKey: key,
               x: 0,
@@ -696,7 +707,7 @@ describe("cross-slide object continuity", () => {
           {},
           createElement(
             Slide,
-            { slideId: "transparent" },
+            { id: "transparent" },
             createElement(
               Box,
               { morphKey: key } as never,
@@ -717,7 +728,7 @@ describe("cross-slide object continuity", () => {
           {},
           createElement(
             Slide,
-            { slideId: "nested" },
+            { id: "nested" },
             createElement(
               Group,
               null,
@@ -739,7 +750,7 @@ describe("cross-slide object continuity", () => {
           {},
           createElement(
             Slide,
-            { slideId: "before" },
+            { id: "before" },
             createElement(
               Group,
               null,
@@ -759,7 +770,7 @@ describe("cross-slide object continuity", () => {
           createElement(
             Slide,
             {
-              slideId: "after",
+              id: "after",
               transition: transitions.morph({ fallback: transitions.fade() }),
             },
             createElement(Shape, {
@@ -779,7 +790,7 @@ describe("cross-slide object continuity", () => {
           {},
           createElement(
             Slide,
-            { slideId: "nested-boxes" },
+            { id: "nested-boxes" },
             createElement(
               Group,
               null,
@@ -809,7 +820,7 @@ describe("cross-slide object continuity", () => {
           {},
           createElement(
             Slide,
-            { slideId: "mixed-wrappers" },
+            { id: "mixed-wrappers" },
             createElement(Group, null, createElement(MotionWrappedBox)),
           ),
         ),
@@ -821,7 +832,7 @@ describe("cross-slide object continuity", () => {
           {},
           createElement(
             Slide,
-            { slideId: "before" },
+            { id: "before" },
             createElement(Shape, {
               morphKey: key,
               x: 0,
@@ -833,7 +844,7 @@ describe("cross-slide object continuity", () => {
           createElement(
             Slide,
             {
-              slideId: "after",
+              id: "after",
               transition: transitions.morph({ fallback: transitions.fade() }),
             },
             createElement(Image, {

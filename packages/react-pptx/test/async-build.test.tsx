@@ -21,18 +21,18 @@ function deck(children: ReactNode) {
   return createElement(
     Deck,
     { width: 960, height: 540 },
-    createElement(Slide, { slideId: "async" }, children),
+    createElement(Slide, { id: "async" }, children),
   );
 }
 
 function Read({
   promise,
   onRead,
-  testId,
+  id,
 }: {
   promise: Promise<string>;
   onRead?: () => void;
-  testId?: string;
+  id?: string;
 }) {
   const text = use(promise);
   useEffect(() => {
@@ -41,7 +41,7 @@ function Read({
   return createElement(
     Text,
     {
-      ...(testId === undefined ? {} : { testId }),
+      ...(id === undefined ? {} : { id }),
       x: 0,
       y: 0,
       width: 240,
@@ -330,7 +330,7 @@ describe("React asynchronous content in public build", () => {
         createElement(
           Text,
           {
-            testId: "completed-before-abort",
+            id: "completed-before-abort",
             x: 0,
             y: 0,
             width: 240,
@@ -370,7 +370,7 @@ describe("React asynchronous content in public build", () => {
       return createElement(
         Text,
         {
-          testId: "cleanup-abort",
+          id: "cleanup-abort",
           x: 0,
           y: 0,
           width: 240,
@@ -458,12 +458,12 @@ describe("React asynchronous content in public build", () => {
         null,
         createElement(
           Text,
-          { testId: "sync", x: 0, y: 0, width: 240, height: 48 },
+          { id: "sync", x: 0, y: 0, width: 240, height: 48 },
           "同步内容",
         ),
         createElement(
           Text,
-          { testId: "prefetched", x: 0, y: 52, width: 240, height: 48 },
+          { id: "prefetched", x: 0, y: 52, width: 240, height: 48 },
           prefetched,
         ),
         createElement(
@@ -538,7 +538,7 @@ describe("React asynchronous content in public build", () => {
     const updates: number[] = [];
     const stableHost = createElement(
       Text,
-      { testId: "stable-host", x: 0, y: 0, width: 240, height: 48 },
+      { id: "stable-host", x: 0, y: 0, width: 240, height: 48 },
       "宿主文字保持不变",
     );
 
@@ -798,7 +798,7 @@ describe("React asynchronous content in public build", () => {
       }, []);
       return createElement(
         Text,
-        { testId: "background", x: 0, y: 0, width: 240, height: 48 },
+        { id: "background", x: 0, y: 0, width: 240, height: 48 },
         text,
       );
     }
@@ -841,13 +841,7 @@ describe("React asynchronous content in public build", () => {
       if (responses.size === 3) requested.resolve();
     });
 
-    function SalesTable({
-      source,
-      testId,
-    }: {
-      source: string;
-      testId: string;
-    }) {
+    function SalesTable({ source, id }: { source: string; id: string }) {
       const [promise, setPromise] = useState<Promise<string> | null>(null);
       useEffect(() => {
         const read = fetch(source)
@@ -863,7 +857,7 @@ describe("React asynchronous content in public build", () => {
         : createElement(
             Suspense,
             { fallback: null },
-            createElement(Read, { promise, testId }),
+            createElement(Read, { promise, id }),
           );
     }
 
@@ -882,11 +876,11 @@ describe("React asynchronous content in public build", () => {
             null,
             createElement(SalesTable, {
               source: `${origin}/first`,
-              testId: "first-instance",
+              id: "first-instance",
             }),
             createElement(SalesTable, {
               source: `${origin}/second`,
-              testId: "second-instance",
+              id: "second-instance",
             }),
           ),
         ),
@@ -895,7 +889,7 @@ describe("React asynchronous content in public build", () => {
         deck(
           createElement(SalesTable, {
             source: `${origin}/other-build`,
-            testId: "other-build",
+            id: "other-build",
           }),
         ),
       );
@@ -954,13 +948,13 @@ describe("React asynchronous content in public build", () => {
 
       assert.deepEqual(firstFile.errors, []);
       assert.deepEqual(
-        firstResult.report.slides[0]?.objects.map(({ testId, text }) => ({
-          testId,
+        firstResult.report.slides[0]?.objects.map(({ authorId, text }) => ({
+          authorId,
           text,
         })),
         [
-          { testId: "first-instance", text: "第一个组件实例的数据" },
-          { testId: "second-instance", text: "第二个组件实例的数据" },
+          { authorId: "first-instance", text: "第一个组件实例的数据" },
+          { authorId: "second-instance", text: "第二个组件实例的数据" },
         ],
       );
       assert.deepEqual(
@@ -969,8 +963,8 @@ describe("React asynchronous content in public build", () => {
           text: text?.text,
         })),
         [
-          { name: "first-instance", text: "第一个组件实例的数据" },
-          { name: "second-instance", text: "第二个组件实例的数据" },
+          { name: "Text 1", text: "第一个组件实例的数据" },
+          { name: "Text 2", text: "第二个组件实例的数据" },
         ],
       );
       assert.equal(otherStatus, "done");

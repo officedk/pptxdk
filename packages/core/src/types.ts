@@ -196,9 +196,9 @@ export type PaddingStyle = {
   readonly paddingLeft?: number;
 };
 
-/** Target declaration interpreted by PowerPoint upon clicking an object; internal targets are resolved by stable slideId. */
+/** Target declaration interpreted by PowerPoint upon clicking an object; internal targets are resolved by page author id. */
 export type LinkTarget =
-  | { readonly slideId: string }
+  | { readonly id: string }
   | { readonly url: string }
   | { readonly action: "home" };
 
@@ -214,8 +214,6 @@ export type ObjectObservation = {
   readonly name: string;
   /** Author id declared on the source node; numeric `id` remains the build observation identity. */
   readonly authorId?: string;
-  readonly testId?: string;
-  readonly part?: string;
   readonly geometry?: string;
   readonly box?: GeometryBox;
   readonly text?: string;
@@ -232,8 +230,6 @@ export type LayoutChildReference = {
 export type LayoutObservation = {
   readonly id: number;
   readonly authorId?: string;
-  readonly testId?: string;
-  readonly part?: string;
   readonly box: GeometryBox;
   readonly children: readonly LayoutChildReference[];
 };
@@ -257,8 +253,6 @@ export type NativeTableObservation = {
 export type NativeTablePartObservation = {
   readonly kind: "row" | "cell";
   readonly authorId?: string;
-  readonly testId?: string;
-  readonly part?: string;
   readonly row: number;
   readonly column?: number;
   readonly rowSpan?: number;
@@ -268,8 +262,9 @@ export type NativeTablePartObservation = {
 };
 
 export type SlideObservation = {
+  /** Page author id; also the stable identifier written to the slide part. */
   readonly id: string;
-  /** Author id declared on the Slide; legacy `slideId` remains the observation identity. */
+  /** Author id declared on the Slide, retained as the explicit author observation for pages. */
   readonly authorId?: string;
   readonly index: number;
   readonly section?: string;
@@ -302,8 +297,6 @@ export type BuildResult = {
 export type LocatorObservation = {
   readonly evidence: "generation";
   readonly authorId?: string;
-  readonly testId?: string;
-  readonly part?: string;
   readonly box?: GeometryBox;
   readonly text?: string;
   readonly objects: readonly ObjectObservation[];
@@ -326,10 +319,7 @@ export type Locator = {
   get(id: string): Locator;
   /** Lists matches for an author id in this locator scope; duplicates are already rejected by the build. */
   getAll(id: string): readonly Locator[];
-  getByTestId(testId: string): Locator;
-  getAllByTestId(testId: string): readonly Locator[];
-  part(name: string): Locator;
-  parts(name: string): readonly Locator[];
+  /** Direct author child entries; anonymous entries remain transparent while named nodes are boundaries. */
   children(): readonly Locator[];
   descendants(): readonly Locator[];
   observe(): LocatorObservation;
@@ -345,9 +335,7 @@ export type SlideQuery = Locator & {
 export type BuildQuery = {
   readonly evidence: "generation";
   readonly slides: readonly SlideQuery[];
-  /** Legacy slideId lookup retained until the identity consumer migration. */
-  slide(slideId: string): SlideQuery;
-  /** New author id lookup for pages, independent of the legacy slideId field. */
+  /** Page lookup by author id in this build. */
   getSlide(id: string): SlideQuery;
 };
 
@@ -671,10 +659,8 @@ export type DeckProps = ElementProps & {
 };
 
 export type SlideProps = ElementProps & {
-  /** Scoped author id for the page; unique within the deck. */
-  readonly id?: string;
-  /** Legacy page identity retained until the identity consumer migration. */
-  readonly slideId?: string;
+  /** Page author id; unique within the deck and written as the stable slide identifier. */
+  readonly id: string;
   readonly transition?: unknown;
   readonly theme?: ThemeScope;
   readonly style?: TextStyle & Omit<LayoutStyle, "zIndex">;

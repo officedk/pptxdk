@@ -42,7 +42,7 @@ const costRows = [
 export function TrainingCostPage() {
   return (
     <SlideFrame
-      slideId="training-cost"
+      id="training-cost"
       kicker="01 · 模型架构基座｜训练算力投入与成本拆解"
       title="278.8 万 H800 GPU 小时完成 671B 完整训练，预训练占总算力 95.55%"
       takeaway="核心记录：14.8T 语料正式训练耗资 $5.576M，全程 0 次不可恢复 Loss 尖峰"
@@ -62,7 +62,7 @@ export function TrainingCostPage() {
         tone="compute"
       >
         <Chart
-          testId="training-hours-chart"
+          id="training-hours-chart"
           kind="column"
           enter={wipe({ duration: 460 })}
           x={66}
@@ -124,7 +124,7 @@ export function TrainingCostPage() {
         </Text>
 
         <Chart
-          testId="training-share-chart"
+          id="training-share-chart"
           kind="bar"
           stacking="stacked"
           x={66}
@@ -184,7 +184,7 @@ export function TrainingCostPage() {
         tone="copper"
       >
         <Table
-          testId="training-cost-table"
+          id="training-cost-table"
           x={638}
           y={174}
           width={576}

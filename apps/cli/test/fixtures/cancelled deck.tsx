@@ -30,7 +30,7 @@ function NotifyMount() {
 export default function CancelledDeck() {
   return (
     <Deck>
-      <Slide slideId="cancelled">
+      <Slide id="cancelled">
         <NotifyMount />
         <Suspense fallback={null}>
           <PendingContent />

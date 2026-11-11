@@ -15,7 +15,7 @@ const steps = [
 export function AlignmentPage() {
   return (
     <SlideFrame
-      slideId="alignment"
+      id="alignment"
       chapter="对齐｜InstructGPT 与 ChatGPT"
       title="2022｜从会补全，到听得懂指令"
       number={8}

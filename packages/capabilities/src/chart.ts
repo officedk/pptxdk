@@ -279,6 +279,27 @@ function xmlText(value: string, label: string): string {
   return value;
 }
 
+function pieExplosion(
+  value: unknown,
+  label: string,
+  kind: ChartKind,
+): number | undefined {
+  if (value === undefined) return undefined;
+  if (kind !== "pie" && kind !== "doughnut") {
+    fail(
+      "invalid-chart-option",
+      `${label} is only supported for pie and doughnut charts`,
+    );
+  }
+  return roundedRange(
+    value,
+    label,
+    0,
+    maximumExplosionForCurrentValidationProfile,
+    "rounded-result",
+  );
+}
+
 function lineStyle(value: unknown, label: string): ChartLine | undefined {
   if (value === undefined) return undefined;
   if (!isRecord(value)) fail("invalid-style", `${label} must be an object`);
@@ -918,6 +939,7 @@ function chartSeriesList(
         "values",
         "color",
         "line",
+        "explosion",
         "dataLabels",
         "marker",
         "smooth",
@@ -989,7 +1011,7 @@ function chartSeriesList(
         }
         onlyKeys(
           pointValue,
-          ["color", "line", "marker", "labelColor", "dataLabels"],
+          ["color", "line", "explosion", "marker", "labelColor", "dataLabels"],
           `Series "${name}" data point ${rawIndex}`,
         );
         const pointColor = optionalColor(
@@ -1009,16 +1031,25 @@ function chartSeriesList(
           pointValue["labelColor"],
           `Series "${name}" data point ${rawIndex}.labelColor`,
         );
+        const pointExplosion = pieExplosion(
+          pointValue["explosion"],
+          `Series "${name}" data point ${rawIndex} explosion`,
+          kind,
+        );
         const pointLabels = labels(
           pointValue["dataLabels"],
           kind,
           stacking,
           `Series "${name}" data point ${rawIndex} dataLabels`,
           false,
+          false,
         );
         points[pointIndex] = {
           ...(pointColor === undefined ? {} : { color: pointColor }),
           ...(pointLine === undefined ? {} : { line: pointLine }),
+          ...(pointExplosion === undefined
+            ? {}
+            : { explosion: pointExplosion }),
           ...(pointMarker === undefined ? {} : { marker: pointMarker }),
           ...(labelColor === undefined ? {} : { labelColor }),
           ...(pointLabels === undefined ? {} : { dataLabels: pointLabels }),
@@ -1027,6 +1058,11 @@ function chartSeriesList(
     }
     const color = optionalColor(item["color"], `Series "${name}".color`);
     const line = lineStyle(item["line"], `Series "${name}".line`);
+    const seriesExplosion = pieExplosion(
+      item["explosion"],
+      `Series "${name}" explosion`,
+      kind,
+    );
     const marker = markerStyle(item["marker"], `Series "${name}".marker`, kind);
     const smooth = smoothStyle(item["smooth"], `Series "${name}".smooth`, kind);
     const seriesLabels = labels(
@@ -1035,12 +1071,14 @@ function chartSeriesList(
       stacking,
       `Series "${name}" dataLabels`,
       false,
+      true,
     );
     return {
       name,
       values: values as readonly (number | null)[],
       ...(color === undefined ? {} : { color }),
       ...(line === undefined ? {} : { line }),
+      ...(seriesExplosion === undefined ? {} : { explosion: seriesExplosion }),
       ...(seriesLabels === undefined ? {} : { dataLabels: seriesLabels }),
       ...(marker === undefined ? {} : { marker }),
       ...(smooth === undefined ? {} : { smooth }),
@@ -1055,15 +1093,22 @@ function labels(
   stacking: "stacked" | "percent" | undefined,
   label: string,
   allowStyle = true,
+  allowLeaderLines = false,
 ): false | ChartDataLabels | undefined {
   if (value === undefined || value === false) return value;
   if (!isRecord(value))
     fail("invalid-data-labels", `${label} must be an object or false`);
   onlyKeys(
     value,
-    allowStyle
-      ? ["value", "percent", "category", "position", "numberFormat", "style"]
-      : ["value", "percent", "category", "position", "numberFormat"],
+    [
+      "value",
+      "percent",
+      "category",
+      "position",
+      "numberFormat",
+      ...(allowStyle ? ["style"] : []),
+      ...(allowLeaderLines ? ["leaderLines"] : []),
+    ],
     label,
   );
   for (const key of ["value", "percent", "category"] as const) {
@@ -1186,6 +1231,21 @@ function labels(
   if (typeof numberFormat === "string") {
     xmlText(numberFormat, `${label}.numberFormat`);
   }
+  const rawLeaderLines = value["leaderLines"];
+  let leaderLines: boolean | ChartLine | undefined;
+  if (rawLeaderLines !== undefined) {
+    if (kind !== "pie" && kind !== "doughnut") {
+      fail(
+        "invalid-data-labels",
+        "leaderLines is only supported for pie and doughnut charts",
+      );
+    }
+    if (typeof rawLeaderLines === "boolean") {
+      leaderLines = rawLeaderLines;
+    } else {
+      leaderLines = lineStyle(rawLeaderLines, `${label}.leaderLines`)!;
+    }
+  }
   return {
     ...(value["value"] === undefined
       ? {}
@@ -1200,6 +1260,7 @@ function labels(
       ? {}
       : { position: position as NonNullable<ChartDataLabels["position"]> }),
     ...(numberFormat === undefined ? {} : { numberFormat: numberFormat }),
+    ...(leaderLines === undefined ? {} : { leaderLines }),
     ...(allowStyle && value["style"] !== undefined
       ? { style: value["style"] as TextStyle }
       : {}),
@@ -1290,6 +1351,34 @@ function scatterAxisReferences(
     );
   }
   return { x, y };
+}
+
+function hasVisibleDataLabels(
+  value: false | ChartDataLabels | undefined,
+): value is ChartDataLabels {
+  return (
+    value !== undefined &&
+    value !== false &&
+    (value.value === true || value.percent === true || value.category === true)
+  );
+}
+
+function hasLeaderLinesWithoutVisibleLabels(
+  groupLabels: false | ChartDataLabels | undefined,
+  series: readonly ChartSeries[],
+): boolean {
+  // Only the effective labels written to each series dLbls matter. A group declaration that
+  // every series overrides is not written and must not create an extra validation target.
+  return series.some((item) => {
+    const labels = mergeDataLabels(groupLabels, item.dataLabels);
+    return (
+      labels !== undefined &&
+      labels !== false &&
+      labels.leaderLines !== undefined &&
+      labels.leaderLines !== false &&
+      !hasVisibleDataLabels(labels)
+    );
+  });
 }
 
 type ParsedGroupDraft =
@@ -1440,7 +1529,18 @@ function chartGroupDrafts(value: unknown): ParsedGroupDraft[] {
       chartKind,
       stack,
       "Chart group dataLabels",
+      true,
+      true,
     );
+    if (
+      (chartKind === "pie" || chartKind === "doughnut") &&
+      hasLeaderLinesWithoutVisibleLabels(labelsValue, series)
+    ) {
+      fail(
+        "invalid-data-labels",
+        "leaderLines requires at least one visible data label value, percent, or category",
+      );
+    }
     const gapWidth = item["gapWidth"];
     if (
       gapWidth !== undefined &&
@@ -2851,6 +2951,7 @@ export type {
   ChartPoint,
   ChartProps,
   ChartSeries,
+  ChartSeriesDataLabelOverride,
   ChartTextStyle,
   ChartTickLabelPosition,
   ChartTickMark,
@@ -2862,6 +2963,7 @@ export type {
   LineOrAreaChartGroup,
   PieChartGroup,
   ScatterChartGroup,
+  ScatterChartPoint,
   ScatterChartSeries,
   ScatterData,
   ScatterLine,

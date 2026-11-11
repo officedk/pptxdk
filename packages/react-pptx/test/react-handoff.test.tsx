@@ -191,15 +191,17 @@ describe("public React handoff", () => {
         ),
         createElement(Chart, {
           id: "handoff-chart",
-          kind: "column",
           x: 0,
           y: 40,
           width: 240,
           height: 160,
-          data: {
-            categories: ["Q1"],
-            series: [{ name: "Original", values: [1] }],
-          },
+          groups: [
+            {
+              kind: "column",
+              data: { kind: "shared-categories", categories: ["Q1"] },
+              series: [{ name: "Original", values: [1] }],
+            },
+          ],
         }),
       ]),
     );
@@ -222,15 +224,27 @@ describe("public React handoff", () => {
     assert.deepEqual(
       firstFile.slides[0]?.objects.find(({ kind }) => kind === "chart")?.chart
         ?.series,
-      [{ name: "Original", categories: ["Q1"], values: [1] }],
+      [
+        {
+          name: "Original",
+          categories: ["Q1"],
+          values: [1],
+          index: 0,
+          order: 0,
+          groupIndex: 0,
+        },
+      ],
     );
 
     cellNode.content("Edited cell");
     chartNode.set({
-      data: {
-        categories: ["R1"],
-        series: [{ name: "Revised", values: [7] }],
-      },
+      groups: [
+        {
+          kind: "column",
+          data: { kind: "shared-categories", categories: ["R1"] },
+          series: [{ name: "Revised", values: [7] }],
+        },
+      ],
     });
     const second = await buildDocument(expanded);
     const secondFile = await validatePptx(second.pptx);
@@ -243,7 +257,16 @@ describe("public React handoff", () => {
     assert.deepEqual(
       secondFile.slides[0]?.objects.find(({ kind }) => kind === "chart")?.chart
         ?.series,
-      [{ name: "Revised", categories: ["R1"], values: [7] }],
+      [
+        {
+          name: "Revised",
+          categories: ["R1"],
+          values: [7],
+          index: 0,
+          order: 0,
+          groupIndex: 0,
+        },
+      ],
     );
     assert.equal(
       firstFile.slides[0]?.objects.find(({ kind }) => kind === "table")?.table

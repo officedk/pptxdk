@@ -291,15 +291,17 @@ describe("slide navigation", () => {
             id: "chart-link",
             name: "chart-link",
             link: { id: "target" },
-            kind: "line",
             x: 0,
             y: 100,
             width: 100,
             height: 80,
-            data: {
-              categories: ["Q1"],
-              series: [{ name: "Sales", values: [1] }],
-            },
+            groups: [
+              {
+                kind: "line",
+                data: { kind: "shared-categories", categories: ["Q1"] },
+                series: [{ name: "Sales", values: [1] }],
+              },
+            ],
           }),
         ),
         createElement(Slide, { id: "target" }),

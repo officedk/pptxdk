@@ -476,17 +476,17 @@ const document = entry
               .append(entry.cell("Pure table"), entry.cell("42")),
           ),
         entry.chart({
-          id: "pure-chart",
-          kind: "column",
-          x: 260,
-          y: 220,
-          width: 240,
-          height: 140,
-          data: {
-            categories: ["Q1"],
-            series: [{ name: "Series", values: [1] }],
-          },
-        }),
+  id: "pure-chart",
+  x: 260,
+  y: 220,
+  width: 240,
+  height: 140,
+  groups: [{
+    kind: "column",
+    data: { kind: "shared-categories", categories: ["Q1"] },
+    series: [{ name: "Series", values: [1] }],
+  }],
+}),
       ),
   );
 const result = await entry.build(document);

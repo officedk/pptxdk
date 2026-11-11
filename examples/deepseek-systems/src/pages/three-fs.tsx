@@ -205,7 +205,6 @@ export function ThreeFsPage() {
       >
         <Chart
           id="three-fs-chart"
-          kind="bar"
           x={696}
           y={274}
           width={520}
@@ -215,42 +214,52 @@ export function ThreeFsPage() {
             fontSize: 10.5,
             color: colors.ink,
           }}
-          data={{
-            categories: storageCategories,
-            series: [
-              {
-                name: "实测持续吞吐 / 硬件参考线 (GiB/s)",
-                values: storageMeasured,
-                color: colors.comm,
-                points: {
-                  0: { color: colors.compute, labelColor: colors.compute },
-                  1: { color: colors.copper, labelColor: colors.copperText },
-                  2: { color: colors.comm, labelColor: colors.commText },
-                  3: { color: colors.baseline, labelColor: colors.steel },
-                },
-              },
-            ],
-          }}
           legend={false}
-          dataLabels={{
-            value: true,
-            position: "outsideEnd",
-            numberFormat: "0.0",
-            style: { fontFamily: "body", fontSize: 10, color: colors.ink },
+          axes={{
+            category: {
+              kind: "category",
+              line: { color: colors.steel, width: 1 },
+              style: { fontFamily: "body", fontSize: 10.5, color: colors.ink },
+            },
+            value: {
+              kind: "value",
+              min: 0,
+              max: 70,
+              majorUnit: 14,
+              numberFormat: "0.0",
+              gridlines: { color: colors.line, width: 1 },
+              line: false,
+              style: { fontFamily: "body", fontSize: 10, color: colors.muted },
+            },
           }}
-          valueAxis={{
-            min: 0,
-            max: 70,
-            majorUnit: 14,
-            numberFormat: "0.0",
-            gridlines: { color: colors.line, width: 1 },
-            line: false,
-            style: { fontFamily: "body", fontSize: 10, color: colors.muted },
-          }}
-          categoryAxis={{
-            line: { color: colors.steel, width: 1 },
-            style: { fontFamily: "body", fontSize: 10.5, color: colors.ink },
-          }}
+          groups={[
+            {
+              kind: "bar",
+              data: {
+                kind: "shared-categories",
+                categories: storageCategories,
+              },
+              series: [
+                {
+                  name: "实测持续吞吐 / 硬件参考线 (GiB/s)",
+                  values: storageMeasured,
+                  color: colors.comm,
+                  points: {
+                    0: { color: colors.compute, labelColor: colors.compute },
+                    1: { color: colors.copper, labelColor: colors.copperText },
+                    2: { color: colors.comm, labelColor: colors.commText },
+                    3: { color: colors.baseline, labelColor: colors.steel },
+                  },
+                },
+              ],
+              dataLabels: {
+                value: true,
+                position: "outsideEnd",
+                numberFormat: "0.0",
+                style: { fontFamily: "body", fontSize: 10, color: colors.ink },
+              },
+            },
+          ]}
         />
         <Rule x={696} y={492} width={520} />
         <Text

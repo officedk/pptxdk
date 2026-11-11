@@ -42,16 +42,21 @@ export type {
 } from "@react-pptx/core";
 export type {
   ChartAxis,
-  ChartData,
+  ChartAxisReferences,
+  ChartCategoryAxis,
   ChartDataLabels,
+  ChartGroup,
+  ChartGroupData,
   ChartKind,
   ChartLine,
   ChartPoint,
   ChartProps,
   ChartSeries,
-  ColumnOrBarChartProps,
-  DoughnutChartProps,
-  LineOrAreaChartProps,
-  PieChartProps,
+  ChartValueAxis,
+  ColumnOrBarChartGroup,
+  DoughnutChartGroup,
+  LineOrAreaChartGroup,
+  PieChartGroup,
+  SharedCategoryData,
 } from "@react-pptx/capabilities/chart";
 export type { SlideProps } from "./slide.ts";

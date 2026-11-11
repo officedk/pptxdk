@@ -63,54 +63,63 @@ export function TrainingCostPage() {
       >
         <Chart
           id="training-hours-chart"
-          kind="column"
           enter={wipe({ duration: 460 })}
           x={66}
           y={168}
           width={520}
           height={292}
           style={{ fontFamily: "body", fontSize: 12, color: colors.ink }}
-          data={{
-            categories: [
-              "预训练 (14.8T)",
-              "上下文扩展 (128K)",
-              "后训练 (SFT+RL)",
-            ],
-            series: [
-              {
-                name: "H800 算力耗时（千小时）",
-                values: [2664, 119, 5],
-                color: colors.compute,
-                points: {
-                  0: { color: colors.compute, labelColor: colors.compute },
-                  1: { color: colors.comm, labelColor: colors.commText },
-                  2: { color: colors.copper, labelColor: colors.copperText },
-                },
-              },
-            ],
-          }}
           legend={false}
-          gapWidth={95}
           plotArea={{ left: 58, top: 24, width: 442, height: 214 }}
-          dataLabels={{
-            value: true,
-            position: "outsideEnd",
-            numberFormat: '#,##0"K"',
-            style: { fontFamily: "body", fontSize: 12, color: colors.ink },
+          axes={{
+            category: {
+              kind: "category",
+              line: { color: colors.steel, width: 1 },
+              style: { fontFamily: "body", fontSize: 12, color: colors.ink },
+            },
+            value: {
+              kind: "value",
+              min: 0,
+              max: 3000,
+              majorUnit: 1000,
+              numberFormat: '#,##0"K"',
+              gridlines: { color: colors.line, width: 1 },
+              line: false,
+              style: { fontFamily: "body", fontSize: 11, color: colors.muted },
+            },
           }}
-          valueAxis={{
-            min: 0,
-            max: 3000,
-            majorUnit: 1000,
-            numberFormat: '#,##0"K"',
-            gridlines: { color: colors.line, width: 1 },
-            line: false,
-            style: { fontFamily: "body", fontSize: 11, color: colors.muted },
-          }}
-          categoryAxis={{
-            line: { color: colors.steel, width: 1 },
-            style: { fontFamily: "body", fontSize: 12, color: colors.ink },
-          }}
+          groups={[
+            {
+              kind: "column",
+              data: {
+                kind: "shared-categories",
+                categories: [
+                  "预训练 (14.8T)",
+                  "上下文扩展 (128K)",
+                  "后训练 (SFT+RL)",
+                ],
+              },
+              series: [
+                {
+                  name: "H800 算力耗时（千小时）",
+                  values: [2664, 119, 5],
+                  color: colors.compute,
+                  points: {
+                    0: { color: colors.compute, labelColor: colors.compute },
+                    1: { color: colors.comm, labelColor: colors.commText },
+                    2: { color: colors.copper, labelColor: colors.copperText },
+                  },
+                },
+              ],
+              gapWidth: 95,
+              dataLabels: {
+                value: true,
+                position: "outsideEnd",
+                numberFormat: '#,##0"K"',
+                style: { fontFamily: "body", fontSize: 12, color: colors.ink },
+              },
+            },
+          ]}
         />
 
         <Text
@@ -125,50 +134,60 @@ export function TrainingCostPage() {
 
         <Chart
           id="training-share-chart"
-          kind="bar"
-          stacking="stacked"
           x={66}
           y={496}
           width={520}
           height={150}
           style={{ fontFamily: "body", fontSize: 11, color: colors.ink }}
-          data={{
-            categories: ["成本结构"],
-            series: [
-              {
-                name: "预训练 95.55%",
-                values: [95.55],
-                color: colors.compute,
-              },
-              {
-                name: "上下文扩展 4.27%",
-                values: [4.27],
-                color: colors.comm,
-              },
-              {
-                name: "后训练 0.18%",
-                values: [0.18],
-                color: colors.copper,
-              },
-            ],
-          }}
           legend="bottom"
-          gapWidth={55}
           plotArea={{ left: 68, top: 12, width: 432, height: 68 }}
-          valueAxis={{
-            visible: true,
-            min: 0,
-            max: 100,
-            majorUnit: 20,
-            numberFormat: '0"%"',
-            gridlines: { color: colors.line, width: 1 },
-            line: false,
-            style: { fontFamily: "body", fontSize: 10.5, color: colors.muted },
+          axes={{
+            category: {
+              kind: "category",
+              line: { color: colors.steel, width: 1 },
+              style: { fontFamily: "body", fontSize: 11.5, color: colors.ink },
+            },
+            value: {
+              kind: "value",
+              visible: true,
+              min: 0,
+              max: 100,
+              majorUnit: 20,
+              numberFormat: '0"%"',
+              gridlines: { color: colors.line, width: 1 },
+              line: false,
+              style: {
+                fontFamily: "body",
+                fontSize: 10.5,
+                color: colors.muted,
+              },
+            },
           }}
-          categoryAxis={{
-            line: { color: colors.steel, width: 1 },
-            style: { fontFamily: "body", fontSize: 11.5, color: colors.ink },
-          }}
+          groups={[
+            {
+              kind: "bar",
+              data: { kind: "shared-categories", categories: ["成本结构"] },
+              series: [
+                {
+                  name: "预训练 95.55%",
+                  values: [95.55],
+                  color: colors.compute,
+                },
+                {
+                  name: "上下文扩展 4.27%",
+                  values: [4.27],
+                  color: colors.comm,
+                },
+                {
+                  name: "后训练 0.18%",
+                  values: [0.18],
+                  color: colors.copper,
+                },
+              ],
+              stacking: "stacked",
+              gapWidth: 55,
+            },
+          ]}
         />
       </PanelCard>
 

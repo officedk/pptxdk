@@ -1387,8 +1387,16 @@ describe("object motion", () => {
             y: 10,
             width: 210,
             height: 200,
-            kind: "column",
-            data,
+            groups: [
+              {
+                kind: "column",
+                data: {
+                  kind: "shared-categories",
+                  categories: data.categories,
+                },
+                series: data.series,
+              },
+            ],
             enter: wipe({ by: "series", duration: 400, from: "left" }),
           }),
           createElement(Chart, {
@@ -1398,8 +1406,16 @@ describe("object motion", () => {
             y: 10,
             width: 210,
             height: 200,
-            kind: "line",
-            data,
+            groups: [
+              {
+                kind: "line",
+                data: {
+                  kind: "shared-categories",
+                  categories: data.categories,
+                },
+                series: data.series,
+              },
+            ],
             enter: fade({ by: "category", duration: 300 }),
           }),
         ),

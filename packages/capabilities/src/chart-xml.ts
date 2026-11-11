@@ -315,6 +315,21 @@ function numRef(
   );
 }
 
+/** Literal numeric data source; zero-observation custom error bars use zero points. */
+function numLit(values: readonly (number | null)[]): XmlElement {
+  return el(
+    "c:numLit",
+    null,
+    el("c:formatCode", null, "General"),
+    el("c:ptCount", { val: values.length }),
+    values.flatMap((value, index) =>
+      value === null
+        ? []
+        : [el("c:pt", { idx: index }, el("c:v", null, String(value)))],
+    ),
+  );
+}
+
 function color(value: ColorValue, theme: ThemeContext): XmlRaw {
   return { raw: resolvedColorXml(theme.resolveColor(value)) };
 }
@@ -535,14 +550,22 @@ function errorBarXml(
   if (bars.type === "custom") {
     if (bars.plus !== undefined) {
       const values = channel("plus");
-      plus = el("c:plus", null, numRef(errorBarFormula(values), values.values));
+      plus = el(
+        "c:plus",
+        null,
+        values.values.length === 0
+          ? numLit(values.values)
+          : numRef(errorBarFormula(values), values.values),
+      );
     }
     if (bars.minus !== undefined) {
       const values = channel("minus");
       minus = el(
         "c:minus",
         null,
-        numRef(errorBarFormula(values), values.values),
+        values.values.length === 0
+          ? numLit(values.values)
+          : numRef(errorBarFormula(values), values.values),
       );
     }
   }

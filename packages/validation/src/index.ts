@@ -3447,6 +3447,13 @@ function readEmbeddedWorkbook(
     return result;
   };
 
+  const hasErrorBarReferences = (series: FileChartSeries): boolean =>
+    (series.errorBars ?? []).some(
+      (bar) =>
+        bar.plus?.source === "reference" ||
+        bar.minus?.source === "reference",
+    );
+
   const workbookSeries: FileChartSeries[] = [];
   for (const { series, formula } of formulaSeries) {
     const nameRange = chartFormulaRange(formula.name, sheetName);
@@ -3484,6 +3491,15 @@ function readEmbeddedWorkbook(
           part,
           "incomplete-embedded-workbook",
           `Workbook missing series name ${spreadsheetColumn(nameRange.startColumn - 1)}${nameRange.startRow}`,
+        );
+        continue;
+      }
+      if (hasErrorBarReferences(series)) {
+        issue(
+          errors,
+          chartPart,
+          "invalid-chart-formula",
+          `Zero-observation scatter series ${series.name} custom error bars must not reference workbook ranges`,
         );
         continue;
       }
@@ -3624,6 +3640,15 @@ function readEmbeddedWorkbook(
           part,
           "incomplete-embedded-workbook",
           `Workbook missing series name ${spreadsheetColumn(nameRange.startColumn - 1)}${nameRange.startRow}`,
+        );
+        continue;
+      }
+      if (hasErrorBarReferences(series)) {
+        issue(
+          errors,
+          chartPart,
+          "invalid-chart-formula",
+          `Zero-observation series ${series.name} custom error bars must not reference workbook ranges`,
         );
         continue;
       }

@@ -1168,11 +1168,6 @@ function setPosition(
   yoga.setPosition(edge, value);
 }
 
-function layoutPixel(value: number): number {
-  // Yoga stores dimensions as single-precision floats; normalized to hundredths of a pixel per text service precision.
-  return Math.round(value * 100) / 100;
-}
-
 function objectModule(
   module: RegisteredCapabilityModule | undefined,
 ): module is ObjectCapabilityModule {
@@ -2877,11 +2872,12 @@ export class LayoutPass {
     node: LayoutNode,
     origin: { readonly x: number; readonly y: number },
   ): void {
+    // Keep the solver's precision: capabilities compile and write the same geometry, so display rounding here would shrink native output.
     const box = {
-      x: layoutPixel(origin.x + node.yoga.getComputedLeft()),
-      y: layoutPixel(origin.y + node.yoga.getComputedTop()),
-      width: layoutPixel(node.yoga.getComputedWidth()),
-      height: layoutPixel(node.yoga.getComputedHeight()),
+      x: origin.x + node.yoga.getComputedLeft(),
+      y: origin.y + node.yoga.getComputedTop(),
+      width: node.yoga.getComputedWidth(),
+      height: node.yoga.getComputedHeight(),
     };
     if (node.element?.type === "rp:box") {
       this.#boxes.set(node.element, box);

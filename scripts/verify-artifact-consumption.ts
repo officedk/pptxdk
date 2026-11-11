@@ -235,6 +235,8 @@ try {
           "reject-text-box.mjs",
           "showcase-entry.ts",
           "consumer-cropped.mjs",
+          "consumer-document.ts",
+          "reject-document-react.mjs",
           "devtools-sentinel.mjs",
         ],
       },
@@ -606,6 +608,103 @@ try {
       "process.stdout.write(JSON.stringify({ shapeText: file.slides[0]?.objects[0]?.text?.text, shapeField: shapeField.field, shapeFieldText: shapeField.text, tableKind: file.slides[0]?.objects[2]?.kind, tableText: file.slides[0]?.objects[2]?.table?.cells[0]?.[0], missingCode: missingText.diagnostics[0]?.code, missingPath: missingText.diagnostics[0]?.path, textBoxImplementationLoaded: false }));",
     ].join("\n"),
   );
+  await writeFile(
+    join(temporaryDirectory, "consumer-document.ts"),
+    [
+      'import { strFromU8, unzipSync } from "fflate";',
+      "import {",
+      "  after,",
+      "  box,",
+      "  BuildError,",
+      "  build,",
+      "  cell,",
+      "  chart,",
+      "  createDocumentBuild,",
+      "  createMotionScopeHandle,",
+      "  deck,",
+      "  documentCapabilities,",
+      "  fade,",
+      "  image,",
+      "  motionScope,",
+      "  paragraph,",
+      "  row,",
+      "  shape,",
+      "  slide,",
+      "  span,",
+      "  step,",
+      "  table,",
+      "  text,",
+      "  transitions,",
+      '} from "@react-pptx/react-pptx/document";',
+      'import { validatePptx } from "@react-pptx/validation";',
+      'const png = new Uint8Array(Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/n1sAAAAASUVORK5CYII=", "base64"));',
+      "const source = createMotionScopeHandle();",
+      'const ready = source.cue("ready");',
+      "const follower = createMotionScopeHandle();",
+      'const document = deck({ width: 960, height: 540, theme: { colors: { ink: "#123456", accent1: "#2F6F8F" } } }).append(',
+      '  slide({ id: "packed-overview", background: "#F7F9FB", theme: { colors: { ink: "#0B5C7A" } } }).append(',
+      '    box({ id: "packed-layout", style: { width: 600, height: 140, padding: 12 } }).append(',
+      '      text(paragraph(span("Packed ", { style: { fontWeight: "bold" } }), span("default", { style: { color: "ink" } })), { id: "packed-headline", x: 12, y: 12, width: 560, height: 60, style: { fontSize: 24 } }),',
+      "    ),",
+      '    shape({ id: "packed-shape", x: 20, y: 160, width: 120, height: 60, text: "Packed shape", fill: "accent1" }),',
+      '    image({ id: "packed-image", src: png, x: 160, y: 160, width: 80, height: 60, fit: "cover" }),',
+      '    table({ id: "packed-table", x: 20, y: 240, width: 420, columns: [140, "1fr"], style: { fontSize: 14 } }).append(',
+      '      row({ style: { height: 28 } }).append(cell("Metric"), cell("Value")),',
+      '      row({ style: { height: 28 } }).append(cell("North"), cell("12")),',
+      "    ),",
+      '    chart({ id: "packed-chart", kind: "column", x: 480, y: 240, width: 400, height: 200, data: { categories: ["Q1", "Q2"], series: [{ name: "North", values: [12, 18] }, { name: "South", values: [9, 15] }] } }),',
+      "    step({ n: 1 }).append(",
+      '      shape({ id: "packed-animated", x: 20, y: 460, width: 120, height: 40, enter: fade({ duration: 200 }) }),',
+      '      motionScope(source, { publishEnd: ready }).append(shape({ id: "packed-scope", x: 160, y: 460, width: 120, height: 40, enter: fade({ duration: 100 }) })),',
+      '      motionScope(follower, { startAt: after(ready, 20) }).append(shape({ id: "packed-follow", x: 300, y: 460, width: 120, height: 40, enter: fade({ duration: 80 }) })),',
+      "    ),",
+      '    shape({ id: "packed-next", x: 440, y: 460, width: 120, height: 40, text: "Details", link: { id: "packed-details" } }),',
+      "  ),",
+      '  slide({ id: "packed-details", transition: transitions.fade() }).append(text("Details", { id: "packed-details-title", x: 20, y: 20, width: 400, height: 48, style: { fontSize: 24, color: "ink" } })),',
+      ");",
+      'const resolved = import.meta.resolve("@react-pptx/react-pptx/document");',
+      'if (!resolved.endsWith("/dist/document.js")) throw new Error(`pure document entry resolved outside dist: ${resolved}`);',
+      "const result = await build(document);",
+      'const headline = result.report.slides[0]?.objects.find(({ authorId }) => authorId === "packed-headline");',
+      'const motion = result.report.slides[0]?.capabilities?.["motion"] as { readonly steps?: readonly { readonly effects?: readonly unknown[] }[] } | undefined;',
+      "const motionEffects = motion?.steps?.flatMap(({ effects = [] }) => effects) ?? [];",
+      'const reportLink = result.report.slides[0]?.objects.find(({ authorId }) => authorId === "packed-next")?.link;',
+      'if (documentCapabilities.length !== 10 || headline?.box === undefined || headline.box.width <= 0 || motionEffects.length !== 3 || reportLink !== "slide:packed-details") throw new Error(JSON.stringify({ capabilities: documentCapabilities.length, headline, motionEffects, reportLink }));',
+      "const parts = unzipSync(result.pptx);",
+      'const slideBytes = parts["ppt/slides/slide1.xml"];',
+      'if (slideBytes === undefined) throw new Error("packed pure document did not write slide1.xml");',
+      "const slideXml = strFromU8(slideBytes);",
+      'if (!slideXml.includes("0B5C7A") || !slideXml.includes("<p:timing")) throw new Error("packed pure document lost theme scope or motion timing");',
+      "const file = await validatePptx(result.pptx);",
+      'const overview = file.slides.find(({ id }) => id === "packed-overview");',
+      "const kinds = overview?.objects.map(({ kind }) => kind) ?? [];",
+      'const tableObject = overview?.objects.find(({ kind }) => kind === "table");',
+      'const chartObject = overview?.objects.find(({ kind }) => kind === "chart");',
+      "const fileLink = overview?.objects.find(({ link }) => link !== undefined)?.link;",
+      "const fileEffects = overview?.animations?.flatMap(({ effects }) => effects) ?? [];",
+      'const details = file.slides.find(({ id }) => id === "packed-details");',
+      'if (file.errors.length !== 0 || !kinds.includes("shape") || !kinds.includes("image") || !kinds.includes("table") || !kinds.includes("chart") || tableObject?.table?.cells[0]?.[0] !== "Metric" || chartObject?.chart?.types[0] !== "barChart" || JSON.stringify(chartObject.chart.series[0]?.values) !== JSON.stringify([12, 18]) || fileLink === undefined || !("slideId" in fileLink) || fileLink.slideId !== "packed-details" || fileEffects.length !== 3 || details?.transition?.kind !== "fade") throw new Error(JSON.stringify({ errors: file.errors, kinds, table: tableObject?.table?.cells, chart: chartObject?.chart, fileLink, fileEffects, transition: details?.transition }));',
+      'const trimmedBuild = createDocumentBuild(documentCapabilities.filter(({ declaration }) => declaration !== "rp:table"));',
+      "let missing: unknown;",
+      'try { await trimmedBuild(deck({ width: 320, height: 180 }).append(slide({ id: "packed-trimmed" }).append(table({ id: "packed-missing", x: 0, y: 0, width: 200, columns: [100] }).append(row().append(cell("missing")))))); } catch (error) { missing = error; }',
+      'if (!(missing instanceof BuildError)) throw new Error("trimmed pure document did not reject the missing table capability");',
+      'const missingDiagnostic = missing.diagnostics.find(({ code }) => code === "missing-capability");',
+      'if (missingDiagnostic === undefined || !missingDiagnostic.path.includes("/table[packed-missing]")) throw new Error(JSON.stringify({ diagnostics: missing.diagnostics }));',
+      'const linkSlideId = fileLink !== undefined && "slideId" in fileLink ? fileLink.slideId : undefined;',
+      "process.stdout.write(JSON.stringify({ resolved, capabilities: documentCapabilities.length, slides: file.slides.length, kinds, headlineBox: headline?.box, motionEffects: motionEffects.length, table: tableObject?.table?.cells[0]?.[0], chart: chartObject?.chart?.types[0], chartValue: chartObject?.chart?.series[0]?.values[1], link: linkSlideId, fileEffects: fileEffects.length, transition: details?.transition?.kind, missingCode: missingDiagnostic.code, missingPath: missingDiagnostic.path }));",
+    ].join("\n"),
+  );
+  await writeFile(
+    join(temporaryDirectory, "reject-document-react.mjs"),
+    [
+      "/** @param {string} specifier @param {object} context @param {(specifier: string, context: object) => Promise<{ url: string }> | { url: string }} nextResolve */",
+      "export async function resolve(specifier, context, nextResolve) {",
+      '  if (specifier === "react" || specifier === "react-reconciler" || specifier.startsWith("react/")) throw new Error(`pure document consumer loaded ${specifier}`);',
+      "  const resolved = await nextResolve(specifier, context);",
+      "  return resolved;",
+      "}",
+    ].join("\n"),
+  );
   const devtoolsSentinel = join(temporaryDirectory, "devtools-sentinel.mjs");
   await writeFile(
     devtoolsSentinel,
@@ -627,6 +726,8 @@ try {
     "reject-text-box.mjs",
     "showcase-entry.ts",
     "consumer-cropped.mjs",
+    "consumer-document.ts",
+    "reject-document-react.mjs",
     "devtools-sentinel.mjs",
   ].map((file) => join(temporaryDirectory, file));
   run("pnpm", [
@@ -953,8 +1054,57 @@ try {
       `Installed artifact cropped entrypoint returned unexpected results: ${croppedText}`,
     );
   }
+  const documentText = run(
+    process.execPath,
+    [
+      "--loader",
+      join(temporaryDirectory, "reject-document-react.mjs"),
+      "consumer-document.ts",
+    ],
+    temporaryDirectory,
+  );
+  const plainDocument = JSON.parse(documentText) as {
+    readonly resolved?: string;
+    readonly capabilities?: number;
+    readonly slides?: number;
+    readonly kinds?: readonly string[];
+    readonly headlineBox?: { readonly width: number };
+    readonly motionEffects?: number;
+    readonly table?: string;
+    readonly chart?: string;
+    readonly chartValue?: number;
+    readonly link?: string;
+    readonly fileEffects?: number;
+    readonly transition?: string;
+    readonly missingCode?: string;
+    readonly missingPath?: string;
+  };
+  if (
+    plainDocument.resolved?.endsWith("/dist/document.js") !== true ||
+    plainDocument.capabilities !== 10 ||
+    plainDocument.slides !== 2 ||
+    plainDocument.kinds?.includes("shape") !== true ||
+    plainDocument.kinds?.includes("image") !== true ||
+    plainDocument.kinds?.includes("table") !== true ||
+    plainDocument.kinds?.includes("chart") !== true ||
+    plainDocument.headlineBox === undefined ||
+    plainDocument.headlineBox.width <= 0 ||
+    plainDocument.motionEffects !== 3 ||
+    plainDocument.table !== "Metric" ||
+    plainDocument.chart !== "barChart" ||
+    plainDocument.chartValue !== 18 ||
+    plainDocument.link !== "packed-details" ||
+    plainDocument.fileEffects !== 3 ||
+    plainDocument.transition !== "fade" ||
+    plainDocument.missingCode !== "missing-capability" ||
+    plainDocument.missingPath?.includes("/table[packed-missing]") !== true
+  ) {
+    throw new Error(
+      `Installed artifact plain document entry returned unexpected results: ${documentText}`,
+    );
+  }
   process.stdout.write(
-    `Formal artifact consumption passed: ${summaryText}\nInstalled artifact crop passed: ${croppedText}\n`,
+    `Formal artifact consumption passed: ${summaryText}\nInstalled artifact crop passed: ${croppedText}\nInstalled plain document entry passed: ${documentText}\n`,
   );
 } finally {
   await rm(temporaryDirectory, { recursive: true, force: true });

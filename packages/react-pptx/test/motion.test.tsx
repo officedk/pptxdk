@@ -3658,12 +3658,101 @@ describe("object motion", () => {
         assert.doesNotMatch(companion.block, /<p:set>/u);
       }
       if (item.preset === "spinIn") {
-        assert.match(
-          companionBlocks[0]?.block ?? "",
-          /fmla="[^"]*#ppt_x-[^"]*#ppt_y-/u,
+        const spinCompanion = companionBlocks[0]?.block ?? "";
+        assert.equal(
+          (spinCompanion.match(/additive="base"/gu) ?? []).length,
+          2,
         );
+        assert.doesNotMatch(spinCompanion, /-#ppt_x|-#ppt_y/u);
+        assert.match(spinCompanion, /fmla="[^"]*\$\*\(/u);
       }
     }
+  });
+
+  it("rejects sum, delta, or identity coordinates on mixed SpinIn companions", async () => {
+    const result = await build(
+      createElement(
+        Deck,
+        { width: 960, height: 540 },
+        createElement(
+          Slide,
+          { id: "mixed-spin-negative" },
+          createElement(
+            Step,
+            { n: 1 },
+            createElement(
+              Shape,
+              {
+                id: "mixed-spin-negative-shape",
+                x: 100,
+                y: 100,
+                width: 400,
+                height: 160,
+                fill: "#0070C0",
+                textStyle: { fontSize: 20, color: "#FFFFFF" },
+                enter: [
+                  spinIn({ duration: 1000 }),
+                  fade({ by: "paragraph", duration: 700, delay: 300 }),
+                ],
+              },
+              createElement(P, { key: "first" }, "First paragraph"),
+              createElement(P, { key: "second" }, "Second paragraph"),
+            ),
+          ),
+        ),
+      ),
+    );
+    assert.deepEqual((await validatePptx(result.pptx)).errors, []);
+    const slideXml = strFromU8(
+      unzipSync(result.pptx)["ppt/slides/slide1.xml"]!,
+    );
+    const companion = animationEffectBlocks(slideXml).find(
+      ({ block, presetId }) =>
+        presetId === 49 && block.includes('nodeType="withEffect"'),
+    )?.block;
+    assert.ok(companion !== undefined);
+    const sumCoordinates = rewriteSlideXml(result.pptx, (xml) =>
+      xml.replace(
+        companion,
+        companion.replace(
+          '<p:cBhvr additive="base">',
+          '<p:cBhvr additive="sum">',
+        ),
+      ),
+    );
+    assert.ok(
+      (await validatePptx(sumCoordinates)).errors.some(
+        ({ code }) => code === "invalid-animation-progress-formula",
+      ),
+    );
+    const deltaCoordinates = rewriteSlideXml(result.pptx, (xml) =>
+      xml.replace(
+        companion,
+        companion.replace(
+          /<p:tav tm="0" fmla="([^"]*)">/u,
+          '<p:tav tm="0" fmla="$1-#ppt_x">',
+        ),
+      ),
+    );
+    assert.ok(
+      (await validatePptx(deltaCoordinates)).errors.some(
+        ({ code }) => code === "invalid-animation-progress-formula",
+      ),
+    );
+    const identityCoordinates = rewriteSlideXml(result.pptx, (xml) =>
+      xml.replace(
+        companion,
+        companion.replace(
+          /<p:tav tm="0" fmla="[^"]*">/u,
+          '<p:tav tm="0" fmla="#ppt_x">',
+        ),
+      ),
+    );
+    assert.ok(
+      (await validatePptx(identityCoordinates)).errors.some(
+        ({ code }) => code === "invalid-animation-progress-formula",
+      ),
+    );
   });
 
   it("keeps cued delayed mixed projection companions synchronized with the whole completion", async () => {

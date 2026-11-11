@@ -646,6 +646,7 @@ function closeGeometryNumber(left: number, right: number): boolean {
 
 function parseCenterRotationFormula(
   behavior: FileAnimationBehavior,
+  absolute = false,
 ): CenterRotationFormula | undefined {
   const formula = behavior.keyframes?.[0]?.formula;
   const axis = behavior.attributeNames[0];
@@ -654,12 +655,14 @@ function parseCenterRotationFormula(
   }
   const number = "(-?(?:\\d+(?:\\.\\d*)?|\\.\\d+))";
   const progress = "(?:\\$|\\(1-\\$\\))";
+  const xSuffix = absolute ? "" : "-#ppt_x";
+  const ySuffix = absolute ? "" : "-#ppt_y";
   const xPattern = new RegExp(
-    `^${number}\\+(\\$\\*)?\\(\\(#ppt_x-${number}\\)\\*cos\\(\\(${number}\\*pi/180\\)\\*(?<firstProgress>${progress})\\)-\\(#ppt_y-${number}\\)\\*${number}\\*sin\\(\\(${number}\\*pi/180\\)\\*(?<secondProgress>${progress})\\)\\)-#ppt_x$`,
+    `^${number}\\+(\\$\\*)?\\(\\(#ppt_x-${number}\\)\\*cos\\(\\(${number}\\*pi/180\\)\\*(?<firstProgress>${progress})\\)-\\(#ppt_y-${number}\\)\\*${number}\\*sin\\(\\(${number}\\*pi/180\\)\\*(?<secondProgress>${progress})\\)\\)${xSuffix}$`,
     "u",
   );
   const yPattern = new RegExp(
-    `^${number}\\+(\\$\\*)?\\(\\(#ppt_x-${number}\\)\\*${number}\\*sin\\(\\(${number}\\*pi/180\\)\\*(?<firstProgress>${progress})\\)\\+\\(#ppt_y-${number}\\)\\*cos\\(\\(${number}\\*pi/180\\)\\*(?<secondProgress>${progress})\\)\\)-#ppt_y$`,
+    `^${number}\\+(\\$\\*)?\\(\\(#ppt_x-${number}\\)\\*${number}\\*sin\\(\\(${number}\\*pi/180\\)\\*(?<firstProgress>${progress})\\)\\+\\(#ppt_y-${number}\\)\\*cos\\(\\(${number}\\*pi/180\\)\\*(?<secondProgress>${progress})\\)\\)${ySuffix}$`,
     "u",
   );
   const match = (axis === "ppt_x" ? xPattern : yPattern).exec(formula);
@@ -758,11 +761,14 @@ function parseCenterRotationFormula(
 }
 
 /** Progress carrier for validating shared geometry; does not extrapolate formula positions at arbitrary points in time. */
-function validCenterRotationProgress(behavior: FileAnimationBehavior): boolean {
+function validCenterRotationProgress(
+  behavior: FileAnimationBehavior,
+  absolute = false,
+): boolean {
   const keyframes = behavior.keyframes;
   return (
     isPositionBehavior(behavior) &&
-    behavior.additive === "sum" &&
+    behavior.additive === (absolute ? "base" : "sum") &&
     behavior.calculationMode === "lin" &&
     keyframes?.length === 2 &&
     keyframes[0]?.time === 0 &&
@@ -772,7 +778,7 @@ function validCenterRotationProgress(behavior: FileAnimationBehavior): boolean {
     keyframes[0]?.value === "0" &&
     keyframes[1]?.valueType === "fltVal" &&
     keyframes[1]?.value === "1" &&
-    parseCenterRotationFormula(behavior) !== undefined
+    parseCenterRotationFormula(behavior, absolute) !== undefined
   );
 }
 
@@ -797,11 +803,12 @@ function hasCompletePositionAxes(
 
 function hasConsistentPositionFormulas(
   behaviors: readonly FileAnimationBehavior[],
+  absolute = false,
 ): boolean {
   // Paragraphs, backgrounds, and members emitted within the same timing node must share parameter relationships.
   const formulas = behaviors
     .filter(isPositionBehavior)
-    .map(parseCenterRotationFormula);
+    .map((behavior) => parseCenterRotationFormula(behavior, absolute));
   const firstFormula = formulas[0];
   return (
     firstFormula !== undefined &&
@@ -970,10 +977,13 @@ function validCenterRotationGeometry(
   objects: readonly FileObject[],
   widthEmu: number,
   heightEmu: number,
+  absolute = false,
 ): boolean {
   const positions = behaviors.filter(isPositionBehavior);
   if (positions.length === 0) return true;
-  const parsed = positions.map(parseCenterRotationFormula);
+  const parsed = positions.map((behavior) =>
+    parseCenterRotationFormula(behavior, absolute),
+  );
   const firstFormula = parsed[0];
   if (
     firstFormula === undefined ||
@@ -7859,20 +7869,47 @@ function readSlideAnimations(
         );
         continue;
       }
+      // Mixed Shape SpinIn companions carry the absolute common-center position on a base
+      // behavior. Keep the sum/delta contract for every other spin/spinIn target role.
+      const mixedSpinInCompanion =
+        preset === "spinIn" &&
+        kind === "entrance" &&
+        nativeBuildGroupId === 0 &&
+        paragraphBuild?.build === "p" &&
+        paragraphBuild?.animBg === true &&
+        targetObject?.kind === "shape" &&
+        targetObject.text !== undefined &&
+        ranges.length > 0 &&
+        ranges.every((range) => range?.type === "paragraph") &&
+        ranges[0]?.type === "paragraph" &&
+        ranges[0].start === ranges[0].end &&
+        nativeBehaviors.length > 0 &&
+        nativeBehaviors.every(
+          ({ behavior, targetType }) =>
+            behavior !== "set" && targetType === "paragraph",
+        ) &&
+        nativeBehaviors.some(({ additive }) => additive === "base");
       if (
         (preset === "spin" || preset === "spinIn") &&
         nativeBehaviors.some(isPositionBehavior) &&
         (!hasCompletePositionAxes(nativeBehaviors) ||
-          !hasConsistentPositionFormulas(nativeBehaviors) ||
+          !hasConsistentPositionFormulas(
+            nativeBehaviors,
+            mixedSpinInCompanion,
+          ) ||
           nativeBehaviors
             .filter(isPositionBehavior)
-            .some((behavior) => !validCenterRotationProgress(behavior)) ||
+            .some(
+              (behavior) =>
+                !validCenterRotationProgress(behavior, mixedSpinInCompanion),
+            ) ||
           !validCenterRotationGeometry(
             preset,
             nativeBehaviors,
             objects,
             slideSize.widthEmu,
             slideSize.heightEmu,
+            mixedSpinInCompanion,
           ))
       ) {
         issue(

@@ -429,6 +429,7 @@ function centerRotationDelta(
   center: { readonly x: number; readonly y: number },
   dimensions: { readonly width: number; readonly height: number },
   scaleToCenter = false,
+  absolute = false,
 ): readonly [string, string] {
   const widthEmu = pxToEmu(dimensions.width);
   const heightEmu = pxToEmu(dimensions.height);
@@ -437,13 +438,15 @@ function centerRotationDelta(
   const centerX = formulaNumber(center.x);
   const centerY = formulaNumber(center.y);
   const { angle } = rotationFormula(effect);
-  const deltaX = scaleToCenter
-    ? `${centerX}+$*((#ppt_x-${centerX})*cos(${angle})-(#ppt_y-${centerY})*${ratioX}*sin(${angle}))-#ppt_x`
-    : `${centerX}+((#ppt_x-${centerX})*cos(${angle})-(#ppt_y-${centerY})*${ratioX}*sin(${angle}))-#ppt_x`;
-  const deltaY = scaleToCenter
-    ? `${centerY}+$*((#ppt_x-${centerX})*${ratioY}*sin(${angle})+(#ppt_y-${centerY})*cos(${angle}))-#ppt_y`
-    : `${centerY}+((#ppt_x-${centerX})*${ratioY}*sin(${angle})+(#ppt_y-${centerY})*cos(${angle}))-#ppt_y`;
-  return [deltaX, deltaY];
+  const positionX = scaleToCenter
+    ? `${centerX}+$*((#ppt_x-${centerX})*cos(${angle})-(#ppt_y-${centerY})*${ratioX}*sin(${angle}))`
+    : `${centerX}+((#ppt_x-${centerX})*cos(${angle})-(#ppt_y-${centerY})*${ratioX}*sin(${angle}))`;
+  const positionY = scaleToCenter
+    ? `${centerY}+$*((#ppt_x-${centerX})*${ratioY}*sin(${angle})+(#ppt_y-${centerY})*cos(${angle}))`
+    : `${centerY}+((#ppt_x-${centerX})*${ratioY}*sin(${angle})+(#ppt_y-${centerY})*cos(${angle}))`;
+  return absolute
+    ? [positionX, positionY]
+    : [`${positionX}-#ppt_x`, `${positionY}-#ppt_y`];
 }
 
 function flyOffset(
@@ -522,7 +525,7 @@ function behaviorIds(
     name: string,
     from: string | number,
     to: string | number,
-    additive: boolean | "sum",
+    additive: boolean | "sum" | "base",
     targetElement: string,
     progressFormula?: string,
   ) =>
@@ -567,7 +570,8 @@ function behaviorIds(
     name: string,
     formula: string,
     targetElement = target(),
-  ) => motion(name, 0, 1, "sum", targetElement, formula);
+    additive: "sum" | "base" = "sum",
+  ) => motion(name, 0, 1, additive, targetElement, formula);
   const rotation = (targetElement: string, additive: boolean | "sum" = false) =>
     element(
       "p:animRot",
@@ -670,13 +674,21 @@ function behaviorIds(
           targetBox(effect, "whole-text spin-in"),
           dimensions,
         );
-        const position = centerRotationDelta(effect, center, dimensions, true);
+        // Mixed Shape paragraph companions use the absolute common-center position on a base
+        // behavior; the whole/Text/Group delta-sum expression stays unchanged.
+        const position = centerRotationDelta(
+          effect,
+          center,
+          dimensions,
+          true,
+          true,
+        );
         return [
           singleMotion("ppt_w", 0, "#ppt_w", false, targetElement),
           singleMotion("ppt_h", 0, "#ppt_h", false, targetElement),
           singleMotion("style.rotation", 360, 0, false, targetElement),
-          progressMotion("ppt_x", position[0], targetElement),
-          progressMotion("ppt_y", position[1], targetElement),
+          progressMotion("ppt_x", position[0], targetElement, "base"),
+          progressMotion("ppt_y", position[1], targetElement, "base"),
         ];
       }
       case "stretch": {

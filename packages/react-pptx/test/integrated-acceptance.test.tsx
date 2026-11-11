@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 
 import {
+  after,
   appendJSX,
   Box,
   Chart,
@@ -18,12 +19,14 @@ import {
   Image,
   MotionScope,
   Notes,
+  observeMotion,
   P,
   Shape,
   Slide,
   Span,
   Step,
   Text,
+  type MotionEffectObservation,
   type MotionObservation,
 } from "@react-pptx/react-pptx";
 import {
@@ -122,6 +125,15 @@ function motion(result: Awaited<ReturnType<typeof build>>, slideIndex = 0) {
     | undefined;
   assert.ok(value);
   return value;
+}
+
+function chartEffects(
+  motion: MotionObservation,
+  authorId: string,
+): readonly MotionEffectObservation[] {
+  return motion.steps
+    .flatMap((step) => step.effects)
+    .filter(({ target }) => target.authorId === authorId);
 }
 
 function chartXml(pptx: Uint8Array, marker: string): string {
@@ -1120,6 +1132,526 @@ describe("integrated acceptance", () => {
     assert.equal(
       sha256(unzipSync(second.pptx)[secondImage.image.part]!),
       sha256(panelPng),
+    );
+  });
+
+  it("fills empty category and XY charts with mixed data and new element orders", async () => {
+    const sourceScope = createMotionScopeHandle();
+    const followerScope = createMotionScopeHandle();
+    const badgeKey = createMorphScope().handle("fill-badge");
+    const expanded = await expandDocument(
+      <Deck width={1280} height={720} theme={theme}>
+        <Slide id="empty-fill-page">
+          <Box
+            id="fill-layout"
+            style={{
+              position: "absolute",
+              left: 40,
+              top: 100,
+              width: 1200,
+              height: 560,
+            }}
+          >
+            <Text
+              id="fill-heading"
+              x={0}
+              y={0}
+              width={800}
+              height={36}
+              style={{
+                color: "ink",
+                fontFamily: "major",
+                fontSize: 24,
+                fontWeight: 700,
+              }}
+            >
+              Empty to filled
+            </Text>
+            <MotionScope scope={sourceScope}>
+              <Chart
+                id="empty-category-chart"
+                x={0}
+                y={48}
+                width={560}
+                height={300}
+                title="Empty category chart"
+                legend="bottom"
+                style={{
+                  fontFamily: "minor",
+                  fontSize: "10pt",
+                  color: "ink",
+                }}
+                groups={[
+                  {
+                    kind: "column",
+                    data: { kind: "shared-categories", categories: [] },
+                    series: [
+                      { name: "Zero and filled", values: [] },
+                      { name: "Second", values: [] },
+                    ],
+                  },
+                ]}
+                enter={fade({ by: "seriesElements", duration: 100 })}
+              />
+              <Chart
+                id="empty-xy-chart"
+                x={580}
+                y={48}
+                width={560}
+                height={300}
+                title="Empty XY chart"
+                legend="bottom"
+                style={{
+                  fontFamily: "minor",
+                  fontSize: "10pt",
+                  color: "ink",
+                }}
+                groups={[
+                  {
+                    kind: "scatter",
+                    data: { kind: "xy" },
+                    line: "straight",
+                    markers: true,
+                    series: [
+                      { name: "Still empty", x: [], y: [] },
+                      { name: "Mixed", x: [], y: [] },
+                      { name: "Short", x: [], y: [] },
+                    ],
+                  },
+                ]}
+                enter={fade({ by: "categoryElements", duration: 100 })}
+              />
+            </MotionScope>
+            <MotionScope
+              scope={followerScope}
+              startAt={after(sourceScope.end, 25)}
+            >
+              <Shape
+                id="fill-follower"
+                x={0}
+                y={370}
+                width={100}
+                height={40}
+                fill="#1D4ED8"
+                enter={fade({ duration: 50 })}
+              />
+            </MotionScope>
+            <Box
+              id="fill-badge-slot"
+              style={{
+                position: "absolute",
+                left: 0,
+                top: 430,
+                width: 120,
+                height: 40,
+              }}
+            >
+              <Shape
+                id="fill-badge"
+                morphKey={badgeKey}
+                width={100}
+                height={32}
+                fill="#C2410C"
+                text="Badge"
+                style={{
+                  color: "#FFFFFF",
+                  fontFamily: "minor",
+                  fontSize: 14,
+                }}
+              />
+            </Box>
+            <Box
+              id="fill-badge-target"
+              style={{
+                position: "absolute",
+                left: 180,
+                top: 430,
+                width: 120,
+                height: 40,
+              }}
+            />
+          </Box>
+          <Notes id="fill-notes">
+            <P id="fill-note">Empty charts are filled from the same nodes.</P>
+            <P id="fill-note-second">Notes stay off the canvas.</P>
+          </Notes>
+        </Slide>
+      </Deck>,
+    );
+
+    const first = await build(expanded);
+    const firstBytes = new Uint8Array(first.pptx);
+    const firstSha = sha256(first.pptx);
+    const firstRead = await validatePptx(first.pptx);
+    assert.deepEqual(firstRead.errors, []);
+    const firstCategory = readerObject(
+      firstRead,
+      first,
+      0,
+      "empty-category-chart",
+    ).chart;
+    const firstXY = readerObject(firstRead, first, 0, "empty-xy-chart").chart;
+    assert.ok(firstCategory && firstXY);
+    assert.deepEqual(
+      firstCategory.series.map(({ index, categories: domain, values }) => ({
+        index,
+        domain,
+        values,
+      })),
+      [
+        { index: 0, domain: [], values: [] },
+        { index: 1, domain: [], values: [] },
+      ],
+    );
+    assert.deepEqual(
+      firstXY.series.map(({ index, x, y }) => ({ index, x, y })),
+      [
+        { index: 0, x: [], y: [] },
+        { index: 1, x: [], y: [] },
+        { index: 2, x: [], y: [] },
+      ],
+    );
+    const emptyCategoryEffects = chartEffects(
+      motion(first),
+      "empty-category-chart",
+    );
+    const emptyXYEffects = chartEffects(motion(first), "empty-xy-chart");
+    const backgroundRange = {
+      type: "chart",
+      step: "gridLegend",
+      seriesIndex: -3,
+      categoryIndex: -3,
+    };
+    assert.deepEqual(
+      emptyCategoryEffects.map(({ target }) => target.range),
+      [backgroundRange],
+    );
+    assert.deepEqual(
+      emptyXYEffects.map(({ target }) => target.range),
+      [backgroundRange],
+    );
+    const firstFollower = motion(first)
+      .steps.flatMap((step) => step.effects)
+      .find(({ target }) => target.authorId === "fill-follower");
+    assert.deepEqual(
+      [firstFollower?.startMs, firstFollower?.endMs],
+      [125, 175],
+    );
+    const firstCategoryObservation = first.query
+      .getSlide("empty-fill-page")
+      .get("fill-layout")
+      .get("empty-category-chart")
+      .observe();
+    const firstNotes = firstRead.slides[0]?.notes;
+    assert.equal(
+      firstNotes?.text.text,
+      "Empty charts are filled from the same nodes.\nNotes stay off the canvas.",
+    );
+    assert.ok(
+      first.report.slides[0]?.objects.every(
+        ({ authorId }) => authorId !== "fill-notes",
+      ),
+    );
+
+    const page = expanded.query.get("empty-fill-page");
+    const layout = page.get("fill-layout");
+    const category = layout.getAs("empty-category-chart", isChart);
+    const xy = layout.getAs("empty-xy-chart", isChart);
+    const badge = layout.get("fill-badge-slot").get("fill-badge").node;
+    badge.moveTo(container(layout.get("fill-badge-target").node));
+    await appendJSX(
+      container(layout.node),
+      createElement(Text, {
+        id: "fill-appended",
+        x: 0,
+        y: 480,
+        width: 400,
+        height: 24,
+        style: {
+          color: "ink",
+          fontFamily: "minor",
+          fontSize: 14,
+        },
+        children: "Appended after the empty build",
+      }),
+    );
+    category.set({
+      groups: [
+        {
+          kind: "column",
+          data: {
+            kind: "shared-categories",
+            categories: ["A", "B", "C", "D"],
+          },
+          series: [
+            { name: "Zero and filled", values: [0, 4, null, 7] },
+            { name: "Second", values: [1, 0, 3, null] },
+          ],
+        },
+      ],
+    });
+    xy.set({
+      groups: [
+        {
+          kind: "scatter",
+          data: { kind: "xy" },
+          line: "straight",
+          markers: true,
+          series: [
+            { name: "Still empty", x: [], y: [] },
+            { name: "Mixed", x: [0, 2, null, 5], y: [1, null, 4, 0] },
+            { name: "Short", x: [1, 3], y: [2, 6] },
+          ],
+        },
+      ],
+    });
+
+    const second = await build(expanded);
+    const secondRead = await validatePptx(second.pptx);
+    assert.deepEqual(secondRead.errors, []);
+    assert.equal(sha256(first.pptx), firstSha);
+    assert.deepEqual(new Uint8Array(first.pptx), firstBytes);
+    const rereadFirst = await validatePptx(first.pptx);
+    assert.deepEqual(
+      rereadFirst.slides[0]?.objects
+        .find(
+          ({ id }) =>
+            id ===
+            first.report.slides[0]?.objects.find(
+              ({ authorId }) => authorId === "empty-category-chart",
+            )?.id,
+        )
+        ?.chart?.series.map(({ index, values }) => ({ index, values })),
+      [
+        { index: 0, values: [] },
+        { index: 1, values: [] },
+      ],
+    );
+    assert.deepEqual(
+      first.query
+        .getSlide("empty-fill-page")
+        .get("fill-layout")
+        .get("empty-category-chart")
+        .observe(),
+      firstCategoryObservation,
+    );
+    assert.deepEqual(
+      motion(first).steps.map((step) =>
+        step.effects.map(({ target }) => target.authorId),
+      ),
+      [["empty-category-chart", "empty-xy-chart", "fill-follower"]],
+    );
+
+    const secondCategory = readerObject(
+      secondRead,
+      second,
+      0,
+      "empty-category-chart",
+    ).chart;
+    const secondXY = readerObject(
+      secondRead,
+      second,
+      0,
+      "empty-xy-chart",
+    ).chart;
+    assert.ok(secondCategory && secondXY);
+    assert.deepEqual(
+      secondCategory.series.map(({ index, categories: domain, values }) => ({
+        index,
+        domain,
+        values,
+      })),
+      [
+        {
+          index: 0,
+          domain: ["A", "B", "C", "D"],
+          values: [0, 4, null, 7],
+        },
+        {
+          index: 1,
+          domain: ["A", "B", "C", "D"],
+          values: [1, 0, 3, null],
+        },
+      ],
+    );
+    assert.deepEqual(
+      secondCategory.embeddedWorkbook?.series.map(({ index, values }) => ({
+        index,
+        values,
+      })),
+      [
+        { index: 0, values: [0, 4, null, 7] },
+        { index: 1, values: [1, 0, 3, null] },
+      ],
+    );
+    assert.deepEqual(
+      secondXY.series.map(({ index, x, y }) => ({ index, x, y })),
+      [
+        { index: 0, x: [], y: [] },
+        { index: 1, x: [0, 2, null, 5], y: [1, null, 4, 0] },
+        { index: 2, x: [1, 3], y: [2, 6] },
+      ],
+    );
+    assert.deepEqual(
+      secondXY.embeddedWorkbook?.series.map(({ index, x, y }) => ({
+        index,
+        x,
+        y,
+      })),
+      [
+        { index: 0, x: [], y: [] },
+        { index: 1, x: [0, 2, null, 5], y: [1, null, 4, 0] },
+        { index: 2, x: [1, 3], y: [2, 6] },
+      ],
+    );
+
+    const seriesElements = [
+      backgroundRange,
+      ...[0, 1, 2, 3].map((categoryIndex) => ({
+        type: "chart",
+        step: "ptInSeries",
+        seriesIndex: 0,
+        categoryIndex,
+      })),
+      ...[0, 1, 2, 3].map((categoryIndex) => ({
+        type: "chart",
+        step: "ptInSeries",
+        seriesIndex: 1,
+        categoryIndex,
+      })),
+    ];
+    const categoryElements = [
+      backgroundRange,
+      {
+        type: "chart",
+        step: "ptInCategory",
+        seriesIndex: 1,
+        categoryIndex: 0,
+      },
+      {
+        type: "chart",
+        step: "ptInCategory",
+        seriesIndex: 2,
+        categoryIndex: 0,
+      },
+      {
+        type: "chart",
+        step: "ptInCategory",
+        seriesIndex: 1,
+        categoryIndex: 1,
+      },
+      {
+        type: "chart",
+        step: "ptInCategory",
+        seriesIndex: 2,
+        categoryIndex: 1,
+      },
+      {
+        type: "chart",
+        step: "ptInCategory",
+        seriesIndex: 1,
+        categoryIndex: 2,
+      },
+      {
+        type: "chart",
+        step: "ptInCategory",
+        seriesIndex: 1,
+        categoryIndex: 3,
+      },
+    ];
+    const secondMotion = motion(second);
+    assert.deepEqual(
+      chartEffects(secondMotion, "empty-category-chart").map(
+        ({ target }) => target.range,
+      ),
+      seriesElements,
+    );
+    assert.deepEqual(
+      chartEffects(secondMotion, "empty-xy-chart").map(
+        ({ target }) => target.range,
+      ),
+      categoryElements,
+    );
+    assert.deepEqual(
+      chartEffects(secondMotion, "empty-category-chart").map(
+        ({ startMs, endMs }) => [startMs, endMs],
+      ),
+      Array.from({ length: 9 }, (_, index) => [index * 100, (index + 1) * 100]),
+    );
+    assert.deepEqual(
+      chartEffects(secondMotion, "empty-xy-chart").map(({ startMs, endMs }) => [
+        startMs,
+        endMs,
+      ]),
+      Array.from({ length: 7 }, (_, index) => [index * 100, (index + 1) * 100]),
+    );
+    const follower = secondMotion.steps
+      .flatMap((step) => step.effects)
+      .find(({ target }) => target.authorId === "fill-follower");
+    assert.deepEqual([follower?.startMs, follower?.endMs], [925, 975]);
+
+    const query = observeMotion(second.report.slides[0]!);
+    const queryEffects = query?.steps.flatMap((step) => step.effects) ?? [];
+    const lastCategory = queryEffects
+      .filter(({ target }) => target.authorId === "empty-category-chart")
+      .at(-1);
+    assert.deepEqual([lastCategory?.startMs, lastCategory?.endMs], [800, 900]);
+
+    const fileCategoryEffects =
+      secondRead.slides[0]?.animations?.[0]?.effects.filter(
+        ({ targetId }) =>
+          targetId ===
+          second.report.slides[0]?.objects.find(
+            ({ authorId }) => authorId === "empty-category-chart",
+          )?.id,
+      );
+    const fileXYEffects = secondRead.slides[0]?.animations?.[0]?.effects.filter(
+      ({ targetId }) =>
+        targetId ===
+        second.report.slides[0]?.objects.find(
+          ({ authorId }) => authorId === "empty-xy-chart",
+        )?.id,
+    );
+    assert.equal(fileCategoryEffects?.length, seriesElements.length);
+    assert.equal(fileXYEffects?.length, categoryElements.length);
+    assert.ok(
+      fileCategoryEffects?.every(
+        ({ nativeBuild }) => nativeBuild === "seriesEl",
+      ),
+    );
+    assert.ok(
+      fileXYEffects?.every(({ nativeBuild }) => nativeBuild === "categoryEl"),
+    );
+    assert.deepEqual(
+      fileCategoryEffects?.map(({ targetRange }) => targetRange),
+      seriesElements,
+    );
+    assert.deepEqual(
+      fileXYEffects?.map(({ targetRange }) => targetRange),
+      categoryElements,
+    );
+
+    const appended = second.report.slides[0]?.objects.find(
+      ({ authorId }) => authorId === "fill-appended",
+    );
+    assert.equal(appended?.text, "Appended after the empty build");
+    const secondBadge = second.report.slides[0]?.objects.find(
+      ({ authorId }) => authorId === "fill-badge",
+    );
+    assert.deepEqual(secondBadge?.box, {
+      x: 220,
+      y: 530,
+      width: 100,
+      height: 32,
+    });
+    assert.deepEqual(
+      secondRead.slides[0]?.notes?.text.text,
+      firstNotes?.text.text,
+    );
+    assert.ok(
+      second.report.slides[0]?.objects.every(
+        ({ authorId }) => authorId !== "fill-notes",
+      ),
     );
   });
 });

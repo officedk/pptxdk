@@ -211,7 +211,14 @@ describe("line and area depth", () => {
             kind,
             ...(stacking === undefined ? {} : { stacking }),
             data: { kind: "shared-categories", categories },
-            series,
+            series:
+              kind === "line"
+                ? series.map((item, index) => ({
+                    ...item,
+                    marker: { symbol: index === 0 ? "square" : "triangle" },
+                    smooth: index === 0,
+                  }))
+                : series,
             ...(kind === "line"
               ? { dataLabels: { value: true, numberFormat: "0.0" } }
               : {}),
@@ -263,6 +270,9 @@ describe("line and area depth", () => {
       assert.ok(line.includes("<c:smooth"));
       assert.ok(!area.includes("<c:marker>"));
       assert.ok(!area.includes("<c:smooth"));
+      assert.ok(line.includes('<c:symbol val="square"/>'));
+      assert.ok(line.includes('<c:symbol val="triangle"/>'));
+      assert.ok(line.includes("<c:smooth"));
       assert.ok(
         line.includes(
           '<c:numCache><c:formatCode>General</c:formatCode><c:ptCount val="3"/><c:pt idx="0"><c:v>10</c:v></c:pt><c:pt idx="2"><c:v>30</c:v></c:pt></c:numCache>',

@@ -3450,8 +3450,7 @@ function readEmbeddedWorkbook(
   const hasErrorBarReferences = (series: FileChartSeries): boolean =>
     (series.errorBars ?? []).some(
       (bar) =>
-        bar.plus?.source === "reference" ||
-        bar.minus?.source === "reference",
+        bar.plus?.source === "reference" || bar.minus?.source === "reference",
     );
 
   const workbookSeries: FileChartSeries[] = [];

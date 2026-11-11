@@ -6,6 +6,7 @@ import {
   Chart,
   Deck,
   Slide,
+  type ChartErrorBars,
   type ChartGroup,
   type ChartProps,
 } from "@react-pptx/react-pptx";
@@ -41,11 +42,7 @@ const customBoth = {
   line: { color: "#336699", width: 1 },
 };
 
-function lineZeroGroups(
-  errorBars: NonNullable<
-    ChartProps["groups"][number]["series"][number]["errorBars"]
-  >,
-): readonly ChartGroup[] {
+function lineZeroGroups(errorBars: ChartErrorBars): readonly ChartGroup[] {
   return [
     {
       kind: "line",
@@ -74,7 +71,7 @@ describe("zero-observation custom error bars", () => {
                   series: [
                     { name: "Empty", values: [], errorBars: customBoth },
                   ],
-                },
+                } as ChartGroup,
               ]}
             />
           </Slide>

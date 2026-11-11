@@ -611,6 +611,23 @@ describe("pie and doughnut depth", () => {
         } as unknown as ChartProps,
       },
       {
+        id: "pie-line-position",
+        code: "invalid-data-labels",
+        message:
+          'Office does not allow dLblPos="l" for pieChart series data labels',
+        props: {
+          ...base,
+          groups: [
+            {
+              kind: "pie",
+              data,
+              series,
+              dataLabels: { value: true, position: "left" },
+            },
+          ],
+        } as unknown as ChartProps,
+      },
+      {
         id: "pie-inside-base",
         code: "invalid-data-labels",
         message:

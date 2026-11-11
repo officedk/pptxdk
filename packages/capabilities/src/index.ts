@@ -34,13 +34,14 @@ export type {
   Shadow,
   VisualStyle,
 } from "@react-pptx/core";
-export { Chart, chartCapability } from "#/chart.ts";
+export { chartCapability } from "#/chart.ts";
 export type {
   ChartAxis,
   ChartData,
   ChartDataLabels,
   ChartKind,
   ChartLine,
+  ChartNode,
   ChartPoint,
   ChartProps,
   ChartSeries,
@@ -50,6 +51,7 @@ export type {
   ParsedChart,
   PieChartProps,
 } from "#/chart.ts";
+export { Chart } from "#/chart-elements.ts";
 export { imageCapability } from "#/image.ts";
 export type {
   ImageDeclarationProps,
@@ -63,20 +65,25 @@ export { groupCapability } from "#/group.ts";
 export type { GroupDeclarationProps } from "#/group.ts";
 export { Group } from "#/group-elements.ts";
 export type { GroupProps } from "#/group-elements.ts";
-export { Cell, Row, Table, tableCapability } from "#/table.ts";
+export { tableCapability } from "#/table.ts";
 export type {
-  CellProps,
+  CellDeclarationProps,
+  CellNode,
   ParsedTable,
-  RowProps,
+  RowDeclarationProps,
+  RowNode,
   TableCellStyle,
   TableColumn,
-  TableProps,
+  TableDeclarationProps,
+  TableNode,
   TableRowStyle,
   TableSpacing,
   TableStyle,
   TableTextStyle,
   TableVerticalAlign,
 } from "#/table.ts";
+export { Cell, Row, Table } from "#/table-elements.ts";
+export type { CellProps, RowProps, TableProps } from "#/table-elements.ts";
 export { font, textCapability } from "#/text.ts";
 export { P, SlideNumber, Span, Text } from "#/text-elements.ts";
 export type { ParsedText } from "#/text.ts";

@@ -59,6 +59,11 @@
       "types": "./dist/chart.d.ts",
       "default": "./dist/chart.js"
     },
+    "./chart-elements": {
+      "source": "./src/chart-elements.ts",
+      "types": "./dist/chart-elements.d.ts",
+      "default": "./dist/chart-elements.js"
+    },
     "./text": {
       "source": "./src/text.ts",
       "types": "./dist/text.d.ts",
@@ -73,6 +78,11 @@
       "source": "./src/table.ts",
       "types": "./dist/table.d.ts",
       "default": "./dist/table.js"
+    },
+    "./table-elements": {
+      "source": "./src/table-elements.ts",
+      "types": "./dist/table-elements.d.ts",
+      "default": "./dist/table-elements.js"
     },
     "./transition": {
       "source": "./src/transition.ts",

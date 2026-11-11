@@ -3,9 +3,9 @@ import {
   resolvedColorXml,
   xmlEscape,
   type ColorValue,
+  type NativeLink,
   type ThemeContext,
-} from "@react-pptx/core";
-import type { NativeLink } from "@react-pptx/core";
+} from "@react-pptx/core/capability";
 import { strToU8, zipSync } from "fflate";
 
 import type {

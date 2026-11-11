@@ -23,6 +23,12 @@ import {
   createBoxNode,
   type BoxDeclarationProps,
 } from "./box.ts";
+import {
+  chartCapability,
+  createChartNode,
+  type ChartNode,
+  type ChartProps,
+} from "./chart.ts";
 import { font } from "./font.ts";
 import {
   createGroupNode,
@@ -50,6 +56,18 @@ import {
   type ShapeDeclarationProps,
 } from "./shape.ts";
 import { slideBackgroundCapability } from "./slide-background.ts";
+import {
+  createCellNode,
+  createRowNode,
+  createTableNode,
+  tableCapability,
+  type CellDeclarationProps,
+  type CellNode,
+  type RowDeclarationProps,
+  type RowNode,
+  type TableDeclarationProps,
+  type TableNode,
+} from "./table.ts";
 import {
   createParagraphNode,
   createSlideNumberNode,
@@ -103,6 +121,10 @@ export type TextAuthorProps = TextDeclarationProps;
 export type ParagraphAuthorProps = ParagraphDeclarationProps;
 export type SpanAuthorProps = SpanDeclarationProps;
 export type SlideNumberAuthorProps = SlideNumberDeclarationProps;
+export type ChartAuthorProps = ChartProps;
+export type TableAuthorProps = TableDeclarationProps;
+export type RowAuthorProps = RowDeclarationProps;
+export type CellAuthorProps = CellDeclarationProps;
 
 export type DeckNode = CommonContainer<"deck", DeckAuthorProps, TextStyle>;
 export type SlideNode = CommonContainer<
@@ -159,6 +181,7 @@ export type MotionStepNode = CommonContainer<
   "motion-step",
   MotionStepAuthorProps
 >;
+export type { CellNode, ChartNode, RowNode, TableNode };
 
 export type TextContent = RichTextItem | readonly RichTextItem[];
 export type ParagraphContent = RichTextItem | readonly RichTextItem[];
@@ -226,6 +249,33 @@ export function group(props: GroupAuthorProps = {}): GroupNode {
   return createGroupNode(props);
 }
 
+/** Creates a native table whose rows and cells remain editable after attachment. */
+export function table(props: TableAuthorProps): TableNode {
+  return createTableNode(props);
+}
+
+/** Creates a native table row; attach it to a table and add cells through its content operations. */
+export function row(props: RowAuthorProps = {}): RowNode {
+  return createRowNode(props);
+}
+
+/** Creates a rich-text table cell whose horizontal and vertical spans remain editable. */
+export function cell(content?: TextContent, props?: CellAuthorProps): CellNode;
+export function cell(...content: readonly TextContent[]): CellNode;
+export function cell(
+  ...args: readonly (TextContent | CellAuthorProps | undefined)[]
+): CellNode {
+  const { content, props } = splitContent<CellAuthorProps>(args);
+  const node = createCellNode(props ?? {});
+  node.content(...content);
+  return node;
+}
+
+/** Creates a native chart whose data, options, and styles remain editable after attachment. */
+export function chart(props: ChartAuthorProps): ChartNode {
+  return createChartNode(props);
+}
+
 /** Creates a text box whose original reference remains editable after attachment. */
 export function text(content?: TextContent, props?: TextAuthorProps): TextNode;
 export function text(...content: readonly TextContent[]): TextNode;
@@ -291,12 +341,14 @@ export function step(props: MotionStepAuthorProps = {}): MotionStepNode {
 /** Baseline capabilities enabled by the public document build; factories never register capabilities. */
 export const documentCapabilities = Object.freeze([
   boxCapability,
+  chartCapability,
   groupCapability,
   imageCapability,
   motionCapability,
   motionStructureCapability,
   shapeCapability,
   slideBackgroundCapability,
+  tableCapability,
   textCapability,
   transitionCapability,
 ] as const);
@@ -308,3 +360,27 @@ export type {
   MotionStepAuthorProps,
 } from "./motion-api.ts";
 export type { LinkTarget, ParsedText, Transition };
+
+export type {
+  ChartAxis,
+  ChartData,
+  ChartDataLabels,
+  ChartKind,
+  ChartLine,
+  ChartPoint,
+  ChartProps,
+  ChartSeries,
+  ColumnOrBarChartProps,
+  DoughnutChartProps,
+  LineOrAreaChartProps,
+  PieChartProps,
+} from "./chart.ts";
+export type {
+  TableCellStyle,
+  TableColumn,
+  TableRowStyle,
+  TableSpacing,
+  TableStyle,
+  TableTextStyle,
+  TableVerticalAlign,
+} from "./table.ts";

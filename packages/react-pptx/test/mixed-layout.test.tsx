@@ -1185,6 +1185,10 @@ describe("mixed layout, layering, and component reflow", () => {
     const measuredWidth = Math.round(
       (face.layout(label).advanceWidth / face.unitsPerEm) * 13 * 9525,
     );
+    // Jost Bold 13px "Open report" shaped advances: natural 717071 EMU, native 1/8pt
+    // grid 717550 EMU, and 9.8pt at the 1/20pt grid 721360 EMU. The last is the
+    // conservative candidate the native file must cover.
+    const nativeQuantizedWidth = 721360;
 
     for (const [entry, result] of [
       ["react", reactResult],
@@ -1223,6 +1227,10 @@ describe("mixed layout, layering, and component reflow", () => {
       assert.ok(
         labelWidth >= measuredWidth,
         `${entry}: intrinsic width ${labelWidth} EMU is shorter than measured ${measuredWidth} EMU`,
+      );
+      assert.ok(
+        labelWidth >= nativeQuantizedWidth,
+        `${entry}: intrinsic width ${labelWidth} EMU is shorter than the native-quantized candidate ${nativeQuantizedWidth} EMU`,
       );
       assert.ok(
         Math.abs(nativeBox("cta").width - labelWidth - 32 * 9525) <= 1,
@@ -1411,6 +1419,135 @@ describe("mixed layout, layering, and component reflow", () => {
       assert.equal(nativeBox("top-group").height, 20 * 9525, entry);
       assert.equal(nativeBox("fixed-group").width, 100 * 9525, entry);
       assert.equal(nativeBox("fixed-member").width, memberWidthEmu, entry);
+    }
+  });
+
+  it("uses the rounded-up tenth-point effective size only for non-integral serialized sizes", async () => {
+    const cases = [
+      { id: "fs-9_74", points: 9.74, hundredths: 974, widthEmu: 721360 },
+      { id: "fs-9_75", points: 9.75, hundredths: 975, widthEmu: 721360 },
+      { id: "fs-9_8", points: 9.8, hundredths: 980, widthEmu: 721360 },
+      { id: "fs-9_9", points: 9.9, hundredths: 990, widthEmu: 728663 },
+      { id: "fs-10", points: 10, hundredths: 1000, widthEmu: 735457 },
+    ] as const;
+    const textStyle = {
+      fontFamily: "minor",
+      fontWeight: "bold",
+      height: "auto",
+    } as const;
+    const reactResult = await build(
+      <Deck width={400} height={400} theme={mixedTheme}>
+        <Slide id="native-font-size">
+          <Box
+            id="column"
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "flex-start",
+              gap: 4,
+              width: 400,
+            }}
+          >
+            {cases.map(({ id, points }) => (
+              <Text
+                key={id}
+                id={id}
+                style={{ ...textStyle, fontSize: `${points}pt` }}
+              >
+                Open report
+              </Text>
+            ))}
+            <Box id="narrow" style={{ width: 60, backgroundColor: "lt1" }}>
+              <Text id="fs-narrow" style={{ ...textStyle, fontSize: "9.74pt" }}>
+                Open report
+              </Text>
+            </Box>
+          </Box>
+        </Slide>
+      </Deck>,
+    );
+    const documentResult = await buildDocument(
+      authorDeck({ width: 400, height: 400, theme: mixedTheme }).append(
+        authorSlide({ id: "native-font-size" }).append(
+          authorBox({
+            id: "column",
+            style: {
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "flex-start",
+              gap: 4,
+              width: 400,
+            },
+          }).append(
+            ...cases.map(({ id, points }) =>
+              authorText("Open report", {
+                id,
+                style: { ...textStyle, fontSize: `${points}pt` },
+              }),
+            ),
+            authorBox({
+              id: "narrow",
+              style: { width: 60, backgroundColor: "lt1" },
+            }).append(
+              authorText("Open report", {
+                id: "fs-narrow",
+                style: { ...textStyle, fontSize: "9.74pt" },
+              }),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    for (const [entry, result] of [
+      ["react", reactResult],
+      ["document", documentResult],
+    ] as const) {
+      assert.deepEqual(result.report.diagnostics, [], entry);
+      const file = await validatePptx(result.pptx);
+      assert.deepEqual(file.errors, [], entry);
+      const objectIds = new Map(
+        (result.report.slides[0]?.objects ?? []).flatMap((object) =>
+          object.authorId === undefined
+            ? []
+            : [[object.authorId, object.id] as const],
+        ),
+      );
+      const nativeObject = (authorId: string) => {
+        const id = objectIds.get(authorId);
+        assert.ok(id !== undefined, `${entry}: missing object ${authorId}`);
+        const object = file.slides[0]?.objects.find(
+          (candidate) => candidate.id === id,
+        );
+        assert.ok(object, `${entry}: missing native object ${authorId}`);
+        return object;
+      };
+      const slideXml = strFromU8(
+        unzipSync(result.pptx)["ppt/slides/slide1.xml"]!,
+      );
+      const shapeXml = (id: number) => {
+        const match = slideXml.match(
+          new RegExp(
+            `<p:sp>(?:(?!</p:sp>).)*?<p:cNvPr id="${id}"[^>]*>(?:(?!</p:sp>).)*?</p:sp>`,
+            "s",
+          ),
+        );
+        assert.ok(match, `${entry}: missing shape ${id}`);
+        return match[0];
+      };
+
+      for (const { id, hundredths, widthEmu } of cases) {
+        const object = nativeObject(id);
+        assert.equal(object.boxEmu.width, widthEmu, `${entry}: ${id} width`);
+        const size = shapeXml(object.id).match(/<a:rPr sz="(\d+)"/u);
+        assert.equal(Number(size?.[1]), hundredths, `${entry}: ${id} sz`);
+      }
+      assert.equal(nativeObject("fs-narrow").boxEmu.width, 60 * 9525, entry);
+      assert.ok(
+        nativeObject("fs-narrow").boxEmu.height >
+          nativeObject("fs-9_74").boxEmu.height,
+        `${entry}: narrow text did not wrap`,
+      );
     }
   });
 });

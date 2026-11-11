@@ -320,7 +320,8 @@ describe("column and bar depth", () => {
     assert.equal(category?.title, "Quarter");
     assert.equal(category?.majorTickMark, "in");
     assert.equal(category?.tickLabelPosition, "high");
-    assert.equal(category?.crosses, "max");
+    assert.equal(category?.crosses, undefined);
+    assert.equal(category?.crossesAt, 1);
     assert.equal(value?.title, "Revenue");
     assert.equal(value?.orientation, "maxMin");
     assert.equal(value?.logBase, 10);
@@ -329,7 +330,8 @@ describe("column and bar depth", () => {
     assert.equal(value?.majorTickMark, "out");
     assert.equal(value?.minorTickMark, "cross");
     assert.equal(value?.tickLabelPosition, "low");
-    assert.equal(value?.crossesAt, 1);
+    assert.equal(value?.crosses, "max");
+    assert.equal(value?.crossesAt, undefined);
   });
 
   it("diagnoses inapplicable or invalid column/bar depth options", async () => {

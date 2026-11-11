@@ -82,6 +82,7 @@ export {
 export type {
   ChartAxis,
   ChartAxisCrossing,
+  ChartAxisPosition,
   ChartAxisReferences,
   ChartCategoryAxis,
   ChartCategoryAxisReferences,

@@ -390,6 +390,7 @@ export type { NotesDeclarationProps } from "./notes-declaration.ts";
 export type {
   ChartAxis,
   ChartAxisCrossing,
+  ChartAxisPosition,
   ChartAxisReferences,
   ChartCategoryAxis,
   ChartCategoryAxisReferences,

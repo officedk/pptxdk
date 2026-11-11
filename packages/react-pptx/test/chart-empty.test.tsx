@@ -950,11 +950,8 @@ describe("editable empty charts", () => {
     );
     assert.ok(
       singleCategorySource.errors.some(
-        ({ code }) => code === "invalid-chart-formula",
-      ) ||
-        singleCategorySource.errors.some(
-          ({ code }) => code === "invalid-chart-series",
-        ),
+        ({ code }) => code === "invalid-chart-series",
+      ),
       JSON.stringify(singleCategorySource.errors),
     );
 
@@ -968,6 +965,46 @@ describe("editable empty charts", () => {
         ({ code }) => code === "invalid-chart-data-label-range",
       ),
       JSON.stringify(withCategoryRange.errors),
+    );
+
+    const scatterResult = await build(
+      <Deck width={320} height={240}>
+        <Slide id="reader-scatter-single-source">
+          <Chart
+            id="reader-scatter-single-source"
+            x={16}
+            y={16}
+            width={288}
+            height={180}
+            groups={[
+              {
+                kind: "scatter",
+                data: { kind: "xy" },
+                series: [{ name: "Scatter", x: [1], y: [2] }],
+              },
+            ]}
+          />
+        </Slide>
+      </Deck>,
+    );
+    const scatterParts = unzipSync(scatterResult.pptx);
+    const scatterPath = "ppt/charts/chart1.xml";
+    const scatterPart = strFromU8(scatterParts[scatterPath]!);
+    const scatterWithoutX = scatterPart.replace(
+      /<c:xVal>[\s\S]*?<\/c:xVal>/u,
+      "",
+    );
+    const singleScatterSource = await validatePptx(
+      zipSync({
+        ...scatterParts,
+        [scatterPath]: strToU8(scatterWithoutX),
+      }),
+    );
+    assert.ok(
+      singleScatterSource.errors.some(
+        ({ code }) => code === "invalid-chart-series",
+      ),
+      JSON.stringify(singleScatterSource.errors),
     );
 
     const workbookParts = unzipSync(source[workbookPart]!);

@@ -96,7 +96,8 @@ export type ChartSeries = {
 /**
  * Ordered categories shared by every series in one chart group.
  *
- * The discriminant leaves independent category domains to a separate future group-data shape.
+ * The discriminant makes the shared domain explicit: series positions align because they
+ * declare this group domain, not because their labels happen to match.
  * Duplicate labels are meaningful positions, not keys.
  */
 export type SharedCategoryData = {
@@ -105,6 +106,20 @@ export type SharedCategoryData = {
 };
 
 export type ChartGroupData = SharedCategoryData;
+
+/**
+ * Explicitly declares that each doughnut series owns its own category domain.
+ *
+ * Categories remain on the series so the group owns no parallel per-series lookup.
+ */
+export type IndependentCategoryData = {
+  readonly kind: "independent-categories";
+};
+
+/** One ring of an independent-category doughnut; `values` aligns with this ring's categories. */
+export type IndependentCategorySeries = ChartSeries & {
+  readonly categories: readonly string[];
+};
 
 export type ChartTickMark = "none" | "in" | "out" | "cross";
 
@@ -285,13 +300,20 @@ export type PieChartGroup = ChartGroupBase &
       | ChartDataLabels<"center" | "insideEnd" | "outsideEnd" | "bestFit">;
   };
 
-export type DoughnutChartGroup = ChartGroupBase &
-  PieOptions & {
-    readonly kind: "doughnut";
-    /** Percentage size of doughnut chart center hole, range 10–90. */
-    readonly holeSize?: number;
-    readonly dataLabels?: DataLabelsWithoutPosition;
-  };
+type DoughnutGroupOptions = PieOptions & {
+  readonly kind: "doughnut";
+  /** Percentage size of doughnut chart center hole, range 10–90. */
+  readonly holeSize?: number;
+  readonly dataLabels?: DataLabelsWithoutPosition;
+};
+
+/** A doughnut group either shares one category domain or gives every ring its own. */
+export type DoughnutChartGroup =
+  | (ChartGroupBase & DoughnutGroupOptions)
+  | (DoughnutGroupOptions & {
+      readonly data: IndependentCategoryData;
+      readonly series: readonly IndependentCategorySeries[];
+    });
 
 export type ChartGroup =
   | ColumnOrBarChartGroup

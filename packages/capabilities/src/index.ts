@@ -60,6 +60,8 @@ export type {
   ChartValueAxis,
   ColumnOrBarChartGroup,
   DoughnutChartGroup,
+  IndependentCategoryData,
+  IndependentCategorySeries,
   LineOrAreaChartGroup,
   ParsedChart,
   PieChartGroup,

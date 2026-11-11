@@ -41,6 +41,7 @@ import type {
   ChartTickMark,
   ChartTitle,
   ChartValueAxis,
+  IndependentCategoryData,
   SharedCategoryData,
 } from "./chart-types.ts";
 import {
@@ -671,12 +672,6 @@ function sharedCategoryData(value: unknown, label: string): SharedCategoryData {
   if (!isRecord(value)) fail("invalid-data", `${label} must be an object`);
   onlyKeys(value, ["kind", "categories"], label);
   const kind = value["kind"];
-  if (kind === "independent-categories") {
-    fail(
-      "unsupported-chart-data",
-      `${label}.kind "independent-categories" is not supported by the migrated chart kinds`,
-    );
-  }
   if (kind !== "shared-categories") {
     fail(
       "invalid-data",
@@ -701,13 +696,48 @@ function sharedCategoryData(value: unknown, label: string): SharedCategoryData {
   };
 }
 
+function independentCategoryData(
+  value: unknown,
+  label: string,
+): IndependentCategoryData {
+  if (!isRecord(value)) fail("invalid-data", `${label} must be an object`);
+  onlyKeys(value, ["kind"], label);
+  if (value["kind"] !== "independent-categories") {
+    fail("invalid-data", `${label}.kind must be "independent-categories"`);
+  }
+  return { kind: "independent-categories" };
+}
+
+function seriesCategories(value: unknown, label: string): readonly string[] {
+  if (!Array.isArray(value) || value.length === 0) {
+    fail("invalid-data", `${label} must contain at least one category`);
+  }
+  for (const [index, category] of value.entries()) {
+    if (typeof category !== "string") {
+      fail("invalid-data", `${label}[${index}] must be a string`);
+    }
+  }
+  return value as string[];
+}
+
+type SeriesDomain =
+  | {
+      readonly kind: "shared-categories";
+      readonly categories: readonly string[];
+    }
+  | { readonly kind: "independent-categories" };
+
+type ParsedDraftSeries = ChartSeries & {
+  readonly categories: readonly string[];
+};
+
 function chartSeriesList(
   value: unknown,
-  categories: readonly string[],
+  domain: SeriesDomain,
   kind: ChartKind,
   stacking: "stacked" | "percent" | undefined,
   label: string,
-): ChartSeries[] {
+): ParsedDraftSeries[] {
   if (!Array.isArray(value) || value.length === 0) {
     fail("invalid-data", `${label} must contain at least one series`);
   }
@@ -727,6 +757,9 @@ function chartSeriesList(
         "marker",
         "smooth",
         "points",
+        ...(domain.kind === "independent-categories"
+          ? (["categories"] as const)
+          : []),
       ],
       seriesLabel,
     );
@@ -735,6 +768,10 @@ function chartSeriesList(
     if (typeof name !== "string" || name.trim() === "") {
       fail("invalid-data", `${seriesLabel}.name must be a non-empty string`);
     }
+    const categories =
+      domain.kind === "shared-categories"
+        ? domain.categories
+        : seriesCategories(item["categories"], `${seriesLabel}.categories`);
     if (!Array.isArray(values) || values.length !== categories.length) {
       fail(
         "invalid-data",
@@ -843,6 +880,7 @@ function chartSeriesList(
     );
     return {
       name,
+      categories,
       values: values as readonly (number | null)[],
       ...(color === undefined ? {} : { color }),
       ...(line === undefined ? {} : { line }),
@@ -1052,8 +1090,8 @@ function axisReferences(
 
 type ParsedGroupDraft = {
   readonly kind: ChartKind;
-  readonly data: ChartGroupData;
-  readonly series: readonly ChartSeries[];
+  readonly data: ChartGroupData | IndependentCategoryData;
+  readonly series: readonly ParsedDraftSeries[];
   readonly axes?: ChartAxisReferences;
   readonly dataLabels?: false | ChartDataLabels;
   readonly stacking?: "stacked" | "percent";
@@ -1101,21 +1139,31 @@ function chartGroupDrafts(value: unknown): ParsedGroupDraft[] {
     if (stack !== undefined && stack !== "stacked" && stack !== "percent") {
       fail("invalid-stacking", `${label}.stacking must be stacked or percent`);
     }
-    const data = sharedCategoryData(item["data"], `${label}.data`);
+    const rawData = item["data"];
+    const independent =
+      isRecord(rawData) && rawData["kind"] === "independent-categories";
+    if (independent && chartKind !== "doughnut") {
+      fail(
+        "invalid-data",
+        `${chartKind} chart group does not support independent categories`,
+      );
+    }
+    const data = independent
+      ? independentCategoryData(rawData, `${label}.data`)
+      : sharedCategoryData(rawData, `${label}.data`);
     const series = chartSeriesList(
       item["series"],
-      data.categories,
+      data.kind === "independent-categories"
+        ? { kind: "independent-categories" }
+        : { kind: "shared-categories", categories: data.categories },
       chartKind,
       stack,
       `${label}.series`,
     );
-    if (
-      (chartKind === "pie" || chartKind === "doughnut") &&
-      series.length !== 1
-    ) {
+    if (chartKind === "pie" && series.length !== 1) {
       fail(
         "invalid-data",
-        `${chartKind} chart currently only supports a single data series`,
+        "pie chart currently only supports a single data series",
       );
     }
     const labelsValue = labels(
@@ -1191,6 +1239,8 @@ function chartGroupDrafts(value: unknown): ParsedGroupDraft[] {
 }
 
 export type ParsedChartSeries = ChartSeries & {
+  /** Resolved ordered category domain: the shared group domain or this ring's own. */
+  readonly categories: readonly string[];
   readonly groupIndex: number;
   readonly groupSeriesIndex: number;
   /** Derived once from group order and group-local series order. */
@@ -1207,7 +1257,7 @@ export type ParsedChartAxis = {
 
 export type ParsedChartGroup = {
   readonly kind: ChartKind;
-  readonly data: ChartGroupData;
+  readonly data: ChartGroupData | IndependentCategoryData;
   readonly series: readonly ParsedChartSeries[];
   readonly axes?: {
     readonly category: ParsedChartAxis;
@@ -1234,7 +1284,10 @@ export type ParsedChart = {
   readonly groups: readonly ParsedChartGroup[];
   /** Flattened series view with the same objects owned by their groups. */
   readonly series: readonly ParsedChartSeries[];
+  /** Ordered categories of the first resolved series; kept for axis text and existing consumers. */
   readonly categories: readonly string[];
+  /** Largest point count across all series; existing chart animation maps every real slot. */
+  readonly categoryCount: number;
   readonly title?: ChartTitle;
   readonly displayBlanksAs?: ChartDisplayBlanksAs;
   readonly legend?: ChartProps["legend"];
@@ -1489,18 +1542,20 @@ export const chartCapability: ObjectCapabilityModule = {
     });
 
     const drafts = chartGroupDrafts(input.props["groups"]);
-    if (drafts.length > 1) {
-      for (const group of drafts.slice(1)) {
-        if (
-          group.data.categories.length !== drafts[0]!.data.categories.length
-        ) {
+    const sharedDomains = drafts.flatMap((group) =>
+      group.data.kind === "shared-categories" ? [group.data.categories] : [],
+    );
+    if (sharedDomains.length > 1) {
+      const first = sharedDomains[0]!;
+      for (const categories of sharedDomains.slice(1)) {
+        if (categories.length !== first.length) {
           fail(
             "chart-category-domain-mismatch",
             "Chart groups sharing a category axis must have the same ordered category domain",
           );
         }
-        for (const [index, category] of group.data.categories.entries()) {
-          if (category !== drafts[0]!.data.categories[index]) {
+        for (const [index, category] of categories.entries()) {
+          if (category !== first[index]) {
             fail(
               "chart-category-domain-mismatch",
               "Chart groups sharing a category axis must have the same ordered category domain",
@@ -1541,7 +1596,11 @@ export const chartCapability: ObjectCapabilityModule = {
       };
     });
     const series = groups.flatMap((group) => group.series);
-    const categories = groups[0]!.data.categories;
+    const categories = groups[0]!.series[0]!.categories;
+    const categoryCount = Math.max(
+      0,
+      ...series.map((item) => item.categories.length),
+    );
 
     const name = optionalName(input.props["name"], "name");
     if (name !== undefined) xmlText(name, "Chart.name");
@@ -1593,6 +1652,7 @@ export const chartCapability: ObjectCapabilityModule = {
       groups,
       series,
       categories,
+      categoryCount,
       contract,
       rawProps: input.props,
       ...(name === undefined ? {} : { name }),
@@ -1689,7 +1749,7 @@ export const chartCapability: ObjectCapabilityModule = {
       rotationDegrees: 0,
       hasBackground: firstKind !== "line",
       chartSeriesCount: parsed.series.length,
-      chartCategoryCount: parsed.categories.length,
+      chartCategoryCount: parsed.categoryCount,
     });
     const { textStyles, resourceClaims, fontUses, warnings } =
       chartResourceClaims(parsed, context.theme, context.options.embedFonts);
@@ -1977,7 +2037,6 @@ function effectivePointLabels(
 }
 
 function pointDataLabelTexts(
-  group: ParsedChartGroup,
   series: ParsedChartSeries,
   labels: ChartDataLabels,
   index: number,
@@ -1991,7 +2050,7 @@ function pointDataLabelTexts(
       numberLabelCharacters(labels.numberFormat, labels.percent === true),
     );
   }
-  if (labels.category === true) texts.push(group.data.categories[index]!);
+  if (labels.category === true) texts.push(series.categories[index]!);
   return texts;
 }
 
@@ -2001,7 +2060,7 @@ function groupDataLabelTexts(group: ParsedChartGroup): string[] {
     for (const index of series.values.keys()) {
       const labels = effectivePointLabels(group, series, index);
       if (labels === undefined || labels === false) continue;
-      texts.push(...pointDataLabelTexts(group, series, labels, index));
+      texts.push(...pointDataLabelTexts(series, labels, index));
     }
   }
   return texts;
@@ -2048,7 +2107,7 @@ function chartResourceClaims(
       : groupDataLabelTexts(group),
   );
   const chartText = [
-    ...parsed.categories,
+    ...parsed.series.flatMap(({ categories }) => categories),
     ...parsed.series.map(({ name }) => name),
     ...dataLabelText,
   ];
@@ -2240,12 +2299,7 @@ function chartResourceClaims(
         const index = Number(pointIndex);
         const pointLabels = effectivePointLabels(group, series, index);
         if (pointLabels === undefined || pointLabels === false) continue;
-        const pointText = pointDataLabelTexts(
-          group,
-          series,
-          pointLabels,
-          index,
-        );
+        const pointText = pointDataLabelTexts(series, pointLabels, index);
         if (pointText.length === 0) continue;
         const output = writeChartTextProperties(
           mergeTextStyle(chartStyle, {
@@ -2327,6 +2381,8 @@ export type {
   ChartValueAxis,
   ColumnOrBarChartGroup,
   DoughnutChartGroup,
+  IndependentCategoryData,
+  IndependentCategorySeries,
   LineOrAreaChartGroup,
   PieChartGroup,
   SharedCategoryData,

@@ -398,6 +398,33 @@ function pointShape(
   );
 }
 
+type SeriesCells = {
+  /** One-based worksheet category column for this series domain. */
+  readonly categoryColumn: number;
+  /** One-based worksheet value column; also holds the series name in row 1. */
+  readonly valueColumn: number;
+  readonly rows: number;
+};
+
+/** Derives every workbook/cache formula range from the same resolved series domain. */
+function seriesCells(
+  group: ParsedChartGroup,
+  series: ParsedChartSeries,
+): SeriesCells {
+  if (group.data.kind === "independent-categories") {
+    return {
+      categoryColumn: series.seriesIndex * 2 + 1,
+      valueColumn: series.seriesIndex * 2 + 2,
+      rows: series.categories.length,
+    };
+  }
+  return {
+    categoryColumn: 1,
+    valueColumn: series.seriesIndex + 2,
+    rows: series.categories.length,
+  };
+}
+
 function chartSeries(
   group: ParsedChartGroup,
   series: ParsedChartSeries,
@@ -405,8 +432,10 @@ function chartSeries(
   textStyles: ChartTextStyleXml,
   theme: ThemeContext,
 ): XmlElement {
-  const rows = group.data.categories.length + 1;
-  const column = columnName(series.seriesIndex + 1);
+  const cells = seriesCells(group, series);
+  const categoryColumn = columnName(cells.categoryColumn - 1);
+  const valueColumn = columnName(cells.valueColumn - 1);
+  const rows = cells.rows + 1;
   const kind: ChartKind = group.kind;
   const bar = kind === "column" || kind === "bar";
   const lineChart = kind === "line";
@@ -438,7 +467,7 @@ function chartSeries(
     null,
     el("c:idx", { val: series.seriesIndex }),
     el("c:order", { val: series.seriesIndex }),
-    el("c:tx", null, strRef(`${sheet}!$${column}$1`, [series.name])),
+    el("c:tx", null, strRef(`${sheet}!$${valueColumn}$1`, [series.name])),
     itemShape,
     bar ? el("c:invertIfNegative", { val: false }) : undefined,
     lineChart ? chartMarker(series.marker, theme) : undefined,
@@ -450,12 +479,18 @@ function chartSeries(
     el(
       "c:cat",
       null,
-      strRef(`${sheet}!$A$2:$A$${rows}`, group.data.categories),
+      strRef(
+        `${sheet}!$${categoryColumn}$2:$${categoryColumn}$${rows}`,
+        series.categories,
+      ),
     ),
     el(
       "c:val",
       null,
-      numRef(`${sheet}!$${column}$2:$${column}$${rows}`, series.values),
+      numRef(
+        `${sheet}!$${valueColumn}$2:$${valueColumn}$${rows}`,
+        series.values,
+      ),
     ),
     lineChart ? el("c:smooth", { val: series.smooth ?? false }) : undefined,
   );
@@ -852,33 +887,80 @@ export function chartWorkbook(parsed: ParsedChart): Uint8Array {
   const spreadsheet =
     "http://schemas.openxmlformats.org/spreadsheetml/2006/main";
   const officeRelationships = relationshipNamespace;
+  const independent = parsed.groups[0]?.data.kind === "independent-categories";
   const header = el(
     "row",
     { r: 1 },
     inlineString("A1", " "),
-    parsed.series.map((item) =>
-      inlineString(`${columnName(item.seriesIndex + 1)}1`, item.name),
-    ),
+    independent
+      ? parsed.series.map((item) => {
+          const { valueColumn } = seriesCells(
+            parsed.groups[item.groupIndex]!,
+            item,
+          );
+          return inlineString(`${columnName(valueColumn - 1)}1`, item.name);
+        })
+      : parsed.series.map((item) =>
+          inlineString(`${columnName(item.seriesIndex + 1)}1`, item.name),
+        ),
   );
-  const rows = parsed.categories.map((category, row) =>
-    el(
-      "row",
-      { r: row + 2 },
-      inlineString(`A${row + 2}`, category),
-      parsed.series.flatMap((item) => {
-        const value = item.values[row];
-        return value === null || value === undefined
-          ? []
-          : [
-              el(
-                "c",
-                { r: `${columnName(item.seriesIndex + 1)}${row + 2}` },
-                el("v", null, String(value)),
-              ),
-            ];
-      }),
-    ),
-  );
+  const rows = independent
+    ? Array.from(
+        {
+          length: Math.max(
+            0,
+            ...parsed.series.map((item) => item.categories.length),
+          ),
+        },
+        (_, row) =>
+          el(
+            "row",
+            { r: row + 2 },
+            parsed.series.flatMap((item) => {
+              const category = item.categories[row];
+              if (category === undefined) return [];
+              const { categoryColumn, valueColumn } = seriesCells(
+                parsed.groups[item.groupIndex]!,
+                item,
+              );
+              const value = item.values[row];
+              return [
+                inlineString(
+                  `${columnName(categoryColumn - 1)}${row + 2}`,
+                  category,
+                ),
+                ...(value === null || value === undefined
+                  ? []
+                  : [
+                      el(
+                        "c",
+                        { r: `${columnName(valueColumn - 1)}${row + 2}` },
+                        el("v", null, String(value)),
+                      ),
+                    ]),
+              ];
+            }),
+          ),
+      )
+    : parsed.categories.map((category, row) =>
+        el(
+          "row",
+          { r: row + 2 },
+          inlineString(`A${row + 2}`, category),
+          parsed.series.flatMap((item) => {
+            const value = item.values[row];
+            return value === null || value === undefined
+              ? []
+              : [
+                  el(
+                    "c",
+                    { r: `${columnName(item.seriesIndex + 1)}${row + 2}` },
+                    el("v", null, String(value)),
+                  ),
+                ];
+          }),
+        ),
+      );
   const parts: Record<string, XmlElement> = {
     "[Content_Types].xml": el(
       "Types",

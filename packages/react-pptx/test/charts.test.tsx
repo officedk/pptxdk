@@ -931,15 +931,25 @@ describe("native Cartesian charts", () => {
                 width={200}
                 height={120}
                 groups={[
-                  {
-                    kind: kind,
-                    data: {
-                      kind: "shared-categories",
-                      categories: data.categories,
-                    },
-                    series: data.series,
-                    explosion: explosion,
-                  },
+                  kind === "pie"
+                    ? {
+                        kind: "pie" as const,
+                        data: {
+                          kind: "shared-categories" as const,
+                          categories: data.categories,
+                        },
+                        series: data.series,
+                        explosion: explosion,
+                      }
+                    : {
+                        kind: "doughnut" as const,
+                        data: {
+                          kind: "shared-categories" as const,
+                          categories: data.categories,
+                        },
+                        series: data.series,
+                        explosion: explosion,
+                      },
                 ]}
               />
             )),
@@ -998,15 +1008,25 @@ describe("native Cartesian charts", () => {
                   width={200}
                   height={120}
                   groups={[
-                    {
-                      kind: kind,
-                      data: {
-                        kind: "shared-categories",
-                        categories: data.categories,
-                      },
-                      series: data.series,
-                      explosion: explosion,
-                    },
+                    kind === "pie"
+                      ? {
+                          kind: "pie" as const,
+                          data: {
+                            kind: "shared-categories" as const,
+                            categories: data.categories,
+                          },
+                          series: data.series,
+                          explosion: explosion,
+                        }
+                      : {
+                          kind: "doughnut" as const,
+                          data: {
+                            kind: "shared-categories" as const,
+                            categories: data.categories,
+                          },
+                          series: data.series,
+                          explosion: explosion,
+                        },
                   ]}
                 />
               </Slide>
@@ -1054,14 +1074,6 @@ describe("native Cartesian charts", () => {
         props: {
           ...base,
           groups: [{ kind: "pie", data, series: twoSeries }],
-        },
-      },
-      {
-        id: "doughnut-series-count",
-        code: "invalid-data",
-        props: {
-          ...base,
-          groups: [{ kind: "doughnut", data, series: twoSeries }],
         },
       },
       {

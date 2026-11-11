@@ -6354,8 +6354,13 @@ function readSlideAnimations(
         }
       }
       const chartSeriesCount = targetObject?.chart?.series.length ?? 0;
-      const chartCategoryCount =
-        targetObject?.chart?.series[0]?.categories.length ?? 0;
+      // Independent rings may have different point counts; keep every real slot addressable.
+      const chartCategoryCount = Math.max(
+        0,
+        ...(targetObject?.chart?.series.map(
+          (series) => series.categories.length,
+        ) ?? []),
+      );
       if (
         targetRange?.type === "paragraph" &&
         (targetObject?.text === undefined ||

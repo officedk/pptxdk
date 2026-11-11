@@ -103,6 +103,8 @@ export type {
   ChartValueAxis,
   ColumnOrBarChartGroup,
   DoughnutChartGroup,
+  IndependentCategoryData,
+  IndependentCategorySeries,
   LineOrAreaChartGroup,
   PieChartGroup,
   SharedCategoryData,

@@ -6,9 +6,12 @@ import {
   Cell,
   Chart,
   Deck,
+  P,
   Row,
   Slide,
   Shape,
+  SlideNumber,
+  Span,
   Table,
   Text,
   build,
@@ -18,8 +21,11 @@ import {
   box,
   build as buildDocument,
   deck,
+  paragraph,
   shape,
   slide,
+  slideNumber,
+  span,
   text,
   type CommonNode,
   type TextNode,
@@ -136,6 +142,178 @@ describe("scoped author ids", () => {
         return true;
       },
     );
+  });
+
+  it("builds P, Span, and SlideNumber author ids through the shared rich text parser", async () => {
+    const document = deck({ width: 480, height: 270 }).append(
+      slide({ id: "rich" }).append(
+        text(
+          paragraph("Body", {
+            id: "body",
+            style: { align: "center", fontSize: 18 },
+          }),
+          paragraph(
+            [
+              span("Bold", {
+                id: "emphasis",
+                style: { fontWeight: "bold", color: "#C00000" },
+              }),
+              slideNumber({ id: "page-number" }),
+            ],
+            { id: "footer", style: { spacingAfter: 6 } },
+          ),
+        ).set({ id: "copy", x: 10, y: 10, width: 300, height: 80 }),
+      ),
+    );
+
+    const copy = document.query.get("rich").get("copy");
+    assert.equal(copy.get("body").node.kind, "paragraph");
+    assert.equal(copy.get("footer").get("emphasis").node.kind, "span");
+    assert.equal(
+      copy.get("footer").get("page-number").node.kind,
+      "slide-number",
+    );
+
+    const result = await buildDocument(document);
+    const validation = await validatePptx(result.pptx);
+    assert.deepEqual(validation.errors, []);
+    const richText = validation.slides[0]?.objects.find(
+      ({ text: value }) => value !== undefined,
+    )?.text;
+    assert.equal(richText?.text, "Body\nBold1");
+    assert.equal(richText?.paragraphs[0]?.alignment, "ctr");
+    assert.equal(richText?.paragraphs[0]?.runs[0]?.fontSizePt, 13.5);
+    assert.equal(richText?.paragraphs[1]?.runs[0]?.bold, true);
+    assert.equal(richText?.paragraphs[1]?.runs[0]?.color, "#C00000");
+    assert.equal(richText?.paragraphs[1]?.spacingAfterPoints, 4.5);
+    assert.equal(richText?.paragraphs[1]?.runs[1]?.field, "slidenum");
+    assert.equal(richText?.paragraphs[1]?.runs[1]?.text, "1");
+    assert.equal(
+      result.query.getSlide("rich").get("copy").observe().text,
+      "Body\nBold1",
+    );
+  });
+
+  it("expands JSX rich text author ids into the same formal build", async () => {
+    const expanded = await expandDocument(
+      <Deck width={480} height={270}>
+        <Slide id="jsx-rich">
+          <Text id="copy" x={10} y={10} width={300} height={80}>
+            <P id="body" style={{ align: "center", fontSize: 18 }}>
+              Body
+            </P>
+            <P id="footer">
+              <Span id="emphasis" style={{ fontWeight: "bold" }}>
+                Bold
+              </Span>
+              <SlideNumber id="page-number" />
+            </P>
+          </Text>
+        </Slide>
+      </Deck>,
+    );
+    const copy = expanded.query.get("jsx-rich").get("copy");
+    assert.equal(copy.get("body").node.kind, "paragraph");
+    assert.equal(copy.get("footer").get("emphasis").node.kind, "span");
+    assert.equal(
+      copy.get("footer").get("page-number").node.kind,
+      "slide-number",
+    );
+
+    const result = await buildDocument(expanded);
+    const validation = await validatePptx(result.pptx);
+    assert.deepEqual(validation.errors, []);
+    const richText = validation.slides[0]?.objects.find(
+      ({ text: value }) => value !== undefined,
+    )?.text;
+    assert.equal(richText?.text, "Body\nBold1");
+    assert.equal(richText?.paragraphs[0]?.alignment, "ctr");
+    assert.equal(richText?.paragraphs[1]?.runs[0]?.bold, true);
+    assert.equal(richText?.paragraphs[1]?.runs[1]?.field, "slidenum");
+    assert.equal(
+      result.query.getSlide("jsx-rich").get("copy").observe().text,
+      "Body\nBold1",
+    );
+    assert.match(slideXml(result), /type="slidenum"/u);
+  });
+
+  it("validates rich text author ids in their named scopes", async () => {
+    const duplicatedParagraph = deck({ width: 480, height: 270 }).append(
+      slide({ id: "duplicate-paragraph" }).append(
+        text(
+          paragraph("First", { id: "same" }),
+          paragraph("Second", { id: "same" }),
+        ).set({ x: 0, y: 0, width: 240, height: 60 }),
+      ),
+    );
+    await assert.rejects(
+      buildDocument(duplicatedParagraph),
+      (error: unknown) => {
+        assert.ok(error instanceof BuildError);
+        assert.ok(
+          error.diagnostics.some(({ code }) => code === "duplicate-author-id"),
+        );
+        return true;
+      },
+    );
+
+    const duplicatedSpan = deck({ width: 480, height: 270 }).append(
+      slide({ id: "duplicate-span" }).append(
+        text(
+          paragraph([
+            span("First", { id: "same" }),
+            span("Second", { id: "same" }),
+          ]),
+        ).set({ x: 0, y: 0, width: 240, height: 30 }),
+      ),
+    );
+    await assert.rejects(buildDocument(duplicatedSpan), (error: unknown) => {
+      assert.ok(error instanceof BuildError);
+      assert.ok(
+        error.diagnostics.some(({ code }) => code === "duplicate-author-id"),
+      );
+      return true;
+    });
+
+    const scoped = deck({ width: 480, height: 270 }).append(
+      slide({ id: "scoped-rich" }).append(
+        text(
+          paragraph(["Left", span("L", { id: "part" })], { id: "left" }),
+          paragraph(["Right", span("R", { id: "part" })], { id: "right" }),
+          paragraph("Anonymous"),
+        ).set({ id: "copy", x: 0, y: 0, width: 240, height: 90 }),
+      ),
+    );
+    const result = await buildDocument(scoped);
+    assert.deepEqual((await validatePptx(result.pptx)).errors, []);
+    assert.equal(
+      result.query.getSlide("scoped-rich").get("copy").observe().text,
+      "LeftL\nRightR\nAnonymous",
+    );
+  });
+
+  it("keeps unknown rich text parameter diagnostics", async () => {
+    for (const [label, node] of [
+      ["P", paragraph("Body").set({ mystery: true } as never)],
+      ["Span", span("Body").set({ mystery: true } as never)],
+    ] as const) {
+      const document = deck({ width: 320, height: 180 }).append(
+        slide({ id: "unknown-rich" }).append(
+          text(node).set({ x: 0, y: 0, width: 240, height: 40 }),
+        ),
+      );
+      await assert.rejects(buildDocument(document), (error: unknown) => {
+        assert.ok(error instanceof BuildError);
+        const message =
+          error.diagnostics.find(({ code }) => code === "unknown-parameter")
+            ?.message ?? "";
+        assert.match(
+          message,
+          new RegExp(`${label} contains unimplemented parameter mystery`, "u"),
+        );
+        return true;
+      });
+    }
   });
 
   it("rejects duplicate ids in one scope while allowing reuse across named scopes", async () => {

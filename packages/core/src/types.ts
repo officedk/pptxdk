@@ -493,8 +493,14 @@ export type CapabilitySharedPackagePart = {
     readonly pathTemplate: string;
     readonly contentType: string;
   };
-  /** Relationship type from the presentation part to this part. */
-  readonly presentationRelationshipType: string;
+  /**
+   * Relationship type from the presentation part to this part.
+   *
+   * Omit for a shared part that is only referenced by another capability part, such as a second
+   * theme component. Such a part still receives a unique package path and can be targeted by a
+   * `{ kind: "part", key }` relationship, but it has no presentation-level relationship.
+   */
+  readonly presentationRelationshipType?: string;
   readonly relationships?: readonly CapabilityPartRelationship[];
   readonly presentationElement?: {
     readonly position: "before-slides" | "after-notes-size";
@@ -668,11 +674,11 @@ export type SlideCapabilityContext = {
   readonly registerResource: (resource: CapabilityResource) => string;
   /** Register a part referenced by the current slide; returns the slide relationship ID. */
   readonly registerPackagePart: (part: CapabilitySlidePackagePart) => string;
-  /** Register or retrieve a deck-shared part; returns its path and presentation relationship ID. */
+  /** Register or retrieve a deck-shared part; returns its path and presentation relationship ID when present. */
   readonly registerSharedPart: (
     key: string,
     part: CapabilitySharedPackagePart,
-  ) => { readonly path: string; readonly relationshipId: string };
+  ) => { readonly path: string; readonly relationshipId?: string };
 };
 
 export type SlideCapabilityOutput = {

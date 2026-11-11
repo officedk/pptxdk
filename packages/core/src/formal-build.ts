@@ -56,6 +56,7 @@ import {
   type CapabilityResourceClaim,
   type Diagnostic,
   type Extension,
+  type GeometryBox,
   type LayoutChildReference,
   type LayoutObservation,
   type NativeElementKind,
@@ -170,7 +171,7 @@ type DocumentBuildState = {
     string,
     {
       readonly path: string;
-      readonly relationshipId: string;
+      readonly relationshipId?: string;
       readonly descriptor: CapabilitySharedPackagePart;
     }
   >;
@@ -199,6 +200,7 @@ type SlideBuildState = {
   readonly contributions: CapabilityContribution[];
   readonly morphObjects: Map<MorphKey, MorphObject>;
   readonly linkedSlideIndexes: Set<number>;
+  readonly layoutDerivedObjectIds: Set<number>;
 };
 
 type PackageBuildContext = {
@@ -246,6 +248,46 @@ function deepFreeze<T>(value: T): T {
   if (!Object.isFrozen(value)) Object.freeze(value);
   for (const child of Object.values(value)) deepFreeze(child);
   return value;
+}
+
+function reportBox(box: GeometryBox): GeometryBox {
+  // Reports show layout-derived geometry at hundredths of a pixel; capability measurement fallbacks keep their measured values.
+  return {
+    x: Math.round(box.x * 100) / 100,
+    y: Math.round(box.y * 100) / 100,
+    width: Math.round(box.width * 100) / 100,
+    height: Math.round(box.height * 100) / 100,
+  };
+}
+
+function projectObservation(
+  observation: ObjectObservation,
+  layoutDerivedObjectIds: ReadonlySet<number>,
+): ObjectObservation {
+  const box =
+    observation.box !== undefined && layoutDerivedObjectIds.has(observation.id)
+      ? reportBox(observation.box)
+      : observation.box;
+  const members =
+    observation.members === undefined
+      ? undefined
+      : observation.members.map((member) =>
+          projectObservation(member, layoutDerivedObjectIds),
+        );
+  return {
+    ...observation,
+    ...(box === undefined || box === observation.box ? {} : { box }),
+    ...(members === undefined ? {} : { members }),
+  };
+}
+
+function projectObservations(
+  observations: readonly ObjectObservation[],
+  layoutDerivedObjectIds: ReadonlySet<number>,
+): readonly ObjectObservation[] {
+  return observations.map((observation) =>
+    projectObservation(observation, layoutDerivedObjectIds),
+  );
 }
 
 function ownKeys(
@@ -849,6 +891,28 @@ function packagePartPath(template: string, sequence: number): string {
   return template.replace("{n}", String(sequence));
 }
 
+/**
+ * Allocates a shared part path without colliding with generated deck parts.
+ *
+ * Shared part templates normally start at a free sequence number. A template such as
+ * `ppt/theme/theme{n}.xml` must nevertheless skip the theme part generated from the deck theme,
+ * which is written outside shared part registration but already reserved for the package.
+ */
+function allocateSharedPackagePartPath(
+  template: string,
+  document: DocumentBuildState,
+): string {
+  for (;;) {
+    const path = packagePartPath(template, document.nextPackagePartId++);
+    if (
+      !document.packageParts.has(path) &&
+      !document.presentationPartPaths.has(path)
+    ) {
+      return path;
+    }
+  }
+}
+
 function addPackagePart(
   packagePart: CapabilityPackagePart,
   context: BuildContext,
@@ -998,15 +1062,16 @@ function packagePartDescriptor(
 ): {
   readonly pathTemplate: string;
   readonly contentType: string;
-  readonly relationshipType: string;
+  readonly relationshipType?: string;
   readonly relationships: readonly CapabilityPartRelationship[];
 } {
   if (
     typeof part.pathTemplate !== "string" ||
     typeof part.contentType !== "string" ||
     part.contentType.trim() === "" ||
-    typeof relationshipType !== "string" ||
-    relationshipType.trim() === "" ||
+    (relationshipType !== undefined &&
+      (typeof relationshipType !== "string" ||
+        relationshipType.trim() === "")) ||
     typeof content !== "function" ||
     (relationships !== undefined && !Array.isArray(relationships)) ||
     (Array.isArray(relationships) &&
@@ -1034,7 +1099,9 @@ function packagePartDescriptor(
   }
   try {
     assertXml10Characters(part.contentType);
-    assertXml10Characters(relationshipType);
+    if (typeof relationshipType === "string") {
+      assertXml10Characters(relationshipType);
+    }
     for (const relationship of relationships ?? []) {
       assertXml10Characters(relationship.relationshipType);
       if (relationship.target.kind === "part") {
@@ -1052,7 +1119,7 @@ function packagePartDescriptor(
   return {
     pathTemplate: part.pathTemplate,
     contentType: part.contentType,
-    relationshipType,
+    ...(typeof relationshipType === "string" ? { relationshipType } : {}),
     relationships: relationships ?? [],
   };
 }
@@ -1104,6 +1171,13 @@ function addSlidePackagePart(
     "slide part",
     true,
   );
+  const slideRelationshipType = descriptor.relationshipType;
+  if (slideRelationshipType === undefined) {
+    throw new CapabilityError(
+      "invalid-part",
+      "Slide part relationship type is required",
+    );
+  }
   const sequence = context.document.nextPackagePartId++;
   const partPath = packagePartPath(descriptor.pathTemplate, sequence);
   if (
@@ -1136,7 +1210,7 @@ function addSlidePackagePart(
   const relationshipId = `rId${context.slide.relationships.length + 2}`;
   context.slide.relationships.push({
     id: relationshipId,
-    type: descriptor.relationshipType,
+    type: slideRelationshipType,
     target: relationshipTarget(
       `ppt/slides/slide${context.slide.index}.xml`,
       partPath,
@@ -1149,7 +1223,7 @@ function addSharedPackagePart(
   key: string,
   part: CapabilitySharedPackagePart,
   context: PackageBuildContext,
-): { readonly path: string; readonly relationshipId: string } {
+): { readonly path: string; readonly relationshipId?: string } {
   if (typeof key !== "string" || key.trim() === "") {
     throw new CapabilityError(
       "invalid-part",
@@ -1163,6 +1237,16 @@ function addSharedPackagePart(
     part.content,
     "shared part",
   );
+  const presentationRelationshipType = descriptor.relationshipType;
+  if (
+    part.presentationElement !== undefined &&
+    presentationRelationshipType === undefined
+  ) {
+    throw new CapabilityError(
+      "invalid-part",
+      "Shared part presentation element requires a presentation relationship type",
+    );
+  }
   const existing = context.document.sharedParts.get(key);
   if (existing !== undefined) {
     const same =
@@ -1180,17 +1264,15 @@ function addSharedPackagePart(
     }
     return {
       path: existing.path,
-      relationshipId: existing.relationshipId,
+      ...(existing.relationshipId === undefined
+        ? {}
+        : { relationshipId: existing.relationshipId }),
     };
   }
-  const sequence = context.document.nextPackagePartId++;
-  const partPath = packagePartPath(descriptor.pathTemplate, sequence);
-  if (
-    context.document.packageParts.has(partPath) ||
-    context.document.presentationPartPaths.has(partPath)
-  ) {
-    throw new CapabilityError("duplicate-part", "Duplicate PPTX part path");
-  }
+  const partPath = allocateSharedPackagePartPath(
+    descriptor.pathTemplate,
+    context.document,
+  );
   const relationships = descriptor.relationships.map((relationship, index) => ({
     id: `rId${index + 1}`,
     type: relationship.relationshipType,
@@ -1212,52 +1294,57 @@ function addSharedPackagePart(
   if (relationships.length > 0) {
     context.document.packageRelationships.set(partPath, relationships);
   }
-  const relationshipId = `rId${context.document.nextPresentationRelationshipId++}`;
-  const presentationRelationships =
-    context.document.packageRelationships.get("ppt/presentation.xml") ?? [];
-  presentationRelationships.push({
-    id: relationshipId,
-    type: descriptor.relationshipType,
-    target: relationshipTarget("ppt/presentation.xml", partPath),
-  });
-  context.document.packageRelationships.set(
-    "ppt/presentation.xml",
-    presentationRelationships,
-  );
-  const element = part.presentationElement;
-  if (element !== undefined) {
-    if (
-      (element.position !== "before-slides" &&
-        element.position !== "after-notes-size") ||
-      typeof element.content !== "function"
-    ) {
-      throw new CapabilityError(
-        "invalid-part",
-        "Shared part presentation element declaration is invalid",
-      );
-    }
-    const xml = element.content(relationshipId);
-    if (typeof xml !== "string" || xml.trim() === "") {
-      throw new CapabilityError(
-        "invalid-part",
-        "Shared part presentation element must generate content",
-      );
-    }
-    assertXml10Characters(xml);
-    context.document.presentationElements.push({
-      position: element.position,
-      content: xml,
+  let relationshipId: string | undefined;
+  if (presentationRelationshipType !== undefined) {
+    relationshipId = `rId${context.document.nextPresentationRelationshipId++}`;
+    const presentationRelationships =
+      context.document.packageRelationships.get("ppt/presentation.xml") ?? [];
+    presentationRelationships.push({
+      id: relationshipId,
+      type: presentationRelationshipType,
+      target: relationshipTarget("ppt/presentation.xml", partPath),
     });
+    context.document.packageRelationships.set(
+      "ppt/presentation.xml",
+      presentationRelationships,
+    );
+    const element = part.presentationElement;
+    if (element !== undefined) {
+      if (
+        (element.position !== "before-slides" &&
+          element.position !== "after-notes-size") ||
+        typeof element.content !== "function"
+      ) {
+        throw new CapabilityError(
+          "invalid-part",
+          "Shared part presentation element declaration is invalid",
+        );
+      }
+      const xml = element.content(relationshipId);
+      if (typeof xml !== "string" || xml.trim() === "") {
+        throw new CapabilityError(
+          "invalid-part",
+          "Shared part presentation element must generate content",
+        );
+      }
+      assertXml10Characters(xml);
+      context.document.presentationElements.push({
+        position: element.position,
+        content: xml,
+      });
+    }
   }
   context.document.sharedParts.set(key, {
     path: partPath,
-    relationshipId,
+    ...(relationshipId === undefined ? {} : { relationshipId }),
     descriptor: {
       part: {
         pathTemplate: descriptor.pathTemplate,
         contentType: descriptor.contentType,
       },
-      presentationRelationshipType: descriptor.relationshipType,
+      ...(presentationRelationshipType === undefined
+        ? {}
+        : { presentationRelationshipType }),
       ...(part.relationships === undefined
         ? {}
         : { relationships: descriptor.relationships }),
@@ -1267,7 +1354,10 @@ function addSharedPackagePart(
       content: part.content,
     },
   });
-  return { path: partPath, relationshipId };
+  return {
+    path: partPath,
+    ...(relationshipId === undefined ? {} : { relationshipId }),
+  };
 }
 
 function xmlName(value: string): boolean {
@@ -1831,6 +1921,7 @@ function compileChildren(
               ...(authorId === undefined ? {} : { authorId }),
               ...(boxLink === undefined ? {} : { link: boxLink.summary }),
             };
+            context.slide.layoutDerivedObjectIds.add(objectId);
             if (morphKey !== undefined && morphName !== undefined) {
               const nativeKind = parsedResult?.contract?.nativeKind ?? "sp";
               if (output.observation.name !== morphName) {
@@ -1911,7 +2002,7 @@ function compileChildren(
       context.slide.layouts.push({
         id,
         ...(authorId === undefined ? {} : { authorId }),
-        box,
+        box: reportBox(box),
         children: [
           ...(boxObservation === undefined
             ? []
@@ -2165,6 +2256,7 @@ function compileChildren(
         ...(authorId === undefined ? {} : { authorId }),
         ...(compiledLink === undefined ? {} : { link: compiledLink.summary }),
       };
+      if (layoutBox !== undefined) context.slide.layoutDerivedObjectIds.add(id);
       content.push({
         ...(authorId === undefined ? {} : { authorId }),
         reference: { kind: "object", id: observation.id },
@@ -2173,8 +2265,8 @@ function compileChildren(
           ...tableContentNodes(observation),
         ],
       });
-      if (observation.box !== undefined) {
-        const box = observation.box;
+      if (output.observation.box !== undefined) {
+        const box = output.observation.box;
         if (
           box.x < 0 ||
           box.y < 0 ||
@@ -2408,6 +2500,7 @@ function compileSlide(
     contentChildrenByObjectId: new Map(),
     contributions: [],
     morphObjects: new Map(),
+    layoutDerivedObjectIds: new Set(),
   };
   const path = `deck/slide[${id}]`;
   if (nonWhitespaceText(node.children)) {
@@ -2602,7 +2695,10 @@ function compileSlide(
     ...(section === undefined ? {} : { section }),
     hidden,
     ...(advanceAfter === undefined ? {} : { advanceAfter }),
-    objects: compiled.objects,
+    objects: projectObservations(
+      compiled.objects,
+      slide.layoutDerivedObjectIds,
+    ),
     layouts: [...slide.layouts].sort((left, right) => left.id - right.id),
     content: compiled.content,
     resources: slide.resourceObservations,
@@ -2692,7 +2788,9 @@ function compileDocument(
     packageParts: new Map(),
     packageRelationships: new Map(),
     presentationAttributes: new Map(),
-    presentationPartPaths: new Set(),
+    // The deck theme part is generated outside shared part registration; reserve its path so a
+    // capability-provided theme part gets a distinct OPC identity.
+    presentationPartPaths: new Set(["ppt/theme/theme1.xml"]),
     presentationCollections: new Map(),
     sharedParts: new Map(),
     presentationElements: [],

@@ -18,6 +18,7 @@ export type { MorphKey, MorphScope } from "#/morph.ts";
 export {
   assertXml10Characters,
   pxToEmu,
+  themeXml,
   xmlDocument,
   xmlEscape,
 } from "#/ooxml.ts";

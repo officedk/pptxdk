@@ -8,6 +8,7 @@ import {
   Chart,
   Deck,
   font,
+  Group,
   Image,
   Slide,
   Text,
@@ -17,14 +18,19 @@ import {
   build as buildDocument,
   chart as authorChart,
   deck as authorDeck,
+  group as authorGroup,
   image as authorImage,
   slide as authorSlide,
   text as authorText,
 } from "@react-pptx/react-pptx/document";
 import { validatePptx } from "@react-pptx/validation";
 import { strFromU8, unzipSync } from "fflate";
+import * as fontkit from "fontkit";
 import { describe, it } from "vitest";
 
+const jostBoldBytes = new Uint8Array(
+  readFileSync(new URL("./assets/fonts/Jost-700-Bold.ttf", import.meta.url)),
+);
 const jost = font("Jost*", [
   {
     weight: 400,
@@ -36,11 +42,7 @@ const jost = font("Jost*", [
   },
   {
     weight: 700,
-    data: new Uint8Array(
-      readFileSync(
-        new URL("./assets/fonts/Jost-700-Bold.ttf", import.meta.url),
-      ),
-    ),
+    data: jostBoldBytes,
   },
 ]);
 const heroImage = new Uint8Array(
@@ -969,7 +971,7 @@ describe("mixed layout, layering, and component reflow", () => {
     assert.equal(nativeKinds[2]?.filter((kind) => kind === "image").length, 2);
     assert.equal(
       reactFile.slides[0]?.objects.find(({ kind }) => kind === "chart")?.chart
-        ?.series[0]?.values[3],
+        ?.series[0]?.values?.[3],
       31,
     );
     assert.equal(
@@ -1082,5 +1084,333 @@ describe("mixed layout, layering, and component reflow", () => {
         error instanceof BuildError &&
         error.diagnostics[0]?.code === "invalid-layout-context",
     );
+  });
+
+  it("keeps intrinsic content width in the native file while constrained text wraps and flows", async () => {
+    const label = "Open report";
+    const labelStyle = {
+      fontFamily: "minor",
+      fontSize: 13,
+      fontWeight: "bold",
+      color: "dk1",
+      height: "auto",
+    } as const;
+    const columnStyle = {
+      display: "flex",
+      flexDirection: "column",
+      alignItems: "flex-start",
+      width: 400,
+      padding: 20,
+      gap: 6,
+    } as const;
+
+    const reactResult = await build(
+      <Deck width={400} height={300} theme={mixedTheme}>
+        <Slide id="intrinsic-precision">
+          <Box id="column" style={columnStyle}>
+            <Box
+              id="cta"
+              style={{
+                backgroundColor: "accent2",
+                padding: [8, 16],
+                borderRadius: 12,
+              }}
+            >
+              <Text id="cta-label" style={labelStyle}>
+                {label}
+              </Text>
+            </Box>
+            <Box
+              id="after-cta"
+              style={{ width: 20, height: 10, backgroundColor: "accent1" }}
+            />
+            <Box id="narrow" style={{ width: 60, backgroundColor: "lt1" }}>
+              <Text id="narrow-label" style={labelStyle}>
+                {label}
+              </Text>
+            </Box>
+            <Box
+              id="after-narrow"
+              style={{ width: 20, height: 10, backgroundColor: "accent1" }}
+            />
+            <Text
+              id="overset-label"
+              style={{ ...labelStyle, width: 60, height: 10 }}
+            >
+              {label}
+            </Text>
+          </Box>
+        </Slide>
+      </Deck>,
+    );
+    const documentResult = await buildDocument(
+      authorDeck({ width: 400, height: 300, theme: mixedTheme }).append(
+        authorSlide({ id: "intrinsic-precision" }).append(
+          authorBox({ id: "column", style: columnStyle }).append(
+            authorBox({
+              id: "cta",
+              style: {
+                backgroundColor: "accent2",
+                padding: [8, 16],
+                borderRadius: 12,
+              },
+            }).append(
+              authorText(label, { id: "cta-label", style: labelStyle }),
+            ),
+            authorBox({
+              id: "after-cta",
+              style: { width: 20, height: 10, backgroundColor: "accent1" },
+            }),
+            authorBox({
+              id: "narrow",
+              style: { width: 60, backgroundColor: "lt1" },
+            }).append(
+              authorText(label, { id: "narrow-label", style: labelStyle }),
+            ),
+            authorBox({
+              id: "after-narrow",
+              style: { width: 20, height: 10, backgroundColor: "accent1" },
+            }),
+            authorText(label, {
+              id: "overset-label",
+              style: { ...labelStyle, width: 60, height: 10 },
+            }),
+          ),
+        ),
+      ),
+    );
+
+    const face = fontkit.create(Buffer.from(jostBoldBytes));
+    if (face.type !== "TTF") throw new Error("expected a static TrueType font");
+    const measuredWidth = Math.round(
+      (face.layout(label).advanceWidth / face.unitsPerEm) * 13 * 9525,
+    );
+
+    for (const [entry, result] of [
+      ["react", reactResult],
+      ["document", documentResult],
+    ] as const) {
+      assert.deepEqual(
+        result.report.diagnostics.map(({ code, path }) => ({ code, path })),
+        [
+          {
+            code: "overset",
+            path: "deck/slide[intrinsic-precision]/box[column]/text[overset-label]",
+          },
+        ],
+        entry,
+      );
+      const file = await validatePptx(result.pptx);
+      assert.deepEqual(file.errors, [], entry);
+      const objectIds = new Map(
+        (result.report.slides[0]?.objects ?? []).flatMap((object) =>
+          object.authorId === undefined
+            ? []
+            : [[object.authorId, object.id] as const],
+        ),
+      );
+      const nativeBox = (authorId: string) => {
+        const id = objectIds.get(authorId);
+        assert.ok(id !== undefined, `${entry}: missing object ${authorId}`);
+        const object = file.slides[0]?.objects.find(
+          (candidate) => candidate.id === id,
+        );
+        assert.ok(object, `${entry}: missing native object ${authorId}`);
+        return object.boxEmu;
+      };
+
+      const labelWidth = nativeBox("cta-label").width;
+      assert.ok(
+        labelWidth >= measuredWidth,
+        `${entry}: intrinsic width ${labelWidth} EMU is shorter than measured ${measuredWidth} EMU`,
+      );
+      assert.ok(
+        Math.abs(nativeBox("cta").width - labelWidth - 32 * 9525) <= 1,
+        `${entry}: CTA parent lost its 32px horizontal padding`,
+      );
+      assert.ok(
+        Math.abs(
+          nativeBox("cta").height - nativeBox("cta-label").height - 16 * 9525,
+        ) <= 1,
+        `${entry}: CTA parent lost its 16px vertical padding`,
+      );
+      assert.ok(
+        Math.abs(
+          nativeBox("after-cta").y -
+            (nativeBox("cta").y + nativeBox("cta").height + 6 * 9525),
+        ) <= 1,
+        `${entry}: content after the CTA did not follow its measured height`,
+      );
+
+      assert.equal(nativeBox("narrow").width, 60 * 9525, entry);
+      assert.ok(
+        nativeBox("narrow-label").height > nativeBox("cta-label").height,
+        `${entry}: text constrained to a 60px parent did not wrap to a taller box`,
+      );
+      assert.ok(
+        nativeBox("after-narrow").y >=
+          nativeBox("narrow").y + nativeBox("narrow").height,
+        `${entry}: content after the narrow card overlapped it`,
+      );
+      assert.equal(nativeBox("overset-label").height, 10 * 9525, entry);
+    }
+  });
+
+  it("writes group extents from the union of precise member geometry", async () => {
+    const memberWidth = 74.39453125;
+    const memberWidthEmu = Math.round(memberWidth * 9525);
+    const reactResult = await build(
+      <Deck width={400} height={300} theme={mixedTheme}>
+        <Slide id="group-precision">
+          <Group id="top-group">
+            <Box
+              id="top-member"
+              style={{
+                width: memberWidth,
+                height: 20,
+                backgroundColor: "accent1",
+              }}
+            />
+          </Group>
+          <Group id="nested-outer">
+            <Group id="nested-inner">
+              <Box
+                id="nested-member"
+                style={{
+                  width: memberWidth,
+                  height: 20,
+                  backgroundColor: "accent2",
+                }}
+              />
+            </Group>
+          </Group>
+          <Group id="fixed-group" style={{ width: 100, height: 20 }}>
+            <Box
+              id="fixed-member"
+              style={{
+                width: memberWidth,
+                height: 20,
+                backgroundColor: "accent3",
+              }}
+            />
+          </Group>
+        </Slide>
+      </Deck>,
+    );
+    const documentResult = await buildDocument(
+      authorDeck({ width: 400, height: 300, theme: mixedTheme }).append(
+        authorSlide({ id: "group-precision" }).append(
+          authorGroup({ id: "top-group" }).append(
+            authorBox({
+              id: "top-member",
+              style: {
+                width: memberWidth,
+                height: 20,
+                backgroundColor: "accent1",
+              },
+            }),
+          ),
+          authorGroup({ id: "nested-outer" }).append(
+            authorGroup({ id: "nested-inner" }).append(
+              authorBox({
+                id: "nested-member",
+                style: {
+                  width: memberWidth,
+                  height: 20,
+                  backgroundColor: "accent2",
+                },
+              }),
+            ),
+          ),
+          authorGroup({
+            id: "fixed-group",
+            style: { width: 100, height: 20 },
+          }).append(
+            authorBox({
+              id: "fixed-member",
+              style: {
+                width: memberWidth,
+                height: 20,
+                backgroundColor: "accent3",
+              },
+            }),
+          ),
+        ),
+      ),
+    );
+
+    for (const [entry, result] of [
+      ["react", reactResult],
+      ["document", documentResult],
+    ] as const) {
+      assert.deepEqual(result.report.diagnostics, [], entry);
+      const file = await validatePptx(result.pptx);
+      assert.deepEqual(file.errors, [], entry);
+      const reportIds = new Map<string, number>();
+      const collectReportIds = (
+        objects: readonly {
+          readonly authorId?: string;
+          readonly id: number;
+          readonly members?: readonly unknown[];
+        }[],
+      ) => {
+        for (const object of objects) {
+          if (object.authorId !== undefined)
+            reportIds.set(object.authorId, object.id);
+          if (object.members !== undefined)
+            collectReportIds(
+              object.members as readonly {
+                readonly authorId?: string;
+                readonly id: number;
+                readonly members?: readonly unknown[];
+              }[],
+            );
+        }
+      };
+      collectReportIds(result.report.slides[0]?.objects ?? []);
+      const nativeObjects = new Map<
+        number,
+        { readonly boxEmu: { readonly width: number; readonly height: number } }
+      >();
+      const collectNative = (
+        objects: readonly {
+          readonly id: number;
+          readonly boxEmu: { readonly width: number; readonly height: number };
+          readonly members?: readonly unknown[];
+        }[],
+      ) => {
+        for (const object of objects) {
+          nativeObjects.set(object.id, object);
+          if (object.members !== undefined)
+            collectNative(
+              object.members as readonly {
+                readonly id: number;
+                readonly boxEmu: {
+                  readonly width: number;
+                  readonly height: number;
+                };
+                readonly members?: readonly unknown[];
+              }[],
+            );
+        }
+      };
+      collectNative(file.slides[0]?.objects ?? []);
+      const nativeBox = (authorId: string) => {
+        const id = reportIds.get(authorId);
+        assert.ok(id !== undefined, `${entry}: missing object ${authorId}`);
+        const object = nativeObjects.get(id);
+        assert.ok(object, `${entry}: missing native object ${authorId}`);
+        return object.boxEmu;
+      };
+
+      assert.equal(nativeBox("top-member").width, memberWidthEmu, entry);
+      assert.equal(nativeBox("top-group").width, memberWidthEmu, entry);
+      assert.equal(nativeBox("nested-member").width, memberWidthEmu, entry);
+      assert.equal(nativeBox("nested-inner").width, memberWidthEmu, entry);
+      assert.equal(nativeBox("nested-outer").width, memberWidthEmu, entry);
+      assert.equal(nativeBox("top-group").height, 20 * 9525, entry);
+      assert.equal(nativeBox("fixed-group").width, 100 * 9525, entry);
+      assert.equal(nativeBox("fixed-member").width, memberWidthEmu, entry);
+    }
   });
 });

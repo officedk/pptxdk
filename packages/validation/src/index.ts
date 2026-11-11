@@ -577,6 +577,41 @@ const textProjectionBackgroundRoles: Partial<
   spin: ["animRot:r", "anim:ppt_x", "anim:ppt_y"],
 };
 
+// Shapes keep whole-object visibility and fill geometry while paragraph-targeted effects split text
+// into native paragraph builds; this role pairing is the mixed projection this writer can produce.
+const mixedWholeObjectRoles: Partial<
+  Record<FileAnimationEffect["preset"], readonly string[]>
+> = {
+  zoom: ["anim:ppt_w", "anim:ppt_h", "animEffect:fade"],
+  fly: ["anim:ppt_x", "anim:ppt_y"],
+  floatUp: ["animEffect:fade", "anim:ppt_x", "anim:ppt_y"],
+  floatDown: ["animEffect:fade", "anim:ppt_x", "anim:ppt_y"],
+  spinIn: [
+    "anim:ppt_w",
+    "anim:ppt_h",
+    "anim:style.rotation",
+    "animEffect:fade",
+  ],
+  stretch: ["anim:ppt_w", "anim:ppt_h"],
+};
+
+const mixedParagraphGeometryRoles: Partial<
+  Record<FileAnimationEffect["preset"], readonly string[]>
+> = {
+  zoom: ["anim:ppt_x", "anim:ppt_y", "anim:ppt_w", "anim:ppt_h"],
+  fly: ["anim:ppt_x", "anim:ppt_y"],
+  floatUp: ["anim:ppt_x", "anim:ppt_y"],
+  floatDown: ["anim:ppt_x", "anim:ppt_y"],
+  spinIn: [
+    "anim:ppt_w",
+    "anim:ppt_h",
+    "anim:style.rotation",
+    "anim:ppt_x",
+    "anim:ppt_y",
+  ],
+  stretch: ["anim:ppt_x", "anim:ppt_w", "anim:ppt_h"],
+};
+
 function animationBehaviorRole(behavior: FileAnimationBehavior): string {
   return behavior.behavior === "animEffect"
     ? `${behavior.behavior}:${behavior.filter ?? ""}`
@@ -625,6 +660,7 @@ function closeGeometryNumber(left: number, right: number): boolean {
 
 function parseCenterRotationFormula(
   behavior: FileAnimationBehavior,
+  absolute = false,
 ): CenterRotationFormula | undefined {
   const formula = behavior.keyframes?.[0]?.formula;
   const axis = behavior.attributeNames[0];
@@ -633,12 +669,14 @@ function parseCenterRotationFormula(
   }
   const number = "(-?(?:\\d+(?:\\.\\d*)?|\\.\\d+))";
   const progress = "(?:\\$|\\(1-\\$\\))";
+  const xSuffix = absolute ? "" : "-#ppt_x";
+  const ySuffix = absolute ? "" : "-#ppt_y";
   const xPattern = new RegExp(
-    `^${number}\\+(\\$\\*)?\\(\\(#ppt_x-${number}\\)\\*cos\\(\\(${number}\\*pi/180\\)\\*(?<firstProgress>${progress})\\)-\\(#ppt_y-${number}\\)\\*${number}\\*sin\\(\\(${number}\\*pi/180\\)\\*(?<secondProgress>${progress})\\)\\)-#ppt_x$`,
+    `^${number}\\+(\\$\\*)?\\(\\(#ppt_x-${number}\\)\\*cos\\(\\(${number}\\*pi/180\\)\\*(?<firstProgress>${progress})\\)-\\(#ppt_y-${number}\\)\\*${number}\\*sin\\(\\(${number}\\*pi/180\\)\\*(?<secondProgress>${progress})\\)\\)${xSuffix}$`,
     "u",
   );
   const yPattern = new RegExp(
-    `^${number}\\+(\\$\\*)?\\(\\(#ppt_x-${number}\\)\\*${number}\\*sin\\(\\(${number}\\*pi/180\\)\\*(?<firstProgress>${progress})\\)\\+\\(#ppt_y-${number}\\)\\*cos\\(\\(${number}\\*pi/180\\)\\*(?<secondProgress>${progress})\\)\\)-#ppt_y$`,
+    `^${number}\\+(\\$\\*)?\\(\\(#ppt_x-${number}\\)\\*${number}\\*sin\\(\\(${number}\\*pi/180\\)\\*(?<firstProgress>${progress})\\)\\+\\(#ppt_y-${number}\\)\\*cos\\(\\(${number}\\*pi/180\\)\\*(?<secondProgress>${progress})\\)\\)${ySuffix}$`,
     "u",
   );
   const match = (axis === "ppt_x" ? xPattern : yPattern).exec(formula);
@@ -737,11 +775,14 @@ function parseCenterRotationFormula(
 }
 
 /** Progress carrier for validating shared geometry; does not extrapolate formula positions at arbitrary points in time. */
-function validCenterRotationProgress(behavior: FileAnimationBehavior): boolean {
+function validCenterRotationProgress(
+  behavior: FileAnimationBehavior,
+  absolute = false,
+): boolean {
   const keyframes = behavior.keyframes;
   return (
     isPositionBehavior(behavior) &&
-    behavior.additive === "sum" &&
+    behavior.additive === (absolute ? "base" : "sum") &&
     behavior.calculationMode === "lin" &&
     keyframes?.length === 2 &&
     keyframes[0]?.time === 0 &&
@@ -751,7 +792,7 @@ function validCenterRotationProgress(behavior: FileAnimationBehavior): boolean {
     keyframes[0]?.value === "0" &&
     keyframes[1]?.valueType === "fltVal" &&
     keyframes[1]?.value === "1" &&
-    parseCenterRotationFormula(behavior) !== undefined
+    parseCenterRotationFormula(behavior, absolute) !== undefined
   );
 }
 
@@ -776,11 +817,12 @@ function hasCompletePositionAxes(
 
 function hasConsistentPositionFormulas(
   behaviors: readonly FileAnimationBehavior[],
+  absolute = false,
 ): boolean {
   // Paragraphs, backgrounds, and members emitted within the same timing node must share parameter relationships.
   const formulas = behaviors
     .filter(isPositionBehavior)
-    .map(parseCenterRotationFormula);
+    .map((behavior) => parseCenterRotationFormula(behavior, absolute));
   const firstFormula = formulas[0];
   return (
     firstFormula !== undefined &&
@@ -949,10 +991,13 @@ function validCenterRotationGeometry(
   objects: readonly FileObject[],
   widthEmu: number,
   heightEmu: number,
+  absolute = false,
 ): boolean {
   const positions = behaviors.filter(isPositionBehavior);
   if (positions.length === 0) return true;
-  const parsed = positions.map(parseCenterRotationFormula);
+  const parsed = positions.map((behavior) =>
+    parseCenterRotationFormula(behavior, absolute),
+  );
   const firstFormula = parsed[0];
   if (
     firstFormula === undefined ||
@@ -1008,6 +1053,337 @@ function validCenterRotationGeometry(
       angle !== undefined && closeGeometryNumber(formula.angleDegrees, angle)
     );
   });
+}
+
+type ParsedAnimationRecord = {
+  readonly effect: FileAnimationEffect;
+  readonly targetId: number;
+  readonly nativeBuildGroupId?: number;
+  readonly parentTimingId?: number;
+  readonly stepIndex: number;
+  readonly nativeBehaviors: readonly FileAnimationBehavior[];
+  readonly ranges: readonly (FileAnimationTargetRange | undefined)[];
+  readonly targetObject?: FileObject;
+};
+
+/**
+ * Verifies the whole-object side of a mixed Shape projection: one visibility set plus the exact
+ * whole geometry roles, all on either the object or the background primary role. Paragraph and
+ * chart targets are not allowed on this primary effect.
+ */
+function validWholeShapeProjectionObject(
+  preset: FileAnimationEffect["preset"],
+  targetId: number,
+  behaviors: readonly FileAnimationBehavior[],
+): boolean {
+  const roles = mixedWholeObjectRoles[preset];
+  if (roles === undefined) return false;
+  const visibilitySets = behaviors.filter(({ behavior }) => behavior === "set");
+  const [visibility] = visibilitySets;
+  if (
+    visibilitySets.length !== 1 ||
+    visibility === undefined ||
+    visibility.targetId !== targetId ||
+    (visibility.targetType !== "object" &&
+      visibility.targetType !== "background") ||
+    visibility.attributeNames.length !== 1 ||
+    visibility.attributeNames[0] !== "style.visibility" ||
+    visibility.durationMs !== 1 ||
+    visibility.to !== "visible"
+  ) {
+    return false;
+  }
+  const primaryTargetType = visibility.targetType;
+  const primaryBehaviors = behaviors.filter(
+    ({ behavior }) => behavior !== "set",
+  );
+  if (
+    primaryBehaviors.some(
+      ({ targetId: behaviorTargetId, targetType }) =>
+        behaviorTargetId !== targetId || targetType !== primaryTargetType,
+    )
+  ) {
+    return false;
+  }
+  return hasRoles(primaryBehaviors.map(animationBehaviorRole), roles);
+}
+
+/** Verifies one companion effect carries only the exact geometry roles for one paragraph. */
+function validMixedCompanionGeometry(
+  preset: FileAnimationEffect["preset"],
+  targetId: number,
+  paragraphIndex: number,
+  behaviors: readonly FileAnimationBehavior[],
+): boolean {
+  const roles = mixedParagraphGeometryRoles[preset];
+  if (roles === undefined || behaviors.length !== roles.length) return false;
+  if (
+    behaviors.some(
+      ({ behavior, targetId: behaviorTargetId, targetType, targetRange }) =>
+        behavior === "set" ||
+        behaviorTargetId !== targetId ||
+        targetType !== "paragraph" ||
+        targetRange?.type !== "paragraph" ||
+        targetRange.start !== paragraphIndex ||
+        targetRange.end !== paragraphIndex,
+    )
+  ) {
+    return false;
+  }
+  return hasRoles(behaviors.map(animationBehaviorRole), roles);
+}
+
+function sameCompanionTiming(
+  whole: ParsedAnimationRecord,
+  companion: ParsedAnimationRecord,
+): boolean {
+  return (
+    companion.effect.delayMs === whole.effect.delayMs &&
+    JSON.stringify(companion.effect.startAfter) ===
+      JSON.stringify(whole.effect.startAfter) &&
+    companion.effect.durationMs === whole.effect.durationMs &&
+    companion.effect.repeatCount === whole.effect.repeatCount &&
+    JSON.stringify(companion.effect.easing ?? {}) ===
+      JSON.stringify(whole.effect.easing ?? {}) &&
+    companion.effect.by === whole.effect.by &&
+    companion.effect.intervalMs === whole.effect.intervalMs &&
+    companion.effect.nativeBuild === whole.effect.nativeBuild &&
+    companion.effect.nativeBuildAnimBg === whole.effect.nativeBuildAnimBg
+  );
+}
+
+/**
+ * Recognizes the explicit mixed Shape projection from actual timing containers: one whole entrance
+ * plus same-target/same-build paragraph effects, with one synchronized geometry companion per
+ * paragraph. Physical effects stay separate; this only checks the native role coverage.
+ */
+function companionGroupKey(record: ParsedAnimationRecord): string {
+  const { effect } = record;
+  return JSON.stringify([
+    record.targetId,
+    record.nativeBuildGroupId ?? null,
+    record.stepIndex,
+    record.parentTimingId ?? null,
+    effect.preset,
+    effect.kind,
+    effect.delayMs,
+    effect.startAfter ?? null,
+    effect.durationMs,
+    effect.repeatCount ?? null,
+    effect.easing ?? null,
+    effect.by ?? null,
+    effect.intervalMs ?? null,
+    effect.nativeBuild ?? null,
+    effect.nativeBuildAnimBg ?? null,
+  ]);
+}
+
+function companionScopeKey(record: ParsedAnimationRecord): string {
+  return JSON.stringify([
+    record.targetId,
+    record.nativeBuildGroupId ?? null,
+    record.stepIndex,
+    record.parentTimingId ?? null,
+    record.effect.preset,
+    record.effect.kind,
+  ]);
+}
+
+/**
+ * Recognizes the explicit mixed Shape projection from actual timing containers: one whole entrance
+ * plus same-target/same-build paragraph effects, with one synchronized geometry companion per
+ * paragraph. Physical effects stay separate; companions are associated to each whole effect instance
+ * by its actual timing key and, for identical parameters, by their actual written order/multiplicity.
+ */
+function validateMixedWholeCompanionProjections(
+  records: readonly ParsedAnimationRecord[],
+  errors: ValidationIssue[],
+  part: string,
+): void {
+  const order = new Map(records.map((record, index) => [record, index]));
+  const groups = new Map<string, ParsedAnimationRecord[]>();
+  for (const whole of records) {
+    if (
+      whole.effect.kind !== "entrance" ||
+      mixedWholeObjectRoles[whole.effect.preset] === undefined ||
+      whole.targetObject?.kind !== "shape" ||
+      whole.targetObject.text === undefined ||
+      whole.targetObject.text.paragraphs.length < 1 ||
+      whole.effect.nativeBuild !== "paragraph" ||
+      whole.effect.nativeBuildAnimBg !== true ||
+      whole.ranges.length === 0 ||
+      whole.ranges.some((range) => range !== undefined)
+    ) {
+      continue;
+    }
+    const siblings = records.filter(
+      (record) =>
+        record.targetId === whole.targetId &&
+        record.nativeBuildGroupId === whole.nativeBuildGroupId,
+    );
+    const hasParagraphEffect = siblings.some((record) =>
+      record.nativeBehaviors.some(
+        ({ behavior, targetType }) =>
+          behavior === "set" && targetType === "paragraph",
+      ),
+    );
+    if (!hasParagraphEffect) continue;
+    if (
+      !validWholeShapeProjectionObject(
+        whole.effect.preset,
+        whole.targetId,
+        whole.nativeBehaviors,
+      )
+    ) {
+      issue(
+        errors,
+        part,
+        "invalid-animation-projection-target",
+        "Mixed whole Shape projection must keep exactly one object visibility set and the whole geometry roles",
+      );
+      continue;
+    }
+    const key = companionGroupKey(whole);
+    const group = groups.get(key) ?? [];
+    group.push(whole);
+    groups.set(key, group);
+  }
+
+  for (const [key, group] of groups) {
+    const first = group[0];
+    if (first === undefined || first.targetObject?.text === undefined) continue;
+    const paragraphCount = first.targetObject.text.paragraphs.length;
+    const companions = records
+      .filter(
+        (record) =>
+          companionGroupKey(record) === key &&
+          record.effect.targetRange?.type === "paragraph" &&
+          !record.nativeBehaviors.some(({ behavior }) => behavior === "set"),
+      )
+      .sort((left, right) => (order.get(left) ?? 0) - (order.get(right) ?? 0));
+    const expectedStarts = Array.from(
+      { length: paragraphCount },
+      (_, index) => index,
+    );
+    const expectedTotal = group.length * paragraphCount;
+    for (const [instance, whole] of group.entries()) {
+      const chunk = companions.slice(
+        instance * paragraphCount,
+        (instance + 1) * paragraphCount,
+      );
+      const starts = chunk.map(({ effect }) =>
+        effect.targetRange?.type === "paragraph"
+          ? effect.targetRange.start
+          : -1,
+      );
+      const ordered =
+        chunk.length === paragraphCount &&
+        starts.join(",") === expectedStarts.join(",");
+      if (!ordered) {
+        for (const index of expectedStarts) {
+          const matches = chunk.filter(
+            ({ effect }) =>
+              effect.targetRange?.type === "paragraph" &&
+              effect.targetRange.start === index &&
+              effect.targetRange.end === index,
+          );
+          if (matches.length === 0) {
+            issue(
+              errors,
+              part,
+              "inconsistent-animation-target-range",
+              `Mixed whole Shape projection is missing geometry companion for paragraph ${index} of effect instance ${instance + 1}`,
+            );
+          } else if (matches.length > 1) {
+            issue(
+              errors,
+              part,
+              "invalid-animation-projection-target",
+              `Mixed whole Shape projection has duplicate geometry companions for paragraph ${index} of effect instance ${instance + 1}`,
+            );
+          }
+        }
+        if (chunk.length === paragraphCount) {
+          issue(
+            errors,
+            part,
+            "invalid-animation-projection-target",
+            `Geometry companions for effect instance ${instance + 1} do not preserve their paragraph instance order`,
+          );
+        }
+        continue;
+      }
+      for (const index of expectedStarts) {
+        const companion = chunk[index];
+        if (companion === undefined) continue;
+        if (!sameCompanionTiming(whole, companion)) {
+          issue(
+            errors,
+            part,
+            "invalid-animation-projection-target",
+            `Geometry companion for paragraph ${index} of effect instance ${instance + 1} must share start, duration, repeat, easing, and build with that whole effect`,
+          );
+          continue;
+        }
+        if (
+          !validMixedCompanionGeometry(
+            whole.effect.preset,
+            whole.targetId,
+            index,
+            companion.nativeBehaviors,
+          )
+        ) {
+          issue(
+            errors,
+            part,
+            "invalid-animation-projection-target",
+            `Geometry companion for paragraph ${index} of effect instance ${instance + 1} must contain complete and unique paragraph geometry without visibility or background`,
+          );
+        }
+      }
+    }
+    if (companions.length > expectedTotal) {
+      issue(
+        errors,
+        part,
+        "invalid-animation-projection-target",
+        "Mixed whole Shape projection has geometry companions outside the complete effect instance coverage",
+      );
+    }
+  }
+
+  // A companion whose start/duration/repeat/easing does not match any whole instance is still a
+  // typed companion, not an unrelated effect; report it instead of silently treating it as missing.
+  const groupKeys = new Set(groups.keys());
+  const wholeScopes = new Set(
+    records
+      .filter(
+        (record) =>
+          record.effect.kind === "entrance" &&
+          (record.effect.targetRange === undefined ||
+            record.effect.targetRange.type === "paragraph"),
+      )
+      .map(companionScopeKey),
+  );
+  const reportedOrphans = new Set<ParsedAnimationRecord>();
+  for (const record of records) {
+    if (
+      record.effect.targetRange?.type !== "paragraph" ||
+      record.nativeBehaviors.some(({ behavior }) => behavior === "set") ||
+      !wholeScopes.has(companionScopeKey(record)) ||
+      groupKeys.has(companionGroupKey(record)) ||
+      reportedOrphans.has(record)
+    ) {
+      continue;
+    }
+    reportedOrphans.add(record);
+    issue(
+      errors,
+      part,
+      "invalid-animation-projection-target",
+      "Geometry companion must share start, duration, repeat, easing, and build with a whole effect instance",
+    );
+  }
 }
 
 /** Recovers logical whole Text only after complete verification against actual paragraphs, background, and visibility targets. */
@@ -7454,11 +7830,12 @@ function readSlideAnimations(
   };
 
   const result: FileAnimationStep[] = [];
-  for (const stepNode of elements(
+  const parsedEffects: ParsedAnimationRecord[] = [];
+  for (const [stepIndex, stepNode] of elements(
     sequenceChildren,
     presentationNamespace,
     "par",
-  )) {
+  ).entries()) {
     const stepTimeNode = first(stepNode, presentationNamespace, "cTn");
     if (stepTimeNode === undefined) {
       issue(errors, part, "invalid-animation-step", "Click step missing cTn");
@@ -7840,20 +8217,47 @@ function readSlideAnimations(
         );
         continue;
       }
+      // Mixed Shape SpinIn companions carry the absolute common-center position on a base
+      // behavior. Keep the sum/delta contract for every other spin/spinIn target role.
+      const mixedSpinInCompanion =
+        preset === "spinIn" &&
+        kind === "entrance" &&
+        nativeBuildGroupId === 0 &&
+        paragraphBuild?.build === "p" &&
+        paragraphBuild?.animBg === true &&
+        targetObject?.kind === "shape" &&
+        targetObject.text !== undefined &&
+        ranges.length > 0 &&
+        ranges.every((range) => range?.type === "paragraph") &&
+        ranges[0]?.type === "paragraph" &&
+        ranges[0].start === ranges[0].end &&
+        nativeBehaviors.length > 0 &&
+        nativeBehaviors.every(
+          ({ behavior, targetType }) =>
+            behavior !== "set" && targetType === "paragraph",
+        ) &&
+        nativeBehaviors.some(({ additive }) => additive === "base");
       if (
         (preset === "spin" || preset === "spinIn") &&
         nativeBehaviors.some(isPositionBehavior) &&
         (!hasCompletePositionAxes(nativeBehaviors) ||
-          !hasConsistentPositionFormulas(nativeBehaviors) ||
+          !hasConsistentPositionFormulas(
+            nativeBehaviors,
+            mixedSpinInCompanion,
+          ) ||
           nativeBehaviors
             .filter(isPositionBehavior)
-            .some((behavior) => !validCenterRotationProgress(behavior)) ||
+            .some(
+              (behavior) =>
+                !validCenterRotationProgress(behavior, mixedSpinInCompanion),
+            ) ||
           !validCenterRotationGeometry(
             preset,
             nativeBehaviors,
             objects,
             slideSize.widthEmu,
             slideSize.heightEmu,
+            mixedSpinInCompanion,
           ))
       ) {
         issue(
@@ -8185,7 +8589,7 @@ function readSlideAnimations(
             : chartBuild === "series" || chartBuild === "category"
               ? chartBuild
               : undefined;
-      effects.push({
+      const effect: FileAnimationEffect = {
         targetId,
         timingId,
         ...(targetRange === undefined ? {} : { targetRange }),
@@ -8222,10 +8626,23 @@ function readSlideAnimations(
         ...(fromColor === undefined ? {} : { fromColor }),
         ...(toColor === undefined ? {} : { toColor }),
         ...(Object.keys(easing).length === 0 ? {} : { easing }),
+      };
+      const parentTimingId = timingTreeNodes.get(timingId)?.parentTimingId;
+      effects.push(effect);
+      parsedEffects.push({
+        effect,
+        targetId,
+        ...(nativeBuildGroupId === undefined ? {} : { nativeBuildGroupId }),
+        ...(parentTimingId === undefined ? {} : { parentTimingId }),
+        stepIndex,
+        nativeBehaviors,
+        ranges,
+        ...(targetObject === undefined ? {} : { targetObject }),
       });
     }
     if (effects.length > 0) result.push({ trigger, effects });
   }
+  validateMixedWholeCompanionProjections(parsedEffects, errors, part);
   return { steps: result, containers };
 }
 

@@ -74,6 +74,8 @@ export type {
   ChartXYAxisReferences,
   ColumnOrBarChartGroup,
   DoughnutChartGroup,
+  IndependentCategoryData,
+  IndependentCategorySeries,
   LineOrAreaChartGroup,
   PieChartGroup,
   ScatterChartGroup,

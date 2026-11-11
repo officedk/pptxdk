@@ -35,6 +35,10 @@ const drawingNamespace =
 const relationshipNamespace =
   "http://schemas.openxmlformats.org/officeDocument/2006/relationships";
 const sheet = "Sheet1";
+// Microsoft chart extensions used only by independent doughnut category labels.
+const c15Namespace = "http://schemas.microsoft.com/office/drawing/2012/chart";
+const categoryRangeExtensionUri = "{02D57815-91ED-43cb-92C2-25804820EDAC}";
+const dataLabelRangeExtensionUri = "{CE6537A1-D6FC-4f65-9D91-7224C49458BB}";
 
 type XmlAttributes = Readonly<
   Record<string, string | number | boolean | undefined>
@@ -147,6 +151,10 @@ type ChartCells = {
     number,
     { readonly column: number; readonly categories: readonly string[] }
   >;
+  readonly independentCategoryColumns: ReadonlyMap<
+    number,
+    { readonly column: number; readonly categories: readonly string[] }
+  >;
   readonly series: ReadonlyMap<number, ChartSeriesCells>;
   readonly nextColumn: number;
 };
@@ -167,9 +175,14 @@ function chartCells(parsed: ParsedChart): ChartCells {
     number,
     { column: number; categories: readonly string[] }
   >();
+  const independentCategoryColumns = new Map<
+    number,
+    { column: number; categories: readonly string[] }
+  >();
   let nextColumn = 0;
   for (const [groupIndex, group] of parsed.groups.entries()) {
     if (group.kind === "scatter") continue;
+    if (group.data.kind === "independent-categories") continue;
     if (group.axes === undefined) {
       // Pie and doughnut groups have no axis identity; only one group may exist.
       axislessCategoryColumns.set(groupIndex, {
@@ -209,6 +222,26 @@ function chartCells(parsed: ParsedChart): ChartCells {
       }
       continue;
     }
+    if (group.data.kind === "independent-categories") {
+      for (const item of group.series) {
+        const categoryColumn = nextColumn;
+        const valueColumn = nextColumn + 1;
+        independentCategoryColumns.set(item.seriesIndex, {
+          column: categoryColumn,
+          categories: item.categories,
+        });
+        series.set(item.seriesIndex, {
+          nameColumn: valueColumn,
+          category: {
+            column: categoryColumn,
+            pointCount: item.categories.length,
+          },
+          value: { column: valueColumn },
+        });
+        nextColumn += 2;
+      }
+      continue;
+    }
     const category =
       group.axes === undefined
         ? axislessCategoryColumns.get(groupIndex)
@@ -230,7 +263,13 @@ function chartCells(parsed: ParsedChart): ChartCells {
       nextColumn += 1;
     }
   }
-  return { categoryColumns, axislessCategoryColumns, series, nextColumn };
+  return {
+    categoryColumns,
+    axislessCategoryColumns,
+    independentCategoryColumns,
+    series,
+    nextColumn,
+  };
 }
 
 function rangeFormula(column: number, pointCount: number): string {
@@ -527,6 +566,12 @@ function errorBarXml(
   );
 }
 
+type CategoryLabelRange = {
+  /** Workbook range matching the series-owned ordered categories. */
+  readonly formula: string;
+  readonly categories: readonly string[];
+};
+
 export type ChartTextStyleXml = {
   readonly chart: string;
   readonly title?: string;
@@ -536,12 +581,55 @@ export type ChartTextStyleXml = {
   readonly pointLabels?: ReadonlyMap<string, string>;
 };
 
+function categoryLabelFieldExtension(enabled: boolean): XmlElement {
+  return el(
+    "c:extLst",
+    null,
+    el(
+      "c:ext",
+      { uri: dataLabelRangeExtensionUri, "xmlns:c15": c15Namespace },
+      el("c15:showDataLabelsRange", { val: enabled }),
+    ),
+  );
+}
+
+function categoryRangeExtension(range: CategoryLabelRange): XmlElement {
+  return el(
+    "c:extLst",
+    null,
+    el(
+      "c:ext",
+      { uri: categoryRangeExtensionUri, "xmlns:c15": c15Namespace },
+      el(
+        "c15:datalabelsRange",
+        null,
+        el("c15:f", null, range.formula),
+        el(
+          "c15:dlblRangeCache",
+          null,
+          el("c:ptCount", { val: range.categories.length }),
+          range.categories.map((category, index) =>
+            el("c:pt", { idx: index }, el("c:v", null, category)),
+          ),
+        ),
+      ),
+    ),
+  );
+}
+
+function categoryLabelsEnabled(
+  labels: false | ChartDataLabelSettings | undefined,
+): boolean {
+  return labels !== undefined && labels !== false && labels.category === true;
+}
+
 function dataLabels(
   group: ParsedChartGroup,
   series: ParsedChartSeries | ParsedScatterSeries,
   groupIndex: number,
   textStyles: ChartTextStyleXml,
   theme: ThemeContext,
+  categoryRange?: CategoryLabelRange,
 ): XmlElement | undefined {
   const seriesLabels = mergeDataLabels(group.dataLabels, series.dataLabels);
   const hasPosition =
@@ -580,6 +668,7 @@ function dataLabels(
     labels: ChartDataLabelSettings,
     textStyle: string | undefined,
     includeLeaderLines: boolean,
+    categoryField: boolean,
   ) => [
     labels.numberFormat === undefined
       ? undefined
@@ -599,7 +688,10 @@ function dataLabels(
     // Scatter showCatName displays the horizontal X value; category charts keep category labels.
     el("c:showCatName", {
       val:
-        (group.kind === "scatter" ? labels.xValue : labels.category) ?? false,
+        categoryRange === undefined
+          ? ((group.kind === "scatter" ? labels.xValue : labels.category) ??
+            false)
+          : false,
     }),
     el("c:showSerName", { val: false }),
     group.kind === "pie" || group.kind === "doughnut"
@@ -607,6 +699,9 @@ function dataLabels(
       : undefined,
     el("c:showBubbleSize", { val: false }),
     includeLeaderLines ? leaderLineSettings(labels) : undefined,
+    categoryField
+      ? categoryLabelFieldExtension(categoryLabelsEnabled(labels))
+      : undefined,
   ];
   const groupStyle = textStyles.groupDataLabels?.get(groupIndex);
   const pointBase = seriesLabels === false ? {} : seriesLabels;
@@ -639,7 +734,7 @@ function dataLabels(
           "c:dLbl",
           null,
           el("c:idx", { val: index }),
-          settings(effective, style, false),
+          settings(effective, style, false, categoryRange !== undefined),
         ),
       ];
     },
@@ -654,7 +749,12 @@ function dataLabels(
   if (base === false) {
     return el("c:dLbls", null, el("c:delete", { val: true }));
   }
-  return el("c:dLbls", null, pointLabels, settings(base, groupStyle, true));
+  return el(
+    "c:dLbls",
+    null,
+    pointLabels,
+    settings(base, groupStyle, true, categoryRange !== undefined),
+  );
 }
 
 function seriesShape(
@@ -775,6 +875,82 @@ function trendlineXml(value: ChartTrendline, theme: ThemeContext): XmlElement {
   );
 }
 
+type SeriesCells = {
+  /** Zero-based worksheet category column, matching columnName. */
+  readonly categoryColumn: number;
+  /** Zero-based worksheet value column; also holds the series name in row 1. */
+  readonly valueColumn: number;
+  readonly rows: number;
+};
+
+/** Derives every workbook/formula range from the one resolved series category domain. */
+function seriesCells(
+  group: ParsedChartGroup,
+  series: ParsedChartSeries,
+): SeriesCells {
+  if (
+    group.kind !== "scatter" &&
+    group.data.kind === "independent-categories"
+  ) {
+    return {
+      categoryColumn: series.seriesIndex * 2,
+      valueColumn: series.seriesIndex * 2 + 1,
+      rows: series.categories.length,
+    };
+  }
+  return {
+    categoryColumn: 0,
+    valueColumn: series.seriesIndex + 1,
+    rows: series.categories.length,
+  };
+}
+
+function categoryLabelRange(
+  group: Extract<ParsedChartGroup, { kind: Exclude<ChartKind, "scatter"> }>,
+  series: ParsedChartSeries,
+  cells: SeriesCells,
+): CategoryLabelRange | undefined {
+  if (
+    group.kind !== "doughnut" ||
+    group.data.kind !== "independent-categories"
+  ) {
+    return undefined;
+  }
+  const seriesLabels = mergeDataLabels(group.dataLabels, series.dataLabels);
+  const pointBase = seriesLabels === false ? {} : seriesLabels;
+  const seriesNeedsLabels = categoryLabelsEnabled(seriesLabels);
+  const pointNeedsLabels = Object.values(series.points ?? {}).some((point) =>
+    categoryLabelsEnabled(mergeDataLabels(pointBase, point.dataLabels)),
+  );
+  if (!seriesNeedsLabels && !pointNeedsLabels) return undefined;
+  const categoryColumn = columnName(cells.categoryColumn);
+  return {
+    formula: `${sheet}!$${categoryColumn}$2:$${categoryColumn}$${cells.rows + 1}`,
+    categories: series.categories,
+  };
+}
+
+export function chartUsesCategoryLabelRange(parsed: ParsedChart): boolean {
+  for (const group of parsed.groups) {
+    if (group.kind === "scatter") continue;
+    if (
+      group.kind !== "doughnut" ||
+      group.data.kind !== "independent-categories"
+    ) {
+      continue;
+    }
+    for (const series of group.series) {
+      if (
+        categoryLabelRange(group, series, seriesCells(group, series)) !==
+        undefined
+      ) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
 function categoryChartSeries(
   group: Extract<ParsedChartGroup, { kind: Exclude<ChartKind, "scatter"> }>,
   series: ParsedChartSeries,
@@ -789,6 +965,11 @@ function categoryChartSeries(
   if (category === undefined || value === undefined) {
     throw new Error("Category chart series is missing workbook columns");
   }
+  const categoryRange = categoryLabelRange(group, series, {
+    categoryColumn: category.column,
+    valueColumn: value.column,
+    rows: series.categories.length,
+  });
   const kind: ChartKind = group.kind;
   const bar = kind === "column" || kind === "bar";
   const lineChart = kind === "line";
@@ -844,7 +1025,7 @@ function categoryChartSeries(
       ? el("c:explosion", { val: Math.round(seriesExplosion) })
       : undefined,
     points,
-    dataLabels(group, series, groupIndex, textStyles, theme),
+    dataLabels(group, series, groupIndex, textStyles, theme, categoryRange),
     (series.trendlines ?? []).map((trendline) =>
       trendlineXml(trendline, theme),
     ),
@@ -863,7 +1044,7 @@ function categoryChartSeries(
       null,
       strRef(
         rangeFormula(category.column, category.pointCount),
-        group.data.categories,
+        series.categories,
       ),
     ),
     el(
@@ -872,6 +1053,9 @@ function categoryChartSeries(
       numRef(rangeFormula(value.column, category.pointCount), series.values),
     ),
     lineChart ? el("c:smooth", { val: series.smooth ?? false }) : undefined,
+    categoryRange === undefined
+      ? undefined
+      : categoryRangeExtension(categoryRange),
   );
 }
 
@@ -1283,6 +1467,39 @@ const legendPositions = {
   right: "r",
 } as const;
 
+/**
+ * An independent-category doughnut legend explains the first declared ring's ordered
+ * category positions. Native legend entries beyond that domain would otherwise describe
+ * positions no first-ring category owns; delete only those trailing entries.
+ */
+function independentLegendEntries(parsed: ParsedChart): XmlElement[] {
+  if (parsed.groups.length !== 1) return [];
+  const group = parsed.groups[0]!;
+  if (
+    group.kind !== "doughnut" ||
+    group.data.kind !== "independent-categories"
+  ) {
+    return [];
+  }
+  const first = group.series[0];
+  if (first === undefined) return [];
+  const firstCount = first.categories.length;
+  const maximumCount = Math.max(
+    firstCount,
+    ...group.series.map((series) => series.categories.length),
+  );
+  return Array.from(
+    { length: Math.max(0, maximumCount - firstCount) },
+    (_, offset) =>
+      el(
+        "c:legendEntry",
+        null,
+        el("c:idx", { val: firstCount + offset }),
+        el("c:delete", { val: true }),
+      ),
+  );
+}
+
 function plotLayout(
   parsed: ParsedChart,
   box: { readonly width: number; readonly height: number },
@@ -1353,6 +1570,7 @@ export function chartPartXml(
               "c:legend",
               null,
               el("c:legendPos", { val: legendPositions[parsed.legend] }),
+              independentLegendEntries(parsed),
               el("c:overlay", { val: false }),
             ),
         el("c:plotVisOnly", { val: true }),
@@ -1441,96 +1659,46 @@ export function chartWorkbook(parsed: ParsedChart): Uint8Array {
   const officeRelationships = relationshipNamespace;
   const cells = chartCells(parsed);
   const channels = [...errorBarChannels(parsed, cells.nextColumn + 1).values()];
+  const independent =
+    parsed.groups.length === 1 &&
+    parsed.groups[0]!.kind === "doughnut" &&
+    parsed.groups[0]!.data.kind === "independent-categories";
   const headerCells: XmlElement[] = [inlineString("A1", " ")];
-  for (const { column } of [
-    ...cells.categoryColumns.values(),
-    ...cells.axislessCategoryColumns.values(),
-  ]) {
-    if (column !== 0) {
-      headerCells.push(inlineString(`${columnName(column)}1`, " "));
-    }
-  }
-  for (const group of parsed.groups) {
-    for (const series of group.series) {
-      const item = cells.series.get(series.seriesIndex);
-      if (item === undefined) {
+  if (independent) {
+    for (const item of parsed.series as readonly ParsedChartSeries[]) {
+      const itemCells = cells.series.get(item.seriesIndex);
+      if (itemCells?.value === undefined) {
         throw new Error(
-          `Chart series ${series.seriesIndex} is missing workbook columns`,
+          `Chart series ${item.seriesIndex} is missing workbook columns`,
         );
       }
       headerCells.push(
-        inlineString(`${columnName(item.nameColumn)}1`, series.name),
+        inlineString(`${columnName(itemCells.value.column)}1`, item.name),
       );
-      if (group.kind === "scatter" && item.y !== undefined) {
-        headerCells.push(inlineString(`${columnName(item.y.column)}1`, "Y"));
+    }
+  } else {
+    for (const { column } of [
+      ...cells.categoryColumns.values(),
+      ...cells.axislessCategoryColumns.values(),
+    ]) {
+      if (column !== 0) {
+        headerCells.push(inlineString(`${columnName(column)}1`, " "));
       }
     }
-  }
-  const rows = new Map<number, XmlElement[]>();
-  const addCell = (row: number, cell: XmlElement | undefined) => {
-    if (cell === undefined) return;
-    const items = rows.get(row);
-    if (items === undefined) rows.set(row, [cell]);
-    else items.push(cell);
-  };
-  const categoryRanges = [
-    ...cells.categoryColumns.values(),
-    ...cells.axislessCategoryColumns.values(),
-  ];
-  for (const { column, categories } of categoryRanges) {
-    for (const [index, category] of categories.entries()) {
-      const row = index + 2;
-      addCell(row, inlineString(`${columnName(column)}${row}`, category));
-    }
-  }
-  for (const group of parsed.groups) {
-    for (const series of group.series) {
-      const item = cells.series.get(series.seriesIndex);
-      if (item === undefined) continue;
-      if (group.kind === "scatter") {
-        const scatter = series as ParsedScatterSeries;
-        for (let index = 0; index < scatter.x.length; index += 1) {
-          const row = index + 2;
-          const x = scatter.x[index];
-          const y = scatter.y[index];
-          if (x !== null && x !== undefined && item.x !== undefined) {
-            addCell(
-              row,
-              el(
-                "c",
-                { r: `${columnName(item.x.column)}${row}` },
-                el("v", null, String(x)),
-              ),
-            );
-          }
-          if (y !== null && y !== undefined && item.y !== undefined) {
-            addCell(
-              row,
-              el(
-                "c",
-                { r: `${columnName(item.y.column)}${row}` },
-                el("v", null, String(y)),
-              ),
-            );
-          }
+    for (const group of parsed.groups) {
+      for (const series of group.series) {
+        const item = cells.series.get(series.seriesIndex);
+        if (item === undefined) {
+          throw new Error(
+            `Chart series ${series.seriesIndex} is missing workbook columns`,
+          );
         }
-        continue;
-      }
-      const category = series as ParsedChartSeries;
-      for (let index = 0; index < category.values.length; index += 1) {
-        const value = category.values[index];
-        if (value === null || value === undefined || item.value === undefined) {
-          continue;
-        }
-        const row = index + 2;
-        addCell(
-          row,
-          el(
-            "c",
-            { r: `${columnName(item.value.column)}${row}` },
-            el("v", null, String(value)),
-          ),
+        headerCells.push(
+          inlineString(`${columnName(item.nameColumn)}1`, series.name),
         );
+        if (group.kind === "scatter" && item.y !== undefined) {
+          headerCells.push(inlineString(`${columnName(item.y.column)}1`, "Y"));
+        }
       }
     }
   }
@@ -1540,23 +1708,133 @@ export function chartWorkbook(parsed: ParsedChart): Uint8Array {
     );
   }
   const header = el("row", { r: 1 }, headerCells);
-  for (const channel of channels) {
-    for (let index = 0; index < channel.pointCount; index += 1) {
-      const value = channel.values[index];
-      if (value === null || value === undefined) continue;
-      addCell(
-        index + 2,
-        el(
-          "c",
-          { r: `${columnName(channel.column - 1)}${index + 2}` },
-          el("v", null, String(value)),
-        ),
-      );
+  let rowXml: XmlElement[];
+  if (independent) {
+    const rows: XmlElement[][] = [];
+    const series = parsed.series as readonly ParsedChartSeries[];
+    const rowCount = Math.max(
+      0,
+      ...series.map((item) => item.categories.length),
+    );
+    for (let row = 0; row < rowCount; row += 1) rows.push([]);
+    for (const item of series) {
+      const itemCells = cells.series.get(item.seriesIndex);
+      if (itemCells?.category === undefined || itemCells.value === undefined) {
+        throw new Error(
+          `Chart series ${item.seriesIndex} is missing workbook columns`,
+        );
+      }
+      for (const [row, category] of item.categories.entries()) {
+        rows[row]!.push(
+          inlineString(
+            `${columnName(itemCells.category.column)}${row + 2}`,
+            category,
+          ),
+        );
+        const value = item.values[row];
+        if (value !== null && value !== undefined) {
+          rows[row]!.push(
+            el(
+              "c",
+              { r: `${columnName(itemCells.value.column)}${row + 2}` },
+              el("v", null, String(value)),
+            ),
+          );
+        }
+      }
     }
+    rowXml = rows.map((items, index) => el("row", { r: index + 2 }, items));
+  } else {
+    const rows = new Map<number, XmlElement[]>();
+    const addCell = (row: number, cell: XmlElement | undefined) => {
+      if (cell === undefined) return;
+      const items = rows.get(row);
+      if (items === undefined) rows.set(row, [cell]);
+      else items.push(cell);
+    };
+    const categoryRanges = [
+      ...cells.categoryColumns.values(),
+      ...cells.axislessCategoryColumns.values(),
+    ];
+    for (const { column, categories } of categoryRanges) {
+      for (const [index, category] of categories.entries()) {
+        const row = index + 2;
+        addCell(row, inlineString(`${columnName(column)}${row}`, category));
+      }
+    }
+    for (const group of parsed.groups) {
+      for (const series of group.series) {
+        const item = cells.series.get(series.seriesIndex);
+        if (item === undefined) continue;
+        if (group.kind === "scatter") {
+          const scatter = series as ParsedScatterSeries;
+          for (let index = 0; index < scatter.x.length; index += 1) {
+            const row = index + 2;
+            const x = scatter.x[index];
+            const y = scatter.y[index];
+            if (x !== null && x !== undefined && item.x !== undefined) {
+              addCell(
+                row,
+                el(
+                  "c",
+                  { r: `${columnName(item.x.column)}${row}` },
+                  el("v", null, String(x)),
+                ),
+              );
+            }
+            if (y !== null && y !== undefined && item.y !== undefined) {
+              addCell(
+                row,
+                el(
+                  "c",
+                  { r: `${columnName(item.y.column)}${row}` },
+                  el("v", null, String(y)),
+                ),
+              );
+            }
+          }
+          continue;
+        }
+        const category = series as ParsedChartSeries;
+        for (let index = 0; index < category.values.length; index += 1) {
+          const value = category.values[index];
+          if (
+            value === null ||
+            value === undefined ||
+            item.value === undefined
+          ) {
+            continue;
+          }
+          const row = index + 2;
+          addCell(
+            row,
+            el(
+              "c",
+              { r: `${columnName(item.value.column)}${row}` },
+              el("v", null, String(value)),
+            ),
+          );
+        }
+      }
+    }
+    for (const channel of channels) {
+      for (let index = 0; index < channel.pointCount; index += 1) {
+        const value = channel.values[index];
+        if (value === null || value === undefined) continue;
+        addCell(
+          index + 2,
+          el(
+            "c",
+            { r: `${columnName(channel.column - 1)}${index + 2}` },
+            el("v", null, String(value)),
+          ),
+        );
+      }
+    }
+    rowXml = [...rows.entries()]
+      .sort(([left], [right]) => left - right)
+      .map(([row, items]) => el("row", { r: row }, items));
   }
-  const rowXml = [...rows.entries()]
-    .sort(([left], [right]) => left - right)
-    .map(([row, items]) => el("row", { r: row }, items));
   const parts: Record<string, XmlElement> = {
     "[Content_Types].xml": el(
       "Types",

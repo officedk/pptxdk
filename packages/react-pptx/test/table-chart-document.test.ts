@@ -880,10 +880,9 @@ describe("table and chart authoring through the common document", () => {
               height: 200,
               groups: [
                 {
-                  kind: "doughnut",
+                  kind: "column",
                   data: {
                     kind: "independent-categories",
-                    categories: ["A"],
                   } as never,
                   series: [{ name: "S", values: [1] }],
                 },
@@ -894,7 +893,7 @@ describe("table and chart authoring through the common document", () => {
       ),
       (error: unknown) => {
         assert.ok(error instanceof BuildError);
-        assert.equal(error.diagnostics[0]?.code, "unsupported-chart-data");
+        assert.equal(error.diagnostics[0]?.code, "invalid-data");
         return true;
       },
     );

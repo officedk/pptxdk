@@ -76,6 +76,8 @@ export type {
   DeckAuthorProps,
   DeckNode,
   DoughnutChartGroup,
+  IndependentCategoryData,
+  IndependentCategorySeries,
   GroupAuthorProps,
   GroupNode,
   ImageAuthorProps,

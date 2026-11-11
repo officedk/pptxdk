@@ -1,4 +1,9 @@
 import type { DeclarationChild, DeclarationNode } from "#/declaration.ts";
+import {
+  insertDeclarationChild,
+  removeDeclarationChild,
+  replaceDeclarationProps,
+} from "#/document-internals.ts";
 import { createFormalBuild } from "#/formal-build.ts";
 import { snapshotValue } from "#/input-values.ts";
 import type { BuildOptions, BuildResult, CapabilityModule } from "#/types.ts";
@@ -89,6 +94,59 @@ export class CommonNode<
   /** Read-only child declaration view; node entries keep their editable identity. */
   get children(): readonly DeclarationChild[] {
     return this.#childrenView;
+  }
+
+  /**
+   * Adapter-only complete declaration replacement for one React commit.
+   *
+   * React commits all current JSX props, so absent fields must disappear instead of surviving from a
+   * previous commit as they would under the author-facing single-level update. Values still pass
+   * through the same field-level input snapshot as construction.
+   */
+  [replaceDeclarationProps](props: Readonly<Record<string, unknown>>): void {
+    this.#props = normalizeProps(props);
+  }
+
+  /**
+   * Adapter-only insertion or same-document reordering during React reconciliation.
+   *
+   * React may reposition an attached host instance with `insertBefore`; author `append` remains
+   * strict and the adapter reaches this operation explicitly. Text entries are accepted so rich-text
+   * containers can be reconciled in place without rebuilding their content.
+   */
+  [insertDeclarationChild](
+    child: DeclarationChild,
+    before?: DeclarationChild,
+  ): void {
+    if (before === child) return;
+    if (child instanceof CommonNode) {
+      if (child === this) {
+        throw new Error("Cannot attach a node inside its own descendant tree");
+      }
+      if (child.#parent === this) {
+        const index = this.#children.indexOf(child);
+        if (index !== -1) this.#children.splice(index, 1);
+      } else {
+        this.assertCanInsert(child, true);
+        const previousParent = child.#parent;
+        if (previousParent !== undefined) previousParent.#detach(child);
+        const owner = this.#owner;
+        if (owner !== undefined) child.#assignOwner(owner);
+        child.#parent = this;
+      }
+    } else {
+      const index = this.#children.indexOf(child);
+      if (index !== -1) this.#children.splice(index, 1);
+    }
+    const index = before === undefined ? -1 : this.#children.indexOf(before);
+    if (index === -1) this.#children.push(child);
+    else this.#children.splice(index, 0, child);
+    this.#refreshChildren();
+  }
+
+  /** Adapter-only removal during React reconciliation; author removal remains `remove()`. */
+  [removeDeclarationChild](child: DeclarationChild): void {
+    this.#detach(child);
   }
 
   /** Applies an ordinary property update; `style` and `children` use their dedicated operations. */

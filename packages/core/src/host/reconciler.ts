@@ -5,15 +5,22 @@ import {
   ConcurrentRoot,
 } from "react-reconciler/constants.js";
 
-import type { DeclarationContainer } from "#/declaration.ts";
+import { BuildError } from "#/diagnostics.ts";
+import { CommonContainer, CommonNode } from "#/document.ts";
 import {
-  declarationFromHost,
-  HostNode,
-  type HostChild,
+  attachHostChild,
+  createHostInstance,
+  createHostText,
+  detachHostChild,
   type HostContainer,
-  type HostText,
-  withoutChildren,
-} from "#/host/nodes.ts";
+  insertRootChild,
+  lockHandoffTree,
+  ReactTextNode,
+  removeRootChild,
+  updateHostInstance,
+  updateHostText,
+} from "#/host/document-adapter.ts";
+import type { Diagnostic } from "#/types.ts";
 
 type Props = Record<string, unknown>;
 
@@ -33,36 +40,19 @@ type FiberRoot = {
 
 const suspenseComponentTag = 13;
 
-function insertChild(
-  children: HostChild[],
-  child: HostChild,
-  before?: HostChild,
-): void {
-  const existing = children.indexOf(child);
-  if (existing !== -1) children.splice(existing, 1);
-  const index = before === undefined ? -1 : children.indexOf(before);
-  if (index === -1) children.push(child);
-  else children.splice(index, 0, child);
-}
-
-function removeChild(children: HostChild[], child: HostChild): void {
-  const index = children.indexOf(child);
-  if (index !== -1) children.splice(index, 1);
-}
-
 const hostTransitionContext = createContext<null>(null);
 
 const reconciler = Reconciler<
   string,
   Props,
   HostContainer,
-  HostNode,
-  HostText,
+  CommonNode,
+  ReactTextNode,
   never,
   never,
   never,
   never,
-  HostNode | HostText,
+  CommonNode | ReactTextNode,
   Record<string, never>,
   never,
   ReturnType<typeof setTimeout>,
@@ -87,52 +77,43 @@ const reconciler = Reconciler<
   NotPendingTransition: null,
   HostTransitionContext: hostTransitionContext,
 
-  createInstance(type, props, _root, _context, internalHandle) {
-    return new HostNode(type, withoutChildren(props), internalHandle);
+  createInstance(type, props) {
+    return createHostInstance(type, props);
   },
   createTextInstance(text) {
-    return { type: "#text", text, hidden: false };
+    return createHostText(text);
   },
   appendInitialChild(parent, child) {
-    insertChild(parent.children, child);
+    attachHostChild(parent, child);
   },
   appendChild(parent, child) {
-    insertChild(parent.children, child);
+    attachHostChild(parent, child);
   },
   appendChildToContainer(container, child) {
-    insertChild(container.children, child);
+    insertRootChild(container, child);
   },
   insertBefore(parent, child, before) {
-    insertChild(parent.children, child, before);
+    attachHostChild(parent, child, before);
   },
   insertInContainerBefore(container, child, before) {
-    insertChild(container.children, child, before);
+    insertRootChild(container, child, before);
   },
   removeChild(parent, child) {
-    removeChild(parent.children, child);
+    detachHostChild(parent, child);
   },
   removeChildFromContainer(container, child) {
-    removeChild(container.children, child);
+    removeRootChild(container, child);
   },
-  commitUpdate(instance, _type, _previous, next, internalHandle) {
-    instance.props = withoutChildren(next);
-    instance.fiber = internalHandle;
+  commitUpdate(instance, _type, _previous, next) {
+    updateHostInstance(instance, next);
   },
   commitTextUpdate(textInstance, _previous, next) {
-    textInstance.text = next;
+    updateHostText(textInstance, next);
   },
-  hideInstance(instance) {
-    instance.hidden = true;
-  },
-  hideTextInstance(textInstance) {
-    textInstance.hidden = true;
-  },
-  unhideInstance(instance) {
-    instance.hidden = false;
-  },
-  unhideTextInstance(textInstance) {
-    textInstance.hidden = false;
-  },
+  hideInstance() {},
+  hideTextInstance() {},
+  unhideInstance() {},
+  unhideTextInstance() {},
   resetTextContent() {},
   clearContainer(container) {
     container.children.length = 0;
@@ -196,14 +177,63 @@ function containsSuspendedBoundary(fiber: FiberNode | null): boolean {
   return false;
 }
 
+function diagnostic(path: string, code: string, message: string): Diagnostic {
+  return { severity: "error", path, code, message };
+}
+
+function isDeckNode(
+  node: CommonNode | undefined,
+): node is CommonContainer<"deck"> {
+  return node instanceof CommonContainer && node.type === "rp:deck";
+}
+
 /**
- * Runs a dedicated React root to completion, hands off a declaration snapshot, then unmounts and
- * cleans up. The returned tree no longer depends on React updates or the finished root.
+ * Selects the single completed Deck root before renderer teardown.
+ *
+ * Root-level checks mirror the formal declaration contract so an invalid React tree fails expansion
+ * with the same diagnostics instead of silently handing off a partial document.
  */
-export async function expandHostTree(
+function completedDocument(container: HostContainer): CommonContainer<"deck"> {
+  const nodes = container.children.filter(
+    (child): child is CommonNode => child instanceof CommonNode,
+  );
+  if (nodes.length !== 1 || !isDeckNode(nodes[0])) {
+    throw new BuildError([
+      diagnostic(
+        "deck",
+        "document-root",
+        "Build content must have exactly one Deck root component",
+      ),
+    ]);
+  }
+  if (
+    container.children.some(
+      (child) => !("props" in child) && child.text.trim() !== "",
+    )
+  ) {
+    throw new BuildError([
+      diagnostic(
+        "deck",
+        "unexpected-text",
+        "No text allowed outside the Deck root component",
+      ),
+    ]);
+  }
+  return nodes[0];
+}
+
+/**
+ * Runs a dedicated React root to completion and hands off the completed common document.
+ *
+ * React creates and updates the same `CommonNode` instances the caller receives. On completion the
+ * candidate is closed to further adapter edits before renderer teardown, then the root is unmounted
+ * and its listeners/adapter state are cleaned up. The document is returned only when both expansion
+ * and cleanup succeed; unhandled errors, cancellation, and cleanup failures reject the expansion.
+ */
+export async function expandReactDocument(
   element: ReactNode,
   signal?: AbortSignal,
-): Promise<DeclarationContainer> {
+): Promise<CommonContainer<"deck">> {
   if (signal?.aborted) throw signal.reason;
 
   const container: HostContainer = { children: [] };
@@ -260,7 +290,8 @@ export async function expandHostTree(
   let revision = 0;
   let operationError: unknown;
   let operationFailed = false;
-  let declaration: DeclarationContainer | undefined;
+  let candidate: CommonContainer<"deck"> | undefined;
+  let rootError: BuildError | undefined;
 
   const currentOutcome = (): Outcome => outcome;
   const onAbort = (): void => finish("cancelled", signal?.reason);
@@ -322,7 +353,13 @@ export async function expandHostTree(
     try {
       await completion;
       if (currentOutcome() === "completed") {
-        declaration = declarationFromHost(container);
+        try {
+          candidate = completedDocument(container);
+          lockHandoffTree(candidate);
+        } catch (error) {
+          if (error instanceof BuildError) rootError = error;
+          else throw error;
+        }
       }
     } catch (error) {
       operationFailed = true;
@@ -368,8 +405,9 @@ export async function expandHostTree(
     throw outcomeError;
   }
   if (cleanupError !== undefined) throw cleanupError.error;
-  if (finalOutcome !== "completed" || declaration === undefined) {
-    throw new Error("React expansion did not produce a declaration");
+  if (rootError !== undefined) throw rootError;
+  if (finalOutcome !== "completed" || candidate === undefined) {
+    throw new Error("React expansion did not produce a document");
   }
-  return declaration;
+  return candidate;
 }

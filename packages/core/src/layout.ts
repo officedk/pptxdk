@@ -144,6 +144,7 @@ const layoutProperties = [
   "aspectRatio",
   "gridTemplateColumns",
   "gridTemplateRows",
+  "gridAutoRows",
   "gridColumn",
   "gridRow",
   "justifyItems",
@@ -169,6 +170,7 @@ const containerProperties = [
 const gridContainerProperties = [
   "gridTemplateColumns",
   "gridTemplateRows",
+  "gridAutoRows",
   "justifyItems",
 ] as const;
 const gridItemProperties = ["gridColumn", "gridRow", "justifySelf"] as const;
@@ -337,6 +339,21 @@ function gridTracks(
       "Grid tracks must contain between 1 and 128 tracks",
     );
   }
+  return tracks;
+}
+
+function gridAutoRowTracks(
+  input: string | undefined,
+  path: string,
+): readonly GridTrack[] {
+  if (input === undefined) return [{ kind: "auto", min: 0 }];
+  const tracks = gridTracks(input, path, false);
+  if (tracks.length === 0)
+    fail(
+      path,
+      "invalid-grid-tracks",
+      "gridAutoRows must contain at least 1 track",
+    );
   return tracks;
 }
 
@@ -847,7 +864,11 @@ function readStyle(
     const candidate = value[key];
     if (candidate !== undefined) length(candidate, key, path, false);
   }
-  for (const key of ["gridTemplateColumns", "gridTemplateRows"] as const) {
+  for (const key of [
+    "gridTemplateColumns",
+    "gridTemplateRows",
+    "gridAutoRows",
+  ] as const) {
     if (value[key] !== undefined && typeof value[key] !== "string") {
       fail(path, "invalid-layout-style", `${key} must be a grid track string`);
     }
@@ -1920,6 +1941,7 @@ export class LayoutPass {
       true,
     );
     const rowTracks = gridTracks(node.style.gridTemplateRows, node.path, false);
+    const autoRowTracks = gridAutoRowTracks(node.style.gridAutoRows, node.path);
     const { placements, columns } = this.#gridPlacements(node, columnTracks);
     const columnGap = node.style.columnGap ?? node.style.gap ?? 0;
     const rowGap = node.style.rowGap ?? node.style.gap ?? 0;
@@ -1928,6 +1950,10 @@ export class LayoutPass {
       ...placements.map((placement) => placement.row + placement.rowSpan),
       0,
     );
+    // Explicit rows keep their template; rows beyond it cycle through gridAutoRows.
+    const rowTrackAt = (index: number): GridTrack =>
+      rowTracks[index] ??
+      autoRowTracks[(index - rowTracks.length) % autoRowTracks.length]!;
     const minContentWidth = (item: LayoutNode): number =>
       this.#minContentContribution(item, "width");
     const columnWidths = columns.map((track) =>
@@ -1982,15 +2008,12 @@ export class LayoutPass {
         .reduce((sum, width) => sum + width, 0) +
       columnGap * Math.max(0, span - 1);
     const rowHeights = Array.from({ length: rowCount }, (_, index) => {
-      const track = rowTracks[index] ?? { kind: "auto" as const, min: 0 };
+      const track = rowTrackAt(index);
       return track.kind === "px" ? track.value : track.min;
     });
     for (const placement of placements) {
       if (placement.rowSpan !== 1) continue;
-      const track = rowTracks[placement.row] ?? {
-        kind: "auto" as const,
-        min: 0,
-      };
+      const track = rowTrackAt(placement.row);
       if (track.kind === "px" || (track.kind === "fr" && !track.contentMinimum))
         continue;
       const margin = expandedSpacing(placement.node.style, "margin");
@@ -2025,7 +2048,7 @@ export class LayoutPass {
       const growable = Array.from(
         { length: placement.rowSpan },
         (_, index) => placement.row + index,
-      ).filter((index) => (rowTracks[index]?.kind ?? "auto") !== "px");
+      ).filter((index) => rowTrackAt(index).kind !== "px");
       if (growable.length === 0) continue;
       for (const index of growable) {
         rowHeights[index] =
@@ -2033,7 +2056,12 @@ export class LayoutPass {
       }
     }
     if (innerHeight !== undefined) {
-      distributeFrTracks(rowHeights, rowTracks, innerHeight, rowGap);
+      distributeFrTracks(
+        rowHeights,
+        Array.from({ length: rowCount }, (_, index) => rowTrackAt(index)),
+        innerHeight,
+        rowGap,
+      );
     }
     const spanHeightFinal = (start: number, span: number) =>
       rowHeights

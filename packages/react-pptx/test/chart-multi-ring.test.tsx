@@ -15,7 +15,11 @@ import {
   deck,
   slide,
 } from "@react-pptx/react-pptx/document";
-import { validatePptx, type FileChart } from "@react-pptx/validation";
+import {
+  validatePptx,
+  type FileChart,
+  type FileChartDataLabel,
+} from "@react-pptx/validation";
 import { strFromU8, unzipSync } from "fflate";
 import { describe, it } from "vitest";
 
@@ -108,6 +112,12 @@ function chartFrom(
   const chart = file.slides[0]?.objects[index]?.chart;
   assert.ok(chart);
   return chart;
+}
+
+function labelSettings(
+  value: false | FileChartDataLabel | undefined,
+): FileChartDataLabel | undefined {
+  return value === false ? undefined : value;
 }
 
 function chartXml(pptx: Uint8Array, chartNumber: number): string {
@@ -379,6 +389,131 @@ describe("multi-ring doughnut charts", () => {
 
     const file = await validatePptx(result.pptx);
     assert.deepEqual(file.errors, []);
+  });
+
+  it("applies 17 series and point formatting per independent ring", async () => {
+    const result = await build(
+      <Deck>
+        <Slide id="ring-format">
+          <Chart
+            id="ring-format"
+            x={0}
+            y={0}
+            width={640}
+            height={420}
+            groups={[
+              {
+                kind: "doughnut",
+                data: { kind: "independent-categories" },
+                holeSize: 60,
+                series: [
+                  {
+                    name: "Ring A",
+                    categories: ["Direct", "Partner", "Online"],
+                    values: [10, 20, 30],
+                    explosion: 12,
+                    dataLabels: { value: true, leaderLines: false },
+                    points: {
+                      1: {
+                        color: "#AA0000",
+                        explosion: 25,
+                        dataLabels: { numberFormat: "0.0%" },
+                      },
+                      2: { dataLabels: false },
+                    },
+                  },
+                  {
+                    name: "Ring B",
+                    categories: ["Direct", "Partner"],
+                    values: [5, null],
+                    dataLabels: false,
+                  },
+                ],
+              },
+            ]}
+          />
+        </Slide>
+      </Deck>,
+    );
+    const file = await validatePptx(result.pptx);
+    assert.deepEqual(file.errors, []);
+    const chart = chartFrom(file);
+    assert.equal(chart.series[0]?.explosion, 12);
+    assert.deepEqual(chart.series[0]?.pointExplosions, { 1: 25 });
+    assert.equal(chart.series[1]?.explosion, undefined);
+
+    const ringALabels = chart.seriesDataLabels?.[0];
+    const ringASettings = labelSettings(ringALabels?.dataLabels);
+    assert.equal(ringASettings?.value, true);
+    assert.equal(ringASettings?.leaderLines, false);
+    assert.equal(
+      labelSettings(ringALabels?.pointDataLabels?.[1])?.numberFormat,
+      "0.0%",
+    );
+    assert.equal(ringALabels?.pointDataLabels?.[2], false);
+    assert.equal(chart.seriesDataLabels?.[1]?.dataLabels, false);
+
+    const xml = chartXml(result.pptx, 1);
+    assert.equal((xml.match(/<c:ser>/gu) ?? []).length, 2);
+    assert.ok(xml.includes('<c:explosion val="12"/>'));
+    assert.ok(xml.includes('<c:explosion val="25"/>'));
+    assert.ok(xml.includes('<a:srgbClr val="AA0000"/>'));
+    assert.ok(xml.includes('<c:showLeaderLines val="0"/>'));
+    assert.ok(!xml.includes("<c:leaderLines"));
+    assert.ok(
+      xml.includes("Sheet1!$C$2:$C$3") && xml.includes("Sheet1!$D$2:$D$3"),
+    );
+
+    for (const [id, code, series] of [
+      [
+        "ring-explosion-overflow",
+        "invalid-chart-option",
+        {
+          name: "S",
+          categories: ["A"],
+          values: [1],
+          points: { 0: { explosion: 2_147_483_648 } },
+        },
+      ],
+      [
+        "ring-leader-lines-without-labels",
+        "invalid-data-labels",
+        {
+          name: "S",
+          categories: ["A"],
+          values: [1],
+          dataLabels: { leaderLines: true },
+        },
+      ],
+    ] as const) {
+      await assert.rejects(
+        build(
+          <Deck>
+            <Slide id={id}>
+              <Chart
+                id={id}
+                x={0}
+                y={0}
+                width={200}
+                height={120}
+                groups={[
+                  {
+                    kind: "doughnut",
+                    data: { kind: "independent-categories" },
+                    series: [series],
+                  },
+                ]}
+              />
+            </Slide>
+          </Deck>,
+        ),
+        (error: unknown) => {
+          assert.ok(error instanceof BuildError);
+          assert.equal(error.diagnostics[0]?.code, code);
+          return true;
+        },
+      );
+    }
   });
 
   it("rejects independent categories outside doughnut and malformed per-ring domains", async () => {

@@ -1117,6 +1117,10 @@ describe("chart combination and dual-axis topology", () => {
       ),
       "invalid-chart-axis-role",
     );
+    await expectError(
+      mutate((xml) => xml.replaceAll("222222", "4294967296")),
+      "invalid-chart-axis",
+    );
 
     const shared = await buildSingleChart({
       x: 10,

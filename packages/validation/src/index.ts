@@ -9,6 +9,7 @@ const presentationNamespace =
 const drawingNamespace =
   "http://schemas.openxmlformats.org/drawingml/2006/main";
 const chartNamespace = "http://schemas.openxmlformats.org/drawingml/2006/chart";
+const maximumChartAxisId = 4_294_967_295;
 const spreadsheetNamespace =
   "http://schemas.openxmlformats.org/spreadsheetml/2006/main";
 const tableUri = "http://schemas.openxmlformats.org/drawingml/2006/table";
@@ -3382,7 +3383,14 @@ function validateChart(
       first(axisNode, chartNamespace, "crossAx"),
       "val",
     );
-    if (id === undefined || id < 0 || crossAxisId === undefined) {
+    if (
+      id === undefined ||
+      id < 0 ||
+      id > maximumChartAxisId ||
+      crossAxisId === undefined ||
+      crossAxisId < 0 ||
+      crossAxisId > maximumChartAxisId
+    ) {
       issue(
         errors,
         chartPart,

@@ -1735,8 +1735,6 @@ export type ParsedChart = {
   readonly series: readonly (ParsedChartSeries | ParsedScatterSeries)[];
   /** Labels of the first category group; each group keeps its own domain. */
   readonly categories: readonly string[];
-  /** Largest point count across every series. */
-  readonly pointSlots: number;
   /** Largest point count among category series; scatter groups have no category slots. */
   readonly categoryPointSlots: number;
   readonly title?: ChartTitle;
@@ -2265,16 +2263,6 @@ export const chartCapability: ObjectCapabilityModule = {
       groups.find(
         (group): group is ParsedCategoryChartGroup => group.kind !== "scatter",
       )?.data.categories ?? [];
-    const pointSlots = Math.max(
-      0,
-      ...groups.flatMap((group) =>
-        group.series.map((item) =>
-          group.kind === "scatter"
-            ? (item as ParsedScatterSeries).x.length
-            : (item as ParsedChartSeries).values.length,
-        ),
-      ),
-    );
     const categoryPointSlots = Math.max(
       0,
       ...groups.flatMap((group) =>
@@ -2336,7 +2324,6 @@ export const chartCapability: ObjectCapabilityModule = {
       groups,
       series,
       categories,
-      pointSlots,
       categoryPointSlots,
       contract,
       rawProps: input.props,

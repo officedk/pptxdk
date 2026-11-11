@@ -64,6 +64,7 @@ describe("scoped author ids", () => {
     const slideQuery = authorId(document, "cover");
     const titleQuery = slideQuery.get("title");
     assert.equal(titleQuery.node, titleNode);
+    assert.equal(slideQuery.getNode("title"), titleNode);
     assert.match(
       titleQuery.path,
       /^deck\/slide\[cover\]\/box\/text\[title\]$/u,

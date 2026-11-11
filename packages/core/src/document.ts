@@ -471,7 +471,13 @@ export class AuthorQuery<Node extends CommonNode = CommonNode> {
     return authorPath(this.#node);
   }
 
-  /** Returns the single editable node named `id` in this scope. */
+  /** Returns the single editable node named `id` directly in this scope. */
+  getNode(id: string): CommonNode {
+    assertAuthorId(id);
+    return this.#one(id, "getNode").node;
+  }
+
+  /** Returns a scoped query handle for the single node named `id`, enabling stepwise lookups. */
   get(id: string): AuthorQuery {
     assertAuthorId(id);
     return this.#one(id, "get");

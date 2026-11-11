@@ -963,4 +963,198 @@ describe("native chart error bars", () => {
       documentFile.slides[0]?.objects[0]?.chart?.series[0]?.errorBars,
     );
   });
+
+  it("combines series trendlines with custom error bars through both entries", async () => {
+    const line: ChartProps = {
+      x: 0,
+      y: 0,
+      width: 420,
+      height: 260,
+      groups: [
+        {
+          kind: "line",
+          data: {
+            kind: "shared-categories",
+            categories: ["Alpha", "Alpha", "Beta"],
+          },
+          series: [
+            {
+              name: "Observed",
+              values: [1, null, 3],
+              trendlines: [
+                {
+                  type: "linear",
+                  displayEquation: true,
+                  displayRSquared: true,
+                },
+              ],
+              errorBars: {
+                type: "custom",
+                plus: [0.4, null, 0.8],
+                minus: [0.1, 0.2, 0.3],
+              },
+            },
+          ],
+        },
+      ],
+    };
+    const scatter: ChartProps = {
+      x: 0,
+      y: 280,
+      width: 420,
+      height: 260,
+      groups: [
+        {
+          kind: "scatter",
+          data: { kind: "xy" },
+          line: "straight",
+          series: [
+            {
+              name: "Sample",
+              x: [1, 2, null, 4],
+              y: [2, null, 4, 8],
+              trendlines: [{ type: "linear" }],
+              errorBars: {
+                x: {
+                  type: "custom",
+                  plus: [0.2, null, 0.4, 0.5],
+                  minus: [0.1, 0.2, 0.3, 0.4],
+                },
+                y: {
+                  type: "custom",
+                  include: "plus",
+                  plus: [0.5, null, 0.7, 0.9],
+                },
+              },
+            },
+          ],
+        },
+      ],
+    };
+    for (const entry of ["document", "react"] as const) {
+      let pptx: Uint8Array;
+      if (entry === "document") {
+        pptx = (
+          await buildDocument(
+            deck({ width: 480, height: 640 }).append(
+              documentSlide({ id: "combo-line" }).append(
+                documentChart({ ...line, id: "combo-line" }),
+              ),
+              documentSlide({ id: "combo-scatter" }).append(
+                documentChart({ ...scatter, id: "combo-scatter" }),
+              ),
+            ),
+          )
+        ).pptx;
+      } else {
+        pptx = (
+          await build(
+            <Deck width={480} height={640}>
+              <Slide id="combo-line">
+                <Chart {...line} id="combo-line" />
+              </Slide>
+              <Slide id="combo-scatter">
+                <Chart {...scatter} id="combo-scatter" />
+              </Slide>
+            </Deck>,
+          )
+        ).pptx;
+      }
+      const file = await validatePptx(pptx);
+      assert.deepEqual(file.errors, [], `${entry} schema and reader errors`);
+      const lineChart = file.slides[0]?.objects[0]?.chart;
+      const lineSeries = lineChart?.series[0];
+      assert.deepEqual(lineSeries?.values, [1, null, 3]);
+      assert.equal(lineSeries?.trendlines?.[0]?.type, "linear");
+      assert.equal(lineSeries?.trendlines?.[0]?.displayEquation, true);
+      assert.equal(lineSeries?.trendlines?.[0]?.displayRSquared, true);
+      const lineBar = lineSeries?.errorBars?.[0];
+      assert.equal(lineBar?.direction, "y");
+      assert.equal(lineBar?.type, "custom");
+      assert.deepEqual(lineBar?.plus, {
+        source: "reference",
+        formula: "Sheet1!$C$2:$C$4",
+        values: [0.4, null, 0.8],
+      });
+      assert.deepEqual(lineBar?.minus, {
+        source: "reference",
+        formula: "Sheet1!$D$2:$D$4",
+        values: [0.1, 0.2, 0.3],
+      });
+      assert.deepEqual(
+        lineChart?.embeddedWorkbook?.series[0]?.errorBars?.[0]?.plus?.values,
+        [0.4, null, 0.8],
+      );
+      assert.deepEqual(
+        lineChart?.embeddedWorkbook?.series[0]?.errorBars?.[0]?.minus?.values,
+        [0.1, 0.2, 0.3],
+      );
+      const scatterChart = file.slides[1]?.objects[0]?.chart;
+      const scatterSeries = scatterChart?.series[0];
+      assert.deepEqual(scatterSeries?.x, [1, 2, null, 4]);
+      assert.deepEqual(scatterSeries?.y, [2, null, 4, 8]);
+      assert.equal(scatterSeries?.trendlines?.[0]?.type, "linear");
+      assert.deepEqual(
+        scatterSeries?.errorBars?.map(({ direction }) => direction),
+        ["x", "y"],
+      );
+      const [xBar, yBar] = scatterSeries?.errorBars ?? [];
+      assert.deepEqual(xBar?.plus, {
+        source: "reference",
+        formula: "Sheet1!$D$2:$D$5",
+        values: [0.2, null, 0.4, 0.5],
+      });
+      assert.deepEqual(xBar?.minus, {
+        source: "reference",
+        formula: "Sheet1!$E$2:$E$5",
+        values: [0.1, 0.2, 0.3, 0.4],
+      });
+      assert.deepEqual(yBar?.plus, {
+        source: "reference",
+        formula: "Sheet1!$F$2:$F$5",
+        values: [0.5, null, 0.7, 0.9],
+      });
+      assert.equal(yBar?.minus, undefined);
+      assert.deepEqual(
+        scatterChart?.embeddedWorkbook?.series[0]?.errorBars?.[1]?.plus?.values,
+        [0.5, null, 0.7, 0.9],
+      );
+      const parts = chartParts(pptx);
+      for (const [index, dataMarker] of [
+        [1, "<c:cat>"],
+        [2, "<c:xVal>"],
+      ] as const) {
+        const xml = parts.chart(index);
+        const trendline = xml.indexOf("<c:trendline>");
+        const errBars = xml.indexOf("<c:errBars>");
+        const data = xml.indexOf(dataMarker);
+        const labels = xml.indexOf("<c:dLbls>");
+        assert.ok(
+          trendline >= 0 && trendline < errBars && errBars < data,
+          `${entry} chart${index} must serialize trendline before error bars before data`,
+        );
+        assert.ok(
+          labels === -1 || labels < trendline,
+          `${entry} chart${index} must serialize labels before trendline`,
+        );
+      }
+      const lineWorkbook = lineChart?.embeddedWorkbook?.part;
+      assert.ok(lineWorkbook);
+      const lineSheet = parts.workbook(lineWorkbook);
+      assert.ok(lineSheet.includes('r="C2"'));
+      assert.ok(!lineSheet.includes('r="C3"'));
+      assert.ok(lineSheet.includes('r="C4"'));
+      assert.ok(lineSheet.includes('r="D2"'));
+      assert.ok(lineSheet.includes('r="D3"'));
+      assert.ok(lineSheet.includes('r="D4"'));
+      const scatterWorkbook = scatterChart?.embeddedWorkbook?.part;
+      assert.ok(scatterWorkbook);
+      const scatterSheet = parts.workbook(scatterWorkbook);
+      assert.ok(scatterSheet.includes('r="D2"'));
+      assert.ok(!scatterSheet.includes('r="D3"'));
+      assert.ok(scatterSheet.includes('r="D4"'));
+      assert.ok(!scatterSheet.includes('r="F3"'));
+      assert.ok(scatterSheet.includes('r="F5"'));
+    }
+  });
 });

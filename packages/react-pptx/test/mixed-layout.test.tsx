@@ -969,7 +969,7 @@ describe("mixed layout, layering, and component reflow", () => {
     assert.equal(nativeKinds[2]?.filter((kind) => kind === "image").length, 2);
     assert.equal(
       reactFile.slides[0]?.objects.find(({ kind }) => kind === "chart")?.chart
-        ?.series[0]?.values[3],
+        ?.series[0]?.values?.[3],
       31,
     );
     assert.equal(

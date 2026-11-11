@@ -883,7 +883,7 @@ type SeriesCells = {
   readonly rows: number;
 };
 
-/** Derives every workbook/formula range from the one resolved series category domain. */
+/** Maps an independent-ring series to its columns for c15 label-range detection. */
 function seriesCells(
   group: ParsedChartGroup,
   series: ParsedChartSeries,

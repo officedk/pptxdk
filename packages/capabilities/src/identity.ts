@@ -1,4 +1,4 @@
-import { xmlEscape, type NativeLink } from "@react-pptx/core";
+import { xmlEscape, type NativeLink } from "@react-pptx/core/capability";
 
 /** Native object capabilities share the same click link representation, with relationships and actions pre-resolved by core. */
 export function nativeLinkXml(link: NativeLink | undefined): string {

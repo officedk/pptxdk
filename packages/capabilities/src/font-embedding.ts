@@ -4,7 +4,7 @@ import {
   CapabilityError,
   xmlEscape,
   type CapabilityPresentationContribution,
-} from "@react-pptx/core";
+} from "@react-pptx/core/capability";
 import * as fontkit from "fontkit";
 
 import { fontFamilyKey, matchesFontFamily } from "./font-family.ts";

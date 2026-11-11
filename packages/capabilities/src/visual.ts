@@ -9,7 +9,7 @@ import {
   type ResolvedColor,
   type ThemeContext,
   type VisualStyle as CoreVisualStyle,
-} from "@react-pptx/core";
+} from "@react-pptx/core/capability";
 
 import {
   presetGeometryNames,

@@ -1,4 +1,4 @@
-import { CapabilityError } from "@react-pptx/core";
+import { CapabilityError } from "@react-pptx/core/capability";
 
 export type PresetGeometry = {
   readonly type: "preset";

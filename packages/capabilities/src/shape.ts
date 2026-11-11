@@ -38,11 +38,8 @@ export { linearGradient, radialGradient } from "./visual.ts";
 export type { PaddingStyle, VisualStyle } from "@react-pptx/core";
 import { fontPresentationContributions } from "./font-embedding.ts";
 import type { MorphProps } from "./morph-api.ts";
-import {
-  motionAnnotations,
-  motionElement,
-  type MotionProps,
-} from "./motion-api.ts";
+import { motionAnnotations, type MotionProps } from "./motion-api.ts";
+import { motionElement } from "./motion-elements.ts";
 import {
   measureTextLayoutFromParagraphs,
   parseTextContent,

@@ -10,15 +10,10 @@ export const build = createBuilder([
 ]);
 
 export { Deck, formatBaseline, targets } from "@react-pptx/core";
-export { Box, type BoxProps } from "@react-pptx/capabilities/box";
+export { Box, type BoxProps } from "@react-pptx/capabilities/box-elements";
 export { Slide } from "./slide.ts";
-export {
-  font,
-  P,
-  Span,
-  Text,
-  textCapability,
-} from "@react-pptx/capabilities/text";
+export { font, textCapability } from "@react-pptx/capabilities/text";
+export { P, Span, Text } from "@react-pptx/capabilities/text-elements";
 export { createBuilder } from "@react-pptx/core";
 export {
   Step,
@@ -65,13 +60,15 @@ export type {
   FontOptions,
   FontReference,
   FontSize,
-  ParagraphProps,
   ParagraphStyle,
   TextAlignment,
   TextList,
-  TextProps,
   TextStyle,
 } from "@react-pptx/capabilities/text";
+export type {
+  ParagraphProps,
+  TextProps,
+} from "@react-pptx/capabilities/text-elements";
 export type { SlideProps } from "./slide.ts";
 export {
   transitionCapability,

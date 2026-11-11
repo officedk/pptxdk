@@ -34,6 +34,21 @@
       "types": "./dist/box.d.ts",
       "default": "./dist/box.js"
     },
+    "./box-elements": {
+      "source": "./src/box-elements.ts",
+      "types": "./dist/box-elements.d.ts",
+      "default": "./dist/box-elements.js"
+    },
+    "./document": {
+      "source": "./src/document.ts",
+      "types": "./dist/document.d.ts",
+      "default": "./dist/document.js"
+    },
+    "./font": {
+      "source": "./src/font.ts",
+      "types": "./dist/font.d.ts",
+      "default": "./dist/font.js"
+    },
     "./chart": {
       "source": "./src/chart.ts",
       "types": "./dist/chart.d.ts",

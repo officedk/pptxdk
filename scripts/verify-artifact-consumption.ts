@@ -671,7 +671,7 @@ try {
       'const motion = result.report.slides[0]?.capabilities?.["motion"] as { readonly steps?: readonly { readonly effects?: readonly unknown[] }[] } | undefined;',
       "const motionEffects = motion?.steps?.flatMap(({ effects = [] }) => effects) ?? [];",
       'const reportLink = result.report.slides[0]?.objects.find(({ authorId }) => authorId === "packed-next")?.link;',
-      'if (documentCapabilities.length !== 10 || headline?.box === undefined || headline.box.width <= 0 || motionEffects.length !== 3 || reportLink !== "slide:packed-details") throw new Error(JSON.stringify({ capabilities: documentCapabilities.length, headline, motionEffects, reportLink }));',
+      'if (documentCapabilities.length !== 11 || headline?.box === undefined || headline.box.width <= 0 || motionEffects.length !== 3 || reportLink !== "slide:packed-details") throw new Error(JSON.stringify({ capabilities: documentCapabilities.length, headline, motionEffects, reportLink }));',
       "const parts = unzipSync(result.pptx);",
       'const slideBytes = parts["ppt/slides/slide1.xml"];',
       'if (slideBytes === undefined) throw new Error("packed pure document did not write slide1.xml");',
@@ -1083,7 +1083,7 @@ try {
   };
   if (
     plainDocument.resolved?.endsWith("/dist/document.js") !== true ||
-    plainDocument.capabilities !== 10 ||
+    plainDocument.capabilities !== 11 ||
     plainDocument.slides !== 2 ||
     plainDocument.kinds?.includes("shape") !== true ||
     !plainDocument.kinds?.includes("image") ||

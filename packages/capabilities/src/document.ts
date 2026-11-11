@@ -51,6 +51,11 @@ import {
 } from "./motion-api.ts";
 import { motionCapability } from "./motion.ts";
 import {
+  createNotesNode,
+  type NotesDeclarationProps,
+} from "./notes-declaration.ts";
+import { notesCapability } from "./notes.ts";
+import {
   createShapeNode,
   shapeCapability,
   type ShapeDeclarationProps,
@@ -125,6 +130,7 @@ export type ChartAuthorProps = ChartProps;
 export type TableAuthorProps = TableDeclarationProps;
 export type RowAuthorProps = RowDeclarationProps;
 export type CellAuthorProps = CellDeclarationProps;
+export type NotesAuthorProps = NotesDeclarationProps;
 
 export type DeckNode = CommonContainer<"deck", DeckAuthorProps, TextStyle>;
 export type SlideNode = CommonContainer<
@@ -148,6 +154,7 @@ export type TextNode = RichTextContainer<
   TextAuthorProps,
   LayoutStyle & PaddingStyle & TextStyle & VisualStyle
 >;
+export type NotesNode = RichTextContainer<"notes", NotesAuthorProps, TextStyle>;
 export type ImageNode = CommonNode<
   "image",
   ImageDeclarationProps,
@@ -288,6 +295,24 @@ export function text(
   return node;
 }
 
+/**
+ * Creates a page-affiliated notes container. The node is attached to a Slide; rich-text content
+ * remains editable through the returned reference after attachment.
+ */
+export function notes(
+  content?: TextContent,
+  props?: NotesAuthorProps,
+): NotesNode;
+export function notes(...content: readonly TextContent[]): NotesNode;
+export function notes(
+  ...args: readonly (TextContent | NotesAuthorProps | undefined)[]
+): NotesNode {
+  const { content, props } = splitContent<NotesAuthorProps>(args);
+  const node = createNotesNode(props ?? {});
+  node.content(...content);
+  return node;
+}
+
 export function paragraph(
   content?: ParagraphContent,
   props?: ParagraphAuthorProps,
@@ -345,6 +370,7 @@ export const documentCapabilities = Object.freeze([
   groupCapability,
   imageCapability,
   motionCapability,
+  notesCapability,
   shapeCapability,
   slideBackgroundCapability,
   tableCapability,
@@ -352,13 +378,14 @@ export const documentCapabilities = Object.freeze([
   transitionCapability,
 ] as const);
 
-export { createMotionScopeHandle, font };
+export { createMotionScopeHandle, font, notesCapability };
 export type {
   MotionScopeAuthorProps,
   MotionScopeHandle,
   MotionStepAuthorProps,
 } from "./motion-api.ts";
 export type { LinkTarget, ParsedText, Transition };
+export type { NotesDeclarationProps } from "./notes-declaration.ts";
 
 export type {
   ChartAxis,

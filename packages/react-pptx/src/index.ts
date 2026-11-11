@@ -57,6 +57,8 @@ export {
   Span,
   SlideNumber,
   Text,
+  Notes,
+  notesCapability,
   textCapability,
   transitionCapability,
   transitions,
@@ -181,6 +183,9 @@ export type {
 export type { SlideProps } from "./slide.ts";
 export type {
   GroupProps,
+  NotesDeclarationProps,
+  NotesNode,
+  NotesProps,
   MorphKey,
   MorphProps,
   MorphScope,

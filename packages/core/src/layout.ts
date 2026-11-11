@@ -1437,6 +1437,8 @@ export class LayoutPass {
       const module = this.#modules.get(child.type);
       if (module !== undefined && "compileDeclaration" in module) {
         this.#themes.set(child, themeContext);
+        // An owned subtree belongs to its capability and never becomes layout content.
+        if (module.children === "owned") return;
         this.#appendChildren(
           child.children,
           childPath,

@@ -33,7 +33,11 @@ export function createBuilder(modules: readonly CapabilityModule[]) {
     validateOptions(options);
     try {
       const declaration = await expandHostTree(element, options.signal);
-      return formalBuild(declaration, options);
+      // Expansion locks its first terminal state before unmount cleanup runs. Passing the shared
+      // signal on would let a cleanup abort retroactively reject an already completed declaration;
+      // the sync formal build therefore starts without a fresh cancellation check here.
+      const { signal: _signal, ...formalOptions } = options;
+      return formalBuild(declaration, formalOptions);
     } catch (error) {
       if (options.signal?.aborted && error === options.signal.reason) {
         throw error;

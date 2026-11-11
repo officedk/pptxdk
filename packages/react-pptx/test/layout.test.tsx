@@ -787,6 +787,195 @@ describe("public layout entry", () => {
     }
   });
 
+  it("keeps zero-minimum fr implicit rows on their share when spanning content overflows", async () => {
+    const result = await build(
+      <Deck width={320} height={240}>
+        <Slide slideId="grid-auto-zero-fr-span">
+          <Box
+            testId="zero-fr-span-grid"
+            style={{
+              display: "grid",
+              width: 200,
+              height: 40,
+              gridTemplateColumns: "100px 100px",
+              gridAutoRows: "minmax(0px, 1fr)",
+            }}
+          >
+            <Shape
+              testId="zero-fr-spanning"
+              height={100}
+              style={{ gridColumn: 1, gridRow: "1 / span 2" }}
+            />
+            <Shape
+              testId="zero-fr-second"
+              style={{ gridColumn: 2, gridRow: 2 }}
+            />
+          </Box>
+        </Slide>
+      </Deck>,
+    );
+
+    const objects = new Map(
+      (result.report.slides[0]?.objects ?? []).flatMap(({ testId, box }) =>
+        testId === undefined || box === undefined
+          ? []
+          : [[testId, box] as const],
+      ),
+    );
+    assert.deepEqual(objects.get("zero-fr-spanning"), {
+      x: 0,
+      y: 0,
+      width: 100,
+      height: 100,
+    });
+    assert.deepEqual(objects.get("zero-fr-second"), {
+      x: 100,
+      y: 20,
+      width: 100,
+      height: 20,
+    });
+    assert.deepEqual(
+      result.report.diagnostics.map(({ code, path }) => ({ code, path })),
+      [
+        {
+          code: "grid-item-overflow",
+          path: "deck/slide[grid-auto-zero-fr-span]/box[zero-fr-span-grid]/shape[zero-fr-spanning]",
+        },
+      ],
+    );
+
+    const file = await validatePptx(result.pptx);
+    assert.deepEqual(file.errors, []);
+    const native = new Map(
+      (file.slides[0]?.objects ?? []).map(({ name, boxEmu }) => [name, boxEmu]),
+    );
+    for (const id of ["zero-fr-spanning", "zero-fr-second"]) {
+      const object = native.get(id);
+      const reported = objects.get(id);
+      assert.ok(object !== undefined && reported !== undefined);
+      assert.deepEqual(
+        {
+          x: object.x / 9525,
+          y: object.y / 9525,
+          width: object.width / 9525,
+          height: object.height / 9525,
+        },
+        reported,
+      );
+    }
+  });
+
+  it("grows auto and content-minimum fr rows but not fixed rows for spanning content", async () => {
+    const result = await build(
+      <Deck width={320} height={400}>
+        <Slide slideId="grid-auto-span-growth">
+          <Box
+            testId="growth-grid"
+            style={{
+              display: "grid",
+              width: 200,
+              height: 300,
+              gridTemplateColumns: "100px 100px",
+              gridTemplateRows: "auto",
+              gridAutoRows: "auto minmax(auto, 1fr) 30px",
+            }}
+          >
+            <Shape
+              testId="growth-span"
+              height={210}
+              style={{ gridColumn: 1, gridRow: "1 / span 4" }}
+            />
+            <Shape
+              testId="growth-auto-explicit"
+              height={10}
+              style={{ gridColumn: 2, gridRow: 1 }}
+            />
+            <Shape
+              testId="growth-auto-implicit"
+              height={10}
+              style={{ gridColumn: 2, gridRow: 2 }}
+            />
+            <Shape
+              testId="growth-fr-implicit"
+              height={10}
+              style={{ gridColumn: 2, gridRow: 3 }}
+            />
+            <Shape
+              testId="growth-fixed-implicit"
+              height={10}
+              style={{ gridColumn: 2, gridRow: 4 }}
+            />
+          </Box>
+        </Slide>
+      </Deck>,
+    );
+
+    const objects = new Map(
+      (result.report.slides[0]?.objects ?? []).flatMap(({ testId, box }) =>
+        testId === undefined || box === undefined
+          ? []
+          : [[testId, box] as const],
+      ),
+    );
+    assert.deepEqual(objects.get("growth-span"), {
+      x: 0,
+      y: 0,
+      width: 100,
+      height: 210,
+    });
+    assert.deepEqual(objects.get("growth-auto-explicit"), {
+      x: 100,
+      y: 0,
+      width: 100,
+      height: 10,
+    });
+    assert.deepEqual(objects.get("growth-auto-implicit"), {
+      x: 100,
+      y: 60,
+      width: 100,
+      height: 10,
+    });
+    assert.deepEqual(objects.get("growth-fr-implicit"), {
+      x: 100,
+      y: 120,
+      width: 100,
+      height: 10,
+    });
+    assert.deepEqual(objects.get("growth-fixed-implicit"), {
+      x: 100,
+      y: 270,
+      width: 100,
+      height: 10,
+    });
+    assert.deepEqual(result.report.diagnostics, []);
+
+    const file = await validatePptx(result.pptx);
+    assert.deepEqual(file.errors, []);
+    const native = new Map(
+      (file.slides[0]?.objects ?? []).map(({ name, boxEmu }) => [name, boxEmu]),
+    );
+    for (const id of [
+      "growth-span",
+      "growth-auto-explicit",
+      "growth-auto-implicit",
+      "growth-fr-implicit",
+      "growth-fixed-implicit",
+    ]) {
+      const object = native.get(id);
+      const reported = objects.get(id);
+      assert.ok(object !== undefined && reported !== undefined);
+      assert.deepEqual(
+        {
+          x: object.x / 9525,
+          y: object.y / 9525,
+          width: object.width / 9525,
+          height: object.height / 9525,
+        },
+        reported,
+      );
+    }
+  });
+
   it("retains fixed implicit rows and reports grid and text constraint failures", async () => {
     const result = await build(
       <Deck width={320} height={240}>

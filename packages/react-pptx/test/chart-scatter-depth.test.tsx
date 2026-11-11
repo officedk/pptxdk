@@ -322,6 +322,108 @@ describe("scatter depth", () => {
     assert.ok(chartXml(parts, 3).includes('<c:smooth val="0"/>'));
   });
 
+  it("disables connecting lines per series for marker-only scatter groups", async () => {
+    const series: ScatterChartGroup["series"] = [
+      {
+        name: "Observed",
+        x: [1, 2.5, 4, 8],
+        y: [3, 6, 9, 12],
+        color: "#336699",
+        marker: { symbol: "circle", size: 8 },
+        points: {
+          1: { marker: { symbol: "star", size: 11 }, color: "#AA5500" },
+        },
+      },
+      {
+        name: "Short",
+        x: [1.5, 6, 9],
+        y: [2, 5, 7],
+        marker: { symbol: "square", size: 7 },
+      },
+    ];
+    const chart = (
+      id: string,
+      x: number,
+      extra: Pick<ScatterChartGroup, "line" | "markers"> = {},
+    ) => {
+      const chartSeries =
+        extra.markers === false
+          ? series.map((item) => ({
+              name: item.name,
+              x: item.x,
+              y: item.y,
+              ...(item.color === undefined ? {} : { color: item.color }),
+            }))
+          : series;
+      return documentChart({
+        id,
+        x,
+        y: 10,
+        width: 300,
+        height: 220,
+        groups: [xyGroup(chartSeries, extra)],
+      });
+    };
+    const result = await buildDocument(
+      deck({ width: 1280, height: 260 }).append(
+        documentSlide({ id: "marker-only-lines" }).append(
+          chart("omitted", 10),
+          chart("explicit-false", 330, { line: false }),
+          chart("straight-markers", 650, { line: "straight" }),
+          chart("smooth-no-markers", 970, { line: "smooth", markers: false }),
+        ),
+      ),
+    );
+    const file = await validatePptx(result.pptx);
+    assert.deepEqual(file.errors, []);
+    const charts = file.slides[0]?.objects.map(({ chart }) => chart);
+    assert.deepEqual(
+      charts?.map((chart) => chart?.groups[0]?.scatterStyle),
+      ["marker", "marker", "lineMarker", "smooth"],
+    );
+    for (const chart of charts?.slice(0, 2) ?? []) {
+      assert.deepEqual(chart?.series[0]?.x, [1, 2.5, 4, 8]);
+      assert.deepEqual(chart?.series[0]?.y, [3, 6, 9, 12]);
+      assert.deepEqual(chart?.series[1]?.x, [1.5, 6, 9]);
+      assert.deepEqual(chart?.series[0]?.marker, {
+        symbol: "circle",
+        size: 8,
+      });
+      assert.deepEqual(chart?.series[1]?.marker, {
+        symbol: "square",
+        size: 7,
+      });
+    }
+
+    const parts = unzipSync(result.pptx);
+    const noLine = "<c:spPr><a:ln><a:noFill/></a:ln></c:spPr>";
+    for (const index of [1, 2]) {
+      const xml = chartXml(parts, index);
+      const seriesXml = xml.split("<c:ser>").slice(1);
+      assert.equal(seriesXml.length, 2);
+      for (const [seriesIndex, markerSeriesXml] of seriesXml.entries()) {
+        assert.ok(
+          markerSeriesXml.includes(noLine),
+          `chart ${index} series ${seriesIndex} should disable its line`,
+        );
+        assert.ok(
+          markerSeriesXml.indexOf(noLine) <
+            markerSeriesXml.indexOf("<c:marker>"),
+        );
+      }
+      assert.ok(
+        xml.includes('<c:idx val="1"/><c:marker><c:symbol val="star"/>'),
+      );
+      assert.ok(xml.includes('<a:srgbClr val="AA5500"/>'));
+    }
+    for (const index of [3, 4]) {
+      const xml = chartXml(parts, index);
+      assert.ok(!xml.includes(noLine));
+      assert.ok(xml.includes("<c:spPr><a:ln "));
+    }
+    assert.ok(chartXml(parts, 4).includes('<c:smooth val="1"/>'));
+  });
+
   it("keeps missing X and missing Y in their original slots with point formatting", async () => {
     const result = await buildDocument(
       deck({ width: 640, height: 400 }).append(
@@ -714,7 +816,7 @@ describe("scatter depth", () => {
       ],
       [
         "invalid-data",
-        { ...base, groups: [xyGroup([{ name: "S", x: [], y: [] }])] },
+        { ...base, groups: [xyGroup([{ name: "S", x: [], y: [3] }])] },
       ],
       [
         "invalid-data",
@@ -992,17 +1094,31 @@ describe("scatter depth", () => {
     );
   });
 
-  it("builds scatter series motion and rejects category granularity", async () => {
+  it("builds scatter series and category batch motion from original observation slots", async () => {
     const result = await build(
       <Deck width={480} height={300}>
         <Slide id="scatter-motion">
           <Chart
-            id="scatter-motion"
+            id="scatter-series-motion"
             x={10}
             y={10}
-            width={300}
+            width={220}
             height={220}
             enter={fade({ by: "series", duration: 400 })}
+            groups={[
+              xyGroup([
+                { name: "North", x: [1, 2, 4], y: [2, 4, 8] },
+                { name: "South", x: [1, 3], y: [5, 10] },
+              ]),
+            ]}
+          />
+          <Chart
+            id="scatter-category-motion"
+            x={240}
+            y={10}
+            width={220}
+            height={220}
+            enter={fade({ by: "category", duration: 400 })}
             groups={[
               xyGroup([
                 { name: "North", x: [1, 2, 4], y: [2, 4, 8] },
@@ -1022,29 +1138,10 @@ describe("scatter depth", () => {
     assert.ok(slideXml.includes('seriesIdx="1"'));
     assert.ok(slideXml.includes('bldStep="series"'));
     assert.ok(slideXml.includes('<a:bldChart bld="series">'));
-
-    await assert.rejects(
-      build(
-        <Deck width={480} height={300}>
-          <Slide id="scatter-category-motion">
-            <Chart
-              id="scatter-category-motion"
-              x={10}
-              y={10}
-              width={300}
-              height={220}
-              enter={fade({ by: "category", duration: 400 })}
-              groups={[xyGroup([{ name: "North", x: [1, 2], y: [2, 4] }])]}
-            />
-          </Slide>
-        </Deck>,
-      ),
-      (error: unknown) => {
-        assert.ok(error instanceof BuildError);
-        assert.equal(error.diagnostics[0]?.code, "invalid-motion-granularity");
-        return true;
-      },
-    );
+    assert.ok(slideXml.includes('categoryIdx="0"'));
+    assert.ok(slideXml.includes('categoryIdx="2"'));
+    assert.ok(slideXml.includes('bldStep="category"'));
+    assert.ok(slideXml.includes('<a:bldChart bld="category">'));
   });
 
   it("diagnoses marker-only span from actual scatter XML independently", async () => {

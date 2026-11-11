@@ -1637,6 +1637,774 @@ describe("object motion", () => {
     );
   });
 
+  it("expands all four chart orders from unequal XY point slots without matching coordinates", async () => {
+    const groups = [
+      {
+        kind: "scatter" as const,
+        data: { kind: "xy" as const },
+        series: [
+          { name: "Long", x: [3, null, 1], y: [5, 2, null] },
+          { name: "Short", x: [2, 4], y: [6, 8] },
+        ],
+      },
+    ];
+    const orders = [
+      "series",
+      "category",
+      "seriesElements",
+      "categoryElements",
+    ] as const;
+    const chart = (by: (typeof orders)[number], x: number) =>
+      createElement(Chart, {
+        id: `xy-${by}`,
+        name: `xy-${by}`,
+        x,
+        y: 10,
+        width: 200,
+        height: 200,
+        groups,
+        enter: fade({ by, duration: 100 }),
+      });
+    const result = await build(
+      createElement(
+        Deck,
+        { width: 900, height: 260 },
+        createElement(
+          Slide,
+          { id: "xy-chart-orders" },
+          chart("series", 10),
+          chart("category", 230),
+          chart("seriesElements", 450),
+          chart("categoryElements", 670),
+        ),
+      ),
+    );
+    const motion = result.report.slides[0]?.capabilities?.[
+      "motion"
+    ] as MotionObservation;
+    const expected = {
+      series: [
+        { step: "gridLegend", seriesIndex: -3, categoryIndex: -3 },
+        { step: "series", seriesIndex: 0, categoryIndex: -4 },
+        { step: "series", seriesIndex: 1, categoryIndex: -4 },
+      ],
+      category: [
+        { step: "gridLegend", seriesIndex: -3, categoryIndex: -3 },
+        { step: "category", seriesIndex: -4, categoryIndex: 0 },
+        { step: "category", seriesIndex: -4, categoryIndex: 1 },
+        { step: "category", seriesIndex: -4, categoryIndex: 2 },
+      ],
+      seriesElements: [
+        { step: "gridLegend", seriesIndex: -3, categoryIndex: -3 },
+        { step: "ptInSeries", seriesIndex: 0, categoryIndex: 0 },
+        { step: "ptInSeries", seriesIndex: 0, categoryIndex: 1 },
+        { step: "ptInSeries", seriesIndex: 0, categoryIndex: 2 },
+        { step: "ptInSeries", seriesIndex: 1, categoryIndex: 0 },
+        { step: "ptInSeries", seriesIndex: 1, categoryIndex: 1 },
+      ],
+      categoryElements: [
+        { step: "gridLegend", seriesIndex: -3, categoryIndex: -3 },
+        { step: "ptInCategory", seriesIndex: 0, categoryIndex: 0 },
+        { step: "ptInCategory", seriesIndex: 1, categoryIndex: 0 },
+        { step: "ptInCategory", seriesIndex: 0, categoryIndex: 1 },
+        { step: "ptInCategory", seriesIndex: 1, categoryIndex: 1 },
+        { step: "ptInCategory", seriesIndex: 0, categoryIndex: 2 },
+      ],
+    } satisfies Record<
+      (typeof orders)[number],
+      readonly {
+        readonly step: string;
+        readonly seriesIndex: number;
+        readonly categoryIndex: number;
+      }[]
+    >;
+    for (const by of orders) {
+      assert.deepEqual(
+        motion.steps[0]?.effects
+          .filter(({ target }) => target.authorId === `xy-${by}`)
+          .map(({ target, by: observedBy, startMs, endMs }) => ({
+            by: observedBy,
+            range: target.range,
+            startMs,
+            endMs,
+          })),
+        expected[by].map((range, index) => ({
+          by,
+          range: { type: "chart", ...range },
+          startMs: index * 100,
+          endMs: (index + 1) * 100,
+        })),
+        by,
+      );
+    }
+
+    const file = await validatePptx(result.pptx);
+    assert.deepEqual(file.errors, []);
+    const objects = file.slides[0]?.objects ?? [];
+    const nativeBuild = {
+      series: "series",
+      category: "category",
+      seriesElements: "seriesEl",
+      categoryElements: "categoryEl",
+    } as const;
+    for (const by of orders) {
+      const object = objects.find(({ name }) => name === `xy-${by}`);
+      assert.ok(object !== undefined);
+      assert.deepEqual(
+        file.slides[0]?.animations?.[0]?.effects
+          .filter(({ targetId }) => targetId === object.id)
+          .map(({ targetRange, nativeBuild: observedBuild }) => ({
+            nativeBuild: observedBuild,
+            range: targetRange,
+          })),
+        expected[by].map((range) => ({
+          nativeBuild: nativeBuild[by],
+          range: { type: "chart", ...range },
+        })),
+        by,
+      );
+    }
+  });
+
+  it("preserves duplicate category positions in all four chart orders", async () => {
+    const groups = [
+      {
+        kind: "column" as const,
+        data: {
+          kind: "shared-categories" as const,
+          categories: ["Q1", "Q1", "Q3"],
+        },
+        series: [
+          { name: "North", values: [1, 2, 3], color: "#1D4ED8" },
+          { name: "South", values: [4, 5, 6], color: "#B45309" },
+        ],
+      },
+    ];
+    const orders = [
+      "series",
+      "category",
+      "seriesElements",
+      "categoryElements",
+    ] as const;
+    const result = await build(
+      createElement(
+        Deck,
+        { width: 900, height: 260 },
+        createElement(
+          Slide,
+          { id: "duplicate-category-orders" },
+          ...orders.map((by, index) =>
+            createElement(Chart, {
+              id: `duplicate-${by}`,
+              name: `duplicate-${by}`,
+              x: 10 + index * 220,
+              y: 10,
+              width: 200,
+              height: 200,
+              groups,
+              enter: fade({ by, duration: 100 }),
+            }),
+          ),
+        ),
+      ),
+    );
+    const motion = result.report.slides[0]?.capabilities?.[
+      "motion"
+    ] as MotionObservation;
+    assert.deepEqual(
+      motion.steps[0]?.effects
+        .filter(({ target }) => target.authorId === "duplicate-seriesElements")
+        .map(({ target }) => target.range),
+      [
+        {
+          type: "chart",
+          step: "gridLegend",
+          seriesIndex: -3,
+          categoryIndex: -3,
+        },
+        {
+          type: "chart",
+          step: "ptInSeries",
+          seriesIndex: 0,
+          categoryIndex: 0,
+        },
+        {
+          type: "chart",
+          step: "ptInSeries",
+          seriesIndex: 0,
+          categoryIndex: 1,
+        },
+        {
+          type: "chart",
+          step: "ptInSeries",
+          seriesIndex: 0,
+          categoryIndex: 2,
+        },
+        {
+          type: "chart",
+          step: "ptInSeries",
+          seriesIndex: 1,
+          categoryIndex: 0,
+        },
+        {
+          type: "chart",
+          step: "ptInSeries",
+          seriesIndex: 1,
+          categoryIndex: 1,
+        },
+        {
+          type: "chart",
+          step: "ptInSeries",
+          seriesIndex: 1,
+          categoryIndex: 2,
+        },
+      ],
+    );
+    assert.deepEqual(
+      motion.steps[0]?.effects
+        .filter(
+          ({ target }) => target.authorId === "duplicate-categoryElements",
+        )
+        .map(({ target }) => target.range),
+      [
+        {
+          type: "chart",
+          step: "gridLegend",
+          seriesIndex: -3,
+          categoryIndex: -3,
+        },
+        {
+          type: "chart",
+          step: "ptInCategory",
+          seriesIndex: 0,
+          categoryIndex: 0,
+        },
+        {
+          type: "chart",
+          step: "ptInCategory",
+          seriesIndex: 1,
+          categoryIndex: 0,
+        },
+        {
+          type: "chart",
+          step: "ptInCategory",
+          seriesIndex: 0,
+          categoryIndex: 1,
+        },
+        {
+          type: "chart",
+          step: "ptInCategory",
+          seriesIndex: 1,
+          categoryIndex: 1,
+        },
+        {
+          type: "chart",
+          step: "ptInCategory",
+          seriesIndex: 0,
+          categoryIndex: 2,
+        },
+        {
+          type: "chart",
+          step: "ptInCategory",
+          seriesIndex: 1,
+          categoryIndex: 2,
+        },
+      ],
+    );
+    const file = await validatePptx(result.pptx);
+    assert.deepEqual(file.errors, []);
+  });
+
+  it("indexes same-kind chart groups by formal chart-wide series order", async () => {
+    const categories = ["A", "B", "C"];
+    const groups = [
+      {
+        kind: "column" as const,
+        data: { kind: "shared-categories" as const, categories },
+        series: [
+          { name: "Group 1A", values: [1, 2, 3], color: "#1D4ED8" },
+          { name: "Group 1B", values: [4, 5, 6], color: "#C2410C" },
+        ],
+      },
+      {
+        kind: "column" as const,
+        data: { kind: "shared-categories" as const, categories },
+        series: [
+          { name: "Group 2A", values: [7, 8, 9], color: "#0F766E" },
+          { name: "Group 2B", values: [10, 11, 12], color: "#7C3AED" },
+        ],
+      },
+    ];
+    const result = await build(
+      createElement(
+        Deck,
+        { width: 600, height: 300 },
+        createElement(
+          Slide,
+          { id: "multi-group-orders" },
+          createElement(Chart, {
+            id: "multi-group-series-elements",
+            name: "multi-group-series-elements",
+            x: 10,
+            y: 10,
+            width: 280,
+            height: 280,
+            groups,
+            enter: fade({ by: "seriesElements", duration: 100 }),
+          }),
+          createElement(Chart, {
+            id: "multi-group-category-elements",
+            name: "multi-group-category-elements",
+            x: 310,
+            y: 10,
+            width: 280,
+            height: 280,
+            groups,
+            enter: fade({ by: "categoryElements", duration: 100 }),
+          }),
+        ),
+      ),
+    );
+    const motion = result.report.slides[0]?.capabilities?.[
+      "motion"
+    ] as MotionObservation;
+    const seriesElements = motion.steps[0]?.effects
+      .filter(({ target }) => target.authorId === "multi-group-series-elements")
+      .map(({ target }) => target.range);
+    assert.deepEqual(seriesElements, [
+      {
+        type: "chart",
+        step: "gridLegend",
+        seriesIndex: -3,
+        categoryIndex: -3,
+      },
+      ...[0, 1, 2, 3].flatMap((seriesIndex) =>
+        [0, 1, 2].map((categoryIndex) => ({
+          type: "chart",
+          step: "ptInSeries",
+          seriesIndex,
+          categoryIndex,
+        })),
+      ),
+    ]);
+    const categoryElements = motion.steps[0]?.effects
+      .filter(
+        ({ target }) => target.authorId === "multi-group-category-elements",
+      )
+      .map(({ target }) => target.range);
+    assert.deepEqual(categoryElements, [
+      {
+        type: "chart",
+        step: "gridLegend",
+        seriesIndex: -3,
+        categoryIndex: -3,
+      },
+      ...[0, 1, 2].flatMap((categoryIndex) =>
+        [0, 1, 2, 3].map((seriesIndex) => ({
+          type: "chart",
+          step: "ptInCategory",
+          seriesIndex,
+          categoryIndex,
+        })),
+      ),
+    ]);
+    const file = await validatePptx(result.pptx);
+    assert.deepEqual(file.errors, []);
+  });
+
+  it("runs all four chart orders over the six category chart kinds through public build", async () => {
+    const orders = [
+      "series",
+      "category",
+      "seriesElements",
+      "categoryElements",
+    ] as const;
+    const kinds = ["column", "bar", "line", "area", "pie", "doughnut"] as const;
+    const categories = ["Q1", "Q2", "Q3"];
+    const data = { kind: "shared-categories" as const, categories };
+    const twoSeries = [
+      { name: "North", values: [1, 2, 3] },
+      { name: "South", values: [4, 5, 6] },
+    ];
+    const singleSeries = [{ name: "Only", values: [1, 2, 3] }];
+    const groupFor = (kind: (typeof kinds)[number]) => {
+      switch (kind) {
+        case "column":
+          return { kind, data, series: twoSeries } as const;
+        case "bar":
+          return { kind, data, series: twoSeries } as const;
+        case "line":
+          return { kind, data, series: twoSeries } as const;
+        case "area":
+          return { kind, data, series: twoSeries } as const;
+        case "pie":
+          return { kind, data, series: singleSeries } as const;
+        case "doughnut":
+          return { kind, data, series: singleSeries } as const;
+      }
+    };
+    const result = await build(
+      createElement(
+        Deck,
+        { width: 480, height: 270 },
+        ...kinds.flatMap((kind) =>
+          orders.map((by, orderIndex) =>
+            createElement(
+              Slide,
+              {
+                id: `${kind}-${by}`,
+              },
+              createElement(Chart, {
+                id: `${kind}-${by}`,
+                name: `${kind}-${by}`,
+                x: 10,
+                y: 10,
+                width: 460,
+                height: 250,
+                groups: [groupFor(kind)],
+                enter: fade({ by, duration: 100 + orderIndex }),
+              }),
+            ),
+          ),
+        ),
+      ),
+    );
+    for (const kind of kinds) {
+      for (const by of orders) {
+        const slide = result.report.slides.find(
+          ({ id }) => id === `${kind}-${by}`,
+        );
+        assert.ok(slide !== undefined, `${kind}/${by}`);
+        const motion = slide.capabilities?.["motion"] as
+          | MotionObservation
+          | undefined;
+        const ranges =
+          motion?.steps[0]?.effects.map(({ target }) => target.range) ?? [];
+        const singleValue = kind === "pie" || kind === "doughnut";
+        const expectedDataRanges =
+          by === "series"
+            ? singleValue
+              ? [{ step: "series", seriesIndex: 0, categoryIndex: -4 }]
+              : [
+                  { step: "series", seriesIndex: 0, categoryIndex: -4 },
+                  { step: "series", seriesIndex: 1, categoryIndex: -4 },
+                ]
+            : by === "category"
+              ? categories.map((_, categoryIndex) => ({
+                  step: "category",
+                  seriesIndex: -4,
+                  categoryIndex,
+                }))
+              : by === "seriesElements"
+                ? (singleValue ? [0] : [0, 1]).flatMap((seriesIndex) =>
+                    categories.map((_, categoryIndex) => ({
+                      step: "ptInSeries",
+                      seriesIndex,
+                      categoryIndex,
+                    })),
+                  )
+                : categories.flatMap((_, categoryIndex) =>
+                    (singleValue ? [0] : [0, 1]).map((seriesIndex) => ({
+                      step: "ptInCategory",
+                      seriesIndex,
+                      categoryIndex,
+                    })),
+                  );
+        assert.deepEqual(
+          ranges,
+          [
+            {
+              type: "chart",
+              step: "gridLegend",
+              seriesIndex: -3,
+              categoryIndex: -3,
+            },
+            ...expectedDataRanges.map((range) => ({ type: "chart", ...range })),
+          ],
+          `${kind}/${by}`,
+        );
+      }
+    }
+    const file = await validatePptx(result.pptx);
+    assert.deepEqual(file.errors, []);
+  });
+
+  it("validates point-level chart build steps, series identities, bounds, and groups", async () => {
+    const groups = [
+      {
+        kind: "scatter" as const,
+        data: { kind: "xy" as const },
+        series: [
+          { name: "Short", x: [1, 2], y: [3, 4] },
+          { name: "Long", x: [5, 6, 7], y: [8, 9, 10] },
+        ],
+      },
+    ];
+    const result = await build(
+      createElement(
+        Deck,
+        { width: 480, height: 270 },
+        createElement(
+          Slide,
+          { id: "point-chart-validation" },
+          createElement(Chart, {
+            id: "point-chart",
+            name: "point-chart",
+            x: 10,
+            y: 10,
+            width: 460,
+            height: 250,
+            groups,
+            enter: fade({ by: "seriesElements", duration: 100 }),
+          }),
+        ),
+      ),
+    );
+    const source = await validatePptx(result.pptx);
+    assert.deepEqual(source.errors, []);
+    const object = source.slides[0]?.objects.find(
+      ({ kind }) => kind === "chart",
+    );
+    assert.ok(object !== undefined);
+    const slidePath = "ppt/slides/slide1.xml";
+    const slideXml = strFromU8(unzipSync(result.pptx)[slidePath]!);
+    const buildElement = slideXml.match(
+      /<p:bldGraphic\b[\s\S]*?<\/p:bldGraphic>/u,
+    )?.[0];
+    assert.ok(buildElement !== undefined);
+    const groupMatch = buildElement.match(/grpId="(\d+)"/u);
+    assert.ok(groupMatch !== null);
+    const groupId = Number(groupMatch[1]);
+    const expectMutationError = async (
+      label: string,
+      mutate: (xml: string) => string,
+      code: string,
+      message: RegExp,
+    ): Promise<void> => {
+      const read = await validatePptx(rewriteSlideXml(result.pptx, mutate));
+      assert.ok(
+        read.errors.some(
+          (error) => error.code === code && message.test(error.message),
+        ),
+        `${label}: ${JSON.stringify(read.errors)}`,
+      );
+    };
+
+    await expectMutationError(
+      "nonexistent global series",
+      (xml) =>
+        xml.replaceAll(
+          'seriesIdx="0" categoryIdx="0" bldStep="ptInSeries"',
+          'seriesIdx="9" categoryIdx="0" bldStep="ptInSeries"',
+        ),
+      "invalid-animation-target-range",
+      /series that does not exist/u,
+    );
+    await expectMutationError(
+      "short series point beyond its own count",
+      (xml) =>
+        xml.replaceAll(
+          'seriesIdx="1" categoryIdx="2" bldStep="ptInSeries"',
+          'seriesIdx="0" categoryIdx="2" bldStep="ptInSeries"',
+        ),
+      "invalid-animation-target-range",
+      /exceeds points in native chart series/u,
+    );
+    await expectMutationError(
+      "point sentinel",
+      (xml) =>
+        xml.replaceAll(
+          'seriesIdx="0" categoryIdx="0" bldStep="ptInSeries"',
+          'seriesIdx="0" categoryIdx="-4" bldStep="ptInSeries"',
+        ),
+      "invalid-animation-target-range",
+      /non-negative series and category indices/u,
+    );
+    await expectMutationError(
+      "point step mismatched with build",
+      (xml) =>
+        xml.replace(
+          buildElement,
+          buildElement.replace('bld="seriesEl"', 'bld="categoryEl"'),
+        ),
+      "invalid-animation-target-range",
+      /does not match native chart build mode/u,
+    );
+    await expectMutationError(
+      "point step paired with category batch build",
+      (xml) =>
+        xml.replace(
+          buildElement,
+          buildElement.replace('bld="seriesEl"', 'bld="category"'),
+        ),
+      "invalid-animation-target-range",
+      /does not match native chart build mode/u,
+    );
+    await expectMutationError(
+      "point gridLegend sentinel",
+      (xml) =>
+        xml.replaceAll(
+          'seriesIdx="-3" categoryIdx="-3" bldStep="gridLegend"',
+          'seriesIdx="-4" categoryIdx="-3" bldStep="gridLegend"',
+        ),
+      "invalid-animation-target-range",
+      /native -3 sentinel/u,
+    );
+    await expectMutationError(
+      "point build group",
+      (xml) =>
+        xml.replace(
+          buildElement,
+          buildElement.replace(`grpId="${groupId}"`, 'grpId="777"'),
+        ),
+      "invalid-chart-build-group",
+      /actual chart animation effect/u,
+    );
+  });
+
+  it("rejects point granularity on non-charts and mixed granularity on one chart", async () => {
+    await assert.rejects(
+      build(
+        createElement(
+          Deck,
+          { width: 320, height: 180 },
+          createElement(
+            Slide,
+            { id: "non-chart-points" },
+            createElement(Shape, {
+              id: "not-a-chart",
+              x: 10,
+              y: 10,
+              width: 100,
+              height: 50,
+              enter: fade({ by: "seriesElements" }),
+            }),
+          ),
+        ),
+      ),
+      (error: unknown) => {
+        assert.ok(error instanceof BuildError);
+        assert.equal(error.diagnostics[0]?.code, "invalid-motion-granularity");
+        return true;
+      },
+    );
+    await assert.rejects(
+      build(
+        createElement(
+          Deck,
+          { width: 480, height: 270 },
+          createElement(
+            Slide,
+            { id: "mixed-points" },
+            createElement(Chart, {
+              id: "mixed-chart",
+              x: 10,
+              y: 10,
+              width: 460,
+              height: 250,
+              groups: [
+                {
+                  kind: "column",
+                  data: {
+                    kind: "shared-categories",
+                    categories: ["Q1", "Q2"],
+                  },
+                  series: [{ name: "Only", values: [1, 2] }],
+                },
+              ],
+              enter: [fade({ by: "series" }), fade({ by: "categoryElements" })],
+            }),
+          ),
+        ),
+      ),
+      (error: unknown) => {
+        assert.ok(error instanceof BuildError);
+        assert.equal(error.diagnostics[0]?.code, "invalid-motion-granularity");
+        return true;
+      },
+    );
+  });
+
+  it("completes every point range before a sequenced successor starts", async () => {
+    function PointSequenceDeck() {
+      const chartScope = useMotionScope();
+      const followerScope = useMotionScope();
+      return createElement(
+        Deck,
+        { width: 480, height: 270 },
+        createElement(
+          Slide,
+          { id: "point-sequence" },
+          createElement(
+            MotionScope,
+            { scope: chartScope },
+            createElement(Chart, {
+              id: "point-sequence-chart",
+              x: 10,
+              y: 10,
+              width: 460,
+              height: 200,
+              groups: [
+                {
+                  kind: "column",
+                  data: {
+                    kind: "shared-categories",
+                    categories: ["Q1", "Q2", "Q3"],
+                  },
+                  series: [
+                    { name: "North", values: [1, 2, 3] },
+                    { name: "South", values: [4, 5, 6] },
+                  ],
+                },
+              ],
+              enter: fade({ by: "categoryElements", duration: 100 }),
+            }),
+          ),
+          createElement(
+            MotionScope,
+            {
+              scope: followerScope,
+              startAt: after(chartScope.end, 25),
+            },
+            createElement(Shape, {
+              id: "point-sequence-follower",
+              x: 10,
+              y: 220,
+              width: 40,
+              height: 30,
+              enter: fade({ duration: 50 }),
+            }),
+          ),
+        ),
+      );
+    }
+    const result = await build(createElement(PointSequenceDeck));
+    const motion = result.report.slides[0]?.capabilities?.[
+      "motion"
+    ] as MotionObservation;
+    const chartEffects = motion.steps[0]?.effects.filter(
+      ({ target }) => target.authorId === "point-sequence-chart",
+    );
+    assert.deepEqual(
+      chartEffects?.map(({ startMs, endMs }) => [startMs, endMs]),
+      [
+        [0, 100],
+        [100, 200],
+        [200, 300],
+        [300, 400],
+        [400, 500],
+        [500, 600],
+        [600, 700],
+      ],
+    );
+    assert.deepEqual(
+      motion.steps[0]?.effects
+        .filter(({ target }) => target.authorId === "point-sequence-follower")
+        .map(({ startMs, endMs }) => [startMs, endMs]),
+      [[725, 775]],
+    );
+  });
+
   it("associates chart builds with actual chart effects by target and group after native timing renumbering", async () => {
     const data = {
       categories: ["Q1", "Q2"],

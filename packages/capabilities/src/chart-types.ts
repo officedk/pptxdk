@@ -271,7 +271,10 @@ type ChartSeriesFormat = {
 
 /** Category chart series: one value per ordered group category position. */
 export type ChartSeries = ChartSeriesFormat & {
-  /** One numeric value per category position; null preserves a missing value. */
+  /**
+   * One numeric value per category position; null preserves a missing value. An empty array is
+   * valid only when the group also declares no categories, and keeps the series without points.
+   */
   readonly values: readonly (number | null)[];
   /** Whether the line uses the native smoothing flag; applies only to line charts. */
   readonly smooth?: boolean;
@@ -314,7 +317,8 @@ export type ScatterChartPoint = Omit<ChartPoint, "explosion" | "dataLabels"> & {
  * Scatter series with independent numeric X/Y observations.
  *
  * X and Y share one observation slot at each array position. Either coordinate may be null
- * without changing the slot, its point formatting, or the other coordinate.
+ * without changing the slot, its point formatting, or the other coordinate. Both arrays may be
+ * empty to declare a series without observations.
  */
 export type ScatterChartSeries = Omit<
   ChartSeriesFormat,
@@ -341,6 +345,10 @@ export type ScatterChartSeries = Omit<
  */
 export type SharedCategoryData = {
   readonly kind: "shared-categories";
+  /**
+   * Ordered category labels. An empty list declares no category positions; every series in the
+   * group must then also have empty values.
+   */
   readonly categories: readonly string[];
 };
 
@@ -498,6 +506,7 @@ export type ChartDataLabelSettings = ChartDataLabels & {
 
 type ChartGroupBase = {
   readonly data: ChartGroupData;
+  /** At least one series; a named empty series keeps its declaration without observations. */
   readonly series: readonly ChartSeries[];
 };
 

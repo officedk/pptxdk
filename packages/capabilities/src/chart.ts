@@ -758,11 +758,8 @@ function sharedCategoryData(value: unknown, label: string): SharedCategoryData {
     );
   }
   const categories = value["categories"];
-  if (!Array.isArray(categories) || categories.length === 0) {
-    fail(
-      "invalid-data",
-      `${label}.categories must contain at least one category`,
-    );
+  if (!Array.isArray(categories)) {
+    fail("invalid-data", `${label}.categories must be an array of categories`);
   }
   for (const [index, category] of categories.entries()) {
     if (typeof category !== "string") {
@@ -796,8 +793,8 @@ function coordinateList(
   value: unknown,
   label: string,
 ): readonly (number | null)[] {
-  if (!Array.isArray(value) || value.length === 0) {
-    fail("invalid-data", `${label} must contain at least one observation`);
+  if (!Array.isArray(value)) {
+    fail("invalid-data", `${label} must be an array of observations`);
   }
   for (const [index, coordinate] of value.entries()) {
     if (
@@ -1423,8 +1420,8 @@ function independentCategoryData(
 }
 
 function seriesCategories(value: unknown, label: string): readonly string[] {
-  if (!Array.isArray(value) || value.length === 0) {
-    fail("invalid-data", `${label} must contain at least one category`);
+  if (!Array.isArray(value)) {
+    fail("invalid-data", `${label} must be an array of categories`);
   }
   for (const [index, category] of value.entries()) {
     if (typeof category !== "string") {
@@ -3162,7 +3159,6 @@ export const chartCapability: ObjectCapabilityModule = {
     }
 
     const name = context.morphName ?? parsed.name ?? `Chart ${context.id - 1}`;
-    const firstKind = parsed.groups[0]!.kind;
     const annotations = motionAnnotations(parsed.rawProps, {
       kind: "chart",
       name,
@@ -3170,12 +3166,13 @@ export const chartCapability: ObjectCapabilityModule = {
         ? {}
         : { authorId: parsed.rawProps["id"] as string }),
       textBody: false,
-      filled: firstKind !== "line",
+      // Chart ranges own their gridLegend step; a chart has no whole-text fill/background flag.
+      filled: false,
       box,
       rotationDegrees: 0,
-      hasBackground: firstKind !== "line",
-      chartSeriesCount: parsed.series.length,
-      chartCategoryCount: parsed.categoryCount,
+      chartSeriesPointCounts: parsed.series.map((series) =>
+        "x" in series ? series.x.length : series.values.length,
+      ),
     });
     const { textStyles, resourceClaims, fontUses, warnings } =
       chartResourceClaims(parsed, context.theme, context.options.embedFonts);

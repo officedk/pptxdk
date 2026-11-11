@@ -1067,8 +1067,9 @@ type ParsedAnimationRecord = {
 };
 
 /**
- * Verifies the whole-object side of a mixed Shape projection: one object visibility set plus the
- * exact whole geometry roles, without paragraph, background, or chart targets.
+ * Verifies the whole-object side of a mixed Shape projection: one visibility set plus the exact
+ * whole geometry roles, all on either the object or the background primary role. Paragraph and
+ * chart targets are not allowed on this primary effect.
  */
 function validWholeShapeProjectionObject(
   preset: FileAnimationEffect["preset"],
@@ -1156,11 +1157,51 @@ function sameCompanionTiming(
  * plus same-target/same-build paragraph effects, with one synchronized geometry companion per
  * paragraph. Physical effects stay separate; this only checks the native role coverage.
  */
+function companionGroupKey(record: ParsedAnimationRecord): string {
+  const { effect } = record;
+  return JSON.stringify([
+    record.targetId,
+    record.nativeBuildGroupId ?? null,
+    record.stepIndex,
+    record.parentTimingId ?? null,
+    effect.preset,
+    effect.kind,
+    effect.delayMs,
+    effect.startAfter ?? null,
+    effect.durationMs,
+    effect.repeatCount ?? null,
+    effect.easing ?? null,
+    effect.by ?? null,
+    effect.intervalMs ?? null,
+    effect.nativeBuild ?? null,
+    effect.nativeBuildAnimBg ?? null,
+  ]);
+}
+
+function companionScopeKey(record: ParsedAnimationRecord): string {
+  return JSON.stringify([
+    record.targetId,
+    record.nativeBuildGroupId ?? null,
+    record.stepIndex,
+    record.parentTimingId ?? null,
+    record.effect.preset,
+    record.effect.kind,
+  ]);
+}
+
+/**
+ * Recognizes the explicit mixed Shape projection from actual timing containers: one whole entrance
+ * plus same-target/same-build paragraph effects, with one synchronized geometry companion per
+ * paragraph. Physical effects stay separate; companions are associated to each whole effect instance
+ * by its actual timing key and, for identical parameters, by their actual written order/multiplicity.
+ */
 function validateMixedWholeCompanionProjections(
   records: readonly ParsedAnimationRecord[],
   errors: ValidationIssue[],
   part: string,
 ): void {
+  const order = new Map(records.map((record, index) => [record, index]));
+  const groups = new Map<string, ParsedAnimationRecord[]>();
   for (const whole of records) {
     if (
       whole.effect.kind !== "entrance" ||
@@ -1202,81 +1243,146 @@ function validateMixedWholeCompanionProjections(
       );
       continue;
     }
-    const paragraphCount = whole.targetObject.text.paragraphs.length;
-    const companions = siblings.filter(
-      (record) =>
-        record !== whole &&
-        record.stepIndex === whole.stepIndex &&
-        record.parentTimingId === whole.parentTimingId &&
-        record.effect.preset === whole.effect.preset &&
-        record.effect.kind === "entrance" &&
-        record.effect.targetRange?.type === "paragraph" &&
-        !record.nativeBehaviors.some(({ behavior }) => behavior === "set"),
+    const key = companionGroupKey(whole);
+    const group = groups.get(key) ?? [];
+    group.push(whole);
+    groups.set(key, group);
+  }
+
+  for (const [key, group] of groups) {
+    const first = group[0];
+    if (first === undefined || first.targetObject?.text === undefined) continue;
+    const paragraphCount = first.targetObject.text.paragraphs.length;
+    const companions = records
+      .filter(
+        (record) =>
+          companionGroupKey(record) === key &&
+          record.effect.targetRange?.type === "paragraph" &&
+          !record.nativeBehaviors.some(({ behavior }) => behavior === "set"),
+      )
+      .sort((left, right) => (order.get(left) ?? 0) - (order.get(right) ?? 0));
+    const expectedStarts = Array.from(
+      { length: paragraphCount },
+      (_, index) => index,
     );
-    const used = new Set<ParsedAnimationRecord>();
-    for (let index = 0; index < paragraphCount; index += 1) {
-      const matches = companions.filter(
-        ({ effect }) =>
-          effect.targetRange?.type === "paragraph" &&
-          effect.targetRange.start === index &&
-          effect.targetRange.end === index,
+    const expectedTotal = group.length * paragraphCount;
+    for (const [instance, whole] of group.entries()) {
+      const chunk = companions.slice(
+        instance * paragraphCount,
+        (instance + 1) * paragraphCount,
       );
-      if (matches.length === 0) {
-        issue(
-          errors,
-          part,
-          "inconsistent-animation-target-range",
-          `Mixed whole Shape projection is missing geometry companion for paragraph ${index}`,
-        );
+      const starts = chunk.map(({ effect }) =>
+        effect.targetRange?.type === "paragraph"
+          ? effect.targetRange.start
+          : -1,
+      );
+      const ordered =
+        chunk.length === paragraphCount &&
+        starts.join(",") === expectedStarts.join(",");
+      if (!ordered) {
+        for (const index of expectedStarts) {
+          const matches = chunk.filter(
+            ({ effect }) =>
+              effect.targetRange?.type === "paragraph" &&
+              effect.targetRange.start === index &&
+              effect.targetRange.end === index,
+          );
+          if (matches.length === 0) {
+            issue(
+              errors,
+              part,
+              "inconsistent-animation-target-range",
+              `Mixed whole Shape projection is missing geometry companion for paragraph ${index} of effect instance ${instance + 1}`,
+            );
+          } else if (matches.length > 1) {
+            issue(
+              errors,
+              part,
+              "invalid-animation-projection-target",
+              `Mixed whole Shape projection has duplicate geometry companions for paragraph ${index} of effect instance ${instance + 1}`,
+            );
+          }
+        }
+        if (chunk.length === paragraphCount) {
+          issue(
+            errors,
+            part,
+            "invalid-animation-projection-target",
+            `Geometry companions for effect instance ${instance + 1} do not preserve their paragraph instance order`,
+          );
+        }
         continue;
       }
-      if (matches.length > 1) {
-        issue(
-          errors,
-          part,
-          "invalid-animation-projection-target",
-          `Mixed whole Shape projection has duplicate geometry companions for paragraph ${index}`,
-        );
-        for (const match of matches) used.add(match);
-        continue;
-      }
-      const companion = matches[0];
-      if (companion === undefined) continue;
-      used.add(companion);
-      if (!sameCompanionTiming(whole, companion)) {
-        issue(
-          errors,
-          part,
-          "invalid-animation-projection-target",
-          `Geometry companion for paragraph ${index} must share start, duration, repeat, easing, and build with the whole effect`,
-        );
-        continue;
-      }
-      if (
-        !validMixedCompanionGeometry(
-          whole.effect.preset,
-          whole.targetId,
-          index,
-          companion.nativeBehaviors,
-        )
-      ) {
-        issue(
-          errors,
-          part,
-          "invalid-animation-projection-target",
-          `Geometry companion for paragraph ${index} must contain complete and unique paragraph geometry without visibility or background`,
-        );
+      for (const index of expectedStarts) {
+        const companion = chunk[index];
+        if (companion === undefined) continue;
+        if (!sameCompanionTiming(whole, companion)) {
+          issue(
+            errors,
+            part,
+            "invalid-animation-projection-target",
+            `Geometry companion for paragraph ${index} of effect instance ${instance + 1} must share start, duration, repeat, easing, and build with that whole effect`,
+          );
+          continue;
+        }
+        if (
+          !validMixedCompanionGeometry(
+            whole.effect.preset,
+            whole.targetId,
+            index,
+            companion.nativeBehaviors,
+          )
+        ) {
+          issue(
+            errors,
+            part,
+            "invalid-animation-projection-target",
+            `Geometry companion for paragraph ${index} of effect instance ${instance + 1} must contain complete and unique paragraph geometry without visibility or background`,
+          );
+        }
       }
     }
-    for (const companion of companions) {
-      if (used.has(companion)) continue;
+    if (companions.length > expectedTotal) {
       issue(
         errors,
         part,
         "invalid-animation-projection-target",
-        "Mixed whole Shape projection has a geometry companion outside the complete paragraph range",
+        "Mixed whole Shape projection has geometry companions outside the complete effect instance coverage",
       );
     }
+  }
+
+  // A companion whose start/duration/repeat/easing does not match any whole instance is still a
+  // typed companion, not an unrelated effect; report it instead of silently treating it as missing.
+  const groupKeys = new Set(groups.keys());
+  const wholeScopes = new Set(
+    records
+      .filter(
+        (record) =>
+          record.effect.kind === "entrance" &&
+          (record.effect.targetRange === undefined ||
+            record.effect.targetRange.type === "paragraph"),
+      )
+      .map(companionScopeKey),
+  );
+  const reportedOrphans = new Set<ParsedAnimationRecord>();
+  for (const record of records) {
+    if (
+      record.effect.targetRange?.type !== "paragraph" ||
+      record.nativeBehaviors.some(({ behavior }) => behavior === "set") ||
+      !wholeScopes.has(companionScopeKey(record)) ||
+      groupKeys.has(companionGroupKey(record)) ||
+      reportedOrphans.has(record)
+    ) {
+      continue;
+    }
+    reportedOrphans.add(record);
+    issue(
+      errors,
+      part,
+      "invalid-animation-projection-target",
+      "Geometry companion must share start, duration, repeat, easing, and build with a whole effect instance",
+    );
   }
 }
 

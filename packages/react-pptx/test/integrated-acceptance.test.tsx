@@ -258,6 +258,7 @@ describe("integrated acceptance", () => {
     );
 
     const first = await build(expanded);
+    const firstReportSnapshot = structuredClone(first.report);
     const firstBytes = new Uint8Array(first.pptx);
     const firstSha = sha256(first.pptx);
     const firstRead = await validatePptx(first.pptx);
@@ -350,6 +351,7 @@ describe("integrated acceptance", () => {
     const second = await build(expanded);
     const secondRead = await validatePptx(second.pptx);
     assert.deepEqual(secondRead.errors, []);
+    assert.deepEqual(first.report, firstReportSnapshot);
     assert.equal(sha256(first.pptx), firstSha);
     assert.deepEqual(new Uint8Array(first.pptx), firstBytes);
     const rereadFirst = await validatePptx(first.pptx);
@@ -684,7 +686,14 @@ describe("integrated acceptance", () => {
       </Deck>,
     );
 
+    categories[0] = "Mutated";
+    actualValues[0] = 99;
+    customPlus[0] = 99;
+    customMinus[0] = 99;
+    panelBytes[0] = 0;
+
     const first = await build(expanded);
+    const firstReportSnapshot = structuredClone(first.report);
     const firstBytes = new Uint8Array(first.pptx);
     const firstSha = sha256(first.pptx);
     const firstRead = await validatePptx(first.pptx);
@@ -974,14 +983,11 @@ describe("integrated acceptance", () => {
         [0.2, 0.3, 0.4],
       ),
     });
-    categories[0] = "Mutated";
-    actualValues[0] = 99;
-    customPlus[0] = 99;
-    panelBytes[0] = 0;
 
     const second = await build(expanded);
     const secondRead = await validatePptx(second.pptx);
     assert.deepEqual(secondRead.errors, []);
+    assert.deepEqual(first.report, firstReportSnapshot);
     assert.equal(sha256(first.pptx), firstSha);
     assert.deepEqual(new Uint8Array(first.pptx), firstBytes);
     assert.deepEqual(
@@ -1280,6 +1286,7 @@ describe("integrated acceptance", () => {
     );
 
     const first = await build(expanded);
+    const firstReportSnapshot = structuredClone(first.report);
     const firstBytes = new Uint8Array(first.pptx);
     const firstSha = sha256(first.pptx);
     const firstRead = await validatePptx(first.pptx);
@@ -1409,6 +1416,7 @@ describe("integrated acceptance", () => {
     const second = await build(expanded);
     const secondRead = await validatePptx(second.pptx);
     assert.deepEqual(secondRead.errors, []);
+    assert.deepEqual(first.report, firstReportSnapshot);
     assert.equal(sha256(first.pptx), firstSha);
     assert.deepEqual(new Uint8Array(first.pptx), firstBytes);
     const rereadFirst = await validatePptx(first.pptx);

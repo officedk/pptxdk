@@ -713,13 +713,25 @@ describe("scatter depth", () => {
         chart?.seriesDataLabels?.find((labels) => labels.seriesIndex === index);
       const both = fileLabel(labelSettings(0)?.dataLabels);
       assert.deepEqual(
-        [both.value, both.xValue, both.position, both.numberFormat],
-        [true, true, "right", "0.0"],
+        [
+          both.value,
+          both.xValue,
+          both.position,
+          both.numberFormat,
+          both.percent,
+        ],
+        [true, true, "right", "0.0", false],
       );
       const yOnly = fileLabel(labelSettings(1)?.dataLabels);
-      assert.deepEqual([yOnly.value, yOnly.xValue], [true, false]);
+      assert.deepEqual(
+        [yOnly.value, yOnly.xValue, yOnly.percent],
+        [true, false, false],
+      );
       const xOnly = fileLabel(labelSettings(2)?.dataLabels);
-      assert.deepEqual([xOnly.value, xOnly.xValue], [false, true]);
+      assert.deepEqual(
+        [xOnly.value, xOnly.xValue, xOnly.percent],
+        [false, true, false],
+      );
       const overrides = labelSettings(3)?.pointDataLabels;
       assert.deepEqual(Object.keys(overrides ?? {}), ["0", "1", "2"]);
       const pointZero = fileLabel(overrides?.[0]);
@@ -733,8 +745,9 @@ describe("scatter depth", () => {
           override.xValue,
           override.position,
           override.numberFormat,
+          override.percent,
         ],
-        [true, true, "top", "0"],
+        [true, true, "top", "0", false],
       );
       const recovered = fileLabel(labelSettings(4)?.dataLabels);
       assert.deepEqual([recovered.value, recovered.xValue], [false, false]);
@@ -751,10 +764,13 @@ describe("scatter depth", () => {
       const seriesBlocks = xml.split("<c:ser>").slice(1);
       assert.ok(seriesBlocks[0]!.includes('<c:showVal val="1"/>'));
       assert.ok(seriesBlocks[0]!.includes('<c:showCatName val="1"/>'));
+      assert.ok(seriesBlocks[0]!.includes('<c:showPercent val="0"/>'));
       assert.ok(seriesBlocks[1]!.includes('<c:showVal val="1"/>'));
       assert.ok(seriesBlocks[1]!.includes('<c:showCatName val="0"/>'));
+      assert.ok(seriesBlocks[1]!.includes('<c:showPercent val="0"/>'));
       assert.ok(seriesBlocks[2]!.includes('<c:showVal val="0"/>'));
       assert.ok(seriesBlocks[2]!.includes('<c:showCatName val="1"/>'));
+      assert.ok(seriesBlocks[2]!.includes('<c:showPercent val="0"/>'));
       const pointBlocks = seriesBlocks[3]!.split("<c:dLbl>").slice(1);
       assert.ok(pointBlocks[0]!.includes('<c:idx val="0"/>'));
       assert.ok(pointBlocks[0]!.includes('<c:showCatName val="0"/>'));
@@ -765,6 +781,7 @@ describe("scatter depth", () => {
       assert.ok(
         pointBlocks[2]!.includes('<c:numFmt formatCode="0" sourceLinked="0"/>'),
       );
+      assert.ok(pointBlocks[2]!.includes('<c:showPercent val="0"/>'));
       assert.ok(pointBlocks[2]!.includes('<c:dLblPos val="t"/>'));
       assert.ok(seriesBlocks[4]!.includes("<c:dLbls>"));
       const recoveredBlocks = seriesBlocks[4]!.split("<c:dLbl>").slice(1);

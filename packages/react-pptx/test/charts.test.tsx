@@ -729,9 +729,9 @@ describe("native Cartesian charts", () => {
     assert.ok(columnXml.includes('<c:dLblPos val="inBase"/>'));
     assert.ok(columnXml.includes('<a:bodyPr anchor="ctr"/>'));
     assert.ok(columnXml.includes('<a:lnSpc><a:spcPts val="2000"/></a:lnSpc>'));
-    assert.ok(
-      !strFromU8(parts["ppt/charts/chart2.xml"]!).includes("showPercent"),
-    );
+    const barXml = strFromU8(parts["ppt/charts/chart2.xml"]!);
+    assert.ok(barXml.includes('<c:showPercent val="0"/>'));
+    assert.ok(!barXml.includes('<c:showPercent val="1"/>'));
     assert.ok(
       strFromU8(parts["ppt/charts/chart3.xml"]!).includes("<c:lineChart>"),
     );

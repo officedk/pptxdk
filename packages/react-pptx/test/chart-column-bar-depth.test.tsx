@@ -588,6 +588,7 @@ describe("column and bar depth", () => {
           dataLabels: {
             value: true,
             category: true,
+            percent: false,
             position: "outsideEnd",
             numberFormat: "0.0",
           },
@@ -595,6 +596,7 @@ describe("column and bar depth", () => {
             1: {
               value: true,
               category: true,
+              percent: false,
               numberFormat: "0.000",
               position: "insideEnd",
             },
@@ -607,6 +609,7 @@ describe("column and bar depth", () => {
           dataLabels: {
             value: false,
             category: true,
+            percent: false,
             position: "outsideEnd",
             numberFormat: "0",
           },
@@ -640,7 +643,9 @@ describe("column and bar depth", () => {
       assert.ok(
         seriesXml[2]!.includes('<c:numFmt formatCode="0" sourceLinked="0"/>'),
       );
-      assert.ok(!xml.includes("showPercent"));
+      assert.ok(seriesXml[0]!.includes('<c:showPercent val="0"/>'));
+      assert.ok(seriesXml[2]!.includes('<c:showPercent val="0"/>'));
+      assert.ok(!xml.includes('<c:showPercent val="1"/>'));
     }
   });
 

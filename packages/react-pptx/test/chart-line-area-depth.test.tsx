@@ -173,7 +173,13 @@ describe("line and area depth", () => {
         '<c:idx val="2"/><c:marker><c:symbol val="none"/></c:marker>',
       ),
     );
-    assert.ok(!xml.includes("<c:showPercent"));
+    const seriesXml = [...xml.matchAll(/<c:ser>(.*?)<\/c:ser>/gsu)].map(
+      (match) => match[1]!,
+    );
+    assert.equal(seriesXml.length, 2);
+    for (const series of seriesXml) {
+      assert.ok(series.includes('<c:showPercent val="0"/>'));
+    }
 
     const workbookPath = chart?.embeddedWorkbook?.part;
     assert.ok(workbookPath);
@@ -628,6 +634,7 @@ describe("line and area depth", () => {
           seriesIndex: 0,
           dataLabels: {
             numberFormat: "0.0",
+            percent: false,
             position: "left",
             value: true,
             category: true,
@@ -635,6 +642,7 @@ describe("line and area depth", () => {
           pointDataLabels: {
             1: {
               numberFormat: "0.00",
+              percent: false,
               position: "bottom",
               value: true,
               category: true,
@@ -646,6 +654,7 @@ describe("line and area depth", () => {
           seriesIndex: 1,
           dataLabels: {
             numberFormat: "0",
+            percent: false,
             position: "top",
             value: true,
             category: true,
@@ -695,6 +704,7 @@ describe("line and area depth", () => {
         seriesIndex: 0,
         dataLabels: {
           numberFormat: "0.0",
+          percent: false,
           value: true,
           category: false,
         },

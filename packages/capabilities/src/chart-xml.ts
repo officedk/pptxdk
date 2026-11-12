@@ -717,9 +717,13 @@ function dataLabels(
           : false,
     }),
     el("c:showSerName", { val: false }),
-    group.kind === "pie" || group.kind === "doughnut"
-      ? el("c:showPercent", { val: labels.percent ?? false })
-      : undefined,
+    // Persist percentage labels as disabled where the chart model cannot enable them.
+    el("c:showPercent", {
+      val:
+        group.kind === "pie" || group.kind === "doughnut"
+          ? (labels.percent ?? false)
+          : false,
+    }),
     el("c:showBubbleSize", { val: false }),
     includeLeaderLines ? leaderLineSettings(labels) : undefined,
     categoryField

@@ -24,6 +24,56 @@ function chartXml(parts: Unzipped, index: number): string {
   return strFromU8(parts[`ppt/charts/chart${index}.xml`]!);
 }
 
+function scatterAxisNumberFormat(xml: string, direction: "x" | "y"): string {
+  const scatter = xml
+    .split("<c:scatterChart>")[1]
+    ?.split("</c:scatterChart>")[0];
+  assert.ok(scatter);
+  const axisId = [...scatter.matchAll(/<c:axId val="(\d+)"\/>/gu)][
+    direction === "x" ? 0 : 1
+  ]?.[1];
+  assert.ok(axisId);
+  const axis = [...xml.matchAll(/<c:valAx>([\s\S]*?)<\/c:valAx>/gu)]
+    .map((match) => match[1]!)
+    .find((value) => value.includes(`<c:axId val="${axisId}"/>`));
+  assert.ok(axis);
+  const numberFormat = axis.match(
+    /<c:numFmt formatCode="([^"]+)" sourceLinked="([01])"\/>/u,
+  );
+  assert.ok(numberFormat);
+  return `${numberFormat[1]}/${numberFormat[2]}`;
+}
+
+function workbookCellXml(
+  workbook: Unzipped,
+  reference: string,
+): string | undefined {
+  const worksheet = strFromU8(workbook["xl/worksheets/sheet1.xml"]!);
+  return [...worksheet.matchAll(/<c\b[^>]*\/>|<c\b[^>]*>[\s\S]*?<\/c>/gu)]
+    .map((match) => match[0])
+    .find((cell) => cell.match(/(?:^|\s)r="([^"]+)"/u)?.[1] === reference);
+}
+
+function workbookCellNumberFormat(
+  workbook: Unzipped,
+  reference: string,
+): string | undefined {
+  const cell = workbookCellXml(workbook, reference);
+  if (cell === undefined) return undefined;
+  const styleIndex = Number(cell.match(/\bs="(\d+)"/u)?.[1] ?? 0);
+  const styles = strFromU8(workbook["xl/styles.xml"]!);
+  const cellXfs = styles.match(/<cellXfs\b[^>]*>([\s\S]*?)<\/cellXfs>/u)?.[1];
+  assert.ok(cellXfs);
+  const xf = [...cellXfs.matchAll(/<xf\b([^>]*)\/>/gu)][styleIndex]?.[1];
+  assert.ok(xf);
+  const numberFormatId = xf.match(/\bnumFmtId="(\d+)"/u)?.[1] ?? "0";
+  if (numberFormatId === "0") return "General";
+  return [...styles.matchAll(/<numFmt\b([^>]*)\/>/gu)]
+    .map((match) => match[1]!)
+    .find((attributes) => attributes.includes(`numFmtId="${numberFormatId}"`))
+    ?.match(/\bformatCode="([^"]+)"/u)?.[1];
+}
+
 async function rejectsWithCode(props: ChartProps, code: string): Promise<void> {
   const id = "invalid-scatter-chart";
   await assert.rejects(
@@ -656,7 +706,15 @@ describe("scatter depth", () => {
       groups: [
         xyGroup(
           [
-            { name: "Both", x: [1, 2, 3], y: [10, 20, 30] },
+            {
+              name: "Both",
+              x: [1, 2, 3, 4],
+              y: [10, 20, 30, 40],
+              points: {
+                2: { dataLabels: { xValue: false } },
+                3: { dataLabels: { numberFormat: "0.00" } },
+              },
+            },
             {
               name: "Y only",
               x: [4, 5],
@@ -676,7 +734,7 @@ describe("scatter depth", () => {
               points: {
                 0: { dataLabels: { xValue: false } },
                 1: { dataLabels: { value: false } },
-                2: { dataLabels: { numberFormat: "0", position: "top" } },
+                2: { dataLabels: { numberFormat: "0.00", position: "top" } },
               },
             },
             {
@@ -684,11 +742,14 @@ describe("scatter depth", () => {
               x: [13, 14],
               y: [15, 16],
               dataLabels: false,
-              points: { 1: { dataLabels: { xValue: true } } },
+              points: {
+                0: { dataLabels: { xValue: true, numberFormat: "0.00" } },
+                1: { dataLabels: { xValue: true } },
+              },
             },
             {
               name: "Missing coordinates",
-              x: [null, 12],
+              x: [null, 0],
               y: [13, null],
               dataLabels: { value: true, xValue: true },
             },
@@ -722,6 +783,10 @@ describe("scatter depth", () => {
         ],
         [true, true, "right", "0.0", false],
       );
+      const bothPoints = labelSettings(0)?.pointDataLabels;
+      assert.deepEqual(Object.keys(bothPoints ?? {}), ["2", "3"]);
+      assert.equal(fileLabel(bothPoints?.[2]).xValue, false);
+      assert.equal(fileLabel(bothPoints?.[3]).numberFormat, "0.00");
       const yOnly = fileLabel(labelSettings(1)?.dataLabels);
       assert.deepEqual(
         [yOnly.value, yOnly.xValue, yOnly.percent],
@@ -747,20 +812,29 @@ describe("scatter depth", () => {
           override.numberFormat,
           override.percent,
         ],
-        [true, true, "top", "0", false],
+        [true, true, "top", "0.00", false],
       );
       const recovered = fileLabel(labelSettings(4)?.dataLabels);
       assert.deepEqual([recovered.value, recovered.xValue], [false, false]);
+      assert.equal(
+        fileLabel(labelSettings(4)?.pointDataLabels?.[0]).numberFormat,
+        "0.00",
+      );
+      assert.equal(
+        fileLabel(labelSettings(4)?.pointDataLabels?.[0]).xValue,
+        true,
+      );
       assert.equal(
         fileLabel(labelSettings(4)?.pointDataLabels?.[1]).xValue,
         true,
       );
       const missing = fileLabel(labelSettings(5)?.dataLabels);
       assert.deepEqual([missing.value, missing.xValue], [true, true]);
-      assert.deepEqual(chart?.series[5]?.x, [null, 12]);
+      assert.deepEqual(chart?.series[5]?.x, [null, 0]);
       assert.deepEqual(chart?.series[5]?.y, [13, null]);
 
-      const xml = chartXml(unzipSync(pptx), 1);
+      const parts = unzipSync(pptx);
+      const xml = chartXml(parts, 1);
       const seriesBlocks = xml.split("<c:ser>").slice(1);
       assert.ok(seriesBlocks[0]!.includes('<c:showVal val="1"/>'));
       assert.ok(seriesBlocks[0]!.includes('<c:showCatName val="1"/>'));
@@ -779,14 +853,153 @@ describe("scatter depth", () => {
       assert.ok(pointBlocks[2]!.includes('<c:idx val="2"/>'));
       assert.ok(pointBlocks[2]!.includes('<c:showCatName val="1"/>'));
       assert.ok(
-        pointBlocks[2]!.includes('<c:numFmt formatCode="0" sourceLinked="0"/>'),
+        pointBlocks[2]!.includes(
+          '<c:numFmt formatCode="0.00" sourceLinked="0"/>',
+        ),
       );
       assert.ok(pointBlocks[2]!.includes('<c:showPercent val="0"/>'));
       assert.ok(pointBlocks[2]!.includes('<c:dLblPos val="t"/>'));
       assert.ok(seriesBlocks[4]!.includes("<c:dLbls>"));
       const recoveredBlocks = seriesBlocks[4]!.split("<c:dLbl>").slice(1);
-      assert.ok(recoveredBlocks[0]!.includes('<c:idx val="1"/>'));
+      assert.ok(recoveredBlocks[0]!.includes('<c:idx val="0"/>'));
       assert.ok(recoveredBlocks[0]!.includes('<c:showCatName val="1"/>'));
+      assert.ok(
+        recoveredBlocks[0]!.includes(
+          '<c:numFmt formatCode="0.00" sourceLinked="0"/>',
+        ),
+      );
+
+      const xCache = (seriesIndex: number) =>
+        seriesBlocks[seriesIndex]!.split("<c:xVal>")[1]!.split("</c:xVal>")[0]!;
+      assert.ok(xCache(0).includes("<c:formatCode>0.0</c:formatCode>"));
+      assert.ok(
+        xCache(0).includes(
+          '<c:pt idx="2" formatCode="General"><c:v>3</c:v></c:pt>',
+        ),
+      );
+      assert.ok(
+        xCache(0).includes(
+          '<c:pt idx="3" formatCode="0.00"><c:v>4</c:v></c:pt>',
+        ),
+      );
+      assert.ok(xCache(0).includes("<c:f>Sheet1!$B$2:$B$5</c:f>"));
+      assert.ok(xCache(1).includes("<c:formatCode>General</c:formatCode>"));
+      assert.ok(xCache(3).includes("<c:formatCode>0.0</c:formatCode>"));
+      assert.ok(
+        xCache(3).includes(
+          '<c:pt idx="0" formatCode="General"><c:v>8</c:v></c:pt>',
+        ),
+      );
+      assert.ok(
+        xCache(3).includes(
+          '<c:pt idx="2" formatCode="0.00"><c:v>10</c:v></c:pt>',
+        ),
+      );
+      assert.ok(xCache(4).includes("<c:formatCode>General</c:formatCode>"));
+      assert.ok(
+        xCache(4).includes(
+          '<c:pt idx="0" formatCode="0.00"><c:v>13</c:v></c:pt>',
+        ),
+      );
+      assert.ok(xCache(5).includes("<c:formatCode>0.0</c:formatCode>"));
+      assert.ok(xCache(5).includes("<c:f>Sheet1!$L$2:$L$3</c:f>"));
+      assert.ok(xCache(5).includes('<c:ptCount val="2"/>'));
+      assert.ok(!xCache(5).includes('<c:pt idx="0"'));
+      assert.ok(xCache(5).includes('<c:pt idx="1"><c:v>0</c:v></c:pt>'));
+      const yCache = seriesBlocks[0]!
+        .split("<c:yVal>")[1]!
+        .split("</c:yVal>")[0]!;
+      assert.ok(yCache.includes("<c:formatCode>General</c:formatCode>"));
+
+      const workbookPath = chart?.embeddedWorkbook?.part;
+      assert.ok(workbookPath);
+      const workbook = unzipSync(parts[workbookPath]!);
+      assert.equal(workbookCellNumberFormat(workbook, "B2"), "0.0");
+      assert.equal(workbookCellNumberFormat(workbook, "B4"), "General");
+      assert.equal(workbookCellNumberFormat(workbook, "B5"), "0.00");
+      assert.equal(workbookCellNumberFormat(workbook, "D2"), "General");
+      assert.equal(workbookCellNumberFormat(workbook, "C2"), "General");
+      assert.equal(workbookCellNumberFormat(workbook, "H2"), "General");
+      assert.equal(workbookCellNumberFormat(workbook, "H4"), "0.00");
+      assert.equal(workbookCellNumberFormat(workbook, "J2"), "0.00");
+      assert.equal(workbookCellNumberFormat(workbook, "J3"), "General");
+      assert.equal(workbookCellNumberFormat(workbook, "L2"), "0.0");
+      assert.equal(workbookCellNumberFormat(workbook, "L3"), "0.0");
+      assert.equal(workbookCellXml(workbook, "L2"), '<c r="L2" s="1"/>');
+      assert.equal(
+        workbookCellXml(workbook, "L3"),
+        '<c r="L3" s="1"><v>0</v></c>',
+      );
+      assert.deepEqual(chart?.series[5]?.x, [null, 0]);
+      assert.deepEqual(chart?.series[5]?.y, [13, null]);
+      assert.deepEqual(chart?.series[0]?.x, [1, 2, 3, 4]);
+      assert.deepEqual(chart?.embeddedWorkbook?.series[0]?.x, [1, 2, 3, 4]);
+      assert.deepEqual(chart?.embeddedWorkbook?.series[5]?.x, [null, 0]);
+      assert.deepEqual(chart?.embeddedWorkbook?.series[5]?.y, [13, null]);
+    }
+  });
+
+  it("isolates only projected scatter X formats from the default X axis", async () => {
+    const projectedSeries = {
+      name: "Projected X",
+      x: [1, 2],
+      y: [3, 4],
+      dataLabels: { value: false, xValue: true, numberFormat: "0.0" },
+    };
+    const projected: ChartProps = {
+      x: 10,
+      y: 10,
+      width: 340,
+      height: 240,
+      groups: [xyGroup([projectedSeries])],
+    };
+    const explicit: ChartProps = {
+      ...projected,
+      axes: {
+        horizontal: { kind: "value", numberFormat: "0.00" },
+        vertical: { kind: "value", numberFormat: "0.000" },
+      },
+      groups: [
+        xyGroup([projectedSeries], {
+          axes: { x: "horizontal", y: "vertical" },
+        }),
+      ],
+    };
+    const noProjection: ChartProps = {
+      ...projected,
+      groups: [
+        xyGroup([
+          {
+            name: "General X",
+            x: [1, 2],
+            y: [3, 4],
+            dataLabels: { value: false, xValue: true },
+          },
+        ]),
+      ],
+    };
+
+    for (const entry of ["document", "react"] as const) {
+      const projectedXml = chartXml(
+        unzipSync(await buildInEntry(entry, projected)),
+        1,
+      );
+      assert.equal(scatterAxisNumberFormat(projectedXml, "x"), "General/0");
+      assert.equal(scatterAxisNumberFormat(projectedXml, "y"), "General/1");
+
+      const explicitXml = chartXml(
+        unzipSync(await buildInEntry(entry, explicit)),
+        1,
+      );
+      assert.equal(scatterAxisNumberFormat(explicitXml, "x"), "0.00/0");
+      assert.equal(scatterAxisNumberFormat(explicitXml, "y"), "0.000/0");
+
+      const noProjectionXml = chartXml(
+        unzipSync(await buildInEntry(entry, noProjection)),
+        1,
+      );
+      assert.equal(scatterAxisNumberFormat(noProjectionXml, "x"), "General/1");
+      assert.equal(scatterAxisNumberFormat(noProjectionXml, "y"), "General/1");
     }
   });
 
@@ -1243,6 +1456,14 @@ describe("scatter depth", () => {
       ),
     );
     const parts = unzipSync(result.pptx);
+    const file = await validatePptx(result.pptx);
+    assert.deepEqual(file.errors, []);
+    const workbookPart =
+      file.slides[0]?.objects[0]?.chart?.embeddedWorkbook?.part;
+    assert.ok(workbookPart);
+    const workbook = unzipSync(parts[workbookPart]!);
+    const worksheetPath = "xl/worksheets/sheet1.xml";
+    const worksheet = strFromU8(workbook[worksheetPath]!);
     const path = "ppt/charts/chart1.xml";
     const original = chartXml(parts, 1);
 
@@ -1276,6 +1497,50 @@ describe("scatter depth", () => {
     );
     assert.ok(
       categoryErrors.errors.some(({ code }) => code === "invalid-chart-series"),
+    );
+
+    const badSharedString = worksheet.replace(
+      '<c r="B2"><v>1</v></c>',
+      '<c r="B2" t="s"><v>999</v></c>',
+    );
+    assert.notEqual(badSharedString, worksheet);
+    const sharedStringErrors = await validatePptx(
+      zipSync({
+        ...parts,
+        [workbookPart]: zipSync({
+          ...workbook,
+          [worksheetPath]: strToU8(badSharedString),
+        }),
+      }),
+    );
+    assert.ok(
+      sharedStringErrors.errors.some(
+        ({ code, message }) =>
+          code === "invalid-embedded-workbook-value" &&
+          message.includes("B2 shared string index is invalid"),
+      ),
+    );
+
+    const badNumber = worksheet.replace(
+      '<c r="B2"><v>1</v></c>',
+      '<c r="B2"><v>not-a-number</v></c>',
+    );
+    assert.notEqual(badNumber, worksheet);
+    const numberErrors = await validatePptx(
+      zipSync({
+        ...parts,
+        [workbookPart]: zipSync({
+          ...workbook,
+          [worksheetPath]: strToU8(badNumber),
+        }),
+      }),
+    );
+    assert.ok(
+      numberErrors.errors.some(
+        ({ code, message }) =>
+          code === "invalid-embedded-workbook-value" &&
+          message.includes("B2 is not a finite number"),
+      ),
     );
   });
 });

@@ -3412,11 +3412,13 @@ function readEmbeddedWorkbook(
       const reference = attribute(cell, "r");
       const type = attribute(cell, "t");
       const inline = first(cell, spreadsheetNamespace, "is");
+      const formula = first(cell, spreadsheetNamespace, "f");
+      const valueNode = first(cell, spreadsheetNamespace, "v");
       let value = "";
       if (type === "inlineStr") {
         value = inline === undefined ? "" : spreadsheetStringText(inline);
       } else if (type === "s") {
-        const text = first(cell, spreadsheetNamespace, "v")?.textContent ?? "";
+        const text = valueNode?.textContent ?? "";
         const index = text.trim() === "" ? Number.NaN : Number(text);
         const entry = Number.isInteger(index)
           ? sharedStrings?.[index]
@@ -3432,9 +3434,14 @@ function readEmbeddedWorkbook(
           value = entry;
         }
       } else {
-        value = first(cell, spreadsheetNamespace, "v")?.textContent ?? "";
+        value = valueNode?.textContent ?? "";
       }
-      if (reference !== "") cells.set(reference, value);
+      const blankNumericCell =
+        (type === "" || type === "n") &&
+        inline === undefined &&
+        formula === undefined &&
+        valueNode === undefined;
+      if (reference !== "" && !blankNumericCell) cells.set(reference, value);
     }
   }
 

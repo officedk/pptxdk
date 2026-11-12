@@ -211,6 +211,45 @@ describe("public document authoring entry", () => {
     assert.equal(classRun?.color, "#00AA00");
   });
 
+  it("accepts record-shaped class props as rich-text factory configuration", async () => {
+    class TextOptions {
+      id = "class-props";
+      x = 0;
+      y = 0;
+      width = 300;
+      height = 40;
+      style = { color: "#AA0000" };
+    }
+
+    const document = deck({ width: 480, height: 320 }).append(
+      slide({ id: "class-props" }).append(
+        text("Hello", new TextOptions()),
+        text("Hello", {
+          id: "plain-props",
+          x: 0,
+          y: 50,
+          width: 300,
+          height: 40,
+          style: { color: "#AA0000" },
+        }),
+      ),
+    );
+    const result = await build(document);
+    const file = await validatePptx(result.pptx);
+
+    assert.deepEqual(file.errors, []);
+    const helloTexts = file.slides[0]?.objects.filter(
+      ({ text: value }) => value?.text === "Hello",
+    );
+    assert.equal(helloTexts?.length, 2);
+    assert.deepEqual(
+      helloTexts?.map(
+        ({ text: value }) => value?.paragraphs[0]?.runs[0]?.color,
+      ),
+      ["#AA0000", "#AA0000"],
+    );
+  });
+
   it("creates common nodes, builds them through the formal build, and keeps old build results immutable", async () => {
     const title = text("Initial title").set({
       x: 0,

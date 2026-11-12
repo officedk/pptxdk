@@ -194,13 +194,15 @@ export type TextContent = RichTextItem | readonly RichTextItem[];
 export type ParagraphContent = RichTextItem | readonly RichTextItem[];
 export type SpanContent = RichTextItem | readonly RichTextItem[];
 
-function isPlainRecord(value: unknown): value is Record<string, unknown> {
+function isPropsRecord(value: unknown): value is Record<string, unknown> {
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
     return false;
   }
   if (value instanceof CommonNode) return false;
-  const prototype = Object.getPrototypeOf(value);
-  return prototype === Object.prototype || prototype === null;
+
+  // Factory props are structural records even when a caller uses a class to organize them.
+  // Built-in opaque values keep their own tag and remain in the rich-text content position.
+  return Object.prototype.toString.call(value) === "[object Object]";
 }
 
 function splitContent<Props extends object>(
@@ -210,7 +212,7 @@ function splitContent<Props extends object>(
   readonly props: Props | undefined;
 } {
   const last = args.at(-1);
-  const hasProps = isPlainRecord(last);
+  const hasProps = isPropsRecord(last);
   const values = hasProps ? args.slice(0, -1) : args;
   const content = values.flatMap((value) =>
     value === undefined

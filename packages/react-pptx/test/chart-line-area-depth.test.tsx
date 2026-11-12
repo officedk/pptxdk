@@ -306,6 +306,106 @@ describe("line and area depth", () => {
       assert.ok(worksheet.includes('r="B2"'), `chart ${index + 1} B2`);
     }
   });
+
+  it("rejects individual fill colors on area data points with a field diagnostic", async () => {
+    const id = "area-point-fill";
+
+    await assert.rejects(
+      buildDocument(
+        deck({ width: 240, height: 160 }).append(
+          documentSlide({ id }).append(
+            documentChart({
+              id,
+              x: 0,
+              y: 0,
+              width: 220,
+              height: 140,
+              groups: [
+                {
+                  kind: "area",
+                  data: {
+                    kind: "shared-categories",
+                    categories: ["Q1", "Q2", "Q3"],
+                  },
+                  series: [
+                    {
+                      name: "Actual",
+                      values: [10, 20, 30],
+                      points: { 2: { color: "accent2" } },
+                    },
+                  ],
+                },
+              ],
+            }),
+          ),
+        ),
+      ),
+      (error: unknown) => {
+        assert.ok(error instanceof BuildError);
+        assert.equal(error.diagnostics[0]?.code, "invalid-data");
+        assert.match(
+          error.diagnostics[0]?.path ?? "",
+          /Chart\.groups\[0\]\.series\[0\]\.points\[2\]\.color/u,
+        );
+        assert.equal(
+          error.diagnostics[0]?.message,
+          "Area chart data points do not support individual fill colors; set the series color instead.",
+        );
+        return true;
+      },
+    );
+  });
+
+  it("keeps area series fill and supported data point formatting", async () => {
+    const result = await build(
+      <Deck width={240} height={160}>
+        <Slide id="area-point-formatting">
+          <Chart
+            id="area-point-formatting"
+            x={0}
+            y={0}
+            width={220}
+            height={140}
+            groups={[
+              {
+                kind: "area",
+                data: {
+                  kind: "shared-categories",
+                  categories: ["Q1", "Q2", "Q3"],
+                },
+                dataLabels: { value: true },
+                series: [
+                  {
+                    name: "Actual",
+                    values: [10, 20, 30],
+                    color: "#336699",
+                    points: {
+                      2: {
+                        line: { color: "#445566", width: 2 },
+                        labelColor: "#112233",
+                        dataLabels: { numberFormat: "0.00" },
+                      },
+                    },
+                  },
+                ],
+              },
+            ]}
+          />
+        </Slide>
+      </Deck>,
+    );
+
+    const file = await validatePptx(result.pptx);
+    assert.deepEqual(file.errors, []);
+    assert.deepEqual(file.slides[0]?.objects[0]?.chart?.types, ["areaChart"]);
+    const xml = chartXml(unzipSync(result.pptx), 1);
+    assert.ok(xml.includes('<a:srgbClr val="336699"/>'));
+    assert.ok(xml.includes('<a:srgbClr val="445566"/>'));
+    assert.ok(xml.includes('<a:srgbClr val="112233"/>'));
+    assert.ok(xml.includes('<c:idx val="2"/>'));
+    assert.ok(xml.includes('<c:numFmt formatCode="0.00" sourceLinked="0"/>'));
+  });
+
   it("diagnoses marker, smooth, and missing-value combinations that the native chart kinds reject", async () => {
     const data = {
       kind: "shared-categories" as const,

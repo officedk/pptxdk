@@ -540,6 +540,13 @@ describe("native Cartesian charts", () => {
         { name: "Secondary", values: [2, 4, 8] },
       ],
     } as const;
+    const areaSeries = [
+      {
+        ...data.series[0],
+        points: { 1: { labelColor: "#FFFFFF" } },
+      },
+      data.series[1],
+    ] as const;
     const result = await build(
       <Deck width={640} height={480}>
         <Slide id="chart-types">
@@ -650,7 +657,7 @@ describe("native Cartesian charts", () => {
                   kind: "shared-categories",
                   categories: data.categories,
                 },
-                series: data.series,
+                series: areaSeries,
                 stacking: "percent",
               },
             ]}
@@ -685,9 +692,10 @@ describe("native Cartesian charts", () => {
     const expectedTypes = ["barChart", "barChart", "lineChart", "areaChart"];
     for (const [index, expectedType] of expectedTypes.entries()) {
       assert.deepEqual(charts?.[index]?.types, [expectedType]);
+      const expectedSeries = index === 3 ? areaSeries : data.series;
       assert.deepEqual(
         charts?.[index]?.series,
-        fileSeries(["FY1", "FY2", "FY3"], data.series),
+        fileSeries(["FY1", "FY2", "FY3"], expectedSeries),
       );
       assert.deepEqual(
         charts?.[index]?.embeddedWorkbook?.series,

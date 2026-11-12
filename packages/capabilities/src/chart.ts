@@ -186,8 +186,8 @@ const trendlineTypes = new Set<ChartTrendlineType>([
 ]);
 const cartesianKinds = new Set<ChartKind>(["column", "bar", "line", "area"]);
 
-function fail(code: string, message: string): never {
-  throw new CapabilityError(code, message);
+function fail(code: string, message: string, path?: string): never {
+  throw new CapabilityError(code, message, path);
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -1562,6 +1562,13 @@ function chartSeriesList(
           pointValue["color"],
           `Series "${name}" data point ${rawIndex}.color`,
         );
+        if (kind === "area" && pointColor !== undefined) {
+          fail(
+            "invalid-data",
+            "Area chart data points do not support individual fill colors; set the series color instead.",
+            `${seriesLabel}.points[${rawIndex}].color`,
+          );
+        }
         const pointLine = lineStyle(
           pointValue["line"],
           `Series "${name}" data point ${rawIndex}.line`,

@@ -7,6 +7,7 @@ import { fileURLToPath } from "node:url";
 import {
   box,
   build,
+  chart,
   createMorphScope,
   deck,
   font,
@@ -15,6 +16,8 @@ import {
   slideNumber,
   span,
   text,
+  type ChartSeries,
+  type ChartTrendline,
   type LinearGradient,
 } from "@react-pptx/react-pptx/document";
 import { validatePptx } from "@react-pptx/validation";
@@ -30,6 +33,184 @@ function slideXml(result: { readonly pptx: Uint8Array }, index = 1): string {
 }
 
 describe("public document authoring entry", () => {
+  it("reads chart series getters when taking declaration values", async () => {
+    let reads = 0;
+    let trendlineTypeReads = 0;
+    const sourceValues = [1, 2];
+    const sourceTrendline = {
+      get type(): "linear" {
+        trendlineTypeReads += 1;
+        return "linear";
+      },
+    } satisfies ChartTrendline;
+    const sourceSeries = {
+      name: "Observed",
+      get values() {
+        reads += 1;
+        return sourceValues;
+      },
+      trendlines: [sourceTrendline],
+    } satisfies ChartSeries;
+    const node = chart({
+      id: "getter-series",
+      x: 0,
+      y: 0,
+      width: 400,
+      height: 260,
+      groups: [
+        {
+          kind: "column",
+          data: { kind: "shared-categories", categories: ["A", "B"] },
+          series: [sourceSeries],
+        },
+      ],
+    });
+    const dataSeries = {
+      name: "Data property",
+      values: [7, 8],
+    } satisfies ChartSeries;
+    const dataNode = chart({
+      id: "data-series",
+      x: 480,
+      y: 0,
+      width: 400,
+      height: 260,
+      groups: [
+        {
+          kind: "column",
+          data: { kind: "shared-categories", categories: ["A", "B"] },
+          series: [dataSeries],
+        },
+      ],
+    });
+    sourceValues[0] = 9;
+    sourceSeries.name = "Changed outside";
+    dataSeries.values[0] = 70;
+
+    const document = deck({ width: 960, height: 320 }).append(
+      slide({ id: "getter-values" }).append(node, dataNode),
+    );
+    const result = await build(document);
+    const firstFile = await validatePptx(result.pptx);
+    const firstPptx = new Uint8Array(result.pptx);
+    const firstReport = structuredClone(result.report);
+    const firstQuery = structuredClone(
+      result.query.getSlide("getter-values").get("getter-series").observe(),
+    );
+
+    assert.equal(reads, 1);
+    assert.equal(trendlineTypeReads, 1);
+    assert.deepEqual(firstFile.errors, []);
+    assert.equal(
+      firstFile.slides[0]?.objects[0]?.chart?.series[0]?.name,
+      "Observed",
+    );
+    assert.deepEqual(
+      firstFile.slides[0]?.objects[0]?.chart?.series[0]?.values,
+      [1, 2],
+    );
+    assert.equal(
+      firstFile.slides[0]?.objects[0]?.chart?.series[0]?.trendlines?.[0]?.type,
+      "linear",
+    );
+    assert.deepEqual(
+      firstFile.slides[0]?.objects[1]?.chart?.series[0]?.values,
+      [7, 8],
+    );
+
+    let updateReads = 0;
+    const updatedValues = [3, 4];
+    const updatedSeries = {
+      name: "Updated",
+      get values() {
+        updateReads += 1;
+        return updatedValues;
+      },
+    } satisfies ChartSeries;
+    node.set({
+      groups: [
+        {
+          kind: "column",
+          data: { kind: "shared-categories", categories: ["A", "B"] },
+          series: [updatedSeries],
+        },
+      ],
+    });
+    updatedValues[0] = 8;
+    updatedSeries.name = "Changed after set";
+    const updated = await build(document);
+    const updatedFile = await validatePptx(updated.pptx);
+
+    assert.equal(updateReads, 1);
+    assert.deepEqual(updatedFile.errors, []);
+    assert.equal(
+      updatedFile.slides[0]?.objects[0]?.chart?.series[0]?.name,
+      "Updated",
+    );
+    assert.deepEqual(
+      updatedFile.slides[0]?.objects[0]?.chart?.series[0]?.values,
+      [3, 4],
+    );
+    assert.deepEqual(result.pptx, firstPptx);
+    assert.deepEqual(result.report, firstReport);
+    assert.deepEqual(
+      result.query.getSlide("getter-values").get("getter-series").observe(),
+      firstQuery,
+    );
+  });
+
+  it("takes nested getter and class style values at declaration time", async () => {
+    let getterReads = 0;
+    let sourceColor = "#AA0000";
+    const getterStyle = {
+      get color() {
+        getterReads += 1;
+        return sourceColor;
+      },
+      fontSize: 18,
+    };
+    class StyleConfig {
+      color = "#00AA00";
+      fontSize = 18;
+    }
+    const classStyle = new StyleConfig();
+    const document = deck({ width: 480, height: 320 }).append(
+      slide({ id: "style-values" }).append(
+        text("Getter style", {
+          id: "getter-style",
+          x: 0,
+          y: 0,
+          width: 300,
+          height: 40,
+          style: getterStyle,
+        }),
+        text("Class style", {
+          id: "class-style",
+          x: 0,
+          y: 50,
+          width: 300,
+          height: 40,
+          style: classStyle,
+        }),
+      ),
+    );
+    sourceColor = "#0000FF";
+    classStyle.color = "#0000FF";
+    const result = await build(document);
+    const file = await validatePptx(result.pptx);
+
+    assert.equal(getterReads, 1);
+    assert.deepEqual(file.errors, []);
+    const getterRun = file.slides[0]?.objects.find(({ text: value }) =>
+      value?.text.includes("Getter style"),
+    )?.text?.paragraphs[0]?.runs[0];
+    const classRun = file.slides[0]?.objects.find(({ text: value }) =>
+      value?.text.includes("Class style"),
+    )?.text?.paragraphs[0]?.runs[0];
+    assert.equal(getterRun?.color, "#AA0000");
+    assert.equal(classRun?.color, "#00AA00");
+  });
+
   it("creates common nodes, builds them through the formal build, and keeps old build results immutable", async () => {
     const title = text("Initial title").set({
       x: 0,

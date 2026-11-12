@@ -135,11 +135,17 @@ type ChartSeriesCells = {
   readonly x?: {
     readonly column: number;
     readonly pointCount: number;
+    readonly labelFormats: ScatterXLabelFormats;
   };
   readonly y?: {
     readonly column: number;
     readonly pointCount: number;
   };
+};
+
+type ScatterXLabelFormats = {
+  readonly baseFormatCode: string;
+  readonly pointFormatCodes: readonly string[];
 };
 
 type ChartCells = {
@@ -156,15 +162,25 @@ type ChartCells = {
     { readonly column: number; readonly categories: readonly string[] }
   >;
   readonly series: ReadonlyMap<number, ChartSeriesCells>;
+  readonly projectedScatterXAxes: ReadonlySet<number>;
   readonly nextColumn: number;
 };
 
+function scatterXFormatCode(
+  labels: false | ChartDataLabelSettings | undefined,
+): string {
+  return labels !== undefined && labels !== false && labels.xValue === true
+    ? (labels.numberFormat ?? "General")
+    : "General";
+}
+
 /**
- * Assigns workbook columns for every parsed series once.
+ * Assigns workbook columns and scatter X label formats for every parsed series once.
  *
  * Category axes own the leading columns because several groups may share one ordered domain;
  * each remaining category series owns one value column, and every scatter series owns its own
- * X and Y columns. Both c:ser formulas and the embedded workbook read this mapping.
+ * X and Y columns. The chart cache, embedded workbook, and affected default X axis read this
+ * mapping so their coordinate formats stay aligned.
  */
 function chartCells(parsed: ParsedChart): ChartCells {
   const categoryColumns = new Map<
@@ -210,12 +226,38 @@ function chartCells(parsed: ParsedChart): ChartCells {
     nextColumn = 1;
   }
   const series = new Map<number, ChartSeriesCells>();
+  const projectedScatterXAxes = new Set<number>();
   for (const [groupIndex, group] of parsed.groups.entries()) {
     if (group.kind === "scatter") {
       for (const item of group.series) {
+        const seriesLabels = mergeDataLabels(group.dataLabels, item.dataLabels);
+        const pointBase = seriesLabels === false ? {} : seriesLabels;
+        const labelFormats: ScatterXLabelFormats = {
+          baseFormatCode: scatterXFormatCode(seriesLabels),
+          pointFormatCodes: item.x.map((value, index) => {
+            const pointLabels = mergeDataLabels(
+              pointBase,
+              item.points?.[index]?.dataLabels,
+            );
+            const formatCode = scatterXFormatCode(pointLabels);
+            if (
+              value !== null &&
+              value !== undefined &&
+              formatCode !== "General" &&
+              group.axes !== undefined
+            ) {
+              projectedScatterXAxes.add(group.axes.x.id);
+            }
+            return formatCode;
+          }),
+        };
         series.set(item.seriesIndex, {
           nameColumn: nextColumn,
-          x: { column: nextColumn, pointCount: item.x.length },
+          x: {
+            column: nextColumn,
+            pointCount: item.x.length,
+            labelFormats,
+          },
           y: { column: nextColumn + 1, pointCount: item.y.length },
         });
         nextColumn += 2;
@@ -268,6 +310,7 @@ function chartCells(parsed: ParsedChart): ChartCells {
     axislessCategoryColumns,
     independentCategoryColumns,
     series,
+    projectedScatterXAxes,
     nextColumn,
   };
 }
@@ -296,7 +339,9 @@ function strRef(formula: string, values: readonly string[]): XmlElement {
 function numRef(
   formula: string,
   values: readonly (number | null)[],
+  labelFormats?: ScatterXLabelFormats,
 ): XmlElement {
+  const baseFormatCode = labelFormats?.baseFormatCode ?? "General";
   return el(
     "c:numRef",
     null,
@@ -304,12 +349,24 @@ function numRef(
     el(
       "c:numCache",
       null,
-      el("c:formatCode", null, "General"),
+      el("c:formatCode", null, baseFormatCode),
       el("c:ptCount", { val: values.length }),
       values.flatMap((value, index) =>
         value === null
           ? []
-          : [el("c:pt", { idx: index }, el("c:v", null, String(value)))],
+          : [
+              el(
+                "c:pt",
+                {
+                  idx: index,
+                  formatCode:
+                    labelFormats?.pointFormatCodes[index] === baseFormatCode
+                      ? undefined
+                      : labelFormats?.pointFormatCodes[index],
+                },
+                el("c:v", null, String(value)),
+              ),
+            ],
       ),
     ),
   );
@@ -1210,6 +1267,7 @@ function scatterChartSeries(
           numRef(
             rangeFormula(seriesCells.x.column, seriesCells.x.pointCount),
             series.x,
+            seriesCells.x.labelFormats,
           ),
         ),
     series.x.length === 0
@@ -1449,12 +1507,18 @@ function axisCrossBetween(
 function axisXml(
   parsed: ParsedChart,
   axis: ParsedChartAxis,
+  projectedScatterXAxes: ReadonlySet<number>,
   textStyles: ChartTextStyleXml,
   theme: ThemeContext,
 ): XmlElement {
   const spec = axis.spec;
   const category = spec.kind === "category";
   const valueSpec = category ? undefined : (spec as ChartValueAxis);
+  // Source-formatted X cells also affect linked ticks, so keep an unspecified X axis at General.
+  const isolateDefaultXFormat =
+    !category &&
+    valueSpec?.numberFormat === undefined &&
+    projectedScatterXAxes.has(axis.id);
   return el(
     category ? "c:catAx" : "c:valAx",
     null,
@@ -1468,8 +1532,13 @@ function axisXml(
     gridlines(spec, "minor", theme),
     axisTitle(spec, textStyles, axis.name),
     el("c:numFmt", {
-      formatCode: category ? "General" : (valueSpec?.numberFormat ?? "General"),
-      sourceLinked: category || valueSpec?.numberFormat === undefined,
+      formatCode:
+        category || isolateDefaultXFormat
+          ? "General"
+          : (valueSpec?.numberFormat ?? "General"),
+      sourceLinked:
+        category ||
+        (valueSpec?.numberFormat === undefined && !isolateDefaultXFormat),
     }),
     el("c:majorTickMark", { val: spec.majorTickMark ?? "none" }),
     el("c:minorTickMark", { val: spec.minorTickMark ?? "none" }),
@@ -1499,10 +1568,13 @@ function axisXml(
 
 function axes(
   parsed: ParsedChart,
+  cells: ChartCells,
   textStyles: ChartTextStyleXml,
   theme: ThemeContext,
 ): XmlElement[] {
-  return parsed.axes.map((axis) => axisXml(parsed, axis, textStyles, theme));
+  return parsed.axes.map((axis) =>
+    axisXml(parsed, axis, cells.projectedScatterXAxes, textStyles, theme),
+  );
 }
 
 const legendPositions = {
@@ -1606,7 +1678,7 @@ export function chartPartXml(
           parsed.groups.map((group, groupIndex) =>
             chartGroup(group, groupIndex, cells, textStyles, channels, theme),
           ),
-          axes(parsed, textStyles, theme),
+          axes(parsed, cells, textStyles, theme),
           transparent(),
         ),
         parsed.legend === undefined || parsed.legend === false
@@ -1704,6 +1776,19 @@ export function chartWorkbook(parsed: ParsedChart): Uint8Array {
   const officeRelationships = relationshipNamespace;
   const cells = chartCells(parsed);
   const channels = [...errorBarChannels(parsed, cells.nextColumn + 1).values()];
+  const xNumberFormats = [
+    ...new Set(
+      [...cells.series.values()].flatMap(
+        (item) => item.x?.labelFormats.pointFormatCodes ?? [],
+      ),
+    ),
+  ].filter((formatCode) => formatCode !== "General");
+  const numberFormatIds = new Map(
+    xNumberFormats.map((formatCode, index) => [formatCode, 164 + index]),
+  );
+  const numberFormatStyleIndices = new Map(
+    xNumberFormats.map((formatCode, index) => [formatCode, index + 1]),
+  );
   const independent =
     parsed.groups.length === 1 &&
     parsed.groups[0]!.kind === "doughnut" &&
@@ -1817,15 +1902,27 @@ export function chartWorkbook(parsed: ParsedChart): Uint8Array {
             const row = index + 2;
             const x = scatter.x[index];
             const y = scatter.y[index];
-            if (x !== null && x !== undefined && item.x !== undefined) {
-              addCell(
-                row,
-                el(
-                  "c",
-                  { r: `${columnName(item.x.column)}${row}` },
-                  el("v", null, String(x)),
-                ),
-              );
+            if (item.x !== undefined) {
+              const reference = `${columnName(item.x.column)}${row}`;
+              const formatCode =
+                item.x.labelFormats.pointFormatCodes[index] ?? "General";
+              const styleIndex = numberFormatStyleIndices.get(formatCode);
+              if (x !== null && x !== undefined) {
+                addCell(
+                  row,
+                  el(
+                    "c",
+                    {
+                      r: reference,
+                      s: styleIndex,
+                    },
+                    el("v", null, String(x)),
+                  ),
+                );
+              } else if (styleIndex !== undefined) {
+                // Keep the blank slot formatted for a future workbook edit without adding a value.
+                addCell(row, el("c", { r: reference, s: styleIndex }));
+              }
             }
             if (y !== null && y !== undefined && item.y !== undefined) {
               addCell(
@@ -1945,6 +2042,18 @@ export function chartWorkbook(parsed: ParsedChart): Uint8Array {
     "xl/styles.xml": el(
       "styleSheet",
       { xmlns: spreadsheet },
+      xNumberFormats.length === 0
+        ? undefined
+        : el(
+            "numFmts",
+            { count: xNumberFormats.length },
+            xNumberFormats.map((formatCode) =>
+              el("numFmt", {
+                numFmtId: numberFormatIds.get(formatCode),
+                formatCode,
+              }),
+            ),
+          ),
       el(
         "fonts",
         { count: 1 },
@@ -1976,8 +2085,18 @@ export function chartWorkbook(parsed: ParsedChart): Uint8Array {
       ),
       el(
         "cellXfs",
-        { count: 1 },
+        { count: xNumberFormats.length + 1 },
         el("xf", { numFmtId: 0, fontId: 0, fillId: 0, borderId: 0, xfId: 0 }),
+        xNumberFormats.map((formatCode) =>
+          el("xf", {
+            numFmtId: numberFormatIds.get(formatCode),
+            fontId: 0,
+            fillId: 0,
+            borderId: 0,
+            xfId: 0,
+            applyNumberFormat: true,
+          }),
+        ),
       ),
     ),
   };

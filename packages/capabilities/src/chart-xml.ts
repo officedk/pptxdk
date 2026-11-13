@@ -1126,6 +1126,8 @@ function categoryChartSeries(
         ),
     // A true zero-observation series omits both optional data-source wrappers. An empty
     // wrapper is not equivalent, and the source must stay absent after native save.
+    // Keep missing points and inherited labels intact even though WPS may label gaps as 0
+    // or misrender empty rings beside filled ones.
     series.values.length === 0
       ? undefined
       : el(

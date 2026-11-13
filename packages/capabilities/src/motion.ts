@@ -253,6 +253,7 @@ function timingTarget(
             element("p:pRg", { st: range.start, end: range.end }),
           )
         : undefined,
+      // WPS may play granular chart targets as a whole chart; preserve the declared indices.
       range?.type === "chart"
         ? element(
             "p:graphicEl",

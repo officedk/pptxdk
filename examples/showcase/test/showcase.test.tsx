@@ -1,13 +1,100 @@
 import assert from "node:assert/strict";
 
 import { build, Deck, Slide } from "@react-pptx/react-pptx";
+import { build as buildDocument } from "@react-pptx/react-pptx/document";
 import { validatePptx } from "@react-pptx/validation";
+import { unzipSync } from "fflate";
 import { it } from "vitest";
 
 import { Progress } from "../src/components/progress.tsx";
-import { ShowcaseDeck } from "../src/index.ts";
+import { createShowcaseDocument, ShowcaseDeck } from "../src/index.ts";
 import { CardsPage } from "../src/templates/cards-page.tsx";
 import { theme } from "../src/theme.ts";
+
+it("builds a byte-equivalent mixed showcase entry with a factory comparison page", async () => {
+  const jsx = await build(<ShowcaseDeck />, { embedFonts: "full" });
+  const factory = await buildDocument(await createShowcaseDocument(), {
+    embedFonts: "full",
+  });
+  assert.deepEqual(jsx.report.diagnostics, []);
+  assert.deepEqual(factory.report.diagnostics, []);
+  assert.deepEqual(factory.report, jsx.report);
+  const jsxFile = await validatePptx(jsx.pptx, {
+    allowedExtensions: ["p14", "p159"],
+  });
+  const factoryFile = await validatePptx(factory.pptx, {
+    allowedExtensions: ["p14", "p159"],
+  });
+  assert.deepEqual(jsxFile.errors, []);
+  assert.deepEqual(factoryFile.errors, []);
+  assert.deepEqual(factoryFile.slides, jsxFile.slides);
+  assert.deepEqual(
+    factoryFile.slides.map(({ id }) => id),
+    [
+      "opening",
+      "hierarchy",
+      "grouping",
+      "reveal",
+      "comparison",
+      "process",
+      "progress",
+      "calendar",
+      "devices",
+      "world",
+      "gallery-contrast",
+      "gallery-process",
+      "gallery-hierarchy",
+      "gallery-space",
+      "combination",
+      "closing",
+    ],
+  );
+  const comparison = factoryFile.slides.find(({ id }) => id === "comparison")!;
+  const group = comparison.objects.find(({ kind }) => kind === "group");
+  assert.ok(group);
+  const clickSteps = comparison.animations ?? [];
+  assert.deepEqual(
+    clickSteps.map(({ trigger }) => trigger),
+    ["click", "click"],
+  );
+  const cardEffects = clickSteps[0]!.effects;
+  const cardText = cardEffects.map(
+    ({ targetId }) =>
+      comparison.objects.find(({ id }) => id === targetId)?.text?.text,
+  );
+  assert.deepEqual(cardText, [
+    "Lorem ipsum",
+    "Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor.",
+  ]);
+  assert.ok(
+    comparison.animationContainers?.some(({ kind }) => kind === "sequence"),
+  );
+  const groupEffect = clickSteps[1]!.effects.find(
+    ({ targetId }) => targetId === group.id,
+  );
+  assert.deepEqual(
+    [
+      groupEffect?.kind,
+      groupEffect?.preset,
+      groupEffect?.durationMs,
+      groupEffect?.from,
+      group.members?.length,
+    ],
+    ["entrance", "wipe", 600, "left", 9],
+  );
+
+  const jsxParts = unzipSync(jsx.pptx);
+  const factoryParts = unzipSync(factory.pptx);
+  const partNames = Object.keys(jsxParts).sort();
+  assert.deepEqual(Object.keys(factoryParts).sort(), partNames);
+  for (const partName of partNames) {
+    assert.deepEqual(
+      factoryParts[partName],
+      jsxParts[partName],
+      `PPTX part differs: ${partName}`,
+    );
+  }
+}, 30_000);
 
 it("map and calendar synchronize click behaviors, four-page gallery preserves continuity and direct navigation", async () => {
   const result = await build(<ShowcaseDeck />, { embedFonts: "full" });

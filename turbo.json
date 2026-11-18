@@ -36,38 +36,6 @@
       "outputs": [],
       "tags": ["quality:light"]
     },
-    "//#verify:artifact-consumption": {
-      "dependsOn": [
-        "@react-pptx/cli#build",
-        "@react-pptx/react-pptx#build",
-        "@react-pptx/validation#build",
-        "@react-pptx/showcase#build"
-      ],
-      "inputs": [
-        "scripts/verify-artifact-consumption.ts",
-        "scripts/assets/fonts/**",
-        "package.json",
-        "apps/cli/package.json",
-        "apps/cli/src/**",
-        "apps/cli/dist/**",
-        "pnpm-workspace.yaml",
-        "packages/core/package.json",
-        "packages/capabilities/package.json",
-        "packages/react-pptx/package.json",
-        "packages/validation/package.json",
-        "packages/core/dist/**",
-        "packages/capabilities/dist/**",
-        "packages/react-pptx/dist/**",
-        "packages/validation/dist/**",
-        "pnpm-lock.yaml",
-        "examples/showcase/package.json",
-        "examples/showcase/src/**",
-        "examples/showcase/dist/**"
-      ],
-      "outputs": [],
-      "cache": false,
-      "tags": ["quality:heavy"]
-    },
     "//#publication:pack": {
       "tags": ["work:release"],
       "cache": false

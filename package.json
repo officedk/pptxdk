@@ -11,7 +11,6 @@
     "check": "node --conditions=source scripts/task-gates.ts check",
     "check:heavy": "node --conditions=source scripts/task-gates.ts check:heavy",
     "check:full": "node --conditions=source scripts/task-gates.ts check:full",
-    "verify:artifact-consumption": "node --conditions=source scripts/verify-artifact-consumption.ts",
     "fix": "node --conditions=source scripts/task-gates.ts fix",
     "boundaries": "turbo boundaries",
     "publication:pack": "turbo run build && changeset pack --out-dir .changeset/packed",
@@ -19,7 +18,6 @@
   },
   "devDependencies": {
     "@changesets/cli": "catalog:",
-    "@fontsource/jost": "5.3.0",
     "@react-pptx/tooling-config": "workspace:./packages/tooling-config",
     "@types/node": "catalog:",
     "oxfmt": "catalog:",

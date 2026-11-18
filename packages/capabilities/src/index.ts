@@ -17,7 +17,7 @@ export type {
 } from "#/shape.ts";
 export { Shape } from "#/shape-elements.ts";
 export type { ShapeProps } from "#/shape-elements.ts";
-export { boxCapability, type ParsedBox } from "#/box.ts";
+export { boxCapability } from "#/box.ts";
 export { Box, type BoxProps } from "#/box-elements.ts";
 export {
   arrowTypes,
@@ -91,7 +91,6 @@ export type {
   ImageDeclarationProps,
   ImageSource,
   ImageVisualStyle,
-  ParsedImage,
 } from "#/image.ts";
 export { Image } from "#/image-elements.ts";
 export type { ImageProps } from "#/image-elements.ts";
@@ -120,7 +119,6 @@ export { Cell, Row, Table } from "#/table-elements.ts";
 export type { CellProps, RowProps, TableProps } from "#/table-elements.ts";
 export { font, textCapability } from "#/text.ts";
 export { P, SlideNumber, Span, Text } from "#/text-elements.ts";
-export type { ParsedText } from "#/text.ts";
 export { notesCapability } from "#/notes.ts";
 export { Notes } from "#/notes-elements.ts";
 export type { NotesProps } from "#/notes-elements.ts";

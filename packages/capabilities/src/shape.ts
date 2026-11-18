@@ -1,7 +1,6 @@
 import {
   assertValidLang,
   CapabilityError,
-  isMorphKey,
   layoutStyleKeys,
   paddingStyleKeys,
   parseCapabilityLayoutContract,
@@ -20,9 +19,6 @@ import {
   type GeometryBox,
   type LayoutStyle,
   type LinkTarget,
-  type MorphKey,
-  type ObjectPreviewContext,
-  type ObjectPreviewOutput,
   type PaddingStyle,
   type ThemeContext,
 } from "@react-pptx/core/capability";
@@ -38,7 +34,12 @@ export type {
   PathOptions,
   PresetGeometry,
 } from "./geometry.ts";
-import { nativeLinkXml } from "./identity.ts";
+import {
+  nativeLinkXml,
+  parseLinkTarget,
+  parseMorphKey,
+  parseOptionalName,
+} from "./identity.ts";
 import { shapeXml } from "./shape-xml.ts";
 export { linearGradient, radialGradient } from "./visual.ts";
 export type { PaddingStyle, VisualStyle } from "@react-pptx/core/capability";
@@ -56,6 +57,7 @@ import {
 } from "./text-service.ts";
 import {
   lineEndStyleKeys,
+  resolveBoxPreviewVisuals,
   shapePropertiesXml,
   visualStyleKeys,
   type ShapeVisualStyle,
@@ -228,70 +230,10 @@ function validateSize(
   return value;
 }
 
-function parseLinkTarget(
-  value: unknown,
-  path?: string,
-): LinkTarget | undefined {
-  if (value === undefined) return undefined;
-  if (typeof value !== "object" || value === null || Array.isArray(value)) {
-    throw new CapabilityError(
-      "invalid-link",
-      "link must specify id, url, or home action",
-      path,
-    );
-  }
-  const entries = Object.entries(value).filter(
-    ([, target]) => target !== undefined,
-  );
-  if (entries.length !== 1) {
-    throw new CapabilityError(
-      "invalid-link",
-      "link must specify exactly one target",
-      path,
-    );
-  }
-  const [kind, target] = entries[0] ?? [];
-  if (kind === "id" && typeof target === "string") {
-    return { id: target };
-  }
-  if (kind === "url" && typeof target === "string") {
-    return { url: target };
-  }
-  if (kind === "action" && target === "home") {
-    return { action: "home" };
-  }
-  throw new CapabilityError(
-    "invalid-link",
-    "link supports { id }, { url }, or { action: 'home' }",
-    path,
-  );
-}
-
-function optionalText(
-  props: Record<string, unknown>,
-  name: "name",
-  path?: string,
-): string | undefined {
-  const value = props[name];
-  if (value === undefined) return undefined;
-  if (typeof value !== "string" || value.trim() === "") {
-    throw new CapabilityError(
-      "invalid-parameter",
-      `${name} must be a non-empty string`,
-      path,
-    );
-  }
-  return value;
-}
-
-const unsupportedPreviewStyleKeys = [
-  "backgroundImage",
-  "boxShadow",
-  "softEdge",
-  "borderRadius",
-  "startArrow",
-  "endArrow",
-] as const;
+import type {
+  ObjectPreviewContext,
+  ObjectPreviewOutput,
+} from "@react-pptx/core/capability";
 
 function renderCustomGeometryPaths(
   custom: CustomGeometry,
@@ -335,14 +277,15 @@ function renderShapePreview(options: {
 }): ObjectPreviewOutput {
   const { visualStyle, hasText, geometry, fill, flipH, flipV, box, theme } =
     options;
-  for (const key of unsupportedPreviewStyleKeys) {
-    if (visualStyle[key] !== undefined) {
-      throw new CapabilityError(
-        "preview-unsupported-style",
-        `Preview does not support shape ${key}`,
-      );
-    }
-  }
+  const resolved = resolveBoxPreviewVisuals({
+    label: "shape",
+    visualStyle,
+    box,
+    theme,
+    fill,
+    flipH,
+    flipV,
+  });
   if (hasText) {
     throw new CapabilityError(
       "preview-unsupported-text",
@@ -368,52 +311,19 @@ function renderShapePreview(options: {
       "Preview does not yet support this shape geometry",
     );
   }
-  const borderStyle = visualStyle["borderStyle"];
-  if (borderStyle !== undefined && borderStyle !== "solid") {
-    throw new CapabilityError(
-      "preview-unsupported-border-style",
-      "Preview does not yet support non-solid borders",
-    );
-  }
-  const fillValue =
-    fill ?? (visualStyle["backgroundColor"] as ColorValue | undefined);
-  const resolvedFill =
-    fillValue === undefined ? undefined : theme.resolveColor(fillValue);
-  const strokeValue = visualStyle["borderColor"] as ColorValue | undefined;
-  const borderWidth =
-    visualStyle["borderWidth"] === undefined
-      ? 1
-      : Number(visualStyle["borderWidth"]);
-  const resolvedStroke =
-    strokeValue === undefined || borderWidth === 0
-      ? undefined
-      : theme.resolveColor(strokeValue);
-  const opacity = Number(visualStyle["opacity"] ?? 1);
-  const attributes = `fill="${resolvedFill === undefined ? "none" : `#${resolvedFill.hex}`}" fill-opacity="${(resolvedFill?.alpha ?? 1) * opacity}" stroke="${resolvedStroke === undefined ? "none" : `#${resolvedStroke.hex}`}" stroke-opacity="${(resolvedStroke?.alpha ?? 1) * opacity}" stroke-width="${resolvedStroke === undefined ? 0 : borderWidth}"`;
 
-  const angle =
-    typeof visualStyle["rotate"] === "number" ? visualStyle["rotate"] : 0;
   const cx = box.x + box.width / 2;
   const cy = box.y + box.height / 2;
-  const flipX = Boolean(flipH);
-  const flipY = Boolean(flipV);
-  const transform = `translate(${cx} ${cy}) rotate(${angle}) scale(${flipX ? -1 : 1} ${flipY ? -1 : 1}) translate(${-cx} ${-cy})`;
-
   const element =
     custom !== undefined
-      ? renderCustomGeometryPaths(custom, box, attributes)
+      ? renderCustomGeometryPaths(custom, box, resolved.attributes)
       : name === "rect"
-        ? `<rect x="${box.x}" y="${box.y}" width="${box.width}" height="${box.height}" ${attributes}/>`
-        : `<ellipse cx="${cx}" cy="${cy}" rx="${box.width / 2}" ry="${box.height / 2}" ${attributes}/>`;
+        ? `<rect x="${box.x}" y="${box.y}" width="${box.width}" height="${box.height}" ${resolved.attributes}/>`
+        : `<ellipse cx="${cx}" cy="${cy}" rx="${box.width / 2}" ry="${box.height / 2}" ${resolved.attributes}/>`;
 
   return {
-    svg: `<g transform="${transform}">${element}</g>`,
-    transform: {
-      box,
-      angle,
-      flipH: flipX,
-      flipV: flipY,
-    },
+    svg: `<g transform="${resolved.svgTransform}">${element}</g>`,
+    transform: resolved.transform,
   };
 }
 
@@ -436,19 +346,8 @@ export const shapeCapability: BoundObjectCapabilityModule = {
       );
     }
 
-    const requestedName = optionalText(input.props, "name", context.path);
-    const rawMorphKey = input.props["morphKey"];
-    let morphKey: MorphKey | undefined;
-    if (rawMorphKey !== undefined) {
-      if (!isMorphKey(rawMorphKey)) {
-        throw new CapabilityError(
-          "invalid-morph-key",
-          "morphKey must be created by createMorphScope().handle(name)",
-          context.path,
-        );
-      }
-      morphKey = rawMorphKey;
-    }
+    const requestedName = parseOptionalName(input.props["name"], context.path);
+    const morphKey = parseMorphKey(input.props["morphKey"], context.path);
     const link = parseLinkTarget(input.props["link"], context.path);
 
     const declaredX = input.props["x"];

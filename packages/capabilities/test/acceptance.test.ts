@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -9,6 +10,7 @@ import {
   Deck,
   Slide,
   createPreview,
+  expandDocument,
   pxToEmu,
   xmlEscape,
   type BoundObjectCapabilityModule,
@@ -17,7 +19,9 @@ import {
   type Diagnostic,
 } from "@react-pptx/core";
 import { parseCapabilityLayoutContract } from "@react-pptx/core/capability";
+import { RichTextContainer } from "@react-pptx/core/document";
 import { createDocumentPreview } from "@react-pptx/core/preview";
+import { validatePptx } from "@react-pptx/validation";
 import { PNG } from "pngjs";
 import { createElement, type ComponentType } from "react";
 import { describe, expect, it } from "vitest";
@@ -26,6 +30,8 @@ import { boxCapability } from "../src/box.ts";
 import {
   box,
   deck,
+  documentCapabilities,
+  font,
   notes,
   paragraph,
   shape,
@@ -39,8 +45,13 @@ import { notesCapability } from "../src/notes.ts";
 import { Shape } from "../src/shape-elements.ts";
 import { shapeCapability } from "../src/shape.ts";
 import { slideBackgroundCapability } from "../src/slide-background.ts";
-import { P, SlideNumber, Span } from "../src/text-elements.ts";
+import { P, SlideNumber, Span, Text } from "../src/text-elements.ts";
 import { runCapabilityScenario } from "./acceptance-runner.ts";
+import { boxPositiveScenario, boxRejectionScenario } from "./scenarios/box.ts";
+import {
+  imagePositiveScenario,
+  imageRejectionScenario,
+} from "./scenarios/image.ts";
 import {
   notesPositiveScenario,
   notesPreviewIsolationScenario,
@@ -53,6 +64,10 @@ import {
   slideBackgroundPositiveScenario,
   slideBackgroundRejectionScenario,
 } from "./scenarios/slide-background.ts";
+import {
+  textPositiveScenario,
+  textRejectionScenario,
+} from "./scenarios/text.ts";
 
 type CustomMarkerProps = {
   readonly id?: string;
@@ -70,14 +85,20 @@ function createMarkerNode(
 }
 
 describe("Capability-owned acceptance scenarios & custom bound preview extensions", () => {
-  it("runs Shape and slide-background dual-author scenarios through shared runner and collects artifacts", async () => {
+  it("runs Shape, Image, slide-background, and Text dual-author scenarios through shared runner and collects artifacts", async () => {
     const outDir = await mkdtemp(join(tmpdir(), "rp-cap-accept-"));
     try {
       for (const scenario of [
+        boxPositiveScenario,
+        boxRejectionScenario,
         shapePositiveScenario,
         shapeRejectionScenario,
+        imagePositiveScenario,
+        imageRejectionScenario,
         slideBackgroundPositiveScenario,
         slideBackgroundRejectionScenario,
+        textPositiveScenario,
+        textRejectionScenario,
         notesPositiveScenario,
         notesPreviewIsolationScenario,
       ]) {
@@ -93,6 +114,92 @@ describe("Capability-owned acceptance scenarios & custom bound preview extension
     } finally {
       await rm(outDir, { recursive: true, force: true });
     }
+  });
+
+  it("supports JSX expansion followed by imperative Text edit, rebuild, and preview without mutating prior outputs", async () => {
+    const jostFont = font("Jost*", [
+      {
+        weight: 400,
+        data: readFileSync(
+          new URL(
+            "../../react-pptx/test/assets/fonts/Jost-400-Book.ttf",
+            import.meta.url,
+          ),
+        ),
+      },
+    ]);
+    const expanded = await expandDocument(
+      createElement(
+        Deck,
+        { width: 480, height: 270 },
+        createElement(
+          Slide,
+          { id: "handoff" },
+          createElement(
+            Text,
+            {
+              id: "headline",
+              x: 24,
+              y: 24,
+              width: 200,
+              style: {
+                fontFamily: jostFont,
+                fontSize: 20,
+                color: "#1E293B",
+                padding: 8,
+                backgroundColor: "#F1F5F9",
+              },
+            },
+            "Initial title",
+          ),
+        ),
+      ),
+    );
+
+    const previewDocument = createDocumentPreview(documentCapabilities);
+    const first = await previewDocument(expanded);
+    assert.deepEqual(first.pages[0]?.diagnostics, []);
+    assert.deepEqual((await validatePptx(first.build.pptx)).errors, []);
+    const firstPng = first.pages[0].png!.slice();
+    const firstSvg = first.pages[0].svg!;
+    const firstPptx = first.build.pptx.slice();
+    const firstHeight = first.build.query
+      .getSlide("handoff")
+      .get("headline")
+      .observe().box!.height;
+
+    const headline = expanded.query
+      .get("handoff")
+      .getAs(
+        "headline",
+        (node): node is RichTextContainer => node instanceof RichTextContainer,
+      );
+    headline.content("Updated longer headline wrapping across multiple lines");
+    headline.style({ color: "#059669" });
+
+    const second = await previewDocument(expanded);
+    assert.deepEqual(second.pages[0]?.diagnostics, []);
+    assert.deepEqual((await validatePptx(second.build.pptx)).errors, []);
+    assert.equal(
+      second.build.query.getSlide("handoff").get("headline").observe().text,
+      "Updated longer headline wrapping across multiple lines",
+    );
+    const secondHeight = second.build.query
+      .getSlide("handoff")
+      .get("headline")
+      .observe().box!.height;
+    assert.ok(secondHeight > firstHeight);
+    expect(second.pages[0]?.svg).toContain('fill="#059669"');
+    assert.notDeepEqual(second.pages[0]?.png, firstPng);
+
+    // Prior BuildResult and PreviewResult remain unchanged.
+    assert.equal(first.pages[0]?.svg, firstSvg);
+    assert.deepEqual(first.pages[0]?.png, firstPng);
+    assert.deepEqual(first.build.pptx, firstPptx);
+    assert.equal(
+      first.build.query.getSlide("handoff").get("headline").observe().text,
+      "Initial title",
+    );
   });
 
   it("supports registering custom bound extension modules, warning retention, and missing preview rejection", async () => {

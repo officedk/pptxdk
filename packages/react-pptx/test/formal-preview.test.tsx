@@ -199,11 +199,6 @@ describe("Slice 3: formal static preview public entrypoints and runtime isolatio
           }),
         ),
       ),
-      slide({ id: "with-box" }).append(
-        box({ id: "b1", style: { width: 100, height: 40 } }).append(
-          shape({ id: "inner", width: 40, height: 20, fill: "#FF0000" }),
-        ),
-      ),
       slide({ id: "with-chart" }).append(
         chart({
           id: "c1",
@@ -220,27 +215,34 @@ describe("Slice 3: formal static preview public entrypoints and runtime isolatio
           ],
         }),
       ),
-      slide({ id: "ok-shape" }).append(
-        shape({
-          id: "ok",
-          x: 10,
-          y: 10,
-          width: 60,
-          height: 40,
-          fill: "#00AA00",
-        }),
+      slide({ id: "ok-box" }).append(
+        box({
+          id: "b1",
+          style: {
+            width: 120,
+            height: 60,
+            padding: 8,
+            backgroundColor: "#E2E8F0",
+          },
+        }).append(
+          shape({
+            id: "ok",
+            width: 60,
+            height: 40,
+            fill: "#00AA00",
+          }),
+        ),
       ),
     );
     const result = await previewDocument(doc);
     expect(result.pages[0]?.png).toBeUndefined();
     expect(result.pages[0]?.diagnostics[0]?.path).toContain("group[g1]");
     expect(result.pages[1]?.png).toBeUndefined();
-    expect(result.pages[1]?.diagnostics[0]?.path).toContain("box[b1]");
-    expect(result.pages[2]?.png).toBeUndefined();
-    expect(result.pages[2]?.diagnostics[0]?.path).toContain("chart[c1]");
-    expect(result.pages[3]?.png).toBeDefined();
+    expect(result.pages[1]?.diagnostics[0]?.path).toContain("chart[c1]");
+    expect(result.pages[2]?.png).toBeDefined();
+    expect(result.pages[2]?.diagnostics).toEqual([]);
 
-    const jsxGroupResult = await previewJsx(
+    const jsxResult = await previewJsx(
       createElement(
         Deck,
         { width: 320, height: 180 },
@@ -265,18 +267,16 @@ describe("Slice 3: formal static preview public entrypoints and runtime isolatio
           { id: "with-jsx-box" },
           createElement(
             Box,
-            { id: "jb1", style: { width: 80, height: 40 } },
+            { id: "jb1", style: { width: 80, height: 40, padding: 4 } },
             createElement(Shape, { width: 40, height: 20, fill: "#0000FF" }),
           ),
         ),
       ),
     );
-    expect(jsxGroupResult.pages[0]?.png).toBeUndefined();
-    expect(jsxGroupResult.pages[0]?.diagnostics[0]?.path).toContain(
-      "group[g1]",
-    );
-    expect(jsxGroupResult.pages[1]?.png).toBeUndefined();
-    expect(jsxGroupResult.pages[1]?.diagnostics[0]?.path).toContain("box[jb1]");
+    expect(jsxResult.pages[0]?.png).toBeUndefined();
+    expect(jsxResult.pages[0]?.diagnostics[0]?.path).toContain("group[g1]");
+    expect(jsxResult.pages[1]?.png).toBeDefined();
+    expect(jsxResult.pages[1]?.diagnostics).toEqual([]);
   });
 
   it("never loads @resvg/resvg-js when calling JSX build or document build", () => {

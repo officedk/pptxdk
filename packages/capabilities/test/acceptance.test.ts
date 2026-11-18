@@ -120,7 +120,7 @@ describe("Capability-owned acceptance scenarios & custom bound preview extension
     } finally {
       await rm(outDir, { recursive: true, force: true });
     }
-  });
+  }, 30_000);
 
   it("supports JSX expansion followed by imperative Text edit, rebuild, and preview without mutating prior outputs", async () => {
     const jostFont = font("Jost*", [

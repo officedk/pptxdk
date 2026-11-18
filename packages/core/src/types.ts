@@ -755,7 +755,11 @@ export type TransparentCapabilityModule = {
   readonly children?: "traverse" | "owned";
   compileDeclaration(
     input: CapabilityInput,
-    context: { readonly path: string },
+    context: {
+      readonly path: string;
+      readonly theme?: ThemeContext;
+      readonly slideNumber?: number;
+    },
   ): readonly CapabilityAnnotation[];
 };
 
@@ -806,6 +810,7 @@ export type SlideCapabilityParseContext = {
   readonly theme: ThemeContext;
   readonly options: BuildOptions;
   readonly slideNumber: number;
+  readonly contributions: readonly CapabilityContribution[];
 };
 
 export type SlidePreviewContext = {

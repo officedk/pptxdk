@@ -1870,7 +1870,11 @@ function compileChildren(
         return;
       }
       try {
-        for (const annotation of module.compileDeclaration(child, { path })) {
+        for (const annotation of module.compileDeclaration(child, {
+          path,
+          theme: context.theme,
+          slideNumber: context.slideNumber,
+        })) {
           context.slide.contributions.push({
             ...annotation,
             path,
@@ -2654,6 +2658,8 @@ function collectOwnedContributions(
   parentPath: string,
   order: { value: number },
   hidden: WeakSet<CapabilityElement>,
+  theme: ThemeContext,
+  slideNumber: number,
 ): void {
   children.forEach((child, index) => {
     if (!("props" in child)) return;
@@ -2665,12 +2671,15 @@ function collectOwnedContributions(
       module.children === "owned"
     ) {
       try {
-        for (const annotation of module.compileDeclaration(child, { path })) {
+        for (const annotation of module.compileDeclaration(child, {
+          path,
+          theme,
+          slideNumber,
+        })) {
           slide.contributions.push({
             ...annotation,
             path,
             order: order.value++,
-            declaration: child,
           });
         }
       } catch (error) {
@@ -2714,6 +2723,8 @@ function collectOwnedContributions(
       path,
       order,
       hidden,
+      theme,
+      slideNumber,
     );
   });
 }
@@ -2784,6 +2795,8 @@ function compileSlide(
     path,
     ownedOrder,
     layout.hidden,
+    theme,
+    index,
   );
   const compiled = compileChildren(
     children,
@@ -2848,6 +2861,7 @@ function compileSlide(
         theme,
         options,
         slideNumber: index,
+        contributions,
       });
       const output = boundSlide.compileSlide({
         path,

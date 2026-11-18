@@ -1,8 +1,9 @@
 import {
   CapabilityError,
+  type BoundSlideCapabilityModule,
   type CapabilityInput,
+  type ColorValue,
   type SlideBackground,
-  type SlideCapabilityModule,
 } from "@react-pptx/core/capability";
 
 import { readImage } from "./image.ts";
@@ -18,19 +19,34 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-/** Slide backgrounds share theme resolution, gradient writing, and image resource registration services. */
-export const slideBackgroundCapability: SlideCapabilityModule = {
+/**
+ * Bound slide-background module: validates and resolves background declarations once per build
+ * and owns both PresentationML `<p:bg>` compilation and static preview canvas rendering.
+ */
+export const slideBackgroundCapability: BoundSlideCapabilityModule = {
   declaration: "slide-background",
   slideProp: "background",
   slot: "background",
-  compileSlide(input: CapabilityInput, context) {
+  always: true,
+  bindSlide(input: CapabilityInput, context) {
     const background = input.props["background"] as SlideBackground | undefined;
-    if (background === undefined) return { xml: "", extensions: [] };
+    if (background === undefined) {
+      return {
+        compileSlide() {
+          return { xml: "", extensions: [] };
+        },
+        previewSlide() {
+          return { svg: '<rect width="100%" height="100%" fill="white"/>' };
+        },
+      };
+    }
+
     const backgroundRecord: Record<string, unknown> | undefined = isRecord(
       background,
     )
       ? background
       : undefined;
+
     try {
       if (
         backgroundRecord !== undefined &&
@@ -46,26 +62,65 @@ export const slideBackgroundCapability: SlideCapabilityModule = {
           );
         }
         const image = readImage(backgroundRecord["image"]);
-        const relationshipId = context.registerResource({
-          bytes: image.bytes,
-          extension: image.extension,
-          contentType: image.contentType,
-          relationshipType: imageRelationship,
-        });
         return {
-          xml: slideBackgroundImageXml(relationshipId),
-          extensions: [],
+          compileSlide(compileContext) {
+            const relationshipId = compileContext.registerResource({
+              bytes: image.bytes,
+              extension: image.extension,
+              contentType: image.contentType,
+              relationshipType: imageRelationship,
+            });
+            return {
+              xml: slideBackgroundImageXml(relationshipId),
+              extensions: [],
+            };
+          },
+          previewSlide(previewContext) {
+            throw new CapabilityError(
+              "preview-unsupported-background",
+              "Preview does not yet support image or gradient backgrounds",
+              `${previewContext.path}/background`,
+            );
+          },
         };
       }
-      const style =
+
+      const isGradient =
         backgroundRecord !== undefined &&
         (backgroundRecord["type"] === "linear-gradient" ||
-          backgroundRecord["type"] === "radial-gradient")
-          ? { backgroundImage: backgroundRecord }
-          : { backgroundColor: background };
+          backgroundRecord["type"] === "radial-gradient");
+
+      if (isGradient) {
+        const xml = slideBackgroundFillXml(context.theme, {
+          backgroundImage: backgroundRecord,
+        });
+        return {
+          compileSlide() {
+            return { xml, extensions: [] };
+          },
+          previewSlide(previewContext) {
+            throw new CapabilityError(
+              "preview-unsupported-background",
+              "Preview does not yet support image or gradient backgrounds",
+              `${previewContext.path}/background`,
+            );
+          },
+        };
+      }
+
+      const xml = slideBackgroundFillXml(context.theme, {
+        backgroundColor: background,
+      });
+      const color = context.theme.resolveColor(background as ColorValue);
       return {
-        xml: slideBackgroundFillXml(context.theme, style),
-        extensions: [],
+        compileSlide() {
+          return { xml, extensions: [] };
+        },
+        previewSlide() {
+          return {
+            svg: `<rect width="100%" height="100%" fill="#${color.hex}" fill-opacity="${color.alpha ?? 1}"/>`,
+          };
+        },
       };
     } catch (error) {
       if (error instanceof CapabilityError) {

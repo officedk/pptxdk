@@ -39,6 +39,11 @@
       "types": "./dist/node.d.ts",
       "default": "./dist/node.js"
     },
+    "./preview": {
+      "source": "./src/preview.ts",
+      "types": "./dist/preview.d.ts",
+      "default": "./dist/preview.js"
+    },
     "./shape": {
       "source": "./src/shape.ts",
       "types": "./dist/shape.d.ts",

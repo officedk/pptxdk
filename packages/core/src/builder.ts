@@ -13,6 +13,8 @@ import type {
   BuildResult,
   CapabilityModule,
   Diagnostic,
+  PreviewOptions,
+  PreviewResult,
 } from "#/types.ts";
 
 function diagnostic(path: string, code: string, message: string): Diagnostic {
@@ -136,6 +138,64 @@ export function createBuilder(modules: readonly CapabilityModule[]) {
       return formalBuild({ children: [document] }, options);
     } catch (error) {
       if (options.signal?.aborted && error === options.signal.reason) {
+        throw error;
+      }
+      if (error instanceof BuildError) throw error;
+      throw reactFailure(error);
+    }
+  };
+}
+
+/**
+ * Creates the asynchronous one-call JSX static preview entry.
+ *
+ * Lazily loads the preview rasterizer only when called so normal JSX `build()` calls never
+ * load `@resvg/resvg-js`.
+ */
+export function createPreview(modules: readonly CapabilityModule[]) {
+  let runnerPromise:
+    | Promise<
+        (
+          declaration: { readonly children: readonly CommonNode[] },
+          options?: PreviewOptions,
+        ) => PreviewResult
+      >
+    | undefined;
+
+  const loadRunner = () => {
+    runnerPromise ??= import("#/preview.ts").then(
+      ({ createCompletedDeclarationPreview }) =>
+        createCompletedDeclarationPreview(modules),
+    );
+    return runnerPromise;
+  };
+
+  return async function preview(
+    element: ReactNode,
+    options: PreviewOptions = {},
+  ): Promise<PreviewResult> {
+    const { pages, ...buildOptions } = options;
+    if (pages?.some((page) => !Number.isInteger(page) || page < 1)) {
+      throw new RangeError("Preview page numbers must be positive integers");
+    }
+    validateOptions(buildOptions);
+    try {
+      const [runPreview, document] = await Promise.all([
+        loadRunner(),
+        expandDocument(
+          element,
+          buildOptions.signal === undefined
+            ? {}
+            : { signal: buildOptions.signal },
+        ),
+      ]);
+      return runPreview({ children: [document] }, options);
+    } catch (error) {
+      if (error instanceof RangeError) throw error;
+      if (
+        buildOptions.signal?.aborted &&
+        error === buildOptions.signal.reason
+      ) {
         throw error;
       }
       if (error instanceof BuildError) throw error;

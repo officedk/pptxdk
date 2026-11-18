@@ -83,7 +83,6 @@ type SlideBuild = {
   readonly index: number;
   readonly section?: string;
   readonly hidden: boolean;
-  readonly advanceAfter?: number;
   readonly objects: readonly ObjectObservation[];
   readonly layouts: readonly LayoutObservation[];
   readonly content: readonly QueryContentNode[];
@@ -96,6 +95,7 @@ type SlideBuild = {
   readonly capabilities: Readonly<Record<string, unknown>>;
   readonly relationships: readonly PptxRelationship[];
   readonly morphObjects: ReadonlyMap<MorphKey, MorphObject>;
+  readonly matchContinuityKinds: boolean;
   readonly linkedSlideIndexes: ReadonlySet<number>;
 };
 
@@ -106,7 +106,6 @@ type ResolvedSlide = {
   readonly index: number;
   readonly section?: string;
   readonly hidden?: boolean;
-  readonly advanceAfter?: number;
 };
 
 type ResolvedSection = {
@@ -203,9 +202,9 @@ type SlideBuildState = {
   readonly relationshipIds: Map<string, string>;
   readonly layouts: LayoutObservation[];
   readonly resourceObservations: (ResourceObservation & { objectId: number })[];
-  readonly contentChildrenByObjectId: Map<number, readonly QueryContentNode[]>;
   readonly contributions: CapabilityContribution[];
   readonly morphObjects: Map<MorphKey, MorphObject>;
+  matchContinuityKinds: boolean;
   readonly linkedSlideIndexes: Set<number>;
   readonly layoutDerivedObjectIds: Set<number>;
 };
@@ -370,17 +369,6 @@ function nativeObjectName(key: MorphKey, document: DocumentBuildState): string {
     document.morphNames.set(key, name);
   }
   return name;
-}
-
-function usesMorphTransition(node: DeclarationNode): boolean {
-  const transition = node.props["transition"];
-  return (
-    typeof transition === "object" &&
-    transition !== null &&
-    !Array.isArray(transition) &&
-    (transition as Record<string, unknown>)["type"] === "transition" &&
-    (transition as Record<string, unknown>)["kind"] === "morph"
-  );
 }
 
 function validateTarget(target: Target | undefined): Target {
@@ -743,22 +731,6 @@ function resolveSlides(
         ),
       ]);
     }
-    const advanceAfter = node.props["advanceAfter"];
-    if (
-      advanceAfter !== undefined &&
-      (typeof advanceAfter !== "number" ||
-        !Number.isFinite(advanceAfter) ||
-        advanceAfter < 0 ||
-        advanceAfter > 4_294_967_295)
-    ) {
-      throw new BuildError([
-        diagnostic(
-          `deck/slide[${id}]`,
-          "invalid-advance-after",
-          "Slide.advanceAfter must be a finite millisecond value between 0 and 4294967295",
-        ),
-      ]);
-    }
     const resolved = {
       node,
       id,
@@ -766,7 +738,6 @@ function resolveSlides(
       index: index + 1,
       ...(section === undefined ? {} : { section }),
       ...(hidden === undefined ? {} : { hidden }),
-      ...(advanceAfter === undefined ? {} : { advanceAfter }),
     };
     if (sectionIndex !== undefined) {
       sections[sectionIndex]?.slideIndexes.push(index + 1);
@@ -1681,14 +1652,15 @@ function presentationContent(document: DocumentBuildState): {
 
 function capabilityContext(
   context: BuildContext,
-  child: CapabilityElement,
   id: number,
   path: string,
   layoutBox: CapabilityContext["layoutBox"],
   theme: ThemeContext,
   insideGroup: boolean,
+  restrictsMemberContinuity: boolean,
   morphName?: string,
   nativeLink?: NativeLink,
+  onChildrenCompiled?: (compiled: CompiledChildren) => void,
 ): CapabilityContext {
   return {
     id,
@@ -1709,11 +1681,9 @@ function capabilityContext(
         nested,
         context,
         path,
-        insideGroup || child.type === "rp:group",
+        insideGroup || restrictsMemberContinuity,
       );
-      if (child.type === "rp:group") {
-        context.slide.contentChildrenByObjectId.set(id, compiled.content);
-      }
+      onChildrenCompiled?.(compiled);
       return { xml: compiled.xml, objects: compiled.objects };
     },
     registerResource(resource) {
@@ -1871,7 +1841,11 @@ function compileChildren(
         return;
       }
       try {
-        for (const annotation of module.compileDeclaration(child, { path })) {
+        for (const annotation of module.compileDeclaration(child, {
+          path,
+          theme: context.theme,
+          slideNumber: context.slideNumber,
+        })) {
           context.slide.contributions.push({
             ...annotation,
             path,
@@ -1951,6 +1925,7 @@ function compileChildren(
       const id = context.slide.nextId++;
       const requestedMorphKey = bound.native?.morphKey;
       const hasExplicitName = bound.native?.hasExplicitName === true;
+      const emitsObject = bound.native?.emitsObject !== false;
       let morphKey: MorphKey | undefined;
       let morphName: string | undefined;
       if (requestedMorphKey !== undefined) {
@@ -1968,6 +1943,14 @@ function compileChildren(
               path,
               "morph-inside-group",
               "Morph only matches top-level slide objects; place morphKey on Group to move the entire group",
+            ),
+          );
+        } else if (!emitsObject) {
+          context.slide.diagnostics.push(
+            diagnostic(
+              path,
+              "morph-needs-object",
+              "morphKey can only be used with capabilities that produce native objects",
             ),
           );
         } else if (hasExplicitName) {
@@ -1993,23 +1976,44 @@ function compileChildren(
           }
         }
       }
-      const compiledLink = registerLink(bound.native?.link, context, path);
+      const rawLink = bound.native?.link;
+      const compiledLink =
+        rawLink === undefined
+          ? undefined
+          : emitsObject
+            ? registerLink(rawLink, context, path)
+            : (context.slide.diagnostics.push(
+                diagnostic(
+                  path,
+                  "link-needs-object",
+                  "Only elements producing native objects can attach click links",
+                ),
+              ),
+              undefined);
       const output = bound.compile(
         capabilityContext(
           context,
-          child,
           id,
           path,
           layoutBox,
           theme,
           insideGroup,
+          bound.contract.nativeKind === "grpSp",
           morphName,
           compiledLink?.nativeLink,
         ),
       );
       if (morphKey !== undefined && morphName !== undefined) {
         const nativeKind = bound.contract.nativeKind;
-        if (output.observation.name !== morphName) {
+        if (output.xml === "") {
+          context.slide.diagnostics.push(
+            diagnostic(
+              path,
+              "morph-needs-object",
+              "morphKey can only be used with capabilities that produce native objects",
+            ),
+          );
+        } else if (output.observation.name !== morphName) {
           context.slide.diagnostics.push(
             diagnostic(
               path,
@@ -2087,10 +2091,7 @@ function compileChildren(
       content.push({
         ...(authorId === undefined ? {} : { authorId }),
         reference: { kind: "object", id: observation.id },
-        children: [
-          ...(context.slide.contentChildrenByObjectId.get(id) ?? []),
-          ...subPartContentNodes(output.parts),
-        ],
+        children: subPartContentNodes(output.parts),
       });
       if (output.observation.box !== undefined) {
         const box = output.observation.box;
@@ -2232,7 +2233,7 @@ function compileBoundContainer(args: {
     content,
   } = args;
   const box = context.layout.boxes.get(child);
-  if (box === undefined) {
+  if (box === undefined && container.layoutMode !== "when-styled") {
     context.slide.diagnostics.push(
       diagnostic(
         path,
@@ -2242,7 +2243,12 @@ function compileBoundContainer(args: {
     );
     return;
   }
-  const observesLayout = container.observesLayout !== false;
+  const enclosesChildren = container.childComposition === "members";
+  const restrictsMemberContinuity =
+    container.restrictsMemberContinuity === true ||
+    bound.contract.nativeKind === "grpSp";
+  const observesLayout =
+    container.observesLayout !== false && box !== undefined;
   const layoutId = observesLayout ? context.slide.nextId++ : undefined;
   const emitsObject = container.emitsObject;
   const requestedMorphKey = bound.native?.morphKey;
@@ -2312,19 +2318,23 @@ function compileBoundContainer(args: {
   }
   let containerXml = "";
   let containerObservation: ObjectObservation | undefined;
+  let memberCompiled: CompiledChildren | undefined;
   const objectId = context.slide.nextId++;
   try {
     const output = bound.compile(
       capabilityContext(
         context,
-        child,
         objectId,
         path,
         box,
         theme,
         insideGroup,
+        restrictsMemberContinuity,
         morphName,
         containerLink?.nativeLink,
+        (compiled) => {
+          memberCompiled = compiled;
+        },
       ),
     );
     if (emitsObject && output.xml !== "") {
@@ -2335,7 +2345,27 @@ function compileBoundContainer(args: {
         ...(authorId === undefined ? {} : { authorId }),
         ...(containerLink === undefined ? {} : { link: containerLink.summary }),
       };
-      context.slide.layoutDerivedObjectIds.add(objectId);
+      if (box !== undefined) context.slide.layoutDerivedObjectIds.add(objectId);
+      if (
+        container.checksCanvasOverflow === false &&
+        output.observation.box !== undefined
+      ) {
+        const obsBox = output.observation.box;
+        if (
+          obsBox.x < 0 ||
+          obsBox.y < 0 ||
+          obsBox.x + obsBox.width > context.dimensions.width ||
+          obsBox.y + obsBox.height > context.dimensions.height
+        ) {
+          context.document.warnings.push({
+            severity: "warning",
+            path,
+            code: "overflow",
+            message:
+              "Object overflows slide canvas; build retains original declaration",
+          });
+        }
+      }
       if (morphKey !== undefined && morphName !== undefined) {
         const nativeKind = bound.contract.nativeKind;
         if (output.observation.name !== morphName) {
@@ -2430,14 +2460,25 @@ function compileBoundContainer(args: {
           ),
     );
   }
-  const compiled = compileChildren(
-    container.children,
-    context,
-    path,
-    insideGroup,
-  );
+  const compiled = enclosesChildren
+    ? (memberCompiled ?? {
+        xml: "",
+        objects: [],
+        references: [],
+        content: [],
+        paintLayers: [],
+      })
+    : compileChildren(
+        container.children,
+        context,
+        path,
+        insideGroup || restrictsMemberContinuity,
+      );
   let containerPreviewSvg: string | undefined;
-  if (context.previewSession?.shouldPreviewPage(context.slideNumber)) {
+  if (
+    context.previewSession?.shouldPreviewPage(context.slideNumber) &&
+    (!emitsObject || containerObservation !== undefined)
+  ) {
     const previewSession = context.previewSession;
     if (bound.preview !== undefined) {
       const childrenSvg = compiled.paintLayers
@@ -2505,7 +2546,14 @@ function compileBoundContainer(args: {
       });
     }
   }
-  if (layoutId !== undefined) {
+  const layerXml = enclosesChildren
+    ? containerXml
+    : containerXml + compiled.xml;
+  const layerObjects = [
+    ...(containerObservation === undefined ? [] : [containerObservation]),
+    ...(enclosesChildren ? [] : compiled.objects),
+  ];
+  if (layoutId !== undefined && box !== undefined) {
     context.slide.layouts.push({
       id: layoutId,
       ...(authorId === undefined ? {} : { authorId }),
@@ -2530,14 +2578,11 @@ function compileBoundContainer(args: {
     painted.push({
       sourceOrder: [index],
       zIndex: paintOrder(bound.contract),
-      xml: containerXml + compiled.xml,
+      xml: layerXml,
       ...(containerPreviewSvg === undefined
         ? {}
         : { previewSvg: containerPreviewSvg }),
-      objects: [
-        ...(containerObservation === undefined ? [] : [containerObservation]),
-        ...compiled.objects,
-      ],
+      objects: layerObjects,
       reference: { kind: "layout", id: layoutId },
     });
     return;
@@ -2554,14 +2599,11 @@ function compileBoundContainer(args: {
   painted.push({
     sourceOrder: [index],
     zIndex: paintOrder(bound.contract),
-    xml: containerXml + compiled.xml,
+    xml: layerXml,
     ...(containerPreviewSvg === undefined
       ? {}
       : { previewSvg: containerPreviewSvg }),
-    objects: [
-      ...(containerObservation === undefined ? [] : [containerObservation]),
-      ...compiled.objects,
-    ],
+    objects: layerObjects,
     reference:
       containerObservation !== undefined
         ? { kind: "object", id: containerObservation.id }
@@ -2641,6 +2683,8 @@ function collectOwnedContributions(
   parentPath: string,
   order: { value: number },
   hidden: WeakSet<CapabilityElement>,
+  theme: ThemeContext,
+  slideNumber: number,
 ): void {
   children.forEach((child, index) => {
     if (!("props" in child)) return;
@@ -2652,12 +2696,15 @@ function collectOwnedContributions(
       module.children === "owned"
     ) {
       try {
-        for (const annotation of module.compileDeclaration(child, { path })) {
+        for (const annotation of module.compileDeclaration(child, {
+          path,
+          theme,
+          slideNumber,
+        })) {
           slide.contributions.push({
             ...annotation,
             path,
             order: order.value++,
-            declaration: child,
           });
         }
       } catch (error) {
@@ -2701,6 +2748,8 @@ function collectOwnedContributions(
       path,
       order,
       hidden,
+      theme,
+      slideNumber,
     );
   });
 }
@@ -2715,15 +2764,7 @@ function compileSlide(
   documentTheme: ThemeContext,
   previewSession?: PreviewSession,
 ): SlideBuild {
-  const {
-    node,
-    id,
-    authorId,
-    index,
-    section,
-    hidden = false,
-    advanceAfter,
-  } = resolved;
+  const { node, id, authorId, index, section, hidden = false } = resolved;
   const slide: SlideBuildState = {
     index,
     nextId: 2,
@@ -2734,9 +2775,9 @@ function compileSlide(
     linkedSlideIndexes: new Set(),
     layouts: [],
     resourceObservations: [],
-    contentChildrenByObjectId: new Map(),
     contributions: [],
     morphObjects: new Map(),
+    matchContinuityKinds: false,
     layoutDerivedObjectIds: new Set(),
   };
   const path = `deck/slide[${id}]`;
@@ -2771,6 +2812,8 @@ function compileSlide(
     path,
     ownedOrder,
     layout.hidden,
+    theme,
+    index,
   );
   const compiled = compileChildren(
     children,
@@ -2835,7 +2878,11 @@ function compileSlide(
         theme,
         options,
         slideNumber: index,
+        contributions,
       });
+      if (boundSlide.continuity?.matchSourceKinds === true) {
+        slide.matchContinuityKinds = true;
+      }
       const output = boundSlide.compileSlide({
         path,
         dimensions,
@@ -2990,7 +3037,6 @@ function compileSlide(
     index,
     ...(section === undefined ? {} : { section }),
     hidden,
-    ...(advanceAfter === undefined ? {} : { advanceAfter }),
     objects: projectObservations(
       compiled.objects,
       slide.layoutDerivedObjectIds,
@@ -3012,6 +3058,7 @@ function compileSlide(
     capabilities,
     relationships: slide.relationships,
     morphObjects: slide.morphObjects,
+    matchContinuityKinds: slide.matchContinuityKinds,
     linkedSlideIndexes: slide.linkedSlideIndexes,
   };
 }
@@ -3118,7 +3165,7 @@ function compileDocument(
     if (
       current === undefined ||
       currentBuild === undefined ||
-      !usesMorphTransition(current.node)
+      !currentBuild.matchContinuityKinds
     ) {
       continue;
     }
@@ -3199,9 +3246,6 @@ function compileDocument(
     index: slide.index,
     ...(slide.section === undefined ? {} : { section: slide.section }),
     ...(slide.hidden ? { hidden: true } : {}),
-    ...(slide.advanceAfter === undefined
-      ? {}
-      : { advanceAfter: Math.round(slide.advanceAfter) }),
     objects: slide.objects,
     ...(slide.layouts.length > 0 && { layouts: slide.layouts }),
     ...(Object.keys(slide.capabilities).length > 0 && {

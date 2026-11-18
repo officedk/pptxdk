@@ -59,6 +59,7 @@ export type {
   BoundObjectNativeCollaboration,
   BoundSlideCapability,
   BoundSlideCapabilityModule,
+  BoundSlideContinuityCollaboration,
   BuildOptions,
   BuildReport,
   BuildResult,

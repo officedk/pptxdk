@@ -235,8 +235,8 @@ describe("Slice 3: formal static preview public entrypoints and runtime isolatio
       ),
     );
     const result = await previewDocument(doc);
-    expect(result.pages[0]?.png).toBeUndefined();
-    expect(result.pages[0]?.diagnostics[0]?.path).toContain("group[g1]");
+    expect(result.pages[0]?.png).toBeDefined();
+    expect(result.pages[0]?.diagnostics).toEqual([]);
     expect(result.pages[1]?.png).toBeUndefined();
     expect(result.pages[1]?.diagnostics[0]?.path).toContain("chart[c1]");
     expect(result.pages[2]?.png).toBeDefined();
@@ -251,13 +251,13 @@ describe("Slice 3: formal static preview public entrypoints and runtime isolatio
           { id: "with-group" },
           createElement(
             Group,
-            { id: "g1" },
+            { id: "g1", style: { rotate: 90 } },
             createElement(Shape, {
               id: "m1",
               x: 10,
               y: 10,
-              width: 40,
-              height: 40,
+              width: 60,
+              height: 20,
               fill: "#FF0000",
             }),
           ),
@@ -273,8 +273,13 @@ describe("Slice 3: formal static preview public entrypoints and runtime isolatio
         ),
       ),
     );
-    expect(jsxResult.pages[0]?.png).toBeUndefined();
-    expect(jsxResult.pages[0]?.diagnostics[0]?.path).toContain("group[g1]");
+    expect(jsxResult.pages[0]?.png).toBeDefined();
+    expect(jsxResult.pages[0]?.diagnostics).toEqual([]);
+    const rotatedGroupNode = jsxResult.pages[0]?.nodes.find(
+      (node) => node.authorId === "g1",
+    );
+    expect(rotatedGroupNode?.screenBox?.width).toBeCloseTo(20);
+    expect(rotatedGroupNode?.screenBox?.height).toBeCloseTo(60);
     expect(jsxResult.pages[1]?.png).toBeDefined();
     expect(jsxResult.pages[1]?.diagnostics).toEqual([]);
   });

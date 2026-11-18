@@ -270,7 +270,6 @@ export type SlideObservation = {
   readonly index: number;
   readonly section?: string;
   readonly hidden?: boolean;
-  readonly advanceAfter?: number;
   readonly objects: readonly ObjectObservation[];
   readonly layouts?: readonly LayoutObservation[];
   readonly capabilities?: Readonly<Record<string, unknown>>;
@@ -706,6 +705,8 @@ export type BoundObjectNativeCollaboration = {
   readonly morphKey?: MorphKey;
   /** True when the capability claims an explicit native object name, conflicting with morphKey. */
   readonly hasExplicitName?: boolean;
+  /** Whether this bound instance produces a native slide object; defaults to true when omitted. */
+  readonly emitsObject?: boolean;
   readonly link?: LinkTarget;
 };
 
@@ -721,6 +722,18 @@ export type BoundContainerCollaboration = {
   readonly theme?: ThemeContext;
   /** True when this container produces a native PresentationML object rather than remaining layout-only. */
   readonly emitsObject: boolean;
+  /**
+   * Controls whether this container enters the Yoga layout tree when placed inside a loose parent
+   * without declaring non-text layout styles. Defaults to `"always"`.
+   */
+  readonly layoutMode?: "always" | "when-styled";
+  /**
+   * Controls whether compiled children remain siblings of the container or are enclosed as native
+   * members inside `bound.compile` via `context.compileChildren`. Defaults to `"siblings"`.
+   */
+  readonly childComposition?: "siblings" | "members";
+  /** True when members inside this container cannot declare continuity keys (e.g. native group members). Defaults to false. */
+  readonly restrictsMemberContinuity?: boolean;
   /** True when this container contributes a layout-region observation (`kind: "layout"`). Defaults to true. */
   readonly observesLayout?: boolean;
   /** True when single-child flex rows propagate text baseline through this container. Defaults to true. */
@@ -768,7 +781,11 @@ export type TransparentCapabilityModule = {
   readonly children?: "traverse" | "owned";
   compileDeclaration(
     input: CapabilityInput,
-    context: { readonly path: string },
+    context: {
+      readonly path: string;
+      readonly theme?: ThemeContext;
+      readonly slideNumber?: number;
+    },
   ): readonly CapabilityAnnotation[];
 };
 
@@ -819,6 +836,7 @@ export type SlideCapabilityParseContext = {
   readonly theme: ThemeContext;
   readonly options: BuildOptions;
   readonly slideNumber: number;
+  readonly contributions: readonly CapabilityContribution[];
 };
 
 export type SlidePreviewContext = {
@@ -833,7 +851,19 @@ export type SlidePreviewOutput = {
   readonly warnings?: readonly PreviewWarning[];
 };
 
+/**
+ * Generic cross-slide continuity collaboration facts submitted by a bound slide capability.
+ */
+export type BoundSlideContinuityCollaboration = {
+  /**
+   * When true, core validates that each MorphKey object declared on this slide
+   * has the same native element kind as matching objects on reachable source slides.
+   */
+  readonly matchSourceKinds?: boolean;
+};
+
 export type BoundSlideCapability = {
+  readonly continuity?: BoundSlideContinuityCollaboration;
   compileSlide(context: SlideCapabilityContext): SlideCapabilityOutput;
   previewSlide?(context: SlidePreviewContext): SlidePreviewOutput;
 };

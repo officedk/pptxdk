@@ -49,6 +49,10 @@ import { P, SlideNumber, Span, Text } from "../src/text-elements.ts";
 import { runCapabilityScenario } from "./acceptance-runner.ts";
 import { boxPositiveScenario, boxRejectionScenario } from "./scenarios/box.ts";
 import {
+  groupPositiveScenario,
+  groupRejectionScenario,
+} from "./scenarios/group.ts";
+import {
   imagePositiveScenario,
   imageRejectionScenario,
 } from "./scenarios/image.ts";
@@ -95,6 +99,8 @@ describe("Capability-owned acceptance scenarios & custom bound preview extension
       for (const scenario of [
         boxPositiveScenario,
         boxRejectionScenario,
+        groupPositiveScenario,
+        groupRejectionScenario,
         imagePositiveScenario,
         imageRejectionScenario,
         layoutBlockFlexPositiveScenario,
@@ -119,7 +125,7 @@ describe("Capability-owned acceptance scenarios & custom bound preview extension
     } finally {
       await rm(outDir, { recursive: true, force: true });
     }
-  });
+  }, 30_000);
 
   it("enforces unsupported Block/Flex layout rejections consistently across JSX and document entries", async () => {
     const jsxPreview = createPreview(documentCapabilities);

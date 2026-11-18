@@ -202,7 +202,6 @@ type SlideBuildState = {
   readonly relationshipIds: Map<string, string>;
   readonly layouts: LayoutObservation[];
   readonly resourceObservations: (ResourceObservation & { objectId: number })[];
-  readonly contentChildrenByObjectId: Map<number, readonly QueryContentNode[]>;
   readonly contributions: CapabilityContribution[];
   readonly morphObjects: Map<MorphKey, MorphObject>;
   readonly linkedSlideIndexes: Set<number>;
@@ -1680,14 +1679,15 @@ function presentationContent(document: DocumentBuildState): {
 
 function capabilityContext(
   context: BuildContext,
-  child: CapabilityElement,
   id: number,
   path: string,
   layoutBox: CapabilityContext["layoutBox"],
   theme: ThemeContext,
   insideGroup: boolean,
+  restrictsMemberContinuity: boolean,
   morphName?: string,
   nativeLink?: NativeLink,
+  onChildrenCompiled?: (compiled: CompiledChildren) => void,
 ): CapabilityContext {
   return {
     id,
@@ -1708,11 +1708,9 @@ function capabilityContext(
         nested,
         context,
         path,
-        insideGroup || child.type === "rp:group",
+        insideGroup || restrictsMemberContinuity,
       );
-      if (child.type === "rp:group") {
-        context.slide.contentChildrenByObjectId.set(id, compiled.content);
-      }
+      onChildrenCompiled?.(compiled);
       return { xml: compiled.xml, objects: compiled.objects };
     },
     registerResource(resource) {
@@ -2000,12 +1998,12 @@ function compileChildren(
       const output = bound.compile(
         capabilityContext(
           context,
-          child,
           id,
           path,
           layoutBox,
           theme,
           insideGroup,
+          bound.contract.nativeKind === "grpSp",
           morphName,
           compiledLink?.nativeLink,
         ),
@@ -2090,10 +2088,7 @@ function compileChildren(
       content.push({
         ...(authorId === undefined ? {} : { authorId }),
         reference: { kind: "object", id: observation.id },
-        children: [
-          ...(context.slide.contentChildrenByObjectId.get(id) ?? []),
-          ...tableContentNodes(observation),
-        ],
+        children: tableContentNodes(observation),
       });
       if (output.observation.box !== undefined) {
         const box = output.observation.box;
@@ -2235,7 +2230,7 @@ function compileBoundContainer(args: {
     content,
   } = args;
   const box = context.layout.boxes.get(child);
-  if (box === undefined) {
+  if (box === undefined && container.layoutMode !== "when-styled") {
     context.slide.diagnostics.push(
       diagnostic(
         path,
@@ -2245,7 +2240,12 @@ function compileBoundContainer(args: {
     );
     return;
   }
-  const observesLayout = container.observesLayout !== false;
+  const enclosesChildren = container.childComposition === "members";
+  const restrictsMemberContinuity =
+    container.restrictsMemberContinuity === true ||
+    bound.contract.nativeKind === "grpSp";
+  const observesLayout =
+    container.observesLayout !== false && box !== undefined;
   const layoutId = observesLayout ? context.slide.nextId++ : undefined;
   const emitsObject = container.emitsObject;
   const requestedMorphKey = bound.native?.morphKey;
@@ -2315,19 +2315,23 @@ function compileBoundContainer(args: {
   }
   let containerXml = "";
   let containerObservation: ObjectObservation | undefined;
+  let memberCompiled: CompiledChildren | undefined;
   const objectId = context.slide.nextId++;
   try {
     const output = bound.compile(
       capabilityContext(
         context,
-        child,
         objectId,
         path,
         box,
         theme,
         insideGroup,
+        restrictsMemberContinuity,
         morphName,
         containerLink?.nativeLink,
+        (compiled) => {
+          memberCompiled = compiled;
+        },
       ),
     );
     if (emitsObject && output.xml !== "") {
@@ -2338,7 +2342,27 @@ function compileBoundContainer(args: {
         ...(authorId === undefined ? {} : { authorId }),
         ...(containerLink === undefined ? {} : { link: containerLink.summary }),
       };
-      context.slide.layoutDerivedObjectIds.add(objectId);
+      if (box !== undefined) context.slide.layoutDerivedObjectIds.add(objectId);
+      if (
+        container.checksCanvasOverflow === false &&
+        output.observation.box !== undefined
+      ) {
+        const obsBox = output.observation.box;
+        if (
+          obsBox.x < 0 ||
+          obsBox.y < 0 ||
+          obsBox.x + obsBox.width > context.dimensions.width ||
+          obsBox.y + obsBox.height > context.dimensions.height
+        ) {
+          context.document.warnings.push({
+            severity: "warning",
+            path,
+            code: "overflow",
+            message:
+              "Object overflows slide canvas; build retains original declaration",
+          });
+        }
+      }
       if (morphKey !== undefined && morphName !== undefined) {
         const nativeKind = bound.contract.nativeKind;
         if (output.observation.name !== morphName) {
@@ -2433,14 +2457,25 @@ function compileBoundContainer(args: {
           ),
     );
   }
-  const compiled = compileChildren(
-    container.children,
-    context,
-    path,
-    insideGroup,
-  );
+  const compiled = enclosesChildren
+    ? (memberCompiled ?? {
+        xml: "",
+        objects: [],
+        references: [],
+        content: [],
+        paintLayers: [],
+      })
+    : compileChildren(
+        container.children,
+        context,
+        path,
+        insideGroup || restrictsMemberContinuity,
+      );
   let containerPreviewSvg: string | undefined;
-  if (context.previewSession?.shouldPreviewPage(context.slideNumber)) {
+  if (
+    context.previewSession?.shouldPreviewPage(context.slideNumber) &&
+    (!emitsObject || containerObservation !== undefined)
+  ) {
     const previewSession = context.previewSession;
     if (bound.preview !== undefined) {
       const childrenSvg = compiled.paintLayers
@@ -2508,7 +2543,14 @@ function compileBoundContainer(args: {
       });
     }
   }
-  if (layoutId !== undefined) {
+  const layerXml = enclosesChildren
+    ? containerXml
+    : containerXml + compiled.xml;
+  const layerObjects = [
+    ...(containerObservation === undefined ? [] : [containerObservation]),
+    ...(enclosesChildren ? [] : compiled.objects),
+  ];
+  if (layoutId !== undefined && box !== undefined) {
     context.slide.layouts.push({
       id: layoutId,
       ...(authorId === undefined ? {} : { authorId }),
@@ -2533,14 +2575,11 @@ function compileBoundContainer(args: {
     painted.push({
       sourceOrder: [index],
       zIndex: paintOrder(bound.contract),
-      xml: containerXml + compiled.xml,
+      xml: layerXml,
       ...(containerPreviewSvg === undefined
         ? {}
         : { previewSvg: containerPreviewSvg }),
-      objects: [
-        ...(containerObservation === undefined ? [] : [containerObservation]),
-        ...compiled.objects,
-      ],
+      objects: layerObjects,
       reference: { kind: "layout", id: layoutId },
     });
     return;
@@ -2557,14 +2596,11 @@ function compileBoundContainer(args: {
   painted.push({
     sourceOrder: [index],
     zIndex: paintOrder(bound.contract),
-    xml: containerXml + compiled.xml,
+    xml: layerXml,
     ...(containerPreviewSvg === undefined
       ? {}
       : { previewSvg: containerPreviewSvg }),
-    objects: [
-      ...(containerObservation === undefined ? [] : [containerObservation]),
-      ...compiled.objects,
-    ],
+    objects: layerObjects,
     reference:
       containerObservation !== undefined
         ? { kind: "object", id: containerObservation.id }
@@ -2758,7 +2794,6 @@ function compileSlide(
     linkedSlideIndexes: new Set(),
     layouts: [],
     resourceObservations: [],
-    contentChildrenByObjectId: new Map(),
     contributions: [],
     morphObjects: new Map(),
     layoutDerivedObjectIds: new Set(),

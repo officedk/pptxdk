@@ -19,7 +19,7 @@ import type {
   LayoutSolverNode,
   LayoutSolverPort,
 } from "#/layout-protocol.ts";
-import { textStyleFrom, textStyleKeys } from "#/theme.ts";
+import { textStyleKeys } from "#/theme.ts";
 import type {
   BoundContainerCollaboration,
   BoundObjectCapability,
@@ -36,7 +36,6 @@ import type {
   NativeElementKind,
   RegisteredCapabilityModule,
   ThemeContext,
-  ThemeScope,
 } from "#/types.ts";
 
 export { paddingStyleKeys };
@@ -113,24 +112,6 @@ function diagnostic(path: string, code: string, message: string): Diagnostic {
 
 function fail(path: string, code: string, message: string): never {
   throw new BuildError([diagnostic(path, code, message)]);
-}
-
-function deriveTheme(
-  parent: ThemeContext,
-  scope: ThemeScope | undefined,
-  style: unknown,
-  path: string,
-): ThemeContext {
-  try {
-    const textStyle = style === undefined ? {} : textStyleFrom(style);
-    return parent.with(scope, textStyle);
-  } catch (error) {
-    return fail(
-      path,
-      error instanceof CapabilityError ? error.code : "invalid-theme-scope",
-      error instanceof Error ? error.message : String(error),
-    );
-  }
 }
 
 function element(child: CapabilityChild): child is CapabilityElement {
@@ -1309,7 +1290,7 @@ export class LayoutPass {
     return bound;
   }
 
-  // Transparent Groups are not in the layout tree, so theme context must be passed separately along the declaration tree.
+  // Transparent or loose containers are not in the layout tree, so theme context must be passed separately along the declaration tree.
   #appendChildren(
     children: readonly CapabilityChild[],
     parentPath: string,
@@ -1322,61 +1303,6 @@ export class LayoutPass {
       const childPath = `${parentPath}/${label(child, index)}`;
       if (parent.style.display === "none") {
         this.#markHidden(child);
-        return;
-      }
-      if (child.type === "rp:group") {
-        const module = this.#modules.get(child.type);
-        if (!objectModule(module)) {
-          fail(
-            childPath,
-            "missing-capability",
-            "rp:group capability is required",
-          );
-        }
-        const bound = this.#bindCapability(
-          child,
-          childPath,
-          themeContext,
-          module,
-        );
-        const contract = bound.contract;
-        const childStyle = contract.layoutStyle;
-        if (childStyle.display === "none") {
-          this.#markHidden(child);
-          return;
-        }
-        validateGridItemStyle(childStyle, parent.style, childPath);
-        if (!includeObjects) {
-          // Group text defaults apply only to descendants, not indicating it should become a layout item.
-          const optsIntoLayout = Object.keys(childStyle).some(
-            (key) => key !== "zIndex" && !textStyleKeys.has(key),
-          );
-          if (!optsIntoLayout) {
-            const groupTheme = deriveTheme(
-              themeContext,
-              child.props["theme"] as ThemeScope | undefined,
-              child.props["style"],
-              childPath,
-            );
-            this.#themes.set(child, groupTheme);
-            this.#appendChildren(
-              child.children,
-              childPath,
-              parent,
-              false,
-              groupTheme,
-            );
-            return;
-          }
-        }
-        const built = this.#buildGroup(
-          child,
-          childPath,
-          parent,
-          themeContext,
-          contract,
-        );
-        this.#solver.appendChild(parent, built);
         return;
       }
       const module = this.#modules.get(child.type);
@@ -1407,6 +1333,27 @@ export class LayoutPass {
         }
         validateGridItemStyle(contract.layoutStyle, parent.style, childPath);
         if (bound.container !== undefined) {
+          if (
+            !includeObjects &&
+            bound.container.layoutMode === "when-styled" &&
+            !Object.keys(contract.layoutStyle).some(
+              (key) =>
+                key !== "zIndex" &&
+                layoutPropertySet.has(key) &&
+                contract.layoutStyle[key as keyof LayoutStyle] !== undefined,
+            )
+          ) {
+            const theme = bound.container.theme ?? themeContext;
+            this.#themes.set(child, theme);
+            this.#appendChildren(
+              bound.container.children,
+              childPath,
+              parent,
+              false,
+              theme,
+            );
+            return;
+          }
           const built = this.#buildContainer(
             child,
             childPath,
@@ -1477,50 +1424,6 @@ export class LayoutPass {
       checksCanvasOverflow: container.checksCanvasOverflow !== false,
     });
     this.#appendChildren(container.children, path, node, true, theme);
-    return node;
-  }
-
-  #buildGroup(
-    input: CapabilityElement,
-    path: string,
-    parent: LayoutSolverNode,
-    themeContext: ThemeContext,
-    contract: CapabilityLayoutContract,
-  ): LayoutSolverNode {
-    const rawStyle = input.props["style"];
-    const style = contract.layoutStyle;
-    const theme = deriveTheme(
-      themeContext,
-      input.props["theme"] as ThemeScope | undefined,
-      rawStyle,
-      path,
-    );
-    this.#themes.set(input, theme);
-    const node = this.#solver.createNode(
-      {
-        path,
-        style,
-        isContainer: true,
-        propagatesBaseline: false,
-        ...(contract.width === undefined
-          ? {}
-          : { contractWidth: contract.width }),
-        ...(contract.height === undefined
-          ? {}
-          : { contractHeight: contract.height }),
-        ...(contract.x === undefined ? {} : { contractX: contract.x }),
-        ...(contract.y === undefined ? {} : { contractY: contract.y }),
-        ...(contract.padding === undefined
-          ? {}
-          : { padding: contract.padding }),
-      },
-      parent,
-    );
-    this.#nodeMeta.set(node, {
-      element: input,
-      checksCanvasOverflow: false,
-    });
-    this.#appendChildren(input.children, path, node, true, theme);
     return node;
   }
 

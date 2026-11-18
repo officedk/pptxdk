@@ -102,7 +102,6 @@ export { tableCapability } from "#/table.ts";
 export type {
   CellDeclarationProps,
   CellNode,
-  ParsedTable,
   RowDeclarationProps,
   RowNode,
   TableCellStyle,

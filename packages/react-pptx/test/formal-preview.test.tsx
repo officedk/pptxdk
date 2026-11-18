@@ -6,27 +6,21 @@ import { fileURLToPath } from "node:url";
 import {
   Box,
   BuildError,
-  Cell,
   Deck,
   Group,
-  Row,
   Shape,
   Slide,
-  Table,
   Text,
   font,
   preview as previewJsx,
 } from "@react-pptx/react-pptx";
 import {
   box,
-  cell,
   chart,
   deck,
   group,
-  row,
   shape,
   slide,
-  table,
   text,
 } from "@react-pptx/react-pptx/document";
 import { preview as previewDocument } from "@react-pptx/react-pptx/preview";
@@ -119,8 +113,15 @@ describe("Slice 3: formal static preview public entrypoints and runtime isolatio
   it("validates 1-based pages, skips drawing unselected pages, and still validates full-deck build", async () => {
     const validTwoPages = deck({ width: 320, height: 180 }).append(
       slide({ id: "unselected-unmigrated" }).append(
-        table({ id: "t", x: 10, y: 10, width: 100, columns: [100] }).append(
-          row({ style: { height: 30 } }).append(cell("Not yet migrated")),
+        group({ id: "g-unselected" }).append(
+          shape({
+            id: "s-unselected",
+            x: 10,
+            y: 10,
+            width: 80,
+            height: 40,
+            fill: "#334155",
+          }),
         ),
       ),
       slide({ id: "selected", background: "#123456" }).append(
@@ -186,19 +187,14 @@ describe("Slice 3: formal static preview public entrypoints and runtime isolatio
 
   it("rejects unmigrated object capabilities on selected pages without silently omitting them", async () => {
     const doc = deck({ width: 320, height: 180 }).append(
-      slide({ id: "with-table" }).append(
-        table({ id: "tb1", x: 10, y: 10, width: 120, columns: [120] }).append(
-          row({ style: { height: 30 } }).append(cell("Unmigrated table")),
-        ),
-      ),
       slide({ id: "with-group" }).append(
         group({ id: "g1" }).append(
           shape({
-            id: "inner",
+            id: "m1",
             x: 10,
             y: 10,
             width: 40,
-            height: 20,
+            height: 40,
             fill: "#FF0000",
           }),
         ),
@@ -239,14 +235,12 @@ describe("Slice 3: formal static preview public entrypoints and runtime isolatio
       ),
     );
     const result = await previewDocument(doc);
-    expect(result.pages[0]?.png).toBeUndefined();
-    expect(result.pages[0]?.diagnostics[0]?.path).toContain("table[tb1]");
-    expect(result.pages[1]?.png).toBeDefined();
-    expect(result.pages[1]?.diagnostics).toEqual([]);
-    expect(result.pages[2]?.png).toBeUndefined();
-    expect(result.pages[2]?.diagnostics[0]?.path).toContain("chart[c1]");
-    expect(result.pages[3]?.png).toBeDefined();
-    expect(result.pages[3]?.diagnostics).toEqual([]);
+    expect(result.pages[0]?.png).toBeDefined();
+    expect(result.pages[0]?.diagnostics).toEqual([]);
+    expect(result.pages[1]?.png).toBeUndefined();
+    expect(result.pages[1]?.diagnostics[0]?.path).toContain("chart[c1]");
+    expect(result.pages[2]?.png).toBeDefined();
+    expect(result.pages[2]?.diagnostics).toEqual([]);
 
     const jsxResult = await previewJsx(
       createElement(
@@ -277,19 +271,6 @@ describe("Slice 3: formal static preview public entrypoints and runtime isolatio
             createElement(Shape, { width: 40, height: 20, fill: "#0000FF" }),
           ),
         ),
-        createElement(
-          Slide,
-          { id: "with-jsx-table" },
-          createElement(
-            Table,
-            { id: "jtb1", x: 10, y: 10, width: 100, columns: [100] },
-            createElement(
-              Row,
-              { style: { height: 30 } },
-              createElement(Cell, null, "Hi"),
-            ),
-          ),
-        ),
       ),
     );
     expect(jsxResult.pages[0]?.png).toBeDefined();
@@ -301,8 +282,6 @@ describe("Slice 3: formal static preview public entrypoints and runtime isolatio
     expect(rotatedGroupNode?.screenBox?.height).toBeCloseTo(60);
     expect(jsxResult.pages[1]?.png).toBeDefined();
     expect(jsxResult.pages[1]?.diagnostics).toEqual([]);
-    expect(jsxResult.pages[2]?.png).toBeUndefined();
-    expect(jsxResult.pages[2]?.diagnostics[0]?.path).toContain("table[jtb1]");
   });
 
   it("never loads @resvg/resvg-js when calling JSX build or document build", () => {

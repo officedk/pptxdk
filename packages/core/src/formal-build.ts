@@ -57,6 +57,7 @@ import {
   type RegisteredCapabilityModule,
   type CapabilityResource,
   type CapabilityResourceClaim,
+  type CapabilitySubPartObservation,
   type Diagnostic,
   type Extension,
   type GeometryBox,
@@ -2090,7 +2091,7 @@ function compileChildren(
       content.push({
         ...(authorId === undefined ? {} : { authorId }),
         reference: { kind: "object", id: observation.id },
-        children: tableContentNodes(observation),
+        children: subPartContentNodes(output.parts),
       });
       if (output.observation.box !== undefined) {
         const box = output.observation.box;
@@ -2626,33 +2627,19 @@ function paintOrder(contract?: CapabilityLayoutContract): number {
   return typeof value === "number" && Number.isFinite(value) ? value : 0;
 }
 
-function tableContentNodes(object: ObjectObservation): QueryContentNode[] {
-  const parts = object.table?.parts;
-  if (parts === undefined) return [];
-  const nodeAt = (partIndex: number): QueryContentNode => {
-    const part = parts[partIndex];
-    if (part === undefined)
-      throw new Error("Table query part index does not exist");
-    return {
-      ...(part.authorId === undefined ? {} : { authorId: part.authorId }),
-      reference: { kind: "table-part", tableId: object.id, partIndex },
-      children: [],
-    };
-  };
-  return parts.flatMap((part, partIndex) =>
-    part.kind === "row"
-      ? [
-          {
-            ...nodeAt(partIndex),
-            children: parts.flatMap((cell, cellIndex) =>
-              cell.kind === "cell" && cell.row === part.row
-                ? [nodeAt(cellIndex)]
-                : [],
-            ),
-          },
-        ]
-      : [],
-  );
+function subPartContentNodes(
+  parts: readonly CapabilitySubPartObservation[] | undefined,
+): QueryContentNode[] {
+  if (parts === undefined || parts.length === 0) return [];
+  return parts.map((part) => ({
+    ...(part.authorId === undefined ? {} : { authorId: part.authorId }),
+    reference: {
+      kind: "part",
+      ...(part.box === undefined ? {} : { box: part.box }),
+      ...(part.text === undefined ? {} : { text: part.text }),
+    },
+    children: subPartContentNodes(part.parts),
+  }));
 }
 
 function resolveContributions(

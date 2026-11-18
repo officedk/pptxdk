@@ -5,31 +5,43 @@ import {
   paddingStyleKeys,
   parseCapabilityLayoutContract,
   textStyleKeys,
+  type BoundObjectCapability,
+  type BoundObjectCapabilityModule,
+  type BoundObjectNativeCollaboration,
   type CapabilityContext,
   type CapabilityInput,
-  type CapabilityLayoutContract,
   type CapabilityLayoutMeasurement,
   type CapabilityLayoutRequest,
-  type ObjectCapabilityModule,
   type CapabilityParseContext,
-  type CapabilityParseResult,
+  type GeometryBox,
+  type ObjectPreviewContext,
+  type ObjectPreviewOutput,
 } from "@react-pptx/core/capability";
 
 import { fontPresentationContributions } from "./font-embedding.ts";
-import { nativeLinkXml } from "./identity.ts";
+import {
+  nativeLinkXml,
+  parseLinkTarget,
+  parseMorphKey,
+  parseOptionalName,
+} from "./identity.ts";
 import { motionAnnotations } from "./motion-api.ts";
 import { layoutStyleValue } from "./style-parse.ts";
 import {
   measureTextLayoutFromParagraphs,
   parseTextContent,
+  renderTextOutlinesSvg,
   textInsets,
   textExtent,
   writeTextBodyFromParagraphs,
-  type Paragraph,
-  type ResolvedTextStyle,
+  type MeasuredTextLayout,
 } from "./text-service.ts";
 import { textBoxXml } from "./text-xml.ts";
-import { shapePropertiesXml, visualStyleKeys } from "./visual.ts";
+import {
+  resolveBoxPreviewVisuals,
+  shapePropertiesXml,
+  visualStyleKeys,
+} from "./visual.ts";
 
 export type {
   ParagraphDeclarationProps,
@@ -48,26 +60,6 @@ export type {
   TextList,
   TextStyle,
 } from "./text-service.ts";
-
-export type ParsedText = {
-  readonly name?: string | undefined;
-  readonly morphKey?: unknown;
-  readonly link?: unknown;
-  readonly visualStyle: Readonly<Record<string, unknown>>;
-  readonly insets: {
-    readonly top: number;
-    readonly right: number;
-    readonly bottom: number;
-    readonly left: number;
-  };
-  readonly paragraphs: readonly Paragraph[];
-  readonly textStyle: ResolvedTextStyle;
-  readonly requestedHeight:
-    | { readonly contentSized: true }
-    | { readonly contentSized: false; readonly value: number | undefined };
-  readonly contract: CapabilityLayoutContract;
-  readonly rawProps: Readonly<Record<string, unknown>>;
-};
 
 const allowedParameters = [
   "id",
@@ -89,18 +81,7 @@ function record(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function optionalName(value: unknown, parameter: "name"): string | undefined {
-  if (value === undefined) return undefined;
-  if (typeof value !== "string" || value.trim() === "") {
-    throw new CapabilityError(
-      "invalid-parameter",
-      `${parameter} must be a non-empty string`,
-    );
-  }
-  return value;
-}
-
-function coordinate(value: unknown, label: "x" | "y"): number {
+function coordinate(value: unknown, label: "x" | "y", path?: string): number {
   if (
     typeof value !== "number" ||
     !Number.isFinite(value) ||
@@ -110,16 +91,22 @@ function coordinate(value: unknown, label: "x" | "y"): number {
     throw new CapabilityError(
       "invalid-text-box",
       `${label} must be a finite pixel number between -1000000 and 1000000`,
+      path,
     );
   }
   return value;
 }
 
-function size(value: unknown, label: "width" | "height"): number {
+function size(
+  value: unknown,
+  label: "width" | "height",
+  path?: string,
+): number {
   if (typeof value !== "number") {
     throw new CapabilityError(
       "invalid-text-box",
       `${label} must be a finite positive pixel number`,
+      path,
     );
   }
   textExtent(value, label);
@@ -128,6 +115,7 @@ function size(value: unknown, label: "width" | "height"): number {
 
 function height(
   value: unknown,
+  path?: string,
 ):
   | { readonly contentSized: true }
   | { readonly contentSized: false; readonly value: number | undefined } {
@@ -138,7 +126,7 @@ function height(
   ) {
     return { contentSized: false, value: undefined };
   }
-  return { contentSized: false, value: size(value, "height") };
+  return { contentSized: false, value: size(value, "height", path) };
 }
 
 function textStyle(value: unknown): unknown {
@@ -148,14 +136,14 @@ function textStyle(value: unknown): unknown {
   );
 }
 
-/** Fixed-region text box capability; specific text services are shared by text boxes and other native objects. */
-export const textCapability: ObjectCapabilityModule<ParsedText> = {
+/** Fixed-region and content-sized text box capability bound per formal build. */
+export const textCapability: BoundObjectCapabilityModule = {
   declaration: "rp:text",
 
-  parse(
+  bind(
     input: CapabilityInput,
     context: CapabilityParseContext,
-  ): CapabilityParseResult<ParsedText> {
+  ): BoundObjectCapability {
     const unknown = Object.keys(input.props).find(
       (key) => !(allowedParameters as readonly string[]).includes(key),
     );
@@ -166,15 +154,17 @@ export const textCapability: ObjectCapabilityModule<ParsedText> = {
         context.path,
       );
     }
-    const requestedName = optionalName(input.props["name"], "name");
+    const requestedName = parseOptionalName(input.props["name"], context.path);
+    const morphKey = parseMorphKey(input.props["morphKey"], context.path);
+    const link = parseLinkTarget(input.props["link"], context.path);
 
-    if (input.props["x"] !== undefined) coordinate(input.props["x"], "x");
-    if (input.props["y"] !== undefined) coordinate(input.props["y"], "y");
-    if (
-      input.props["width"] !== undefined &&
-      typeof input.props["width"] === "number"
-    ) {
-      size(input.props["width"], "width");
+    const declaredX = input.props["x"];
+    const declaredY = input.props["y"];
+    const declaredWidth = input.props["width"];
+    if (declaredX !== undefined) coordinate(declaredX, "x", context.path);
+    if (declaredY !== undefined) coordinate(declaredY, "y", context.path);
+    if (declaredWidth !== undefined && typeof declaredWidth === "number") {
+      size(declaredWidth, "width", context.path);
     }
 
     const allowedStyleKeys = new Set<string>([
@@ -194,7 +184,10 @@ export const textCapability: ObjectCapabilityModule<ParsedText> = {
 
     const insets = textInsets(input.props["style"]);
     const styleHeight = layoutStyleValue(input, "height");
-    const requestedHeight = height(styleHeight ?? input.props["height"]);
+    const requestedHeight = height(
+      styleHeight ?? input.props["height"],
+      context.path,
+    );
 
     const { paragraphs, style: parsedTextStyle } = parseTextContent(
       input.children,
@@ -206,197 +199,242 @@ export const textCapability: ObjectCapabilityModule<ParsedText> = {
     );
 
     const visualStyle = record(input.props["style"])
-      ? input.props["style"]
+      ? { ...input.props["style"] }
       : {};
-
-    const parsed: ParsedText = {
-      ...(requestedName !== undefined ? { name: requestedName } : {}),
-      ...(input.props["morphKey"] !== undefined
-        ? { morphKey: input.props["morphKey"] }
-        : {}),
-      ...(input.props["link"] !== undefined
-        ? { link: input.props["link"] }
-        : {}),
-      visualStyle,
-      insets,
-      paragraphs,
-      textStyle: parsedTextStyle,
-      requestedHeight,
-      contract,
-      rawProps: input.props,
-    };
-
-    return { contract, parsed };
-  },
-
-  measureLayout(
-    parsed: ParsedText,
-    request: CapabilityLayoutRequest,
-  ): CapabilityLayoutMeasurement | undefined {
-    const insets = parsed.insets;
-    const isContentSized = parsed.requestedHeight.contentSized;
-    const styleWidth = layoutStyleValue(
-      { type: "rp:text", props: parsed.rawProps, children: [] },
-      "width",
-    );
-    const width =
-      request.availableWidth ?? styleWidth ?? parsed.rawProps["width"];
-    const innerWidth =
-      request.availableWidth !== undefined
-        ? request.availableWidth
-        : typeof width === "number"
-          ? Math.max(0, width - insets.left - insets.right)
-          : undefined;
-
-    try {
-      const measured = measureTextLayoutFromParagraphs(
-        parsed.paragraphs,
-        parsed.textStyle,
-        innerWidth,
-      );
-      return {
-        ...measured,
-        baseline: measured.baseline ?? "unavailable",
-      };
-    } catch (error) {
-      if (
-        !isContentSized &&
-        error instanceof CapabilityError &&
-        error.code === "font-measurement-unavailable"
-      ) {
-        return {
-          baseline: "unavailable",
-        };
-      }
-      throw error;
-    }
-  },
-
-  compile(parsed: ParsedText, context: CapabilityContext) {
-    const insets = parsed.insets;
-    const styleWidth = layoutStyleValue(
-      { type: "rp:text", props: parsed.rawProps, children: [] },
-      "width",
-    );
-    const dimensions = {
-      x: coordinate(
-        context.layoutBox?.x ?? parsed.contract.x ?? parsed.rawProps["x"],
-        "x",
-      ),
-      y: coordinate(
-        context.layoutBox?.y ?? parsed.contract.y ?? parsed.rawProps["y"],
-        "y",
-      ),
-      width: size(
-        context.layoutBox?.width ??
-          parsed.contract.width ??
-          styleWidth ??
-          parsed.rawProps["width"],
-        "width",
-      ),
-    };
-    const requestedHeight = parsed.requestedHeight;
-    const measuredHeight = requestedHeight.contentSized
-      ? undefined
-      : requestedHeight.value;
-    const outputHeight = context.layoutBox?.height ?? measuredHeight;
-    const innerWidth = Math.max(
-      0,
-      dimensions.width - insets.left - insets.right,
-    );
-    const innerHeight =
-      outputHeight === undefined
-        ? undefined
-        : Math.max(0, outputHeight - insets.top - insets.bottom);
-    const body = writeTextBodyFromParagraphs(
-      parsed.paragraphs,
-      parsed.textStyle,
-      context.theme,
-      "top",
-      {
-        width: innerWidth,
-        ...(innerHeight === undefined ? {} : { height: innerHeight }),
-        contentSized: requestedHeight.contentSized,
-        insets,
-      },
-      "text-box",
-      context.options.embedFonts,
-      context.createTextFieldId,
-    );
-    const box = {
-      ...dimensions,
-      height: size(
-        context.layoutBox?.height ??
-          (requestedHeight.contentSized
-            ? body.measurement === undefined
-              ? undefined
-              : body.measurement.height + insets.top + insets.bottom
-            : requestedHeight.value),
-        "height",
-      ),
-    };
-    const visualStyle = parsed.visualStyle;
-    const properties = shapePropertiesXml({
+    shapePropertiesXml({
       theme: context.theme,
       style: visualStyle,
-      box,
+      box: { x: 0, y: 0, width: 100, height: 100 },
     });
-    const name = context.morphName ?? parsed.name ?? `Text ${context.id - 1}`;
-    const annotations = motionAnnotations(parsed.rawProps, {
-      kind: "text",
-      name,
-      ...(typeof parsed.rawProps["id"] === "string"
-        ? { authorId: parsed.rawProps["id"] }
+
+    const authorId =
+      typeof input.props["id"] === "string" ? input.props["id"] : undefined;
+    const motionProps: Readonly<Record<string, unknown>> = {
+      ...(input.props["enter"] !== undefined
+        ? { enter: input.props["enter"] }
         : {}),
-      textBody: true,
-      filled:
-        visualStyle["backgroundColor"] !== undefined ||
-        visualStyle["backgroundImage"] !== undefined,
-      box,
-      rotationDegrees:
-        typeof visualStyle["rotate"] === "number" ? visualStyle["rotate"] : 0,
-      hasBackground:
-        visualStyle["backgroundColor"] !== undefined ||
-        visualStyle["backgroundImage"] !== undefined ||
-        visualStyle["borderColor"] !== undefined ||
-        (typeof visualStyle["borderWidth"] === "number" &&
-          visualStyle["borderWidth"] > 0),
-      paragraphCount: body.paragraphCount,
-    });
-    let escapedName: string;
-    try {
-      escapedName = xmlEscape(name);
-    } catch {
-      throw new CapabilityError(
-        "invalid-xml-character",
-        "Text.name contains characters not allowed in XML 1.0",
-      );
-    }
-    const output = {
-      xml: textBoxXml(
-        context.id,
-        escapedName,
-        box,
-        body.xml,
-        properties.xml,
-        nativeLinkXml(context.nativeLink),
-      ),
-      observation: {
-        id: context.id,
-        kind: "text",
-        name,
-        box,
-        text: body.text,
-      },
-      extensions: [],
-      warnings: [...body.warnings, ...properties.warnings],
-      ...(annotations.length === 0 ? {} : { annotations }),
-      resourceClaims: body.resourceClaims,
-      presentationContributions: fontPresentationContributions(
-        body.fontUses,
-        context.options.embedFonts,
-      ),
+      ...(input.props["emphasis"] !== undefined
+        ? { emphasis: input.props["emphasis"] }
+        : {}),
+      ...(input.props["motion"] !== undefined
+        ? { motion: input.props["motion"] }
+        : {}),
     };
-    return output;
+
+    const native: BoundObjectNativeCollaboration = {
+      ...(morphKey === undefined ? {} : { morphKey }),
+      ...(requestedName === undefined ? {} : { hasExplicitName: true }),
+      ...(link === undefined ? {} : { link }),
+    };
+
+    let compiledState:
+      | {
+          readonly box: GeometryBox;
+          readonly measuredLayout?: MeasuredTextLayout | undefined;
+        }
+      | undefined;
+
+    return {
+      contract,
+      ...(morphKey !== undefined ||
+      requestedName !== undefined ||
+      link !== undefined
+        ? { native }
+        : {}),
+      measureLayout(
+        request: CapabilityLayoutRequest,
+      ): CapabilityLayoutMeasurement | undefined {
+        const isContentSized = requestedHeight.contentSized;
+        const width = request.availableWidth ?? contract.width ?? declaredWidth;
+        const innerWidth =
+          request.availableWidth !== undefined
+            ? request.availableWidth
+            : typeof width === "number"
+              ? Math.max(0, width - insets.left - insets.right)
+              : undefined;
+
+        try {
+          const measured = measureTextLayoutFromParagraphs(
+            paragraphs,
+            parsedTextStyle,
+            innerWidth,
+          );
+          return {
+            ...measured,
+            baseline: measured.baseline ?? "unavailable",
+          };
+        } catch (error) {
+          if (
+            !isContentSized &&
+            error instanceof CapabilityError &&
+            error.code === "font-measurement-unavailable"
+          ) {
+            return {
+              baseline: "unavailable",
+            };
+          }
+          throw error;
+        }
+      },
+      compile(compileContext: CapabilityContext) {
+        const dimensions = {
+          x: coordinate(
+            compileContext.layoutBox?.x ?? contract.x ?? declaredX,
+            "x",
+            compileContext.path,
+          ),
+          y: coordinate(
+            compileContext.layoutBox?.y ?? contract.y ?? declaredY,
+            "y",
+            compileContext.path,
+          ),
+          width: size(
+            compileContext.layoutBox?.width ?? contract.width ?? declaredWidth,
+            "width",
+            compileContext.path,
+          ),
+        };
+        const measuredHeight = requestedHeight.contentSized
+          ? undefined
+          : requestedHeight.value;
+        const outputHeight = compileContext.layoutBox?.height ?? measuredHeight;
+        const innerWidth = Math.max(
+          0,
+          dimensions.width - insets.left - insets.right,
+        );
+        const innerHeight =
+          outputHeight === undefined
+            ? undefined
+            : Math.max(0, outputHeight - insets.top - insets.bottom);
+        const body = writeTextBodyFromParagraphs(
+          paragraphs,
+          parsedTextStyle,
+          compileContext.theme,
+          "top",
+          {
+            width: innerWidth,
+            ...(innerHeight === undefined ? {} : { height: innerHeight }),
+            contentSized: requestedHeight.contentSized,
+            insets,
+          },
+          "text-box",
+          compileContext.options.embedFonts,
+          compileContext.createTextFieldId,
+        );
+        const box = {
+          ...dimensions,
+          height: size(
+            compileContext.layoutBox?.height ??
+              (requestedHeight.contentSized
+                ? body.measurement === undefined
+                  ? undefined
+                  : body.measurement.height + insets.top + insets.bottom
+                : requestedHeight.value),
+            "height",
+            compileContext.path,
+          ),
+        };
+        compiledState = { box, measuredLayout: body.measuredLayout };
+
+        const properties = shapePropertiesXml({
+          theme: compileContext.theme,
+          style: visualStyle,
+          box,
+        });
+        const name =
+          compileContext.morphName ??
+          requestedName ??
+          `Text ${compileContext.id - 1}`;
+        const annotations = motionAnnotations(motionProps, {
+          kind: "text",
+          name,
+          ...(authorId === undefined ? {} : { authorId }),
+          textBody: true,
+          filled:
+            visualStyle["backgroundColor"] !== undefined ||
+            visualStyle["backgroundImage"] !== undefined,
+          box,
+          rotationDegrees:
+            typeof visualStyle["rotate"] === "number"
+              ? visualStyle["rotate"]
+              : 0,
+          hasBackground:
+            visualStyle["backgroundColor"] !== undefined ||
+            visualStyle["backgroundImage"] !== undefined ||
+            visualStyle["borderColor"] !== undefined ||
+            (typeof visualStyle["borderWidth"] === "number" &&
+              visualStyle["borderWidth"] > 0),
+          paragraphCount: body.paragraphCount,
+        });
+        let escapedName: string;
+        try {
+          escapedName = xmlEscape(name);
+        } catch {
+          throw new CapabilityError(
+            "invalid-xml-character",
+            "Text.name contains characters not allowed in XML 1.0",
+            compileContext.path,
+          );
+        }
+        return {
+          xml: textBoxXml(
+            compileContext.id,
+            escapedName,
+            box,
+            body.xml,
+            properties.xml,
+            nativeLinkXml(compileContext.nativeLink),
+          ),
+          observation: {
+            id: compileContext.id,
+            kind: "text",
+            name,
+            box,
+            text: body.text,
+          },
+          extensions: [],
+          warnings: [...body.warnings, ...properties.warnings],
+          ...(annotations.length === 0 ? {} : { annotations }),
+          resourceClaims: body.resourceClaims,
+          presentationContributions: fontPresentationContributions(
+            body.fontUses,
+            compileContext.options.embedFonts,
+          ),
+        };
+      },
+      preview(previewContext: ObjectPreviewContext): ObjectPreviewOutput {
+        const box = previewContext.box ?? compiledState?.box;
+        if (box === undefined) {
+          throw new CapabilityError(
+            "preview-missing-geometry",
+            "Preview requires compiled text geometry",
+          );
+        }
+        const visuals = resolveBoxPreviewVisuals({
+          label: "text",
+          visualStyle,
+          box,
+          theme: previewContext.theme,
+        });
+        const backgroundRect = visuals.hasFillOrStroke
+          ? `<rect x="${box.x}" y="${box.y}" width="${box.width}" height="${box.height}" ${visuals.attributes}/>`
+          : "";
+        const glyphs = renderTextOutlinesSvg({
+          paragraphs,
+          box,
+          insets,
+          verticalAlign: parsedTextStyle.verticalAlign ?? "top",
+          theme: previewContext.theme,
+          measuredLayout:
+            compiledState !== undefined && compiledState.box.width === box.width
+              ? compiledState.measuredLayout
+              : undefined,
+        });
+        return {
+          svg: `<g transform="${visuals.svgTransform}">${backgroundRect}${glyphs}</g>`,
+          transform: visuals.transform,
+        };
+      },
+    };
   },
 };

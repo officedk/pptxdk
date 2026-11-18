@@ -12,6 +12,7 @@ import {
   type FontFaceStyle,
   type FontReference,
   type FontSize,
+  type GeometryBox,
   type ResolvedColor,
   type Shadow,
   type TextAlignment,
@@ -71,6 +72,7 @@ export type TextServiceResult = {
   readonly resourceClaims: readonly TextResourceClaim[];
   readonly fontUses: readonly FontEmbeddingUse[];
   readonly measurement?: { readonly width: number; readonly height: number };
+  readonly measuredLayout?: MeasuredTextLayout;
   readonly warnings: readonly {
     readonly code: string;
     readonly message: string;
@@ -167,11 +169,58 @@ type MeasurePiece = {
   readonly face: MeasureFace;
 };
 
-type MeasuredParagraph = {
+/** UTF-16 ranges retain the formal wrapping decision for derived static drawing. */
+export type MeasuredLine = {
+  readonly start: number;
+  readonly end: number;
+  readonly width: number;
+};
+
+export type MeasuredParagraph = {
   readonly lineCount: number;
+  readonly lines: readonly MeasuredLine[];
+  readonly text: string;
+  readonly pieces: readonly MeasurePiece[];
   readonly width: number;
   readonly lineHeight: number;
   readonly spacingAfter: number;
+};
+
+export type MeasuredTextLayout = {
+  readonly width: number;
+  readonly height: number;
+  readonly paragraphs: readonly MeasuredParagraph[];
+};
+
+export type PreviewGlyph = {
+  readonly path: string;
+  readonly x: number;
+  readonly y: number;
+  readonly scale: number;
+  readonly color: RunStyle["color"];
+};
+
+export type PreviewLineOutlines = {
+  readonly start: number;
+  readonly end: number;
+  readonly width: number;
+  readonly glyphs: readonly PreviewGlyph[];
+  readonly ascent: number;
+  readonly descent: number;
+  readonly advance: number;
+};
+
+export type PreviewParagraphOutlines = {
+  readonly lines: readonly PreviewLineOutlines[];
+  readonly lineHeight: number;
+  readonly spacingAfter: number;
+};
+
+export type PreviewTextOutlinesLine = {
+  readonly start: number;
+  readonly end: number;
+  readonly baseline: number;
+  readonly glyphs: readonly PreviewGlyph[];
 };
 
 type LineBreakerConstructor = new (text: string) => {
@@ -1269,15 +1318,12 @@ function rangeWidth(
     const source = text.slice(from, to);
     const transformed =
       piece.style.textTransform === "uppercase" ? source.toUpperCase() : source;
-    let visible = "";
-    for (const character of transformed) {
-      if (requiresFontGlyph(character)) visible += character;
-    }
-    if (visible === "") continue;
+    const shaped = shapeVisibleText(piece.face, transformed);
+    if (shaped === undefined) continue;
     const face = piece.face.font;
     const points = fontSizePoints(piece.style.fontSize);
     const tenths = Math.ceil(centipoints(points) / 10) / 10;
-    for (const position of face.layout(visible).positions) {
+    for (const position of shaped.positions) {
       const advance = (position.xAdvance / face.unitsPerEm) * points;
       natural += advance;
       eighthPoint +=
@@ -1289,6 +1335,12 @@ function rangeWidth(
     spacing += (piece.style.letterSpacing ?? 0) * characterCount;
   }
   return Math.max(natural, eighthPoint, twips) * (4 / 3) + spacing;
+}
+
+/** Drawing and measurement must shape the same visible stream, including control filtering. */
+function shapeVisibleText(face: MeasureFace, text: string) {
+  const visible = Array.from(text).filter(requiresFontGlyph).join("");
+  return visible === "" ? undefined : face.font.layout(visible);
 }
 
 function trimLineEnd(text: string, start: number, end: number): number {
@@ -1327,8 +1379,10 @@ function wrapParagraph(
   text: string,
   pieces: readonly MeasurePiece[],
   width: number,
-): { readonly lines: number; readonly width: number } {
-  if (text === "") return { lines: 1, width: 0 };
+): { readonly lines: readonly MeasuredLine[]; readonly width: number } {
+  if (text === "") {
+    return { lines: [{ start: 0, end: 0, width: 0 }], width: 0 };
+  }
   const breaks: { readonly position: number; readonly required: boolean }[] =
     [];
   const breaker = new LineBreaker(text);
@@ -1440,7 +1494,7 @@ function wrapParagraph(
     rangeWidth(pieces, text, start, trimLineEnd(text, start, end)),
   );
   return {
-    lines: lines.length,
+    lines: lines.map((line, index) => ({ ...line, width: lineWidths[index]! })),
     width: Math.max(0, ...lineWidths),
   };
 }
@@ -1564,7 +1618,10 @@ function paragraphMeasurement(
       ? 0
       : spacingCentipoints(paragraph.style.spacingAfter, "spacingAfter") / 75;
   return {
-    lineCount: wrapped.lines,
+    lineCount: wrapped.lines.length,
+    lines: wrapped.lines,
+    text,
+    pieces,
     width: wrapped.width,
     lineHeight: paragraphLineHeight(paragraph),
     spacingAfter,
@@ -1574,11 +1631,7 @@ function paragraphMeasurement(
 function measureParagraphs(
   paragraphs: readonly Paragraph[],
   width: number,
-): {
-  readonly width: number;
-  readonly height: number;
-  readonly paragraphs: readonly MeasuredParagraph[];
-} {
+): MeasuredTextLayout {
   const measured = paragraphs.map((paragraph) =>
     paragraphMeasurement(paragraph, width),
   );
@@ -1592,6 +1645,229 @@ function measureParagraphs(
     height,
     paragraphs: measured,
   };
+}
+
+const unsupportedColorFontTables = [
+  "COLR",
+  "CPAL",
+  "sbix",
+  "CBDT",
+  "SVG ",
+] as const;
+
+/**
+ * Extracts vector glyph outlines for one paragraph using its formal measurement / line-break ranges.
+ * Coordinates are relative to each line's baseline, in pixels.
+ */
+export function previewParagraphOutlines(
+  paragraph: Paragraph,
+  widthOrMeasured: number | MeasuredParagraph,
+): PreviewParagraphOutlines {
+  if (
+    paragraph.runs.some((run) =>
+      /[^\p{Script=Latin}\p{Script=Han}\p{Script=Common}\p{Script=Inherited}]/u.test(
+        run.text,
+      ),
+    )
+  ) {
+    throw new CapabilityError(
+      "preview-unsupported-script",
+      "Preview currently supports Latin and Han text only",
+    );
+  }
+  const align = paragraph.style.align ?? "left";
+  if (align === "justify" || paragraph.style.list !== undefined) {
+    throw new CapabilityError(
+      "preview-unsupported-text",
+      "Preview does not support justified text or lists",
+    );
+  }
+  const measured =
+    typeof widthOrMeasured === "number"
+      ? paragraphMeasurement(paragraph, widthOrMeasured)
+      : widthOrMeasured;
+  const { text, pieces } = measured;
+  for (const piece of pieces) {
+    if (
+      (piece.style.textDecoration !== undefined &&
+        piece.style.textDecoration !== "none") ||
+      (piece.style.textShadow !== undefined &&
+        piece.style.textShadow !== "none") ||
+      (piece.style.letterSpacing !== undefined &&
+        piece.style.letterSpacing !== 0)
+    ) {
+      throw new CapabilityError(
+        "preview-unsupported-text",
+        "Preview does not support text decoration, shadow, or custom letter spacing",
+      );
+    }
+    if (unsupportedColorFontTables.some((table) => table in piece.face.font)) {
+      throw new CapabilityError(
+        "preview-unsupported-font",
+        "Preview requires monochrome outline fonts",
+      );
+    }
+  }
+  const lines = measured.lines.map((line) => {
+    let cursor = 0;
+    const glyphs: PreviewGlyph[] = [];
+    let ascent = 0;
+    let descent = 0;
+    for (const piece of pieces) {
+      const start = Math.max(line.start, piece.start);
+      const end = Math.min(trimLineEnd(text, line.start, line.end), piece.end);
+      if (start >= end) continue;
+      const shown = text.slice(start, end);
+      const missing = missingCharacters(piece.face, shown);
+      if (missing.length > 0) {
+        throw new CapabilityError(
+          "preview-missing-glyph",
+          "Preview requires every visible glyph in the supplied font",
+        );
+      }
+      const shaped = shapeVisibleText(piece.face, shown);
+      if (shaped === undefined) continue;
+      const face = piece.face.font;
+      const scale =
+        (fontSizePoints(piece.style.fontSize) * 4) / (3 * face.unitsPerEm);
+      ascent = Math.max(ascent, face.ascent * scale);
+      descent = Math.max(descent, -face.descent * scale);
+      shaped.glyphs.forEach((glyph, index) => {
+        const position = shaped.positions[index]!;
+        glyphs.push({
+          path: glyph.path.toSVG(),
+          x: cursor + position.xOffset * scale,
+          y: -position.yOffset * scale,
+          scale,
+          color: piece.style.color,
+        });
+        cursor += position.xAdvance * scale;
+      });
+    }
+    return { ...line, glyphs, ascent, descent, advance: cursor };
+  });
+  return {
+    lines,
+    lineHeight: measured.lineHeight,
+    spacingAfter: measured.spacingAfter,
+  };
+}
+
+/**
+ * Positions paragraph glyph outlines inside a compiled box with insets, horizontal alignment,
+ * and vertical alignment. Reuses pre-computed formal build line measurements when provided.
+ */
+export function previewTextBoxOutlines(options: {
+  readonly paragraphs: readonly Paragraph[];
+  readonly box: GeometryBox;
+  readonly insets?: {
+    readonly top: number;
+    readonly right: number;
+    readonly bottom: number;
+    readonly left: number;
+  };
+  readonly verticalAlign?: TextStyle["verticalAlign"];
+  readonly measuredLayout?: MeasuredTextLayout | undefined;
+}): readonly PreviewTextOutlinesLine[] {
+  const {
+    paragraphs,
+    box,
+    insets = { top: 0, right: 0, bottom: 0, left: 0 },
+    verticalAlign = "top",
+    measuredLayout,
+  } = options;
+  const innerWidth = Math.max(0, box.width - insets.left - insets.right);
+  const useBoundMeasurement =
+    measuredLayout !== undefined &&
+    measuredLayout.paragraphs.length === paragraphs.length;
+  const outlinedParagraphs = paragraphs.map((paragraph, index) => ({
+    paragraph,
+    layout: previewParagraphOutlines(
+      paragraph,
+      useBoundMeasurement ? measuredLayout.paragraphs[index]! : innerWidth,
+    ),
+  }));
+  const totalHeight = outlinedParagraphs.reduce(
+    (total, { layout }, index) =>
+      total +
+      layout.lines.length * layout.lineHeight +
+      (index < outlinedParagraphs.length - 1 ? layout.spacingAfter : 0),
+    0,
+  );
+  const freeHeight = box.height - insets.top - insets.bottom - totalHeight;
+  let top =
+    box.y +
+    insets.top +
+    (verticalAlign === "middle"
+      ? freeHeight / 2
+      : verticalAlign === "bottom"
+        ? freeHeight
+        : 0);
+  return outlinedParagraphs.flatMap(({ paragraph, layout }) => {
+    const align = paragraph.style.align ?? "left";
+    const lines = layout.lines.map((line) => {
+      const left =
+        box.x +
+        insets.left +
+        (align === "center"
+          ? (innerWidth - line.advance) / 2
+          : align === "right"
+            ? innerWidth - line.advance
+            : 0);
+      const baseline =
+        top +
+        line.ascent +
+        (layout.lineHeight - line.ascent - line.descent) / 2;
+      top += layout.lineHeight;
+      return {
+        start: line.start,
+        end: line.end,
+        baseline,
+        glyphs: line.glyphs.map((glyph) => ({
+          ...glyph,
+          x: left + glyph.x,
+          y: baseline + glyph.y,
+        })),
+      };
+    });
+    top += layout.spacingAfter;
+    return lines;
+  });
+}
+
+/** Serializes a single positioned glyph outline to an SVG path element. */
+export function renderGlyphPathSvg(
+  glyph: PreviewGlyph,
+  theme: ThemeContext,
+): string {
+  if (glyph.path === "") return "";
+  const color = isResolvedColor(glyph.color)
+    ? glyph.color
+    : theme.resolveColor(glyph.color ?? "dk1");
+  return `<path d="${xmlEscape(glyph.path)}" fill="#${color.hex}" fill-opacity="${color.alpha ?? 1}" transform="translate(${glyph.x} ${glyph.y}) scale(${glyph.scale} ${-glyph.scale})"/>`;
+}
+
+/** Renders box-level positioned glyph outlines into SVG path fragments without importing textCapability. */
+export function renderTextOutlinesSvg(options: {
+  readonly paragraphs: readonly Paragraph[];
+  readonly box: GeometryBox;
+  readonly theme: ThemeContext;
+  readonly insets?: {
+    readonly top: number;
+    readonly right: number;
+    readonly bottom: number;
+    readonly left: number;
+  };
+  readonly verticalAlign?: TextStyle["verticalAlign"];
+  readonly measuredLayout?: MeasuredTextLayout | undefined;
+}): string {
+  const { theme, ...layoutOptions } = options;
+  const lines = previewTextBoxOutlines(layoutOptions);
+  return lines
+    .flatMap((line) =>
+      line.glyphs.map((glyph) => renderGlyphPathSvg(glyph, theme)),
+    )
+    .join("");
 }
 
 /** Returns layout dimensions based on actual fonts and line breaking rules from normalized paragraphs. */
@@ -1835,7 +2111,10 @@ export function writeTextBodyFromParagraphs(
     fontUses,
     ...(measured === undefined
       ? {}
-      : { measurement: { width: measured.width, height: measured.height } }),
+      : {
+          measurement: { width: measured.width, height: measured.height },
+          measuredLayout: measured,
+        }),
     warnings,
   };
 }

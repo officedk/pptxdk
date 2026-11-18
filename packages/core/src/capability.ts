@@ -79,7 +79,6 @@ export type {
   CapabilityPartRelationshipTarget,
   CapabilitySharedPackagePart,
   CapabilitySlidePackagePart,
-  CapabilityParseResult,
   CapabilityPresentationContribution,
   CapabilityResource,
   CapabilityResourceClaim,

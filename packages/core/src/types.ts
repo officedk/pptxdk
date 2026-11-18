@@ -576,11 +576,6 @@ export type CapabilityParseContext = {
   readonly slideNumber: number;
 };
 
-export type CapabilityParseResult<TParsed = unknown> = {
-  readonly contract: CapabilityLayoutContract;
-  readonly parsed: TParsed;
-};
-
 /** Intrinsic size and main-axis min-content size provided by capability modules, in pixels. */
 export type CapabilityLayoutMeasurement = {
   /** Natural width after typesetting at the requested width. */
@@ -633,22 +628,6 @@ export type CapabilityResourceClaim = {
   readonly identity: string;
   /** Actual output text from the shared text service, used for subsequent font resource processing. */
   readonly characters?: string;
-};
-
-export type ObjectCapabilityModule<TParsed = any> = {
-  /** Host type of the declared component, such as an object component host name. */
-  readonly declaration: string;
-  /** Parse the host declaration once before layout, returning the layout contract and parsed state reused by measureLayout and compile. */
-  parse(
-    input: CapabilityInput,
-    context: CapabilityParseContext,
-  ): CapabilityParseResult<TParsed>;
-  /** Provides measurement basis using the capability's own content measurement when layout requires intrinsic or main-axis min-content size. */
-  measureLayout?(
-    parsed: TParsed,
-    request: CapabilityLayoutRequest,
-  ): CapabilityLayoutMeasurement | undefined;
-  compile(parsed: TParsed, context: CapabilityContext): CapabilityOutput;
 };
 
 export type PreviewSeverity = "error" | "warning";
@@ -759,13 +738,16 @@ export type BoundObjectCapability = {
 /**
  * Object capability module that binds per-build declaration state into a closed handle without exposing private parsed state.
  */
-export type BoundObjectCapabilityModule = {
+export type ObjectCapabilityModule = {
   readonly declaration: string;
   bind(
     input: CapabilityInput,
     context: CapabilityParseContext,
   ): BoundObjectCapability;
 };
+
+/** Alias for the unified bound object capability contract. */
+export type BoundObjectCapabilityModule = ObjectCapabilityModule;
 
 /** Transparent host node that does not generate native objects, submitting declarations only to its parent slide capability. */
 export type TransparentCapabilityModule = {
@@ -868,7 +850,8 @@ export type BoundSlideCapability = {
   previewSlide?(context: SlidePreviewContext): SlidePreviewOutput;
 };
 
-export type BoundSlideCapabilityModule = {
+/** Slide capability module that binds per-build slide declaration state into a closed handle. */
+export type SlideCapabilityModule = {
   /** Slide property name handled by this module. */
   readonly slideProp: string;
   /** Slide properties jointly consumed by the same module, such as transition and advance timing. */
@@ -887,30 +870,10 @@ export type BoundSlideCapabilityModule = {
   ): BoundSlideCapability;
 };
 
-export type SlideCapabilityModule = {
-  /** Slide property name handled by this module. */
-  readonly slideProp: string;
-  /** Slide properties jointly consumed by the same module, such as transition and advance timing. */
-  readonly slideProps?: readonly string[];
-  /** Written to the slide following PresentationML fixed child element order. */
-  readonly slot: SlideCapabilitySlot;
-  /** Runs once regardless of whether Slide provides the corresponding property. */
-  readonly always?: boolean;
-  /** Stable capability key in reports. */
-  readonly declaration: string;
-  /** Handlers wired by this capability for internal transparent declaration hosts. */
-  readonly transparentDeclarations?: readonly TransparentCapabilityModule[];
-  compileSlide(
-    input: CapabilityInput,
-    context: SlideCapabilityContext,
-  ): SlideCapabilityOutput;
-};
+/** Alias for the unified bound slide capability contract. */
+export type BoundSlideCapabilityModule = SlideCapabilityModule;
 
-export type CapabilityModule =
-  | BoundObjectCapabilityModule
-  | ObjectCapabilityModule
-  | BoundSlideCapabilityModule
-  | SlideCapabilityModule;
+export type CapabilityModule = ObjectCapabilityModule | SlideCapabilityModule;
 
 export type PreviewOptions = BuildOptions & {
   /** 1-based page numbers to preview. Omit to draw all pages; an empty list draws none. */

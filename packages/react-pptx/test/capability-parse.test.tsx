@@ -804,9 +804,8 @@ describe("Ticket 08: Object capability parse phase, container TextStyle validati
       );
     });
 
-    it("calls shapeCapability.parse once during layout and reuses parsed result in measureLayout and compile", async () => {
-      const parseSpy = vi.spyOn(shapeCapability, "parse");
-      const compileSpy = vi.spyOn(shapeCapability, "compile");
+    it("calls shapeCapability.bind once during layout and reuses the bound handle for measureLayout and compile", async () => {
+      const bindSpy = vi.spyOn(shapeCapability, "bind");
 
       try {
         const result = await build(
@@ -835,19 +834,12 @@ describe("Ticket 08: Object capability parse phase, container TextStyle validati
 
         assert.deepEqual(result.report.diagnostics, []);
         assert.equal(
-          parseSpy.mock.calls.length,
+          bindSpy.mock.calls.length,
           1,
-          "parse should be called exactly once",
+          "bind should be called exactly once",
         );
-
-        // Verify that compile received the parsed object produced by parse
-        const parseReturn = parseSpy.mock.results[0]!.value as {
-          parsed: unknown;
-        };
-        assert.equal(compileSpy.mock.calls[0]![0], parseReturn.parsed);
       } finally {
-        parseSpy.mockRestore();
-        compileSpy.mockRestore();
+        bindSpy.mockRestore();
       }
     });
   });

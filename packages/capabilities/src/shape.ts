@@ -1,23 +1,25 @@
 import {
   assertValidLang,
   CapabilityError,
+  isMorphKey,
   layoutStyleKeys,
   paddingStyleKeys,
   parseCapabilityLayoutContract,
   pxToEmu,
   textStyleKeys,
   xmlEscape,
+  type BoundObjectCapability,
+  type BoundObjectCapabilityModule,
+  type BoundObjectNativeCollaboration,
   type CapabilityContext,
   type CapabilityInput,
-  type CapabilityLayoutContract,
   type CapabilityLayoutMeasurement,
   type CapabilityLayoutRequest,
   type CapabilityParseContext,
-  type CapabilityParseResult,
   type ColorValue,
   type LayoutStyle,
   type LinkTarget,
-  type ObjectCapabilityModule,
+  type MorphKey,
   type PaddingStyle,
 } from "@react-pptx/core/capability";
 import { RichTextContainer } from "@react-pptx/core/document";
@@ -34,7 +36,6 @@ export type {
 } from "./geometry.ts";
 import { nativeLinkXml } from "./identity.ts";
 import { shapeXml } from "./shape-xml.ts";
-import { layoutStyleValue } from "./style-parse.ts";
 export { linearGradient, radialGradient } from "./visual.ts";
 export type { PaddingStyle, VisualStyle } from "@react-pptx/core/capability";
 import { fontPresentationContributions } from "./font-embedding.ts";
@@ -46,7 +47,6 @@ import {
   textInsets,
   writeTextBodyFromParagraphs,
   type Paragraph,
-  type ResolvedTextStyle,
   type TextServiceResult,
   type TextStyle,
 } from "./text-service.ts";
@@ -55,7 +55,6 @@ import {
   shapePropertiesXml,
   visualStyleKeys,
   type ShapeVisualStyle,
-  type VisualStyleRecord,
 } from "./visual.ts";
 
 export type ShapeDeclarationProps = MotionProps &
@@ -77,32 +76,6 @@ export type ShapeDeclarationProps = MotionProps &
     /** Shape text uses shared text services and can still be emitted when text box capability is omitted. */
     readonly textStyle?: TextStyle;
   };
-
-export type ParsedShape = {
-  readonly name?: string | undefined;
-  readonly morphKey?: unknown;
-  readonly link?: unknown;
-  readonly geometry?: Geometry | undefined;
-  readonly flipH?: boolean | undefined;
-  readonly flipV?: boolean | undefined;
-  readonly fill?: ColorValue | undefined;
-  readonly visualStyle: VisualStyleRecord;
-  readonly insets: {
-    readonly top: number;
-    readonly right: number;
-    readonly bottom: number;
-    readonly left: number;
-  };
-  readonly hasText: boolean;
-  readonly text?: string | undefined;
-  readonly paragraphs: readonly Paragraph[];
-  readonly textStyle: ResolvedTextStyle;
-  readonly requestedHeight:
-    | { readonly contentSized: true }
-    | { readonly contentSized: false; readonly value: number | undefined };
-  readonly contract: CapabilityLayoutContract;
-  readonly rawProps: Readonly<Record<string, unknown>>;
-};
 
 /** Creates the editable native shape shared by the command factory and the Shape JSX element. */
 export function createShapeNode(
@@ -251,16 +224,43 @@ function validateSize(
   return value;
 }
 
-function requiredNumber(
-  props: Record<string, unknown>,
-  name: "x" | "y" | "width" | "height",
+function parseLinkTarget(
+  value: unknown,
   path?: string,
-): number {
-  const value = props[name];
-  const isExtent = name === "width" || name === "height";
-  return isExtent
-    ? validateSize(value, name, path)
-    : validateCoordinate(value, name, path);
+): LinkTarget | undefined {
+  if (value === undefined) return undefined;
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    throw new CapabilityError(
+      "invalid-link",
+      "link must specify id, url, or home action",
+      path,
+    );
+  }
+  const entries = Object.entries(value).filter(
+    ([, target]) => target !== undefined,
+  );
+  if (entries.length !== 1) {
+    throw new CapabilityError(
+      "invalid-link",
+      "link must specify exactly one target",
+      path,
+    );
+  }
+  const [kind, target] = entries[0] ?? [];
+  if (kind === "id" && typeof target === "string") {
+    return { id: target };
+  }
+  if (kind === "url" && typeof target === "string") {
+    return { url: target };
+  }
+  if (kind === "action" && target === "home") {
+    return { action: "home" };
+  }
+  throw new CapabilityError(
+    "invalid-link",
+    "link supports { id }, { url }, or { action: 'home' }",
+    path,
+  );
 }
 
 function optionalText(
@@ -280,32 +280,14 @@ function optionalText(
   return value;
 }
 
-function height(
-  value: unknown,
-):
-  | { readonly contentSized: true }
-  | { readonly contentSized: false; readonly value: number | undefined } {
-  if (value === "auto" || value === undefined) return { contentSized: true };
-  if (
-    typeof value === "string" &&
-    /^-?(?:\d+(?:\.\d*)?|\.\d+)%$/u.test(value)
-  ) {
-    return { contentSized: false, value: undefined };
-  }
-  return {
-    contentSized: false,
-    value: typeof value === "number" ? value : undefined,
-  };
-}
-
-/** Shape module independently validates input, declares native geometry, and emits corresponding PresentationML objects. */
-export const shapeCapability: ObjectCapabilityModule<ParsedShape> = {
+/** Shape module independently validates input, encapsulates bound state, and emits native PresentationML objects. */
+export const shapeCapability: BoundObjectCapabilityModule = {
   declaration: "rp:shape",
 
-  parse(
+  bind(
     input: CapabilityInput,
     context: CapabilityParseContext,
-  ): CapabilityParseResult<ParsedShape> {
+  ): BoundObjectCapability {
     const unknown = Object.keys(input.props).find(
       (key) => !(allowedParameters as readonly string[]).includes(key),
     );
@@ -318,12 +300,27 @@ export const shapeCapability: ObjectCapabilityModule<ParsedShape> = {
     }
 
     const requestedName = optionalText(input.props, "name", context.path);
-
-    if (input.props["x"] !== undefined) {
-      validateCoordinate(input.props["x"], "x", context.path);
+    const rawMorphKey = input.props["morphKey"];
+    let morphKey: MorphKey | undefined;
+    if (rawMorphKey !== undefined) {
+      if (!isMorphKey(rawMorphKey)) {
+        throw new CapabilityError(
+          "invalid-morph-key",
+          "morphKey must be created by createMorphScope().handle(name)",
+          context.path,
+        );
+      }
+      morphKey = rawMorphKey;
     }
-    if (input.props["y"] !== undefined) {
-      validateCoordinate(input.props["y"], "y", context.path);
+    const link = parseLinkTarget(input.props["link"], context.path);
+
+    const declaredX = input.props["x"];
+    const declaredY = input.props["y"];
+    if (declaredX !== undefined) {
+      validateCoordinate(declaredX, "x", context.path);
+    }
+    if (declaredY !== undefined) {
+      validateCoordinate(declaredY, "y", context.path);
     }
     if (
       input.props["width"] !== undefined &&
@@ -376,8 +373,6 @@ export const shapeCapability: ObjectCapabilityModule<ParsedShape> = {
     const insets = hasText
       ? textInsets(input.props["style"])
       : { top: 0, right: 0, bottom: 0, left: 0 };
-    const styleHeight = layoutStyleValue(input, "height");
-    const requestedHeight = height(styleHeight ?? input.props["height"]);
 
     const textChildren = shapeTextContent(input, context.path);
     const rawTextStyle = shapeTextStyle(input.props);
@@ -404,259 +399,248 @@ export const shapeCapability: ObjectCapabilityModule<ParsedShape> = {
           ).style,
         };
 
-    const visualStyle = record(input.props["style"]);
+    const visualStyle = { ...record(input.props["style"]) };
+    const geometry = input.props["geometry"] as Geometry | undefined;
+    const flipH = input.props["flipH"] as boolean | undefined;
+    const flipV = input.props["flipV"] as boolean | undefined;
+    const fill = input.props["fill"] as ColorValue | undefined;
+    const explicitText = typeof textProp === "string" ? textProp : undefined;
+    const authorId =
+      typeof input.props["id"] === "string" ? input.props["id"] : undefined;
+    const motionProps: Readonly<Record<string, unknown>> = {
+      ...(input.props["enter"] !== undefined
+        ? { enter: input.props["enter"] }
+        : {}),
+      ...(input.props["emphasis"] !== undefined
+        ? { emphasis: input.props["emphasis"] }
+        : {}),
+      ...(input.props["motion"] !== undefined
+        ? { motion: input.props["motion"] }
+        : {}),
+    };
 
-    // Validate geometry and visual properties
+    // Validate geometry and visual properties during bind before layout runs.
     shapePropertiesXml({
       theme: context.theme,
       style: visualStyle,
       box: { x: 0, y: 0, width: 100, height: 100 },
-      ...(input.props["geometry"] !== undefined
-        ? { geometry: input.props["geometry"] as Geometry }
-        : {}),
-      ...(input.props["flipH"] !== undefined
-        ? { flipH: input.props["flipH"] as boolean }
-        : {}),
-      ...(input.props["flipV"] !== undefined
-        ? { flipV: input.props["flipV"] as boolean }
-        : {}),
-      ...(input.props["fill"] !== undefined
-        ? { fill: input.props["fill"] as ColorValue }
-        : {}),
+      ...(geometry !== undefined ? { geometry } : {}),
+      ...(flipH !== undefined ? { flipH } : {}),
+      ...(flipV !== undefined ? { flipV } : {}),
+      ...(fill !== undefined ? { fill } : {}),
     });
 
-    const parsed: ParsedShape = {
-      ...(requestedName !== undefined ? { name: requestedName } : {}),
-      ...(input.props["morphKey"] !== undefined
-        ? { morphKey: input.props["morphKey"] }
-        : {}),
-      ...(input.props["link"] !== undefined
-        ? { link: input.props["link"] }
-        : {}),
-      ...(input.props["geometry"] !== undefined
-        ? { geometry: input.props["geometry"] as Geometry }
-        : {}),
-      ...(input.props["flipH"] !== undefined
-        ? { flipH: input.props["flipH"] as boolean }
-        : {}),
-      ...(input.props["flipV"] !== undefined
-        ? { flipV: input.props["flipV"] as boolean }
-        : {}),
-      ...(input.props["fill"] !== undefined
-        ? { fill: input.props["fill"] as ColorValue }
-        : {}),
-      visualStyle,
-      insets,
-      hasText,
-      ...(typeof textProp === "string" ? { text: textProp } : {}),
-      paragraphs,
-      textStyle: parsedTextStyle,
-      requestedHeight,
-      contract,
-      rawProps: input.props,
+    const declaredWidth = contract.width;
+    const declaredHeight = contract.height;
+    const hasFixedSize =
+      typeof declaredWidth === "number" && typeof declaredHeight === "number";
+
+    const native: BoundObjectNativeCollaboration = {
+      ...(morphKey === undefined ? {} : { morphKey }),
+      ...(requestedName === undefined ? {} : { hasExplicitName: true }),
+      ...(link === undefined ? {} : { link }),
     };
 
-    return { contract, parsed };
-  },
-
-  measureLayout(
-    parsed: ParsedShape,
-    request: CapabilityLayoutRequest,
-  ): CapabilityLayoutMeasurement | undefined {
-    if (!parsed.hasText || parsed.paragraphs.length === 0) {
-      return { minContentWidth: 0, minContentHeight: 0 };
-    }
-
-    const insets = parsed.insets;
-    const styleWidth = layoutStyleValue(
-      { type: "rp:shape", props: parsed.rawProps, children: [] },
-      "width",
-    );
-    const width =
-      request.availableWidth ?? styleWidth ?? parsed.rawProps["width"];
-    const innerWidth =
-      request.availableWidth !== undefined
-        ? request.availableWidth
-        : typeof width === "number"
-          ? Math.max(0, width - insets.left - insets.right)
-          : undefined;
-
-    const hasFixedSize =
-      typeof (styleWidth ?? parsed.rawProps["width"]) === "number" &&
-      typeof (
-        layoutStyleValue(
-          { type: "rp:shape", props: parsed.rawProps, children: [] },
-          "height",
-        ) ?? parsed.rawProps["height"]
-      ) === "number";
-
-    try {
-      const measured = measureTextLayoutFromParagraphs(
-        parsed.paragraphs,
-        parsed.textStyle,
-        innerWidth,
-      );
-      const baseline =
-        parsed.textStyle.verticalAlign === "top"
-          ? (measured.baseline ?? "unavailable")
-          : "unavailable";
-
-      return {
-        ...measured,
-        baseline,
-      };
-    } catch (error) {
-      if (
-        hasFixedSize &&
-        error instanceof CapabilityError &&
-        error.code === "font-measurement-unavailable"
-      ) {
-        return {
-          baseline: "unavailable",
-        };
-      }
-      throw error;
-    }
-  },
-
-  compile(parsed: ParsedShape, context: CapabilityContext) {
-    const props = parsed.rawProps;
-    const requestedName = parsed.name;
-    const geometry = parsed.geometry;
-    const layoutStyle = parsed.visualStyle;
-    const insets = parsed.insets;
-    const box =
-      context.layoutBox === undefined
-        ? {
-            x: requiredNumber(props, "x", context.path),
-            y: requiredNumber(props, "y", context.path),
-            width: requiredNumber(
-              { width: layoutStyle["width"] ?? props["width"] },
-              "width",
-              context.path,
-            ),
-            height: requiredNumber(
-              { height: layoutStyle["height"] ?? props["height"] },
-              "height",
-              context.path,
-            ),
-          }
-        : {
-            x: requiredNumber({ x: context.layoutBox.x }, "x", context.path),
-            y: requiredNumber({ y: context.layoutBox.y }, "y", context.path),
-            width: requiredNumber(
-              { width: context.layoutBox.width },
-              "width",
-              context.path,
-            ),
-            height: requiredNumber(
-              { height: context.layoutBox.height },
-              "height",
-              context.path,
-            ),
-          };
-    const properties = shapePropertiesXml({
-      theme: context.theme,
-      style: layoutStyle,
-      box,
-      ...(geometry === undefined ? {} : { geometry }),
-      ...(parsed.flipH === undefined ? {} : { flipH: parsed.flipH }),
-      ...(parsed.flipV === undefined ? {} : { flipV: parsed.flipV }),
-      ...(parsed.fill === undefined ? {} : { fill: parsed.fill }),
-    });
-
-    let textOutput: TextServiceResult | undefined;
-    if (parsed.hasText && parsed.paragraphs.length > 0) {
-      textOutput = writeTextBodyFromParagraphs(
-        parsed.paragraphs,
-        parsed.textStyle,
-        context.theme,
-        parsed.textStyle.verticalAlign ?? "middle",
-        {
-          width: Math.max(0, box.width - insets.left - insets.right),
-          height: Math.max(0, box.height - insets.top - insets.bottom),
-          insets,
-        },
-        "text-box",
-        context.options.embedFonts,
-        context.createTextFieldId,
-      );
-    }
-    const name =
-      context.morphName ?? requestedName ?? `Shape ${context.id - 1}`;
-    const annotations = motionAnnotations(props, {
-      kind: "shape",
-      name,
-      ...(typeof props["id"] === "string" ? { authorId: props["id"] } : {}),
-      textBody: textOutput !== undefined,
-      filled:
-        props["fill"] !== undefined ||
-        layoutStyle["backgroundColor"] !== undefined ||
-        layoutStyle["backgroundImage"] !== undefined,
-      solidFilled:
-        (props["fill"] ?? layoutStyle["backgroundColor"]) !== undefined &&
-        (props["fill"] ?? layoutStyle["backgroundColor"]) !== "none" &&
-        layoutStyle["backgroundImage"] === undefined,
-      box,
-      rotationDegrees:
-        typeof layoutStyle["rotate"] === "number" ? layoutStyle["rotate"] : 0,
-      hasBackground:
-        props["fill"] !== undefined ||
-        layoutStyle["backgroundColor"] !== undefined ||
-        layoutStyle["backgroundImage"] !== undefined ||
-        layoutStyle["borderColor"] !== undefined ||
-        (typeof layoutStyle["borderWidth"] === "number" &&
-          layoutStyle["borderWidth"] > 0),
-      ...(textOutput === undefined
-        ? {}
-        : { paragraphCount: textOutput.paragraphCount }),
-    });
-    let escapedName: string;
-    try {
-      escapedName = xmlEscape(name);
-    } catch {
-      throw new CapabilityError(
-        "invalid-xml-character",
-        "Shape.name contains characters not allowed in XML 1.0",
-        context.path,
-      );
-    }
     return {
-      xml: shapeXml(
-        context.id,
-        escapedName,
-        properties.xml,
-        textOutput?.xml ?? "",
-        nativeLinkXml(context.nativeLink),
-      ),
-      observation: {
-        id: context.id,
-        kind: "shape",
-        name,
-        geometry: properties.geometryName,
-        box,
-        ...(textOutput === undefined
-          ? parsed.text === undefined
-            ? {}
-            : { text: parsed.text }
-          : { text: textOutput.text }),
+      contract,
+      ...(morphKey !== undefined ||
+      requestedName !== undefined ||
+      link !== undefined
+        ? { native }
+        : {}),
+      measureLayout(
+        request: CapabilityLayoutRequest,
+      ): CapabilityLayoutMeasurement | undefined {
+        if (!hasText || paragraphs.length === 0) {
+          return { minContentWidth: 0, minContentHeight: 0 };
+        }
+
+        const width = request.availableWidth ?? declaredWidth;
+        const innerWidth =
+          request.availableWidth !== undefined
+            ? request.availableWidth
+            : typeof width === "number"
+              ? Math.max(0, width - insets.left - insets.right)
+              : undefined;
+
+        try {
+          const measured = measureTextLayoutFromParagraphs(
+            paragraphs,
+            parsedTextStyle,
+            innerWidth,
+          );
+          const baseline =
+            parsedTextStyle.verticalAlign === "top"
+              ? (measured.baseline ?? "unavailable")
+              : "unavailable";
+
+          return {
+            ...measured,
+            baseline,
+          };
+        } catch (error) {
+          if (
+            hasFixedSize &&
+            error instanceof CapabilityError &&
+            error.code === "font-measurement-unavailable"
+          ) {
+            return {
+              baseline: "unavailable",
+            };
+          }
+          throw error;
+        }
       },
-      extensions: [],
-      ...(properties.warnings.length === 0 && textOutput === undefined
-        ? {}
-        : {
-            warnings: [...properties.warnings, ...(textOutput?.warnings ?? [])],
-          }),
-      ...(annotations.length === 0 ? {} : { annotations }),
-      ...(textOutput === undefined
-        ? {}
-        : {
-            resourceClaims: textOutput.resourceClaims,
-            presentationContributions: fontPresentationContributions(
-              textOutput.fontUses,
-              context.options.embedFonts,
-            ),
-          }),
+      compile(compileContext: CapabilityContext) {
+        const box =
+          compileContext.layoutBox === undefined
+            ? {
+                x: validateCoordinate(declaredX, "x", compileContext.path),
+                y: validateCoordinate(declaredY, "y", compileContext.path),
+                width: validateSize(
+                  declaredWidth,
+                  "width",
+                  compileContext.path,
+                ),
+                height: validateSize(
+                  declaredHeight,
+                  "height",
+                  compileContext.path,
+                ),
+              }
+            : {
+                x: validateCoordinate(
+                  compileContext.layoutBox.x,
+                  "x",
+                  compileContext.path,
+                ),
+                y: validateCoordinate(
+                  compileContext.layoutBox.y,
+                  "y",
+                  compileContext.path,
+                ),
+                width: validateSize(
+                  compileContext.layoutBox.width,
+                  "width",
+                  compileContext.path,
+                ),
+                height: validateSize(
+                  compileContext.layoutBox.height,
+                  "height",
+                  compileContext.path,
+                ),
+              };
+        const properties = shapePropertiesXml({
+          theme: compileContext.theme,
+          style: visualStyle,
+          box,
+          ...(geometry === undefined ? {} : { geometry }),
+          ...(flipH === undefined ? {} : { flipH }),
+          ...(flipV === undefined ? {} : { flipV }),
+          ...(fill === undefined ? {} : { fill }),
+        });
+
+        let textOutput: TextServiceResult | undefined;
+        if (hasText && paragraphs.length > 0) {
+          textOutput = writeTextBodyFromParagraphs(
+            paragraphs,
+            parsedTextStyle,
+            compileContext.theme,
+            parsedTextStyle.verticalAlign ?? "middle",
+            {
+              width: Math.max(0, box.width - insets.left - insets.right),
+              height: Math.max(0, box.height - insets.top - insets.bottom),
+              insets,
+            },
+            "text-box",
+            compileContext.options.embedFonts,
+            compileContext.createTextFieldId,
+          );
+        }
+        const name =
+          compileContext.morphName ??
+          requestedName ??
+          `Shape ${compileContext.id - 1}`;
+        const annotations = motionAnnotations(motionProps, {
+          kind: "shape",
+          name,
+          ...(authorId === undefined ? {} : { authorId }),
+          textBody: textOutput !== undefined,
+          filled:
+            fill !== undefined ||
+            visualStyle["backgroundColor"] !== undefined ||
+            visualStyle["backgroundImage"] !== undefined,
+          solidFilled:
+            (fill ?? visualStyle["backgroundColor"]) !== undefined &&
+            (fill ?? visualStyle["backgroundColor"]) !== "none" &&
+            visualStyle["backgroundImage"] === undefined,
+          box,
+          rotationDegrees:
+            typeof visualStyle["rotate"] === "number"
+              ? visualStyle["rotate"]
+              : 0,
+          hasBackground:
+            fill !== undefined ||
+            visualStyle["backgroundColor"] !== undefined ||
+            visualStyle["backgroundImage"] !== undefined ||
+            visualStyle["borderColor"] !== undefined ||
+            (typeof visualStyle["borderWidth"] === "number" &&
+              visualStyle["borderWidth"] > 0),
+          ...(textOutput === undefined
+            ? {}
+            : { paragraphCount: textOutput.paragraphCount }),
+        });
+        let escapedName: string;
+        try {
+          escapedName = xmlEscape(name);
+        } catch {
+          throw new CapabilityError(
+            "invalid-xml-character",
+            "Shape.name contains characters not allowed in XML 1.0",
+            compileContext.path,
+          );
+        }
+        return {
+          xml: shapeXml(
+            compileContext.id,
+            escapedName,
+            properties.xml,
+            textOutput?.xml ?? "",
+            nativeLinkXml(compileContext.nativeLink),
+          ),
+          observation: {
+            id: compileContext.id,
+            kind: "shape",
+            name,
+            geometry: properties.geometryName,
+            box,
+            ...(textOutput === undefined
+              ? explicitText === undefined
+                ? {}
+                : { text: explicitText }
+              : { text: textOutput.text }),
+          },
+          extensions: [],
+          ...(properties.warnings.length === 0 && textOutput === undefined
+            ? {}
+            : {
+                warnings: [
+                  ...properties.warnings,
+                  ...(textOutput?.warnings ?? []),
+                ],
+              }),
+          ...(annotations.length === 0 ? {} : { annotations }),
+          ...(textOutput === undefined
+            ? {}
+            : {
+                resourceClaims: textOutput.resourceClaims,
+                presentationContributions: fontPresentationContributions(
+                  textOutput.fontUses,
+                  compileContext.options.embedFonts,
+                ),
+              }),
+        };
+      },
     };
   },
 };

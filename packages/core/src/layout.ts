@@ -16,12 +16,13 @@ import Yoga, {
 import { BuildError, CapabilityError } from "#/diagnostics.ts";
 import { textStyleFrom, textStyleKeys } from "#/theme.ts";
 import type {
+  BoundObjectCapability,
+  BoundObjectCapabilityModule,
   BuildOptions,
   CapabilityChild,
   CapabilityElement,
   CapabilityLayoutContract,
   CapabilityLayoutMeasurement,
-  CapabilityParseResult,
   RegisteredCapabilityModule,
   Diagnostic,
   GeometryBox,
@@ -30,7 +31,6 @@ import type {
   NativeElementKind,
   ThemeContext,
   ThemeScope,
-  ObjectCapabilityModule,
 } from "#/types.ts";
 
 type Dimensions = { readonly width: number; readonly height: number };
@@ -77,7 +77,7 @@ type LayoutNode = {
   readonly style: LayoutStyle;
   readonly theme: ThemeContext;
   readonly path: string;
-  readonly module?: ObjectCapabilityModule;
+  readonly bound?: BoundObjectCapability;
   parent?: LayoutNode;
   readonly children: LayoutNode[];
   readonly escaped: LayoutNode[];
@@ -88,7 +88,6 @@ type LayoutNode = {
   measureFunction?: MeasureFunction;
   baselineContent?: YogaNode;
   baseline?: number | undefined;
-  parsed?: unknown;
   contract?: CapabilityLayoutContract | undefined;
 };
 
@@ -97,7 +96,7 @@ export type LayoutPassResult = {
   readonly themes: WeakMap<CapabilityElement, ThemeContext>;
   readonly hidden: WeakSet<CapabilityElement>;
   readonly warnings: readonly Diagnostic[];
-  readonly parsed?: WeakMap<CapabilityElement, CapabilityParseResult>;
+  readonly bound: WeakMap<CapabilityElement, BoundObjectCapability>;
 };
 
 export const paddingStyleKeys = [
@@ -1170,8 +1169,8 @@ function setPosition(
 
 function objectModule(
   module: RegisteredCapabilityModule | undefined,
-): module is ObjectCapabilityModule {
-  return module !== undefined && "compile" in module;
+): module is BoundObjectCapabilityModule {
+  return module !== undefined && "bind" in module;
 }
 
 /** Resolve Box, block, and flex/grid layouts before capability modules write native objects. */
@@ -1184,9 +1183,9 @@ export class LayoutPass {
   readonly #boxes = new WeakMap<CapabilityElement, GeometryBox>();
   readonly #themes = new WeakMap<CapabilityElement, ThemeContext>();
   readonly #hidden = new WeakSet<CapabilityElement>();
-  readonly #parsedResults = new WeakMap<
+  readonly #boundObjects = new WeakMap<
     CapabilityElement,
-    CapabilityParseResult
+    BoundObjectCapability
   >();
   readonly #warnings: Diagnostic[] = [];
   readonly #warningKeys = new Set<string>();
@@ -1284,26 +1283,26 @@ export class LayoutPass {
       themes: this.#themes,
       hidden: this.#hidden,
       warnings: this.#warnings,
-      parsed: this.#parsedResults,
+      bound: this.#boundObjects,
     };
   }
 
-  #parseCapability(
+  #bindCapability(
     child: CapabilityElement,
     childPath: string,
     themeContext: ThemeContext,
-    module: ObjectCapabilityModule,
-  ): CapabilityParseResult {
-    let parseResult = this.#parsedResults.get(child);
-    if (parseResult === undefined) {
+    module: BoundObjectCapabilityModule,
+  ): BoundObjectCapability {
+    let bound = this.#boundObjects.get(child);
+    if (bound === undefined) {
       try {
-        parseResult = module.parse(child, {
+        bound = module.bind(child, {
           path: childPath,
           theme: themeContext,
           options: this.#options,
           slideNumber: this.#slideNumber,
         });
-        this.#parsedResults.set(child, parseResult);
+        this.#boundObjects.set(child, bound);
       } catch (error) {
         if (error instanceof BuildError) throw error;
         const code =
@@ -1320,7 +1319,7 @@ export class LayoutPass {
         return fail(targetPath, code, message);
       }
     }
-    return parseResult;
+    return bound;
   }
 
   // Transparent Groups are not in the layout tree, so theme context must be passed separately along the declaration tree.
@@ -1347,15 +1346,14 @@ export class LayoutPass {
             "rp:box capability is required",
           );
         }
-        const result = this.#parseCapability(
+        const bound = this.#bindCapability(
           child,
           childPath,
           themeContext,
           module,
         );
-        const contract = result.contract;
+        const contract = bound.contract;
         const childStyle = contract.layoutStyle;
-        const parsed = result.parsed;
         if (childStyle.display === "none") {
           this.#markHidden(child);
           return;
@@ -1367,7 +1365,7 @@ export class LayoutPass {
           parent,
           themeContext,
           contract,
-          parsed,
+          bound,
         );
         this.#appendLayoutChild(parent, built);
         return;
@@ -1381,15 +1379,14 @@ export class LayoutPass {
             "rp:group capability is required",
           );
         }
-        const result = this.#parseCapability(
+        const bound = this.#bindCapability(
           child,
           childPath,
           themeContext,
           module,
         );
-        const contract = result.contract;
+        const contract = bound.contract;
         const childStyle = contract.layoutStyle;
-        const parsed = result.parsed;
         if (childStyle.display === "none") {
           this.#markHidden(child);
           return;
@@ -1424,7 +1421,7 @@ export class LayoutPass {
           parent,
           themeContext,
           contract,
-          parsed,
+          bound,
         );
         this.#appendLayoutChild(parent, built);
         return;
@@ -1444,12 +1441,13 @@ export class LayoutPass {
         return;
       }
       if (objectModule(module)) {
-        const { contract, parsed } = this.#parseCapability(
+        const bound = this.#bindCapability(
           child,
           childPath,
           themeContext,
           module,
         );
+        const contract = bound.contract;
         if (contract.layoutStyle.display === "none") {
           this.#markHidden(child);
           return;
@@ -1461,7 +1459,7 @@ export class LayoutPass {
           parent,
           contract.layoutStyle,
           themeContext,
-          parsed,
+          bound,
           contract,
         );
         if (!includeObjects) {
@@ -1602,7 +1600,7 @@ export class LayoutPass {
     parent: LayoutNode,
     themeContext: ThemeContext,
     contract: CapabilityLayoutContract,
-    parsed?: unknown,
+    bound: BoundObjectCapability,
   ): LayoutNode {
     const rawStyle = input.props["style"];
     const style = contract.layoutStyle;
@@ -1619,11 +1617,11 @@ export class LayoutPass {
       style,
       theme,
       path,
+      bound,
       children: [],
       parent,
       escaped: [],
       contract,
-      ...(parsed !== undefined ? { parsed } : {}),
     };
     this.#themes.set(input, theme);
     this.#applyStyle(yoga, style, parent.style, false, true);
@@ -1637,7 +1635,7 @@ export class LayoutPass {
     parent: LayoutNode,
     themeContext: ThemeContext,
     contract: CapabilityLayoutContract,
-    parsed?: unknown,
+    bound: BoundObjectCapability,
   ): LayoutNode {
     const rawStyle = input.props["style"];
     const style = contract.layoutStyle;
@@ -1654,11 +1652,11 @@ export class LayoutPass {
       style,
       theme,
       path,
+      bound,
       children: [],
       parent,
       escaped: [],
       contract,
-      ...(parsed !== undefined ? { parsed } : {}),
     };
     this.#themes.set(input, theme);
     this.#applyStyle(yoga, style, parent.style, false, true);
@@ -1704,11 +1702,9 @@ export class LayoutPass {
     parent: LayoutNode,
     style: LayoutStyle,
     themeContext: ThemeContext,
-    parsed?: unknown,
-    contract?: CapabilityLayoutContract,
-  ): LayoutNode | undefined {
-    const module = this.#modules.get(input.type);
-    if (!objectModule(module)) return undefined;
+    bound: BoundObjectCapability,
+    contract: CapabilityLayoutContract,
+  ): LayoutNode {
     const yoga = Yoga.Node.create(this.#config);
     const node: LayoutNode = {
       yoga,
@@ -1716,16 +1712,15 @@ export class LayoutPass {
       style,
       theme: themeContext,
       path,
-      module,
+      bound,
       children: [],
       parent,
       escaped: [],
-      ...(parsed !== undefined ? { parsed } : {}),
-      ...(contract !== undefined ? { contract } : {}),
+      contract,
     };
     this.#themes.set(input, themeContext);
     this.#applyStyle(yoga, style, parent.style, false, false);
-    if (contract?.padding !== undefined) {
+    if (contract.padding !== undefined) {
       yoga.setPadding(Edge.Top, contract.padding.top);
       yoga.setPadding(Edge.Right, contract.padding.right);
       yoga.setPadding(Edge.Bottom, contract.padding.bottom);
@@ -1733,8 +1728,8 @@ export class LayoutPass {
     }
     this.#setDeclaredSize(node);
     if (style.position === "absolute") {
-      const x = contract?.x;
-      const y = contract?.y;
+      const x = contract.x;
+      const y = contract.y;
       if (
         style.left === undefined &&
         style.inset === undefined &&
@@ -1752,7 +1747,7 @@ export class LayoutPass {
         yoga.setPosition(Edge.Top, y);
       }
     }
-    if (module.measureLayout !== undefined) {
+    if (bound.measureLayout !== undefined) {
       const measureFunction: MeasureFunction = (width, widthMode) => {
         const measured = this.#measure(
           node,
@@ -2171,9 +2166,8 @@ export class LayoutPass {
         );
       }
       const align = gridAlignment(alignValue);
-      const declaredWidth = childStyle.width ?? child.element?.props["width"];
-      const declaredHeight =
-        childStyle.height ?? child.element?.props["height"];
+      const declaredWidth = childStyle.width ?? child.contract?.width;
+      const declaredHeight = childStyle.height ?? child.contract?.height;
       const widthPercent = resolvePercent(
         declaredWidth as LayoutLength | undefined,
         cellWidth,
@@ -2442,14 +2436,11 @@ export class LayoutPass {
       readonly widthMode?: "at-most" | "exactly";
     },
   ): CapabilityLayoutMeasurement | undefined {
-    if (
-      node.module?.measureLayout === undefined ||
-      node.element === undefined
-    ) {
+    if (node.bound?.measureLayout === undefined) {
       return undefined;
     }
     try {
-      return node.module.measureLayout(node.parsed ?? node.element, {
+      return node.bound.measureLayout({
         ...request,
         theme: node.theme,
         slideNumber: this.#slideNumber,
@@ -2509,7 +2500,7 @@ export class LayoutPass {
       axis === "width"
         ? styleLength(node.style.maxWidth)
         : styleLength(node.style.maxHeight);
-    const rawDimension = node.style[axis] ?? node.element?.props[axis];
+    const rawDimension = node.style[axis] ?? node.contract?.[axis];
     const declared = length(rawDimension, axis, node.path);
     return Math.min(
       content,
@@ -2554,7 +2545,7 @@ export class LayoutPass {
 
   #resolveBaselineLeaf(node: LayoutNode): LayoutNode {
     if (node.element?.type !== "rp:box") {
-      if (node.module?.measureLayout === undefined) {
+      if (node.bound?.measureLayout === undefined) {
         fail(
           node.path,
           "unsupported-baseline-context",
@@ -2624,7 +2615,7 @@ export class LayoutPass {
     const measureFunction = node.measureFunction;
     if (
       measureFunction === undefined ||
-      node.module?.measureLayout === undefined
+      node.bound?.measureLayout === undefined
     ) {
       fail(
         node.path,
@@ -2752,7 +2743,7 @@ export class LayoutPass {
 
   #minContentContribution(node: LayoutNode, axis: "width" | "height"): number {
     const content = this.#minContent(node, axis) ?? 0;
-    const rawDimension = node.style[axis] ?? node.element?.props[axis];
+    const rawDimension = node.style[axis] ?? node.contract?.[axis];
     let size = length(rawDimension, axis, node.path) ?? content;
     const minimum =
       axis === "width"
@@ -2781,7 +2772,7 @@ export class LayoutPass {
     if (!isContainer) {
       const padding = expandedSpacing(node.style, "padding");
       const computedWidth = node.yoga.getComputedWidth();
-      const rawWidth = node.style.width ?? node.element?.props["width"];
+      const rawWidth = node.style.width ?? node.contract?.width;
       const measuredWidth =
         typeof rawWidth === "string" && rawWidth.endsWith("%")
           ? undefined

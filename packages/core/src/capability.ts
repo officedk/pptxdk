@@ -53,6 +53,9 @@ export type {
   VisualStyle,
 } from "#/theme.ts";
 export type {
+  BoundObjectCapability,
+  BoundObjectCapabilityModule,
+  BoundObjectNativeCollaboration,
   BuildOptions,
   BuildReport,
   BuildResult,

@@ -14,7 +14,7 @@ import Yoga, {
 } from "yoga-layout";
 
 import { BuildError, CapabilityError } from "#/diagnostics.ts";
-import { textStyleFrom, textStyleKeys } from "#/theme.ts";
+import { textStyleKeys } from "#/theme.ts";
 import type {
   BoundContainerCollaboration,
   BoundObjectCapability,
@@ -31,7 +31,6 @@ import type {
   LayoutStyle,
   NativeElementKind,
   ThemeContext,
-  ThemeScope,
 } from "#/types.ts";
 
 type Dimensions = { readonly width: number; readonly height: number };
@@ -204,24 +203,6 @@ function diagnostic(path: string, code: string, message: string): Diagnostic {
 
 function fail(path: string, code: string, message: string): never {
   throw new BuildError([diagnostic(path, code, message)]);
-}
-
-function deriveTheme(
-  parent: ThemeContext,
-  scope: ThemeScope | undefined,
-  style: unknown,
-  path: string,
-): ThemeContext {
-  try {
-    const textStyle = style === undefined ? {} : textStyleFrom(style);
-    return parent.with(scope, textStyle);
-  } catch (error) {
-    return fail(
-      path,
-      error instanceof CapabilityError ? error.code : "invalid-theme-scope",
-      error instanceof Error ? error.message : String(error),
-    );
-  }
 }
 
 function record(value: unknown): value is Record<string, unknown> {
@@ -1323,7 +1304,7 @@ export class LayoutPass {
     return bound;
   }
 
-  // Transparent Groups are not in the layout tree, so theme context must be passed separately along the declaration tree.
+  // Transparent or loose containers are not in the layout tree, so theme context must be passed separately along the declaration tree.
   #appendChildren(
     children: readonly CapabilityChild[],
     parentPath: string,
@@ -1336,62 +1317,6 @@ export class LayoutPass {
       const childPath = `${parentPath}/${label(child, index)}`;
       if (parent.style.display === "none") {
         this.#markHidden(child);
-        return;
-      }
-      if (child.type === "rp:group") {
-        const module = this.#modules.get(child.type);
-        if (!objectModule(module)) {
-          fail(
-            childPath,
-            "missing-capability",
-            "rp:group capability is required",
-          );
-        }
-        const bound = this.#bindCapability(
-          child,
-          childPath,
-          themeContext,
-          module,
-        );
-        const contract = bound.contract;
-        const childStyle = contract.layoutStyle;
-        if (childStyle.display === "none") {
-          this.#markHidden(child);
-          return;
-        }
-        this.#validateItemStyle(childStyle, parent, childPath);
-        if (!includeObjects) {
-          // Group text defaults apply only to descendants, not indicating it should become a layout item.
-          const optsIntoLayout = Object.keys(childStyle).some(
-            (key) => key !== "zIndex" && !textStyleKeys.has(key),
-          );
-          if (!optsIntoLayout) {
-            const groupTheme = deriveTheme(
-              themeContext,
-              child.props["theme"] as ThemeScope | undefined,
-              child.props["style"],
-              childPath,
-            );
-            this.#themes.set(child, groupTheme);
-            this.#appendChildren(
-              child.children,
-              childPath,
-              parent,
-              false,
-              groupTheme,
-            );
-            return;
-          }
-        }
-        const built = this.#buildGroup(
-          child,
-          childPath,
-          parent,
-          themeContext,
-          contract,
-          bound,
-        );
-        this.#appendLayoutChild(parent, built);
         return;
       }
       const module = this.#modules.get(child.type);
@@ -1422,6 +1347,27 @@ export class LayoutPass {
         }
         this.#validateItemStyle(contract.layoutStyle, parent, childPath);
         if (bound.container !== undefined) {
+          if (
+            !includeObjects &&
+            bound.container.layoutMode === "when-styled" &&
+            !Object.keys(contract.layoutStyle).some(
+              (key) =>
+                key !== "zIndex" &&
+                layoutPropertySet.has(key) &&
+                contract.layoutStyle[key as keyof LayoutStyle] !== undefined,
+            )
+          ) {
+            const theme = bound.container.theme ?? themeContext;
+            this.#themes.set(child, theme);
+            this.#appendChildren(
+              bound.container.children,
+              childPath,
+              parent,
+              false,
+              theme,
+            );
+            return;
+          }
           const built = this.#buildContainer(
             child,
             childPath,
@@ -1602,41 +1548,6 @@ export class LayoutPass {
     this.#themes.set(input, theme);
     this.#applyStyle(yoga, style, parent.style, false, true);
     this.#appendChildren(container.children, path, node, true, theme);
-    return node;
-  }
-
-  #buildGroup(
-    input: CapabilityElement,
-    path: string,
-    parent: LayoutNode,
-    themeContext: ThemeContext,
-    contract: CapabilityLayoutContract,
-    bound: BoundObjectCapability,
-  ): LayoutNode {
-    const rawStyle = input.props["style"];
-    const style = contract.layoutStyle;
-    const theme = deriveTheme(
-      themeContext,
-      input.props["theme"] as ThemeScope | undefined,
-      rawStyle,
-      path,
-    );
-    const yoga = Yoga.Node.create(this.#config);
-    const node: LayoutNode = {
-      yoga,
-      element: input,
-      style,
-      theme,
-      path,
-      bound,
-      children: [],
-      parent,
-      escaped: [],
-      contract,
-    };
-    this.#themes.set(input, theme);
-    this.#applyStyle(yoga, style, parent.style, false, true);
-    this.#appendChildren(input.children, path, node, true, theme);
     return node;
   }
 
@@ -2739,9 +2650,7 @@ export class LayoutPass {
 
   #minContent(node: LayoutNode, axis: "width" | "height"): number | undefined {
     const isContainer =
-      node.element === undefined ||
-      node.bound?.container !== undefined ||
-      node.element.type === "rp:group";
+      node.element === undefined || node.bound?.container !== undefined;
     if (!isContainer) {
       const padding = expandedSpacing(node.style, "padding");
       const computedWidth = node.yoga.getComputedWidth();

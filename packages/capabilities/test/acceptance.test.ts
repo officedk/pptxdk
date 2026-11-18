@@ -37,6 +37,10 @@ import { Text } from "../src/text-elements.ts";
 import { runCapabilityScenario } from "./acceptance-runner.ts";
 import { boxPositiveScenario, boxRejectionScenario } from "./scenarios/box.ts";
 import {
+  groupPositiveScenario,
+  groupRejectionScenario,
+} from "./scenarios/group.ts";
+import {
   imagePositiveScenario,
   imageRejectionScenario,
 } from "./scenarios/image.ts";
@@ -75,6 +79,8 @@ describe("Capability-owned acceptance scenarios & custom bound preview extension
       for (const scenario of [
         boxPositiveScenario,
         boxRejectionScenario,
+        groupPositiveScenario,
+        groupRejectionScenario,
         shapePositiveScenario,
         shapeRejectionScenario,
         imagePositiveScenario,

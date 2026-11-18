@@ -1155,4 +1155,269 @@ describe("bound object capability contract", () => {
       },
     );
   });
+
+  it("migrates groupCapability to BoundObjectCapabilityModule with single bind per node per build", async () => {
+    assert.equal("bind" in groupCapability, true);
+    assert.equal("parse" in groupCapability, false);
+    assert.equal("compile" in groupCapability, false);
+
+    const bindSpy = vi.spyOn(groupCapability, "bind");
+    try {
+      const trimmedBuild = createBuilder([groupCapability, shapeCapability]);
+      const result = await trimmedBuild(
+        <Deck width={960} height={540} theme={{ colors: { ink: "#111111" } }}>
+          <Slide id="group-bound-slide">
+            <Group id="loose-group" theme={{ colors: { ink: "#2563EB" } }}>
+              <Shape id="m1" x={10} y={20} width={50} height={30} fill="ink" />
+              <Shape
+                id="m2"
+                x={70}
+                y={30}
+                width={40}
+                height={40}
+                fill="#0F766E"
+              />
+            </Group>
+          </Slide>
+        </Deck>,
+      );
+
+      assert.equal(bindSpy.mock.calls.length, 1);
+      assert.deepEqual(result.report.diagnostics, []);
+      assert.equal(result.report.slides[0]?.layouts, undefined);
+      const observed = result.query
+        .getSlide("group-bound-slide")
+        .get("loose-group")
+        .observe();
+      assert.deepEqual(observed.box, { x: 10, y: 20, width: 100, height: 50 });
+      assert.deepEqual(
+        observed.objects.map((object) => object.authorId),
+        ["loose-group", "m1", "m2"],
+      );
+    } finally {
+      bindSpy.mockRestore();
+    }
+
+    const withoutGroupBuild = createBuilder([shapeCapability]);
+    await assert.rejects(
+      withoutGroupBuild(
+        <Deck width={960} height={540}>
+          <Slide id="missing-group">
+            <Group id="cropped-group">
+              <Shape x={0} y={0} width={40} height={20} />
+            </Group>
+          </Slide>
+        </Deck>,
+      ),
+      (error: unknown) => {
+        assert(error instanceof BuildError);
+        assert.ok(
+          error.diagnostics.some((d) => d.code === "missing-capability"),
+        );
+        return true;
+      },
+    );
+  });
+
+  it("coordinates generic non-Group BoundContainerCollaboration modules with when-styled layout, member composition, and continuity restrictions", async () => {
+    type ClusterProps = {
+      readonly id?: string;
+      readonly name?: string;
+      readonly morphKey?: MorphKey;
+      readonly link?: LinkTarget;
+      readonly theme?: ThemeScope;
+      readonly style?: Record<string, unknown>;
+    };
+    const createClusterNode = (props: ClusterProps) =>
+      new CommonContainer("cluster", "rp:custom-cluster", props);
+    const CustomCluster = (
+      props: ClusterProps & { readonly children?: React.ReactNode },
+    ) =>
+      createElement(
+        "rp:custom-cluster",
+        { ...props, [hostNodeCreator]: createClusterNode },
+        props.children,
+      );
+
+    const clusterAllowedStyle = new Set([
+      ...layoutStyleKeys,
+      ...textStyleKeys,
+      "padding",
+    ]);
+    const customClusterModule: BoundObjectCapabilityModule = {
+      declaration: "rp:custom-cluster",
+      bind(input, context) {
+        const contract = parseCapabilityLayoutContract({
+          nativeKind: "grpSp",
+          props: input.props,
+          allowedStyleKeys: clusterAllowedStyle,
+          allowPadding: true,
+          isContainer: true,
+          path: context.path,
+        });
+        const derivedTheme = context.theme.with(
+          input.props["theme"] as ThemeScope | undefined,
+          textStyleFrom(input.props["style"]),
+        );
+        const morphKey = input.props["morphKey"] as MorphKey | undefined;
+        const link = input.props["link"] as LinkTarget | undefined;
+        const requestedName =
+          typeof input.props["name"] === "string"
+            ? input.props["name"]
+            : undefined;
+        const container: BoundContainerCollaboration = {
+          children: input.children,
+          theme: derivedTheme,
+          emitsObject: true,
+          layoutMode: "when-styled",
+          childComposition: "members",
+          restrictsMemberContinuity: true,
+          observesLayout: false,
+          propagatesBaseline: false,
+          checksCanvasOverflow: false,
+        };
+        return {
+          contract,
+          container,
+          ...(morphKey !== undefined ||
+          requestedName !== undefined ||
+          link !== undefined
+            ? {
+                native: {
+                  ...(morphKey === undefined ? {} : { morphKey }),
+                  ...(requestedName === undefined
+                    ? {}
+                    : { hasExplicitName: true }),
+                  ...(link === undefined ? {} : { link }),
+                },
+              }
+            : {}),
+          compile(compileContext) {
+            const compiled = compileContext.compileChildren(input.children);
+            const boxes = compiled.objects
+              .map((member) => member.box)
+              .filter((b): b is NonNullable<typeof b> => b !== undefined);
+            const x = Math.min(...boxes.map((b) => b.x));
+            const y = Math.min(...boxes.map((b) => b.y));
+            const right = Math.max(...boxes.map((b) => b.x + b.width));
+            const bottom = Math.max(...boxes.map((b) => b.y + b.height));
+            const box = compileContext.layoutBox ?? {
+              x,
+              y,
+              width: right - x,
+              height: bottom - y,
+            };
+            const name =
+              compileContext.morphName ??
+              requestedName ??
+              `Cluster ${compileContext.id}`;
+            return {
+              xml: `<p:grpSp><p:nvGrpSpPr><p:cNvPr id="${compileContext.id}" name="${xmlEscape(name)}"/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr><a:xfrm><a:off x="${pxToEmu(box.x)}" y="${pxToEmu(box.y)}"/><a:ext cx="${pxToEmu(box.width)}" cy="${pxToEmu(box.height)}"/><a:chOff x="${pxToEmu(box.x)}" y="${pxToEmu(box.y)}"/><a:chExt cx="${pxToEmu(box.width)}" cy="${pxToEmu(box.height)}"/></a:xfrm></p:grpSpPr>${compiled.xml}</p:grpSp>`,
+              observation: {
+                id: compileContext.id,
+                kind: "group",
+                name,
+                box,
+                members: compiled.objects,
+              },
+              extensions: [],
+            };
+          },
+        };
+      },
+    };
+
+    const clusterMorph = createMorphScope().handle("cluster-morph");
+    const clusterBuild = createBuilder([
+      customClusterModule,
+      boxCapability,
+      shapeCapability,
+    ]);
+    const valid = await clusterBuild(
+      <Deck width={400} height={240} theme={{ colors: { tone: "#111111" } }}>
+        <Slide id="cluster-slide">
+          <CustomCluster
+            id="loose-cluster"
+            theme={{ colors: { tone: "#DC2626" } }}
+          >
+            <Shape id="c1" x={15} y={25} width={40} height={30} fill="tone" />
+            <Shape
+              id="c2"
+              x={75}
+              y={40}
+              width={30}
+              height={25}
+              fill="#0F766E"
+            />
+          </CustomCluster>
+          <Box
+            id="cluster-host"
+            style={{
+              position: "absolute",
+              left: 20,
+              top: 120,
+              display: "flex",
+              flexDirection: "row",
+              gap: 12,
+            }}
+          >
+            <CustomCluster
+              id="layout-cluster"
+              morphKey={clusterMorph}
+              style={{ display: "flex", width: 120, height: 60 }}
+            >
+              <Shape id="lc1" width={50} height={40} fill="#1D4ED8" />
+            </CustomCluster>
+            <Shape id="after-cluster" width={40} height={40} fill="#F59E0B" />
+          </Box>
+        </Slide>
+      </Deck>,
+    );
+
+    assert.deepEqual(valid.report.diagnostics, []);
+    assert.deepEqual((await validatePptx(valid.pptx)).errors, []);
+    const looseObs = valid.query
+      .getSlide("cluster-slide")
+      .get("loose-cluster")
+      .observe();
+    assert.deepEqual(looseObs.box, { x: 15, y: 25, width: 90, height: 40 });
+    assert.equal(looseObs.objects[0]?.kind, "group");
+    assert.equal(looseObs.objects[0]?.members?.length, 2);
+
+    const afterObs = valid.query
+      .getSlide("cluster-slide")
+      .get("cluster-host")
+      .get("after-cluster")
+      .observe();
+    assert.deepEqual(afterObs.box, { x: 152, y: 120, width: 40, height: 40 });
+    const unzipped = unzipSync(valid.pptx);
+    assert.match(strFromU8(unzipped["ppt/slides/slide1.xml"]!), /DC2626/u);
+
+    // Members inside a childComposition="members" / restrictsMemberContinuity container cannot declare morphKey.
+    await assert.rejects(
+      clusterBuild(
+        <Deck width={400} height={240}>
+          <Slide id="bad-cluster-member-morph">
+            <CustomCluster id="bad-cluster">
+              <Shape
+                id="bad-member"
+                morphKey={clusterMorph}
+                x={0}
+                y={0}
+                width={30}
+                height={30}
+              />
+            </CustomCluster>
+          </Slide>
+        </Deck>,
+      ),
+      (error: unknown) => {
+        assert(error instanceof BuildError);
+        assert.ok(
+          error.diagnostics.some((d) => d.code === "morph-inside-group"),
+        );
+        return true;
+      },
+    );
+  });
 });

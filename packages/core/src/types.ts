@@ -708,6 +708,18 @@ export type BoundContainerCollaboration = {
   readonly theme?: ThemeContext;
   /** True when this container produces a native PresentationML object rather than remaining layout-only. */
   readonly emitsObject: boolean;
+  /**
+   * Controls whether this container enters the Yoga layout tree when placed inside a loose parent
+   * without declaring non-text layout styles. Defaults to `"always"`.
+   */
+  readonly layoutMode?: "always" | "when-styled";
+  /**
+   * Controls whether compiled children remain siblings of the container or are enclosed as native
+   * members inside `bound.compile` via `context.compileChildren`. Defaults to `"siblings"`.
+   */
+  readonly childComposition?: "siblings" | "members";
+  /** True when members inside this container cannot declare continuity keys (e.g. native group members). Defaults to false. */
+  readonly restrictsMemberContinuity?: boolean;
   /** True when this container contributes a layout-region observation (`kind: "layout"`). Defaults to true. */
   readonly observesLayout?: boolean;
   /** True when single-child flex rows propagate text baseline through this container. Defaults to true. */

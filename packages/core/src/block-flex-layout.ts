@@ -14,13 +14,17 @@ import Yoga, {
 } from "yoga-layout";
 
 import { BuildError } from "#/diagnostics.ts";
-import type {
-  CustomContainerSolver,
-  LayoutEdges,
-  LayoutNodeMeasure,
-  LayoutSolver,
-  LayoutSolverNode,
-  LayoutSolverPort,
+import {
+  describeStyleValue,
+  expandedSpacing,
+  parseLayoutNumber,
+  parseLayoutSpacing,
+  type CustomContainerMode,
+  type CustomContainerSolver,
+  type LayoutNodeMeasure,
+  type LayoutSolver,
+  type LayoutSolverNode,
+  type LayoutSolverPort,
 } from "#/layout-protocol.ts";
 import type {
   Diagnostic,
@@ -121,25 +125,6 @@ export function isStyleRecord(
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-export function describeStyleValue(value: unknown): string {
-  if (typeof value === "string") return `"${value}"`;
-  if (typeof value === "number" || typeof value === "boolean") {
-    return String(value);
-  }
-  return typeof value;
-}
-
-export function parseLayoutNumber(
-  value: unknown,
-  name: string,
-  path: string,
-): number {
-  if (typeof value !== "number" || !Number.isFinite(value)) {
-    fail(path, "invalid-layout-style", `${name} must be a finite pixel number`);
-  }
-  return value;
-}
-
 export function parseLayoutLength(
   value: unknown,
   name: string,
@@ -169,70 +154,6 @@ export function parseLayoutLength(
   return amount;
 }
 
-export function parseLayoutSpacing(
-  value: unknown,
-  name: string,
-  path: string,
-): LayoutEdges {
-  if (value === undefined) return { top: 0, right: 0, bottom: 0, left: 0 };
-  if (typeof value === "number") {
-    const amount = parseLayoutNumber(value, name, path);
-    return { top: amount, right: amount, bottom: amount, left: amount };
-  }
-  if (!Array.isArray(value) || (value.length !== 2 && value.length !== 4)) {
-    fail(
-      path,
-      "invalid-layout-style",
-      `${name} must be a number, 2-tuple, or 4-tuple`,
-    );
-  }
-  const values = value.map((item) => parseLayoutNumber(item, name, path));
-  if (values.length === 2) {
-    return {
-      top: values[0]!,
-      right: values[1]!,
-      bottom: values[0]!,
-      left: values[1]!,
-    };
-  }
-  return {
-    top: values[0]!,
-    right: values[1]!,
-    bottom: values[2]!,
-    left: values[3]!,
-  };
-}
-
-export function expandedSpacing(
-  style: LayoutStyle,
-  kind: "margin" | "padding",
-): LayoutEdges {
-  const base = parseLayoutSpacing(style[kind], kind, "layout");
-  if (kind === "margin") {
-    return {
-      top: style.marginTop ?? base.top,
-      right: style.marginRight ?? base.right,
-      bottom: style.marginBottom ?? base.bottom,
-      left: style.marginLeft ?? base.left,
-    };
-  }
-  return {
-    top: style.paddingTop ?? base.top,
-    right: style.paddingRight ?? base.right,
-    bottom: style.paddingBottom ?? base.bottom,
-    left: style.paddingLeft ?? base.left,
-  };
-}
-
-export function resolvePercent(
-  value: LayoutLength | undefined,
-  basis: number,
-): number | undefined {
-  if (typeof value !== "string") return undefined;
-  const match = /^(-?(?:\d+(?:\.\d*)?|\.\d+))%$/u.exec(value);
-  return match === null ? undefined : (Number(match[1]) * basis) / 100;
-}
-
 export function styleLength(
   value: LayoutLength | undefined,
 ): number | undefined {
@@ -246,16 +167,21 @@ export function validateBlockFlexContainerContext(
   value: Record<string, unknown>,
   path: string,
   isContainer: boolean,
-): "block" | "flex" | "grid" | "none" {
+  customContainers: readonly CustomContainerMode[] = [],
+): NonNullable<LayoutStyle["display"]> {
+  const customContainerKeys = customContainers.flatMap(
+    (mode) => mode.containerStyleKeys,
+  );
   if (
     !isContainer &&
     ((value["display"] !== undefined &&
       value["display"] !== "none" &&
       value["display"] !== "block") ||
-      Object.keys(value).some((key) =>
-        blockFlexContainerProperties.includes(
-          key as (typeof blockFlexContainerProperties)[number],
-        ),
+      Object.keys(value).some(
+        (key) =>
+          blockFlexContainerProperties.includes(
+            key as (typeof blockFlexContainerProperties)[number],
+          ) || customContainerKeys.includes(key),
       ))
   ) {
     fail(
@@ -265,40 +191,55 @@ export function validateBlockFlexContainerContext(
     );
   }
   const display = value["display"];
+  const customDisplays = customContainers.map((mode) => mode.display);
   if (
     display !== undefined &&
     display !== "block" &&
     display !== "flex" &&
-    display !== "grid" &&
-    display !== "none"
+    display !== "none" &&
+    !customDisplays.includes(display as NonNullable<LayoutStyle["display"]>)
   ) {
-    fail(
-      path,
-      "unsupported-layout-value",
-      "display only supports block, flex, grid, or none",
-    );
+    const supported = ["block", "flex", ...customDisplays, "none"];
+    const list =
+      supported.length <= 2
+        ? supported.join(" or ")
+        : `${supported.slice(0, -1).join(", ")}, or ${supported.at(-1)}`;
+    fail(path, "unsupported-layout-value", `display only supports ${list}`);
   }
-  return display ?? "block";
+  return (
+    (display as NonNullable<LayoutStyle["display"]> | undefined) ?? "block"
+  );
 }
 
 export function validateBlockFlexContainerProperties(
   value: Record<string, unknown>,
-  resolvedDisplay: "block" | "flex" | "grid" | "none",
+  resolvedDisplay: NonNullable<LayoutStyle["display"]>,
   path: string,
+  customContainers: readonly CustomContainerMode[] = [],
 ): void {
+  const activeCustomMode = customContainers.find(
+    (mode) => mode.display === resolvedDisplay,
+  );
   for (const key of blockFlexContainerProperties) {
     if (
       value[key] !== undefined &&
-      !(key === "alignItems" && resolvedDisplay === "grid") &&
-      !(key === "gap" && resolvedDisplay === "grid") &&
-      !(key === "rowGap" && resolvedDisplay === "grid") &&
-      !(key === "columnGap" && resolvedDisplay === "grid") &&
-      resolvedDisplay !== "flex"
+      resolvedDisplay !== "flex" &&
+      !(activeCustomMode?.sharedContainerProperties.includes(key) ?? false)
     ) {
+      const supported = [
+        "flex",
+        ...customContainers
+          .filter((mode) => mode.sharedContainerProperties.includes(key))
+          .map((mode) => mode.display),
+      ];
+      const label =
+        supported.length === 1
+          ? `"${supported[0]}"`
+          : `"${supported[0]}" or ${supported.slice(1).join(", ")}`;
       fail(
         path,
         "invalid-layout-context",
-        `${key} is only applicable to display: "flex"${key === "alignItems" ? " or grid" : ""} containers`,
+        `${key} is only applicable to display: ${label} containers`,
       );
     }
   }
@@ -662,6 +603,7 @@ type BlockFlexNode = {
   measureFunction?: MeasureFunction;
   baselineContent?: YogaNode;
   baseline?: number | undefined;
+  allocatedHeight?: number | undefined;
 };
 
 function applyBlockFlexStyle(
@@ -684,7 +626,7 @@ function applyBlockFlexStyle(
         : PositionType.Static,
   );
   if (!positioned && isCustomContainer) {
-    // Delegated custom containers (such as Grid) place items with local absolute positions.
+    // Delegated custom containers place items with local absolute positions.
     // A static container must still form a containing block so those positions resolve locally,
     // while author absolute descendants escape to the nearest positioned ancestor before layout.
     yoga.setAlwaysFormsContainingBlock(true);
@@ -1230,6 +1172,12 @@ export function createBlockFlexLayoutSolver(options: {
         width: internal.yoga.getComputedWidth(),
         height: internal.yoga.getComputedHeight(),
       };
+    },
+    getAllocatedHeight(node) {
+      return asInternal(node).allocatedHeight;
+    },
+    setAllocatedHeight(node, height) {
+      asInternal(node).allocatedHeight = height;
     },
     setContainerSize(node, size) {
       const internal = asInternal(node);

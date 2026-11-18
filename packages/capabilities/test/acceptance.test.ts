@@ -61,6 +61,10 @@ import {
   layoutBlockFlexRejectionCases,
 } from "./scenarios/layout-block-flex.ts";
 import {
+  layoutGridPositiveScenario,
+  layoutGridRejectionCases,
+} from "./scenarios/layout-grid.ts";
+import {
   notesPositiveScenario,
   notesPreviewIsolationScenario,
 } from "./scenarios/notes.ts";
@@ -104,6 +108,7 @@ describe("Capability-owned acceptance scenarios & custom bound preview extension
         imagePositiveScenario,
         imageRejectionScenario,
         layoutBlockFlexPositiveScenario,
+        layoutGridPositiveScenario,
         shapePositiveScenario,
         shapeRejectionScenario,
         slideBackgroundPositiveScenario,
@@ -127,10 +132,13 @@ describe("Capability-owned acceptance scenarios & custom bound preview extension
     }
   }, 30_000);
 
-  it("enforces unsupported Block/Flex layout rejections consistently across JSX and document entries", async () => {
+  it("enforces unsupported Block/Flex and Grid layout rejections consistently across JSX and document entries", async () => {
     const jsxPreview = createPreview(documentCapabilities);
     const docPreview = createDocumentPreview(documentCapabilities);
-    for (const entry of layoutBlockFlexRejectionCases) {
+    for (const entry of [
+      ...layoutBlockFlexRejectionCases,
+      ...layoutGridRejectionCases,
+    ]) {
       for (const author of ["jsx", "document"] as const) {
         await assert.rejects(
           () =>

@@ -1,9 +1,43 @@
 import {
   CapabilityError,
+  isMorphKey,
   xmlEscape,
   type LinkTarget,
+  type MorphKey,
   type NativeLink,
 } from "@react-pptx/core/capability";
+
+/** Validates an optional non-empty object name parameter. */
+export function parseOptionalName(
+  value: unknown,
+  path?: string,
+): string | undefined {
+  if (value === undefined) return undefined;
+  if (typeof value !== "string" || value.trim() === "") {
+    throw new CapabilityError(
+      "invalid-parameter",
+      "name must be a non-empty string",
+      path,
+    );
+  }
+  return value;
+}
+
+/** Validates an optional Morph handle created by createMorphScope().handle(name). */
+export function parseMorphKey(
+  value: unknown,
+  path?: string,
+): MorphKey | undefined {
+  if (value === undefined) return undefined;
+  if (!isMorphKey(value)) {
+    throw new CapabilityError(
+      "invalid-morph-key",
+      "morphKey must be created by createMorphScope().handle(name)",
+      path,
+    );
+  }
+  return value;
+}
 
 /** Validates link target declarations once during capability bind. */
 export function parseLinkTarget(

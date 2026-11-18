@@ -3,8 +3,10 @@ import {
   pxToEmu,
   resolvedColorXml,
   type ColorValue,
+  type GeometryBox,
   type GradientStop,
   type LinearGradient,
+  type PreviewTransform,
   type RadialGradient,
   type ResolvedColor,
   type ThemeContext,
@@ -649,5 +651,87 @@ export function shapePropertiesXml(
     warnings,
     hasVisibleStyle,
     geometryName: geometry.name,
+  };
+}
+
+const unsupportedBoxPreviewStyleKeys = [
+  "backgroundImage",
+  "boxShadow",
+  "softEdge",
+  "borderRadius",
+  "startArrow",
+  "endArrow",
+] as const;
+
+export type BoxPreviewVisuals = {
+  readonly attributes: string;
+  readonly hasFillOrStroke: boolean;
+  readonly svgTransform: string;
+  readonly transform: PreviewTransform;
+};
+
+/**
+ * Validates and resolves visual styles for static SVG preview across rect-backed objects
+ * (Shape, Text, and visible Box). Throws located CapabilityError codes for unsupported effects.
+ */
+export function resolveBoxPreviewVisuals(options: {
+  readonly label: string;
+  readonly visualStyle: Readonly<Record<string, unknown>>;
+  readonly box: GeometryBox;
+  readonly theme: ThemeContext;
+  readonly fill?: ColorValue | undefined;
+  readonly flipH?: boolean | undefined;
+  readonly flipV?: boolean | undefined;
+}): BoxPreviewVisuals {
+  const { label, visualStyle, box, theme, fill, flipH, flipV } = options;
+  for (const key of unsupportedBoxPreviewStyleKeys) {
+    if (visualStyle[key] !== undefined) {
+      throw new CapabilityError(
+        "preview-unsupported-style",
+        `Preview does not support ${label} ${key}`,
+      );
+    }
+  }
+  const borderStyle = visualStyle["borderStyle"];
+  if (borderStyle !== undefined && borderStyle !== "solid") {
+    throw new CapabilityError(
+      "preview-unsupported-border-style",
+      "Preview does not yet support non-solid borders",
+    );
+  }
+  const fillValue =
+    fill ?? (visualStyle["backgroundColor"] as ColorValue | undefined);
+  const resolvedFill =
+    fillValue === undefined ? undefined : theme.resolveColor(fillValue);
+  const strokeValue = visualStyle["borderColor"] as ColorValue | undefined;
+  const borderWidth =
+    visualStyle["borderWidth"] === undefined
+      ? 1
+      : Number(visualStyle["borderWidth"]);
+  const resolvedStroke =
+    strokeValue === undefined || borderWidth === 0
+      ? undefined
+      : theme.resolveColor(strokeValue);
+  const opacity = Number(visualStyle["opacity"] ?? 1);
+  const attributes = `fill="${resolvedFill === undefined ? "none" : `#${resolvedFill.hex}`}" fill-opacity="${(resolvedFill?.alpha ?? 1) * opacity}" stroke="${resolvedStroke === undefined ? "none" : `#${resolvedStroke.hex}`}" stroke-opacity="${(resolvedStroke?.alpha ?? 1) * opacity}" stroke-width="${resolvedStroke === undefined ? 0 : borderWidth}"`;
+
+  const angle =
+    typeof visualStyle["rotate"] === "number" ? visualStyle["rotate"] : 0;
+  const cx = box.x + box.width / 2;
+  const cy = box.y + box.height / 2;
+  const flipX = Boolean(flipH);
+  const flipY = Boolean(flipV);
+  const svgTransform = `translate(${cx} ${cy}) rotate(${angle}) scale(${flipX ? -1 : 1} ${flipY ? -1 : 1}) translate(${-cx} ${-cy})`;
+
+  return {
+    attributes,
+    hasFillOrStroke: resolvedFill !== undefined || resolvedStroke !== undefined,
+    svgTransform,
+    transform: {
+      box,
+      angle,
+      flipH: flipX,
+      flipV: flipY,
+    },
   };
 }

@@ -234,8 +234,8 @@ describe("Ticket 08: Object capability parse phase, container TextStyle validati
       );
     });
 
-    it("executes textCapability.parse exactly once per Text node during build and reuses parsed result", async () => {
-      const parseSpy = vi.spyOn(textCapability, "parse");
+    it("executes textCapability.bind exactly once per Text node during build and reuses bound handle", async () => {
+      const bindSpy = vi.spyOn(textCapability, "bind");
       try {
         const result = await build(
           <Deck width={960} height={540}>
@@ -262,15 +262,15 @@ describe("Ticket 08: Object capability parse phase, container TextStyle validati
         );
 
         assert.equal(
-          parseSpy.mock.calls.length,
+          bindSpy.mock.calls.length,
           1,
-          `Expected parse to be called exactly 1 time, but was called ${parseSpy.mock.calls.length} times`,
+          `Expected bind to be called exactly 1 time, but was called ${bindSpy.mock.calls.length} times`,
         );
 
         const validation = await validatePptx(result.pptx);
         assert.deepEqual(validation.errors, []);
       } finally {
-        parseSpy.mockRestore();
+        bindSpy.mockRestore();
       }
     });
   });

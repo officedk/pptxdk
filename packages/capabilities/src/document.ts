@@ -83,7 +83,7 @@ import {
   type SpanDeclarationProps,
   type TextDeclarationProps,
 } from "./text-declaration.ts";
-import { textCapability, type ParsedText } from "./text.ts";
+import { textCapability } from "./text.ts";
 import { transitionCapability, type Transition } from "./transition.ts";
 
 /**
@@ -386,7 +386,7 @@ export type {
   MotionScopeHandle,
   MotionStepAuthorProps,
 } from "./motion-api.ts";
-export type { LinkTarget, ParsedText, Transition };
+export type { LinkTarget, Transition };
 export type { NotesDeclarationProps } from "./notes-declaration.ts";
 
 export type {

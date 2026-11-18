@@ -1,29 +1,34 @@
 import { readFileSync } from "node:fs";
+import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 
 import {
   CapabilityError,
+  isMorphKey,
   layoutStyleKeys,
   parseCapabilityLayoutContract,
   pxToEmu,
   xmlEscape,
+  type BoundObjectCapability,
+  type BoundObjectCapabilityModule,
+  type BoundObjectNativeCollaboration,
   type CapabilityContext,
-  type CapabilityLayoutContract,
+  type CapabilityInput,
   type CapabilityLayoutMeasurement,
   type CapabilityLayoutRequest,
-  type CapabilityInput,
-  type CapabilityOutput,
   type CapabilityParseContext,
-  type CapabilityParseResult,
+  type GeometryBox,
   type LayoutStyle,
   type LinkTarget,
-  type ObjectCapabilityModule,
+  type MorphKey,
+  type ObjectPreviewContext,
+  type ObjectPreviewOutput,
   type VisualStyle,
 } from "@react-pptx/core/capability";
 import { CommonNode } from "@react-pptx/core/document";
 
 import type { Geometry } from "./geometry.ts";
-import { nativeLinkXml } from "./identity.ts";
+import { nativeLinkXml, parseLinkTarget } from "./identity.ts";
 import { imageXml } from "./image-xml.ts";
 import type { MorphProps } from "./morph-api.ts";
 import { motionAnnotations, type MotionProps } from "./motion-api.ts";
@@ -97,24 +102,7 @@ export function createImageNode(
   >("image", "rp:image", props);
 }
 
-export type ParsedImage = {
-  readonly name?: string;
-  readonly morphKey?: string;
-  readonly link?: LinkTarget;
-  readonly image: LoadedImage;
-  readonly style: Record<string, unknown>;
-  readonly fit: "fill" | "cover" | "contain";
-  readonly crop?: Record<string, number>;
-  readonly alt?: string;
-  readonly geometry?: Geometry;
-  readonly flipH?: boolean;
-  readonly flipV?: boolean;
-  readonly enter?: MotionProps["enter"];
-  readonly emphasis?: MotionProps["emphasis"];
-  readonly motion?: MotionProps["motion"];
-  readonly contract: CapabilityLayoutContract;
-  readonly rawProps: Readonly<Record<string, unknown>>;
-};
+type ImageFit = "fill" | "cover" | "contain";
 
 type ImageMetadata = {
   readonly extension: "png" | "jpeg" | "gif";
@@ -124,6 +112,224 @@ type ImageMetadata = {
 };
 
 export type LoadedImage = ImageMetadata & { readonly bytes: Uint8Array };
+
+type ImagePlacement = {
+  readonly box: GeometryBox;
+  readonly sourceCrop: Readonly<Record<string, number>>;
+};
+
+interface PngInstance {
+  width: number;
+  height: number;
+  data: Buffer;
+}
+
+interface PngJsModule {
+  readonly PNG: {
+    new (options: { width: number; height: number }): PngInstance;
+    readonly sync: {
+      read(buffer: Buffer): PngInstance;
+      write(png: PngInstance): Buffer;
+    };
+  };
+}
+
+interface JpegJsModule {
+  decode(
+    jpegData: Uint8Array,
+    options?: { readonly tolerantDecoding?: boolean },
+  ): {
+    readonly width: number;
+    readonly height: number;
+    readonly data: Uint8Array;
+  };
+}
+
+let cachedDecoders:
+  | { readonly png: PngJsModule; readonly jpeg: JpegJsModule }
+  | undefined;
+
+// Load pngjs and jpeg-js lazily only when preview() executes so formal build() never pulls rasterizers.
+function imageDecoders(): {
+  readonly png: PngJsModule;
+  readonly jpeg: JpegJsModule;
+} {
+  if (cachedDecoders === undefined) {
+    const require = createRequire(import.meta.url);
+    cachedDecoders = {
+      png: require("pngjs") as PngJsModule,
+      jpeg: require("jpeg-js") as JpegJsModule,
+    };
+  }
+  return cachedDecoders;
+}
+
+const unsupportedPreviewImageStyleKeys = [
+  "borderColor",
+  "borderWidth",
+  "borderStyle",
+  "boxShadow",
+  "softEdge",
+] as const;
+
+function isRectMask(geometry: Geometry | undefined): boolean {
+  if (geometry === undefined || geometry === "rect") return true;
+  return (
+    typeof geometry === "object" &&
+    geometry.type === "preset" &&
+    geometry.name === "rect" &&
+    (geometry.adjust === undefined || Object.keys(geometry.adjust).length === 0)
+  );
+}
+
+function renderImagePreview(options: {
+  readonly image: LoadedImage;
+  readonly visualStyle: Readonly<Record<string, unknown>>;
+  readonly geometry: Geometry | undefined;
+  readonly flipH: boolean | undefined;
+  readonly flipV: boolean | undefined;
+  readonly placement: ImagePlacement;
+  readonly objectId: number;
+}): ObjectPreviewOutput {
+  const { image, visualStyle, geometry, flipH, flipV, placement, objectId } =
+    options;
+
+  if (!isRectMask(geometry)) {
+    throw new CapabilityError(
+      "preview-unsupported-geometry",
+      "Preview does not yet support shaped images",
+    );
+  }
+  for (const key of unsupportedPreviewImageStyleKeys) {
+    if (visualStyle[key] !== undefined) {
+      throw new CapabilityError(
+        "preview-unsupported-style",
+        `Preview does not yet support image ${key}`,
+      );
+    }
+  }
+  if (image.extension !== "png" && image.extension !== "jpeg") {
+    throw new CapabilityError(
+      "preview-unsupported-image",
+      "Preview supports only PNG and JPEG images",
+    );
+  }
+
+  const { png: pngModule, jpeg: jpegModule } = imageDecoders();
+  const bytes = Buffer.from(image.bytes);
+  let decoded: {
+    readonly width: number;
+    readonly height: number;
+    readonly data: Uint8Array;
+  };
+  try {
+    decoded =
+      image.extension === "png"
+        ? pngModule.PNG.sync.read(bytes)
+        : jpegModule.decode(bytes, { tolerantDecoding: false });
+  } catch (error) {
+    throw new CapabilityError(
+      "preview-corrupt-image",
+      error instanceof Error
+        ? `Failed to decode ${image.extension.toUpperCase()} image for preview: ${error.message}`
+        : `Failed to decode ${image.extension.toUpperCase()} image for preview`,
+    );
+  }
+
+  const normalized = new pngModule.PNG({
+    width: decoded.width,
+    height: decoded.height,
+  });
+  normalized.data = Buffer.from(decoded.data);
+  const pngBytes = pngModule.PNG.sync.write(normalized);
+
+  const { box, sourceCrop } = placement;
+  const cropSide = (side: "l" | "t" | "r" | "b") =>
+    Math.round((sourceCrop[side] ?? 0) * 100000) / 100000;
+  const leftCrop = cropSide("l");
+  const topCrop = cropSide("t");
+  const rightCrop = cropSide("r");
+  const bottomCrop = cropSide("b");
+  const widthFactor = 1 - leftCrop - rightCrop;
+  const heightFactor = 1 - topCrop - bottomCrop;
+
+  const angle =
+    typeof visualStyle["rotate"] === "number" ? visualStyle["rotate"] : 0;
+  const flipX = Boolean(flipH);
+  const flipY = Boolean(flipV);
+  const cx = box.x + box.width / 2;
+  const cy = box.y + box.height / 2;
+  const opacity = Number(visualStyle["opacity"] ?? 1);
+  const transform = `translate(${cx} ${cy}) rotate(${angle}) scale(${flipX ? -1 : 1} ${flipY ? -1 : 1}) translate(${-cx} ${-cy})`;
+
+  if (widthFactor <= 0 || heightFactor <= 0) {
+    return {
+      svg: `<g transform="${transform}" opacity="${opacity}"></g>`,
+      transform: {
+        box,
+        angle,
+        flipH: flipX,
+        flipV: flipY,
+      },
+    };
+  }
+
+  const width = box.width / widthFactor;
+  const height = box.height / heightFactor;
+  const clipId = `image-${objectId}`;
+  const svg = `<g transform="${transform}" opacity="${opacity}"><defs><clipPath id="${clipId}"><rect x="${box.x}" y="${box.y}" width="${box.width}" height="${box.height}"/></clipPath></defs><image clip-path="url(#${clipId})" x="${box.x - leftCrop * width}" y="${box.y - topCrop * height}" width="${width}" height="${height}" preserveAspectRatio="none" href="data:image/png;base64,${pngBytes.toString("base64")}"/></g>`;
+
+  return {
+    svg,
+    transform: {
+      box,
+      angle,
+      flipH: flipX,
+      flipV: flipY,
+    },
+  };
+}
+
+/** Shared image placement calculation for native OOXML output and static preview. */
+function imagePlacement(
+  image: { readonly width: number; readonly height: number },
+  fit: ImageFit,
+  crop: Readonly<Record<string, number>> | undefined,
+  allocated: GeometryBox,
+): ImagePlacement {
+  const { width, height } = allocated;
+  const box = { ...allocated };
+  const sourceCrop = crop !== undefined ? { ...crop } : {};
+  if (crop === undefined && fit === "cover") {
+    const imageRatio = image.width / image.height;
+    const boxRatio = width / height;
+    if (imageRatio > boxRatio) {
+      const excess = (1 - boxRatio / imageRatio) / 2;
+      sourceCrop["l"] = excess;
+      sourceCrop["r"] = excess;
+    } else if (imageRatio < boxRatio) {
+      const excess = (1 - imageRatio / boxRatio) / 2;
+      sourceCrop["t"] = excess;
+      sourceCrop["b"] = excess;
+    }
+  } else if (crop === undefined && fit === "contain") {
+    const imageRatio = image.width / image.height;
+    const boxRatio = width / height;
+    if (imageRatio > boxRatio) {
+      const fittedHeight = width / imageRatio;
+      box.y += (height - fittedHeight) / 2;
+      box.height = fittedHeight;
+    } else if (imageRatio < boxRatio) {
+      const fittedWidth = height * imageRatio;
+      box.x += (width - fittedWidth) / 2;
+      box.width = fittedWidth;
+    }
+  }
+  // Dimensions derived by contain must also be representable as non-zero EMU.
+  box.width = dimension(box.width, "width");
+  box.height = dimension(box.height, "height");
+  return { box, sourceCrop };
+}
 
 const allowedParameters = [
   "id",
@@ -521,14 +727,14 @@ function cropValues(
   return result;
 }
 
-/** Image module reads and validates formal resources, then emits native picture objects with media relationships. */
-export const imageCapability: ObjectCapabilityModule<ParsedImage> = {
+/** Image module reads and validates formal resources, encapsulates bound state, and emits native picture objects. */
+export const imageCapability: BoundObjectCapabilityModule = {
   declaration: "rp:image",
 
-  parse(
+  bind(
     input: CapabilityInput,
     context: CapabilityParseContext,
-  ): CapabilityParseResult<ParsedImage> {
+  ): BoundObjectCapability {
     const unknown = Object.keys(input.props).find(
       (key) => !(allowedParameters as readonly string[]).includes(key),
     );
@@ -552,6 +758,20 @@ export const imageCapability: ObjectCapabilityModule<ParsedImage> = {
     }
 
     const requestedName = optionalText(input.props, "name", context.path);
+    const rawMorphKey = input.props["morphKey"];
+    let morphKey: MorphKey | undefined;
+    if (rawMorphKey !== undefined) {
+      if (!isMorphKey(rawMorphKey)) {
+        throw new CapabilityError(
+          "invalid-morph-key",
+          "morphKey must be created by createMorphScope().handle(name)",
+          context.path,
+        );
+      }
+      morphKey = rawMorphKey;
+    }
+    const link = parseLinkTarget(input.props["link"], context.path);
+
     const altValue = input.props["alt"];
     if (altValue !== undefined && typeof altValue !== "string") {
       throw new CapabilityError(
@@ -575,7 +795,7 @@ export const imageCapability: ObjectCapabilityModule<ParsedImage> = {
     });
 
     const imageStyle = isRecord(input.props["style"])
-      ? input.props["style"]
+      ? { ...input.props["style"] }
       : {};
 
     const requestedFit = input.props["fit"];
@@ -590,220 +810,224 @@ export const imageCapability: ObjectCapabilityModule<ParsedImage> = {
 
     const crop = cropValues(input.props["crop"], context.path);
     const image = readImage(input.props["src"]);
+    const geometry = input.props["geometry"] as Geometry | undefined;
+    const flipH = input.props["flipH"] as boolean | undefined;
+    const flipV = input.props["flipV"] as boolean | undefined;
 
-    const parsed: ParsedImage = {
-      ...(requestedName !== undefined ? { name: requestedName } : {}),
-      ...(input.props["morphKey"] !== undefined
-        ? { morphKey: input.props["morphKey"] as string }
-        : {}),
-      ...(input.props["link"] !== undefined
-        ? { link: input.props["link"] as LinkTarget }
-        : {}),
-      ...(altValue !== undefined ? { alt: altValue } : {}),
-      ...(input.props["geometry"] !== undefined
-        ? { geometry: input.props["geometry"] as Geometry }
-        : {}),
-      ...(input.props["flipH"] !== undefined
-        ? { flipH: input.props["flipH"] as boolean }
-        : {}),
-      ...(input.props["flipV"] !== undefined
-        ? { flipV: input.props["flipV"] as boolean }
-        : {}),
-      ...(input.props["enter"] !== undefined
-        ? { enter: input.props["enter"] as MotionProps["enter"] }
-        : {}),
-      ...(input.props["emphasis"] !== undefined
-        ? { emphasis: input.props["emphasis"] as MotionProps["emphasis"] }
-        : {}),
-      ...(input.props["motion"] !== undefined
-        ? { motion: input.props["motion"] as MotionProps["motion"] }
-        : {}),
-      image,
-      style: imageStyle,
-      fit,
-      ...(crop !== undefined ? { crop } : {}),
-      contract,
-      rawProps: input.props,
-    };
-
-    return { contract, parsed };
-  },
-
-  measureLayout(
-    parsed: ParsedImage,
-    request: CapabilityLayoutRequest,
-  ): CapabilityLayoutMeasurement {
-    const image = parsed.image;
-    const style = parsed.style;
-    const requestedWidth = requestedDimension(style, parsed.rawProps, "width");
-    const requestedHeight = requestedDimension(
-      style,
-      parsed.rawProps,
-      "height",
-    );
-    const declaredWidth =
-      typeof requestedWidth === "number" ? requestedWidth : undefined;
-    const declaredHeight =
-      typeof requestedHeight === "number" ? requestedHeight : undefined;
-    const width =
-      declaredWidth ??
-      Math.min(image.width, request.availableWidth ?? image.width);
-    const height = declaredHeight ?? (width * image.height) / image.width;
-    return {
-      width,
-      height,
-      minContentWidth: image.width,
-      minContentHeight: image.height,
-    };
-  },
-
-  compile(parsed: ParsedImage, context: CapabilityContext): CapabilityOutput {
-    const image = parsed.image;
-    const imageStyle = parsed.style;
-    const requestedWidth = requestedDimension(
-      imageStyle,
-      parsed.rawProps,
-      "width",
-    );
-    const requestedHeight = requestedDimension(
-      imageStyle,
-      parsed.rawProps,
-      "height",
-    );
-    const x = dimension(context.layoutBox?.x ?? parsed.rawProps["x"], "x", 0);
-    const y = dimension(context.layoutBox?.y ?? parsed.rawProps["y"], "y", 0);
-    let width: number;
-    let height: number;
-    if (context.layoutBox !== undefined) {
-      width = dimension(context.layoutBox.width, "width");
-      height = dimension(context.layoutBox.height, "height");
-    } else if (requestedWidth === undefined && requestedHeight === undefined) {
-      width = image.width;
-      height = image.height;
-    } else if (requestedWidth === undefined) {
-      height = dimension(requestedHeight, "height");
-      width = (height * image.width) / image.height;
-    } else if (requestedHeight === undefined) {
-      width = dimension(requestedWidth, "width");
-      height = (width * image.height) / image.width;
-    } else {
-      width = dimension(requestedWidth, "width");
-      height = dimension(requestedHeight, "height");
-    }
-    width = dimension(width, "width");
-    height = dimension(height, "height");
-
-    const fit = parsed.fit;
-    const crop = parsed.crop;
-    const box = { x, y, width, height };
-    const sourceCrop = crop !== undefined ? { ...crop } : {};
-    if (crop === undefined && fit === "cover") {
-      const imageRatio = image.width / image.height;
-      const boxRatio = width / height;
-      if (imageRatio > boxRatio) {
-        const excess = (1 - boxRatio / imageRatio) / 2;
-        sourceCrop["l"] = excess;
-        sourceCrop["r"] = excess;
-      } else if (imageRatio < boxRatio) {
-        const excess = (1 - imageRatio / boxRatio) / 2;
-        sourceCrop["t"] = excess;
-        sourceCrop["b"] = excess;
-      }
-    } else if (crop === undefined && fit === "contain") {
-      const imageRatio = image.width / image.height;
-      const boxRatio = width / height;
-      if (imageRatio > boxRatio) {
-        const fittedHeight = width / imageRatio;
-        box.y += (height - fittedHeight) / 2;
-        box.height = fittedHeight;
-      } else if (imageRatio < boxRatio) {
-        const fittedWidth = height * imageRatio;
-        box.x += (width - fittedWidth) / 2;
-        box.width = fittedWidth;
-      }
-    }
-    // Dimensions derived by contain must also be representable as non-zero EMU.
-    box.width = dimension(box.width, "width");
-    box.height = dimension(box.height, "height");
-    const properties = shapePropertiesXml({
+    // Validate geometry and visual properties during bind before layout runs.
+    shapePropertiesXml({
       theme: context.theme,
       style: imageStyle,
-      box,
-      ...(parsed.geometry === undefined ? {} : { geometry: parsed.geometry }),
-      ...(parsed.flipH === undefined ? {} : { flipH: parsed.flipH }),
-      ...(parsed.flipV === undefined ? {} : { flipV: parsed.flipV }),
+      box: { x: 0, y: 0, width: 100, height: 100 },
+      ...(geometry !== undefined ? { geometry } : {}),
+      ...(flipH !== undefined ? { flipH } : {}),
+      ...(flipV !== undefined ? { flipV } : {}),
       image: true,
     });
-    const name = context.morphName ?? parsed.name ?? `Image ${context.id - 1}`;
-    const annotations = motionAnnotations(parsed.rawProps, {
-      kind: "image",
-      name,
-      ...(typeof parsed.rawProps["id"] === "string"
-        ? { authorId: parsed.rawProps["id"] }
-        : {}),
-      textBody: false,
-      filled: false,
-      box,
-      rotationDegrees:
-        typeof imageStyle["rotate"] === "number" ? imageStyle["rotate"] : 0,
-      hasBackground:
-        imageStyle["borderColor"] !== undefined ||
-        (typeof imageStyle["borderWidth"] === "number" &&
-          imageStyle["borderWidth"] > 0),
-    });
-    let escapedName: string;
-    let escapedAlt: string | undefined;
-    try {
-      escapedName = xmlEscape(name);
-      escapedAlt = parsed.alt === undefined ? undefined : xmlEscape(parsed.alt);
-    } catch {
-      throw new CapabilityError(
-        "invalid-xml-character",
-        "Image.name or alt contains characters not allowed in XML 1.0",
-      );
-    }
-    let relationshipId: string;
-    try {
-      relationshipId = context.registerResource({
-        bytes: image.bytes,
-        extension: image.extension,
-        contentType: image.contentType,
-        relationshipType:
-          "http://schemas.openxmlformats.org/officeDocument/2006/relationships/image",
-      });
-    } catch (error) {
-      if (error instanceof CapabilityError) throw error;
-      throw new CapabilityError(
-        "image-resource-failure",
-        error instanceof Error ? error.message : String(error),
-      );
-    }
-    const serializedCrop = Object.fromEntries(
-      Object.entries(sourceCrop).filter(([, fraction]) => fraction !== 0),
+
+    const declaredX = input.props["x"];
+    const declaredY = input.props["y"];
+    const requestedWidth = requestedDimension(imageStyle, input.props, "width");
+    const requestedHeight = requestedDimension(
+      imageStyle,
+      input.props,
+      "height",
     );
+    const authorId =
+      typeof input.props["id"] === "string" ? input.props["id"] : undefined;
+    const motionProps: Readonly<Record<string, unknown>> = {
+      ...(input.props["enter"] !== undefined
+        ? { enter: input.props["enter"] }
+        : {}),
+      ...(input.props["emphasis"] !== undefined
+        ? { emphasis: input.props["emphasis"] }
+        : {}),
+      ...(input.props["motion"] !== undefined
+        ? { motion: input.props["motion"] }
+        : {}),
+    };
+
+    const native: BoundObjectNativeCollaboration = {
+      ...(morphKey === undefined ? {} : { morphKey }),
+      ...(requestedName === undefined ? {} : { hasExplicitName: true }),
+      ...(link === undefined ? {} : { link }),
+    };
+
+    let compiledPlacement: ImagePlacement | undefined;
+
     return {
-      xml: imageXml(
-        context.id,
-        escapedName,
-        escapedAlt,
-        relationshipId,
-        box,
-        serializedCrop,
-        properties.xml,
-        properties.opacity,
-        nativeLinkXml(context.nativeLink),
-      ),
-      observation: {
-        id: context.id,
-        kind: "image",
-        name,
-        box,
+      contract,
+      ...(morphKey !== undefined ||
+      requestedName !== undefined ||
+      link !== undefined
+        ? { native }
+        : {}),
+
+      measureLayout(
+        request: CapabilityLayoutRequest,
+      ): CapabilityLayoutMeasurement {
+        const declaredWidth =
+          typeof requestedWidth === "number" ? requestedWidth : undefined;
+        const declaredHeight =
+          typeof requestedHeight === "number" ? requestedHeight : undefined;
+        const width =
+          declaredWidth ??
+          Math.min(image.width, request.availableWidth ?? image.width);
+        const height = declaredHeight ?? (width * image.height) / image.width;
+        return {
+          width,
+          height,
+          minContentWidth: image.width,
+          minContentHeight: image.height,
+        };
       },
-      extensions: [],
-      ...(properties.warnings.length === 0
-        ? {}
-        : { warnings: properties.warnings }),
-      ...(annotations.length === 0 ? {} : { annotations }),
+
+      compile(compileContext: CapabilityContext) {
+        const x = dimension(compileContext.layoutBox?.x ?? declaredX, "x", 0);
+        const y = dimension(compileContext.layoutBox?.y ?? declaredY, "y", 0);
+        let width: number;
+        let height: number;
+        if (compileContext.layoutBox !== undefined) {
+          width = dimension(compileContext.layoutBox.width, "width");
+          height = dimension(compileContext.layoutBox.height, "height");
+        } else if (
+          requestedWidth === undefined &&
+          requestedHeight === undefined
+        ) {
+          width = image.width;
+          height = image.height;
+        } else if (requestedWidth === undefined) {
+          height = dimension(requestedHeight, "height");
+          width = (height * image.width) / image.height;
+        } else if (requestedHeight === undefined) {
+          width = dimension(requestedWidth, "width");
+          height = (width * image.height) / image.width;
+        } else {
+          width = dimension(requestedWidth, "width");
+          height = dimension(requestedHeight, "height");
+        }
+        width = dimension(width, "width");
+        height = dimension(height, "height");
+
+        const placement = imagePlacement(image, fit, crop, {
+          x,
+          y,
+          width,
+          height,
+        });
+        compiledPlacement = placement;
+        const { box, sourceCrop } = placement;
+        const properties = shapePropertiesXml({
+          theme: compileContext.theme,
+          style: imageStyle,
+          box,
+          ...(geometry === undefined ? {} : { geometry }),
+          ...(flipH === undefined ? {} : { flipH }),
+          ...(flipV === undefined ? {} : { flipV }),
+          image: true,
+        });
+        const name =
+          compileContext.morphName ??
+          requestedName ??
+          `Image ${compileContext.id - 1}`;
+        const annotations = motionAnnotations(motionProps, {
+          kind: "image",
+          name,
+          ...(authorId === undefined ? {} : { authorId }),
+          textBody: false,
+          filled: false,
+          box,
+          rotationDegrees:
+            typeof imageStyle["rotate"] === "number" ? imageStyle["rotate"] : 0,
+          hasBackground:
+            imageStyle["borderColor"] !== undefined ||
+            (typeof imageStyle["borderWidth"] === "number" &&
+              imageStyle["borderWidth"] > 0),
+        });
+        let escapedName: string;
+        let escapedAlt: string | undefined;
+        try {
+          escapedName = xmlEscape(name);
+          escapedAlt = altValue === undefined ? undefined : xmlEscape(altValue);
+        } catch {
+          throw new CapabilityError(
+            "invalid-xml-character",
+            "Image.name or alt contains characters not allowed in XML 1.0",
+          );
+        }
+        let relationshipId: string;
+        try {
+          relationshipId = compileContext.registerResource({
+            bytes: image.bytes,
+            extension: image.extension,
+            contentType: image.contentType,
+            relationshipType:
+              "http://schemas.openxmlformats.org/officeDocument/2006/relationships/image",
+          });
+        } catch (error) {
+          if (error instanceof CapabilityError) throw error;
+          throw new CapabilityError(
+            "image-resource-failure",
+            error instanceof Error ? error.message : String(error),
+          );
+        }
+        const serializedCrop = Object.fromEntries(
+          Object.entries(sourceCrop).filter(([, fraction]) => fraction !== 0),
+        );
+        return {
+          xml: imageXml(
+            compileContext.id,
+            escapedName,
+            escapedAlt,
+            relationshipId,
+            box,
+            serializedCrop,
+            properties.xml,
+            properties.opacity,
+            nativeLinkXml(compileContext.nativeLink),
+          ),
+          observation: {
+            id: compileContext.id,
+            kind: "image",
+            name,
+            box,
+          },
+          extensions: [],
+          ...(properties.warnings.length === 0
+            ? {}
+            : { warnings: properties.warnings }),
+          ...(annotations.length === 0 ? {} : { annotations }),
+        };
+      },
+
+      preview(previewContext: ObjectPreviewContext): ObjectPreviewOutput {
+        const placement =
+          compiledPlacement !== undefined &&
+          (previewContext.box === undefined ||
+            (previewContext.box.x === compiledPlacement.box.x &&
+              previewContext.box.y === compiledPlacement.box.y &&
+              previewContext.box.width === compiledPlacement.box.width &&
+              previewContext.box.height === compiledPlacement.box.height))
+            ? compiledPlacement
+            : previewContext.box !== undefined
+              ? imagePlacement(image, fit, crop, previewContext.box)
+              : undefined;
+        if (placement === undefined) {
+          throw new CapabilityError(
+            "preview-missing-geometry",
+            "Preview requires compiled image placement",
+          );
+        }
+        return renderImagePreview({
+          image,
+          visualStyle: imageStyle,
+          geometry,
+          flipH,
+          flipV,
+          placement,
+          objectId: previewContext.objectId,
+        });
+      },
     };
   },
 };

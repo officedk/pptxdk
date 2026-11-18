@@ -39,7 +39,7 @@ export function parseMorphKey(
   return value;
 }
 
-/** Validates an optional click-link target for native objects. */
+/** Validates link target declarations once during capability bind. */
 export function parseLinkTarget(
   value: unknown,
   path?: string,

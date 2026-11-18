@@ -306,12 +306,23 @@ registerHooks({
   },
 });
 
-const { build, Deck, Slide, Shape } = await import("@react-pptx/react-pptx");
+const { build, Deck, Image, Slide, Shape } = await import("@react-pptx/react-pptx");
+const pngBytes = new Uint8Array(
+  Buffer.from(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/n1sAAAAASUVORK5CYII=",
+    "base64",
+  ),
+);
 const result = await build(
   createElement(
     Deck,
     { width: 320, height: 180 },
-    createElement(Slide, { id: "s1" }, createElement(Shape, { x: 10, y: 10, width: 40, height: 40 })),
+    createElement(
+      Slide,
+      { id: "s1" },
+      createElement(Shape, { x: 10, y: 10, width: 40, height: 40 }),
+      createElement(Image, { x: 60, y: 10, width: 40, height: 40, src: pngBytes }),
+    ),
   ),
 );
 if (!(result.pptx instanceof Uint8Array) || result.pptx.byteLength === 0) {
@@ -341,12 +352,21 @@ registerHooks({
   },
 });
 
-const { build, deck, slide, shape } = await import("@react-pptx/react-pptx/document");
+const { build, deck, image, slide, shape } = await import("@react-pptx/react-pptx/document");
 const { createFormalBuild } = await import("@react-pptx/react-pptx/build");
 void createFormalBuild;
+const pngBytes = new Uint8Array(
+  Buffer.from(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/n1sAAAAASUVORK5CYII=",
+    "base64",
+  ),
+);
 const result = await build(
   deck({ width: 320, height: 180 }).append(
-    slide({ id: "s1" }).append(shape({ x: 10, y: 10, width: 40, height: 40 })),
+    slide({ id: "s1" }).append(
+      shape({ x: 10, y: 10, width: 40, height: 40 }),
+      image({ x: 60, y: 10, width: 40, height: 40, src: pngBytes }),
+    ),
   ),
 );
 if (!(result.pptx instanceof Uint8Array) || result.pptx.byteLength === 0) {

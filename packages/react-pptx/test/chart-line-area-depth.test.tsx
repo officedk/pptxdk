@@ -842,7 +842,7 @@ describe("line and area depth", () => {
               ],
             },
           ],
-        } as ChartProps,
+        },
         "invalid-data-labels",
       ],
       [
@@ -860,7 +860,7 @@ describe("line and area depth", () => {
               ],
             },
           ],
-        } as ChartProps,
+        },
         "invalid-data-labels",
       ],
       [
@@ -878,7 +878,7 @@ describe("line and area depth", () => {
               ],
             },
           ],
-        } as ChartProps,
+        },
         "invalid-data-labels",
       ],
       [

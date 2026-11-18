@@ -181,7 +181,7 @@ describe("generated zero-source category column ownership", () => {
 
   it("keeps independent-ring sources valid when the zero ring has no label", async () => {
     const result = await buildChart(independentRings);
-    assertSeries(result.chart.series as readonly ChartSeriesObservation[], [
+    assertSeries(result.chart.series, [
       { name: "Empty", categories: [], values: [] },
       { name: "Filled", categories: ["A", "B"], values: [2, 3] },
     ]);

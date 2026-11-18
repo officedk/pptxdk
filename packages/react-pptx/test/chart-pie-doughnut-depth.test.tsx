@@ -419,7 +419,7 @@ describe("pie and doughnut depth", () => {
           },
         },
       ],
-    } as ChartProps);
+    });
     const result = await buildDocument(
       deck({ width: 640, height: 480 }).append(
         documentSlide({ id: "imperative-pie-slide" }).append(chart),
@@ -645,7 +645,7 @@ describe("pie and doughnut depth", () => {
                   name: "S",
                   values: [1, 2],
                   smooth: true,
-                } as unknown as ChartSeries,
+                },
               ],
             },
           ],
@@ -717,7 +717,7 @@ describe("pie and doughnut depth", () => {
                   name: "S",
                   values: [1, 2],
                   dataLabels: { value: true, leaderLines: true },
-                } as unknown as ChartSeries,
+                },
               ],
             },
           ],
@@ -766,7 +766,7 @@ describe("pie and doughnut depth", () => {
                   name: "S",
                   values: [1, 2],
                   explosion: 10,
-                } as unknown as ChartSeries,
+                },
               ],
             },
           ],
@@ -788,7 +788,7 @@ describe("pie and doughnut depth", () => {
                   name: "S",
                   values: [1, 2],
                   points: { 0: { explosion: 10 } },
-                } as unknown as ChartSeries,
+                },
               ],
             },
           ],

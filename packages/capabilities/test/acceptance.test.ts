@@ -988,7 +988,7 @@ describe("Capability-owned acceptance scenarios & custom bound preview extension
         unzipSync(result.build.pptx)["ppt/slides/slide1.xml"]!,
       );
       expect(slideXml).toContain('<a:srgbClr val="0F766E"/>');
-      const png = PNG.sync.read(Buffer.from(result.pages[0]!.png!));
+      const png = PNG.sync.read(Buffer.from(result.pages[0].png!));
       // Top-left corner (5, 5) shows custom backdrop #0F766E; center (100, 60) shows shape #F59E0B.
       const cornerOffset = (5 * png.width + 5) * 4;
       assert.deepEqual(

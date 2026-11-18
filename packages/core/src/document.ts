@@ -224,9 +224,7 @@ export class CommonNode<
   style(patch: StyleUpdate<Style>): this {
     const record = patch as Readonly<Record<string, unknown>>;
     requirePatchObject(record, "style() patch");
-    const current = isRecord(this.#props["style"])
-      ? (this.#props["style"] as Record<string, unknown>)
-      : {};
+    const current = isRecord(this.#props["style"]) ? this.#props["style"] : {};
     const next = { ...current };
     for (const [key, value] of Object.entries(record)) {
       if (value === undefined) delete next[key];

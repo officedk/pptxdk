@@ -35,6 +35,7 @@ import {
 import { shapeCapability } from "../src/shape.ts";
 import { Text } from "../src/text-elements.ts";
 import { runCapabilityScenario } from "./acceptance-runner.ts";
+import { boxPositiveScenario, boxRejectionScenario } from "./scenarios/box.ts";
 import {
   imagePositiveScenario,
   imageRejectionScenario,
@@ -72,6 +73,8 @@ describe("Capability-owned acceptance scenarios & custom bound preview extension
     const outDir = await mkdtemp(join(tmpdir(), "rp-cap-accept-"));
     try {
       for (const scenario of [
+        boxPositiveScenario,
+        boxRejectionScenario,
         shapePositiveScenario,
         shapeRejectionScenario,
         imagePositiveScenario,
@@ -139,8 +142,8 @@ describe("Capability-owned acceptance scenarios & custom bound preview extension
     const first = await previewDocument(expanded);
     assert.deepEqual(first.pages[0]?.diagnostics, []);
     assert.deepEqual((await validatePptx(first.build.pptx)).errors, []);
-    const firstPng = first.pages[0]!.png!.slice();
-    const firstSvg = first.pages[0]!.svg!;
+    const firstPng = first.pages[0].png!.slice();
+    const firstSvg = first.pages[0].svg!;
     const firstPptx = first.build.pptx.slice();
     const firstHeight = first.build.query
       .getSlide("handoff")

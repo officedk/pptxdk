@@ -17,7 +17,7 @@ export type {
 } from "#/shape.ts";
 export { Shape } from "#/shape-elements.ts";
 export type { ShapeProps } from "#/shape-elements.ts";
-export { boxCapability, type ParsedBox } from "#/box.ts";
+export { boxCapability } from "#/box.ts";
 export { Box, type BoxProps } from "#/box-elements.ts";
 export {
   arrowTypes,

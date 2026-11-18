@@ -3,24 +3,28 @@ import {
   layoutStyleKeys,
   paddingStyleKeys,
   parseCapabilityLayoutContract,
+  textStyleFrom,
   textStyleKeys,
   xmlEscape,
+  type BoundContainerCollaboration,
+  type BoundObjectCapability,
+  type BoundObjectCapabilityModule,
+  type BoundObjectNativeCollaboration,
+  type CapabilityContext,
   type CapabilityInput,
-  type CapabilityLayoutContract,
   type CapabilityParseContext,
-  type CapabilityParseResult,
   type GeometryBox,
   type LayoutStyle,
   type LinkTarget,
-  type MorphKey,
-  type ObjectCapabilityModule,
+  type ObjectPreviewContext,
+  type ObjectPreviewOutput,
   type TextStyle,
   type ThemeScope,
   type VisualStyle,
 } from "@react-pptx/core/capability";
 import { CommonContainer } from "@react-pptx/core/document";
 
-import { nativeLinkXml } from "./identity.ts";
+import { nativeLinkXml, parseLinkTarget, parseMorphKey } from "./identity.ts";
 import type { MorphProps } from "./morph-api.ts";
 import {
   motionAnnotations,
@@ -29,9 +33,9 @@ import {
 } from "./motion-api.ts";
 import {
   hasVisibleBoxStyle,
+  resolveBoxPreviewVisuals,
   shapePropertiesXml,
   visualStyleKeys,
-  type VisualStyleRecord,
 } from "./visual.ts";
 
 /** Layout container appearance with visual styling that optionally generates a native background shape. */
@@ -75,15 +79,6 @@ const boxAllowedStyleKeys = new Set<string>([
   ...visualStyleKeys,
 ]);
 
-export type ParsedBox = {
-  readonly morphKey?: MorphKey;
-  readonly link?: LinkTarget;
-  readonly styleRecord: VisualStyleRecord;
-  readonly hasVisibleStyle: boolean;
-  readonly contract: CapabilityLayoutContract;
-  readonly rawProps: Readonly<Record<string, unknown>>;
-};
-
 function styleRecord(value: unknown): Record<string, unknown> {
   if (value === undefined) return {};
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
@@ -95,7 +90,6 @@ function styleRecord(value: unknown): Record<string, unknown> {
 function objectXml(
   id: number,
   name: string,
-  box: GeometryBox,
   properties: string,
   linkXml: string,
 ): string {
@@ -103,13 +97,13 @@ function objectXml(
 }
 
 /** Visible Box backgrounds use the same shape property writer; boxes without fill, stroke, or shadow retain layout semantics only. */
-export const boxCapability: ObjectCapabilityModule<ParsedBox> = {
+export const boxCapability: BoundObjectCapabilityModule = {
   declaration: "rp:box",
 
-  parse(
+  bind(
     input: CapabilityInput,
     context: CapabilityParseContext,
-  ): CapabilityParseResult<ParsedBox> {
+  ): BoundObjectCapability {
     const unknown = Object.keys(input.props).find(
       (key) => !(boxAllowedParameters as readonly string[]).includes(key),
     );
@@ -117,15 +111,19 @@ export const boxCapability: ObjectCapabilityModule<ParsedBox> = {
       throw new CapabilityError(
         "unknown-parameter",
         `Box contains unknown parameter ${unknown}`,
+        context.path,
       );
     }
     validateMotionFlag(input.props["motion"]);
-    const style = styleRecord(input.props["style"]);
+    const morphKey = parseMorphKey(input.props["morphKey"], context.path);
+    const link = parseLinkTarget(input.props["link"], context.path);
+    const style = { ...styleRecord(input.props["style"]) };
     const hasVisibleStyle = hasVisibleBoxStyle(style);
-    if (input.props["morphKey"] !== undefined && !hasVisibleStyle) {
+    if (morphKey !== undefined && !hasVisibleStyle) {
       throw new CapabilityError(
         "morph-needs-object",
         "Only visible Box elements generating native background shapes can participate in Morph",
+        context.path,
       );
     }
 
@@ -138,74 +136,126 @@ export const boxCapability: ObjectCapabilityModule<ParsedBox> = {
       path: context.path,
     });
 
-    const parsed: ParsedBox = {
-      ...(input.props["morphKey"] !== undefined
-        ? { morphKey: input.props["morphKey"] as MorphKey }
-        : {}),
-      ...(input.props["link"] !== undefined
-        ? { link: input.props["link"] as LinkTarget }
-        : {}),
-      styleRecord: style,
-      hasVisibleStyle,
-      contract,
-      rawProps: input.props,
-    };
+    const theme = context.theme.with(
+      input.props["theme"] as ThemeScope | undefined,
+      textStyleFrom(style),
+    );
 
-    return { contract, parsed };
-  },
-
-  compile(parsed: ParsedBox, context) {
-    const box = context.layoutBox;
-    if (box === undefined) {
-      throw new CapabilityError(
-        "layout-unavailable",
-        "Box is missing layout results",
-      );
-    }
-    const name = context.morphName ?? `Box ${context.id - 1}`;
-    const style = parsed.styleRecord;
-    const properties = shapePropertiesXml({
-      theme: context.theme,
+    shapePropertiesXml({
+      theme,
       style,
-      box,
+      box: { x: 0, y: 0, width: 100, height: 100 },
       layoutOnlyWhenInvisible: true,
     });
-    const motionTarget = {
-      kind: "shape",
-      name,
-      ...(typeof parsed.rawProps["id"] === "string"
-        ? { authorId: parsed.rawProps["id"] }
+
+    const authorId =
+      typeof input.props["id"] === "string" ? input.props["id"] : undefined;
+    const motionProps: Readonly<Record<string, unknown>> = {
+      ...(input.props["enter"] !== undefined
+        ? { enter: input.props["enter"] }
         : {}),
-      textBody: false,
-      filled:
-        style["backgroundColor"] !== undefined ||
-        style["backgroundImage"] !== undefined,
-    } as const;
-    const annotations = properties.hasVisibleStyle
-      ? motionAnnotations(parsed.rawProps, motionTarget)
-      : [];
+      ...(input.props["motion"] !== undefined
+        ? { motion: input.props["motion"] }
+        : {}),
+    };
+
+    const container: BoundContainerCollaboration = {
+      children: input.children,
+      theme,
+      emitsObject: hasVisibleStyle,
+      observesLayout: true,
+      propagatesBaseline: true,
+      checksCanvasOverflow: true,
+    };
+
+    const native: BoundObjectNativeCollaboration = {
+      ...(morphKey === undefined ? {} : { morphKey }),
+      ...(link === undefined ? {} : { link }),
+    };
+
+    let compiledBox: GeometryBox | undefined;
+
     return {
-      xml: properties.hasVisibleStyle
-        ? objectXml(
-            context.id,
+      contract,
+      container,
+      ...(morphKey !== undefined || link !== undefined ? { native } : {}),
+      compile(compileContext: CapabilityContext) {
+        const box = compileContext.layoutBox;
+        if (box === undefined) {
+          throw new CapabilityError(
+            "layout-unavailable",
+            "Box is missing layout results",
+            compileContext.path,
+          );
+        }
+        compiledBox = box;
+        const name = compileContext.morphName ?? `Box ${compileContext.id - 1}`;
+        const properties = shapePropertiesXml({
+          theme: compileContext.theme,
+          style,
+          box,
+          layoutOnlyWhenInvisible: true,
+        });
+        const motionTarget = {
+          kind: "shape",
+          name,
+          ...(authorId === undefined ? {} : { authorId }),
+          textBody: false,
+          filled:
+            style["backgroundColor"] !== undefined ||
+            style["backgroundImage"] !== undefined,
+        } as const;
+        const annotations = properties.hasVisibleStyle
+          ? motionAnnotations(motionProps, motionTarget)
+          : [];
+        return {
+          xml: properties.hasVisibleStyle
+            ? objectXml(
+                compileContext.id,
+                name,
+                properties.xml,
+                nativeLinkXml(compileContext.nativeLink),
+              )
+            : "",
+          observation: {
+            id: compileContext.id,
+            kind: "shape",
             name,
+            geometry: properties.geometryName,
             box,
-            properties.xml,
-            nativeLinkXml(context.nativeLink),
-          )
-        : "",
-      observation: {
-        id: context.id,
-        kind: "shape",
-        name,
-        geometry: properties.geometryName,
-        box,
+          },
+          extensions: [],
+          ...(annotations.length === 0 ? {} : { annotations }),
+          ...(properties.warnings.length === 0
+            ? {}
+            : { warnings: properties.warnings }),
+        };
       },
-      extensions: [],
-      ...(annotations.length === 0 ? {} : { annotations }),
-      ...(properties.warnings.length === 0
-        ? {}
-        : { warnings: properties.warnings }),
+      preview(previewContext: ObjectPreviewContext): ObjectPreviewOutput {
+        const childrenSvg = previewContext.childrenSvg ?? "";
+        if (!hasVisibleStyle) {
+          return { svg: childrenSvg };
+        }
+        const box = previewContext.box ?? compiledBox;
+        if (box === undefined) {
+          throw new CapabilityError(
+            "layout-unavailable",
+            "Preview requires compiled Box geometry",
+            previewContext.path,
+          );
+        }
+        const resolved = resolveBoxPreviewVisuals({
+          label: "box",
+          visualStyle: style,
+          box,
+          theme: previewContext.theme,
+        });
+        const backgroundSvg = `<g transform="${resolved.svgTransform}"><rect x="${box.x}" y="${box.y}" width="${box.width}" height="${box.height}" ${resolved.attributes}/></g>`;
+        return {
+          svg: `${backgroundSvg}${childrenSvg}`,
+          transform: resolved.transform,
+        };
+      },
     };
   },
 };

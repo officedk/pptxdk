@@ -53,6 +53,10 @@ import {
   imageRejectionScenario,
 } from "./scenarios/image.ts";
 import {
+  layoutBlockFlexPositiveScenario,
+  layoutBlockFlexRejectionCases,
+} from "./scenarios/layout-block-flex.ts";
+import {
   notesPositiveScenario,
   notesPreviewIsolationScenario,
 } from "./scenarios/notes.ts";
@@ -91,10 +95,11 @@ describe("Capability-owned acceptance scenarios & custom bound preview extension
       for (const scenario of [
         boxPositiveScenario,
         boxRejectionScenario,
-        shapePositiveScenario,
-        shapeRejectionScenario,
         imagePositiveScenario,
         imageRejectionScenario,
+        layoutBlockFlexPositiveScenario,
+        shapePositiveScenario,
+        shapeRejectionScenario,
         slideBackgroundPositiveScenario,
         slideBackgroundRejectionScenario,
         textPositiveScenario,
@@ -113,6 +118,36 @@ describe("Capability-owned acceptance scenarios & custom bound preview extension
       }
     } finally {
       await rm(outDir, { recursive: true, force: true });
+    }
+  });
+
+  it("enforces unsupported Block/Flex layout rejections consistently across JSX and document entries", async () => {
+    const jsxPreview = createPreview(documentCapabilities);
+    const docPreview = createDocumentPreview(documentCapabilities);
+    for (const entry of layoutBlockFlexRejectionCases) {
+      for (const author of ["jsx", "document"] as const) {
+        await assert.rejects(
+          () =>
+            author === "jsx"
+              ? jsxPreview(entry.jsx())
+              : docPreview(entry.document()),
+          (error: unknown) => {
+            assert(
+              error instanceof BuildError,
+              `${entry.id} (${author}) should throw BuildError`,
+            );
+            assert.ok(
+              error.diagnostics.some(
+                (d) =>
+                  d.code === entry.expectedCode &&
+                  d.path.includes(entry.expectedPathSubstring),
+              ),
+              `${entry.id} (${author}) expected ${entry.expectedCode} at ${entry.expectedPathSubstring}, got ${JSON.stringify(error.diagnostics)}`,
+            );
+            return true;
+          },
+        );
+      }
     }
   });
 

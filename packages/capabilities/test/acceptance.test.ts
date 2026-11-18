@@ -32,6 +32,10 @@ import {
   slideBackgroundPositiveScenario,
   slideBackgroundRejectionScenario,
 } from "./scenarios/slide-background.ts";
+import {
+  runTransitionRejectionScenarios,
+  transitionPositiveScenario,
+} from "./scenarios/transition.ts";
 
 type CustomMarkerProps = {
   readonly id?: string;
@@ -57,6 +61,7 @@ describe("Capability-owned acceptance scenarios & custom bound preview extension
         shapeRejectionScenario,
         slideBackgroundPositiveScenario,
         slideBackgroundRejectionScenario,
+        transitionPositiveScenario,
       ]) {
         const runs = await runCapabilityScenario(scenario, {
           outputDir: outDir,
@@ -67,6 +72,7 @@ describe("Capability-owned acceptance scenarios & custom bound preview extension
           ["jsx", "document"],
         );
       }
+      await runTransitionRejectionScenarios();
     } finally {
       await rm(outDir, { recursive: true, force: true });
     }

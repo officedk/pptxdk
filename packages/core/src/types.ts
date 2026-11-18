@@ -270,7 +270,6 @@ export type SlideObservation = {
   readonly index: number;
   readonly section?: string;
   readonly hidden?: boolean;
-  readonly advanceAfter?: number;
   readonly objects: readonly ObjectObservation[];
   readonly layouts?: readonly LayoutObservation[];
   readonly capabilities?: Readonly<Record<string, unknown>>;
@@ -693,6 +692,8 @@ export type BoundObjectNativeCollaboration = {
   readonly morphKey?: MorphKey;
   /** True when the capability claims an explicit native object name, conflicting with morphKey. */
   readonly hasExplicitName?: boolean;
+  /** Whether this bound instance produces a native slide object; defaults to true when omitted. */
+  readonly emitsObject?: boolean;
   readonly link?: LinkTarget;
 };
 
@@ -799,7 +800,19 @@ export type SlidePreviewOutput = {
   readonly warnings?: readonly PreviewWarning[];
 };
 
+/**
+ * Generic cross-slide continuity collaboration facts submitted by a bound slide capability.
+ */
+export type BoundSlideContinuityCollaboration = {
+  /**
+   * When true, core validates that each MorphKey object declared on this slide
+   * has the same native element kind as matching objects on reachable source slides.
+   */
+  readonly matchSourceKinds?: boolean;
+};
+
 export type BoundSlideCapability = {
+  readonly continuity?: BoundSlideContinuityCollaboration;
   compileSlide(context: SlideCapabilityContext): SlideCapabilityOutput;
   previewSlide?(context: SlidePreviewContext): SlidePreviewOutput;
 };

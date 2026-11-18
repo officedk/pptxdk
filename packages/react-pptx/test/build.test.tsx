@@ -5,7 +5,7 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import type { ObjectCapabilityModule } from "@react-pptx/core";
+import type { BoundObjectCapabilityModule } from "@react-pptx/core";
 import {
   build,
   BuildError,
@@ -809,17 +809,22 @@ describe("public build entry", () => {
 
   it("measures Shape text via shared text service, emits page number fields, and registers actual characters", async () => {
     const pageNumberClaims: string[] = [];
-    const shapeModule = shapeCapability as ObjectCapabilityModule;
-    const observedShapeCapability: ObjectCapabilityModule = {
-      ...shapeModule,
-      compile(input, context) {
-        const output = shapeModule.compile(input, context);
-        pageNumberClaims.push(
-          ...(output.resourceClaims ?? []).flatMap(({ characters }) =>
-            characters === undefined ? [] : [characters],
-          ),
-        );
-        return output;
+    const observedShapeCapability: BoundObjectCapabilityModule = {
+      declaration: shapeCapability.declaration,
+      bind(input, context) {
+        const bound = shapeCapability.bind(input, context);
+        return {
+          ...bound,
+          compile(compileContext) {
+            const output = bound.compile(compileContext);
+            pageNumberClaims.push(
+              ...(output.resourceClaims ?? []).flatMap(({ characters }) =>
+                characters === undefined ? [] : [characters],
+              ),
+            );
+            return output;
+          },
+        };
       },
     };
     const shapeBuild = createBuilder([boxCapability, observedShapeCapability]);
@@ -3873,16 +3878,18 @@ describe("public build entry", () => {
     let cleaned = 0;
     const cleanupSeenAtParse: number[] = [];
     const cleanupSeenAtCompile: number[] = [];
-    const shapeModule = shapeCapability as ObjectCapabilityModule;
-    const observedShape: ObjectCapabilityModule = {
-      ...shapeModule,
-      parse(input, context) {
+    const observedShape: BoundObjectCapabilityModule = {
+      declaration: shapeCapability.declaration,
+      bind(input, context) {
         cleanupSeenAtParse.push(cleaned);
-        return shapeModule.parse(input, context);
-      },
-      compile(parsed, context) {
-        cleanupSeenAtCompile.push(cleaned);
-        return shapeModule.compile(parsed, context);
+        const bound = shapeCapability.bind(input, context);
+        return {
+          ...bound,
+          compile(compileContext) {
+            cleanupSeenAtCompile.push(cleaned);
+            return bound.compile(compileContext);
+          },
+        };
       },
     };
 
@@ -3926,18 +3933,20 @@ describe("public build entry", () => {
 
   it("keeps original build options visible to capability parse and compile", async () => {
     const controller = new AbortController();
-    const shapeModule = shapeCapability as ObjectCapabilityModule;
     const parseOptions: BuildOptions[] = [];
     const compileOptions: BuildOptions[] = [];
-    const observedShape: ObjectCapabilityModule = {
-      ...shapeModule,
-      parse(input, context) {
+    const observedShape: BoundObjectCapabilityModule = {
+      declaration: shapeCapability.declaration,
+      bind(input, context) {
         parseOptions.push(context.options);
-        return shapeModule.parse(input, context);
-      },
-      compile(parsed, context) {
-        compileOptions.push(context.options);
-        return shapeModule.compile(parsed, context);
+        const bound = shapeCapability.bind(input, context);
+        return {
+          ...bound,
+          compile(compileContext) {
+            compileOptions.push(compileContext.options);
+            return bound.compile(compileContext);
+          },
+        };
       },
     };
 

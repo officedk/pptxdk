@@ -1,0 +1,866 @@
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+
+import {
+  BuildError,
+  CommonNode,
+  createBuilder,
+  createMorphScope,
+  Deck,
+  Slide,
+  type BoundObjectCapability,
+  type BoundObjectCapabilityModule,
+  type CapabilityInput,
+  type CapabilityParseContext,
+  type LinkTarget,
+} from "@react-pptx/core";
+import {
+  CapabilityError,
+  isMorphKey,
+  layoutStyleKeys,
+  parseCapabilityLayoutContract,
+  pxToEmu,
+  xmlEscape,
+  type MorphKey,
+} from "@react-pptx/core/capability";
+import {
+  createDeckNode,
+  createDocumentBuild,
+  createSlideNode,
+  hostNodeCreator,
+} from "@react-pptx/core/document";
+import {
+  Box,
+  boxCapability,
+  fade,
+  font,
+  Group,
+  groupCapability,
+  motionCapability,
+  P,
+  preset,
+  Shape,
+  shapeCapability,
+  Span,
+  transitionCapability,
+  transitions,
+} from "@react-pptx/react-pptx";
+import {
+  box as impBox,
+  createDocumentBuild as createDocBuild,
+  createMorphScope as createDocMorphScope,
+  deck as impDeck,
+  font as impFont,
+  group as impGroup,
+  paragraph as impParagraph,
+  shape as impShape,
+  slide as impSlide,
+  span as impSpan,
+} from "@react-pptx/react-pptx/document";
+import { validatePptx } from "@react-pptx/validation";
+import { strFromU8, unzipSync } from "fflate";
+import { createElement } from "react";
+import { describe, it, vi } from "vitest";
+
+const notoFont = font("Noto Sans CJK SC", [
+  {
+    weight: 400,
+    data: new Uint8Array(
+      readFileSync(
+        new URL("./assets/fonts/NotoSansSC-Regular.woff2", import.meta.url),
+      ),
+    ),
+  },
+]);
+const impNotoFont = impFont("Noto Sans CJK SC", [
+  {
+    weight: 400,
+    data: new Uint8Array(
+      readFileSync(
+        new URL("./assets/fonts/NotoSansSC-Regular.woff2", import.meta.url),
+      ),
+    ),
+  },
+]);
+
+type BadgeProps = {
+  readonly id?: string;
+  readonly label: string;
+  readonly name?: string;
+  readonly morphKey?: MorphKey;
+  readonly link?: LinkTarget;
+  readonly x?: number;
+  readonly y?: number;
+  readonly width?: number;
+  readonly height?: number;
+  readonly style?: {
+    readonly width?: number;
+    readonly height?: number;
+  };
+};
+
+function createBadgeNode(props: BadgeProps): CommonNode<"badge", BadgeProps> {
+  return new CommonNode("badge", "rp:custom-badge", props);
+}
+
+function CustomBadge(props: BadgeProps) {
+  return createElement("rp:custom-badge", {
+    ...props,
+    [hostNodeCreator]: createBadgeNode,
+  });
+}
+
+function createTrackedBadgeCapability() {
+  const bindCalls: string[] = [];
+  const measureCalls: string[] = [];
+  const compileCalls: string[] = [];
+
+  const module: BoundObjectCapabilityModule = {
+    declaration: "rp:custom-badge",
+    bind(
+      input: CapabilityInput,
+      context: CapabilityParseContext,
+    ): BoundObjectCapability {
+      bindCalls.push(context.path);
+      const label = input.props["label"];
+      if (typeof label !== "string" || label.length === 0) {
+        throw new CapabilityError(
+          "invalid-parameter",
+          "CustomBadge.label must be a non-empty string",
+          context.path,
+        );
+      }
+      const rawName = input.props["name"];
+      if (
+        rawName !== undefined &&
+        (typeof rawName !== "string" || rawName.trim() === "")
+      ) {
+        throw new CapabilityError(
+          "invalid-parameter",
+          "CustomBadge.name must be a non-empty string",
+          context.path,
+        );
+      }
+      const rawMorphKey = input.props["morphKey"];
+      let morphKey: MorphKey | undefined;
+      if (rawMorphKey !== undefined) {
+        if (!isMorphKey(rawMorphKey)) {
+          throw new CapabilityError(
+            "invalid-morph-key",
+            "morphKey must be created by createMorphScope().handle(name)",
+            context.path,
+          );
+        }
+        morphKey = rawMorphKey;
+      }
+      const rawLink = input.props["link"] as LinkTarget | undefined;
+
+      const contract = parseCapabilityLayoutContract({
+        nativeKind: "sp",
+        props: input.props,
+        allowedStyleKeys: new Set<string>(layoutStyleKeys),
+        path: context.path,
+      });
+
+      const declaredX =
+        typeof input.props["x"] === "number" ? input.props["x"] : 0;
+      const declaredY =
+        typeof input.props["y"] === "number" ? input.props["y"] : 0;
+      const declaredWidth =
+        typeof contract.width === "number" ? contract.width : label.length * 10;
+      const declaredHeight =
+        typeof contract.height === "number" ? contract.height : 36;
+
+      // Encapsulated private state: never returned on contract or exposed to core.
+      const privateLabel = label;
+      const privateExplicitName = rawName;
+
+      return {
+        contract,
+        native: {
+          ...(morphKey === undefined ? {} : { morphKey }),
+          ...(privateExplicitName === undefined
+            ? {}
+            : { hasExplicitName: true }),
+          ...(rawLink === undefined ? {} : { link: rawLink }),
+        },
+        measureLayout(request) {
+          measureCalls.push(context.path);
+          const width =
+            request.availableWidth !== undefined
+              ? Math.min(request.availableWidth, declaredWidth)
+              : declaredWidth;
+          return {
+            width,
+            height: declaredHeight,
+            minContentWidth: Math.min(declaredWidth, 40),
+            minContentHeight: declaredHeight,
+          };
+        },
+        compile(compileContext) {
+          compileCalls.push(compileContext.path);
+          const box = compileContext.layoutBox ?? {
+            x: declaredX,
+            y: declaredY,
+            width: declaredWidth,
+            height: declaredHeight,
+          };
+          const name =
+            compileContext.morphName ??
+            privateExplicitName ??
+            `Badge ${compileContext.id - 1}`;
+          const link = compileContext.nativeLink;
+          const linkAttrs = [
+            ...(link?.relationshipId !== undefined && link.relationshipId !== ""
+              ? [`r:id="${xmlEscape(link.relationshipId)}"`]
+              : []),
+            ...(link?.action !== undefined
+              ? [`action="${xmlEscape(link.action)}"`]
+              : []),
+          ].join(" ");
+          const linkXml =
+            linkAttrs.length > 0 ? `<a:hlinkClick ${linkAttrs}/>` : "";
+          const xml =
+            `<p:sp><p:nvSpPr>` +
+            `<p:cNvPr id="${compileContext.id}" name="${xmlEscape(name)}">${linkXml}</p:cNvPr>` +
+            `<p:cNvSpPr/><p:nvPr/></p:nvSpPr>` +
+            `<p:spPr>` +
+            `<a:xfrm><a:off x="${pxToEmu(box.x)}" y="${pxToEmu(box.y)}"/><a:ext cx="${pxToEmu(box.width)}" cy="${pxToEmu(box.height)}"/></a:xfrm>` +
+            `<a:prstGeom prst="rect"><a:avLst/></a:prstGeom>` +
+            `<a:solidFill><a:srgbClr val="2B579A"/></a:solidFill>` +
+            `</p:spPr>` +
+            `<p:txBody><a:bodyPr/><a:lstStyle/><a:p><a:r><a:t>${xmlEscape(privateLabel)}</a:t></a:r></a:p></p:txBody>` +
+            `</p:sp>`;
+          return {
+            xml,
+            observation: {
+              id: compileContext.id,
+              kind: "badge",
+              name,
+              box,
+              text: privateLabel,
+            },
+            extensions: [],
+          };
+        },
+      };
+    },
+  };
+
+  return { module, bindCalls, measureCalls, compileCalls };
+}
+
+describe("bound object capability contract", () => {
+  it("supports custom bound object capability via both JSX and imperative builds without exposing parsed state", async () => {
+    const tracker = createTrackedBadgeCapability();
+    const morph = createMorphScope();
+    const badgeMorph = morph.handle("badge-morph");
+
+    // 1. Imperative build via createDocumentBuild
+    const deckNode = createDeckNode({ width: 960, height: 540 });
+    const slide1 = createSlideNode({ id: "first" });
+    const badge1 = createBadgeNode({
+      id: "imp-badge",
+      label: "Imperative",
+      morphKey: badgeMorph,
+      link: { id: "second" },
+      x: 40,
+      y: 50,
+      width: 160,
+      height: 44,
+    });
+    const slide2 = createSlideNode({ id: "second" });
+    slide1.append(badge1);
+    deckNode.append(slide1, slide2);
+
+    const imperativeBuild = createDocumentBuild([tracker.module]);
+    const imperativeResult = await imperativeBuild(deckNode);
+    const impValidation = await validatePptx(imperativeResult.pptx);
+    assert.deepEqual(impValidation.errors, []);
+
+    assert.equal(tracker.bindCalls.length, 1);
+    assert.equal(tracker.compileCalls.length, 1);
+    assert.equal(
+      imperativeResult.report.slides[0]?.objects[0]?.text,
+      "Imperative",
+    );
+    assert.equal(
+      imperativeResult.report.slides[0]?.objects[0]?.link,
+      "slide:second",
+    );
+    assert.match(
+      imperativeResult.report.slides[0]?.objects[0]?.name ?? "",
+      /^!!react-pptx-morph-/u,
+    );
+
+    // 2. JSX build inside legacy Box Flex container (exercises measureLayout + container collaboration)
+    tracker.bindCalls.length = 0;
+    tracker.measureCalls.length = 0;
+    tracker.compileCalls.length = 0;
+
+    const jsxBuild = createBuilder([boxCapability, tracker.module]);
+    const jsxResult = await jsxBuild(
+      <Deck width={960} height={540}>
+        <Slide id="jsx-first">
+          <Box
+            style={{
+              display: "flex",
+              flexDirection: "row",
+              alignItems: "flex-start",
+              width: 500,
+              height: 120,
+              padding: 10,
+            }}
+          >
+            <CustomBadge
+              id="jsx-badge"
+              label="JSX-Flex"
+              link={{ url: "https://example.com/badge" }}
+            />
+          </Box>
+        </Slide>
+      </Deck>,
+    );
+    const jsxValidation = await validatePptx(jsxResult.pptx);
+    assert.deepEqual(jsxValidation.errors, []);
+    assert.equal(tracker.bindCalls.length, 1);
+    assert.ok(tracker.measureCalls.length >= 1);
+    assert.equal(tracker.compileCalls.length, 1);
+
+    const observed = jsxResult.query
+      .getSlide("jsx-first")
+      .get("jsx-badge")
+      .observe();
+    assert.equal(observed.authorId, "jsx-badge");
+    assert.equal(observed.text, "JSX-Flex");
+    assert.deepEqual(observed.box, {
+      x: 10,
+      y: 10,
+      width: 80,
+      height: 36,
+    });
+    assert.equal(observed.objects[0]?.link, "url:https://example.com/badge");
+  });
+
+  it("enforces morph-object-name-conflict via native.hasExplicitName and missing-capability when trimmed", async () => {
+    const tracker = createTrackedBadgeCapability();
+    const morph = createMorphScope();
+    const conflictKey = morph.handle("conflict");
+
+    const buildWithBadge = createBuilder([tracker.module]);
+    await assert.rejects(
+      buildWithBadge(
+        <Deck width={960} height={540}>
+          <Slide id="conflict-slide">
+            <CustomBadge
+              id="conflicting-badge"
+              label="Conflict"
+              name="ExplicitName"
+              morphKey={conflictKey}
+              x={10}
+              y={10}
+              width={100}
+              height={40}
+            />
+          </Slide>
+        </Deck>,
+      ),
+      (error: unknown) => {
+        assert(error instanceof BuildError);
+        assert.ok(
+          error.diagnostics.some(
+            (d) => d.code === "morph-object-name-conflict",
+          ),
+        );
+        return true;
+      },
+    );
+
+    const trimmedBuild = createBuilder([]);
+    await assert.rejects(
+      trimmedBuild(
+        <Deck width={960} height={540}>
+          <Slide id="trimmed-slide">
+            <CustomBadge
+              label="Missing"
+              x={10}
+              y={10}
+              width={100}
+              height={40}
+            />
+          </Slide>
+        </Deck>,
+      ),
+      (error: unknown) => {
+        assert(error instanceof BuildError);
+        assert.ok(
+          error.diagnostics.some((d) => d.code === "missing-capability"),
+        );
+        return true;
+      },
+    );
+  });
+
+  it("migrates shapeCapability to BoundObjectCapabilityModule with single bind per node per build", async () => {
+    assert.equal("bind" in shapeCapability, true);
+    assert.equal("parse" in shapeCapability, false);
+    assert.equal("compile" in shapeCapability, false);
+
+    const bindSpy = vi.spyOn(shapeCapability, "bind");
+    try {
+      const trimmedShapeBuild = createBuilder([shapeCapability]);
+      const result = await trimmedShapeBuild(
+        <Deck width={960} height={540}>
+          <Slide id="standalone-shape">
+            <Shape
+              id="hero-shape"
+              geometry={preset("roundRect")}
+              x={80}
+              y={90}
+              width={260}
+              height={100}
+              fill="#2B579A"
+              style={{ fontFamily: notoFont, fontSize: 18, color: "#FFFFFF" }}
+            >
+              <P>
+                <Span>Bound Shape</Span>
+              </P>
+            </Shape>
+          </Slide>
+        </Deck>,
+      );
+
+      assert.equal(bindSpy.mock.calls.length, 1);
+      assert.deepEqual(result.report.diagnostics, []);
+      const validation = await validatePptx(result.pptx);
+      assert.deepEqual(validation.errors, []);
+      assert.equal(validation.slides[0]?.objects[0]?.text?.text, "Bound Shape");
+    } finally {
+      bindSpy.mockRestore();
+    }
+  });
+
+  it("produces consistent native PPTX and observations for Shape across JSX and imperative entries inside unmigrated containers", async () => {
+    const jsxMorph = createMorphScope().handle("shape-card");
+    const impMorph = createDocMorphScope().handle("shape-card");
+
+    const jsxBuild = createBuilder([
+      shapeCapability,
+      boxCapability,
+      groupCapability,
+      transitionCapability,
+      motionCapability,
+    ]);
+    const docBuild = createDocBuild([
+      shapeCapability,
+      boxCapability,
+      groupCapability,
+      transitionCapability,
+      motionCapability,
+    ]);
+
+    const jsxResult = await jsxBuild(
+      <Deck width={960} height={540}>
+        <Slide id="main">
+          <Shape
+            id="standalone"
+            geometry="hexagon"
+            morphKey={jsxMorph}
+            link={{ id: "next" }}
+            enter={fade()}
+            x={40}
+            y={40}
+            width={180}
+            height={70}
+            fill="#1D4ED8"
+            style={{ fontFamily: notoFont, fontSize: 16, color: "#FFFFFF" }}
+            text="Standalone"
+          />
+          <Box
+            id="flex-row"
+            style={{
+              position: "absolute",
+              left: 40,
+              top: 140,
+              width: 500,
+              height: 120,
+              display: "flex",
+              flexDirection: "row",
+              alignItems: "baseline",
+              gap: 16,
+            }}
+          >
+            <Shape
+              id="flex-shape-a"
+              width={180}
+              fill="#0F766E"
+              style={{
+                fontFamily: notoFont,
+                fontSize: 24,
+                color: "#FFFFFF",
+                verticalAlign: "top",
+                padding: 8,
+              }}
+            >
+              <P>
+                <Span>Baseline A</Span>
+              </P>
+            </Shape>
+            <Shape
+              id="flex-shape-b"
+              width={160}
+              fill="#B45309"
+              style={{
+                fontFamily: notoFont,
+                fontSize: 14,
+                color: "#FFFFFF",
+                verticalAlign: "top",
+                padding: 8,
+              }}
+            >
+              <P>
+                <Span>Baseline B</Span>
+              </P>
+            </Shape>
+          </Box>
+          <Box
+            id="grid-box"
+            style={{
+              position: "absolute",
+              left: 40,
+              top: 280,
+              width: 320,
+              display: "grid",
+              gridTemplateColumns: "1fr 1fr",
+              gap: 12,
+            }}
+          >
+            <Shape
+              id="grid-shape-1"
+              fill="#334155"
+              style={{
+                fontFamily: notoFont,
+                fontSize: 14,
+                color: "#FFFFFF",
+                padding: 8,
+              }}
+              text="Grid Cell 1"
+            />
+            <Shape
+              id="grid-shape-2"
+              fill="#475569"
+              style={{
+                fontFamily: notoFont,
+                fontSize: 14,
+                color: "#FFFFFF",
+                padding: 8,
+              }}
+              text="Grid Cell 2"
+            />
+          </Box>
+          <Group id="grouped-shapes">
+            <Shape
+              id="grouped-rect"
+              x={600}
+              y={140}
+              width={140}
+              height={80}
+              fill="#7C3AED"
+              style={{ fontFamily: notoFont }}
+              text="In Group"
+            />
+          </Group>
+        </Slide>
+        <Slide
+          id="next"
+          transition={transitions.morph({ fallback: transitions.fade() })}
+        >
+          <Shape
+            id="standalone-next"
+            geometry="hexagon"
+            morphKey={jsxMorph}
+            x={300}
+            y={80}
+            width={220}
+            height={90}
+            fill="#1D4ED8"
+            style={{ fontFamily: notoFont }}
+            text="Standalone"
+          />
+        </Slide>
+      </Deck>,
+    );
+
+    const impDeckNode = impDeck({ width: 960, height: 540 });
+    const impSlideMain = impSlide({ id: "main" });
+    const impStandalone = impShape({
+      id: "standalone",
+      geometry: "hexagon",
+      morphKey: impMorph,
+      link: { id: "next" },
+      enter: fade(),
+      x: 40,
+      y: 40,
+      width: 180,
+      height: 70,
+      fill: "#1D4ED8",
+      style: { fontFamily: impNotoFont, fontSize: 16, color: "#FFFFFF" },
+      text: "Standalone",
+    });
+    const impFlexRow = impBox({
+      id: "flex-row",
+      style: {
+        position: "absolute",
+        left: 40,
+        top: 140,
+        width: 500,
+        height: 120,
+        display: "flex",
+        flexDirection: "row",
+        alignItems: "baseline",
+        gap: 16,
+      },
+    }).append(
+      impShape({
+        id: "flex-shape-a",
+        width: 180,
+        fill: "#0F766E",
+        style: {
+          fontFamily: impNotoFont,
+          fontSize: 24,
+          color: "#FFFFFF",
+          verticalAlign: "top",
+          padding: 8,
+        },
+      }).append(impParagraph().append(impSpan("Baseline A"))),
+      impShape({
+        id: "flex-shape-b",
+        width: 160,
+        fill: "#B45309",
+        style: {
+          fontFamily: impNotoFont,
+          fontSize: 14,
+          color: "#FFFFFF",
+          verticalAlign: "top",
+          padding: 8,
+        },
+      }).append(impParagraph().append(impSpan("Baseline B"))),
+    );
+    const impGridBox = impBox({
+      id: "grid-box",
+      style: {
+        position: "absolute",
+        left: 40,
+        top: 280,
+        width: 320,
+        display: "grid",
+        gridTemplateColumns: "1fr 1fr",
+        gap: 12,
+      },
+    }).append(
+      impShape({
+        id: "grid-shape-1",
+        fill: "#334155",
+        style: {
+          fontFamily: impNotoFont,
+          fontSize: 14,
+          color: "#FFFFFF",
+          padding: 8,
+        },
+        text: "Grid Cell 1",
+      }),
+      impShape({
+        id: "grid-shape-2",
+        fill: "#475569",
+        style: {
+          fontFamily: impNotoFont,
+          fontSize: 14,
+          color: "#FFFFFF",
+          padding: 8,
+        },
+        text: "Grid Cell 2",
+      }),
+    );
+    const impGrouped = impGroup({ id: "grouped-shapes" }).append(
+      impShape({
+        id: "grouped-rect",
+        x: 600,
+        y: 140,
+        width: 140,
+        height: 80,
+        fill: "#7C3AED",
+        style: { fontFamily: impNotoFont },
+        text: "In Group",
+      }),
+    );
+    impSlideMain.append(impStandalone, impFlexRow, impGridBox, impGrouped);
+    const impSlideNext = impSlide({
+      id: "next",
+      transition: transitions.morph({ fallback: transitions.fade() }),
+    }).append(
+      impShape({
+        id: "standalone-next",
+        geometry: "hexagon",
+        morphKey: impMorph,
+        x: 300,
+        y: 80,
+        width: 220,
+        height: 90,
+        fill: "#1D4ED8",
+        style: { fontFamily: impNotoFont },
+        text: "Standalone",
+      }),
+    );
+    impDeckNode.append(impSlideMain, impSlideNext);
+    const impResult = await docBuild(impDeckNode);
+
+    for (const result of [jsxResult, impResult]) {
+      assert.deepEqual(result.report.diagnostics, []);
+      const validation = await validatePptx(result.pptx);
+      assert.deepEqual(validation.errors, []);
+      assert.equal(validation.slides[0]?.objects.length, 6);
+      assert.equal(
+        result.query.getSlide("main").get("standalone").observe().objects[0]
+          ?.link,
+        "slide:next",
+      );
+      assert.equal(
+        result.query
+          .getSlide("main")
+          .get("grouped-shapes")
+          .get("grouped-rect")
+          .observe().text,
+        "In Group",
+      );
+      const slide1Xml = strFromU8(
+        unzipSync(result.pptx)["ppt/slides/slide1.xml"]!,
+      );
+      assert.match(slide1Xml, /<p:timing>/u);
+      assert.match(slide1Xml, /<a:prstGeom prst="hexagon">/u);
+    }
+
+    const jsxFlexA = jsxResult.query
+      .getSlide("main")
+      .get("flex-row")
+      .get("flex-shape-a")
+      .observe().box!;
+    const jsxFlexB = jsxResult.query
+      .getSlide("main")
+      .get("flex-row")
+      .get("flex-shape-b")
+      .observe().box!;
+    const impFlexA = impResult.query
+      .getSlide("main")
+      .get("flex-row")
+      .get("flex-shape-a")
+      .observe().box!;
+    const impFlexB = impResult.query
+      .getSlide("main")
+      .get("flex-row")
+      .get("flex-shape-b")
+      .observe().box!;
+    assert.deepEqual(jsxFlexA, impFlexA);
+    assert.deepEqual(jsxFlexB, impFlexB);
+    assert.ok(impFlexB.y > impFlexA.y);
+  });
+
+  it("isolates per-build bound state across document edits and rebuilds", async () => {
+    const bindSpy = vi.spyOn(shapeCapability, "bind");
+    try {
+      const node = impShape({
+        id: "mutable-shape",
+        geometry: "rect",
+        x: 20,
+        y: 30,
+        width: 140,
+        height: 60,
+        fill: "#112233",
+        text: "Version 1",
+      });
+      const deckNode = impDeck({ width: 960, height: 540 }).append(
+        impSlide({ id: "s1" }).append(node),
+      );
+      const docBuild = createDocBuild([shapeCapability]);
+
+      const first = await docBuild(deckNode);
+      assert.equal(bindSpy.mock.calls.length, 1);
+
+      node.set({
+        geometry: "ellipse",
+        width: 220,
+        fill: "#445566",
+        text: "Version 2",
+      });
+
+      const second = await docBuild(deckNode);
+      assert.equal(bindSpy.mock.calls.length, 2);
+
+      // First build outputs remain bound to Version 1
+      const firstFile = await validatePptx(first.pptx);
+      assert.deepEqual(firstFile.errors, []);
+      assert.equal(firstFile.slides[0]?.objects[0]?.text?.text, "Version 1");
+      assert.equal(
+        first.query.getSlide("s1").get("mutable-shape").observe().box?.width,
+        140,
+      );
+
+      // Second build outputs reflect Version 2
+      const secondFile = await validatePptx(second.pptx);
+      assert.deepEqual(secondFile.errors, []);
+      assert.equal(secondFile.slides[0]?.objects[0]?.text?.text, "Version 2");
+      assert.equal(
+        second.query.getSlide("s1").get("mutable-shape").observe().box?.width,
+        220,
+      );
+    } finally {
+      bindSpy.mockRestore();
+    }
+  });
+
+  it("validates Shape link declarations in bind and resolves valid links in core", async () => {
+    const shapeBuild = createBuilder([shapeCapability]);
+    await assert.rejects(
+      shapeBuild(
+        <Deck width={960} height={540}>
+          <Slide id="bad-link-shape">
+            <Shape
+              id="malformed-link"
+              x={10}
+              y={10}
+              width={100}
+              height={40}
+              link={"not-an-object" as unknown as LinkTarget}
+            />
+          </Slide>
+        </Deck>,
+      ),
+      (error: unknown) => {
+        assert(error instanceof BuildError);
+        assert.ok(error.diagnostics.some((d) => d.code === "invalid-link"));
+        return true;
+      },
+    );
+
+    await assert.rejects(
+      shapeBuild(
+        <Deck width={960} height={540}>
+          <Slide id="bad-url-shape">
+            <Shape
+              id="malformed-url"
+              x={10}
+              y={10}
+              width={100}
+              height={40}
+              link={{ url: "not a valid url" }}
+            />
+          </Slide>
+        </Deck>,
+      ),
+      (error: unknown) => {
+        assert(error instanceof BuildError);
+        assert.ok(error.diagnostics.some((d) => d.code === "invalid-link"));
+        return true;
+      },
+    );
+  });
+});

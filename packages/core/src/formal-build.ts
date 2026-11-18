@@ -37,6 +37,8 @@ import {
   type BuildOptions,
   type BuildReport,
   type BuildResult,
+  type BoundObjectCapability,
+  type BoundObjectCapabilityModule,
   type CapabilityChild,
   type CapabilityElement,
   type CapabilityChildren,
@@ -50,7 +52,6 @@ import {
   type CapabilityContext,
   type CapabilityLayoutContract,
   type CapabilityModule,
-  type CapabilityParseResult,
   type RegisteredCapabilityModule,
   type CapabilityResource,
   type CapabilityResourceClaim,
@@ -59,6 +60,7 @@ import {
   type GeometryBox,
   type LayoutChildReference,
   type LayoutObservation,
+  type LinkTarget,
   type NativeElementKind,
   type ObjectCapabilityModule,
   type ObjectObservation,
@@ -208,10 +210,17 @@ type PackageBuildContext = {
   readonly slide: SlideBuildState;
 };
 
+type BoundModuleRegistry = {
+  readonly modules: ReadonlyMap<string, RegisteredCapabilityModule>;
+  /** Transitional set tracking legacy rp:box instances with visible style until Box migrates. */
+  readonly legacyBoxVisibleStyle: WeakSet<BoundObjectCapability>;
+};
+
 type BuildContext = {
   readonly document: DocumentBuildState;
   readonly slide: SlideBuildState;
   readonly modules: ReadonlyMap<string, RegisteredCapabilityModule>;
+  readonly legacyBoxVisibleStyle: WeakSet<BoundObjectCapability>;
   readonly target: Target;
   readonly dimensions: Dimensions;
   readonly options: BuildOptions;
@@ -303,10 +312,10 @@ function isSlideCapability(
   return "compileSlide" in module;
 }
 
-function isObjectCapability(
+function isBoundObjectCapability(
   module: RegisteredCapabilityModule,
-): module is ObjectCapabilityModule {
-  return "compile" in module;
+): module is BoundObjectCapabilityModule {
+  return "bind" in module;
 }
 
 function nonWhitespaceText(children: readonly DeclarationChild[]): boolean {
@@ -1817,7 +1826,6 @@ function compileChildren(
     const path = `${parentPath}/${capabilityLabel(child, index)}`;
     const authorId = readAuthorId(child.props["id"], path);
     const order = context.slide.nextNodeOrder++;
-    const requestedMorphKey = child.props["morphKey"];
     if (child.type === "rp:box") {
       const box = context.layout.boxes.get(child);
       if (box === undefined) {
@@ -1832,13 +1840,11 @@ function compileChildren(
       }
       const id = context.slide.nextId++;
       const module = context.modules.get("rp:box");
-      const parsedResult: CapabilityParseResult | undefined =
-        context.layout.parsed?.get(child);
-      const parsedBox = parsedResult?.parsed as
-        | { hasVisibleStyle?: boolean }
-        | undefined;
-      const hasNativeBox = Boolean(parsedBox?.hasVisibleStyle);
-      const rawLink = child.props["link"];
+      const boundBox = context.layout.bound.get(child);
+      const hasNativeBox =
+        boundBox !== undefined && context.legacyBoxVisibleStyle.has(boundBox);
+      const requestedMorphKey = boundBox?.native?.morphKey;
+      const rawLink = boundBox?.native?.link;
       const boxLink =
         rawLink === undefined
           ? undefined
@@ -1895,12 +1901,14 @@ function compileChildren(
       }
       let boxXml = "";
       let boxObservation: ObjectObservation | undefined;
-      if (module !== undefined && isObjectCapability(module)) {
+      if (
+        module !== undefined &&
+        isBoundObjectCapability(module) &&
+        boundBox !== undefined
+      ) {
         const objectId = context.slide.nextId++;
         try {
-          const compileInput = parsedResult!.parsed;
-          const output = module.compile(
-            compileInput,
+          const output = boundBox.compile(
             capabilityContext(
               context,
               child,
@@ -1923,7 +1931,7 @@ function compileChildren(
             };
             context.slide.layoutDerivedObjectIds.add(objectId);
             if (morphKey !== undefined && morphName !== undefined) {
-              const nativeKind = parsedResult?.contract?.nativeKind ?? "sp";
+              const nativeKind = boundBox.contract.nativeKind;
               if (output.observation.name !== morphName) {
                 context.slide.diagnostics.push(
                   diagnostic(
@@ -2021,7 +2029,7 @@ function compileChildren(
       });
       painted.push({
         sourceOrder: [index],
-        zIndex: paintOrder(parsedResult?.contract),
+        zIndex: paintOrder(boundBox?.contract),
         xml: boxXml + compiled.xml,
         objects: [
           ...(boxObservation === undefined ? [] : [boxObservation]),
@@ -2042,60 +2050,20 @@ function compileChildren(
       );
       return;
     }
-    let morphKey: MorphKey | undefined;
-    let morphName: string | undefined;
-    if (requestedMorphKey !== undefined) {
-      if (!isMorphKey(requestedMorphKey)) {
-        context.slide.diagnostics.push(
-          diagnostic(
-            path,
-            "invalid-morph-key",
-            "morphKey must be created by createMorphScope().handle(name)",
-          ),
-        );
-      } else if (insideGroup) {
-        context.slide.diagnostics.push(
-          diagnostic(
-            path,
-            "morph-inside-group",
-            "Morph only matches top-level slide objects; place morphKey on Group to move the entire group",
-          ),
-        );
-      } else if (
-        "compileDeclaration" in module ||
-        !isObjectCapability(module)
-      ) {
-        context.slide.diagnostics.push(
-          diagnostic(
-            path,
-            "morph-needs-object",
-            "morphKey can only be used with capabilities that produce native objects",
-          ),
-        );
-      } else if (child.props["name"] !== undefined) {
-        context.slide.diagnostics.push(
-          diagnostic(
-            path,
-            "morph-object-name-conflict",
-            "Both morphKey and name claim native object names; specify only one",
-          ),
-        );
-      } else {
-        morphKey = requestedMorphKey;
-        morphName = nativeObjectName(morphKey, context.document);
-        const previous = context.slide.morphObjects.get(morphKey);
-        if (previous !== undefined) {
-          context.slide.diagnostics.push(
-            diagnostic(
-              path,
-              "duplicate-morph-key",
-              `Morph handle "${getMorphKeyLabel(morphKey)}" reused on this slide; can only be declared once per slide`,
-            ),
-          );
-        }
-      }
-    }
     if ("compileDeclaration" in module) {
+      if (child.props["morphKey"] !== undefined) {
+        context.slide.diagnostics.push(
+          diagnostic(
+            path,
+            isMorphKey(child.props["morphKey"])
+              ? "morph-needs-object"
+              : "invalid-morph-key",
+            isMorphKey(child.props["morphKey"])
+              ? "morphKey can only be used with capabilities that produce native objects"
+              : "morphKey must be created by createMorphScope().handle(name)",
+          ),
+        );
+      }
       if (module.children === "owned") {
         // Owned subtrees belong to their capability and never become slide content. The same
         // declarations were already reported by the structure-only collection pass.
@@ -2141,7 +2109,7 @@ function compileChildren(
       );
       return;
     }
-    if (!isObjectCapability(module)) {
+    if (!isBoundObjectCapability(module)) {
       context.slide.diagnostics.push(
         diagnostic(
           path,
@@ -2152,22 +2120,63 @@ function compileChildren(
       return;
     }
     const id = context.slide.nextId++;
-    const input: CapabilityInput = child;
     const layoutBox = context.layout.boxes.get(child);
     const theme = context.layout.themes.get(child) ?? context.theme;
-    const compiledLink = registerLink(child.props["link"], context, path);
     try {
-      const parsedResult: CapabilityParseResult =
-        context.layout.parsed?.get(child) ??
-        module.parse(input, {
+      const bound =
+        context.layout.bound.get(child) ??
+        module.bind(child, {
           path,
           theme,
           options: context.options,
           slideNumber: context.slideNumber,
         });
-      const compileInput = parsedResult.parsed;
-      const output = module.compile(
-        compileInput,
+      const requestedMorphKey = bound.native?.morphKey;
+      const hasExplicitName = bound.native?.hasExplicitName === true;
+      let morphKey: MorphKey | undefined;
+      let morphName: string | undefined;
+      if (requestedMorphKey !== undefined) {
+        if (!isMorphKey(requestedMorphKey)) {
+          context.slide.diagnostics.push(
+            diagnostic(
+              path,
+              "invalid-morph-key",
+              "morphKey must be created by createMorphScope().handle(name)",
+            ),
+          );
+        } else if (insideGroup) {
+          context.slide.diagnostics.push(
+            diagnostic(
+              path,
+              "morph-inside-group",
+              "Morph only matches top-level slide objects; place morphKey on Group to move the entire group",
+            ),
+          );
+        } else if (hasExplicitName) {
+          context.slide.diagnostics.push(
+            diagnostic(
+              path,
+              "morph-object-name-conflict",
+              "Both morphKey and name claim native object names; specify only one",
+            ),
+          );
+        } else {
+          morphKey = requestedMorphKey;
+          morphName = nativeObjectName(morphKey, context.document);
+          const previous = context.slide.morphObjects.get(morphKey);
+          if (previous !== undefined) {
+            context.slide.diagnostics.push(
+              diagnostic(
+                path,
+                "duplicate-morph-key",
+                `Morph handle "${getMorphKeyLabel(morphKey)}" reused on this slide; can only be declared once per slide`,
+              ),
+            );
+          }
+        }
+      }
+      const compiledLink = registerLink(bound.native?.link, context, path);
+      const output = bound.compile(
         capabilityContext(
           context,
           child,
@@ -2181,7 +2190,7 @@ function compileChildren(
         ),
       );
       if (morphKey !== undefined && morphName !== undefined) {
-        const nativeKind = parsedResult.contract.nativeKind;
+        const nativeKind = bound.contract.nativeKind;
         if (output.observation.name !== morphName) {
           context.slide.diagnostics.push(
             diagnostic(
@@ -2284,7 +2293,7 @@ function compileChildren(
       }
       painted.push({
         sourceOrder: [index],
-        zIndex: paintOrder(parsedResult.contract),
+        zIndex: paintOrder(bound.contract),
         xml: output.xml,
         objects: [observation],
         reference: { kind: "object", id: observation.id },
@@ -2471,13 +2480,14 @@ function collectOwnedContributions(
 
 function compileSlide(
   resolved: ResolvedSlide,
-  modules: ReadonlyMap<string, RegisteredCapabilityModule>,
+  registry: BoundModuleRegistry,
   target: Target,
   dimensions: Dimensions,
   document: DocumentBuildState,
   options: BuildOptions,
   documentTheme: ThemeContext,
 ): SlideBuild {
+  const { modules, legacyBoxVisibleStyle } = registry;
   const {
     node,
     id,
@@ -2541,6 +2551,7 @@ function compileSlide(
       document,
       slide,
       modules,
+      legacyBoxVisibleStyle,
       target,
       dimensions,
       options,
@@ -2726,10 +2737,11 @@ function slideSlotOrder(slot: SlideCapabilitySlot): number {
 
 function compileDocument(
   container: DeclarationContainer,
-  modules: ReadonlyMap<string, RegisteredCapabilityModule>,
+  registry: BoundModuleRegistry,
   target: Target,
   options: BuildOptions,
 ): BuildResult {
+  const { modules } = registry;
   const resolved = resolveSlides(container, modules);
   const { slides, sections } = resolved;
   const deck = childNodes(container.children)[0];
@@ -2804,7 +2816,7 @@ function compileDocument(
   const builtSlides = slides.map((resolvedSlide) =>
     compileSlide(
       resolvedSlide,
-      modules,
+      registry,
       target,
       size,
       document,
@@ -2973,10 +2985,62 @@ export function createCompletedDeclarationBuild(
   };
 }
 
+/**
+ * Transitional adapter for unmigrated ObjectCapabilityModule implementations.
+ * Keeps legacy parsed state inside the adapter closure (never exposing bound module state).
+ * Removed once all object capabilities migrate in Ticket 14.
+ */
+function adaptLegacyObjectCapability(
+  module: ObjectCapabilityModule,
+  legacyBoxVisibleStyle: WeakSet<BoundObjectCapability>,
+): BoundObjectCapabilityModule {
+  return {
+    declaration: module.declaration,
+    bind(input, context) {
+      const result = module.parse(input, context);
+      const handle: BoundObjectCapability = {
+        contract: result.contract,
+        native: {
+          ...(input.props["morphKey"] !== undefined
+            ? { morphKey: input.props["morphKey"] as MorphKey }
+            : {}),
+          ...(input.props["name"] !== undefined
+            ? { hasExplicitName: true }
+            : {}),
+          ...(input.props["link"] !== undefined
+            ? { link: input.props["link"] as LinkTarget }
+            : {}),
+        },
+        ...(module.measureLayout !== undefined
+          ? {
+              measureLayout(request) {
+                return module.measureLayout!(result.parsed, request);
+              },
+            }
+          : {}),
+        compile(compileContext) {
+          return module.compile(result.parsed, compileContext);
+        },
+      };
+      if (
+        module.declaration === "rp:box" &&
+        typeof result.parsed === "object" &&
+        result.parsed !== null &&
+        (result.parsed as { hasVisibleStyle?: unknown }).hasVisibleStyle ===
+          true
+      ) {
+        legacyBoxVisibleStyle.add(handle);
+      }
+      return handle;
+    },
+  };
+}
+
 function bindCapabilityModules(
   modules: readonly CapabilityModule[],
-): ReadonlyMap<string, RegisteredCapabilityModule> {
+): BoundModuleRegistry {
   const bound = new Map<string, RegisteredCapabilityModule>();
+  const legacyBoxVisibleStyle = new WeakSet<BoundObjectCapability>();
   for (const module of modules) {
     const declarations = [
       module,
@@ -2994,8 +3058,19 @@ function bindCapabilityModules(
           ),
         ]);
       }
-      bound.set(declaration.declaration, declaration);
+      if (
+        !("compileSlide" in declaration) &&
+        !("compileDeclaration" in declaration) &&
+        !("bind" in declaration)
+      ) {
+        bound.set(
+          declaration.declaration,
+          adaptLegacyObjectCapability(declaration, legacyBoxVisibleStyle),
+        );
+      } else {
+        bound.set(declaration.declaration, declaration);
+      }
     }
   }
-  return bound;
+  return { modules: bound, legacyBoxVisibleStyle };
 }

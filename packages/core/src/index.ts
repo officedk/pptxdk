@@ -70,6 +70,9 @@ export type {
   ThemeShade,
 } from "#/theme.ts";
 export type {
+  BoundObjectCapability,
+  BoundObjectCapabilityModule,
+  BoundObjectNativeCollaboration,
   BuildQuery,
   BuildOptions,
   BuildReport,

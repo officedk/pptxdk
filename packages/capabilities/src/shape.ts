@@ -17,14 +17,18 @@ import {
   type CapabilityLayoutRequest,
   type CapabilityParseContext,
   type ColorValue,
+  type GeometryBox,
   type LayoutStyle,
   type LinkTarget,
   type MorphKey,
+  type ObjectPreviewContext,
+  type ObjectPreviewOutput,
   type PaddingStyle,
+  type ThemeContext,
 } from "@react-pptx/core/capability";
 import { RichTextContainer } from "@react-pptx/core/document";
 
-import type { Geometry } from "./geometry.ts";
+import type { CustomGeometry, Geometry } from "./geometry.ts";
 export { blockArc, path, preset } from "./geometry.ts";
 export type {
   CustomGeometry,
@@ -280,6 +284,139 @@ function optionalText(
   return value;
 }
 
+const unsupportedPreviewStyleKeys = [
+  "backgroundImage",
+  "boxShadow",
+  "softEdge",
+  "borderRadius",
+  "startArrow",
+  "endArrow",
+] as const;
+
+function renderCustomGeometryPaths(
+  custom: CustomGeometry,
+  box: GeometryBox,
+  attributes: string,
+): string {
+  // Scale local path points into page units instead of an SVG viewport so stroke width stays in page px.
+  const mapX = (value: number) => box.x + (value * box.width) / custom.width;
+  const mapY = (value: number) => box.y + (value * box.height) / custom.height;
+  return custom.paths
+    .map((geometryPath) => {
+      const data = geometryPath.commands
+        .map((command) => {
+          switch (command.op) {
+            case "Z":
+              return "Z";
+            case "M":
+            case "L":
+              return `${command.op}${mapX(command.x)} ${mapY(command.y)}`;
+            case "Q":
+              return `Q${mapX(command.x1)} ${mapY(command.y1)} ${mapX(command.x)} ${mapY(command.y)}`;
+            case "C":
+              return `C${mapX(command.x1)} ${mapY(command.y1)} ${mapX(command.x2)} ${mapY(command.y2)} ${mapX(command.x)} ${mapY(command.y)}`;
+          }
+        })
+        .join(" ");
+      return `<g ${attributes}><path d="${data}"${geometryPath.fill === false ? ' fill="none"' : ""}${geometryPath.stroke === false ? ' stroke="none"' : ""}/></g>`;
+    })
+    .join("");
+}
+
+function renderShapePreview(options: {
+  readonly visualStyle: Readonly<Record<string, unknown>>;
+  readonly hasText: boolean;
+  readonly geometry: Geometry | undefined;
+  readonly fill: ColorValue | undefined;
+  readonly flipH: boolean | undefined;
+  readonly flipV: boolean | undefined;
+  readonly box: GeometryBox;
+  readonly theme: ThemeContext;
+}): ObjectPreviewOutput {
+  const { visualStyle, hasText, geometry, fill, flipH, flipV, box, theme } =
+    options;
+  for (const key of unsupportedPreviewStyleKeys) {
+    if (visualStyle[key] !== undefined) {
+      throw new CapabilityError(
+        "preview-unsupported-style",
+        `Preview does not support shape ${key}`,
+      );
+    }
+  }
+  if (hasText) {
+    throw new CapabilityError(
+      "preview-unsupported-text",
+      "Preview does not yet support text inside shapes",
+    );
+  }
+  const resolvedGeometry = geometry ?? "rect";
+  const name =
+    typeof resolvedGeometry === "string"
+      ? resolvedGeometry
+      : resolvedGeometry.type === "preset" &&
+          (resolvedGeometry.adjust === undefined ||
+            Object.keys(resolvedGeometry.adjust).length === 0)
+        ? resolvedGeometry.name
+        : undefined;
+  const custom =
+    typeof resolvedGeometry === "object" && resolvedGeometry.type === "custom"
+      ? resolvedGeometry
+      : undefined;
+  if (name !== "rect" && name !== "ellipse" && custom === undefined) {
+    throw new CapabilityError(
+      "preview-unsupported-geometry",
+      "Preview does not yet support this shape geometry",
+    );
+  }
+  const borderStyle = visualStyle["borderStyle"];
+  if (borderStyle !== undefined && borderStyle !== "solid") {
+    throw new CapabilityError(
+      "preview-unsupported-border-style",
+      "Preview does not yet support non-solid borders",
+    );
+  }
+  const fillValue =
+    fill ?? (visualStyle["backgroundColor"] as ColorValue | undefined);
+  const resolvedFill =
+    fillValue === undefined ? undefined : theme.resolveColor(fillValue);
+  const strokeValue = visualStyle["borderColor"] as ColorValue | undefined;
+  const borderWidth =
+    visualStyle["borderWidth"] === undefined
+      ? 1
+      : Number(visualStyle["borderWidth"]);
+  const resolvedStroke =
+    strokeValue === undefined || borderWidth === 0
+      ? undefined
+      : theme.resolveColor(strokeValue);
+  const opacity = Number(visualStyle["opacity"] ?? 1);
+  const attributes = `fill="${resolvedFill === undefined ? "none" : `#${resolvedFill.hex}`}" fill-opacity="${(resolvedFill?.alpha ?? 1) * opacity}" stroke="${resolvedStroke === undefined ? "none" : `#${resolvedStroke.hex}`}" stroke-opacity="${(resolvedStroke?.alpha ?? 1) * opacity}" stroke-width="${resolvedStroke === undefined ? 0 : borderWidth}"`;
+
+  const angle =
+    typeof visualStyle["rotate"] === "number" ? visualStyle["rotate"] : 0;
+  const cx = box.x + box.width / 2;
+  const cy = box.y + box.height / 2;
+  const flipX = Boolean(flipH);
+  const flipY = Boolean(flipV);
+  const transform = `translate(${cx} ${cy}) rotate(${angle}) scale(${flipX ? -1 : 1} ${flipY ? -1 : 1}) translate(${-cx} ${-cy})`;
+
+  const element =
+    custom !== undefined
+      ? renderCustomGeometryPaths(custom, box, attributes)
+      : name === "rect"
+        ? `<rect x="${box.x}" y="${box.y}" width="${box.width}" height="${box.height}" ${attributes}/>`
+        : `<ellipse cx="${cx}" cy="${cy}" rx="${box.width / 2}" ry="${box.height / 2}" ${attributes}/>`;
+
+  return {
+    svg: `<g transform="${transform}">${element}</g>`,
+    transform: {
+      box,
+      angle,
+      flipH: flipX,
+      flipV: flipY,
+    },
+  };
+}
+
 /** Shape module independently validates input, encapsulates bound state, and emits native PresentationML objects. */
 export const shapeCapability: BoundObjectCapabilityModule = {
   declaration: "rp:shape",
@@ -441,6 +578,10 @@ export const shapeCapability: BoundObjectCapabilityModule = {
       ...(link === undefined ? {} : { link }),
     };
 
+    let compiledState:
+      | { readonly box: GeometryBox; readonly theme: ThemeContext }
+      | undefined;
+
     return {
       contract,
       ...(morphKey !== undefined ||
@@ -539,6 +680,7 @@ export const shapeCapability: BoundObjectCapabilityModule = {
           ...(flipV === undefined ? {} : { flipV }),
           ...(fill === undefined ? {} : { fill }),
         });
+        compiledState = { box, theme: compileContext.theme };
 
         let textOutput: TextServiceResult | undefined;
         if (hasText && paragraphs.length > 0) {
@@ -640,6 +782,25 @@ export const shapeCapability: BoundObjectCapabilityModule = {
                 ),
               }),
         };
+      },
+      preview(previewContext: ObjectPreviewContext): ObjectPreviewOutput {
+        const box = previewContext.box ?? compiledState?.box;
+        if (box === undefined) {
+          throw new CapabilityError(
+            "preview-missing-geometry",
+            "Preview requires compiled shape geometry",
+          );
+        }
+        return renderShapePreview({
+          visualStyle,
+          hasText,
+          geometry,
+          fill,
+          flipH,
+          flipV,
+          box,
+          theme: compiledState?.theme ?? previewContext.theme,
+        });
       },
     };
   },

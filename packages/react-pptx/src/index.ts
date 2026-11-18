@@ -1,11 +1,17 @@
 import { documentCapabilities } from "@react-pptx/capabilities/document";
-import { createBuilder } from "@react-pptx/core";
+import { createBuilder, createPreview } from "@react-pptx/core";
 
 /**
  * Default React one-call export. It composes real expansion with the same formal build used by the
  * plain document entry; both entries share one default capability list.
  */
 export const build = createBuilder(documentCapabilities);
+
+/**
+ * Default React one-call static preview export. Expands JSX to the common editable document,
+ * then runs the shared formal build and preview rasterizer on demand.
+ */
+export const preview = createPreview(documentCapabilities);
 
 /** Default capability list shared by the React one-call entry and the plain document entry. */
 export { documentCapabilities };
@@ -147,7 +153,12 @@ export type {
   PathOptions,
   PresetGeometry,
 } from "@react-pptx/capabilities";
-export { appendJSX, createBuilder, expandDocument } from "@react-pptx/core";
+export {
+  appendJSX,
+  createBuilder,
+  createPreview,
+  expandDocument,
+} from "@react-pptx/core";
 export {
   CommonContainer,
   CommonNode,
@@ -189,7 +200,17 @@ export type {
   NativeTableObservation,
   NativeTablePartObservation,
   ObjectObservation,
+  PreviewDiagnostic,
+  PreviewNodeObservation,
+  PreviewOptions,
+  PreviewPageResult,
+  PreviewResult,
+  PreviewSeverity,
+  PreviewTransform,
+  PreviewWarning,
   ResourceObservation,
+  ScreenGeometry,
+  ScreenPoint,
   SlideObservation,
   SlideQuery,
   SlideBackground,

@@ -39,6 +39,7 @@ import {
   type BuildResult,
   type BoundObjectCapability,
   type BoundObjectCapabilityModule,
+  type BoundSlideCapabilityModule,
   type CapabilityChild,
   type CapabilityElement,
   type CapabilityChildren,
@@ -58,6 +59,8 @@ import {
   type Diagnostic,
   type Extension,
   type GeometryBox,
+  type PreviewDiagnostic,
+  type PreviewTransform,
   type LayoutChildReference,
   type LayoutObservation,
   type LinkTarget,
@@ -216,6 +219,20 @@ type BoundModuleRegistry = {
   readonly legacyBoxVisibleStyle: WeakSet<BoundObjectCapability>;
 };
 
+export type PreviewSession = {
+  shouldPreviewPage(page: number): boolean;
+  setSlideDimensions(page: number, dimensions: Dimensions): void;
+  setSlideBackground(page: number, svg: string): void;
+  recordDiagnostic(page: number, entry: PreviewDiagnostic): void;
+  recordNode(
+    page: number,
+    objectId: number,
+    path: string,
+    transform?: PreviewTransform,
+  ): void;
+  setPageLayers(page: number, svg: string): void;
+};
+
 type BuildContext = {
   readonly document: DocumentBuildState;
   readonly slide: SlideBuildState;
@@ -227,6 +244,7 @@ type BuildContext = {
   readonly theme: ThemeContext;
   readonly layout: LayoutPassResult;
   readonly slideNumber: number;
+  readonly previewSession?: PreviewSession;
 };
 
 type CompiledChildren = CapabilityChildren & {
@@ -239,6 +257,7 @@ type PaintLayer = {
   readonly sourceOrder: readonly number[];
   readonly zIndex: number;
   readonly xml: string;
+  readonly previewSvg?: string;
   readonly objects: readonly ObjectObservation[];
   readonly reference: LayoutChildReference;
 };
@@ -308,8 +327,8 @@ function ownKeys(
 
 function isSlideCapability(
   module: RegisteredCapabilityModule,
-): module is SlideCapabilityModule {
-  return "compileSlide" in module;
+): module is BoundSlideCapabilityModule {
+  return "bindSlide" in module;
 }
 
 function isBoundObjectCapability(
@@ -2007,6 +2026,62 @@ function compileChildren(
         path,
         insideGroup,
       );
+      let boxPreviewSvg: string | undefined;
+      if (context.previewSession?.shouldPreviewPage(context.slideNumber)) {
+        const previewSession = context.previewSession;
+        if (boundBox?.preview !== undefined) {
+          const childrenSvg = compiled.paintLayers
+            .map((layer) => layer.previewSvg ?? "")
+            .join("");
+          try {
+            const previewOutput = boundBox.preview({
+              path,
+              slideNumber: context.slideNumber,
+              objectId: id,
+              ...(boxObservation?.box === undefined
+                ? {}
+                : { box: boxObservation.box }),
+              theme: context.layout.themes.get(child) ?? context.theme,
+              childrenSvg,
+            });
+            boxPreviewSvg = previewOutput.svg;
+            if (boxObservation !== undefined) {
+              previewSession.recordNode(
+                context.slideNumber,
+                boxObservation.id,
+                path,
+                previewOutput.transform,
+              );
+            }
+            for (const warning of previewOutput.warnings ?? []) {
+              previewSession.recordDiagnostic(context.slideNumber, {
+                severity: "warning",
+                page: context.slideNumber,
+                path:
+                  warning.path === undefined ? path : `${path}/${warning.path}`,
+                message: warning.message,
+              });
+            }
+          } catch (error) {
+            previewSession.recordDiagnostic(context.slideNumber, {
+              severity: "error",
+              page: context.slideNumber,
+              path:
+                error instanceof CapabilityError && error.path !== undefined
+                  ? `${path}/${error.path}`
+                  : path,
+              message: error instanceof Error ? error.message : String(error),
+            });
+          }
+        } else {
+          previewSession.recordDiagnostic(context.slideNumber, {
+            severity: "error",
+            page: context.slideNumber,
+            path,
+            message: `Preview does not support ${child.type}`,
+          });
+        }
+      }
       context.slide.layouts.push({
         id,
         ...(authorId === undefined ? {} : { authorId }),
@@ -2031,6 +2106,7 @@ function compileChildren(
         sourceOrder: [index],
         zIndex: paintOrder(boundBox?.contract),
         xml: boxXml + compiled.xml,
+        ...(boxPreviewSvg === undefined ? {} : { previewSvg: boxPreviewSvg }),
         objects: [
           ...(boxObservation === undefined ? [] : [boxObservation]),
           ...compiled.objects,
@@ -2291,10 +2367,67 @@ function compileChildren(
           });
         }
       }
+      let previewSvg: string | undefined;
+      if (context.previewSession?.shouldPreviewPage(context.slideNumber)) {
+        const previewSession = context.previewSession;
+        if (bound.preview !== undefined) {
+          try {
+            const previewOutput = bound.preview({
+              path,
+              slideNumber: context.slideNumber,
+              objectId: id,
+              ...(output.observation.box === undefined
+                ? {}
+                : { box: output.observation.box }),
+              theme,
+            });
+            previewSvg = previewOutput.svg;
+            previewSession.recordNode(
+              context.slideNumber,
+              observation.id,
+              path,
+              previewOutput.transform,
+            );
+            for (const warning of previewOutput.warnings ?? []) {
+              previewSession.recordDiagnostic(context.slideNumber, {
+                severity: "warning",
+                page: context.slideNumber,
+                path:
+                  warning.path === undefined ? path : `${path}/${warning.path}`,
+                message: warning.message,
+              });
+            }
+          } catch (error) {
+            previewSession.recordNode(
+              context.slideNumber,
+              observation.id,
+              path,
+            );
+            previewSession.recordDiagnostic(context.slideNumber, {
+              severity: "error",
+              page: context.slideNumber,
+              path:
+                error instanceof CapabilityError && error.path !== undefined
+                  ? `${path}/${error.path}`
+                  : path,
+              message: error instanceof Error ? error.message : String(error),
+            });
+          }
+        } else {
+          previewSession.recordNode(context.slideNumber, observation.id, path);
+          previewSession.recordDiagnostic(context.slideNumber, {
+            severity: "error",
+            page: context.slideNumber,
+            path,
+            message: `Preview does not support ${child.type}`,
+          });
+        }
+      }
       painted.push({
         sourceOrder: [index],
         zIndex: paintOrder(bound.contract),
         xml: output.xml,
+        ...(previewSvg === undefined ? {} : { previewSvg }),
         objects: [observation],
         reference: { kind: "object", id: observation.id },
       });
@@ -2486,6 +2619,7 @@ function compileSlide(
   document: DocumentBuildState,
   options: BuildOptions,
   documentTheme: ThemeContext,
+  previewSession?: PreviewSession,
 ): SlideBuild {
   const { modules, legacyBoxVisibleStyle } = registry;
   const {
@@ -2558,9 +2692,17 @@ function compileSlide(
       theme,
       layout,
       slideNumber: index,
+      ...(previewSession === undefined ? {} : { previewSession }),
     },
     path,
   );
+  if (previewSession?.shouldPreviewPage(index)) {
+    previewSession.setSlideDimensions(index, dimensions);
+    previewSession.setPageLayers(
+      index,
+      compiled.paintLayers.map((layer) => layer.previewSvg ?? "").join(""),
+    );
+  }
   let contributions: readonly CapabilityContribution[] = slide.contributions;
   try {
     contributions = resolveContributions(children, slide.contributions);
@@ -2595,7 +2737,14 @@ function compileSlide(
     )
       continue;
     try {
-      const output = module.compileSlide(input, {
+      const boundSlide = module.bindSlide(input, {
+        path,
+        dimensions,
+        theme,
+        options,
+        slideNumber: index,
+      });
+      const output = boundSlide.compileSlide({
         path,
         dimensions,
         contributions,
@@ -2622,6 +2771,50 @@ function compileSlide(
       else slideXml.push({ slot: module.slot, xml: output.xml });
       if (output.observation !== undefined) {
         capabilities[module.declaration] = output.observation;
+      }
+      if (previewSession?.shouldPreviewPage(index)) {
+        if (boundSlide.previewSlide !== undefined) {
+          try {
+            const previewOutput = boundSlide.previewSlide({
+              path,
+              dimensions,
+              theme,
+              slideNumber: index,
+            });
+            if (module.slot === "background") {
+              previewSession.setSlideBackground(index, previewOutput.svg);
+            }
+            for (const warning of previewOutput.warnings ?? []) {
+              previewSession.recordDiagnostic(index, {
+                severity: "warning",
+                page: index,
+                path:
+                  warning.path === undefined ? path : `${path}/${warning.path}`,
+                message: warning.message,
+              });
+            }
+          } catch (error) {
+            previewSession.recordDiagnostic(index, {
+              severity: "error",
+              page: index,
+              path:
+                error instanceof CapabilityError && error.path !== undefined
+                  ? error.path
+                  : path,
+              message: error instanceof Error ? error.message : String(error),
+            });
+          }
+        } else if (
+          module.slot === "background" &&
+          slideProps.some((property) => Object.hasOwn(node.props, property))
+        ) {
+          previewSession.recordDiagnostic(index, {
+            severity: "error",
+            page: index,
+            path,
+            message: `Preview does not support ${module.declaration}`,
+          });
+        }
       }
       for (const extension of output.extensions) {
         if (!target.extensions.includes(extension)) {
@@ -2740,6 +2933,7 @@ function compileDocument(
   registry: BoundModuleRegistry,
   target: Target,
   options: BuildOptions,
+  previewSession?: PreviewSession,
 ): BuildResult {
   const { modules } = registry;
   const resolved = resolveSlides(container, modules);
@@ -2822,6 +3016,7 @@ function compileDocument(
       document,
       options,
       theme,
+      previewSession,
     ),
   );
   if (sections.length > 0) document.usedExtensions.add("p14");
@@ -2986,6 +3181,55 @@ export function createCompletedDeclarationBuild(
 }
 
 /**
+ * Internal formal build entry shared by static preview so preview consumes the exact single build
+ * without exposing preview collector hooks on public build options.
+ */
+export function createDeclarationPreviewBuild(
+  modules: readonly CapabilityModule[],
+) {
+  const bound = bindCapabilityModules(modules);
+
+  return function buildForPreview(
+    declaration: DeclarationContainer,
+    options: BuildOptions,
+    previewSession: PreviewSession,
+    checkSignal = true,
+  ): BuildResult {
+    const target = validateOptions(options);
+    if (checkSignal && options.signal?.aborted) throw options.signal.reason;
+    return compileDocument(declaration, bound, target, options, previewSession);
+  };
+}
+
+/**
+ * Transitional adapter for unmigrated SlideCapabilityModule implementations.
+ * Removed once notes, transition, and motion migrate in Tickets 11-14.
+ */
+function adaptLegacySlideCapability(
+  module: SlideCapabilityModule,
+): BoundSlideCapabilityModule {
+  return {
+    declaration: module.declaration,
+    slideProp: module.slideProp,
+    ...(module.slideProps === undefined
+      ? {}
+      : { slideProps: module.slideProps }),
+    slot: module.slot,
+    ...(module.always === undefined ? {} : { always: module.always }),
+    ...(module.transparentDeclarations === undefined
+      ? {}
+      : { transparentDeclarations: module.transparentDeclarations }),
+    bindSlide(input) {
+      return {
+        compileSlide(context) {
+          return module.compileSlide(input, context);
+        },
+      };
+    },
+  };
+}
+
+/**
  * Transitional adapter for unmigrated ObjectCapabilityModule implementations.
  * Keeps legacy parsed state inside the adapter closure (never exposing bound module state).
  * Removed once all object capabilities migrate in Ticket 14.
@@ -3044,7 +3288,7 @@ function bindCapabilityModules(
   for (const module of modules) {
     const declarations = [
       module,
-      ...("compileSlide" in module
+      ...("compileSlide" in module || "bindSlide" in module
         ? (module.transparentDeclarations ?? [])
         : []),
     ];
@@ -3058,8 +3302,13 @@ function bindCapabilityModules(
           ),
         ]);
       }
-      if (
-        !("compileSlide" in declaration) &&
+      if ("compileSlide" in declaration && !("bindSlide" in declaration)) {
+        bound.set(
+          declaration.declaration,
+          adaptLegacySlideCapability(declaration),
+        );
+      } else if (
+        !("bindSlide" in declaration) &&
         !("compileDeclaration" in declaration) &&
         !("bind" in declaration)
       ) {

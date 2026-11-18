@@ -639,6 +639,52 @@ export type ObjectCapabilityModule<TParsed = any> = {
   compile(parsed: TParsed, context: CapabilityContext): CapabilityOutput;
 };
 
+export type PreviewSeverity = "error" | "warning";
+
+export type PreviewDiagnostic = {
+  readonly severity: PreviewSeverity;
+  readonly page: number;
+  readonly path: string;
+  readonly message: string;
+};
+
+export type ScreenPoint = {
+  readonly x: number;
+  readonly y: number;
+};
+
+export type ScreenGeometry = {
+  readonly corners: readonly ScreenPoint[];
+  readonly screenBox: GeometryBox;
+};
+
+export type PreviewTransform = {
+  readonly box: GeometryBox;
+  readonly angle: number;
+  readonly flipH: boolean;
+  readonly flipV: boolean;
+};
+
+export type PreviewWarning = {
+  readonly message: string;
+  readonly path?: string;
+};
+
+export type ObjectPreviewContext = {
+  readonly path: string;
+  readonly slideNumber: number;
+  readonly objectId: number;
+  readonly box?: GeometryBox;
+  readonly theme: ThemeContext;
+  readonly childrenSvg?: string;
+};
+
+export type ObjectPreviewOutput = {
+  readonly svg: string;
+  readonly transform?: PreviewTransform;
+  readonly warnings?: readonly PreviewWarning[];
+};
+
 /**
  * Generic native object collaboration facts submitted by a bound object capability.
  * Core coordinates Morph continuity, explicit name conflicts, and click relationships without reading leaf props.
@@ -660,6 +706,7 @@ export type BoundObjectCapability = {
     request: CapabilityLayoutRequest,
   ): CapabilityLayoutMeasurement | undefined;
   compile(context: CapabilityContext): CapabilityOutput;
+  preview?(context: ObjectPreviewContext): ObjectPreviewOutput;
 };
 
 /**
@@ -732,6 +779,50 @@ export type SlideCapabilityOutput = {
   }[];
 };
 
+export type SlideCapabilityParseContext = {
+  readonly path: string;
+  readonly dimensions: { readonly width: number; readonly height: number };
+  readonly theme: ThemeContext;
+  readonly options: BuildOptions;
+  readonly slideNumber: number;
+};
+
+export type SlidePreviewContext = {
+  readonly path: string;
+  readonly dimensions: { readonly width: number; readonly height: number };
+  readonly theme: ThemeContext;
+  readonly slideNumber: number;
+};
+
+export type SlidePreviewOutput = {
+  readonly svg: string;
+  readonly warnings?: readonly PreviewWarning[];
+};
+
+export type BoundSlideCapability = {
+  compileSlide(context: SlideCapabilityContext): SlideCapabilityOutput;
+  previewSlide?(context: SlidePreviewContext): SlidePreviewOutput;
+};
+
+export type BoundSlideCapabilityModule = {
+  /** Slide property name handled by this module. */
+  readonly slideProp: string;
+  /** Slide properties jointly consumed by the same module, such as transition and advance timing. */
+  readonly slideProps?: readonly string[];
+  /** Written to the slide following PresentationML fixed child element order. */
+  readonly slot: SlideCapabilitySlot;
+  /** Runs once regardless of whether Slide provides the corresponding property. */
+  readonly always?: boolean;
+  /** Stable capability key in reports. */
+  readonly declaration: string;
+  /** Handlers wired by this capability for internal transparent declaration hosts. */
+  readonly transparentDeclarations?: readonly TransparentCapabilityModule[];
+  bindSlide(
+    input: CapabilityInput,
+    context: SlideCapabilityParseContext,
+  ): BoundSlideCapability;
+};
+
 export type SlideCapabilityModule = {
   /** Slide property name handled by this module. */
   readonly slideProp: string;
@@ -754,7 +845,34 @@ export type SlideCapabilityModule = {
 export type CapabilityModule =
   | BoundObjectCapabilityModule
   | ObjectCapabilityModule
+  | BoundSlideCapabilityModule
   | SlideCapabilityModule;
+
+export type PreviewOptions = BuildOptions & {
+  /** 1-based page numbers to preview. Omit to draw all pages; an empty list draws none. */
+  readonly pages?: readonly number[];
+};
+
+export type PreviewNodeObservation = ObjectObservation & {
+  readonly path: string | undefined;
+  readonly corners?: readonly ScreenPoint[];
+  readonly screenBox?: GeometryBox;
+};
+
+export type PreviewPageResult = {
+  readonly id: string;
+  readonly page: number;
+  readonly svg?: string;
+  readonly png?: Uint8Array;
+  readonly nodes: readonly PreviewNodeObservation[];
+  readonly layouts: readonly LayoutObservation[];
+  readonly diagnostics: readonly PreviewDiagnostic[];
+};
+
+export type PreviewResult = {
+  readonly build: BuildResult;
+  readonly pages: readonly PreviewPageResult[];
+};
 
 /** Modules registered inside Builder; transparent declarations can only be owned by slide capability modules. */
 export type RegisteredCapabilityModule =

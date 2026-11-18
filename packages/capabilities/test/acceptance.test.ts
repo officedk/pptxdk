@@ -48,6 +48,10 @@ import {
   slideBackgroundRejectionScenario,
 } from "./scenarios/slide-background.ts";
 import {
+  tablePositiveScenario,
+  tableRejectionScenario,
+} from "./scenarios/table.ts";
+import {
   textPositiveScenario,
   textRejectionScenario,
 } from "./scenarios/text.ts";
@@ -68,7 +72,7 @@ function createMarkerNode(
 }
 
 describe("Capability-owned acceptance scenarios & custom bound preview extensions", () => {
-  it("runs Shape, Image, slide-background, and Text dual-author scenarios through shared runner and collects artifacts", async () => {
+  it("runs Shape, Image, slide-background, Table, and Text dual-author scenarios through shared runner and collects artifacts", async () => {
     const outDir = await mkdtemp(join(tmpdir(), "rp-cap-accept-"));
     try {
       for (const scenario of [
@@ -78,6 +82,8 @@ describe("Capability-owned acceptance scenarios & custom bound preview extension
         imageRejectionScenario,
         slideBackgroundPositiveScenario,
         slideBackgroundRejectionScenario,
+        tablePositiveScenario,
+        tableRejectionScenario,
         textPositiveScenario,
         textRejectionScenario,
       ]) {

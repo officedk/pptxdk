@@ -596,11 +596,24 @@ export type CapabilityLayoutMeasurement = {
   readonly baseline?: number | "unavailable";
 };
 
+/**
+ * Generic sub-part observation node contributed by a composite object capability
+ * for read-only locator traversal and observation without core knowing capability-specific part kinds.
+ */
+export type CapabilitySubPartObservation = {
+  readonly authorId?: string;
+  readonly box?: GeometryBox;
+  readonly text?: string;
+  readonly parts?: readonly CapabilitySubPartObservation[];
+};
+
 export type CapabilityOutput = {
   /** A Transitional PresentationML object written as a child of the slide shape tree. */
   readonly xml: string;
   readonly observation: ObjectObservation;
   readonly extensions: readonly Extension[];
+  /** Generic hierarchical sub-parts owned by this native object for locator queries without core special-casing. */
+  readonly parts?: readonly CapabilitySubPartObservation[];
   /** Object-level declarations compiled by the corresponding slide capability, such as motion. */
   readonly annotations?: readonly CapabilityAnnotation[];
   readonly resourceClaims?: readonly CapabilityResourceClaim[];

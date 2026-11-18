@@ -885,10 +885,13 @@ describe("native tables", () => {
     );
   });
 
-  it("executes tableCapability.parse exactly once per Table node during build and reuses parsed model", async () => {
-    const parseSpy = vi.spyOn(tableCapability, "parse");
-    const measureSpy = vi.spyOn(tableCapability, "measureLayout");
-    const compileSpy = vi.spyOn(tableCapability, "compile");
+  it("executes tableCapability.bind exactly once per Table node during build and encapsulates parsed state", async () => {
+    assert.equal("bind" in tableCapability, true);
+    assert.equal("parse" in tableCapability, false);
+    assert.equal("measureLayout" in tableCapability, false);
+    assert.equal("compile" in tableCapability, false);
+
+    const bindSpy = vi.spyOn(tableCapability, "bind");
 
     try {
       const result = await build(
@@ -921,34 +924,20 @@ describe("native tables", () => {
       );
 
       assert.equal(
-        parseSpy.mock.calls.length,
+        bindSpy.mock.calls.length,
         1,
-        `Expected tableCapability.parse to be called exactly 1 time, got ${parseSpy.mock.calls.length}`,
+        `Expected tableCapability.bind to be called exactly 1 time, got ${bindSpy.mock.calls.length}`,
       );
 
-      const parsedResult = parseSpy.mock.results[0]?.value;
-      assert.ok(parsedResult);
-      assert.equal(parsedResult.contract.nativeKind, "graphicFrame");
-      assert.equal(parsedResult.parsed.rows.length, 1);
-      assert.equal(parsedResult.parsed.cells.length, 2);
-
-      // Verify measureLayout and compile reused the parsed table state directly
-      assert.ok(measureSpy.mock.calls.length >= 1);
-      for (const call of measureSpy.mock.calls) {
-        assert.equal(call[0]?.cells, parsedResult.parsed.cells);
-      }
-      assert.equal(compileSpy.mock.calls.length, 1);
-      assert.equal(
-        compileSpy.mock.calls[0]?.[0]?.cells,
-        parsedResult.parsed.cells,
-      );
+      const boundHandle = bindSpy.mock.results[0]?.value;
+      assert.ok(boundHandle);
+      assert.equal(boundHandle.contract.nativeKind, "graphicFrame");
+      assert.equal("parsed" in boundHandle, false);
 
       const validation = await validatePptx(result.pptx);
       assert.deepEqual(validation.errors, []);
     } finally {
-      parseSpy.mockRestore();
-      measureSpy.mockRestore();
-      compileSpy.mockRestore();
+      bindSpy.mockRestore();
     }
   });
 

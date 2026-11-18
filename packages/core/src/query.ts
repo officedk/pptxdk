@@ -1,5 +1,6 @@
 import type {
   BuildQuery,
+  GeometryBox,
   LayoutObservation,
   Locator,
   LocatorResourceObservation,
@@ -35,9 +36,9 @@ export type QueryContentReference =
     }
   | { readonly kind: "object"; readonly id: number }
   | {
-      readonly kind: "table-part";
-      readonly tableId: number;
-      readonly partIndex: number;
+      readonly kind: "part";
+      readonly box?: GeometryBox;
+      readonly text?: string;
     };
 
 export type QueryContentNode = {
@@ -93,6 +94,57 @@ function collectObjects(
   }
   for (const child of node.children) {
     collectObjects(child, objectsById, seen, objects);
+  }
+}
+
+function collectTexts(
+  node: QueryNode,
+  objectsById: ReadonlyMap<number, ObjectObservation>,
+  seen: Set<number>,
+  texts: string[],
+): void {
+  const addMemberObjects = (object: ObjectObservation) => {
+    if (!seen.has(object.id)) {
+      seen.add(object.id);
+      if (object.text !== undefined) texts.push(object.text);
+    }
+    for (const member of object.members ?? []) addMemberObjects(member);
+  };
+
+  if (node.reference?.kind === "object") {
+    const object = objectsById.get(node.reference.id);
+    if (object !== undefined && !seen.has(object.id)) {
+      seen.add(object.id);
+      if (object.text !== undefined) {
+        texts.push(object.text);
+      } else {
+        for (const child of node.children) {
+          if (
+            child.reference?.kind === "part" &&
+            child.reference.text !== undefined
+          ) {
+            texts.push(child.reference.text);
+          }
+        }
+      }
+    }
+  }
+  for (const child of node.children) {
+    if (child.reference?.kind !== "part") {
+      collectTexts(child, objectsById, seen, texts);
+    }
+  }
+  if (node.reference?.kind === "object") {
+    const object = objectsById.get(node.reference.id);
+    if (object !== undefined) {
+      for (const member of object.members ?? []) addMemberObjects(member);
+    }
+  }
+  if (node.reference?.kind === "layout") {
+    for (const id of node.reference.objectIds) {
+      const object = objectsById.get(id);
+      if (object !== undefined) addMemberObjects(object);
+    }
   }
 }
 
@@ -181,22 +233,15 @@ function makeLocator(
       entry.node.reference?.kind === "object"
         ? objectsById.get(entry.node.reference.id)?.box
         : undefined;
-    const tablePart =
-      entry.node.reference?.kind === "table-part"
-        ? objectsById.get(entry.node.reference.tableId)?.table?.parts?.[
-            entry.node.reference.partIndex
-          ]
-        : undefined;
-    const text = objects.flatMap((object) => {
-      if (object.text !== undefined) return [object.text];
-      if (object.table !== undefined) {
-        return [object.table.cells.map((row) => row.join("\t")).join("\n")];
-      }
-      return [];
-    });
+    const partRef =
+      entry.node.reference?.kind === "part" ? entry.node.reference : undefined;
+    const text: string[] = [];
+    if (partRef === undefined) {
+      collectTexts(entry.node, objectsById, new Set(), text);
+    }
     const selectedText = text.length === 0 ? undefined : text.join("\n");
-    const box = tablePart?.box ?? layoutBox ?? objectBox;
-    const observedText = tablePart?.text ?? selectedText;
+    const box = partRef !== undefined ? partRef.box : (layoutBox ?? objectBox);
+    const observedText = partRef !== undefined ? partRef.text : selectedText;
     const resources: LocatorResourceObservation[] = objects.flatMap((object) =>
       (resourcesByObjectId.get(object.id) ?? []).map((resource) =>
         Object.freeze({ objectId: object.id, ...resource }),

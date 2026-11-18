@@ -81,6 +81,7 @@ export type {
   CapabilityPresentationContribution,
   CapabilityResource,
   CapabilityResourceClaim,
+  CapabilitySubPartObservation,
   ContributionResolver,
   Diagnostic,
   Extension,

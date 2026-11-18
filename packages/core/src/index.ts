@@ -101,6 +101,7 @@ export type {
   CapabilityOutput,
   CapabilityResource,
   CapabilityResourceClaim,
+  CapabilitySubPartObservation,
   ContributionResolver,
   DeckProps,
   Diagnostic,

@@ -42,6 +42,7 @@ import {
   Shape,
   shapeCapability,
   Span,
+  tableCapability,
   transitionCapability,
   transitions,
 } from "@react-pptx/react-pptx";
@@ -862,5 +863,85 @@ describe("bound object capability contract", () => {
         return true;
       },
     );
+  });
+
+  it("migrates tableCapability to BoundObjectCapabilityModule and resolves generic hierarchical sub-part locators", async () => {
+    assert.equal("bind" in tableCapability, true);
+    assert.equal("parse" in tableCapability, false);
+    assert.equal("compile" in tableCapability, false);
+
+    const compositeWithParts: BoundObjectCapabilityModule = {
+      declaration: "rp:composite-grid",
+      bind(input, context) {
+        const contract = parseCapabilityLayoutContract({
+          nativeKind: "graphicFrame",
+          props: input.props,
+          allowedStyleKeys: new Set(layoutStyleKeys),
+          path: context.path,
+        });
+        return {
+          contract,
+          compile(compileContext) {
+            const box = compileContext.layoutBox ?? {
+              x: 10,
+              y: 20,
+              width: 120,
+              height: 40,
+            };
+            return {
+              xml: `<p:sp><p:nvSpPr><p:cNvPr id="${compileContext.id}" name="Composite"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr><p:spPr><a:xfrm><a:off x="${pxToEmu(box.x)}" y="${pxToEmu(box.y)}"/><a:ext cx="${pxToEmu(box.width)}" cy="${pxToEmu(box.height)}"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom><a:noFill/></p:spPr></p:sp>`,
+              observation: {
+                id: compileContext.id,
+                kind: "shape",
+                name: "Composite",
+                geometry: "rect",
+                box,
+              },
+              parts: [
+                {
+                  authorId: "band-1",
+                  box: { x: 10, y: 20, width: 120, height: 20 },
+                  text: "Alpha\tBeta",
+                  parts: [
+                    {
+                      authorId: "slot-a",
+                      box: { x: 10, y: 20, width: 60, height: 20 },
+                      text: "Alpha",
+                    },
+                    {
+                      authorId: "slot-b",
+                      box: { x: 70, y: 20, width: 60, height: 20 },
+                      text: "Beta",
+                    },
+                  ],
+                },
+              ],
+              extensions: [],
+            };
+          },
+        };
+      },
+    };
+
+    const customBuild = createDocBuild([compositeWithParts]);
+    const doc = impDeck({ width: 320, height: 180 }).append(
+      impSlide({ id: "generic-parts" }).append(
+        new CommonNode("composite", "rp:composite-grid", { id: "grid" }),
+      ),
+    );
+    const result = await customBuild(doc);
+    const grid = result.query.getSlide("generic-parts").get("grid");
+    assert.equal(grid.observe().text, "Alpha\tBeta");
+    const band = grid.get("band-1");
+    assert.equal(band.observe().text, "Alpha\tBeta");
+    assert.deepEqual(band.observe().objects, []);
+    assert.equal(band.children().length, 2);
+    assert.deepEqual(band.get("slot-a").observe().box, {
+      x: 10,
+      y: 20,
+      width: 60,
+      height: 20,
+    });
+    assert.equal(band.get("slot-b").observe().text, "Beta");
   });
 });

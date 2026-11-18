@@ -183,11 +183,11 @@ describe("rich-text speaker notes", () => {
     assert.ok(parts[masterThemePath]);
     assert.ok(parts[slideThemePath]);
 
-    const theme = strFromU8(parts[masterThemePath]!);
+    const theme = strFromU8(parts[masterThemePath]);
     assert.match(theme, /<a:theme[^>]+name="Notes Theme Contract"/u);
     assert.match(theme, /<a:accent1><a:srgbClr val="336699"\/><\/a:accent1>/u);
     assert.match(theme, /<a:minorFont><a:latin typeface="Jost\*"/u);
-    assert.equal(theme, strFromU8(parts[slideThemePath]!));
+    assert.equal(theme, strFromU8(parts[slideThemePath]));
 
     const run = notesRead.text.paragraphs[0]?.runs[0];
     assert.equal(run?.color, "#ABCDEF");

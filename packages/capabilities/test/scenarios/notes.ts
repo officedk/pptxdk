@@ -273,13 +273,13 @@ export const notesPositiveScenario: CapabilityScenario = {
     );
 
     // Canvas pixel checks: shapes drawn accurately and empty lower canvas stays pure background.
-    const png1 = preview.pages[0]!.png!;
+    const png1 = preview.pages[0].png!;
     assert.deepEqual(pixelAt(png1, 10, 10), [0xf8, 0xfa, 0xfc, 255], author);
     assert.deepEqual(pixelAt(png1, 160, 100), [0x1e, 0x3a, 0x8a, 255], author);
     assert.deepEqual(pixelAt(png1, 450, 100), [0xd9, 0x77, 0x06, 255], author);
     assert.deepEqual(pixelAt(png1, 320, 260), [0xf8, 0xfa, 0xfc, 255], author);
 
-    const png2 = preview.pages[1]!.png!;
+    const png2 = preview.pages[1].png!;
     assert.deepEqual(pixelAt(png2, 10, 10), [0xee, 0xf2, 0xff, 255], author);
     assert.deepEqual(pixelAt(png2, 320, 180), [0x43, 0x38, 0xca, 255], author);
   },
@@ -388,7 +388,7 @@ export const notesPreviewIsolationScenario: CapabilityScenario = {
     assert.ok(preview.pages[1]?.png !== undefined, author);
     assert.deepEqual(preview.pages[1]?.diagnostics, [], author);
     assert.deepEqual(
-      pixelAt(preview.pages[1]!.png!, 240, 135),
+      pixelAt(preview.pages[1].png, 240, 135),
       [0x05, 0x96, 0x69, 255],
       author,
     );

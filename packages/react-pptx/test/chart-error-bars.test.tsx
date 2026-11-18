@@ -406,7 +406,7 @@ describe("native chart error bars", () => {
                 name: "Only",
                 x: [1, 2],
                 y: [1, 2],
-                errorBars: {} as never,
+                errorBars: {},
               },
             ],
           },

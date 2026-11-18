@@ -460,8 +460,8 @@ export const tablePositiveScenario: CapabilityScenario = {
     assert.deepEqual(preview.pages[0]?.diagnostics, [], author);
     assert.deepEqual(preview.pages[1]?.diagnostics, [], author);
 
-    const p1 = preview.pages[0]!;
-    const p2 = preview.pages[1]!;
+    const p1 = preview.pages[0];
+    const p2 = preview.pages[1];
     expect(p1.svg).toContain("<path");
     expect(p2.svg).toContain("<path");
 

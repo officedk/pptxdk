@@ -27,7 +27,7 @@ import { CommonContainer } from "@react-pptx/core/document";
 import { nativeLinkXml, parseLinkTarget, parseMorphKey } from "./identity.ts";
 import type { MorphProps } from "./morph-api.ts";
 import {
-  motionAnnotations,
+  motionContainerAnnotations,
   validateMotionFlag,
   type MotionProps,
 } from "./motion-api.ts";
@@ -205,9 +205,11 @@ export const boxCapability: BoundObjectCapabilityModule = {
             style["backgroundColor"] !== undefined ||
             style["backgroundImage"] !== undefined,
         } as const;
-        const annotations = properties.hasVisibleStyle
-          ? motionAnnotations(motionProps, motionTarget)
-          : [];
+        const annotations = motionContainerAnnotations(
+          motionProps,
+          properties.hasVisibleStyle ? motionTarget : undefined,
+          { propagatesDefaultEnter: true },
+        );
         return {
           xml: properties.hasVisibleStyle
             ? objectXml(

@@ -2388,15 +2388,6 @@ function compileBoundContainer(args: {
       for (const contribution of output.presentationContributions ?? []) {
         addPresentationContribution(contribution, context, path, objectId);
       }
-      for (const annotation of output.annotations ?? []) {
-        context.slide.contributions.push({
-          ...annotation,
-          path,
-          targetId: containerObservation.id,
-          order,
-          declaration: child,
-        });
-      }
     } else if (morphKey !== undefined && emitsObject) {
       context.slide.diagnostics.push(
         diagnostic(
@@ -2405,6 +2396,17 @@ function compileBoundContainer(args: {
           "Only containers generating native objects can participate in Morph",
         ),
       );
+    }
+    for (const annotation of output.annotations ?? []) {
+      context.slide.contributions.push({
+        ...annotation,
+        path,
+        ...(containerObservation === undefined
+          ? {}
+          : { targetId: containerObservation.id }),
+        order,
+        declaration: child,
+      });
     }
     for (const warning of output.warnings ?? []) {
       context.document.warnings.push({

@@ -26,7 +26,7 @@ import { CommonContainer } from "@react-pptx/core/document";
 import { groupXml } from "./group-xml.ts";
 import { nativeLinkXml } from "./identity.ts";
 import type { MorphProps } from "./morph-api.ts";
-import { motionAnnotations, type MotionProps } from "./motion-api.ts";
+import { motionContainerAnnotations, type MotionProps } from "./motion-api.ts";
 
 /** Native Group preserves member relationships; style allows it to arrange as a layout child, with output bounds computed from the union of member geometries. */
 export type GroupDeclarationProps = MotionProps &
@@ -275,7 +275,7 @@ export const groupCapability: ObjectCapabilityModule<ParsedGroup> = {
       context.morphName ?? requestedName ?? `Group ${context.id - 1}`;
     const rotation = parsed.rotation;
     const members = motionMembers(compiled.objects);
-    const annotations = motionAnnotations(parsed.rawProps, {
+    const annotations = motionContainerAnnotations(parsed.rawProps, {
       kind: "group",
       name,
       ...(typeof parsed.rawProps["id"] === "string"

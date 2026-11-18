@@ -1155,4 +1155,91 @@ describe("bound object capability contract", () => {
       },
     );
   });
+
+  it("collects annotations from transparent bound containers and binds motionCapability onto BoundSlideCapabilityModule", async () => {
+    assert.equal("bindSlide" in motionCapability, true);
+
+    const observedMarkers: unknown[] = [];
+    const customTimingSlide: import("@react-pptx/core").BoundSlideCapabilityModule =
+      {
+        declaration: "custom-timing",
+        slideProp: "customTiming",
+        slot: "timing",
+        always: true,
+        bindSlide() {
+          return {
+            compileSlide(compileContext) {
+              for (const contribution of compileContext.contributions) {
+                if (contribution.capability === "custom-timing") {
+                  observedMarkers.push(contribution.value);
+                }
+              }
+              return {
+                xml: "",
+                extensions: [],
+                observation: { count: observedMarkers.length },
+              };
+            },
+          };
+        },
+      };
+
+    const transparentAnnotator: BoundObjectCapabilityModule = {
+      declaration: "rp:transparent-annotator",
+      bind(input, parseContext) {
+        const contract = parseCapabilityLayoutContract({
+          nativeKind: "sp",
+          props: input.props,
+          allowedStyleKeys: new Set<string>(layoutStyleKeys),
+          isContainer: true,
+          path: parseContext.path,
+        });
+        return {
+          contract,
+          container: {
+            children: input.children,
+            emitsObject: false,
+          },
+          compile() {
+            return {
+              xml: "",
+              observation: {
+                id: 0,
+                kind: "shape",
+                name: "transparent",
+                box: { x: 0, y: 0, width: 100, height: 40 },
+              },
+              extensions: [],
+              annotations: [
+                {
+                  capability: "custom-timing",
+                  value: { marker: "from-transparent-container" },
+                },
+              ],
+            };
+          },
+        };
+      },
+    };
+
+    const customBuild = createDocumentBuild([
+      transparentAnnotator,
+      shapeCapability,
+      customTimingSlide,
+    ]);
+    const doc = impDeck({ width: 320, height: 180 }).append(
+      impSlide({ id: "annotator-slide" }).append(
+        new CommonContainer("annotator", "rp:transparent-annotator", {
+          style: { width: 100, height: 40 },
+        }).append(impShape({ id: "child", x: 0, y: 0, width: 20, height: 20 })),
+      ),
+    );
+    const result = await customBuild(doc);
+    assert.deepEqual(observedMarkers, [
+      { marker: "from-transparent-container" },
+    ]);
+    assert.deepEqual(result.report.slides[0]?.capabilities?.["custom-timing"], {
+      count: 1,
+    });
+  });
 });

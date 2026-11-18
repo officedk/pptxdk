@@ -6,6 +6,9 @@ import {
   pxToEmu,
   textStyleKeys,
   xmlEscape,
+  type BoundObjectCapability,
+  type BoundObjectCapabilityModule,
+  type BoundObjectNativeCollaboration,
   type CapabilityContext,
   type CapabilityInput,
   type CapabilityLayoutContract,
@@ -13,12 +16,14 @@ import {
   type CapabilityLayoutRequest,
   type CapabilityOutput,
   type CapabilityParseContext,
-  type CapabilityParseResult,
+  type CapabilitySubPartObservation,
   type ColorValue,
+  type GeometryBox,
   type LayoutStyle,
   type LinkTarget,
   type NativeTableObservation,
-  type ObjectCapabilityModule,
+  type ObjectPreviewContext,
+  type ObjectPreviewOutput,
   type ResolvedColor,
   type TextStyle,
   type ThemeContext,
@@ -30,7 +35,12 @@ import {
   type FontEmbeddingMode,
   type FontEmbeddingUse,
 } from "./font-embedding.ts";
-import { nativeLinkXml } from "./identity.ts";
+import {
+  nativeLinkXml,
+  parseLinkTarget,
+  parseMorphKey,
+  parseOptionalName,
+} from "./identity.ts";
 import type { MorphProps } from "./morph-api.ts";
 import { motionAnnotations, type MotionProps } from "./motion-api.ts";
 import {
@@ -42,10 +52,12 @@ import {
 } from "./table-xml.ts";
 import {
   parseTextParagraphs,
+  renderTextOutlinesSvg,
   textExtent,
   writeTextBodyFromParagraphs,
   type FontReference,
   type FontSize,
+  type MeasuredTextLayout,
   type Paragraph,
   type ResolvedTextStyle,
 } from "./text-service.ts";
@@ -754,17 +766,36 @@ function prepareRows(
   return { rows, cells };
 }
 
-export type ParsedTable = {
-  readonly name?: string;
-  readonly morphKey?: string;
-  readonly link?: LinkTarget;
+type CompiledTableCellSnapshot = {
+  readonly path: string;
+  readonly box: GeometryBox;
+  readonly padding: Edges;
+  readonly verticalAlign: TableVerticalAlign;
+  readonly fill?: ResolvedColor;
+  readonly border?: TableCellBorder;
+  readonly paragraphs: readonly Paragraph[];
+  readonly measuredLayout?: MeasuredTextLayout;
+  readonly hasText: boolean;
+  readonly hasOverflow: boolean;
+};
+
+type CompiledTableSnapshot = {
+  readonly box: GeometryBox;
+  readonly widths: readonly number[];
+  readonly heights: readonly number[];
+  readonly cells: readonly CompiledTableCellSnapshot[];
+};
+
+type ParsedTable = {
   readonly columns: readonly Track[];
   readonly tableStyle: ReturnType<typeof trackStyle>;
   readonly tableVerticalAlign: TableVerticalAlign;
   readonly rows: readonly ParsedRow[];
   readonly cells: readonly ParsedCell[];
   readonly contract: CapabilityLayoutContract;
-  readonly rawProps: Readonly<Record<string, unknown>>;
+  readonly declaredX: unknown;
+  readonly declaredY: unknown;
+  readonly declaredWidth: unknown;
 };
 
 type TableLayoutModel = {
@@ -984,19 +1015,17 @@ function tableLayoutModel(
 }
 
 /** Table module independently validates row and column structure, emitting a single object with native graphicFrame and a:tbl. */
-export const tableCapability: ObjectCapabilityModule<ParsedTable> = {
+export const tableCapability: BoundObjectCapabilityModule = {
   declaration: "rp:table",
 
-  parse(
+  bind(
     input: CapabilityInput,
     context: CapabilityParseContext,
-  ): CapabilityParseResult<ParsedTable> {
+  ): BoundObjectCapability {
     onlyKeys(input.props, tableParameters, "Table", context.path);
-    const requestedName = optionalName(
-      input.props["name"],
-      "name",
-      context.path,
-    );
+    const requestedName = parseOptionalName(input.props["name"], context.path);
+    const morphKey = parseMorphKey(input.props["morphKey"], context.path);
+    const link = parseLinkTarget(input.props["link"], context.path);
 
     const allowedStyleKeys = new Set<string>([
       ...layoutStyleKeys,
@@ -1026,345 +1055,502 @@ export const tableCapability: ObjectCapabilityModule<ParsedTable> = {
     );
 
     const parsed: ParsedTable = {
-      ...(requestedName !== undefined ? { name: requestedName } : {}),
-      ...(input.props["morphKey"] !== undefined
-        ? { morphKey: input.props["morphKey"] as string }
-        : {}),
-      ...(input.props["link"] !== undefined
-        ? { link: input.props["link"] as LinkTarget }
-        : {}),
       columns,
       tableStyle,
       tableVerticalAlign,
       rows,
       cells,
       contract,
-      rawProps: input.props,
+      declaredX: input.props["x"],
+      declaredY: input.props["y"],
+      declaredWidth: contract.layoutStyle.width ?? input.props["width"],
     };
 
-    return { contract, parsed };
-  },
-
-  measureLayout(
-    parsed: ParsedTable,
-    request: CapabilityLayoutRequest,
-  ): CapabilityLayoutMeasurement {
-    const declaredWidth =
-      parsed.contract.layoutStyle.width ?? parsed.rawProps["width"];
-    const declaredSize =
-      typeof declaredWidth === "number"
-        ? positiveSize(declaredWidth, "Table.width")
-        : undefined;
-    const natural = tableLayoutModel(
-      parsed,
-      undefined,
-      request.theme,
-      request.slideNumber,
-    );
-    const naturalWidth = natural.widths.reduce((sum, width) => sum + width, 0);
-    const availableWidth =
-      request.availableWidth !== undefined && request.availableWidth > 0
-        ? request.availableWidth
-        : undefined;
-    const requestedWidth =
-      declaredSize ??
-      (availableWidth !== undefined &&
-      (request.widthMode === "exactly" ||
-        request.widthMode === undefined ||
-        naturalWidth > availableWidth)
-        ? availableWidth
-        : undefined);
-    const model =
-      requestedWidth === undefined
-        ? natural
-        : tableLayoutModel(
-            parsed,
-            requestedWidth,
-            request.theme,
-            request.slideNumber,
-          );
-    const width = model.widths.reduce((sum, value) => sum + value, 0);
-    const height = model.heights.reduce((sum, value) => sum + value, 0);
-    return {
-      width,
-      height,
-      minContentWidth: natural.widths.reduce((sum, value) => sum + value, 0),
-      minContentHeight: natural.heights.reduce((sum, value) => sum + value, 0),
-    };
-  },
-
-  compile(parsed: ParsedTable, context: CapabilityContext): CapabilityOutput {
-    const requestedName = parsed.name;
-    const declaredWidth =
-      parsed.contract.layoutStyle.width ?? parsed.rawProps["width"];
-    const requestedWidth =
-      context.layoutBox?.width ??
-      (typeof declaredWidth === "number"
-        ? positiveSize(declaredWidth, "Table.width")
-        : undefined);
-    const model = tableLayoutModel(
-      parsed,
-      requestedWidth,
-      context.theme,
-      context.slideNumber,
-      context.options.embedFonts,
-    );
-    const { columns, rows, cells, widths } = model;
-    const heights = [...model.heights];
-    const warnings = [...model.warnings];
-    const claims = [...model.claims];
-    const fontUses: FontEmbeddingUse[] = [];
-    const warningKeys = new Set(model.warningKeys);
-    const addTextResult = (
-      result: ReturnType<typeof writeTextBodyFromParagraphs>,
-      path: string,
-    ) => {
-      for (const warning of result.warnings) {
-        const key = `${path}\u0000${warning.code}\u0000${warning.message}`;
-        if (warningKeys.has(key)) continue;
-        warningKeys.add(key);
-        warnings.push({ ...warning, path });
-      }
-      claims.push(...result.resourceClaims);
-      fontUses.push(...result.fontUses.map((use) => ({ ...use, path })));
-    };
-    const targetHeight = context.layoutBox?.height;
-    if (targetHeight !== undefined) {
-      const naturalHeight = heights.reduce((sum, value) => sum + value, 0);
-      if (targetHeight > naturalHeight + 0.01) {
-        const growable = rows.flatMap((row, index) =>
-          row.height === undefined ? [index] : [],
-        );
-        if (growable.length > 0) {
-          const extra = (targetHeight - naturalHeight) / growable.length;
-          for (const row of growable)
-            heights[row] = (heights[row] ?? 0) + extra;
-        } else {
-          warnings.push({
-            code: "table-height-underflow",
-            message: `Sum of fixed row heights ${naturalHeight}px is less than layout height ${targetHeight}px; build preserves row heights`,
-          });
-        }
-      } else if (targetHeight < naturalHeight - 0.01) {
-        warnings.push({
-          code: "table-height-overflow",
-          message: `Sum of row heights ${naturalHeight}px exceeds layout height ${targetHeight}px; build preserves row heights`,
-        });
-      }
-    }
-    const x = coordinate(context.layoutBox?.x ?? parsed.rawProps["x"], "x");
-    const y = coordinate(context.layoutBox?.y ?? parsed.rawProps["y"], "y");
-    const widthOf = (cell: ParsedCell) =>
-      widths
-        .slice(cell.column, cell.column + cell.colSpan)
-        .reduce((sum, width) => sum + width, 0);
-    const innerWidthOf = (cell: ParsedCell) =>
-      Math.max(0, widthOf(cell) - cell.padding.left - cell.padding.right);
-
-    const anchors = new Map(
-      cells.map((cell) => [`${cell.row}:${cell.column}`, cell]),
-    );
-    const owners = new Map<string, ParsedCell>();
-    for (const cell of cells) {
-      for (let row = cell.row; row < cell.row + cell.rowSpan; row += 1) {
-        for (
-          let column = cell.column;
-          column < cell.column + cell.colSpan;
-          column += 1
-        ) {
-          owners.set(`${row}:${column}`, cell);
-        }
-      }
-    }
-    const matrix = rows.map(() =>
-      Array.from({ length: columns.length }, () => ""),
-    );
-    const rowsXml = rows.map((_, rowIndex) => {
-      const rowCells: string[] = [];
-      for (let column = 0; column < columns.length; column += 1) {
-        const cell = anchors.get(`${rowIndex}:${column}`);
-        if (cell === undefined) {
-          const owner = owners.get(`${rowIndex}:${column}`);
-          if (owner === undefined) {
-            fail(
-              "invalid-table-structure",
-              "Table row contains undeclared cells",
-            );
-          }
-          const hMerge = column > owner.column ? ' hMerge="1"' : "";
-          const vMerge = rowIndex > owner.row ? ' vMerge="1"' : "";
-          const spanAttributes = [
-            ...(rowIndex === owner.row && owner.rowSpan > 1
-              ? [`rowSpan="${owner.rowSpan}"`]
-              : []),
-            ...(column === owner.column && owner.colSpan > 1
-              ? [`gridSpan="${owner.colSpan}"`]
-              : []),
-          ];
-          rowCells.push(
-            `<a:tc${hMerge}${vMerge}${spanAttributes.length === 0 ? "" : ` ${spanAttributes.join(" ")}`}>${emptyTableCellXml(owner?.textStyle?.["lang"])}</a:tc>`,
-          );
-          continue;
-        }
-        const innerHeight = Math.max(
-          0,
-          heights
-            .slice(cell.row, cell.row + cell.rowSpan)
-            .reduce((sum, value) => sum + value, 0) -
-            cell.padding.top -
-            cell.padding.bottom,
-        );
-        const contentSized = rows
-          .slice(cell.row, cell.row + cell.rowSpan)
-          .some((row) => row.height === undefined);
-        const body = textBody(
-          cell,
-          context.theme,
-          innerWidthOf(cell),
-          innerHeight,
-          contentSized,
-          {
-            slideNumber: context.slideNumber,
-            createId: context.createTextFieldId,
-          },
-          context.options.embedFonts,
-        );
-        addTextResult(body, cell.path);
-        matrix[rowIndex]![column] = body.text;
-        const spanAttributes = [
-          ...(cell.colSpan > 1 ? [`gridSpan="${cell.colSpan}"`] : []),
-          ...(cell.rowSpan > 1 ? [`rowSpan="${cell.rowSpan}"`] : []),
-        ];
-        const attributes =
-          spanAttributes.length === 0 ? "" : ` ${spanAttributes.join(" ")}`;
-        const rowFill = rows[cell.row]?.fill;
-        const fill = cell.fill ?? rowFill;
-        const properties = tableCellPropertiesXml(
-          cell.padding,
-          cell.verticalAlign,
-          cell.border,
-          fill,
-        );
-        rowCells.push(`<a:tc${attributes}>${body.xml}${properties}</a:tc>`);
-      }
-      return rowCells.join("");
-    });
-    for (const warning of warnings) {
-      if (warning.code === "overset") {
-        warning.message = `${warning.message} (table cell preserves original content and declared dimensions)`;
-      }
-    }
-    const name =
-      context.morphName ?? requestedName ?? `Table ${context.id - 1}`;
-    let escapedName: string;
-    try {
-      escapedName = xmlEscape(name);
-    } catch {
-      fail(
-        "invalid-xml-character",
-        "Table.name contains characters not allowed in XML 1.0",
-      );
-    }
-    const width = widths.reduce((sum, value) => sum + value, 0);
-    const height = heights.reduce((sum, value) => sum + value, 0);
-    const box = { x, y, width, height };
-    const tableParts = [
-      ...rows.map((row, rowIndex) => ({
-        kind: "row" as const,
-        ...(row.authorId === undefined ? {} : { authorId: row.authorId }),
-        row: rowIndex,
-        box: {
-          x,
-          y:
-            y +
-            heights.slice(0, rowIndex).reduce((sum, value) => sum + value, 0),
-          width,
-          height: heights[rowIndex] ?? 0,
-        },
-        text: matrix[rowIndex]?.join("\t") ?? "",
-      })),
-      ...cells.map((cell) => ({
-        kind: "cell" as const,
-        ...(cell.authorId === undefined ? {} : { authorId: cell.authorId }),
-        row: cell.row,
-        column: cell.column,
-        rowSpan: cell.rowSpan,
-        colSpan: cell.colSpan,
-        box: {
-          x:
-            x +
-            widths.slice(0, cell.column).reduce((sum, value) => sum + value, 0),
-          y:
-            y +
-            heights.slice(0, cell.row).reduce((sum, value) => sum + value, 0),
-          width: widths
-            .slice(cell.column, cell.column + cell.colSpan)
-            .reduce((sum, value) => sum + value, 0),
-          height: heights
-            .slice(cell.row, cell.row + cell.rowSpan)
-            .reduce((sum, value) => sum + value, 0),
-        },
-        text: matrix[cell.row]?.[cell.column] ?? "",
-      })),
-    ];
-    const observation: NativeTableObservation = {
-      columnWidths: [...widths],
-      rowHeights: [...heights],
-      cells: matrix,
-      merges: cells
-        .filter((cell) => cell.colSpan > 1 || cell.rowSpan > 1)
-        .map(({ row, column, rowSpan, colSpan }) => ({
-          row,
-          column,
-          rowSpan,
-          colSpan,
-        })),
-      ...(tableParts.some(({ authorId }) => authorId !== undefined)
-        ? { parts: tableParts }
+    const authorId =
+      typeof input.props["id"] === "string" ? input.props["id"] : undefined;
+    const motionProps: Readonly<Record<string, unknown>> = {
+      ...(input.props["enter"] !== undefined
+        ? { enter: input.props["enter"] }
+        : {}),
+      ...(input.props["emphasis"] !== undefined
+        ? { emphasis: input.props["emphasis"] }
+        : {}),
+      ...(input.props["motion"] !== undefined
+        ? { motion: input.props["motion"] }
         : {}),
     };
-    const annotations = motionAnnotations(parsed.rawProps, {
-      kind: "table",
-      name,
-      ...(parsed.rawProps["id"] === undefined
-        ? {}
-        : { authorId: parsed.rawProps["id"] as string }),
-      textBody: true,
-      filled: cells.some(
-        (cell) => cell.fill !== undefined || rows[cell.row]?.fill !== undefined,
-      ),
-      box,
-      rotationDegrees: 0,
-      hasBackground: cells.some(
-        (cell) => cell.fill !== undefined || rows[cell.row]?.fill !== undefined,
-      ),
-    });
+
+    const native: BoundObjectNativeCollaboration = {
+      ...(morphKey === undefined ? {} : { morphKey }),
+      ...(requestedName === undefined ? {} : { hasExplicitName: true }),
+      ...(link === undefined ? {} : { link }),
+    };
+
+    let compiledSnapshot: CompiledTableSnapshot | undefined;
+
     return {
-      xml: tableFrameXml(
-        context.id,
-        escapedName,
-        x,
-        y,
-        widths,
-        heights,
-        rowsXml,
-        nativeLinkXml(context.nativeLink),
-      ),
-      observation: {
-        id: context.id,
-        kind: "table",
-        name,
-        box,
-        table: observation,
+      contract,
+      ...(morphKey !== undefined ||
+      requestedName !== undefined ||
+      link !== undefined
+        ? { native }
+        : {}),
+
+      measureLayout(
+        request: CapabilityLayoutRequest,
+      ): CapabilityLayoutMeasurement {
+        const declaredSize =
+          typeof parsed.declaredWidth === "number"
+            ? positiveSize(parsed.declaredWidth, "Table.width")
+            : undefined;
+        const natural = tableLayoutModel(
+          parsed,
+          undefined,
+          request.theme,
+          request.slideNumber,
+        );
+        const naturalWidth = natural.widths.reduce(
+          (sum, width) => sum + width,
+          0,
+        );
+        const availableWidth =
+          request.availableWidth !== undefined && request.availableWidth > 0
+            ? request.availableWidth
+            : undefined;
+        const requestedWidth =
+          declaredSize ??
+          (availableWidth !== undefined &&
+          (request.widthMode === "exactly" ||
+            request.widthMode === undefined ||
+            naturalWidth > availableWidth)
+            ? availableWidth
+            : undefined);
+        const model =
+          requestedWidth === undefined
+            ? natural
+            : tableLayoutModel(
+                parsed,
+                requestedWidth,
+                request.theme,
+                request.slideNumber,
+              );
+        const width = model.widths.reduce((sum, value) => sum + value, 0);
+        const height = model.heights.reduce((sum, value) => sum + value, 0);
+        return {
+          width,
+          height,
+          minContentWidth: natural.widths.reduce(
+            (sum, value) => sum + value,
+            0,
+          ),
+          minContentHeight: natural.heights.reduce(
+            (sum, value) => sum + value,
+            0,
+          ),
+        };
       },
-      extensions: [],
-      ...(annotations.length === 0 ? {} : { annotations }),
-      resourceClaims: claims,
-      presentationContributions: fontPresentationContributions(
-        fontUses,
-        context.options.embedFonts,
-      ),
-      warnings,
+
+      compile(compileContext: CapabilityContext): CapabilityOutput {
+        const requestedWidth =
+          compileContext.layoutBox?.width ??
+          (typeof parsed.declaredWidth === "number"
+            ? positiveSize(parsed.declaredWidth, "Table.width")
+            : undefined);
+        const model = tableLayoutModel(
+          parsed,
+          requestedWidth,
+          compileContext.theme,
+          compileContext.slideNumber,
+          compileContext.options.embedFonts,
+        );
+        const { widths } = model;
+        const heights = [...model.heights];
+        const warnings = [...model.warnings];
+        const claims = [...model.claims];
+        const fontUses: FontEmbeddingUse[] = [];
+        const warningKeys = new Set(model.warningKeys);
+        const addTextResult = (
+          result: ReturnType<typeof writeTextBodyFromParagraphs>,
+          path: string,
+        ) => {
+          for (const warning of result.warnings) {
+            const key = `${path}\u0000${warning.code}\u0000${warning.message}`;
+            if (warningKeys.has(key)) continue;
+            warningKeys.add(key);
+            warnings.push({ ...warning, path });
+          }
+          claims.push(...result.resourceClaims);
+          fontUses.push(...result.fontUses.map((use) => ({ ...use, path })));
+        };
+        const targetHeight = compileContext.layoutBox?.height;
+        if (targetHeight !== undefined) {
+          const naturalHeight = heights.reduce((sum, value) => sum + value, 0);
+          if (targetHeight > naturalHeight + 0.01) {
+            const growable = rows.flatMap((row, index) =>
+              row.height === undefined ? [index] : [],
+            );
+            if (growable.length > 0) {
+              const extra = (targetHeight - naturalHeight) / growable.length;
+              for (const row of growable)
+                heights[row] = (heights[row] ?? 0) + extra;
+            } else {
+              warnings.push({
+                code: "table-height-underflow",
+                message: `Sum of fixed row heights ${naturalHeight}px is less than layout height ${targetHeight}px; build preserves row heights`,
+              });
+            }
+          } else if (targetHeight < naturalHeight - 0.01) {
+            warnings.push({
+              code: "table-height-overflow",
+              message: `Sum of row heights ${naturalHeight}px exceeds layout height ${targetHeight}px; build preserves row heights`,
+            });
+          }
+        }
+        const x = coordinate(
+          compileContext.layoutBox?.x ?? parsed.declaredX,
+          "x",
+        );
+        const y = coordinate(
+          compileContext.layoutBox?.y ?? parsed.declaredY,
+          "y",
+        );
+        const width = widths.reduce((sum, value) => sum + value, 0);
+        const height = heights.reduce((sum, value) => sum + value, 0);
+        const box: GeometryBox = { x, y, width, height };
+        const columnOffsets: number[] = [];
+        let offsetX = x;
+        for (const w of widths) {
+          columnOffsets.push(offsetX);
+          offsetX += w;
+        }
+        const rowOffsets: number[] = [];
+        let offsetY = y;
+        for (const h of heights) {
+          rowOffsets.push(offsetY);
+          offsetY += h;
+        }
+        const cellBoxes = new Map<ParsedCell, GeometryBox>();
+        for (const cell of cells) {
+          cellBoxes.set(cell, {
+            x: columnOffsets[cell.column] ?? x,
+            y: rowOffsets[cell.row] ?? y,
+            width: widths
+              .slice(cell.column, cell.column + cell.colSpan)
+              .reduce((sum, value) => sum + value, 0),
+            height: heights
+              .slice(cell.row, cell.row + cell.rowSpan)
+              .reduce((sum, value) => sum + value, 0),
+          });
+        }
+        const widthOf = (cell: ParsedCell) =>
+          widths
+            .slice(cell.column, cell.column + cell.colSpan)
+            .reduce((sum, width) => sum + width, 0);
+        const innerWidthOf = (cell: ParsedCell) =>
+          Math.max(0, widthOf(cell) - cell.padding.left - cell.padding.right);
+
+        const anchors = new Map(
+          cells.map((cell) => [`${cell.row}:${cell.column}`, cell]),
+        );
+        const owners = new Map<string, ParsedCell>();
+        for (const cell of cells) {
+          for (let row = cell.row; row < cell.row + cell.rowSpan; row += 1) {
+            for (
+              let column = cell.column;
+              column < cell.column + cell.colSpan;
+              column += 1
+            ) {
+              owners.set(`${row}:${column}`, cell);
+            }
+          }
+        }
+        const matrix = rows.map(() =>
+          Array.from({ length: columns.length }, () => ""),
+        );
+        const cellSnapshots: CompiledTableCellSnapshot[] = [];
+        const rowsXml = rows.map((_, rowIndex) => {
+          const rowCells: string[] = [];
+          for (let column = 0; column < columns.length; column += 1) {
+            const cell = anchors.get(`${rowIndex}:${column}`);
+            if (cell === undefined) {
+              const owner = owners.get(`${rowIndex}:${column}`);
+              if (owner === undefined) {
+                fail(
+                  "invalid-table-structure",
+                  "Table row contains undeclared cells",
+                );
+              }
+              const hMerge = column > owner.column ? ' hMerge="1"' : "";
+              const vMerge = rowIndex > owner.row ? ' vMerge="1"' : "";
+              const spanAttributes = [
+                ...(rowIndex === owner.row && owner.rowSpan > 1
+                  ? [`rowSpan="${owner.rowSpan}"`]
+                  : []),
+                ...(column === owner.column && owner.colSpan > 1
+                  ? [`gridSpan="${owner.colSpan}"`]
+                  : []),
+              ];
+              rowCells.push(
+                `<a:tc${hMerge}${vMerge}${spanAttributes.length === 0 ? "" : ` ${spanAttributes.join(" ")}`}>${emptyTableCellXml(owner?.textStyle?.["lang"])}</a:tc>`,
+              );
+              continue;
+            }
+            const innerHeight = Math.max(
+              0,
+              heights
+                .slice(cell.row, cell.row + cell.rowSpan)
+                .reduce((sum, value) => sum + value, 0) -
+                cell.padding.top -
+                cell.padding.bottom,
+            );
+            const contentSized = rows
+              .slice(cell.row, cell.row + cell.rowSpan)
+              .some((row) => row.height === undefined);
+            const body = textBody(
+              cell,
+              compileContext.theme,
+              innerWidthOf(cell),
+              innerHeight,
+              contentSized,
+              {
+                slideNumber: compileContext.slideNumber,
+                createId: compileContext.createTextFieldId,
+              },
+              compileContext.options.embedFonts,
+            );
+            addTextResult(body, cell.path);
+            matrix[rowIndex]![column] = body.text;
+            const spanAttributes = [
+              ...(cell.colSpan > 1 ? [`gridSpan="${cell.colSpan}"`] : []),
+              ...(cell.rowSpan > 1 ? [`rowSpan="${cell.rowSpan}"`] : []),
+            ];
+            const attributes =
+              spanAttributes.length === 0 ? "" : ` ${spanAttributes.join(" ")}`;
+            const rowFill = rows[cell.row]?.fill;
+            const fill = cell.fill ?? rowFill;
+            const properties = tableCellPropertiesXml(
+              cell.padding,
+              cell.verticalAlign,
+              cell.border,
+              fill,
+            );
+            rowCells.push(`<a:tc${attributes}>${body.xml}${properties}</a:tc>`);
+            cellSnapshots.push({
+              path: cell.path,
+              box: cellBoxes.get(cell)!,
+              padding: cell.padding,
+              verticalAlign: cell.verticalAlign,
+              ...(fill === undefined ? {} : { fill }),
+              ...(cell.border === undefined ? {} : { border: cell.border }),
+              paragraphs: cell.paragraphs,
+              ...(body.measuredLayout === undefined
+                ? {}
+                : { measuredLayout: body.measuredLayout }),
+              hasText: cell.paragraphs.some(
+                (paragraph) =>
+                  paragraph.style.list !== undefined ||
+                  paragraph.runs.some((run) => run.text.length > 0),
+              ),
+              hasOverflow: body.warnings.some(
+                (warning) => warning.code === "overset",
+              ),
+            });
+          }
+          return rowCells.join("");
+        });
+        compiledSnapshot = {
+          box,
+          widths: [...widths],
+          heights: [...heights],
+          cells: cellSnapshots,
+        };
+        for (const warning of warnings) {
+          if (warning.code === "overset") {
+            warning.message = `${warning.message} (table cell preserves original content and declared dimensions)`;
+          }
+        }
+        const name =
+          compileContext.morphName ??
+          requestedName ??
+          `Table ${compileContext.id - 1}`;
+        let escapedName: string;
+        try {
+          escapedName = xmlEscape(name);
+        } catch {
+          fail(
+            "invalid-xml-character",
+            "Table.name contains characters not allowed in XML 1.0",
+          );
+        }
+        const tableParts = [
+          ...rows.map((row, rowIndex) => ({
+            kind: "row" as const,
+            ...(row.authorId === undefined ? {} : { authorId: row.authorId }),
+            row: rowIndex,
+            box: {
+              x,
+              y: rowOffsets[rowIndex] ?? y,
+              width,
+              height: heights[rowIndex] ?? 0,
+            },
+            text: matrix[rowIndex]?.join("\t") ?? "",
+          })),
+          ...cells.map((cell) => ({
+            kind: "cell" as const,
+            ...(cell.authorId === undefined ? {} : { authorId: cell.authorId }),
+            row: cell.row,
+            column: cell.column,
+            rowSpan: cell.rowSpan,
+            colSpan: cell.colSpan,
+            box: cellBoxes.get(cell)!,
+            text: matrix[cell.row]?.[cell.column] ?? "",
+          })),
+        ];
+        const subParts: CapabilitySubPartObservation[] = rows.map(
+          (row, rowIndex) => ({
+            ...(row.authorId === undefined ? {} : { authorId: row.authorId }),
+            box: {
+              x,
+              y: rowOffsets[rowIndex] ?? y,
+              width,
+              height: heights[rowIndex] ?? 0,
+            },
+            text: matrix[rowIndex]?.join("\t") ?? "",
+            parts: cells
+              .filter((cell) => cell.row === rowIndex)
+              .map((cell) => ({
+                ...(cell.authorId === undefined
+                  ? {}
+                  : { authorId: cell.authorId }),
+                box: cellBoxes.get(cell)!,
+                text: matrix[cell.row]?.[cell.column] ?? "",
+              })),
+          }),
+        );
+        const observation: NativeTableObservation = {
+          columnWidths: [...widths],
+          rowHeights: [...heights],
+          cells: matrix,
+          merges: cells
+            .filter((cell) => cell.colSpan > 1 || cell.rowSpan > 1)
+            .map(({ row, column, rowSpan, colSpan }) => ({
+              row,
+              column,
+              rowSpan,
+              colSpan,
+            })),
+          ...(tableParts.some(({ authorId }) => authorId !== undefined)
+            ? { parts: tableParts }
+            : {}),
+        };
+        const annotations = motionAnnotations(motionProps, {
+          kind: "table",
+          name,
+          ...(authorId === undefined ? {} : { authorId }),
+          textBody: true,
+          filled: cells.some(
+            (cell) =>
+              cell.fill !== undefined || rows[cell.row]?.fill !== undefined,
+          ),
+          box,
+          rotationDegrees: 0,
+          hasBackground: cells.some(
+            (cell) =>
+              cell.fill !== undefined || rows[cell.row]?.fill !== undefined,
+          ),
+        });
+        return {
+          xml: tableFrameXml(
+            compileContext.id,
+            escapedName,
+            x,
+            y,
+            widths,
+            heights,
+            rowsXml,
+            nativeLinkXml(compileContext.nativeLink),
+          ),
+          observation: {
+            id: compileContext.id,
+            kind: "table",
+            name,
+            box,
+            table: observation,
+          },
+          parts: subParts,
+          extensions: [],
+          ...(annotations.length === 0 ? {} : { annotations }),
+          resourceClaims: claims,
+          presentationContributions: fontPresentationContributions(
+            fontUses,
+            compileContext.options.embedFonts,
+          ),
+          warnings,
+        };
+      },
+
+      preview(previewContext: ObjectPreviewContext): ObjectPreviewOutput {
+        if (compiledSnapshot === undefined) {
+          throw new CapabilityError(
+            "preview-missing-geometry",
+            "Preview requires compiled table layout snapshot",
+          );
+        }
+        const fills: string[] = [];
+        const texts: string[] = [];
+        const borders: string[] = [];
+        for (const cell of compiledSnapshot.cells) {
+          if (cell.border !== undefined && cell.border.dash !== "solid") {
+            throw new CapabilityError(
+              "preview-unsupported-border-style",
+              "Preview does not support non-solid table cell borders",
+              cell.path,
+            );
+          }
+          if (cell.hasOverflow) {
+            throw new CapabilityError(
+              "preview-table-cell-overflow",
+              "Preview does not support table cells whose text overflows cell bounds",
+              cell.path,
+            );
+          }
+          if (cell.fill !== undefined) {
+            fills.push(
+              `<rect x="${cell.box.x}" y="${cell.box.y}" width="${cell.box.width}" height="${cell.box.height}" fill="#${cell.fill.hex}" fill-opacity="${cell.fill.alpha ?? 1}" stroke="none"/>`,
+            );
+          }
+          if (cell.hasText) {
+            try {
+              const glyphs = renderTextOutlinesSvg({
+                paragraphs: cell.paragraphs,
+                box: cell.box,
+                insets: cell.padding,
+                verticalAlign: cell.verticalAlign,
+                theme: previewContext.theme,
+                measuredLayout: cell.measuredLayout,
+              });
+              if (glyphs !== "") texts.push(glyphs);
+            } catch (error) {
+              if (error instanceof CapabilityError) {
+                throw new CapabilityError(
+                  error.code,
+                  error.message,
+                  error.path ?? cell.path,
+                );
+              }
+              throw error;
+            }
+          }
+          if (cell.border !== undefined) {
+            borders.push(
+              `<rect x="${cell.box.x}" y="${cell.box.y}" width="${cell.box.width}" height="${cell.box.height}" fill="none" stroke="#${cell.border.color.hex}" stroke-opacity="${cell.border.color.alpha ?? 1}" stroke-width="${cell.border.width}"/>`,
+            );
+          }
+        }
+        return {
+          svg: `<g>${fills.join("")}${texts.join("")}${borders.join("")}</g>`,
+        };
+      },
     };
   },
 };

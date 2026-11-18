@@ -1155,4 +1155,159 @@ describe("bound object capability contract", () => {
       },
     );
   });
+
+  it("solves Block/Flex automatic minimums, baseline alignment, and absolute coordinates strictly from bound contracts without reading raw leaf props", async () => {
+    type MetricTileProps = {
+      readonly id?: string;
+      readonly spanW?: number;
+      readonly spanH?: number;
+      readonly posX?: number;
+      readonly posY?: number;
+      readonly baselineAt?: number;
+      readonly minW?: number;
+      readonly style?: Record<string, unknown>;
+    };
+    const createTileNode = (props: MetricTileProps) =>
+      new CommonNode("tile", "rp:metric-tile", props);
+    const MetricTile = (props: MetricTileProps) =>
+      createElement("rp:metric-tile", {
+        ...props,
+        [hostNodeCreator]: createTileNode,
+      });
+
+    const tileModule: BoundObjectCapabilityModule = {
+      declaration: "rp:metric-tile",
+      bind(input, context) {
+        // Deliberately omit props.width/height/x/y; supply them strictly on contract.
+        const contract = parseCapabilityLayoutContract({
+          nativeKind: "sp",
+          props: {
+            ...(input.props["posX"] === undefined
+              ? {}
+              : { x: input.props["posX"] }),
+            ...(input.props["posY"] === undefined
+              ? {}
+              : { y: input.props["posY"] }),
+            ...(input.props["spanW"] === undefined
+              ? {}
+              : { width: input.props["spanW"] }),
+            ...(input.props["spanH"] === undefined
+              ? {}
+              : { height: input.props["spanH"] }),
+            ...(input.props["style"] === undefined
+              ? {}
+              : { style: input.props["style"] }),
+          },
+          allowedStyleKeys: new Set<string>(layoutStyleKeys),
+          path: context.path,
+        });
+        const baselineAt =
+          typeof input.props["baselineAt"] === "number"
+            ? input.props["baselineAt"]
+            : undefined;
+        const minW =
+          typeof input.props["minW"] === "number" ? input.props["minW"] : 40;
+        const naturalW =
+          typeof contract.width === "number" ? contract.width : 80;
+        const naturalH =
+          typeof contract.height === "number" ? contract.height : 30;
+        return {
+          contract,
+          measureLayout() {
+            return {
+              width: naturalW,
+              height: naturalH,
+              minContentWidth: minW,
+              minContentHeight: naturalH,
+              ...(baselineAt === undefined ? {} : { baseline: baselineAt }),
+            };
+          },
+          compile(compileContext) {
+            const box = compileContext.layoutBox!;
+            const name = `Tile ${compileContext.id}`;
+            return {
+              xml: `<p:sp><p:nvSpPr><p:cNvPr id="${compileContext.id}" name="${name}"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr><p:spPr><a:xfrm><a:off x="${pxToEmu(box.x)}" y="${pxToEmu(box.y)}"/><a:ext cx="${pxToEmu(box.width)}" cy="${pxToEmu(box.height)}"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom><a:noFill/></p:spPr></p:sp>`,
+              observation: {
+                id: compileContext.id,
+                kind: "shape",
+                name,
+                geometry: "rect",
+                box,
+              },
+              extensions: [],
+            };
+          },
+        };
+      },
+    };
+
+    const customBuild = createBuilder([tileModule, boxCapability]);
+    const result = await customBuild(
+      <Deck width={400} height={240}>
+        <Slide id="contract-only-layout">
+          <Box
+            id="narrow-row"
+            style={{
+              position: "absolute",
+              left: 20,
+              top: 20,
+              width: 140,
+              display: "flex",
+              flexDirection: "row",
+              alignItems: "baseline",
+              gap: 10,
+            }}
+          >
+            {/* spanW=60 clamps minContentWidth=100 down to 60 via contract.width */}
+            <MetricTile
+              id="clamped-tile"
+              spanW={60}
+              spanH={40}
+              minW={100}
+              baselineAt={28}
+            />
+            <MetricTile
+              id="shifted-tile"
+              spanW={120}
+              spanH={24}
+              minW={80}
+              baselineAt={14}
+            />
+          </Box>
+          <MetricTile
+            id="abs-tile"
+            posX={220}
+            posY={40}
+            spanW={90}
+            spanH={50}
+            style={{ position: "absolute" }}
+          />
+        </Slide>
+      </Deck>,
+    );
+
+    const clamped = result.query
+      .getSlide("contract-only-layout")
+      .get("narrow-row")
+      .get("clamped-tile")
+      .observe().box!;
+    const shifted = result.query
+      .getSlide("contract-only-layout")
+      .get("narrow-row")
+      .get("shifted-tile")
+      .observe().box!;
+    const abs = result.query
+      .getSlide("contract-only-layout")
+      .get("abs-tile")
+      .observe().box!;
+
+    // Total width 140, gap 10 -> 130 available; clamped-tile min is min(100, 60)=60, shifted-tile min is 80 -> 60 + 80 > 130 so flexShrink keeps at least 60/80 or proportional shrink above contract clamp.
+    assert.ok(clamped.width >= 60);
+    assert.ok(shifted.width >= 70);
+    // Baseline 28 vs 14 shifts shifted-tile down by 14px.
+    assert.equal(clamped.y, 20);
+    assert.equal(shifted.y, 34);
+    // Absolute position comes from contract.x / contract.y (posX / posY).
+    assert.deepEqual(abs, { x: 220, y: 40, width: 90, height: 50 });
+  });
 });

@@ -1,19 +1,24 @@
-import Yoga, {
-  Align,
-  Direction,
-  Display,
-  Edge,
-  FlexDirection,
-  Gutter,
-  Justify,
-  MeasureMode,
-  PositionType,
-  Wrap,
-  type MeasureFunction,
-  type Node as YogaNode,
-} from "yoga-layout";
-
+import {
+  blockFlexLayoutProperties,
+  createBlockFlexLayoutSolver,
+  describeStyleValue,
+  expandedSpacing,
+  isStyleRecord,
+  paddingStyleKeys,
+  resolvePercent,
+  validateBlockFlexContainerContext,
+  validateBlockFlexContainerProperties,
+  validateBlockFlexDimensionsAndOffsets,
+  validateBlockFlexEnumValues,
+  validateBlockFlexSpacingAndBounds,
+} from "#/block-flex-layout.ts";
 import { BuildError, CapabilityError } from "#/diagnostics.ts";
+import type {
+  CustomContainerSolver,
+  LayoutSolver,
+  LayoutSolverNode,
+  LayoutSolverPort,
+} from "#/layout-protocol.ts";
 import { textStyleFrom, textStyleKeys } from "#/theme.ts";
 import type {
   BoundContainerCollaboration,
@@ -24,23 +29,21 @@ import type {
   CapabilityElement,
   CapabilityLayoutContract,
   CapabilityLayoutMeasurement,
-  RegisteredCapabilityModule,
   Diagnostic,
   GeometryBox,
   LayoutLength,
   LayoutStyle,
   NativeElementKind,
+  RegisteredCapabilityModule,
   ThemeContext,
   ThemeScope,
 } from "#/types.ts";
 
+export { paddingStyleKeys };
+
 type Dimensions = { readonly width: number; readonly height: number };
-type Edges = {
-  readonly top: number;
-  readonly right: number;
-  readonly bottom: number;
-  readonly left: number;
-};
+
+// Grid-owned layout vocabulary and solver helpers stay isolated here until Ticket 07 extracts Grid.
 type GridTrack =
   | { readonly kind: "px"; readonly value: number }
   | { readonly kind: "auto"; readonly min: number }
@@ -51,7 +54,7 @@ type GridTrack =
       readonly contentMinimum?: boolean;
     };
 type GridPlacement = {
-  readonly node: LayoutNode;
+  readonly node: LayoutSolverNode;
   readonly row: number;
   readonly column: number;
   readonly rowSpan: number;
@@ -72,25 +75,6 @@ type GridModel = {
   readonly width: number;
   readonly height: number;
 };
-type LayoutNode = {
-  readonly yoga: YogaNode;
-  readonly element?: CapabilityElement;
-  readonly style: LayoutStyle;
-  readonly theme: ThemeContext;
-  readonly path: string;
-  readonly bound?: BoundObjectCapability;
-  parent?: LayoutNode;
-  readonly children: LayoutNode[];
-  readonly escaped: LayoutNode[];
-  gridItem?: boolean;
-  /** Retain allocated box height when the grid parent has not yet recalculated Yoga child nodes. */
-  gridAreaHeight?: number;
-  /** When text needs to provide a baseline, delegated from outer object node to inner measurement leaf node. */
-  measureFunction?: MeasureFunction;
-  baselineContent?: YogaNode;
-  baseline?: number | undefined;
-  contract?: CapabilityLayoutContract | undefined;
-};
 
 export type LayoutPassResult = {
   readonly boxes: WeakMap<CapabilityElement, GeometryBox>;
@@ -100,77 +84,6 @@ export type LayoutPassResult = {
   readonly bound: WeakMap<CapabilityElement, BoundObjectCapability>;
 };
 
-export const paddingStyleKeys = [
-  "padding",
-  "paddingTop",
-  "paddingRight",
-  "paddingBottom",
-  "paddingLeft",
-] as const;
-
-const layoutProperties = [
-  "display",
-  "position",
-  "inset",
-  "left",
-  "top",
-  "right",
-  "bottom",
-  "width",
-  "height",
-  "minWidth",
-  "minHeight",
-  "maxWidth",
-  "maxHeight",
-  "margin",
-  "marginTop",
-  "marginRight",
-  "marginBottom",
-  "marginLeft",
-  "padding",
-  "paddingTop",
-  "paddingRight",
-  "paddingBottom",
-  "paddingLeft",
-  "gap",
-  "rowGap",
-  "columnGap",
-  "flexDirection",
-  "flexWrap",
-  "justifyContent",
-  "alignItems",
-  "alignSelf",
-  "alignContent",
-  "flex",
-  "flexGrow",
-  "flexShrink",
-  "flexBasis",
-  "aspectRatio",
-  "gridTemplateColumns",
-  "gridTemplateRows",
-  "gridAutoRows",
-  "gridColumn",
-  "gridRow",
-  "justifyItems",
-  "justifySelf",
-  "zIndex",
-] as const;
-
-const layoutPropertySet = new Set<string>(layoutProperties);
-
-export const layoutStyleKeys = layoutProperties.filter(
-  (key) => !(paddingStyleKeys as readonly string[]).includes(key),
-);
-const containerProperties = [
-  "flexDirection",
-  "flexWrap",
-  "justifyContent",
-  "alignItems",
-  "alignContent",
-  "gap",
-  "rowGap",
-  "columnGap",
-] as const;
 const gridContainerProperties = [
   "gridTemplateColumns",
   "gridTemplateRows",
@@ -178,25 +91,21 @@ const gridContainerProperties = [
   "justifyItems",
 ] as const;
 const gridItemProperties = ["gridColumn", "gridRow", "justifySelf"] as const;
-const alignItems = [
-  "start",
-  "end",
-  "center",
-  "stretch",
-  "flex-start",
-  "flex-end",
-  "baseline",
+const gridLayoutProperties = [
+  ...gridContainerProperties,
+  ...gridItemProperties,
 ] as const;
-const contentAlignments = [
-  "start",
-  "end",
-  "center",
-  "flex-start",
-  "flex-end",
-  "space-between",
-  "space-around",
-  "space-evenly",
+
+const layoutProperties = [
+  ...blockFlexLayoutProperties,
+  ...gridLayoutProperties,
 ] as const;
+
+const layoutPropertySet = new Set<string>(layoutProperties);
+
+export const layoutStyleKeys = layoutProperties.filter(
+  (key) => !(paddingStyleKeys as readonly string[]).includes(key),
+);
 
 function diagnostic(path: string, code: string, message: string): Diagnostic {
   return { severity: "error", path, code, message };
@@ -224,20 +133,20 @@ function deriveTheme(
   }
 }
 
-function record(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function describe(value: unknown): string {
-  if (typeof value === "string") return `"${value}"`;
-  if (typeof value === "number" || typeof value === "boolean") {
-    return String(value);
-  }
-  return typeof value;
-}
-
 function element(child: CapabilityChild): child is CapabilityElement {
   return "props" in child;
+}
+
+function identity(element: CapabilityElement): string | undefined {
+  const id = element.props["id"];
+  return typeof id === "string" && id.trim() !== "" ? id : undefined;
+}
+
+function label(element: CapabilityElement, index: number): string {
+  const type = element.type.startsWith("rp:")
+    ? element.type.slice(3)
+    : element.type;
+  return `${type}[${identity(element) ?? String(index + 1)}]`;
 }
 
 function gridTokens(input: string, path: string): string[] {
@@ -509,264 +418,10 @@ function gridAlignment(
   return "start";
 }
 
-function resolvePercent(
-  value: LayoutLength | undefined,
-  basis: number,
-): number | undefined {
-  if (typeof value !== "string") return undefined;
-  const match = /^(-?(?:\d+(?:\.\d*)?|\.\d+))%$/u.exec(value);
-  return match === null ? undefined : (Number(match[1]) * basis) / 100;
-}
-
-function identity(element: CapabilityElement): string | undefined {
-  const id = element.props["id"];
-  return typeof id === "string" && id.trim() !== "" ? id : undefined;
-}
-
-function label(element: CapabilityElement, index: number): string {
-  const type = element.type.startsWith("rp:")
-    ? element.type.slice(3)
-    : element.type;
-  return `${type}[${identity(element) ?? String(index + 1)}]`;
-}
-
-function number(value: unknown, name: string, path: string): number {
-  if (typeof value !== "number" || !Number.isFinite(value)) {
-    fail(path, "invalid-layout-style", `${name} must be a finite pixel number`);
-  }
-  return value;
-}
-
-function length(
-  value: unknown,
-  name: string,
+function validateGridEnumValues(
+  value: Record<string, unknown>,
   path: string,
-  nonNegative = true,
-): number | undefined {
-  if (value === undefined || value === "auto") return undefined;
-  if (typeof value === "string") {
-    const percent = /^(-?(?:\d+(?:\.\d*)?|\.\d+))%$/u.exec(value);
-    if (percent === null) {
-      fail(
-        path,
-        "invalid-layout-style",
-        `${name} must be a pixel number, percentage, or auto`,
-      );
-    }
-    const amount = Number(percent[1]);
-    if (!Number.isFinite(amount) || (nonNegative && amount < 0)) {
-      fail(path, "invalid-layout-style", `${name} cannot be less than 0`);
-    }
-    return undefined;
-  }
-  const amount = number(value, name, path);
-  if (nonNegative && amount < 0) {
-    fail(path, "invalid-layout-style", `${name} cannot be less than 0`);
-  }
-  return amount;
-}
-
-function spacing(value: unknown, name: string, path: string): Edges {
-  if (value === undefined) return { top: 0, right: 0, bottom: 0, left: 0 };
-  if (typeof value === "number") {
-    const amount = number(value, name, path);
-    return { top: amount, right: amount, bottom: amount, left: amount };
-  }
-  if (!Array.isArray(value) || (value.length !== 2 && value.length !== 4)) {
-    fail(
-      path,
-      "invalid-layout-style",
-      `${name} must be a number, 2-tuple, or 4-tuple`,
-    );
-  }
-  const values = value.map((item) => number(item, name, path));
-  if (values.length === 2) {
-    return {
-      top: values[0]!,
-      right: values[1]!,
-      bottom: values[0]!,
-      left: values[1]!,
-    };
-  }
-  return {
-    top: values[0]!,
-    right: values[1]!,
-    bottom: values[2]!,
-    left: values[3]!,
-  };
-}
-
-function yogaJustify(
-  value: NonNullable<LayoutStyle["justifyContent"]>,
-): Justify {
-  switch (value) {
-    case "start":
-    case "flex-start":
-      return Justify.FlexStart;
-    case "end":
-    case "flex-end":
-      return Justify.FlexEnd;
-    case "center":
-      return Justify.Center;
-    case "space-between":
-      return Justify.SpaceBetween;
-    case "space-around":
-      return Justify.SpaceAround;
-    case "space-evenly":
-      return Justify.SpaceEvenly;
-    default: {
-      const exhaustiveCheck: never = value;
-      throw new Error(`Unsupported justifyContent: ${String(exhaustiveCheck)}`);
-    }
-  }
-}
-
-function yogaAlign(
-  value: NonNullable<LayoutStyle["alignItems"]> | "auto",
-): Align {
-  switch (value) {
-    case "auto":
-      return Align.Auto;
-    case "start":
-    case "flex-start":
-      return Align.FlexStart;
-    case "end":
-    case "flex-end":
-      return Align.FlexEnd;
-    case "center":
-      return Align.Center;
-    case "stretch":
-      return Align.Stretch;
-    case "baseline":
-      return Align.Baseline;
-    default: {
-      const exhaustiveCheck: never = value;
-      throw new Error(`Unsupported alignItems: ${String(exhaustiveCheck)}`);
-    }
-  }
-}
-
-function yogaAlignContent(
-  value: NonNullable<LayoutStyle["alignContent"]>,
-): Align {
-  switch (value) {
-    case "start":
-    case "flex-start":
-      return Align.FlexStart;
-    case "end":
-    case "flex-end":
-      return Align.FlexEnd;
-    case "center":
-      return Align.Center;
-    case "space-between":
-      return Align.SpaceBetween;
-    case "space-around":
-      return Align.SpaceAround;
-    case "space-evenly":
-      return Align.SpaceEvenly;
-    case "stretch":
-      return Align.Stretch;
-    default: {
-      const exhaustiveCheck: never = value;
-      throw new Error(`Unsupported alignContent: ${String(exhaustiveCheck)}`);
-    }
-  }
-}
-
-function rowDirection(style: LayoutStyle): boolean {
-  const direction = style.flexDirection ?? "row";
-  return direction === "row" || direction === "row-reverse";
-}
-
-function reverseDirection(style: LayoutStyle): boolean {
-  return (style.flexDirection ?? "row").endsWith("-reverse");
-}
-
-function readStyle(
-  value: unknown,
-  path: string,
-  isContainer: boolean,
-  allowsPadding = isContainer,
-  allowedPresentation: ReadonlySet<string> = new Set(),
-): LayoutStyle {
-  if (value === undefined) return {};
-  if (!record(value)) {
-    fail(path, "invalid-layout-style", "style must be an object");
-  }
-  const unknown = Object.keys(value).find(
-    (key) => !layoutPropertySet.has(key) && !allowedPresentation.has(key),
-  );
-  if (unknown !== undefined) {
-    fail(
-      path,
-      "unsupported-layout-style",
-      `style contains unsupported property ${unknown}`,
-    );
-  }
-  if (
-    !isContainer &&
-    ((value["display"] !== undefined &&
-      value["display"] !== "none" &&
-      value["display"] !== "block") ||
-      Object.keys(value).some((key) =>
-        containerProperties.includes(
-          key as (typeof containerProperties)[number],
-        ),
-      ))
-  ) {
-    fail(
-      path,
-      "invalid-layout-context",
-      "Container-only styles cannot be used on objects without layout children",
-    );
-  }
-  const display = value["display"];
-  if (
-    display !== undefined &&
-    display !== "block" &&
-    display !== "flex" &&
-    display !== "grid" &&
-    display !== "none"
-  ) {
-    fail(
-      path,
-      "unsupported-layout-value",
-      "display only supports block, flex, grid, or none",
-    );
-  }
-  const resolvedDisplay = display ?? "block";
-  if (resolvedDisplay === "grid" && value["alignItems"] === "baseline") {
-    fail(
-      path,
-      "unsupported-grid-alignment",
-      "Grid containers do not support baseline alignment",
-    );
-  }
-  for (const key of containerProperties) {
-    if (
-      value[key] !== undefined &&
-      !(key === "alignItems" && resolvedDisplay === "grid") &&
-      !(key === "gap" && resolvedDisplay === "grid") &&
-      !(key === "rowGap" && resolvedDisplay === "grid") &&
-      !(key === "columnGap" && resolvedDisplay === "grid") &&
-      resolvedDisplay !== "flex"
-    ) {
-      fail(
-        path,
-        "invalid-layout-context",
-        `${key} is only applicable to display: "flex"${key === "alignItems" ? " or grid" : ""} containers`,
-      );
-    }
-  }
-  for (const key of gridContainerProperties) {
-    if (value[key] !== undefined && resolvedDisplay !== "grid") {
-      fail(
-        path,
-        "invalid-layout-context",
-        `${key} is only applicable to display: "grid" containers`,
-      );
-    }
-  }
+): void {
   const allowedValue = (
     name: string,
     candidate: unknown,
@@ -779,29 +434,10 @@ function readStyle(
       fail(
         path,
         "unsupported-layout-value",
-        `${name} does not support value ${describe(candidate)}`,
+        `${name} does not support value ${describeStyleValue(candidate)}`,
       );
     }
   };
-  allowedValue("flexDirection", value["flexDirection"], [
-    "row",
-    "column",
-    "row-reverse",
-    "column-reverse",
-  ]);
-  allowedValue("flexWrap", value["flexWrap"], ["nowrap", "wrap"]);
-  allowedValue("justifyContent", value["justifyContent"], contentAlignments);
-  allowedValue("alignItems", value["alignItems"], alignItems);
-  allowedValue("alignSelf", value["alignSelf"], ["auto", ...alignItems]);
-  allowedValue("alignContent", value["alignContent"], [
-    ...contentAlignments,
-    "stretch",
-  ]);
-  allowedValue("position", value["position"], [
-    "static",
-    "relative",
-    "absolute",
-  ]);
   allowedValue("justifyItems", value["justifyItems"], [
     "start",
     "end",
@@ -819,65 +455,12 @@ function readStyle(
     "flex-start",
     "flex-end",
   ]);
-  const position =
-    (value["position"] as LayoutStyle["position"] | undefined) ?? "static";
-  if (
-    position === "static" &&
-    ["inset", "left", "top", "right", "bottom"].some(
-      (key) => value[key] !== undefined,
-    )
-  ) {
-    fail(
-      path,
-      "invalid-layout-context",
-      "Position offsets are only applicable to relative or absolute elements",
-    );
-  }
-  for (const key of ["flex", "flexGrow", "flexShrink"] as const) {
-    const candidate = value[key];
-    if (candidate !== undefined && number(candidate, key, path) < 0) {
-      fail(path, "invalid-layout-style", `${key} cannot be less than 0`);
-    }
-  }
-  for (const key of ["gap", "rowGap", "columnGap"] as const) {
-    const candidate = value[key];
-    if (candidate !== undefined && number(candidate, key, path) < 0) {
-      fail(path, "invalid-layout-style", `${key} cannot be less than 0`);
-    }
-  }
-  for (const key of [
-    "width",
-    "height",
-    "minWidth",
-    "minHeight",
-    "maxWidth",
-    "maxHeight",
-    "flexBasis",
-  ] as const) {
-    length(value[key], key, path);
-  }
-  const ratio = value["aspectRatio"];
-  if (
-    ratio !== undefined &&
-    (typeof ratio !== "number" || !Number.isFinite(ratio) || ratio <= 0)
-  ) {
-    fail(
-      path,
-      "invalid-layout-style",
-      "aspectRatio must be a finite positive number",
-    );
-  }
-  const zIndex = value["zIndex"];
-  if (
-    zIndex !== undefined &&
-    (typeof zIndex !== "number" || !Number.isFinite(zIndex))
-  ) {
-    fail(path, "invalid-layout-style", "zIndex must be a finite number");
-  }
-  for (const key of ["inset", "left", "top", "right", "bottom"] as const) {
-    const candidate = value[key];
-    if (candidate !== undefined) length(candidate, key, path, false);
-  }
+}
+
+function validateGridValueTypes(
+  value: Record<string, unknown>,
+  path: string,
+): void {
   for (const key of [
     "gridTemplateColumns",
     "gridTemplateRows",
@@ -902,913 +485,57 @@ function readStyle(
       );
     }
   }
-  const padding = value["padding"];
-  if (padding !== undefined) {
-    const values = spacing(padding, "padding", path);
-    if (Object.values(values).some((item) => item < 0)) {
-      fail(path, "invalid-layout-style", "padding cannot be less than 0");
-    }
-  }
-  for (const key of [
-    "paddingTop",
-    "paddingRight",
-    "paddingBottom",
-    "paddingLeft",
-  ] as const) {
-    const candidate = value[key];
-    if (candidate !== undefined && number(candidate, key, path) < 0) {
-      fail(path, "invalid-layout-style", `${key} cannot be less than 0`);
-    }
-  }
-  for (const key of [
-    "marginTop",
-    "marginRight",
-    "marginBottom",
-    "marginLeft",
-  ] as const) {
-    if (value[key] !== undefined) number(value[key], key, path);
-  }
-  if (value["margin"] !== undefined) spacing(value["margin"], "margin", path);
-  if (
-    !allowsPadding &&
-    [
-      "padding",
-      "paddingTop",
-      "paddingRight",
-      "paddingBottom",
-      "paddingLeft",
-    ].some((key) => value[key] !== undefined)
-  ) {
-    fail(
-      path,
-      "invalid-layout-context",
-      "padding is only applicable to layout containers",
-    );
-  }
-  const minWidth = length(value["minWidth"], "minWidth", path);
-  const maxWidth = length(value["maxWidth"], "maxWidth", path);
-  const minHeight = length(value["minHeight"], "minHeight", path);
-  const maxHeight = length(value["maxHeight"], "maxHeight", path);
-  if (
-    typeof value["minWidth"] === "number" &&
-    typeof value["maxWidth"] === "number" &&
-    minWidth !== undefined &&
-    maxWidth !== undefined &&
-    minWidth > maxWidth
-  ) {
-    fail(
-      path,
-      "invalid-layout-style",
-      "minWidth cannot be greater than maxWidth",
-    );
-  }
-  if (
-    typeof value["minHeight"] === "number" &&
-    typeof value["maxHeight"] === "number" &&
-    minHeight !== undefined &&
-    maxHeight !== undefined &&
-    minHeight > maxHeight
-  ) {
-    fail(
-      path,
-      "invalid-layout-style",
-      "minHeight cannot be greater than maxHeight",
-    );
-  }
-  return value;
 }
 
-/**
- * Parses and validates host props into a CapabilityLayoutContract for object capabilities.
- */
-export function parseCapabilityLayoutContract(options: {
-  readonly nativeKind: NativeElementKind;
-  readonly props: Readonly<Record<string, unknown>>;
-  readonly allowedStyleKeys: ReadonlySet<string>;
-  readonly allowPadding?: boolean;
-  readonly isContainer?: boolean;
-  readonly path?: string;
-}): CapabilityLayoutContract {
-  const {
-    nativeKind,
-    props,
-    allowedStyleKeys,
-    allowPadding = false,
-    isContainer = false,
-  } = options;
-  const path = options.path ?? "style";
-  const rawStyle = props["style"];
-  if (rawStyle !== undefined) {
-    if (!record(rawStyle)) {
-      throw new CapabilityError(
-        "invalid-style",
-        "style must be an object",
-        options.path,
-      );
-    }
-    if (!allowPadding) {
-      const paddingKey = (paddingStyleKeys as readonly string[]).find(
-        (key) => rawStyle[key] !== undefined,
-      );
-      if (paddingKey !== undefined) {
-        throw new CapabilityError(
-          "invalid-layout-context",
-          "padding is only applicable to layout containers",
-          options.path,
-        );
-      }
-    }
-    const unknown = Object.keys(rawStyle).find(
-      (key) => rawStyle[key] !== undefined && !allowedStyleKeys.has(key),
-    );
-    if (unknown !== undefined) {
-      throw new CapabilityError(
-        "unknown-style",
-        `style contains unsupported property ${unknown}`,
-        options.path,
-      );
-    }
-  }
-
-  const layoutStyle = readStyle(
-    rawStyle,
-    path,
-    isContainer,
-    allowPadding,
-    allowedStyleKeys,
-  );
-
-  let padding:
-    | {
-        readonly top: number;
-        readonly right: number;
-        readonly bottom: number;
-        readonly left: number;
-      }
-    | undefined;
-  if (allowPadding && rawStyle !== undefined) {
-    const hasPadding = (paddingStyleKeys as readonly string[]).some(
-      (key) => rawStyle[key] !== undefined,
-    );
-    if (hasPadding) {
-      const edges = expandedSpacing(layoutStyle, "padding");
-      padding = {
-        top: edges.top,
-        right: edges.right,
-        bottom: edges.bottom,
-        left: edges.left,
-      };
-    }
-  }
-
-  const x = typeof props["x"] === "number" ? props["x"] : undefined;
-  const y = typeof props["y"] === "number" ? props["y"] : undefined;
-  const styleWidth = rawStyle !== undefined ? rawStyle["width"] : undefined;
-  const styleHeight = rawStyle !== undefined ? rawStyle["height"] : undefined;
-  const width = (styleWidth ?? props["width"]) as
-    | number
-    | `${number}%`
-    | "auto"
-    | undefined;
-  const height = (styleHeight ?? props["height"]) as
-    | number
-    | `${number}%`
-    | "auto"
-    | undefined;
-
-  return {
-    nativeKind,
-    ...(x === undefined ? {} : { x }),
-    ...(y === undefined ? {} : { y }),
-    ...(width === undefined ? {} : { width }),
-    ...(height === undefined ? {} : { height }),
-    layoutStyle,
-    ...(padding === undefined ? {} : { padding }),
-  };
-}
-
-function expandedSpacing(
+function validateGridItemStyle(
   style: LayoutStyle,
-  kind: "margin" | "padding",
-): Edges {
-  const base = spacing(style[kind], kind, "layout");
-  if (kind === "margin") {
-    return {
-      top: style.marginTop ?? base.top,
-      right: style.marginRight ?? base.right,
-      bottom: style.marginBottom ?? base.bottom,
-      left: style.marginLeft ?? base.left,
-    };
-  }
-  return {
-    top: style.paddingTop ?? base.top,
-    right: style.paddingRight ?? base.right,
-    bottom: style.paddingBottom ?? base.bottom,
-    left: style.paddingLeft ?? base.left,
-  };
-}
-
-function styleLength(value: LayoutLength | undefined): number | undefined {
-  return typeof value === "number" ? value : undefined;
-}
-
-function setLength(
-  yoga: YogaNode,
-  property:
-    | "width"
-    | "height"
-    | "minWidth"
-    | "minHeight"
-    | "maxWidth"
-    | "maxHeight"
-    | "flexBasis",
-  value: LayoutLength | undefined,
+  parentStyle: LayoutStyle,
+  path: string,
 ): void {
-  const setters = {
-    width: ["setWidth", "setWidthPercent"],
-    height: ["setHeight", "setHeightPercent"],
-    minWidth: ["setMinWidth", "setMinWidthPercent"],
-    minHeight: ["setMinHeight", "setMinHeightPercent"],
-    maxWidth: ["setMaxWidth", "setMaxWidthPercent"],
-    maxHeight: ["setMaxHeight", "setMaxHeightPercent"],
-    flexBasis: ["setFlexBasis", "setFlexBasisPercent"],
-  } as const;
-  const [pointSetter, percentSetter] = setters[property];
-  const percent =
-    typeof value === "string" ? /^(\d+(?:\.\d*)?|\.\d+)%$/u.exec(value) : null;
-  if (percent !== null) {
-    yoga[percentSetter](Number(percent[1]));
-    return;
-  }
-  if (typeof value === "number") {
-    yoga[pointSetter](value);
-    return;
-  }
-  if (value === "auto") {
-    const autoSetter = {
-      width: "setWidthAuto",
-      height: "setHeightAuto",
-      minWidth: "setMinWidth",
-      minHeight: "setMinHeight",
-      maxWidth: "setMaxWidth",
-      maxHeight: "setMaxHeight",
-      flexBasis: "setFlexBasisAuto",
-    }[property] as keyof YogaNode;
-    const setter = yoga[autoSetter] as ((amount?: number) => void) | undefined;
-    if (setter !== undefined) setter.call(yoga);
-  }
-}
-
-function setPosition(
-  yoga: YogaNode,
-  edge: Edge,
-  value: LayoutLength | undefined,
-): void {
-  if (value === undefined || value === "auto") return;
-  yoga.setPosition(edge, value);
-}
-
-function objectModule(
-  module: RegisteredCapabilityModule | undefined,
-): module is BoundObjectCapabilityModule {
-  return module !== undefined && "bind" in module;
-}
-
-/** Resolve Box, block, and flex/grid layouts before capability modules write native objects. */
-export class LayoutPass {
-  readonly #modules: ReadonlyMap<string, RegisteredCapabilityModule>;
-  readonly #dimensions: Dimensions;
-  readonly #slideNumber: number;
-  readonly #options: BuildOptions;
-  readonly #config = Yoga.Config.create();
-  readonly #boxes = new WeakMap<CapabilityElement, GeometryBox>();
-  readonly #themes = new WeakMap<CapabilityElement, ThemeContext>();
-  readonly #hidden = new WeakSet<CapabilityElement>();
-  readonly #boundObjects = new WeakMap<
-    CapabilityElement,
-    BoundObjectCapability
-  >();
-  readonly #warnings: Diagnostic[] = [];
-  readonly #warningKeys = new Set<string>();
-
-  constructor(
-    modules: ReadonlyMap<string, RegisteredCapabilityModule>,
-    dimensions: Dimensions,
-    slideNumber = 1,
-    options: BuildOptions = {},
+  if (
+    parentStyle.display === "grid" &&
+    style.position === "absolute" &&
+    (style.alignSelf !== undefined ||
+      style.justifySelf !== undefined ||
+      style.gridColumn !== undefined ||
+      style.gridRow !== undefined)
   ) {
-    this.#modules = modules;
-    this.#dimensions = dimensions;
-    this.#slideNumber = slideNumber;
-    this.#options = options;
-    this.#config.setPointScaleFactor(0);
-  }
-
-  run(
-    children: readonly CapabilityChild[],
-    parentPath: string,
-    theme: ThemeContext,
-    slideStyle?: unknown,
-  ): LayoutPassResult {
-    const rootYoga = Yoga.Node.create(this.#config);
-    const rootStyle = readStyle(
-      slideStyle,
-      parentPath,
-      true,
-      true,
-      textStyleKeys,
-    );
-    const root: LayoutNode = {
-      yoga: rootYoga,
-      style: rootStyle,
-      theme,
-      path: parentPath,
-      children: [],
-      escaped: [],
-    };
-    rootYoga.setWidth(this.#dimensions.width);
-    rootYoga.setHeight(this.#dimensions.height);
-    rootYoga.setPositionType(PositionType.Relative);
-    this.#applyStyle(rootYoga, rootStyle, { display: "block" }, true, true);
-    try {
-      this.#appendChildren(
-        children,
-        parentPath,
-        root,
-        slideStyle !== undefined,
-        theme,
-      );
-      this.#prepareTextBaselines(root);
-      // Fixed-size parent nodes may skip creating a new measure tree; solve initially, then mark measurement leaves dirty and recalculate.
-      rootYoga.calculateLayout(
-        this.#dimensions.width,
-        this.#dimensions.height,
-        Direction.LTR,
-      );
-      for (let pass = 0; pass < 3; pass += 1) {
-        this.#resolveGridTree(root);
-        rootYoga.calculateLayout(
-          this.#dimensions.width,
-          this.#dimensions.height,
-          Direction.LTR,
-        );
-      }
-      if (this.#markBaselineMeasurementsDirty(root)) {
-        rootYoga.calculateLayout(
-          this.#dimensions.width,
-          this.#dimensions.height,
-          Direction.LTR,
-        );
-      }
-      if (this.#applyAutomaticMinimums(root)) {
-        rootYoga.calculateLayout(
-          this.#dimensions.width,
-          this.#dimensions.height,
-          Direction.LTR,
-        );
-        this.#resolveGridTree(root);
-        rootYoga.calculateLayout(
-          this.#dimensions.width,
-          this.#dimensions.height,
-          Direction.LTR,
-        );
-      }
-      this.#commit(root, { x: 0, y: 0 });
-    } finally {
-      rootYoga.freeRecursive();
-      this.#freeEscaped(root);
-      this.#config.free();
-    }
-    return {
-      boxes: this.#boxes,
-      themes: this.#themes,
-      hidden: this.#hidden,
-      warnings: this.#warnings,
-      bound: this.#boundObjects,
-    };
-  }
-
-  #bindCapability(
-    child: CapabilityElement,
-    childPath: string,
-    themeContext: ThemeContext,
-    module: BoundObjectCapabilityModule,
-  ): BoundObjectCapability {
-    let bound = this.#boundObjects.get(child);
-    if (bound === undefined) {
-      try {
-        bound = module.bind(child, {
-          path: childPath,
-          theme: themeContext,
-          options: this.#options,
-          slideNumber: this.#slideNumber,
-        });
-        this.#boundObjects.set(child, bound);
-      } catch (error) {
-        if (error instanceof BuildError) throw error;
-        const code =
-          error instanceof CapabilityError
-            ? error.code
-            : "invalid-capability-input";
-        const message = error instanceof Error ? error.message : String(error);
-        const targetPath =
-          error instanceof CapabilityError && error.path !== undefined
-            ? error.path.startsWith(childPath)
-              ? error.path
-              : `${childPath}/${error.path}`
-            : childPath;
-        return fail(targetPath, code, message);
-      }
-    }
-    return bound;
-  }
-
-  // Transparent Groups are not in the layout tree, so theme context must be passed separately along the declaration tree.
-  #appendChildren(
-    children: readonly CapabilityChild[],
-    parentPath: string,
-    parent: LayoutNode,
-    includeObjects: boolean,
-    themeContext: ThemeContext,
-  ): void {
-    children.forEach((child, index) => {
-      if (!element(child)) return;
-      const childPath = `${parentPath}/${label(child, index)}`;
-      if (parent.style.display === "none") {
-        this.#markHidden(child);
-        return;
-      }
-      if (child.type === "rp:group") {
-        const module = this.#modules.get(child.type);
-        if (!objectModule(module)) {
-          fail(
-            childPath,
-            "missing-capability",
-            "rp:group capability is required",
-          );
-        }
-        const bound = this.#bindCapability(
-          child,
-          childPath,
-          themeContext,
-          module,
-        );
-        const contract = bound.contract;
-        const childStyle = contract.layoutStyle;
-        if (childStyle.display === "none") {
-          this.#markHidden(child);
-          return;
-        }
-        this.#validateItemStyle(childStyle, parent, childPath);
-        if (!includeObjects) {
-          // Group text defaults apply only to descendants, not indicating it should become a layout item.
-          const optsIntoLayout = Object.keys(childStyle).some(
-            (key) => key !== "zIndex" && !textStyleKeys.has(key),
-          );
-          if (!optsIntoLayout) {
-            const groupTheme = deriveTheme(
-              themeContext,
-              child.props["theme"] as ThemeScope | undefined,
-              child.props["style"],
-              childPath,
-            );
-            this.#themes.set(child, groupTheme);
-            this.#appendChildren(
-              child.children,
-              childPath,
-              parent,
-              false,
-              groupTheme,
-            );
-            return;
-          }
-        }
-        const built = this.#buildGroup(
-          child,
-          childPath,
-          parent,
-          themeContext,
-          contract,
-          bound,
-        );
-        this.#appendLayoutChild(parent, built);
-        return;
-      }
-      const module = this.#modules.get(child.type);
-      if (module !== undefined && "compileDeclaration" in module) {
-        this.#themes.set(child, themeContext);
-        // An owned subtree belongs to its capability and never becomes layout content.
-        if (module.children === "owned") return;
-        this.#appendChildren(
-          child.children,
-          childPath,
-          parent,
-          includeObjects,
-          themeContext,
-        );
-        return;
-      }
-      if (objectModule(module)) {
-        const bound = this.#bindCapability(
-          child,
-          childPath,
-          themeContext,
-          module,
-        );
-        const contract = bound.contract;
-        if (contract.layoutStyle.display === "none") {
-          this.#markHidden(child);
-          return;
-        }
-        this.#validateItemStyle(contract.layoutStyle, parent, childPath);
-        if (bound.container !== undefined) {
-          const built = this.#buildContainer(
-            child,
-            childPath,
-            parent,
-            themeContext,
-            contract,
-            bound,
-            bound.container,
-          );
-          this.#appendLayoutChild(parent, built);
-          return;
-        }
-        const built = this.#buildObject(
-          child,
-          childPath,
-          parent,
-          contract.layoutStyle,
-          themeContext,
-          bound,
-          contract,
-        );
-        if (!includeObjects) {
-          if (
-            built !== undefined &&
-            this.#requiresLooseLayout(contract.layoutStyle)
-          ) {
-            this.#positionLooseGeometry(built);
-            this.#appendLayoutChild(parent, built);
-          }
-          return;
-        }
-        if (built !== undefined) {
-          this.#appendLayoutChild(parent, built);
-        }
-        return;
-      }
-    });
-  }
-
-  #validateItemStyle(
-    style: LayoutStyle,
-    parent: LayoutNode,
-    path: string,
-  ): void {
-    if (
-      parent.style.display === "grid" &&
-      style.position === "absolute" &&
-      (style.alignSelf !== undefined ||
-        style.justifySelf !== undefined ||
-        style.gridColumn !== undefined ||
-        style.gridRow !== undefined)
-    ) {
-      fail(
-        path,
-        "unsupported-grid-positioning",
-        "Absolutely positioned grid items currently do not support grid placement or self alignment",
-      );
-    }
-    if (
-      parent.style.display === "grid" &&
-      style.position !== "absolute" &&
-      style.alignSelf === "baseline"
-    ) {
-      fail(
-        path,
-        "unsupported-grid-alignment",
-        "Grid items do not support baseline alignment",
-      );
-    }
-  }
-
-  #appendLayoutChild(parent: LayoutNode, child: LayoutNode): void {
-    child.parent = parent;
-    if (
-      child.style.position === "absolute" &&
-      this.#containingBlock(parent) !== parent
-    ) {
-      this.#containingBlock(parent).escaped.push(child);
-      return;
-    }
-    this.#markGridItem(child, parent);
-    parent.yoga.insertChild(child.yoga, parent.children.length);
-    parent.children.push(child);
-  }
-
-  #containingBlock(parent: LayoutNode): LayoutNode {
-    let current: LayoutNode | undefined = parent;
-    while (current !== undefined) {
-      if (current.element === undefined) return current;
-      if (
-        current.style.position === "relative" ||
-        current.style.position === "absolute"
-      ) {
-        return current;
-      }
-      current = current.parent;
-    }
-    return fail(
-      parent.path,
-      "layout-unavailable",
-      "Positioned object is not within slide canvas",
-    );
-  }
-
-  #placeEscaped(node: LayoutNode, containingBlock: GeometryBox): void {
-    const container = Yoga.Node.create(this.#config);
-    container.setWidth(containingBlock.width);
-    container.setHeight(containingBlock.height);
-    container.setPositionType(PositionType.Relative);
-    container.insertChild(node.yoga, 0);
-    try {
-      this.#markBaselineMeasurementsDirty(node);
-      for (let pass = 0; pass < 3; pass += 1) {
-        container.calculateLayout(
-          containingBlock.width,
-          containingBlock.height,
-          Direction.LTR,
-        );
-        this.#resolveGridTree(node);
-      }
-      if (this.#applyAutomaticMinimums(node)) {
-        container.calculateLayout(
-          containingBlock.width,
-          containingBlock.height,
-          Direction.LTR,
-        );
-        this.#resolveGridTree(node);
-        container.calculateLayout(
-          containingBlock.width,
-          containingBlock.height,
-          Direction.LTR,
-        );
-      }
-      container.calculateLayout(
-        containingBlock.width,
-        containingBlock.height,
-        Direction.LTR,
-      );
-      this.#commit(node, { x: containingBlock.x, y: containingBlock.y });
-    } finally {
-      container.removeChild(node.yoga);
-      container.free();
-    }
-  }
-
-  #freeEscaped(node: LayoutNode): void {
-    for (const child of node.escaped) {
-      child.yoga.freeRecursive();
-      this.#freeEscaped(child);
-    }
-    for (const child of node.children) this.#freeEscaped(child);
-  }
-
-  #buildContainer(
-    input: CapabilityElement,
-    path: string,
-    parent: LayoutNode,
-    themeContext: ThemeContext,
-    contract: CapabilityLayoutContract,
-    bound: BoundObjectCapability,
-    container: BoundContainerCollaboration,
-  ): LayoutNode {
-    const style = contract.layoutStyle;
-    const theme = container.theme ?? themeContext;
-    const yoga = Yoga.Node.create(this.#config);
-    const node: LayoutNode = {
-      yoga,
-      element: input,
-      style,
-      theme,
+    fail(
       path,
-      bound,
-      children: [],
-      parent,
-      escaped: [],
-      contract,
-    };
-    this.#themes.set(input, theme);
-    this.#applyStyle(yoga, style, parent.style, false, true);
-    this.#appendChildren(container.children, path, node, true, theme);
-    return node;
+      "unsupported-grid-positioning",
+      "Absolutely positioned grid items currently do not support grid placement or self alignment",
+    );
   }
-
-  #buildGroup(
-    input: CapabilityElement,
-    path: string,
-    parent: LayoutNode,
-    themeContext: ThemeContext,
-    contract: CapabilityLayoutContract,
-    bound: BoundObjectCapability,
-  ): LayoutNode {
-    const rawStyle = input.props["style"];
-    const style = contract.layoutStyle;
-    const theme = deriveTheme(
-      themeContext,
-      input.props["theme"] as ThemeScope | undefined,
-      rawStyle,
+  if (
+    parentStyle.display === "grid" &&
+    style.position !== "absolute" &&
+    style.alignSelf === "baseline"
+  ) {
+    fail(
       path,
-    );
-    const yoga = Yoga.Node.create(this.#config);
-    const node: LayoutNode = {
-      yoga,
-      element: input,
-      style,
-      theme,
-      path,
-      bound,
-      children: [],
-      parent,
-      escaped: [],
-      contract,
-    };
-    this.#themes.set(input, theme);
-    this.#applyStyle(yoga, style, parent.style, false, true);
-    this.#appendChildren(input.children, path, node, true, theme);
-    return node;
-  }
-
-  #markHidden(child: CapabilityElement): void {
-    this.#hidden.add(child);
-    for (const descendant of child.children) {
-      if (element(descendant)) this.#markHidden(descendant);
-    }
-  }
-
-  #markGridItem(child: LayoutNode, parent: LayoutNode): void {
-    if (
-      parent.style.display !== "grid" ||
-      child.style.position === "absolute"
-    ) {
-      return;
-    }
-    child.gridItem = true;
-    child.yoga.setPositionType(PositionType.Absolute);
-  }
-
-  #requiresLooseLayout(style: LayoutStyle): boolean {
-    return (
-      style.position === "absolute" ||
-      style.position === "relative" ||
-      style.aspectRatio !== undefined ||
-      style.width !== undefined ||
-      style.height !== undefined ||
-      style.minWidth !== undefined ||
-      style.minHeight !== undefined ||
-      style.maxWidth !== undefined ||
-      style.maxHeight !== undefined
+      "unsupported-grid-alignment",
+      "Grid items do not support baseline alignment",
     );
   }
+}
 
-  #buildObject(
-    input: CapabilityElement,
-    path: string,
-    parent: LayoutNode,
-    style: LayoutStyle,
-    themeContext: ThemeContext,
-    bound: BoundObjectCapability,
-    contract: CapabilityLayoutContract,
-  ): LayoutNode {
-    const yoga = Yoga.Node.create(this.#config);
-    const node: LayoutNode = {
-      yoga,
-      element: input,
-      style,
-      theme: themeContext,
-      path,
-      bound,
-      children: [],
-      parent,
-      escaped: [],
-      contract,
-    };
-    this.#themes.set(input, themeContext);
-    this.#applyStyle(yoga, style, parent.style, false, false);
-    if (contract.padding !== undefined) {
-      yoga.setPadding(Edge.Top, contract.padding.top);
-      yoga.setPadding(Edge.Right, contract.padding.right);
-      yoga.setPadding(Edge.Bottom, contract.padding.bottom);
-      yoga.setPadding(Edge.Left, contract.padding.left);
-    }
-    this.#setDeclaredSize(node);
-    if (style.position === "absolute") {
-      const x = contract.x;
-      const y = contract.y;
-      if (
-        style.left === undefined &&
-        style.inset === undefined &&
-        style.right === undefined &&
-        x !== undefined
-      ) {
-        yoga.setPosition(Edge.Left, x);
-      }
-      if (
-        style.top === undefined &&
-        style.inset === undefined &&
-        style.bottom === undefined &&
-        y !== undefined
-      ) {
-        yoga.setPosition(Edge.Top, y);
-      }
-    }
-    if (bound.measureLayout !== undefined) {
-      const measureFunction: MeasureFunction = (width, widthMode) => {
-        const measured = this.#measure(
-          node,
-          widthMode === MeasureMode.Undefined
-            ? {}
-            : {
-                availableWidth: width,
-                widthMode:
-                  widthMode === MeasureMode.Exactly ? "exactly" : "at-most",
-              },
-        );
-        return {
-          width:
-            widthMode === MeasureMode.Exactly ? width : (measured?.width ?? 0),
-          height: measured?.height ?? 0,
-        };
-      };
-      node.measureFunction = measureFunction;
-      yoga.setMeasureFunc(measureFunction);
-    }
-    return node;
-  }
+function createGridContainerSolver(
+  warnOnce: (path: string, code: string, message: string) => void,
+): CustomContainerSolver {
+  // Retain allocated box height when a nested grid parent has not yet recalculated Yoga child nodes.
+  const gridAreaHeights = new WeakMap<LayoutSolverNode, number>();
 
-  #positionLooseGeometry(node: LayoutNode): void {
-    const element = node.element;
-    if (element === undefined) return;
-    const x = node.contract?.x ?? 0;
-    const y = node.contract?.y ?? 0;
-    if (node.style.position === "absolute") {
-      if (
-        node.style.left === undefined &&
-        node.style.inset === undefined &&
-        node.style.right === undefined
-      )
-        node.yoga.setPosition(Edge.Left, x);
-      if (
-        node.style.top === undefined &&
-        node.style.inset === undefined &&
-        node.style.bottom === undefined
-      )
-        node.yoga.setPosition(Edge.Top, y);
-      return;
-    }
-    const offset = (
-      start: LayoutLength | undefined,
-      end: LayoutLength | undefined,
-      basis: number,
-    ) => {
-      if (typeof start === "number") return start;
-      if (typeof start === "string" && start.endsWith("%")) {
-        return (Number(start.slice(0, -1)) * basis) / 100;
-      }
-      if (typeof end === "number") return -end;
-      if (typeof end === "string" && end.endsWith("%")) {
-        return -(Number(end.slice(0, -1)) * basis) / 100;
-      }
-      return 0;
-    };
-    const left = offset(
-      node.style.left ?? node.style.inset,
-      node.style.right ?? node.style.inset,
-      this.#dimensions.width,
-    );
-    const top = offset(
-      node.style.top ?? node.style.inset,
-      node.style.bottom ?? node.style.inset,
-      this.#dimensions.height,
-    );
-    node.yoga.setPositionType(PositionType.Absolute);
-    node.yoga.setPositionAuto(Edge.Right);
-    node.yoga.setPositionAuto(Edge.Bottom);
-    node.yoga.setPosition(Edge.Left, x + left);
-    node.yoga.setPosition(Edge.Top, y + top);
-    node.yoga.setAlwaysFormsContainingBlock(true);
-  }
-
-  #gridPlacements(
-    node: LayoutNode,
+  const computePlacements = (
+    node: LayoutSolverNode,
     explicitColumns: readonly GridTrack[],
   ): {
     readonly placements: readonly GridPlacement[];
     readonly columns: GridTrack[];
-  } {
+  } => {
     const columns = [...explicitColumns];
-    const children = node.children.filter((child) => child.gridItem === true);
+    const children = node.children.filter(
+      (child) => child.style.position !== "absolute",
+    );
     const occupied = new Set<string>();
     const placements: GridPlacement[] = [];
     let cursorRow = 0;
@@ -1902,21 +629,14 @@ export class LayoutPass {
       }
     }
     return { placements, columns };
-  }
+  };
 
-  #naturalSize(node: LayoutNode, width?: number): Dimensions {
-    node.yoga.calculateLayout(width, undefined, Direction.LTR);
-    return {
-      width: node.yoga.getComputedWidth(),
-      height: node.yoga.getComputedHeight(),
-    };
-  }
-
-  #gridModel(
-    node: LayoutNode,
+  const buildGridModel = (
+    node: LayoutSolverNode,
     innerWidth: number | undefined,
     innerHeight: number | undefined,
-  ): GridModel {
+    port: LayoutSolverPort,
+  ): GridModel => {
     const columnTracks = gridTracks(
       node.style.gridTemplateColumns,
       node.path,
@@ -1924,7 +644,7 @@ export class LayoutPass {
     );
     const rowTracks = gridTracks(node.style.gridTemplateRows, node.path, false);
     const autoRowTracks = gridAutoRowTracks(node.style.gridAutoRows, node.path);
-    const { placements, columns } = this.#gridPlacements(node, columnTracks);
+    const { placements, columns } = computePlacements(node, columnTracks);
     const columnGap = node.style.columnGap ?? node.style.gap ?? 0;
     const rowGap = node.style.rowGap ?? node.style.gap ?? 0;
     const rowCount = Math.max(
@@ -1936,8 +656,8 @@ export class LayoutPass {
     const rowTrackAt = (index: number): GridTrack =>
       rowTracks[index] ??
       autoRowTracks[(index - rowTracks.length) % autoRowTracks.length]!;
-    const minContentWidth = (item: LayoutNode): number =>
-      this.#minContentContribution(item, "width");
+    const minContentWidth = (item: LayoutSolverNode): number =>
+      port.measureMinContentContribution(item, "width");
     const columnWidths = columns.map((track) =>
       track.kind === "px" ? track.value : track.min,
     );
@@ -1998,7 +718,7 @@ export class LayoutPass {
       const track = rowTrackAt(placement.row);
       if (!rowTrackGrowsWithContent(track)) continue;
       const margin = expandedSpacing(placement.node.style, "margin");
-      const size = this.#naturalSize(
+      const size = port.measureNaturalSize(
         placement.node,
         spanWidth(placement.column, placement.columnSpan),
       );
@@ -2015,7 +735,7 @@ export class LayoutPass {
       rowGap * Math.max(0, span - 1);
     for (const placement of placements) {
       if (placement.rowSpan === 1) continue;
-      const natural = this.#naturalSize(
+      const natural = port.measureNaturalSize(
         placement.node,
         spanWidth(placement.column, placement.columnSpan),
       );
@@ -2060,793 +780,477 @@ export class LayoutPass {
       width: spanWidth(0, columnWidths.length),
       height: rowCount === 0 ? 0 : spanHeightFinal(0, rowCount),
     };
-  }
+  };
 
-  #placeGrid(node: LayoutNode): void {
-    const padding = expandedSpacing(node.style, "padding");
-    const outerWidth = node.yoga.getComputedWidth();
-    const outerHeight =
-      node.yoga.getComputedHeight() || node.gridAreaHeight || 0;
-    const hasWidth =
-      node.element === undefined ||
-      (node.style.width !== undefined && node.style.width !== "auto");
-    const hasResolvedHeight =
-      node.element === undefined ||
-      (node.style.height !== undefined && node.style.height !== "auto") ||
-      outerHeight > 0;
-    const innerWidth =
-      outerWidth > 0
-        ? Math.max(0, outerWidth - padding.left - padding.right)
-        : undefined;
-    const innerHeight = hasResolvedHeight
-      ? Math.max(0, outerHeight - padding.top - padding.bottom)
-      : undefined;
-    const model = this.#gridModel(node, innerWidth, innerHeight);
-    if (innerWidth !== undefined && model.width > innerWidth + 0.01) {
-      this.#warnOnce(
-        node.path,
-        "grid-overflow",
-        `Grid columns minimum size total ${model.width}px exceeds available width ${innerWidth}px; build retains track dimensions`,
-      );
-    }
-    if (innerHeight !== undefined && model.height > innerHeight + 0.01) {
-      this.#warnOnce(
-        node.path,
-        "grid-overflow",
-        `Grid rows minimum size total ${model.height}px exceeds available height ${innerHeight}px; build retains track dimensions`,
-      );
-    }
-    if (!hasWidth && outerWidth <= 0) {
-      node.yoga.setWidth(model.width + padding.left + padding.right);
-    }
-    if (!hasResolvedHeight) {
-      node.yoga.setHeight(model.height + padding.top + padding.bottom);
-    }
-    for (const placement of model.placements) {
-      const child = placement.node;
-      const childStyle = child.style;
-      const cellWidth = model.spanWidth(placement.column, placement.columnSpan);
-      const cellHeight = model.spanHeight(placement.row, placement.rowSpan);
-      const cellX =
-        padding.left +
-        model.spanWidth(0, placement.column) +
-        (placement.column > 0 ? model.columnGap : 0);
-      const cellY =
-        padding.top +
-        model.spanHeight(0, placement.row) +
-        (placement.row > 0 ? model.rowGap : 0);
-      const margin = expandedSpacing(childStyle, "margin");
-      const availableWidth = Math.max(
-        0,
-        cellWidth - margin.left - margin.right,
-      );
-      const availableHeight = Math.max(
-        0,
-        cellHeight - margin.top - margin.bottom,
-      );
-      const justify = gridAlignment(
-        childStyle.justifySelf === undefined ||
-          childStyle.justifySelf === "auto"
-          ? (node.style.justifyItems ?? "stretch")
-          : childStyle.justifySelf,
-      );
-      const alignValue =
-        childStyle.alignSelf === undefined || childStyle.alignSelf === "auto"
-          ? (node.style.alignItems ?? "stretch")
-          : childStyle.alignSelf;
-      if (alignValue === "baseline") {
-        fail(
-          child.path,
-          "unsupported-grid-alignment",
-          "Text baseline alignment in grid does not yet have a reliable row baseline",
-        );
-      }
-      const align = gridAlignment(alignValue);
-      const declaredWidth = childStyle.width ?? child.contract?.width;
-      const declaredHeight = childStyle.height ?? child.contract?.height;
-      const widthPercent = resolvePercent(declaredWidth, cellWidth);
-      const heightPercent = resolvePercent(declaredHeight, cellHeight);
-      const widthSpecified =
-        declaredWidth !== undefined && declaredWidth !== "auto";
-      let heightSpecified =
-        declaredHeight !== undefined && declaredHeight !== "auto";
-      if (widthPercent !== undefined) child.yoga.setWidth(widthPercent);
-      if (heightPercent !== undefined && availableHeight > 0) {
-        child.yoga.setHeight(heightPercent);
-      } else if (heightPercent !== undefined) {
-        child.yoga.setHeightAuto();
-        heightSpecified = false;
-      }
-      const minWidth = resolvePercent(childStyle.minWidth, cellWidth);
-      const maxWidth = resolvePercent(childStyle.maxWidth, cellWidth);
-      const minHeight = resolvePercent(childStyle.minHeight, cellHeight);
-      const maxHeight = resolvePercent(childStyle.maxHeight, cellHeight);
-      if (minWidth !== undefined) child.yoga.setMinWidth(minWidth);
-      if (maxWidth !== undefined) child.yoga.setMaxWidth(maxWidth);
-      if (minHeight !== undefined) child.yoga.setMinHeight(minHeight);
-      if (maxHeight !== undefined) child.yoga.setMaxHeight(maxHeight);
-      const intrinsic = this.#naturalSize(
-        child,
-        typeof declaredWidth === "string" && declaredWidth.endsWith("%")
-          ? cellWidth
-          : undefined,
-      );
-      let width = widthSpecified
-        ? intrinsic.width
-        : justify === "stretch"
-          ? availableWidth
-          : intrinsic.width;
-      if (
-        childStyle.aspectRatio !== undefined &&
-        heightSpecified &&
-        !widthSpecified
-      ) {
-        width = intrinsic.height * childStyle.aspectRatio;
-      }
-      if (!widthSpecified || widthPercent !== undefined)
-        child.yoga.setWidth(Math.max(0, width));
-      const naturalAtWidth = this.#naturalSize(child, width);
-      let height = heightSpecified
-        ? naturalAtWidth.height
-        : align === "stretch" && childStyle.aspectRatio === undefined
-          ? availableHeight
-          : naturalAtWidth.height;
-      if (!heightSpecified && childStyle.aspectRatio === undefined) {
-        child.yoga.setHeight(Math.max(0, height));
-      }
-      // Recalculate after assigning the stretched size; the previous natural-size pass may
-      // still hold the content height and would report a false track overflow.
-      const finalSize = this.#naturalSize(child, width);
-      const usedWidth = finalSize.width || width;
-      const usedHeight = finalSize.height || height;
-      if (child.style.display === "grid" && !heightSpecified) {
-        child.gridAreaHeight = height;
-      }
-      if (
-        usedWidth > availableWidth + 0.01 ||
-        usedHeight > availableHeight + 0.01
-      ) {
-        this.#warnOnce(
-          child.path,
-          "grid-item-overflow",
-          "Grid item overflows its track area; build retains declared dimensions",
-        );
-      }
-      const xAlign =
-        justify === "center"
-          ? Math.max(0, (availableWidth - usedWidth) / 2)
-          : justify === "end"
-            ? Math.max(0, availableWidth - usedWidth)
-            : 0;
-      const yAlign =
-        align === "center"
-          ? Math.max(0, (availableHeight - usedHeight) / 2)
-          : align === "end"
-            ? Math.max(0, availableHeight - usedHeight)
-            : 0;
-      const relative = (
-        start: LayoutLength | undefined,
-        end: LayoutLength | undefined,
-        basis: number,
-      ) => {
-        const resolve = (value: LayoutLength | undefined) =>
-          typeof value === "number"
-            ? value
-            : typeof value === "string" && value.endsWith("%")
-              ? (Number(value.slice(0, -1)) * basis) / 100
-              : undefined;
-        const startValue = resolve(start);
-        return startValue ?? -(resolve(end) ?? 0);
-      };
-      const dx =
-        childStyle.position === "relative"
-          ? relative(
-              childStyle.left ?? childStyle.inset,
-              childStyle.right ?? childStyle.inset,
-              cellWidth,
-            )
-          : 0;
-      const dy =
-        childStyle.position === "relative"
-          ? relative(
-              childStyle.top ?? childStyle.inset,
-              childStyle.bottom ?? childStyle.inset,
-              cellHeight,
-            )
-          : 0;
-      child.yoga.setPositionType(PositionType.Absolute);
-      child.yoga.setPosition(Edge.Left, cellX + xAlign + dx);
-      child.yoga.setPosition(Edge.Top, cellY + yAlign + dy);
-    }
-  }
-
-  #resolveGridTree(node: LayoutNode): void {
-    if (node.style.display === "grid") this.#placeGrid(node);
-    for (const child of node.children) this.#resolveGridTree(child);
-  }
-
-  #warnOnce(path: string, code: string, message: string): void {
-    const key = `${path}\u0000${code}\u0000${message}`;
-    if (this.#warningKeys.has(key)) return;
-    this.#warningKeys.add(key);
-    this.#warnings.push({ severity: "warning", path, code, message });
-  }
-
-  #setDeclaredSize(node: LayoutNode): void {
-    const style = node.style;
-    const width = node.contract?.width ?? style.width;
-    const height = node.contract?.height ?? style.height;
-    if (width !== undefined) setLength(node.yoga, "width", width);
-    if (height !== undefined) setLength(node.yoga, "height", height);
-  }
-
-  #applyStyle(
-    yoga: YogaNode,
-    style: LayoutStyle,
-    parent: LayoutStyle,
-    isRoot: boolean,
-    isContainer: boolean,
-  ): void {
-    const display = style.display ?? "block";
-    yoga.setDisplay(display === "none" ? Display.None : Display.Flex);
-    const positioned =
-      style.position === "absolute" || style.position === "relative" || isRoot;
-    yoga.setPositionType(
-      style.position === "absolute"
-        ? PositionType.Absolute
-        : positioned
-          ? PositionType.Relative
-          : PositionType.Static,
-    );
-    if (!positioned && display === "grid") {
-      // Grid items are placed with absolute positions local to the grid area. A
-      // static grid must form a containing block so those positions resolve
-      // against the grid, not the page. Author absolute descendants escape to
-      // the nearest positioned ancestor before layout, so their contract holds.
-      yoga.setAlwaysFormsContainingBlock(true);
-    }
-    for (const [edge, value] of [
-      [Edge.Left, style.left ?? style.inset],
-      [Edge.Top, style.top ?? style.inset],
-      [Edge.Right, style.right ?? style.inset],
-      [Edge.Bottom, style.bottom ?? style.inset],
-    ] as const) {
-      setPosition(yoga, edge, value);
-    }
-    if (style.aspectRatio !== undefined) yoga.setAspectRatio(style.aspectRatio);
-    const flex = style.display === "flex";
-    yoga.setFlexDirection(
-      flex
-        ? {
-            row: FlexDirection.Row,
-            column: FlexDirection.Column,
-            "row-reverse": FlexDirection.RowReverse,
-            "column-reverse": FlexDirection.ColumnReverse,
-          }[style.flexDirection ?? "row"]
-        : FlexDirection.Column,
-    );
-    if (flex && style.flexWrap === "wrap") yoga.setFlexWrap(Wrap.Wrap);
-    if (flex && style.justifyContent !== undefined) {
-      const align = style.justifyContent;
-      const isReversed = reverseDirection(style);
-      const physicalAlign: NonNullable<LayoutStyle["justifyContent"]> =
-        align === "start"
-          ? isReversed
-            ? "flex-end"
-            : "flex-start"
-          : align === "end"
-            ? isReversed
-              ? "flex-start"
-              : "flex-end"
-            : align;
-      yoga.setJustifyContent(yogaJustify(physicalAlign));
-    }
-    if (flex && style.alignItems !== undefined) {
-      yoga.setAlignItems(yogaAlign(style.alignItems));
-    }
-    if (flex && style.alignContent !== undefined) {
-      yoga.setAlignContent(yogaAlignContent(style.alignContent));
-    } else if (flex && style.flexWrap === "wrap") {
-      // Yoga stacks flex lines from start edge by default; CSS stretches lines with remaining space by default.
-      yoga.setAlignContent(Align.Stretch);
-    }
-    const grid = style.display === "grid";
-    if ((flex || grid) && style.gap !== undefined)
-      yoga.setGap(Gutter.All, style.gap);
-    if ((flex || grid) && style.rowGap !== undefined)
-      yoga.setGap(Gutter.Row, style.rowGap);
-    if ((flex || grid) && style.columnGap !== undefined)
-      yoga.setGap(Gutter.Column, style.columnGap);
-    for (const key of [
-      "width",
-      "height",
-      "minWidth",
-      "minHeight",
-      "maxWidth",
-      "maxHeight",
-    ] as const) {
-      setLength(yoga, key, style[key]);
-    }
-    const padding = expandedSpacing(style, "padding");
-    yoga.setPadding(Edge.Top, padding.top);
-    yoga.setPadding(Edge.Right, padding.right);
-    yoga.setPadding(Edge.Bottom, padding.bottom);
-    yoga.setPadding(Edge.Left, padding.left);
-    if (!isRoot) {
-      const margin = expandedSpacing(style, "margin");
-      yoga.setMargin(Edge.Top, margin.top);
-      yoga.setMargin(Edge.Right, margin.right);
-      yoga.setMargin(Edge.Bottom, margin.bottom);
-      yoga.setMargin(Edge.Left, margin.left);
-      if (parent.display === "flex") {
-        yoga.setFlexShrink(style.flexShrink ?? 1);
-        if (style.flex !== undefined) {
-          yoga.setFlexGrow(style.flex);
-          yoga.setFlexShrink(style.flexShrink ?? 1);
-          yoga.setFlexBasis(0);
-        }
-        if (style.flexGrow !== undefined) yoga.setFlexGrow(style.flexGrow);
-        if (style.flexBasis !== undefined)
-          setLength(yoga, "flexBasis", style.flexBasis);
-        if (style.alignSelf !== undefined)
-          yoga.setAlignSelf(yogaAlign(style.alignSelf));
-      } else {
-        yoga.setFlexShrink(0);
-      }
-    }
-    if (isContainer && style.display !== "flex") {
-      yoga.setAlignItems(Align.Stretch);
-    }
-  }
-
-  #measure(
-    node: LayoutNode,
-    request: {
-      readonly availableWidth?: number;
-      readonly widthMode?: "at-most" | "exactly";
+  return {
+    handlesDisplay(display) {
+      return display === "grid";
     },
-  ): CapabilityLayoutMeasurement | undefined {
-    if (node.bound?.measureLayout === undefined) {
-      return undefined;
-    }
-    try {
-      return node.bound.measureLayout({
-        ...request,
-        theme: node.theme,
-        slideNumber: this.#slideNumber,
-      });
-    } catch (error) {
-      if (error instanceof BuildError) throw error;
-      const code =
-        error instanceof CapabilityError
-          ? error.code
-          : "layout-measurement-failed";
-      const message = error instanceof Error ? error.message : String(error);
-      const targetPath =
-        error instanceof CapabilityError && error.path !== undefined
-          ? error.path.startsWith(node.path)
-            ? error.path
-            : `${node.path}/${error.path}`
-          : node.path;
-      return fail(targetPath, code, message);
-    }
-  }
 
-  #applyAutomaticMinimums(root: LayoutNode): boolean {
-    let changed = false;
-    const flex = root.style.display === "flex";
-    if (flex) {
-      const horizontal = rowDirection(root.style);
-      for (const child of root.children) {
-        const explicitMinimum = horizontal
-          ? child.style.minWidth
-          : child.style.minHeight;
-        if (
-          child.style.position === "absolute" ||
-          (explicitMinimum !== undefined && explicitMinimum !== "auto")
-        )
-          continue;
-        const axis = horizontal ? "width" : "height";
-        const minimum = this.#automaticMinimum(child, axis);
-        if (minimum === undefined || minimum <= 0) continue;
-        if (horizontal) child.yoga.setMinWidth(minimum);
-        else child.yoga.setMinHeight(minimum);
-        changed = true;
-      }
-    }
-    for (const child of root.children) {
-      if (this.#applyAutomaticMinimums(child)) changed = true;
-    }
-    return changed;
-  }
-
-  #automaticMinimum(
-    node: LayoutNode,
-    axis: "width" | "height",
-  ): number | undefined {
-    const content = this.#minContent(node, axis);
-    if (content === undefined) return undefined;
-    const maximum =
-      axis === "width"
-        ? styleLength(node.style.maxWidth)
-        : styleLength(node.style.maxHeight);
-    const rawDimension = node.style[axis] ?? node.contract?.[axis];
-    const declared = length(rawDimension, axis, node.path);
-    return Math.min(
-      content,
-      ...(declared === undefined ? [] : [declared]),
-      ...(maximum === undefined ? [] : [maximum]),
-    );
-  }
-
-  #resolvedChildAlignment(node: LayoutNode, child: LayoutNode): Align {
-    // Use properties applied to Yoga to replicate its column baseline fallback to flex-start.
-    const childAlignment = child.yoga.getAlignSelf();
-    const alignment =
-      childAlignment === Align.Auto
-        ? node.yoga.getAlignItems()
-        : childAlignment;
-    const direction = node.yoga.getFlexDirection();
-    if (
-      alignment === Align.Baseline &&
-      (direction === FlexDirection.Column ||
-        direction === FlexDirection.ColumnReverse)
-    ) {
-      return Align.FlexStart;
-    }
-    return alignment;
-  }
-
-  #baselineParticipants(node: LayoutNode): LayoutNode[] {
-    // Resolve participants using actual properties of layout node, ignoring raw styles dropped by non-flex parents.
-    return node.children.filter(
-      (child) => this.#resolvedChildAlignment(node, child) === Align.Baseline,
-    );
-  }
-
-  #hasVerticalOffset(node: LayoutNode): boolean {
-    return (
-      node.style.top !== undefined ||
-      node.style.marginTop !== undefined ||
-      node.style.bottom !== undefined ||
-      node.style.marginBottom !== undefined
-    );
-  }
-
-  #resolveBaselineLeaf(node: LayoutNode): LayoutNode {
-    if (
-      node.bound?.container === undefined ||
-      node.bound.container.propagatesBaseline === false
-    ) {
-      if (node.bound?.measureLayout === undefined) {
-        fail(
-          node.path,
-          "unsupported-baseline-context",
-          "Baseline alignment requires a text-bearing capability with baseline support",
-        );
-      }
-      return node;
-    }
-    if (node.children.length !== 1) {
-      fail(
-        node.path,
-        "unsupported-baseline-context",
-        "Text baseline currently only propagates along single-child Box chains",
-      );
-    }
-    const child = node.children[0]!;
-    const simpleRow =
-      node.style.display === "flex" &&
-      node.style.flexWrap !== "wrap" &&
-      rowDirection(node.style) &&
-      !reverseDirection(node.style);
-    const childAlign = child.style.alignSelf;
-    const parentAlign = node.style.alignItems;
-    const alignedAtStart =
-      childAlign === "start" ||
-      childAlign === "flex-start" ||
-      ((childAlign === undefined || childAlign === "auto") &&
-        (parentAlign === "start" || parentAlign === "flex-start"));
-    const childHeight = child.contract?.height ?? child.style.height;
-    const stretchedFixedHeight =
-      (childAlign === undefined ||
-        childAlign === "auto" ||
-        childAlign === "stretch") &&
-      (parentAlign === undefined || parentAlign === "stretch") &&
-      typeof childHeight === "number";
-    if (!simpleRow || (!alignedAtStart && !stretchedFixedHeight)) {
-      fail(
-        node.path,
-        "unsupported-baseline-context",
-        "Text baseline requires a nowrap row Box with the only child fixed at the top of the cross axis",
-      );
-    }
-    return this.#resolveBaselineLeaf(child);
-  }
-
-  #prepareTextBaselines(node: LayoutNode): void {
-    const flexRow = node.style.display === "flex" && rowDirection(node.style);
-    const participants = this.#baselineParticipants(node);
-    if (flexRow && participants.length > 0) {
-      if (node.style.flexWrap === "wrap") {
-        fail(
-          node.path,
-          "unsupported-baseline-context",
-          "Text baseline currently requires a nowrap row flex container",
-        );
-      }
-      for (const participant of participants) {
-        this.#installBaselineMarker(this.#resolveBaselineLeaf(participant));
-      }
-    }
-    for (const child of node.children) this.#prepareTextBaselines(child);
-    for (const child of node.escaped) this.#prepareTextBaselines(child);
-  }
-
-  #installBaselineMarker(node: LayoutNode): void {
-    if (node.baselineContent !== undefined) return;
-    const measureFunction = node.measureFunction;
-    if (
-      measureFunction === undefined ||
-      node.bound?.measureLayout === undefined
-    ) {
-      fail(
-        node.path,
-        "unsupported-baseline-context",
-        "Baseline alignment requires a text-bearing capability with baseline support",
-      );
-    }
-    const rawWidth = node.contract?.width ?? node.style.width;
-    const availableWidth = length(rawWidth, "width", node.path);
-    const padding = expandedSpacing(node.style, "padding");
-    const measurement = this.#measure(
-      node,
-      availableWidth === undefined
-        ? {}
-        : {
-            availableWidth: Math.max(
-              0,
-              availableWidth - padding.left - padding.right,
-            ),
-          },
-    );
-    if (measurement?.baseline === undefined) {
-      fail(
-        node.path,
-        "unsupported-baseline-context",
-        "Baseline alignment requires a text-bearing capability with baseline support",
-      );
-    }
-    if (
-      measurement.baseline === "unavailable" ||
-      this.#hasVerticalOffset(node)
-    ) {
-      fail(
-        node.path,
-        "baseline-measurement-unavailable",
-        "Baseline alignment requires a single text run, top anchor, and explicit font resource",
-      );
-    }
-
-    const content = Yoga.Node.create(this.#config);
-    content.setFlexShrink(1);
-    content.setMeasureFunc(measureFunction);
-    const marker = Yoga.Node.create(this.#config);
-    marker.setWidth(0);
-    marker.setHeight(0);
-    marker.setPositionType(PositionType.Relative);
-    marker.setPosition(Edge.Top, measurement.baseline);
-    // Zero-size relative positioning marker only provides content baseline to Yoga; does not enter semantic layout tree or PPTX.
-    marker.setIsReferenceBaseline(true);
-
-    node.yoga.unsetMeasureFunc();
-    node.yoga.setFlexDirection(FlexDirection.Row);
-    node.yoga.setAlignItems(Align.FlexStart);
-    node.yoga.insertChild(content, 0);
-    node.yoga.insertChild(marker, 1);
-    node.baseline = measurement.baseline + padding.top;
-    node.baselineContent = content;
-  }
-
-  #markBaselineMeasurementsDirty(node: LayoutNode): boolean {
-    let changed = false;
-    if (node.baselineContent !== undefined) {
-      node.baselineContent.markDirty();
-      changed = true;
-    }
-    for (const child of node.children) {
-      if (this.#markBaselineMeasurementsDirty(child)) changed = true;
-    }
-    return changed;
-  }
-
-  #baselineOffsetWithin(node: LayoutNode): number {
-    if (node.baseline !== undefined) return node.baseline;
-    if (node.children.length === 0) return node.yoga.getComputedHeight();
-
-    // Same as Yoga Baseline.cpp: take baseline or reference child of this line first, else first item.
-    const participants = new Set(this.#baselineParticipants(node));
-    const baselineChild = node.children.find(
-      (child) => child.yoga.isReferenceBaseline() || participants.has(child),
-    );
-    const child = baselineChild ?? node.children[0];
-    if (child === undefined) {
-      fail(
-        node.path,
-        "unsupported-baseline-context",
-        "Layout subtree has no propagatable text baseline",
-      );
-    }
-    if (
-      node.style.flexWrap === "wrap" &&
-      baselineChild !== undefined &&
-      baselineChild !== node.children[0]
-    ) {
-      fail(
-        node.path,
-        "unsupported-baseline-context",
-        "Cannot reliably determine text baseline row in wrapping Box",
-      );
-    }
-    return child.yoga.getComputedTop() + this.#baselineOffsetWithin(child);
-  }
-
-  #baselineContentHeight(node: LayoutNode): number | undefined {
-    const participants = this.#baselineParticipants(node);
-    if (participants.length === 0) return undefined;
-    // Baseline line height is composed from max ascent and max descent, not written back as a fixed height constraint.
-    let ascent = 0;
-    let descent = 0;
-    for (const child of participants) {
-      const margin = expandedSpacing(child.style, "margin");
-      const contribution = this.#minContentContribution(child, "height");
-      const height = Math.max(0, contribution - margin.top - margin.bottom);
-      const baseline = this.#baselineOffsetWithin(child);
-      ascent = Math.max(ascent, margin.top + baseline);
-      descent = Math.max(descent, margin.bottom + height - baseline);
-    }
-    const nonParticipantsHeight = Math.max(
-      0,
-      ...node.children
-        .filter((child) => !participants.includes(child))
-        .map((child) => this.#minContentContribution(child, "height")),
-    );
-    return Math.max(ascent + descent, nonParticipantsHeight);
-  }
-
-  #minContentContribution(node: LayoutNode, axis: "width" | "height"): number {
-    const content = this.#minContent(node, axis) ?? 0;
-    const rawDimension = node.style[axis] ?? node.contract?.[axis];
-    let size = length(rawDimension, axis, node.path) ?? content;
-    const minimum =
-      axis === "width"
-        ? styleLength(node.style.minWidth)
-        : styleLength(node.style.minHeight);
-    const maximum =
-      axis === "width"
-        ? styleLength(node.style.maxWidth)
-        : styleLength(node.style.maxHeight);
-    if (minimum !== undefined) size = Math.max(size, minimum);
-    if (maximum !== undefined) size = Math.min(size, maximum);
-    const margin = expandedSpacing(node.style, "margin");
-    return (
-      size +
-      (axis === "width"
-        ? margin.left + margin.right
-        : margin.top + margin.bottom)
-    );
-  }
-
-  #minContent(node: LayoutNode, axis: "width" | "height"): number | undefined {
-    const isContainer =
-      node.element === undefined ||
-      node.bound?.container !== undefined ||
-      node.element.type === "rp:group";
-    if (!isContainer) {
+    measureMinContent(node, axis, port) {
+      const model = buildGridModel(node, undefined, undefined, port);
       const padding = expandedSpacing(node.style, "padding");
-      const computedWidth = node.yoga.getComputedWidth();
-      const rawWidth = node.style.width ?? node.contract?.width;
-      const measuredWidth =
-        typeof rawWidth === "string" && rawWidth.endsWith("%")
-          ? undefined
-          : Math.max(0, computedWidth - padding.left - padding.right);
-      const measured = this.#measure(
-        node,
-        measuredWidth === undefined ? {} : { availableWidth: measuredWidth },
-      );
-      const result =
-        axis === "width"
-          ? measured?.minContentWidth
-          : measured?.minContentHeight;
-      if (result === undefined) return undefined;
       return (
-        result +
+        (axis === "width" ? model.width : model.height) +
         (axis === "width"
           ? padding.left + padding.right
           : padding.top + padding.bottom)
       );
-    }
-    const horizontal = axis === "width";
-    if (node.style.display === "grid") {
-      const model = this.#gridModel(node, undefined, undefined);
-      return (
-        (horizontal ? model.width : model.height) +
-        (horizontal
-          ? expandedSpacing(node.style, "padding").left +
-            expandedSpacing(node.style, "padding").right
-          : expandedSpacing(node.style, "padding").top +
-            expandedSpacing(node.style, "padding").bottom)
-      );
-    }
-    const flexRow =
-      node.style.display === "flex" &&
-      rowDirection(node.style) &&
-      node.style.flexWrap !== "wrap";
-    const flexColumn =
-      node.style.display === "flex" && !rowDirection(node.style);
-    let content: number;
-    if (horizontal && flexRow) {
-      content = node.children.reduce(
-        (total, child) => total + this.#minContentContribution(child, axis),
-        0,
-      );
-      content +=
-        (node.style.columnGap ?? node.style.gap ?? 0) *
-        Math.max(0, node.children.length - 1);
-    } else if (!horizontal && (flexColumn || node.style.display !== "flex")) {
-      content = node.children.reduce(
-        (total, child) => total + this.#minContentContribution(child, axis),
-        0,
-      );
-      if (node.style.display === "flex") {
-        content +=
-          (node.style.rowGap ?? node.style.gap ?? 0) *
-          Math.max(0, node.children.length - 1);
+    },
+
+    placeContainer(node, port) {
+      if (node.style.display !== "grid") return;
+      const padding = expandedSpacing(node.style, "padding");
+      const computed = port.getComputedSize(node);
+      const outerWidth = computed.width;
+      const outerHeight = computed.height || gridAreaHeights.get(node) || 0;
+      const hasWidth =
+        node.isRoot ||
+        (node.style.width !== undefined && node.style.width !== "auto");
+      const hasResolvedHeight =
+        node.isRoot ||
+        (node.style.height !== undefined && node.style.height !== "auto") ||
+        outerHeight > 0;
+      const innerWidth =
+        outerWidth > 0
+          ? Math.max(0, outerWidth - padding.left - padding.right)
+          : undefined;
+      const innerHeight = hasResolvedHeight
+        ? Math.max(0, outerHeight - padding.top - padding.bottom)
+        : undefined;
+      const model = buildGridModel(node, innerWidth, innerHeight, port);
+      if (innerWidth !== undefined && model.width > innerWidth + 0.01) {
+        warnOnce(
+          node.path,
+          "grid-overflow",
+          `Grid columns minimum size total ${model.width}px exceeds available width ${innerWidth}px; build retains track dimensions`,
+        );
       }
-    } else {
-      content = Math.max(
-        0,
-        ...node.children.map((child) =>
-          this.#minContentContribution(child, axis),
-        ),
+      if (innerHeight !== undefined && model.height > innerHeight + 0.01) {
+        warnOnce(
+          node.path,
+          "grid-overflow",
+          `Grid rows minimum size total ${model.height}px exceeds available height ${innerHeight}px; build retains track dimensions`,
+        );
+      }
+      port.setContainerSize(node, {
+        ...(!hasWidth && outerWidth <= 0
+          ? { width: model.width + padding.left + padding.right }
+          : {}),
+        ...(!hasResolvedHeight
+          ? { height: model.height + padding.top + padding.bottom }
+          : {}),
+      });
+      for (const placement of model.placements) {
+        const child = placement.node;
+        const childStyle = child.style;
+        const cellWidth = model.spanWidth(
+          placement.column,
+          placement.columnSpan,
+        );
+        const cellHeight = model.spanHeight(placement.row, placement.rowSpan);
+        const cellX =
+          padding.left +
+          model.spanWidth(0, placement.column) +
+          (placement.column > 0 ? model.columnGap : 0);
+        const cellY =
+          padding.top +
+          model.spanHeight(0, placement.row) +
+          (placement.row > 0 ? model.rowGap : 0);
+        const margin = expandedSpacing(childStyle, "margin");
+        const availableWidth = Math.max(
+          0,
+          cellWidth - margin.left - margin.right,
+        );
+        const availableHeight = Math.max(
+          0,
+          cellHeight - margin.top - margin.bottom,
+        );
+        const justify = gridAlignment(
+          childStyle.justifySelf === undefined ||
+            childStyle.justifySelf === "auto"
+            ? (node.style.justifyItems ?? "stretch")
+            : childStyle.justifySelf,
+        );
+        const alignValue =
+          childStyle.alignSelf === undefined || childStyle.alignSelf === "auto"
+            ? (node.style.alignItems ?? "stretch")
+            : childStyle.alignSelf;
+        if (alignValue === "baseline") {
+          fail(
+            child.path,
+            "unsupported-grid-alignment",
+            "Text baseline alignment in grid does not yet have a reliable row baseline",
+          );
+        }
+        const align = gridAlignment(alignValue);
+        const declaredWidth = childStyle.width ?? child.contractWidth;
+        const declaredHeight = childStyle.height ?? child.contractHeight;
+        const widthPercent = resolvePercent(declaredWidth, cellWidth);
+        const heightPercent = resolvePercent(declaredHeight, cellHeight);
+        const widthSpecified =
+          declaredWidth !== undefined && declaredWidth !== "auto";
+        let heightSpecified =
+          declaredHeight !== undefined && declaredHeight !== "auto";
+        const minWidth = resolvePercent(childStyle.minWidth, cellWidth);
+        const maxWidth = resolvePercent(childStyle.maxWidth, cellWidth);
+        const minHeight = resolvePercent(childStyle.minHeight, cellHeight);
+        const maxHeight = resolvePercent(childStyle.maxHeight, cellHeight);
+        let initialHeightConstraint: number | "auto" | undefined;
+        if (heightPercent !== undefined && availableHeight > 0) {
+          initialHeightConstraint = heightPercent;
+        } else if (heightPercent !== undefined) {
+          initialHeightConstraint = "auto";
+          heightSpecified = false;
+        }
+        port.setChildConstraints(child, {
+          ...(widthPercent === undefined ? {} : { width: widthPercent }),
+          ...(initialHeightConstraint === undefined
+            ? {}
+            : { height: initialHeightConstraint }),
+          ...(minWidth === undefined ? {} : { minWidth }),
+          ...(maxWidth === undefined ? {} : { maxWidth }),
+          ...(minHeight === undefined ? {} : { minHeight }),
+          ...(maxHeight === undefined ? {} : { maxHeight }),
+        });
+        const intrinsic = port.measureNaturalSize(
+          child,
+          typeof declaredWidth === "string" && declaredWidth.endsWith("%")
+            ? cellWidth
+            : undefined,
+        );
+        let width = widthSpecified
+          ? intrinsic.width
+          : justify === "stretch"
+            ? availableWidth
+            : intrinsic.width;
+        if (
+          childStyle.aspectRatio !== undefined &&
+          heightSpecified &&
+          !widthSpecified
+        ) {
+          width = intrinsic.height * childStyle.aspectRatio;
+        }
+        if (!widthSpecified || widthPercent !== undefined) {
+          port.setChildConstraints(child, { width: Math.max(0, width) });
+        }
+        const naturalAtWidth = port.measureNaturalSize(child, width);
+        let height = heightSpecified
+          ? naturalAtWidth.height
+          : align === "stretch" && childStyle.aspectRatio === undefined
+            ? availableHeight
+            : naturalAtWidth.height;
+        if (!heightSpecified && childStyle.aspectRatio === undefined) {
+          port.setChildConstraints(child, { height: Math.max(0, height) });
+        }
+        // Recalculate after assigning the stretched size; the previous natural-size pass may
+        // still hold the content height and would report a false track overflow.
+        const finalSize = port.measureNaturalSize(child, width);
+        const usedWidth = finalSize.width || width;
+        const usedHeight = finalSize.height || height;
+        if (child.style.display === "grid" && !heightSpecified) {
+          gridAreaHeights.set(child, height);
+        }
+        if (
+          usedWidth > availableWidth + 0.01 ||
+          usedHeight > availableHeight + 0.01
+        ) {
+          warnOnce(
+            child.path,
+            "grid-item-overflow",
+            "Grid item overflows its track area; build retains declared dimensions",
+          );
+        }
+        const xAlign =
+          justify === "center"
+            ? Math.max(0, (availableWidth - usedWidth) / 2)
+            : justify === "end"
+              ? Math.max(0, availableWidth - usedWidth)
+              : 0;
+        const yAlign =
+          align === "center"
+            ? Math.max(0, (availableHeight - usedHeight) / 2)
+            : align === "end"
+              ? Math.max(0, availableHeight - usedHeight)
+              : 0;
+        const relative = (
+          start: LayoutLength | undefined,
+          end: LayoutLength | undefined,
+          basis: number,
+        ) => {
+          const resolve = (value: LayoutLength | undefined) =>
+            typeof value === "number"
+              ? value
+              : typeof value === "string" && value.endsWith("%")
+                ? (Number(value.slice(0, -1)) * basis) / 100
+                : undefined;
+          const startValue = resolve(start);
+          return startValue ?? -(resolve(end) ?? 0);
+        };
+        const dx =
+          childStyle.position === "relative"
+            ? relative(
+                childStyle.left ?? childStyle.inset,
+                childStyle.right ?? childStyle.inset,
+                cellWidth,
+              )
+            : 0;
+        const dy =
+          childStyle.position === "relative"
+            ? relative(
+                childStyle.top ?? childStyle.inset,
+                childStyle.bottom ?? childStyle.inset,
+                cellHeight,
+              )
+            : 0;
+        port.placeChild(child, {
+          x: cellX + xAlign + dx,
+          y: cellY + yAlign + dy,
+        });
+      }
+    },
+  };
+}
+
+function readStyle(
+  value: unknown,
+  path: string,
+  isContainer: boolean,
+  allowsPadding = isContainer,
+  allowedPresentation: ReadonlySet<string> = new Set(),
+): LayoutStyle {
+  if (value === undefined) return {};
+  if (!isStyleRecord(value)) {
+    fail(path, "invalid-layout-style", "style must be an object");
+  }
+  const unknown = Object.keys(value).find(
+    (key) => !layoutPropertySet.has(key) && !allowedPresentation.has(key),
+  );
+  if (unknown !== undefined) {
+    fail(
+      path,
+      "unsupported-layout-style",
+      `style contains unsupported property ${unknown}`,
+    );
+  }
+  const resolvedDisplay = validateBlockFlexContainerContext(
+    value,
+    path,
+    isContainer,
+  );
+  if (resolvedDisplay === "grid" && value["alignItems"] === "baseline") {
+    fail(
+      path,
+      "unsupported-grid-alignment",
+      "Grid containers do not support baseline alignment",
+    );
+  }
+  validateBlockFlexContainerProperties(value, resolvedDisplay, path);
+  for (const key of gridContainerProperties) {
+    if (value[key] !== undefined && resolvedDisplay !== "grid") {
+      fail(
+        path,
+        "invalid-layout-context",
+        `${key} is only applicable to display: "grid" containers`,
       );
     }
-    if (!horizontal && flexRow) {
-      content = this.#baselineContentHeight(node) ?? content;
+  }
+  validateBlockFlexEnumValues(value, path);
+  validateGridEnumValues(value, path);
+  validateBlockFlexDimensionsAndOffsets(value, allowsPadding, path);
+  validateGridValueTypes(value, path);
+  validateBlockFlexSpacingAndBounds(value, allowsPadding, path);
+  return value;
+}
+
+/**
+ * Parses and validates host props into a CapabilityLayoutContract for object capabilities.
+ */
+export function parseCapabilityLayoutContract(options: {
+  readonly nativeKind: NativeElementKind;
+  readonly props: Readonly<Record<string, unknown>>;
+  readonly allowedStyleKeys: ReadonlySet<string>;
+  readonly allowPadding?: boolean;
+  readonly isContainer?: boolean;
+  readonly path?: string;
+}): CapabilityLayoutContract {
+  const {
+    nativeKind,
+    props,
+    allowedStyleKeys,
+    allowPadding = false,
+    isContainer = false,
+  } = options;
+  const path = options.path ?? "style";
+  const rawStyle = props["style"];
+  if (rawStyle !== undefined) {
+    if (!isStyleRecord(rawStyle)) {
+      throw new CapabilityError(
+        "invalid-style",
+        "style must be an object",
+        options.path,
+      );
     }
-    if (horizontal) {
-      const padding = expandedSpacing(node.style, "padding");
-      content += padding.left + padding.right;
-      const declared = styleLength(node.style.width);
-      const maximum = styleLength(node.style.maxWidth);
-      if (declared !== undefined) content = Math.min(content, declared);
-      if (maximum !== undefined) content = Math.min(content, maximum);
-    } else {
-      const padding = expandedSpacing(node.style, "padding");
-      content += padding.top + padding.bottom;
-      const declared = styleLength(node.style.height);
-      const maximum = styleLength(node.style.maxHeight);
-      if (declared !== undefined) content = Math.min(content, declared);
-      if (maximum !== undefined) content = Math.min(content, maximum);
+    if (!allowPadding) {
+      const paddingKey = (paddingStyleKeys as readonly string[]).find(
+        (key) => rawStyle[key] !== undefined,
+      );
+      if (paddingKey !== undefined) {
+        throw new CapabilityError(
+          "invalid-layout-context",
+          "padding is only applicable to layout containers",
+          options.path,
+        );
+      }
     }
-    return content;
+    const unknown = Object.keys(rawStyle).find(
+      (key) => rawStyle[key] !== undefined && !allowedStyleKeys.has(key),
+    );
+    if (unknown !== undefined) {
+      throw new CapabilityError(
+        "unknown-style",
+        `style contains unsupported property ${unknown}`,
+        options.path,
+      );
+    }
   }
 
-  #commit(
-    node: LayoutNode,
-    origin: { readonly x: number; readonly y: number },
-  ): void {
-    // Keep the solver's precision: capabilities compile and write the same geometry, so display rounding here would shrink native output.
-    const box = {
-      x: origin.x + node.yoga.getComputedLeft(),
-      y: origin.y + node.yoga.getComputedTop(),
-      width: node.yoga.getComputedWidth(),
-      height: node.yoga.getComputedHeight(),
-    };
-    if (node.bound?.container !== undefined && node.element !== undefined) {
-      this.#boxes.set(node.element, box);
+  const layoutStyle = readStyle(
+    rawStyle,
+    path,
+    isContainer,
+    allowPadding,
+    allowedStyleKeys,
+  );
+
+  let padding:
+    | {
+        readonly top: number;
+        readonly right: number;
+        readonly bottom: number;
+        readonly left: number;
+      }
+    | undefined;
+  if (allowPadding && rawStyle !== undefined) {
+    const hasPadding = (paddingStyleKeys as readonly string[]).some(
+      (key) => rawStyle[key] !== undefined,
+    );
+    if (hasPadding) {
+      const edges = expandedSpacing(layoutStyle, "padding");
+      padding = {
+        top: edges.top,
+        right: edges.right,
+        bottom: edges.bottom,
+        left: edges.left,
+      };
+    }
+  }
+
+  const x = typeof props["x"] === "number" ? props["x"] : undefined;
+  const y = typeof props["y"] === "number" ? props["y"] : undefined;
+  const styleWidth = rawStyle !== undefined ? rawStyle["width"] : undefined;
+  const styleHeight = rawStyle !== undefined ? rawStyle["height"] : undefined;
+  const width = (styleWidth ?? props["width"]) as
+    | number
+    | `${number}%`
+    | "auto"
+    | undefined;
+  const height = (styleHeight ?? props["height"]) as
+    | number
+    | `${number}%`
+    | "auto"
+    | undefined;
+
+  return {
+    nativeKind,
+    ...(x === undefined ? {} : { x }),
+    ...(y === undefined ? {} : { y }),
+    ...(width === undefined ? {} : { width }),
+    ...(height === undefined ? {} : { height }),
+    layoutStyle,
+    ...(padding === undefined ? {} : { padding }),
+  };
+}
+
+function objectModule(
+  module: RegisteredCapabilityModule | undefined,
+): module is BoundObjectCapabilityModule {
+  return module !== undefined && "bind" in module;
+}
+
+type CommittedNodeMeta = {
+  readonly element: CapabilityElement;
+  readonly checksCanvasOverflow: boolean;
+};
+
+/** Coordinates layout tree construction, capability binding, solver collaboration, and box commitment. */
+export class LayoutPass {
+  readonly #modules: ReadonlyMap<string, RegisteredCapabilityModule>;
+  readonly #dimensions: Dimensions;
+  readonly #slideNumber: number;
+  readonly #options: BuildOptions;
+  readonly #boxes = new WeakMap<CapabilityElement, GeometryBox>();
+  readonly #themes = new WeakMap<CapabilityElement, ThemeContext>();
+  readonly #hidden = new WeakSet<CapabilityElement>();
+  readonly #boundObjects = new WeakMap<
+    CapabilityElement,
+    BoundObjectCapability
+  >();
+  readonly #nodeMeta = new WeakMap<LayoutSolverNode, CommittedNodeMeta>();
+  readonly #warnings: Diagnostic[] = [];
+  readonly #warningKeys = new Set<string>();
+  readonly #solver: LayoutSolver;
+
+  constructor(
+    modules: ReadonlyMap<string, RegisteredCapabilityModule>,
+    dimensions: Dimensions,
+    slideNumber = 1,
+    options: BuildOptions = {},
+  ) {
+    this.#modules = modules;
+    this.#dimensions = dimensions;
+    this.#slideNumber = slideNumber;
+    this.#options = options;
+    this.#solver = createBlockFlexLayoutSolver({
+      dimensions,
+      customContainers: [
+        createGridContainerSolver((path, code, message) => {
+          this.#warnOnce(path, code, message);
+        }),
+      ],
+    });
+  }
+
+  run(
+    children: readonly CapabilityChild[],
+    parentPath: string,
+    theme: ThemeContext,
+    slideStyle?: unknown,
+  ): LayoutPassResult {
+    const rootStyle = readStyle(
+      slideStyle,
+      parentPath,
+      true,
+      true,
+      textStyleKeys,
+    );
+    const root = this.#solver.createRoot({
+      path: parentPath,
+      style: rootStyle,
+    });
+    this.#appendChildren(
+      children,
+      parentPath,
+      root,
+      slideStyle !== undefined,
+      theme,
+    );
+    this.#solver.solve((node, box) => {
+      const meta = this.#nodeMeta.get(node);
+      if (meta === undefined) return;
+      this.#boxes.set(meta.element, box);
       if (
-        node.bound.container.checksCanvasOverflow !== false &&
+        meta.checksCanvasOverflow &&
         (box.x < 0 ||
           box.y < 0 ||
           box.x + box.width > this.#dimensions.width ||
@@ -2860,11 +1264,355 @@ export class LayoutPass {
             "Layout container overflows slide canvas; build retains original declaration",
         });
       }
-    } else if (node.element !== undefined) {
-      this.#boxes.set(node.element, box);
+    });
+    return {
+      boxes: this.#boxes,
+      themes: this.#themes,
+      hidden: this.#hidden,
+      warnings: this.#warnings,
+      bound: this.#boundObjects,
+    };
+  }
+
+  #bindCapability(
+    child: CapabilityElement,
+    childPath: string,
+    themeContext: ThemeContext,
+    module: BoundObjectCapabilityModule,
+  ): BoundObjectCapability {
+    let bound = this.#boundObjects.get(child);
+    if (bound === undefined) {
+      try {
+        bound = module.bind(child, {
+          path: childPath,
+          theme: themeContext,
+          options: this.#options,
+          slideNumber: this.#slideNumber,
+        });
+        this.#boundObjects.set(child, bound);
+      } catch (error) {
+        if (error instanceof BuildError) throw error;
+        const code =
+          error instanceof CapabilityError
+            ? error.code
+            : "invalid-capability-input";
+        const message = error instanceof Error ? error.message : String(error);
+        const targetPath =
+          error instanceof CapabilityError && error.path !== undefined
+            ? error.path.startsWith(childPath)
+              ? error.path
+              : `${childPath}/${error.path}`
+            : childPath;
+        return fail(targetPath, code, message);
+      }
     }
-    for (const child of node.children)
-      this.#commit(child, { x: box.x, y: box.y });
-    for (const child of node.escaped) this.#placeEscaped(child, box);
+    return bound;
+  }
+
+  // Transparent Groups are not in the layout tree, so theme context must be passed separately along the declaration tree.
+  #appendChildren(
+    children: readonly CapabilityChild[],
+    parentPath: string,
+    parent: LayoutSolverNode,
+    includeObjects: boolean,
+    themeContext: ThemeContext,
+  ): void {
+    children.forEach((child, index) => {
+      if (!element(child)) return;
+      const childPath = `${parentPath}/${label(child, index)}`;
+      if (parent.style.display === "none") {
+        this.#markHidden(child);
+        return;
+      }
+      if (child.type === "rp:group") {
+        const module = this.#modules.get(child.type);
+        if (!objectModule(module)) {
+          fail(
+            childPath,
+            "missing-capability",
+            "rp:group capability is required",
+          );
+        }
+        const bound = this.#bindCapability(
+          child,
+          childPath,
+          themeContext,
+          module,
+        );
+        const contract = bound.contract;
+        const childStyle = contract.layoutStyle;
+        if (childStyle.display === "none") {
+          this.#markHidden(child);
+          return;
+        }
+        validateGridItemStyle(childStyle, parent.style, childPath);
+        if (!includeObjects) {
+          // Group text defaults apply only to descendants, not indicating it should become a layout item.
+          const optsIntoLayout = Object.keys(childStyle).some(
+            (key) => key !== "zIndex" && !textStyleKeys.has(key),
+          );
+          if (!optsIntoLayout) {
+            const groupTheme = deriveTheme(
+              themeContext,
+              child.props["theme"] as ThemeScope | undefined,
+              child.props["style"],
+              childPath,
+            );
+            this.#themes.set(child, groupTheme);
+            this.#appendChildren(
+              child.children,
+              childPath,
+              parent,
+              false,
+              groupTheme,
+            );
+            return;
+          }
+        }
+        const built = this.#buildGroup(
+          child,
+          childPath,
+          parent,
+          themeContext,
+          contract,
+        );
+        this.#solver.appendChild(parent, built);
+        return;
+      }
+      const module = this.#modules.get(child.type);
+      if (module !== undefined && "compileDeclaration" in module) {
+        this.#themes.set(child, themeContext);
+        // An owned subtree belongs to its capability and never becomes layout content.
+        if (module.children === "owned") return;
+        this.#appendChildren(
+          child.children,
+          childPath,
+          parent,
+          includeObjects,
+          themeContext,
+        );
+        return;
+      }
+      if (objectModule(module)) {
+        const bound = this.#bindCapability(
+          child,
+          childPath,
+          themeContext,
+          module,
+        );
+        const contract = bound.contract;
+        if (contract.layoutStyle.display === "none") {
+          this.#markHidden(child);
+          return;
+        }
+        validateGridItemStyle(contract.layoutStyle, parent.style, childPath);
+        if (bound.container !== undefined) {
+          const built = this.#buildContainer(
+            child,
+            childPath,
+            parent,
+            themeContext,
+            contract,
+            bound.container,
+          );
+          this.#solver.appendChild(parent, built);
+          return;
+        }
+        this.#themes.set(child, themeContext);
+        if (
+          !includeObjects &&
+          !this.#solver.requiresLooseLayout(contract.layoutStyle)
+        ) {
+          return;
+        }
+        const built = this.#buildLeafObject(
+          child,
+          childPath,
+          parent,
+          themeContext,
+          bound,
+          contract,
+        );
+        if (!includeObjects) {
+          this.#solver.positionLooseGeometry(built);
+        }
+        this.#solver.appendChild(parent, built);
+      }
+    });
+  }
+
+  #buildContainer(
+    input: CapabilityElement,
+    path: string,
+    parent: LayoutSolverNode,
+    themeContext: ThemeContext,
+    contract: CapabilityLayoutContract,
+    container: BoundContainerCollaboration,
+  ): LayoutSolverNode {
+    const style = contract.layoutStyle;
+    const theme = container.theme ?? themeContext;
+    this.#themes.set(input, theme);
+    const node = this.#solver.createNode(
+      {
+        path,
+        style,
+        isContainer: true,
+        propagatesBaseline: container.propagatesBaseline !== false,
+        ...(contract.width === undefined
+          ? {}
+          : { contractWidth: contract.width }),
+        ...(contract.height === undefined
+          ? {}
+          : { contractHeight: contract.height }),
+        ...(contract.x === undefined ? {} : { contractX: contract.x }),
+        ...(contract.y === undefined ? {} : { contractY: contract.y }),
+        ...(contract.padding === undefined
+          ? {}
+          : { padding: contract.padding }),
+      },
+      parent,
+    );
+    this.#nodeMeta.set(node, {
+      element: input,
+      checksCanvasOverflow: container.checksCanvasOverflow !== false,
+    });
+    this.#appendChildren(container.children, path, node, true, theme);
+    return node;
+  }
+
+  #buildGroup(
+    input: CapabilityElement,
+    path: string,
+    parent: LayoutSolverNode,
+    themeContext: ThemeContext,
+    contract: CapabilityLayoutContract,
+  ): LayoutSolverNode {
+    const rawStyle = input.props["style"];
+    const style = contract.layoutStyle;
+    const theme = deriveTheme(
+      themeContext,
+      input.props["theme"] as ThemeScope | undefined,
+      rawStyle,
+      path,
+    );
+    this.#themes.set(input, theme);
+    const node = this.#solver.createNode(
+      {
+        path,
+        style,
+        isContainer: true,
+        propagatesBaseline: false,
+        ...(contract.width === undefined
+          ? {}
+          : { contractWidth: contract.width }),
+        ...(contract.height === undefined
+          ? {}
+          : { contractHeight: contract.height }),
+        ...(contract.x === undefined ? {} : { contractX: contract.x }),
+        ...(contract.y === undefined ? {} : { contractY: contract.y }),
+        ...(contract.padding === undefined
+          ? {}
+          : { padding: contract.padding }),
+      },
+      parent,
+    );
+    this.#nodeMeta.set(node, {
+      element: input,
+      checksCanvasOverflow: false,
+    });
+    this.#appendChildren(input.children, path, node, true, theme);
+    return node;
+  }
+
+  #buildLeafObject(
+    input: CapabilityElement,
+    path: string,
+    parent: LayoutSolverNode,
+    themeContext: ThemeContext,
+    bound: BoundObjectCapability,
+    contract: CapabilityLayoutContract,
+  ): LayoutSolverNode {
+    const node = this.#solver.createNode(
+      {
+        path,
+        style: contract.layoutStyle,
+        isContainer: false,
+        propagatesBaseline: false,
+        ...(contract.width === undefined
+          ? {}
+          : { contractWidth: contract.width }),
+        ...(contract.height === undefined
+          ? {}
+          : { contractHeight: contract.height }),
+        ...(contract.x === undefined ? {} : { contractX: contract.x }),
+        ...(contract.y === undefined ? {} : { contractY: contract.y }),
+        ...(contract.padding === undefined
+          ? {}
+          : { padding: contract.padding }),
+        ...(bound.measureLayout === undefined
+          ? {}
+          : {
+              measure: (request: {
+                readonly availableWidth?: number;
+                readonly widthMode?: "at-most" | "exactly";
+              }) => this.#measure(path, themeContext, bound, request),
+            }),
+      },
+      parent,
+    );
+    this.#nodeMeta.set(node, {
+      element: input,
+      checksCanvasOverflow: false,
+    });
+    return node;
+  }
+
+  #markHidden(child: CapabilityElement): void {
+    this.#hidden.add(child);
+    for (const descendant of child.children) {
+      if (element(descendant)) this.#markHidden(descendant);
+    }
+  }
+
+  #warnOnce(path: string, code: string, message: string): void {
+    const key = `${path}\u0000${code}\u0000${message}`;
+    if (this.#warningKeys.has(key)) return;
+    this.#warningKeys.add(key);
+    this.#warnings.push({ severity: "warning", path, code, message });
+  }
+
+  #measure(
+    path: string,
+    theme: ThemeContext,
+    bound: BoundObjectCapability,
+    request: {
+      readonly availableWidth?: number;
+      readonly widthMode?: "at-most" | "exactly";
+    },
+  ): CapabilityLayoutMeasurement | undefined {
+    if (bound.measureLayout === undefined) {
+      return undefined;
+    }
+    try {
+      return bound.measureLayout({
+        ...request,
+        theme,
+        slideNumber: this.#slideNumber,
+      });
+    } catch (error) {
+      if (error instanceof BuildError) throw error;
+      const code =
+        error instanceof CapabilityError
+          ? error.code
+          : "layout-measurement-failed";
+      const message = error instanceof Error ? error.message : String(error);
+      const targetPath =
+        error instanceof CapabilityError && error.path !== undefined
+          ? error.path.startsWith(path)
+            ? error.path
+            : `${path}/${error.path}`
+          : path;
+      return fail(targetPath, code, message);
+    }
   }
 }

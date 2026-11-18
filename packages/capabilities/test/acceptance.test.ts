@@ -25,6 +25,10 @@ import { deck, shape, slide } from "../src/document.ts";
 import { shapeCapability } from "../src/shape.ts";
 import { runCapabilityScenario } from "./acceptance-runner.ts";
 import {
+  imagePositiveScenario,
+  imageRejectionScenario,
+} from "./scenarios/image.ts";
+import {
   shapePositiveScenario,
   shapeRejectionScenario,
 } from "./scenarios/shape.ts";
@@ -53,12 +57,14 @@ function createMarkerNode(
 }
 
 describe("Capability-owned acceptance scenarios & custom bound preview extensions", () => {
-  it("runs Shape and slide-background dual-author scenarios through shared runner and collects artifacts", async () => {
+  it("runs Shape, Image, and slide-background dual-author scenarios through shared runner and collects artifacts", async () => {
     const outDir = await mkdtemp(join(tmpdir(), "rp-cap-accept-"));
     try {
       for (const scenario of [
         shapePositiveScenario,
         shapeRejectionScenario,
+        imagePositiveScenario,
+        imageRejectionScenario,
         slideBackgroundPositiveScenario,
         slideBackgroundRejectionScenario,
         transitionPositiveScenario,

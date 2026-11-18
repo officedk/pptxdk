@@ -91,7 +91,6 @@ export type {
   ImageDeclarationProps,
   ImageSource,
   ImageVisualStyle,
-  ParsedImage,
 } from "#/image.ts";
 export { Image } from "#/image-elements.ts";
 export type { ImageProps } from "#/image-elements.ts";

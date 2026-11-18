@@ -38,7 +38,7 @@ export type {
   PathOptions,
   PresetGeometry,
 } from "./geometry.ts";
-import { nativeLinkXml } from "./identity.ts";
+import { nativeLinkXml, parseLinkTarget } from "./identity.ts";
 import { shapeXml } from "./shape-xml.ts";
 export { linearGradient, radialGradient } from "./visual.ts";
 export type { PaddingStyle, VisualStyle } from "@react-pptx/core/capability";
@@ -226,45 +226,6 @@ function validateSize(
     );
   }
   return value;
-}
-
-function parseLinkTarget(
-  value: unknown,
-  path?: string,
-): LinkTarget | undefined {
-  if (value === undefined) return undefined;
-  if (typeof value !== "object" || value === null || Array.isArray(value)) {
-    throw new CapabilityError(
-      "invalid-link",
-      "link must specify id, url, or home action",
-      path,
-    );
-  }
-  const entries = Object.entries(value).filter(
-    ([, target]) => target !== undefined,
-  );
-  if (entries.length !== 1) {
-    throw new CapabilityError(
-      "invalid-link",
-      "link must specify exactly one target",
-      path,
-    );
-  }
-  const [kind, target] = entries[0] ?? [];
-  if (kind === "id" && typeof target === "string") {
-    return { id: target };
-  }
-  if (kind === "url" && typeof target === "string") {
-    return { url: target };
-  }
-  if (kind === "action" && target === "home") {
-    return { action: "home" };
-  }
-  throw new CapabilityError(
-    "invalid-link",
-    "link supports { id }, { url }, or { action: 'home' }",
-    path,
-  );
 }
 
 function optionalText(

@@ -4,19 +4,22 @@ import {
   paddingStyleKeys,
   parseCapabilityLayoutContract,
   pxToEmu,
+  textStyleFrom,
   textStyleKeys,
   xmlEscape,
-  type CapabilityChild,
+  type BoundContainerCollaboration,
+  type BoundObjectCapability,
+  type BoundObjectCapabilityModule,
+  type BoundObjectNativeCollaboration,
   type CapabilityContext,
   type CapabilityInput,
-  type CapabilityLayoutContract,
   type CapabilityParseContext,
-  type CapabilityParseResult,
+  type GeometryBox,
   type LayoutStyle,
   type LinkTarget,
-  type MorphKey,
-  type ObjectCapabilityModule,
   type ObjectObservation,
+  type ObjectPreviewContext,
+  type ObjectPreviewOutput,
   type TextStyle,
   type ThemeScope,
   type VisualStyle,
@@ -24,9 +27,18 @@ import {
 import { CommonContainer } from "@react-pptx/core/document";
 
 import { groupXml } from "./group-xml.ts";
-import { nativeLinkXml } from "./identity.ts";
+import {
+  nativeLinkXml,
+  parseLinkTarget,
+  parseMorphKey,
+  parseOptionalName,
+} from "./identity.ts";
 import type { MorphProps } from "./morph-api.ts";
-import { motionContainerAnnotations, type MotionProps } from "./motion-api.ts";
+import {
+  motionContainerAnnotations,
+  validateMotionFlag,
+  type MotionProps,
+} from "./motion-api.ts";
 
 /** Native Group preserves member relationships; style allows it to arrange as a layout child, with output bounds computed from the union of member geometries. */
 export type GroupDeclarationProps = MotionProps &
@@ -96,21 +108,6 @@ function motionMembers(
       ? {}
       : { members: motionMembers(object.members) }),
   }));
-}
-
-function optionalText(
-  props: Readonly<Record<string, unknown>>,
-  name: "name",
-): string | undefined {
-  const value = props[name];
-  if (value === undefined) return undefined;
-  if (typeof value !== "string" || value.trim() === "") {
-    throw new CapabilityError(
-      "invalid-parameter",
-      `${name} must be a non-empty string`,
-    );
-  }
-  return value;
 }
 
 function bounds(members: readonly ObjectObservation[]): {
@@ -184,25 +181,14 @@ const groupAllowedStyleKeys = new Set<string>([
   "rotate",
 ]);
 
-export type ParsedGroup = {
-  readonly name?: string;
-  readonly morphKey?: MorphKey;
-  readonly link?: LinkTarget;
-  readonly styleRecord: Readonly<Record<string, unknown>>;
-  readonly rotation?: number;
-  readonly contract: CapabilityLayoutContract;
-  readonly rawProps: Readonly<Record<string, unknown>>;
-  readonly children: readonly CapabilityChild[];
-};
-
-/** Preserves members as native objects and writes group bounds according to final member geometry; outer layout is resolved by core. */
-export const groupCapability: ObjectCapabilityModule<ParsedGroup> = {
+/** Preserves members as native objects and writes group bounds according to final member geometry; layout participation uses generic container collaboration. */
+export const groupCapability: BoundObjectCapabilityModule = {
   declaration: "rp:group",
 
-  parse(
+  bind(
     input: CapabilityInput,
     context: CapabilityParseContext,
-  ): CapabilityParseResult<ParsedGroup> {
+  ): BoundObjectCapability {
     const unknown = Object.keys(input.props).find(
       (key) => !(allowedParameters as readonly string[]).includes(key),
     );
@@ -210,16 +196,13 @@ export const groupCapability: ObjectCapabilityModule<ParsedGroup> = {
       throw new CapabilityError(
         "unknown-parameter",
         `Group contains unsupported parameter ${unknown}`,
+        context.path,
       );
     }
-    const requestedName = optionalText(input.props, "name");
-    const rawStyle = input.props["style"];
-    const styleRecord =
-      typeof rawStyle === "object" &&
-      rawStyle !== null &&
-      !Array.isArray(rawStyle)
-        ? (rawStyle as Record<string, unknown>)
-        : {};
+    validateMotionFlag(input.props["motion"]);
+    const requestedName = parseOptionalName(input.props["name"], context.path);
+    const morphKey = parseMorphKey(input.props["morphKey"], context.path);
+    const link = parseLinkTarget(input.props["link"], context.path);
 
     const contract = parseCapabilityLayoutContract({
       nativeKind: "grpSp",
@@ -230,90 +213,160 @@ export const groupCapability: ObjectCapabilityModule<ParsedGroup> = {
       path: context.path,
     });
 
-    const rotation = styleRecord["rotate"];
-    if (typeof rotation === "number" && !Number.isFinite(rotation)) {
+    const rawStyle = input.props["style"];
+    const styleRecord =
+      typeof rawStyle === "object" &&
+      rawStyle !== null &&
+      !Array.isArray(rawStyle)
+        ? (rawStyle as Record<string, unknown>)
+        : {};
+
+    const rawRotation = styleRecord["rotate"];
+    if (
+      rawRotation !== undefined &&
+      (typeof rawRotation !== "number" || !Number.isFinite(rawRotation))
+    ) {
       throw new CapabilityError(
         "invalid-visual-style",
         "rotate must be a finite angle",
+        context.path,
       );
     }
-    const parsed: ParsedGroup = {
-      ...(requestedName !== undefined ? { name: requestedName } : {}),
-      ...(input.props["morphKey"] !== undefined
-        ? { morphKey: input.props["morphKey"] as MorphKey }
-        : {}),
-      ...(input.props["link"] !== undefined
-        ? { link: input.props["link"] as LinkTarget }
-        : {}),
-      styleRecord,
-      ...(typeof rotation === "number" ? { rotation } : {}),
-      contract,
-      rawProps: input.props,
-      children: input.children,
-    };
-    return { contract, parsed };
-  },
+    const rotation = rawRotation;
 
-  compile(parsed: ParsedGroup, context: CapabilityContext) {
-    const requestedName = parsed.name;
-    const compiled = context.compileChildren(parsed.children);
-    const geometry = bounds(compiled.objects);
-    const outputGeometry = context.layoutBox ?? geometry.pixels;
-    if (outputGeometry.width <= 0 || outputGeometry.height <= 0) {
-      throw new CapabilityError(
-        "invalid-group-geometry",
-        "Group layout width and height must be greater than 0",
-      );
-    }
-    const outputEmu = {
-      x: pxToEmu(outputGeometry.x),
-      y: pxToEmu(outputGeometry.y),
-      width: pxToEmu(outputGeometry.width),
-      height: pxToEmu(outputGeometry.height),
-    };
-    const name =
-      context.morphName ?? requestedName ?? `Group ${context.id - 1}`;
-    const rotation = parsed.rotation;
-    const members = motionMembers(compiled.objects);
-    const annotations = motionContainerAnnotations(parsed.rawProps, {
-      kind: "group",
-      name,
-      ...(typeof parsed.rawProps["id"] === "string"
-        ? { authorId: parsed.rawProps["id"] }
+    const theme = context.theme.with(
+      input.props["theme"] as ThemeScope | undefined,
+      textStyleFrom(styleRecord),
+    );
+
+    const authorId =
+      typeof input.props["id"] === "string" ? input.props["id"] : undefined;
+    const motionProps: Readonly<Record<string, unknown>> = {
+      ...(input.props["enter"] !== undefined
+        ? { enter: input.props["enter"] }
         : {}),
-      textBody: false,
-      filled: false,
-      box: outputGeometry,
-      rotationDegrees: typeof rotation === "number" ? rotation : 0,
-      members,
-    });
-    let escapedName: string;
-    try {
-      escapedName = xmlEscape(name);
-    } catch {
-      throw new CapabilityError(
-        "invalid-xml-character",
-        "Group.name contains characters not allowed in XML 1.0",
-      );
-    }
+      ...(input.props["emphasis"] !== undefined
+        ? { emphasis: input.props["emphasis"] }
+        : {}),
+      ...(input.props["motion"] !== undefined
+        ? { motion: input.props["motion"] }
+        : {}),
+    };
+
+    const container: BoundContainerCollaboration = {
+      children: input.children,
+      theme,
+      emitsObject: true,
+      layoutMode: "when-styled",
+      childComposition: "members",
+      restrictsMemberContinuity: true,
+      observesLayout: false,
+      propagatesBaseline: false,
+      checksCanvasOverflow: false,
+    };
+
+    const native: BoundObjectNativeCollaboration = {
+      ...(morphKey === undefined ? {} : { morphKey }),
+      ...(requestedName === undefined ? {} : { hasExplicitName: true }),
+      ...(link === undefined ? {} : { link }),
+    };
+
+    let compiledBox: GeometryBox | undefined;
+
     return {
-      xml: groupXml(
-        context.id,
-        escapedName,
-        outputEmu,
-        compiled.xml,
-        rotation === undefined ? undefined : rotation,
-        nativeLinkXml(context.nativeLink),
-      ),
-      observation: {
-        id: context.id,
-        kind: "group",
-        name,
-        box: outputGeometry,
-        members: compiled.objects,
+      contract,
+      container,
+      ...(morphKey !== undefined ||
+      requestedName !== undefined ||
+      link !== undefined
+        ? { native }
+        : {}),
+      compile(compileContext: CapabilityContext) {
+        const compiled = compileContext.compileChildren(input.children);
+        const geometry = bounds(compiled.objects);
+        const outputGeometry = compileContext.layoutBox ?? geometry.pixels;
+        if (outputGeometry.width <= 0 || outputGeometry.height <= 0) {
+          throw new CapabilityError(
+            "invalid-group-geometry",
+            "Group layout width and height must be greater than 0",
+            compileContext.path,
+          );
+        }
+        compiledBox = outputGeometry;
+        const outputEmu = {
+          x: pxToEmu(outputGeometry.x),
+          y: pxToEmu(outputGeometry.y),
+          width: pxToEmu(outputGeometry.width),
+          height: pxToEmu(outputGeometry.height),
+        };
+        const name =
+          compileContext.morphName ??
+          requestedName ??
+          `Group ${compileContext.id - 1}`;
+        const members = motionMembers(compiled.objects);
+        const annotations = motionContainerAnnotations(motionProps, {
+          kind: "group",
+          name,
+          ...(authorId === undefined ? {} : { authorId }),
+          textBody: false,
+          filled: false,
+          box: outputGeometry,
+          rotationDegrees: rotation ?? 0,
+          members,
+        });
+        let escapedName: string;
+        try {
+          escapedName = xmlEscape(name);
+        } catch {
+          throw new CapabilityError(
+            "invalid-xml-character",
+            "Group.name contains characters not allowed in XML 1.0",
+            compileContext.path,
+          );
+        }
+        return {
+          xml: groupXml(
+            compileContext.id,
+            escapedName,
+            outputEmu,
+            compiled.xml,
+            rotation,
+            nativeLinkXml(compileContext.nativeLink),
+          ),
+          observation: {
+            id: compileContext.id,
+            kind: "group",
+            name,
+            box: outputGeometry,
+            members: compiled.objects,
+          },
+          extensions: [],
+          ...(annotations.length === 0 ? {} : { annotations }),
+        };
       },
-      extensions: [],
-      ...(annotations.length === 0 ? {} : { annotations }),
+      preview(previewContext: ObjectPreviewContext): ObjectPreviewOutput {
+        const box = previewContext.box ?? compiledBox;
+        if (box === undefined) {
+          throw new CapabilityError(
+            "layout-unavailable",
+            "Preview requires compiled Group geometry",
+            previewContext.path,
+          );
+        }
+        const childrenSvg = previewContext.childrenSvg ?? "";
+        const angle = rotation ?? 0;
+        const cx = box.x + box.width / 2;
+        const cy = box.y + box.height / 2;
+        return {
+          svg: `<g transform="rotate(${angle} ${cx} ${cy})">${childrenSvg}</g>`,
+          transform: {
+            box,
+            angle,
+            flipH: false,
+            flipV: false,
+          },
+        };
+      },
     };
   },
 };

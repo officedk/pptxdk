@@ -49,9 +49,21 @@ import { P, SlideNumber, Span, Text } from "../src/text-elements.ts";
 import { runCapabilityScenario } from "./acceptance-runner.ts";
 import { boxPositiveScenario, boxRejectionScenario } from "./scenarios/box.ts";
 import {
+  groupPositiveScenario,
+  groupRejectionScenario,
+} from "./scenarios/group.ts";
+import {
   imagePositiveScenario,
   imageRejectionScenario,
 } from "./scenarios/image.ts";
+import {
+  layoutBlockFlexPositiveScenario,
+  layoutBlockFlexRejectionCases,
+} from "./scenarios/layout-block-flex.ts";
+import {
+  layoutGridPositiveScenario,
+  layoutGridRejectionCases,
+} from "./scenarios/layout-grid.ts";
 import {
   motionPositiveScenario,
   verifyMotionCollaborationAndRejections,
@@ -72,6 +84,10 @@ import {
   textPositiveScenario,
   textRejectionScenario,
 } from "./scenarios/text.ts";
+import {
+  runTransitionRejectionScenarios,
+  transitionPositiveScenario,
+} from "./scenarios/transition.ts";
 
 type CustomMarkerProps = {
   readonly id?: string;
@@ -89,16 +105,20 @@ function createMarkerNode(
 }
 
 describe("Capability-owned acceptance scenarios & custom bound preview extensions", () => {
-  it("runs Shape, Image, slide-background, and Text dual-author scenarios through shared runner and collects artifacts", async () => {
+  it("runs Box, Shape, Image, slide-background, Text, and Notes dual-author scenarios through shared runner and collects artifacts", async () => {
     const outDir = await mkdtemp(join(tmpdir(), "rp-cap-accept-"));
     try {
       for (const scenario of [
         boxPositiveScenario,
         boxRejectionScenario,
-        shapePositiveScenario,
-        shapeRejectionScenario,
+        groupPositiveScenario,
+        groupRejectionScenario,
         imagePositiveScenario,
         imageRejectionScenario,
+        layoutBlockFlexPositiveScenario,
+        layoutGridPositiveScenario,
+        shapePositiveScenario,
+        shapeRejectionScenario,
         slideBackgroundPositiveScenario,
         slideBackgroundRejectionScenario,
         textPositiveScenario,
@@ -118,7 +138,40 @@ describe("Capability-owned acceptance scenarios & custom bound preview extension
     } finally {
       await rm(outDir, { recursive: true, force: true });
     }
-  }, 15_000);
+  }, 30_000);
+
+  it("enforces unsupported Block/Flex and Grid layout rejections consistently across JSX and document entries", async () => {
+    const jsxPreview = createPreview(documentCapabilities);
+    const docPreview = createDocumentPreview(documentCapabilities);
+    for (const entry of [
+      ...layoutBlockFlexRejectionCases,
+      ...layoutGridRejectionCases,
+    ]) {
+      for (const author of ["jsx", "document"] as const) {
+        await assert.rejects(
+          () =>
+            author === "jsx"
+              ? jsxPreview(entry.jsx())
+              : docPreview(entry.document()),
+          (error: unknown) => {
+            assert(
+              error instanceof BuildError,
+              `${entry.id} (${author}) should throw BuildError`,
+            );
+            assert.ok(
+              error.diagnostics.some(
+                (d) =>
+                  d.code === entry.expectedCode &&
+                  d.path.includes(entry.expectedPathSubstring),
+              ),
+              `${entry.id} (${author}) expected ${entry.expectedCode} at ${entry.expectedPathSubstring}, got ${JSON.stringify(error.diagnostics)}`,
+            );
+            return true;
+          },
+        );
+      }
+    }
+  });
 
   it("runs Motion dual-author choreography scenario, static canvas preview, Group/Chart collaboration, and rejections", async () => {
     const outDir = await mkdtemp(join(tmpdir(), "rp-motion-accept-"));
@@ -132,6 +185,23 @@ describe("Capability-owned acceptance scenarios & custom bound preview extension
         ["jsx", "document"],
       );
       await verifyMotionCollaborationAndRejections();
+    } finally {
+      await rm(outDir, { recursive: true, force: true });
+    }
+  }, 15_000);
+
+  it("runs Transition and Morph dual-author scenarios through shared runner and verifies rejections", async () => {
+    const outDir = await mkdtemp(join(tmpdir(), "rp-cap-accept-trans-"));
+    try {
+      const runs = await runCapabilityScenario(transitionPositiveScenario, {
+        outputDir: outDir,
+      });
+      assert.equal(runs.length, 2);
+      assert.deepEqual(
+        runs.map((r) => r.author),
+        ["jsx", "document"],
+      );
+      await runTransitionRejectionScenarios();
     } finally {
       await rm(outDir, { recursive: true, force: true });
     }

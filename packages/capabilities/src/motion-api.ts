@@ -543,14 +543,24 @@ type MotionFrame = {
   readonly enabled: boolean;
   readonly step?: StepDeclaration;
   readonly scopes: readonly MotionScopeDeclaration[];
-  readonly defaultEnter?:
-    | EntranceEffectDeclaration
-    | readonly EntranceEffectDeclaration[];
+  readonly defaultEnter?: readonly NormalizedEffect[];
 };
 
 type LocalScopeValue = {
   readonly type: "scope";
   readonly scope: MotionScopeDeclaration;
+  readonly enabled: boolean;
+};
+
+type LocalStepValue = {
+  readonly type: "step";
+  readonly step: StepDeclaration;
+};
+
+type LocalContainerValue = {
+  readonly type: "container";
+  readonly enabled: boolean;
+  readonly defaultEnter?: readonly NormalizedEffect[];
 };
 
 export type MotionEffectObservation = {
@@ -1238,12 +1248,16 @@ export function motionScopeAnnotation(
   const scope = localScopeDeclaration(input);
   return {
     capability: "motion",
-    value: Object.freeze({ type: "scope", scope }),
+    value: Object.freeze({
+      type: "scope",
+      scope,
+      enabled: input["motion"] !== false,
+    } satisfies LocalScopeValue),
     resolveContributions: resolveMotionContributions,
   };
 }
 
-/** Validates Step wrapper parameters; step ancestry is derived from the build-time tree. */
+/** Validates Step wrapper parameters and emits a transparent step annotation resolved by tree order. */
 export function motionStepAnnotation(
   input: Readonly<Record<string, unknown>>,
 ): readonly CapabilityAnnotation[] {
@@ -1256,8 +1270,15 @@ export function motionStepAnnotation(
       `Step contains unimplemented parameter ${unknown}`,
     );
   }
-  stepDeclarationFromProps(input);
-  return [];
+  const step = stepDeclarationFromProps(input);
+  return [
+    {
+      capability: "motion",
+      optional: true,
+      value: Object.freeze({ type: "step", step } satisfies LocalStepValue),
+      resolveContributions: resolveMotionContributions,
+    },
+  ];
 }
 
 function localMotionValue(
@@ -1321,6 +1342,45 @@ export function motionAnnotations(
   ];
 }
 
+/**
+ * Converts container motion scope overrides and optional native target animation declarations into
+ * local annotations consumed by motion slide capability without inspecting raw container props later.
+ */
+export function motionContainerAnnotations(
+  props: Readonly<Record<string, unknown>>,
+  target: MotionTarget | undefined,
+  options: { readonly propagatesDefaultEnter?: boolean } = {},
+): readonly CapabilityAnnotation[] {
+  validateMotionFlag(props["motion"]);
+  const enabled = props["motion"] !== false;
+  const propagatesDefaultEnter = options.propagatesDefaultEnter === true;
+  let defaultEnter: readonly NormalizedEffect[] | undefined;
+  if (enabled && propagatesDefaultEnter && props["enter"] !== undefined) {
+    defaultEnter = Object.freeze(
+      listed(props["enter"], true).map((effect) =>
+        validatedEffect(effect, "entrance"),
+      ),
+    );
+  }
+  const annotations: CapabilityAnnotation[] = [];
+  if (!enabled || defaultEnter !== undefined) {
+    annotations.push({
+      capability: "motion",
+      optional: true,
+      value: Object.freeze({
+        type: "container",
+        enabled,
+        ...(defaultEnter === undefined ? {} : { defaultEnter }),
+      } satisfies LocalContainerValue),
+      resolveContributions: resolveMotionContributions,
+    });
+  }
+  if (enabled && target !== undefined) {
+    annotations.push(...motionAnnotations(props, target));
+  }
+  return annotations;
+}
+
 function isLocalMotionValue(value: unknown): value is LocalMotionValue {
   return (
     isRecord(value) &&
@@ -1335,40 +1395,30 @@ function isLocalScopeValue(value: unknown): value is LocalScopeValue {
     isRecord(value) &&
     value["type"] === "scope" &&
     isRecord(value["scope"]) &&
-    typeof value["scope"]["identity"] === "string"
+    typeof value["scope"]["identity"] === "string" &&
+    typeof value["enabled"] === "boolean"
   );
 }
 
-function entranceEffects(
-  value: unknown,
-  path: string,
-): readonly NormalizedEffect[] {
-  try {
-    return listed(value, true).map((effect) =>
-      validatedEffect(effect, "entrance"),
-    );
-  } catch (error) {
-    if (error instanceof CapabilityError) {
-      throw new CapabilityError(error.code, error.message, path);
-    }
-    throw error;
-  }
+function isLocalStepValue(value: unknown): value is LocalStepValue {
+  return isRecord(value) && value["type"] === "step" && isRecord(value["step"]);
 }
 
-function motionContainer(declaration: string): boolean {
+function isLocalContainerValue(value: unknown): value is LocalContainerValue {
   return (
-    declaration === "rp:box" ||
-    declaration === "rp:group" ||
-    declaration === "rp:motion-scope"
+    isRecord(value) &&
+    value["type"] === "container" &&
+    typeof value["enabled"] === "boolean"
   );
 }
 
 /**
  * Resolves local motion declarations against the current declaration tree.
  *
- * Scope parent chains, nearest click step, inherited Box default entrance, and disabled ancestor
- * chains are derived from this build's structure. Nothing here is stored on the editable nodes, so
- * moving or appending content changes the next build's choreography without stale React context.
+ * Scope parent chains, nearest click step, inherited container default entrance, and disabled
+ * ancestor chains are derived from submitted capability annotations along the build's structure.
+ * Nothing here is stored on the editable nodes or read from raw container props, so moving or
+ * appending content changes the next build's choreography without stale React context.
  *
  * The build passes only this capability's contributions, then uses the effective result for both
  * timing output and missing-capability checks.
@@ -1393,55 +1443,64 @@ export function resolveMotionContributions(
 
   const resolved: CapabilityContribution[] = [];
   const visit = (node: CapabilityChild, frame: MotionFrame): void => {
-    if (!("props" in node)) return;
+    if (!("children" in node)) return;
     const localContributions = byDeclaration.get(node) ?? [];
     let childFrame = frame;
 
-    if (node.type === "rp:motion-scope") {
-      const enabled = frame.enabled && node.props["motion"] !== false;
-      const scopeContribution = localContributions.find((contribution) =>
-        isLocalScopeValue(contribution.value),
+    const stepContribution = localContributions.find((contribution) =>
+      isLocalStepValue(contribution.value),
+    );
+    const scopeContribution = localContributions.find((contribution) =>
+      isLocalScopeValue(contribution.value),
+    );
+    const containerContribution = localContributions.find((contribution) =>
+      isLocalContainerValue(contribution.value),
+    );
+    const localContribution = localContributions.find((contribution) =>
+      isLocalMotionValue(contribution.value),
+    );
+
+    if (stepContribution !== undefined) {
+      const localStep = stepContribution.value as LocalStepValue;
+      childFrame = { ...childFrame, step: localStep.step };
+    }
+
+    if (scopeContribution !== undefined) {
+      const local = scopeContribution.value as LocalScopeValue;
+      const enabled = childFrame.enabled && local.enabled;
+      const parent = childFrame.scopes.at(-1);
+      const scope: MotionScopeDeclaration = Object.freeze({
+        ...local.scope,
+        ...(parent === undefined ? {} : { parent: parent.identity }),
+        ...(childFrame.step === undefined ? {} : { step: childFrame.step }),
+      });
+      resolved.push(
+        Object.freeze({
+          ...scopeContribution,
+          value: Object.freeze({ type: "scope" as const, scope }),
+        }),
       );
-      if (scopeContribution !== undefined) {
-        const local = scopeContribution.value as LocalScopeValue;
-        const parent = frame.scopes.at(-1);
-        const scope: MotionScopeDeclaration = Object.freeze({
-          ...local.scope,
-          ...(parent === undefined ? {} : { parent: parent.identity }),
-          ...(frame.step === undefined ? {} : { step: frame.step }),
-        });
-        resolved.push(
-          Object.freeze({
-            ...scopeContribution,
-            value: Object.freeze({ type: "scope" as const, scope }),
-          }),
-        );
-        childFrame = {
-          ...frame,
-          enabled,
-          scopes: Object.freeze([...frame.scopes, scope]),
-        };
-      } else {
-        childFrame = { ...frame, enabled };
-      }
-    } else if (node.type === "rp:motion-step") {
-      childFrame = { ...frame, step: stepDeclarationFromProps(node.props) };
-    } else {
-      const localContribution = localContributions.find((contribution) =>
-        isLocalMotionValue(contribution.value),
-      );
-      let defaultEnter = frame.defaultEnter;
-      if (node.type === "rp:box" && node.props["enter"] !== undefined) {
-        defaultEnter = node.props["enter"] as
-          | EntranceEffectDeclaration
-          | readonly EntranceEffectDeclaration[];
-      }
-      const enabled = frame.enabled && node.props["motion"] !== false;
+      childFrame = {
+        ...childFrame,
+        enabled,
+        scopes: Object.freeze([...childFrame.scopes, scope]),
+      };
+    }
+
+    if (
+      containerContribution !== undefined ||
+      localContribution !== undefined
+    ) {
+      const container = containerContribution?.value as
+        | LocalContainerValue
+        | undefined;
+      const enabled =
+        childFrame.enabled && (container === undefined || container.enabled);
       if (localContribution !== undefined && enabled) {
         const local = localContribution.value as LocalMotionValue;
         const inherited = local.enterDeclared
           ? []
-          : entranceEffects(defaultEnter, localContribution.path);
+          : (childFrame.defaultEnter ?? []);
         const effects = Object.freeze([...inherited, ...local.effects]);
         if (effects.length > 0) {
           resolved.push(
@@ -1450,19 +1509,25 @@ export function resolveMotionContributions(
               optional: false,
               value: Object.freeze({
                 target: local.target,
-                ...(frame.step === undefined ? {} : { step: frame.step }),
-                scopes: frame.scopes,
+                ...(childFrame.step === undefined
+                  ? {}
+                  : { step: childFrame.step }),
+                scopes: childFrame.scopes,
                 effects,
               } satisfies MotionValue),
             }),
           );
         }
       }
-      childFrame = {
-        ...frame,
-        ...(motionContainer(node.type) ? { enabled } : {}),
-        ...(node.type === "rp:box" ? { defaultEnter } : {}),
-      };
+      if (container !== undefined) {
+        childFrame = {
+          ...childFrame,
+          enabled,
+          ...(container.defaultEnter === undefined
+            ? {}
+            : { defaultEnter: container.defaultEnter }),
+        };
+      }
     }
 
     for (const child of node.children) visit(child, childFrame);

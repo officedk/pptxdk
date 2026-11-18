@@ -69,6 +69,10 @@ import {
   layoutGridRejectionCases,
 } from "./scenarios/layout-grid.ts";
 import {
+  motionPositiveScenario,
+  verifyMotionCollaborationAndRejections,
+} from "./scenarios/motion.ts";
+import {
   notesPositiveScenario,
   notesPreviewIsolationScenario,
 } from "./scenarios/notes.ts";
@@ -180,6 +184,23 @@ describe("Capability-owned acceptance scenarios & custom bound preview extension
       }
     }
   });
+
+  it("runs Motion dual-author choreography scenario, static canvas preview, Group/Chart collaboration, and rejections", async () => {
+    const outDir = await mkdtemp(join(tmpdir(), "rp-motion-accept-"));
+    try {
+      const runs = await runCapabilityScenario(motionPositiveScenario, {
+        outputDir: outDir,
+      });
+      assert.equal(runs.length, 2);
+      assert.deepEqual(
+        runs.map((r) => r.author),
+        ["jsx", "document"],
+      );
+      await verifyMotionCollaborationAndRejections();
+    } finally {
+      await rm(outDir, { recursive: true, force: true });
+    }
+  }, 15_000);
 
   it("runs Transition and Morph dual-author scenarios through shared runner and verifies rejections", async () => {
     const outDir = await mkdtemp(join(tmpdir(), "rp-cap-accept-trans-"));

@@ -35,7 +35,7 @@ import {
 } from "./identity.ts";
 import type { MorphProps } from "./morph-api.ts";
 import {
-  motionAnnotations,
+  motionContainerAnnotations,
   validateMotionFlag,
   type MotionProps,
 } from "./motion-api.ts";
@@ -304,7 +304,7 @@ export const groupCapability: BoundObjectCapabilityModule = {
           requestedName ??
           `Group ${compileContext.id - 1}`;
         const members = motionMembers(compiled.objects);
-        const annotations = motionAnnotations(motionProps, {
+        const annotations = motionContainerAnnotations(motionProps, {
           kind: "group",
           name,
           ...(authorId === undefined ? {} : { authorId }),

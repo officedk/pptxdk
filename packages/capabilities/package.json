@@ -149,7 +149,9 @@
     "fflate": "catalog:",
     "fontkit": "catalog:",
     "harfbuzzjs": "catalog:",
+    "jpeg-js": "catalog:",
     "linebreak": "catalog:",
+    "pngjs": "catalog:",
     "react": "catalog:"
   },
   "devDependencies": {
@@ -162,7 +164,6 @@
     "oxfmt": "catalog:",
     "oxlint": "catalog:",
     "oxlint-tsgolint": "catalog:",
-    "pngjs": "catalog:",
     "typescript-7": "catalog:",
     "vitest": "catalog:"
   },

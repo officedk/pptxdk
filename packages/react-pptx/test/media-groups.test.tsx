@@ -895,10 +895,13 @@ describe("images and native groups", () => {
     );
   });
 
-  it("executes imageCapability.parse and reads image resource exactly once per Image node during build", async () => {
-    const parseSpy = vi.spyOn(imageCapability, "parse");
-    const measureSpy = vi.spyOn(imageCapability, "measureLayout");
-    const compileSpy = vi.spyOn(imageCapability, "compile");
+  it("migrates imageCapability to BoundObjectCapabilityModule and binds image resource once per Image node during build", async () => {
+    assert.equal("bind" in imageCapability, true);
+    assert.equal("parse" in imageCapability, false);
+    assert.equal("measureLayout" in imageCapability, false);
+    assert.equal("compile" in imageCapability, false);
+
+    const bindSpy = vi.spyOn(imageCapability, "bind");
 
     try {
       const result = await build(
@@ -922,34 +925,25 @@ describe("images and native groups", () => {
       );
 
       assert.equal(
-        parseSpy.mock.calls.length,
+        bindSpy.mock.calls.length,
         1,
-        `Expected imageCapability.parse to be called exactly 1 time, got ${parseSpy.mock.calls.length}`,
+        `Expected imageCapability.bind to be called exactly 1 time, got ${bindSpy.mock.calls.length}`,
       );
 
-      const parsedResult = parseSpy.mock.results[0]?.value;
-      assert.ok(parsedResult);
-      assert.equal(parsedResult.contract.nativeKind, "pic");
-      assert.equal(parsedResult.parsed.image.width, 1);
-      assert.equal(parsedResult.parsed.image.height, 1);
-
-      // Verify measureLayout and compile reused the parsed image object directly
-      assert.ok(measureSpy.mock.calls.length >= 1);
-      for (const call of measureSpy.mock.calls) {
-        assert.equal(call[0]?.image, parsedResult.parsed.image);
-      }
-      assert.equal(compileSpy.mock.calls.length, 1);
-      assert.equal(
-        compileSpy.mock.calls[0]?.[0]?.image,
-        parsedResult.parsed.image,
-      );
+      const boundHandle = bindSpy.mock.results[0]?.value;
+      assert.ok(boundHandle);
+      assert.equal(boundHandle.contract.nativeKind, "pic");
+      assert.deepEqual(result.report.slides[0]?.objects[0]?.box, {
+        x: 0,
+        y: 0,
+        width: 1,
+        height: 1,
+      });
 
       const validation = await validatePptx(result.pptx);
       assert.deepEqual(validation.errors, []);
     } finally {
-      parseSpy.mockRestore();
-      measureSpy.mockRestore();
-      compileSpy.mockRestore();
+      bindSpy.mockRestore();
     }
   });
 

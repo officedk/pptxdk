@@ -16,6 +16,7 @@ import Yoga, {
 import { BuildError, CapabilityError } from "#/diagnostics.ts";
 import { textStyleFrom, textStyleKeys } from "#/theme.ts";
 import type {
+  BoundContainerCollaboration,
   BoundObjectCapability,
   BoundObjectCapabilityModule,
   BuildOptions,
@@ -1337,39 +1338,6 @@ export class LayoutPass {
         this.#markHidden(child);
         return;
       }
-      if (child.type === "rp:box") {
-        const module = this.#modules.get(child.type);
-        if (!objectModule(module)) {
-          fail(
-            childPath,
-            "missing-capability",
-            "rp:box capability is required",
-          );
-        }
-        const bound = this.#bindCapability(
-          child,
-          childPath,
-          themeContext,
-          module,
-        );
-        const contract = bound.contract;
-        const childStyle = contract.layoutStyle;
-        if (childStyle.display === "none") {
-          this.#markHidden(child);
-          return;
-        }
-        this.#validateItemStyle(childStyle, parent, childPath);
-        const built = this.#buildBox(
-          child,
-          childPath,
-          parent,
-          themeContext,
-          contract,
-          bound,
-        );
-        this.#appendLayoutChild(parent, built);
-        return;
-      }
       if (child.type === "rp:group") {
         const module = this.#modules.get(child.type);
         if (!objectModule(module)) {
@@ -1453,6 +1421,19 @@ export class LayoutPass {
           return;
         }
         this.#validateItemStyle(contract.layoutStyle, parent, childPath);
+        if (bound.container !== undefined) {
+          const built = this.#buildContainer(
+            child,
+            childPath,
+            parent,
+            themeContext,
+            contract,
+            bound,
+            bound.container,
+          );
+          this.#appendLayoutChild(parent, built);
+          return;
+        }
         const built = this.#buildObject(
           child,
           childPath,
@@ -1594,22 +1575,17 @@ export class LayoutPass {
     for (const child of node.children) this.#freeEscaped(child);
   }
 
-  #buildBox(
+  #buildContainer(
     input: CapabilityElement,
     path: string,
     parent: LayoutNode,
     themeContext: ThemeContext,
     contract: CapabilityLayoutContract,
     bound: BoundObjectCapability,
+    container: BoundContainerCollaboration,
   ): LayoutNode {
-    const rawStyle = input.props["style"];
     const style = contract.layoutStyle;
-    const theme = deriveTheme(
-      themeContext,
-      input.props["theme"] as ThemeScope | undefined,
-      rawStyle,
-      path,
-    );
+    const theme = container.theme ?? themeContext;
     const yoga = Yoga.Node.create(this.#config);
     const node: LayoutNode = {
       yoga,
@@ -1625,7 +1601,7 @@ export class LayoutPass {
     };
     this.#themes.set(input, theme);
     this.#applyStyle(yoga, style, parent.style, false, true);
-    this.#appendChildren(input.children, path, node, true, theme);
+    this.#appendChildren(container.children, path, node, true, theme);
     return node;
   }
 
@@ -2168,14 +2144,8 @@ export class LayoutPass {
       const align = gridAlignment(alignValue);
       const declaredWidth = childStyle.width ?? child.contract?.width;
       const declaredHeight = childStyle.height ?? child.contract?.height;
-      const widthPercent = resolvePercent(
-        declaredWidth as LayoutLength | undefined,
-        cellWidth,
-      );
-      const heightPercent = resolvePercent(
-        declaredHeight as LayoutLength | undefined,
-        cellHeight,
-      );
+      const widthPercent = resolvePercent(declaredWidth, cellWidth);
+      const heightPercent = resolvePercent(declaredHeight, cellHeight);
       const widthSpecified =
         declaredWidth !== undefined && declaredWidth !== "auto";
       let heightSpecified =
@@ -2544,7 +2514,10 @@ export class LayoutPass {
   }
 
   #resolveBaselineLeaf(node: LayoutNode): LayoutNode {
-    if (node.element?.type !== "rp:box") {
+    if (
+      node.bound?.container === undefined ||
+      node.bound.container.propagatesBaseline === false
+    ) {
       if (node.bound?.measureLayout === undefined) {
         fail(
           node.path,
@@ -2767,7 +2740,7 @@ export class LayoutPass {
   #minContent(node: LayoutNode, axis: "width" | "height"): number | undefined {
     const isContainer =
       node.element === undefined ||
-      node.element.type === "rp:box" ||
+      node.bound?.container !== undefined ||
       node.element.type === "rp:group";
     if (!isContainer) {
       const padding = expandedSpacing(node.style, "padding");
@@ -2870,13 +2843,14 @@ export class LayoutPass {
       width: node.yoga.getComputedWidth(),
       height: node.yoga.getComputedHeight(),
     };
-    if (node.element?.type === "rp:box") {
+    if (node.bound?.container !== undefined && node.element !== undefined) {
       this.#boxes.set(node.element, box);
       if (
-        box.x < 0 ||
-        box.y < 0 ||
-        box.x + box.width > this.#dimensions.width ||
-        box.y + box.height > this.#dimensions.height
+        node.bound.container.checksCanvasOverflow !== false &&
+        (box.x < 0 ||
+          box.y < 0 ||
+          box.x + box.width > this.#dimensions.width ||
+          box.y + box.height > this.#dimensions.height)
       ) {
         this.#warnings.push({
           severity: "warning",

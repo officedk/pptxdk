@@ -698,11 +698,32 @@ export type BoundObjectNativeCollaboration = {
 };
 
 /**
+ * Generic container collaboration facts submitted by a bound object capability.
+ * Core coordinates child layout/compilation, scoped theme propagation, layout observation,
+ * baseline propagation, and native object qualification without hardcoding container names.
+ */
+export type BoundContainerCollaboration = {
+  /** Child declarations owned by this layout container. */
+  readonly children: readonly CapabilityChild[];
+  /** Scoped theme and accumulated text defaults applied to descendants and container compilation. */
+  readonly theme?: ThemeContext;
+  /** True when this container produces a native PresentationML object rather than remaining layout-only. */
+  readonly emitsObject: boolean;
+  /** True when this container contributes a layout-region observation (`kind: "layout"`). Defaults to true. */
+  readonly observesLayout?: boolean;
+  /** True when single-child flex rows propagate text baseline through this container. Defaults to true. */
+  readonly propagatesBaseline?: boolean;
+  /** True when overflowing the slide canvas emits a layout container overflow warning. Defaults to true. */
+  readonly checksCanvasOverflow?: boolean;
+};
+
+/**
  * Per-build bound object instance whose private parsed state remains encapsulated inside the module closure.
  */
 export type BoundObjectCapability = {
   readonly contract: CapabilityLayoutContract;
   readonly native?: BoundObjectNativeCollaboration;
+  readonly container?: BoundContainerCollaboration;
   measureLayout?(
     request: CapabilityLayoutRequest,
   ): CapabilityLayoutMeasurement | undefined;
@@ -735,7 +756,11 @@ export type TransparentCapabilityModule = {
   readonly children?: "traverse" | "owned";
   compileDeclaration(
     input: CapabilityInput,
-    context: { readonly path: string },
+    context: {
+      readonly path: string;
+      readonly theme?: ThemeContext;
+      readonly slideNumber?: number;
+    },
   ): readonly CapabilityAnnotation[];
 };
 
@@ -786,6 +811,7 @@ export type SlideCapabilityParseContext = {
   readonly theme: ThemeContext;
   readonly options: BuildOptions;
   readonly slideNumber: number;
+  readonly contributions: readonly CapabilityContribution[];
 };
 
 export type SlidePreviewContext = {

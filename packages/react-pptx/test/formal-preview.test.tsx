@@ -1,23 +1,32 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
+import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
 import {
   Box,
   BuildError,
+  Cell,
   Deck,
   Group,
+  Row,
   Shape,
   Slide,
+  Table,
   Text,
+  font,
   preview as previewJsx,
 } from "@react-pptx/react-pptx";
 import {
   box,
+  cell,
   chart,
   deck,
+  group,
+  row,
   shape,
   slide,
+  table,
   text,
 } from "@react-pptx/react-pptx/document";
 import { preview as previewDocument } from "@react-pptx/react-pptx/preview";
@@ -38,6 +47,14 @@ function runIsolatedScript(script: string) {
 
 describe("Slice 3: formal static preview public entrypoints and runtime isolation", () => {
   it("supports JSX preview and plain document preview from the same formal pipeline", async () => {
+    const jostFont = font("Jost*", [
+      {
+        weight: 400,
+        data: readFileSync(
+          new URL("./assets/fonts/Jost-400-Book.ttf", import.meta.url),
+        ),
+      },
+    ]);
     const jsxResult = await previewJsx(
       createElement(
         Deck,
@@ -53,6 +70,17 @@ describe("Slice 3: formal static preview public entrypoints and runtime isolatio
             height: 60,
             fill: "#336699",
           }),
+          createElement(
+            Text,
+            {
+              id: "caption",
+              x: 20,
+              y: 96,
+              width: 160,
+              style: { fontFamily: jostFont, fontSize: 18, color: "#111827" },
+            },
+            "Shared preview",
+          ),
         ),
       ),
     );
@@ -67,6 +95,13 @@ describe("Slice 3: formal static preview public entrypoints and runtime isolatio
             height: 60,
             fill: "#336699",
           }),
+          text("Shared preview", {
+            id: "caption",
+            x: 20,
+            y: 96,
+            width: 160,
+            style: { fontFamily: jostFont, fontSize: 18, color: "#111827" },
+          }),
         ),
       ),
     );
@@ -75,6 +110,7 @@ describe("Slice 3: formal static preview public entrypoints and runtime isolatio
     assert.equal(docResult.pages.length, 1);
     assert.deepEqual(jsxResult.pages[0]?.diagnostics, []);
     assert.deepEqual(docResult.pages[0]?.diagnostics, []);
+    expect(jsxResult.pages[0]?.svg).toContain("<path");
     assert.deepEqual(jsxResult.pages[0]?.png, docResult.pages[0]?.png);
     assert.deepEqual((await validatePptx(jsxResult.build.pptx)).errors, []);
     assert.deepEqual((await validatePptx(docResult.build.pptx)).errors, []);
@@ -83,13 +119,9 @@ describe("Slice 3: formal static preview public entrypoints and runtime isolatio
   it("validates 1-based pages, skips drawing unselected pages, and still validates full-deck build", async () => {
     const validTwoPages = deck({ width: 320, height: 180 }).append(
       slide({ id: "unselected-unmigrated" }).append(
-        text("Not yet migrated", {
-          id: "t",
-          x: 10,
-          y: 10,
-          width: 100,
-          height: 30,
-        }),
+        table({ id: "t", x: 10, y: 10, width: 100, columns: [100] }).append(
+          row({ style: { height: 30 } }).append(cell("Not yet migrated")),
+        ),
       ),
       slide({ id: "selected", background: "#123456" }).append(
         shape({
@@ -154,18 +186,21 @@ describe("Slice 3: formal static preview public entrypoints and runtime isolatio
 
   it("rejects unmigrated object capabilities on selected pages without silently omitting them", async () => {
     const doc = deck({ width: 320, height: 180 }).append(
-      slide({ id: "with-text" }).append(
-        text("Unmigrated text", {
-          id: "t1",
-          x: 10,
-          y: 10,
-          width: 100,
-          height: 30,
-        }),
+      slide({ id: "with-table" }).append(
+        table({ id: "tb1", x: 10, y: 10, width: 120, columns: [120] }).append(
+          row({ style: { height: 30 } }).append(cell("Unmigrated table")),
+        ),
       ),
-      slide({ id: "with-box" }).append(
-        box({ id: "b1", style: { width: 100, height: 40 } }).append(
-          shape({ id: "inner", width: 40, height: 20, fill: "#FF0000" }),
+      slide({ id: "with-group" }).append(
+        group({ id: "g1" }).append(
+          shape({
+            id: "inner",
+            x: 10,
+            y: 10,
+            width: 40,
+            height: 20,
+            fill: "#FF0000",
+          }),
         ),
       ),
       slide({ id: "with-chart" }).append(
@@ -184,27 +219,36 @@ describe("Slice 3: formal static preview public entrypoints and runtime isolatio
           ],
         }),
       ),
-      slide({ id: "ok-shape" }).append(
-        shape({
-          id: "ok",
-          x: 10,
-          y: 10,
-          width: 60,
-          height: 40,
-          fill: "#00AA00",
-        }),
+      slide({ id: "ok-box" }).append(
+        box({
+          id: "b1",
+          style: {
+            width: 120,
+            height: 60,
+            padding: 8,
+            backgroundColor: "#E2E8F0",
+          },
+        }).append(
+          shape({
+            id: "ok",
+            width: 60,
+            height: 40,
+            fill: "#00AA00",
+          }),
+        ),
       ),
     );
     const result = await previewDocument(doc);
     expect(result.pages[0]?.png).toBeUndefined();
-    expect(result.pages[0]?.diagnostics[0]?.path).toContain("text[t1]");
+    expect(result.pages[0]?.diagnostics[0]?.path).toContain("table[tb1]");
     expect(result.pages[1]?.png).toBeUndefined();
-    expect(result.pages[1]?.diagnostics[0]?.path).toContain("box[b1]");
+    expect(result.pages[1]?.diagnostics[0]?.path).toContain("group[g1]");
     expect(result.pages[2]?.png).toBeUndefined();
     expect(result.pages[2]?.diagnostics[0]?.path).toContain("chart[c1]");
     expect(result.pages[3]?.png).toBeDefined();
+    expect(result.pages[3]?.diagnostics).toEqual([]);
 
-    const jsxGroupResult = await previewJsx(
+    const jsxResult = await previewJsx(
       createElement(
         Deck,
         { width: 320, height: 180 },
@@ -229,31 +273,31 @@ describe("Slice 3: formal static preview public entrypoints and runtime isolatio
           { id: "with-jsx-box" },
           createElement(
             Box,
-            { id: "jb1", style: { width: 80, height: 40 } },
+            { id: "jb1", style: { width: 80, height: 40, padding: 4 } },
             createElement(Shape, { width: 40, height: 20, fill: "#0000FF" }),
           ),
         ),
         createElement(
           Slide,
-          { id: "with-jsx-text" },
+          { id: "with-jsx-table" },
           createElement(
-            Text,
-            { id: "jt1", x: 10, y: 10, width: 80, height: 30 },
-            "Hi",
+            Table,
+            { id: "jtb1", x: 10, y: 10, width: 100, columns: [100] },
+            createElement(
+              Row,
+              { style: { height: 30 } },
+              createElement(Cell, null, "Hi"),
+            ),
           ),
         ),
       ),
     );
-    expect(jsxGroupResult.pages[0]?.png).toBeUndefined();
-    expect(jsxGroupResult.pages[0]?.diagnostics[0]?.path).toContain(
-      "group[g1]",
-    );
-    expect(jsxGroupResult.pages[1]?.png).toBeUndefined();
-    expect(jsxGroupResult.pages[1]?.diagnostics[0]?.path).toContain("box[jb1]");
-    expect(jsxGroupResult.pages[2]?.png).toBeUndefined();
-    expect(jsxGroupResult.pages[2]?.diagnostics[0]?.path).toContain(
-      "text[jt1]",
-    );
+    expect(jsxResult.pages[0]?.png).toBeUndefined();
+    expect(jsxResult.pages[0]?.diagnostics[0]?.path).toContain("group[g1]");
+    expect(jsxResult.pages[1]?.png).toBeDefined();
+    expect(jsxResult.pages[1]?.diagnostics).toEqual([]);
+    expect(jsxResult.pages[2]?.png).toBeUndefined();
+    expect(jsxResult.pages[2]?.diagnostics[0]?.path).toContain("table[jtb1]");
   });
 
   it("never loads @resvg/resvg-js when calling JSX build or document build", () => {

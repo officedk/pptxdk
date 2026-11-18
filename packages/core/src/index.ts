@@ -75,6 +75,7 @@ export type {
   ThemeShade,
 } from "#/theme.ts";
 export type {
+  BoundContainerCollaboration,
   BoundObjectCapability,
   BoundObjectCapabilityModule,
   BoundObjectNativeCollaboration,

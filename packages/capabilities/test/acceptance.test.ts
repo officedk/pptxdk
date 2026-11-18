@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -9,25 +10,52 @@ import {
   Deck,
   Slide,
   createPreview,
+  expandDocument,
   pxToEmu,
   xmlEscape,
   type BoundObjectCapabilityModule,
   type CapabilityInput,
   type CapabilityParseContext,
+  type Diagnostic,
 } from "@react-pptx/core";
 import { parseCapabilityLayoutContract } from "@react-pptx/core/capability";
+import { RichTextContainer } from "@react-pptx/core/document";
 import { createDocumentPreview } from "@react-pptx/core/preview";
+import { validatePptx } from "@react-pptx/validation";
 import { PNG } from "pngjs";
-import { createElement } from "react";
+import { createElement, type ComponentType } from "react";
 import { describe, expect, it } from "vitest";
 
-import { deck, shape, slide } from "../src/document.ts";
+import { boxCapability } from "../src/box.ts";
+import {
+  box,
+  deck,
+  documentCapabilities,
+  font,
+  notes,
+  paragraph,
+  shape,
+  slide,
+  slideNumber,
+  span,
+  text,
+} from "../src/document.ts";
+import { Notes } from "../src/notes-elements.ts";
+import { notesCapability } from "../src/notes.ts";
+import { Shape } from "../src/shape-elements.ts";
 import { shapeCapability } from "../src/shape.ts";
+import { slideBackgroundCapability } from "../src/slide-background.ts";
+import { P, SlideNumber, Span, Text } from "../src/text-elements.ts";
 import { runCapabilityScenario } from "./acceptance-runner.ts";
+import { boxPositiveScenario, boxRejectionScenario } from "./scenarios/box.ts";
 import {
   imagePositiveScenario,
   imageRejectionScenario,
 } from "./scenarios/image.ts";
+import {
+  notesPositiveScenario,
+  notesPreviewIsolationScenario,
+} from "./scenarios/notes.ts";
 import {
   shapePositiveScenario,
   shapeRejectionScenario,
@@ -36,6 +64,10 @@ import {
   slideBackgroundPositiveScenario,
   slideBackgroundRejectionScenario,
 } from "./scenarios/slide-background.ts";
+import {
+  textPositiveScenario,
+  textRejectionScenario,
+} from "./scenarios/text.ts";
 import {
   runTransitionRejectionScenarios,
   transitionPositiveScenario,
@@ -57,17 +89,22 @@ function createMarkerNode(
 }
 
 describe("Capability-owned acceptance scenarios & custom bound preview extensions", () => {
-  it("runs Shape, Image, and slide-background dual-author scenarios through shared runner and collects artifacts", async () => {
+  it("runs Box, Shape, Image, slide-background, Text, and Notes dual-author scenarios through shared runner and collects artifacts", async () => {
     const outDir = await mkdtemp(join(tmpdir(), "rp-cap-accept-"));
     try {
       for (const scenario of [
+        boxPositiveScenario,
+        boxRejectionScenario,
         shapePositiveScenario,
         shapeRejectionScenario,
         imagePositiveScenario,
         imageRejectionScenario,
         slideBackgroundPositiveScenario,
         slideBackgroundRejectionScenario,
-        transitionPositiveScenario,
+        textPositiveScenario,
+        textRejectionScenario,
+        notesPositiveScenario,
+        notesPreviewIsolationScenario,
       ]) {
         const runs = await runCapabilityScenario(scenario, {
           outputDir: outDir,
@@ -78,10 +115,112 @@ describe("Capability-owned acceptance scenarios & custom bound preview extension
           ["jsx", "document"],
         );
       }
+    } finally {
+      await rm(outDir, { recursive: true, force: true });
+    }
+  }, 30_000);
+
+  it("runs Transition and Morph dual-author scenarios through shared runner and verifies rejections", async () => {
+    const outDir = await mkdtemp(join(tmpdir(), "rp-cap-accept-trans-"));
+    try {
+      const runs = await runCapabilityScenario(transitionPositiveScenario, {
+        outputDir: outDir,
+      });
+      assert.equal(runs.length, 2);
+      assert.deepEqual(
+        runs.map((r) => r.author),
+        ["jsx", "document"],
+      );
       await runTransitionRejectionScenarios();
     } finally {
       await rm(outDir, { recursive: true, force: true });
     }
+  }, 15_000);
+
+  it("supports JSX expansion followed by imperative Text edit, rebuild, and preview without mutating prior outputs", async () => {
+    const jostFont = font("Jost*", [
+      {
+        weight: 400,
+        data: readFileSync(
+          new URL(
+            "../../react-pptx/test/assets/fonts/Jost-400-Book.ttf",
+            import.meta.url,
+          ),
+        ),
+      },
+    ]);
+    const expanded = await expandDocument(
+      createElement(
+        Deck,
+        { width: 480, height: 270 },
+        createElement(
+          Slide,
+          { id: "handoff" },
+          createElement(
+            Text,
+            {
+              id: "headline",
+              x: 24,
+              y: 24,
+              width: 200,
+              style: {
+                fontFamily: jostFont,
+                fontSize: 20,
+                color: "#1E293B",
+                padding: 8,
+                backgroundColor: "#F1F5F9",
+              },
+            },
+            "Initial title",
+          ),
+        ),
+      ),
+    );
+
+    const previewDocument = createDocumentPreview(documentCapabilities);
+    const first = await previewDocument(expanded);
+    assert.deepEqual(first.pages[0]?.diagnostics, []);
+    assert.deepEqual((await validatePptx(first.build.pptx)).errors, []);
+    const firstPng = first.pages[0].png!.slice();
+    const firstSvg = first.pages[0].svg!;
+    const firstPptx = first.build.pptx.slice();
+    const firstHeight = first.build.query
+      .getSlide("handoff")
+      .get("headline")
+      .observe().box!.height;
+
+    const headline = expanded.query
+      .get("handoff")
+      .getAs(
+        "headline",
+        (node): node is RichTextContainer => node instanceof RichTextContainer,
+      );
+    headline.content("Updated longer headline wrapping across multiple lines");
+    headline.style({ color: "#059669" });
+
+    const second = await previewDocument(expanded);
+    assert.deepEqual(second.pages[0]?.diagnostics, []);
+    assert.deepEqual((await validatePptx(second.build.pptx)).errors, []);
+    assert.equal(
+      second.build.query.getSlide("handoff").get("headline").observe().text,
+      "Updated longer headline wrapping across multiple lines",
+    );
+    const secondHeight = second.build.query
+      .getSlide("handoff")
+      .get("headline")
+      .observe().box!.height;
+    assert.ok(secondHeight > firstHeight);
+    expect(second.pages[0]?.svg).toContain('fill="#059669"');
+    assert.notDeepEqual(second.pages[0]?.png, firstPng);
+
+    // Prior BuildResult and PreviewResult remain unchanged.
+    assert.equal(first.pages[0]?.svg, firstSvg);
+    assert.deepEqual(first.pages[0]?.png, firstPng);
+    assert.deepEqual(first.build.pptx, firstPptx);
+    assert.equal(
+      first.build.query.getSlide("handoff").get("headline").observe().text,
+      "Initial title",
+    );
   });
 
   it("supports registering custom bound extension modules, warning retention, and missing preview rejection", async () => {
@@ -274,5 +413,239 @@ describe("Capability-owned acceptance scenarios & custom bound preview extension
     assert.ok(calls.some((entry) => entry.startsWith("bind:")));
     assert.ok(calls.some((entry) => entry.startsWith("compile:")));
     assert.ok(calls.some((entry) => entry.startsWith("preview:")));
+  });
+
+  it("binds notesCapability via BoundSlideCapabilityModule without fake previewSlide, trims textCapability cleanly, and enforces rejections", async () => {
+    assert.equal("bindSlide" in notesCapability, true);
+    assert.equal("compileSlide" in notesCapability, false);
+    assert.equal("measureLayout" in notesCapability, false);
+
+    // Notes-only slide previews cleanly as an empty canvas without fake previewSlide errors or leaked notes text.
+    const notesOnlyPreview = createDocumentPreview([
+      notesCapability,
+      slideBackgroundCapability,
+    ]);
+    const notesOnlyResult = await notesOnlyPreview(
+      deck({ width: 200, height: 120 }).append(
+        slide({ id: "notes-only" }).append(notes("Speaker only")),
+      ),
+    );
+    assert.deepEqual(notesOnlyResult.pages[0]?.diagnostics, []);
+    assert.ok(notesOnlyResult.pages[0]?.png !== undefined);
+    const notesOnlyPng = PNG.sync.read(
+      Buffer.from(notesOnlyResult.pages[0].png),
+    );
+    for (let i = 0; i < notesOnlyPng.data.length; i += 4) {
+      assert.deepEqual(
+        [...notesOnlyPng.data.subarray(i, i + 4)],
+        [255, 255, 255, 255],
+      );
+    }
+
+    const trimmedModules = [
+      shapeCapability,
+      notesCapability,
+      slideBackgroundCapability,
+    ] as const;
+    const previewDocTrimmed = createDocumentPreview(trimmedModules);
+    const previewJsxTrimmed = createPreview(trimmedModules);
+
+    const doc = deck({ width: 480, height: 270 }).append(
+      slide({ id: "trimmed-text" }).append(
+        shape({
+          id: "card",
+          x: 40,
+          y: 40,
+          width: 200,
+          height: 100,
+          fill: "#1D4ED8",
+        }),
+        notes(
+          [
+            paragraph([
+              span("Trimmed text check ", { style: { fontWeight: "bold" } }),
+              slideNumber(),
+            ]),
+          ],
+          { id: "speaker" },
+        ),
+      ),
+    );
+    const docResult = await previewDocTrimmed(doc);
+    assert.deepEqual(docResult.pages[0]?.diagnostics, []);
+    assert.ok(docResult.pages[0]?.png !== undefined);
+    assert.deepEqual(docResult.build.report.slides[0]?.capabilities, {
+      notes: { text: "Trimmed text check 1", paragraphCount: 1 },
+    });
+
+    const jsxResult = await previewJsxTrimmed(
+      createElement(
+        Deck,
+        { width: 480, height: 270 },
+        createElement(
+          Slide,
+          { id: "trimmed-text" },
+          createElement(Shape, {
+            id: "card",
+            x: 40,
+            y: 40,
+            width: 200,
+            height: 100,
+            fill: "#1D4ED8",
+          }),
+          createElement(
+            Notes,
+            { id: "speaker" },
+            createElement(
+              P,
+              null,
+              createElement(
+                Span,
+                { style: { fontWeight: "bold" } },
+                "Trimmed text check ",
+              ),
+              createElement(SlideNumber, null),
+            ),
+          ),
+        ),
+      ),
+    );
+    assert.deepEqual(jsxResult.pages[0]?.diagnostics, []);
+    assert.ok(jsxResult.pages[0]?.png !== undefined);
+    assert.deepEqual(jsxResult.build.report.slides[0]?.capabilities, {
+      notes: { text: "Trimmed text check 1", paragraphCount: 1 },
+    });
+
+    async function expectBuildErrorCode(
+      run: () => Promise<unknown>,
+    ): Promise<readonly Diagnostic[]> {
+      try {
+        await run();
+      } catch (error) {
+        assert.ok(error instanceof BuildError);
+        return error.diagnostics;
+      }
+      assert.fail("Expected BuildError");
+    }
+
+    const withBoxModules = [...trimmedModules, boxCapability] as const;
+    const previewDocWithBox = createDocumentPreview(withBoxModules);
+    const previewJsxWithBox = createPreview(withBoxModules);
+    const previewWithoutNotes = createDocumentPreview([
+      shapeCapability,
+      boxCapability,
+    ]);
+    const previewJsxWithoutNotes = createPreview([
+      shapeCapability,
+      boxCapability,
+    ]);
+
+    const dupHiddenDiags = await expectBuildErrorCode(() =>
+      previewDocWithBox(
+        deck().append(
+          slide({ id: "dup" }).append(
+            box({ style: { display: "none" } }).append(notes("hidden")),
+            notes("visible"),
+          ),
+        ),
+      ),
+    );
+    assert.deepEqual(
+      dupHiddenDiags.map(({ code }) => code),
+      ["duplicate-notes"],
+    );
+
+    const dupJsxDiags = await expectBuildErrorCode(() =>
+      previewJsxWithBox(
+        createElement(
+          Deck,
+          null,
+          createElement(
+            Slide,
+            { id: "dup-jsx" },
+            createElement(Notes, null, createElement(P, null, "one")),
+            createElement(Notes, null, createElement(P, null, "two")),
+          ),
+        ),
+      ),
+    );
+    assert.deepEqual(
+      dupJsxDiags.map(({ code }) => code),
+      ["duplicate-notes"],
+    );
+
+    const badChildDiags = await expectBuildErrorCode(() =>
+      previewDocTrimmed(
+        deck().append(
+          slide({ id: "bad-child" }).append(notes(text("illegal"))),
+        ),
+      ),
+    );
+    assert.equal(badChildDiags[0]?.code, "unsupported-text-child");
+
+    const unknownPropDiags = await expectBuildErrorCode(() =>
+      previewJsxTrimmed(
+        createElement(
+          Deck,
+          null,
+          createElement(
+            Slide,
+            { id: "unknown-prop" },
+            createElement(
+              Notes as unknown as ComponentType<Record<string, unknown>>,
+              { layout: { x: 1 } },
+              createElement(P, null, "bad"),
+            ),
+          ),
+        ),
+      ),
+    );
+    assert.equal(unknownPropDiags[0]?.code, "unknown-parameter");
+
+    const missingHiddenDocDiags = await expectBuildErrorCode(() =>
+      previewWithoutNotes(
+        deck().append(
+          slide({ id: "missing-hidden" }).append(
+            box({ style: { display: "none" } }).append(notes("hidden")),
+          ),
+        ),
+      ),
+    );
+    assert.deepEqual(
+      missingHiddenDocDiags.map(({ code, path }) => ({ code, path })),
+      [
+        {
+          code: "missing-capability",
+          path: "deck/slide[missing-hidden]/box[1]/notes[1]",
+        },
+      ],
+    );
+
+    const missingJsxDiags = await expectBuildErrorCode(() =>
+      previewJsxWithoutNotes(
+        createElement(
+          Deck,
+          null,
+          createElement(
+            Slide,
+            { id: "missing-jsx" },
+            createElement(Notes, null, createElement(P, null, "trimmed")),
+          ),
+        ),
+      ),
+    );
+    assert.equal(missingJsxDiags[0]?.code, "missing-capability");
+
+    const dupIdDiags = await expectBuildErrorCode(() =>
+      previewDocTrimmed(
+        deck().append(
+          slide({ id: "dup-id" }).append(
+            shape({ id: "same", x: 10, y: 10, width: 40, height: 20 }),
+            notes("body", { id: "same" }),
+          ),
+        ),
+      ),
+    );
+    assert.equal(dupIdDiags[0]?.code, "duplicate-author-id");
   });
 });

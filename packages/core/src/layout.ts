@@ -241,6 +241,41 @@ export function parseCapabilityLayoutContract(options: {
   };
 }
 
+const nativeElementKinds = new Set<string>([
+  "sp",
+  "pic",
+  "grpSp",
+  "graphicFrame",
+  "cxnSp",
+]);
+
+export function validateBoundObjectCapability(
+  bound: unknown,
+): BoundObjectCapability {
+  if (typeof bound !== "object" || bound === null) {
+    throw new CapabilityError(
+      "invalid-capability-binding",
+      "Object capability bind() must return a bound capability object",
+    );
+  }
+  const candidate = bound as Partial<BoundObjectCapability>;
+  if (
+    typeof candidate.contract !== "object" ||
+    candidate.contract === null ||
+    !nativeElementKinds.has(candidate.contract.nativeKind) ||
+    typeof candidate.contract.layoutStyle !== "object" ||
+    candidate.contract.layoutStyle === null ||
+    Array.isArray(candidate.contract.layoutStyle) ||
+    typeof candidate.compile !== "function"
+  ) {
+    throw new CapabilityError(
+      "invalid-capability-binding",
+      "Object capability bind() must return a valid contract and compile handler",
+    );
+  }
+  return candidate as BoundObjectCapability;
+}
+
 function objectModule(
   module: RegisteredCapabilityModule | undefined,
 ): module is BoundObjectCapabilityModule {
@@ -352,12 +387,14 @@ export class LayoutPass {
     let bound = this.#boundObjects.get(child);
     if (bound === undefined) {
       try {
-        bound = module.bind(child, {
-          path: childPath,
-          theme: themeContext,
-          options: this.#options,
-          slideNumber: this.#slideNumber,
-        });
+        bound = validateBoundObjectCapability(
+          module.bind(child, {
+            path: childPath,
+            theme: themeContext,
+            options: this.#options,
+            slideNumber: this.#slideNumber,
+          }),
+        );
         this.#boundObjects.set(child, bound);
       } catch (error) {
         if (error instanceof BuildError) throw error;

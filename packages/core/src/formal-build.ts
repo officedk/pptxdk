@@ -12,7 +12,11 @@ import {
   type DeclarationNode,
 } from "#/declaration.ts";
 import { CapabilityError, BuildError } from "#/diagnostics.ts";
-import { LayoutPass, type LayoutPassResult } from "#/layout.ts";
+import {
+  LayoutPass,
+  validateBoundObjectCapability,
+  type LayoutPassResult,
+} from "#/layout.ts";
 import { getMorphKeyLabel, isMorphKey, type MorphKey } from "#/morph.ts";
 import {
   assertXml10Characters,
@@ -39,8 +43,7 @@ import {
   type BuildResult,
   type BoundContainerCollaboration,
   type BoundObjectCapability,
-  type BoundObjectCapabilityModule,
-  type BoundSlideCapabilityModule,
+  type BoundSlideCapability,
   type CapabilityChild,
   type CapabilityElement,
   type CapabilityChildren,
@@ -65,7 +68,6 @@ import {
   type PreviewTransform,
   type LayoutChildReference,
   type LayoutObservation,
-  type LinkTarget,
   type NativeElementKind,
   type ObjectCapabilityModule,
   type ObjectObservation,
@@ -321,13 +323,13 @@ function ownKeys(
 
 function isSlideCapability(
   module: RegisteredCapabilityModule,
-): module is BoundSlideCapabilityModule {
+): module is SlideCapabilityModule {
   return "bindSlide" in module;
 }
 
-function isBoundObjectCapability(
+function isObjectCapability(
   module: RegisteredCapabilityModule,
-): module is BoundObjectCapabilityModule {
+): module is ObjectCapabilityModule {
   return "bind" in module;
 }
 
@@ -1822,19 +1824,6 @@ function compileChildren(
       return;
     }
     if ("compileDeclaration" in module) {
-      if (child.props["morphKey"] !== undefined) {
-        context.slide.diagnostics.push(
-          diagnostic(
-            path,
-            isMorphKey(child.props["morphKey"])
-              ? "morph-needs-object"
-              : "invalid-morph-key",
-            isMorphKey(child.props["morphKey"])
-              ? "morphKey can only be used with capabilities that produce native objects"
-              : "morphKey must be created by createMorphScope().handle(name)",
-          ),
-        );
-      }
       if (module.children === "owned") {
         // Owned subtrees belong to their capability and never become slide content. The same
         // declarations were already reported by the structure-only collection pass.
@@ -1884,7 +1873,7 @@ function compileChildren(
       );
       return;
     }
-    if (!isBoundObjectCapability(module)) {
+    if (!isObjectCapability(module)) {
       context.slide.diagnostics.push(
         diagnostic(
           path,
@@ -1899,12 +1888,14 @@ function compileChildren(
     try {
       const bound =
         context.layout.bound.get(child) ??
-        module.bind(child, {
-          path,
-          theme,
-          options: context.options,
-          slideNumber: context.slideNumber,
-        });
+        validateBoundObjectCapability(
+          module.bind(child, {
+            path,
+            theme,
+            options: context.options,
+            slideNumber: context.slideNumber,
+          }),
+        );
       if (bound.container !== undefined) {
         compileBoundContainer({
           child,
@@ -2874,14 +2865,16 @@ function compileSlide(
     )
       continue;
     try {
-      const boundSlide = module.bindSlide(input, {
-        path,
-        dimensions,
-        theme,
-        options,
-        slideNumber: index,
-        contributions,
-      });
+      const boundSlide = validateBoundSlideCapability(
+        module.bindSlide(input, {
+          path,
+          dimensions,
+          theme,
+          options,
+          slideNumber: index,
+          contributions,
+        }),
+      );
       if (boundSlide.continuity?.matchSourceKinds === true) {
         slide.matchContinuityKinds = true;
       }
@@ -3338,72 +3331,18 @@ export function createDeclarationPreviewBuild(
   };
 }
 
-/**
- * Transitional adapter for unmigrated SlideCapabilityModule implementations.
- * Removed once notes, transition, and motion migrate in Tickets 11-14.
- */
-function adaptLegacySlideCapability(
-  module: SlideCapabilityModule,
-): BoundSlideCapabilityModule {
-  return {
-    declaration: module.declaration,
-    slideProp: module.slideProp,
-    ...(module.slideProps === undefined
-      ? {}
-      : { slideProps: module.slideProps }),
-    slot: module.slot,
-    ...(module.always === undefined ? {} : { always: module.always }),
-    ...(module.transparentDeclarations === undefined
-      ? {}
-      : { transparentDeclarations: module.transparentDeclarations }),
-    bindSlide(input) {
-      return {
-        compileSlide(context) {
-          return module.compileSlide(input, context);
-        },
-      };
-    },
-  };
-}
-
-/**
- * Transitional adapter for unmigrated ObjectCapabilityModule implementations.
- * Keeps legacy parsed state inside the adapter closure (never exposing bound module state).
- * Removed once all object capabilities migrate in Ticket 14.
- */
-function adaptLegacyObjectCapability(
-  module: ObjectCapabilityModule,
-): BoundObjectCapabilityModule {
-  return {
-    declaration: module.declaration,
-    bind(input, context) {
-      const result = module.parse(input, context);
-      return {
-        contract: result.contract,
-        native: {
-          ...(input.props["morphKey"] !== undefined
-            ? { morphKey: input.props["morphKey"] as MorphKey }
-            : {}),
-          ...(input.props["name"] !== undefined
-            ? { hasExplicitName: true }
-            : {}),
-          ...(input.props["link"] !== undefined
-            ? { link: input.props["link"] as LinkTarget }
-            : {}),
-        },
-        ...(module.measureLayout !== undefined
-          ? {
-              measureLayout(request) {
-                return module.measureLayout!(result.parsed, request);
-              },
-            }
-          : {}),
-        compile(compileContext) {
-          return module.compile(result.parsed, compileContext);
-        },
-      };
-    },
-  };
+function validateBoundSlideCapability(bound: unknown): BoundSlideCapability {
+  if (
+    typeof bound !== "object" ||
+    bound === null ||
+    typeof (bound as Partial<BoundSlideCapability>).compileSlide !== "function"
+  ) {
+    throw new CapabilityError(
+      "invalid-capability-binding",
+      "Slide capability bindSlide() must return a compileSlide handler",
+    );
+  }
+  return bound as BoundSlideCapability;
 }
 
 function bindCapabilityModules(
@@ -3411,13 +3350,72 @@ function bindCapabilityModules(
 ): ReadonlyMap<string, RegisteredCapabilityModule> {
   const bound = new Map<string, RegisteredCapabilityModule>();
   for (const module of modules) {
-    const declarations = [
+    if (typeof module !== "object" || module === null) {
+      throw new BuildError([
+        diagnostic(
+          "build.modules",
+          "invalid-capability-module",
+          "Capability module must be an object",
+        ),
+      ]);
+    }
+    const isSlide =
+      "bindSlide" in module &&
+      typeof module.bindSlide === "function" &&
+      !("compileSlide" in module) &&
+      !("bind" in module) &&
+      !("parse" in module);
+    const isObject =
+      "bind" in module &&
+      typeof module.bind === "function" &&
+      !("parse" in module) &&
+      !("compile" in module) &&
+      !("compileSlide" in module) &&
+      !("bindSlide" in module);
+    if (!isSlide && !isObject) {
+      const rawDeclaration = (module as { declaration?: unknown }).declaration;
+      const declarationLabel =
+        typeof rawDeclaration === "string" && rawDeclaration.trim() !== ""
+          ? rawDeclaration
+          : "<unknown>";
+      throw new BuildError([
+        diagnostic(
+          "build.modules",
+          "invalid-capability-module",
+          `Capability module ${declarationLabel} must implement the bound bind() or bindSlide() contract`,
+        ),
+      ]);
+    }
+    const declarations: readonly RegisteredCapabilityModule[] = [
       module,
-      ...("compileSlide" in module || "bindSlide" in module
-        ? (module.transparentDeclarations ?? [])
-        : []),
+      ...(isSlide ? (module.transparentDeclarations ?? []) : []),
     ];
     for (const declaration of declarations) {
+      if (
+        typeof declaration.declaration !== "string" ||
+        declaration.declaration.trim() === ""
+      ) {
+        throw new BuildError([
+          diagnostic(
+            "build.modules",
+            "invalid-capability-module",
+            "Capability module declaration must be a non-empty string",
+          ),
+        ]);
+      }
+      if (
+        declaration !== module &&
+        (!("compileDeclaration" in declaration) ||
+          typeof declaration.compileDeclaration !== "function")
+      ) {
+        throw new BuildError([
+          diagnostic(
+            "build.modules",
+            "invalid-capability-module",
+            `Transparent declaration ${declaration.declaration} must implement compileDeclaration()`,
+          ),
+        ]);
+      }
       if (bound.has(declaration.declaration)) {
         throw new BuildError([
           diagnostic(
@@ -3427,23 +3425,7 @@ function bindCapabilityModules(
           ),
         ]);
       }
-      if ("compileSlide" in declaration && !("bindSlide" in declaration)) {
-        bound.set(
-          declaration.declaration,
-          adaptLegacySlideCapability(declaration),
-        );
-      } else if (
-        !("bindSlide" in declaration) &&
-        !("compileDeclaration" in declaration) &&
-        !("bind" in declaration)
-      ) {
-        bound.set(
-          declaration.declaration,
-          adaptLegacyObjectCapability(declaration),
-        );
-      } else {
-        bound.set(declaration.declaration, declaration);
-      }
+      bound.set(declaration.declaration, declaration);
     }
   }
   return bound;

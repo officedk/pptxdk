@@ -6,29 +6,43 @@ import { join } from "node:path";
 
 import {
   BuildError,
+  BuildQueryError,
+  CapabilityError,
   CommonNode,
   Deck,
   Slide,
+  createBuilder,
+  createMorphScope,
   createPreview,
   expandDocument,
   pxToEmu,
   xmlEscape,
   type BoundObjectCapabilityModule,
   type CapabilityInput,
+  type CapabilityModule,
   type CapabilityParseContext,
   type Diagnostic,
+  type ObjectCapabilityModule,
+  type SlideCapabilityModule,
 } from "@react-pptx/core";
 import { parseCapabilityLayoutContract } from "@react-pptx/core/capability";
-import { RichTextContainer } from "@react-pptx/core/document";
+import {
+  RichTextContainer,
+  createDocumentBuild,
+} from "@react-pptx/core/document";
 import { createDocumentPreview } from "@react-pptx/core/preview";
 import { validatePptx } from "@react-pptx/validation";
+import { strFromU8, unzipSync } from "fflate";
 import { PNG } from "pngjs";
 import { createElement, type ComponentType } from "react";
 import { describe, expect, it } from "vitest";
 
 import { boxCapability } from "../src/box.ts";
+import { Chart } from "../src/chart-elements.ts";
+import { chartCapability } from "../src/chart.ts";
 import {
   box,
+  chart,
   deck,
   documentCapabilities,
   font,
@@ -40,6 +54,8 @@ import {
   span,
   text,
 } from "../src/document.ts";
+import { Step } from "../src/motion-elements.ts";
+import { fade, motionCapability, observeMotion } from "../src/motion.ts";
 import { Notes } from "../src/notes-elements.ts";
 import { notesCapability } from "../src/notes.ts";
 import { Shape } from "../src/shape-elements.ts";
@@ -266,6 +282,7 @@ describe("Capability-owned acceptance scenarios & custom bound preview extension
     const firstPng = first.pages[0].png!.slice();
     const firstSvg = first.pages[0].svg!;
     const firstPptx = first.build.pptx.slice();
+    const firstReportSnapshot = JSON.stringify(first.build.report);
     const firstHeight = first.build.query
       .getSlide("handoff")
       .get("headline")
@@ -299,9 +316,35 @@ describe("Capability-owned acceptance scenarios & custom bound preview extension
     assert.equal(first.pages[0]?.svg, firstSvg);
     assert.deepEqual(first.pages[0]?.png, firstPng);
     assert.deepEqual(first.build.pptx, firstPptx);
+    assert.equal(JSON.stringify(first.build.report), firstReportSnapshot);
     assert.equal(
       first.build.query.getSlide("handoff").get("headline").observe().text,
       "Initial title",
+    );
+
+    // Cross-build motion observation references are rejected cleanly.
+    const motionDoc = deck({ width: 480, height: 270 }).append(
+      slide({ id: "m" }).append(
+        shape({
+          id: "hero",
+          x: 20,
+          y: 20,
+          width: 80,
+          height: 40,
+          enter: fade({ duration: 200 }),
+        }),
+      ),
+    );
+    const motionBuildA = await previewDocument(motionDoc);
+    const motionBuildB = await previewDocument(motionDoc);
+    const effectA = observeMotion(motionBuildA.build.report.slides[0]!)!
+      .steps[0]!.effects[0]!;
+    const stepB = observeMotion(motionBuildB.build.report.slides[0]!)!
+      .steps[0]!;
+    assert.throws(
+      () => stepB.before(effectA.start.ref, effectA.end.ref),
+      (error: unknown) =>
+        error instanceof BuildQueryError && error.code === "foreign-reference",
     );
   });
 
@@ -729,5 +772,352 @@ describe("Capability-owned acceptance scenarios & custom bound preview extension
       ),
     );
     assert.equal(dupIdDiags[0]?.code, "duplicate-author-id");
+  });
+
+  it("rejects non-bound capability modules at registration and invalid bound handles at bind time", async () => {
+    const legacyObjectModule = {
+      declaration: "rp:legacy-object",
+      parse() {
+        return {
+          contract: { nativeKind: "sp", layoutStyle: {} },
+          parsed: {},
+        };
+      },
+      compile() {
+        return {
+          xml: "",
+          observation: { id: 2, kind: "shape", name: "Legacy" },
+          extensions: [],
+        };
+      },
+    } as unknown as CapabilityModule;
+
+    const legacySlideModule = {
+      declaration: "legacy-slide",
+      slideProp: "legacySlide",
+      slot: "timing",
+      compileSlide() {
+        return { xml: "", extensions: [] };
+      },
+    } as unknown as CapabilityModule;
+
+    for (const invalidModule of [legacyObjectModule, legacySlideModule]) {
+      assert.throws(
+        () => createDocumentBuild([invalidModule]),
+        (error: unknown) => {
+          assert(error instanceof BuildError);
+          assert.equal(error.diagnostics[0]?.code, "invalid-capability-module");
+          return true;
+        },
+      );
+      assert.throws(
+        () => createBuilder([invalidModule]),
+        (error: unknown) => {
+          assert(error instanceof BuildError);
+          assert.equal(error.diagnostics[0]?.code, "invalid-capability-module");
+          return true;
+        },
+      );
+    }
+
+    const brokenObjectBinding: ObjectCapabilityModule = {
+      declaration: "rp:broken-object",
+      bind() {
+        return {
+          contract: { nativeKind: "sp" },
+        } as unknown as ReturnType<ObjectCapabilityModule["bind"]>;
+      },
+    };
+    const brokenObjectBuild = createDocumentBuild([brokenObjectBinding]);
+    await assert.rejects(
+      brokenObjectBuild(
+        deck().append(
+          slide({ id: "s1" }).append(
+            new CommonNode("broken", "rp:broken-object", { id: "bad-obj" }),
+          ),
+        ),
+      ),
+      (error: unknown) => {
+        assert(error instanceof BuildError);
+        assert.equal(error.diagnostics[0]?.code, "invalid-capability-binding");
+        assert.equal(
+          error.diagnostics[0]?.path,
+          "deck/slide[s1]/broken-object[bad-obj]",
+        );
+        return true;
+      },
+    );
+
+    const brokenSlideBinding: SlideCapabilityModule = {
+      declaration: "broken-slide",
+      slideProp: "background",
+      slot: "background",
+      bindSlide() {
+        return {} as unknown as ReturnType<SlideCapabilityModule["bindSlide"]>;
+      },
+    };
+    const brokenSlideBuild = createDocumentBuild([brokenSlideBinding]);
+    await assert.rejects(
+      brokenSlideBuild(
+        deck().append(slide({ id: "s1", background: "#123456" })),
+      ),
+      (error: unknown) => {
+        assert(error instanceof BuildError);
+        assert.equal(error.diagnostics[0]?.code, "invalid-capability-binding");
+        assert.equal(error.diagnostics[0]?.path, "deck/slide[s1]");
+        return true;
+      },
+    );
+  });
+
+  it("delegates transparent declaration prop validation (including morphKey) to compileDeclaration without core prop readbacks", async () => {
+    const morphKey = createMorphScope().handle("step-key");
+    const stepBuild = createBuilder([motionCapability, shapeCapability]);
+    await assert.rejects(
+      stepBuild(
+        createElement(
+          Deck,
+          null,
+          createElement(
+            Slide,
+            { id: "transparent-own-validation" },
+            createElement(
+              Step as unknown as ComponentType<Record<string, unknown>>,
+              { n: 1, morphKey },
+              createElement(Shape, { x: 0, y: 0, width: 40, height: 20 }),
+            ),
+          ),
+        ),
+      ),
+      (error: unknown) => {
+        assert(error instanceof BuildError);
+        assert.deepEqual(
+          error.diagnostics.map(({ code }) => code),
+          ["unknown-parameter"],
+        );
+        return true;
+      },
+    );
+  });
+
+  it("supports custom bound SlideCapabilityModule with previewSlide, rejects missing background previewSlide, and enforces [slideBackgroundCapability, chartCapability] trimming", async () => {
+    const customSlideCalls: string[] = [];
+    const customBackdropModule: SlideCapabilityModule = {
+      declaration: "custom-backdrop",
+      slideProp: "background",
+      slot: "background",
+      bindSlide(input, parseContext) {
+        const raw = input.props["background"];
+        if (typeof raw !== "string" || !/^#[0-9A-Fa-f]{6}$/u.test(raw)) {
+          throw new CapabilityError(
+            "invalid-background",
+            "Custom backdrop expects a 6-digit hex color",
+            parseContext.path,
+          );
+        }
+        const hex = raw.slice(1).toUpperCase();
+        customSlideCalls.push(`bindSlide:${parseContext.path}`);
+        return {
+          compileSlide(compileContext) {
+            customSlideCalls.push(`compileSlide:${compileContext.path}`);
+            return {
+              xml: `<p:bg><p:bgPr><a:solidFill><a:srgbClr val="${hex}"/></a:solidFill><a:effectLst/></p:bgPr></p:bg>`,
+              extensions: [],
+              observation: { backdropColor: `#${hex}` },
+            };
+          },
+          previewSlide(previewContext) {
+            customSlideCalls.push(`previewSlide:${previewContext.path}`);
+            return {
+              svg: `<rect width="${previewContext.dimensions.width}" height="${previewContext.dimensions.height}" fill="#${hex}"/>`,
+            };
+          },
+        };
+      },
+    };
+
+    const backdropDocPreview = createDocumentPreview([
+      customBackdropModule,
+      shapeCapability,
+    ]);
+    const backdropJsxPreview = createPreview([
+      customBackdropModule,
+      shapeCapability,
+    ]);
+
+    const docResult = await backdropDocPreview(
+      deck({ width: 200, height: 120 }).append(
+        slide({ id: "bg-doc", background: "#0F766E" }).append(
+          shape({
+            id: "card",
+            x: 40,
+            y: 20,
+            width: 120,
+            height: 80,
+            fill: "#F59E0B",
+          }),
+        ),
+      ),
+    );
+    const jsxResult = await backdropJsxPreview(
+      createElement(
+        Deck,
+        { width: 200, height: 120 },
+        createElement(
+          Slide,
+          { id: "bg-jsx", background: "#0F766E" },
+          createElement(Shape, {
+            id: "card",
+            x: 40,
+            y: 20,
+            width: 120,
+            height: 80,
+            fill: "#F59E0B",
+          }),
+        ),
+      ),
+    );
+
+    for (const result of [docResult, jsxResult]) {
+      assert.deepEqual(result.pages[0]?.diagnostics, []);
+      assert.deepEqual((await validatePptx(result.build.pptx)).errors, []);
+      assert.deepEqual(result.build.report.slides[0]?.capabilities, {
+        "custom-backdrop": { backdropColor: "#0F766E" },
+      });
+      const slideXml = strFromU8(
+        unzipSync(result.build.pptx)["ppt/slides/slide1.xml"]!,
+      );
+      expect(slideXml).toContain('<a:srgbClr val="0F766E"/>');
+      const png = PNG.sync.read(Buffer.from(result.pages[0]!.png!));
+      // Top-left corner (5, 5) shows custom backdrop #0F766E; center (100, 60) shows shape #F59E0B.
+      const cornerOffset = (5 * png.width + 5) * 4;
+      assert.deepEqual(
+        [...png.data.subarray(cornerOffset, cornerOffset + 4)],
+        [0x0f, 0x76, 0x6e, 255],
+      );
+      const centerOffset = (60 * png.width + 100) * 4;
+      assert.deepEqual(
+        [...png.data.subarray(centerOffset, centerOffset + 4)],
+        [0xf5, 0x9e, 0x0b, 255],
+      );
+    }
+    assert.deepEqual(customSlideCalls, [
+      "bindSlide:deck/slide[bg-doc]",
+      "compileSlide:deck/slide[bg-doc]",
+      "previewSlide:deck/slide[bg-doc]",
+      "bindSlide:deck/slide[bg-jsx]",
+      "compileSlide:deck/slide[bg-jsx]",
+      "previewSlide:deck/slide[bg-jsx]",
+    ]);
+
+    // A background-slot SlideCapabilityModule without previewSlide produces png: undefined + located error.
+    const backdropWithoutPreview: SlideCapabilityModule = {
+      declaration: "custom-backdrop-no-preview",
+      slideProp: "background",
+      slot: "background",
+      bindSlide() {
+        return {
+          compileSlide() {
+            return {
+              xml: `<p:bg><p:bgPr><a:solidFill><a:srgbClr val="1E293B"/></a:solidFill><a:effectLst/></p:bgPr></p:bg>`,
+              extensions: [],
+            };
+          },
+        };
+      },
+    };
+    const noPreviewResult = await createDocumentPreview([
+      backdropWithoutPreview,
+    ])(
+      deck({ width: 200, height: 120 }).append(
+        slide({ id: "no-bg-prev", background: "#1E293B" }),
+      ),
+    );
+    assert.equal(noPreviewResult.pages[0]?.png, undefined);
+    assert.deepEqual(noPreviewResult.pages[0]?.diagnostics, [
+      {
+        severity: "error",
+        page: 1,
+        path: "deck/slide[no-bg-prev]",
+        message: "Preview does not support custom-backdrop-no-preview",
+      },
+    ]);
+
+    // Trimmed [slideBackgroundCapability, chartCapability] builds & previews chart without shape/text, and rejects Shape.
+    const chartFont = font("Jost*", [
+      {
+        weight: 400,
+        data: readFileSync(
+          new URL(
+            "../../react-pptx/test/assets/fonts/Jost-400-Book.ttf",
+            import.meta.url,
+          ),
+        ),
+      },
+    ]);
+    const chartOnlyModules = [
+      slideBackgroundCapability,
+      chartCapability,
+    ] as const;
+    const chartTrimmedDoc = createDocumentPreview(chartOnlyModules);
+    const chartTrimmedJsx = createPreview(chartOnlyModules);
+    const chartGroup = {
+      kind: "column" as const,
+      data: { kind: "shared-categories" as const, categories: ["Q1", "Q2"] },
+      series: [{ name: "Sales", values: [12, 24] }],
+    };
+    const chartDocOut = await chartTrimmedDoc(
+      deck({ width: 320, height: 200 }).append(
+        slide({ id: "chart-trim", background: "#FFFFFF" }).append(
+          chart({
+            id: "c1",
+            x: 20,
+            y: 20,
+            width: 280,
+            height: 160,
+            style: { fontFamily: chartFont },
+            groups: [chartGroup],
+          }),
+        ),
+      ),
+    );
+    const chartJsxOut = await chartTrimmedJsx(
+      createElement(
+        Deck,
+        { width: 320, height: 200 },
+        createElement(
+          Slide,
+          { id: "chart-trim", background: "#FFFFFF" },
+          createElement(Chart, {
+            id: "c1",
+            x: 20,
+            y: 20,
+            width: 280,
+            height: 160,
+            style: { fontFamily: chartFont },
+            groups: [chartGroup],
+          }),
+        ),
+      ),
+    );
+    assert.ok(chartDocOut.pages[0]?.png !== undefined);
+    assert.ok(chartJsxOut.pages[0]?.png !== undefined);
+    assert.deepEqual((await validatePptx(chartDocOut.build.pptx)).errors, []);
+    assert.deepEqual((await validatePptx(chartJsxOut.build.pptx)).errors, []);
+    await assert.rejects(
+      () =>
+        chartTrimmedDoc(
+          deck({ width: 320, height: 200 }).append(
+            slide({ id: "missing-shape" }).append(
+              shape({ id: "s1", x: 10, y: 10, width: 50, height: 50 }),
+            ),
+          ),
+        ),
+      (error: unknown) => {
+        assert(error instanceof BuildError);
+        assert.equal(error.diagnostics[0]?.code, "missing-capability");
+        return true;
+      },
+    );
   });
 });

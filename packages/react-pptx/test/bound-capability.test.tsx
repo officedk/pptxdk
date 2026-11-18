@@ -299,7 +299,7 @@ describe("bound object capability contract", () => {
       /^!!react-pptx-morph-/u,
     );
 
-    // 2. JSX build inside legacy Box Flex container (exercises measureLayout + container collaboration)
+    // 2. JSX build inside Box Flex container (exercises measureLayout + container collaboration)
     tracker.bindCalls.length = 0;
     tracker.measureCalls.length = 0;
     tracker.compileCalls.length = 0;

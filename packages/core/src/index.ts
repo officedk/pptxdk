@@ -90,7 +90,6 @@ export type {
   CapabilityLayoutMeasurement,
   CapabilityLayoutRequest,
   CapabilityParseContext,
-  CapabilityParseResult,
   CapabilityChild,
   CapabilityChildren,
   CapabilityAnnotation,

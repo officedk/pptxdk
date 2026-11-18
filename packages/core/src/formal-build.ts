@@ -37,6 +37,7 @@ import {
   type BuildOptions,
   type BuildReport,
   type BuildResult,
+  type BoundContainerCollaboration,
   type BoundObjectCapability,
   type BoundObjectCapabilityModule,
   type BoundSlideCapabilityModule,
@@ -213,12 +214,6 @@ type PackageBuildContext = {
   readonly slide: SlideBuildState;
 };
 
-type BoundModuleRegistry = {
-  readonly modules: ReadonlyMap<string, RegisteredCapabilityModule>;
-  /** Transitional set tracking legacy rp:box instances with visible style until Box migrates. */
-  readonly legacyBoxVisibleStyle: WeakSet<BoundObjectCapability>;
-};
-
 export type PreviewSession = {
   shouldPreviewPage(page: number): boolean;
   setSlideDimensions(page: number, dimensions: Dimensions): void;
@@ -237,7 +232,6 @@ type BuildContext = {
   readonly document: DocumentBuildState;
   readonly slide: SlideBuildState;
   readonly modules: ReadonlyMap<string, RegisteredCapabilityModule>;
-  readonly legacyBoxVisibleStyle: WeakSet<BoundObjectCapability>;
   readonly target: Target;
   readonly dimensions: Dimensions;
   readonly options: BuildOptions;
@@ -1845,276 +1839,6 @@ function compileChildren(
     const path = `${parentPath}/${capabilityLabel(child, index)}`;
     const authorId = readAuthorId(child.props["id"], path);
     const order = context.slide.nextNodeOrder++;
-    if (child.type === "rp:box") {
-      const box = context.layout.boxes.get(child);
-      if (box === undefined) {
-        context.slide.diagnostics.push(
-          diagnostic(
-            path,
-            "layout-unavailable",
-            "Box is missing layout result",
-          ),
-        );
-        return;
-      }
-      const id = context.slide.nextId++;
-      const module = context.modules.get("rp:box");
-      const boundBox = context.layout.bound.get(child);
-      const hasNativeBox =
-        boundBox !== undefined && context.legacyBoxVisibleStyle.has(boundBox);
-      const requestedMorphKey = boundBox?.native?.morphKey;
-      const rawLink = boundBox?.native?.link;
-      const boxLink =
-        rawLink === undefined
-          ? undefined
-          : hasNativeBox
-            ? registerLink(rawLink, context, path)
-            : (context.slide.diagnostics.push(
-                diagnostic(
-                  path,
-                  "link-needs-object",
-                  "Transparent Box does not produce clickable objects; attach link to a visible Box or Group",
-                ),
-              ),
-              undefined);
-      let morphKey: MorphKey | undefined;
-      let morphName: string | undefined;
-      if (requestedMorphKey !== undefined) {
-        if (!isMorphKey(requestedMorphKey)) {
-          context.slide.diagnostics.push(
-            diagnostic(
-              path,
-              "invalid-morph-key",
-              "morphKey must be created by createMorphScope().handle(name)",
-            ),
-          );
-        } else if (insideGroup) {
-          context.slide.diagnostics.push(
-            diagnostic(
-              path,
-              "morph-inside-group",
-              "Morph only matches top-level slide objects; place morphKey on Group to move the entire group",
-            ),
-          );
-        } else if (!hasNativeBox) {
-          context.slide.diagnostics.push(
-            diagnostic(
-              path,
-              "morph-needs-object",
-              "Only visible Box generating native background shapes can participate in Morph",
-            ),
-          );
-        } else {
-          morphKey = requestedMorphKey;
-          morphName = nativeObjectName(morphKey, context.document);
-          if (context.slide.morphObjects.has(morphKey)) {
-            context.slide.diagnostics.push(
-              diagnostic(
-                path,
-                "duplicate-morph-key",
-                `Morph handle "${getMorphKeyLabel(morphKey)}" reused on this slide; can only be declared once per slide`,
-              ),
-            );
-          }
-        }
-      }
-      let boxXml = "";
-      let boxObservation: ObjectObservation | undefined;
-      if (
-        module !== undefined &&
-        isBoundObjectCapability(module) &&
-        boundBox !== undefined
-      ) {
-        const objectId = context.slide.nextId++;
-        try {
-          const output = boundBox.compile(
-            capabilityContext(
-              context,
-              child,
-              objectId,
-              path,
-              box,
-              context.layout.themes.get(child) ?? context.theme,
-              insideGroup,
-              morphName,
-              boxLink?.nativeLink,
-            ),
-          );
-          boxXml = output.xml;
-          if (output.xml !== "") {
-            boxObservation = {
-              ...output.observation,
-              id: objectId,
-              ...(authorId === undefined ? {} : { authorId }),
-              ...(boxLink === undefined ? {} : { link: boxLink.summary }),
-            };
-            context.slide.layoutDerivedObjectIds.add(objectId);
-            if (morphKey !== undefined && morphName !== undefined) {
-              const nativeKind = boundBox.contract.nativeKind;
-              if (output.observation.name !== morphName) {
-                context.slide.diagnostics.push(
-                  diagnostic(
-                    path,
-                    "unsupported-morph-object",
-                    "Box did not write morphKey to a supported native background shape name",
-                  ),
-                );
-              } else if (!context.slide.morphObjects.has(morphKey)) {
-                context.slide.morphObjects.set(morphKey, {
-                  kind: nativeKind,
-                  name: morphName,
-                  path,
-                });
-              }
-            }
-          } else if (morphKey !== undefined) {
-            context.slide.diagnostics.push(
-              diagnostic(
-                path,
-                "morph-needs-object",
-                "Only visible Box generating native background shapes can participate in Morph",
-              ),
-            );
-          }
-          if (boxObservation !== undefined) {
-            for (const annotation of output.annotations ?? []) {
-              context.slide.contributions.push({
-                ...annotation,
-                path,
-                targetId: boxObservation.id,
-                order,
-                declaration: child,
-              });
-            }
-          }
-          for (const warning of output.warnings ?? []) {
-            context.document.warnings.push({
-              severity: "warning",
-              path:
-                warning.path === undefined ? path : `${path}/${warning.path}`,
-              code: warning.code,
-              message: warning.message,
-            });
-          }
-        } catch (error) {
-          context.slide.diagnostics.push(
-            error instanceof CapabilityError
-              ? diagnostic(
-                  error.path === undefined ? path : `${path}/${error.path}`,
-                  error.code,
-                  error.message,
-                )
-              : diagnostic(
-                  path,
-                  "capability-failure",
-                  error instanceof Error ? error.message : String(error),
-                ),
-          );
-        }
-      } else if (hasNativeBox) {
-        context.slide.diagnostics.push(
-          diagnostic(
-            path,
-            "missing-capability",
-            "Visible Box requires registered rp:box shape capability",
-          ),
-        );
-      }
-      const compiled = compileChildren(
-        child.children,
-        context,
-        path,
-        insideGroup,
-      );
-      let boxPreviewSvg: string | undefined;
-      if (context.previewSession?.shouldPreviewPage(context.slideNumber)) {
-        const previewSession = context.previewSession;
-        if (boundBox?.preview !== undefined) {
-          const childrenSvg = compiled.paintLayers
-            .map((layer) => layer.previewSvg ?? "")
-            .join("");
-          try {
-            const previewOutput = boundBox.preview({
-              path,
-              slideNumber: context.slideNumber,
-              objectId: id,
-              ...(boxObservation?.box === undefined
-                ? {}
-                : { box: boxObservation.box }),
-              theme: context.layout.themes.get(child) ?? context.theme,
-              childrenSvg,
-            });
-            boxPreviewSvg = previewOutput.svg;
-            if (boxObservation !== undefined) {
-              previewSession.recordNode(
-                context.slideNumber,
-                boxObservation.id,
-                path,
-                previewOutput.transform,
-              );
-            }
-            for (const warning of previewOutput.warnings ?? []) {
-              previewSession.recordDiagnostic(context.slideNumber, {
-                severity: "warning",
-                page: context.slideNumber,
-                path:
-                  warning.path === undefined ? path : `${path}/${warning.path}`,
-                message: warning.message,
-              });
-            }
-          } catch (error) {
-            previewSession.recordDiagnostic(context.slideNumber, {
-              severity: "error",
-              page: context.slideNumber,
-              path:
-                error instanceof CapabilityError && error.path !== undefined
-                  ? `${path}/${error.path}`
-                  : path,
-              message: error instanceof Error ? error.message : String(error),
-            });
-          }
-        } else {
-          previewSession.recordDiagnostic(context.slideNumber, {
-            severity: "error",
-            page: context.slideNumber,
-            path,
-            message: `Preview does not support ${child.type}`,
-          });
-        }
-      }
-      context.slide.layouts.push({
-        id,
-        ...(authorId === undefined ? {} : { authorId }),
-        box: reportBox(box),
-        children: [
-          ...(boxObservation === undefined
-            ? []
-            : [{ kind: "object" as const, id: boxObservation.id }]),
-          ...compiled.references,
-        ],
-      });
-      content.push({
-        ...(authorId === undefined ? {} : { authorId }),
-        reference: {
-          kind: "layout",
-          id,
-          objectIds: boxObservation === undefined ? [] : [boxObservation.id],
-        },
-        children: compiled.content,
-      });
-      painted.push({
-        sourceOrder: [index],
-        zIndex: paintOrder(boundBox?.contract),
-        xml: boxXml + compiled.xml,
-        ...(boxPreviewSvg === undefined ? {} : { previewSvg: boxPreviewSvg }),
-        objects: [
-          ...(boxObservation === undefined ? [] : [boxObservation]),
-          ...compiled.objects,
-        ],
-        reference: { kind: "layout", id },
-      });
-      return;
-    }
     const module = context.modules.get(child.type);
     if (module === undefined) {
       context.slide.diagnostics.push(
@@ -2195,7 +1919,6 @@ function compileChildren(
       );
       return;
     }
-    const id = context.slide.nextId++;
     const layoutBox = context.layout.boxes.get(child);
     const theme = context.layout.themes.get(child) ?? context.theme;
     try {
@@ -2207,6 +1930,24 @@ function compileChildren(
           options: context.options,
           slideNumber: context.slideNumber,
         });
+      if (bound.container !== undefined) {
+        compileBoundContainer({
+          child,
+          index,
+          path,
+          authorId,
+          order,
+          bound,
+          container: bound.container,
+          theme,
+          context,
+          insideGroup,
+          painted,
+          content,
+        });
+        return;
+      }
+      const id = context.slide.nextId++;
       const requestedMorphKey = bound.native?.morphKey;
       const hasExplicitName = bound.native?.hasExplicitName === true;
       let morphKey: MorphKey | undefined;
@@ -2461,6 +2202,372 @@ function compileChildren(
   };
 }
 
+function compileBoundContainer(args: {
+  readonly child: CapabilityElement;
+  readonly index: number;
+  readonly path: string;
+  readonly authorId: string | undefined;
+  readonly order: number;
+  readonly bound: BoundObjectCapability;
+  readonly container: BoundContainerCollaboration;
+  readonly theme: ThemeContext;
+  readonly context: BuildContext;
+  readonly insideGroup: boolean;
+  readonly painted: PaintLayer[];
+  readonly content: QueryContentNode[];
+}): void {
+  const {
+    child,
+    index,
+    path,
+    authorId,
+    order,
+    bound,
+    container,
+    theme,
+    context,
+    insideGroup,
+    painted,
+    content,
+  } = args;
+  const box = context.layout.boxes.get(child);
+  if (box === undefined) {
+    context.slide.diagnostics.push(
+      diagnostic(
+        path,
+        "layout-unavailable",
+        "Container is missing layout result",
+      ),
+    );
+    return;
+  }
+  const observesLayout = container.observesLayout !== false;
+  const layoutId = observesLayout ? context.slide.nextId++ : undefined;
+  const emitsObject = container.emitsObject;
+  const requestedMorphKey = bound.native?.morphKey;
+  const hasExplicitName = bound.native?.hasExplicitName === true;
+  const rawLink = bound.native?.link;
+  const containerLink =
+    rawLink === undefined
+      ? undefined
+      : emitsObject
+        ? registerLink(rawLink, context, path)
+        : (context.slide.diagnostics.push(
+            diagnostic(
+              path,
+              "link-needs-object",
+              "Transparent container does not produce clickable objects; attach link to a visible container or object",
+            ),
+          ),
+          undefined);
+  let morphKey: MorphKey | undefined;
+  let morphName: string | undefined;
+  if (requestedMorphKey !== undefined) {
+    if (!isMorphKey(requestedMorphKey)) {
+      context.slide.diagnostics.push(
+        diagnostic(
+          path,
+          "invalid-morph-key",
+          "morphKey must be created by createMorphScope().handle(name)",
+        ),
+      );
+    } else if (insideGroup) {
+      context.slide.diagnostics.push(
+        diagnostic(
+          path,
+          "morph-inside-group",
+          "Morph only matches top-level slide objects; place morphKey on Group to move the entire group",
+        ),
+      );
+    } else if (!emitsObject) {
+      context.slide.diagnostics.push(
+        diagnostic(
+          path,
+          "morph-needs-object",
+          "Only containers generating native objects can participate in Morph",
+        ),
+      );
+    } else if (hasExplicitName) {
+      context.slide.diagnostics.push(
+        diagnostic(
+          path,
+          "morph-object-name-conflict",
+          "Both morphKey and name claim native object names; specify only one",
+        ),
+      );
+    } else {
+      morphKey = requestedMorphKey;
+      morphName = nativeObjectName(morphKey, context.document);
+      if (context.slide.morphObjects.has(morphKey)) {
+        context.slide.diagnostics.push(
+          diagnostic(
+            path,
+            "duplicate-morph-key",
+            `Morph handle "${getMorphKeyLabel(morphKey)}" reused on this slide; can only be declared once per slide`,
+          ),
+        );
+      }
+    }
+  }
+  let containerXml = "";
+  let containerObservation: ObjectObservation | undefined;
+  const objectId = context.slide.nextId++;
+  try {
+    const output = bound.compile(
+      capabilityContext(
+        context,
+        child,
+        objectId,
+        path,
+        box,
+        theme,
+        insideGroup,
+        morphName,
+        containerLink?.nativeLink,
+      ),
+    );
+    if (emitsObject && output.xml !== "") {
+      containerXml = output.xml;
+      containerObservation = {
+        ...output.observation,
+        id: objectId,
+        ...(authorId === undefined ? {} : { authorId }),
+        ...(containerLink === undefined ? {} : { link: containerLink.summary }),
+      };
+      context.slide.layoutDerivedObjectIds.add(objectId);
+      if (morphKey !== undefined && morphName !== undefined) {
+        const nativeKind = bound.contract.nativeKind;
+        if (output.observation.name !== morphName) {
+          context.slide.diagnostics.push(
+            diagnostic(
+              path,
+              "unsupported-morph-object",
+              `${child.type} did not write morphKey to a supported native object name`,
+            ),
+          );
+        } else if (!context.slide.morphObjects.has(morphKey)) {
+          context.slide.morphObjects.set(morphKey, {
+            kind: nativeKind,
+            name: morphName,
+            path,
+          });
+        }
+      }
+      for (const extension of output.extensions) {
+        if (!context.target.extensions.includes(extension)) {
+          context.slide.diagnostics.push(
+            diagnostic(
+              path,
+              "forbidden-mechanism",
+              `Target forbids ${extension}`,
+            ),
+          );
+        } else {
+          context.document.usedExtensions.add(extension);
+        }
+      }
+      for (const claim of output.resourceClaims ?? []) {
+        const claimKey = `${claim.kind}\u0000${claim.key}`;
+        const existing = context.document.resourceClaims.get(claimKey);
+        if (existing !== undefined && existing.identity !== claim.identity) {
+          context.slide.diagnostics.push(
+            diagnostic(
+              path,
+              "conflicting-resource",
+              `Resource ${claim.key} has conflicting definition with ${existing.path}`,
+            ),
+          );
+        } else {
+          context.document.resourceClaims.set(claimKey, {
+            identity: claim.identity,
+            path: existing?.path ?? path,
+            characters: (existing?.characters ?? "") + (claim.characters ?? ""),
+          });
+        }
+      }
+      for (const contribution of output.presentationContributions ?? []) {
+        addPresentationContribution(contribution, context, path, objectId);
+      }
+      for (const annotation of output.annotations ?? []) {
+        context.slide.contributions.push({
+          ...annotation,
+          path,
+          targetId: containerObservation.id,
+          order,
+          declaration: child,
+        });
+      }
+    } else if (morphKey !== undefined && emitsObject) {
+      context.slide.diagnostics.push(
+        diagnostic(
+          path,
+          "morph-needs-object",
+          "Only containers generating native objects can participate in Morph",
+        ),
+      );
+    }
+    for (const warning of output.warnings ?? []) {
+      context.document.warnings.push({
+        severity: "warning",
+        path: warning.path === undefined ? path : `${path}/${warning.path}`,
+        code: warning.code,
+        message: warning.message,
+      });
+    }
+  } catch (error) {
+    context.slide.diagnostics.push(
+      error instanceof CapabilityError
+        ? diagnostic(
+            error.path === undefined ? path : `${path}/${error.path}`,
+            error.code,
+            error.message,
+          )
+        : diagnostic(
+            path,
+            "capability-failure",
+            error instanceof Error ? error.message : String(error),
+          ),
+    );
+  }
+  const compiled = compileChildren(
+    container.children,
+    context,
+    path,
+    insideGroup,
+  );
+  let containerPreviewSvg: string | undefined;
+  if (context.previewSession?.shouldPreviewPage(context.slideNumber)) {
+    const previewSession = context.previewSession;
+    if (bound.preview !== undefined) {
+      const childrenSvg = compiled.paintLayers
+        .map((layer) => layer.previewSvg ?? "")
+        .join("");
+      try {
+        const previewOutput = bound.preview({
+          path,
+          slideNumber: context.slideNumber,
+          objectId: layoutId ?? objectId,
+          ...(containerObservation?.box === undefined
+            ? {}
+            : { box: containerObservation.box }),
+          theme,
+          childrenSvg,
+        });
+        containerPreviewSvg = previewOutput.svg;
+        if (containerObservation !== undefined) {
+          previewSession.recordNode(
+            context.slideNumber,
+            containerObservation.id,
+            path,
+            previewOutput.transform,
+          );
+        }
+        for (const warning of previewOutput.warnings ?? []) {
+          previewSession.recordDiagnostic(context.slideNumber, {
+            severity: "warning",
+            page: context.slideNumber,
+            path: warning.path === undefined ? path : `${path}/${warning.path}`,
+            message: warning.message,
+          });
+        }
+      } catch (error) {
+        if (containerObservation !== undefined) {
+          previewSession.recordNode(
+            context.slideNumber,
+            containerObservation.id,
+            path,
+          );
+        }
+        previewSession.recordDiagnostic(context.slideNumber, {
+          severity: "error",
+          page: context.slideNumber,
+          path:
+            error instanceof CapabilityError && error.path !== undefined
+              ? `${path}/${error.path}`
+              : path,
+          message: error instanceof Error ? error.message : String(error),
+        });
+      }
+    } else {
+      if (containerObservation !== undefined) {
+        previewSession.recordNode(
+          context.slideNumber,
+          containerObservation.id,
+          path,
+        );
+      }
+      previewSession.recordDiagnostic(context.slideNumber, {
+        severity: "error",
+        page: context.slideNumber,
+        path,
+        message: `Preview does not support ${child.type}`,
+      });
+    }
+  }
+  if (layoutId !== undefined) {
+    context.slide.layouts.push({
+      id: layoutId,
+      ...(authorId === undefined ? {} : { authorId }),
+      box: reportBox(box),
+      children: [
+        ...(containerObservation === undefined
+          ? []
+          : [{ kind: "object" as const, id: containerObservation.id }]),
+        ...compiled.references,
+      ],
+    });
+    content.push({
+      ...(authorId === undefined ? {} : { authorId }),
+      reference: {
+        kind: "layout",
+        id: layoutId,
+        objectIds:
+          containerObservation === undefined ? [] : [containerObservation.id],
+      },
+      children: compiled.content,
+    });
+    painted.push({
+      sourceOrder: [index],
+      zIndex: paintOrder(bound.contract),
+      xml: containerXml + compiled.xml,
+      ...(containerPreviewSvg === undefined
+        ? {}
+        : { previewSvg: containerPreviewSvg }),
+      objects: [
+        ...(containerObservation === undefined ? [] : [containerObservation]),
+        ...compiled.objects,
+      ],
+      reference: { kind: "layout", id: layoutId },
+    });
+    return;
+  }
+  if (containerObservation !== undefined) {
+    content.push({
+      ...(authorId === undefined ? {} : { authorId }),
+      reference: { kind: "object", id: containerObservation.id },
+      children: compiled.content,
+    });
+  } else {
+    content.push(...compiled.content);
+  }
+  painted.push({
+    sourceOrder: [index],
+    zIndex: paintOrder(bound.contract),
+    xml: containerXml + compiled.xml,
+    ...(containerPreviewSvg === undefined
+      ? {}
+      : { previewSvg: containerPreviewSvg }),
+    objects: [
+      ...(containerObservation === undefined ? [] : [containerObservation]),
+      ...compiled.objects,
+    ],
+    reference:
+      containerObservation !== undefined
+        ? { kind: "object", id: containerObservation.id }
+        : { kind: "layout", id: objectId },
+  });
+}
+
 function compareSourceOrder(
   left: readonly number[],
   right: readonly number[],
@@ -2613,7 +2720,7 @@ function collectOwnedContributions(
 
 function compileSlide(
   resolved: ResolvedSlide,
-  registry: BoundModuleRegistry,
+  modules: ReadonlyMap<string, RegisteredCapabilityModule>,
   target: Target,
   dimensions: Dimensions,
   document: DocumentBuildState,
@@ -2621,7 +2728,6 @@ function compileSlide(
   documentTheme: ThemeContext,
   previewSession?: PreviewSession,
 ): SlideBuild {
-  const { modules, legacyBoxVisibleStyle } = registry;
   const {
     node,
     id,
@@ -2685,7 +2791,6 @@ function compileSlide(
       document,
       slide,
       modules,
-      legacyBoxVisibleStyle,
       target,
       dimensions,
       options,
@@ -2930,12 +3035,11 @@ function slideSlotOrder(slot: SlideCapabilitySlot): number {
 
 function compileDocument(
   container: DeclarationContainer,
-  registry: BoundModuleRegistry,
+  modules: ReadonlyMap<string, RegisteredCapabilityModule>,
   target: Target,
   options: BuildOptions,
   previewSession?: PreviewSession,
 ): BuildResult {
-  const { modules } = registry;
   const resolved = resolveSlides(container, modules);
   const { slides, sections } = resolved;
   const deck = childNodes(container.children)[0];
@@ -3010,7 +3114,7 @@ function compileDocument(
   const builtSlides = slides.map((resolvedSlide) =>
     compileSlide(
       resolvedSlide,
-      registry,
+      modules,
       target,
       size,
       document,
@@ -3236,13 +3340,12 @@ function adaptLegacySlideCapability(
  */
 function adaptLegacyObjectCapability(
   module: ObjectCapabilityModule,
-  legacyBoxVisibleStyle: WeakSet<BoundObjectCapability>,
 ): BoundObjectCapabilityModule {
   return {
     declaration: module.declaration,
     bind(input, context) {
       const result = module.parse(input, context);
-      const handle: BoundObjectCapability = {
+      return {
         contract: result.contract,
         native: {
           ...(input.props["morphKey"] !== undefined
@@ -3266,25 +3369,14 @@ function adaptLegacyObjectCapability(
           return module.compile(result.parsed, compileContext);
         },
       };
-      if (
-        module.declaration === "rp:box" &&
-        typeof result.parsed === "object" &&
-        result.parsed !== null &&
-        (result.parsed as { hasVisibleStyle?: unknown }).hasVisibleStyle ===
-          true
-      ) {
-        legacyBoxVisibleStyle.add(handle);
-      }
-      return handle;
     },
   };
 }
 
 function bindCapabilityModules(
   modules: readonly CapabilityModule[],
-): BoundModuleRegistry {
+): ReadonlyMap<string, RegisteredCapabilityModule> {
   const bound = new Map<string, RegisteredCapabilityModule>();
-  const legacyBoxVisibleStyle = new WeakSet<BoundObjectCapability>();
   for (const module of modules) {
     const declarations = [
       module,
@@ -3314,12 +3406,12 @@ function bindCapabilityModules(
       ) {
         bound.set(
           declaration.declaration,
-          adaptLegacyObjectCapability(declaration, legacyBoxVisibleStyle),
+          adaptLegacyObjectCapability(declaration),
         );
       } else {
         bound.set(declaration.declaration, declaration);
       }
     }
   }
-  return { modules: bound, legacyBoxVisibleStyle };
+  return bound;
 }

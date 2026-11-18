@@ -19,14 +19,18 @@ import {
 import { RichTextContainer } from "@react-pptx/core/document";
 import { createDocumentPreview } from "@react-pptx/core/preview";
 import { validatePptx } from "@react-pptx/validation";
+import { strFromU8, unzipSync } from "fflate";
 import { PNG } from "pngjs";
 import { createElement } from "react";
 import { describe, expect, it } from "vitest";
 
 import { Box } from "../src/box-elements.ts";
+import { Chart } from "../src/chart-elements.ts";
+import { chartCapability } from "../src/chart.ts";
 import {
   box,
   cell,
+  chart,
   deck,
   documentCapabilities,
   font,
@@ -1392,6 +1396,799 @@ describe("Slice 3 (Ticket 04): Image static preview positive behaviors", () => {
       );
       assert.ok(result.pages[1]?.png !== undefined, item.label);
       assert.deepEqual(result.pages[1]?.diagnostics, [], item.label);
+    }
+  });
+});
+
+describe("Slice 4 (Ticket 10): Chart static preview, layout warning, and textCapability isolation", () => {
+  const jostFont = font("Jost*", [
+    {
+      weight: 400,
+      data: readFileSync(
+        new URL(
+          "../../react-pptx/test/assets/fonts/Jost-400-Book.ttf",
+          import.meta.url,
+        ),
+      ),
+    },
+  ]);
+
+  it("renders finite clustered column chart with layout warning, preserves native chart, and works without textCapability", async () => {
+    const trimmedPreview = createDocumentPreview([
+      slideBackgroundCapability,
+      chartCapability,
+    ]);
+
+    const doc = deck({ width: 640, height: 360 }).append(
+      slide({ id: "column-defaults", background: "#FFFFFF" }).append(
+        chart({
+          id: "sales",
+          x: 24,
+          y: 20,
+          width: 592,
+          height: 320,
+          title: "Quarterly sales",
+          legend: "bottom",
+          style: { fontFamily: jostFont, fontSize: 16 },
+          groups: [
+            {
+              kind: "column",
+              data: {
+                kind: "shared-categories",
+                categories: ["Q1", "Q2", "Q3"],
+              },
+              series: [
+                { name: "Actual", values: [18, 32, 24] },
+                { name: "Plan", values: [22, 28, 30] },
+              ],
+              dataLabels: { value: true },
+            },
+          ],
+        }),
+      ),
+    );
+
+    const result = await trimmedPreview(doc);
+    assert.deepEqual((await validatePptx(result.build.pptx)).errors, []);
+    const page = result.pages[0]!;
+    assert.ok(page.png !== undefined);
+    assert.ok(page.svg !== undefined);
+    assert.equal(page.diagnostics.length, 1);
+    assert.equal(page.diagnostics[0]?.severity, "warning");
+    assert.equal(
+      page.diagnostics[0]?.path,
+      "deck/slide[column-defaults]/chart[sales]",
+    );
+    expect(page.diagnostics[0]?.message).toContain("native");
+
+    const files = unzipSync(result.build.pptx);
+    const chartXml = strFromU8(files["ppt/charts/chart1.xml"]!);
+    expect(chartXml).toContain("<c:barChart>");
+    expect(chartXml).toContain("Quarterly sales");
+    expect(chartXml).toContain('<c:showVal val="1"');
+    expect(chartXml).not.toContain("<c:manualLayout>");
+    expect(chartXml).not.toContain("<c:majorGridlines");
+    assert.ok(
+      Object.keys(files).some((name) =>
+        name.startsWith("ppt/embeddings/Microsoft_Excel_Worksheet"),
+      ),
+    );
+
+    // JSX entry produces identical PNG through the full capability set.
+    const jsxDoc = await expandDocument(
+      createElement(
+        Deck,
+        { width: 640, height: 360 },
+        createElement(
+          Slide,
+          { id: "column-defaults", background: "#FFFFFF" },
+          createElement(Chart, {
+            id: "sales",
+            x: 24,
+            y: 20,
+            width: 592,
+            height: 320,
+            title: "Quarterly sales",
+            legend: "bottom",
+            style: { fontFamily: jostFont, fontSize: 16 },
+            groups: [
+              {
+                kind: "column",
+                data: {
+                  kind: "shared-categories",
+                  categories: ["Q1", "Q2", "Q3"],
+                },
+                series: [
+                  { name: "Actual", values: [18, 32, 24] },
+                  { name: "Plan", values: [22, 28, 30] },
+                ],
+                dataLabels: { value: true },
+              },
+            ],
+          }),
+        ),
+      ),
+    );
+    const jsxResult = await createDocumentPreview(documentCapabilities)(jsxDoc);
+    assert.deepEqual(jsxResult.pages[0]?.png, page.png);
+
+    // Verify chart.ts never loads text.ts at runtime.
+    const packageRoot = fileURLToPath(new URL("../", import.meta.url));
+    const isolated = spawnSync(
+      process.execPath,
+      [
+        "--conditions=source",
+        "--input-type=module",
+        "--eval",
+        `
+import { registerHooks } from "node:module";
+registerHooks({
+  resolve(specifier, context, nextResolve) {
+    if (specifier.endsWith("/text.ts") || specifier.endsWith("/text.js") || specifier.endsWith("/text")) {
+      throw new Error("chart capability loaded text.ts: " + specifier);
+    }
+    return nextResolve(specifier, context);
+  },
+});
+await import("./src/chart.ts");
+process.stdout.write("ok");
+`,
+      ],
+      { cwd: packageRoot, encoding: "utf8" },
+    );
+    assert.equal(isolated.status, 0, isolated.stderr);
+    assert.equal(isolated.stdout, "ok");
+  });
+
+  it("handles fontSize units/inheritance, zero/fractional scales, top label inset, gapWidth bar geometry, and rebuild isolation", async () => {
+    const previewDoc = createDocumentPreview(documentCapabilities);
+
+    const salesChart = chart({
+      id: "sales",
+      x: 24,
+      y: 20,
+      width: 592,
+      height: 320,
+      title: "Quarterly sales",
+      legend: "bottom",
+      style: { fontFamily: jostFont, fontSize: 16 },
+      groups: [
+        {
+          kind: "column",
+          data: {
+            kind: "shared-categories",
+            categories: ["Q1", "Q2", "Q3"],
+          },
+          series: [
+            { name: "Actual", values: [18, 32, 24] },
+            { name: "Plan", values: [22, 28, 30] },
+          ],
+          dataLabels: { value: true },
+        },
+      ],
+    });
+    const doc = deck({ width: 640, height: 360 }).append(
+      slide({ id: "column-defaults", background: "#FFFFFF" }).append(
+        salesChart,
+      ),
+    );
+
+    // 1. Native default cluster gapWidth=150 in rendered bar widths.
+    const baseline = await previewDoc(doc);
+    const baselinePng = baseline.pages[0]!.png!;
+    const baselineSvg = baseline.pages[0]!.svg!;
+    const baselinePptx = baseline.build.pptx.slice();
+    const pixels = PNG.sync.read(Buffer.from(baselinePng));
+    const widths: number[] = [];
+    let barRun = 0;
+    for (let x = 0; x < pixels.width; x++) {
+      const offset = (240 * pixels.width + x) * 4;
+      const isAccent1 =
+        pixels.data[offset] === 79 &&
+        pixels.data[offset + 1] === 129 &&
+        pixels.data[offset + 2] === 189;
+      if (isAccent1) barRun++;
+      else if (barRun > 0) {
+        widths.push(barRun);
+        barRun = 0;
+      }
+    }
+    expect(widths).toHaveLength(3);
+    for (const width of widths) {
+      expect(width).toBeGreaterThanOrEqual(49);
+      expect(width).toBeLessThanOrEqual(51);
+    }
+
+    // 2. Numeric, unit-based, and inherited fontSize equivalence + rebuild isolation.
+    salesChart.style({ fontSize: 24 });
+    const numeric = await previewDoc(doc);
+    assert.ok(numeric.pages[0]?.png !== undefined);
+    // Earlier baseline artifact remains unchanged after mutation & rebuild.
+    assert.deepEqual(baseline.pages[0]?.png, baselinePng);
+    assert.equal(baseline.pages[0]?.svg, baselineSvg);
+    assert.deepEqual(baseline.build.pptx, baselinePptx);
+
+    for (const fontSize of ["18pt", "24px"] as const) {
+      salesChart.style({ fontSize });
+      assert.deepEqual(
+        (await previewDoc(doc)).pages[0]?.png,
+        numeric.pages[0]?.png,
+      );
+    }
+    salesChart.style({ fontSize: undefined });
+    doc.style({ fontSize: 24 });
+    assert.deepEqual(
+      (await previewDoc(doc)).pages[0]?.png,
+      numeric.pages[0]?.png,
+    );
+
+    // 3. Zero and fractional values render cleanly without tick overflow.
+    doc.style({ fontSize: undefined });
+    salesChart.style({ fontSize: 16 });
+    for (const values of [
+      [0, 0, 0],
+      [0.1, 0.3, 0.7],
+    ]) {
+      salesChart.set({
+        groups: [
+          {
+            kind: "column",
+            data: { kind: "shared-categories", categories: ["A", "B", "C"] },
+            series: [{ name: "Values", values }],
+            dataLabels: { value: true },
+          },
+        ],
+      });
+      const res = await previewDoc(doc);
+      assert.deepEqual(
+        res.pages[0]?.diagnostics.filter((item) => item.severity === "error"),
+        [],
+      );
+      assert.ok(res.pages[0]?.png !== undefined);
+    }
+
+    // 4. Untitled chart at top edge (0, 0) keeps highest value label unclipped.
+    salesChart.set({
+      title: undefined,
+      x: 0,
+      y: 0,
+      width: 640,
+      height: 360,
+      legend: false,
+      groups: [
+        {
+          kind: "column",
+          data: { kind: "shared-categories", categories: ["A"] },
+          series: [{ name: "Values", values: [40] }],
+          dataLabels: { value: true },
+        },
+      ],
+    });
+    const edgeResult = await previewDoc(doc);
+    assert.ok(edgeResult.pages[0]?.png !== undefined);
+    const edgeSvg = edgeResult.pages[0].svg!;
+    // With fontSize=16 and dataLabels.value=true, plotTopInset=24, so top bar starts at y=24
+    // and its "40" value label glyphs sit within [0, 24) without clipping above y=0.
+    expect(edgeSvg).toContain('y="24"');
+    const edgePixels = PNG.sync.read(Buffer.from(edgeResult.pages[0].png));
+    let labelPixelsInsideTopBand = 0;
+    for (let y = 2; y < 22; y++) {
+      for (let x = 150; x < 500; x++) {
+        const idx = (y * edgePixels.width + x) * 4;
+        if (
+          edgePixels.data[idx]! < 100 &&
+          edgePixels.data[idx + 1]! < 100 &&
+          edgePixels.data[idx + 2]! < 100
+        ) {
+          labelPixelsInsideTopBand++;
+        }
+      }
+    }
+    expect(labelPixelsInsideTopBand).toBeGreaterThan(20);
+  });
+
+  it("rejects unsupported chart inputs with located errors and never lets warnings clear existing errors", async () => {
+    const previewDoc = createDocumentPreview(documentCapabilities);
+    const validColumnChart = (id: string) =>
+      chart({
+        id,
+        x: 20,
+        y: 20,
+        width: 280,
+        height: 150,
+        style: { fontFamily: jostFont, fontSize: 12 },
+        groups: [
+          {
+            kind: "column",
+            data: { kind: "shared-categories", categories: ["A", "B"] },
+            series: [{ name: "S", values: [4, 8] }],
+          },
+        ],
+      });
+
+    const baseProps = {
+      id: "bad",
+      x: 20,
+      y: 20,
+      width: 560,
+      height: 300,
+      style: { fontFamily: jostFont, fontSize: 14 },
+    } as const;
+
+    const rejectionCases: readonly {
+      readonly label: string;
+      readonly node: ReturnType<typeof chart>;
+      readonly expected: RegExp;
+    }[] = [
+      {
+        label: "non-column-bar",
+        node: chart({
+          ...baseProps,
+          groups: [
+            {
+              kind: "bar",
+              data: { kind: "shared-categories", categories: ["A", "B"] },
+              series: [{ name: "S", values: [1, 2] }],
+            },
+          ],
+        }),
+        expected: /clustered columns/i,
+      },
+      {
+        label: "non-column-line",
+        node: chart({
+          ...baseProps,
+          groups: [
+            {
+              kind: "line",
+              data: { kind: "shared-categories", categories: ["A", "B"] },
+              series: [{ name: "S", values: [1, 2] }],
+            },
+          ],
+        }),
+        expected: /clustered columns/i,
+      },
+      {
+        label: "non-column-pie",
+        node: chart({
+          ...baseProps,
+          groups: [
+            {
+              kind: "pie",
+              data: { kind: "shared-categories", categories: ["A", "B"] },
+              series: [{ name: "S", values: [1, 2] }],
+            },
+          ],
+        }),
+        expected: /clustered columns/i,
+      },
+      {
+        label: "non-column-scatter",
+        node: chart({
+          ...baseProps,
+          groups: [
+            {
+              kind: "scatter",
+              data: { kind: "xy" },
+              series: [{ name: "S", x: [1, 2], y: [3, 4] }],
+            },
+          ],
+        }),
+        expected: /clustered columns/i,
+      },
+      {
+        label: "combo-groups",
+        node: chart({
+          ...baseProps,
+          groups: [
+            {
+              kind: "column",
+              data: { kind: "shared-categories", categories: ["A", "B"] },
+              series: [{ name: "Bars", values: [1, 2] }],
+            },
+            {
+              kind: "column",
+              data: { kind: "shared-categories", categories: ["A", "B"] },
+              series: [{ name: "MoreBars", values: [2, 3] }],
+            },
+          ],
+        }),
+        expected: /clustered columns/i,
+      },
+      {
+        label: "stacked-column",
+        node: chart({
+          ...baseProps,
+          groups: [
+            {
+              kind: "column",
+              stacking: "stacked",
+              data: { kind: "shared-categories", categories: ["A", "B"] },
+              series: [{ name: "S", values: [1, 2] }],
+            },
+          ],
+        }),
+        expected: /clustered columns/i,
+      },
+      {
+        label: "percent-stacked-column",
+        node: chart({
+          ...baseProps,
+          groups: [
+            {
+              kind: "column",
+              stacking: "percent",
+              data: { kind: "shared-categories", categories: ["A", "B"] },
+              series: [{ name: "S", values: [1, 2] }],
+            },
+          ],
+        }),
+        expected: /clustered columns/i,
+      },
+      {
+        label: "explicit-gapWidth",
+        node: chart({
+          ...baseProps,
+          groups: [
+            {
+              kind: "column",
+              gapWidth: 80,
+              data: { kind: "shared-categories", categories: ["A", "B"] },
+              series: [{ name: "S", values: [1, 2] }],
+            },
+          ],
+        }),
+        expected: /clustered columns/i,
+      },
+      {
+        label: "explicit-overlap",
+        node: chart({
+          ...baseProps,
+          groups: [
+            {
+              kind: "column",
+              overlap: 10,
+              data: { kind: "shared-categories", categories: ["A", "B"] },
+              series: [{ name: "S", values: [1, 2] }],
+            },
+          ],
+        }),
+        expected: /clustered columns/i,
+      },
+      {
+        label: "explicit-plotArea",
+        node: chart({
+          ...baseProps,
+          plotArea: { left: 40, top: 20, width: 400, height: 220 },
+          groups: [
+            {
+              kind: "column",
+              data: { kind: "shared-categories", categories: ["A", "B"] },
+              series: [{ name: "S", values: [1, 2] }],
+            },
+          ],
+        }),
+        expected: /clustered columns/i,
+      },
+      {
+        label: "explicit-axes",
+        node: chart({
+          ...baseProps,
+          axes: {
+            category: { kind: "category" },
+            value: { kind: "value", max: 50 },
+          },
+          groups: [
+            {
+              kind: "column",
+              data: { kind: "shared-categories", categories: ["A", "B"] },
+              series: [{ name: "S", values: [1, 2] }],
+            },
+          ],
+        }),
+        expected: /clustered columns/i,
+      },
+      {
+        label: "explicit-displayBlanksAs",
+        node: chart({
+          ...baseProps,
+          displayBlanksAs: "zero",
+          groups: [
+            {
+              kind: "column",
+              data: { kind: "shared-categories", categories: ["A", "B"] },
+              series: [{ name: "S", values: [1, 2] }],
+            },
+          ],
+        }),
+        expected: /clustered columns/i,
+      },
+      {
+        label: "legend-top",
+        node: chart({
+          ...baseProps,
+          legend: "top",
+          groups: [
+            {
+              kind: "column",
+              data: { kind: "shared-categories", categories: ["A", "B"] },
+              series: [{ name: "S", values: [1, 2] }],
+            },
+          ],
+        }),
+        expected: /bottom legend/i,
+      },
+      {
+        label: "rich-styled-title",
+        node: chart({
+          ...baseProps,
+          title: { text: "Styled", style: { fontSize: 18 } },
+          groups: [
+            {
+              kind: "column",
+              data: { kind: "shared-categories", categories: ["A", "B"] },
+              series: [{ name: "S", values: [1, 2] }],
+            },
+          ],
+        }),
+        expected: /styled titles/i,
+      },
+      {
+        label: "negative-value",
+        node: chart({
+          ...baseProps,
+          groups: [
+            {
+              kind: "column",
+              data: { kind: "shared-categories", categories: ["A", "B"] },
+              series: [{ name: "S", values: [-5, 10] }],
+            },
+          ],
+        }),
+        expected: /negative/i,
+      },
+      {
+        label: "null-value",
+        node: chart({
+          ...baseProps,
+          groups: [
+            {
+              kind: "column",
+              data: { kind: "shared-categories", categories: ["A", "B"] },
+              series: [{ name: "S", values: [10, null] }],
+            },
+          ],
+        }),
+        expected: /missing/i,
+      },
+      {
+        label: "styled-series-color",
+        node: chart({
+          ...baseProps,
+          groups: [
+            {
+              kind: "column",
+              data: { kind: "shared-categories", categories: ["A", "B"] },
+              series: [{ name: "S", values: [10, 20], color: "#FF0000" }],
+            },
+          ],
+        }),
+        expected: /styled series/i,
+      },
+      {
+        label: "series-points-and-errorBars",
+        node: chart({
+          ...baseProps,
+          groups: [
+            {
+              kind: "column",
+              data: { kind: "shared-categories", categories: ["A", "B"] },
+              series: [
+                {
+                  name: "S",
+                  values: [10, 20],
+                  errorBars: { type: "fixed", value: 2 },
+                },
+              ],
+            },
+          ],
+        }),
+        expected: /styled series/i,
+      },
+      {
+        label: "series-trendlines",
+        node: chart({
+          ...baseProps,
+          groups: [
+            {
+              kind: "column",
+              data: { kind: "shared-categories", categories: ["A", "B"] },
+              series: [
+                {
+                  name: "S",
+                  values: [10, 20],
+                  trendlines: [{ type: "linear" }],
+                },
+              ],
+            },
+          ],
+        }),
+        expected: /styled series/i,
+      },
+      {
+        label: "series-dataLabels",
+        node: chart({
+          ...baseProps,
+          groups: [
+            {
+              kind: "column",
+              data: { kind: "shared-categories", categories: ["A", "B"] },
+              series: [
+                { name: "S", values: [10, 20], dataLabels: { value: true } },
+              ],
+            },
+          ],
+        }),
+        expected: /styled series/i,
+      },
+      {
+        label: "group-dataLabels-category",
+        node: chart({
+          ...baseProps,
+          groups: [
+            {
+              kind: "column",
+              data: { kind: "shared-categories", categories: ["A", "B"] },
+              series: [{ name: "S", values: [10, 20] }],
+              dataLabels: { value: true, category: true },
+            },
+          ],
+        }),
+        expected: /default value data labels/i,
+      },
+      {
+        label: "missing-font-file",
+        node: chart({
+          id: "bad",
+          x: 20,
+          y: 20,
+          width: 400,
+          height: 240,
+          style: { fontSize: 14 },
+          groups: [
+            {
+              kind: "column",
+              data: { kind: "shared-categories", categories: ["A", "B"] },
+              series: [{ name: "S", values: [10, 20] }],
+            },
+          ],
+        }),
+        expected: /font file/i,
+      },
+      {
+        label: "overflowing-label",
+        node: chart({
+          ...baseProps,
+          groups: [
+            {
+              kind: "column",
+              data: {
+                kind: "shared-categories",
+                categories: [
+                  "An excessively long category name that cannot fit on a single line inside its column slot",
+                  "B",
+                ],
+              },
+              series: [{ name: "S", values: [10, 20] }],
+            },
+          ],
+        }),
+        expected: /fit|single-line/i,
+      },
+      {
+        label: "too-small-plot",
+        node: chart({
+          id: "bad",
+          x: 20,
+          y: 20,
+          width: 40,
+          height: 40,
+          style: { fontFamily: jostFont, fontSize: 16 },
+          groups: [
+            {
+              kind: "column",
+              data: { kind: "shared-categories", categories: ["A"] },
+              series: [{ name: "S", values: [10] }],
+            },
+          ],
+        }),
+        expected: /too small/i,
+      },
+    ];
+
+    for (const item of rejectionCases) {
+      const result = await previewDoc(
+        deck({ width: 640, height: 360 }).append(
+          slide({ id: "bad-page" }).append(item.node),
+          slide({ id: "good-page" }).append(validColumnChart("ok")),
+        ),
+      );
+      assert.deepEqual(
+        (await validatePptx(result.build.pptx)).errors,
+        [],
+        item.label,
+      );
+      assert.equal(result.pages[0]?.png, undefined, item.label);
+      assert.equal(result.pages[0]?.svg, undefined, item.label);
+      assert.equal(
+        result.pages[0]?.diagnostics[0]?.severity,
+        "error",
+        item.label,
+      );
+      assert.match(
+        result.pages[0]?.diagnostics[0]?.path ?? "",
+        /chart\[bad\]/,
+        item.label,
+      );
+      assert.match(
+        result.pages[0]?.diagnostics[0]?.message ?? "",
+        item.expected,
+        item.label,
+      );
+      assert.ok(result.pages[1]?.png !== undefined, item.label);
+      assert.equal(
+        result.pages[1]?.diagnostics[0]?.severity,
+        "warning",
+        item.label,
+      );
+    }
+
+    // Warning before error AND warning after error must both keep png undefined and retain all diagnostics.
+    const coexistence = await previewDoc(
+      deck({ width: 640, height: 360 }).append(
+        slide({ id: "warn-then-error" }).append(
+          validColumnChart("warn-first"),
+          shape({
+            id: "unsupported-second",
+            geometry: "star5",
+            x: 320,
+            y: 20,
+            width: 40,
+            height: 40,
+          }),
+        ),
+        slide({ id: "error-then-warn" }).append(
+          shape({
+            id: "unsupported-first",
+            geometry: "star5",
+            x: 20,
+            y: 20,
+            width: 40,
+            height: 40,
+          }),
+          validColumnChart("warn-second"),
+        ),
+      ),
+    );
+    for (const [index, expected] of [
+      { warnPath: "chart[warn-first]", errorPath: "shape[unsupported-second]" },
+      { warnPath: "chart[warn-second]", errorPath: "shape[unsupported-first]" },
+    ].entries()) {
+      const page = coexistence.pages[index]!;
+      assert.equal(page.png, undefined);
+      assert.equal(page.svg, undefined);
+      expect(page.diagnostics).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            severity: "warning",
+            path: expect.stringContaining(expected.warnPath),
+          }),
+          expect.objectContaining({
+            severity: "error",
+            path: expect.stringContaining(expected.errorPath),
+          }),
+        ]),
+      );
     }
   });
 });

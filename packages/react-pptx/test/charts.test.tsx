@@ -1799,9 +1799,13 @@ describe("native Cartesian charts", () => {
     );
   });
 
-  it("executes chartCapability.parse exactly once per Chart node during build and reuses parsed model", async () => {
-    const parseSpy = vi.spyOn(chartCapability, "parse");
-    const compileSpy = vi.spyOn(chartCapability, "compile");
+  it("migrates chartCapability to BoundObjectCapabilityModule and executes bind once per Chart node during build", async () => {
+    assert.equal("bind" in chartCapability, true);
+    assert.equal("parse" in chartCapability, false);
+    assert.equal("measureLayout" in chartCapability, false);
+    assert.equal("compile" in chartCapability, false);
+
+    const bindSpy = vi.spyOn(chartCapability, "bind");
 
     try {
       const result = await build(
@@ -1827,30 +1831,19 @@ describe("native Cartesian charts", () => {
       );
 
       assert.equal(
-        parseSpy.mock.calls.length,
+        bindSpy.mock.calls.length,
         1,
-        `Expected chartCapability.parse to be called exactly 1 time, got ${parseSpy.mock.calls.length}`,
+        `Expected chartCapability.bind to be called exactly 1 time, got ${bindSpy.mock.calls.length}`,
       );
 
-      const parsedResult = parseSpy.mock.results[0]?.value;
-      assert.ok(parsedResult);
-      assert.equal(parsedResult.contract.nativeKind, "graphicFrame");
-      assert.equal(parsedResult.parsed.groups[0]?.kind, "column");
-      assert.equal(parsedResult.parsed.categories.length, 2);
-      assert.equal(parsedResult.parsed.series.length, 1);
-      assert.equal(parsedResult.parsed.series[0]?.seriesIndex, 0);
-
-      assert.equal(compileSpy.mock.calls.length, 1);
-      assert.equal(
-        compileSpy.mock.calls[0]?.[0]?.groups,
-        parsedResult.parsed.groups,
-      );
+      const boundHandle = bindSpy.mock.results[0]?.value;
+      assert.ok(boundHandle);
+      assert.equal(boundHandle.contract.nativeKind, "graphicFrame");
 
       const validation = await validatePptx(result.pptx);
       assert.deepEqual(validation.errors, []);
     } finally {
-      parseSpy.mockRestore();
-      compileSpy.mockRestore();
+      bindSpy.mockRestore();
     }
   });
 

@@ -1,5 +1,7 @@
+import { BuildError } from "#/diagnostics.ts";
 import type {
   CapabilityLayoutMeasurement,
+  Diagnostic,
   GeometryBox,
   LayoutLength,
   LayoutStyle,
@@ -55,15 +57,18 @@ export type LayoutChildConstraints = {
 };
 
 /**
- * Collaboration port exposed by the layout solver so delegated container modes (such as Grid)
- * can inspect computed sizes, request natural and min-content child measurements, apply resolved
- * constraints, and position children without depending directly on Yoga.
+ * Collaboration port exposed by the layout solver so delegated container modes
+ * can inspect computed sizes, share allocated area heights across passes, request
+ * natural and min-content child measurements, apply resolved constraints, and position
+ * children without depending directly on the underlying solver.
  */
 export type LayoutSolverPort = {
   getComputedSize(node: LayoutSolverNode): {
     readonly width: number;
     readonly height: number;
   };
+  getAllocatedHeight(node: LayoutSolverNode): number | undefined;
+  setAllocatedHeight(node: LayoutSolverNode, height: number): void;
   setContainerSize(
     node: LayoutSolverNode,
     size: { readonly width?: number; readonly height?: number },
@@ -99,6 +104,34 @@ export type CustomContainerSolver = {
   placeContainer(node: LayoutSolverNode, port: LayoutSolverPort): void;
 };
 
+/**
+ * Ownership descriptor for a delegated container layout mode, including style
+ * vocabulary, context/value validation, and solver creation.
+ */
+export type CustomContainerMode = {
+  readonly display: NonNullable<LayoutStyle["display"]>;
+  readonly containerStyleKeys: readonly string[];
+  readonly itemStyleKeys: readonly string[];
+  readonly sharedContainerProperties: readonly string[];
+  validateContainerStyle(
+    style: Readonly<Record<string, unknown>>,
+    resolvedDisplay: NonNullable<LayoutStyle["display"]>,
+    path: string,
+  ): void;
+  validateStyleValues(
+    style: Readonly<Record<string, unknown>>,
+    path: string,
+  ): void;
+  validateItemStyle(
+    style: LayoutStyle,
+    parentStyle: LayoutStyle,
+    path: string,
+  ): void;
+  createSolver(
+    warnOnce: (path: string, code: string, message: string) => void,
+  ): CustomContainerSolver;
+};
+
 export type LayoutSolver = {
   createRoot(spec: {
     readonly path: string;
@@ -110,3 +143,99 @@ export type LayoutSolver = {
   positionLooseGeometry(node: LayoutSolverNode): void;
   solve(onCommit: (node: LayoutSolverNode, box: GeometryBox) => void): void;
 };
+
+function failLayoutProtocol(
+  path: string,
+  code: string,
+  message: string,
+): never {
+  const diagnostic: Diagnostic = { severity: "error", path, code, message };
+  throw new BuildError([diagnostic]);
+}
+
+export function describeStyleValue(value: unknown): string {
+  if (typeof value === "string") return `"${value}"`;
+  if (typeof value === "number" || typeof value === "boolean") {
+    return String(value);
+  }
+  return typeof value;
+}
+
+export function parseLayoutNumber(
+  value: unknown,
+  name: string,
+  path: string,
+): number {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    failLayoutProtocol(
+      path,
+      "invalid-layout-style",
+      `${name} must be a finite pixel number`,
+    );
+  }
+  return value;
+}
+
+export function parseLayoutSpacing(
+  value: unknown,
+  name: string,
+  path: string,
+): LayoutEdges {
+  if (value === undefined) return { top: 0, right: 0, bottom: 0, left: 0 };
+  if (typeof value === "number") {
+    const amount = parseLayoutNumber(value, name, path);
+    return { top: amount, right: amount, bottom: amount, left: amount };
+  }
+  if (!Array.isArray(value) || (value.length !== 2 && value.length !== 4)) {
+    failLayoutProtocol(
+      path,
+      "invalid-layout-style",
+      `${name} must be a number, 2-tuple, or 4-tuple`,
+    );
+  }
+  const values = value.map((item) => parseLayoutNumber(item, name, path));
+  if (values.length === 2) {
+    return {
+      top: values[0]!,
+      right: values[1]!,
+      bottom: values[0]!,
+      left: values[1]!,
+    };
+  }
+  return {
+    top: values[0]!,
+    right: values[1]!,
+    bottom: values[2]!,
+    left: values[3]!,
+  };
+}
+
+export function expandedSpacing(
+  style: LayoutStyle,
+  kind: "margin" | "padding",
+): LayoutEdges {
+  const base = parseLayoutSpacing(style[kind], kind, "layout");
+  if (kind === "margin") {
+    return {
+      top: style.marginTop ?? base.top,
+      right: style.marginRight ?? base.right,
+      bottom: style.marginBottom ?? base.bottom,
+      left: style.marginLeft ?? base.left,
+    };
+  }
+  return {
+    top: style.paddingTop ?? base.top,
+    right: style.paddingRight ?? base.right,
+    bottom: style.paddingBottom ?? base.bottom,
+    left: style.paddingLeft ?? base.left,
+  };
+}
+
+export function resolvePercent(
+  value: LayoutLength | undefined,
+  basis: number,
+): number | undefined {
+  if (typeof value !== "string") return undefined;
+  const match = /^(-?(?:\d+(?:\.\d*)?|\.\d+))%$/u.exec(value);
+  return match === null ? undefined : (Number(match[1]) * basis) / 100;
+}

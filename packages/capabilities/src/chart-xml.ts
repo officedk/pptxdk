@@ -10,6 +10,14 @@ import { strToU8, zipSync } from "fflate";
 
 import { chartDataLabelPositions, mergeDataLabels } from "./chart-labels.ts";
 import type {
+  ParsedAxisCrossing,
+  ParsedChart,
+  ParsedChartAxis,
+  ParsedChartGroup,
+  ParsedChartSeries,
+  ParsedScatterSeries,
+} from "./chart-model.ts";
+import type {
   ChartAxis,
   ChartDataLabelSettings,
   ChartErrorBars,
@@ -18,16 +26,7 @@ import type {
   ChartMarker,
   ChartPoint,
   ChartTrendline,
-  ChartValueAxis,
 } from "./chart-types.ts";
-import type {
-  ParsedAxisCrossing,
-  ParsedChart,
-  ParsedChartAxis,
-  ParsedChartGroup,
-  ParsedChartSeries,
-  ParsedScatterSeries,
-} from "./chart.ts";
 
 const chartNamespace = "http://schemas.openxmlformats.org/drawingml/2006/chart";
 const drawingNamespace =
@@ -1515,7 +1514,7 @@ function axisXml(
 ): XmlElement {
   const spec = axis.spec;
   const category = spec.kind === "category";
-  const valueSpec = category ? undefined : (spec as ChartValueAxis);
+  const valueSpec = category ? undefined : spec;
   // Source-formatted X cells also affect linked ticks, so keep an unspecified X axis at General.
   const isolateDefaultXFormat =
     !category &&

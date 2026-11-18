@@ -16,11 +16,14 @@ import {
 } from "@react-pptx/react-pptx";
 import {
   box,
+  cell,
   chart,
   deck,
   group,
+  row,
   shape,
   slide,
+  table,
   text,
 } from "@react-pptx/react-pptx/document";
 import { preview as previewDocument } from "@react-pptx/react-pptx/preview";
@@ -185,8 +188,28 @@ describe("Slice 3: formal static preview public entrypoints and runtime isolatio
     );
   });
 
-  it("rejects unmigrated object capabilities on selected pages without silently omitting them", async () => {
+  it("rejects unsupported chart kinds on selected pages while rendering all migrated object capabilities without silently omitting them", async () => {
+    const jostFont = font("Jost*", [
+      {
+        weight: 400,
+        data: readFileSync(
+          new URL("./assets/fonts/Jost-400-Book.ttf", import.meta.url),
+        ),
+      },
+    ]);
     const doc = deck({ width: 320, height: 180 }).append(
+      slide({ id: "ok-table" }).append(
+        table({
+          id: "tb1",
+          x: 10,
+          y: 10,
+          width: 120,
+          columns: [120],
+          style: { fontFamily: jostFont, fontSize: 12 },
+        }).append(
+          row({ style: { height: 30 } }).append(cell("Migrated table")),
+        ),
+      ),
       slide({ id: "with-group" }).append(
         group({ id: "g1" }).append(
           shape({
@@ -199,18 +222,19 @@ describe("Slice 3: formal static preview public entrypoints and runtime isolatio
           }),
         ),
       ),
-      slide({ id: "with-chart" }).append(
+      slide({ id: "with-unsupported-chart" }).append(
         chart({
           id: "c1",
           x: 10,
           y: 10,
           width: 200,
           height: 120,
+          style: { fontFamily: jostFont, fontSize: 12 },
           groups: [
             {
-              kind: "column",
-              data: { kind: "shared-categories", categories: ["A"] },
-              series: [{ name: "S", values: [1] }],
+              kind: "line",
+              data: { kind: "shared-categories", categories: ["A", "B"] },
+              series: [{ name: "S", values: [1, 2] }],
             },
           ],
         }),
@@ -233,14 +257,41 @@ describe("Slice 3: formal static preview public entrypoints and runtime isolatio
           }),
         ),
       ),
+      slide({ id: "ok-column-chart" }).append(
+        chart({
+          id: "col1",
+          x: 10,
+          y: 10,
+          width: 280,
+          height: 150,
+          style: { fontFamily: jostFont, fontSize: 12 },
+          groups: [
+            {
+              kind: "column",
+              data: { kind: "shared-categories", categories: ["A", "B"] },
+              series: [{ name: "S", values: [3, 5] }],
+            },
+          ],
+        }),
+      ),
     );
     const result = await previewDocument(doc);
     expect(result.pages[0]?.png).toBeDefined();
     expect(result.pages[0]?.diagnostics).toEqual([]);
-    expect(result.pages[1]?.png).toBeUndefined();
-    expect(result.pages[1]?.diagnostics[0]?.path).toContain("chart[c1]");
-    expect(result.pages[2]?.png).toBeDefined();
-    expect(result.pages[2]?.diagnostics).toEqual([]);
+    expect(result.pages[1]?.png).toBeDefined();
+    expect(result.pages[1]?.diagnostics).toEqual([]);
+    expect(result.pages[2]?.png).toBeUndefined();
+    expect(result.pages[2]?.diagnostics[0]?.severity).toBe("error");
+    expect(result.pages[2]?.diagnostics[0]?.path).toContain("chart[c1]");
+    expect(result.pages[3]?.png).toBeDefined();
+    expect(result.pages[3]?.diagnostics).toEqual([]);
+    expect(result.pages[4]?.png).toBeDefined();
+    expect(result.pages[4]?.diagnostics).toEqual([
+      expect.objectContaining({
+        severity: "warning",
+        path: "deck/slide[ok-column-chart]/chart[col1]",
+      }),
+    ]);
 
     const jsxResult = await previewJsx(
       createElement(

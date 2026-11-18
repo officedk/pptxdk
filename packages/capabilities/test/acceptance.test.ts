@@ -49,6 +49,10 @@ import { P, SlideNumber, Span, Text } from "../src/text-elements.ts";
 import { runCapabilityScenario } from "./acceptance-runner.ts";
 import { boxPositiveScenario, boxRejectionScenario } from "./scenarios/box.ts";
 import {
+  chartPositiveScenario,
+  chartRejectionScenario,
+} from "./scenarios/chart.ts";
+import {
   groupPositiveScenario,
   groupRejectionScenario,
 } from "./scenarios/group.ts";
@@ -111,6 +115,8 @@ describe("Capability-owned acceptance scenarios & custom bound preview extension
       for (const scenario of [
         boxPositiveScenario,
         boxRejectionScenario,
+        chartPositiveScenario,
+        chartRejectionScenario,
         groupPositiveScenario,
         groupRejectionScenario,
         imagePositiveScenario,

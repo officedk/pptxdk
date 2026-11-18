@@ -73,7 +73,6 @@ export type {
   IndependentCategoryData,
   IndependentCategorySeries,
   LineOrAreaChartGroup,
-  ParsedChart,
   PieChartGroup,
   ScatterChartGroup,
   ScatterChartPoint,

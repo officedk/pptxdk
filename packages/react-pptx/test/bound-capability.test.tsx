@@ -3,11 +3,13 @@ import { readFileSync } from "node:fs";
 
 import {
   BuildError,
+  CommonContainer,
   CommonNode,
   createBuilder,
   createMorphScope,
   Deck,
   Slide,
+  type BoundContainerCollaboration,
   type BoundObjectCapability,
   type BoundObjectCapabilityModule,
   type CapabilityInput,
@@ -20,8 +22,11 @@ import {
   layoutStyleKeys,
   parseCapabilityLayoutContract,
   pxToEmu,
+  textStyleFrom,
+  textStyleKeys,
   xmlEscape,
   type MorphKey,
+  type ThemeScope,
 } from "@react-pptx/core/capability";
 import {
   createDeckNode,
@@ -859,6 +864,713 @@ describe("bound object capability contract", () => {
       (error: unknown) => {
         assert(error instanceof BuildError);
         assert.ok(error.diagnostics.some((d) => d.code === "invalid-link"));
+        return true;
+      },
+    );
+  });
+
+  it("migrates boxCapability to BoundObjectCapabilityModule with container role and single bind per build", async () => {
+    assert.equal("bind" in boxCapability, true);
+    assert.equal("parse" in boxCapability, false);
+    assert.equal("compile" in boxCapability, false);
+
+    const bindSpy = vi.spyOn(boxCapability, "bind");
+    try {
+      const trimmedBuild = createBuilder([boxCapability, shapeCapability]);
+      const result = await trimmedBuild(
+        <Deck width={960} height={540}>
+          <Slide id="box-container-slide">
+            <Box
+              id="transparent-card"
+              style={{ display: "flex", width: 320, padding: 12 }}
+            >
+              <Shape id="child-shape" width={120} height={60} fill="#1D4ED8" />
+            </Box>
+          </Slide>
+        </Deck>,
+      );
+
+      assert.equal(bindSpy.mock.calls.length, 1);
+      assert.deepEqual(result.report.diagnostics, []);
+      assert.equal(result.report.slides[0]?.objects.length, 1);
+      assert.equal(result.report.slides[0]?.layouts?.length, 1);
+      const observed = result.query
+        .getSlide("box-container-slide")
+        .get("transparent-card")
+        .observe();
+      assert.deepEqual(observed.box, { x: 0, y: 0, width: 320, height: 84 });
+      assert.equal(observed.objects.length, 1);
+      assert.equal(observed.objects[0]?.authorId, "child-shape");
+    } finally {
+      bindSpy.mockRestore();
+    }
+
+    const withoutBoxBuild = createBuilder([shapeCapability]);
+    await assert.rejects(
+      withoutBoxBuild(
+        <Deck width={960} height={540}>
+          <Slide id="missing-box">
+            <Box id="cropped-box" style={{ width: 100, height: 40 }}>
+              <Shape width={40} height={20} />
+            </Box>
+          </Slide>
+        </Deck>,
+      ),
+      (error: unknown) => {
+        assert(error instanceof BuildError);
+        assert.ok(
+          error.diagnostics.some((d) => d.code === "missing-capability"),
+        );
+        return true;
+      },
+    );
+  });
+
+  it("coordinates generic non-Box BoundContainerCollaboration modules for layout, scoped theme, baseline, overflow, and native objects", async () => {
+    type PanelProps = {
+      readonly id?: string;
+      readonly filled?: boolean;
+      readonly link?: LinkTarget;
+      readonly morphKey?: MorphKey;
+      readonly theme?: ThemeScope;
+      readonly style?: Record<string, unknown>;
+    };
+    const createPanelNode = (props: PanelProps) =>
+      new CommonContainer("panel", "rp:custom-panel", props);
+    const CustomPanel = (
+      props: PanelProps & { readonly children?: React.ReactNode },
+    ) =>
+      createElement(
+        "rp:custom-panel",
+        { ...props, [hostNodeCreator]: createPanelNode },
+        props.children,
+      );
+
+    const panelAllowedStyle = new Set([
+      ...layoutStyleKeys,
+      ...textStyleKeys,
+      "padding",
+    ]);
+    const customPanelModule: BoundObjectCapabilityModule = {
+      declaration: "rp:custom-panel",
+      bind(input, context) {
+        const contract = parseCapabilityLayoutContract({
+          nativeKind: "sp",
+          props: input.props,
+          allowedStyleKeys: panelAllowedStyle,
+          allowPadding: true,
+          isContainer: true,
+          path: context.path,
+        });
+        const emitsObject = input.props["filled"] === true;
+        const derivedTheme = context.theme.with(
+          input.props["theme"] as ThemeScope | undefined,
+          textStyleFrom(input.props["style"]),
+        );
+        const container: BoundContainerCollaboration = {
+          children: input.children,
+          theme: derivedTheme,
+          emitsObject,
+          propagatesBaseline: true,
+          checksCanvasOverflow: true,
+        };
+        const morphKey = input.props["morphKey"] as MorphKey | undefined;
+        const link = input.props["link"] as LinkTarget | undefined;
+        return {
+          contract,
+          container,
+          ...(morphKey !== undefined || link !== undefined
+            ? {
+                native: {
+                  ...(morphKey === undefined ? {} : { morphKey }),
+                  ...(link === undefined ? {} : { link }),
+                },
+              }
+            : {}),
+          compile(compileContext) {
+            const box = compileContext.layoutBox!;
+            const name =
+              compileContext.morphName ?? `Panel ${compileContext.id}`;
+            return {
+              xml: emitsObject
+                ? `<p:sp><p:nvSpPr><p:cNvPr id="${compileContext.id}" name="${xmlEscape(name)}"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr><p:spPr><a:xfrm><a:off x="${pxToEmu(box.x)}" y="${pxToEmu(box.y)}"/><a:ext cx="${pxToEmu(box.width)}" cy="${pxToEmu(box.height)}"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom><a:solidFill><a:srgbClr val="E2E8F0"/></a:solidFill></p:spPr></p:sp>`
+                : "",
+              observation: {
+                id: compileContext.id,
+                kind: "shape",
+                name,
+                geometry: "rect",
+                box,
+              },
+              extensions: [],
+            };
+          },
+        };
+      },
+    };
+
+    const panelMorph = createMorphScope().handle("panel-morph");
+    const panelBuild = createBuilder([customPanelModule, shapeCapability]);
+    const valid = await panelBuild(
+      <Deck
+        width={400}
+        height={240}
+        theme={{ colors: { panelAccent: "#111111" } }}
+      >
+        <Slide id="panel-slide">
+          <CustomPanel
+            id="outer-panel"
+            filled
+            morphKey={panelMorph}
+            theme={{ colors: { panelAccent: "#2563EB" } }}
+            style={{
+              display: "flex",
+              flexDirection: "row",
+              alignItems: "baseline",
+              width: 300,
+              padding: 10,
+              gap: 12,
+              fontFamily: notoFont,
+              fontSize: 18,
+            }}
+          >
+            <CustomPanel
+              id="inner-transparent-panel"
+              style={{
+                display: "flex",
+                flexDirection: "row",
+                alignItems: "flex-start",
+              }}
+            >
+              <Shape
+                id="panel-shape-a"
+                width={100}
+                fill="panelAccent"
+                style={{ verticalAlign: "top", padding: 4 }}
+              >
+                <P>
+                  <Span>Row A</Span>
+                </P>
+              </Shape>
+            </CustomPanel>
+            <Shape
+              id="panel-shape-b"
+              width={100}
+              fill="#0F766E"
+              style={{ fontSize: 12, verticalAlign: "top", padding: 4 }}
+            >
+              <P>
+                <Span>Row B</Span>
+              </P>
+            </Shape>
+          </CustomPanel>
+          <CustomPanel
+            id="overflow-panel"
+            style={{
+              position: "absolute",
+              left: 350,
+              top: 10,
+              width: 100,
+              height: 40,
+            }}
+          />
+        </Slide>
+      </Deck>,
+    );
+
+    assert.equal(
+      valid.report.diagnostics.filter((d) => d.severity === "error").length,
+      0,
+    );
+    assert.ok(
+      valid.report.diagnostics.some(
+        (w) =>
+          w.severity === "warning" &&
+          w.code === "overflow" &&
+          w.path.includes("custom-panel[overflow-panel]"),
+      ),
+    );
+    const outerObserved = valid.query
+      .getSlide("panel-slide")
+      .get("outer-panel")
+      .observe();
+    assert.equal(outerObserved.objects[0]?.kind, "shape");
+    const innerObserved = valid.query
+      .getSlide("panel-slide")
+      .get("outer-panel")
+      .get("inner-transparent-panel")
+      .observe();
+    // Transparent container has layout observation box, and its native objects are its descendants.
+    assert.ok(innerObserved.box !== undefined);
+    assert.equal(innerObserved.objects.length, 1);
+    assert.equal(innerObserved.objects[0]?.authorId, "panel-shape-a");
+    // Baseline shifted smaller font shape downward to align with larger font shape.
+    assert.ok(
+      valid.query
+        .getSlide("panel-slide")
+        .get("outer-panel")
+        .get("panel-shape-b")
+        .observe().box!.y > innerObserved.objects[0].box!.y,
+    );
+    const unzipped = unzipSync(valid.pptx);
+    assert.match(strFromU8(unzipped["ppt/slides/slide1.xml"]!), /2563EB/u);
+
+    // Transparent custom container rejects link and morphKey.
+    await assert.rejects(
+      panelBuild(
+        <Deck width={400} height={240}>
+          <Slide id="bad-transparent-link">
+            <CustomPanel
+              link={{ action: "home" }}
+              style={{ width: 100, height: 40 }}
+            />
+          </Slide>
+        </Deck>,
+      ),
+      (error: unknown) => {
+        assert(error instanceof BuildError);
+        assert.ok(
+          error.diagnostics.some((d) => d.code === "link-needs-object"),
+        );
+        return true;
+      },
+    );
+    await assert.rejects(
+      panelBuild(
+        <Deck width={400} height={240}>
+          <Slide id="bad-transparent-morph">
+            <CustomPanel
+              morphKey={panelMorph}
+              style={{ width: 100, height: 40 }}
+            />
+          </Slide>
+        </Deck>,
+      ),
+      (error: unknown) => {
+        assert(error instanceof BuildError);
+        assert.ok(
+          error.diagnostics.some((d) => d.code === "morph-needs-object"),
+        );
+        return true;
+      },
+    );
+  });
+
+  it("solves Block/Flex automatic minimums, baseline alignment, and absolute coordinates strictly from bound contracts without reading raw leaf props", async () => {
+    type MetricTileProps = {
+      readonly id?: string;
+      readonly spanW?: number;
+      readonly spanH?: number;
+      readonly posX?: number;
+      readonly posY?: number;
+      readonly baselineAt?: number;
+      readonly minW?: number;
+      readonly style?: Record<string, unknown>;
+    };
+    const createTileNode = (props: MetricTileProps) =>
+      new CommonNode("tile", "rp:metric-tile", props);
+    const MetricTile = (props: MetricTileProps) =>
+      createElement("rp:metric-tile", {
+        ...props,
+        [hostNodeCreator]: createTileNode,
+      });
+
+    const tileModule: BoundObjectCapabilityModule = {
+      declaration: "rp:metric-tile",
+      bind(input, context) {
+        // Deliberately omit props.width/height/x/y; supply them strictly on contract.
+        const contract = parseCapabilityLayoutContract({
+          nativeKind: "sp",
+          props: {
+            ...(input.props["posX"] === undefined
+              ? {}
+              : { x: input.props["posX"] }),
+            ...(input.props["posY"] === undefined
+              ? {}
+              : { y: input.props["posY"] }),
+            ...(input.props["spanW"] === undefined
+              ? {}
+              : { width: input.props["spanW"] }),
+            ...(input.props["spanH"] === undefined
+              ? {}
+              : { height: input.props["spanH"] }),
+            ...(input.props["style"] === undefined
+              ? {}
+              : { style: input.props["style"] }),
+          },
+          allowedStyleKeys: new Set<string>(layoutStyleKeys),
+          path: context.path,
+        });
+        const baselineAt =
+          typeof input.props["baselineAt"] === "number"
+            ? input.props["baselineAt"]
+            : undefined;
+        const minW =
+          typeof input.props["minW"] === "number" ? input.props["minW"] : 40;
+        const naturalW =
+          typeof contract.width === "number" ? contract.width : 80;
+        const naturalH =
+          typeof contract.height === "number" ? contract.height : 30;
+        return {
+          contract,
+          measureLayout() {
+            return {
+              width: naturalW,
+              height: naturalH,
+              minContentWidth: minW,
+              minContentHeight: naturalH,
+              ...(baselineAt === undefined ? {} : { baseline: baselineAt }),
+            };
+          },
+          compile(compileContext) {
+            const box = compileContext.layoutBox!;
+            const name = `Tile ${compileContext.id}`;
+            return {
+              xml: `<p:sp><p:nvSpPr><p:cNvPr id="${compileContext.id}" name="${name}"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr><p:spPr><a:xfrm><a:off x="${pxToEmu(box.x)}" y="${pxToEmu(box.y)}"/><a:ext cx="${pxToEmu(box.width)}" cy="${pxToEmu(box.height)}"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom><a:noFill/></p:spPr></p:sp>`,
+              observation: {
+                id: compileContext.id,
+                kind: "shape",
+                name,
+                geometry: "rect",
+                box,
+              },
+              extensions: [],
+            };
+          },
+        };
+      },
+    };
+
+    const customBuild = createBuilder([tileModule, boxCapability]);
+    const result = await customBuild(
+      <Deck width={400} height={240}>
+        <Slide id="contract-only-layout">
+          <Box
+            id="narrow-row"
+            style={{
+              position: "absolute",
+              left: 20,
+              top: 20,
+              width: 140,
+              display: "flex",
+              flexDirection: "row",
+              alignItems: "baseline",
+              gap: 10,
+            }}
+          >
+            {/* spanW=60 clamps minContentWidth=100 down to 60 via contract.width */}
+            <MetricTile
+              id="clamped-tile"
+              spanW={60}
+              spanH={40}
+              minW={100}
+              baselineAt={28}
+            />
+            <MetricTile
+              id="shifted-tile"
+              spanW={120}
+              spanH={24}
+              minW={80}
+              baselineAt={14}
+            />
+          </Box>
+          <MetricTile
+            id="abs-tile"
+            posX={220}
+            posY={40}
+            spanW={90}
+            spanH={50}
+            style={{ position: "absolute" }}
+          />
+        </Slide>
+      </Deck>,
+    );
+
+    const clamped = result.query
+      .getSlide("contract-only-layout")
+      .get("narrow-row")
+      .get("clamped-tile")
+      .observe().box!;
+    const shifted = result.query
+      .getSlide("contract-only-layout")
+      .get("narrow-row")
+      .get("shifted-tile")
+      .observe().box!;
+    const abs = result.query
+      .getSlide("contract-only-layout")
+      .get("abs-tile")
+      .observe().box!;
+
+    // Total width 140, gap 10 -> 130 available; clamped-tile min is min(100, 60)=60, shifted-tile min is 80 -> 60 + 80 > 130 so flexShrink keeps at least 60/80 or proportional shrink above contract clamp.
+    assert.ok(clamped.width >= 60);
+    assert.ok(shifted.width >= 70);
+    // Baseline 28 vs 14 shifts shifted-tile down by 14px.
+    assert.equal(clamped.y, 20);
+    assert.equal(shifted.y, 34);
+    // Absolute position comes from contract.x / contract.y (posX / posY).
+    assert.deepEqual(abs, { x: 220, y: 40, width: 90, height: 50 });
+  });
+
+  it("migrates groupCapability to BoundObjectCapabilityModule with single bind per node per build", async () => {
+    assert.equal("bind" in groupCapability, true);
+    assert.equal("parse" in groupCapability, false);
+    assert.equal("compile" in groupCapability, false);
+
+    const bindSpy = vi.spyOn(groupCapability, "bind");
+    try {
+      const trimmedBuild = createBuilder([groupCapability, shapeCapability]);
+      const result = await trimmedBuild(
+        <Deck width={960} height={540} theme={{ colors: { ink: "#111111" } }}>
+          <Slide id="group-bound-slide">
+            <Group id="loose-group" theme={{ colors: { ink: "#2563EB" } }}>
+              <Shape id="m1" x={10} y={20} width={50} height={30} fill="ink" />
+              <Shape
+                id="m2"
+                x={70}
+                y={30}
+                width={40}
+                height={40}
+                fill="#0F766E"
+              />
+            </Group>
+          </Slide>
+        </Deck>,
+      );
+
+      assert.equal(bindSpy.mock.calls.length, 1);
+      assert.deepEqual(result.report.diagnostics, []);
+      assert.equal(result.report.slides[0]?.layouts, undefined);
+      const observed = result.query
+        .getSlide("group-bound-slide")
+        .get("loose-group")
+        .observe();
+      assert.deepEqual(observed.box, { x: 10, y: 20, width: 100, height: 50 });
+      assert.deepEqual(
+        observed.objects.map((object) => object.authorId),
+        ["loose-group", "m1", "m2"],
+      );
+    } finally {
+      bindSpy.mockRestore();
+    }
+
+    const withoutGroupBuild = createBuilder([shapeCapability]);
+    await assert.rejects(
+      withoutGroupBuild(
+        <Deck width={960} height={540}>
+          <Slide id="missing-group">
+            <Group id="cropped-group">
+              <Shape x={0} y={0} width={40} height={20} />
+            </Group>
+          </Slide>
+        </Deck>,
+      ),
+      (error: unknown) => {
+        assert(error instanceof BuildError);
+        assert.ok(
+          error.diagnostics.some((d) => d.code === "missing-capability"),
+        );
+        return true;
+      },
+    );
+  });
+
+  it("coordinates generic non-Group BoundContainerCollaboration modules with when-styled layout, member composition, and continuity restrictions", async () => {
+    type ClusterProps = {
+      readonly id?: string;
+      readonly name?: string;
+      readonly morphKey?: MorphKey;
+      readonly link?: LinkTarget;
+      readonly theme?: ThemeScope;
+      readonly style?: Record<string, unknown>;
+    };
+    const createClusterNode = (props: ClusterProps) =>
+      new CommonContainer("cluster", "rp:custom-cluster", props);
+    const CustomCluster = (
+      props: ClusterProps & { readonly children?: React.ReactNode },
+    ) =>
+      createElement(
+        "rp:custom-cluster",
+        { ...props, [hostNodeCreator]: createClusterNode },
+        props.children,
+      );
+
+    const clusterAllowedStyle = new Set([
+      ...layoutStyleKeys,
+      ...textStyleKeys,
+      "padding",
+    ]);
+    const customClusterModule: BoundObjectCapabilityModule = {
+      declaration: "rp:custom-cluster",
+      bind(input, context) {
+        const contract = parseCapabilityLayoutContract({
+          nativeKind: "grpSp",
+          props: input.props,
+          allowedStyleKeys: clusterAllowedStyle,
+          allowPadding: true,
+          isContainer: true,
+          path: context.path,
+        });
+        const derivedTheme = context.theme.with(
+          input.props["theme"] as ThemeScope | undefined,
+          textStyleFrom(input.props["style"]),
+        );
+        const morphKey = input.props["morphKey"] as MorphKey | undefined;
+        const link = input.props["link"] as LinkTarget | undefined;
+        const requestedName =
+          typeof input.props["name"] === "string"
+            ? input.props["name"]
+            : undefined;
+        const container: BoundContainerCollaboration = {
+          children: input.children,
+          theme: derivedTheme,
+          emitsObject: true,
+          layoutMode: "when-styled",
+          childComposition: "members",
+          restrictsMemberContinuity: true,
+          observesLayout: false,
+          propagatesBaseline: false,
+          checksCanvasOverflow: false,
+        };
+        return {
+          contract,
+          container,
+          ...(morphKey !== undefined ||
+          requestedName !== undefined ||
+          link !== undefined
+            ? {
+                native: {
+                  ...(morphKey === undefined ? {} : { morphKey }),
+                  ...(requestedName === undefined
+                    ? {}
+                    : { hasExplicitName: true }),
+                  ...(link === undefined ? {} : { link }),
+                },
+              }
+            : {}),
+          compile(compileContext) {
+            const compiled = compileContext.compileChildren(input.children);
+            const boxes = compiled.objects
+              .map((member) => member.box)
+              .filter((b): b is NonNullable<typeof b> => b !== undefined);
+            const x = Math.min(...boxes.map((b) => b.x));
+            const y = Math.min(...boxes.map((b) => b.y));
+            const right = Math.max(...boxes.map((b) => b.x + b.width));
+            const bottom = Math.max(...boxes.map((b) => b.y + b.height));
+            const box = compileContext.layoutBox ?? {
+              x,
+              y,
+              width: right - x,
+              height: bottom - y,
+            };
+            const name =
+              compileContext.morphName ??
+              requestedName ??
+              `Cluster ${compileContext.id}`;
+            return {
+              xml: `<p:grpSp><p:nvGrpSpPr><p:cNvPr id="${compileContext.id}" name="${xmlEscape(name)}"/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr><a:xfrm><a:off x="${pxToEmu(box.x)}" y="${pxToEmu(box.y)}"/><a:ext cx="${pxToEmu(box.width)}" cy="${pxToEmu(box.height)}"/><a:chOff x="${pxToEmu(box.x)}" y="${pxToEmu(box.y)}"/><a:chExt cx="${pxToEmu(box.width)}" cy="${pxToEmu(box.height)}"/></a:xfrm></p:grpSpPr>${compiled.xml}</p:grpSp>`,
+              observation: {
+                id: compileContext.id,
+                kind: "group",
+                name,
+                box,
+                members: compiled.objects,
+              },
+              extensions: [],
+            };
+          },
+        };
+      },
+    };
+
+    const clusterMorph = createMorphScope().handle("cluster-morph");
+    const clusterBuild = createBuilder([
+      customClusterModule,
+      boxCapability,
+      shapeCapability,
+    ]);
+    const valid = await clusterBuild(
+      <Deck width={400} height={240} theme={{ colors: { tone: "#111111" } }}>
+        <Slide id="cluster-slide">
+          <CustomCluster
+            id="loose-cluster"
+            theme={{ colors: { tone: "#DC2626" } }}
+          >
+            <Shape id="c1" x={15} y={25} width={40} height={30} fill="tone" />
+            <Shape
+              id="c2"
+              x={75}
+              y={40}
+              width={30}
+              height={25}
+              fill="#0F766E"
+            />
+          </CustomCluster>
+          <Box
+            id="cluster-host"
+            style={{
+              position: "absolute",
+              left: 20,
+              top: 120,
+              display: "flex",
+              flexDirection: "row",
+              gap: 12,
+            }}
+          >
+            <CustomCluster
+              id="layout-cluster"
+              morphKey={clusterMorph}
+              style={{ display: "flex", width: 120, height: 60 }}
+            >
+              <Shape id="lc1" width={50} height={40} fill="#1D4ED8" />
+            </CustomCluster>
+            <Shape id="after-cluster" width={40} height={40} fill="#F59E0B" />
+          </Box>
+        </Slide>
+      </Deck>,
+    );
+
+    assert.deepEqual(valid.report.diagnostics, []);
+    assert.deepEqual((await validatePptx(valid.pptx)).errors, []);
+    const looseObs = valid.query
+      .getSlide("cluster-slide")
+      .get("loose-cluster")
+      .observe();
+    assert.deepEqual(looseObs.box, { x: 15, y: 25, width: 90, height: 40 });
+    assert.equal(looseObs.objects[0]?.kind, "group");
+    assert.equal(looseObs.objects[0]?.members?.length, 2);
+
+    const afterObs = valid.query
+      .getSlide("cluster-slide")
+      .get("cluster-host")
+      .get("after-cluster")
+      .observe();
+    assert.deepEqual(afterObs.box, { x: 152, y: 120, width: 40, height: 40 });
+    const unzipped = unzipSync(valid.pptx);
+    assert.match(strFromU8(unzipped["ppt/slides/slide1.xml"]!), /DC2626/u);
+
+    // Members inside a childComposition="members" / restrictsMemberContinuity container cannot declare morphKey.
+    await assert.rejects(
+      clusterBuild(
+        <Deck width={400} height={240}>
+          <Slide id="bad-cluster-member-morph">
+            <CustomCluster id="bad-cluster">
+              <Shape
+                id="bad-member"
+                morphKey={clusterMorph}
+                x={0}
+                y={0}
+                width={30}
+                height={30}
+              />
+            </CustomCluster>
+          </Slide>
+        </Deck>,
+      ),
+      (error: unknown) => {
+        assert(error instanceof BuildError);
+        assert.ok(
+          error.diagnostics.some((d) => d.code === "morph-inside-group"),
+        );
         return true;
       },
     );

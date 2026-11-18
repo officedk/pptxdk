@@ -4,6 +4,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
 import {
+  BuildError,
   Deck,
   Slide,
   expandDocument,
@@ -23,13 +24,16 @@ import { PNG } from "pngjs";
 import { createElement } from "react";
 import { describe, expect, it } from "vitest";
 
+import { Box } from "../src/box-elements.ts";
 import { Chart } from "../src/chart-elements.ts";
 import { chartCapability } from "../src/chart.ts";
 import {
+  box,
   chart,
   deck,
   documentCapabilities,
   font,
+  group,
   image,
   notes,
   notesCapability,
@@ -41,6 +45,7 @@ import {
   text,
 } from "../src/document.ts";
 import { blockArc, path, preset } from "../src/geometry.ts";
+import { Group } from "../src/group-elements.ts";
 import { Image } from "../src/image-elements.ts";
 import { motionCapability } from "../src/motion.ts";
 import { Shape } from "../src/shape-elements.ts";
@@ -2180,5 +2185,492 @@ process.stdout.write("ok");
         ]),
       );
     }
+  });
+});
+
+describe("Slice 4 (Ticket 05): Box static preview positive and negative behaviors", () => {
+  it("renders transparent and visible Box containers with solid fill/border, opacity, rotate, theme overrides, and post-preview isolation", async () => {
+    const previewDoc = createDocumentPreview(documentCapabilities);
+    const mutableCard = box({
+      id: "visible-card",
+      theme: { colors: { cardTone: "#1D4ED8" } },
+      style: {
+        width: 140,
+        height: 80,
+        padding: 12,
+        backgroundColor: "cardTone",
+        borderColor: "#0F172A",
+        borderWidth: 2,
+        borderStyle: "solid",
+        opacity: 0.85,
+        rotate: 90,
+      },
+    }).append(
+      shape({
+        id: "card-dot",
+        width: 24,
+        height: 24,
+        fill: "#FACC15",
+      }),
+    );
+
+    const doc = deck({
+      width: 360,
+      height: 200,
+      theme: { colors: { cardTone: "#991B1B" } },
+    }).append(
+      slide({ id: "boxes", background: "#FFFFFF" }).append(
+        box({
+          id: "transparent-row",
+          style: {
+            position: "absolute",
+            left: 20,
+            top: 20,
+            display: "flex",
+            flexDirection: "row",
+            gap: 20,
+            padding: 8,
+          },
+        }).append(
+          mutableCard,
+          box({
+            id: "border-only",
+            style: {
+              width: 100,
+              height: 60,
+              padding: 8,
+              borderColor: "#16A34A",
+              borderWidth: 3,
+            },
+          }).append(
+            shape({
+              id: "inner-rect",
+              width: 30,
+              height: 20,
+              fill: "#0EA5E9",
+            }),
+          ),
+        ),
+      ),
+    );
+
+    const first = await previewDoc(doc);
+    const page = first.pages[0]!;
+    assert.deepEqual(page.diagnostics, []);
+    assert.ok(page.png !== undefined);
+    assert.ok(page.svg !== undefined);
+    // Transparent outer box does not emit a native shape object; only visible boxes and child shapes become objects.
+    assert.equal(page.nodes.length, 4);
+    assert.equal(
+      page.nodes.some((node) => node.authorId === "transparent-row"),
+      false,
+    );
+    assert.equal(page.layouts[0]?.authorId, "transparent-row");
+    expect(page.svg).toContain('fill="#1D4ED8"');
+    expect(page.svg).toContain('stroke="#16A34A"');
+    // Visible box background appears before its child dot in SVG paint order.
+    expect(page.svg.indexOf('fill="#1D4ED8"')).toBeLessThan(
+      page.svg.indexOf('fill="#FACC15"'),
+    );
+    const rotatedCard = page.nodes.find((n) => n.authorId === "visible-card")!;
+    expect(rotatedCard.screenBox?.width).toBeCloseTo(80);
+    expect(rotatedCard.screenBox?.height).toBeCloseTo(140);
+
+    // Mutate after preview and rebuild: prior PNG, SVG, and PPTX remain untouched.
+    const firstSvg = page.svg;
+    const firstPng = page.png.slice();
+    const firstPptx = first.build.pptx.slice();
+    mutableCard.style({ backgroundColor: "#059669" });
+    const second = await previewDoc(doc);
+    assert.equal(first.pages[0]?.svg, firstSvg);
+    assert.deepEqual(first.pages[0]?.png, firstPng);
+    assert.deepEqual(first.build.pptx, firstPptx);
+    expect(second.pages[0]?.svg).toContain('fill="#059669"');
+    assert.notDeepEqual(second.pages[0]?.png, firstPng);
+
+    // JSX entry renders transparent and visible Box identically.
+    const jsxDoc = await expandDocument(
+      createElement(
+        Deck,
+        { width: 240, height: 140 },
+        createElement(
+          Slide,
+          { id: "jsx-box", background: "#FFFFFF" },
+          createElement(
+            Box,
+            {
+              id: "jsx-transparent",
+              style: { display: "flex", padding: 10 },
+            },
+            createElement(
+              Box,
+              {
+                id: "jsx-visible",
+                style: {
+                  width: 120,
+                  height: 60,
+                  padding: 8,
+                  backgroundColor: "#E2E8F0",
+                  borderColor: "#334155",
+                  borderWidth: 2,
+                },
+              },
+              createElement(Shape, {
+                id: "jsx-child",
+                width: 40,
+                height: 20,
+                fill: "#EF4444",
+              }),
+            ),
+          ),
+        ),
+      ),
+    );
+    const jsxResult = await previewDoc(jsxDoc);
+    assert.deepEqual(jsxResult.pages[0]?.diagnostics, []);
+    assert.ok(jsxResult.pages[0]?.png !== undefined);
+    expect(jsxResult.pages[0]?.svg).toContain('fill="#E2E8F0"');
+  });
+
+  it("rejects unsupported visible Box preview styles while retaining valid sibling pages and PPTX", async () => {
+    const previewDoc = createDocumentPreview(documentCapabilities);
+    const rejectionCases: readonly {
+      readonly label: string;
+      readonly node: ReturnType<typeof box>;
+      readonly expected: RegExp;
+    }[] = [
+      {
+        label: "backgroundImage",
+        node: box({
+          id: "bad",
+          style: {
+            width: 100,
+            height: 50,
+            backgroundImage: linearGradient(90, "#1D4ED8", "#9333EA"),
+          },
+        }),
+        expected: /backgroundImage/i,
+      },
+      {
+        label: "borderRadius",
+        node: box({
+          id: "bad",
+          style: {
+            width: 100,
+            height: 50,
+            backgroundColor: "#E2E8F0",
+            borderRadius: 12,
+          },
+        }),
+        expected: /borderRadius/i,
+      },
+      {
+        label: "boxShadow",
+        node: box({
+          id: "bad",
+          style: {
+            width: 100,
+            height: 50,
+            backgroundColor: "#E2E8F0",
+            boxShadow: { blur: 4, distance: 2 },
+          },
+        }),
+        expected: /boxShadow/i,
+      },
+      {
+        label: "softEdge",
+        node: box({
+          id: "bad",
+          style: {
+            width: 100,
+            height: 50,
+            backgroundColor: "#E2E8F0",
+            softEdge: 4,
+          },
+        }),
+        expected: /softEdge/i,
+      },
+      {
+        label: "dashed-border",
+        node: box({
+          id: "bad",
+          style: {
+            width: 100,
+            height: 50,
+            borderColor: "#0F172A",
+            borderStyle: "dashed",
+          },
+        }),
+        expected: /non-solid/i,
+      },
+      {
+        label: "dotted-border",
+        node: box({
+          id: "bad",
+          style: {
+            width: 100,
+            height: 50,
+            borderColor: "#0F172A",
+            borderStyle: "dotted",
+          },
+        }),
+        expected: /non-solid/i,
+      },
+    ];
+
+    for (const item of rejectionCases) {
+      const result = await previewDoc(
+        deck({ width: 240, height: 120 }).append(
+          slide({ id: "bad-box-page" }).append(item.node),
+          slide({ id: "good-box-page" }).append(
+            box({
+              id: "ok",
+              style: { width: 100, height: 50, backgroundColor: "#10B981" },
+            }),
+          ),
+        ),
+      );
+      assert.deepEqual(
+        (await validatePptx(result.build.pptx)).errors,
+        [],
+        item.label,
+      );
+      assert.equal(result.pages[0]?.png, undefined, item.label);
+      assert.equal(result.pages[0]?.svg, undefined, item.label);
+      assert.equal(
+        result.pages[0]?.diagnostics[0]?.severity,
+        "error",
+        item.label,
+      );
+      assert.match(
+        result.pages[0]?.diagnostics[0]?.path ?? "",
+        /box\[bad\]/,
+        item.label,
+      );
+      assert.match(
+        result.pages[0]?.diagnostics[0]?.message ?? "",
+        item.expected,
+        item.label,
+      );
+      assert.ok(result.pages[1]?.png !== undefined, item.label);
+      assert.deepEqual(result.pages[1]?.diagnostics, [], item.label);
+    }
+  });
+});
+
+describe("Slice 5 (Ticket 08): Group static preview, screenGeometry, and member failure propagation", () => {
+  it("renders nested rotated Group trees with flipped members, Box children, screenGeometry, and post-preview isolation", async () => {
+    const previewDoc = createDocumentPreview(documentCapabilities);
+    const mutableShape = shape({
+      id: "inner-leaf",
+      x: 110,
+      y: 70,
+      width: 60,
+      height: 20,
+      fill: "#1D4ED8",
+      flipH: true,
+    });
+    const doc = deck({
+      width: 400,
+      height: 240,
+      theme: { colors: { groupAccent: "#111111" } },
+    }).append(
+      slide({ id: "groups-preview", background: "#FFFFFF" }).append(
+        group({
+          id: "outer",
+          theme: { colors: { groupAccent: "#0F766E" } },
+          style: { rotate: 90 },
+        }).append(
+          shape({
+            id: "base-rect",
+            x: 70,
+            y: 40,
+            width: 80,
+            height: 40,
+            fill: "groupAccent",
+          }),
+          box({
+            id: "group-box",
+            style: {
+              position: "absolute",
+              left: 150,
+              top: 40,
+              width: 60,
+              height: 40,
+              padding: 4,
+              backgroundColor: "#E2E8F0",
+            },
+          }).append(
+            shape({
+              id: "box-child",
+              width: 30,
+              height: 20,
+              fill: "#F59E0B",
+            }),
+          ),
+          group({
+            id: "inner",
+            style: { rotate: -90 },
+          }).append(mutableShape),
+        ),
+      ),
+    );
+
+    const first = await previewDoc(doc);
+    const page = first.pages[0]!;
+    assert.deepEqual(page.diagnostics, []);
+    assert.ok(page.png !== undefined);
+    assert.ok(page.svg !== undefined);
+    expect(page.svg).toContain('transform="rotate(90 ');
+    expect(page.svg).toContain('transform="rotate(-90 ');
+    expect(page.svg).toContain('fill="#0F766E"');
+    expect(page.svg).toContain('fill="#1D4ED8"');
+
+    const outerNode = page.nodes.find((n) => n.authorId === "outer")!;
+    // Outer bounds: x=[70..210] (width 140), y=[40..90] (height 50), center=(140, 65).
+    // Rotated 90deg -> width=50, height=140, x=115, y=-5.
+    assert.deepEqual(outerNode.box, { x: 70, y: 40, width: 140, height: 50 });
+    expect(outerNode.screenBox?.x).toBeCloseTo(115);
+    expect(outerNode.screenBox?.y).toBeCloseTo(-5);
+    expect(outerNode.screenBox?.width).toBeCloseTo(50);
+    expect(outerNode.screenBox?.height).toBeCloseTo(140);
+    assert.equal(outerNode.corners?.length, 4);
+
+    // Inner group is rotated -90 around (140, 80), then +90 around (140, 65) => net 0deg rotation!
+    // Center (140, 80) rotated +90deg around (140, 65) goes to (125, 65).
+    // Since net rotation on inner-leaf is 0deg, its screenBox has width=60, height=20 centered at (125, 65).
+    const innerLeafNode = page.nodes.find((n) => n.authorId === "inner-leaf")!;
+    expect(innerLeafNode.screenBox?.x).toBeCloseTo(95);
+    expect(innerLeafNode.screenBox?.y).toBeCloseTo(55);
+    expect(innerLeafNode.screenBox?.width).toBeCloseTo(60);
+    expect(innerLeafNode.screenBox?.height).toBeCloseTo(20);
+
+    // Mutate after preview: prior outputs remain unchanged.
+    const firstSvg = page.svg;
+    const firstPng = page.png.slice();
+    const firstPptx = first.build.pptx.slice();
+    mutableShape.set({ fill: "#DC2626" });
+    const second = await previewDoc(doc);
+    assert.equal(first.pages[0]?.svg, firstSvg);
+    assert.deepEqual(first.pages[0]?.png, firstPng);
+    assert.deepEqual(first.build.pptx, firstPptx);
+    expect(second.pages[0]?.svg).toContain('fill="#DC2626"');
+    assert.notDeepEqual(second.pages[0]?.png, firstPng);
+
+    // JSX entry renders equivalent rotated Group.
+    const jsxDoc = await expandDocument(
+      createElement(
+        Deck,
+        { width: 240, height: 160 },
+        createElement(
+          Slide,
+          { id: "jsx-group", background: "#FFFFFF" },
+          createElement(
+            Group,
+            { id: "jg", style: { rotate: 90 } },
+            createElement(Shape, {
+              id: "js",
+              x: 40,
+              y: 30,
+              width: 80,
+              height: 40,
+              fill: "#2563EB",
+            }),
+          ),
+        ),
+      ),
+    );
+    const jsxResult = await previewDoc(jsxDoc);
+    assert.deepEqual(jsxResult.pages[0]?.diagnostics, []);
+    assert.ok(jsxResult.pages[0]?.png !== undefined);
+    const jsxGroupNode = jsxResult.pages[0]?.nodes.find(
+      (n) => n.authorId === "jg",
+    );
+    expect(jsxGroupNode?.screenBox?.width).toBeCloseTo(40);
+    expect(jsxGroupNode?.screenBox?.height).toBeCloseTo(80);
+  });
+
+  it("propagates member preview failures out of Group without omitting failed members or breaking sibling pages", async () => {
+    const previewDoc = createDocumentPreview(documentCapabilities);
+    const result = await previewDoc(
+      deck({ width: 320, height: 180 }).append(
+        slide({ id: "group-with-bad-member" }).append(
+          group({ id: "g", style: { rotate: 15 } }).append(
+            shape({
+              id: "ok-member",
+              x: 20,
+              y: 20,
+              width: 50,
+              height: 30,
+              fill: "#10B981",
+            }),
+            shape({
+              id: "bad-member",
+              x: 80,
+              y: 20,
+              width: 50,
+              height: 30,
+              fill: "#EF4444",
+              style: { boxShadow: { blur: 4, distance: 2 } },
+            }),
+          ),
+        ),
+        slide({ id: "valid-sibling" }).append(
+          group({ id: "ok-group" }).append(
+            shape({
+              id: "ok-shape",
+              x: 20,
+              y: 20,
+              width: 60,
+              height: 40,
+              fill: "#2563EB",
+            }),
+          ),
+        ),
+      ),
+    );
+
+    assert.deepEqual((await validatePptx(result.build.pptx)).errors, []);
+    const badPage = result.pages[0]!;
+    assert.equal(badPage.png, undefined);
+    assert.equal(badPage.svg, undefined);
+    assert.ok(
+      badPage.diagnostics.some(
+        (d) =>
+          d.severity === "error" &&
+          /group\[g\]\/shape\[bad-member\]/u.test(d.path) &&
+          /boxShadow/i.test(d.message),
+      ),
+    );
+    // Nodes and transformed screenBoxes are still reported for locator inspection.
+    assert.ok(
+      badPage.nodes.find((n) => n.authorId === "bad-member")?.screenBox !==
+        undefined,
+    );
+
+    const goodPage = result.pages[1]!;
+    assert.deepEqual(goodPage.diagnostics, []);
+    assert.ok(goodPage.png !== undefined);
+
+    // Non-finite rotation on Group fails formal build validation.
+    await assert.rejects(
+      () =>
+        previewDoc(
+          deck({ width: 320, height: 180 }).append(
+            slide({ id: "bad-rot" }).append(
+              group({ id: "g", style: { rotate: Number.NaN } }).append(
+                shape({ id: "s", x: 10, y: 10, width: 20, height: 20 }),
+              ),
+            ),
+          ),
+        ),
+      (error: unknown) => {
+        assert(error instanceof BuildError);
+        assert.ok(
+          error.diagnostics.some((d) => d.code === "invalid-visual-style"),
+        );
+        return true;
+      },
+    );
   });
 });

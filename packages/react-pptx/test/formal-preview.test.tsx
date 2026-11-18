@@ -22,6 +22,7 @@ import {
   cell,
   chart,
   deck,
+  group,
   row,
   shape,
   slide,
@@ -198,9 +199,16 @@ describe("Slice 3: formal static preview public entrypoints and runtime isolatio
           row({ style: { height: 30 } }).append(cell("Not yet migrated")),
         ),
       ),
-      slide({ id: "with-box" }).append(
-        box({ id: "b1", style: { width: 100, height: 40 } }).append(
-          shape({ id: "inner", width: 40, height: 20, fill: "#FF0000" }),
+      slide({ id: "with-group" }).append(
+        group({ id: "g1" }).append(
+          shape({
+            id: "inner",
+            x: 10,
+            y: 10,
+            width: 40,
+            height: 20,
+            fill: "#FF0000",
+          }),
         ),
       ),
       slide({ id: "with-unsupported-chart" }).append(
@@ -219,6 +227,24 @@ describe("Slice 3: formal static preview public entrypoints and runtime isolatio
             },
           ],
         }),
+      ),
+      slide({ id: "ok-box" }).append(
+        box({
+          id: "b1",
+          style: {
+            width: 120,
+            height: 60,
+            padding: 8,
+            backgroundColor: "#E2E8F0",
+          },
+        }).append(
+          shape({
+            id: "ok",
+            width: 60,
+            height: 40,
+            fill: "#00AA00",
+          }),
+        ),
       ),
       slide({ id: "ok-column-chart" }).append(
         chart({
@@ -241,20 +267,22 @@ describe("Slice 3: formal static preview public entrypoints and runtime isolatio
     const result = await previewDocument(doc);
     expect(result.pages[0]?.png).toBeUndefined();
     expect(result.pages[0]?.diagnostics[0]?.path).toContain("table[tb1]");
-    expect(result.pages[1]?.png).toBeUndefined();
-    expect(result.pages[1]?.diagnostics[0]?.path).toContain("box[b1]");
+    expect(result.pages[1]?.png).toBeDefined();
+    expect(result.pages[1]?.diagnostics).toEqual([]);
     expect(result.pages[2]?.png).toBeUndefined();
     expect(result.pages[2]?.diagnostics[0]?.severity).toBe("error");
     expect(result.pages[2]?.diagnostics[0]?.path).toContain("chart[c1]");
     expect(result.pages[3]?.png).toBeDefined();
-    expect(result.pages[3]?.diagnostics).toEqual([
+    expect(result.pages[3]?.diagnostics).toEqual([]);
+    expect(result.pages[4]?.png).toBeDefined();
+    expect(result.pages[4]?.diagnostics).toEqual([
       expect.objectContaining({
         severity: "warning",
         path: "deck/slide[ok-column-chart]/chart[col1]",
       }),
     ]);
 
-    const jsxGroupResult = await previewJsx(
+    const jsxResult = await previewJsx(
       createElement(
         Deck,
         { width: 320, height: 180 },
@@ -263,13 +291,13 @@ describe("Slice 3: formal static preview public entrypoints and runtime isolatio
           { id: "with-group" },
           createElement(
             Group,
-            { id: "g1" },
+            { id: "g1", style: { rotate: 90 } },
             createElement(Shape, {
               id: "m1",
               x: 10,
               y: 10,
-              width: 40,
-              height: 40,
+              width: 60,
+              height: 20,
               fill: "#FF0000",
             }),
           ),
@@ -279,7 +307,7 @@ describe("Slice 3: formal static preview public entrypoints and runtime isolatio
           { id: "with-jsx-box" },
           createElement(
             Box,
-            { id: "jb1", style: { width: 80, height: 40 } },
+            { id: "jb1", style: { width: 80, height: 40, padding: 4 } },
             createElement(Shape, { width: 40, height: 20, fill: "#0000FF" }),
           ),
         ),
@@ -298,16 +326,17 @@ describe("Slice 3: formal static preview public entrypoints and runtime isolatio
         ),
       ),
     );
-    expect(jsxGroupResult.pages[0]?.png).toBeUndefined();
-    expect(jsxGroupResult.pages[0]?.diagnostics[0]?.path).toContain(
-      "group[g1]",
+    expect(jsxResult.pages[0]?.png).toBeDefined();
+    expect(jsxResult.pages[0]?.diagnostics).toEqual([]);
+    const rotatedGroupNode = jsxResult.pages[0]?.nodes.find(
+      (node) => node.authorId === "g1",
     );
-    expect(jsxGroupResult.pages[1]?.png).toBeUndefined();
-    expect(jsxGroupResult.pages[1]?.diagnostics[0]?.path).toContain("box[jb1]");
-    expect(jsxGroupResult.pages[2]?.png).toBeUndefined();
-    expect(jsxGroupResult.pages[2]?.diagnostics[0]?.path).toContain(
-      "table[jtb1]",
-    );
+    expect(rotatedGroupNode?.screenBox?.width).toBeCloseTo(20);
+    expect(rotatedGroupNode?.screenBox?.height).toBeCloseTo(60);
+    expect(jsxResult.pages[1]?.png).toBeDefined();
+    expect(jsxResult.pages[1]?.diagnostics).toEqual([]);
+    expect(jsxResult.pages[2]?.png).toBeUndefined();
+    expect(jsxResult.pages[2]?.diagnostics[0]?.path).toContain("table[jtb1]");
   });
 
   it("never loads @resvg/resvg-js when calling JSX build or document build", () => {

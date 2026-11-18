@@ -75,11 +75,13 @@ export type {
   ThemeShade,
 } from "#/theme.ts";
 export type {
+  BoundContainerCollaboration,
   BoundObjectCapability,
   BoundObjectCapabilityModule,
   BoundObjectNativeCollaboration,
   BoundSlideCapability,
   BoundSlideCapabilityModule,
+  BoundSlideContinuityCollaboration,
   BuildQuery,
   BuildOptions,
   BuildReport,

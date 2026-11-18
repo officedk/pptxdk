@@ -53,11 +53,13 @@ export type {
   VisualStyle,
 } from "#/theme.ts";
 export type {
+  BoundContainerCollaboration,
   BoundObjectCapability,
   BoundObjectCapabilityModule,
   BoundObjectNativeCollaboration,
   BoundSlideCapability,
   BoundSlideCapabilityModule,
+  BoundSlideContinuityCollaboration,
   BuildOptions,
   BuildReport,
   BuildResult,

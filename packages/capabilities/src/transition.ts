@@ -1,8 +1,8 @@
 import {
   CapabilityError,
+  type BoundSlideCapabilityModule,
   type CapabilityInput,
   type Extension,
-  type SlideCapabilityModule,
 } from "@react-pptx/core/capability";
 
 /** Transition duration in milliseconds; rounded to the nearest integer millisecond when written to p14:dur. */
@@ -297,6 +297,7 @@ function compileTransition(
 ): {
   readonly xml: string;
   readonly extensions: readonly Extension[];
+  readonly matchSourceKinds: boolean;
   readonly observation: Readonly<Record<string, unknown>>;
 } {
   const transition = asRecord(value);
@@ -380,11 +381,15 @@ function compileTransition(
     speed: speed(duration),
     ...(duration === undefined ? {} : { durationMs: Math.round(duration) }),
     ...(fallback === undefined ? {} : { fallback: fallback.observation }),
+    ...(advanceAfter === undefined
+      ? {}
+      : { advanceAfterMs: Math.round(advanceAfter) }),
   };
   if (extensions.length === 0) {
     return {
       xml: standardXml,
       extensions,
+      matchSourceKinds: kind === "morph",
       observation: Object.freeze(observation),
     };
   }
@@ -398,16 +403,21 @@ function compileTransition(
   return {
     xml: `<mc:AlternateContent xmlns:mc="${markupCompatibilityNamespace}" ${declarations}><mc:Choice Requires="${requires}">${exactXml}</mc:Choice><mc:Fallback>${fallbackXml}</mc:Fallback></mc:AlternateContent>`,
     extensions,
+    matchSourceKinds: kind === "morph",
     observation: Object.freeze(observation),
   };
 }
 
-export const transitionCapability: SlideCapabilityModule = Object.freeze({
+/**
+ * Bound transition module: validates transition & advanceAfter once per slide during bind,
+ * submits generic continuity matching collaboration for Morph, and leaves static preview untouched.
+ */
+export const transitionCapability: BoundSlideCapabilityModule = {
   declaration: "transition",
   slideProp: "transition",
   slideProps: ["transition", "advanceAfter"],
   slot: "transition",
-  compileSlide(input: CapabilityInput) {
+  bindSlide(input: CapabilityInput) {
     const advanceAfter = input.props["advanceAfter"];
     if (
       advanceAfter !== undefined &&
@@ -422,7 +432,7 @@ export const transitionCapability: SlideCapabilityModule = Object.freeze({
       );
     }
     const transitionValue = input.props["transition"];
-    const transition =
+    const compiled =
       transitionValue === undefined
         ? {
             xml:
@@ -430,15 +440,29 @@ export const transitionCapability: SlideCapabilityModule = Object.freeze({
                 ? ""
                 : `<p:transition advTm="${Math.round(advanceAfter)}"/>`,
             extensions: [] as readonly Extension[],
-            observation: undefined,
+            matchSourceKinds: false,
+            observation:
+              advanceAfter === undefined
+                ? undefined
+                : Object.freeze({ advanceAfterMs: Math.round(advanceAfter) }),
           }
         : compileTransition(transitionValue, advanceAfter);
-    return {
-      xml: transition.xml,
-      extensions: transition.extensions,
-      ...(transition.observation === undefined
+
+    const output = {
+      xml: compiled.xml,
+      extensions: compiled.extensions,
+      ...(compiled.observation === undefined
         ? {}
-        : { observation: transition.observation }),
+        : { observation: compiled.observation }),
+    };
+
+    return {
+      ...(compiled.matchSourceKinds
+        ? { continuity: { matchSourceKinds: true } }
+        : {}),
+      compileSlide() {
+        return output;
+      },
     };
   },
-});
+};

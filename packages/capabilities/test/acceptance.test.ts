@@ -76,6 +76,10 @@ import {
   textPositiveScenario,
   textRejectionScenario,
 } from "./scenarios/text.ts";
+import {
+  runTransitionRejectionScenarios,
+  transitionPositiveScenario,
+} from "./scenarios/transition.ts";
 
 type CustomMarkerProps = {
   readonly id?: string;
@@ -93,7 +97,7 @@ function createMarkerNode(
 }
 
 describe("Capability-owned acceptance scenarios & custom bound preview extensions", () => {
-  it("runs Shape, Image, slide-background, and Text dual-author scenarios through shared runner and collects artifacts", async () => {
+  it("runs Box, Shape, Image, slide-background, Text, and Notes dual-author scenarios through shared runner and collects artifacts", async () => {
     const outDir = await mkdtemp(join(tmpdir(), "rp-cap-accept-"));
     try {
       for (const scenario of [
@@ -156,6 +160,23 @@ describe("Capability-owned acceptance scenarios & custom bound preview extension
       }
     }
   });
+
+  it("runs Transition and Morph dual-author scenarios through shared runner and verifies rejections", async () => {
+    const outDir = await mkdtemp(join(tmpdir(), "rp-cap-accept-trans-"));
+    try {
+      const runs = await runCapabilityScenario(transitionPositiveScenario, {
+        outputDir: outDir,
+      });
+      assert.equal(runs.length, 2);
+      assert.deepEqual(
+        runs.map((r) => r.author),
+        ["jsx", "document"],
+      );
+      await runTransitionRejectionScenarios();
+    } finally {
+      await rm(outDir, { recursive: true, force: true });
+    }
+  }, 15_000);
 
   it("supports JSX expansion followed by imperative Text edit, rebuild, and preview without mutating prior outputs", async () => {
     const jostFont = font("Jost*", [

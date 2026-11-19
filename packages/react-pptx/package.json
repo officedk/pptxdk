@@ -74,6 +74,7 @@
     "@react-pptx/core": "workspace:*",
     "@react-pptx/emit": "workspace:*",
     "@react-pptx/preview": "workspace:*",
+    "@react-pptx/react": "workspace:*",
     "esbuild": "catalog:",
     "react": "catalog:"
   },

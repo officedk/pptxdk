@@ -1,9 +1,3 @@
-export { appendJSX, expandDocument } from "#/builder.ts";
-export type {
-  AppendJSXOptions,
-  ExpandDocumentOptions,
-  ExpandedDocument,
-} from "#/builder.ts";
 export { BuildError, CapabilityError } from "#/diagnostics.ts";
 export {
   AuthorQuery,
@@ -20,7 +14,6 @@ export type {
   RichTextItem,
   StyleUpdate,
 } from "#/document.ts";
-export { Deck, Section, Slide } from "#/elements.ts";
 export { createMorphScope } from "#/morph.ts";
 export type { MorphKey, MorphScope } from "#/morph.ts";
 export { BuildQueryError } from "#/query.ts";
@@ -97,7 +90,6 @@ export type {
   ContributionResolver,
   DeckProps,
   Diagnostic,
-  ElementProps,
   EmitContext,
   EmitOptions,
   EmitOutput,

@@ -1,15 +1,28 @@
-import { createElement, type ReactNode } from "react";
-
+import type {
+  DeckProps as CoreDeckProps,
+  SectionProps as CoreSectionProps,
+  SlideProps as CoreSlideProps,
+} from "@react-pptx/core";
 import {
   createDeckNode,
   createSectionNode,
   createSlideNode,
+} from "@react-pptx/core/document";
+import {
   hostNodeCreator,
   type DocumentNodeCreator,
-} from "#/document.ts";
-import type { DeckProps, SectionProps, SlideProps } from "#/types.ts";
+} from "@react-pptx/core/host";
+import { createElement, type ReactNode } from "react";
 
-function hostElement<P extends { readonly children?: ReactNode }>(
+export type ElementProps = {
+  readonly children?: ReactNode;
+};
+
+export type DeckProps = CoreDeckProps & ElementProps;
+export type SlideProps = CoreSlideProps & ElementProps;
+export type SectionProps = CoreSectionProps & ElementProps;
+
+function hostElement<P extends ElementProps>(
   type: string,
   create: DocumentNodeCreator<P>,
 ) {

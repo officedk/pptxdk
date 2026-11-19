@@ -53,14 +53,12 @@ import {
 import {
   BuildError,
   CommonNode,
-  Deck,
-  Slide,
-  expandDocument,
   type CapabilityModule,
 } from "@react-pptx/core";
 import { createResolver } from "@react-pptx/core/build";
 import { emit } from "@react-pptx/emit";
 import { paint } from "@react-pptx/preview";
+import { Deck, Slide, expandDocument } from "@react-pptx/react";
 import { validatePptx } from "@react-pptx/validation";
 import { strFromU8, unzipSync } from "fflate";
 import { PNG } from "pngjs";

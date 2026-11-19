@@ -1,4 +1,4 @@
-import { hostNodeCreator } from "@react-pptx/core/document";
+import { hostNodeCreator } from "@react-pptx/core/host";
 import type { ReactNode } from "react";
 
 import { createImageNode, type ImageDeclarationProps } from "./image.ts";

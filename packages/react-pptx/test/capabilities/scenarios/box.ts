@@ -13,7 +13,7 @@ import {
 import { linearGradient } from "@react-pptx/capabilities/shape";
 import { Shape } from "@react-pptx/capabilities/shape-elements";
 import { Text } from "@react-pptx/capabilities/text-elements";
-import { Deck, Slide } from "@react-pptx/core";
+import { Deck, Slide } from "@react-pptx/react";
 import { strFromU8, unzipSync } from "fflate";
 import { createElement } from "react";
 import { expect } from "vitest";

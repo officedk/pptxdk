@@ -10,7 +10,8 @@ export const { build } = createStagePipeline([
   transitionCapability,
 ]);
 
-export { Deck, formatBaseline, targets } from "@react-pptx/core";
+export { formatBaseline, targets } from "@react-pptx/core";
+export { Deck } from "@react-pptx/react";
 export { Slide } from "./slide.ts";
 export { Chart } from "@react-pptx/capabilities/chart-elements";
 export { chartCapability } from "@react-pptx/capabilities/chart";

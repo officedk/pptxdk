@@ -624,7 +624,9 @@ registerHooks({
     if (
       specifier === "react" ||
       specifier === "react-reconciler" ||
-      specifier.startsWith("react/")
+      specifier.startsWith("react/") ||
+      specifier === "@react-pptx/react" ||
+      specifier.startsWith("@react-pptx/react/")
     ) {
       throw new Error("pure document entry loaded " + specifier);
     }

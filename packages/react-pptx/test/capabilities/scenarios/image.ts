@@ -4,7 +4,7 @@ import { createRequire } from "node:module";
 import { deck, image, shape, slide } from "@react-pptx/capabilities/document";
 import { Image } from "@react-pptx/capabilities/image-elements";
 import { Shape } from "@react-pptx/capabilities/shape-elements";
-import { Deck, Slide } from "@react-pptx/core";
+import { Deck, Slide } from "@react-pptx/react";
 import { strFromU8, unzipSync } from "fflate";
 import { PNG } from "pngjs";
 import { createElement } from "react";

@@ -300,6 +300,72 @@ process.stdout.write("ok");
     assert.equal(child.stdout, "ok");
   });
 
+  it("never loads react, react-reconciler, or @react-pptx/react from any @react-pptx/core subpath and keeps host operations off public core entries", () => {
+    const packageRoot = fileURLToPath(new URL("../", import.meta.url));
+    const script = `
+import { registerHooks } from "node:module";
+
+registerHooks({
+  resolve(specifier, context, nextResolve) {
+    if (
+      specifier === "react" ||
+      specifier === "react-reconciler" ||
+      specifier.startsWith("react/") ||
+      specifier === "@react-pptx/react" ||
+      specifier.startsWith("@react-pptx/react/") ||
+      specifier.includes("@react-pptx/emit") ||
+      specifier.includes("@react-pptx/preview")
+    ) {
+      throw new Error("core subpath loaded forbidden dependency: " + specifier);
+    }
+    return nextResolve(specifier, context);
+  },
+});
+
+const coreMain = await import("@react-pptx/core");
+const coreBuild = await import("@react-pptx/core/build");
+const coreCap = await import("@react-pptx/core/capability");
+const coreDoc = await import("@react-pptx/core/document");
+const coreHost = await import("@react-pptx/core/host");
+await import("@react-pptx/core/query");
+await import("@react-pptx/core/resolution");
+await import("@react-pptx/core/theme");
+void coreBuild;
+void coreCap;
+
+for (const key of ["hostNodeCreator", "expandDocument", "appendJSX", "Deck", "Slide", "Section"]) {
+  if (key in coreMain) {
+    throw new Error("@react-pptx/core must not export " + key);
+  }
+  if (key in coreDoc) {
+    throw new Error("@react-pptx/core/document must not export " + key);
+  }
+}
+
+for (const key of [
+  "hostNodeCreator",
+  "insertDeclarationChild",
+  "removeDeclarationChild",
+  "replaceDeclarationProps",
+  "setDeclarationText",
+  "validateAuthorIdScopes",
+]) {
+  if (!(key in coreHost)) {
+    throw new Error("@react-pptx/core/host must export " + key);
+  }
+}
+
+process.stdout.write("ok");
+`;
+    const child = spawnSync(
+      process.execPath,
+      ["--conditions=source", "--input-type=module", "--eval", script],
+      { cwd: packageRoot, encoding: "utf8" },
+    );
+    assert.equal(child.status, 0, child.stderr);
+    assert.equal(child.stdout, "ok");
+  });
+
   it("never loads react or react-reconciler when running imperative paint via @react-pptx/preview", () => {
     const packageRoot = fileURLToPath(new URL("../", import.meta.url));
     const script = `
@@ -310,7 +376,9 @@ registerHooks({
     if (
       specifier === "react" ||
       specifier === "react-reconciler" ||
-      specifier.startsWith("react/")
+      specifier.startsWith("react/") ||
+      specifier === "@react-pptx/react" ||
+      specifier.startsWith("@react-pptx/react/")
     ) {
       throw new Error("preview package loaded React dependency: " + specifier);
     }

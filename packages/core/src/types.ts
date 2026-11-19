@@ -1,5 +1,3 @@
-import type { ReactNode } from "react";
-
 import type { MorphKey } from "#/morph.ts";
 import type {
   ThemeContext,
@@ -904,11 +902,7 @@ export type Diagnostic = {
   readonly message: string;
 };
 
-export type ElementProps = {
-  readonly children?: ReactNode;
-};
-
-export type DeckProps = ElementProps & {
+export type DeckProps = {
   readonly width?: number;
   readonly height?: number;
   readonly theme?: ThemeInput;
@@ -916,7 +910,7 @@ export type DeckProps = ElementProps & {
   readonly title?: string;
 };
 
-export type SlideProps = ElementProps & {
+export type SlideProps = {
   /** Page author id; unique within the deck and written as the stable slide identifier. */
   readonly id: string;
   readonly transition?: unknown;
@@ -928,6 +922,6 @@ export type SlideProps = ElementProps & {
 };
 
 /** Organizes slides into collapsible flat sections in PowerPoint. */
-export type SectionProps = ElementProps & {
+export type SectionProps = {
   readonly name: string;
 };

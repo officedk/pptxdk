@@ -16,7 +16,7 @@ import {
   Span,
   Text,
 } from "@react-pptx/capabilities/text-elements";
-import { Deck, Slide } from "@react-pptx/core";
+import { Deck, Slide } from "@react-pptx/react";
 import { createElement } from "react";
 
 import type { CapabilityScenario } from "../acceptance-runner.ts";

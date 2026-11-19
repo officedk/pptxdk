@@ -6,9 +6,6 @@ import {
   CommonContainer,
   CommonNode,
   createMorphScope,
-  Deck,
-  expandDocument,
-  Slide,
   type BoundContainerCollaboration,
   type BoundObjectCapability,
   type BoundObjectCapabilityModule,
@@ -39,13 +36,11 @@ import {
   type SlideResolveContext,
   type ThemeScope,
 } from "@react-pptx/core/capability";
-import {
-  createDeckNode,
-  createSlideNode,
-  hostNodeCreator,
-} from "@react-pptx/core/document";
+import { createDeckNode, createSlideNode } from "@react-pptx/core/document";
+import { hostNodeCreator } from "@react-pptx/core/host";
 import { emit, pxToEmu, xmlEscape } from "@react-pptx/emit";
 import { paint } from "@react-pptx/preview";
+import { Deck, expandDocument, Slide } from "@react-pptx/react";
 import {
   Box,
   boxCapability,

@@ -20,8 +20,6 @@ import {
   CommonContainer,
   CommonNode,
   createMorphScope,
-  Deck,
-  Slide,
   targets,
   type BoundObjectCapabilityModule,
   type BoundSlideCapabilityModule,
@@ -32,6 +30,7 @@ import {
 import { createResolver } from "@react-pptx/core/build";
 import { emit } from "@react-pptx/emit";
 import { paint } from "@react-pptx/preview";
+import { Deck, Slide } from "@react-pptx/react";
 import { validatePptx } from "@react-pptx/validation";
 import { strFromU8, unzipSync } from "fflate";
 import { createElement } from "react";

@@ -14,7 +14,7 @@ import {
 } from "@react-pptx/capabilities/document";
 import { Cell, Row, Table } from "@react-pptx/capabilities/table-elements";
 import { P, SlideNumber, Span } from "@react-pptx/capabilities/text-elements";
-import { Deck, Slide } from "@react-pptx/core";
+import { Deck, Slide } from "@react-pptx/react";
 import { PNG } from "pngjs";
 import { createElement } from "react";
 import { expect } from "vitest";

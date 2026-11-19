@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
-import { expandDocument } from "@react-pptx/core";
 import { createResolver } from "@react-pptx/core/build";
 import { emit } from "@react-pptx/emit";
 import { paint } from "@react-pptx/preview";
+import { expandDocument } from "@react-pptx/react";
 import {
   BuildError,
   Chart,

@@ -39,6 +39,11 @@
       "types": "./dist/document.d.ts",
       "default": "./dist/document.js"
     },
+    "./host": {
+      "source": "./src/host.ts",
+      "types": "./dist/host.d.ts",
+      "default": "./dist/host.js"
+    },
     "./query": {
       "source": "./src/query.ts",
       "types": "./dist/query.d.ts",
@@ -64,15 +69,11 @@
     "build": "rm -rf dist && tsc -p tsconfig.build.json --pretty false"
   },
   "dependencies": {
-    "react": "catalog:",
-    "react-reconciler": "catalog:",
     "yoga-layout": "catalog:"
   },
   "devDependencies": {
     "@react-pptx/tooling-config": "workspace:*",
     "@types/node": "catalog:",
-    "@types/react": "catalog:",
-    "@types/react-reconciler": "catalog:",
     "oxfmt": "catalog:",
     "oxlint": "catalog:",
     "oxlint-tsgolint": "catalog:",

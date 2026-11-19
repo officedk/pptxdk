@@ -48,16 +48,16 @@ import {
 import { shapeXml } from "./shape-xml.ts";
 export { linearGradient, radialGradient } from "./visual.ts";
 export type { PaddingStyle, VisualStyle } from "@react-pptx/core/capability";
-import { fontPresentationContributions } from "./font-embedding.ts";
 import type { MorphProps } from "./morph-api.ts";
 import { motionAnnotations, type MotionProps } from "./motion-api.ts";
 import {
+  emitTextBody,
   measureTextLayoutFromParagraphs,
   parseTextContent,
+  resolveTextBody,
   textInsets,
-  writeTextBodyFromParagraphs,
   type Paragraph,
-  type TextServiceResult,
+  type ResolvedTextBody,
   type TextStyle,
 } from "./text-service.ts";
 import {
@@ -579,9 +579,9 @@ export const shapeCapability: ObjectCapabilityModule<ResolvedBoundObjectCapabili
             ...(fill === undefined ? {} : { fill }),
           });
 
-          let textOutput: TextServiceResult | undefined;
+          let resolvedText: ResolvedTextBody | undefined;
           if (hasText && paragraphs.length > 0) {
-            textOutput = writeTextBodyFromParagraphs(
+            resolvedText = resolveTextBody(
               paragraphs,
               parsedTextStyle,
               resolveContext.theme,
@@ -592,7 +592,6 @@ export const shapeCapability: ObjectCapabilityModule<ResolvedBoundObjectCapabili
                 insets,
               },
               "text-box",
-              resolveContext.options.embedFonts,
             );
           }
           const name =
@@ -603,7 +602,7 @@ export const shapeCapability: ObjectCapabilityModule<ResolvedBoundObjectCapabili
             kind: "shape",
             name,
             ...(authorId === undefined ? {} : { authorId }),
-            textBody: textOutput !== undefined,
+            textBody: resolvedText !== undefined,
             filled:
               fill !== undefined ||
               visualStyle["backgroundColor"] !== undefined ||
@@ -624,9 +623,9 @@ export const shapeCapability: ObjectCapabilityModule<ResolvedBoundObjectCapabili
               visualStyle["borderColor"] !== undefined ||
               (typeof visualStyle["borderWidth"] === "number" &&
                 visualStyle["borderWidth"] > 0),
-            ...(textOutput === undefined
+            ...(resolvedText === undefined
               ? {}
-              : { paragraphCount: textOutput.paragraphCount }),
+              : { paragraphCount: resolvedText.paragraphCount }),
           });
           let escapedName: string;
           try {
@@ -640,7 +639,7 @@ export const shapeCapability: ObjectCapabilityModule<ResolvedBoundObjectCapabili
           }
           const warnings = [
             ...properties.warnings,
-            ...(textOutput?.warnings ?? []),
+            ...(resolvedText?.warnings ?? []),
           ];
           const transform: PreviewTransform = {
             box,
@@ -658,58 +657,44 @@ export const shapeCapability: ObjectCapabilityModule<ResolvedBoundObjectCapabili
               name,
               geometry: properties.geometryName,
               box,
-              ...(textOutput === undefined
+              ...(resolvedText === undefined
                 ? explicitText === undefined
                   ? {}
                   : { text: explicitText }
-                : { text: textOutput.text }),
+                : { text: resolvedText.text }),
             },
             transform,
             extensions: [],
             ...(warnings.length === 0 ? {} : { warnings }),
             ...(annotations.length === 0 ? {} : { annotations }),
-            ...(textOutput === undefined
+            ...(resolvedText === undefined
               ? {}
-              : { resourceClaims: textOutput.resourceClaims }),
+              : { resourceClaims: resolvedText.resourceClaims }),
             emit(emitContext: EmitContext): EmitOutput {
-              const emitTextOutput =
-                hasText && paragraphs.length > 0
-                  ? writeTextBodyFromParagraphs(
-                      paragraphs,
-                      parsedTextStyle,
-                      emitContext.theme,
-                      parsedTextStyle.verticalAlign ?? "middle",
-                      {
-                        width: Math.max(
-                          0,
-                          box.width - insets.left - insets.right,
-                        ),
-                        height: Math.max(
-                          0,
-                          box.height - insets.top - insets.bottom,
-                        ),
-                        insets,
-                      },
-                      "text-box",
-                      emitContext.options.embedFonts,
-                      emitContext.createTextFieldId,
-                    )
-                  : undefined;
+              // Transition period before ticket 10 removes embedFonts from ResolveOptions.
+              const embedFonts =
+                emitContext.options.embedFonts ??
+                resolveContext.options.embedFonts;
+              const emittedBody =
+                resolvedText === undefined
+                  ? undefined
+                  : emitTextBody(resolvedText, emitContext.theme, {
+                      createFieldId: emitContext.createTextFieldId,
+                      ...(embedFonts === undefined ? {} : { embedFonts }),
+                    });
               return {
                 xml: shapeXml(
                   emitContext.id,
                   escapedName,
                   properties.xml,
-                  emitTextOutput?.xml ?? "",
+                  emittedBody?.xml ?? "",
                   nativeLinkXml(emitContext.nativeLink),
                 ),
-                ...(emitTextOutput === undefined
+                ...(emittedBody === undefined
                   ? {}
                   : {
-                      presentationContributions: fontPresentationContributions(
-                        emitTextOutput.fontUses,
-                        emitContext.options.embedFonts,
-                      ),
+                      presentationContributions:
+                        emittedBody.presentationContributions,
                     }),
               };
             },

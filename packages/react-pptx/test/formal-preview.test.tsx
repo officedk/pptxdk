@@ -335,7 +335,12 @@ describe("Slice 3: formal static preview public entrypoints and runtime isolatio
     expect(jsxResult.pages[1]?.diagnostics).toEqual([]);
   });
 
-  it("never loads @resvg/resvg-js when calling JSX build or document build", () => {
+  it("never loads @resvg/resvg-js, pngjs, or jpeg-js when calling JSX build, document build, or resolve + emit with PNG and JPEG images", () => {
+    const pngBase64 =
+      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/n1sAAAAASUVORK5CYII=";
+    const jpegBase64 =
+      "/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAP//////////////////////////////////////////////////////////////////////////////////////2wBDAf//////////////////////////////////////////////////////////////////////////////////////wAARCAABAAEDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAX/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/9oADAMBAAIQAxAAAAFR/8QAFBABAAAAAAAAAAAAAAAAAAAAAP/aAAgBAQABBQJ//8QAFBABAAAAAAAAAAAAAAAAAAAAAP/aAAgBAwEBPwF//8QAFBABAAAAAAAAAAAAAAAAAAAAAP/aAAgBAgEBPwF//8QAFBABAAAAAAAAAAAAAAAAAAAAAP/aAAgBAQAGPwJ//8QAFBABAAAAAAAAAAAAAAAAAAAAAP/aAAgBAQABPyF//9oADAMBAAIRAxEAPwD/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/9oACAEBAAE/IV//2Q==";
+
     const jsxOut = runIsolatedScript(`
 import { registerHooks } from "node:module";
 import { createElement } from "react";
@@ -355,12 +360,8 @@ registerHooks({
 });
 
 const { build, Deck, Image, Slide, Shape } = await import("@react-pptx/react-pptx");
-const pngBytes = new Uint8Array(
-  Buffer.from(
-    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/n1sAAAAASUVORK5CYII=",
-    "base64",
-  ),
-);
+const pngBytes = new Uint8Array(Buffer.from("${pngBase64}", "base64"));
+const jpegBytes = new Uint8Array(Buffer.from("${jpegBase64}", "base64"));
 const result = await build(
   createElement(
     Deck,
@@ -369,7 +370,8 @@ const result = await build(
       Slide,
       { id: "s1" },
       createElement(Shape, { x: 10, y: 10, width: 40, height: 40 }),
-      createElement(Image, { x: 60, y: 10, width: 40, height: 40, src: pngBytes }),
+      createElement(Image, { x: 60, y: 10, width: 40, height: 40, src: pngBytes, fit: "cover" }),
+      createElement(Image, { x: 110, y: 10, width: 40, height: 40, src: jpegBytes, crop: { left: 0.2 }, flipH: true, style: { rotate: 15, opacity: 0.8 } }),
     ),
   ),
 );
@@ -403,17 +405,14 @@ registerHooks({
 const { build, deck, image, slide, shape } = await import("@react-pptx/react-pptx/document");
 const { createFormalBuild } = await import("@react-pptx/react-pptx/build");
 void createFormalBuild;
-const pngBytes = new Uint8Array(
-  Buffer.from(
-    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/n1sAAAAASUVORK5CYII=",
-    "base64",
-  ),
-);
+const pngBytes = new Uint8Array(Buffer.from("${pngBase64}", "base64"));
+const jpegBytes = new Uint8Array(Buffer.from("${jpegBase64}", "base64"));
 const result = await build(
   deck({ width: 320, height: 180 }).append(
     slide({ id: "s1" }).append(
       shape({ x: 10, y: 10, width: 40, height: 40 }),
-      image({ x: 60, y: 10, width: 40, height: 40, src: pngBytes }),
+      image({ x: 60, y: 10, width: 40, height: 40, src: pngBytes, fit: "contain" }),
+      image({ x: 110, y: 10, width: 40, height: 40, src: jpegBytes, flipV: true, style: { rotate: 30 } }),
     ),
   ),
 );
@@ -423,6 +422,50 @@ if (!(result.pptx instanceof Uint8Array) || result.pptx.byteLength === 0) {
 process.stdout.write("ok");
 `);
     assert.equal(docBuildOut, "ok");
+
+    const resolveEmitOut = runIsolatedScript(`
+import { registerHooks } from "node:module";
+
+registerHooks({
+  resolve(specifier, context, nextResolve) {
+    if (
+      specifier === "react" ||
+      specifier === "react-reconciler" ||
+      specifier.startsWith("react/") ||
+      specifier.includes("@resvg/resvg-js") ||
+      specifier.includes("pngjs") ||
+      specifier.includes("jpeg-js") ||
+      specifier.includes("@react-pptx/validation")
+    ) {
+      throw new Error("resolve + emit loaded forbidden dependency: " + specifier);
+    }
+    return nextResolve(specifier, context);
+  },
+});
+
+const { imageCapability } = await import("@react-pptx/capabilities/image");
+const { createResolver, emit } = await import("@react-pptx/core/build");
+const { createDeckNode, createSlideNode } = await import("@react-pptx/core/document");
+const { createImageNode } = await import("@react-pptx/capabilities/image");
+
+const pngBytes = new Uint8Array(Buffer.from("${pngBase64}", "base64"));
+const jpegBytes = new Uint8Array(Buffer.from("${jpegBase64}", "base64"));
+const d = createDeckNode({ width: 320, height: 180 });
+const s = createSlideNode({ id: "s1" });
+s.append(
+  createImageNode({ x: 10, y: 10, width: 80, height: 40, src: pngBytes, fit: "contain" }),
+  createImageNode({ x: 100, y: 10, width: 80, height: 40, src: jpegBytes, crop: { top: 0.25 }, flipH: true }),
+);
+d.append(s);
+
+const resolution = createResolver([imageCapability])({ children: [d] });
+const emitted = emit(resolution);
+if (!(emitted.pptx instanceof Uint8Array) || emitted.pptx.byteLength === 0) {
+  throw new Error("Expected PPTX output from resolve + emit");
+}
+process.stdout.write("ok");
+`);
+    assert.equal(resolveEmitOut, "ok");
   });
 
   it("never loads react or react-reconciler when calling plain document preview", () => {

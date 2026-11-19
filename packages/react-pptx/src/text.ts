@@ -2,9 +2,10 @@ import { motionCapability } from "@react-pptx/capabilities/motion";
 import { notesCapability } from "@react-pptx/capabilities/notes";
 import { textCapability } from "@react-pptx/capabilities/text";
 import { transitionCapability } from "@react-pptx/capabilities/transition";
-import { createBuilder } from "@react-pptx/core";
 
-export const build = createBuilder([
+import { createStagePipeline } from "./compose.ts";
+
+export const { build } = createStagePipeline([
   textCapability,
   notesCapability,
   transitionCapability,
@@ -18,7 +19,6 @@ export { font, textCapability } from "@react-pptx/capabilities/text";
 export { P, Span, Text } from "@react-pptx/capabilities/text-elements";
 export { Notes } from "@react-pptx/capabilities/notes-elements";
 export { notesCapability } from "@react-pptx/capabilities/notes";
-export { createBuilder } from "@react-pptx/core";
 export { Step } from "@react-pptx/capabilities/motion-elements";
 export {
   fade,

@@ -56,7 +56,6 @@ import {
   type BoundSlideCapability,
   type BuildOptions,
   type BuildReport,
-  type BuildResult,
   type CapabilityChild,
   type CapabilityContext,
   type CapabilityContribution,
@@ -502,6 +501,28 @@ export function validateOptions(options: BuildOptions): Target {
     ]);
   }
   return validateTarget(options.target);
+}
+
+export function validateEmitOptions(options: EmitOptions): void {
+  if (
+    typeof options !== "object" ||
+    options === null ||
+    Array.isArray(options)
+  ) {
+    throw new BuildError([
+      diagnostic("build", "invalid-options", "Emit options must be an object"),
+    ]);
+  }
+  const unknown = ownKeys(options, ["signal"]);
+  if (unknown !== undefined) {
+    throw new BuildError([
+      diagnostic(
+        "build",
+        "unknown-parameter",
+        `Emit options contain unknown parameter ${unknown}`,
+      ),
+    ]);
+  }
 }
 
 function positiveDimension(value: unknown, label: string): number {
@@ -3464,6 +3485,7 @@ function resolveDocument(
   container: DeclarationContainer,
   modules: ReadonlyMap<string, RegisteredCapabilityModule>,
   options: ResolveOptions,
+  target: Target,
 ): Resolution {
   const parsed = resolveSlides(container, modules);
   const { slides, sections } = parsed;
@@ -3605,6 +3627,10 @@ function resolveDocument(
   const internal: InternalResolution = {
     dimensions: size,
     ...(typeof title === "string" ? { title } : {}),
+    target,
+    ...(options.embedFonts === undefined
+      ? {}
+      : { embedFonts: options.embedFonts }),
     theme,
     sections,
     slides: resolvedSlides.map(({ internal: slideInternal }) => slideInternal),
@@ -3842,14 +3868,14 @@ function emitLayer(
   return layer.childComposition === "members" ? ownXml : ownXml + siblingXml;
 }
 
-export function emitInternal(
+export function emit(
   resolution: Resolution,
   options: EmitOptions = {},
-  checkSignal = true,
 ): EmitResult {
-  const target = validateOptions(options);
-  if (checkSignal && options.signal?.aborted) throw options.signal.reason;
+  validateEmitOptions(options);
+  if (options.signal?.aborted) throw options.signal.reason;
   const internal = getInternalResolution(resolution);
+  const target = internal.target;
 
   if (internal.sections.length > 0 && !target.extensions.includes("p14")) {
     throw new BuildError([
@@ -4020,87 +4046,36 @@ export function emitInternal(
   return Object.freeze({ pptx, report, query });
 }
 
-export function emit(
-  resolution: Resolution,
-  options: EmitOptions = {},
-): EmitResult {
-  return emitInternal(resolution, options, true);
-}
-
 function normalizeDeclarationInput(
   input: DeclarationContainer | DeclarationNode,
 ): DeclarationContainer {
-  return isDeclarationNode(input) ? { children: [input] } : input;
-}
-
-export function createDeclarationResolver(
-  modules: readonly CapabilityModule[],
-) {
-  const bound = bindCapabilityModules(modules);
-
-  return function resolveDeclaration(
-    declaration: DeclarationContainer | DeclarationNode,
-    options: ResolveOptions = {},
-    checkSignal = true,
-  ): Resolution {
-    validateOptions(options);
-    if (checkSignal && options.signal?.aborted) throw options.signal.reason;
-    return resolveDocument(
-      normalizeDeclarationInput(declaration),
-      bound,
-      options,
-    );
-  };
+  if (isDeclarationNode(input)) return { children: [input] };
+  if (
+    typeof input === "object" &&
+    input !== null &&
+    "children" in input &&
+    Array.isArray(input.children)
+  ) {
+    return input;
+  }
+  return { children: [] };
 }
 
 export function createResolver(modules: readonly CapabilityModule[]) {
-  const resolveDeclaration = createDeclarationResolver(modules);
+  const bound = bindCapabilityModules(modules);
 
   return function resolve(
     declaration: DeclarationContainer | DeclarationNode,
     options: ResolveOptions = {},
   ): Resolution {
-    return resolveDeclaration(declaration, options, true);
-  };
-}
-
-/**
- * Creates the synchronous formal build over a plain declaration tree.
- *
- * The formal build performs validation, layout, choreography, resource coordination, and packaging
- * without executing React lifecycle or importing React at runtime. React execution hands off its
- * declaration tree before this function runs, and the same implementation serves later authoring
- * entries. The shared editable document should expose this declaration view directly; do not add a
- * document-to-host reverse tree or a second compiler.
- */
-export function createFormalBuild(modules: readonly CapabilityModule[]) {
-  const resolve = createResolver(modules);
-
-  return function buildDeclaration(
-    declaration: DeclarationContainer,
-    options: BuildOptions = {},
-  ): BuildResult {
-    const resolution = resolve(declaration, options);
-    return emit(resolution, options);
-  };
-}
-
-/**
- * Internal React composition entry. React expansion has already locked its completion when the
- * declaration is handed off, so a cleanup abort must not be treated as cancelling it. The original
- * options, including the caller's signal, still reach capability parse and compile contexts.
- */
-export function createCompletedDeclarationBuild(
-  modules: readonly CapabilityModule[],
-) {
-  const resolveDeclaration = createDeclarationResolver(modules);
-
-  return function buildCompletedDeclaration(
-    declaration: DeclarationContainer,
-    options: BuildOptions = {},
-  ): BuildResult {
-    const resolution = resolveDeclaration(declaration, options, false);
-    return emitInternal(resolution, options, false);
+    const target = validateOptions(options);
+    if (options.signal?.aborted) throw options.signal.reason;
+    return resolveDocument(
+      normalizeDeclarationInput(declaration),
+      bound,
+      options,
+      target,
+    );
   };
 }
 

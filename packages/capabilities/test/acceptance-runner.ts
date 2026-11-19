@@ -2,9 +2,10 @@ import assert from "node:assert/strict";
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
-import { createPreview, type CommonNode } from "@react-pptx/core";
+import { expandDocument, type CommonNode } from "@react-pptx/core";
+import { createResolver, emit, type Resolution } from "@react-pptx/core/build";
 import {
-  createDocumentPreview,
+  paint,
   type PreviewPageResult,
   type PreviewResult,
 } from "@react-pptx/core/preview";
@@ -18,6 +19,8 @@ export type AuthorKind = "jsx" | "document";
 
 export type ScenarioAssertContext = {
   readonly author: AuthorKind;
+  readonly resolution: Resolution;
+  readonly pptx: Uint8Array;
   readonly preview: PreviewResult;
   readonly validation: ValidationResult;
 };
@@ -46,13 +49,14 @@ export type CollectedScenarioArtifact = {
 export type ScenarioRunOutput = {
   readonly scenarioId: string;
   readonly author: AuthorKind;
+  readonly resolution: Resolution;
+  readonly pptx: Uint8Array;
   readonly preview: PreviewResult;
   readonly validation: ValidationResult;
   readonly artifacts: readonly CollectedScenarioArtifact[];
 };
 
-const runJsxPreview = createPreview(documentCapabilities);
-const runDocumentPreview = createDocumentPreview(documentCapabilities);
+const resolveDocument = createResolver(documentCapabilities);
 
 function assertPngValid(page: PreviewPageResult, label: string): void {
   const hasError = page.diagnostics.some((item) => item.severity === "error");
@@ -77,7 +81,7 @@ function assertPngValid(page: PreviewPageResult, label: string): void {
 
 /**
  * Shared runner executing one capability-owned scenario across both real JSX and imperative
- * document authoring entries through the formal preview and validation pipeline.
+ * document authoring entries by resolving once, then feeding emit and paint independently.
  */
 export async function runCapabilityScenario(
   scenario: CapabilityScenario,
@@ -88,11 +92,21 @@ export async function runCapabilityScenario(
     scenario.pages === undefined ? {} : { pages: scenario.pages };
 
   for (const author of ["jsx", "document"] as const) {
-    const preview =
+    const document =
       author === "jsx"
-        ? await runJsxPreview(scenario.jsx(), previewOptions)
-        : await runDocumentPreview(scenario.document(), previewOptions);
-    const validation = await validatePptx(preview.build.pptx);
+        ? await expandDocument(scenario.jsx())
+        : scenario.document();
+    const resolution = resolveDocument(document);
+    const { pptx } = emit(resolution);
+    const { pages } = paint(resolution, previewOptions);
+    const preview: PreviewResult = Object.freeze({
+      report: resolution.report,
+      query: resolution.query,
+      pages,
+    });
+    assert.equal("build" in preview, false);
+
+    const validation = await validatePptx(pptx);
     assert.deepEqual(
       validation.errors,
       [],
@@ -103,14 +117,14 @@ export async function runCapabilityScenario(
       assertPngValid(page, `${scenario.id}:${author}:p${page.page}`);
     }
 
-    await scenario.assert({ author, preview, validation });
+    await scenario.assert({ author, resolution, pptx, preview, validation });
 
     const artifacts: CollectedScenarioArtifact[] = [];
     if (options.outputDir !== undefined) {
       const baseDir = join(options.outputDir, scenario.id, author);
       await mkdir(baseDir, { recursive: true });
       const pptxPath = join(baseDir, "deck.pptx");
-      await writeFile(pptxPath, preview.build.pptx);
+      await writeFile(pptxPath, pptx);
       for (const page of preview.pages) {
         let pngPath: string | undefined;
         if (page.png !== undefined) {
@@ -160,6 +174,8 @@ export async function runCapabilityScenario(
     results.push({
       scenarioId: scenario.id,
       author,
+      resolution,
+      pptx,
       preview,
       validation,
       artifacts,

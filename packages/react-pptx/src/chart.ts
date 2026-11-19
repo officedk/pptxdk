@@ -1,9 +1,10 @@
 import { chartCapability } from "@react-pptx/capabilities/chart";
 import { motionCapability } from "@react-pptx/capabilities/motion";
 import { transitionCapability } from "@react-pptx/capabilities/transition";
-import { createBuilder } from "@react-pptx/core";
 
-export const build = createBuilder([
+import { createStagePipeline } from "./compose.ts";
+
+export const { build } = createStagePipeline([
   chartCapability,
   motionCapability,
   transitionCapability,
@@ -30,7 +31,6 @@ export {
   transitionCapability,
   transitions,
 } from "@react-pptx/capabilities/transition";
-export { createBuilder } from "@react-pptx/core";
 export type {
   BuildOptions,
   BuildReport,

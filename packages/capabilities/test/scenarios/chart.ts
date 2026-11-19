@@ -157,7 +157,7 @@ export const chartPositiveScenario: CapabilityScenario = {
       ),
     );
   },
-  assert({ preview, validation }) {
+  assert({ pptx, preview, validation }) {
     assert.deepEqual(validation.errors, []);
     assert.equal(preview.pages.length, 2);
 
@@ -197,7 +197,7 @@ export const chartPositiveScenario: CapabilityScenario = {
       "deck/slide[untitled-fractional-columns]/chart[fractions]",
     );
 
-    const files = unzipSync(preview.build.pptx);
+    const files = unzipSync(pptx);
     const chart1Xml = strFromU8(files["ppt/charts/chart1.xml"]!);
     expect(chart1Xml).toContain("<c:barChart>");
     expect(chart1Xml).toContain('<c:grouping val="clustered"/>');
@@ -389,7 +389,7 @@ export const chartRejectionScenario: CapabilityScenario = {
       ),
     );
   },
-  assert({ preview, validation }) {
+  assert({ pptx, preview, validation }) {
     assert.deepEqual(validation.errors, []);
     assert.equal(preview.pages.length, 3);
 
@@ -428,7 +428,7 @@ export const chartRejectionScenario: CapabilityScenario = {
       }),
     ]);
 
-    const files = unzipSync(preview.build.pptx);
+    const files = unzipSync(pptx);
     expect(strFromU8(files["ppt/charts/chart1.xml"]!)).toContain(
       "<c:lineChart>",
     );

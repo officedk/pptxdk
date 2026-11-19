@@ -29,6 +29,7 @@ import type {
   SlidePaintOutput,
   SlidePreviewContext,
   SlidePreviewOutput,
+  Target,
 } from "#/types.ts";
 
 export type ResolutionDimensions = {
@@ -132,6 +133,8 @@ export type InternalResolvedSlide = {
 export type InternalResolution = {
   readonly dimensions: ResolutionDimensions;
   readonly title?: string;
+  readonly target: Target;
+  readonly embedFonts?: "full" | "subset";
   readonly theme: ThemeContext;
   readonly sections: readonly ResolvedSectionRecord[];
   readonly slides: readonly InternalResolvedSlide[];

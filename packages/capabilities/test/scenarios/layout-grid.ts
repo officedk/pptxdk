@@ -924,7 +924,7 @@ export const layoutGridPositiveScenario: CapabilityScenario = {
       ),
     );
   },
-  assert({ author, preview, validation }) {
+  assert({ author, resolution, preview, validation }) {
     assert.equal(preview.pages.length, 3, author);
     assert.deepEqual(validation.errors, [], author);
 
@@ -933,7 +933,7 @@ export const layoutGridPositiveScenario: CapabilityScenario = {
     assert.deepEqual(page1.diagnostics, [], author);
     assert.ok(page1.png !== undefined, author);
 
-    const s1 = preview.build.query.getSlide("grid-tracks-span-wrap");
+    const s1 = resolution.query.getSlide("grid-tracks-span-wrap");
     const headerBox = s1.get("grid-header").observe().box!;
     const sidebarBox = s1.get("sidebar-fixed").observe().box!;
     const autoColBox = s1.get("auto-col-card").observe().box!;
@@ -982,7 +982,7 @@ export const layoutGridPositiveScenario: CapabilityScenario = {
     assert.deepEqual(page2.diagnostics, [], author);
     assert.ok(page2.png !== undefined, author);
 
-    const s2 = preview.build.query.getSlide("grid-nested-flex-and-theme");
+    const s2 = resolution.query.getSlide("grid-nested-flex-and-theme");
     const nestedGridBox = s2
       .get("outer-grid")
       .get("nested-grid")
@@ -1016,7 +1016,7 @@ export const layoutGridPositiveScenario: CapabilityScenario = {
     assert.deepEqual(page3.diagnostics, [], author);
     assert.ok(page3.png !== undefined, author);
 
-    const s3 = preview.build.query.getSlide("grid-overflow-warnings");
+    const s3 = resolution.query.getSlide("grid-overflow-warnings");
     const ovC1 = s3.get("container-overflow-grid").get("ov-c1").observe().box!;
     const ovC2 = s3.get("container-overflow-grid").get("ov-c2").observe().box!;
     assert.equal(ovC1.width, 180, author);
@@ -1034,7 +1034,7 @@ export const layoutGridPositiveScenario: CapabilityScenario = {
     );
 
     assert.ok(
-      preview.build.report.diagnostics.some(
+      resolution.report.diagnostics.some(
         (d) =>
           d.severity === "warning" &&
           d.code === "grid-overflow" &&
@@ -1043,7 +1043,7 @@ export const layoutGridPositiveScenario: CapabilityScenario = {
       author,
     );
     assert.ok(
-      preview.build.report.diagnostics.some(
+      resolution.report.diagnostics.some(
         (d) =>
           d.severity === "warning" &&
           d.code === "grid-item-overflow" &&

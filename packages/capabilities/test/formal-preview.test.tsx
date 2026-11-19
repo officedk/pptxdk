@@ -5,19 +5,22 @@ import { fileURLToPath } from "node:url";
 
 import {
   BuildError,
+  CommonNode,
   Deck,
   Slide,
   expandDocument,
   type BoundObjectCapabilityModule,
   type CapabilityInput,
+  type CapabilityModule,
   type CapabilityParseContext,
 } from "@react-pptx/core";
+import { createResolver, emit } from "@react-pptx/core/build";
 import {
   parseCapabilityLayoutContract,
   textStyleKeys,
 } from "@react-pptx/core/capability";
 import { RichTextContainer } from "@react-pptx/core/document";
-import { createDocumentPreview } from "@react-pptx/core/preview";
+import { paint } from "@react-pptx/core/preview";
 import { validatePptx } from "@react-pptx/validation";
 import { strFromU8, unzipSync } from "fflate";
 import { PNG } from "pngjs";
@@ -63,12 +66,20 @@ import {
   textInsets,
   writeTextBodyFromParagraphs,
 } from "../src/text-service.ts";
+
+function runDocPreview(modules: readonly CapabilityModule[]) {
+  const resolveWith = createResolver(modules);
+  return async (document: CommonNode) => {
+    const resolution = resolveWith(document);
+    return { ...emit(resolution), ...paint(resolution) };
+  };
+}
 import { transitionCapability, transitions } from "../src/transition.ts";
 import { linearGradient } from "../src/visual.ts";
 
 describe("Slice 1: core bound slide preview & slideBackgroundCapability", () => {
   it("renders default white and solid backgrounds across both authoring entries using bound slide role", async () => {
-    const previewDoc = createDocumentPreview([
+    const previewDoc = runDocPreview([
       slideBackgroundCapability,
       shapeCapability,
       notesCapability,
@@ -129,7 +140,7 @@ describe("Slice 1: core bound slide preview & slideBackgroundCapability", () => 
     ] as const) {
       const result = await previewDoc(doc);
       assert.equal(result.pages.length, 2, label);
-      const validation = await validatePptx(result.build.pptx);
+      const validation = await validatePptx(result.pptx);
       assert.deepEqual(validation.errors, [], label);
 
       const blankPage = result.pages[0]!;
@@ -156,7 +167,7 @@ describe("Slice 1: core bound slide preview & slideBackgroundCapability", () => 
   });
 
   it("rejects gradient background on its page with located error while keeping valid pages and PPTX", async () => {
-    const previewDoc = createDocumentPreview(documentCapabilities);
+    const previewDoc = runDocPreview(documentCapabilities);
     const doc = deck({ width: 320, height: 180 }).append(
       slide({
         id: "grad",
@@ -165,7 +176,7 @@ describe("Slice 1: core bound slide preview & slideBackgroundCapability", () => 
       slide({ id: "ok", background: "#ABCDEF" }),
     );
     const result = await previewDoc(doc);
-    const validation = await validatePptx(result.build.pptx);
+    const validation = await validatePptx(result.pptx);
     assert.deepEqual(validation.errors, []);
     assert.equal(result.pages[0]?.png, undefined);
     assert.equal(result.pages[0]?.diagnostics.length, 1);
@@ -181,7 +192,7 @@ describe("Slice 1: core bound slide preview & slideBackgroundCapability", () => 
 
 describe("Slice 2: Shape static preview", () => {
   it("renders rect, ellipse, preset, custom path, transforms, zIndex, and screenGeometry", async () => {
-    const previewDoc = createDocumentPreview(documentCapabilities);
+    const previewDoc = runDocPreview(documentCapabilities);
     const custom = {
       type: "custom" as const,
       width: 10,
@@ -287,7 +298,7 @@ describe("Slice 2: Shape static preview", () => {
   });
 
   it("rejects unsupported shape styles, arrows, inline text, and geometries with located errors", async () => {
-    const previewDoc = createDocumentPreview(documentCapabilities);
+    const previewDoc = runDocPreview(documentCapabilities);
     const cases: readonly {
       label: string;
       node: ReturnType<typeof shape>;
@@ -439,7 +450,7 @@ describe("Slice 2: Shape static preview", () => {
           slide({ id: "s1" }).append(item.node),
         ),
       );
-      const validation = await validatePptx(result.build.pptx);
+      const validation = await validatePptx(result.pptx);
       assert.deepEqual(validation.errors, [], item.label);
       assert.equal(result.pages[0]?.png, undefined, item.label);
       assert.equal(
@@ -518,7 +529,7 @@ describe("Slice 3: Text static preview & shared text-service outlines", () => {
   ]);
 
   it("renders wrapped CJK/Latin text, alignments, uppercase, slide number, and box visuals across JSX and document entries", async () => {
-    const previewDoc = createDocumentPreview(documentCapabilities);
+    const previewDoc = runDocPreview(documentCapabilities);
 
     const jsxDoc = await expandDocument(
       createElement(
@@ -654,8 +665,8 @@ describe("Slice 3: Text static preview & shared text-service outlines", () => {
 
     const jsxPreview = await previewDoc(jsxDoc);
     const impPreview = await previewDoc(impDoc);
-    assert.deepEqual((await validatePptx(jsxPreview.build.pptx)).errors, []);
-    assert.deepEqual((await validatePptx(impPreview.build.pptx)).errors, []);
+    assert.deepEqual((await validatePptx(jsxPreview.pptx)).errors, []);
+    assert.deepEqual((await validatePptx(impPreview.pptx)).errors, []);
 
     assert.deepEqual(jsxPreview.pages[0]?.diagnostics, []);
     assert.deepEqual(impPreview.pages[0]?.diagnostics, []);
@@ -671,13 +682,13 @@ describe("Slice 3: Text static preview & shared text-service outlines", () => {
     expect(centeredNode?.screenBox?.width).toBeCloseTo(120);
     expect(centeredNode?.screenBox?.height).toBeCloseTo(160);
     assert.equal(
-      jsxPreview.build.query.getSlide("text-main").get("mixed").observe().text,
+      jsxPreview.query.getSlide("text-main").get("mixed").observe().text,
       "共享排版 shared 2026 第1页\nRight",
     );
   });
 
   it("rejects unsupported scripts, text styles, missing glyphs/fonts, color tables, and visual effects while keeping valid pages", async () => {
-    const previewDoc = createDocumentPreview(documentCapabilities);
+    const previewDoc = runDocPreview(documentCapabilities);
     const jostBytes = readFileSync(
       new URL(
         "../../react-pptx/test/assets/fonts/Jost-400-Book.ttf",
@@ -919,7 +930,7 @@ describe("Slice 3: Text static preview & shared text-service outlines", () => {
         ),
       );
       assert.deepEqual(
-        (await validatePptx(result.build.pptx)).errors,
+        (await validatePptx(result.pptx)).errors,
         [],
         item.label,
       );
@@ -1026,7 +1037,7 @@ describe("Slice 3: Text static preview & shared text-service outlines", () => {
       },
     };
 
-    const previewWithoutTextCapability = createDocumentPreview([
+    const previewWithoutTextCapability = runDocPreview([
       slideBackgroundCapability,
       customLabelCapability,
     ]);
@@ -1097,7 +1108,7 @@ describe("Slice 3 (Ticket 04): Image static preview positive behaviors", () => {
     const pngBytes = new Uint8Array(PNG.sync.write(source));
     const jpegBytes = new Uint8Array(encode(source, 100).data);
 
-    const previewDoc = createDocumentPreview(documentCapabilities);
+    const previewDoc = runDocPreview(documentCapabilities);
 
     for (const [format, bytes] of [
       ["png", pngBytes],
@@ -1168,12 +1179,12 @@ describe("Slice 3 (Ticket 04): Image static preview positive behaviors", () => {
       // Mutate image after preview and verify earlier build & preview remain untouched.
       const prevPng = page.png.slice();
       const prevSvg = page.svg;
-      const prevPptx = first.build.pptx.slice();
+      const prevPptx = first.pptx.slice();
       mutable.set({ crop: { right: 0.5 } });
       const second = await previewDoc(doc);
       assert.deepEqual(first.pages[0]?.png, prevPng);
       assert.equal(first.pages[0]?.svg, prevSvg);
-      assert.deepEqual(first.build.pptx, prevPptx);
+      assert.deepEqual(first.pptx, prevPptx);
       assert.notEqual(second.pages[0]?.svg, prevSvg);
       const updatedRendered = PNG.sync.read(Buffer.from(second.pages[0]!.png!));
       assert.ok((updatedRendered.data[cropCenter] ?? 0) > 240, format);
@@ -1210,7 +1221,7 @@ describe("Slice 3 (Ticket 04): Image static preview positive behaviors", () => {
 
   it("rejects GIF, non-rect geometry masks, image border/shadow styles, and corrupt PNG/JPEG streams with located diagnostics while preserving valid sibling pages", async () => {
     const { encode } = await import("jpeg-js");
-    const previewDoc = createDocumentPreview(documentCapabilities);
+    const previewDoc = runDocPreview(documentCapabilities);
 
     const validSource = createTwoToneSource();
     const validPng = new Uint8Array(PNG.sync.write(validSource));
@@ -1375,7 +1386,7 @@ describe("Slice 3 (Ticket 04): Image static preview positive behaviors", () => {
           ),
         ),
       );
-      const validation = await validatePptx(result.build.pptx);
+      const validation = await validatePptx(result.pptx);
       assert.deepEqual(validation.errors, [], item.label);
       assert.equal(result.pages[0]?.png, undefined, item.label);
       assert.equal(
@@ -1414,7 +1425,7 @@ describe("Slice 4 (Ticket 10): Chart static preview, layout warning, and textCap
   ]);
 
   it("renders finite clustered column chart with layout warning, preserves native chart, and works without textCapability", async () => {
-    const trimmedPreview = createDocumentPreview([
+    const trimmedPreview = runDocPreview([
       slideBackgroundCapability,
       chartCapability,
     ]);
@@ -1449,7 +1460,7 @@ describe("Slice 4 (Ticket 10): Chart static preview, layout warning, and textCap
     );
 
     const result = await trimmedPreview(doc);
-    assert.deepEqual((await validatePptx(result.build.pptx)).errors, []);
+    assert.deepEqual((await validatePptx(result.pptx)).errors, []);
     const page = result.pages[0]!;
     assert.ok(page.png !== undefined);
     assert.ok(page.svg !== undefined);
@@ -1461,7 +1472,7 @@ describe("Slice 4 (Ticket 10): Chart static preview, layout warning, and textCap
     );
     expect(page.diagnostics[0]?.message).toContain("native");
 
-    const files = unzipSync(result.build.pptx);
+    const files = unzipSync(result.pptx);
     const chartXml = strFromU8(files["ppt/charts/chart1.xml"]!);
     expect(chartXml).toContain("<c:barChart>");
     expect(chartXml).toContain("Quarterly sales");
@@ -1509,7 +1520,7 @@ describe("Slice 4 (Ticket 10): Chart static preview, layout warning, and textCap
         ),
       ),
     );
-    const jsxResult = await createDocumentPreview(documentCapabilities)(jsxDoc);
+    const jsxResult = await runDocPreview(documentCapabilities)(jsxDoc);
     assert.deepEqual(jsxResult.pages[0]?.png, page.png);
 
     // Verify chart.ts never loads text.ts at runtime.
@@ -1541,7 +1552,7 @@ process.stdout.write("ok");
   });
 
   it("handles fontSize units/inheritance, zero/fractional scales, top label inset, gapWidth bar geometry, and rebuild isolation", async () => {
-    const previewDoc = createDocumentPreview(documentCapabilities);
+    const previewDoc = runDocPreview(documentCapabilities);
 
     const salesChart = chart({
       id: "sales",
@@ -1577,7 +1588,7 @@ process.stdout.write("ok");
     const baseline = await previewDoc(doc);
     const baselinePng = baseline.pages[0]!.png!;
     const baselineSvg = baseline.pages[0]!.svg!;
-    const baselinePptx = baseline.build.pptx.slice();
+    const baselinePptx = baseline.pptx.slice();
     const pixels = PNG.sync.read(Buffer.from(baselinePng));
     const widths: number[] = [];
     let barRun = 0;
@@ -1606,7 +1617,7 @@ process.stdout.write("ok");
     // Earlier baseline artifact remains unchanged after mutation & rebuild.
     assert.deepEqual(baseline.pages[0]?.png, baselinePng);
     assert.equal(baseline.pages[0]?.svg, baselineSvg);
-    assert.deepEqual(baseline.build.pptx, baselinePptx);
+    assert.deepEqual(baseline.pptx, baselinePptx);
 
     for (const fontSize of ["18pt", "24px"] as const) {
       salesChart.style({ fontSize });
@@ -1688,7 +1699,7 @@ process.stdout.write("ok");
   });
 
   it("rejects unsupported chart inputs with located errors and never lets warnings clear existing errors", async () => {
-    const previewDoc = createDocumentPreview(documentCapabilities);
+    const previewDoc = runDocPreview(documentCapabilities);
     const validColumnChart = (id: string) =>
       chart({
         id,
@@ -2114,7 +2125,7 @@ process.stdout.write("ok");
         ),
       );
       assert.deepEqual(
-        (await validatePptx(result.build.pptx)).errors,
+        (await validatePptx(result.pptx)).errors,
         [],
         item.label,
       );
@@ -2195,7 +2206,7 @@ process.stdout.write("ok");
 
 describe("Slice 4 (Ticket 05): Box static preview positive and negative behaviors", () => {
   it("renders transparent and visible Box containers with solid fill/border, opacity, rotate, theme overrides, and post-preview isolation", async () => {
-    const previewDoc = createDocumentPreview(documentCapabilities);
+    const previewDoc = runDocPreview(documentCapabilities);
     const mutableCard = box({
       id: "visible-card",
       theme: { colors: { cardTone: "#1D4ED8" } },
@@ -2284,12 +2295,12 @@ describe("Slice 4 (Ticket 05): Box static preview positive and negative behavior
     // Mutate after preview and rebuild: prior PNG, SVG, and PPTX remain untouched.
     const firstSvg = page.svg;
     const firstPng = page.png.slice();
-    const firstPptx = first.build.pptx.slice();
+    const firstPptx = first.pptx.slice();
     mutableCard.style({ backgroundColor: "#059669" });
     const second = await previewDoc(doc);
     assert.equal(first.pages[0]?.svg, firstSvg);
     assert.deepEqual(first.pages[0]?.png, firstPng);
-    assert.deepEqual(first.build.pptx, firstPptx);
+    assert.deepEqual(first.pptx, firstPptx);
     expect(second.pages[0]?.svg).toContain('fill="#059669"');
     assert.notDeepEqual(second.pages[0]?.png, firstPng);
 
@@ -2338,7 +2349,7 @@ describe("Slice 4 (Ticket 05): Box static preview positive and negative behavior
   });
 
   it("rejects unsupported visible Box preview styles while retaining valid sibling pages and PPTX", async () => {
-    const previewDoc = createDocumentPreview(documentCapabilities);
+    const previewDoc = runDocPreview(documentCapabilities);
     const rejectionCases: readonly {
       readonly label: string;
       readonly node: ReturnType<typeof box>;
@@ -2436,7 +2447,7 @@ describe("Slice 4 (Ticket 05): Box static preview positive and negative behavior
         ),
       );
       assert.deepEqual(
-        (await validatePptx(result.build.pptx)).errors,
+        (await validatePptx(result.pptx)).errors,
         [],
         item.label,
       );
@@ -2465,7 +2476,7 @@ describe("Slice 4 (Ticket 05): Box static preview positive and negative behavior
 
 describe("Slice 5 (Ticket 08): Group static preview, screenGeometry, and member failure propagation", () => {
   it("renders nested rotated Group trees with flipped members, Box children, screenGeometry, and post-preview isolation", async () => {
-    const previewDoc = createDocumentPreview(documentCapabilities);
+    const previewDoc = runDocPreview(documentCapabilities);
     const mutableShape = shape({
       id: "inner-leaf",
       x: 110,
@@ -2553,12 +2564,12 @@ describe("Slice 5 (Ticket 08): Group static preview, screenGeometry, and member 
     // Mutate after preview: prior outputs remain unchanged.
     const firstSvg = page.svg;
     const firstPng = page.png.slice();
-    const firstPptx = first.build.pptx.slice();
+    const firstPptx = first.pptx.slice();
     mutableShape.set({ fill: "#DC2626" });
     const second = await previewDoc(doc);
     assert.equal(first.pages[0]?.svg, firstSvg);
     assert.deepEqual(first.pages[0]?.png, firstPng);
-    assert.deepEqual(first.build.pptx, firstPptx);
+    assert.deepEqual(first.pptx, firstPptx);
     expect(second.pages[0]?.svg).toContain('fill="#DC2626"');
     assert.notDeepEqual(second.pages[0]?.png, firstPng);
 
@@ -2596,7 +2607,7 @@ describe("Slice 5 (Ticket 08): Group static preview, screenGeometry, and member 
   });
 
   it("propagates member preview failures out of Group without omitting failed members or breaking sibling pages", async () => {
-    const previewDoc = createDocumentPreview(documentCapabilities);
+    const previewDoc = runDocPreview(documentCapabilities);
     const result = await previewDoc(
       deck({ width: 320, height: 180 }).append(
         slide({ id: "group-with-bad-member" }).append(
@@ -2635,7 +2646,7 @@ describe("Slice 5 (Ticket 08): Group static preview, screenGeometry, and member 
       ),
     );
 
-    assert.deepEqual((await validatePptx(result.build.pptx)).errors, []);
+    assert.deepEqual((await validatePptx(result.pptx)).errors, []);
     const badPage = result.pages[0]!;
     assert.equal(badPage.png, undefined);
     assert.equal(badPage.svg, undefined);
@@ -2710,7 +2721,7 @@ describe("Slice 4 (Ticket 09): Table static preview positive and negative behavi
   ]);
 
   it("renders multi-row/multi-column table fills, solid borders, merges, rich text, stretched layout, and isolates mutations", async () => {
-    const previewDoc = createDocumentPreview(documentCapabilities);
+    const previewDoc = runDocPreview(documentCapabilities);
 
     const editableCell = cell(
       paragraph("North Q1", { style: { align: "center" } }),
@@ -2822,7 +2833,7 @@ describe("Slice 4 (Ticket 09): Table static preview positive and negative behavi
     );
 
     const first = await previewDoc(doc);
-    assert.deepEqual((await validatePptx(first.build.pptx)).errors, []);
+    assert.deepEqual((await validatePptx(first.pptx)).errors, []);
     const page = first.pages[0]!;
     assert.deepEqual(page.diagnostics, []);
     assert.ok(page.png !== undefined);
@@ -2830,14 +2841,14 @@ describe("Slice 4 (Ticket 09): Table static preview positive and negative behavi
     expect(page.svg).toContain("<path");
 
     const rendered = PNG.sync.read(Buffer.from(page.png));
-    const tableObs = first.build.report.slides[0]?.objects[0]?.table;
+    const tableObs = first.report.slides[0]?.objects[0]?.table;
     assert.ok(tableObs !== undefined);
     // Stretched height should expand auto rows to fill 260px (300 - 40 padding).
     const totalHeight = tableObs.rowHeights.reduce((a, b) => a + b, 0);
     expect(totalHeight).toBeCloseTo(260, 1);
 
     // Sample pixel inside hero-cell (#1E3A8A) and span-cell (#FEF3C7) and empty-cell (#ECFDF5).
-    const heroBox = first.build.query
+    const heroBox = first.query
       .getSlide("table-slide")
       .get("pricing")
       .get("header-row")
@@ -2851,7 +2862,7 @@ describe("Slice 4 (Ticket 09): Table static preview positive and negative behavi
       [0x1e, 0x3a, 0x8a, 255],
     );
 
-    const emptyBox = first.build.query
+    const emptyBox = first.query
       .getSlide("table-slide")
       .get("pricing")
       .get("tail-row")
@@ -2869,14 +2880,14 @@ describe("Slice 4 (Ticket 09): Table static preview positive and negative behavi
     // Mutate after preview and verify prior result remains immutable.
     const prevPng = page.png.slice();
     const prevSvg = page.svg;
-    const prevPptx = first.build.pptx.slice();
+    const prevPptx = first.pptx.slice();
     editableCell.style({ backgroundColor: "#047857" });
     editableCell.content("South Q2");
 
     const second = await previewDoc(doc);
     assert.deepEqual(first.pages[0]?.png, prevPng);
     assert.equal(first.pages[0]?.svg, prevSvg);
-    assert.deepEqual(first.build.pptx, prevPptx);
+    assert.deepEqual(first.pptx, prevPptx);
     assert.notEqual(second.pages[0]?.svg, prevSvg);
     const secondRendered = PNG.sync.read(Buffer.from(second.pages[0]!.png!));
     assert.deepEqual(
@@ -2932,10 +2943,7 @@ describe("Slice 4 (Ticket 09): Table static preview positive and negative behavi
   });
 
   it("renders cropped [shapeCapability, tableCapability] build + preview without loading text.ts or registering textCapability", async () => {
-    const croppedPreview = createDocumentPreview([
-      shapeCapability,
-      tableCapability,
-    ]);
+    const croppedPreview = runDocPreview([shapeCapability, tableCapability]);
     const doc = deck({ width: 360, height: 200 }).append(
       slide({ id: "cropped" }).append(
         shape({
@@ -2976,7 +2984,7 @@ describe("Slice 4 (Ticket 09): Table static preview positive and negative behavi
     assert.deepEqual(result.pages[0]?.diagnostics, []);
     assert.ok(result.pages[0]?.png !== undefined);
     expect(result.pages[0]?.svg).toContain("<path");
-    assert.deepEqual((await validatePptx(result.build.pptx)).errors, []);
+    assert.deepEqual((await validatePptx(result.pptx)).errors, []);
 
     const packageRoot = fileURLToPath(new URL("../", import.meta.url));
     const isolated = spawnSync(
@@ -3000,10 +3008,11 @@ const { createDeckNode, createSlideNode } = await import("@react-pptx/core/docum
 const { createShapeNode, shapeCapability } = await import("./src/shape.ts");
 const { createCellNode, createRowNode, createTableNode, tableCapability } = await import("./src/table.ts");
 const { font } = await import("./src/font.ts");
-const { createDocumentPreview } = await import("@react-pptx/core/preview");
+const { createResolver } = await import("@react-pptx/core/build");
+const { paint } = await import("@react-pptx/core/preview");
 const jost = font("Jost*", [{ weight: 400, data: readFileSync("../react-pptx/test/assets/fonts/Jost-400-Book.ttf") }]);
-const run = createDocumentPreview([shapeCapability, tableCapability]);
-const res = await run(
+const resolveTrimmed = createResolver([shapeCapability, tableCapability]);
+const res = paint(resolveTrimmed(
   createDeckNode({ width: 300, height: 160 }).append(
     createSlideNode({ id: "s1" }).append(
       createShapeNode({ id: "s", x: 10, y: 10, width: 40, height: 40, fill: "#DC2626" }),
@@ -3015,7 +3024,7 @@ const res = await run(
       )
     )
   )
-);
+));
 if (!res.pages[0]?.png || res.pages[0].diagnostics.length !== 0) {
   throw new Error(JSON.stringify(res.pages[0]?.diagnostics));
 }
@@ -3029,7 +3038,7 @@ process.stdout.write("ok");
   });
 
   it("rejects non-solid cell borders, cell overflow, and unsupported cell text features with cell-located errors while preserving sibling pages", async () => {
-    const previewDoc = createDocumentPreview(documentCapabilities);
+    const previewDoc = runDocPreview(documentCapabilities);
 
     const cases: readonly {
       readonly label: string;
@@ -3174,7 +3183,7 @@ process.stdout.write("ok");
         ),
       );
       assert.deepEqual(
-        (await validatePptx(result.build.pptx)).errors,
+        (await validatePptx(result.pptx)).errors,
         [],
         item.label,
       );

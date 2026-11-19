@@ -4,21 +4,31 @@ import {
   BuildError,
   CommonContainer,
   CommonNode,
-  createBuilder,
   createMorphScope,
   Deck,
   Slide,
   targets,
   type BoundObjectCapabilityModule,
   type BoundSlideCapabilityModule,
+  type BuildOptions,
+  type CapabilityModule,
   type MorphKey,
 } from "@react-pptx/core";
-import { createDocumentBuild } from "@react-pptx/core/document";
-import { createDocumentPreview } from "@react-pptx/core/preview";
+import { createResolver, emit } from "@react-pptx/core/build";
+import { paint } from "@react-pptx/core/preview";
 import { validatePptx } from "@react-pptx/validation";
 import { strFromU8, unzipSync } from "fflate";
 import { createElement } from "react";
 import { describe, expect, it, vi } from "vitest";
+
+function docBuildWith(modules: readonly CapabilityModule[]) {
+  const resolveWith = createResolver(modules);
+  return async (document: CommonNode, options?: BuildOptions) =>
+    emit(
+      resolveWith(document, options),
+      options?.signal === undefined ? {} : { signal: options.signal },
+    );
+}
 
 import {
   box,
@@ -43,7 +53,7 @@ describe("transitionCapability bound slide migration & generic continuity collab
       const morph = createMorphScope();
       const hero = morph.handle("hero");
 
-      const previewRunner = createDocumentPreview([
+      const previewResolve = createResolver([
         shapeCapability,
         slideBackgroundCapability,
         transitionCapability,
@@ -112,10 +122,12 @@ describe("transitionCapability bound slide migration & generic continuity collab
         ),
       );
 
-      const staticPreview = await previewRunner(staticDoc);
+      const staticPreview = paint(previewResolve(staticDoc));
       assert.equal(bindSpy.mock.calls.length, 0);
 
-      const transitionPreview = await previewRunner(transitionDoc);
+      const transitionResolution = previewResolve(transitionDoc);
+      const transitionPreview = paint(transitionResolution);
+      const transitionEmit = emit(transitionResolution);
       assert.equal(bindSpy.mock.calls.length, 2);
 
       // Static edit canvas pixels are identical whether transition/advanceAfter are declared or not.
@@ -132,7 +144,7 @@ describe("transitionCapability bound slide migration & generic continuity collab
 
       // Transition and advanceAfter observations live on transition capability observation.
       assert.deepEqual(
-        transitionPreview.build.report.slides[0]?.capabilities?.["transition"],
+        transitionResolution.report.slides[0]?.capabilities?.["transition"],
         {
           kind: "fade",
           speed: "med",
@@ -142,7 +154,7 @@ describe("transitionCapability bound slide migration & generic continuity collab
         },
       );
       assert.deepEqual(
-        transitionPreview.build.report.slides[1]?.capabilities?.["transition"],
+        transitionResolution.report.slides[1]?.capabilities?.["transition"],
         {
           kind: "morph",
           by: "object",
@@ -153,7 +165,7 @@ describe("transitionCapability bound slide migration & generic continuity collab
         },
       );
 
-      const file = await validatePptx(transitionPreview.build.pptx, {
+      const file = await validatePptx(transitionEmit.pptx, {
         allowedExtensions: ["p14", "p159"],
       });
       assert.deepEqual(file.errors, []);
@@ -166,7 +178,7 @@ describe("transitionCapability bound slide migration & generic continuity collab
   });
 
   it("validates Slide.advanceAfter in transitionCapability and rejects when trimmed", async () => {
-    const buildWithTransition = createDocumentBuild([
+    const buildWithTransition = docBuildWith([
       shapeCapability,
       transitionCapability,
     ]);
@@ -192,7 +204,7 @@ describe("transitionCapability bound slide migration & generic continuity collab
       },
     );
 
-    const buildWithoutTransition = createDocumentBuild([shapeCapability]);
+    const buildWithoutTransition = docBuildWith([shapeCapability]);
     await assert.rejects(
       buildWithoutTransition(
         deck().append(slide({ id: "trimmed", advanceAfter: 1000 })),
@@ -260,7 +272,7 @@ describe("transitionCapability bound slide migration & generic continuity collab
       },
     };
 
-    const continuityMismatchBuild = createDocumentBuild([
+    const continuityMismatchBuild = docBuildWith([
       shapeCapability,
       customGraphicModule,
       customContinuitySlideCapability,
@@ -317,7 +329,6 @@ describe("transitionCapability bound slide migration & generic continuity collab
     const okResult = await continuityMismatchBuild(noMatchDoc);
     assert.equal(okResult.report.slides.length, 2);
 
-    void createBuilder;
     void Deck;
     void Slide;
     void createElement;
@@ -392,7 +403,7 @@ describe("transitionCapability bound slide migration & generic continuity collab
       },
     };
 
-    const customBuild = createDocumentBuild([
+    const customBuild = docBuildWith([
       shapeCapability,
       nonEmittingWrapper,
       realCustomGroup,
@@ -457,7 +468,7 @@ describe("transitionCapability bound slide migration & generic continuity collab
   });
 
   it("collaborates across Shape, Box (visible vs transparent), Group, and Chart via generic native contributions", async () => {
-    const buildAll = createDocumentBuild(documentCapabilities);
+    const buildAll = docBuildWith(documentCapabilities);
     const scope = createMorphScope();
     const spKey = scope.handle("sp-card");
     const grpKey = scope.handle("grp");
@@ -660,7 +671,7 @@ describe("transitionCapability bound slide migration & generic continuity collab
   });
 
   it("enforces vendor extensions, parameter-dependent p14/p159 requirements, and rejects forbidden mechanisms even with fallback", async () => {
-    const buildAll = createDocumentBuild(documentCapabilities);
+    const buildAll = docBuildWith(documentCapabilities);
 
     // Baseline-only allows standard transitions without duration and advanceAfter alone.
     const baselineDoc = deck().append(

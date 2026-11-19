@@ -27,7 +27,6 @@ import {
   text,
 } from "@react-pptx/react-pptx/document";
 import { preview as previewDocument } from "@react-pptx/react-pptx/preview";
-import { validatePptx } from "@react-pptx/validation";
 import { createElement } from "react";
 import { describe, expect, it } from "vitest";
 
@@ -103,14 +102,15 @@ describe("Slice 3: formal static preview public entrypoints and runtime isolatio
       ),
     );
 
+    assert.equal("build" in jsxResult, false);
+    assert.equal("build" in docResult, false);
     assert.equal(jsxResult.pages.length, 1);
     assert.equal(docResult.pages.length, 1);
+    assert.deepEqual(jsxResult.report, docResult.report);
     assert.deepEqual(jsxResult.pages[0]?.diagnostics, []);
     assert.deepEqual(docResult.pages[0]?.diagnostics, []);
     expect(jsxResult.pages[0]?.svg).toContain("<path");
     assert.deepEqual(jsxResult.pages[0]?.png, docResult.pages[0]?.png);
-    assert.deepEqual((await validatePptx(jsxResult.build.pptx)).errors, []);
-    assert.deepEqual((await validatePptx(docResult.build.pptx)).errors, []);
   });
 
   it("validates 1-based pages, skips drawing unselected pages, and still validates full-deck build", async () => {
@@ -146,11 +146,11 @@ describe("Slice 3: formal static preview public entrypoints and runtime isolatio
     );
     assert.deepEqual(selectedOnly.pages[0]?.diagnostics, []);
     assert.ok(selectedOnly.pages[0]?.png !== undefined);
-    assert.equal(selectedOnly.build.report.slides.length, 2);
+    assert.equal(selectedOnly.report.slides.length, 2);
 
     const noneSelected = await previewDocument(validTwoPages, { pages: [] });
     assert.equal(noneSelected.pages.length, 0);
-    assert.equal(noneSelected.build.report.slides.length, 2);
+    assert.equal(noneSelected.report.slides.length, 2);
 
     for (const invalidPage of [0, -1, 1.5]) {
       await assert.rejects(
@@ -401,8 +401,9 @@ registerHooks({
 });
 
 const { build, deck, image, slide, shape } = await import("@react-pptx/react-pptx/document");
-const { createFormalBuild } = await import("@react-pptx/react-pptx/build");
-void createFormalBuild;
+const { createResolver, emit } = await import("@react-pptx/react-pptx/build");
+void createResolver;
+void emit;
 const pngBytes = new Uint8Array(
   Buffer.from(
     "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/n1sAAAAASUVORK5CYII=",

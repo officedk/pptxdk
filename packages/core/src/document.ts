@@ -4,13 +4,9 @@ import {
   removeDeclarationChild,
   replaceDeclarationProps,
 } from "#/document-internals.ts";
-import { createFormalBuild } from "#/formal-build.ts";
 import { snapshotValue } from "#/input-values.ts";
 import type { TextStyle } from "#/theme.ts";
 import type {
-  BuildOptions,
-  BuildResult,
-  CapabilityModule,
   DeckProps,
   LayoutStyle,
   SectionProps,
@@ -572,16 +568,4 @@ export function createSectionNode<Props extends object = SectionProps>(
   props: Props,
 ): CommonContainer<"section", Props> {
   return new CommonContainer("section", "rp:section", props);
-}
-
-export function createDocumentBuild(modules: readonly CapabilityModule[]) {
-  const formalBuild = createFormalBuild(modules);
-  return async function buildDocument(
-    document: CommonNode,
-    options: BuildOptions = {},
-  ): Promise<BuildResult> {
-    // Consume the current declaration synchronously before this async function returns its Promise.
-    // Caller edits after the call therefore affect only later builds.
-    return formalBuild({ children: [document] }, options);
-  };
 }

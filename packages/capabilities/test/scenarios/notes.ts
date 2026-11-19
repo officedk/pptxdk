@@ -196,7 +196,7 @@ export const notesPositiveScenario: CapabilityScenario = {
       ),
     );
   },
-  assert({ author, preview, validation }) {
+  assert({ author, resolution, pptx, preview, validation }) {
     const expectedText =
       "Speaker cue: introduce the architecture.\nKey takeaway: keep notes off the visible canvas.\nSlide index 1";
 
@@ -205,7 +205,7 @@ export const notesPositiveScenario: CapabilityScenario = {
     assert.deepEqual(preview.pages[1]?.diagnostics, [], author);
 
     // Report observations: only visible canvas shapes are listed under objects; notes stay page-affiliated.
-    const reportSlide1 = preview.build.report.slides[0]!;
+    const reportSlide1 = resolution.report.slides[0]!;
     assert.equal(reportSlide1.objects.length, 2, author);
     assert.deepEqual(reportSlide1.layouts ?? [], [], author);
     assert.deepEqual(
@@ -213,7 +213,7 @@ export const notesPositiveScenario: CapabilityScenario = {
       { notes: { text: expectedText, paragraphCount: 3 } },
       author,
     );
-    const reportSlide2 = preview.build.report.slides[1]!;
+    const reportSlide2 = resolution.report.slides[1]!;
     assert.equal(reportSlide2.objects.length, 1, author);
     assert.equal(reportSlide2.capabilities?.["notes"], undefined, author);
 
@@ -259,7 +259,7 @@ export const notesPositiveScenario: CapabilityScenario = {
     assert.equal(fileNotes.text.paragraphs[2]?.runs[1]?.text, "1", author);
     assert.equal(validation.slides[1]?.notes, undefined, author);
 
-    const parts = unzipSync(preview.build.pptx);
+    const parts = unzipSync(pptx);
     const slide1Xml = strFromU8(parts["ppt/slides/slide1.xml"]!);
     assert.doesNotMatch(
       slide1Xml,

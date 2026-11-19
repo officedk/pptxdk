@@ -6,13 +6,14 @@ import {
   CommonNode,
   RichTextContainer,
 } from "@react-pptx/core/document";
+import { createResolver } from "@react-pptx/react-pptx/build";
 import {
   BuildError,
   build,
   cell,
   chart,
-  createDocumentBuild,
   deck,
+  emit,
   font,
   paragraph,
   row,
@@ -954,7 +955,7 @@ describe("table and chart authoring through the common document", () => {
     );
 
     await assert.rejects(
-      createDocumentBuild([])(document),
+      async () => emit(createResolver([])(document)),
       (error: unknown) => {
         assert.ok(error instanceof BuildError);
         assert.ok(

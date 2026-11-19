@@ -12,12 +12,13 @@ import {
   Span,
   textCapability,
 } from "@react-pptx/react-pptx";
+import { createResolver } from "@react-pptx/react-pptx/build";
 import {
   build,
-  createDocumentBuild,
   deck,
   box,
   documentCapabilities,
+  emit,
   font,
   notes,
   notesCapability,
@@ -350,12 +351,16 @@ describe("rich-text speaker notes", () => {
       "unknown-parameter",
     );
 
-    const trimmed = createDocumentBuild(
+    const trimmed = createResolver(
       documentCapabilities.filter((module) => module !== notesCapability),
     );
     const missing = deck().append(slide({ id: "missing" }).append(notes("x")));
     assert.equal(
-      (await rejectedDiagnostics(trimmed(missing)))[0]?.code,
+      (
+        await rejectedDiagnostics(
+          Promise.resolve().then(() => emit(trimmed(missing))),
+        )
+      )[0]?.code,
       "missing-capability",
     );
 
@@ -383,11 +388,15 @@ describe("rich-text speaker notes", () => {
     assert.equal(fullRead.slides[0]?.notes?.text.text, "hidden notes");
     assert.deepEqual(full.report.slides[0]?.objects, []);
 
-    const trimmed = createDocumentBuild(
+    const trimmed = createResolver(
       documentCapabilities.filter((module) => module !== notesCapability),
     );
     assert.deepEqual(
-      (await rejectedDiagnostics(trimmed(document))).map(({ code, path }) => ({
+      (
+        await rejectedDiagnostics(
+          Promise.resolve().then(() => emit(trimmed(document))),
+        )
+      ).map(({ code, path }) => ({
         code,
         path,
       })),
@@ -401,7 +410,7 @@ describe("rich-text speaker notes", () => {
   });
 
   it("keeps pruning hidden canvas content whose capability is trimmed", async () => {
-    const trimmedText = createDocumentBuild(
+    const trimmedText = createResolver(
       documentCapabilities.filter((module) => module !== textCapability),
     );
     const document = deck().append(
@@ -411,13 +420,13 @@ describe("rich-text speaker notes", () => {
         ),
       ),
     );
-    const result = await trimmedText(document);
+    const result = emit(trimmedText(document));
     assert.deepEqual(result.report.slides[0]?.objects, []);
     assert.deepEqual(result.report.diagnostics, []);
   });
 
   it("builds notes from the shared text service when the Text capability is trimmed", async () => {
-    const notesOnlyBuild = createDocumentBuild(
+    const notesOnlyResolve = createResolver(
       documentCapabilities.filter((module) => module !== textCapability),
     );
     const document = deck({ width: 960, height: 540 }).append(
@@ -425,7 +434,7 @@ describe("rich-text speaker notes", () => {
         notes([paragraph("Only notes"), paragraph()], { id: "speech" }),
       ),
     );
-    const result = await notesOnlyBuild(document);
+    const result = emit(notesOnlyResolve(document));
     const read = await validatePptx(result.pptx);
     assert.deepEqual(read.errors, []);
     assert.equal(read.slides[0]?.notes?.text.text, "Only notes\n");

@@ -9,6 +9,8 @@ import {
   Chart,
   Deck,
   documentCapabilities as reactDocumentCapabilities,
+  emit,
+  expandDocument,
   fade,
   Group,
   Image,
@@ -22,15 +24,14 @@ import {
   Table,
   Text,
   useMotionScope,
-  createBuilder,
 } from "@react-pptx/react-pptx";
+import { createResolver } from "@react-pptx/react-pptx/build";
 import {
   after as afterPlain,
   box,
   build,
   cell,
   chart,
-  createDocumentBuild,
   createMotionScopeHandle,
   deck,
   documentCapabilities,
@@ -506,23 +507,30 @@ describe("generation closure", () => {
   });
 
   it("reports the same capability boundary when either entry is trimmed", async () => {
-    const plainFailure = await createDocumentBuild([shapeCapability])(
-      deck({ width: 240, height: 160 }).append(
-        slide({ id: "trimmed" }).append(
-          text("not registered", {
-            id: "plain-text",
-            x: 0,
-            y: 0,
-            width: 160,
-            height: 32,
-          }),
+    const resolveShapeOnly = createResolver([shapeCapability]);
+    const plainFailure = await Promise.resolve()
+      .then(() =>
+        emit(
+          resolveShapeOnly(
+            deck({ width: 240, height: 160 }).append(
+              slide({ id: "trimmed" }).append(
+                text("not registered", {
+                  id: "plain-text",
+                  x: 0,
+                  y: 0,
+                  width: 160,
+                  height: 32,
+                }),
+              ),
+            ),
+          ),
         ),
-      ),
-    ).then(
-      () => undefined,
-      (error: unknown) => error,
-    );
-    const reactFailure = await createBuilder([shapeCapability])(
+      )
+      .then(
+        () => undefined,
+        (error: unknown) => error,
+      );
+    const reactFailure = await expandDocument(
       <Deck width={240} height={160}>
         <Slide id="trimmed">
           <Text id="plain-text" x={0} y={0} width={160} height={32}>
@@ -530,10 +538,12 @@ describe("generation closure", () => {
           </Text>
         </Slide>
       </Deck>,
-    ).then(
-      () => undefined,
-      (error: unknown) => error,
-    );
+    )
+      .then((expanded) => emit(resolveShapeOnly(expanded)))
+      .then(
+        () => undefined,
+        (error: unknown) => error,
+      );
 
     assert.ok(plainFailure instanceof Error);
     assert.ok(reactFailure instanceof Error);

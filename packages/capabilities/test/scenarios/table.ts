@@ -455,7 +455,7 @@ export const tablePositiveScenario: CapabilityScenario = {
       ),
     );
   },
-  assert({ author, preview, validation }) {
+  assert({ author, resolution, preview, validation }) {
     assert.equal(preview.pages.length, 2, author);
     assert.deepEqual(preview.pages[0]?.diagnostics, [], author);
     assert.deepEqual(preview.pages[1]?.diagnostics, [], author);
@@ -487,7 +487,7 @@ export const tablePositiveScenario: CapabilityScenario = {
     );
 
     // Verify sub-part locators match formal table layout geometry.
-    const pricingQuery = preview.build.query
+    const pricingQuery = resolution.query
       .getSlide("tracks-merges-and-fills")
       .get("pricing-table");
     const headerSpanBox = pricingQuery
@@ -503,7 +503,7 @@ export const tablePositiveScenario: CapabilityScenario = {
       .get("notes-detail")
       .observe().box!;
 
-    const reportTable1 = preview.build.report.slides[0]?.objects[0]?.table;
+    const reportTable1 = resolution.report.slides[0]?.objects[0]?.table;
     assert.ok(reportTable1 !== undefined, author);
     assert.equal(
       headerSpanBox.width,
@@ -540,7 +540,7 @@ export const tablePositiveScenario: CapabilityScenario = {
     );
 
     // Page 2: constrained narrow column causes wrapping and noticeably taller row height.
-    const slide2Query = preview.build.query.getSlide(
+    const slide2Query = resolution.query.getSlide(
       "wrapping-and-width-constraint",
     );
     const wideBox = slide2Query

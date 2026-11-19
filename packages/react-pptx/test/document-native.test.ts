@@ -9,12 +9,13 @@ import {
   Shape as ReactShape,
   Slide,
 } from "@react-pptx/react-pptx";
+import { createResolver } from "@react-pptx/react-pptx/build";
 import {
   BuildError,
   build,
-  createDocumentBuild,
   createMorphScope,
   deck,
+  emit,
   group,
   image,
   paragraph,
@@ -327,7 +328,7 @@ describe("native content in the common document", () => {
     );
 
     await assert.rejects(
-      createDocumentBuild([])(document),
+      async () => emit(createResolver([])(document)),
       (error: unknown) => {
         assert.ok(error instanceof BuildError);
         assert.ok(

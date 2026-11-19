@@ -4,16 +4,18 @@ import { readFileSync } from "node:fs";
 import {
   BuildError,
   Deck,
+  expandDocument,
   Section,
   Slide,
-  createBuilder,
   targets,
+  type BuildOptions,
+  type CommonNode,
 } from "@react-pptx/core";
-import { createDocumentBuild } from "@react-pptx/core/document";
+import { createResolver, emit } from "@react-pptx/core/build";
 import { validatePptx } from "@react-pptx/validation";
 import { strFromU8, unzipSync } from "fflate";
 import { PNG } from "pngjs";
-import { createElement } from "react";
+import { createElement, type ReactNode } from "react";
 
 import { Box } from "../../src/box-elements.ts";
 import { Chart } from "../../src/chart-elements.ts";
@@ -521,7 +523,7 @@ export const motionPositiveScenario: CapabilityScenario = {
       ),
     );
   },
-  assert({ author, preview, validation }) {
+  assert({ author, resolution, pptx, preview, validation }) {
     assert.deepEqual(validation.extensions, [], author);
     const p1 = preview.pages[0]!;
     const p2 = preview.pages[1]!;
@@ -573,8 +575,8 @@ export const motionPositiveScenario: CapabilityScenario = {
       author,
     );
 
-    const slide1 = preview.build.report.slides[0]!;
-    const slide2 = preview.build.report.slides[1]!;
+    const slide1 = resolution.report.slides[0]!;
+    const slide2 = resolution.report.slides[1]!;
     const motion1 = slide1.capabilities?.["motion"] as MotionObservation;
     const motion2 = slide2.capabilities?.["motion"] as MotionObservation;
     assert.ok(motion1 !== undefined && motion2 !== undefined, author);
@@ -645,8 +647,8 @@ export const motionPositiveScenario: CapabilityScenario = {
     );
     assert.equal(fileSlide2.animations?.[0]?.trigger, "auto", author);
 
-    const xml1 = slideXml(preview.build.pptx, 1);
-    const xml2 = slideXml(preview.build.pptx, 2);
+    const xml1 = slideXml(pptx, 1);
+    const xml2 = slideXml(pptx, 2);
     assert.match(xml1, /<p:timing>/u, author);
     assert.match(xml1, /<p:bldLst>/u, author);
     assert.match(xml2, /<p:timing>/u, author);
@@ -655,8 +657,23 @@ export const motionPositiveScenario: CapabilityScenario = {
 };
 
 export async function verifyMotionCollaborationAndRejections(): Promise<void> {
-  const buildJsx = createBuilder(documentCapabilities);
-  const buildDocument = createDocumentBuild(documentCapabilities);
+  const resolveDefault = createResolver(documentCapabilities);
+  const buildJsx = async (element: ReactNode, options?: BuildOptions) =>
+    emit(
+      resolveDefault(
+        await expandDocument(
+          element,
+          options?.signal === undefined ? {} : { signal: options.signal },
+        ),
+        options,
+      ),
+      options?.signal === undefined ? {} : { signal: options.signal },
+    );
+  const buildDocument = async (document: CommonNode, options?: BuildOptions) =>
+    emit(
+      resolveDefault(document, options),
+      options?.signal === undefined ? {} : { signal: options.signal },
+    );
 
   // 1. Preserve 100% Group and Chart native motion target collaboration via formal build + validatePptx.
   const chartGroups = [

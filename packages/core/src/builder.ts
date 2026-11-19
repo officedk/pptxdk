@@ -3,19 +3,8 @@ import type { ReactNode } from "react";
 import { assertAppendableAuthorIds } from "#/append.ts";
 import { BuildError } from "#/diagnostics.ts";
 import type { CommonContainer, CommonNode } from "#/document.ts";
-import {
-  createCompletedDeclarationBuild,
-  validateOptions,
-} from "#/formal-build.ts";
 import { expandReactDocument, expandReactFragment } from "#/host/reconciler.ts";
-import type {
-  BuildOptions,
-  BuildResult,
-  CapabilityModule,
-  Diagnostic,
-  PreviewOptions,
-  PreviewResult,
-} from "#/types.ts";
+import type { Diagnostic } from "#/types.ts";
 
 function diagnostic(path: string, code: string, message: string): Diagnostic {
   return { severity: "error", path, code, message };
@@ -109,97 +98,4 @@ export async function appendJSX(
     if (error instanceof BuildError) throw error;
     throw appendFailure(error);
   }
-}
-
-/**
- * Creates the asynchronous one-call JSX authoring entry.
- *
- * It composes the public React handoff with the same formal build used by plain authoring entries.
- * Cancellation, unhandled errors, and cleanup failures keep the existing rejection semantics, and
- * the original build options continue to reach capability parse and compile contexts.
- */
-export function createBuilder(modules: readonly CapabilityModule[]) {
-  const formalBuild = createCompletedDeclarationBuild(modules);
-
-  return async function build(
-    element: ReactNode,
-    options: BuildOptions = {},
-  ): Promise<BuildResult> {
-    // Validate before React runs so invalid options never start author components.
-    validateOptions(options);
-    try {
-      const document = await expandDocument(
-        element,
-        options.signal === undefined ? {} : { signal: options.signal },
-      );
-      // Expansion locks its first terminal state before unmount cleanup runs. The completed
-      // declaration build therefore does not re-check the signal, while preserving the original
-      // options for capability parse and compile.
-      return formalBuild({ children: [document] }, options);
-    } catch (error) {
-      if (options.signal?.aborted && error === options.signal.reason) {
-        throw error;
-      }
-      if (error instanceof BuildError) throw error;
-      throw reactFailure(error);
-    }
-  };
-}
-
-/**
- * Creates the asynchronous one-call JSX static preview entry.
- *
- * Lazily loads the preview rasterizer only when called so normal JSX `build()` calls never
- * load `@resvg/resvg-js`.
- */
-export function createPreview(modules: readonly CapabilityModule[]) {
-  let runnerPromise:
-    | Promise<
-        (
-          declaration: { readonly children: readonly CommonNode[] },
-          options?: PreviewOptions,
-        ) => PreviewResult
-      >
-    | undefined;
-
-  const loadRunner = () => {
-    runnerPromise ??= import("#/preview.ts").then(
-      ({ createCompletedDeclarationPreview }) =>
-        createCompletedDeclarationPreview(modules),
-    );
-    return runnerPromise;
-  };
-
-  return async function preview(
-    element: ReactNode,
-    options: PreviewOptions = {},
-  ): Promise<PreviewResult> {
-    const { pages, ...buildOptions } = options;
-    if (pages?.some((page) => !Number.isInteger(page) || page < 1)) {
-      throw new RangeError("Preview page numbers must be positive integers");
-    }
-    validateOptions(buildOptions);
-    try {
-      const [runPreview, document] = await Promise.all([
-        loadRunner(),
-        expandDocument(
-          element,
-          buildOptions.signal === undefined
-            ? {}
-            : { signal: buildOptions.signal },
-        ),
-      ]);
-      return runPreview({ children: [document] }, options);
-    } catch (error) {
-      if (error instanceof RangeError) throw error;
-      if (
-        buildOptions.signal?.aborted &&
-        error === buildOptions.signal.reason
-      ) {
-        throw error;
-      }
-      if (error instanceof BuildError) throw error;
-      throw reactFailure(error);
-    }
-  };
 }

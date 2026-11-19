@@ -2,9 +2,10 @@ import { boxCapability } from "@react-pptx/capabilities/box";
 import { motionCapability } from "@react-pptx/capabilities/motion";
 import { shapeCapability } from "@react-pptx/capabilities/shape";
 import { transitionCapability } from "@react-pptx/capabilities/transition";
-import { createBuilder } from "@react-pptx/core";
 
-export const build = createBuilder([
+import { createStagePipeline } from "./compose.ts";
+
+export const { build } = createStagePipeline([
   boxCapability,
   shapeCapability,
   transitionCapability,
@@ -69,7 +70,6 @@ export type {
   PathOptions,
   PresetGeometry,
 } from "@react-pptx/capabilities/shape";
-export { createBuilder } from "@react-pptx/core";
 export type {
   BuildOptions,
   BuildReport,

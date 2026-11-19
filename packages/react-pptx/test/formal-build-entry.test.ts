@@ -2,23 +2,22 @@ import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
-import { createFormalBuild } from "@react-pptx/react-pptx/build";
+import { createResolver, emit } from "@react-pptx/react-pptx/build";
 import { describe, it } from "vitest";
 
 describe("pure formal build entry", () => {
-  it("rejects a pre-cancelled formal build before compiling", () => {
+  it("rejects a pre-cancelled resolve or emit before running", () => {
     const controller = new AbortController();
     const reason = new Error("pre-cancelled formal build");
     controller.abort(reason);
 
     assert.throws(
-      () =>
-        createFormalBuild([])({ children: [] }, { signal: controller.signal }),
+      () => createResolver([])({ children: [] }, { signal: controller.signal }),
       (error: unknown) => error === reason,
     );
   });
 
-  it("loads without React and exposes the shared formal build", () => {
+  it("loads without React and exposes createResolver and emit", () => {
     const packageRoot = fileURLToPath(new URL("../", import.meta.url));
     const script = `
 import { registerHooks } from "node:module";
@@ -37,8 +36,8 @@ registerHooks({
 });
 
 const entry = await import("@react-pptx/react-pptx/build");
-if (typeof entry.createFormalBuild !== "function") {
-  throw new Error("pure build entry does not expose createFormalBuild");
+if (typeof entry.createResolver !== "function" || typeof entry.emit !== "function") {
+  throw new Error("pure build entry does not expose createResolver and emit");
 }
 process.stdout.write("ok");
 `;
@@ -51,5 +50,6 @@ process.stdout.write("ok");
 
     assert.equal(child.status, 0, child.stderr);
     assert.equal(child.stdout, "ok");
+    void emit;
   });
 });

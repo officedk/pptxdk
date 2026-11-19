@@ -410,7 +410,7 @@ export const textPositiveScenario: CapabilityScenario = {
       ),
     );
   },
-  assert({ author, preview, validation }) {
+  assert({ author, resolution, preview, validation }) {
     assert.equal(preview.pages.length, 2, author);
     assert.equal(validation.slides.length, 2, author);
 
@@ -425,7 +425,7 @@ export const textPositiveScenario: CapabilityScenario = {
     );
     assert.ok((mixedNode?.box?.height ?? 0) > 100, author);
     assert.equal(
-      preview.build.query
+      resolution.query
         .getSlide("cjk-latin-wrapping")
         .get("fixed-align")
         .observe().text,
@@ -433,7 +433,7 @@ export const textPositiveScenario: CapabilityScenario = {
       author,
     );
     assert.equal(
-      preview.build.query
+      resolution.query
         .getSlide("vertical-and-rotation")
         .get("bottom-aligned")
         .observe().text,

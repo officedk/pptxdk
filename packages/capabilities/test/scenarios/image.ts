@@ -287,12 +287,12 @@ export const imagePositiveScenario: CapabilityScenario = {
       ),
     );
   },
-  assert({ author, preview, validation }) {
+  assert({ author, pptx, preview, validation }) {
     assert.equal(preview.pages.length, 3, author);
     assert.equal(validation.slides.length, 3, author);
 
     // Media deduplication: across all 3 slides and 9 image objects, only 1 PNG + 1 JPEG part exist.
-    const zip = unzipSync(preview.build.pptx);
+    const zip = unzipSync(pptx);
     const mediaParts = Object.keys(zip)
       .filter((entry) => entry.startsWith("ppt/media/"))
       .sort();

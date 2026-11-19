@@ -5,9 +5,9 @@ import {
   BuildError,
   CommonContainer,
   CommonNode,
-  createBuilder,
   createMorphScope,
   Deck,
+  expandDocument,
   Slide,
   type BoundContainerCollaboration,
   type BoundObjectCapability,
@@ -16,7 +16,12 @@ import {
   type CapabilityParseContext,
   type LinkTarget,
 } from "@react-pptx/core";
-import { createResolver, emit } from "@react-pptx/core/build";
+import {
+  createResolver,
+  emit,
+  type BuildOptions,
+  type CapabilityModule,
+} from "@react-pptx/core/build";
 import {
   CapabilityError,
   isMorphKey,
@@ -39,7 +44,6 @@ import {
 } from "@react-pptx/core/capability";
 import {
   createDeckNode,
-  createDocumentBuild,
   createSlideNode,
   hostNodeCreator,
 } from "@react-pptx/core/document";
@@ -67,7 +71,6 @@ import {
 } from "@react-pptx/react-pptx";
 import {
   box as impBox,
-  createDocumentBuild as createDocBuild,
   createMorphScope as createDocMorphScope,
   deck as impDeck,
   font as impFont,
@@ -80,8 +83,32 @@ import {
 } from "@react-pptx/react-pptx/document";
 import { validatePptx } from "@react-pptx/validation";
 import { strFromU8, unzipSync } from "fflate";
-import { createElement } from "react";
+import { createElement, type ReactNode } from "react";
 import { describe, it, vi } from "vitest";
+
+function runJsxModules(modules: readonly CapabilityModule[]) {
+  const resolveWith = createResolver(modules);
+  return async (element: ReactNode, options?: BuildOptions) =>
+    emit(
+      resolveWith(
+        await expandDocument(
+          element,
+          options?.signal === undefined ? {} : { signal: options.signal },
+        ),
+        options,
+      ),
+      options?.signal === undefined ? {} : { signal: options.signal },
+    );
+}
+
+function runDocModules(modules: readonly CapabilityModule[]) {
+  const resolveWith = createResolver(modules);
+  return async (document: CommonNode, options?: BuildOptions) =>
+    emit(
+      resolveWith(document, options),
+      options?.signal === undefined ? {} : { signal: options.signal },
+    );
+}
 
 const notoFont = font("Noto Sans CJK SC", [
   {
@@ -277,7 +304,7 @@ describe("bound object capability contract", () => {
     const morph = createMorphScope();
     const badgeMorph = morph.handle("badge-morph");
 
-    // 1. Imperative build via createDocumentBuild
+    // 1. Imperative build via createResolver + emit
     const deckNode = createDeckNode({ width: 960, height: 540 });
     const slide1 = createSlideNode({ id: "first" });
     const badge1 = createBadgeNode({
@@ -294,7 +321,7 @@ describe("bound object capability contract", () => {
     slide1.append(badge1);
     deckNode.append(slide1, slide2);
 
-    const imperativeBuild = createDocumentBuild([tracker.module]);
+    const imperativeBuild = runDocModules([tracker.module]);
     const imperativeResult = await imperativeBuild(deckNode);
     const impValidation = await validatePptx(imperativeResult.pptx);
     assert.deepEqual(impValidation.errors, []);
@@ -319,7 +346,7 @@ describe("bound object capability contract", () => {
     tracker.measureCalls.length = 0;
     tracker.compileCalls.length = 0;
 
-    const jsxBuild = createBuilder([boxCapability, tracker.module]);
+    const jsxBuild = runJsxModules([boxCapability, tracker.module]);
     const jsxResult = await jsxBuild(
       <Deck width={960} height={540}>
         <Slide id="jsx-first">
@@ -368,7 +395,7 @@ describe("bound object capability contract", () => {
     const morph = createMorphScope();
     const conflictKey = morph.handle("conflict");
 
-    const buildWithBadge = createBuilder([tracker.module]);
+    const buildWithBadge = runJsxModules([tracker.module]);
     await assert.rejects(
       buildWithBadge(
         <Deck width={960} height={540}>
@@ -397,7 +424,7 @@ describe("bound object capability contract", () => {
       },
     );
 
-    const trimmedBuild = createBuilder([]);
+    const trimmedBuild = runJsxModules([]);
     await assert.rejects(
       trimmedBuild(
         <Deck width={960} height={540}>
@@ -429,7 +456,7 @@ describe("bound object capability contract", () => {
 
     const bindSpy = vi.spyOn(shapeCapability, "bind");
     try {
-      const trimmedShapeBuild = createBuilder([shapeCapability]);
+      const trimmedShapeBuild = runJsxModules([shapeCapability]);
       const result = await trimmedShapeBuild(
         <Deck width={960} height={540}>
           <Slide id="standalone-shape">
@@ -465,14 +492,14 @@ describe("bound object capability contract", () => {
     const jsxMorph = createMorphScope().handle("shape-card");
     const impMorph = createDocMorphScope().handle("shape-card");
 
-    const jsxBuild = createBuilder([
+    const jsxBuild = runJsxModules([
       shapeCapability,
       boxCapability,
       groupCapability,
       transitionCapability,
       motionCapability,
     ]);
-    const docBuild = createDocBuild([
+    const docBuild = runDocModules([
       shapeCapability,
       boxCapability,
       groupCapability,
@@ -801,7 +828,7 @@ describe("bound object capability contract", () => {
       const deckNode = impDeck({ width: 960, height: 540 }).append(
         impSlide({ id: "s1" }).append(node),
       );
-      const docBuild = createDocBuild([shapeCapability]);
+      const docBuild = runDocModules([shapeCapability]);
 
       const first = await docBuild(deckNode);
       assert.equal(bindSpy.mock.calls.length, 1);
@@ -839,7 +866,7 @@ describe("bound object capability contract", () => {
   });
 
   it("validates Shape link declarations in bind and resolves valid links in core", async () => {
-    const shapeBuild = createBuilder([shapeCapability]);
+    const shapeBuild = runJsxModules([shapeCapability]);
     await assert.rejects(
       shapeBuild(
         <Deck width={960} height={540}>
@@ -943,7 +970,7 @@ describe("bound object capability contract", () => {
       },
     };
 
-    const customBuild = createDocBuild([compositeWithParts]);
+    const customBuild = runDocModules([compositeWithParts]);
     const doc = impDeck({ width: 320, height: 180 }).append(
       impSlide({ id: "generic-parts" }).append(
         new CommonNode("composite", "rp:composite-grid", { id: "grid" }),
@@ -972,7 +999,7 @@ describe("bound object capability contract", () => {
 
     const bindSpy = vi.spyOn(boxCapability, "bind");
     try {
-      const trimmedBuild = createBuilder([boxCapability, shapeCapability]);
+      const trimmedBuild = runJsxModules([boxCapability, shapeCapability]);
       const result = await trimmedBuild(
         <Deck width={960} height={540}>
           <Slide id="box-container-slide">
@@ -1001,7 +1028,7 @@ describe("bound object capability contract", () => {
       bindSpy.mockRestore();
     }
 
-    const withoutBoxBuild = createBuilder([shapeCapability]);
+    const withoutBoxBuild = runJsxModules([shapeCapability]);
     await assert.rejects(
       withoutBoxBuild(
         <Deck width={960} height={540}>
@@ -1106,7 +1133,7 @@ describe("bound object capability contract", () => {
     };
 
     const panelMorph = createMorphScope().handle("panel-morph");
-    const panelBuild = createBuilder([customPanelModule, shapeCapability]);
+    const panelBuild = runJsxModules([customPanelModule, shapeCapability]);
     const valid = await panelBuild(
       <Deck
         width={400}
@@ -1318,7 +1345,7 @@ describe("bound object capability contract", () => {
       },
     };
 
-    const customBuild = createDocumentBuild([
+    const customBuild = runDocModules([
       transparentAnnotator,
       shapeCapability,
       customTimingSlide,
@@ -1424,7 +1451,7 @@ describe("bound object capability contract", () => {
       },
     };
 
-    const customBuild = createBuilder([tileModule, boxCapability]);
+    const customBuild = runJsxModules([tileModule, boxCapability]);
     const result = await customBuild(
       <Deck width={400} height={240}>
         <Slide id="contract-only-layout">
@@ -1501,7 +1528,7 @@ describe("bound object capability contract", () => {
 
     const bindSpy = vi.spyOn(groupCapability, "bind");
     try {
-      const trimmedBuild = createBuilder([groupCapability, shapeCapability]);
+      const trimmedBuild = runJsxModules([groupCapability, shapeCapability]);
       const result = await trimmedBuild(
         <Deck width={960} height={540} theme={{ colors: { ink: "#111111" } }}>
           <Slide id="group-bound-slide">
@@ -1536,7 +1563,7 @@ describe("bound object capability contract", () => {
       bindSpy.mockRestore();
     }
 
-    const withoutGroupBuild = createBuilder([shapeCapability]);
+    const withoutGroupBuild = runJsxModules([shapeCapability]);
     await assert.rejects(
       withoutGroupBuild(
         <Deck width={960} height={540}>
@@ -1666,7 +1693,7 @@ describe("bound object capability contract", () => {
     };
 
     const clusterMorph = createMorphScope().handle("cluster-morph");
-    const clusterBuild = createBuilder([
+    const clusterBuild = runJsxModules([
       customClusterModule,
       boxCapability,
       shapeCapability,
@@ -2181,8 +2208,13 @@ describe("bound object capability contract", () => {
     );
 
     // Target check happens in emit, while resolve + paint still succeed for baselineOnly.
+    const baselineResolution = resolve(
+      { children: [deckNode] },
+      { target: targets.baselineOnly },
+    );
+    assert.equal(paint(baselineResolution).pages.length, 2);
     assert.throws(
-      () => emit(resolution, { target: targets.baselineOnly }),
+      () => emit(baselineResolution),
       (error: unknown) => {
         assert(error instanceof BuildError);
         assert.ok(

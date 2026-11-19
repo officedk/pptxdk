@@ -2,7 +2,16 @@ import assert from "node:assert/strict";
 import { getEventListeners } from "node:events";
 import { createServer, type ServerResponse } from "node:http";
 
-import { BuildError, build, Deck, Slide, Text } from "@react-pptx/react-pptx";
+import {
+  BuildError,
+  build,
+  Deck,
+  emit,
+  expandDocument,
+  resolve,
+  Slide,
+  Text,
+} from "@react-pptx/react-pptx";
 import { validatePptx } from "@react-pptx/validation";
 import {
   Component,
@@ -354,16 +363,16 @@ describe("React asynchronous content in public build", () => {
     assert.equal(file.slides[0]?.objects[0]?.text?.text, "完成内容");
   });
 
-  it("keeps the completed result when layout cleanup aborts the shared signal during unmount", async () => {
-    const controller = new AbortController();
-    const reason = new Error("cleanup abort after completion");
+  it("keeps the expanded document when layout cleanup aborts the expansion signal, while resolve/build honor their own signals", async () => {
+    const expandController = new AbortController();
+    const expandReason = new Error("cleanup abort after expansion completion");
     let cleanupRan = false;
 
     function AbortsDuringLayoutCleanup() {
       useLayoutEffect(
         () => () => {
           cleanupRan = true;
-          controller.abort(reason);
+          expandController.abort(expandReason);
         },
         [],
       );
@@ -380,15 +389,41 @@ describe("React asynchronous content in public build", () => {
       );
     }
 
-    const result = await build(deck(createElement(AbortsDuringLayoutCleanup)), {
-      signal: controller.signal,
-    });
-    const file = await validatePptx(result.pptx);
-
+    const expanded = await expandDocument(
+      deck(createElement(AbortsDuringLayoutCleanup)),
+      { signal: expandController.signal },
+    );
     assert.equal(cleanupRan, true);
-    assert.equal(getEventListeners(controller.signal, "abort").length, 0);
+    assert.equal(getEventListeners(expandController.signal, "abort").length, 0);
+
+    // Sharing the already-aborted expansion signal with resolve() or build() cancels the resolve stage.
+    assert.throws(
+      () => resolve(expanded, { signal: expandController.signal }),
+      (error: unknown) => error === expandReason,
+    );
+    await assert.rejects(
+      () =>
+        build(deck(createElement(AbortsDuringLayoutCleanup)), {
+          signal: expandController.signal,
+        }),
+      (error: unknown) => error === expandReason,
+    );
+
+    // A separate signal for resolve/emit succeeds when expansion itself succeeded, and cancels independently when aborted.
+    const resolveController = new AbortController();
+    const resolution = resolve(expanded, { signal: resolveController.signal });
+    const emitted = emit(resolution, { signal: resolveController.signal });
+    const file = await validatePptx(emitted.pptx);
     assert.deepEqual(file.errors, []);
     assert.equal(file.slides[0]?.objects[0]?.text?.text, "完成内容");
+
+    const abortedResolveController = new AbortController();
+    const resolveReason = new Error("resolve cancelled independently");
+    abortedResolveController.abort(resolveReason);
+    assert.throws(
+      () => resolve(expanded, { signal: abortedResolveController.signal }),
+      (error: unknown) => error === resolveReason,
+    );
   });
 
   it("awaits stable Promises inside Suspense and generates final content", async () => {

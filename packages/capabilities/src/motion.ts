@@ -2,9 +2,14 @@ import {
   CapabilityError,
   pxToEmu,
   xmlEscape,
-  type BoundSlideCapabilityModule,
   type CapabilityInput,
   type GeometryBox,
+  type ResolvedBoundSlideCapability,
+  type ResolvedSlide,
+  type SlideCapabilityModule,
+  type SlideEmitContext,
+  type SlideEmitOutput,
+  type SlideResolveContext,
   type TransparentCapabilityModule,
 } from "@react-pptx/core/capability";
 
@@ -2460,56 +2465,63 @@ function timingXml(
 }
 
 /** Slide-level motion module binds choreography, writes object timing, and leaves preview on the static edit canvas. */
-export const motionCapability: BoundSlideCapabilityModule = Object.freeze({
-  declaration: "motion",
-  slideProp: "motion",
-  slot: "timing",
-  always: true,
-  transparentDeclarations: [
-    {
-      declaration: "rp:motion-scope",
-      compileDeclaration(input) {
-        return [motionScopeAnnotation(input.props)];
-      },
-    } satisfies TransparentCapabilityModule,
-    {
-      declaration: "rp:motion-step",
-      compileDeclaration(input) {
-        return motionStepAnnotation(input.props);
-      },
-    } satisfies TransparentCapabilityModule,
-  ],
-  bindSlide(_input: CapabilityInput, _parseContext) {
-    return {
-      compileSlide(context) {
-        const plan = compileMotionPlan(context.contributions);
-        validateKnownMotionTimes(plan.observation);
-        const hasEffects = plan.steps.some((step) => step.effects.length > 0);
-        if (!hasEffects) {
-          registerMotionObservation(plan.observation, plan.query);
-          return {
-            xml: "",
-            extensions: [],
-            ...(plan.observation.scopes === undefined
+export const motionCapability: SlideCapabilityModule<ResolvedBoundSlideCapability> =
+  Object.freeze({
+    declaration: "motion",
+    slideProp: "motion",
+    slot: "timing",
+    always: true,
+    transparentDeclarations: [
+      {
+        declaration: "rp:motion-scope",
+        compileDeclaration(input) {
+          return [motionScopeAnnotation(input.props)];
+        },
+      } satisfies TransparentCapabilityModule,
+      {
+        declaration: "rp:motion-step",
+        compileDeclaration(input) {
+          return motionStepAnnotation(input.props);
+        },
+      } satisfies TransparentCapabilityModule,
+    ],
+    bindSlide(_input: CapabilityInput, _parseContext) {
+      return {
+        resolveSlide(context: SlideResolveContext): ResolvedSlide {
+          const plan = compileMotionPlan(context.contributions);
+          validateKnownMotionTimes(plan.observation);
+          const hasEffects = plan.steps.some((step) => step.effects.length > 0);
+          if (!hasEffects) {
+            registerMotionObservation(plan.observation, plan.query);
+            return {
+              extensions: [],
+              ...(plan.observation.scopes === undefined
+                ? {}
+                : { observation: plan.observation }),
+              emit(): SlideEmitOutput {
+                return { xml: "" };
+              },
+            };
+          }
+          const timing = timingXml(plan.steps, context.dimensions);
+          const observation = {
+            ...plan.observation,
+            ...(timing.nativeProjections.length === 0
               ? {}
-              : { observation: plan.observation }),
+              : { nativeProjections: timing.nativeProjections }),
+          } satisfies MotionObservation;
+          // Query identity must bind to final public observation object containing native projections.
+          registerMotionObservation(observation, plan.query);
+          return {
+            extensions: [],
+            observation,
+            emit(emitContext: SlideEmitContext): SlideEmitOutput {
+              return {
+                xml: timingXml(plan.steps, emitContext.dimensions).xml,
+              };
+            },
           };
-        }
-        const timing = timingXml(plan.steps, context.dimensions);
-        const observation = {
-          ...plan.observation,
-          ...(timing.nativeProjections.length === 0
-            ? {}
-            : { nativeProjections: timing.nativeProjections }),
-        } satisfies MotionObservation;
-        // Query identity must bind to final public observation object containing native projections.
-        registerMotionObservation(observation, plan.query);
-        return {
-          xml: timing.xml,
-          extensions: [],
-          observation,
-        };
-      },
-    };
-  },
-});
+        },
+      };
+    },
+  });

@@ -7,8 +7,6 @@ import {
   pxToEmu,
   textStyleKeys,
   xmlEscape,
-  type BoundObjectCapability,
-  type BoundObjectCapabilityModule,
   type BoundObjectNativeCollaboration,
   type CapabilityContext,
   type CapabilityInput,
@@ -18,6 +16,8 @@ import {
   type ColorValue,
   type GeometryBox,
   type LayoutStyle,
+  type LegacyBoundObjectCapability,
+  type LegacyObjectCapabilityModule,
   type LinkTarget,
   type PaddingStyle,
   type ThemeContext,
@@ -328,13 +328,13 @@ function renderShapePreview(options: {
 }
 
 /** Shape module independently validates input, encapsulates bound state, and emits native PresentationML objects. */
-export const shapeCapability: BoundObjectCapabilityModule = {
+export const shapeCapability: LegacyObjectCapabilityModule = {
   declaration: "rp:shape",
 
   bind(
     input: CapabilityInput,
     context: CapabilityParseContext,
-  ): BoundObjectCapability {
+  ): LegacyBoundObjectCapability {
     const unknown = Object.keys(input.props).find(
       (key) => !(allowedParameters as readonly string[]).includes(key),
     );

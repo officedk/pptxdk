@@ -79,6 +79,14 @@ export type BuildOptions = {
   readonly signal?: AbortSignal;
 };
 
+export type ResolveOptions = BuildOptions;
+export type EmitOptions = BuildOptions;
+export type PaintOptions = {
+  /** 1-based page numbers to paint. Omit to draw all pages; an empty list draws none. */
+  readonly pages?: readonly number[];
+  readonly signal?: AbortSignal;
+};
+
 export type GeometryBox = {
   readonly x: number;
   readonly y: number;
@@ -275,6 +283,19 @@ export type SlideObservation = {
   readonly capabilities?: Readonly<Record<string, unknown>>;
 };
 
+export type ResolutionReport = {
+  readonly evidence: "generation";
+  readonly title?: string;
+  readonly extensions: readonly Extension[];
+  readonly slides: readonly SlideObservation[];
+  readonly diagnostics: readonly Diagnostic[];
+};
+
+export type Resolution = {
+  readonly report: ResolutionReport;
+  readonly query: BuildQuery;
+};
+
 export type BuildReport = {
   readonly evidence: "generation";
   readonly title?: string;
@@ -292,6 +313,12 @@ export type BuildResult = {
   readonly pptx: Uint8Array;
   readonly report: BuildReport;
   readonly query: BuildQuery;
+};
+
+export type EmitResult = BuildResult;
+
+export type PaintResult = {
+  readonly pages: readonly PreviewPageResult[];
 };
 
 export type LocatorObservation = {
@@ -721,10 +748,84 @@ export type BoundContainerCollaboration = {
   readonly checksCanvasOverflow?: boolean;
 };
 
-/**
- * Per-build bound object instance whose private parsed state remains encapsulated inside the module closure.
- */
-export type BoundObjectCapability = {
+export type CapabilityWarning = {
+  readonly code: string;
+  readonly message: string;
+  /** Subpath relative to the native object, used for precisely locating cell diagnostics. */
+  readonly path?: string;
+};
+
+export type ResolvedLink = {
+  readonly target: LinkTarget;
+  readonly summary: string;
+};
+
+export type ResolvedObjectChildren = {
+  readonly objects: readonly ObjectObservation[];
+};
+
+export type ObjectResolveContext = {
+  readonly id: number;
+  readonly path: string;
+  /** Deck theme, local color scope, and container text defaults available to the current element. */
+  readonly theme: ThemeContext;
+  readonly options: ResolveOptions;
+  readonly slideNumber: number;
+  readonly layoutBox?: GeometryBox;
+  /** Convert an explicit continuity handle into an OOXML object name; objects without declared continuity omit this value. */
+  readonly morphName?: string;
+  /** Link target already validated during resolve before relationship ID allocation in emit. */
+  readonly link?: ResolvedLink;
+  /** Recursively resolve member child objects using the same registered modules. */
+  resolveChildren(children: readonly CapabilityChild[]): ResolvedObjectChildren;
+};
+
+export type EmitContext = {
+  readonly id: number;
+  readonly path: string;
+  readonly theme: ThemeContext;
+  readonly options: EmitOptions;
+  readonly slideNumber: number;
+  readonly morphName?: string;
+  readonly nativeLink?: NativeLink;
+  readonly childrenXml: string;
+  readonly createTextFieldId: () => string;
+  registerResource(resource: CapabilityResource): string;
+  registerPackagePart(part: CapabilityPackagePart): string;
+};
+
+export type EmitOutput = {
+  readonly xml: string;
+  readonly presentationContributions?: readonly CapabilityPresentationContribution[];
+};
+
+export type PaintContext = {
+  readonly path: string;
+  readonly slideNumber: number;
+  readonly objectId: number;
+  readonly box?: GeometryBox;
+  readonly theme: ThemeContext;
+  readonly childrenSvg?: string;
+};
+
+export type PaintOutput = {
+  readonly svg: string;
+  readonly warnings?: readonly PreviewWarning[];
+};
+
+export type ResolvedObject = {
+  readonly observation: ObjectObservation;
+  readonly transform?: PreviewTransform;
+  readonly parts?: readonly CapabilitySubPartObservation[];
+  readonly extensions: readonly Extension[];
+  readonly annotations?: readonly CapabilityAnnotation[];
+  readonly resourceClaims?: readonly CapabilityResourceClaim[];
+  readonly warnings?: readonly CapabilityWarning[];
+  emit(context: EmitContext): EmitOutput;
+  paint?(context: PaintContext): PaintOutput;
+};
+
+export type LegacyBoundObjectCapability = {
   readonly contract: CapabilityLayoutContract;
   readonly native?: BoundObjectNativeCollaboration;
   readonly container?: BoundContainerCollaboration;
@@ -735,19 +836,38 @@ export type BoundObjectCapability = {
   preview?(context: ObjectPreviewContext): ObjectPreviewOutput;
 };
 
+export type ResolvedBoundObjectCapability = {
+  readonly contract: CapabilityLayoutContract;
+  readonly native?: BoundObjectNativeCollaboration;
+  readonly container?: BoundContainerCollaboration;
+  measureLayout?(
+    request: CapabilityLayoutRequest,
+  ): CapabilityLayoutMeasurement | undefined;
+  resolve(context: ObjectResolveContext): ResolvedObject;
+};
+
+/**
+ * Per-build bound object instance whose private parsed state remains encapsulated inside the module closure.
+ */
+export type BoundObjectCapability =
+  | LegacyBoundObjectCapability
+  | ResolvedBoundObjectCapability;
+
 /**
  * Object capability module that binds per-build declaration state into a closed handle without exposing private parsed state.
  */
-export type ObjectCapabilityModule = {
+export type ObjectCapabilityModule<
+  Bound extends BoundObjectCapability = BoundObjectCapability,
+> = {
   readonly declaration: string;
-  bind(
-    input: CapabilityInput,
-    context: CapabilityParseContext,
-  ): BoundObjectCapability;
+  bind(input: CapabilityInput, context: CapabilityParseContext): Bound;
 };
 
 /** Alias for the unified bound object capability contract. */
 export type BoundObjectCapabilityModule = ObjectCapabilityModule;
+
+export type LegacyObjectCapabilityModule =
+  ObjectCapabilityModule<LegacyBoundObjectCapability>;
 
 /** Transparent host node that does not generate native objects, submitting declarations only to its parent slide capability. */
 export type TransparentCapabilityModule = {
@@ -844,14 +964,76 @@ export type BoundSlideContinuityCollaboration = {
   readonly matchSourceKinds?: boolean;
 };
 
-export type BoundSlideCapability = {
+export type SlideResolveContext = {
+  readonly path: string;
+  readonly dimensions: { readonly width: number; readonly height: number };
+  readonly contributions: readonly CapabilityContribution[];
+  readonly children: readonly CapabilityChild[];
+  readonly theme: ThemeContext;
+  readonly options: ResolveOptions;
+  readonly slideNumber: number;
+};
+
+export type SlideEmitContext = {
+  readonly path: string;
+  readonly dimensions: { readonly width: number; readonly height: number };
+  readonly theme: ThemeContext;
+  readonly options: EmitOptions;
+  readonly slideNumber: number;
+  readonly createTextFieldId: () => string;
+  readonly registerResource: (resource: CapabilityResource) => string;
+  readonly registerPackagePart: (part: CapabilitySlidePackagePart) => string;
+  readonly registerSharedPart: (
+    key: string,
+    part: CapabilitySharedPackagePart,
+  ) => { readonly path: string; readonly relationshipId?: string };
+};
+
+export type SlideEmitOutput = {
+  readonly xml: string;
+  readonly presentationContributions?: readonly CapabilityPresentationContribution[];
+};
+
+export type SlidePaintContext = {
+  readonly path: string;
+  readonly dimensions: { readonly width: number; readonly height: number };
+  readonly theme: ThemeContext;
+  readonly slideNumber: number;
+};
+
+export type SlidePaintOutput = {
+  readonly svg: string;
+  readonly warnings?: readonly PreviewWarning[];
+};
+
+export type ResolvedSlide = {
+  readonly observation?: unknown;
+  readonly extensions: readonly Extension[];
+  readonly resourceClaims?: readonly CapabilityResourceClaim[];
+  readonly warnings?: readonly CapabilityWarning[];
+  emit(context: SlideEmitContext): SlideEmitOutput;
+  paint?(context: SlidePaintContext): SlidePaintOutput;
+};
+
+export type LegacyBoundSlideCapability = {
   readonly continuity?: BoundSlideContinuityCollaboration;
   compileSlide(context: SlideCapabilityContext): SlideCapabilityOutput;
   previewSlide?(context: SlidePreviewContext): SlidePreviewOutput;
 };
 
+export type ResolvedBoundSlideCapability = {
+  readonly continuity?: BoundSlideContinuityCollaboration;
+  resolveSlide(context: SlideResolveContext): ResolvedSlide;
+};
+
+export type BoundSlideCapability =
+  | LegacyBoundSlideCapability
+  | ResolvedBoundSlideCapability;
+
 /** Slide capability module that binds per-build slide declaration state into a closed handle. */
-export type SlideCapabilityModule = {
+export type SlideCapabilityModule<
+  Bound extends BoundSlideCapability = BoundSlideCapability,
+> = {
   /** Slide property name handled by this module. */
   readonly slideProp: string;
   /** Slide properties jointly consumed by the same module, such as transition and advance timing. */
@@ -867,7 +1049,7 @@ export type SlideCapabilityModule = {
   bindSlide(
     input: CapabilityInput,
     context: SlideCapabilityParseContext,
-  ): BoundSlideCapability;
+  ): Bound;
 };
 
 /** Alias for the unified bound slide capability contract. */

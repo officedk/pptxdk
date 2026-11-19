@@ -1,25 +1,36 @@
 import { Resvg } from "@resvg/resvg-js";
 
 import type { DeclarationContainer } from "#/declaration.ts";
+import { CapabilityError } from "#/diagnostics.ts";
 import type { CommonNode } from "#/document.ts";
 import {
-  createDeclarationPreviewBuild,
-  type PreviewSession,
+  createDeclarationResolver,
+  emitInternal,
+  validateOptions,
 } from "#/formal-build.ts";
+import {
+  getInternalResolution,
+  type ResolvedObjectLayer,
+} from "#/resolution.ts";
 import type {
   CapabilityModule,
   GeometryBox,
   ObjectObservation,
+  PaintOptions,
+  PaintResult,
   PreviewDiagnostic,
   PreviewNodeObservation,
   PreviewOptions,
   PreviewPageResult,
   PreviewResult,
   PreviewTransform,
+  Resolution,
   ScreenGeometry,
 } from "#/types.ts";
 
 export type {
+  PaintOptions,
+  PaintResult,
   PreviewDiagnostic,
   PreviewNodeObservation,
   PreviewOptions,
@@ -79,66 +90,228 @@ function validateRequestedPages(pages: readonly number[] | undefined): void {
   }
 }
 
-function runPreviewPipeline(
-  buildForPreview: ReturnType<typeof createDeclarationPreviewBuild>,
-  declaration: DeclarationContainer,
-  options: PreviewOptions,
-  checkSignal: boolean,
-): PreviewResult {
-  const { pages: requestedPages, ...buildOptions } = options;
+function paintLayer(
+  layer: ResolvedObjectLayer,
+  pageNumber: number,
+  diagnostics: PreviewDiagnostic[],
+  nodePaths: Map<number, string>,
+  transforms: Map<number, PreviewTransform>,
+): string {
+  const childrenSvg =
+    layer.childComposition === "members"
+      ? layer.memberLayers
+          .map((child) =>
+            paintLayer(child, pageNumber, diagnostics, nodePaths, transforms),
+          )
+          .join("")
+      : layer.childComposition === "siblings"
+        ? layer.siblingLayers
+            .map((child) =>
+              paintLayer(child, pageNumber, diagnostics, nodePaths, transforms),
+            )
+            .join("")
+        : undefined;
+
+  if (
+    layer.childComposition !== "leaf" &&
+    layer.emitsObject &&
+    !layer.hasObservation
+  ) {
+    return "";
+  }
+
+  const recordNodeIdentity = (transform?: PreviewTransform): void => {
+    if (!layer.hasObservation) return;
+    nodePaths.set(layer.objectId, layer.path);
+    const resolvedTransform = transform ?? layer.transform;
+    if (resolvedTransform !== undefined) {
+      transforms.set(layer.objectId, resolvedTransform);
+    }
+  };
+
+  if (layer.paint !== undefined) {
+    try {
+      const output = layer.paint({
+        path: layer.path,
+        slideNumber: pageNumber,
+        objectId: layer.paintObjectId,
+        ...(layer.box === undefined ? {} : { box: layer.box }),
+        theme: layer.theme,
+        ...(childrenSvg === undefined ? {} : { childrenSvg }),
+      });
+      recordNodeIdentity();
+      for (const warning of output.warnings ?? []) {
+        diagnostics.push(
+          Object.freeze({
+            severity: "warning",
+            page: pageNumber,
+            path:
+              warning.path === undefined
+                ? layer.path
+                : `${layer.path}/${warning.path}`,
+            message: warning.message,
+          }),
+        );
+      }
+      return output.svg;
+    } catch (error) {
+      recordNodeIdentity();
+      diagnostics.push(
+        Object.freeze({
+          severity: "error",
+          page: pageNumber,
+          path:
+            error instanceof CapabilityError && error.path !== undefined
+              ? `${layer.path}/${error.path}`
+              : layer.path,
+          message: error instanceof Error ? error.message : String(error),
+        }),
+      );
+      return "";
+    }
+  }
+
+  if (layer.legacyPreview !== undefined) {
+    try {
+      const output = layer.legacyPreview({
+        path: layer.path,
+        slideNumber: pageNumber,
+        objectId: layer.paintObjectId,
+        ...(layer.box === undefined ? {} : { box: layer.box }),
+        theme: layer.theme,
+        ...(childrenSvg === undefined ? {} : { childrenSvg }),
+      });
+      recordNodeIdentity(output.transform);
+      for (const warning of output.warnings ?? []) {
+        diagnostics.push(
+          Object.freeze({
+            severity: "warning",
+            page: pageNumber,
+            path:
+              warning.path === undefined
+                ? layer.path
+                : `${layer.path}/${warning.path}`,
+            message: warning.message,
+          }),
+        );
+      }
+      return output.svg;
+    } catch (error) {
+      recordNodeIdentity();
+      diagnostics.push(
+        Object.freeze({
+          severity: "error",
+          page: pageNumber,
+          path:
+            error instanceof CapabilityError && error.path !== undefined
+              ? `${layer.path}/${error.path}`
+              : layer.path,
+          message: error instanceof Error ? error.message : String(error),
+        }),
+      );
+      return "";
+    }
+  }
+
+  recordNodeIdentity();
+  diagnostics.push(
+    Object.freeze({
+      severity: "error",
+      page: pageNumber,
+      path: layer.path,
+      message: `Preview does not support ${layer.declarationType}`,
+    }),
+  );
+  return "";
+}
+
+function paintInternal(
+  resolution: Resolution,
+  options: PaintOptions = {},
+  checkSignal = true,
+): PaintResult {
+  const { pages: requestedPages, signal } = options;
   validateRequestedPages(requestedPages);
+  if (checkSignal && signal?.aborted) throw signal.reason;
+
+  const internal = getInternalResolution(resolution);
+  if (requestedPages?.some((page) => page > internal.slides.length)) {
+    throw new RangeError("Preview page number is outside the document");
+  }
   const selected =
     requestedPages === undefined ? undefined : new Set(requestedPages);
 
-  const dimensionsByPage = new Map<
-    number,
-    { readonly width: number; readonly height: number }
-  >();
-  const backgroundByPage = new Map<number, string>();
-  const layersByPage = new Map<number, string>();
-  const diagnosticsByPage = new Map<number, PreviewDiagnostic[]>();
-  const nodePaths = new Map<string, string>();
-  const transforms = new Map<string, PreviewTransform>();
-
-  const session: PreviewSession = {
-    shouldPreviewPage(page) {
-      return selected === undefined || selected.has(page);
-    },
-    setSlideDimensions(page, dimensions) {
-      dimensionsByPage.set(page, dimensions);
-    },
-    setSlideBackground(page, svg) {
-      backgroundByPage.set(page, svg);
-    },
-    recordDiagnostic(page, entry) {
-      const list = diagnosticsByPage.get(page) ?? [];
-      list.push(Object.freeze({ ...entry }));
-      diagnosticsByPage.set(page, list);
-    },
-    recordNode(page, objectId, path, transform) {
-      const key = `${page}:${objectId}`;
-      nodePaths.set(key, path);
-      if (transform !== undefined) transforms.set(key, transform);
-    },
-    setPageLayers(page, svg) {
-      layersByPage.set(page, svg);
-    },
-  };
-
-  const build = buildForPreview(
-    declaration,
-    buildOptions,
-    session,
-    checkSignal,
-  );
-  if (requestedPages?.some((page) => page > build.report.slides.length)) {
-    throw new RangeError("Preview page number is outside the document");
-  }
-
   const pages: PreviewPageResult[] = [];
-  for (const [index, slide] of build.report.slides.entries()) {
-    const pageNumber = index + 1;
+  for (const [index, slide] of internal.slides.entries()) {
+    const pageNumber = slide.index;
     if (selected !== undefined && !selected.has(pageNumber)) continue;
+
+    const slideObservation = resolution.report.slides[index];
+    if (slideObservation === undefined) {
+      throw new Error("Missing resolved slide observation for paint");
+    }
+
+    const diagnostics: PreviewDiagnostic[] = [];
+    const nodePaths = new Map<number, string>();
+    const transforms = new Map<number, PreviewTransform>();
+
+    const layers = slide.layers
+      .map((layer) =>
+        paintLayer(layer, pageNumber, diagnostics, nodePaths, transforms),
+      )
+      .join("");
+
+    let background: string | undefined;
+    for (const slideCap of slide.slideCapabilities) {
+      const runSlidePaint = slideCap.paint ?? slideCap.legacyPreviewSlide;
+      if (runSlidePaint !== undefined) {
+        try {
+          const previewOutput = runSlidePaint({
+            path: slideCap.path,
+            dimensions: internal.dimensions,
+            theme: slideCap.theme,
+            slideNumber: pageNumber,
+          });
+          if (slideCap.slot === "background") {
+            background = previewOutput.svg;
+          }
+          for (const warning of previewOutput.warnings ?? []) {
+            diagnostics.push(
+              Object.freeze({
+                severity: "warning",
+                page: pageNumber,
+                path:
+                  warning.path === undefined
+                    ? slideCap.path
+                    : `${slideCap.path}/${warning.path}`,
+                message: warning.message,
+              }),
+            );
+          }
+        } catch (error) {
+          diagnostics.push(
+            Object.freeze({
+              severity: "error",
+              page: pageNumber,
+              path:
+                error instanceof CapabilityError && error.path !== undefined
+                  ? error.path
+                  : slideCap.path,
+              message: error instanceof Error ? error.message : String(error),
+            }),
+          );
+        }
+      } else if (slideCap.slot === "background" && slideCap.hasSlideProps) {
+        diagnostics.push(
+          Object.freeze({
+            severity: "error",
+            page: pageNumber,
+            path: slideCap.path,
+            message: `Preview does not support ${slideCap.declaration}`,
+          }),
+        );
+      }
+    }
 
     const nodes: PreviewNodeObservation[] = [];
     const collect = (
@@ -146,7 +319,7 @@ function runPreviewPipeline(
       ancestors: readonly PreviewTransform[] = [],
     ): void => {
       for (const object of objects) {
-        const own = transforms.get(`${pageNumber}:${object.id}`);
+        const own = transforms.get(object.id);
         const chain = own === undefined ? ancestors : [own, ...ancestors];
         nodes.push(
           Object.freeze({
@@ -154,38 +327,29 @@ function runPreviewPipeline(
             ...(object.box === undefined
               ? {}
               : screenGeometry(object.box, chain)),
-            path: nodePaths.get(`${pageNumber}:${object.id}`),
+            path: nodePaths.get(object.id),
           }),
         );
         if (object.members !== undefined) collect(object.members, chain);
       }
     };
-    collect(slide.objects);
+    collect(slideObservation.objects);
 
-    const pageDiagnostics = Object.freeze([
-      ...(diagnosticsByPage.get(pageNumber) ?? []),
-    ]);
+    const pageDiagnostics = Object.freeze([...diagnostics]);
     if (pageDiagnostics.some((item) => item.severity === "error")) {
       pages.push(
         Object.freeze({
           id: slide.id,
           page: pageNumber,
           nodes: Object.freeze(nodes),
-          layouts: slide.layouts ?? Object.freeze([]),
+          layouts: slideObservation.layouts ?? Object.freeze([]),
           diagnostics: pageDiagnostics,
         }),
       );
       continue;
     }
 
-    const dimensions = dimensionsByPage.get(pageNumber);
-    if (dimensions === undefined) {
-      throw new Error("Missing formal slide dimensions for preview");
-    }
-    const background =
-      backgroundByPage.get(pageNumber) ?? defaultCanvasBackground;
-    const layers = layersByPage.get(pageNumber) ?? "";
-    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${dimensions.width}" height="${dimensions.height}" viewBox="0 0 ${dimensions.width} ${dimensions.height}">${background}${layers}</svg>`;
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${internal.dimensions.width}" height="${internal.dimensions.height}" viewBox="0 0 ${internal.dimensions.width} ${internal.dimensions.height}">${background ?? defaultCanvasBackground}${layers}</svg>`;
     const png = new Uint8Array(
       new Resvg(svg, { font: { loadSystemFonts: false } }).render().asPng(),
     );
@@ -196,31 +360,63 @@ function runPreviewPipeline(
         svg,
         png,
         nodes: Object.freeze(nodes),
-        layouts: slide.layouts ?? Object.freeze([]),
+        layouts: slideObservation.layouts ?? Object.freeze([]),
         diagnostics: pageDiagnostics,
       }),
     );
   }
 
+  return Object.freeze({ pages: Object.freeze(pages) });
+}
+
+/** Paints static preview pages directly from a Resolution without running emit(). */
+export function paint(
+  resolution: Resolution,
+  options: PaintOptions = {},
+): PaintResult {
+  return paintInternal(resolution, options, true);
+}
+
+function runPreviewPipeline(
+  resolveDeclaration: ReturnType<typeof createDeclarationResolver>,
+  declaration: DeclarationContainer,
+  options: PreviewOptions,
+  checkSignal: boolean,
+): PreviewResult {
+  const { pages: requestedPages, ...buildOptions } = options;
+  validateRequestedPages(requestedPages);
+  validateOptions(buildOptions);
+  const resolution = resolveDeclaration(declaration, buildOptions, checkSignal);
+  const build = emitInternal(resolution, buildOptions, checkSignal);
+  const { pages } = paintInternal(
+    resolution,
+    {
+      ...(requestedPages === undefined ? {} : { pages: requestedPages }),
+      ...(buildOptions.signal === undefined
+        ? {}
+        : { signal: buildOptions.signal }),
+    },
+    checkSignal,
+  );
   return Object.freeze({
     build,
-    pages: Object.freeze(pages),
+    pages,
   });
 }
 
 /**
  * Creates a static preview runner over a plain editable document without loading React.
- * Reuses a single formal build pass per invocation for PPTX, layout, diagnostics, and PNGs.
+ * Resolves the document once, then feeds emit and paint as independent consumers.
  */
 export function createDocumentPreview(modules: readonly CapabilityModule[]) {
-  const buildForPreview = createDeclarationPreviewBuild(modules);
+  const resolveDeclaration = createDeclarationResolver(modules);
 
   return async function previewDocument(
     document: CommonNode,
     options: PreviewOptions = {},
   ): Promise<PreviewResult> {
     return runPreviewPipeline(
-      buildForPreview,
+      resolveDeclaration,
       { children: [document] },
       options,
       true,
@@ -234,12 +430,12 @@ export function createDocumentPreview(modules: readonly CapabilityModule[]) {
 export function createCompletedDeclarationPreview(
   modules: readonly CapabilityModule[],
 ) {
-  const buildForPreview = createDeclarationPreviewBuild(modules);
+  const resolveDeclaration = createDeclarationResolver(modules);
 
   return function previewCompletedDeclaration(
     declaration: DeclarationContainer,
     options: PreviewOptions = {},
   ): PreviewResult {
-    return runPreviewPipeline(buildForPreview, declaration, options, false);
+    return runPreviewPipeline(resolveDeclaration, declaration, options, false);
   };
 }

@@ -16,6 +16,7 @@ import {
   type CapabilityParseContext,
   type LinkTarget,
 } from "@react-pptx/core";
+import { createResolver, emit } from "@react-pptx/core/build";
 import {
   CapabilityError,
   isMorphKey,
@@ -25,7 +26,15 @@ import {
   textStyleFrom,
   textStyleKeys,
   xmlEscape,
+  type EmitContext,
   type MorphKey,
+  type ObjectResolveContext,
+  type PaintContext,
+  type ResolvedObject,
+  type ResolvedSlide,
+  type SlideCapabilityModule,
+  type SlideEmitContext,
+  type SlideResolveContext,
   type ThemeScope,
 } from "@react-pptx/core/capability";
 import {
@@ -34,6 +43,7 @@ import {
   createSlideNode,
   hostNodeCreator,
 } from "@react-pptx/core/document";
+import { paint } from "@react-pptx/core/preview";
 import {
   Box,
   boxCapability,
@@ -41,13 +51,17 @@ import {
   font,
   Group,
   groupCapability,
+  imageCapability,
   motionCapability,
+  notesCapability,
+  observeMotion,
   P,
   preset,
   Shape,
   shapeCapability,
   Span,
   tableCapability,
+  targets,
   transitionCapability,
   transitions,
 } from "@react-pptx/react-pptx";
@@ -58,6 +72,7 @@ import {
   deck as impDeck,
   font as impFont,
   group as impGroup,
+  image as impImage,
   paragraph as impParagraph,
   shape as impShape,
   slide as impSlide,
@@ -1741,6 +1756,526 @@ describe("bound object capability contract", () => {
         );
         return true;
       },
+    );
+  });
+
+  it("separates resolve, emit, and paint stages, mixes old and new capability contracts without resource/rId conflicts, and paints without running emit", async () => {
+    const png1x1 = Buffer.from(
+      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
+      "base64",
+    );
+    let emitCalls = 0;
+    let paintCalls = 0;
+    const allocatedFieldIds: string[] = [];
+    const resolveKeysSeen: string[][] = [];
+
+    const newTileModule: BoundObjectCapabilityModule = {
+      declaration: "rp:new-tile",
+      bind(input, context) {
+        const contract = parseCapabilityLayoutContract({
+          nativeKind: "sp",
+          props: input.props,
+          allowedStyleKeys: new Set<string>(layoutStyleKeys),
+          path: context.path,
+        });
+        const label =
+          typeof input.props["label"] === "string"
+            ? input.props["label"]
+            : "tile";
+        const box = {
+          x: typeof input.props["x"] === "number" ? input.props["x"] : 20,
+          y: typeof input.props["y"] === "number" ? input.props["y"] : 20,
+          width:
+            typeof input.props["width"] === "number"
+              ? input.props["width"]
+              : 100,
+          height:
+            typeof input.props["height"] === "number"
+              ? input.props["height"]
+              : 40,
+        };
+        const rotate =
+          typeof input.props["rotate"] === "number" ? input.props["rotate"] : 0;
+        const link = input.props["link"] as LinkTarget | undefined;
+        const attachImage = input.props["attachImage"] === true;
+
+        return {
+          contract,
+          ...(link === undefined ? {} : { native: { link } }),
+          resolve(resolveContext: ObjectResolveContext): ResolvedObject {
+            resolveKeysSeen.push(Object.keys(resolveContext));
+            const resolvedBox = resolveContext.layoutBox ?? box;
+            return {
+              observation: {
+                id: resolveContext.id,
+                kind: "shape",
+                name: `NewTile ${resolveContext.id}`,
+                geometry: "rect",
+                box: resolvedBox,
+                text: label,
+              },
+              ...(rotate === 0
+                ? {}
+                : {
+                    transform: {
+                      box: resolvedBox,
+                      angle: rotate,
+                      flipH: false,
+                      flipV: false,
+                    },
+                  }),
+              extensions: [],
+              emit(emitContext: EmitContext) {
+                emitCalls += 1;
+                const fieldId = emitContext.createTextFieldId();
+                allocatedFieldIds.push(fieldId);
+                if (attachImage) {
+                  emitContext.registerResource({
+                    bytes: new Uint8Array(png1x1),
+                    extension: "png",
+                    contentType: "image/png",
+                    relationshipType:
+                      "http://schemas.openxmlformats.org/officeDocument/2006/relationships/image",
+                  });
+                }
+                const linkXml =
+                  emitContext.nativeLink?.relationshipId !== undefined &&
+                  emitContext.nativeLink.relationshipId !== ""
+                    ? `<a:hlinkClick r:id="${xmlEscape(emitContext.nativeLink.relationshipId)}"${
+                        emitContext.nativeLink.action === undefined
+                          ? ""
+                          : ` action="${xmlEscape(emitContext.nativeLink.action)}"`
+                      }/>`
+                    : "";
+                return {
+                  xml:
+                    `<p:sp><p:nvSpPr>` +
+                    `<p:cNvPr id="${emitContext.id}" name="${xmlEscape(`NewTile ${emitContext.id}`)}">${linkXml}</p:cNvPr>` +
+                    `<p:cNvSpPr/><p:nvPr/></p:nvSpPr>` +
+                    `<p:spPr>` +
+                    `<a:xfrm><a:off x="${pxToEmu(resolvedBox.x)}" y="${pxToEmu(resolvedBox.y)}"/><a:ext cx="${pxToEmu(resolvedBox.width)}" cy="${pxToEmu(resolvedBox.height)}"/></a:xfrm>` +
+                    `<a:prstGeom prst="rect"><a:avLst/></a:prstGeom>` +
+                    `<a:solidFill><a:srgbClr val="1D4ED8"/></a:solidFill>` +
+                    `</p:spPr>` +
+                    `<p:txBody><a:bodyPr/><a:lstStyle/><a:p><a:fld id="${xmlEscape(fieldId)}" type="slidenum"><a:t>${emitContext.slideNumber}</a:t></a:fld><a:r><a:t>${xmlEscape(label)}</a:t></a:r></a:p></p:txBody>` +
+                    `</p:sp>`,
+                };
+              },
+              paint(paintContext: PaintContext) {
+                paintCalls += 1;
+                const cx = resolvedBox.x + resolvedBox.width / 2;
+                const cy = resolvedBox.y + resolvedBox.height / 2;
+                return {
+                  svg: `<g transform="rotate(${rotate} ${cx} ${cy})" data-id="${paintContext.objectId}"><rect x="${resolvedBox.x}" y="${resolvedBox.y}" width="${resolvedBox.width}" height="${resolvedBox.height}" fill="#1D4ED8"/></g>`,
+                };
+              },
+            };
+          },
+        };
+      },
+    };
+
+    const newClusterModule: BoundObjectCapabilityModule = {
+      declaration: "rp:new-cluster",
+      bind(input, context) {
+        const contract = parseCapabilityLayoutContract({
+          nativeKind: "grpSp",
+          props: input.props,
+          allowedStyleKeys: new Set<string>(layoutStyleKeys),
+          isContainer: true,
+          path: context.path,
+        });
+        return {
+          contract,
+          container: {
+            children: input.children,
+            emitsObject: true,
+            layoutMode: "when-styled",
+            childComposition: "members",
+            restrictsMemberContinuity: true,
+            observesLayout: false,
+            propagatesBaseline: false,
+            checksCanvasOverflow: false,
+          },
+          resolve(resolveContext: ObjectResolveContext): ResolvedObject {
+            const members = resolveContext.resolveChildren(input.children);
+            const boxes = members.objects
+              .map((m) => m.box)
+              .filter((b): b is NonNullable<typeof b> => b !== undefined);
+            const x = Math.min(...boxes.map((b) => b.x));
+            const y = Math.min(...boxes.map((b) => b.y));
+            const right = Math.max(...boxes.map((b) => b.x + b.width));
+            const bottom = Math.max(...boxes.map((b) => b.y + b.height));
+            const box = { x, y, width: right - x, height: bottom - y };
+            const name = `NewCluster ${resolveContext.id}`;
+            return {
+              observation: {
+                id: resolveContext.id,
+                kind: "group",
+                name,
+                box,
+                members: members.objects,
+              },
+              extensions: [],
+              emit(emitContext: EmitContext) {
+                return {
+                  xml:
+                    `<p:grpSp><p:nvGrpSpPr><p:cNvPr id="${emitContext.id}" name="${xmlEscape(name)}"/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr>` +
+                    `<p:grpSpPr><a:xfrm><a:off x="${pxToEmu(box.x)}" y="${pxToEmu(box.y)}"/><a:ext cx="${pxToEmu(box.width)}" cy="${pxToEmu(box.height)}"/><a:chOff x="${pxToEmu(box.x)}" y="${pxToEmu(box.y)}"/><a:chExt cx="${pxToEmu(box.width)}" cy="${pxToEmu(box.height)}"/></a:xfrm></p:grpSpPr>` +
+                    `${emitContext.childrenXml}</p:grpSp>`,
+                };
+              },
+              paint(paintContext: PaintContext) {
+                return {
+                  svg: `<g>${paintContext.childrenSvg ?? ""}</g>`,
+                };
+              },
+            };
+          },
+        };
+      },
+    };
+
+    const newSlideMetaModule: SlideCapabilityModule = {
+      declaration: "new-slide-meta",
+      slideProp: "slideMeta",
+      slot: "transition",
+      bindSlide(input) {
+        const enabled = input.props["slideMeta"] === true;
+        return {
+          resolveSlide(resolveContext: SlideResolveContext): ResolvedSlide {
+            assert.equal("registerSharedPart" in resolveContext, false);
+            assert.equal("registerPackagePart" in resolveContext, false);
+            assert.equal("registerResource" in resolveContext, false);
+            assert.equal("createTextFieldId" in resolveContext, false);
+            return {
+              observation: { enabled },
+              extensions: enabled ? ["p14"] : [],
+              emit(emitContext: SlideEmitContext) {
+                emitContext.registerSharedPart("new-meta-shared", {
+                  part: {
+                    pathTemplate: "ppt/tags/tag{n}.xml",
+                    contentType:
+                      "application/vnd.openxmlformats-officedocument.presentationml.tags+xml",
+                  },
+                  content: () =>
+                    '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><p:tagLst xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"/>',
+                });
+                return { xml: "" };
+              },
+            };
+          },
+        };
+      },
+    };
+
+    const noPaintModule: BoundObjectCapabilityModule = {
+      declaration: "rp:no-paint-tile",
+      bind(input, context) {
+        const contract = parseCapabilityLayoutContract({
+          nativeKind: "sp",
+          props: input.props,
+          allowedStyleKeys: new Set<string>(layoutStyleKeys),
+          path: context.path,
+        });
+        return {
+          contract,
+          resolve(resolveContext: ObjectResolveContext): ResolvedObject {
+            const box = { x: 10, y: 10, width: 50, height: 25 };
+            return {
+              observation: {
+                id: resolveContext.id,
+                kind: "shape",
+                name: `NoPaint ${resolveContext.id}`,
+                geometry: "rect",
+                box,
+              },
+              extensions: [],
+              emit(emitContext: EmitContext) {
+                return {
+                  xml:
+                    `<p:sp><p:nvSpPr><p:cNvPr id="${emitContext.id}" name="NoPaint"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr>` +
+                    `<p:spPr><a:xfrm><a:off x="${pxToEmu(box.x)}" y="${pxToEmu(box.y)}"/><a:ext cx="${pxToEmu(box.width)}" cy="${pxToEmu(box.height)}"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></p:spPr></p:sp>`,
+                };
+              },
+            };
+          },
+        };
+      },
+    };
+
+    const modules = [
+      shapeCapability,
+      boxCapability,
+      groupCapability,
+      imageCapability,
+      motionCapability,
+      notesCapability,
+      newTileModule,
+      newClusterModule,
+      newSlideMetaModule,
+      noPaintModule,
+    ] as const;
+
+    const deckNode = createDeckNode({ width: 960, height: 540 });
+    const slide1 = createSlideNode({
+      id: "mixed-1",
+      slideMeta: true,
+    } as never);
+    const slide2 = createSlideNode({ id: "mixed-2" });
+
+    const newTile1 = new CommonNode("new-tile", "rp:new-tile", {
+      id: "nt1",
+      label: "Hello",
+      x: 20,
+      y: 30,
+      width: 120,
+      height: 40,
+      rotate: 30,
+      attachImage: true,
+      link: { id: "mixed-2" },
+    });
+    const oldShape = impShape({
+      id: "old-s1",
+      x: 200,
+      y: 30,
+      width: 100,
+      height: 50,
+      fill: "#16A34A",
+      link: { url: "https://example.com" },
+      enter: fade(),
+    });
+    const oldImage = impImage({
+      id: "old-img",
+      src: new Uint8Array(png1x1),
+      x: 320,
+      y: 30,
+      width: 40,
+      height: 40,
+    });
+    const mixedCluster = new CommonContainer("new-cluster", "rp:new-cluster", {
+      id: "mixed-cluster",
+    });
+    mixedCluster.append(
+      impShape({
+        id: "cluster-old",
+        x: 40,
+        y: 120,
+        width: 60,
+        height: 40,
+        fill: "#DC2626",
+      }),
+      new CommonNode("new-tile", "rp:new-tile", {
+        id: "cluster-new",
+        label: "InsideCluster",
+        x: 120,
+        y: 120,
+        width: 80,
+        height: 40,
+      }),
+    );
+    const oldGroupWithNewChild = impGroup({ id: "old-group" });
+    oldGroupWithNewChild.append(
+      new CommonNode("new-tile", "rp:new-tile", {
+        id: "inside-old-group",
+        label: "InOldGroup",
+        x: 360,
+        y: 120,
+        width: 80,
+        height: 40,
+      }),
+    );
+    slide1.append(
+      newTile1,
+      oldShape,
+      oldImage,
+      mixedCluster,
+      oldGroupWithNewChild,
+    );
+    slide2.append(
+      impShape({
+        id: "s2-shape",
+        x: 20,
+        y: 20,
+        width: 80,
+        height: 40,
+        fill: "#0EA5E9",
+      }),
+    );
+    deckNode.append(slide1, slide2);
+
+    const resolve = createResolver(modules);
+    const resolution = resolve({ children: [deckNode] });
+
+    assert.equal(Object.isFrozen(resolution), true);
+    assert.deepEqual(Object.keys(resolution), ["report", "query"]);
+    assert.equal(Object.getOwnPropertySymbols(resolution).length, 0);
+
+    // Neither emit nor paint ran for top-level/cluster new-contract modules during resolve (only inside oldGroupWithNewChild bridge).
+    const emitCallsAfterResolve = emitCalls;
+    assert.equal(paintCalls, 0);
+    assert.ok(
+      resolveKeysSeen.every(
+        (keys) =>
+          !keys.includes("registerResource") &&
+          !keys.includes("registerPackagePart") &&
+          !keys.includes("createTextFieldId"),
+      ),
+    );
+
+    // Mutating the editable CommonNode after resolve must not affect the Resolution snapshot.
+    slide2.append(
+      impShape({
+        id: "mutated-after-resolve",
+        x: 100,
+        y: 100,
+        width: 50,
+        height: 50,
+      }),
+    );
+
+    // Paint BEFORE emit: must succeed without emit having run.
+    const painted = paint(resolution);
+    assert.equal(emitCalls, emitCallsAfterResolve);
+    assert.equal(paintCalls, 3);
+    assert.equal(painted.pages.length, 2);
+    assert.deepEqual(painted.pages[0]?.diagnostics, []);
+    assert.ok(painted.pages[0]?.png !== undefined);
+    const rotatedNode = painted.pages[0]?.nodes.find(
+      (n) => n.authorId === "nt1",
+    );
+    assert.ok(rotatedNode?.screenBox !== undefined);
+    assert.ok(rotatedNode.screenBox.width > 120);
+    assert.ok(rotatedNode.screenBox.height > 40);
+    assert.equal(painted.pages[1]?.nodes.length, 1);
+
+    // Emit twice on the same Resolution: idempotent, no rId/field-id/resource conflicts.
+    const emitted1 = emit(resolution);
+    const emitted2 = emit(resolution);
+    assert.deepEqual((await validatePptx(emitted1.pptx)).errors, []);
+    assert.deepEqual((await validatePptx(emitted2.pptx)).errors, []);
+    assert.equal(emitted1.report.slides.length, 2);
+    assert.equal(
+      emitted2.query.getSlide("mixed-2").observe().objects.length,
+      1,
+    );
+    const tileResources = emitted1.query
+      .getSlide("mixed-1")
+      .get("nt1")
+      .observe().resources;
+    assert.equal(tileResources?.length, 1);
+    assert.match(
+      tileResources?.[0]?.part ?? "",
+      /^ppt\/media\/resource\d+\.png$/u,
+    );
+    assert.equal(
+      new Set(allocatedFieldIds.slice(0, 3)).size,
+      allocatedFieldIds.slice(0, 3).length,
+    );
+    assert.ok(observeMotion(emitted1.report.slides[0]!) !== undefined);
+    assert.deepEqual(
+      emitted1.report.slides[0]?.capabilities?.["new-slide-meta"],
+      {
+        enabled: true,
+      },
+    );
+
+    // Target check happens in emit, while resolve + paint still succeed for baselineOnly.
+    assert.throws(
+      () => emit(resolution, { target: targets.baselineOnly }),
+      (error: unknown) => {
+        assert(error instanceof BuildError);
+        assert.ok(
+          error.diagnostics.some((d) => d.code === "forbidden-mechanism"),
+        );
+        return true;
+      },
+    );
+
+    // Missing paint() produces a page error diagnostic and omits svg/png without blocking emit().
+    const noPaintDeck = createDeckNode({ width: 400, height: 300 });
+    const noPaintSlide = createSlideNode({ id: "no-paint" });
+    noPaintSlide.append(
+      new CommonNode("no-paint-tile", "rp:no-paint-tile", { id: "np1" }),
+    );
+    noPaintDeck.append(noPaintSlide);
+    const noPaintResolution = resolve({ children: [noPaintDeck] });
+    const noPaintPainted = paint(noPaintResolution);
+    assert.equal(noPaintPainted.pages[0]?.svg, undefined);
+    assert.equal(noPaintPainted.pages[0]?.png, undefined);
+    assert.ok(
+      noPaintPainted.pages[0]?.diagnostics.some(
+        (d) =>
+          d.severity === "error" &&
+          d.message.includes("Preview does not support rp:no-paint-tile"),
+      ),
+    );
+    const noPaintEmitted = emit(noPaintResolution);
+    assert.deepEqual((await validatePptx(noPaintEmitted.pptx)).errors, []);
+
+    // New-contract background SlideCapabilityModule: paints when paint() is present and reports unsupported when omitted.
+    const newBgSupported: SlideCapabilityModule = {
+      declaration: "new-bg",
+      slideProp: "newBg",
+      slot: "background",
+      bindSlide(input) {
+        const color =
+          typeof input.props["newBg"] === "string"
+            ? input.props["newBg"]
+            : "#ffffff";
+        return {
+          resolveSlide(): ResolvedSlide {
+            return {
+              extensions: [],
+              emit: () => ({ xml: "" }),
+              paint: () => ({
+                svg: `<rect width="100%" height="100%" fill="${color}"/>`,
+              }),
+            };
+          },
+        };
+      },
+    };
+    const newBgUnsupported: SlideCapabilityModule = {
+      declaration: "new-bg-nopaint",
+      slideProp: "newBgNoPaint",
+      slot: "background",
+      bindSlide() {
+        return {
+          resolveSlide(): ResolvedSlide {
+            return {
+              extensions: [],
+              emit: () => ({ xml: "" }),
+            };
+          },
+        };
+      },
+    };
+    const bgOkDeck = createDeckNode({ width: 400, height: 300 });
+    bgOkDeck.append(
+      createSlideNode({ id: "bg-ok", newBg: "#123456" } as never),
+    );
+    const bgOkPainted = paint(
+      createResolver([newBgSupported])({ children: [bgOkDeck] }),
+    );
+    assert.match(bgOkPainted.pages[0]?.svg ?? "", /#123456/u);
+    assert.ok(bgOkPainted.pages[0]?.png !== undefined);
+
+    const bgBadDeck = createDeckNode({ width: 400, height: 300 });
+    bgBadDeck.append(
+      createSlideNode({ id: "bg-bad", newBgNoPaint: true } as never),
+    );
+    const bgBadPainted = paint(
+      createResolver([newBgUnsupported])({ children: [bgBadDeck] }),
+    );
+    assert.equal(bgBadPainted.pages[0]?.svg, undefined);
+    assert.equal(bgBadPainted.pages[0]?.png, undefined);
+    assert.ok(
+      bgBadPainted.pages[0]?.diagnostics.some(
+        (d) =>
+          d.severity === "error" &&
+          d.message.includes("Preview does not support new-bg-nopaint"),
+      ),
     );
   });
 });

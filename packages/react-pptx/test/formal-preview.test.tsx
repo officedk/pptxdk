@@ -335,6 +335,223 @@ describe("Slice 3: formal static preview public entrypoints and runtime isolatio
     expect(jsxResult.pages[1]?.diagnostics).toEqual([]);
   });
 
+  it("computes exact screen corners and screenBox for rotated groups, offset children, rotated/flipped members, and nested groups", async () => {
+    const result = await previewJsx(
+      createElement(
+        Deck,
+        { width: 480, height: 320 },
+        createElement(
+          Slide,
+          { id: "rotated-group-members" },
+          createElement(
+            Group,
+            { id: "outer-group", style: { rotate: 90 } },
+            createElement(Shape, {
+              id: "offset-rect",
+              x: 100,
+              y: 100,
+              width: 60,
+              height: 20,
+              fill: "#2563EB",
+            }),
+            createElement(Shape, {
+              id: "rotated-child",
+              x: 180,
+              y: 120,
+              width: 40,
+              height: 40,
+              fill: "#16A34A",
+              style: { rotate: 45 },
+            }),
+          ),
+        ),
+        createElement(
+          Slide,
+          { id: "nested-rotated-groups" },
+          createElement(
+            Group,
+            { id: "parent-group", style: { rotate: 90 } },
+            createElement(
+              Group,
+              { id: "child-group", style: { rotate: 90 } },
+              createElement(Shape, {
+                id: "leaf-rect",
+                x: 100,
+                y: 100,
+                width: 60,
+                height: 20,
+                fill: "#DC2626",
+              }),
+            ),
+            createElement(Shape, {
+              id: "anchor-rect",
+              x: 200,
+              y: 140,
+              width: 20,
+              height: 20,
+              fill: "#0EA5E9",
+            }),
+          ),
+        ),
+        createElement(
+          Slide,
+          { id: "arbitrary-angle-and-flip" },
+          createElement(
+            Group,
+            { id: "angled-group", style: { rotate: 30 } },
+            createElement(Shape, {
+              id: "flipped-child",
+              x: 100,
+              y: 80,
+              width: 80,
+              height: 40,
+              flipH: true,
+              fill: "#9333EA",
+              style: { rotate: 60 },
+            }),
+            createElement(Shape, {
+              id: "second-member",
+              x: 220,
+              y: 120,
+              width: 40,
+              height: 40,
+              fill: "#F59E0B",
+            }),
+          ),
+        ),
+      ),
+    );
+
+    const assertCornersClose = (
+      actual: readonly { readonly x: number; readonly y: number }[] | undefined,
+      expected: readonly { readonly x: number; readonly y: number }[],
+    ) => {
+      assert.equal(actual?.length, expected.length);
+      expected.forEach((point, index) => {
+        expect(actual[index]!.x).toBeCloseTo(point.x, 6);
+        expect(actual[index]!.y).toBeCloseTo(point.y, 6);
+      });
+    };
+
+    const assertScreenBoxClose = (
+      actual:
+        | {
+            readonly x: number;
+            readonly y: number;
+            readonly width: number;
+            readonly height: number;
+          }
+        | undefined,
+      expected: {
+        readonly x: number;
+        readonly y: number;
+        readonly width: number;
+        readonly height: number;
+      },
+    ) => {
+      assert.ok(actual !== undefined);
+      expect(actual.x).toBeCloseTo(expected.x, 6);
+      expect(actual.y).toBeCloseTo(expected.y, 6);
+      expect(actual.width).toBeCloseTo(expected.width, 6);
+      expect(actual.height).toBeCloseTo(expected.height, 6);
+    };
+
+    // Page 1: 90° rotated group [100..220, 100..160] (center 160, 130)
+    const p1 = result.pages[0]!;
+    assert.deepEqual(p1.diagnostics, []);
+    assert.ok(p1.png !== undefined);
+
+    const outerGroup = p1.nodes.find((n) => n.authorId === "outer-group");
+    assertCornersClose(outerGroup?.corners, [
+      { x: 190, y: 70 },
+      { x: 190, y: 190 },
+      { x: 130, y: 190 },
+      { x: 130, y: 70 },
+    ]);
+    assertScreenBoxClose(outerGroup?.screenBox, {
+      x: 130,
+      y: 70,
+      width: 60,
+      height: 120,
+    });
+
+    const offsetRect = p1.nodes.find((n) => n.authorId === "offset-rect");
+    assertCornersClose(offsetRect?.corners, [
+      { x: 190, y: 70 },
+      { x: 190, y: 130 },
+      { x: 170, y: 130 },
+      { x: 170, y: 70 },
+    ]);
+    assertScreenBoxClose(offsetRect?.screenBox, {
+      x: 170,
+      y: 70,
+      width: 20,
+      height: 60,
+    });
+
+    const halfDiag = 20 * Math.SQRT2;
+    const rotatedChild = p1.nodes.find((n) => n.authorId === "rotated-child");
+    assertCornersClose(rotatedChild?.corners, [
+      { x: 150 + halfDiag, y: 170 },
+      { x: 150, y: 170 + halfDiag },
+      { x: 150 - halfDiag, y: 170 },
+      { x: 150, y: 170 - halfDiag },
+    ]);
+    assertScreenBoxClose(rotatedChild?.screenBox, {
+      x: 150 - halfDiag,
+      y: 170 - halfDiag,
+      width: 2 * halfDiag,
+      height: 2 * halfDiag,
+    });
+
+    // Page 2: nested 90° groups with distinct centers ((130, 110) inside (160, 130))
+    const p2 = result.pages[1]!;
+    assert.deepEqual(p2.diagnostics, []);
+    assert.ok(p2.png !== undefined);
+
+    const childGroup = p2.nodes.find((n) => n.authorId === "child-group");
+    const leafRect = p2.nodes.find((n) => n.authorId === "leaf-rect");
+    const expectedNestedCorners = [
+      { x: 210, y: 110 },
+      { x: 150, y: 110 },
+      { x: 150, y: 90 },
+      { x: 210, y: 90 },
+    ];
+    const expectedNestedBox = { x: 150, y: 90, width: 60, height: 20 };
+    assertCornersClose(childGroup?.corners, expectedNestedCorners);
+    assertScreenBoxClose(childGroup?.screenBox, expectedNestedBox);
+    assertCornersClose(leafRect?.corners, expectedNestedCorners);
+    assertScreenBoxClose(leafRect?.screenBox, expectedNestedBox);
+
+    // Page 3: 30° group [100..260, 80..160] (center 180, 120) with flipH + 60° child [100..180, 80..120] (center 140, 100)
+    const p3 = result.pages[2]!;
+    assert.deepEqual(p3.diagnostics, []);
+    assert.ok(p3.png !== undefined);
+
+    const flippedChild = p3.nodes.find((n) => n.authorId === "flipped-child");
+    // Local flipH swaps left/right around (140, 100), then +60° + 30° = +90° total rotation,
+    // while child center (140, 100) rotates +30° around group center (180, 120):
+    // dc = (-40, -20) -> (180 - 40*cos30 + 20*sin30, 120 - 40*sin30 - 20*cos30)
+    const cos30 = Math.cos(Math.PI / 6);
+    const sin30 = 0.5;
+    const childCenterX = 180 + (-40 * cos30 - -20 * sin30);
+    const childCenterY = 120 + (-40 * sin30 + -20 * cos30);
+    // Original corners after flipH around (140, 100): (+40,-20), (-40,-20), (-40,+20), (+40,+20)
+    // Rotated by 90° CW: (dx, dy) -> (-dy, dx): (+20,+40), (+20,-40), (-20,-40), (-20,+40)
+    assertCornersClose(flippedChild?.corners, [
+      { x: childCenterX + 20, y: childCenterY + 40 },
+      { x: childCenterX + 20, y: childCenterY - 40 },
+      { x: childCenterX - 20, y: childCenterY - 40 },
+      { x: childCenterX - 20, y: childCenterY + 40 },
+    ]);
+    assertScreenBoxClose(flippedChild?.screenBox, {
+      x: childCenterX - 20,
+      y: childCenterY - 40,
+      width: 40,
+      height: 80,
+    });
+  });
+
   it("never loads @resvg/resvg-js when calling JSX build or document build", () => {
     const jsxOut = runIsolatedScript(`
 import { registerHooks } from "node:module";

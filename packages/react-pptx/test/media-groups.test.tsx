@@ -906,7 +906,6 @@ describe("images and native groups", () => {
     assert.equal("bind" in imageCapability, true);
     assert.equal("parse" in imageCapability, false);
     assert.equal("measureLayout" in imageCapability, false);
-    assert.equal("compile" in imageCapability, false);
 
     const bindSpy = vi.spyOn(imageCapability, "bind");
 

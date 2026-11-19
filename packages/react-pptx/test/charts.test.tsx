@@ -1803,7 +1803,6 @@ describe("native Cartesian charts", () => {
     assert.equal("bind" in chartCapability, true);
     assert.equal("parse" in chartCapability, false);
     assert.equal("measureLayout" in chartCapability, false);
-    assert.equal("compile" in chartCapability, false);
 
     const bindSpy = vi.spyOn(chartCapability, "bind");
 

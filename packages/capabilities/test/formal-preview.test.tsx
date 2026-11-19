@@ -61,10 +61,11 @@ import { Cell, Row, Table } from "../src/table-elements.ts";
 import { tableCapability } from "../src/table.ts";
 import { P, SlideNumber, Span, Text } from "../src/text-elements.ts";
 import {
+  emitTextBody,
   parseTextContent,
   renderTextOutlinesSvg,
+  resolveTextBody,
   textInsets,
-  writeTextBodyFromParagraphs,
 } from "../src/text-service.ts";
 
 function runDocPreview(modules: readonly CapabilityModule[]) {
@@ -973,43 +974,26 @@ describe("Slice 3: Text static preview & shared text-service outlines", () => {
           parseContext.theme,
           { slideNumber: parseContext.slideNumber },
         );
-        let boundResult:
-          | {
-              readonly box: {
-                x: number;
-                y: number;
-                width: number;
-                height: number;
-              };
-              readonly measuredLayout: ReturnType<
-                typeof writeTextBodyFromParagraphs
-              >["measuredLayout"];
-            }
-          | undefined;
         return {
           contract,
-          compile(compileContext) {
-            const box = compileContext.layoutBox ?? {
+          resolve(resolveContext) {
+            const box = resolveContext.layoutBox ?? {
               x: Number(input.props["x"] ?? 0),
               y: Number(input.props["y"] ?? 0),
               width: Number(input.props["width"] ?? 120),
               height: Number(input.props["height"] ?? 40),
             };
-            const body = writeTextBodyFromParagraphs(
+            const body = resolveTextBody(
               paragraphs,
               style,
-              compileContext.theme,
+              resolveContext.theme,
               "middle",
               { width: box.width, height: box.height, insets },
               "text-box",
-              compileContext.options.embedFonts,
-              compileContext.createTextFieldId,
             );
-            boundResult = { box, measuredLayout: body.measuredLayout };
             return {
-              xml: `<p:sp><p:nvSpPr><p:cNvPr id="${compileContext.id}" name="CustomLabel"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr><p:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="952500" cy="381000"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom><a:noFill/></p:spPr>${body.xml}</p:sp>`,
               observation: {
-                id: compileContext.id,
+                id: resolveContext.id,
                 kind: "shape",
                 name: "CustomLabel",
                 geometry: "rect",
@@ -1018,19 +1002,36 @@ describe("Slice 3: Text static preview & shared text-service outlines", () => {
               },
               extensions: [],
               resourceClaims: body.resourceClaims,
-            };
-          },
-          preview(previewContext) {
-            const box = previewContext.box ?? boundResult!.box;
-            return {
-              svg: renderTextOutlinesSvg({
-                paragraphs,
-                box,
-                insets,
-                verticalAlign: "middle",
-                theme: previewContext.theme,
-                measuredLayout: boundResult?.measuredLayout,
-              }),
+              emit(emitContext) {
+                const emitted = emitTextBody(body, emitContext.theme, {
+                  createFieldId: emitContext.createTextFieldId,
+                  ...(emitContext.options.embedFonts === undefined
+                    ? {}
+                    : { embedFonts: emitContext.options.embedFonts }),
+                });
+                return {
+                  xml: `<p:sp><p:nvSpPr><p:cNvPr id="${emitContext.id}" name="CustomLabel"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr><p:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="952500" cy="381000"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom><a:noFill/></p:spPr>${emitted.xml}</p:sp>`,
+                  ...(emitted.presentationContributions.length === 0
+                    ? {}
+                    : {
+                        presentationContributions:
+                          emitted.presentationContributions,
+                      }),
+                };
+              },
+              paint(paintContext) {
+                const paintBox = paintContext.box ?? box;
+                return {
+                  svg: renderTextOutlinesSvg({
+                    paragraphs,
+                    box: paintBox,
+                    insets,
+                    verticalAlign: "middle",
+                    theme: paintContext.theme,
+                    measuredLayout: body.measuredLayout,
+                  }),
+                };
+              },
             };
           },
         };

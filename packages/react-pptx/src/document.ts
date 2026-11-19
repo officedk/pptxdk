@@ -36,12 +36,8 @@ export async function build(
   options: BuildOptions = {},
 ): Promise<BuildResult> {
   validateOptions(options);
-  const resolveOptions: ResolveOptions = {
-    ...(options.embedFonts === undefined
-      ? {}
-      : { embedFonts: options.embedFonts }),
-    ...(options.signal === undefined ? {} : { signal: options.signal }),
-  };
+  const resolveOptions: ResolveOptions =
+    options.signal === undefined ? {} : { signal: options.signal };
   const resolution = resolve(document, resolveOptions);
   return emit(resolution, options);
 }

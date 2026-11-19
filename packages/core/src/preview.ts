@@ -110,12 +110,11 @@ function paintLayer(
     return "";
   }
 
-  const recordNodeIdentity = (transform?: PreviewTransform): void => {
+  const recordNodeIdentity = (): void => {
     if (!layer.hasObservation) return;
     nodePaths.set(layer.objectId, layer.path);
-    const resolvedTransform = transform ?? layer.transform;
-    if (resolvedTransform !== undefined) {
-      transforms.set(layer.objectId, resolvedTransform);
+    if (layer.transform !== undefined) {
+      transforms.set(layer.objectId, layer.transform);
     }
   };
 
@@ -130,48 +129,6 @@ function paintLayer(
         ...(childrenSvg === undefined ? {} : { childrenSvg }),
       });
       recordNodeIdentity();
-      for (const warning of output.warnings ?? []) {
-        diagnostics.push(
-          Object.freeze({
-            severity: "warning",
-            page: pageNumber,
-            path:
-              warning.path === undefined
-                ? layer.path
-                : `${layer.path}/${warning.path}`,
-            message: warning.message,
-          }),
-        );
-      }
-      return output.svg;
-    } catch (error) {
-      recordNodeIdentity();
-      diagnostics.push(
-        Object.freeze({
-          severity: "error",
-          page: pageNumber,
-          path:
-            error instanceof CapabilityError && error.path !== undefined
-              ? `${layer.path}/${error.path}`
-              : layer.path,
-          message: error instanceof Error ? error.message : String(error),
-        }),
-      );
-      return "";
-    }
-  }
-
-  if (layer.legacyPreview !== undefined) {
-    try {
-      const output = layer.legacyPreview({
-        path: layer.path,
-        slideNumber: pageNumber,
-        objectId: layer.paintObjectId,
-        ...(layer.box === undefined ? {} : { box: layer.box }),
-        theme: layer.theme,
-        ...(childrenSvg === undefined ? {} : { childrenSvg }),
-      });
-      recordNodeIdentity(output.transform);
       for (const warning of output.warnings ?? []) {
         diagnostics.push(
           Object.freeze({
@@ -253,7 +210,7 @@ export function paint(
 
     let background: string | undefined;
     for (const slideCap of slide.slideCapabilities) {
-      const runSlidePaint = slideCap.paint ?? slideCap.legacyPreviewSlide;
+      const runSlidePaint = slideCap.paint;
       if (runSlidePaint !== undefined) {
         try {
           const previewOutput = runSlidePaint({

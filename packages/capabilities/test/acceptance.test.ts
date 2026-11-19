@@ -384,37 +384,38 @@ describe("Capability-owned acceptance scenarios & custom bound preview extension
 
         return {
           contract,
-          compile(compileContext) {
-            calls.push(`compile:${compileContext.path}`);
-            const box = compileContext.layoutBox ?? {
+          resolve(resolveContext) {
+            calls.push(`resolve:${resolveContext.path}`);
+            const box = resolveContext.layoutBox ?? {
               x,
               y,
               width: size,
               height: size,
             };
-            const name = xmlEscape(`Marker ${compileContext.id}`);
-            const xml = `<p:sp><p:nvSpPr><p:cNvPr id="${compileContext.id}" name="${name}"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr><p:spPr><a:xfrm><a:off x="${pxToEmu(box.x)}" y="${pxToEmu(box.y)}"/><a:ext cx="${pxToEmu(box.width)}" cy="${pxToEmu(box.height)}"/></a:xfrm><a:prstGeom prst="ellipse"><a:avLst/></a:prstGeom><a:noFill/></p:spPr></p:sp>`;
+            const name = xmlEscape(`Marker ${resolveContext.id}`);
             return {
-              xml,
               observation: {
-                id: compileContext.id,
+                id: resolveContext.id,
                 kind: "shape",
                 name,
                 geometry: "ellipse",
                 box,
               },
               extensions: [],
-            };
-          },
-          preview(previewContext) {
-            calls.push(`preview:${previewContext.path}`);
-            const box = previewContext.box!;
-            const resolved = previewContext.theme.resolveColor(color);
-            return {
-              svg: `<circle cx="${box.x + box.width / 2}" cy="${box.y + box.height / 2}" r="${box.width / 2}" fill="#${resolved.hex}"/>`,
-              ...(warnMessage === undefined
-                ? {}
-                : { warnings: [{ message: warnMessage }] }),
+              emit(emitContext) {
+                const xml = `<p:sp><p:nvSpPr><p:cNvPr id="${emitContext.id}" name="${name}"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr><p:spPr><a:xfrm><a:off x="${pxToEmu(box.x)}" y="${pxToEmu(box.y)}"/><a:ext cx="${pxToEmu(box.width)}" cy="${pxToEmu(box.height)}"/></a:xfrm><a:prstGeom prst="ellipse"><a:avLst/></a:prstGeom><a:noFill/></p:spPr></p:sp>`;
+                return { xml };
+              },
+              paint(paintContext) {
+                calls.push(`paint:${paintContext.path}`);
+                const resolved = paintContext.theme.resolveColor(color);
+                return {
+                  svg: `<circle cx="${box.x + box.width / 2}" cy="${box.y + box.height / 2}" r="${box.width / 2}" fill="#${resolved.hex}"/>`,
+                  ...(warnMessage === undefined
+                    ? {}
+                    : { warnings: [{ message: warnMessage }] }),
+                };
+              },
             };
           },
         };
@@ -433,23 +434,27 @@ describe("Capability-owned acceptance scenarios & custom bound preview extension
         });
         return {
           contract,
-          compile(compileContext) {
-            const box = compileContext.layoutBox ?? {
+          resolve(resolveContext) {
+            const box = resolveContext.layoutBox ?? {
               x: 0,
               y: 0,
               width: 20,
               height: 20,
             };
             return {
-              xml: `<p:sp><p:nvSpPr><p:cNvPr id="${compileContext.id}" name="NoPreview"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr><p:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="190500" cy="190500"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom><a:noFill/></p:spPr></p:sp>`,
               observation: {
-                id: compileContext.id,
+                id: resolveContext.id,
                 kind: "shape",
                 name: "NoPreview",
                 geometry: "rect",
                 box,
               },
               extensions: [],
+              emit(emitContext) {
+                return {
+                  xml: `<p:sp><p:nvSpPr><p:cNvPr id="${emitContext.id}" name="NoPreview"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr><p:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="190500" cy="190500"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom><a:noFill/></p:spPr></p:sp>`,
+                };
+              },
             };
           },
         };
@@ -547,16 +552,15 @@ describe("Capability-owned acceptance scenarios & custom bound preview extension
     );
     void shape;
     assert.ok(calls.some((entry) => entry.startsWith("bind:")));
-    assert.ok(calls.some((entry) => entry.startsWith("compile:")));
-    assert.ok(calls.some((entry) => entry.startsWith("preview:")));
+    assert.ok(calls.some((entry) => entry.startsWith("resolve:")));
+    assert.ok(calls.some((entry) => entry.startsWith("paint:")));
   });
 
-  it("binds notesCapability via BoundSlideCapabilityModule without fake previewSlide, trims textCapability cleanly, and enforces rejections", async () => {
+  it("binds notesCapability via BoundSlideCapabilityModule, trims textCapability cleanly, and enforces rejections", async () => {
     assert.equal("bindSlide" in notesCapability, true);
-    assert.equal("compileSlide" in notesCapability, false);
     assert.equal("measureLayout" in notesCapability, false);
 
-    // Notes-only slide previews cleanly as an empty canvas without fake previewSlide errors or leaked notes text.
+    // Notes-only slide previews cleanly as an empty canvas without preview errors or leaked notes text.
     const notesOnlyPreview = previewDocWith([
       notesCapability,
       slideBackgroundCapability,
@@ -786,33 +790,33 @@ describe("Capability-owned acceptance scenarios & custom bound preview extension
   });
 
   it("rejects non-bound capability modules at registration and invalid bound handles at bind time", async () => {
-    const legacyObjectModule = {
-      declaration: "rp:legacy-object",
+    const unboundObjectModule = {
+      declaration: "rp:unbound-object",
       parse() {
         return {
           contract: { nativeKind: "sp", layoutStyle: {} },
           parsed: {},
         };
       },
-      compile() {
+      resolve() {
         return {
-          xml: "",
-          observation: { id: 2, kind: "shape", name: "Legacy" },
+          observation: { id: 2, kind: "shape", name: "Unbound" },
           extensions: [],
+          emit: () => ({ xml: "" }),
         };
       },
     } as unknown as CapabilityModule;
 
-    const legacySlideModule = {
-      declaration: "legacy-slide",
-      slideProp: "legacySlide",
+    const unboundSlideModule = {
+      declaration: "unbound-slide",
+      slideProp: "unboundSlide",
       slot: "timing",
-      compileSlide() {
-        return { xml: "", extensions: [] };
+      resolveSlide() {
+        return { extensions: [], emit: () => ({ xml: "" }) };
       },
     } as unknown as CapabilityModule;
 
-    for (const invalidModule of [legacyObjectModule, legacySlideModule]) {
+    for (const invalidModule of [unboundObjectModule, unboundSlideModule]) {
       assert.throws(
         () => createResolver([invalidModule]),
         (error: unknown) => {
@@ -905,7 +909,7 @@ describe("Capability-owned acceptance scenarios & custom bound preview extension
     );
   });
 
-  it("supports custom bound SlideCapabilityModule with previewSlide, rejects missing background previewSlide, and enforces [slideBackgroundCapability, chartCapability] trimming", async () => {
+  it("supports custom bound SlideCapabilityModule with paint, rejects missing background paint, and enforces [slideBackgroundCapability, chartCapability] trimming", async () => {
     const customSlideCalls: string[] = [];
     const customBackdropModule: SlideCapabilityModule = {
       declaration: "custom-backdrop",
@@ -923,18 +927,22 @@ describe("Capability-owned acceptance scenarios & custom bound preview extension
         const hex = raw.slice(1).toUpperCase();
         customSlideCalls.push(`bindSlide:${parseContext.path}`);
         return {
-          compileSlide(compileContext) {
-            customSlideCalls.push(`compileSlide:${compileContext.path}`);
+          resolveSlide(resolveContext) {
+            customSlideCalls.push(`resolveSlide:${resolveContext.path}`);
             return {
-              xml: `<p:bg><p:bgPr><a:solidFill><a:srgbClr val="${hex}"/></a:solidFill><a:effectLst/></p:bgPr></p:bg>`,
               extensions: [],
               observation: { backdropColor: `#${hex}` },
-            };
-          },
-          previewSlide(previewContext) {
-            customSlideCalls.push(`previewSlide:${previewContext.path}`);
-            return {
-              svg: `<rect width="${previewContext.dimensions.width}" height="${previewContext.dimensions.height}" fill="#${hex}"/>`,
+              emit() {
+                return {
+                  xml: `<p:bg><p:bgPr><a:solidFill><a:srgbClr val="${hex}"/></a:solidFill><a:effectLst/></p:bgPr></p:bg>`,
+                };
+              },
+              paint(paintContext) {
+                customSlideCalls.push(`paint:${paintContext.path}`);
+                return {
+                  svg: `<rect width="${paintContext.dimensions.width}" height="${paintContext.dimensions.height}" fill="#${hex}"/>`,
+                };
+              },
             };
           },
         };
@@ -1008,24 +1016,28 @@ describe("Capability-owned acceptance scenarios & custom bound preview extension
     }
     assert.deepEqual(customSlideCalls, [
       "bindSlide:deck/slide[bg-doc]",
-      "compileSlide:deck/slide[bg-doc]",
-      "previewSlide:deck/slide[bg-doc]",
+      "resolveSlide:deck/slide[bg-doc]",
+      "paint:deck/slide[bg-doc]",
       "bindSlide:deck/slide[bg-jsx]",
-      "compileSlide:deck/slide[bg-jsx]",
-      "previewSlide:deck/slide[bg-jsx]",
+      "resolveSlide:deck/slide[bg-jsx]",
+      "paint:deck/slide[bg-jsx]",
     ]);
 
-    // A background-slot SlideCapabilityModule without previewSlide produces png: undefined + located error.
+    // A background-slot SlideCapabilityModule without paint produces png: undefined + located error.
     const backdropWithoutPreview: SlideCapabilityModule = {
       declaration: "custom-backdrop-no-preview",
       slideProp: "background",
       slot: "background",
       bindSlide() {
         return {
-          compileSlide() {
+          resolveSlide() {
             return {
-              xml: `<p:bg><p:bgPr><a:solidFill><a:srgbClr val="1E293B"/></a:solidFill><a:effectLst/></p:bgPr></p:bg>`,
               extensions: [],
+              emit() {
+                return {
+                  xml: `<p:bg><p:bgPr><a:solidFill><a:srgbClr val="1E293B"/></a:solidFill><a:effectLst/></p:bgPr></p:bg>`,
+                };
+              },
             };
           },
         };

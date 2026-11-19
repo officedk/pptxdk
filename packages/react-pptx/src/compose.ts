@@ -32,12 +32,8 @@ export function createStagePipeline(modules: readonly CapabilityModule[]) {
   ): Promise<BuildResult> {
     // Validate build/target options upfront so invalid options fail before React expansion or resolve runs.
     validateOptions(options);
-    const resolveOptions: ResolveOptions = {
-      ...(options.embedFonts === undefined
-        ? {}
-        : { embedFonts: options.embedFonts }),
-      ...(options.signal === undefined ? {} : { signal: options.signal }),
-    };
+    const resolveOptions: ResolveOptions =
+      options.signal === undefined ? {} : { signal: options.signal };
     if (input instanceof CommonNode) {
       // Resolve synchronously before yielding so later edits to the mutable document do not leak into this build.
       const resolution = resolve(input, resolveOptions);

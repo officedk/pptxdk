@@ -67,20 +67,6 @@ export type TextResourceClaim = {
   readonly characters: string;
 };
 
-export type TextServiceResult = {
-  readonly xml: string;
-  readonly text: string;
-  readonly paragraphCount: number;
-  readonly resourceClaims: readonly TextResourceClaim[];
-  readonly fontUses: readonly FontEmbeddingUse[];
-  readonly measurement?: { readonly width: number; readonly height: number };
-  readonly measuredLayout?: MeasuredTextLayout;
-  readonly warnings: readonly {
-    readonly code: string;
-    readonly message: string;
-  }[];
-};
-
 /** Resolve-stage text facts cached inside capability closures for independent emit and paint. */
 export type ResolvedTextBody = {
   readonly paragraphs: readonly Paragraph[];
@@ -947,10 +933,7 @@ function runXml(run: Run, theme: ThemeContext): string {
   return `<a:r>${runPropertiesXml(run.style, "a:rPr", theme)}<a:t xml:space="preserve">${text}</a:t></a:r>`;
 }
 
-function textResourceClaims(
-  runs: readonly Run[],
-  embedFonts?: FontEmbeddingMode,
-): {
+function textResourceClaims(runs: readonly Run[]): {
   readonly resourceClaims: TextResourceClaim[];
   readonly fontUses: FontEmbeddingUse[];
   readonly warnings: { readonly code: string; readonly message: string }[];
@@ -1024,15 +1007,11 @@ function textResourceClaims(
             const shown = missing.slice(0, 10).join(" ");
             const extra = missing.length - 10;
             const message = `${font.family} is missing glyphs for characters ${shown}${extra > 0 ? `, and ${extra} more characters` : ""}`;
-            if (embedFonts === "full" || embedFonts === "subset") {
-              throw new CapabilityError("font-missing-glyph", message);
-            } else {
-              warnings.push({
-                code: "font-missing-glyph",
-                message,
-              });
-              missingGlyphErrors.push(message);
-            }
+            warnings.push({
+              code: "font-missing-glyph",
+              message,
+            });
+            missingGlyphErrors.push(message);
           }
         }
       }
@@ -2068,7 +2047,6 @@ export function resolveTextBody(
   verticalAlign: TextStyle["verticalAlign"] = "top",
   layout?: TextLayoutRequest,
   destination: TextBodyDestination = "text-box",
-  embedFonts?: FontEmbeddingMode,
 ): ResolvedTextBody {
   const runs = paragraphs.flatMap((paragraph) =>
     paragraph.runs.length > 0
@@ -2088,7 +2066,7 @@ export function resolveTextBody(
     ];
   });
   const { resourceClaims, fontUses, warnings, missingGlyphErrors } =
-    textResourceClaims([...runs, ...listRuns], embedFonts);
+    textResourceClaims([...runs, ...listRuns]);
   let measured: ReturnType<typeof measureParagraphs> | undefined;
   if (layout !== undefined) {
     try {
@@ -2222,75 +2200,17 @@ export function emitTextBody(
   };
 }
 
-/** Generates PresentationML txBody XML and resource claims directly from pre-parsed paragraphs and styles. */
-export function writeTextBodyFromParagraphs(
-  paragraphs: readonly Paragraph[],
-  style: ResolvedTextStyle | TextStyle,
-  theme: ThemeContext,
-  verticalAlign: TextStyle["verticalAlign"] = "top",
-  layout?: TextLayoutRequest,
-  destination: TextBodyDestination = "text-box",
-  embedFonts?: FontEmbeddingMode,
-  createFieldId?: () => string,
-): TextServiceResult {
-  const resolved = resolveTextBody(
-    paragraphs,
-    style,
-    theme,
-    verticalAlign,
-    layout,
-    destination,
-    embedFonts,
-  );
-  const emitted = emitTextBody(resolved, theme, {
-    ...(createFieldId === undefined ? {} : { createFieldId }),
-    ...(embedFonts === undefined ? {} : { embedFonts }),
-  });
-  return {
-    xml: emitted.xml,
-    text: resolved.text,
-    paragraphCount: resolved.paragraphCount,
-    resourceClaims: resolved.resourceClaims,
-    fontUses: resolved.fontUses,
-    ...(resolved.measurement === undefined
-      ? {}
-      : { measurement: resolved.measurement }),
-    ...(resolved.measuredLayout === undefined
-      ? {}
-      : { measuredLayout: resolved.measuredLayout }),
-    warnings: resolved.warnings,
-  };
-}
-
-/** Shares paragraph, run, list, and font resource processing for text boxes and shape text. */
-export function writeTextBody(
-  children: readonly unknown[],
-  styleValue: unknown,
-  theme: ThemeContext,
-  verticalAlign: TextStyle["verticalAlign"] = "top",
-  layout?: TextLayoutRequest,
-  destination: TextBodyDestination = "text-box",
-  fields: TextFieldContext = { slideNumber: 1 },
-  embedFonts?: FontEmbeddingMode,
-): TextServiceResult {
-  const style = readTextStyle(
-    destination === "table-cell"
-      ? { ...styleRecord(styleValue, "Text.style"), textWrap: "normal" }
-      : styleValue,
-    "Text.style",
-    theme,
-  );
-  const paragraphs = normalizeParagraphs(children, style, theme, fields);
-  return writeTextBodyFromParagraphs(
-    paragraphs,
-    style,
-    theme,
-    verticalAlign,
-    layout,
-    destination,
-    embedFonts,
-  );
-}
+type ChartTextResult = {
+  readonly xml: string;
+  readonly text: string;
+  readonly resourceClaims: readonly TextResourceClaim[];
+  readonly fontUses: readonly FontEmbeddingUse[];
+  readonly warnings: readonly {
+    readonly code: string;
+    readonly message: string;
+  }[];
+  readonly missingGlyphErrors: readonly string[];
+};
 
 /** Generates shared font styles for native chart text and registers font claims based on actual categories, series, and label text. */
 export function writeChartTextProperties(
@@ -2298,14 +2218,7 @@ export function writeChartTextProperties(
   texts: readonly string[],
   label: string,
   theme: ThemeContext,
-  embedFonts?: FontEmbeddingMode,
-): Pick<
-  TextServiceResult,
-  "text" | "resourceClaims" | "fontUses" | "warnings"
-> & {
-  readonly xml: string;
-  readonly missingGlyphErrors: readonly string[];
-} {
+): ChartTextResult {
   const style = readTextStyle(styleValue, label, theme);
   const runStyle: RunStyle = {
     fontFamily: style.fontFamily,
@@ -2324,7 +2237,7 @@ export function writeChartTextProperties(
   const runs = texts.map((text) => ({ text, style: runStyle }));
   for (const text of texts) escapedXml(text);
   const { resourceClaims, fontUses, warnings, missingGlyphErrors } =
-    textResourceClaims(runs, embedFonts);
+    textResourceClaims(runs);
   const defaultProperties = runPropertiesXml(runStyle, "a:defRPr", theme);
   const outputText = texts.join("\n");
   const lineSpacing =
@@ -2356,14 +2269,7 @@ export function writeChartTitle(
   styleValue: unknown,
   label: string,
   theme: ThemeContext,
-  embedFonts?: FontEmbeddingMode,
-): Pick<
-  TextServiceResult,
-  "text" | "resourceClaims" | "fontUses" | "warnings"
-> & {
-  readonly xml: string;
-  readonly missingGlyphErrors: readonly string[];
-} {
+): ChartTextResult {
   const style = readTextStyle(styleValue, label, theme);
   const runStyle: RunStyle = {
     fontFamily: style.fontFamily,
@@ -2381,7 +2287,7 @@ export function writeChartTitle(
   validateRunStyle(runStyle);
   const escapedText = escapedXml(text);
   const { resourceClaims, fontUses, warnings, missingGlyphErrors } =
-    textResourceClaims([{ text, style: runStyle }], embedFonts);
+    textResourceClaims([{ text, style: runStyle }]);
   const runProperties = runPropertiesXml(runStyle, "a:rPr", theme);
   const defaultProperties = runPropertiesXml(runStyle, "a:defRPr", theme);
   const lineSpacing =
@@ -2424,27 +2330,4 @@ export function textExtent(value: number, label: string): number {
     );
   }
   return extent;
-}
-
-/** Reads raw plain text of fixed-area text, shared between shape and read-only report. */
-export function plainText(children: readonly unknown[]): string {
-  const result: string[] = [];
-  for (const child of children) {
-    if (!hostChild(child)) {
-      throw new CapabilityError(
-        "invalid-text-child",
-        "Text content tree contains invalid nodes",
-      );
-    }
-    if (child.type === "#text") result.push(child.text);
-    else if (child.type === "rp:span" || child.type === "rp:paragraph") {
-      result.push(plainText(child.children));
-    } else {
-      throw new CapabilityError(
-        "unsupported-text-child",
-        `${child.type} is not text content`,
-      );
-    }
-  }
-  return result.join("");
 }

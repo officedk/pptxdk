@@ -84,8 +84,6 @@ describe("chartCapability resolved contract", () => {
       const boundHandle = bindSpy.mock.results[0]?.value;
       assert.ok(boundHandle !== undefined);
       assert.equal("resolve" in boundHandle, true);
-      assert.equal("compile" in boundHandle, false);
-      assert.equal("preview" in boundHandle, false);
 
       const observed = resolution.report.slides[0]?.objects.find(
         (obj) => obj.authorId === "sales",

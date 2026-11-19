@@ -661,8 +661,9 @@ registerHooks({
 });
 
 const { imageCapability } = await import("@react-pptx/capabilities/image");
-const { createResolver, emit } = await import("@react-pptx/core/build");
+const { createResolver } = await import("@react-pptx/core/build");
 const { createDeckNode, createSlideNode } = await import("@react-pptx/core/document");
+const { emit } = await import("@react-pptx/emit");
 const { createImageNode } = await import("@react-pptx/capabilities/image");
 
 const pngBytes = new Uint8Array(Buffer.from("${pngBase64}", "base64"));

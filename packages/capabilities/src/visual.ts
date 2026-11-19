@@ -1,7 +1,5 @@
 import {
   CapabilityError,
-  pxToEmu,
-  resolvedColorXml,
   type ColorValue,
   type GeometryBox,
   type GradientStop,
@@ -12,6 +10,7 @@ import {
   type ThemeContext,
   type VisualStyle as CoreVisualStyle,
 } from "@react-pptx/core/capability";
+import { pxToEmu, resolvedColorXml } from "@react-pptx/emit";
 
 import {
   presetGeometryNames,

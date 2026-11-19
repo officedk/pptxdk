@@ -3,12 +3,13 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
 import { expandDocument, type CommonNode } from "@react-pptx/core";
-import { createResolver, emit, type Resolution } from "@react-pptx/core/build";
+import { createResolver, type Resolution } from "@react-pptx/core/build";
 import {
   paint,
   type PreviewPageResult,
   type PreviewResult,
 } from "@react-pptx/core/preview";
+import { emit } from "@react-pptx/emit";
 import { validatePptx, type ValidationResult } from "@react-pptx/validation";
 import { PNG } from "pngjs";
 import type { ReactNode } from "react";

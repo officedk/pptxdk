@@ -14,13 +14,14 @@ import {
   type CapabilityModule,
   type CapabilityParseContext,
 } from "@react-pptx/core";
-import { createResolver, emit } from "@react-pptx/core/build";
+import { createResolver } from "@react-pptx/core/build";
 import {
   parseCapabilityLayoutContract,
   textStyleKeys,
 } from "@react-pptx/core/capability";
 import { RichTextContainer } from "@react-pptx/core/document";
 import { paint } from "@react-pptx/core/preview";
+import { emit } from "@react-pptx/emit";
 import { validatePptx } from "@react-pptx/validation";
 import { strFromU8, unzipSync } from "fflate";
 import { PNG } from "pngjs";

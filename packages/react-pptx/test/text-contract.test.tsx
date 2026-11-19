@@ -2,8 +2,9 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
 import { expandDocument } from "@react-pptx/core";
-import { createResolver, emit } from "@react-pptx/core/build";
+import { createResolver } from "@react-pptx/core/build";
 import { paint } from "@react-pptx/core/preview";
+import { emit } from "@react-pptx/emit";
 import {
   BuildError,
   Deck,

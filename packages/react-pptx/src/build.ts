@@ -2,10 +2,10 @@ export {
   BuildError,
   CapabilityError,
   createResolver,
-  emit,
   formatBaseline,
   targets,
 } from "@react-pptx/core/build";
+export { emit } from "@react-pptx/emit";
 export type {
   BuildOptions,
   BuildReport,

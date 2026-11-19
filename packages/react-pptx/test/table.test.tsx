@@ -61,7 +61,8 @@ describe("native tables", () => {
         [
           'import { createElement } from "react";',
           'import { Deck, Slide, expandDocument } from "@react-pptx/core";',
-          'import { createResolver, emit } from "@react-pptx/core/build";',
+          'import { createResolver } from "@react-pptx/core/build";',
+          'import { emit } from "@react-pptx/emit";',
           'import { Cell, Row, Table } from "@react-pptx/capabilities/table-elements";',
           'import { tableCapability } from "@react-pptx/capabilities/table";',
           'import { validatePptx } from "@react-pptx/validation";',

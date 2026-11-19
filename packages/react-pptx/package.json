@@ -72,6 +72,7 @@
   "dependencies": {
     "@react-pptx/capabilities": "workspace:*",
     "@react-pptx/core": "workspace:*",
+    "@react-pptx/emit": "workspace:*",
     "esbuild": "catalog:",
     "react": "catalog:"
   },

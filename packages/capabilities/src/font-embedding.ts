@@ -2,9 +2,9 @@ import { createHash } from "node:crypto";
 
 import {
   CapabilityError,
-  xmlEscape,
   type CapabilityPresentationContribution,
 } from "@react-pptx/core/capability";
+import { xmlEscape } from "@react-pptx/emit";
 import * as fontkit from "fontkit";
 
 import { fontFamilyKey, matchesFontFamily } from "./font-family.ts";

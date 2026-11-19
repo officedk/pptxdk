@@ -1,12 +1,9 @@
 import {
   assertValidLang,
-  assertXml10Characters,
   CapabilityError,
   layoutStyleKeys,
   parseCapabilityLayoutContract,
-  pxToEmu,
   textStyleKeys,
-  xmlEscape,
   type BoundObjectNativeCollaboration,
   type CapabilityInput,
   type CapabilityLayoutContract,
@@ -32,6 +29,7 @@ import {
   type ThemeContext,
 } from "@react-pptx/core/capability";
 import { CommonContainer, RichTextContainer } from "@react-pptx/core/document";
+import { assertXml10Characters, pxToEmu, xmlEscape } from "@react-pptx/emit";
 
 import {
   fontPresentationContributions,

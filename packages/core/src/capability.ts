@@ -8,20 +8,12 @@ export {
   isNativeColorSlot,
   lighter,
   nativeColorSlots,
-  resolvedColorXml,
   textStyleFrom,
   textStyleKeys,
   validateTextStyle,
 } from "#/theme.ts";
 export { createMorphScope, getMorphKeyLabel, isMorphKey } from "#/morph.ts";
 export type { MorphKey, MorphScope } from "#/morph.ts";
-export {
-  assertXml10Characters,
-  pxToEmu,
-  themeXml,
-  xmlDocument,
-  xmlEscape,
-} from "#/ooxml.ts";
 export {
   layoutStyleKeys,
   paddingStyleKeys,

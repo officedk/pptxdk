@@ -62,9 +62,19 @@
           "allow": ["layer:tooling", "layer:validation"]
         }
       },
-      "layer:capabilities": {
+      "layer:emit": {
         "dependencies": {
           "allow": ["layer:tooling", "layer:validation", "layer:core"]
+        }
+      },
+      "layer:capabilities": {
+        "dependencies": {
+          "allow": [
+            "layer:tooling",
+            "layer:validation",
+            "layer:core",
+            "layer:emit"
+          ]
         }
       },
       "layer:entry": {
@@ -73,6 +83,7 @@
             "layer:tooling",
             "layer:validation",
             "layer:core",
+            "layer:emit",
             "layer:capabilities"
           ]
         }
@@ -83,6 +94,7 @@
             "layer:tooling",
             "layer:validation",
             "layer:core",
+            "layer:emit",
             "layer:capabilities",
             "layer:entry",
             "layer:application"
@@ -95,6 +107,7 @@
             "layer:tooling",
             "layer:validation",
             "layer:core",
+            "layer:emit",
             "layer:capabilities",
             "layer:entry"
           ]

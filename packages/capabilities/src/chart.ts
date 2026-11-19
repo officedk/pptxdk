@@ -2,8 +2,6 @@ import {
   CapabilityError,
   layoutStyleKeys,
   parseCapabilityLayoutContract,
-  pxToEmu,
-  xmlEscape,
   type BoundObjectNativeCollaboration,
   type CapabilityInput,
   type CapabilityLayoutMeasurement,
@@ -23,6 +21,7 @@ import {
   type ThemeContext,
 } from "@react-pptx/core/capability";
 import { CommonNode } from "@react-pptx/core/document";
+import { pxToEmu, xmlEscape } from "@react-pptx/emit";
 
 import { chartDataLabelPositions, mergeDataLabels } from "./chart-labels.ts";
 import {

@@ -1,8 +1,11 @@
 import {
   CapabilityError,
-  type BoundSlideCapabilityModule,
   type CapabilityInput,
   type Extension,
+  type ResolvedBoundSlideCapability,
+  type ResolvedSlide,
+  type SlideCapabilityModule,
+  type SlideEmitOutput,
 } from "@react-pptx/core/capability";
 
 /** Transition duration in milliseconds; rounded to the nearest integer millisecond when written to p14:dur. */
@@ -412,57 +415,60 @@ function compileTransition(
  * Bound transition module: validates transition & advanceAfter once per slide during bind,
  * submits generic continuity matching collaboration for Morph, and leaves static preview untouched.
  */
-export const transitionCapability: BoundSlideCapabilityModule = {
-  declaration: "transition",
-  slideProp: "transition",
-  slideProps: ["transition", "advanceAfter"],
-  slot: "transition",
-  bindSlide(input: CapabilityInput) {
-    const advanceAfter = input.props["advanceAfter"];
-    if (
-      advanceAfter !== undefined &&
-      (typeof advanceAfter !== "number" ||
-        !Number.isFinite(advanceAfter) ||
-        advanceAfter < 0 ||
-        advanceAfter > 4_294_967_295)
-    ) {
-      return fail(
-        "invalid-advance-after",
-        "Slide.advanceAfter must be a finite millisecond value between 0 and 4294967295",
-      );
-    }
-    const transitionValue = input.props["transition"];
-    const compiled =
-      transitionValue === undefined
-        ? {
-            xml:
-              advanceAfter === undefined
-                ? ""
-                : `<p:transition advTm="${Math.round(advanceAfter)}"/>`,
-            extensions: [] as readonly Extension[],
-            matchSourceKinds: false,
-            observation:
-              advanceAfter === undefined
-                ? undefined
-                : Object.freeze({ advanceAfterMs: Math.round(advanceAfter) }),
-          }
-        : compileTransition(transitionValue, advanceAfter);
+export const transitionCapability: SlideCapabilityModule<ResolvedBoundSlideCapability> =
+  {
+    declaration: "transition",
+    slideProp: "transition",
+    slideProps: ["transition", "advanceAfter"],
+    slot: "transition",
+    bindSlide(input: CapabilityInput) {
+      const advanceAfter = input.props["advanceAfter"];
+      if (
+        advanceAfter !== undefined &&
+        (typeof advanceAfter !== "number" ||
+          !Number.isFinite(advanceAfter) ||
+          advanceAfter < 0 ||
+          advanceAfter > 4_294_967_295)
+      ) {
+        return fail(
+          "invalid-advance-after",
+          "Slide.advanceAfter must be a finite millisecond value between 0 and 4294967295",
+        );
+      }
+      const transitionValue = input.props["transition"];
+      const compiled =
+        transitionValue === undefined
+          ? {
+              xml:
+                advanceAfter === undefined
+                  ? ""
+                  : `<p:transition advTm="${Math.round(advanceAfter)}"/>`,
+              extensions: [] as readonly Extension[],
+              matchSourceKinds: false,
+              observation:
+                advanceAfter === undefined
+                  ? undefined
+                  : Object.freeze({ advanceAfterMs: Math.round(advanceAfter) }),
+            }
+          : compileTransition(transitionValue, advanceAfter);
 
-    const output = {
-      xml: compiled.xml,
-      extensions: compiled.extensions,
-      ...(compiled.observation === undefined
-        ? {}
-        : { observation: compiled.observation }),
-    };
+      const resolved: ResolvedSlide = {
+        extensions: compiled.extensions,
+        ...(compiled.observation === undefined
+          ? {}
+          : { observation: compiled.observation }),
+        emit(): SlideEmitOutput {
+          return { xml: compiled.xml };
+        },
+      };
 
-    return {
-      ...(compiled.matchSourceKinds
-        ? { continuity: { matchSourceKinds: true } }
-        : {}),
-      compileSlide() {
-        return output;
-      },
-    };
-  },
-};
+      return {
+        ...(compiled.matchSourceKinds
+          ? { continuity: { matchSourceKinds: true } }
+          : {}),
+        resolveSlide() {
+          return resolved;
+        },
+      };
+    },
+  };

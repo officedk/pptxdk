@@ -2310,4 +2310,283 @@ describe("bound object capability contract", () => {
       ),
     );
   });
+
+  it("migrates box, shape, and group to resolve/emit/paint without emit-coupled preview or paint-returned transforms", async () => {
+    const resolve = createResolver([
+      boxCapability,
+      shapeCapability,
+      groupCapability,
+    ]);
+
+    // 1. XML 1.0 control characters in Shape.name and Group.name fail in resolve().
+    for (const badDoc of [
+      impDeck({ width: 320, height: 180 }).append(
+        impSlide({ id: "bad-shape-name" }).append(
+          impShape({
+            id: "s1",
+            name: "Bad\u0007Shape",
+            x: 10,
+            y: 10,
+            width: 40,
+            height: 20,
+          }),
+        ),
+      ),
+      impDeck({ width: 320, height: 180 }).append(
+        impSlide({ id: "bad-group-name" }).append(
+          impGroup({ id: "g1", name: "Bad\u0008Group" }).append(
+            impShape({ id: "s1", x: 10, y: 10, width: 40, height: 20 }),
+          ),
+        ),
+      ),
+    ]) {
+      assert.throws(
+        () => resolve({ children: [badDoc] }),
+        (error: unknown) => {
+          assert(error instanceof BuildError);
+          assert.ok(
+            error.diagnostics.some((d) => d.code === "invalid-xml-character"),
+          );
+          return true;
+        },
+      );
+    }
+
+    // 2. Empty Group fails in resolve().
+    assert.throws(
+      () =>
+        resolve({
+          children: [
+            impDeck({ width: 320, height: 180 }).append(
+              impSlide({ id: "empty-group-slide" }).append(
+                impGroup({ id: "empty" }),
+              ),
+            ),
+          ],
+        }),
+      (error: unknown) => {
+        assert(error instanceof BuildError);
+        assert.ok(error.diagnostics.some((d) => d.code === "empty-group"));
+        return true;
+      },
+    );
+
+    // 3. Screen geometry depends only on resolve facts: even when a rotated member's paint() fails,
+    //    its own rotation + enclosing group rotation still produce exact corners and screenBox.
+    const doc = impDeck({ width: 480, height: 320 }).append(
+      impSlide({ id: "failed-paint-transforms" }).append(
+        impGroup({ id: "rg", style: { rotate: 90 } }).append(
+          impShape({
+            id: "star-member",
+            geometry: "star5",
+            x: 100,
+            y: 100,
+            width: 40,
+            height: 40,
+            fill: "#2563EB",
+            style: { rotate: 45 },
+          }),
+          impShape({
+            id: "rect-member",
+            x: 160,
+            y: 120,
+            width: 40,
+            height: 20,
+            fill: "#16A34A",
+          }),
+        ),
+      ),
+    );
+    const resolution = resolve({ children: [doc] });
+    const painted = paint(resolution);
+    const page = painted.pages[0]!;
+    assert.equal(page.png, undefined);
+    assert.ok(
+      page.diagnostics.some(
+        (d) => d.severity === "error" && d.path.includes("shape[star-member]"),
+      ),
+    );
+    // Group [100..200, 100..140] center (150, 120); star-member center (120, 120) -> rotates 90° CW to (150, 90).
+    const starNode = page.nodes.find((n) => n.authorId === "star-member")!;
+    const halfDiag = 20 * Math.SQRT2;
+    assert.ok(starNode.screenBox !== undefined);
+    assert.ok(Math.abs(starNode.screenBox.x - (150 - halfDiag)) < 1e-6);
+    assert.ok(Math.abs(starNode.screenBox.y - (90 - halfDiag)) < 1e-6);
+    assert.ok(Math.abs(starNode.screenBox.width - 2 * halfDiag) < 1e-6);
+    assert.ok(Math.abs(starNode.screenBox.height - 2 * halfDiag) < 1e-6);
+
+    // 4. resolve() without emit options + independent emit() with subset font embedding & Shape inline text.
+    const jostFont = impFont("Jost*", [
+      {
+        weight: 400,
+        data: new Uint8Array(
+          readFileSync(
+            new URL("./assets/fonts/Jost-400-Book.ttf", import.meta.url),
+          ),
+        ),
+      },
+    ]);
+    const textShapeDoc = impDeck({ width: 480, height: 270 }).append(
+      impSlide({ id: "s1" }).append(
+        impBox({
+          id: "card",
+          style: {
+            width: 240,
+            height: 80,
+            padding: 8,
+            backgroundColor: "#F8FAFC",
+          },
+        }).append(
+          impShape({
+            id: "shaped-text",
+            width: 200,
+            height: 48,
+            fill: "#1E293B",
+            style: { fontFamily: jostFont, fontSize: 16, color: "#FFFFFF" },
+            text: "Resolved once",
+          }),
+        ),
+      ),
+    );
+    const textResolution = resolve({ children: [textShapeDoc] });
+    const textPainted = paint(textResolution);
+    assert.equal(textPainted.pages[0]?.png, undefined);
+    assert.ok(
+      textPainted.pages[0]?.diagnostics.some(
+        (d) => d.severity === "error" && d.path.includes("shape[shaped-text]"),
+      ),
+    );
+    const textEmitted = emit(textResolution, { embedFonts: "subset" });
+    assert.deepEqual((await validatePptx(textEmitted.pptx)).errors, []);
+    const files = unzipSync(textEmitted.pptx);
+    const slideXml = strFromU8(files["ppt/slides/slide1.xml"]!);
+    assert.match(slideXml, /Resolved once/u);
+  });
+
+  it("migrates imageCapability to ResolvedBoundObjectCapability with resolve-only placement/XML1.0 checks, paint without emit, and emit-only resource registration", async () => {
+    const png1x1 = new Uint8Array(
+      Buffer.from(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
+        "base64",
+      ),
+    );
+    const jpeg1x1 = new Uint8Array(
+      Buffer.from(
+        "/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAP//////////////////////////////////////////////////////////////////////////////////////2wBDAf//////////////////////////////////////////////////////////////////////////////////////wAARCAABAAEDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAX/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/9oADAMBAAIQAxAAAAFR/8QAFBABAAAAAAAAAAAAAAAAAAAAAP/aAAgBAQABBQJ//8QAFBABAAAAAAAAAAAAAAAAAAAAAP/aAAgBAwEBPwF//8QAFBABAAAAAAAAAAAAAAAAAAAAAP/aAAgBAgEBPwF//8QAFBABAAAAAAAAAAAAAAAAAAAAAP/aAAgBAQAGPwJ//8QAFBABAAAAAAAAAAAAAAAAAAAAAP/aAAgBAQABPyF//9oADAMBAAIRAxEAPwD/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/9oACAEBAAE/IV//2Q==",
+        "base64",
+      ),
+    );
+
+    const bindSpy = vi.spyOn(imageCapability, "bind");
+    try {
+      const resolveImages = createResolver([imageCapability]);
+      const deckNode = createDeckNode({ width: 640, height: 360 });
+      const slide1 = createSlideNode({ id: "img-s1" });
+      slide1.append(
+        impImage({
+          id: "hero-png",
+          name: "Hero PNG",
+          alt: "Square sample",
+          src: png1x1,
+          fit: "contain",
+          x: 20,
+          y: 40,
+          width: 120,
+          height: 60,
+          style: { rotate: 30 },
+          flipH: true,
+          link: { id: "img-s2" },
+        }),
+      );
+      const slide2 = createSlideNode({ id: "img-s2" });
+      slide2.append(
+        impImage({
+          id: "thumb-jpeg",
+          src: jpeg1x1,
+          crop: { left: 0.25 },
+          x: 50,
+          y: 50,
+          width: 80,
+          height: 80,
+        }),
+      );
+      deckNode.append(slide1, slide2);
+
+      const resolution = resolveImages({ children: [deckNode] });
+
+      assert.equal(bindSpy.mock.calls.length, 2);
+      const boundHandle = bindSpy.mock.results[0]?.value as Record<
+        string,
+        unknown
+      >;
+      assert.equal(typeof boundHandle["resolve"], "function");
+      assert.equal("compile" in boundHandle, false);
+      assert.equal("preview" in boundHandle, false);
+
+      // Placement (contain of 1x1 into 120x60 -> 60x60 centered at x=50) happens in resolve;
+      // resource registration does NOT happen during resolve.
+      const heroObs = resolution.query
+        .getSlide("img-s1")
+        .get("hero-png")
+        .observe();
+      assert.deepEqual(heroObs.box, { x: 50, y: 40, width: 60, height: 60 });
+      assert.equal(heroObs.resources, undefined);
+
+      // Paint succeeds directly from Resolution before emit() runs, and computes screenBox from transform.
+      const painted = paint(resolution);
+      assert.equal(painted.pages.length, 2);
+      assert.deepEqual(painted.pages[0]?.diagnostics, []);
+      assert.ok(painted.pages[0]?.png !== undefined);
+      assert.match(painted.pages[0]?.svg ?? "", /<image/u);
+      const paintedHero = painted.pages[0]?.nodes.find(
+        (n) => n.authorId === "hero-png",
+      );
+      assert.ok(paintedHero?.screenBox !== undefined);
+      assert.ok(paintedHero.screenBox.width > 60);
+      assert.ok(paintedHero.screenBox.height > 60);
+
+      // Emit registers media resources and produces valid PPTX; repeat emit is idempotent.
+      const emitted1 = emit(resolution);
+      const emitted2 = emit(resolution);
+      assert.deepEqual((await validatePptx(emitted1.pptx)).errors, []);
+      assert.deepEqual((await validatePptx(emitted2.pptx)).errors, []);
+      const emittedHeroResources = emitted1.query
+        .getSlide("img-s1")
+        .get("hero-png")
+        .observe().resources;
+      assert.equal(emittedHeroResources?.length, 1);
+      assert.match(
+        emittedHeroResources?.[0]?.part ?? "",
+        /^ppt\/media\/resource\d+\.png$/u,
+      );
+      const emittedThumbResources = emitted1.query
+        .getSlide("img-s2")
+        .get("thumb-jpeg")
+        .observe().resources;
+      assert.equal(emittedThumbResources?.length, 1);
+      assert.match(
+        emittedThumbResources?.[0]?.part ?? "",
+        /^ppt\/media\/resource\d+\.jpeg$/u,
+      );
+
+      // Invalid XML 1.0 characters in name or alt fail immediately during resolve.
+      for (const badProps of [
+        { name: "bad\u0000name", src: png1x1 },
+        { alt: "bad\u000balt", src: png1x1 },
+      ]) {
+        const badDeck = createDeckNode({ width: 320, height: 180 });
+        const badSlide = createSlideNode({ id: "bad-xml" });
+        badSlide.append(impImage({ id: "bad-img", ...badProps }));
+        badDeck.append(badSlide);
+        assert.throws(
+          () => resolveImages({ children: [badDeck] }),
+          (error: unknown) =>
+            error instanceof BuildError &&
+            error.diagnostics.some((d) => d.code === "invalid-xml-character"),
+        );
+      }
+    } finally {
+      bindSpy.mockRestore();
+    }
+  });
 });

@@ -1,8 +1,8 @@
 import {
   CapabilityError,
   type GeometryBox,
-  type ObjectPreviewContext,
-  type ObjectPreviewOutput,
+  type PaintContext,
+  type PaintOutput,
 } from "@react-pptx/core/capability";
 
 import { textOnlyChartStyle, type ParsedChart } from "./chart-model.ts";
@@ -42,8 +42,8 @@ function resolveChartFontSizePixels(fontSize: FontSize | undefined): number {
 export function drawChartPreview(
   parsed: ParsedChart,
   box: GeometryBox,
-  context: ObjectPreviewContext,
-): ObjectPreviewOutput {
+  context: PaintContext,
+): PaintOutput {
   const group = parsed.groups[0];
   if (
     parsed.groups.length !== 1 ||

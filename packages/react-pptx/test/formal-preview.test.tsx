@@ -335,7 +335,228 @@ describe("Slice 3: formal static preview public entrypoints and runtime isolatio
     expect(jsxResult.pages[1]?.diagnostics).toEqual([]);
   });
 
-  it("never loads @resvg/resvg-js when calling JSX build or document build", () => {
+  it("computes exact screen corners and screenBox for rotated groups, offset children, rotated/flipped members, and nested groups", async () => {
+    const result = await previewJsx(
+      createElement(
+        Deck,
+        { width: 480, height: 320 },
+        createElement(
+          Slide,
+          { id: "rotated-group-members" },
+          createElement(
+            Group,
+            { id: "outer-group", style: { rotate: 90 } },
+            createElement(Shape, {
+              id: "offset-rect",
+              x: 100,
+              y: 100,
+              width: 60,
+              height: 20,
+              fill: "#2563EB",
+            }),
+            createElement(Shape, {
+              id: "rotated-child",
+              x: 180,
+              y: 120,
+              width: 40,
+              height: 40,
+              fill: "#16A34A",
+              style: { rotate: 45 },
+            }),
+          ),
+        ),
+        createElement(
+          Slide,
+          { id: "nested-rotated-groups" },
+          createElement(
+            Group,
+            { id: "parent-group", style: { rotate: 90 } },
+            createElement(
+              Group,
+              { id: "child-group", style: { rotate: 90 } },
+              createElement(Shape, {
+                id: "leaf-rect",
+                x: 100,
+                y: 100,
+                width: 60,
+                height: 20,
+                fill: "#DC2626",
+              }),
+            ),
+            createElement(Shape, {
+              id: "anchor-rect",
+              x: 200,
+              y: 140,
+              width: 20,
+              height: 20,
+              fill: "#0EA5E9",
+            }),
+          ),
+        ),
+        createElement(
+          Slide,
+          { id: "arbitrary-angle-and-flip" },
+          createElement(
+            Group,
+            { id: "angled-group", style: { rotate: 30 } },
+            createElement(Shape, {
+              id: "flipped-child",
+              x: 100,
+              y: 80,
+              width: 80,
+              height: 40,
+              flipH: true,
+              fill: "#9333EA",
+              style: { rotate: 60 },
+            }),
+            createElement(Shape, {
+              id: "second-member",
+              x: 220,
+              y: 120,
+              width: 40,
+              height: 40,
+              fill: "#F59E0B",
+            }),
+          ),
+        ),
+      ),
+    );
+
+    const assertCornersClose = (
+      actual: readonly { readonly x: number; readonly y: number }[] | undefined,
+      expected: readonly { readonly x: number; readonly y: number }[],
+    ) => {
+      assert.equal(actual?.length, expected.length);
+      expected.forEach((point, index) => {
+        expect(actual[index]!.x).toBeCloseTo(point.x, 6);
+        expect(actual[index]!.y).toBeCloseTo(point.y, 6);
+      });
+    };
+
+    const assertScreenBoxClose = (
+      actual:
+        | {
+            readonly x: number;
+            readonly y: number;
+            readonly width: number;
+            readonly height: number;
+          }
+        | undefined,
+      expected: {
+        readonly x: number;
+        readonly y: number;
+        readonly width: number;
+        readonly height: number;
+      },
+    ) => {
+      assert.ok(actual !== undefined);
+      expect(actual.x).toBeCloseTo(expected.x, 6);
+      expect(actual.y).toBeCloseTo(expected.y, 6);
+      expect(actual.width).toBeCloseTo(expected.width, 6);
+      expect(actual.height).toBeCloseTo(expected.height, 6);
+    };
+
+    // Page 1: 90° rotated group [100..220, 100..160] (center 160, 130)
+    const p1 = result.pages[0]!;
+    assert.deepEqual(p1.diagnostics, []);
+    assert.ok(p1.png !== undefined);
+
+    const outerGroup = p1.nodes.find((n) => n.authorId === "outer-group");
+    assertCornersClose(outerGroup?.corners, [
+      { x: 190, y: 70 },
+      { x: 190, y: 190 },
+      { x: 130, y: 190 },
+      { x: 130, y: 70 },
+    ]);
+    assertScreenBoxClose(outerGroup?.screenBox, {
+      x: 130,
+      y: 70,
+      width: 60,
+      height: 120,
+    });
+
+    const offsetRect = p1.nodes.find((n) => n.authorId === "offset-rect");
+    assertCornersClose(offsetRect?.corners, [
+      { x: 190, y: 70 },
+      { x: 190, y: 130 },
+      { x: 170, y: 130 },
+      { x: 170, y: 70 },
+    ]);
+    assertScreenBoxClose(offsetRect?.screenBox, {
+      x: 170,
+      y: 70,
+      width: 20,
+      height: 60,
+    });
+
+    const halfDiag = 20 * Math.SQRT2;
+    const rotatedChild = p1.nodes.find((n) => n.authorId === "rotated-child");
+    assertCornersClose(rotatedChild?.corners, [
+      { x: 150 + halfDiag, y: 170 },
+      { x: 150, y: 170 + halfDiag },
+      { x: 150 - halfDiag, y: 170 },
+      { x: 150, y: 170 - halfDiag },
+    ]);
+    assertScreenBoxClose(rotatedChild?.screenBox, {
+      x: 150 - halfDiag,
+      y: 170 - halfDiag,
+      width: 2 * halfDiag,
+      height: 2 * halfDiag,
+    });
+
+    // Page 2: nested 90° groups with distinct centers ((130, 110) inside (160, 130))
+    const p2 = result.pages[1]!;
+    assert.deepEqual(p2.diagnostics, []);
+    assert.ok(p2.png !== undefined);
+
+    const childGroup = p2.nodes.find((n) => n.authorId === "child-group");
+    const leafRect = p2.nodes.find((n) => n.authorId === "leaf-rect");
+    const expectedNestedCorners = [
+      { x: 210, y: 110 },
+      { x: 150, y: 110 },
+      { x: 150, y: 90 },
+      { x: 210, y: 90 },
+    ];
+    const expectedNestedBox = { x: 150, y: 90, width: 60, height: 20 };
+    assertCornersClose(childGroup?.corners, expectedNestedCorners);
+    assertScreenBoxClose(childGroup?.screenBox, expectedNestedBox);
+    assertCornersClose(leafRect?.corners, expectedNestedCorners);
+    assertScreenBoxClose(leafRect?.screenBox, expectedNestedBox);
+
+    // Page 3: 30° group [100..260, 80..160] (center 180, 120) with flipH + 60° child [100..180, 80..120] (center 140, 100)
+    const p3 = result.pages[2]!;
+    assert.deepEqual(p3.diagnostics, []);
+    assert.ok(p3.png !== undefined);
+
+    const flippedChild = p3.nodes.find((n) => n.authorId === "flipped-child");
+    // Local flipH swaps left/right around (140, 100), then +60° + 30° = +90° total rotation,
+    // while child center (140, 100) rotates +30° around group center (180, 120):
+    // dc = (-40, -20) -> (180 - 40*cos30 + 20*sin30, 120 - 40*sin30 - 20*cos30)
+    const cos30 = Math.cos(Math.PI / 6);
+    const sin30 = 0.5;
+    const childCenterX = 180 + (-40 * cos30 - -20 * sin30);
+    const childCenterY = 120 + (-40 * sin30 + -20 * cos30);
+    // Original corners after flipH around (140, 100): (+40,-20), (-40,-20), (-40,+20), (+40,+20)
+    // Rotated by 90° CW: (dx, dy) -> (-dy, dx): (+20,+40), (+20,-40), (-20,-40), (-20,+40)
+    assertCornersClose(flippedChild?.corners, [
+      { x: childCenterX + 20, y: childCenterY + 40 },
+      { x: childCenterX + 20, y: childCenterY - 40 },
+      { x: childCenterX - 20, y: childCenterY - 40 },
+      { x: childCenterX - 20, y: childCenterY + 40 },
+    ]);
+    assertScreenBoxClose(flippedChild?.screenBox, {
+      x: childCenterX - 20,
+      y: childCenterY - 40,
+      width: 40,
+      height: 80,
+    });
+  });
+
+  it("never loads @resvg/resvg-js, pngjs, or jpeg-js when calling JSX build, document build, or resolve + emit with PNG and JPEG images", () => {
+    const pngBase64 =
+      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/n1sAAAAASUVORK5CYII=";
+    const jpegBase64 =
+      "/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAP//////////////////////////////////////////////////////////////////////////////////////2wBDAf//////////////////////////////////////////////////////////////////////////////////////wAARCAABAAEDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAX/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/9oADAMBAAIQAxAAAAFR/8QAFBABAAAAAAAAAAAAAAAAAAAAAP/aAAgBAQABBQJ//8QAFBABAAAAAAAAAAAAAAAAAAAAAP/aAAgBAwEBPwF//8QAFBABAAAAAAAAAAAAAAAAAAAAAP/aAAgBAgEBPwF//8QAFBABAAAAAAAAAAAAAAAAAAAAAP/aAAgBAQAGPwJ//8QAFBABAAAAAAAAAAAAAAAAAAAAAP/aAAgBAQABPyF//9oADAMBAAIRAxEAPwD/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/9oACAEBAAE/IV//2Q==";
     const jsxOut = runIsolatedScript(`
 import { registerHooks } from "node:module";
 import { createElement } from "react";
@@ -355,12 +576,8 @@ registerHooks({
 });
 
 const { build, Deck, Image, Slide, Shape } = await import("@react-pptx/react-pptx");
-const pngBytes = new Uint8Array(
-  Buffer.from(
-    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/n1sAAAAASUVORK5CYII=",
-    "base64",
-  ),
-);
+const pngBytes = new Uint8Array(Buffer.from("${pngBase64}", "base64"));
+const jpegBytes = new Uint8Array(Buffer.from("${jpegBase64}", "base64"));
 const result = await build(
   createElement(
     Deck,
@@ -369,7 +586,8 @@ const result = await build(
       Slide,
       { id: "s1" },
       createElement(Shape, { x: 10, y: 10, width: 40, height: 40 }),
-      createElement(Image, { x: 60, y: 10, width: 40, height: 40, src: pngBytes }),
+      createElement(Image, { x: 60, y: 10, width: 40, height: 40, src: pngBytes, fit: "cover" }),
+      createElement(Image, { x: 110, y: 10, width: 40, height: 40, src: jpegBytes, crop: { left: 0.2 }, flipH: true, style: { rotate: 15, opacity: 0.8 } }),
     ),
   ),
 );
@@ -404,17 +622,14 @@ const { build, deck, image, slide, shape } = await import("@react-pptx/react-ppt
 const { createResolver, emit } = await import("@react-pptx/react-pptx/build");
 void createResolver;
 void emit;
-const pngBytes = new Uint8Array(
-  Buffer.from(
-    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/n1sAAAAASUVORK5CYII=",
-    "base64",
-  ),
-);
+const pngBytes = new Uint8Array(Buffer.from("${pngBase64}", "base64"));
+const jpegBytes = new Uint8Array(Buffer.from("${jpegBase64}", "base64"));
 const result = await build(
   deck({ width: 320, height: 180 }).append(
     slide({ id: "s1" }).append(
       shape({ x: 10, y: 10, width: 40, height: 40 }),
-      image({ x: 60, y: 10, width: 40, height: 40, src: pngBytes }),
+      image({ x: 60, y: 10, width: 40, height: 40, src: pngBytes, fit: "contain" }),
+      image({ x: 110, y: 10, width: 40, height: 40, src: jpegBytes, flipV: true, style: { rotate: 30 } }),
     ),
   ),
 );
@@ -424,6 +639,50 @@ if (!(result.pptx instanceof Uint8Array) || result.pptx.byteLength === 0) {
 process.stdout.write("ok");
 `);
     assert.equal(docBuildOut, "ok");
+
+    const resolveEmitOut = runIsolatedScript(`
+import { registerHooks } from "node:module";
+
+registerHooks({
+  resolve(specifier, context, nextResolve) {
+    if (
+      specifier === "react" ||
+      specifier === "react-reconciler" ||
+      specifier.startsWith("react/") ||
+      specifier.includes("@resvg/resvg-js") ||
+      specifier.includes("pngjs") ||
+      specifier.includes("jpeg-js") ||
+      specifier.includes("@react-pptx/validation")
+    ) {
+      throw new Error("resolve + emit loaded forbidden dependency: " + specifier);
+    }
+    return nextResolve(specifier, context);
+  },
+});
+
+const { imageCapability } = await import("@react-pptx/capabilities/image");
+const { createResolver, emit } = await import("@react-pptx/core/build");
+const { createDeckNode, createSlideNode } = await import("@react-pptx/core/document");
+const { createImageNode } = await import("@react-pptx/capabilities/image");
+
+const pngBytes = new Uint8Array(Buffer.from("${pngBase64}", "base64"));
+const jpegBytes = new Uint8Array(Buffer.from("${jpegBase64}", "base64"));
+const d = createDeckNode({ width: 320, height: 180 });
+const s = createSlideNode({ id: "s1" });
+s.append(
+  createImageNode({ x: 10, y: 10, width: 80, height: 40, src: pngBytes, fit: "contain" }),
+  createImageNode({ x: 100, y: 10, width: 80, height: 40, src: jpegBytes, crop: { top: 0.25 }, flipH: true }),
+);
+d.append(s);
+
+const resolution = createResolver([imageCapability])({ children: [d] });
+const emitted = emit(resolution);
+if (!(emitted.pptx instanceof Uint8Array) || emitted.pptx.byteLength === 0) {
+  throw new Error("Expected PPTX output from resolve + emit");
+}
+process.stdout.write("ok");
+`);
+    assert.equal(resolveEmitOut, "ok");
   });
 
   it("never loads react or react-reconciler when calling plain document preview", () => {

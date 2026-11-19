@@ -7,6 +7,7 @@ import {
   resolvedColorXml,
   textStyleKeys,
   xmlEscape,
+  type CapabilityPresentationContribution,
   type ColorValue,
   type Font,
   type FontFaceStyle,
@@ -23,9 +24,15 @@ import * as fontkit from "fontkit";
 // @ts-expect-error -- linebreak does not provide types; declare the breakpoint interface used below.
 import LineBreakerImplementation from "linebreak";
 
-import type { FontEmbeddingMode, FontEmbeddingUse } from "./font-embedding.ts";
+import {
+  fontPresentationContributions,
+  requiresFontGlyph,
+  type FontEmbeddingMode,
+  type FontEmbeddingUse,
+} from "./font-embedding.ts";
 import { matchesFontFamily } from "./font-family.ts";
 import { textShadowXml } from "./visual.ts";
+export { requiresFontGlyph } from "./font-embedding.ts";
 export type {
   FontReference,
   FontSize,
@@ -60,11 +67,6 @@ export type TextResourceClaim = {
   readonly characters: string;
 };
 
-/** Retains control characters and default ignorable code points in text stream without requiring standalone cmap glyphs. */
-export function requiresFontGlyph(character: string): boolean {
-  return !/^[\p{Cc}\p{Default_Ignorable_Code_Point}]$/u.test(character);
-}
-
 export type TextServiceResult = {
   readonly xml: string;
   readonly text: string;
@@ -77,6 +79,31 @@ export type TextServiceResult = {
     readonly code: string;
     readonly message: string;
   }[];
+};
+
+/** Resolve-stage text facts cached inside capability closures for independent emit and paint. */
+export type ResolvedTextBody = {
+  readonly paragraphs: readonly Paragraph[];
+  readonly style: ResolvedTextStyle | TextStyle;
+  readonly verticalAlign: TextStyle["verticalAlign"];
+  readonly layout?: TextLayoutRequest;
+  readonly destination: TextBodyDestination;
+  readonly text: string;
+  readonly paragraphCount: number;
+  readonly resourceClaims: readonly TextResourceClaim[];
+  readonly fontUses: readonly FontEmbeddingUse[];
+  readonly measurement?: { readonly width: number; readonly height: number };
+  readonly measuredLayout?: MeasuredTextLayout;
+  readonly warnings: readonly {
+    readonly code: string;
+    readonly message: string;
+  }[];
+  readonly missingGlyphErrors: readonly string[];
+};
+
+export type EmittedTextBody = {
+  readonly xml: string;
+  readonly presentationContributions: readonly CapabilityPresentationContribution[];
 };
 
 export type TextLayoutMeasurement = {
@@ -927,6 +954,7 @@ function textResourceClaims(
   readonly resourceClaims: TextResourceClaim[];
   readonly fontUses: FontEmbeddingUse[];
   readonly warnings: { readonly code: string; readonly message: string }[];
+  readonly missingGlyphErrors: string[];
 } {
   const used = new Map<
     string,
@@ -960,6 +988,7 @@ function textResourceClaims(
   const resourceClaims: TextResourceClaim[] = [];
   const fontUses: FontEmbeddingUse[] = [];
   const warnings: { code: string; message: string }[] = [];
+  const missingGlyphErrors: string[] = [];
   for (const [key, entry] of used) {
     for (const font of entry.fontPolicies.values()) {
       fontUses.push({
@@ -1002,13 +1031,14 @@ function textResourceClaims(
                 code: "font-missing-glyph",
                 message,
               });
+              missingGlyphErrors.push(message);
             }
           }
         }
       }
     }
   }
-  return { resourceClaims, fontUses, warnings };
+  return { resourceClaims, fontUses, warnings, missingGlyphErrors };
 }
 
 function alignmentValue(value: TextAlignment | undefined): string | undefined {
@@ -1994,8 +2024,44 @@ export function parseTextContent(
 
 export const parseTextParagraphs = parseTextContent;
 
-/** Generates PresentationML txBody XML and resource claims directly from pre-parsed paragraphs and styles. */
-export function writeTextBodyFromParagraphs(
+function validateEmittableParagraphs(
+  paragraphs: readonly Paragraph[],
+  theme: ThemeContext,
+): void {
+  for (const paragraph of paragraphs) {
+    if (paragraph.style.list?.type === "bullet") {
+      escapedXml(paragraph.style.list.character ?? "•");
+    }
+    if (paragraph.runs.length === 0) {
+      if (paragraph.endStyle.lang !== undefined) {
+        escapedXml(paragraph.endStyle.lang);
+      }
+      centipoints(fontSizePoints(paragraph.endStyle.fontSize));
+      continue;
+    }
+    for (const run of paragraph.runs) {
+      escapedXml(run.text);
+      for (const font of normalizedFonts(run.style)) {
+        escapedXml(font.family);
+      }
+      if (run.style.lang !== undefined) {
+        escapedXml(run.style.lang);
+      }
+      if (
+        run.style.textShadow !== undefined &&
+        run.style.textShadow !== "none"
+      ) {
+        textShadowXml(theme, run.style.textShadow);
+      }
+    }
+  }
+}
+
+/**
+ * Resolves text layout, wrapping metrics, overset diagnostics, plain-text observations,
+ * and font resource claims from pre-parsed paragraphs without assigning emit-only field IDs.
+ */
+export function resolveTextBody(
   paragraphs: readonly Paragraph[],
   style: ResolvedTextStyle | TextStyle,
   theme: ThemeContext,
@@ -2003,31 +2069,13 @@ export function writeTextBodyFromParagraphs(
   layout?: TextLayoutRequest,
   destination: TextBodyDestination = "text-box",
   embedFonts?: FontEmbeddingMode,
-  createFieldId?: () => string,
-): TextServiceResult {
-  const resolvedParagraphs =
-    createFieldId !== undefined
-      ? paragraphs.map((paragraph) => ({
-          ...paragraph,
-          runs: paragraph.runs.map((run) =>
-            run.field !== undefined
-              ? {
-                  ...run,
-                  field: {
-                    ...run.field,
-                    id: createFieldId(),
-                  },
-                }
-              : run,
-          ),
-        }))
-      : paragraphs;
-  const runs = resolvedParagraphs.flatMap((paragraph) =>
+): ResolvedTextBody {
+  const runs = paragraphs.flatMap((paragraph) =>
     paragraph.runs.length > 0
       ? paragraph.runs
       : [{ text: "", style: paragraph.endStyle }],
   );
-  const listRuns = resolvedParagraphs.flatMap((paragraph) => {
+  const listRuns = paragraphs.flatMap((paragraph) => {
     const list = paragraph.style.list;
     if (list === undefined) return [];
     const characters =
@@ -2039,15 +2087,13 @@ export function writeTextBodyFromParagraphs(
       },
     ];
   });
-  const { resourceClaims, fontUses, warnings } = textResourceClaims(
-    [...runs, ...listRuns],
-    embedFonts,
-  );
+  const { resourceClaims, fontUses, warnings, missingGlyphErrors } =
+    textResourceClaims([...runs, ...listRuns], embedFonts);
   let measured: ReturnType<typeof measureParagraphs> | undefined;
   if (layout !== undefined) {
     try {
       measured = measureParagraphs(
-        resolvedParagraphs,
+        paragraphs,
         layout.width === "max-content" ? Number.MAX_VALUE : layout.width,
       );
     } catch (error) {
@@ -2088,23 +2134,26 @@ export function writeTextBodyFromParagraphs(
   }
   const outputParagraphs =
     layout?.contentSized === true && measured !== undefined
-      ? resolvedParagraphs.map((paragraph, index) => ({
+      ? paragraphs.map((paragraph, index) => ({
           ...paragraph,
           style: {
             ...paragraph.style,
             lineHeight: measured.paragraphs[index]!.lineHeight,
           },
         }))
-      : resolvedParagraphs;
+      : paragraphs;
+  validateEmittableParagraphs(outputParagraphs, theme);
   const text = outputParagraphs
-    .map(({ runs }) => runs.map(({ text: part }) => part).join(""))
+    .map(({ runs: paragraphRuns }) =>
+      paragraphRuns.map(({ text: part }) => part).join(""),
+    )
     .join("\n");
-  const xml =
-    destination === "table-cell"
-      ? `<a:txBody><a:bodyPr/><a:lstStyle/>${outputParagraphs.map((paragraph) => paragraphXml(paragraph, theme)).join("")}</a:txBody>`
-      : `<p:txBody><a:bodyPr wrap="${style.textWrap === "nowrap" ? "none" : "square"}" lIns="${pxToEmu(layout?.insets?.left ?? 0)}" tIns="${pxToEmu(layout?.insets?.top ?? 0)}" rIns="${pxToEmu(layout?.insets?.right ?? 0)}" bIns="${pxToEmu(layout?.insets?.bottom ?? 0)}" anchor="${bodyAnchor(style.verticalAlign ?? verticalAlign)}"><a:noAutofit/></a:bodyPr><a:lstStyle/>${outputParagraphs.map((paragraph) => paragraphXml(paragraph, theme)).join("")}</p:txBody>`;
   return {
-    xml,
+    paragraphs: outputParagraphs,
+    style,
+    verticalAlign,
+    ...(layout === undefined ? {} : { layout }),
+    destination,
     text,
     paragraphCount: outputParagraphs.length,
     resourceClaims,
@@ -2116,6 +2165,100 @@ export function writeTextBodyFromParagraphs(
           measuredLayout: measured,
         }),
     warnings,
+    missingGlyphErrors,
+  };
+}
+
+/**
+ * Emits PresentationML txBody XML and font embedding contributions from resolved text facts.
+ * Preserves native paragraph/run structure without converting soft wraps into hard line breaks.
+ */
+export function emitTextBody(
+  resolved: ResolvedTextBody,
+  theme: ThemeContext,
+  options: {
+    readonly createFieldId?: () => string;
+    readonly embedFonts?: FontEmbeddingMode;
+  } = {},
+): EmittedTextBody {
+  const { createFieldId, embedFonts } = options;
+  if (
+    (embedFonts === "full" || embedFonts === "subset") &&
+    resolved.missingGlyphErrors.length > 0
+  ) {
+    throw new CapabilityError(
+      "font-missing-glyph",
+      resolved.missingGlyphErrors[0]!,
+    );
+  }
+  const emittedParagraphs =
+    createFieldId !== undefined
+      ? resolved.paragraphs.map((paragraph) => ({
+          ...paragraph,
+          runs: paragraph.runs.map((run) =>
+            run.field !== undefined
+              ? {
+                  ...run,
+                  field: {
+                    ...run.field,
+                    id: createFieldId(),
+                  },
+                }
+              : run,
+          ),
+        }))
+      : resolved.paragraphs;
+  const { style, verticalAlign, layout, destination } = resolved;
+  const xml =
+    destination === "table-cell"
+      ? `<a:txBody><a:bodyPr/><a:lstStyle/>${emittedParagraphs.map((paragraph) => paragraphXml(paragraph, theme)).join("")}</a:txBody>`
+      : `<p:txBody><a:bodyPr wrap="${style.textWrap === "nowrap" ? "none" : "square"}" lIns="${pxToEmu(layout?.insets?.left ?? 0)}" tIns="${pxToEmu(layout?.insets?.top ?? 0)}" rIns="${pxToEmu(layout?.insets?.right ?? 0)}" bIns="${pxToEmu(layout?.insets?.bottom ?? 0)}" anchor="${bodyAnchor(style.verticalAlign ?? verticalAlign)}"><a:noAutofit/></a:bodyPr><a:lstStyle/>${emittedParagraphs.map((paragraph) => paragraphXml(paragraph, theme)).join("")}</p:txBody>`;
+  return {
+    xml,
+    presentationContributions: fontPresentationContributions(
+      resolved.fontUses,
+      embedFonts,
+    ),
+  };
+}
+
+/** Generates PresentationML txBody XML and resource claims directly from pre-parsed paragraphs and styles. */
+export function writeTextBodyFromParagraphs(
+  paragraphs: readonly Paragraph[],
+  style: ResolvedTextStyle | TextStyle,
+  theme: ThemeContext,
+  verticalAlign: TextStyle["verticalAlign"] = "top",
+  layout?: TextLayoutRequest,
+  destination: TextBodyDestination = "text-box",
+  embedFonts?: FontEmbeddingMode,
+  createFieldId?: () => string,
+): TextServiceResult {
+  const resolved = resolveTextBody(
+    paragraphs,
+    style,
+    theme,
+    verticalAlign,
+    layout,
+    destination,
+    embedFonts,
+  );
+  const emitted = emitTextBody(resolved, theme, {
+    ...(createFieldId === undefined ? {} : { createFieldId }),
+    ...(embedFonts === undefined ? {} : { embedFonts }),
+  });
+  return {
+    xml: emitted.xml,
+    text: resolved.text,
+    paragraphCount: resolved.paragraphCount,
+    resourceClaims: resolved.resourceClaims,
+    fontUses: resolved.fontUses,
+    ...(resolved.measurement === undefined
+      ? {}
+      : { measurement: resolved.measurement }),
+    ...(resolved.measuredLayout === undefined
+      ? {}
+      : { measuredLayout: resolved.measuredLayout }),
+    warnings: resolved.warnings,
   };
 }
 
@@ -2161,6 +2304,7 @@ export function writeChartTextProperties(
   "text" | "resourceClaims" | "fontUses" | "warnings"
 > & {
   readonly xml: string;
+  readonly missingGlyphErrors: readonly string[];
 } {
   const style = readTextStyle(styleValue, label, theme);
   const runStyle: RunStyle = {
@@ -2179,10 +2323,8 @@ export function writeChartTextProperties(
   validateRunStyle(runStyle);
   const runs = texts.map((text) => ({ text, style: runStyle }));
   for (const text of texts) escapedXml(text);
-  const { resourceClaims, fontUses, warnings } = textResourceClaims(
-    runs,
-    embedFonts,
-  );
+  const { resourceClaims, fontUses, warnings, missingGlyphErrors } =
+    textResourceClaims(runs, embedFonts);
   const defaultProperties = runPropertiesXml(runStyle, "a:defRPr", theme);
   const outputText = texts.join("\n");
   const lineSpacing =
@@ -2204,6 +2346,7 @@ export function writeChartTextProperties(
     resourceClaims,
     fontUses,
     warnings,
+    missingGlyphErrors,
   };
 }
 
@@ -2219,6 +2362,7 @@ export function writeChartTitle(
   "text" | "resourceClaims" | "fontUses" | "warnings"
 > & {
   readonly xml: string;
+  readonly missingGlyphErrors: readonly string[];
 } {
   const style = readTextStyle(styleValue, label, theme);
   const runStyle: RunStyle = {
@@ -2236,10 +2380,8 @@ export function writeChartTitle(
   };
   validateRunStyle(runStyle);
   const escapedText = escapedXml(text);
-  const { resourceClaims, fontUses, warnings } = textResourceClaims(
-    [{ text, style: runStyle }],
-    embedFonts,
-  );
+  const { resourceClaims, fontUses, warnings, missingGlyphErrors } =
+    textResourceClaims([{ text, style: runStyle }], embedFonts);
   const runProperties = runPropertiesXml(runStyle, "a:rPr", theme);
   const defaultProperties = runPropertiesXml(runStyle, "a:defRPr", theme);
   const lineSpacing =
@@ -2262,6 +2404,7 @@ export function writeChartTitle(
     resourceClaims,
     fontUses,
     warnings,
+    missingGlyphErrors,
   };
 }
 

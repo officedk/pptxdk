@@ -2304,6 +2304,7 @@ export function writeChartTextProperties(
   "text" | "resourceClaims" | "fontUses" | "warnings"
 > & {
   readonly xml: string;
+  readonly missingGlyphErrors: readonly string[];
 } {
   const style = readTextStyle(styleValue, label, theme);
   const runStyle: RunStyle = {
@@ -2322,10 +2323,8 @@ export function writeChartTextProperties(
   validateRunStyle(runStyle);
   const runs = texts.map((text) => ({ text, style: runStyle }));
   for (const text of texts) escapedXml(text);
-  const { resourceClaims, fontUses, warnings } = textResourceClaims(
-    runs,
-    embedFonts,
-  );
+  const { resourceClaims, fontUses, warnings, missingGlyphErrors } =
+    textResourceClaims(runs, embedFonts);
   const defaultProperties = runPropertiesXml(runStyle, "a:defRPr", theme);
   const outputText = texts.join("\n");
   const lineSpacing =
@@ -2347,6 +2346,7 @@ export function writeChartTextProperties(
     resourceClaims,
     fontUses,
     warnings,
+    missingGlyphErrors,
   };
 }
 
@@ -2362,6 +2362,7 @@ export function writeChartTitle(
   "text" | "resourceClaims" | "fontUses" | "warnings"
 > & {
   readonly xml: string;
+  readonly missingGlyphErrors: readonly string[];
 } {
   const style = readTextStyle(styleValue, label, theme);
   const runStyle: RunStyle = {
@@ -2379,10 +2380,8 @@ export function writeChartTitle(
   };
   validateRunStyle(runStyle);
   const escapedText = escapedXml(text);
-  const { resourceClaims, fontUses, warnings } = textResourceClaims(
-    [{ text, style: runStyle }],
-    embedFonts,
-  );
+  const { resourceClaims, fontUses, warnings, missingGlyphErrors } =
+    textResourceClaims([{ text, style: runStyle }], embedFonts);
   const runProperties = runPropertiesXml(runStyle, "a:rPr", theme);
   const defaultProperties = runPropertiesXml(runStyle, "a:defRPr", theme);
   const lineSpacing =
@@ -2405,6 +2404,7 @@ export function writeChartTitle(
     resourceClaims,
     fontUses,
     warnings,
+    missingGlyphErrors,
   };
 }
 

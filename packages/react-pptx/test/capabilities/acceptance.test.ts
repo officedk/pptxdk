@@ -43,10 +43,7 @@ import {
   BuildQueryError,
   CapabilityError,
   CommonNode,
-  Deck,
-  Slide,
   createMorphScope,
-  expandDocument,
   type BoundObjectCapabilityModule,
   type CapabilityInput,
   type CapabilityModule,
@@ -60,6 +57,7 @@ import { parseCapabilityLayoutContract } from "@react-pptx/core/capability";
 import { RichTextContainer } from "@react-pptx/core/document";
 import { emit, pxToEmu, xmlEscape } from "@react-pptx/emit";
 import { paint } from "@react-pptx/preview";
+import { Deck, Slide, expandDocument } from "@react-pptx/react";
 import { validatePptx } from "@react-pptx/validation";
 import { strFromU8, unzipSync } from "fflate";
 import { PNG } from "pngjs";

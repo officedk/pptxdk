@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 
 import { Chart } from "@react-pptx/capabilities/chart-elements";
 import { chart, deck, font, slide } from "@react-pptx/capabilities/document";
-import { Deck, Slide } from "@react-pptx/core";
+import { Deck, Slide } from "@react-pptx/react";
 import { strFromU8, unzipSync } from "fflate";
 import { PNG } from "pngjs";
 import { createElement } from "react";

@@ -12,7 +12,8 @@ export const { build } = createStagePipeline([
   motionCapability,
 ]);
 
-export { Deck, formatBaseline, targets } from "@react-pptx/core";
+export { formatBaseline, targets } from "@react-pptx/core";
+export { Deck } from "@react-pptx/react";
 export { Box, type BoxProps } from "@react-pptx/capabilities/box-elements";
 export { Slide } from "./slide.ts";
 export { font, textCapability } from "@react-pptx/capabilities/text";

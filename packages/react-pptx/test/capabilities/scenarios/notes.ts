@@ -12,7 +12,7 @@ import {
 import { Notes } from "@react-pptx/capabilities/notes-elements";
 import { Shape } from "@react-pptx/capabilities/shape-elements";
 import { P, SlideNumber, Span } from "@react-pptx/capabilities/text-elements";
-import { Deck, Slide } from "@react-pptx/core";
+import { Deck, Slide } from "@react-pptx/react";
 import { strFromU8, unzipSync } from "fflate";
 import { PNG } from "pngjs";
 import { createElement } from "react";

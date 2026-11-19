@@ -1,10 +1,9 @@
+import { BuildError, type Diagnostic } from "@react-pptx/core";
+import type { CommonContainer, CommonNode } from "@react-pptx/core/document";
 import type { ReactNode } from "react";
 
 import { assertAppendableAuthorIds } from "#/append.ts";
-import { BuildError } from "#/diagnostics.ts";
-import type { CommonContainer, CommonNode } from "#/document.ts";
-import { expandReactDocument, expandReactFragment } from "#/host/reconciler.ts";
-import type { Diagnostic } from "#/types.ts";
+import { expandReactDocument, expandReactFragment } from "#/reconciler.ts";
 
 function diagnostic(path: string, code: string, message: string): Diagnostic {
   return { severity: "error", path, code, message };
@@ -99,3 +98,11 @@ export async function appendJSX(
     throw appendFailure(error);
   }
 }
+
+export { Deck, Section, Slide } from "#/elements.ts";
+export type {
+  DeckProps,
+  ElementProps,
+  SectionProps,
+  SlideProps,
+} from "#/elements.ts";

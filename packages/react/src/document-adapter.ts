@@ -1,39 +1,17 @@
-import type { DeclarationChild, DeclarationText } from "#/declaration.ts";
+import { CommonNode } from "@react-pptx/core/document";
 import {
+  hostNodeCreator,
+  HostTextNode,
   insertDeclarationChild,
   removeDeclarationChild,
   replaceDeclarationProps,
   setDeclarationText,
-} from "#/document-internals.ts";
-import {
-  CommonNode,
-  hostNodeCreator,
+  type DeclarationChild,
   type DocumentNodeCreator,
-} from "#/document.ts";
+} from "@react-pptx/core/host";
 
 /** Renderer-side root during a single React expansion; it does not own a second document tree. */
 export type HostContainer = { children: DeclarationChild[] };
-
-/** A literal text instance reconciled inside a rich-text common node. */
-export class ReactTextNode implements DeclarationText {
-  #text: string;
-
-  constructor(text: string) {
-    this.#text = text;
-  }
-
-  get type(): "#text" {
-    return "#text";
-  }
-
-  get text(): string {
-    return this.#text;
-  }
-
-  [setDeclarationText](text: string): void {
-    this.#text = text;
-  }
-}
 
 /**
  * Nodes whose React tree has been handed to a caller. Renderer teardown and late React work must
@@ -71,13 +49,13 @@ export function createHostInstance(
   return new CommonNode(declarationKind(type), type, declaration);
 }
 
-export function createHostText(text: string): ReactTextNode {
-  return new ReactTextNode(text);
+export function createHostText(text: string): HostTextNode {
+  return new HostTextNode(text);
 }
 
-export function updateHostText(text: ReactTextNode, next: string): void {
+export function updateHostText(text: HostTextNode, next: string): void {
   if (handedOff.has(text)) return;
-  text[setDeclarationText](next);
+  setDeclarationText(text, next);
 }
 
 export function updateHostInstance(
@@ -87,7 +65,7 @@ export function updateHostInstance(
   if (handedOff.has(instance)) return;
   // React commits all current JSX props at once, unlike author updates that patch only provided
   // fields. Replace the declaration so fields absent from this commit do not survive.
-  instance[replaceDeclarationProps](withoutHostMetadata(props));
+  replaceDeclarationProps(instance, withoutHostMetadata(props));
 }
 
 export function attachHostChild(
@@ -96,7 +74,7 @@ export function attachHostChild(
   before?: DeclarationChild,
 ): void {
   if (handedOff.has(parent) || handedOff.has(child)) return;
-  parent[insertDeclarationChild](child, before);
+  insertDeclarationChild(parent, child, before);
 }
 
 export function detachHostChild(
@@ -104,7 +82,7 @@ export function detachHostChild(
   child: DeclarationChild,
 ): void {
   if (handedOff.has(parent) || handedOff.has(child)) return;
-  parent[removeDeclarationChild](child);
+  removeDeclarationChild(parent, child);
 }
 
 export function insertRootChild(

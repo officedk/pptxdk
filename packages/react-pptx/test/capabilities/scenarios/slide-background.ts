@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { deck, shape, slide } from "@react-pptx/capabilities/document";
 import { linearGradient } from "@react-pptx/capabilities/shape";
 import { Shape } from "@react-pptx/capabilities/shape-elements";
-import { Deck, Slide } from "@react-pptx/core";
+import { Deck, Slide } from "@react-pptx/react";
 import { PNG } from "pngjs";
 import { createElement } from "react";
 

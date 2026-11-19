@@ -1,4 +1,3 @@
-import { expandDocument } from "@react-pptx/core";
 import {
   createResolver,
   type BuildOptions,
@@ -9,6 +8,7 @@ import {
 } from "@react-pptx/core/build";
 import { CommonNode } from "@react-pptx/core/document";
 import { emit, validateOptions } from "@react-pptx/emit";
+import { expandDocument } from "@react-pptx/react";
 import type { ReactNode } from "react";
 
 /**

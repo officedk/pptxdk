@@ -44,7 +44,7 @@ export async function preview(
       pages,
     });
   }
-  const { expandDocument } = await import("@react-pptx/core");
+  const { expandDocument } = await import("@react-pptx/react");
   const document = await expandDocument(input, signalOption);
   const resolution = resolveDocument(document, signalOption);
   const { pages } = paint(resolution, options);

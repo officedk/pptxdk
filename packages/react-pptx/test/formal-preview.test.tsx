@@ -608,6 +608,8 @@ registerHooks({
       specifier === "react" ||
       specifier === "react-reconciler" ||
       specifier.startsWith("react/") ||
+      specifier === "@react-pptx/react" ||
+      specifier.startsWith("@react-pptx/react/") ||
       specifier.includes("@react-pptx/preview") ||
       specifier.includes("@resvg/resvg-js") ||
       specifier.includes("pngjs") ||
@@ -651,6 +653,8 @@ registerHooks({
       specifier === "react" ||
       specifier === "react-reconciler" ||
       specifier.startsWith("react/") ||
+      specifier === "@react-pptx/react" ||
+      specifier.startsWith("@react-pptx/react/") ||
       specifier.includes("@react-pptx/preview") ||
       specifier.includes("@resvg/resvg-js") ||
       specifier.includes("pngjs") ||
@@ -699,6 +703,8 @@ registerHooks({
       specifier === "react" ||
       specifier === "react-reconciler" ||
       specifier.startsWith("react/") ||
+      specifier === "@react-pptx/react" ||
+      specifier.startsWith("@react-pptx/react/") ||
       specifier.includes("@react-pptx/validation")
     ) {
       throw new Error("Plain document preview loaded React or test dependency: " + specifier);

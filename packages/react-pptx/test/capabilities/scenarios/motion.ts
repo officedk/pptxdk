@@ -42,16 +42,13 @@ import { Shape } from "@react-pptx/capabilities/shape-elements";
 import { Text } from "@react-pptx/capabilities/text-elements";
 import {
   BuildError,
-  Deck,
-  expandDocument,
-  Section,
-  Slide,
   targets,
   type BuildOptions,
   type CommonNode,
 } from "@react-pptx/core";
 import { createResolver } from "@react-pptx/core/build";
 import { emit } from "@react-pptx/emit";
+import { Deck, expandDocument, Section, Slide } from "@react-pptx/react";
 import { validatePptx } from "@react-pptx/validation";
 import { strFromU8, unzipSync } from "fflate";
 import { PNG } from "pngjs";

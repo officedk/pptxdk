@@ -1,7 +1,8 @@
 import { documentCapabilities } from "@react-pptx/capabilities/document";
-import { CommonNode, expandDocument } from "@react-pptx/core";
+import { CommonNode } from "@react-pptx/core";
 import { emit } from "@react-pptx/emit";
 import type { PreviewOptions, PreviewResult } from "@react-pptx/preview";
+import { expandDocument } from "@react-pptx/react";
 import type { ReactNode } from "react";
 
 import { createStagePipeline } from "./compose.ts";
@@ -68,8 +69,6 @@ export {
   AuthorQueryError,
   BuildError,
   BuildQueryError,
-  Deck,
-  Section,
   darker,
   defaultTheme,
   defineTheme,
@@ -79,6 +78,7 @@ export {
   nativeColorSlots,
   targets,
 } from "@react-pptx/core";
+export { Deck, Section } from "@react-pptx/react";
 export { Slide } from "./slide.ts";
 export {
   after,
@@ -200,7 +200,7 @@ export type {
   PathOptions,
   PresetGeometry,
 } from "@react-pptx/capabilities";
-export { appendJSX, expandDocument } from "@react-pptx/core";
+export { appendJSX, expandDocument } from "@react-pptx/react";
 export {
   CommonContainer,
   CommonNode,
@@ -208,11 +208,15 @@ export {
 } from "@react-pptx/core";
 export type {
   AppendJSXOptions,
+  DeckProps,
+  ExpandDocumentOptions,
+  ExpandedDocument,
+  SectionProps,
+} from "@react-pptx/react";
+export type {
   DocumentProps,
   DocumentStyle,
   DocumentUpdate,
-  ExpandDocumentOptions,
-  ExpandedDocument,
   RichTextItem,
   StyleUpdate,
 } from "@react-pptx/core";
@@ -223,7 +227,6 @@ export type {
   BuildReport,
   BuildResult,
   ColorValue,
-  DeckProps,
   Diagnostic,
   EmitOptions,
   EmitResult,
@@ -254,7 +257,6 @@ export type {
   SlideQuery,
   SlideBackground,
   LinkTarget,
-  SectionProps,
   Target,
   Extension,
   NativeColorSlot,

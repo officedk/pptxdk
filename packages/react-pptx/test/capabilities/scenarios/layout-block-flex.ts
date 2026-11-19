@@ -12,7 +12,8 @@ import {
 } from "@react-pptx/capabilities/document";
 import { Shape } from "@react-pptx/capabilities/shape-elements";
 import { Text } from "@react-pptx/capabilities/text-elements";
-import { Deck, Slide, type CommonNode } from "@react-pptx/core";
+import type { CommonNode } from "@react-pptx/core";
+import { Deck, Slide } from "@react-pptx/react";
 import { createElement, type ReactNode } from "react";
 
 import type { CapabilityScenario } from "../acceptance-runner.ts";

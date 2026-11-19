@@ -72,6 +72,11 @@
           "allow": ["layer:tooling", "layer:validation", "layer:core"]
         }
       },
+      "layer:react": {
+        "dependencies": {
+          "allow": ["layer:tooling", "layer:validation", "layer:core"]
+        }
+      },
       "layer:capabilities": {
         "dependencies": {
           "allow": [
@@ -90,7 +95,8 @@
             "layer:core",
             "layer:emit",
             "layer:preview",
-            "layer:capabilities"
+            "layer:capabilities",
+            "layer:react"
           ]
         }
       },
@@ -103,6 +109,7 @@
             "layer:emit",
             "layer:preview",
             "layer:capabilities",
+            "layer:react",
             "layer:entry",
             "layer:application"
           ]
@@ -117,6 +124,7 @@
             "layer:emit",
             "layer:preview",
             "layer:capabilities",
+            "layer:react",
             "layer:entry"
           ]
         }

@@ -3,7 +3,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
 import { documentCapabilities } from "@react-pptx/capabilities/document";
-import { expandDocument, type CommonNode } from "@react-pptx/core";
+import type { CommonNode } from "@react-pptx/core";
 import { createResolver, type Resolution } from "@react-pptx/core/build";
 import { emit } from "@react-pptx/emit";
 import {
@@ -11,6 +11,7 @@ import {
   type PreviewPageResult,
   type PreviewResult,
 } from "@react-pptx/preview";
+import { expandDocument } from "@react-pptx/react";
 import { validatePptx, type ValidationResult } from "@react-pptx/validation";
 import { PNG } from "pngjs";
 import type { ReactNode } from "react";

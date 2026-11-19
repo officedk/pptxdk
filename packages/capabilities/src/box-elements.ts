@@ -1,4 +1,4 @@
-import { hostNodeCreator } from "@react-pptx/core/document";
+import { hostNodeCreator } from "@react-pptx/core/host";
 import { createElement, type Key, type ReactNode } from "react";
 
 import { createBoxNode, type BoxDeclarationProps } from "./box.ts";

@@ -1,12 +1,13 @@
+import { BuildError, type Diagnostic } from "@react-pptx/core";
+import { CommonContainer, CommonNode } from "@react-pptx/core/document";
+import type { HostTextNode } from "@react-pptx/core/host";
 import { createContext, type ReactNode } from "react";
 import Reconciler from "react-reconciler";
 import {
-  DefaultEventPriority,
   ConcurrentRoot,
+  DefaultEventPriority,
 } from "react-reconciler/constants.js";
 
-import { BuildError } from "#/diagnostics.ts";
-import { CommonContainer, CommonNode } from "#/document.ts";
 import {
   attachHostChild,
   createHostInstance,
@@ -15,12 +16,10 @@ import {
   type HostContainer,
   insertRootChild,
   lockHandoffTree,
-  ReactTextNode,
   removeRootChild,
   updateHostInstance,
   updateHostText,
-} from "#/host/document-adapter.ts";
-import type { Diagnostic } from "#/types.ts";
+} from "#/document-adapter.ts";
 
 type Props = Record<string, unknown>;
 
@@ -47,12 +46,12 @@ const reconciler = Reconciler<
   Props,
   HostContainer,
   CommonNode,
-  ReactTextNode,
+  HostTextNode,
   never,
   never,
   never,
   never,
-  CommonNode | ReactTextNode,
+  CommonNode | HostTextNode,
   Record<string, never>,
   never,
   ReturnType<typeof setTimeout>,
@@ -69,7 +68,7 @@ const reconciler = Reconciler<
   supportsHydration: false,
   isPrimaryRenderer: false,
   rendererVersion: "0.0.0",
-  rendererPackageName: "@react-pptx/core",
+  rendererPackageName: "@react-pptx/react",
   extraDevToolsConfig: null,
   noTimeout: -1,
   scheduleTimeout: setTimeout,

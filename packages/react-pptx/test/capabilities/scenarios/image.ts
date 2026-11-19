@@ -1,15 +1,15 @@
 import assert from "node:assert/strict";
 import { createRequire } from "node:module";
 
+import { deck, image, shape, slide } from "@react-pptx/capabilities/document";
+import { Image } from "@react-pptx/capabilities/image-elements";
+import { Shape } from "@react-pptx/capabilities/shape-elements";
 import { Deck, Slide } from "@react-pptx/core";
 import { strFromU8, unzipSync } from "fflate";
 import { PNG } from "pngjs";
 import { createElement } from "react";
 import { expect } from "vitest";
 
-import { deck, image, shape, slide } from "../../src/document.ts";
-import { Image } from "../../src/image-elements.ts";
-import { Shape } from "../../src/shape-elements.ts";
 import type { CapabilityScenario } from "../acceptance-runner.ts";
 
 const require = createRequire(import.meta.url);

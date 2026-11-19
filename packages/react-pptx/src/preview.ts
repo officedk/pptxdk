@@ -5,12 +5,16 @@ import {
   type Resolution,
   type ResolutionReport,
 } from "@react-pptx/core/build";
+import type {
+  PreviewTransform,
+  PreviewWarning,
+} from "@react-pptx/core/capability";
 import { CommonNode } from "@react-pptx/core/document";
 import {
   paint,
   type PreviewOptions,
   type PreviewResult,
-} from "@react-pptx/core/preview";
+} from "@react-pptx/preview";
 import type { ReactNode } from "react";
 
 const resolveDocument = createResolver(documentCapabilities);
@@ -52,7 +56,13 @@ export async function preview(
 }
 
 export { paint };
-export type { BuildQuery, Resolution, ResolutionReport };
+export type {
+  BuildQuery,
+  PreviewTransform,
+  PreviewWarning,
+  Resolution,
+  ResolutionReport,
+};
 export type {
   PaintOptions,
   PaintResult,
@@ -62,8 +72,6 @@ export type {
   PreviewPageResult,
   PreviewResult,
   PreviewSeverity,
-  PreviewTransform,
-  PreviewWarning,
   ScreenGeometry,
   ScreenPoint,
-} from "@react-pptx/core/preview";
+} from "@react-pptx/preview";

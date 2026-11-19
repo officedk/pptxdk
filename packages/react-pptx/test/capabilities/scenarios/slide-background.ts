@@ -1,12 +1,12 @@
 import assert from "node:assert/strict";
 
+import { deck, shape, slide } from "@react-pptx/capabilities/document";
+import { linearGradient } from "@react-pptx/capabilities/shape";
+import { Shape } from "@react-pptx/capabilities/shape-elements";
 import { Deck, Slide } from "@react-pptx/core";
 import { PNG } from "pngjs";
 import { createElement } from "react";
 
-import { deck, shape, slide } from "../../src/document.ts";
-import { Shape } from "../../src/shape-elements.ts";
-import { linearGradient } from "../../src/visual.ts";
 import type { CapabilityScenario } from "../acceptance-runner.ts";
 
 function solidSamplePng(): Uint8Array {

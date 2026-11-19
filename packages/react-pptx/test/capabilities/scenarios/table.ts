@@ -1,11 +1,6 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
-import { Deck, Slide } from "@react-pptx/core";
-import { PNG } from "pngjs";
-import { createElement } from "react";
-import { expect } from "vitest";
-
 import {
   cell,
   deck,
@@ -16,28 +11,27 @@ import {
   slideNumber,
   span,
   table,
-} from "../../src/document.ts";
-import { Cell, Row, Table } from "../../src/table-elements.ts";
-import { P, SlideNumber, Span } from "../../src/text-elements.ts";
+} from "@react-pptx/capabilities/document";
+import { Cell, Row, Table } from "@react-pptx/capabilities/table-elements";
+import { P, SlideNumber, Span } from "@react-pptx/capabilities/text-elements";
+import { Deck, Slide } from "@react-pptx/core";
+import { PNG } from "pngjs";
+import { createElement } from "react";
+import { expect } from "vitest";
+
 import type { CapabilityScenario } from "../acceptance-runner.ts";
 
 const jostFont = font("Jost*", [
   {
     weight: 400,
     data: readFileSync(
-      new URL(
-        "../../../react-pptx/test/assets/fonts/Jost-400-Book.ttf",
-        import.meta.url,
-      ),
+      new URL("../../assets/fonts/Jost-400-Book.ttf", import.meta.url),
     ),
   },
   {
     weight: 700,
     data: readFileSync(
-      new URL(
-        "../../../react-pptx/test/assets/fonts/Jost-700-Bold.ttf",
-        import.meta.url,
-      ),
+      new URL("../../assets/fonts/Jost-700-Bold.ttf", import.meta.url),
     ),
   },
 ]);
@@ -46,10 +40,7 @@ const notoFont = font("Noto Sans CJK SC", [
   {
     weight: 400,
     data: readFileSync(
-      new URL(
-        "../../../react-pptx/test/assets/fonts/NotoSansSC-Regular.woff2",
-        import.meta.url,
-      ),
+      new URL("../../assets/fonts/NotoSansSC-Regular.woff2", import.meta.url),
     ),
   },
 ]);

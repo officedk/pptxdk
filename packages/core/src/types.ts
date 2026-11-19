@@ -83,11 +83,6 @@ export type ResolveOptions = {
   readonly signal?: AbortSignal;
 };
 export type EmitOptions = BuildOptions;
-export type PaintOptions = {
-  /** 1-based page numbers to paint. Omit to draw all pages; an empty list draws none. */
-  readonly pages?: readonly number[];
-  readonly signal?: AbortSignal;
-};
 
 export type GeometryBox = {
   readonly x: number;
@@ -318,10 +313,6 @@ export type BuildResult = {
 };
 
 export type EmitResult = BuildResult;
-
-export type PaintResult = {
-  readonly pages: readonly PreviewPageResult[];
-};
 
 export type LocatorObservation = {
   readonly evidence: "generation";
@@ -608,25 +599,6 @@ export type CapabilityResourceClaim = {
   readonly identity: string;
   /** Actual output text from the shared text service, used for subsequent font resource processing. */
   readonly characters?: string;
-};
-
-export type PreviewSeverity = "error" | "warning";
-
-export type PreviewDiagnostic = {
-  readonly severity: PreviewSeverity;
-  readonly page: number;
-  readonly path: string;
-  readonly message: string;
-};
-
-export type ScreenPoint = {
-  readonly x: number;
-  readonly y: number;
-};
-
-export type ScreenGeometry = {
-  readonly corners: readonly ScreenPoint[];
-  readonly screenBox: GeometryBox;
 };
 
 export type PreviewTransform = {
@@ -919,30 +891,6 @@ export type SlideCapabilityModule<
 export type BoundSlideCapabilityModule = SlideCapabilityModule;
 
 export type CapabilityModule = ObjectCapabilityModule | SlideCapabilityModule;
-
-export type PreviewOptions = PaintOptions;
-
-export type PreviewNodeObservation = ObjectObservation & {
-  readonly path: string | undefined;
-  readonly corners?: readonly ScreenPoint[];
-  readonly screenBox?: GeometryBox;
-};
-
-export type PreviewPageResult = {
-  readonly id: string;
-  readonly page: number;
-  readonly svg?: string;
-  readonly png?: Uint8Array;
-  readonly nodes: readonly PreviewNodeObservation[];
-  readonly layouts: readonly LayoutObservation[];
-  readonly diagnostics: readonly PreviewDiagnostic[];
-};
-
-export type PreviewResult = {
-  readonly report: ResolutionReport;
-  readonly query: BuildQuery;
-  readonly pages: readonly PreviewPageResult[];
-};
 
 /** Modules registered inside Builder; transparent declarations can only be owned by slide capability modules. */
 export type RegisteredCapabilityModule =

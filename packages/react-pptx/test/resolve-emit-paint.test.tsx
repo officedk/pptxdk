@@ -243,7 +243,7 @@ describe("Seam 1 & Seam 3: public resolve / emit / paint & createResolver", () =
     assert.deepEqual(jsxPaint.pages[0]?.png, docPaint.pages[0]?.png);
   });
 
-  it("never loads ./preview.ts or @resvg/resvg-js when importing or running resolve/emit/build on the main entry", () => {
+  it("never loads ./preview.ts, @react-pptx/preview, or @resvg/resvg-js when importing or running build subpaths", () => {
     const packageRoot = fileURLToPath(new URL("../", import.meta.url));
     const script = `
 import { registerHooks } from "node:module";
@@ -252,28 +252,86 @@ registerHooks({
   resolve(specifier, context, nextResolve) {
     if (
       specifier.includes("@resvg/resvg-js") ||
+      specifier.includes("@react-pptx/preview") ||
+      specifier.endsWith("/packages/preview/src/index.ts") ||
       specifier.endsWith("/preview.ts") ||
       specifier.endsWith("/preview.js") ||
       specifier === "./preview.ts"
     ) {
-      throw new Error("main entry loaded preview dependency: " + specifier);
+      throw new Error("build path loaded preview dependency: " + specifier);
     }
     return nextResolve(specifier, context);
   },
 });
 
 const { build, emit, resolve } = await import("@react-pptx/react-pptx");
-const { deck, slide, shape } = await import("@react-pptx/react-pptx/document");
-const doc = deck({ width: 320, height: 180 }).append(
-  slide({ id: "s1" }).append(
-    shape({ id: "box", x: 10, y: 10, width: 40, height: 40 }),
+const docEntry = await import("@react-pptx/react-pptx/document");
+const buildEntry = await import("@react-pptx/react-pptx/build");
+await import("@react-pptx/react-pptx/node");
+await import("@react-pptx/react-pptx/shape");
+await import("@react-pptx/react-pptx/chart");
+await import("@react-pptx/react-pptx/text");
+void buildEntry;
+
+const doc = docEntry.deck({ width: 320, height: 180 }).append(
+  docEntry.slide({ id: "s1" }).append(
+    docEntry.shape({ id: "box", x: 10, y: 10, width: 40, height: 40 }),
   ),
 );
 const resolution = resolve(doc);
 const emitted = emit(resolution);
 const built = await build(doc);
-if (emitted.pptx.byteLength === 0 || built.pptx.byteLength === 0) {
+const docBuilt = await docEntry.build(doc);
+if (
+  emitted.pptx.byteLength === 0 ||
+  built.pptx.byteLength === 0 ||
+  docBuilt.pptx.byteLength === 0
+) {
   throw new Error("expected PPTX bytes");
+}
+process.stdout.write("ok");
+`;
+    const child = spawnSync(
+      process.execPath,
+      ["--conditions=source", "--input-type=module", "--eval", script],
+      { cwd: packageRoot, encoding: "utf8" },
+    );
+    assert.equal(child.status, 0, child.stderr);
+    assert.equal(child.stdout, "ok");
+  });
+
+  it("never loads react or react-reconciler when running imperative paint via @react-pptx/preview", () => {
+    const packageRoot = fileURLToPath(new URL("../", import.meta.url));
+    const script = `
+import { registerHooks } from "node:module";
+
+registerHooks({
+  resolve(specifier, context, nextResolve) {
+    if (
+      specifier === "react" ||
+      specifier === "react-reconciler" ||
+      specifier.startsWith("react/")
+    ) {
+      throw new Error("preview package loaded React dependency: " + specifier);
+    }
+    return nextResolve(specifier, context);
+  },
+});
+
+const { paint } = await import("@react-pptx/preview");
+const { createResolver } = await import("@react-pptx/core/build");
+const { createDeckNode, createSlideNode } = await import("@react-pptx/core/document");
+const { shapeCapability, createShapeNode } = await import("@react-pptx/capabilities/shape");
+
+const d = createDeckNode({ width: 320, height: 180 });
+const s = createSlideNode({ id: "s1" });
+s.append(createShapeNode({ id: "box", x: 10, y: 10, width: 40, height: 40, fill: "#2563EB" }));
+d.append(s);
+
+const resolution = createResolver([shapeCapability])({ children: [d] });
+const painted = paint(resolution);
+if (!painted.pages[0]?.png || painted.pages[0].png.byteLength === 0) {
+  throw new Error("expected PNG output");
 }
 process.stdout.write("ok");
 `;

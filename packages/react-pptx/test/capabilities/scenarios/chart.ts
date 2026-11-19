@@ -1,24 +1,21 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
+import { Chart } from "@react-pptx/capabilities/chart-elements";
+import { chart, deck, font, slide } from "@react-pptx/capabilities/document";
 import { Deck, Slide } from "@react-pptx/core";
 import { strFromU8, unzipSync } from "fflate";
 import { PNG } from "pngjs";
 import { createElement } from "react";
 import { expect } from "vitest";
 
-import { Chart } from "../../src/chart-elements.ts";
-import { chart, deck, font, slide } from "../../src/document.ts";
 import type { CapabilityScenario } from "../acceptance-runner.ts";
 
 const jostFont = font("Jost*", [
   {
     weight: 400,
     data: readFileSync(
-      new URL(
-        "../../../react-pptx/test/assets/fonts/Jost-400-Book.ttf",
-        import.meta.url,
-      ),
+      new URL("../../assets/fonts/Jost-400-Book.ttf", import.meta.url),
     ),
   },
 ]);

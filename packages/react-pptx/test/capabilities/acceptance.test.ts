@@ -4,6 +4,40 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+import { slideBackgroundCapability } from "@react-pptx/capabilities";
+import { boxCapability } from "@react-pptx/capabilities/box";
+import { chartCapability } from "@react-pptx/capabilities/chart";
+import { Chart } from "@react-pptx/capabilities/chart-elements";
+import {
+  box,
+  chart,
+  deck,
+  documentCapabilities,
+  font,
+  notes,
+  paragraph,
+  shape,
+  slide,
+  slideNumber,
+  span,
+  text,
+} from "@react-pptx/capabilities/document";
+import {
+  fade,
+  motionCapability,
+  observeMotion,
+} from "@react-pptx/capabilities/motion";
+import { Step } from "@react-pptx/capabilities/motion-elements";
+import { notesCapability } from "@react-pptx/capabilities/notes";
+import { Notes } from "@react-pptx/capabilities/notes-elements";
+import { shapeCapability } from "@react-pptx/capabilities/shape";
+import { Shape } from "@react-pptx/capabilities/shape-elements";
+import {
+  P,
+  SlideNumber,
+  Span,
+  Text,
+} from "@react-pptx/capabilities/text-elements";
 import {
   BuildError,
   BuildQueryError,
@@ -24,8 +58,8 @@ import {
 import { createResolver } from "@react-pptx/core/build";
 import { parseCapabilityLayoutContract } from "@react-pptx/core/capability";
 import { RichTextContainer } from "@react-pptx/core/document";
-import { paint } from "@react-pptx/core/preview";
 import { emit, pxToEmu, xmlEscape } from "@react-pptx/emit";
+import { paint } from "@react-pptx/preview";
 import { validatePptx } from "@react-pptx/validation";
 import { strFromU8, unzipSync } from "fflate";
 import { PNG } from "pngjs";
@@ -48,31 +82,6 @@ function previewJsxWith(modules: readonly CapabilityModule[]) {
   };
 }
 
-import { boxCapability } from "../src/box.ts";
-import { Chart } from "../src/chart-elements.ts";
-import { chartCapability } from "../src/chart.ts";
-import {
-  box,
-  chart,
-  deck,
-  documentCapabilities,
-  font,
-  notes,
-  paragraph,
-  shape,
-  slide,
-  slideNumber,
-  span,
-  text,
-} from "../src/document.ts";
-import { Step } from "../src/motion-elements.ts";
-import { fade, motionCapability, observeMotion } from "../src/motion.ts";
-import { Notes } from "../src/notes-elements.ts";
-import { notesCapability } from "../src/notes.ts";
-import { Shape } from "../src/shape-elements.ts";
-import { shapeCapability } from "../src/shape.ts";
-import { slideBackgroundCapability } from "../src/slide-background.ts";
-import { P, SlideNumber, Span, Text } from "../src/text-elements.ts";
 import { runCapabilityScenario } from "./acceptance-runner.ts";
 import { boxPositiveScenario, boxRejectionScenario } from "./scenarios/box.ts";
 import {
@@ -251,10 +260,7 @@ describe("Capability-owned acceptance scenarios & custom bound preview extension
       {
         weight: 400,
         data: readFileSync(
-          new URL(
-            "../../react-pptx/test/assets/fonts/Jost-400-Book.ttf",
-            import.meta.url,
-          ),
+          new URL("../assets/fonts/Jost-400-Book.ttf", import.meta.url),
         ),
       },
     ]);
@@ -1062,10 +1068,7 @@ describe("Capability-owned acceptance scenarios & custom bound preview extension
       {
         weight: 400,
         data: readFileSync(
-          new URL(
-            "../../react-pptx/test/assets/fonts/Jost-400-Book.ttf",
-            import.meta.url,
-          ),
+          new URL("../assets/fonts/Jost-400-Book.ttf", import.meta.url),
         ),
       },
     ]);

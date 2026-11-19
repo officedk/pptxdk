@@ -14,7 +14,10 @@ import {
   emit as emitFromMain,
   expandDocument,
   font,
+  formatBaseline,
+  observeMotion,
   resolve as resolveFromMain,
+  targets,
 } from "@react-pptx/react-pptx";
 import {
   createResolver,
@@ -22,12 +25,18 @@ import {
   type CapabilityModule,
 } from "@react-pptx/react-pptx/build";
 import {
+  box,
+  chart,
+  createMorphScope,
   deck,
   emit as emitFromDocument,
+  fade,
   resolve as resolveFromDocument,
+  section,
   shape,
   slide,
   text,
+  transitions,
 } from "@react-pptx/react-pptx/document";
 import { paint, preview } from "@react-pptx/react-pptx/preview";
 import { validatePptx } from "@react-pptx/validation";
@@ -362,5 +371,321 @@ process.stdout.write("ok");
     );
     assert.ok(painted.pages[1]?.png !== undefined);
     assert.deepEqual(painted.pages[1]?.diagnostics, []);
+  });
+
+  it("splits ResolutionReport from BuildReport, rejects target on resolve, validates target on emit, and emits one Resolution to two targets", async () => {
+    const doc = deck({
+      title: "Multi-target Deck",
+      width: 320,
+      height: 180,
+    }).append(
+      slide({
+        id: "s1",
+        background: "#F8FAFC",
+        transition: transitions.fade({ duration: 500 }),
+      }).append(
+        shape({
+          id: "hero",
+          x: 20,
+          y: 20,
+          width: 100,
+          height: 50,
+          fill: "#2563EB",
+          enter: fade(),
+        }),
+      ),
+    );
+
+    // Runtime callers passing target to resolve() must fail immediately with unknown-parameter.
+    assert.throws(
+      () => resolveFromMain(doc, { target: targets.baselineOnly } as never),
+      (error: unknown) =>
+        error instanceof BuildError &&
+        error.diagnostics[0]?.code === "unknown-parameter",
+    );
+
+    const resolution = resolveFromMain(doc);
+    assert.equal(resolution.report.evidence, "generation");
+    assert.equal(resolution.report.title, "Multi-target Deck");
+    assert.deepEqual(resolution.report.extensions, ["p14"]);
+    assert.equal("target" in resolution.report, false);
+
+    // Invalid target shapes are rejected by emit().
+    for (const invalidTarget of [
+      null,
+      { name: "", format: formatBaseline, extensions: [] },
+      { name: "bad-ext", format: formatBaseline, extensions: ["p99"] },
+      {
+        name: "extra-key",
+        format: formatBaseline,
+        extensions: [],
+        unexpected: true,
+      },
+    ]) {
+      assert.throws(
+        () => emitFromMain(resolution, { target: invalidTarget as never }),
+        BuildError,
+      );
+    }
+
+    const p14OnlyTarget = {
+      name: "p14-only",
+      format: formatBaseline,
+      extensions: ["p14"] as const,
+    };
+    const firstEmit = emitFromMain(resolution, { target: p14OnlyTarget });
+    const secondEmit = emitFromMain(resolution, {
+      target: targets.transitional,
+    });
+
+    assert.deepEqual(firstEmit.report.target, {
+      name: "p14-only",
+      format: formatBaseline,
+      extensions: ["p14"],
+    });
+    assert.deepEqual(firstEmit.report.extensions, ["p14"]);
+    assert.equal(firstEmit.report.title, "Multi-target Deck");
+    assert.equal(firstEmit.report.slides, resolution.report.slides);
+    assert.ok(observeMotion(firstEmit.report.slides[0]!) !== undefined);
+
+    assert.deepEqual(secondEmit.report.target, {
+      name: targets.transitional.name,
+      format: targets.transitional.format,
+      extensions: ["p14", "p159", "c15"],
+    });
+    assert.deepEqual(secondEmit.report.extensions, ["p14"]);
+    assert.equal(secondEmit.report.slides, resolution.report.slides);
+    assert.ok(observeMotion(secondEmit.report.slides[0]!) !== undefined);
+
+    const firstFile = await validatePptx(firstEmit.pptx, {
+      allowedExtensions: ["p14"],
+    });
+    const secondFile = await validatePptx(secondEmit.pptx, {
+      allowedExtensions: ["p14", "p159", "c15"],
+    });
+    assert.deepEqual(firstFile.errors, []);
+    assert.deepEqual(secondFile.errors, []);
+  });
+
+  it("allows resolve, paint, and preview to succeed when target forbids required mechanisms while emit throws forbidden-mechanism", async () => {
+    const doc = deck({ width: 320, height: 180 }).append(
+      section({ name: "Part 1" }).append(
+        slide({ id: "intro", background: "#FFFFFF" }).append(
+          shape({
+            id: "box-1",
+            x: 20,
+            y: 20,
+            width: 80,
+            height: 50,
+            fill: "#2563EB",
+          }),
+        ),
+        slide({
+          id: "morph-slide",
+          background: "#FFFFFF",
+          transition: transitions.morph({
+            duration: 800,
+            fallback: transitions.fade(),
+          }),
+        }).append(
+          text("Morph target", {
+            id: "label-1",
+            x: 20,
+            y: 20,
+            width: 160,
+            height: 40,
+            style: { fontFamily: jostFont, fontSize: 16 },
+          }),
+        ),
+      ),
+    );
+
+    const resolution = resolveFromMain(doc);
+    assert.deepEqual(
+      new Set(resolution.report.extensions),
+      new Set(["p14", "p159"]),
+    );
+    assert.equal("target" in resolution.report, false);
+
+    const painted = paint(resolution);
+    assert.equal(painted.pages.length, 2);
+    for (const page of painted.pages) {
+      assert.deepEqual(page.diagnostics, []);
+      assert.ok(typeof page.svg === "string" && page.svg.length > 0);
+      assert.ok(page.png instanceof Uint8Array && page.png.byteLength > 0);
+    }
+
+    const previewResult = await preview(doc);
+    assert.deepEqual(
+      new Set(previewResult.report.extensions),
+      new Set(["p14", "p159"]),
+    );
+    assert.equal("target" in previewResult.report, false);
+    assert.equal(previewResult.pages.length, 2);
+    for (const page of previewResult.pages) {
+      assert.deepEqual(page.diagnostics, []);
+      assert.ok(page.png instanceof Uint8Array && page.png.byteLength > 0);
+    }
+
+    assert.throws(
+      () => emitFromMain(resolution, { target: targets.baselineOnly }),
+      (error: unknown) =>
+        error instanceof BuildError &&
+        error.diagnostics.some((diag) => diag.code === "forbidden-mechanism"),
+    );
+
+    const emitted = emitFromMain(resolution, { target: targets.transitional });
+    const file = await validatePptx(emitted.pptx, {
+      allowedExtensions: ["p14", "p159"],
+    });
+    assert.deepEqual(file.errors, []);
+
+    // c15 chart resolves cleanly and rejects targets omitting c15 during emit.
+    const c15Doc = deck({ width: 480, height: 270 }).append(
+      slide({ id: "c15-slide", background: "#FFFFFF" }).append(
+        chart({
+          id: "rings",
+          x: 20,
+          y: 20,
+          width: 320,
+          height: 200,
+          groups: [
+            {
+              kind: "doughnut",
+              data: { kind: "independent-categories" },
+              series: [
+                { name: "R1", categories: ["A", "B"], values: [10, 20] },
+                { name: "R2", categories: ["B", "A"], values: [15, 25] },
+              ],
+              dataLabels: { value: true, category: true },
+            },
+          ],
+        }),
+      ),
+    );
+    const c15Resolution = resolveFromMain(c15Doc);
+    assert.deepEqual(c15Resolution.report.extensions, ["c15"]);
+    assert.throws(
+      () => emitFromMain(c15Resolution, { target: targets.baselineOnly }),
+      (error: unknown) =>
+        error instanceof BuildError &&
+        error.diagnostics.some((diag) => diag.code === "forbidden-mechanism"),
+    );
+    assert.throws(
+      () =>
+        emitFromMain(c15Resolution, {
+          target: {
+            name: "no-c15",
+            format: formatBaseline,
+            extensions: ["p14", "p159"],
+          },
+        }),
+      (error: unknown) =>
+        error instanceof BuildError &&
+        error.diagnostics.some((diag) => diag.code === "forbidden-mechanism"),
+    );
+    const c15Emitted = emitFromMain(c15Resolution, {
+      target: targets.transitional,
+    });
+    const c15File = await validatePptx(c15Emitted.pptx, {
+      allowedExtensions: ["c15"],
+    });
+    assert.deepEqual(c15File.errors, []);
+  });
+
+  it("rejects invalid documents directly during resolve without waiting for emit", () => {
+    // 1. Declaration parse error
+    const invalidParseDoc = deck({ width: 320, height: 180 }).append(
+      slide({
+        id: "bad-transition",
+        transition: transitions.fade({ duration: -1 }),
+      }),
+    );
+    assert.throws(
+      () => resolveFromMain(invalidParseDoc),
+      (error: unknown) =>
+        error instanceof BuildError &&
+        error.diagnostics[0]?.code === "invalid-transition-duration",
+    );
+
+    // 2. Author ID conflict
+    const duplicateIdDoc = deck({ width: 320, height: 180 }).append(
+      slide({ id: "dup-slide" }).append(
+        shape({ id: "dup", x: 10, y: 10, width: 40, height: 40 }),
+        shape({ id: "dup", x: 60, y: 10, width: 40, height: 40 }),
+      ),
+    );
+    assert.throws(
+      () => resolveFromMain(duplicateIdDoc),
+      (error: unknown) =>
+        error instanceof BuildError &&
+        error.diagnostics[0]?.code === "duplicate-author-id",
+    );
+
+    // 3. Morph continuity object kind mismatch (sp vs graphicFrame)
+    const morph = createMorphScope();
+    const hero = morph.handle("hero");
+    const morphMismatchDoc = deck({ width: 480, height: 270 }).append(
+      slide({ id: "m1" }).append(
+        shape({
+          id: "hero-shape",
+          morphKey: hero,
+          x: 20,
+          y: 20,
+          width: 80,
+          height: 50,
+        }),
+      ),
+      slide({
+        id: "m2",
+        transition: transitions.morph({ fallback: transitions.fade() }),
+      }).append(
+        chart({
+          id: "hero-chart",
+          morphKey: hero,
+          x: 20,
+          y: 20,
+          width: 200,
+          height: 150,
+          groups: [
+            {
+              kind: "column",
+              data: { kind: "shared-categories", categories: ["A", "B"] },
+              series: [{ name: "S1", values: [1, 2] }],
+            },
+          ],
+        }),
+      ),
+    );
+    assert.throws(
+      () => resolveFromMain(morphMismatchDoc),
+      (error: unknown) =>
+        error instanceof BuildError &&
+        error.diagnostics[0]?.code === "morph-object-kind-mismatch",
+    );
+
+    // 4. Layout error
+    const invalidLayoutDoc = deck({ width: 320, height: 180 }).append(
+      slide({ id: "bad-layout" }).append(
+        box({
+          id: "negative-padding",
+          style: {
+            position: "absolute",
+            left: 10,
+            top: 10,
+            width: 100,
+            height: 80,
+            display: "flex",
+            padding: -10,
+          },
+        }),
+      ),
+    );
+    assert.throws(
+      () => resolveFromMain(invalidLayoutDoc),
+      (error: unknown) =>
+        error instanceof BuildError &&
+        error.diagnostics[0]?.code === "invalid-layout-style",
+    );
   });
 });

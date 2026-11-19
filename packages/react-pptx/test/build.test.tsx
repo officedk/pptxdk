@@ -28,8 +28,9 @@ import {
   Text,
   targets,
   transitions,
-  type BuildOptions,
+  type EmitOptions,
   type FontSize,
+  type ResolveOptions,
 } from "@react-pptx/react-pptx";
 import { createResolver } from "@react-pptx/react-pptx/build";
 import { validatePptx } from "@react-pptx/validation";
@@ -3940,10 +3941,11 @@ describe("public build entry", () => {
     );
   });
 
-  it("keeps original build options visible to capability parse and compile", async () => {
+  it("keeps stage options visible to capability bind, resolve, and emit", async () => {
     const controller = new AbortController();
-    const parseOptions: BuildOptions[] = [];
-    const compileOptions: BuildOptions[] = [];
+    const parseOptions: ResolveOptions[] = [];
+    const resolveOptions: ResolveOptions[] = [];
+    const emitOptions: EmitOptions[] = [];
     const observedShape: BoundObjectCapabilityModule = {
       declaration: shapeCapability.declaration,
       bind(input, context) {
@@ -3952,8 +3954,15 @@ describe("public build entry", () => {
         return {
           ...bound,
           resolve(resolveContext) {
-            compileOptions.push(resolveContext.options);
-            return bound.resolve(resolveContext);
+            resolveOptions.push(resolveContext.options);
+            const resolved = bound.resolve(resolveContext);
+            return {
+              ...resolved,
+              emit(emitContext) {
+                emitOptions.push(emitContext.options);
+                return resolved.emit(emitContext);
+              },
+            };
           },
         };
       },
@@ -3974,18 +3983,24 @@ describe("public build entry", () => {
     );
     const resolution = createResolver([observedShape])(expanded, {
       signal: controller.signal,
+      embedFonts: "full",
+    });
+    const result = emit(resolution, {
+      signal: controller.signal,
       target: targets.baselineOnly,
       embedFonts: "full",
     });
-    const result = emit(resolution, { signal: controller.signal });
 
     assert.equal(parseOptions.length, 1);
-    assert.equal(compileOptions.length, 1);
-    for (const options of [parseOptions[0], compileOptions[0]]) {
+    assert.equal(resolveOptions.length, 1);
+    assert.equal(emitOptions.length, 1);
+    for (const options of [parseOptions[0], resolveOptions[0]]) {
       assert.equal(options?.signal, controller.signal);
-      assert.equal(options?.target, targets.baselineOnly);
       assert.equal(options?.embedFonts, "full");
     }
+    assert.equal(emitOptions[0]?.signal, controller.signal);
+    assert.equal(emitOptions[0]?.target, targets.baselineOnly);
+    assert.equal(emitOptions[0]?.embedFonts, "full");
     const file = await validatePptx(result.pptx);
     assert.deepEqual(file.errors, []);
   });
@@ -4059,8 +4074,8 @@ describe("public build entry", () => {
             }),
           ),
         ),
-        { target: targets.baselineOnly },
       ),
+      { target: targets.baselineOnly },
     );
 
     assert.deepEqual(result.report.target.extensions, []);

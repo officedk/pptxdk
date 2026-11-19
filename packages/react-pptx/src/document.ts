@@ -2,6 +2,7 @@ import { documentCapabilities } from "@react-pptx/capabilities/document";
 import {
   createResolver,
   emit,
+  validateOptions,
   type BuildOptions,
   type BuildResult,
   type Resolution,
@@ -34,7 +35,14 @@ export async function build(
   document: CommonNode,
   options: BuildOptions = {},
 ): Promise<BuildResult> {
-  const resolution = resolve(document, options);
+  validateOptions(options);
+  const resolveOptions: ResolveOptions = {
+    ...(options.embedFonts === undefined
+      ? {}
+      : { embedFonts: options.embedFonts }),
+    ...(options.signal === undefined ? {} : { signal: options.signal }),
+  };
+  const resolution = resolve(document, resolveOptions);
   return emit(resolution, options);
 }
 

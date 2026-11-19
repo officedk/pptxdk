@@ -79,7 +79,7 @@ export type BuildOptions = {
   readonly signal?: AbortSignal;
 };
 
-export type ResolveOptions = BuildOptions;
+export type ResolveOptions = Omit<BuildOptions, "target">;
 export type EmitOptions = BuildOptions;
 export type PaintOptions = {
   /** 1-based page numbers to paint. Omit to draw all pages; an empty list draws none. */
@@ -599,7 +599,7 @@ export type CapabilityLayoutContract = {
 export type CapabilityParseContext = {
   readonly path: string;
   readonly theme: ThemeContext;
-  readonly options: BuildOptions;
+  readonly options: ResolveOptions;
   readonly slideNumber: number;
 };
 
@@ -936,7 +936,7 @@ export type SlideCapabilityParseContext = {
   readonly path: string;
   readonly dimensions: { readonly width: number; readonly height: number };
   readonly theme: ThemeContext;
-  readonly options: BuildOptions;
+  readonly options: ResolveOptions;
   readonly slideNumber: number;
   readonly contributions: readonly CapabilityContribution[];
 };

@@ -86,6 +86,15 @@ import { strFromU8, unzipSync } from "fflate";
 import { createElement, type ReactNode } from "react";
 import { describe, it, vi } from "vitest";
 
+function resolveOptionsFrom(options?: BuildOptions) {
+  return {
+    ...(options?.embedFonts === undefined
+      ? {}
+      : { embedFonts: options.embedFonts }),
+    ...(options?.signal === undefined ? {} : { signal: options.signal }),
+  };
+}
+
 function runJsxModules(modules: readonly CapabilityModule[]) {
   const resolveWith = createResolver(modules);
   return async (element: ReactNode, options?: BuildOptions) =>
@@ -95,19 +104,16 @@ function runJsxModules(modules: readonly CapabilityModule[]) {
           element,
           options?.signal === undefined ? {} : { signal: options.signal },
         ),
-        options,
+        resolveOptionsFrom(options),
       ),
-      options?.signal === undefined ? {} : { signal: options.signal },
+      options,
     );
 }
 
 function runDocModules(modules: readonly CapabilityModule[]) {
   const resolveWith = createResolver(modules);
   return async (document: CommonNode, options?: BuildOptions) =>
-    emit(
-      resolveWith(document, options),
-      options?.signal === undefined ? {} : { signal: options.signal },
-    );
+    emit(resolveWith(document, resolveOptionsFrom(options)), options);
 }
 
 const notoFont = font("Noto Sans CJK SC", [
@@ -2208,13 +2214,10 @@ describe("bound object capability contract", () => {
     );
 
     // Target check happens in emit, while resolve + paint still succeed for baselineOnly.
-    const baselineResolution = resolve(
-      { children: [deckNode] },
-      { target: targets.baselineOnly },
-    );
+    const baselineResolution = resolve({ children: [deckNode] });
     assert.equal(paint(baselineResolution).pages.length, 2);
     assert.throws(
-      () => emit(baselineResolution),
+      () => emit(baselineResolution, { target: targets.baselineOnly }),
       (error: unknown) => {
         assert(error instanceof BuildError);
         assert.ok(

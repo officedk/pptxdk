@@ -22,7 +22,6 @@ import type {
   BoundContainerCollaboration,
   BoundObjectCapability,
   BoundObjectCapabilityModule,
-  BuildOptions,
   CapabilityChild,
   CapabilityElement,
   CapabilityLayoutContract,
@@ -32,6 +31,7 @@ import type {
   LayoutStyle,
   NativeElementKind,
   RegisteredCapabilityModule,
+  ResolveOptions,
   ThemeContext,
 } from "#/types.ts";
 
@@ -299,7 +299,7 @@ export class LayoutPass {
   readonly #modules: ReadonlyMap<string, RegisteredCapabilityModule>;
   readonly #dimensions: Dimensions;
   readonly #slideNumber: number;
-  readonly #options: BuildOptions;
+  readonly #options: ResolveOptions;
   readonly #boxes = new WeakMap<CapabilityElement, GeometryBox>();
   readonly #themes = new WeakMap<CapabilityElement, ThemeContext>();
   readonly #hidden = new WeakSet<CapabilityElement>();
@@ -316,7 +316,7 @@ export class LayoutPass {
     modules: ReadonlyMap<string, RegisteredCapabilityModule>,
     dimensions: Dimensions,
     slideNumber = 1,
-    options: BuildOptions = {},
+    options: ResolveOptions = {},
   ) {
     this.#modules = modules;
     this.#dimensions = dimensions;

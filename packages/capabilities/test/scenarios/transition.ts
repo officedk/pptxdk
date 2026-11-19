@@ -375,6 +375,12 @@ type DualAuthorRejectionCase = {
 };
 
 const resolveDefault = createResolver(documentCapabilities);
+const resolveOptionsFrom = (options?: BuildOptions) => ({
+  ...(options?.embedFonts === undefined
+    ? {}
+    : { embedFonts: options.embedFonts }),
+  ...(options?.signal === undefined ? {} : { signal: options.signal }),
+});
 const runJsxBuild = async (element: ReactNode, options?: BuildOptions) =>
   emit(
     resolveDefault(
@@ -382,15 +388,12 @@ const runJsxBuild = async (element: ReactNode, options?: BuildOptions) =>
         element,
         options?.signal === undefined ? {} : { signal: options.signal },
       ),
-      options,
+      resolveOptionsFrom(options),
     ),
-    options?.signal === undefined ? {} : { signal: options.signal },
+    options,
   );
 const runDocBuild = async (document: CommonNode, options?: BuildOptions) =>
-  emit(
-    resolveDefault(document, options),
-    options?.signal === undefined ? {} : { signal: options.signal },
-  );
+  emit(resolveDefault(document, resolveOptionsFrom(options)), options);
 
 export const transitionRejectionCases: readonly DualAuthorRejectionCase[] = [
   {

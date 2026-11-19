@@ -260,11 +260,8 @@ export function validateBoundObjectCapability(
   }
   const candidate = bound as {
     readonly contract?: Partial<CapabilityLayoutContract>;
-    readonly compile?: unknown;
     readonly resolve?: unknown;
   };
-  const hasCompile = typeof candidate.compile === "function";
-  const hasResolve = typeof candidate.resolve === "function";
   if (
     typeof candidate.contract !== "object" ||
     candidate.contract === null ||
@@ -273,11 +270,11 @@ export function validateBoundObjectCapability(
     typeof candidate.contract.layoutStyle !== "object" ||
     candidate.contract.layoutStyle === null ||
     Array.isArray(candidate.contract.layoutStyle) ||
-    hasCompile === hasResolve
+    typeof candidate.resolve !== "function"
   ) {
     throw new CapabilityError(
       "invalid-capability-binding",
-      "Object capability bind() must return a valid contract and resolve or compile handler",
+      "Object capability bind() must return a valid contract and resolve handler",
     );
   }
   return bound as BoundObjectCapability;

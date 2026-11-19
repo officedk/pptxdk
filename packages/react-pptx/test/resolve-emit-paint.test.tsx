@@ -43,14 +43,31 @@ import { validatePptx } from "@react-pptx/validation";
 import { createElement } from "react";
 import { describe, expect, it } from "vitest";
 
+const jostBookBytes = new Uint8Array(
+  readFileSync(new URL("./assets/fonts/Jost-400-Book.ttf", import.meta.url)),
+);
+
 const jostFont = font("Jost*", [
   {
     weight: 400,
-    data: readFileSync(
-      new URL("./assets/fonts/Jost-400-Book.ttf", import.meta.url),
-    ),
+    data: jostBookBytes,
   },
 ]);
+
+function withFontFsType(bytes: Uint8Array, fsType: number): Uint8Array {
+  const copy = new Uint8Array(bytes);
+  const view = new DataView(copy.buffer, copy.byteOffset, copy.byteLength);
+  const tableCount = view.getUint16(4);
+  for (let index = 0; index < tableCount; index += 1) {
+    const record = 12 + index * 16;
+    const tag = String.fromCharCode(...copy.subarray(record, record + 4));
+    if (tag === "OS/2") {
+      view.setUint16(view.getUint32(record + 8) + 8, fsType);
+      return copy;
+    }
+  }
+  throw new Error("Jost fixture must contain an OS/2 table");
+}
 
 describe("Seam 1 & Seam 3: public resolve / emit / paint & createResolver", () => {
   it("isolates Resolution from subsequent editable document edits across emit and paint", async () => {
@@ -686,6 +703,95 @@ process.stdout.write("ok");
       (error: unknown) =>
         error instanceof BuildError &&
         error.diagnostics[0]?.code === "invalid-layout-style",
+    );
+  });
+
+  it("rejects embedFonts in resolve, allows resolve/paint/preview/unembedded emit with restricted font license, and fails only when emit embeds", async () => {
+    const restrictedFont = font("Jost*", [
+      { weight: 400, data: withFontFsType(jostBookBytes, 0x0002) },
+    ]);
+    const restrictedDoc = deck({ width: 320, height: 180 }).append(
+      slide({ id: "restricted-slide", background: "#FFFFFF" }).append(
+        text("Licensed text", {
+          id: "licensed-text",
+          x: 20,
+          y: 20,
+          width: 240,
+          height: 48,
+          style: { fontFamily: restrictedFont, fontSize: 18, color: "#0F172A" },
+        }),
+      ),
+    );
+
+    // Passing embedFonts to resolve() must fail immediately with unknown-parameter.
+    for (const mode of ["full", "subset"] as const) {
+      assert.throws(
+        () => resolveFromMain(restrictedDoc, { embedFonts: mode } as never),
+        (error: unknown) =>
+          error instanceof BuildError &&
+          error.diagnostics[0]?.code === "unknown-parameter",
+      );
+    }
+
+    // Resolve, paint, preview, and unembedded emit all succeed.
+    const resolution = resolveFromMain(restrictedDoc);
+    const painted = paint(resolution);
+    assert.equal(painted.pages.length, 1);
+    assert.deepEqual(painted.pages[0]?.diagnostics, []);
+    expect(painted.pages[0]?.svg).toContain("<path");
+    assert.ok(
+      painted.pages[0]?.png instanceof Uint8Array &&
+        painted.pages[0].png.byteLength > 0,
+    );
+
+    const previewed = await preview(restrictedDoc);
+    assert.equal(previewed.pages.length, 1);
+    assert.deepEqual(previewed.pages[0]?.diagnostics, []);
+    assert.ok(
+      previewed.pages[0]?.png instanceof Uint8Array &&
+        previewed.pages[0].png.byteLength > 0,
+    );
+
+    const unembedded = emitFromMain(resolution);
+    const unembeddedValidation = await validatePptx(unembedded.pptx);
+    assert.deepEqual(unembeddedValidation.errors, []);
+
+    // Requesting full or subset font embedding at emit() throws BuildError.
+    for (const mode of ["full", "subset"] as const) {
+      assert.throws(
+        () => emitFromMain(resolution, { embedFonts: mode }),
+        (error: unknown) =>
+          error instanceof BuildError &&
+          error.diagnostics[0]?.code === "font-embedding-restricted",
+      );
+    }
+
+    // Subsetting-forbidden fsType (0x0100) still allows full embedding at emit, failing only on subset.
+    const noSubsetFont = font("Jost*", [
+      { weight: 400, data: withFontFsType(jostBookBytes, 0x0100) },
+    ]);
+    const noSubsetDoc = deck({ width: 320, height: 180 }).append(
+      slide({ id: "no-subset-slide", background: "#FFFFFF" }).append(
+        text("Full only", {
+          id: "full-only-text",
+          x: 20,
+          y: 20,
+          width: 240,
+          height: 48,
+          style: { fontFamily: noSubsetFont, fontSize: 18 },
+        }),
+      ),
+    );
+    const noSubsetResolution = resolveFromMain(noSubsetDoc);
+    const fullEmitted = emitFromMain(noSubsetResolution, {
+      embedFonts: "full",
+    });
+    assert.deepEqual((await validatePptx(fullEmitted.pptx)).errors, []);
+    assert.throws(
+      () => emitFromMain(noSubsetResolution, { embedFonts: "subset" }),
+      (error: unknown) =>
+        error instanceof BuildError &&
+        error.diagnostics[0]?.code === "font-subsetting-forbidden",
     );
   });
 });

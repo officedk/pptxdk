@@ -891,7 +891,6 @@ describe("native tables", () => {
     assert.equal("bind" in tableCapability, true);
     assert.equal("parse" in tableCapability, false);
     assert.equal("measureLayout" in tableCapability, false);
-    assert.equal("compile" in tableCapability, false);
 
     const bindSpy = vi.spyOn(tableCapability, "bind");
 

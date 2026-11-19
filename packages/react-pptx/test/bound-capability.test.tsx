@@ -87,12 +87,7 @@ import { createElement, type ReactNode } from "react";
 import { describe, it, vi } from "vitest";
 
 function resolveOptionsFrom(options?: BuildOptions) {
-  return {
-    ...(options?.embedFonts === undefined
-      ? {}
-      : { embedFonts: options.embedFonts }),
-    ...(options?.signal === undefined ? {} : { signal: options.signal }),
-  };
+  return options?.signal === undefined ? {} : { signal: options.signal };
 }
 
 function runJsxModules(modules: readonly CapabilityModule[]) {
@@ -167,7 +162,7 @@ function CustomBadge(props: BadgeProps) {
 function createTrackedBadgeCapability() {
   const bindCalls: string[] = [];
   const measureCalls: string[] = [];
-  const compileCalls: string[] = [];
+  const resolveCalls: string[] = [];
 
   const module: BoundObjectCapabilityModule = {
     declaration: "rp:custom-badge",
@@ -251,57 +246,60 @@ function createTrackedBadgeCapability() {
             minContentHeight: declaredHeight,
           };
         },
-        compile(compileContext) {
-          compileCalls.push(compileContext.path);
-          const box = compileContext.layoutBox ?? {
+        resolve(resolveContext) {
+          resolveCalls.push(resolveContext.path);
+          const box = resolveContext.layoutBox ?? {
             x: declaredX,
             y: declaredY,
             width: declaredWidth,
             height: declaredHeight,
           };
           const name =
-            compileContext.morphName ??
+            resolveContext.morphName ??
             privateExplicitName ??
-            `Badge ${compileContext.id - 1}`;
-          const link = compileContext.nativeLink;
-          const linkAttrs = [
-            ...(link?.relationshipId !== undefined && link.relationshipId !== ""
-              ? [`r:id="${xmlEscape(link.relationshipId)}"`]
-              : []),
-            ...(link?.action !== undefined
-              ? [`action="${xmlEscape(link.action)}"`]
-              : []),
-          ].join(" ");
-          const linkXml =
-            linkAttrs.length > 0 ? `<a:hlinkClick ${linkAttrs}/>` : "";
-          const xml =
-            `<p:sp><p:nvSpPr>` +
-            `<p:cNvPr id="${compileContext.id}" name="${xmlEscape(name)}">${linkXml}</p:cNvPr>` +
-            `<p:cNvSpPr/><p:nvPr/></p:nvSpPr>` +
-            `<p:spPr>` +
-            `<a:xfrm><a:off x="${pxToEmu(box.x)}" y="${pxToEmu(box.y)}"/><a:ext cx="${pxToEmu(box.width)}" cy="${pxToEmu(box.height)}"/></a:xfrm>` +
-            `<a:prstGeom prst="rect"><a:avLst/></a:prstGeom>` +
-            `<a:solidFill><a:srgbClr val="2B579A"/></a:solidFill>` +
-            `</p:spPr>` +
-            `<p:txBody><a:bodyPr/><a:lstStyle/><a:p><a:r><a:t>${xmlEscape(privateLabel)}</a:t></a:r></a:p></p:txBody>` +
-            `</p:sp>`;
+            `Badge ${resolveContext.id - 1}`;
           return {
-            xml,
             observation: {
-              id: compileContext.id,
+              id: resolveContext.id,
               kind: "badge",
               name,
               box,
               text: privateLabel,
             },
             extensions: [],
+            emit(emitContext) {
+              const link = emitContext.nativeLink;
+              const linkAttrs = [
+                ...(link?.relationshipId !== undefined &&
+                link.relationshipId !== ""
+                  ? [`r:id="${xmlEscape(link.relationshipId)}"`]
+                  : []),
+                ...(link?.action !== undefined
+                  ? [`action="${xmlEscape(link.action)}"`]
+                  : []),
+              ].join(" ");
+              const linkXml =
+                linkAttrs.length > 0 ? `<a:hlinkClick ${linkAttrs}/>` : "";
+              const xml =
+                `<p:sp><p:nvSpPr>` +
+                `<p:cNvPr id="${emitContext.id}" name="${xmlEscape(name)}">${linkXml}</p:cNvPr>` +
+                `<p:cNvSpPr/><p:nvPr/></p:nvSpPr>` +
+                `<p:spPr>` +
+                `<a:xfrm><a:off x="${pxToEmu(box.x)}" y="${pxToEmu(box.y)}"/><a:ext cx="${pxToEmu(box.width)}" cy="${pxToEmu(box.height)}"/></a:xfrm>` +
+                `<a:prstGeom prst="rect"><a:avLst/></a:prstGeom>` +
+                `<a:solidFill><a:srgbClr val="2B579A"/></a:solidFill>` +
+                `</p:spPr>` +
+                `<p:txBody><a:bodyPr/><a:lstStyle/><a:p><a:r><a:t>${xmlEscape(privateLabel)}</a:t></a:r></a:p></p:txBody>` +
+                `</p:sp>`;
+              return { xml };
+            },
           };
         },
       };
     },
   };
 
-  return { module, bindCalls, measureCalls, compileCalls };
+  return { module, bindCalls, measureCalls, resolveCalls };
 }
 
 describe("bound object capability contract", () => {
@@ -333,7 +331,7 @@ describe("bound object capability contract", () => {
     assert.deepEqual(impValidation.errors, []);
 
     assert.equal(tracker.bindCalls.length, 1);
-    assert.equal(tracker.compileCalls.length, 1);
+    assert.equal(tracker.resolveCalls.length, 1);
     assert.equal(
       imperativeResult.report.slides[0]?.objects[0]?.text,
       "Imperative",
@@ -350,7 +348,7 @@ describe("bound object capability contract", () => {
     // 2. JSX build inside Box Flex container (exercises measureLayout + container collaboration)
     tracker.bindCalls.length = 0;
     tracker.measureCalls.length = 0;
-    tracker.compileCalls.length = 0;
+    tracker.resolveCalls.length = 0;
 
     const jsxBuild = runJsxModules([boxCapability, tracker.module]);
     const jsxResult = await jsxBuild(
@@ -379,7 +377,7 @@ describe("bound object capability contract", () => {
     assert.deepEqual(jsxValidation.errors, []);
     assert.equal(tracker.bindCalls.length, 1);
     assert.ok(tracker.measureCalls.length >= 1);
-    assert.equal(tracker.compileCalls.length, 1);
+    assert.equal(tracker.resolveCalls.length, 1);
 
     const observed = jsxResult.query
       .getSlide("jsx-first")
@@ -458,7 +456,6 @@ describe("bound object capability contract", () => {
   it("migrates shapeCapability to BoundObjectCapabilityModule with single bind per node per build", async () => {
     assert.equal("bind" in shapeCapability, true);
     assert.equal("parse" in shapeCapability, false);
-    assert.equal("compile" in shapeCapability, false);
 
     const bindSpy = vi.spyOn(shapeCapability, "bind");
     try {
@@ -921,7 +918,6 @@ describe("bound object capability contract", () => {
   it("migrates tableCapability to BoundObjectCapabilityModule and resolves generic hierarchical sub-part locators", async () => {
     assert.equal("bind" in tableCapability, true);
     assert.equal("parse" in tableCapability, false);
-    assert.equal("compile" in tableCapability, false);
 
     const compositeWithParts: BoundObjectCapabilityModule = {
       declaration: "rp:composite-grid",
@@ -934,17 +930,16 @@ describe("bound object capability contract", () => {
         });
         return {
           contract,
-          compile(compileContext) {
-            const box = compileContext.layoutBox ?? {
+          resolve(resolveContext) {
+            const box = resolveContext.layoutBox ?? {
               x: 10,
               y: 20,
               width: 120,
               height: 40,
             };
             return {
-              xml: `<p:sp><p:nvSpPr><p:cNvPr id="${compileContext.id}" name="Composite"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr><p:spPr><a:xfrm><a:off x="${pxToEmu(box.x)}" y="${pxToEmu(box.y)}"/><a:ext cx="${pxToEmu(box.width)}" cy="${pxToEmu(box.height)}"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom><a:noFill/></p:spPr></p:sp>`,
               observation: {
-                id: compileContext.id,
+                id: resolveContext.id,
                 kind: "shape",
                 name: "Composite",
                 geometry: "rect",
@@ -970,6 +965,11 @@ describe("bound object capability contract", () => {
                 },
               ],
               extensions: [],
+              emit(emitContext) {
+                return {
+                  xml: `<p:sp><p:nvSpPr><p:cNvPr id="${emitContext.id}" name="Composite"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr><p:spPr><a:xfrm><a:off x="${pxToEmu(box.x)}" y="${pxToEmu(box.y)}"/><a:ext cx="${pxToEmu(box.width)}" cy="${pxToEmu(box.height)}"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom><a:noFill/></p:spPr></p:sp>`,
+                };
+              },
             };
           },
         };
@@ -1001,7 +1001,6 @@ describe("bound object capability contract", () => {
   it("migrates boxCapability to BoundObjectCapabilityModule with container role and single bind per build", async () => {
     assert.equal("bind" in boxCapability, true);
     assert.equal("parse" in boxCapability, false);
-    assert.equal("compile" in boxCapability, false);
 
     const bindSpy = vi.spyOn(boxCapability, "bind");
     try {
@@ -1116,22 +1115,26 @@ describe("bound object capability contract", () => {
                 },
               }
             : {}),
-          compile(compileContext) {
-            const box = compileContext.layoutBox!;
+          resolve(resolveContext) {
+            const box = resolveContext.layoutBox!;
             const name =
-              compileContext.morphName ?? `Panel ${compileContext.id}`;
+              resolveContext.morphName ?? `Panel ${resolveContext.id}`;
             return {
-              xml: emitsObject
-                ? `<p:sp><p:nvSpPr><p:cNvPr id="${compileContext.id}" name="${xmlEscape(name)}"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr><p:spPr><a:xfrm><a:off x="${pxToEmu(box.x)}" y="${pxToEmu(box.y)}"/><a:ext cx="${pxToEmu(box.width)}" cy="${pxToEmu(box.height)}"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom><a:solidFill><a:srgbClr val="E2E8F0"/></a:solidFill></p:spPr></p:sp>`
-                : "",
               observation: {
-                id: compileContext.id,
+                id: resolveContext.id,
                 kind: "shape",
                 name,
                 geometry: "rect",
                 box,
               },
               extensions: [],
+              emit(emitContext) {
+                return {
+                  xml: emitsObject
+                    ? `<p:sp><p:nvSpPr><p:cNvPr id="${emitContext.id}" name="${xmlEscape(name)}"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr><p:spPr><a:xfrm><a:off x="${pxToEmu(box.x)}" y="${pxToEmu(box.y)}"/><a:ext cx="${pxToEmu(box.width)}" cy="${pxToEmu(box.height)}"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom><a:solidFill><a:srgbClr val="E2E8F0"/></a:solidFill></p:spPr></p:sp>`
+                    : "",
+                };
+              },
             };
           },
         };
@@ -1297,16 +1300,18 @@ describe("bound object capability contract", () => {
         always: true,
         bindSlide() {
           return {
-            compileSlide(compileContext) {
-              for (const contribution of compileContext.contributions) {
+            resolveSlide(resolveContext) {
+              for (const contribution of resolveContext.contributions) {
                 if (contribution.capability === "custom-timing") {
                   observedMarkers.push(contribution.value);
                 }
               }
               return {
-                xml: "",
                 extensions: [],
                 observation: { count: observedMarkers.length },
+                emit() {
+                  return { xml: "" };
+                },
               };
             },
           };
@@ -1329,9 +1334,8 @@ describe("bound object capability contract", () => {
             children: input.children,
             emitsObject: false,
           },
-          compile() {
+          resolve() {
             return {
-              xml: "",
               observation: {
                 id: 0,
                 kind: "shape",
@@ -1345,6 +1349,9 @@ describe("bound object capability contract", () => {
                   value: { marker: "from-transparent-container" },
                 },
               ],
+              emit() {
+                return { xml: "" };
+              },
             };
           },
         };
@@ -1438,19 +1445,23 @@ describe("bound object capability contract", () => {
               ...(baselineAt === undefined ? {} : { baseline: baselineAt }),
             };
           },
-          compile(compileContext) {
-            const box = compileContext.layoutBox!;
-            const name = `Tile ${compileContext.id}`;
+          resolve(resolveContext) {
+            const box = resolveContext.layoutBox!;
+            const name = `Tile ${resolveContext.id}`;
             return {
-              xml: `<p:sp><p:nvSpPr><p:cNvPr id="${compileContext.id}" name="${name}"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr><p:spPr><a:xfrm><a:off x="${pxToEmu(box.x)}" y="${pxToEmu(box.y)}"/><a:ext cx="${pxToEmu(box.width)}" cy="${pxToEmu(box.height)}"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom><a:noFill/></p:spPr></p:sp>`,
               observation: {
-                id: compileContext.id,
+                id: resolveContext.id,
                 kind: "shape",
                 name,
                 geometry: "rect",
                 box,
               },
               extensions: [],
+              emit(emitContext) {
+                return {
+                  xml: `<p:sp><p:nvSpPr><p:cNvPr id="${emitContext.id}" name="${name}"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr><p:spPr><a:xfrm><a:off x="${pxToEmu(box.x)}" y="${pxToEmu(box.y)}"/><a:ext cx="${pxToEmu(box.width)}" cy="${pxToEmu(box.height)}"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom><a:noFill/></p:spPr></p:sp>`,
+                };
+              },
             };
           },
         };
@@ -1530,7 +1541,6 @@ describe("bound object capability contract", () => {
   it("migrates groupCapability to BoundObjectCapabilityModule with single bind per node per build", async () => {
     assert.equal("bind" in groupCapability, true);
     assert.equal("parse" in groupCapability, false);
-    assert.equal("compile" in groupCapability, false);
 
     const bindSpy = vi.spyOn(groupCapability, "bind");
     try {
@@ -1663,35 +1673,39 @@ describe("bound object capability contract", () => {
                 },
               }
             : {}),
-          compile(compileContext) {
-            const compiled = compileContext.compileChildren(input.children);
-            const boxes = compiled.objects
+          resolve(resolveContext) {
+            const resolved = resolveContext.resolveChildren(input.children);
+            const boxes = resolved.objects
               .map((member) => member.box)
               .filter((b): b is NonNullable<typeof b> => b !== undefined);
             const x = Math.min(...boxes.map((b) => b.x));
             const y = Math.min(...boxes.map((b) => b.y));
             const right = Math.max(...boxes.map((b) => b.x + b.width));
             const bottom = Math.max(...boxes.map((b) => b.y + b.height));
-            const box = compileContext.layoutBox ?? {
+            const box = resolveContext.layoutBox ?? {
               x,
               y,
               width: right - x,
               height: bottom - y,
             };
             const name =
-              compileContext.morphName ??
+              resolveContext.morphName ??
               requestedName ??
-              `Cluster ${compileContext.id}`;
+              `Cluster ${resolveContext.id}`;
             return {
-              xml: `<p:grpSp><p:nvGrpSpPr><p:cNvPr id="${compileContext.id}" name="${xmlEscape(name)}"/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr><a:xfrm><a:off x="${pxToEmu(box.x)}" y="${pxToEmu(box.y)}"/><a:ext cx="${pxToEmu(box.width)}" cy="${pxToEmu(box.height)}"/><a:chOff x="${pxToEmu(box.x)}" y="${pxToEmu(box.y)}"/><a:chExt cx="${pxToEmu(box.width)}" cy="${pxToEmu(box.height)}"/></a:xfrm></p:grpSpPr>${compiled.xml}</p:grpSp>`,
               observation: {
-                id: compileContext.id,
+                id: resolveContext.id,
                 kind: "group",
                 name,
                 box,
-                members: compiled.objects,
+                members: resolved.objects,
               },
               extensions: [],
+              emit(emitContext) {
+                return {
+                  xml: `<p:grpSp><p:nvGrpSpPr><p:cNvPr id="${emitContext.id}" name="${xmlEscape(name)}"/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr><a:xfrm><a:off x="${pxToEmu(box.x)}" y="${pxToEmu(box.y)}"/><a:ext cx="${pxToEmu(box.width)}" cy="${pxToEmu(box.height)}"/><a:chOff x="${pxToEmu(box.x)}" y="${pxToEmu(box.y)}"/><a:chExt cx="${pxToEmu(box.width)}" cy="${pxToEmu(box.height)}"/></a:xfrm></p:grpSpPr>${emitContext.childrenXml}</p:grpSp>`,
+                };
+              },
             };
           },
         };
@@ -1792,7 +1806,7 @@ describe("bound object capability contract", () => {
     );
   });
 
-  it("separates resolve, emit, and paint stages, mixes old and new capability contracts without resource/rId conflicts, and paints without running emit", async () => {
+  it("separates resolve, emit, and paint stages without resource/rId conflicts, and paints without running emit", async () => {
     const png1x1 = Buffer.from(
       "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
       "base64",
@@ -2144,8 +2158,8 @@ describe("bound object capability contract", () => {
     assert.deepEqual(Object.keys(resolution), ["report", "query"]);
     assert.equal(Object.getOwnPropertySymbols(resolution).length, 0);
 
-    // Neither emit nor paint ran for top-level/cluster new-contract modules during resolve (only inside oldGroupWithNewChild bridge).
-    const emitCallsAfterResolve = emitCalls;
+    // Neither emit nor paint ran during resolve.
+    assert.equal(emitCalls, 0);
     assert.equal(paintCalls, 0);
     assert.ok(
       resolveKeysSeen.every(
@@ -2169,7 +2183,7 @@ describe("bound object capability contract", () => {
 
     // Paint BEFORE emit: must succeed without emit having run.
     const painted = paint(resolution);
-    assert.equal(emitCalls, emitCallsAfterResolve);
+    assert.equal(emitCalls, 0);
     assert.equal(paintCalls, 3);
     assert.equal(painted.pages.length, 2);
     assert.deepEqual(painted.pages[0]?.diagnostics, []);
@@ -2523,8 +2537,6 @@ describe("bound object capability contract", () => {
         unknown
       >;
       assert.equal(typeof boundHandle["resolve"], "function");
-      assert.equal("compile" in boundHandle, false);
-      assert.equal("preview" in boundHandle, false);
 
       // Placement (contain of 1x1 into 120x60 -> 60x60 centered at x=50) happens in resolve;
       // resource registration does NOT happen during resolve.

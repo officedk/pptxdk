@@ -25,12 +25,10 @@ function docBuildWith(modules: readonly CapabilityModule[]) {
   const resolveWith = createResolver(modules);
   return async (document: CommonNode, options?: BuildOptions) =>
     emit(
-      resolveWith(document, {
-        ...(options?.embedFonts === undefined
-          ? {}
-          : { embedFonts: options.embedFonts }),
-        ...(options?.signal === undefined ? {} : { signal: options.signal }),
-      }),
+      resolveWith(
+        document,
+        options?.signal === undefined ? {} : { signal: options.signal },
+      ),
       options,
     );
 }
@@ -51,7 +49,6 @@ import { transitionCapability, transitions } from "../src/transition.ts";
 describe("transitionCapability bound slide migration & generic continuity collaboration", () => {
   it("implements BoundSlideCapabilityModule, parses once per slide, and leaves static preview canvas unchanged", async () => {
     assert.equal("bindSlide" in transitionCapability, true);
-    assert.equal("compileSlide" in transitionCapability, false);
 
     const bindSpy = vi.spyOn(transitionCapability, "bindSlide");
     try {
@@ -232,8 +229,11 @@ describe("transitionCapability bound slide migration & generic continuity collab
         const enableCheck = input.props["background"] === "#112233";
         return {
           ...(enableCheck ? { continuity: { matchSourceKinds: true } } : {}),
-          compileSlide() {
-            return { xml: "", extensions: [] };
+          resolveSlide() {
+            return {
+              extensions: [],
+              emit: () => ({ xml: "" }),
+            };
           },
         };
       },
@@ -242,35 +242,33 @@ describe("transitionCapability bound slide migration & generic continuity collab
     const scope = createMorphScope();
     const shared = scope.handle("shared");
 
-    const customGraphicModule = {
+    const customGraphicModule: BoundObjectCapabilityModule = {
       declaration: "rp:custom-graphic",
-      bind(input: { props: Record<string, unknown> }) {
+      bind(input) {
         return {
           contract: {
             nativeKind: "graphicFrame" as const,
             layoutStyle: {},
             padding: { top: 0, right: 0, bottom: 0, left: 0 },
-            isContainer: false,
-            hasExplicitSize: true,
           },
           native: {
-            morphKey: input.props["morphKey"] as ReturnType<
-              typeof createMorphScope
-            >["handle"] extends (n: string) => infer R
-              ? R
-              : never,
+            morphKey: input.props["morphKey"] as MorphKey,
           },
-          compile(compileContext: { id: number; morphName?: string }) {
-            const name = compileContext.morphName ?? "Custom";
+          resolve(resolveContext) {
+            const name = resolveContext.morphName ?? "Custom";
             return {
-              xml: `<p:sp><p:nvSpPr><p:cNvPr id="${compileContext.id}" name="${name}"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr><p:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="190500" cy="190500"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom><a:noFill/></p:spPr></p:sp>`,
               observation: {
-                id: compileContext.id,
+                id: resolveContext.id,
                 kind: "custom",
                 name,
                 box: { x: 0, y: 0, width: 20, height: 20 },
               },
               extensions: [],
+              emit(emitContext) {
+                return {
+                  xml: `<p:sp><p:nvSpPr><p:cNvPr id="${emitContext.id}" name="${name}"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr><p:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="190500" cy="190500"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom><a:noFill/></p:spPr></p:sp>`,
+                };
+              },
             };
           },
         };
@@ -352,8 +350,6 @@ describe("transitionCapability bound slide migration & generic continuity collab
             nativeKind: "sp",
             layoutStyle: {},
             padding: { top: 0, right: 0, bottom: 0, left: 0 },
-            isContainer: false,
-            hasExplicitSize: true,
           },
           native: {
             emitsObject: false,
@@ -364,16 +360,16 @@ describe("transitionCapability bound slide migration & generic continuity collab
               ? { link: input.props["link"] as { readonly id: string } }
               : {}),
           },
-          compile(compileContext) {
+          resolve(resolveContext) {
             return {
-              xml: "",
               observation: {
-                id: compileContext.id,
+                id: resolveContext.id,
                 kind: "shape",
                 name: "NonEmitting",
                 box: { x: 0, y: 0, width: 10, height: 10 },
               },
               extensions: [],
+              emit: () => ({ xml: "" }),
             };
           },
         };
@@ -388,20 +384,22 @@ describe("transitionCapability bound slide migration & generic continuity collab
             nativeKind: "grpSp",
             layoutStyle: {},
             padding: { top: 0, right: 0, bottom: 0, left: 0 },
-            isContainer: false,
-            hasExplicitSize: true,
           },
-          compile(compileContext) {
-            const compiled = compileContext.compileChildren(input.children);
+          resolve(resolveContext) {
+            resolveContext.resolveChildren(input.children);
             return {
-              xml: `<p:grpSp><p:nvGrpSpPr><p:cNvPr id="${compileContext.id}" name="CustomGroup"/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr/>${compiled.xml}</p:grpSp>`,
               observation: {
-                id: compileContext.id,
+                id: resolveContext.id,
                 kind: "group",
                 name: "CustomGroup",
                 box: { x: 0, y: 0, width: 100, height: 100 },
               },
               extensions: [],
+              emit(emitContext) {
+                return {
+                  xml: `<p:grpSp><p:nvGrpSpPr><p:cNvPr id="${emitContext.id}" name="CustomGroup"/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr/>${emitContext.childrenXml}</p:grpSp>`,
+                };
+              },
             };
           },
         };

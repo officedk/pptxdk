@@ -658,12 +658,8 @@ export const motionPositiveScenario: CapabilityScenario = {
 
 export async function verifyMotionCollaborationAndRejections(): Promise<void> {
   const resolveDefault = createResolver(documentCapabilities);
-  const resolveOptionsFrom = (options?: BuildOptions) => ({
-    ...(options?.embedFonts === undefined
-      ? {}
-      : { embedFonts: options.embedFonts }),
-    ...(options?.signal === undefined ? {} : { signal: options.signal }),
-  });
+  const resolveOptionsFrom = (options?: BuildOptions) =>
+    options?.signal === undefined ? {} : { signal: options.signal };
   const buildJsx = async (element: ReactNode, options?: BuildOptions) =>
     emit(
       resolveDefault(

@@ -3983,7 +3983,6 @@ describe("public build entry", () => {
     );
     const resolution = createResolver([observedShape])(expanded, {
       signal: controller.signal,
-      embedFonts: "full",
     });
     const result = emit(resolution, {
       signal: controller.signal,
@@ -3996,7 +3995,6 @@ describe("public build entry", () => {
     assert.equal(emitOptions.length, 1);
     for (const options of [parseOptions[0], resolveOptions[0]]) {
       assert.equal(options?.signal, controller.signal);
-      assert.equal(options?.embedFonts, "full");
     }
     assert.equal(emitOptions[0]?.signal, controller.signal);
     assert.equal(emitOptions[0]?.target, targets.baselineOnly);

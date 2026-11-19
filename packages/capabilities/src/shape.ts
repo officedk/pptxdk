@@ -327,391 +327,384 @@ function renderShapePreview(options: {
 }
 
 /** Shape module independently validates input, encapsulates bound state, and emits native PresentationML objects. */
-export const shapeCapability: ObjectCapabilityModule<ResolvedBoundObjectCapability> =
-  {
-    declaration: "rp:shape",
+export const shapeCapability: ObjectCapabilityModule = {
+  declaration: "rp:shape",
 
-    bind(
-      input: CapabilityInput,
-      context: CapabilityParseContext,
-    ): ResolvedBoundObjectCapability {
-      const unknown = Object.keys(input.props).find(
-        (key) => !(allowedParameters as readonly string[]).includes(key),
-      );
-      if (unknown !== undefined) {
-        throw new CapabilityError(
-          "unknown-parameter",
-          `Shape contains unsupported parameter ${unknown}`,
-          context.path,
-        );
-      }
-
-      const requestedName = parseOptionalName(
-        input.props["name"],
+  bind(
+    input: CapabilityInput,
+    context: CapabilityParseContext,
+  ): ResolvedBoundObjectCapability {
+    const unknown = Object.keys(input.props).find(
+      (key) => !(allowedParameters as readonly string[]).includes(key),
+    );
+    if (unknown !== undefined) {
+      throw new CapabilityError(
+        "unknown-parameter",
+        `Shape contains unsupported parameter ${unknown}`,
         context.path,
       );
-      const morphKey = parseMorphKey(input.props["morphKey"], context.path);
-      const link = parseLinkTarget(input.props["link"], context.path);
+    }
 
-      const declaredX = input.props["x"];
-      const declaredY = input.props["y"];
-      if (declaredX !== undefined) {
-        validateCoordinate(declaredX, "x", context.path);
-      }
-      if (declaredY !== undefined) {
-        validateCoordinate(declaredY, "y", context.path);
-      }
-      if (
-        input.props["width"] !== undefined &&
-        typeof input.props["width"] === "number"
-      ) {
-        validateSize(input.props["width"], "width", context.path);
-      }
-      if (
-        input.props["height"] !== undefined &&
-        typeof input.props["height"] === "number"
-      ) {
-        validateSize(input.props["height"], "height", context.path);
-      }
+    const requestedName = parseOptionalName(input.props["name"], context.path);
+    const morphKey = parseMorphKey(input.props["morphKey"], context.path);
+    const link = parseLinkTarget(input.props["link"], context.path);
 
-      const textProp = input.props["text"];
-      if (textProp !== undefined && typeof textProp !== "string") {
-        throw new CapabilityError(
-          "invalid-text",
-          "Shape.text must be a string",
-          context.path,
-        );
-      }
-      if (textProp !== undefined && input.children.length > 0) {
-        throw new CapabilityError(
-          "conflicting-text-content",
-          "Shape.text and Shape children text cannot be declared simultaneously",
-          context.path,
-        );
-      }
+    const declaredX = input.props["x"];
+    const declaredY = input.props["y"];
+    if (declaredX !== undefined) {
+      validateCoordinate(declaredX, "x", context.path);
+    }
+    if (declaredY !== undefined) {
+      validateCoordinate(declaredY, "y", context.path);
+    }
+    if (
+      input.props["width"] !== undefined &&
+      typeof input.props["width"] === "number"
+    ) {
+      validateSize(input.props["width"], "width", context.path);
+    }
+    if (
+      input.props["height"] !== undefined &&
+      typeof input.props["height"] === "number"
+    ) {
+      validateSize(input.props["height"], "height", context.path);
+    }
 
-      const hasText =
-        (typeof textProp === "string" && textProp !== "") ||
-        (textProp === undefined && input.children.length > 0);
+    const textProp = input.props["text"];
+    if (textProp !== undefined && typeof textProp !== "string") {
+      throw new CapabilityError(
+        "invalid-text",
+        "Shape.text must be a string",
+        context.path,
+      );
+    }
+    if (textProp !== undefined && input.children.length > 0) {
+      throw new CapabilityError(
+        "conflicting-text-content",
+        "Shape.text and Shape children text cannot be declared simultaneously",
+        context.path,
+      );
+    }
 
-      const allowedStyleKeys = new Set<string>([
-        ...layoutStyleKeys,
-        ...visualStyleKeys,
-        ...lineEndStyleKeys,
-        ...(hasText ? [...textStyleKeys, ...paddingStyleKeys] : []),
-      ]);
+    const hasText =
+      (typeof textProp === "string" && textProp !== "") ||
+      (textProp === undefined && input.children.length > 0);
 
-      const contract = parseCapabilityLayoutContract({
-        nativeKind: "sp",
-        props: input.props,
-        allowedStyleKeys,
-        allowPadding: hasText,
-        path: context.path,
-      });
+    const allowedStyleKeys = new Set<string>([
+      ...layoutStyleKeys,
+      ...visualStyleKeys,
+      ...lineEndStyleKeys,
+      ...(hasText ? [...textStyleKeys, ...paddingStyleKeys] : []),
+    ]);
 
-      const insets = hasText
-        ? textInsets(input.props["style"])
-        : { top: 0, right: 0, bottom: 0, left: 0 };
+    const contract = parseCapabilityLayoutContract({
+      nativeKind: "sp",
+      props: input.props,
+      allowedStyleKeys,
+      allowPadding: hasText,
+      path: context.path,
+    });
 
-      const textChildren = shapeTextContent(input, context.path);
-      const rawTextStyle = shapeTextStyle(input.props);
-      const effectiveTextStyle = {
-        ...rawTextStyle,
-        verticalAlign: rawTextStyle["verticalAlign"] ?? "middle",
-      };
-      const { paragraphs, style: parsedTextStyle } = hasText
-        ? parseTextContent(
-            textChildren,
-            effectiveTextStyle,
+    const insets = hasText
+      ? textInsets(input.props["style"])
+      : { top: 0, right: 0, bottom: 0, left: 0 };
+
+    const textChildren = shapeTextContent(input, context.path);
+    const rawTextStyle = shapeTextStyle(input.props);
+    const effectiveTextStyle = {
+      ...rawTextStyle,
+      verticalAlign: rawTextStyle["verticalAlign"] ?? "middle",
+    };
+    const { paragraphs, style: parsedTextStyle } = hasText
+      ? parseTextContent(
+          textChildren,
+          effectiveTextStyle,
+          context.theme,
+          { slideNumber: context.slideNumber },
+          "Shape.style",
+        )
+      : {
+          paragraphs: [] as readonly Paragraph[],
+          style: parseTextContent(
+            [],
+            {},
             context.theme,
             { slideNumber: context.slideNumber },
             "Shape.style",
-          )
-        : {
-            paragraphs: [] as readonly Paragraph[],
-            style: parseTextContent(
-              [],
-              {},
-              context.theme,
-              { slideNumber: context.slideNumber },
-              "Shape.style",
-            ).style,
+          ).style,
+        };
+
+    const visualStyle = { ...record(input.props["style"]) };
+    const geometry = input.props["geometry"] as Geometry | undefined;
+    const flipH = input.props["flipH"] as boolean | undefined;
+    const flipV = input.props["flipV"] as boolean | undefined;
+    const fill = input.props["fill"] as ColorValue | undefined;
+    const explicitText = typeof textProp === "string" ? textProp : undefined;
+    const authorId =
+      typeof input.props["id"] === "string" ? input.props["id"] : undefined;
+    const motionProps: Readonly<Record<string, unknown>> = {
+      ...(input.props["enter"] !== undefined
+        ? { enter: input.props["enter"] }
+        : {}),
+      ...(input.props["emphasis"] !== undefined
+        ? { emphasis: input.props["emphasis"] }
+        : {}),
+      ...(input.props["motion"] !== undefined
+        ? { motion: input.props["motion"] }
+        : {}),
+    };
+
+    // Validate geometry and visual properties during bind before layout runs.
+    shapePropertiesXml({
+      theme: context.theme,
+      style: visualStyle,
+      box: { x: 0, y: 0, width: 100, height: 100 },
+      ...(geometry !== undefined ? { geometry } : {}),
+      ...(flipH !== undefined ? { flipH } : {}),
+      ...(flipV !== undefined ? { flipV } : {}),
+      ...(fill !== undefined ? { fill } : {}),
+    });
+
+    const declaredWidth = contract.width;
+    const declaredHeight = contract.height;
+    const hasFixedSize =
+      typeof declaredWidth === "number" && typeof declaredHeight === "number";
+
+    const native: BoundObjectNativeCollaboration = {
+      ...(morphKey === undefined ? {} : { morphKey }),
+      ...(requestedName === undefined ? {} : { hasExplicitName: true }),
+      ...(link === undefined ? {} : { link }),
+    };
+
+    return {
+      contract,
+      ...(morphKey !== undefined ||
+      requestedName !== undefined ||
+      link !== undefined
+        ? { native }
+        : {}),
+      measureLayout(
+        request: CapabilityLayoutRequest,
+      ): CapabilityLayoutMeasurement | undefined {
+        if (!hasText || paragraphs.length === 0) {
+          return { minContentWidth: 0, minContentHeight: 0 };
+        }
+
+        const width = request.availableWidth ?? declaredWidth;
+        const innerWidth =
+          request.availableWidth !== undefined
+            ? request.availableWidth
+            : typeof width === "number"
+              ? Math.max(0, width - insets.left - insets.right)
+              : undefined;
+
+        try {
+          const measured = measureTextLayoutFromParagraphs(
+            paragraphs,
+            parsedTextStyle,
+            innerWidth,
+          );
+          const baseline =
+            parsedTextStyle.verticalAlign === "top"
+              ? (measured.baseline ?? "unavailable")
+              : "unavailable";
+
+          return {
+            ...measured,
+            baseline,
           };
-
-      const visualStyle = { ...record(input.props["style"]) };
-      const geometry = input.props["geometry"] as Geometry | undefined;
-      const flipH = input.props["flipH"] as boolean | undefined;
-      const flipV = input.props["flipV"] as boolean | undefined;
-      const fill = input.props["fill"] as ColorValue | undefined;
-      const explicitText = typeof textProp === "string" ? textProp : undefined;
-      const authorId =
-        typeof input.props["id"] === "string" ? input.props["id"] : undefined;
-      const motionProps: Readonly<Record<string, unknown>> = {
-        ...(input.props["enter"] !== undefined
-          ? { enter: input.props["enter"] }
-          : {}),
-        ...(input.props["emphasis"] !== undefined
-          ? { emphasis: input.props["emphasis"] }
-          : {}),
-        ...(input.props["motion"] !== undefined
-          ? { motion: input.props["motion"] }
-          : {}),
-      };
-
-      // Validate geometry and visual properties during bind before layout runs.
-      shapePropertiesXml({
-        theme: context.theme,
-        style: visualStyle,
-        box: { x: 0, y: 0, width: 100, height: 100 },
-        ...(geometry !== undefined ? { geometry } : {}),
-        ...(flipH !== undefined ? { flipH } : {}),
-        ...(flipV !== undefined ? { flipV } : {}),
-        ...(fill !== undefined ? { fill } : {}),
-      });
-
-      const declaredWidth = contract.width;
-      const declaredHeight = contract.height;
-      const hasFixedSize =
-        typeof declaredWidth === "number" && typeof declaredHeight === "number";
-
-      const native: BoundObjectNativeCollaboration = {
-        ...(morphKey === undefined ? {} : { morphKey }),
-        ...(requestedName === undefined ? {} : { hasExplicitName: true }),
-        ...(link === undefined ? {} : { link }),
-      };
-
-      return {
-        contract,
-        ...(morphKey !== undefined ||
-        requestedName !== undefined ||
-        link !== undefined
-          ? { native }
-          : {}),
-        measureLayout(
-          request: CapabilityLayoutRequest,
-        ): CapabilityLayoutMeasurement | undefined {
-          if (!hasText || paragraphs.length === 0) {
-            return { minContentWidth: 0, minContentHeight: 0 };
-          }
-
-          const width = request.availableWidth ?? declaredWidth;
-          const innerWidth =
-            request.availableWidth !== undefined
-              ? request.availableWidth
-              : typeof width === "number"
-                ? Math.max(0, width - insets.left - insets.right)
-                : undefined;
-
-          try {
-            const measured = measureTextLayoutFromParagraphs(
-              paragraphs,
-              parsedTextStyle,
-              innerWidth,
-            );
-            const baseline =
-              parsedTextStyle.verticalAlign === "top"
-                ? (measured.baseline ?? "unavailable")
-                : "unavailable";
-
+        } catch (error) {
+          if (
+            hasFixedSize &&
+            error instanceof CapabilityError &&
+            error.code === "font-measurement-unavailable"
+          ) {
             return {
-              ...measured,
-              baseline,
+              baseline: "unavailable",
             };
-          } catch (error) {
-            if (
-              hasFixedSize &&
-              error instanceof CapabilityError &&
-              error.code === "font-measurement-unavailable"
-            ) {
-              return {
-                baseline: "unavailable",
+          }
+          throw error;
+        }
+      },
+      resolve(resolveContext: ObjectResolveContext): ResolvedObject {
+        const box =
+          resolveContext.layoutBox === undefined
+            ? {
+                x: validateCoordinate(declaredX, "x", resolveContext.path),
+                y: validateCoordinate(declaredY, "y", resolveContext.path),
+                width: validateSize(
+                  declaredWidth,
+                  "width",
+                  resolveContext.path,
+                ),
+                height: validateSize(
+                  declaredHeight,
+                  "height",
+                  resolveContext.path,
+                ),
+              }
+            : {
+                x: validateCoordinate(
+                  resolveContext.layoutBox.x,
+                  "x",
+                  resolveContext.path,
+                ),
+                y: validateCoordinate(
+                  resolveContext.layoutBox.y,
+                  "y",
+                  resolveContext.path,
+                ),
+                width: validateSize(
+                  resolveContext.layoutBox.width,
+                  "width",
+                  resolveContext.path,
+                ),
+                height: validateSize(
+                  resolveContext.layoutBox.height,
+                  "height",
+                  resolveContext.path,
+                ),
               };
-            }
-            throw error;
-          }
-        },
-        resolve(resolveContext: ObjectResolveContext): ResolvedObject {
-          const box =
-            resolveContext.layoutBox === undefined
-              ? {
-                  x: validateCoordinate(declaredX, "x", resolveContext.path),
-                  y: validateCoordinate(declaredY, "y", resolveContext.path),
-                  width: validateSize(
-                    declaredWidth,
-                    "width",
-                    resolveContext.path,
-                  ),
-                  height: validateSize(
-                    declaredHeight,
-                    "height",
-                    resolveContext.path,
-                  ),
-                }
-              : {
-                  x: validateCoordinate(
-                    resolveContext.layoutBox.x,
-                    "x",
-                    resolveContext.path,
-                  ),
-                  y: validateCoordinate(
-                    resolveContext.layoutBox.y,
-                    "y",
-                    resolveContext.path,
-                  ),
-                  width: validateSize(
-                    resolveContext.layoutBox.width,
-                    "width",
-                    resolveContext.path,
-                  ),
-                  height: validateSize(
-                    resolveContext.layoutBox.height,
-                    "height",
-                    resolveContext.path,
-                  ),
-                };
-          const properties = shapePropertiesXml({
-            theme: resolveContext.theme,
-            style: visualStyle,
-            box,
-            ...(geometry === undefined ? {} : { geometry }),
-            ...(flipH === undefined ? {} : { flipH }),
-            ...(flipV === undefined ? {} : { flipV }),
-            ...(fill === undefined ? {} : { fill }),
-          });
+        const properties = shapePropertiesXml({
+          theme: resolveContext.theme,
+          style: visualStyle,
+          box,
+          ...(geometry === undefined ? {} : { geometry }),
+          ...(flipH === undefined ? {} : { flipH }),
+          ...(flipV === undefined ? {} : { flipV }),
+          ...(fill === undefined ? {} : { fill }),
+        });
 
-          let resolvedText: ResolvedTextBody | undefined;
-          if (hasText && paragraphs.length > 0) {
-            resolvedText = resolveTextBody(
-              paragraphs,
-              parsedTextStyle,
-              resolveContext.theme,
-              parsedTextStyle.verticalAlign ?? "middle",
-              {
-                width: Math.max(0, box.width - insets.left - insets.right),
-                height: Math.max(0, box.height - insets.top - insets.bottom),
-                insets,
-              },
-              "text-box",
-            );
-          }
-          const name =
-            resolveContext.morphName ??
-            requestedName ??
-            `Shape ${resolveContext.id - 1}`;
-          const annotations = motionAnnotations(motionProps, {
+        let resolvedText: ResolvedTextBody | undefined;
+        if (hasText && paragraphs.length > 0) {
+          resolvedText = resolveTextBody(
+            paragraphs,
+            parsedTextStyle,
+            resolveContext.theme,
+            parsedTextStyle.verticalAlign ?? "middle",
+            {
+              width: Math.max(0, box.width - insets.left - insets.right),
+              height: Math.max(0, box.height - insets.top - insets.bottom),
+              insets,
+            },
+            "text-box",
+          );
+        }
+        const name =
+          resolveContext.morphName ??
+          requestedName ??
+          `Shape ${resolveContext.id - 1}`;
+        const annotations = motionAnnotations(motionProps, {
+          kind: "shape",
+          name,
+          ...(authorId === undefined ? {} : { authorId }),
+          textBody: resolvedText !== undefined,
+          filled:
+            fill !== undefined ||
+            visualStyle["backgroundColor"] !== undefined ||
+            visualStyle["backgroundImage"] !== undefined,
+          solidFilled:
+            (fill ?? visualStyle["backgroundColor"]) !== undefined &&
+            (fill ?? visualStyle["backgroundColor"]) !== "none" &&
+            visualStyle["backgroundImage"] === undefined,
+          box,
+          rotationDegrees:
+            typeof visualStyle["rotate"] === "number"
+              ? visualStyle["rotate"]
+              : 0,
+          hasBackground:
+            fill !== undefined ||
+            visualStyle["backgroundColor"] !== undefined ||
+            visualStyle["backgroundImage"] !== undefined ||
+            visualStyle["borderColor"] !== undefined ||
+            (typeof visualStyle["borderWidth"] === "number" &&
+              visualStyle["borderWidth"] > 0),
+          ...(resolvedText === undefined
+            ? {}
+            : { paragraphCount: resolvedText.paragraphCount }),
+        });
+        let escapedName: string;
+        try {
+          escapedName = xmlEscape(name);
+        } catch {
+          throw new CapabilityError(
+            "invalid-xml-character",
+            "Shape.name contains characters not allowed in XML 1.0",
+            resolveContext.path,
+          );
+        }
+        const warnings = [
+          ...properties.warnings,
+          ...(resolvedText?.warnings ?? []),
+        ];
+        const transform: PreviewTransform = {
+          box,
+          angle:
+            typeof visualStyle["rotate"] === "number"
+              ? visualStyle["rotate"]
+              : 0,
+          flipH: Boolean(flipH),
+          flipV: Boolean(flipV),
+        };
+        return {
+          observation: {
+            id: resolveContext.id,
             kind: "shape",
             name,
-            ...(authorId === undefined ? {} : { authorId }),
-            textBody: resolvedText !== undefined,
-            filled:
-              fill !== undefined ||
-              visualStyle["backgroundColor"] !== undefined ||
-              visualStyle["backgroundImage"] !== undefined,
-            solidFilled:
-              (fill ?? visualStyle["backgroundColor"]) !== undefined &&
-              (fill ?? visualStyle["backgroundColor"]) !== "none" &&
-              visualStyle["backgroundImage"] === undefined,
+            geometry: properties.geometryName,
             box,
-            rotationDegrees:
-              typeof visualStyle["rotate"] === "number"
-                ? visualStyle["rotate"]
-                : 0,
-            hasBackground:
-              fill !== undefined ||
-              visualStyle["backgroundColor"] !== undefined ||
-              visualStyle["backgroundImage"] !== undefined ||
-              visualStyle["borderColor"] !== undefined ||
-              (typeof visualStyle["borderWidth"] === "number" &&
-                visualStyle["borderWidth"] > 0),
             ...(resolvedText === undefined
-              ? {}
-              : { paragraphCount: resolvedText.paragraphCount }),
-          });
-          let escapedName: string;
-          try {
-            escapedName = xmlEscape(name);
-          } catch {
-            throw new CapabilityError(
-              "invalid-xml-character",
-              "Shape.name contains characters not allowed in XML 1.0",
-              resolveContext.path,
-            );
-          }
-          const warnings = [
-            ...properties.warnings,
-            ...(resolvedText?.warnings ?? []),
-          ];
-          const transform: PreviewTransform = {
-            box,
-            angle:
-              typeof visualStyle["rotate"] === "number"
-                ? visualStyle["rotate"]
-                : 0,
-            flipH: Boolean(flipH),
-            flipV: Boolean(flipV),
-          };
-          return {
-            observation: {
-              id: resolveContext.id,
-              kind: "shape",
-              name,
-              geometry: properties.geometryName,
+              ? explicitText === undefined
+                ? {}
+                : { text: explicitText }
+              : { text: resolvedText.text }),
+          },
+          transform,
+          extensions: [],
+          ...(warnings.length === 0 ? {} : { warnings }),
+          ...(annotations.length === 0 ? {} : { annotations }),
+          ...(resolvedText === undefined
+            ? {}
+            : { resourceClaims: resolvedText.resourceClaims }),
+          emit(emitContext: EmitContext): EmitOutput {
+            const embedFonts = emitContext.options.embedFonts;
+            const emittedBody =
+              resolvedText === undefined
+                ? undefined
+                : emitTextBody(resolvedText, emitContext.theme, {
+                    createFieldId: emitContext.createTextFieldId,
+                    ...(embedFonts === undefined ? {} : { embedFonts }),
+                  });
+            return {
+              xml: shapeXml(
+                emitContext.id,
+                escapedName,
+                properties.xml,
+                emittedBody?.xml ?? "",
+                nativeLinkXml(emitContext.nativeLink),
+              ),
+              ...(emittedBody === undefined
+                ? {}
+                : {
+                    presentationContributions:
+                      emittedBody.presentationContributions,
+                  }),
+            };
+          },
+          paint(): PaintOutput {
+            return renderShapePreview({
+              visualStyle,
+              hasText,
+              geometry,
+              fill,
+              flipH,
+              flipV,
               box,
-              ...(resolvedText === undefined
-                ? explicitText === undefined
-                  ? {}
-                  : { text: explicitText }
-                : { text: resolvedText.text }),
-            },
-            transform,
-            extensions: [],
-            ...(warnings.length === 0 ? {} : { warnings }),
-            ...(annotations.length === 0 ? {} : { annotations }),
-            ...(resolvedText === undefined
-              ? {}
-              : { resourceClaims: resolvedText.resourceClaims }),
-            emit(emitContext: EmitContext): EmitOutput {
-              // Transition period before ticket 10 removes embedFonts from ResolveOptions.
-              const embedFonts =
-                emitContext.options.embedFonts ??
-                resolveContext.options.embedFonts;
-              const emittedBody =
-                resolvedText === undefined
-                  ? undefined
-                  : emitTextBody(resolvedText, emitContext.theme, {
-                      createFieldId: emitContext.createTextFieldId,
-                      ...(embedFonts === undefined ? {} : { embedFonts }),
-                    });
-              return {
-                xml: shapeXml(
-                  emitContext.id,
-                  escapedName,
-                  properties.xml,
-                  emittedBody?.xml ?? "",
-                  nativeLinkXml(emitContext.nativeLink),
-                ),
-                ...(emittedBody === undefined
-                  ? {}
-                  : {
-                      presentationContributions:
-                        emittedBody.presentationContributions,
-                    }),
-              };
-            },
-            paint(): PaintOutput {
-              return renderShapePreview({
-                visualStyle,
-                hasText,
-                geometry,
-                fill,
-                flipH,
-                flipV,
-                box,
-                theme: resolveContext.theme,
-              });
-            },
-          };
-        },
-      };
-    },
-  };
+              theme: resolveContext.theme,
+            });
+          },
+        };
+      },
+    };
+  },
+};

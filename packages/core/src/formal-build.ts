@@ -33,9 +33,6 @@ import {
   registerInternalResolution,
   type InternalResolution,
   type InternalResolvedSlide,
-  type LegacyDocumentSnapshot,
-  type LegacyPresentationElementRecord,
-  type LegacySharedPartRecord,
   type ResolutionDimensions,
   type ResolvedObjectLayer,
   type ResolvedSectionRecord,
@@ -57,7 +54,6 @@ import {
   type BuildOptions,
   type BuildReport,
   type CapabilityChild,
-  type CapabilityContext,
   type CapabilityContribution,
   type CapabilityElement,
   type CapabilityInput,
@@ -81,7 +77,6 @@ import {
   type GeometryBox,
   type LayoutChildReference,
   type LayoutObservation,
-  type LegacyBoundObjectCapability,
   type NativeElementKind,
   type NativeLink,
   type ObjectCapabilityModule,
@@ -91,8 +86,6 @@ import {
   type Resolution,
   type ResolutionReport,
   type ResolveOptions,
-  type ResolvedBoundObjectCapability,
-  type ResolvedBoundSlideCapability,
   type ResolvedLink,
   type ResolvedObjectChildren,
   type ResolvedSlide as ResolvedSlideCapabilityOutput,
@@ -140,14 +133,25 @@ type StoredPresentationItem = {
   readonly resolveBytes?: (characters: string) => Uint8Array;
 };
 
+type SharedPartRecord = {
+  readonly path: string;
+  readonly relationshipId?: string;
+  readonly descriptor: CapabilitySharedPackagePart;
+};
+
+type PresentationElementRecord = {
+  readonly position: "before-slides" | "after-notes-size";
+  readonly content: string;
+};
+
 type DocumentPackageState = {
   readonly resources: Map<string, PptxPackageResource>;
   readonly resourceTypes: Map<string, string>;
   readonly packageParts: Map<string, PptxPackagePart>;
   readonly packageRelationships: Map<string, PptxRelationship[]>;
   readonly presentationPartPaths: Set<string>;
-  readonly sharedParts: Map<string, LegacySharedPartRecord>;
-  readonly presentationElements: LegacyPresentationElementRecord[];
+  readonly sharedParts: Map<string, SharedPartRecord>;
+  readonly presentationElements: PresentationElementRecord[];
   nextPackagePartId: number;
   nextPresentationRelationshipId: number;
   nextTextFieldId: number;
@@ -175,7 +179,6 @@ type DocumentResolveState = {
   readonly morphNames: Map<MorphKey, string>;
   nextMorphName: number;
   readonly slideIndexById: ReadonlyMap<string, number>;
-  readonly legacy: DocumentPackageState;
 };
 
 type SlideResolveState = {
@@ -189,7 +192,6 @@ type SlideResolveState = {
   matchContinuityKinds: boolean;
   readonly linkedSlideIndexes: Set<number>;
   readonly layoutDerivedObjectIds: Set<number>;
-  readonly legacy: SlidePackageState;
 };
 
 type DocumentEmitState = DocumentPackageState & {
@@ -330,18 +332,6 @@ function isObjectCapability(
   module: RegisteredCapabilityModule,
 ): module is ObjectCapabilityModule {
   return "bind" in module;
-}
-
-function isNewObjectCapability(
-  bound: BoundObjectCapability,
-): bound is ResolvedBoundObjectCapability {
-  return "resolve" in bound && typeof bound.resolve === "function";
-}
-
-function isNewSlideCapability(
-  bound: BoundSlideCapability,
-): bound is ResolvedBoundSlideCapability {
-  return "resolveSlide" in bound && typeof bound.resolveSlide === "function";
 }
 
 function nonWhitespaceText(children: readonly DeclarationChild[]): boolean {
@@ -496,24 +486,27 @@ function validateStageOptions(
       ),
     ]);
   }
-  const embedFonts = (options as { readonly embedFonts?: unknown }).embedFonts;
-  if (
-    embedFonts !== undefined &&
-    embedFonts !== "full" &&
-    embedFonts !== "subset"
-  ) {
-    throw new BuildError([
-      diagnostic(
-        `${stage}.embedFonts`,
-        "unsupported-font-embedding",
-        "embedFonts currently only supports 'full' or 'subset'",
-      ),
-    ]);
+  if (stage === "build") {
+    const embedFonts = (options as { readonly embedFonts?: unknown })
+      .embedFonts;
+    if (
+      embedFonts !== undefined &&
+      embedFonts !== "full" &&
+      embedFonts !== "subset"
+    ) {
+      throw new BuildError([
+        diagnostic(
+          `${stage}.embedFonts`,
+          "unsupported-font-embedding",
+          "embedFonts currently only supports 'full' or 'subset'",
+        ),
+      ]);
+    }
   }
 }
 
 function validateResolveOptions(options: ResolveOptions): void {
-  validateStageOptions(options, "resolve", ["signal", "embedFonts"]);
+  validateStageOptions(options, "resolve", ["signal"]);
 }
 
 export function validateOptions(options: BuildOptions): Target {
@@ -1907,154 +1900,6 @@ function recordObjectMorph(args: {
   }
 }
 
-function createLegacyCapabilityContext(args: {
-  readonly resolveContext: ResolvePassContext;
-  readonly id: number;
-  readonly path: string;
-  readonly layoutBox: GeometryBox | undefined;
-  readonly theme: ThemeContext;
-  readonly insideGroup: boolean;
-  readonly restrictsMemberContinuity: boolean;
-  readonly morphName: string | undefined;
-  readonly nativeLink: NativeLink | undefined;
-  readonly onChildrenCompiled?: (
-    resolved: ResolvedChildrenResult,
-    contributions: readonly CapabilityPresentationContribution[],
-  ) => void;
-}): CapabilityContext {
-  const {
-    resolveContext,
-    id,
-    path,
-    layoutBox,
-    theme,
-    insideGroup,
-    restrictsMemberContinuity,
-    morphName,
-    nativeLink,
-    onChildrenCompiled,
-  } = args;
-  const packageCtx: PackageContext = {
-    document: resolveContext.document.legacy,
-    slide: resolveContext.slide.legacy,
-  };
-  return {
-    id,
-    path,
-    options: resolveContext.options,
-    slideNumber: resolveContext.slideNumber,
-    createTextFieldId() {
-      return allocateTextFieldId(resolveContext.document.legacy);
-    },
-    ...(morphName === undefined ? {} : { morphName }),
-    ...(nativeLink === undefined ? {} : { nativeLink }),
-    theme,
-    ...(layoutBox === undefined ? {} : { layoutBox }),
-    compileChildren(nested) {
-      const resolved = resolveChildrenPass(
-        nested,
-        resolveContext,
-        path,
-        insideGroup || restrictsMemberContinuity,
-      );
-      // Old-contract member containers require child XML synchronously during resolve().
-      // Emit new-contract children via the legacy allocator so paint() still runs independently later.
-      const legacyContributions: CapabilityPresentationContribution[] = [];
-      const xml = resolved.layers
-        .map((layer) =>
-          emitLayerInLegacyResolve(layer, resolveContext, legacyContributions),
-        )
-        .join("");
-      onChildrenCompiled?.(resolved, legacyContributions);
-      return { xml, objects: resolved.objects };
-    },
-    registerResource(resource) {
-      return addResource(resource, packageCtx, id);
-    },
-    registerPackagePart(part) {
-      return addPackagePart(part, packageCtx, id);
-    },
-  };
-}
-
-function emitLayerInLegacyResolve(
-  layer: ResolvedObjectLayer,
-  resolveContext: ResolvePassContext,
-  collectedContributions: CapabilityPresentationContribution[],
-): string {
-  const packageCtx: PackageContext = {
-    document: resolveContext.document.legacy,
-    slide: resolveContext.slide.legacy,
-  };
-  const emitSingle = (targetLayer: ResolvedObjectLayer): string => {
-    const childXml =
-      targetLayer.childComposition === "members" && targetLayer.isNewContract
-        ? targetLayer.memberLayers.map(emitSingle).join("")
-        : "";
-    const siblingXml =
-      targetLayer.childComposition === "siblings"
-        ? targetLayer.siblingLayers.map(emitSingle).join("")
-        : "";
-    if (!targetLayer.isNewContract) {
-      if (targetLayer.legacyPresentationContributions !== undefined) {
-        collectedContributions.push(
-          ...targetLayer.legacyPresentationContributions,
-        );
-      }
-      const out = targetLayer.emit({
-        id: targetLayer.objectId,
-        path: targetLayer.path,
-        theme: targetLayer.theme,
-        options: resolveContext.options,
-        slideNumber: resolveContext.slideNumber,
-        childrenXml: "",
-        createTextFieldId: () =>
-          allocateTextFieldId(resolveContext.document.legacy),
-        registerResource: (resource) =>
-          addResource(resource, packageCtx, targetLayer.objectId),
-        registerPackagePart: (part) =>
-          addPackagePart(part, packageCtx, targetLayer.objectId),
-      });
-      if (out.presentationContributions !== undefined) {
-        collectedContributions.push(...out.presentationContributions);
-      }
-      return targetLayer.childComposition === "members"
-        ? out.xml
-        : out.xml + siblingXml;
-    }
-    const nativeLink =
-      targetLayer.resolvedLink === undefined
-        ? undefined
-        : registerLinkRelationship(
-            targetLayer.resolvedLink,
-            resolveContext.document.slideIndexById,
-            resolveContext.slide.legacy,
-          );
-    const out = targetLayer.emit({
-      id: targetLayer.objectId,
-      path: targetLayer.path,
-      theme: targetLayer.theme,
-      options: resolveContext.options,
-      slideNumber: resolveContext.slideNumber,
-      ...(nativeLink === undefined ? {} : { nativeLink }),
-      childrenXml: childXml,
-      createTextFieldId: () =>
-        allocateTextFieldId(resolveContext.document.legacy),
-      registerResource: (resource) =>
-        addResource(resource, packageCtx, targetLayer.objectId),
-      registerPackagePart: (part) =>
-        addPackagePart(part, packageCtx, targetLayer.objectId),
-    });
-    if (out.presentationContributions !== undefined) {
-      collectedContributions.push(...out.presentationContributions);
-    }
-    return targetLayer.childComposition === "members"
-      ? out.xml
-      : out.xml + siblingXml;
-  };
-  return emitSingle(layer);
-}
-
 function createObjectResolveContext(args: {
   readonly resolveContext: ResolvePassContext;
   readonly id: number;
@@ -2098,60 +1943,6 @@ function createObjectResolveContext(args: {
       onChildrenResolved?.(resolved);
       return { objects: resolved.objects };
     },
-  };
-}
-
-function wrapLegacyObjectOutput(
-  output: ReturnType<LegacyBoundObjectCapability["compile"]>,
-  bound: LegacyBoundObjectCapability,
-  args: {
-    readonly declarationType: string;
-    readonly sourceOrder: readonly number[];
-    readonly zIndex: number;
-    readonly path: string;
-    readonly objectId: number;
-    readonly paintObjectId: number;
-    readonly theme: ThemeContext;
-    readonly box: GeometryBox | undefined;
-    readonly emitsObject: boolean;
-    readonly hasObservation: boolean;
-    readonly childComposition: "siblings" | "members" | "leaf";
-    readonly memberLayers: readonly ResolvedObjectLayer[];
-    readonly siblingLayers: readonly ResolvedObjectLayer[];
-    readonly legacyPresentationContributions?: readonly CapabilityPresentationContribution[];
-  },
-): ResolvedObjectLayer {
-  return {
-    declarationType: args.declarationType,
-    sourceOrder: args.sourceOrder,
-    zIndex: args.zIndex,
-    path: args.path,
-    objectId: args.objectId,
-    paintObjectId: args.paintObjectId,
-    theme: args.theme,
-    ...(args.box === undefined ? {} : { box: args.box }),
-    emitsObject: args.emitsObject,
-    hasObservation: args.hasObservation,
-    childComposition: args.childComposition,
-    isNewContract: false,
-    extensions: output.extensions,
-    memberLayers: args.memberLayers,
-    siblingLayers: args.siblingLayers,
-    ...(args.legacyPresentationContributions === undefined ||
-    args.legacyPresentationContributions.length === 0
-      ? {}
-      : {
-          legacyPresentationContributions: args.legacyPresentationContributions,
-        }),
-    emit: () => ({
-      xml: output.xml,
-      ...(output.presentationContributions === undefined
-        ? {}
-        : { presentationContributions: output.presentationContributions }),
-    }),
-    ...(bound.preview === undefined
-      ? {}
-      : { legacyPreview: (ctx) => bound.preview!(ctx) }),
   };
 }
 
@@ -2358,114 +2149,8 @@ function resolveChildrenPass(
               ),
               undefined);
 
-      if (isNewObjectCapability(bound)) {
-        const resolvedObj = bound.resolve(
-          createObjectResolveContext({
-            resolveContext: context,
-            id,
-            path,
-            layoutBox,
-            theme,
-            insideGroup,
-            restrictsMemberContinuity: bound.contract.nativeKind === "grpSp",
-            morphName,
-            link: resolvedLink,
-          }),
-        );
-        recordObjectMorph({
-          morphKey,
-          morphName,
-          nativeKind: bound.contract.nativeKind,
-          observationName: resolvedObj.observation.name,
-          hasOutput: emitsObject,
-          slide: context.slide,
-          declarationType: child.type,
-          path,
-        });
-        for (const extension of resolvedObj.extensions) {
-          context.document.usedExtensions.add(extension);
-        }
-        recordResourceClaims(
-          resolvedObj.resourceClaims,
-          context.document,
-          context.slide.diagnostics,
-          path,
-        );
-        recordCapabilityWarnings(resolvedObj.warnings, context.document, path);
-        for (const annotation of resolvedObj.annotations ?? []) {
-          context.slide.contributions.push({
-            ...annotation,
-            path,
-            targetId: id,
-            order,
-            declaration: child,
-          });
-        }
-        const observation: ObjectObservation = {
-          ...resolvedObj.observation,
-          id,
-          ...(authorId === undefined ? {} : { authorId }),
-          ...(resolvedLink === undefined ? {} : { link: resolvedLink.summary }),
-        };
-        if (layoutBox !== undefined)
-          context.slide.layoutDerivedObjectIds.add(id);
-        content.push({
-          ...(authorId === undefined ? {} : { authorId }),
-          reference: { kind: "object", id: observation.id },
-          children: subPartContentNodes(resolvedObj.parts),
-        });
-        checkCanvasOverflow(
-          resolvedObj.observation.box,
-          context.dimensions,
-          context.document,
-          path,
-        );
-        const layer: ResolvedObjectLayer = {
-          declarationType: child.type,
-          sourceOrder: [index],
-          zIndex: paintOrder(bound.contract),
-          path,
-          objectId: observation.id,
-          paintObjectId: observation.id,
-          theme,
-          ...(resolvedObj.observation.box === undefined
-            ? {}
-            : { box: resolvedObj.observation.box }),
-          ...(resolvedObj.transform === undefined
-            ? {}
-            : { transform: resolvedObj.transform }),
-          emitsObject,
-          hasObservation: true,
-          childComposition: "leaf",
-          isNewContract: true,
-          ...(resolvedLink === undefined ? {} : { resolvedLink }),
-          ...(morphKey === undefined ? {} : { morphKey }),
-          extensions: resolvedObj.extensions,
-          memberLayers: [],
-          siblingLayers: [],
-          emit: (emitContext) => resolvedObj.emit(emitContext),
-          ...(resolvedObj.paint === undefined
-            ? {}
-            : { paint: (paintContext) => resolvedObj.paint!(paintContext) }),
-        };
-        layers.push({
-          layer,
-          objects: [observation],
-          reference: { kind: "object", id: observation.id },
-        });
-        return;
-      }
-
-      const legacyNativeLink =
-        resolvedLink === undefined
-          ? undefined
-          : registerLinkRelationship(
-              resolvedLink,
-              context.document.slideIndexById,
-              context.slide.legacy,
-            );
-      const output = bound.compile(
-        createLegacyCapabilityContext({
+      const resolvedObj = bound.resolve(
+        createObjectResolveContext({
           resolveContext: context,
           id,
           path,
@@ -2474,30 +2159,30 @@ function resolveChildrenPass(
           insideGroup,
           restrictsMemberContinuity: bound.contract.nativeKind === "grpSp",
           morphName,
-          nativeLink: legacyNativeLink,
+          link: resolvedLink,
         }),
       );
       recordObjectMorph({
         morphKey,
         morphName,
         nativeKind: bound.contract.nativeKind,
-        observationName: output.observation.name,
-        hasOutput: output.xml !== "",
+        observationName: resolvedObj.observation.name,
+        hasOutput: emitsObject,
         slide: context.slide,
         declarationType: child.type,
         path,
       });
-      for (const extension of output.extensions) {
+      for (const extension of resolvedObj.extensions) {
         context.document.usedExtensions.add(extension);
       }
       recordResourceClaims(
-        output.resourceClaims,
+        resolvedObj.resourceClaims,
         context.document,
         context.slide.diagnostics,
         path,
       );
-      recordCapabilityWarnings(output.warnings, context.document, path);
-      for (const annotation of output.annotations ?? []) {
+      recordCapabilityWarnings(resolvedObj.warnings, context.document, path);
+      for (const annotation of resolvedObj.annotations ?? []) {
         context.slide.contributions.push({
           ...annotation,
           path,
@@ -2507,7 +2192,7 @@ function resolveChildrenPass(
         });
       }
       const observation: ObjectObservation = {
-        ...output.observation,
+        ...resolvedObj.observation,
         id,
         ...(authorId === undefined ? {} : { authorId }),
         ...(resolvedLink === undefined ? {} : { link: resolvedLink.summary }),
@@ -2516,15 +2201,15 @@ function resolveChildrenPass(
       content.push({
         ...(authorId === undefined ? {} : { authorId }),
         reference: { kind: "object", id: observation.id },
-        children: subPartContentNodes(output.parts),
+        children: subPartContentNodes(resolvedObj.parts),
       });
       checkCanvasOverflow(
-        output.observation.box,
+        resolvedObj.observation.box,
         context.dimensions,
         context.document,
         path,
       );
-      const layer = wrapLegacyObjectOutput(output, bound, {
+      const layer: ResolvedObjectLayer = {
         declarationType: child.type,
         sourceOrder: [index],
         zIndex: paintOrder(bound.contract),
@@ -2532,13 +2217,25 @@ function resolveChildrenPass(
         objectId: observation.id,
         paintObjectId: observation.id,
         theme,
-        box: output.observation.box,
+        ...(resolvedObj.observation.box === undefined
+          ? {}
+          : { box: resolvedObj.observation.box }),
+        ...(resolvedObj.transform === undefined
+          ? {}
+          : { transform: resolvedObj.transform }),
         emitsObject,
         hasObservation: true,
         childComposition: "leaf",
+        ...(resolvedLink === undefined ? {} : { resolvedLink }),
+        ...(morphKey === undefined ? {} : { morphKey }),
+        extensions: resolvedObj.extensions,
         memberLayers: [],
         siblingLayers: [],
-      });
+        emit: (emitContext) => resolvedObj.emit(emitContext),
+        ...(resolvedObj.paint === undefined
+          ? {}
+          : { paint: (paintContext) => resolvedObj.paint!(paintContext) }),
+      };
       layers.push({
         layer,
         objects: [observation],
@@ -2694,220 +2391,110 @@ function resolveBoundContainer(args: {
   let containerObservation: ObjectObservation | undefined;
   let memberResolved: ResolvedChildrenResult | undefined;
   let memberLayers: readonly ResolvedObjectLayer[] = [];
-  let legacyChildContributions: readonly CapabilityPresentationContribution[] =
-    [];
   let containerLayer: ResolvedObjectLayer | undefined;
   const objectId = context.slide.nextId++;
 
   try {
-    if (isNewObjectCapability(bound)) {
-      const resolvedObj = bound.resolve(
-        createObjectResolveContext({
-          resolveContext: context,
-          id: objectId,
-          path,
-          layoutBox: box,
-          theme,
-          insideGroup,
-          restrictsMemberContinuity,
-          morphName,
-          link: containerLink,
-          onChildrenResolved: (resolved) => {
-            memberResolved = resolved;
-          },
-        }),
-      );
-      if (emitsObject) {
-        containerObservation = {
-          ...resolvedObj.observation,
-          id: objectId,
-          ...(authorId === undefined ? {} : { authorId }),
-          ...(containerLink === undefined
-            ? {}
-            : { link: containerLink.summary }),
-        };
-        if (box !== undefined)
-          context.slide.layoutDerivedObjectIds.add(objectId);
-        if (container.checksCanvasOverflow === false) {
-          checkCanvasOverflow(
-            resolvedObj.observation.box,
-            context.dimensions,
-            context.document,
-            path,
-          );
-        }
-        recordObjectMorph({
-          morphKey,
-          morphName,
-          nativeKind: bound.contract.nativeKind,
-          observationName: resolvedObj.observation.name,
-          hasOutput: true,
-          slide: context.slide,
-          declarationType: child.type,
-          path,
-        });
-        for (const extension of resolvedObj.extensions) {
-          context.document.usedExtensions.add(extension);
-        }
-        recordResourceClaims(
-          resolvedObj.resourceClaims,
-          context.document,
-          context.slide.diagnostics,
-          path,
-        );
-      } else if (morphKey !== undefined) {
-        context.slide.diagnostics.push(
-          diagnostic(
-            path,
-            "morph-needs-object",
-            "Only containers generating native objects can participate in Morph",
-          ),
-        );
-      }
-      for (const annotation of resolvedObj.annotations ?? []) {
-        context.slide.contributions.push({
-          ...annotation,
-          path,
-          ...(containerObservation === undefined
-            ? {}
-            : { targetId: containerObservation.id }),
-          order,
-          declaration: child,
-        });
-      }
-      recordCapabilityWarnings(resolvedObj.warnings, context.document, path);
-      memberLayers = enclosesChildren ? (memberResolved?.layers ?? []) : [];
-      containerLayer = {
-        declarationType: child.type,
-        sourceOrder: [index],
-        zIndex: paintOrder(bound.contract),
+    const resolvedObj = bound.resolve(
+      createObjectResolveContext({
+        resolveContext: context,
+        id: objectId,
         path,
-        objectId: containerObservation?.id ?? objectId,
-        paintObjectId: layoutId ?? objectId,
+        layoutBox: box,
         theme,
-        ...(containerObservation?.box === undefined
-          ? {}
-          : { box: containerObservation.box }),
-        ...(resolvedObj.transform === undefined
-          ? {}
-          : { transform: resolvedObj.transform }),
-        emitsObject,
-        hasObservation: containerObservation !== undefined,
-        childComposition: enclosesChildren ? "members" : "siblings",
-        isNewContract: true,
-        ...(containerLink === undefined ? {} : { resolvedLink: containerLink }),
-        ...(morphKey === undefined ? {} : { morphKey }),
-        extensions: resolvedObj.extensions,
-        memberLayers,
-        siblingLayers: [],
-        emit: (emitContext) => resolvedObj.emit(emitContext),
-        ...(resolvedObj.paint === undefined
-          ? {}
-          : { paint: (paintContext) => resolvedObj.paint!(paintContext) }),
+        insideGroup,
+        restrictsMemberContinuity,
+        morphName,
+        link: containerLink,
+        onChildrenResolved: (resolved) => {
+          memberResolved = resolved;
+        },
+      }),
+    );
+    if (emitsObject) {
+      containerObservation = {
+        ...resolvedObj.observation,
+        id: objectId,
+        ...(authorId === undefined ? {} : { authorId }),
+        ...(containerLink === undefined ? {} : { link: containerLink.summary }),
       };
-    } else {
-      const legacyContainerLink =
-        containerLink === undefined
-          ? undefined
-          : registerLinkRelationship(
-              containerLink,
-              context.document.slideIndexById,
-              context.slide.legacy,
-            );
-      const output = bound.compile(
-        createLegacyCapabilityContext({
-          resolveContext: context,
-          id: objectId,
-          path,
-          layoutBox: box,
-          theme,
-          insideGroup,
-          restrictsMemberContinuity,
-          morphName,
-          nativeLink: legacyContainerLink,
-          onChildrenCompiled: (resolved, childContributions) => {
-            memberResolved = resolved;
-            memberLayers = resolved.layers;
-            legacyChildContributions = childContributions;
-          },
-        }),
-      );
-      if (emitsObject && output.xml !== "") {
-        containerObservation = {
-          ...output.observation,
-          id: objectId,
-          ...(authorId === undefined ? {} : { authorId }),
-          ...(containerLink === undefined
-            ? {}
-            : { link: containerLink.summary }),
-        };
-        if (box !== undefined)
-          context.slide.layoutDerivedObjectIds.add(objectId);
-        if (container.checksCanvasOverflow === false) {
-          checkCanvasOverflow(
-            output.observation.box,
-            context.dimensions,
-            context.document,
-            path,
-          );
-        }
-        recordObjectMorph({
-          morphKey,
-          morphName,
-          nativeKind: bound.contract.nativeKind,
-          observationName: output.observation.name,
-          hasOutput: true,
-          slide: context.slide,
-          declarationType: child.type,
-          path,
-        });
-        for (const extension of output.extensions) {
-          context.document.usedExtensions.add(extension);
-        }
-        recordResourceClaims(
-          output.resourceClaims,
+      if (box !== undefined) context.slide.layoutDerivedObjectIds.add(objectId);
+      if (container.checksCanvasOverflow === false) {
+        checkCanvasOverflow(
+          resolvedObj.observation.box,
+          context.dimensions,
           context.document,
-          context.slide.diagnostics,
           path,
         );
-      } else if (morphKey !== undefined && emitsObject) {
-        context.slide.diagnostics.push(
-          diagnostic(
-            path,
-            "morph-needs-object",
-            "Only containers generating native objects can participate in Morph",
-          ),
-        );
       }
-      for (const annotation of output.annotations ?? []) {
-        context.slide.contributions.push({
-          ...annotation,
-          path,
-          ...(containerObservation === undefined
-            ? {}
-            : { targetId: containerObservation.id }),
-          order,
-          declaration: child,
-        });
-      }
-      recordCapabilityWarnings(output.warnings, context.document, path);
-      containerLayer = wrapLegacyObjectOutput(output, bound, {
+      recordObjectMorph({
+        morphKey,
+        morphName,
+        nativeKind: bound.contract.nativeKind,
+        observationName: resolvedObj.observation.name,
+        hasOutput: true,
+        slide: context.slide,
         declarationType: child.type,
-        sourceOrder: [index],
-        zIndex: paintOrder(bound.contract),
         path,
-        objectId: containerObservation?.id ?? objectId,
-        paintObjectId: layoutId ?? objectId,
-        theme,
-        box: containerObservation?.box,
-        emitsObject,
-        hasObservation: containerObservation !== undefined,
-        childComposition: enclosesChildren ? "members" : "siblings",
-        memberLayers,
-        siblingLayers: [],
-        legacyPresentationContributions: legacyChildContributions,
+      });
+      for (const extension of resolvedObj.extensions) {
+        context.document.usedExtensions.add(extension);
+      }
+      recordResourceClaims(
+        resolvedObj.resourceClaims,
+        context.document,
+        context.slide.diagnostics,
+        path,
+      );
+    } else if (morphKey !== undefined) {
+      context.slide.diagnostics.push(
+        diagnostic(
+          path,
+          "morph-needs-object",
+          "Only containers generating native objects can participate in Morph",
+        ),
+      );
+    }
+    for (const annotation of resolvedObj.annotations ?? []) {
+      context.slide.contributions.push({
+        ...annotation,
+        path,
+        ...(containerObservation === undefined
+          ? {}
+          : { targetId: containerObservation.id }),
+        order,
+        declaration: child,
       });
     }
+    recordCapabilityWarnings(resolvedObj.warnings, context.document, path);
+    memberLayers = enclosesChildren ? (memberResolved?.layers ?? []) : [];
+    containerLayer = {
+      declarationType: child.type,
+      sourceOrder: [index],
+      zIndex: paintOrder(bound.contract),
+      path,
+      objectId: containerObservation?.id ?? objectId,
+      paintObjectId: layoutId ?? objectId,
+      theme,
+      ...(containerObservation?.box === undefined
+        ? {}
+        : { box: containerObservation.box }),
+      ...(resolvedObj.transform === undefined
+        ? {}
+        : { transform: resolvedObj.transform }),
+      emitsObject,
+      hasObservation: containerObservation !== undefined,
+      childComposition: enclosesChildren ? "members" : "siblings",
+      ...(containerLink === undefined ? {} : { resolvedLink: containerLink }),
+      ...(morphKey === undefined ? {} : { morphKey }),
+      extensions: resolvedObj.extensions,
+      memberLayers,
+      siblingLayers: [],
+      emit: (emitContext) => resolvedObj.emit(emitContext),
+      ...(resolvedObj.paint === undefined
+        ? {}
+        : { paint: (paintContext) => resolvedObj.paint!(paintContext) }),
+    };
   } catch (error) {
     context.slide.diagnostics.push(
       error instanceof CapabilityError
@@ -2958,7 +2545,6 @@ function resolveBoundContainer(args: {
           emitsObject,
           hasObservation: false,
           childComposition: enclosesChildren ? "members" : "siblings",
-          isNewContract: true,
           extensions: [],
           memberLayers: enclosesChildren ? resolvedChildren.layers : [],
           siblingLayers: enclosesChildren ? [] : resolvedChildren.layers,
@@ -3181,12 +2767,6 @@ function resolveSlideDeclaration(
     matchContinuityKinds: false,
     linkedSlideIndexes: new Set(),
     layoutDerivedObjectIds: new Set(),
-    legacy: {
-      index,
-      relationships: [],
-      relationshipIds: new Map(),
-      resourceObservations: [],
-    },
   };
   const path = `deck/slide[${id}]`;
   if (nonWhitespaceText(node.children)) {
@@ -3259,10 +2839,6 @@ function resolveSlideDeclaration(
     props: node.props,
     children: node.children.map(capabilityChild),
   };
-  const legacyPackageCtx: PackageContext = {
-    document: document.legacy,
-    slide: slide.legacy,
-  };
 
   for (const module of modules.values()) {
     if (!isSlideCapability(module)) continue;
@@ -3285,47 +2861,8 @@ function resolveSlideDeclaration(
       if (boundSlide.continuity?.matchSourceKinds === true) {
         slide.matchContinuityKinds = true;
       }
-      if (isNewSlideCapability(boundSlide)) {
-        const resolvedSlideCap: ResolvedSlideCapabilityOutput =
-          boundSlide.resolveSlide({
-            path,
-            dimensions,
-            contributions,
-            children,
-            theme,
-            options,
-            slideNumber: index,
-          });
-        if (resolvedSlideCap.observation !== undefined) {
-          capabilities[module.declaration] = resolvedSlideCap.observation;
-        }
-        for (const extension of resolvedSlideCap.extensions) {
-          document.usedExtensions.add(extension);
-        }
-        recordResourceClaims(
-          resolvedSlideCap.resourceClaims,
-          document,
-          slide.diagnostics,
-          path,
-        );
-        recordCapabilityWarnings(resolvedSlideCap.warnings, document, path);
-        slideCapabilities.push({
-          declaration: module.declaration,
-          slot: module.slot,
-          hasSlideProps,
-          path,
-          theme,
-          extensions: resolvedSlideCap.extensions,
-          emit: (emitContext) => resolvedSlideCap.emit(emitContext),
-          ...(resolvedSlideCap.paint === undefined
-            ? {}
-            : {
-                paint: (paintContext) => resolvedSlideCap.paint!(paintContext),
-              }),
-        });
-      } else {
-        const legacySlide = boundSlide;
-        const output = legacySlide.compileSlide({
+      const resolvedSlideCap: ResolvedSlideCapabilityOutput =
+        boundSlide.resolveSlide({
           path,
           dimensions,
           contributions,
@@ -3333,50 +2870,34 @@ function resolveSlideDeclaration(
           theme,
           options,
           slideNumber: index,
-          createTextFieldId: () => allocateTextFieldId(document.legacy),
-          registerResource: (resource) =>
-            addResource(resource, legacyPackageCtx),
-          registerPackagePart: (part) =>
-            addSlidePackagePart(part, legacyPackageCtx),
-          registerSharedPart: (key, part) =>
-            addSharedPackagePart(key, part, legacyPackageCtx),
         });
-        if (output.observation !== undefined) {
-          capabilities[module.declaration] = output.observation;
-        }
-        for (const extension of output.extensions) {
-          document.usedExtensions.add(extension);
-        }
-        recordResourceClaims(
-          output.resourceClaims,
-          document,
-          slide.diagnostics,
-          path,
-        );
-        recordCapabilityWarnings(output.warnings, document, path);
-        slideCapabilities.push({
-          declaration: module.declaration,
-          slot: module.slot,
-          hasSlideProps,
-          path,
-          theme,
-          extensions: output.extensions,
-          emit: () => ({
-            xml: output.xml,
-            ...(output.presentationContributions === undefined
-              ? {}
-              : {
-                  presentationContributions: output.presentationContributions,
-                }),
-          }),
-          ...(boundSlide.previewSlide === undefined
-            ? {}
-            : {
-                legacyPreviewSlide: (previewContext) =>
-                  boundSlide.previewSlide!(previewContext),
-              }),
-        });
+      if (resolvedSlideCap.observation !== undefined) {
+        capabilities[module.declaration] = resolvedSlideCap.observation;
       }
+      for (const extension of resolvedSlideCap.extensions) {
+        document.usedExtensions.add(extension);
+      }
+      recordResourceClaims(
+        resolvedSlideCap.resourceClaims,
+        document,
+        slide.diagnostics,
+        path,
+      );
+      recordCapabilityWarnings(resolvedSlideCap.warnings, document, path);
+      slideCapabilities.push({
+        declaration: module.declaration,
+        slot: module.slot,
+        hasSlideProps,
+        path,
+        theme,
+        extensions: resolvedSlideCap.extensions,
+        emit: (emitContext) => resolvedSlideCap.emit(emitContext),
+        ...(resolvedSlideCap.paint === undefined
+          ? {}
+          : {
+              paint: (paintContext) => resolvedSlideCap.paint!(paintContext),
+            }),
+      });
     } catch (error) {
       slide.diagnostics.push(
         error instanceof CapabilityError
@@ -3443,38 +2964,12 @@ function resolveSlideDeclaration(
       content: resolvedChildren.content,
       layers: resolvedChildren.layers,
       slideCapabilities,
-      legacySlide: {
-        relationships: [...slide.legacy.relationships],
-        relationshipIds: new Map(slide.legacy.relationshipIds),
-        resourceObservations: [...slide.legacy.resourceObservations],
-      },
     },
   };
 }
 
 function slideSlotOrder(slot: SlideCapabilitySlot): number {
   return slot === "transition" ? 0 : 1;
-}
-
-function snapshotLegacyDocument(
-  state: DocumentPackageState,
-): LegacyDocumentSnapshot {
-  const packageRelationships = new Map<string, readonly PptxRelationship[]>();
-  for (const [partPath, rels] of state.packageRelationships) {
-    packageRelationships.set(partPath, [...rels]);
-  }
-  return {
-    resources: new Map(state.resources),
-    resourceTypes: new Map(state.resourceTypes),
-    packageParts: new Map(state.packageParts),
-    packageRelationships,
-    presentationPartPaths: new Set(state.presentationPartPaths),
-    sharedParts: new Map(state.sharedParts),
-    presentationElements: [...state.presentationElements],
-    nextPackagePartId: state.nextPackagePartId,
-    nextPresentationRelationshipId: state.nextPresentationRelationshipId,
-    nextTextFieldId: state.nextTextFieldId,
-  };
 }
 
 function resolveDocument(
@@ -3529,20 +3024,6 @@ function resolveDocument(
     morphNames: new Map(),
     nextMorphName: 1,
     slideIndexById,
-    legacy: {
-      resources: new Map(),
-      resourceTypes: new Map(),
-      packageParts: new Map(),
-      packageRelationships: new Map(),
-      // The deck theme part is generated outside shared part registration; reserve its path so a
-      // capability-provided theme part gets a distinct OPC identity.
-      presentationPartPaths: new Set(["ppt/theme/theme1.xml"]),
-      sharedParts: new Map(),
-      presentationElements: [],
-      nextPackagePartId: 1,
-      nextPresentationRelationshipId: slides.length + 2,
-      nextTextFieldId: 1,
-    },
   };
 
   const resolvedSlides = slides.map((parsedSlide) =>
@@ -3622,15 +3103,11 @@ function resolveDocument(
   const internal: InternalResolution = {
     dimensions: size,
     ...(typeof title === "string" ? { title } : {}),
-    ...(options.embedFonts === undefined
-      ? {}
-      : { embedFonts: options.embedFonts }),
     theme,
     sections,
     slides: resolvedSlides.map(({ internal: slideInternal }) => slideInternal),
     resourceClaims: document.resourceClaims,
     warnings: [...document.warnings],
-    legacyDocument: snapshotLegacyDocument(document.legacy),
   };
   registerInternalResolution(resolution, internal);
   return resolution;
@@ -3639,29 +3116,24 @@ function resolveDocument(
 function createDocumentEmitState(
   internal: InternalResolution,
 ): DocumentEmitState {
-  const packageRelationships = new Map<string, PptxRelationship[]>();
-  for (const [partPath, rels] of internal.legacyDocument.packageRelationships) {
-    packageRelationships.set(partPath, [...rels]);
-  }
   return {
     usedExtensions: new Set(internal.sections.length > 0 ? ["p14"] : []),
     warnings: [...internal.warnings],
     resourceClaims: internal.resourceClaims,
-    resources: new Map(internal.legacyDocument.resources),
-    resourceTypes: new Map(internal.legacyDocument.resourceTypes),
-    packageParts: new Map(internal.legacyDocument.packageParts),
-    packageRelationships,
+    resources: new Map(),
+    resourceTypes: new Map(),
+    packageParts: new Map(),
+    packageRelationships: new Map(),
     presentationAttributes: new Map(),
-    presentationPartPaths: new Set(
-      internal.legacyDocument.presentationPartPaths,
-    ),
+    // The deck theme part is generated outside shared part registration; reserve its path so a
+    // capability-provided theme part gets a distinct OPC identity.
+    presentationPartPaths: new Set(["ppt/theme/theme1.xml"]),
     presentationCollections: new Map(),
-    sharedParts: new Map(internal.legacyDocument.sharedParts),
-    presentationElements: [...internal.legacyDocument.presentationElements],
-    nextPackagePartId: internal.legacyDocument.nextPackagePartId,
-    nextPresentationRelationshipId:
-      internal.legacyDocument.nextPresentationRelationshipId,
-    nextTextFieldId: internal.legacyDocument.nextTextFieldId,
+    sharedParts: new Map(),
+    presentationElements: [],
+    nextPackagePartId: 1,
+    nextPresentationRelationshipId: internal.slides.length + 2,
+    nextTextFieldId: 1,
   };
 }
 
@@ -3692,72 +3164,6 @@ function emitLayer(
   options: EmitOptions,
 ): string {
   const packageCtx: PackageContext = { document: docEmit, slide: slideEmit };
-
-  if (!layer.isNewContract) {
-    // Old-contract layers already serialized XML during resolve; still check all descendant
-    // extensions against target and process any deferred presentationContributions.
-    const checkDescendantExtensions = (targetLayer: ResolvedObjectLayer) => {
-      checkExtensions(
-        targetLayer.extensions,
-        target,
-        docEmit.usedExtensions,
-        slideEmit.diagnostics,
-        targetLayer.path,
-      );
-      for (const member of targetLayer.memberLayers) {
-        checkDescendantExtensions(member);
-      }
-    };
-    checkDescendantExtensions(layer);
-
-    for (const contribution of layer.legacyPresentationContributions ?? []) {
-      addPresentationContribution(
-        contribution,
-        { document: docEmit, slide: slideEmit },
-        layer.path,
-        layer.objectId,
-      );
-    }
-    const output = layer.emit({
-      id: layer.objectId,
-      path: layer.path,
-      theme: layer.theme,
-      options,
-      slideNumber: slideEmit.index,
-      childrenXml: "",
-      createTextFieldId: () => allocateTextFieldId(docEmit),
-      registerResource: (resource) =>
-        addResource(resource, packageCtx, layer.objectId),
-      registerPackagePart: (part) =>
-        addPackagePart(part, packageCtx, layer.objectId),
-    });
-    for (const contribution of output.presentationContributions ?? []) {
-      addPresentationContribution(
-        contribution,
-        { document: docEmit, slide: slideEmit },
-        layer.path,
-        layer.objectId,
-      );
-    }
-    const siblingXml =
-      layer.childComposition === "siblings"
-        ? layer.siblingLayers
-            .map((child) =>
-              emitLayer(
-                child,
-                slideIndexById,
-                docEmit,
-                slideEmit,
-                target,
-                options,
-              ),
-            )
-            .join("")
-        : "";
-    return layer.childComposition === "members"
-      ? output.xml
-      : output.xml + siblingXml;
-  }
 
   checkExtensions(
     layer.extensions,
@@ -3889,9 +3295,9 @@ export function emit(
     const slideEmit: SlideEmitState = {
       index: resolvedSlide.index,
       diagnostics: [],
-      relationships: [...resolvedSlide.legacySlide.relationships],
-      relationshipIds: new Map(resolvedSlide.legacySlide.relationshipIds),
-      resourceObservations: [...resolvedSlide.legacySlide.resourceObservations],
+      relationships: [],
+      relationshipIds: new Map(),
+      resourceObservations: [],
     };
     const packageCtx: PackageContext = { document: docEmit, slide: slideEmit };
 
@@ -4075,19 +3481,16 @@ function validateBoundSlideCapability(bound: unknown): BoundSlideCapability {
   if (typeof bound !== "object" || bound === null) {
     throw new CapabilityError(
       "invalid-capability-binding",
-      "Slide capability bindSlide() must return a resolveSlide or compileSlide handler",
+      "Slide capability bindSlide() must return a resolveSlide handler",
     );
   }
   const candidate = bound as {
-    readonly compileSlide?: unknown;
     readonly resolveSlide?: unknown;
   };
-  const hasCompile = typeof candidate.compileSlide === "function";
-  const hasResolve = typeof candidate.resolveSlide === "function";
-  if (hasCompile === hasResolve) {
+  if (typeof candidate.resolveSlide !== "function") {
     throw new CapabilityError(
       "invalid-capability-binding",
-      "Slide capability bindSlide() must return a resolveSlide or compileSlide handler",
+      "Slide capability bindSlide() must return a resolveSlide handler",
     );
   }
   return bound as BoundSlideCapability;
@@ -4110,15 +3513,12 @@ function bindCapabilityModules(
     const isSlide =
       "bindSlide" in module &&
       typeof module.bindSlide === "function" &&
-      !("compileSlide" in module) &&
       !("bind" in module) &&
       !("parse" in module);
     const isObject =
       "bind" in module &&
       typeof module.bind === "function" &&
       !("parse" in module) &&
-      !("compile" in module) &&
-      !("compileSlide" in module) &&
       !("bindSlide" in module);
     if (!isSlide && !isObject) {
       const rawDeclaration = (module as { declaration?: unknown }).declaration;

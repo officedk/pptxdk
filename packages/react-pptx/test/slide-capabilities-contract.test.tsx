@@ -84,8 +84,6 @@ describe("slide capabilities resolved contract", () => {
       for (const callResult of bindSpy.mock.results) {
         const bound = callResult.value as Record<string, unknown>;
         assert.equal(typeof bound["resolveSlide"], "function");
-        assert.equal("compileSlide" in bound, false);
-        assert.equal("previewSlide" in bound, false);
       }
 
       // Paint directly from Resolution without running emit().
@@ -231,8 +229,6 @@ describe("slide capabilities resolved contract", () => {
         unknown
       >;
       assert.equal(typeof firstBound["resolveSlide"], "function");
-      assert.equal("compileSlide" in firstBound, false);
-      assert.equal("previewSlide" in firstBound, false);
       assert.deepEqual(secondBound["continuity"], { matchSourceKinds: true });
 
       assert.deepEqual(resolution.report.extensions, ["p14", "p159"]);
@@ -401,8 +397,6 @@ describe("slide capabilities resolved contract", () => {
     const resolution = resolve(doc);
     assert.equal(boundHandles.length, 1);
     assert.equal(typeof boundHandles[0]?.["resolveSlide"], "function");
-    assert.equal("compileSlide" in boundHandles[0]!, false);
-    assert.equal("previewSlide" in boundHandles[0]!, false);
 
     // observeMotion works immediately on Resolution before emit().
     const resolvedSlide = resolution.report.slides[0]!;
@@ -526,8 +520,6 @@ describe("slide capabilities resolved contract", () => {
     assert.equal(boundHandles.length, 3);
     for (const bound of boundHandles) {
       assert.equal(typeof bound["resolveSlide"], "function");
-      assert.equal("compileSlide" in bound, false);
-      assert.equal("previewSlide" in bound, false);
     }
     assert.deepEqual(resolution.report.slides[0]?.capabilities?.["notes"], {
       text: "Speaker slide 1",

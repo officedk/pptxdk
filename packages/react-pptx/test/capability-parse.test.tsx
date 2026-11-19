@@ -804,7 +804,7 @@ describe("Ticket 08: Object capability parse phase, container TextStyle validati
       );
     });
 
-    it("calls shapeCapability.bind once during layout and reuses the bound handle for measureLayout and compile", async () => {
+    it("calls shapeCapability.bind once during layout and reuses the bound handle for measureLayout and resolve", async () => {
       const bindSpy = vi.spyOn(shapeCapability, "bind");
 
       try {
@@ -1023,7 +1023,7 @@ describe("Ticket 08: Object capability parse phase, container TextStyle validati
       );
     });
 
-    it("calls boxCapability.bind once during layout and reuses the bound handle in compile", async () => {
+    it("calls boxCapability.bind once during layout and reuses the bound handle in resolve", async () => {
       const bindSpy = vi.spyOn(boxCapability, "bind");
 
       try {
@@ -1055,7 +1055,7 @@ describe("Ticket 08: Object capability parse phase, container TextStyle validati
       }
     });
 
-    it("calls groupCapability.bind once during layout and reuses the bound handle in compile", async () => {
+    it("calls groupCapability.bind once during layout and reuses the bound handle in resolve", async () => {
       const bindSpy = vi.spyOn(groupCapability, "bind");
 
       try {

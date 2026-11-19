@@ -3,26 +3,30 @@ import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 
 import {
+  assertXml10Characters,
   CapabilityError,
   isMorphKey,
   layoutStyleKeys,
   parseCapabilityLayoutContract,
   pxToEmu,
   xmlEscape,
-  type BoundObjectCapability,
   type BoundObjectCapabilityModule,
   type BoundObjectNativeCollaboration,
-  type CapabilityContext,
   type CapabilityInput,
   type CapabilityLayoutMeasurement,
   type CapabilityLayoutRequest,
   type CapabilityParseContext,
+  type EmitContext,
+  type EmitOutput,
   type GeometryBox,
   type LayoutStyle,
   type LinkTarget,
   type MorphKey,
-  type ObjectPreviewContext,
-  type ObjectPreviewOutput,
+  type ObjectResolveContext,
+  type PaintContext,
+  type PaintOutput,
+  type ResolvedBoundObjectCapability,
+  type ResolvedObject,
   type VisualStyle,
 } from "@react-pptx/core/capability";
 import { CommonNode } from "@react-pptx/core/document";
@@ -149,7 +153,7 @@ let cachedDecoders:
   | { readonly png: PngJsModule; readonly jpeg: JpegJsModule }
   | undefined;
 
-// Load pngjs and jpeg-js lazily only when preview() executes so formal build() never pulls rasterizers.
+// Load pngjs and jpeg-js lazily only when paint() executes so resolve() and emit() never pull rasterizers.
 function imageDecoders(): {
   readonly png: PngJsModule;
   readonly jpeg: JpegJsModule;
@@ -190,7 +194,7 @@ function renderImagePreview(options: {
   readonly flipV: boolean | undefined;
   readonly placement: ImagePlacement;
   readonly objectId: number;
-}): ObjectPreviewOutput {
+}): PaintOutput {
   const { image, visualStyle, geometry, flipH, flipV, placement, objectId } =
     options;
 
@@ -265,12 +269,6 @@ function renderImagePreview(options: {
   if (widthFactor <= 0 || heightFactor <= 0) {
     return {
       svg: `<g transform="${transform}" opacity="${opacity}"></g>`,
-      transform: {
-        box,
-        angle,
-        flipH: flipX,
-        flipV: flipY,
-      },
     };
   }
 
@@ -281,12 +279,6 @@ function renderImagePreview(options: {
 
   return {
     svg,
-    transform: {
-      box,
-      angle,
-      flipH: flipX,
-      flipV: flipY,
-    },
   };
 }
 
@@ -734,7 +726,7 @@ export const imageCapability: BoundObjectCapabilityModule = {
   bind(
     input: CapabilityInput,
     context: CapabilityParseContext,
-  ): BoundObjectCapability {
+  ): ResolvedBoundObjectCapability {
     const unknown = Object.keys(input.props).find(
       (key) => !(allowedParameters as readonly string[]).includes(key),
     );
@@ -853,8 +845,6 @@ export const imageCapability: BoundObjectCapabilityModule = {
       ...(link === undefined ? {} : { link }),
     };
 
-    let compiledPlacement: ImagePlacement | undefined;
-
     return {
       contract,
       ...(morphKey !== undefined ||
@@ -882,14 +872,14 @@ export const imageCapability: BoundObjectCapabilityModule = {
         };
       },
 
-      compile(compileContext: CapabilityContext) {
-        const x = dimension(compileContext.layoutBox?.x ?? declaredX, "x", 0);
-        const y = dimension(compileContext.layoutBox?.y ?? declaredY, "y", 0);
+      resolve(resolveContext: ObjectResolveContext): ResolvedObject {
+        const x = dimension(resolveContext.layoutBox?.x ?? declaredX, "x", 0);
+        const y = dimension(resolveContext.layoutBox?.y ?? declaredY, "y", 0);
         let width: number;
         let height: number;
-        if (compileContext.layoutBox !== undefined) {
-          width = dimension(compileContext.layoutBox.width, "width");
-          height = dimension(compileContext.layoutBox.height, "height");
+        if (resolveContext.layoutBox !== undefined) {
+          width = dimension(resolveContext.layoutBox.width, "width");
+          height = dimension(resolveContext.layoutBox.height, "height");
         } else if (
           requestedWidth === undefined &&
           requestedHeight === undefined
@@ -915,10 +905,9 @@ export const imageCapability: BoundObjectCapabilityModule = {
           width,
           height,
         });
-        compiledPlacement = placement;
         const { box, sourceCrop } = placement;
-        const properties = shapePropertiesXml({
-          theme: compileContext.theme,
+        const resolvedProperties = shapePropertiesXml({
+          theme: resolveContext.theme,
           style: imageStyle,
           box,
           ...(geometry === undefined ? {} : { geometry }),
@@ -927,9 +916,20 @@ export const imageCapability: BoundObjectCapabilityModule = {
           image: true,
         });
         const name =
-          compileContext.morphName ??
+          resolveContext.morphName ??
           requestedName ??
-          `Image ${compileContext.id - 1}`;
+          `Image ${resolveContext.id - 1}`;
+        try {
+          assertXml10Characters(name);
+          if (altValue !== undefined) assertXml10Characters(altValue);
+        } catch {
+          throw new CapabilityError(
+            "invalid-xml-character",
+            "Image.name or alt contains characters not allowed in XML 1.0",
+          );
+        }
+        const angle =
+          typeof imageStyle["rotate"] === "number" ? imageStyle["rotate"] : 0;
         const annotations = motionAnnotations(motionProps, {
           kind: "image",
           name,
@@ -937,96 +937,93 @@ export const imageCapability: BoundObjectCapabilityModule = {
           textBody: false,
           filled: false,
           box,
-          rotationDegrees:
-            typeof imageStyle["rotate"] === "number" ? imageStyle["rotate"] : 0,
+          rotationDegrees: angle,
           hasBackground:
             imageStyle["borderColor"] !== undefined ||
             (typeof imageStyle["borderWidth"] === "number" &&
               imageStyle["borderWidth"] > 0),
         });
-        let escapedName: string;
-        let escapedAlt: string | undefined;
-        try {
-          escapedName = xmlEscape(name);
-          escapedAlt = altValue === undefined ? undefined : xmlEscape(altValue);
-        } catch {
-          throw new CapabilityError(
-            "invalid-xml-character",
-            "Image.name or alt contains characters not allowed in XML 1.0",
-          );
-        }
-        let relationshipId: string;
-        try {
-          relationshipId = compileContext.registerResource({
-            bytes: image.bytes,
-            extension: image.extension,
-            contentType: image.contentType,
-            relationshipType:
-              "http://schemas.openxmlformats.org/officeDocument/2006/relationships/image",
-          });
-        } catch (error) {
-          if (error instanceof CapabilityError) throw error;
-          throw new CapabilityError(
-            "image-resource-failure",
-            error instanceof Error ? error.message : String(error),
-          );
-        }
-        const serializedCrop = Object.fromEntries(
-          Object.entries(sourceCrop).filter(([, fraction]) => fraction !== 0),
-        );
+
         return {
-          xml: imageXml(
-            compileContext.id,
-            escapedName,
-            escapedAlt,
-            relationshipId,
-            box,
-            serializedCrop,
-            properties.xml,
-            properties.opacity,
-            nativeLinkXml(compileContext.nativeLink),
-          ),
           observation: {
-            id: compileContext.id,
+            id: resolveContext.id,
             kind: "image",
             name,
             box,
           },
+          transform: {
+            box,
+            angle,
+            flipH: Boolean(flipH),
+            flipV: Boolean(flipV),
+          },
           extensions: [],
-          ...(properties.warnings.length === 0
+          ...(resolvedProperties.warnings.length === 0
             ? {}
-            : { warnings: properties.warnings }),
+            : { warnings: resolvedProperties.warnings }),
           ...(annotations.length === 0 ? {} : { annotations }),
-        };
-      },
 
-      preview(previewContext: ObjectPreviewContext): ObjectPreviewOutput {
-        const placement =
-          compiledPlacement !== undefined &&
-          (previewContext.box === undefined ||
-            (previewContext.box.x === compiledPlacement.box.x &&
-              previewContext.box.y === compiledPlacement.box.y &&
-              previewContext.box.width === compiledPlacement.box.width &&
-              previewContext.box.height === compiledPlacement.box.height))
-            ? compiledPlacement
-            : previewContext.box !== undefined
-              ? imagePlacement(image, fit, crop, previewContext.box)
-              : undefined;
-        if (placement === undefined) {
-          throw new CapabilityError(
-            "preview-missing-geometry",
-            "Preview requires compiled image placement",
-          );
-        }
-        return renderImagePreview({
-          image,
-          visualStyle: imageStyle,
-          geometry,
-          flipH,
-          flipV,
-          placement,
-          objectId: previewContext.objectId,
-        });
+          emit(emitContext: EmitContext): EmitOutput {
+            const properties = shapePropertiesXml({
+              theme: emitContext.theme,
+              style: imageStyle,
+              box,
+              ...(geometry === undefined ? {} : { geometry }),
+              ...(flipH === undefined ? {} : { flipH }),
+              ...(flipV === undefined ? {} : { flipV }),
+              image: true,
+            });
+            const escapedName = xmlEscape(name);
+            const escapedAlt =
+              altValue === undefined ? undefined : xmlEscape(altValue);
+            let relationshipId: string;
+            try {
+              relationshipId = emitContext.registerResource({
+                bytes: image.bytes,
+                extension: image.extension,
+                contentType: image.contentType,
+                relationshipType:
+                  "http://schemas.openxmlformats.org/officeDocument/2006/relationships/image",
+              });
+            } catch (error) {
+              if (error instanceof CapabilityError) throw error;
+              throw new CapabilityError(
+                "image-resource-failure",
+                error instanceof Error ? error.message : String(error),
+              );
+            }
+            const serializedCrop = Object.fromEntries(
+              Object.entries(sourceCrop).filter(
+                ([, fraction]) => fraction !== 0,
+              ),
+            );
+            return {
+              xml: imageXml(
+                emitContext.id,
+                escapedName,
+                escapedAlt,
+                relationshipId,
+                box,
+                serializedCrop,
+                properties.xml,
+                properties.opacity,
+                nativeLinkXml(emitContext.nativeLink),
+              ),
+            };
+          },
+
+          paint(paintContext: PaintContext): PaintOutput {
+            return renderImagePreview({
+              image,
+              visualStyle: imageStyle,
+              geometry,
+              flipH,
+              flipV,
+              placement,
+              objectId: paintContext.objectId,
+            });
+          },
+        };
       },
     };
   },

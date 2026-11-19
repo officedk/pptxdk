@@ -10,7 +10,8 @@ import {
   type BuildOptions,
   type CommonNode,
 } from "@react-pptx/core";
-import { createResolver, emit } from "@react-pptx/core/build";
+import { createResolver } from "@react-pptx/core/build";
+import { emit } from "@react-pptx/emit";
 import { validatePptx } from "@react-pptx/validation";
 import { PNG } from "pngjs";
 import { createElement, type ReactNode } from "react";

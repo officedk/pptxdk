@@ -3,13 +3,10 @@ import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 
 import {
-  assertXml10Characters,
   CapabilityError,
   isMorphKey,
   layoutStyleKeys,
   parseCapabilityLayoutContract,
-  pxToEmu,
-  xmlEscape,
   type BoundObjectCapabilityModule,
   type BoundObjectNativeCollaboration,
   type CapabilityInput,
@@ -30,6 +27,7 @@ import {
   type VisualStyle,
 } from "@react-pptx/core/capability";
 import { CommonNode } from "@react-pptx/core/document";
+import { assertXml10Characters, pxToEmu, xmlEscape } from "@react-pptx/emit";
 
 import type { Geometry } from "./geometry.ts";
 import { nativeLinkXml, parseLinkTarget } from "./identity.ts";

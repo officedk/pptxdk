@@ -1,7 +1,5 @@
 import {
-  assertXml10Characters,
   CapabilityError,
-  xmlEscape,
   layoutStyleKeys,
   paddingStyleKeys,
   parseCapabilityLayoutContract,
@@ -22,6 +20,7 @@ import {
   type ResolvedBoundObjectCapability,
   type ResolvedObject,
 } from "@react-pptx/core/capability";
+import { assertXml10Characters, xmlEscape } from "@react-pptx/emit";
 
 import {
   nativeLinkXml,

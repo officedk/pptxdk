@@ -1,7 +1,15 @@
 import { createHash } from "node:crypto";
 
+import {
+  defaultTheme,
+  isFont,
+  nativeColorSlots,
+  type NativeColorSlot,
+  type ResolvedColor,
+  type Theme,
+} from "@react-pptx/core/theme";
+
 import { shapeTreeXml } from "#/shape-tree.ts";
-import { defaultTheme, isFont, nativeColorSlots, type Theme } from "#/theme.ts";
 
 export function pxToEmu(value: number): number {
   return Math.round(value * 9525);
@@ -41,6 +49,42 @@ export function xmlEscape(value: string): string {
 
 export function xmlDocument(body: string): string {
   return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n${body}`;
+}
+
+const nativeSchemeReference: Record<NativeColorSlot, string> = {
+  dk1: "tx1",
+  lt1: "bg1",
+  dk2: "tx2",
+  lt2: "bg2",
+  accent1: "accent1",
+  accent2: "accent2",
+  accent3: "accent3",
+  accent4: "accent4",
+  accent5: "accent5",
+  accent6: "accent6",
+  hlink: "hlink",
+  folHlink: "folHlink",
+};
+
+/** Write native theme colors as schemeClr and literal colors as srgbClr. */
+export function resolvedColorXml(value: ResolvedColor): string {
+  const children = [
+    value.lumMod === undefined
+      ? ""
+      : `<a:lumMod val="${Math.round(value.lumMod * 100000)}"/>`,
+    value.lumOff === undefined
+      ? ""
+      : `<a:lumOff val="${Math.round(value.lumOff * 100000)}"/>`,
+    value.alpha === undefined
+      ? ""
+      : `<a:alpha val="${Math.round(value.alpha * 100000)}"/>`,
+  ].join("");
+  const element = value.slot === undefined ? "srgbClr" : "schemeClr";
+  const color =
+    value.slot === undefined ? value.hex : nativeSchemeReference[value.slot];
+  return children === ""
+    ? `<a:${element} val="${color}"/>`
+    : `<a:${element} val="${color}">${children}</a:${element}>`;
 }
 
 const namespaces = {

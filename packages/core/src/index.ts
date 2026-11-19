@@ -24,7 +24,6 @@ export { Deck, Section, Slide } from "#/elements.ts";
 export { createMorphScope } from "#/morph.ts";
 export type { MorphKey, MorphScope } from "#/morph.ts";
 export { BuildQueryError } from "#/query.ts";
-export { pxToEmu, xmlEscape } from "#/ooxml.ts";
 export {
   assertValidLang,
   darker,
@@ -33,7 +32,6 @@ export {
   isNativeColorSlot,
   lighter,
   nativeColorSlots,
-  resolvedColorXml,
   textStyleKeys,
   validateTextStyle,
 } from "#/theme.ts";

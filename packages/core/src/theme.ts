@@ -190,21 +190,6 @@ const officeColors: Record<NativeColorSlot, string> = {
   folHlink: "#800080",
 };
 
-const nativeSchemeReference: Record<NativeColorSlot, string> = {
-  dk1: "tx1",
-  lt1: "bg1",
-  dk2: "tx2",
-  lt2: "bg2",
-  accent1: "accent1",
-  accent2: "accent2",
-  accent3: "accent3",
-  accent4: "accent4",
-  accent5: "accent5",
-  accent6: "accent6",
-  hlink: "hlink",
-  folHlink: "folHlink",
-};
-
 const contextRecords = new WeakMap<
   ThemeContext,
   {
@@ -1051,25 +1036,4 @@ export function createThemeContext(
     undefined,
     textStyleFrom(style, initialContext),
   );
-}
-
-/** Write native theme colors as schemeClr and literal colors as srgbClr. */
-export function resolvedColorXml(value: ResolvedColor): string {
-  const children = [
-    value.lumMod === undefined
-      ? ""
-      : `<a:lumMod val="${Math.round(value.lumMod * 100000)}"/>`,
-    value.lumOff === undefined
-      ? ""
-      : `<a:lumOff val="${Math.round(value.lumOff * 100000)}"/>`,
-    value.alpha === undefined
-      ? ""
-      : `<a:alpha val="${Math.round(value.alpha * 100000)}"/>`,
-  ].join("");
-  const element = value.slot === undefined ? "srgbClr" : "schemeClr";
-  const color =
-    value.slot === undefined ? value.hex : nativeSchemeReference[value.slot];
-  return children === ""
-    ? `<a:${element} val="${color}"/>`
-    : `<a:${element} val="${color}">${children}</a:${element}>`;
 }

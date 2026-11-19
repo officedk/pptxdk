@@ -4,9 +4,7 @@ import {
   layoutStyleKeys,
   paddingStyleKeys,
   parseCapabilityLayoutContract,
-  pxToEmu,
   textStyleKeys,
-  xmlEscape,
   type BoundObjectNativeCollaboration,
   type CapabilityInput,
   type CapabilityLayoutMeasurement,
@@ -28,6 +26,7 @@ import {
   type ThemeContext,
 } from "@react-pptx/core/capability";
 import { RichTextContainer } from "@react-pptx/core/document";
+import { pxToEmu, xmlEscape } from "@react-pptx/emit";
 
 import type { CustomGeometry, Geometry } from "./geometry.ts";
 export { blockArc, path, preset } from "./geometry.ts";

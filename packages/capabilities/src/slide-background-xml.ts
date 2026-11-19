@@ -1,4 +1,5 @@
-import { xmlEscape, type ThemeContext } from "@react-pptx/core/capability";
+import type { ThemeContext } from "@react-pptx/core/capability";
+import { xmlEscape } from "@react-pptx/emit";
 
 import { fillXml } from "./visual.ts";
 

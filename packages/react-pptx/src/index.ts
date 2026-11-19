@@ -5,7 +5,7 @@ import {
   type PreviewOptions,
   type PreviewResult,
 } from "@react-pptx/core";
-import { emit } from "@react-pptx/core/build";
+import { emit } from "@react-pptx/emit";
 import type { ReactNode } from "react";
 
 import { createStagePipeline } from "./compose.ts";

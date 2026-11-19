@@ -1,8 +1,6 @@
 import { expandDocument } from "@react-pptx/core";
 import {
   createResolver,
-  emit,
-  validateOptions,
   type BuildOptions,
   type BuildResult,
   type CapabilityModule,
@@ -10,6 +8,7 @@ import {
   type ResolveOptions,
 } from "@react-pptx/core/build";
 import { CommonNode } from "@react-pptx/core/document";
+import { emit, validateOptions } from "@react-pptx/emit";
 import type { ReactNode } from "react";
 
 /**

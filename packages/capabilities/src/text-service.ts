@@ -3,10 +3,7 @@ import { createHash } from "node:crypto";
 import {
   assertValidLang,
   CapabilityError,
-  pxToEmu,
-  resolvedColorXml,
   textStyleKeys,
-  xmlEscape,
   type CapabilityPresentationContribution,
   type ColorValue,
   type Font,
@@ -20,6 +17,7 @@ import {
   type TextStyle,
   type ThemeContext,
 } from "@react-pptx/core/capability";
+import { pxToEmu, resolvedColorXml, xmlEscape } from "@react-pptx/emit";
 import * as fontkit from "fontkit";
 // @ts-expect-error -- linebreak does not provide types; declare the breakpoint interface used below.
 import LineBreakerImplementation from "linebreak";

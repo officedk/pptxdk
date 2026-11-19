@@ -1,7 +1,5 @@
 import {
   CapabilityError,
-  pxToEmu,
-  xmlEscape,
   type CapabilityInput,
   type GeometryBox,
   type ResolvedSlide,
@@ -11,6 +9,7 @@ import {
   type SlideResolveContext,
   type TransparentCapabilityModule,
 } from "@react-pptx/core/capability";
+import { pxToEmu, xmlEscape } from "@react-pptx/emit";
 
 import type {
   MotionDirection,

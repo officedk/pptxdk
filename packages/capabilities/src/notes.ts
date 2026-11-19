@@ -1,7 +1,5 @@
 import {
   CapabilityError,
-  themeXml,
-  xmlEscape,
   type CapabilityInput,
   type ResolvedSlide,
   type SlideCapabilityModule,
@@ -10,6 +8,7 @@ import {
   type TextStyle,
   type ThemeContext,
 } from "@react-pptx/core/capability";
+import { themeXml, xmlEscape } from "@react-pptx/emit";
 
 import {
   notesMasterContentType,

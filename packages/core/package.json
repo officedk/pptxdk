@@ -49,6 +49,11 @@
       "types": "./dist/query.d.ts",
       "default": "./dist/query.js"
     },
+    "./resolution": {
+      "source": "./src/resolution.ts",
+      "types": "./dist/resolution.d.ts",
+      "default": "./dist/resolution.js"
+    },
     "./theme": {
       "source": "./src/theme.ts",
       "types": "./dist/theme.d.ts",
@@ -65,7 +70,6 @@
   },
   "dependencies": {
     "@resvg/resvg-js": "catalog:",
-    "fflate": "catalog:",
     "react": "catalog:",
     "react-reconciler": "catalog:",
     "yoga-layout": "catalog:"

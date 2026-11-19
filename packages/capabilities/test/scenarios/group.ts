@@ -2,7 +2,8 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
 import { BuildError, Deck, Slide, expandDocument } from "@react-pptx/core";
-import { createResolver, emit } from "@react-pptx/core/build";
+import { createResolver } from "@react-pptx/core/build";
+import { emit } from "@react-pptx/emit";
 import { strFromU8, unzipSync } from "fflate";
 import { createElement } from "react";
 import { expect } from "vitest";

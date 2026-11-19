@@ -146,6 +146,7 @@
   },
   "dependencies": {
     "@react-pptx/core": "workspace:*",
+    "@react-pptx/emit": "workspace:*",
     "fflate": "catalog:",
     "fontkit": "catalog:",
     "harfbuzzjs": "catalog:",

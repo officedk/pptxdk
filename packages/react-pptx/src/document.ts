@@ -1,14 +1,13 @@
 import { documentCapabilities } from "@react-pptx/capabilities/document";
 import {
   createResolver,
-  emit,
-  validateOptions,
   type BuildOptions,
   type BuildResult,
   type Resolution,
   type ResolveOptions,
 } from "@react-pptx/core/build";
 import type { CommonNode } from "@react-pptx/core/document";
+import { emit, validateOptions } from "@react-pptx/emit";
 
 const resolveDocument = createResolver(documentCapabilities);
 

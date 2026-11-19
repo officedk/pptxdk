@@ -5,7 +5,6 @@ import {
   parseCapabilityLayoutContract,
   textStyleFrom,
   textStyleKeys,
-  xmlEscape,
   type BoundContainerCollaboration,
   type BoundObjectNativeCollaboration,
   type CapabilityInput,
@@ -26,6 +25,7 @@ import {
   type VisualStyle,
 } from "@react-pptx/core/capability";
 import { CommonContainer } from "@react-pptx/core/document";
+import { xmlEscape } from "@react-pptx/emit";
 
 import { nativeLinkXml, parseLinkTarget, parseMorphKey } from "./identity.ts";
 import type { MorphProps } from "./morph-api.ts";

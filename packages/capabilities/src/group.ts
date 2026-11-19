@@ -3,10 +3,8 @@ import {
   layoutStyleKeys,
   paddingStyleKeys,
   parseCapabilityLayoutContract,
-  pxToEmu,
   textStyleFrom,
   textStyleKeys,
-  xmlEscape,
   type BoundContainerCollaboration,
   type BoundObjectNativeCollaboration,
   type CapabilityInput,
@@ -28,6 +26,7 @@ import {
   type VisualStyle,
 } from "@react-pptx/core/capability";
 import { CommonContainer } from "@react-pptx/core/document";
+import { pxToEmu, xmlEscape } from "@react-pptx/emit";
 
 import { groupXml } from "./group-xml.ts";
 import {

@@ -18,7 +18,6 @@ import {
 } from "@react-pptx/core";
 import {
   createResolver,
-  emit,
   type BuildOptions,
   type CapabilityModule,
 } from "@react-pptx/core/build";
@@ -27,10 +26,8 @@ import {
   isMorphKey,
   layoutStyleKeys,
   parseCapabilityLayoutContract,
-  pxToEmu,
   textStyleFrom,
   textStyleKeys,
-  xmlEscape,
   type EmitContext,
   type MorphKey,
   type ObjectResolveContext,
@@ -48,6 +45,7 @@ import {
   hostNodeCreator,
 } from "@react-pptx/core/document";
 import { paint } from "@react-pptx/core/preview";
+import { emit, pxToEmu, xmlEscape } from "@react-pptx/emit";
 import {
   Box,
   boxCapability,

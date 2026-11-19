@@ -1,4 +1,4 @@
-import { xmlDocument } from "@react-pptx/core/capability";
+import { xmlDocument } from "@react-pptx/emit";
 
 const drawingNamespace =
   "http://schemas.openxmlformats.org/drawingml/2006/main";

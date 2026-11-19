@@ -564,6 +564,7 @@ import { createElement } from "react";
 registerHooks({
   resolve(specifier, context, nextResolve) {
     if (
+      specifier.includes("@react-pptx/preview") ||
       specifier.includes("@resvg/resvg-js") ||
       specifier.includes("pngjs") ||
       specifier.includes("jpeg-js") ||
@@ -607,6 +608,7 @@ registerHooks({
       specifier === "react" ||
       specifier === "react-reconciler" ||
       specifier.startsWith("react/") ||
+      specifier.includes("@react-pptx/preview") ||
       specifier.includes("@resvg/resvg-js") ||
       specifier.includes("pngjs") ||
       specifier.includes("jpeg-js") ||
@@ -649,6 +651,7 @@ registerHooks({
       specifier === "react" ||
       specifier === "react-reconciler" ||
       specifier.startsWith("react/") ||
+      specifier.includes("@react-pptx/preview") ||
       specifier.includes("@resvg/resvg-js") ||
       specifier.includes("pngjs") ||
       specifier.includes("jpeg-js") ||

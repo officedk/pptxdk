@@ -39,11 +39,6 @@
       "types": "./dist/document.d.ts",
       "default": "./dist/document.js"
     },
-    "./preview": {
-      "source": "./src/preview.ts",
-      "types": "./dist/preview.d.ts",
-      "default": "./dist/preview.js"
-    },
     "./query": {
       "source": "./src/query.ts",
       "types": "./dist/query.d.ts",
@@ -69,7 +64,6 @@
     "build": "rm -rf dist && tsc -p tsconfig.build.json --pretty false"
   },
   "dependencies": {
-    "@resvg/resvg-js": "catalog:",
     "react": "catalog:",
     "react-reconciler": "catalog:",
     "yoga-layout": "catalog:"

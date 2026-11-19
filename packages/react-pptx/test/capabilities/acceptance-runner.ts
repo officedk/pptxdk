@@ -2,19 +2,18 @@ import assert from "node:assert/strict";
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
+import { documentCapabilities } from "@react-pptx/capabilities/document";
 import { expandDocument, type CommonNode } from "@react-pptx/core";
 import { createResolver, type Resolution } from "@react-pptx/core/build";
+import { emit } from "@react-pptx/emit";
 import {
   paint,
   type PreviewPageResult,
   type PreviewResult,
-} from "@react-pptx/core/preview";
-import { emit } from "@react-pptx/emit";
+} from "@react-pptx/preview";
 import { validatePptx, type ValidationResult } from "@react-pptx/validation";
 import { PNG } from "pngjs";
 import type { ReactNode } from "react";
-
-import { documentCapabilities } from "../src/document.ts";
 
 export type AuthorKind = "jsx" | "document";
 

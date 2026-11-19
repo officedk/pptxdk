@@ -1,5 +1,20 @@
 import assert from "node:assert/strict";
 
+import { slideBackgroundCapability } from "@react-pptx/capabilities";
+import {
+  box,
+  chart,
+  deck,
+  documentCapabilities,
+  group,
+  shape,
+  slide,
+} from "@react-pptx/capabilities/document";
+import { shapeCapability } from "@react-pptx/capabilities/shape";
+import {
+  transitionCapability,
+  transitions,
+} from "@react-pptx/capabilities/transition";
 import {
   BuildError,
   CommonContainer,
@@ -15,8 +30,8 @@ import {
   type MorphKey,
 } from "@react-pptx/core";
 import { createResolver } from "@react-pptx/core/build";
-import { paint } from "@react-pptx/core/preview";
 import { emit } from "@react-pptx/emit";
+import { paint } from "@react-pptx/preview";
 import { validatePptx } from "@react-pptx/validation";
 import { strFromU8, unzipSync } from "fflate";
 import { createElement } from "react";
@@ -33,19 +48,6 @@ function docBuildWith(modules: readonly CapabilityModule[]) {
       options,
     );
 }
-
-import {
-  box,
-  chart,
-  deck,
-  documentCapabilities,
-  group,
-  shape,
-  slide,
-} from "../src/document.ts";
-import { shapeCapability } from "../src/shape.ts";
-import { slideBackgroundCapability } from "../src/slide-background.ts";
-import { transitionCapability, transitions } from "../src/transition.ts";
 
 describe("transitionCapability bound slide migration & generic continuity collaboration", () => {
   it("implements BoundSlideCapabilityModule, parses once per slide, and leaves static preview canvas unchanged", async () => {

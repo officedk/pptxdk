@@ -1,10 +1,5 @@
 import assert from "node:assert/strict";
 
-import { Deck, Slide } from "@react-pptx/core";
-import { strFromU8, unzipSync } from "fflate";
-import { PNG } from "pngjs";
-import { createElement } from "react";
-
 import {
   deck,
   notes,
@@ -13,10 +8,15 @@ import {
   slide,
   slideNumber,
   span,
-} from "../../src/document.ts";
-import { Notes } from "../../src/notes-elements.ts";
-import { Shape } from "../../src/shape-elements.ts";
-import { P, SlideNumber, Span } from "../../src/text-elements.ts";
+} from "@react-pptx/capabilities/document";
+import { Notes } from "@react-pptx/capabilities/notes-elements";
+import { Shape } from "@react-pptx/capabilities/shape-elements";
+import { P, SlideNumber, Span } from "@react-pptx/capabilities/text-elements";
+import { Deck, Slide } from "@react-pptx/core";
+import { strFromU8, unzipSync } from "fflate";
+import { PNG } from "pngjs";
+import { createElement } from "react";
+
 import type { CapabilityScenario } from "../acceptance-runner.ts";
 
 function pixelAt(

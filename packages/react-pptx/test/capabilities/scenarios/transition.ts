@@ -1,5 +1,19 @@
 import assert from "node:assert/strict";
 
+import { Box } from "@react-pptx/capabilities/box-elements";
+import { Chart } from "@react-pptx/capabilities/chart-elements";
+import {
+  box,
+  chart,
+  deck,
+  documentCapabilities,
+  group,
+  shape,
+  slide,
+} from "@react-pptx/capabilities/document";
+import { Group } from "@react-pptx/capabilities/group-elements";
+import { Shape } from "@react-pptx/capabilities/shape-elements";
+import { transitions } from "@react-pptx/capabilities/transition";
 import {
   BuildError,
   createMorphScope,
@@ -16,20 +30,6 @@ import { validatePptx } from "@react-pptx/validation";
 import { PNG } from "pngjs";
 import { createElement, type ReactNode } from "react";
 
-import { Box } from "../../src/box-elements.ts";
-import { Chart } from "../../src/chart-elements.ts";
-import {
-  box,
-  chart,
-  deck,
-  documentCapabilities,
-  group,
-  shape,
-  slide,
-} from "../../src/document.ts";
-import { Group } from "../../src/group-elements.ts";
-import { Shape } from "../../src/shape-elements.ts";
-import { transitions } from "../../src/transition.ts";
 import type { CapabilityScenario } from "../acceptance-runner.ts";
 
 function readPixel(

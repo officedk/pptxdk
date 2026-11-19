@@ -3,8 +3,8 @@ import { readFileSync } from "node:fs";
 
 import { expandDocument } from "@react-pptx/core";
 import { createResolver } from "@react-pptx/core/build";
-import { paint } from "@react-pptx/core/preview";
 import { emit } from "@react-pptx/emit";
+import { paint } from "@react-pptx/preview";
 import {
   BuildError,
   Chart,

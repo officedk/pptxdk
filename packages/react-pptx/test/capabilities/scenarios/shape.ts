@@ -1,20 +1,25 @@
 import assert from "node:assert/strict";
 
-import { Deck, Slide } from "@react-pptx/core";
-import { PNG } from "pngjs";
-import { createElement } from "react";
-import { expect } from "vitest";
-
-import { deck, paragraph, shape, slide } from "../../src/document.ts";
+import {
+  deck,
+  paragraph,
+  shape,
+  slide,
+} from "@react-pptx/capabilities/document";
 import {
   blockArc,
   path,
   preset,
   type CustomGeometry,
-} from "../../src/geometry.ts";
-import { Shape } from "../../src/shape-elements.ts";
-import { P } from "../../src/text-elements.ts";
-import { linearGradient } from "../../src/visual.ts";
+} from "@react-pptx/capabilities/shape";
+import { linearGradient } from "@react-pptx/capabilities/shape";
+import { Shape } from "@react-pptx/capabilities/shape-elements";
+import { P } from "@react-pptx/capabilities/text-elements";
+import { Deck, Slide } from "@react-pptx/core";
+import { PNG } from "pngjs";
+import { createElement } from "react";
+import { expect } from "vitest";
+
 import type { CapabilityScenario } from "../acceptance-runner.ts";
 
 const dualSubpathCustom: CustomGeometry = {

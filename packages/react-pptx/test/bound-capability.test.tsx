@@ -44,8 +44,8 @@ import {
   createSlideNode,
   hostNodeCreator,
 } from "@react-pptx/core/document";
-import { paint } from "@react-pptx/core/preview";
 import { emit, pxToEmu, xmlEscape } from "@react-pptx/emit";
+import { paint } from "@react-pptx/preview";
 import {
   Box,
   boxCapability,

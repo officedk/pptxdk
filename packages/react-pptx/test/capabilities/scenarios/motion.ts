@@ -1,6 +1,45 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
+import { Box } from "@react-pptx/capabilities/box-elements";
+import { Chart } from "@react-pptx/capabilities/chart-elements";
+import {
+  box,
+  chart,
+  createMotionScopeHandle,
+  deck,
+  documentCapabilities,
+  font,
+  group,
+  motionScope,
+  section,
+  shape,
+  slide,
+  step,
+  text,
+} from "@react-pptx/capabilities/document";
+import { Group } from "@react-pptx/capabilities/group-elements";
+import {
+  after,
+  breathe,
+  fade,
+  fillColor,
+  floatUp,
+  fly,
+  observeMotion,
+  repeat,
+  spin,
+  wipe,
+  zoom,
+  type MotionObservation,
+} from "@react-pptx/capabilities/motion";
+import {
+  MotionScope,
+  Step,
+  useMotionScope,
+} from "@react-pptx/capabilities/motion-elements";
+import { Shape } from "@react-pptx/capabilities/shape-elements";
+import { Text } from "@react-pptx/capabilities/text-elements";
 import {
   BuildError,
   Deck,
@@ -18,55 +57,13 @@ import { strFromU8, unzipSync } from "fflate";
 import { PNG } from "pngjs";
 import { createElement, type ReactNode } from "react";
 
-import { Box } from "../../src/box-elements.ts";
-import { Chart } from "../../src/chart-elements.ts";
-import {
-  box,
-  chart,
-  createMotionScopeHandle,
-  deck,
-  documentCapabilities,
-  font,
-  group,
-  motionScope,
-  section,
-  shape,
-  slide,
-  step,
-  text,
-} from "../../src/document.ts";
-import { Group } from "../../src/group-elements.ts";
-import {
-  MotionScope,
-  Step,
-  useMotionScope,
-} from "../../src/motion-elements.ts";
-import {
-  after,
-  breathe,
-  fade,
-  fillColor,
-  floatUp,
-  fly,
-  observeMotion,
-  repeat,
-  spin,
-  wipe,
-  zoom,
-  type MotionObservation,
-} from "../../src/motion.ts";
-import { Shape } from "../../src/shape-elements.ts";
-import { Text } from "../../src/text-elements.ts";
 import type { CapabilityScenario } from "../acceptance-runner.ts";
 
 const jostFont = font("Jost*", [
   {
     weight: 400,
     data: readFileSync(
-      new URL(
-        "../../../react-pptx/test/assets/fonts/Jost-400-Book.ttf",
-        import.meta.url,
-      ),
+      new URL("../../assets/fonts/Jost-400-Book.ttf", import.meta.url),
     ),
   },
 ]);

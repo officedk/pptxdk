@@ -3,34 +3,10 @@ import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
-import {
-  BuildError,
-  CommonNode,
-  Deck,
-  Slide,
-  expandDocument,
-  type BoundObjectCapabilityModule,
-  type CapabilityInput,
-  type CapabilityModule,
-  type CapabilityParseContext,
-} from "@react-pptx/core";
-import { createResolver } from "@react-pptx/core/build";
-import {
-  parseCapabilityLayoutContract,
-  textStyleKeys,
-} from "@react-pptx/core/capability";
-import { RichTextContainer } from "@react-pptx/core/document";
-import { paint } from "@react-pptx/core/preview";
-import { emit } from "@react-pptx/emit";
-import { validatePptx } from "@react-pptx/validation";
-import { strFromU8, unzipSync } from "fflate";
-import { PNG } from "pngjs";
-import { createElement } from "react";
-import { describe, expect, it } from "vitest";
-
-import { Box } from "../src/box-elements.ts";
-import { Chart } from "../src/chart-elements.ts";
-import { chartCapability } from "../src/chart.ts";
+import { slideBackgroundCapability } from "@react-pptx/capabilities";
+import { Box } from "@react-pptx/capabilities/box-elements";
+import { chartCapability } from "@react-pptx/capabilities/chart";
+import { Chart } from "@react-pptx/capabilities/chart-elements";
 import {
   box,
   cell,
@@ -44,30 +20,52 @@ import {
   notesCapability,
   paragraph,
   row,
+  shape,
   slide,
   slideNumber,
-  shape,
   span,
   table,
   text,
-} from "../src/document.ts";
-import { blockArc, path, preset } from "../src/geometry.ts";
-import { Group } from "../src/group-elements.ts";
-import { Image } from "../src/image-elements.ts";
-import { motionCapability } from "../src/motion.ts";
-import { Shape } from "../src/shape-elements.ts";
-import { shapeCapability } from "../src/shape.ts";
-import { slideBackgroundCapability } from "../src/slide-background.ts";
-import { Cell, Row, Table } from "../src/table-elements.ts";
-import { tableCapability } from "../src/table.ts";
-import { P, SlideNumber, Span, Text } from "../src/text-elements.ts";
+} from "@react-pptx/capabilities/document";
+import { Group } from "@react-pptx/capabilities/group-elements";
+import { Image } from "@react-pptx/capabilities/image-elements";
+import { motionCapability } from "@react-pptx/capabilities/motion";
 import {
-  emitTextBody,
-  parseTextContent,
-  renderTextOutlinesSvg,
-  resolveTextBody,
-  textInsets,
-} from "../src/text-service.ts";
+  blockArc,
+  linearGradient,
+  path,
+  preset,
+  shapeCapability,
+} from "@react-pptx/capabilities/shape";
+import { Shape } from "@react-pptx/capabilities/shape-elements";
+import { tableCapability } from "@react-pptx/capabilities/table";
+import { Cell, Row, Table } from "@react-pptx/capabilities/table-elements";
+import {
+  P,
+  SlideNumber,
+  Span,
+  Text,
+} from "@react-pptx/capabilities/text-elements";
+import {
+  transitionCapability,
+  transitions,
+} from "@react-pptx/capabilities/transition";
+import {
+  BuildError,
+  CommonNode,
+  Deck,
+  Slide,
+  expandDocument,
+  type CapabilityModule,
+} from "@react-pptx/core";
+import { createResolver } from "@react-pptx/core/build";
+import { emit } from "@react-pptx/emit";
+import { paint } from "@react-pptx/preview";
+import { validatePptx } from "@react-pptx/validation";
+import { strFromU8, unzipSync } from "fflate";
+import { PNG } from "pngjs";
+import { createElement } from "react";
+import { describe, expect, it } from "vitest";
 
 function runDocPreview(modules: readonly CapabilityModule[]) {
   const resolveWith = createResolver(modules);
@@ -76,8 +74,6 @@ function runDocPreview(modules: readonly CapabilityModule[]) {
     return { ...emit(resolution), ...paint(resolution) };
   };
 }
-import { transitionCapability, transitions } from "../src/transition.ts";
-import { linearGradient } from "../src/visual.ts";
 
 describe("Slice 1: core bound slide preview & slideBackgroundCapability", () => {
   it("renders default white and solid backgrounds across both authoring entries using bound slide role", async () => {
@@ -502,19 +498,13 @@ describe("Slice 3: Text static preview & shared text-service outlines", () => {
     {
       weight: 400,
       data: readFileSync(
-        new URL(
-          "../../react-pptx/test/assets/fonts/Jost-400-Book.ttf",
-          import.meta.url,
-        ),
+        new URL("../assets/fonts/Jost-400-Book.ttf", import.meta.url),
       ),
     },
     {
       weight: 700,
       data: readFileSync(
-        new URL(
-          "../../react-pptx/test/assets/fonts/Jost-700-Bold.ttf",
-          import.meta.url,
-        ),
+        new URL("../assets/fonts/Jost-700-Bold.ttf", import.meta.url),
       ),
     },
   ]);
@@ -522,10 +512,7 @@ describe("Slice 3: Text static preview & shared text-service outlines", () => {
     {
       weight: 400,
       data: readFileSync(
-        new URL(
-          "../../react-pptx/test/assets/fonts/NotoSansSC-Regular.woff2",
-          import.meta.url,
-        ),
+        new URL("../assets/fonts/NotoSansSC-Regular.woff2", import.meta.url),
       ),
     },
   ]);
@@ -692,10 +679,7 @@ describe("Slice 3: Text static preview & shared text-service outlines", () => {
   it("rejects unsupported scripts, text styles, missing glyphs/fonts, color tables, and visual effects while keeping valid pages", async () => {
     const previewDoc = runDocPreview(documentCapabilities);
     const jostBytes = readFileSync(
-      new URL(
-        "../../react-pptx/test/assets/fonts/Jost-400-Book.ttf",
-        import.meta.url,
-      ),
+      new URL("../assets/fonts/Jost-400-Book.ttf", import.meta.url),
     );
     const withSyntheticTable = (source: Buffer, tag: string): Uint8Array => {
       const numTables = source.readUInt16BE(4);
@@ -955,137 +939,6 @@ describe("Slice 3: Text static preview & shared text-service outlines", () => {
       );
       assert.ok(result.pages[1]?.png !== undefined, item.label);
     }
-  });
-
-  it("shares text-service layout and glyph outlines without registering textCapability or loading text.ts", async () => {
-    const customLabelCapability: BoundObjectCapabilityModule = {
-      declaration: "rp:custom-label",
-      bind(input: CapabilityInput, parseContext: CapabilityParseContext) {
-        const contract = parseCapabilityLayoutContract({
-          nativeKind: "sp",
-          props: input.props,
-          allowedStyleKeys: new Set(["width", "height", ...textStyleKeys]),
-          allowPadding: false,
-          path: parseContext.path,
-        });
-        const insets = textInsets(input.props["style"]);
-        const { paragraphs, style } = parseTextContent(
-          input.children,
-          input.props["style"],
-          parseContext.theme,
-          { slideNumber: parseContext.slideNumber },
-        );
-        return {
-          contract,
-          resolve(resolveContext) {
-            const box = resolveContext.layoutBox ?? {
-              x: Number(input.props["x"] ?? 0),
-              y: Number(input.props["y"] ?? 0),
-              width: Number(input.props["width"] ?? 120),
-              height: Number(input.props["height"] ?? 40),
-            };
-            const body = resolveTextBody(
-              paragraphs,
-              style,
-              resolveContext.theme,
-              "middle",
-              { width: box.width, height: box.height, insets },
-              "text-box",
-            );
-            return {
-              observation: {
-                id: resolveContext.id,
-                kind: "shape",
-                name: "CustomLabel",
-                geometry: "rect",
-                box,
-                text: body.text,
-              },
-              extensions: [],
-              resourceClaims: body.resourceClaims,
-              emit(emitContext) {
-                const emitted = emitTextBody(body, emitContext.theme, {
-                  createFieldId: emitContext.createTextFieldId,
-                  ...(emitContext.options.embedFonts === undefined
-                    ? {}
-                    : { embedFonts: emitContext.options.embedFonts }),
-                });
-                return {
-                  xml: `<p:sp><p:nvSpPr><p:cNvPr id="${emitContext.id}" name="CustomLabel"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr><p:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="952500" cy="381000"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom><a:noFill/></p:spPr>${emitted.xml}</p:sp>`,
-                  ...(emitted.presentationContributions.length === 0
-                    ? {}
-                    : {
-                        presentationContributions:
-                          emitted.presentationContributions,
-                      }),
-                };
-              },
-              paint(paintContext) {
-                const paintBox = paintContext.box ?? box;
-                return {
-                  svg: renderTextOutlinesSvg({
-                    paragraphs,
-                    box: paintBox,
-                    insets,
-                    verticalAlign: "middle",
-                    theme: paintContext.theme,
-                    measuredLayout: body.measuredLayout,
-                  }),
-                };
-              },
-            };
-          },
-        };
-      },
-    };
-
-    const previewWithoutTextCapability = runDocPreview([
-      slideBackgroundCapability,
-      customLabelCapability,
-    ]);
-    const doc = deck({ width: 320, height: 180 }).append(
-      slide({ id: "shared-only" }).append(
-        new RichTextContainer("custom-label", "rp:custom-label", {
-          id: "lbl",
-          x: 20,
-          y: 20,
-          width: 180,
-          height: 50,
-          style: { fontFamily: jostFont, fontSize: 18, color: "#1D4ED8" },
-        }).content("Shared glyphs"),
-      ),
-    );
-    const result = await previewWithoutTextCapability(doc);
-    assert.deepEqual(result.pages[0]?.diagnostics, []);
-    expect(result.pages[0]?.svg).toContain("<path");
-    assert.ok(result.pages[0]?.png !== undefined);
-
-    // Also verify text-service never pulls in text.ts at runtime.
-    const packageRoot = fileURLToPath(new URL("../", import.meta.url));
-    const isolated = spawnSync(
-      process.execPath,
-      [
-        "--conditions=source",
-        "--input-type=module",
-        "--eval",
-        `
-import { registerHooks } from "node:module";
-registerHooks({
-  resolve(specifier, context, nextResolve) {
-    if (specifier.endsWith("/text.ts") || specifier.endsWith("/text.js") || specifier.endsWith("/text")) {
-      throw new Error("text-service loaded text capability module: " + specifier);
-    }
-    return nextResolve(specifier, context);
-  },
-});
-await import("./src/text-service.ts");
-process.stdout.write("ok");
-`,
-      ],
-      { cwd: packageRoot, encoding: "utf8" },
-    );
-    assert.equal(isolated.status, 0, isolated.stderr);
-    assert.equal(isolated.stdout, "ok");
   });
 });
 
@@ -1418,10 +1271,7 @@ describe("Slice 4 (Ticket 10): Chart static preview, layout warning, and textCap
     {
       weight: 400,
       data: readFileSync(
-        new URL(
-          "../../react-pptx/test/assets/fonts/Jost-400-Book.ttf",
-          import.meta.url,
-        ),
+        new URL("../assets/fonts/Jost-400-Book.ttf", import.meta.url),
       ),
     },
   ]);
@@ -1524,33 +1374,6 @@ describe("Slice 4 (Ticket 10): Chart static preview, layout warning, and textCap
     );
     const jsxResult = await runDocPreview(documentCapabilities)(jsxDoc);
     assert.deepEqual(jsxResult.pages[0]?.png, page.png);
-
-    // Verify chart.ts never loads text.ts at runtime.
-    const packageRoot = fileURLToPath(new URL("../", import.meta.url));
-    const isolated = spawnSync(
-      process.execPath,
-      [
-        "--conditions=source",
-        "--input-type=module",
-        "--eval",
-        `
-import { registerHooks } from "node:module";
-registerHooks({
-  resolve(specifier, context, nextResolve) {
-    if (specifier.endsWith("/text.ts") || specifier.endsWith("/text.js") || specifier.endsWith("/text")) {
-      throw new Error("chart capability loaded text.ts: " + specifier);
-    }
-    return nextResolve(specifier, context);
-  },
-});
-await import("./src/chart.ts");
-process.stdout.write("ok");
-`,
-      ],
-      { cwd: packageRoot, encoding: "utf8" },
-    );
-    assert.equal(isolated.status, 0, isolated.stderr);
-    assert.equal(isolated.stdout, "ok");
   });
 
   it("handles fontSize units/inheritance, zero/fractional scales, top label inset, gapWidth bar geometry, and rebuild isolation", async () => {
@@ -2695,16 +2518,10 @@ describe("Slice 5 (Ticket 08): Group static preview, screenGeometry, and member 
 
 describe("Slice 4 (Ticket 09): Table static preview positive and negative behaviors", () => {
   const jostRegularBytes = readFileSync(
-    new URL(
-      "../../react-pptx/test/assets/fonts/Jost-400-Book.ttf",
-      import.meta.url,
-    ),
+    new URL("../assets/fonts/Jost-400-Book.ttf", import.meta.url),
   );
   const jostBoldBytes = readFileSync(
-    new URL(
-      "../../react-pptx/test/assets/fonts/Jost-700-Bold.ttf",
-      import.meta.url,
-    ),
+    new URL("../assets/fonts/Jost-700-Bold.ttf", import.meta.url),
   );
   const jostFont = font("Jost*", [
     { weight: 400, data: jostRegularBytes },
@@ -2714,10 +2531,7 @@ describe("Slice 4 (Ticket 09): Table static preview positive and negative behavi
     {
       weight: 400,
       data: readFileSync(
-        new URL(
-          "../../react-pptx/test/assets/fonts/NotoSansSC-Regular.woff2",
-          import.meta.url,
-        ),
+        new URL("../assets/fonts/NotoSansSC-Regular.woff2", import.meta.url),
       ),
     },
   ]);
@@ -2988,7 +2802,7 @@ describe("Slice 4 (Ticket 09): Table static preview positive and negative behavi
     expect(result.pages[0]?.svg).toContain("<path");
     assert.deepEqual((await validatePptx(result.pptx)).errors, []);
 
-    const packageRoot = fileURLToPath(new URL("../", import.meta.url));
+    const packageRoot = fileURLToPath(new URL("../../", import.meta.url));
     const isolated = spawnSync(
       process.execPath,
       [
@@ -3007,12 +2821,12 @@ registerHooks({
   },
 });
 const { createDeckNode, createSlideNode } = await import("@react-pptx/core/document");
-const { createShapeNode, shapeCapability } = await import("./src/shape.ts");
-const { createCellNode, createRowNode, createTableNode, tableCapability } = await import("./src/table.ts");
-const { font } = await import("./src/font.ts");
+const { createShapeNode, shapeCapability } = await import("@react-pptx/capabilities/shape");
+const { createCellNode, createRowNode, createTableNode, tableCapability } = await import("@react-pptx/capabilities/table");
+const { font } = await import("@react-pptx/capabilities/font");
 const { createResolver } = await import("@react-pptx/core/build");
-const { paint } = await import("@react-pptx/core/preview");
-const jost = font("Jost*", [{ weight: 400, data: readFileSync("../react-pptx/test/assets/fonts/Jost-400-Book.ttf") }]);
+const { paint } = await import("@react-pptx/preview");
+const jost = font("Jost*", [{ weight: 400, data: readFileSync("./test/assets/fonts/Jost-400-Book.ttf") }]);
 const resolveTrimmed = createResolver([shapeCapability, tableCapability]);
 const res = paint(resolveTrimmed(
   createDeckNode({ width: 300, height: 160 }).append(

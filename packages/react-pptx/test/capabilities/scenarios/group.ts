@@ -1,15 +1,9 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
-import { BuildError, Deck, Slide, expandDocument } from "@react-pptx/core";
-import { createResolver } from "@react-pptx/core/build";
-import { emit } from "@react-pptx/emit";
-import { strFromU8, unzipSync } from "fflate";
-import { createElement } from "react";
-import { expect } from "vitest";
-
-import { Box } from "../../src/box-elements.ts";
-import { boxCapability } from "../../src/box.ts";
+import { createMorphScope } from "@react-pptx/capabilities";
+import { boxCapability } from "@react-pptx/capabilities/box";
+import { Box } from "@react-pptx/capabilities/box-elements";
 import {
   box,
   deck,
@@ -18,26 +12,29 @@ import {
   shape,
   slide,
   text,
-} from "../../src/document.ts";
-import { path } from "../../src/geometry.ts";
-import { Group } from "../../src/group-elements.ts";
-import { groupCapability } from "../../src/group.ts";
-import { createMorphScope } from "../../src/morph-api.ts";
-import { fade, type MotionObservation } from "../../src/motion.ts";
-import { Shape } from "../../src/shape-elements.ts";
-import { shapeCapability } from "../../src/shape.ts";
-import { Text } from "../../src/text-elements.ts";
-import { transitions } from "../../src/transition.ts";
+} from "@react-pptx/capabilities/document";
+import { groupCapability } from "@react-pptx/capabilities/group";
+import { Group } from "@react-pptx/capabilities/group-elements";
+import { fade, type MotionObservation } from "@react-pptx/capabilities/motion";
+import { path } from "@react-pptx/capabilities/shape";
+import { shapeCapability } from "@react-pptx/capabilities/shape";
+import { Shape } from "@react-pptx/capabilities/shape-elements";
+import { Text } from "@react-pptx/capabilities/text-elements";
+import { transitions } from "@react-pptx/capabilities/transition";
+import { BuildError, Deck, Slide, expandDocument } from "@react-pptx/core";
+import { createResolver } from "@react-pptx/core/build";
+import { emit } from "@react-pptx/emit";
+import { strFromU8, unzipSync } from "fflate";
+import { createElement } from "react";
+import { expect } from "vitest";
+
 import type { CapabilityScenario } from "../acceptance-runner.ts";
 
 const jostFont = font("Jost*", [
   {
     weight: 400,
     data: readFileSync(
-      new URL(
-        "../../../react-pptx/test/assets/fonts/Jost-400-Book.ttf",
-        import.meta.url,
-      ),
+      new URL("../../assets/fonts/Jost-400-Book.ttf", import.meta.url),
     ),
   },
 ]);
@@ -46,10 +43,7 @@ const notoFont = font("Noto Sans CJK SC", [
   {
     weight: 400,
     data: readFileSync(
-      new URL(
-        "../../../react-pptx/test/assets/fonts/NotoSansSC-Regular.woff2",
-        import.meta.url,
-      ),
+      new URL("../../assets/fonts/NotoSansSC-Regular.woff2", import.meta.url),
     ),
   },
 ]);

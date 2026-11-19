@@ -1,37 +1,76 @@
-import { Resvg } from "@resvg/resvg-js";
-
-import { CapabilityError } from "#/diagnostics.ts";
+import {
+  CapabilityError,
+  type BuildQuery,
+  type Resolution,
+  type ResolutionReport,
+} from "@react-pptx/core/build";
+import type {
+  GeometryBox,
+  LayoutObservation,
+  ObjectObservation,
+  PreviewTransform,
+  PreviewWarning,
+} from "@react-pptx/core/capability";
 import {
   getInternalResolution,
   type ResolvedObjectLayer,
-} from "#/resolution.ts";
-import type {
-  GeometryBox,
-  ObjectObservation,
-  PaintOptions,
-  PaintResult,
-  PreviewDiagnostic,
-  PreviewNodeObservation,
-  PreviewPageResult,
-  PreviewTransform,
-  Resolution,
-  ScreenGeometry,
-} from "#/types.ts";
+} from "@react-pptx/core/resolution";
+import { Resvg } from "@resvg/resvg-js";
 
-export type {
-  PaintOptions,
-  PaintResult,
-  PreviewDiagnostic,
-  PreviewNodeObservation,
-  PreviewOptions,
-  PreviewPageResult,
-  PreviewResult,
-  PreviewSeverity,
-  PreviewTransform,
-  PreviewWarning,
-  ScreenGeometry,
-  ScreenPoint,
-} from "#/types.ts";
+export type { PreviewTransform, PreviewWarning };
+
+export type PaintOptions = {
+  /** 1-based page numbers to paint. Omit to draw all pages; an empty list draws none. */
+  readonly pages?: readonly number[];
+  readonly signal?: AbortSignal;
+};
+
+export type PreviewOptions = PaintOptions;
+
+export type PreviewSeverity = "error" | "warning";
+
+export type PreviewDiagnostic = {
+  readonly severity: PreviewSeverity;
+  readonly page: number;
+  readonly path: string;
+  readonly message: string;
+};
+
+export type ScreenPoint = {
+  readonly x: number;
+  readonly y: number;
+};
+
+export type ScreenGeometry = {
+  readonly corners: readonly ScreenPoint[];
+  readonly screenBox: GeometryBox;
+};
+
+export type PreviewNodeObservation = ObjectObservation & {
+  readonly path: string | undefined;
+  readonly corners?: readonly ScreenPoint[];
+  readonly screenBox?: GeometryBox;
+};
+
+export type PreviewPageResult = {
+  readonly id: string;
+  readonly page: number;
+  readonly svg?: string;
+  readonly png?: Uint8Array;
+  readonly nodes: readonly PreviewNodeObservation[];
+  readonly layouts: readonly LayoutObservation[];
+  readonly diagnostics: readonly PreviewDiagnostic[];
+};
+
+export type PaintResult = {
+  readonly pages: readonly PreviewPageResult[];
+};
+
+export type PreviewResult = {
+  readonly report: ResolutionReport;
+  readonly query: BuildQuery;
+  readonly pages: readonly PreviewPageResult[];
+};
 
 const defaultCanvasBackground =
   '<rect width="100%" height="100%" fill="white"/>';

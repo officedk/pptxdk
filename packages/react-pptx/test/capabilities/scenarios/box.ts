@@ -1,26 +1,30 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
+import { Box } from "@react-pptx/capabilities/box-elements";
+import {
+  box,
+  deck,
+  font,
+  shape,
+  slide,
+  text,
+} from "@react-pptx/capabilities/document";
+import { linearGradient } from "@react-pptx/capabilities/shape";
+import { Shape } from "@react-pptx/capabilities/shape-elements";
+import { Text } from "@react-pptx/capabilities/text-elements";
 import { Deck, Slide } from "@react-pptx/core";
 import { strFromU8, unzipSync } from "fflate";
 import { createElement } from "react";
 import { expect } from "vitest";
 
-import { Box } from "../../src/box-elements.ts";
-import { box, deck, font, shape, slide, text } from "../../src/document.ts";
-import { Shape } from "../../src/shape-elements.ts";
-import { Text } from "../../src/text-elements.ts";
-import { linearGradient } from "../../src/visual.ts";
 import type { CapabilityScenario } from "../acceptance-runner.ts";
 
 const jostFont = font("Jost*", [
   {
     weight: 400,
     data: readFileSync(
-      new URL(
-        "../../../react-pptx/test/assets/fonts/Jost-400-Book.ttf",
-        import.meta.url,
-      ),
+      new URL("../../assets/fonts/Jost-400-Book.ttf", import.meta.url),
     ),
   },
 ]);
@@ -29,10 +33,7 @@ const notoFont = font("Noto Sans CJK SC", [
   {
     weight: 400,
     data: readFileSync(
-      new URL(
-        "../../../react-pptx/test/assets/fonts/NotoSansSC-Regular.woff2",
-        import.meta.url,
-      ),
+      new URL("../../assets/fonts/NotoSansSC-Regular.woff2", import.meta.url),
     ),
   },
 ]);

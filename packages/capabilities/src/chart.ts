@@ -4,20 +4,22 @@ import {
   parseCapabilityLayoutContract,
   pxToEmu,
   xmlEscape,
-  type BoundObjectCapability,
-  type BoundObjectCapabilityModule,
   type BoundObjectNativeCollaboration,
-  type CapabilityContext,
   type CapabilityInput,
   type CapabilityLayoutMeasurement,
   type CapabilityLayoutRequest,
-  type CapabilityOutput,
   type CapabilityParseContext,
   type ColorValue,
+  type EmitContext,
+  type EmitOutput,
   type GeometryBox,
   type LayoutStyle,
-  type ObjectPreviewContext,
-  type ObjectPreviewOutput,
+  type ObjectCapabilityModule,
+  type ObjectResolveContext,
+  type PaintContext,
+  type PaintOutput,
+  type ResolvedBoundObjectCapability,
+  type ResolvedObject,
   type ThemeContext,
 } from "@react-pptx/core/capability";
 import { CommonNode } from "@react-pptx/core/document";
@@ -2763,96 +2765,121 @@ function displayBlanksAs(
   return requested;
 }
 
-/** Chart module validates input and generates native chart parts with embedded workbook. */
-export const chartCapability: BoundObjectCapabilityModule = {
-  declaration: "rp:chart",
+/** Chart module validates input and resolves chart data/configuration for native emit and static paint. */
+export const chartCapability: ObjectCapabilityModule<ResolvedBoundObjectCapability> =
+  {
+    declaration: "rp:chart",
 
-  bind(
-    input: CapabilityInput,
-    context: CapabilityParseContext,
-  ): BoundObjectCapability {
-    if (input.children.length > 0) {
-      fail(
-        "unsupported-children",
-        "Chart does not accept children; chart text and data should be passed in groups",
-        context.path,
-      );
-    }
-    onlyKeys(
-      input.props,
-      [
-        "id",
-        "name",
-        "morphKey",
-        "link",
-        "x",
-        "y",
-        "width",
-        "height",
-        "axes",
-        "groups",
-        "title",
-        "displayBlanksAs",
-        "legend",
-        "plotArea",
-        "style",
-        "enter",
-        "emphasis",
-        "motion",
-      ],
-      "Chart",
-    );
-
-    const allowedStyleKeys = new Set<string>([
-      ...layoutStyleKeys,
-      ...chartTextStyleKeys,
-    ]);
-    const contract = parseCapabilityLayoutContract({
-      nativeKind: "graphicFrame",
-      props: input.props,
-      allowedStyleKeys,
-      allowPadding: false,
-      path: context.path,
-    });
-
-    const requestedName = parseOptionalName(input.props["name"], context.path);
-    if (requestedName !== undefined) xmlText(requestedName, "Chart.name");
-    const morphKey = parseMorphKey(input.props["morphKey"], context.path);
-    const link = parseLinkTarget(input.props["link"], context.path);
-
-    const drafts = chartGroupDrafts(input.props["groups"]);
-    const { axes, groupAxes } = parsedAxes(input.props["axes"], drafts);
-    const categoryDomains = new Map<string, readonly string[]>();
-    for (const [groupIndex, draft] of drafts.entries()) {
-      if (draft.kind === "scatter") continue;
-      if (draft.data.kind !== "shared-categories") continue;
-      const resolved = groupAxes[groupIndex] as
-        | {
-            readonly category: ParsedChartAxis;
-            readonly value: ParsedChartAxis;
-          }
-        | undefined;
-      if (resolved === undefined) continue;
-      const domain = draft.data.categories;
-      const existing = categoryDomains.get(resolved.category.name);
-      if (existing === undefined) {
-        categoryDomains.set(resolved.category.name, domain);
-        continue;
-      }
-      if (
-        existing.length !== domain.length ||
-        existing.some((category, index) => category !== domain[index])
-      ) {
+    bind(
+      input: CapabilityInput,
+      context: CapabilityParseContext,
+    ): ResolvedBoundObjectCapability {
+      if (input.children.length > 0) {
         fail(
-          "chart-category-domain-mismatch",
-          `Chart groups sharing category axis "${resolved.category.name}" must have the same ordered category domain`,
+          "unsupported-children",
+          "Chart does not accept children; chart text and data should be passed in groups",
+          context.path,
         );
       }
-    }
+      onlyKeys(
+        input.props,
+        [
+          "id",
+          "name",
+          "morphKey",
+          "link",
+          "x",
+          "y",
+          "width",
+          "height",
+          "axes",
+          "groups",
+          "title",
+          "displayBlanksAs",
+          "legend",
+          "plotArea",
+          "style",
+          "enter",
+          "emphasis",
+          "motion",
+        ],
+        "Chart",
+      );
 
-    let seriesIndex = 0;
-    const groups: ParsedChartGroup[] = drafts.map((draft, groupIndex) => {
-      if (draft.kind === "scatter") {
+      const allowedStyleKeys = new Set<string>([
+        ...layoutStyleKeys,
+        ...chartTextStyleKeys,
+      ]);
+      const contract = parseCapabilityLayoutContract({
+        nativeKind: "graphicFrame",
+        props: input.props,
+        allowedStyleKeys,
+        allowPadding: false,
+        path: context.path,
+      });
+
+      const requestedName = parseOptionalName(
+        input.props["name"],
+        context.path,
+      );
+      if (requestedName !== undefined) xmlText(requestedName, "Chart.name");
+      const morphKey = parseMorphKey(input.props["morphKey"], context.path);
+      const link = parseLinkTarget(input.props["link"], context.path);
+
+      const drafts = chartGroupDrafts(input.props["groups"]);
+      const { axes, groupAxes } = parsedAxes(input.props["axes"], drafts);
+      const categoryDomains = new Map<string, readonly string[]>();
+      for (const [groupIndex, draft] of drafts.entries()) {
+        if (draft.kind === "scatter") continue;
+        if (draft.data.kind !== "shared-categories") continue;
+        const resolved = groupAxes[groupIndex] as
+          | {
+              readonly category: ParsedChartAxis;
+              readonly value: ParsedChartAxis;
+            }
+          | undefined;
+        if (resolved === undefined) continue;
+        const domain = draft.data.categories;
+        const existing = categoryDomains.get(resolved.category.name);
+        if (existing === undefined) {
+          categoryDomains.set(resolved.category.name, domain);
+          continue;
+        }
+        if (
+          existing.length !== domain.length ||
+          existing.some((category, index) => category !== domain[index])
+        ) {
+          fail(
+            "chart-category-domain-mismatch",
+            `Chart groups sharing category axis "${resolved.category.name}" must have the same ordered category domain`,
+          );
+        }
+      }
+
+      let seriesIndex = 0;
+      const groups: ParsedChartGroup[] = drafts.map((draft, groupIndex) => {
+        if (draft.kind === "scatter") {
+          const series = draft.series.map((item, groupSeriesIndex) => ({
+            ...item,
+            groupIndex,
+            groupSeriesIndex,
+            seriesIndex: seriesIndex++,
+          }));
+          const parsedGroupAxes = groupAxes[groupIndex] as
+            | { readonly x: ParsedChartAxis; readonly y: ParsedChartAxis }
+            | undefined;
+          return {
+            kind: "scatter",
+            data: draft.data,
+            series,
+            markers: draft.markers,
+            ...(parsedGroupAxes === undefined ? {} : { axes: parsedGroupAxes }),
+            ...(draft.dataLabels === undefined
+              ? {}
+              : { dataLabels: draft.dataLabels }),
+            ...(draft.line === undefined ? {} : { line: draft.line }),
+          };
+        }
         const series = draft.series.map((item, groupSeriesIndex) => ({
           ...item,
           groupIndex,
@@ -2860,299 +2887,299 @@ export const chartCapability: BoundObjectCapabilityModule = {
           seriesIndex: seriesIndex++,
         }));
         const parsedGroupAxes = groupAxes[groupIndex] as
-          | { readonly x: ParsedChartAxis; readonly y: ParsedChartAxis }
+          | {
+              readonly category: ParsedChartAxis;
+              readonly value: ParsedChartAxis;
+            }
           | undefined;
         return {
-          kind: "scatter",
+          kind: draft.kind,
           data: draft.data,
           series,
-          markers: draft.markers,
           ...(parsedGroupAxes === undefined ? {} : { axes: parsedGroupAxes }),
           ...(draft.dataLabels === undefined
             ? {}
             : { dataLabels: draft.dataLabels }),
-          ...(draft.line === undefined ? {} : { line: draft.line }),
+          ...(draft.stacking === undefined ? {} : { stacking: draft.stacking }),
+          ...(draft.gapWidth === undefined ? {} : { gapWidth: draft.gapWidth }),
+          ...(draft.overlap === undefined ? {} : { overlap: draft.overlap }),
+          ...(draft.explosion === undefined
+            ? {}
+            : { explosion: draft.explosion }),
+          ...(draft.firstSliceAngle === undefined
+            ? {}
+            : { firstSliceAngle: draft.firstSliceAngle }),
+          ...(draft.holeSize === undefined ? {} : { holeSize: draft.holeSize }),
         };
-      }
-      const series = draft.series.map((item, groupSeriesIndex) => ({
-        ...item,
-        groupIndex,
-        groupSeriesIndex,
-        seriesIndex: seriesIndex++,
-      }));
-      const parsedGroupAxes = groupAxes[groupIndex] as
-        | {
-            readonly category: ParsedChartAxis;
-            readonly value: ParsedChartAxis;
-          }
-        | undefined;
-      return {
-        kind: draft.kind,
-        data: draft.data,
-        series,
-        ...(parsedGroupAxes === undefined ? {} : { axes: parsedGroupAxes }),
-        ...(draft.dataLabels === undefined
-          ? {}
-          : { dataLabels: draft.dataLabels }),
-        ...(draft.stacking === undefined ? {} : { stacking: draft.stacking }),
-        ...(draft.gapWidth === undefined ? {} : { gapWidth: draft.gapWidth }),
-        ...(draft.overlap === undefined ? {} : { overlap: draft.overlap }),
-        ...(draft.explosion === undefined
-          ? {}
-          : { explosion: draft.explosion }),
-        ...(draft.firstSliceAngle === undefined
-          ? {}
-          : { firstSliceAngle: draft.firstSliceAngle }),
-        ...(draft.holeSize === undefined ? {} : { holeSize: draft.holeSize }),
-      };
-    });
-    const series = groups.flatMap(
-      (group): readonly (ParsedChartSeries | ParsedScatterSeries)[] =>
-        group.series,
-    );
-    const categorySeries = series.filter(
-      (item): item is ParsedChartSeries => "categories" in item,
-    );
-    const categories = categorySeries[0]?.categories ?? [];
-    const categoryCount = Math.max(
-      0,
-      ...categorySeries.map((item) => item.categories.length),
-    );
-
-    const rawWidth =
-      contract.layoutStyle.width ??
-      (input.props["width"] as number | undefined);
-    const rawHeight =
-      contract.layoutStyle.height ??
-      (input.props["height"] as number | undefined);
-    const declaredWidth =
-      rawWidth !== undefined ? extent(rawWidth, "width") : undefined;
-    const declaredHeight =
-      rawHeight !== undefined ? extent(rawHeight, "height") : undefined;
-    const declaredX =
-      input.props["x"] !== undefined
-        ? coordinate(input.props["x"], "x")
-        : undefined;
-    const declaredY =
-      input.props["y"] !== undefined
-        ? coordinate(input.props["y"], "y")
-        : undefined;
-
-    const legend = input.props["legend"];
-    if (
-      legend !== undefined &&
-      legend !== false &&
-      legend !== "top" &&
-      legend !== "bottom" &&
-      legend !== "left" &&
-      legend !== "right"
-    ) {
-      fail(
-        "invalid-legend",
-        "Chart.legend must be false, top, bottom, left, or right",
+      });
+      const series = groups.flatMap(
+        (group): readonly (ParsedChartSeries | ParsedScatterSeries)[] =>
+          group.series,
       );
-    }
-    const checkedPlotArea = plotArea(
-      input.props["plotArea"],
-      declaredWidth !== undefined && declaredHeight !== undefined
-        ? { width: declaredWidth, height: declaredHeight }
-        : undefined,
-    );
-    const title = chartTitleValue(input.props["title"], "Chart.title");
-    const blanks = displayBlanksAs(input.props["displayBlanksAs"], drafts);
+      const categorySeries = series.filter(
+        (item): item is ParsedChartSeries => "categories" in item,
+      );
+      const categories = categorySeries[0]?.categories ?? [];
+      const categoryCount = Math.max(
+        0,
+        ...categorySeries.map((item) => item.categories.length),
+      );
 
-    const parsed: ParsedChart = {
-      axes,
-      hasExplicitAxes: input.props["axes"] !== undefined,
-      groups,
-      series,
-      categories,
-      categoryCount,
-      contract,
-      ...(requestedName === undefined ? {} : { name: requestedName }),
-      ...(title === undefined ? {} : { title }),
-      ...(blanks === undefined ? {} : { displayBlanksAs: blanks }),
-      ...(morphKey === undefined ? {} : { morphKey }),
-      ...(link === undefined ? {} : { link }),
-      ...(declaredX === undefined ? {} : { declaredX }),
-      ...(declaredY === undefined ? {} : { declaredY }),
-      ...(declaredWidth === undefined ? {} : { declaredWidth }),
-      ...(declaredHeight === undefined ? {} : { declaredHeight }),
-      ...(legend === undefined ? {} : { legend: legend }),
-      ...(checkedPlotArea === undefined ? {} : { plotArea: checkedPlotArea }),
-      ...(input.props["style"] === undefined
-        ? {}
-        : { style: input.props["style"] as TextStyle & LayoutStyle }),
-    };
+      const rawWidth =
+        contract.layoutStyle.width ??
+        (input.props["width"] as number | undefined);
+      const rawHeight =
+        contract.layoutStyle.height ??
+        (input.props["height"] as number | undefined);
+      const declaredWidth =
+        rawWidth !== undefined ? extent(rawWidth, "width") : undefined;
+      const declaredHeight =
+        rawHeight !== undefined ? extent(rawHeight, "height") : undefined;
+      const declaredX =
+        input.props["x"] !== undefined
+          ? coordinate(input.props["x"], "x")
+          : undefined;
+      const declaredY =
+        input.props["y"] !== undefined
+          ? coordinate(input.props["y"], "y")
+          : undefined;
 
-    const authorId =
-      typeof input.props["id"] === "string" ? input.props["id"] : undefined;
-    const motionProps: Readonly<Record<string, unknown>> = {
-      ...(input.props["enter"] !== undefined
-        ? { enter: input.props["enter"] }
-        : {}),
-      ...(input.props["emphasis"] !== undefined
-        ? { emphasis: input.props["emphasis"] }
-        : {}),
-      ...(input.props["motion"] !== undefined
-        ? { motion: input.props["motion"] }
-        : {}),
-    };
+      const legend = input.props["legend"];
+      if (
+        legend !== undefined &&
+        legend !== false &&
+        legend !== "top" &&
+        legend !== "bottom" &&
+        legend !== "left" &&
+        legend !== "right"
+      ) {
+        fail(
+          "invalid-legend",
+          "Chart.legend must be false, top, bottom, left, or right",
+        );
+      }
+      const checkedPlotArea = plotArea(
+        input.props["plotArea"],
+        declaredWidth !== undefined && declaredHeight !== undefined
+          ? { width: declaredWidth, height: declaredHeight }
+          : undefined,
+      );
+      const title = chartTitleValue(input.props["title"], "Chart.title");
+      const blanks = displayBlanksAs(input.props["displayBlanksAs"], drafts);
 
-    const native: BoundObjectNativeCollaboration = {
-      ...(morphKey === undefined ? {} : { morphKey }),
-      ...(requestedName === undefined ? {} : { hasExplicitName: true }),
-      ...(link === undefined ? {} : { link }),
-    };
+      const parsed: ParsedChart = {
+        axes,
+        hasExplicitAxes: input.props["axes"] !== undefined,
+        groups,
+        series,
+        categories,
+        categoryCount,
+        contract,
+        ...(requestedName === undefined ? {} : { name: requestedName }),
+        ...(title === undefined ? {} : { title }),
+        ...(blanks === undefined ? {} : { displayBlanksAs: blanks }),
+        ...(morphKey === undefined ? {} : { morphKey }),
+        ...(link === undefined ? {} : { link }),
+        ...(declaredX === undefined ? {} : { declaredX }),
+        ...(declaredY === undefined ? {} : { declaredY }),
+        ...(declaredWidth === undefined ? {} : { declaredWidth }),
+        ...(declaredHeight === undefined ? {} : { declaredHeight }),
+        ...(legend === undefined ? {} : { legend: legend }),
+        ...(checkedPlotArea === undefined ? {} : { plotArea: checkedPlotArea }),
+        ...(input.props["style"] === undefined
+          ? {}
+          : { style: input.props["style"] as TextStyle & LayoutStyle }),
+      };
 
-    let compiledBox: GeometryBox | undefined;
+      const authorId =
+        typeof input.props["id"] === "string" ? input.props["id"] : undefined;
+      const motionProps: Readonly<Record<string, unknown>> = {
+        ...(input.props["enter"] !== undefined
+          ? { enter: input.props["enter"] }
+          : {}),
+        ...(input.props["emphasis"] !== undefined
+          ? { emphasis: input.props["emphasis"] }
+          : {}),
+        ...(input.props["motion"] !== undefined
+          ? { motion: input.props["motion"] }
+          : {}),
+      };
 
-    return {
-      contract,
-      ...(morphKey !== undefined ||
-      requestedName !== undefined ||
-      link !== undefined
-        ? { native }
-        : {}),
-      measureLayout(
-        request: CapabilityLayoutRequest,
-      ): CapabilityLayoutMeasurement {
-        const width =
-          request.availableWidth ??
-          declaredWidth ??
-          (declaredHeight === undefined ? 320 : declaredHeight * (16 / 9));
-        const height = declaredHeight ?? width * (9 / 16);
-        return {
-          width,
-          height,
-          minContentWidth: declaredWidth ?? 0,
-          minContentHeight: declaredHeight ?? 0,
-        };
-      },
-      compile(compileContext: CapabilityContext): CapabilityOutput {
-        const x = compileContext.layoutBox?.x ?? declaredX ?? 0;
-        const y = compileContext.layoutBox?.y ?? declaredY ?? 0;
-        const width =
-          compileContext.layoutBox?.width ??
-          declaredWidth ??
-          (declaredHeight === undefined ? 320 : declaredHeight * (16 / 9));
-        const height =
-          compileContext.layoutBox?.height ??
-          declaredHeight ??
-          width * (9 / 16);
-        const box = { x, y, width, height };
-        compiledBox = box;
+      const native: BoundObjectNativeCollaboration = {
+        ...(morphKey === undefined ? {} : { morphKey }),
+        ...(requestedName === undefined ? {} : { hasExplicitName: true }),
+        ...(link === undefined ? {} : { link }),
+      };
 
-        if (parsed.plotArea !== undefined) {
-          if (
-            parsed.plotArea.left < 0 ||
-            parsed.plotArea.top < 0 ||
-            parsed.plotArea.width <= 0 ||
-            parsed.plotArea.height <= 0 ||
-            parsed.plotArea.left + parsed.plotArea.width > box.width ||
-            parsed.plotArea.top + parsed.plotArea.height > box.height
-          ) {
-            fail(
-              "invalid-plot-area",
-              "Chart.plotArea must be inside chart box with positive width and height",
-              compileContext.path,
-            );
-          }
-        }
+      return {
+        contract,
+        ...(morphKey !== undefined ||
+        requestedName !== undefined ||
+        link !== undefined
+          ? { native }
+          : {}),
+        measureLayout(
+          request: CapabilityLayoutRequest,
+        ): CapabilityLayoutMeasurement {
+          const width =
+            request.availableWidth ??
+            declaredWidth ??
+            (declaredHeight === undefined ? 320 : declaredHeight * (16 / 9));
+          const height = declaredHeight ?? width * (9 / 16);
+          return {
+            width,
+            height,
+            minContentWidth: declaredWidth ?? 0,
+            minContentHeight: declaredHeight ?? 0,
+          };
+        },
+        resolve(resolveContext: ObjectResolveContext): ResolvedObject {
+          const x = resolveContext.layoutBox?.x ?? declaredX ?? 0;
+          const y = resolveContext.layoutBox?.y ?? declaredY ?? 0;
+          const width =
+            resolveContext.layoutBox?.width ??
+            declaredWidth ??
+            (declaredHeight === undefined ? 320 : declaredHeight * (16 / 9));
+          const height =
+            resolveContext.layoutBox?.height ??
+            declaredHeight ??
+            width * (9 / 16);
+          const box: GeometryBox = { x, y, width, height };
 
-        const name =
-          compileContext.morphName ??
-          requestedName ??
-          `Chart ${compileContext.id - 1}`;
-        const annotations = motionAnnotations(motionProps, {
-          kind: "chart",
-          name,
-          ...(authorId === undefined ? {} : { authorId }),
-          textBody: false,
-          // Chart ranges own their gridLegend step; a chart has no whole-text fill/background flag.
-          filled: false,
-          box,
-          rotationDegrees: 0,
-          chartSeriesPointCounts: parsed.series.map((item) =>
-            "x" in item ? item.x.length : item.values.length,
-          ),
-        });
-        const { textStyles, resourceClaims, fontUses, warnings } =
-          chartResourceClaims(
-            parsed,
-            compileContext.theme,
-            compileContext.options.embedFonts,
-          );
-        const usesCategoryLabelRange = chartUsesCategoryLabelRange(parsed);
-        const workbook = chartWorkbook(parsed);
-        const relationshipId = compileContext.registerPackagePart({
-          part: {
-            pathTemplate: "ppt/charts/chart{n}.xml",
-            contentType: chartContentType,
-          },
-          relationshipType: chartRelationship,
-          content(relatedRelationshipIds) {
-            const [workbookRelationshipId] = relatedRelationshipIds;
-            if (workbookRelationshipId === undefined) {
+          if (parsed.plotArea !== undefined) {
+            if (
+              parsed.plotArea.left < 0 ||
+              parsed.plotArea.top < 0 ||
+              parsed.plotArea.width <= 0 ||
+              parsed.plotArea.height <= 0 ||
+              parsed.plotArea.left + parsed.plotArea.width > box.width ||
+              parsed.plotArea.top + parsed.plotArea.height > box.height
+            ) {
               fail(
-                "invalid-part",
-                "Chart part requires embedded workbook relationship",
+                "invalid-plot-area",
+                "Chart.plotArea must be inside chart box with positive width and height",
+                resolveContext.path,
               );
             }
-            return chartPartXml(
-              parsed,
-              box,
-              workbookRelationshipId,
-              textStyles,
-              compileContext.theme,
-            );
-          },
-          relatedParts: [
-            {
-              pathTemplate: "ppt/embeddings/Microsoft_Excel_Worksheet{n}.xlsx",
-              contentType: workbookContentType,
-              relationshipType: packageRelationship,
-              bytes: workbook,
-            },
-          ],
-        });
-        return {
-          xml: chartFrameXml(
-            compileContext.id,
-            name,
-            box,
-            relationshipId,
-            compileContext.nativeLink,
-          ),
-          observation: {
-            id: compileContext.id,
+          }
+
+          const name =
+            resolveContext.morphName ??
+            requestedName ??
+            `Chart ${resolveContext.id - 1}`;
+          xmlText(name, "Chart.name");
+
+          const annotations = motionAnnotations(motionProps, {
             kind: "chart",
             name,
+            ...(authorId === undefined ? {} : { authorId }),
+            textBody: false,
+            // Chart ranges own their gridLegend step; a chart has no whole-text fill/background flag.
+            filled: false,
             box,
-          },
-          extensions: usesCategoryLabelRange ? ["c15"] : [],
-          ...(annotations.length === 0 ? {} : { annotations }),
-          resourceClaims,
-          presentationContributions: fontPresentationContributions(
+            rotationDegrees: 0,
+            chartSeriesPointCounts: parsed.series.map((item) =>
+              "x" in item ? item.x.length : item.values.length,
+            ),
+          });
+          const {
+            textStyles,
+            resourceClaims,
             fontUses,
-            compileContext.options.embedFonts,
-          ),
-          warnings,
-        };
-      },
-      preview(previewContext: ObjectPreviewContext): ObjectPreviewOutput {
-        const box = previewContext.box ?? compiledBox;
-        if (box === undefined) {
-          throw new CapabilityError(
-            "preview-missing-geometry",
-            "Preview requires compiled chart geometry",
+            warnings,
+            missingGlyphErrors,
+          } = chartResourceClaims(
+            parsed,
+            resolveContext.theme,
+            resolveContext.options.embedFonts,
           );
-        }
-        return drawChartPreview(parsed, box, previewContext);
-      },
-    };
-  },
-};
+          validateChartColors(parsed, resolveContext.theme);
+          const usesCategoryLabelRange = chartUsesCategoryLabelRange(parsed);
+
+          return {
+            observation: {
+              id: resolveContext.id,
+              kind: "chart",
+              name,
+              box,
+            },
+            extensions: usesCategoryLabelRange ? ["c15"] : [],
+            ...(annotations.length === 0 ? {} : { annotations }),
+            resourceClaims,
+            ...(warnings.length === 0 ? {} : { warnings }),
+            emit(emitContext: EmitContext): EmitOutput {
+              // Transition period before ticket 10 removes embedFonts from ResolveOptions.
+              const embedFonts =
+                resolveContext.options.embedFonts ??
+                emitContext.options.embedFonts;
+              if (
+                (embedFonts === "full" || embedFonts === "subset") &&
+                missingGlyphErrors.length > 0
+              ) {
+                throw new CapabilityError(
+                  "font-missing-glyph",
+                  missingGlyphErrors[0]!,
+                );
+              }
+              const workbook = chartWorkbook(parsed);
+              const relationshipId = emitContext.registerPackagePart({
+                part: {
+                  pathTemplate: "ppt/charts/chart{n}.xml",
+                  contentType: chartContentType,
+                },
+                relationshipType: chartRelationship,
+                content(relatedRelationshipIds) {
+                  const [workbookRelationshipId] = relatedRelationshipIds;
+                  if (workbookRelationshipId === undefined) {
+                    fail(
+                      "invalid-part",
+                      "Chart part requires embedded workbook relationship",
+                    );
+                  }
+                  return chartPartXml(
+                    parsed,
+                    box,
+                    workbookRelationshipId,
+                    textStyles,
+                    emitContext.theme,
+                  );
+                },
+                relatedParts: [
+                  {
+                    pathTemplate:
+                      "ppt/embeddings/Microsoft_Excel_Worksheet{n}.xlsx",
+                    contentType: workbookContentType,
+                    relationshipType: packageRelationship,
+                    bytes: workbook,
+                  },
+                ],
+              });
+              const presentationContributions = fontPresentationContributions(
+                fontUses,
+                embedFonts,
+              );
+              return {
+                xml: chartFrameXml(
+                  emitContext.id,
+                  name,
+                  box,
+                  relationshipId,
+                  emitContext.nativeLink,
+                ),
+                ...(presentationContributions.length === 0
+                  ? {}
+                  : { presentationContributions }),
+              };
+            },
+            paint(paintContext: PaintContext): PaintOutput {
+              const paintBox = paintContext.box ?? box;
+              return drawChartPreview(parsed, paintBox, paintContext);
+            },
+          };
+        },
+      };
+    },
+  };
 
 const generalNumberCharacters = "0123456789.,-+eE";
 const dateNameCharacters =
@@ -3456,6 +3483,65 @@ function titleParts(
   };
 }
 
+function validateChartColors(parsed: ParsedChart, theme: ThemeContext): void {
+  const checkColor = (color: ColorValue | undefined) => {
+    if (color !== undefined) theme.resolveColor(color);
+  };
+  const checkLine = (line: boolean | ChartLine | undefined) => {
+    if (typeof line === "object") checkColor(line.color);
+  };
+  const checkMarker = (marker: boolean | ChartMarker | undefined) => {
+    if (typeof marker === "object") {
+      checkColor(marker.fill);
+      checkLine(marker.line);
+    }
+  };
+  const checkLabels = (
+    dataLabels: false | ChartDataLabelSettings | undefined,
+  ) => {
+    if (typeof dataLabels === "object") checkLine(dataLabels.leaderLines);
+  };
+
+  const checkCommonSeries = (
+    series: ParsedChartSeries | ParsedScatterSeries,
+  ) => {
+    checkColor(series.color);
+    checkLine(series.line);
+    checkMarker(series.marker);
+    for (const point of Object.values(series.points ?? {})) {
+      checkColor(point.color);
+      checkLine(point.line);
+      checkMarker(point.marker);
+      checkColor(point.labelColor);
+    }
+    for (const trendline of series.trendlines ?? []) {
+      checkLine(trendline.line);
+    }
+  };
+
+  for (const { spec } of parsed.axes) {
+    checkLine(spec.line);
+    checkLine(spec.gridlines);
+    checkLine(spec.minorGridlines);
+  }
+  for (const group of parsed.groups) {
+    checkLabels(group.dataLabels);
+    if (group.kind === "scatter") {
+      for (const series of group.series) {
+        checkCommonSeries(series);
+        checkLine(series.errorBars?.x?.line);
+        checkLine(series.errorBars?.y?.line);
+      }
+    } else {
+      for (const series of group.series) {
+        checkCommonSeries(series);
+        checkLabels(series.dataLabels);
+        checkLine(series.errorBars?.line);
+      }
+    }
+  }
+}
+
 function chartResourceClaims(
   parsed: ParsedChart,
   theme: ThemeContext,
@@ -3468,6 +3554,7 @@ function chartResourceClaims(
     readonly code: string;
     readonly message: string;
   }[];
+  readonly missingGlyphErrors: readonly string[];
 } {
   const categoryLabels = new Map<string, readonly string[]>();
   for (const group of parsed.groups) {
@@ -3528,6 +3615,7 @@ function chartResourceClaims(
     path: "Chart.style",
   }));
   const warnings: { readonly code: string; readonly message: string }[] = [];
+  const missingGlyphErrors: string[] = [...chart.missingGlyphErrors];
   const warningKeys = new Set<string>();
   const addWarnings = (
     items: readonly { readonly code: string; readonly message: string }[],
@@ -3563,6 +3651,7 @@ function chartResourceClaims(
       ...output.fontUses.map((use) => ({ ...use, path: "Chart.title" })),
     );
     addWarnings(output.warnings);
+    missingGlyphErrors.push(...output.missingGlyphErrors);
   }
   for (const { name, spec } of parsed.axes) {
     if (spec.style !== undefined) {
@@ -3585,6 +3674,7 @@ function chartResourceClaims(
         })),
       );
       addWarnings(output.warnings);
+      missingGlyphErrors.push(...output.missingGlyphErrors);
     }
     const axisTitle = titleParts(spec.title);
     if (axisTitle !== undefined) {
@@ -3608,6 +3698,7 @@ function chartResourceClaims(
         })),
       );
       addWarnings(output.warnings);
+      missingGlyphErrors.push(...output.missingGlyphErrors);
     }
   }
   for (const [groupIndex, group] of parsed.groups.entries()) {
@@ -3634,6 +3725,7 @@ function chartResourceClaims(
         })),
       );
       addWarnings(output.warnings);
+      missingGlyphErrors.push(...output.missingGlyphErrors);
     }
     const groupLabelStyle =
       groupLabels !== undefined && groupLabels !== false
@@ -3675,6 +3767,7 @@ function chartResourceClaims(
           })),
         );
         addWarnings(output.warnings);
+        missingGlyphErrors.push(...output.missingGlyphErrors);
       }
     }
   }
@@ -3689,6 +3782,7 @@ function chartResourceClaims(
     resourceClaims,
     fontUses,
     warnings: [...uniqueWarnings.values()],
+    missingGlyphErrors,
   };
 }
 

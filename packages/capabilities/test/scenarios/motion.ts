@@ -658,6 +658,12 @@ export const motionPositiveScenario: CapabilityScenario = {
 
 export async function verifyMotionCollaborationAndRejections(): Promise<void> {
   const resolveDefault = createResolver(documentCapabilities);
+  const resolveOptionsFrom = (options?: BuildOptions) => ({
+    ...(options?.embedFonts === undefined
+      ? {}
+      : { embedFonts: options.embedFonts }),
+    ...(options?.signal === undefined ? {} : { signal: options.signal }),
+  });
   const buildJsx = async (element: ReactNode, options?: BuildOptions) =>
     emit(
       resolveDefault(
@@ -665,15 +671,12 @@ export async function verifyMotionCollaborationAndRejections(): Promise<void> {
           element,
           options?.signal === undefined ? {} : { signal: options.signal },
         ),
-        options,
+        resolveOptionsFrom(options),
       ),
-      options?.signal === undefined ? {} : { signal: options.signal },
+      options,
     );
   const buildDocument = async (document: CommonNode, options?: BuildOptions) =>
-    emit(
-      resolveDefault(document, options),
-      options?.signal === undefined ? {} : { signal: options.signal },
-    );
+    emit(resolveDefault(document, resolveOptionsFrom(options)), options);
 
   // 1. Preserve 100% Group and Chart native motion target collaboration via formal build + validatePptx.
   const chartGroups = [

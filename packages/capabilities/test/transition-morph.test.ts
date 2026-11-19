@@ -25,8 +25,13 @@ function docBuildWith(modules: readonly CapabilityModule[]) {
   const resolveWith = createResolver(modules);
   return async (document: CommonNode, options?: BuildOptions) =>
     emit(
-      resolveWith(document, options),
-      options?.signal === undefined ? {} : { signal: options.signal },
+      resolveWith(document, {
+        ...(options?.embedFonts === undefined
+          ? {}
+          : { embedFonts: options.embedFonts }),
+        ...(options?.signal === undefined ? {} : { signal: options.signal }),
+      }),
+      options,
     );
 }
 

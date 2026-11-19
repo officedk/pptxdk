@@ -394,7 +394,7 @@ function allocateTextFieldId(document: DocumentPackageState): string {
 }
 
 function validateTarget(target: Target | undefined): Target {
-  const value = target ?? targets.transitional;
+  const value = target === undefined ? targets.transitional : target;
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
     throw new BuildError([
       diagnostic("build.target", "invalid-target", "Target must be an object"),
@@ -467,39 +467,57 @@ function validateTarget(target: Target | undefined): Target {
   });
 }
 
-export function validateOptions(options: BuildOptions): Target {
+function validateStageOptions(
+  options: object,
+  stage: "build" | "resolve",
+  allowedKeys: readonly string[],
+): void {
+  const label = stage === "build" ? "Build" : "Resolve";
   if (
     typeof options !== "object" ||
     options === null ||
     Array.isArray(options)
   ) {
     throw new BuildError([
-      diagnostic("build", "invalid-options", "Build options must be an object"),
-    ]);
-  }
-  const unknown = ownKeys(options, ["target", "signal", "embedFonts"]);
-  if (unknown !== undefined) {
-    throw new BuildError([
       diagnostic(
-        "build",
-        "unknown-parameter",
-        `Build options contain unknown parameter ${unknown}`,
+        stage,
+        "invalid-options",
+        `${label} options must be an object`,
       ),
     ]);
   }
+  const unknown = ownKeys(options as Record<string, unknown>, allowedKeys);
+  if (unknown !== undefined) {
+    throw new BuildError([
+      diagnostic(
+        stage,
+        "unknown-parameter",
+        `${label} options contain unknown parameter ${unknown}`,
+      ),
+    ]);
+  }
+  const embedFonts = (options as { readonly embedFonts?: unknown }).embedFonts;
   if (
-    options.embedFonts !== undefined &&
-    options.embedFonts !== "full" &&
-    options.embedFonts !== "subset"
+    embedFonts !== undefined &&
+    embedFonts !== "full" &&
+    embedFonts !== "subset"
   ) {
     throw new BuildError([
       diagnostic(
-        "build.embedFonts",
+        `${stage}.embedFonts`,
         "unsupported-font-embedding",
         "embedFonts currently only supports 'full' or 'subset'",
       ),
     ]);
   }
+}
+
+function validateResolveOptions(options: ResolveOptions): void {
+  validateStageOptions(options, "resolve", ["signal", "embedFonts"]);
+}
+
+export function validateOptions(options: BuildOptions): Target {
+  validateStageOptions(options, "build", ["target", "signal", "embedFonts"]);
   return validateTarget(options.target);
 }
 
@@ -3463,7 +3481,6 @@ function resolveDocument(
   container: DeclarationContainer,
   modules: ReadonlyMap<string, RegisteredCapabilityModule>,
   options: ResolveOptions,
-  target: Target,
 ): Resolution {
   const parsed = resolveSlides(container, modules);
   const { slides, sections } = parsed;
@@ -3605,7 +3622,6 @@ function resolveDocument(
   const internal: InternalResolution = {
     dimensions: size,
     ...(typeof title === "string" ? { title } : {}),
-    target,
     ...(options.embedFonts === undefined
       ? {}
       : { embedFonts: options.embedFonts }),
@@ -3850,10 +3866,9 @@ export function emit(
   resolution: Resolution,
   options: EmitOptions = {},
 ): EmitResult {
-  const optionTarget = validateOptions(options);
+  const target = validateOptions(options);
   if (options.signal?.aborted) throw options.signal.reason;
   const internal = getInternalResolution(resolution);
-  const target = options.target === undefined ? internal.target : optionTarget;
 
   if (internal.sections.length > 0 && !target.extensions.includes("p14")) {
     throw new BuildError([
@@ -4046,13 +4061,12 @@ export function createResolver(modules: readonly CapabilityModule[]) {
     declaration: DeclarationContainer | DeclarationNode,
     options: ResolveOptions = {},
   ): Resolution {
-    const target = validateOptions(options);
+    validateResolveOptions(options);
     if (options.signal?.aborted) throw options.signal.reason;
     return resolveDocument(
       normalizeDeclarationInput(declaration),
       bound,
       options,
-      target,
     );
   };
 }

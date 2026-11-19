@@ -4,6 +4,7 @@ import {
   layoutStyleKeys,
   parseCapabilityLayoutContract,
   textStyleKeys,
+  type BoundObjectCapability,
   type BoundObjectNativeCollaboration,
   type CapabilityInput,
   type CapabilityLayoutContract,
@@ -22,7 +23,6 @@ import {
   type ObjectResolveContext,
   type PaintContext,
   type PaintOutput,
-  type ResolvedBoundObjectCapability,
   type ResolvedColor,
   type ResolvedObject,
   type TextStyle,
@@ -985,11 +985,11 @@ export const tableCapability: ObjectCapabilityModule = {
   bind(
     input: CapabilityInput,
     context: CapabilityParseContext,
-  ): ResolvedBoundObjectCapability {
-    onlyKeys(input.props, tableParameters, "Table", context.path);
-    const requestedName = parseOptionalName(input.props["name"], context.path);
-    const morphKey = parseMorphKey(input.props["morphKey"], context.path);
-    const link = parseLinkTarget(input.props["link"], context.path);
+  ): BoundObjectCapability {
+    onlyKeys(input.props, tableParameters, "Table");
+    const requestedName = parseOptionalName(input.props["name"]);
+    const morphKey = parseMorphKey(input.props["morphKey"]);
+    const link = parseLinkTarget(input.props["link"]);
 
     const allowedStyleKeys = new Set<string>([
       ...layoutStyleKeys,
@@ -1005,10 +1005,9 @@ export const tableCapability: ObjectCapabilityModule = {
     });
 
     const columns = parseTracks(input.props["columns"]);
-    const tableStyle = trackStyle(input, "table", context.path);
+    const tableStyle = trackStyle(input, "table");
     const tableVerticalAlign =
-      verticalAlign(tableStyle.style["verticalAlign"], context.path) ??
-      "middle";
+      verticalAlign(tableStyle.style["verticalAlign"]) ?? "middle";
     const { rows, cells } = prepareRows(
       input,
       columns,

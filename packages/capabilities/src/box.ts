@@ -6,6 +6,7 @@ import {
   textStyleFrom,
   textStyleKeys,
   type BoundContainerCollaboration,
+  type BoundObjectCapability,
   type BoundObjectNativeCollaboration,
   type CapabilityInput,
   type CapabilityParseContext,
@@ -18,7 +19,6 @@ import {
   type PaintContext,
   type PaintOutput,
   type PreviewTransform,
-  type ResolvedBoundObjectCapability,
   type ResolvedObject,
   type TextStyle,
   type ThemeScope,
@@ -106,7 +106,7 @@ export const boxCapability: ObjectCapabilityModule = {
   bind(
     input: CapabilityInput,
     context: CapabilityParseContext,
-  ): ResolvedBoundObjectCapability {
+  ): BoundObjectCapability {
     const unknown = Object.keys(input.props).find(
       (key) => !(boxAllowedParameters as readonly string[]).includes(key),
     );
@@ -114,19 +114,17 @@ export const boxCapability: ObjectCapabilityModule = {
       throw new CapabilityError(
         "unknown-parameter",
         `Box contains unknown parameter ${unknown}`,
-        context.path,
       );
     }
     validateMotionFlag(input.props["motion"]);
-    const morphKey = parseMorphKey(input.props["morphKey"], context.path);
-    const link = parseLinkTarget(input.props["link"], context.path);
+    const morphKey = parseMorphKey(input.props["morphKey"]);
+    const link = parseLinkTarget(input.props["link"]);
     const style = { ...styleRecord(input.props["style"]) };
     const hasVisibleStyle = hasVisibleBoxStyle(style);
     if (morphKey !== undefined && !hasVisibleStyle) {
       throw new CapabilityError(
         "morph-needs-object",
         "Only visible Box elements generating native background shapes can participate in Morph",
-        context.path,
       );
     }
 
@@ -186,7 +184,6 @@ export const boxCapability: ObjectCapabilityModule = {
           throw new CapabilityError(
             "layout-unavailable",
             "Box is missing layout results",
-            resolveContext.path,
           );
         }
         const name = resolveContext.morphName ?? `Box ${resolveContext.id - 1}`;
@@ -197,7 +194,6 @@ export const boxCapability: ObjectCapabilityModule = {
           throw new CapabilityError(
             "invalid-xml-character",
             "Box.name contains characters not allowed in XML 1.0",
-            resolveContext.path,
           );
         }
         const properties = shapePropertiesXml({

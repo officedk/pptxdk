@@ -1,9 +1,5 @@
 import { documentCapabilities } from "@react-pptx/capabilities/document";
-import { CommonNode } from "@react-pptx/core";
 import { emit } from "@react-pptx/emit";
-import type { PreviewOptions, PreviewResult } from "@react-pptx/preview";
-import { expandDocument } from "@react-pptx/react";
-import type { ReactNode } from "react";
 
 import { createStagePipeline } from "./compose.ts";
 
@@ -23,43 +19,6 @@ export { emit };
  * Default one-call build supporting both JSX elements and plain CommonNode documents.
  */
 export const build = pipeline.build;
-
-/**
- * Default one-call static preview supporting both JSX elements and plain CommonNode documents.
- * Lazily loads `@react-pptx/preview` only when called so normal build paths never load `@resvg/resvg-js`.
- */
-export async function preview(
-  input: ReactNode | CommonNode,
-  options: PreviewOptions = {},
-): Promise<PreviewResult> {
-  if (options.pages?.some((page) => !Number.isInteger(page) || page < 1)) {
-    throw new RangeError("Preview page numbers must be positive integers");
-  }
-  if (options.signal?.aborted) throw options.signal.reason;
-  const signalOption =
-    options.signal === undefined ? {} : { signal: options.signal };
-  if (input instanceof CommonNode) {
-    const resolution = resolve(input, signalOption);
-    const { paint } = await import("@react-pptx/preview");
-    const { pages } = paint(resolution, options);
-    return Object.freeze({
-      report: resolution.report,
-      query: resolution.query,
-      pages,
-    });
-  }
-  const [{ paint }, document] = await Promise.all([
-    import("@react-pptx/preview"),
-    expandDocument(input, signalOption),
-  ]);
-  const resolution = resolve(document, signalOption);
-  const { pages } = paint(resolution, options);
-  return Object.freeze({
-    report: resolution.report,
-    query: resolution.query,
-    pages,
-  });
-}
 
 /** Default capability list shared by the React one-call entry and the plain document entry. */
 export { documentCapabilities };
@@ -266,18 +225,6 @@ export type {
   ThemeScope,
   ThemeShade,
 } from "@react-pptx/core";
-export type {
-  PaintOptions,
-  PaintResult,
-  PreviewDiagnostic,
-  PreviewNodeObservation,
-  PreviewOptions,
-  PreviewPageResult,
-  PreviewResult,
-  PreviewSeverity,
-  ScreenGeometry,
-  ScreenPoint,
-} from "@react-pptx/preview";
 export type { SlideProps } from "./slide.ts";
 export type {
   GroupProps,

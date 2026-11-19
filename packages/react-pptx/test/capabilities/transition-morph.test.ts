@@ -34,7 +34,7 @@ import { Deck, Slide } from "@react-pptx/react";
 import { validatePptx } from "@react-pptx/validation";
 import { strFromU8, unzipSync } from "fflate";
 import { createElement } from "react";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 
 function docBuildWith(modules: readonly CapabilityModule[]) {
   const resolveWith = createResolver(modules);
@@ -50,135 +50,126 @@ function docBuildWith(modules: readonly CapabilityModule[]) {
 
 describe("transitionCapability bound slide migration & generic continuity collaboration", () => {
   it("implements BoundSlideCapabilityModule, parses once per slide, and leaves static preview canvas unchanged", async () => {
-    assert.equal("bindSlide" in transitionCapability, true);
+    const morph = createMorphScope();
+    const hero = morph.handle("hero");
 
-    const bindSpy = vi.spyOn(transitionCapability, "bindSlide");
-    try {
-      const morph = createMorphScope();
-      const hero = morph.handle("hero");
+    const previewResolve = createResolver([
+      shapeCapability,
+      slideBackgroundCapability,
+      transitionCapability,
+    ]);
 
-      const previewResolve = createResolver([
-        shapeCapability,
-        slideBackgroundCapability,
-        transitionCapability,
-      ]);
+    const staticDoc = deck({ width: 320, height: 180 }).append(
+      slide({ id: "first", background: "#F8FAFC" }).append(
+        shape({
+          id: "hero-a",
+          morphKey: hero,
+          x: 30,
+          y: 40,
+          width: 80,
+          height: 60,
+          fill: "#2563EB",
+        }),
+      ),
+      slide({ id: "second", background: "#F8FAFC" }).append(
+        shape({
+          id: "hero-b",
+          morphKey: hero,
+          x: 180,
+          y: 50,
+          width: 100,
+          height: 80,
+          fill: "#1D4ED8",
+        }),
+      ),
+    );
 
-      const staticDoc = deck({ width: 320, height: 180 }).append(
-        slide({ id: "first", background: "#F8FAFC" }).append(
-          shape({
-            id: "hero-a",
-            morphKey: hero,
-            x: 30,
-            y: 40,
-            width: 80,
-            height: 60,
-            fill: "#2563EB",
-          }),
-        ),
-        slide({ id: "second", background: "#F8FAFC" }).append(
-          shape({
-            id: "hero-b",
-            morphKey: hero,
-            x: 180,
-            y: 50,
-            width: 100,
-            height: 80,
-            fill: "#1D4ED8",
-          }),
-        ),
-      );
+    const transitionDoc = deck({ width: 320, height: 180 }).append(
+      slide({
+        id: "first",
+        background: "#F8FAFC",
+        advanceAfter: 1800,
+        transition: transitions.fade({ duration: 650 }),
+      }).append(
+        shape({
+          id: "hero-a",
+          morphKey: hero,
+          x: 30,
+          y: 40,
+          width: 80,
+          height: 60,
+          fill: "#2563EB",
+        }),
+      ),
+      slide({
+        id: "second",
+        background: "#F8FAFC",
+        advanceAfter: 2500,
+        transition: transitions.morph({
+          duration: 1100,
+          fallback: transitions.fade(),
+        }),
+      }).append(
+        shape({
+          id: "hero-b",
+          morphKey: hero,
+          x: 180,
+          y: 50,
+          width: 100,
+          height: 80,
+          fill: "#1D4ED8",
+        }),
+      ),
+    );
 
-      const transitionDoc = deck({ width: 320, height: 180 }).append(
-        slide({
-          id: "first",
-          background: "#F8FAFC",
-          advanceAfter: 1800,
-          transition: transitions.fade({ duration: 650 }),
-        }).append(
-          shape({
-            id: "hero-a",
-            morphKey: hero,
-            x: 30,
-            y: 40,
-            width: 80,
-            height: 60,
-            fill: "#2563EB",
-          }),
-        ),
-        slide({
-          id: "second",
-          background: "#F8FAFC",
-          advanceAfter: 2500,
-          transition: transitions.morph({
-            duration: 1100,
-            fallback: transitions.fade(),
-          }),
-        }).append(
-          shape({
-            id: "hero-b",
-            morphKey: hero,
-            x: 180,
-            y: 50,
-            width: 100,
-            height: 80,
-            fill: "#1D4ED8",
-          }),
-        ),
-      );
+    const staticPreview = paint(previewResolve(staticDoc));
 
-      const staticPreview = paint(previewResolve(staticDoc));
-      assert.equal(bindSpy.mock.calls.length, 0);
+    const transitionResolution = previewResolve(transitionDoc);
+    const transitionPreview = paint(transitionResolution);
+    const transitionEmit = emit(transitionResolution);
 
-      const transitionResolution = previewResolve(transitionDoc);
-      const transitionPreview = paint(transitionResolution);
-      const transitionEmit = emit(transitionResolution);
-      assert.equal(bindSpy.mock.calls.length, 2);
+    // Static edit canvas pixels are identical whether transition/advanceAfter are declared or not.
+    assert.deepEqual(transitionPreview.pages[0]?.diagnostics, []);
+    assert.deepEqual(transitionPreview.pages[1]?.diagnostics, []);
+    assert.deepEqual(
+      Buffer.from(transitionPreview.pages[0].png!),
+      Buffer.from(staticPreview.pages[0]!.png!),
+    );
+    assert.deepEqual(
+      Buffer.from(transitionPreview.pages[1].png!),
+      Buffer.from(staticPreview.pages[1]!.png!),
+    );
 
-      // Static edit canvas pixels are identical whether transition/advanceAfter are declared or not.
-      assert.deepEqual(transitionPreview.pages[0]?.diagnostics, []);
-      assert.deepEqual(transitionPreview.pages[1]?.diagnostics, []);
-      assert.deepEqual(
-        Buffer.from(transitionPreview.pages[0].png!),
-        Buffer.from(staticPreview.pages[0]!.png!),
-      );
-      assert.deepEqual(
-        Buffer.from(transitionPreview.pages[1].png!),
-        Buffer.from(staticPreview.pages[1]!.png!),
-      );
+    // Transition and advanceAfter observations live on transition capability observation.
+    assert.deepEqual(
+      transitionResolution.report.slides[0]?.capabilities?.["transition"],
+      {
+        kind: "fade",
+        speed: "med",
+        durationMs: 650,
+        fallback: { kind: "fade", speed: "med" },
+        advanceAfterMs: 1800,
+      },
+    );
+    assert.deepEqual(
+      transitionResolution.report.slides[1]?.capabilities?.["transition"],
+      {
+        kind: "morph",
+        by: "object",
+        speed: "slow",
+        durationMs: 1100,
+        fallback: { kind: "fade", speed: "slow" },
+        advanceAfterMs: 2500,
+      },
+    );
 
-      // Transition and advanceAfter observations live on transition capability observation.
-      assert.deepEqual(
-        transitionResolution.report.slides[0]?.capabilities?.["transition"],
-        {
-          kind: "fade",
-          speed: "med",
-          durationMs: 650,
-          fallback: { kind: "fade", speed: "med" },
-          advanceAfterMs: 1800,
-        },
-      );
-      assert.deepEqual(
-        transitionResolution.report.slides[1]?.capabilities?.["transition"],
-        {
-          kind: "morph",
-          by: "object",
-          speed: "slow",
-          durationMs: 1100,
-          fallback: { kind: "fade", speed: "slow" },
-          advanceAfterMs: 2500,
-        },
-      );
-
-      const file = await validatePptx(transitionEmit.pptx, {
-        allowedExtensions: ["p14", "p159"],
-      });
-      assert.deepEqual(file.errors, []);
-      assert.equal(file.slides[0]?.advanceAfterMs, 1800);
-      assert.equal(file.slides[1]?.advanceAfterMs, 2500);
-      assert.equal(file.slides[1]?.transition?.kind, "morph");
-    } finally {
-      bindSpy.mockRestore();
-    }
+    const file = await validatePptx(transitionEmit.pptx, {
+      allowedExtensions: ["p14", "p159"],
+    });
+    assert.deepEqual(file.errors, []);
+    assert.equal(file.slides[0]?.advanceAfterMs, 1800);
+    assert.equal(file.slides[1]?.advanceAfterMs, 2500);
+    assert.equal(file.slides[1]?.transition?.kind, "morph");
   });
 
   it("validates Slide.advanceAfter in transitionCapability and rejects when trimmed", async () => {

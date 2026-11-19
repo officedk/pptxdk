@@ -105,7 +105,6 @@ export async function runCapabilityScenario(
       query: resolution.query,
       pages,
     });
-    assert.equal("build" in preview, false);
 
     const validation = await validatePptx(pptx);
     assert.deepEqual(

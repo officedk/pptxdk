@@ -4,6 +4,7 @@ import {
   paddingStyleKeys,
   parseCapabilityLayoutContract,
   textStyleKeys,
+  type BoundObjectCapability,
   type BoundObjectNativeCollaboration,
   type CapabilityInput,
   type CapabilityLayoutMeasurement,
@@ -17,7 +18,6 @@ import {
   type PaintContext,
   type PaintOutput,
   type PreviewTransform,
-  type ResolvedBoundObjectCapability,
   type ResolvedObject,
 } from "@react-pptx/core/capability";
 import { assertXml10Characters, xmlEscape } from "@react-pptx/emit";
@@ -146,7 +146,7 @@ export const textCapability: ObjectCapabilityModule = {
   bind(
     input: CapabilityInput,
     context: CapabilityParseContext,
-  ): ResolvedBoundObjectCapability {
+  ): BoundObjectCapability {
     const unknown = Object.keys(input.props).find(
       (key) => !(allowedParameters as readonly string[]).includes(key),
     );
@@ -154,20 +154,19 @@ export const textCapability: ObjectCapabilityModule = {
       throw new CapabilityError(
         "unknown-parameter",
         `Text contains unsupported parameter ${unknown}`,
-        context.path,
       );
     }
-    const requestedName = parseOptionalName(input.props["name"], context.path);
-    const morphKey = parseMorphKey(input.props["morphKey"], context.path);
-    const link = parseLinkTarget(input.props["link"], context.path);
+    const requestedName = parseOptionalName(input.props["name"]);
+    const morphKey = parseMorphKey(input.props["morphKey"]);
+    const link = parseLinkTarget(input.props["link"]);
 
     const declaredX = input.props["x"];
     const declaredY = input.props["y"];
     const declaredWidth = input.props["width"];
-    if (declaredX !== undefined) coordinate(declaredX, "x", context.path);
-    if (declaredY !== undefined) coordinate(declaredY, "y", context.path);
+    if (declaredX !== undefined) coordinate(declaredX, "x");
+    if (declaredY !== undefined) coordinate(declaredY, "y");
     if (declaredWidth !== undefined && typeof declaredWidth === "number") {
-      size(declaredWidth, "width", context.path);
+      size(declaredWidth, "width");
     }
 
     const allowedStyleKeys = new Set<string>([
@@ -187,10 +186,7 @@ export const textCapability: ObjectCapabilityModule = {
 
     const insets = textInsets(input.props["style"]);
     const styleHeight = layoutStyleValue(input, "height");
-    const requestedHeight = height(
-      styleHeight ?? input.props["height"],
-      context.path,
-    );
+    const requestedHeight = height(styleHeight ?? input.props["height"]);
 
     const { paragraphs, style: parsedTextStyle } = parseTextContent(
       input.children,

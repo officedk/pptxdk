@@ -5,6 +5,7 @@ import {
   paddingStyleKeys,
   parseCapabilityLayoutContract,
   textStyleKeys,
+  type BoundObjectCapability,
   type BoundObjectNativeCollaboration,
   type CapabilityInput,
   type CapabilityLayoutMeasurement,
@@ -21,7 +22,6 @@ import {
   type PaddingStyle,
   type PaintOutput,
   type PreviewTransform,
-  type ResolvedBoundObjectCapability,
   type ResolvedObject,
   type ThemeContext,
 } from "@react-pptx/core/capability";
@@ -332,7 +332,7 @@ export const shapeCapability: ObjectCapabilityModule = {
   bind(
     input: CapabilityInput,
     context: CapabilityParseContext,
-  ): ResolvedBoundObjectCapability {
+  ): BoundObjectCapability {
     const unknown = Object.keys(input.props).find(
       (key) => !(allowedParameters as readonly string[]).includes(key),
     );
@@ -340,48 +340,42 @@ export const shapeCapability: ObjectCapabilityModule = {
       throw new CapabilityError(
         "unknown-parameter",
         `Shape contains unsupported parameter ${unknown}`,
-        context.path,
       );
     }
 
-    const requestedName = parseOptionalName(input.props["name"], context.path);
-    const morphKey = parseMorphKey(input.props["morphKey"], context.path);
-    const link = parseLinkTarget(input.props["link"], context.path);
+    const requestedName = parseOptionalName(input.props["name"]);
+    const morphKey = parseMorphKey(input.props["morphKey"]);
+    const link = parseLinkTarget(input.props["link"]);
 
     const declaredX = input.props["x"];
     const declaredY = input.props["y"];
     if (declaredX !== undefined) {
-      validateCoordinate(declaredX, "x", context.path);
+      validateCoordinate(declaredX, "x");
     }
     if (declaredY !== undefined) {
-      validateCoordinate(declaredY, "y", context.path);
+      validateCoordinate(declaredY, "y");
     }
     if (
       input.props["width"] !== undefined &&
       typeof input.props["width"] === "number"
     ) {
-      validateSize(input.props["width"], "width", context.path);
+      validateSize(input.props["width"], "width");
     }
     if (
       input.props["height"] !== undefined &&
       typeof input.props["height"] === "number"
     ) {
-      validateSize(input.props["height"], "height", context.path);
+      validateSize(input.props["height"], "height");
     }
 
     const textProp = input.props["text"];
     if (textProp !== undefined && typeof textProp !== "string") {
-      throw new CapabilityError(
-        "invalid-text",
-        "Shape.text must be a string",
-        context.path,
-      );
+      throw new CapabilityError("invalid-text", "Shape.text must be a string");
     }
     if (textProp !== undefined && input.children.length > 0) {
       throw new CapabilityError(
         "conflicting-text-content",
         "Shape.text and Shape children text cannot be declared simultaneously",
-        context.path,
       );
     }
 
@@ -408,7 +402,7 @@ export const shapeCapability: ObjectCapabilityModule = {
       ? textInsets(input.props["style"])
       : { top: 0, right: 0, bottom: 0, left: 0 };
 
-    const textChildren = shapeTextContent(input, context.path);
+    const textChildren = shapeTextContent(input);
     const rawTextStyle = shapeTextStyle(input.props);
     const effectiveTextStyle = {
       ...rawTextStyle,
@@ -529,40 +523,16 @@ export const shapeCapability: ObjectCapabilityModule = {
         const box =
           resolveContext.layoutBox === undefined
             ? {
-                x: validateCoordinate(declaredX, "x", resolveContext.path),
-                y: validateCoordinate(declaredY, "y", resolveContext.path),
-                width: validateSize(
-                  declaredWidth,
-                  "width",
-                  resolveContext.path,
-                ),
-                height: validateSize(
-                  declaredHeight,
-                  "height",
-                  resolveContext.path,
-                ),
+                x: validateCoordinate(declaredX, "x"),
+                y: validateCoordinate(declaredY, "y"),
+                width: validateSize(declaredWidth, "width"),
+                height: validateSize(declaredHeight, "height"),
               }
             : {
-                x: validateCoordinate(
-                  resolveContext.layoutBox.x,
-                  "x",
-                  resolveContext.path,
-                ),
-                y: validateCoordinate(
-                  resolveContext.layoutBox.y,
-                  "y",
-                  resolveContext.path,
-                ),
-                width: validateSize(
-                  resolveContext.layoutBox.width,
-                  "width",
-                  resolveContext.path,
-                ),
-                height: validateSize(
-                  resolveContext.layoutBox.height,
-                  "height",
-                  resolveContext.path,
-                ),
+                x: validateCoordinate(resolveContext.layoutBox.x, "x"),
+                y: validateCoordinate(resolveContext.layoutBox.y, "y"),
+                width: validateSize(resolveContext.layoutBox.width, "width"),
+                height: validateSize(resolveContext.layoutBox.height, "height"),
               };
         const properties = shapePropertiesXml({
           theme: resolveContext.theme,
@@ -629,7 +599,6 @@ export const shapeCapability: ObjectCapabilityModule = {
           throw new CapabilityError(
             "invalid-xml-character",
             "Shape.name contains characters not allowed in XML 1.0",
-            resolveContext.path,
           );
         }
         const warnings = [

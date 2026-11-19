@@ -310,7 +310,10 @@ export type BuildResult = {
   readonly query: BuildQuery;
 };
 
-export type EmitResult = BuildResult;
+export type EmitResult = {
+  readonly pptx: Uint8Array;
+  readonly report: BuildReport;
+};
 
 export type LocatorObservation = {
   readonly evidence: "generation";
@@ -694,7 +697,6 @@ export type EmitContext = {
   readonly theme: ThemeContext;
   readonly options: EmitOptions;
   readonly slideNumber: number;
-  readonly morphName?: string;
   readonly nativeLink?: NativeLink;
   readonly childrenXml: string;
   readonly createTextFieldId: () => string;
@@ -745,8 +747,6 @@ export type BoundObjectCapability = {
   ): CapabilityLayoutMeasurement | undefined;
   resolve(context: ObjectResolveContext): ResolvedObject;
 };
-
-export type ResolvedBoundObjectCapability = BoundObjectCapability;
 
 /**
  * Object capability module that binds per-build declaration state into a closed handle without exposing private parsed state.
@@ -861,8 +861,6 @@ export type BoundSlideCapability = {
   resolveSlide(context: SlideResolveContext): ResolvedSlide;
 };
 
-export type ResolvedBoundSlideCapability = BoundSlideCapability;
-
 /** Slide capability module that binds per-build slide declaration state into a closed handle. */
 export type SlideCapabilityModule<
   Bound extends BoundSlideCapability = BoundSlideCapability,
@@ -890,7 +888,7 @@ export type BoundSlideCapabilityModule = SlideCapabilityModule;
 
 export type CapabilityModule = ObjectCapabilityModule | SlideCapabilityModule;
 
-/** Modules registered inside Builder; transparent declarations can only be owned by slide capability modules. */
+/** Modules registered inside a resolver; transparent declarations can only be owned by slide capability modules. */
 export type RegisteredCapabilityModule =
   | CapabilityModule
   | TransparentCapabilityModule;

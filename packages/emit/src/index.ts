@@ -1,4 +1,4 @@
-export { emit, validateOptions } from "#/emit.ts";
+export { emit, emittedBuildQuery, validateOptions } from "#/emit.ts";
 export {
   assertXml10Characters,
   pptxParts,

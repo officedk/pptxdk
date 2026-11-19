@@ -1,4 +1,4 @@
-export { createResolver } from "#/formal-build.ts";
+export { createResolver } from "#/resolve.ts";
 export { BuildError, CapabilityError } from "#/diagnostics.ts";
 export { formatBaseline, targets } from "#/types.ts";
 export type {

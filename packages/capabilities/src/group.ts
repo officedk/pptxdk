@@ -6,6 +6,7 @@ import {
   textStyleFrom,
   textStyleKeys,
   type BoundContainerCollaboration,
+  type BoundObjectCapability,
   type BoundObjectNativeCollaboration,
   type CapabilityInput,
   type CapabilityParseContext,
@@ -19,7 +20,6 @@ import {
   type PaintContext,
   type PaintOutput,
   type PreviewTransform,
-  type ResolvedBoundObjectCapability,
   type ResolvedObject,
   type TextStyle,
   type ThemeScope,
@@ -190,7 +190,7 @@ export const groupCapability: ObjectCapabilityModule = {
   bind(
     input: CapabilityInput,
     context: CapabilityParseContext,
-  ): ResolvedBoundObjectCapability {
+  ): BoundObjectCapability {
     const unknown = Object.keys(input.props).find(
       (key) => !(allowedParameters as readonly string[]).includes(key),
     );
@@ -198,13 +198,12 @@ export const groupCapability: ObjectCapabilityModule = {
       throw new CapabilityError(
         "unknown-parameter",
         `Group contains unsupported parameter ${unknown}`,
-        context.path,
       );
     }
     validateMotionFlag(input.props["motion"]);
-    const requestedName = parseOptionalName(input.props["name"], context.path);
-    const morphKey = parseMorphKey(input.props["morphKey"], context.path);
-    const link = parseLinkTarget(input.props["link"], context.path);
+    const requestedName = parseOptionalName(input.props["name"]);
+    const morphKey = parseMorphKey(input.props["morphKey"]);
+    const link = parseLinkTarget(input.props["link"]);
 
     const contract = parseCapabilityLayoutContract({
       nativeKind: "grpSp",
@@ -231,7 +230,6 @@ export const groupCapability: ObjectCapabilityModule = {
       throw new CapabilityError(
         "invalid-visual-style",
         "rotate must be a finite angle",
-        context.path,
       );
     }
     const rotation = rawRotation;
@@ -289,7 +287,6 @@ export const groupCapability: ObjectCapabilityModule = {
           throw new CapabilityError(
             "invalid-group-geometry",
             "Group layout width and height must be greater than 0",
-            resolveContext.path,
           );
         }
         const outputEmu = {
@@ -309,7 +306,6 @@ export const groupCapability: ObjectCapabilityModule = {
           throw new CapabilityError(
             "invalid-xml-character",
             "Group.name contains characters not allowed in XML 1.0",
-            resolveContext.path,
           );
         }
         const members = motionMembers(resolvedChildren.objects);

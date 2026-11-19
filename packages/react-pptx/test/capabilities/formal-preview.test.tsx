@@ -69,7 +69,11 @@ function runDocPreview(modules: readonly CapabilityModule[]) {
   const resolveWith = createResolver(modules);
   return async (document: CommonNode) => {
     const resolution = resolveWith(document);
-    return { ...emit(resolution), ...paint(resolution) };
+    return {
+      query: resolution.query,
+      ...emit(resolution),
+      ...paint(resolution),
+    };
   };
 }
 

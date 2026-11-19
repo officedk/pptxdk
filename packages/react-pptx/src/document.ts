@@ -7,7 +7,7 @@ import {
   type ResolveOptions,
 } from "@react-pptx/core/build";
 import type { CommonNode } from "@react-pptx/core/document";
-import { emit, validateOptions } from "@react-pptx/emit";
+import { emit, emittedBuildQuery, validateOptions } from "@react-pptx/emit";
 
 const resolveDocument = createResolver(documentCapabilities);
 
@@ -38,7 +38,12 @@ export async function build(
   const resolveOptions: ResolveOptions =
     options.signal === undefined ? {} : { signal: options.signal };
   const resolution = resolve(document, resolveOptions);
-  return emit(resolution, options);
+  const emitted = emit(resolution, options);
+  return Object.freeze({
+    pptx: emitted.pptx,
+    report: emitted.report,
+    query: emittedBuildQuery(emitted.report, resolution.query),
+  });
 }
 
 export {

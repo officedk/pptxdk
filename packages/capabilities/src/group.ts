@@ -8,18 +8,21 @@ import {
   textStyleKeys,
   xmlEscape,
   type BoundContainerCollaboration,
-  type BoundObjectCapability,
-  type BoundObjectCapabilityModule,
   type BoundObjectNativeCollaboration,
-  type CapabilityContext,
   type CapabilityInput,
   type CapabilityParseContext,
-  type GeometryBox,
+  type EmitContext,
+  type EmitOutput,
   type LayoutStyle,
   type LinkTarget,
+  type ObjectCapabilityModule,
   type ObjectObservation,
-  type ObjectPreviewContext,
-  type ObjectPreviewOutput,
+  type ObjectResolveContext,
+  type PaintContext,
+  type PaintOutput,
+  type PreviewTransform,
+  type ResolvedBoundObjectCapability,
+  type ResolvedObject,
   type TextStyle,
   type ThemeScope,
   type VisualStyle,
@@ -182,191 +185,191 @@ const groupAllowedStyleKeys = new Set<string>([
 ]);
 
 /** Preserves members as native objects and writes group bounds according to final member geometry; layout participation uses generic container collaboration. */
-export const groupCapability: BoundObjectCapabilityModule = {
-  declaration: "rp:group",
+export const groupCapability: ObjectCapabilityModule<ResolvedBoundObjectCapability> =
+  {
+    declaration: "rp:group",
 
-  bind(
-    input: CapabilityInput,
-    context: CapabilityParseContext,
-  ): BoundObjectCapability {
-    const unknown = Object.keys(input.props).find(
-      (key) => !(allowedParameters as readonly string[]).includes(key),
-    );
-    if (unknown !== undefined) {
-      throw new CapabilityError(
-        "unknown-parameter",
-        `Group contains unsupported parameter ${unknown}`,
+    bind(
+      input: CapabilityInput,
+      context: CapabilityParseContext,
+    ): ResolvedBoundObjectCapability {
+      const unknown = Object.keys(input.props).find(
+        (key) => !(allowedParameters as readonly string[]).includes(key),
+      );
+      if (unknown !== undefined) {
+        throw new CapabilityError(
+          "unknown-parameter",
+          `Group contains unsupported parameter ${unknown}`,
+          context.path,
+        );
+      }
+      validateMotionFlag(input.props["motion"]);
+      const requestedName = parseOptionalName(
+        input.props["name"],
         context.path,
       );
-    }
-    validateMotionFlag(input.props["motion"]);
-    const requestedName = parseOptionalName(input.props["name"], context.path);
-    const morphKey = parseMorphKey(input.props["morphKey"], context.path);
-    const link = parseLinkTarget(input.props["link"], context.path);
+      const morphKey = parseMorphKey(input.props["morphKey"], context.path);
+      const link = parseLinkTarget(input.props["link"], context.path);
 
-    const contract = parseCapabilityLayoutContract({
-      nativeKind: "grpSp",
-      props: input.props,
-      allowedStyleKeys: groupAllowedStyleKeys,
-      allowPadding: true,
-      isContainer: true,
-      path: context.path,
-    });
+      const contract = parseCapabilityLayoutContract({
+        nativeKind: "grpSp",
+        props: input.props,
+        allowedStyleKeys: groupAllowedStyleKeys,
+        allowPadding: true,
+        isContainer: true,
+        path: context.path,
+      });
 
-    const rawStyle = input.props["style"];
-    const styleRecord =
-      typeof rawStyle === "object" &&
-      rawStyle !== null &&
-      !Array.isArray(rawStyle)
-        ? (rawStyle as Record<string, unknown>)
-        : {};
+      const rawStyle = input.props["style"];
+      const styleRecord =
+        typeof rawStyle === "object" &&
+        rawStyle !== null &&
+        !Array.isArray(rawStyle)
+          ? (rawStyle as Record<string, unknown>)
+          : {};
 
-    const rawRotation = styleRecord["rotate"];
-    if (
-      rawRotation !== undefined &&
-      (typeof rawRotation !== "number" || !Number.isFinite(rawRotation))
-    ) {
-      throw new CapabilityError(
-        "invalid-visual-style",
-        "rotate must be a finite angle",
-        context.path,
+      const rawRotation = styleRecord["rotate"];
+      if (
+        rawRotation !== undefined &&
+        (typeof rawRotation !== "number" || !Number.isFinite(rawRotation))
+      ) {
+        throw new CapabilityError(
+          "invalid-visual-style",
+          "rotate must be a finite angle",
+          context.path,
+        );
+      }
+      const rotation = rawRotation;
+
+      const theme = context.theme.with(
+        input.props["theme"] as ThemeScope | undefined,
+        textStyleFrom(styleRecord),
       );
-    }
-    const rotation = rawRotation;
 
-    const theme = context.theme.with(
-      input.props["theme"] as ThemeScope | undefined,
-      textStyleFrom(styleRecord),
-    );
+      const authorId =
+        typeof input.props["id"] === "string" ? input.props["id"] : undefined;
+      const motionProps: Readonly<Record<string, unknown>> = {
+        ...(input.props["enter"] !== undefined
+          ? { enter: input.props["enter"] }
+          : {}),
+        ...(input.props["emphasis"] !== undefined
+          ? { emphasis: input.props["emphasis"] }
+          : {}),
+        ...(input.props["motion"] !== undefined
+          ? { motion: input.props["motion"] }
+          : {}),
+      };
 
-    const authorId =
-      typeof input.props["id"] === "string" ? input.props["id"] : undefined;
-    const motionProps: Readonly<Record<string, unknown>> = {
-      ...(input.props["enter"] !== undefined
-        ? { enter: input.props["enter"] }
-        : {}),
-      ...(input.props["emphasis"] !== undefined
-        ? { emphasis: input.props["emphasis"] }
-        : {}),
-      ...(input.props["motion"] !== undefined
-        ? { motion: input.props["motion"] }
-        : {}),
-    };
+      const container: BoundContainerCollaboration = {
+        children: input.children,
+        theme,
+        emitsObject: true,
+        layoutMode: "when-styled",
+        childComposition: "members",
+        restrictsMemberContinuity: true,
+        observesLayout: false,
+        propagatesBaseline: false,
+        checksCanvasOverflow: false,
+      };
 
-    const container: BoundContainerCollaboration = {
-      children: input.children,
-      theme,
-      emitsObject: true,
-      layoutMode: "when-styled",
-      childComposition: "members",
-      restrictsMemberContinuity: true,
-      observesLayout: false,
-      propagatesBaseline: false,
-      checksCanvasOverflow: false,
-    };
+      const native: BoundObjectNativeCollaboration = {
+        ...(morphKey === undefined ? {} : { morphKey }),
+        ...(requestedName === undefined ? {} : { hasExplicitName: true }),
+        ...(link === undefined ? {} : { link }),
+      };
 
-    const native: BoundObjectNativeCollaboration = {
-      ...(morphKey === undefined ? {} : { morphKey }),
-      ...(requestedName === undefined ? {} : { hasExplicitName: true }),
-      ...(link === undefined ? {} : { link }),
-    };
-
-    let compiledBox: GeometryBox | undefined;
-
-    return {
-      contract,
-      container,
-      ...(morphKey !== undefined ||
-      requestedName !== undefined ||
-      link !== undefined
-        ? { native }
-        : {}),
-      compile(compileContext: CapabilityContext) {
-        const compiled = compileContext.compileChildren(input.children);
-        const geometry = bounds(compiled.objects);
-        const outputGeometry = compileContext.layoutBox ?? geometry.pixels;
-        if (outputGeometry.width <= 0 || outputGeometry.height <= 0) {
-          throw new CapabilityError(
-            "invalid-group-geometry",
-            "Group layout width and height must be greater than 0",
-            compileContext.path,
+      return {
+        contract,
+        container,
+        ...(morphKey !== undefined ||
+        requestedName !== undefined ||
+        link !== undefined
+          ? { native }
+          : {}),
+        resolve(resolveContext: ObjectResolveContext): ResolvedObject {
+          const resolvedChildren = resolveContext.resolveChildren(
+            input.children,
           );
-        }
-        compiledBox = outputGeometry;
-        const outputEmu = {
-          x: pxToEmu(outputGeometry.x),
-          y: pxToEmu(outputGeometry.y),
-          width: pxToEmu(outputGeometry.width),
-          height: pxToEmu(outputGeometry.height),
-        };
-        const name =
-          compileContext.morphName ??
-          requestedName ??
-          `Group ${compileContext.id - 1}`;
-        const members = motionMembers(compiled.objects);
-        const annotations = motionContainerAnnotations(motionProps, {
-          kind: "group",
-          name,
-          ...(authorId === undefined ? {} : { authorId }),
-          textBody: false,
-          filled: false,
-          box: outputGeometry,
-          rotationDegrees: rotation ?? 0,
-          members,
-        });
-        let escapedName: string;
-        try {
-          escapedName = xmlEscape(name);
-        } catch {
-          throw new CapabilityError(
-            "invalid-xml-character",
-            "Group.name contains characters not allowed in XML 1.0",
-            compileContext.path,
-          );
-        }
-        return {
-          xml: groupXml(
-            compileContext.id,
-            escapedName,
-            outputEmu,
-            compiled.xml,
-            rotation,
-            nativeLinkXml(compileContext.nativeLink),
-          ),
-          observation: {
-            id: compileContext.id,
+          const geometry = bounds(resolvedChildren.objects);
+          const outputGeometry = resolveContext.layoutBox ?? geometry.pixels;
+          if (outputGeometry.width <= 0 || outputGeometry.height <= 0) {
+            throw new CapabilityError(
+              "invalid-group-geometry",
+              "Group layout width and height must be greater than 0",
+              resolveContext.path,
+            );
+          }
+          const outputEmu = {
+            x: pxToEmu(outputGeometry.x),
+            y: pxToEmu(outputGeometry.y),
+            width: pxToEmu(outputGeometry.width),
+            height: pxToEmu(outputGeometry.height),
+          };
+          const name =
+            resolveContext.morphName ??
+            requestedName ??
+            `Group ${resolveContext.id - 1}`;
+          let escapedName: string;
+          try {
+            escapedName = xmlEscape(name);
+          } catch {
+            throw new CapabilityError(
+              "invalid-xml-character",
+              "Group.name contains characters not allowed in XML 1.0",
+              resolveContext.path,
+            );
+          }
+          const members = motionMembers(resolvedChildren.objects);
+          const annotations = motionContainerAnnotations(motionProps, {
             kind: "group",
             name,
+            ...(authorId === undefined ? {} : { authorId }),
+            textBody: false,
+            filled: false,
             box: outputGeometry,
-            members: compiled.objects,
-          },
-          extensions: [],
-          ...(annotations.length === 0 ? {} : { annotations }),
-        };
-      },
-      preview(previewContext: ObjectPreviewContext): ObjectPreviewOutput {
-        const box = previewContext.box ?? compiledBox;
-        if (box === undefined) {
-          throw new CapabilityError(
-            "layout-unavailable",
-            "Preview requires compiled Group geometry",
-            previewContext.path,
-          );
-        }
-        const childrenSvg = previewContext.childrenSvg ?? "";
-        const angle = rotation ?? 0;
-        const cx = box.x + box.width / 2;
-        const cy = box.y + box.height / 2;
-        return {
-          svg: `<g transform="rotate(${angle} ${cx} ${cy})">${childrenSvg}</g>`,
-          transform: {
-            box,
+            rotationDegrees: rotation ?? 0,
+            members,
+          });
+          const angle = rotation ?? 0;
+          const transform: PreviewTransform = {
+            box: outputGeometry,
             angle,
             flipH: false,
             flipV: false,
-          },
-        };
-      },
-    };
-  },
-};
+          };
+          return {
+            observation: {
+              id: resolveContext.id,
+              kind: "group",
+              name,
+              box: outputGeometry,
+              members: resolvedChildren.objects,
+            },
+            transform,
+            extensions: [],
+            ...(annotations.length === 0 ? {} : { annotations }),
+            emit(emitContext: EmitContext): EmitOutput {
+              return {
+                xml: groupXml(
+                  emitContext.id,
+                  escapedName,
+                  outputEmu,
+                  emitContext.childrenXml,
+                  rotation,
+                  nativeLinkXml(emitContext.nativeLink),
+                ),
+              };
+            },
+            paint(paintContext: PaintContext): PaintOutput {
+              const childrenSvg = paintContext.childrenSvg ?? "";
+              const cx = outputGeometry.x + outputGeometry.width / 2;
+              const cy = outputGeometry.y + outputGeometry.height / 2;
+              return {
+                svg: `<g transform="rotate(${angle} ${cx} ${cy})">${childrenSvg}</g>`,
+              };
+            },
+          };
+        },
+      };
+    },
+  };

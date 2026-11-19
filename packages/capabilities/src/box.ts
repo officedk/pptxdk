@@ -7,17 +7,20 @@ import {
   textStyleKeys,
   xmlEscape,
   type BoundContainerCollaboration,
-  type BoundObjectCapability,
-  type BoundObjectCapabilityModule,
   type BoundObjectNativeCollaboration,
-  type CapabilityContext,
   type CapabilityInput,
   type CapabilityParseContext,
-  type GeometryBox,
+  type EmitContext,
+  type EmitOutput,
   type LayoutStyle,
   type LinkTarget,
-  type ObjectPreviewContext,
-  type ObjectPreviewOutput,
+  type ObjectCapabilityModule,
+  type ObjectResolveContext,
+  type PaintContext,
+  type PaintOutput,
+  type PreviewTransform,
+  type ResolvedBoundObjectCapability,
+  type ResolvedObject,
   type TextStyle,
   type ThemeScope,
   type VisualStyle,
@@ -89,175 +92,190 @@ function styleRecord(value: unknown): Record<string, unknown> {
 
 function objectXml(
   id: number,
-  name: string,
+  escapedName: string,
   properties: string,
   linkXml: string,
 ): string {
-  return `<p:sp><p:nvSpPr><p:cNvPr id="${id}" name="${xmlEscape(name)}">${linkXml}</p:cNvPr><p:cNvSpPr/><p:nvPr/></p:nvSpPr>${properties}</p:sp>`;
+  return `<p:sp><p:nvSpPr><p:cNvPr id="${id}" name="${escapedName}">${linkXml}</p:cNvPr><p:cNvSpPr/><p:nvPr/></p:nvSpPr>${properties}</p:sp>`;
 }
 
 /** Visible Box backgrounds use the same shape property writer; boxes without fill, stroke, or shadow retain layout semantics only. */
-export const boxCapability: BoundObjectCapabilityModule = {
-  declaration: "rp:box",
+export const boxCapability: ObjectCapabilityModule<ResolvedBoundObjectCapability> =
+  {
+    declaration: "rp:box",
 
-  bind(
-    input: CapabilityInput,
-    context: CapabilityParseContext,
-  ): BoundObjectCapability {
-    const unknown = Object.keys(input.props).find(
-      (key) => !(boxAllowedParameters as readonly string[]).includes(key),
-    );
-    if (unknown !== undefined) {
-      throw new CapabilityError(
-        "unknown-parameter",
-        `Box contains unknown parameter ${unknown}`,
-        context.path,
+    bind(
+      input: CapabilityInput,
+      context: CapabilityParseContext,
+    ): ResolvedBoundObjectCapability {
+      const unknown = Object.keys(input.props).find(
+        (key) => !(boxAllowedParameters as readonly string[]).includes(key),
       );
-    }
-    validateMotionFlag(input.props["motion"]);
-    const morphKey = parseMorphKey(input.props["morphKey"], context.path);
-    const link = parseLinkTarget(input.props["link"], context.path);
-    const style = { ...styleRecord(input.props["style"]) };
-    const hasVisibleStyle = hasVisibleBoxStyle(style);
-    if (morphKey !== undefined && !hasVisibleStyle) {
-      throw new CapabilityError(
-        "morph-needs-object",
-        "Only visible Box elements generating native background shapes can participate in Morph",
-        context.path,
-      );
-    }
-
-    const contract = parseCapabilityLayoutContract({
-      nativeKind: "sp",
-      props: input.props,
-      allowedStyleKeys: boxAllowedStyleKeys,
-      allowPadding: true,
-      isContainer: true,
-      path: context.path,
-    });
-
-    const theme = context.theme.with(
-      input.props["theme"] as ThemeScope | undefined,
-      textStyleFrom(style),
-    );
-
-    shapePropertiesXml({
-      theme,
-      style,
-      box: { x: 0, y: 0, width: 100, height: 100 },
-      layoutOnlyWhenInvisible: true,
-    });
-
-    const authorId =
-      typeof input.props["id"] === "string" ? input.props["id"] : undefined;
-    const motionProps: Readonly<Record<string, unknown>> = {
-      ...(input.props["enter"] !== undefined
-        ? { enter: input.props["enter"] }
-        : {}),
-      ...(input.props["motion"] !== undefined
-        ? { motion: input.props["motion"] }
-        : {}),
-    };
-
-    const container: BoundContainerCollaboration = {
-      children: input.children,
-      theme,
-      emitsObject: hasVisibleStyle,
-      observesLayout: true,
-      propagatesBaseline: true,
-      checksCanvasOverflow: true,
-    };
-
-    const native: BoundObjectNativeCollaboration = {
-      ...(morphKey === undefined ? {} : { morphKey }),
-      ...(link === undefined ? {} : { link }),
-    };
-
-    let compiledBox: GeometryBox | undefined;
-
-    return {
-      contract,
-      container,
-      ...(morphKey !== undefined || link !== undefined ? { native } : {}),
-      compile(compileContext: CapabilityContext) {
-        const box = compileContext.layoutBox;
-        if (box === undefined) {
-          throw new CapabilityError(
-            "layout-unavailable",
-            "Box is missing layout results",
-            compileContext.path,
-          );
-        }
-        compiledBox = box;
-        const name = compileContext.morphName ?? `Box ${compileContext.id - 1}`;
-        const properties = shapePropertiesXml({
-          theme: compileContext.theme,
-          style,
-          box,
-          layoutOnlyWhenInvisible: true,
-        });
-        const motionTarget = {
-          kind: "shape",
-          name,
-          ...(authorId === undefined ? {} : { authorId }),
-          textBody: false,
-          filled:
-            style["backgroundColor"] !== undefined ||
-            style["backgroundImage"] !== undefined,
-        } as const;
-        const annotations = motionContainerAnnotations(
-          motionProps,
-          properties.hasVisibleStyle ? motionTarget : undefined,
-          { propagatesDefaultEnter: true },
+      if (unknown !== undefined) {
+        throw new CapabilityError(
+          "unknown-parameter",
+          `Box contains unknown parameter ${unknown}`,
+          context.path,
         );
-        return {
-          xml: properties.hasVisibleStyle
-            ? objectXml(
-                compileContext.id,
-                name,
-                properties.xml,
-                nativeLinkXml(compileContext.nativeLink),
-              )
-            : "",
-          observation: {
-            id: compileContext.id,
+      }
+      validateMotionFlag(input.props["motion"]);
+      const morphKey = parseMorphKey(input.props["morphKey"], context.path);
+      const link = parseLinkTarget(input.props["link"], context.path);
+      const style = { ...styleRecord(input.props["style"]) };
+      const hasVisibleStyle = hasVisibleBoxStyle(style);
+      if (morphKey !== undefined && !hasVisibleStyle) {
+        throw new CapabilityError(
+          "morph-needs-object",
+          "Only visible Box elements generating native background shapes can participate in Morph",
+          context.path,
+        );
+      }
+
+      const contract = parseCapabilityLayoutContract({
+        nativeKind: "sp",
+        props: input.props,
+        allowedStyleKeys: boxAllowedStyleKeys,
+        allowPadding: true,
+        isContainer: true,
+        path: context.path,
+      });
+
+      const theme = context.theme.with(
+        input.props["theme"] as ThemeScope | undefined,
+        textStyleFrom(style),
+      );
+
+      shapePropertiesXml({
+        theme,
+        style,
+        box: { x: 0, y: 0, width: 100, height: 100 },
+        layoutOnlyWhenInvisible: true,
+      });
+
+      const authorId =
+        typeof input.props["id"] === "string" ? input.props["id"] : undefined;
+      const motionProps: Readonly<Record<string, unknown>> = {
+        ...(input.props["enter"] !== undefined
+          ? { enter: input.props["enter"] }
+          : {}),
+        ...(input.props["motion"] !== undefined
+          ? { motion: input.props["motion"] }
+          : {}),
+      };
+
+      const container: BoundContainerCollaboration = {
+        children: input.children,
+        theme,
+        emitsObject: hasVisibleStyle,
+        observesLayout: true,
+        propagatesBaseline: true,
+        checksCanvasOverflow: true,
+      };
+
+      const native: BoundObjectNativeCollaboration = {
+        ...(morphKey === undefined ? {} : { morphKey }),
+        ...(link === undefined ? {} : { link }),
+      };
+
+      return {
+        contract,
+        container,
+        ...(morphKey !== undefined || link !== undefined ? { native } : {}),
+        resolve(resolveContext: ObjectResolveContext): ResolvedObject {
+          const box = resolveContext.layoutBox;
+          if (box === undefined) {
+            throw new CapabilityError(
+              "layout-unavailable",
+              "Box is missing layout results",
+              resolveContext.path,
+            );
+          }
+          const name =
+            resolveContext.morphName ?? `Box ${resolveContext.id - 1}`;
+          let escapedName: string;
+          try {
+            escapedName = xmlEscape(name);
+          } catch {
+            throw new CapabilityError(
+              "invalid-xml-character",
+              "Box.name contains characters not allowed in XML 1.0",
+              resolveContext.path,
+            );
+          }
+          const properties = shapePropertiesXml({
+            theme: resolveContext.theme,
+            style,
+            box,
+            layoutOnlyWhenInvisible: true,
+          });
+          const motionTarget = {
             kind: "shape",
             name,
-            geometry: properties.geometryName,
-            box,
-          },
-          extensions: [],
-          ...(annotations.length === 0 ? {} : { annotations }),
-          ...(properties.warnings.length === 0
-            ? {}
-            : { warnings: properties.warnings }),
-        };
-      },
-      preview(previewContext: ObjectPreviewContext): ObjectPreviewOutput {
-        const childrenSvg = previewContext.childrenSvg ?? "";
-        if (!hasVisibleStyle) {
-          return { svg: childrenSvg };
-        }
-        const box = previewContext.box ?? compiledBox;
-        if (box === undefined) {
-          throw new CapabilityError(
-            "layout-unavailable",
-            "Preview requires compiled Box geometry",
-            previewContext.path,
+            ...(authorId === undefined ? {} : { authorId }),
+            textBody: false,
+            filled:
+              style["backgroundColor"] !== undefined ||
+              style["backgroundImage"] !== undefined,
+          } as const;
+          const annotations = motionContainerAnnotations(
+            motionProps,
+            properties.hasVisibleStyle ? motionTarget : undefined,
+            { propagatesDefaultEnter: true },
           );
-        }
-        const resolved = resolveBoxPreviewVisuals({
-          label: "box",
-          visualStyle: style,
-          box,
-          theme: previewContext.theme,
-        });
-        const backgroundSvg = `<g transform="${resolved.svgTransform}"><rect x="${box.x}" y="${box.y}" width="${box.width}" height="${box.height}" ${resolved.attributes}/></g>`;
-        return {
-          svg: `${backgroundSvg}${childrenSvg}`,
-          transform: resolved.transform,
-        };
-      },
-    };
-  },
-};
+          const transform: PreviewTransform | undefined =
+            properties.hasVisibleStyle
+              ? {
+                  box,
+                  angle:
+                    typeof style["rotate"] === "number" ? style["rotate"] : 0,
+                  flipH: false,
+                  flipV: false,
+                }
+              : undefined;
+          return {
+            observation: {
+              id: resolveContext.id,
+              kind: "shape",
+              name,
+              geometry: properties.geometryName,
+              box,
+            },
+            ...(transform === undefined ? {} : { transform }),
+            extensions: [],
+            ...(annotations.length === 0 ? {} : { annotations }),
+            ...(properties.warnings.length === 0
+              ? {}
+              : { warnings: properties.warnings }),
+            emit(emitContext: EmitContext): EmitOutput {
+              return {
+                xml: properties.hasVisibleStyle
+                  ? objectXml(
+                      emitContext.id,
+                      escapedName,
+                      properties.xml,
+                      nativeLinkXml(emitContext.nativeLink),
+                    )
+                  : "",
+              };
+            },
+            paint(paintContext: PaintContext): PaintOutput {
+              const childrenSvg = paintContext.childrenSvg ?? "";
+              if (!hasVisibleStyle) {
+                return { svg: childrenSvg };
+              }
+              const resolved = resolveBoxPreviewVisuals({
+                label: "box",
+                visualStyle: style,
+                box,
+                theme: resolveContext.theme,
+              });
+              const backgroundSvg = `<g transform="${resolved.svgTransform}"><rect x="${box.x}" y="${box.y}" width="${box.width}" height="${box.height}" ${resolved.attributes}/></g>`;
+              return {
+                svg: `${backgroundSvg}${childrenSvg}`,
+              };
+            },
+          };
+        },
+      };
+    },
+  };

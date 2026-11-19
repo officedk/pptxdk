@@ -815,14 +815,14 @@ describe("public build entry", () => {
         const bound = shapeCapability.bind(input, context);
         return {
           ...bound,
-          compile(compileContext) {
-            const output = bound.compile(compileContext);
+          resolve(resolveContext) {
+            const resolved = bound.resolve(resolveContext);
             pageNumberClaims.push(
-              ...(output.resourceClaims ?? []).flatMap(({ characters }) =>
+              ...(resolved.resourceClaims ?? []).flatMap(({ characters }) =>
                 characters === undefined ? [] : [characters],
               ),
             );
-            return output;
+            return resolved;
           },
         };
       },
@@ -3885,9 +3885,9 @@ describe("public build entry", () => {
         const bound = shapeCapability.bind(input, context);
         return {
           ...bound,
-          compile(compileContext) {
+          resolve(resolveContext) {
             cleanupSeenAtCompile.push(cleaned);
-            return bound.compile(compileContext);
+            return bound.resolve(resolveContext);
           },
         };
       },
@@ -3942,9 +3942,9 @@ describe("public build entry", () => {
         const bound = shapeCapability.bind(input, context);
         return {
           ...bound,
-          compile(compileContext) {
-            compileOptions.push(compileContext.options);
-            return bound.compile(compileContext);
+          resolve(resolveContext) {
+            compileOptions.push(resolveContext.options);
+            return bound.resolve(resolveContext);
           },
         };
       },

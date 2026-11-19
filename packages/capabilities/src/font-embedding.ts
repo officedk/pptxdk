@@ -10,7 +10,11 @@ import * as fontkit from "fontkit";
 import { fontFamilyKey, matchesFontFamily } from "./font-family.ts";
 import { subsetFont } from "./font-subset.ts";
 import type { FontFaceStyle } from "./font.ts";
-import { requiresFontGlyph } from "./text-service.ts";
+
+/** Retains control characters and default ignorable code points in text stream without requiring standalone cmap glyphs. */
+export function requiresFontGlyph(character: string): boolean {
+  return !/^[\p{Cc}\p{Default_Ignorable_Code_Point}]$/u.test(character);
+}
 
 const fontRelationship =
   "http://schemas.openxmlformats.org/officeDocument/2006/relationships/font";

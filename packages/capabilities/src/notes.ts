@@ -2,13 +2,17 @@ import {
   CapabilityError,
   themeXml,
   xmlEscape,
-  type BoundSlideCapabilityModule,
   type CapabilityInput,
+  type ResolvedBoundSlideCapability,
+  type ResolvedSlide,
+  type SlideCapabilityModule,
+  type SlideEmitContext,
+  type SlideEmitOutput,
+  type SlideResolveContext,
   type TextStyle,
+  type ThemeContext,
 } from "@react-pptx/core/capability";
-import type { ThemeContext } from "@react-pptx/core/capability";
 
-import { fontPresentationContributions } from "./font-embedding.ts";
 import {
   notesMasterContentType,
   notesMasterPathTemplate,
@@ -24,8 +28,9 @@ import {
   themeRelationshipType,
 } from "./notes-xml.ts";
 import {
+  emitTextBody,
   parseTextContent,
-  writeTextBodyFromParagraphs,
+  resolveTextBody,
   type Paragraph,
   type ResolvedTextStyle,
 } from "./text-service.ts";
@@ -102,136 +107,160 @@ function notesObservation(
  *
  * The visible slide tree never contains the notes body: core treats the declaration subtree as
  * owned by this module, while this module parses the shared P/Span content once into an opaque
- * per-build binding, writes the notes part and body placeholder, and contributes the notes master,
- * relationships, and font resources. Notes has no canvas geometry or static slide preview layer.
+ * per-build binding, resolves text metrics and resource claims during resolve, and emits the notes
+ * part, body placeholder, notes master, relationships, and font resources during emit. Notes has
+ * no canvas geometry or static slide preview layer.
  */
-export const notesCapability: BoundSlideCapabilityModule = Object.freeze({
-  declaration: "notes",
-  slideProp: "notes",
-  slideProps: [],
-  slot: "timing",
-  always: true,
-  transparentDeclarations: [
-    {
-      declaration: "rp:notes",
-      children: "owned" as const,
-      compileDeclaration(input, context) {
-        if (context.theme === undefined || context.slideNumber === undefined) {
-          throw new CapabilityError(
-            "invalid-notes",
-            "Notes declaration requires slide theme and number context",
-          );
-        }
-        const entry = parseNotes(input, context.theme, context.slideNumber);
-        const token = Object.freeze({});
-        boundNotesEntries.set(token, entry);
-        return [{ capability: "notes", value: token }];
+export const notesCapability: SlideCapabilityModule<ResolvedBoundSlideCapability> =
+  Object.freeze({
+    declaration: "notes",
+    slideProp: "notes",
+    slideProps: [],
+    slot: "timing",
+    always: true,
+    transparentDeclarations: [
+      {
+        declaration: "rp:notes",
+        children: "owned" as const,
+        compileDeclaration(input, context) {
+          if (
+            context.theme === undefined ||
+            context.slideNumber === undefined
+          ) {
+            throw new CapabilityError(
+              "invalid-notes",
+              "Notes declaration requires slide theme and number context",
+            );
+          }
+          const entry = parseNotes(input, context.theme, context.slideNumber);
+          const token = Object.freeze({});
+          boundNotesEntries.set(token, entry);
+          return [{ capability: "notes", value: token }];
+        },
       },
-    },
-  ],
-  bindSlide(_input: CapabilityInput, parseContext) {
-    const contributions = parseContext.contributions.filter(
-      (contribution) => contribution.capability === "notes",
-    );
-    if (contributions.length === 0) {
+    ],
+    bindSlide(_input: CapabilityInput, parseContext) {
+      const contributions = parseContext.contributions.filter(
+        (contribution) => contribution.capability === "notes",
+      );
+      if (contributions.length === 0) {
+        return {
+          resolveSlide(): ResolvedSlide {
+            return {
+              extensions: [],
+              emit(): SlideEmitOutput {
+                return { xml: "" };
+              },
+            };
+          },
+        };
+      }
+      if (contributions.length > 1) {
+        throw new CapabilityError(
+          "duplicate-notes",
+          "A slide can declare at most one Notes",
+          contributions[1]!.path,
+        );
+      }
+      const contribution = contributions[0]!;
+      const entry =
+        typeof contribution.value === "object" && contribution.value !== null
+          ? boundNotesEntries.get(contribution.value)
+          : undefined;
+      if (entry === undefined) {
+        throw new CapabilityError(
+          "invalid-notes",
+          "Notes declaration is missing its bound content",
+          contribution.path,
+        );
+      }
+
       return {
-        compileSlide() {
-          return { xml: "", extensions: [] };
+        resolveSlide(resolveContext: SlideResolveContext): ResolvedSlide {
+          const resolvedBody = resolveTextBody(
+            entry.paragraphs,
+            entry.style,
+            entry.theme,
+            "top",
+            undefined,
+            "text-box",
+            resolveContext.options.embedFonts,
+          );
+          return {
+            observation: notesObservation(resolvedBody.text, entry.paragraphs),
+            extensions: [],
+            resourceClaims: resolvedBody.resourceClaims,
+            ...(resolvedBody.warnings.length === 0
+              ? {}
+              : { warnings: resolvedBody.warnings }),
+            emit(emitContext: SlideEmitContext): SlideEmitOutput {
+              // Transition period before ticket 10 removes embedFonts from ResolveOptions.
+              const embedFonts =
+                resolveContext.options.embedFonts ??
+                emitContext.options.embedFonts;
+              const body = emitTextBody(resolvedBody, entry.theme, {
+                createFieldId: emitContext.createTextFieldId,
+                ...(embedFonts === undefined ? {} : { embedFonts }),
+              });
+              // The notes master needs its own theme part: PowerPoint rejects a notes master that
+              // shares the slide master's theme. Register the theme first so the notes master
+              // relationship can resolve to this distinct OPC part, then serialize the same author
+              // theme values into it.
+              emitContext.registerSharedPart("notes-theme", {
+                part: {
+                  pathTemplate: themePathTemplate,
+                  contentType: themeContentType,
+                },
+                content: () => themeXml(emitContext.theme.theme),
+              });
+              emitContext.registerSharedPart("notes-master", {
+                part: {
+                  pathTemplate: notesMasterPathTemplate,
+                  contentType: notesMasterContentType,
+                },
+                presentationRelationshipType: notesMasterRelationshipType,
+                relationships: [
+                  {
+                    relationshipType: themeRelationshipType,
+                    target: { kind: "part", key: "notes-theme" },
+                  },
+                ],
+                presentationElement: {
+                  position: "before-slides",
+                  content: (relationshipId) =>
+                    `<p:notesMasterIdLst><p:notesMasterId r:id="${xmlEscape(relationshipId)}"/></p:notesMasterIdLst>`,
+                },
+                content: () => notesMasterXml(),
+              });
+              emitContext.registerPackagePart({
+                part: {
+                  pathTemplate: notesSlidePathTemplate,
+                  contentType: notesSlideContentType,
+                },
+                slideRelationshipType: notesSlideRelationshipType,
+                relationships: [
+                  {
+                    relationshipType: slideRelationshipType,
+                    target: { kind: "slide" },
+                  },
+                  {
+                    relationshipType: notesMasterRelationshipType,
+                    target: { kind: "part", key: "notes-master" },
+                  },
+                ],
+                content: () => notesSlideXml(body.xml),
+              });
+              return {
+                xml: "",
+                ...(body.presentationContributions.length === 0
+                  ? {}
+                  : {
+                      presentationContributions: body.presentationContributions,
+                    }),
+              };
+            },
+          };
         },
       };
-    }
-    if (contributions.length > 1) {
-      throw new CapabilityError(
-        "duplicate-notes",
-        "A slide can declare at most one Notes",
-        contributions[1]!.path,
-      );
-    }
-    const contribution = contributions[0]!;
-    const entry =
-      typeof contribution.value === "object" && contribution.value !== null
-        ? boundNotesEntries.get(contribution.value)
-        : undefined;
-    if (entry === undefined) {
-      throw new CapabilityError(
-        "invalid-notes",
-        "Notes declaration is missing its bound content",
-        contribution.path,
-      );
-    }
-
-    return {
-      compileSlide(context) {
-        const body = writeTextBodyFromParagraphs(
-          entry.paragraphs,
-          entry.style,
-          entry.theme,
-          "top",
-          undefined,
-          "text-box",
-          context.options.embedFonts,
-          context.createTextFieldId,
-        );
-        // The notes master needs its own theme part: PowerPoint rejects a notes master that
-        // shares the slide master's theme. Register the theme first so the notes master
-        // relationship can resolve to this distinct OPC part, then serialize the same author theme
-        // values into it.
-        context.registerSharedPart("notes-theme", {
-          part: {
-            pathTemplate: themePathTemplate,
-            contentType: themeContentType,
-          },
-          content: () => themeXml(context.theme.theme),
-        });
-        context.registerSharedPart("notes-master", {
-          part: {
-            pathTemplate: notesMasterPathTemplate,
-            contentType: notesMasterContentType,
-          },
-          presentationRelationshipType: notesMasterRelationshipType,
-          relationships: [
-            {
-              relationshipType: themeRelationshipType,
-              target: { kind: "part", key: "notes-theme" },
-            },
-          ],
-          presentationElement: {
-            position: "before-slides",
-            content: (relationshipId) =>
-              `<p:notesMasterIdLst><p:notesMasterId r:id="${xmlEscape(relationshipId)}"/></p:notesMasterIdLst>`,
-          },
-          content: () => notesMasterXml(),
-        });
-        context.registerPackagePart({
-          part: {
-            pathTemplate: notesSlidePathTemplate,
-            contentType: notesSlideContentType,
-          },
-          slideRelationshipType: notesSlideRelationshipType,
-          relationships: [
-            {
-              relationshipType: slideRelationshipType,
-              target: { kind: "slide" },
-            },
-            {
-              relationshipType: notesMasterRelationshipType,
-              target: { kind: "part", key: "notes-master" },
-            },
-          ],
-          content: () => notesSlideXml(body.xml),
-        });
-        return {
-          xml: "",
-          extensions: [],
-          observation: notesObservation(body.text, entry.paragraphs),
-          resourceClaims: body.resourceClaims,
-          presentationContributions: fontPresentationContributions(
-            body.fontUses,
-            context.options.embedFonts,
-          ),
-          warnings: body.warnings,
-        };
-      },
-    };
-  },
-});
+    },
+  });

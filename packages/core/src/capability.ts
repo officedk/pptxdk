@@ -103,8 +103,6 @@ export type {
   Resolution,
   ResolutionReport,
   ResolveOptions,
-  ResolvedBoundObjectCapability,
-  ResolvedBoundSlideCapability,
   ResolvedLink,
   ResolvedObject,
   ResolvedObjectChildren,

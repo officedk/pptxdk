@@ -12,7 +12,6 @@ import {
   Slide,
   Text,
   font,
-  preview as previewJsx,
 } from "@react-pptx/react-pptx";
 import {
   box,
@@ -26,7 +25,10 @@ import {
   table,
   text,
 } from "@react-pptx/react-pptx/document";
-import { preview as previewDocument } from "@react-pptx/react-pptx/preview";
+import {
+  preview as previewDocument,
+  preview as previewJsx,
+} from "@react-pptx/react-pptx/preview";
 import { createElement } from "react";
 import { describe, expect, it } from "vitest";
 
@@ -102,8 +104,6 @@ describe("Slice 3: formal static preview public entrypoints and runtime isolatio
       ),
     );
 
-    assert.equal("build" in jsxResult, false);
-    assert.equal("build" in docResult, false);
     assert.equal(jsxResult.pages.length, 1);
     assert.equal(docResult.pages.length, 1);
     assert.deepEqual(jsxResult.report, docResult.report);
@@ -748,7 +748,8 @@ registerHooks({
   },
 });
 
-const { Deck, Slide, Shape, preview } = await import("@react-pptx/react-pptx");
+const { Deck, Slide, Shape } = await import("@react-pptx/react-pptx");
+const { preview } = await import("@react-pptx/react-pptx/preview");
 const result = await preview(
   createElement(
     Deck,

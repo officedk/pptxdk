@@ -68,7 +68,12 @@ function previewDocWith(modules: readonly CapabilityModule[]) {
   const resolveWith = createResolver(modules);
   return async (document: CommonNode) => {
     const resolution = resolveWith(document);
-    return { resolution, ...emit(resolution), ...paint(resolution) };
+    return {
+      resolution,
+      query: resolution.query,
+      ...emit(resolution),
+      ...paint(resolution),
+    };
   };
 }
 
@@ -76,7 +81,12 @@ function previewJsxWith(modules: readonly CapabilityModule[]) {
   const resolveWith = createResolver(modules);
   return async (element: ReactNode) => {
     const resolution = resolveWith(await expandDocument(element));
-    return { resolution, ...emit(resolution), ...paint(resolution) };
+    return {
+      resolution,
+      query: resolution.query,
+      ...emit(resolution),
+      ...paint(resolution),
+    };
   };
 }
 

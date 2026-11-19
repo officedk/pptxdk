@@ -6,6 +6,7 @@ import {
   formatBaseline,
   targets,
   type BuildOptions,
+  type BuildQuery,
   type BuildReport,
   type ResourceObservation,
 } from "@react-pptx/core/build";
@@ -1368,6 +1369,18 @@ function emitLayer(
   return layer.childComposition === "members" ? ownXml : ownXml + siblingXml;
 }
 
+const emittedQueries = new WeakMap<BuildReport, BuildQuery>();
+
+/**
+ * Returns the BuildQuery enriched with emitted package resources for a BuildReport produced by `emit()`.
+ */
+export function emittedBuildQuery(
+  report: BuildReport,
+  fallbackQuery: BuildQuery,
+): BuildQuery {
+  return emittedQueries.get(report) ?? fallbackQuery;
+}
+
 /**
  * Emits a PPTX archive and BuildReport from an existing Resolution without re-resolving the document.
  */
@@ -1545,5 +1558,6 @@ export function emit(
       resources: emittedSlides[index]!.resourceObservations,
     })),
   );
-  return Object.freeze({ pptx, report, query });
+  emittedQueries.set(report, query);
+  return Object.freeze({ pptx, report });
 }

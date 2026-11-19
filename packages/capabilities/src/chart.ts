@@ -2,6 +2,7 @@ import {
   CapabilityError,
   layoutStyleKeys,
   parseCapabilityLayoutContract,
+  type BoundObjectCapability,
   type BoundObjectNativeCollaboration,
   type CapabilityInput,
   type CapabilityLayoutMeasurement,
@@ -16,7 +17,6 @@ import {
   type ObjectResolveContext,
   type PaintContext,
   type PaintOutput,
-  type ResolvedBoundObjectCapability,
   type ResolvedObject,
   type ThemeContext,
 } from "@react-pptx/core/capability";
@@ -2770,12 +2770,11 @@ export const chartCapability: ObjectCapabilityModule = {
   bind(
     input: CapabilityInput,
     context: CapabilityParseContext,
-  ): ResolvedBoundObjectCapability {
+  ): BoundObjectCapability {
     if (input.children.length > 0) {
       fail(
         "unsupported-children",
         "Chart does not accept children; chart text and data should be passed in groups",
-        context.path,
       );
     }
     onlyKeys(
@@ -2815,10 +2814,10 @@ export const chartCapability: ObjectCapabilityModule = {
       path: context.path,
     });
 
-    const requestedName = parseOptionalName(input.props["name"], context.path);
+    const requestedName = parseOptionalName(input.props["name"]);
     if (requestedName !== undefined) xmlText(requestedName, "Chart.name");
-    const morphKey = parseMorphKey(input.props["morphKey"], context.path);
-    const link = parseLinkTarget(input.props["link"], context.path);
+    const morphKey = parseMorphKey(input.props["morphKey"]);
+    const link = parseLinkTarget(input.props["link"]);
 
     const drafts = chartGroupDrafts(input.props["groups"]);
     const { axes, groupAxes } = parsedAxes(input.props["axes"], drafts);
@@ -3052,7 +3051,6 @@ export const chartCapability: ObjectCapabilityModule = {
             fail(
               "invalid-plot-area",
               "Chart.plotArea must be inside chart box with positive width and height",
-              resolveContext.path,
             );
           }
         }

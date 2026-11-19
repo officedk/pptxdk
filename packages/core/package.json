@@ -11,11 +11,6 @@
       "source": "./src/*.ts",
       "types": "./dist/*.d.ts",
       "default": "./dist/*.js"
-    },
-    "#/*.tsx": {
-      "source": "./src/*.tsx",
-      "types": "./dist/*.d.ts",
-      "default": "./dist/*.js"
     }
   },
   "exports": {

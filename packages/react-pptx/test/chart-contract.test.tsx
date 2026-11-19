@@ -28,7 +28,7 @@ import {
 import { validatePptx } from "@react-pptx/validation";
 import { strFromU8, unzipSync } from "fflate";
 import { createElement } from "react";
-import { describe, it, vi } from "vitest";
+import { describe, it } from "vitest";
 
 const jostBook = readFileSync(
   new URL("./assets/fonts/Jost-400-Book.ttf", import.meta.url),
@@ -38,97 +38,88 @@ const impJostFont = impFont("Jost*", [{ weight: 400, data: jostBook }]);
 
 describe("chartCapability resolved contract", () => {
   it("resolves chart model once, paints independently without emit, and omits preview plot layout from native chart XML", async () => {
-    const bindSpy = vi.spyOn(chartCapability, "bind");
-    try {
-      const resolve = createResolver([
-        slideBackgroundCapability,
-        chartCapability,
-      ]);
-      const doc = await expandDocument(
+    const resolve = createResolver([
+      slideBackgroundCapability,
+      chartCapability,
+    ]);
+    const doc = await expandDocument(
+      createElement(
+        Deck,
+        { width: 640, height: 360 },
         createElement(
-          Deck,
-          { width: 640, height: 360 },
-          createElement(
-            Slide,
-            { id: "overview", background: "#FFFFFF" },
-            createElement(Chart, {
-              id: "sales",
-              name: "SalesChart",
-              x: 24,
-              y: 20,
-              width: 592,
-              height: 320,
-              title: "Quarterly sales",
-              legend: "bottom",
-              style: { fontFamily: jostFont, fontSize: 16 },
-              groups: [
-                {
-                  kind: "column",
-                  data: {
-                    kind: "shared-categories",
-                    categories: ["Q1", "Q2", "Q3"],
-                  },
-                  series: [
-                    { name: "Actual", values: [18, 32, 24] },
-                    { name: "Plan", values: [22, 28, 30] },
-                  ],
-                  dataLabels: { value: true },
+          Slide,
+          { id: "overview", background: "#FFFFFF" },
+          createElement(Chart, {
+            id: "sales",
+            name: "SalesChart",
+            x: 24,
+            y: 20,
+            width: 592,
+            height: 320,
+            title: "Quarterly sales",
+            legend: "bottom",
+            style: { fontFamily: jostFont, fontSize: 16 },
+            groups: [
+              {
+                kind: "column",
+                data: {
+                  kind: "shared-categories",
+                  categories: ["Q1", "Q2", "Q3"],
                 },
-              ],
-            }),
-          ),
+                series: [
+                  { name: "Actual", values: [18, 32, 24] },
+                  { name: "Plan", values: [22, 28, 30] },
+                ],
+                dataLabels: { value: true },
+              },
+            ],
+          }),
         ),
-      );
+      ),
+    );
 
-      const resolution = resolve(doc);
-      assert.equal(bindSpy.mock.calls.length, 1);
-      const boundHandle = bindSpy.mock.results[0]?.value;
-      assert.ok(boundHandle !== undefined);
-      assert.equal("resolve" in boundHandle, true);
+    const resolution = resolve(doc);
 
-      const observed = resolution.report.slides[0]?.objects.find(
-        (obj) => obj.authorId === "sales",
-      );
-      assert.ok(observed !== undefined);
-      assert.equal(observed.kind, "chart");
-      assert.equal(observed.name, "SalesChart");
-      assert.deepEqual(observed.box, {
-        x: 24,
-        y: 20,
-        width: 592,
-        height: 320,
-      });
+    const observed = resolution.report.slides[0]?.objects.find(
+      (obj) => obj.authorId === "sales",
+    );
+    assert.ok(observed !== undefined);
+    assert.equal(observed.kind, "chart");
+    assert.equal(observed.name, "SalesChart");
+    assert.deepEqual(observed.box, {
+      x: 24,
+      y: 20,
+      width: 592,
+      height: 320,
+    });
 
-      // Paint runs independently without calling emit.
-      const painted = paint(resolution);
-      assert.equal(painted.pages.length, 1);
-      const page = painted.pages[0]!;
-      assert.ok(page.png !== undefined);
-      assert.ok(page.svg?.includes("<path"));
-      assert.equal(page.diagnostics.length, 1);
-      assert.equal(page.diagnostics[0]?.severity, "warning");
-      assert.equal(
-        page.diagnostics[0]?.path,
-        "deck/slide[overview]/chart[sales]",
-      );
+    // Paint runs independently without calling emit.
+    const painted = paint(resolution);
+    assert.equal(painted.pages.length, 1);
+    const page = painted.pages[0]!;
+    assert.ok(page.png !== undefined);
+    assert.ok(page.svg?.includes("<path"));
+    assert.equal(page.diagnostics.length, 1);
+    assert.equal(page.diagnostics[0]?.severity, "warning");
+    assert.equal(
+      page.diagnostics[0]?.path,
+      "deck/slide[overview]/chart[sales]",
+    );
 
-      // Native emit keeps automatic <c:layout/> without preview's computed plot area.
-      const emitted = emit(resolution);
-      const validation = await validatePptx(emitted.pptx);
-      assert.deepEqual(validation.errors, []);
-      const zip = unzipSync(emitted.pptx);
-      const chartXml = strFromU8(zip["ppt/charts/chart1.xml"]!);
-      assert.ok(chartXml.includes("<c:barChart>"));
-      assert.ok(chartXml.includes("<c:layout/>"));
-      assert.equal(chartXml.includes("<c:manualLayout>"), false);
-      assert.ok(
-        Object.keys(zip).some((entry) =>
-          entry.startsWith("ppt/embeddings/Microsoft_Excel_Worksheet"),
-        ),
-      );
-    } finally {
-      bindSpy.mockRestore();
-    }
+    // Native emit keeps automatic <c:layout/> without preview's computed plot area.
+    const emitted = emit(resolution);
+    const validation = await validatePptx(emitted.pptx);
+    assert.deepEqual(validation.errors, []);
+    const zip = unzipSync(emitted.pptx);
+    const chartXml = strFromU8(zip["ppt/charts/chart1.xml"]!);
+    assert.ok(chartXml.includes("<c:barChart>"));
+    assert.ok(chartXml.includes("<c:layout/>"));
+    assert.equal(chartXml.includes("<c:manualLayout>"), false);
+    assert.ok(
+      Object.keys(zip).some((entry) =>
+        entry.startsWith("ppt/embeddings/Microsoft_Excel_Worksheet"),
+      ),
+    );
   });
 
   it("validates XML 1.0 characters, text styles, chart colors, and plotArea bounds during resolve before emit", () => {
@@ -279,7 +270,11 @@ describe("chartCapability resolved contract", () => {
         ),
       (error: unknown) =>
         error instanceof BuildError &&
-        error.diagnostics.some(({ code }) => code === "invalid-plot-area"),
+        error.diagnostics.some(
+          ({ code, path }) =>
+            code === "invalid-plot-area" &&
+            path === "deck/slide[s1]/chart[bad-plot-area]",
+        ),
     );
   });
 

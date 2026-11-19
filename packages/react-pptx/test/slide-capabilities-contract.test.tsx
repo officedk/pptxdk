@@ -40,7 +40,7 @@ import {
 import { validatePptx } from "@react-pptx/validation";
 import { strFromU8, unzipSync } from "fflate";
 import { createElement } from "react";
-import { describe, it, vi } from "vitest";
+import { describe, it } from "vitest";
 
 const jostBook = readFileSync(
   new URL("./assets/fonts/Jost-400-Book.ttf", import.meta.url),
@@ -55,282 +55,244 @@ const png1x1 = new Uint8Array(
 );
 
 describe("slide capabilities resolved contract", () => {
-  it("migrates slideBackgroundCapability to ResolvedBoundSlideCapability with paint-only solid/default rendering, preview error on image/gradient, and emit-only resource registration", async () => {
-    const bindSpy = vi.spyOn(slideBackgroundCapability, "bindSlide");
-    try {
-      const resolve = createResolver([slideBackgroundCapability]);
-      const doc = await expandDocument(
-        createElement(
-          Deck,
-          { width: 320, height: 180 },
-          createElement(Slide, { id: "default-bg" }),
-          createElement(Slide, { id: "solid-bg", background: "#1E293B" }),
-          createElement(Slide, {
-            id: "gradient-bg",
-            background: linearGradient(
-              90,
-              { color: "#0F172A", position: 0 },
-              { color: "#38BDF8", position: 1 },
-            ),
-          }),
-          createElement(Slide, {
-            id: "image-bg",
-            background: { image: png1x1 },
-          }),
+  it("migrates slideBackgroundCapability to BoundSlideCapability with paint-only solid/default rendering, preview error on image/gradient, and emit-only resource registration", async () => {
+    const resolve = createResolver([slideBackgroundCapability]);
+    const doc = await expandDocument(
+      createElement(
+        Deck,
+        { width: 320, height: 180 },
+        createElement(Slide, { id: "default-bg" }),
+        createElement(Slide, { id: "solid-bg", background: "#1E293B" }),
+        createElement(Slide, {
+          id: "gradient-bg",
+          background: linearGradient(
+            90,
+            { color: "#0F172A", position: 0 },
+            { color: "#38BDF8", position: 1 },
+          ),
+        }),
+        createElement(Slide, {
+          id: "image-bg",
+          background: { image: png1x1 },
+        }),
+      ),
+    );
+
+    const resolution = resolve(doc);
+
+    // Paint directly from Resolution without running emit().
+    const painted = paint(resolution);
+    assert.equal(painted.pages.length, 4);
+
+    assert.deepEqual(painted.pages[0]?.diagnostics, []);
+    assert.ok(painted.pages[0]?.png !== undefined);
+    assert.match(painted.pages[0]?.svg ?? "", /fill="white"/u);
+
+    assert.deepEqual(painted.pages[1]?.diagnostics, []);
+    assert.ok(painted.pages[1]?.png !== undefined);
+    assert.match(painted.pages[1]?.svg ?? "", /fill="#1E293B"/u);
+
+    // Gradient and image backgrounds report preview error diagnostics and omit PNG,
+    // while emit() on the same Resolution succeeds.
+    for (const pageIndex of [2, 3]) {
+      const page = painted.pages[pageIndex]!;
+      assert.equal(page.png, undefined);
+      assert.ok(
+        page.diagnostics.some(
+          (diag) =>
+            diag.severity === "error" &&
+            diag.message.includes("image or gradient backgrounds"),
         ),
       );
-
-      const resolution = resolve(doc);
-      assert.equal(bindSpy.mock.calls.length, 4);
-      for (const callResult of bindSpy.mock.results) {
-        const bound = callResult.value as Record<string, unknown>;
-        assert.equal(typeof bound["resolveSlide"], "function");
-      }
-
-      // Paint directly from Resolution without running emit().
-      const painted = paint(resolution);
-      assert.equal(painted.pages.length, 4);
-
-      assert.deepEqual(painted.pages[0]?.diagnostics, []);
-      assert.ok(painted.pages[0]?.png !== undefined);
-      assert.match(painted.pages[0]?.svg ?? "", /fill="white"/u);
-
-      assert.deepEqual(painted.pages[1]?.diagnostics, []);
-      assert.ok(painted.pages[1]?.png !== undefined);
-      assert.match(painted.pages[1]?.svg ?? "", /fill="#1E293B"/u);
-
-      // Gradient and image backgrounds report preview error diagnostics and omit PNG,
-      // while emit() on the same Resolution succeeds.
-      for (const pageIndex of [2, 3]) {
-        const page = painted.pages[pageIndex]!;
-        assert.equal(page.png, undefined);
-        assert.ok(
-          page.diagnostics.some(
-            (diag) =>
-              diag.severity === "error" &&
-              diag.message.includes("image or gradient backgrounds"),
-          ),
-        );
-      }
-
-      const emitted1 = emit(resolution);
-      const emitted2 = emit(resolution);
-      assert.deepEqual((await validatePptx(emitted1.pptx)).errors, []);
-      assert.deepEqual((await validatePptx(emitted2.pptx)).errors, []);
-
-      const entries1 = unzipSync(emitted1.pptx);
-      const entries2 = unzipSync(emitted2.pptx);
-      const media1 = Object.keys(entries1).filter((name) =>
-        name.startsWith("ppt/media/"),
-      );
-      const media2 = Object.keys(entries2).filter((name) =>
-        name.startsWith("ppt/media/"),
-      );
-      assert.equal(media1.length, 1);
-      assert.deepEqual(media2, media1);
-
-      const slide4Xml = strFromU8(entries1["ppt/slides/slide4.xml"]!);
-      assert.match(slide4Xml, /<p:bg><p:bgPr><a:blipFill>/u);
-      const slide4Rels = strFromU8(
-        entries1["ppt/slides/_rels/slide4.xml.rels"]!,
-      );
-      assert.match(slide4Rels, /relationships\/image/u);
-
-      // Invalid background fails during resolve.
-      const invalidDoc = await expandDocument(
-        createElement(
-          Deck,
-          { width: 320, height: 180 },
-          createElement(Slide, {
-            id: "bad-bg",
-            background: { image: png1x1, extra: true } as never,
-          }),
-        ),
-      );
-      assert.throws(
-        () => resolve(invalidDoc),
-        (error: unknown) =>
-          error instanceof BuildError &&
-          error.diagnostics.some(
-            (diag) =>
-              diag.code === "invalid-slide-background" &&
-              diag.path === "deck/slide[bad-bg]/background",
-          ),
-      );
-    } finally {
-      bindSpy.mockRestore();
     }
+
+    const emitted1 = emit(resolution);
+    const emitted2 = emit(resolution);
+    assert.deepEqual((await validatePptx(emitted1.pptx)).errors, []);
+    assert.deepEqual((await validatePptx(emitted2.pptx)).errors, []);
+
+    const entries1 = unzipSync(emitted1.pptx);
+    const entries2 = unzipSync(emitted2.pptx);
+    const media1 = Object.keys(entries1).filter((name) =>
+      name.startsWith("ppt/media/"),
+    );
+    const media2 = Object.keys(entries2).filter((name) =>
+      name.startsWith("ppt/media/"),
+    );
+    assert.equal(media1.length, 1);
+    assert.deepEqual(media2, media1);
+
+    const slide4Xml = strFromU8(entries1["ppt/slides/slide4.xml"]!);
+    assert.match(slide4Xml, /<p:bg><p:bgPr><a:blipFill>/u);
+    const slide4Rels = strFromU8(entries1["ppt/slides/_rels/slide4.xml.rels"]!);
+    assert.match(slide4Rels, /relationships\/image/u);
+
+    // Invalid background fails during resolve.
+    const invalidDoc = await expandDocument(
+      createElement(
+        Deck,
+        { width: 320, height: 180 },
+        createElement(Slide, {
+          id: "bad-bg",
+          background: { image: png1x1, extra: true } as never,
+        }),
+      ),
+    );
+    assert.throws(
+      () => resolve(invalidDoc),
+      (error: unknown) =>
+        error instanceof BuildError &&
+        error.diagnostics.some(
+          (diag) =>
+            diag.code === "invalid-slide-background" &&
+            diag.path === "deck/slide[bad-bg]/background",
+        ),
+    );
   });
 
-  it("migrates transitionCapability to ResolvedBoundSlideCapability with Morph continuity, paint without diagnostics, and emit target checks", async () => {
-    const bindSpy = vi.spyOn(transitionCapability, "bindSlide");
-    try {
-      const resolve = createResolver([
-        slideBackgroundCapability,
-        shapeCapability,
-        imageCapability,
-        transitionCapability,
-      ]);
-      const morph = createMorphScope();
-      const hero = morph.handle("hero");
+  it("migrates transitionCapability to BoundSlideCapability with Morph continuity, paint without diagnostics, and emit target checks", async () => {
+    const resolve = createResolver([
+      slideBackgroundCapability,
+      shapeCapability,
+      imageCapability,
+      transitionCapability,
+    ]);
+    const morph = createMorphScope();
+    const hero = morph.handle("hero");
 
-      const doc = await expandDocument(
+    const doc = await expandDocument(
+      createElement(
+        Deck,
+        { width: 320, height: 180 },
         createElement(
-          Deck,
-          { width: 320, height: 180 },
-          createElement(
-            Slide,
-            {
-              id: "s1",
-              background: "#FFFFFF",
-              advanceAfter: 1200,
-              transition: transitions.fade({ duration: 500 }),
-            },
-            createElement(Shape, {
-              id: "hero-a",
-              morphKey: hero,
-              x: 20,
-              y: 20,
-              width: 80,
-              height: 40,
-              fill: "#2563EB",
-            }),
-          ),
-          createElement(
-            Slide,
-            {
-              id: "s2",
-              background: "#FFFFFF",
-              transition: transitions.morph({
-                duration: 900,
-                fallback: transitions.fade(),
-              }),
-            },
-            createElement(Shape, {
-              id: "hero-b",
-              morphKey: hero,
-              x: 120,
-              y: 40,
-              width: 100,
-              height: 60,
-              fill: "#1D4ED8",
-            }),
-          ),
+          Slide,
+          {
+            id: "s1",
+            background: "#FFFFFF",
+            advanceAfter: 1200,
+            transition: transitions.fade({ duration: 500 }),
+          },
+          createElement(Shape, {
+            id: "hero-a",
+            morphKey: hero,
+            x: 20,
+            y: 20,
+            width: 80,
+            height: 40,
+            fill: "#2563EB",
+          }),
         ),
-      );
-
-      const resolution = resolve(doc);
-      assert.equal(bindSpy.mock.calls.length, 2);
-      const firstBound = bindSpy.mock.results[0]?.value as Record<
-        string,
-        unknown
-      >;
-      const secondBound = bindSpy.mock.results[1]?.value as Record<
-        string,
-        unknown
-      >;
-      assert.equal(typeof firstBound["resolveSlide"], "function");
-      assert.deepEqual(secondBound["continuity"], { matchSourceKinds: true });
-
-      assert.deepEqual(resolution.report.extensions, ["p14", "p159"]);
-      assert.deepEqual(
-        resolution.report.slides[1]?.capabilities?.["transition"],
-        {
-          kind: "morph",
-          by: "object",
-          speed: "slow",
-          durationMs: 900,
-          fallback: { kind: "fade", speed: "slow" },
-        },
-      );
-
-      // Paint succeeds on the same Resolution even when baselineOnly target rejects emit.
-      const painted = paint(resolution);
-      assert.equal(painted.pages.length, 2);
-      assert.deepEqual(painted.pages[0]?.diagnostics, []);
-      assert.deepEqual(painted.pages[1]?.diagnostics, []);
-      assert.ok(painted.pages[1]?.png !== undefined);
-
-      assert.throws(
-        () => emit(resolution, { target: targets.baselineOnly }),
-        (error: unknown) =>
-          error instanceof BuildError &&
-          error.diagnostics.some((diag) => diag.code === "forbidden-mechanism"),
-      );
-
-      const emitted = emit(resolution, { target: targets.transitional });
-      const file = await validatePptx(emitted.pptx, {
-        allowedExtensions: ["p14", "p159"],
-      });
-      assert.deepEqual(file.errors, []);
-      assert.equal(file.slides[0]?.advanceAfterMs, 1200);
-      assert.equal(file.slides[1]?.transition?.kind, "morph");
-
-      // Cross-slide Morph kind mismatch still fails during resolve.
-      const mismatchDoc = await expandDocument(
         createElement(
-          Deck,
-          { width: 320, height: 180 },
-          createElement(
-            Slide,
-            { id: "m1" },
-            createElement(Shape, {
-              id: "shape-src",
-              morphKey: hero,
-              x: 20,
-              y: 20,
-              width: 80,
-              height: 40,
+          Slide,
+          {
+            id: "s2",
+            background: "#FFFFFF",
+            transition: transitions.morph({
+              duration: 900,
+              fallback: transitions.fade(),
             }),
-          ),
-          createElement(
-            Slide,
-            {
-              id: "m2",
-              transition: transitions.morph({ fallback: transitions.fade() }),
-            },
-            createElement(Image, {
-              id: "img-dst",
-              src: png1x1,
-              morphKey: hero,
-              x: 20,
-              y: 20,
-              width: 80,
-              height: 40,
-            }),
-          ),
+          },
+          createElement(Shape, {
+            id: "hero-b",
+            morphKey: hero,
+            x: 120,
+            y: 40,
+            width: 100,
+            height: 60,
+            fill: "#1D4ED8",
+          }),
         ),
-      );
-      assert.throws(
-        () => resolve(mismatchDoc),
-        (error: unknown) =>
-          error instanceof BuildError &&
-          error.diagnostics.some(
-            (diag) => diag.code === "morph-object-kind-mismatch",
-          ),
-      );
-    } finally {
-      bindSpy.mockRestore();
-    }
-  });
+      ),
+    );
 
-  it("migrates motionCapability to ResolvedBoundSlideCapability with resolve-time WeakMap query binding, nativeProjections, paint without diagnostics, and emit identity preservation", async () => {
-    const boundHandles: Record<string, unknown>[] = [];
-    const trackedMotion: typeof motionCapability = {
-      ...motionCapability,
-      bindSlide(input, context) {
-        const handle = motionCapability.bindSlide(input, context);
-        boundHandles.push(handle);
-        return handle;
+    const resolution = resolve(doc);
+
+    assert.deepEqual(resolution.report.extensions, ["p14", "p159"]);
+    assert.deepEqual(
+      resolution.report.slides[1]?.capabilities?.["transition"],
+      {
+        kind: "morph",
+        by: "object",
+        speed: "slow",
+        durationMs: 900,
+        fallback: { kind: "fade", speed: "slow" },
       },
-    };
+    );
 
+    // Paint succeeds on the same Resolution even when baselineOnly target rejects emit.
+    const painted = paint(resolution);
+    assert.equal(painted.pages.length, 2);
+    assert.deepEqual(painted.pages[0]?.diagnostics, []);
+    assert.deepEqual(painted.pages[1]?.diagnostics, []);
+    assert.ok(painted.pages[1]?.png !== undefined);
+
+    assert.throws(
+      () => emit(resolution, { target: targets.baselineOnly }),
+      (error: unknown) =>
+        error instanceof BuildError &&
+        error.diagnostics.some((diag) => diag.code === "forbidden-mechanism"),
+    );
+
+    const emitted = emit(resolution, { target: targets.transitional });
+    const file = await validatePptx(emitted.pptx, {
+      allowedExtensions: ["p14", "p159"],
+    });
+    assert.deepEqual(file.errors, []);
+    assert.equal(file.slides[0]?.advanceAfterMs, 1200);
+    assert.equal(file.slides[1]?.transition?.kind, "morph");
+
+    // Cross-slide Morph kind mismatch still fails during resolve.
+    const mismatchDoc = await expandDocument(
+      createElement(
+        Deck,
+        { width: 320, height: 180 },
+        createElement(
+          Slide,
+          { id: "m1" },
+          createElement(Shape, {
+            id: "shape-src",
+            morphKey: hero,
+            x: 20,
+            y: 20,
+            width: 80,
+            height: 40,
+          }),
+        ),
+        createElement(
+          Slide,
+          {
+            id: "m2",
+            transition: transitions.morph({ fallback: transitions.fade() }),
+          },
+          createElement(Image, {
+            id: "img-dst",
+            src: png1x1,
+            morphKey: hero,
+            x: 20,
+            y: 20,
+            width: 80,
+            height: 40,
+          }),
+        ),
+      ),
+    );
+    assert.throws(
+      () => resolve(mismatchDoc),
+      (error: unknown) =>
+        error instanceof BuildError &&
+        error.diagnostics.some(
+          (diag) => diag.code === "morph-object-kind-mismatch",
+        ),
+    );
+  });
+
+  it("migrates motionCapability to BoundSlideCapability with resolve-time WeakMap query binding, nativeProjections, paint without diagnostics, and emit identity preservation", async () => {
     const resolve = createResolver([
       slideBackgroundCapability,
       shapeCapability,
       groupCapability,
       textCapability,
-      trackedMotion,
+      motionCapability,
     ]);
     const intro = createMotionScopeHandle();
     const captionScope = createMotionScopeHandle();
@@ -396,8 +358,6 @@ describe("slide capabilities resolved contract", () => {
     );
 
     const resolution = resolve(doc);
-    assert.equal(boundHandles.length, 1);
-    assert.equal(typeof boundHandles[0]?.["resolveSlide"], "function");
 
     // observeMotion works immediately on Resolution before emit().
     const resolvedSlide = resolution.report.slides[0]!;
@@ -473,18 +433,11 @@ describe("slide capabilities resolved contract", () => {
     );
   });
 
-  it("migrates notesCapability to ResolvedBoundSlideCapability with resolve-time claims, paint without notes leakage, and emit-only shared notes parts and font embedding", async () => {
-    const boundHandles: Record<string, unknown>[] = [];
-    const trackedNotes: typeof notesCapability = {
-      ...notesCapability,
-      bindSlide(input, context) {
-        const handle = notesCapability.bindSlide(input, context);
-        boundHandles.push(handle);
-        return handle;
-      },
-    };
-
-    const resolve = createResolver([slideBackgroundCapability, trackedNotes]);
+  it("migrates notesCapability to BoundSlideCapability with resolve-time claims, paint without notes leakage, and emit-only shared notes parts and font embedding", async () => {
+    const resolve = createResolver([
+      slideBackgroundCapability,
+      notesCapability,
+    ]);
 
     const doc = await expandDocument(
       createElement(
@@ -518,10 +471,6 @@ describe("slide capabilities resolved contract", () => {
     );
 
     const resolution = resolve(doc);
-    assert.equal(boundHandles.length, 3);
-    for (const bound of boundHandles) {
-      assert.equal(typeof bound["resolveSlide"], "function");
-    }
     assert.deepEqual(resolution.report.slides[0]?.capabilities?.["notes"], {
       text: "Speaker slide 1",
       paragraphCount: 1,

@@ -7,7 +7,7 @@ import {
   type ResolveOptions,
 } from "@react-pptx/core/build";
 import { CommonNode } from "@react-pptx/core/document";
-import { emit, validateOptions } from "@react-pptx/emit";
+import { emit, emittedBuildQuery, validateOptions } from "@react-pptx/emit";
 import { expandDocument } from "@react-pptx/react";
 import type { ReactNode } from "react";
 
@@ -36,14 +36,24 @@ export function createStagePipeline(modules: readonly CapabilityModule[]) {
     if (input instanceof CommonNode) {
       // Resolve synchronously before yielding so later edits to the mutable document do not leak into this build.
       const resolution = resolve(input, resolveOptions);
-      return emit(resolution, options);
+      const emitted = emit(resolution, options);
+      return Object.freeze({
+        pptx: emitted.pptx,
+        report: emitted.report,
+        query: emittedBuildQuery(emitted.report, resolution.query),
+      });
     }
     const document = await expandDocument(
       input,
       options.signal === undefined ? {} : { signal: options.signal },
     );
     const resolution = resolve(document, resolveOptions);
-    return emit(resolution, options);
+    const emitted = emit(resolution, options);
+    return Object.freeze({
+      pptx: emitted.pptx,
+      report: emitted.report,
+      query: emittedBuildQuery(emitted.report, resolution.query),
+    });
   }
 
   return { resolve, build };

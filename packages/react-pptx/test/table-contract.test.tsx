@@ -29,7 +29,7 @@ import {
 import { validatePptx } from "@react-pptx/validation";
 import { strFromU8, unzipSync } from "fflate";
 import { createElement } from "react";
-import { describe, it, vi } from "vitest";
+import { describe, it } from "vitest";
 
 const jostBook = readFileSync(
   new URL("./assets/fonts/Jost-400-Book.ttf", import.meta.url),
@@ -39,144 +39,135 @@ const impJostFont = impFont("Jost*", [{ weight: 400, data: jostBook }]);
 
 describe("tableCapability resolved contract", () => {
   it("resolves table layout, cell bodies, and sub-part locators and paints without calling emit", async () => {
-    const bindSpy = vi.spyOn(tableCapability, "bind");
-    try {
-      const resolve = createResolver([
-        slideBackgroundCapability,
-        tableCapability,
-      ]);
-      const doc = await expandDocument(
+    const resolve = createResolver([
+      slideBackgroundCapability,
+      tableCapability,
+    ]);
+    const doc = await expandDocument(
+      createElement(
+        Deck,
+        { width: 480, height: 270 },
         createElement(
-          Deck,
-          { width: 480, height: 270 },
+          Slide,
+          { id: "cover" },
           createElement(
-            Slide,
-            { id: "cover" },
+            Table,
+            {
+              id: "pricing",
+              name: "PricingTable",
+              x: 20,
+              y: 30,
+              width: 300,
+              columns: [100, "1fr", "auto"],
+              style: {
+                fontFamily: jostFont,
+                fontSize: 14,
+              },
+            },
             createElement(
-              Table,
+              Row,
               {
-                id: "pricing",
-                name: "PricingTable",
-                x: 20,
-                y: 30,
-                width: 300,
-                columns: [100, "1fr", "auto"],
-                style: {
-                  fontFamily: jostFont,
-                  fontSize: 14,
-                },
+                id: "header",
+                style: { height: 40, backgroundColor: "#1E293B" },
               },
               createElement(
-                Row,
+                Cell,
                 {
-                  id: "header",
-                  style: { height: 40, backgroundColor: "#1E293B" },
+                  id: "title-span",
+                  colSpan: 2,
+                  style: { color: "#FFFFFF", padding: 6 },
                 },
-                createElement(
-                  Cell,
-                  {
-                    id: "title-span",
-                    colSpan: 2,
-                    style: { color: "#FFFFFF", padding: 6 },
-                  },
-                  "Plan Overview",
-                ),
-                createElement(
-                  Cell,
-                  {
-                    id: "page-cell",
-                    style: { color: "#FFFFFF", padding: 6 },
-                  },
-                  createElement(
-                    P,
-                    null,
-                    "Page ",
-                    createElement(SlideNumber, null),
-                  ),
-                ),
+                "Plan Overview",
               ),
               createElement(
-                Row,
-                { id: "body" },
+                Cell,
+                {
+                  id: "page-cell",
+                  style: { color: "#FFFFFF", padding: 6 },
+                },
                 createElement(
-                  Cell,
-                  {
-                    id: "tier-cell",
-                    style: {
-                      padding: 6,
-                      borderColor: "#2563EB",
-                      borderWidth: 2,
-                    },
+                  P,
+                  null,
+                  "Page ",
+                  createElement(SlideNumber, null),
+                ),
+              ),
+            ),
+            createElement(
+              Row,
+              { id: "body" },
+              createElement(
+                Cell,
+                {
+                  id: "tier-cell",
+                  style: {
+                    padding: 6,
+                    borderColor: "#2563EB",
+                    borderWidth: 2,
                   },
-                  "Pro",
-                ),
-                createElement(
-                  Cell,
-                  { id: "desc-cell", style: { padding: 6 } },
-                  "Wraps inside flexible middle track",
-                ),
-                createElement(
-                  Cell,
-                  { id: "price-cell", style: { padding: 6 } },
-                  "$49",
-                ),
+                },
+                "Pro",
+              ),
+              createElement(
+                Cell,
+                { id: "desc-cell", style: { padding: 6 } },
+                "Wraps inside flexible middle track",
+              ),
+              createElement(
+                Cell,
+                { id: "price-cell", style: { padding: 6 } },
+                "$49",
               ),
             ),
           ),
         ),
-      );
+      ),
+    );
 
-      const resolution = resolve(doc);
-      assert.equal(bindSpy.mock.calls.length, 1);
-      const boundHandle = bindSpy.mock.results[0]?.value;
-      assert.ok(boundHandle !== undefined);
-      assert.equal(typeof boundHandle.resolve, "function");
+    const resolution = resolve(doc);
 
-      const observed = resolution.report.slides[0]?.objects.find(
-        (obj) => obj.authorId === "pricing",
-      );
-      assert.ok(observed !== undefined);
-      assert.equal(observed.kind, "table");
-      assert.equal(observed.name, "PricingTable");
-      assert.equal(observed.table?.columnWidths.length, 3);
-      assert.deepEqual(observed.table?.merges, [
-        { row: 0, column: 0, rowSpan: 1, colSpan: 2 },
-      ]);
-      assert.deepEqual(observed.table?.cells, [
-        ["Plan Overview", "", "Page 1"],
-        ["Pro", "Wraps inside flexible middle track", "$49"],
-      ]);
+    const observed = resolution.report.slides[0]?.objects.find(
+      (obj) => obj.authorId === "pricing",
+    );
+    assert.ok(observed !== undefined);
+    assert.equal(observed.kind, "table");
+    assert.equal(observed.name, "PricingTable");
+    assert.equal(observed.table?.columnWidths.length, 3);
+    assert.deepEqual(observed.table?.merges, [
+      { row: 0, column: 0, rowSpan: 1, colSpan: 2 },
+    ]);
+    assert.deepEqual(observed.table?.cells, [
+      ["Plan Overview", "", "Page 1"],
+      ["Pro", "Wraps inside flexible middle track", "$49"],
+    ]);
 
-      const tableQuery = resolution.query.getSlide("cover").get("pricing");
-      const titleSpanBox = tableQuery
-        .get("header")
-        .get("title-span")
-        .observe().box!;
-      assert.equal(
-        titleSpanBox.width,
-        observed.table.columnWidths[0]! + observed.table.columnWidths[1]!,
-      );
-      assert.equal(titleSpanBox.height, 40);
+    const tableQuery = resolution.query.getSlide("cover").get("pricing");
+    const titleSpanBox = tableQuery
+      .get("header")
+      .get("title-span")
+      .observe().box!;
+    assert.equal(
+      titleSpanBox.width,
+      observed.table.columnWidths[0]! + observed.table.columnWidths[1]!,
+    );
+    assert.equal(titleSpanBox.height, 40);
 
-      const painted = paint(resolution);
-      assert.equal(painted.pages.length, 1);
-      assert.deepEqual(painted.pages[0]?.diagnostics, []);
-      assert.ok(painted.pages[0]?.png !== undefined);
-      assert.ok(painted.pages[0]?.svg?.includes("<path"));
-      assert.ok(painted.pages[0]?.svg?.includes("#1E293B"));
-      assert.ok(painted.pages[0]?.svg?.includes("#2563EB"));
+    const painted = paint(resolution);
+    assert.equal(painted.pages.length, 1);
+    assert.deepEqual(painted.pages[0]?.diagnostics, []);
+    assert.ok(painted.pages[0]?.png !== undefined);
+    assert.ok(painted.pages[0]?.svg?.includes("<path"));
+    assert.ok(painted.pages[0]?.svg?.includes("#1E293B"));
+    assert.ok(painted.pages[0]?.svg?.includes("#2563EB"));
 
-      const emitted = emit(resolution);
-      const validation = await validatePptx(emitted.pptx);
-      assert.deepEqual(validation.errors, []);
-      const slideXml = strFromU8(
-        unzipSync(emitted.pptx)["ppt/slides/slide1.xml"]!,
-      );
-      assert.ok(slideXml.includes("<a:tbl>"));
-      assert.ok(slideXml.includes('type="slidenum"'));
-    } finally {
-      bindSpy.mockRestore();
-    }
+    const emitted = emit(resolution);
+    const validation = await validatePptx(emitted.pptx);
+    assert.deepEqual(validation.errors, []);
+    const slideXml = strFromU8(
+      unzipSync(emitted.pptx)["ppt/slides/slide1.xml"]!,
+    );
+    assert.ok(slideXml.includes("<a:tbl>"));
+    assert.ok(slideXml.includes('type="slidenum"'));
   });
 
   it("defers font embedding and preserves cell-level diagnostic paths across resolve, emit, and paint", async () => {

@@ -7,6 +7,7 @@ import {
   isMorphKey,
   layoutStyleKeys,
   parseCapabilityLayoutContract,
+  type BoundObjectCapability,
   type BoundObjectCapabilityModule,
   type BoundObjectNativeCollaboration,
   type CapabilityInput,
@@ -22,7 +23,6 @@ import {
   type ObjectResolveContext,
   type PaintContext,
   type PaintOutput,
-  type ResolvedBoundObjectCapability,
   type ResolvedObject,
   type VisualStyle,
 } from "@react-pptx/core/capability";
@@ -724,7 +724,7 @@ export const imageCapability: BoundObjectCapabilityModule = {
   bind(
     input: CapabilityInput,
     context: CapabilityParseContext,
-  ): ResolvedBoundObjectCapability {
+  ): BoundObjectCapability {
     const unknown = Object.keys(input.props).find(
       (key) => !(allowedParameters as readonly string[]).includes(key),
     );
@@ -732,7 +732,6 @@ export const imageCapability: BoundObjectCapabilityModule = {
       throw new CapabilityError(
         "unknown-parameter",
         `Image contains unsupported parameter ${unknown}`,
-        context.path,
       );
     }
     if (
@@ -743,11 +742,10 @@ export const imageCapability: BoundObjectCapabilityModule = {
       throw new CapabilityError(
         "unsupported-children",
         "Image does not accept children",
-        context.path,
       );
     }
 
-    const requestedName = optionalText(input.props, "name", context.path);
+    const requestedName = optionalText(input.props, "name");
     const rawMorphKey = input.props["morphKey"];
     let morphKey: MorphKey | undefined;
     if (rawMorphKey !== undefined) {
@@ -755,20 +753,15 @@ export const imageCapability: BoundObjectCapabilityModule = {
         throw new CapabilityError(
           "invalid-morph-key",
           "morphKey must be created by createMorphScope().handle(name)",
-          context.path,
         );
       }
       morphKey = rawMorphKey;
     }
-    const link = parseLinkTarget(input.props["link"], context.path);
+    const link = parseLinkTarget(input.props["link"]);
 
     const altValue = input.props["alt"];
     if (altValue !== undefined && typeof altValue !== "string") {
-      throw new CapabilityError(
-        "invalid-parameter",
-        "alt must be a string",
-        context.path,
-      );
+      throw new CapabilityError("invalid-parameter", "alt must be a string");
     }
 
     const allowedStyleKeys = new Set<string>([
@@ -794,11 +787,10 @@ export const imageCapability: BoundObjectCapabilityModule = {
       throw new CapabilityError(
         "unsupported-fit",
         "fit must be fill, cover, or contain",
-        context.path,
       );
     }
 
-    const crop = cropValues(input.props["crop"], context.path);
+    const crop = cropValues(input.props["crop"]);
     const image = readImage(input.props["src"]);
     const geometry = input.props["geometry"] as Geometry | undefined;
     const flipH = input.props["flipH"] as boolean | undefined;

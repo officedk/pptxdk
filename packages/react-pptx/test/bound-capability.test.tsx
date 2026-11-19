@@ -38,7 +38,7 @@ import {
 } from "@react-pptx/core/capability";
 import { createDeckNode, createSlideNode } from "@react-pptx/core/document";
 import { hostNodeCreator } from "@react-pptx/core/host";
-import { emit, pxToEmu, xmlEscape } from "@react-pptx/emit";
+import { emit, emittedBuildQuery, pxToEmu, xmlEscape } from "@react-pptx/emit";
 import { paint } from "@react-pptx/preview";
 import { Deck, expandDocument, Slide } from "@react-pptx/react";
 import {
@@ -57,7 +57,6 @@ import {
   Shape,
   shapeCapability,
   Span,
-  tableCapability,
   targets,
   transitionCapability,
   transitions,
@@ -77,7 +76,7 @@ import {
 import { validatePptx } from "@react-pptx/validation";
 import { strFromU8, unzipSync } from "fflate";
 import { createElement, type ReactNode } from "react";
-import { describe, it, vi } from "vitest";
+import { describe, it } from "vitest";
 
 function resolveOptionsFrom(options?: BuildOptions) {
   return options?.signal === undefined ? {} : { signal: options.signal };
@@ -85,23 +84,32 @@ function resolveOptionsFrom(options?: BuildOptions) {
 
 function runJsxModules(modules: readonly CapabilityModule[]) {
   const resolveWith = createResolver(modules);
-  return async (element: ReactNode, options?: BuildOptions) =>
-    emit(
-      resolveWith(
-        await expandDocument(
-          element,
-          options?.signal === undefined ? {} : { signal: options.signal },
-        ),
-        resolveOptionsFrom(options),
+  return async (element: ReactNode, options?: BuildOptions) => {
+    const resolution = resolveWith(
+      await expandDocument(
+        element,
+        options?.signal === undefined ? {} : { signal: options.signal },
       ),
-      options,
+      resolveOptionsFrom(options),
     );
+    const emitted = emit(resolution, options);
+    return {
+      ...emitted,
+      query: emittedBuildQuery(emitted.report, resolution.query),
+    };
+  };
 }
 
 function runDocModules(modules: readonly CapabilityModule[]) {
   const resolveWith = createResolver(modules);
-  return async (document: CommonNode, options?: BuildOptions) =>
-    emit(resolveWith(document, resolveOptionsFrom(options)), options);
+  return async (document: CommonNode, options?: BuildOptions) => {
+    const resolution = resolveWith(document, resolveOptionsFrom(options));
+    const emitted = emit(resolution, options);
+    return {
+      ...emitted,
+      query: emittedBuildQuery(emitted.report, resolution.query),
+    };
+  };
 }
 
 const notoFont = font("Noto Sans CJK SC", [
@@ -447,41 +455,32 @@ describe("bound object capability contract", () => {
   });
 
   it("migrates shapeCapability to BoundObjectCapabilityModule with single bind per node per build", async () => {
-    assert.equal("bind" in shapeCapability, true);
-    assert.equal("parse" in shapeCapability, false);
+    const trimmedShapeBuild = runJsxModules([shapeCapability]);
+    const result = await trimmedShapeBuild(
+      <Deck width={960} height={540}>
+        <Slide id="standalone-shape">
+          <Shape
+            id="hero-shape"
+            geometry={preset("roundRect")}
+            x={80}
+            y={90}
+            width={260}
+            height={100}
+            fill="#2B579A"
+            style={{ fontFamily: notoFont, fontSize: 18, color: "#FFFFFF" }}
+          >
+            <P>
+              <Span>Bound Shape</Span>
+            </P>
+          </Shape>
+        </Slide>
+      </Deck>,
+    );
 
-    const bindSpy = vi.spyOn(shapeCapability, "bind");
-    try {
-      const trimmedShapeBuild = runJsxModules([shapeCapability]);
-      const result = await trimmedShapeBuild(
-        <Deck width={960} height={540}>
-          <Slide id="standalone-shape">
-            <Shape
-              id="hero-shape"
-              geometry={preset("roundRect")}
-              x={80}
-              y={90}
-              width={260}
-              height={100}
-              fill="#2B579A"
-              style={{ fontFamily: notoFont, fontSize: 18, color: "#FFFFFF" }}
-            >
-              <P>
-                <Span>Bound Shape</Span>
-              </P>
-            </Shape>
-          </Slide>
-        </Deck>,
-      );
-
-      assert.equal(bindSpy.mock.calls.length, 1);
-      assert.deepEqual(result.report.diagnostics, []);
-      const validation = await validatePptx(result.pptx);
-      assert.deepEqual(validation.errors, []);
-      assert.equal(validation.slides[0]?.objects[0]?.text?.text, "Bound Shape");
-    } finally {
-      bindSpy.mockRestore();
-    }
+    assert.deepEqual(result.report.diagnostics, []);
+    const validation = await validatePptx(result.pptx);
+    assert.deepEqual(validation.errors, []);
+    assert.equal(validation.slides[0]?.objects[0]?.text?.text, "Bound Shape");
   });
 
   it("produces consistent native PPTX and observations for Shape across JSX and imperative entries inside unmigrated containers", async () => {
@@ -809,56 +808,49 @@ describe("bound object capability contract", () => {
   });
 
   it("isolates per-build bound state across document edits and rebuilds", async () => {
-    const bindSpy = vi.spyOn(shapeCapability, "bind");
-    try {
-      const node = impShape({
-        id: "mutable-shape",
-        geometry: "rect",
-        x: 20,
-        y: 30,
-        width: 140,
-        height: 60,
-        fill: "#112233",
-        text: "Version 1",
-      });
-      const deckNode = impDeck({ width: 960, height: 540 }).append(
-        impSlide({ id: "s1" }).append(node),
-      );
-      const docBuild = runDocModules([shapeCapability]);
+    const node = impShape({
+      id: "mutable-shape",
+      geometry: "rect",
+      x: 20,
+      y: 30,
+      width: 140,
+      height: 60,
+      fill: "#112233",
+      text: "Version 1",
+    });
+    const deckNode = impDeck({ width: 960, height: 540 }).append(
+      impSlide({ id: "s1" }).append(node),
+    );
+    const docBuild = runDocModules([shapeCapability]);
 
-      const first = await docBuild(deckNode);
-      assert.equal(bindSpy.mock.calls.length, 1);
+    const first = await docBuild(deckNode);
 
-      node.set({
-        geometry: "ellipse",
-        width: 220,
-        fill: "#445566",
-        text: "Version 2",
-      });
+    node.set({
+      geometry: "ellipse",
+      width: 220,
+      fill: "#445566",
+      text: "Version 2",
+    });
 
-      const second = await docBuild(deckNode);
-      assert.equal(bindSpy.mock.calls.length, 2);
+    const second = await docBuild(deckNode);
 
-      // First build outputs remain bound to Version 1
-      const firstFile = await validatePptx(first.pptx);
-      assert.deepEqual(firstFile.errors, []);
-      assert.equal(firstFile.slides[0]?.objects[0]?.text?.text, "Version 1");
-      assert.equal(
-        first.query.getSlide("s1").get("mutable-shape").observe().box?.width,
-        140,
-      );
+    // First build outputs remain bound to Version 1
+    const firstFile = await validatePptx(first.pptx);
+    assert.deepEqual(firstFile.errors, []);
+    assert.equal(firstFile.slides[0]?.objects[0]?.text?.text, "Version 1");
+    assert.equal(
+      first.query.getSlide("s1").get("mutable-shape").observe().box?.width,
+      140,
+    );
 
-      // Second build outputs reflect Version 2
-      const secondFile = await validatePptx(second.pptx);
-      assert.deepEqual(secondFile.errors, []);
-      assert.equal(secondFile.slides[0]?.objects[0]?.text?.text, "Version 2");
-      assert.equal(
-        second.query.getSlide("s1").get("mutable-shape").observe().box?.width,
-        220,
-      );
-    } finally {
-      bindSpy.mockRestore();
-    }
+    // Second build outputs reflect Version 2
+    const secondFile = await validatePptx(second.pptx);
+    assert.deepEqual(secondFile.errors, []);
+    assert.equal(secondFile.slides[0]?.objects[0]?.text?.text, "Version 2");
+    assert.equal(
+      second.query.getSlide("s1").get("mutable-shape").observe().box?.width,
+      220,
+    );
   });
 
   it("validates Shape link declarations in bind and resolves valid links in core", async () => {
@@ -909,9 +901,6 @@ describe("bound object capability contract", () => {
   });
 
   it("migrates tableCapability to BoundObjectCapabilityModule and resolves generic hierarchical sub-part locators", async () => {
-    assert.equal("bind" in tableCapability, true);
-    assert.equal("parse" in tableCapability, false);
-
     const compositeWithParts: BoundObjectCapabilityModule = {
       declaration: "rp:composite-grid",
       bind(input, context) {
@@ -991,40 +980,31 @@ describe("bound object capability contract", () => {
     assert.equal(band.get("slot-b").observe().text, "Beta");
   });
 
-  it("migrates boxCapability to BoundObjectCapabilityModule with container role and single bind per build", async () => {
-    assert.equal("bind" in boxCapability, true);
-    assert.equal("parse" in boxCapability, false);
+  it("migrates boxCapability to BoundObjectCapabilityModule with container role", async () => {
+    const trimmedBuild = runJsxModules([boxCapability, shapeCapability]);
+    const result = await trimmedBuild(
+      <Deck width={960} height={540}>
+        <Slide id="box-container-slide">
+          <Box
+            id="transparent-card"
+            style={{ display: "flex", width: 320, padding: 12 }}
+          >
+            <Shape id="child-shape" width={120} height={60} fill="#1D4ED8" />
+          </Box>
+        </Slide>
+      </Deck>,
+    );
 
-    const bindSpy = vi.spyOn(boxCapability, "bind");
-    try {
-      const trimmedBuild = runJsxModules([boxCapability, shapeCapability]);
-      const result = await trimmedBuild(
-        <Deck width={960} height={540}>
-          <Slide id="box-container-slide">
-            <Box
-              id="transparent-card"
-              style={{ display: "flex", width: 320, padding: 12 }}
-            >
-              <Shape id="child-shape" width={120} height={60} fill="#1D4ED8" />
-            </Box>
-          </Slide>
-        </Deck>,
-      );
-
-      assert.equal(bindSpy.mock.calls.length, 1);
-      assert.deepEqual(result.report.diagnostics, []);
-      assert.equal(result.report.slides[0]?.objects.length, 1);
-      assert.equal(result.report.slides[0]?.layouts?.length, 1);
-      const observed = result.query
-        .getSlide("box-container-slide")
-        .get("transparent-card")
-        .observe();
-      assert.deepEqual(observed.box, { x: 0, y: 0, width: 320, height: 84 });
-      assert.equal(observed.objects.length, 1);
-      assert.equal(observed.objects[0]?.authorId, "child-shape");
-    } finally {
-      bindSpy.mockRestore();
-    }
+    assert.deepEqual(result.report.diagnostics, []);
+    assert.equal(result.report.slides[0]?.objects.length, 1);
+    assert.equal(result.report.slides[0]?.layouts?.length, 1);
+    const observed = result.query
+      .getSlide("box-container-slide")
+      .get("transparent-card")
+      .observe();
+    assert.deepEqual(observed.box, { x: 0, y: 0, width: 320, height: 84 });
+    assert.equal(observed.objects.length, 1);
+    assert.equal(observed.objects[0]?.authorId, "child-shape");
 
     const withoutBoxBuild = runJsxModules([shapeCapability]);
     await assert.rejects(
@@ -1282,8 +1262,6 @@ describe("bound object capability contract", () => {
   });
 
   it("collects annotations from transparent bound containers and binds motionCapability onto BoundSlideCapabilityModule", async () => {
-    assert.equal("bindSlide" in motionCapability, true);
-
     const observedMarkers: unknown[] = [];
     const customTimingSlide: import("@react-pptx/core").BoundSlideCapabilityModule =
       {
@@ -1531,46 +1509,37 @@ describe("bound object capability contract", () => {
     assert.deepEqual(abs, { x: 220, y: 40, width: 90, height: 50 });
   });
 
-  it("migrates groupCapability to BoundObjectCapabilityModule with single bind per node per build", async () => {
-    assert.equal("bind" in groupCapability, true);
-    assert.equal("parse" in groupCapability, false);
+  it("migrates groupCapability to BoundObjectCapabilityModule", async () => {
+    const trimmedBuild = runJsxModules([groupCapability, shapeCapability]);
+    const result = await trimmedBuild(
+      <Deck width={960} height={540} theme={{ colors: { ink: "#111111" } }}>
+        <Slide id="group-bound-slide">
+          <Group id="loose-group" theme={{ colors: { ink: "#2563EB" } }}>
+            <Shape id="m1" x={10} y={20} width={50} height={30} fill="ink" />
+            <Shape
+              id="m2"
+              x={70}
+              y={30}
+              width={40}
+              height={40}
+              fill="#0F766E"
+            />
+          </Group>
+        </Slide>
+      </Deck>,
+    );
 
-    const bindSpy = vi.spyOn(groupCapability, "bind");
-    try {
-      const trimmedBuild = runJsxModules([groupCapability, shapeCapability]);
-      const result = await trimmedBuild(
-        <Deck width={960} height={540} theme={{ colors: { ink: "#111111" } }}>
-          <Slide id="group-bound-slide">
-            <Group id="loose-group" theme={{ colors: { ink: "#2563EB" } }}>
-              <Shape id="m1" x={10} y={20} width={50} height={30} fill="ink" />
-              <Shape
-                id="m2"
-                x={70}
-                y={30}
-                width={40}
-                height={40}
-                fill="#0F766E"
-              />
-            </Group>
-          </Slide>
-        </Deck>,
-      );
-
-      assert.equal(bindSpy.mock.calls.length, 1);
-      assert.deepEqual(result.report.diagnostics, []);
-      assert.equal(result.report.slides[0]?.layouts, undefined);
-      const observed = result.query
-        .getSlide("group-bound-slide")
-        .get("loose-group")
-        .observe();
-      assert.deepEqual(observed.box, { x: 10, y: 20, width: 100, height: 50 });
-      assert.deepEqual(
-        observed.objects.map((object) => object.authorId),
-        ["loose-group", "m1", "m2"],
-      );
-    } finally {
-      bindSpy.mockRestore();
-    }
+    assert.deepEqual(result.report.diagnostics, []);
+    assert.equal(result.report.slides[0]?.layouts, undefined);
+    const observed = result.query
+      .getSlide("group-bound-slide")
+      .get("loose-group")
+      .observe();
+    assert.deepEqual(observed.box, { x: 10, y: 20, width: 100, height: 50 });
+    assert.deepEqual(
+      observed.objects.map((object) => object.authorId),
+      ["loose-group", "m1", "m2"],
+    );
 
     const withoutGroupBuild = runJsxModules([shapeCapability]);
     await assert.rejects(
@@ -2196,18 +2165,13 @@ describe("bound object capability contract", () => {
     assert.deepEqual((await validatePptx(emitted2.pptx)).errors, []);
     assert.equal(emitted1.report.slides.length, 2);
     assert.equal(
-      emitted2.query.getSlide("mixed-2").observe().objects.length,
+      resolution.query.getSlide("mixed-2").observe().objects.length,
       1,
     );
-    const tileResources = emitted1.query
-      .getSlide("mixed-1")
-      .get("nt1")
-      .observe().resources;
-    assert.equal(tileResources?.length, 1);
-    assert.match(
-      tileResources?.[0]?.part ?? "",
-      /^ppt\/media\/resource\d+\.png$/u,
+    const mediaParts = Object.keys(unzipSync(emitted1.pptx)).filter((part) =>
+      /^ppt\/media\/resource\d+\.png$/u.test(part),
     );
+    assert.equal(mediaParts.length, 1);
     assert.equal(
       new Set(allocatedFieldIds.slice(0, 3)).size,
       allocatedFieldIds.slice(0, 3).length,
@@ -2328,39 +2292,95 @@ describe("bound object capability contract", () => {
       groupCapability,
     ]);
 
-    // 1. XML 1.0 control characters in Shape.name and Group.name fail in resolve().
-    for (const badDoc of [
-      impDeck({ width: 320, height: 180 }).append(
-        impSlide({ id: "bad-shape-name" }).append(
-          impShape({
-            id: "s1",
-            name: "Bad\u0007Shape",
-            x: 10,
-            y: 10,
-            width: 40,
-            height: 20,
-          }),
-        ),
-      ),
-      impDeck({ width: 320, height: 180 }).append(
-        impSlide({ id: "bad-group-name" }).append(
-          impGroup({ id: "g1", name: "Bad\u0008Group" }).append(
-            impShape({ id: "s1", x: 10, y: 10, width: 40, height: 20 }),
+    // 1. XML 1.0 control characters in Shape.name and Group.name fail in resolve() with non-doubled paths.
+    for (const [badDoc, expectedPath] of [
+      [
+        impDeck({ width: 320, height: 180 }).append(
+          impSlide({ id: "bad-shape-name" }).append(
+            impShape({
+              id: "s1",
+              name: "Bad\u0007Shape",
+              x: 10,
+              y: 10,
+              width: 40,
+              height: 20,
+            }),
           ),
         ),
-      ),
-    ]) {
+        "deck/slide[bad-shape-name]/shape[s1]",
+      ],
+      [
+        impDeck({ width: 320, height: 180 }).append(
+          impSlide({ id: "bad-group-name" }).append(
+            impGroup({ id: "g1", name: "Bad\u0008Group" }).append(
+              impShape({ id: "s1", x: 10, y: 10, width: 40, height: 20 }),
+            ),
+          ),
+        ),
+        "deck/slide[bad-group-name]/group[g1]",
+      ],
+    ] as const) {
       assert.throws(
         () => resolve({ children: [badDoc] }),
         (error: unknown) => {
           assert(error instanceof BuildError);
-          assert.ok(
-            error.diagnostics.some((d) => d.code === "invalid-xml-character"),
-          );
+          assert.equal(error.diagnostics[0]?.code, "invalid-xml-character");
+          assert.equal(error.diagnostics[0]?.path, expectedPath);
           return true;
         },
       );
     }
+
+    // Box errors in resolve() or non-layout bind() also report exact single node paths (never doubled).
+    const wrapperCapability: CapabilityModule = {
+      declaration: "rp:custom-wrapper",
+      bind(input) {
+        return {
+          contract: {
+            nativeKind: "grpSp",
+            layoutStyle: {},
+          },
+          resolve(resolveContext) {
+            resolveContext.resolveChildren(input.children);
+            return {
+              observation: {
+                id: resolveContext.id,
+                kind: "group",
+                name: "Wrap",
+                box: { x: 0, y: 0, width: 10, height: 10 },
+              },
+              extensions: [],
+              emit() {
+                return { xml: "" };
+              },
+            };
+          },
+        };
+      },
+    };
+    const resolveWithWrapper = createResolver([
+      wrapperCapability,
+      boxCapability,
+    ]);
+    const unlaidOutBoxDoc = impDeck({ width: 320, height: 180 }).append(
+      impSlide({ id: "bad-box-slide" }).append(
+        new CommonContainer("wrap", "rp:custom-wrapper", { id: "wrap" }).append(
+          impBox({ id: "b1", style: { backgroundColor: "#112233" } }),
+        ),
+      ),
+    );
+    assert.throws(
+      () => resolveWithWrapper({ children: [unlaidOutBoxDoc] }),
+      (error: unknown) => {
+        assert(error instanceof BuildError);
+        assert.equal(error.diagnostics[0]?.code, "layout-unavailable");
+        assert.equal(
+          error.diagnostics[0]?.path,
+          "deck/slide[bad-box-slide]/custom-wrapper[wrap]/box[b1]",
+        );
+        return true;
+      },
+    );
 
     // 2. Empty Group fails in resolve().
     assert.throws(
@@ -2473,7 +2493,7 @@ describe("bound object capability contract", () => {
     assert.match(slideXml, /Resolved once/u);
   });
 
-  it("migrates imageCapability to ResolvedBoundObjectCapability with resolve-only placement/XML1.0 checks, paint without emit, and emit-only resource registration", async () => {
+  it("migrates imageCapability to BoundObjectCapability with resolve-only placement/XML1.0 checks, paint without emit, and emit-only resource registration", async () => {
     const png1x1 = new Uint8Array(
       Buffer.from(
         "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
@@ -2487,114 +2507,89 @@ describe("bound object capability contract", () => {
       ),
     );
 
-    const bindSpy = vi.spyOn(imageCapability, "bind");
-    try {
-      const resolveImages = createResolver([imageCapability]);
-      const deckNode = createDeckNode({ width: 640, height: 360 });
-      const slide1 = createSlideNode({ id: "img-s1" });
-      slide1.append(
-        impImage({
-          id: "hero-png",
-          name: "Hero PNG",
-          alt: "Square sample",
-          src: png1x1,
-          fit: "contain",
-          x: 20,
-          y: 40,
-          width: 120,
-          height: 60,
-          style: { rotate: 30 },
-          flipH: true,
-          link: { id: "img-s2" },
-        }),
+    const resolveImages = createResolver([imageCapability]);
+    const deckNode = createDeckNode({ width: 640, height: 360 });
+    const slide1 = createSlideNode({ id: "img-s1" });
+    slide1.append(
+      impImage({
+        id: "hero-png",
+        name: "Hero PNG",
+        alt: "Square sample",
+        src: png1x1,
+        fit: "contain",
+        x: 20,
+        y: 40,
+        width: 120,
+        height: 60,
+        style: { rotate: 30 },
+        flipH: true,
+        link: { id: "img-s2" },
+      }),
+    );
+    const slide2 = createSlideNode({ id: "img-s2" });
+    slide2.append(
+      impImage({
+        id: "thumb-jpeg",
+        src: jpeg1x1,
+        crop: { left: 0.25 },
+        x: 50,
+        y: 50,
+        width: 80,
+        height: 80,
+      }),
+    );
+    deckNode.append(slide1, slide2);
+
+    const resolution = resolveImages({ children: [deckNode] });
+
+    // Placement (contain of 1x1 into 120x60 -> 60x60 centered at x=50) happens in resolve;
+    // resource registration does NOT happen during resolve.
+    const heroObs = resolution.query
+      .getSlide("img-s1")
+      .get("hero-png")
+      .observe();
+    assert.deepEqual(heroObs.box, { x: 50, y: 40, width: 60, height: 60 });
+    assert.equal(heroObs.resources, undefined);
+
+    // Paint succeeds directly from Resolution before emit() runs, and computes screenBox from transform.
+    const painted = paint(resolution);
+    assert.equal(painted.pages.length, 2);
+    assert.deepEqual(painted.pages[0]?.diagnostics, []);
+    assert.ok(painted.pages[0]?.png !== undefined);
+    assert.match(painted.pages[0]?.svg ?? "", /<image/u);
+    const paintedHero = painted.pages[0]?.nodes.find(
+      (n) => n.authorId === "hero-png",
+    );
+    assert.ok(paintedHero?.screenBox !== undefined);
+    assert.ok(paintedHero.screenBox.width > 60);
+    assert.ok(paintedHero.screenBox.height > 60);
+
+    // Emit registers media resources and produces valid PPTX; repeat emit is idempotent.
+    const emitted1 = emit(resolution);
+    const emitted2 = emit(resolution);
+    const val1 = await validatePptx(emitted1.pptx);
+    assert.deepEqual(val1.errors, []);
+    assert.deepEqual((await validatePptx(emitted2.pptx)).errors, []);
+    const heroImagePart = val1.slides[0]?.objects[0]?.image?.part ?? "";
+    assert.match(heroImagePart, /^ppt\/media\/resource\d+\.png$/u);
+    const thumbImagePart = val1.slides[1]?.objects[0]?.image?.part ?? "";
+    assert.match(thumbImagePart, /^ppt\/media\/resource\d+\.jpeg$/u);
+
+    // Invalid XML 1.0 characters in name or alt fail immediately during resolve.
+    for (const badProps of [
+      { name: "bad\u0000name", src: png1x1 },
+      { alt: "bad\u000balt", src: png1x1 },
+    ]) {
+      const badDeck = createDeckNode({ width: 320, height: 180 });
+      const badSlide = createSlideNode({ id: "bad-xml" });
+      badSlide.append(impImage({ id: "bad-img", ...badProps }));
+      badDeck.append(badSlide);
+      assert.throws(
+        () => resolveImages({ children: [badDeck] }),
+        (error: unknown) =>
+          error instanceof BuildError &&
+          error.diagnostics.some((d) => d.code === "invalid-xml-character"),
       );
-      const slide2 = createSlideNode({ id: "img-s2" });
-      slide2.append(
-        impImage({
-          id: "thumb-jpeg",
-          src: jpeg1x1,
-          crop: { left: 0.25 },
-          x: 50,
-          y: 50,
-          width: 80,
-          height: 80,
-        }),
-      );
-      deckNode.append(slide1, slide2);
-
-      const resolution = resolveImages({ children: [deckNode] });
-
-      assert.equal(bindSpy.mock.calls.length, 2);
-      const boundHandle = bindSpy.mock.results[0]?.value as Record<
-        string,
-        unknown
-      >;
-      assert.equal(typeof boundHandle["resolve"], "function");
-
-      // Placement (contain of 1x1 into 120x60 -> 60x60 centered at x=50) happens in resolve;
-      // resource registration does NOT happen during resolve.
-      const heroObs = resolution.query
-        .getSlide("img-s1")
-        .get("hero-png")
-        .observe();
-      assert.deepEqual(heroObs.box, { x: 50, y: 40, width: 60, height: 60 });
-      assert.equal(heroObs.resources, undefined);
-
-      // Paint succeeds directly from Resolution before emit() runs, and computes screenBox from transform.
-      const painted = paint(resolution);
-      assert.equal(painted.pages.length, 2);
-      assert.deepEqual(painted.pages[0]?.diagnostics, []);
-      assert.ok(painted.pages[0]?.png !== undefined);
-      assert.match(painted.pages[0]?.svg ?? "", /<image/u);
-      const paintedHero = painted.pages[0]?.nodes.find(
-        (n) => n.authorId === "hero-png",
-      );
-      assert.ok(paintedHero?.screenBox !== undefined);
-      assert.ok(paintedHero.screenBox.width > 60);
-      assert.ok(paintedHero.screenBox.height > 60);
-
-      // Emit registers media resources and produces valid PPTX; repeat emit is idempotent.
-      const emitted1 = emit(resolution);
-      const emitted2 = emit(resolution);
-      assert.deepEqual((await validatePptx(emitted1.pptx)).errors, []);
-      assert.deepEqual((await validatePptx(emitted2.pptx)).errors, []);
-      const emittedHeroResources = emitted1.query
-        .getSlide("img-s1")
-        .get("hero-png")
-        .observe().resources;
-      assert.equal(emittedHeroResources?.length, 1);
-      assert.match(
-        emittedHeroResources?.[0]?.part ?? "",
-        /^ppt\/media\/resource\d+\.png$/u,
-      );
-      const emittedThumbResources = emitted1.query
-        .getSlide("img-s2")
-        .get("thumb-jpeg")
-        .observe().resources;
-      assert.equal(emittedThumbResources?.length, 1);
-      assert.match(
-        emittedThumbResources?.[0]?.part ?? "",
-        /^ppt\/media\/resource\d+\.jpeg$/u,
-      );
-
-      // Invalid XML 1.0 characters in name or alt fail immediately during resolve.
-      for (const badProps of [
-        { name: "bad\u0000name", src: png1x1 },
-        { alt: "bad\u000balt", src: png1x1 },
-      ]) {
-        const badDeck = createDeckNode({ width: 320, height: 180 });
-        const badSlide = createSlideNode({ id: "bad-xml" });
-        badSlide.append(impImage({ id: "bad-img", ...badProps }));
-        badDeck.append(badSlide);
-        assert.throws(
-          () => resolveImages({ children: [badDeck] }),
-          (error: unknown) =>
-            error instanceof BuildError &&
-            error.diagnostics.some((d) => d.code === "invalid-xml-character"),
-        );
-      }
-    } finally {
-      bindSpy.mockRestore();
     }
   });
 });

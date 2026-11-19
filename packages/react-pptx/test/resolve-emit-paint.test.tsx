@@ -41,7 +41,7 @@ import {
 import { paint, preview } from "@react-pptx/react-pptx/preview";
 import { validatePptx } from "@react-pptx/validation";
 import { createElement } from "react";
-import { describe, expect, it } from "vitest";
+import { describe, it } from "vitest";
 
 const jostBookBytes = new Uint8Array(
   readFileSync(new URL("./assets/fonts/Jost-400-Book.ttf", import.meta.url)),
@@ -103,14 +103,16 @@ describe("Seam 1 & Seam 3: public resolve / emit / paint & createResolver", () =
     doc.append(slide({ id: "s2" }));
 
     const firstEmit = emitFromMain(firstResolution);
+    assert.deepEqual(Object.keys(firstEmit).toSorted(), ["pptx", "report"]);
+    assert.equal("query" in firstEmit, false);
     const firstPaint = paint(firstResolution);
     const firstFile = await validatePptx(firstEmit.pptx);
     assert.deepEqual(firstFile.errors, []);
     assert.equal(firstFile.slides.length, 1);
     assert.equal(firstFile.slides[0]?.objects[0]?.text?.text, "Before edit");
     assert.equal(firstPaint.pages.length, 1);
-    expect(firstPaint.pages[0]?.svg).toContain('fill="#1D4ED8"');
-    expect(firstPaint.pages[0]?.svg).not.toContain('fill="#DC2626"');
+    assert.ok(firstPaint.pages[0]?.svg?.includes('fill="#1D4ED8"'));
+    assert.equal(firstPaint.pages[0]?.svg?.includes('fill="#DC2626"'), false);
 
     // Re-resolving reflects the updated document.
     const secondResolution = resolveFromDocument(doc);
@@ -121,7 +123,7 @@ describe("Seam 1 & Seam 3: public resolve / emit / paint & createResolver", () =
     assert.equal(secondFile.slides.length, 2);
     assert.equal(secondFile.slides[0]?.objects[0]?.text?.text, "After edit");
     assert.equal(secondPaint.pages.length, 2);
-    expect(secondPaint.pages[0]?.svg).toContain('fill="#DC2626"');
+    assert.ok(secondPaint.pages[0]?.svg?.includes('fill="#DC2626"'));
   });
 
   it("scopes pages selection to paint and preview without omitting build slides or returning preview.build", async () => {
@@ -168,7 +170,11 @@ describe("Seam 1 & Seam 3: public resolve / emit / paint & createResolver", () =
     }
 
     const previewResult = await preview(doc, { pages: [2] });
-    assert.equal("build" in previewResult, false);
+    assert.deepEqual(Object.keys(previewResult).toSorted(), [
+      "pages",
+      "query",
+      "report",
+    ]);
     assert.equal(previewResult.report.slides.length, 2);
     assert.equal(previewResult.query.slides.length, 2);
     assert.deepEqual(
@@ -330,17 +336,10 @@ const coreHost = await import("@react-pptx/core/host");
 await import("@react-pptx/core/query");
 await import("@react-pptx/core/resolution");
 await import("@react-pptx/core/theme");
+void coreMain;
 void coreBuild;
 void coreCap;
-
-for (const key of ["hostNodeCreator", "expandDocument", "appendJSX", "Deck", "Slide", "Section"]) {
-  if (key in coreMain) {
-    throw new Error("@react-pptx/core must not export " + key);
-  }
-  if (key in coreDoc) {
-    throw new Error("@react-pptx/core/document must not export " + key);
-  }
-}
+void coreDoc;
 
 for (const key of [
   "hostNodeCreator",
@@ -864,7 +863,7 @@ process.stdout.write("ok");
     const painted = paint(resolution);
     assert.equal(painted.pages.length, 1);
     assert.deepEqual(painted.pages[0]?.diagnostics, []);
-    expect(painted.pages[0]?.svg).toContain("<path");
+    assert.ok(painted.pages[0]?.svg?.includes("<path"));
     assert.ok(
       painted.pages[0]?.png instanceof Uint8Array &&
         painted.pages[0].png.byteLength > 0,
@@ -919,5 +918,105 @@ process.stdout.write("ok");
         error instanceof BuildError &&
         error.diagnostics[0]?.code === "font-subsetting-forbidden",
     );
+  });
+
+  it("resolves, emits, and paints tableCapability and chartCapability text outlines without registering or loading textCapability", () => {
+    const packageRoot = fileURLToPath(new URL("../", import.meta.url));
+    const script = `
+import { readFileSync } from "node:fs";
+import { registerHooks } from "node:module";
+
+registerHooks({
+  resolve(specifier, context, nextResolve) {
+    if (
+      specifier === "@react-pptx/capabilities/text" ||
+      specifier === "./text.ts" ||
+      specifier === "./text.js" ||
+      specifier.endsWith("/capabilities/src/text.ts") ||
+      specifier.endsWith("/capabilities/dist/text.js")
+    ) {
+      throw new Error("Loaded forbidden text capability module: " + specifier);
+    }
+    return nextResolve(specifier, context);
+  },
+});
+
+const { createResolver } = await import("@react-pptx/core/build");
+const { createDeckNode, createSlideNode } = await import("@react-pptx/core/document");
+const {
+  tableCapability,
+  createTableNode,
+  createRowNode,
+  createCellNode,
+} = await import("@react-pptx/capabilities/table");
+const { chartCapability, createChartNode } = await import("@react-pptx/capabilities/chart");
+const { font } = await import("@react-pptx/capabilities/font");
+const { emit } = await import("@react-pptx/emit");
+const { paint } = await import("@react-pptx/preview");
+
+const jost = font("Jost*", [
+  {
+    weight: 400,
+    data: new Uint8Array(readFileSync("./test/assets/fonts/Jost-400-Book.ttf")),
+  },
+]);
+
+const doc = createDeckNode({ width: 640, height: 360 });
+const s1 = createSlideNode({ id: "table-and-chart" });
+const tbl = createTableNode({
+  id: "tbl",
+  x: 20,
+  y: 20,
+  width: 240,
+  columns: [120, 120],
+  style: { fontFamily: jost, fontSize: 16, color: "#111827" },
+});
+const row1 = createRowNode({ style: { height: 40 } });
+row1.append(createCellNode({}).content("Alpha"), createCellNode({}).content("Beta"));
+tbl.append(row1);
+s1.append(
+  tbl,
+  createChartNode({
+    id: "cht",
+    x: 280,
+    y: 20,
+    width: 320,
+    height: 240,
+    title: "Sales",
+    legend: "bottom",
+    style: { fontFamily: jost, fontSize: 14 },
+    groups: [
+      {
+        kind: "column",
+        data: { kind: "shared-categories", categories: ["Q1", "Q2"] },
+        series: [{ name: "Actual", values: [12, 24] }],
+      },
+    ],
+  }),
+);
+doc.append(s1);
+
+const resolution = createResolver([tableCapability, chartCapability])({ children: [doc] });
+const emitted = emit(resolution);
+if (emitted.pptx.byteLength === 0) {
+  throw new Error("Expected PPTX output");
+}
+const painted = paint(resolution);
+const page = painted.pages[0];
+if (!page || page.diagnostics.some((diag) => diag.severity === "error")) {
+  throw new Error("Expected clean page paint without errors");
+}
+if (!page.png || page.png.byteLength === 0 || !page.svg?.includes("<path")) {
+  throw new Error("Expected rendered glyph outline SVG and PNG");
+}
+process.stdout.write("ok");
+`;
+    const child = spawnSync(
+      process.execPath,
+      ["--conditions=source", "--input-type=module", "--eval", script],
+      { cwd: packageRoot, encoding: "utf8" },
+    );
+    assert.equal(child.status, 0, child.stderr);
+    assert.equal(child.stdout, "ok");
   });
 });

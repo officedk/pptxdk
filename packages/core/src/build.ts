@@ -1,9 +1,4 @@
-export {
-  createResolver,
-  emit,
-  validateEmitOptions,
-  validateOptions,
-} from "#/formal-build.ts";
+export { createResolver, emit, validateOptions } from "#/formal-build.ts";
 export { BuildError, CapabilityError } from "#/diagnostics.ts";
 export { formatBaseline, targets } from "#/types.ts";
 export type {

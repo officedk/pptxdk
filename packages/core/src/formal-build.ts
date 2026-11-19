@@ -503,28 +503,6 @@ export function validateOptions(options: BuildOptions): Target {
   return validateTarget(options.target);
 }
 
-export function validateEmitOptions(options: EmitOptions): void {
-  if (
-    typeof options !== "object" ||
-    options === null ||
-    Array.isArray(options)
-  ) {
-    throw new BuildError([
-      diagnostic("build", "invalid-options", "Emit options must be an object"),
-    ]);
-  }
-  const unknown = ownKeys(options, ["signal"]);
-  if (unknown !== undefined) {
-    throw new BuildError([
-      diagnostic(
-        "build",
-        "unknown-parameter",
-        `Emit options contain unknown parameter ${unknown}`,
-      ),
-    ]);
-  }
-}
-
 function positiveDimension(value: unknown, label: string): number {
   if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) {
     throw new BuildError([
@@ -3872,10 +3850,10 @@ export function emit(
   resolution: Resolution,
   options: EmitOptions = {},
 ): EmitResult {
-  validateEmitOptions(options);
+  const optionTarget = validateOptions(options);
   if (options.signal?.aborted) throw options.signal.reason;
   const internal = getInternalResolution(resolution);
-  const target = internal.target;
+  const target = options.target === undefined ? internal.target : optionTarget;
 
   if (internal.sections.length > 0 && !target.extensions.includes("p14")) {
     throw new BuildError([

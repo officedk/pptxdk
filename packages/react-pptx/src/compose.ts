@@ -33,10 +33,7 @@ export function createStagePipeline(modules: readonly CapabilityModule[]) {
     if (input instanceof CommonNode) {
       // Resolve synchronously before yielding so later edits to the mutable document do not leak into this build.
       const resolution = resolve(input, options);
-      return emit(
-        resolution,
-        options.signal === undefined ? {} : { signal: options.signal },
-      );
+      return emit(resolution, options);
     }
     // Validate options before React runs so invalid options never start author components.
     validateOptions(options);
@@ -45,10 +42,7 @@ export function createStagePipeline(modules: readonly CapabilityModule[]) {
       options.signal === undefined ? {} : { signal: options.signal },
     );
     const resolution = resolve(document, options);
-    return emit(
-      resolution,
-      options.signal === undefined ? {} : { signal: options.signal },
-    );
+    return emit(resolution, options);
   }
 
   return { resolve, build };

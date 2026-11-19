@@ -80,9 +80,7 @@ export type BuildOptions = {
 };
 
 export type ResolveOptions = BuildOptions;
-export type EmitOptions = {
-  readonly signal?: AbortSignal;
-};
+export type EmitOptions = BuildOptions;
 export type PaintOptions = {
   /** 1-based page numbers to paint. Omit to draw all pages; an empty list draws none. */
   readonly pages?: readonly number[];

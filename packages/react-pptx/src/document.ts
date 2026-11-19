@@ -35,10 +35,7 @@ export async function build(
   options: BuildOptions = {},
 ): Promise<BuildResult> {
   const resolution = resolve(document, options);
-  return emit(
-    resolution,
-    options.signal === undefined ? {} : { signal: options.signal },
-  );
+  return emit(resolution, options);
 }
 
 export {

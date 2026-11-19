@@ -1,17 +1,68 @@
 import { documentCapabilities } from "@react-pptx/capabilities/document";
-import { createBuilder, createPreview } from "@react-pptx/core";
+import {
+  CommonNode,
+  expandDocument,
+  type PreviewOptions,
+  type PreviewResult,
+} from "@react-pptx/core";
+import { emit } from "@react-pptx/core/build";
+import type { ReactNode } from "react";
+
+import { createStagePipeline } from "./compose.ts";
+
+const pipeline = createStagePipeline(documentCapabilities);
 
 /**
- * Default React one-call export. It composes real expansion with the same formal build used by the
- * plain document entry; both entries share one default capability list.
+ * Synchronously resolves an editable CommonNode document into an immutable Resolution snapshot.
  */
-export const build = createBuilder(documentCapabilities);
+export const resolve = pipeline.resolve;
 
 /**
- * Default React one-call static preview export. Expands JSX to the common editable document,
- * then runs the shared formal build and preview rasterizer on demand.
+ * Synchronously emits a PPTX archive and BuildReport from an existing Resolution.
  */
-export const preview = createPreview(documentCapabilities);
+export { emit };
+
+/**
+ * Default one-call build supporting both JSX elements and plain CommonNode documents.
+ */
+export const build = pipeline.build;
+
+/**
+ * Default one-call static preview supporting both JSX elements and plain CommonNode documents.
+ * Lazily loads `@react-pptx/core/preview` only when called so normal build paths never load `@resvg/resvg-js`.
+ */
+export async function preview(
+  input: ReactNode | CommonNode,
+  options: PreviewOptions = {},
+): Promise<PreviewResult> {
+  if (options.pages?.some((page) => !Number.isInteger(page) || page < 1)) {
+    throw new RangeError("Preview page numbers must be positive integers");
+  }
+  if (options.signal?.aborted) throw options.signal.reason;
+  const signalOption =
+    options.signal === undefined ? {} : { signal: options.signal };
+  if (input instanceof CommonNode) {
+    const resolution = resolve(input, signalOption);
+    const { paint } = await import("@react-pptx/core/preview");
+    const { pages } = paint(resolution, options);
+    return Object.freeze({
+      report: resolution.report,
+      query: resolution.query,
+      pages,
+    });
+  }
+  const [{ paint }, document] = await Promise.all([
+    import("@react-pptx/core/preview"),
+    expandDocument(input, signalOption),
+  ]);
+  const resolution = resolve(document, signalOption);
+  const { pages } = paint(resolution, options);
+  return Object.freeze({
+    report: resolution.report,
+    query: resolution.query,
+    pages,
+  });
+}
 
 /** Default capability list shared by the React one-call entry and the plain document entry. */
 export { documentCapabilities };
@@ -153,12 +204,7 @@ export type {
   PathOptions,
   PresetGeometry,
 } from "@react-pptx/capabilities";
-export {
-  appendJSX,
-  createBuilder,
-  createPreview,
-  expandDocument,
-} from "@react-pptx/core";
+export { appendJSX, expandDocument } from "@react-pptx/core";
 export {
   CommonContainer,
   CommonNode,
@@ -183,6 +229,8 @@ export type {
   ColorValue,
   DeckProps,
   Diagnostic,
+  EmitOptions,
+  EmitResult,
   GeometryBox,
   LayoutChildReference,
   Locator,
@@ -200,6 +248,8 @@ export type {
   NativeTableObservation,
   NativeTablePartObservation,
   ObjectObservation,
+  PaintOptions,
+  PaintResult,
   PreviewDiagnostic,
   PreviewNodeObservation,
   PreviewOptions,
@@ -208,6 +258,9 @@ export type {
   PreviewSeverity,
   PreviewTransform,
   PreviewWarning,
+  Resolution,
+  ResolutionReport,
+  ResolveOptions,
   ResourceObservation,
   ScreenGeometry,
   ScreenPoint,

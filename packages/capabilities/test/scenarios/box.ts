@@ -451,7 +451,7 @@ export const boxPositiveScenario: CapabilityScenario = {
       ),
     );
   },
-  assert({ preview, validation }) {
+  assert({ resolution, pptx, preview, validation }) {
     assert.equal(preview.pages.length, 2);
     const page1 = preview.pages[0]!;
     const page2 = preview.pages[1]!;
@@ -470,7 +470,7 @@ export const boxPositiveScenario: CapabilityScenario = {
       false,
     );
     assert.equal(page1.nodes.length, 6);
-    const shellObserved = preview.build.query
+    const shellObserved = resolution.query
       .getSlide("box-nesting-and-styles")
       .get("shell")
       .observe();
@@ -490,9 +490,7 @@ export const boxPositiveScenario: CapabilityScenario = {
     assert.deepEqual(pptxLinkedBox?.link, {
       slideId: "box-theme-and-wrapping",
     });
-    const slide1Xml = strFromU8(
-      unzipSync(preview.build.pptx)["ppt/slides/slide1.xml"]!,
-    );
+    const slide1Xml = strFromU8(unzipSync(pptx)["ppt/slides/slide1.xml"]!);
     assert.match(slide1Xml, /rot="180000"/u);
 
     // Page 2: ThemeScope tokens resolved in both SVG and PPTX, hollow frame has fill="none".

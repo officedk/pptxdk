@@ -1,16 +1,17 @@
 import assert from "node:assert/strict";
 
 import * as jsx from "@react-pptx/react-pptx";
+import { createResolver } from "@react-pptx/react-pptx/build";
 import {
   after,
   box,
   build,
   BuildError,
-  createDocumentBuild,
   createMorphScope,
   createMotionScopeHandle,
   deck,
   documentCapabilities,
+  emit,
   fade,
   motionScope,
   observeMotion,
@@ -252,21 +253,33 @@ describe("plain authoring choreography", () => {
 
   it("checks trimmed capabilities against the structure-resolved motion", async () => {
     const manualModules = [jsx.boxCapability, jsx.shapeCapability] as const;
-    const filtered = createDocumentBuild(
+    const filteredResolve = createResolver(
       documentCapabilities.filter(
         (capability) => capability.declaration !== "motion",
       ),
     );
+    const manualFullResolve = createResolver([
+      ...manualModules,
+      jsx.motionCapability,
+    ]);
+    const manualCroppedResolve = createResolver(manualModules);
+    const filtered = async (doc: Parameters<typeof build>[0]) =>
+      emit(filteredResolve(doc));
     const fullBuilds = [
       ["default-full", build],
       [
         "manual-full",
-        createDocumentBuild([...manualModules, jsx.motionCapability]),
+        async (doc: Parameters<typeof build>[0]) =>
+          emit(manualFullResolve(doc)),
       ],
     ] as const;
     const croppedBuilds = [
       ["default-filtered", filtered],
-      ["manual-cropped", createDocumentBuild(manualModules)],
+      [
+        "manual-cropped",
+        async (doc: Parameters<typeof build>[0]) =>
+          emit(manualCroppedResolve(doc)),
+      ],
     ] as const;
     const style = { width: 100, height: 60 };
     const scenarios = [
@@ -398,16 +411,24 @@ describe("plain authoring choreography", () => {
 
   it("checks trimmed JSX capabilities against the structure-resolved motion", async () => {
     const manualModules = [jsx.boxCapability, jsx.shapeCapability] as const;
-    const filtered = createDocumentBuild(
+    const filteredResolve = createResolver(
       documentCapabilities.filter(
         (capability) => capability.declaration !== "motion",
       ),
     );
-    const manualFull = jsx.createBuilder([
+    const manualFullResolve = createResolver([
       ...manualModules,
       jsx.motionCapability,
     ]);
-    const manualCropped = jsx.createBuilder(manualModules);
+    const manualCroppedResolve = createResolver(manualModules);
+    const filtered = async (doc: Parameters<typeof build>[0]) =>
+      emit(filteredResolve(doc));
+    const manualFull = async (
+      element: Parameters<typeof jsx.expandDocument>[0],
+    ) => emit(manualFullResolve(await jsx.expandDocument(element)));
+    const manualCropped = async (
+      element: Parameters<typeof jsx.expandDocument>[0],
+    ) => emit(manualCroppedResolve(await jsx.expandDocument(element)));
     const style = { width: 100, height: 60 };
     const cases = [
       {

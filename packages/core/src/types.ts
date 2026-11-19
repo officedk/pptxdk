@@ -1057,10 +1057,7 @@ export type BoundSlideCapabilityModule = SlideCapabilityModule;
 
 export type CapabilityModule = ObjectCapabilityModule | SlideCapabilityModule;
 
-export type PreviewOptions = BuildOptions & {
-  /** 1-based page numbers to preview. Omit to draw all pages; an empty list draws none. */
-  readonly pages?: readonly number[];
-};
+export type PreviewOptions = PaintOptions;
 
 export type PreviewNodeObservation = ObjectObservation & {
   readonly path: string | undefined;
@@ -1079,7 +1076,8 @@ export type PreviewPageResult = {
 };
 
 export type PreviewResult = {
-  readonly build: BuildResult;
+  readonly report: ResolutionReport;
+  readonly query: BuildQuery;
   readonly pages: readonly PreviewPageResult[];
 };
 

@@ -294,7 +294,7 @@ export const shapePositiveScenario: CapabilityScenario = {
       ),
     );
   },
-  assert({ author, preview, validation }) {
+  assert({ author, resolution, preview, validation }) {
     assert.equal(preview.pages.length, 2, author);
     assert.equal(validation.slides.length, 2, author);
     assert.equal(validation.slides[0]?.objects.length, 5, author);
@@ -306,7 +306,7 @@ export const shapePositiveScenario: CapabilityScenario = {
     expect(rotatedNode.screenBox?.width).toBeCloseTo(84 * Math.SQRT2, 1);
     expect(rotatedNode.screenBox?.height).toBeCloseTo(84 * Math.SQRT2, 1);
     assert.equal(
-      preview.build.query
+      resolution.query
         .getSlide("geometry-and-styles")
         .get("overlap-ellipse")
         .observe().objects[0]?.geometry,

@@ -6,8 +6,9 @@ import {
   build,
   BuildError,
   Chart,
-  createBuilder,
   Deck,
+  emit,
+  expandDocument,
   breathe,
   fade,
   fly,
@@ -35,6 +36,7 @@ import {
   wipe,
   zoom,
 } from "@react-pptx/react-pptx";
+import { createResolver } from "@react-pptx/react-pptx/build";
 import {
   build as buildDocument,
   deck as documentDeck,
@@ -7207,24 +7209,29 @@ describe("object motion", () => {
     }
 
     await assert.rejects(
-      createBuilder([shapeCapability, transitionCapability])(
-        createElement(
-          Deck,
-          {},
-          createElement(
-            Slide,
-            { id: "trimmed" },
-            createElement(Shape, {
-              id: "needs-motion",
-              x: 0,
-              y: 0,
-              width: 16,
-              height: 16,
-              enter: fade(),
-            }),
+      async () =>
+        emit(
+          createResolver([shapeCapability, transitionCapability])(
+            await expandDocument(
+              createElement(
+                Deck,
+                {},
+                createElement(
+                  Slide,
+                  { id: "trimmed" },
+                  createElement(Shape, {
+                    id: "needs-motion",
+                    x: 0,
+                    y: 0,
+                    width: 16,
+                    height: 16,
+                    enter: fade(),
+                  }),
+                ),
+              ),
+            ),
           ),
         ),
-      ),
       (error: unknown) => {
         assert.ok(error instanceof BuildError);
         assert.equal(error.diagnostics[0]?.code, "missing-capability");
@@ -7486,26 +7493,30 @@ describe("object motion", () => {
   });
 
   it("writes transitions and animations into fixed slide slots regardless of module registration order", async () => {
-    const buildReversed = createBuilder([
+    const resolveReversed = createResolver([
       motionCapability,
       transitionCapability,
       shapeCapability,
     ]);
-    const result = await buildReversed(
-      createElement(
-        Deck,
-        {},
-        createElement(
-          Slide,
-          { id: "slot-order", transition: transitions.fade() },
-          createElement(Shape, {
-            id: "timed",
-            x: 0,
-            y: 0,
-            width: 16,
-            height: 16,
-            enter: fade(),
-          }),
+    const result = emit(
+      resolveReversed(
+        await expandDocument(
+          createElement(
+            Deck,
+            {},
+            createElement(
+              Slide,
+              { id: "slot-order", transition: transitions.fade() },
+              createElement(Shape, {
+                id: "timed",
+                x: 0,
+                y: 0,
+                width: 16,
+                height: 16,
+                enter: fade(),
+              }),
+            ),
+          ),
         ),
       ),
     );

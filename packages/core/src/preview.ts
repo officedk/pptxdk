@@ -1,28 +1,18 @@
 import { Resvg } from "@resvg/resvg-js";
 
-import type { DeclarationContainer } from "#/declaration.ts";
 import { CapabilityError } from "#/diagnostics.ts";
-import type { CommonNode } from "#/document.ts";
-import {
-  createDeclarationResolver,
-  emitInternal,
-  validateOptions,
-} from "#/formal-build.ts";
 import {
   getInternalResolution,
   type ResolvedObjectLayer,
 } from "#/resolution.ts";
 import type {
-  CapabilityModule,
   GeometryBox,
   ObjectObservation,
   PaintOptions,
   PaintResult,
   PreviewDiagnostic,
   PreviewNodeObservation,
-  PreviewOptions,
   PreviewPageResult,
-  PreviewResult,
   PreviewTransform,
   Resolution,
   ScreenGeometry,
@@ -225,14 +215,14 @@ function paintLayer(
   return "";
 }
 
-function paintInternal(
+/** Paints static preview pages directly from a Resolution without running emit(). */
+export function paint(
   resolution: Resolution,
   options: PaintOptions = {},
-  checkSignal = true,
 ): PaintResult {
   const { pages: requestedPages, signal } = options;
   validateRequestedPages(requestedPages);
-  if (checkSignal && signal?.aborted) throw signal.reason;
+  if (signal?.aborted) throw signal.reason;
 
   const internal = getInternalResolution(resolution);
   if (requestedPages?.some((page) => page > internal.slides.length)) {
@@ -367,75 +357,4 @@ function paintInternal(
   }
 
   return Object.freeze({ pages: Object.freeze(pages) });
-}
-
-/** Paints static preview pages directly from a Resolution without running emit(). */
-export function paint(
-  resolution: Resolution,
-  options: PaintOptions = {},
-): PaintResult {
-  return paintInternal(resolution, options, true);
-}
-
-function runPreviewPipeline(
-  resolveDeclaration: ReturnType<typeof createDeclarationResolver>,
-  declaration: DeclarationContainer,
-  options: PreviewOptions,
-  checkSignal: boolean,
-): PreviewResult {
-  const { pages: requestedPages, ...buildOptions } = options;
-  validateRequestedPages(requestedPages);
-  validateOptions(buildOptions);
-  const resolution = resolveDeclaration(declaration, buildOptions, checkSignal);
-  const build = emitInternal(resolution, buildOptions, checkSignal);
-  const { pages } = paintInternal(
-    resolution,
-    {
-      ...(requestedPages === undefined ? {} : { pages: requestedPages }),
-      ...(buildOptions.signal === undefined
-        ? {}
-        : { signal: buildOptions.signal }),
-    },
-    checkSignal,
-  );
-  return Object.freeze({
-    build,
-    pages,
-  });
-}
-
-/**
- * Creates a static preview runner over a plain editable document without loading React.
- * Resolves the document once, then feeds emit and paint as independent consumers.
- */
-export function createDocumentPreview(modules: readonly CapabilityModule[]) {
-  const resolveDeclaration = createDeclarationResolver(modules);
-
-  return async function previewDocument(
-    document: CommonNode,
-    options: PreviewOptions = {},
-  ): Promise<PreviewResult> {
-    return runPreviewPipeline(
-      resolveDeclaration,
-      { children: [document] },
-      options,
-      true,
-    );
-  };
-}
-
-/**
- * Internal preview entry for already-expanded declaration trees (e.g. JSX handoff).
- */
-export function createCompletedDeclarationPreview(
-  modules: readonly CapabilityModule[],
-) {
-  const resolveDeclaration = createDeclarationResolver(modules);
-
-  return function previewCompletedDeclaration(
-    declaration: DeclarationContainer,
-    options: PreviewOptions = {},
-  ): PreviewResult {
-    return runPreviewPipeline(resolveDeclaration, declaration, options, false);
-  };
 }

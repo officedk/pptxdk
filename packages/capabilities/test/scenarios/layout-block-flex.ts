@@ -856,7 +856,7 @@ export const layoutBlockFlexPositiveScenario: CapabilityScenario = {
       ),
     );
   },
-  assert({ author, preview, validation }) {
+  assert({ author, resolution, preview, validation }) {
     assert.equal(preview.pages.length, 3, author);
     assert.deepEqual(validation.errors, [], author);
 
@@ -864,11 +864,11 @@ export const layoutBlockFlexPositiveScenario: CapabilityScenario = {
     const page1 = preview.pages[0]!;
     assert.deepEqual(page1.diagnostics, [], author);
     assert.ok(page1.png !== undefined, author);
-    const headerRow = preview.build.query
+    const headerRow = resolution.query
       .getSlide("block-flex-flow-and-auto-min")
       .get("header-row")
       .observe();
-    const badge = preview.build.query
+    const badge = resolution.query
       .getSlide("block-flex-flow-and-auto-min")
       .get("header-row")
       .get("header-badge")
@@ -877,17 +877,17 @@ export const layoutBlockFlexPositiveScenario: CapabilityScenario = {
       Math.abs(badge.box!.width - (headerRow.box!.width - 28) * 0.3) < 0.5,
       author,
     );
-    const autominCard = preview.build.query
+    const autominCard = resolution.query
       .getSlide("block-flex-flow-and-auto-min")
       .get("auto-min-row")
       .get("card-automin")
       .observe();
-    const releasedCard = preview.build.query
+    const releasedCard = resolution.query
       .getSlide("block-flex-flow-and-auto-min")
       .get("auto-min-row")
       .get("card-released")
       .observe();
-    const percentCard = preview.build.query
+    const percentCard = resolution.query
       .getSlide("block-flex-flow-and-auto-min")
       .get("auto-min-row")
       .get("card-percent")
@@ -900,17 +900,17 @@ export const layoutBlockFlexPositiveScenario: CapabilityScenario = {
     const page2 = preview.pages[1]!;
     assert.deepEqual(page2.diagnostics, [], author);
     assert.ok(page2.png !== undefined, author);
-    const chip1 = preview.build.query
+    const chip1 = resolution.query
       .getSlide("flex-wrap-and-baseline")
       .get("wrap-panel")
       .get("chip-1")
       .observe().box!;
-    const chip2 = preview.build.query
+    const chip2 = resolution.query
       .getSlide("flex-wrap-and-baseline")
       .get("wrap-panel")
       .get("chip-2")
       .observe().box!;
-    const chip3 = preview.build.query
+    const chip3 = resolution.query
       .getSlide("flex-wrap-and-baseline")
       .get("wrap-panel")
       .get("chip-3")
@@ -919,18 +919,18 @@ export const layoutBlockFlexPositiveScenario: CapabilityScenario = {
     assert.ok(chip3.y > chip1.y, author);
     assert.equal(chip3.x, chip1.x, author);
 
-    const baseLarge = preview.build.query
+    const baseLarge = resolution.query
       .getSlide("flex-wrap-and-baseline")
       .get("baseline-row")
       .get("base-large")
       .observe().box!;
-    const baseShape = preview.build.query
+    const baseShape = resolution.query
       .getSlide("flex-wrap-and-baseline")
       .get("baseline-row")
       .get("base-passthrough")
       .get("base-boxed")
       .observe().box!;
-    const baseSmall = preview.build.query
+    const baseSmall = resolution.query
       .getSlide("flex-wrap-and-baseline")
       .get("baseline-row")
       .get("base-small")
@@ -938,7 +938,7 @@ export const layoutBlockFlexPositiveScenario: CapabilityScenario = {
     assert.ok(baseShape.y > baseLarge.y, author);
     assert.ok(baseSmall.y > baseShape.y, author);
 
-    const escapedRelative = preview.build.query
+    const escapedRelative = resolution.query
       .getSlide("flex-wrap-and-baseline")
       .get("relative-cb")
       .get("static-nested")
@@ -960,7 +960,7 @@ export const layoutBlockFlexPositiveScenario: CapabilityScenario = {
     const page3 = preview.pages[2]!;
     assert.deepEqual(page3.diagnostics, [], author);
     assert.ok(page3.png !== undefined, author);
-    const escapedSlide = preview.build.query
+    const escapedSlide = resolution.query
       .getSlide("canvas-overflow-and-escape")
       .get("static-outer-box")
       .get("escaped-to-slide")
@@ -970,7 +970,7 @@ export const layoutBlockFlexPositiveScenario: CapabilityScenario = {
       { x: 32, y: 32, width: 180, height: 54 },
       author,
     );
-    const overflowBox = preview.build.query
+    const overflowBox = resolution.query
       .getSlide("canvas-overflow-and-escape")
       .get("overflowing-box")
       .observe().box!;
@@ -980,7 +980,7 @@ export const layoutBlockFlexPositiveScenario: CapabilityScenario = {
       author,
     );
     assert.ok(
-      preview.build.report.diagnostics.some(
+      resolution.report.diagnostics.some(
         (d) =>
           d.severity === "warning" &&
           d.code === "overflow" &&

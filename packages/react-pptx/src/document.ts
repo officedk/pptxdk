@@ -1,14 +1,42 @@
 import { documentCapabilities } from "@react-pptx/capabilities/document";
-import { createDocumentBuild } from "@react-pptx/core/document";
+import {
+  createResolver,
+  emit,
+  type BuildOptions,
+  type BuildResult,
+  type Resolution,
+  type ResolveOptions,
+} from "@react-pptx/core/build";
+import type { CommonNode } from "@react-pptx/core/document";
+
+const resolveDocument = createResolver(documentCapabilities);
+
+/**
+ * Synchronously resolves an editable CommonNode document without loading React.
+ */
+export function resolve(
+  document: CommonNode,
+  options: ResolveOptions = {},
+): Resolution {
+  return resolveDocument(document, options);
+}
+
+export { emit };
 
 /**
  * Default formal build for plain authoring.
  *
  * Capability modules are registered explicitly here; author factories create declarations only and
- * never enable a capability that the caller chose to trim. The build consumes the declaration before
- * returning control and shares the same formal implementation as the React entry.
+ * never enable a capability that the caller chose to trim. Resolution runs synchronously before
+ * control returns so caller edits after the call affect only later builds.
  */
-export const build = createDocumentBuild(documentCapabilities);
+export async function build(
+  document: CommonNode,
+  options: BuildOptions = {},
+): Promise<BuildResult> {
+  const resolution = resolve(document, options);
+  return emit(resolution, options);
+}
 
 export {
   box,
@@ -196,15 +224,11 @@ export type {
 } from "@react-pptx/capabilities/motion";
 export {
   BuildError,
-  createFormalBuild,
+  CapabilityError,
   formatBaseline,
   targets,
 } from "@react-pptx/core/build";
-export {
-  AuthorQuery,
-  AuthorQueryError,
-  createDocumentBuild,
-} from "@react-pptx/core/document";
+export { AuthorQuery, AuthorQueryError } from "@react-pptx/core/document";
 export {
   blockArc,
   linearGradient,
@@ -235,6 +259,11 @@ export type {
   DeclarationNode,
   DeclarationText,
   Diagnostic,
+  EmitOptions,
+  EmitResult,
+  Resolution,
+  ResolutionReport,
+  ResolveOptions,
   Target,
 } from "@react-pptx/core/build";
 export type {

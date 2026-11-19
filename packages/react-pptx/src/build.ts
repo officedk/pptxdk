@@ -1,6 +1,8 @@
 export {
   BuildError,
-  createFormalBuild,
+  CapabilityError,
+  createResolver,
+  emit,
   formatBaseline,
   targets,
 } from "@react-pptx/core/build";
@@ -14,6 +16,11 @@ export type {
   DeclarationNode,
   DeclarationText,
   Diagnostic,
+  EmitOptions,
+  EmitResult,
   Extension,
+  Resolution,
+  ResolutionReport,
+  ResolveOptions,
   Target,
 } from "@react-pptx/core/build";

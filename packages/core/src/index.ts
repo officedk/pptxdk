@@ -1,9 +1,4 @@
-export {
-  appendJSX,
-  createBuilder,
-  createPreview,
-  expandDocument,
-} from "#/builder.ts";
+export { appendJSX, expandDocument } from "#/builder.ts";
 export type {
   AppendJSXOptions,
   ExpandDocumentOptions,

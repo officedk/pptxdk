@@ -8,8 +8,9 @@ import {
   Box,
   build,
   BuildError,
-  createBuilder,
   Deck,
+  emit,
+  expandDocument,
   font,
   Group,
   groupCapability,
@@ -22,6 +23,7 @@ import {
   Span,
   Text,
 } from "@react-pptx/react-pptx";
+import { createResolver } from "@react-pptx/react-pptx/build";
 import { validatePptx } from "@react-pptx/validation";
 import { strFromU8, unzipSync, zipSync } from "fflate";
 import { createElement, type ComponentType } from "react";
@@ -864,23 +866,28 @@ describe("images and native groups", () => {
       },
     );
 
-    const clippedBuild = createBuilder([shapeCapability, groupCapability]);
+    const resolveClipped = createResolver([shapeCapability, groupCapability]);
     await assert.rejects(
-      clippedBuild(
-        createElement(
-          Deck,
-          { width: 960, height: 540 },
-          createElement(
-            Slide,
-            { id: "clipped-group" },
-            createElement(
-              Group,
-              { id: "clipped" },
-              createElement(Image, { id: "missing-image", src: png }),
+      async () =>
+        emit(
+          resolveClipped(
+            await expandDocument(
+              createElement(
+                Deck,
+                { width: 960, height: 540 },
+                createElement(
+                  Slide,
+                  { id: "clipped-group" },
+                  createElement(
+                    Group,
+                    { id: "clipped" },
+                    createElement(Image, { id: "missing-image", src: png }),
+                  ),
+                ),
+              ),
             ),
           ),
         ),
-      ),
       (error: unknown) => {
         assert.ok(error instanceof BuildError);
         assert.ok(

@@ -2,15 +2,15 @@ import assert from "node:assert/strict";
 
 import {
   BuildError,
-  createBuilder,
   createMorphScope,
   Deck,
+  expandDocument,
   Slide,
   targets,
   type BuildOptions,
   type CommonNode,
 } from "@react-pptx/core";
-import { createDocumentBuild } from "@react-pptx/core/document";
+import { createResolver, emit } from "@react-pptx/core/build";
 import { validatePptx } from "@react-pptx/validation";
 import { PNG } from "pngjs";
 import { createElement, type ReactNode } from "react";
@@ -255,7 +255,7 @@ export const transitionPositiveScenario: CapabilityScenario = {
       ),
     );
   },
-  async assert({ author, preview }) {
+  async assert({ author, pptx, preview }) {
     assert.equal(preview.pages.length, 3, author);
     for (const page of preview.pages) {
       assert.deepEqual(page.diagnostics, [], `${author} p${page.page}`);
@@ -294,7 +294,7 @@ export const transitionPositiveScenario: CapabilityScenario = {
       author,
     );
 
-    const file = await validatePptx(preview.build.pptx, {
+    const file = await validatePptx(pptx, {
       allowedExtensions: ["p14", "p159"],
     });
     assert.deepEqual(file.errors, [], author);
@@ -356,7 +356,7 @@ export const transitionPositiveScenario: CapabilityScenario = {
     );
 
     // Baseline-only validation must reject the exported file because p14/p159 extensions are used.
-    const baselineCheck = await validatePptx(preview.build.pptx, {
+    const baselineCheck = await validatePptx(pptx, {
       allowedExtensions: [],
     });
     assert.ok(
@@ -374,8 +374,23 @@ type DualAuthorRejectionCase = {
   document(): CommonNode;
 };
 
-const runJsxBuild = createBuilder(documentCapabilities);
-const runDocBuild = createDocumentBuild(documentCapabilities);
+const resolveDefault = createResolver(documentCapabilities);
+const runJsxBuild = async (element: ReactNode, options?: BuildOptions) =>
+  emit(
+    resolveDefault(
+      await expandDocument(
+        element,
+        options?.signal === undefined ? {} : { signal: options.signal },
+      ),
+      options,
+    ),
+    options?.signal === undefined ? {} : { signal: options.signal },
+  );
+const runDocBuild = async (document: CommonNode, options?: BuildOptions) =>
+  emit(
+    resolveDefault(document, options),
+    options?.signal === undefined ? {} : { signal: options.signal },
+  );
 
 export const transitionRejectionCases: readonly DualAuthorRejectionCase[] = [
   {

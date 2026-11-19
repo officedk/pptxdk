@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
-import { BuildError, Deck, Slide, createBuilder } from "@react-pptx/core";
+import { BuildError, Deck, Slide, expandDocument } from "@react-pptx/core";
+import { createResolver, emit } from "@react-pptx/core/build";
 import { strFromU8, unzipSync } from "fflate";
 import { createElement } from "react";
 import { expect } from "vitest";
@@ -530,8 +531,8 @@ export const groupPositiveScenario: CapabilityScenario = {
       ),
     );
   },
-  assert({ preview, validation }) {
-    assert.deepEqual(preview.build.report.diagnostics, []);
+  assert({ resolution, pptx, preview, validation }) {
+    assert.deepEqual(resolution.report.diagnostics, []);
     assert.equal(preview.pages.length, 3);
     for (const page of preview.pages) {
       assert.deepEqual(page.diagnostics, []);
@@ -540,7 +541,7 @@ export const groupPositiveScenario: CapabilityScenario = {
 
     // Page 1: verify Query hierarchy, transformed screenGeometry, and Motion group members.
     const page1 = preview.pages[0]!;
-    const badgeGroupQuery = preview.build.query
+    const badgeGroupQuery = resolution.query
       .getSlide("group-hierarchy-and-transforms")
       .get("badge-group");
     const badgeObjects = badgeGroupQuery.observe().objects;
@@ -561,7 +562,7 @@ export const groupPositiveScenario: CapabilityScenario = {
     assert.ok(flippedNode.screenBox !== undefined);
 
     // Motion capability observation retains group target and native animation target id.
-    const slide1Motion = preview.build.report.slides[0]?.capabilities?.[
+    const slide1Motion = resolution.report.slides[0]?.capabilities?.[
       "motion"
     ] as MotionObservation;
     const badgeEffect = slide1Motion.steps
@@ -605,7 +606,7 @@ export const groupPositiveScenario: CapabilityScenario = {
     });
     assert.equal(siblingCardNode.box?.x, 292);
 
-    const unzipped = unzipSync(preview.build.pptx);
+    const unzipped = unzipSync(pptx);
     const slide1Xml = strFromU8(unzipped["ppt/slides/slide1.xml"]!);
     const slide2Xml = strFromU8(unzipped["ppt/slides/slide2.xml"]!);
     const slide3Xml = strFromU8(unzipped["ppt/slides/slide3.xml"]!);
@@ -737,11 +738,14 @@ export const groupRejectionScenario: CapabilityScenario = {
     assert.ok(validPage.png !== undefined);
 
     // Build-time continuity, empty-group, and missing-capability rejections via formal builder.
-    const trimmedBuilder = createBuilder([
+    const trimmedResolve = createResolver([
       groupCapability,
       boxCapability,
       shapeCapability,
     ]);
+    const trimmedBuilder = async (
+      element: Parameters<typeof expandDocument>[0],
+    ) => emit(trimmedResolve(await expandDocument(element)));
     await assert.rejects(
       trimmedBuilder(
         createElement(

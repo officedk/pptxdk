@@ -14,7 +14,8 @@ import {
   Cell,
   Chart,
   Deck,
-  createBuilder,
+  emit,
+  expandDocument,
   font,
   P,
   Row,
@@ -30,6 +31,7 @@ import {
   type BuildOptions,
   type FontSize,
 } from "@react-pptx/react-pptx";
+import { createResolver } from "@react-pptx/react-pptx/build";
 import { validatePptx } from "@react-pptx/validation";
 import { strFromU8, strToU8, unzipSync, zipSync } from "fflate";
 import * as fontkit from "fontkit";
@@ -827,7 +829,12 @@ describe("public build entry", () => {
         };
       },
     };
-    const shapeBuild = createBuilder([boxCapability, observedShapeCapability]);
+    const resolveShape = createResolver([
+      boxCapability,
+      observedShapeCapability,
+    ]);
+    const shapeBuild = async (element: Parameters<typeof expandDocument>[0]) =>
+      emit(resolveShape(await expandDocument(element)));
     const measurementFont = font("Jost", [{ weight: 400, data: jostBook }], {
       substitute: true,
     });
@@ -3916,8 +3923,10 @@ describe("public build entry", () => {
       });
     }
 
-    const result = await createBuilder([observedShape])(
-      deck(createElement(CleanupBeforeBuild)),
+    const result = emit(
+      createResolver([observedShape])(
+        await expandDocument(deck(createElement(CleanupBeforeBuild))),
+      ),
     );
 
     assert.equal(cleaned, 2);
@@ -3950,7 +3959,7 @@ describe("public build entry", () => {
       },
     };
 
-    const result = await createBuilder([observedShape])(
+    const expanded = await expandDocument(
       deck(
         createElement(Shape, {
           id: "options-visible-to-capabilities",
@@ -3961,12 +3970,14 @@ describe("public build entry", () => {
           height: 60,
         }),
       ),
-      {
-        signal: controller.signal,
-        target: targets.baselineOnly,
-        embedFonts: "full",
-      },
+      { signal: controller.signal },
     );
+    const resolution = createResolver([observedShape])(expanded, {
+      signal: controller.signal,
+      target: targets.baselineOnly,
+      embedFonts: "full",
+    });
+    const result = emit(resolution, { signal: controller.signal });
 
     assert.equal(parseOptions.length, 1);
     assert.equal(compileOptions.length, 1);
@@ -4002,19 +4013,24 @@ describe("public build entry", () => {
       return true;
     });
 
-    const clippedBuild = createBuilder([]);
+    const resolveClipped = createResolver([]);
     await assert.rejects(
-      clippedBuild(
-        deck(
-          createElement(Shape, {
-            id: "trimmed-shape",
-            x: 0,
-            y: 0,
-            width: 20,
-            height: 20,
-          }),
+      async () =>
+        emit(
+          resolveClipped(
+            await expandDocument(
+              deck(
+                createElement(Shape, {
+                  id: "trimmed-shape",
+                  x: 0,
+                  y: 0,
+                  width: 20,
+                  height: 20,
+                }),
+              ),
+            ),
+          ),
         ),
-      ),
       (error: unknown) => {
         assert.ok(error instanceof BuildError);
         assert.equal(error.diagnostics[0]?.code, "missing-capability");
@@ -4028,19 +4044,23 @@ describe("public build entry", () => {
   });
 
   it("adheres to basic Transitional target along the same pipeline for explicit shape module", async () => {
-    const result = await createBuilder([shapeCapability])(
-      deck(
-        createElement(Shape, {
-          id: "triangle",
-          geometry: "triangle",
-          x: 0,
-          y: 0,
-          width: 80,
-          height: 60,
-          fill: "#FFAA00",
-        }),
+    const result = emit(
+      createResolver([shapeCapability])(
+        await expandDocument(
+          deck(
+            createElement(Shape, {
+              id: "triangle",
+              geometry: "triangle",
+              x: 0,
+              y: 0,
+              width: 80,
+              height: 60,
+              fill: "#FFAA00",
+            }),
+          ),
+        ),
+        { target: targets.baselineOnly },
       ),
-      { target: targets.baselineOnly },
     );
 
     assert.deepEqual(result.report.target.extensions, []);
@@ -4428,16 +4448,21 @@ describe("public build entry", () => {
 
   it("locates omitted Slide declarations after trimming transition capabilities", async () => {
     await assert.rejects(
-      createBuilder([shapeCapability])(
-        createElement(
-          Deck,
-          {},
-          createElement(Slide, {
-            id: "missing-transition-module",
-            transition: transitions.fade(),
-          }),
+      async () =>
+        emit(
+          createResolver([shapeCapability])(
+            await expandDocument(
+              createElement(
+                Deck,
+                {},
+                createElement(Slide, {
+                  id: "missing-transition-module",
+                  transition: transitions.fade(),
+                }),
+              ),
+            ),
+          ),
         ),
-      ),
       (error: unknown) => {
         assert.ok(error instanceof BuildError);
         assert.equal(error.diagnostics[0]?.code, "missing-capability");

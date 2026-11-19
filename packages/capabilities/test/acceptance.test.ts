@@ -11,9 +11,7 @@ import {
   CommonNode,
   Deck,
   Slide,
-  createBuilder,
   createMorphScope,
-  createPreview,
   expandDocument,
   pxToEmu,
   xmlEscape,
@@ -25,17 +23,31 @@ import {
   type ObjectCapabilityModule,
   type SlideCapabilityModule,
 } from "@react-pptx/core";
+import { createResolver, emit } from "@react-pptx/core/build";
 import { parseCapabilityLayoutContract } from "@react-pptx/core/capability";
-import {
-  RichTextContainer,
-  createDocumentBuild,
-} from "@react-pptx/core/document";
-import { createDocumentPreview } from "@react-pptx/core/preview";
+import { RichTextContainer } from "@react-pptx/core/document";
+import { paint } from "@react-pptx/core/preview";
 import { validatePptx } from "@react-pptx/validation";
 import { strFromU8, unzipSync } from "fflate";
 import { PNG } from "pngjs";
-import { createElement, type ComponentType } from "react";
+import { createElement, type ComponentType, type ReactNode } from "react";
 import { describe, expect, it } from "vitest";
+
+function previewDocWith(modules: readonly CapabilityModule[]) {
+  const resolveWith = createResolver(modules);
+  return async (document: CommonNode) => {
+    const resolution = resolveWith(document);
+    return { resolution, ...emit(resolution), ...paint(resolution) };
+  };
+}
+
+function previewJsxWith(modules: readonly CapabilityModule[]) {
+  const resolveWith = createResolver(modules);
+  return async (element: ReactNode) => {
+    const resolution = resolveWith(await expandDocument(element));
+    return { resolution, ...emit(resolution), ...paint(resolution) };
+  };
+}
 
 import { boxCapability } from "../src/box.ts";
 import { Chart } from "../src/chart-elements.ts";
@@ -169,8 +181,8 @@ describe("Capability-owned acceptance scenarios & custom bound preview extension
   }, 30_000);
 
   it("enforces unsupported Block/Flex and Grid layout rejections consistently across JSX and document entries", async () => {
-    const jsxPreview = createPreview(documentCapabilities);
-    const docPreview = createDocumentPreview(documentCapabilities);
+    const jsxPreview = previewJsxWith(documentCapabilities);
+    const docPreview = previewDocWith(documentCapabilities);
     for (const entry of [
       ...layoutBlockFlexRejectionCases,
       ...layoutGridRejectionCases,
@@ -275,15 +287,15 @@ describe("Capability-owned acceptance scenarios & custom bound preview extension
       ),
     );
 
-    const previewDocument = createDocumentPreview(documentCapabilities);
+    const previewDocument = previewDocWith(documentCapabilities);
     const first = await previewDocument(expanded);
     assert.deepEqual(first.pages[0]?.diagnostics, []);
-    assert.deepEqual((await validatePptx(first.build.pptx)).errors, []);
+    assert.deepEqual((await validatePptx(first.pptx)).errors, []);
     const firstPng = first.pages[0].png!.slice();
     const firstSvg = first.pages[0].svg!;
-    const firstPptx = first.build.pptx.slice();
-    const firstReportSnapshot = JSON.stringify(first.build.report);
-    const firstHeight = first.build.query
+    const firstPptx = first.pptx.slice();
+    const firstReportSnapshot = JSON.stringify(first.report);
+    const firstHeight = first.query
       .getSlide("handoff")
       .get("headline")
       .observe().box!.height;
@@ -299,12 +311,12 @@ describe("Capability-owned acceptance scenarios & custom bound preview extension
 
     const second = await previewDocument(expanded);
     assert.deepEqual(second.pages[0]?.diagnostics, []);
-    assert.deepEqual((await validatePptx(second.build.pptx)).errors, []);
+    assert.deepEqual((await validatePptx(second.pptx)).errors, []);
     assert.equal(
-      second.build.query.getSlide("handoff").get("headline").observe().text,
+      second.query.getSlide("handoff").get("headline").observe().text,
       "Updated longer headline wrapping across multiple lines",
     );
-    const secondHeight = second.build.query
+    const secondHeight = second.query
       .getSlide("handoff")
       .get("headline")
       .observe().box!.height;
@@ -315,10 +327,10 @@ describe("Capability-owned acceptance scenarios & custom bound preview extension
     // Prior BuildResult and PreviewResult remain unchanged.
     assert.equal(first.pages[0]?.svg, firstSvg);
     assert.deepEqual(first.pages[0]?.png, firstPng);
-    assert.deepEqual(first.build.pptx, firstPptx);
-    assert.equal(JSON.stringify(first.build.report), firstReportSnapshot);
+    assert.deepEqual(first.pptx, firstPptx);
+    assert.equal(JSON.stringify(first.report), firstReportSnapshot);
     assert.equal(
-      first.build.query.getSlide("handoff").get("headline").observe().text,
+      first.query.getSlide("handoff").get("headline").observe().text,
       "Initial title",
     );
 
@@ -337,10 +349,9 @@ describe("Capability-owned acceptance scenarios & custom bound preview extension
     );
     const motionBuildA = await previewDocument(motionDoc);
     const motionBuildB = await previewDocument(motionDoc);
-    const effectA = observeMotion(motionBuildA.build.report.slides[0]!)!
-      .steps[0]!.effects[0]!;
-    const stepB = observeMotion(motionBuildB.build.report.slides[0]!)!
-      .steps[0]!;
+    const effectA = observeMotion(motionBuildA.report.slides[0]!)!.steps[0]!
+      .effects[0]!;
+    const stepB = observeMotion(motionBuildB.report.slides[0]!)!.steps[0]!;
     assert.throws(
       () => stepB.before(effectA.start.ref, effectA.end.ref),
       (error: unknown) =>
@@ -445,7 +456,7 @@ describe("Capability-owned acceptance scenarios & custom bound preview extension
       },
     };
 
-    const previewCustom = createDocumentPreview([
+    const previewCustom = previewDocWith([
       shapeCapability,
       customMarkerWithPreview,
       customMarkerWithoutPreview,
@@ -493,7 +504,7 @@ describe("Capability-owned acceptance scenarios & custom bound preview extension
       [0xdc, 0x26, 0x26, 255],
     );
     assert.ok(
-      result.build.query.getSlide("warn-keeps-png").get("dot").observe().box
+      result.query.getSlide("warn-keeps-png").get("dot").observe().box
         ?.width === 80,
     );
 
@@ -512,8 +523,8 @@ describe("Capability-owned acceptance scenarios & custom bound preview extension
       ]),
     );
 
-    // Same custom bound extension works via JSX createPreview and shares trimmed constraints.
-    const jsxCustomPreview = createPreview([shapeCapability]);
+    // Same custom bound extension works via JSX expansion and shares trimmed constraints.
+    const jsxCustomPreview = previewJsxWith([shapeCapability]);
     const trimmedOk = await jsxCustomPreview(
       createElement(
         Deck,
@@ -546,7 +557,7 @@ describe("Capability-owned acceptance scenarios & custom bound preview extension
     assert.equal("measureLayout" in notesCapability, false);
 
     // Notes-only slide previews cleanly as an empty canvas without fake previewSlide errors or leaked notes text.
-    const notesOnlyPreview = createDocumentPreview([
+    const notesOnlyPreview = previewDocWith([
       notesCapability,
       slideBackgroundCapability,
     ]);
@@ -572,8 +583,8 @@ describe("Capability-owned acceptance scenarios & custom bound preview extension
       notesCapability,
       slideBackgroundCapability,
     ] as const;
-    const previewDocTrimmed = createDocumentPreview(trimmedModules);
-    const previewJsxTrimmed = createPreview(trimmedModules);
+    const previewDocTrimmed = previewDocWith(trimmedModules);
+    const previewJsxTrimmed = previewJsxWith(trimmedModules);
 
     const doc = deck({ width: 480, height: 270 }).append(
       slide({ id: "trimmed-text" }).append(
@@ -599,7 +610,7 @@ describe("Capability-owned acceptance scenarios & custom bound preview extension
     const docResult = await previewDocTrimmed(doc);
     assert.deepEqual(docResult.pages[0]?.diagnostics, []);
     assert.ok(docResult.pages[0]?.png !== undefined);
-    assert.deepEqual(docResult.build.report.slides[0]?.capabilities, {
+    assert.deepEqual(docResult.report.slides[0]?.capabilities, {
       notes: { text: "Trimmed text check 1", paragraphCount: 1 },
     });
 
@@ -637,7 +648,7 @@ describe("Capability-owned acceptance scenarios & custom bound preview extension
     );
     assert.deepEqual(jsxResult.pages[0]?.diagnostics, []);
     assert.ok(jsxResult.pages[0]?.png !== undefined);
-    assert.deepEqual(jsxResult.build.report.slides[0]?.capabilities, {
+    assert.deepEqual(jsxResult.report.slides[0]?.capabilities, {
       notes: { text: "Trimmed text check 1", paragraphCount: 1 },
     });
 
@@ -654,13 +665,13 @@ describe("Capability-owned acceptance scenarios & custom bound preview extension
     }
 
     const withBoxModules = [...trimmedModules, boxCapability] as const;
-    const previewDocWithBox = createDocumentPreview(withBoxModules);
-    const previewJsxWithBox = createPreview(withBoxModules);
-    const previewWithoutNotes = createDocumentPreview([
+    const previewDocWithBox = previewDocWith(withBoxModules);
+    const previewJsxWithBox = previewJsxWith(withBoxModules);
+    const previewWithoutNotes = previewDocWith([
       shapeCapability,
       boxCapability,
     ]);
-    const previewJsxWithoutNotes = createPreview([
+    const previewJsxWithoutNotes = previewJsxWith([
       shapeCapability,
       boxCapability,
     ]);
@@ -803,15 +814,7 @@ describe("Capability-owned acceptance scenarios & custom bound preview extension
 
     for (const invalidModule of [legacyObjectModule, legacySlideModule]) {
       assert.throws(
-        () => createDocumentBuild([invalidModule]),
-        (error: unknown) => {
-          assert(error instanceof BuildError);
-          assert.equal(error.diagnostics[0]?.code, "invalid-capability-module");
-          return true;
-        },
-      );
-      assert.throws(
-        () => createBuilder([invalidModule]),
+        () => createResolver([invalidModule]),
         (error: unknown) => {
           assert(error instanceof BuildError);
           assert.equal(error.diagnostics[0]?.code, "invalid-capability-module");
@@ -828,15 +831,16 @@ describe("Capability-owned acceptance scenarios & custom bound preview extension
         } as unknown as ReturnType<ObjectCapabilityModule["bind"]>;
       },
     };
-    const brokenObjectBuild = createDocumentBuild([brokenObjectBinding]);
-    await assert.rejects(
-      brokenObjectBuild(
-        deck().append(
-          slide({ id: "s1" }).append(
-            new CommonNode("broken", "rp:broken-object", { id: "bad-obj" }),
+    const brokenObjectResolve = createResolver([brokenObjectBinding]);
+    assert.throws(
+      () =>
+        brokenObjectResolve(
+          deck().append(
+            slide({ id: "s1" }).append(
+              new CommonNode("broken", "rp:broken-object", { id: "bad-obj" }),
+            ),
           ),
         ),
-      ),
       (error: unknown) => {
         assert(error instanceof BuildError);
         assert.equal(error.diagnostics[0]?.code, "invalid-capability-binding");
@@ -856,11 +860,12 @@ describe("Capability-owned acceptance scenarios & custom bound preview extension
         return {} as unknown as ReturnType<SlideCapabilityModule["bindSlide"]>;
       },
     };
-    const brokenSlideBuild = createDocumentBuild([brokenSlideBinding]);
-    await assert.rejects(
-      brokenSlideBuild(
-        deck().append(slide({ id: "s1", background: "#123456" })),
-      ),
+    const brokenSlideResolve = createResolver([brokenSlideBinding]);
+    assert.throws(
+      () =>
+        brokenSlideResolve(
+          deck().append(slide({ id: "s1", background: "#123456" })),
+        ),
       (error: unknown) => {
         assert(error instanceof BuildError);
         assert.equal(error.diagnostics[0]?.code, "invalid-capability-binding");
@@ -872,7 +877,7 @@ describe("Capability-owned acceptance scenarios & custom bound preview extension
 
   it("delegates transparent declaration prop validation (including morphKey) to compileDeclaration without core prop readbacks", async () => {
     const morphKey = createMorphScope().handle("step-key");
-    const stepBuild = createBuilder([motionCapability, shapeCapability]);
+    const stepBuild = previewJsxWith([motionCapability, shapeCapability]);
     await assert.rejects(
       stepBuild(
         createElement(
@@ -936,11 +941,11 @@ describe("Capability-owned acceptance scenarios & custom bound preview extension
       },
     };
 
-    const backdropDocPreview = createDocumentPreview([
+    const backdropDocPreview = previewDocWith([
       customBackdropModule,
       shapeCapability,
     ]);
-    const backdropJsxPreview = createPreview([
+    const backdropJsxPreview = previewJsxWith([
       customBackdropModule,
       shapeCapability,
     ]);
@@ -980,12 +985,12 @@ describe("Capability-owned acceptance scenarios & custom bound preview extension
 
     for (const result of [docResult, jsxResult]) {
       assert.deepEqual(result.pages[0]?.diagnostics, []);
-      assert.deepEqual((await validatePptx(result.build.pptx)).errors, []);
-      assert.deepEqual(result.build.report.slides[0]?.capabilities, {
+      assert.deepEqual((await validatePptx(result.pptx)).errors, []);
+      assert.deepEqual(result.report.slides[0]?.capabilities, {
         "custom-backdrop": { backdropColor: "#0F766E" },
       });
       const slideXml = strFromU8(
-        unzipSync(result.build.pptx)["ppt/slides/slide1.xml"]!,
+        unzipSync(result.pptx)["ppt/slides/slide1.xml"]!,
       );
       expect(slideXml).toContain('<a:srgbClr val="0F766E"/>');
       const png = PNG.sync.read(Buffer.from(result.pages[0].png!));
@@ -1026,9 +1031,7 @@ describe("Capability-owned acceptance scenarios & custom bound preview extension
         };
       },
     };
-    const noPreviewResult = await createDocumentPreview([
-      backdropWithoutPreview,
-    ])(
+    const noPreviewResult = await previewDocWith([backdropWithoutPreview])(
       deck({ width: 200, height: 120 }).append(
         slide({ id: "no-bg-prev", background: "#1E293B" }),
       ),
@@ -1059,8 +1062,8 @@ describe("Capability-owned acceptance scenarios & custom bound preview extension
       slideBackgroundCapability,
       chartCapability,
     ] as const;
-    const chartTrimmedDoc = createDocumentPreview(chartOnlyModules);
-    const chartTrimmedJsx = createPreview(chartOnlyModules);
+    const chartTrimmedDoc = previewDocWith(chartOnlyModules);
+    const chartTrimmedJsx = previewJsxWith(chartOnlyModules);
     const chartGroup = {
       kind: "column" as const,
       data: { kind: "shared-categories" as const, categories: ["Q1", "Q2"] },
@@ -1102,8 +1105,8 @@ describe("Capability-owned acceptance scenarios & custom bound preview extension
     );
     assert.ok(chartDocOut.pages[0]?.png !== undefined);
     assert.ok(chartJsxOut.pages[0]?.png !== undefined);
-    assert.deepEqual((await validatePptx(chartDocOut.build.pptx)).errors, []);
-    assert.deepEqual((await validatePptx(chartJsxOut.build.pptx)).errors, []);
+    assert.deepEqual((await validatePptx(chartDocOut.pptx)).errors, []);
+    assert.deepEqual((await validatePptx(chartJsxOut.pptx)).errors, []);
     await assert.rejects(
       () =>
         chartTrimmedDoc(

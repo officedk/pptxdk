@@ -258,22 +258,29 @@ export function validateBoundObjectCapability(
       "Object capability bind() must return a bound capability object",
     );
   }
-  const candidate = bound as Partial<BoundObjectCapability>;
+  const candidate = bound as {
+    readonly contract?: Partial<CapabilityLayoutContract>;
+    readonly compile?: unknown;
+    readonly resolve?: unknown;
+  };
+  const hasCompile = typeof candidate.compile === "function";
+  const hasResolve = typeof candidate.resolve === "function";
   if (
     typeof candidate.contract !== "object" ||
     candidate.contract === null ||
+    candidate.contract.nativeKind === undefined ||
     !nativeElementKinds.has(candidate.contract.nativeKind) ||
     typeof candidate.contract.layoutStyle !== "object" ||
     candidate.contract.layoutStyle === null ||
     Array.isArray(candidate.contract.layoutStyle) ||
-    typeof candidate.compile !== "function"
+    hasCompile === hasResolve
   ) {
     throw new CapabilityError(
       "invalid-capability-binding",
-      "Object capability bind() must return a valid contract and compile handler",
+      "Object capability bind() must return a valid contract and resolve or compile handler",
     );
   }
-  return candidate as BoundObjectCapability;
+  return bound as BoundObjectCapability;
 }
 
 function objectModule(

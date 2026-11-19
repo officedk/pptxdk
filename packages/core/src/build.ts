@@ -1,4 +1,4 @@
-export { createFormalBuild } from "#/formal-build.ts";
+export { createFormalBuild, createResolver, emit } from "#/formal-build.ts";
 export { BuildError, CapabilityError } from "#/diagnostics.ts";
 export { formatBaseline, targets } from "#/types.ts";
 export type {
@@ -7,7 +7,12 @@ export type {
   BuildResult,
   CapabilityModule,
   Diagnostic,
+  EmitOptions,
+  EmitResult,
   Extension,
+  Resolution,
+  ResolutionReport,
+  ResolveOptions,
   Target,
 } from "#/types.ts";
 export type {

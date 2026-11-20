@@ -162,21 +162,217 @@ describe("Slice 3 (Ticket 04): Image static preview positive behaviors", () => {
     );
   });
 
-  it("rejects GIF, non-rect geometry masks, image border/shadow styles, and corrupt PNG/JPEG streams with located diagnostics while preserving valid sibling pages", async () => {
+  it("renders GIF87a/89a first frame including GCT, LCT, GCE transparency, and interlacing", async () => {
+    const previewDoc = runDocPreview(documentCapabilities);
+
+    // Independent known-good 1x1 white GIF89a with GCT.
+    const gif1x1White = new Uint8Array(
+      Buffer.from(
+        "47494638396101000100800000ffffff0000002c00000000010001000002024401003b",
+        "hex",
+      ),
+    );
+
+    // Build an 8x8 interlaced GIF89a with LCT and GCE transparent index 0:
+    // Pass 0 (y=0), Pass 1 (y=4), Pass 2 (y=2,6), Pass 3 (y=1,3,5,7).
+    // Row 0 = color 1 (red #FF0000), Row 1 = color 0 (transparent), Rows 2..7 = color 2 (blue #0000FF).
+    const lzwEncodeMin2 = (pixels: readonly number[]): Uint8Array => {
+      const bytes: number[] = [];
+      let bitBuf = 0;
+      let bitCount = 0;
+      const pushCode = (code: number, width: number) => {
+        bitBuf |= code << bitCount;
+        bitCount += width;
+        while (bitCount >= 8) {
+          bytes.push(bitBuf & 0xff);
+          bitBuf >>>= 8;
+          bitCount -= 8;
+        }
+      };
+      // Reset dictionary every few pixels to keep 3-bit codes simple and deterministic.
+      pushCode(4, 3); // clear
+      for (const p of pixels) {
+        pushCode(p, 3);
+        pushCode(4, 3); // clear so code size remains 3 bits
+      }
+      pushCode(5, 3); // EOI
+      if (bitCount > 0) bytes.push(bitBuf & 0xff);
+      return new Uint8Array(bytes);
+    };
+
+    const interlaceRows = [0, 4, 2, 6, 1, 3, 5, 7];
+    const rowColor = (y: number) => (y === 0 ? 1 : y === 1 ? 0 : 2);
+    const interlacedPixels: number[] = [];
+    for (const y of interlaceRows) {
+      for (let x = 0; x < 8; x += 1) {
+        interlacedPixels.push(rowColor(y));
+      }
+    }
+    const compressedInterlaced = lzwEncodeMin2(interlacedPixels);
+    const gifInterlaced = new Uint8Array([
+      // Header GIF89a + LSD 8x8 (no GCT: packed = 0x00)
+      0x47,
+      0x49,
+      0x46,
+      0x38,
+      0x39,
+      0x61,
+      8,
+      0,
+      8,
+      0,
+      0x00,
+      0,
+      0,
+      // GCE: transparent flag=1, transparent index=0
+      0x21,
+      0xf9,
+      0x04,
+      0x01,
+      0x00,
+      0x00,
+      0x00,
+      0x00,
+      // Image descriptor 8x8, LCT=1 (4 colors -> 0x81), Interlace=1 (0x40) => packed = 0xC1
+      0x2c,
+      0,
+      0,
+      0,
+      0,
+      8,
+      0,
+      8,
+      0,
+      0xc1,
+      // LCT (4 RGB entries)
+      0,
+      0,
+      0, // 0: transparent
+      255,
+      0,
+      0, // 1: red
+      0,
+      0,
+      255, // 2: blue
+      0,
+      255,
+      0, // 3: green
+      // LZW min code size = 2
+      0x02,
+      compressedInterlaced.length,
+      ...compressedInterlaced,
+      0x00, // sub-block terminator
+      0x3b, // trailer
+    ]);
+
+    // GIF87a 2x2 solid green (#00AA00) with GCT.
+    const compressed87a = lzwEncodeMin2([1, 1, 1, 1]);
+    const gif87a = new Uint8Array([
+      0x47,
+      0x49,
+      0x46,
+      0x38,
+      0x37,
+      0x61,
+      2,
+      0,
+      2,
+      0,
+      0x81,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      170,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0x2c,
+      0,
+      0,
+      0,
+      0,
+      2,
+      0,
+      2,
+      0,
+      0x00,
+      0x02,
+      compressed87a.length,
+      ...compressed87a,
+      0x00,
+      0x3b,
+    ]);
+
+    const doc = deck({ width: 240, height: 120 }).append(
+      slide({ id: "gifs", background: "#10B981" }).append(
+        image({
+          id: "gif-white",
+          src: gif1x1White,
+          x: 10,
+          y: 10,
+          width: 40,
+          height: 40,
+        }),
+        image({
+          id: "gif-interlaced",
+          src: gifInterlaced,
+          x: 60,
+          y: 10,
+          width: 80,
+          height: 80,
+        }),
+        image({
+          id: "gif-87a",
+          src: gif87a,
+          x: 160,
+          y: 10,
+          width: 40,
+          height: 40,
+        }),
+      ),
+    );
+    const result = await previewDoc(doc);
+    assert.deepEqual((await validatePptx(result.pptx)).errors, []);
+    const page = result.pages[0]!;
+    assert.deepEqual(page.diagnostics, []);
+    assert.ok(page.png !== undefined);
+    const rendered = PNG.sync.read(Buffer.from(page.png));
+    const px = (x: number, y: number) => [
+      ...rendered.data.subarray(
+        (y * rendered.width + x) * 4,
+        (y * rendered.width + x) * 4 + 4,
+      ),
+    ];
+    // 1x1 white GIF at (10..50, 10..50)
+    assert.deepEqual(px(30, 30), [255, 255, 255, 255]);
+    // Interlaced 8x8 scaled to 80x80 at (60, 10):
+    // Row 0 -> y in 10..19 is red (#FF0000)
+    const row0 = px(100, 11);
+    assert.ok(row0[0]! > 240 && row0[1]! < 20 && row0[2]! < 20);
+    // Row 1 -> y in 20..29 is transparent, revealing slide background #10B981
+    const row1 = px(100, 25);
+    assert.ok(row1[0]! < 80 && row1[1]! > 150 && row1[2]! > 100);
+    // Row 2 -> y in 30..39 is blue (#0000FF)
+    const row2 = px(100, 35);
+    assert.ok(row2[0]! < 40 && row2[1]! < 60 && row2[2]! > 220);
+    // GIF87a green (#00AA00) at (160..200, 10..50)
+    assert.deepEqual(px(180, 30), [0, 170, 0, 255]);
+  });
+
+  it("rejects non-rect geometry masks, image border/shadow styles, and corrupt PNG/JPEG/GIF streams with located diagnostics while preserving valid sibling pages", async () => {
     const { encode } = await import("jpeg-js");
     const previewDoc = runDocPreview(documentCapabilities);
 
     const validSource = createTwoToneSource();
     const validPng = new Uint8Array(PNG.sync.write(validSource));
     const validJpeg = new Uint8Array(encode(validSource, 90).data);
-
-    // Minimal valid 1x1 GIF89a with one image block and trailer.
-    const validGif = new Uint8Array(
-      Buffer.from(
-        "47494638396101000100800000ffffff0000002c00000000010001000002024401003b",
-        "hex",
-      ),
-    );
 
     // Valid PNG header/chunks with corrupted IDAT compressed data.
     const corruptPng = new Uint8Array(validPng);
@@ -197,16 +393,50 @@ describe("Slice 3 (Ticket 04): Image static preview positive behaviors", () => {
       corruptJpeg[i] = 0x55;
     }
 
+    // Valid GIF framing (GIF89a 2x2) with invalid LZW code (> nextCode).
+    const corruptGif = new Uint8Array([
+      0x47,
+      0x49,
+      0x46,
+      0x38,
+      0x39,
+      0x61,
+      2,
+      0,
+      2,
+      0,
+      0x80,
+      0,
+      0,
+      0xff,
+      0xff,
+      0xff,
+      0x00,
+      0x00,
+      0x00,
+      0x2c,
+      0,
+      0,
+      0,
+      0,
+      2,
+      0,
+      2,
+      0,
+      0x00,
+      0x02,
+      0x02,
+      0xbc, // first 3-bit code is 4 (clear), next is 7 (> nextCode=6)!
+      0x00,
+      0x00,
+      0x3b,
+    ]);
+
     const cases: readonly {
       readonly label: string;
       readonly node: ReturnType<typeof image>;
       readonly expected: RegExp;
     }[] = [
-      {
-        label: "gif",
-        node: image({ id: "bad", src: validGif, x: 10, y: 10 }),
-        expected: /PNG and JPEG/i,
-      },
       {
         label: "ellipse-mask",
         node: image({
@@ -310,6 +540,11 @@ describe("Slice 3 (Ticket 04): Image static preview positive behaviors", () => {
         label: "corrupt-jpeg",
         node: image({ id: "bad", src: corruptJpeg, x: 10, y: 10 }),
         expected: /decode JPEG/i,
+      },
+      {
+        label: "corrupt-gif",
+        node: image({ id: "bad", src: corruptGif, x: 10, y: 10 }),
+        expected: /decode GIF|GIF/i,
       },
     ];
 

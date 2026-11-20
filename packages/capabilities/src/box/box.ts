@@ -39,9 +39,10 @@ import {
 } from "../shared/identity.ts";
 import type { MorphProps } from "../shared/morph-api.ts";
 import {
+  emitVisualModel,
   hasVisibleBoxStyle,
-  resolveBoxPreviewVisuals,
-  shapePropertiesXml,
+  paintVisualModel,
+  resolveVisualModel,
   visualStyleKeys,
 } from "../shared/visual.ts";
 
@@ -146,7 +147,7 @@ export const boxCapability: ObjectCapabilityModule = {
       textStyleFrom(style),
     );
 
-    shapePropertiesXml({
+    resolveVisualModel({
       theme,
       style,
       box: { x: 0, y: 0, width: 100, height: 100 },
@@ -200,12 +201,14 @@ export const boxCapability: ObjectCapabilityModule = {
             "Box.name contains characters not allowed in XML 1.0",
           );
         }
-        const properties = shapePropertiesXml({
+        const visual = resolveVisualModel({
           theme: resolveContext.theme,
           style,
           box,
           layoutOnlyWhenInvisible: true,
         });
+        const geometryName =
+          visual.geometry.kind === "custom" ? "custom" : visual.geometry.name;
         const motionTarget = {
           kind: "shape",
           name,
@@ -217,40 +220,38 @@ export const boxCapability: ObjectCapabilityModule = {
         } as const;
         const annotations = motionContainerAnnotations(
           motionProps,
-          properties.hasVisibleStyle ? motionTarget : undefined,
+          visual.hasVisibleStyle ? motionTarget : undefined,
           { propagatesDefaultEnter: true },
         );
-        const transform: PreviewTransform | undefined =
-          properties.hasVisibleStyle
-            ? {
-                box,
-                angle:
-                  typeof style["rotate"] === "number" ? style["rotate"] : 0,
-                flipH: false,
-                flipV: false,
-              }
-            : undefined;
+        const transform: PreviewTransform | undefined = visual.hasVisibleStyle
+          ? {
+              box,
+              angle: visual.rotate,
+              flipH: visual.flipH,
+              flipV: visual.flipV,
+            }
+          : undefined;
         return {
           observation: {
             id: resolveContext.id,
             kind: "shape",
             name,
-            geometry: properties.geometryName,
+            geometry: geometryName,
             box,
           },
           ...(transform === undefined ? {} : { transform }),
           extensions: [],
           ...(annotations.length === 0 ? {} : { annotations }),
-          ...(properties.warnings.length === 0
+          ...(visual.warnings.length === 0
             ? {}
-            : { warnings: properties.warnings }),
+            : { warnings: visual.warnings }),
           emit(emitContext: EmitContext): EmitOutput {
             return {
-              xml: properties.hasVisibleStyle
+              xml: visual.hasVisibleStyle
                 ? objectXml(
                     emitContext.id,
                     escapedName,
-                    properties.xml,
+                    emitVisualModel(visual, emitContext.registerResource).xml,
                     nativeLinkXml(emitContext.nativeLink),
                   )
                 : "",
@@ -258,18 +259,16 @@ export const boxCapability: ObjectCapabilityModule = {
           },
           paint(paintContext: PaintContext): PaintOutput {
             const childrenSvg = paintContext.childrenSvg ?? "";
-            if (!hasVisibleStyle) {
+            if (!visual.hasVisibleStyle) {
               return { svg: childrenSvg };
             }
-            const resolved = resolveBoxPreviewVisuals({
-              label: "box",
-              visualStyle: style,
-              box,
-              theme: resolveContext.theme,
+            const background = paintVisualModel({
+              model: visual,
+              slideNumber: paintContext.slideNumber,
+              objectId: paintContext.objectId,
             });
-            const backgroundSvg = `<g transform="${resolved.svgTransform}"><rect x="${box.x}" y="${box.y}" width="${box.width}" height="${box.height}" ${resolved.attributes}/></g>`;
             return {
-              svg: `${backgroundSvg}${childrenSvg}`,
+              svg: `${background.svg}${childrenSvg}`,
             };
           },
         };

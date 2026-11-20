@@ -65,6 +65,11 @@ function createCorruptJpeg(): Uint8Array {
 
 const corruptPngBytes = createCorruptPng();
 const corruptJpegBytes = createCorruptJpeg();
+const corruptGifBytes = new Uint8Array([
+  0x47, 0x49, 0x46, 0x38, 0x39, 0x61, 2, 0, 2, 0, 0x80, 0, 0, 0xff, 0xff, 0xff,
+  0x00, 0x00, 0x00, 0x2c, 0, 0, 0, 0, 2, 0, 2, 0, 0x00, 0x02, 0x02, 0xbc, 0x00,
+  0x00, 0x3b,
+]);
 
 export const imagePositiveScenario: CapabilityScenario = {
   id: "image-placement-and-transforms",
@@ -393,8 +398,8 @@ export const imageRejectionScenario: CapabilityScenario = {
         Slide,
         { id: "unsupported-image-preview" },
         createElement(Image, {
-          id: "gif-img",
-          src: sampleGifBytes,
+          id: "corrupt-gif-img",
+          src: corruptGifBytes,
           x: 20,
           y: 20,
           width: 40,
@@ -462,8 +467,8 @@ export const imageRejectionScenario: CapabilityScenario = {
     return deck({ width: 480, height: 270 }).append(
       slide({ id: "unsupported-image-preview" }).append(
         image({
-          id: "gif-img",
-          src: sampleGifBytes,
+          id: "corrupt-gif-img",
+          src: corruptGifBytes,
           x: 20,
           y: 20,
           width: 40,
@@ -532,7 +537,7 @@ export const imageRejectionScenario: CapabilityScenario = {
     assert.equal(p1.png, undefined, author);
     assert.equal(p1.diagnostics.length, 6, author);
     for (const id of [
-      "gif-img",
+      "corrupt-gif-img",
       "shaped-img",
       "bordered-img",
       "shadowed-img",

@@ -77,7 +77,10 @@ export type Shadow = {
 /** Visual fields shared across native DrawingML shapes, images, text boxes, and visible Boxes. */
 export type VisualStyle = {
   readonly backgroundColor?: ColorValue;
-  readonly backgroundImage?: LinearGradient | RadialGradient;
+  readonly backgroundImage?:
+    | LinearGradient
+    | RadialGradient
+    | { readonly image: string | URL | Uint8Array };
   readonly borderColor?: ColorValue;
   readonly borderWidth?: number;
   readonly borderStyle?: "solid" | "dashed" | "dotted";

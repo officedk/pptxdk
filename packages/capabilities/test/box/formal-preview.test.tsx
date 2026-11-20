@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createRequire } from "node:module";
 
 import { Box } from "@react-pptx/capabilities/box-elements";
 import {
@@ -8,7 +9,7 @@ import {
   shape,
   slide,
 } from "@react-pptx/capabilities/document";
-import { linearGradient } from "@react-pptx/capabilities/shape";
+import { linearGradient, radialGradient } from "@react-pptx/capabilities/shape";
 import { Shape } from "@react-pptx/capabilities/shape-elements";
 import type { CapabilityModule, CommonNode } from "@react-pptx/core";
 import { createResolver } from "@react-pptx/core/build";
@@ -16,8 +17,12 @@ import { emit } from "@react-pptx/emit";
 import { paint } from "@react-pptx/preview";
 import { Deck, Slide, expandDocument } from "@react-pptx/react";
 import { validatePptx } from "@react-pptx/validation";
+import { PNG } from "pngjs";
 import { createElement } from "react";
 import { describe, expect, it } from "vitest";
+
+const require = createRequire(import.meta.url);
+const { encode: encodeJpeg } = require("jpeg-js") as typeof import("jpeg-js");
 
 function runDocPreview(modules: readonly CapabilityModule[]) {
   const resolveWith = createResolver(modules);
@@ -175,96 +180,161 @@ describe("Slice 4 (Ticket 05): Box static preview positive and negative behavior
     expect(jsxResult.pages[0]?.svg).toContain('fill="#E2E8F0"');
   });
 
-  it("rejects unsupported visible Box preview styles while retaining valid sibling pages and PPTX", async () => {
+  it("renders visible Box containers with linear/radial gradients, image fill, borderRadius, dashed/dotted borders, boxShadow, and softEdge", async () => {
     const previewDoc = runDocPreview(documentCapabilities);
-    const rejectionCases: readonly {
-      readonly label: string;
-      readonly node: ReturnType<typeof box>;
-      readonly expected: RegExp;
-    }[] = [
-      {
-        label: "backgroundImage",
-        node: box({
-          id: "bad",
+    const pngImg = new PNG({ width: 4, height: 4 });
+    for (let i = 0; i < pngImg.data.length; i += 4) {
+      pngImg.data.set([0x25, 0x63, 0xeb, 255], i);
+    }
+    const validPng = new Uint8Array(PNG.sync.write(pngImg));
+    const validGif = new Uint8Array([
+      0x47, 0x49, 0x46, 0x38, 0x39, 0x61, 1, 0, 1, 0, 0x80, 0, 0, 0x10, 0xb9,
+      0x81, 0x00, 0x00, 0x00, 0x2c, 0, 0, 0, 0, 1, 0, 1, 0, 0x00, 0x02, 0x02,
+      0x44, 0x01, 0x00, 0x3b,
+    ]);
+
+    const doc = deck({ width: 480, height: 270 }).append(
+      slide({ id: "box-effects", background: "#FFFFFF" }).append(
+        box({
+          id: "grad-box",
           style: {
+            position: "absolute",
+            left: 20,
+            top: 20,
             width: 100,
             height: 50,
             backgroundImage: linearGradient(90, "#1D4ED8", "#9333EA"),
+            borderRadius: 10,
           },
         }),
-        expected: /backgroundImage/i,
-      },
-      {
-        label: "borderRadius",
-        node: box({
-          id: "bad",
+        box({
+          id: "radial-box",
           style: {
+            position: "absolute",
+            left: 140,
+            top: 20,
             width: 100,
             height: 50,
+            backgroundImage: radialGradient("#FEF3C7", "#1E3A8A"),
+          },
+        }),
+        box({
+          id: "img-png-box",
+          style: {
+            position: "absolute",
+            left: 260,
+            top: 20,
+            width: 80,
+            height: 50,
+            backgroundImage: { image: validPng },
+            borderRadius: 8,
+          },
+        }),
+        box({
+          id: "img-gif-box",
+          style: {
+            position: "absolute",
+            left: 360,
+            top: 20,
+            width: 80,
+            height: 50,
+            backgroundImage: { image: validGif },
+          },
+        }),
+        box({
+          id: "dashed-shadow-box",
+          style: {
+            position: "absolute",
+            left: 20,
+            top: 100,
+            width: 140,
+            height: 60,
             backgroundColor: "#E2E8F0",
-            borderRadius: 12,
-          },
-        }),
-        expected: /borderRadius/i,
-      },
-      {
-        label: "boxShadow",
-        node: box({
-          id: "bad",
-          style: {
-            width: 100,
-            height: 50,
-            backgroundColor: "#E2E8F0",
-            boxShadow: { blur: 4, distance: 2 },
-          },
-        }),
-        expected: /boxShadow/i,
-      },
-      {
-        label: "softEdge",
-        node: box({
-          id: "bad",
-          style: {
-            width: 100,
-            height: 50,
-            backgroundColor: "#E2E8F0",
-            softEdge: 4,
-          },
-        }),
-        expected: /softEdge/i,
-      },
-      {
-        label: "dashed-border",
-        node: box({
-          id: "bad",
-          style: {
-            width: 100,
-            height: 50,
             borderColor: "#0F172A",
+            borderWidth: 2,
             borderStyle: "dashed",
+            boxShadow: { blur: 4, distance: 6, angle: 90 },
           },
         }),
-        expected: /non-solid/i,
-      },
-      {
-        label: "dotted-border",
-        node: box({
-          id: "bad",
+        box({
+          id: "dotted-soft-box",
           style: {
-            width: 100,
-            height: 50,
-            borderColor: "#0F172A",
+            position: "absolute",
+            left: 200,
+            top: 100,
+            width: 140,
+            height: 60,
+            backgroundColor: "#0EA5E9",
+            borderColor: "#0369A1",
+            borderWidth: 2,
             borderStyle: "dotted",
+            softEdge: 6,
           },
         }),
-        expected: /non-solid/i,
-      },
-    ];
+      ),
+    );
 
-    for (const item of rejectionCases) {
+    const result = await previewDoc(doc);
+    assert.deepEqual((await validatePptx(result.pptx)).errors, []);
+    const page = result.pages[0]!;
+    assert.deepEqual(page.diagnostics, []);
+    assert.ok(page.png !== undefined);
+    assert.ok(page.svg !== undefined);
+    expect(page.svg).toContain("<linearGradient");
+    expect(page.svg).toContain("<radialGradient");
+    expect(page.svg).toContain("<pattern");
+    expect(page.svg).toContain("<feDropShadow");
+    expect(page.svg).toContain("<feGaussianBlur");
+    expect(page.svg).toContain("stroke-dasharray");
+  });
+
+  it("rejects corrupt PNG, JPEG, and GIF backgroundImage streams on Box with preview-corrupt-image while preserving valid sibling pages and PPTX", async () => {
+    const previewDoc = runDocPreview(documentCapabilities);
+    const source = new PNG({ width: 20, height: 10 });
+    for (let y = 0; y < 10; y += 1) {
+      for (let x = 0; x < 20; x += 1) {
+        source.data.set(
+          x < 10 ? [255, 0, 0, 255] : [0, 0, 255, 255],
+          (y * 20 + x) * 4,
+        );
+      }
+    }
+    const corruptPng = new Uint8Array(PNG.sync.write(source));
+    const idat = Buffer.from(corruptPng).indexOf(Buffer.from("IDAT"));
+    corruptPng[idat + 6] = (corruptPng[idat + 6] ?? 0) ^ 0xff;
+    corruptPng[idat + 7] = (corruptPng[idat + 7] ?? 0) ^ 0xff;
+
+    const corruptJpeg = new Uint8Array(encodeJpeg(source, 90).data);
+    const sos = Buffer.from(corruptJpeg).indexOf(Buffer.from([0xff, 0xda]));
+    const sosLen =
+      ((corruptJpeg[sos + 2] ?? 0) << 8) + (corruptJpeg[sos + 3] ?? 0);
+    for (let i = sos + 2 + sosLen; i < corruptJpeg.length - 4; i++) {
+      corruptJpeg[i] = 0x55;
+    }
+
+    const corruptGif = new Uint8Array([
+      0x47, 0x49, 0x46, 0x38, 0x39, 0x61, 2, 0, 2, 0, 0x80, 0, 0, 0xff, 0xff,
+      0xff, 0x00, 0x00, 0x00, 0x2c, 0, 0, 0, 0, 2, 0, 2, 0, 0x00, 0x02, 0x02,
+      0xbc, 0x00, 0x00, 0x3b,
+    ]);
+
+    for (const [label, bytes] of [
+      ["corrupt-png", corruptPng],
+      ["corrupt-jpeg", corruptJpeg],
+      ["corrupt-gif", corruptGif],
+    ] as const) {
       const result = await previewDoc(
         deck({ width: 240, height: 120 }).append(
-          slide({ id: "bad-box-page" }).append(item.node),
+          slide({ id: "bad-box-page" }).append(
+            box({
+              id: "bad",
+              style: {
+                width: 100,
+                height: 50,
+                backgroundImage: { image: bytes },
+              },
+            }),
+          ),
           slide({ id: "good-box-page" }).append(
             box({
               id: "ok",
@@ -276,27 +346,23 @@ describe("Slice 4 (Ticket 05): Box static preview positive and negative behavior
       assert.deepEqual(
         (await validatePptx(result.pptx)).errors,
         [],
-        item.label,
+        label,
       );
-      assert.equal(result.pages[0]?.png, undefined, item.label);
-      assert.equal(result.pages[0]?.svg, undefined, item.label);
-      assert.equal(
-        result.pages[0]?.diagnostics[0]?.severity,
-        "error",
-        item.label,
-      );
+      assert.equal(result.pages[0]?.png, undefined, label);
+      assert.equal(result.pages[0]?.svg, undefined, label);
+      assert.equal(result.pages[0]?.diagnostics[0]?.severity, "error", label);
       assert.match(
         result.pages[0]?.diagnostics[0]?.path ?? "",
         /box\[bad\]/,
-        item.label,
+        label,
       );
       assert.match(
         result.pages[0]?.diagnostics[0]?.message ?? "",
-        item.expected,
-        item.label,
+        /decode/i,
+        label,
       );
-      assert.ok(result.pages[1]?.png !== undefined, item.label);
-      assert.deepEqual(result.pages[1]?.diagnostics, [], item.label);
+      assert.ok(result.pages[1]?.png !== undefined, label);
+      assert.deepEqual(result.pages[1]?.diagnostics, [], label);
     }
   });
 });

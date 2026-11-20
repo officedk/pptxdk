@@ -6,13 +6,21 @@ import { join } from "node:path";
 import { describe, it } from "vitest";
 
 import { runCapabilityScenario } from "../acceptance-runner.ts";
-import { tablePositiveScenario, tableRejectionScenario } from "./scenarios.ts";
+import {
+  tablePositiveScenario,
+  tableRejectionScenario,
+  tableRichTextBordersAndOversetScenario,
+} from "./scenarios.ts";
 
 describe("Table capability acceptance", () => {
   it("runs Table dual-author positive and rejection scenarios through shared runner", async () => {
     const outDir = await mkdtemp(join(tmpdir(), "rp-table-accept-"));
     try {
-      for (const scenario of [tablePositiveScenario, tableRejectionScenario]) {
+      for (const scenario of [
+        tablePositiveScenario,
+        tableRichTextBordersAndOversetScenario,
+        tableRejectionScenario,
+      ]) {
         const runs = await runCapabilityScenario(scenario, {
           outputDir: outDir,
         });

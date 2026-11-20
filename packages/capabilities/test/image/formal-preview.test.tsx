@@ -7,7 +7,7 @@ import {
   slide,
 } from "@react-pptx/capabilities/document";
 import { Image } from "@react-pptx/capabilities/image-elements";
-import { path, preset } from "@react-pptx/capabilities/shape";
+import { preset } from "@react-pptx/capabilities/shape";
 import { type CapabilityModule, CommonNode } from "@react-pptx/core";
 import { createResolver } from "@react-pptx/core/build";
 import { emit } from "@react-pptx/emit";
@@ -366,7 +366,167 @@ describe("Slice 3 (Ticket 04): Image static preview positive behaviors", () => {
     assert.deepEqual(px(180, 30), [0, 170, 0, 255]);
   });
 
-  it("rejects non-rect geometry masks, image border/shadow styles, and corrupt PNG/JPEG/GIF streams with located diagnostics while preserving valid sibling pages", async () => {
+  it("renders preset and custom geometry masks, dashed/dotted borders, boxShadow, softEdge, and opacity without double-applying border alpha", async () => {
+    const { encode } = await import("jpeg-js");
+    const source = createTwoToneSource();
+    const pngBytes = new Uint8Array(PNG.sync.write(source));
+    const jpegBytes = new Uint8Array(encode(source, 100).data);
+
+    // 1x1 solid red GIF89a.
+    const gifRedBytes = new Uint8Array(
+      Buffer.from(
+        "47494638396101000100800000ff00000000002c00000000010001000002024401003b",
+        "hex",
+      ),
+    );
+
+    const previewDoc = runDocPreview(documentCapabilities);
+
+    // Separate fill=false stroke=true path should be stroked but NOT added to <clipPath>.
+    const multiSubpathMask = [
+      {
+        commands: [
+          { op: "M" as const, x: 0, y: 0 },
+          { op: "L" as const, x: 10, y: 0 },
+          { op: "L" as const, x: 5, y: 10 },
+          { op: "Z" as const },
+        ],
+        fill: true,
+        stroke: true,
+      },
+      {
+        commands: [
+          { op: "M" as const, x: 1, y: 9 },
+          { op: "L" as const, x: 9, y: 9 },
+        ],
+        fill: false,
+        stroke: true,
+      },
+    ];
+
+    const doc = deck({ width: 480, height: 240 }).append(
+      slide({ id: "image-masks-and-effects", background: "#FFFFFF" }).append(
+        // 1. Ellipse mask + dashed border + boxShadow on PNG
+        image({
+          id: "ellipse-dashed-shadow",
+          src: pngBytes,
+          geometry: "ellipse",
+          x: 20,
+          y: 20,
+          width: 100,
+          height: 80,
+          style: {
+            borderColor: "#1E293B",
+            borderWidth: 3,
+            borderStyle: "dashed",
+            boxShadow: { color: "#000000", blur: 6, distance: 6, angle: 45 },
+          },
+        }),
+        // 2. Adjusted roundRect mask + dotted border on JPEG
+        image({
+          id: "roundrect-dotted",
+          src: jpegBytes,
+          geometry: preset("roundRect", { adj: 25000 }),
+          x: 150,
+          y: 20,
+          width: 100,
+          height: 80,
+          style: {
+            borderColor: "#DC2626",
+            borderWidth: 2,
+            borderStyle: "dotted",
+          },
+        }),
+        // 3. SoftEdge + opacity on GIF
+        image({
+          id: "gif-softedge-opacity",
+          src: gifRedBytes,
+          geometry: "diamond",
+          x: 280,
+          y: 20,
+          width: 90,
+          height: 80,
+          style: {
+            softEdge: 8,
+            opacity: 0.6,
+          },
+        }),
+        // 4. Custom multi-path mask (one fill=false stroke=true subpath) + flipH + rotate
+        image({
+          id: "custom-mask-transformed",
+          src: pngBytes,
+          geometry: {
+            type: "custom",
+            width: 10,
+            height: 10,
+            paths: multiSubpathMask,
+          },
+          x: 20,
+          y: 130,
+          width: 100,
+          height: 80,
+          flipH: true,
+          style: {
+            rotate: 15,
+            borderColor: "#0F766E",
+            borderWidth: 2,
+            borderStyle: "solid",
+          },
+        }),
+        // 5. SmileyFace preset (contains fill="none" mouth arc) with solid border
+        image({
+          id: "smiley-mask",
+          src: pngBytes,
+          geometry: "smileyFace",
+          x: 160,
+          y: 130,
+          width: 90,
+          height: 80,
+          style: {
+            borderColor: "#0F172A",
+            borderWidth: 2,
+          },
+        }),
+      ),
+    );
+
+    const result = await previewDoc(doc);
+    assert.deepEqual((await validatePptx(result.pptx)).errors, []);
+    const page = result.pages[0]!;
+    assert.deepEqual(page.diagnostics, []);
+    assert.ok(page.png !== undefined);
+    assert.ok(page.svg !== undefined);
+    expect(page.svg).toContain("<clipPath");
+    expect(page.svg).toContain("stroke-dasharray=");
+    expect(page.svg).toContain("<feDropShadow");
+    expect(page.svg).toContain("<mask");
+
+    const rendered = PNG.sync.read(Buffer.from(page.png));
+    const px = (x: number, y: number) => [
+      ...rendered.data.subarray(
+        (y * rendered.width + x) * 4,
+        (y * rendered.width + x) * 4 + 4,
+      ),
+    ];
+    // Corner (22, 22) outside ellipse mask must stay white (not filled by image).
+    const outsideEllipse = px(22, 22);
+    assert.ok(
+      outsideEllipse[0]! > 240 &&
+        outsideEllipse[1]! > 240 &&
+        outsideEllipse[2]! > 240,
+    );
+    // Center of left half of ellipse (45, 60) must be red from two-tone PNG.
+    const insideEllipseLeft = px(45, 60);
+    assert.ok(insideEllipseLeft[0]! > 220 && insideEllipseLeft[2]! < 30);
+    // Center of right half of ellipse (95, 60) must be blue.
+    const insideEllipseRight = px(95, 60);
+    assert.ok(insideEllipseRight[2]! > 220 && insideEllipseRight[0]! < 30);
+    // GIF diamond with opacity 0.6 over white at center (325, 60) must be blended pink-red (R=255, G/B around 102).
+    const gifCenter = px(325, 60);
+    assert.ok(gifCenter[0]! > 240 && gifCenter[1]! > 70 && gifCenter[1]! < 150);
+  });
+
+  it("rejects only corrupt PNG/JPEG/GIF pixel streams with preview-corrupt-image while preserving valid sibling pages", async () => {
     const { encode } = await import("jpeg-js");
     const previewDoc = runDocPreview(documentCapabilities);
 
@@ -437,100 +597,6 @@ describe("Slice 3 (Ticket 04): Image static preview positive behaviors", () => {
       readonly node: ReturnType<typeof image>;
       readonly expected: RegExp;
     }[] = [
-      {
-        label: "ellipse-mask",
-        node: image({
-          id: "bad",
-          src: validPng,
-          geometry: "ellipse",
-          x: 10,
-          y: 10,
-          width: 40,
-          height: 40,
-        }),
-        expected: /shaped images/i,
-      },
-      {
-        label: "roundRect-mask",
-        node: image({
-          id: "bad",
-          src: validPng,
-          geometry: preset("roundRect"),
-          x: 10,
-          y: 10,
-          width: 40,
-          height: 40,
-        }),
-        expected: /shaped images/i,
-      },
-      {
-        label: "custom-path-mask",
-        node: image({
-          id: "bad",
-          src: validPng,
-          geometry: path("M0 0 L10 0 L5 10 Z", { viewBox: [10, 10] }),
-          x: 10,
-          y: 10,
-          width: 40,
-          height: 40,
-        }),
-        expected: /shaped images/i,
-      },
-      {
-        label: "borderColor",
-        node: image({
-          id: "bad",
-          src: validPng,
-          x: 10,
-          y: 10,
-          style: { borderColor: "#000000" },
-        }),
-        expected: /borderColor/i,
-      },
-      {
-        label: "borderWidth",
-        node: image({
-          id: "bad",
-          src: validPng,
-          x: 10,
-          y: 10,
-          style: { borderWidth: 2 },
-        }),
-        expected: /borderWidth/i,
-      },
-      {
-        label: "borderStyle",
-        node: image({
-          id: "bad",
-          src: validPng,
-          x: 10,
-          y: 10,
-          style: { borderStyle: "solid" },
-        }),
-        expected: /borderStyle/i,
-      },
-      {
-        label: "boxShadow",
-        node: image({
-          id: "bad",
-          src: validPng,
-          x: 10,
-          y: 10,
-          style: { boxShadow: { blur: 4, distance: 2 } },
-        }),
-        expected: /boxShadow/i,
-      },
-      {
-        label: "softEdge",
-        node: image({
-          id: "bad",
-          src: validPng,
-          x: 10,
-          y: 10,
-          style: { softEdge: 4 },
-        }),
-        expected: /softEdge/i,
-      },
       {
         label: "corrupt-png",
         node: image({ id: "bad", src: corruptPng, x: 10, y: 10 }),

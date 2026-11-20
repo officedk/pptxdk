@@ -6,13 +6,21 @@ import { join } from "node:path";
 import { describe, it } from "vitest";
 
 import { runCapabilityScenario } from "../acceptance-runner.ts";
-import { imagePositiveScenario, imageRejectionScenario } from "./scenarios.ts";
+import {
+  imageMasksAndEffectsScenario,
+  imagePositiveScenario,
+  imageRejectionScenario,
+} from "./scenarios.ts";
 
 describe("Image capability acceptance", () => {
   it("runs Image dual-author positive and rejection scenarios through shared runner", async () => {
     const outDir = await mkdtemp(join(tmpdir(), "rp-image-accept-"));
     try {
-      for (const scenario of [imagePositiveScenario, imageRejectionScenario]) {
+      for (const scenario of [
+        imagePositiveScenario,
+        imageMasksAndEffectsScenario,
+        imageRejectionScenario,
+      ]) {
         const runs = await runCapabilityScenario(scenario, {
           outputDir: outDir,
         });

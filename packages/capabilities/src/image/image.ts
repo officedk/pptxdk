@@ -26,10 +26,16 @@ import { CommonNode } from "@react-pptx/core/document";
 import { assertXml10Characters, pxToEmu, xmlEscape } from "@react-pptx/emit";
 
 import { motionAnnotations, type MotionProps } from "../motion/motion-api.ts";
-import type { Geometry } from "../shared/geometry.ts";
+import { evaluateGeometry, type Geometry } from "../shared/geometry.ts";
 import { nativeLinkXml, parseLinkTarget } from "../shared/identity.ts";
 import type { MorphProps } from "../shared/morph-api.ts";
-import { emitVisualModel, resolveVisualModel } from "../shared/visual.ts";
+import {
+  emitVisualModel,
+  resolveVisualModel,
+  visualSvgTransform,
+  type ResolvedBorder,
+  type ResolvedVisualModel,
+} from "../shared/visual.ts";
 import {
   decodeImageToPngBytes,
   readImage,
@@ -109,90 +115,213 @@ export function createImageNode(
 
 type ImageFit = "fill" | "cover" | "contain";
 
-type ImagePlacement = {
-  readonly box: GeometryBox;
-  readonly sourceCrop: Readonly<Record<string, number>>;
+type ImageCrop = {
+  readonly l: number;
+  readonly t: number;
+  readonly r: number;
+  readonly b: number;
 };
 
-const unsupportedPreviewImageStyleKeys = [
-  "borderColor",
-  "borderWidth",
-  "borderStyle",
-  "boxShadow",
-  "softEdge",
-] as const;
+type ImagePlacement = {
+  readonly box: GeometryBox;
+  readonly sourceCrop: ImageCrop;
+};
 
-function isRectMask(geometry: Geometry | undefined): boolean {
-  if (geometry === undefined || geometry === "rect") return true;
-  return (
-    typeof geometry === "object" &&
-    geometry.type === "preset" &&
-    geometry.name === "rect" &&
-    (geometry.adjust === undefined || Object.keys(geometry.adjust).length === 0)
-  );
+/** Closed resolved image model produced in resolve() and exhaustively consumed by emit and paint. */
+type ResolvedImageModel = {
+  readonly image: LoadedImage;
+  readonly placement: ImagePlacement;
+  readonly visual: ResolvedVisualModel;
+  readonly name: string;
+  readonly alt?: string;
+};
+
+function roundSvgNumber(value: number): string {
+  const rounded = Math.round(value * 1_000_000) / 1_000_000;
+  return Object.is(rounded, -0) ? "0" : String(rounded);
 }
 
-function renderImagePreview(options: {
-  readonly image: LoadedImage;
-  readonly visualStyle: Readonly<Record<string, unknown>>;
-  readonly geometry: Geometry | undefined;
-  readonly flipH: boolean | undefined;
-  readonly flipV: boolean | undefined;
-  readonly placement: ImagePlacement;
-  readonly objectId: number;
-}): PaintOutput {
-  const { image, visualStyle, geometry, flipH, flipV, placement, objectId } =
-    options;
-
-  if (!isRectMask(geometry)) {
-    throw new CapabilityError(
-      "preview-unsupported-geometry",
-      "Preview does not yet support shaped images",
-    );
-  }
-  for (const key of unsupportedPreviewImageStyleKeys) {
-    if (visualStyle[key] !== undefined) {
-      throw new CapabilityError(
-        "preview-unsupported-style",
-        `Preview does not yet support image ${key}`,
-      );
+function borderStrokeAttributes(border: ResolvedBorder): string {
+  const w = Math.max(1, border.width);
+  let dashAttr = "";
+  switch (border.style) {
+    case "solid":
+      dashAttr = "";
+      break;
+    case "dashed":
+      dashAttr = ` stroke-dasharray="${roundSvgNumber(w * 4)} ${roundSvgNumber(w * 3)}"`;
+      break;
+    case "dotted":
+      dashAttr = ` stroke-dasharray="${roundSvgNumber(w)} ${roundSvgNumber(w * 2)}"`;
+      break;
+    default: {
+      const exhaustive: never = border.style;
+      return exhaustive;
     }
   }
+  return `stroke="#${border.color.hex}" stroke-opacity="${roundSvgNumber(border.color.alpha ?? 1)}" stroke-width="${roundSvgNumber(border.width)}"${dashAttr}`;
+}
 
+function emitImageModel(
+  model: ResolvedImageModel,
+  emitContext: EmitContext,
+): EmitOutput {
+  const properties = emitVisualModel(model.visual, undefined, {
+    omitFill: true,
+  });
+  const escapedName = xmlEscape(model.name);
+  const escapedAlt = model.alt === undefined ? undefined : xmlEscape(model.alt);
+  let relationshipId: string;
+  try {
+    relationshipId = emitContext.registerResource({
+      bytes: model.image.bytes,
+      extension: model.image.extension,
+      contentType: model.image.contentType,
+      relationshipType:
+        "http://schemas.openxmlformats.org/officeDocument/2006/relationships/image",
+    });
+  } catch (error) {
+    if (error instanceof CapabilityError) throw error;
+    throw new CapabilityError(
+      "image-resource-failure",
+      error instanceof Error ? error.message : String(error),
+    );
+  }
+  const { sourceCrop } = model.placement;
+  const serializedCrop = Object.fromEntries(
+    (
+      [
+        ["l", sourceCrop.l],
+        ["t", sourceCrop.t],
+        ["r", sourceCrop.r],
+        ["b", sourceCrop.b],
+      ] as const
+    ).filter(([, fraction]) => fraction !== 0),
+  );
+  return {
+    xml: imageXml(
+      emitContext.id,
+      escapedName,
+      escapedAlt,
+      relationshipId,
+      model.placement.box,
+      serializedCrop,
+      properties.xml,
+      properties.opacity,
+      nativeLinkXml(emitContext.nativeLink),
+    ),
+  };
+}
+
+function roundCropFraction(fraction: number): number {
+  return Math.round(fraction * 100000) / 100000;
+}
+
+function paintImageModel(
+  model: ResolvedImageModel,
+  paintContext: PaintContext,
+): PaintOutput {
+  const { image, placement, visual } = model;
   const pngBytes = decodeImageToPngBytes(image);
 
   const { box, sourceCrop } = placement;
-  const cropSide = (side: "l" | "t" | "r" | "b") =>
-    Math.round((sourceCrop[side] ?? 0) * 100000) / 100000;
-  const leftCrop = cropSide("l");
-  const topCrop = cropSide("t");
-  const rightCrop = cropSide("r");
-  const bottomCrop = cropSide("b");
+  const leftCrop = roundCropFraction(sourceCrop.l);
+  const topCrop = roundCropFraction(sourceCrop.t);
+  const rightCrop = roundCropFraction(sourceCrop.r);
+  const bottomCrop = roundCropFraction(sourceCrop.b);
   const widthFactor = 1 - leftCrop - rightCrop;
   const heightFactor = 1 - topCrop - bottomCrop;
 
-  const angle =
-    typeof visualStyle["rotate"] === "number" ? visualStyle["rotate"] : 0;
-  const flipX = Boolean(flipH);
-  const flipY = Boolean(flipV);
-  const cx = box.x + box.width / 2;
-  const cy = box.y + box.height / 2;
-  const opacity = Number(visualStyle["opacity"] ?? 1);
-  const transform = `translate(${cx} ${cy}) rotate(${angle}) scale(${flipX ? -1 : 1} ${flipY ? -1 : 1}) translate(${-cx} ${-cy})`;
+  const prefix = `img-s${paintContext.slideNumber}-o${paintContext.objectId}`;
+  const defs: string[] = [];
+  const evaluated = evaluateGeometry(visual.geometry, box);
+  const fillablePaths = evaluated.paths.filter(
+    (pathItem) => pathItem.fillMode !== "none" && pathItem.d !== "",
+  );
 
-  if (widthFactor <= 0 || heightFactor <= 0) {
-    return {
-      svg: `<g transform="${transform}" opacity="${opacity}"></g>`,
-    };
+  const opacity = visual.opacity ?? 1;
+  let imageElement = "";
+  if (widthFactor > 0 && heightFactor > 0 && fillablePaths.length > 0) {
+    const imgWidth = box.width / widthFactor;
+    const imgHeight = box.height / heightFactor;
+    const imgX = box.x - leftCrop * imgWidth;
+    const imgY = box.y - topCrop * imgHeight;
+    const clipId = `${prefix}-clip`;
+    const clipMarkup = fillablePaths
+      .map((pathItem) => `<path d="${pathItem.d}"/>`)
+      .join("");
+    defs.push(
+      `<clipPath id="${clipId}" clipPathUnits="userSpaceOnUse">${clipMarkup}</clipPath>`,
+    );
+    const opacityAttr =
+      opacity === 1 ? "" : ` opacity="${roundSvgNumber(opacity)}"`;
+    imageElement = `<image clip-path="url(#${clipId})" x="${roundSvgNumber(imgX)}" y="${roundSvgNumber(imgY)}" width="${roundSvgNumber(imgWidth)}" height="${roundSvgNumber(imgHeight)}" preserveAspectRatio="none"${opacityAttr} href="data:image/png;base64,${Buffer.from(pngBytes).toString("base64")}"/>`;
+
+    if (visual.softEdge !== undefined && visual.softEdge > 0) {
+      const r = visual.softEdge;
+      const minSide = Math.min(box.width, box.height);
+      const borderPad = visual.border === undefined ? 0 : visual.border.width;
+      const pad = Math.ceil(r * 2 + borderPad + 8);
+      const maskX = roundSvgNumber(box.x - pad);
+      const maskY = roundSvgNumber(box.y - pad);
+      const maskW = roundSvgNumber(box.width + pad * 2);
+      const maskH = roundSvgNumber(box.height + pad * 2);
+      const blurId = `${prefix}-soft-blur`;
+      const maskId = `${prefix}-soft-mask`;
+      const innerStrokeWidth =
+        r >= minSide / 2 ? 0 : Math.min(r, minSide * 0.45);
+      const maskAttrs =
+        innerStrokeWidth > 0
+          ? `fill="white" stroke="black" stroke-width="${roundSvgNumber(innerStrokeWidth)}" filter="url(#${blurId})"`
+          : `fill="white" stroke="none" filter="url(#${blurId})"`;
+      const maskShapes = fillablePaths
+        .map((pathItem) => `<path d="${pathItem.d}" ${maskAttrs}/>`)
+        .join("");
+      defs.push(
+        `<filter id="${blurId}" filterUnits="userSpaceOnUse" x="${maskX}" y="${maskY}" width="${maskW}" height="${maskH}"><feGaussianBlur stdDeviation="${roundSvgNumber(r / 2)}"/></filter>`,
+      );
+      defs.push(
+        `<mask id="${maskId}" maskUnits="userSpaceOnUse" x="${maskX}" y="${maskY}" width="${maskW}" height="${maskH}">${maskShapes}</mask>`,
+      );
+      imageElement = `<g mask="url(#${maskId})">${imageElement}</g>`;
+    }
   }
 
-  const width = box.width / widthFactor;
-  const height = box.height / heightFactor;
-  const clipId = `image-${objectId}`;
-  const svg = `<g transform="${transform}" opacity="${opacity}"><defs><clipPath id="${clipId}"><rect x="${box.x}" y="${box.y}" width="${box.width}" height="${box.height}"/></clipPath></defs><image clip-path="url(#${clipId})" x="${box.x - leftCrop * width}" y="${box.y - topCrop * height}" width="${width}" height="${height}" preserveAspectRatio="none" href="data:image/png;base64,${Buffer.from(pngBytes).toString("base64")}"/></g>`;
+  let borderElements = "";
+  if (visual.border !== undefined) {
+    const strokeAttr = borderStrokeAttributes(visual.border);
+    borderElements = evaluated.paths
+      .filter((pathItem) => pathItem.stroke && pathItem.d !== "")
+      .map((pathItem) => `<path d="${pathItem.d}" fill="none" ${strokeAttr}/>`)
+      .join("");
+  }
 
+  let layer = `<g transform="${visualSvgTransform(visual)}">${imageElement}${borderElements}</g>`;
+
+  if (visual.boxShadow !== undefined) {
+    const shadow = visual.boxShadow;
+    const cx = box.x + box.width / 2;
+    const cy = box.y + box.height / 2;
+    const halfDiag = Math.hypot(box.width, box.height) / 2;
+    const rad = (shadow.angle * Math.PI) / 180;
+    const dx = shadow.distance * Math.cos(rad);
+    const dy = shadow.distance * Math.sin(rad);
+    const sigma = shadow.blur / 2;
+    const borderPad = visual.border === undefined ? 0 : visual.border.width;
+    const pad = shadow.blur * 3 + Math.abs(dx) + Math.abs(dy) + borderPad + 16;
+    const minX = roundSvgNumber(cx - halfDiag - pad);
+    const minY = roundSvgNumber(cy - halfDiag - pad);
+    const filterSize = roundSvgNumber((halfDiag + pad) * 2);
+    const shadowId = `${prefix}-shadow`;
+    defs.push(
+      `<filter id="${shadowId}" filterUnits="userSpaceOnUse" x="${minX}" y="${minY}" width="${filterSize}" height="${filterSize}"><feDropShadow dx="${roundSvgNumber(dx)}" dy="${roundSvgNumber(dy)}" stdDeviation="${roundSvgNumber(sigma)}" flood-color="#${shadow.color.hex}" flood-opacity="${roundSvgNumber(shadow.color.alpha ?? 1)}"/></filter>`,
+    );
+    layer = `<g filter="url(#${shadowId})">${layer}</g>`;
+  }
+
+  const defsXml = defs.length > 0 ? `<defs>${defs.join("")}</defs>` : "";
   return {
-    svg,
+    svg: `${defsXml}${layer}`,
   };
 }
 
@@ -200,23 +329,26 @@ function renderImagePreview(options: {
 function imagePlacement(
   image: { readonly width: number; readonly height: number },
   fit: ImageFit,
-  crop: Readonly<Record<string, number>> | undefined,
+  crop: Partial<ImageCrop> | undefined,
   allocated: GeometryBox,
 ): ImagePlacement {
   const { width, height } = allocated;
   const box = { ...allocated };
-  const sourceCrop = crop !== undefined ? { ...crop } : {};
+  let l = crop?.l ?? 0;
+  let t = crop?.t ?? 0;
+  let r = crop?.r ?? 0;
+  let b = crop?.b ?? 0;
   if (crop === undefined && fit === "cover") {
     const imageRatio = image.width / image.height;
     const boxRatio = width / height;
     if (imageRatio > boxRatio) {
       const excess = (1 - boxRatio / imageRatio) / 2;
-      sourceCrop["l"] = excess;
-      sourceCrop["r"] = excess;
+      l = excess;
+      r = excess;
     } else if (imageRatio < boxRatio) {
       const excess = (1 - imageRatio / boxRatio) / 2;
-      sourceCrop["t"] = excess;
-      sourceCrop["b"] = excess;
+      t = excess;
+      b = excess;
     }
   } else if (crop === undefined && fit === "contain") {
     const imageRatio = image.width / image.height;
@@ -234,7 +366,7 @@ function imagePlacement(
   // Dimensions derived by contain must also be representable as non-zero EMU.
   box.width = dimension(box.width, "width");
   box.height = dimension(box.height, "height");
-  return { box, sourceCrop };
+  return { box, sourceCrop: { l, t, r, b } };
 }
 
 const allowedParameters = [
@@ -326,7 +458,7 @@ function requestedDimension(
 function cropValues(
   value: unknown,
   path?: string,
-): Record<string, number> | undefined {
+): Partial<ImageCrop> | undefined {
   if (value === undefined) return undefined;
   if (!isRecord(value)) {
     throw new CapabilityError(
@@ -347,7 +479,13 @@ function cropValues(
       path,
     );
   }
-  const result: Record<string, number> = {};
+  const result: { l?: number; t?: number; r?: number; b?: number } = {};
+  const sideMap = {
+    left: "l",
+    top: "t",
+    right: "r",
+    bottom: "b",
+  } as const;
   for (const side of allowed) {
     const fraction = crop[side];
     if (fraction === undefined) continue;
@@ -363,16 +501,16 @@ function cropValues(
         path,
       );
     }
-    result[{ left: "l", top: "t", right: "r", bottom: "b" }[side]] = fraction;
+    result[sideMap[side]] = fraction;
   }
-  if ((result["l"] ?? 0) + (result["r"] ?? 0) > 1) {
+  if ((result.l ?? 0) + (result.r ?? 0) > 1) {
     throw new CapabilityError(
       "invalid-crop",
       "Sum of crop left and right cannot exceed 1",
       path,
     );
   }
-  if ((result["t"] ?? 0) + (result["b"] ?? 0) > 1) {
+  if ((result.t ?? 0) + (result.b ?? 0) > 1) {
     throw new CapabilityError(
       "invalid-crop",
       "Sum of crop top and bottom cannot exceed 1",
@@ -560,7 +698,7 @@ export const imageCapability: BoundObjectCapabilityModule = {
           width,
           height,
         });
-        const { box, sourceCrop } = placement;
+        const { box } = placement;
         const resolvedVisual = resolveVisualModel({
           theme: resolveContext.theme,
           style: imageStyle,
@@ -597,6 +735,13 @@ export const imageCapability: BoundObjectCapabilityModule = {
             (typeof imageStyle["borderWidth"] === "number" &&
               imageStyle["borderWidth"] > 0),
         });
+        const model: ResolvedImageModel = {
+          image,
+          placement,
+          visual: resolvedVisual,
+          name,
+          ...(altValue === undefined ? {} : { alt: altValue }),
+        };
 
         return {
           observation: {
@@ -618,58 +763,11 @@ export const imageCapability: BoundObjectCapabilityModule = {
           ...(annotations.length === 0 ? {} : { annotations }),
 
           emit(emitContext: EmitContext): EmitOutput {
-            const properties = emitVisualModel(resolvedVisual, undefined, {
-              omitFill: true,
-            });
-            const escapedName = xmlEscape(name);
-            const escapedAlt =
-              altValue === undefined ? undefined : xmlEscape(altValue);
-            let relationshipId: string;
-            try {
-              relationshipId = emitContext.registerResource({
-                bytes: image.bytes,
-                extension: image.extension,
-                contentType: image.contentType,
-                relationshipType:
-                  "http://schemas.openxmlformats.org/officeDocument/2006/relationships/image",
-              });
-            } catch (error) {
-              if (error instanceof CapabilityError) throw error;
-              throw new CapabilityError(
-                "image-resource-failure",
-                error instanceof Error ? error.message : String(error),
-              );
-            }
-            const serializedCrop = Object.fromEntries(
-              Object.entries(sourceCrop).filter(
-                ([, fraction]) => fraction !== 0,
-              ),
-            );
-            return {
-              xml: imageXml(
-                emitContext.id,
-                escapedName,
-                escapedAlt,
-                relationshipId,
-                box,
-                serializedCrop,
-                properties.xml,
-                properties.opacity,
-                nativeLinkXml(emitContext.nativeLink),
-              ),
-            };
+            return emitImageModel(model, emitContext);
           },
 
           paint(paintContext: PaintContext): PaintOutput {
-            return renderImagePreview({
-              image,
-              visualStyle: imageStyle,
-              geometry,
-              flipH,
-              flipV,
-              placement,
-              objectId: paintContext.objectId,
-            });
+            return paintImageModel(model, paintContext);
           },
         };
       },

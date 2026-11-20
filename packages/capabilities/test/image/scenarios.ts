@@ -3,6 +3,7 @@ import { createRequire } from "node:module";
 
 import { deck, image, shape, slide } from "@react-pptx/capabilities/document";
 import { Image } from "@react-pptx/capabilities/image-elements";
+import { path, preset } from "@react-pptx/capabilities/shape";
 import { Shape } from "@react-pptx/capabilities/shape-elements";
 import { Deck, Slide } from "@react-pptx/react";
 import { strFromU8, unzipSync } from "fflate";
@@ -397,18 +398,343 @@ export const imagePositiveScenario: CapabilityScenario = {
   },
 };
 
+const triangleMaskGeometry = path("M0 0 L10 0 L5 10 Z", {
+  viewBox: [10, 10],
+});
+
+export const imageMasksAndEffectsScenario: CapabilityScenario = {
+  id: "image-masks-borders-and-effects",
+  capability: "rp:image",
+  description:
+    "Dual-author Image scenario covering preset & custom geometry masks, solid/dashed/dotted borders, boxShadow, softEdge, opacity+border, and flip+rotate composition across PNG, JPEG, and GIF.",
+  visualCheckpoints: [
+    "Page 1 (geometry-masks-and-borders): light #F8FAFC canvas; ellipse PNG with dashed border, adjusted roundRect JPEG with dotted border, star5 GIF with solid border, smileyFace PNG (fill-none mouth arc excluded from clip), and custom triangle path PNG.",
+    "Page 2 (effects-and-transforms): white canvas; shadowed & flipped+rotated rightArrow PNG, feathered softEdge diamond JPEG, and semi-transparent bordered PNG over dark backdrop.",
+  ],
+  nativeCheckpoints: [
+    "Open exported PPTX and verify native <p:pic><p:spPr> preserves <a:prstGeom>/<a:custGeom>, <a:prstDash>, <a:outerShdw rotWithShape='0'>, <a:softEdge>, <a:alphaModFix>, and <a:xfrm flipH/rot>.",
+  ],
+  jsx() {
+    return createElement(
+      Deck,
+      { width: 640, height: 360 },
+      createElement(
+        Slide,
+        { id: "geometry-masks-and-borders", background: "#F8FAFC" },
+        createElement(Image, {
+          id: "ellipse-dashed",
+          src: samplePngBytes,
+          geometry: "ellipse",
+          x: 24,
+          y: 30,
+          width: 130,
+          height: 90,
+          style: {
+            borderColor: "#1E293B",
+            borderWidth: 3,
+            borderStyle: "dashed",
+          },
+        }),
+        createElement(Image, {
+          id: "roundrect-dotted",
+          src: sampleJpegBytes,
+          geometry: preset("roundRect", { adj: 25000 }),
+          x: 180,
+          y: 30,
+          width: 130,
+          height: 90,
+          style: {
+            borderColor: "#DC2626",
+            borderWidth: 2,
+            borderStyle: "dotted",
+          },
+        }),
+        createElement(Image, {
+          id: "star-gif",
+          src: sampleGifBytes,
+          geometry: preset("star5", { adj: 22000 }),
+          x: 340,
+          y: 30,
+          width: 110,
+          height: 110,
+          style: {
+            borderColor: "#0F766E",
+            borderWidth: 2,
+            borderStyle: "solid",
+          },
+        }),
+        createElement(Image, {
+          id: "smiley-png",
+          src: samplePngBytes,
+          geometry: "smileyFace",
+          x: 480,
+          y: 30,
+          width: 110,
+          height: 110,
+          style: {
+            borderColor: "#0F172A",
+            borderWidth: 2,
+          },
+        }),
+        createElement(Image, {
+          id: "custom-triangle",
+          src: samplePngBytes,
+          geometry: triangleMaskGeometry,
+          x: 24,
+          y: 170,
+          width: 140,
+          height: 120,
+          style: {
+            borderColor: "#1D4ED8",
+            borderWidth: 2,
+          },
+        }),
+      ),
+      createElement(
+        Slide,
+        { id: "effects-and-transforms", background: "#FFFFFF" },
+        createElement(Image, {
+          id: "arrow-shadow-flip-rot",
+          src: samplePngBytes,
+          geometry: "rightArrow",
+          x: 40,
+          y: 50,
+          width: 160,
+          height: 100,
+          flipH: true,
+          style: {
+            rotate: 20,
+            borderColor: "#0F172A",
+            borderWidth: 2,
+            boxShadow: { color: "#000000", blur: 6, distance: 6, angle: 45 },
+          },
+        }),
+        createElement(Image, {
+          id: "soft-diamond",
+          src: sampleJpegBytes,
+          geometry: "diamond",
+          x: 240,
+          y: 50,
+          width: 140,
+          height: 110,
+          style: { softEdge: 10 },
+        }),
+        createElement(Shape, {
+          id: "opacity-backdrop",
+          x: 410,
+          y: 45,
+          width: 190,
+          height: 140,
+          fill: "#0F172A",
+          style: { zIndex: 1 },
+        }),
+        createElement(Image, {
+          id: "opacity-bordered",
+          src: samplePngBytes,
+          geometry: preset("roundRect", { adj: 15000 }),
+          x: 430,
+          y: 65,
+          width: 150,
+          height: 100,
+          style: {
+            opacity: 0.5,
+            borderColor: "#FFFFFF",
+            borderWidth: 4,
+            zIndex: 2,
+          },
+        }),
+      ),
+    );
+  },
+  document() {
+    return deck({ width: 640, height: 360 }).append(
+      slide({ id: "geometry-masks-and-borders", background: "#F8FAFC" }).append(
+        image({
+          id: "ellipse-dashed",
+          src: samplePngBytes,
+          geometry: "ellipse",
+          x: 24,
+          y: 30,
+          width: 130,
+          height: 90,
+          style: {
+            borderColor: "#1E293B",
+            borderWidth: 3,
+            borderStyle: "dashed",
+          },
+        }),
+        image({
+          id: "roundrect-dotted",
+          src: sampleJpegBytes,
+          geometry: preset("roundRect", { adj: 25000 }),
+          x: 180,
+          y: 30,
+          width: 130,
+          height: 90,
+          style: {
+            borderColor: "#DC2626",
+            borderWidth: 2,
+            borderStyle: "dotted",
+          },
+        }),
+        image({
+          id: "star-gif",
+          src: sampleGifBytes,
+          geometry: preset("star5", { adj: 22000 }),
+          x: 340,
+          y: 30,
+          width: 110,
+          height: 110,
+          style: {
+            borderColor: "#0F766E",
+            borderWidth: 2,
+            borderStyle: "solid",
+          },
+        }),
+        image({
+          id: "smiley-png",
+          src: samplePngBytes,
+          geometry: "smileyFace",
+          x: 480,
+          y: 30,
+          width: 110,
+          height: 110,
+          style: {
+            borderColor: "#0F172A",
+            borderWidth: 2,
+          },
+        }),
+        image({
+          id: "custom-triangle",
+          src: samplePngBytes,
+          geometry: triangleMaskGeometry,
+          x: 24,
+          y: 170,
+          width: 140,
+          height: 120,
+          style: {
+            borderColor: "#1D4ED8",
+            borderWidth: 2,
+          },
+        }),
+      ),
+      slide({ id: "effects-and-transforms", background: "#FFFFFF" }).append(
+        image({
+          id: "arrow-shadow-flip-rot",
+          src: samplePngBytes,
+          geometry: "rightArrow",
+          x: 40,
+          y: 50,
+          width: 160,
+          height: 100,
+          flipH: true,
+          style: {
+            rotate: 20,
+            borderColor: "#0F172A",
+            borderWidth: 2,
+            boxShadow: { color: "#000000", blur: 6, distance: 6, angle: 45 },
+          },
+        }),
+        image({
+          id: "soft-diamond",
+          src: sampleJpegBytes,
+          geometry: "diamond",
+          x: 240,
+          y: 50,
+          width: 140,
+          height: 110,
+          style: { softEdge: 10 },
+        }),
+        shape({
+          id: "opacity-backdrop",
+          x: 410,
+          y: 45,
+          width: 190,
+          height: 140,
+          fill: "#0F172A",
+          style: { zIndex: 1 },
+        }),
+        image({
+          id: "opacity-bordered",
+          src: samplePngBytes,
+          geometry: preset("roundRect", { adj: 15000 }),
+          x: 430,
+          y: 65,
+          width: 150,
+          height: 100,
+          style: {
+            opacity: 0.5,
+            borderColor: "#FFFFFF",
+            borderWidth: 4,
+            zIndex: 2,
+          },
+        }),
+      ),
+    );
+  },
+  assert({ author, pptx, preview, validation }) {
+    assert.equal(preview.pages.length, 2, author);
+    assert.equal(validation.slides.length, 2, author);
+
+    const p1 = preview.pages[0]!;
+    assert.deepEqual(p1.diagnostics, [], author);
+    expect(p1.svg).toContain("<clipPath");
+    expect(p1.svg).toContain("stroke-dasharray=");
+    const p1Pixels = PNG.sync.read(Buffer.from(p1.png!));
+    // Top-left corner (26, 32) outside ellipse mask stays #F8FAFC background.
+    const outsideEllipse = (32 * p1Pixels.width + 26) * 4;
+    assert.deepEqual(
+      [...p1Pixels.data.subarray(outsideEllipse, outsideEllipse + 4)],
+      [0xf8, 0xfa, 0xfc, 255],
+      author,
+    );
+    // Bottom-left corner (26, 286) outside custom triangle stays #F8FAFC background.
+    const outsideTriangle = (286 * p1Pixels.width + 26) * 4;
+    assert.deepEqual(
+      [...p1Pixels.data.subarray(outsideTriangle, outsideTriangle + 4)],
+      [0xf8, 0xfa, 0xfc, 255],
+      author,
+    );
+    // Top-center (94, 190) inside custom triangle is red/blue image pixel, not background.
+    const insideTriangle = (190 * p1Pixels.width + 94) * 4;
+    assert.ok(
+      (p1Pixels.data[insideTriangle] ?? 0) > 180 ||
+        (p1Pixels.data[insideTriangle + 2] ?? 0) > 180,
+      author,
+    );
+
+    const p2 = preview.pages[1]!;
+    assert.deepEqual(p2.diagnostics, [], author);
+    expect(p2.svg).toContain("<feDropShadow");
+    expect(p2.svg).toContain("<mask");
+    // Border stroke-opacity must be 0.5 (not double-multiplied to 0.25).
+    expect(p2.svg).toContain('stroke-opacity="0.5"');
+    expect(p2.svg).not.toContain('stroke-opacity="0.25"');
+
+    const zip = unzipSync(pptx);
+    const slide1Xml = strFromU8(zip["ppt/slides/slide1.xml"]!);
+    assert.match(slide1Xml, /<a:prstGeom prst="ellipse"/u, author);
+    assert.match(slide1Xml, /<a:prstDash val="dash"\/>/u, author);
+    assert.match(slide1Xml, /<a:prstDash val="sysDot"\/>/u, author);
+    assert.match(slide1Xml, /<a:custGeom>/u, author);
+    const slide2Xml = strFromU8(zip["ppt/slides/slide2.xml"]!);
+    assert.match(slide2Xml, /<a:outerShdw[^>]*rotWithShape="0"/u, author);
+    assert.match(slide2Xml, /<a:softEdge /u, author);
+  },
+};
+
 export const imageRejectionScenario: CapabilityScenario = {
   id: "image-preview-rejections",
   capability: "rp:image",
   kind: "rejection",
   description:
-    "Dual-author negative scenario verifying GIF, non-rect mask, border/shadow styles, and corrupt PNG/JPEG streams emit located errors while PPTX and sibling pages survive.",
+    "Dual-author negative scenario verifying only corrupt PNG/JPEG/GIF pixel streams emit located preview-corrupt-image errors while PPTX and shaped/bordered/shadowed sibling pages survive.",
   visualCheckpoints: [
-    "Page 1 (unsupported-image-preview): no PNG emitted (preview rejected cleanly with 6 located errors).",
-    "Page 2 (valid-sibling-image): clean white canvas with centered three-zone PNG image.",
+    "Page 1 (corrupt-image-preview): no PNG emitted (preview rejected cleanly with 3 located preview-corrupt-image errors).",
+    "Page 2 (valid-sibling-image): clean white canvas with ellipse-masked, bordered, shadowed three-zone PNG image.",
   ],
   nativeCheckpoints: [
-    "Open exported PPTX and verify Page 1 retains native GIF, ellipse-masked PNG, bordered/shadowed PNGs, and embedded picture relationships.",
+    "Open exported PPTX and verify Page 1 retains native media parts and Page 2 retains ellipse mask, border, and shadow.",
   ],
   jsx() {
     return createElement(
@@ -416,7 +742,7 @@ export const imageRejectionScenario: CapabilityScenario = {
       { width: 480, height: 270 },
       createElement(
         Slide,
-        { id: "unsupported-image-preview" },
+        { id: "corrupt-image-preview" },
         createElement(Image, {
           id: "corrupt-gif-img",
           src: corruptGifBytes,
@@ -426,45 +752,18 @@ export const imageRejectionScenario: CapabilityScenario = {
           height: 40,
         }),
         createElement(Image, {
-          id: "shaped-img",
-          src: samplePngBytes,
-          geometry: "ellipse",
+          id: "corrupt-png-img",
+          src: corruptPngBytes,
           x: 80,
           y: 20,
           width: 60,
           height: 40,
         }),
         createElement(Image, {
-          id: "bordered-img",
-          src: samplePngBytes,
-          x: 160,
-          y: 20,
-          width: 60,
-          height: 40,
-          style: { borderColor: "#1E293B", borderWidth: 3 },
-        }),
-        createElement(Image, {
-          id: "shadowed-img",
-          src: samplePngBytes,
-          x: 240,
-          y: 20,
-          width: 60,
-          height: 40,
-          style: { boxShadow: { blur: 4, distance: 2 } },
-        }),
-        createElement(Image, {
-          id: "corrupt-png-img",
-          src: corruptPngBytes,
-          x: 20,
-          y: 90,
-          width: 60,
-          height: 40,
-        }),
-        createElement(Image, {
           id: "corrupt-jpeg-img",
           src: corruptJpegBytes,
-          x: 100,
-          y: 90,
+          x: 160,
+          y: 20,
           width: 60,
           height: 40,
         }),
@@ -475,17 +774,23 @@ export const imageRejectionScenario: CapabilityScenario = {
         createElement(Image, {
           id: "valid-img",
           src: samplePngBytes,
+          geometry: "ellipse",
           x: 150,
           y: 90,
           width: 180,
           height: 90,
+          style: {
+            borderColor: "#1E293B",
+            borderWidth: 2,
+            boxShadow: { blur: 4, distance: 3 },
+          },
         }),
       ),
     );
   },
   document() {
     return deck({ width: 480, height: 270 }).append(
-      slide({ id: "unsupported-image-preview" }).append(
+      slide({ id: "corrupt-image-preview" }).append(
         image({
           id: "corrupt-gif-img",
           src: corruptGifBytes,
@@ -495,45 +800,18 @@ export const imageRejectionScenario: CapabilityScenario = {
           height: 40,
         }),
         image({
-          id: "shaped-img",
-          src: samplePngBytes,
-          geometry: "ellipse",
+          id: "corrupt-png-img",
+          src: corruptPngBytes,
           x: 80,
           y: 20,
           width: 60,
           height: 40,
         }),
         image({
-          id: "bordered-img",
-          src: samplePngBytes,
-          x: 160,
-          y: 20,
-          width: 60,
-          height: 40,
-          style: { borderColor: "#1E293B", borderWidth: 3 },
-        }),
-        image({
-          id: "shadowed-img",
-          src: samplePngBytes,
-          x: 240,
-          y: 20,
-          width: 60,
-          height: 40,
-          style: { boxShadow: { blur: 4, distance: 2 } },
-        }),
-        image({
-          id: "corrupt-png-img",
-          src: corruptPngBytes,
-          x: 20,
-          y: 90,
-          width: 60,
-          height: 40,
-        }),
-        image({
           id: "corrupt-jpeg-img",
           src: corruptJpegBytes,
-          x: 100,
-          y: 90,
+          x: 160,
+          y: 20,
           width: 60,
           height: 40,
         }),
@@ -542,25 +820,28 @@ export const imageRejectionScenario: CapabilityScenario = {
         image({
           id: "valid-img",
           src: samplePngBytes,
+          geometry: "ellipse",
           x: 150,
           y: 90,
           width: 180,
           height: 90,
+          style: {
+            borderColor: "#1E293B",
+            borderWidth: 2,
+            boxShadow: { blur: 4, distance: 3 },
+          },
         }),
       ),
     );
   },
   assert({ author, preview, validation }) {
-    assert.equal(validation.slides[0]?.objects.length, 6, author);
+    assert.equal(validation.slides[0]?.objects.length, 3, author);
 
     const p1 = preview.pages[0]!;
     assert.equal(p1.png, undefined, author);
-    assert.equal(p1.diagnostics.length, 6, author);
+    assert.equal(p1.diagnostics.length, 3, author);
     for (const id of [
       "corrupt-gif-img",
-      "shaped-img",
-      "bordered-img",
-      "shadowed-img",
       "corrupt-png-img",
       "corrupt-jpeg-img",
     ]) {
@@ -569,9 +850,10 @@ export const imageRejectionScenario: CapabilityScenario = {
           (d) =>
             d.severity === "error" &&
             d.page === 1 &&
-            d.path.includes(`image[${id}]`),
+            d.path.includes(`image[${id}]`) &&
+            /decode/i.test(d.message),
         ),
-        `${author}: missing diagnostic for ${id}`,
+        `${author}: missing corrupt-image diagnostic for ${id}`,
       );
     }
 
@@ -579,7 +861,7 @@ export const imageRejectionScenario: CapabilityScenario = {
     assert.deepEqual(p2.diagnostics, [], author);
     assert.ok(p2.png !== undefined, author);
     const p2Pixels = PNG.sync.read(Buffer.from(p2.png));
-    const redLeft = (135 * p2Pixels.width + 180) * 4;
+    const redLeft = (135 * p2Pixels.width + 185) * 4;
     assert.ok((p2Pixels.data[redLeft] ?? 0) > 200, author);
     assert.ok((p2Pixels.data[redLeft + 2] ?? 255) < 60, author);
   },

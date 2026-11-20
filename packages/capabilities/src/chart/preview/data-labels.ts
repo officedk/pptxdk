@@ -11,18 +11,24 @@ import {
   resolveChartFontSizePixels,
   type ChartTextClipAllocator,
 } from "./text-render.ts";
-import type { PlottedBarAnchor, PlottedPointAnchor } from "./types.ts";
+import type {
+  PlottedBarAnchor,
+  PlottedCartesianPointAnchor,
+  PlottedPointAnchor,
+} from "./types.ts";
+
+type LabelPlacement = {
+  readonly box: GeometryBox;
+  readonly align: "left" | "center" | "right";
+  readonly verticalAlign: "top" | "middle" | "bottom";
+};
 
 function barLabelBox(
   anchor: PlottedBarAnchor,
   position: string,
   textWidth: number,
   textHeight: number,
-): {
-  readonly box: GeometryBox;
-  readonly align: "left" | "center" | "right";
-  readonly verticalAlign: "top" | "middle" | "bottom";
-} {
+): LabelPlacement {
   const pad = 3;
   const labelH = Math.max(textHeight, 10);
 
@@ -118,6 +124,66 @@ function barLabelBox(
   };
 }
 
+function pointLabelBox(
+  anchor: PlottedCartesianPointAnchor,
+  position: string,
+  textWidth: number,
+  textHeight: number,
+): LabelPlacement {
+  const offset = (anchor.markerRadius ?? 1.5) + 4;
+  const w = Math.max(textWidth + 4, 12);
+  const h = Math.max(textHeight, 10);
+
+  switch (position) {
+    case "center":
+      return {
+        box: { x: anchor.x - w / 2, y: anchor.y - h / 2, width: w, height: h },
+        align: "center",
+        verticalAlign: "middle",
+      };
+    case "bottom":
+      return {
+        box: { x: anchor.x - w / 2, y: anchor.y + offset, width: w, height: h },
+        align: "center",
+        verticalAlign: "top",
+      };
+    case "left":
+      return {
+        box: {
+          x: anchor.x - offset - w,
+          y: anchor.y - h / 2,
+          width: w,
+          height: h,
+        },
+        align: "right",
+        verticalAlign: "middle",
+      };
+    case "right":
+      return {
+        box: {
+          x: anchor.x + offset,
+          y: anchor.y - h / 2,
+          width: w,
+          height: h,
+        },
+        align: "left",
+        verticalAlign: "middle",
+      };
+    case "top":
+    default:
+      return {
+        box: {
+          x: anchor.x - w / 2,
+          y: anchor.y - offset - h,
+          width: w,
+          height: h,
+        },
+        align: "center",
+        verticalAlign: "bottom",
+      };
+  }
+}
+
 export function renderDataLabelsSvg(options: {
   readonly parsed: ParsedChart;
   readonly anchors: readonly PlottedPointAnchor[];
@@ -139,15 +205,24 @@ export function renderDataLabelsSvg(options: {
   const parts: string[] = [];
 
   for (const anchor of anchors) {
-    if (anchor.kind !== "bar") continue;
+    if (anchor.kind === "slice") continue;
     const group = parsed.groups[anchor.groupIndex];
-    if (
-      group === undefined ||
-      (group.kind !== "column" && group.kind !== "bar")
-    ) {
-      continue;
+    if (group === undefined) continue;
+
+    let series;
+    if (anchor.kind === "bar") {
+      if (group.kind !== "column" && group.kind !== "bar") continue;
+      series = group.series[anchor.groupSeriesIndex];
+    } else {
+      if (
+        group.kind !== "line" &&
+        group.kind !== "area" &&
+        group.kind !== "scatter"
+      ) {
+        continue;
+      }
+      series = group.series[anchor.groupSeriesIndex];
     }
-    const series = group.series[anchor.groupSeriesIndex];
     if (series === undefined) continue;
 
     const seriesMerged = mergeDataLabels(group.dataLabels, series.dataLabels);
@@ -158,7 +233,17 @@ export function renderDataLabelsSvg(options: {
     if (pointMerged === undefined || pointMerged === false) continue;
 
     const labelSegments: string[] = [];
-    if (pointMerged.category === true) {
+    if (group.kind === "scatter") {
+      if (
+        pointMerged.xValue === true &&
+        anchor.kind === "point" &&
+        anchor.xValue !== undefined
+      ) {
+        labelSegments.push(
+          formatChartNumber(anchor.xValue, pointMerged.numberFormat),
+        );
+      }
+    } else if (pointMerged.category === true && anchor.category !== undefined) {
       labelSegments.push(anchor.category);
     }
     if (pointMerged.value === true) {
@@ -192,15 +277,32 @@ export function renderDataLabelsSvg(options: {
       labelPath: `Chart.groups[${anchor.groupIndex}].dataLabels`,
     });
     const fontPx = resolveChartFontSizePixels(style?.fontSize);
-    const position =
-      pointMerged.position ??
-      (group.stacking === "clustered" ? "outsideEnd" : "center");
-    const placement = barLabelBox(
-      anchor,
-      position,
-      measured.width,
-      Math.max(measured.height, fontPx * 1.15),
-    );
+    const textH = Math.max(measured.height, fontPx * 1.15);
+
+    const placement: LabelPlacement =
+      anchor.kind === "bar"
+        ? barLabelBox(
+            anchor,
+            pointMerged.position ??
+              (group.kind === "column" || group.kind === "bar"
+                ? group.stacking === "clustered"
+                  ? "outsideEnd"
+                  : "center"
+                : "center"),
+            measured.width,
+            textH,
+          )
+        : pointLabelBox(
+            anchor,
+            pointMerged.position ??
+              (group.kind === "scatter"
+                ? "right"
+                : group.kind === "area"
+                  ? "center"
+                  : "top"),
+            measured.width,
+            textH,
+          );
 
     parts.push(
       renderChartTextSvg({

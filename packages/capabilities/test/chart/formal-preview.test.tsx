@@ -520,6 +520,184 @@ describe("Chart static preview, layout parity, and textCapability isolation", ()
           ],
         }),
       },
+      {
+        label: "line-standard-smooth-markers-blanks-and-point-overrides",
+        node: chart({
+          ...baseProps,
+          legend: "bottom",
+          displayBlanksAs: "gap",
+          groups: [
+            {
+              kind: "line",
+              data: {
+                kind: "shared-categories",
+                categories: ["A", "B", "C", "D", "E"],
+              },
+              series: [
+                {
+                  name: "Smooth",
+                  color: "#2563EB",
+                  line: { width: 2, dash: "dash" },
+                  smooth: true,
+                  marker: { symbol: "diamond", size: 7, fill: "#1D4ED8" },
+                  values: [10, 28, null, 18, 32],
+                  points: {
+                    1: {
+                      color: "#EF4444",
+                      line: { color: "#EF4444", width: 3 },
+                      marker: { symbol: "star", size: 9, fill: "#EF4444" },
+                    },
+                  },
+                },
+                {
+                  name: "AutoMarker",
+                  marker: { symbol: "auto", size: 6 },
+                  values: [14, 18, 24, 20, 26],
+                },
+              ],
+              dataLabels: { value: true, position: "top" },
+            },
+          ],
+        }),
+      },
+      {
+        label: "line-stacked-and-percent",
+        node: chart({
+          ...baseProps,
+          legend: "right",
+          groups: [
+            {
+              kind: "line",
+              stacking: "percent",
+              data: {
+                kind: "shared-categories",
+                categories: ["P1", "P2", "P3"],
+              },
+              series: [
+                { name: "L1", marker: true, values: [20, null, 30] },
+                {
+                  name: "L2",
+                  marker: { symbol: "triangle" },
+                  values: [20, 40, 10],
+                },
+              ],
+            },
+          ],
+        }),
+      },
+      {
+        label: "area-standard-midCat-and-blanks-gap",
+        node: chart({
+          ...baseProps,
+          legend: "bottom",
+          displayBlanksAs: "gap",
+          groups: [
+            {
+              kind: "area",
+              data: {
+                kind: "shared-categories",
+                categories: ["Jan", "Feb", "Mar", "Apr", "May"],
+              },
+              series: [
+                {
+                  name: "SeriesA",
+                  color: "#2563EB",
+                  line: { color: "#1E40AF", width: 2 },
+                  values: [12, 24, null, 18, 28],
+                },
+              ],
+              dataLabels: { value: true },
+            },
+          ],
+        }),
+      },
+      {
+        label: "area-stacked-and-percent",
+        node: chart({
+          ...baseProps,
+          legend: "top",
+          groups: [
+            {
+              kind: "area",
+              stacking: "stacked",
+              data: {
+                kind: "shared-categories",
+                categories: ["Q1", "Q2", "Q3"],
+              },
+              series: [
+                { name: "Base", color: "#10B981", values: [10, 20, 15] },
+                { name: "Top", color: "#3B82F6", values: [15, null, 25] },
+              ],
+            },
+          ],
+        }),
+      },
+      {
+        label: "scatter-five-modes-unequal-xy-and-empty-series",
+        node: chart({
+          ...baseProps,
+          legend: "bottom",
+          displayBlanksAs: "span",
+          groups: [
+            {
+              kind: "scatter",
+              data: { kind: "xy" },
+              line: "smooth",
+              markers: true,
+              series: [
+                {
+                  name: "Observed",
+                  color: "#2563EB",
+                  line: { width: 2, dash: "solid" },
+                  marker: { symbol: "circle", size: 6 },
+                  x: [1, 2, null, 4, 6],
+                  y: [3, 8, 10, 5, 11],
+                  points: {
+                    3: {
+                      color: "#EF4444",
+                      marker: { symbol: "diamond", size: 8, fill: "#EF4444" },
+                    },
+                  },
+                },
+                {
+                  name: "EmptySeries",
+                  x: [],
+                  y: [],
+                },
+              ],
+              dataLabels: { xValue: true, value: true, position: "right" },
+            },
+          ],
+        }),
+      },
+      {
+        label: "scatter-markers-only-and-log-axes",
+        node: chart({
+          ...baseProps,
+          legend: "right",
+          axes: {
+            x: { kind: "value", logBase: 10, min: 1, max: 100 },
+            y: { kind: "value", min: 0, max: 50 },
+          },
+          groups: [
+            {
+              kind: "scatter",
+              axes: { x: "x", y: "y" },
+              data: { kind: "xy" },
+              line: false,
+              markers: true,
+              series: [
+                {
+                  name: "LogScatter",
+                  marker: { symbol: "triangle", size: 7, fill: "#F59E0B" },
+                  x: [1, 10, 100],
+                  y: [12, 28, 44],
+                },
+              ],
+            },
+          ],
+        }),
+      },
     ];
 
     for (const item of parityCases) {
@@ -573,34 +751,6 @@ describe("Chart static preview, layout parity, and textCapability isolation", ()
       readonly expected: RegExp;
     }[] = [
       {
-        label: "non-column-line",
-        node: chart({
-          ...baseProps,
-          groups: [
-            {
-              kind: "line",
-              data: { kind: "shared-categories", categories: ["A", "B"] },
-              series: [{ name: "S", values: [1, 2] }],
-            },
-          ],
-        }),
-        expected: /line/i,
-      },
-      {
-        label: "non-column-area",
-        node: chart({
-          ...baseProps,
-          groups: [
-            {
-              kind: "area",
-              data: { kind: "shared-categories", categories: ["A", "B"] },
-              series: [{ name: "S", values: [1, 2] }],
-            },
-          ],
-        }),
-        expected: /area/i,
-      },
-      {
         label: "non-column-pie",
         node: chart({
           ...baseProps,
@@ -613,20 +763,6 @@ describe("Chart static preview, layout parity, and textCapability isolation", ()
           ],
         }),
         expected: /pie/i,
-      },
-      {
-        label: "non-column-scatter",
-        node: chart({
-          ...baseProps,
-          groups: [
-            {
-              kind: "scatter",
-              data: { kind: "xy" },
-              series: [{ name: "S", x: [1, 2], y: [3, 4] }],
-            },
-          ],
-        }),
-        expected: /scatter/i,
       },
       {
         label: "series-errorBars",

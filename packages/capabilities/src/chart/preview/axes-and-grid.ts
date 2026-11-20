@@ -286,15 +286,20 @@ export function renderAxesSvg(options: {
     if (labelSide !== "none") {
       if (axis.direction === "horizontal") {
         const zone = layout.labelZones.get(axis.name);
+        const zoneOffset = zone?.offset ?? 0;
         const zoneH = Math.max(
           axisFontPx * 1.3,
           (zone?.depth ?? axisFontPx * 1.4) - labelGap - tickProtrusion,
         );
         const labelY =
           labelSide === "top"
-            ? plotRect.y - labelGap - tickProtrusion - zoneH
+            ? plotRect.y - labelGap - tickProtrusion - zoneOffset - zoneH
             : labelSide === "bottom"
-              ? plotRect.y + plotRect.height + labelGap + tickProtrusion
+              ? plotRect.y +
+                plotRect.height +
+                labelGap +
+                tickProtrusion +
+                zoneOffset
               : crossCoord + 4;
 
         if (scale.kind === "category") {
@@ -366,15 +371,21 @@ export function renderAxesSvg(options: {
             ? titleBox.x - 2
             : chartBox.x + chartBox.width - 2;
 
+        const zoneOffset = layout.labelZones.get(axis.name)?.offset ?? 0;
         let boxX: number;
         let boxW: number;
         let align: "left" | "right";
         if (labelSide === "right") {
-          boxX = plotRect.x + plotRect.width + labelGap + tickProtrusion;
+          boxX =
+            plotRect.x +
+            plotRect.width +
+            labelGap +
+            tickProtrusion +
+            zoneOffset;
           boxW = Math.max(6, rightBound - boxX);
           align = "left";
         } else if (labelSide === "left") {
-          const rightEdge = plotRect.x - labelGap - tickProtrusion;
+          const rightEdge = plotRect.x - labelGap - tickProtrusion - zoneOffset;
           boxX = leftBound;
           boxW = Math.max(6, rightEdge - leftBound);
           align = "right";

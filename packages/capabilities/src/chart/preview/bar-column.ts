@@ -6,12 +6,7 @@ import {
   resolveSeriesColor,
   strokeAttrs,
 } from "./style.ts";
-import type {
-  AxisScale,
-  CategoryAxisScale,
-  PlottedBarAnchor,
-  ValueAxisScale,
-} from "./types.ts";
+import type { AxisScale, PlottedBarAnchor } from "./types.ts";
 
 export function renderColumnOrBarGroup(options: {
   readonly group: ParsedColumnOrBarGroup;
@@ -24,10 +19,11 @@ export function renderColumnOrBarGroup(options: {
   readonly anchors: readonly PlottedBarAnchor[];
 } {
   const { group, groupIndex, scales, plotRect, theme } = options;
-  const catScale = scales.get(
-    group.axes.category.name,
-  ) as CategoryAxisScale;
-  const valScale = scales.get(group.axes.value.name) as ValueAxisScale;
+  const catScale = scales.get(group.axes.category.name);
+  const valScale = scales.get(group.axes.value.name);
+  if (catScale?.kind !== "category" || valScale?.kind !== "value") {
+    return { svg: "", anchors: [] };
+  }
 
   const isHorizontal = group.kind === "bar";
   const categories = group.data.categories;
@@ -197,7 +193,9 @@ export function renderColumnOrBarGroup(options: {
           negAcc = endVal;
         }
         const startCoord = valScale.valueToScreen(
-          valScale.logBase !== undefined ? Math.max(valScale.min, startVal) : startVal,
+          valScale.logBase !== undefined
+            ? Math.max(valScale.min, startVal)
+            : startVal,
           plotRect,
         );
         const endCoord = valScale.valueToScreen(endVal, plotRect);

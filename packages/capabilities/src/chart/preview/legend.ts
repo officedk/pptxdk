@@ -1,10 +1,7 @@
-import type {
-  GeometryBox,
-  ThemeContext,
-} from "@react-pptx/core/capability";
+import type { GeometryBox, ThemeContext } from "@react-pptx/core/capability";
 
-import type { ParsedChart } from "../chart-model.ts";
 import type { TextStyle } from "../../shared/text-service.ts";
+import type { ParsedChart } from "../chart-model.ts";
 import { resolveSeriesColor } from "./style.ts";
 import {
   measureChartText,
@@ -13,12 +10,7 @@ import {
 } from "./text-render.ts";
 import type { ChartLegendEntry } from "./types.ts";
 
-export type LegendPosition =
-  | "top"
-  | "bottom"
-  | "left"
-  | "right"
-  | "topRight";
+export type LegendPosition = "top" | "bottom" | "left" | "right" | "topRight";
 
 export function collectLegendEntries(
   parsed: ParsedChart,
@@ -27,11 +19,7 @@ export function collectLegendEntries(
   const entries: ChartLegendEntry[] = [];
   for (const group of parsed.groups) {
     for (const series of group.series) {
-      const color = resolveSeriesColor(
-        series.color,
-        series.seriesIndex,
-        theme,
-      );
+      const color = resolveSeriesColor(series.color, series.seriesIndex, theme);
       entries.push({
         label: series.name,
         colorHex: color.hex,
@@ -120,8 +108,7 @@ export function measureLegend(options: {
       0,
       ...rows.map((row) =>
         row.reduce(
-          (sum, item, idx) =>
-            sum + item.itemWidth + (idx > 0 ? itemGapX : 0),
+          (sum, item, idx) => sum + item.itemWidth + (idx > 0 ? itemGapX : 0),
           0,
         ),
       ),

@@ -1057,7 +1057,10 @@ function categoryChartSeries(
   const pie = kind === "pie" || kind === "doughnut";
   const itemShape = seriesShape(kind, series.color, series.line, theme);
   const seriesExplosion =
-    series.explosion ?? (pie ? group.explosion : undefined);
+    series.explosion ??
+    (group.kind === "pie" || group.kind === "doughnut"
+      ? group.explosion
+      : undefined);
   const points = Object.entries<ChartPoint>(series.points ?? {}).flatMap(
     ([pointIndex, point]) => {
       const shape = pointShape(kind, point, theme);
@@ -1620,7 +1623,8 @@ function axisXml(
           formatCode: isolateDefaultXFormat
             ? "General"
             : (spec.numberFormat ?? "General"),
-          sourceLinked: spec.numberFormat === undefined && !isolateDefaultXFormat,
+          sourceLinked:
+            spec.numberFormat === undefined && !isolateDefaultXFormat,
         }),
         el("c:majorTickMark", { val: spec.majorTickMark ?? "none" }),
         el("c:minorTickMark", { val: spec.minorTickMark ?? "none" }),

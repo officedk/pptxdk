@@ -110,7 +110,10 @@ export type ChartLayoutResult = {
   readonly axisTitleBoxes: ReadonlyMap<string, GeometryBox>;
   readonly labelZones: ReadonlyMap<
     string,
-    { readonly side: "top" | "bottom" | "left" | "right"; readonly depth: number }
+    {
+      readonly side: "top" | "bottom" | "left" | "right";
+      readonly depth: number;
+    }
   >;
 };
 

@@ -111,13 +111,13 @@ function tokenizeSection(section: string): Token[] {
       tokens.push({ kind: "percent" });
       continue;
     }
-    if (
-      (ch === "E" || ch === "e") &&
-      (section[i + 1] === "+" || section[i + 1] === "-")
-    ) {
-      tokens.push({ kind: "exp", sign: section[i + 1] as "+" | "-" });
-      i += 1;
-      continue;
+    if (ch === "E" || ch === "e") {
+      const next = section[i + 1];
+      if (next === "+" || next === "-") {
+        tokens.push({ kind: "exp", sign: next });
+        i += 1;
+        continue;
+      }
     }
     if (
       (ch === "G" || ch === "g") &&
@@ -191,6 +191,7 @@ function formatSection(absValue: number, section: string): string {
   let lastNumIdx = -1;
   let lastDigitIdx = -1;
   let expIdx = -1;
+  let expSignToken: "+" | "-" = "+";
   for (let i = 0; i < tokens.length; i += 1) {
     const token = tokens[i]!;
     if (token.kind === "digit" || token.kind === "dot") {
@@ -202,6 +203,7 @@ function formatSection(absValue: number, section: string): string {
     }
     if (token.kind === "exp" && expIdx < 0) {
       expIdx = i;
+      expSignToken = token.sign;
     }
   }
 
@@ -265,7 +267,6 @@ function formatSection(absValue: number, section: string): string {
     .join("");
 
   if (expIdx >= 0 && expIdx > firstNumIdx) {
-    const expToken = tokens[expIdx] as { kind: "exp"; sign: "+" | "-" };
     const mantissaTokens = tokens.slice(firstNumIdx, expIdx);
     const expTokens = tokens.slice(expIdx + 1, lastNumIdx + 1);
     const dotPos = mantissaTokens.findIndex((token) => token.kind === "dot");
@@ -297,7 +298,7 @@ function formatSection(absValue: number, section: string): string {
       maxFrac,
       false,
     );
-    const expSign = expVal < 0 ? "-" : expToken.sign === "+" ? "+" : "";
+    const expSign = expVal < 0 ? "-" : expSignToken === "+" ? "+" : "";
     const expDigits = String(Math.abs(expVal)).padStart(
       Math.max(1, expMinDigits),
       "0",

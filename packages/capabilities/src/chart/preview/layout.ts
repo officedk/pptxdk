@@ -1,10 +1,7 @@
-import type {
-  GeometryBox,
-  ThemeContext,
-} from "@react-pptx/core/capability";
+import type { GeometryBox, ThemeContext } from "@react-pptx/core/capability";
 
-import type { ParsedChart, ParsedChartAxis } from "../chart-model.ts";
 import type { TextStyle } from "../../shared/text-service.ts";
+import type { ParsedChart, ParsedChartAxis } from "../chart-model.ts";
 import {
   collectLegendEntries,
   measureLegend,
@@ -25,9 +22,10 @@ export type ComputedChartLayout = ChartLayoutResult & {
 
 type EdgeSide = "top" | "bottom" | "left" | "right";
 
-function titleTextOf(
-  title: NonNullable<ParsedChart["title"]>,
-): { readonly text: string; readonly style?: TextStyle } {
+function titleTextOf(title: NonNullable<ParsedChart["title"]>): {
+  readonly text: string;
+  readonly style?: TextStyle;
+} {
   return typeof title === "string" ? { text: title } : title;
 }
 
@@ -84,11 +82,15 @@ function hasOutsideEndBarLabels(parsed: ParsedChart): {
         series.dataLabels === false
           ? false
           : series.dataLabels !== undefined
-            ? { ...(group.dataLabels === false ? {} : group.dataLabels), ...series.dataLabels }
+            ? {
+                ...(group.dataLabels === false ? {} : group.dataLabels),
+                ...series.dataLabels,
+              }
             : group.dataLabels;
       for (let i = 0; i < series.values.length; i += 1) {
         const val = series.values[i];
-        if (val === null || val === undefined || !Number.isFinite(val)) continue;
+        if (val === null || val === undefined || !Number.isFinite(val))
+          continue;
         const ptOverride = series.points?.[i]?.dataLabels;
         const eff =
           ptOverride === false
@@ -159,7 +161,12 @@ export function computeChartLayout(options: {
         availableWidth: Math.max(10, box.width - 16),
       });
       const h = Math.min(measured.height, Math.max(12, topRoom));
-      titleBox = { x: box.x + 8, y: box.y + 2, width: Math.max(10, box.width - 16), height: h };
+      titleBox = {
+        x: box.x + 8,
+        y: box.y + 2,
+        width: Math.max(10, box.width - 16),
+        height: h,
+      };
     }
     let measuredLegend: MeasuredLegend | undefined;
     let legendBox: GeometryBox | undefined;
@@ -193,7 +200,10 @@ export function computeChartLayout(options: {
           x: box.x + 8,
           y: box.y + (titleBox ? titleBox.height + 4 : 2),
           width: Math.max(10, box.width - 16),
-          height: Math.min(measuredLegend.height, Math.max(14, parsed.plotArea.top - 4)),
+          height: Math.min(
+            measuredLegend.height,
+            Math.max(14, parsed.plotArea.top - 4),
+          ),
         };
       } else if (parsed.legend === "left") {
         legendBox = {
@@ -211,13 +221,19 @@ export function computeChartLayout(options: {
           x: plotRect.x + plotRect.width + 4,
           y: plotRect.y,
           width: rightRoom,
-          height: parsed.legend === "topRight" ? Math.min(measuredLegend.height, plotRect.height) : plotRect.height,
+          height:
+            parsed.legend === "topRight"
+              ? Math.min(measuredLegend.height, plotRect.height)
+              : plotRect.height,
         };
       }
     }
 
     const axisTitleBoxes = new Map<string, GeometryBox>();
-    const labelZones = new Map<string, { readonly side: EdgeSide; readonly depth: number }>();
+    const labelZones = new Map<
+      string,
+      { readonly side: EdgeSide; readonly depth: number }
+    >();
     for (const axis of parsed.axes) {
       if (axis.spec.visible === false) continue;
       const crossAxis = parsed.axes.find((a) => a.id === axis.crossAxisId);
@@ -238,7 +254,10 @@ export function computeChartLayout(options: {
         if (titleSide === "bottom") {
           axisTitleBoxes.set(axis.name, {
             x: plotRect.x,
-            y: Math.min(box.y + box.height - thickness, plotRect.y + plotRect.height + 18),
+            y: Math.min(
+              box.y + box.height - thickness,
+              plotRect.y + plotRect.height + 18,
+            ),
             width: plotRect.width,
             height: thickness,
           });
@@ -258,7 +277,10 @@ export function computeChartLayout(options: {
           });
         } else {
           axisTitleBoxes.set(axis.name, {
-            x: Math.min(box.x + box.width - thickness, plotRect.x + plotRect.width + 24),
+            x: Math.min(
+              box.x + box.width - thickness,
+              plotRect.x + plotRect.width + 24,
+            ),
             y: plotRect.y,
             width: thickness,
             height: plotRect.height,
@@ -332,7 +354,10 @@ export function computeChartLayout(options: {
     });
     const gap = Math.min(6, Math.min(avail.width, avail.height) * 0.03);
     if (pos === "top" || pos === "bottom") {
-      const h = Math.min(measuredLegend.height, Math.max(4, avail.height * 0.28));
+      const h = Math.min(
+        measuredLegend.height,
+        Math.max(4, avail.height * 0.28),
+      );
       const consume = Math.min(h + gap, Math.max(0, avail.height - 4));
       if (pos === "top") {
         legendBox = { x: avail.x, y: avail.y, width: avail.width, height: h };
@@ -364,7 +389,10 @@ export function computeChartLayout(options: {
     } else {
       // topRight
       const w = Math.min(measuredLegend.width, Math.max(4, avail.width * 0.32));
-      const h = Math.min(measuredLegend.height, Math.max(4, avail.height * 0.5));
+      const h = Math.min(
+        measuredLegend.height,
+        Math.max(4, avail.height * 0.5),
+      );
       const consume = Math.min(w + gap, Math.max(0, avail.width - 4));
       legendBox = {
         x: avail.x + avail.width - w,
@@ -383,7 +411,10 @@ export function computeChartLayout(options: {
     left: 0,
     right: 0,
   };
-  const labelDepths = new Map<string, { readonly side: EdgeSide; readonly depth: number }>();
+  const labelDepths = new Map<
+    string,
+    { readonly side: EdgeSide; readonly depth: number }
+  >();
   const axisTitleSpecs: {
     readonly axis: ParsedChartAxis;
     readonly side: EdgeSide;
@@ -433,7 +464,10 @@ export function computeChartLayout(options: {
           edges.left = Math.max(edges.left, overhang);
           edges.right = Math.max(edges.right, overhang);
         } else {
-          const depth = Math.min(maxW + labelGap + tickProtrusion, avail.width * 0.32);
+          const depth = Math.min(
+            maxW + labelGap + tickProtrusion,
+            avail.width * 0.32,
+          );
           edges[labelSide] = Math.max(edges[labelSide], depth);
           labelDepths.set(axis.name, { side: labelSide, depth });
           const overhang = Math.min(maxH / 2, avail.height * 0.1);
@@ -451,8 +485,9 @@ export function computeChartLayout(options: {
             theme,
             slideNumber,
             labelPath: `Chart.axes.${axis.name}.style`,
-            availableWidth:
-              axis.direction === "horizontal" ? estSlot : undefined,
+            ...(axis.direction === "horizontal"
+              ? { availableWidth: estSlot }
+              : {}),
           });
           maxW = Math.max(maxW, m.width);
           maxH = Math.max(maxH, m.height);
@@ -465,12 +500,19 @@ export function computeChartLayout(options: {
             slideNumber,
             labelPath: `Chart.axes.${axis.name}.style`,
           }).height;
-          const cappedH = Math.min(maxH, singleLineH * 2.2, avail.height * 0.25);
+          const cappedH = Math.min(
+            maxH,
+            singleLineH * 2.2,
+            avail.height * 0.25,
+          );
           const depth = cappedH + labelGap + tickProtrusion;
           edges[labelSide] = Math.max(edges[labelSide], depth);
           labelDepths.set(axis.name, { side: labelSide, depth });
         } else {
-          const depth = Math.min(maxW + labelGap + tickProtrusion, avail.width * 0.34);
+          const depth = Math.min(
+            maxW + labelGap + tickProtrusion,
+            avail.width * 0.34,
+          );
           edges[labelSide] = Math.max(edges[labelSide], depth);
           labelDepths.set(axis.name, { side: labelSide, depth });
         }
@@ -508,22 +550,38 @@ export function computeChartLayout(options: {
   // Reserve space for outsideEnd data labels so tall bars do not clip against the frame edge.
   const outside = hasOutsideEndBarLabels(parsed);
   if (outside.columnPos) {
-    edges.top = Math.max(edges.top, Math.min(baseFontSizePx * 1.4, avail.height * 0.16));
+    edges.top = Math.max(
+      edges.top,
+      Math.min(baseFontSizePx * 1.4, avail.height * 0.16),
+    );
   }
   if (outside.columnNeg) {
-    edges.bottom = Math.max(edges.bottom, Math.min(baseFontSizePx * 1.4, avail.height * 0.16));
+    edges.bottom = Math.max(
+      edges.bottom,
+      Math.min(baseFontSizePx * 1.4, avail.height * 0.16),
+    );
   }
   if (outside.barPos) {
-    edges.right = Math.max(edges.right, Math.min(baseFontSizePx * 2.5, avail.width * 0.16));
+    edges.right = Math.max(
+      edges.right,
+      Math.min(baseFontSizePx * 2.5, avail.width * 0.16),
+    );
   }
   if (outside.barNeg) {
-    edges.left = Math.max(edges.left, Math.min(baseFontSizePx * 2.5, avail.width * 0.16));
+    edges.left = Math.max(
+      edges.left,
+      Math.min(baseFontSizePx * 2.5, avail.width * 0.16),
+    );
   }
 
   // Ensure a small visual breathing room on edges without labels/titles.
   for (const side of ["top", "bottom", "left", "right"] as const) {
     if (edges[side] === 0) {
-      edges[side] = Math.min(6, (side === "left" || side === "right" ? avail.width : avail.height) * 0.03);
+      edges[side] = Math.min(
+        6,
+        (side === "left" || side === "right" ? avail.width : avail.height) *
+          0.03,
+      );
     }
   }
 

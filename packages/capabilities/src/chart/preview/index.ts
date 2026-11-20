@@ -5,8 +5,8 @@ import {
   type PaintOutput,
 } from "@react-pptx/core/capability";
 
-import { textOnlyChartStyle, type ParsedChart } from "../chart-model.ts";
 import { parseTextContent } from "../../shared/text-service.ts";
+import { textOnlyChartStyle, type ParsedChart } from "../chart-model.ts";
 import { renderAxesSvg, renderGridlinesSvg } from "./axes-and-grid.ts";
 import { renderColumnOrBarGroup } from "./bar-column.ts";
 import { renderDataLabelsSvg } from "./data-labels.ts";
@@ -76,7 +76,9 @@ export function drawChartPreview(
     { slideNumber: context.slideNumber },
     "Chart.style",
   );
-  const baseFontSizePx = resolveChartFontSizePixels(resolvedChartStyle.fontSize);
+  const baseFontSizePx = resolveChartFontSizePixels(
+    resolvedChartStyle.fontSize,
+  );
 
   const scales = buildAxisScales(parsed);
   const layout = computeChartLayout({
@@ -166,7 +168,9 @@ export function drawChartPreview(
         axis.direction === "vertical"
           ? `M${layout.plotRect.x} ${zeroCoord}H${layout.plotRect.x + layout.plotRect.width}`
           : `M${zeroCoord} ${layout.plotRect.y}V${layout.plotRect.y + layout.plotRect.height}`;
-      bodyParts.push(`<path d="${path}" ${strokeAttrs(zeroStroke)} fill="none"/>`);
+      bodyParts.push(
+        `<path d="${path}" ${strokeAttrs(zeroStroke)} fill="none"/>`,
+      );
     }
   }
 
@@ -200,9 +204,7 @@ export function drawChartPreview(
   // 5. Chart title
   if (parsed.title !== undefined && layout.titleBox !== undefined) {
     const titleObj =
-      typeof parsed.title === "string"
-        ? { text: parsed.title }
-        : parsed.title;
+      typeof parsed.title === "string" ? { text: parsed.title } : parsed.title;
     bodyParts.push(
       renderChartTextSvg({
         text: titleObj.text,

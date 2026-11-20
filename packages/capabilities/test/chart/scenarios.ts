@@ -495,14 +495,24 @@ export const chartAxesAndCompactScenario: CapabilityScenario = {
             {
               kind: "column",
               axes: { category: "cat", value: "logVal" },
-              data: { kind: "shared-categories", categories: ["Q1", "Q2", "Q3"] },
-              series: [{ name: "Volume", values: [10, 120, 850], color: "#2563EB" }],
+              data: {
+                kind: "shared-categories",
+                categories: ["Q1", "Q2", "Q3"],
+              },
+              series: [
+                { name: "Volume", values: [10, 120, 850], color: "#2563EB" },
+              ],
             },
             {
               kind: "column",
               axes: { category: "cat", value: "pctVal" },
-              data: { kind: "shared-categories", categories: ["Q1", "Q2", "Q3"] },
-              series: [{ name: "Share", values: [0.25, 0.5, 0.75], color: "#F59E0B" }],
+              data: {
+                kind: "shared-categories",
+                categories: ["Q1", "Q2", "Q3"],
+              },
+              series: [
+                { name: "Share", values: [0.25, 0.5, 0.75], color: "#F59E0B" },
+              ],
             },
           ],
         }),
@@ -541,7 +551,10 @@ export const chartAxesAndCompactScenario: CapabilityScenario = {
             {
               kind: "column",
               axes: { category: "cat", value: "val" },
-              data: { kind: "shared-categories", categories: ["First", "Second", "Third"] },
+              data: {
+                kind: "shared-categories",
+                categories: ["First", "Second", "Third"],
+              },
               series: [{ name: "Spend", values: [25, 60, 90] }],
             },
           ],
@@ -580,7 +593,10 @@ export const chartAxesAndCompactScenario: CapabilityScenario = {
           groups: [
             {
               kind: "column",
-              data: { kind: "shared-categories", categories: ["Alpha", "Beta"] },
+              data: {
+                kind: "shared-categories",
+                categories: ["Alpha", "Beta"],
+              },
               series: [{ name: "S", values: [10, 20] }],
             },
           ],
@@ -662,14 +678,24 @@ export const chartAxesAndCompactScenario: CapabilityScenario = {
             {
               kind: "column",
               axes: { category: "cat", value: "logVal" },
-              data: { kind: "shared-categories", categories: ["Q1", "Q2", "Q3"] },
-              series: [{ name: "Volume", values: [10, 120, 850], color: "#2563EB" }],
+              data: {
+                kind: "shared-categories",
+                categories: ["Q1", "Q2", "Q3"],
+              },
+              series: [
+                { name: "Volume", values: [10, 120, 850], color: "#2563EB" },
+              ],
             },
             {
               kind: "column",
               axes: { category: "cat", value: "pctVal" },
-              data: { kind: "shared-categories", categories: ["Q1", "Q2", "Q3"] },
-              series: [{ name: "Share", values: [0.25, 0.5, 0.75], color: "#F59E0B" }],
+              data: {
+                kind: "shared-categories",
+                categories: ["Q1", "Q2", "Q3"],
+              },
+              series: [
+                { name: "Share", values: [0.25, 0.5, 0.75], color: "#F59E0B" },
+              ],
             },
           ],
         }),
@@ -709,7 +735,10 @@ export const chartAxesAndCompactScenario: CapabilityScenario = {
             {
               kind: "column",
               axes: { category: "cat", value: "val" },
-              data: { kind: "shared-categories", categories: ["First", "Second", "Third"] },
+              data: {
+                kind: "shared-categories",
+                categories: ["First", "Second", "Third"],
+              },
               series: [{ name: "Spend", values: [25, 60, 90] }],
             },
           ],
@@ -746,7 +775,10 @@ export const chartAxesAndCompactScenario: CapabilityScenario = {
           groups: [
             {
               kind: "column",
-              data: { kind: "shared-categories", categories: ["Alpha", "Beta"] },
+              data: {
+                kind: "shared-categories",
+                categories: ["Alpha", "Beta"],
+              },
               series: [{ name: "S", values: [10, 20] }],
             },
           ],
@@ -808,7 +840,11 @@ export const chartAxesAndCompactScenario: CapabilityScenario = {
     for (let y = 40; y < 120; y += 1) {
       for (let x = 500; x < 620; x += 1) {
         const idx = (y * png1.width + x) * 4;
-        if (png1.data[idx]! < 250 || png1.data[idx + 1]! < 250 || png1.data[idx + 2]! < 250) {
+        if (
+          png1.data[idx]! < 250 ||
+          png1.data[idx + 1]! < 250 ||
+          png1.data[idx + 2]! < 250
+        ) {
           topRightLegendPixels += 1;
         }
       }
@@ -912,7 +948,10 @@ export const chartBarColumnVariantsScenario: CapabilityScenario = {
               kind: "bar",
               gapWidth: 100,
               overlap: -20,
-              data: { kind: "shared-categories", categories: ["North", "South", "West"] },
+              data: {
+                kind: "shared-categories",
+                categories: ["North", "South", "West"],
+              },
               series: [
                 {
                   name: "S1",
@@ -938,7 +977,10 @@ export const chartBarColumnVariantsScenario: CapabilityScenario = {
             {
               kind: "bar",
               stacking: "stacked",
-              data: { kind: "shared-categories", categories: ["Jan", "Feb", "Mar"] },
+              data: {
+                kind: "shared-categories",
+                categories: ["Jan", "Feb", "Mar"],
+              },
               series: [
                 { name: "In", values: [25, -10, 15] },
                 { name: "Out", values: [15, -20, 25] },
@@ -964,7 +1006,10 @@ export const chartBarColumnVariantsScenario: CapabilityScenario = {
             {
               kind: "bar",
               stacking: "percent",
-              data: { kind: "shared-categories", categories: ["Team A", "Team B"] },
+              data: {
+                kind: "shared-categories",
+                categories: ["Team A", "Team B"],
+              },
               series: [
                 { name: "Done", values: [3, 1] },
                 { name: "Todo", values: [1, 3] },
@@ -1048,7 +1093,10 @@ export const chartBarColumnVariantsScenario: CapabilityScenario = {
               kind: "bar",
               gapWidth: 100,
               overlap: -20,
-              data: { kind: "shared-categories", categories: ["North", "South", "West"] },
+              data: {
+                kind: "shared-categories",
+                categories: ["North", "South", "West"],
+              },
               series: [
                 {
                   name: "S1",
@@ -1074,7 +1122,10 @@ export const chartBarColumnVariantsScenario: CapabilityScenario = {
             {
               kind: "bar",
               stacking: "stacked",
-              data: { kind: "shared-categories", categories: ["Jan", "Feb", "Mar"] },
+              data: {
+                kind: "shared-categories",
+                categories: ["Jan", "Feb", "Mar"],
+              },
               series: [
                 { name: "In", values: [25, -10, 15] },
                 { name: "Out", values: [15, -20, 25] },
@@ -1101,7 +1152,10 @@ export const chartBarColumnVariantsScenario: CapabilityScenario = {
             {
               kind: "bar",
               stacking: "percent",
-              data: { kind: "shared-categories", categories: ["Team A", "Team B"] },
+              data: {
+                kind: "shared-categories",
+                categories: ["Team A", "Team B"],
+              },
               series: [
                 { name: "Done", values: [3, 1] },
                 { name: "Todo", values: [1, 3] },
@@ -1133,7 +1187,10 @@ export const chartBarColumnVariantsScenario: CapabilityScenario = {
       if (r === 0xef && g === 0x44 && b === 0x44) redPixels += 1;
     }
     assert.ok(greenPixels > 200, `Expected #10B981 pixels, got ${greenPixels}`);
-    assert.ok(redPixels > 100, `Expected #EF4444 override pixels, got ${redPixels}`);
+    assert.ok(
+      redPixels > 100,
+      `Expected #EF4444 override pixels, got ${redPixels}`,
+    );
 
     // Check Page 2 contains pink point override (#EC4899) pixels.
     const png2 = PNG.sync.read(Buffer.from(preview.pages[1]!.png!));
@@ -1147,7 +1204,10 @@ export const chartBarColumnVariantsScenario: CapabilityScenario = {
         pinkPixels += 1;
       }
     }
-    assert.ok(pinkPixels > 100, `Expected #EC4899 point override pixels, got ${pinkPixels}`);
+    assert.ok(
+      pinkPixels > 100,
+      `Expected #EC4899 point override pixels, got ${pinkPixels}`,
+    );
 
     const files = unzipSync(pptx);
     expect(strFromU8(files["ppt/charts/chart1.xml"]!)).toContain(

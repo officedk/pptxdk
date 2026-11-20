@@ -54,7 +54,6 @@ import {
   type ResolvedCartesianAxes,
   type ResolvedScatterAxes,
 } from "./chart-model.ts";
-import { drawChartPreview } from "./preview/index.ts";
 import type {
   ChartAxis,
   ChartAxisCrossing,
@@ -99,6 +98,7 @@ import {
   chartWorkbook,
   type ChartTextStyleXml,
 } from "./chart-xml.ts";
+import { drawChartPreview } from "./preview/index.ts";
 
 const chartRelationship =
   "http://schemas.openxmlformats.org/officeDocument/2006/relationships/chart";

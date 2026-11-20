@@ -1,8 +1,8 @@
 import type { GeometryBox, ThemeContext } from "@react-pptx/core/capability";
 
+import type { TextStyle } from "../../shared/text-service.ts";
 import { mergeDataLabels } from "../chart-labels.ts";
 import type { ParsedChart } from "../chart-model.ts";
-import type { TextStyle } from "../../shared/text-service.ts";
 import { formatChartNumber } from "./number-format.ts";
 import {
   measureChartText,
@@ -31,14 +31,21 @@ function barLabelBox(
     const colX = anchor.x + (anchor.width - colW) / 2;
     if (position === "center") {
       return {
-        box: { x: colX, y: anchor.y, width: colW, height: Math.max(anchor.height, labelH) },
+        box: {
+          x: colX,
+          y: anchor.y,
+          width: colW,
+          height: Math.max(anchor.height, labelH),
+        },
         align: "center",
         verticalAlign: "middle",
       };
     }
     const endIsTop = anchor.valueEndSide === "top";
     if (position === "insideEnd") {
-      const y = endIsTop ? anchor.y + pad : anchor.y + anchor.height - labelH - pad;
+      const y = endIsTop
+        ? anchor.y + pad
+        : anchor.y + anchor.height - labelH - pad;
       return {
         box: { x: colX, y, width: colW, height: labelH },
         align: "center",
@@ -46,7 +53,9 @@ function barLabelBox(
       };
     }
     if (position === "insideBase") {
-      const y = endIsTop ? anchor.y + anchor.height - labelH - pad : anchor.y + pad;
+      const y = endIsTop
+        ? anchor.y + anchor.height - labelH - pad
+        : anchor.y + pad;
       return {
         box: { x: colX, y, width: colW, height: labelH },
         align: "center",
@@ -54,7 +63,9 @@ function barLabelBox(
       };
     }
     // outsideEnd
-    const y = endIsTop ? anchor.y - labelH - pad : anchor.y + anchor.height + pad;
+    const y = endIsTop
+      ? anchor.y - labelH - pad
+      : anchor.y + anchor.height + pad;
     return {
       box: { x: colX, y, width: colW, height: labelH },
       align: "center",
@@ -67,7 +78,12 @@ function barLabelBox(
   const barY = anchor.y + (anchor.height - labelH) / 2;
   if (position === "center") {
     return {
-      box: { x: anchor.x, y: barY, width: Math.max(anchor.width, barW), height: labelH },
+      box: {
+        x: anchor.x,
+        y: barY,
+        width: Math.max(anchor.width, barW),
+        height: labelH,
+      },
       align: "center",
       verticalAlign: "middle",
     };
@@ -125,7 +141,10 @@ export function renderDataLabelsSvg(options: {
   for (const anchor of anchors) {
     if (anchor.kind !== "bar") continue;
     const group = parsed.groups[anchor.groupIndex];
-    if (group === undefined || (group.kind !== "column" && group.kind !== "bar")) {
+    if (
+      group === undefined ||
+      (group.kind !== "column" && group.kind !== "bar")
+    ) {
       continue;
     }
     const series = group.series[anchor.groupSeriesIndex];
@@ -149,10 +168,7 @@ export function renderDataLabelsSvg(options: {
     }
     if (pointMerged.percent === true && anchor.percent !== undefined) {
       labelSegments.push(
-        formatChartNumber(
-          anchor.percent,
-          pointMerged.numberFormat ?? "0%",
-        ),
+        formatChartNumber(anchor.percent, pointMerged.numberFormat ?? "0%"),
       );
     }
     if (labelSegments.length === 0) continue;

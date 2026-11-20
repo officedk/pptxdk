@@ -1,7 +1,4 @@
-import type {
-  GeometryBox,
-  ThemeContext,
-} from "@react-pptx/core/capability";
+import type { GeometryBox, ThemeContext } from "@react-pptx/core/capability";
 
 import {
   measureTextLayoutFromParagraphs,

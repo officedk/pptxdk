@@ -349,7 +349,8 @@ function buildValueAxisScale(
       spec.min ??
       cleanNumber(Math.floor(rawMin / majorUnit + 1e-12) * majorUnit);
     max =
-      spec.max ?? cleanNumber(Math.ceil(rawMax / majorUnit - 1e-12) * majorUnit);
+      spec.max ??
+      cleanNumber(Math.ceil(rawMax / majorUnit - 1e-12) * majorUnit);
     if (min >= max) max = cleanNumber(min + majorUnit);
     if (
       spec.majorUnit === undefined &&
@@ -367,8 +368,7 @@ function buildValueAxisScale(
   const minorTicks =
     minorUnit > 0
       ? generateLinearTicks(min, max, minorUnit, 200).filter(
-          (t) =>
-            !majorTicks.some((m) => Math.abs(m - t) <= majorUnit * 1e-6),
+          (t) => !majorTicks.some((m) => Math.abs(m - t) <= majorUnit * 1e-6),
         )
       : [];
 

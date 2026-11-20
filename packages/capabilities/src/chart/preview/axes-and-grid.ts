@@ -1,11 +1,8 @@
-import type {
-  GeometryBox,
-  ThemeContext,
-} from "@react-pptx/core/capability";
+import type { GeometryBox, ThemeContext } from "@react-pptx/core/capability";
 
+import type { TextStyle } from "../../shared/text-service.ts";
 import type { ParsedChart, ParsedChartAxis } from "../chart-model.ts";
 import type { ChartLine, ChartTickMark } from "../chart-types.ts";
-import type { TextStyle } from "../../shared/text-service.ts";
 import { resolveAxisLabelSide, type ComputedChartLayout } from "./layout.ts";
 import { formatChartNumber } from "./number-format.ts";
 import { resolveAxisCrossingScreen } from "./scales.ts";
@@ -389,7 +386,10 @@ export function renderAxesSvg(options: {
             align = "right";
           } else {
             boxX = crossCoord + 4;
-            boxW = Math.max(6, Math.min(56, plotRect.x + plotRect.width - boxX));
+            boxW = Math.max(
+              6,
+              Math.min(56, plotRect.x + plotRect.width - boxX),
+            );
             align = "left";
           }
         }

@@ -323,10 +323,11 @@ function paintShapeModel(
       return visualPaint;
     case "body": {
       const { box, flipH, flipV, rotate, geometry } = model.visual;
-      const evaluated = evaluateGeometry(geometry, box);
+      const paintBox = paintContext.box ?? box;
+      const evaluated = evaluateGeometry(geometry, paintBox);
       const { textRect } = evaluated;
-      const cx = box.x + box.width / 2;
-      const cy = box.y + box.height / 2;
+      const cx = paintBox.x + paintBox.width / 2;
+      const cy = paintBox.y + paintBox.height / 2;
       // Flip mirrors the geometry and its embedded textRect around the shape center,
       // while inline text glyphs stay upright and only follow shape rotation.
       const effectiveTextRect = {
@@ -342,7 +343,7 @@ function paintShapeModel(
         verticalAlign: model.text.verticalAlign,
         theme: paintContext.theme,
         measuredLayout:
-          Math.abs(effectiveTextRect.width - box.width) <= 0.01
+          paintBox.width === box.width && paintBox.height === box.height
             ? model.text.body.measuredLayout
             : undefined,
         idPrefix: `obj-s${paintContext.slideNumber}-o${paintContext.objectId}`,
@@ -588,14 +589,15 @@ export const shapeCapability: ObjectCapabilityModule = {
 
         let resolvedText: ResolvedTextBody | undefined;
         if (hasText && paragraphs.length > 0) {
+          const { textRect } = evaluateGeometry(visual.geometry, box);
           resolvedText = resolveTextBody(
             paragraphs,
             parsedTextStyle,
             resolveContext.theme,
             parsedTextStyle.verticalAlign ?? "middle",
             {
-              width: Math.max(0, box.width - insets.left - insets.right),
-              height: Math.max(0, box.height - insets.top - insets.bottom),
+              width: Math.max(0, textRect.width - insets.left - insets.right),
+              height: Math.max(0, textRect.height - insets.top - insets.bottom),
               insets,
             },
             "text-box",

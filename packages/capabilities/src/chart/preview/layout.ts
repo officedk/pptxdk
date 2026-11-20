@@ -1,6 +1,7 @@
 import type { GeometryBox, ThemeContext } from "@react-pptx/core/capability";
 
 import type { TextStyle } from "../../shared/text-service.ts";
+import { mergeDataLabels } from "../chart-labels.ts";
 import type { ParsedChart, ParsedChartAxis } from "../chart-model.ts";
 import {
   collectLegendEntries,
@@ -78,26 +79,13 @@ function hasOutsideEndBarLabels(parsed: ParsedChart): {
   for (const group of parsed.groups) {
     if (group.kind !== "column" && group.kind !== "bar") continue;
     for (const series of group.series) {
-      const serLabels =
-        series.dataLabels === false
-          ? false
-          : series.dataLabels !== undefined
-            ? {
-                ...(group.dataLabels === false ? {} : group.dataLabels),
-                ...series.dataLabels,
-              }
-            : group.dataLabels;
+      const serLabels = mergeDataLabels(group.dataLabels, series.dataLabels);
       for (let i = 0; i < series.values.length; i += 1) {
         const val = series.values[i];
         if (val === null || val === undefined || !Number.isFinite(val))
           continue;
         const ptOverride = series.points?.[i]?.dataLabels;
-        const eff =
-          ptOverride === false
-            ? false
-            : ptOverride !== undefined
-              ? { ...(serLabels === false ? {} : serLabels), ...ptOverride }
-              : serLabels;
+        const eff = mergeDataLabels(serLabels, ptOverride);
         if (eff === undefined || eff === false) continue;
         if (!eff.value && !eff.category && !eff.percent && !eff.seriesName)
           continue;
@@ -143,24 +131,11 @@ function hasPointDataLabels(parsed: ParsedChart): {
           ? "center"
           : "top";
     for (const series of group.series) {
-      const serLabels =
-        series.dataLabels === false
-          ? false
-          : series.dataLabels !== undefined
-            ? {
-                ...(group.dataLabels === false ? {} : group.dataLabels),
-                ...series.dataLabels,
-              }
-            : group.dataLabels;
+      const serLabels = mergeDataLabels(group.dataLabels, series.dataLabels);
       const count = "x" in series ? series.x.length : series.values.length;
       for (let i = 0; i < count; i += 1) {
         const ptOverride = series.points?.[i]?.dataLabels;
-        const eff =
-          ptOverride === false
-            ? false
-            : ptOverride !== undefined
-              ? { ...(serLabels === false ? {} : serLabels), ...ptOverride }
-              : serLabels;
+        const eff = mergeDataLabels(serLabels, ptOverride);
         if (eff === undefined || eff === false) continue;
         if (
           !eff.value &&

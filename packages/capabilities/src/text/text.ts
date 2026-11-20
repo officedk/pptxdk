@@ -38,6 +38,7 @@ import {
   resolveTextBody,
   textExtent,
   textInsets,
+  type ResolvedTextBody,
 } from "../shared/text-service.ts";
 import {
   emitVisualModel,
@@ -45,6 +46,7 @@ import {
   resolveVisualModel,
   visualStyleKeys,
   visualSvgTransform,
+  type ResolvedVisualModel,
 } from "../shared/visual.ts";
 import { textBoxXml } from "./text-xml.ts";
 
@@ -144,6 +146,76 @@ function textStyle(value: unknown): unknown {
   return Object.fromEntries(
     Object.entries(value).filter(([key]) => textStyleKeys.has(key)),
   );
+}
+
+type TextInsets = ReturnType<typeof textInsets>;
+
+/** Closed resolved text model produced in resolve() and exhaustively consumed by emitTextModel and paintTextModel. */
+type ResolvedTextModel = {
+  readonly escapedName: string;
+  readonly box: GeometryBox;
+  readonly visual: ResolvedVisualModel;
+  readonly text: ResolvedTextBody;
+  readonly insets: TextInsets;
+};
+
+function emitTextModel(
+  model: ResolvedTextModel,
+  emitContext: EmitContext,
+): EmitOutput {
+  const embedFonts = emitContext.options.embedFonts;
+  const emittedBody = emitTextBody(model.text, emitContext.theme, {
+    createFieldId: emitContext.createTextFieldId,
+    ...(embedFonts === undefined ? {} : { embedFonts }),
+  });
+  const emittedProperties = emitVisualModel(model.visual, (resource) =>
+    emitContext.registerResource(resource),
+  );
+  return {
+    xml: textBoxXml(
+      emitContext.id,
+      model.escapedName,
+      model.box,
+      emittedBody.xml,
+      emittedProperties.xml,
+      nativeLinkXml(emitContext.nativeLink),
+    ),
+    ...(emittedBody.presentationContributions.length === 0
+      ? {}
+      : {
+          presentationContributions: emittedBody.presentationContributions,
+        }),
+  };
+}
+
+function paintTextModel(
+  model: ResolvedTextModel,
+  paintContext: PaintContext,
+): PaintOutput {
+  const paintBox = paintContext.box ?? model.box;
+  const backgroundSvg = model.visual.hasVisibleStyle
+    ? paintVisualModel({
+        model: model.visual,
+        slideNumber: paintContext.slideNumber,
+        objectId: paintContext.objectId,
+      }).svg
+    : "";
+  const glyphs = renderTextOutlinesSvg({
+    paragraphs: model.text.paragraphs,
+    box: paintBox,
+    insets: model.insets,
+    verticalAlign: model.text.verticalAlign,
+    theme: paintContext.theme,
+    measuredLayout:
+      model.box.width === paintBox.width
+        ? model.text.measuredLayout
+        : undefined,
+    idPrefix: `obj-s${paintContext.slideNumber}-o${paintContext.objectId}`,
+    rotate: model.visual.rotate,
+  });
+  return {
+    svg: `${backgroundSvg}<g transform="${visualSvgTransform(model.visual)}">${glyphs}</g>`,
+  };
 }
 
 /** Fixed-region and content-sized text box capability bound per formal build. */
@@ -306,7 +378,7 @@ export const textCapability: ObjectCapabilityModule = {
           paragraphs,
           parsedTextStyle,
           resolveContext.theme,
-          "top",
+          parsedTextStyle.verticalAlign ?? "top",
           {
             width: innerWidth,
             ...(innerHeight === undefined ? {} : { height: innerHeight }),
@@ -336,8 +408,10 @@ export const textCapability: ObjectCapabilityModule = {
           resolveContext.morphName ??
           requestedName ??
           `Text ${resolveContext.id - 1}`;
+        let escapedName: string;
         try {
           assertXml10Characters(name);
+          escapedName = xmlEscape(name);
         } catch {
           throw new CapabilityError(
             "invalid-xml-character",
@@ -369,6 +443,13 @@ export const textCapability: ObjectCapabilityModule = {
           flipV: false,
         };
         const warnings = [...resolvedText.warnings, ...visual.warnings];
+        const model: ResolvedTextModel = {
+          escapedName,
+          box,
+          visual,
+          text: resolvedText,
+          insets,
+        };
         return {
           observation: {
             id: resolveContext.id,
@@ -383,56 +464,10 @@ export const textCapability: ObjectCapabilityModule = {
           ...(annotations.length === 0 ? {} : { annotations }),
           resourceClaims: resolvedText.resourceClaims,
           emit(emitContext: EmitContext): EmitOutput {
-            const embedFonts = emitContext.options.embedFonts;
-            const emittedBody = emitTextBody(resolvedText, emitContext.theme, {
-              createFieldId: emitContext.createTextFieldId,
-              ...(embedFonts === undefined ? {} : { embedFonts }),
-            });
-            const emittedProperties = emitVisualModel(visual, (resource) =>
-              emitContext.registerResource(resource),
-            );
-            return {
-              xml: textBoxXml(
-                emitContext.id,
-                xmlEscape(name),
-                box,
-                emittedBody.xml,
-                emittedProperties.xml,
-                nativeLinkXml(emitContext.nativeLink),
-              ),
-              ...(emittedBody.presentationContributions.length === 0
-                ? {}
-                : {
-                    presentationContributions:
-                      emittedBody.presentationContributions,
-                  }),
-            };
+            return emitTextModel(model, emitContext);
           },
           paint(paintContext: PaintContext): PaintOutput {
-            const paintBox = paintContext.box ?? box;
-            const backgroundSvg = visual.hasVisibleStyle
-              ? paintVisualModel({
-                  model: visual,
-                  slideNumber: paintContext.slideNumber,
-                  objectId: paintContext.objectId,
-                }).svg
-              : "";
-            const glyphs = renderTextOutlinesSvg({
-              paragraphs: resolvedText.paragraphs,
-              box: paintBox,
-              insets,
-              verticalAlign: parsedTextStyle.verticalAlign ?? "top",
-              theme: paintContext.theme,
-              measuredLayout:
-                box.width === paintBox.width
-                  ? resolvedText.measuredLayout
-                  : undefined,
-              idPrefix: `obj-s${paintContext.slideNumber}-o${paintContext.objectId}`,
-              rotate: visual.rotate,
-            });
-            return {
-              svg: `${backgroundSvg}<g transform="${visualSvgTransform(visual)}">${glyphs}</g>`,
-            };
+            return paintTextModel(model, paintContext);
           },
         };
       },

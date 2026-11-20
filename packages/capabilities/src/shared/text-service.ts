@@ -1515,6 +1515,8 @@ function rangeWidth(
   let eighthPoint = 0;
   let twips = 0;
   let spacing = 0;
+  let hasVisibleGrapheme = false;
+  let pendingTracking = 0;
   for (const piece of pieces) {
     const from = Math.max(start, piece.start);
     const to = Math.min(end, piece.end);
@@ -1522,8 +1524,10 @@ function rangeWidth(
     const source = text.slice(from, to);
     const transformed =
       piece.style.textTransform === "uppercase" ? source.toUpperCase() : source;
-    const shaped = shapeVisibleText(piece.face, transformed);
-    if (shaped === undefined) continue;
+    // Drawing and measurement must shape the same visible stream, including control filtering.
+    const visible = Array.from(transformed).filter(requiresFontGlyph).join("");
+    if (visible === "") continue;
+    const shaped = piece.face.font.layout(visible);
     const face = piece.face.font;
     const points = fontSizePoints(piece.style.fontSize);
     const tenths = Math.ceil(centipoints(points) / 10) / 10;
@@ -1535,16 +1539,18 @@ function rangeWidth(
       const tenthAdvance = (position.xAdvance / face.unitsPerEm) * tenths;
       twips += Math.round(tenthAdvance * twipsPerPoint) / twipsPerPoint;
     }
-    const characterCount = Array.from(graphemes.segment(transformed)).length;
-    spacing += (piece.style.letterSpacing ?? 0) * characterCount;
+    const pieceTracking = piece.style.letterSpacing ?? 0;
+    const visibleCount = Array.from(graphemes.segment(visible)).length;
+    if (visibleCount > 0) {
+      if (hasVisibleGrapheme) {
+        spacing += pendingTracking;
+      }
+      spacing += pieceTracking * (visibleCount - 1);
+      hasVisibleGrapheme = true;
+      pendingTracking = pieceTracking;
+    }
   }
   return Math.max(natural, eighthPoint, twips) * (4 / 3) + spacing;
-}
-
-/** Drawing and measurement must shape the same visible stream, including control filtering. */
-function shapeVisibleText(face: MeasureFace, text: string) {
-  const visible = Array.from(text).filter(requiresFontGlyph).join("");
-  return visible === "" ? undefined : face.font.layout(visible);
 }
 
 function trimLineEnd(text: string, start: number, end: number): number {

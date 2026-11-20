@@ -627,4 +627,65 @@ describe("Slice 2: Shape static preview", () => {
       /shape\[bad-jsx\]/,
     );
   });
+
+  it("measures non-rectangular shape inline text against the inscribed textRect so diamond overflow emits overset", async () => {
+    const resolveWith = createResolver(documentCapabilities);
+    const label = "One two three four";
+    const doc = deck({ width: 400, height: 200 }).append(
+      slide({ id: "diamond-overset", background: "#FFFFFF" }).append(
+        shape({
+          id: "rect-box",
+          geometry: preset("rect"),
+          x: 20,
+          y: 20,
+          width: 160,
+          height: 52,
+          fill: "#E2E8F0",
+          text: label,
+          textStyle: { fontFamily: jostFont, fontSize: 14, color: "#0F172A" },
+        }),
+        shape({
+          id: "diamond-box",
+          geometry: preset("diamond"),
+          x: 210,
+          y: 20,
+          width: 160,
+          height: 52,
+          fill: "#FEF3C7",
+          text: label,
+          textStyle: { fontFamily: jostFont, fontSize: 14, color: "#0F172A" },
+        }),
+      ),
+    );
+
+    const resolution = resolveWith(doc);
+    assert.equal(
+      resolution.report.diagnostics.some(
+        (diag) =>
+          diag.code === "overset" &&
+          diag.path === "deck/slide[diamond-overset]/shape[rect-box]",
+      ),
+      false,
+    );
+    assert.ok(
+      resolution.report.diagnostics.some(
+        (diag) =>
+          diag.severity === "warning" &&
+          diag.code === "overset" &&
+          diag.path === "deck/slide[diamond-overset]/shape[diamond-box]",
+      ),
+    );
+
+    const { pptx } = emit(resolution);
+    assert.deepEqual((await validatePptx(pptx)).errors, []);
+
+    const preview = paint(resolution);
+    const page = preview.pages[0]!;
+    assert.deepEqual(page.diagnostics, []);
+    assert.ok(page.svg !== undefined && page.svg.length > 0);
+    assert.ok(page.png !== undefined);
+    const decoded = PNG.sync.read(Buffer.from(page.png));
+    assert.equal(decoded.width, 400);
+    assert.equal(decoded.height, 200);
+  });
 });

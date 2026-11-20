@@ -997,4 +997,140 @@ describe("Slice 3: Text static preview & shared text-service outlines", () => {
     ].map((m) => Number(m[1]));
     assert.ok(nestedGlyphs[0]! > line1Xs[0]! + 15);
   });
+
+  it("applies inter-cluster letterSpacing consistently between line wrapping measurement and painted glyph advances", async () => {
+    const resolveWith = createResolver(documentCapabilities);
+    const doc = deck({ width: 400, height: 220 }).append(
+      slide({ id: "tracking-wrap", background: "#FFFFFF" }).append(
+        text("A", {
+          id: "single-char",
+          x: 20,
+          y: 20,
+          width: 18,
+          height: "auto",
+          style: {
+            fontFamily: jostFont,
+            fontSize: 20,
+            letterSpacing: -6,
+            padding: 0,
+            color: "#0F172A",
+          },
+        }),
+        text("AB", {
+          id: "negative-wrap",
+          x: 60,
+          y: 20,
+          width: 18,
+          height: "auto",
+          style: {
+            fontFamily: jostFont,
+            fontSize: 20,
+            letterSpacing: -6,
+            padding: 0,
+            color: "#111827",
+          },
+        }),
+        text(
+          paragraph([
+            span("A", { style: { letterSpacing: -6 } }),
+            span("B", { style: { letterSpacing: -6 } }),
+          ]),
+          {
+            id: "multi-run-wrap",
+            x: 100,
+            y: 20,
+            width: 18,
+            height: "auto",
+            style: {
+              fontFamily: jostFont,
+              fontSize: 20,
+              padding: 0,
+              color: "#1D4ED8",
+            },
+          },
+        ),
+        text("AB", {
+          id: "center-neg",
+          x: 160,
+          y: 20,
+          width: 80,
+          height: "auto",
+          style: {
+            fontFamily: jostFont,
+            fontSize: 20,
+            letterSpacing: -6,
+            align: "center",
+            padding: 0,
+            color: "#047857",
+          },
+        }),
+        text("AB", {
+          id: "right-neg",
+          x: 260,
+          y: 20,
+          width: 80,
+          height: "auto",
+          style: {
+            fontFamily: jostFont,
+            fontSize: 20,
+            letterSpacing: -6,
+            align: "right",
+            padding: 0,
+            color: "#B91C1C",
+          },
+        }),
+      ),
+    );
+
+    const resolution = resolveWith(doc);
+    const { pptx } = emit(resolution);
+    assert.deepEqual((await validatePptx(pptx)).errors, []);
+    const page = paint(resolution).pages[0]!;
+    assert.deepEqual(page.diagnostics, []);
+    assert.ok(page.png !== undefined);
+
+    const objects = resolution.report.slides[0]?.objects ?? [];
+    const singleBox = objects.find(
+      (obj) => obj.authorId === "single-char",
+    )!.box!;
+    const negWrapBox = objects.find(
+      (obj) => obj.authorId === "negative-wrap",
+    )!.box!;
+    const multiRunBox = objects.find(
+      (obj) => obj.authorId === "multi-run-wrap",
+    )!.box!;
+
+    // Single-line "A" height vs wrapped 2-line "AB" height (both single-run and multi-run).
+    assert.ok(
+      negWrapBox.height > singleBox.height * 1.5,
+      `Expected "AB" with letterSpacing=-6 in width=20 to wrap onto 2 lines (single=${singleBox.height}, wrapped=${negWrapBox.height})`,
+    );
+    assert.equal(multiRunBox.height, negWrapBox.height);
+
+    const svg = page.svg!;
+    const extractGlyphs = (color: string) =>
+      [
+        ...svg.matchAll(
+          new RegExp(
+            `fill="${color}"[^>]*transform="translate\\(([\\d.-]+)\\s+([\\d.-]+)\\)`,
+            "g",
+          ),
+        ),
+      ].map((m) => ({ x: Number(m[1]), y: Number(m[2]) }));
+
+    const wrappedGlyphs = extractGlyphs("#111827");
+    assert.equal(wrappedGlyphs.length, 2);
+    assert.ok(wrappedGlyphs[1]!.y > wrappedGlyphs[0]!.y + 5);
+
+    const multiRunGlyphs = extractGlyphs("#1D4ED8");
+    assert.equal(multiRunGlyphs.length, 2);
+    assert.ok(multiRunGlyphs[1]!.y > multiRunGlyphs[0]!.y + 5);
+
+    const centerGlyphs = extractGlyphs("#047857");
+    const rightGlyphs = extractGlyphs("#B91C1C");
+    assert.equal(centerGlyphs.length, 2);
+    assert.equal(rightGlyphs.length, 2);
+    // Relative x within each 80px box: right-aligned glyphs sit strictly further right than center-aligned glyphs.
+    assert.ok(rightGlyphs[0]!.x - 260 > centerGlyphs[0]!.x - 160 + 10);
+  });
 });

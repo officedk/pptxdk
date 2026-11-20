@@ -1,11 +1,15 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 
 import {
   deck,
   documentCapabilities,
+  font,
   paragraph,
   shape,
   slide,
+  slideNumber,
+  span,
 } from "@react-pptx/capabilities/document";
 import {
   blockArc,
@@ -13,15 +17,75 @@ import {
   preset,
 } from "@react-pptx/capabilities/shape";
 import { Shape } from "@react-pptx/capabilities/shape-elements";
-import { P } from "@react-pptx/capabilities/text-elements";
+import { P, SlideNumber, Span } from "@react-pptx/capabilities/text-elements";
 import type { CapabilityModule, CommonNode } from "@react-pptx/core";
 import { createResolver } from "@react-pptx/core/build";
 import { emit } from "@react-pptx/emit";
 import { paint } from "@react-pptx/preview";
 import { Deck, Slide, expandDocument } from "@react-pptx/react";
 import { validatePptx } from "@react-pptx/validation";
+import { PNG } from "pngjs";
 import { createElement } from "react";
 import { describe, expect, it } from "vitest";
+
+const jostRegularBytes = readFileSync(
+  new URL("../assets/fonts/Jost-400-Book.ttf", import.meta.url),
+);
+const jostFont = font("Jost*", [
+  { weight: 400, data: jostRegularBytes },
+  {
+    weight: 700,
+    data: readFileSync(
+      new URL("../assets/fonts/Jost-700-Bold.ttf", import.meta.url),
+    ),
+  },
+]);
+
+function withSyntheticFontTable(source: Buffer, tag: string): Uint8Array {
+  const numTables = source.readUInt16BE(4);
+  const headerSize = 12 + numTables * 16;
+  const nextNumTables = numTables + 1;
+  const nextHeaderSize = 12 + nextNumTables * 16;
+  const records: {
+    tag: string;
+    checkSum: number;
+    offset: number;
+    length: number;
+  }[] = [];
+  for (let i = 0; i < numTables; i++) {
+    const off = 12 + i * 16;
+    records.push({
+      tag: source.subarray(off, off + 4).toString("ascii"),
+      checkSum: source.readUInt32BE(off + 4),
+      offset: source.readUInt32BE(off + 8) + 16,
+      length: source.readUInt32BE(off + 12),
+    });
+  }
+  records.push({
+    tag,
+    checkSum: 0,
+    offset: source.length + 16,
+    length: 16,
+  });
+  records.sort((a, b) => (a.tag < b.tag ? -1 : a.tag > b.tag ? 1 : 0));
+  const out = Buffer.alloc(source.length + 32);
+  source.copy(out, 0, 0, 12);
+  out.writeUInt16BE(nextNumTables, 4);
+  const entrySelector = Math.floor(Math.log2(nextNumTables));
+  const searchRange = (1 << entrySelector) * 16;
+  out.writeUInt16BE(searchRange, 6);
+  out.writeUInt16BE(entrySelector, 8);
+  out.writeUInt16BE(nextNumTables * 16 - searchRange, 10);
+  for (let i = 0; i < records.length; i++) {
+    const off = 12 + i * 16;
+    out.write(records[i]!.tag, off, 4, "ascii");
+    out.writeUInt32BE(records[i]!.checkSum, off + 4);
+    out.writeUInt32BE(records[i]!.offset, off + 8);
+    out.writeUInt32BE(records[i]!.length, off + 12);
+  }
+  source.copy(out, nextHeaderSize, headerSize);
+  return new Uint8Array(out);
+}
 
 function runDocPreview(modules: readonly CapabilityModule[]) {
   const resolveWith = createResolver(modules);
@@ -318,37 +382,184 @@ describe("Slice 2: Shape static preview", () => {
     expect(page.svg).toContain("stroke-dasharray");
   });
 
-  it("rejects inline text inside shapes with located errors", async () => {
+  it("renders inline rich text inside shapes with textRect, flipH/flipV, rotate, opacity, and decorations", async () => {
     const previewDoc = runDocPreview(documentCapabilities);
+    const doc = deck({ width: 520, height: 280 }).append(
+      slide({ id: "shape-text", background: "#FFFFFF" }).append(
+        shape({
+          id: "opacity-shape-text",
+          x: 20,
+          y: 20,
+          width: 180,
+          height: 80,
+          fill: "#000000",
+          style: { opacity: 0.5, padding: 8 },
+          text: "IIII",
+          textStyle: {
+            fontFamily: jostFont,
+            fontSize: 36,
+            color: "#FFFFFF",
+            align: "center",
+            verticalAlign: "middle",
+          },
+        }),
+        shape({
+          id: "flipped-arrow-text",
+          geometry: "rightArrow",
+          x: 220,
+          y: 20,
+          width: 240,
+          height: 90,
+          fill: "#1D4ED8",
+          flipH: true,
+          flipV: true,
+          style: { rotate: 15, borderColor: "#0F172A", borderWidth: 2 },
+        }).append(
+          paragraph([
+            span("Page ").style({ fontWeight: 700, color: "#FFFFFF" }),
+            slideNumber().style({ color: "#FDE047" }),
+          ]).style({ fontFamily: jostFont, fontSize: 18, align: "center" }),
+        ),
+        shape({
+          id: "diamond-wrapped",
+          geometry: "diamond",
+          x: 20,
+          y: 130,
+          width: 180,
+          height: 120,
+          style: {
+            backgroundImage: linearGradient(90, "#0F766E", "#14B8A6"),
+            boxShadow: { blur: 4, distance: 4, angle: 90 },
+            borderColor: "#115E59",
+            borderWidth: 2,
+            borderStyle: "dashed",
+            padding: 4,
+          },
+        }).append(
+          paragraph("Diamond inner text wraps neatly").style({
+            fontFamily: jostFont,
+            fontSize: 14,
+            color: "#FFFFFF",
+            align: "center",
+            textDecoration: "underline",
+          }),
+        ),
+      ),
+    );
+
+    const result = await previewDoc(doc);
+    assert.deepEqual((await validatePptx(result.pptx)).errors, []);
+    const page = result.pages[0]!;
+    assert.deepEqual(page.diagnostics, []);
+    assert.ok(page.png !== undefined);
+    assert.ok(page.svg !== undefined);
+
+    // Shape opacity (0.5 over #000000 on white) produces gray ~128 fill while text remains solid white (#FFFFFF).
+    const pixels = PNG.sync.read(Buffer.from(page.png));
+    const fillCorner = (30 * pixels.width + 30) * 4;
+    expect(pixels.data[fillCorner]).toBeGreaterThan(115);
+    expect(pixels.data[fillCorner]).toBeLessThan(140);
+    // At least one pixel in the middle of opacity-shape-text is pure white (#FFFFFF) from the un-faded glyph.
+    let foundPureWhiteText = false;
+    for (let y = 45; y <= 75; y++) {
+      for (let x = 90; x <= 130; x++) {
+        const idx = (y * pixels.width + x) * 4;
+        if (
+          pixels.data[idx] === 255 &&
+          pixels.data[idx + 1] === 255 &&
+          pixels.data[idx + 2] === 255
+        ) {
+          foundPureWhiteText = true;
+          break;
+        }
+      }
+      if (foundPureWhiteText) break;
+    }
+    assert.equal(foundPureWhiteText, true);
+
+    // Flipped arrow geometry uses scale(-1 -1), while its text layer must only rotate (no negative scale).
+    expect(page.svg).toContain("scale(-1 -1)");
+    expect(page.svg).toContain('transform="rotate(15 340 65)"');
+    // SlideNumber resolved to "1" inside the shape text.
+    expect(
+      page.nodes.find((n) => n.authorId === "flipped-arrow-text")?.text,
+    ).toBe("Page 1");
+
+    // JSX equivalent with Shape + P/Span/SlideNumber also renders cleanly with zero diagnostics.
+    const jsxDoc = await expandDocument(
+      createElement(
+        Deck,
+        { width: 320, height: 180 },
+        createElement(
+          Slide,
+          { id: "jsx-shape-text", background: "#FFFFFF" },
+          createElement(
+            Shape,
+            {
+              id: "jsx-rich",
+              geometry: "roundRect",
+              x: 30,
+              y: 30,
+              width: 240,
+              height: 100,
+              fill: "#1E293B",
+              style: { padding: 12, verticalAlign: "bottom" },
+            },
+            createElement(
+              P,
+              {
+                style: { fontFamily: jostFont, fontSize: 16, color: "#FFFFFF" },
+              },
+              createElement(Span, { style: { fontWeight: 700 } }, "Bold "),
+              createElement(SlideNumber, null),
+            ),
+          ),
+        ),
+      ),
+    );
+    const jsxResult = await previewDoc(jsxDoc);
+    assert.deepEqual(jsxResult.pages[0]?.diagnostics, []);
+    assert.ok(jsxResult.pages[0]?.png !== undefined);
+  });
+
+  it("rejects only underlying font resource errors on shape inline text with located diagnostics", async () => {
+    const previewDoc = runDocPreview(documentCapabilities);
+    const colrFont = font(
+      "ColrJost",
+      [{ weight: 400, data: withSyntheticFontTable(jostRegularBytes, "COLR") }],
+      { substitute: true },
+    );
+
     const cases: readonly {
       label: string;
       node: ReturnType<typeof shape>;
       expected: RegExp;
     }[] = [
       {
-        label: "inline-text",
+        label: "missing-glyph-inline",
         node: shape({
           id: "bad",
           x: 10,
           y: 10,
-          width: 60,
-          height: 20,
+          width: 120,
+          height: 40,
           fill: "#112233",
-          text: "Inline",
+          text: "汉",
+          textStyle: { fontFamily: jostFont },
         }),
-        expected: /text/i,
+        expected: /glyph/i,
       },
       {
-        label: "rich-children-text",
+        label: "color-font-children",
         node: shape({
           id: "bad",
           x: 10,
           y: 10,
-          width: 60,
-          height: 20,
+          width: 120,
+          height: 40,
           fill: "#112233",
-        }).append(paragraph("Child")),
-        expected: /text/i,
+        }).append(paragraph("Color").style({ fontFamily: colrFont })),
+        expected: /monochrome/i,
       },
     ];
 
@@ -356,11 +567,24 @@ describe("Slice 2: Shape static preview", () => {
       const result = await previewDoc(
         deck({ width: 200, height: 120 }).append(
           slide({ id: "s1" }).append(item.node),
+          slide({ id: "s2" }).append(
+            shape({
+              id: "ok-sibling",
+              x: 10,
+              y: 10,
+              width: 80,
+              height: 40,
+              fill: "#16A34A",
+              text: "OK",
+              textStyle: { fontFamily: jostFont, color: "#FFFFFF" },
+            }),
+          ),
         ),
       );
       const validation = await validatePptx(result.pptx);
       assert.deepEqual(validation.errors, [], item.label);
       assert.equal(result.pages[0]?.png, undefined, item.label);
+      assert.equal(result.pages[0]?.svg, undefined, item.label);
       assert.equal(
         result.pages[0]?.diagnostics[0]?.severity,
         "error",
@@ -376,10 +600,12 @@ describe("Slice 2: Shape static preview", () => {
         item.expected,
         item.label,
       );
+      assert.deepEqual(result.pages[1]?.diagnostics, [], item.label);
+      assert.ok(result.pages[1]?.png !== undefined, item.label);
     }
 
-    // Verify JSX shape with children text also rejects cleanly.
-    const jsxWithText = await expandDocument(
+    // Verify JSX shape with missing glyph also rejects cleanly with located path.
+    const jsxMissingGlyph = await expandDocument(
       createElement(
         Deck,
         { width: 200, height: 120 },
@@ -388,13 +614,13 @@ describe("Slice 2: Shape static preview", () => {
           { id: "jsx-text" },
           createElement(
             Shape,
-            { id: "bad-jsx", x: 10, y: 10, width: 60, height: 20 },
-            createElement(P, null, "Hello"),
+            { id: "bad-jsx", x: 10, y: 10, width: 120, height: 40 },
+            createElement(P, { style: { fontFamily: jostFont } }, "汉"),
           ),
         ),
       ),
     );
-    const jsxResult = await previewDoc(jsxWithText);
+    const jsxResult = await previewDoc(jsxMissingGlyph);
     assert.equal(jsxResult.pages[0]?.png, undefined);
     assert.match(
       jsxResult.pages[0]?.diagnostics[0]?.path ?? "",

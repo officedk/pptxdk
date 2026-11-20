@@ -44,14 +44,68 @@ const corruptGroupMemberPng = (() => {
   return bytes;
 })();
 
+const jostRegularBytes = readFileSync(
+  new URL("../assets/fonts/Jost-400-Book.ttf", import.meta.url),
+);
+
 const jostFont = font("Jost*", [
   {
     weight: 400,
-    data: readFileSync(
-      new URL("../assets/fonts/Jost-400-Book.ttf", import.meta.url),
-    ),
+    data: jostRegularBytes,
   },
 ]);
+
+function withSyntheticFontTable(source: Buffer, tag: string): Uint8Array {
+  const numTables = source.readUInt16BE(4);
+  const headerSize = 12 + numTables * 16;
+  const nextNumTables = numTables + 1;
+  const nextHeaderSize = 12 + nextNumTables * 16;
+  const records: {
+    tag: string;
+    checkSum: number;
+    offset: number;
+    length: number;
+  }[] = [];
+  for (let i = 0; i < numTables; i++) {
+    const off = 12 + i * 16;
+    records.push({
+      tag: source.subarray(off, off + 4).toString("ascii"),
+      checkSum: source.readUInt32BE(off + 4),
+      offset: source.readUInt32BE(off + 8) + 16,
+      length: source.readUInt32BE(off + 12),
+    });
+  }
+  records.push({
+    tag,
+    checkSum: 0,
+    offset: source.length + 16,
+    length: 16,
+  });
+  records.sort((a, b) => (a.tag < b.tag ? -1 : a.tag > b.tag ? 1 : 0));
+  const out = Buffer.alloc(source.length + 32);
+  source.copy(out, 0, 0, 12);
+  out.writeUInt16BE(nextNumTables, 4);
+  const entrySelector = Math.floor(Math.log2(nextNumTables));
+  const searchRange = (1 << entrySelector) * 16;
+  out.writeUInt16BE(searchRange, 6);
+  out.writeUInt16BE(entrySelector, 8);
+  out.writeUInt16BE(nextNumTables * 16 - searchRange, 10);
+  for (let i = 0; i < records.length; i++) {
+    const off = 12 + i * 16;
+    out.write(records[i]!.tag, off, 4, "ascii");
+    out.writeUInt32BE(records[i]!.checkSum, off + 4);
+    out.writeUInt32BE(records[i]!.offset, off + 8);
+    out.writeUInt32BE(records[i]!.length, off + 12);
+  }
+  source.copy(out, nextHeaderSize, headerSize);
+  return new Uint8Array(out);
+}
+
+const colrJostFont = font(
+  "ColrJost",
+  [{ weight: 400, data: withSyntheticFontTable(jostRegularBytes, "COLR") }],
+  { substitute: true },
+);
 
 const notoFont = font("Noto Sans CJK SC", [
   {
@@ -86,7 +140,7 @@ export const groupPositiveScenario: CapabilityScenario = {
       {
         width: 640,
         height: 360,
-        theme: { colors: { badgeFill: "#991B1B" } },
+        theme: { colors: { badgeFill: "#991B1B", badgeText: "#000000" } },
       },
       createElement(
         Slide,
@@ -95,7 +149,7 @@ export const groupPositiveScenario: CapabilityScenario = {
           Group,
           {
             id: "badge-group",
-            theme: { colors: { badgeFill: "#1D4ED8" } },
+            theme: { colors: { badgeFill: "#1D4ED8", badgeText: "#FFFFFF" } },
             enter: fade({ duration: 400 }),
           },
           createElement(
@@ -134,11 +188,21 @@ export const groupPositiveScenario: CapabilityScenario = {
           ),
           createElement(Shape, {
             id: "badge-tag",
+            geometry: "roundRect",
             x: 204,
             y: 40,
             width: 52,
             height: 24,
             fill: "#F59E0B",
+            style: { opacity: 0.85 },
+            text: "TAG",
+            textStyle: {
+              fontFamily: jostFont,
+              fontSize: 11,
+              color: "badgeText",
+              align: "center",
+              verticalAlign: "middle",
+            },
           }),
         ),
         createElement(
@@ -172,6 +236,25 @@ export const groupPositiveScenario: CapabilityScenario = {
               geometry: trianglePath,
               fill: "#DB2777",
               flipH: true,
+            }),
+            createElement(Shape, {
+              id: "flipped-arrow",
+              geometry: "rightArrow",
+              x: 370,
+              y: 208,
+              width: 76,
+              height: 36,
+              fill: "#0EA5E9",
+              flipH: true,
+              style: { opacity: 0.75 },
+              text: "Go",
+              textStyle: {
+                fontFamily: jostFont,
+                fontSize: 12,
+                color: "#FFFFFF",
+                align: "center",
+                verticalAlign: "middle",
+              },
             }),
             createElement(
               Text,
@@ -333,7 +416,7 @@ export const groupPositiveScenario: CapabilityScenario = {
     return deck({
       width: 640,
       height: 360,
-      theme: { colors: { badgeFill: "#991B1B" } },
+      theme: { colors: { badgeFill: "#991B1B", badgeText: "#000000" } },
     }).append(
       slide({
         id: "group-hierarchy-and-transforms",
@@ -341,7 +424,7 @@ export const groupPositiveScenario: CapabilityScenario = {
       }).append(
         group({
           id: "badge-group",
-          theme: { colors: { badgeFill: "#1D4ED8" } },
+          theme: { colors: { badgeFill: "#1D4ED8", badgeText: "#FFFFFF" } },
           enter: fade({ duration: 400 }),
         }).append(
           box({
@@ -374,11 +457,21 @@ export const groupPositiveScenario: CapabilityScenario = {
           ),
           shape({
             id: "badge-tag",
+            geometry: "roundRect",
             x: 204,
             y: 40,
             width: 52,
             height: 24,
             fill: "#F59E0B",
+            style: { opacity: 0.85 },
+            text: "TAG",
+            textStyle: {
+              fontFamily: jostFont,
+              fontSize: 11,
+              color: "badgeText",
+              align: "center",
+              verticalAlign: "middle",
+            },
           }),
         ),
         group({
@@ -408,6 +501,25 @@ export const groupPositiveScenario: CapabilityScenario = {
               geometry: trianglePath,
               fill: "#DB2777",
               flipH: true,
+            }),
+            shape({
+              id: "flipped-arrow",
+              geometry: "rightArrow",
+              x: 370,
+              y: 208,
+              width: 76,
+              height: 36,
+              fill: "#0EA5E9",
+              flipH: true,
+              style: { opacity: 0.75 },
+              text: "Go",
+              textStyle: {
+                fontFamily: jostFont,
+                fontSize: 12,
+                color: "#FFFFFF",
+                align: "center",
+                verticalAlign: "middle",
+              },
             }),
             text("Nested", {
               id: "inner-caption",
@@ -565,10 +677,28 @@ export const groupPositiveScenario: CapabilityScenario = {
     const flippedNode = page1.nodes.find(
       (n) => n.authorId === "flipped-triangle",
     )!;
+    const flippedArrowNode = page1.nodes.find(
+      (n) => n.authorId === "flipped-arrow",
+    )!;
     assert.ok(outerNode.screenBox !== undefined);
     assert.ok(outerNode.screenBox.width > outerNode.box!.width);
-    assert.ok(innerNode.corners?.length === 4);
+    assert.equal(innerNode.corners?.length, 4);
     assert.ok(flippedNode.screenBox !== undefined);
+    assert.equal(flippedArrowNode.corners?.length, 4);
+    assert.equal(flippedArrowNode.text, "Go");
+    // Exact screenBox consistency: screenBox bounds equal min/max of the 4 transformed corners.
+    const arrowXs = flippedArrowNode.corners.map((pt) => pt.x);
+    const arrowYs = flippedArrowNode.corners.map((pt) => pt.y);
+    expect(flippedArrowNode.screenBox!.x).toBeCloseTo(Math.min(...arrowXs), 4);
+    expect(flippedArrowNode.screenBox!.y).toBeCloseTo(Math.min(...arrowYs), 4);
+    expect(flippedArrowNode.screenBox!.width).toBeCloseTo(
+      Math.max(...arrowXs) - Math.min(...arrowXs),
+      4,
+    );
+    expect(flippedArrowNode.screenBox!.height).toBeCloseTo(
+      Math.max(...arrowYs) - Math.min(...arrowYs),
+      4,
+    );
 
     // Motion capability observation retains group target and native animation target id.
     const slide1Motion = resolution.report.slides[0]?.capabilities?.[
@@ -598,7 +728,7 @@ export const groupPositiveScenario: CapabilityScenario = {
     );
     assert.equal(fileRotatedOuter?.kind, "group");
     assert.equal(fileRotatedOuter?.members?.[1]?.kind, "group");
-    assert.equal(fileRotatedOuter?.members?.[1]?.members?.length, 2);
+    assert.equal(fileRotatedOuter?.members?.[1]?.members?.length, 3);
 
     const page2 = preview.pages[1]!;
     const morphGroupNode = page2.nodes.find(
@@ -632,13 +762,13 @@ export const groupRejectionScenario: CapabilityScenario = {
   capability: "rp:group",
   kind: "rejection",
   description:
-    "Dual-author Group rejection scenario verifying member preview failure propagation, morph-inside-group restriction, empty-group rejection, and missing member capability rejection.",
+    "Dual-author Group rejection scenario verifying underlying resource error propagation through nested Groups (corrupt image, missing glyph on Shape text, color font on Text), morph-inside-group restriction, empty-group rejection, and missing member capability rejection.",
   visualCheckpoints: [
-    "Page 1 (group-member-preview-failure): fails static preview (no PNG delivered) with located diagnostic pointing to group[bad-preview-group]/image[unsupported-member] while retaining formal PPTX.",
+    "Page 1 (group-member-preview-failure): fails static preview (no PNG delivered) with located diagnostics pointing to group[bad-preview-group]/image[unsupported-member] and nested shape/text members while retaining formal PPTX.",
     "Page 2 (group-valid-sibling): white canvas with valid teal #0D9488 rectangle inside Group.",
   ],
   nativeCheckpoints: [
-    "Formal PPTX retains both slides as valid native <p:grpSp> objects despite static preview rejecting corrupt image stream on Page 1.",
+    "Formal PPTX retains both slides as valid native <p:grpSp> objects despite static preview rejecting corrupt image and font resource boundaries on Page 1.",
   ],
   jsx() {
     return createElement(
@@ -666,6 +796,32 @@ export const groupRejectionScenario: CapabilityScenario = {
             width: 60,
             height: 40,
           }),
+          createElement(
+            Group,
+            { id: "nested-text-fail", style: { rotate: -8 } },
+            createElement(Shape, {
+              id: "missing-glyph-member",
+              x: 20,
+              y: 80,
+              width: 80,
+              height: 36,
+              fill: "#1E293B",
+              text: "汉",
+              textStyle: { fontFamily: jostFont, color: "#FFFFFF" },
+            }),
+            createElement(
+              Text,
+              {
+                id: "color-font-member",
+                x: 110,
+                y: 80,
+                width: 80,
+                height: 36,
+                style: { fontFamily: colrJostFont },
+              },
+              "Color",
+            ),
+          ),
         ),
       ),
       createElement(
@@ -706,6 +862,26 @@ export const groupRejectionScenario: CapabilityScenario = {
             width: 60,
             height: 40,
           }),
+          group({ id: "nested-text-fail", style: { rotate: -8 } }).append(
+            shape({
+              id: "missing-glyph-member",
+              x: 20,
+              y: 80,
+              width: 80,
+              height: 36,
+              fill: "#1E293B",
+              text: "汉",
+              textStyle: { fontFamily: jostFont, color: "#FFFFFF" },
+            }),
+            text("Color", {
+              id: "color-font-member",
+              x: 110,
+              y: 80,
+              width: 80,
+              height: 36,
+              style: { fontFamily: colrJostFont },
+            }),
+          ),
         ),
       ),
       slide({ id: "group-valid-sibling", background: "#FFFFFF" }).append(
@@ -726,6 +902,7 @@ export const groupRejectionScenario: CapabilityScenario = {
     const failedPage = preview.pages[0]!;
     assert.equal(failedPage.png, undefined);
     assert.equal(failedPage.svg, undefined);
+    assert.equal(failedPage.diagnostics.length, 3);
     assert.ok(
       failedPage.diagnostics.some(
         (d) =>
@@ -737,9 +914,34 @@ export const groupRejectionScenario: CapabilityScenario = {
       ),
     );
     assert.ok(
-      failedPage.nodes.find((n) => n.authorId === "unsupported-member")
-        ?.screenBox !== undefined,
+      failedPage.diagnostics.some(
+        (d) =>
+          d.severity === "error" &&
+          /group\[bad-preview-group\]\/group\[nested-text-fail\]\/shape\[missing-glyph-member\]/u.test(
+            d.path,
+          ) &&
+          /glyph/i.test(d.message),
+      ),
     );
+    assert.ok(
+      failedPage.diagnostics.some(
+        (d) =>
+          d.severity === "error" &&
+          /group\[bad-preview-group\]\/group\[nested-text-fail\]\/text\[color-font-member\]/u.test(
+            d.path,
+          ) &&
+          /monochrome/i.test(d.message),
+      ),
+    );
+    for (const memberId of [
+      "unsupported-member",
+      "missing-glyph-member",
+      "color-font-member",
+    ]) {
+      const node = failedPage.nodes.find((n) => n.authorId === memberId);
+      assert.ok(node?.screenBox !== undefined, memberId);
+      assert.equal(node?.corners?.length, 4, memberId);
+    }
 
     const validPage = preview.pages[1]!;
     assert.deepEqual(validPage.diagnostics, []);

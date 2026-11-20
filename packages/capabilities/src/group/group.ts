@@ -183,6 +183,53 @@ const groupAllowedStyleKeys = new Set<string>([
   "rotate",
 ]);
 
+/** Closed resolved group model produced in resolve() and consumed by emitGroupModel and paintGroupModel. */
+type ResolvedGroupModel = {
+  readonly escapedName: string;
+  readonly box: {
+    readonly x: number;
+    readonly y: number;
+    readonly width: number;
+    readonly height: number;
+  };
+  readonly emu: EmuBox;
+  readonly angle: number;
+  readonly rotation?: number;
+};
+
+function roundSvgNumber(value: number): string {
+  const rounded = Math.round(value * 1_000_000) / 1_000_000;
+  return Object.is(rounded, -0) ? "0" : String(rounded);
+}
+
+function emitGroupModel(
+  model: ResolvedGroupModel,
+  emitContext: EmitContext,
+): EmitOutput {
+  return {
+    xml: groupXml(
+      emitContext.id,
+      model.escapedName,
+      model.emu,
+      emitContext.childrenXml,
+      model.rotation,
+      nativeLinkXml(emitContext.nativeLink),
+    ),
+  };
+}
+
+function paintGroupModel(
+  model: ResolvedGroupModel,
+  paintContext: PaintContext,
+): PaintOutput {
+  const childrenSvg = paintContext.childrenSvg ?? "";
+  const cx = roundSvgNumber(model.box.x + model.box.width / 2);
+  const cy = roundSvgNumber(model.box.y + model.box.height / 2);
+  return {
+    svg: `<g transform="rotate(${roundSvgNumber(model.angle)} ${cx} ${cy})">${childrenSvg}</g>`,
+  };
+}
+
 /** Preserves members as native objects and writes group bounds according to final member geometry; layout participation uses generic container collaboration. */
 export const groupCapability: ObjectCapabilityModule = {
   declaration: "rp:group",
@@ -320,6 +367,13 @@ export const groupCapability: ObjectCapabilityModule = {
           members,
         });
         const angle = rotation ?? 0;
+        const resolvedModel: ResolvedGroupModel = {
+          escapedName,
+          box: outputGeometry,
+          emu: outputEmu,
+          angle,
+          ...(rotation === undefined ? {} : { rotation }),
+        };
         const transform: PreviewTransform = {
           box: outputGeometry,
           angle,
@@ -338,24 +392,10 @@ export const groupCapability: ObjectCapabilityModule = {
           extensions: [],
           ...(annotations.length === 0 ? {} : { annotations }),
           emit(emitContext: EmitContext): EmitOutput {
-            return {
-              xml: groupXml(
-                emitContext.id,
-                escapedName,
-                outputEmu,
-                emitContext.childrenXml,
-                rotation,
-                nativeLinkXml(emitContext.nativeLink),
-              ),
-            };
+            return emitGroupModel(resolvedModel, emitContext);
           },
           paint(paintContext: PaintContext): PaintOutput {
-            const childrenSvg = paintContext.childrenSvg ?? "";
-            const cx = outputGeometry.x + outputGeometry.width / 2;
-            const cy = outputGeometry.y + outputGeometry.height / 2;
-            return {
-              svg: `<g transform="rotate(${angle} ${cx} ${cy})">${childrenSvg}</g>`,
-            };
+            return paintGroupModel(resolvedModel, paintContext);
           },
         };
       },

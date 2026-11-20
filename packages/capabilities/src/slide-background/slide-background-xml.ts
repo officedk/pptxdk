@@ -1,14 +1,21 @@
-import type { ThemeContext } from "@react-pptx/core/capability";
-import { xmlEscape } from "@react-pptx/emit";
+import type { ResolvedColor } from "@react-pptx/core/capability";
+import { resolvedColorXml, xmlEscape } from "@react-pptx/emit";
 
-import { fillXml } from "../shared/visual.ts";
+import {
+  gradientFillXml,
+  type ResolvedGradientSpec,
+} from "../shared/visual.ts";
 
-/** Internal PresentationML slide background wrapper reusing the shared visual fill writer. */
-export function slideBackgroundFillXml(
-  theme: ThemeContext,
-  style: Readonly<Record<string, unknown>>,
+/** Internal PresentationML slide background wrapper for a resolved solid color. */
+export function slideBackgroundSolidXml(color: ResolvedColor): string {
+  return `<p:bg><p:bgPr><a:solidFill>${resolvedColorXml(color)}</a:solidFill><a:effectLst/></p:bgPr></p:bg>`;
+}
+
+/** Internal PresentationML slide background wrapper for a resolved gradient. */
+export function slideBackgroundGradientXml(
+  gradient: ResolvedGradientSpec,
 ): string {
-  return `<p:bg><p:bgPr>${fillXml(theme, style, undefined, undefined)}<a:effectLst/></p:bgPr></p:bg>`;
+  return `<p:bg><p:bgPr>${gradientFillXml(gradient)}<a:effectLst/></p:bgPr></p:bg>`;
 }
 
 /** Internal PresentationML slide background wrapper for a registered image relationship. */

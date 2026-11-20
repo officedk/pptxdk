@@ -129,26 +129,38 @@ describe("Slice 1: core bound slide preview & slideBackgroundCapability", () => 
     }
   });
 
-  it("rejects gradient background on its page with located error while keeping valid pages and PPTX", async () => {
+  it("renders linear-gradient background and rejects corrupt image background with located error while keeping valid pages and PPTX", async () => {
     const previewDoc = runDocPreview(documentCapabilities);
+    const validPng = new PNG({ width: 2, height: 2 });
+    validPng.data.fill(255);
+    const corruptPng = new Uint8Array(PNG.sync.write(validPng));
+    const idat = Buffer.from(corruptPng).indexOf(Buffer.from("IDAT"));
+    corruptPng[idat + 6] = (corruptPng[idat + 6] ?? 0) ^ 0xff;
+    corruptPng[idat + 7] = (corruptPng[idat + 7] ?? 0) ^ 0xff;
+
     const doc = deck({ width: 320, height: 180 }).append(
       slide({
         id: "grad",
-        background: linearGradient(45, "#112233", "#445566"),
+        background: linearGradient(90, "#112233", "#445566"),
       }),
+      slide({ id: "corrupt", background: { image: corruptPng } }),
       slide({ id: "ok", background: "#ABCDEF" }),
     );
     const result = await previewDoc(doc);
     const validation = await validatePptx(result.pptx);
     assert.deepEqual(validation.errors, []);
-    assert.equal(result.pages[0]?.png, undefined);
-    assert.equal(result.pages[0]?.diagnostics.length, 1);
-    assert.equal(result.pages[0]?.diagnostics[0]?.severity, "error");
-    assert.equal(result.pages[0]?.diagnostics[0]?.page, 1);
-    assert.match(
-      result.pages[0]?.diagnostics[0]?.path ?? "",
-      /^deck\/slide\[grad\]/,
+    assert.deepEqual(result.pages[0]?.diagnostics, []);
+    assert.ok(result.pages[0]?.png !== undefined);
+    assert.match(result.pages[0]?.svg ?? "", /<linearGradient/u);
+
+    assert.equal(result.pages[1]?.png, undefined);
+    assert.equal(result.pages[1]?.diagnostics.length, 1);
+    assert.equal(result.pages[1]?.diagnostics[0]?.severity, "error");
+    assert.equal(result.pages[1]?.diagnostics[0]?.page, 2);
+    assert.equal(
+      result.pages[1]?.diagnostics[0]?.path,
+      "deck/slide[corrupt]/background",
     );
-    assert.ok(result.pages[1]?.png !== undefined);
+    assert.ok(result.pages[2]?.png !== undefined);
   });
 });

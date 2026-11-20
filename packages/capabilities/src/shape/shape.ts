@@ -14,27 +14,20 @@ import {
   type ColorValue,
   type EmitContext,
   type EmitOutput,
-  type GeometryBox,
   type LayoutStyle,
   type LinkTarget,
   type ObjectCapabilityModule,
   type ObjectResolveContext,
   type PaddingStyle,
+  type PaintContext,
   type PaintOutput,
   type PreviewTransform,
   type ResolvedObject,
-  type ThemeContext,
 } from "@react-pptx/core/capability";
 import { RichTextContainer } from "@react-pptx/core/document";
 import { pxToEmu, xmlEscape } from "@react-pptx/emit";
 
-import {
-  evaluateGeometry,
-  shadeHex,
-  type Geometry,
-  type PresetPathFillMode,
-  type ResolvedGeometry,
-} from "../shared/geometry.ts";
+import type { Geometry } from "../shared/geometry.ts";
 export {
   blockArc,
   path,
@@ -73,9 +66,10 @@ import {
   type TextStyle,
 } from "../shared/text-service.ts";
 import {
+  emitVisualModel,
   lineEndStyleKeys,
-  resolveBoxPreviewVisuals,
-  shapePropertiesXml,
+  paintVisualModel,
+  resolveVisualModel,
   visualStyleKeys,
   type ShapeVisualStyle,
 } from "../shared/visual.ts";
@@ -247,99 +241,6 @@ function validateSize(
   return value;
 }
 
-function subpathFillHex(
-  baseHex: string,
-  fillMode: Exclude<"norm" | PresetPathFillMode, "none">,
-): string {
-  switch (fillMode) {
-    case "norm":
-      return baseHex;
-    case "lighten":
-      return shadeHex(baseHex, 0.6, 0.4);
-    case "lightenLess":
-      return shadeHex(baseHex, 0.8, 0.2);
-    case "darken":
-      return shadeHex(baseHex, 0.6, 0);
-    case "darkenLess":
-      return shadeHex(baseHex, 0.8, 0);
-    default: {
-      const exhaustive: never = fillMode;
-      return exhaustive;
-    }
-  }
-}
-
-function renderShapePreview(options: {
-  readonly visualStyle: Readonly<Record<string, unknown>>;
-  readonly hasText: boolean;
-  readonly resolvedGeometry: ResolvedGeometry;
-  readonly fill: ColorValue | undefined;
-  readonly flipH: boolean | undefined;
-  readonly flipV: boolean | undefined;
-  readonly box: GeometryBox;
-  readonly theme: ThemeContext;
-}): PaintOutput {
-  const {
-    visualStyle,
-    hasText,
-    resolvedGeometry,
-    fill,
-    flipH,
-    flipV,
-    box,
-    theme,
-  } = options;
-  const resolved = resolveBoxPreviewVisuals({
-    label: "shape",
-    visualStyle,
-    box,
-    theme,
-    fill,
-    flipH,
-    flipV,
-  });
-  if (hasText) {
-    throw new CapabilityError(
-      "preview-unsupported-text",
-      "Preview does not yet support text inside shapes",
-    );
-  }
-
-  const fillValue =
-    fill ?? (visualStyle["backgroundColor"] as ColorValue | undefined);
-  const resolvedFill =
-    fillValue === undefined ? undefined : theme.resolveColor(fillValue);
-  const opacity = Number(visualStyle["opacity"] ?? 1);
-  const strokeValue = visualStyle["borderColor"] as ColorValue | undefined;
-  const borderWidth =
-    visualStyle["borderWidth"] === undefined
-      ? 1
-      : Number(visualStyle["borderWidth"]);
-  const resolvedStroke =
-    strokeValue === undefined || borderWidth === 0
-      ? undefined
-      : theme.resolveColor(strokeValue);
-
-  const evaluated = evaluateGeometry(resolvedGeometry, box);
-  const elements = evaluated.paths
-    .map((subpath) => {
-      const fillAttrs =
-        subpath.fillMode === "none" || resolvedFill === undefined
-          ? 'fill="none"'
-          : `fill="#${subpathFillHex(resolvedFill.hex, subpath.fillMode)}" fill-opacity="${(resolvedFill.alpha ?? 1) * opacity}"`;
-      const strokeAttrs =
-        !subpath.stroke || resolvedStroke === undefined
-          ? 'stroke="none" stroke-width="0"'
-          : `stroke="#${resolvedStroke.hex}" stroke-opacity="${(resolvedStroke.alpha ?? 1) * opacity}" stroke-width="${borderWidth}"`;
-      return `<path d="${subpath.d}" ${fillAttrs} ${strokeAttrs}/>`;
-    })
-    .join("");
-
-  return {
-    svg: `<g transform="${resolved.svgTransform}">${elements}</g>`,
-  };
-}
-
 /** Shape module independently validates input, encapsulates bound state, and emits native PresentationML objects. */
 export const shapeCapability: ObjectCapabilityModule = {
   declaration: "rp:shape",
@@ -463,7 +364,7 @@ export const shapeCapability: ObjectCapabilityModule = {
     };
 
     // Validate geometry and visual properties during bind before layout runs.
-    shapePropertiesXml({
+    resolveVisualModel({
       theme: context.theme,
       style: visualStyle,
       box: { x: 0, y: 0, width: 100, height: 100 },
@@ -549,7 +450,7 @@ export const shapeCapability: ObjectCapabilityModule = {
                 width: validateSize(resolveContext.layoutBox.width, "width"),
                 height: validateSize(resolveContext.layoutBox.height, "height"),
               };
-        const properties = shapePropertiesXml({
+        const visual = resolveVisualModel({
           theme: resolveContext.theme,
           style: visualStyle,
           box,
@@ -558,6 +459,8 @@ export const shapeCapability: ObjectCapabilityModule = {
           ...(flipV === undefined ? {} : { flipV }),
           ...(fill === undefined ? {} : { fill }),
         });
+        const geometryName =
+          visual.geometry.kind === "custom" ? "custom" : visual.geometry.name;
 
         let resolvedText: ResolvedTextBody | undefined;
         if (hasText && paragraphs.length > 0) {
@@ -592,10 +495,7 @@ export const shapeCapability: ObjectCapabilityModule = {
             (fill ?? visualStyle["backgroundColor"]) !== "none" &&
             visualStyle["backgroundImage"] === undefined,
           box,
-          rotationDegrees:
-            typeof visualStyle["rotate"] === "number"
-              ? visualStyle["rotate"]
-              : 0,
+          rotationDegrees: visual.rotate,
           hasBackground:
             fill !== undefined ||
             visualStyle["backgroundColor"] !== undefined ||
@@ -617,24 +517,21 @@ export const shapeCapability: ObjectCapabilityModule = {
           );
         }
         const warnings = [
-          ...properties.warnings,
+          ...visual.warnings,
           ...(resolvedText?.warnings ?? []),
         ];
         const transform: PreviewTransform = {
           box,
-          angle:
-            typeof visualStyle["rotate"] === "number"
-              ? visualStyle["rotate"]
-              : 0,
-          flipH: Boolean(flipH),
-          flipV: Boolean(flipV),
+          angle: visual.rotate,
+          flipH: visual.flipH,
+          flipV: visual.flipV,
         };
         return {
           observation: {
             id: resolveContext.id,
             kind: "shape",
             name,
-            geometry: properties.geometryName,
+            geometry: geometryName,
             box,
             ...(resolvedText === undefined
               ? explicitText === undefined
@@ -658,6 +555,9 @@ export const shapeCapability: ObjectCapabilityModule = {
                     createFieldId: emitContext.createTextFieldId,
                     ...(embedFonts === undefined ? {} : { embedFonts }),
                   });
+            const properties = emitVisualModel(visual, (resource) =>
+              emitContext.registerResource(resource),
+            );
             return {
               xml: shapeXml(
                 emitContext.id,
@@ -674,16 +574,17 @@ export const shapeCapability: ObjectCapabilityModule = {
                   }),
             };
           },
-          paint(): PaintOutput {
-            return renderShapePreview({
-              visualStyle,
-              hasText,
-              resolvedGeometry: properties.geometry,
-              fill,
-              flipH,
-              flipV,
-              box,
-              theme: resolveContext.theme,
+          paint(paintContext: PaintContext): PaintOutput {
+            if (hasText) {
+              throw new CapabilityError(
+                "preview-unsupported-text",
+                "Preview does not yet support text inside shapes",
+              );
+            }
+            return paintVisualModel({
+              model: visual,
+              slideNumber: paintContext.slideNumber,
+              objectId: paintContext.objectId,
             });
           },
         };

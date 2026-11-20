@@ -20,7 +20,7 @@ const png1x1 = new Uint8Array(
 );
 
 describe("slide capabilities resolved contract", () => {
-  it("migrates slideBackgroundCapability to BoundSlideCapability with paint-only solid/default rendering, preview error on image/gradient, and emit-only resource registration", async () => {
+  it("migrates slideBackgroundCapability to BoundSlideCapability with full default/solid/gradient/image rendering and emit-only resource registration", async () => {
     const resolve = createResolver([slideBackgroundCapability]);
     const doc = await expandDocument(
       createElement(
@@ -57,19 +57,14 @@ describe("slide capabilities resolved contract", () => {
     assert.ok(painted.pages[1]?.png !== undefined);
     assert.match(painted.pages[1]?.svg ?? "", /fill="#1E293B"/u);
 
-    // Gradient and image backgrounds report preview error diagnostics and omit PNG,
-    // while emit() on the same Resolution succeeds.
+    // Gradient and image backgrounds also render cleanly with zero diagnostics.
     for (const pageIndex of [2, 3]) {
       const page = painted.pages[pageIndex]!;
-      assert.equal(page.png, undefined);
-      assert.ok(
-        page.diagnostics.some(
-          (diag) =>
-            diag.severity === "error" &&
-            diag.message.includes("image or gradient backgrounds"),
-        ),
-      );
+      assert.deepEqual(page.diagnostics, []);
+      assert.ok(page.png !== undefined);
     }
+    assert.match(painted.pages[2]?.svg ?? "", /<linearGradient/u);
+    assert.match(painted.pages[3]?.svg ?? "", /<image/u);
 
     const emitted1 = emit(resolution);
     const emitted2 = emit(resolution);

@@ -40,9 +40,11 @@ import {
   textInsets,
 } from "../shared/text-service.ts";
 import {
-  resolveBoxPreviewVisuals,
-  shapePropertiesXml,
+  emitVisualModel,
+  paintVisualModel,
+  resolveVisualModel,
   visualStyleKeys,
+  visualSvgTransform,
 } from "../shared/visual.ts";
 import { textBoxXml } from "./text-xml.ts";
 
@@ -205,7 +207,7 @@ export const textCapability: ObjectCapabilityModule = {
     const visualStyle = record(input.props["style"])
       ? { ...input.props["style"] }
       : {};
-    shapePropertiesXml({
+    resolveVisualModel({
       theme: context.theme,
       style: visualStyle,
       box: { x: 0, y: 0, width: 100, height: 100 },
@@ -325,7 +327,7 @@ export const textCapability: ObjectCapabilityModule = {
             "height",
           ),
         };
-        const properties = shapePropertiesXml({
+        const visual = resolveVisualModel({
           theme: resolveContext.theme,
           style: visualStyle,
           box,
@@ -351,10 +353,7 @@ export const textCapability: ObjectCapabilityModule = {
             visualStyle["backgroundColor"] !== undefined ||
             visualStyle["backgroundImage"] !== undefined,
           box,
-          rotationDegrees:
-            typeof visualStyle["rotate"] === "number"
-              ? visualStyle["rotate"]
-              : 0,
+          rotationDegrees: visual.rotate,
           hasBackground:
             visualStyle["backgroundColor"] !== undefined ||
             visualStyle["backgroundImage"] !== undefined ||
@@ -365,14 +364,11 @@ export const textCapability: ObjectCapabilityModule = {
         });
         const transform: PreviewTransform = {
           box,
-          angle:
-            typeof visualStyle["rotate"] === "number"
-              ? visualStyle["rotate"]
-              : 0,
+          angle: visual.rotate,
           flipH: false,
           flipV: false,
         };
-        const warnings = [...resolvedText.warnings, ...properties.warnings];
+        const warnings = [...resolvedText.warnings, ...visual.warnings];
         return {
           observation: {
             id: resolveContext.id,
@@ -392,11 +388,9 @@ export const textCapability: ObjectCapabilityModule = {
               createFieldId: emitContext.createTextFieldId,
               ...(embedFonts === undefined ? {} : { embedFonts }),
             });
-            const emittedProperties = shapePropertiesXml({
-              theme: emitContext.theme,
-              style: visualStyle,
-              box,
-            });
+            const emittedProperties = emitVisualModel(visual, (resource) =>
+              emitContext.registerResource(resource),
+            );
             return {
               xml: textBoxXml(
                 emitContext.id,
@@ -416,14 +410,14 @@ export const textCapability: ObjectCapabilityModule = {
           },
           paint(paintContext: PaintContext): PaintOutput {
             const paintBox = paintContext.box ?? box;
-            const visuals = resolveBoxPreviewVisuals({
-              label: "text",
-              visualStyle,
-              box: paintBox,
-              theme: paintContext.theme,
-            });
-            const backgroundRect = visuals.hasFillOrStroke
-              ? `<rect x="${paintBox.x}" y="${paintBox.y}" width="${paintBox.width}" height="${paintBox.height}" ${visuals.attributes}/>`
+            const hasFillOrStroke =
+              visual.fill.kind !== "none" || visual.border !== undefined;
+            const backgroundSvg = hasFillOrStroke
+              ? paintVisualModel({
+                  model: visual,
+                  slideNumber: paintContext.slideNumber,
+                  objectId: paintContext.objectId,
+                }).svg
               : "";
             const glyphs = renderTextOutlinesSvg({
               paragraphs: resolvedText.paragraphs,
@@ -437,7 +431,7 @@ export const textCapability: ObjectCapabilityModule = {
                   : undefined,
             });
             return {
-              svg: `<g transform="${visuals.svgTransform}">${backgroundRect}${glyphs}</g>`,
+              svg: `${backgroundSvg}<g transform="${visualSvgTransform(visual)}">${glyphs}</g>`,
             };
           },
         };

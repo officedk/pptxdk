@@ -9,12 +9,14 @@ import {
   deck,
   font,
   group,
+  image,
   shape,
   slide,
   text,
 } from "@react-pptx/capabilities/document";
 import { groupCapability } from "@react-pptx/capabilities/group";
 import { Group } from "@react-pptx/capabilities/group-elements";
+import { Image } from "@react-pptx/capabilities/image-elements";
 import { fade, type MotionObservation } from "@react-pptx/capabilities/motion";
 import { path } from "@react-pptx/capabilities/shape";
 import { shapeCapability } from "@react-pptx/capabilities/shape";
@@ -26,10 +28,21 @@ import { createResolver } from "@react-pptx/core/build";
 import { emit } from "@react-pptx/emit";
 import { Deck, Slide, expandDocument } from "@react-pptx/react";
 import { strFromU8, unzipSync } from "fflate";
+import { PNG } from "pngjs";
 import { createElement } from "react";
 import { expect } from "vitest";
 
 import type { CapabilityScenario } from "../acceptance-runner.ts";
+
+const corruptGroupMemberPng = (() => {
+  const png = new PNG({ width: 4, height: 4 });
+  png.data.fill(255);
+  const bytes = new Uint8Array(PNG.sync.write(png));
+  const idat = Buffer.from(bytes).indexOf(Buffer.from("IDAT"));
+  bytes[idat + 6] = (bytes[idat + 6] ?? 0) ^ 0xff;
+  bytes[idat + 7] = (bytes[idat + 7] ?? 0) ^ 0xff;
+  return bytes;
+})();
 
 const jostFont = font("Jost*", [
   {
@@ -621,11 +634,11 @@ export const groupRejectionScenario: CapabilityScenario = {
   description:
     "Dual-author Group rejection scenario verifying member preview failure propagation, morph-inside-group restriction, empty-group rejection, and missing member capability rejection.",
   visualCheckpoints: [
-    "Page 1 (group-member-preview-failure): fails static preview (no PNG delivered) with located diagnostic pointing to group[bad-preview-group]/shape[unsupported-member] while retaining formal PPTX.",
+    "Page 1 (group-member-preview-failure): fails static preview (no PNG delivered) with located diagnostic pointing to group[bad-preview-group]/image[unsupported-member] while retaining formal PPTX.",
     "Page 2 (group-valid-sibling): white canvas with valid teal #0D9488 rectangle inside Group.",
   ],
   nativeCheckpoints: [
-    "Formal PPTX retains both slides as valid native <p:grpSp> objects despite static preview rejecting boxShadow on Page 1.",
+    "Formal PPTX retains both slides as valid native <p:grpSp> objects despite static preview rejecting corrupt image stream on Page 1.",
   ],
   jsx() {
     return createElement(
@@ -645,14 +658,13 @@ export const groupRejectionScenario: CapabilityScenario = {
             height: 40,
             fill: "#10B981",
           }),
-          createElement(Shape, {
+          createElement(Image, {
             id: "unsupported-member",
+            src: corruptGroupMemberPng,
             x: 100,
             y: 20,
             width: 60,
             height: 40,
-            fill: "#EF4444",
-            style: { boxShadow: { blur: 4, distance: 2 } },
           }),
         ),
       ),
@@ -686,14 +698,13 @@ export const groupRejectionScenario: CapabilityScenario = {
             height: 40,
             fill: "#10B981",
           }),
-          shape({
+          image({
             id: "unsupported-member",
+            src: corruptGroupMemberPng,
             x: 100,
             y: 20,
             width: 60,
             height: 40,
-            fill: "#EF4444",
-            style: { boxShadow: { blur: 4, distance: 2 } },
           }),
         ),
       ),
@@ -719,10 +730,10 @@ export const groupRejectionScenario: CapabilityScenario = {
       failedPage.diagnostics.some(
         (d) =>
           d.severity === "error" &&
-          /group\[bad-preview-group\]\/shape\[unsupported-member\]/u.test(
+          /group\[bad-preview-group\]\/image\[unsupported-member\]/u.test(
             d.path,
           ) &&
-          /boxShadow/i.test(d.message),
+          /decode/i.test(d.message),
       ),
     );
     assert.ok(

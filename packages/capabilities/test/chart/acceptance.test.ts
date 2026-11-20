@@ -32,6 +32,7 @@ import {
   chartAxesAndCompactScenario,
   chartBarColumnVariantsScenario,
   chartComboDualAxesScenario,
+  chartDiscreteParityEdgeCasesScenario,
   chartLineAreaParityScenario,
   chartPieDoughnutAndLabelsParityScenario,
   chartPositiveScenario,
@@ -79,6 +80,7 @@ describe("Chart capability acceptance", () => {
         chartComboDualAxesScenario,
         chartPieDoughnutAndLabelsParityScenario,
         chartTrendlinesAndErrorBarsParityScenario,
+        chartDiscreteParityEdgeCasesScenario,
         chartRejectionScenario,
       ]) {
         const runs = await runCapabilityScenario(scenario, {

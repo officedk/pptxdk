@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
+import type { ChartProps } from "@react-pptx/capabilities/chart";
 import { Chart } from "@react-pptx/capabilities/chart-elements";
 import { chart, deck, font, slide } from "@react-pptx/capabilities/document";
 import { Deck, Slide } from "@react-pptx/react";
@@ -2791,5 +2792,386 @@ export const chartTrendlinesAndErrorBarsParityScenario: CapabilityScenario = {
     expect(chart5).toContain('<c:errValType val="cust"/>');
     expect(chart5).toContain('<c:errDir val="x"/>');
     expect(chart5).toContain('<c:errDir val="y"/>');
+  },
+};
+
+const discreteParityPage1Charts: readonly ChartProps[] = [
+  {
+    id: "dash-cross-axis",
+    x: 16,
+    y: 16,
+    width: 300,
+    height: 320,
+    title: {
+      text: "LongDash & CrossesAt",
+      style: {
+        fontSize: 14,
+        color: "#1D4ED8",
+        textDecoration: "underline",
+        textShadow: { color: "#0F172A", blur: 1, distance: 2, angle: 90 },
+      },
+    },
+    legend: "top",
+    plotArea: { left: 50, top: 64, width: 210, height: 190 },
+    style: { fontFamily: jostFont, fontSize: 10 },
+    axes: {
+      x: {
+        kind: "category",
+        position: "top",
+        gridlines: true,
+        majorTickMark: "in",
+        tickLabelPosition: "none",
+        crossesAt: 2,
+        title: { text: "Top X" },
+        line: { dash: "longDash", color: "#1E293B", width: 1.5 },
+      },
+      y: {
+        kind: "value",
+        position: "left",
+        crossesAt: 10,
+        numberFormat: '#,##0;(#,##0);"-"',
+        line: { dash: "longDashDot", color: "#0F766E", width: 1.5 },
+      },
+      y2: {
+        kind: "value",
+        position: "right",
+        visible: false,
+        tickLabelPosition: "high",
+      },
+      x2: {
+        kind: "category",
+        position: "bottom",
+        visible: false,
+      },
+    },
+    groups: [
+      {
+        kind: "column",
+        axes: { category: "x", value: "y" },
+        data: { kind: "shared-categories", categories: ["A", "B", "C"] },
+        dataLabels: {
+          value: true,
+          position: "insideBase",
+          style: { color: "#0F172A", textDecoration: "underline" },
+        },
+        series: [
+          {
+            name: "Col",
+            values: [25, -15, 0],
+            points: { 0: { dataLabels: { position: "center" } } },
+          },
+        ],
+      },
+      {
+        kind: "line",
+        axes: { category: "x2", value: "y2" },
+        data: { kind: "shared-categories", categories: ["A", "B", "C"] },
+        dataLabels: { value: true, position: "bottom" },
+        series: [
+          {
+            name: "Line",
+            values: [12, 28, 18],
+            line: { dash: "longDashDotDot", color: "#DC2626", width: 2 },
+            points: { 0: { dataLabels: { position: "left" } } },
+          },
+        ],
+      },
+    ],
+  },
+  {
+    id: "horiz-bar-labels",
+    x: 328,
+    y: 16,
+    width: 300,
+    height: 320,
+    title: "Horizontal Bar Labels",
+    legend: "left",
+    style: { fontFamily: jostFont, fontSize: 10 },
+    axes: {
+      x: { kind: "category", tickLabelPosition: "low" },
+      y: { kind: "value", numberFormat: "0.00E+00" },
+    },
+    groups: [
+      {
+        kind: "bar",
+        axes: { category: "x", value: "y" },
+        data: { kind: "shared-categories", categories: ["Neg", "Mid", "High"] },
+        dataLabels: { value: true, numberFormat: '#,##0,"K"' },
+        series: [
+          {
+            name: "Bar",
+            values: [-2000, 3500, 1500],
+            points: {
+              0: { dataLabels: { position: "outsideEnd" } },
+              1: { dataLabels: { position: "insideEnd" } },
+              2: { dataLabels: { position: "insideBase" } },
+            },
+          },
+          {
+            name: "BarCenter",
+            values: [-1000, 2000, 1000],
+            dataLabels: { position: "center" },
+          },
+        ],
+      },
+    ],
+  },
+];
+
+const discreteParityPage2Charts: readonly ChartProps[] = [
+  {
+    id: "stacked-neg-line",
+    x: 16,
+    y: 16,
+    width: 196,
+    height: 156,
+    legend: "bottom",
+    style: { fontFamily: jostFont, fontSize: 9 },
+    axes: {
+      x: { kind: "category" },
+      y: { kind: "value", numberFormat: "[$€-407]#,##0.00" },
+    },
+    groups: [
+      {
+        kind: "line",
+        stacking: "stacked",
+        axes: { category: "x", value: "y" },
+        data: { kind: "shared-categories", categories: ["Q1", "Q2", "Q3"] },
+        series: [
+          { name: "S1", values: [-10, 20, -5] },
+          { name: "S2", values: [15, -25, 10] },
+        ],
+      },
+    ],
+  },
+  {
+    id: "stacked-neg-area",
+    x: 222,
+    y: 16,
+    width: 196,
+    height: 156,
+    legend: false,
+    style: { fontFamily: jostFont, fontSize: 9 },
+    axes: {
+      x: { kind: "category" },
+      y: { kind: "value" },
+    },
+    groups: [
+      {
+        kind: "area",
+        stacking: "stacked",
+        axes: { category: "x", value: "y" },
+        data: { kind: "shared-categories", categories: ["A", "B", "C"] },
+        series: [
+          { name: "A1", values: [20, -10, 15] },
+          { name: "A2", values: [-5, 25, -10] },
+        ],
+      },
+    ],
+  },
+  {
+    id: "isolated-gaps-and-area-trend",
+    x: 428,
+    y: 16,
+    width: 196,
+    height: 156,
+    legend: false,
+    displayBlanksAs: "gap",
+    style: { fontFamily: jostFont, fontSize: 9 },
+    axes: {
+      x: { kind: "category", reversed: true },
+      y: { kind: "value" },
+    },
+    groups: [
+      {
+        kind: "line",
+        axes: { category: "x", value: "y" },
+        data: { kind: "shared-categories", categories: ["X", "Y", "Z"] },
+        series: [
+          {
+            name: "GapLine",
+            values: [null, 15, null],
+            marker: false,
+          },
+        ],
+      },
+      {
+        kind: "area",
+        axes: { category: "x", value: "y" },
+        data: { kind: "shared-categories", categories: ["X", "Y", "Z"] },
+        series: [
+          { name: "GapArea", values: [null, 8, null] },
+          {
+            name: "TrendArea",
+            values: [10, 18, 24],
+            trendlines: [
+              {
+                type: "linear",
+                intercept: 5,
+                displayEquation: true,
+                line: { color: "#1E293B", width: 1.5 },
+              },
+            ],
+          },
+        ],
+      },
+    ],
+  },
+  {
+    id: "scatter-gaps-and-intercept",
+    x: 16,
+    y: 184,
+    width: 240,
+    height: 160,
+    legend: false,
+    displayBlanksAs: "zero",
+    style: { fontFamily: jostFont, fontSize: 9 },
+    groups: [
+      {
+        kind: "scatter",
+        data: { kind: "xy" },
+        line: "straight",
+        markers: true,
+        dataLabels: { value: true, position: "left" },
+        series: [
+          {
+            name: "ExpIntercept",
+            x: [1, 2, 3, 4],
+            y: [4, 8, null, 20],
+            points: { 1: { marker: false } },
+            trendlines: [
+              {
+                type: "exponential",
+                intercept: 2,
+                displayRSquared: true,
+                line: { color: "#2563EB", width: 1.5 },
+              },
+            ],
+          },
+          {
+            name: "CubicNeg",
+            x: [1, 2, 3, 4, 5],
+            y: [20, 4, 18, 3, 15],
+            trendlines: [
+              {
+                type: "polynomial",
+                order: 3,
+                displayEquation: true,
+                line: { color: "#DC2626", width: 1.5 },
+              },
+            ],
+          },
+        ],
+      },
+    ],
+  },
+  {
+    id: "scatter-isolated-gap",
+    x: 266,
+    y: 184,
+    width: 144,
+    height: 160,
+    legend: false,
+    displayBlanksAs: "gap",
+    style: { fontFamily: jostFont, fontSize: 9 },
+    groups: [
+      {
+        kind: "scatter",
+        data: { kind: "xy" },
+        line: "straight",
+        markers: false,
+        series: [
+          {
+            name: "IsolatedScatter",
+            x: [1, 2, 3],
+            y: [null, 12, null],
+          },
+        ],
+      },
+    ],
+  },
+  {
+    id: "doughnut-full-360",
+    x: 420,
+    y: 184,
+    width: 204,
+    height: 160,
+    legend: false,
+    style: { fontFamily: jostFont, fontSize: 9 },
+    groups: [
+      {
+        kind: "doughnut",
+        holeSize: 50,
+        data: { kind: "shared-categories", categories: ["Only", "Empty"] },
+        series: [{ name: "Share", values: [100, 0] }],
+      },
+    ],
+  },
+];
+
+export const chartDiscreteParityEdgeCasesScenario: CapabilityScenario = {
+  id: "chart-discrete-dashes-crosses-formats-and-edge-branches",
+  capability: "rp:chart",
+  description:
+    "Dual-author Chart scenario covering longDash* stroke styles, explicit crossesAt & hidden/in-tick axes, top/left/bottom legends, explicit plotArea, horizontal bar & line/scatter label positions, styled title decoration/shadow, stacked negative line/area, gap isolated points, scatter zero blanks + exponential intercept + negative-term polynomial, 360-degree doughnut, and multi-section/scientific/thousands/currency number formats.",
+  visualCheckpoints: [
+    "Page 1: longDash* lines, top/bottom/hidden axes with crossesAt and in-ticks, underline+shadow title, and horizontal bar label placements.",
+    "Page 2: stacked negative line/area, isolated gap line/area, scatter exponential intercept + cubic poly + zero blank, and 360-degree doughnut.",
+  ],
+  nativeCheckpoints: [
+    "Verify native dash presets, crossesAt, number formats, trendline intercepts, and 360-degree doughnut XML.",
+  ],
+  jsx() {
+    return createElement(
+      Deck,
+      { width: 640, height: 360, theme: chartTheme },
+      createElement(
+        Slide,
+        { id: "chart-dashes-crosses-and-labels-1", background: "#FFFFFF" },
+        ...discreteParityPage1Charts.map((props) =>
+          createElement(Chart, props),
+        ),
+      ),
+      createElement(
+        Slide,
+        {
+          id: "chart-stacked-neg-gaps-doughnut-and-trend",
+          background: "#FFFFFF",
+        },
+        ...discreteParityPage2Charts.map((props) =>
+          createElement(Chart, props),
+        ),
+      ),
+    );
+  },
+  document() {
+    return deck({ width: 640, height: 360, theme: chartTheme }).append(
+      slide({
+        id: "chart-dashes-crosses-and-labels-1",
+        background: "#FFFFFF",
+      }).append(...discreteParityPage1Charts.map((props) => chart(props))),
+      slide({
+        id: "chart-stacked-neg-gaps-doughnut-and-trend",
+        background: "#FFFFFF",
+      }).append(...discreteParityPage2Charts.map((props) => chart(props))),
+    );
+  },
+  assert({ author, pptx, preview, validation }) {
+    assert.deepEqual(validation.errors, [], author);
+    assert.equal(preview.pages.length, 2, author);
+    for (const page of preview.pages) {
+      assert.deepEqual(page.diagnostics, [], author);
+      assert.ok(page.png !== undefined, author);
+    }
+    const p1Svg = preview.pages[0]!.svg ?? "";
+    expect(p1Svg).toContain("<feDropShadow");
+    expect(p1Svg).toMatch(/<rect[^>]*fill="#1D4ED8"/);
+    const files = unzipSync(pptx);
+    const chart1 = strFromU8(files["ppt/charts/chart1.xml"]!);
+    expect(chart1).toContain('<c:crossesAt val="2"/>');
+    expect(chart1).toContain('<c:crossesAt val="10"/>');
+    expect(chart1).toContain('<a:prstDash val="lgDash"/>');
+    expect(chart1).toContain('<a:prstDash val="lgDashDot"/>');
+    expect(chart1).toContain('<a:prstDash val="lgDashDotDot"/>');
   },
 };

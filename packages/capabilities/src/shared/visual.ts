@@ -196,8 +196,6 @@ export type ShapePropertiesOptions = {
   readonly image?: boolean;
   /** Layout containers without visible styling do not require emitting native transforms. */
   readonly layoutOnlyWhenInvisible?: boolean;
-  /** Optional resource registrar used by convenience `shapePropertiesXml` wrapper when filling with an image. */
-  readonly registerResource?: (resource: CapabilityResource) => string;
 };
 
 export type ShapePropertiesResult = {
@@ -801,30 +799,6 @@ export function emitVisualModel(
     geometryName: model.geometryName,
     geometry: model.geometry,
   };
-}
-
-/** Compatibility wrapper resolving and emitting `<p:spPr>` in a single step. */
-export function shapePropertiesXml(
-  options: ShapePropertiesOptions,
-): ShapePropertiesResult {
-  const model = resolveVisualModel(options);
-  return emitVisualModel(model, options.registerResource, {
-    omitFill: Boolean(options.image),
-  });
-}
-
-/** Legacy helper preserved for slide-background callers that pass raw fill style records. */
-export function fillXml(
-  theme: ThemeContext,
-  style: VisualStyleRecord,
-  explicitFill: ColorValue | undefined,
-  opacity: number | undefined,
-  registerResource?: (resource: CapabilityResource) => string,
-): string {
-  return emitFillXml(
-    resolveVisualFill(theme, style, explicitFill, opacity, false),
-    registerResource,
-  );
 }
 
 /** Returns the SVG transform string (flip around box center, then rotate around box center). */

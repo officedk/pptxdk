@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
+import { Box } from "@react-pptx/capabilities/box-elements";
 import {
+  box,
   deck,
   font,
   paragraph,
@@ -16,6 +18,7 @@ import {
   path,
   preset,
   presetGeometryTuple,
+  radialGradient,
   type CustomGeometry,
   type PresetGeometryName,
 } from "@react-pptx/capabilities/shape";
@@ -111,6 +114,8 @@ const colrJostFont = font(
   [{ weight: 400, data: withSyntheticFontTable(jostRegularBytes, "COLR") }],
   { substitute: true },
 );
+
+const missingPreviewFont = font("Missing Shape Preview Face");
 
 const sampleFillPng = (() => {
   const img = new PNG({ width: 4, height: 4 });
@@ -1538,6 +1543,16 @@ export const shapeRejectionScenario: CapabilityScenario = {
           text: "Color",
           textStyle: { fontFamily: colrJostFont, color: "#FFFFFF" },
         }),
+        createElement(Shape, {
+          id: "missing-font-shape",
+          x: 180,
+          y: 90,
+          width: 140,
+          height: 50,
+          fill: "#1E293B",
+          text: "No font",
+          textStyle: { fontFamily: missingPreviewFont, color: "#FFFFFF" },
+        }),
       ),
       createElement(
         Slide,
@@ -1594,6 +1609,16 @@ export const shapeRejectionScenario: CapabilityScenario = {
           text: "Color",
           textStyle: { fontFamily: colrJostFont, color: "#FFFFFF" },
         }),
+        shape({
+          id: "missing-font-shape",
+          x: 180,
+          y: 90,
+          width: 140,
+          height: 50,
+          fill: "#1E293B",
+          text: "No font",
+          textStyle: { fontFamily: missingPreviewFont, color: "#FFFFFF" },
+        }),
       ),
       slide({ id: "valid-sibling-page" }).append(
         shape({
@@ -1616,15 +1641,16 @@ export const shapeRejectionScenario: CapabilityScenario = {
     );
   },
   assert({ author, preview, validation }) {
-    assert.equal(validation.slides[0]?.objects.length, 3, author);
+    assert.equal(validation.slides[0]?.objects.length, 4, author);
     const p1 = preview.pages[0]!;
     assert.equal(p1.png, undefined, author);
     assert.equal(p1.svg, undefined, author);
-    assert.equal(p1.diagnostics.length, 3, author);
+    assert.equal(p1.diagnostics.length, 4, author);
     for (const id of [
       "missing-glyph-inline",
       "missing-glyph-children",
       "color-font-shape",
+      "missing-font-shape",
     ]) {
       assert.ok(
         p1.diagnostics.some(
@@ -1643,5 +1669,367 @@ export const shapeRejectionScenario: CapabilityScenario = {
       [...pixels.data.subarray(corner, corner + 4)],
       [0x16, 0xa3, 0x4a, 255],
     );
+  },
+};
+
+const cubicOpenArrowPath = path("M 10 80 C 30 10 70 10 90 50 S 130 90 150 30", {
+  viewBox: [160, 100],
+});
+
+const quadAndArcPath = path(
+  "M 10 50 Q 30 10 50 50 T 90 50 A 30 20 0 1 0 10 50",
+  { viewBox: [100, 100] },
+);
+
+const curvedEvenOddCutout = path(
+  "M 10 10 C 40 0 60 0 90 10 L 90 90 Q 50 100 10 90 Z M 30 30 C 45 25 55 25 70 30 L 70 70 Q 50 75 30 70 Z",
+  { viewBox: [100, 100], fillRule: "evenodd" },
+);
+
+export const shapeShadedFillsAndPathsScenario: CapabilityScenario = {
+  id: "shape-shaded-fills-open-beziers-and-flex",
+  capability: "rp:shape",
+  description:
+    "Dual-author Shape scenario covering shaded multi-facet presets with gradient/image fills, open cubic/quadratic/arc paths with fill and start/end arrows, curved evenodd cutouts, capsule borderRadius clamp, large softEdge, and flex-measured inline text.",
+  visualCheckpoints: [
+    "Page 1 (shaded-fills-and-paths): bevel/cube/can/foldedCorner with gradient and image fills, open cubic Bezier with arrows & fill, quadratic+arc path, curved evenodd cutout, capsule borderRadius, and large softEdge.",
+    "Page 2 (flex-inline-text): flex row container holding an auto-sized Shape with top-aligned inline text.",
+  ],
+  nativeCheckpoints: [
+    "Verify native preset geometries, gradients, picture fills, custGeom cubic/quadratic curves, arrows, and flex-resolved shape bounds in PPTX.",
+  ],
+  jsx() {
+    const gradA = linearGradient(45, "#1D4ED8", "#38BDF8");
+    const gradB = radialGradient("#F59E0B", "#B45309");
+    return createElement(
+      Deck,
+      { width: 640, height: 360 },
+      createElement(
+        Slide,
+        { id: "shaded-fills-and-paths", background: "#F8FAFC" },
+        createElement(Shape, {
+          id: "bevel-grad",
+          geometry: preset("bevel", { adj: 20000 }),
+          x: 20,
+          y: 20,
+          width: 110,
+          height: 80,
+          style: {
+            backgroundImage: gradA,
+            borderColor: "#0F172A",
+            borderWidth: 1.5,
+          },
+        }),
+        createElement(Shape, {
+          id: "cube-radial",
+          geometry: preset("cube", { adj: 25000 }),
+          x: 150,
+          y: 20,
+          width: 110,
+          height: 80,
+          style: {
+            backgroundImage: gradB,
+            borderColor: "#78350F",
+            borderWidth: 1.5,
+          },
+        }),
+        createElement(Shape, {
+          id: "can-image",
+          geometry: preset("can", { adj: 25000 }),
+          x: 280,
+          y: 20,
+          width: 100,
+          height: 90,
+          style: {
+            backgroundImage: { image: sampleFillPng },
+            borderColor: "#1E3A8A",
+            borderWidth: 1.5,
+          },
+        }),
+        createElement(Shape, {
+          id: "folded-grad",
+          geometry: preset("foldedCorner", { adj: 22000 }),
+          x: 400,
+          y: 20,
+          width: 110,
+          height: 80,
+          style: {
+            backgroundImage: gradA,
+            borderColor: "#0F172A",
+            borderWidth: 1.5,
+          },
+        }),
+        createElement(Shape, {
+          id: "open-cubic-arrows",
+          geometry: cubicOpenArrowPath,
+          x: 20,
+          y: 130,
+          width: 180,
+          height: 100,
+          fill: "#DBEAFE",
+          style: {
+            borderColor: "#1E293B",
+            borderWidth: 2,
+            startArrow: "triangle",
+            endArrow: "stealth",
+          },
+        }),
+        createElement(Shape, {
+          id: "quad-arc-path",
+          geometry: quadAndArcPath,
+          x: 220,
+          y: 130,
+          width: 120,
+          height: 100,
+          fill: "#DCFCE7",
+          style: {
+            borderColor: "#166534",
+            borderWidth: 2,
+            startArrow: "oval",
+            endArrow: "diamond",
+          },
+        }),
+        createElement(Shape, {
+          id: "curved-evenodd",
+          geometry: curvedEvenOddCutout,
+          x: 360,
+          y: 130,
+          width: 100,
+          height: 100,
+          fill: "#E11D48",
+          style: { borderColor: "#881337", borderWidth: 2 },
+        }),
+        createElement(Shape, {
+          id: "capsule-radius",
+          x: 480,
+          y: 130,
+          width: 130,
+          height: 44,
+          fill: "#7C3AED",
+          style: { borderRadius: 40 },
+        }),
+        createElement(Shape, {
+          id: "large-softedge",
+          x: 480,
+          y: 195,
+          width: 100,
+          height: 60,
+          fill: "#0EA5E9",
+          style: { softEdge: 40 },
+        }),
+      ),
+      createElement(
+        Slide,
+        { id: "flex-inline-text", background: "#FFFFFF" },
+        createElement(
+          Box,
+          {
+            id: "flex-row",
+            style: {
+              position: "absolute",
+              left: 24,
+              top: 24,
+              width: 560,
+              display: "flex",
+              flexDirection: "row",
+              gap: 16,
+              padding: 12,
+              backgroundColor: "#F1F5F9",
+            },
+          },
+          createElement(Shape, {
+            id: "flex-auto-shape",
+            fill: "#1D4ED8",
+            text: "Flex Shape Top",
+            style: { padding: 8 },
+            textStyle: {
+              fontFamily: jostFont,
+              fontSize: 16,
+              color: "#FFFFFF",
+              verticalAlign: "top",
+            },
+          }),
+          createElement(Shape, {
+            id: "flex-empty-shape",
+            width: 80,
+            height: 40,
+            fill: "#059669",
+          }),
+        ),
+      ),
+    );
+  },
+  document() {
+    const gradA = linearGradient(45, "#1D4ED8", "#38BDF8");
+    const gradB = radialGradient("#F59E0B", "#B45309");
+    return deck({ width: 640, height: 360 }).append(
+      slide({ id: "shaded-fills-and-paths", background: "#F8FAFC" }).append(
+        shape({
+          id: "bevel-grad",
+          geometry: preset("bevel", { adj: 20000 }),
+          x: 20,
+          y: 20,
+          width: 110,
+          height: 80,
+          style: {
+            backgroundImage: gradA,
+            borderColor: "#0F172A",
+            borderWidth: 1.5,
+          },
+        }),
+        shape({
+          id: "cube-radial",
+          geometry: preset("cube", { adj: 25000 }),
+          x: 150,
+          y: 20,
+          width: 110,
+          height: 80,
+          style: {
+            backgroundImage: gradB,
+            borderColor: "#78350F",
+            borderWidth: 1.5,
+          },
+        }),
+        shape({
+          id: "can-image",
+          geometry: preset("can", { adj: 25000 }),
+          x: 280,
+          y: 20,
+          width: 100,
+          height: 90,
+          style: {
+            backgroundImage: { image: sampleFillPng },
+            borderColor: "#1E3A8A",
+            borderWidth: 1.5,
+          },
+        }),
+        shape({
+          id: "folded-grad",
+          geometry: preset("foldedCorner", { adj: 22000 }),
+          x: 400,
+          y: 20,
+          width: 110,
+          height: 80,
+          style: {
+            backgroundImage: gradA,
+            borderColor: "#0F172A",
+            borderWidth: 1.5,
+          },
+        }),
+        shape({
+          id: "open-cubic-arrows",
+          geometry: cubicOpenArrowPath,
+          x: 20,
+          y: 130,
+          width: 180,
+          height: 100,
+          fill: "#DBEAFE",
+          style: {
+            borderColor: "#1E293B",
+            borderWidth: 2,
+            startArrow: "triangle",
+            endArrow: "stealth",
+          },
+        }),
+        shape({
+          id: "quad-arc-path",
+          geometry: quadAndArcPath,
+          x: 220,
+          y: 130,
+          width: 120,
+          height: 100,
+          fill: "#DCFCE7",
+          style: {
+            borderColor: "#166534",
+            borderWidth: 2,
+            startArrow: "oval",
+            endArrow: "diamond",
+          },
+        }),
+        shape({
+          id: "curved-evenodd",
+          geometry: curvedEvenOddCutout,
+          x: 360,
+          y: 130,
+          width: 100,
+          height: 100,
+          fill: "#E11D48",
+          style: { borderColor: "#881337", borderWidth: 2 },
+        }),
+        shape({
+          id: "capsule-radius",
+          x: 480,
+          y: 130,
+          width: 130,
+          height: 44,
+          fill: "#7C3AED",
+          style: { borderRadius: 40 },
+        }),
+        shape({
+          id: "large-softedge",
+          x: 480,
+          y: 195,
+          width: 100,
+          height: 60,
+          fill: "#0EA5E9",
+          style: { softEdge: 40 },
+        }),
+      ),
+      slide({ id: "flex-inline-text", background: "#FFFFFF" }).append(
+        box({
+          id: "flex-row",
+          style: {
+            position: "absolute",
+            left: 24,
+            top: 24,
+            width: 560,
+            display: "flex",
+            flexDirection: "row",
+            gap: 16,
+            padding: 12,
+            backgroundColor: "#F1F5F9",
+          },
+        }).append(
+          shape({
+            id: "flex-auto-shape",
+            fill: "#1D4ED8",
+            text: "Flex Shape Top",
+            style: { padding: 8 },
+            textStyle: {
+              fontFamily: jostFont,
+              fontSize: 16,
+              color: "#FFFFFF",
+              verticalAlign: "top",
+            },
+          }),
+          shape({
+            id: "flex-empty-shape",
+            width: 80,
+            height: 40,
+            fill: "#059669",
+          }),
+        ),
+      ),
+    );
+  },
+  assert({ author, resolution, preview }) {
+    assert.equal(preview.pages.length, 2, author);
+    assert.deepEqual(preview.pages[0]?.diagnostics, [], author);
+    assert.deepEqual(preview.pages[1]?.diagnostics, [], author);
+    const p1Svg = preview.pages[0]?.svg ?? "";
+    expect(p1Svg).toContain("<linearGradient");
+    expect(p1Svg).toContain("<radialGradient");
+    expect(p1Svg).toContain("<pattern");
+    expect(p1Svg).toContain("<mask");
+    const p1Pixels = PNG.sync.read(Buffer.from(preview.pages[0].png!));
+    // Curved evenodd cutout center at (410, 180) remains #F8FAFC background.
+    assert.deepEqual(pixelRgb(p1Pixels, 410, 180), [0xf8, 0xfa, 0xfc], author);
+    const flexShapeBox = resolution.query
+      .getSlide("flex-inline-text")
+      .get("flex-row")
+      .get("flex-auto-shape")
+      .observe().box;
+    assert.ok((flexShapeBox?.width ?? 0) > 80, author);
+    assert.ok((flexShapeBox?.height ?? 0) > 20, author);
   },
 };

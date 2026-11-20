@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
+import { Box } from "@react-pptx/capabilities/box-elements";
 import {
+  box,
   deck,
   font,
   paragraph,
@@ -18,6 +20,7 @@ import {
 } from "@react-pptx/capabilities/text-elements";
 import { Deck, Slide } from "@react-pptx/react";
 import { strFromU8, unzipSync } from "fflate";
+import { PNG } from "pngjs";
 import { createElement } from "react";
 
 import type { CapabilityScenario } from "../acceptance-runner.ts";
@@ -1123,5 +1126,334 @@ export const textRejectionScenario: CapabilityScenario = {
     const p2 = preview.pages[1]!;
     assert.deepEqual(p2.diagnostics, [], author);
     assert.ok(p2.png !== undefined, author);
+  },
+};
+
+const textFillPngBytes = (() => {
+  const img = new PNG({ width: 4, height: 4 });
+  for (let i = 0; i < img.data.length; i += 4) {
+    img.data.set([0x1e, 0x40, 0xaf, 255], i);
+  }
+  return new Uint8Array(PNG.sync.write(img));
+})();
+
+export const textRtlListsAndFillsScenario: CapabilityScenario = {
+  id: "text-rtl-lists-image-fill-and-percent-height",
+  capability: "rp:text",
+  description:
+    "Dual-author Text scenario covering RTL bullet/numbered lists with right/center/justify alignment, Arabic numerals and diacritics with lang='ar-SA', image-filled Text box, 100% height inside fixed Box, underline+textShadow on list items, and multi-level numbered list fallback.",
+  visualCheckpoints: [
+    "Page 1 (rtl-lists-and-image-fill): RTL Arabic/Hebrew bullet and numbered lists aligned right/center/justify, plus an image-filled Text box and multi-level numbered list with shadow+underline.",
+  ],
+  nativeCheckpoints: [
+    "Verify RTL list XML, image relationship on Text shape, and multi-level numbering in PPTX.",
+  ],
+  jsx() {
+    const rtlJustifyCopy =
+      "مَرْحَبًا بِكُمْ فِي اخْتِبَارِ ١٢٣ القَائِمَةِ العَرَبِيَّةِ المُنَسَّقَةِ مَعَ الضَّبْطِ";
+    return createElement(
+      Deck,
+      { width: 640, height: 360 },
+      createElement(
+        Slide,
+        { id: "rtl-lists-and-image-fill", background: "#FFFFFF" },
+        createElement(
+          Text,
+          {
+            id: "rtl-lists",
+            x: 20,
+            y: 20,
+            width: 300,
+            height: 220,
+            style: {
+              fontFamily: notoArabicFont,
+              fontSize: 15,
+              color: "#0F172A",
+              padding: 10,
+              backgroundColor: "#F8FAFC",
+              borderColor: "#94A3B8",
+              borderWidth: 1,
+            },
+          },
+          createElement(
+            P,
+            {
+              style: {
+                align: "right",
+                lang: "ar-SA",
+                list: { type: "bullet", character: "-" },
+                lineHeight: 24,
+              },
+            },
+            "البند الأول ١٢٣",
+          ),
+          createElement(
+            P,
+            {
+              style: {
+                align: "center",
+                lang: "ar-SA",
+                list: { type: "number", startAt: 1 },
+                lineHeight: 24,
+              },
+            },
+            "البند الثاني",
+          ),
+          createElement(
+            P,
+            {
+              style: {
+                align: "justify",
+                lang: "ar-SA",
+                list: { type: "bullet", character: "-" },
+                lineHeight: 24,
+              },
+            },
+            rtlJustifyCopy,
+          ),
+          createElement(
+            P,
+            {
+              style: {
+                align: "right",
+                list: { type: "number", startAt: 1 },
+                lineHeight: 24,
+              },
+            },
+            createElement(
+              Span,
+              { style: { fontFamily: notoHebrewFont, fontWeight: 100 } },
+              "שורה ראשונה",
+            ),
+          ),
+        ),
+        createElement(
+          Text,
+          {
+            id: "image-filled-text",
+            x: 340,
+            y: 20,
+            width: 280,
+            height: 70,
+            style: {
+              fontFamily: jostFont,
+              fontSize: 16,
+              color: "#FFFFFF",
+              padding: 10,
+              backgroundImage: { image: textFillPngBytes },
+            },
+          },
+          "Image Fill Text",
+        ),
+        createElement(
+          Box,
+          {
+            id: "pct-holder",
+            style: {
+              position: "absolute",
+              left: 340,
+              top: 105,
+              width: 280,
+              height: 150,
+              backgroundColor: "#EFF6FF",
+              borderColor: "#3B82F6",
+              borderWidth: 1,
+            },
+          },
+          createElement(
+            Text,
+            {
+              id: "pct-height-text",
+              style: {
+                width: "100%",
+                height: "100%",
+                fontFamily: jostFont,
+                fontSize: 13,
+                color: "#1E293B",
+                padding: 8,
+              },
+            },
+            createElement(
+              P,
+              {
+                style: {
+                  list: { type: "number", level: 0, startAt: 1 },
+                  textDecoration: "underline",
+                  textShadow: {
+                    color: "#0F172A",
+                    blur: 1,
+                    distance: 1,
+                    angle: 90,
+                  },
+                },
+              },
+              "Level 0 item 1",
+            ),
+            createElement(
+              P,
+              {
+                style: {
+                  list: { type: "number", level: 1, startAt: 1 },
+                },
+              },
+              "Level 1 subitem",
+            ),
+            createElement(
+              P,
+              {
+                style: {
+                  list: { type: "number", level: 0, startAt: 1 },
+                },
+              },
+              "Level 0 item 2",
+            ),
+          ),
+        ),
+      ),
+    );
+  },
+  document() {
+    const rtlJustifyCopy =
+      "مَرْحَبًا بِكُمْ فِي اخْتِبَارِ ١٢٣ القَائِمَةِ العَرَبِيَّةِ المُنَسَّقَةِ مَعَ الضَّبْطِ";
+    return deck({ width: 640, height: 360 }).append(
+      slide({ id: "rtl-lists-and-image-fill", background: "#FFFFFF" }).append(
+        text(
+          [
+            paragraph("البند الأول ١٢٣", {
+              style: {
+                align: "right",
+                lang: "ar-SA",
+                list: { type: "bullet", character: "-" },
+                lineHeight: 24,
+              },
+            }),
+            paragraph("البند الثاني", {
+              style: {
+                align: "center",
+                lang: "ar-SA",
+                list: { type: "number", startAt: 1 },
+                lineHeight: 24,
+              },
+            }),
+            paragraph(rtlJustifyCopy, {
+              style: {
+                align: "justify",
+                lang: "ar-SA",
+                list: { type: "bullet", character: "-" },
+                lineHeight: 24,
+              },
+            }),
+            paragraph(
+              [
+                span("שורה ראשונה", {
+                  style: { fontFamily: notoHebrewFont, fontWeight: 100 },
+                }),
+              ],
+              {
+                style: {
+                  align: "right",
+                  list: { type: "number", startAt: 1 },
+                  lineHeight: 24,
+                },
+              },
+            ),
+          ],
+          {
+            id: "rtl-lists",
+            x: 20,
+            y: 20,
+            width: 300,
+            height: 220,
+            style: {
+              fontFamily: notoArabicFont,
+              fontSize: 15,
+              color: "#0F172A",
+              padding: 10,
+              backgroundColor: "#F8FAFC",
+              borderColor: "#94A3B8",
+              borderWidth: 1,
+            },
+          },
+        ),
+        text("Image Fill Text", {
+          id: "image-filled-text",
+          x: 340,
+          y: 20,
+          width: 280,
+          height: 70,
+          style: {
+            fontFamily: jostFont,
+            fontSize: 16,
+            color: "#FFFFFF",
+            padding: 10,
+            backgroundImage: { image: textFillPngBytes },
+          },
+        }),
+        box({
+          id: "pct-holder",
+          style: {
+            position: "absolute",
+            left: 340,
+            top: 105,
+            width: 280,
+            height: 150,
+            backgroundColor: "#EFF6FF",
+            borderColor: "#3B82F6",
+            borderWidth: 1,
+          },
+        }).append(
+          text(
+            [
+              paragraph("Level 0 item 1", {
+                style: {
+                  list: { type: "number", level: 0, startAt: 1 },
+                  textDecoration: "underline",
+                  textShadow: {
+                    color: "#0F172A",
+                    blur: 1,
+                    distance: 1,
+                    angle: 90,
+                  },
+                },
+              }),
+              paragraph("Level 1 subitem", {
+                style: {
+                  list: { type: "number", level: 1, startAt: 1 },
+                },
+              }),
+              paragraph("Level 0 item 2", {
+                style: {
+                  list: { type: "number", level: 0, startAt: 1 },
+                },
+              }),
+            ],
+            {
+              id: "pct-height-text",
+              style: {
+                width: "100%",
+                height: "100%",
+                fontFamily: jostFont,
+                fontSize: 13,
+                color: "#1E293B",
+                padding: 8,
+              },
+            },
+          ),
+        ),
+      ),
+    );
+  },
+  assert({ author, pptx, preview }) {
+    assert.equal(preview.pages.length, 1, author);
+    const page = preview.pages[0]!;
+    assert.deepEqual(page.diagnostics, [], author);
+    assert.ok(page.png !== undefined, author);
+    const svg = page.svg ?? "";
+    assert.ok(svg.includes("<pattern"), author);
+    assert.ok(svg.includes("<feDropShadow"), author);
+    const zip = unzipSync(pptx);
+    const s1Xml = strFromU8(zip["ppt/slides/slide1.xml"]!);
+    assert.ok(s1Xml.includes("<a:blipFill"), author);
+    assert.ok(s1Xml.includes('lang="ar-SA"'), author);
   },
 };

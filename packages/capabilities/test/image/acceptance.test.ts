@@ -10,6 +10,7 @@ import {
   imageMasksAndEffectsScenario,
   imagePositiveScenario,
   imageRejectionScenario,
+  imageSizingSoftBorderAndLinkScenario,
 } from "./scenarios.ts";
 
 describe("Image capability acceptance", () => {
@@ -19,6 +20,7 @@ describe("Image capability acceptance", () => {
       for (const scenario of [
         imagePositiveScenario,
         imageMasksAndEffectsScenario,
+        imageSizingSoftBorderAndLinkScenario,
         imageRejectionScenario,
       ]) {
         const runs = await runCapabilityScenario(scenario, {

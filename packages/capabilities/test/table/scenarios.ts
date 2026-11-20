@@ -686,6 +686,40 @@ export const tableRichTextBordersAndOversetScenario: CapabilityScenario = {
               "مرحبا بالعالم",
             ),
           ),
+          createElement(
+            Row,
+            { id: "shorthand-row" },
+            createElement(
+              Cell,
+              {
+                id: "quad-padding-cell",
+                style: {
+                  padding: [4, 8, 6, 10],
+                  borderColor: "#334155",
+                },
+              },
+              "4-tuple pad + borderColor only",
+            ),
+            createElement(
+              Cell,
+              {
+                id: "width-only-border-cell",
+                style: {
+                  padding: 6,
+                  borderWidth: 2,
+                },
+              },
+              "borderWidth only",
+            ),
+            createElement(
+              Cell,
+              {
+                id: "plain-cell",
+                style: { padding: 6 },
+              },
+              "Plain",
+            ),
+          ),
         ),
       ),
       createElement(
@@ -794,6 +828,26 @@ export const tableRichTextBordersAndOversetScenario: CapabilityScenario = {
                 borderWidth: 1,
                 borderStyle: "solid",
               },
+            }),
+          ),
+          row({ id: "shorthand-row" }).append(
+            cell("4-tuple pad + borderColor only", {
+              id: "quad-padding-cell",
+              style: {
+                padding: [4, 8, 6, 10],
+                borderColor: "#334155",
+              },
+            }),
+            cell("borderWidth only", {
+              id: "width-only-border-cell",
+              style: {
+                padding: 6,
+                borderWidth: 2,
+              },
+            }),
+            cell("Plain", {
+              id: "plain-cell",
+              style: { padding: 6 },
             }),
           ),
         ),

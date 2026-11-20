@@ -365,6 +365,148 @@ export const transitionPositiveScenario: CapabilityScenario = {
   },
 };
 
+export const transitionBaselineVariantsScenario: CapabilityScenario = {
+  id: "transition-baseline-strips-push-and-default-flip",
+  capability: "transition",
+  description:
+    "Dual-author scenario covering top-level transitions.strips(), transitions.push(), and default rightward transitions.flip() while keeping static preview clean.",
+  visualCheckpoints: [
+    "Pages 1-3 render clean solid shapes with zero diagnostics regardless of strips, push, or default flip transitions.",
+  ],
+  nativeCheckpoints: [
+    "Open exported PPTX and verify Slide 1 strips (rightDown), Slide 2 push (bottom), and Slide 3 flip (right).",
+  ],
+  jsx() {
+    return createElement(
+      Deck,
+      { width: 320, height: 180 },
+      createElement(
+        Slide,
+        {
+          id: "strips-default",
+          background: "#FFFFFF",
+          transition: transitions.strips(),
+        },
+        createElement(Shape, {
+          id: "s1-card",
+          x: 40,
+          y: 40,
+          width: 120,
+          height: 80,
+          fill: "#2563EB",
+        }),
+      ),
+      createElement(
+        Slide,
+        {
+          id: "push-default",
+          background: "#FFFFFF",
+          transition: transitions.push(),
+        },
+        createElement(Shape, {
+          id: "s2-card",
+          x: 40,
+          y: 40,
+          width: 120,
+          height: 80,
+          fill: "#059669",
+        }),
+      ),
+      createElement(
+        Slide,
+        {
+          id: "flip-default-right",
+          background: "#FFFFFF",
+          transition: transitions.flip({
+            fallback: transitions.strips({ direction: "leftUp" }),
+          }),
+        },
+        createElement(Shape, {
+          id: "s3-card",
+          x: 40,
+          y: 40,
+          width: 120,
+          height: 80,
+          fill: "#D97706",
+        }),
+      ),
+    );
+  },
+  document() {
+    return deck({ width: 320, height: 180 }).append(
+      slide({
+        id: "strips-default",
+        background: "#FFFFFF",
+        transition: transitions.strips(),
+      }).append(
+        shape({
+          id: "s1-card",
+          x: 40,
+          y: 40,
+          width: 120,
+          height: 80,
+          fill: "#2563EB",
+        }),
+      ),
+      slide({
+        id: "push-default",
+        background: "#FFFFFF",
+        transition: transitions.push(),
+      }).append(
+        shape({
+          id: "s2-card",
+          x: 40,
+          y: 40,
+          width: 120,
+          height: 80,
+          fill: "#059669",
+        }),
+      ),
+      slide({
+        id: "flip-default-right",
+        background: "#FFFFFF",
+        transition: transitions.flip({
+          fallback: transitions.strips({ direction: "leftUp" }),
+        }),
+      }).append(
+        shape({
+          id: "s3-card",
+          x: 40,
+          y: 40,
+          width: 120,
+          height: 80,
+          fill: "#D97706",
+        }),
+      ),
+    );
+  },
+  async assert({ author, pptx, preview }) {
+    assert.equal(preview.pages.length, 3, author);
+    const file = await validatePptx(pptx, { allowedExtensions: ["p14"] });
+    assert.deepEqual(file.errors, [], author);
+    assert.deepEqual(
+      file.slides[0]?.transition,
+      { kind: "strips", speed: "slow", direction: "rd" },
+      author,
+    );
+    assert.deepEqual(
+      file.slides[1]?.transition,
+      { kind: "push", speed: "slow", direction: "d" },
+      author,
+    );
+    assert.deepEqual(
+      file.slides[2]?.transition,
+      {
+        kind: "flip",
+        speed: "slow",
+        direction: "r",
+        fallback: { kind: "strips", speed: "slow", direction: "lu" },
+      },
+      author,
+    );
+  },
+};
+
 type DualAuthorRejectionCase = {
   readonly id: string;
   readonly expectedCode: string;

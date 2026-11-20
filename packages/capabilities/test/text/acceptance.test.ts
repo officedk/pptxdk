@@ -17,7 +17,11 @@ import { createElement } from "react";
 import { describe, expect, it } from "vitest";
 
 import { runCapabilityScenario } from "../acceptance-runner.ts";
-import { textPositiveScenario, textRejectionScenario } from "./scenarios.ts";
+import {
+  textPositiveScenario,
+  textRejectionScenario,
+  textRtlListsAndFillsScenario,
+} from "./scenarios.ts";
 
 function previewDocWith(modules: readonly CapabilityModule[]) {
   const resolveWith = createResolver(modules);
@@ -36,7 +40,11 @@ describe("Text capability acceptance", () => {
   it("runs Text dual-author positive and rejection scenarios through shared runner", async () => {
     const outDir = await mkdtemp(join(tmpdir(), "rp-text-accept-"));
     try {
-      for (const scenario of [textPositiveScenario, textRejectionScenario]) {
+      for (const scenario of [
+        textPositiveScenario,
+        textRtlListsAndFillsScenario,
+        textRejectionScenario,
+      ]) {
         const runs = await runCapabilityScenario(scenario, {
           outputDir: outDir,
         });

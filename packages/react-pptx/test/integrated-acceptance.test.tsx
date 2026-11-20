@@ -6,6 +6,7 @@ import {
   after,
   appendJSX,
   Box,
+  Cell,
   Chart,
   CommonContainer,
   CommonNode,
@@ -13,19 +14,31 @@ import {
   createMotionScopeHandle,
   Deck,
   defineTheme,
+  emit,
   expandDocument,
   fade,
   font,
+  Group,
   Image,
+  linearGradient,
   MotionScope,
   Notes,
   observeMotion,
   P,
+  path,
+  preset,
+  radialGradient,
+  resolve,
+  Row,
+  Section,
   Shape,
   Slide,
+  SlideNumber,
   Span,
   Step,
+  Table,
   Text,
+  transitions,
   type MotionEffectObservation,
   type MotionObservation,
 } from "@react-pptx/react-pptx";
@@ -36,6 +49,7 @@ import {
   type ChartProps,
   type TextNode,
 } from "@react-pptx/react-pptx/document";
+import { paint } from "@react-pptx/react-pptx/preview";
 import { validatePptx, type FileObject } from "@react-pptx/validation";
 import { strFromU8, unzipSync } from "fflate";
 import { createContext, createElement, Fragment, useContext } from "react";
@@ -1661,5 +1675,576 @@ describe("integrated acceptance", () => {
         ({ authorId }) => authorId !== "fill-notes",
       ),
     );
+  });
+
+  it("resolves once then emits and paints a 2-page deck mixing all eight canvas capabilities, notes, sections, transitions, and motion with zero preview diagnostics", async () => {
+    const notoSc = font("Noto Sans CJK SC", [
+      {
+        weight: 400,
+        data: new Uint8Array(
+          readFileSync(
+            new URL("./assets/fonts/NotoSansSC-Regular.woff2", import.meta.url),
+          ),
+        ),
+      },
+    ]);
+    const validPng1x1 = new Uint8Array(
+      Buffer.from(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
+        "base64",
+      ),
+    );
+    const integrationTheme = defineTheme({
+      name: "Full Canvas Parity Integration",
+      colors: {
+        brand: "#1E3A8A",
+        ink: "#0F172A",
+        accent: "#2563EB",
+        accent2: "#059669",
+      },
+      fonts: { major: jost, minor: jost },
+    });
+    const morphScope = createMorphScope();
+    const heroMorph = morphScope.handle("parity-hero");
+    const openBezierArrow = path(
+      "M 10 70 C 35 10 65 10 90 45 S 135 80 150 25",
+      { viewBox: [160, 90] },
+    );
+
+    const expanded = await expandDocument(
+      createElement(
+        Deck,
+        {
+          title: "Full Canvas Parity Integration",
+          width: 960,
+          height: 540,
+          theme: integrationTheme,
+        },
+        createElement(
+          Section,
+          { name: "Canvas Parity Showcase" },
+          createElement(
+            Slide,
+            {
+              id: "parity-canvas-1",
+              background: linearGradient(135, "#F8FAFC", "#E0F2FE"),
+              transition: transitions.fade({ duration: 400 }),
+            },
+            createElement(
+              Notes,
+              { id: "p1-notes" },
+              "Speaker cues for page 1 cross-capability layout.",
+            ),
+            createElement(
+              Box,
+              {
+                id: "styled-box",
+                theme: { colors: { accent: "#0F766E" } },
+                style: {
+                  position: "absolute",
+                  left: 24,
+                  top: 20,
+                  width: 240,
+                  height: 110,
+                  padding: 12,
+                  backgroundImage: radialGradient("#DBEAFE", "#93C5FD"),
+                  borderColor: "brand",
+                  borderWidth: 2,
+                  borderStyle: "dashed",
+                  borderRadius: 14,
+                  boxShadow: {
+                    color: "#0F172A",
+                    blur: 4,
+                    distance: 3,
+                    angle: 90,
+                  },
+                  softEdge: 3,
+                },
+              },
+              createElement(
+                Text,
+                {
+                  id: "box-caption",
+                  style: { fontFamily: jost, fontSize: 15, color: "accent" },
+                },
+                "Radial Box + Theme Override",
+              ),
+            ),
+            createElement(
+              Step,
+              { n: 1 },
+              createElement(Shape, {
+                id: "morph-origin-card",
+                morphKey: heroMorph,
+                link: { id: "parity-canvas-2" },
+                enter: fade({ duration: 250 }),
+                geometry: preset("roundRect", { adj: 20000 }),
+                x: 24,
+                y: 144,
+                width: 240,
+                height: 60,
+                fill: "accent",
+                text: "Morph + Link Origin",
+                textStyle: {
+                  fontFamily: jost,
+                  fontSize: 14,
+                  color: "#FFFFFF",
+                  align: "center",
+                  verticalAlign: "middle",
+                },
+              }),
+            ),
+            createElement(
+              Group,
+              {
+                id: "outer-rot-group",
+                style: { rotate: 12 },
+              },
+              createElement(
+                Group,
+                {
+                  id: "inner-nested-group",
+                },
+                createElement(Shape, {
+                  id: "grouped-arrow-shape",
+                  geometry: preset("rightArrow", { adj1: 30000 }),
+                  x: 290,
+                  y: 30,
+                  width: 200,
+                  height: 68,
+                  fill: "#7C3AED",
+                  style: { borderColor: "#4C1D95", borderWidth: 1.5 },
+                  text: "Nested Rich Arrow",
+                  textStyle: {
+                    fontFamily: jost,
+                    fontSize: 13,
+                    color: "#FFFFFF",
+                    align: "center",
+                    verticalAlign: "middle",
+                  },
+                }),
+                createElement(Shape, {
+                  id: "grouped-open-bezier",
+                  geometry: openBezierArrow,
+                  x: 300,
+                  y: 110,
+                  width: 190,
+                  height: 68,
+                  style: {
+                    borderColor: "#0F172A",
+                    borderWidth: 2,
+                    startArrow: "oval",
+                    endArrow: "stealth",
+                  },
+                }),
+              ),
+            ),
+            createElement(Image, {
+              id: "clipped-hex-image",
+              src: validPng1x1,
+              geometry: preset("hexagon"),
+              x: 560,
+              y: 20,
+              width: 110,
+              height: 96,
+              style: {
+                borderColor: "#1D4ED8",
+                borderWidth: 2,
+                boxShadow: {
+                  color: "#1E293B",
+                  blur: 4,
+                  distance: 3,
+                  angle: 45,
+                },
+                softEdge: 2,
+              },
+            }),
+            createElement(
+              Text,
+              {
+                id: "multiscript-rich-text",
+                x: 690,
+                y: 20,
+                width: 246,
+                height: 220,
+                style: {
+                  fontFamily: jost,
+                  fontSize: 13,
+                  color: "ink",
+                  padding: 10,
+                  backgroundColor: "#FFFFFF",
+                  borderColor: "#94A3B8",
+                  borderWidth: 1,
+                },
+              },
+              createElement(
+                P,
+                { style: { align: "justify", spacingAfter: 6 } },
+                "Slide ",
+                createElement(SlideNumber, null),
+                " ",
+                createElement(
+                  Span,
+                  { style: { fontFamily: notoSc } },
+                  "汉字 あア ∑≠",
+                ),
+                " justified multi-word copy for layout parity.",
+              ),
+              createElement(
+                P,
+                {
+                  style: {
+                    list: { type: "bullet" },
+                    textDecoration: "underline",
+                    letterSpacing: 1.5,
+                  },
+                },
+                "Wide Bullet",
+              ),
+              createElement(
+                P,
+                {
+                  style: {
+                    list: { type: "number", startAt: 1 },
+                    textDecoration: "line-through",
+                    letterSpacing: -0.5,
+                    textShadow: {
+                      color: "#475569",
+                      blur: 1,
+                      distance: 1,
+                      angle: 90,
+                    },
+                  },
+                },
+                "Tight Shadowed",
+              ),
+            ),
+            createElement(
+              Table,
+              {
+                id: "parity-table",
+                x: 24,
+                y: 256,
+                width: 912,
+                columns: [180, "auto", "1fr"],
+                style: { fontFamily: jost, fontSize: 13, color: "ink" },
+              },
+              createElement(
+                Row,
+                { id: "tbl-header", style: { height: 32 } },
+                createElement(
+                  Cell,
+                  {
+                    id: "hdr-span",
+                    colSpan: 2,
+                    style: {
+                      backgroundColor: "#1E3A8A",
+                      color: "#FFFFFF",
+                      padding: 6,
+                      borderColor: "#0F172A",
+                      borderWidth: 1,
+                      borderStyle: "solid",
+                    },
+                  },
+                  "Merged Header",
+                ),
+                createElement(
+                  Cell,
+                  {
+                    id: "hdr-right",
+                    style: {
+                      backgroundColor: "#EFF6FF",
+                      padding: 6,
+                      borderColor: "#2563EB",
+                      borderWidth: 1.5,
+                      borderStyle: "dashed",
+                    },
+                  },
+                  "Auto / Fr Tracks",
+                ),
+              ),
+              createElement(
+                Row,
+                { id: "tbl-body-1", style: { height: 32 } },
+                createElement(
+                  Cell,
+                  {
+                    id: "row-span-cell",
+                    rowSpan: 2,
+                    style: {
+                      padding: 6,
+                      borderColor: "#059669",
+                      borderWidth: 1.5,
+                      borderStyle: "dotted",
+                    },
+                  },
+                  "Merged Side",
+                ),
+                createElement(
+                  Cell,
+                  {
+                    id: "overset-cell",
+                    style: {
+                      padding: 2,
+                      borderColor: "#DC2626",
+                      borderWidth: 1,
+                    },
+                  },
+                  "OVERSET_LINE_1\nOVERSET_LINE_2\nOVERSET_LINE_3\nOVERSET_LINE_4",
+                ),
+                createElement(
+                  Cell,
+                  {
+                    id: "normal-cell-1",
+                    style: {
+                      padding: 4,
+                      borderColor: "#CBD5E1",
+                      borderWidth: 1,
+                    },
+                  },
+                  "Dashed/Dotted Grid",
+                ),
+              ),
+              createElement(
+                Row,
+                { id: "tbl-body-2", style: { height: 32 } },
+                createElement(
+                  Cell,
+                  {
+                    id: "normal-cell-2",
+                    style: {
+                      padding: 6,
+                      borderColor: "#CBD5E1",
+                      borderWidth: 1,
+                    },
+                  },
+                  "Row 2 Col 2",
+                ),
+                createElement(
+                  Cell,
+                  {
+                    id: "normal-cell-3",
+                    style: {
+                      padding: 6,
+                      borderColor: "#CBD5E1",
+                      borderWidth: 1,
+                    },
+                  },
+                  "Row 2 Col 3",
+                ),
+              ),
+            ),
+          ),
+          createElement(
+            Slide,
+            {
+              id: "parity-canvas-2",
+              background: { image: validPng1x1 },
+              transition: transitions.morph({
+                duration: 800,
+                fallback: transitions.fade(),
+              }),
+            },
+            createElement(Shape, {
+              id: "morph-target-card",
+              morphKey: heroMorph,
+              geometry: preset("roundRect", { adj: 25000 }),
+              x: 24,
+              y: 20,
+              width: 280,
+              height: 64,
+              fill: "accent2",
+              text: "Morph Target Card",
+              textStyle: {
+                fontFamily: jost,
+                fontSize: 15,
+                color: "#FFFFFF",
+                align: "center",
+                verticalAlign: "middle",
+              },
+            }),
+            createElement(Chart, {
+              id: "combo-dual-axis-chart",
+              x: 24,
+              y: 100,
+              width: 520,
+              height: 416,
+              title: {
+                text: "Combo Dual Axis + Trend",
+                style: {
+                  fontSize: 15,
+                  color: "brand",
+                  textDecoration: "underline",
+                  textShadow: {
+                    color: "#0F172A",
+                    blur: 1,
+                    distance: 1,
+                    angle: 90,
+                  },
+                },
+              },
+              legend: "bottom",
+              style: { fontFamily: jost, fontSize: 11 },
+              axes: {
+                x: { kind: "category" },
+                yLeft: { kind: "value", position: "left" },
+                yRight: {
+                  kind: "value",
+                  position: "right",
+                  numberFormat: "0%",
+                },
+              },
+              groups: [
+                {
+                  kind: "column",
+                  axes: { category: "x", value: "yLeft" },
+                  data: {
+                    kind: "shared-categories",
+                    categories: ["Q1", "Q2", "Q3", "Q4"],
+                  },
+                  dataLabels: { value: true, position: "outsideEnd" },
+                  series: [
+                    {
+                      name: "Revenue",
+                      values: [40, 65, 55, 80],
+                      errorBars: { type: "fixed", value: 5 },
+                      trendlines: [
+                        {
+                          type: "linear",
+                          displayEquation: true,
+                          displayRSquared: true,
+                          line: { color: "#DC2626", width: 1.5 },
+                        },
+                      ],
+                    },
+                  ],
+                },
+                {
+                  kind: "line",
+                  axes: { category: "x", value: "yRight" },
+                  data: {
+                    kind: "shared-categories",
+                    categories: ["Q1", "Q2", "Q3", "Q4"],
+                  },
+                  series: [
+                    {
+                      name: "Margin",
+                      values: [0.18, 0.24, 0.21, 0.29],
+                    },
+                  ],
+                },
+              ],
+            }),
+            createElement(Chart, {
+              id: "multi-ring-doughnut",
+              x: 564,
+              y: 100,
+              width: 372,
+              height: 416,
+              title: "Multi-Ring Independent Categories",
+              legend: "top",
+              style: { fontFamily: jost, fontSize: 11 },
+              groups: [
+                {
+                  kind: "doughnut",
+                  holeSize: 45,
+                  data: { kind: "independent-categories" },
+                  dataLabels: { category: true, percent: true },
+                  series: [
+                    {
+                      name: "Inner",
+                      categories: ["Alpha", "Beta"],
+                      values: [60, 40],
+                    },
+                    {
+                      name: "Outer",
+                      categories: ["North", "South", "East"],
+                      values: [50, 30, 20],
+                    },
+                  ],
+                },
+              ],
+            }),
+          ),
+        ),
+      ),
+    );
+
+    const resolution = resolve(expanded);
+    assert.equal(resolution.report.diagnostics.length, 1);
+    assert.deepEqual(
+      {
+        severity: resolution.report.diagnostics[0]?.severity,
+        code: resolution.report.diagnostics[0]?.code,
+        path: resolution.report.diagnostics[0]?.path,
+      },
+      {
+        severity: "warning",
+        code: "overset",
+        path: "deck/slide[parity-canvas-1]/table[parity-table]/row[tbl-body-1]/cell[overset-cell]",
+      },
+    );
+    assert.ok(resolution.report.extensions.includes("p14"));
+    assert.ok(resolution.report.extensions.includes("p159"));
+    assert.ok(resolution.report.extensions.includes("c15"));
+
+    const emitted = emit(resolution);
+    const validation = await validatePptx(emitted.pptx, {
+      allowedExtensions: ["p14", "p159", "c15"],
+    });
+    assert.deepEqual(validation.errors, []);
+    assert.equal(validation.slides.length, 2);
+    assert.deepEqual(validation.presentation.sections, [
+      {
+        name: "Canvas Parity Showcase",
+        slideIds: ["parity-canvas-1", "parity-canvas-2"],
+      },
+    ]);
+    assert.ok(
+      validation.slides[0]?.notes?.text.text.includes(
+        "Speaker cues for page 1",
+      ),
+    );
+    assert.ok((validation.slides[0]?.animations?.length ?? 0) >= 1);
+    const fileTable = validation.slides[0]?.objects.find(
+      (o) => o.kind === "table",
+    )?.table;
+    assert.deepEqual(fileTable?.merges, [
+      { row: 0, column: 0, rowSpan: 1, colSpan: 2 },
+      { row: 1, column: 0, rowSpan: 2, colSpan: 1 },
+    ]);
+    const charts = validation.slides[1]?.objects.filter(
+      (o) => o.chart !== undefined,
+    );
+    assert.equal(charts?.length, 2);
+    assert.ok(charts?.every((c) => c.chart?.embeddedWorkbook !== undefined));
+
+    const painted = paint(resolution);
+    assert.equal(painted.pages.length, 2);
+    const pngSignature = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
+    for (const page of painted.pages) {
+      assert.deepEqual(page.diagnostics, []);
+      assert.ok(page.png !== undefined);
+      assert.ok((page.svg?.trim().length ?? 0) > 0);
+      assert.deepEqual([...page.png.subarray(0, 8)], pngSignature);
+      const view = new DataView(
+        page.png.buffer,
+        page.png.byteOffset,
+        page.png.byteLength,
+      );
+      assert.equal(view.getUint32(16, false), 960);
+      assert.equal(view.getUint32(20, false), 540);
+    }
+
+    const groupedArrow = painted.pages[0]?.nodes.find(
+      (n) => n.authorId === "grouped-arrow-shape",
+    );
+    const groupedBezier = painted.pages[0]?.nodes.find(
+      (n) => n.authorId === "grouped-open-bezier",
+    );
+    assert.ok(groupedArrow?.screenBox !== undefined);
+    assert.equal(groupedArrow?.corners?.length, 4);
+    assert.ok(groupedBezier?.screenBox !== undefined);
+    assert.equal(groupedBezier?.corners?.length, 4);
   });
 });

@@ -866,3 +866,126 @@ export const imageRejectionScenario: CapabilityScenario = {
     assert.ok((p2Pixels.data[redLeft + 2] ?? 255) < 60, author);
   },
 };
+
+export const imageSizingSoftBorderAndLinkScenario: CapabilityScenario = {
+  id: "image-single-axis-sizing-softedge-border-and-link",
+  capability: "rp:image",
+  description:
+    "Dual-author Image scenario covering width-only and height-only aspect derivation, border+softEdge overlay, large softEdge radius, and hyperlink attachment.",
+  visualCheckpoints: [
+    "Page 1 renders aspect-derived width-only and height-only images, a bordered+softEdge image, a large-softEdge image, and a linked image with zero diagnostics.",
+  ],
+  nativeCheckpoints: [
+    "Verify proportional extents, softEdge+line XML, and hyperlink relationship in PPTX.",
+  ],
+  jsx() {
+    return createElement(
+      Deck,
+      { width: 640, height: 360 },
+      createElement(
+        Slide,
+        { id: "sizing-and-links", background: "#FFFFFF" },
+        createElement(Image, {
+          id: "width-only",
+          src: samplePngBytes,
+          x: 20,
+          y: 20,
+          width: 120,
+        }),
+        createElement(Image, {
+          id: "height-only",
+          src: samplePngBytes,
+          x: 170,
+          y: 20,
+          height: 80,
+        }),
+        createElement(Image, {
+          id: "border-and-soft",
+          src: sampleJpegBytes,
+          x: 340,
+          y: 20,
+          width: 120,
+          height: 80,
+          style: {
+            borderColor: "#1E293B",
+            borderWidth: 3,
+            softEdge: 5,
+          },
+        }),
+        createElement(Image, {
+          id: "large-soft-linked",
+          src: samplePngBytes,
+          x: 490,
+          y: 20,
+          width: 100,
+          height: 80,
+          link: { url: "https://example.com" },
+          style: {
+            softEdge: 50,
+          },
+        }),
+      ),
+    );
+  },
+  document() {
+    return deck({ width: 640, height: 360 }).append(
+      slide({ id: "sizing-and-links", background: "#FFFFFF" }).append(
+        image({
+          id: "width-only",
+          src: samplePngBytes,
+          x: 20,
+          y: 20,
+          width: 120,
+        }),
+        image({
+          id: "height-only",
+          src: samplePngBytes,
+          x: 170,
+          y: 20,
+          height: 80,
+        }),
+        image({
+          id: "border-and-soft",
+          src: sampleJpegBytes,
+          x: 340,
+          y: 20,
+          width: 120,
+          height: 80,
+          style: {
+            borderColor: "#1E293B",
+            borderWidth: 3,
+            softEdge: 5,
+          },
+        }),
+        image({
+          id: "large-soft-linked",
+          src: samplePngBytes,
+          x: 490,
+          y: 20,
+          width: 100,
+          height: 80,
+          link: { url: "https://example.com" },
+          style: {
+            softEdge: 50,
+          },
+        }),
+      ),
+    );
+  },
+  assert({ author, preview, validation }) {
+    const page = preview.pages[0]!;
+    assert.deepEqual(page.diagnostics, [], author);
+    assert.ok(page.png !== undefined, author);
+    const widthOnly = page.nodes.find((n) => n.authorId === "width-only")!;
+    const heightOnly = page.nodes.find((n) => n.authorId === "height-only")!;
+    // samplePngBytes is 30x15 (2:1 aspect ratio)
+    assert.equal(widthOnly.box?.height, 60, author);
+    assert.equal(heightOnly.box?.width, 160, author);
+    expect(page.svg).toContain("<mask");
+    expect(page.svg).toContain('stroke="#1E293B"');
+    const linked = validation.slides[0]?.objects.find(
+      (obj) => obj.link !== undefined,
+    );
+    assert.ok(linked !== undefined, author);
+  },
+};

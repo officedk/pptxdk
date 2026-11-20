@@ -1,7 +1,18 @@
 import assert from "node:assert/strict";
 
-import { build, Deck, Slide } from "@react-pptx/react-pptx";
-import { build as buildDocument } from "@react-pptx/react-pptx/document";
+import {
+  build,
+  Deck,
+  emit,
+  expandDocument,
+  resolve,
+  Slide,
+} from "@react-pptx/react-pptx";
+import {
+  emit as emitDocument,
+  resolve as resolveDocument,
+} from "@react-pptx/react-pptx/document";
+import { paint } from "@react-pptx/react-pptx/preview";
 import { validatePptx } from "@react-pptx/validation";
 import { unzipSync } from "fflate";
 import { it } from "vitest";
@@ -11,14 +22,50 @@ import { createShowcaseDocument, ShowcaseDeck } from "../src/index.ts";
 import { CardsPage } from "../src/templates/cards-page.tsx";
 import { theme } from "../src/theme.ts";
 
-it("builds a byte-equivalent mixed showcase entry with a factory comparison page", async () => {
-  const jsx = await build(<ShowcaseDeck />, { embedFonts: "full" });
-  const factory = await buildDocument(await createShowcaseDocument(), {
-    embedFonts: "full",
-  });
+function assertValidPng1280x720(png: Uint8Array, label: string): void {
+  const pngSignature = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
+  assert.ok(png.byteLength > 24, `${label}: PNG too small`);
+  assert.deepEqual(
+    [...png.subarray(0, 8)],
+    pngSignature,
+    `${label}: invalid PNG signature`,
+  );
+  const view = new DataView(png.buffer, png.byteOffset, png.byteLength);
+  assert.equal(view.getUint32(16, false), 1280, `${label}: PNG width`);
+  assert.equal(view.getUint32(20, false), 720, `${label}: PNG height`);
+}
+
+it("builds and paints a byte-equivalent mixed showcase entry with a factory comparison page", async () => {
+  const jsxResolution = resolve(await expandDocument(<ShowcaseDeck />));
+  const factoryResolution = resolveDocument(await createShowcaseDocument());
+  const jsx = emit(jsxResolution, { embedFonts: "full" });
+  const factory = emitDocument(factoryResolution, { embedFonts: "full" });
+  const jsxPreview = paint(jsxResolution);
+  const factoryPreview = paint(factoryResolution);
+
+  assert.deepEqual(jsxResolution.report.diagnostics, []);
+  assert.deepEqual(factoryResolution.report.diagnostics, []);
   assert.deepEqual(jsx.report.diagnostics, []);
   assert.deepEqual(factory.report.diagnostics, []);
   assert.deepEqual(factory.report, jsx.report);
+
+  assert.equal(jsxPreview.pages.length, 16);
+  assert.equal(factoryPreview.pages.length, 16);
+  for (let i = 0; i < 16; i += 1) {
+    const jsxPage = jsxPreview.pages[i]!;
+    const factoryPage = factoryPreview.pages[i]!;
+    assert.deepEqual(jsxPage.diagnostics, [], `jsx page ${i + 1}`);
+    assert.deepEqual(factoryPage.diagnostics, [], `factory page ${i + 1}`);
+    assert.ok(jsxPage.png !== undefined, `jsx page ${i + 1} png`);
+    assert.ok(factoryPage.png !== undefined, `factory page ${i + 1} png`);
+    assertValidPng1280x720(jsxPage.png, `jsx page ${i + 1}`);
+    assertValidPng1280x720(factoryPage.png, `factory page ${i + 1}`);
+    assert.equal(
+      Buffer.compare(factoryPage.png, jsxPage.png),
+      0,
+      `PNG differs on page ${i + 1}`,
+    );
+  }
   const jsxFile = await validatePptx(jsx.pptx, {
     allowedExtensions: ["p14", "p159"],
   });

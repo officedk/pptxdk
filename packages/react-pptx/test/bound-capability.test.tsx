@@ -2401,19 +2401,34 @@ describe("bound object capability contract", () => {
       },
     );
 
-    // 3. Screen geometry depends only on resolve facts: even when a rotated member's paint() fails,
-    //    its own rotation + enclosing group rotation still produce exact corners and screenBox.
+    // 3. Screen geometry depends only on resolve facts: even when a rotated member's paint() fails
+    //    due to a corrupt image stream, its own rotation + enclosing group rotation still produce exact corners and screenBox.
+    const corruptPng = new Uint8Array(
+      Buffer.from(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
+        "base64",
+      ),
+    );
+    const idatOffset = Buffer.from(corruptPng).indexOf(Buffer.from("IDAT"));
+    corruptPng[idatOffset + 6] = (corruptPng[idatOffset + 6] ?? 0) ^ 0xff;
+    corruptPng[idatOffset + 7] = (corruptPng[idatOffset + 7] ?? 0) ^ 0xff;
+
+    const resolveWithImage = createResolver([
+      boxCapability,
+      shapeCapability,
+      groupCapability,
+      imageCapability,
+    ]);
     const doc = impDeck({ width: 480, height: 320 }).append(
       impSlide({ id: "failed-paint-transforms" }).append(
         impGroup({ id: "rg", style: { rotate: 90 } }).append(
-          impShape({
-            id: "star-member",
-            geometry: "star5",
+          impImage({
+            id: "corrupt-member",
+            src: corruptPng,
             x: 100,
             y: 100,
             width: 40,
             height: 40,
-            fill: "#2563EB",
             style: { rotate: 45 },
           }),
           impShape({
@@ -2427,25 +2442,31 @@ describe("bound object capability contract", () => {
         ),
       ),
     );
-    const resolution = resolve({ children: [doc] });
+    const resolution = resolveWithImage({ children: [doc] });
     const painted = paint(resolution);
     const page = painted.pages[0]!;
     assert.equal(page.png, undefined);
     assert.ok(
       page.diagnostics.some(
-        (d) => d.severity === "error" && d.path.includes("shape[star-member]"),
+        (d) =>
+          d.severity === "error" &&
+          /decode PNG/i.test(d.message) &&
+          d.path.includes("image[corrupt-member]"),
       ),
     );
-    // Group [100..200, 100..140] center (150, 120); star-member center (120, 120) -> rotates 90° CW to (150, 90).
-    const starNode = page.nodes.find((n) => n.authorId === "star-member")!;
+    // Group [100..200, 100..140] center (150, 120); corrupt-member center (120, 120) -> rotates 90° CW to (150, 90).
+    const corruptNode = page.nodes.find(
+      (n) => n.authorId === "corrupt-member",
+    )!;
     const halfDiag = 20 * Math.SQRT2;
-    assert.ok(starNode.screenBox !== undefined);
-    assert.ok(Math.abs(starNode.screenBox.x - (150 - halfDiag)) < 1e-6);
-    assert.ok(Math.abs(starNode.screenBox.y - (90 - halfDiag)) < 1e-6);
-    assert.ok(Math.abs(starNode.screenBox.width - 2 * halfDiag) < 1e-6);
-    assert.ok(Math.abs(starNode.screenBox.height - 2 * halfDiag) < 1e-6);
+    assert.ok(corruptNode.screenBox !== undefined);
+    assert.ok(Math.abs(corruptNode.screenBox.x - (150 - halfDiag)) < 1e-6);
+    assert.ok(Math.abs(corruptNode.screenBox.y - (90 - halfDiag)) < 1e-6);
+    assert.ok(Math.abs(corruptNode.screenBox.width - 2 * halfDiag) < 1e-6);
+    assert.ok(Math.abs(corruptNode.screenBox.height - 2 * halfDiag) < 1e-6);
 
-    // 4. resolve() without emit options + independent emit() with subset font embedding & Shape inline text.
+    // 4. resolve() without emit options + independent emit() with subset font embedding & Shape inline text,
+    //    even when a sibling corrupt image fails paint().
     const jostFont = impFont("Jost*", [
       {
         weight: 400,
@@ -2476,14 +2497,25 @@ describe("bound object capability contract", () => {
             text: "Resolved once",
           }),
         ),
+        impImage({
+          id: "corrupt-blocker",
+          src: corruptPng,
+          x: 10,
+          y: 120,
+          width: 20,
+          height: 20,
+        }),
       ),
     );
-    const textResolution = resolve({ children: [textShapeDoc] });
+    const textResolution = resolveWithImage({ children: [textShapeDoc] });
     const textPainted = paint(textResolution);
     assert.equal(textPainted.pages[0]?.png, undefined);
     assert.ok(
       textPainted.pages[0]?.diagnostics.some(
-        (d) => d.severity === "error" && d.path.includes("shape[shaped-text]"),
+        (d) =>
+          d.severity === "error" &&
+          /decode PNG/i.test(d.message) &&
+          d.path.includes("image[corrupt-blocker]"),
       ),
     );
     const textEmitted = emit(textResolution, { embedFonts: "subset" });

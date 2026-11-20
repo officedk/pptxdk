@@ -188,7 +188,7 @@ describe("Slice 3: formal static preview public entrypoints and runtime isolatio
     );
   });
 
-  it("rejects unsupported chart kinds on selected pages while rendering all migrated object capabilities without silently omitting them", async () => {
+  it("rejects missing glyphs on selected pages while rendering all migrated object capabilities without silently omitting them", async () => {
     const jostFont = font("Jost*", [
       {
         weight: 400,
@@ -222,21 +222,14 @@ describe("Slice 3: formal static preview public entrypoints and runtime isolatio
           }),
         ),
       ),
-      slide({ id: "with-unsupported-chart" }).append(
-        chart({
-          id: "c1",
+      slide({ id: "with-missing-glyph" }).append(
+        text("汉", {
+          id: "t1",
           x: 10,
           y: 10,
           width: 200,
-          height: 120,
-          style: { fontFamily: jostFont, fontSize: 12 },
-          groups: [
-            {
-              kind: "line",
-              data: { kind: "shared-categories", categories: ["A", "B"] },
-              series: [{ name: "S", values: [1, 2] }],
-            },
-          ],
+          height: 60,
+          style: { fontFamily: jostFont, fontSize: 16 },
         }),
       ),
       slide({ id: "ok-box" }).append(
@@ -281,8 +274,10 @@ describe("Slice 3: formal static preview public entrypoints and runtime isolatio
     expect(result.pages[1]?.png).toBeDefined();
     expect(result.pages[1]?.diagnostics).toEqual([]);
     expect(result.pages[2]?.png).toBeUndefined();
+    expect(result.pages[2]?.svg).toBeUndefined();
     expect(result.pages[2]?.diagnostics[0]?.severity).toBe("error");
-    expect(result.pages[2]?.diagnostics[0]?.path).toContain("chart[c1]");
+    expect(result.pages[2]?.diagnostics[0]?.message).toMatch(/visible glyph/i);
+    expect(result.pages[2]?.diagnostics[0]?.path).toContain("text[t1]");
     expect(result.pages[3]?.png).toBeDefined();
     expect(result.pages[3]?.diagnostics).toEqual([]);
     expect(result.pages[4]?.png).toBeDefined();

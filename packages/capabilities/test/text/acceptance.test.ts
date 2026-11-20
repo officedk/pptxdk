@@ -1,0 +1,138 @@
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
+import { documentCapabilities, font } from "@react-pptx/capabilities/document";
+import { Text } from "@react-pptx/capabilities/text-elements";
+import type { CapabilityModule, CommonNode } from "@react-pptx/core";
+import { createResolver } from "@react-pptx/core/build";
+import { RichTextContainer } from "@react-pptx/core/document";
+import { emit } from "@react-pptx/emit";
+import { paint } from "@react-pptx/preview";
+import { Deck, Slide, expandDocument } from "@react-pptx/react";
+import { validatePptx } from "@react-pptx/validation";
+import { createElement } from "react";
+import { describe, expect, it } from "vitest";
+
+import { runCapabilityScenario } from "../acceptance-runner.ts";
+import { textPositiveScenario, textRejectionScenario } from "./scenarios.ts";
+
+function previewDocWith(modules: readonly CapabilityModule[]) {
+  const resolveWith = createResolver(modules);
+  return async (document: CommonNode) => {
+    const resolution = resolveWith(document);
+    return {
+      resolution,
+      query: resolution.query,
+      ...emit(resolution),
+      ...paint(resolution),
+    };
+  };
+}
+
+describe("Text capability acceptance", () => {
+  it("runs Text dual-author positive and rejection scenarios through shared runner", async () => {
+    const outDir = await mkdtemp(join(tmpdir(), "rp-text-accept-"));
+    try {
+      for (const scenario of [textPositiveScenario, textRejectionScenario]) {
+        const runs = await runCapabilityScenario(scenario, {
+          outputDir: outDir,
+        });
+        assert.equal(runs.length, 2);
+        assert.deepEqual(
+          runs.map((r) => r.author),
+          ["jsx", "document"],
+        );
+      }
+    } finally {
+      await rm(outDir, { recursive: true, force: true });
+    }
+  }, 15_000);
+
+  it("supports JSX expansion followed by imperative Text edit, rebuild, and preview without mutating prior outputs", async () => {
+    const jostFont = font("Jost*", [
+      {
+        weight: 400,
+        data: readFileSync(
+          new URL("../assets/fonts/Jost-400-Book.ttf", import.meta.url),
+        ),
+      },
+    ]);
+    const expanded = await expandDocument(
+      createElement(
+        Deck,
+        { width: 480, height: 270 },
+        createElement(
+          Slide,
+          { id: "handoff" },
+          createElement(
+            Text,
+            {
+              id: "headline",
+              x: 24,
+              y: 24,
+              width: 200,
+              style: {
+                fontFamily: jostFont,
+                fontSize: 20,
+                color: "#1E293B",
+                padding: 8,
+                backgroundColor: "#F1F5F9",
+              },
+            },
+            "Initial title",
+          ),
+        ),
+      ),
+    );
+
+    const previewDocument = previewDocWith(documentCapabilities);
+    const first = await previewDocument(expanded);
+    assert.deepEqual(first.pages[0]?.diagnostics, []);
+    assert.deepEqual((await validatePptx(first.pptx)).errors, []);
+    const firstPng = first.pages[0].png!.slice();
+    const firstSvg = first.pages[0].svg!;
+    const firstPptx = first.pptx.slice();
+    const firstReportSnapshot = JSON.stringify(first.report);
+    const firstHeight = first.query
+      .getSlide("handoff")
+      .get("headline")
+      .observe().box!.height;
+
+    const headline = expanded.query
+      .get("handoff")
+      .getAs(
+        "headline",
+        (node): node is RichTextContainer => node instanceof RichTextContainer,
+      );
+    headline.content("Updated longer headline wrapping across multiple lines");
+    headline.style({ color: "#059669" });
+
+    const second = await previewDocument(expanded);
+    assert.deepEqual(second.pages[0]?.diagnostics, []);
+    assert.deepEqual((await validatePptx(second.pptx)).errors, []);
+    assert.equal(
+      second.query.getSlide("handoff").get("headline").observe().text,
+      "Updated longer headline wrapping across multiple lines",
+    );
+    const secondHeight = second.query
+      .getSlide("handoff")
+      .get("headline")
+      .observe().box!.height;
+    assert.ok(secondHeight > firstHeight);
+    expect(second.pages[0]?.svg).toContain('fill="#059669"');
+    assert.notDeepEqual(second.pages[0]?.png, firstPng);
+
+    // Prior BuildResult and PreviewResult remain unchanged.
+    assert.equal(first.pages[0]?.svg, firstSvg);
+    assert.deepEqual(first.pages[0]?.png, firstPng);
+    assert.deepEqual(first.pptx, firstPptx);
+    assert.equal(JSON.stringify(first.report), firstReportSnapshot);
+    assert.equal(
+      first.query.getSlide("handoff").get("headline").observe().text,
+      "Initial title",
+    );
+  });
+});

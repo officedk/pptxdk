@@ -23,13 +23,13 @@ import { shapeCapability } from "@react-pptx/capabilities/shape";
 import { Shape } from "@react-pptx/capabilities/shape-elements";
 import { textCapability } from "@react-pptx/capabilities/text";
 import { P, Text } from "@react-pptx/capabilities/text-elements";
-import { BuildError } from "@react-pptx/core";
+import { BuildError, createMorphScope } from "@react-pptx/core";
 import { createResolver } from "@react-pptx/core/build";
 import { emit } from "@react-pptx/emit";
 import { paint } from "@react-pptx/preview";
 import { Deck, Slide, expandDocument } from "@react-pptx/react";
 import { validatePptx } from "@react-pptx/validation";
-import { createElement } from "react";
+import { createElement, type ComponentType } from "react";
 import { describe, it } from "vitest";
 
 import { runCapabilityScenario } from "../acceptance-runner.ts";
@@ -205,6 +205,33 @@ describe("Motion capability acceptance & bound slide contract", () => {
       () => resolve(invalidDoc),
       (error: unknown) =>
         error instanceof BuildError && error.diagnostics.length > 0,
+    );
+  });
+
+  it("delegates transparent declaration prop validation (including morphKey) to compileDeclaration without core prop readbacks", async () => {
+    const morphKey = createMorphScope().handle("step-key");
+    const resolve = createResolver([motionCapability, shapeCapability]);
+    const doc = await expandDocument(
+      createElement(
+        Deck,
+        null,
+        createElement(
+          Slide,
+          { id: "transparent-own-validation" },
+          createElement(
+            Step as unknown as ComponentType<Record<string, unknown>>,
+            { n: 1, morphKey },
+            createElement(Shape, { x: 0, y: 0, width: 40, height: 20 }),
+          ),
+        ),
+      ),
+    );
+    assert.throws(
+      () => resolve(doc),
+      (error: unknown) =>
+        error instanceof BuildError &&
+        error.diagnostics.map(({ code }) => code).join(",") ===
+          "unknown-parameter",
     );
   });
 });

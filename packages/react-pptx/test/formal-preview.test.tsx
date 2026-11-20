@@ -281,12 +281,7 @@ describe("Slice 3: formal static preview public entrypoints and runtime isolatio
     expect(result.pages[3]?.png).toBeDefined();
     expect(result.pages[3]?.diagnostics).toEqual([]);
     expect(result.pages[4]?.png).toBeDefined();
-    expect(result.pages[4]?.diagnostics).toEqual([
-      expect.objectContaining({
-        severity: "warning",
-        path: "deck/slide[ok-column-chart]/chart[col1]",
-      }),
-    ]);
+    expect(result.pages[4]?.diagnostics).toEqual([]);
 
     const jsxResult = await previewJsx(
       createElement(

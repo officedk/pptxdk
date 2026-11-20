@@ -196,7 +196,7 @@ function chartCells(parsed: ParsedChart): ChartCells {
   for (const [groupIndex, group] of parsed.groups.entries()) {
     if (group.kind === "scatter") continue;
     if (group.data.kind === "independent-categories") continue;
-    if (group.axes === undefined) {
+    if (group.kind === "pie" || group.kind === "doughnut") {
       // Pie and doughnut groups have no axis identity; only one group may exist.
       axislessCategoryColumns.set(groupIndex, {
         column: nextColumn,
@@ -240,8 +240,7 @@ function chartCells(parsed: ParsedChart): ChartCells {
             if (
               value !== null &&
               value !== undefined &&
-              formatCode !== "General" &&
-              group.axes !== undefined
+              formatCode !== "General"
             ) {
               projectedScatterXAxes.add(group.axes.x.id);
             }
@@ -282,7 +281,7 @@ function chartCells(parsed: ParsedChart): ChartCells {
       continue;
     }
     const category =
-      group.axes === undefined
+      group.kind === "pie" || group.kind === "doughnut"
         ? axislessCategoryColumns.get(groupIndex)
         : categoryColumns.get(group.axes.category.name);
     if (category === undefined) {
@@ -1057,7 +1056,8 @@ function categoryChartSeries(
   const lineChart = kind === "line";
   const pie = kind === "pie" || kind === "doughnut";
   const itemShape = seriesShape(kind, series.color, series.line, theme);
-  const seriesExplosion = series.explosion ?? group.explosion;
+  const seriesExplosion =
+    series.explosion ?? (pie ? group.explosion : undefined);
   const points = Object.entries<ChartPoint>(series.points ?? {}).flatMap(
     ([pointIndex, point]) => {
       const shape = pointShape(kind, point, theme);
@@ -1285,13 +1285,25 @@ function scatterChartSeries(
   );
 }
 
+function assertNever(value: never): never {
+  throw new Error(`Unhandled chart model variant: ${JSON.stringify(value)}`);
+}
+
 function grouping(
-  stacking: "stacked" | "percent" | undefined,
-  fallback: string,
+  stacking: "clustered" | "standard" | "stacked" | "percent",
 ): string {
-  if (stacking === "stacked") return "stacked";
-  if (stacking === "percent") return "percentStacked";
-  return fallback;
+  switch (stacking) {
+    case "clustered":
+      return "clustered";
+    case "standard":
+      return "standard";
+    case "stacked":
+      return "stacked";
+    case "percent":
+      return "percentStacked";
+    default:
+      return assertNever(stacking);
+  }
 }
 
 function scatterStyle(
@@ -1323,98 +1335,139 @@ function chartGroup(
     }
     return value;
   };
-  if (group.kind === "scatter") {
-    const items = group.series.map((item) =>
-      scatterChartSeries(
-        group,
-        item,
-        seriesCell(item.seriesIndex),
-        groupIndex,
-        textStyles,
-        channels,
-        theme,
-      ),
-    );
-    if (group.axes === undefined) {
-      throw new Error("Scatter chart group is missing resolved X and Y axes");
-    }
-    return el(
-      "c:scatterChart",
-      null,
-      el("c:scatterStyle", { val: scatterStyle(group) }),
-      el("c:varyColors", { val: false }),
-      items,
-      el("c:axId", { val: group.axes.x.id }),
-      el("c:axId", { val: group.axes.y.id }),
-    );
-  }
-  const items = group.series.map((item) =>
-    categoryChartSeries(
-      group,
-      item,
-      seriesCell(item.seriesIndex),
-      groupIndex,
-      textStyles,
-      channels,
-      theme,
-    ),
-  );
-  const axes =
-    group.axes === undefined
-      ? []
-      : [
-          el("c:axId", { val: group.axes.category.id }),
-          el("c:axId", { val: group.axes.value.id }),
-        ];
   switch (group.kind) {
+    case "scatter": {
+      const items = group.series.map((item) =>
+        scatterChartSeries(
+          group,
+          item,
+          seriesCell(item.seriesIndex),
+          groupIndex,
+          textStyles,
+          channels,
+          theme,
+        ),
+      );
+      return el(
+        "c:scatterChart",
+        null,
+        el("c:scatterStyle", { val: scatterStyle(group) }),
+        el("c:varyColors", { val: false }),
+        items,
+        el("c:axId", { val: group.axes.x.id }),
+        el("c:axId", { val: group.axes.y.id }),
+      );
+    }
     case "column":
-    case "bar":
+    case "bar": {
+      const items = group.series.map((item) =>
+        categoryChartSeries(
+          group,
+          item,
+          seriesCell(item.seriesIndex),
+          groupIndex,
+          textStyles,
+          channels,
+          theme,
+        ),
+      );
+      const axes = [
+        el("c:axId", { val: group.axes.category.id }),
+        el("c:axId", { val: group.axes.value.id }),
+      ];
       return el(
         "c:barChart",
         null,
         el("c:barDir", { val: group.kind === "bar" ? "bar" : "col" }),
-        el("c:grouping", { val: grouping(group.stacking, "clustered") }),
+        el("c:grouping", { val: grouping(group.stacking) }),
         el("c:varyColors", { val: false }),
         items,
-        el("c:gapWidth", { val: Math.round(group.gapWidth ?? 150) }),
+        el("c:gapWidth", { val: Math.round(group.gapWidth) }),
         group.overlap !== undefined
           ? el("c:overlap", { val: Math.round(group.overlap) })
-          : group.stacking === undefined
+          : group.stacking === "clustered"
             ? undefined
             : el("c:overlap", { val: 100 }),
         axes,
       );
-    case "line":
+    }
+    case "line": {
+      const items = group.series.map((item) =>
+        categoryChartSeries(
+          group,
+          item,
+          seriesCell(item.seriesIndex),
+          groupIndex,
+          textStyles,
+          channels,
+          theme,
+        ),
+      );
+      const axes = [
+        el("c:axId", { val: group.axes.category.id }),
+        el("c:axId", { val: group.axes.value.id }),
+      ];
       return el(
         "c:lineChart",
         null,
-        el("c:grouping", { val: grouping(group.stacking, "standard") }),
+        el("c:grouping", { val: grouping(group.stacking) }),
         el("c:varyColors", { val: false }),
         items,
         el("c:marker", { val: true }),
         axes,
       );
-    case "area":
+    }
+    case "area": {
+      const items = group.series.map((item) =>
+        categoryChartSeries(
+          group,
+          item,
+          seriesCell(item.seriesIndex),
+          groupIndex,
+          textStyles,
+          channels,
+          theme,
+        ),
+      );
+      const axes = [
+        el("c:axId", { val: group.axes.category.id }),
+        el("c:axId", { val: group.axes.value.id }),
+      ];
       return el(
         "c:areaChart",
         null,
-        el("c:grouping", { val: grouping(group.stacking, "standard") }),
+        el("c:grouping", { val: grouping(group.stacking) }),
         el("c:varyColors", { val: false }),
         items,
         axes,
       );
+    }
     case "pie":
-    case "doughnut":
+    case "doughnut": {
+      const items = group.series.map((item) =>
+        categoryChartSeries(
+          group,
+          item,
+          seriesCell(item.seriesIndex),
+          groupIndex,
+          textStyles,
+          channels,
+          theme,
+        ),
+      );
       return el(
         group.kind === "pie" ? "c:pieChart" : "c:doughnutChart",
         null,
         el("c:varyColors", { val: true }),
         items,
-        el("c:firstSliceAng", { val: group.firstSliceAngle ?? 0 }),
+        el("c:firstSliceAng", { val: group.firstSliceAngle }),
         group.kind === "doughnut"
-          ? el("c:holeSize", { val: group.holeSize ?? 50 })
+          ? el("c:holeSize", { val: group.holeSize })
           : undefined,
       );
+    }
+    default:
+      return assertNever(group);
   }
 }
 
@@ -1492,7 +1545,13 @@ function axisCrossBetween(
   let categoryUse = false;
   let areaOnly = true;
   for (const group of parsed.groups) {
-    if (group.kind === "scatter" || group.axes === undefined) continue;
+    if (
+      group.kind === "scatter" ||
+      group.kind === "pie" ||
+      group.kind === "doughnut"
+    ) {
+      continue;
+    }
     if (group.axes.value !== axis) continue;
     categoryUse = true;
     if (group.kind !== "area") areaOnly = false;
@@ -1510,59 +1569,80 @@ function axisXml(
   textStyles: ChartTextStyleXml,
   theme: ThemeContext,
 ): XmlElement {
-  const spec = axis.spec;
-  const category = spec.kind === "category";
-  const valueSpec = category ? undefined : spec;
-  // Source-formatted X cells also affect linked ticks, so keep an unspecified X axis at General.
-  const isolateDefaultXFormat =
-    !category &&
-    valueSpec?.numberFormat === undefined &&
-    projectedScatterXAxes.has(axis.id);
-  return el(
-    category ? "c:catAx" : "c:valAx",
-    null,
-    el("c:axId", { val: axis.id }),
-    axisScaling(spec, !category),
-    el("c:delete", { val: spec.visible === false }),
-    // axPos is a nominal side; an internal crossesAt/autoZero control can still
-    // place the axis away from a plot-area edge.
-    el("c:axPos", { val: axisPositionCodes[axis.position] }),
-    gridlines(spec, "major", theme),
-    gridlines(spec, "minor", theme),
-    axisTitle(spec, textStyles, axis.name),
-    el("c:numFmt", {
-      formatCode:
-        category || isolateDefaultXFormat
-          ? "General"
-          : (valueSpec?.numberFormat ?? "General"),
-      sourceLinked:
-        category ||
-        (valueSpec?.numberFormat === undefined && !isolateDefaultXFormat),
-    }),
-    el("c:majorTickMark", { val: spec.majorTickMark ?? "none" }),
-    el("c:minorTickMark", { val: spec.minorTickMark ?? "none" }),
-    el("c:tickLblPos", { val: spec.tickLabelPosition ?? "nextTo" }),
-    lineXml(spec.line, theme),
-    raw(textStyles.axisStyles?.get(axis.name)),
-    el("c:crossAx", { val: axis.crossAxisId }),
-    axisCrossing(axis.crossing),
-    category
-      ? [
+  switch (axis.kind) {
+    case "category": {
+      const spec = axis.spec;
+      return el(
+        "c:catAx",
+        null,
+        el("c:axId", { val: axis.id }),
+        axisScaling(spec, false),
+        el("c:delete", { val: spec.visible === false }),
+        el("c:axPos", { val: axisPositionCodes[axis.position] }),
+        gridlines(spec, "major", theme),
+        gridlines(spec, "minor", theme),
+        axisTitle(spec, textStyles, axis.name),
+        el("c:numFmt", {
+          formatCode: "General",
+          sourceLinked: true,
+        }),
+        el("c:majorTickMark", { val: spec.majorTickMark ?? "none" }),
+        el("c:minorTickMark", { val: spec.minorTickMark ?? "none" }),
+        el("c:tickLblPos", { val: spec.tickLabelPosition ?? "nextTo" }),
+        lineXml(spec.line, theme),
+        raw(textStyles.axisStyles?.get(axis.name)),
+        el("c:crossAx", { val: axis.crossAxisId }),
+        axisCrossing(axis.crossing),
+        [
           el("c:auto", { val: true }),
           el("c:lblAlgn", { val: "ctr" }),
           el("c:lblOffset", { val: 100 }),
           el("c:noMultiLvlLbl", { val: false }),
-        ]
-      : [
-          el("c:crossBetween", { val: axisCrossBetween(parsed, axis) }),
-          valueSpec?.majorUnit === undefined
-            ? undefined
-            : el("c:majorUnit", { val: valueSpec.majorUnit }),
-          valueSpec?.minorUnit === undefined
-            ? undefined
-            : el("c:minorUnit", { val: valueSpec.minorUnit }),
         ],
-  );
+      );
+    }
+    case "value": {
+      const spec = axis.spec;
+      // Source-formatted X cells also affect linked ticks, so keep an unspecified X axis at General.
+      const isolateDefaultXFormat =
+        spec.numberFormat === undefined && projectedScatterXAxes.has(axis.id);
+      return el(
+        "c:valAx",
+        null,
+        el("c:axId", { val: axis.id }),
+        axisScaling(spec, true),
+        el("c:delete", { val: spec.visible === false }),
+        el("c:axPos", { val: axisPositionCodes[axis.position] }),
+        gridlines(spec, "major", theme),
+        gridlines(spec, "minor", theme),
+        axisTitle(spec, textStyles, axis.name),
+        el("c:numFmt", {
+          formatCode: isolateDefaultXFormat
+            ? "General"
+            : (spec.numberFormat ?? "General"),
+          sourceLinked: spec.numberFormat === undefined && !isolateDefaultXFormat,
+        }),
+        el("c:majorTickMark", { val: spec.majorTickMark ?? "none" }),
+        el("c:minorTickMark", { val: spec.minorTickMark ?? "none" }),
+        el("c:tickLblPos", { val: spec.tickLabelPosition ?? "nextTo" }),
+        lineXml(spec.line, theme),
+        raw(textStyles.axisStyles?.get(axis.name)),
+        el("c:crossAx", { val: axis.crossAxisId }),
+        axisCrossing(axis.crossing),
+        [
+          el("c:crossBetween", { val: axisCrossBetween(parsed, axis) }),
+          spec.majorUnit === undefined
+            ? undefined
+            : el("c:majorUnit", { val: spec.majorUnit }),
+          spec.minorUnit === undefined
+            ? undefined
+            : el("c:minorUnit", { val: spec.minorUnit }),
+        ],
+      );
+    }
+    default:
+      return assertNever(axis);
+  }
 }
 
 function axes(
@@ -1581,6 +1661,7 @@ const legendPositions = {
   bottom: "b",
   left: "l",
   right: "r",
+  topRight: "tr",
 } as const;
 
 /**

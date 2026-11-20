@@ -660,7 +660,7 @@ export type ChartBase = MotionProps &
      * entries beyond that ring's category count are deleted, and other rings rely on their
      * own data labels. No legend can select or merge another ring's category domain.
      */
-    readonly legend?: false | "top" | "bottom" | "left" | "right";
+    readonly legend?: false | "top" | "bottom" | "left" | "right" | "topRight";
     /** Internal plot area position relative to chart box, in px. */
     readonly plotArea?: {
       readonly left: number;

@@ -28,7 +28,12 @@ import { createElement, type ReactNode } from "react";
 import { describe, it } from "vitest";
 
 import { runCapabilityScenario } from "../acceptance-runner.ts";
-import { chartPositiveScenario, chartRejectionScenario } from "./scenarios.ts";
+import {
+  chartAxesAndCompactScenario,
+  chartBarColumnVariantsScenario,
+  chartPositiveScenario,
+  chartRejectionScenario,
+} from "./scenarios.ts";
 
 function previewDocWith(modules: readonly CapabilityModule[]) {
   const resolveWith = createResolver(modules);
@@ -60,7 +65,12 @@ describe("Chart capability acceptance", () => {
   it("runs Chart dual-author positive and rejection scenarios through shared runner", async () => {
     const outDir = await mkdtemp(join(tmpdir(), "rp-chart-accept-"));
     try {
-      for (const scenario of [chartPositiveScenario, chartRejectionScenario]) {
+      for (const scenario of [
+        chartPositiveScenario,
+        chartAxesAndCompactScenario,
+        chartBarColumnVariantsScenario,
+        chartRejectionScenario,
+      ]) {
         const runs = await runCapabilityScenario(scenario, {
           outputDir: outDir,
         });

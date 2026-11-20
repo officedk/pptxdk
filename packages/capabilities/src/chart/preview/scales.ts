@@ -8,6 +8,12 @@ import type {
   ParsedValueAxis,
 } from "../chart-model.ts";
 import type { ChartDisplayBlanksAs } from "../chart-types.ts";
+import { computeErrorBarBounds } from "./error-bars.ts";
+import {
+  collectCategoryFitPoints,
+  collectScatterFitPoints,
+  fitTrendline,
+} from "./trendlines.ts";
 import {
   assertNever,
   type AxisScale,
@@ -125,6 +131,31 @@ function collectAxisValues(
                 values.push(0);
               }
             }
+            for (const tl of series.trendlines ?? []) {
+              if (tl.forward === undefined && tl.backward === undefined) {
+                continue;
+              }
+              const model = fitTrendline(
+                collectCategoryFitPoints(series.values),
+                tl,
+              );
+              if (model?.kind === "curve") {
+                for (const xSample of [model.xMin, model.xMax]) {
+                  const ySample = model.evalY(xSample);
+                  if (Number.isFinite(ySample)) values.push(ySample);
+                }
+              }
+            }
+            if (series.errorBars !== undefined) {
+              const bounds = computeErrorBarBounds(
+                series.errorBars,
+                series.values,
+              );
+              for (const b of bounds) {
+                if (b.hasMinus && Number.isFinite(b.low)) values.push(b.low);
+                if (b.hasPlus && Number.isFinite(b.high)) values.push(b.high);
+              }
+            }
           }
         }
         break;
@@ -150,6 +181,61 @@ function collectAxisValues(
               Number.isFinite(yVal)
             ) {
               values.push(isX ? xVal : yVal);
+            }
+          }
+          for (const tl of series.trendlines ?? []) {
+            if (tl.forward === undefined && tl.backward === undefined) {
+              continue;
+            }
+            const model = fitTrendline(
+              collectScatterFitPoints(series.x, series.y),
+              tl,
+            );
+            if (model?.kind === "curve") {
+              if (isX) {
+                if (Number.isFinite(model.xMin)) values.push(model.xMin);
+                if (Number.isFinite(model.xMax)) values.push(model.xMax);
+              }
+              if (isY) {
+                for (const xSample of [model.xMin, model.xMax]) {
+                  const ySample = model.evalY(xSample);
+                  if (Number.isFinite(ySample)) values.push(ySample);
+                }
+              }
+            }
+          }
+          const skipMask = series.x.map((xv, i) => {
+            const yv = series.y[i];
+            if (blanksZero) return false;
+            return (
+              xv === null ||
+              xv === undefined ||
+              !Number.isFinite(xv) ||
+              yv === null ||
+              yv === undefined ||
+              !Number.isFinite(yv)
+            );
+          });
+          if (isX && series.errorBars?.x !== undefined) {
+            const bounds = computeErrorBarBounds(
+              series.errorBars.x,
+              series.x.map((v) => (v === null && blanksZero ? 0 : v)),
+              { skipMask },
+            );
+            for (const b of bounds) {
+              if (b.hasMinus && Number.isFinite(b.low)) values.push(b.low);
+              if (b.hasPlus && Number.isFinite(b.high)) values.push(b.high);
+            }
+          }
+          if (isY && series.errorBars?.y !== undefined) {
+            const bounds = computeErrorBarBounds(
+              series.errorBars.y,
+              series.y.map((v) => (v === null && blanksZero ? 0 : v)),
+              { skipMask },
+            );
+            for (const b of bounds) {
+              if (b.hasMinus && Number.isFinite(b.low)) values.push(b.low);
+              if (b.hasPlus && Number.isFinite(b.high)) values.push(b.high);
             }
           }
         }

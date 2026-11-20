@@ -43,6 +43,7 @@ export function renderColumnOrBarGroup(options: {
     readonly seriesName: string;
     readonly pointIndex: number;
     readonly rawValue: number;
+    readonly plottedValue?: number;
     readonly percent?: number;
     readonly bandStart: number;
     readonly bandThickness: number;
@@ -101,6 +102,9 @@ export function renderColumnOrBarGroup(options: {
       groupSeriesIndex: params.groupSeriesIndex,
       pointIndex: params.pointIndex,
       value: params.rawValue,
+      ...(params.plottedValue === undefined
+        ? {}
+        : { plottedValue: params.plottedValue }),
       category: categories[params.pointIndex] ?? "",
       seriesName: params.seriesName,
       x,
@@ -205,6 +209,7 @@ export function renderColumnOrBarGroup(options: {
           seriesName: series.name,
           pointIndex: catIdx,
           rawValue: raw,
+          plottedValue: endVal,
           ...(isPercent ? { percent: Math.abs(raw) / totalAbs } : {}),
           bandStart,
           bandThickness: barThickness,

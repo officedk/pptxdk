@@ -717,7 +717,522 @@ describe("Chart static preview, layout parity, and textCapability isolation", ()
     }
   });
 
-  it("rejects remaining unsupported chart kinds/features and missing font files with located errors", async () => {
+  it("wires seriesName and separator through resolve, emit, validatePptx, and preview", async () => {
+    const previewDoc = runDocPreview(documentCapabilities);
+    const doc = deck({ width: 640, height: 360 }).append(
+      slide({ id: "data-label-fields", background: "#FFFFFF" }).append(
+        chart({
+          id: "col-labels",
+          x: 20,
+          y: 20,
+          width: 290,
+          height: 300,
+          style: { fontFamily: jostFont, fontSize: 12 },
+          groups: [
+            {
+              kind: "column",
+              data: { kind: "shared-categories", categories: ["Q1", "Q2"] },
+              series: [
+                {
+                  name: "Rev",
+                  values: [12, 24],
+                },
+              ],
+              dataLabels: {
+                seriesName: true,
+                category: true,
+                value: true,
+                separator: " - ",
+              },
+            },
+          ],
+        }),
+        chart({
+          id: "scatter-labels",
+          x: 330,
+          y: 20,
+          width: 290,
+          height: 300,
+          style: { fontFamily: jostFont, fontSize: 12 },
+          groups: [
+            {
+              kind: "scatter",
+              data: { kind: "xy" },
+              series: [
+                {
+                  name: "Obs",
+                  x: [1, 2],
+                  y: [5, 10],
+                },
+              ],
+              dataLabels: {
+                seriesName: true,
+                xValue: true,
+                value: true,
+                separator: "\n",
+              },
+            },
+          ],
+        }),
+      ),
+    );
+
+    const result = await previewDoc(doc);
+    assert.deepEqual((await validatePptx(result.pptx)).errors, []);
+    assert.deepEqual(result.pages[0]?.diagnostics, []);
+    assert.ok(result.pages[0]?.png !== undefined);
+    const files = unzipSync(result.pptx);
+    const chart1 = strFromU8(files["ppt/charts/chart1.xml"]!);
+    const chart2 = strFromU8(files["ppt/charts/chart2.xml"]!);
+    expect(chart1).toContain('<c:showSerName val="1"/>');
+    expect(chart1).toContain("<c:separator> - </c:separator>");
+    expect(chart2).toContain('<c:showSerName val="1"/>');
+    expect(chart2).toContain("<c:separator>&#xA;</c:separator>");
+  });
+
+  it("renders pie and single/multi-ring doughnut charts with 360-degree slice, explosion, leaderLines, and 3-level data labels at zero diagnostics", async () => {
+    const previewDoc = runDocPreview(documentCapabilities);
+    const pieDoc = deck({ width: 640, height: 360 }).append(
+      slide({ id: "pie-doughnut", background: "#FFFFFF" }).append(
+        chart({
+          id: "pie-single-full",
+          x: 16,
+          y: 20,
+          width: 190,
+          height: 150,
+          title: "Full 360",
+          style: { fontFamily: jostFont, fontSize: 11 },
+          groups: [
+            {
+              kind: "pie",
+              firstSliceAngle: 45,
+              data: { kind: "shared-categories", categories: ["All"] },
+              series: [
+                {
+                  name: "Only",
+                  values: [100],
+                  points: { 0: { color: "#2563EB" } },
+                },
+              ],
+              dataLabels: { percent: true, position: "center" },
+            },
+          ],
+        }),
+        chart({
+          id: "pie-leader-explosion",
+          x: 220,
+          y: 20,
+          width: 200,
+          height: 150,
+          legend: "bottom",
+          style: { fontFamily: jostFont, fontSize: 10 },
+          groups: [
+            {
+              kind: "pie",
+              firstSliceAngle: 90,
+              explosion: 8,
+              data: { kind: "shared-categories", categories: ["A", "B", "C"] },
+              series: [
+                {
+                  name: "Share",
+                  values: [50, 30, 20],
+                  points: {
+                    0: {
+                      color: "#10B981",
+                      explosion: 18,
+                      labelColor: "#FFFFFF",
+                      dataLabels: { position: "insideEnd", percent: true },
+                    },
+                    1: {
+                      color: "#F59E0B",
+                      dataLabels: false,
+                    },
+                  },
+                },
+              ],
+              dataLabels: {
+                category: true,
+                percent: true,
+                position: "outsideEnd",
+                leaderLines: { color: "#1E293B", width: 1.5 },
+              },
+            },
+          ],
+        }),
+        chart({
+          id: "doughnut-multi-ring",
+          x: 432,
+          y: 20,
+          width: 192,
+          height: 300,
+          legend: "bottom",
+          style: { fontFamily: jostFont, fontSize: 10 },
+          groups: [
+            {
+              kind: "doughnut",
+              holeSize: 40,
+              firstSliceAngle: 30,
+              data: { kind: "independent-categories" },
+              series: [
+                {
+                  name: "Inner",
+                  categories: ["R1-A", "R1-B"],
+                  values: [40, 60],
+                  points: {
+                    0: { color: "#3B82F6" },
+                    1: { color: "#EC4899" },
+                  },
+                },
+                {
+                  name: "Outer",
+                  categories: ["R2-X", "R2-Y", "R2-Z"],
+                  values: [20, 50, 30],
+                  points: {
+                    0: { color: "#14B8A6" },
+                    1: { color: "#8B5CF6" },
+                    2: { color: "#F97316" },
+                  },
+                },
+              ],
+              dataLabels: { category: true, value: true },
+            },
+          ],
+        }),
+      ),
+    );
+
+    const result = await previewDoc(pieDoc);
+    assert.deepEqual((await validatePptx(result.pptx)).errors, []);
+    assert.deepEqual(result.pages[0]?.diagnostics, []);
+    assert.ok(result.pages[0]?.png !== undefined);
+    assert.ok(result.pages[0]?.svg !== undefined);
+    const png = PNG.sync.read(Buffer.from(result.pages[0].png));
+    let blueCount = 0;
+    let pinkCount = 0;
+    for (let i = 0; i < png.data.length; i += 4) {
+      const r = png.data[i]!;
+      const g = png.data[i + 1]!;
+      const b = png.data[i + 2]!;
+      if (r === 0x25 && g === 0x63 && b === 0xeb) blueCount += 1;
+      if (r === 0xec && g === 0x48 && b === 0x99) pinkCount += 1;
+    }
+    expect(blueCount).toBeGreaterThan(200);
+    expect(pinkCount).toBeGreaterThan(100);
+  });
+
+  it("renders all six trendline types, forward/backward extrapolation, equations/R2, and custom strokes at zero diagnostics", async () => {
+    const previewDoc = runDocPreview(documentCapabilities);
+    const doc = deck({ width: 640, height: 360 }).append(
+      slide({ id: "trendlines", background: "#FFFFFF" }).append(
+        chart({
+          id: "col-trendlines",
+          x: 16,
+          y: 16,
+          width: 300,
+          height: 160,
+          style: { fontFamily: jostFont, fontSize: 10 },
+          groups: [
+            {
+              kind: "column",
+              data: {
+                kind: "shared-categories",
+                categories: ["C1", "C2", "C3", "C4", "C5"],
+              },
+              series: [
+                {
+                  name: "Growth",
+                  color: "#2563EB",
+                  values: [4, 9, 17, 29, 44],
+                  trendlines: [
+                    {
+                      type: "polynomial",
+                      order: 2,
+                      intercept: 1,
+                      forward: 1,
+                      backward: 0.5,
+                      displayEquation: true,
+                      displayRSquared: true,
+                      line: { color: "#EF4444", width: 2, dash: "dash" },
+                    },
+                    {
+                      type: "movingAverage",
+                      period: 3,
+                      line: { color: "#10B981", width: 2 },
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        }),
+        chart({
+          id: "scatter-trendlines",
+          x: 324,
+          y: 16,
+          width: 300,
+          height: 160,
+          style: { fontFamily: jostFont, fontSize: 10 },
+          groups: [
+            {
+              kind: "scatter",
+              data: { kind: "xy" },
+              line: false,
+              markers: true,
+              series: [
+                {
+                  name: "Fit",
+                  color: "#6366F1",
+                  x: [1, 2, 3, 4, 5],
+                  y: [2.2, 4.8, 9.1, 15.5, 24.0],
+                  trendlines: [
+                    {
+                      type: "linear",
+                      forward: 1.5,
+                      displayEquation: true,
+                      line: { color: "#F59E0B", width: 1.75 },
+                    },
+                    {
+                      type: "exponential",
+                      line: { color: "#EC4899", width: 1.5, dash: "dot" },
+                    },
+                    {
+                      type: "logarithmic",
+                      line: { color: "#14B8A6", width: 1.5 },
+                    },
+                    {
+                      type: "power",
+                      line: { color: "#8B5CF6", width: 1.5 },
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        }),
+        chart({
+          id: "bar-trendline",
+          x: 16,
+          y: 186,
+          width: 300,
+          height: 158,
+          style: { fontFamily: jostFont, fontSize: 10 },
+          groups: [
+            {
+              kind: "bar",
+              data: {
+                kind: "shared-categories",
+                categories: ["A", "B", "C", "D"],
+              },
+              series: [
+                {
+                  name: "Horizontal",
+                  color: "#0EA5E9",
+                  values: [10, 18, 25, 36],
+                  trendlines: [
+                    {
+                      type: "linear",
+                      line: { color: "#DC2626", width: 2 },
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        }),
+      ),
+    );
+
+    const result = await previewDoc(doc);
+    assert.deepEqual((await validatePptx(result.pptx)).errors, []);
+    assert.deepEqual(result.pages[0]?.diagnostics, []);
+    assert.ok(result.pages[0]?.png !== undefined);
+    const png = PNG.sync.read(Buffer.from(result.pages[0].png));
+    let redCount = 0;
+    let greenCount = 0;
+    for (let i = 0; i < png.data.length; i += 4) {
+      const r = png.data[i]!;
+      const g = png.data[i + 1]!;
+      const b = png.data[i + 2]!;
+      if (r === 0xef && g === 0x44 && b === 0x44) redCount += 1;
+      if (r === 0x10 && g === 0xb9 && b === 0x81) greenCount += 1;
+    }
+    expect(redCount).toBeGreaterThan(20);
+    expect(greenCount).toBeGreaterThan(20);
+  });
+
+  it("renders all five error bar modes, include/endCap options, and scatter XY bidirectional error bars at zero diagnostics", async () => {
+    const previewDoc = runDocPreview(documentCapabilities);
+    const doc = deck({ width: 640, height: 360 }).append(
+      slide({ id: "error-bars", background: "#FFFFFF" }).append(
+        chart({
+          id: "col-err",
+          x: 16,
+          y: 16,
+          width: 300,
+          height: 160,
+          style: { fontFamily: jostFont, fontSize: 10 },
+          groups: [
+            {
+              kind: "column",
+              data: {
+                kind: "shared-categories",
+                categories: ["A", "B", "C", "D"],
+              },
+              series: [
+                {
+                  name: "FixedPlus",
+                  color: "#2563EB",
+                  values: [10, 20, 15, 25],
+                  errorBars: {
+                    type: "fixed",
+                    value: 4,
+                    include: "plus",
+                    line: { color: "#DC2626", width: 1.5 },
+                  },
+                },
+                {
+                  name: "PctNoCap",
+                  color: "#10B981",
+                  values: [12, 18, 22, 16],
+                  errorBars: {
+                    type: "percentage",
+                    value: 20,
+                    include: "minus",
+                    endCap: false,
+                    line: { color: "#7C3AED", width: 1.5 },
+                  },
+                },
+              ],
+            },
+          ],
+        }),
+        chart({
+          id: "line-err-stddev",
+          x: 324,
+          y: 16,
+          width: 300,
+          height: 160,
+          style: { fontFamily: jostFont, fontSize: 10 },
+          groups: [
+            {
+              kind: "line",
+              data: {
+                kind: "shared-categories",
+                categories: ["T1", "T2", "T3", "T4"],
+              },
+              series: [
+                {
+                  name: "StdDev",
+                  color: "#0EA5E9",
+                  marker: true,
+                  values: [10, 20, 30, 40],
+                  errorBars: {
+                    type: "standardDeviation",
+                    value: 1,
+                    line: { color: "#EA580C", width: 1.5 },
+                  },
+                },
+                {
+                  name: "StdErr",
+                  color: "#F59E0B",
+                  marker: true,
+                  values: [14, 18, 22, 26],
+                  errorBars: {
+                    type: "standardError",
+                  },
+                },
+              ],
+            },
+          ],
+        }),
+        chart({
+          id: "scatter-err-xy",
+          x: 16,
+          y: 186,
+          width: 300,
+          height: 158,
+          style: { fontFamily: jostFont, fontSize: 10 },
+          groups: [
+            {
+              kind: "scatter",
+              data: { kind: "xy" },
+              line: false,
+              markers: true,
+              series: [
+                {
+                  name: "Obs",
+                  color: "#2563EB",
+                  x: [2, 4, null, 8],
+                  y: [5, 12, 9, 18],
+                  errorBars: {
+                    x: {
+                      type: "custom",
+                      plus: [0.6, 0.8, null, 1.0],
+                      minus: [0.4, null, 0.3, 0.7],
+                      line: { color: "#059669", width: 1.5 },
+                    },
+                    y: {
+                      type: "fixed",
+                      value: 2.5,
+                      line: { color: "#DB2777", width: 1.5 },
+                    },
+                  },
+                },
+              ],
+            },
+          ],
+        }),
+        chart({
+          id: "bar-err",
+          x: 324,
+          y: 186,
+          width: 300,
+          height: 158,
+          style: { fontFamily: jostFont, fontSize: 10 },
+          groups: [
+            {
+              kind: "bar",
+              data: { kind: "shared-categories", categories: ["N", "S"] },
+              series: [
+                {
+                  name: "Horiz",
+                  color: "#6366F1",
+                  values: [15, 25],
+                  errorBars: {
+                    type: "fixed",
+                    value: 3,
+                    line: { color: "#111827", width: 1.5 },
+                  },
+                },
+              ],
+            },
+          ],
+        }),
+      ),
+    );
+
+    const result = await previewDoc(doc);
+    assert.deepEqual((await validatePptx(result.pptx)).errors, []);
+    assert.deepEqual(result.pages[0]?.diagnostics, []);
+    assert.ok(result.pages[0]?.png !== undefined);
+    const png = PNG.sync.read(Buffer.from(result.pages[0].png));
+    let redCount = 0;
+    let pinkCount = 0;
+    let greenCount = 0;
+    for (let i = 0; i < png.data.length; i += 4) {
+      const r = png.data[i]!;
+      const g = png.data[i + 1]!;
+      const b = png.data[i + 2]!;
+      if (r === 0xdc && g === 0x26 && b === 0x26) redCount += 1;
+      if (r === 0xdb && g === 0x27 && b === 0x77) pinkCount += 1;
+      if (r === 0x05 && g === 0x96 && b === 0x69) greenCount += 1;
+    }
+    expect(redCount).toBeGreaterThan(20);
+    expect(pinkCount).toBeGreaterThan(20);
+    expect(greenCount).toBeGreaterThan(20);
+  });
+
+  it("rejects underlying font resource limitations with located errors", async () => {
     const previewDoc = runDocPreview(documentCapabilities);
     const validColumnChart = (id: string) =>
       chart({
@@ -736,73 +1251,30 @@ describe("Chart static preview, layout parity, and textCapability isolation", ()
         ],
       });
 
-    const baseProps = {
-      id: "bad",
-      x: 20,
-      y: 20,
-      width: 560,
-      height: 300,
-      style: { fontFamily: jostFont, fontSize: 14 },
-    } as const;
-
     const rejectionCases: readonly {
       readonly label: string;
       readonly node: ReturnType<typeof chart>;
       readonly expected: RegExp;
     }[] = [
       {
-        label: "non-column-pie",
+        label: "missing-glyph",
         node: chart({
-          ...baseProps,
-          groups: [
-            {
-              kind: "pie",
-              data: { kind: "shared-categories", categories: ["A", "B"] },
-              series: [{ name: "S", values: [1, 2] }],
-            },
-          ],
-        }),
-        expected: /pie/i,
-      },
-      {
-        label: "series-errorBars",
-        node: chart({
-          ...baseProps,
+          id: "bad",
+          x: 20,
+          y: 20,
+          width: 400,
+          height: 240,
+          title: "汉",
+          style: { fontFamily: jostFont, fontSize: 14 },
           groups: [
             {
               kind: "column",
               data: { kind: "shared-categories", categories: ["A", "B"] },
-              series: [
-                {
-                  name: "S",
-                  values: [10, 20],
-                  errorBars: { type: "fixed", value: 2 },
-                },
-              ],
+              series: [{ name: "S", values: [10, 20] }],
             },
           ],
         }),
-        expected: /error bars/i,
-      },
-      {
-        label: "series-trendlines",
-        node: chart({
-          ...baseProps,
-          groups: [
-            {
-              kind: "column",
-              data: { kind: "shared-categories", categories: ["A", "B"] },
-              series: [
-                {
-                  name: "S",
-                  values: [10, 20],
-                  trendlines: [{ type: "linear" }],
-                },
-              ],
-            },
-          ],
-        }),
-        expected: /trendlines/i,
+        expected: /glyph/i,
       },
       {
         label: "missing-font-file",

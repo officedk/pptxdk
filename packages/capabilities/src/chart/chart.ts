@@ -1651,7 +1651,9 @@ function labels(
       "value",
       "percent",
       "category",
+      "seriesName",
       "xValue",
+      "separator",
       "position",
       "numberFormat",
       ...(allowStyle ? ["style"] : []),
@@ -1659,7 +1661,7 @@ function labels(
     ],
     label,
   );
-  for (const key of ["value", "percent", "category"] as const) {
+  for (const key of ["value", "percent", "category", "seriesName"] as const) {
     if (value[key] !== undefined && typeof value[key] !== "boolean") {
       fail("invalid-data-labels", `${label}.${key} must be a boolean`);
     }
@@ -1790,6 +1792,16 @@ function labels(
   if (typeof numberFormat === "string") {
     xmlText(numberFormat, `${label}.numberFormat`);
   }
+  const separator = value["separator"];
+  if (separator !== undefined) {
+    if (typeof separator !== "string" || separator.length === 0) {
+      fail(
+        "invalid-data-labels",
+        `${label}.separator must be a non-empty string`,
+      );
+    }
+    xmlText(separator, `${label}.separator`);
+  }
   const rawLeaderLines = value["leaderLines"];
   let leaderLines: boolean | ChartLine | undefined;
   if (rawLeaderLines !== undefined) {
@@ -1815,7 +1827,11 @@ function labels(
     ...(value["category"] === undefined
       ? {}
       : { category: value["category"] as boolean }),
+    ...(value["seriesName"] === undefined
+      ? {}
+      : { seriesName: value["seriesName"] as boolean }),
     ...(value["xValue"] === undefined ? {} : { xValue: value["xValue"] }),
+    ...(separator === undefined ? {} : { separator }),
     ...(position === undefined
       ? {}
       : { position: position as NonNullable<ChartDataLabels["position"]> }),
@@ -1922,7 +1938,8 @@ function hasVisibleDataLabels(
     (value.value === true ||
       value.percent === true ||
       value.category === true ||
-      value.xValue === true)
+      value.xValue === true ||
+      value.seriesName === true)
   );
 }
 
@@ -3472,6 +3489,9 @@ function pointDataLabelTexts(
     const texts: string[] = [];
     const numericText = () =>
       numberLabelCharacters(labels.numberFormat, labels.percent === true);
+    if (labels.seriesName === true) {
+      texts.push(scatter.name);
+    }
     if (
       (labels.value === true || labels.percent === true) &&
       scatter.y[index] !== null &&
@@ -3486,6 +3506,9 @@ function pointDataLabelTexts(
     ) {
       texts.push(numericText());
     }
+    if (labels.separator !== undefined) {
+      texts.push(labels.separator);
+    }
     return texts;
   }
   const value = (series as ParsedChartSeries).values[index];
@@ -3493,6 +3516,9 @@ function pointDataLabelTexts(
     return [];
   }
   const texts: string[] = [];
+  if (labels.seriesName === true) {
+    texts.push(series.name);
+  }
   if (labels.value === true || labels.percent === true) {
     texts.push(
       numberLabelCharacters(labels.numberFormat, labels.percent === true),
@@ -3500,6 +3526,9 @@ function pointDataLabelTexts(
   }
   if (labels.category === true) {
     texts.push((series as ParsedChartSeries).categories[index]!);
+  }
+  if (labels.separator !== undefined) {
+    texts.push(labels.separator);
   }
   return texts;
 }

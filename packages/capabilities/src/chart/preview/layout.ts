@@ -99,7 +99,8 @@ function hasOutsideEndBarLabels(parsed: ParsedChart): {
               ? { ...(serLabels === false ? {} : serLabels), ...ptOverride }
               : serLabels;
         if (eff === undefined || eff === false) continue;
-        if (!eff.value && !eff.category && !eff.percent) continue;
+        if (!eff.value && !eff.category && !eff.percent && !eff.seriesName)
+          continue;
         const pos =
           eff.position ??
           (group.stacking === "clustered" ? "outsideEnd" : "center");
@@ -161,7 +162,13 @@ function hasPointDataLabels(parsed: ParsedChart): {
               ? { ...(serLabels === false ? {} : serLabels), ...ptOverride }
               : serLabels;
         if (eff === undefined || eff === false) continue;
-        if (!eff.value && !eff.category && !eff.percent && !eff.xValue) {
+        if (
+          !eff.value &&
+          !eff.category &&
+          !eff.percent &&
+          !eff.xValue &&
+          !eff.seriesName
+        ) {
           continue;
         }
         const pos = eff.position ?? defaultPos;

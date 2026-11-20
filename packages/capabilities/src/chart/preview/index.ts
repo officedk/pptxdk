@@ -1,8 +1,7 @@
-import {
-  CapabilityError,
-  type GeometryBox,
-  type PaintContext,
-  type PaintOutput,
+import type {
+  GeometryBox,
+  PaintContext,
+  PaintOutput,
 } from "@react-pptx/core/capability";
 
 import { parseTextContent } from "../../shared/text-service.ts";
@@ -10,9 +9,11 @@ import { textOnlyChartStyle, type ParsedChart } from "../chart-model.ts";
 import { renderAxesSvg, renderGridlinesSvg } from "./axes-and-grid.ts";
 import { renderColumnOrBarGroup } from "./bar-column.ts";
 import { renderDataLabelsSvg } from "./data-labels.ts";
+import { renderErrorBarsSvg } from "./error-bars.ts";
 import { computeChartLayout } from "./layout.ts";
 import { renderLegendSvg } from "./legend.ts";
 import { renderLineOrAreaGroup } from "./line-area.ts";
+import { renderPieOrDoughnutGroup } from "./pie-doughnut.ts";
 import { buildAxisScales } from "./scales.ts";
 import { renderScatterGroup } from "./scatter.ts";
 import { resolveChartLineStroke, strokeAttrs } from "./style.ts";
@@ -22,52 +23,8 @@ import {
   renderChartTextSvg,
   resolveChartFontSizePixels,
 } from "./text-render.ts";
+import { renderTrendlinesSvg } from "./trendlines.ts";
 import { assertNever, type PlottedPointAnchor } from "./types.ts";
-
-function validateSupportedPreviewFeatures(parsed: ParsedChart): void {
-  for (const group of parsed.groups) {
-    switch (group.kind) {
-      case "column":
-      case "bar":
-      case "line":
-      case "area":
-        for (const series of group.series) {
-          if (
-            (series.trendlines !== undefined && series.trendlines.length > 0) ||
-            series.errorBars !== undefined
-          ) {
-            throw new CapabilityError(
-              "preview-unsupported-chart",
-              "Chart preview does not yet support trendlines or error bars",
-            );
-          }
-        }
-        break;
-      case "scatter":
-        for (const series of group.series) {
-          if (
-            (series.trendlines !== undefined && series.trendlines.length > 0) ||
-            series.errorBars?.x !== undefined ||
-            series.errorBars?.y !== undefined
-          ) {
-            throw new CapabilityError(
-              "preview-unsupported-chart",
-              "Chart preview does not yet support trendlines or error bars",
-            );
-          }
-        }
-        break;
-      case "pie":
-      case "doughnut":
-        throw new CapabilityError(
-          "preview-unsupported-chart",
-          `Chart preview does not yet support ${group.kind} charts`,
-        );
-      default:
-        assertNever(group);
-    }
-  }
-}
 
 /**
  * Renders a static SVG preview for a resolved chart without mutating or leaking into native emit.
@@ -77,8 +34,6 @@ export function drawChartPreview(
   box: GeometryBox,
   context: PaintContext,
 ): PaintOutput {
-  validateSupportedPreviewFeatures(parsed);
-
   const baseChartTextStyle = textOnlyChartStyle(parsed.style);
   const { style: resolvedChartStyle } = parseTextContent(
     [],
@@ -174,11 +129,43 @@ export function drawChartPreview(
         break;
       }
       case "pie":
-      case "doughnut":
+      case "doughnut": {
+        const rendered = renderPieOrDoughnutGroup({
+          group,
+          groupIndex,
+          plotRect: layout.plotRect,
+          theme: context.theme,
+        });
+        if (rendered.svg !== "") plotParts.push(rendered.svg);
+        anchors.push(...rendered.anchors);
         break;
+      }
       default:
         assertNever(group);
     }
+  }
+  const errorBarsSvg = renderErrorBarsSvg({
+    parsed,
+    anchors,
+    scales,
+    plotRect: layout.plotRect,
+    theme: context.theme,
+  });
+  if (errorBarsSvg !== "") {
+    plotParts.push(errorBarsSvg);
+  }
+  const trendlines = renderTrendlinesSvg({
+    parsed,
+    scales,
+    plotRect: layout.plotRect,
+    chartBox: box,
+    baseChartTextStyle,
+    theme: context.theme,
+    slideNumber: context.slideNumber,
+    clipAllocator,
+  });
+  if (trendlines.linesSvg !== "") {
+    plotParts.push(trendlines.linesSvg);
   }
   if (plotParts.length > 0) {
     bodyParts.push(
@@ -223,7 +210,7 @@ export function drawChartPreview(
     }),
   );
 
-  // 4. Data labels
+  // 4. Data labels & trendline annotations
   bodyParts.push(
     renderDataLabelsSvg({
       parsed,
@@ -235,6 +222,9 @@ export function drawChartPreview(
       clipAllocator,
     }),
   );
+  if (trendlines.labelsSvg !== "") {
+    bodyParts.push(trendlines.labelsSvg);
+  }
 
   // 5. Chart title
   if (parsed.title !== undefined && layout.titleBox !== undefined) {

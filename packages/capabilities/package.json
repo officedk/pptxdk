@@ -20,24 +20,24 @@
       "default": "./dist/index.js"
     },
     "./shape": {
-      "source": "./src/shape.ts",
-      "types": "./dist/shape.d.ts",
-      "default": "./dist/shape.js"
+      "source": "./src/shape/shape.ts",
+      "types": "./dist/shape/shape.d.ts",
+      "default": "./dist/shape/shape.js"
     },
     "./shape-elements": {
-      "source": "./src/shape-elements.ts",
-      "types": "./dist/shape-elements.d.ts",
-      "default": "./dist/shape-elements.js"
+      "source": "./src/shape/shape-elements.ts",
+      "types": "./dist/shape/shape-elements.d.ts",
+      "default": "./dist/shape/shape-elements.js"
     },
     "./box": {
-      "source": "./src/box.ts",
-      "types": "./dist/box.d.ts",
-      "default": "./dist/box.js"
+      "source": "./src/box/box.ts",
+      "types": "./dist/box/box.d.ts",
+      "default": "./dist/box/box.js"
     },
     "./box-elements": {
-      "source": "./src/box-elements.ts",
-      "types": "./dist/box-elements.d.ts",
-      "default": "./dist/box-elements.js"
+      "source": "./src/box/box-elements.ts",
+      "types": "./dist/box/box-elements.d.ts",
+      "default": "./dist/box/box-elements.js"
     },
     "./document": {
       "source": "./src/document.ts",
@@ -45,89 +45,89 @@
       "default": "./dist/document.js"
     },
     "./font": {
-      "source": "./src/font.ts",
-      "types": "./dist/font.d.ts",
-      "default": "./dist/font.js"
+      "source": "./src/font/font.ts",
+      "types": "./dist/font/font.d.ts",
+      "default": "./dist/font/font.js"
     },
     "./chart": {
-      "source": "./src/chart.ts",
-      "types": "./dist/chart.d.ts",
-      "default": "./dist/chart.js"
+      "source": "./src/chart/chart.ts",
+      "types": "./dist/chart/chart.d.ts",
+      "default": "./dist/chart/chart.js"
     },
     "./chart-elements": {
-      "source": "./src/chart-elements.ts",
-      "types": "./dist/chart-elements.d.ts",
-      "default": "./dist/chart-elements.js"
+      "source": "./src/chart/chart-elements.ts",
+      "types": "./dist/chart/chart-elements.d.ts",
+      "default": "./dist/chart/chart-elements.js"
     },
     "./text": {
-      "source": "./src/text.ts",
-      "types": "./dist/text.d.ts",
-      "default": "./dist/text.js"
+      "source": "./src/text/text.ts",
+      "types": "./dist/text/text.d.ts",
+      "default": "./dist/text/text.js"
     },
     "./text-elements": {
-      "source": "./src/text-elements.ts",
-      "types": "./dist/text-elements.d.ts",
-      "default": "./dist/text-elements.js"
+      "source": "./src/text/text-elements.ts",
+      "types": "./dist/text/text-elements.d.ts",
+      "default": "./dist/text/text-elements.js"
     },
     "./notes": {
-      "source": "./src/notes.ts",
-      "types": "./dist/notes.d.ts",
-      "default": "./dist/notes.js"
+      "source": "./src/notes/notes.ts",
+      "types": "./dist/notes/notes.d.ts",
+      "default": "./dist/notes/notes.js"
     },
     "./notes-elements": {
-      "source": "./src/notes-elements.ts",
-      "types": "./dist/notes-elements.d.ts",
-      "default": "./dist/notes-elements.js"
+      "source": "./src/notes/notes-elements.ts",
+      "types": "./dist/notes/notes-elements.d.ts",
+      "default": "./dist/notes/notes-elements.js"
     },
     "./notes-declaration": {
-      "source": "./src/notes-declaration.ts",
-      "types": "./dist/notes-declaration.d.ts",
-      "default": "./dist/notes-declaration.js"
+      "source": "./src/notes/notes-declaration.ts",
+      "types": "./dist/notes/notes-declaration.d.ts",
+      "default": "./dist/notes/notes-declaration.js"
     },
     "./table": {
-      "source": "./src/table.ts",
-      "types": "./dist/table.d.ts",
-      "default": "./dist/table.js"
+      "source": "./src/table/table.ts",
+      "types": "./dist/table/table.d.ts",
+      "default": "./dist/table/table.js"
     },
     "./table-elements": {
-      "source": "./src/table-elements.ts",
-      "types": "./dist/table-elements.d.ts",
-      "default": "./dist/table-elements.js"
+      "source": "./src/table/table-elements.ts",
+      "types": "./dist/table/table-elements.d.ts",
+      "default": "./dist/table/table-elements.js"
     },
     "./transition": {
-      "source": "./src/transition.ts",
-      "types": "./dist/transition.d.ts",
-      "default": "./dist/transition.js"
+      "source": "./src/transition/transition.ts",
+      "types": "./dist/transition/transition.d.ts",
+      "default": "./dist/transition/transition.js"
     },
     "./motion": {
-      "source": "./src/motion.ts",
-      "types": "./dist/motion.d.ts",
-      "default": "./dist/motion.js"
+      "source": "./src/motion/motion.ts",
+      "types": "./dist/motion/motion.d.ts",
+      "default": "./dist/motion/motion.js"
     },
     "./motion-elements": {
-      "source": "./src/motion-elements.ts",
-      "types": "./dist/motion-elements.d.ts",
-      "default": "./dist/motion-elements.js"
+      "source": "./src/motion/motion-elements.ts",
+      "types": "./dist/motion/motion-elements.d.ts",
+      "default": "./dist/motion/motion-elements.js"
     },
     "./image": {
-      "source": "./src/image.ts",
-      "types": "./dist/image.d.ts",
-      "default": "./dist/image.js"
+      "source": "./src/image/image.ts",
+      "types": "./dist/image/image.d.ts",
+      "default": "./dist/image/image.js"
     },
     "./image-elements": {
-      "source": "./src/image-elements.ts",
-      "types": "./dist/image-elements.d.ts",
-      "default": "./dist/image-elements.js"
+      "source": "./src/image/image-elements.ts",
+      "types": "./dist/image/image-elements.d.ts",
+      "default": "./dist/image/image-elements.js"
     },
     "./group": {
-      "source": "./src/group.ts",
-      "types": "./dist/group.d.ts",
-      "default": "./dist/group.js"
+      "source": "./src/group/group.ts",
+      "types": "./dist/group/group.d.ts",
+      "default": "./dist/group/group.js"
     },
     "./group-elements": {
-      "source": "./src/group-elements.ts",
-      "types": "./dist/group-elements.d.ts",
-      "default": "./dist/group-elements.js"
+      "source": "./src/group/group-elements.ts",
+      "types": "./dist/group/group-elements.d.ts",
+      "default": "./dist/group/group-elements.js"
     }
   },
   "scripts": {
@@ -136,7 +136,8 @@
     "lint": "oxlint --quiet --format=unix --ignore-pattern node_modules .",
     "lint:fix": "oxlint --format=unix . --fix",
     "typecheck": "tsc -p tsconfig.node.json --noEmit --pretty false",
-    "build": "rm -rf dist && tsc -p tsconfig.build.json --pretty false"
+    "build": "rm -rf dist && tsc -p tsconfig.build.json --pretty false",
+    "test": "vitest run"
   },
   "dependencies": {
     "@react-pptx/core": "workspace:*",
@@ -150,7 +151,10 @@
     "react": "catalog:"
   },
   "devDependencies": {
+    "@react-pptx/preview": "workspace:*",
+    "@react-pptx/react": "workspace:*",
     "@react-pptx/tooling-config": "workspace:*",
+    "@react-pptx/validation": "workspace:*",
     "@types/fontkit": "catalog:",
     "@types/node": "catalog:",
     "@types/pngjs": "catalog:",
@@ -158,7 +162,9 @@
     "oxfmt": "catalog:",
     "oxlint": "catalog:",
     "oxlint-tsgolint": "catalog:",
-    "typescript-7": "catalog:"
+    "typescript-7": "catalog:",
+    "vite": "catalog:",
+    "vitest": "catalog:"
   },
   "engines": {
     "node": "^26.13.0"

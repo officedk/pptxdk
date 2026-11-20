@@ -5,7 +5,7 @@ export {
   preset,
   radialGradient,
   shapeCapability,
-} from "#/shape.ts";
+} from "#/shape/shape.ts";
 export type {
   CustomGeometry,
   Geometry,
@@ -14,11 +14,11 @@ export type {
   PathOptions,
   PresetGeometry,
   shapeStyleKeys,
-} from "#/shape.ts";
-export { Shape } from "#/shape-elements.ts";
-export type { ShapeProps } from "#/shape-elements.ts";
-export { boxCapability } from "#/box.ts";
-export { Box, type BoxProps } from "#/box-elements.ts";
+} from "#/shape/shape.ts";
+export { Shape } from "#/shape/shape-elements.ts";
+export type { ShapeProps } from "#/shape/shape-elements.ts";
+export { boxCapability } from "#/box/box.ts";
+export { Box, type BoxProps } from "#/box/box-elements.ts";
 export {
   arrowTypes,
   hasVisibleBoxStyle,
@@ -26,7 +26,7 @@ export {
   type ArrowType,
   type LineEndStyle,
   type ShapeVisualStyle,
-} from "#/visual.ts";
+} from "#/shared/visual.ts";
 export type {
   GradientStop,
   LinearGradient,
@@ -34,7 +34,7 @@ export type {
   Shadow,
   VisualStyle,
 } from "@react-pptx/core";
-export { chartCapability } from "#/chart.ts";
+export { chartCapability } from "#/chart/chart.ts";
 export type {
   ChartAxis,
   ChartAxisCrossing,
@@ -83,21 +83,21 @@ export type {
   ScatterErrorBars,
   ScatterLine,
   SharedCategoryData,
-} from "#/chart.ts";
-export { Chart } from "#/chart-elements.ts";
-export { imageCapability } from "#/image.ts";
+} from "#/chart/chart.ts";
+export { Chart } from "#/chart/chart-elements.ts";
+export { imageCapability } from "#/image/image.ts";
 export type {
   ImageDeclarationProps,
   ImageSource,
   ImageVisualStyle,
-} from "#/image.ts";
-export { Image } from "#/image-elements.ts";
-export type { ImageProps } from "#/image-elements.ts";
-export { groupCapability } from "#/group.ts";
-export type { GroupDeclarationProps } from "#/group.ts";
-export { Group } from "#/group-elements.ts";
-export type { GroupProps } from "#/group-elements.ts";
-export { tableCapability } from "#/table.ts";
+} from "#/image/image.ts";
+export { Image } from "#/image/image-elements.ts";
+export type { ImageProps } from "#/image/image-elements.ts";
+export { groupCapability } from "#/group/group.ts";
+export type { GroupDeclarationProps } from "#/group/group.ts";
+export { Group } from "#/group/group-elements.ts";
+export type { GroupProps } from "#/group/group-elements.ts";
+export { tableCapability } from "#/table/table.ts";
 export type {
   CellDeclarationProps,
   CellNode,
@@ -112,19 +112,26 @@ export type {
   TableStyle,
   TableTextStyle,
   TableVerticalAlign,
-} from "#/table.ts";
-export { Cell, Row, Table } from "#/table-elements.ts";
-export type { CellProps, RowProps, TableProps } from "#/table-elements.ts";
-export { font, textCapability } from "#/text.ts";
-export { P, SlideNumber, Span, Text } from "#/text-elements.ts";
-export { notesCapability } from "#/notes.ts";
-export { Notes } from "#/notes-elements.ts";
-export type { NotesProps } from "#/notes-elements.ts";
-export type { NotesDeclarationProps, NotesNode } from "#/notes-declaration.ts";
-export { transitionCapability, transitions } from "#/transition.ts";
-export { slideBackgroundCapability } from "#/slide-background.ts";
-export { createMorphScope } from "#/morph-api.ts";
-export type { MorphKey, MorphProps, MorphScope } from "#/morph-api.ts";
+} from "#/table/table.ts";
+export { Cell, Row, Table } from "#/table/table-elements.ts";
+export type {
+  CellProps,
+  RowProps,
+  TableProps,
+} from "#/table/table-elements.ts";
+export { font, textCapability } from "#/text/text.ts";
+export { P, SlideNumber, Span, Text } from "#/text/text-elements.ts";
+export { notesCapability } from "#/notes/notes.ts";
+export { Notes } from "#/notes/notes-elements.ts";
+export type { NotesProps } from "#/notes/notes-elements.ts";
+export type {
+  NotesDeclarationProps,
+  NotesNode,
+} from "#/notes/notes-declaration.ts";
+export { transitionCapability, transitions } from "#/transition/transition.ts";
+export { slideBackgroundCapability } from "#/slide-background/slide-background.ts";
+export { createMorphScope } from "#/shared/morph-api.ts";
+export type { MorphKey, MorphProps, MorphScope } from "#/shared/morph-api.ts";
 export {
   after,
   breathe,
@@ -142,8 +149,8 @@ export {
   stretch,
   wipe,
   zoom,
-} from "#/motion.ts";
-export { MotionScope, Step, useMotionScope } from "#/motion-elements.ts";
+} from "#/motion/motion.ts";
+export { MotionScope, Step, useMotionScope } from "#/motion/motion-elements.ts";
 export type {
   EffectInstanceObservation,
   Easing,
@@ -195,7 +202,7 @@ export type {
   RepeatedEffect,
   SpinOptions,
   StepProps,
-} from "#/motion.ts";
+} from "#/motion/motion.ts";
 export type {
   Font,
   FontFace,
@@ -212,13 +219,13 @@ export type {
   TextDeclarationProps,
   TextList,
   TextStyle,
-} from "#/text.ts";
+} from "#/text/text.ts";
 export type {
   ParagraphProps,
   SlideNumberProps,
   SpanProps,
   TextProps,
-} from "#/text-elements.ts";
+} from "#/text/text-elements.ts";
 export type {
   FlipTransition,
   MorphTransition,
@@ -228,4 +235,4 @@ export type {
   TransitionDirection,
   TransitionDuration,
   TransitionSpeed,
-} from "#/transition.ts";
+} from "#/transition/transition.ts";

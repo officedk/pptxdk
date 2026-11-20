@@ -22,24 +22,24 @@ import {
   boxCapability,
   createBoxNode,
   type BoxDeclarationProps,
-} from "./box.ts";
+} from "./box/box.ts";
 import {
   chartCapability,
   createChartNode,
   type ChartNode,
   type ChartProps,
-} from "./chart.ts";
-import { font } from "./font.ts";
+} from "./chart/chart.ts";
+import { font } from "./font/font.ts";
 import {
   createGroupNode,
   groupCapability,
   type GroupDeclarationProps,
-} from "./group.ts";
+} from "./group/group.ts";
 import {
   createImageNode,
   imageCapability,
   type ImageDeclarationProps,
-} from "./image.ts";
+} from "./image/image.ts";
 import {
   createMotionScopeHandle,
   createMotionScopeNode,
@@ -48,19 +48,19 @@ import {
   type MotionScopeAuthorProps,
   type MotionScopeHandle,
   type MotionStepAuthorProps,
-} from "./motion-api.ts";
-import { motionCapability } from "./motion.ts";
+} from "./motion/motion-api.ts";
+import { motionCapability } from "./motion/motion.ts";
 import {
   createNotesNode,
   type NotesDeclarationProps,
-} from "./notes-declaration.ts";
-import { notesCapability } from "./notes.ts";
+} from "./notes/notes-declaration.ts";
+import { notesCapability } from "./notes/notes.ts";
 import {
   createShapeNode,
   shapeCapability,
   type ShapeDeclarationProps,
-} from "./shape.ts";
-import { slideBackgroundCapability } from "./slide-background.ts";
+} from "./shape/shape.ts";
+import { slideBackgroundCapability } from "./slide-background/slide-background.ts";
 import {
   createCellNode,
   createRowNode,
@@ -72,7 +72,7 @@ import {
   type RowNode,
   type TableDeclarationProps,
   type TableNode,
-} from "./table.ts";
+} from "./table/table.ts";
 import {
   createParagraphNode,
   createSlideNumberNode,
@@ -82,9 +82,12 @@ import {
   type SlideNumberDeclarationProps,
   type SpanDeclarationProps,
   type TextDeclarationProps,
-} from "./text-declaration.ts";
-import { textCapability } from "./text.ts";
-import { transitionCapability, type Transition } from "./transition.ts";
+} from "./text/text-declaration.ts";
+import { textCapability } from "./text/text.ts";
+import {
+  transitionCapability,
+  type Transition,
+} from "./transition/transition.ts";
 
 /**
  * External addresses such as link URLs are stored as address values at authoring time. Content
@@ -385,9 +388,9 @@ export type {
   MotionScopeAuthorProps,
   MotionScopeHandle,
   MotionStepAuthorProps,
-} from "./motion-api.ts";
+} from "./motion/motion-api.ts";
 export type { LinkTarget, Transition };
-export type { NotesDeclarationProps } from "./notes-declaration.ts";
+export type { NotesDeclarationProps } from "./notes/notes-declaration.ts";
 
 export type {
   ChartAxis,
@@ -436,7 +439,7 @@ export type {
   ScatterErrorBars,
   ScatterLine,
   SharedCategoryData,
-} from "./chart.ts";
+} from "./chart/chart.ts";
 export type {
   TableCellStyle,
   TableColumn,
@@ -445,4 +448,4 @@ export type {
   TableStyle,
   TableTextStyle,
   TableVerticalAlign,
-} from "./table.ts";
+} from "./table/table.ts";

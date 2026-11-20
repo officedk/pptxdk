@@ -7,6 +7,7 @@ import type {
   ParsedChartGroup,
   ParsedValueAxis,
 } from "../chart-model.ts";
+import type { ChartDisplayBlanksAs } from "../chart-types.ts";
 import {
   assertNever,
   type AxisScale,
@@ -56,6 +57,7 @@ function generateLinearTicks(
 function collectAxisValues(
   axis: ParsedValueAxis,
   groups: readonly ParsedChartGroup[],
+  displayBlanksAs: ChartDisplayBlanksAs | undefined,
 ): {
   readonly values: number[];
   readonly hasPercent: boolean;
@@ -119,6 +121,8 @@ function collectAxisValues(
             for (const v of series.values) {
               if (v !== null && v !== undefined && Number.isFinite(v)) {
                 values.push(v);
+              } else if (v === null && displayBlanksAs === "zero") {
+                values.push(0);
               }
             }
           }
@@ -129,11 +133,23 @@ function collectAxisValues(
         const isX = group.axes.x === axis;
         const isY = group.axes.y === axis;
         if (!isX && !isY) continue;
+        const blanksZero = displayBlanksAs === "zero";
         for (const series of group.series) {
-          const arr = isX ? series.x : series.y;
-          for (const v of arr) {
-            if (v !== null && v !== undefined && Number.isFinite(v)) {
-              values.push(v);
+          for (let i = 0; i < series.x.length; i += 1) {
+            const xVal = series.x[i];
+            const yVal = series.y[i];
+            if (blanksZero) {
+              const coord = isX ? (xVal ?? 0) : (yVal ?? 0);
+              if (Number.isFinite(coord)) values.push(coord);
+            } else if (
+              xVal !== null &&
+              xVal !== undefined &&
+              Number.isFinite(xVal) &&
+              yVal !== null &&
+              yVal !== undefined &&
+              Number.isFinite(yVal)
+            ) {
+              values.push(isX ? xVal : yVal);
             }
           }
         }
@@ -218,10 +234,12 @@ function buildCategoryAxisScale(
 function buildValueAxisScale(
   axis: ParsedValueAxis,
   groups: readonly ParsedChartGroup[],
+  displayBlanksAs: ChartDisplayBlanksAs | undefined,
 ): ValueAxisScale {
   const { values, hasPercent, hasBaselineZero } = collectAxisValues(
     axis,
     groups,
+    displayBlanksAs,
   );
   const spec = axis.spec;
   const reversed = spec.reversed === true;
@@ -415,7 +433,10 @@ export function buildAxisScales(
         result.set(axis.name, buildCategoryAxisScale(axis, parsed.groups));
         break;
       case "value":
-        result.set(axis.name, buildValueAxisScale(axis, parsed.groups));
+        result.set(
+          axis.name,
+          buildValueAxisScale(axis, parsed.groups, parsed.displayBlanksAs),
+        );
         break;
       default:
         assertNever(axis);

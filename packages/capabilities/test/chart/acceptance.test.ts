@@ -31,8 +31,11 @@ import { runCapabilityScenario } from "../acceptance-runner.ts";
 import {
   chartAxesAndCompactScenario,
   chartBarColumnVariantsScenario,
+  chartComboDualAxesScenario,
+  chartLineAreaParityScenario,
   chartPositiveScenario,
   chartRejectionScenario,
+  chartScatterParityScenario,
 } from "./scenarios.ts";
 
 function previewDocWith(modules: readonly CapabilityModule[]) {
@@ -69,6 +72,9 @@ describe("Chart capability acceptance", () => {
         chartPositiveScenario,
         chartAxesAndCompactScenario,
         chartBarColumnVariantsScenario,
+        chartLineAreaParityScenario,
+        chartScatterParityScenario,
+        chartComboDualAxesScenario,
         chartRejectionScenario,
       ]) {
         const runs = await runCapabilityScenario(scenario, {

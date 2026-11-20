@@ -2,15 +2,38 @@ import type { GeometryBox, ThemeContext } from "@react-pptx/core/capability";
 
 import type { TextStyle } from "../../shared/text-service.ts";
 import type { ParsedChart } from "../chart-model.ts";
-import { resolveSeriesColor } from "./style.ts";
+import { renderMarkerSvg, resolveEffectiveMarker } from "./markers.ts";
+import { resolveChartLineStroke, resolveSeriesColor } from "./style.ts";
 import {
   measureChartText,
   renderChartTextSvg,
   type ChartTextClipAllocator,
 } from "./text-render.ts";
-import type { ChartLegendEntry } from "./types.ts";
+import {
+  assertNever,
+  type ChartLegendEntry,
+  type ChartLegendMarker,
+} from "./types.ts";
 
 export type LegendPosition = "top" | "bottom" | "left" | "right" | "topRight";
+
+function toLegendMarker(
+  resolved: ReturnType<typeof resolveEffectiveMarker>,
+): ChartLegendMarker | undefined {
+  if (resolved === undefined) return undefined;
+  return {
+    symbol: resolved.symbol,
+    fillHex: resolved.fillHex,
+    fillAlpha: resolved.fillAlpha,
+    ...(resolved.stroke === undefined
+      ? {}
+      : {
+          strokeHex: resolved.stroke.hex,
+          strokeAlpha: resolved.stroke.alpha,
+          strokeWidth: resolved.stroke.width,
+        }),
+  };
+}
 
 export function collectLegendEntries(
   parsed: ParsedChart,
@@ -18,14 +41,128 @@ export function collectLegendEntries(
 ): ChartLegendEntry[] {
   const entries: ChartLegendEntry[] = [];
   for (const group of parsed.groups) {
-    for (const series of group.series) {
-      const color = resolveSeriesColor(series.color, series.seriesIndex, theme);
-      entries.push({
-        label: series.name,
-        colorHex: color.hex,
-        colorAlpha: color.alpha ?? 1,
-        kind: "swatch",
-      });
+    switch (group.kind) {
+      case "column":
+      case "bar":
+      case "area":
+      case "pie":
+      case "doughnut": {
+        for (const series of group.series) {
+          const color = resolveSeriesColor(
+            series.color,
+            series.seriesIndex,
+            theme,
+          );
+          const stroke =
+            series.line === undefined
+              ? undefined
+              : resolveChartLineStroke(series.line, theme, {
+                  color: "dk1",
+                  width: 1,
+                });
+          entries.push({
+            label: series.name,
+            colorHex: color.hex,
+            colorAlpha: color.alpha ?? 1,
+            kind: "swatch",
+            ...(stroke === undefined
+              ? {}
+              : {
+                  strokeWidth: stroke.width,
+                  ...(stroke.dashArray === undefined
+                    ? {}
+                    : { dashArray: stroke.dashArray }),
+                }),
+          });
+        }
+        break;
+      }
+      case "line": {
+        for (const series of group.series) {
+          const fallbackColor =
+            series.line?.color ??
+            series.color ??
+            `accent${(series.seriesIndex % 6) + 1}`;
+          const stroke = resolveChartLineStroke(series.line, theme, {
+            color: fallbackColor,
+            width: 2,
+          })!;
+          const marker = toLegendMarker(
+            resolveEffectiveMarker({
+              groupDefaultEnabled: false,
+              seriesMarker: series.marker,
+              pointMarker: undefined,
+              seriesColor: series.color,
+              pointColor: undefined,
+              seriesIndex: series.seriesIndex,
+              theme,
+            }),
+          );
+          entries.push({
+            label: series.name,
+            colorHex: stroke.hex,
+            colorAlpha: stroke.alpha,
+            kind: "line",
+            strokeWidth: stroke.width,
+            ...(stroke.dashArray === undefined
+              ? {}
+              : { dashArray: stroke.dashArray }),
+            ...(marker === undefined ? {} : { marker }),
+          });
+        }
+        break;
+      }
+      case "scatter": {
+        const hasLine = group.line !== false;
+        for (const series of group.series) {
+          const fallbackColor =
+            series.line?.color ??
+            series.color ??
+            `accent${(series.seriesIndex % 6) + 1}`;
+          const stroke = hasLine
+            ? resolveChartLineStroke(series.line, theme, {
+                color: fallbackColor,
+                width: 2,
+              })!
+            : undefined;
+          const color = resolveSeriesColor(
+            series.color,
+            series.seriesIndex,
+            theme,
+          );
+          const marker = toLegendMarker(
+            group.markers
+              ? resolveEffectiveMarker({
+                  groupDefaultEnabled: true,
+                  seriesMarker: series.marker,
+                  pointMarker: undefined,
+                  seriesColor: series.color,
+                  pointColor: undefined,
+                  seriesIndex: series.seriesIndex,
+                  theme,
+                })
+              : undefined,
+          );
+          entries.push({
+            label: series.name,
+            colorHex: stroke?.hex ?? marker?.fillHex ?? color.hex,
+            colorAlpha: stroke?.alpha ?? marker?.fillAlpha ?? color.alpha ?? 1,
+            kind: hasLine ? "line" : "marker",
+            ...(stroke === undefined
+              ? {}
+              : {
+                  strokeWidth: stroke.width,
+                  ...(stroke.dashArray === undefined
+                    ? {}
+                    : { dashArray: stroke.dashArray }),
+                }),
+            ...(marker === undefined ? {} : { marker }),
+          });
+        }
+        break;
+      }
+      default:
+        assertNever(group);
     }
   }
   return entries;
@@ -41,6 +178,7 @@ export type MeasuredLegend = {
   readonly width: number;
   readonly height: number;
   readonly swatchSize: number;
+  readonly iconWidth: number;
   readonly swatchGap: number;
   readonly itemGapX: number;
   readonly rowGapY: number;
@@ -60,6 +198,10 @@ export function measureLegend(options: {
   const { entries, position, maxWidth, fontSizePx, style, theme, slideNumber } =
     options;
   const swatchSize = Math.max(5, Math.min(fontSizePx * 0.72, 12));
+  const hasLineEntry = entries.some((entry) => entry.kind === "line");
+  const iconWidth = hasLineEntry
+    ? Math.max(swatchSize, Math.min(fontSizePx * 1.3, 18))
+    : swatchSize;
   const swatchGap = Math.max(3, swatchSize * 0.45);
   const itemGapX = Math.max(8, fontSizePx * 0.75);
   const rowGapY = Math.max(2, fontSizePx * 0.25);
@@ -74,7 +216,7 @@ export function measureLegend(options: {
     });
     return {
       entry,
-      itemWidth: swatchSize + swatchGap + measured.width,
+      itemWidth: iconWidth + swatchGap + measured.width,
       textHeight: Math.max(swatchSize, measured.height),
     };
   });
@@ -121,6 +263,7 @@ export function measureLegend(options: {
       width: Math.min(maxWidth, maxRowWidth),
       height: totalHeight,
       swatchSize,
+      iconWidth,
       swatchGap,
       itemGapX,
       rowGapY,
@@ -139,12 +282,73 @@ export function measureLegend(options: {
     width: widest,
     height: totalHeight,
     swatchSize,
+    iconWidth,
     swatchGap,
     itemGapX,
     rowGapY,
     rowHeight,
     rows,
   };
+}
+
+function renderLegendIconSvg(
+  entry: ChartLegendEntry,
+  x: number,
+  rowY: number,
+  measured: MeasuredLegend,
+): string {
+  const cy = rowY + measured.rowHeight / 2;
+  const cx = x + measured.iconWidth / 2;
+
+  if (entry.kind === "swatch") {
+    const size = measured.swatchSize;
+    const swatchX = cx - size / 2;
+    const swatchY = cy - size / 2;
+    const dashAttr =
+      entry.dashArray === undefined
+        ? ""
+        : ` stroke-dasharray="${entry.dashArray}"`;
+    const strokeAttr =
+      entry.strokeWidth === undefined
+        ? ""
+        : ` stroke="#${entry.colorHex}" stroke-width="${Math.min(1.5, entry.strokeWidth)}"${dashAttr}`;
+    return `<rect x="${swatchX}" y="${swatchY}" width="${size}" height="${size}" fill="#${entry.colorHex}" fill-opacity="${entry.colorAlpha}"${strokeAttr}/>`;
+  }
+
+  const parts: string[] = [];
+  if (entry.kind === "line") {
+    const strokeW = Math.min(2.5, Math.max(1.25, entry.strokeWidth ?? 2));
+    const dashAttr =
+      entry.dashArray === undefined
+        ? ""
+        : ` stroke-dasharray="${entry.dashArray}"`;
+    parts.push(
+      `<line x1="${x}" y1="${cy}" x2="${x + measured.iconWidth}" y2="${cy}" stroke="#${entry.colorHex}" stroke-opacity="${entry.colorAlpha}" stroke-width="${strokeW}"${dashAttr} stroke-linecap="round"/>`,
+    );
+  }
+
+  if (entry.marker !== undefined) {
+    const r = Math.min(measured.swatchSize * 0.42, 4);
+    parts.push(
+      renderMarkerSvg(cx, cy, {
+        symbol: entry.marker.symbol,
+        radius: r,
+        fillHex: entry.marker.fillHex,
+        fillAlpha: entry.marker.fillAlpha,
+        ...(entry.marker.strokeHex === undefined
+          ? {}
+          : {
+              stroke: {
+                hex: entry.marker.strokeHex,
+                alpha: entry.marker.strokeAlpha ?? 1,
+                width: Math.min(1.5, entry.marker.strokeWidth ?? 1),
+              },
+            }),
+      }),
+    );
+  }
+
+  return parts.join("");
 }
 
 export function renderLegendSvg(options: {
@@ -198,15 +402,12 @@ export function renderLegendSvg(options: {
         : legendBox.x;
 
     for (const item of row) {
-      const swatchY = rowY + (measured.rowHeight - measured.swatchSize) / 2;
-      parts.push(
-        `<rect x="${cursorX}" y="${swatchY}" width="${measured.swatchSize}" height="${measured.swatchSize}" fill="#${item.entry.colorHex}" fill-opacity="${item.entry.colorAlpha}"/>`,
-      );
-      const textX = cursorX + measured.swatchSize + measured.swatchGap;
+      parts.push(renderLegendIconSvg(item.entry, cursorX, rowY, measured));
+      const textX = cursorX + measured.iconWidth + measured.swatchGap;
       const availableTextWidth = Math.max(
         1,
         Math.min(
-          item.itemWidth - measured.swatchSize - measured.swatchGap,
+          item.itemWidth - measured.iconWidth - measured.swatchGap,
           legendBox.x + legendBox.width - textX,
         ),
       );

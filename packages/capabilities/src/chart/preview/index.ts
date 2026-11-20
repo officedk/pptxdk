@@ -12,7 +12,9 @@ import { renderColumnOrBarGroup } from "./bar-column.ts";
 import { renderDataLabelsSvg } from "./data-labels.ts";
 import { computeChartLayout } from "./layout.ts";
 import { renderLegendSvg } from "./legend.ts";
+import { renderLineOrAreaGroup } from "./line-area.ts";
 import { buildAxisScales } from "./scales.ts";
+import { renderScatterGroup } from "./scatter.ts";
 import { resolveChartLineStroke, strokeAttrs } from "./style.ts";
 import {
   createChartClipAllocator,
@@ -27,6 +29,8 @@ function validateSupportedPreviewFeatures(parsed: ParsedChart): void {
     switch (group.kind) {
       case "column":
       case "bar":
+      case "line":
+      case "area":
         for (const series of group.series) {
           if (
             (series.trendlines !== undefined && series.trendlines.length > 0) ||
@@ -39,13 +43,20 @@ function validateSupportedPreviewFeatures(parsed: ParsedChart): void {
           }
         }
         break;
-      case "line":
-      case "area":
       case "scatter":
-        throw new CapabilityError(
-          "preview-unsupported-chart",
-          `Chart preview does not yet support ${group.kind} charts`,
-        );
+        for (const series of group.series) {
+          if (
+            (series.trendlines !== undefined && series.trendlines.length > 0) ||
+            series.errorBars?.x !== undefined ||
+            series.errorBars?.y !== undefined
+          ) {
+            throw new CapabilityError(
+              "preview-unsupported-chart",
+              "Chart preview does not yet support trendlines or error bars",
+            );
+          }
+        }
+        break;
       case "pie":
       case "doughnut":
         throw new CapabilityError(
@@ -136,8 +147,32 @@ export function drawChartPreview(
         break;
       }
       case "line":
-      case "area":
-      case "scatter":
+      case "area": {
+        const rendered = renderLineOrAreaGroup({
+          group,
+          groupIndex,
+          scales,
+          plotRect: layout.plotRect,
+          displayBlanksAs: parsed.displayBlanksAs,
+          theme: context.theme,
+        });
+        if (rendered.svg !== "") plotParts.push(rendered.svg);
+        anchors.push(...rendered.anchors);
+        break;
+      }
+      case "scatter": {
+        const rendered = renderScatterGroup({
+          group,
+          groupIndex,
+          scales,
+          plotRect: layout.plotRect,
+          displayBlanksAs: parsed.displayBlanksAs,
+          theme: context.theme,
+        });
+        if (rendered.svg !== "") plotParts.push(rendered.svg);
+        anchors.push(...rendered.anchors);
+        break;
+      }
       case "pie":
       case "doughnut":
         break;

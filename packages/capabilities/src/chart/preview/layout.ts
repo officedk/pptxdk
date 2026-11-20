@@ -117,6 +117,64 @@ function hasOutsideEndBarLabels(parsed: ParsedChart): {
   return { columnPos, columnNeg, barPos, barNeg };
 }
 
+function hasPointDataLabels(parsed: ParsedChart): {
+  readonly top: boolean;
+  readonly bottom: boolean;
+  readonly left: boolean;
+  readonly right: boolean;
+} {
+  let top = false;
+  let bottom = false;
+  let left = false;
+  let right = false;
+  for (const group of parsed.groups) {
+    if (
+      group.kind !== "line" &&
+      group.kind !== "area" &&
+      group.kind !== "scatter"
+    ) {
+      continue;
+    }
+    const defaultPos =
+      group.kind === "scatter"
+        ? "right"
+        : group.kind === "area"
+          ? "center"
+          : "top";
+    for (const series of group.series) {
+      const serLabels =
+        series.dataLabels === false
+          ? false
+          : series.dataLabels !== undefined
+            ? {
+                ...(group.dataLabels === false ? {} : group.dataLabels),
+                ...series.dataLabels,
+              }
+            : group.dataLabels;
+      const count = "x" in series ? series.x.length : series.values.length;
+      for (let i = 0; i < count; i += 1) {
+        const ptOverride = series.points?.[i]?.dataLabels;
+        const eff =
+          ptOverride === false
+            ? false
+            : ptOverride !== undefined
+              ? { ...(serLabels === false ? {} : serLabels), ...ptOverride }
+              : serLabels;
+        if (eff === undefined || eff === false) continue;
+        if (!eff.value && !eff.category && !eff.percent && !eff.xValue) {
+          continue;
+        }
+        const pos = eff.position ?? defaultPos;
+        if (pos === "top") top = true;
+        else if (pos === "bottom") bottom = true;
+        else if (pos === "left") left = true;
+        else if (pos === "right") right = true;
+      }
+    }
+  }
+  return { top, bottom, left, right };
+}
+
 export function computeChartLayout(options: {
   readonly parsed: ParsedChart;
   readonly box: GeometryBox;
@@ -232,7 +290,11 @@ export function computeChartLayout(options: {
     const axisTitleBoxes = new Map<string, GeometryBox>();
     const labelZones = new Map<
       string,
-      { readonly side: EdgeSide; readonly depth: number }
+      {
+        readonly side: EdgeSide;
+        readonly depth: number;
+        readonly offset: number;
+      }
     >();
     for (const axis of parsed.axes) {
       if (axis.spec.visible === false) continue;
@@ -240,7 +302,7 @@ export function computeChartLayout(options: {
       const crossScale = crossAxis ? scales.get(crossAxis.name) : undefined;
       const labelSide = resolveAxisLabelSide(axis, crossScale);
       if (labelSide !== "none" && labelSide !== "interior") {
-        labelZones.set(axis.name, { side: labelSide, depth: 20 });
+        labelZones.set(axis.name, { side: labelSide, depth: 20, offset: 0 });
       }
       if (axis.spec.title !== undefined) {
         const titleSide = resolveAxisTitleSide(axis, crossScale);
@@ -413,8 +475,18 @@ export function computeChartLayout(options: {
   };
   const labelDepths = new Map<
     string,
-    { readonly side: EdgeSide; readonly depth: number }
+    { readonly side: EdgeSide; readonly depth: number; readonly offset: number }
   >();
+  const addLabelZone = (
+    axisName: string,
+    side: EdgeSide,
+    depth: number,
+  ): void => {
+    const existing = edges[side];
+    const offset = existing > 0 ? existing + 2 : 0;
+    edges[side] = offset + depth;
+    labelDepths.set(axisName, { side, depth, offset });
+  };
   const axisTitleSpecs: {
     readonly axis: ParsedChartAxis;
     readonly side: EdgeSide;
@@ -458,8 +530,7 @@ export function computeChartLayout(options: {
         }
         if (axis.direction === "horizontal") {
           const depth = maxH + labelGap + tickProtrusion;
-          edges[labelSide] = Math.max(edges[labelSide], depth);
-          labelDepths.set(axis.name, { side: labelSide, depth });
+          addLabelZone(axis.name, labelSide, depth);
           const overhang = Math.min(maxW / 2, avail.width * 0.1);
           edges.left = Math.max(edges.left, overhang);
           edges.right = Math.max(edges.right, overhang);
@@ -468,8 +539,7 @@ export function computeChartLayout(options: {
             maxW + labelGap + tickProtrusion,
             avail.width * 0.32,
           );
-          edges[labelSide] = Math.max(edges[labelSide], depth);
-          labelDepths.set(axis.name, { side: labelSide, depth });
+          addLabelZone(axis.name, labelSide, depth);
           const overhang = Math.min(maxH / 2, avail.height * 0.1);
           edges.top = Math.max(edges.top, overhang);
           edges.bottom = Math.max(edges.bottom, overhang);
@@ -506,15 +576,13 @@ export function computeChartLayout(options: {
             avail.height * 0.25,
           );
           const depth = cappedH + labelGap + tickProtrusion;
-          edges[labelSide] = Math.max(edges[labelSide], depth);
-          labelDepths.set(axis.name, { side: labelSide, depth });
+          addLabelZone(axis.name, labelSide, depth);
         } else {
           const depth = Math.min(
             maxW + labelGap + tickProtrusion,
             avail.width * 0.34,
           );
-          edges[labelSide] = Math.max(edges[labelSide], depth);
-          labelDepths.set(axis.name, { side: labelSide, depth });
+          addLabelZone(axis.name, labelSide, depth);
         }
       }
     }
@@ -547,27 +615,28 @@ export function computeChartLayout(options: {
     edges[item.side] += item.thickness;
   }
 
-  // Reserve space for outsideEnd data labels so tall bars do not clip against the frame edge.
+  // Reserve space for outsideEnd bar labels and edge-adjacent point data labels.
   const outside = hasOutsideEndBarLabels(parsed);
-  if (outside.columnPos) {
+  const pointLabels = hasPointDataLabels(parsed);
+  if (outside.columnPos || pointLabels.top) {
     edges.top = Math.max(
       edges.top,
       Math.min(baseFontSizePx * 1.4, avail.height * 0.16),
     );
   }
-  if (outside.columnNeg) {
+  if (outside.columnNeg || pointLabels.bottom) {
     edges.bottom = Math.max(
       edges.bottom,
       Math.min(baseFontSizePx * 1.4, avail.height * 0.16),
     );
   }
-  if (outside.barPos) {
+  if (outside.barPos || pointLabels.right) {
     edges.right = Math.max(
       edges.right,
       Math.min(baseFontSizePx * 2.5, avail.width * 0.16),
     );
   }
-  if (outside.barNeg) {
+  if (outside.barNeg || pointLabels.left) {
     edges.left = Math.max(
       edges.left,
       Math.min(baseFontSizePx * 2.5, avail.width * 0.16),

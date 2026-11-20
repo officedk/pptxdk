@@ -1,6 +1,7 @@
 import type { GeometryBox } from "@react-pptx/core/capability";
 
 import type { ParsedCategoryAxis, ParsedValueAxis } from "../chart-model.ts";
+import type { ChartMarkerSymbol } from "../chart-types.ts";
 
 /** Plotted anchor emitted by column/bar renderers for label and annotation placement. */
 export type PlottedBarAnchor = {
@@ -22,11 +23,12 @@ export type PlottedBarAnchor = {
   readonly percent?: number;
 };
 
-/** Plotted anchor reserved for line, area, and scatter point renderers. */
+/** Plotted anchor emitted by line, area, and scatter point renderers. */
 export type PlottedCartesianPointAnchor = {
   readonly kind: "point";
   readonly groupIndex: number;
   readonly seriesIndex: number;
+  readonly groupSeriesIndex: number;
   readonly pointIndex: number;
   readonly value: number;
   readonly xValue?: number;
@@ -34,6 +36,7 @@ export type PlottedCartesianPointAnchor = {
   readonly seriesName: string;
   readonly x: number;
   readonly y: number;
+  readonly markerRadius?: number;
   readonly percent?: number;
 };
 
@@ -95,12 +98,23 @@ export type ValueAxisScale = {
 
 export type AxisScale = CategoryAxisScale | ValueAxisScale;
 
+export type ChartLegendMarker = {
+  readonly symbol: Exclude<ChartMarkerSymbol, "none" | "auto">;
+  readonly fillHex: string;
+  readonly fillAlpha: number;
+  readonly strokeHex?: string;
+  readonly strokeAlpha?: number;
+  readonly strokeWidth?: number;
+};
+
 export type ChartLegendEntry = {
   readonly label: string;
   readonly colorHex: string;
   readonly colorAlpha: number;
-  readonly kind: "swatch" | "line";
+  readonly kind: "swatch" | "line" | "marker";
+  readonly strokeWidth?: number;
   readonly dashArray?: string;
+  readonly marker?: ChartLegendMarker;
 };
 
 export type ChartLayoutResult = {
@@ -113,6 +127,7 @@ export type ChartLayoutResult = {
     {
       readonly side: "top" | "bottom" | "left" | "right";
       readonly depth: number;
+      readonly offset: number;
     }
   >;
 };

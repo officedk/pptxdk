@@ -216,14 +216,14 @@ export const chartRejectionScenario: CapabilityScenario = {
   capability: "rp:chart",
   kind: "rejection",
   description:
-    "Dual-author Chart rejection scenario verifying unsupported chart kinds (line/pie) error isolation while retaining native PPTX parts and unaffected pages.",
+    "Dual-author Chart rejection scenario verifying remaining unsupported chart kinds (doughnut/pie) error isolation while retaining native PPTX parts and unaffected pages.",
   visualCheckpoints: [
-    "Page 1 (unsupported-line-with-column): no PNG emitted; located error on chart[trend] while chart[bars] has no warning.",
+    "Page 1 (unsupported-doughnut-with-line): no PNG emitted; located error on chart[ring] while chart[trend] has no warning.",
     "Page 2 (unsupported-pie): no PNG emitted; located error on chart[slices].",
     "Page 3 (unaffected-column): white canvas with valid clustered column chart 'Healthy' ([12, 20]), blue bars (#2563EB), Y ticks, X labels (H1, H2), and zero diagnostics.",
   ],
   nativeCheckpoints: [
-    "Open exported PPTX in PowerPoint/WPS and verify Slide 1's line & column charts, Slide 2's pie chart, and Slide 3's column chart all remain native charts.",
+    "Open exported PPTX in PowerPoint/WPS and verify Slide 1's doughnut & line charts, Slide 2's pie chart, and Slide 3's column chart all remain native charts.",
   ],
   jsx() {
     return createElement(
@@ -231,10 +231,25 @@ export const chartRejectionScenario: CapabilityScenario = {
       { width: 640, height: 360, theme: chartTheme },
       createElement(
         Slide,
-        { id: "unsupported-line-with-column", background: "#FFFFFF" },
+        { id: "unsupported-doughnut-with-line", background: "#FFFFFF" },
+        createElement(Chart, {
+          id: "ring",
+          x: 20,
+          y: 20,
+          width: 280,
+          height: 220,
+          style: { fontFamily: jostFont, fontSize: 12 },
+          groups: [
+            {
+              kind: "doughnut",
+              data: { kind: "shared-categories", categories: ["A", "B"] },
+              series: [{ name: "Share", values: [40, 60] }],
+            },
+          ],
+        }),
         createElement(Chart, {
           id: "trend",
-          x: 20,
+          x: 330,
           y: 20,
           width: 280,
           height: 220,
@@ -243,22 +258,7 @@ export const chartRejectionScenario: CapabilityScenario = {
             {
               kind: "line",
               data: { kind: "shared-categories", categories: ["A", "B"] },
-              series: [{ name: "Trend", values: [10, 20] }],
-            },
-          ],
-        }),
-        createElement(Chart, {
-          id: "bars",
-          x: 330,
-          y: 20,
-          width: 280,
-          height: 220,
-          style: { fontFamily: jostFont, fontSize: 12 },
-          groups: [
-            {
-              kind: "column",
-              data: { kind: "shared-categories", categories: ["A", "B"] },
-              series: [{ name: "Bars", values: [8, 16] }],
+              series: [{ name: "Trend", values: [8, 16] }],
             },
           ],
         }),
@@ -309,12 +309,27 @@ export const chartRejectionScenario: CapabilityScenario = {
   document() {
     return deck({ width: 640, height: 360, theme: chartTheme }).append(
       slide({
-        id: "unsupported-line-with-column",
+        id: "unsupported-doughnut-with-line",
         background: "#FFFFFF",
       }).append(
         chart({
-          id: "trend",
+          id: "ring",
           x: 20,
+          y: 20,
+          width: 280,
+          height: 220,
+          style: { fontFamily: jostFont, fontSize: 12 },
+          groups: [
+            {
+              kind: "doughnut",
+              data: { kind: "shared-categories", categories: ["A", "B"] },
+              series: [{ name: "Share", values: [40, 60] }],
+            },
+          ],
+        }),
+        chart({
+          id: "trend",
+          x: 330,
           y: 20,
           width: 280,
           height: 220,
@@ -323,22 +338,7 @@ export const chartRejectionScenario: CapabilityScenario = {
             {
               kind: "line",
               data: { kind: "shared-categories", categories: ["A", "B"] },
-              series: [{ name: "Trend", values: [10, 20] }],
-            },
-          ],
-        }),
-        chart({
-          id: "bars",
-          x: 330,
-          y: 20,
-          width: 280,
-          height: 220,
-          style: { fontFamily: jostFont, fontSize: 12 },
-          groups: [
-            {
-              kind: "column",
-              data: { kind: "shared-categories", categories: ["A", "B"] },
-              series: [{ name: "Bars", values: [8, 16] }],
+              series: [{ name: "Trend", values: [8, 16] }],
             },
           ],
         }),
@@ -392,7 +392,7 @@ export const chartRejectionScenario: CapabilityScenario = {
     expect(page1.diagnostics).toEqual([
       expect.objectContaining({
         severity: "error",
-        path: "deck/slide[unsupported-line-with-column]/chart[trend]",
+        path: "deck/slide[unsupported-doughnut-with-line]/chart[ring]",
       }),
     ]);
 
@@ -412,10 +412,10 @@ export const chartRejectionScenario: CapabilityScenario = {
 
     const files = unzipSync(pptx);
     expect(strFromU8(files["ppt/charts/chart1.xml"]!)).toContain(
-      "<c:lineChart>",
+      "<c:doughnutChart>",
     );
     expect(strFromU8(files["ppt/charts/chart2.xml"]!)).toContain(
-      "<c:barChart>",
+      "<c:lineChart>",
     );
     expect(strFromU8(files["ppt/charts/chart3.xml"]!)).toContain(
       "<c:pieChart>",
@@ -1225,5 +1225,903 @@ export const chartBarColumnVariantsScenario: CapabilityScenario = {
     expect(strFromU8(files["ppt/charts/chart5.xml"]!)).toContain(
       "<c:manualLayout>",
     );
+  },
+};
+
+const allMarkerSymbols = [
+  "none",
+  "auto",
+  "circle",
+  "square",
+  "diamond",
+  "triangle",
+  "plus",
+  "x",
+  "star",
+  "dot",
+  "dash",
+] as const;
+
+const lineMarkersPoints = Object.fromEntries(
+  allMarkerSymbols.map((symbol, idx) => [
+    idx,
+    {
+      marker: {
+        symbol,
+        size: 7,
+        fill: idx % 2 === 0 ? "#2563EB" : "#EC4899",
+        line: { color: "#0F172A", width: 1 },
+      },
+      ...(idx === 5
+        ? {
+            color: "#EF4444",
+            line: { color: "#EF4444", width: 3, dash: "dot" as const },
+          }
+        : {}),
+    },
+  ]),
+);
+
+const lineAreaPage1Charts = [
+  {
+    id: "line-all-markers-gap",
+    x: 16,
+    y: 16,
+    width: 390,
+    height: 328,
+    title: "Smooth Line & All Markers",
+    legend: "bottom" as const,
+    displayBlanksAs: "gap" as const,
+    style: { fontFamily: jostFont, fontSize: 11 },
+    groups: [
+      {
+        kind: "line" as const,
+        data: {
+          kind: "shared-categories" as const,
+          categories: [
+            "M1",
+            "M2",
+            "M3",
+            "M4",
+            "M5",
+            "M6",
+            "M7",
+            "M8",
+            "M9",
+            "M10",
+            "M11",
+          ],
+        },
+        series: [
+          {
+            name: "Symbols",
+            color: "#2563EB",
+            smooth: true,
+            line: { width: 2, dash: "solid" as const },
+            marker: { symbol: "circle" as const, size: 6 },
+            values: [12, 24, 18, null, 26, 34, 22, 30, 16, 28, 36],
+            points: lineMarkersPoints,
+          },
+          {
+            name: "Auto",
+            color: "#10B981",
+            line: { width: 2, dash: "dash" as const },
+            marker: { symbol: "auto" as const, size: 6 },
+            values: [8, 14, 22, 18, 15, 20, 28, 24, 20, 14, 18],
+          },
+        ],
+        dataLabels: { value: true, position: "top" as const },
+      },
+    ],
+  },
+  {
+    id: "line-span",
+    x: 416,
+    y: 16,
+    width: 208,
+    height: 158,
+    title: "Span Blanks",
+    legend: "bottom" as const,
+    displayBlanksAs: "span" as const,
+    style: { fontFamily: jostFont, fontSize: 11 },
+    groups: [
+      {
+        kind: "line" as const,
+        data: {
+          kind: "shared-categories" as const,
+          categories: ["A", "B", "C", "D"],
+        },
+        series: [
+          {
+            name: "Span",
+            color: "#F59E0B",
+            marker: true,
+            values: [10, null, 28, 22],
+          },
+        ],
+      },
+    ],
+  },
+  {
+    id: "line-zero",
+    x: 416,
+    y: 186,
+    width: 208,
+    height: 158,
+    title: "Zero Blanks",
+    legend: "bottom" as const,
+    displayBlanksAs: "zero" as const,
+    style: { fontFamily: jostFont, fontSize: 11 },
+    groups: [
+      {
+        kind: "line" as const,
+        data: {
+          kind: "shared-categories" as const,
+          categories: ["A", "B", "C", "D"],
+        },
+        series: [
+          {
+            name: "Zero",
+            color: "#8B5CF6",
+            marker: true,
+            values: [15, null, 30, 20],
+          },
+        ],
+      },
+    ],
+  },
+] as const;
+
+const lineAreaPage2Charts = [
+  {
+    id: "line-stacked",
+    x: 16,
+    y: 16,
+    width: 296,
+    height: 158,
+    title: "Line Stacked",
+    legend: "top" as const,
+    style: { fontFamily: jostFont, fontSize: 11 },
+    groups: [
+      {
+        kind: "line" as const,
+        stacking: "stacked" as const,
+        data: {
+          kind: "shared-categories" as const,
+          categories: ["Q1", "Q2", "Q3"],
+        },
+        series: [
+          { name: "S1", color: "#2563EB", marker: true, values: [10, 20, 15] },
+          {
+            name: "S2",
+            color: "#F59E0B",
+            marker: { symbol: "square" as const },
+            values: [15, null, 25],
+          },
+        ],
+      },
+    ],
+  },
+  {
+    id: "line-percent",
+    x: 328,
+    y: 16,
+    width: 296,
+    height: 158,
+    title: "Line Percent",
+    legend: "top" as const,
+    style: { fontFamily: jostFont, fontSize: 11 },
+    groups: [
+      {
+        kind: "line" as const,
+        stacking: "percent" as const,
+        data: {
+          kind: "shared-categories" as const,
+          categories: ["Q1", "Q2", "Q3"],
+        },
+        series: [
+          { name: "P1", color: "#10B981", marker: true, values: [10, 30, 20] },
+          { name: "P2", color: "#EC4899", marker: true, values: [30, 10, 20] },
+        ],
+      },
+    ],
+  },
+  {
+    id: "area-standard-midcat",
+    x: 16,
+    y: 186,
+    width: 296,
+    height: 158,
+    title: "Area Standard",
+    legend: "bottom" as const,
+    displayBlanksAs: "gap" as const,
+    style: { fontFamily: jostFont, fontSize: 11 },
+    groups: [
+      {
+        kind: "area" as const,
+        data: {
+          kind: "shared-categories" as const,
+          categories: ["Jan", "Feb", "Mar", "Apr", "May"],
+        },
+        series: [
+          {
+            name: "Flow",
+            color: "#2563EB",
+            line: { color: "#1E3A8A", width: 1.5 },
+            values: [14, 28, null, 18, 32],
+          },
+        ],
+        dataLabels: { value: true },
+      },
+    ],
+  },
+  {
+    id: "area-percent",
+    x: 328,
+    y: 186,
+    width: 296,
+    height: 158,
+    title: "Area Percent",
+    legend: "bottom" as const,
+    style: { fontFamily: jostFont, fontSize: 11 },
+    groups: [
+      {
+        kind: "area" as const,
+        stacking: "percent" as const,
+        data: {
+          kind: "shared-categories" as const,
+          categories: ["Jan", "Feb", "Mar"],
+        },
+        series: [
+          { name: "A", color: "#10B981", values: [20, 40, 30] },
+          { name: "B", color: "#F59E0B", values: [60, 40, 70] },
+        ],
+      },
+    ],
+  },
+] as const;
+
+export const chartLineAreaParityScenario: CapabilityScenario = {
+  id: "chart-line-area-parity",
+  capability: "rp:chart",
+  description:
+    "Dual-author Chart scenario covering line and area standard/stacked/percent variants, smooth splines, all 11 marker symbols, gap/span/zero blank modes, midCat edge alignment, and series/point overrides.",
+  visualCheckpoints: [
+    "Page 1 (line-variants-markers-and-blanks): smooth blue line with gap break at M4, all 11 marker symbols, dashed green Auto line, plus Span and Zero blank mini charts.",
+    "Page 2 (line-area-stacked-percent-and-midCat): stacked and percent lines on top; edge-to-edge midCat standard area with gap and percent-stacked area on bottom.",
+  ],
+  nativeCheckpoints: [
+    "Open candidate PPTX in PowerPoint/WPS and verify line/area groupings, dispBlanksAs, smooth flags, marker symbols, and midCat crossBetween.",
+  ],
+  jsx() {
+    return createElement(
+      Deck,
+      { width: 640, height: 360, theme: chartTheme },
+      createElement(
+        Slide,
+        { id: "line-variants-markers-and-blanks", background: "#FFFFFF" },
+        ...lineAreaPage1Charts.map((props) => createElement(Chart, props)),
+      ),
+      createElement(
+        Slide,
+        { id: "line-area-stacked-percent-and-midCat", background: "#FFFFFF" },
+        ...lineAreaPage2Charts.map((props) => createElement(Chart, props)),
+      ),
+    );
+  },
+  document() {
+    return deck({ width: 640, height: 360, theme: chartTheme }).append(
+      slide({
+        id: "line-variants-markers-and-blanks",
+        background: "#FFFFFF",
+      }).append(...lineAreaPage1Charts.map((props) => chart(props))),
+      slide({
+        id: "line-area-stacked-percent-and-midCat",
+        background: "#FFFFFF",
+      }).append(...lineAreaPage2Charts.map((props) => chart(props))),
+    );
+  },
+  assert({ pptx, preview, validation }) {
+    assert.deepEqual(validation.errors, []);
+    assert.equal(preview.pages.length, 2);
+    for (const page of preview.pages) {
+      assert.deepEqual(page.diagnostics, []);
+      assert.ok(page.png !== undefined);
+      assert.ok(page.svg !== undefined);
+    }
+
+    const png1 = PNG.sync.read(Buffer.from(preview.pages[0]!.png!));
+    let blueCount = 0;
+    let pinkCount = 0;
+    for (let i = 0; i < png1.data.length; i += 4) {
+      const r = png1.data[i]!;
+      const g = png1.data[i + 1]!;
+      const b = png1.data[i + 2]!;
+      if (r === 0x25 && g === 0x63 && b === 0xeb) blueCount += 1;
+      if (r === 0xec && g === 0x48 && b === 0x99) pinkCount += 1;
+    }
+    assert.ok(
+      blueCount > 100,
+      `Expected #2563EB line/marker pixels, got ${blueCount}`,
+    );
+    assert.ok(
+      pinkCount > 30,
+      `Expected #EC4899 marker pixels, got ${pinkCount}`,
+    );
+
+    const png2 = PNG.sync.read(Buffer.from(preview.pages[1]!.png!));
+    let greenCount = 0;
+    for (let i = 0; i < png2.data.length; i += 4) {
+      if (
+        png2.data[i] === 0x10 &&
+        png2.data[i + 1] === 0xb9 &&
+        png2.data[i + 2] === 0x81
+      ) {
+        greenCount += 1;
+      }
+    }
+    assert.ok(
+      greenCount > 500,
+      `Expected #10B981 area pixels, got ${greenCount}`,
+    );
+
+    const files = unzipSync(pptx);
+    const chart1 = strFromU8(files["ppt/charts/chart1.xml"]!);
+    expect(chart1).toContain("<c:lineChart>");
+    expect(chart1).toContain('<c:smooth val="1"/>');
+    expect(chart1).toContain('<c:symbol val="diamond"/>');
+    expect(chart1).toContain('<c:symbol val="star"/>');
+    expect(chart1).toContain('<c:symbol val="dash"/>');
+    expect(strFromU8(files["ppt/charts/chart2.xml"]!)).toContain(
+      '<c:dispBlanksAs val="span"/>',
+    );
+    expect(strFromU8(files["ppt/charts/chart3.xml"]!)).toContain(
+      '<c:dispBlanksAs val="zero"/>',
+    );
+    const chart6 = strFromU8(files["ppt/charts/chart6.xml"]!);
+    expect(chart6).toContain("<c:areaChart>");
+    expect(chart6).toContain('<c:crossBetween val="midCat"/>');
+    expect(strFromU8(files["ppt/charts/chart7.xml"]!)).toContain(
+      '<c:grouping val="percentStacked"/>',
+    );
+  },
+};
+
+const scatterPage1Charts = [
+  {
+    id: "scatter-smooth-marker-unequal",
+    x: 16,
+    y: 16,
+    width: 300,
+    height: 158,
+    title: "Smooth + Markers (Unequal XY)",
+    legend: "bottom" as const,
+    displayBlanksAs: "span" as const,
+    style: { fontFamily: jostFont, fontSize: 11 },
+    groups: [
+      {
+        kind: "scatter" as const,
+        data: { kind: "xy" as const },
+        line: "smooth" as const,
+        markers: true,
+        series: [
+          {
+            name: "Obs5",
+            color: "#2563EB",
+            marker: { symbol: "circle" as const, size: 6 },
+            x: [1, 2, null, 4, 6],
+            y: [4, 12, 8, 9, 18],
+            points: {
+              3: {
+                color: "#EF4444",
+                marker: {
+                  symbol: "diamond" as const,
+                  size: 8,
+                  fill: "#EF4444",
+                },
+              },
+            },
+          },
+          {
+            name: "Obs3",
+            color: "#10B981",
+            line: { dash: "dash" as const, width: 2 },
+            marker: { symbol: "triangle" as const, size: 6 },
+            x: [1.5, 3.5, 5.5],
+            y: [14, 6, 15],
+          },
+          {
+            name: "Empty",
+            x: [],
+            y: [],
+          },
+        ],
+        dataLabels: { xValue: true, value: true, position: "right" as const },
+      },
+    ],
+  },
+  {
+    id: "scatter-markers-only",
+    x: 324,
+    y: 16,
+    width: 300,
+    height: 158,
+    title: "Markers Only (Zero Blanks)",
+    legend: "right" as const,
+    displayBlanksAs: "zero" as const,
+    style: { fontFamily: jostFont, fontSize: 11 },
+    groups: [
+      {
+        kind: "scatter" as const,
+        data: { kind: "xy" as const },
+        line: false as const,
+        markers: true,
+        series: [
+          {
+            name: "Cluster",
+            color: "#F59E0B",
+            marker: { symbol: "square" as const, size: 7 },
+            x: [1, null, 3, 4],
+            y: [5, 10, 15, 12],
+          },
+        ],
+      },
+    ],
+  },
+  {
+    id: "scatter-straight-only",
+    x: 16,
+    y: 186,
+    width: 196,
+    height: 158,
+    title: "Straight Only",
+    legend: false as const,
+    style: { fontFamily: jostFont, fontSize: 10 },
+    groups: [
+      {
+        kind: "scatter" as const,
+        data: { kind: "xy" as const },
+        line: "straight" as const,
+        markers: false,
+        series: [{ name: "S", color: "#8B5CF6", x: [0, 2, 4], y: [2, 8, 5] }],
+      },
+    ],
+  },
+  {
+    id: "scatter-straight-markers",
+    x: 222,
+    y: 186,
+    width: 196,
+    height: 158,
+    title: "Straight + Markers",
+    legend: false as const,
+    style: { fontFamily: jostFont, fontSize: 10 },
+    groups: [
+      {
+        kind: "scatter" as const,
+        data: { kind: "xy" as const },
+        line: "straight" as const,
+        markers: true,
+        series: [
+          {
+            name: "SM",
+            color: "#EC4899",
+            marker: { symbol: "x" as const, size: 7 },
+            x: [1, 3, 5],
+            y: [3, 9, 4],
+          },
+        ],
+      },
+    ],
+  },
+  {
+    id: "scatter-smooth-only",
+    x: 428,
+    y: 186,
+    width: 196,
+    height: 158,
+    title: "Smooth Only",
+    legend: false as const,
+    style: { fontFamily: jostFont, fontSize: 10 },
+    groups: [
+      {
+        kind: "scatter" as const,
+        data: { kind: "xy" as const },
+        line: "smooth" as const,
+        markers: false,
+        series: [
+          { name: "SO", color: "#14B8A6", x: [1, 2, 3, 4], y: [2, 10, 4, 12] },
+        ],
+      },
+    ],
+  },
+] as const;
+
+const scatterPage2Charts = [
+  {
+    id: "scatter-quadrants",
+    x: 16,
+    y: 20,
+    width: 296,
+    height: 320,
+    title: "4-Quadrant Scatter",
+    legend: "bottom" as const,
+    displayBlanksAs: "gap" as const,
+    style: { fontFamily: jostFont, fontSize: 11 },
+    groups: [
+      {
+        kind: "scatter" as const,
+        data: { kind: "xy" as const },
+        line: "straight" as const,
+        markers: true,
+        series: [
+          {
+            name: "Quad",
+            color: "#2563EB",
+            x: [-10, -4, null, 4, 10],
+            y: [-8, 6, 0, -5, 9],
+          },
+        ],
+      },
+    ],
+  },
+  {
+    id: "scatter-log-axes",
+    x: 328,
+    y: 20,
+    width: 296,
+    height: 320,
+    title: "Log10 XY Scatter",
+    legend: "bottom" as const,
+    style: { fontFamily: jostFont, fontSize: 11 },
+    axes: {
+      x: {
+        kind: "value" as const,
+        logBase: 10,
+        min: 1,
+        max: 1000,
+        gridlines: true,
+      },
+      y: {
+        kind: "value" as const,
+        logBase: 10,
+        min: 1,
+        max: 100,
+        gridlines: true,
+      },
+    },
+    groups: [
+      {
+        kind: "scatter" as const,
+        axes: { x: "x", y: "y" },
+        data: { kind: "xy" as const },
+        line: "straight" as const,
+        markers: true,
+        series: [
+          {
+            name: "PowerLaw",
+            color: "#F59E0B",
+            marker: { symbol: "star" as const, size: 7 },
+            x: [1, 10, 100, 1000],
+            y: [2, 8, 32, 90],
+          },
+        ],
+      },
+    ],
+  },
+] as const;
+
+export const chartScatterParityScenario: CapabilityScenario = {
+  id: "chart-scatter-parity",
+  capability: "rp:chart",
+  description:
+    "Dual-author Chart scenario covering all 5 scatter marker/line presentations, unequal-length XY series with empty series and null coordinates, gap/span/zero blank handling, 4-quadrant and log10 axes, and X/Y data labels.",
+  visualCheckpoints: [
+    "Page 1 (scatter-five-modes-and-unequal-xy): 5 scatter charts demonstrating smooth+marker (with empty legend entry and X/Y labels), markers-only, straight-only, straight+markers, and smooth-only.",
+    "Page 2 (scatter-log-and-quadrants): 4-quadrant scatter with negative/positive X/Y zero baselines and log10 XY scatter with power-law curve.",
+  ],
+  nativeCheckpoints: [
+    "Open candidate PPTX in PowerPoint/WPS and verify all 5 scatterStyle modes, independent XY columns, and logBase=10 scatter axes.",
+  ],
+  jsx() {
+    return createElement(
+      Deck,
+      { width: 640, height: 360, theme: chartTheme },
+      createElement(
+        Slide,
+        { id: "scatter-five-modes-and-unequal-xy", background: "#FFFFFF" },
+        ...scatterPage1Charts.map((props) => createElement(Chart, props)),
+      ),
+      createElement(
+        Slide,
+        { id: "scatter-log-and-quadrants", background: "#FFFFFF" },
+        ...scatterPage2Charts.map((props) => createElement(Chart, props)),
+      ),
+    );
+  },
+  document() {
+    return deck({ width: 640, height: 360, theme: chartTheme }).append(
+      slide({
+        id: "scatter-five-modes-and-unequal-xy",
+        background: "#FFFFFF",
+      }).append(...scatterPage1Charts.map((props) => chart(props))),
+      slide({ id: "scatter-log-and-quadrants", background: "#FFFFFF" }).append(
+        ...scatterPage2Charts.map((props) => chart(props)),
+      ),
+    );
+  },
+  assert({ pptx, preview, validation }) {
+    assert.deepEqual(validation.errors, []);
+    assert.equal(preview.pages.length, 2);
+    for (const page of preview.pages) {
+      assert.deepEqual(page.diagnostics, []);
+      assert.ok(page.png !== undefined);
+      assert.ok(page.svg !== undefined);
+    }
+
+    const png1 = PNG.sync.read(Buffer.from(preview.pages[0]!.png!));
+    let blueCount = 0;
+    let amberCount = 0;
+    for (let i = 0; i < png1.data.length; i += 4) {
+      const r = png1.data[i]!;
+      const g = png1.data[i + 1]!;
+      const b = png1.data[i + 2]!;
+      if (r === 0x25 && g === 0x63 && b === 0xeb) blueCount += 1;
+      if (r === 0xf5 && g === 0x9e && b === 0x0b) amberCount += 1;
+    }
+    assert.ok(
+      blueCount > 80,
+      `Expected #2563EB scatter pixels, got ${blueCount}`,
+    );
+    assert.ok(
+      amberCount > 80,
+      `Expected #F59E0B marker pixels, got ${amberCount}`,
+    );
+
+    const files = unzipSync(pptx);
+    expect(strFromU8(files["ppt/charts/chart1.xml"]!)).toContain(
+      '<c:scatterStyle val="smoothMarker"/>',
+    );
+    expect(strFromU8(files["ppt/charts/chart2.xml"]!)).toContain(
+      '<c:scatterStyle val="marker"/>',
+    );
+    expect(strFromU8(files["ppt/charts/chart3.xml"]!)).toContain(
+      '<c:scatterStyle val="line"/>',
+    );
+    expect(strFromU8(files["ppt/charts/chart4.xml"]!)).toContain(
+      '<c:scatterStyle val="lineMarker"/>',
+    );
+    expect(strFromU8(files["ppt/charts/chart5.xml"]!)).toContain(
+      '<c:scatterStyle val="smooth"/>',
+    );
+    expect(strFromU8(files["ppt/charts/chart7.xml"]!)).toContain(
+      '<c:logBase val="10"/>',
+    );
+  },
+};
+
+const comboPage1Chart = {
+  id: "combo-col-area-line-dual",
+  x: 20,
+  y: 16,
+  width: 600,
+  height: 328,
+  title: "Revenue, Baseline & Margin %",
+  legend: "bottom" as const,
+  style: { fontFamily: jostFont, fontSize: 12 },
+  axes: {
+    catPrimary: {
+      kind: "category" as const,
+      position: "bottom" as const,
+      title: "Quarter",
+    },
+    catSecondary: { kind: "category" as const, position: "top" as const },
+    valPrimary: {
+      kind: "value" as const,
+      position: "left" as const,
+      min: 0,
+      max: 100,
+      numberFormat: "$#,##0",
+      gridlines: true,
+      title: "Revenue",
+    },
+    valSecondary: {
+      kind: "value" as const,
+      position: "right" as const,
+      min: 0,
+      max: 1,
+      numberFormat: "0%",
+      title: "Margin %",
+    },
+  },
+  groups: [
+    {
+      kind: "area" as const,
+      axes: { category: "catPrimary", value: "valPrimary" },
+      data: {
+        kind: "shared-categories" as const,
+        categories: ["Q1", "Q2", "Q3", "Q4"],
+      },
+      series: [{ name: "Floor", color: "#93C5FD", values: [20, 25, 30, 28] }],
+    },
+    {
+      kind: "column" as const,
+      axes: { category: "catPrimary", value: "valPrimary" },
+      data: {
+        kind: "shared-categories" as const,
+        categories: ["Q1", "Q2", "Q3", "Q4"],
+      },
+      series: [{ name: "Revenue", color: "#2563EB", values: [45, 68, 74, 88] }],
+      dataLabels: { value: true, position: "insideEnd" as const },
+    },
+    {
+      kind: "line" as const,
+      axes: { category: "catSecondary", value: "valSecondary" },
+      data: {
+        kind: "shared-categories" as const,
+        categories: ["P1", "P2", "P3", "P4"],
+      },
+      series: [
+        {
+          name: "Margin",
+          color: "#F59E0B",
+          smooth: true,
+          marker: { symbol: "diamond" as const, size: 7, fill: "#F59E0B" },
+          values: [0.22, 0.48, 0.62, 0.78],
+        },
+      ],
+      dataLabels: { value: true, position: "top" as const },
+    },
+  ],
+};
+
+const comboPage2Chart = {
+  id: "combo-bar-scatter-shared-x",
+  x: 20,
+  y: 16,
+  width: 600,
+  height: 328,
+  title: "Horizontal Bar + Scatter Shared X",
+  legend: "right" as const,
+  style: { fontFamily: jostFont, fontSize: 12 },
+  axes: {
+    barCat: { kind: "category" as const, position: "left" as const },
+    sharedVal: {
+      kind: "value" as const,
+      position: "bottom" as const,
+      min: 0,
+      max: 50,
+      gridlines: true,
+    },
+    scatterY: {
+      kind: "value" as const,
+      position: "right" as const,
+      min: 0,
+      max: 10,
+    },
+  },
+  groups: [
+    {
+      kind: "bar" as const,
+      axes: { category: "barCat", value: "sharedVal" },
+      data: {
+        kind: "shared-categories" as const,
+        categories: ["North", "South", "West"],
+      },
+      series: [{ name: "Volume", color: "#10B981", values: [18, 36, 28] }],
+    },
+    {
+      kind: "scatter" as const,
+      axes: { x: "sharedVal", y: "scatterY" },
+      data: { kind: "xy" as const },
+      line: "straight" as const,
+      markers: true,
+      series: [
+        {
+          name: "Target",
+          color: "#EF4444",
+          marker: { symbol: "circle" as const, size: 7 },
+          x: [12, 26, 42],
+          y: [3, 7, 9],
+        },
+      ],
+    },
+  ],
+};
+
+export const chartComboDualAxesScenario: CapabilityScenario = {
+  id: "chart-combo-dual-axes-parity",
+  capability: "rp:chart",
+  description:
+    "Dual-author Chart scenario covering multi-group combo layering (area + column + line across primary/secondary category & value axes, and horizontal bar + scatter sharing a value axis) with mixed legend icons and data labels.",
+  visualCheckpoints: [
+    "Page 1 (combo-area-column-line-dual): layered light-blue area, blue columns with insideEnd labels, amber smooth line with diamonds mapped to right 0%..100% axis, top secondary category axis, and bottom legend showing both swatches and line+marker icon.",
+    "Page 2 (combo-bar-scatter-shared-x): green horizontal bars and red straight+circle scatter overlay sharing the bottom 0..50 axis with right scatter Y axis and right legend.",
+  ],
+  nativeCheckpoints: [
+    "Open candidate PPTX in PowerPoint/WPS and verify all 4 axes, multi-group axId bindings, and mixed legend entries render cleanly.",
+  ],
+  jsx() {
+    return createElement(
+      Deck,
+      { width: 640, height: 360, theme: chartTheme },
+      createElement(
+        Slide,
+        { id: "combo-area-column-line-dual", background: "#FFFFFF" },
+        createElement(Chart, comboPage1Chart),
+      ),
+      createElement(
+        Slide,
+        { id: "combo-bar-scatter-shared-x", background: "#FFFFFF" },
+        createElement(Chart, comboPage2Chart),
+      ),
+    );
+  },
+  document() {
+    return deck({ width: 640, height: 360, theme: chartTheme }).append(
+      slide({
+        id: "combo-area-column-line-dual",
+        background: "#FFFFFF",
+      }).append(chart(comboPage1Chart)),
+      slide({ id: "combo-bar-scatter-shared-x", background: "#FFFFFF" }).append(
+        chart(comboPage2Chart),
+      ),
+    );
+  },
+  assert({ pptx, preview, validation }) {
+    assert.deepEqual(validation.errors, []);
+    assert.equal(preview.pages.length, 2);
+    for (const page of preview.pages) {
+      assert.deepEqual(page.diagnostics, []);
+      assert.ok(page.png !== undefined);
+      assert.ok(page.svg !== undefined);
+    }
+
+    const png1 = PNG.sync.read(Buffer.from(preview.pages[0]!.png!));
+    let blueCount = 0;
+    let amberCount = 0;
+    for (let i = 0; i < png1.data.length; i += 4) {
+      const r = png1.data[i]!;
+      const g = png1.data[i + 1]!;
+      const b = png1.data[i + 2]!;
+      if (r === 0x25 && g === 0x63 && b === 0xeb) blueCount += 1;
+      if (r === 0xf5 && g === 0x9e && b === 0x0b) amberCount += 1;
+    }
+    assert.ok(
+      blueCount > 300,
+      `Expected #2563EB column pixels, got ${blueCount}`,
+    );
+    assert.ok(
+      amberCount > 80,
+      `Expected #F59E0B line/marker pixels, got ${amberCount}`,
+    );
+
+    const png2 = PNG.sync.read(Buffer.from(preview.pages[1]!.png!));
+    let greenCount = 0;
+    let redCount = 0;
+    for (let i = 0; i < png2.data.length; i += 4) {
+      const r = png2.data[i]!;
+      const g = png2.data[i + 1]!;
+      const b = png2.data[i + 2]!;
+      if (r === 0x10 && g === 0xb9 && b === 0x81) greenCount += 1;
+      if (r === 0xef && g === 0x44 && b === 0x44) redCount += 1;
+    }
+    assert.ok(
+      greenCount > 300,
+      `Expected #10B981 bar pixels, got ${greenCount}`,
+    );
+    assert.ok(
+      redCount > 50,
+      `Expected #EF4444 scatter pixels, got ${redCount}`,
+    );
+
+    const files = unzipSync(pptx);
+    const chart1 = strFromU8(files["ppt/charts/chart1.xml"]!);
+    expect(chart1).toContain("<c:areaChart>");
+    expect(chart1).toContain("<c:barChart>");
+    expect(chart1).toContain("<c:lineChart>");
+    const chart2 = strFromU8(files["ppt/charts/chart2.xml"]!);
+    expect(chart2).toContain('<c:barDir val="bar"/>');
+    expect(chart2).toContain("<c:scatterChart>");
   },
 };

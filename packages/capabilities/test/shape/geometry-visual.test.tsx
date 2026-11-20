@@ -11,6 +11,7 @@ import {
   linearGradient,
   path,
   preset,
+  type Geometry,
 } from "@react-pptx/capabilities/shape";
 import { Shape } from "@react-pptx/capabilities/shape-elements";
 import { Text } from "@react-pptx/capabilities/text-elements";
@@ -611,7 +612,7 @@ describe("geometry, object visuals, and text visuals", () => {
             y: 0,
             width: 10,
             height: 10,
-            geometry: "unknownPreset",
+            geometry: "unknownPreset" as Geometry,
           }),
           "unsupported-geometry",
         ],

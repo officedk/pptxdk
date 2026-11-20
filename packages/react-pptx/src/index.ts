@@ -158,6 +158,7 @@ export type {
   PathCommand,
   PathOptions,
   PresetGeometry,
+  PresetGeometryName,
 } from "@react-pptx/capabilities";
 export { appendJSX, expandDocument } from "@react-pptx/react";
 export {

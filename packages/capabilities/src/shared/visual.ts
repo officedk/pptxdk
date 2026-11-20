@@ -13,10 +13,11 @@ import {
 import { pxToEmu, resolvedColorXml } from "@react-pptx/emit";
 
 import {
-  presetGeometryNames,
-  type CustomGeometry,
+  resolveGeometry,
+  resolvedGeometryXml,
   type Geometry,
-  type PathCommand,
+  type PresetGeometryName,
+  type ResolvedGeometry,
 } from "./geometry.ts";
 
 export function linearGradient(
@@ -120,7 +121,8 @@ export type ShapePropertiesResult = {
   readonly opacity?: number;
   readonly warnings: readonly VisualWarning[];
   readonly hasVisibleStyle: boolean;
-  readonly geometryName: string;
+  readonly geometryName: PresetGeometryName | "custom";
+  readonly geometry: ResolvedGeometry;
 };
 
 function invalid(code: string, message: string): never {
@@ -259,170 +261,6 @@ function rotationUnits(style: VisualStyleRecord): number | undefined {
       "rotate exceeds writable DrawingML range after conversion",
     );
   return units;
-}
-
-function point(value: number, label: string): string {
-  const coordinate = Math.round(finite(value, label) * 1000);
-  if (
-    !Number.isSafeInteger(coordinate) ||
-    Math.abs(coordinate) > 2_147_483_647
-  ) {
-    invalid(
-      "invalid-geometry",
-      `${label} exceeds DrawingML path coordinate range after conversion`,
-    );
-  }
-  return String(coordinate);
-}
-
-function pathCommandXml(command: PathCommand): string {
-  switch (command.op) {
-    case "M":
-      return `<a:moveTo><a:pt x="${point(command.x, "path.x")}" y="${point(command.y, "path.y")}"/></a:moveTo>`;
-    case "L":
-      return `<a:lnTo><a:pt x="${point(command.x, "path.x")}" y="${point(command.y, "path.y")}"/></a:lnTo>`;
-    case "C":
-      return `<a:cubicBezTo><a:pt x="${point(command.x1, "path.x1")}" y="${point(command.y1, "path.y1")}"/><a:pt x="${point(command.x2, "path.x2")}" y="${point(command.y2, "path.y2")}"/><a:pt x="${point(command.x, "path.x")}" y="${point(command.y, "path.y")}"/></a:cubicBezTo>`;
-    case "Q":
-      return `<a:quadBezTo><a:pt x="${point(command.x1, "path.x1")}" y="${point(command.y1, "path.y1")}"/><a:pt x="${point(command.x, "path.x")}" y="${point(command.y, "path.y")}"/></a:quadBezTo>`;
-    case "Z":
-      return "<a:close/>";
-    default:
-      return invalid(
-        "invalid-geometry",
-        "Custom path contains unsupported command",
-      );
-  }
-}
-
-function customGeometryXml(geometry: CustomGeometry): string {
-  if (!isRecord(geometry) || !Array.isArray(geometry.paths))
-    invalid("invalid-geometry", "Custom geometry must contain a paths array");
-  const width = finite(geometry.width, "geometry.width");
-  const height = finite(geometry.height, "geometry.height");
-  if (width <= 0 || height <= 0 || geometry.paths.length === 0) {
-    invalid(
-      "invalid-geometry",
-      "Custom geometry must have a positive viewBox and at least one path",
-    );
-  }
-  const widthUnits = point(width, "geometry.width");
-  const heightUnits = point(height, "geometry.height");
-  if (Number(widthUnits) === 0 || Number(heightUnits) === 0) {
-    invalid(
-      "invalid-geometry",
-      "Custom geometry viewBox must retain positive width and height in path coordinate space after conversion",
-    );
-  }
-  const pathList = geometry.paths
-    .map((path, index) => {
-      if (
-        !isRecord(path) ||
-        !Array.isArray(path.commands) ||
-        path.commands.length === 0
-      ) {
-        invalid(
-          "invalid-geometry",
-          `Custom path ${index + 1} must contain commands`,
-        );
-      }
-      if (
-        (path.fill !== undefined && typeof path.fill !== "boolean") ||
-        (path.stroke !== undefined && typeof path.stroke !== "boolean")
-      )
-        invalid(
-          "invalid-geometry",
-          `fill/stroke for custom path ${index + 1} must be boolean`,
-        );
-      const commands = path.commands.map(pathCommandXml).join("");
-      return `<a:path w="${widthUnits}" h="${heightUnits}"${path.fill === false ? ' fill="none"' : ""}${path.stroke === false ? ' stroke="0"' : ""}>${commands}</a:path>`;
-    })
-    .join("");
-  return `<a:custGeom><a:avLst/><a:gdLst/><a:ahLst/><a:cxnLst/><a:rect l="l" t="t" r="r" b="b"/><a:pathLst>${pathList}</a:pathLst></a:custGeom>`;
-}
-
-function geometryXml(
-  value: Geometry | undefined,
-  radius: number | undefined,
-  box: ShapeBox,
-  warnings: VisualWarning[],
-): { readonly xml: string; readonly name: string } {
-  if (isRecord(value) && value["type"] === "custom") {
-    if (radius !== undefined && radius > 0)
-      invalid(
-        "unsupported-style-combination",
-        "borderRadius cannot be used together with custom geometry",
-      );
-    return { xml: customGeometryXml(value), name: "custom" };
-  }
-  let name: string;
-  let adjust: Record<string, number> = {};
-  if (value === undefined)
-    name = radius !== undefined && radius > 0 ? "roundRect" : "rect";
-  else if (typeof value === "string") name = value;
-  else if (
-    isRecord(value) &&
-    value["type"] === "preset" &&
-    typeof value["name"] === "string"
-  ) {
-    name = value["name"];
-    if (value["adjust"] !== undefined) {
-      if (!isRecord(value["adjust"]))
-        invalid("invalid-geometry", "preset.adjust must be an object");
-      adjust = { ...value["adjust"] };
-    }
-  } else
-    invalid(
-      "invalid-geometry",
-      "geometry must be a preset name, preset(...), or custom path",
-    );
-  if (!presetGeometryNames.has(name))
-    invalid("unsupported-geometry", `Unsupported preset geometry ${name}`);
-  if (radius !== undefined && radius > 0) {
-    if (name !== "rect" && name !== "roundRect")
-      invalid(
-        "unsupported-style-combination",
-        "borderRadius is only applicable to rect or roundRect geometry",
-      );
-    name = "roundRect";
-    if (adjust["adj"] === undefined) {
-      const raw = Math.round(
-        (radius / Math.min(box.width, box.height)) * 100000,
-      );
-      adjust["adj"] = raw;
-      if (raw > 50000)
-        warnings.push({
-          code: "geometry-adjustment-range",
-          message:
-            "borderRadius exceeds half of the shorter side; preserved original radius and wrote native adjust value",
-        });
-    }
-  }
-  for (const [key, amount] of Object.entries(adjust)) {
-    if (!/^adj(?:[1-9]\d*)?$/u.test(key) || !Number.isSafeInteger(amount))
-      invalid(
-        "invalid-geometry",
-        `preset.adjust.${key} must be a finite integer`,
-      );
-    if (
-      name === "blockArc" &&
-      (((key === "adj1" || key === "adj2") &&
-        (amount < 0 || amount > 21_600_000)) ||
-        (key === "adj3" && (amount < 0 || amount > 50_000)))
-    ) {
-      warnings.push({
-        code: "geometry-adjustment-range",
-        message: `blockArc.${key} exceeds common preset range; preserved original adjust value`,
-      });
-    }
-  }
-  const values = Object.entries(adjust)
-    .map(([key, amount]) => `<a:gd name="${key}" fmla="val ${amount}"/>`)
-    .join("");
-  return {
-    xml: `<a:prstGeom prst="${name}"><a:avLst>${values}</a:avLst></a:prstGeom>`,
-    name,
-  };
 }
 
 export function fillXml(
@@ -632,12 +470,14 @@ export function shapePropertiesXml(
   const effects = effectsXml(theme, style);
   const hasVisibleStyle =
     (options.fill !== undefined && !options.image) || hasVisibleBoxStyle(style);
-  const geometry = geometryXml(
-    options.geometry,
-    options.layoutOnlyWhenInvisible && !hasVisibleStyle ? undefined : radius,
+  const resolvedGeometry = resolveGeometry({
+    geometry: options.geometry,
+    borderRadius:
+      options.layoutOnlyWhenInvisible && !hasVisibleStyle ? undefined : radius,
     box,
-    warnings,
-  );
+  });
+  warnings.push(...resolvedGeometry.warnings);
+  const geometryXmlText = resolvedGeometryXml(resolvedGeometry.geometry);
   // Transparent layout Box does not write native transforms, but invalid rotation remains an unwritable visual declaration.
   const rotation = rotationUnits(style);
   const transform =
@@ -645,11 +485,12 @@ export function shapePropertiesXml(
       ? ""
       : transformXml(box, rotation, options.flipH, options.flipV);
   return {
-    xml: `<p:spPr>${transform}${geometry.xml}${visualFill}${line}${effects}</p:spPr>`,
+    xml: `<p:spPr>${transform}${geometryXmlText}${visualFill}${line}${effects}</p:spPr>`,
     ...(opacity === undefined ? {} : { opacity }),
     warnings,
     hasVisibleStyle,
-    geometryName: geometry.name,
+    geometryName: resolvedGeometry.name,
+    geometry: resolvedGeometry.geometry,
   };
 }
 

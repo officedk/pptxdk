@@ -755,7 +755,7 @@ describe("Slice 4 (Ticket 10): Chart static preview, layout warning, and textCap
           validColumnChart("warn-first"),
           shape({
             id: "unsupported-second",
-            geometry: "star5",
+            text: "Unsupported",
             x: 320,
             y: 20,
             width: 40,
@@ -765,7 +765,7 @@ describe("Slice 4 (Ticket 10): Chart static preview, layout warning, and textCap
         slide({ id: "error-then-warn" }).append(
           shape({
             id: "unsupported-first",
-            geometry: "star5",
+            text: "Unsupported",
             x: 20,
             y: 20,
             width: 40,

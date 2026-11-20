@@ -60,6 +60,14 @@ describe("Slice 4 (Ticket 09): Table static preview positive and negative behavi
       ),
     },
   ]);
+  const arabicFont = font("Noto Naskh Arabic", [
+    {
+      weight: 400,
+      data: readFileSync(
+        new URL("../assets/fonts/NotoNaskhArabic.ttf", import.meta.url),
+      ),
+    },
+  ]);
 
   it("renders multi-row/multi-column table fills, solid borders, merges, rich text, stretched layout, and isolates mutations", async () => {
     const previewDoc = runDocPreview(documentCapabilities);
@@ -378,7 +386,138 @@ process.stdout.write("ok");
     assert.equal(isolated.stdout, "ok");
   });
 
-  it("rejects non-solid cell borders, cell overflow, and unsupported cell text features with cell-located errors while preserving sibling pages", async () => {
+  it("renders dashed/dotted cell borders, full cell rich text (BiDi, justify, lists, decorations, textShadow, letterSpacing), and clips fixed-height overset cells with zero preview diagnostics", async () => {
+    const resolveWith = createResolver(documentCapabilities);
+    const doc = deck({ width: 520, height: 300 }).append(
+      slide({ id: "table-parity", background: "#FFFFFF" }).append(
+        table({
+          id: "parity-tbl",
+          x: 20,
+          y: 20,
+          columns: [160, 160, 140],
+          style: { fontFamily: jostFont, fontSize: 13, color: "#0F172A" },
+        }).append(
+          row({ id: "styled-row" }).append(
+            cell(
+              [
+                paragraph("Dashed cell", {
+                  style: {
+                    textDecoration: "underline",
+                    letterSpacing: 1.5,
+                  },
+                }),
+                paragraph("List item 1", {
+                  style: { list: { type: "bullet" } },
+                }),
+                paragraph("List item 2", {
+                  style: { list: { type: "number", startAt: 2 } },
+                }),
+              ],
+              {
+                id: "dashed-cell",
+                style: {
+                  padding: 6,
+                  borderColor: "#1E293B",
+                  borderWidth: 2,
+                  borderStyle: "dashed",
+                },
+              },
+            ),
+            cell(
+              [
+                paragraph("Shadow strike", {
+                  style: {
+                    textDecoration: "line-through",
+                    textShadow: {
+                      color: "#000000",
+                      blur: 2,
+                      distance: 2,
+                      angle: 45,
+                    },
+                  },
+                }),
+                paragraph("Justified sample copy across cell width", {
+                  style: { align: "justify" },
+                }),
+              ],
+              {
+                id: "dotted-cell",
+                style: {
+                  padding: 6,
+                  borderColor: "#2563EB",
+                  borderWidth: 2,
+                  borderStyle: "dotted",
+                },
+              },
+            ),
+            cell("مرحبا بالعالم", {
+              id: "arabic-cell",
+              style: {
+                fontFamily: arabicFont,
+                padding: 6,
+                borderColor: "#0F766E",
+                borderWidth: 1,
+                borderStyle: "solid",
+              },
+            }),
+          ),
+        ),
+        table({
+          id: "overset-tbl",
+          x: 20,
+          y: 160,
+          columns: [140],
+          style: { fontFamily: jostFont, fontSize: 15, color: "#DC2626" },
+        }).append(
+          row({ id: "short-row", style: { height: 22 } }).append(
+            cell("LINE1\nLINE2\nLINE3\nLINE4\nLINE5", {
+              id: "overset-cell",
+              style: {
+                padding: 2,
+                borderColor: "#0F172A",
+                borderWidth: 1,
+              },
+            }),
+          ),
+        ),
+      ),
+    );
+
+    const resolution = resolveWith(doc);
+    assert.ok(
+      resolution.report.diagnostics.some(
+        (diag) =>
+          diag.severity === "warning" &&
+          diag.code === "overset" &&
+          diag.path ===
+            "deck/slide[table-parity]/table[overset-tbl]/row[short-row]/cell[overset-cell]",
+      ),
+    );
+    const { pptx } = emit(resolution);
+    assert.deepEqual((await validatePptx(pptx)).errors, []);
+
+    const preview = paint(resolution);
+    const page = preview.pages[0]!;
+    assert.deepEqual(page.diagnostics, []);
+    assert.ok(page.png !== undefined);
+    assert.ok(page.svg !== undefined);
+    expect(page.svg).toContain('stroke-dasharray="8 6"');
+    expect(page.svg).toContain('stroke-dasharray="2 4"');
+    expect(page.svg).toContain("<feDropShadow");
+    expect(page.svg).toContain("<clipPath");
+
+    // Overflowing lines below y=160+22=182 must be clipped; pixels at y=195 under overset-tbl must remain white.
+    const rendered = PNG.sync.read(Buffer.from(page.png));
+    for (let x = 28; x <= 140; x += 12) {
+      const offset = (195 * rendered.width + x) * 4;
+      assert.deepEqual(
+        [...rendered.data.subarray(offset, offset + 4)],
+        [255, 255, 255, 255],
+      );
+    }
+  });
+
+  it("rejects only missing glyphs and unmeasured fonts on fixed-height cells with cell-located errors while preserving sibling pages", async () => {
     const previewDoc = runDocPreview(documentCapabilities);
 
     const cases: readonly {
@@ -386,68 +525,6 @@ process.stdout.write("ok");
       readonly node: ReturnType<typeof table>;
       readonly expected: RegExp;
     }[] = [
-      {
-        label: "dashed-cell-border",
-        node: table({
-          id: "bad-tbl",
-          x: 10,
-          y: 10,
-          columns: [120],
-          style: { fontFamily: jostFont, fontSize: 14 },
-        }).append(
-          row({ id: "bad-row" }).append(
-            cell("Dashed", {
-              id: "bad-cell",
-              style: {
-                borderColor: "#1E293B",
-                borderWidth: 2,
-                borderStyle: "dashed",
-              },
-            }),
-          ),
-        ),
-        expected: /non-solid/i,
-      },
-      {
-        label: "dotted-cell-border",
-        node: table({
-          id: "bad-tbl",
-          x: 10,
-          y: 10,
-          columns: [120],
-          style: { fontFamily: jostFont, fontSize: 14 },
-        }).append(
-          row({ id: "bad-row" }).append(
-            cell("Dotted", {
-              id: "bad-cell",
-              style: {
-                borderColor: "#1E293B",
-                borderWidth: 1,
-                borderStyle: "dotted",
-              },
-            }),
-          ),
-        ),
-        expected: /non-solid/i,
-      },
-      {
-        label: "fixed-height-cell-overflow",
-        node: table({
-          id: "bad-tbl",
-          x: 10,
-          y: 10,
-          columns: [80],
-          style: { fontFamily: jostFont, fontSize: 14 },
-        }).append(
-          row({ id: "bad-row", style: { height: 16 } }).append(
-            cell("Line one\nLine two\nLine three", {
-              id: "bad-cell",
-              style: { padding: 4 },
-            }),
-          ),
-        ),
-        expected: /overflow/i,
-      },
       {
         label: "missing-glyph-arabic-cell",
         node: table({

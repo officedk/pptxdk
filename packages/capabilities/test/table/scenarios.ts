@@ -15,6 +15,7 @@ import {
 import { Cell, Row, Table } from "@react-pptx/capabilities/table-elements";
 import { P, SlideNumber, Span } from "@react-pptx/capabilities/text-elements";
 import { Deck, Slide } from "@react-pptx/react";
+import { strFromU8, unzipSync } from "fflate";
 import { PNG } from "pngjs";
 import { createElement } from "react";
 import { expect } from "vitest";
@@ -41,6 +42,15 @@ const notoFont = font("Noto Sans CJK SC", [
     weight: 400,
     data: readFileSync(
       new URL("../assets/fonts/NotoSansSC-Regular.woff2", import.meta.url),
+    ),
+  },
+]);
+
+const arabicFont = font("Noto Naskh Arabic", [
+  {
+    weight: 400,
+    data: readFileSync(
+      new URL("../assets/fonts/NotoNaskhArabic.ttf", import.meta.url),
     ),
   },
 ]);
@@ -562,15 +572,305 @@ export const tablePositiveScenario: CapabilityScenario = {
   },
 };
 
+export const tableRichTextBordersAndOversetScenario: CapabilityScenario = {
+  id: "table-rich-text-borders-and-overset",
+  capability: "rp:table",
+  description:
+    "Dual-author Table scenario covering dashed/dotted borders, multiscript/BiDi, justify, bullet & numbered lists, underline/line-through, textShadow, letterSpacing, slideNumber, and fixed-height overset clipping with build warning and zero preview diagnostics.",
+  visualCheckpoints: [
+    "Page 1 (borders-and-rich-text): white canvas; 3-column table with dashed border cell (underline, letterSpacing, bullet & numbered lists), dotted border cell (line-through, textShadow, justify), and solid border Arabic RTL cell.",
+    "Page 2 (overset-cell-clipping): white canvas; fixed-height (24px) row with 4 lines of red text clipped cleanly to cell bounds so pixels below the cell remain pure white.",
+  ],
+  nativeCheckpoints: [
+    "Open exported PPTX and verify native <a:prstDash val='dash'/'dot'/> borders, rich text formatting, and preserved overset cell text with overset warning in build report.",
+  ],
+  jsx() {
+    return createElement(
+      Deck,
+      { width: 640, height: 360 },
+      createElement(
+        Slide,
+        { id: "borders-and-rich-text", background: "#FFFFFF" },
+        createElement(
+          Table,
+          {
+            id: "rich-tbl",
+            x: 24,
+            y: 28,
+            columns: [200, 200, 170],
+            style: { fontFamily: jostFont, fontSize: 13, color: "#0F172A" },
+          },
+          createElement(
+            Row,
+            { id: "rich-row" },
+            createElement(
+              Cell,
+              {
+                id: "dashed-list-cell",
+                style: {
+                  padding: 8,
+                  backgroundColor: "#F8FAFC",
+                  borderColor: "#1E293B",
+                  borderWidth: 2,
+                  borderStyle: "dashed",
+                },
+              },
+              createElement(
+                P,
+                {
+                  style: {
+                    textDecoration: "underline",
+                    letterSpacing: 1.5,
+                  },
+                },
+                "Page ",
+                createElement(SlideNumber, null),
+                " Dashed",
+              ),
+              createElement(
+                P,
+                { style: { list: { type: "bullet" } } },
+                "Bullet alpha",
+              ),
+              createElement(
+                P,
+                { style: { list: { type: "number", startAt: 2 } } },
+                "Number two",
+              ),
+            ),
+            createElement(
+              Cell,
+              {
+                id: "dotted-shadow-cell",
+                style: {
+                  padding: 8,
+                  backgroundColor: "#EFF6FF",
+                  borderColor: "#2563EB",
+                  borderWidth: 2,
+                  borderStyle: "dotted",
+                },
+              },
+              createElement(
+                P,
+                {
+                  style: {
+                    textDecoration: "line-through",
+                    textShadow: {
+                      color: "#000000",
+                      blur: 2,
+                      distance: 2,
+                      angle: 45,
+                    },
+                  },
+                },
+                "Strike Shadow",
+              ),
+              createElement(
+                P,
+                { style: { align: "justify" } },
+                "Justified multi-word copy across cell box width",
+              ),
+            ),
+            createElement(
+              Cell,
+              {
+                id: "bidi-cell",
+                style: {
+                  fontFamily: arabicFont,
+                  padding: 8,
+                  borderColor: "#0F766E",
+                  borderWidth: 1,
+                  borderStyle: "solid",
+                },
+              },
+              "مرحبا بالعالم",
+            ),
+          ),
+        ),
+      ),
+      createElement(
+        Slide,
+        { id: "overset-cell-clipping", background: "#FFFFFF" },
+        createElement(
+          Table,
+          {
+            id: "overset-tbl",
+            x: 32,
+            y: 36,
+            columns: [180],
+            style: { fontFamily: jostFont, fontSize: 15, color: "#DC2626" },
+          },
+          createElement(
+            Row,
+            { id: "fixed-row", style: { height: 24 } },
+            createElement(
+              Cell,
+              {
+                id: "overset-cell",
+                style: {
+                  padding: 2,
+                  borderColor: "#0F172A",
+                  borderWidth: 1,
+                },
+              },
+              "OVERFLOW_1\nOVERFLOW_2\nOVERFLOW_3\nOVERFLOW_4",
+            ),
+          ),
+        ),
+      ),
+    );
+  },
+  document() {
+    return deck({ width: 640, height: 360 }).append(
+      slide({ id: "borders-and-rich-text", background: "#FFFFFF" }).append(
+        table({
+          id: "rich-tbl",
+          x: 24,
+          y: 28,
+          columns: [200, 200, 170],
+          style: { fontFamily: jostFont, fontSize: 13, color: "#0F172A" },
+        }).append(
+          row({ id: "rich-row" }).append(
+            cell(
+              [
+                paragraph(["Page ", slideNumber(), " Dashed"], {
+                  style: {
+                    textDecoration: "underline",
+                    letterSpacing: 1.5,
+                  },
+                }),
+                paragraph("Bullet alpha", {
+                  style: { list: { type: "bullet" } },
+                }),
+                paragraph("Number two", {
+                  style: { list: { type: "number", startAt: 2 } },
+                }),
+              ],
+              {
+                id: "dashed-list-cell",
+                style: {
+                  padding: 8,
+                  backgroundColor: "#F8FAFC",
+                  borderColor: "#1E293B",
+                  borderWidth: 2,
+                  borderStyle: "dashed",
+                },
+              },
+            ),
+            cell(
+              [
+                paragraph("Strike Shadow", {
+                  style: {
+                    textDecoration: "line-through",
+                    textShadow: {
+                      color: "#000000",
+                      blur: 2,
+                      distance: 2,
+                      angle: 45,
+                    },
+                  },
+                }),
+                paragraph("Justified multi-word copy across cell box width", {
+                  style: { align: "justify" },
+                }),
+              ],
+              {
+                id: "dotted-shadow-cell",
+                style: {
+                  padding: 8,
+                  backgroundColor: "#EFF6FF",
+                  borderColor: "#2563EB",
+                  borderWidth: 2,
+                  borderStyle: "dotted",
+                },
+              },
+            ),
+            cell("مرحبا بالعالم", {
+              id: "bidi-cell",
+              style: {
+                fontFamily: arabicFont,
+                padding: 8,
+                borderColor: "#0F766E",
+                borderWidth: 1,
+                borderStyle: "solid",
+              },
+            }),
+          ),
+        ),
+      ),
+      slide({ id: "overset-cell-clipping", background: "#FFFFFF" }).append(
+        table({
+          id: "overset-tbl",
+          x: 32,
+          y: 36,
+          columns: [180],
+          style: { fontFamily: jostFont, fontSize: 15, color: "#DC2626" },
+        }).append(
+          row({ id: "fixed-row", style: { height: 24 } }).append(
+            cell("OVERFLOW_1\nOVERFLOW_2\nOVERFLOW_3\nOVERFLOW_4", {
+              id: "overset-cell",
+              style: {
+                padding: 2,
+                borderColor: "#0F172A",
+                borderWidth: 1,
+              },
+            }),
+          ),
+        ),
+      ),
+    );
+  },
+  assert({ author, resolution, pptx, preview }) {
+    assert.equal(preview.pages.length, 2, author);
+    assert.deepEqual(preview.pages[0]?.diagnostics, [], author);
+    assert.deepEqual(preview.pages[1]?.diagnostics, [], author);
+
+    // Overset build warning continues to appear in resolution.report.diagnostics.
+    assert.ok(
+      resolution.report.diagnostics.some(
+        (diag) =>
+          diag.severity === "warning" &&
+          diag.code === "overset" &&
+          diag.path ===
+            "deck/slide[overset-cell-clipping]/table[overset-tbl]/row[fixed-row]/cell[overset-cell]",
+      ),
+      author,
+    );
+
+    const p1 = preview.pages[0];
+    expect(p1.svg).toContain('stroke-dasharray="8 6"');
+    expect(p1.svg).toContain('stroke-dasharray="2 4"');
+    expect(p1.svg).toContain("<feDropShadow");
+
+    const zip = unzipSync(pptx);
+    const slide1Xml = strFromU8(zip["ppt/slides/slide1.xml"]!);
+    assert.match(slide1Xml, /<a:prstDash val="dash"\/>/u, author);
+    assert.match(slide1Xml, /<a:prstDash val="dot"\/>/u, author);
+
+    const p2 = preview.pages[1];
+    expect(p2.svg).toContain("<clipPath");
+    const png2 = PNG.sync.read(Buffer.from(p2.png!));
+    // Below fixed row (y=36, height=24 => bottom=60): pixels at y=74 remain pure white.
+    for (let x = 40; x <= 190; x += 20) {
+      const offset = (74 * png2.width + x) * 4;
+      assert.deepEqual(
+        [...png2.data.subarray(offset, offset + 4)],
+        [255, 255, 255, 255],
+        author,
+      );
+    }
+  },
+};
+
 export const tableRejectionScenario: CapabilityScenario = {
   id: "table-preview-rejections",
   capability: "rp:table",
   kind: "rejection",
   description:
-    "Dual-author Table rejection scenario verifying per-page error isolation for dashed/dotted cell borders, fixed-height cell overflow, and unsupported cell text styles while valid sibling pages render.",
+    "Dual-author Table rejection scenario verifying per-page error isolation strictly for cell missing-glyph and unmeasured font resources while valid sibling pages (with dashed borders & overset clipping) render.",
   visualCheckpoints: [
-    "Pages 1-4 fail preview (no PNG) with located cell-level error diagnostics.",
-    "Page 5 (valid-table-sibling): renders clean 2-column table with solid border and #EFF6FF header fill.",
+    "Pages 1-2 fail preview (no PNG) with located cell-level font/glyph error diagnostics.",
+    "Page 3 (valid-table-sibling): renders clean 2-column table with dashed border and #EFF6FF header fill.",
   ],
   nativeCheckpoints: [
     "Verify exported PPTX remains schema-valid with all native tables intact.",
@@ -581,90 +881,7 @@ export const tableRejectionScenario: CapabilityScenario = {
       { width: 480, height: 270 },
       createElement(
         Slide,
-        { id: "dashed-border-page" },
-        createElement(
-          Table,
-          {
-            id: "bad-border-tbl",
-            x: 20,
-            y: 20,
-            columns: [140],
-            style: { fontFamily: jostFont, fontSize: 14 },
-          },
-          createElement(
-            Row,
-            { id: "r1" },
-            createElement(
-              Cell,
-              {
-                id: "dashed-cell",
-                style: {
-                  borderColor: "#1E293B",
-                  borderWidth: 2,
-                  borderStyle: "dashed",
-                },
-              },
-              "Dashed border",
-            ),
-          ),
-        ),
-      ),
-      createElement(
-        Slide,
-        { id: "dotted-border-page" },
-        createElement(
-          Table,
-          {
-            id: "bad-dot-tbl",
-            x: 20,
-            y: 20,
-            columns: [140],
-            style: { fontFamily: jostFont, fontSize: 14 },
-          },
-          createElement(
-            Row,
-            { id: "r1" },
-            createElement(
-              Cell,
-              {
-                id: "dotted-cell",
-                style: {
-                  borderColor: "#1E293B",
-                  borderWidth: 2,
-                  borderStyle: "dotted",
-                },
-              },
-              "Dotted border",
-            ),
-          ),
-        ),
-      ),
-      createElement(
-        Slide,
-        { id: "cell-overflow-page" },
-        createElement(
-          Table,
-          {
-            id: "overflow-tbl",
-            x: 20,
-            y: 20,
-            columns: [90],
-            style: { fontFamily: jostFont, fontSize: 14 },
-          },
-          createElement(
-            Row,
-            { id: "r1", style: { height: 18 } },
-            createElement(
-              Cell,
-              { id: "overflow-cell", style: { padding: 4 } },
-              "Line 1\nLine 2\nLine 3",
-            ),
-          ),
-        ),
-      ),
-      createElement(
-        Slide,
-        { id: "unsupported-cell-text-page" },
+        { id: "missing-glyph-cell-page" },
         createElement(
           Table,
           {
@@ -678,6 +895,25 @@ export const tableRejectionScenario: CapabilityScenario = {
             Row,
             { id: "r1" },
             createElement(Cell, { id: "missing-glyph-cell" }, "汉"),
+          ),
+        ),
+      ),
+      createElement(
+        Slide,
+        { id: "unsupported-font-cell-page" },
+        createElement(
+          Table,
+          {
+            id: "bad-font-tbl",
+            x: 20,
+            y: 20,
+            columns: [140],
+            style: { fontFamily: "Aptos", fontSize: 14 },
+          },
+          createElement(
+            Row,
+            { id: "r1", style: { height: 28 } },
+            createElement(Cell, { id: "unmeasured-font-cell" }, "No Font Data"),
           ),
         ),
       ),
@@ -704,6 +940,7 @@ export const tableRejectionScenario: CapabilityScenario = {
                   padding: [6, 10],
                   borderColor: "#2563EB",
                   borderWidth: 2,
+                  borderStyle: "dashed",
                 },
               },
               "Valid",
@@ -726,63 +963,7 @@ export const tableRejectionScenario: CapabilityScenario = {
   },
   document() {
     return deck({ width: 480, height: 270 }).append(
-      slide({ id: "dashed-border-page" }).append(
-        table({
-          id: "bad-border-tbl",
-          x: 20,
-          y: 20,
-          columns: [140],
-          style: { fontFamily: jostFont, fontSize: 14 },
-        }).append(
-          row({ id: "r1" }).append(
-            cell("Dashed border", {
-              id: "dashed-cell",
-              style: {
-                borderColor: "#1E293B",
-                borderWidth: 2,
-                borderStyle: "dashed",
-              },
-            }),
-          ),
-        ),
-      ),
-      slide({ id: "dotted-border-page" }).append(
-        table({
-          id: "bad-dot-tbl",
-          x: 20,
-          y: 20,
-          columns: [140],
-          style: { fontFamily: jostFont, fontSize: 14 },
-        }).append(
-          row({ id: "r1" }).append(
-            cell("Dotted border", {
-              id: "dotted-cell",
-              style: {
-                borderColor: "#1E293B",
-                borderWidth: 2,
-                borderStyle: "dotted",
-              },
-            }),
-          ),
-        ),
-      ),
-      slide({ id: "cell-overflow-page" }).append(
-        table({
-          id: "overflow-tbl",
-          x: 20,
-          y: 20,
-          columns: [90],
-          style: { fontFamily: jostFont, fontSize: 14 },
-        }).append(
-          row({ id: "r1", style: { height: 18 } }).append(
-            cell("Line 1\nLine 2\nLine 3", {
-              id: "overflow-cell",
-              style: { padding: 4 },
-            }),
-          ),
-        ),
-      ),
-      slide({ id: "unsupported-cell-text-page" }).append(
+      slide({ id: "missing-glyph-cell-page" }).append(
         table({
           id: "bad-text-tbl",
           x: 20,
@@ -793,6 +974,21 @@ export const tableRejectionScenario: CapabilityScenario = {
           row({ id: "r1" }).append(
             cell("汉", {
               id: "missing-glyph-cell",
+            }),
+          ),
+        ),
+      ),
+      slide({ id: "unsupported-font-cell-page" }).append(
+        table({
+          id: "bad-font-tbl",
+          x: 20,
+          y: 20,
+          columns: [140],
+          style: { fontFamily: "Aptos", fontSize: 14 },
+        }).append(
+          row({ id: "r1", style: { height: 28 } }).append(
+            cell("No Font Data", {
+              id: "unmeasured-font-cell",
             }),
           ),
         ),
@@ -812,6 +1008,7 @@ export const tableRejectionScenario: CapabilityScenario = {
                 padding: [6, 10],
                 borderColor: "#2563EB",
                 borderWidth: 2,
+                borderStyle: "dashed",
               },
             }),
             cell("Sibling", {
@@ -828,10 +1025,8 @@ export const tableRejectionScenario: CapabilityScenario = {
   },
   assert({ author, preview }) {
     const expectedPaths = [
-      /table\[bad-border-tbl\]\/row\[r1\]\/cell\[dashed-cell\]/,
-      /table\[bad-dot-tbl\]\/row\[r1\]\/cell\[dotted-cell\]/,
-      /table\[overflow-tbl\]\/row\[r1\]\/cell\[overflow-cell\]/,
       /table\[bad-text-tbl\]\/row\[r1\]\/cell\[missing-glyph-cell\]/,
+      /table\[bad-font-tbl\]\/row\[r1\]\/cell\[unmeasured-font-cell\]/,
     ];
     expectedPaths.forEach((pattern, index) => {
       const page = preview.pages[index]!;
@@ -839,7 +1034,7 @@ export const tableRejectionScenario: CapabilityScenario = {
       assert.equal(page.diagnostics[0]?.severity, "error", author);
       assert.match(page.diagnostics[0]?.path ?? "", pattern, author);
     });
-    const validPage = preview.pages[4]!;
+    const validPage = preview.pages[2]!;
     assert.deepEqual(validPage.diagnostics, [], author);
     assert.ok(validPage.png !== undefined, author);
   },

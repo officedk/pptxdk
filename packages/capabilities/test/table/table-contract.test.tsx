@@ -279,7 +279,7 @@ describe("tableCapability resolved contract", () => {
         ),
     );
 
-    // Cell overflow & unsupported border style fail paint with cell paths while emit still succeeds.
+    // Fixed-height cell overflow produces build overset warning while painting clipped output cleanly; dashed border renders cleanly; missing glyph fails paint with cell path.
     const paintErrorsDoc = deck({ width: 480, height: 270 }).append(
       slide({ id: "overflow-slide" }).append(
         table({
@@ -314,6 +314,15 @@ describe("tableCapability resolved contract", () => {
           ),
         ),
       ),
+      slide({ id: "glyph-slide" }).append(
+        table({
+          id: "glyph-tbl",
+          x: 20,
+          y: 20,
+          columns: [120],
+          style: { fontFamily: impJostFont, fontSize: 14 },
+        }).append(row({ id: "r1" }).append(cell("汉", { id: "c1" }))),
+      ),
     );
     const paintErrorsResolution = resolve(paintErrorsDoc);
     assert.ok(
@@ -326,15 +335,16 @@ describe("tableCapability resolved contract", () => {
       ),
     );
     const paintedErrors = paint(paintErrorsResolution);
-    assert.equal(paintedErrors.pages[0]?.png, undefined);
+    assert.deepEqual(paintedErrors.pages[0]?.diagnostics, []);
+    assert.ok(paintedErrors.pages[0]?.png !== undefined);
+    assert.ok(paintedErrors.pages[0]?.svg?.includes("<clipPath"));
+    assert.deepEqual(paintedErrors.pages[1]?.diagnostics, []);
+    assert.ok(paintedErrors.pages[1]?.png !== undefined);
+    assert.ok(paintedErrors.pages[1]?.svg?.includes('stroke-dasharray="8 6"'));
+    assert.equal(paintedErrors.pages[2]?.png, undefined);
     assert.equal(
-      paintedErrors.pages[0]?.diagnostics[0]?.path,
-      "deck/slide[overflow-slide]/table[overflow-tbl]/row[r1]/cell[c1]",
-    );
-    assert.equal(paintedErrors.pages[1]?.png, undefined);
-    assert.equal(
-      paintedErrors.pages[1]?.diagnostics[0]?.path,
-      "deck/slide[border-slide]/table[border-tbl]/row[r1]/cell[c1]",
+      paintedErrors.pages[2]?.diagnostics[0]?.path,
+      "deck/slide[glyph-slide]/table[glyph-tbl]/row[r1]/cell[c1]",
     );
     assert.deepEqual(
       (await validatePptx(emit(paintErrorsResolution).pptx)).errors,

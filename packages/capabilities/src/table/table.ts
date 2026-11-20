@@ -769,6 +769,201 @@ type ResolvedTableCell = {
   readonly hasOverflow: boolean;
 };
 
+/** Closed resolved table model produced in resolve() and exhaustively consumed by emit and paint. */
+type ResolvedTableModel = {
+  readonly x: number;
+  readonly y: number;
+  readonly widths: readonly number[];
+  readonly heights: readonly number[];
+  readonly rows: readonly ParsedRow[];
+  readonly columns: readonly Track[];
+  readonly resolvedCells: readonly ResolvedTableCell[];
+  readonly resolvedAnchors: ReadonlyMap<string, ResolvedTableCell>;
+  readonly owners: ReadonlyMap<string, ParsedCell>;
+  readonly name: string;
+  readonly fontUses: readonly FontEmbeddingUse[];
+};
+
+function roundSvgNumber(value: number): string {
+  const rounded = Math.round(value * 1_000_000) / 1_000_000;
+  return Object.is(rounded, -0) ? "0" : String(rounded);
+}
+
+function tableBorderAttributes(border: TableCellBorder): string {
+  const w = Math.max(1, border.width);
+  let dashAttr = "";
+  switch (border.dash) {
+    case "solid":
+      dashAttr = "";
+      break;
+    case "dash":
+      dashAttr = ` stroke-dasharray="${roundSvgNumber(w * 4)} ${roundSvgNumber(w * 3)}"`;
+      break;
+    case "dot":
+      dashAttr = ` stroke-dasharray="${roundSvgNumber(w)} ${roundSvgNumber(w * 2)}"`;
+      break;
+    default: {
+      const exhaustive: never = border.dash;
+      return exhaustive;
+    }
+  }
+  return `fill="none" stroke="#${border.color.hex}" stroke-opacity="${roundSvgNumber(border.color.alpha ?? 1)}" stroke-width="${roundSvgNumber(border.width)}"${dashAttr}`;
+}
+
+function emitTableModel(
+  model: ResolvedTableModel,
+  emitContext: EmitContext,
+): EmitOutput {
+  const {
+    x,
+    y,
+    widths,
+    heights,
+    rows,
+    columns,
+    resolvedAnchors,
+    owners,
+    name,
+    fontUses,
+  } = model;
+  const embedFonts = emitContext.options.embedFonts;
+  const rowsXml = rows.map((_, rowIndex) => {
+    const rowCells: string[] = [];
+    for (let column = 0; column < columns.length; column += 1) {
+      const entry = resolvedAnchors.get(`${rowIndex}:${column}`);
+      if (entry === undefined) {
+        const owner = owners.get(`${rowIndex}:${column}`)!;
+        const hMerge = column > owner.column ? ' hMerge="1"' : "";
+        const vMerge = rowIndex > owner.row ? ' vMerge="1"' : "";
+        const spanAttributes = [
+          ...(rowIndex === owner.row && owner.rowSpan > 1
+            ? [`rowSpan="${owner.rowSpan}"`]
+            : []),
+          ...(column === owner.column && owner.colSpan > 1
+            ? [`gridSpan="${owner.colSpan}"`]
+            : []),
+        ];
+        rowCells.push(
+          `<a:tc${hMerge}${vMerge}${spanAttributes.length === 0 ? "" : ` ${spanAttributes.join(" ")}`}>${emptyTableCellXml(owner.textStyle["lang"])}</a:tc>`,
+        );
+        continue;
+      }
+      const { cell, body, fill } = entry;
+      if (
+        (embedFonts === "full" || embedFonts === "subset") &&
+        body.missingGlyphErrors.length > 0
+      ) {
+        fail("font-missing-glyph", body.missingGlyphErrors[0]!, cell.path);
+      }
+      let emittedXml: string;
+      try {
+        emittedXml = emitTextBody(body, emitContext.theme, {
+          createFieldId: emitContext.createTextFieldId,
+        }).xml;
+      } catch (error) {
+        if (error instanceof CapabilityError) {
+          fail(error.code, error.message, error.path ?? cell.path);
+        }
+        throw error;
+      }
+      const spanAttributes = [
+        ...(cell.colSpan > 1 ? [`gridSpan="${cell.colSpan}"`] : []),
+        ...(cell.rowSpan > 1 ? [`rowSpan="${cell.rowSpan}"`] : []),
+      ];
+      const attributes =
+        spanAttributes.length === 0 ? "" : ` ${spanAttributes.join(" ")}`;
+      const properties = tableCellPropertiesXml(
+        cell.padding,
+        cell.verticalAlign,
+        cell.border,
+        fill,
+      );
+      rowCells.push(`<a:tc${attributes}>${emittedXml}${properties}</a:tc>`);
+    }
+    return rowCells.join("");
+  });
+  const presentationContributions = fontPresentationContributions(
+    fontUses,
+    embedFonts,
+  );
+  return {
+    xml: tableFrameXml(
+      emitContext.id,
+      xmlEscape(name),
+      x,
+      y,
+      widths,
+      heights,
+      rowsXml,
+      nativeLinkXml(emitContext.nativeLink),
+    ),
+    ...(presentationContributions.length === 0
+      ? {}
+      : { presentationContributions }),
+  };
+}
+
+function paintTableModel(
+  model: ResolvedTableModel,
+  paintContext: PaintContext,
+): PaintOutput {
+  const defs: string[] = [];
+  const fills: string[] = [];
+  const texts: string[] = [];
+  const borders: string[] = [];
+  for (const entry of model.resolvedCells) {
+    const { cell, box: cellBox, fill, body, hasText, hasOverflow } = entry;
+    if (fill !== undefined) {
+      fills.push(
+        `<rect x="${roundSvgNumber(cellBox.x)}" y="${roundSvgNumber(cellBox.y)}" width="${roundSvgNumber(cellBox.width)}" height="${roundSvgNumber(cellBox.height)}" fill="#${fill.hex}" fill-opacity="${roundSvgNumber(fill.alpha ?? 1)}" stroke="none"/>`,
+      );
+    }
+    if (hasText) {
+      const idPrefix = `tbl-s${paintContext.slideNumber}-o${paintContext.objectId}-r${cell.row}-c${cell.column}`;
+      try {
+        const glyphs = renderTextOutlinesSvg({
+          paragraphs: body.paragraphs,
+          box: cellBox,
+          insets: cell.padding,
+          verticalAlign: cell.verticalAlign,
+          theme: paintContext.theme,
+          measuredLayout: body.measuredLayout,
+          idPrefix,
+        });
+        if (glyphs !== "") {
+          if (hasOverflow) {
+            const clipId = `${idPrefix}-clip`;
+            defs.push(
+              `<clipPath id="${clipId}" clipPathUnits="userSpaceOnUse"><rect x="${roundSvgNumber(cellBox.x)}" y="${roundSvgNumber(cellBox.y)}" width="${roundSvgNumber(cellBox.width)}" height="${roundSvgNumber(cellBox.height)}"/></clipPath>`,
+            );
+            texts.push(`<g clip-path="url(#${clipId})">${glyphs}</g>`);
+          } else {
+            texts.push(glyphs);
+          }
+        }
+      } catch (error) {
+        if (error instanceof CapabilityError) {
+          throw new CapabilityError(
+            error.code,
+            error.message,
+            error.path ?? cell.path,
+          );
+        }
+        throw error;
+      }
+    }
+    if (cell.border !== undefined) {
+      borders.push(
+        `<rect x="${roundSvgNumber(cellBox.x)}" y="${roundSvgNumber(cellBox.y)}" width="${roundSvgNumber(cellBox.width)}" height="${roundSvgNumber(cellBox.height)}" ${tableBorderAttributes(cell.border)}/>`,
+      );
+    }
+  }
+  const defsXml = defs.length > 0 ? `<defs>${defs.join("")}</defs>` : "";
+  return {
+    svg: `${defsXml}<g>${fills.join("")}${texts.join("")}${borders.join("")}</g>`,
+  };
+}
+
 type ParsedTable = {
   readonly columns: readonly Track[];
   readonly tableStyle: ReturnType<typeof trackStyle>;
@@ -1361,6 +1556,19 @@ export const tableCapability: ObjectCapabilityModule = {
               cell.fill !== undefined || rows[cell.row]?.fill !== undefined,
           ),
         });
+        const resolvedModel: ResolvedTableModel = {
+          x,
+          y,
+          widths,
+          heights,
+          rows,
+          columns,
+          resolvedCells,
+          resolvedAnchors,
+          owners,
+          name,
+          fontUses,
+        };
         return {
           observation: {
             id: resolveContext.id,
@@ -1376,155 +1584,11 @@ export const tableCapability: ObjectCapabilityModule = {
           ...(warnings.length === 0 ? {} : { warnings }),
 
           emit(emitContext: EmitContext): EmitOutput {
-            const embedFonts = emitContext.options.embedFonts;
-            const rowsXml = rows.map((_, rowIndex) => {
-              const rowCells: string[] = [];
-              for (let column = 0; column < columns.length; column += 1) {
-                const entry = resolvedAnchors.get(`${rowIndex}:${column}`);
-                if (entry === undefined) {
-                  const owner = owners.get(`${rowIndex}:${column}`)!;
-                  const hMerge = column > owner.column ? ' hMerge="1"' : "";
-                  const vMerge = rowIndex > owner.row ? ' vMerge="1"' : "";
-                  const spanAttributes = [
-                    ...(rowIndex === owner.row && owner.rowSpan > 1
-                      ? [`rowSpan="${owner.rowSpan}"`]
-                      : []),
-                    ...(column === owner.column && owner.colSpan > 1
-                      ? [`gridSpan="${owner.colSpan}"`]
-                      : []),
-                  ];
-                  rowCells.push(
-                    `<a:tc${hMerge}${vMerge}${spanAttributes.length === 0 ? "" : ` ${spanAttributes.join(" ")}`}>${emptyTableCellXml(owner.textStyle["lang"])}</a:tc>`,
-                  );
-                  continue;
-                }
-                const { cell, body, fill } = entry;
-                if (
-                  (embedFonts === "full" || embedFonts === "subset") &&
-                  body.missingGlyphErrors.length > 0
-                ) {
-                  fail(
-                    "font-missing-glyph",
-                    body.missingGlyphErrors[0]!,
-                    cell.path,
-                  );
-                }
-                let emittedXml: string;
-                try {
-                  emittedXml = emitTextBody(body, emitContext.theme, {
-                    createFieldId: emitContext.createTextFieldId,
-                  }).xml;
-                } catch (error) {
-                  if (error instanceof CapabilityError) {
-                    fail(error.code, error.message, error.path ?? cell.path);
-                  }
-                  throw error;
-                }
-                const spanAttributes = [
-                  ...(cell.colSpan > 1 ? [`gridSpan="${cell.colSpan}"`] : []),
-                  ...(cell.rowSpan > 1 ? [`rowSpan="${cell.rowSpan}"`] : []),
-                ];
-                const attributes =
-                  spanAttributes.length === 0
-                    ? ""
-                    : ` ${spanAttributes.join(" ")}`;
-                const properties = tableCellPropertiesXml(
-                  cell.padding,
-                  cell.verticalAlign,
-                  cell.border,
-                  fill,
-                );
-                rowCells.push(
-                  `<a:tc${attributes}>${emittedXml}${properties}</a:tc>`,
-                );
-              }
-              return rowCells.join("");
-            });
-            const presentationContributions = fontPresentationContributions(
-              fontUses,
-              embedFonts,
-            );
-            return {
-              xml: tableFrameXml(
-                emitContext.id,
-                xmlEscape(name),
-                x,
-                y,
-                widths,
-                heights,
-                rowsXml,
-                nativeLinkXml(emitContext.nativeLink),
-              ),
-              ...(presentationContributions.length === 0
-                ? {}
-                : { presentationContributions }),
-            };
+            return emitTableModel(resolvedModel, emitContext);
           },
 
           paint(paintContext: PaintContext): PaintOutput {
-            const fills: string[] = [];
-            const texts: string[] = [];
-            const borders: string[] = [];
-            for (const entry of resolvedCells) {
-              const {
-                cell,
-                box: cellBox,
-                fill,
-                body,
-                hasText,
-                hasOverflow,
-              } = entry;
-              if (cell.border !== undefined && cell.border.dash !== "solid") {
-                throw new CapabilityError(
-                  "preview-unsupported-border-style",
-                  "Preview does not support non-solid table cell borders",
-                  cell.path,
-                );
-              }
-              if (hasOverflow) {
-                throw new CapabilityError(
-                  "preview-table-cell-overflow",
-                  "Preview does not support table cells whose text overflows cell bounds",
-                  cell.path,
-                );
-              }
-              if (fill !== undefined) {
-                fills.push(
-                  `<rect x="${cellBox.x}" y="${cellBox.y}" width="${cellBox.width}" height="${cellBox.height}" fill="#${fill.hex}" fill-opacity="${fill.alpha ?? 1}" stroke="none"/>`,
-                );
-              }
-              if (hasText) {
-                try {
-                  const glyphs = renderTextOutlinesSvg({
-                    paragraphs: body.paragraphs,
-                    box: cellBox,
-                    insets: cell.padding,
-                    verticalAlign: cell.verticalAlign,
-                    theme: paintContext.theme,
-                    measuredLayout: body.measuredLayout,
-                    idPrefix: `tbl-s${paintContext.slideNumber}-o${paintContext.objectId}-r${cell.row}-c${cell.column}`,
-                  });
-                  if (glyphs !== "") texts.push(glyphs);
-                } catch (error) {
-                  if (error instanceof CapabilityError) {
-                    throw new CapabilityError(
-                      error.code,
-                      error.message,
-                      error.path ?? cell.path,
-                    );
-                  }
-                  throw error;
-                }
-              }
-              if (cell.border !== undefined) {
-                borders.push(
-                  `<rect x="${cellBox.x}" y="${cellBox.y}" width="${cellBox.width}" height="${cellBox.height}" fill="none" stroke="#${cell.border.color.hex}" stroke-opacity="${cell.border.color.alpha ?? 1}" stroke-width="${cell.border.width}"/>`,
-                );
-              }
-            }
-            return {
-              svg: `<g>${fills.join("")}${texts.join("")}${borders.join("")}</g>`,
-            };
+            return paintTableModel(resolvedModel, paintContext);
           },
         };
       },

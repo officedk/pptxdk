@@ -27,7 +27,7 @@ import {
 import { RichTextContainer } from "@react-pptx/core/document";
 import { pxToEmu, xmlEscape } from "@react-pptx/emit";
 
-import type { Geometry } from "../shared/geometry.ts";
+import { evaluateGeometry, type Geometry } from "../shared/geometry.ts";
 export {
   blockArc,
   path,
@@ -59,6 +59,7 @@ import {
   emitTextBody,
   measureTextLayoutFromParagraphs,
   parseTextContent,
+  renderTextOutlinesSvg,
   resolveTextBody,
   textInsets,
   type Paragraph,
@@ -71,6 +72,7 @@ import {
   paintVisualModel,
   resolveVisualModel,
   visualStyleKeys,
+  type ResolvedVisualModel,
   type ShapeVisualStyle,
 } from "../shared/visual.ts";
 
@@ -239,6 +241,131 @@ function validateSize(
     );
   }
   return value;
+}
+
+type TextInsets = ReturnType<typeof textInsets>;
+
+/** Closed resolved shape text body consumed exhaustively by emitShapeModel and paintShapeModel. */
+type ResolvedShapeText =
+  | { readonly kind: "none" }
+  | {
+      readonly kind: "body";
+      readonly body: ResolvedTextBody;
+      readonly insets: TextInsets;
+      readonly verticalAlign: NonNullable<TextStyle["verticalAlign"]>;
+    };
+
+/** Closed resolved shape model produced in resolve() and exhaustively consumed by emit and paint. */
+type ResolvedShapeModel = {
+  readonly escapedName: string;
+  readonly visual: ResolvedVisualModel;
+  readonly text: ResolvedShapeText;
+};
+
+function roundSvgNumber(value: number): string {
+  const rounded = Math.round(value * 1_000_000) / 1_000_000;
+  return Object.is(rounded, -0) ? "0" : String(rounded);
+}
+
+function emitShapeModel(
+  model: ResolvedShapeModel,
+  emitContext: EmitContext,
+): EmitOutput {
+  const properties = emitVisualModel(model.visual, (resource) =>
+    emitContext.registerResource(resource),
+  );
+  const embedFonts = emitContext.options.embedFonts;
+  switch (model.text.kind) {
+    case "none":
+      return {
+        xml: shapeXml(
+          emitContext.id,
+          model.escapedName,
+          properties.xml,
+          "",
+          nativeLinkXml(emitContext.nativeLink),
+        ),
+      };
+    case "body": {
+      const emittedBody = emitTextBody(model.text.body, emitContext.theme, {
+        createFieldId: emitContext.createTextFieldId,
+        ...(embedFonts === undefined ? {} : { embedFonts }),
+      });
+      return {
+        xml: shapeXml(
+          emitContext.id,
+          model.escapedName,
+          properties.xml,
+          emittedBody.xml,
+          nativeLinkXml(emitContext.nativeLink),
+        ),
+        presentationContributions: emittedBody.presentationContributions,
+      };
+    }
+    default: {
+      const exhaustive: never = model.text;
+      return exhaustive;
+    }
+  }
+}
+
+function paintShapeModel(
+  model: ResolvedShapeModel,
+  paintContext: PaintContext,
+): PaintOutput {
+  const visualPaint = paintVisualModel({
+    model: model.visual,
+    slideNumber: paintContext.slideNumber,
+    objectId: paintContext.objectId,
+  });
+  switch (model.text.kind) {
+    case "none":
+      return visualPaint;
+    case "body": {
+      const { box, flipH, flipV, rotate, geometry } = model.visual;
+      const evaluated = evaluateGeometry(geometry, box);
+      const { textRect } = evaluated;
+      const cx = box.x + box.width / 2;
+      const cy = box.y + box.height / 2;
+      // Flip mirrors the geometry and its embedded textRect around the shape center,
+      // while inline text glyphs stay upright and only follow shape rotation.
+      const effectiveTextRect = {
+        x: flipH ? 2 * cx - (textRect.x + textRect.width) : textRect.x,
+        y: flipV ? 2 * cy - (textRect.y + textRect.height) : textRect.y,
+        width: textRect.width,
+        height: textRect.height,
+      };
+      const glyphsSvg = renderTextOutlinesSvg({
+        paragraphs: model.text.body.paragraphs,
+        box: effectiveTextRect,
+        insets: model.text.insets,
+        verticalAlign: model.text.verticalAlign,
+        theme: paintContext.theme,
+        measuredLayout:
+          Math.abs(effectiveTextRect.width - box.width) <= 0.01
+            ? model.text.body.measuredLayout
+            : undefined,
+        idPrefix: `obj-s${paintContext.slideNumber}-o${paintContext.objectId}`,
+        rotate,
+      });
+      const textLayer =
+        glyphsSvg === ""
+          ? ""
+          : rotate === 0
+            ? glyphsSvg
+            : `<g transform="rotate(${roundSvgNumber(rotate)} ${roundSvgNumber(cx)} ${roundSvgNumber(cy)})">${glyphsSvg}</g>`;
+      return {
+        svg: `${visualPaint.svg}${textLayer}`,
+        ...(visualPaint.warnings === undefined
+          ? {}
+          : { warnings: visualPaint.warnings }),
+      };
+    }
+    default: {
+      const exhaustive: never = model.text;
+      return exhaustive;
+    }
+  }
 }
 
 /** Shape module independently validates input, encapsulates bound state, and emits native PresentationML objects. */
@@ -520,6 +647,19 @@ export const shapeCapability: ObjectCapabilityModule = {
           ...visual.warnings,
           ...(resolvedText?.warnings ?? []),
         ];
+        const resolvedModel: ResolvedShapeModel = {
+          escapedName,
+          visual,
+          text:
+            resolvedText === undefined
+              ? { kind: "none" }
+              : {
+                  kind: "body",
+                  body: resolvedText,
+                  insets,
+                  verticalAlign: parsedTextStyle.verticalAlign ?? "middle",
+                },
+        };
         const transform: PreviewTransform = {
           box,
           angle: visual.rotate,
@@ -547,45 +687,10 @@ export const shapeCapability: ObjectCapabilityModule = {
             ? {}
             : { resourceClaims: resolvedText.resourceClaims }),
           emit(emitContext: EmitContext): EmitOutput {
-            const embedFonts = emitContext.options.embedFonts;
-            const emittedBody =
-              resolvedText === undefined
-                ? undefined
-                : emitTextBody(resolvedText, emitContext.theme, {
-                    createFieldId: emitContext.createTextFieldId,
-                    ...(embedFonts === undefined ? {} : { embedFonts }),
-                  });
-            const properties = emitVisualModel(visual, (resource) =>
-              emitContext.registerResource(resource),
-            );
-            return {
-              xml: shapeXml(
-                emitContext.id,
-                escapedName,
-                properties.xml,
-                emittedBody?.xml ?? "",
-                nativeLinkXml(emitContext.nativeLink),
-              ),
-              ...(emittedBody === undefined
-                ? {}
-                : {
-                    presentationContributions:
-                      emittedBody.presentationContributions,
-                  }),
-            };
+            return emitShapeModel(resolvedModel, emitContext);
           },
           paint(paintContext: PaintContext): PaintOutput {
-            if (hasText) {
-              throw new CapabilityError(
-                "preview-unsupported-text",
-                "Preview does not yet support text inside shapes",
-              );
-            }
-            return paintVisualModel({
-              model: visual,
-              slideNumber: paintContext.slideNumber,
-              objectId: paintContext.objectId,
-            });
+            return paintShapeModel(resolvedModel, paintContext);
           },
         };
       },

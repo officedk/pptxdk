@@ -29,6 +29,7 @@ import {
   shapePositiveScenario,
   shapePresetCatalogScenario,
   shapeRejectionScenario,
+  shapeTextParityScenario,
 } from "./scenarios.ts";
 
 type CustomMarkerProps = {
@@ -79,6 +80,7 @@ describe("Shape capability acceptance & bound extension contracts", () => {
       for (const scenario of [
         shapePositiveScenario,
         shapePresetCatalogScenario,
+        shapeTextParityScenario,
         shapeRejectionScenario,
       ]) {
         const runs = await runCapabilityScenario(scenario, {

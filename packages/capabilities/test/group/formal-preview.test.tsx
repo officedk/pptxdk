@@ -1,13 +1,17 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 
 import {
   box,
   deck,
   documentCapabilities,
+  font,
   group,
   image,
+  paragraph,
   shape,
   slide,
+  span,
 } from "@react-pptx/capabilities/document";
 import { Group } from "@react-pptx/capabilities/group-elements";
 import { Shape } from "@react-pptx/capabilities/shape-elements";
@@ -24,6 +28,15 @@ import { validatePptx } from "@react-pptx/validation";
 import { PNG } from "pngjs";
 import { createElement } from "react";
 import { describe, expect, it } from "vitest";
+
+const jostFont = font("Jost*", [
+  {
+    weight: 400,
+    data: readFileSync(
+      new URL("../assets/fonts/Jost-400-Book.ttf", import.meta.url),
+    ),
+  },
+]);
 
 function runDocPreview(modules: readonly CapabilityModule[]) {
   const resolveWith = createResolver(modules);
@@ -256,6 +269,120 @@ describe("Slice 5 (Ticket 08): Group static preview, screenGeometry, and member 
         );
         return true;
       },
+    );
+  });
+
+  it("composites 3-level nested rotated Group with inline-text flipped/opaque Shape, local ThemeScope, exact corners, and missing-glyph propagation", async () => {
+    const previewDoc = runDocPreview(documentCapabilities);
+    const doc = deck({
+      width: 400,
+      height: 260,
+      theme: { colors: { cardFill: "#991B1B", ink: "#000000" } },
+    }).append(
+      slide({ id: "deep-group", background: "#FFFFFF" }).append(
+        group({
+          id: "lvl1",
+          theme: { colors: { cardFill: "#1D4ED8", ink: "#FFFFFF" } },
+          style: { rotate: 90 },
+        }).append(
+          shape({
+            id: "anchor",
+            x: 100,
+            y: 50,
+            width: 40,
+            height: 40,
+            fill: "#E2E8F0",
+          }),
+          group({
+            id: "lvl2",
+            style: { rotate: -90 },
+          }).append(
+            group({
+              id: "lvl3",
+              style: { rotate: 45 },
+            }).append(
+              shape({
+                id: "deep-rich-shape",
+                geometry: "roundRect",
+                x: 160,
+                y: 90,
+                width: 120,
+                height: 60,
+                fill: "cardFill",
+                flipH: true,
+                style: { opacity: 0.7 },
+              }).append(
+                paragraph([span("Deep")]).style({
+                  fontFamily: jostFont,
+                  fontSize: 16,
+                  color: "ink",
+                  align: "center",
+                }),
+              ),
+            ),
+          ),
+        ),
+      ),
+      slide({ id: "deep-glyph-fail" }).append(
+        group({ id: "outer-fail" }).append(
+          group({ id: "inner-fail", style: { rotate: 15 } }).append(
+            shape({
+              id: "bad-shape-text",
+              x: 40,
+              y: 40,
+              width: 100,
+              height: 40,
+              fill: "#111827",
+              text: "汉",
+              textStyle: { fontFamily: jostFont, color: "#FFFFFF" },
+            }),
+          ),
+        ),
+      ),
+    );
+
+    const result = await previewDoc(doc);
+    assert.deepEqual((await validatePptx(result.pptx)).errors, []);
+
+    const p1 = result.pages[0]!;
+    assert.deepEqual(p1.diagnostics, []);
+    assert.ok(p1.png !== undefined);
+    assert.ok(p1.svg !== undefined);
+    expect(p1.svg).toContain("scale(-1 1)");
+
+    // Analytical corners check for deep-rich-shape:
+    // lvl1 box: anchor [100..140, 50..90] + lvl3 [160..280, 90..150] => x=[100..280] (w=180, cx=190), y=[50..150] (h=100, cy=100).
+    // lvl2 box: [160..280, 90..150] (cx=220, cy=120).
+    // lvl3 box: [160..280, 90..150] (cx=220, cy=120).
+    // Net rotation of deep-rich-shape: 45 - 90 + 90 = +45deg, around center:
+    // (220, 120) rotated -90 around (220, 120) -> (220, 120); rotated +90 around (190, 100) -> (170, 130).
+    // So deep-rich-shape screenBox is centered at (170, 130) with rotated 45deg bounding box side = (120 + 60) / sqrt(2).
+    const deepNode = p1.nodes.find((n) => n.authorId === "deep-rich-shape")!;
+    assert.equal(deepNode.corners?.length, 4);
+    const expectedSpan = (120 + 60) / Math.SQRT2;
+    expect(deepNode.screenBox?.width).toBeCloseTo(expectedSpan, 3);
+    expect(deepNode.screenBox?.height).toBeCloseTo(expectedSpan, 3);
+    expect(deepNode.screenBox!.x + deepNode.screenBox!.width / 2).toBeCloseTo(
+      170,
+      3,
+    );
+    expect(deepNode.screenBox!.y + deepNode.screenBox!.height / 2).toBeCloseTo(
+      130,
+      3,
+    );
+
+    const p2 = result.pages[1]!;
+    assert.equal(p2.png, undefined);
+    assert.equal(p2.svg, undefined);
+    assert.ok(
+      p2.diagnostics.some(
+        (d) =>
+          d.severity === "error" &&
+          /group\[outer-fail\]\/group\[inner-fail\]\/shape\[bad-shape-text\]/u.test(
+            d.path,
+          ) &&
+          /glyph/i.test(d.message),
+      ),
     );
   });
 });

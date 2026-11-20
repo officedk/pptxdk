@@ -343,11 +343,7 @@ describe("Slice 4 (Ticket 05): Box static preview positive and negative behavior
           ),
         ),
       );
-      assert.deepEqual(
-        (await validatePptx(result.pptx)).errors,
-        [],
-        label,
-      );
+      assert.deepEqual((await validatePptx(result.pptx)).errors, [], label);
       assert.equal(result.pages[0]?.png, undefined, label);
       assert.equal(result.pages[0]?.svg, undefined, label);
       assert.equal(result.pages[0]?.diagnostics[0]?.severity, "error", label);

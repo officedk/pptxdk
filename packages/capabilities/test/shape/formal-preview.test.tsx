@@ -219,100 +219,112 @@ describe("Slice 2: Shape static preview", () => {
     );
   });
 
-  it("rejects unsupported shape styles, arrows, and inline text with located errors", async () => {
+  it("renders gradients, image fills, borderRadius, dashed/dotted borders, open-path arrows, boxShadow, and softEdge with zero diagnostics", async () => {
+    const previewDoc = runDocPreview(documentCapabilities);
+    const { PNG } = await import("pngjs");
+    const { arrowTypes } = await import("@react-pptx/capabilities");
+    const { path } = await import("@react-pptx/capabilities/shape");
+
+    const samplePng = new PNG({ width: 4, height: 4 });
+    for (let i = 0; i < samplePng.data.length; i += 4) {
+      samplePng.data.set([0x16, 0xa3, 0x4a, 255], i);
+    }
+    const pngBytes = new Uint8Array(PNG.sync.write(samplePng));
+
+    const doc = deck({ width: 480, height: 270 }).append(
+      slide({ id: "visuals", background: "#FFFFFF" }).append(
+        shape({
+          id: "grad-shape",
+          x: 10,
+          y: 10,
+          width: 90,
+          height: 40,
+          style: {
+            backgroundImage: linearGradient(90, "#111111", "#888888"),
+            borderRadius: 8,
+            borderColor: "#0F172A",
+            borderWidth: 2,
+            borderStyle: "dashed",
+          },
+        }),
+        shape({
+          id: "img-shape",
+          geometry: "ellipse",
+          x: 120,
+          y: 10,
+          width: 80,
+          height: 40,
+          style: {
+            backgroundImage: { image: pngBytes },
+            borderColor: "#064E3B",
+            borderWidth: 2,
+            borderStyle: "dotted",
+          },
+        }),
+        shape({
+          id: "shadow-shape",
+          x: 220,
+          y: 15,
+          width: 70,
+          height: 35,
+          fill: "#112233",
+          style: {
+            rotate: 45,
+            boxShadow: { blur: 4, distance: 6, angle: 90 },
+          },
+        }),
+        shape({
+          id: "soft-shape",
+          x: 320,
+          y: 10,
+          width: 80,
+          height: 40,
+          fill: "#1D4ED8",
+          style: { softEdge: 6 },
+        }),
+        ...arrowTypes.map((arrowType, idx) =>
+          shape({
+            id: `arrow-${arrowType}`,
+            geometry:
+              idx % 2 === 0
+                ? "line"
+                : path("M 0 12 Q 50 -6 100 12", {
+                    viewBox: [100, 18],
+                    fill: false,
+                  }),
+            x: 15 + idx * 75,
+            y: 100,
+            width: 60,
+            height: 16,
+            style: {
+              borderColor: "#0F172A",
+              borderWidth: 2.5,
+              startArrow: arrowType,
+              endArrow: arrowType,
+            },
+          }),
+        ),
+      ),
+    );
+    const result = await previewDoc(doc);
+    assert.deepEqual((await validatePptx(result.pptx)).errors, []);
+    const page = result.pages[0]!;
+    assert.deepEqual(page.diagnostics, []);
+    assert.ok(page.png !== undefined);
+    expect(page.svg).toContain("<linearGradient");
+    expect(page.svg).toContain("<pattern");
+    expect(page.svg).toContain("<feDropShadow");
+    expect(page.svg).toContain("<feGaussianBlur");
+    expect(page.svg).toContain("stroke-dasharray");
+  });
+
+  it("rejects inline text inside shapes with located errors", async () => {
     const previewDoc = runDocPreview(documentCapabilities);
     const cases: readonly {
       label: string;
       node: ReturnType<typeof shape>;
       expected: RegExp;
     }[] = [
-      {
-        label: "startArrow",
-        node: shape({
-          id: "bad",
-          x: 10,
-          y: 10,
-          width: 60,
-          height: 20,
-          style: { borderColor: "#000000", startArrow: "triangle" },
-        }),
-        expected: /startArrow/i,
-      },
-      {
-        label: "endArrow",
-        node: shape({
-          id: "bad",
-          x: 10,
-          y: 10,
-          width: 60,
-          height: 20,
-          style: { borderColor: "#000000", endArrow: "arrow" },
-        }),
-        expected: /endArrow/i,
-      },
-      {
-        label: "dashed",
-        node: shape({
-          id: "bad",
-          x: 10,
-          y: 10,
-          width: 60,
-          height: 20,
-          style: { borderColor: "#000000", borderStyle: "dashed" },
-        }),
-        expected: /border|dash/i,
-      },
-      {
-        label: "borderRadius",
-        node: shape({
-          id: "bad",
-          x: 10,
-          y: 10,
-          width: 60,
-          height: 20,
-          fill: "#112233",
-          style: { borderRadius: 8 },
-        }),
-        expected: /borderRadius/i,
-      },
-      {
-        label: "boxShadow",
-        node: shape({
-          id: "bad",
-          x: 10,
-          y: 10,
-          width: 60,
-          height: 20,
-          fill: "#112233",
-          style: { boxShadow: { blur: 4, distance: 2 } },
-        }),
-        expected: /boxShadow/i,
-      },
-      {
-        label: "softEdge",
-        node: shape({
-          id: "bad",
-          x: 10,
-          y: 10,
-          width: 60,
-          height: 20,
-          fill: "#112233",
-          style: { softEdge: 4 },
-        }),
-        expected: /softEdge/i,
-      },
-      {
-        label: "gradient",
-        node: shape({
-          id: "bad",
-          x: 10,
-          y: 10,
-          width: 60,
-          height: 20,
-          style: { backgroundImage: linearGradient(90, "#111111", "#999999") },
-        }),
-        expected: /backgroundImage|gradient/i,
-      },
       {
         label: "inline-text",
         node: shape({

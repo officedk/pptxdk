@@ -251,7 +251,9 @@ export const boxCapability: ObjectCapabilityModule = {
                 ? objectXml(
                     emitContext.id,
                     escapedName,
-                    emitVisualModel(visual, emitContext.registerResource).xml,
+                    emitVisualModel(visual, (resource) =>
+                      emitContext.registerResource(resource),
+                    ).xml,
                     nativeLinkXml(emitContext.nativeLink),
                   )
                 : "",

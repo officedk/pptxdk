@@ -189,6 +189,14 @@ export const imagePositiveScenario: CapabilityScenario = {
           width: 180,
           height: 90,
         }),
+        createElement(Image, {
+          id: "gif-sample",
+          src: sampleGifBytes,
+          x: 260,
+          y: 230,
+          width: 60,
+          height: 60,
+        }),
       ),
     );
   },
@@ -289,6 +297,14 @@ export const imagePositiveScenario: CapabilityScenario = {
           width: 180,
           height: 90,
         }),
+        image({
+          id: "gif-sample",
+          src: sampleGifBytes,
+          x: 260,
+          y: 230,
+          width: 60,
+          height: 60,
+        }),
       ),
     );
   },
@@ -296,18 +312,22 @@ export const imagePositiveScenario: CapabilityScenario = {
     assert.equal(preview.pages.length, 3, author);
     assert.equal(validation.slides.length, 3, author);
 
-    // Media deduplication: across all 3 slides and 9 image objects, only 1 PNG + 1 JPEG part exist.
+    // Media deduplication: across all 3 slides and 10 image objects, only 1 PNG + 1 JPEG + 1 GIF part exist.
     const zip = unzipSync(pptx);
     const mediaParts = Object.keys(zip)
       .filter((entry) => entry.startsWith("ppt/media/"))
       .sort();
-    assert.equal(mediaParts.length, 2, author);
+    assert.equal(mediaParts.length, 3, author);
     assert.ok(
       mediaParts.some((name) => name.endsWith(".png")),
       author,
     );
     assert.ok(
       mediaParts.some((name) => name.endsWith(".jpeg")),
+      author,
+    );
+    assert.ok(
+      mediaParts.some((name) => name.endsWith(".gif")),
       author,
     );
 

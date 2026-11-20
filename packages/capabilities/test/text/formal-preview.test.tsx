@@ -219,9 +219,38 @@ describe("Slice 3: Text static preview & shared text-service outlines", () => {
       jsxPreview.query.getSlide("text-main").get("mixed").observe().text,
       "共享排版 shared 2026 第1页\nRight",
     );
+
+    // Box visual effects (boxShadow, dashed border, borderRadius, gradient) render on Text with zero diagnostics.
+    const styledTextDoc = deck({ width: 320, height: 180 }).append(
+      slide({ id: "styled-text", background: "#FFFFFF" }).append(
+        text("Boxed Text", {
+          id: "styled",
+          x: 20,
+          y: 20,
+          width: 180,
+          height: 60,
+          style: {
+            fontFamily: jostFont,
+            padding: 10,
+            backgroundColor: "#EFF6FF",
+            borderColor: "#111827",
+            borderWidth: 2,
+            borderStyle: "dashed",
+            borderRadius: 10,
+            boxShadow: { blur: 4, distance: 4, angle: 90 },
+          },
+        }),
+      ),
+    );
+    const styledPreview = await previewDoc(styledTextDoc);
+    assert.deepEqual((await validatePptx(styledPreview.pptx)).errors, []);
+    assert.deepEqual(styledPreview.pages[0]?.diagnostics, []);
+    assert.ok(styledPreview.pages[0]?.png !== undefined);
+    expect(styledPreview.pages[0]?.svg).toContain("<feDropShadow");
+    expect(styledPreview.pages[0]?.svg).toContain("stroke-dasharray");
   });
 
-  it("rejects unsupported scripts, text styles, missing glyphs/fonts, color tables, and visual effects while keeping valid pages", async () => {
+  it("rejects unsupported scripts, text styles, missing glyphs/fonts, and color tables while keeping valid pages", async () => {
     const previewDoc = runDocPreview(documentCapabilities);
     const jostBytes = readFileSync(
       new URL("../assets/fonts/Jost-400-Book.ttf", import.meta.url),
@@ -411,37 +440,6 @@ describe("Slice 3: Text static preview & shared text-service outlines", () => {
           },
         }),
         expected: /monochrome outline/i,
-      },
-      {
-        label: "boxShadow-on-text",
-        node: text("Box shadow", {
-          id: "bad",
-          x: 10,
-          y: 10,
-          width: 160,
-          height: 50,
-          style: {
-            fontFamily: jostFont,
-            boxShadow: { blur: 4, distance: 2 },
-          },
-        }),
-        expected: /boxShadow/i,
-      },
-      {
-        label: "dashed-border-on-text",
-        node: text("Dashed", {
-          id: "bad",
-          x: 10,
-          y: 10,
-          width: 160,
-          height: 50,
-          style: {
-            fontFamily: jostFont,
-            borderColor: "#111827",
-            borderStyle: "dashed",
-          },
-        }),
-        expected: /non-solid/i,
       },
     ];
 

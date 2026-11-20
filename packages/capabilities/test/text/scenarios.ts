@@ -563,21 +563,6 @@ export const textRejectionScenario: CapabilityScenario = {
           },
           "Color",
         ),
-        createElement(
-          Text,
-          {
-            id: "box-shadow",
-            x: 310,
-            y: 10,
-            width: 120,
-            height: 30,
-            style: {
-              fontFamily: jostFont,
-              boxShadow: { blur: 4, distance: 2 },
-            },
-          },
-          "Box",
-        ),
       ),
       createElement(
         Slide,
@@ -675,17 +660,6 @@ export const textRejectionScenario: CapabilityScenario = {
           height: 30,
           style: { fontFamily: colrJostFont },
         }),
-        text("Box", {
-          id: "box-shadow",
-          x: 310,
-          y: 10,
-          width: 120,
-          height: 30,
-          style: {
-            fontFamily: jostFont,
-            boxShadow: { blur: 4, distance: 2 },
-          },
-        }),
       ),
       slide({ id: "valid-sibling" }).append(
         text("Valid sibling text", {
@@ -710,7 +684,7 @@ export const textRejectionScenario: CapabilityScenario = {
   assert({ author, preview }) {
     const p1 = preview.pages[0]!;
     assert.equal(p1.png, undefined, author);
-    assert.equal(p1.diagnostics.length, 9, author);
+    assert.equal(p1.diagnostics.length, 8, author);
     for (const id of [
       "arabic",
       "justify",
@@ -720,7 +694,6 @@ export const textRejectionScenario: CapabilityScenario = {
       "letter-spacing",
       "missing-glyph",
       "colr-font",
-      "box-shadow",
     ]) {
       assert.ok(
         p1.diagnostics.some(

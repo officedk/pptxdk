@@ -388,9 +388,8 @@ export const textCapability: ObjectCapabilityModule = {
               createFieldId: emitContext.createTextFieldId,
               ...(embedFonts === undefined ? {} : { embedFonts }),
             });
-            const emittedProperties = emitVisualModel(
-              visual,
-              emitContext.registerResource,
+            const emittedProperties = emitVisualModel(visual, (resource) =>
+              emitContext.registerResource(resource),
             );
             return {
               xml: textBoxXml(

@@ -1373,8 +1373,7 @@ export function paintVisualModel(options: {
     const maskH = roundSvgNumber(box.height + pad * 2);
     const blurId = `${prefix}-soft-blur`;
     const maskId = `${prefix}-soft-mask`;
-    const innerStrokeWidth =
-      r >= minSide / 2 ? 0 : Math.min(r, minSide * 0.45);
+    const innerStrokeWidth = r >= minSide / 2 ? 0 : Math.min(r, minSide * 0.45);
     const maskAttrs =
       innerStrokeWidth > 0
         ? `fill="white" stroke="black" stroke-width="${roundSvgNumber(innerStrokeWidth)}" filter="url(#${blurId})"`

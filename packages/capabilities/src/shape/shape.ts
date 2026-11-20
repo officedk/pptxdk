@@ -14,7 +14,6 @@ import {
   type ColorValue,
   type EmitContext,
   type EmitOutput,
-  type GeometryBox,
   type LayoutStyle,
   type LinkTarget,
   type ObjectCapabilityModule,
@@ -556,9 +555,8 @@ export const shapeCapability: ObjectCapabilityModule = {
                     createFieldId: emitContext.createTextFieldId,
                     ...(embedFonts === undefined ? {} : { embedFonts }),
                   });
-            const properties = emitVisualModel(
-              visual,
-              emitContext.registerResource,
+            const properties = emitVisualModel(visual, (resource) =>
+              emitContext.registerResource(resource),
             );
             return {
               xml: shapeXml(

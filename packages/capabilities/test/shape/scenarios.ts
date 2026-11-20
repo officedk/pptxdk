@@ -8,7 +8,6 @@ import {
 } from "@react-pptx/capabilities/document";
 import {
   blockArc,
-  linearGradient,
   path,
   preset,
   presetGeometryTuple,
@@ -832,9 +831,9 @@ export const shapeRejectionScenario: CapabilityScenario = {
   capability: "rp:shape",
   kind: "rejection",
   description:
-    "Dual-author negative scenario verifying unsupported Shape features emit located page errors while valid PPTX and valid sibling pages survive.",
+    "Dual-author negative scenario verifying unsupported Shape inline text emits located page errors while valid PPTX and valid sibling pages survive.",
   visualCheckpoints: [
-    "Page 1 (unsupported-shape-features): no PNG emitted (preview rejected cleanly with 8 located errors).",
+    "Page 1 (unsupported-shape-features): no PNG emitted (preview rejected cleanly on inline text).",
     "Page 2 (valid-sibling-page): clean white canvas with centered emerald rectangle (#16A34A).",
   ],
   nativeCheckpoints: [
@@ -847,65 +846,6 @@ export const shapeRejectionScenario: CapabilityScenario = {
       createElement(
         Slide,
         { id: "unsupported-shape-features" },
-        createElement(Shape, {
-          id: "arrow-start",
-          x: 10,
-          y: 10,
-          width: 80,
-          height: 20,
-          style: { borderColor: "#000000", startArrow: "triangle" },
-        }),
-        createElement(Shape, {
-          id: "arrow-end",
-          x: 10,
-          y: 40,
-          width: 80,
-          height: 20,
-          style: { borderColor: "#000000", endArrow: "arrow" },
-        }),
-        createElement(Shape, {
-          id: "dashed",
-          x: 10,
-          y: 70,
-          width: 80,
-          height: 20,
-          style: { borderColor: "#000000", borderStyle: "dashed" },
-        }),
-        createElement(Shape, {
-          id: "rounded",
-          x: 10,
-          y: 100,
-          width: 80,
-          height: 20,
-          fill: "#112233",
-          style: { borderRadius: 6 },
-        }),
-        createElement(Shape, {
-          id: "shadow",
-          x: 120,
-          y: 10,
-          width: 80,
-          height: 20,
-          fill: "#112233",
-          style: { boxShadow: { blur: 4, distance: 2 } },
-        }),
-        createElement(Shape, {
-          id: "soft",
-          x: 120,
-          y: 40,
-          width: 80,
-          height: 20,
-          fill: "#112233",
-          style: { softEdge: 4 },
-        }),
-        createElement(Shape, {
-          id: "gradient",
-          x: 120,
-          y: 70,
-          width: 80,
-          height: 20,
-          style: { backgroundImage: linearGradient(90, "#111111", "#888888") },
-        }),
         createElement(
           Shape,
           { id: "inline-text", x: 120, y: 100, width: 80, height: 30 },
@@ -930,65 +870,6 @@ export const shapeRejectionScenario: CapabilityScenario = {
     return deck({ width: 480, height: 270 }).append(
       slide({ id: "unsupported-shape-features" }).append(
         shape({
-          id: "arrow-start",
-          x: 10,
-          y: 10,
-          width: 80,
-          height: 20,
-          style: { borderColor: "#000000", startArrow: "triangle" },
-        }),
-        shape({
-          id: "arrow-end",
-          x: 10,
-          y: 40,
-          width: 80,
-          height: 20,
-          style: { borderColor: "#000000", endArrow: "arrow" },
-        }),
-        shape({
-          id: "dashed",
-          x: 10,
-          y: 70,
-          width: 80,
-          height: 20,
-          style: { borderColor: "#000000", borderStyle: "dashed" },
-        }),
-        shape({
-          id: "rounded",
-          x: 10,
-          y: 100,
-          width: 80,
-          height: 20,
-          fill: "#112233",
-          style: { borderRadius: 6 },
-        }),
-        shape({
-          id: "shadow",
-          x: 120,
-          y: 10,
-          width: 80,
-          height: 20,
-          fill: "#112233",
-          style: { boxShadow: { blur: 4, distance: 2 } },
-        }),
-        shape({
-          id: "soft",
-          x: 120,
-          y: 40,
-          width: 80,
-          height: 20,
-          fill: "#112233",
-          style: { softEdge: 4 },
-        }),
-        shape({
-          id: "gradient",
-          x: 120,
-          y: 70,
-          width: 80,
-          height: 20,
-          style: { backgroundImage: linearGradient(90, "#111111", "#888888") },
-        }),
-        shape({
           id: "inline-text",
           x: 120,
           y: 100,
@@ -1011,24 +892,13 @@ export const shapeRejectionScenario: CapabilityScenario = {
   assert({ author, preview }) {
     const p1 = preview.pages[0]!;
     assert.equal(p1.png, undefined, author);
-    assert.equal(p1.diagnostics.length, 8, author);
-    for (const id of [
-      "arrow-start",
-      "arrow-end",
-      "dashed",
-      "rounded",
-      "shadow",
-      "soft",
-      "gradient",
-      "inline-text",
-    ]) {
-      assert.ok(
-        p1.diagnostics.some(
-          (d) => d.severity === "error" && d.path.includes(`shape[${id}]`),
-        ),
-        `${author}: missing diagnostic for ${id}`,
-      );
-    }
+    assert.equal(p1.diagnostics.length, 1, author);
+    assert.ok(
+      p1.diagnostics.some(
+        (d) => d.severity === "error" && d.path.includes("shape[inline-text]"),
+      ),
+      `${author}: missing diagnostic for inline-text`,
+    );
 
     const p2 = preview.pages[1]!;
     assert.deepEqual(p2.diagnostics, [], author);

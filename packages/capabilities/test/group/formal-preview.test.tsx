@@ -5,6 +5,7 @@ import {
   deck,
   documentCapabilities,
   group,
+  image,
   shape,
   slide,
 } from "@react-pptx/capabilities/document";
@@ -20,6 +21,7 @@ import { emit } from "@react-pptx/emit";
 import { paint } from "@react-pptx/preview";
 import { Deck, Slide, expandDocument } from "@react-pptx/react";
 import { validatePptx } from "@react-pptx/validation";
+import { PNG } from "pngjs";
 import { createElement } from "react";
 import { describe, expect, it } from "vitest";
 
@@ -169,6 +171,13 @@ describe("Slice 5 (Ticket 08): Group static preview, screenGeometry, and member 
 
   it("propagates member preview failures out of Group without omitting failed members or breaking sibling pages", async () => {
     const previewDoc = runDocPreview(documentCapabilities);
+    const png = new PNG({ width: 4, height: 4 });
+    png.data.fill(255);
+    const corruptPng = new Uint8Array(PNG.sync.write(png));
+    const idat = Buffer.from(corruptPng).indexOf(Buffer.from("IDAT"));
+    corruptPng[idat + 6] = (corruptPng[idat + 6] ?? 0) ^ 0xff;
+    corruptPng[idat + 7] = (corruptPng[idat + 7] ?? 0) ^ 0xff;
+
     const result = await previewDoc(
       deck({ width: 320, height: 180 }).append(
         slide({ id: "group-with-bad-member" }).append(
@@ -181,14 +190,13 @@ describe("Slice 5 (Ticket 08): Group static preview, screenGeometry, and member 
               height: 30,
               fill: "#10B981",
             }),
-            shape({
+            image({
               id: "bad-member",
+              src: corruptPng,
               x: 80,
               y: 20,
               width: 50,
               height: 30,
-              fill: "#EF4444",
-              style: { boxShadow: { blur: 4, distance: 2 } },
             }),
           ),
         ),
@@ -215,8 +223,8 @@ describe("Slice 5 (Ticket 08): Group static preview, screenGeometry, and member 
       badPage.diagnostics.some(
         (d) =>
           d.severity === "error" &&
-          /group\[g\]\/shape\[bad-member\]/u.test(d.path) &&
-          /boxShadow/i.test(d.message),
+          /group\[g\]\/image\[bad-member\]/u.test(d.path) &&
+          /decode/i.test(d.message),
       ),
     );
     // Nodes and transformed screenBoxes are still reported for locator inspection.

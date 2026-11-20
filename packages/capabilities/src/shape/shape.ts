@@ -28,8 +28,20 @@ import {
 import { RichTextContainer } from "@react-pptx/core/document";
 import { pxToEmu, xmlEscape } from "@react-pptx/emit";
 
-import type { CustomGeometry, Geometry } from "../shared/geometry.ts";
-export { blockArc, path, preset } from "../shared/geometry.ts";
+import {
+  evaluateGeometry,
+  shadeHex,
+  type Geometry,
+  type PresetPathFillMode,
+  type ResolvedGeometry,
+} from "../shared/geometry.ts";
+export {
+  blockArc,
+  path,
+  preset,
+  presetGeometryNames,
+  presetGeometryTuple,
+} from "../shared/geometry.ts";
 export type {
   CustomGeometry,
   Geometry,
@@ -37,6 +49,7 @@ export type {
   PathCommand,
   PathOptions,
   PresetGeometry,
+  PresetGeometryName,
 } from "../shared/geometry.ts";
 import {
   nativeLinkXml,
@@ -234,48 +247,48 @@ function validateSize(
   return value;
 }
 
-function renderCustomGeometryPaths(
-  custom: CustomGeometry,
-  box: GeometryBox,
-  attributes: string,
+function subpathFillHex(
+  baseHex: string,
+  fillMode: Exclude<"norm" | PresetPathFillMode, "none">,
 ): string {
-  // Scale local path points into page units instead of an SVG viewport so stroke width stays in page px.
-  const mapX = (value: number) => box.x + (value * box.width) / custom.width;
-  const mapY = (value: number) => box.y + (value * box.height) / custom.height;
-  return custom.paths
-    .map((geometryPath) => {
-      const data = geometryPath.commands
-        .map((command) => {
-          switch (command.op) {
-            case "Z":
-              return "Z";
-            case "M":
-            case "L":
-              return `${command.op}${mapX(command.x)} ${mapY(command.y)}`;
-            case "Q":
-              return `Q${mapX(command.x1)} ${mapY(command.y1)} ${mapX(command.x)} ${mapY(command.y)}`;
-            case "C":
-              return `C${mapX(command.x1)} ${mapY(command.y1)} ${mapX(command.x2)} ${mapY(command.y2)} ${mapX(command.x)} ${mapY(command.y)}`;
-          }
-        })
-        .join(" ");
-      return `<g ${attributes}><path d="${data}"${geometryPath.fill === false ? ' fill="none"' : ""}${geometryPath.stroke === false ? ' stroke="none"' : ""}/></g>`;
-    })
-    .join("");
+  switch (fillMode) {
+    case "norm":
+      return baseHex;
+    case "lighten":
+      return shadeHex(baseHex, 0.6, 0.4);
+    case "lightenLess":
+      return shadeHex(baseHex, 0.8, 0.2);
+    case "darken":
+      return shadeHex(baseHex, 0.6, 0);
+    case "darkenLess":
+      return shadeHex(baseHex, 0.8, 0);
+    default: {
+      const exhaustive: never = fillMode;
+      return exhaustive;
+    }
+  }
 }
 
 function renderShapePreview(options: {
   readonly visualStyle: Readonly<Record<string, unknown>>;
   readonly hasText: boolean;
-  readonly geometry: Geometry | undefined;
+  readonly resolvedGeometry: ResolvedGeometry;
   readonly fill: ColorValue | undefined;
   readonly flipH: boolean | undefined;
   readonly flipV: boolean | undefined;
   readonly box: GeometryBox;
   readonly theme: ThemeContext;
 }): PaintOutput {
-  const { visualStyle, hasText, geometry, fill, flipH, flipV, box, theme } =
-    options;
+  const {
+    visualStyle,
+    hasText,
+    resolvedGeometry,
+    fill,
+    flipH,
+    flipV,
+    box,
+    theme,
+  } = options;
   const resolved = resolveBoxPreviewVisuals({
     label: "shape",
     visualStyle,
@@ -291,37 +304,39 @@ function renderShapePreview(options: {
       "Preview does not yet support text inside shapes",
     );
   }
-  const resolvedGeometry = geometry ?? "rect";
-  const name =
-    typeof resolvedGeometry === "string"
-      ? resolvedGeometry
-      : resolvedGeometry.type === "preset" &&
-          (resolvedGeometry.adjust === undefined ||
-            Object.keys(resolvedGeometry.adjust).length === 0)
-        ? resolvedGeometry.name
-        : undefined;
-  const custom =
-    typeof resolvedGeometry === "object" && resolvedGeometry.type === "custom"
-      ? resolvedGeometry
-      : undefined;
-  if (name !== "rect" && name !== "ellipse" && custom === undefined) {
-    throw new CapabilityError(
-      "preview-unsupported-geometry",
-      "Preview does not yet support this shape geometry",
-    );
-  }
 
-  const cx = box.x + box.width / 2;
-  const cy = box.y + box.height / 2;
-  const element =
-    custom !== undefined
-      ? renderCustomGeometryPaths(custom, box, resolved.attributes)
-      : name === "rect"
-        ? `<rect x="${box.x}" y="${box.y}" width="${box.width}" height="${box.height}" ${resolved.attributes}/>`
-        : `<ellipse cx="${cx}" cy="${cy}" rx="${box.width / 2}" ry="${box.height / 2}" ${resolved.attributes}/>`;
+  const fillValue =
+    fill ?? (visualStyle["backgroundColor"] as ColorValue | undefined);
+  const resolvedFill =
+    fillValue === undefined ? undefined : theme.resolveColor(fillValue);
+  const opacity = Number(visualStyle["opacity"] ?? 1);
+  const strokeValue = visualStyle["borderColor"] as ColorValue | undefined;
+  const borderWidth =
+    visualStyle["borderWidth"] === undefined
+      ? 1
+      : Number(visualStyle["borderWidth"]);
+  const resolvedStroke =
+    strokeValue === undefined || borderWidth === 0
+      ? undefined
+      : theme.resolveColor(strokeValue);
+
+  const evaluated = evaluateGeometry(resolvedGeometry, box);
+  const elements = evaluated.paths
+    .map((subpath) => {
+      const fillAttrs =
+        subpath.fillMode === "none" || resolvedFill === undefined
+          ? 'fill="none"'
+          : `fill="#${subpathFillHex(resolvedFill.hex, subpath.fillMode)}" fill-opacity="${(resolvedFill.alpha ?? 1) * opacity}"`;
+      const strokeAttrs =
+        !subpath.stroke || resolvedStroke === undefined
+          ? 'stroke="none" stroke-width="0"'
+          : `stroke="#${resolvedStroke.hex}" stroke-opacity="${(resolvedStroke.alpha ?? 1) * opacity}" stroke-width="${borderWidth}"`;
+      return `<path d="${subpath.d}" ${fillAttrs} ${strokeAttrs}/>`;
+    })
+    .join("");
 
   return {
-    svg: `<g transform="${resolved.svgTransform}">${element}</g>`,
+    svg: `<g transform="${resolved.svgTransform}">${elements}</g>`,
   };
 }
 
@@ -663,7 +678,7 @@ export const shapeCapability: ObjectCapabilityModule = {
             return renderShapePreview({
               visualStyle,
               hasText,
-              geometry,
+              resolvedGeometry: properties.geometry,
               fill,
               flipH,
               flipV,

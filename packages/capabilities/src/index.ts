@@ -3,6 +3,8 @@ export {
   linearGradient,
   path,
   preset,
+  presetGeometryNames,
+  presetGeometryTuple,
   radialGradient,
   shapeCapability,
 } from "#/shape/shape.ts";
@@ -13,6 +15,7 @@ export type {
   PathCommand,
   PathOptions,
   PresetGeometry,
+  PresetGeometryName,
   shapeStyleKeys,
 } from "#/shape/shape.ts";
 export { Shape } from "#/shape/shape-elements.ts";

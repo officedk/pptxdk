@@ -19,6 +19,7 @@ import {
 } from "@react-pptx/core/capability";
 import { pxToEmu, resolvedColorXml, xmlEscape } from "@react-pptx/emit";
 import * as fontkit from "fontkit";
+import * as hb from "harfbuzzjs";
 // @ts-expect-error -- linebreak does not provide types; declare the breakpoint interface used below.
 import LineBreakerImplementation from "linebreak";
 
@@ -29,7 +30,8 @@ import {
   type FontEmbeddingUse,
 } from "../font/font-embedding.ts";
 import { matchesFontFamily } from "../font/font-family.ts";
-import { textShadowXml } from "./visual.ts";
+import type {} from "./emscripten.d.ts";
+import { resolveShadow, textShadowXml, type ResolvedShadow } from "./visual.ts";
 export { requiresFontGlyph } from "../font/font-embedding.ts";
 export type {
   FontReference,
@@ -203,12 +205,47 @@ export type MeasuredTextLayout = {
   readonly paragraphs: readonly MeasuredParagraph[];
 };
 
+export type ResolvedTextDecoration = "none" | "underline" | "line-through";
+export type ResolvedTextTransform = "none" | "uppercase";
+export type ResolvedTextAlign = "left" | "center" | "right" | "justify";
+export type ResolvedVerticalAlign = "top" | "middle" | "bottom";
+export type ResolvedTextWrap = "normal" | "nowrap";
+export type ResolvedTextList =
+  | {
+      readonly type: "bullet";
+      readonly character: string;
+      readonly level: number;
+    }
+  | {
+      readonly type: "number";
+      readonly style: "arabicPeriod";
+      readonly startAt: number;
+      readonly level: number;
+    };
+export type ResolvedTextShadow =
+  | { readonly kind: "none" }
+  | { readonly kind: "shadow"; readonly shadow: ResolvedShadow };
+
+export type PreviewDecoration = {
+  readonly x: number;
+  readonly y: number;
+  readonly width: number;
+  readonly height: number;
+  readonly color: RunStyle["color"];
+  readonly textShadow?: Shadow | "none" | undefined;
+  readonly glyphStart?: number;
+  readonly glyphEnd?: number;
+};
+
 export type PreviewGlyph = {
   readonly path: string;
   readonly x: number;
   readonly y: number;
   readonly scale: number;
   readonly color: RunStyle["color"];
+  readonly textShadow?: Shadow | "none" | undefined;
+  readonly isSpace?: boolean;
+  readonly clusterKey?: string;
 };
 
 export type PreviewLineOutlines = {
@@ -216,15 +253,18 @@ export type PreviewLineOutlines = {
   readonly end: number;
   readonly width: number;
   readonly glyphs: readonly PreviewGlyph[];
+  readonly decorations?: readonly PreviewDecoration[];
   readonly ascent: number;
   readonly descent: number;
   readonly advance: number;
+  readonly canJustify?: boolean;
 };
 
 export type PreviewParagraphOutlines = {
   readonly lines: readonly PreviewLineOutlines[];
   readonly lineHeight: number;
   readonly spacingAfter: number;
+  readonly baseDir: "ltr" | "rtl";
 };
 
 export type PreviewTextOutlinesLine = {
@@ -232,6 +272,7 @@ export type PreviewTextOutlinesLine = {
   readonly end: number;
   readonly baseline: number;
   readonly glyphs: readonly PreviewGlyph[];
+  readonly decorations?: readonly PreviewDecoration[];
 };
 
 type LineBreakerConstructor = new (text: string) => {
@@ -241,6 +282,33 @@ type LineBreakerConstructor = new (text: string) => {
 const LineBreaker = LineBreakerImplementation as LineBreakerConstructor;
 const graphemes = new Intl.Segmenter(undefined, { granularity: "grapheme" });
 const measureFaces = new Map<string, fontkit.Font>();
+type CachedHbFace = {
+  readonly blob: hb.Blob;
+  readonly face: hb.Face;
+  readonly font: hb.Font;
+};
+const hbFaces = new Map<string, CachedHbFace>();
+let sharedHbBuffer: hb.Buffer | undefined;
+let sharedHbBufferBusy = false;
+
+function withHbBuffer<T>(fn: (buffer: hb.Buffer) => T): T {
+  if (!sharedHbBufferBusy) {
+    sharedHbBufferBusy = true;
+    sharedHbBuffer ??= new hb.Buffer();
+    try {
+      return fn(sharedHbBuffer);
+    } finally {
+      sharedHbBuffer.reset();
+      sharedHbBufferBusy = false;
+    }
+  }
+  const buffer = new hb.Buffer();
+  try {
+    return fn(buffer);
+  } finally {
+    buffer.reset();
+  }
+}
 
 const defaultTextStyle: TextStyle = Object.freeze({
   fontFamily: "minor",
@@ -530,11 +598,11 @@ function validateRunStyle(style: RunStyle): RunStyle {
   }
   if (
     style.textDecoration !== undefined &&
-    !["none", "underline"].includes(style.textDecoration)
+    !["none", "underline", "line-through"].includes(style.textDecoration)
   ) {
     throw new CapabilityError(
       "invalid-text-decoration",
-      "textDecoration must be none or underline",
+      "textDecoration must be none, underline, or line-through",
     );
   }
   if (style.lang !== undefined) {
@@ -873,6 +941,97 @@ function collectRuns(
   }
 }
 
+function resolveDecoration(
+  value: TextStyle["textDecoration"] | undefined,
+): ResolvedTextDecoration {
+  return value ?? "none";
+}
+
+function resolveTransform(
+  value: TextStyle["textTransform"] | undefined,
+): ResolvedTextTransform {
+  return value ?? "none";
+}
+
+function resolveTextShadowModel(
+  theme: ThemeContext,
+  value: Shadow | "none" | undefined,
+): ResolvedTextShadow {
+  if (value === undefined || value === "none") {
+    return { kind: "none" };
+  }
+  return {
+    kind: "shadow",
+    shadow: resolveShadow(theme, value, "textShadow"),
+  };
+}
+
+function resolveAlign(
+  value: TextAlignment | undefined,
+  fallback: ResolvedTextAlign = "left",
+): ResolvedTextAlign {
+  return value ?? fallback;
+}
+
+function resolveVerticalAlign(
+  value: TextStyle["verticalAlign"] | undefined,
+): ResolvedVerticalAlign {
+  return value ?? "top";
+}
+
+function resolveListModel(
+  value: TextList | undefined,
+): ResolvedTextList | undefined {
+  if (value === undefined) return undefined;
+  switch (value.type) {
+    case "bullet":
+      return {
+        type: "bullet",
+        character: value.character ?? "•",
+        level: value.level ?? 0,
+      };
+    case "number":
+      return {
+        type: "number",
+        style: value.style ?? "arabicPeriod",
+        startAt: value.startAt ?? 1,
+        level: value.level ?? 0,
+      };
+    default: {
+      const exhaustive: never = value;
+      return exhaustive;
+    }
+  }
+}
+
+function decorationAttribute(decoration: ResolvedTextDecoration): string[] {
+  switch (decoration) {
+    case "none":
+      return [];
+    case "underline":
+      return ['u="sng"'];
+    case "line-through":
+      return ['strike="sngStrike"'];
+    default: {
+      const exhaustive: never = decoration;
+      return exhaustive;
+    }
+  }
+}
+
+function transformAttribute(transform: ResolvedTextTransform): string[] {
+  switch (transform) {
+    case "none":
+      return [];
+    case "uppercase":
+      return ['cap="all"'];
+    default: {
+      const exhaustive: never = transform;
+      return exhaustive;
+    }
+  }
+}
+
 function runPropertiesXml(
   style: RunStyle,
   tag: "a:rPr" | "a:defRPr",
@@ -903,13 +1062,15 @@ function runPropertiesXml(
         ? "+mn-cs"
         : font.family;
   const fontSlots = `<a:latin typeface="${escapedXml(latinTypeface)}"/><a:ea typeface="${escapedXml(eaTypeface)}"/><a:cs typeface="${escapedXml(csTypeface)}"/>`;
+  const decoration = resolveDecoration(style.textDecoration);
+  const transform = resolveTransform(style.textTransform);
   const attributes = [
     ...(style.lang !== undefined ? [`lang="${escapedXml(style.lang)}"`] : []),
     `sz="${centipoints(points)}"`,
     `b="${bold ? 1 : 0}"`,
     `i="${font.style === "italic" ? 1 : 0}"`,
-    ...(style.textDecoration === "underline" ? ['u="sng"'] : []),
-    ...(style.textTransform === "uppercase" ? ['cap="all"'] : []),
+    ...decorationAttribute(decoration),
+    ...transformAttribute(transform),
     ...(style.letterSpacing === undefined || style.letterSpacing === 0
       ? []
       : [`spc="${letterSpacingCentipoints(style.letterSpacing)}"`]),
@@ -1020,7 +1181,20 @@ function textResourceClaims(runs: readonly Run[]): {
 
 function alignmentValue(value: TextAlignment | undefined): string | undefined {
   if (value === undefined) return undefined;
-  return { left: "l", center: "ctr", right: "r", justify: "just" }[value];
+  switch (value) {
+    case "left":
+      return "l";
+    case "center":
+      return "ctr";
+    case "right":
+      return "r";
+    case "justify":
+      return "just";
+    default: {
+      const exhaustive: never = value;
+      return exhaustive;
+    }
+  }
 }
 
 function paragraphXml(paragraph: Paragraph, theme: ThemeContext): string {
@@ -1028,8 +1202,13 @@ function paragraphXml(paragraph: Paragraph, theme: ThemeContext): string {
   const attributes: string[] = [];
   const align = alignmentValue(style.align);
   if (align !== undefined) attributes.push(`algn="${align}"`);
-  const level = style.list?.level ?? 0;
-  if (style.list !== undefined) attributes.push(`lvl="${level}"`);
+  const paragraphText = runs.map((run) => displayedText(run)).join("");
+  if (paragraphBaseDirection(paragraphText) === "rtl") {
+    attributes.push('rtl="1"');
+  }
+  const resolvedList = resolveListModel(style.list);
+  if (resolvedList !== undefined)
+    attributes.push(`lvl="${resolvedList.level}"`);
   const lineSpacing =
     style.lineHeight === undefined
       ? ""
@@ -1039,10 +1218,19 @@ function paragraphXml(paragraph: Paragraph, theme: ThemeContext): string {
       ? ""
       : `<a:spcAft><a:spcPts val="${spacingCentipoints(style.spacingAfter, "spacingAfter")}"/></a:spcAft>`;
   let list = "";
-  if (style.list?.type === "bullet") {
-    list = `<a:buChar char="${xmlEscape(style.list.character ?? "•")}"/>`;
-  } else if (style.list?.type === "number") {
-    list = `<a:buAutoNum type="${style.list.style ?? "arabicPeriod"}" startAt="${style.list.startAt ?? 1}"/>`;
+  if (resolvedList !== undefined) {
+    switch (resolvedList.type) {
+      case "bullet":
+        list = `<a:buChar char="${xmlEscape(resolvedList.character)}"/>`;
+        break;
+      case "number":
+        list = `<a:buAutoNum type="${resolvedList.style}" startAt="${resolvedList.startAt}"/>`;
+        break;
+      default: {
+        const exhaustive: never = resolvedList;
+        return exhaustive;
+      }
+    }
   }
   const pPr =
     attributes.length +
@@ -1237,7 +1425,16 @@ function measureFace(source: NormalizedFont): MeasureFace {
       `Font line metrics for ${source.family} are invalid`,
     );
   }
-  return { font: parsed, identity: source.identity };
+  if (parsed.type === "TTF" && !hbFaces.has(source.identity)) {
+    const blob = new hb.Blob(source.data);
+    const hbFace = new hb.Face(blob, 0);
+    const font = new hb.Font(hbFace);
+    hbFaces.set(source.identity, { blob, face: hbFace, font });
+  }
+  return {
+    font: parsed,
+    identity: source.identity,
+  };
 }
 
 function measureRunFace(style: RunStyle): MeasureFace {
@@ -1586,11 +1783,39 @@ function paragraphPieces(paragraph: Paragraph): {
   return { text, pieces };
 }
 
+function listIndentMetrics(paragraph: Paragraph): {
+  readonly levelIndent: number;
+  readonly hangingIndent: number;
+  readonly contentIndent: number;
+  readonly baseFontPx: number;
+} {
+  const resolvedList = resolveListModel(paragraph.style.list);
+  if (resolvedList === undefined) {
+    return {
+      levelIndent: 0,
+      hangingIndent: 0,
+      contentIndent: 0,
+      baseFontPx: 0,
+    };
+  }
+  const firstStyle = paragraph.runs[0]?.style ?? paragraph.endStyle;
+  const baseFontPx = (fontSizePoints(firstStyle.fontSize) * 4) / 3;
+  const hangingIndent = Math.max(baseFontPx * 1.25, 20);
+  const levelIndent = resolvedList.level * (baseFontPx * 1.5);
+  return {
+    levelIndent,
+    hangingIndent,
+    contentIndent: levelIndent + hangingIndent,
+    baseFontPx,
+  };
+}
+
 function paragraphMinContentWidth(paragraph: Paragraph): number {
   const { text, pieces } = paragraphPieces(paragraph);
-  if (text === "") return 0;
+  const { contentIndent } = listIndentMetrics(paragraph);
+  if (text === "") return contentIndent;
   if (paragraph.wrap === "nowrap") {
-    return wrapParagraph(text, pieces, Number.MAX_VALUE).width;
+    return wrapParagraph(text, pieces, Number.MAX_VALUE).width + contentIndent;
   }
   const breaker = new LineBreaker(text);
   let start = 0;
@@ -1607,7 +1832,7 @@ function paragraphMinContentWidth(paragraph: Paragraph): number {
     );
     start = next.position;
   }
-  return widest;
+  return widest + contentIndent;
 }
 
 function paragraphMeasurement(
@@ -1615,11 +1840,12 @@ function paragraphMeasurement(
   width: number,
 ): MeasuredParagraph {
   const { text, pieces } = paragraphPieces(paragraph);
-  const wrapped = wrapParagraph(
-    text,
-    pieces,
-    paragraph.wrap === "nowrap" ? Number.MAX_VALUE : width,
-  );
+  const { contentIndent } = listIndentMetrics(paragraph);
+  const wrapWidth =
+    paragraph.wrap === "nowrap"
+      ? Number.MAX_VALUE
+      : Math.max(1, width - contentIndent);
+  const wrapped = wrapParagraph(text, pieces, wrapWidth);
   const spacingAfter =
     paragraph.style.spacingAfter === undefined
       ? 0
@@ -1629,7 +1855,7 @@ function paragraphMeasurement(
     lines: wrapped.lines,
     text,
     pieces,
-    width: wrapped.width,
+    width: wrapped.width + contentIndent,
     lineHeight: paragraphLineHeight(paragraph),
     spacingAfter,
   };
@@ -1659,8 +1885,420 @@ const unsupportedColorFontTables = [
   "CPAL",
   "sbix",
   "CBDT",
+  "CBLC",
   "SVG ",
 ] as const;
+
+function hasUnsupportedColorFontTable(font: fontkit.Font): boolean {
+  const directory = (
+    font as {
+      readonly directory?: { readonly tables?: Record<string, unknown> };
+    }
+  ).directory;
+  const tables = directory?.tables;
+  return unsupportedColorFontTables.some(
+    (table) => table in font || (tables !== undefined && table in tables),
+  );
+}
+
+function roundSvgNumber(value: number): string {
+  const rounded = Math.round(value * 1_000_000) / 1_000_000;
+  return Object.is(rounded, -0) ? "0" : String(rounded);
+}
+
+function decorationForSegment(
+  decoration: ResolvedTextDecoration,
+  face: fontkit.Font,
+  fontPx: number,
+  startX: number,
+  endX: number,
+  color: RunStyle["color"],
+  textShadow: Shadow | "none" | undefined,
+): PreviewDecoration | undefined {
+  if (endX <= startX) return undefined;
+  const unitsPerEm = face.unitsPerEm;
+  switch (decoration) {
+    case "none":
+      return undefined;
+    case "underline": {
+      const thickness = Math.max(
+        1,
+        face.underlineThickness
+          ? (face.underlineThickness / unitsPerEm) * fontPx
+          : fontPx * 0.07,
+      );
+      const yCenter = face.underlinePosition
+        ? (-face.underlinePosition / unitsPerEm) * fontPx
+        : fontPx * 0.12;
+      return {
+        x: startX,
+        y: yCenter - thickness / 2,
+        width: endX - startX,
+        height: thickness,
+        color,
+        ...(textShadow === undefined ? {} : { textShadow }),
+      };
+    }
+    case "line-through": {
+      const os2 = face["OS/2"];
+      const thickness = Math.max(
+        1,
+        os2?.yStrikeoutSize
+          ? (os2.yStrikeoutSize / unitsPerEm) * fontPx
+          : fontPx * 0.07,
+      );
+      const yCenter = -(os2?.yStrikeoutPosition
+        ? (os2.yStrikeoutPosition / unitsPerEm) * fontPx
+        : fontPx * 0.3);
+      return {
+        x: startX,
+        y: yCenter - thickness / 2,
+        width: endX - startX,
+        height: thickness,
+        color,
+        ...(textShadow === undefined ? {} : { textShadow }),
+      };
+    }
+    default: {
+      const exhaustive: never = decoration;
+      return exhaustive;
+    }
+  }
+}
+
+type BidiType =
+  | "L"
+  | "R"
+  | "AL"
+  | "EN"
+  | "AN"
+  | "NSM"
+  | "ES"
+  | "CS"
+  | "ET"
+  | "ON";
+
+function bidiCharType(ch: string): BidiType {
+  if (ch === "\u200F") return "R";
+  if (ch === "\u200E") return "L";
+  if (/^\p{Mark}$/u.test(ch)) return "NSM";
+  if (/^[\u0660-\u0669\u06F0-\u06F9]$/u.test(ch)) return "AN";
+  if (/^\p{Nd}$/u.test(ch)) return "EN";
+  if (
+    /^[\p{Script=Arabic}\p{Script=Syriac}\p{Script=Thaana}\p{Script=Nko}\uFB50-\uFDFF\uFE70-\uFEFF]$/u.test(
+      ch,
+    ) &&
+    /^\p{Letter}$/u.test(ch)
+  ) {
+    return "AL";
+  }
+  if (
+    /^[\p{Script=Hebrew}\uFB1D-\uFB4F]$/u.test(ch) &&
+    /^\p{Letter}$/u.test(ch)
+  ) {
+    return "R";
+  }
+  if (/^\p{Letter}$/u.test(ch)) return "L";
+  if (ch === "+" || ch === "-" || ch === "\u2212") return "ES";
+  if (ch === "," || ch === "." || ch === ":" || ch === "/") return "CS";
+  if (ch === "%" || /^\p{Sc}$/u.test(ch)) return "ET";
+  return "ON";
+}
+
+function paragraphBaseDirection(text: string): "ltr" | "rtl" {
+  for (const ch of text) {
+    const type = bidiCharType(ch);
+    if (type === "R" || type === "AL") return "rtl";
+    if (type === "L") return "ltr";
+  }
+  return "ltr";
+}
+
+type CodePointSpan = {
+  readonly start: number;
+  readonly end: number;
+  readonly level: number;
+};
+
+function computeLineBidiLevels(
+  lineText: string,
+  baseOffset: number,
+  baseDir: "ltr" | "rtl",
+): CodePointSpan[] {
+  const cps: {
+    readonly start: number;
+    readonly end: number;
+    readonly ch: string;
+  }[] = [];
+  let offset = baseOffset;
+  for (const ch of lineText) {
+    cps.push({ start: offset, end: offset + ch.length, ch });
+    offset += ch.length;
+  }
+  const n = cps.length;
+  if (n === 0) return [];
+
+  const embeddingLevel = baseDir === "rtl" ? 1 : 0;
+  const dirStrong: "L" | "R" = embeddingLevel === 0 ? "L" : "R";
+  const types: BidiType[] = cps.map((cp) => bidiCharType(cp.ch));
+
+  // W1: NSM takes the type of the preceding character (or sos).
+  let prevW1: BidiType = dirStrong;
+  for (let i = 0; i < n; i += 1) {
+    if (types[i] === "NSM") {
+      types[i] = prevW1;
+    } else {
+      prevW1 = types[i]!;
+    }
+  }
+
+  // W2: EN -> AN when preceded by AL as the last strong type.
+  let lastStrongW2: "L" | "R" | "AL" = dirStrong;
+  for (let i = 0; i < n; i += 1) {
+    const t = types[i]!;
+    if (t === "L" || t === "R" || t === "AL") {
+      lastStrongW2 = t;
+    } else if (t === "EN" && lastStrongW2 === "AL") {
+      types[i] = "AN";
+    }
+  }
+
+  // W3: AL -> R.
+  for (let i = 0; i < n; i += 1) {
+    if (types[i] === "AL") types[i] = "R";
+  }
+
+  // W4: Single ES between EN/EN, single CS between EN/EN or AN/AN.
+  for (let i = 1; i < n - 1; i += 1) {
+    const t = types[i]!;
+    const prev = types[i - 1]!;
+    const next = types[i + 1]!;
+    if (t === "ES" && prev === "EN" && next === "EN") {
+      types[i] = "EN";
+    } else if (
+      t === "CS" &&
+      ((prev === "EN" && next === "EN") || (prev === "AN" && next === "AN"))
+    ) {
+      types[i] = prev;
+    }
+  }
+
+  // W5: ET sequences adjacent to EN become EN.
+  for (let i = 0; i < n; i += 1) {
+    if (types[i] !== "ET") continue;
+    let end = i;
+    while (end < n && types[end] === "ET") end += 1;
+    const prevEn = i > 0 && types[i - 1] === "EN";
+    const nextEn = end < n && types[end] === "EN";
+    if (prevEn || nextEn) {
+      for (let k = i; k < end; k += 1) types[k] = "EN";
+    }
+    i = end - 1;
+  }
+
+  // W6: Remaining ES, ET, CS -> ON.
+  for (let i = 0; i < n; i += 1) {
+    const t = types[i]!;
+    if (t === "ES" || t === "ET" || t === "CS") {
+      types[i] = "ON";
+    }
+  }
+
+  // W7: EN -> L when last strong type was L.
+  let lastStrongW7: "L" | "R" = dirStrong;
+  for (let i = 0; i < n; i += 1) {
+    const t = types[i]!;
+    if (t === "L" || t === "R") {
+      lastStrongW7 = t;
+    } else if (t === "EN" && lastStrongW7 === "L") {
+      types[i] = "L";
+    }
+  }
+
+  // N1 & N2: Neutral runs.
+  const neutralEffective = (t: BidiType): "L" | "R" | undefined => {
+    if (t === "L") return "L";
+    if (t === "R" || t === "EN" || t === "AN") return "R";
+    return undefined;
+  };
+  for (let i = 0; i < n; i += 1) {
+    if (types[i] !== "ON") continue;
+    let end = i;
+    while (end < n && types[end] === "ON") end += 1;
+    const leftSide =
+      i === 0 ? dirStrong : (neutralEffective(types[i - 1]!) ?? dirStrong);
+    const rightSide =
+      end === n ? dirStrong : (neutralEffective(types[end]!) ?? dirStrong);
+    const resolved: "L" | "R" = leftSide === rightSide ? leftSide : dirStrong;
+    for (let k = i; k < end; k += 1) types[k] = resolved;
+    i = end - 1;
+  }
+
+  // I1 & I2: Resolve final embedding levels.
+  return cps.map((cp, index) => {
+    const t = types[index]!;
+    let level: number;
+    if (embeddingLevel === 0) {
+      level = t === "L" ? 0 : t === "R" ? 1 : 2;
+    } else {
+      level = t === "R" ? 1 : 2;
+    }
+    return { start: cp.start, end: cp.end, level };
+  });
+}
+
+type VisualLineSegment = {
+  readonly text: string;
+  readonly piece: MeasurePiece;
+  readonly level: number;
+  readonly isRtl: boolean;
+};
+
+function buildVisualLineSegments(
+  text: string,
+  lineStart: number,
+  trimmedEnd: number,
+  pieces: readonly MeasurePiece[],
+  baseDir: "ltr" | "rtl",
+): VisualLineSegment[] {
+  if (lineStart >= trimmedEnd) return [];
+  const spans = computeLineBidiLevels(
+    text.slice(lineStart, trimmedEnd),
+    lineStart,
+    baseDir,
+  );
+  const segments: VisualLineSegment[] = [];
+  let spanIdx = 0;
+  for (const piece of pieces) {
+    const pStart = Math.max(lineStart, piece.start);
+    const pEnd = Math.min(trimmedEnd, piece.end);
+    if (pStart >= pEnd) continue;
+    while (spanIdx < spans.length && spans[spanIdx]!.end <= pStart) {
+      spanIdx += 1;
+    }
+    let segStart = pStart;
+    let currentLevel: number | undefined;
+    while (spanIdx < spans.length && spans[spanIdx]!.start < pEnd) {
+      const sp = spans[spanIdx]!;
+      if (currentLevel === undefined) {
+        currentLevel = sp.level;
+        segStart = Math.max(pStart, sp.start);
+      } else if (sp.level !== currentLevel) {
+        const segEnd = Math.min(pEnd, sp.start);
+        if (segEnd > segStart) {
+          segments.push({
+            text: text.slice(segStart, segEnd),
+            piece,
+            level: currentLevel,
+            isRtl: currentLevel % 2 === 1,
+          });
+        }
+        currentLevel = sp.level;
+        segStart = segEnd;
+      }
+      if (sp.end <= pEnd) {
+        spanIdx += 1;
+      } else {
+        break;
+      }
+    }
+    if (currentLevel !== undefined && pEnd > segStart) {
+      segments.push({
+        text: text.slice(segStart, pEnd),
+        piece,
+        level: currentLevel,
+        isRtl: currentLevel % 2 === 1,
+      });
+    }
+  }
+
+  // L2: Reverse contiguous runs at or above each level from maxLevel down to 1.
+  const maxLevel = Math.max(0, ...segments.map((seg) => seg.level));
+  for (let lvl = maxLevel; lvl >= 1; lvl -= 1) {
+    let i = 0;
+    while (i < segments.length) {
+      if (segments[i]!.level < lvl) {
+        i += 1;
+        continue;
+      }
+      let j = i;
+      while (j < segments.length && segments[j]!.level >= lvl) {
+        j += 1;
+      }
+      let left = i;
+      let right = j - 1;
+      while (left < right) {
+        const tmp = segments[left]!;
+        segments[left] = segments[right]!;
+        segments[right] = tmp;
+        left += 1;
+        right -= 1;
+      }
+      i = j;
+    }
+  }
+  return segments;
+}
+
+type ShapedOutlineGlyph = {
+  readonly path: string;
+  readonly xAdvance: number;
+  readonly xOffset: number;
+  readonly yOffset: number;
+  readonly cluster: number;
+  readonly isSpace: boolean;
+};
+
+function shapeSegmentOutlines(
+  face: MeasureFace,
+  text: string,
+  isRtl: boolean,
+  lang: string | undefined,
+): ShapedOutlineGlyph[] {
+  const visible = Array.from(text).filter(requiresFontGlyph).join("");
+  if (visible === "") return [];
+  const hbFont = hbFaces.get(face.identity)?.font;
+  if (hbFont !== undefined) {
+    return withHbBuffer((buffer) => {
+      buffer.addText(visible);
+      buffer.guessSegmentProperties();
+      buffer.setDirection(isRtl ? hb.Direction.RTL : hb.Direction.LTR);
+      if (lang !== undefined) {
+        buffer.setLanguage(lang);
+      }
+      hb.shape(hbFont, buffer);
+      return buffer.getGlyphInfosAndPositions().map((item) => ({
+        path: hbFont.glyphToPath(item.codepoint),
+        xAdvance: item.xAdvance ?? 0,
+        xOffset: item.xOffset ?? 0,
+        yOffset: item.yOffset ?? 0,
+        cluster: item.cluster,
+        isSpace: /\p{White_Space}/u.test(visible[item.cluster] ?? ""),
+      }));
+    });
+  }
+  const fkRun = face.font.layout(
+    visible,
+    undefined,
+    undefined,
+    undefined,
+    isRtl ? "rtl" : "ltr",
+  );
+  return fkRun.glyphs.map((glyph, index) => {
+    const pos = fkRun.positions[index]!;
+    const isSpace = glyph.codePoints.some((cp) =>
+      /\p{White_Space}/u.test(String.fromCodePoint(cp)),
+    );
+    return {
+      path: glyph.path.toSVG(),
+      xAdvance: pos.xAdvance,
+      xOffset: pos.xOffset,
+      yOffset: pos.yOffset,
+      cluster: index,
+      isSpace,
+    };
+  });
+}
 
 /**
  * Extracts vector glyph outlines for one paragraph using its formal measurement / line-break ranges.
@@ -1670,94 +2308,267 @@ export function previewParagraphOutlines(
   paragraph: Paragraph,
   widthOrMeasured: number | MeasuredParagraph,
 ): PreviewParagraphOutlines {
-  if (
-    paragraph.runs.some((run) =>
-      /[^\p{Script=Latin}\p{Script=Han}\p{Script=Common}\p{Script=Inherited}]/u.test(
-        run.text,
-      ),
-    )
-  ) {
-    throw new CapabilityError(
-      "preview-unsupported-script",
-      "Preview currently supports Latin and Han text only",
-    );
-  }
-  const align = paragraph.style.align ?? "left";
-  if (align === "justify" || paragraph.style.list !== undefined) {
-    throw new CapabilityError(
-      "preview-unsupported-text",
-      "Preview does not support justified text or lists",
-    );
-  }
   const measured =
     typeof widthOrMeasured === "number"
       ? paragraphMeasurement(paragraph, widthOrMeasured)
       : widthOrMeasured;
   const { text, pieces } = measured;
+  const baseDir = paragraphBaseDirection(text);
   for (const piece of pieces) {
-    if (
-      (piece.style.textDecoration !== undefined &&
-        piece.style.textDecoration !== "none") ||
-      (piece.style.textShadow !== undefined &&
-        piece.style.textShadow !== "none") ||
-      (piece.style.letterSpacing !== undefined &&
-        piece.style.letterSpacing !== 0)
-    ) {
-      throw new CapabilityError(
-        "preview-unsupported-text",
-        "Preview does not support text decoration, shadow, or custom letter spacing",
-      );
-    }
-    if (unsupportedColorFontTables.some((table) => table in piece.face.font)) {
+    if (hasUnsupportedColorFontTable(piece.face.font)) {
       throw new CapabilityError(
         "preview-unsupported-font",
         "Preview requires monochrome outline fonts",
       );
     }
   }
-  const lines = measured.lines.map((line) => {
+  const lines = measured.lines.map((line, lineIndex) => {
     let cursor = 0;
+    let pendingTracking = 0;
     const glyphs: PreviewGlyph[] = [];
+    const decorations: PreviewDecoration[] = [];
     let ascent = 0;
     let descent = 0;
-    for (const piece of pieces) {
-      const start = Math.max(line.start, piece.start);
-      const end = Math.min(trimLineEnd(text, line.start, line.end), piece.end);
-      if (start >= end) continue;
-      const shown = text.slice(start, end);
-      const missing = missingCharacters(piece.face, shown);
+    const trimmedEnd = trimLineEnd(text, line.start, line.end);
+    const visualSegments = buildVisualLineSegments(
+      text,
+      line.start,
+      trimmedEnd,
+      pieces,
+      baseDir,
+    );
+    visualSegments.forEach((seg, segIndex) => {
+      const { piece } = seg;
+      const missing = missingCharacters(piece.face, seg.text);
       if (missing.length > 0) {
         throw new CapabilityError(
           "preview-missing-glyph",
           "Preview requires every visible glyph in the supplied font",
         );
       }
-      const shaped = shapeVisibleText(piece.face, shown);
-      if (shaped === undefined) continue;
+      const shaped = shapeSegmentOutlines(
+        piece.face,
+        seg.text,
+        seg.isRtl,
+        piece.style.lang,
+      );
+      if (shaped.length === 0) return;
       const face = piece.face.font;
-      const scale =
-        (fontSizePoints(piece.style.fontSize) * 4) / (3 * face.unitsPerEm);
+      const fontPx = (fontSizePoints(piece.style.fontSize) * 4) / 3;
+      const scale = fontPx / face.unitsPerEm;
+      const trackingPx = piece.style.letterSpacing ?? 0;
       ascent = Math.max(ascent, face.ascent * scale);
       descent = Math.max(descent, -face.descent * scale);
-      shaped.glyphs.forEach((glyph, index) => {
-        const position = shaped.positions[index]!;
+      let segStartX: number | undefined;
+      let segEndX = cursor;
+      const glyphStart = glyphs.length;
+      let lastCluster: number | undefined;
+      let clusterHadAdvance = false;
+      for (const item of shaped) {
+        if (lastCluster !== undefined && item.cluster !== lastCluster) {
+          if (clusterHadAdvance && pendingTracking !== 0) {
+            cursor += pendingTracking;
+            pendingTracking = 0;
+          }
+          clusterHadAdvance = false;
+        } else if (lastCluster === undefined && pendingTracking !== 0) {
+          cursor += pendingTracking;
+          pendingTracking = 0;
+        }
+        lastCluster = item.cluster;
+        if (segStartX === undefined) {
+          segStartX = cursor;
+        }
         glyphs.push({
-          path: glyph.path.toSVG(),
-          x: cursor + position.xOffset * scale,
-          y: -position.yOffset * scale,
+          path: item.path,
+          x: cursor + item.xOffset * scale,
+          y: -item.yOffset * scale,
           scale,
           color: piece.style.color,
+          ...(piece.style.textShadow === undefined
+            ? {}
+            : { textShadow: piece.style.textShadow }),
+          isSpace: item.isSpace && item.xAdvance > 0,
+          clusterKey: `${segIndex}:${item.cluster}`,
         });
-        cursor += position.xAdvance * scale;
-      });
+        cursor += item.xAdvance * scale;
+        segEndX = cursor;
+        if (item.xAdvance > 0) {
+          clusterHadAdvance = true;
+          pendingTracking = trackingPx;
+        }
+      }
+      const glyphEnd = glyphs.length;
+      if (segStartX !== undefined && glyphEnd > glyphStart) {
+        const decoration = decorationForSegment(
+          resolveDecoration(piece.style.textDecoration),
+          face,
+          fontPx,
+          segStartX,
+          segEndX,
+          piece.style.color,
+          piece.style.textShadow,
+        );
+        if (decoration !== undefined) {
+          decorations.push({
+            ...decoration,
+            glyphStart,
+            glyphEnd,
+          });
+        }
+      }
+    });
+    if (glyphs.length === 0 && pieces.length > 0) {
+      const fallbackPiece = pieces[0]!;
+      const fallbackScale =
+        (fontSizePoints(fallbackPiece.style.fontSize) * 4) /
+        (3 * fallbackPiece.face.font.unitsPerEm);
+      ascent = fallbackPiece.face.font.ascent * fallbackScale;
+      descent = -fallbackPiece.face.font.descent * fallbackScale;
     }
-    return { ...line, glyphs, ascent, descent, advance: cursor };
+    const endsWithMandatoryBreak =
+      trimMandatoryBreakEnd(text, line.start, line.end) < line.end ||
+      (line.end < text.length &&
+        /[\n\r\v\f\u0085\u2028\u2029]/u.test(text[line.end] ?? ""));
+    const canJustify =
+      lineIndex < measured.lines.length - 1 && !endsWithMandatoryBreak;
+    return {
+      ...line,
+      glyphs,
+      ...(decorations.length === 0 ? {} : { decorations }),
+      ascent,
+      descent,
+      advance: cursor,
+      canJustify,
+    };
   });
   return {
     lines,
     lineHeight: measured.lineHeight,
     spacingAfter: measured.spacingAfter,
+    baseDir,
   };
+}
+
+function applyJustifyLine(
+  line: PreviewLineOutlines,
+  availableWidth: number,
+): {
+  readonly glyphs: readonly PreviewGlyph[];
+  readonly decorations: readonly PreviewDecoration[] | undefined;
+  readonly advance: number;
+} {
+  const slack = availableWidth - line.advance;
+  if (!line.canJustify || slack <= 0.01 || line.glyphs.length <= 1) {
+    return {
+      glyphs: line.glyphs,
+      decorations: line.decorations,
+      advance: line.advance,
+    };
+  }
+  const count = line.glyphs.length;
+  const deltaBefore = Array.from<number>({ length: count }).fill(0);
+  const spaceCount = line.glyphs.filter((g) => g.isSpace === true).length;
+  if (spaceCount > 0) {
+    const extraPerSpace = slack / spaceCount;
+    let cumulative = 0;
+    for (let i = 0; i < count; i += 1) {
+      deltaBefore[i] = cumulative;
+      if (line.glyphs[i]!.isSpace === true) {
+        cumulative += extraPerSpace;
+      }
+    }
+  } else {
+    let clusterTransitions = 0;
+    for (let i = 1; i < count; i += 1) {
+      if (line.glyphs[i]!.clusterKey !== line.glyphs[i - 1]!.clusterKey) {
+        clusterTransitions += 1;
+      }
+    }
+    if (clusterTransitions <= 0) {
+      return {
+        glyphs: line.glyphs,
+        decorations: line.decorations,
+        advance: line.advance,
+      };
+    }
+    const extraPerCluster = slack / clusterTransitions;
+    let cumulative = 0;
+    for (let i = 1; i < count; i += 1) {
+      if (line.glyphs[i]!.clusterKey !== line.glyphs[i - 1]!.clusterKey) {
+        cumulative += extraPerCluster;
+      }
+      deltaBefore[i] = cumulative;
+    }
+  }
+  const glyphs = line.glyphs.map((glyph, index) => ({
+    ...glyph,
+    x: glyph.x + deltaBefore[index]!,
+  }));
+  const decorations = line.decorations?.map((deco) => {
+    const gStart = deco.glyphStart ?? 0;
+    const gEnd = deco.glyphEnd ?? count;
+    const startDelta = deltaBefore[gStart] ?? 0;
+    const endDelta =
+      gEnd < count
+        ? (deltaBefore[gEnd] ?? 0)
+        : (deltaBefore[Math.max(gStart, gEnd - 1)] ?? 0);
+    return {
+      ...deco,
+      x: deco.x + startDelta,
+      width: deco.width + (endDelta - startDelta),
+    };
+  });
+  return {
+    glyphs,
+    decorations,
+    advance: availableWidth,
+  };
+}
+
+function shapeListPrefix(
+  paragraph: Paragraph,
+  prefixText: string,
+): { readonly glyphs: readonly PreviewGlyph[]; readonly advance: number } {
+  const prefixStyle = paragraph.runs[0]?.style ?? paragraph.endStyle;
+  const prefixFace = measureRunFace(prefixStyle);
+  if (hasUnsupportedColorFontTable(prefixFace.font)) {
+    throw new CapabilityError(
+      "preview-unsupported-font",
+      "Preview requires monochrome outline fonts",
+    );
+  }
+  if (missingCharacters(prefixFace, prefixText).length > 0) {
+    throw new CapabilityError(
+      "preview-missing-glyph",
+      "Preview requires every visible glyph in the supplied font",
+    );
+  }
+  const shaped = shapeSegmentOutlines(
+    prefixFace,
+    prefixText,
+    false,
+    prefixStyle.lang,
+  );
+  const scale =
+    (fontSizePoints(prefixStyle.fontSize) * 4) /
+    (3 * prefixFace.font.unitsPerEm);
+  let cursor = 0;
+  const glyphs: PreviewGlyph[] = shaped.map((item) => {
+    const glyph: PreviewGlyph = {
+      path: item.path,
+      x: cursor + item.xOffset * scale,
+      y: -item.yOffset * scale,
+      scale,
+      color: prefixStyle.color,
+      ...(prefixStyle.textShadow === undefined
+        ? {}
+        : { textShadow: prefixStyle.textShadow }),
+    };
+    cursor += item.xAdvance * scale;
+    return glyph;
+  });
+  return { glyphs, advance: cursor };
 }
 
 /**
@@ -1780,9 +2591,10 @@ export function previewTextBoxOutlines(options: {
     paragraphs,
     box,
     insets = { top: 0, right: 0, bottom: 0, left: 0 },
-    verticalAlign = "top",
+    verticalAlign: rawVerticalAlign,
     measuredLayout,
   } = options;
+  const verticalAlign = resolveVerticalAlign(rawVerticalAlign);
   const innerWidth = Math.max(0, box.width - insets.left - insets.right);
   const useBoundMeasurement =
     measuredLayout !== undefined &&
@@ -1810,31 +2622,164 @@ export function previewTextBoxOutlines(options: {
       : verticalAlign === "bottom"
         ? freeHeight
         : 0);
+  const activeNumberSeq = new Map<
+    number,
+    { readonly startAt: number; current: number }
+  >();
   return outlinedParagraphs.flatMap(({ paragraph, layout }) => {
-    const align = paragraph.style.align ?? "left";
-    const lines = layout.lines.map((line) => {
-      const left =
-        box.x +
-        insets.left +
-        (align === "center"
-          ? (innerWidth - line.advance) / 2
-          : align === "right"
-            ? innerWidth - line.advance
-            : 0);
+    const resolvedList = resolveListModel(paragraph.style.list);
+    let prefixText: string | undefined;
+    if (resolvedList === undefined) {
+      activeNumberSeq.clear();
+    } else {
+      switch (resolvedList.type) {
+        case "bullet": {
+          for (const key of activeNumberSeq.keys()) {
+            if (key >= resolvedList.level) activeNumberSeq.delete(key);
+          }
+          prefixText = resolvedList.character;
+          break;
+        }
+        case "number": {
+          for (const key of activeNumberSeq.keys()) {
+            if (key > resolvedList.level) activeNumberSeq.delete(key);
+          }
+          const existing = activeNumberSeq.get(resolvedList.level);
+          if (
+            existing !== undefined &&
+            existing.startAt === resolvedList.startAt
+          ) {
+            existing.current += 1;
+          } else {
+            activeNumberSeq.set(resolvedList.level, {
+              startAt: resolvedList.startAt,
+              current: resolvedList.startAt,
+            });
+          }
+          prefixText = `${activeNumberSeq.get(resolvedList.level)!.current}.`;
+          break;
+        }
+        default: {
+          const exhaustive: never = resolvedList;
+          return exhaustive;
+        }
+      }
+    }
+    const listPrefix =
+      prefixText === undefined
+        ? undefined
+        : shapeListPrefix(paragraph, prefixText);
+    const listIndent = listIndentMetrics(paragraph);
+    const availableLineWidth = Math.max(
+      1,
+      innerWidth - listIndent.contentIndent,
+    );
+    const align = resolveAlign(
+      paragraph.style.align,
+      layout.baseDir === "rtl" ? "right" : "left",
+    );
+    const lines = layout.lines.map((line, lineIndex) => {
+      const justified =
+        align === "justify"
+          ? applyJustifyLine(line, availableLineWidth)
+          : {
+              glyphs: line.glyphs,
+              decorations: line.decorations,
+              advance: line.advance,
+            };
+      let horizontalOffset: number;
+      let prefixOffset = 0;
+      if (layout.baseDir === "rtl" && resolvedList !== undefined) {
+        switch (align) {
+          case "center":
+            horizontalOffset = (availableLineWidth - justified.advance) / 2;
+            prefixOffset =
+              horizontalOffset +
+              justified.advance +
+              0.4 * listIndent.baseFontPx;
+            break;
+          case "left":
+          case "justify":
+            horizontalOffset = 0;
+            prefixOffset =
+              innerWidth - listIndent.levelIndent - (listPrefix?.advance ?? 0);
+            break;
+          case "right":
+            horizontalOffset = availableLineWidth - justified.advance;
+            prefixOffset =
+              innerWidth - listIndent.levelIndent - (listPrefix?.advance ?? 0);
+            break;
+          default: {
+            const exhaustive: never = align;
+            return exhaustive;
+          }
+        }
+      } else {
+        switch (align) {
+          case "center":
+            horizontalOffset =
+              listIndent.contentIndent +
+              (availableLineWidth - justified.advance) / 2;
+            prefixOffset =
+              horizontalOffset -
+              (listPrefix?.advance ?? 0) -
+              0.4 * listIndent.baseFontPx;
+            break;
+          case "right":
+            horizontalOffset =
+              listIndent.contentIndent +
+              (availableLineWidth - justified.advance);
+            prefixOffset =
+              horizontalOffset -
+              (listPrefix?.advance ?? 0) -
+              0.4 * listIndent.baseFontPx;
+            break;
+          case "left":
+          case "justify":
+            horizontalOffset = listIndent.contentIndent;
+            prefixOffset = listIndent.levelIndent;
+            break;
+          default: {
+            const exhaustive: never = align;
+            return exhaustive;
+          }
+        }
+      }
+      const left = box.x + insets.left + horizontalOffset;
       const baseline =
         top +
         line.ascent +
         (layout.lineHeight - line.ascent - line.descent) / 2;
       top += layout.lineHeight;
+      const prefixGlyphs =
+        lineIndex === 0 && listPrefix !== undefined
+          ? listPrefix.glyphs.map((glyph) => ({
+              ...glyph,
+              x: box.x + insets.left + prefixOffset + glyph.x,
+              y: baseline + glyph.y,
+            }))
+          : [];
       return {
         start: line.start,
         end: line.end,
         baseline,
-        glyphs: line.glyphs.map((glyph) => ({
-          ...glyph,
-          x: left + glyph.x,
-          y: baseline + glyph.y,
-        })),
+        glyphs: [
+          ...prefixGlyphs,
+          ...justified.glyphs.map((glyph) => ({
+            ...glyph,
+            x: left + glyph.x,
+            y: baseline + glyph.y,
+          })),
+        ],
+        ...(justified.decorations === undefined
+          ? {}
+          : {
+              decorations: justified.decorations.map((deco) => ({
+                ...deco,
+                x: left + deco.x,
+                y: baseline + deco.y,
+              })),
+            }),
       };
     });
     top += layout.spacingAfter;
@@ -1854,6 +2799,16 @@ export function renderGlyphPathSvg(
   return `<path d="${xmlEscape(glyph.path)}" fill="#${color.hex}" fill-opacity="${color.alpha ?? 1}" transform="translate(${glyph.x} ${glyph.y}) scale(${glyph.scale} ${-glyph.scale})"/>`;
 }
 
+function renderDecorationRectSvg(
+  deco: PreviewDecoration,
+  theme: ThemeContext,
+): string {
+  const color = isResolvedColor(deco.color)
+    ? deco.color
+    : theme.resolveColor(deco.color ?? "dk1");
+  return `<rect x="${roundSvgNumber(deco.x)}" y="${roundSvgNumber(deco.y)}" width="${roundSvgNumber(deco.width)}" height="${roundSvgNumber(deco.height)}" fill="#${color.hex}" fill-opacity="${color.alpha ?? 1}"/>`;
+}
+
 /** Renders box-level positioned glyph outlines into SVG path fragments without importing textCapability. */
 export function renderTextOutlinesSvg(options: {
   readonly paragraphs: readonly Paragraph[];
@@ -1867,14 +2822,93 @@ export function renderTextOutlinesSvg(options: {
   };
   readonly verticalAlign?: TextStyle["verticalAlign"];
   readonly measuredLayout?: MeasuredTextLayout | undefined;
+  readonly idPrefix?: string;
+  readonly rotate?: number;
 }): string {
-  const { theme, ...layoutOptions } = options;
+  const { theme, idPrefix = "txt", rotate = 0, ...layoutOptions } = options;
   const lines = previewTextBoxOutlines(layoutOptions);
-  return lines
-    .flatMap((line) =>
-      line.glyphs.map((glyph) => renderGlyphPathSvg(glyph, theme)),
-    )
-    .join("");
+  const defs: string[] = [];
+  const shadowFilterIds = new Map<string, string>();
+  let shadowIndex = 0;
+
+  const filterIdForShadow = (
+    rawShadow: Shadow | "none" | undefined,
+  ): string | undefined => {
+    const resolved = resolveTextShadowModel(theme, rawShadow);
+    switch (resolved.kind) {
+      case "none":
+        return undefined;
+      case "shadow": {
+        const { shadow } = resolved;
+        const rad = (shadow.angle * Math.PI) / 180;
+        const worldDx = shadow.distance * Math.cos(rad);
+        const worldDy = shadow.distance * Math.sin(rad);
+        const rotRad = (-rotate * Math.PI) / 180;
+        const localDx = worldDx * Math.cos(rotRad) - worldDy * Math.sin(rotRad);
+        const localDy = worldDx * Math.sin(rotRad) + worldDy * Math.cos(rotRad);
+        const sigma = shadow.blur / 2;
+        const alpha = shadow.color.alpha ?? 1;
+        const key = `${shadow.color.hex}:${roundSvgNumber(alpha)}:${roundSvgNumber(sigma)}:${roundSvgNumber(localDx)}:${roundSvgNumber(localDy)}`;
+        const existing = shadowFilterIds.get(key);
+        if (existing !== undefined) return existing;
+        const id = `${idPrefix}-tshdw-${shadowIndex++}`;
+        shadowFilterIds.set(key, id);
+        const pad =
+          shadow.blur * 3 + Math.abs(localDx) + Math.abs(localDy) + 64;
+        const fx = roundSvgNumber(options.box.x - pad);
+        const fy = roundSvgNumber(options.box.y - pad);
+        const fw = roundSvgNumber(options.box.width + pad * 2);
+        const fh = roundSvgNumber(options.box.height + pad * 2);
+        defs.push(
+          `<filter id="${id}" filterUnits="userSpaceOnUse" x="${fx}" y="${fy}" width="${fw}" height="${fh}"><feDropShadow dx="${roundSvgNumber(localDx)}" dy="${roundSvgNumber(localDy)}" stdDeviation="${roundSvgNumber(sigma)}" flood-color="#${shadow.color.hex}" flood-opacity="${roundSvgNumber(alpha)}"/></filter>`,
+        );
+        return id;
+      }
+      default: {
+        const exhaustive: never = resolved;
+        return exhaustive;
+      }
+    }
+  };
+
+  const parts: string[] = [];
+  let activeFilter: string | undefined;
+  let activeGroup: string[] = [];
+  const flushGroup = (): void => {
+    if (activeGroup.length === 0) return;
+    const joined = activeGroup.join("");
+    parts.push(
+      activeFilter === undefined
+        ? joined
+        : `<g filter="url(#${activeFilter})">${joined}</g>`,
+    );
+    activeGroup = [];
+  };
+  const pushElement = (
+    elementSvg: string,
+    rawShadow: Shadow | "none" | undefined,
+  ): void => {
+    if (elementSvg === "") return;
+    const filterId = filterIdForShadow(rawShadow);
+    if (filterId !== activeFilter) {
+      flushGroup();
+      activeFilter = filterId;
+    }
+    activeGroup.push(elementSvg);
+  };
+
+  for (const line of lines) {
+    for (const glyph of line.glyphs) {
+      pushElement(renderGlyphPathSvg(glyph, theme), glyph.textShadow);
+    }
+    for (const deco of line.decorations ?? []) {
+      pushElement(renderDecorationRectSvg(deco, theme), deco.textShadow);
+    }
+  }
+  flushGroup();
+
+  const defsXml = defs.length > 0 ? `<defs>${defs.join("")}</defs>` : "";
+  return `${defsXml}${parts.join("")}`;
 }
 
 /** Returns layout dimensions based on actual fonts and line breaking rules from normalized paragraphs. */

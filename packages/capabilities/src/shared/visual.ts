@@ -273,7 +273,7 @@ function roundSvgNumber(value: number): string {
   return Object.is(rounded, -0) ? "0" : String(rounded);
 }
 
-function shadowValue(
+export function resolveShadow(
   theme: ThemeContext,
   value: unknown,
   label: string,
@@ -314,7 +314,7 @@ function shadowValue(
 
 export function textShadowXml(theme: ThemeContext, value: unknown): string {
   if (value === undefined || value === "none") return "";
-  const shadow = shadowValue(theme, value, "textShadow");
+  const shadow = resolveShadow(theme, value, "textShadow");
   const direction = Math.round((((shadow.angle % 360) + 360) % 360) * 60000);
   return `<a:effectLst><a:outerShdw blurRad="${emu(shadow.blur, "textShadow.blur")}" dist="${emu(shadow.distance, "textShadow.distance")}" dir="${direction}" algn="ctr" rotWithShape="0">${resolvedColorXml(shadow.color)}</a:outerShdw></a:effectLst>`;
 }
@@ -645,7 +645,7 @@ export function resolveVisualModel(
   const boxShadow =
     style["boxShadow"] === undefined
       ? undefined
-      : shadowValue(theme, style["boxShadow"], "boxShadow");
+      : resolveShadow(theme, style["boxShadow"], "boxShadow");
 
   let softEdge: number | undefined;
   if (style["softEdge"] !== undefined) {

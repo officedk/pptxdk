@@ -677,11 +677,7 @@ export const tableRejectionScenario: CapabilityScenario = {
           createElement(
             Row,
             { id: "r1" },
-            createElement(
-              Cell,
-              { id: "underline-cell", style: { textDecoration: "underline" } },
-              "Underlined",
-            ),
+            createElement(Cell, { id: "missing-glyph-cell" }, "汉"),
           ),
         ),
       ),
@@ -795,9 +791,8 @@ export const tableRejectionScenario: CapabilityScenario = {
           style: { fontFamily: jostFont, fontSize: 14 },
         }).append(
           row({ id: "r1" }).append(
-            cell("Underlined", {
-              id: "underline-cell",
-              style: { textDecoration: "underline" },
+            cell("汉", {
+              id: "missing-glyph-cell",
             }),
           ),
         ),
@@ -836,7 +831,7 @@ export const tableRejectionScenario: CapabilityScenario = {
       /table\[bad-border-tbl\]\/row\[r1\]\/cell\[dashed-cell\]/,
       /table\[bad-dot-tbl\]\/row\[r1\]\/cell\[dotted-cell\]/,
       /table\[overflow-tbl\]\/row\[r1\]\/cell\[overflow-cell\]/,
-      /table\[bad-text-tbl\]\/row\[r1\]\/cell\[underline-cell\]/,
+      /table\[bad-text-tbl\]\/row\[r1\]\/cell\[missing-glyph-cell\]/,
     ];
     expectedPaths.forEach((pattern, index) => {
       const page = preview.pages[index]!;

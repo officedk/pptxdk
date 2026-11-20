@@ -449,25 +449,7 @@ process.stdout.write("ok");
         expected: /overflow/i,
       },
       {
-        label: "text-decoration-underline",
-        node: table({
-          id: "bad-tbl",
-          x: 10,
-          y: 10,
-          columns: [120],
-          style: { fontFamily: jostFont, fontSize: 14 },
-        }).append(
-          row({ id: "bad-row" }).append(
-            cell("Underlined", {
-              id: "bad-cell",
-              style: { textDecoration: "underline" },
-            }),
-          ),
-        ),
-        expected: /decoration/i,
-      },
-      {
-        label: "unsupported-arabic-script",
+        label: "missing-glyph-arabic-cell",
         node: table({
           id: "bad-tbl",
           x: 10,
@@ -481,7 +463,7 @@ process.stdout.write("ok");
             }),
           ),
         ),
-        expected: /Latin and Han/i,
+        expected: /glyph/i,
       },
       {
         label: "unmeasured-font-on-fixed-row",

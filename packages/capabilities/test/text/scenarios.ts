@@ -17,6 +17,7 @@ import {
   Text,
 } from "@react-pptx/capabilities/text-elements";
 import { Deck, Slide } from "@react-pptx/react";
+import { strFromU8, unzipSync } from "fflate";
 import { createElement } from "react";
 
 import type { CapabilityScenario } from "../acceptance-runner.ts";
@@ -47,7 +48,25 @@ const notoFont = font("Noto Sans CJK SC", [
   },
 ]);
 
-function withSyntheticColrTable(source: Buffer): Uint8Array {
+const notoArabicFont = font("Noto Naskh Arabic", [
+  {
+    weight: 400,
+    data: readFileSync(
+      new URL("../assets/fonts/NotoNaskhArabic.ttf", import.meta.url),
+    ),
+  },
+]);
+
+const notoHebrewFont = font("Noto Sans Hebrew Thin", [
+  {
+    weight: 100,
+    data: readFileSync(
+      new URL("../assets/fonts/NotoSansHebrew.ttf", import.meta.url),
+    ),
+  },
+]);
+
+function withSyntheticFontTable(source: Buffer, tag: string): Uint8Array {
   const numTables = source.readUInt16BE(4);
   const headerSize = 12 + numTables * 16;
   const nextNumTables = numTables + 1;
@@ -68,7 +87,7 @@ function withSyntheticColrTable(source: Buffer): Uint8Array {
     });
   }
   records.push({
-    tag: "COLR",
+    tag,
     checkSum: 0,
     offset: source.length + 16,
     length: 16,
@@ -95,7 +114,13 @@ function withSyntheticColrTable(source: Buffer): Uint8Array {
 
 const colrJostFont = font(
   "ColrJost",
-  [{ weight: 400, data: withSyntheticColrTable(jostRegularBytes) }],
+  [{ weight: 400, data: withSyntheticFontTable(jostRegularBytes, "COLR") }],
+  { substitute: true },
+);
+
+const sbixJostFont = font(
+  "SbixJost",
+  [{ weight: 400, data: withSyntheticFontTable(jostRegularBytes, "sbix") }],
   { substitute: true },
 );
 
@@ -103,13 +128,14 @@ export const textPositiveScenario: CapabilityScenario = {
   id: "text-typography-and-alignment",
   capability: "rp:text",
   description:
-    "Dual-author Text scenario covering CJK/Latin wrapping, padding, horizontal/vertical alignment, uppercase, slide numbers, content-sized vs fixed height, opacity, and rotation.",
+    "Dual-author Text scenario covering multi-script & BiDi shaping, CJK/Latin wrapping, justify, bullet & numbered lists with hanging indent, underline/line-through, textShadow, letterSpacing, padding, vertical alignment, slide numbers, opacity, rotation, and container visual styles.",
   visualCheckpoints: [
-    "Page 1 (cjk-latin-wrapping): light slate #F8FAFC canvas; left white card with 1px #CBD5E1 border contains wrapped CJK + bold uppercase blue Latin 'SHARED LAYOUT 2026' and centered second paragraph; right blue-tinted #EFF6FF card with 2px #3B82F6 border shows middle/right-aligned text including slide number '1'.",
-    "Page 2 (vertical-and-rotation): warm #FFFBEB canvas; top-left white bordered card aligns text at top; bottom-left #FEF3C7 bordered card aligns centered text with slide number '2' at bottom; right dark slate #1E293B semi-transparent card rotated +12 degrees displays crisp centered white text.",
+    "Page 1 (cjk-latin-wrapping): light slate #F8FAFC canvas; top-left wrapped CJK + bold uppercase Latin; top-right middle/right-aligned card with slide number '1'; bottom-left Kana/Hangul/Cyrillic/Greek/math box; bottom-right Arabic & Hebrew BiDi cards with mixed LTR digits/Latin.",
+    "Page 2 (vertical-and-rotation): warm #FFFBEB canvas; top-left top-aligned card; bottom-left bottom-aligned card with slide number '2'; top-right rotated +12 tag; bottom-right rounded dashed-border card showing underline, line-through, textShadow, and positive/negative letterSpacing.",
+    "Page 3 (justify-and-lists): crisp white canvas; left card shows Latin and CJK justified paragraphs with flush edges on soft wraps and natural last/hard-break lines; right card shows multi-line bullet hanging indent, nested custom bullet, and sequential/restarted numbered lists.",
   ],
   nativeCheckpoints: [
-    "Open exported PPTX in PowerPoint/WPS and verify all Text boxes are editable <p:sp> txBox='1' objects with native <a:fld type='slidenum'> slide numbers and matching wrapping/alignment.",
+    "Open exported PPTX in PowerPoint/WPS and verify all Text boxes are editable <p:sp> txBox='1' objects with native <a:fld type='slidenum'>, underline/sngStrike, spc, algn='just', <a:buChar>, <a:buAutoNum>, and rtl='1' attributes.",
   ],
   jsx() {
     return createElement(
@@ -123,7 +149,7 @@ export const textPositiveScenario: CapabilityScenario = {
           {
             id: "mixed-wrap",
             x: 24,
-            y: 28,
+            y: 20,
             width: 280,
             style: {
               fontFamily: notoFont,
@@ -169,9 +195,9 @@ export const textPositiveScenario: CapabilityScenario = {
           {
             id: "fixed-align",
             x: 332,
-            y: 28,
+            y: 20,
             width: 280,
-            height: 180,
+            height: 150,
             style: {
               fontFamily: notoFont,
               fontSize: 18,
@@ -192,6 +218,70 @@ export const textPositiveScenario: CapabilityScenario = {
             Span,
             { style: { fontFamily: jostFont } },
             "Right middle aligned",
+          ),
+        ),
+        createElement(
+          Text,
+          {
+            id: "multiscript-symbols",
+            x: 24,
+            y: 220,
+            width: 280,
+            height: 100,
+            style: {
+              fontFamily: notoFont,
+              fontSize: 17,
+              color: "#0F172A",
+              padding: 10,
+              backgroundColor: "#FFFFFF",
+              borderColor: "#CBD5E1",
+              borderWidth: 1,
+              borderRadius: 8,
+            },
+          },
+          "あア 한 Д Ω ∑√≠",
+        ),
+        createElement(
+          Text,
+          {
+            id: "bidi-mixed",
+            x: 332,
+            y: 190,
+            width: 280,
+            height: 130,
+            style: {
+              fontFamily: notoArabicFont,
+              fontSize: 18,
+              color: "#0F172A",
+              padding: 10,
+              backgroundColor: "#F0FDF4",
+              borderColor: "#10B981",
+              borderWidth: 1,
+            },
+          },
+          createElement(
+            P,
+            { style: { lineHeight: 28, spacingAfter: 6 } },
+            "مرحبا بالعالم 2026!",
+          ),
+          createElement(
+            P,
+            { style: { lineHeight: 28 } },
+            createElement(
+              Span,
+              { style: { fontFamily: notoHebrewFont, fontWeight: 100 } },
+              "שלום ",
+            ),
+            createElement(
+              Span,
+              { style: { fontFamily: jostFont, color: "#1D4ED8" } },
+              "2026 ABC",
+            ),
+            createElement(
+              Span,
+              { style: { fontFamily: notoHebrewFont, fontWeight: 100 } },
+              " עולם",
+            ),
           ),
         ),
       ),
@@ -248,9 +338,9 @@ export const textPositiveScenario: CapabilityScenario = {
           {
             id: "rotated-tag",
             x: 340,
-            y: 100,
+            y: 34,
             width: 220,
-            height: 80,
+            height: 70,
             style: {
               fontFamily: jostFont,
               fontSize: 20,
@@ -261,9 +351,194 @@ export const textPositiveScenario: CapabilityScenario = {
               backgroundColor: "#1E293B",
               opacity: 0.85,
               rotate: 12,
+              textShadow: { color: "#000000", blur: 2, distance: 3, angle: 90 },
             },
           },
           "Rotated 12",
+        ),
+        createElement(
+          Text,
+          {
+            id: "decorations-card",
+            x: 320,
+            y: 136,
+            width: 280,
+            height: 160,
+            style: {
+              fontFamily: jostFont,
+              fontSize: 18,
+              padding: 12,
+              backgroundColor: "#FFFFFF",
+              borderColor: "#6366F1",
+              borderWidth: 2,
+              borderStyle: "dashed",
+              borderRadius: 12,
+              boxShadow: { color: "#1E293B", blur: 4, distance: 3, angle: 90 },
+            },
+          },
+          createElement(
+            P,
+            { style: { lineHeight: 28, spacingAfter: 6 } },
+            createElement(
+              Span,
+              { style: { textDecoration: "underline", color: "#1D4ED8" } },
+              "Underline ",
+            ),
+            createElement(
+              Span,
+              { style: { textDecoration: "line-through", color: "#DC2626" } },
+              "Strike",
+            ),
+          ),
+          createElement(
+            P,
+            { style: { lineHeight: 28, spacingAfter: 6 } },
+            createElement(
+              Span,
+              {
+                style: {
+                  textShadow: {
+                    color: "#0F172A",
+                    blur: 2,
+                    distance: 2,
+                    angle: 45,
+                  },
+                },
+              },
+              "Text Shadow",
+            ),
+          ),
+          createElement(
+            P,
+            { style: { lineHeight: 26 } },
+            createElement(
+              Span,
+              { style: { letterSpacing: 3, color: "#047857" } },
+              "WIDE ",
+            ),
+            createElement(
+              Span,
+              { style: { letterSpacing: -1.5, color: "#7C3AED" } },
+              "TIGHT",
+            ),
+          ),
+        ),
+      ),
+      createElement(
+        Slide,
+        { id: "justify-and-lists", background: "#FFFFFF" },
+        createElement(
+          Text,
+          {
+            id: "justify-box",
+            x: 24,
+            y: 24,
+            width: 270,
+            height: 290,
+            style: {
+              fontFamily: notoFont,
+              fontSize: 16,
+              padding: 12,
+              backgroundColor: "#F8FAFC",
+              borderColor: "#94A3B8",
+              borderWidth: 1,
+            },
+          },
+          createElement(
+            P,
+            {
+              style: {
+                fontFamily: jostFont,
+                align: "justify",
+                lineHeight: 24,
+                spacingAfter: 10,
+              },
+            },
+            "Alpha beta gamma delta epsilon zeta\nMandatory break line here",
+          ),
+          createElement(
+            P,
+            { style: { align: "justify", lineHeight: 24 } },
+            "汉字两端对齐自动折行测试第一行与末行",
+          ),
+        ),
+        createElement(
+          Text,
+          {
+            id: "list-box",
+            x: 324,
+            y: 24,
+            width: 280,
+            height: 290,
+            style: {
+              fontFamily: jostFont,
+              fontSize: 16,
+              padding: 12,
+              backgroundColor: "#EFF6FF",
+              borderColor: "#3B82F6",
+              borderWidth: 1,
+            },
+          },
+          createElement(
+            P,
+            {
+              style: {
+                list: { type: "bullet" },
+                lineHeight: 24,
+                spacingAfter: 4,
+              },
+            },
+            "Wrapped bullet item showing hanging indent alignment",
+          ),
+          createElement(
+            P,
+            {
+              style: {
+                list: { type: "bullet", character: "+", level: 1 },
+                lineHeight: 24,
+                spacingAfter: 8,
+              },
+            },
+            "Nested custom bullet",
+          ),
+          createElement(
+            P,
+            {
+              style: {
+                list: { type: "number" },
+                lineHeight: 24,
+                spacingAfter: 4,
+              },
+            },
+            "First auto item",
+          ),
+          createElement(
+            P,
+            {
+              style: {
+                list: { type: "number" },
+                lineHeight: 24,
+                spacingAfter: 4,
+              },
+            },
+            "Second auto item",
+          ),
+          createElement(
+            P,
+            {
+              style: {
+                list: { type: "number", startAt: 5 },
+                lineHeight: 24,
+                spacingAfter: 4,
+              },
+            },
+            "Restarted at five",
+          ),
+          createElement(
+            P,
+            { style: { list: { type: "number", startAt: 5 }, lineHeight: 24 } },
+            "Follows as six",
+          ),
         ),
       ),
     );
@@ -301,7 +576,7 @@ export const textPositiveScenario: CapabilityScenario = {
           {
             id: "mixed-wrap",
             x: 24,
-            y: 28,
+            y: 20,
             width: 280,
             style: {
               fontFamily: notoFont,
@@ -324,9 +599,9 @@ export const textPositiveScenario: CapabilityScenario = {
           {
             id: "fixed-align",
             x: 332,
-            y: 28,
+            y: 20,
             width: 280,
-            height: 180,
+            height: 150,
             style: {
               fontFamily: notoFont,
               fontSize: 18,
@@ -338,6 +613,60 @@ export const textPositiveScenario: CapabilityScenario = {
               backgroundColor: "#EFF6FF",
               borderColor: "#3B82F6",
               borderWidth: 2,
+            },
+          },
+        ),
+        text("あア 한 Д Ω ∑√≠", {
+          id: "multiscript-symbols",
+          x: 24,
+          y: 220,
+          width: 280,
+          height: 100,
+          style: {
+            fontFamily: notoFont,
+            fontSize: 17,
+            color: "#0F172A",
+            padding: 10,
+            backgroundColor: "#FFFFFF",
+            borderColor: "#CBD5E1",
+            borderWidth: 1,
+            borderRadius: 8,
+          },
+        }),
+        text(
+          [
+            paragraph("مرحبا بالعالم 2026!", {
+              style: { lineHeight: 28, spacingAfter: 6 },
+            }),
+            paragraph(
+              [
+                span("שלום ", {
+                  style: { fontFamily: notoHebrewFont, fontWeight: 100 },
+                }),
+                span("2026 ABC", {
+                  style: { fontFamily: jostFont, color: "#1D4ED8" },
+                }),
+                span(" עולם", {
+                  style: { fontFamily: notoHebrewFont, fontWeight: 100 },
+                }),
+              ],
+              { style: { lineHeight: 28 } },
+            ),
+          ],
+          {
+            id: "bidi-mixed",
+            x: 332,
+            y: 190,
+            width: 280,
+            height: 130,
+            style: {
+              fontFamily: notoArabicFont,
+              fontSize: 18,
+              color: "#0F172A",
+              padding: 10,
+              backgroundColor: "#F0FDF4",
+              borderColor: "#10B981",
+              borderWidth: 1,
             },
           },
         ),
@@ -388,9 +717,9 @@ export const textPositiveScenario: CapabilityScenario = {
         text("Rotated 12", {
           id: "rotated-tag",
           x: 340,
-          y: 100,
+          y: 34,
           width: 220,
-          height: 80,
+          height: 70,
           style: {
             fontFamily: jostFont,
             fontSize: 20,
@@ -401,14 +730,166 @@ export const textPositiveScenario: CapabilityScenario = {
             backgroundColor: "#1E293B",
             opacity: 0.85,
             rotate: 12,
+            textShadow: { color: "#000000", blur: 2, distance: 3, angle: 90 },
           },
         }),
+        text(
+          [
+            paragraph(
+              [
+                span("Underline ", {
+                  style: { textDecoration: "underline", color: "#1D4ED8" },
+                }),
+                span("Strike", {
+                  style: { textDecoration: "line-through", color: "#DC2626" },
+                }),
+              ],
+              { style: { lineHeight: 28, spacingAfter: 6 } },
+            ),
+            paragraph(
+              [
+                span("Text Shadow", {
+                  style: {
+                    textShadow: {
+                      color: "#0F172A",
+                      blur: 2,
+                      distance: 2,
+                      angle: 45,
+                    },
+                  },
+                }),
+              ],
+              { style: { lineHeight: 28, spacingAfter: 6 } },
+            ),
+            paragraph(
+              [
+                span("WIDE ", {
+                  style: { letterSpacing: 3, color: "#047857" },
+                }),
+                span("TIGHT", {
+                  style: { letterSpacing: -1.5, color: "#7C3AED" },
+                }),
+              ],
+              { style: { lineHeight: 26 } },
+            ),
+          ],
+          {
+            id: "decorations-card",
+            x: 320,
+            y: 136,
+            width: 280,
+            height: 160,
+            style: {
+              fontFamily: jostFont,
+              fontSize: 18,
+              padding: 12,
+              backgroundColor: "#FFFFFF",
+              borderColor: "#6366F1",
+              borderWidth: 2,
+              borderStyle: "dashed",
+              borderRadius: 12,
+              boxShadow: { color: "#1E293B", blur: 4, distance: 3, angle: 90 },
+            },
+          },
+        ),
+      ),
+      slide({ id: "justify-and-lists", background: "#FFFFFF" }).append(
+        text(
+          [
+            paragraph(
+              "Alpha beta gamma delta epsilon zeta\nMandatory break line here",
+              {
+                style: {
+                  fontFamily: jostFont,
+                  align: "justify",
+                  lineHeight: 24,
+                  spacingAfter: 10,
+                },
+              },
+            ),
+            paragraph("汉字两端对齐自动折行测试第一行与末行", {
+              style: { align: "justify", lineHeight: 24 },
+            }),
+          ],
+          {
+            id: "justify-box",
+            x: 24,
+            y: 24,
+            width: 270,
+            height: 290,
+            style: {
+              fontFamily: notoFont,
+              fontSize: 16,
+              padding: 12,
+              backgroundColor: "#F8FAFC",
+              borderColor: "#94A3B8",
+              borderWidth: 1,
+            },
+          },
+        ),
+        text(
+          [
+            paragraph("Wrapped bullet item showing hanging indent alignment", {
+              style: {
+                list: { type: "bullet" },
+                lineHeight: 24,
+                spacingAfter: 4,
+              },
+            }),
+            paragraph("Nested custom bullet", {
+              style: {
+                list: { type: "bullet", character: "+", level: 1 },
+                lineHeight: 24,
+                spacingAfter: 8,
+              },
+            }),
+            paragraph("First auto item", {
+              style: {
+                list: { type: "number" },
+                lineHeight: 24,
+                spacingAfter: 4,
+              },
+            }),
+            paragraph("Second auto item", {
+              style: {
+                list: { type: "number" },
+                lineHeight: 24,
+                spacingAfter: 4,
+              },
+            }),
+            paragraph("Restarted at five", {
+              style: {
+                list: { type: "number", startAt: 5 },
+                lineHeight: 24,
+                spacingAfter: 4,
+              },
+            }),
+            paragraph("Follows as six", {
+              style: { list: { type: "number", startAt: 5 }, lineHeight: 24 },
+            }),
+          ],
+          {
+            id: "list-box",
+            x: 324,
+            y: 24,
+            width: 280,
+            height: 290,
+            style: {
+              fontFamily: jostFont,
+              fontSize: 16,
+              padding: 12,
+              backgroundColor: "#EFF6FF",
+              borderColor: "#3B82F6",
+              borderWidth: 1,
+            },
+          },
+        ),
       ),
     );
   },
-  assert({ author, resolution, preview, validation }) {
-    assert.equal(preview.pages.length, 2, author);
-    assert.equal(validation.slides.length, 2, author);
+  assert({ author, pptx, resolution, preview, validation }) {
+    assert.equal(preview.pages.length, 3, author);
+    assert.equal(validation.slides.length, 3, author);
 
     for (const page of preview.pages) {
       assert.deepEqual(page.diagnostics, [], author);
@@ -440,7 +921,22 @@ export const textPositiveScenario: CapabilityScenario = {
       (node) => node.authorId === "rotated-tag",
     );
     assert.ok((rotatedNode?.screenBox?.width ?? 0) > 220, author);
-    assert.ok((rotatedNode?.screenBox?.height ?? 0) > 80, author);
+    assert.ok((rotatedNode?.screenBox?.height ?? 0) > 70, author);
+
+    const zip = unzipSync(pptx);
+    const s2Xml = strFromU8(zip["ppt/slides/slide2.xml"]!);
+    assert.ok(s2Xml.includes('u="sng"'), author);
+    assert.ok(s2Xml.includes('strike="sngStrike"'), author);
+    assert.ok(s2Xml.includes('spc="225"'), author);
+    assert.ok(s2Xml.includes('spc="-112"'), author);
+
+    const s3Xml = strFromU8(zip["ppt/slides/slide3.xml"]!);
+    assert.ok(s3Xml.includes('algn="just"'), author);
+    assert.ok(s3Xml.includes("<a:buChar"), author);
+    assert.ok(s3Xml.includes("<a:buAutoNum"), author);
+
+    assert.ok(preview.pages[1]?.svg?.includes("<feDropShadow"), author);
+    assert.ok(preview.pages[1]?.svg?.includes("<rect "), author);
   },
 };
 
@@ -449,9 +945,9 @@ export const textRejectionScenario: CapabilityScenario = {
   capability: "rp:text",
   kind: "rejection",
   description:
-    "Dual-author negative scenario verifying Text preview rejects unsupported script, text styles, missing glyphs, COLR font tables, and unsupported box styles while keeping valid sibling pages.",
+    "Dual-author negative scenario verifying Text preview enforces only the two underlying font resource boundaries (color/bitmap font tables and missing glyph) while retaining valid PPTX output and sibling pages.",
   visualCheckpoints: [
-    "Page 1 (text-rejections): preview omitted (`png: undefined`) with located error diagnostics for all unsupported text/font declarations.",
+    "Page 1 (text-rejections): preview omitted (`png: undefined`) with located error diagnostics for missing glyph (body & list bullet) and COLR/sbix color/bitmap font tables.",
     "Page 2 (valid-sibling): crisp white canvas with blue-bordered valid text box.",
   ],
   nativeCheckpoints: [
@@ -467,86 +963,11 @@ export const textRejectionScenario: CapabilityScenario = {
         createElement(
           Text,
           {
-            id: "arabic",
-            x: 10,
-            y: 10,
-            width: 120,
-            height: 30,
-            style: { fontFamily: jostFont },
-          },
-          "مرحبا",
-        ),
-        createElement(
-          Text,
-          {
-            id: "justify",
-            x: 10,
-            y: 50,
-            width: 120,
-            height: 30,
-            style: { fontFamily: jostFont, align: "justify" },
-          },
-          "Justify",
-        ),
-        createElement(
-          Text,
-          {
-            id: "bullet-list",
-            x: 10,
-            y: 90,
-            width: 120,
-            height: 30,
-            style: { fontFamily: jostFont },
-          },
-          createElement(P, { style: { list: { type: "bullet" } } }, "Item"),
-        ),
-        createElement(
-          Text,
-          {
-            id: "underline",
-            x: 10,
-            y: 130,
-            width: 120,
-            height: 30,
-            style: { fontFamily: jostFont, textDecoration: "underline" },
-          },
-          "Underline",
-        ),
-        createElement(
-          Text,
-          {
-            id: "shadow",
-            x: 160,
-            y: 10,
-            width: 120,
-            height: 30,
-            style: {
-              fontFamily: jostFont,
-              textShadow: { blur: 2, distance: 1 },
-            },
-          },
-          "Shadow",
-        ),
-        createElement(
-          Text,
-          {
-            id: "letter-spacing",
-            x: 160,
-            y: 50,
-            width: 120,
-            height: 30,
-            style: { fontFamily: jostFont, letterSpacing: 2 },
-          },
-          "Tracking",
-        ),
-        createElement(
-          Text,
-          {
             id: "missing-glyph",
-            x: 160,
-            y: 90,
-            width: 120,
-            height: 30,
+            x: 10,
+            y: 10,
+            width: 180,
+            height: 40,
             style: { fontFamily: jostFont },
           },
           "汉",
@@ -554,14 +975,42 @@ export const textRejectionScenario: CapabilityScenario = {
         createElement(
           Text,
           {
+            id: "missing-bullet-glyph",
+            x: 10,
+            y: 60,
+            width: 180,
+            height: 40,
+            style: { fontFamily: jostFont },
+          },
+          createElement(
+            P,
+            { style: { list: { type: "bullet", character: "汉" } } },
+            "Item",
+          ),
+        ),
+        createElement(
+          Text,
+          {
             id: "colr-font",
-            x: 160,
-            y: 130,
-            width: 120,
-            height: 30,
+            x: 220,
+            y: 10,
+            width: 180,
+            height: 40,
             style: { fontFamily: colrJostFont },
           },
           "Color",
+        ),
+        createElement(
+          Text,
+          {
+            id: "sbix-font",
+            x: 220,
+            y: 60,
+            width: 180,
+            height: 40,
+            style: { fontFamily: sbixJostFont },
+          },
+          "Bitmap",
         ),
       ),
       createElement(
@@ -593,72 +1042,44 @@ export const textRejectionScenario: CapabilityScenario = {
   document() {
     return deck({ width: 480, height: 270 }).append(
       slide({ id: "text-rejections" }).append(
-        text("مرحبا", {
-          id: "arabic",
-          x: 10,
-          y: 10,
-          width: 120,
-          height: 30,
-          style: { fontFamily: jostFont },
-        }),
-        text("Justify", {
-          id: "justify",
-          x: 10,
-          y: 50,
-          width: 120,
-          height: 30,
-          style: { fontFamily: jostFont, align: "justify" },
-        }),
-        text([paragraph("Item", { style: { list: { type: "bullet" } } })], {
-          id: "bullet-list",
-          x: 10,
-          y: 90,
-          width: 120,
-          height: 30,
-          style: { fontFamily: jostFont },
-        }),
-        text("Underline", {
-          id: "underline",
-          x: 10,
-          y: 130,
-          width: 120,
-          height: 30,
-          style: { fontFamily: jostFont, textDecoration: "underline" },
-        }),
-        text("Shadow", {
-          id: "shadow",
-          x: 160,
-          y: 10,
-          width: 120,
-          height: 30,
-          style: {
-            fontFamily: jostFont,
-            textShadow: { blur: 2, distance: 1 },
-          },
-        }),
-        text("Tracking", {
-          id: "letter-spacing",
-          x: 160,
-          y: 50,
-          width: 120,
-          height: 30,
-          style: { fontFamily: jostFont, letterSpacing: 2 },
-        }),
         text("汉", {
           id: "missing-glyph",
-          x: 160,
-          y: 90,
-          width: 120,
-          height: 30,
+          x: 10,
+          y: 10,
+          width: 180,
+          height: 40,
           style: { fontFamily: jostFont },
         }),
+        text(
+          [
+            paragraph("Item", {
+              style: { list: { type: "bullet", character: "汉" } },
+            }),
+          ],
+          {
+            id: "missing-bullet-glyph",
+            x: 10,
+            y: 60,
+            width: 180,
+            height: 40,
+            style: { fontFamily: jostFont },
+          },
+        ),
         text("Color", {
           id: "colr-font",
-          x: 160,
-          y: 130,
-          width: 120,
-          height: 30,
+          x: 220,
+          y: 10,
+          width: 180,
+          height: 40,
           style: { fontFamily: colrJostFont },
+        }),
+        text("Bitmap", {
+          id: "sbix-font",
+          x: 220,
+          y: 60,
+          width: 180,
+          height: 40,
+          style: { fontFamily: sbixJostFont },
         }),
       ),
       slide({ id: "valid-sibling" }).append(
@@ -684,16 +1105,12 @@ export const textRejectionScenario: CapabilityScenario = {
   assert({ author, preview }) {
     const p1 = preview.pages[0]!;
     assert.equal(p1.png, undefined, author);
-    assert.equal(p1.diagnostics.length, 8, author);
+    assert.equal(p1.diagnostics.length, 4, author);
     for (const id of [
-      "arabic",
-      "justify",
-      "bullet-list",
-      "underline",
-      "shadow",
-      "letter-spacing",
       "missing-glyph",
+      "missing-bullet-glyph",
       "colr-font",
+      "sbix-font",
     ]) {
       assert.ok(
         p1.diagnostics.some(

@@ -410,9 +410,7 @@ export const textCapability: ObjectCapabilityModule = {
           },
           paint(paintContext: PaintContext): PaintOutput {
             const paintBox = paintContext.box ?? box;
-            const hasFillOrStroke =
-              visual.fill.kind !== "none" || visual.border !== undefined;
-            const backgroundSvg = hasFillOrStroke
+            const backgroundSvg = visual.hasVisibleStyle
               ? paintVisualModel({
                   model: visual,
                   slideNumber: paintContext.slideNumber,
@@ -429,6 +427,8 @@ export const textCapability: ObjectCapabilityModule = {
                 box.width === paintBox.width
                   ? resolvedText.measuredLayout
                   : undefined,
+              idPrefix: `obj-s${paintContext.slideNumber}-o${paintContext.objectId}`,
+              rotate: visual.rotate,
             });
             return {
               svg: `${backgroundSvg}<g transform="${visualSvgTransform(visual)}">${glyphs}</g>`,

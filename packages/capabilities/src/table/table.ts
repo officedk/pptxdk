@@ -1502,6 +1502,7 @@ export const tableCapability: ObjectCapabilityModule = {
                     verticalAlign: cell.verticalAlign,
                     theme: paintContext.theme,
                     measuredLayout: body.measuredLayout,
+                    idPrefix: `tbl-s${paintContext.slideNumber}-o${paintContext.objectId}-r${cell.row}-c${cell.column}`,
                   });
                   if (glyphs !== "") texts.push(glyphs);
                 } catch (error) {

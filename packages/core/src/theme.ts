@@ -43,7 +43,7 @@ export type TextStyle = {
   /** Character spacing in pixels. */
   readonly letterSpacing?: number;
   readonly textTransform?: "none" | "uppercase";
-  readonly textDecoration?: "none" | "underline";
+  readonly textDecoration?: "none" | "underline" | "line-through";
   readonly textShadow?: Shadow | "none";
   /** Whether the text box wraps normally or keeps each line on a single line. */
   readonly textWrap?: "normal" | "nowrap";
@@ -471,10 +471,10 @@ export function validateTextStyle(
 
   if (style["textDecoration"] !== undefined) {
     const value = style["textDecoration"];
-    if (value !== "none" && value !== "underline") {
+    if (value !== "none" && value !== "underline" && value !== "line-through") {
       throw new CapabilityError(
         "invalid-text-decoration",
-        "textDecoration must be none or underline",
+        "textDecoration must be none, underline, or line-through",
       );
     }
   }

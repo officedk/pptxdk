@@ -1,4 +1,7 @@
-// Auto-generated static preset shape definitions from ECMA-376 DrawingML presetShapeDefinitions.xml.
+/**
+ * Static ECMA-376 Part 1 DrawingML preset shape definitions (`ST_ShapeType`, 187 shapes),
+ * including guide formulas, default adjust values, geometry paths, and inscribed text rectangles.
+ */
 
 /** Complete DrawingML preset geometry list from ECMA-376 ST_ShapeType (187 shapes). */
 export const presetGeometryTuple = [

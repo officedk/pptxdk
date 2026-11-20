@@ -33,7 +33,6 @@ export type CapabilityScenario = {
   readonly capability: string;
   readonly description: string;
   readonly kind?: "positive" | "rejection";
-  readonly allowPreviewWarnings?: boolean;
   readonly visualCheckpoints: readonly string[];
   readonly nativeCheckpoints: readonly string[];
   readonly pages?: readonly number[];
@@ -88,19 +87,11 @@ function assertPageOutput(
   }
 
   if (!isRejection) {
-    if (scenario.allowPreviewWarnings) {
-      assert.equal(
-        hasError,
-        false,
-        `${label} positive scenario must not emit error diagnostics`,
-      );
-    } else {
-      assert.deepEqual(
-        page.diagnostics,
-        [],
-        `${label} positive scenario must have zero preview diagnostics`,
-      );
-    }
+    assert.deepEqual(
+      page.diagnostics,
+      [],
+      `${label} positive scenario must have zero preview diagnostics`,
+    );
   }
 
   assert.ok(page.png instanceof Uint8Array, `${label} expected png`);

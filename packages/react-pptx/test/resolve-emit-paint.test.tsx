@@ -932,12 +932,19 @@ registerHooks({
       specifier === "@react-pptx/capabilities/text" ||
       specifier === "./text.ts" ||
       specifier === "./text.js" ||
-      specifier.endsWith("/capabilities/src/text.ts") ||
-      specifier.endsWith("/capabilities/dist/text.js")
+      specifier.endsWith("/capabilities/src/text/text.ts") ||
+      specifier.endsWith("/capabilities/dist/text/text.js")
     ) {
       throw new Error("Loaded forbidden text capability module: " + specifier);
     }
-    return nextResolve(specifier, context);
+    const resolved = nextResolve(specifier, context);
+    if (
+      resolved.url.endsWith("/capabilities/src/text/text.ts") ||
+      resolved.url.endsWith("/capabilities/dist/text/text.js")
+    ) {
+      throw new Error("Loaded forbidden text capability module: " + resolved.url);
+    }
+    return resolved;
   },
 });
 

@@ -47,7 +47,7 @@ describe("native tables", () => {
         [
           "export async function resolve(specifier, context, nextResolve) {",
           "  const resolved = await nextResolve(specifier, context);",
-          '  if (resolved.url.endsWith("/capabilities/src/text.ts")) { throw new Error("text-box implementation was loaded"); }',
+          '  if (resolved.url.endsWith("/capabilities/src/text/text.ts") || resolved.url.endsWith("/capabilities/dist/text/text.js")) { throw new Error("text-box implementation was loaded"); }',
           "  return resolved;",
           "}",
         ].join("\n"),

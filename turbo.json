@@ -83,7 +83,9 @@
             "layer:tooling",
             "layer:validation",
             "layer:core",
-            "layer:emit"
+            "layer:emit",
+            "layer:preview",
+            "layer:react"
           ]
         }
       },

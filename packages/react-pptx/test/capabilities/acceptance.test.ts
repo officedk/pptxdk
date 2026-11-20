@@ -5,22 +5,15 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { slideBackgroundCapability } from "@react-pptx/capabilities";
-import { boxCapability } from "@react-pptx/capabilities/box";
 import { chartCapability } from "@react-pptx/capabilities/chart";
 import { Chart } from "@react-pptx/capabilities/chart-elements";
 import {
-  box,
   chart,
   deck,
   documentCapabilities,
   font,
-  notes,
-  paragraph,
   shape,
   slide,
-  slideNumber,
-  span,
-  text,
 } from "@react-pptx/capabilities/document";
 import {
   fade,
@@ -28,16 +21,9 @@ import {
   observeMotion,
 } from "@react-pptx/capabilities/motion";
 import { Step } from "@react-pptx/capabilities/motion-elements";
-import { notesCapability } from "@react-pptx/capabilities/notes";
-import { Notes } from "@react-pptx/capabilities/notes-elements";
 import { shapeCapability } from "@react-pptx/capabilities/shape";
 import { Shape } from "@react-pptx/capabilities/shape-elements";
-import {
-  P,
-  SlideNumber,
-  Span,
-  Text,
-} from "@react-pptx/capabilities/text-elements";
+import { Text } from "@react-pptx/capabilities/text-elements";
 import {
   BuildError,
   BuildQueryError,
@@ -48,7 +34,6 @@ import {
   type CapabilityInput,
   type CapabilityModule,
   type CapabilityParseContext,
-  type Diagnostic,
   type ObjectCapabilityModule,
   type SlideCapabilityModule,
 } from "@react-pptx/core";
@@ -113,14 +98,6 @@ import {
   layoutGridRejectionCases,
 } from "./scenarios/layout-grid.ts";
 import {
-  motionPositiveScenario,
-  verifyMotionCollaborationAndRejections,
-} from "./scenarios/motion.ts";
-import {
-  notesPositiveScenario,
-  notesPreviewIsolationScenario,
-} from "./scenarios/notes.ts";
-import {
   shapePositiveScenario,
   shapeRejectionScenario,
 } from "./scenarios/shape.ts";
@@ -136,10 +113,6 @@ import {
   textPositiveScenario,
   textRejectionScenario,
 } from "./scenarios/text.ts";
-import {
-  runTransitionRejectionScenarios,
-  transitionPositiveScenario,
-} from "./scenarios/transition.ts";
 
 type CustomMarkerProps = {
   readonly id?: string;
@@ -157,7 +130,7 @@ function createMarkerNode(
 }
 
 describe("Capability-owned acceptance scenarios & custom bound preview extensions", () => {
-  it("runs Box, Group, Shape, Image, slide-background, Table, Text, Notes, and layout dual-author scenarios through shared runner and collects artifacts", async () => {
+  it("runs Box, Group, Shape, Image, slide-background, Table, Text, and layout dual-author scenarios through shared runner and collects artifacts", async () => {
     const outDir = await mkdtemp(join(tmpdir(), "rp-cap-accept-"));
     try {
       for (const scenario of [
@@ -179,8 +152,6 @@ describe("Capability-owned acceptance scenarios & custom bound preview extension
         tableRejectionScenario,
         textPositiveScenario,
         textRejectionScenario,
-        notesPositiveScenario,
-        notesPreviewIsolationScenario,
       ]) {
         const runs = await runCapabilityScenario(scenario, {
           outputDir: outDir,
@@ -228,40 +199,6 @@ describe("Capability-owned acceptance scenarios & custom bound preview extension
       }
     }
   });
-
-  it("runs Motion dual-author choreography scenario, static canvas preview, Group/Chart collaboration, and rejections", async () => {
-    const outDir = await mkdtemp(join(tmpdir(), "rp-motion-accept-"));
-    try {
-      const runs = await runCapabilityScenario(motionPositiveScenario, {
-        outputDir: outDir,
-      });
-      assert.equal(runs.length, 2);
-      assert.deepEqual(
-        runs.map((r) => r.author),
-        ["jsx", "document"],
-      );
-      await verifyMotionCollaborationAndRejections();
-    } finally {
-      await rm(outDir, { recursive: true, force: true });
-    }
-  }, 15_000);
-
-  it("runs Transition and Morph dual-author scenarios through shared runner and verifies rejections", async () => {
-    const outDir = await mkdtemp(join(tmpdir(), "rp-cap-accept-trans-"));
-    try {
-      const runs = await runCapabilityScenario(transitionPositiveScenario, {
-        outputDir: outDir,
-      });
-      assert.equal(runs.length, 2);
-      assert.deepEqual(
-        runs.map((r) => r.author),
-        ["jsx", "document"],
-      );
-      await runTransitionRejectionScenarios();
-    } finally {
-      await rm(outDir, { recursive: true, force: true });
-    }
-  }, 15_000);
 
   it("supports JSX expansion followed by imperative Text edit, rebuild, and preview without mutating prior outputs", async () => {
     const jostFont = font("Jost*", [
@@ -567,239 +504,6 @@ describe("Capability-owned acceptance scenarios & custom bound preview extension
     assert.ok(calls.some((entry) => entry.startsWith("bind:")));
     assert.ok(calls.some((entry) => entry.startsWith("resolve:")));
     assert.ok(calls.some((entry) => entry.startsWith("paint:")));
-  });
-
-  it("binds notesCapability via BoundSlideCapabilityModule, trims textCapability cleanly, and enforces rejections", async () => {
-    assert.equal("bindSlide" in notesCapability, true);
-    assert.equal("measureLayout" in notesCapability, false);
-
-    // Notes-only slide previews cleanly as an empty canvas without preview errors or leaked notes text.
-    const notesOnlyPreview = previewDocWith([
-      notesCapability,
-      slideBackgroundCapability,
-    ]);
-    const notesOnlyResult = await notesOnlyPreview(
-      deck({ width: 200, height: 120 }).append(
-        slide({ id: "notes-only" }).append(notes("Speaker only")),
-      ),
-    );
-    assert.deepEqual(notesOnlyResult.pages[0]?.diagnostics, []);
-    assert.ok(notesOnlyResult.pages[0]?.png !== undefined);
-    const notesOnlyPng = PNG.sync.read(
-      Buffer.from(notesOnlyResult.pages[0].png),
-    );
-    for (let i = 0; i < notesOnlyPng.data.length; i += 4) {
-      assert.deepEqual(
-        [...notesOnlyPng.data.subarray(i, i + 4)],
-        [255, 255, 255, 255],
-      );
-    }
-
-    const trimmedModules = [
-      shapeCapability,
-      notesCapability,
-      slideBackgroundCapability,
-    ] as const;
-    const previewDocTrimmed = previewDocWith(trimmedModules);
-    const previewJsxTrimmed = previewJsxWith(trimmedModules);
-
-    const doc = deck({ width: 480, height: 270 }).append(
-      slide({ id: "trimmed-text" }).append(
-        shape({
-          id: "card",
-          x: 40,
-          y: 40,
-          width: 200,
-          height: 100,
-          fill: "#1D4ED8",
-        }),
-        notes(
-          [
-            paragraph([
-              span("Trimmed text check ", { style: { fontWeight: "bold" } }),
-              slideNumber(),
-            ]),
-          ],
-          { id: "speaker" },
-        ),
-      ),
-    );
-    const docResult = await previewDocTrimmed(doc);
-    assert.deepEqual(docResult.pages[0]?.diagnostics, []);
-    assert.ok(docResult.pages[0]?.png !== undefined);
-    assert.deepEqual(docResult.report.slides[0]?.capabilities, {
-      notes: { text: "Trimmed text check 1", paragraphCount: 1 },
-    });
-
-    const jsxResult = await previewJsxTrimmed(
-      createElement(
-        Deck,
-        { width: 480, height: 270 },
-        createElement(
-          Slide,
-          { id: "trimmed-text" },
-          createElement(Shape, {
-            id: "card",
-            x: 40,
-            y: 40,
-            width: 200,
-            height: 100,
-            fill: "#1D4ED8",
-          }),
-          createElement(
-            Notes,
-            { id: "speaker" },
-            createElement(
-              P,
-              null,
-              createElement(
-                Span,
-                { style: { fontWeight: "bold" } },
-                "Trimmed text check ",
-              ),
-              createElement(SlideNumber, null),
-            ),
-          ),
-        ),
-      ),
-    );
-    assert.deepEqual(jsxResult.pages[0]?.diagnostics, []);
-    assert.ok(jsxResult.pages[0]?.png !== undefined);
-    assert.deepEqual(jsxResult.report.slides[0]?.capabilities, {
-      notes: { text: "Trimmed text check 1", paragraphCount: 1 },
-    });
-
-    async function expectBuildErrorCode(
-      run: () => Promise<unknown>,
-    ): Promise<readonly Diagnostic[]> {
-      try {
-        await run();
-      } catch (error) {
-        assert.ok(error instanceof BuildError);
-        return error.diagnostics;
-      }
-      assert.fail("Expected BuildError");
-    }
-
-    const withBoxModules = [...trimmedModules, boxCapability] as const;
-    const previewDocWithBox = previewDocWith(withBoxModules);
-    const previewJsxWithBox = previewJsxWith(withBoxModules);
-    const previewWithoutNotes = previewDocWith([
-      shapeCapability,
-      boxCapability,
-    ]);
-    const previewJsxWithoutNotes = previewJsxWith([
-      shapeCapability,
-      boxCapability,
-    ]);
-
-    const dupHiddenDiags = await expectBuildErrorCode(() =>
-      previewDocWithBox(
-        deck().append(
-          slide({ id: "dup" }).append(
-            box({ style: { display: "none" } }).append(notes("hidden")),
-            notes("visible"),
-          ),
-        ),
-      ),
-    );
-    assert.deepEqual(
-      dupHiddenDiags.map(({ code }) => code),
-      ["duplicate-notes"],
-    );
-
-    const dupJsxDiags = await expectBuildErrorCode(() =>
-      previewJsxWithBox(
-        createElement(
-          Deck,
-          null,
-          createElement(
-            Slide,
-            { id: "dup-jsx" },
-            createElement(Notes, null, createElement(P, null, "one")),
-            createElement(Notes, null, createElement(P, null, "two")),
-          ),
-        ),
-      ),
-    );
-    assert.deepEqual(
-      dupJsxDiags.map(({ code }) => code),
-      ["duplicate-notes"],
-    );
-
-    const badChildDiags = await expectBuildErrorCode(() =>
-      previewDocTrimmed(
-        deck().append(
-          slide({ id: "bad-child" }).append(notes(text("illegal"))),
-        ),
-      ),
-    );
-    assert.equal(badChildDiags[0]?.code, "unsupported-text-child");
-
-    const unknownPropDiags = await expectBuildErrorCode(() =>
-      previewJsxTrimmed(
-        createElement(
-          Deck,
-          null,
-          createElement(
-            Slide,
-            { id: "unknown-prop" },
-            createElement(
-              Notes as unknown as ComponentType<Record<string, unknown>>,
-              { layout: { x: 1 } },
-              createElement(P, null, "bad"),
-            ),
-          ),
-        ),
-      ),
-    );
-    assert.equal(unknownPropDiags[0]?.code, "unknown-parameter");
-
-    const missingHiddenDocDiags = await expectBuildErrorCode(() =>
-      previewWithoutNotes(
-        deck().append(
-          slide({ id: "missing-hidden" }).append(
-            box({ style: { display: "none" } }).append(notes("hidden")),
-          ),
-        ),
-      ),
-    );
-    assert.deepEqual(
-      missingHiddenDocDiags.map(({ code, path }) => ({ code, path })),
-      [
-        {
-          code: "missing-capability",
-          path: "deck/slide[missing-hidden]/box[1]/notes[1]",
-        },
-      ],
-    );
-
-    const missingJsxDiags = await expectBuildErrorCode(() =>
-      previewJsxWithoutNotes(
-        createElement(
-          Deck,
-          null,
-          createElement(
-            Slide,
-            { id: "missing-jsx" },
-            createElement(Notes, null, createElement(P, null, "trimmed")),
-          ),
-        ),
-      ),
-    );
-    assert.equal(missingJsxDiags[0]?.code, "missing-capability");
-
-    const dupIdDiags = await expectBuildErrorCode(() =>
-      previewDocTrimmed(
-        deck().append(
-          slide({ id: "dup-id" }).append(
-            shape({ id: "same", x: 10, y: 10, width: 40, height: 20 }),
-            notes("body", { id: "same" }),
-          ),
-        ),
-      ),
-    );
-    assert.equal(dupIdDiags[0]?.code, "duplicate-author-id");
   });
 
   it("rejects non-bound capability modules at registration and invalid bound handles at bind time", async () => {

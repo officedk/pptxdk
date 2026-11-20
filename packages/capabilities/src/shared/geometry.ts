@@ -1,8 +1,20 @@
-import { CapabilityError } from "@react-pptx/core/capability";
+import { CapabilityError, type GeometryBox } from "@react-pptx/core/capability";
+import { pxToEmu } from "@react-pptx/emit";
+
+import {
+  presetDefinitions,
+  presetGeometryTuple,
+  type PresetGeometryName,
+  type PresetPathFillMode,
+  type PresetShapeDefinition,
+} from "./preset-definitions.ts";
+
+export { presetGeometryTuple };
+export type { PresetGeometryName, PresetPathFillMode };
 
 export type PresetGeometry = {
   readonly type: "preset";
-  readonly name: string;
+  readonly name: PresetGeometryName;
   /** Raw DrawingML adjust values indexed by guide name (adj, adj1, adj2, etc.). */
   readonly adjust?: Readonly<Record<string, number>>;
 };
@@ -42,13 +54,47 @@ export type CustomGeometry = {
   readonly paths: readonly GeometryPath[];
 };
 
-export type Geometry = string | PresetGeometry | CustomGeometry;
+export type Geometry = PresetGeometryName | PresetGeometry | CustomGeometry;
+
+/** Closed resolved geometry model consumed exhaustively by both emit and paint. */
+export type ResolvedGeometry =
+  | {
+      readonly kind: "preset";
+      readonly name: PresetGeometryName;
+      /** Ordered adjust overrides already merged with borderRadius -> roundRect.adj when applicable. */
+      readonly adjust: Readonly<Record<string, number>>;
+    }
+  | {
+      readonly kind: "custom";
+      readonly width: number;
+      readonly height: number;
+      readonly paths: readonly {
+        readonly commands: readonly PathCommand[];
+        readonly fill: boolean;
+        readonly stroke: boolean;
+      }[];
+    };
+
+export type GeometryWarning = {
+  readonly code: string;
+  readonly message: string;
+};
+
+export type EvaluatedGeometryPath = {
+  readonly d: string;
+  readonly commands: readonly PathCommand[];
+  readonly fillMode: "norm" | PresetPathFillMode;
+  readonly stroke: boolean;
+};
+
+export type EvaluatedGeometry = {
+  readonly paths: readonly EvaluatedGeometryPath[];
+  readonly textRect: GeometryBox;
+};
 
 /** Complete DrawingML preset geometry enumeration from ECMA-376 ST_ShapeType. */
-export const presetGeometryNames = new Set(
-  [
-    "line lineInv triangle rtTriangle rect diamond parallelogram trapezoid nonIsoscelesTrapezoid pentagon hexagon heptagon octagon decagon dodecagon star4 star5 star6 star7 star8 star10 star12 star16 star24 star32 roundRect round1Rect round2SameRect round2DiagRect snipRoundRect snip1Rect snip2SameRect snip2DiagRect plaque ellipse teardrop homePlate chevron pieWedge pie blockArc donut noSmoking rightArrow leftArrow upArrow downArrow stripedRightArrow notchedRightArrow bentUpArrow leftRightArrow upDownArrow leftUpArrow leftRightUpArrow quadArrow leftArrowCallout rightArrowCallout upArrowCallout downArrowCallout leftRightArrowCallout upDownArrowCallout quadArrowCallout bentArrow uturnArrow circularArrow leftCircularArrow leftRightCircularArrow curvedRightArrow curvedLeftArrow curvedUpArrow curvedDownArrow swooshArrow cube can lightningBolt heart sun moon smileyFace irregularSeal1 irregularSeal2 foldedCorner bevel frame halfFrame corner diagStripe chord arc leftBracket rightBracket leftBrace rightBrace bracketPair bracePair straightConnector1 bentConnector2 bentConnector3 bentConnector4 bentConnector5 curvedConnector2 curvedConnector3 curvedConnector4 curvedConnector5 callout1 callout2 callout3 accentCallout1 accentCallout2 accentCallout3 borderCallout1 borderCallout2 borderCallout3 accentBorderCallout1 accentBorderCallout2 accentBorderCallout3 wedgeRectCallout wedgeRoundRectCallout wedgeEllipseCallout cloudCallout cloud ribbon ribbon2 ellipseRibbon ellipseRibbon2 leftRightRibbon verticalScroll horizontalScroll wave doubleWave plus flowChartProcess flowChartDecision flowChartInputOutput flowChartPredefinedProcess flowChartInternalStorage flowChartDocument flowChartMultidocument flowChartTerminator flowChartPreparation flowChartManualInput flowChartManualOperation flowChartConnector flowChartPunchedCard flowChartPunchedTape flowChartSummingJunction flowChartOr flowChartCollate flowChartSort flowChartExtract flowChartMerge flowChartOfflineStorage flowChartOnlineStorage flowChartMagneticTape flowChartMagneticDisk flowChartMagneticDrum flowChartDisplay flowChartDelay flowChartAlternateProcess flowChartOffpageConnector actionButtonBlank actionButtonHome actionButtonHelp actionButtonInformation actionButtonForwardNext actionButtonBackPrevious actionButtonEnd actionButtonBeginning actionButtonReturn actionButtonDocument actionButtonSound actionButtonMovie gear6 gear9 funnel mathPlus mathMinus mathMultiply mathDivide mathEqual mathNotEqual cornerTabs squareTabs plaqueTabs chartX chartStar chartPlus",
-  ].flatMap((names) => names.split(" ")),
+export const presetGeometryNames: ReadonlySet<string> = new Set(
+  presetGeometryTuple,
 );
 
 function invalidGeometry(message: string): never {
@@ -56,7 +102,7 @@ function invalidGeometry(message: string): never {
 }
 
 export function preset(
-  name: string,
+  name: PresetGeometryName,
   adjust?: Readonly<Record<string, number>>,
 ): PresetGeometry {
   if (!presetGeometryNames.has(name)) {
@@ -567,4 +613,772 @@ function arcToCubics(
     });
   }
   return result;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function finiteGeometryNumber(value: unknown, label: string): number {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    throw new CapabilityError(
+      "invalid-visual-style",
+      `${label} must be a finite number`,
+    );
+  }
+  return value;
+}
+
+function pointUnit(value: number, label: string): string {
+  const coordinate = Math.round(finiteGeometryNumber(value, label) * 1000);
+  if (
+    !Number.isSafeInteger(coordinate) ||
+    Math.abs(coordinate) > 2_147_483_647
+  ) {
+    invalidGeometry(
+      `${label} exceeds DrawingML path coordinate range after conversion`,
+    );
+  }
+  return String(coordinate);
+}
+
+function validatePathCommand(command: PathCommand): void {
+  switch (command.op) {
+    case "M":
+    case "L":
+      pointUnit(command.x, "path.x");
+      pointUnit(command.y, "path.y");
+      return;
+    case "C":
+      pointUnit(command.x1, "path.x1");
+      pointUnit(command.y1, "path.y1");
+      pointUnit(command.x2, "path.x2");
+      pointUnit(command.y2, "path.y2");
+      pointUnit(command.x, "path.x");
+      pointUnit(command.y, "path.y");
+      return;
+    case "Q":
+      pointUnit(command.x1, "path.x1");
+      pointUnit(command.y1, "path.y1");
+      pointUnit(command.x, "path.x");
+      pointUnit(command.y, "path.y");
+      return;
+    case "Z":
+      return;
+    default:
+      invalidGeometry("Custom path contains unsupported command");
+  }
+}
+
+/** Validates and resolves author Geometry (+ optional borderRadius) into a closed ResolvedGeometry model. */
+export function resolveGeometry(options: {
+  readonly geometry: Geometry | undefined;
+  readonly borderRadius?: number | undefined;
+  readonly box: { readonly width: number; readonly height: number };
+}): {
+  readonly geometry: ResolvedGeometry;
+  readonly name: PresetGeometryName | "custom";
+  readonly warnings: readonly GeometryWarning[];
+} {
+  const { geometry: value, borderRadius: radius, box } = options;
+  const warnings: GeometryWarning[] = [];
+
+  if (isRecord(value) && value["type"] === "custom") {
+    if (radius !== undefined && radius > 0) {
+      throw new CapabilityError(
+        "unsupported-style-combination",
+        "borderRadius cannot be used together with custom geometry",
+      );
+    }
+    const custom = value;
+    if (!Array.isArray(custom.paths)) {
+      invalidGeometry("Custom geometry must contain a paths array");
+    }
+    const width = finiteGeometryNumber(custom.width, "geometry.width");
+    const height = finiteGeometryNumber(custom.height, "geometry.height");
+    if (width <= 0 || height <= 0 || custom.paths.length === 0) {
+      invalidGeometry(
+        "Custom geometry must have a positive viewBox and at least one path",
+      );
+    }
+    const widthUnits = pointUnit(width, "geometry.width");
+    const heightUnits = pointUnit(height, "geometry.height");
+    if (Number(widthUnits) === 0 || Number(heightUnits) === 0) {
+      invalidGeometry(
+        "Custom geometry viewBox must retain positive width and height in path coordinate space after conversion",
+      );
+    }
+    const resolvedPaths = custom.paths.map((item, index) => {
+      if (
+        !isRecord(item) ||
+        !Array.isArray(item.commands) ||
+        item.commands.length === 0
+      ) {
+        invalidGeometry(`Custom path ${index + 1} must contain commands`);
+      }
+      if (
+        (item.fill !== undefined && typeof item.fill !== "boolean") ||
+        (item.stroke !== undefined && typeof item.stroke !== "boolean")
+      ) {
+        invalidGeometry(
+          `fill/stroke for custom path ${index + 1} must be boolean`,
+        );
+      }
+      for (const command of item.commands) {
+        validatePathCommand(command);
+      }
+      return {
+        commands: item.commands,
+        fill: item.fill ?? true,
+        stroke: item.stroke ?? true,
+      };
+    });
+    return {
+      geometry: {
+        kind: "custom",
+        width,
+        height,
+        paths: resolvedPaths,
+      },
+      name: "custom",
+      warnings,
+    };
+  }
+
+  let rawName: string;
+  const adjust: Record<string, number> = {};
+  if (value === undefined) {
+    rawName = radius !== undefined && radius > 0 ? "roundRect" : "rect";
+  } else if (typeof value === "string") {
+    rawName = value;
+  } else if (
+    isRecord(value) &&
+    value["type"] === "preset" &&
+    typeof value["name"] === "string"
+  ) {
+    rawName = value["name"];
+    if (value["adjust"] !== undefined) {
+      if (!isRecord(value["adjust"])) {
+        invalidGeometry("preset.adjust must be an object");
+      }
+      Object.assign(adjust, value["adjust"]);
+    }
+  } else {
+    invalidGeometry(
+      "geometry must be a preset name, preset(...), or custom path",
+    );
+  }
+
+  if (!presetGeometryNames.has(rawName)) {
+    throw new CapabilityError(
+      "unsupported-geometry",
+      `Unsupported preset geometry ${rawName}`,
+    );
+  }
+  let name = rawName as PresetGeometryName;
+
+  if (radius !== undefined && radius > 0) {
+    if (name !== "rect" && name !== "roundRect") {
+      throw new CapabilityError(
+        "unsupported-style-combination",
+        "borderRadius is only applicable to rect or roundRect geometry",
+      );
+    }
+    name = "roundRect";
+    if (adjust["adj"] === undefined) {
+      const raw = Math.round(
+        (radius / Math.min(box.width, box.height)) * 100000,
+      );
+      adjust["adj"] = raw;
+      if (raw > 50000) {
+        warnings.push({
+          code: "geometry-adjustment-range",
+          message:
+            "borderRadius exceeds half of the shorter side; preserved original radius and wrote native adjust value",
+        });
+      }
+    }
+  }
+
+  for (const [key, amount] of Object.entries(adjust)) {
+    if (!/^adj(?:[1-9]\d*)?$/u.test(key) || !Number.isSafeInteger(amount)) {
+      invalidGeometry(`preset.adjust.${key} must be a finite integer`);
+    }
+    if (
+      name === "blockArc" &&
+      (((key === "adj1" || key === "adj2") &&
+        (amount < 0 || amount > 21_600_000)) ||
+        (key === "adj3" && (amount < 0 || amount > 50_000)))
+    ) {
+      warnings.push({
+        code: "geometry-adjustment-range",
+        message: `blockArc.${key} exceeds common preset range; preserved original adjust value`,
+      });
+    }
+  }
+
+  return {
+    geometry: {
+      kind: "preset",
+      name,
+      adjust,
+    },
+    name,
+    warnings,
+  };
+}
+
+function pathCommandXml(command: PathCommand): string {
+  switch (command.op) {
+    case "M":
+      return `<a:moveTo><a:pt x="${pointUnit(command.x, "path.x")}" y="${pointUnit(command.y, "path.y")}"/></a:moveTo>`;
+    case "L":
+      return `<a:lnTo><a:pt x="${pointUnit(command.x, "path.x")}" y="${pointUnit(command.y, "path.y")}"/></a:lnTo>`;
+    case "C":
+      return `<a:cubicBezTo><a:pt x="${pointUnit(command.x1, "path.x1")}" y="${pointUnit(command.y1, "path.y1")}"/><a:pt x="${pointUnit(command.x2, "path.x2")}" y="${pointUnit(command.y2, "path.y2")}"/><a:pt x="${pointUnit(command.x, "path.x")}" y="${pointUnit(command.y, "path.y")}"/></a:cubicBezTo>`;
+    case "Q":
+      return `<a:quadBezTo><a:pt x="${pointUnit(command.x1, "path.x1")}" y="${pointUnit(command.y1, "path.y1")}"/><a:pt x="${pointUnit(command.x, "path.x")}" y="${pointUnit(command.y, "path.y")}"/></a:quadBezTo>`;
+    case "Z":
+      return "<a:close/>";
+    default: {
+      const exhaustive: never = command;
+      return exhaustive;
+    }
+  }
+}
+
+/** Exhaustively serializes a ResolvedGeometry to DrawingML <a:prstGeom> or <a:custGeom>. */
+export function resolvedGeometryXml(geometry: ResolvedGeometry): string {
+  switch (geometry.kind) {
+    case "preset": {
+      const values = Object.entries(geometry.adjust)
+        .map(([key, amount]) => `<a:gd name="${key}" fmla="val ${amount}"/>`)
+        .join("");
+      return `<a:prstGeom prst="${geometry.name}"><a:avLst>${values}</a:avLst></a:prstGeom>`;
+    }
+    case "custom": {
+      const widthUnits = pointUnit(geometry.width, "geometry.width");
+      const heightUnits = pointUnit(geometry.height, "geometry.height");
+      const pathList = geometry.paths
+        .map((pathItem) => {
+          const commands = pathItem.commands.map(pathCommandXml).join("");
+          return `<a:path w="${widthUnits}" h="${heightUnits}"${pathItem.fill ? "" : ' fill="none"'}${pathItem.stroke ? "" : ' stroke="0"'}>${commands}</a:path>`;
+        })
+        .join("");
+      return `<a:custGeom><a:avLst/><a:gdLst/><a:ahLst/><a:cxnLst/><a:rect l="l" t="t" r="r" b="b"/><a:pathLst>${pathList}</a:pathLst></a:custGeom>`;
+    }
+    default: {
+      const exhaustive: never = geometry;
+      return exhaustive;
+    }
+  }
+}
+
+const drawingAngleToRad = (ang: number): number =>
+  (ang / 60_000) * (Math.PI / 180);
+const radToDrawingAngle = (rad: number): number =>
+  rad * (180 / Math.PI) * 60_000;
+
+function formatSvgCoord(value: number): number {
+  if (Object.is(value, -0) || value === 0) return 0;
+  return Math.round(value * 1_000_000) / 1_000_000;
+}
+
+function commandsToSvgD(commands: readonly PathCommand[]): string {
+  return commands
+    .map((command) => {
+      switch (command.op) {
+        case "Z":
+          return "Z";
+        case "M":
+        case "L":
+          return `${command.op}${formatSvgCoord(command.x)} ${formatSvgCoord(command.y)}`;
+        case "Q":
+          return `Q${formatSvgCoord(command.x1)} ${formatSvgCoord(command.y1)} ${formatSvgCoord(command.x)} ${formatSvgCoord(command.y)}`;
+        case "C":
+          return `C${formatSvgCoord(command.x1)} ${formatSvgCoord(command.y1)} ${formatSvgCoord(command.x2)} ${formatSvgCoord(command.y2)} ${formatSvgCoord(command.x)} ${formatSvgCoord(command.y)}`;
+        default: {
+          const exhaustive: never = command;
+          return exhaustive;
+        }
+      }
+    })
+    .join(" ");
+}
+
+/**
+ * Unwraps the DrawingML polar angle onto the continuous eccentric parameter angle of an ellipse
+ * with semi-axes (rx, ry), preserving exact winding across arbitrary sweep angles.
+ */
+function eccentricAngle(theta: number, rx: number, ry: number): number {
+  if (rx === ry) return theta;
+  const base = Math.atan2(rx * Math.sin(theta), ry * Math.cos(theta));
+  return base + 2 * Math.PI * Math.round((theta - base) / (2 * Math.PI));
+}
+
+function drawingMlArcToLocalCubics(
+  curX: number,
+  curY: number,
+  wR: number,
+  hR: number,
+  stAng: number,
+  swAng: number,
+): {
+  readonly commands: readonly PathCommand[];
+  readonly endX: number;
+  readonly endY: number;
+} {
+  if (swAng === 0) {
+    return { commands: [], endX: curX, endY: curY };
+  }
+  const rx = Math.max(0, wR);
+  const ry = Math.max(0, hR);
+  if (rx === 0 && ry === 0) {
+    return { commands: [], endX: curX, endY: curY };
+  }
+
+  const theta1 = drawingAngleToRad(stAng);
+  const deltaTheta = drawingAngleToRad(swAng);
+  const theta2 = theta1 + deltaTheta;
+
+  if (rx === 0 || ry === 0) {
+    // Degenerate 1D ellipse: project along the non-zero axis via eccentric parameterization.
+    const phi1 =
+      rx === 0
+        ? Math.sin(theta1) >= 0
+          ? Math.PI / 2
+          : -Math.PI / 2
+        : Math.cos(theta1) >= 0
+          ? 0
+          : Math.PI;
+    const phi2 =
+      rx === 0
+        ? Math.sin(theta2) >= 0
+          ? Math.PI / 2
+          : -Math.PI / 2
+        : Math.cos(theta2) >= 0
+          ? 0
+          : Math.PI;
+    const cx = curX - rx * Math.cos(phi1);
+    const cy = curY - ry * Math.sin(phi1);
+    const endX = cx + rx * Math.cos(phi2);
+    const endY = cy + ry * Math.sin(phi2);
+    return {
+      commands: [{ op: "L", x: endX, y: endY }],
+      endX,
+      endY,
+    };
+  }
+
+  const phi1 = eccentricAngle(theta1, rx, ry);
+  const phi2 = eccentricAngle(theta2, rx, ry);
+  const deltaPhi = phi2 - phi1;
+  const cx = curX - rx * Math.cos(phi1);
+  const cy = curY - ry * Math.sin(phi1);
+
+  const segments = Math.max(1, Math.ceil(Math.abs(deltaPhi) / (Math.PI / 2)));
+  const step = deltaPhi / segments;
+  const kappa = (4 / 3) * Math.tan(step / 4);
+  const result: PathCommand[] = [];
+
+  for (let segment = 0; segment < segments; segment += 1) {
+    const a = phi1 + segment * step;
+    const b = a + step;
+    const paX = cx + rx * Math.cos(a);
+    const paY = cy + ry * Math.sin(a);
+    const daX = -rx * Math.sin(a);
+    const daY = ry * Math.cos(a);
+    const pbX = cx + rx * Math.cos(b);
+    const pbY = cy + ry * Math.sin(b);
+    const dbX = -rx * Math.sin(b);
+    const dbY = ry * Math.cos(b);
+    result.push({
+      op: "C",
+      x1: paX + kappa * daX,
+      y1: paY + kappa * daY,
+      x2: pbX - kappa * dbX,
+      y2: pbY - kappa * dbY,
+      x: pbX,
+      y: pbY,
+    });
+  }
+
+  const endX = cx + rx * Math.cos(phi2);
+  const endY = cy + ry * Math.sin(phi2);
+  return { commands: result, endX, endY };
+}
+
+function evaluatePresetGeometry(
+  name: PresetGeometryName,
+  adjust: Readonly<Record<string, number>>,
+  box: GeometryBox,
+): EvaluatedGeometry {
+  const def: PresetShapeDefinition = presetDefinitions[name];
+  // Evaluate guides in EMU space to preserve ECMA-376 precision on small pixel boxes.
+  const W = Math.max(1, pxToEmu(box.width));
+  const H = Math.max(1, pxToEmu(box.height));
+  const ss = Math.min(W, H);
+  const ls = Math.max(W, H);
+
+  const builtins: Record<string, number> = {
+    w: W,
+    h: H,
+    l: 0,
+    t: 0,
+    r: W,
+    b: H,
+    hc: W / 2,
+    vc: H / 2,
+    ss,
+    ls,
+    cd2: 10_800_000,
+    cd4: 5_400_000,
+    cd8: 2_700_000,
+    "3cd4": 16_200_000,
+    "3cd8": 8_100_000,
+    "5cd8": 13_500_000,
+    "7cd8": 18_900_000,
+  };
+
+  const env = new Map<string, number>();
+
+  const arg = (token: string): number => {
+    const bound = env.get(token);
+    if (bound !== undefined) return bound;
+    const builtin = builtins[token];
+    if (builtin !== undefined) return builtin;
+    const denomMatch = /^(wd|hd|ssd)(\d+)$/u.exec(token);
+    if (denomMatch !== null) {
+      const kind = denomMatch[1];
+      const divisor = Number(denomMatch[2]);
+      return kind === "wd"
+        ? W / divisor
+        : kind === "hd"
+          ? H / divisor
+          : ss / divisor;
+    }
+    const numeric = Number(token);
+    if (!Number.isFinite(numeric)) {
+      invalidGeometry(`Preset ${name} references unknown guide token ${token}`);
+    }
+    return numeric;
+  };
+
+  const evalFormula = (formula: string): number => {
+    const parts = formula.trim().split(/\s+/u);
+    const op = parts[0];
+    const x = parts[1] === undefined ? 0 : arg(parts[1]);
+    const y = parts[2] === undefined ? 0 : arg(parts[2]);
+    const z = parts[3] === undefined ? 0 : arg(parts[3]);
+    switch (op) {
+      case "val":
+        return x;
+      case "*/":
+        return z === 0 ? 0 : (x * y) / z;
+      case "+-":
+        return x + y - z;
+      case "+/":
+        return z === 0 ? 0 : (x + y) / z;
+      case "?:":
+      case "ifelse":
+        return x > 0 ? y : z;
+      case "abs":
+        return Math.abs(x);
+      case "at2":
+        return radToDrawingAngle(Math.atan2(y, x));
+      case "cat2":
+        return x * Math.cos(Math.atan2(z, y));
+      case "sat2":
+        return x * Math.sin(Math.atan2(z, y));
+      case "cos":
+        return x * Math.cos(drawingAngleToRad(y));
+      case "sin":
+        return x * Math.sin(drawingAngleToRad(y));
+      case "tan":
+        return x * Math.tan(drawingAngleToRad(y));
+      case "max":
+        return Math.max(x, y);
+      case "min":
+        return Math.min(x, y);
+      case "mod":
+        return Math.sqrt(x * x + y * y + z * z);
+      case "pin":
+        return y < x ? x : y > z ? z : y;
+      case "sqrt":
+        return x <= 0 ? 0 : Math.sqrt(x);
+      default:
+        invalidGeometry(`Preset ${name} uses unsupported guide operator ${op}`);
+    }
+  };
+
+  if (def.av !== undefined) {
+    for (const [key, formula] of def.av) {
+      env.set(key, evalFormula(formula));
+    }
+  }
+  for (const [key, value] of Object.entries(adjust)) {
+    env.set(key, value);
+  }
+  if (def.gd !== undefined) {
+    for (const [key, formula] of def.gd) {
+      env.set(key, evalFormula(formula));
+    }
+  }
+
+  const rectTokens = def.rect ?? (["l", "t", "r", "b"] as const);
+  const rectL = arg(rectTokens[0]);
+  const rectT = arg(rectTokens[1]);
+  const rectR = arg(rectTokens[2]);
+  const rectB = arg(rectTokens[3]);
+  const textRect: GeometryBox = {
+    x: box.x + (rectL / W) * box.width,
+    y: box.y + (rectT / H) * box.height,
+    width: Math.max(0, ((rectR - rectL) / W) * box.width),
+    height: Math.max(0, ((rectB - rectT) / H) * box.height),
+  };
+
+  const paths: EvaluatedGeometryPath[] = def.paths.map((pathDef) => {
+    const pathW = pathDef.w ?? W;
+    const pathH = pathDef.h ?? H;
+    const scaleX = box.width / pathW;
+    const scaleY = box.height / pathH;
+    const toPageX = (lx: number): number => box.x + lx * scaleX;
+    const toPageY = (ly: number): number => box.y + ly * scaleY;
+    const mapCmdToPage = (cmd: PathCommand): PathCommand => {
+      switch (cmd.op) {
+        case "Z":
+          return cmd;
+        case "M":
+        case "L":
+          return { op: cmd.op, x: toPageX(cmd.x), y: toPageY(cmd.y) };
+        case "Q":
+          return {
+            op: "Q",
+            x1: toPageX(cmd.x1),
+            y1: toPageY(cmd.y1),
+            x: toPageX(cmd.x),
+            y: toPageY(cmd.y),
+          };
+        case "C":
+          return {
+            op: "C",
+            x1: toPageX(cmd.x1),
+            y1: toPageY(cmd.y1),
+            x2: toPageX(cmd.x2),
+            y2: toPageY(cmd.y2),
+            x: toPageX(cmd.x),
+            y: toPageY(cmd.y),
+          };
+      }
+    };
+
+    const commands: PathCommand[] = [];
+    let curX = 0;
+    let curY = 0;
+    let subStartX = 0;
+    let subStartY = 0;
+
+    for (const cmd of pathDef.cmds) {
+      switch (cmd[0]) {
+        case "M": {
+          curX = arg(cmd[1]);
+          curY = arg(cmd[2]);
+          subStartX = curX;
+          subStartY = curY;
+          commands.push({ op: "M", x: toPageX(curX), y: toPageY(curY) });
+          break;
+        }
+        case "L": {
+          curX = arg(cmd[1]);
+          curY = arg(cmd[2]);
+          commands.push({ op: "L", x: toPageX(curX), y: toPageY(curY) });
+          break;
+        }
+        case "Q": {
+          const x1 = arg(cmd[1]);
+          const y1 = arg(cmd[2]);
+          curX = arg(cmd[3]);
+          curY = arg(cmd[4]);
+          commands.push({
+            op: "Q",
+            x1: toPageX(x1),
+            y1: toPageY(y1),
+            x: toPageX(curX),
+            y: toPageY(curY),
+          });
+          break;
+        }
+        case "C": {
+          const x1 = arg(cmd[1]);
+          const y1 = arg(cmd[2]);
+          const x2 = arg(cmd[3]);
+          const y2 = arg(cmd[4]);
+          curX = arg(cmd[5]);
+          curY = arg(cmd[6]);
+          commands.push({
+            op: "C",
+            x1: toPageX(x1),
+            y1: toPageY(y1),
+            x2: toPageX(x2),
+            y2: toPageY(y2),
+            x: toPageX(curX),
+            y: toPageY(curY),
+          });
+          break;
+        }
+        case "A": {
+          const wR = arg(cmd[1]);
+          const hR = arg(cmd[2]);
+          const stAng = arg(cmd[3]);
+          const swAng = arg(cmd[4]);
+          const arc = drawingMlArcToLocalCubics(
+            curX,
+            curY,
+            wR,
+            hR,
+            stAng,
+            swAng,
+          );
+          for (const cubic of arc.commands) {
+            commands.push(mapCmdToPage(cubic));
+          }
+          curX = arc.endX;
+          curY = arc.endY;
+          break;
+        }
+        case "Z": {
+          curX = subStartX;
+          curY = subStartY;
+          commands.push({ op: "Z" });
+          break;
+        }
+      }
+    }
+
+    return {
+      d: commandsToSvgD(commands),
+      commands,
+      fillMode: pathDef.fill ?? "norm",
+      stroke: pathDef.stroke ?? true,
+    };
+  });
+
+  return { paths, textRect };
+}
+
+function evaluateCustomGeometry(
+  geometry: Extract<ResolvedGeometry, { readonly kind: "custom" }>,
+  box: GeometryBox,
+): EvaluatedGeometry {
+  const mapX = (value: number) => box.x + (value * box.width) / geometry.width;
+  const mapY = (value: number) =>
+    box.y + (value * box.height) / geometry.height;
+
+  const paths: EvaluatedGeometryPath[] = geometry.paths.map((pathItem) => {
+    const commands = pathItem.commands.map((command): PathCommand => {
+      switch (command.op) {
+        case "Z":
+          return command;
+        case "M":
+        case "L":
+          return {
+            op: command.op,
+            x: mapX(command.x),
+            y: mapY(command.y),
+          };
+        case "Q":
+          return {
+            op: "Q",
+            x1: mapX(command.x1),
+            y1: mapY(command.y1),
+            x: mapX(command.x),
+            y: mapY(command.y),
+          };
+        case "C":
+          return {
+            op: "C",
+            x1: mapX(command.x1),
+            y1: mapY(command.y1),
+            x2: mapX(command.x2),
+            y2: mapY(command.y2),
+            x: mapX(command.x),
+            y: mapY(command.y),
+          };
+        default: {
+          const exhaustive: never = command;
+          return exhaustive;
+        }
+      }
+    });
+    return {
+      d: commandsToSvgD(commands),
+      commands,
+      fillMode: pathItem.fill ? "norm" : "none",
+      stroke: pathItem.stroke,
+    };
+  });
+
+  return { paths, textRect: box };
+}
+
+/** Exhaustively evaluates any ResolvedGeometry into page-space SVG paths and embedded textRect. */
+export function evaluateGeometry(
+  geometry: ResolvedGeometry,
+  box: GeometryBox,
+): EvaluatedGeometry {
+  switch (geometry.kind) {
+    case "preset":
+      return evaluatePresetGeometry(geometry.name, geometry.adjust, box);
+    case "custom":
+      return evaluateCustomGeometry(geometry, box);
+    default: {
+      const exhaustive: never = geometry;
+      return exhaustive;
+    }
+  }
+}
+
+/** Modulates RGB hex color lightness using DrawingML HSL lumMod/lumOff rules. */
+export function shadeHex(hex: string, lumMod: number, lumOff: number): string {
+  const [r, g, b] = [0, 2, 4].map(
+    (start) => Number.parseInt(hex.slice(start, start + 2), 16) / 255,
+  ) as [number, number, number];
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  const lightness = (max + min) / 2;
+  const delta = max - min;
+  const saturation =
+    delta === 0 ? 0 : delta / (1 - Math.abs(2 * lightness - 1));
+  const hue =
+    delta === 0
+      ? 0
+      : max === r
+        ? ((g - b) / delta + 6) % 6
+        : max === g
+          ? (b - r) / delta + 2
+          : (r - g) / delta + 4;
+  const shaded = Math.min(1, Math.max(0, lightness * lumMod + lumOff));
+  const chroma = (1 - Math.abs(2 * shaded - 1)) * saturation;
+  const x = chroma * (1 - Math.abs((hue % 2) - 1));
+  const m = shaded - chroma / 2;
+  const [r1, g1, b1] =
+    hue < 1
+      ? [chroma, x, 0]
+      : hue < 2
+        ? [x, chroma, 0]
+        : hue < 3
+          ? [0, chroma, x]
+          : hue < 4
+            ? [0, x, chroma]
+            : hue < 5
+              ? [x, 0, chroma]
+              : [chroma, 0, x];
+  return [r1, g1, b1]
+    .map((channel) =>
+      Math.round((channel + m) * 255)
+        .toString(16)
+        .padStart(2, "0"),
+    )
+    .join("")
+    .toUpperCase();
 }

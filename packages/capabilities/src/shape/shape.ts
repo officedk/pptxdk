@@ -29,7 +29,13 @@ import { RichTextContainer } from "@react-pptx/core/document";
 import { pxToEmu, xmlEscape } from "@react-pptx/emit";
 
 import type { Geometry } from "../shared/geometry.ts";
-export { blockArc, path, preset } from "../shared/geometry.ts";
+export {
+  blockArc,
+  path,
+  preset,
+  presetGeometryNames,
+  presetGeometryTuple,
+} from "../shared/geometry.ts";
 export type {
   CustomGeometry,
   Geometry,
@@ -37,6 +43,7 @@ export type {
   PathCommand,
   PathOptions,
   PresetGeometry,
+  PresetGeometryName,
 } from "../shared/geometry.ts";
 import {
   nativeLinkXml,
@@ -65,7 +72,6 @@ import {
   paintVisualModel,
   resolveVisualModel,
   visualStyleKeys,
-  type ResolvedVisualGeometry,
   type ShapeVisualStyle,
 } from "../shared/visual.ts";
 
@@ -234,26 +240,6 @@ function validateSize(
     );
   }
   return value;
-}
-
-function assertSupportedShapeGeometryForPreview(
-  geometry: ResolvedVisualGeometry,
-): void {
-  if (geometry.kind === "custom") return;
-  const adjustKeys = Object.keys(geometry.adjust);
-  const supported =
-    (geometry.name === "roundRect" &&
-      adjustKeys.every((key) => key === "adj")) ||
-    ((geometry.name === "rect" ||
-      geometry.name === "ellipse" ||
-      geometry.name === "line") &&
-      adjustKeys.length === 0);
-  if (!supported) {
-    throw new CapabilityError(
-      "preview-unsupported-geometry",
-      "Preview does not yet support this shape geometry",
-    );
-  }
 }
 
 /** Shape module independently validates input, encapsulates bound state, and emits native PresentationML objects. */
@@ -597,7 +583,6 @@ export const shapeCapability: ObjectCapabilityModule = {
                 "Preview does not yet support text inside shapes",
               );
             }
-            assertSupportedShapeGeometryForPreview(visual.geometry);
             return paintVisualModel({
               model: visual,
               slideNumber: paintContext.slideNumber,

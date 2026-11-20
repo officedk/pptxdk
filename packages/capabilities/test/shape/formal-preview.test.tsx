@@ -120,7 +120,8 @@ describe("Slice 2: Shape static preview", () => {
     expect(page.svg.indexOf('fill="#0000FF"')).toBeLessThan(
       page.svg.indexOf('fill="#FF0000"'),
     );
-    expect(page.svg).toContain("<ellipse");
+    // Uniform path evaluation renders all shapes (including ellipse) as SVG <path> elements.
+    expect(page.svg).toContain("<path ");
     expect(page.svg).toContain('fill="none"');
     expect(page.svg).toContain('stroke="none"');
     expect(page.svg).toContain('stroke-width="2"');
@@ -142,7 +143,83 @@ describe("Slice 2: Shape static preview", () => {
     expect(second.pages[0]?.svg).toContain('fill="#00AA00"');
   });
 
-  it("rejects unsupported shape styles, arrows, inline text, and geometries with located errors", async () => {
+  it("renders standard preset geometries (including adjust, shaded subpaths, local path w/h, and connectors) with zero diagnostics", async () => {
+    const previewDoc = runDocPreview(documentCapabilities);
+    const doc = deck({ width: 480, height: 240 }).append(
+      slide({ id: "presets" }).append(
+        shape({
+          id: "star",
+          geometry: "star5",
+          x: 20,
+          y: 20,
+          width: 80,
+          height: 80,
+          fill: "#F59E0B",
+        }),
+        shape({
+          id: "arc",
+          geometry: blockArc({ startAngle: 0, endAngle: 180, thickness: 0.3 }),
+          x: 120,
+          y: 20,
+          width: 80,
+          height: 80,
+          fill: "#10B981",
+        }),
+        shape({
+          id: "bevel-box",
+          geometry: preset("bevel", { adj: 20000 }),
+          x: 220,
+          y: 20,
+          width: 100,
+          height: 60,
+          fill: "#3B82F6",
+          style: { borderColor: "#1E3A8A", borderWidth: 2 },
+        }),
+        shape({
+          id: "cloud-shape",
+          geometry: "cloud",
+          x: 340,
+          y: 20,
+          width: 110,
+          height: 70,
+          fill: "#E0F2FE",
+          style: { borderColor: "#0284C7", borderWidth: 2 },
+        }),
+        shape({
+          id: "donut-ring",
+          geometry: "donut",
+          x: 20,
+          y: 120,
+          width: 80,
+          height: 80,
+          fill: "#EC4899",
+        }),
+        shape({
+          id: "connector",
+          geometry: preset("bentConnector3", { adj1: 30000 }),
+          x: 130,
+          y: 130,
+          width: 120,
+          height: 60,
+          style: { borderColor: "#0F172A", borderWidth: 2 },
+        }),
+      ),
+    );
+    const result = await previewDoc(doc);
+    const validation = await validatePptx(result.pptx);
+    assert.deepEqual(validation.errors, []);
+    const page = result.pages[0]!;
+    assert.deepEqual(page.diagnostics, []);
+    assert.ok(page.png !== undefined);
+    assert.ok(page.svg !== undefined);
+    // Bevel produces shaded fill variants alongside the base #3B82F6 face.
+    expect(page.svg).toContain('fill="#3B82F6"');
+    expect(page.svg).not.toEqual(
+      page.svg.replace(/fill="#(?!3B82F6)[0-9A-F]{6}"/u, ""),
+    );
+  });
+
+  it("rejects unsupported shape styles, arrows, and inline text with located errors", async () => {
     const previewDoc = runDocPreview(documentCapabilities);
     const cases: readonly {
       label: string;
@@ -260,32 +337,6 @@ describe("Slice 2: Shape static preview", () => {
           fill: "#112233",
         }).append(paragraph("Child")),
         expected: /text/i,
-      },
-      {
-        label: "star5-preset",
-        node: shape({
-          id: "bad",
-          x: 10,
-          y: 10,
-          width: 60,
-          height: 60,
-          geometry: "star5",
-          fill: "#112233",
-        }),
-        expected: /geometry/i,
-      },
-      {
-        label: "adjusted-preset",
-        node: shape({
-          id: "bad",
-          x: 10,
-          y: 10,
-          width: 60,
-          height: 60,
-          geometry: blockArc({ startAngle: 0, endAngle: 180, thickness: 0.3 }),
-          fill: "#112233",
-        }),
-        expected: /geometry/i,
       },
     ];
 

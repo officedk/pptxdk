@@ -4641,7 +4641,7 @@ describe("public build entry", () => {
         deck(
           createElement(Shape, {
             id: "unknown-geometry",
-            geometry: "madeUpShape",
+            geometry: "madeUpShape" as never,
             x: 0,
             y: 0,
             width: 20,

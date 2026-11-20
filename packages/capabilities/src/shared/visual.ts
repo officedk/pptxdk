@@ -18,10 +18,15 @@ import {
   type LoadedImage,
 } from "../image/image-decode.ts";
 import {
-  presetGeometryNames,
-  type CustomGeometry,
+  evaluateGeometry,
+  resolveGeometry,
+  resolvedGeometryXml,
+  shadeHex,
   type Geometry,
   type PathCommand,
+  type PresetGeometryName,
+  type PresetPathFillMode,
+  type ResolvedGeometry,
 } from "./geometry.ts";
 
 const imageRelationship =
@@ -112,23 +117,6 @@ export type ResolvedShadow = {
   readonly angle: number;
 };
 
-export type ResolvedVisualGeometry =
-  | {
-      readonly kind: "preset";
-      readonly name: string;
-      readonly adjust: Readonly<Record<string, number>>;
-    }
-  | {
-      readonly kind: "custom";
-      readonly width: number;
-      readonly height: number;
-      readonly paths: readonly {
-        readonly commands: readonly PathCommand[];
-        readonly fill?: boolean;
-        readonly stroke?: boolean;
-      }[];
-    };
-
 export type VisualWarning = { readonly code: string; readonly message: string };
 export type ShapeBox = {
   readonly x: number;
@@ -141,7 +129,8 @@ export type VisualStyleRecord = Readonly<Record<string, unknown>>;
 /** Closed resolved visual model produced in resolve() and exhaustively consumed by emit() and paint(). */
 export type ResolvedVisualModel = {
   readonly box: ShapeBox;
-  readonly geometry: ResolvedVisualGeometry;
+  readonly geometry: ResolvedGeometry;
+  readonly geometryName: PresetGeometryName | "custom";
   readonly fill: ResolvedFill;
   readonly border?: ResolvedBorder;
   readonly opacity?: number;
@@ -216,7 +205,8 @@ export type ShapePropertiesResult = {
   readonly opacity?: number;
   readonly warnings: readonly VisualWarning[];
   readonly hasVisibleStyle: boolean;
-  readonly geometryName: string;
+  readonly geometryName: PresetGeometryName | "custom";
+  readonly geometry: ResolvedGeometry;
 };
 
 function invalid(code: string, message: string): never {
@@ -455,187 +445,6 @@ function rotationUnits(style: VisualStyleRecord): {
   return { degrees, units };
 }
 
-function point(value: number, label: string): string {
-  const coordinate = Math.round(finite(value, label) * 1000);
-  if (
-    !Number.isSafeInteger(coordinate) ||
-    Math.abs(coordinate) > 2_147_483_647
-  ) {
-    invalid(
-      "invalid-geometry",
-      `${label} exceeds DrawingML path coordinate range after conversion`,
-    );
-  }
-  return String(coordinate);
-}
-
-function pathCommandXml(command: PathCommand): string {
-  switch (command.op) {
-    case "M":
-      return `<a:moveTo><a:pt x="${point(command.x, "path.x")}" y="${point(command.y, "path.y")}"/></a:moveTo>`;
-    case "L":
-      return `<a:lnTo><a:pt x="${point(command.x, "path.x")}" y="${point(command.y, "path.y")}"/></a:lnTo>`;
-    case "C":
-      return `<a:cubicBezTo><a:pt x="${point(command.x1, "path.x1")}" y="${point(command.y1, "path.y1")}"/><a:pt x="${point(command.x2, "path.x2")}" y="${point(command.y2, "path.y2")}"/><a:pt x="${point(command.x, "path.x")}" y="${point(command.y, "path.y")}"/></a:cubicBezTo>`;
-    case "Q":
-      return `<a:quadBezTo><a:pt x="${point(command.x1, "path.x1")}" y="${point(command.y1, "path.y1")}"/><a:pt x="${point(command.x, "path.x")}" y="${point(command.y, "path.y")}"/></a:quadBezTo>`;
-    case "Z":
-      return "<a:close/>";
-    default:
-      return invalid(
-        "invalid-geometry",
-        "Custom path contains unsupported command",
-      );
-  }
-}
-
-function resolveVisualGeometry(
-  value: Geometry | undefined,
-  radius: number | undefined,
-  box: ShapeBox,
-  warnings: VisualWarning[],
-): ResolvedVisualGeometry {
-  if (isRecord(value) && value["type"] === "custom") {
-    if (radius !== undefined && radius > 0) {
-      invalid(
-        "unsupported-style-combination",
-        "borderRadius cannot be used together with custom geometry",
-      );
-    }
-    const custom = value as CustomGeometry;
-    if (!Array.isArray(custom.paths)) {
-      invalid("invalid-geometry", "Custom geometry must contain a paths array");
-    }
-    const width = finite(custom.width, "geometry.width");
-    const height = finite(custom.height, "geometry.height");
-    if (width <= 0 || height <= 0 || custom.paths.length === 0) {
-      invalid(
-        "invalid-geometry",
-        "Custom geometry must have a positive viewBox and at least one path",
-      );
-    }
-    const widthUnits = point(width, "geometry.width");
-    const heightUnits = point(height, "geometry.height");
-    if (Number(widthUnits) === 0 || Number(heightUnits) === 0) {
-      invalid(
-        "invalid-geometry",
-        "Custom geometry viewBox must retain positive width and height in path coordinate space after conversion",
-      );
-    }
-    for (const [index, path] of custom.paths.entries()) {
-      if (
-        !isRecord(path) ||
-        !Array.isArray(path.commands) ||
-        path.commands.length === 0
-      ) {
-        invalid(
-          "invalid-geometry",
-          `Custom path ${index + 1} must contain commands`,
-        );
-      }
-      if (
-        (path.fill !== undefined && typeof path.fill !== "boolean") ||
-        (path.stroke !== undefined && typeof path.stroke !== "boolean")
-      ) {
-        invalid(
-          "invalid-geometry",
-          `fill/stroke for custom path ${index + 1} must be boolean`,
-        );
-      }
-      for (const command of path.commands) {
-        pathCommandXml(command);
-      }
-    }
-    return {
-      kind: "custom",
-      width,
-      height,
-      paths: custom.paths.map((p) => ({
-        commands: [...p.commands],
-        ...(p.fill === undefined ? {} : { fill: p.fill }),
-        ...(p.stroke === undefined ? {} : { stroke: p.stroke }),
-      })),
-    };
-  }
-
-  let name: string;
-  let adjust: Record<string, number> = {};
-  if (value === undefined) {
-    name = radius !== undefined && radius > 0 ? "roundRect" : "rect";
-  } else if (typeof value === "string") {
-    name = value;
-  } else if (
-    isRecord(value) &&
-    value["type"] === "preset" &&
-    typeof value["name"] === "string"
-  ) {
-    name = value["name"];
-    if (value["adjust"] !== undefined) {
-      if (!isRecord(value["adjust"])) {
-        invalid("invalid-geometry", "preset.adjust must be an object");
-      }
-      adjust = { ...value["adjust"] };
-    }
-  } else {
-    invalid(
-      "invalid-geometry",
-      "geometry must be a preset name, preset(...), or custom path",
-    );
-  }
-
-  if (!presetGeometryNames.has(name)) {
-    invalid("unsupported-geometry", `Unsupported preset geometry ${name}`);
-  }
-  if (radius !== undefined && radius > 0) {
-    if (name !== "rect" && name !== "roundRect") {
-      invalid(
-        "unsupported-style-combination",
-        "borderRadius is only applicable to rect or roundRect geometry",
-      );
-    }
-    name = "roundRect";
-    if (adjust["adj"] === undefined) {
-      const raw = Math.round(
-        (radius / Math.min(box.width, box.height)) * 100000,
-      );
-      adjust["adj"] = raw;
-      if (raw > 50000) {
-        warnings.push({
-          code: "geometry-adjustment-range",
-          message:
-            "borderRadius exceeds half of the shorter side; preserved original radius and wrote native adjust value",
-        });
-      }
-    }
-  }
-
-  for (const [key, amount] of Object.entries(adjust)) {
-    if (!/^adj(?:[1-9]\d*)?$/u.test(key) || !Number.isSafeInteger(amount)) {
-      invalid(
-        "invalid-geometry",
-        `preset.adjust.${key} must be a finite integer`,
-      );
-    }
-    if (
-      name === "blockArc" &&
-      (((key === "adj1" || key === "adj2") &&
-        (amount < 0 || amount > 21_600_000)) ||
-        (key === "adj3" && (amount < 0 || amount > 50_000)))
-    ) {
-      warnings.push({
-        code: "geometry-adjustment-range",
-        message: `blockArc.${key} exceeds common preset range; preserved original adjust value`,
-      });
-    }
-  }
-
-  return {
-    kind: "preset",
-    name,
-    adjust,
-  };
-}
-
 function resolveVisualFill(
   theme: ThemeContext,
   style: VisualStyleRecord,
@@ -853,17 +662,19 @@ export function resolveVisualModel(
   const hasVisibleStyle =
     (options.fill !== undefined && !options.image) || hasVisibleBoxStyle(style);
   const layoutOnlyWhenInvisible = Boolean(options.layoutOnlyWhenInvisible);
-  const geometry = resolveVisualGeometry(
-    options.geometry,
-    layoutOnlyWhenInvisible && !hasVisibleStyle ? undefined : radius,
+  const resolvedGeometry = resolveGeometry({
+    geometry: options.geometry,
+    borderRadius:
+      layoutOnlyWhenInvisible && !hasVisibleStyle ? undefined : radius,
     box,
-    warnings,
-  );
+  });
+  warnings.push(...resolvedGeometry.warnings);
   const rotation = rotationUnits(style);
 
   return {
     box,
-    geometry,
+    geometry: resolvedGeometry.geometry,
+    geometryName: resolvedGeometry.name,
     fill,
     ...(border === undefined ? {} : { border }),
     ...(opacity === undefined ? {} : { opacity }),
@@ -877,41 +688,6 @@ export function resolveVisualModel(
     layoutOnlyWhenInvisible,
     warnings,
   };
-}
-
-function emitGeometryXml(geometry: ResolvedVisualGeometry): {
-  readonly xml: string;
-  readonly name: string;
-} {
-  switch (geometry.kind) {
-    case "preset": {
-      const values = Object.entries(geometry.adjust)
-        .map(([key, amount]) => `<a:gd name="${key}" fmla="val ${amount}"/>`)
-        .join("");
-      return {
-        xml: `<a:prstGeom prst="${geometry.name}"><a:avLst>${values}</a:avLst></a:prstGeom>`,
-        name: geometry.name,
-      };
-    }
-    case "custom": {
-      const widthUnits = point(geometry.width, "geometry.width");
-      const heightUnits = point(geometry.height, "geometry.height");
-      const pathList = geometry.paths
-        .map((path) => {
-          const commands = path.commands.map(pathCommandXml).join("");
-          return `<a:path w="${widthUnits}" h="${heightUnits}"${path.fill === false ? ' fill="none"' : ""}${path.stroke === false ? ' stroke="0"' : ""}>${commands}</a:path>`;
-        })
-        .join("");
-      return {
-        xml: `<a:custGeom><a:avLst/><a:gdLst/><a:ahLst/><a:cxnLst/><a:rect l="l" t="t" r="r" b="b"/><a:pathLst>${pathList}</a:pathLst></a:custGeom>`,
-        name: "custom",
-      };
-    }
-    default: {
-      const exhaustive: never = geometry;
-      return exhaustive;
-    }
-  }
 }
 
 function emitFillXml(
@@ -1011,18 +787,19 @@ export function emitVisualModel(
     model.layoutOnlyWhenInvisible && !model.hasVisibleStyle
       ? ""
       : `<a:xfrm${model.rotationUnits === undefined || model.rotationUnits === 0 ? "" : ` rot="${model.rotationUnits}"`}${model.flipH ? ' flipH="1"' : ""}${model.flipV ? ' flipV="1"' : ""}><a:off x="${emu(box.x, "x", true, true)}" y="${emu(box.y, "y", true, true)}"/><a:ext cx="${emu(box.width, "width", false)}" cy="${emu(box.height, "height", false)}"/></a:xfrm>`;
-  const geometry = emitGeometryXml(model.geometry);
+  const geometryXmlText = resolvedGeometryXml(model.geometry);
   const visualFill = options?.omitFill
     ? ""
     : emitFillXml(model.fill, registerResource);
   const line = emitBorderXml(model.border);
   const effects = emitEffectsXml(model);
   return {
-    xml: `<p:spPr>${transform}${geometry.xml}${visualFill}${line}${effects}</p:spPr>`,
+    xml: `<p:spPr>${transform}${geometryXmlText}${visualFill}${line}${effects}</p:spPr>`,
     ...(model.opacity === undefined ? {} : { opacity: model.opacity }),
     warnings: model.warnings,
     hasVisibleStyle: model.hasVisibleStyle,
-    geometryName: geometry.name,
+    geometryName: model.geometryName,
+    geometry: model.geometry,
   };
 }
 
@@ -1194,21 +971,23 @@ function extractOpenSubpathEnds(subpath: readonly PathCommand[]):
   let startTangent: Point2 | undefined;
   let firstSegLen = 0;
 
-  // Outgoing tangent at t=0 of the first segment (walking subsequent points if control points coincide).
   for (let i = 1; i < subpath.length; i += 1) {
     const cmd = subpath[i]!;
     if (cmd.op === "L") {
-      if (i === 1) firstSegLen = Math.hypot(cmd.x - startPoint.x, cmd.y - startPoint.y);
+      if (i === 1)
+        firstSegLen = Math.hypot(cmd.x - startPoint.x, cmd.y - startPoint.y);
       startTangent = normalizeVec(cmd.x - startPoint.x, cmd.y - startPoint.y);
       if (startTangent !== undefined) break;
     } else if (cmd.op === "Q") {
-      if (i === 1) firstSegLen = Math.hypot(cmd.x - startPoint.x, cmd.y - startPoint.y);
+      if (i === 1)
+        firstSegLen = Math.hypot(cmd.x - startPoint.x, cmd.y - startPoint.y);
       startTangent =
         normalizeVec(cmd.x1 - startPoint.x, cmd.y1 - startPoint.y) ??
         normalizeVec(cmd.x - startPoint.x, cmd.y - startPoint.y);
       if (startTangent !== undefined) break;
     } else if (cmd.op === "C") {
-      if (i === 1) firstSegLen = Math.hypot(cmd.x - startPoint.x, cmd.y - startPoint.y);
+      if (i === 1)
+        firstSegLen = Math.hypot(cmd.x - startPoint.x, cmd.y - startPoint.y);
       startTangent =
         normalizeVec(cmd.x1 - startPoint.x, cmd.y1 - startPoint.y) ??
         normalizeVec(cmd.x2 - startPoint.x, cmd.y2 - startPoint.y) ??
@@ -1229,13 +1008,22 @@ function extractOpenSubpathEnds(subpath: readonly PathCommand[]):
     const prevPoint: Point2 = { x: prevCmd.x, y: prevCmd.y };
     if (cmd.op === "L") {
       if (i === subpath.length - 1) {
-        lastSegLen = Math.hypot(endPoint.x - prevPoint.x, endPoint.y - prevPoint.y);
+        lastSegLen = Math.hypot(
+          endPoint.x - prevPoint.x,
+          endPoint.y - prevPoint.y,
+        );
       }
-      endTangent = normalizeVec(endPoint.x - prevPoint.x, endPoint.y - prevPoint.y);
+      endTangent = normalizeVec(
+        endPoint.x - prevPoint.x,
+        endPoint.y - prevPoint.y,
+      );
       if (endTangent !== undefined) break;
     } else if (cmd.op === "Q") {
       if (i === subpath.length - 1) {
-        lastSegLen = Math.hypot(endPoint.x - prevPoint.x, endPoint.y - prevPoint.y);
+        lastSegLen = Math.hypot(
+          endPoint.x - prevPoint.x,
+          endPoint.y - prevPoint.y,
+        );
       }
       endTangent =
         normalizeVec(endPoint.x - cmd.x1, endPoint.y - cmd.y1) ??
@@ -1243,7 +1031,10 @@ function extractOpenSubpathEnds(subpath: readonly PathCommand[]):
       if (endTangent !== undefined) break;
     } else if (cmd.op === "C") {
       if (i === subpath.length - 1) {
-        lastSegLen = Math.hypot(endPoint.x - prevPoint.x, endPoint.y - prevPoint.y);
+        lastSegLen = Math.hypot(
+          endPoint.x - prevPoint.x,
+          endPoint.y - prevPoint.y,
+        );
       }
       endTangent =
         normalizeVec(endPoint.x - cmd.x2, endPoint.y - cmd.y2) ??
@@ -1338,193 +1129,193 @@ function borderAttributes(border: ResolvedBorder | undefined): string {
   return `stroke="#${border.color.hex}" stroke-opacity="${roundSvgNumber(border.color.alpha ?? 1)}" stroke-width="${roundSvgNumber(border.width)}"${dashAttr}`;
 }
 
-function renderOpenSubpathWithArrows(
-  subpaths: readonly (readonly PathCommand[])[],
-  fillAttr: string,
-  border: ResolvedBorder | undefined,
-  allowFill: boolean,
-  allowStroke: boolean,
+function subpathFillHex(
+  baseHex: string,
+  fillMode: Exclude<"norm" | PresetPathFillMode, "none">,
 ): string {
-  const strokeAttr = allowStroke
-    ? borderAttributes(border)
-    : 'stroke="none" stroke-width="0"';
-  const startArrow = border?.startArrow ?? "none";
-  const endArrow = border?.endArrow ?? "none";
-  const hasArrows =
-    allowStroke &&
-    border !== undefined &&
-    (startArrow !== "none" || endArrow !== "none");
-
-  if (!hasArrows) {
-    const combinedD = subpaths.map(commandsToSvgPath).join(" ");
-    return `<path d="${combinedD}" ${allowFill ? fillAttr : 'fill="none"'} ${strokeAttr}/>`;
-  }
-
-  const startShorten = arrowShortenLength(startArrow, border.width);
-  const endShorten = arrowShortenLength(endArrow, border.width);
-  const fragments: string[] = [];
-
-  if (allowFill) {
-    const fillD = subpaths.map(commandsToSvgPath).join(" ");
-    fragments.push(`<path d="${fillD}" ${fillAttr} stroke="none"/>`);
-  }
-
-  const strokeAlpha = border.color.alpha ?? 1;
-  for (const subpath of subpaths) {
-    const ends = extractOpenSubpathEnds(subpath);
-    if (ends === undefined) {
-      fragments.push(
-        `<path d="${commandsToSvgPath(subpath)}" fill="none" ${strokeAttr}/>`,
-      );
-      continue;
-    }
-    const shortened = shortenOpenSubpath(
-      subpath,
-      startShorten,
-      endShorten,
-      ends,
-    );
-    fragments.push(
-      `<path d="${commandsToSvgPath(shortened)}" fill="none" ${strokeAttr}/>`,
-    );
-    if (startArrow !== "none") {
-      fragments.push(
-        arrowHeadSvg(
-          startArrow,
-          ends.startPoint,
-          { x: -ends.startTangent.x, y: -ends.startTangent.y },
-          border.color.hex,
-          strokeAlpha,
-          border.width,
-        ),
-      );
-    }
-    if (endArrow !== "none") {
-      fragments.push(
-        arrowHeadSvg(
-          endArrow,
-          ends.endPoint,
-          ends.endTangent,
-          border.color.hex,
-          strokeAlpha,
-          border.width,
-        ),
-      );
-    }
-  }
-  return fragments.join("");
-}
-
-function renderGeometryElements(
-  model: ResolvedVisualModel,
-  fillAttr: string,
-  overrideAttrs?: string,
-): string {
-  const { box, geometry, border } = model;
-  const attrs = overrideAttrs ?? `${fillAttr} ${borderAttributes(border)}`;
-  const hasFill = overrideAttrs !== undefined || model.fill.kind !== "none";
-
-  switch (geometry.kind) {
-    case "preset": {
-      if (geometry.name === "rect") {
-        return `<rect x="${roundSvgNumber(box.x)}" y="${roundSvgNumber(box.y)}" width="${roundSvgNumber(box.width)}" height="${roundSvgNumber(box.height)}" ${attrs}/>`;
-      }
-      if (geometry.name === "roundRect") {
-        const rawAdj = geometry.adjust["adj"] ?? 16667;
-        const clampedAdj = Math.max(0, Math.min(50000, rawAdj));
-        const r = roundSvgNumber(
-          (clampedAdj / 100000) * Math.min(box.width, box.height),
-        );
-        return `<rect x="${roundSvgNumber(box.x)}" y="${roundSvgNumber(box.y)}" width="${roundSvgNumber(box.width)}" height="${roundSvgNumber(box.height)}" rx="${r}" ry="${r}" ${attrs}/>`;
-      }
-      if (geometry.name === "ellipse") {
-        const cx = roundSvgNumber(box.x + box.width / 2);
-        const cy = roundSvgNumber(box.y + box.height / 2);
-        return `<ellipse cx="${cx}" cy="${cy}" rx="${roundSvgNumber(box.width / 2)}" ry="${roundSvgNumber(box.height / 2)}" ${attrs}/>`;
-      }
-      if (geometry.name === "line") {
-        const lineSubpath: readonly PathCommand[] = [
-          { op: "M", x: box.x, y: box.y },
-          { op: "L", x: box.x + box.width, y: box.y + box.height },
-        ];
-        if (overrideAttrs !== undefined) {
-          return `<path d="${commandsToSvgPath(lineSubpath)}" ${overrideAttrs}/>`;
-        }
-        return renderOpenSubpathWithArrows(
-          [lineSubpath],
-          fillAttr,
-          border,
-          false,
-          border !== undefined,
-        );
-      }
-      throw new CapabilityError(
-        "preview-unsupported-geometry",
-        "Preview does not yet support this shape geometry",
-      );
-    }
-    case "custom": {
-      const scaleX = box.width / geometry.width;
-      const scaleY = box.height / geometry.height;
-      const mapCmd = (command: PathCommand): PathCommand => {
-        switch (command.op) {
-          case "Z":
-            return command;
-          case "M":
-          case "L":
-            return {
-              op: command.op,
-              x: box.x + command.x * scaleX,
-              y: box.y + command.y * scaleY,
-            };
-          case "Q":
-            return {
-              op: "Q",
-              x1: box.x + command.x1 * scaleX,
-              y1: box.y + command.y1 * scaleY,
-              x: box.x + command.x * scaleX,
-              y: box.y + command.y * scaleY,
-            };
-          case "C":
-            return {
-              op: "C",
-              x1: box.x + command.x1 * scaleX,
-              y1: box.y + command.y1 * scaleY,
-              x2: box.x + command.x2 * scaleX,
-              y2: box.y + command.y2 * scaleY,
-              x: box.x + command.x * scaleX,
-              y: box.y + command.y * scaleY,
-            };
-          default: {
-            const exhaustive: never = command;
-            return exhaustive;
-          }
-        }
-      };
-
-      return geometry.paths
-        .map((geometryPath) => {
-          const scaledCommands = geometryPath.commands.map(mapCmd);
-          const subpaths = splitSubpaths(scaledCommands);
-          if (overrideAttrs !== undefined) {
-            const d = subpaths.map(commandsToSvgPath).join(" ");
-            return `<path d="${d}" ${overrideAttrs}/>`;
-          }
-          return renderOpenSubpathWithArrows(
-            subpaths,
-            fillAttr,
-            border,
-            hasFill && geometryPath.fill !== false,
-            border !== undefined && geometryPath.stroke !== false,
-          );
-        })
-        .join("");
-    }
+  switch (fillMode) {
+    case "norm":
+      return baseHex;
+    case "lighten":
+      return shadeHex(baseHex, 0.6, 0.4);
+    case "lightenLess":
+      return shadeHex(baseHex, 0.8, 0.2);
+    case "darken":
+      return shadeHex(baseHex, 0.6, 0);
+    case "darkenLess":
+      return shadeHex(baseHex, 0.8, 0);
     default: {
-      const exhaustive: never = geometry;
+      const exhaustive: never = fillMode;
       return exhaustive;
     }
   }
+}
+
+function shadeOverlayAttrs(
+  fillMode: Exclude<"norm" | PresetPathFillMode, "none">,
+): string | undefined {
+  switch (fillMode) {
+    case "norm":
+      return undefined;
+    case "lighten":
+      return 'fill="#FFFFFF" fill-opacity="0.35"';
+    case "lightenLess":
+      return 'fill="#FFFFFF" fill-opacity="0.2"';
+    case "darken":
+      return 'fill="#000000" fill-opacity="0.3"';
+    case "darkenLess":
+      return 'fill="#000000" fill-opacity="0.15"';
+    default: {
+      const exhaustive: never = fillMode;
+      return exhaustive;
+    }
+  }
+}
+
+function resolveSubpathFill(
+  fill: ResolvedFill,
+  fillDefId: string | undefined,
+  fillMode: "norm" | PresetPathFillMode,
+): {
+  readonly fillAttr: string;
+  readonly overlayAttr: string | undefined;
+  readonly hasFill: boolean;
+} {
+  if (fillMode === "none") {
+    return { fillAttr: 'fill="none"', overlayAttr: undefined, hasFill: false };
+  }
+  switch (fill.kind) {
+    case "none":
+      return {
+        fillAttr: 'fill="none"',
+        overlayAttr: undefined,
+        hasFill: false,
+      };
+    case "solid": {
+      const hex = subpathFillHex(fill.color.hex, fillMode);
+      return {
+        fillAttr: `fill="#${hex}" fill-opacity="${roundSvgNumber(fill.color.alpha ?? 1)}"`,
+        overlayAttr: undefined,
+        hasFill: true,
+      };
+    }
+    case "linear-gradient":
+    case "radial-gradient":
+    case "image":
+      return {
+        fillAttr: `fill="url(#${fillDefId})" fill-opacity="1"`,
+        overlayAttr: shadeOverlayAttrs(fillMode),
+        hasFill: true,
+      };
+    default: {
+      const exhaustive: never = fill;
+      return exhaustive;
+    }
+  }
+}
+
+function renderEvaluatedGeometryElements(
+  model: ResolvedVisualModel,
+  fillDefId: string | undefined,
+  overrideAttrs?: string,
+): string {
+  const evaluated = evaluateGeometry(model.geometry, model.box);
+  const { border } = model;
+  const strokeAttr = borderAttributes(border);
+  const startArrow = border?.startArrow ?? "none";
+  const endArrow = border?.endArrow ?? "none";
+
+  return evaluated.paths
+    .map((pathItem) => {
+      if (overrideAttrs !== undefined) {
+        if (
+          pathItem.fillMode === "none" &&
+          (!pathItem.stroke || border === undefined)
+        ) {
+          return "";
+        }
+        return `<path d="${pathItem.d}" ${overrideAttrs}/>`;
+      }
+
+      const { fillAttr, overlayAttr, hasFill } = resolveSubpathFill(
+        model.fill,
+        fillDefId,
+        pathItem.fillMode,
+      );
+      const allowStroke = pathItem.stroke && border !== undefined;
+      const subpaths = splitSubpaths(pathItem.commands);
+      const hasOpenSubpath = subpaths.some((sp) => sp.at(-1)?.op !== "Z");
+      const hasArrows =
+        allowStroke &&
+        hasOpenSubpath &&
+        (startArrow !== "none" || endArrow !== "none");
+
+      if (!hasArrows) {
+        const base = `<path d="${pathItem.d}" ${fillAttr} ${allowStroke ? strokeAttr : 'stroke="none" stroke-width="0"'}/>`;
+        return overlayAttr === undefined
+          ? base
+          : `${base}<path d="${pathItem.d}" ${overlayAttr} stroke="none" stroke-width="0"/>`;
+      }
+
+      const fragments: string[] = [];
+      if (hasFill) {
+        fragments.push(`<path d="${pathItem.d}" ${fillAttr} stroke="none"/>`);
+        if (overlayAttr !== undefined) {
+          fragments.push(
+            `<path d="${pathItem.d}" ${overlayAttr} stroke="none"/>`,
+          );
+        }
+      }
+
+      const startShorten = arrowShortenLength(startArrow, border.width);
+      const endShorten = arrowShortenLength(endArrow, border.width);
+      const strokeAlpha = border.color.alpha ?? 1;
+
+      for (const subpath of subpaths) {
+        const ends = extractOpenSubpathEnds(subpath);
+        if (ends === undefined) {
+          fragments.push(
+            `<path d="${commandsToSvgPath(subpath)}" fill="none" ${strokeAttr}/>`,
+          );
+          continue;
+        }
+        const shortened = shortenOpenSubpath(
+          subpath,
+          startShorten,
+          endShorten,
+          ends,
+        );
+        fragments.push(
+          `<path d="${commandsToSvgPath(shortened)}" fill="none" ${strokeAttr}/>`,
+        );
+        if (startArrow !== "none") {
+          fragments.push(
+            arrowHeadSvg(
+              startArrow,
+              ends.startPoint,
+              { x: -ends.startTangent.x, y: -ends.startTangent.y },
+              border.color.hex,
+              strokeAlpha,
+              border.width,
+            ),
+          );
+        }
+        if (endArrow !== "none") {
+          fragments.push(
+            arrowHeadSvg(
+              endArrow,
+              ends.endPoint,
+              ends.endTangent,
+              border.color.hex,
+              strokeAlpha,
+              border.width,
+            ),
+          );
+        }
+      }
+      return fragments.join("");
+    })
+    .join("");
 }
 
 /**
@@ -1542,30 +1333,25 @@ export function paintVisualModel(options: {
   const prefix = `obj-s${slideNumber}-o${objectId}`;
   const defs: string[] = [];
 
-  let fillAttr: string;
+  let fillDefId: string | undefined;
   switch (model.fill.kind) {
     case "none":
-      fillAttr = 'fill="none"';
-      break;
     case "solid":
-      fillAttr = `fill="#${model.fill.color.hex}" fill-opacity="${roundSvgNumber(model.fill.color.alpha ?? 1)}"`;
       break;
     case "linear-gradient":
     case "radial-gradient": {
-      const gradId = `${prefix}-fill`;
-      defs.push(gradientDefSvg(gradId, model.fill));
-      fillAttr = `fill="url(#${gradId})" fill-opacity="1"`;
+      fillDefId = `${prefix}-fill`;
+      defs.push(gradientDefSvg(fillDefId, model.fill));
       break;
     }
     case "image": {
       const pngBytes = decodeImageToPngBytes(model.fill.image);
       const base64 = Buffer.from(pngBytes).toString("base64");
-      const patId = `${prefix}-fill`;
+      fillDefId = `${prefix}-fill`;
       const imgOpacity = roundSvgNumber(model.fill.opacity ?? 1);
       defs.push(
-        `<pattern id="${patId}" patternUnits="userSpaceOnUse" x="${roundSvgNumber(box.x)}" y="${roundSvgNumber(box.y)}" width="${roundSvgNumber(box.width)}" height="${roundSvgNumber(box.height)}"><image x="0" y="0" width="${roundSvgNumber(box.width)}" height="${roundSvgNumber(box.height)}" preserveAspectRatio="none" opacity="${imgOpacity}" href="data:image/png;base64,${base64}"/></pattern>`,
+        `<pattern id="${fillDefId}" patternUnits="userSpaceOnUse" x="${roundSvgNumber(box.x)}" y="${roundSvgNumber(box.y)}" width="${roundSvgNumber(box.width)}" height="${roundSvgNumber(box.height)}"><image x="0" y="0" width="${roundSvgNumber(box.width)}" height="${roundSvgNumber(box.height)}" preserveAspectRatio="none" opacity="${imgOpacity}" href="data:image/png;base64,${base64}"/></pattern>`,
       );
-      fillAttr = `fill="url(#${patId})" fill-opacity="1"`;
       break;
     }
     default: {
@@ -1574,7 +1360,7 @@ export function paintVisualModel(options: {
     }
   }
 
-  let content = renderGeometryElements(model, fillAttr);
+  let content = renderEvaluatedGeometryElements(model, fillDefId);
 
   if (model.softEdge !== undefined && model.softEdge > 0) {
     const r = model.softEdge;
@@ -1593,7 +1379,11 @@ export function paintVisualModel(options: {
       innerStrokeWidth > 0
         ? `fill="white" stroke="black" stroke-width="${roundSvgNumber(innerStrokeWidth)}" filter="url(#${blurId})"`
         : `fill="white" stroke="none" filter="url(#${blurId})"`;
-    const maskShapes = renderGeometryElements(model, fillAttr, maskAttrs);
+    const maskShapes = renderEvaluatedGeometryElements(
+      model,
+      fillDefId,
+      maskAttrs,
+    );
     defs.push(
       `<filter id="${blurId}" filterUnits="userSpaceOnUse" x="${maskX}" y="${maskY}" width="${maskW}" height="${maskH}"><feGaussianBlur stdDeviation="${roundSvgNumber(r / 2)}"/></filter>`,
     );

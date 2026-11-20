@@ -44,13 +44,16 @@ import {
   chartTextStyleKeys,
   textOnlyChartStyle,
   type ParsedAxisCrossing,
+  type ParsedCategoryAxis,
   type ParsedChart,
   type ParsedChartAxis,
   type ParsedChartGroup,
   type ParsedChartSeries,
   type ParsedScatterSeries,
+  type ParsedValueAxis,
+  type ResolvedCartesianAxes,
+  type ResolvedScatterAxes,
 } from "./chart-model.ts";
-import { drawChartPreview } from "./chart-preview.ts";
 import type {
   ChartAxis,
   ChartAxisCrossing,
@@ -95,6 +98,7 @@ import {
   chartWorkbook,
   type ChartTextStyleXml,
 } from "./chart-xml.ts";
+import { drawChartPreview } from "./preview/index.ts";
 
 const chartRelationship =
   "http://schemas.openxmlformats.org/officeDocument/2006/relationships/chart";
@@ -2288,12 +2292,17 @@ function axisEntries(
   return { entries, axisless: false };
 }
 
+type ResolvedParsedGroupAxes =
+  | ({ readonly kind: "category" } & ResolvedCartesianAxes)
+  | ({ readonly kind: "scatter" } & ResolvedScatterAxes)
+  | undefined;
+
 function parsedAxes(
   value: unknown,
   groups: readonly ParsedGroupDraft[],
 ): {
   axes: ParsedChartAxis[];
-  groupAxes: (ParsedChartGroup["axes"] | undefined)[];
+  groupAxes: ResolvedParsedGroupAxes[];
 } {
   const { entries, axisless } = axisEntries(value, groups);
   if (axisless) {
@@ -2691,28 +2700,44 @@ function parsedAxes(
     second.crossAxisId ??= first.id!;
   }
 
-  const parsed = firstUse.map((axis) => ({
-    name: axis.name,
-    id: axis.id!,
-    crossAxisId: axis.crossAxisId!,
-    direction: axis.direction!,
-    position: axis.position!,
-    crossing: axis.crossing!,
-    spec: axis.spec,
-  }));
+  const parsed: ParsedChartAxis[] = firstUse.map((axis) =>
+    axis.spec.kind === "category"
+      ? {
+          kind: "category",
+          name: axis.name,
+          id: axis.id!,
+          crossAxisId: axis.crossAxisId!,
+          direction: axis.direction!,
+          position: axis.position!,
+          crossing: axis.crossing!,
+          spec: axis.spec,
+        }
+      : {
+          kind: "value",
+          name: axis.name,
+          id: axis.id!,
+          crossAxisId: axis.crossAxisId!,
+          direction: axis.direction!,
+          position: axis.position!,
+          crossing: axis.crossing!,
+          spec: axis.spec,
+        },
+  );
 
   const parsedByDraft = new Map(
     firstUse.map((axis, index) => [axis, parsed[index]!]),
   );
-  const groupAxes = resolvedGroups.map((group) =>
+  const groupAxes: ResolvedParsedGroupAxes[] = resolvedGroups.map((group) =>
     group.kind === "category"
       ? {
-          category: parsedByDraft.get(group.category)!,
-          value: parsedByDraft.get(group.value)!,
+          kind: "category",
+          category: parsedByDraft.get(group.category) as ParsedCategoryAxis,
+          value: parsedByDraft.get(group.value) as ParsedValueAxis,
         }
       : {
-          x: parsedByDraft.get(group.x)!,
-          y: parsedByDraft.get(group.y)!,
+          kind: "scatter",
+          x: parsedByDraft.get(group.x) as ParsedValueAxis,
+          y: parsedByDraft.get(group.y) as ParsedValueAxis,
         },
   );
   return { axes: parsed, groupAxes };
@@ -2825,13 +2850,8 @@ export const chartCapability: ObjectCapabilityModule = {
     for (const [groupIndex, draft] of drafts.entries()) {
       if (draft.kind === "scatter") continue;
       if (draft.data.kind !== "shared-categories") continue;
-      const resolved = groupAxes[groupIndex] as
-        | {
-            readonly category: ParsedChartAxis;
-            readonly value: ParsedChartAxis;
-          }
-        | undefined;
-      if (resolved === undefined) continue;
+      const resolved = groupAxes[groupIndex];
+      if (resolved === undefined || resolved.kind !== "category") continue;
       const domain = draft.data.categories;
       const existing = categoryDomains.get(resolved.category.name);
       if (existing === undefined) {
@@ -2851,26 +2871,30 @@ export const chartCapability: ObjectCapabilityModule = {
 
     let seriesIndex = 0;
     const groups: ParsedChartGroup[] = drafts.map((draft, groupIndex) => {
+      const resolvedAxes = groupAxes[groupIndex];
       if (draft.kind === "scatter") {
+        if (resolvedAxes === undefined || resolvedAxes.kind !== "scatter") {
+          fail(
+            "invalid-chart-axes",
+            `Chart.groups[${groupIndex}] is missing resolved X and Y axes`,
+          );
+        }
         const series = draft.series.map((item, groupSeriesIndex) => ({
           ...item,
           groupIndex,
           groupSeriesIndex,
           seriesIndex: seriesIndex++,
         }));
-        const parsedGroupAxes = groupAxes[groupIndex] as
-          | { readonly x: ParsedChartAxis; readonly y: ParsedChartAxis }
-          | undefined;
         return {
           kind: "scatter",
           data: draft.data,
           series,
+          axes: { x: resolvedAxes.x, y: resolvedAxes.y },
+          line: draft.line ?? false,
           markers: draft.markers,
-          ...(parsedGroupAxes === undefined ? {} : { axes: parsedGroupAxes }),
           ...(draft.dataLabels === undefined
             ? {}
             : { dataLabels: draft.dataLabels }),
-          ...(draft.line === undefined ? {} : { line: draft.line }),
         };
       }
       const series = draft.series.map((item, groupSeriesIndex) => ({
@@ -2879,30 +2903,75 @@ export const chartCapability: ObjectCapabilityModule = {
         groupSeriesIndex,
         seriesIndex: seriesIndex++,
       }));
-      const parsedGroupAxes = groupAxes[groupIndex] as
-        | {
-            readonly category: ParsedChartAxis;
-            readonly value: ParsedChartAxis;
-          }
-        | undefined;
+      if (draft.kind === "pie") {
+        const firstSeries = series[0];
+        if (firstSeries === undefined || series.length !== 1) {
+          fail(
+            "invalid-data",
+            "pie chart currently only supports a single data series",
+          );
+        }
+        return {
+          kind: "pie",
+          data: draft.data as SharedCategoryData,
+          series: [firstSeries],
+          firstSliceAngle: draft.firstSliceAngle ?? 0,
+          ...(draft.explosion === undefined
+            ? {}
+            : { explosion: draft.explosion }),
+          ...(draft.dataLabels === undefined
+            ? {}
+            : { dataLabels: draft.dataLabels }),
+        };
+      }
+      if (draft.kind === "doughnut") {
+        return {
+          kind: "doughnut",
+          data: draft.data,
+          series,
+          firstSliceAngle: draft.firstSliceAngle ?? 0,
+          holeSize: draft.holeSize ?? 50,
+          ...(draft.explosion === undefined
+            ? {}
+            : { explosion: draft.explosion }),
+          ...(draft.dataLabels === undefined
+            ? {}
+            : { dataLabels: draft.dataLabels }),
+        };
+      }
+      if (resolvedAxes === undefined || resolvedAxes.kind !== "category") {
+        fail(
+          "invalid-chart-axes",
+          `Chart.groups[${groupIndex}] is missing resolved category and value axes`,
+        );
+      }
+      const cartesianAxes: ResolvedCartesianAxes = {
+        category: resolvedAxes.category,
+        value: resolvedAxes.value,
+      };
+      if (draft.kind === "column" || draft.kind === "bar") {
+        return {
+          kind: draft.kind,
+          data: draft.data as SharedCategoryData,
+          series,
+          axes: cartesianAxes,
+          stacking: draft.stacking ?? "clustered",
+          gapWidth: draft.gapWidth ?? 150,
+          ...(draft.overlap === undefined ? {} : { overlap: draft.overlap }),
+          ...(draft.dataLabels === undefined
+            ? {}
+            : { dataLabels: draft.dataLabels }),
+        };
+      }
       return {
         kind: draft.kind,
-        data: draft.data,
+        data: draft.data as SharedCategoryData,
         series,
-        ...(parsedGroupAxes === undefined ? {} : { axes: parsedGroupAxes }),
+        axes: cartesianAxes,
+        stacking: draft.stacking ?? "standard",
         ...(draft.dataLabels === undefined
           ? {}
           : { dataLabels: draft.dataLabels }),
-        ...(draft.stacking === undefined ? {} : { stacking: draft.stacking }),
-        ...(draft.gapWidth === undefined ? {} : { gapWidth: draft.gapWidth }),
-        ...(draft.overlap === undefined ? {} : { overlap: draft.overlap }),
-        ...(draft.explosion === undefined
-          ? {}
-          : { explosion: draft.explosion }),
-        ...(draft.firstSliceAngle === undefined
-          ? {}
-          : { firstSliceAngle: draft.firstSliceAngle }),
-        ...(draft.holeSize === undefined ? {} : { holeSize: draft.holeSize }),
       };
     });
     const series = groups.flatMap(
@@ -2944,11 +3013,12 @@ export const chartCapability: ObjectCapabilityModule = {
       legend !== "top" &&
       legend !== "bottom" &&
       legend !== "left" &&
-      legend !== "right"
+      legend !== "right" &&
+      legend !== "topRight"
     ) {
       fail(
         "invalid-legend",
-        "Chart.legend must be false, top, bottom, left, or right",
+        "Chart.legend must be false, top, bottom, left, right, or topRight",
       );
     }
     const checkedPlotArea = plotArea(
@@ -3542,13 +3612,14 @@ function chartResourceClaims(
 } {
   const categoryLabels = new Map<string, readonly string[]>();
   for (const group of parsed.groups) {
-    if (group.kind === "scatter" || group.axes === undefined) continue;
-    categoryLabels.set(
-      group.axes.category.name,
-      group.data.kind === "independent-categories"
-        ? (group.series[0]?.categories ?? [])
-        : group.data.categories,
-    );
+    if (
+      group.kind === "scatter" ||
+      group.kind === "pie" ||
+      group.kind === "doughnut"
+    ) {
+      continue;
+    }
+    categoryLabels.set(group.axes.category.name, group.data.categories);
   }
   const dataLabelText = parsed.groups.flatMap((group) =>
     group.dataLabels !== undefined &&
@@ -3565,7 +3636,12 @@ function chartResourceClaims(
     ...dataLabelText,
   ];
   const percentStacked = parsed.groups.some(
-    (group) => group.kind !== "scatter" && group.stacking === "percent",
+    (group) =>
+      (group.kind === "column" ||
+        group.kind === "bar" ||
+        group.kind === "line" ||
+        group.kind === "area") &&
+      group.stacking === "percent",
   );
   const axisCharacters = (spec: ChartAxis): string[] =>
     spec.visible === false

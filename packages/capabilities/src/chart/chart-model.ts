@@ -7,20 +7,20 @@ import type {
 
 import type { TextStyle } from "../shared/text-service.ts";
 import type {
-  ChartAxis,
   ChartAxisCrossing,
   ChartAxisPosition,
+  ChartCategoryAxis,
   ChartDataLabelSettings,
   ChartDisplayBlanksAs,
-  ChartGroupData,
-  ChartKind,
   ChartProps,
   ChartSeries,
   ChartTitle,
+  ChartValueAxis,
   IndependentCategoryData,
   ScatterChartSeries,
   ScatterData,
   ScatterLine,
+  SharedCategoryData,
 } from "./chart-types.ts";
 
 export const chartTextStyleKeys = [
@@ -73,7 +73,8 @@ export type ParsedAxisCrossing =
   | { readonly kind: "crosses"; readonly value: ChartAxisCrossing }
   | { readonly kind: "crossesAt"; readonly value: number };
 
-export type ParsedChartAxis = {
+export type ParsedCategoryAxis = {
+  readonly kind: "category";
   readonly name: string;
   readonly id: number;
   readonly crossAxisId: number;
@@ -83,44 +84,98 @@ export type ParsedChartAxis = {
   readonly position: ChartAxisPosition;
   /** Effective native crossing control; explicit author values are preserved. */
   readonly crossing: ParsedAxisCrossing;
-  readonly spec: ChartAxis;
+  readonly spec: ChartCategoryAxis;
+};
+
+export type ParsedValueAxis = {
+  readonly kind: "value";
+  readonly name: string;
+  readonly id: number;
+  readonly crossAxisId: number;
+  /** Physical direction derived from every group reference to this axis. */
+  readonly direction: "horizontal" | "vertical";
+  /** Nominal axPos side; interior/autoZero crossings may not resolve to an edge. */
+  readonly position: ChartAxisPosition;
+  /** Effective native crossing control; explicit author values are preserved. */
+  readonly crossing: ParsedAxisCrossing;
+  readonly spec: ChartValueAxis;
+};
+
+export type ParsedChartAxis = ParsedCategoryAxis | ParsedValueAxis;
+
+export type ResolvedCartesianAxes = {
+  readonly category: ParsedCategoryAxis;
+  readonly value: ParsedValueAxis;
+};
+
+export type ResolvedScatterAxes = {
+  readonly x: ParsedValueAxis;
+  readonly y: ParsedValueAxis;
 };
 
 type ParsedGroupBase = {
   readonly dataLabels?: false | ChartDataLabelSettings;
 };
 
-type ParsedCategoryChartGroup = ParsedGroupBase & {
-  readonly kind: Exclude<ChartKind, "scatter">;
-  readonly data: ChartGroupData | IndependentCategoryData;
+export type ParsedColumnOrBarGroup = ParsedGroupBase & {
+  readonly kind: "column" | "bar";
+  readonly data: SharedCategoryData;
   readonly series: readonly ParsedChartSeries[];
-  readonly axes?: {
-    readonly category: ParsedChartAxis;
-    readonly value: ParsedChartAxis;
-  };
-  readonly stacking?: "stacked" | "percent";
-  readonly gapWidth?: number;
+  readonly axes: ResolvedCartesianAxes;
+  readonly stacking: "clustered" | "stacked" | "percent";
+  readonly gapWidth: number;
   readonly overlap?: number;
-  readonly explosion?: number;
-  readonly firstSliceAngle?: number;
-  readonly holeSize?: number;
 };
 
-type ParsedScatterChartGroup = ParsedGroupBase & {
+export type ParsedLineGroup = ParsedGroupBase & {
+  readonly kind: "line";
+  readonly data: SharedCategoryData;
+  readonly series: readonly ParsedChartSeries[];
+  readonly axes: ResolvedCartesianAxes;
+  readonly stacking: "standard" | "stacked" | "percent";
+};
+
+export type ParsedAreaGroup = ParsedGroupBase & {
+  readonly kind: "area";
+  readonly data: SharedCategoryData;
+  readonly series: readonly ParsedChartSeries[];
+  readonly axes: ResolvedCartesianAxes;
+  readonly stacking: "standard" | "stacked" | "percent";
+};
+
+export type ParsedPieGroup = ParsedGroupBase & {
+  readonly kind: "pie";
+  readonly data: SharedCategoryData;
+  readonly series: readonly [ParsedChartSeries];
+  readonly firstSliceAngle: number;
+  readonly explosion?: number;
+};
+
+export type ParsedDoughnutGroup = ParsedGroupBase & {
+  readonly kind: "doughnut";
+  readonly data: SharedCategoryData | IndependentCategoryData;
+  readonly series: readonly ParsedChartSeries[];
+  readonly firstSliceAngle: number;
+  readonly holeSize: number;
+  readonly explosion?: number;
+};
+
+export type ParsedScatterGroup = ParsedGroupBase & {
   readonly kind: "scatter";
   readonly data: ScatterData;
   readonly series: readonly ParsedScatterSeries[];
-  readonly axes?: {
-    readonly x: ParsedChartAxis;
-    readonly y: ParsedChartAxis;
-  };
-  readonly line?: ScatterLine;
+  readonly axes: ResolvedScatterAxes;
+  readonly line: ScatterLine;
   readonly markers: boolean;
 };
 
 export type ParsedChartGroup =
-  | ParsedCategoryChartGroup
-  | ParsedScatterChartGroup;
+  | ParsedColumnOrBarGroup
+  | ParsedLineGroup
+  | ParsedAreaGroup
+  | ParsedPieGroup
+  | ParsedDoughnutGroup
+  | ParsedScatterGroup;
 
 export type ParsedChart = {
   readonly name?: string;

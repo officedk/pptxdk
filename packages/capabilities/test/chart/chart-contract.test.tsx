@@ -96,12 +96,7 @@ describe("chartCapability resolved contract", () => {
     const page = painted.pages[0]!;
     assert.ok(page.png !== undefined);
     assert.ok(page.svg?.includes("<path"));
-    assert.equal(page.diagnostics.length, 1);
-    assert.equal(page.diagnostics[0]?.severity, "warning");
-    assert.equal(
-      page.diagnostics[0]?.path,
-      "deck/slide[overview]/chart[sales]",
-    );
+    assert.deepEqual(page.diagnostics, []);
 
     // Native emit keeps automatic <c:layout/> without preview's computed plot area.
     const emitted = emit(resolution);

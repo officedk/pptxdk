@@ -33,9 +33,11 @@ import {
   chartBarColumnVariantsScenario,
   chartComboDualAxesScenario,
   chartLineAreaParityScenario,
+  chartPieDoughnutAndLabelsParityScenario,
   chartPositiveScenario,
   chartRejectionScenario,
   chartScatterParityScenario,
+  chartTrendlinesAndErrorBarsParityScenario,
 } from "./scenarios.ts";
 
 function previewDocWith(modules: readonly CapabilityModule[]) {
@@ -75,6 +77,8 @@ describe("Chart capability acceptance", () => {
         chartLineAreaParityScenario,
         chartScatterParityScenario,
         chartComboDualAxesScenario,
+        chartPieDoughnutAndLabelsParityScenario,
+        chartTrendlinesAndErrorBarsParityScenario,
         chartRejectionScenario,
       ]) {
         const runs = await runCapabilityScenario(scenario, {

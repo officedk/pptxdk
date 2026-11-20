@@ -718,7 +718,8 @@ function dataLabels(
     labels.value === true ||
     labels.percent === true ||
     labels.category === true ||
-    labels.xValue === true;
+    labels.xValue === true ||
+    labels.seriesName === true;
   const leaderLineSettings = (labels: ChartDataLabelSettings) => {
     if (labels.leaderLines === undefined) return [];
     const visible = hasVisibleContent(labels);
@@ -769,7 +770,7 @@ function dataLabels(
             false)
           : false,
     }),
-    el("c:showSerName", { val: false }),
+    el("c:showSerName", { val: labels.seriesName ?? false }),
     // Persist percentage labels as disabled where the chart model cannot enable them.
     el("c:showPercent", {
       val:
@@ -778,6 +779,9 @@ function dataLabels(
           : false,
     }),
     el("c:showBubbleSize", { val: false }),
+    labels.separator === undefined
+      ? undefined
+      : el("c:separator", null, labels.separator),
     includeLeaderLines ? leaderLineSettings(labels) : undefined,
     categoryField
       ? categoryLabelFieldExtension(categoryLabelsEnabled(labels))

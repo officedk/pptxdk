@@ -287,6 +287,10 @@ type ScatterDataLabelContent = {
   readonly value?: boolean;
   /** Display the X coordinate; `value` keeps its Y meaning when both are enabled. */
   readonly xValue?: boolean;
+  /** Display the series name in each data label. */
+  readonly seriesName?: boolean;
+  /** Custom separator between displayed data-label fields. */
+  readonly separator?: string;
   /** Label position; omitted inherits the enclosing chart group or series. */
   readonly position?: "left" | "right" | "bottom" | "top" | "center";
   /** Excel number format applied to each displayed coordinate. */
@@ -478,6 +482,8 @@ export type ChartDataLabels<
   readonly value?: boolean;
   readonly percent?: boolean;
   readonly category?: boolean;
+  readonly seriesName?: boolean;
+  readonly separator?: string;
   readonly position?: Position;
   readonly numberFormat?: string;
   readonly leaderLines?: boolean | ChartLine;

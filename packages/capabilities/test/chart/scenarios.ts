@@ -216,14 +216,14 @@ export const chartRejectionScenario: CapabilityScenario = {
   capability: "rp:chart",
   kind: "rejection",
   description:
-    "Dual-author Chart rejection scenario verifying remaining unsupported chart kinds (doughnut/pie) error isolation while retaining native PPTX parts and unaffected pages.",
+    "Dual-author Chart rejection scenario verifying font-resource limitations (preview-missing-glyph and preview-unsupported-font) isolate failed pages while retaining native PPTX parts and unaffected sibling pages.",
   visualCheckpoints: [
-    "Page 1 (unsupported-doughnut-with-line): no PNG emitted; located error on chart[ring] while chart[trend] has no warning.",
-    "Page 2 (unsupported-pie): no PNG emitted; located error on chart[slices].",
-    "Page 3 (unaffected-column): white canvas with valid clustered column chart 'Healthy' ([12, 20]), blue bars (#2563EB), Y ticks, X labels (H1, H2), and zero diagnostics.",
+    "Page 1 (missing-glyph-chart): no PNG emitted; located preview-missing-glyph error on chart[cjk-in-latin] while sibling chart[healthy-line] has no warning.",
+    "Page 2 (missing-font-chart): no PNG emitted; located preview-unsupported-font error on chart[no-font-file].",
+    "Page 3 (unaffected-pie): white canvas with valid pie chart 'Healthy Share' ([40, 60]), blue (#2563EB) and amber (#F59E0B) slices, bottom legend, and zero diagnostics.",
   ],
   nativeCheckpoints: [
-    "Open exported PPTX in PowerPoint/WPS and verify Slide 1's doughnut & line charts, Slide 2's pie chart, and Slide 3's column chart all remain native charts.",
+    "Open exported PPTX in PowerPoint/WPS and verify Slide 1, Slide 2, and Slide 3 charts all remain native charts.",
   ],
   jsx() {
     return createElement(
@@ -231,24 +231,25 @@ export const chartRejectionScenario: CapabilityScenario = {
       { width: 640, height: 360, theme: chartTheme },
       createElement(
         Slide,
-        { id: "unsupported-doughnut-with-line", background: "#FFFFFF" },
+        { id: "missing-glyph-chart", background: "#FFFFFF" },
         createElement(Chart, {
-          id: "ring",
+          id: "cjk-in-latin",
           x: 20,
           y: 20,
           width: 280,
           height: 220,
+          title: "汉",
           style: { fontFamily: jostFont, fontSize: 12 },
           groups: [
             {
-              kind: "doughnut",
+              kind: "column",
               data: { kind: "shared-categories", categories: ["A", "B"] },
               series: [{ name: "Share", values: [40, 60] }],
             },
           ],
         }),
         createElement(Chart, {
-          id: "trend",
+          id: "healthy-line",
           x: 330,
           y: 20,
           width: 280,
@@ -265,17 +266,19 @@ export const chartRejectionScenario: CapabilityScenario = {
       ),
       createElement(
         Slide,
-        { id: "unsupported-pie", background: "#FFFFFF" },
+        { id: "missing-font-chart", background: "#FFFFFF" },
         createElement(Chart, {
-          id: "slices",
+          id: "no-font-file",
           x: 40,
           y: 20,
           width: 560,
           height: 300,
-          style: { fontFamily: jostFont, fontSize: 14 },
+          title: "Missing Font",
+          legend: "bottom",
+          style: { fontSize: 14 },
           groups: [
             {
-              kind: "pie",
+              kind: "doughnut",
               data: { kind: "shared-categories", categories: ["X", "Y"] },
               series: [{ name: "Share", values: [40, 60] }],
             },
@@ -284,22 +287,22 @@ export const chartRejectionScenario: CapabilityScenario = {
       ),
       createElement(
         Slide,
-        { id: "unaffected-column", background: "#FFFFFF" },
+        { id: "unaffected-pie", background: "#FFFFFF" },
         createElement(Chart, {
           id: "healthy",
           x: 40,
           y: 20,
           width: 560,
           height: 300,
-          title: "Healthy",
+          title: "Healthy Share",
           legend: "bottom",
           style: { fontFamily: jostFont, fontSize: 14 },
           groups: [
             {
-              kind: "column",
+              kind: "pie",
               data: { kind: "shared-categories", categories: ["H1", "H2"] },
-              series: [{ name: "Revenue", values: [12, 20] }],
-              dataLabels: { value: true },
+              series: [{ name: "Revenue", values: [40, 60] }],
+              dataLabels: { percent: true, position: "center" },
             },
           ],
         }),
@@ -308,27 +311,25 @@ export const chartRejectionScenario: CapabilityScenario = {
   },
   document() {
     return deck({ width: 640, height: 360, theme: chartTheme }).append(
-      slide({
-        id: "unsupported-doughnut-with-line",
-        background: "#FFFFFF",
-      }).append(
+      slide({ id: "missing-glyph-chart", background: "#FFFFFF" }).append(
         chart({
-          id: "ring",
+          id: "cjk-in-latin",
           x: 20,
           y: 20,
           width: 280,
           height: 220,
+          title: "汉",
           style: { fontFamily: jostFont, fontSize: 12 },
           groups: [
             {
-              kind: "doughnut",
+              kind: "column",
               data: { kind: "shared-categories", categories: ["A", "B"] },
               series: [{ name: "Share", values: [40, 60] }],
             },
           ],
         }),
         chart({
-          id: "trend",
+          id: "healthy-line",
           x: 330,
           y: 20,
           width: 280,
@@ -343,39 +344,41 @@ export const chartRejectionScenario: CapabilityScenario = {
           ],
         }),
       ),
-      slide({ id: "unsupported-pie", background: "#FFFFFF" }).append(
+      slide({ id: "missing-font-chart", background: "#FFFFFF" }).append(
         chart({
-          id: "slices",
+          id: "no-font-file",
           x: 40,
           y: 20,
           width: 560,
           height: 300,
-          style: { fontFamily: jostFont, fontSize: 14 },
+          title: "Missing Font",
+          legend: "bottom",
+          style: { fontSize: 14 },
           groups: [
             {
-              kind: "pie",
+              kind: "doughnut",
               data: { kind: "shared-categories", categories: ["X", "Y"] },
               series: [{ name: "Share", values: [40, 60] }],
             },
           ],
         }),
       ),
-      slide({ id: "unaffected-column", background: "#FFFFFF" }).append(
+      slide({ id: "unaffected-pie", background: "#FFFFFF" }).append(
         chart({
           id: "healthy",
           x: 40,
           y: 20,
           width: 560,
           height: 300,
-          title: "Healthy",
+          title: "Healthy Share",
           legend: "bottom",
           style: { fontFamily: jostFont, fontSize: 14 },
           groups: [
             {
-              kind: "column",
+              kind: "pie",
               data: { kind: "shared-categories", categories: ["H1", "H2"] },
-              series: [{ name: "Revenue", values: [12, 20] }],
-              dataLabels: { value: true },
+              series: [{ name: "Revenue", values: [40, 60] }],
+              dataLabels: { percent: true, position: "center" },
             },
           ],
         }),
@@ -392,7 +395,8 @@ export const chartRejectionScenario: CapabilityScenario = {
     expect(page1.diagnostics).toEqual([
       expect.objectContaining({
         severity: "error",
-        path: "deck/slide[unsupported-doughnut-with-line]/chart[ring]",
+        path: "deck/slide[missing-glyph-chart]/chart[cjk-in-latin]",
+        message: expect.stringMatching(/glyph/i),
       }),
     ]);
 
@@ -402,7 +406,8 @@ export const chartRejectionScenario: CapabilityScenario = {
     expect(page2.diagnostics).toEqual([
       expect.objectContaining({
         severity: "error",
-        path: "deck/slide[unsupported-pie]/chart[slices]",
+        path: "deck/slide[missing-font-chart]/chart[no-font-file]",
+        message: expect.stringMatching(/font file/i),
       }),
     ]);
 
@@ -412,16 +417,16 @@ export const chartRejectionScenario: CapabilityScenario = {
 
     const files = unzipSync(pptx);
     expect(strFromU8(files["ppt/charts/chart1.xml"]!)).toContain(
-      "<c:doughnutChart>",
+      "<c:barChart>",
     );
     expect(strFromU8(files["ppt/charts/chart2.xml"]!)).toContain(
       "<c:lineChart>",
     );
     expect(strFromU8(files["ppt/charts/chart3.xml"]!)).toContain(
-      "<c:pieChart>",
+      "<c:doughnutChart>",
     );
     expect(strFromU8(files["ppt/charts/chart4.xml"]!)).toContain(
-      "<c:barChart>",
+      "<c:pieChart>",
     );
   },
 };
@@ -2123,5 +2128,668 @@ export const chartComboDualAxesScenario: CapabilityScenario = {
     const chart2 = strFromU8(files["ppt/charts/chart2.xml"]!);
     expect(chart2).toContain('<c:barDir val="bar"/>');
     expect(chart2).toContain("<c:scatterChart>");
+  },
+};
+
+const pieDoughnutPage1Charts = [
+  {
+    id: "pie-full-circle-360",
+    x: 16,
+    y: 16,
+    width: 220,
+    height: 158,
+    title: "360 Full Pie",
+    style: { fontFamily: jostFont, fontSize: 11 },
+    groups: [
+      {
+        kind: "pie" as const,
+        firstSliceAngle: 45,
+        data: { kind: "shared-categories" as const, categories: ["Sole"] },
+        series: [
+          {
+            name: "Total",
+            values: [100],
+            points: { 0: { color: "#2563EB" } },
+          },
+        ],
+        dataLabels: {
+          seriesName: true,
+          percent: true,
+          separator: " - ",
+          position: "center" as const,
+          style: { color: "#FFFFFF", fontSize: 10 },
+        },
+      },
+    ],
+  },
+  {
+    id: "pie-exploded-leader-and-3level-labels",
+    x: 248,
+    y: 16,
+    width: 376,
+    height: 328,
+    title: "Exploded Pie & 3-Level Labels",
+    legend: "bottom" as const,
+    style: { fontFamily: jostFont, fontSize: 11 },
+    groups: [
+      {
+        kind: "pie" as const,
+        firstSliceAngle: 90,
+        explosion: 6,
+        data: {
+          kind: "shared-categories" as const,
+          categories: ["Cloud", "License", "Services", "Hardware"],
+        },
+        series: [
+          {
+            name: "Mix",
+            values: [45, 25, 20, 10],
+            points: {
+              0: {
+                color: "#10B981",
+                explosion: 18,
+                labelColor: "#065F46",
+                dataLabels: { position: "insideEnd" as const, percent: true },
+              },
+              1: {
+                color: "#F59E0B",
+                line: { color: "#1E293B", width: 1.5 },
+              },
+              2: {
+                color: "#8B5CF6",
+                dataLabels: false,
+              },
+              3: {
+                color: "#EC4899",
+                dataLabels: {
+                  seriesName: true,
+                  category: true,
+                  percent: true,
+                  separator: " - ",
+                  position: "outsideEnd" as const,
+                },
+              },
+            },
+          },
+        ],
+        dataLabels: {
+          category: true,
+          percent: true,
+          position: "outsideEnd" as const,
+          leaderLines: { color: "#1E293B", width: 1.5 },
+        },
+      },
+    ],
+  },
+  {
+    id: "pie-bestfit-labels",
+    x: 16,
+    y: 186,
+    width: 220,
+    height: 158,
+    title: "BestFit Pie",
+    style: { fontFamily: jostFont, fontSize: 10 },
+    groups: [
+      {
+        kind: "pie" as const,
+        data: {
+          kind: "shared-categories" as const,
+          categories: ["Major", "Minor"],
+        },
+        series: [
+          {
+            name: "Split",
+            values: [80, 20],
+            points: {
+              0: { color: "#3B82F6" },
+              1: { color: "#F97316" },
+            },
+          },
+        ],
+        dataLabels: { value: true, position: "bestFit" as const },
+      },
+    ],
+  },
+] as const;
+
+const pieDoughnutPage2Charts = [
+  {
+    id: "doughnut-shared-ring",
+    x: 16,
+    y: 16,
+    width: 296,
+    height: 328,
+    title: "Shared Doughnut (60% Hole)",
+    legend: "right" as const,
+    style: { fontFamily: jostFont, fontSize: 11 },
+    groups: [
+      {
+        kind: "doughnut" as const,
+        holeSize: 60,
+        firstSliceAngle: 30,
+        data: {
+          kind: "shared-categories" as const,
+          categories: ["North", "South", "West"],
+        },
+        series: [
+          {
+            name: "Q4",
+            values: [50, 30, 20],
+            points: {
+              0: { color: "#2563EB" },
+              1: { color: "#10B981" },
+              2: { color: "#F59E0B" },
+            },
+          },
+        ],
+        dataLabels: {
+          seriesName: true,
+          percent: true,
+          separator: "\n",
+          style: { fontSize: 9, color: "#FFFFFF" },
+        },
+      },
+    ],
+  },
+  {
+    id: "doughnut-multi-independent",
+    x: 328,
+    y: 16,
+    width: 296,
+    height: 328,
+    title: "Multi-Ring Independent",
+    legend: "bottom" as const,
+    style: { fontFamily: jostFont, fontSize: 11 },
+    groups: [
+      {
+        kind: "doughnut" as const,
+        holeSize: 35,
+        firstSliceAngle: 0,
+        data: { kind: "independent-categories" as const },
+        series: [
+          {
+            name: "InnerRing",
+            categories: ["Core", "Edge"],
+            values: [60, 40],
+            points: {
+              0: { color: "#1D4ED8" },
+              1: { color: "#EC4899" },
+            },
+          },
+          {
+            name: "OuterRing",
+            categories: ["Alpha", "Beta", "Gamma"],
+            values: [30, 45, 25],
+            points: {
+              0: { color: "#14B8A6" },
+              1: { color: "#8B5CF6" },
+              2: { color: "#F97316" },
+            },
+          },
+        ],
+        dataLabels: { category: true, value: true },
+      },
+    ],
+  },
+] as const;
+
+export const chartPieDoughnutAndLabelsParityScenario: CapabilityScenario = {
+  id: "chart-pie-doughnut-and-labels-parity",
+  capability: "rp:chart",
+  description:
+    "Dual-author Chart scenario covering 360-degree and exploded pie charts, single-ring shared and multi-ring independent-category doughnut charts, firstSliceAngle, holeSize, leaderLines, and 3-level data labels with seriesName, separator, and position overrides.",
+  visualCheckpoints: [
+    "Page 1 (pie-variants-and-labels): full 360-degree blue pie with seriesName+percent label, bestFit pie, and exploded multi-slice pie with insideEnd/outsideEnd/deleted labels and dark leaderLines.",
+    "Page 2 (doughnut-single-multi-and-independent): left shared 60%-hole doughnut with right legend; right concentric 2-ring independent-category doughnut whose bottom legend displays only the inner ring categories ('Core', 'Edge').",
+  ],
+  nativeCheckpoints: [
+    "Open candidate PPTX in PowerPoint/WPS and verify pieChart/doughnutChart properties, dLbls separator/showSerName, leaderLines, c15:datalabelsRange, and legendEntry deletions.",
+  ],
+  jsx() {
+    return createElement(
+      Deck,
+      { width: 640, height: 360, theme: chartTheme },
+      createElement(
+        Slide,
+        { id: "pie-variants-and-labels", background: "#FFFFFF" },
+        ...pieDoughnutPage1Charts.map((props) => createElement(Chart, props)),
+      ),
+      createElement(
+        Slide,
+        { id: "doughnut-single-multi-and-independent", background: "#FFFFFF" },
+        ...pieDoughnutPage2Charts.map((props) => createElement(Chart, props)),
+      ),
+    );
+  },
+  document() {
+    return deck({ width: 640, height: 360, theme: chartTheme }).append(
+      slide({
+        id: "pie-variants-and-labels",
+        background: "#FFFFFF",
+      }).append(...pieDoughnutPage1Charts.map((props) => chart(props))),
+      slide({
+        id: "doughnut-single-multi-and-independent",
+        background: "#FFFFFF",
+      }).append(...pieDoughnutPage2Charts.map((props) => chart(props))),
+    );
+  },
+  assert({ pptx, preview, validation }) {
+    assert.deepEqual(validation.errors, []);
+    assert.equal(preview.pages.length, 2);
+    for (const page of preview.pages) {
+      assert.deepEqual(page.diagnostics, []);
+      assert.ok(page.png !== undefined);
+      assert.ok(page.svg !== undefined);
+    }
+
+    expect(preview.pages[0]!.svg).toContain("<polyline");
+    const png1 = PNG.sync.read(Buffer.from(preview.pages[0]!.png!));
+    let blueCount = 0;
+    let greenCount = 0;
+    for (let i = 0; i < png1.data.length; i += 4) {
+      const r = png1.data[i]!;
+      const g = png1.data[i + 1]!;
+      const b = png1.data[i + 2]!;
+      if (r === 0x25 && g === 0x63 && b === 0xeb) blueCount += 1;
+      if (r === 0x10 && g === 0xb9 && b === 0x81) greenCount += 1;
+    }
+    assert.ok(blueCount > 500, `Expected #2563EB pie pixels, got ${blueCount}`);
+    assert.ok(
+      greenCount > 500,
+      `Expected #10B981 pie pixels, got ${greenCount}`,
+    );
+
+    const png2 = PNG.sync.read(Buffer.from(preview.pages[1]!.png!));
+    let pinkCount = 0;
+    let purpleCount = 0;
+    for (let i = 0; i < png2.data.length; i += 4) {
+      const r = png2.data[i]!;
+      const g = png2.data[i + 1]!;
+      const b = png2.data[i + 2]!;
+      if (r === 0xec && g === 0x48 && b === 0x99) pinkCount += 1;
+      if (r === 0x8b && g === 0x5c && b === 0xf6) purpleCount += 1;
+    }
+    assert.ok(
+      pinkCount > 200,
+      `Expected #EC4899 inner ring pixels, got ${pinkCount}`,
+    );
+    assert.ok(
+      purpleCount > 200,
+      `Expected #8B5CF6 outer ring pixels, got ${purpleCount}`,
+    );
+
+    const files = unzipSync(pptx);
+    const chart1 = strFromU8(files["ppt/charts/chart1.xml"]!);
+    const chart2 = strFromU8(files["ppt/charts/chart2.xml"]!);
+    const chart4 = strFromU8(files["ppt/charts/chart4.xml"]!);
+    const chart5 = strFromU8(files["ppt/charts/chart5.xml"]!);
+    expect(chart1).toContain('<c:firstSliceAng val="45"/>');
+    expect(chart1).toContain('<c:showSerName val="1"/>');
+    expect(chart1).toContain("<c:separator> - </c:separator>");
+    expect(chart2).toContain('<c:showLeaderLines val="1"/>');
+    expect(chart2).toContain(
+      '<c:dLbl><c:idx val="2"/><c:delete val="1"/></c:dLbl>',
+    );
+    expect(chart4).toContain('<c:holeSize val="60"/>');
+    expect(chart4).toContain("<c:separator>&#xA;</c:separator>");
+    expect(chart5).toContain("<c15:datalabelsRange>");
+    expect(chart5).toContain("<c:legendEntry>");
+  },
+};
+
+const annotationsPage1Charts = [
+  {
+    id: "col-poly-moving-avg",
+    x: 16,
+    y: 16,
+    width: 300,
+    height: 328,
+    title: "Polynomial & Moving Avg",
+    legend: "bottom" as const,
+    style: { fontFamily: jostFont, fontSize: 11 },
+    groups: [
+      {
+        kind: "column" as const,
+        data: {
+          kind: "shared-categories" as const,
+          categories: ["C1", "C2", "C3", "C4", "C5"],
+        },
+        series: [
+          {
+            name: "Actual",
+            color: "#2563EB",
+            values: [4, 9, 17, 29, 44],
+            trendlines: [
+              {
+                type: "polynomial" as const,
+                order: 2,
+                intercept: 1,
+                forward: 1,
+                backward: 0.5,
+                displayEquation: true,
+                displayRSquared: true,
+                line: { color: "#EF4444", width: 2, dash: "dash" as const },
+              },
+              {
+                type: "movingAverage" as const,
+                period: 3,
+                line: { color: "#10B981", width: 2 },
+              },
+            ],
+          },
+        ],
+      },
+    ],
+  },
+  {
+    id: "scatter-exp-log-pow-lin",
+    x: 324,
+    y: 16,
+    width: 300,
+    height: 328,
+    title: "Linear, Exp, Log & Power",
+    legend: "bottom" as const,
+    style: { fontFamily: jostFont, fontSize: 11 },
+    groups: [
+      {
+        kind: "scatter" as const,
+        data: { kind: "xy" as const },
+        line: false as const,
+        markers: true,
+        series: [
+          {
+            name: "Observations",
+            color: "#6366F1",
+            x: [1, 2, 3, 4, 5],
+            y: [2.2, 4.8, 9.1, 15.5, 24.0],
+            trendlines: [
+              {
+                type: "linear" as const,
+                forward: 1.5,
+                displayEquation: true,
+                line: { color: "#F59E0B", width: 1.75 },
+              },
+              {
+                type: "exponential" as const,
+                line: { color: "#EC4899", width: 1.5, dash: "dot" as const },
+              },
+              {
+                type: "logarithmic" as const,
+                line: { color: "#14B8A6", width: 1.5 },
+              },
+              {
+                type: "power" as const,
+                line: { color: "#8B5CF6", width: 1.5 },
+              },
+            ],
+          },
+        ],
+      },
+    ],
+  },
+] as const;
+
+const annotationsPage2Charts = [
+  {
+    id: "col-fixed-pct-err",
+    x: 16,
+    y: 16,
+    width: 300,
+    height: 158,
+    title: "Fixed+ & Percentage- (NoCap)",
+    style: { fontFamily: jostFont, fontSize: 10 },
+    groups: [
+      {
+        kind: "column" as const,
+        data: {
+          kind: "shared-categories" as const,
+          categories: ["A", "B", "C", "D"],
+        },
+        series: [
+          {
+            name: "FixedPlus",
+            color: "#2563EB",
+            values: [10, 20, 15, 25],
+            errorBars: {
+              type: "fixed" as const,
+              value: 4,
+              include: "plus" as const,
+              line: { color: "#DC2626", width: 1.5 },
+            },
+          },
+          {
+            name: "PctNoCap",
+            color: "#10B981",
+            values: [12, 18, 22, 16],
+            errorBars: {
+              type: "percentage" as const,
+              value: 20,
+              include: "minus" as const,
+              endCap: false,
+              line: { color: "#7C3AED", width: 1.5 },
+            },
+          },
+        ],
+      },
+    ],
+  },
+  {
+    id: "line-stddev-stderr",
+    x: 324,
+    y: 16,
+    width: 300,
+    height: 158,
+    title: "StdDev (Mean) & StdErr",
+    style: { fontFamily: jostFont, fontSize: 10 },
+    groups: [
+      {
+        kind: "line" as const,
+        data: {
+          kind: "shared-categories" as const,
+          categories: ["T1", "T2", "T3", "T4"],
+        },
+        series: [
+          {
+            name: "StdDev",
+            color: "#0EA5E9",
+            marker: true,
+            values: [10, 20, 30, 40],
+            errorBars: {
+              type: "standardDeviation" as const,
+              value: 1,
+              line: { color: "#EA580C", width: 1.5 },
+            },
+          },
+          {
+            name: "StdErr",
+            color: "#F59E0B",
+            marker: true,
+            values: [14, 18, 22, 26],
+            errorBars: { type: "standardError" as const },
+          },
+        ],
+      },
+    ],
+  },
+  {
+    id: "scatter-xy-custom-err",
+    x: 16,
+    y: 186,
+    width: 300,
+    height: 158,
+    title: "Scatter XY Custom + Fixed",
+    style: { fontFamily: jostFont, fontSize: 10 },
+    groups: [
+      {
+        kind: "scatter" as const,
+        data: { kind: "xy" as const },
+        line: false as const,
+        markers: true,
+        series: [
+          {
+            name: "XY",
+            color: "#2563EB",
+            x: [2, 4, null, 8],
+            y: [5, 12, 9, 18],
+            errorBars: {
+              x: {
+                type: "custom" as const,
+                plus: [0.6, 0.8, null, 1.0],
+                minus: [0.4, null, 0.3, 0.7],
+                line: { color: "#059669", width: 1.5 },
+              },
+              y: {
+                type: "fixed" as const,
+                value: 2.5,
+                line: { color: "#DB2777", width: 1.5 },
+              },
+            },
+          },
+        ],
+      },
+    ],
+  },
+  {
+    id: "bar-trendline-and-err",
+    x: 324,
+    y: 186,
+    width: 300,
+    height: 158,
+    title: "Bar Trendline & Error",
+    style: { fontFamily: jostFont, fontSize: 10 },
+    groups: [
+      {
+        kind: "bar" as const,
+        data: {
+          kind: "shared-categories" as const,
+          categories: ["N", "S", "W"],
+        },
+        series: [
+          {
+            name: "Volume",
+            color: "#6366F1",
+            values: [12, 22, 30],
+            trendlines: [
+              {
+                type: "linear" as const,
+                line: { color: "#EF4444", width: 1.5 },
+              },
+            ],
+            errorBars: {
+              type: "fixed" as const,
+              value: 3,
+              line: { color: "#111827", width: 1.5 },
+            },
+          },
+        ],
+      },
+    ],
+  },
+] as const;
+
+export const chartTrendlinesAndErrorBarsParityScenario: CapabilityScenario = {
+  id: "chart-trendlines-and-error-bars-parity",
+  capability: "rp:chart",
+  description:
+    "Dual-author Chart scenario covering all 6 trendline types (linear, exponential, logarithmic, polynomial with intercept, power, movingAverage) with forward/backward forecasts and equation/R-squared display, plus all 5 error bar modes (fixed, percentage, standardDeviation, standardError, custom) with include/endCap options and scatter XY bidirectional error bars.",
+  visualCheckpoints: [
+    "Page 1 (all-six-trendlines): column chart with dashed red polynomial curve (backward=0.5, forward=1, eq+R2) and green movingAverage; scatter chart with linear, exponential, logarithmic, and power curves.",
+    "Page 2 (all-five-error-bars-and-xy): column fixed-plus (#DC2626) and percentage-minus without end caps (#7C3AED); line mean-centered stdDev (#EA580C) and stdErr; scatter bidirectional custom X (#059669) and fixed Y (#DB2777) error bars; horizontal bar trendline and error bars.",
+  ],
+  nativeCheckpoints: [
+    "Open candidate PPTX in PowerPoint/WPS and verify all 6 trendlineType variants, dispEq/dispRSqr, errValType modes, noEndCap, and independent scatter X/Y error bar channels.",
+  ],
+  jsx() {
+    return createElement(
+      Deck,
+      { width: 640, height: 360, theme: chartTheme },
+      createElement(
+        Slide,
+        { id: "all-six-trendlines", background: "#FFFFFF" },
+        ...annotationsPage1Charts.map((props) => createElement(Chart, props)),
+      ),
+      createElement(
+        Slide,
+        { id: "all-five-error-bars-and-xy", background: "#FFFFFF" },
+        ...annotationsPage2Charts.map((props) => createElement(Chart, props)),
+      ),
+    );
+  },
+  document() {
+    return deck({ width: 640, height: 360, theme: chartTheme }).append(
+      slide({ id: "all-six-trendlines", background: "#FFFFFF" }).append(
+        ...annotationsPage1Charts.map((props) => chart(props)),
+      ),
+      slide({
+        id: "all-five-error-bars-and-xy",
+        background: "#FFFFFF",
+      }).append(...annotationsPage2Charts.map((props) => chart(props))),
+    );
+  },
+  assert({ pptx, preview, validation }) {
+    assert.deepEqual(validation.errors, []);
+    assert.equal(preview.pages.length, 2);
+    for (const page of preview.pages) {
+      assert.deepEqual(page.diagnostics, []);
+      assert.ok(page.png !== undefined);
+      assert.ok(page.svg !== undefined);
+    }
+
+    const png1 = PNG.sync.read(Buffer.from(preview.pages[0]!.png!));
+    let redCount = 0;
+    let greenCount = 0;
+    for (let i = 0; i < png1.data.length; i += 4) {
+      const r = png1.data[i]!;
+      const g = png1.data[i + 1]!;
+      const b = png1.data[i + 2]!;
+      if (r === 0xef && g === 0x44 && b === 0x44) redCount += 1;
+      if (r === 0x10 && g === 0xb9 && b === 0x81) greenCount += 1;
+    }
+    assert.ok(
+      redCount > 40,
+      `Expected #EF4444 trendline pixels, got ${redCount}`,
+    );
+    assert.ok(
+      greenCount > 30,
+      `Expected #10B981 movingAverage pixels, got ${greenCount}`,
+    );
+
+    const png2 = PNG.sync.read(Buffer.from(preview.pages[1]!.png!));
+    let errGreenCount = 0;
+    let errPinkCount = 0;
+    for (let i = 0; i < png2.data.length; i += 4) {
+      const r = png2.data[i]!;
+      const g = png2.data[i + 1]!;
+      const b = png2.data[i + 2]!;
+      if (r === 0x05 && g === 0x96 && b === 0x69) errGreenCount += 1;
+      if (r === 0xdb && g === 0x27 && b === 0x77) errPinkCount += 1;
+    }
+    assert.ok(
+      errGreenCount > 30,
+      `Expected #059669 scatter X error bar pixels, got ${errGreenCount}`,
+    );
+    assert.ok(
+      errPinkCount > 30,
+      `Expected #DB2777 scatter Y error bar pixels, got ${errPinkCount}`,
+    );
+
+    const files = unzipSync(pptx);
+    const chart1 = strFromU8(files["ppt/charts/chart1.xml"]!);
+    const chart2 = strFromU8(files["ppt/charts/chart2.xml"]!);
+    const chart3 = strFromU8(files["ppt/charts/chart3.xml"]!);
+    const chart4 = strFromU8(files["ppt/charts/chart4.xml"]!);
+    const chart5 = strFromU8(files["ppt/charts/chart5.xml"]!);
+    expect(chart1).toContain('<c:trendlineType val="poly"/>');
+    expect(chart1).toContain('<c:trendlineType val="movingAvg"/>');
+    expect(chart2).toContain('<c:trendlineType val="linear"/>');
+    expect(chart2).toContain('<c:trendlineType val="exp"/>');
+    expect(chart2).toContain('<c:trendlineType val="log"/>');
+    expect(chart2).toContain('<c:trendlineType val="power"/>');
+    expect(chart3).toContain('<c:noEndCap val="1"/>');
+    expect(chart4).toContain('<c:errValType val="stdDev"/>');
+    expect(chart4).toContain('<c:errValType val="stdErr"/>');
+    expect(chart5).toContain('<c:errValType val="cust"/>');
+    expect(chart5).toContain('<c:errDir val="x"/>');
+    expect(chart5).toContain('<c:errDir val="y"/>');
   },
 };

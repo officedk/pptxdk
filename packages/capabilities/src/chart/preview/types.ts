@@ -11,6 +11,7 @@ export type PlottedBarAnchor = {
   readonly groupSeriesIndex: number;
   readonly pointIndex: number;
   readonly value: number;
+  readonly plottedValue?: number;
   readonly category: string;
   readonly seriesName: string;
   readonly x: number;
@@ -31,6 +32,7 @@ export type PlottedCartesianPointAnchor = {
   readonly groupSeriesIndex: number;
   readonly pointIndex: number;
   readonly value: number;
+  readonly plottedValue?: number;
   readonly xValue?: number;
   readonly category?: string;
   readonly seriesName: string;
@@ -40,13 +42,15 @@ export type PlottedCartesianPointAnchor = {
   readonly percent?: number;
 };
 
-/** Plotted anchor reserved for pie and doughnut slice renderers. */
+/** Plotted anchor emitted by pie and doughnut slice renderers. */
 export type PlottedSliceAnchor = {
   readonly kind: "slice";
   readonly groupIndex: number;
   readonly seriesIndex: number;
+  readonly groupSeriesIndex: number;
   readonly pointIndex: number;
   readonly value: number;
+  readonly plottedValue?: number;
   readonly category: string;
   readonly seriesName: string;
   readonly cx: number;
@@ -58,6 +62,7 @@ export type PlottedSliceAnchor = {
   readonly midAngleRad: number;
   readonly sliceSum: number;
   readonly percent: number;
+  readonly spanDeg: number;
 };
 
 export type PlottedPointAnchor =
@@ -112,6 +117,8 @@ export type ChartLegendEntry = {
   readonly colorHex: string;
   readonly colorAlpha: number;
   readonly kind: "swatch" | "line" | "marker";
+  readonly strokeHex?: string;
+  readonly strokeAlpha?: number;
   readonly strokeWidth?: number;
   readonly dashArray?: string;
   readonly marker?: ChartLegendMarker;

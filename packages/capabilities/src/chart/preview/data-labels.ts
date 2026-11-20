@@ -4,6 +4,7 @@ import type { TextStyle } from "../../shared/text-service.ts";
 import { mergeDataLabels } from "../chart-labels.ts";
 import type { ParsedChart } from "../chart-model.ts";
 import { formatChartNumber } from "./number-format.ts";
+import { resolveChartLineStroke, strokeAttrs } from "./style.ts";
 import {
   measureChartText,
   mergeChartTextStyle,
@@ -15,6 +16,7 @@ import type {
   PlottedBarAnchor,
   PlottedCartesianPointAnchor,
   PlottedPointAnchor,
+  PlottedSliceAnchor,
 } from "./types.ts";
 
 type LabelPlacement = {
@@ -184,6 +186,129 @@ function pointLabelBox(
   }
 }
 
+function sliceLabelBox(options: {
+  readonly anchor: PlottedSliceAnchor;
+  readonly isDoughnut: boolean;
+  readonly requestedPosition: string | undefined;
+  readonly hasLeaderLines: boolean;
+  readonly textWidth: number;
+  readonly textHeight: number;
+  readonly leaderSpec:
+    | boolean
+    | import("../chart-types.ts").ChartLine
+    | undefined;
+  readonly theme: ThemeContext;
+}): {
+  readonly placement: LabelPlacement;
+  readonly leaderSvg: string;
+} {
+  const {
+    anchor,
+    isDoughnut,
+    requestedPosition,
+    hasLeaderLines,
+    textWidth,
+    textHeight,
+    leaderSpec,
+    theme,
+  } = options;
+  const w = Math.max(textWidth + 4, 12);
+  const h = Math.max(textHeight, 10);
+
+  if (isDoughnut) {
+    const r = (anchor.innerR + anchor.outerR) / 2;
+    const lx = anchor.cx + r * Math.cos(anchor.midAngleRad);
+    const ly = anchor.cy + r * Math.sin(anchor.midAngleRad);
+    return {
+      placement: {
+        box: { x: lx - w / 2, y: ly - h / 2, width: w, height: h },
+        align: "center",
+        verticalAlign: "middle",
+      },
+      leaderSvg: "",
+    };
+  }
+
+  let resolvedPos =
+    requestedPosition ?? (hasLeaderLines ? "outsideEnd" : "bestFit");
+  if (resolvedPos === "bestFit") {
+    const midR = anchor.outerR * 0.62;
+    const spanRad = (anchor.spanDeg * Math.PI) / 180;
+    const chord = 2 * midR * Math.sin(Math.min(Math.PI / 2, spanRad / 2));
+    const radial = (anchor.outerR - anchor.innerR) * 0.7;
+    resolvedPos =
+      !hasLeaderLines && spanRad >= 0.45 && w <= chord && h <= radial
+        ? "center"
+        : "outsideEnd";
+  }
+
+  if (resolvedPos === "center") {
+    const r = (anchor.innerR + anchor.outerR) * 0.56;
+    const lx = anchor.cx + r * Math.cos(anchor.midAngleRad);
+    const ly = anchor.cy + r * Math.sin(anchor.midAngleRad);
+    return {
+      placement: {
+        box: { x: lx - w / 2, y: ly - h / 2, width: w, height: h },
+        align: "center",
+        verticalAlign: "middle",
+      },
+      leaderSvg: "",
+    };
+  }
+
+  if (resolvedPos === "insideEnd") {
+    const r = Math.max(
+      anchor.innerR + 2,
+      anchor.outerR - Math.max(10, (anchor.outerR - anchor.innerR) * 0.25),
+    );
+    const lx = anchor.cx + r * Math.cos(anchor.midAngleRad);
+    const ly = anchor.cy + r * Math.sin(anchor.midAngleRad);
+    return {
+      placement: {
+        box: { x: lx - w / 2, y: ly - h / 2, width: w, height: h },
+        align: "center",
+        verticalAlign: "middle",
+      },
+      leaderSvg: "",
+    };
+  }
+
+  // outsideEnd
+  const cosM = Math.cos(anchor.midAngleRad);
+  const sinM = Math.sin(anchor.midAngleRad);
+  const ax = anchor.cx + anchor.outerR * cosM;
+  const ay = anchor.cy + anchor.outerR * sinM;
+  const elbowR = anchor.outerR + 10;
+  const ex = anchor.cx + elbowR * cosM;
+  const ey = anchor.cy + elbowR * sinM;
+  const isRight = cosM >= 0;
+  const armLen = 8;
+  const lx = isRight ? ex + armLen : ex - armLen;
+  const ly = ey;
+
+  let leaderSvg = "";
+  if (hasLeaderLines && leaderSpec !== undefined && leaderSpec !== false) {
+    const leaderStroke = resolveChartLineStroke(leaderSpec, theme, {
+      color: "dk2",
+      width: 1,
+    });
+    if (leaderStroke !== undefined) {
+      leaderSvg = `<polyline points="${ax},${ay} ${ex},${ey} ${lx},${ly}" fill="none" ${strokeAttrs(leaderStroke)}/>`;
+    }
+  }
+
+  return {
+    placement: {
+      box: isRight
+        ? { x: lx + 2, y: ly - h / 2, width: w, height: h }
+        : { x: lx - 2 - w, y: ly - h / 2, width: w, height: h },
+      align: isRight ? "left" : "right",
+      verticalAlign: "middle",
+    },
+    leaderSvg,
+  };
+}
+
 export function renderDataLabelsSvg(options: {
   readonly parsed: ParsedChart;
   readonly anchors: readonly PlottedPointAnchor[];
@@ -205,13 +330,15 @@ export function renderDataLabelsSvg(options: {
   const parts: string[] = [];
 
   for (const anchor of anchors) {
-    if (anchor.kind === "slice") continue;
     const group = parsed.groups[anchor.groupIndex];
     if (group === undefined) continue;
 
     let series;
     if (anchor.kind === "bar") {
       if (group.kind !== "column" && group.kind !== "bar") continue;
+      series = group.series[anchor.groupSeriesIndex];
+    } else if (anchor.kind === "slice") {
+      if (group.kind !== "pie" && group.kind !== "doughnut") continue;
       series = group.series[anchor.groupSeriesIndex];
     } else {
       if (
@@ -233,6 +360,9 @@ export function renderDataLabelsSvg(options: {
     if (pointMerged === undefined || pointMerged === false) continue;
 
     const labelSegments: string[] = [];
+    if (pointMerged.seriesName === true) {
+      labelSegments.push(anchor.seriesName);
+    }
     if (group.kind === "scatter") {
       if (
         pointMerged.xValue === true &&
@@ -258,7 +388,7 @@ export function renderDataLabelsSvg(options: {
     }
     if (labelSegments.length === 0) continue;
 
-    const text = labelSegments.join(", ");
+    const text = labelSegments.join(pointMerged.separator ?? ", ");
     const groupStyle =
       group.dataLabels !== undefined && group.dataLabels !== false
         ? group.dataLabels.style
@@ -279,30 +409,51 @@ export function renderDataLabelsSvg(options: {
     const fontPx = resolveChartFontSizePixels(style?.fontSize);
     const textH = Math.max(measured.height, fontPx * 1.15);
 
-    const placement: LabelPlacement =
-      anchor.kind === "bar"
-        ? barLabelBox(
-            anchor,
-            pointMerged.position ??
-              (group.kind === "column" || group.kind === "bar"
-                ? group.stacking === "clustered"
-                  ? "outsideEnd"
-                  : "center"
-                : "center"),
-            measured.width,
-            textH,
-          )
-        : pointLabelBox(
-            anchor,
-            pointMerged.position ??
-              (group.kind === "scatter"
-                ? "right"
-                : group.kind === "area"
-                  ? "center"
-                  : "top"),
-            measured.width,
-            textH,
-          );
+    let placement: LabelPlacement;
+    if (anchor.kind === "bar") {
+      placement = barLabelBox(
+        anchor,
+        pointMerged.position ??
+          (group.kind === "column" || group.kind === "bar"
+            ? group.stacking === "clustered"
+              ? "outsideEnd"
+              : "center"
+            : "center"),
+        measured.width,
+        textH,
+      );
+    } else if (anchor.kind === "slice") {
+      const leaderSpec =
+        seriesMerged !== undefined && seriesMerged !== false
+          ? seriesMerged.leaderLines
+          : pointMerged.leaderLines;
+      const slicePlacement = sliceLabelBox({
+        anchor,
+        isDoughnut: group.kind === "doughnut",
+        requestedPosition: pointMerged.position,
+        hasLeaderLines: leaderSpec !== undefined && leaderSpec !== false,
+        textWidth: measured.width,
+        textHeight: textH,
+        leaderSpec,
+        theme,
+      });
+      if (slicePlacement.leaderSvg !== "") {
+        parts.push(slicePlacement.leaderSvg);
+      }
+      placement = slicePlacement.placement;
+    } else {
+      placement = pointLabelBox(
+        anchor,
+        pointMerged.position ??
+          (group.kind === "scatter"
+            ? "right"
+            : group.kind === "area"
+              ? "center"
+              : "top"),
+        measured.width,
+        textH,
+      );
+    }
 
     parts.push(
       renderChartTextSvg({

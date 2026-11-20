@@ -44,9 +44,7 @@ export function collectLegendEntries(
     switch (group.kind) {
       case "column":
       case "bar":
-      case "area":
-      case "pie":
-      case "doughnut": {
+      case "area": {
         for (const series of group.series) {
           const color = resolveSeriesColor(
             series.color,
@@ -68,6 +66,48 @@ export function collectLegendEntries(
             ...(stroke === undefined
               ? {}
               : {
+                  strokeHex: stroke.hex,
+                  strokeAlpha: stroke.alpha,
+                  strokeWidth: stroke.width,
+                  ...(stroke.dashArray === undefined
+                    ? {}
+                    : { dashArray: stroke.dashArray }),
+                }),
+          });
+        }
+        break;
+      }
+      case "pie":
+      case "doughnut": {
+        // Pie and doughnut legends explain category slices; independent-category doughnuts
+        // strictly use the first declared ring's categories.
+        const firstSeries = group.series[0];
+        if (firstSeries === undefined) break;
+        for (let j = 0; j < firstSeries.categories.length; j += 1) {
+          const point = firstSeries.points?.[j];
+          const color = resolveSeriesColor(
+            point?.color ?? firstSeries.color,
+            j,
+            theme,
+          );
+          const lineSpec = point?.line ?? firstSeries.line;
+          const stroke =
+            lineSpec === undefined
+              ? undefined
+              : resolveChartLineStroke(lineSpec, theme, {
+                  color: "dk1",
+                  width: 1,
+                });
+          entries.push({
+            label: firstSeries.categories[j] ?? "",
+            colorHex: color.hex,
+            colorAlpha: color.alpha ?? 1,
+            kind: "swatch",
+            ...(stroke === undefined
+              ? {}
+              : {
+                  strokeHex: stroke.hex,
+                  strokeAlpha: stroke.alpha,
                   strokeWidth: stroke.width,
                   ...(stroke.dashArray === undefined
                     ? {}
@@ -311,7 +351,7 @@ function renderLegendIconSvg(
     const strokeAttr =
       entry.strokeWidth === undefined
         ? ""
-        : ` stroke="#${entry.colorHex}" stroke-width="${Math.min(1.5, entry.strokeWidth)}"${dashAttr}`;
+        : ` stroke="#${entry.strokeHex ?? entry.colorHex}" stroke-opacity="${entry.strokeAlpha ?? 1}" stroke-width="${Math.min(1.5, entry.strokeWidth)}"${dashAttr}`;
     return `<rect x="${swatchX}" y="${swatchY}" width="${size}" height="${size}" fill="#${entry.colorHex}" fill-opacity="${entry.colorAlpha}"${strokeAttr}/>`;
   }
 

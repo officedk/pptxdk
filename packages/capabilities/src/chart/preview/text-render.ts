@@ -3,8 +3,8 @@ import type { GeometryBox, ThemeContext } from "@react-pptx/core/capability";
 import {
   measureTextLayoutFromParagraphs,
   parseTextContent,
-  previewTextBoxOutlines,
-  renderGlyphPathSvg,
+  renderTextOutlinesSvg,
+  withPreviewFontBoundary,
   type FontSize,
   type Paragraph,
   type ResolvedTextStyle,
@@ -74,10 +74,12 @@ export function measureChartText(options: {
     { slideNumber: options.slideNumber },
     options.labelPath,
   );
-  const measured = measureTextLayoutFromParagraphs(
-    paragraphs,
-    resolvedStyle,
-    options.availableWidth,
+  const measured = withPreviewFontBoundary(() =>
+    measureTextLayoutFromParagraphs(
+      paragraphs,
+      resolvedStyle,
+      options.availableWidth,
+    ),
   );
   return {
     paragraphs,
@@ -147,9 +149,8 @@ export function renderChartTextSvg(options: {
     };
   }
 
-  const singleLineMeasure = measureTextLayoutFromParagraphs(
-    paragraphs,
-    resolvedStyle,
+  const singleLineMeasure = withPreviewFontBoundary(() =>
+    measureTextLayoutFromParagraphs(paragraphs, resolvedStyle),
   );
   const allowWrap = options.wrap ?? false;
   let effectiveLayoutBox = layoutBox;
@@ -171,29 +172,31 @@ export function renderChartTextSvg(options: {
   }
 
   const wrappedMeasure = allowWrap
-    ? measureTextLayoutFromParagraphs(
-        paragraphs,
-        resolvedStyle,
-        effectiveLayoutBox.width,
+    ? withPreviewFontBoundary(() =>
+        measureTextLayoutFromParagraphs(
+          paragraphs,
+          resolvedStyle,
+          effectiveLayoutBox.width,
+        ),
       )
     : singleLineMeasure;
 
-  const lines = previewTextBoxOutlines({
-    paragraphs,
-    box: effectiveLayoutBox,
-    verticalAlign,
-  });
-
-  const glyphPaths: string[] = [];
-  for (const line of lines) {
-    for (const glyph of line.glyphs) {
-      const svg = renderGlyphPathSvg(glyph, options.theme);
-      if (svg !== "") glyphPaths.push(svg);
-    }
-  }
-  if (glyphPaths.length === 0) return "";
-
-  let content = glyphPaths.join("");
+  const idPrefix =
+    options.clipAllocator !== undefined &&
+    resolvedStyle.textShadow !== undefined
+      ? options.clipAllocator.nextClipId()
+      : `rp-chart-txt-${options.slideNumber}`;
+  let content = withPreviewFontBoundary(() =>
+    renderTextOutlinesSvg({
+      paragraphs,
+      box: effectiveLayoutBox,
+      verticalAlign,
+      theme: options.theme,
+      idPrefix,
+      rotate: options.rotationDegrees ?? 0,
+    }),
+  );
+  if (content === "") return "";
   if (options.rotationDegrees !== undefined) {
     const cx = options.box.x + options.box.width / 2;
     const cy = options.box.y + options.box.height / 2;

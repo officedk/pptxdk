@@ -1,9 +1,16 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { deck, shape, slide } from "@react-pptx/capabilities/document";
+import {
+  deck,
+  documentCapabilities,
+  font,
+  shape,
+  slide,
+} from "@react-pptx/capabilities/document";
 import { shapeCapability } from "@react-pptx/capabilities/shape";
 import {
   BuildError,
@@ -29,6 +36,7 @@ import {
   shapePositiveScenario,
   shapePresetCatalogScenario,
   shapeRejectionScenario,
+  shapeShadedFillsAndPathsScenario,
   shapeTextParityScenario,
 } from "./scenarios.ts";
 
@@ -81,6 +89,7 @@ describe("Shape capability acceptance & bound extension contracts", () => {
         shapePositiveScenario,
         shapePresetCatalogScenario,
         shapeTextParityScenario,
+        shapeShadedFillsAndPathsScenario,
         shapeRejectionScenario,
       ]) {
         const runs = await runCapabilityScenario(scenario, {
@@ -382,5 +391,38 @@ describe("Shape capability acceptance & bound extension contracts", () => {
         return true;
       },
     );
+  });
+
+  it("embeds subset fonts for Shape inline text across emit() and preserves paint() parity", () => {
+    const jostSubsetFont = font("Jost*", [
+      {
+        weight: 400,
+        data: readFileSync(
+          new URL("../assets/fonts/Jost-400-Book.ttf", import.meta.url),
+        ),
+      },
+    ]);
+    const resolveWith = createResolver(documentCapabilities);
+    const resolution = resolveWith(
+      deck({ width: 320, height: 180 }).append(
+        slide({ id: "embed-shape" }).append(
+          shape({
+            id: "embedded",
+            x: 20,
+            y: 20,
+            width: 180,
+            height: 60,
+            fill: "#1E293B",
+            text: "Subset Font",
+            textStyle: { fontFamily: jostSubsetFont, color: "#FFFFFF" },
+          }),
+        ),
+      ),
+    );
+    const emitted = emit(resolution, { embedFonts: "subset" });
+    assert.ok(emitted.pptx.byteLength > 0);
+    const painted = paint(resolution);
+    assert.deepEqual(painted.pages[0]?.diagnostics, []);
+    assert.ok(painted.pages[0]?.png !== undefined);
   });
 });

@@ -24,6 +24,7 @@ import { describe, it } from "vitest";
 import { runCapabilityScenario } from "../acceptance-runner.ts";
 import {
   runTransitionRejectionScenarios,
+  transitionBaselineVariantsScenario,
   transitionPositiveScenario,
 } from "./scenarios.ts";
 
@@ -38,14 +39,19 @@ describe("Transition capability acceptance & bound slide contract", () => {
   it("runs Transition and Morph dual-author scenarios through shared runner and verifies rejections", async () => {
     const outDir = await mkdtemp(join(tmpdir(), "rp-cap-accept-trans-"));
     try {
-      const runs = await runCapabilityScenario(transitionPositiveScenario, {
-        outputDir: outDir,
-      });
-      assert.equal(runs.length, 2);
-      assert.deepEqual(
-        runs.map((r) => r.author),
-        ["jsx", "document"],
-      );
+      for (const scenario of [
+        transitionPositiveScenario,
+        transitionBaselineVariantsScenario,
+      ]) {
+        const runs = await runCapabilityScenario(scenario, {
+          outputDir: outDir,
+        });
+        assert.equal(runs.length, 2);
+        assert.deepEqual(
+          runs.map((r) => r.author),
+          ["jsx", "document"],
+        );
+      }
       await runTransitionRejectionScenarios();
     } finally {
       await rm(outDir, { recursive: true, force: true });

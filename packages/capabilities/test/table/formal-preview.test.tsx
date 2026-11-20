@@ -608,4 +608,48 @@ process.stdout.write("ok");
       assert.deepEqual(result.pages[1]?.diagnostics, [], item.label);
     }
   });
+
+  it("emits table-height-underflow and table-height-overflow build warnings while painting cleanly", async () => {
+    const resolveWith = createResolver(documentCapabilities);
+    const doc = deck({ width: 320, height: 220 }).append(
+      slide({ id: "height-warnings", background: "#FFFFFF" }).append(
+        table({
+          id: "underflow-tbl",
+          x: 16,
+          y: 16,
+          columns: [140],
+          style: { fontFamily: jostFont, fontSize: 13, height: 90 },
+        }).append(
+          row({ style: { height: 28 } }).append(
+            cell("Short", {
+              style: { borderColor: "#0F172A", borderWidth: 1 },
+            }),
+          ),
+        ),
+        table({
+          id: "overflow-tbl",
+          x: 16,
+          y: 120,
+          columns: [140],
+          style: { fontFamily: jostFont, fontSize: 13, height: 20 },
+        }).append(
+          row({ style: { height: 50 } }).append(
+            cell("Tall", { style: { borderColor: "#0F172A", borderWidth: 1 } }),
+          ),
+        ),
+      ),
+    );
+    const resolution = resolveWith(doc);
+    const warningCodes = resolution.report.diagnostics
+      .filter((d) => d.severity === "warning")
+      .map((d) => d.code);
+    assert.ok(warningCodes.includes("table-height-underflow"));
+    assert.ok(warningCodes.includes("table-height-overflow"));
+
+    const emitted = emit(resolution);
+    assert.deepEqual((await validatePptx(emitted.pptx)).errors, []);
+    const painted = paint(resolution);
+    assert.deepEqual(painted.pages[0]?.diagnostics, []);
+    assert.ok(painted.pages[0]?.png !== undefined);
+  });
 });

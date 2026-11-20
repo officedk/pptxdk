@@ -361,4 +361,36 @@ describe("Slice 4 (Ticket 05): Box static preview positive and negative behavior
       assert.deepEqual(result.pages[1]?.diagnostics, [], label);
     }
   });
+
+  it("retains borderRadius clamp build warning on Box while emitting and painting cleanly", async () => {
+    const resolveWith = createResolver(documentCapabilities);
+    const resolution = resolveWith(
+      deck({ width: 240, height: 120 }).append(
+        slide({ id: "clamped-box", background: "#FFFFFF" }).append(
+          box({
+            id: "pill",
+            style: {
+              position: "absolute",
+              left: 20,
+              top: 20,
+              width: 100,
+              height: 40,
+              borderRadius: 60,
+              backgroundColor: "#2563EB",
+            },
+          }),
+        ),
+      ),
+    );
+    assert.ok(
+      resolution.report.diagnostics.some(
+        (d) => d.severity === "warning" && d.path.includes("box[pill]"),
+      ),
+    );
+    const emitted = emit(resolution);
+    assert.deepEqual((await validatePptx(emitted.pptx)).errors, []);
+    const painted = paint(resolution);
+    assert.deepEqual(painted.pages[0]?.diagnostics, []);
+    assert.ok(painted.pages[0]?.png !== undefined);
+  });
 });

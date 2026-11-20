@@ -2,13 +2,18 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
 import {
+  cell,
+  chart,
   deck,
   documentCapabilities,
   font,
   paragraph,
+  row,
+  shape,
   slideNumber,
   slide,
   span,
+  table,
   text,
 } from "@react-pptx/capabilities/document";
 import {
@@ -18,7 +23,8 @@ import {
   Text,
 } from "@react-pptx/capabilities/text-elements";
 import { type CapabilityModule, CommonNode } from "@react-pptx/core";
-import { createResolver } from "@react-pptx/core/build";
+import { CapabilityError, createResolver } from "@react-pptx/core/build";
+import { getInternalResolution } from "@react-pptx/core/resolution";
 import { emit } from "@react-pptx/emit";
 import { paint } from "@react-pptx/preview";
 import { Deck, Slide, expandDocument } from "@react-pptx/react";
@@ -425,6 +431,170 @@ describe("Slice 3: Text static preview & shared text-service outlines", () => {
       );
       assert.ok(result.pages[1]?.png !== undefined, item.label);
     }
+  });
+
+  it("closes paint() CapabilityError.code strictly to preview-unsupported-font and preview-missing-glyph across Text, Shape, Table, and Chart", () => {
+    const resolveDoc = createResolver(documentCapabilities);
+    const allowedCodes = new Set([
+      "preview-unsupported-font",
+      "preview-missing-glyph",
+      "preview-corrupt-image",
+    ]);
+
+    const capturePaintErrorCode = (doc: CommonNode): string => {
+      const resolution = resolveDoc(doc);
+      // Confirm resolve + emit succeed even when paint rejects underlying font limits.
+      const emitted = emit(resolution);
+      assert.ok(emitted.pptx.byteLength > 0);
+      const internal = getInternalResolution(resolution);
+      const slideData = internal.slides[0]!;
+      const layer = slideData.layers[0]!;
+      try {
+        layer.paint?.({
+          path: layer.path,
+          slideNumber: slideData.index,
+          objectId: layer.paintObjectId,
+          ...(layer.box === undefined ? {} : { box: layer.box }),
+          theme: layer.theme,
+        });
+        assert.fail("Expected layer.paint to throw a CapabilityError");
+      } catch (error) {
+        assert.ok(
+          error instanceof CapabilityError,
+          `Expected CapabilityError, got ${String(error)}`,
+        );
+        assert.ok(
+          allowedCodes.has(error.code),
+          `Unexpected CapabilityError.code in paint(): ${error.code}`,
+        );
+        return error.code;
+      }
+    };
+
+    const missingFace = font("Missing Preview Face");
+
+    // 1. Fixed-area Text without font files
+    assert.equal(
+      capturePaintErrorCode(
+        deck({ width: 240, height: 120 }).append(
+          slide({ id: "p" }).append(
+            text("No font file", {
+              id: "t",
+              x: 10,
+              y: 10,
+              width: 160,
+              height: 50,
+              style: { fontFamily: missingFace },
+            }),
+          ),
+        ),
+      ),
+      "preview-unsupported-font",
+    );
+
+    // 2. Fixed-area Text list prefix without font files
+    assert.equal(
+      capturePaintErrorCode(
+        deck({ width: 240, height: 120 }).append(
+          slide({ id: "p" }).append(
+            text([paragraph("Item", { style: { list: { type: "bullet" } } })], {
+              id: "t-list",
+              x: 10,
+              y: 10,
+              width: 160,
+              height: 50,
+              style: { fontFamily: missingFace },
+            }),
+          ),
+        ),
+      ),
+      "preview-unsupported-font",
+    );
+
+    // 3. Fixed-size Shape inline text without font files
+    assert.equal(
+      capturePaintErrorCode(
+        deck({ width: 240, height: 120 }).append(
+          slide({ id: "p" }).append(
+            shape({
+              id: "s",
+              x: 10,
+              y: 10,
+              width: 160,
+              height: 50,
+              fill: "#1E293B",
+              text: "No font",
+              textStyle: { fontFamily: missingFace, color: "#FFFFFF" },
+            }),
+          ),
+        ),
+      ),
+      "preview-unsupported-font",
+    );
+
+    // 4. Fixed-row-height Table cell without font files
+    assert.equal(
+      capturePaintErrorCode(
+        deck({ width: 240, height: 120 }).append(
+          slide({ id: "p" }).append(
+            table({
+              id: "tbl",
+              x: 10,
+              y: 10,
+              columns: [120],
+              style: { fontFamily: missingFace, fontSize: 14 },
+            }).append(row({ style: { height: 30 } }).append(cell("Cell"))),
+          ),
+        ),
+      ),
+      "preview-unsupported-font",
+    );
+
+    // 5. Chart without font files
+    assert.equal(
+      capturePaintErrorCode(
+        deck({ width: 320, height: 200 }).append(
+          slide({ id: "p" }).append(
+            chart({
+              id: "c",
+              x: 10,
+              y: 10,
+              width: 300,
+              height: 180,
+              title: "No font",
+              style: { fontSize: 12 },
+              groups: [
+                {
+                  kind: "column",
+                  data: { kind: "shared-categories", categories: ["A", "B"] },
+                  series: [{ name: "S", values: [10, 20] }],
+                },
+              ],
+            }),
+          ),
+        ),
+      ),
+      "preview-unsupported-font",
+    );
+
+    // 6. Missing glyph in supplied font
+    assert.equal(
+      capturePaintErrorCode(
+        deck({ width: 240, height: 120 }).append(
+          slide({ id: "p" }).append(
+            text("汉", {
+              id: "t-glyph",
+              x: 10,
+              y: 10,
+              width: 160,
+              height: 50,
+              style: { fontFamily: jostFont },
+            }),
+          ),
+        ),
+      ),
+      "preview-missing-glyph",
+    );
   });
 
   it("renders underline, line-through, textShadow (preserving rotWithShape=0 under rotation), and positive/negative letterSpacing across resolve, emit, and paint", async () => {

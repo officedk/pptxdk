@@ -310,6 +310,69 @@ describe("Slice 3 (Ticket 04): Image static preview positive behaviors", () => {
       0x3b,
     ]);
 
+    // GIF89a with a Comment Extension block (0x21 0xFE) and non-transparent GCE (transparentFlag = 0).
+    const gifWithCommentAndOpaqueGce = new Uint8Array([
+      0x47,
+      0x49,
+      0x46,
+      0x38,
+      0x39,
+      0x61,
+      2,
+      0,
+      2,
+      0,
+      0x81,
+      0,
+      0,
+      0,
+      0,
+      255, // color 0: blue
+      255,
+      255,
+      0, // color 1: yellow
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      // Comment extension: 'TEST'
+      0x21,
+      0xfe,
+      0x04,
+      0x54,
+      0x45,
+      0x53,
+      0x54,
+      0x00,
+      // GCE with transparentFlag = 0 (packed = 0x00)
+      0x21,
+      0xf9,
+      0x04,
+      0x00,
+      0x00,
+      0x00,
+      0x00,
+      0x00,
+      // Image descriptor 2x2
+      0x2c,
+      0,
+      0,
+      0,
+      0,
+      2,
+      0,
+      2,
+      0,
+      0x00,
+      0x02,
+      compressed87a.length,
+      ...compressed87a,
+      0x00,
+      0x3b,
+    ]);
+
     const doc = deck({ width: 240, height: 120 }).append(
       slide({ id: "gifs", background: "#10B981" }).append(
         image({
@@ -333,6 +396,14 @@ describe("Slice 3 (Ticket 04): Image static preview positive behaviors", () => {
           src: gif87a,
           x: 160,
           y: 10,
+          width: 40,
+          height: 40,
+        }),
+        image({
+          id: "gif-comment-opaque",
+          src: gifWithCommentAndOpaqueGce,
+          x: 160,
+          y: 60,
           width: 40,
           height: 40,
         }),
@@ -364,6 +435,8 @@ describe("Slice 3 (Ticket 04): Image static preview positive behaviors", () => {
     assert.ok(row2[0]! < 40 && row2[1]! < 60 && row2[2]! > 220);
     // GIF87a green (#00AA00) at (160..200, 10..50)
     assert.deepEqual(px(180, 30), [0, 170, 0, 255]);
+    // GIF89a with comment extension & opaque GCE yellow (#FFFF00) at (160..200, 60..100)
+    assert.deepEqual(px(180, 80), [255, 255, 0, 255]);
   });
 
   it("renders preset and custom geometry masks, dashed/dotted borders, boxShadow, softEdge, and opacity without double-applying border alpha", async () => {

@@ -1,16 +1,40 @@
 import assert from "node:assert/strict";
 
-import { build } from "@react-pptx/react-pptx";
+import { emit, expandDocument, resolve } from "@react-pptx/react-pptx";
+import { paint } from "@react-pptx/react-pptx/preview";
 import { validatePptx } from "@react-pptx/validation";
 import { it } from "vitest";
 
 import { GenerativeAiHistoryDeck } from "../src/index.ts";
 
-it("full deck preserves 14 slides, editable chart, and valid object boundaries", async () => {
-  const result = await build(<GenerativeAiHistoryDeck />, {
+function assertValidPng1280x720(png: Uint8Array, label: string): void {
+  const pngSignature = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
+  assert.ok(png.byteLength > 24, `${label}: PNG too small`);
+  assert.deepEqual(
+    [...png.subarray(0, 8)],
+    pngSignature,
+    `${label}: invalid PNG signature`,
+  );
+  const view = new DataView(png.buffer, png.byteOffset, png.byteLength);
+  assert.equal(view.getUint32(16, false), 1280, `${label}: PNG width`);
+  assert.equal(view.getUint32(20, false), 720, `${label}: PNG height`);
+}
+
+it("full deck preserves 14 slides, zero-diagnostic static preview, editable chart, and valid object boundaries", async () => {
+  const resolution = resolve(await expandDocument(<GenerativeAiHistoryDeck />));
+  const result = emit(resolution, {
     embedFonts: "full",
   });
+  assert.deepEqual(resolution.report.diagnostics, []);
   assert.deepEqual(result.report.diagnostics, []);
+
+  const painted = paint(resolution);
+  assert.equal(painted.pages.length, 14);
+  for (const page of painted.pages) {
+    assert.deepEqual(page.diagnostics, [], `preview page ${page.page}`);
+    assert.ok(page.png !== undefined, `preview page ${page.page} png`);
+    assertValidPng1280x720(page.png, `preview page ${page.page}`);
+  }
 
   const file = await validatePptx(result.pptx, {
     allowedExtensions: ["p14", "p159"],

@@ -2301,6 +2301,41 @@ function shapeSegmentOutlines(
 }
 
 /**
+ * Converts font-measurement/outline unavailability errors encountered during paint()
+ * into `preview-unsupported-font` while preserving `resolve()` error semantics.
+ */
+export function withPreviewFontBoundary<T>(fn: () => T): T {
+  try {
+    return fn();
+  } catch (error) {
+    if (error instanceof CapabilityError) {
+      if (
+        error.code === "preview-unsupported-font" ||
+        error.code === "preview-missing-glyph"
+      ) {
+        throw error;
+      }
+      if (error.code === "font-measurement-unavailable") {
+        throw new CapabilityError(
+          "preview-unsupported-font",
+          "Preview requires an explicit monochrome outline font file for each used font weight and style",
+        );
+      }
+      if (
+        error.code === "font-format-unsupported" ||
+        error.code === "font-substitution-required" ||
+        error.code === "font-face-mismatch" ||
+        error.code === "font-metrics-invalid" ||
+        error.code === "conflicting-resource"
+      ) {
+        throw new CapabilityError("preview-unsupported-font", error.message);
+      }
+    }
+    throw error;
+  }
+}
+
+/**
  * Extracts vector glyph outlines for one paragraph using its formal measurement / line-break ranges.
  * Coordinates are relative to each line's baseline, in pixels.
  */
@@ -2308,20 +2343,26 @@ export function previewParagraphOutlines(
   paragraph: Paragraph,
   widthOrMeasured: number | MeasuredParagraph,
 ): PreviewParagraphOutlines {
-  const measured =
-    typeof widthOrMeasured === "number"
-      ? paragraphMeasurement(paragraph, widthOrMeasured)
-      : widthOrMeasured;
-  const { text, pieces } = measured;
-  const baseDir = paragraphBaseDirection(text);
-  for (const piece of pieces) {
-    if (hasUnsupportedColorFontTable(piece.face.font)) {
-      throw new CapabilityError(
-        "preview-unsupported-font",
-        "Preview requires monochrome outline fonts",
-      );
+  const { measured, text, pieces, baseDir } = withPreviewFontBoundary(() => {
+    const resolvedMeasured =
+      typeof widthOrMeasured === "number"
+        ? paragraphMeasurement(paragraph, widthOrMeasured)
+        : widthOrMeasured;
+    for (const piece of resolvedMeasured.pieces) {
+      if (hasUnsupportedColorFontTable(piece.face.font)) {
+        throw new CapabilityError(
+          "preview-unsupported-font",
+          "Preview requires monochrome outline fonts",
+        );
+      }
     }
-  }
+    return {
+      measured: resolvedMeasured,
+      text: resolvedMeasured.text,
+      pieces: resolvedMeasured.pieces,
+      baseDir: paragraphBaseDirection(resolvedMeasured.text),
+    };
+  });
   const lines = measured.lines.map((line, lineIndex) => {
     let cursor = 0;
     let pendingTracking = 0;
@@ -2531,13 +2572,16 @@ function shapeListPrefix(
   prefixText: string,
 ): { readonly glyphs: readonly PreviewGlyph[]; readonly advance: number } {
   const prefixStyle = paragraph.runs[0]?.style ?? paragraph.endStyle;
-  const prefixFace = measureRunFace(prefixStyle);
-  if (hasUnsupportedColorFontTable(prefixFace.font)) {
-    throw new CapabilityError(
-      "preview-unsupported-font",
-      "Preview requires monochrome outline fonts",
-    );
-  }
+  const prefixFace = withPreviewFontBoundary(() => {
+    const face = measureRunFace(prefixStyle);
+    if (hasUnsupportedColorFontTable(face.font)) {
+      throw new CapabilityError(
+        "preview-unsupported-font",
+        "Preview requires monochrome outline fonts",
+      );
+    }
+    return face;
+  });
   if (missingCharacters(prefixFace, prefixText).length > 0) {
     throw new CapabilityError(
       "preview-missing-glyph",
@@ -2945,21 +2989,6 @@ export function measureTextLayoutFromParagraphs(
     minContentHeight: measured.height,
     ...(baseline === undefined ? {} : { baseline }),
   };
-}
-
-/** Returns layout dimensions based on actual fonts and line breaking rules of shared text service. */
-export function measureTextLayout(
-  children: readonly unknown[],
-  styleValue: unknown,
-  theme: ThemeContext,
-  availableWidth?: number,
-  slideNumber = 1,
-): TextLayoutMeasurement {
-  const style = readTextStyle(styleValue, "Text.style", theme);
-  const paragraphs = normalizeParagraphs(children, style, theme, {
-    slideNumber,
-  });
-  return measureTextLayoutFromParagraphs(paragraphs, style, availableWidth);
 }
 
 function bodyAnchor(verticalAlign: TextStyle["verticalAlign"]): string {

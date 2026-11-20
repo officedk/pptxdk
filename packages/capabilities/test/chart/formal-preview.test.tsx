@@ -1330,4 +1330,82 @@ describe("Chart static preview, layout parity, and textCapability isolation", ()
       assert.deepEqual(result.pages[1]?.diagnostics, [], item.label);
     }
   });
+
+  it("renders textDecoration (underline and line-through) and textShadow on chart title and rotated axis titles", async () => {
+    const previewDoc = runDocPreview(documentCapabilities);
+    const doc = deck({ width: 640, height: 360 }).append(
+      slide({ id: "styled-chart-text", background: "#FFFFFF" }).append(
+        chart({
+          id: "styled-title-chart",
+          x: 20,
+          y: 20,
+          width: 600,
+          height: 320,
+          title: {
+            text: "Underlined Title",
+            style: {
+              fontSize: 22,
+              color: "#1D4ED8",
+              textDecoration: "underline",
+              textShadow: {
+                color: "#0F172A",
+                blur: 2,
+                distance: 3,
+                angle: 90,
+              },
+            },
+          },
+          axes: {
+            x: { kind: "category" },
+            y: {
+              kind: "value",
+              title: {
+                text: "Struck Axis",
+                style: {
+                  fontSize: 14,
+                  color: "#DC2626",
+                  textDecoration: "line-through",
+                  textShadow: {
+                    color: "#0F172A",
+                    blur: 1,
+                    distance: 2,
+                    angle: 45,
+                  },
+                },
+              },
+            },
+          },
+          style: { fontFamily: jostFont, fontSize: 12 },
+          groups: [
+            {
+              kind: "column",
+              axes: { category: "x", value: "y" },
+              data: { kind: "shared-categories", categories: ["Q1", "Q2"] },
+              series: [{ name: "Actual", values: [25, 45] }],
+              dataLabels: {
+                value: true,
+                style: {
+                  textDecoration: "underline",
+                  color: "#047857",
+                },
+              },
+            },
+          ],
+        }),
+      ),
+    );
+
+    const result = await previewDoc(doc);
+    assert.deepEqual((await validatePptx(result.pptx)).errors, []);
+    const page = result.pages[0]!;
+    assert.deepEqual(page.diagnostics, []);
+    assert.ok(page.png !== undefined);
+    const svg = page.svg ?? "";
+    expect(svg).toContain("<feDropShadow");
+    expect(svg).toContain('fill="#1D4ED8"');
+    // Decoration lines for underline / line-through are rendered as filled <rect> elements.
+    expect(svg).toMatch(/<rect[^>]*fill="#1D4ED8"/);
+    expect(svg).toMatch(/<rect[^>]*fill="#DC2626"/);
+    expect(svg).toMatch(/<rect[^>]*fill="#047857"/);
+  });
 });

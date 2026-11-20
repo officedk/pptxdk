@@ -25,7 +25,11 @@ import { createElement, type ReactNode } from "react";
 import { describe, expect, it } from "vitest";
 
 import { runCapabilityScenario } from "../acceptance-runner.ts";
-import { shapePositiveScenario, shapeRejectionScenario } from "./scenarios.ts";
+import {
+  shapePositiveScenario,
+  shapePresetCatalogScenario,
+  shapeRejectionScenario,
+} from "./scenarios.ts";
 
 type CustomMarkerProps = {
   readonly id?: string;
@@ -72,7 +76,11 @@ describe("Shape capability acceptance & bound extension contracts", () => {
   it("runs Shape dual-author positive and rejection scenarios through shared runner", async () => {
     const outDir = await mkdtemp(join(tmpdir(), "rp-shape-accept-"));
     try {
-      for (const scenario of [shapePositiveScenario, shapeRejectionScenario]) {
+      for (const scenario of [
+        shapePositiveScenario,
+        shapePresetCatalogScenario,
+        shapeRejectionScenario,
+      ]) {
         const runs = await runCapabilityScenario(scenario, {
           outputDir: outDir,
         });

@@ -70,6 +70,7 @@ export type {
   PathCommand,
   PathOptions,
   PresetGeometry,
+  PresetGeometryName,
 } from "@react-pptx/capabilities/shape";
 export type {
   BuildOptions,

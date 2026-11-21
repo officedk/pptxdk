@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
+import { documentCapabilities } from "@pptxdk/capabilities/all";
 import {
   deck,
-  documentCapabilities,
   font,
   paragraph,
   shape,

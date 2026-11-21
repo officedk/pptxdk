@@ -3,10 +3,10 @@ import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
+import { documentCapabilities } from "@pptxdk/capabilities/all";
 import {
   cell,
   deck,
-  documentCapabilities,
   font,
   paragraph,
   row,

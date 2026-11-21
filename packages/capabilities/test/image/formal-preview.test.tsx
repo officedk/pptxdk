@@ -1,11 +1,7 @@
 import assert from "node:assert/strict";
 
-import {
-  deck,
-  documentCapabilities,
-  image,
-  slide,
-} from "@pptxdk/capabilities/document";
+import { documentCapabilities } from "@pptxdk/capabilities/all";
+import { deck, image, slide } from "@pptxdk/capabilities/document";
 import { Image } from "@pptxdk/capabilities/image-elements";
 import { preset } from "@pptxdk/capabilities/shape";
 import { type CapabilityModule, CommonNode } from "@pptxdk/core";

@@ -1,4 +1,4 @@
-import { documentCapabilities } from "@pptxdk/capabilities/document";
+import { documentCapabilities } from "@pptxdk/capabilities/all";
 import {
   createResolver,
   type BuildQuery,

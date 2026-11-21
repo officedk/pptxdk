@@ -9,11 +9,11 @@ import {
   transitions,
   type MotionObservation,
 } from "@pptxdk/capabilities";
+import { documentCapabilities } from "@pptxdk/capabilities/all";
 import {
   box,
   createMotionScopeHandle,
   deck,
-  documentCapabilities,
   motionScope,
   shape,
   slide,

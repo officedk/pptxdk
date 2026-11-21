@@ -14,17 +14,13 @@ import {
   type ColorValue,
   type EmitContext,
   type EmitOutput,
-  type LayoutStyle,
-  type LinkTarget,
   type ObjectCapabilityModule,
   type ObjectResolveContext,
-  type PaddingStyle,
   type PaintContext,
   type PaintOutput,
   type PreviewTransform,
   type ResolvedObject,
 } from "@pptxdk/core/capability";
-import { RichTextContainer } from "@pptxdk/core/document";
 import { pxToEmu, xmlEscape } from "@pptxdk/emit";
 
 import { evaluateGeometry, type Geometry } from "../shared/geometry.ts";
@@ -58,8 +54,7 @@ export type {
   ShapeVisualStyle,
 } from "../shared/visual.ts";
 export type { PaddingStyle, VisualStyle } from "@pptxdk/core/capability";
-import { motionAnnotations, type MotionProps } from "../motion/motion-api.ts";
-import type { MorphProps } from "../shared/morph-api.ts";
+import { motionAnnotations } from "../motion/motion-api.ts";
 import {
   emitTextBody,
   measureTextLayoutFromParagraphs,
@@ -78,43 +73,12 @@ import {
   resolveVisualModel,
   visualStyleKeys,
   type ResolvedVisualModel,
-  type ShapeVisualStyle,
 } from "../shared/visual.ts";
 
-export type ShapeDeclarationProps = MotionProps &
-  MorphProps & {
-    readonly link?: LinkTarget;
-    readonly id?: string;
-    readonly name?: string;
-    readonly geometry?: Geometry;
-    readonly flipH?: boolean;
-    readonly flipV?: boolean;
-    readonly x?: number;
-    readonly y?: number;
-    readonly width?: number;
-    readonly height?: number;
-    readonly style?: LayoutStyle & ShapeVisualStyle & TextStyle & PaddingStyle;
-    readonly fill?: ColorValue;
-    /** Directly writes native text into this shape without creating an additional text box; mutually exclusive with children. */
-    readonly text?: string;
-    /** Shape text uses shared text services and can still be emitted when text box capability is omitted. */
-    readonly textStyle?: TextStyle;
-  };
-
-/** Creates the editable native shape shared by the command factory and the Shape JSX element. */
-export function createShapeNode(
-  props: ShapeDeclarationProps,
-): RichTextContainer<
-  "shape",
-  ShapeDeclarationProps,
-  NonNullable<ShapeDeclarationProps["style"]>
-> {
-  return new RichTextContainer<
-    "shape",
-    ShapeDeclarationProps,
-    NonNullable<ShapeDeclarationProps["style"]>
-  >("shape", "shape", props);
-}
+export {
+  createShapeNode,
+  type ShapeDeclarationProps,
+} from "./shape-declaration.ts";
 
 const maximumShapeExtentEmu = 2_147_483_647;
 

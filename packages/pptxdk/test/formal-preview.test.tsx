@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 
 import { BuildError, font } from "pptxdk";
 import {
+  PreviewPageRangeError,
   preview as previewDocument,
   preview as previewJsx,
 } from "pptxdk/preview";
@@ -163,8 +164,14 @@ describe("Slice 3: formal static preview public entrypoints and runtime isolatio
       );
     }
     await assert.rejects(
-      () => previewDocument(validTwoPages, { pages: [3] }),
-      RangeError,
+      () => previewDocument(validTwoPages, { pages: [1, 3] }),
+      (error: unknown) =>
+        error instanceof RangeError &&
+        error instanceof PreviewPageRangeError &&
+        error.totalSlides === 2 &&
+        error.requestedPages.length === 2 &&
+        error.requestedPages[0] === 1 &&
+        error.requestedPages[1] === 3,
     );
 
     // Full-deck formal build validation still catches build errors on unselected pages.

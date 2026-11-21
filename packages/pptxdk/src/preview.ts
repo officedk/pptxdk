@@ -8,6 +8,7 @@ import {
 import type { PreviewTransform, PreviewWarning } from "@pptxdk/core/capability";
 import { CommonNode } from "@pptxdk/core/document";
 import {
+  PreviewPageRangeError,
   paint,
   type PreviewOptions,
   type PreviewResult,
@@ -52,7 +53,7 @@ export async function preview(
   });
 }
 
-export { paint };
+export { PreviewPageRangeError, paint };
 export type {
   BuildQuery,
   PreviewTransform,

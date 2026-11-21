@@ -864,6 +864,7 @@ describe("pptxdk CLI preview", () => {
       ),
     ).toEqual([
       "invalidOutput",
+      "pageOutOfRange",
       "sourceLoadFailed",
       "buildFailed",
       "previewFailed",
@@ -1465,6 +1466,479 @@ describe("pptxdk CLI preview", () => {
       expect(loadStderr).toBe("Deck preview cancelled\n");
       expect(loadStderr).not.toContain("Failed to load deck source");
       expect(existsSync(loadOutDir)).toBe(false);
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("selects deduplicated ascending pages via --pages/-p and documents the option in help and contract schema", async () => {
+    const previewHelp = await runInMemory(
+      ["preview", "-h"],
+      import.meta.dirname,
+    );
+    expect(previewHelp.code).toBe(0);
+    expect(previewHelp.stdout).toContain("--pages");
+    expect(previewHelp.stdout).toContain("-p");
+
+    const previewInputSchema = await runInMemory(
+      ["preview", "--schema=input"],
+      import.meta.dirname,
+    );
+    expect(previewInputSchema.code).toBe(0);
+    expect(JSON.parse(previewInputSchema.stdout)).toMatchObject({
+      kind: "input",
+      schemaVersion: "5",
+      command: "preview",
+      fields: expect.arrayContaining([
+        expect.objectContaining({
+          kind: "valueOption",
+          longOption: "--pages",
+          shortAlias: "-p",
+          key: "pages",
+          required: false,
+        }),
+      ]),
+      input: {
+        inputSchema: {
+          properties: {
+            pages: { type: "string", minLength: 1 },
+          },
+        },
+        outputSchema: {
+          properties: {
+            pages: {
+              type: "array",
+              minItems: 1,
+              items: { type: "integer", exclusiveMinimum: 0 },
+            },
+          },
+        },
+      },
+    });
+
+    const directory = await mkdtemp(join(tmpdir(), "pptxdk select-pages "));
+    try {
+      const source = fixture("multi-slide.ts");
+      const outDir = join(directory, "selected");
+
+      const result = await runInMemory(
+        [
+          "preview",
+          source,
+          "-e",
+          "SixPageDeck",
+          "-p",
+          "5,3-5,1",
+          "-o",
+          outDir,
+          "--output",
+          "structured",
+        ],
+        directory,
+      );
+      expect(result.code).toBe(0);
+      expect(result.stderr).toBe("");
+      expect(JSON.parse(result.stdout)).toEqual({
+        schemaVersion: "3",
+        command: "preview",
+        outputMode: "structured",
+        kind: "data",
+        variant: "previewed",
+        data: {
+          outputDir: outDir,
+          pages: [
+            { page: 1, id: "six-1", output: join(outDir, "page-01.png") },
+            { page: 3, id: "six-3", output: join(outDir, "page-03.png") },
+            { page: 4, id: "six-4", output: join(outDir, "page-04.png") },
+            { page: 5, id: "six-5", output: join(outDir, "page-05.png") },
+          ],
+          warnings: [],
+        },
+      });
+      expect((await readdir(outDir)).toSorted()).toEqual([
+        "page-01.png",
+        "page-03.png",
+        "page-04.png",
+        "page-05.png",
+      ]);
+
+      const { previewFromSource } = await import("pptxdk/node");
+      const formal = await previewFromSource(source, {
+        exportName: "SixPageDeck",
+        pages: [1, 3, 4, 5],
+      });
+      for (const pageResult of formal.pages) {
+        expect(
+          await readFile(
+            join(
+              outDir,
+              `page-${String(pageResult.page).padStart(2, "0")}.png`,
+            ),
+          ),
+        ).toEqual(Buffer.from(pageResult.png!));
+      }
+
+      const cliOutDir = join(directory, "cli-selected");
+      const cliResult = runNode(
+        [
+          cli,
+          "preview",
+          source,
+          "--export",
+          "SixPageDeck",
+          "--pages",
+          "5,3-5,1",
+          "--out-dir",
+          cliOutDir,
+        ],
+        directory,
+      );
+      expect(cliResult.code).toBe(0);
+      expect(cliResult.stderr).toBe("");
+      expect(cliResult.stdout).toContain(`Previewed 4 page(s) in ${cliOutDir}`);
+      expect((await readdir(cliOutDir)).toSorted()).toEqual([
+        "page-01.png",
+        "page-03.png",
+        "page-04.png",
+        "page-05.png",
+      ]);
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("rejects invalid --pages syntax at validation time with exit code 2 without loading source or touching outDir", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "pptxdk invalid-pages "));
+    try {
+      const brokenSyntaxEntry = join(directory, "broken-syntax.tsx");
+      await writeFile(brokenSyntaxEntry, "export default <Deck << broken;");
+      const missingEntry = join(directory, "does-not-exist.tsx");
+
+      const preservedDir = join(directory, "preserved-out");
+      await mkdir(preservedDir, { recursive: true });
+      await writeFile(join(preservedDir, "page-01.png"), "existing-page-1");
+      await writeFile(join(preservedDir, "manifest.json"), '{"keep":true}');
+
+      const nonExistentOutDir = join(directory, "never-created-out");
+
+      const invalidSpecs = [
+        "",
+        "0",
+        "00",
+        "5-3",
+        "0-2",
+        "abc",
+        "1.5",
+        "-1",
+        "1,",
+        ",1",
+        "1,,2",
+        "1, 2",
+      ] as const;
+
+      for (const spec of invalidSpecs) {
+        const result = await runInMemory(
+          ["preview", missingEntry, "-p", spec, "--out-dir", nonExistentOutDir],
+          directory,
+        );
+        expect(result.code).toBe(2);
+        expect(result.stdout).toBe("");
+        expect(JSON.parse(result.stderr)).toMatchObject({
+          schemaVersion: "3",
+          command: "preview",
+          kind: "usageFailure",
+          helpArgv: ["pptxdk", "preview", "--help"],
+        });
+        expect(existsSync(nonExistentOutDir)).toBe(false);
+      }
+
+      const syntaxCases = [
+        { entry: missingEntry, spec: "0" },
+        { entry: brokenSyntaxEntry, spec: "5-3" },
+      ] as const;
+
+      for (const item of syntaxCases) {
+        const cliResult = runNode(
+          [cli, "preview", item.entry, "-p", item.spec, "-o", preservedDir],
+          directory,
+        );
+        expect(cliResult.code).toBe(2);
+        expect(cliResult.stdout).toBe("");
+        expect(JSON.parse(cliResult.stderr)).toMatchObject({
+          schemaVersion: "3",
+          command: "preview",
+          kind: "usageFailure",
+          helpArgv: ["pptxdk", "preview", "--help"],
+        });
+      }
+
+      expect((await readdir(preservedDir)).toSorted()).toEqual([
+        "manifest.json",
+        "page-01.png",
+      ]);
+      expect(await readFile(join(preservedDir, "page-01.png"), "utf8")).toBe(
+        "existing-page-1",
+      );
+      expect(await readFile(join(preservedDir, "manifest.json"), "utf8")).toBe(
+        '{"keep":true}',
+      );
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("zero-pads selected page 3 of a 120-page deck to page-003.png and preserves unrelated and unselected files", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "pptxdk 120-pages "));
+    try {
+      const source = fixture("multi-slide.ts");
+      const outDir = join(directory, "preview-120");
+      await mkdir(outDir, { recursive: true });
+
+      const page1Bytes = Buffer.from([0x89, 0x50, 0x4e, 0x47, 1, 2, 3]);
+      const page120Bytes = Buffer.from([0x89, 0x50, 0x4e, 0x47, 9, 8, 7]);
+      const manifestBytes = Buffer.from('{"existing":true}\n', "utf8");
+      await writeFile(join(outDir, "page-001.png"), page1Bytes);
+      await writeFile(join(outDir, "page-120.png"), page120Bytes);
+      await writeFile(join(outDir, "manifest.json"), manifestBytes);
+
+      const result = runNode(
+        [
+          cli,
+          "preview",
+          source,
+          "-e",
+          "OneTwentyPageDeck",
+          "-p",
+          "3",
+          "-o",
+          outDir,
+          "--output",
+          "structured",
+        ],
+        directory,
+      );
+      expect(result.code).toBe(0);
+      expect(result.stderr).toBe("");
+      expect(JSON.parse(result.stdout)).toEqual({
+        schemaVersion: "3",
+        command: "preview",
+        outputMode: "structured",
+        kind: "data",
+        variant: "previewed",
+        data: {
+          outputDir: outDir,
+          pages: [
+            {
+              page: 3,
+              id: "deck-120-slide-3",
+              output: join(outDir, "page-003.png"),
+            },
+          ],
+          warnings: [],
+        },
+      });
+
+      const { previewFromSource } = await import("pptxdk/node");
+      const formal = await previewFromSource(source, {
+        exportName: "OneTwentyPageDeck",
+        pages: [3],
+      });
+      expect(formal.pages).toHaveLength(1);
+      expect(formal.pages[0]?.page).toBe(3);
+      expect(formal.pages[0]?.id).toBe("deck-120-slide-3");
+      expect(await readFile(join(outDir, "page-003.png"))).toEqual(
+        Buffer.from(formal.pages[0]!.png!),
+      );
+
+      expect((await readdir(outDir)).toSorted()).toEqual([
+        "manifest.json",
+        "page-001.png",
+        "page-003.png",
+        "page-120.png",
+      ]);
+      expect(await readFile(join(outDir, "page-001.png"))).toEqual(page1Bytes);
+      expect(await readFile(join(outDir, "page-120.png"))).toEqual(
+        page120Bytes,
+      );
+      expect(await readFile(join(outDir, "manifest.json"))).toEqual(
+        manifestBytes,
+      );
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("reports pageOutOfRange with exit code 2 and zero writes when any requested page exceeds totalSlides", async () => {
+    const failureSchema = await runInMemory(
+      ["preview", "--schema=failures:structured"],
+      import.meta.dirname,
+    );
+    expect(failureSchema.code).toBe(0);
+    expect(JSON.parse(failureSchema.stdout)).toMatchObject({
+      kind: "failures",
+      command: "preview",
+      failures: {
+        pageOutOfRange: {
+          exitCode: 2,
+          outputSchema: {
+            required: ["requestedPages", "totalSlides"],
+          },
+        },
+      },
+    });
+
+    const directory = await mkdtemp(join(tmpdir(), "pptxdk out-of-range "));
+    try {
+      const source = fixture("multi-slide.ts");
+      const missingOutDir = join(directory, "never-created-range");
+
+      const structured = await runInMemory(
+        [
+          "preview",
+          source,
+          "-e",
+          "SixPageDeck",
+          "-p",
+          "1,3,8",
+          "-o",
+          missingOutDir,
+          "--output",
+          "structured",
+        ],
+        directory,
+      );
+      expect(structured.code).toBe(2);
+      expect(structured.stdout).toBe("");
+      expect(JSON.parse(structured.stderr)).toEqual({
+        schemaVersion: "3",
+        command: "preview",
+        outputMode: "structured",
+        kind: "failure",
+        variant: "pageOutOfRange",
+        data: {
+          requestedPages: [1, 3, 8],
+          totalSlides: 6,
+        },
+      });
+      expect(existsSync(missingOutDir)).toBe(false);
+
+      const existingOutDir = join(directory, "existing-range-out");
+      await mkdir(existingOutDir, { recursive: true });
+      const oldPage1 = Buffer.from("old-page-1");
+      const oldPage3 = Buffer.from("old-page-3");
+      const keepFile = Buffer.from("keep-unrelated");
+      await writeFile(join(existingOutDir, "page-01.png"), oldPage1);
+      await writeFile(join(existingOutDir, "page-03.png"), oldPage3);
+      await writeFile(join(existingOutDir, "keep.txt"), keepFile);
+
+      const textResult = runNode(
+        [
+          cli,
+          "preview",
+          source,
+          "-e",
+          "SixPageDeck",
+          "-p",
+          "5,1,8,3",
+          "-o",
+          existingOutDir,
+        ],
+        directory,
+      );
+      expect(textResult.code).toBe(2);
+      expect(textResult.stdout).toBe("");
+      expect(textResult.stderr).toBe(
+        "Requested pages (1, 3, 5, 8) exceed total slides (6)\n",
+      );
+      expect((await readdir(existingOutDir)).toSorted()).toEqual([
+        "keep.txt",
+        "page-01.png",
+        "page-03.png",
+      ]);
+      expect(await readFile(join(existingOutDir, "page-01.png"))).toEqual(
+        oldPage1,
+      );
+      expect(await readFile(join(existingOutDir, "page-03.png"))).toEqual(
+        oldPage3,
+      );
+      expect(await readFile(join(existingOutDir, "keep.txt"))).toEqual(
+        keepFile,
+      );
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("runs full-deck solve before page selection so unselected build errors still return buildFailed without writing selected pages", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "pptxdk solve-first "));
+    try {
+      const source = fixture("broken deck.tsx");
+      const missingOutDir = join(directory, "uncreated-build-fail-out");
+
+      const structured = await runInMemory(
+        [
+          "preview",
+          source,
+          "-e",
+          "UnselectedPageBrokenDeck",
+          "-p",
+          "1",
+          "-o",
+          missingOutDir,
+          "--output",
+          "structured",
+        ],
+        directory,
+      );
+      expect(structured.code).toBe(1);
+      expect(structured.stdout).toBe("");
+      expect(JSON.parse(structured.stderr)).toMatchObject({
+        schemaVersion: "3",
+        command: "preview",
+        outputMode: "structured",
+        kind: "failure",
+        variant: "buildFailed",
+        data: {
+          diagnostics: [
+            {
+              path: "deck/slide[broken-unselected]/shape[broken-unselected-shape]",
+              code: "invalid-coordinate",
+              message: expect.any(String),
+            },
+          ],
+        },
+      });
+      expect(existsSync(missingOutDir)).toBe(false);
+
+      const existingOutDir = join(directory, "existing-build-fail-out");
+      await mkdir(existingOutDir, { recursive: true });
+      const keepBytes = Buffer.from("keep-me");
+      await writeFile(join(existingOutDir, "keep.txt"), keepBytes);
+
+      const textResult = runNode(
+        [
+          cli,
+          "preview",
+          source,
+          "-e",
+          "UnselectedPageBrokenDeck",
+          "--pages",
+          "1",
+          "--out-dir",
+          existingOutDir,
+        ],
+        directory,
+      );
+      expect(textResult.code).toBe(1);
+      expect(textResult.stdout).toBe("");
+      expect(textResult.stderr).toContain("Build failed:");
+      expect(textResult.stderr).toContain(
+        "deck/slide[broken-unselected]/shape[broken-unselected-shape] [invalid-coordinate]:",
+      );
+      expect(await readdir(existingOutDir)).toEqual(["keep.txt"]);
+      expect(await readFile(join(existingOutDir, "keep.txt"))).toEqual(
+        keepBytes,
+      );
     } finally {
       await rm(directory, { recursive: true, force: true });
     }

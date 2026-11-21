@@ -620,7 +620,7 @@ describe("pptxdk/node source SDK", () => {
             (error: unknown) => error === reason,
           );
           importReject.reject(new Error("late module error"));
-          await new Promise((resolve) => setTimeout(resolve, 10));
+          await new Promise((resolve) => setImmediate(resolve));
           assert.equal(getEventListeners(controller.signal, "abort").length, 0);
         }
 
@@ -630,7 +630,18 @@ describe("pptxdk/node source SDK", () => {
         ].entries()) {
           const promisePending = join(root, `promise-pending-${index}.ts`);
           const exported = Promise.withResolvers<unknown>();
-          Reflect.set(globalThis, "__pptxdkPendingPromise", exported.promise);
+          const subscribed = Promise.withResolvers<void>();
+          Reflect.set(globalThis, "__pptxdkPendingPromise", {
+            // Expose subscription timing deterministically before aborting.
+            // oxlint-disable-next-line unicorn/no-thenable
+            then(
+              onFulfilled?: ((value: unknown) => unknown) | null,
+              onRejected?: ((reason: unknown) => unknown) | null,
+            ) {
+              subscribed.resolve();
+              return exported.promise.then(onFulfilled, onRejected);
+            },
+          });
           await writeFile(
             promisePending,
             "export default globalThis.__pptxdkPendingPromise;\n",
@@ -641,7 +652,7 @@ describe("pptxdk/node source SDK", () => {
           const pendingCall = invoke(promisePending, {
             signal: controller.signal,
           });
-          await new Promise((resolve) => setTimeout(resolve, 10));
+          await subscribed.promise;
           controller.abort(reason);
 
           await assert.rejects(
@@ -649,7 +660,7 @@ describe("pptxdk/node source SDK", () => {
             (error: unknown) => error === reason,
           );
           exported.reject(new Error("late deck promise rejection"));
-          await new Promise((resolve) => setTimeout(resolve, 10));
+          await new Promise((resolve) => setImmediate(resolve));
           assert.equal(getEventListeners(controller.signal, "abort").length, 0);
         }
 

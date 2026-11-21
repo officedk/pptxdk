@@ -1,11 +1,13 @@
-import { fillColor, preset, wipe } from "pptxdk";
 import {
+  fillColor,
   Group,
   MotionScope,
+  preset,
   Shape,
   Step,
   Text,
   useMotionScope,
+  wipe,
 } from "pptxdk/react";
 
 import { regionBars, type MapRegionId } from "../assets/world-map.ts";

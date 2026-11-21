@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 
-import { defineTheme, font } from "pptxdk";
+import { defineTheme, font } from "pptxdk/vanilla";
 
 const jost = font(
   "Jost",

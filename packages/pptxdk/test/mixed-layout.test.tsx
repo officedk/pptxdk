@@ -5,7 +5,6 @@ import { validatePptx } from "@pptxdk/validation";
 import { strFromU8, unzipSync } from "fflate";
 import * as fontkit from "fontkit";
 import { build, BuildError, font } from "pptxdk";
-import { build as buildDocument } from "pptxdk";
 import { Box, Chart, Deck, Group, Image, Slide, Text } from "pptxdk/react";
 import {
   box as authorBox,
@@ -815,7 +814,7 @@ function objectBox(
 describe("mixed layout, layering, and component reflow", () => {
   it("builds the same mixed intent through React and document authoring", async () => {
     const reactResult = await build(<MixedDeck />);
-    const documentResult = await buildDocument(authorMixedDeck());
+    const documentResult = await build(authorMixedDeck());
 
     assert.deepEqual(reactResult.report.diagnostics, []);
     assert.deepEqual(documentResult.report.diagnostics, []);
@@ -1133,7 +1132,7 @@ describe("mixed layout, layering, and component reflow", () => {
         </Slide>
       </Deck>,
     );
-    const documentResult = await buildDocument(
+    const documentResult = await build(
       authorDeck({ width: 400, height: 300, theme: mixedTheme }).append(
         authorSlide({ id: "intrinsic-precision" }).append(
           authorBox({ id: "column", style: columnStyle }).append(
@@ -1295,7 +1294,7 @@ describe("mixed layout, layering, and component reflow", () => {
         </Slide>
       </Deck>,
     );
-    const documentResult = await buildDocument(
+    const documentResult = await build(
       authorDeck({ width: 400, height: 300, theme: mixedTheme }).append(
         authorSlide({ id: "group-precision" }).append(
           authorGroup({ id: "top-group" }).append(
@@ -1456,7 +1455,7 @@ describe("mixed layout, layering, and component reflow", () => {
         </Slide>
       </Deck>,
     );
-    const documentResult = await buildDocument(
+    const documentResult = await build(
       authorDeck({ width: 400, height: 400, theme: mixedTheme }).append(
         authorSlide({ id: "native-font-size" }).append(
           authorBox({

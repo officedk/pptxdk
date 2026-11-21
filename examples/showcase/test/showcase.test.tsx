@@ -3,7 +3,6 @@ import assert from "node:assert/strict";
 import { validatePptx } from "@pptxdk/validation";
 import { unzipSync } from "fflate";
 import { build, emit, resolve } from "pptxdk";
-import { emit as emitDocument, resolve as resolveDocument } from "pptxdk";
 import { paint } from "pptxdk/preview";
 import { Deck, expandDocument, Slide } from "pptxdk/react";
 import { it } from "vitest";
@@ -28,9 +27,9 @@ function assertValidPng1280x720(png: Uint8Array, label: string): void {
 
 it("builds and paints a byte-equivalent mixed showcase entry with a factory comparison page", async () => {
   const jsxResolution = resolve(await expandDocument(<ShowcaseDeck />));
-  const factoryResolution = resolveDocument(await createShowcaseDocument());
+  const factoryResolution = resolve(await createShowcaseDocument());
   const jsx = emit(jsxResolution, { embedFonts: "full" });
-  const factory = emitDocument(factoryResolution, { embedFonts: "full" });
+  const factory = emit(factoryResolution, { embedFonts: "full" });
   const jsxPreview = paint(jsxResolution);
   const factoryPreview = paint(factoryResolution);
 

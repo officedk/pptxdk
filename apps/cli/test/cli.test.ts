@@ -1213,6 +1213,8 @@ describe("pptxdk CLI preview", () => {
       await writeFile(regularFile, "not a directory");
       const danglingLink = join(directory, "dangling-link");
       await symlink(join(directory, "missing-target"), danglingLink);
+      const loopLink = join(directory, "loop-dir");
+      await symlink("loop-dir", loopLink);
 
       const fileOutDir = await runInMemory(
         ["preview", source, "--out-dir", regularFile],
@@ -1225,8 +1227,19 @@ describe("pptxdk CLI preview", () => {
       );
       expect(await readFile(regularFile, "utf8")).toBe("not a directory");
 
+      const loopTextOutDir = await runInMemory(
+        ["preview", source, "--out-dir", loopLink],
+        directory,
+      );
+      expect(loopTextOutDir.code).toBe(2);
+      expect(loopTextOutDir.stdout).toBe("");
+      expect(loopTextOutDir.stderr).toBe(
+        `Output directory cannot be a non-directory path: ${loopLink}\n`,
+      );
+
       for (const invalidTarget of [
         danglingLink,
+        loopLink,
         source,
         join(regularFile, "child"),
       ]) {
@@ -1255,6 +1268,31 @@ describe("pptxdk CLI preview", () => {
           },
         });
       }
+
+      const tooLongOutDir = join(directory, "x".repeat(300));
+      const tooLongResult = await runInMemory(
+        [
+          "preview",
+          source,
+          "--out-dir",
+          tooLongOutDir,
+          "--output",
+          "structured",
+        ],
+        directory,
+      );
+      expect(tooLongResult.code).toBe(1);
+      expect(tooLongResult.stdout).toBe("");
+      expect(JSON.parse(tooLongResult.stderr)).toMatchObject({
+        schemaVersion: "3",
+        command: "preview",
+        outputMode: "structured",
+        kind: "failure",
+        variant: "writeFailed",
+        data: {
+          output: tooLongOutDir,
+        },
+      });
 
       const missingSourceOutDir = join(directory, "no-dir-on-source-fail");
       const sourceFailure = await runInMemory(

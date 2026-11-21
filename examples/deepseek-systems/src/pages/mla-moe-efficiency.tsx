@@ -1,5 +1,4 @@
-import { wipe } from "pptxdk";
-import { Chart, Shape, Text } from "pptxdk/react";
+import { Chart, Shape, Text, wipe } from "pptxdk/react";
 
 import { PanelCard, SemanticTag } from "../components/primitives.tsx";
 import { SlideFrame } from "../templates/slide-frame.tsx";

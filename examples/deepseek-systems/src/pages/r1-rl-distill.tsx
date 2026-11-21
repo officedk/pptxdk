@@ -1,6 +1,6 @@
-import { fade } from "pptxdk";
 import {
   Chart,
+  fade,
   MotionScope,
   Shape,
   Step,

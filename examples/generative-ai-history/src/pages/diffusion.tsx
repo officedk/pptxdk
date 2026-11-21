@@ -1,5 +1,4 @@
-import { path, preset } from "pptxdk";
-import { Shape, Text } from "pptxdk/react";
+import { path, preset, Shape, Text } from "pptxdk/react";
 import { Fragment } from "react";
 
 import { OutlineBox, Rule } from "../components/primitives.tsx";

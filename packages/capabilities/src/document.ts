@@ -37,7 +37,6 @@ import {
   type ImageDeclarationProps,
 } from "./image/image-declaration.ts";
 import {
-  createMotionScopeHandle,
   createMotionScopeNode,
   createMotionStepIdentity,
   createMotionStepNode,
@@ -365,12 +364,105 @@ export function step(props: MotionStepAuthorProps = {}): MotionStepNode {
   });
 }
 
-export { createMotionScopeHandle, font, transitions };
+export {
+  createMotionScopeHandle,
+  after,
+  breathe,
+  fade,
+  fillColor,
+  floatDown,
+  floatUp,
+  fly,
+  repeat,
+  spin,
+  spinIn,
+  stretch,
+  wipe,
+  zoom,
+} from "./motion/motion-api.ts";
+export { observeMotion } from "./motion/motion-query.ts";
+export { blockArc, path, preset } from "./shared/geometry.ts";
+export { linearGradient, radialGradient } from "./shared/visual.ts";
+export { font, transitions };
 export type {
+  BreatheEffect,
+  BreatheOptions,
+  Easing,
+  Effect,
+  EffectOptions,
+  EffectPreset,
+  EmphasisEffect,
+  EmphasisEffectDeclaration,
+  EntranceEffect,
+  EntranceEffectDeclaration,
+  FillColorOptions,
+  MotionCompletionState,
+  MotionDirection,
+  MotionEffectObservation,
+  MotionGranularity,
+  MotionMoment,
+  MotionMomentOffset,
+  MotionNativeProjection,
+  MotionObservation,
+  MotionProps,
   MotionScopeAuthorProps,
   MotionScopeHandle,
+  MotionScopeMode,
+  MotionScopeObservation,
+  MotionStartDependency,
   MotionStepAuthorProps,
+  MotionStepObservation,
+  MotionTargetRange,
+  MotionTiming,
+  RepeatCount,
+  RepeatedEffect,
+  SpinOptions,
 } from "./motion/motion-api.ts";
+export type {
+  EffectInstanceObservation,
+  MotionCueObservation,
+  MotionCueRef,
+  MotionDecision,
+  MotionDependencyObservation,
+  MotionDifference,
+  MotionEffectRef,
+  MotionIntervalRef,
+  MotionMembership,
+  MotionMomentObservation,
+  MotionMomentRef,
+  MotionQuery,
+  MotionScopeQueryMember,
+  MotionScopeQueryObservation,
+  MotionScopeRef,
+  MotionStepQuery,
+  MotionStepRef,
+  MotionTime,
+} from "./motion/motion-query.ts";
+export type {
+  CustomGeometry,
+  Geometry,
+  GeometryPath,
+  PathCommand,
+  PathOptions,
+  PresetGeometry,
+  PresetGeometryName,
+} from "./shared/geometry.ts";
+export type {
+  ArrowType,
+  LineEndStyle,
+  ShapeVisualStyle,
+} from "./shared/visual.ts";
+export type {
+  ImageSource,
+  ImageVisualStyle,
+} from "./image/image-declaration.ts";
+export type {
+  ParagraphStyle,
+  TextAlignment,
+  TextList,
+  TextStyle,
+} from "./shared/text-service.ts";
+export type { ShapeTextStyle } from "./text/text-declaration.ts";
 export type { MorphProps } from "./shared/morph-api.ts";
 export type {
   FlipTransition,

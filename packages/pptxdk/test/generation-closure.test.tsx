@@ -5,17 +5,10 @@ import { validatePptx } from "@pptxdk/validation";
 import { strFromU8, unzipSync } from "fflate";
 import {
   after,
-  build as buildReact,
-  documentCapabilities as reactDocumentCapabilities,
-  emit,
-  fade,
-} from "pptxdk";
-import {
-  after as afterPlain,
   build,
   createMotionScopeHandle,
-  documentCapabilities,
-  fade as fadePlain,
+  emit,
+  fade,
   transitions,
   type MotionObservation,
 } from "pptxdk";
@@ -167,7 +160,7 @@ function plainDeck() {
           y: 460,
           width: 120,
           height: 40,
-          enter: fadePlain({ duration: 200 }),
+          enter: fade({ duration: 200 }),
         }),
         motionScope(lead, { publishEnd: ready }).append(
           shape({
@@ -176,17 +169,17 @@ function plainDeck() {
             y: 460,
             width: 120,
             height: 40,
-            enter: fadePlain({ duration: 100 }),
+            enter: fade({ duration: 100 }),
           }),
         ),
-        motionScope(follower, { startAt: afterPlain(ready, 20) }).append(
+        motionScope(follower, { startAt: after(ready, 20) }).append(
           shape({
             id: "scope-follow",
             x: 300,
             y: 460,
             width: 120,
             height: 40,
-            enter: fadePlain({ duration: 80 }),
+            enter: fade({ duration: 80 }),
           }),
         ),
       ),
@@ -425,10 +418,9 @@ function readerProjection(result: Awaited<ReturnType<typeof validatePptx>>) {
 
 describe("generation closure", () => {
   it("builds the same authoring intent through the default plain and React entries", async () => {
-    assert.equal(reactDocumentCapabilities, documentCapabilities);
     const [plainResult, reactResult] = await Promise.all([
       build(plainDeck()),
-      buildReact(<ReactDeck />),
+      build(<ReactDeck />),
     ]);
 
     assert.deepEqual(plainResult.report.slides, reactResult.report.slides);

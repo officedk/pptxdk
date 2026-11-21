@@ -58,10 +58,6 @@ import {
   transitionCapability,
   transitions,
 } from "pptxdk";
-import {
-  createMorphScope as createDocMorphScope,
-  font as impFont,
-} from "pptxdk";
 import { Box, Group, P, Shape, Span } from "pptxdk/react";
 import {
   box as impBox,
@@ -120,7 +116,7 @@ const notoFont = font("Noto Sans CJK SC", [
     ),
   },
 ]);
-const impNotoFont = impFont("Noto Sans CJK SC", [
+const impNotoFont = font("Noto Sans CJK SC", [
   {
     weight: 400,
     data: new Uint8Array(
@@ -483,7 +479,7 @@ describe("bound object capability contract", () => {
 
   it("produces consistent native PPTX and observations for Shape across JSX and imperative entries inside unmigrated containers", async () => {
     const jsxMorph = createMorphScope().handle("shape-card");
-    const impMorph = createDocMorphScope().handle("shape-card");
+    const impMorph = createMorphScope().handle("shape-card");
 
     const jsxBuild = runJsxModules([
       shapeCapability,
@@ -2465,7 +2461,7 @@ describe("bound object capability contract", () => {
 
     // 4. resolve() without emit options + independent emit() with subset font embedding & Shape inline text,
     //    even when a sibling corrupt image fails paint().
-    const jostFont = impFont("Jost*", [
+    const jostFont = font("Jost*", [
       {
         weight: 400,
         data: new Uint8Array(

@@ -1,5 +1,14 @@
-import { fade, transitions, wipe, type MorphScope } from "pptxdk";
-import { MotionScope, Shape, Step, Text, useMotionScope } from "pptxdk/react";
+import {
+  fade,
+  MotionScope,
+  Shape,
+  Step,
+  Text,
+  transitions,
+  useMotionScope,
+  wipe,
+  type MorphScope,
+} from "pptxdk/react";
 
 import {
   EnteredShapeText,

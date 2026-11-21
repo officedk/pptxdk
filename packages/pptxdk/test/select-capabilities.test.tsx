@@ -45,8 +45,9 @@ function runSubprocess(conditions: readonly string[], script: string): string {
 }
 
 describe("pptxdk/build capability selection", () => {
-  it("builds shapes with text via pptxdk/vanilla with capabilities: ['shape'] across source and dist without loading text box implementation, React, or preview", () => {
+  it("builds shapes with text, theme, geometry, gradient, morph, and motion via pptxdk/vanilla with capabilities: ['shape', 'motion', 'transition'] across source and dist without loading unselected implementations, React, or preview", () => {
     const vanillaScript = `
+import { readFileSync } from "node:fs";
 import { registerHooks } from "node:module";
 
 registerHooks({
@@ -54,9 +55,13 @@ registerHooks({
     const resolved = nextResolve(specifier, context);
     if (
       resolved.url.endsWith("/capabilities/src/text/text.ts") ||
-      resolved.url.endsWith("/capabilities/dist/text/text.js")
+      resolved.url.endsWith("/capabilities/dist/text/text.js") ||
+      resolved.url.endsWith("/capabilities/src/chart/chart.ts") ||
+      resolved.url.endsWith("/capabilities/dist/chart/chart.js") ||
+      resolved.url.endsWith("/capabilities/src/table/table.ts") ||
+      resolved.url.endsWith("/capabilities/dist/table/table.js")
     ) {
-      throw new Error("text-box implementation was loaded: " + resolved.url);
+      throw new Error("unselected capability implementation was loaded: " + resolved.url);
     }
     if (
       specifier === "react" ||
@@ -73,13 +78,50 @@ registerHooks({
   },
 });
 
-const { deck, paragraph, shape, slide, span } = await import("pptxdk/vanilla");
+const {
+  createMorphScope,
+  createMotionScopeHandle,
+  deck,
+  defineTheme,
+  fade,
+  font,
+  linearGradient,
+  motionScope,
+  paragraph,
+  preset,
+  shape,
+  slide,
+  span,
+  step,
+  transitions,
+} = await import("pptxdk/vanilla");
 const { build } = await import("pptxdk/build");
 const { validatePptx } = await import("@pptxdk/validation");
 
-const doc = deck({ width: 240, height: 120 }).append(
-  slide({ id: "trimmed-vanilla" }).append(
-    shape({ id: "plain", name: "plain", x: 0, y: 0, width: 20, height: 20 }),
+const jostBytes = new Uint8Array(readFileSync("./test/assets/fonts/Jost-400-Book.ttf"));
+const family = font("Jost", [{ weight: 400, data: jostBytes }], { substitute: true });
+const theme = defineTheme({ name: "TrimmedVanilla", fonts: { major: family, minor: family } });
+const morph = createMorphScope();
+const hero = morph.handle("hero");
+const scope = createMotionScopeHandle();
+
+const doc = deck({ width: 240, height: 120, theme }).append(
+  slide({ id: "trimmed-vanilla", transition: transitions.fade() }).append(
+    step({ n: 1 }).append(
+      motionScope(scope).append(
+        shape({
+          id: "plain",
+          morphKey: hero,
+          geometry: preset("roundRect", { adj: 20000 }),
+          x: 0,
+          y: 0,
+          width: 20,
+          height: 20,
+          style: { backgroundImage: linearGradient(90, "#0F766E", "#14B8A6") },
+          enter: fade({ duration: 150 }),
+        }),
+      ),
+    ),
     shape({
       id: "labeled",
       name: "labeled",
@@ -98,12 +140,30 @@ const doc = deck({ width: 240, height: 120 }).append(
       height: 32,
     }).content(paragraph(span("Rich shape"))),
   ),
+  slide({ id: "trimmed-vanilla-next", transition: transitions.morph({ fallback: transitions.fade() }) }).append(
+    shape({
+      id: "plain-next",
+      morphKey: hero,
+      geometry: preset("roundRect", { adj: 20000 }),
+      x: 20,
+      y: 10,
+      width: 40,
+      height: 40,
+      fill: "#0F766E",
+    }),
+  ),
 );
 
-const result = await build(doc, { capabilities: ["shape"] });
+const result = await build(doc, { capabilities: ["shape", "motion", "transition"] });
 const file = await validatePptx(result.pptx);
 if (file.errors.length !== 0) {
   throw new Error(JSON.stringify(file.errors));
+}
+if (file.slides[0]?.transition?.kind !== "fade" || file.slides[1]?.transition?.kind !== "morph") {
+  throw new Error("Expected fade and morph transitions on trimmed vanilla slides");
+}
+if (file.slides[1]?.objects[0]?.name !== "!!morph-1") {
+  throw new Error("Expected matching morph pair name on slide 2: " + file.slides[1]?.objects[0]?.name);
 }
 const texts = file.slides[0]?.objects.map(({ name, text }) => [name, text?.text ?? ""]);
 process.stdout.write(JSON.stringify(texts));
@@ -111,15 +171,16 @@ process.stdout.write(JSON.stringify(texts));
 
     for (const conditions of [["--conditions=source"], []] as const) {
       assert.deepEqual(JSON.parse(runSubprocess(conditions, vanillaScript)), [
-        ["plain", ""],
+        ["!!morph-1", ""],
         ["labeled", "Shape text"],
         ["rich", "Rich shape"],
       ]);
     }
   }, 45_000);
 
-  it("builds shapes with text via pptxdk/react with capabilities: ['shape', 'transition'] across source and dist without loading text box implementation or preview", () => {
+  it("builds shapes with text, theme, geometry, gradient, morph, and motion via pptxdk/react with capabilities: ['shape', 'motion', 'transition'] across source and dist without loading unselected implementations or preview", () => {
     const reactScript = `
+import { readFileSync } from "node:fs";
 import { registerHooks } from "node:module";
 
 registerHooks({
@@ -127,9 +188,13 @@ registerHooks({
     const resolved = nextResolve(specifier, context);
     if (
       resolved.url.endsWith("/capabilities/src/text/text.ts") ||
-      resolved.url.endsWith("/capabilities/dist/text/text.js")
+      resolved.url.endsWith("/capabilities/dist/text/text.js") ||
+      resolved.url.endsWith("/capabilities/src/chart/chart.ts") ||
+      resolved.url.endsWith("/capabilities/dist/chart/chart.js") ||
+      resolved.url.endsWith("/capabilities/src/table/table.ts") ||
+      resolved.url.endsWith("/capabilities/dist/table/table.js")
     ) {
-      throw new Error("text-box implementation was loaded: " + resolved.url);
+      throw new Error("unselected capability implementation was loaded: " + resolved.url);
     }
     if (
       specifier.includes("@pptxdk/preview") ||
@@ -142,17 +207,58 @@ registerHooks({
 });
 
 const { createElement } = await import("react");
-const { Deck, P, Shape, Slide, Span, transitions } = await import("pptxdk/react");
+const {
+  createMorphScope,
+  createMotionScopeHandle,
+  Deck,
+  defineTheme,
+  fade,
+  font,
+  linearGradient,
+  MotionScope,
+  P,
+  preset,
+  Shape,
+  Slide,
+  Span,
+  Step,
+  transitions,
+} = await import("pptxdk/react");
 const { build } = await import("pptxdk/build");
 const { validatePptx } = await import("@pptxdk/validation");
 
+const jostBytes = new Uint8Array(readFileSync("./test/assets/fonts/Jost-400-Book.ttf"));
+const family = font("Jost", [{ weight: 400, data: jostBytes }], { substitute: true });
+const theme = defineTheme({ name: "TrimmedReact", fonts: { major: family, minor: family } });
+const morph = createMorphScope();
+const hero = morph.handle("hero");
+const scope = createMotionScopeHandle();
+
 const tree = createElement(
   Deck,
-  { width: 240, height: 120 },
+  { width: 240, height: 120, theme },
   createElement(
     Slide,
     { id: "trimmed-react", transition: transitions.fade() },
-    createElement(Shape, { id: "plain", name: "plain", x: 0, y: 0, width: 20, height: 20 }),
+    createElement(
+      Step,
+      { n: 1 },
+      createElement(
+        MotionScope,
+        { scope },
+        createElement(Shape, {
+          id: "plain",
+          morphKey: hero,
+          geometry: preset("roundRect", { adj: 20000 }),
+          x: 0,
+          y: 0,
+          width: 20,
+          height: 20,
+          style: { backgroundImage: linearGradient(90, "#0F766E", "#14B8A6") },
+          enter: fade({ duration: 150 }),
+        }),
+      ),
+    ),
     createElement(Shape, {
       id: "labeled",
       name: "labeled",
@@ -168,15 +274,32 @@ const tree = createElement(
       createElement(P, null, createElement(Span, null, "Rich react shape")),
     ),
   ),
+  createElement(
+    Slide,
+    { id: "trimmed-react-next", transition: transitions.morph({ fallback: transitions.fade() }) },
+    createElement(Shape, {
+      id: "plain-next",
+      morphKey: hero,
+      geometry: preset("roundRect", { adj: 20000 }),
+      x: 20,
+      y: 10,
+      width: 40,
+      height: 40,
+      fill: "#0F766E",
+    }),
+  ),
 );
 
-const result = await build(tree, { capabilities: ["shape", "transition"] });
+const result = await build(tree, { capabilities: ["shape", "motion", "transition"] });
 const file = await validatePptx(result.pptx);
 if (file.errors.length !== 0) {
   throw new Error(JSON.stringify(file.errors));
 }
-if (file.slides[0]?.transition?.kind !== "fade") {
-  throw new Error("Expected fade transition on trimmed slide");
+if (file.slides[0]?.transition?.kind !== "fade" || file.slides[1]?.transition?.kind !== "morph") {
+  throw new Error("Expected fade and morph transitions on trimmed react slides");
+}
+if (file.slides[1]?.objects[0]?.name !== "!!morph-1") {
+  throw new Error("Expected matching morph pair name on slide 2: " + file.slides[1]?.objects[0]?.name);
 }
 const texts = file.slides[0]?.objects.map(({ name, text }) => [name, text?.text ?? ""]);
 process.stdout.write(JSON.stringify(texts));
@@ -184,7 +307,7 @@ process.stdout.write(JSON.stringify(texts));
 
     for (const conditions of [["--conditions=source"], []] as const) {
       assert.deepEqual(JSON.parse(runSubprocess(conditions, reactScript)), [
-        ["plain", ""],
+        ["!!morph-1", ""],
         ["labeled", "React shape text"],
         ["rich", "Rich react shape"],
       ]);
@@ -335,27 +458,5 @@ process.stdout.write(JSON.stringify(texts));
         }),
       (error: unknown) => error === reason,
     );
-  });
-
-  it("retires legacy fixed-capability subpaths pptxdk/shape, pptxdk/text, and pptxdk/chart", () => {
-    const script = `
-const codes = [];
-for (const legacySubpath of ["pptxdk/shape", "pptxdk/text", "pptxdk/chart"]) {
-  try {
-    await import(legacySubpath);
-    throw new Error("Expected rejection for " + legacySubpath);
-  } catch (error) {
-    codes.push(error && typeof error === "object" && "code" in error ? error.code : String(error));
-  }
-}
-process.stdout.write(JSON.stringify(codes));
-`;
-    for (const conditions of [["--conditions=source"], []] as const) {
-      assert.deepEqual(JSON.parse(runSubprocess(conditions, script)), [
-        "ERR_PACKAGE_PATH_NOT_EXPORTED",
-        "ERR_PACKAGE_PATH_NOT_EXPORTED",
-        "ERR_PACKAGE_PATH_NOT_EXPORTED",
-      ]);
-    }
   });
 });

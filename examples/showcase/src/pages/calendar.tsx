@@ -1,5 +1,6 @@
-import { fillColor, floatUp } from "pptxdk";
 import {
+  fillColor,
+  floatUp,
   Group,
   MotionScope,
   Shape,

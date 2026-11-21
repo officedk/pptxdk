@@ -5,6 +5,7 @@ import { validatePptx } from "@pptxdk/validation";
 import { strFromU8, unzipSync } from "fflate";
 import {
   after,
+  build,
   BuildError,
   CommonContainer,
   CommonNode,
@@ -15,7 +16,6 @@ import {
   RichTextContainer,
   type MotionObservation,
 } from "pptxdk";
-import { build as buildDocument } from "pptxdk";
 import {
   appendJSX,
   Box,
@@ -133,7 +133,7 @@ describe("public React fragment append", () => {
     title.content("Edited appended title");
     assert.equal(target.query.get("hero-copy").node.props["morphKey"], hero);
 
-    const result = await buildDocument(expanded);
+    const result = await build(expanded);
     assert.deepEqual((await validatePptx(result.pptx)).errors, []);
     assert.deepEqual(
       result.report.slides[1]?.objects.map(({ authorId, text, box }) => ({
@@ -221,7 +221,7 @@ describe("public React fragment append", () => {
       ["late"],
     );
     assert.equal(target.query.getAll("fallback").length, 0);
-    const result = await buildDocument(expanded);
+    const result = await build(expanded);
     assert.deepEqual((await validatePptx(result.pptx)).errors, []);
     assert.deepEqual(
       result.report.slides[0]?.objects.map(({ text: value }) => value),
@@ -270,7 +270,7 @@ describe("public React fragment append", () => {
       appended.map((node) => node.id),
       ["business-fallback"],
     );
-    const result = await buildDocument(expanded);
+    const result = await build(expanded);
     assert.deepEqual((await validatePptx(result.pptx)).errors, []);
     assert.deepEqual(
       result.report.slides[0]?.objects.map(({ text: value }) => value),
@@ -350,7 +350,7 @@ describe("public React fragment append", () => {
       ),
     );
 
-    const result = await buildDocument(expanded);
+    const result = await build(expanded);
     assert.deepEqual((await validatePptx(result.pptx)).errors, []);
     assert.deepEqual(
       result.report.slides[0]?.objects.map(({ text: value }) => value),
@@ -400,7 +400,7 @@ describe("public React fragment append", () => {
     assert.equal(firstTitle, first[0]?.children[0]);
     assert.equal(secondTitle, second[0]?.children[0]);
 
-    const result = await buildDocument(expanded);
+    const result = await build(expanded);
     assert.deepEqual((await validatePptx(result.pptx)).errors, []);
     assert.deepEqual(
       result.report.slides[0]?.objects.map(({ authorId, text: value }) => ({
@@ -584,7 +584,7 @@ describe("public React fragment append", () => {
     assert.equal(group.query.get("shared").node, reused[0]);
     assert.equal(root.query.getAll("shared").length, 1);
 
-    const result = await buildDocument(
+    const result = await build(
       deck({ width: 320, height: 180 }).append(
         slide({ id: "main" }).append(root),
       ),
@@ -783,7 +783,7 @@ describe("public React fragment append", () => {
 
     assert.equal(card.query.getAll("title").length, 1);
     assert.equal(slide.query.getAll("title").length, 1);
-    const result = await buildDocument(expanded);
+    const result = await build(expanded);
     assert.deepEqual((await validatePptx(result.pptx)).errors, []);
     assert.deepEqual(
       result.report.slides[0]?.objects.map(({ text: value }) => value),
@@ -832,7 +832,7 @@ describe("public React fragment append", () => {
       },
     );
 
-    const result = await buildDocument(expanded);
+    const result = await build(expanded);
     assert.deepEqual((await validatePptx(result.pptx)).errors, []);
     assert.deepEqual(
       result.report.slides.map(({ authorId }) => authorId),
@@ -1003,7 +1003,7 @@ describe("public React fragment append", () => {
     }
     await appendJSX(scopeNode, createElement(ScopedFragment));
 
-    const result = await buildDocument(expanded);
+    const result = await build(expanded);
     assert.deepEqual((await validatePptx(result.pptx)).errors, []);
     const objects = result.report.slides[0]?.objects ?? [];
     const objectId = (authorId: string) => {

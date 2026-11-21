@@ -1,5 +1,4 @@
-import { floatUp, preset } from "pptxdk";
-import { Group, Shape, Step, Text } from "pptxdk/react";
+import { floatUp, Group, preset, Shape, Step, Text } from "pptxdk/react";
 
 import { colors, motion } from "../theme.ts";
 

@@ -156,34 +156,6 @@ describe("public author entrypoints", () => {
     assert.equal(jsxFile.slides[0]?.objects[0]?.text?.text, "Pure JSX");
   });
 
-  it("removes JSX components and React handoff exports from the root pptxdk entry", async () => {
-    const rootEntry: Record<string, unknown> = await import("pptxdk");
-    for (const removed of [
-      "Deck",
-      "Slide",
-      "Section",
-      "Box",
-      "Shape",
-      "Text",
-      "Chart",
-      "Table",
-      "Image",
-      "Group",
-      "Notes",
-      "Step",
-      "MotionScope",
-      "useMotionScope",
-      "expandDocument",
-      "appendJSX",
-    ]) {
-      assert.equal(
-        removed in rootEntry,
-        false,
-        `root pptxdk entry must not export ${removed}`,
-      );
-    }
-  });
-
   it("validates Slide id and numeric width at authoring time via tsc, and locates invalid slide nesting in resolve", async () => {
     const packageRoot = fileURLToPath(new URL("../", import.meta.url));
     const tscBin = join(packageRoot, "node_modules/.bin/tsc");

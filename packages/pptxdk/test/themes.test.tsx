@@ -3,8 +3,15 @@ import { readFileSync } from "node:fs";
 
 import { validatePptx } from "@pptxdk/validation";
 import { strFromU8, unzipSync } from "fflate";
-import { build, BuildError, darker, defineTheme, font, lighter } from "pptxdk";
-import type { ThemeScope } from "pptxdk";
+import {
+  build,
+  BuildError,
+  darker,
+  defineTheme,
+  font,
+  lighter,
+  type ThemeScope,
+} from "pptxdk";
 import {
   Box,
   Chart,

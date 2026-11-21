@@ -1,6 +1,6 @@
-import { fade, wipe } from "pptxdk";
 import {
   Cell,
+  fade,
   MotionScope,
   P,
   Row,
@@ -9,6 +9,7 @@ import {
   Table,
   Text,
   useMotionScope,
+  wipe,
 } from "pptxdk/react";
 
 import {

@@ -1,7 +1,14 @@
-import { preset } from "pptxdk";
-import type { EntranceEffectDeclaration, TextStyle } from "pptxdk";
-import { Group, MotionScope, Shape, Text, useMotionScope } from "pptxdk/react";
-import type { ShapeProps } from "pptxdk/react";
+import {
+  Group,
+  MotionScope,
+  preset,
+  Shape,
+  Text,
+  useMotionScope,
+  type EntranceEffectDeclaration,
+  type ShapeProps,
+  type TextStyle,
+} from "pptxdk/react";
 import type { ReactNode } from "react";
 
 import { colors } from "../theme.ts";

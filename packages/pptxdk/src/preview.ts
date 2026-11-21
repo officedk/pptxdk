@@ -6,7 +6,7 @@ import {
   type ResolutionReport,
 } from "@pptxdk/core/build";
 import type { PreviewTransform, PreviewWarning } from "@pptxdk/core/capability";
-import { CommonNode } from "@pptxdk/core/document";
+import type { CommonNode } from "@pptxdk/core/document";
 import {
   PreviewPageRangeError,
   paint,
@@ -14,6 +14,8 @@ import {
   type PreviewResult,
 } from "@pptxdk/preview";
 import type { ReactNode } from "react";
+
+import { resolveDocumentInput } from "./compose.ts";
 
 const resolveDocument = createResolver(documentCapabilities);
 
@@ -33,18 +35,11 @@ export async function preview(
   if (options.signal?.aborted) throw options.signal.reason;
   const signalOption =
     options.signal === undefined ? {} : { signal: options.signal };
-  if (input instanceof CommonNode) {
-    const resolution = resolveDocument(input, signalOption);
-    const { pages } = paint(resolution, options);
-    return Object.freeze({
-      report: resolution.report,
-      query: resolution.query,
-      pages,
-    });
-  }
-  const { expandDocument } = await import("@pptxdk/react");
-  const document = await expandDocument(input, signalOption);
-  const resolution = resolveDocument(document, signalOption);
+  const resolution = await resolveDocumentInput(
+    resolveDocument,
+    input,
+    signalOption,
+  );
   const { pages } = paint(resolution, options);
   return Object.freeze({
     report: resolution.report,

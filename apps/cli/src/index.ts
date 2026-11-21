@@ -271,27 +271,38 @@ async function isSameExistingFile(
   }
 }
 
+type PreviewOutputDirValidation =
+  | { readonly kind: "valid" }
+  | { readonly kind: "invalidOutput" }
+  | { readonly kind: "error"; readonly error: unknown };
+
 // Validate outputDir read-only before previewFromSource so source or build failures never create an empty directory.
-async function isValidPreviewOutputDir(
+async function validatePreviewOutputDir(
   entry: string,
   outDir: string,
-): Promise<boolean> {
-  if (outDir === entry) return false;
+): Promise<PreviewOutputDirValidation> {
+  if (outDir === entry) return { kind: "invalidOutput" };
   try {
     const stats = await stat(outDir);
-    return stats.isDirectory();
+    return stats.isDirectory() ? { kind: "valid" } : { kind: "invalidOutput" };
   } catch (error) {
     const code = errnoCode(error);
-    if (code === "ENOTDIR") return false;
-    if (code !== "ENOENT") throw error;
+    if (code === "ENOTDIR" || code === "ELOOP") {
+      return { kind: "invalidOutput" };
+    }
+    if (code !== "ENOENT") {
+      return { kind: "error", error };
+    }
     try {
       await lstat(outDir);
-      return false;
+      return { kind: "invalidOutput" };
     } catch (lstatError) {
       const lstatCode = errnoCode(lstatError);
-      if (lstatCode === "ENOENT") return true;
-      if (lstatCode === "ENOTDIR") return false;
-      throw lstatError;
+      if (lstatCode === "ENOENT") return { kind: "valid" };
+      if (lstatCode === "ENOTDIR" || lstatCode === "ELOOP") {
+        return { kind: "invalidOutput" };
+      }
+      return { kind: "error", error: lstatError };
     }
   }
 }
@@ -490,8 +501,15 @@ async function previewDeckCommand({
     dependencies.cwd,
     input.outDir ?? `${basename(entry, extname(entry))}-preview`,
   );
-  if (!(await isValidPreviewOutputDir(entry, outputDir))) {
+  const outputDirCheck = await validatePreviewOutputDir(entry, outputDir);
+  if (outputDirCheck.kind === "invalidOutput") {
     return outcome.failure.invalidOutput({ entry, output: outputDir });
+  }
+  if (outputDirCheck.kind === "error") {
+    return outcome.failure.writeFailed({
+      output: outputDir,
+      message: errorMessage(outputDirCheck.error),
+    });
   }
 
   let result: Awaited<ReturnType<typeof previewFromSource>>;

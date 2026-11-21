@@ -1,5 +1,12 @@
-import { type MorphScope } from "pptxdk";
-import { Cell, P, Row, Shape, Table, Text } from "pptxdk/react";
+import {
+  Cell,
+  P,
+  Row,
+  Shape,
+  Table,
+  Text,
+  type MorphScope,
+} from "pptxdk/react";
 
 import { PanelCard, SemanticTag } from "../components/primitives.tsx";
 import { SlideFrame } from "../templates/slide-frame.tsx";

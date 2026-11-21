@@ -2,8 +2,13 @@ import assert from "node:assert/strict";
 
 import { validatePptx } from "@pptxdk/validation";
 import { strFromU8, unzipSync } from "fflate";
-import { BuildError, build, fade, observeMotion } from "pptxdk";
-import { build as buildDocument, type CommonNode } from "pptxdk";
+import {
+  BuildError,
+  build,
+  fade,
+  observeMotion,
+  type CommonNode,
+} from "pptxdk";
 import {
   Box,
   Cell,
@@ -78,7 +83,7 @@ describe("scoped author ids", () => {
     assert.equal(title, titleNode);
     title.content("Edited through the scoped query");
 
-    const result = await buildDocument(document);
+    const result = await build(document);
     assert.deepEqual((await validatePptx(result.pptx)).errors, []);
     assert.equal(result.report.slides[0]?.id, "cover");
     assert.equal(result.report.slides[0]?.authorId, "cover");
@@ -172,7 +177,7 @@ describe("scoped author ids", () => {
       "slide-number",
     );
 
-    const result = await buildDocument(document);
+    const result = await build(document);
     const validation = await validatePptx(result.pptx);
     assert.deepEqual(validation.errors, []);
     const richText = validation.slides[0]?.objects.find(
@@ -218,7 +223,7 @@ describe("scoped author ids", () => {
       "slide-number",
     );
 
-    const result = await buildDocument(expanded);
+    const result = await build(expanded);
     const validation = await validatePptx(result.pptx);
     assert.deepEqual(validation.errors, []);
     const richText = validation.slides[0]?.objects.find(
@@ -244,16 +249,13 @@ describe("scoped author ids", () => {
         ).set({ x: 0, y: 0, width: 240, height: 60 }),
       ),
     );
-    await assert.rejects(
-      buildDocument(duplicatedParagraph),
-      (error: unknown) => {
-        assert.ok(error instanceof BuildError);
-        assert.ok(
-          error.diagnostics.some(({ code }) => code === "duplicate-author-id"),
-        );
-        return true;
-      },
-    );
+    await assert.rejects(build(duplicatedParagraph), (error: unknown) => {
+      assert.ok(error instanceof BuildError);
+      assert.ok(
+        error.diagnostics.some(({ code }) => code === "duplicate-author-id"),
+      );
+      return true;
+    });
 
     const duplicatedSpan = deck({ width: 480, height: 270 }).append(
       slide({ id: "duplicate-span" }).append(
@@ -265,7 +267,7 @@ describe("scoped author ids", () => {
         ).set({ x: 0, y: 0, width: 240, height: 30 }),
       ),
     );
-    await assert.rejects(buildDocument(duplicatedSpan), (error: unknown) => {
+    await assert.rejects(build(duplicatedSpan), (error: unknown) => {
       assert.ok(error instanceof BuildError);
       assert.ok(
         error.diagnostics.some(({ code }) => code === "duplicate-author-id"),
@@ -282,7 +284,7 @@ describe("scoped author ids", () => {
         ).set({ id: "copy", x: 0, y: 0, width: 240, height: 90 }),
       ),
     );
-    const result = await buildDocument(scoped);
+    const result = await build(scoped);
     assert.deepEqual((await validatePptx(result.pptx)).errors, []);
     assert.equal(
       result.query.getSlide("scoped-rich").get("copy").observe().text,
@@ -300,7 +302,7 @@ describe("scoped author ids", () => {
           text(node).set({ x: 0, y: 0, width: 240, height: 40 }),
         ),
       );
-      await assert.rejects(buildDocument(document), (error: unknown) => {
+      await assert.rejects(build(document), (error: unknown) => {
         assert.ok(error instanceof BuildError);
         const message =
           error.diagnostics.find(({ code }) => code === "unknown-parameter")
@@ -328,7 +330,7 @@ describe("scoped author ids", () => {
         return true;
       },
     );
-    await assert.rejects(buildDocument(duplicated), (error: unknown) => {
+    await assert.rejects(build(duplicated), (error: unknown) => {
       assert.ok(error instanceof BuildError);
       assert.ok(
         error.diagnostics.some(({ code }) => code === "duplicate-author-id"),
@@ -346,7 +348,7 @@ describe("scoped author ids", () => {
         ),
       ),
     );
-    const result = await buildDocument(independent);
+    const result = await build(independent);
     assert.deepEqual((await validatePptx(result.pptx)).errors, []);
     assert.equal(
       result.query.getSlide("independent").get("left").get("title").observe()
@@ -396,7 +398,7 @@ describe("scoped author ids", () => {
     assert.notEqual(leftTitle, rightTitle);
     leftTitle.content("Edited left card");
 
-    const result = await buildDocument(expanded);
+    const result = await build(expanded);
     assert.deepEqual((await validatePptx(result.pptx)).errors, []);
     assert.deepEqual(
       result.report.slides[0]?.objects.map(({ text: value }) => value),
@@ -420,7 +422,7 @@ describe("scoped author ids", () => {
       slide({ id: "first" }).append(source),
       slide({ id: "second" }).append(target),
     );
-    const first = await buildDocument(document);
+    const first = await build(document);
     const firstObservation = first.query
       .getSlide("first")
       .get("source")
@@ -448,7 +450,7 @@ describe("scoped author ids", () => {
     );
 
     moved.content("After move");
-    const second = await buildDocument(document);
+    const second = await build(document);
     assert.equal(
       second.query.getSlide("second").get("target").get("moved").observe().text,
       "After move",
@@ -478,7 +480,7 @@ describe("scoped author ids", () => {
         return true;
       },
     );
-    const third = await buildDocument(document);
+    const third = await build(document);
     assert.ok(
       third.report.slides.every(({ objects }) =>
         objects.every(({ authorId: value }) => value !== "moved"),
@@ -518,7 +520,7 @@ describe("scoped author ids", () => {
       "second",
     );
 
-    const result = await buildDocument(expanded);
+    const result = await build(expanded);
     assert.deepEqual((await validatePptx(result.pptx)).errors, []);
     const shared = result.report.slides[0]?.objects.filter(
       ({ authorId }) => authorId === "shared",
@@ -612,7 +614,7 @@ describe("scoped author ids", () => {
         ),
       ),
     );
-    const commandResult = await buildDocument(commandDocument);
+    const commandResult = await build(commandDocument);
 
     const reactResult = await build(
       <Deck width={320} height={180}>

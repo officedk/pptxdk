@@ -1,5 +1,4 @@
-import { wipe } from "pptxdk";
-import { Cell, Chart, P, Row, Table, Text } from "pptxdk/react";
+import { Cell, Chart, P, Row, Table, Text, wipe } from "pptxdk/react";
 
 import { MetricCard, PanelCard } from "../components/primitives.tsx";
 import { SlideFrame } from "../templates/slide-frame.tsx";

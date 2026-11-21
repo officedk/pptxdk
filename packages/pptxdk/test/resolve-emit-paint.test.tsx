@@ -8,18 +8,14 @@ import { validatePptx } from "@pptxdk/validation";
 import {
   BuildError,
   CommonNode,
-  emit as emitFromMain,
+  createMorphScope,
+  emit,
+  fade,
   font,
   formatBaseline,
   observeMotion,
-  resolve as resolveFromMain,
+  resolve,
   targets,
-} from "pptxdk";
-import {
-  createMorphScope,
-  emit as emitFromDocument,
-  fade,
-  resolve as resolveFromDocument,
   transitions,
 } from "pptxdk";
 import {
@@ -81,7 +77,7 @@ describe("Seam 1 & Seam 3: public resolve / emit / paint & createResolver", () =
       slide({ id: "s1", background: "#F8FAFC" }).append(label, card),
     );
 
-    const firstResolution = resolveFromMain(doc);
+    const firstResolution = resolve(doc);
     assert.equal(
       firstResolution.query.getSlide("s1").get("headline").observe().text,
       "Before edit",
@@ -92,7 +88,7 @@ describe("Seam 1 & Seam 3: public resolve / emit / paint & createResolver", () =
     card.set({ fill: "#DC2626" });
     doc.append(slide({ id: "s2" }));
 
-    const firstEmit = emitFromMain(firstResolution);
+    const firstEmit = emit(firstResolution);
     assert.deepEqual(Object.keys(firstEmit).toSorted(), ["pptx", "report"]);
     assert.equal("query" in firstEmit, false);
     const firstPaint = paint(firstResolution);
@@ -105,8 +101,8 @@ describe("Seam 1 & Seam 3: public resolve / emit / paint & createResolver", () =
     assert.equal(firstPaint.pages[0]?.svg?.includes('fill="#DC2626"'), false);
 
     // Re-resolving reflects the updated document.
-    const secondResolution = resolveFromDocument(doc);
-    const secondEmit = emitFromDocument(secondResolution);
+    const secondResolution = resolve(doc);
+    const secondEmit = emit(secondResolution);
     const secondPaint = paint(secondResolution);
     const secondFile = await validatePptx(secondEmit.pptx);
     assert.deepEqual(secondFile.errors, []);
@@ -140,7 +136,7 @@ describe("Seam 1 & Seam 3: public resolve / emit / paint & createResolver", () =
       ),
     );
 
-    const resolution = resolveFromDocument(doc);
+    const resolution = resolve(doc);
     assert.equal(paint(resolution).pages.length, 2);
     assert.equal(paint(resolution, { pages: [] }).pages.length, 0);
     assert.deepEqual(
@@ -173,7 +169,7 @@ describe("Seam 1 & Seam 3: public resolve / emit / paint & createResolver", () =
     );
 
     // Emit still writes the full deck regardless of paint page selection.
-    const emitted = emitFromDocument(resolution);
+    const emitted = emit(resolution);
     const file = await validatePptx(emitted.pptx);
     assert.equal(file.slides.length, 2);
   });
@@ -229,8 +225,8 @@ describe("Seam 1 & Seam 3: public resolve / emit / paint & createResolver", () =
     );
 
     const expanded = await expandDocument(jsxTree);
-    const jsxResolution = resolveFromMain(expanded);
-    const docResolution = resolveFromDocument(imperativeDoc);
+    const jsxResolution = resolve(expanded);
+    const docResolution = resolve(imperativeDoc);
 
     assert.deepEqual(jsxResolution.report, docResolution.report);
     const jsxPaint = paint(jsxResolution);
@@ -529,13 +525,13 @@ process.stdout.write("ok");
 
     // Runtime callers passing target to resolve() must fail immediately with unknown-parameter.
     assert.throws(
-      () => resolveFromMain(doc, { target: targets.baselineOnly } as never),
+      () => resolve(doc, { target: targets.baselineOnly } as never),
       (error: unknown) =>
         error instanceof BuildError &&
         error.diagnostics[0]?.code === "unknown-parameter",
     );
 
-    const resolution = resolveFromMain(doc);
+    const resolution = resolve(doc);
     assert.equal(resolution.report.evidence, "generation");
     assert.equal(resolution.report.title, "Multi-target Deck");
     assert.deepEqual(resolution.report.extensions, ["p14"]);
@@ -554,7 +550,7 @@ process.stdout.write("ok");
       },
     ]) {
       assert.throws(
-        () => emitFromMain(resolution, { target: invalidTarget as never }),
+        () => emit(resolution, { target: invalidTarget as never }),
         BuildError,
       );
     }
@@ -564,8 +560,8 @@ process.stdout.write("ok");
       format: formatBaseline,
       extensions: ["p14"] as const,
     };
-    const firstEmit = emitFromMain(resolution, { target: p14OnlyTarget });
-    const secondEmit = emitFromMain(resolution, {
+    const firstEmit = emit(resolution, { target: p14OnlyTarget });
+    const secondEmit = emit(resolution, {
       target: targets.transitional,
     });
 
@@ -631,7 +627,7 @@ process.stdout.write("ok");
       ),
     );
 
-    const resolution = resolveFromMain(doc);
+    const resolution = resolve(doc);
     assert.deepEqual(
       new Set(resolution.report.extensions),
       new Set(["p14", "p159"]),
@@ -659,13 +655,13 @@ process.stdout.write("ok");
     }
 
     assert.throws(
-      () => emitFromMain(resolution, { target: targets.baselineOnly }),
+      () => emit(resolution, { target: targets.baselineOnly }),
       (error: unknown) =>
         error instanceof BuildError &&
         error.diagnostics.some((diag) => diag.code === "forbidden-mechanism"),
     );
 
-    const emitted = emitFromMain(resolution, { target: targets.transitional });
+    const emitted = emit(resolution, { target: targets.transitional });
     const file = await validatePptx(emitted.pptx, {
       allowedExtensions: ["p14", "p159"],
     });
@@ -694,17 +690,17 @@ process.stdout.write("ok");
         }),
       ),
     );
-    const c15Resolution = resolveFromMain(c15Doc);
+    const c15Resolution = resolve(c15Doc);
     assert.deepEqual(c15Resolution.report.extensions, ["c15"]);
     assert.throws(
-      () => emitFromMain(c15Resolution, { target: targets.baselineOnly }),
+      () => emit(c15Resolution, { target: targets.baselineOnly }),
       (error: unknown) =>
         error instanceof BuildError &&
         error.diagnostics.some((diag) => diag.code === "forbidden-mechanism"),
     );
     assert.throws(
       () =>
-        emitFromMain(c15Resolution, {
+        emit(c15Resolution, {
           target: {
             name: "no-c15",
             format: formatBaseline,
@@ -715,7 +711,7 @@ process.stdout.write("ok");
         error instanceof BuildError &&
         error.diagnostics.some((diag) => diag.code === "forbidden-mechanism"),
     );
-    const c15Emitted = emitFromMain(c15Resolution, {
+    const c15Emitted = emit(c15Resolution, {
       target: targets.transitional,
     });
     const c15File = await validatePptx(c15Emitted.pptx, {
@@ -733,7 +729,7 @@ process.stdout.write("ok");
       }),
     );
     assert.throws(
-      () => resolveFromMain(invalidParseDoc),
+      () => resolve(invalidParseDoc),
       (error: unknown) =>
         error instanceof BuildError &&
         error.diagnostics[0]?.code === "invalid-transition-duration",
@@ -747,7 +743,7 @@ process.stdout.write("ok");
       ),
     );
     assert.throws(
-      () => resolveFromMain(duplicateIdDoc),
+      () => resolve(duplicateIdDoc),
       (error: unknown) =>
         error instanceof BuildError &&
         error.diagnostics[0]?.code === "duplicate-author-id",
@@ -789,7 +785,7 @@ process.stdout.write("ok");
       ),
     );
     assert.throws(
-      () => resolveFromMain(morphMismatchDoc),
+      () => resolve(morphMismatchDoc),
       (error: unknown) =>
         error instanceof BuildError &&
         error.diagnostics[0]?.code === "morph-object-kind-mismatch",
@@ -813,7 +809,7 @@ process.stdout.write("ok");
       ),
     );
     assert.throws(
-      () => resolveFromMain(invalidLayoutDoc),
+      () => resolve(invalidLayoutDoc),
       (error: unknown) =>
         error instanceof BuildError &&
         error.diagnostics[0]?.code === "invalid-layout-style",
@@ -840,7 +836,7 @@ process.stdout.write("ok");
     // Passing embedFonts to resolve() must fail immediately with unknown-parameter.
     for (const mode of ["full", "subset"] as const) {
       assert.throws(
-        () => resolveFromMain(restrictedDoc, { embedFonts: mode } as never),
+        () => resolve(restrictedDoc, { embedFonts: mode } as never),
         (error: unknown) =>
           error instanceof BuildError &&
           error.diagnostics[0]?.code === "unknown-parameter",
@@ -848,7 +844,7 @@ process.stdout.write("ok");
     }
 
     // Resolve, paint, preview, and unembedded emit all succeed.
-    const resolution = resolveFromMain(restrictedDoc);
+    const resolution = resolve(restrictedDoc);
     const painted = paint(resolution);
     assert.equal(painted.pages.length, 1);
     assert.deepEqual(painted.pages[0]?.diagnostics, []);
@@ -866,14 +862,14 @@ process.stdout.write("ok");
         previewed.pages[0].png.byteLength > 0,
     );
 
-    const unembedded = emitFromMain(resolution);
+    const unembedded = emit(resolution);
     const unembeddedValidation = await validatePptx(unembedded.pptx);
     assert.deepEqual(unembeddedValidation.errors, []);
 
     // Requesting full or subset font embedding at emit() throws BuildError.
     for (const mode of ["full", "subset"] as const) {
       assert.throws(
-        () => emitFromMain(resolution, { embedFonts: mode }),
+        () => emit(resolution, { embedFonts: mode }),
         (error: unknown) =>
           error instanceof BuildError &&
           error.diagnostics[0]?.code === "font-embedding-restricted",
@@ -896,13 +892,13 @@ process.stdout.write("ok");
         }),
       ),
     );
-    const noSubsetResolution = resolveFromMain(noSubsetDoc);
-    const fullEmitted = emitFromMain(noSubsetResolution, {
+    const noSubsetResolution = resolve(noSubsetDoc);
+    const fullEmitted = emit(noSubsetResolution, {
       embedFonts: "full",
     });
     assert.deepEqual((await validatePptx(fullEmitted.pptx)).errors, []);
     assert.throws(
-      () => emitFromMain(noSubsetResolution, { embedFonts: "subset" }),
+      () => emit(noSubsetResolution, { embedFonts: "subset" }),
       (error: unknown) =>
         error instanceof BuildError &&
         error.diagnostics[0]?.code === "font-subsetting-forbidden",

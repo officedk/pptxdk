@@ -6,6 +6,7 @@ import { validatePptx, type FileObject } from "@pptxdk/validation";
 import { strFromU8, unzipSync } from "fflate";
 import {
   after,
+  build,
   CommonContainer,
   CommonNode,
   createMorphScope,
@@ -21,10 +22,10 @@ import {
   radialGradient,
   resolve,
   transitions,
+  type ChartGroup,
   type MotionEffectObservation,
   type MotionObservation,
 } from "pptxdk";
-import { build, type ChartGroup } from "pptxdk";
 import { paint } from "pptxdk/preview";
 import {
   appendJSX,

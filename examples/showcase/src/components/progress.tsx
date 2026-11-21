@@ -1,5 +1,13 @@
-import { blockArc, preset, wipe, zoom } from "pptxdk";
-import { Group, Shape, Step, Text } from "pptxdk/react";
+import {
+  blockArc,
+  Group,
+  preset,
+  Shape,
+  Step,
+  Text,
+  wipe,
+  zoom,
+} from "pptxdk/react";
 
 import { colors, motion } from "../theme.ts";
 

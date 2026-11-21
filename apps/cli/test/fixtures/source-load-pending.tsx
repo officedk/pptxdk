@@ -1,4 +1,4 @@
-import { Deck, Slide } from "@react-pptx/react-pptx";
+import { Deck, Slide } from "pptxdk/react";
 
 declare global {
   var __pptxdkSourceLoadState:

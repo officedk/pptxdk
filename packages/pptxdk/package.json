@@ -1,11 +1,11 @@
 {
-  "name": "@react-pptx/react-pptx",
+  "name": "pptxdk",
   "version": "0.0.0",
   "private": true,
   "repository": {
     "type": "git",
     "url": "git+https://github.com/pptxdk/pptxdk.git",
-    "directory": "packages/react-pptx"
+    "directory": "packages/pptxdk"
   },
   "files": [
     "dist"
@@ -34,10 +34,15 @@
       "types": "./dist/build.d.ts",
       "default": "./dist/build.js"
     },
-    "./document": {
-      "source": "./src/document.ts",
-      "types": "./dist/document.d.ts",
-      "default": "./dist/document.js"
+    "./react": {
+      "source": "./src/react.ts",
+      "types": "./dist/react.d.ts",
+      "default": "./dist/react.js"
+    },
+    "./vanilla": {
+      "source": "./src/vanilla.ts",
+      "types": "./dist/vanilla.d.ts",
+      "default": "./dist/vanilla.js"
     },
     "./node": {
       "source": "./src/node.ts",

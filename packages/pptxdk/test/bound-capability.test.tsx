@@ -42,39 +42,37 @@ import { emit, emittedBuildQuery, pxToEmu, xmlEscape } from "@pptxdk/emit";
 import { paint } from "@pptxdk/preview";
 import { Deck, expandDocument, Slide } from "@pptxdk/react";
 import { validatePptx } from "@pptxdk/validation";
+import { strFromU8, unzipSync } from "fflate";
 import {
-  Box,
   boxCapability,
   fade,
   font,
-  Group,
   groupCapability,
   imageCapability,
   motionCapability,
   notesCapability,
   observeMotion,
-  P,
   preset,
-  Shape,
   shapeCapability,
-  Span,
   targets,
   transitionCapability,
   transitions,
-} from "@react-pptx/react-pptx";
+} from "pptxdk";
+import {
+  createMorphScope as createDocMorphScope,
+  font as impFont,
+} from "pptxdk";
+import { Box, Group, P, Shape, Span } from "pptxdk/react";
 import {
   box as impBox,
-  createMorphScope as createDocMorphScope,
   deck as impDeck,
-  font as impFont,
   group as impGroup,
   image as impImage,
   paragraph as impParagraph,
   shape as impShape,
   slide as impSlide,
   span as impSpan,
-} from "@react-pptx/react-pptx/document";
-import { strFromU8, unzipSync } from "fflate";
+} from "pptxdk/vanilla";
 import { createElement, type ReactNode } from "react";
 import { describe, it } from "vitest";
 

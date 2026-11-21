@@ -1,3 +1,4 @@
+import { fillColor, floatUp } from "pptxdk";
 import {
   Group,
   MotionScope,
@@ -5,10 +6,8 @@ import {
   Slide,
   Step,
   Text,
-  fillColor,
-  floatUp,
   useMotionScope,
-} from "@react-pptx/react-pptx";
+} from "pptxdk/react";
 
 import { colors, motion } from "../theme.ts";
 

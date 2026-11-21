@@ -1,13 +1,5 @@
-import {
-  Chart,
-  Group,
-  Shape,
-  Slide,
-  Text,
-  preset,
-  transitions,
-  type MorphScope,
-} from "@react-pptx/react-pptx";
+import { preset, transitions, type MorphScope } from "pptxdk";
+import { Chart, Group, Shape, Slide, Text } from "pptxdk/react";
 
 import { colors, motion } from "../theme.ts";
 

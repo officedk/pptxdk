@@ -1,12 +1,12 @@
+import { fade } from "pptxdk";
 import {
   Chart,
   MotionScope,
   Shape,
   Step,
   Text,
-  fade,
   useMotionScope,
-} from "@react-pptx/react-pptx";
+} from "pptxdk/react";
 
 import { PanelCard, SemanticTag } from "../components/primitives.tsx";
 import { SlideFrame } from "../templates/slide-frame.tsx";

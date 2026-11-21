@@ -1,12 +1,5 @@
-import {
-  MotionScope,
-  Shape,
-  Slide,
-  Text,
-  floatUp,
-  transitions,
-  useMotionScope,
-} from "@react-pptx/react-pptx";
+import { floatUp, transitions } from "pptxdk";
+import { MotionScope, Shape, Slide, Text, useMotionScope } from "pptxdk/react";
 
 import { MetricCard, Rule } from "../components/primitives.tsx";
 import { colors } from "../theme.ts";

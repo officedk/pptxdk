@@ -1,4 +1,5 @@
-import { Deck, Section, createMorphScope } from "@react-pptx/react-pptx";
+import { createMorphScope } from "pptxdk";
+import { Deck, Section } from "pptxdk/react";
 import { useMemo } from "react";
 
 import { AuxLossFreeMtpPage } from "./pages/aux-loss-free-mtp.tsx";

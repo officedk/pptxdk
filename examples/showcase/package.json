@@ -41,7 +41,7 @@
     "export:pptx": "react-pptx src/index.ts --embed-fonts full --out dist/showcase.pptx"
   },
   "dependencies": {
-    "@react-pptx/react-pptx": "workspace:*",
+    "pptxdk": "workspace:*",
     "react": "catalog:"
   },
   "devDependencies": {

@@ -1,5 +1,6 @@
-import { Shape, Text, preset } from "@react-pptx/react-pptx";
-import type { ColorValue } from "@react-pptx/react-pptx";
+import { preset } from "pptxdk";
+import type { ColorValue } from "pptxdk";
+import { Shape, Text } from "pptxdk/react";
 import type { ReactNode } from "react";
 
 import { colors, transparent } from "../theme.ts";

@@ -2,15 +2,13 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
 import { validatePptx } from "@pptxdk/validation";
+import { strFromU8, unzipSync } from "fflate";
+import { build, BuildError, fade, font } from "pptxdk";
 import {
   Box,
-  build,
-  BuildError,
   Chart,
   Cell,
   Deck,
-  fade,
-  font,
   Group,
   Image,
   Shape,
@@ -18,8 +16,7 @@ import {
   Row,
   Table,
   Text,
-} from "@react-pptx/react-pptx";
-import { strFromU8, unzipSync } from "fflate";
+} from "pptxdk/react";
 import { createElement } from "react";
 import { describe, it } from "vitest";
 

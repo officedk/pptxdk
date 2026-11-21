@@ -3,16 +3,8 @@ import { getEventListeners } from "node:events";
 import { createServer, type ServerResponse } from "node:http";
 
 import { validatePptx } from "@pptxdk/validation";
-import {
-  BuildError,
-  build,
-  Deck,
-  emit,
-  expandDocument,
-  resolve,
-  Slide,
-  Text,
-} from "@react-pptx/react-pptx";
+import { BuildError, build, emit, resolve } from "pptxdk";
+import { Deck, expandDocument, Slide, Text } from "pptxdk/react";
 import {
   Component,
   createElement,

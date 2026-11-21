@@ -3,16 +3,12 @@ import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
+import { BuildError, font } from "pptxdk";
 import {
-  Box,
-  BuildError,
-  Deck,
-  Group,
-  Shape,
-  Slide,
-  Text,
-  font,
-} from "@react-pptx/react-pptx";
+  preview as previewDocument,
+  preview as previewJsx,
+} from "pptxdk/preview";
+import { Box, Deck, Group, Shape, Slide, Text } from "pptxdk/react";
 import {
   box,
   cell,
@@ -24,11 +20,7 @@ import {
   slide,
   table,
   text,
-} from "@react-pptx/react-pptx/document";
-import {
-  preview as previewDocument,
-  preview as previewJsx,
-} from "@react-pptx/react-pptx/preview";
+} from "pptxdk/vanilla";
 import { createElement } from "react";
 import { describe, expect, it } from "vitest";
 
@@ -566,7 +558,8 @@ registerHooks({
   },
 });
 
-const { build, Deck, Image, Slide, Shape } = await import("@react-pptx/react-pptx");
+const { build } = await import("pptxdk");
+const { Deck, Image, Slide, Shape } = await import("pptxdk/react");
 const pngBytes = new Uint8Array(Buffer.from("${pngBase64}", "base64"));
 const jpegBytes = new Uint8Array(Buffer.from("${jpegBase64}", "base64"));
 const result = await build(
@@ -612,8 +605,9 @@ registerHooks({
   },
 });
 
-const { build, deck, image, slide, shape } = await import("@react-pptx/react-pptx/document");
-const { createResolver, emit } = await import("@react-pptx/react-pptx/build");
+const { build } = await import("pptxdk");
+const { deck, image, slide, shape } = await import("pptxdk/vanilla");
+const { createResolver, emit } = await import("pptxdk/build");
 void createResolver;
 void emit;
 const pngBytes = new Uint8Array(Buffer.from("${pngBase64}", "base64"));
@@ -703,8 +697,8 @@ registerHooks({
   },
 });
 
-const { deck, slide, shape } = await import("@react-pptx/react-pptx/document");
-const { preview } = await import("@react-pptx/react-pptx/preview");
+const { deck, slide, shape } = await import("pptxdk/vanilla");
+const { preview } = await import("pptxdk/preview");
 const result = await preview(
   deck({ width: 320, height: 180 }).append(
     slide({ id: "s1", background: "#112233" }).append(
@@ -738,8 +732,8 @@ registerHooks({
   },
 });
 
-const { Deck, Slide, Shape } = await import("@react-pptx/react-pptx");
-const { preview } = await import("@react-pptx/react-pptx/preview");
+const { Deck, Slide, Shape } = await import("pptxdk/react");
+const { preview } = await import("pptxdk/preview");
 const result = await preview(
   createElement(
     Deck,

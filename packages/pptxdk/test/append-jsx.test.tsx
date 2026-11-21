@@ -2,37 +2,33 @@ import assert from "node:assert/strict";
 import { getEventListeners } from "node:events";
 
 import { validatePptx } from "@pptxdk/validation";
+import { strFromU8, unzipSync } from "fflate";
 import {
-  appendJSX,
-  Box,
   after,
   BuildError,
   CommonContainer,
   CommonNode,
   createMorphScope,
   createMotionScopeHandle,
-  Deck,
   defineTheme,
-  expandDocument,
   fade,
-  MotionScope,
   RichTextContainer,
+  type MotionObservation,
+} from "pptxdk";
+import { build as buildDocument } from "pptxdk";
+import {
+  appendJSX,
+  Box,
+  Deck,
+  expandDocument,
+  MotionScope,
   Shape,
   Slide,
   Step,
   Text,
   useMotionScope,
-  type MotionObservation,
-} from "@react-pptx/react-pptx";
-import {
-  box,
-  build as buildDocument,
-  deck,
-  shape,
-  slide,
-  text,
-} from "@react-pptx/react-pptx/document";
-import { strFromU8, unzipSync } from "fflate";
+} from "pptxdk/react";
+import { box, deck, shape, slide, text } from "pptxdk/vanilla";
 import {
   Component,
   createContext,

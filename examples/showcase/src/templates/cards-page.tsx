@@ -1,4 +1,4 @@
-import { Box, Step } from "@react-pptx/react-pptx";
+import { Box, Step } from "pptxdk/react";
 
 import { InfoCard, type CardContent } from "../components/info-card.tsx";
 import { PageFrame } from "./page-frame.tsx";

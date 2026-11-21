@@ -1,5 +1,6 @@
-import { P, Shape, Text, path, preset } from "@react-pptx/react-pptx";
-import type { ColorValue } from "@react-pptx/react-pptx";
+import { path, preset } from "pptxdk";
+import type { ColorValue } from "pptxdk";
+import { P, Shape, Text } from "pptxdk/react";
 
 import { Circle, Rule } from "../components/primitives.tsx";
 import { SlideFrame } from "../templates/slide-frame.tsx";

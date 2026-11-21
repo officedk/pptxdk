@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
 import { validatePptx } from "@pptxdk/validation";
+import { strFromU8, unzipSync } from "fflate";
+import { font, build, spin, type MotionObservation } from "pptxdk";
 import {
   Deck,
   Cell,
@@ -9,7 +11,6 @@ import {
   Chart,
   Group,
   Image,
-  font,
   MotionScope,
   Shape,
   Slide,
@@ -17,12 +18,8 @@ import {
   Text,
   Row,
   Table,
-  build,
-  spin,
   useMotionScope,
-  type MotionObservation,
-} from "@react-pptx/react-pptx";
-import { strFromU8, unzipSync } from "fflate";
+} from "pptxdk/react";
 import { createElement } from "react";
 import { describe, it } from "vitest";
 

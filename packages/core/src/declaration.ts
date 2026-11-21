@@ -49,11 +49,10 @@ export function declarationIdentity(
 
 /** Diagnostic label for a child declaration, matching the existing build path vocabulary. */
 export function componentLabel(node: DeclarationNode, index: number): string {
-  const type = node.type.startsWith("rp:") ? node.type.slice(3) : node.type;
   const identity = declarationIdentity(node.props);
   const label =
     typeof identity === "string" && identity.trim() !== ""
       ? identity
       : String(index + 1);
-  return `${type}[${label}]`;
+  return `${node.type}[${label}]`;
 }

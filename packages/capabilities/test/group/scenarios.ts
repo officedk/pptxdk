@@ -123,7 +123,7 @@ const groupMorphKey = morphScope.handle("group-morph-card");
 
 export const groupPositiveScenario: CapabilityScenario = {
   id: "group-native-composition-and-transforms",
-  capability: "rp:group",
+  capability: "group",
   description:
     "Dual-author Group scenario covering loose and layout-participating Groups containing Text, Shape, Box, nested rotated Groups, flipped members, scoped ThemeScope, Motion members, Morph continuity, and slide links.",
   visualCheckpoints: [
@@ -759,7 +759,7 @@ export const groupPositiveScenario: CapabilityScenario = {
 
 export const groupRejectionScenario: CapabilityScenario = {
   id: "group-preview-and-continuity-rejections",
-  capability: "rp:group",
+  capability: "group",
   kind: "rejection",
   description:
     "Dual-author Group rejection scenario verifying underlying resource error propagation through nested Groups (corrupt image, missing glyph on Shape text, color font on Text), morph-inside-group restriction, empty-group rejection, and missing member capability rejection.",

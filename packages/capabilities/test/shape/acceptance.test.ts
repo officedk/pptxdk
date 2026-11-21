@@ -52,7 +52,7 @@ type CustomMarkerProps = {
 function createMarkerNode(
   props: CustomMarkerProps,
 ): CommonNode<"marker", CustomMarkerProps> {
-  return new CommonNode("marker", "rp:custom-marker", props);
+  return new CommonNode("marker", "custom-marker", props);
 }
 
 function previewDocWith(modules: readonly CapabilityModule[]) {
@@ -110,7 +110,7 @@ describe("Shape capability acceptance & bound extension contracts", () => {
     const calls: string[] = [];
 
     const customMarkerWithPreview: BoundObjectCapabilityModule = {
-      declaration: "rp:custom-marker",
+      declaration: "custom-marker",
       bind(input: CapabilityInput, parseContext: CapabilityParseContext) {
         const x = Number(input.props["x"]);
         const y = Number(input.props["y"]);
@@ -170,7 +170,7 @@ describe("Shape capability acceptance & bound extension contracts", () => {
     };
 
     const customMarkerWithoutPreview: BoundObjectCapabilityModule = {
-      declaration: "rp:custom-no-preview",
+      declaration: "custom-no-preview",
       bind(input: CapabilityInput, parseContext: CapabilityParseContext) {
         const contract = parseCapabilityLayoutContract({
           nativeKind: "sp",
@@ -226,7 +226,7 @@ describe("Shape capability acceptance & bound extension contracts", () => {
         }),
       ),
       slide({ id: "warn-cannot-clear-error" }).append(
-        new CommonNode("noprev", "rp:custom-no-preview", {
+        new CommonNode("noprev", "custom-no-preview", {
           id: "opaque",
           x: 10,
           y: 10,
@@ -305,7 +305,7 @@ describe("Shape capability acceptance & bound extension contracts", () => {
 
   it("rejects non-bound capability modules at registration and invalid bound handles at bind time", async () => {
     const unboundObjectModule = {
-      declaration: "rp:unbound-object",
+      declaration: "unbound-object",
       parse() {
         return {
           contract: { nativeKind: "sp", layoutStyle: {} },
@@ -342,7 +342,7 @@ describe("Shape capability acceptance & bound extension contracts", () => {
     }
 
     const brokenObjectBinding: ObjectCapabilityModule = {
-      declaration: "rp:broken-object",
+      declaration: "broken-object",
       bind() {
         return {
           contract: { nativeKind: "sp" },
@@ -355,7 +355,7 @@ describe("Shape capability acceptance & bound extension contracts", () => {
         brokenObjectResolve(
           deck().append(
             slide({ id: "s1" }).append(
-              new CommonNode("broken", "rp:broken-object", { id: "bad-obj" }),
+              new CommonNode("broken", "broken-object", { id: "bad-obj" }),
             ),
           ),
         ),

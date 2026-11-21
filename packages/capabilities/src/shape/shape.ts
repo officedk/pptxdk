@@ -108,7 +108,7 @@ export function createShapeNode(
     "shape",
     ShapeDeclarationProps,
     NonNullable<ShapeDeclarationProps["style"]>
-  >("shape", "rp:shape", props);
+  >("shape", "shape", props);
 }
 
 const maximumShapeExtentEmu = 2_147_483_647;
@@ -368,7 +368,7 @@ function paintShapeModel(
 
 /** Shape module independently validates input, encapsulates bound state, and emits native PresentationML objects. */
 export const shapeCapability: ObjectCapabilityModule = {
-  declaration: "rp:shape",
+  declaration: "shape",
 
   bind(
     input: CapabilityInput,

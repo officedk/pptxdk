@@ -413,7 +413,7 @@ process.stdout.write("ok");
 
   it("assembles trimmed modules with createResolver, validates roots, and reports unsupported paint without blocking emit", async () => {
     const customNoPaintObject: CapabilityModule = {
-      declaration: "rp:custom-opaque",
+      declaration: "custom-opaque",
       bind() {
         return {
           contract: {
@@ -481,7 +481,7 @@ process.stdout.write("ok");
 
     const doc = deck({ width: 320, height: 180 }).append(
       slide({ id: "s1", background: "#112233" }).append(
-        new CommonNode("opaque", "rp:custom-opaque", { id: "op1" }),
+        new CommonNode("opaque", "custom-opaque", { id: "op1" }),
       ),
       slide({ id: "s2" }).append(
         shape({
@@ -507,7 +507,7 @@ process.stdout.write("ok");
     assert.deepEqual(
       painted.pages[0]?.diagnostics.map((diag) => diag.message),
       [
-        "Preview does not support rp:custom-opaque",
+        "Preview does not support custom-opaque",
         "Preview does not support custom-opaque-bg",
       ],
     );

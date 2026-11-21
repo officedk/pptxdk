@@ -124,7 +124,7 @@ const sbixJostFont = font(
 
 export const textPositiveScenario: CapabilityScenario = {
   id: "text-typography-and-alignment",
-  capability: "rp:text",
+  capability: "text",
   description:
     "Dual-author Text scenario covering multi-script & BiDi shaping, CJK/Latin wrapping, justify, bullet & numbered lists with hanging indent, underline/line-through, textShadow, letterSpacing, padding, vertical alignment, slide numbers, opacity, rotation, and container visual styles.",
   visualCheckpoints: [
@@ -940,7 +940,7 @@ export const textPositiveScenario: CapabilityScenario = {
 
 export const textRejectionScenario: CapabilityScenario = {
   id: "text-preview-rejections",
-  capability: "rp:text",
+  capability: "text",
   kind: "rejection",
   description:
     "Dual-author negative scenario verifying Text preview enforces only the two underlying font resource boundaries (color/bitmap font tables and missing glyph) while retaining valid PPTX output and sibling pages.",
@@ -1134,7 +1134,7 @@ const textFillPngBytes = (() => {
 
 export const textRtlListsAndFillsScenario: CapabilityScenario = {
   id: "text-rtl-lists-image-fill-and-percent-height",
-  capability: "rp:text",
+  capability: "text",
   description:
     "Dual-author Text scenario covering RTL bullet/numbered lists with right/center/justify alignment, Arabic numerals and diacritics with lang='ar-SA', image-filled Text box, 100% height inside fixed Box, underline+textShadow on list items, and multi-level numbered list fallback.",
   visualCheckpoints: [

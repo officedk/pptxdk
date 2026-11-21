@@ -3365,7 +3365,10 @@ describe("public build entry", () => {
         "deck/slide[nested]/text[missing-text]",
       );
       assert.equal(output.missing.code, "missing-capability");
-      assert.ok(output.missing.message.includes("rp:text"));
+      assert.equal(
+        output.missing.message,
+        "No capability module registered for text",
+      );
       assert.equal(output.loaded, false);
     } finally {
       await rm(directory, { recursive: true, force: true });

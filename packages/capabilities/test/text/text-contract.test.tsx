@@ -11,10 +11,12 @@ import {
   text,
 } from "@pptxdk/capabilities/document";
 import { font } from "@pptxdk/capabilities/font";
+import { Shape } from "@pptxdk/capabilities/shape-elements";
 import { textCapability } from "@pptxdk/capabilities/text";
 import { P, SlideNumber, Text } from "@pptxdk/capabilities/text-elements";
 import { BuildError } from "@pptxdk/core";
 import { createResolver } from "@pptxdk/core/build";
+import { CommonNode } from "@pptxdk/core/document";
 import { emit } from "@pptxdk/emit";
 import { paint } from "@pptxdk/preview";
 import { Deck, expandDocument, Slide } from "@pptxdk/react";
@@ -365,5 +367,76 @@ describe("textCapability resolved contract", () => {
     assert.ok((noFontPaint.pages[0]?.diagnostics.length ?? 0) > 0);
     const noFontEmit = emit(noFontResolution);
     assert.deepEqual((await validatePptx(noFontEmit.pptx)).errors, []);
+  });
+
+  it("distinguishes unsupported host declarations from invalid non-declaration text children", async () => {
+    const resolve = createResolver([slideBackgroundCapability, textCapability]);
+
+    const shapeInTextDoc = await expandDocument(
+      createElement(
+        Deck,
+        { width: 480, height: 270 },
+        createElement(
+          Slide,
+          { id: "cover" },
+          createElement(
+            Text,
+            { id: "bad-text", x: 20, y: 20, width: 200, height: 60 },
+            createElement(Shape, { x: 0, y: 0, width: 40, height: 20 }),
+          ),
+        ),
+      ),
+    );
+    assert.throws(
+      () => resolve(shapeInTextDoc),
+      (error: unknown) =>
+        error instanceof BuildError &&
+        error.diagnostics.some((d) => d.code === "unsupported-text-child"),
+    );
+
+    const shapeInParagraphDoc = await expandDocument(
+      createElement(
+        Deck,
+        { width: 480, height: 270 },
+        createElement(
+          Slide,
+          { id: "cover" },
+          createElement(
+            Text,
+            { id: "bad-p", x: 20, y: 20, width: 200, height: 60 },
+            createElement(
+              P,
+              null,
+              createElement(Shape, { x: 0, y: 0, width: 40, height: 20 }),
+            ),
+          ),
+        ),
+      ),
+    );
+    assert.throws(
+      () => resolve(shapeInParagraphDoc),
+      (error: unknown) =>
+        error instanceof BuildError &&
+        error.diagnostics.some((d) => d.code === "unsupported-text-child"),
+    );
+
+    const malformedChild = new CommonNode("bogus", "", {});
+    const badText = text("", {
+      id: "malformed",
+      x: 20,
+      y: 20,
+      width: 200,
+      height: 60,
+    });
+    badText.append(malformedChild);
+    const malformedDoc = deck({ width: 480, height: 270 }).append(
+      slide({ id: "cover" }).append(badText),
+    );
+    assert.throws(
+      () => resolve(malformedDoc),
+      (error: unknown) =>
+        error instanceof BuildError &&
+        error.diagnostics.some((d) => d.code === "invalid-text-child"),
+    );
   });
 });

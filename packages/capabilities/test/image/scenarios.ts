@@ -74,7 +74,7 @@ const corruptGifBytes = new Uint8Array([
 
 export const imagePositiveScenario: CapabilityScenario = {
   id: "image-placement-and-transforms",
-  capability: "rp:image",
+  capability: "image",
   description:
     "Dual-author Image scenario covering PNG & JPEG placement (contain, cover, fill, explicit crop), rotate, flipH/flipV, opacity, and media deduplication.",
   visualCheckpoints: [
@@ -404,7 +404,7 @@ const triangleMaskGeometry = path("M0 0 L10 0 L5 10 Z", {
 
 export const imageMasksAndEffectsScenario: CapabilityScenario = {
   id: "image-masks-borders-and-effects",
-  capability: "rp:image",
+  capability: "image",
   description:
     "Dual-author Image scenario covering preset & custom geometry masks, solid/dashed/dotted borders, boxShadow, softEdge, opacity+border, and flip+rotate composition across PNG, JPEG, and GIF.",
   visualCheckpoints: [
@@ -725,7 +725,7 @@ export const imageMasksAndEffectsScenario: CapabilityScenario = {
 
 export const imageRejectionScenario: CapabilityScenario = {
   id: "image-preview-rejections",
-  capability: "rp:image",
+  capability: "image",
   kind: "rejection",
   description:
     "Dual-author negative scenario verifying only corrupt PNG/JPEG/GIF pixel streams emit located preview-corrupt-image errors while PPTX and shaped/bordered/shadowed sibling pages survive.",
@@ -869,7 +869,7 @@ export const imageRejectionScenario: CapabilityScenario = {
 
 export const imageSizingSoftBorderAndLinkScenario: CapabilityScenario = {
   id: "image-single-axis-sizing-softedge-border-and-link",
-  capability: "rp:image",
+  capability: "image",
   description:
     "Dual-author Image scenario covering width-only and height-only aspect derivation, border+softEdge overlay, large softEdge radius, and hyperlink attachment.",
   visualCheckpoints: [

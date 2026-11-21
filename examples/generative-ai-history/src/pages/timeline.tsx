@@ -1,4 +1,4 @@
-import { Text } from "@react-pptx/react-pptx";
+import { Text } from "pptxdk/react";
 import { Fragment } from "react";
 
 import { Circle, Rule } from "../components/primitives.tsx";

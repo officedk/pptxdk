@@ -1,0 +1,47 @@
+export { appendJSX, Deck, expandDocument, Section } from "@pptxdk/react";
+export type {
+  AppendJSXOptions,
+  DeckProps,
+  ElementProps,
+  ExpandDocumentOptions,
+  ExpandedDocument,
+  SectionProps,
+} from "@pptxdk/react";
+export { Slide, type SlideProps } from "./slide.ts";
+export {
+  Box,
+  Cell,
+  Chart,
+  Group,
+  Image,
+  MotionScope,
+  Notes,
+  P,
+  Row,
+  Shape,
+  SlideNumber,
+  Span,
+  Step,
+  Table,
+  Text,
+  useMotionScope,
+} from "@pptxdk/capabilities";
+export type {
+  BoxProps,
+  CellProps,
+  ChartProps,
+  GroupProps,
+  ImageProps,
+  MorphProps,
+  MotionProps,
+  MotionScopeProps,
+  NotesProps,
+  ParagraphProps,
+  RowProps,
+  ShapeProps,
+  SlideNumberProps,
+  SpanProps,
+  StepProps,
+  TableProps,
+  TextProps,
+} from "@pptxdk/capabilities";

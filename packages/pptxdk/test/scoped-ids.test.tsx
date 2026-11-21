@@ -1,9 +1,11 @@
 import assert from "node:assert/strict";
 
 import { validatePptx } from "@pptxdk/validation";
+import { strFromU8, unzipSync } from "fflate";
+import { BuildError, build, fade, observeMotion } from "pptxdk";
+import { build as buildDocument, type CommonNode } from "pptxdk";
 import {
   Box,
-  BuildError,
   Cell,
   Chart,
   Deck,
@@ -15,14 +17,10 @@ import {
   Span,
   Table,
   Text,
-  build,
   expandDocument,
-  fade,
-  observeMotion,
-} from "@react-pptx/react-pptx";
+} from "pptxdk/react";
 import {
   box,
-  build as buildDocument,
   deck,
   paragraph,
   shape,
@@ -30,10 +28,8 @@ import {
   slideNumber,
   span,
   text,
-  type CommonNode,
   type TextNode,
-} from "@react-pptx/react-pptx/document";
-import { strFromU8, unzipSync } from "fflate";
+} from "pptxdk/vanilla";
 import { describe, it } from "vitest";
 
 function slideXml(result: { readonly pptx: Uint8Array }, index = 1): string {
@@ -529,9 +525,7 @@ describe("scoped author ids", () => {
     );
     assert.equal(shared?.length, 2);
     assert.equal(new Set(shared?.map(({ id }) => id)).size, 2);
-    assert.ok(
-      shared?.every(({ name }) => !name.startsWith("!!react-pptx-morph-")),
-    );
+    assert.ok(shared?.every(({ name }) => !name.startsWith("!!morph-")));
     assert.equal(result.report.slides[0]?.capabilities?.transition, undefined);
     assert.throws(
       () => result.query.getSlide("missing"),

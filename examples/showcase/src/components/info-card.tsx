@@ -1,12 +1,5 @@
-import {
-  Box,
-  MotionScope,
-  Text,
-  floatUp,
-  type LayoutStyle,
-  useMotionScope,
-  wipe,
-} from "@react-pptx/react-pptx";
+import { floatUp, type LayoutStyle, wipe } from "pptxdk";
+import { Box, MotionScope, Text, useMotionScope } from "pptxdk/react";
 
 import { colors, motion } from "../theme.ts";
 

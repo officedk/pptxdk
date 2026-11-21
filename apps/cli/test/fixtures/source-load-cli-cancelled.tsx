@@ -1,4 +1,4 @@
-import { Deck, Slide } from "@react-pptx/react-pptx";
+import { Deck, Slide } from "pptxdk/react";
 
 await new Promise<void>((_resolve, reject) => {
   const keepAlive = setInterval(() => {}, 1000);

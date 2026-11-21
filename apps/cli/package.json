@@ -36,8 +36,8 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@react-pptx/react-pptx": "workspace:*",
     "@ykdz/cli-contract": "catalog:",
+    "pptxdk": "workspace:*",
     "zod": "catalog:"
   },
   "devDependencies": {

@@ -1,13 +1,5 @@
-import {
-  Group,
-  Shape,
-  Step,
-  Text,
-  blockArc,
-  preset,
-  wipe,
-  zoom,
-} from "@react-pptx/react-pptx";
+import { blockArc, preset, wipe, zoom } from "pptxdk";
+import { Group, Shape, Step, Text } from "pptxdk/react";
 
 import { colors, motion } from "../theme.ts";
 

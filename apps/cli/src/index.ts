@@ -2,8 +2,6 @@ import { randomUUID } from "node:crypto";
 import { mkdir, rename, rm, writeFile } from "node:fs/promises";
 import { basename, dirname, extname, resolve } from "node:path";
 
-import { BuildError, targets, type Target } from "@react-pptx/react-pptx";
-import { buildFromSource, SourceLoadError } from "@react-pptx/react-pptx/node";
 import {
   CliWriteError,
   defineCli,
@@ -15,6 +13,8 @@ import {
   type WriteCliOutput,
 } from "@ykdz/cli-contract";
 import { isNodeBrokenPipe } from "@ykdz/cli-contract/node";
+import { BuildError, targets, type Target } from "pptxdk";
+import { buildFromSource, SourceLoadError } from "pptxdk/node";
 import { z } from "zod";
 
 /**

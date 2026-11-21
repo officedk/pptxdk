@@ -5,23 +5,25 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
 import { validatePptx } from "@pptxdk/validation";
+import { strFromU8, unzipSync } from "fflate";
+import {
+  build,
+  createMorphScope,
+  font,
+  type ChartSeries,
+  type ChartTrendline,
+  type LinearGradient,
+} from "pptxdk";
 import {
   box,
-  build,
   chart,
-  createMorphScope,
   deck,
-  font,
   paragraph,
   slide,
   slideNumber,
   span,
   text,
-  type ChartSeries,
-  type ChartTrendline,
-  type LinearGradient,
-} from "@react-pptx/react-pptx/document";
-import { strFromU8, unzipSync } from "fflate";
+} from "pptxdk/vanilla";
 import { describe, it } from "vitest";
 
 const jostBook = new Uint8Array(
@@ -611,7 +613,7 @@ describe("public document authoring entry", () => {
     );
     assert.equal(names.length, 2);
     assert.equal(names[0], names[1]);
-    assert.match(names[0]!, /^!!react-pptx-morph-/u);
+    assert.match(names[0]!, /^!!morph-\d+$/u);
   });
 
   it("loads and builds without importing React at runtime", () => {
@@ -634,7 +636,8 @@ registerHooks({
   },
 });
 
-const entry = await import("@react-pptx/react-pptx/document");
+const { build } = await import("pptxdk");
+const entry = await import("pptxdk/vanilla");
 const png = new Uint8Array(
   Buffer.from(
     "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/n1sAAAAASUVORK5CYII=",
@@ -711,7 +714,7 @@ const document = entry
 }),
       ),
   );
-const result = await entry.build(document);
+const result = await build(document);
 if (result.report.slides[0]?.id !== "pure") {
   throw new Error("pure document build did not produce the expected slide");
 }

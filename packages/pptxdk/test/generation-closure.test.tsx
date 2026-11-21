@@ -2,17 +2,30 @@ import assert from "node:assert/strict";
 
 import { shapeCapability } from "@pptxdk/capabilities/shape";
 import { validatePptx } from "@pptxdk/validation";
+import { strFromU8, unzipSync } from "fflate";
 import {
   after,
-  Box,
   build as buildReact,
+  documentCapabilities as reactDocumentCapabilities,
+  emit,
+  fade,
+} from "pptxdk";
+import {
+  after as afterPlain,
+  build,
+  createMotionScopeHandle,
+  documentCapabilities,
+  fade as fadePlain,
+  transitions,
+  type MotionObservation,
+} from "pptxdk";
+import { createResolver } from "pptxdk/build";
+import {
+  Box,
   Cell,
   Chart,
   Deck,
-  documentCapabilities as reactDocumentCapabilities,
-  emit,
   expandDocument,
-  fade,
   Group,
   Image,
   MotionScope,
@@ -25,18 +38,12 @@ import {
   Table,
   Text,
   useMotionScope,
-} from "@react-pptx/react-pptx";
-import { createResolver } from "@react-pptx/react-pptx/build";
+} from "pptxdk/react";
 import {
-  after as afterPlain,
   box,
-  build,
   cell,
   chart,
-  createMotionScopeHandle,
   deck,
-  documentCapabilities,
-  fade as fadePlain,
   group,
   image,
   motionScope,
@@ -48,10 +55,7 @@ import {
   step,
   table,
   text,
-  transitions,
-  type MotionObservation,
-} from "@react-pptx/react-pptx/document";
-import { strFromU8, unzipSync } from "fflate";
+} from "pptxdk/vanilla";
 import { describe, it } from "vitest";
 
 const png = new Uint8Array(

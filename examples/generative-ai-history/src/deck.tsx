@@ -1,4 +1,4 @@
-import { Deck } from "@react-pptx/react-pptx";
+import { Deck } from "pptxdk/react";
 
 import { AlignmentPage } from "./pages/alignment.tsx";
 import { DiffusionPage } from "./pages/diffusion.tsx";

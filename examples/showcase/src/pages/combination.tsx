@@ -1,4 +1,4 @@
-import { Box, Shape, Slide, Step, Text } from "@react-pptx/react-pptx";
+import { Box, Shape, Slide, Step, Text } from "pptxdk/react";
 
 import { InfoCard } from "../components/info-card.tsx";
 import { ProcessPath } from "../components/process-path.tsx";

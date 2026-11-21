@@ -1,4 +1,4 @@
-import { Text } from "@react-pptx/react-pptx";
+import { Text } from "pptxdk/react";
 import { Fragment } from "react";
 
 import { OutlineBox, Rule } from "../components/primitives.tsx";

@@ -751,9 +751,9 @@ export const groupPositiveScenario: CapabilityScenario = {
     const slide3Xml = strFromU8(unzipped["ppt/slides/slide3.xml"]!);
     expect(slide1Xml).toContain("<p:grpSp>");
     expect(slide1Xml).toContain("1D4ED8");
-    expect(slide2Xml).toContain("!!react-pptx-morph-");
+    expect(slide2Xml).toContain("!!morph-");
     expect(slide2Xml).toContain("<a:hlinkClick");
-    expect(slide3Xml).toContain("!!react-pptx-morph-");
+    expect(slide3Xml).toContain("!!morph-");
   },
 };
 

@@ -383,7 +383,12 @@ export const documentCapabilities = Object.freeze([
   transitionCapability,
 ] as const);
 
-export { createMotionScopeHandle, font, notesCapability };
+export {
+  createMotionScopeHandle,
+  font,
+  notesCapability,
+  slideBackgroundCapability,
+};
 export type {
   MotionScopeAuthorProps,
   MotionScopeHandle,

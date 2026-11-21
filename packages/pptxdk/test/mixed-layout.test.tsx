@@ -2,30 +2,20 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
 import { validatePptx } from "@pptxdk/validation";
-import {
-  Box,
-  build,
-  BuildError,
-  Chart,
-  Deck,
-  font,
-  Group,
-  Image,
-  Slide,
-  Text,
-} from "@react-pptx/react-pptx";
+import { strFromU8, unzipSync } from "fflate";
+import * as fontkit from "fontkit";
+import { build, BuildError, font } from "pptxdk";
+import { build as buildDocument } from "pptxdk";
+import { Box, Chart, Deck, Group, Image, Slide, Text } from "pptxdk/react";
 import {
   box as authorBox,
-  build as buildDocument,
   chart as authorChart,
   deck as authorDeck,
   group as authorGroup,
   image as authorImage,
   slide as authorSlide,
   text as authorText,
-} from "@react-pptx/react-pptx/document";
-import { strFromU8, unzipSync } from "fflate";
-import * as fontkit from "fontkit";
+} from "pptxdk/vanilla";
 import { describe, it } from "vitest";
 
 const jostBoldBytes = new Uint8Array(

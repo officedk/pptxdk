@@ -1,4 +1,4 @@
-import { Box, Shape, Slide, Text } from "@react-pptx/react-pptx";
+import { Box, Shape, Slide, Text } from "pptxdk/react";
 
 import { DeviceFrame } from "../components/device-frame.tsx";
 import { colors } from "../theme.ts";

@@ -2,16 +2,14 @@ import assert from "node:assert/strict";
 
 import { BuildError } from "@pptxdk/core";
 import { validatePptx } from "@pptxdk/validation";
+import { build, createMorphScope, linearGradient, transitions } from "pptxdk";
 import {
-  build,
   Deck,
   Box,
   Cell,
   Chart,
-  createMorphScope,
   Group,
   Image,
-  linearGradient,
   P,
   Row,
   Section,
@@ -21,8 +19,7 @@ import {
   Span,
   Table,
   Text,
-  transitions,
-} from "@react-pptx/react-pptx";
+} from "pptxdk/react";
 import { createElement } from "react";
 import { describe, it } from "vitest";
 

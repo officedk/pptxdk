@@ -8,7 +8,6 @@ import {
 } from "@pptxdk/core/build";
 import { CommonNode } from "@pptxdk/core/document";
 import { emit, emittedBuildQuery, validateOptions } from "@pptxdk/emit";
-import { expandDocument } from "@pptxdk/react";
 import type { ReactNode } from "react";
 
 /**
@@ -43,6 +42,8 @@ export function createStagePipeline(modules: readonly CapabilityModule[]) {
         query: emittedBuildQuery(emitted.report, resolution.query),
       });
     }
+    // Load the React reconciler adapter only when JSX input requires expansion.
+    const { expandDocument } = await import("@pptxdk/react");
     const document = await expandDocument(
       input,
       options.signal === undefined ? {} : { signal: options.signal },

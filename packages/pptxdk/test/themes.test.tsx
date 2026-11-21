@@ -2,17 +2,14 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
 import { validatePptx } from "@pptxdk/validation";
+import { strFromU8, unzipSync } from "fflate";
+import { build, BuildError, darker, defineTheme, font, lighter } from "pptxdk";
+import type { ThemeScope } from "pptxdk";
 import {
-  build,
   Box,
-  BuildError,
   Chart,
-  darker,
   Deck,
-  defineTheme,
-  font,
   Group,
-  lighter,
   MotionScope,
   P,
   Slide,
@@ -23,9 +20,7 @@ import {
   Cell,
   Text,
   useMotionScope,
-} from "@react-pptx/react-pptx";
-import type { ThemeScope } from "@react-pptx/react-pptx";
-import { strFromU8, unzipSync } from "fflate";
+} from "pptxdk/react";
 import type { ReactNode } from "react";
 import { describe, it } from "vitest";
 

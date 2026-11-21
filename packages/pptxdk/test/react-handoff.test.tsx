@@ -1,15 +1,21 @@
 import assert from "node:assert/strict";
 
 import { validatePptx } from "@pptxdk/validation";
+import { strFromU8, unzipSync } from "fflate";
 import {
-  Box,
   build,
+  build as buildDocument,
   BuildError,
-  Cell,
-  Chart,
   CommonContainer,
   CommonNode,
   createMotionScopeHandle,
+  resolve as resolveDocument,
+  RichTextContainer,
+} from "pptxdk";
+import {
+  Box,
+  Cell,
+  Chart,
   Deck,
   expandDocument,
   Group,
@@ -17,7 +23,6 @@ import {
   MotionScope,
   Notes,
   P,
-  RichTextContainer,
   Row,
   Section,
   Shape,
@@ -27,10 +32,9 @@ import {
   Step,
   Table,
   Text,
-} from "@react-pptx/react-pptx";
+} from "pptxdk/react";
 import {
   box,
-  build as buildDocument,
   cell,
   chart,
   deck,
@@ -39,7 +43,6 @@ import {
   motionScope,
   notes,
   paragraph,
-  resolve as resolveDocument,
   row,
   section,
   shape,
@@ -49,8 +52,7 @@ import {
   step,
   table,
   text,
-} from "@react-pptx/react-pptx/document";
-import { strFromU8, unzipSync } from "fflate";
+} from "pptxdk/vanilla";
 import {
   createElement,
   useEffect,

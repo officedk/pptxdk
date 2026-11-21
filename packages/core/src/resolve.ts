@@ -94,6 +94,7 @@ type DocumentResolveState = {
   >;
   readonly morphNames: Map<MorphKey, string>;
   nextMorphName: number;
+  readonly reservedObjectNames: ReadonlySet<string>;
   readonly slideIndexById: ReadonlyMap<string, number>;
 };
 
@@ -272,13 +273,66 @@ function capabilityLabel(child: CapabilityChild, index: number): string {
   return `${child.type}[${label}]`;
 }
 
+function isHiddenByStyle(node: DeclarationNode): boolean {
+  const style = node.props["style"];
+  return (
+    typeof style === "object" &&
+    style !== null &&
+    !Array.isArray(style) &&
+    "display" in style &&
+    style.display === "none"
+  );
+}
+
+function collectExplicitObjectNamesFromChildren(
+  children: readonly DeclarationChild[],
+  modules: ReadonlyMap<
+    string,
+    ObjectCapabilityModule | TransparentCapabilityModule
+  >,
+  names: Set<string>,
+): void {
+  for (const child of children) {
+    if (!isDeclarationNode(child) || isHiddenByStyle(child)) continue;
+    const module = modules.get(child.type);
+    if (module !== undefined && "compileDeclaration" in module) {
+      if (module.children === "owned") continue;
+      collectExplicitObjectNamesFromChildren(child.children, modules, names);
+      continue;
+    }
+    const rawName = child.props["name"];
+    if (typeof rawName === "string" && rawName.trim() !== "") {
+      names.add(rawName);
+    }
+    collectExplicitObjectNamesFromChildren(child.children, modules, names);
+  }
+}
+
+function collectExplicitObjectNames(
+  slides: readonly ParsedSlideNode[],
+  modules: ReadonlyMap<
+    string,
+    ObjectCapabilityModule | TransparentCapabilityModule
+  >,
+): ReadonlySet<string> {
+  const names = new Set<string>();
+  for (const slide of slides) {
+    collectExplicitObjectNamesFromChildren(slide.node.children, modules, names);
+  }
+  return names;
+}
+
 function nativeObjectName(
   key: MorphKey,
   document: DocumentResolveState,
 ): string {
   let name = document.morphNames.get(key);
   if (name === undefined) {
-    name = `!!react-pptx-morph-${document.nextMorphName++}`;
+    // Skip any explicit object name authored anywhere in the deck so auto-generated Morph
+    // handles never collide with or accidentally pair with manually named native objects.
+    do {
+      name = `!!morph-${document.nextMorphName++}`;
+    } while (document.reservedObjectNames.has(name));
     document.morphNames.set(key, name);
   }
   return name;
@@ -1868,6 +1922,10 @@ function resolveDocument(
     resourceClaims: new Map(),
     morphNames: new Map(),
     nextMorphName: 1,
+    reservedObjectNames: collectExplicitObjectNames(
+      slides,
+      modules.declarations,
+    ),
     slideIndexById,
   };
 

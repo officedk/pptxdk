@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
-import { createResolver, emit } from "@react-pptx/react-pptx/build";
+import { createResolver, emit } from "pptxdk/build";
 import { describe, it } from "vitest";
 
 describe("pure formal build entry", () => {
@@ -37,7 +37,7 @@ registerHooks({
   },
 });
 
-const entry = await import("@react-pptx/react-pptx/build");
+const entry = await import("pptxdk/build");
 if (typeof entry.createResolver !== "function" || typeof entry.emit !== "function") {
   throw new Error("pure build entry does not expose createResolver and emit");
 }

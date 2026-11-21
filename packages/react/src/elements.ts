@@ -32,9 +32,6 @@ function hostElement<P extends ElementProps>(
   };
 }
 
-export const Deck = hostElement<DeckProps>("rp:deck", createDeckNode);
-export const Slide = hostElement<SlideProps>("rp:slide", createSlideNode);
-export const Section = hostElement<SectionProps>(
-  "rp:section",
-  createSectionNode,
-);
+export const Deck = hostElement<DeckProps>("deck", createDeckNode);
+export const Slide = hostElement<SlideProps>("slide", createSlideNode);
+export const Section = hostElement<SectionProps>("section", createSectionNode);

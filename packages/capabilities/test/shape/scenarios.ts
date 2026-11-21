@@ -158,7 +158,7 @@ const ribbonPath = path("M0 0 L80 0 L100 50 L80 100 L0 100 L20 50 Z", {
 
 export const shapePositiveScenario: CapabilityScenario = {
   id: "shape-primitives-and-transforms",
-  capability: "rp:shape",
+  capability: "shape",
   description:
     "Dual-author Shape scenario covering rect, ellipse, preset, custom path, fill/border, opacity, rotate, flip, theme tokens, and zIndex.",
   visualCheckpoints: [
@@ -503,7 +503,7 @@ function pixelRgb(
 
 export const shapePresetCatalogScenario: CapabilityScenario = {
   id: "shape-187-presets-and-custom-parity",
-  capability: "rp:shape",
+  capability: "shape",
   description:
     "Data-driven dual-author scenario iterating all 187 ECMA-376 preset geometries plus adjust overrides and transformed multi-subpath custom geometries.",
   visualCheckpoints: [
@@ -930,7 +930,7 @@ export const shapePresetCatalogScenario: CapabilityScenario = {
 
 export const shapeTextParityScenario: CapabilityScenario = {
   id: "shape-inline-rich-text-and-textrect",
-  capability: "rp:shape",
+  capability: "shape",
   description:
     "Dual-author Shape inline rich text scenario covering text prop, P/Span/SlideNumber children, non-rect textRect, flipH/rotate, opacity, gradient/image fill, softEdge, boxShadow, multi-script/BiDi, justify, lists, decorations, and verticalAlign.",
   visualCheckpoints: [
@@ -1489,7 +1489,7 @@ export const shapeTextParityScenario: CapabilityScenario = {
 
 export const shapeRejectionScenario: CapabilityScenario = {
   id: "shape-preview-rejections",
-  capability: "rp:shape",
+  capability: "shape",
   kind: "rejection",
   description:
     "Dual-author negative scenario verifying Shape inline text enforces only permanent underlying font resource boundaries (missing glyph and color/bitmap font tables) while valid PPTX and valid sibling pages survive.",
@@ -1688,7 +1688,7 @@ const curvedEvenOddCutout = path(
 
 export const shapeShadedFillsAndPathsScenario: CapabilityScenario = {
   id: "shape-shaded-fills-open-beziers-and-flex",
-  capability: "rp:shape",
+  capability: "shape",
   description:
     "Dual-author Shape scenario covering shaded multi-facet presets with gradient/image fills, open cubic/quadratic/arc paths with fill and start/end arrows, curved evenodd cutouts, capsule borderRadius clamp, large softEdge, and flex-measured inline text.",
   visualCheckpoints: [

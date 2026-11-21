@@ -62,6 +62,7 @@ import type {
   ResolvedSlide as ResolvedSlideCapabilityOutput,
   SlideCapabilityModule,
   SlideObservation,
+  TransparentCapabilityModule,
 } from "#/types.ts";
 
 type ParsedSlideNode = {
@@ -110,10 +111,18 @@ type SlideResolveState = {
   readonly layoutDerivedObjectIds: Set<number>;
 };
 
+type BoundCapabilityRegistry = {
+  readonly declarations: ReadonlyMap<
+    string,
+    ObjectCapabilityModule | TransparentCapabilityModule
+  >;
+  readonly slideModules: ReadonlyMap<string, SlideCapabilityModule>;
+};
+
 type ResolvePassContext = {
   readonly document: DocumentResolveState;
   readonly slide: SlideResolveState;
-  readonly modules: ReadonlyMap<string, RegisteredCapabilityModule>;
+  readonly modules: BoundCapabilityRegistry;
   readonly dimensions: ResolutionDimensions;
   readonly options: ResolveOptions;
   readonly theme: ThemeContext;
@@ -228,12 +237,6 @@ function ownKeys(
   return Object.keys(value).find((key) => !allowed.includes(key));
 }
 
-function isSlideCapability(
-  module: RegisteredCapabilityModule,
-): module is SlideCapabilityModule {
-  return "bindSlide" in module;
-}
-
 function isObjectCapability(
   module: RegisteredCapabilityModule,
 ): module is ObjectCapabilityModule {
@@ -262,13 +265,12 @@ function capabilityChild(child: DeclarationChild): CapabilityChild {
 
 function capabilityLabel(child: CapabilityChild, index: number): string {
   if (!("props" in child)) return `text[${index + 1}]`;
-  const type = child.type.startsWith("rp:") ? child.type.slice(3) : child.type;
   const identity = declarationIdentity(child.props);
   const label =
     typeof identity === "string" && identity.trim() !== ""
       ? identity
       : String(index + 1);
-  return `${type}[${label}]`;
+  return `${child.type}[${label}]`;
 }
 
 function isHiddenByStyle(node: DeclarationNode): boolean {
@@ -284,7 +286,10 @@ function isHiddenByStyle(node: DeclarationNode): boolean {
 
 function collectExplicitObjectNamesFromChildren(
   children: readonly DeclarationChild[],
-  modules: ReadonlyMap<string, RegisteredCapabilityModule>,
+  modules: ReadonlyMap<
+    string,
+    ObjectCapabilityModule | TransparentCapabilityModule
+  >,
   names: Set<string>,
 ): void {
   for (const child of children) {
@@ -305,7 +310,10 @@ function collectExplicitObjectNamesFromChildren(
 
 function collectExplicitObjectNames(
   slides: readonly ParsedSlideNode[],
-  modules: ReadonlyMap<string, RegisteredCapabilityModule>,
+  modules: ReadonlyMap<
+    string,
+    ObjectCapabilityModule | TransparentCapabilityModule
+  >,
 ): ReadonlySet<string> {
   const names = new Set<string>();
   for (const slide of slides) {
@@ -404,10 +412,10 @@ function deckDimensions(node: DeclarationNode): ResolutionDimensions {
 
 function resolveSlides(
   container: DeclarationContainer,
-  modules: ReadonlyMap<string, RegisteredCapabilityModule>,
+  modules: BoundCapabilityRegistry,
 ): ParsedDocument {
   const decks = childNodes(container.children);
-  if (decks.length !== 1 || decks[0]?.type !== "rp:deck") {
+  if (decks.length !== 1 || decks[0]?.type !== "deck") {
     throw new BuildError([
       diagnostic(
         "deck",
@@ -448,7 +456,7 @@ function resolveSlides(
       diagnostic("deck", "missing-slide", "Deck requires at least one Slide"),
     ]);
   }
-  const sectioned = topLevel.some((node) => node.type === "rp:section");
+  const sectioned = topLevel.some((node) => node.type === "section");
   const candidates: {
     node: DeclarationNode;
     section?: string;
@@ -457,7 +465,7 @@ function resolveSlides(
   const sections: { name: string; slideIndexes: number[] }[] = [];
   if (sectioned) {
     for (const [index, node] of topLevel.entries()) {
-      if (node.type !== "rp:section") {
+      if (node.type !== "section") {
         throw new BuildError([
           diagnostic(
             `deck/${componentLabel(node, index)}`,
@@ -510,7 +518,7 @@ function resolveSlides(
       const section = { name, slideIndexes: [] as number[] };
       sections.push(section);
       for (const [memberIndex, member] of childNodes(node.children).entries()) {
-        if (member.type !== "rp:slide") {
+        if (member.type !== "slide") {
           throw new BuildError([
             diagnostic(
               `deck/section[${name}]/${componentLabel(member, memberIndex)}`,
@@ -524,7 +532,7 @@ function resolveSlides(
     }
   } else {
     for (const [index, node] of topLevel.entries()) {
-      if (node.type !== "rp:slide") {
+      if (node.type !== "slide") {
         throw new BuildError([
           diagnostic(
             `deck/${componentLabel(node, index)}`,
@@ -542,9 +550,9 @@ function resolveSlides(
     ]);
   }
   const authorIds = new Set<string>();
-  const slideProperties = [...modules.values()]
-    .filter(isSlideCapability)
-    .flatMap((module) => module.slideProps ?? [module.slideProp]);
+  const slideProperties = [...modules.slideModules.values()].flatMap(
+    (module) => module.slideProps ?? [module.slideProp],
+  );
   const slides = candidates.map(({ node, section, sectionIndex }, index) => {
     const unknown = ownKeys(node.props, [
       "id",
@@ -871,7 +879,7 @@ function resolveChildrenPass(
     const path = `${parentPath}/${capabilityLabel(child, index)}`;
     const authorId = readAuthorId(child.props["id"], path);
     const order = context.slide.nextNodeOrder++;
-    const module = context.modules.get(child.type);
+    const module = context.modules.declarations.get(child.type);
     if (module === undefined) {
       context.slide.diagnostics.push(
         diagnostic(
@@ -1565,7 +1573,10 @@ function resolveContributions(
 
 function collectOwnedContributions(
   children: readonly CapabilityChild[],
-  modules: ReadonlyMap<string, RegisteredCapabilityModule>,
+  modules: ReadonlyMap<
+    string,
+    ObjectCapabilityModule | TransparentCapabilityModule
+  >,
   slide: SlideResolveState,
   parentPath: string,
   order: { value: number },
@@ -1643,7 +1654,7 @@ function collectOwnedContributions(
 
 function resolveSlideDeclaration(
   parsed: ParsedSlideNode,
-  modules: ReadonlyMap<string, RegisteredCapabilityModule>,
+  modules: BoundCapabilityRegistry,
   dimensions: ResolutionDimensions,
   document: DocumentResolveState,
   options: ResolveOptions,
@@ -1679,17 +1690,17 @@ function resolveSlideDeclaration(
     if (!(error instanceof CapabilityError)) throw error;
     throw new BuildError([diagnostic(path, error.code, error.message)]);
   }
-  const layout = new LayoutPass(modules, dimensions, index, options).run(
-    children,
-    path,
-    theme,
-    node.props["style"],
-  );
+  const layout = new LayoutPass(
+    modules.declarations,
+    dimensions,
+    index,
+    options,
+  ).run(children, path, theme, node.props["style"]);
   document.warnings.push(...layout.warnings);
   const ownedOrder = { value: 0 };
   collectOwnedContributions(
     children,
-    modules,
+    modules.declarations,
     slide,
     path,
     ownedOrder,
@@ -1734,8 +1745,7 @@ function resolveSlideDeclaration(
     children: node.children.map(capabilityChild),
   };
 
-  for (const module of modules.values()) {
-    if (!isSlideCapability(module)) continue;
+  for (const module of modules.slideModules.values()) {
     const slideProps = module.slideProps ?? [module.slideProp];
     const hasSlideProps = slideProps.some((property) =>
       Object.hasOwn(node.props, property),
@@ -1806,10 +1816,9 @@ function resolveSlideDeclaration(
   }
   for (const contribution of contributions) {
     if (contribution.optional) continue;
-    const consumer = modules.get(contribution.capability);
+    const consumer = modules.slideModules.get(contribution.capability);
     if (
       consumer === undefined ||
-      !isSlideCapability(consumer) ||
       (!consumer.always &&
         !(consumer.slideProps ?? [consumer.slideProp]).some((property) =>
           Object.hasOwn(node.props, property),
@@ -1864,7 +1873,7 @@ function resolveSlideDeclaration(
 
 function resolveDocument(
   container: DeclarationContainer,
-  modules: ReadonlyMap<string, RegisteredCapabilityModule>,
+  modules: BoundCapabilityRegistry,
   options: ResolveOptions,
 ): Resolution {
   const parsed = resolveSlides(container, modules);
@@ -1913,7 +1922,10 @@ function resolveDocument(
     resourceClaims: new Map(),
     morphNames: new Map(),
     nextMorphName: 1,
-    reservedObjectNames: collectExplicitObjectNames(slides, modules),
+    reservedObjectNames: collectExplicitObjectNames(
+      slides,
+      modules.declarations,
+    ),
     slideIndexById,
   };
 
@@ -2057,8 +2069,12 @@ function validateBoundSlideCapability(bound: unknown): BoundSlideCapability {
 
 function bindCapabilityModules(
   modules: readonly CapabilityModule[],
-): ReadonlyMap<string, RegisteredCapabilityModule> {
-  const bound = new Map<string, RegisteredCapabilityModule>();
+): BoundCapabilityRegistry {
+  const declarations = new Map<
+    string,
+    ObjectCapabilityModule | TransparentCapabilityModule
+  >();
+  const slideModules = new Map<string, SlideCapabilityModule>();
   for (const module of modules) {
     if (typeof module !== "object" || module === null) {
       throw new BuildError([
@@ -2069,17 +2085,21 @@ function bindCapabilityModules(
         ),
       ]);
     }
-    const isSlide =
+    const slideModule =
       "bindSlide" in module &&
       typeof module.bindSlide === "function" &&
       !("bind" in module) &&
-      !("parse" in module);
-    const isObject =
+      !("parse" in module)
+        ? (module as SlideCapabilityModule)
+        : undefined;
+    const objectModule =
       "bind" in module &&
       typeof module.bind === "function" &&
       !("parse" in module) &&
-      !("bindSlide" in module);
-    if (!isSlide && !isObject) {
+      !("bindSlide" in module)
+        ? (module as ObjectCapabilityModule)
+        : undefined;
+    if (slideModule === undefined && objectModule === undefined) {
       const rawDeclaration = (module as { declaration?: unknown }).declaration;
       const declarationLabel =
         typeof rawDeclaration === "string" && rawDeclaration.trim() !== ""
@@ -2093,37 +2113,20 @@ function bindCapabilityModules(
         ),
       ]);
     }
-    const declarations: readonly RegisteredCapabilityModule[] = [
-      module,
-      ...(isSlide ? (module.transparentDeclarations ?? []) : []),
-    ];
-    for (const declaration of declarations) {
-      if (
-        typeof declaration.declaration !== "string" ||
-        declaration.declaration.trim() === ""
-      ) {
-        throw new BuildError([
-          diagnostic(
-            "build.modules",
-            "invalid-capability-module",
-            "Capability module declaration must be a non-empty string",
-          ),
-        ]);
-      }
-      if (
-        declaration !== module &&
-        (!("compileDeclaration" in declaration) ||
-          typeof declaration.compileDeclaration !== "function")
-      ) {
-        throw new BuildError([
-          diagnostic(
-            "build.modules",
-            "invalid-capability-module",
-            `Transparent declaration ${declaration.declaration} must implement compileDeclaration()`,
-          ),
-        ]);
-      }
-      if (bound.has(declaration.declaration)) {
+    if (
+      typeof module.declaration !== "string" ||
+      module.declaration.trim() === ""
+    ) {
+      throw new BuildError([
+        diagnostic(
+          "build.modules",
+          "invalid-capability-module",
+          "Capability module declaration must be a non-empty string",
+        ),
+      ]);
+    }
+    if (slideModule !== undefined) {
+      if (slideModules.has(slideModule.declaration)) {
         throw new BuildError([
           diagnostic(
             "build.modules",
@@ -2132,8 +2135,55 @@ function bindCapabilityModules(
           ),
         ]);
       }
-      bound.set(declaration.declaration, declaration);
+      slideModules.set(slideModule.declaration, slideModule);
+      for (const transparent of slideModule.transparentDeclarations ?? []) {
+        if (
+          typeof transparent.declaration !== "string" ||
+          transparent.declaration.trim() === ""
+        ) {
+          throw new BuildError([
+            diagnostic(
+              "build.modules",
+              "invalid-capability-module",
+              "Capability module declaration must be a non-empty string",
+            ),
+          ]);
+        }
+        if (
+          !("compileDeclaration" in transparent) ||
+          typeof transparent.compileDeclaration !== "function"
+        ) {
+          throw new BuildError([
+            diagnostic(
+              "build.modules",
+              "invalid-capability-module",
+              `Transparent declaration ${transparent.declaration} must implement compileDeclaration()`,
+            ),
+          ]);
+        }
+        if (declarations.has(transparent.declaration)) {
+          throw new BuildError([
+            diagnostic(
+              "build.modules",
+              "duplicate-capability",
+              "Duplicate capability module declaration",
+            ),
+          ]);
+        }
+        declarations.set(transparent.declaration, transparent);
+      }
+    } else if (objectModule !== undefined) {
+      if (declarations.has(objectModule.declaration)) {
+        throw new BuildError([
+          diagnostic(
+            "build.modules",
+            "duplicate-capability",
+            "Duplicate capability module declaration",
+          ),
+        ]);
+      }
+      declarations.set(objectModule.declaration, objectModule);
     }
   }
-  return bound;
+  return { declarations, slideModules };
 }

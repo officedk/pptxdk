@@ -148,11 +148,11 @@ type BadgeProps = {
 };
 
 function createBadgeNode(props: BadgeProps): CommonNode<"badge", BadgeProps> {
-  return new CommonNode("badge", "rp:custom-badge", props);
+  return new CommonNode("badge", "custom-badge", props);
 }
 
 function CustomBadge(props: BadgeProps) {
-  return createElement("rp:custom-badge", {
+  return createElement("custom-badge", {
     ...props,
     [hostNodeCreator]: createBadgeNode,
   });
@@ -164,7 +164,7 @@ function createTrackedBadgeCapability() {
   const resolveCalls: string[] = [];
 
   const module: BoundObjectCapabilityModule = {
-    declaration: "rp:custom-badge",
+    declaration: "custom-badge",
     bind(
       input: CapabilityInput,
       context: CapabilityParseContext,
@@ -900,7 +900,7 @@ describe("bound object capability contract", () => {
 
   it("migrates tableCapability to BoundObjectCapabilityModule and resolves generic hierarchical sub-part locators", async () => {
     const compositeWithParts: BoundObjectCapabilityModule = {
-      declaration: "rp:composite-grid",
+      declaration: "composite-grid",
       bind(input, context) {
         const contract = parseCapabilityLayoutContract({
           nativeKind: "graphicFrame",
@@ -959,7 +959,7 @@ describe("bound object capability contract", () => {
     const customBuild = runDocModules([compositeWithParts]);
     const doc = impDeck({ width: 320, height: 180 }).append(
       impSlide({ id: "generic-parts" }).append(
-        new CommonNode("composite", "rp:composite-grid", { id: "grid" }),
+        new CommonNode("composite", "composite-grid", { id: "grid" }),
       ),
     );
     const result = await customBuild(doc);
@@ -1035,12 +1035,12 @@ describe("bound object capability contract", () => {
       readonly style?: Record<string, unknown>;
     };
     const createPanelNode = (props: PanelProps) =>
-      new CommonContainer("panel", "rp:custom-panel", props);
+      new CommonContainer("panel", "custom-panel", props);
     const CustomPanel = (
       props: PanelProps & { readonly children?: React.ReactNode },
     ) =>
       createElement(
-        "rp:custom-panel",
+        "custom-panel",
         { ...props, [hostNodeCreator]: createPanelNode },
         props.children,
       );
@@ -1051,7 +1051,7 @@ describe("bound object capability contract", () => {
       "padding",
     ]);
     const customPanelModule: BoundObjectCapabilityModule = {
-      declaration: "rp:custom-panel",
+      declaration: "custom-panel",
       bind(input, context) {
         const contract = parseCapabilityLayoutContract({
           nativeKind: "sp",
@@ -1288,7 +1288,7 @@ describe("bound object capability contract", () => {
       };
 
     const transparentAnnotator: BoundObjectCapabilityModule = {
-      declaration: "rp:transparent-annotator",
+      declaration: "transparent-annotator",
       bind(input, parseContext) {
         const contract = parseCapabilityLayoutContract({
           nativeKind: "sp",
@@ -1334,7 +1334,7 @@ describe("bound object capability contract", () => {
     ]);
     const doc = impDeck({ width: 320, height: 180 }).append(
       impSlide({ id: "annotator-slide" }).append(
-        new CommonContainer("annotator", "rp:transparent-annotator", {
+        new CommonContainer("annotator", "transparent-annotator", {
           style: { width: 100, height: 40 },
         }).append(impShape({ id: "child", x: 0, y: 0, width: 20, height: 20 })),
       ),
@@ -1360,15 +1360,15 @@ describe("bound object capability contract", () => {
       readonly style?: Record<string, unknown>;
     };
     const createTileNode = (props: MetricTileProps) =>
-      new CommonNode("tile", "rp:metric-tile", props);
+      new CommonNode("tile", "metric-tile", props);
     const MetricTile = (props: MetricTileProps) =>
-      createElement("rp:metric-tile", {
+      createElement("metric-tile", {
         ...props,
         [hostNodeCreator]: createTileNode,
       });
 
     const tileModule: BoundObjectCapabilityModule = {
-      declaration: "rp:metric-tile",
+      declaration: "metric-tile",
       bind(input, context) {
         // Deliberately omit props.width/height/x/y; supply them strictly on contract.
         const contract = parseCapabilityLayoutContract({
@@ -1570,12 +1570,12 @@ describe("bound object capability contract", () => {
       readonly style?: Record<string, unknown>;
     };
     const createClusterNode = (props: ClusterProps) =>
-      new CommonContainer("cluster", "rp:custom-cluster", props);
+      new CommonContainer("cluster", "custom-cluster", props);
     const CustomCluster = (
       props: ClusterProps & { readonly children?: React.ReactNode },
     ) =>
       createElement(
-        "rp:custom-cluster",
+        "custom-cluster",
         { ...props, [hostNodeCreator]: createClusterNode },
         props.children,
       );
@@ -1586,7 +1586,7 @@ describe("bound object capability contract", () => {
       "padding",
     ]);
     const customClusterModule: BoundObjectCapabilityModule = {
-      declaration: "rp:custom-cluster",
+      declaration: "custom-cluster",
       bind(input, context) {
         const contract = parseCapabilityLayoutContract({
           nativeKind: "grpSp",
@@ -1777,7 +1777,7 @@ describe("bound object capability contract", () => {
     const resolveKeysSeen: string[][] = [];
 
     const newTileModule: BoundObjectCapabilityModule = {
-      declaration: "rp:new-tile",
+      declaration: "new-tile",
       bind(input, context) {
         const contract = parseCapabilityLayoutContract({
           nativeKind: "sp",
@@ -1883,7 +1883,7 @@ describe("bound object capability contract", () => {
     };
 
     const newClusterModule: BoundObjectCapabilityModule = {
-      declaration: "rp:new-cluster",
+      declaration: "new-cluster",
       bind(input, context) {
         const contract = parseCapabilityLayoutContract({
           nativeKind: "grpSp",
@@ -1977,7 +1977,7 @@ describe("bound object capability contract", () => {
     };
 
     const noPaintModule: BoundObjectCapabilityModule = {
-      declaration: "rp:no-paint-tile",
+      declaration: "no-paint-tile",
       bind(input, context) {
         const contract = parseCapabilityLayoutContract({
           nativeKind: "sp",
@@ -2031,7 +2031,7 @@ describe("bound object capability contract", () => {
     } as never);
     const slide2 = createSlideNode({ id: "mixed-2" });
 
-    const newTile1 = new CommonNode("new-tile", "rp:new-tile", {
+    const newTile1 = new CommonNode("new-tile", "new-tile", {
       id: "nt1",
       label: "Hello",
       x: 20,
@@ -2060,7 +2060,7 @@ describe("bound object capability contract", () => {
       width: 40,
       height: 40,
     });
-    const mixedCluster = new CommonContainer("new-cluster", "rp:new-cluster", {
+    const mixedCluster = new CommonContainer("new-cluster", "new-cluster", {
       id: "mixed-cluster",
     });
     mixedCluster.append(
@@ -2072,7 +2072,7 @@ describe("bound object capability contract", () => {
         height: 40,
         fill: "#DC2626",
       }),
-      new CommonNode("new-tile", "rp:new-tile", {
+      new CommonNode("new-tile", "new-tile", {
         id: "cluster-new",
         label: "InsideCluster",
         x: 120,
@@ -2083,7 +2083,7 @@ describe("bound object capability contract", () => {
     );
     const oldGroupWithNewChild = impGroup({ id: "old-group" });
     oldGroupWithNewChild.append(
-      new CommonNode("new-tile", "rp:new-tile", {
+      new CommonNode("new-tile", "new-tile", {
         id: "inside-old-group",
         label: "InOldGroup",
         x: 360,
@@ -2200,7 +2200,7 @@ describe("bound object capability contract", () => {
     const noPaintDeck = createDeckNode({ width: 400, height: 300 });
     const noPaintSlide = createSlideNode({ id: "no-paint" });
     noPaintSlide.append(
-      new CommonNode("no-paint-tile", "rp:no-paint-tile", { id: "np1" }),
+      new CommonNode("no-paint-tile", "no-paint-tile", { id: "np1" }),
     );
     noPaintDeck.append(noPaintSlide);
     const noPaintResolution = resolve({ children: [noPaintDeck] });
@@ -2211,7 +2211,7 @@ describe("bound object capability contract", () => {
       noPaintPainted.pages[0]?.diagnostics.some(
         (d) =>
           d.severity === "error" &&
-          d.message.includes("Preview does not support rp:no-paint-tile"),
+          d.message.includes("Preview does not support no-paint-tile"),
       ),
     );
     const noPaintEmitted = emit(noPaintResolution);
@@ -2331,7 +2331,7 @@ describe("bound object capability contract", () => {
 
     // Box errors in resolve() or non-layout bind() also report exact single node paths (never doubled).
     const wrapperCapability: CapabilityModule = {
-      declaration: "rp:custom-wrapper",
+      declaration: "custom-wrapper",
       bind(input) {
         return {
           contract: {
@@ -2362,7 +2362,7 @@ describe("bound object capability contract", () => {
     ]);
     const unlaidOutBoxDoc = impDeck({ width: 320, height: 180 }).append(
       impSlide({ id: "bad-box-slide" }).append(
-        new CommonContainer("wrap", "rp:custom-wrapper", { id: "wrap" }).append(
+        new CommonContainer("wrap", "custom-wrapper", { id: "wrap" }).append(
           impBox({ id: "b1", style: { backgroundColor: "#112233" } }),
         ),
       ),

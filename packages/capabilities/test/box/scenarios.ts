@@ -104,7 +104,7 @@ const notoFont = font("Noto Sans CJK SC", [
 
 export const boxPositiveScenario: CapabilityScenario = {
   id: "box-containers-and-nesting",
-  capability: "rp:box",
+  capability: "box",
   description:
     "Dual-author Box scenario covering transparent Flex/Grid layout containers, visible filled/bordered/rotated/linked Boxes, nested Shape & wrapped Text, and scoped ThemeScope overrides.",
   visualCheckpoints: [
@@ -938,7 +938,7 @@ export const boxPositiveScenario: CapabilityScenario = {
 
 export const boxRejectionScenario: CapabilityScenario = {
   id: "box-unsupported-styles-and-rejections",
-  capability: "rp:box",
+  capability: "box",
   kind: "rejection",
   description:
     "Dual-author Box negative preview scenario verifying corrupt PNG, JPEG, and GIF backgroundImage streams report preview-corrupt-image while keeping valid sibling pages and PPTX.",

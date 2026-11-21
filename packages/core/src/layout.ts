@@ -81,10 +81,7 @@ function identity(element: CapabilityElement): string | undefined {
 }
 
 function label(element: CapabilityElement, index: number): string {
-  const type = element.type.startsWith("rp:")
-    ? element.type.slice(3)
-    : element.type;
-  return `${type}[${identity(element) ?? String(index + 1)}]`;
+  return `${element.type}[${identity(element) ?? String(index + 1)}]`;
 }
 
 function readStyle(

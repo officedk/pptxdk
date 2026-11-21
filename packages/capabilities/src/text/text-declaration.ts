@@ -53,7 +53,7 @@ export function createTextNode(
     "text",
     TextDeclarationProps,
     NonNullable<TextDeclarationProps["style"]>
-  >("text", "rp:text", props);
+  >("text", "text", props);
 }
 
 /** Creates the editable paragraph shared by P JSX and command authoring. */
@@ -68,7 +68,7 @@ export function createParagraphNode(
     "paragraph",
     ParagraphDeclarationProps,
     NonNullable<ParagraphDeclarationProps["style"]>
-  >("paragraph", "rp:paragraph", props);
+  >("paragraph", "paragraph", props);
 }
 
 /** Creates the editable span shared by Span JSX and command authoring. */
@@ -83,7 +83,7 @@ export function createSpanNode(
     "span",
     SpanDeclarationProps,
     NonNullable<SpanDeclarationProps["style"]>
-  >("span", "rp:span", props);
+  >("span", "span", props);
 }
 
 /** Creates the editable slide number field shared by the command factory and JSX element. */
@@ -98,5 +98,5 @@ export function createSlideNumberNode(
     "slide-number",
     SlideNumberDeclarationProps,
     NonNullable<SlideNumberDeclarationProps["style"]>
-  >("slide-number", "rp:slide-number", props);
+  >("slide-number", "slide-number", props);
 }

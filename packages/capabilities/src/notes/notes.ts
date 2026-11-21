@@ -116,7 +116,7 @@ export const notesCapability: SlideCapabilityModule = Object.freeze({
   always: true,
   transparentDeclarations: [
     {
-      declaration: "rp:notes",
+      declaration: "notes",
       children: "owned" as const,
       compileDeclaration(input, context) {
         if (context.theme === undefined || context.slideNumber === undefined) {

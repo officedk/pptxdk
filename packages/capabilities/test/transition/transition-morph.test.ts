@@ -236,7 +236,7 @@ describe("transitionCapability bound slide migration & generic continuity collab
     const shared = scope.handle("shared");
 
     const customGraphicModule: BoundObjectCapabilityModule = {
-      declaration: "rp:custom-graphic",
+      declaration: "custom-graphic",
       bind(input) {
         return {
           contract: {
@@ -287,7 +287,7 @@ describe("transitionCapability bound slide migration & generic continuity collab
         }),
       ),
       slide({ id: "dst", background: "#112233" }).append(
-        new CommonNode("custom", "rp:custom-graphic", {
+        new CommonNode("custom", "custom-graphic", {
           id: "g1",
           morphKey: shared,
         }),
@@ -316,7 +316,7 @@ describe("transitionCapability bound slide migration & generic continuity collab
         }),
       ),
       slide({ id: "dst", background: "#445566" }).append(
-        new CommonNode("custom", "rp:custom-graphic", {
+        new CommonNode("custom", "custom-graphic", {
           id: "g1",
           morphKey: shared,
         }),
@@ -336,7 +336,7 @@ describe("transitionCapability bound slide migration & generic continuity collab
     const key = scope.handle("obj");
 
     const nonEmittingWrapper: BoundObjectCapabilityModule = {
-      declaration: "rp:non-emitting",
+      declaration: "non-emitting",
       bind(input) {
         return {
           contract: {
@@ -370,7 +370,7 @@ describe("transitionCapability bound slide migration & generic continuity collab
     };
 
     const realCustomGroup: BoundObjectCapabilityModule = {
-      declaration: "rp:custom-group",
+      declaration: "custom-group",
       bind(input) {
         return {
           contract: {
@@ -409,7 +409,7 @@ describe("transitionCapability bound slide migration & generic continuity collab
       customBuild(
         deck().append(
           slide({ id: "s1" }).append(
-            new CommonNode("ne", "rp:non-emitting", { morphKey: key }),
+            new CommonNode("ne", "non-emitting", { morphKey: key }),
           ),
         ),
       ),
@@ -424,7 +424,7 @@ describe("transitionCapability bound slide migration & generic continuity collab
       customBuild(
         deck().append(
           slide({ id: "s1" }).append(
-            new CommonNode("ne", "rp:non-emitting", {
+            new CommonNode("ne", "non-emitting", {
               link: { id: "s2" },
             }),
           ),
@@ -442,7 +442,7 @@ describe("transitionCapability bound slide migration & generic continuity collab
       customBuild(
         deck().append(
           slide({ id: "s1" }).append(
-            new CommonContainer("cg", "rp:custom-group", {}).append(
+            new CommonContainer("cg", "custom-group", {}).append(
               shape({
                 id: "inner",
                 morphKey: key,

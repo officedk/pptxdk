@@ -13,7 +13,7 @@ export type NotesProps = NotesDeclarationProps & {
 /** Declares one page's rich-text speaker notes; repeated declarations on a page are a build error. */
 export function Notes(props: NotesProps): ReactNode {
   return createElement(
-    "rp:notes",
+    "notes",
     { ...props, [hostNodeCreator]: createNotesNode },
     props.children,
   );

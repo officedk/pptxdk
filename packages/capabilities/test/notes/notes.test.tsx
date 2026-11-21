@@ -13,15 +13,15 @@ import {
   slide,
   span,
   text,
-} from "@react-pptx/capabilities/document";
-import { Notes } from "@react-pptx/capabilities/notes-elements";
-import { textCapability } from "@react-pptx/capabilities/text";
-import { P, Span } from "@react-pptx/capabilities/text-elements";
-import type { Diagnostic } from "@react-pptx/core";
-import { createResolver } from "@react-pptx/core/build";
-import { emit } from "@react-pptx/emit";
-import { appendJSX, Deck, Slide } from "@react-pptx/react";
-import { validatePptx } from "@react-pptx/validation";
+} from "@pptxdk/capabilities/document";
+import { Notes } from "@pptxdk/capabilities/notes-elements";
+import { textCapability } from "@pptxdk/capabilities/text";
+import { P, Span } from "@pptxdk/capabilities/text-elements";
+import type { Diagnostic } from "@pptxdk/core";
+import { createResolver } from "@pptxdk/core/build";
+import { emit } from "@pptxdk/emit";
+import { appendJSX, Deck, Slide } from "@pptxdk/react";
+import { validatePptx } from "@pptxdk/validation";
 import { strFromU8, unzipSync } from "fflate";
 import { describe, it } from "vitest";
 

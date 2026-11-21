@@ -3,7 +3,7 @@ import {
   type ColorValue,
   type GeometryBox,
   type ThemeContext,
-} from "@react-pptx/core/capability";
+} from "@pptxdk/core/capability";
 
 import type { TextStyle } from "../../shared/text-service.ts";
 import type { ParsedChart } from "../chart-model.ts";

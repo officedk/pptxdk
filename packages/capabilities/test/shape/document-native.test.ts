@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
-import type { LinearGradient } from "@react-pptx/capabilities";
+import type { LinearGradient } from "@pptxdk/capabilities";
 import {
   deck,
   group,
@@ -10,15 +10,15 @@ import {
   shape,
   slide,
   span,
-} from "@react-pptx/capabilities/document";
-import { Group as ReactGroup } from "@react-pptx/capabilities/group-elements";
-import { Image as ReactImage } from "@react-pptx/capabilities/image-elements";
-import { Shape as ReactShape } from "@react-pptx/capabilities/shape-elements";
-import { BuildError, createMorphScope } from "@react-pptx/core";
-import { createResolver } from "@react-pptx/core/build";
-import { emit } from "@react-pptx/emit";
-import { Deck, Slide } from "@react-pptx/react";
-import { validatePptx } from "@react-pptx/validation";
+} from "@pptxdk/capabilities/document";
+import { Group as ReactGroup } from "@pptxdk/capabilities/group-elements";
+import { Image as ReactImage } from "@pptxdk/capabilities/image-elements";
+import { Shape as ReactShape } from "@pptxdk/capabilities/shape-elements";
+import { BuildError, createMorphScope } from "@pptxdk/core";
+import { createResolver } from "@pptxdk/core/build";
+import { emit } from "@pptxdk/emit";
+import { Deck, Slide } from "@pptxdk/react";
+import { validatePptx } from "@pptxdk/validation";
 import { strFromU8, unzipSync } from "fflate";
 import { createElement } from "react";
 import { describe, it } from "vitest";

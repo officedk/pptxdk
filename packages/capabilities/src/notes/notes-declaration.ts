@@ -1,4 +1,4 @@
-import { RichTextContainer } from "@react-pptx/core/document";
+import { RichTextContainer } from "@pptxdk/core/document";
 
 import type { TextStyle } from "../shared/text-service.ts";
 

@@ -1,5 +1,5 @@
-import type { ResolvedColor } from "@react-pptx/core/capability";
-import { pxToEmu, resolvedColorXml, xmlEscape } from "@react-pptx/emit";
+import type { ResolvedColor } from "@pptxdk/core/capability";
+import { pxToEmu, resolvedColorXml, xmlEscape } from "@pptxdk/emit";
 
 const tableUri = "http://schemas.openxmlformats.org/drawingml/2006/table";
 

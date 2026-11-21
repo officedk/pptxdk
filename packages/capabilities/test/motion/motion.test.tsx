@@ -29,23 +29,23 @@ import {
   useMotionScope,
   wipe,
   zoom,
-} from "@react-pptx/capabilities";
+} from "@pptxdk/capabilities";
 import {
   deck as documentDeck,
   paragraph as documentParagraph,
   shape as documentShape,
   slide as documentSlide,
   step as documentStep,
-} from "@react-pptx/capabilities/document";
+} from "@pptxdk/capabilities/document";
 import {
   fade as documentFade,
   fly as documentFly,
-} from "@react-pptx/capabilities/motion";
-import { BuildError } from "@react-pptx/core";
-import { createResolver } from "@react-pptx/core/build";
-import { emit } from "@react-pptx/emit";
-import { Deck, Slide, expandDocument } from "@react-pptx/react";
-import { validatePptx } from "@react-pptx/validation";
+} from "@pptxdk/capabilities/motion";
+import { BuildError } from "@pptxdk/core";
+import { createResolver } from "@pptxdk/core/build";
+import { emit } from "@pptxdk/emit";
+import { Deck, Slide, expandDocument } from "@pptxdk/react";
+import { validatePptx } from "@pptxdk/validation";
 import { strFromU8, strToU8, unzipSync, zipSync } from "fflate";
 import { createElement, Fragment, type ReactNode } from "react";
 import { describe, it } from "vitest";

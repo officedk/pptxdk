@@ -4,8 +4,8 @@ import {
   type CapabilityChild,
   type CapabilityContribution,
   type GeometryBox,
-} from "@react-pptx/core/capability";
-import { CommonContainer } from "@react-pptx/core/document";
+} from "@pptxdk/core/capability";
+import { CommonContainer } from "@pptxdk/core/document";
 import type { ReactNode } from "react";
 
 export type MotionDirection = "left" | "right" | "top" | "bottom";
@@ -271,7 +271,7 @@ export function createMotionStepNode(
 let nextMotionIdentity = 1;
 
 function createMotionIdentity(kind: "scope" | "step"): string {
-  return `react-pptx-${kind}-${nextMotionIdentity++}`;
+  return `pptxdk-${kind}-${nextMotionIdentity++}`;
 }
 
 /**

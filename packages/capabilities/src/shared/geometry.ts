@@ -1,5 +1,5 @@
-import { CapabilityError, type GeometryBox } from "@react-pptx/core/capability";
-import { pxToEmu } from "@react-pptx/emit";
+import { CapabilityError, type GeometryBox } from "@pptxdk/core/capability";
+import { pxToEmu } from "@pptxdk/emit";
 
 import {
   presetDefinitions,

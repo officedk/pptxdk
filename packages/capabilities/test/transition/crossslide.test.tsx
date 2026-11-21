@@ -15,10 +15,10 @@ import {
   Text,
   transitions,
   useMotionScope,
-} from "@react-pptx/capabilities";
-import { BuildError, targets } from "@react-pptx/core";
-import { Deck, Slide } from "@react-pptx/react";
-import { validatePptx } from "@react-pptx/validation";
+} from "@pptxdk/capabilities";
+import { BuildError, targets } from "@pptxdk/core";
+import { Deck, Slide } from "@pptxdk/react";
+import { validatePptx } from "@pptxdk/validation";
 import { createElement } from "react";
 import { describe, it } from "vitest";
 

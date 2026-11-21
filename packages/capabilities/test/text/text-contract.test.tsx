@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
-import { slideBackgroundCapability } from "@react-pptx/capabilities";
+import { slideBackgroundCapability } from "@pptxdk/capabilities";
 import {
   deck,
   font as impFont,
@@ -9,16 +9,16 @@ import {
   slide,
   slideNumber,
   text,
-} from "@react-pptx/capabilities/document";
-import { font } from "@react-pptx/capabilities/font";
-import { textCapability } from "@react-pptx/capabilities/text";
-import { P, SlideNumber, Text } from "@react-pptx/capabilities/text-elements";
-import { BuildError } from "@react-pptx/core";
-import { createResolver } from "@react-pptx/core/build";
-import { emit } from "@react-pptx/emit";
-import { paint } from "@react-pptx/preview";
-import { Deck, expandDocument, Slide } from "@react-pptx/react";
-import { validatePptx } from "@react-pptx/validation";
+} from "@pptxdk/capabilities/document";
+import { font } from "@pptxdk/capabilities/font";
+import { textCapability } from "@pptxdk/capabilities/text";
+import { P, SlideNumber, Text } from "@pptxdk/capabilities/text-elements";
+import { BuildError } from "@pptxdk/core";
+import { createResolver } from "@pptxdk/core/build";
+import { emit } from "@pptxdk/emit";
+import { paint } from "@pptxdk/preview";
+import { Deck, expandDocument, Slide } from "@pptxdk/react";
+import { validatePptx } from "@pptxdk/validation";
 import { strFromU8, unzipSync } from "fflate";
 import { createElement } from "react";
 import { describe, it } from "vitest";

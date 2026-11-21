@@ -4,15 +4,15 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { documentCapabilities, font } from "@react-pptx/capabilities/document";
-import { Text } from "@react-pptx/capabilities/text-elements";
-import type { CapabilityModule, CommonNode } from "@react-pptx/core";
-import { createResolver } from "@react-pptx/core/build";
-import { RichTextContainer } from "@react-pptx/core/document";
-import { emit } from "@react-pptx/emit";
-import { paint } from "@react-pptx/preview";
-import { Deck, Slide, expandDocument } from "@react-pptx/react";
-import { validatePptx } from "@react-pptx/validation";
+import { documentCapabilities, font } from "@pptxdk/capabilities/document";
+import { Text } from "@pptxdk/capabilities/text-elements";
+import type { CapabilityModule, CommonNode } from "@pptxdk/core";
+import { createResolver } from "@pptxdk/core/build";
+import { RichTextContainer } from "@pptxdk/core/document";
+import { emit } from "@pptxdk/emit";
+import { paint } from "@pptxdk/preview";
+import { Deck, Slide, expandDocument } from "@pptxdk/react";
+import { validatePptx } from "@pptxdk/validation";
 import { createElement } from "react";
 import { describe, expect, it } from "vitest";
 

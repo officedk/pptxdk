@@ -1,13 +1,13 @@
 import assert from "node:assert/strict";
 
-import { slideBackgroundCapability } from "@react-pptx/capabilities";
-import { linearGradient } from "@react-pptx/capabilities/shape";
-import { BuildError } from "@react-pptx/core";
-import { createResolver } from "@react-pptx/core/build";
-import { emit } from "@react-pptx/emit";
-import { paint } from "@react-pptx/preview";
-import { Deck, Slide, expandDocument } from "@react-pptx/react";
-import { validatePptx } from "@react-pptx/validation";
+import { slideBackgroundCapability } from "@pptxdk/capabilities";
+import { linearGradient } from "@pptxdk/capabilities/shape";
+import { BuildError } from "@pptxdk/core";
+import { createResolver } from "@pptxdk/core/build";
+import { emit } from "@pptxdk/emit";
+import { paint } from "@pptxdk/preview";
+import { Deck, Slide, expandDocument } from "@pptxdk/react";
+import { validatePptx } from "@pptxdk/validation";
 import { strFromU8, unzipSync } from "fflate";
 import { createElement } from "react";
 import { describe, it } from "vitest";

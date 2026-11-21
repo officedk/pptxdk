@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 
-import { Box } from "@react-pptx/capabilities/box-elements";
-import { Chart } from "@react-pptx/capabilities/chart-elements";
+import { Box } from "@pptxdk/capabilities/box-elements";
+import { Chart } from "@pptxdk/capabilities/chart-elements";
 import {
   box,
   chart,
@@ -10,21 +10,21 @@ import {
   group,
   shape,
   slide,
-} from "@react-pptx/capabilities/document";
-import { Group } from "@react-pptx/capabilities/group-elements";
-import { Shape } from "@react-pptx/capabilities/shape-elements";
-import { transitions } from "@react-pptx/capabilities/transition";
+} from "@pptxdk/capabilities/document";
+import { Group } from "@pptxdk/capabilities/group-elements";
+import { Shape } from "@pptxdk/capabilities/shape-elements";
+import { transitions } from "@pptxdk/capabilities/transition";
 import {
   BuildError,
   createMorphScope,
   targets,
   type BuildOptions,
   type CommonNode,
-} from "@react-pptx/core";
-import { createResolver } from "@react-pptx/core/build";
-import { emit } from "@react-pptx/emit";
-import { Deck, expandDocument, Slide } from "@react-pptx/react";
-import { validatePptx } from "@react-pptx/validation";
+} from "@pptxdk/core";
+import { createResolver } from "@pptxdk/core/build";
+import { emit } from "@pptxdk/emit";
+import { Deck, expandDocument, Slide } from "@pptxdk/react";
+import { validatePptx } from "@pptxdk/validation";
 import { PNG } from "pngjs";
 import { createElement, type ReactNode } from "react";
 

@@ -1,1 +1,1 @@
-export { default } from "@react-pptx/tooling-config/vitest";
+export { default } from "@pptxdk/tooling-config/vitest";

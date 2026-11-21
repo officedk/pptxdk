@@ -2,6 +2,11 @@
   "name": "@react-pptx/cli",
   "version": "0.0.0",
   "private": true,
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/pptxdk/pptxdk.git",
+    "directory": "apps/cli"
+  },
   "bin": {
     "react-pptx": "./dist/cli.js"
   },
@@ -36,8 +41,8 @@
     "zod": "catalog:"
   },
   "devDependencies": {
-    "@react-pptx/tooling-config": "workspace:*",
-    "@react-pptx/validation": "workspace:*",
+    "@pptxdk/tooling-config": "workspace:*",
+    "@pptxdk/validation": "workspace:*",
     "@types/node": "catalog:",
     "@types/react": "catalog:",
     "oxfmt": "catalog:",

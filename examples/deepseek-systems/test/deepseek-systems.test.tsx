@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 
+import { validatePptx } from "@pptxdk/validation";
 import { emit, expandDocument, resolve } from "@react-pptx/react-pptx";
 import { paint } from "@react-pptx/react-pptx/preview";
-import { validatePptx } from "@react-pptx/validation";
 import { it } from "vitest";
 
 import { DeepSeekSystemsDeck } from "../src/index.ts";

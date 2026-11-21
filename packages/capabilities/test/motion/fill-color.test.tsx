@@ -9,10 +9,10 @@ import {
   MotionScope,
   useMotionScope,
   fade,
-} from "@react-pptx/capabilities";
-import { BuildError } from "@react-pptx/core";
-import { Deck, Slide } from "@react-pptx/react";
-import { validatePptx } from "@react-pptx/validation";
+} from "@pptxdk/capabilities";
+import { BuildError } from "@pptxdk/core";
+import { Deck, Slide } from "@pptxdk/react";
+import { validatePptx } from "@pptxdk/validation";
 import { unzipSync, strFromU8, strToU8, zipSync } from "fflate";
 import { it } from "vitest";
 

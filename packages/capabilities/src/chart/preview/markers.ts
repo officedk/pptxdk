@@ -1,4 +1,4 @@
-import type { ColorValue, ThemeContext } from "@react-pptx/core/capability";
+import type { ColorValue, ThemeContext } from "@pptxdk/core/capability";
 
 import type { ChartMarker, ChartMarkerSymbol } from "../chart-types.ts";
 import {

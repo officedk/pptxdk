@@ -23,7 +23,7 @@ function runIsolatedNode(
   return child.stdout;
 }
 
-describe("@react-pptx/capabilities production runtime closure", () => {
+describe("@pptxdk/capabilities production runtime closure", () => {
   it("imports all 23 public export subpaths without resolving preview, react adapter, validation, resvg, react-reconciler, or eager image decoders", () => {
     const pkg = JSON.parse(
       readFileSync(new URL("../package.json", import.meta.url), "utf8"),
@@ -33,8 +33,8 @@ describe("@react-pptx/capabilities production runtime closure", () => {
 
     const specifiers = subpaths.map((key) =>
       key === "."
-        ? "@react-pptx/capabilities"
-        : `@react-pptx/capabilities/${key.slice(2)}`,
+        ? "@pptxdk/capabilities"
+        : `@pptxdk/capabilities/${key.slice(2)}`,
     );
 
     const script = `
@@ -42,14 +42,14 @@ import { registerHooks } from "node:module";
 
 function checkForbidden(target, label) {
   if (
-    target === "@react-pptx/preview" ||
-    target.startsWith("@react-pptx/preview/") ||
+    target === "@pptxdk/preview" ||
+    target.startsWith("@pptxdk/preview/") ||
     target.includes("/packages/preview/") ||
-    target === "@react-pptx/react" ||
-    target.startsWith("@react-pptx/react/") ||
+    target === "@pptxdk/react" ||
+    target.startsWith("@pptxdk/react/") ||
     target.includes("/packages/react/") ||
-    target === "@react-pptx/validation" ||
-    target.startsWith("@react-pptx/validation/") ||
+    target === "@pptxdk/validation" ||
+    target.startsWith("@pptxdk/validation/") ||
     target.includes("/packages/validation/") ||
     target.includes("@resvg/resvg-js") ||
     target === "react-reconciler" ||
@@ -106,14 +106,14 @@ function checkForbidden(target, label) {
     target === "react-reconciler" ||
     target.startsWith("react-reconciler/") ||
     target.includes("/react-reconciler/") ||
-    target === "@react-pptx/preview" ||
-    target.startsWith("@react-pptx/preview/") ||
+    target === "@pptxdk/preview" ||
+    target.startsWith("@pptxdk/preview/") ||
     target.includes("/packages/preview/") ||
-    target === "@react-pptx/react" ||
-    target.startsWith("@react-pptx/react/") ||
+    target === "@pptxdk/react" ||
+    target.startsWith("@pptxdk/react/") ||
     target.includes("/packages/react/") ||
-    target === "@react-pptx/validation" ||
-    target.startsWith("@react-pptx/validation/") ||
+    target === "@pptxdk/validation" ||
+    target.startsWith("@pptxdk/validation/") ||
     target.includes("/packages/validation/") ||
     target.includes("@resvg/resvg-js") ||
     target === "pngjs" ||
@@ -136,8 +136,8 @@ registerHooks({
   },
 });
 
-const { createResolver } = await import("@react-pptx/core/build");
-const { emit } = await import("@react-pptx/emit");
+const { createResolver } = await import("@pptxdk/core/build");
+const { emit } = await import("@pptxdk/emit");
 const {
   box,
   cell,
@@ -153,9 +153,9 @@ const {
   step,
   table,
   text,
-} = await import("@react-pptx/capabilities/document");
-const { fade } = await import("@react-pptx/capabilities/motion");
-const { transitions } = await import("@react-pptx/capabilities/transition");
+} = await import("@pptxdk/capabilities/document");
+const { fade } = await import("@pptxdk/capabilities/motion");
+const { transitions } = await import("@pptxdk/capabilities/transition");
 
 const pngBytes = new Uint8Array(Buffer.from("${pngBase64}", "base64"));
 const jpegBytes = new Uint8Array(Buffer.from("${jpegBase64}", "base64"));

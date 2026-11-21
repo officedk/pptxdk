@@ -1,7 +1,7 @@
 /**
  * Internal backend protocol for reading opaque `Resolution` snapshots.
  *
- * Solely for internal stage backend packages (`@react-pptx/emit` and `@react-pptx/preview`);
+ * Solely for internal stage backend packages (`@pptxdk/emit` and `@pptxdk/preview`);
  * this subpath is not an author API and must never be re-exported from `.` or `./document`.
  */
 import type { MorphKey } from "#/morph.ts";

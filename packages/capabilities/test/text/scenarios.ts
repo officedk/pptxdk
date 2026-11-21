@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
-import { Box } from "@react-pptx/capabilities/box-elements";
+import { Box } from "@pptxdk/capabilities/box-elements";
 import {
   box,
   deck,
@@ -11,14 +11,9 @@ import {
   slideNumber,
   span,
   text,
-} from "@react-pptx/capabilities/document";
-import {
-  P,
-  SlideNumber,
-  Span,
-  Text,
-} from "@react-pptx/capabilities/text-elements";
-import { Deck, Slide } from "@react-pptx/react";
+} from "@pptxdk/capabilities/document";
+import { P, SlideNumber, Span, Text } from "@pptxdk/capabilities/text-elements";
+import { Deck, Slide } from "@pptxdk/react";
 import { strFromU8, unzipSync } from "fflate";
 import { PNG } from "pngjs";
 import { createElement } from "react";

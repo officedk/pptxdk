@@ -1,6 +1,10 @@
 {
-  "name": "react-pptx",
+  "name": "@pptxdk/workspace",
   "private": true,
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/pptxdk/pptxdk.git"
+  },
   "type": "module",
   "scripts": {
     "format:check": "oxfmt --list-different --no-error-on-unmatched-pattern *.json pnpm-workspace.yaml pnpm-lock.yaml *.config.ts .gitignore .dockerignore Dockerfile TODO.md rust-toolchain.toml .vscode .github .changeset/config.json .devcontainer resources scripts template",
@@ -18,7 +22,7 @@
   },
   "devDependencies": {
     "@changesets/cli": "catalog:",
-    "@react-pptx/tooling-config": "workspace:./packages/tooling-config",
+    "@pptxdk/tooling-config": "workspace:./packages/tooling-config",
     "@types/node": "catalog:",
     "oxfmt": "catalog:",
     "oxlint": "catalog:",

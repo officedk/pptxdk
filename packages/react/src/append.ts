@@ -1,8 +1,8 @@
-import { CommonNode, type CommonContainer } from "@react-pptx/core/document";
+import { CommonNode, type CommonContainer } from "@pptxdk/core/document";
 import {
   validateAuthorIdScopes,
   type DeclarationNode,
-} from "@react-pptx/core/host";
+} from "@pptxdk/core/host";
 
 function collectAnonymousIds(parent: CommonNode, ids: Set<string>): void {
   for (const child of parent.children) {

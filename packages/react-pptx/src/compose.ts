@@ -5,10 +5,10 @@ import {
   type CapabilityModule,
   type Resolution,
   type ResolveOptions,
-} from "@react-pptx/core/build";
-import { CommonNode } from "@react-pptx/core/document";
-import { emit, emittedBuildQuery, validateOptions } from "@react-pptx/emit";
-import { expandDocument } from "@react-pptx/react";
+} from "@pptxdk/core/build";
+import { CommonNode } from "@pptxdk/core/document";
+import { emit, emittedBuildQuery, validateOptions } from "@pptxdk/emit";
+import { expandDocument } from "@pptxdk/react";
 import type { ReactNode } from "react";
 
 /**

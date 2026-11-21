@@ -15,16 +15,16 @@ import {
   slideNumber,
   span,
   table,
-} from "@react-pptx/capabilities/document";
-import { shapeCapability } from "@react-pptx/capabilities/shape";
-import { tableCapability } from "@react-pptx/capabilities/table";
-import { Cell, Row, Table } from "@react-pptx/capabilities/table-elements";
-import { type CapabilityModule, CommonNode } from "@react-pptx/core";
-import { createResolver } from "@react-pptx/core/build";
-import { emit } from "@react-pptx/emit";
-import { paint } from "@react-pptx/preview";
-import { Deck, Slide, expandDocument } from "@react-pptx/react";
-import { validatePptx } from "@react-pptx/validation";
+} from "@pptxdk/capabilities/document";
+import { shapeCapability } from "@pptxdk/capabilities/shape";
+import { tableCapability } from "@pptxdk/capabilities/table";
+import { Cell, Row, Table } from "@pptxdk/capabilities/table-elements";
+import { type CapabilityModule, CommonNode } from "@pptxdk/core";
+import { createResolver } from "@pptxdk/core/build";
+import { emit } from "@pptxdk/emit";
+import { paint } from "@pptxdk/preview";
+import { Deck, Slide, expandDocument } from "@pptxdk/react";
+import { validatePptx } from "@pptxdk/validation";
 import { PNG } from "pngjs";
 import { createElement } from "react";
 import { describe, expect, it } from "vitest";
@@ -353,12 +353,12 @@ registerHooks({
     return nextResolve(specifier, context);
   },
 });
-const { createDeckNode, createSlideNode } = await import("@react-pptx/core/document");
-const { createShapeNode, shapeCapability } = await import("@react-pptx/capabilities/shape");
-const { createCellNode, createRowNode, createTableNode, tableCapability } = await import("@react-pptx/capabilities/table");
-const { font } = await import("@react-pptx/capabilities/font");
-const { createResolver } = await import("@react-pptx/core/build");
-const { paint } = await import("@react-pptx/preview");
+const { createDeckNode, createSlideNode } = await import("@pptxdk/core/document");
+const { createShapeNode, shapeCapability } = await import("@pptxdk/capabilities/shape");
+const { createCellNode, createRowNode, createTableNode, tableCapability } = await import("@pptxdk/capabilities/table");
+const { font } = await import("@pptxdk/capabilities/font");
+const { createResolver } = await import("@pptxdk/core/build");
+const { paint } = await import("@pptxdk/preview");
 const jost = font("Jost*", [{ weight: 400, data: readFileSync("./test/assets/fonts/Jost-400-Book.ttf") }]);
 const resolveTrimmed = createResolver([shapeCapability, tableCapability]);
 const res = paint(resolveTrimmed(

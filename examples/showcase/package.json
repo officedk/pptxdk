@@ -1,7 +1,12 @@
 {
-  "name": "@react-pptx/showcase",
+  "name": "@pptxdk/showcase",
   "version": "0.0.0",
   "private": true,
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/pptxdk/pptxdk.git",
+    "directory": "examples/showcase"
+  },
   "files": [
     "dist"
   ],
@@ -40,9 +45,9 @@
     "react": "catalog:"
   },
   "devDependencies": {
+    "@pptxdk/tooling-config": "workspace:*",
+    "@pptxdk/validation": "workspace:*",
     "@react-pptx/cli": "workspace:*",
-    "@react-pptx/tooling-config": "workspace:*",
-    "@react-pptx/validation": "workspace:*",
     "@types/node": "catalog:",
     "@types/react": "catalog:",
     "fflate": "catalog:",

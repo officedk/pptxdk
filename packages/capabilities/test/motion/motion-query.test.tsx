@@ -13,10 +13,10 @@ import {
   useMotionScope,
   observeMotion,
   type MotionObservation,
-} from "@react-pptx/capabilities";
-import { BuildQueryError } from "@react-pptx/core";
-import { Deck, Slide } from "@react-pptx/react";
-import { validatePptx } from "@react-pptx/validation";
+} from "@pptxdk/capabilities";
+import { BuildQueryError } from "@pptxdk/core";
+import { Deck, Slide } from "@pptxdk/react";
+import { validatePptx } from "@pptxdk/validation";
 import { createElement, Fragment } from "react";
 import { describe, it } from "vitest";
 

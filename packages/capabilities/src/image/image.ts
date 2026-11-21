@@ -21,9 +21,9 @@ import {
   type PaintOutput,
   type ResolvedObject,
   type VisualStyle,
-} from "@react-pptx/core/capability";
-import { CommonNode } from "@react-pptx/core/document";
-import { assertXml10Characters, pxToEmu, xmlEscape } from "@react-pptx/emit";
+} from "@pptxdk/core/capability";
+import { CommonNode } from "@pptxdk/core/document";
+import { assertXml10Characters, pxToEmu, xmlEscape } from "@pptxdk/emit";
 
 import { motionAnnotations, type MotionProps } from "../motion/motion-api.ts";
 import { evaluateGeometry, type Geometry } from "../shared/geometry.ts";

@@ -2,22 +2,22 @@ import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 
-import { Box } from "@react-pptx/capabilities/box-elements";
-import { font } from "@react-pptx/capabilities/font";
-import { Group } from "@react-pptx/capabilities/group-elements";
-import { Image } from "@react-pptx/capabilities/image-elements";
+import { Box } from "@pptxdk/capabilities/box-elements";
+import { font } from "@pptxdk/capabilities/font";
+import { Group } from "@pptxdk/capabilities/group-elements";
+import { Image } from "@pptxdk/capabilities/image-elements";
 import {
   blockArc,
   linearGradient,
   path,
   preset,
   type Geometry,
-} from "@react-pptx/capabilities/shape";
-import { Shape } from "@react-pptx/capabilities/shape-elements";
-import { Text } from "@react-pptx/capabilities/text-elements";
-import { BuildError } from "@react-pptx/core";
-import { Deck, Slide } from "@react-pptx/react";
-import { validatePptx } from "@react-pptx/validation";
+} from "@pptxdk/capabilities/shape";
+import { Shape } from "@pptxdk/capabilities/shape-elements";
+import { Text } from "@pptxdk/capabilities/text-elements";
+import { BuildError } from "@pptxdk/core";
+import { Deck, Slide } from "@pptxdk/react";
+import { validatePptx } from "@pptxdk/validation";
 import { strFromU8, unzipSync } from "fflate";
 import { createElement } from "react";
 import { describe, it } from "vitest";
@@ -382,7 +382,7 @@ describe("geometry, object visuals, and text visuals", () => {
         "--input-type=module",
         "--eval",
         [
-          'import { path } from "@react-pptx/capabilities/shape";',
+          'import { path } from "@pptxdk/capabilities/shape";',
           'for (const data of ["M0 0Z1", "M0 0A10 10 0 2 3 20 20", "M0 0A10 10 0 1.0 0 20 20"]) {',
           "  try { path(data, { viewBox: [30, 30] }); process.exitCode = 1; break; }",
           '  catch (error) { if (error?.code !== "invalid-geometry") { process.exitCode = 2; break; } }',

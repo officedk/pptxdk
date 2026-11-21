@@ -1,7 +1,12 @@
 {
-  "name": "@react-pptx/emit",
+  "name": "@pptxdk/emit",
   "version": "0.0.0",
   "private": true,
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/pptxdk/pptxdk.git",
+    "directory": "packages/emit"
+  },
   "files": [
     "dist"
   ],
@@ -29,11 +34,11 @@
     "build": "rm -rf dist && tsc -p tsconfig.build.json --pretty false"
   },
   "dependencies": {
-    "@react-pptx/core": "workspace:*",
+    "@pptxdk/core": "workspace:*",
     "fflate": "catalog:"
   },
   "devDependencies": {
-    "@react-pptx/tooling-config": "workspace:*",
+    "@pptxdk/tooling-config": "workspace:*",
     "@types/node": "catalog:",
     "oxfmt": "catalog:",
     "oxlint": "catalog:",

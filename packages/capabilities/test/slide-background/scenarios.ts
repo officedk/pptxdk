@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
 import { createRequire } from "node:module";
 
-import { deck, shape, slide } from "@react-pptx/capabilities/document";
-import { linearGradient, radialGradient } from "@react-pptx/capabilities/shape";
-import { Shape } from "@react-pptx/capabilities/shape-elements";
-import { Deck, Slide } from "@react-pptx/react";
+import { deck, shape, slide } from "@pptxdk/capabilities/document";
+import { linearGradient, radialGradient } from "@pptxdk/capabilities/shape";
+import { Shape } from "@pptxdk/capabilities/shape-elements";
+import { Deck, Slide } from "@pptxdk/react";
 import { PNG } from "pngjs";
 import { createElement } from "react";
 import { expect } from "vitest";

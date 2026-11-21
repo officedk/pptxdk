@@ -1,14 +1,14 @@
 import assert from "node:assert/strict";
 
-import { Box } from "@react-pptx/capabilities/box-elements";
-import { Chart } from "@react-pptx/capabilities/chart-elements";
-import { Group } from "@react-pptx/capabilities/group-elements";
-import { Shape } from "@react-pptx/capabilities/shape-elements";
-import { Cell, Row, Table } from "@react-pptx/capabilities/table-elements";
-import { P, Span, Text } from "@react-pptx/capabilities/text-elements";
-import { BuildError } from "@react-pptx/core";
-import { Deck, Slide } from "@react-pptx/react";
-import { validatePptx } from "@react-pptx/validation";
+import { Box } from "@pptxdk/capabilities/box-elements";
+import { Chart } from "@pptxdk/capabilities/chart-elements";
+import { Group } from "@pptxdk/capabilities/group-elements";
+import { Shape } from "@pptxdk/capabilities/shape-elements";
+import { Cell, Row, Table } from "@pptxdk/capabilities/table-elements";
+import { P, Span, Text } from "@pptxdk/capabilities/text-elements";
+import { BuildError } from "@pptxdk/core";
+import { Deck, Slide } from "@pptxdk/react";
+import { validatePptx } from "@pptxdk/validation";
 import { strFromU8, strToU8, unzipSync, zipSync } from "fflate";
 import { describe, it } from "vitest";
 

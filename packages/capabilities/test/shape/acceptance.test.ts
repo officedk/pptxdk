@@ -10,8 +10,8 @@ import {
   font,
   shape,
   slide,
-} from "@react-pptx/capabilities/document";
-import { shapeCapability } from "@react-pptx/capabilities/shape";
+} from "@pptxdk/capabilities/document";
+import { shapeCapability } from "@pptxdk/capabilities/shape";
 import {
   BuildError,
   CommonNode,
@@ -21,12 +21,12 @@ import {
   type CapabilityParseContext,
   type ObjectCapabilityModule,
   type SlideCapabilityModule,
-} from "@react-pptx/core";
-import { createResolver } from "@react-pptx/core/build";
-import { parseCapabilityLayoutContract } from "@react-pptx/core/capability";
-import { emit, pxToEmu, xmlEscape } from "@react-pptx/emit";
-import { paint } from "@react-pptx/preview";
-import { Deck, Slide, expandDocument } from "@react-pptx/react";
+} from "@pptxdk/core";
+import { createResolver } from "@pptxdk/core/build";
+import { parseCapabilityLayoutContract } from "@pptxdk/core/capability";
+import { emit, pxToEmu, xmlEscape } from "@pptxdk/emit";
+import { paint } from "@pptxdk/preview";
+import { Deck, Slide, expandDocument } from "@pptxdk/react";
 import { PNG } from "pngjs";
 import { createElement, type ReactNode } from "react";
 import { describe, expect, it } from "vitest";

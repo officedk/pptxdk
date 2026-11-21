@@ -11,10 +11,10 @@ import {
   slideNumber,
   span,
   table,
-} from "@react-pptx/capabilities/document";
-import { Cell, Row, Table } from "@react-pptx/capabilities/table-elements";
-import { P, SlideNumber, Span } from "@react-pptx/capabilities/text-elements";
-import { Deck, Slide } from "@react-pptx/react";
+} from "@pptxdk/capabilities/document";
+import { Cell, Row, Table } from "@pptxdk/capabilities/table-elements";
+import { P, SlideNumber, Span } from "@pptxdk/capabilities/text-elements";
+import { Deck, Slide } from "@pptxdk/react";
 import { strFromU8, unzipSync } from "fflate";
 import { PNG } from "pngjs";
 import { createElement } from "react";

@@ -4,8 +4,8 @@ import {
   type LinkTarget,
   type MorphKey,
   type NativeLink,
-} from "@react-pptx/core/capability";
-import { xmlEscape } from "@react-pptx/emit";
+} from "@pptxdk/core/capability";
+import { xmlEscape } from "@pptxdk/emit";
 
 /** Validates an optional non-empty object name parameter. */
 export function parseOptionalName(

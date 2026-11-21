@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
-import { Box } from "@react-pptx/capabilities/box-elements";
+import { Box } from "@pptxdk/capabilities/box-elements";
 import {
   box,
   deck,
@@ -11,7 +11,7 @@ import {
   slide,
   slideNumber,
   span,
-} from "@react-pptx/capabilities/document";
+} from "@pptxdk/capabilities/document";
 import {
   blockArc,
   linearGradient,
@@ -21,10 +21,10 @@ import {
   radialGradient,
   type CustomGeometry,
   type PresetGeometryName,
-} from "@react-pptx/capabilities/shape";
-import { Shape } from "@react-pptx/capabilities/shape-elements";
-import { P, SlideNumber, Span } from "@react-pptx/capabilities/text-elements";
-import { Deck, Slide } from "@react-pptx/react";
+} from "@pptxdk/capabilities/shape";
+import { Shape } from "@pptxdk/capabilities/shape-elements";
+import { P, SlideNumber, Span } from "@pptxdk/capabilities/text-elements";
+import { Deck, Slide } from "@pptxdk/react";
 import { PNG } from "pngjs";
 import { createElement } from "react";
 import { expect } from "vitest";

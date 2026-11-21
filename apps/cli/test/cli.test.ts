@@ -4,7 +4,7 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { validatePptx } from "@react-pptx/validation";
+import { validatePptx } from "@pptxdk/validation";
 import { describe, expect, it } from "vitest";
 
 import { runCli } from "../src/index.ts";
@@ -54,20 +54,20 @@ describe("react-pptx CLI single export", () => {
         `await writeFile(${JSON.stringify(baselineOutput)}, baselineResult.pptx);`,
         'async function expectHookReleased(path) { const error = await import(pathToFileURL(path).href).then(() => undefined, failure => failure); if (error?.code !== "ERR_UNKNOWN_FILE_EXTENSION") throw new Error(JSON.stringify({ path, error })); }',
         `await expectHookReleased(${JSON.stringify(fixture("unloaded after success.tsx"))});`,
-        'process.env.REACT_PPTX_TEST_LOAD_FAILURE = "1";',
+        'process.env.PPTXDK_TEST_LOAD_FAILURE = "1";',
         `const loadFailure = await buildFromSource(${JSON.stringify(fixture("load failure.tsx"))}).then(() => undefined, error => error);`,
         'if (loadFailure?.name !== "SourceLoadError") throw new Error("Source load error was not preserved");',
-        "delete process.env.REACT_PPTX_TEST_LOAD_FAILURE;",
+        "delete process.env.PPTXDK_TEST_LOAD_FAILURE;",
         `await expectHookReleased(${JSON.stringify(fixture("unloaded after load failure.tsx"))});`,
         `const buildFailure = await buildFromSource(${JSON.stringify(fixture("broken deck.tsx"))}).then(() => undefined, error => error);`,
         'if (buildFailure?.name !== "BuildError") throw new Error("Build error was not preserved");',
         `await expectHookReleased(${JSON.stringify(fixture("unloaded after build failure.tsx"))});`,
         "const controller = new AbortController();",
         'const reason = new Error("Programmatic source build cancelled");',
-        "globalThis.__reactPptxCancellation = { controller, reason };",
+        "globalThis.__pptxdkCancellation = { controller, reason };",
         `const cancellation = await buildFromSource(${JSON.stringify(fixture("cancelled deck.tsx"))}, { signal: controller.signal }).then(() => undefined, error => error);`,
         'if (cancellation !== reason) throw new Error("Cancellation reason was not propagated from public build");',
-        "delete globalThis.__reactPptxCancellation;",
+        "delete globalThis.__pptxdkCancellation;",
         `await expectHookReleased(${JSON.stringify(fixture("unloaded after cancellation.tsx"))});`,
         `const independent = await buildFromSource(${JSON.stringify(fixture("independent deck.tsx"))});`,
         "process.stdout.write(JSON.stringify({ sourceSlide: result.report.slides[0]?.id, independentSlide: independent.report.slides[0]?.id }));",
@@ -122,7 +122,7 @@ describe("react-pptx CLI single export", () => {
       `const independentEntry = ${JSON.stringify(fixture("independent deck.tsx"))};`,
       'async function expectHookReleased(path) { const error = await import(pathToFileURL(path).href).then(() => undefined, failure => failure); if (error?.code !== "ERR_UNKNOWN_FILE_EXTENSION") throw new Error(JSON.stringify({ path, error })); }',
       "const state = { controller: new AbortController(), started: false, concurrentStarted: false, rejectPending: undefined, allowConcurrentImport: undefined };",
-      "globalThis.__reactPptxSourceLoadState = state;",
+      "globalThis.__pptxdkSourceLoadState = state;",
       "const preController = new AbortController();",
       'const preReason = new Error("Cancelled before source load");',
       "preController.abort(preReason);",
@@ -200,7 +200,7 @@ describe("react-pptx CLI single export", () => {
       child.stderr.setEncoding("utf8");
       child.stdout.on("data", (chunk: string) => {
         stdout += chunk;
-        if (!interrupted && stdout.includes("__react_pptx_cancel_ready__")) {
+        if (!interrupted && stdout.includes("__pptxdk_cancel_ready__")) {
           interrupted = true;
           child.kill("SIGINT");
         }
@@ -239,7 +239,7 @@ describe("react-pptx CLI single export", () => {
         stdout += chunk;
         if (
           !interrupted &&
-          stdout.includes("__react_pptx_source_load_cancel_ready__")
+          stdout.includes("__pptxdk_source_load_cancel_ready__")
         ) {
           interrupted = true;
           child.kill("SIGINT");

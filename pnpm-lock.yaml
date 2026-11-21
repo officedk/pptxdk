@@ -256,7 +256,7 @@ importers:
       '@changesets/cli':
         specifier: 'catalog:'
         version: 3.0.3
-      '@react-pptx/tooling-config':
+      '@pptxdk/tooling-config':
         specifier: workspace:./packages/tooling-config
         version: link:packages/tooling-config
       '@types/node':
@@ -290,10 +290,10 @@ importers:
         specifier: 'catalog:'
         version: 4.6.7
     devDependencies:
-      '@react-pptx/tooling-config':
+      '@pptxdk/tooling-config':
         specifier: workspace:*
         version: link:../../packages/tooling-config
-      '@react-pptx/validation':
+      '@pptxdk/validation':
         specifier: workspace:*
         version: link:../../packages/validation
       '@types/node':
@@ -333,15 +333,15 @@ importers:
         specifier: 'catalog:'
         version: 19.3.1
     devDependencies:
+      '@pptxdk/tooling-config':
+        specifier: workspace:*
+        version: link:../../packages/tooling-config
+      '@pptxdk/validation':
+        specifier: workspace:*
+        version: link:../../packages/validation
       '@react-pptx/cli':
         specifier: workspace:*
         version: link:../../apps/cli
-      '@react-pptx/tooling-config':
-        specifier: workspace:*
-        version: link:../../packages/tooling-config
-      '@react-pptx/validation':
-        specifier: workspace:*
-        version: link:../../packages/validation
       '@types/node':
         specifier: 'catalog:'
         version: 26.6.6
@@ -376,15 +376,15 @@ importers:
         specifier: 'catalog:'
         version: 19.3.1
     devDependencies:
+      '@pptxdk/tooling-config':
+        specifier: workspace:*
+        version: link:../../packages/tooling-config
+      '@pptxdk/validation':
+        specifier: workspace:*
+        version: link:../../packages/validation
       '@react-pptx/cli':
         specifier: workspace:*
         version: link:../../apps/cli
-      '@react-pptx/tooling-config':
-        specifier: workspace:*
-        version: link:../../packages/tooling-config
-      '@react-pptx/validation':
-        specifier: workspace:*
-        version: link:../../packages/validation
       '@types/node':
         specifier: 'catalog:'
         version: 26.6.6
@@ -419,15 +419,15 @@ importers:
         specifier: 'catalog:'
         version: 19.3.1
     devDependencies:
+      '@pptxdk/tooling-config':
+        specifier: workspace:*
+        version: link:../../packages/tooling-config
+      '@pptxdk/validation':
+        specifier: workspace:*
+        version: link:../../packages/validation
       '@react-pptx/cli':
         specifier: workspace:*
         version: link:../../apps/cli
-      '@react-pptx/tooling-config':
-        specifier: workspace:*
-        version: link:../../packages/tooling-config
-      '@react-pptx/validation':
-        specifier: workspace:*
-        version: link:../../packages/validation
       '@types/node':
         specifier: 'catalog:'
         version: 26.6.6
@@ -458,10 +458,10 @@ importers:
 
   packages/capabilities:
     dependencies:
-      '@react-pptx/core':
+      '@pptxdk/core':
         specifier: workspace:*
         version: link:../core
-      '@react-pptx/emit':
+      '@pptxdk/emit':
         specifier: workspace:*
         version: link:../emit
       fflate:
@@ -486,16 +486,16 @@ importers:
         specifier: 'catalog:'
         version: 19.3.1
     devDependencies:
-      '@react-pptx/preview':
+      '@pptxdk/preview':
         specifier: workspace:*
         version: link:../preview
-      '@react-pptx/react':
+      '@pptxdk/react':
         specifier: workspace:*
         version: link:../react
-      '@react-pptx/tooling-config':
+      '@pptxdk/tooling-config':
         specifier: workspace:*
         version: link:../tooling-config
-      '@react-pptx/validation':
+      '@pptxdk/validation':
         specifier: workspace:*
         version: link:../validation
       '@types/fontkit':
@@ -535,7 +535,7 @@ importers:
         specifier: 'catalog:'
         version: 3.2.1
     devDependencies:
-      '@react-pptx/tooling-config':
+      '@pptxdk/tooling-config':
         specifier: workspace:*
         version: link:../tooling-config
       '@types/node':
@@ -556,14 +556,14 @@ importers:
 
   packages/emit:
     dependencies:
-      '@react-pptx/core':
+      '@pptxdk/core':
         specifier: workspace:*
         version: link:../core
       fflate:
         specifier: 'catalog:'
         version: 0.8.3
     devDependencies:
-      '@react-pptx/tooling-config':
+      '@pptxdk/tooling-config':
         specifier: workspace:*
         version: link:../tooling-config
       '@types/node':
@@ -584,14 +584,14 @@ importers:
 
   packages/preview:
     dependencies:
-      '@react-pptx/core':
+      '@pptxdk/core':
         specifier: workspace:*
         version: link:../core
       '@resvg/resvg-js':
         specifier: 'catalog:'
         version: 2.6.2
     devDependencies:
-      '@react-pptx/tooling-config':
+      '@pptxdk/tooling-config':
         specifier: workspace:*
         version: link:../tooling-config
       '@types/node':
@@ -612,7 +612,7 @@ importers:
 
   packages/react:
     dependencies:
-      '@react-pptx/core':
+      '@pptxdk/core':
         specifier: workspace:*
         version: link:../core
       react:
@@ -622,7 +622,7 @@ importers:
         specifier: 'catalog:'
         version: 0.34.0(react@19.3.1)
     devDependencies:
-      '@react-pptx/tooling-config':
+      '@pptxdk/tooling-config':
         specifier: workspace:*
         version: link:../tooling-config
       '@types/node':
@@ -649,19 +649,19 @@ importers:
 
   packages/react-pptx:
     dependencies:
-      '@react-pptx/capabilities':
+      '@pptxdk/capabilities':
         specifier: workspace:*
         version: link:../capabilities
-      '@react-pptx/core':
+      '@pptxdk/core':
         specifier: workspace:*
         version: link:../core
-      '@react-pptx/emit':
+      '@pptxdk/emit':
         specifier: workspace:*
         version: link:../emit
-      '@react-pptx/preview':
+      '@pptxdk/preview':
         specifier: workspace:*
         version: link:../preview
-      '@react-pptx/react':
+      '@pptxdk/react':
         specifier: workspace:*
         version: link:../react
       esbuild:
@@ -671,10 +671,10 @@ importers:
         specifier: 'catalog:'
         version: 19.3.1
     devDependencies:
-      '@react-pptx/tooling-config':
+      '@pptxdk/tooling-config':
         specifier: workspace:*
         version: link:../tooling-config
-      '@react-pptx/validation':
+      '@pptxdk/validation':
         specifier: workspace:*
         version: link:../validation
       '@types/emscripten':
@@ -762,7 +762,7 @@ importers:
         specifier: 'catalog:'
         version: 0.8.3
     devDependencies:
-      '@react-pptx/tooling-config':
+      '@pptxdk/tooling-config':
         specifier: workspace:*
         version: link:../tooling-config
       '@types/node':

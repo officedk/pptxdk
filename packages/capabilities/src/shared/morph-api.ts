@@ -1,4 +1,4 @@
-import type { LinkTarget, MorphKey } from "@react-pptx/core";
+import type { LinkTarget, MorphKey } from "@pptxdk/core";
 
 /**
  * Explicit cross-slide continuity declaration available to native objects.
@@ -14,5 +14,5 @@ export type LinkProps = {
   readonly link?: LinkTarget;
 };
 
-export { createMorphScope } from "@react-pptx/core";
-export type { LinkTarget, MorphKey, MorphScope } from "@react-pptx/core";
+export { createMorphScope } from "@pptxdk/core";
+export type { LinkTarget, MorphKey, MorphScope } from "@pptxdk/core";

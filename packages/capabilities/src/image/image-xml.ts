@@ -1,4 +1,4 @@
-import { xmlEscape } from "@react-pptx/emit";
+import { xmlEscape } from "@pptxdk/emit";
 
 /** Internal PresentationML wrapper for native picture objects and their crop/opacity values. */
 export function imageXml(

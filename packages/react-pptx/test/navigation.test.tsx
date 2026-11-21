@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 
-import { BuildError } from "@react-pptx/core";
+import { BuildError } from "@pptxdk/core";
+import { validatePptx } from "@pptxdk/validation";
 import {
   build,
   Deck,
@@ -22,7 +23,6 @@ import {
   Text,
   transitions,
 } from "@react-pptx/react-pptx";
-import { validatePptx } from "@react-pptx/validation";
 import { createElement } from "react";
 import { describe, it } from "vitest";
 

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
-import { Box } from "@react-pptx/capabilities/box-elements";
+import { Box } from "@pptxdk/capabilities/box-elements";
 import {
   box,
   deck,
@@ -9,11 +9,11 @@ import {
   shape,
   slide,
   text,
-} from "@react-pptx/capabilities/document";
-import { Shape } from "@react-pptx/capabilities/shape-elements";
-import { Text } from "@react-pptx/capabilities/text-elements";
-import type { CommonNode } from "@react-pptx/core";
-import { Deck, Slide } from "@react-pptx/react";
+} from "@pptxdk/capabilities/document";
+import { Shape } from "@pptxdk/capabilities/shape-elements";
+import { Text } from "@pptxdk/capabilities/text-elements";
+import type { CommonNode } from "@pptxdk/core";
+import { Deck, Slide } from "@pptxdk/react";
 import { createElement, type ReactNode } from "react";
 
 import type { CapabilityScenario } from "../acceptance-runner.ts";

@@ -4,31 +4,28 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { slideBackgroundCapability } from "@react-pptx/capabilities";
-import {
-  createMotionScopeHandle,
-  font,
-} from "@react-pptx/capabilities/document";
-import { groupCapability } from "@react-pptx/capabilities/group";
-import { Group } from "@react-pptx/capabilities/group-elements";
+import { slideBackgroundCapability } from "@pptxdk/capabilities";
+import { createMotionScopeHandle, font } from "@pptxdk/capabilities/document";
+import { groupCapability } from "@pptxdk/capabilities/group";
+import { Group } from "@pptxdk/capabilities/group-elements";
 import {
   after,
   fade,
   motionCapability,
   observeMotion,
   spin,
-} from "@react-pptx/capabilities/motion";
-import { MotionScope, Step } from "@react-pptx/capabilities/motion-elements";
-import { shapeCapability } from "@react-pptx/capabilities/shape";
-import { Shape } from "@react-pptx/capabilities/shape-elements";
-import { textCapability } from "@react-pptx/capabilities/text";
-import { P, Text } from "@react-pptx/capabilities/text-elements";
-import { BuildError, createMorphScope } from "@react-pptx/core";
-import { createResolver } from "@react-pptx/core/build";
-import { emit } from "@react-pptx/emit";
-import { paint } from "@react-pptx/preview";
-import { Deck, Slide, expandDocument } from "@react-pptx/react";
-import { validatePptx } from "@react-pptx/validation";
+} from "@pptxdk/capabilities/motion";
+import { MotionScope, Step } from "@pptxdk/capabilities/motion-elements";
+import { shapeCapability } from "@pptxdk/capabilities/shape";
+import { Shape } from "@pptxdk/capabilities/shape-elements";
+import { textCapability } from "@pptxdk/capabilities/text";
+import { P, Text } from "@pptxdk/capabilities/text-elements";
+import { BuildError, createMorphScope } from "@pptxdk/core";
+import { createResolver } from "@pptxdk/core/build";
+import { emit } from "@pptxdk/emit";
+import { paint } from "@pptxdk/preview";
+import { Deck, Slide, expandDocument } from "@pptxdk/react";
+import { validatePptx } from "@pptxdk/validation";
 import { createElement, type ComponentType } from "react";
 import { describe, it } from "vitest";
 

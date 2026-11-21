@@ -1,4 +1,4 @@
-import type { CapabilityInput } from "@react-pptx/core/capability";
+import type { CapabilityInput } from "@pptxdk/core/capability";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);

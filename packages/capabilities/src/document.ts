@@ -7,7 +7,7 @@ import type {
   ThemeInput,
   ThemeScope,
   VisualStyle,
-} from "@react-pptx/core/capability";
+} from "@pptxdk/core/capability";
 import {
   CommonContainer,
   CommonNode,
@@ -16,7 +16,7 @@ import {
   createSlideNode,
   RichTextContainer,
   type RichTextItem,
-} from "@react-pptx/core/document";
+} from "@pptxdk/core/document";
 
 import {
   boxCapability,

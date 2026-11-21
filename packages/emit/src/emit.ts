@@ -9,7 +9,7 @@ import {
   type BuildQuery,
   type BuildReport,
   type ResourceObservation,
-} from "@react-pptx/core/build";
+} from "@pptxdk/core/build";
 import type {
   CapabilityPackagePart,
   CapabilityPartRelationship,
@@ -30,13 +30,13 @@ import type {
   SlideCapabilitySlot,
   SlideEmitContext,
   Target,
-} from "@react-pptx/core/capability";
-import { createBuildQuery } from "@react-pptx/core/query";
+} from "@pptxdk/core/capability";
+import { createBuildQuery } from "@pptxdk/core/query";
 import {
   getInternalResolution,
   type InternalResolution,
   type ResolvedObjectLayer,
-} from "@react-pptx/core/resolution";
+} from "@pptxdk/core/resolution";
 import { strToU8, zipSync } from "fflate";
 
 import {

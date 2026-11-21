@@ -5,15 +5,15 @@ import {
   documentCapabilities,
   image,
   slide,
-} from "@react-pptx/capabilities/document";
-import { Image } from "@react-pptx/capabilities/image-elements";
-import { preset } from "@react-pptx/capabilities/shape";
-import { type CapabilityModule, CommonNode } from "@react-pptx/core";
-import { createResolver } from "@react-pptx/core/build";
-import { emit } from "@react-pptx/emit";
-import { paint } from "@react-pptx/preview";
-import { Deck, Slide, expandDocument } from "@react-pptx/react";
-import { validatePptx } from "@react-pptx/validation";
+} from "@pptxdk/capabilities/document";
+import { Image } from "@pptxdk/capabilities/image-elements";
+import { preset } from "@pptxdk/capabilities/shape";
+import { type CapabilityModule, CommonNode } from "@pptxdk/core";
+import { createResolver } from "@pptxdk/core/build";
+import { emit } from "@pptxdk/emit";
+import { paint } from "@pptxdk/preview";
+import { Deck, Slide, expandDocument } from "@pptxdk/react";
+import { validatePptx } from "@pptxdk/validation";
 import { PNG } from "pngjs";
 import { createElement } from "react";
 import { describe, expect, it } from "vitest";

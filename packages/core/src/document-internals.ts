@@ -5,13 +5,7 @@
  * reconciliation operations as author API. These symbols are internal to the core package and are
  * not re-exported by the public document entry.
  */
-export const replaceDeclarationProps = Symbol(
-  "react-pptx.replaceDeclarationProps",
-);
-export const insertDeclarationChild = Symbol(
-  "react-pptx.insertDeclarationChild",
-);
-export const removeDeclarationChild = Symbol(
-  "react-pptx.removeDeclarationChild",
-);
-export const setDeclarationText = Symbol("react-pptx.setDeclarationText");
+export const replaceDeclarationProps = Symbol("pptxdk.replaceDeclarationProps");
+export const insertDeclarationChild = Symbol("pptxdk.insertDeclarationChild");
+export const removeDeclarationChild = Symbol("pptxdk.removeDeclarationChild");
+export const setDeclarationText = Symbol("pptxdk.setDeclarationText");

@@ -1,5 +1,5 @@
 {
-  "extends": "@react-pptx/tooling-config/react.json",
+  "extends": "@pptxdk/tooling-config/react.json",
   "compilerOptions": {
     "types": ["emscripten", "node"],
     "declarationMap": false

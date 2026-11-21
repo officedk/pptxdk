@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { getEventListeners } from "node:events";
 import { createServer, type ServerResponse } from "node:http";
 
+import { validatePptx } from "@pptxdk/validation";
 import {
   BuildError,
   build,
@@ -12,7 +13,6 @@ import {
   Slide,
   Text,
 } from "@react-pptx/react-pptx";
-import { validatePptx } from "@react-pptx/validation";
 import {
   Component,
   createElement,

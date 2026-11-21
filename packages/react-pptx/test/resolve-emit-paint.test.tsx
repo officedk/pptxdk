@@ -3,7 +3,8 @@ import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
-import { shapeCapability } from "@react-pptx/capabilities/shape";
+import { shapeCapability } from "@pptxdk/capabilities/shape";
+import { validatePptx } from "@pptxdk/validation";
 import {
   BuildError,
   CommonNode,
@@ -39,7 +40,6 @@ import {
   transitions,
 } from "@react-pptx/react-pptx/document";
 import { paint, preview } from "@react-pptx/react-pptx/preview";
-import { validatePptx } from "@react-pptx/validation";
 import { createElement } from "react";
 import { describe, it } from "vitest";
 
@@ -249,7 +249,7 @@ describe("Seam 1 & Seam 3: public resolve / emit / paint & createResolver", () =
     assert.deepEqual(jsxPaint.pages[0]?.png, docPaint.pages[0]?.png);
   });
 
-  it("never loads ./preview.ts, @react-pptx/preview, or @resvg/resvg-js when importing or running build subpaths", () => {
+  it("never loads ./preview.ts, @pptxdk/preview, or @resvg/resvg-js when importing or running build subpaths", () => {
     const packageRoot = fileURLToPath(new URL("../", import.meta.url));
     const script = `
 import { registerHooks } from "node:module";
@@ -258,7 +258,7 @@ registerHooks({
   resolve(specifier, context, nextResolve) {
     if (
       specifier.includes("@resvg/resvg-js") ||
-      specifier.includes("@react-pptx/preview") ||
+      specifier.includes("@pptxdk/preview") ||
       specifier.endsWith("/packages/preview/src/index.ts") ||
       specifier.endsWith("/preview.ts") ||
       specifier.endsWith("/preview.js") ||
@@ -306,7 +306,7 @@ process.stdout.write("ok");
     assert.equal(child.stdout, "ok");
   });
 
-  it("never loads react, react-reconciler, or @react-pptx/react from any @react-pptx/core subpath and keeps host operations off public core entries", () => {
+  it("never loads react, react-reconciler, or @pptxdk/react from any @pptxdk/core subpath and keeps host operations off public core entries", () => {
     const packageRoot = fileURLToPath(new URL("../", import.meta.url));
     const script = `
 import { registerHooks } from "node:module";
@@ -317,10 +317,10 @@ registerHooks({
       specifier === "react" ||
       specifier === "react-reconciler" ||
       specifier.startsWith("react/") ||
-      specifier === "@react-pptx/react" ||
-      specifier.startsWith("@react-pptx/react/") ||
-      specifier.includes("@react-pptx/emit") ||
-      specifier.includes("@react-pptx/preview")
+      specifier === "@pptxdk/react" ||
+      specifier.startsWith("@pptxdk/react/") ||
+      specifier.includes("@pptxdk/emit") ||
+      specifier.includes("@pptxdk/preview")
     ) {
       throw new Error("core subpath loaded forbidden dependency: " + specifier);
     }
@@ -328,14 +328,14 @@ registerHooks({
   },
 });
 
-const coreMain = await import("@react-pptx/core");
-const coreBuild = await import("@react-pptx/core/build");
-const coreCap = await import("@react-pptx/core/capability");
-const coreDoc = await import("@react-pptx/core/document");
-const coreHost = await import("@react-pptx/core/host");
-await import("@react-pptx/core/query");
-await import("@react-pptx/core/resolution");
-await import("@react-pptx/core/theme");
+const coreMain = await import("@pptxdk/core");
+const coreBuild = await import("@pptxdk/core/build");
+const coreCap = await import("@pptxdk/core/capability");
+const coreDoc = await import("@pptxdk/core/document");
+const coreHost = await import("@pptxdk/core/host");
+await import("@pptxdk/core/query");
+await import("@pptxdk/core/resolution");
+await import("@pptxdk/core/theme");
 void coreMain;
 void coreBuild;
 void coreCap;
@@ -350,7 +350,7 @@ for (const key of [
   "validateAuthorIdScopes",
 ]) {
   if (!(key in coreHost)) {
-    throw new Error("@react-pptx/core/host must export " + key);
+    throw new Error("@pptxdk/core/host must export " + key);
   }
 }
 
@@ -365,7 +365,7 @@ process.stdout.write("ok");
     assert.equal(child.stdout, "ok");
   });
 
-  it("never loads react or react-reconciler when running imperative paint via @react-pptx/preview", () => {
+  it("never loads react or react-reconciler when running imperative paint via @pptxdk/preview", () => {
     const packageRoot = fileURLToPath(new URL("../", import.meta.url));
     const script = `
 import { registerHooks } from "node:module";
@@ -376,8 +376,8 @@ registerHooks({
       specifier === "react" ||
       specifier === "react-reconciler" ||
       specifier.startsWith("react/") ||
-      specifier === "@react-pptx/react" ||
-      specifier.startsWith("@react-pptx/react/")
+      specifier === "@pptxdk/react" ||
+      specifier.startsWith("@pptxdk/react/")
     ) {
       throw new Error("preview package loaded React dependency: " + specifier);
     }
@@ -385,10 +385,10 @@ registerHooks({
   },
 });
 
-const { paint } = await import("@react-pptx/preview");
-const { createResolver } = await import("@react-pptx/core/build");
-const { createDeckNode, createSlideNode } = await import("@react-pptx/core/document");
-const { shapeCapability, createShapeNode } = await import("@react-pptx/capabilities/shape");
+const { paint } = await import("@pptxdk/preview");
+const { createResolver } = await import("@pptxdk/core/build");
+const { createDeckNode, createSlideNode } = await import("@pptxdk/core/document");
+const { shapeCapability, createShapeNode } = await import("@pptxdk/capabilities/shape");
 
 const d = createDeckNode({ width: 320, height: 180 });
 const s = createSlideNode({ id: "s1" });
@@ -929,7 +929,7 @@ import { registerHooks } from "node:module";
 registerHooks({
   resolve(specifier, context, nextResolve) {
     if (
-      specifier === "@react-pptx/capabilities/text" ||
+      specifier === "@pptxdk/capabilities/text" ||
       specifier === "./text.ts" ||
       specifier === "./text.js" ||
       specifier.endsWith("/capabilities/src/text/text.ts") ||
@@ -948,18 +948,18 @@ registerHooks({
   },
 });
 
-const { createResolver } = await import("@react-pptx/core/build");
-const { createDeckNode, createSlideNode } = await import("@react-pptx/core/document");
+const { createResolver } = await import("@pptxdk/core/build");
+const { createDeckNode, createSlideNode } = await import("@pptxdk/core/document");
 const {
   tableCapability,
   createTableNode,
   createRowNode,
   createCellNode,
-} = await import("@react-pptx/capabilities/table");
-const { chartCapability, createChartNode } = await import("@react-pptx/capabilities/chart");
-const { font } = await import("@react-pptx/capabilities/font");
-const { emit } = await import("@react-pptx/emit");
-const { paint } = await import("@react-pptx/preview");
+} = await import("@pptxdk/capabilities/table");
+const { chartCapability, createChartNode } = await import("@pptxdk/capabilities/chart");
+const { font } = await import("@pptxdk/capabilities/font");
+const { emit } = await import("@pptxdk/emit");
+const { paint } = await import("@pptxdk/preview");
 
 const jost = font("Jost*", [
   {

@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
-import { mkdir, rename, rm, stat, writeFile } from "node:fs/promises";
+import { lstat, mkdir, rename, rm, stat, writeFile } from "node:fs/promises";
 import { basename, dirname, extname, resolve } from "node:path";
 
 import {
@@ -17,8 +17,12 @@ import {
   type WriteCliOutput,
 } from "@ykdz/cli-contract";
 import { isNodeBrokenPipe } from "@ykdz/cli-contract/node";
-import { BuildError, targets, type Target } from "pptxdk";
-import { buildFromSource, SourceLoadError } from "pptxdk/node";
+import { BuildError, targets, type Diagnostic, type Target } from "pptxdk";
+import {
+  buildFromSource,
+  previewFromSource,
+  SourceLoadError,
+} from "pptxdk/node";
 import { z } from "zod";
 
 /**
@@ -57,6 +61,18 @@ const diagnosticItemSchema = z.object({
   message: z.string(),
 });
 
+const previewPageItemSchema = z.object({
+  page: z.number().int().positive(),
+  id: z.string(),
+  output: z.string(),
+});
+
+const previewDiagnosticItemSchema = z.object({
+  page: z.number().int().positive(),
+  path: z.string(),
+  message: z.string(),
+});
+
 const buildInputSchema = z.object({
   entry: z.string().min(1),
   out: z.string().min(1).optional(),
@@ -65,9 +81,21 @@ const buildInputSchema = z.object({
   embedFonts: z.enum(["full", "subset"]).optional(),
 });
 
+const previewInputSchema = z.object({
+  entry: z.string().min(1),
+  outDir: z.string().min(1).optional(),
+  export: z.string().min(1).optional(),
+});
+
 const builtSchema = z.object({
   output: z.string(),
   slides: z.number().int().nonnegative(),
+  warnings: z.array(diagnosticItemSchema),
+});
+
+const previewedSchema = z.object({
+  outputDir: z.string(),
+  pages: z.array(previewPageItemSchema),
   warnings: z.array(diagnosticItemSchema),
 });
 
@@ -84,6 +112,13 @@ const buildFailedSchema = z.object({
   diagnostics: z.array(diagnosticItemSchema),
 });
 
+const previewFailedSchema = z.object({
+  outputDir: z.string(),
+  pages: z.array(previewPageItemSchema),
+  warnings: z.array(diagnosticItemSchema),
+  diagnostics: z.array(previewDiagnosticItemSchema),
+});
+
 const writeFailedSchema = z.object({
   output: z.string(),
   message: z.string(),
@@ -97,6 +132,33 @@ function targetByName(name: string): Target | undefined {
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
+}
+
+function errnoCode(error: unknown): string | undefined {
+  return typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    typeof (error as { readonly code?: unknown }).code === "string"
+    ? (error as { readonly code: string }).code
+    : undefined;
+}
+
+function isCancelledError(error: unknown, signal?: AbortSignal): boolean {
+  return Boolean(signal?.aborted && error === signal.reason);
+}
+
+function extractWarnings(diagnostics: readonly Diagnostic[]) {
+  return diagnostics
+    .filter((diagnostic) => diagnostic.severity === "warning")
+    .map(({ path, code, message }) => ({ path, code, message }));
+}
+
+function toBuildFailureDiagnostics(diagnostics: readonly Diagnostic[]) {
+  return diagnostics.map(({ path, code, message }) => ({
+    path,
+    code,
+    message,
+  }));
 }
 
 /**
@@ -141,6 +203,31 @@ async function isSameExistingFile(
     return leftStats.dev === rightStats.dev && leftStats.ino === rightStats.ino;
   } catch {
     return false;
+  }
+}
+
+// Validate outputDir read-only before previewFromSource so source or build failures never create an empty directory.
+async function isValidPreviewOutputDir(
+  entry: string,
+  outDir: string,
+): Promise<boolean> {
+  if (outDir === entry) return false;
+  try {
+    const stats = await stat(outDir);
+    return stats.isDirectory();
+  } catch (error) {
+    const code = errnoCode(error);
+    if (code === "ENOTDIR") return false;
+    if (code !== "ENOENT") throw error;
+    try {
+      await lstat(outDir);
+      return false;
+    } catch (lstatError) {
+      const lstatCode = errnoCode(lstatError);
+      if (lstatCode === "ENOENT") return true;
+      if (lstatCode === "ENOTDIR") return false;
+      throw lstatError;
+    }
   }
 }
 
@@ -192,11 +279,61 @@ const buildFailureVariants = {
   cancelled: cancelledFailure,
 } as const;
 
+const previewSuccessVariant = {
+  description: "Previewed deck pages as PNG images",
+  exitCode: 0,
+  schema: previewedSchema,
+} as const;
+
+const previewSuccessVariants = {
+  previewed: previewSuccessVariant,
+} as const;
+
+const previewInvalidOutputFailure = {
+  description: "Output directory is invalid or points to a non-directory path",
+  exitCode: 2,
+  schema: invalidOutputSchema,
+} as const;
+
+const previewFailedFailure = {
+  description: "Deck preview failed on one or more pages",
+  exitCode: 1,
+  schema: previewFailedSchema,
+} as const;
+
+const previewWriteFailedFailure = {
+  description: "Failed to write preview image",
+  exitCode: 1,
+  schema: writeFailedSchema,
+} as const;
+
+const previewCancelledFailure = {
+  description: "Deck preview cancelled",
+  exitCode: 130,
+  schema: cancelledSchema,
+} as const;
+
+const previewFailureVariants = {
+  invalidOutput: previewInvalidOutputFailure,
+  sourceLoadFailed: sourceLoadFailedFailure,
+  buildFailed: buildFailedFailure,
+  previewFailed: previewFailedFailure,
+  writeFailed: previewWriteFailedFailure,
+  cancelled: previewCancelledFailure,
+} as const;
+
 type BuildHandlerContext = {
   readonly input: z.infer<typeof buildInputSchema>;
   readonly dependencies: CliDependencies;
   readonly outcome: DataOutcome<"build", typeof buildSuccessVariants> &
     FailureOutcome<"build", typeof buildFailureVariants>;
+};
+
+type PreviewHandlerContext = {
+  readonly input: z.infer<typeof previewInputSchema>;
+  readonly dependencies: CliDependencies;
+  readonly outcome: DataOutcome<"preview", typeof previewSuccessVariants> &
+    FailureOutcome<"preview", typeof previewFailureVariants>;
 };
 
 async function buildDeckCommand({
@@ -232,16 +369,12 @@ async function buildDeckCommand({
       }),
     });
   } catch (error) {
-    if (dependencies.signal?.aborted && error === dependencies.signal.reason) {
+    if (isCancelledError(error, dependencies.signal)) {
       return outcome.failure.cancelled({});
     }
     if (error instanceof BuildError) {
       return outcome.failure.buildFailed({
-        diagnostics: error.diagnostics.map(({ path, code, message }) => ({
-          path,
-          code,
-          message,
-        })),
+        diagnostics: toBuildFailureDiagnostics(error.diagnostics),
       });
     }
     if (error instanceof SourceLoadError) {
@@ -255,10 +388,7 @@ async function buildDeckCommand({
   try {
     await writeArtifact(output, result.pptx);
   } catch (writeError) {
-    if (
-      dependencies.signal?.aborted &&
-      writeError === dependencies.signal.reason
-    ) {
+    if (isCancelledError(writeError, dependencies.signal)) {
       return outcome.failure.cancelled({});
     }
     return outcome.failure.writeFailed({
@@ -267,16 +397,150 @@ async function buildDeckCommand({
     });
   }
 
-  const warnings = result.report.diagnostics
-    .filter((diagnostic) => diagnostic.severity === "warning")
-    .map(({ path, code, message }) => ({ path, code, message }));
-
   return outcome.data.built({
     output,
     slides: result.report.slides.length,
+    warnings: extractWarnings(result.report.diagnostics),
+  });
+}
+
+async function previewDeckCommand({
+  input,
+  dependencies,
+  outcome,
+}: PreviewHandlerContext) {
+  if (dependencies.signal?.aborted) {
+    return outcome.failure.cancelled({});
+  }
+
+  const entry = resolve(dependencies.cwd, input.entry);
+  const outputDir = resolve(
+    dependencies.cwd,
+    input.outDir ?? `${basename(entry, extname(entry))}-preview`,
+  );
+  if (!(await isValidPreviewOutputDir(entry, outputDir))) {
+    return outcome.failure.invalidOutput({ entry, output: outputDir });
+  }
+
+  let result: Awaited<ReturnType<typeof previewFromSource>>;
+  try {
+    result = await previewFromSource(entry, {
+      ...(input.export !== undefined && { exportName: input.export }),
+      ...(dependencies.signal !== undefined && {
+        signal: dependencies.signal,
+      }),
+    });
+  } catch (error) {
+    if (isCancelledError(error, dependencies.signal)) {
+      return outcome.failure.cancelled({});
+    }
+    if (error instanceof BuildError) {
+      return outcome.failure.buildFailed({
+        diagnostics: toBuildFailureDiagnostics(error.diagnostics),
+      });
+    }
+    if (error instanceof SourceLoadError) {
+      return outcome.failure.sourceLoadFailed({
+        message: error.message,
+      });
+    }
+    throw error;
+  }
+
+  const warnings = extractWarnings(result.report.diagnostics);
+  // Base zero-padding width on total slides in the resolved deck rather than painted pages.
+  const padWidth = Math.max(2, String(result.report.slides.length).length);
+  const writtenPages: z.infer<typeof previewPageItemSchema>[] = [];
+  const failedDiagnostics: z.infer<typeof previewDiagnosticItemSchema>[] = [];
+
+  for (const pageResult of result.pages) {
+    if (dependencies.signal?.aborted) {
+      return outcome.failure.cancelled({});
+    }
+
+    const errors = pageResult.diagnostics.filter(
+      (diagnostic) => diagnostic.severity === "error",
+    );
+    if (errors.length > 0 || pageResult.png === undefined) {
+      if (errors.length > 0) {
+        failedDiagnostics.push(
+          ...errors.map(({ page, path, message }) => ({
+            page,
+            path,
+            message,
+          })),
+        );
+      } else {
+        failedDiagnostics.push({
+          page: pageResult.page,
+          path: `deck/slide[${pageResult.id}]`,
+          message: "Preview did not produce a PNG image",
+        });
+      }
+      continue;
+    }
+
+    const pageOutput = resolve(
+      outputDir,
+      `page-${String(pageResult.page).padStart(padWidth, "0")}.png`,
+    );
+    try {
+      await writeArtifact(pageOutput, pageResult.png);
+    } catch (writeError) {
+      if (isCancelledError(writeError, dependencies.signal)) {
+        return outcome.failure.cancelled({});
+      }
+      return outcome.failure.writeFailed({
+        output: pageOutput,
+        message: errorMessage(writeError),
+      });
+    }
+
+    writtenPages.push({
+      page: pageResult.page,
+      id: pageResult.id,
+      output: pageOutput,
+    });
+  }
+
+  if (failedDiagnostics.length > 0) {
+    return outcome.failure.previewFailed({
+      outputDir,
+      pages: writtenPages,
+      warnings,
+      diagnostics: failedDiagnostics,
+    });
+  }
+
+  return outcome.data.previewed({
+    outputDir,
+    pages: writtenPages,
     warnings,
   });
 }
+
+const sharedTextFailures = {
+  sourceLoadFailed: {
+    ...sourceLoadFailedFailure,
+    text: ({ message }: z.infer<typeof sourceLoadFailedSchema>) =>
+      text.lines(
+        toContractTextLines([`Failed to load deck source: ${message}`]),
+      ),
+  },
+  buildFailed: {
+    ...buildFailedFailure,
+    text: ({ diagnostics }: z.infer<typeof buildFailedSchema>) =>
+      text.lines(
+        toContractTextLines([
+          "Build failed:",
+          ...diagnostics.map(
+            (diagnostic) =>
+              `  ${diagnostic.path} [${diagnostic.code}]: ${diagnostic.message}`,
+          ),
+        ]),
+      ),
+  },
+} as const;
 
 const define = defineCli<CliDependencies>();
 
@@ -310,7 +574,7 @@ const cliContract = define({
     pptxdk: {
       kind: "rootGroup",
       name: "pptxdk",
-      description: "Build PowerPoint decks from source modules.",
+      description: "Build and preview PowerPoint decks from source modules.",
     },
     ...define.command("build")({
       kind: "command",
@@ -379,28 +643,7 @@ const cliContract = define({
                 text: () =>
                   text.line("Output path cannot overwrite deck source"),
               },
-              sourceLoadFailed: {
-                ...sourceLoadFailedFailure,
-                text: ({ message }) =>
-                  text.lines(
-                    toContractTextLines([
-                      `Failed to load deck source: ${message}`,
-                    ]),
-                  ),
-              },
-              buildFailed: {
-                ...buildFailedFailure,
-                text: ({ diagnostics }) =>
-                  text.lines(
-                    toContractTextLines([
-                      "Build failed:",
-                      ...diagnostics.map(
-                        (diagnostic) =>
-                          `  ${diagnostic.path} [${diagnostic.code}]: ${diagnostic.message}`,
-                      ),
-                    ]),
-                  ),
-              },
+              ...sharedTextFailures,
               writeFailed: {
                 ...writeFailedFailure,
                 text: ({ output, message }) =>
@@ -426,6 +669,126 @@ const cliContract = define({
             },
             failures: buildFailureVariants,
             handler: (context) => buildDeckCommand(context),
+          }),
+        },
+      })),
+    }),
+    ...define.command("preview")({
+      kind: "command",
+      parent: "pptxdk",
+      name: "preview",
+      description: "Render static PNG page previews from a source module.",
+      fields: {
+        entry: {
+          kind: "positional",
+          description: "Deck source entrypoint",
+        },
+        outDir: {
+          kind: "valueOption",
+          longOption: "--out-dir",
+          shortAlias: "-o",
+          description:
+            "Directory for preview PNGs (defaults to <entry>-preview in current directory)",
+        },
+        export: {
+          kind: "valueOption",
+          longOption: "--export",
+          shortAlias: "-e",
+          description:
+            "Named deck or component exported from entry (defaults to default)",
+        },
+      },
+      input: previewInputSchema,
+      outputs: define.outputModes("preview", previewInputSchema, (mode) => ({
+        default: "text",
+        modes: {
+          text: mode.atomic({
+            description: "Human-readable text output",
+            format: "text",
+            success: {
+              kind: "data",
+              variants: {
+                previewed: {
+                  ...previewSuccessVariant,
+                  text: ({ outputDir, pages, warnings }) =>
+                    text.lines(
+                      toContractTextLines([
+                        ...warnings.map(
+                          (warning) =>
+                            `Warning ${warning.path} [${warning.code}]: ${warning.message}`,
+                        ),
+                        `Previewed ${pages.length} page(s) in ${outputDir}`,
+                        ...pages.map(
+                          (page) =>
+                            `  Page ${page.page} (${page.id}): ${page.output}`,
+                        ),
+                      ]),
+                    ),
+                },
+              },
+            },
+            failures: {
+              invalidOutput: {
+                ...previewInvalidOutputFailure,
+                text: ({ output }) =>
+                  text.lines(
+                    toContractTextLines([
+                      `Output directory cannot be a non-directory path: ${output}`,
+                    ]),
+                  ),
+              },
+              ...sharedTextFailures,
+              previewFailed: {
+                ...previewFailedFailure,
+                text: ({ pages, warnings, diagnostics }) =>
+                  text.lines(
+                    toContractTextLines([
+                      ...warnings.map(
+                        (warning) =>
+                          `Warning ${warning.path} [${warning.code}]: ${warning.message}`,
+                      ),
+                      "Preview failed:",
+                      ...diagnostics.map(
+                        (diagnostic) =>
+                          `  Page ${diagnostic.page} ${diagnostic.path}: ${diagnostic.message}`,
+                      ),
+                      ...(pages.length > 0
+                        ? [
+                            "Written pages:",
+                            ...pages.map(
+                              (page) =>
+                                `  Page ${page.page} (${page.id}): ${page.output}`,
+                            ),
+                          ]
+                        : []),
+                    ]),
+                  ),
+              },
+              writeFailed: {
+                ...previewWriteFailedFailure,
+                text: ({ output, message }) =>
+                  text.lines(
+                    toContractTextLines([
+                      `Failed to write preview image to ${output}: ${message}`,
+                    ]),
+                  ),
+              },
+              cancelled: {
+                ...previewCancelledFailure,
+                text: () => text.line("Deck preview cancelled"),
+              },
+            },
+            handler: (context) => previewDeckCommand(context),
+          }),
+          structured: mode.atomic({
+            description: "Structured JSON output",
+            format: "structured",
+            success: {
+              kind: "data",
+              variants: previewSuccessVariants,
+            },
+            failures: previewFailureVariants,
+            handler: (context) => previewDeckCommand(context),
           }),
         },
       })),

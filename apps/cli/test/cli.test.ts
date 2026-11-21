@@ -100,7 +100,7 @@ describe("pptxdk CLI build", () => {
       kind: "directory",
       schemaVersion: "5",
       command: "pptxdk",
-      children: [{ command: "build" }],
+      children: [{ command: "build" }, { command: "preview" }],
     });
 
     const buildSchema = await runInMemory(
@@ -782,5 +782,691 @@ describe("pptxdk CLI build", () => {
       programmatic.code,
       `${programmatic.stderr}\n${programmatic.stdout}`,
     ).toBe(0);
+  });
+});
+
+describe("pptxdk CLI preview", () => {
+  it("exposes preview in CLI help and schema contract and writes all pages by default or to --out-dir", async () => {
+    const rootHelp = await runInMemory(["--help"], import.meta.dirname);
+    expect(rootHelp.code).toBe(0);
+    expect(rootHelp.stdout).toContain("build");
+    expect(rootHelp.stdout).toContain("preview");
+
+    const rootSchema = await runInMemory(["--schema"], import.meta.dirname);
+    expect(rootSchema.code).toBe(0);
+    const parsedRootSchema = JSON.parse(rootSchema.stdout) as {
+      readonly children: ReadonlyArray<{ readonly command: string }>;
+    };
+    expect(parsedRootSchema.children.map((child) => child.command)).toEqual([
+      "build",
+      "preview",
+    ]);
+
+    const previewHelp = await runInMemory(
+      ["preview", "-h"],
+      import.meta.dirname,
+    );
+    expect(previewHelp.code).toBe(0);
+    expect(previewHelp.stderr).toBe("");
+    expect(previewHelp.stdout).toContain(
+      "pptxdk preview [--output <mode>] <entry>",
+    );
+    expect(previewHelp.stdout).toContain("--out-dir");
+    expect(previewHelp.stdout).toContain("--export");
+    expect(previewHelp.stdout).toContain("--output");
+
+    const previewSchema = await runInMemory(
+      ["preview", "--schema"],
+      import.meta.dirname,
+    );
+    expect(previewSchema.code).toBe(0);
+    expect(JSON.parse(previewSchema.stdout)).toMatchObject({
+      kind: "summary",
+      schemaVersion: "5",
+      command: "preview",
+    });
+
+    const previewOutputSchema = await runInMemory(
+      ["preview", "--schema=success:structured"],
+      import.meta.dirname,
+    );
+    expect(previewOutputSchema.code).toBe(0);
+    expect(JSON.parse(previewOutputSchema.stdout)).toMatchObject({
+      kind: "success",
+      schemaVersion: "5",
+      command: "preview",
+      mode: "structured",
+      success: {
+        kind: "data",
+        variants: {
+          previewed: {
+            exitCode: 0,
+            outputSchema: {
+              required: ["outputDir", "pages", "warnings"],
+            },
+          },
+        },
+      },
+    });
+
+    const previewFailureSchema = await runInMemory(
+      ["preview", "--schema=failures:structured"],
+      import.meta.dirname,
+    );
+    expect(previewFailureSchema.code).toBe(0);
+    expect(
+      Object.keys(
+        (
+          JSON.parse(previewFailureSchema.stdout) as {
+            readonly failures: Record<string, unknown>;
+          }
+        ).failures,
+      ),
+    ).toEqual([
+      "invalidOutput",
+      "sourceLoadFailed",
+      "buildFailed",
+      "previewFailed",
+      "writeFailed",
+      "cancelled",
+    ]);
+
+    const directory = await mkdtemp(join(tmpdir(), "pptxdk preview "));
+    try {
+      const source = fixture("preview deck.tsx");
+      const defaultOutDir = join(directory, "preview deck-preview");
+
+      const defaultResult = runNode([cli, "preview", source], directory);
+      expect(defaultResult.code).toBe(0);
+      expect(defaultResult.stderr).toBe("");
+      expect(defaultResult.stdout).toContain(
+        `Previewed 1 page(s) in ${defaultOutDir}`,
+      );
+      expect(defaultResult.stdout).toContain(
+        `Page 1 (preview): ${join(defaultOutDir, "page-01.png")}`,
+      );
+
+      const defaultFiles = await readdir(defaultOutDir);
+      expect(defaultFiles).toEqual(["page-01.png"]);
+
+      const { previewFromSource } = await import("pptxdk/node");
+      const formal = await previewFromSource(source);
+      expect(formal.pages[0]?.png).toBeInstanceOf(Uint8Array);
+      expect(await readFile(join(defaultOutDir, "page-01.png"))).toEqual(
+        Buffer.from(formal.pages[0]!.png!),
+      );
+
+      const customOutDir = join(directory, "custom", "frames");
+      const customResult = await runInMemory(
+        ["preview", source, "-o", customOutDir, "--output", "structured"],
+        directory,
+      );
+      expect(customResult.code).toBe(0);
+      expect(customResult.stderr).toBe("");
+      expect(JSON.parse(customResult.stdout)).toEqual({
+        schemaVersion: "3",
+        command: "preview",
+        outputMode: "structured",
+        kind: "data",
+        variant: "previewed",
+        data: {
+          outputDir: customOutDir,
+          pages: [
+            {
+              page: 1,
+              id: "preview",
+              output: join(customOutDir, "page-01.png"),
+            },
+          ],
+          warnings: [],
+        },
+      });
+      expect(await readdir(customOutDir)).toEqual(["page-01.png"]);
+      expect(await readFile(join(customOutDir, "page-01.png"))).toEqual(
+        Buffer.from(formal.pages[0]!.png!),
+      );
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("builds and previews async vanilla decks, JSX elements, and React Hooks components via --export/-e", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "pptxdk dual "));
+    try {
+      const source = fixture("preview deck.tsx");
+      const { previewFromSource } = await import("pptxdk/node");
+      const cases = [
+        {
+          exportName: "AsyncVanillaDeck",
+          slideId: "async-vanilla",
+          shapeName: "Async Vanilla Shape",
+          flag: "--export",
+        },
+        {
+          exportName: "JsxElementDeck",
+          slideId: "jsx-element",
+          shapeName: "JSX Element Shape",
+          flag: "-e",
+        },
+        {
+          exportName: "HookComponent",
+          slideId: "hook-component",
+          shapeName: "Hook: committed",
+          flag: "--export",
+        },
+      ] as const;
+
+      for (const item of cases) {
+        const pptxOut = join(directory, `${item.exportName}.pptx`);
+        const buildResult = runNode(
+          [cli, "build", source, item.flag, item.exportName, "--out", pptxOut],
+          directory,
+        );
+        expect(buildResult.code).toBe(0);
+        const validated = await validatePptx(
+          new Uint8Array(await readFile(pptxOut)),
+        );
+        expect(validated.errors).toEqual([]);
+        expect(validated.slides).toHaveLength(1);
+        expect(validated.slides[0]?.objects[0]).toMatchObject({
+          name: item.shapeName,
+        });
+
+        const previewDir = join(directory, `${item.exportName}-preview`);
+        const previewResult = runNode(
+          [
+            cli,
+            "preview",
+            source,
+            item.flag,
+            item.exportName,
+            "--out-dir",
+            previewDir,
+          ],
+          directory,
+        );
+        expect(previewResult.code).toBe(0);
+        expect(previewResult.stderr).toBe("");
+        expect(previewResult.stdout).toContain(
+          `Page 1 (${item.slideId}): ${join(previewDir, "page-01.png")}`,
+        );
+
+        const formal = await previewFromSource(source, {
+          exportName: item.exportName,
+        });
+        expect(await readdir(previewDir)).toEqual(["page-01.png"]);
+        expect(await readFile(join(previewDir, "page-01.png"))).toEqual(
+          Buffer.from(formal.pages[0]!.png!),
+        );
+      }
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("pads page filenames based on total slide count and preserves slide ids with spaces and slashes", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "pptxdk paging "));
+    try {
+      const source = fixture("multi-slide.ts");
+
+      const specialDir = join(directory, "special");
+      const specialResult = await runInMemory(
+        [
+          "preview",
+          source,
+          "--export",
+          "SpecialIdDeck",
+          "--out-dir",
+          specialDir,
+          "--output",
+          "structured",
+        ],
+        directory,
+      );
+      expect(specialResult.code).toBe(0);
+      expect(specialResult.stderr).toBe("");
+      expect(JSON.parse(specialResult.stdout)).toEqual({
+        schemaVersion: "3",
+        command: "preview",
+        outputMode: "structured",
+        kind: "data",
+        variant: "previewed",
+        data: {
+          outputDir: specialDir,
+          pages: [
+            {
+              page: 1,
+              id: "sec 1/intro",
+              output: join(specialDir, "page-01.png"),
+            },
+            {
+              page: 2,
+              id: "sec 2/summary",
+              output: join(specialDir, "page-02.png"),
+            },
+          ],
+          warnings: [],
+        },
+      });
+      expect((await readdir(specialDir)).toSorted()).toEqual([
+        "page-01.png",
+        "page-02.png",
+      ]);
+
+      const hundredDir = join(directory, "hundred");
+      const hundredResult = await runInMemory(
+        [
+          "preview",
+          source,
+          "-e",
+          "HundredPageDeck",
+          "-o",
+          hundredDir,
+          "--output",
+          "structured",
+        ],
+        directory,
+      );
+      expect(hundredResult.code).toBe(0);
+      const parsedHundred = JSON.parse(hundredResult.stdout) as {
+        readonly data: {
+          readonly pages: ReadonlyArray<{
+            readonly page: number;
+            readonly id: string;
+            readonly output: string;
+          }>;
+        };
+      };
+      expect(parsedHundred.data.pages).toHaveLength(100);
+      expect(parsedHundred.data.pages[0]).toEqual({
+        page: 1,
+        id: "slide-1",
+        output: join(hundredDir, "page-001.png"),
+      });
+      expect(parsedHundred.data.pages[99]).toEqual({
+        page: 100,
+        id: "slide-100",
+        output: join(hundredDir, "page-100.png"),
+      });
+      const files = (await readdir(hundredDir)).toSorted();
+      expect(files).toHaveLength(100);
+      expect(files[0]).toBe("page-001.png");
+      expect(files[99]).toBe("page-100.png");
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("writes successful sibling pages atomically, preserves stale failed PNGs and unrelated files, and reports previewFailed", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "pptxdk partial "));
+    try {
+      const source = fixture("partial-failure-preview.tsx");
+      const outDir = join(directory, "preview-out");
+      await mkdir(outDir, { recursive: true });
+      await writeFile(join(outDir, "page-02.png"), "stale-png");
+      await writeFile(join(outDir, "notes.txt"), "keep-me");
+
+      const structured = await runInMemory(
+        ["preview", source, "--out-dir", outDir, "--output", "structured"],
+        directory,
+      );
+      expect(structured.code).toBe(1);
+      expect(structured.stdout).toBe("");
+      expect(JSON.parse(structured.stderr)).toEqual({
+        schemaVersion: "3",
+        command: "preview",
+        outputMode: "structured",
+        kind: "failure",
+        variant: "previewFailed",
+        data: {
+          outputDir: outDir,
+          pages: [
+            {
+              page: 1,
+              id: "warn-ok",
+              output: join(outDir, "page-01.png"),
+            },
+            {
+              page: 3,
+              id: "good-sibling",
+              output: join(outDir, "page-03.png"),
+            },
+          ],
+          warnings: [
+            {
+              path: "deck/slide[warn-ok]/shape[overflow-shape]",
+              code: "overflow",
+              message: expect.any(String),
+            },
+          ],
+          diagnostics: [
+            {
+              page: 2,
+              path: "deck/slide[bad-image]/image[corrupt-img]",
+              message: expect.stringContaining("PNG"),
+            },
+          ],
+        },
+      });
+
+      const { previewFromSource } = await import("pptxdk/node");
+      const formal = await previewFromSource(source);
+      expect(await readFile(join(outDir, "page-01.png"))).toEqual(
+        Buffer.from(formal.pages[0]!.png!),
+      );
+      expect(await readFile(join(outDir, "page-03.png"))).toEqual(
+        Buffer.from(formal.pages[2]!.png!),
+      );
+      expect(await readFile(join(outDir, "page-02.png"), "utf8")).toBe(
+        "stale-png",
+      );
+      expect(await readFile(join(outDir, "notes.txt"), "utf8")).toBe("keep-me");
+      expect((await readdir(outDir)).toSorted()).toEqual([
+        "notes.txt",
+        "page-01.png",
+        "page-02.png",
+        "page-03.png",
+      ]);
+
+      const textResult = runNode(
+        [cli, "preview", source, "--out-dir", outDir],
+        directory,
+      );
+      expect(textResult.code).toBe(1);
+      expect(textResult.stdout).toBe("");
+      expect(textResult.stderr).toContain(
+        "Warning deck/slide[warn-ok]/shape[overflow-shape] [overflow]:",
+      );
+      expect(textResult.stderr).toContain("Preview failed:");
+      expect(textResult.stderr).toContain(
+        "Page 2 deck/slide[bad-image]/image[corrupt-img]:",
+      );
+      expect(textResult.stderr).toContain("Written pages:");
+      expect(textResult.stderr).toContain(
+        `Page 1 (warn-ok): ${join(outDir, "page-01.png")}`,
+      );
+      expect(textResult.stderr).toContain(
+        `Page 3 (good-sibling): ${join(outDir, "page-03.png")}`,
+      );
+      expect(textResult.stderr).not.toContain("Page 2 (bad-image)");
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("rejects non-directory outDir with invalidOutput, avoids premature mkdir on failures, and reports writeFailed", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "pptxdk preview errors "));
+    try {
+      const missingEntryCheck = await runInMemory(["preview"], directory);
+      expect(missingEntryCheck.code).toBe(2);
+      expect(JSON.parse(missingEntryCheck.stderr)).toMatchObject({
+        schemaVersion: "3",
+        command: "preview",
+        kind: "usageFailure",
+        helpArgv: ["pptxdk", "preview", "--help"],
+        issues: [{ code: "missingRequiredField", field: "entry" }],
+      });
+
+      const source = fixture("preview deck.tsx");
+      const regularFile = join(directory, "existing-file.txt");
+      await writeFile(regularFile, "not a directory");
+      const danglingLink = join(directory, "dangling-link");
+      await symlink(join(directory, "missing-target"), danglingLink);
+
+      const fileOutDir = await runInMemory(
+        ["preview", source, "--out-dir", regularFile],
+        directory,
+      );
+      expect(fileOutDir.code).toBe(2);
+      expect(fileOutDir.stdout).toBe("");
+      expect(fileOutDir.stderr).toBe(
+        `Output directory cannot be a non-directory path: ${regularFile}\n`,
+      );
+      expect(await readFile(regularFile, "utf8")).toBe("not a directory");
+
+      for (const invalidTarget of [
+        danglingLink,
+        source,
+        join(regularFile, "child"),
+      ]) {
+        const result = await runInMemory(
+          [
+            "preview",
+            source,
+            "--out-dir",
+            invalidTarget,
+            "--output",
+            "structured",
+          ],
+          directory,
+        );
+        expect(result.code).toBe(2);
+        expect(result.stdout).toBe("");
+        expect(JSON.parse(result.stderr)).toEqual({
+          schemaVersion: "3",
+          command: "preview",
+          outputMode: "structured",
+          kind: "failure",
+          variant: "invalidOutput",
+          data: {
+            entry: source,
+            output: invalidTarget,
+          },
+        });
+      }
+
+      const missingSourceOutDir = join(directory, "no-dir-on-source-fail");
+      const sourceFailure = await runInMemory(
+        [
+          "preview",
+          source,
+          "--export",
+          "MissingExport",
+          "--out-dir",
+          missingSourceOutDir,
+          "--output",
+          "structured",
+        ],
+        directory,
+      );
+      expect(sourceFailure.code).toBe(1);
+      expect(sourceFailure.stdout).toBe("");
+      expect(JSON.parse(sourceFailure.stderr)).toMatchObject({
+        schemaVersion: "3",
+        command: "preview",
+        outputMode: "structured",
+        kind: "failure",
+        variant: "sourceLoadFailed",
+        data: { message: expect.stringContaining("MissingExport") },
+      });
+      expect(existsSync(missingSourceOutDir)).toBe(false);
+
+      const brokenOutDir = join(directory, "no-dir-on-build-fail");
+      const buildFailure = await runInMemory(
+        [
+          "preview",
+          fixture("broken deck.tsx"),
+          "--out-dir",
+          brokenOutDir,
+          "--output",
+          "structured",
+        ],
+        directory,
+      );
+      expect(buildFailure.code).toBe(1);
+      expect(buildFailure.stdout).toBe("");
+      expect(JSON.parse(buildFailure.stderr)).toMatchObject({
+        schemaVersion: "3",
+        command: "preview",
+        outputMode: "structured",
+        kind: "failure",
+        variant: "buildFailed",
+        data: {
+          diagnostics: [
+            {
+              path: "deck/slide[broken]/shape[broken-shape]",
+              code: "invalid-coordinate",
+              message: expect.any(String),
+            },
+          ],
+        },
+      });
+      expect(existsSync(brokenOutDir)).toBe(false);
+
+      // Pre-create page-01.png as a subdirectory inside a valid outDir so rename fails with EISDIR even as root.
+      const writeFailOutDir = join(directory, "write-fail-out");
+      const blockingPageDir = join(writeFailOutDir, "page-01.png");
+      await mkdir(blockingPageDir, { recursive: true });
+
+      const textWriteFailure = await runInMemory(
+        ["preview", source, "--out-dir", writeFailOutDir],
+        directory,
+      );
+      expect(textWriteFailure.code).toBe(1);
+      expect(textWriteFailure.stdout).toBe("");
+      expect(textWriteFailure.stderr).toContain(
+        `Failed to write preview image to ${blockingPageDir}:`,
+      );
+      expect(await readdir(writeFailOutDir)).toEqual(["page-01.png"]);
+
+      const structuredWriteFailure = await runInMemory(
+        [
+          "preview",
+          source,
+          "--out-dir",
+          writeFailOutDir,
+          "--output",
+          "structured",
+        ],
+        directory,
+      );
+      expect(structuredWriteFailure.code).toBe(1);
+      expect(structuredWriteFailure.stdout).toBe("");
+      expect(JSON.parse(structuredWriteFailure.stderr)).toMatchObject({
+        schemaVersion: "3",
+        command: "preview",
+        outputMode: "structured",
+        kind: "failure",
+        variant: "writeFailed",
+        data: {
+          output: blockingPageDir,
+          message: expect.any(String),
+        },
+      });
+      expect(await readdir(writeFailOutDir)).toEqual(["page-01.png"]);
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("connects pre-aborted signals and SIGINT during preview to cancelled exit status 130 without creating outDir", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "pptxdk preview cancel "));
+    try {
+      const preAborted = new AbortController();
+      preAborted.abort(new Error("aborted before preview"));
+      const preAbortOutDir = join(directory, "pre-abort-preview");
+      const structuredCancelled = await runInMemory(
+        [
+          "preview",
+          fixture("preview deck.tsx"),
+          "--out-dir",
+          preAbortOutDir,
+          "--output",
+          "structured",
+        ],
+        directory,
+        preAborted.signal,
+      );
+      expect(structuredCancelled.code).toBe(130);
+      expect(structuredCancelled.stdout).toBe("");
+      expect(JSON.parse(structuredCancelled.stderr)).toEqual({
+        schemaVersion: "3",
+        command: "preview",
+        outputMode: "structured",
+        kind: "failure",
+        variant: "cancelled",
+        data: {},
+      });
+      expect(existsSync(preAbortOutDir)).toBe(false);
+
+      const renderOutDir = join(directory, "cancelled-render-preview");
+      const renderChild = spawn(
+        process.execPath,
+        [
+          cli,
+          "preview",
+          fixture("cancelled deck.tsx"),
+          "--out-dir",
+          renderOutDir,
+        ],
+        {
+          cwd: directory,
+          stdio: ["ignore", "pipe", "pipe"],
+        },
+      );
+      let renderStdout = "";
+      let renderStderr = "";
+      let renderInterrupted = false;
+      renderChild.stdout.setEncoding("utf8");
+      renderChild.stderr.setEncoding("utf8");
+      renderChild.stdout.on("data", (chunk: string) => {
+        renderStdout += chunk;
+        if (
+          !renderInterrupted &&
+          renderStdout.includes("__pptxdk_cancel_ready__")
+        ) {
+          renderInterrupted = true;
+          renderChild.kill("SIGINT");
+        }
+      });
+      renderChild.stderr.on("data", (chunk: string) => {
+        renderStderr += chunk;
+      });
+      const renderCode = await waitForClose(renderChild);
+      expect(renderCode).toBe(130);
+      expect(renderStderr).toBe("Deck preview cancelled\n");
+      expect(existsSync(renderOutDir)).toBe(false);
+
+      const loadOutDir = join(directory, "cancelled-load-preview");
+      const loadChild = spawn(
+        process.execPath,
+        [
+          cli,
+          "preview",
+          fixture("source-load-cli-cancelled.tsx"),
+          "--out-dir",
+          loadOutDir,
+        ],
+        {
+          cwd: directory,
+          stdio: ["ignore", "pipe", "pipe"],
+        },
+      );
+      let loadStdout = "";
+      let loadStderr = "";
+      let loadInterrupted = false;
+      loadChild.stdout.setEncoding("utf8");
+      loadChild.stderr.setEncoding("utf8");
+      loadChild.stdout.on("data", (chunk: string) => {
+        loadStdout += chunk;
+        if (
+          !loadInterrupted &&
+          loadStdout.includes("__pptxdk_source_load_cancel_ready__")
+        ) {
+          loadInterrupted = true;
+          loadChild.kill("SIGINT");
+        }
+      });
+      loadChild.stderr.on("data", (chunk: string) => {
+        loadStderr += chunk;
+      });
+      const loadCode = await waitForClose(loadChild);
+      expect(loadCode).toBe(130);
+      expect(loadStderr).toBe("Deck preview cancelled\n");
+      expect(loadStderr).not.toContain("Failed to load deck source");
+      expect(existsSync(loadOutDir)).toBe(false);
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
   });
 });

@@ -90,7 +90,7 @@ describe("native content in the common document", () => {
     assert.equal(firstObject?.kind, "shape");
     assert.equal(firstObject?.authorId, "editable-shape");
     assert.equal(firstObject?.text, "Shape body");
-    assert.match(firstObject?.name ?? "", /^!!react-pptx-morph-/u);
+    assert.match(firstObject?.name ?? "", /^!!morph-\d+$/u);
     const firstXml = slideXml(first);
     assert.match(firstXml, /<a:prstGeom prst="hexagon">/u);
     assert.match(firstXml, /<a:gradFill/u);

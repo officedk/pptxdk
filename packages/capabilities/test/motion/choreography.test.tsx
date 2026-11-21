@@ -732,9 +732,7 @@ describe("plain authoring choreography", () => {
     );
     assert.equal(first.props["morphKey"], undefined);
     assert.equal(
-      result.report.slides[1]?.objects[0]?.name?.startsWith(
-        "!!react-pptx-morph-",
-      ),
+      result.report.slides[1]?.objects[0]?.name?.startsWith("!!morph-"),
       true,
     );
   });
@@ -949,7 +947,7 @@ describe("plain authoring choreography", () => {
       .flatMap(({ objects }) =>
         objects.filter(({ kind }) => kind === "shape").map(({ name }) => name),
       )
-      .filter((name) => name.startsWith("!!react-pptx-morph-"));
+      .filter((name) => name.startsWith("!!morph-"));
     assert.equal(names.length, 2);
     assert.equal(names[0], names[1]);
     const { unzipSync } = await import("fflate");

@@ -13,12 +13,16 @@ import {
   Box,
   Cell,
   Chart,
+  createMorphScope,
   Deck,
   emit,
   expandDocument,
   font,
+  Group,
+  Notes,
   P,
   Row,
+  Section,
   Shape,
   shapeCapability,
   Slide,
@@ -4674,5 +4678,344 @@ describe("public build entry", () => {
         return true;
       },
     );
+  });
+
+  it("assigns stable !!morph-N names per MorphKey across slides and isolates identical labels across scopes", async () => {
+    const scopeA = createMorphScope();
+    const scopeB = createMorphScope();
+    const cardA = scopeA.handle("card");
+    const cardB = scopeB.handle("card");
+
+    const result = await build(
+      createElement(
+        Deck,
+        { width: 960, height: 540 },
+        createElement(
+          Slide,
+          { id: "s1" },
+          createElement(Shape, {
+            id: "a1",
+            morphKey: cardA,
+            x: 40,
+            y: 60,
+            width: 120,
+            height: 80,
+          }),
+          createElement(Shape, {
+            id: "b1",
+            morphKey: cardB,
+            x: 200,
+            y: 60,
+            width: 120,
+            height: 80,
+          }),
+        ),
+        createElement(
+          Slide,
+          {
+            id: "s2",
+            transition: transitions.morph({ fallback: transitions.fade() }),
+          },
+          createElement(Shape, {
+            id: "b2",
+            morphKey: cardB,
+            x: 260,
+            y: 100,
+            width: 160,
+            height: 100,
+          }),
+          createElement(Shape, {
+            id: "a2",
+            morphKey: cardA,
+            x: 80,
+            y: 120,
+            width: 140,
+            height: 90,
+          }),
+        ),
+      ),
+    );
+
+    const file = await validatePptx(result.pptx, {
+      allowedExtensions: ["p14", "p159"],
+    });
+    assert.deepEqual(file.errors, []);
+    assert.equal(file.slides[0]?.objects[0]?.name, "!!morph-1");
+    assert.equal(file.slides[0]?.objects[1]?.name, "!!morph-2");
+    assert.equal(file.slides[1]?.objects[0]?.name, "!!morph-2");
+    assert.equal(file.slides[1]?.objects[1]?.name, "!!morph-1");
+  });
+
+  it("skips explicit object names across later slides, Group members, Box children, and hidden slides while preserving manual names", async () => {
+    const scope = createMorphScope();
+    const card = scope.handle("card");
+    const cluster = scope.handle("cluster");
+
+    const result = await build(
+      createElement(
+        Deck,
+        { width: 960, height: 540 },
+        createElement(
+          Slide,
+          { id: "s1" },
+          createElement(Shape, {
+            id: "card-1",
+            morphKey: card,
+            x: 40,
+            y: 40,
+            width: 120,
+            height: 80,
+          }),
+          createElement(
+            Group,
+            { id: "grp-1", morphKey: cluster },
+            createElement(Shape, { x: 220, y: 40, width: 80, height: 60 }),
+          ),
+        ),
+        createElement(
+          Slide,
+          {
+            id: "s2",
+            transition: transitions.morph({ fallback: transitions.fade() }),
+          },
+          createElement(Shape, {
+            id: "card-2",
+            morphKey: card,
+            x: 100,
+            y: 120,
+            width: 150,
+            height: 90,
+          }),
+          createElement(
+            Group,
+            { id: "grp-2", morphKey: cluster },
+            createElement(Shape, { x: 320, y: 120, width: 100, height: 70 }),
+          ),
+          createElement(Shape, {
+            id: "manual-top",
+            name: "!!morph-1",
+            x: 500,
+            y: 40,
+            width: 100,
+            height: 60,
+          }),
+        ),
+        createElement(
+          Slide,
+          { id: "s3" },
+          createElement(
+            Group,
+            { id: "manual-group" },
+            createElement(Shape, {
+              id: "manual-group-member",
+              name: "!!morph-2",
+              x: 40,
+              y: 40,
+              width: 90,
+              height: 60,
+            }),
+          ),
+          createElement(
+            Box,
+            { style: { display: "flex", width: 240, height: 100 } },
+            createElement(
+              Text,
+              {
+                id: "manual-box-text",
+                name: "!!morph-3",
+                style: { width: 200, height: 50 },
+              },
+              "Manual inside box",
+            ),
+          ),
+        ),
+        createElement(
+          Slide,
+          { id: "s4-hidden", hidden: true },
+          createElement(Shape, {
+            id: "manual-hidden",
+            name: "!!morph-4",
+            x: 40,
+            y: 40,
+            width: 100,
+            height: 60,
+          }),
+        ),
+      ),
+    );
+
+    const file = await validatePptx(result.pptx, {
+      allowedExtensions: ["p14", "p159"],
+    });
+    assert.deepEqual(file.errors, []);
+
+    assert.equal(file.slides[0]?.objects[0]?.name, "!!morph-5");
+    assert.equal(file.slides[0]?.objects[1]?.name, "!!morph-6");
+    assert.equal(file.slides[1]?.objects[0]?.name, "!!morph-5");
+    assert.equal(file.slides[1]?.objects[1]?.name, "!!morph-6");
+    assert.equal(file.slides[1]?.objects[2]?.name, "!!morph-1");
+    assert.equal(file.slides[2]?.objects[0]?.members?.[0]?.name, "!!morph-2");
+    assert.equal(file.slides[2]?.objects[1]?.name, "!!morph-3");
+    assert.equal(file.slides[3]?.objects[0]?.name, "!!morph-4");
+
+    const parts = unzipSync(result.pptx);
+    const slide1Xml = strFromU8(parts["ppt/slides/slide1.xml"]!);
+    const slide2Xml = strFromU8(parts["ppt/slides/slide2.xml"]!);
+    assert.match(slide1Xml, /<p:cNvPr[^>]*name="!!morph-5"/u);
+    assert.match(slide2Xml, /<p:cNvPr[^>]*name="!!morph-5"/u);
+    assert.match(slide2Xml, /<p:cNvPr[^>]*name="!!morph-1"/u);
+  });
+
+  it("excludes Section.name, Notes subtrees, and display:none subtrees from reserved object names", async () => {
+    const scope = createMorphScope();
+    const card = scope.handle("card");
+
+    const result = await build(
+      createElement(
+        Deck,
+        { width: 960, height: 540 },
+        createElement(
+          Section,
+          { name: "!!morph-1" },
+          createElement(
+            Slide,
+            { id: "s1" },
+            createElement(Shape, {
+              id: "card-1",
+              morphKey: card,
+              x: 40,
+              y: 40,
+              width: 120,
+              height: 80,
+            }),
+            createElement(
+              Box,
+              { style: { display: "none" } },
+              createElement(Shape, {
+                id: "pruned-child",
+                name: "!!morph-1",
+                x: 10,
+                y: 10,
+                width: 40,
+                height: 40,
+              }),
+            ),
+            createElement(Notes, {}, "!!morph-1"),
+          ),
+          createElement(
+            Slide,
+            {
+              id: "s2",
+              transition: transitions.morph({ fallback: transitions.fade() }),
+            },
+            createElement(Shape, {
+              id: "card-2",
+              morphKey: card,
+              x: 200,
+              y: 120,
+              width: 160,
+              height: 100,
+            }),
+          ),
+        ),
+      ),
+    );
+
+    const file = await validatePptx(result.pptx, {
+      allowedExtensions: ["p14", "p159"],
+    });
+    assert.deepEqual(file.errors, []);
+    assert.equal(file.slides[0]?.objects.length, 1);
+    assert.equal(file.slides[0]?.objects[0]?.name, "!!morph-1");
+    assert.equal(file.slides[1]?.objects[0]?.name, "!!morph-1");
+  });
+
+  it("produces identical !!morph-N names across repeated serial and concurrent builds", async () => {
+    const scope = createMorphScope();
+    const firstKey = scope.handle("first");
+    const secondKey = scope.handle("second");
+
+    const makeElement = () =>
+      createElement(
+        Deck,
+        { width: 960, height: 540 },
+        createElement(
+          Slide,
+          { id: "s1" },
+          createElement(Shape, {
+            id: "a1",
+            morphKey: firstKey,
+            x: 40,
+            y: 40,
+            width: 100,
+            height: 60,
+          }),
+          createElement(Shape, {
+            id: "b1",
+            morphKey: secondKey,
+            x: 200,
+            y: 40,
+            width: 100,
+            height: 60,
+          }),
+        ),
+        createElement(
+          Slide,
+          {
+            id: "s2",
+            transition: transitions.morph({ fallback: transitions.fade() }),
+          },
+          createElement(Shape, {
+            id: "a2",
+            morphKey: firstKey,
+            x: 80,
+            y: 100,
+            width: 140,
+            height: 80,
+          }),
+          createElement(Shape, {
+            id: "b2",
+            morphKey: secondKey,
+            x: 260,
+            y: 100,
+            width: 140,
+            height: 80,
+          }),
+          createElement(Shape, {
+            id: "reserved",
+            name: "!!morph-1",
+            x: 460,
+            y: 40,
+            width: 90,
+            height: 50,
+          }),
+        ),
+      );
+
+    const serial1 = await build(makeElement());
+    const serial2 = await build(makeElement());
+    const [concurrent1, concurrent2] = await Promise.all([
+      build(makeElement()),
+      build(makeElement()),
+    ]);
+
+    const files = await Promise.all([
+      validatePptx(serial1.pptx, { allowedExtensions: ["p14", "p159"] }),
+      validatePptx(serial2.pptx, { allowedExtensions: ["p14", "p159"] }),
+      validatePptx(concurrent1.pptx, { allowedExtensions: ["p14", "p159"] }),
+      validatePptx(concurrent2.pptx, { allowedExtensions: ["p14", "p159"] }),
+    ]);
+
+    const expected = [
+      ["!!morph-2", "!!morph-3"],
+      ["!!morph-2", "!!morph-3", "!!morph-1"],
+    ];
+    for (const file of files) {
+      assert.deepEqual(file.errors, []);
+      assert.deepEqual(
+        file.slides.map((s) => s.objects.map((o) => o.name)),
+        expected,
+      );
+    }
   });
 });

@@ -25,7 +25,7 @@ export type CellProps = CellDeclarationProps & {
 
 /** Declares an editable native table in the React root handled by the table module. */
 export function Table(props: TableProps): ReactNode {
-  return motionElement("rp:table", {
+  return motionElement("table", {
     ...props,
     [hostNodeCreator]: createTableNode,
   });
@@ -34,7 +34,7 @@ export function Table(props: TableProps): ReactNode {
 /** Declares a row of a native table; calculated from actual measurement of row content when height is omitted. */
 export function Row(props: RowProps): ReactNode {
   return createElement(
-    "rp:row",
+    "row",
     { ...props, [hostNodeCreator]: createRowNode },
     props.children,
   );
@@ -43,7 +43,7 @@ export function Row(props: RowProps): ReactNode {
 /** Declares table cell content and horizontal / vertical merge spans. */
 export function Cell(props: CellProps): ReactNode {
   return createElement(
-    "rp:cell",
+    "cell",
     { ...props, [hostNodeCreator]: createCellNode },
     props.children,
   );

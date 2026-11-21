@@ -23,7 +23,7 @@ export type NotesNode = RichTextContainer<
 export function createNotesNode(props: NotesDeclarationProps): NotesNode {
   return new RichTextContainer<"notes", NotesDeclarationProps, TextStyle>(
     "notes",
-    "rp:notes",
+    "notes",
     props,
     { pageAffiliated: true },
   );

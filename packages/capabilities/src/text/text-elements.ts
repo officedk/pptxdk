@@ -37,7 +37,7 @@ export type SlideNumberProps = SlideNumberDeclarationProps;
 
 /** Native text box; numeric height preserves a fixed region, while auto height uses explicit font measurement. */
 export function Text(props: TextProps): ReactNode {
-  return motionElement("rp:text", {
+  return motionElement("text", {
     ...props,
     [hostNodeCreator]: createTextNode,
   });
@@ -46,7 +46,7 @@ export function Text(props: TextProps): ReactNode {
 /** Declares a native paragraph within a text box, with line spacing and paragraph list semantics. */
 export function P(props: ParagraphProps): ReactNode {
   return createElement(
-    "rp:paragraph",
+    "paragraph",
     { ...props, [hostNodeCreator]: createParagraphNode },
     props.children,
   );
@@ -55,7 +55,7 @@ export function P(props: ParagraphProps): ReactNode {
 /** Declares an individually styled text run within a paragraph. */
 export function Span(props: SpanProps): ReactNode {
   return createElement(
-    "rp:span",
+    "span",
     { ...props, [hostNodeCreator]: createSpanNode },
     props.children,
   );
@@ -63,7 +63,7 @@ export function Span(props: SpanProps): ReactNode {
 
 /** Emits a native slide number field resolved by presentation applications. */
 export function SlideNumber(props: SlideNumberProps): ReactNode {
-  return createElement("rp:slide-number", {
+  return createElement("slide-number", {
     ...props,
     [hostNodeCreator]: createSlideNumberNode,
   });

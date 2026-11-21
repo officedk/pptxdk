@@ -37,7 +37,7 @@ const chartTheme = {
 
 export const chartPositiveScenario: CapabilityScenario = {
   id: "chart-clustered-column-preview",
-  capability: "rp:chart",
+  capability: "chart",
   description:
     "Dual-author Chart scenario covering single-group finite non-negative clustered column charts with title/untitled top value labels, bottom legend, fractional scale, and native chart/workbook retention.",
   visualCheckpoints: [
@@ -214,7 +214,7 @@ export const chartPositiveScenario: CapabilityScenario = {
 
 export const chartRejectionScenario: CapabilityScenario = {
   id: "chart-preview-rejections",
-  capability: "rp:chart",
+  capability: "chart",
   kind: "rejection",
   description:
     "Dual-author Chart rejection scenario verifying font-resource limitations (preview-missing-glyph and preview-unsupported-font) isolate failed pages while retaining native PPTX parts and unaffected sibling pages.",
@@ -434,7 +434,7 @@ export const chartRejectionScenario: CapabilityScenario = {
 
 export const chartAxesAndCompactScenario: CapabilityScenario = {
   id: "chart-axes-scales-and-compact-layout",
-  capability: "rp:chart",
+  capability: "chart",
   description:
     "Dual-author Chart scenario covering dual value axes (log10 & reversed percent), top/reversed category axes, major/minor gridlines, tick marks, number formats, axis titles, styled chart title, topRight legend, and compact frame / long label adaptation.",
   visualCheckpoints: [
@@ -864,7 +864,7 @@ export const chartAxesAndCompactScenario: CapabilityScenario = {
 
 export const chartBarColumnVariantsScenario: CapabilityScenario = {
   id: "chart-bar-column-variants-and-legends",
-  capability: "rp:chart",
+  capability: "chart",
   description:
     "Dual-author Chart scenario covering column and horizontal bar clustered, stacked, and percent variants with negative values, null slots, gapWidth/overlap, series/point fill & stroke overrides, and all legend positions.",
   visualCheckpoints: [
@@ -1489,7 +1489,7 @@ const lineAreaPage2Charts = [
 
 export const chartLineAreaParityScenario: CapabilityScenario = {
   id: "chart-line-area-parity",
-  capability: "rp:chart",
+  capability: "chart",
   description:
     "Dual-author Chart scenario covering line and area standard/stacked/percent variants, smooth splines, all 11 marker symbols, gap/span/zero blank modes, midCat edge alignment, and series/point overrides.",
   visualCheckpoints: [
@@ -1819,7 +1819,7 @@ const scatterPage2Charts = [
 
 export const chartScatterParityScenario: CapabilityScenario = {
   id: "chart-scatter-parity",
-  capability: "rp:chart",
+  capability: "chart",
   description:
     "Dual-author Chart scenario covering all 5 scatter marker/line presentations, unequal-length XY series with empty series and null coordinates, gap/span/zero blank handling, 4-quadrant and log10 axes, and X/Y data labels.",
   visualCheckpoints: [
@@ -2037,7 +2037,7 @@ const comboPage2Chart = {
 
 export const chartComboDualAxesScenario: CapabilityScenario = {
   id: "chart-combo-dual-axes-parity",
-  capability: "rp:chart",
+  capability: "chart",
   description:
     "Dual-author Chart scenario covering multi-group combo layering (area + column + line across primary/secondary category & value axes, and horizontal bar + scatter sharing a value axis) with mixed legend icons and data labels.",
   visualCheckpoints: [
@@ -2336,7 +2336,7 @@ const pieDoughnutPage2Charts = [
 
 export const chartPieDoughnutAndLabelsParityScenario: CapabilityScenario = {
   id: "chart-pie-doughnut-and-labels-parity",
-  capability: "rp:chart",
+  capability: "chart",
   description:
     "Dual-author Chart scenario covering 360-degree and exploded pie charts, single-ring shared and multi-ring independent-category doughnut charts, firstSliceAngle, holeSize, leaderLines, and 3-level data labels with seriesName, separator, and position overrides.",
   visualCheckpoints: [
@@ -2690,7 +2690,7 @@ const annotationsPage2Charts = [
 
 export const chartTrendlinesAndErrorBarsParityScenario: CapabilityScenario = {
   id: "chart-trendlines-and-error-bars-parity",
-  capability: "rp:chart",
+  capability: "chart",
   description:
     "Dual-author Chart scenario covering all 6 trendline types (linear, exponential, logarithmic, polynomial with intercept, power, movingAverage) with forward/backward forecasts and equation/R-squared display, plus all 5 error bar modes (fixed, percentage, standardDeviation, standardError, custom) with include/endCap options and scatter XY bidirectional error bars.",
   visualCheckpoints: [
@@ -3111,7 +3111,7 @@ const discreteParityPage2Charts: readonly ChartProps[] = [
 
 export const chartDiscreteParityEdgeCasesScenario: CapabilityScenario = {
   id: "chart-discrete-dashes-crosses-formats-and-edge-branches",
-  capability: "rp:chart",
+  capability: "chart",
   description:
     "Dual-author Chart scenario covering longDash* stroke styles, explicit crossesAt & hidden/in-tick axes, top/left/bottom legends, explicit plotArea, horizontal bar & line/scatter label positions, styled title decoration/shadow, stacked negative line/area, gap isolated points, scatter zero blanks + exponential intercept + negative-term polynomial, 360-degree doughnut, and multi-section/scientific/thousands/currency number formats.",
   visualCheckpoints: [

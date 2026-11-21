@@ -220,7 +220,7 @@ function paintTextModel(
 
 /** Fixed-region and content-sized text box capability bound per formal build. */
 export const textCapability: ObjectCapabilityModule = {
-  declaration: "rp:text",
+  declaration: "text",
 
   bind(
     input: CapabilityInput,

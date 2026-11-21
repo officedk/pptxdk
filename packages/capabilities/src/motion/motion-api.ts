@@ -258,14 +258,14 @@ type MotionScopeNodeProps = MotionScopeAuthorProps;
 export function createMotionScopeNode(
   props: MotionScopeNodeProps,
 ): CommonContainer<"motion-scope", MotionScopeNodeProps> {
-  return new CommonContainer("motion-scope", "rp:motion-scope", props);
+  return new CommonContainer("motion-scope", "motion-scope", props);
 }
 
 /** Creates the editable click-step container shared by the command factory and the JSX entry. */
 export function createMotionStepNode(
   props: MotionStepNodeProps,
 ): CommonContainer<"motion-step", MotionStepNodeProps> {
-  return new CommonContainer("motion-step", "rp:motion-step", props);
+  return new CommonContainer("motion-step", "motion-step", props);
 }
 
 let nextMotionIdentity = 1;

@@ -110,7 +110,7 @@ export function createImageNode(
     "image",
     ImageDeclarationProps,
     NonNullable<ImageDeclarationProps["style"]>
-  >("image", "rp:image", props);
+  >("image", "image", props);
 }
 
 type ImageFit = "fill" | "cover" | "contain";
@@ -522,7 +522,7 @@ function cropValues(
 
 /** Image module reads and validates formal resources, encapsulates bound state, and emits native picture objects. */
 export const imageCapability: BoundObjectCapabilityModule = {
-  declaration: "rp:image",
+  declaration: "image",
 
   bind(
     input: CapabilityInput,

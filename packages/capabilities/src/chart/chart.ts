@@ -19,9 +19,9 @@ import {
   type PaintOutput,
   type ResolvedObject,
   type ThemeContext,
-} from "@react-pptx/core/capability";
-import { CommonNode } from "@react-pptx/core/document";
-import { pxToEmu, xmlEscape } from "@react-pptx/emit";
+} from "@pptxdk/core/capability";
+import { CommonNode } from "@pptxdk/core/document";
+import { pxToEmu, xmlEscape } from "@pptxdk/emit";
 
 import {
   fontPresentationContributions,

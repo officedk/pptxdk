@@ -7,8 +7,8 @@ import {
   type SlideEmitOutput,
   type TextStyle,
   type ThemeContext,
-} from "@react-pptx/core/capability";
-import { themeXml, xmlEscape } from "@react-pptx/emit";
+} from "@pptxdk/core/capability";
+import { themeXml, xmlEscape } from "@pptxdk/emit";
 
 import {
   emitTextBody,

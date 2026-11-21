@@ -7,7 +7,7 @@ import {
   type NativeColorSlot,
   type ResolvedColor,
   type Theme,
-} from "@react-pptx/core/theme";
+} from "@pptxdk/core/theme";
 
 import { shapeTreeXml } from "#/shape-tree.ts";
 

@@ -19,8 +19,8 @@ import {
   type PaintOutput,
   type PreviewTransform,
   type ResolvedObject,
-} from "@react-pptx/core/capability";
-import { assertXml10Characters, xmlEscape } from "@react-pptx/emit";
+} from "@pptxdk/core/capability";
+import { assertXml10Characters, xmlEscape } from "@pptxdk/emit";
 
 import { motionAnnotations } from "../motion/motion-api.ts";
 import {

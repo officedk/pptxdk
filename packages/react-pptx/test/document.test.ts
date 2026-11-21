@@ -4,6 +4,7 @@ import { getEventListeners } from "node:events";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
+import { validatePptx } from "@pptxdk/validation";
 import {
   box,
   build,
@@ -20,7 +21,6 @@ import {
   type ChartTrendline,
   type LinearGradient,
 } from "@react-pptx/react-pptx/document";
-import { validatePptx } from "@react-pptx/validation";
 import { strFromU8, unzipSync } from "fflate";
 import { describe, it } from "vitest";
 
@@ -625,8 +625,8 @@ registerHooks({
       specifier === "react" ||
       specifier === "react-reconciler" ||
       specifier.startsWith("react/") ||
-      specifier === "@react-pptx/react" ||
-      specifier.startsWith("@react-pptx/react/")
+      specifier === "@pptxdk/react" ||
+      specifier.startsWith("@pptxdk/react/")
     ) {
       throw new Error("pure document entry loaded " + specifier);
     }

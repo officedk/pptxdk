@@ -5,19 +5,19 @@ import {
   chartCapability,
   type ChartProps,
   type ChartSeries,
-} from "@react-pptx/capabilities/chart";
-import { Chart } from "@react-pptx/capabilities/chart-elements";
+} from "@pptxdk/capabilities/chart";
+import { Chart } from "@pptxdk/capabilities/chart-elements";
 import {
   chart as documentChart,
   deck,
   slide as documentSlide,
-} from "@react-pptx/capabilities/document";
-import { font } from "@react-pptx/capabilities/font";
-import { fade, spin } from "@react-pptx/capabilities/motion";
-import { Step } from "@react-pptx/capabilities/motion-elements";
-import { BuildError } from "@react-pptx/core";
-import { Deck, Slide } from "@react-pptx/react";
-import { validatePptx, type FileChartSeries } from "@react-pptx/validation";
+} from "@pptxdk/capabilities/document";
+import { font } from "@pptxdk/capabilities/font";
+import { fade, spin } from "@pptxdk/capabilities/motion";
+import { Step } from "@pptxdk/capabilities/motion-elements";
+import { BuildError } from "@pptxdk/core";
+import { Deck, Slide } from "@pptxdk/react";
+import { validatePptx, type FileChartSeries } from "@pptxdk/validation";
 import { strFromU8, strToU8, unzipSync, zipSync } from "fflate";
 import { describe, it, vi } from "vitest";
 

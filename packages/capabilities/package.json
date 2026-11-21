@@ -1,7 +1,12 @@
 {
-  "name": "@react-pptx/capabilities",
+  "name": "@pptxdk/capabilities",
   "version": "0.0.0",
   "private": true,
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/pptxdk/pptxdk.git",
+    "directory": "packages/capabilities"
+  },
   "files": [
     "dist"
   ],
@@ -140,8 +145,8 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@react-pptx/core": "workspace:*",
-    "@react-pptx/emit": "workspace:*",
+    "@pptxdk/core": "workspace:*",
+    "@pptxdk/emit": "workspace:*",
     "fflate": "catalog:",
     "fontkit": "catalog:",
     "harfbuzzjs": "catalog:",
@@ -151,10 +156,10 @@
     "react": "catalog:"
   },
   "devDependencies": {
-    "@react-pptx/preview": "workspace:*",
-    "@react-pptx/react": "workspace:*",
-    "@react-pptx/tooling-config": "workspace:*",
-    "@react-pptx/validation": "workspace:*",
+    "@pptxdk/preview": "workspace:*",
+    "@pptxdk/react": "workspace:*",
+    "@pptxdk/tooling-config": "workspace:*",
+    "@pptxdk/validation": "workspace:*",
     "@types/fontkit": "catalog:",
     "@types/node": "catalog:",
     "@types/pngjs": "catalog:",

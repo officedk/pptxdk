@@ -4,20 +4,20 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 
-import { Box } from "@react-pptx/capabilities/box-elements";
-import { font } from "@react-pptx/capabilities/font";
-import { groupCapability } from "@react-pptx/capabilities/group";
-import { Group } from "@react-pptx/capabilities/group-elements";
-import { imageCapability } from "@react-pptx/capabilities/image";
-import { Image } from "@react-pptx/capabilities/image-elements";
-import { shapeCapability } from "@react-pptx/capabilities/shape";
-import { Shape } from "@react-pptx/capabilities/shape-elements";
-import { P, Span, Text } from "@react-pptx/capabilities/text-elements";
-import { BuildError } from "@react-pptx/core";
-import { createResolver } from "@react-pptx/core/build";
-import { emit } from "@react-pptx/emit";
-import { Deck, expandDocument, Slide } from "@react-pptx/react";
-import { validatePptx } from "@react-pptx/validation";
+import { Box } from "@pptxdk/capabilities/box-elements";
+import { font } from "@pptxdk/capabilities/font";
+import { groupCapability } from "@pptxdk/capabilities/group";
+import { Group } from "@pptxdk/capabilities/group-elements";
+import { imageCapability } from "@pptxdk/capabilities/image";
+import { Image } from "@pptxdk/capabilities/image-elements";
+import { shapeCapability } from "@pptxdk/capabilities/shape";
+import { Shape } from "@pptxdk/capabilities/shape-elements";
+import { P, Span, Text } from "@pptxdk/capabilities/text-elements";
+import { BuildError } from "@pptxdk/core";
+import { createResolver } from "@pptxdk/core/build";
+import { emit } from "@pptxdk/emit";
+import { Deck, expandDocument, Slide } from "@pptxdk/react";
+import { validatePptx } from "@pptxdk/validation";
 import { strFromU8, unzipSync, zipSync } from "fflate";
 import { createElement, type ComponentType } from "react";
 import { describe, it, vi } from "vitest";
@@ -272,7 +272,7 @@ describe("images and native groups", () => {
   });
 
   it("reads image resources from local paths and file URLs", async () => {
-    const directory = mkdtempSync(join(tmpdir(), "react-pptx-image-"));
+    const directory = mkdtempSync(join(tmpdir(), "pptxdk-image-"));
     const path = join(directory, "pixel.png");
     writeFileSync(path, png);
     try {
@@ -531,7 +531,7 @@ describe("images and native groups", () => {
       [
         {
           id: "missing",
-          src: new URL("file:///tmp/react-pptx-no-image.png"),
+          src: new URL("file:///tmp/pptxdk-no-image.png"),
         },
         "image-read-failed",
       ],

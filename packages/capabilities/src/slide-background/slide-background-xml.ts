@@ -1,5 +1,5 @@
-import type { ResolvedColor } from "@react-pptx/core/capability";
-import { resolvedColorXml, xmlEscape } from "@react-pptx/emit";
+import type { ResolvedColor } from "@pptxdk/core/capability";
+import { resolvedColorXml, xmlEscape } from "@pptxdk/emit";
 
 import {
   gradientFillXml,

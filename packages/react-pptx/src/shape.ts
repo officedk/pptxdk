@@ -1,7 +1,7 @@
-import { boxCapability } from "@react-pptx/capabilities/box";
-import { motionCapability } from "@react-pptx/capabilities/motion";
-import { shapeCapability } from "@react-pptx/capabilities/shape";
-import { transitionCapability } from "@react-pptx/capabilities/transition";
+import { boxCapability } from "@pptxdk/capabilities/box";
+import { motionCapability } from "@pptxdk/capabilities/motion";
+import { shapeCapability } from "@pptxdk/capabilities/shape";
+import { transitionCapability } from "@pptxdk/capabilities/transition";
 
 import { createStagePipeline } from "./compose.ts";
 
@@ -12,11 +12,11 @@ export const { build } = createStagePipeline([
   motionCapability,
 ]);
 
-export { formatBaseline, targets } from "@react-pptx/core";
-export { Deck } from "@react-pptx/react";
-export { Box, type BoxProps } from "@react-pptx/capabilities/box-elements";
+export { formatBaseline, targets } from "@pptxdk/core";
+export { Deck } from "@pptxdk/react";
+export { Box, type BoxProps } from "@pptxdk/capabilities/box-elements";
 export { Slide } from "./slide.ts";
-export { Shape } from "@react-pptx/capabilities/shape-elements";
+export { Shape } from "@pptxdk/capabilities/shape-elements";
 export {
   blockArc,
   linearGradient,
@@ -24,7 +24,7 @@ export {
   preset,
   radialGradient,
   shapeCapability,
-} from "@react-pptx/capabilities/shape";
+} from "@pptxdk/capabilities/shape";
 export type {
   GradientStop,
   LayoutStyle,
@@ -32,9 +32,9 @@ export type {
   RadialGradient,
   Shadow,
   VisualStyle,
-} from "@react-pptx/core";
-export type { ImageVisualStyle } from "@react-pptx/capabilities";
-export { Step } from "@react-pptx/capabilities/motion-elements";
+} from "@pptxdk/core";
+export type { ImageVisualStyle } from "@pptxdk/capabilities";
+export { Step } from "@pptxdk/capabilities/motion-elements";
 export {
   fade,
   fly,
@@ -46,7 +46,7 @@ export {
   stretch,
   wipe,
   zoom,
-} from "@react-pptx/capabilities/motion";
+} from "@pptxdk/capabilities/motion";
 export type {
   Easing,
   Effect,
@@ -61,8 +61,8 @@ export type {
   MotionStepObservation,
   SpinOptions,
   StepProps,
-} from "@react-pptx/capabilities/motion";
-export type { ShapeProps } from "@react-pptx/capabilities/shape-elements";
+} from "@pptxdk/capabilities/motion";
+export type { ShapeProps } from "@pptxdk/capabilities/shape-elements";
 export type {
   CustomGeometry,
   Geometry,
@@ -71,7 +71,7 @@ export type {
   PathOptions,
   PresetGeometry,
   PresetGeometryName,
-} from "@react-pptx/capabilities/shape";
+} from "@pptxdk/capabilities/shape";
 export type {
   BuildOptions,
   BuildReport,
@@ -80,12 +80,12 @@ export type {
   ObjectObservation,
   SlideObservation,
   Target,
-} from "@react-pptx/core";
+} from "@pptxdk/core";
 export type { SlideProps } from "./slide.ts";
 export {
   transitionCapability,
   transitions,
-} from "@react-pptx/capabilities/transition";
+} from "@pptxdk/capabilities/transition";
 export type {
   FlipTransition,
   MorphTransition,
@@ -95,4 +95,4 @@ export type {
   TransitionDirection,
   TransitionDuration,
   TransitionSpeed,
-} from "@react-pptx/capabilities/transition";
+} from "@pptxdk/capabilities/transition";

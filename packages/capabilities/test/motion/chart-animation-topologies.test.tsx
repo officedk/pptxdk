@@ -10,14 +10,14 @@ import {
   useMotionScope,
   type MotionEffectObservation,
   type MotionObservation,
-} from "@react-pptx/capabilities";
+} from "@pptxdk/capabilities";
 import {
   chart as documentChart,
   deck,
   slide,
-} from "@react-pptx/capabilities/document";
-import { Deck, Slide } from "@react-pptx/react";
-import { validatePptx } from "@react-pptx/validation";
+} from "@pptxdk/capabilities/document";
+import { Deck, Slide } from "@pptxdk/react";
+import { validatePptx } from "@pptxdk/validation";
 import { strFromU8, strToU8, unzipSync, zipSync } from "fflate";
 import { describe, it } from "vitest";
 

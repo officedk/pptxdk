@@ -1,5 +1,5 @@
-import { documentCapabilities } from "@react-pptx/capabilities/document";
-import { emit } from "@react-pptx/emit";
+import { documentCapabilities } from "@pptxdk/capabilities/document";
+import { emit } from "@pptxdk/emit";
 
 import { createStagePipeline } from "./compose.ts";
 
@@ -36,8 +36,8 @@ export {
   lighter,
   nativeColorSlots,
   targets,
-} from "@react-pptx/core";
-export { Deck, Section } from "@react-pptx/react";
+} from "@pptxdk/core";
+export { Deck, Section } from "@pptxdk/react";
 export { Slide } from "./slide.ts";
 export {
   after,
@@ -90,7 +90,7 @@ export {
   useMotionScope,
   wipe,
   zoom,
-} from "@react-pptx/capabilities";
+} from "@pptxdk/capabilities";
 export type {
   ChartAxis,
   ChartAxisCrossing,
@@ -159,27 +159,23 @@ export type {
   PathOptions,
   PresetGeometry,
   PresetGeometryName,
-} from "@react-pptx/capabilities";
-export { appendJSX, expandDocument } from "@react-pptx/react";
-export {
-  CommonContainer,
-  CommonNode,
-  RichTextContainer,
-} from "@react-pptx/core";
+} from "@pptxdk/capabilities";
+export { appendJSX, expandDocument } from "@pptxdk/react";
+export { CommonContainer, CommonNode, RichTextContainer } from "@pptxdk/core";
 export type {
   AppendJSXOptions,
   DeckProps,
   ExpandDocumentOptions,
   ExpandedDocument,
   SectionProps,
-} from "@react-pptx/react";
+} from "@pptxdk/react";
 export type {
   DocumentProps,
   DocumentStyle,
   DocumentUpdate,
   RichTextItem,
   StyleUpdate,
-} from "@react-pptx/core";
+} from "@pptxdk/core";
 export type {
   AuthorNodeGuard,
   BuildQuery,
@@ -225,7 +221,7 @@ export type {
   ThemeInput,
   ThemeScope,
   ThemeShade,
-} from "@react-pptx/core";
+} from "@pptxdk/core";
 export type { SlideProps } from "./slide.ts";
 export type {
   GroupProps,
@@ -304,7 +300,7 @@ export type {
   RepeatedEffect,
   SpinOptions,
   StepProps,
-} from "@react-pptx/capabilities";
+} from "@pptxdk/capabilities";
 export type {
   FlipTransition,
   MorphTransition,
@@ -314,4 +310,4 @@ export type {
   TransitionDirection,
   TransitionDuration,
   TransitionSpeed,
-} from "@react-pptx/capabilities";
+} from "@pptxdk/capabilities";

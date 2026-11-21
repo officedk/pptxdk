@@ -12,19 +12,19 @@ import {
   shape,
   slide,
   span,
-} from "@react-pptx/capabilities/document";
-import { Group } from "@react-pptx/capabilities/group-elements";
-import { Shape } from "@react-pptx/capabilities/shape-elements";
+} from "@pptxdk/capabilities/document";
+import { Group } from "@pptxdk/capabilities/group-elements";
+import { Shape } from "@pptxdk/capabilities/shape-elements";
 import {
   BuildError,
   type CapabilityModule,
   type CommonNode,
-} from "@react-pptx/core";
-import { createResolver } from "@react-pptx/core/build";
-import { emit } from "@react-pptx/emit";
-import { paint } from "@react-pptx/preview";
-import { Deck, Slide, expandDocument } from "@react-pptx/react";
-import { validatePptx } from "@react-pptx/validation";
+} from "@pptxdk/core";
+import { createResolver } from "@pptxdk/core/build";
+import { emit } from "@pptxdk/emit";
+import { paint } from "@pptxdk/preview";
+import { Deck, Slide, expandDocument } from "@pptxdk/react";
+import { validatePptx } from "@pptxdk/validation";
 import { PNG } from "pngjs";
 import { createElement } from "react";
 import { describe, expect, it } from "vitest";

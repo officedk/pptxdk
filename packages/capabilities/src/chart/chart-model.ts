@@ -3,7 +3,7 @@ import type {
   LayoutStyle,
   LinkTarget,
   MorphKey,
-} from "@react-pptx/core/capability";
+} from "@pptxdk/core/capability";
 
 import type { TextStyle } from "../shared/text-service.ts";
 import type {

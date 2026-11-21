@@ -1,7 +1,7 @@
-import { motionCapability } from "@react-pptx/capabilities/motion";
-import { notesCapability } from "@react-pptx/capabilities/notes";
-import { textCapability } from "@react-pptx/capabilities/text";
-import { transitionCapability } from "@react-pptx/capabilities/transition";
+import { motionCapability } from "@pptxdk/capabilities/motion";
+import { notesCapability } from "@pptxdk/capabilities/notes";
+import { textCapability } from "@pptxdk/capabilities/text";
+import { transitionCapability } from "@pptxdk/capabilities/transition";
 
 import { createStagePipeline } from "./compose.ts";
 
@@ -12,15 +12,15 @@ export const { build } = createStagePipeline([
   motionCapability,
 ]);
 
-export { formatBaseline, targets } from "@react-pptx/core";
-export { Deck } from "@react-pptx/react";
-export { Box, type BoxProps } from "@react-pptx/capabilities/box-elements";
+export { formatBaseline, targets } from "@pptxdk/core";
+export { Deck } from "@pptxdk/react";
+export { Box, type BoxProps } from "@pptxdk/capabilities/box-elements";
 export { Slide } from "./slide.ts";
-export { font, textCapability } from "@react-pptx/capabilities/text";
-export { P, Span, Text } from "@react-pptx/capabilities/text-elements";
-export { Notes } from "@react-pptx/capabilities/notes-elements";
-export { notesCapability } from "@react-pptx/capabilities/notes";
-export { Step } from "@react-pptx/capabilities/motion-elements";
+export { font, textCapability } from "@pptxdk/capabilities/text";
+export { P, Span, Text } from "@pptxdk/capabilities/text-elements";
+export { Notes } from "@pptxdk/capabilities/notes-elements";
+export { notesCapability } from "@pptxdk/capabilities/notes";
+export { Step } from "@pptxdk/capabilities/motion-elements";
 export {
   fade,
   fly,
@@ -32,7 +32,7 @@ export {
   stretch,
   wipe,
   zoom,
-} from "@react-pptx/capabilities/motion";
+} from "@pptxdk/capabilities/motion";
 export type {
   Easing,
   Effect,
@@ -47,7 +47,7 @@ export type {
   MotionStepObservation,
   SpinOptions,
   StepProps,
-} from "@react-pptx/capabilities/motion";
+} from "@pptxdk/capabilities/motion";
 export type {
   BuildOptions,
   BuildReport,
@@ -57,7 +57,7 @@ export type {
   ObjectObservation,
   SlideObservation,
   Target,
-} from "@react-pptx/core";
+} from "@pptxdk/core";
 export type {
   Font,
   FontFace,
@@ -69,21 +69,21 @@ export type {
   TextAlignment,
   TextList,
   TextStyle,
-} from "@react-pptx/capabilities/text";
+} from "@pptxdk/capabilities/text";
 export type {
   ParagraphProps,
   TextProps,
-} from "@react-pptx/capabilities/text-elements";
+} from "@pptxdk/capabilities/text-elements";
 export type {
   NotesDeclarationProps,
   NotesNode,
-} from "@react-pptx/capabilities/notes-declaration";
-export type { NotesProps } from "@react-pptx/capabilities/notes-elements";
+} from "@pptxdk/capabilities/notes-declaration";
+export type { NotesProps } from "@pptxdk/capabilities/notes-elements";
 export type { SlideProps } from "./slide.ts";
 export {
   transitionCapability,
   transitions,
-} from "@react-pptx/capabilities/transition";
+} from "@pptxdk/capabilities/transition";
 export type {
   FlipTransition,
   MorphTransition,
@@ -93,4 +93,4 @@ export type {
   TransitionDirection,
   TransitionDuration,
   TransitionSpeed,
-} from "@react-pptx/capabilities/transition";
+} from "@pptxdk/capabilities/transition";

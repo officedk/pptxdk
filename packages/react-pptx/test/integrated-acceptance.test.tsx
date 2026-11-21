@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 
+import { validatePptx, type FileObject } from "@pptxdk/validation";
 import {
   after,
   appendJSX,
@@ -50,7 +51,6 @@ import {
   type TextNode,
 } from "@react-pptx/react-pptx/document";
 import { paint } from "@react-pptx/react-pptx/preview";
-import { validatePptx, type FileObject } from "@react-pptx/validation";
 import { strFromU8, unzipSync } from "fflate";
 import { createContext, createElement, Fragment, useContext } from "react";
 import { describe, it } from "vitest";

@@ -10,20 +10,16 @@ import {
   slide,
   slideNumber,
   span,
-} from "@react-pptx/capabilities/document";
-import {
-  blockArc,
-  linearGradient,
-  preset,
-} from "@react-pptx/capabilities/shape";
-import { Shape } from "@react-pptx/capabilities/shape-elements";
-import { P, SlideNumber, Span } from "@react-pptx/capabilities/text-elements";
-import type { CapabilityModule, CommonNode } from "@react-pptx/core";
-import { createResolver } from "@react-pptx/core/build";
-import { emit } from "@react-pptx/emit";
-import { paint } from "@react-pptx/preview";
-import { Deck, Slide, expandDocument } from "@react-pptx/react";
-import { validatePptx } from "@react-pptx/validation";
+} from "@pptxdk/capabilities/document";
+import { blockArc, linearGradient, preset } from "@pptxdk/capabilities/shape";
+import { Shape } from "@pptxdk/capabilities/shape-elements";
+import { P, SlideNumber, Span } from "@pptxdk/capabilities/text-elements";
+import type { CapabilityModule, CommonNode } from "@pptxdk/core";
+import { createResolver } from "@pptxdk/core/build";
+import { emit } from "@pptxdk/emit";
+import { paint } from "@pptxdk/preview";
+import { Deck, Slide, expandDocument } from "@pptxdk/react";
+import { validatePptx } from "@pptxdk/validation";
 import { PNG } from "pngjs";
 import { createElement } from "react";
 import { describe, expect, it } from "vitest";
@@ -286,8 +282,8 @@ describe("Slice 2: Shape static preview", () => {
   it("renders gradients, image fills, borderRadius, dashed/dotted borders, open-path arrows, boxShadow, and softEdge with zero diagnostics", async () => {
     const previewDoc = runDocPreview(documentCapabilities);
     const { PNG } = await import("pngjs");
-    const { arrowTypes } = await import("@react-pptx/capabilities");
-    const { path } = await import("@react-pptx/capabilities/shape");
+    const { arrowTypes } = await import("@pptxdk/capabilities");
+    const { path } = await import("@pptxdk/capabilities/shape");
 
     const samplePng = new PNG({ width: 4, height: 4 });
     for (let i = 0; i < samplePng.data.length; i += 4) {

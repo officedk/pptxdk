@@ -3,18 +3,18 @@ import {
   type BuildQuery,
   type Resolution,
   type ResolutionReport,
-} from "@react-pptx/core/build";
+} from "@pptxdk/core/build";
 import type {
   GeometryBox,
   LayoutObservation,
   ObjectObservation,
   PreviewTransform,
   PreviewWarning,
-} from "@react-pptx/core/capability";
+} from "@pptxdk/core/capability";
 import {
   getInternalResolution,
   type ResolvedObjectLayer,
-} from "@react-pptx/core/resolution";
+} from "@pptxdk/core/resolution";
 import { Resvg } from "@resvg/resvg-js";
 
 export type { PreviewTransform, PreviewWarning };

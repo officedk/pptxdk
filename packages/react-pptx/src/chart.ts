@@ -1,6 +1,6 @@
-import { chartCapability } from "@react-pptx/capabilities/chart";
-import { motionCapability } from "@react-pptx/capabilities/motion";
-import { transitionCapability } from "@react-pptx/capabilities/transition";
+import { chartCapability } from "@pptxdk/capabilities/chart";
+import { motionCapability } from "@pptxdk/capabilities/motion";
+import { transitionCapability } from "@pptxdk/capabilities/transition";
 
 import { createStagePipeline } from "./compose.ts";
 
@@ -10,12 +10,12 @@ export const { build } = createStagePipeline([
   transitionCapability,
 ]);
 
-export { formatBaseline, targets } from "@react-pptx/core";
-export { Deck } from "@react-pptx/react";
+export { formatBaseline, targets } from "@pptxdk/core";
+export { Deck } from "@pptxdk/react";
 export { Slide } from "./slide.ts";
-export { Chart } from "@react-pptx/capabilities/chart-elements";
-export { chartCapability } from "@react-pptx/capabilities/chart";
-export { Step } from "@react-pptx/capabilities/motion-elements";
+export { Chart } from "@pptxdk/capabilities/chart-elements";
+export { chartCapability } from "@pptxdk/capabilities/chart";
+export { Step } from "@pptxdk/capabilities/motion-elements";
 export {
   fade,
   fly,
@@ -27,11 +27,11 @@ export {
   stretch,
   wipe,
   zoom,
-} from "@react-pptx/capabilities/motion";
+} from "@pptxdk/capabilities/motion";
 export {
   transitionCapability,
   transitions,
-} from "@react-pptx/capabilities/transition";
+} from "@pptxdk/capabilities/transition";
 export type {
   BuildOptions,
   BuildReport,
@@ -40,7 +40,7 @@ export type {
   ObjectObservation,
   SlideObservation,
   Target,
-} from "@react-pptx/core";
+} from "@pptxdk/core";
 export type {
   ChartAxis,
   ChartAxisCrossing,
@@ -88,5 +88,5 @@ export type {
   ScatterErrorBars,
   ScatterLine,
   SharedCategoryData,
-} from "@react-pptx/capabilities/chart";
+} from "@pptxdk/capabilities/chart";
 export type { SlideProps } from "./slide.ts";

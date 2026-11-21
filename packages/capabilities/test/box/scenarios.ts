@@ -2,8 +2,8 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 
-import { arrowTypes } from "@react-pptx/capabilities";
-import { Box } from "@react-pptx/capabilities/box-elements";
+import { arrowTypes } from "@pptxdk/capabilities";
+import { Box } from "@pptxdk/capabilities/box-elements";
 import {
   box,
   deck,
@@ -11,15 +11,15 @@ import {
   shape,
   slide,
   text,
-} from "@react-pptx/capabilities/document";
+} from "@pptxdk/capabilities/document";
 import {
   linearGradient,
   path,
   radialGradient,
-} from "@react-pptx/capabilities/shape";
-import { Shape } from "@react-pptx/capabilities/shape-elements";
-import { Text } from "@react-pptx/capabilities/text-elements";
-import { Deck, Slide } from "@react-pptx/react";
+} from "@pptxdk/capabilities/shape";
+import { Shape } from "@pptxdk/capabilities/shape-elements";
+import { Text } from "@pptxdk/capabilities/text-elements";
+import { Deck, Slide } from "@pptxdk/react";
 import { strFromU8, unzipSync } from "fflate";
 import { PNG } from "pngjs";
 import { createElement } from "react";

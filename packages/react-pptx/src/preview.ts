@@ -1,20 +1,17 @@
-import { documentCapabilities } from "@react-pptx/capabilities/document";
+import { documentCapabilities } from "@pptxdk/capabilities/document";
 import {
   createResolver,
   type BuildQuery,
   type Resolution,
   type ResolutionReport,
-} from "@react-pptx/core/build";
-import type {
-  PreviewTransform,
-  PreviewWarning,
-} from "@react-pptx/core/capability";
-import { CommonNode } from "@react-pptx/core/document";
+} from "@pptxdk/core/build";
+import type { PreviewTransform, PreviewWarning } from "@pptxdk/core/capability";
+import { CommonNode } from "@pptxdk/core/document";
 import {
   paint,
   type PreviewOptions,
   type PreviewResult,
-} from "@react-pptx/preview";
+} from "@pptxdk/preview";
 import type { ReactNode } from "react";
 
 const resolveDocument = createResolver(documentCapabilities);
@@ -44,7 +41,7 @@ export async function preview(
       pages,
     });
   }
-  const { expandDocument } = await import("@react-pptx/react");
+  const { expandDocument } = await import("@pptxdk/react");
   const document = await expandDocument(input, signalOption);
   const resolution = resolveDocument(document, signalOption);
   const { pages } = paint(resolution, options);
@@ -74,4 +71,4 @@ export type {
   PreviewSeverity,
   ScreenGeometry,
   ScreenPoint,
-} from "@react-pptx/preview";
+} from "@pptxdk/preview";

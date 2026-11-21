@@ -8,8 +8,8 @@ import {
   type SlideEmitOutput,
   type SlideResolveContext,
   type TransparentCapabilityModule,
-} from "@react-pptx/core/capability";
-import { pxToEmu, xmlEscape } from "@react-pptx/emit";
+} from "@pptxdk/core/capability";
+import { pxToEmu, xmlEscape } from "@pptxdk/emit";
 
 import type {
   MotionDirection,

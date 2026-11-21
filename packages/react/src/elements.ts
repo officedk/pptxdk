@@ -2,16 +2,13 @@ import type {
   DeckProps as CoreDeckProps,
   SectionProps as CoreSectionProps,
   SlideProps as CoreSlideProps,
-} from "@react-pptx/core";
+} from "@pptxdk/core";
 import {
   createDeckNode,
   createSectionNode,
   createSlideNode,
-} from "@react-pptx/core/document";
-import {
-  hostNodeCreator,
-  type DocumentNodeCreator,
-} from "@react-pptx/core/host";
+} from "@pptxdk/core/document";
+import { hostNodeCreator, type DocumentNodeCreator } from "@pptxdk/core/host";
 import { createElement, type ReactNode } from "react";
 
 export type ElementProps = {

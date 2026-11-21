@@ -1,7 +1,12 @@
 {
-  "name": "@react-pptx/validation",
+  "name": "@pptxdk/validation",
   "version": "0.0.0",
   "private": true,
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/pptxdk/pptxdk.git",
+    "directory": "packages/validation"
+  },
   "files": [
     "dist"
   ],
@@ -34,7 +39,7 @@
     "fflate": "catalog:"
   },
   "devDependencies": {
-    "@react-pptx/tooling-config": "workspace:*",
+    "@pptxdk/tooling-config": "workspace:*",
     "@types/node": "catalog:",
     "oxfmt": "catalog:",
     "oxlint": "catalog:",

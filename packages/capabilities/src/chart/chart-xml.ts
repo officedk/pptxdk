@@ -2,8 +2,8 @@ import type {
   ColorValue,
   NativeLink,
   ThemeContext,
-} from "@react-pptx/core/capability";
-import { pxToEmu, resolvedColorXml, xmlEscape } from "@react-pptx/emit";
+} from "@pptxdk/core/capability";
+import { pxToEmu, resolvedColorXml, xmlEscape } from "@pptxdk/emit";
 import { strToU8, zipSync } from "fflate";
 
 import { chartDataLabelPositions, mergeDataLabels } from "./chart-labels.ts";

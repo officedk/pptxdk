@@ -2,7 +2,7 @@ import type {
   ColorValue,
   LayoutStyle,
   LinkTarget,
-} from "@react-pptx/core/capability";
+} from "@pptxdk/core/capability";
 
 import type { MotionProps } from "../motion/motion-api.ts";
 import type { MorphProps } from "../shared/morph-api.ts";

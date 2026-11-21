@@ -1,4 +1,4 @@
-import { CommonNode } from "@react-pptx/core/document";
+import { CommonNode } from "@pptxdk/core/document";
 import {
   hostNodeCreator,
   HostTextNode,
@@ -8,7 +8,7 @@ import {
   setDeclarationText,
   type DeclarationChild,
   type DocumentNodeCreator,
-} from "@react-pptx/core/host";
+} from "@pptxdk/core/host";
 
 /** Renderer-side root during a single React expansion; it does not own a second document tree. */
 export type HostContainer = { children: DeclarationChild[] };

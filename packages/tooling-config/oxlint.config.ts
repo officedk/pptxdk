@@ -16,7 +16,7 @@ export default defineConfig({
           {
             patterns: [
               {
-                group: ["@react-pptx/validation", "@react-pptx/validation/*"],
+                group: ["@pptxdk/validation", "@pptxdk/validation/*"],
                 message:
                   "File validation is for testing only; consume actual build artifacts in tests.",
               },
@@ -36,16 +36,16 @@ export default defineConfig({
           {
             patterns: [
               {
-                group: ["@react-pptx/validation", "@react-pptx/validation/*"],
+                group: ["@pptxdk/validation", "@pptxdk/validation/*"],
                 message:
                   "File validation is for testing only; consume actual build artifacts in tests.",
               },
               {
                 group: [
-                  "@react-pptx/preview",
-                  "@react-pptx/preview/*",
-                  "@react-pptx/react",
-                  "@react-pptx/react/*",
+                  "@pptxdk/preview",
+                  "@pptxdk/preview/*",
+                  "@pptxdk/react",
+                  "@pptxdk/react/*",
                 ],
                 message:
                   "Capabilities production source must only depend on core/emit stage contracts; preview and react are test-only devDependencies.",

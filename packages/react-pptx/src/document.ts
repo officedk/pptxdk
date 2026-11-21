@@ -1,13 +1,13 @@
-import { documentCapabilities } from "@react-pptx/capabilities/document";
+import { documentCapabilities } from "@pptxdk/capabilities/document";
 import {
   createResolver,
   type BuildOptions,
   type BuildResult,
   type Resolution,
   type ResolveOptions,
-} from "@react-pptx/core/build";
-import type { CommonNode } from "@react-pptx/core/document";
-import { emit, emittedBuildQuery, validateOptions } from "@react-pptx/emit";
+} from "@pptxdk/core/build";
+import type { CommonNode } from "@pptxdk/core/document";
+import { emit, emittedBuildQuery, validateOptions } from "@pptxdk/emit";
 
 const resolveDocument = createResolver(documentCapabilities);
 
@@ -69,7 +69,7 @@ export {
   step,
   table,
   text,
-} from "@react-pptx/capabilities/document";
+} from "@pptxdk/capabilities/document";
 export type {
   BoxAuthorProps,
   BoxNode,
@@ -165,7 +165,7 @@ export type {
   TextContent,
   TextNode,
   Transition,
-} from "@react-pptx/capabilities/document";
+} from "@pptxdk/capabilities/document";
 export {
   after,
   breathe,
@@ -181,7 +181,7 @@ export {
   stretch,
   wipe,
   zoom,
-} from "@react-pptx/capabilities/motion";
+} from "@pptxdk/capabilities/motion";
 export type {
   EffectInstanceObservation,
   Easing,
@@ -229,21 +229,21 @@ export type {
   RepeatCount,
   RepeatedEffect,
   SpinOptions,
-} from "@react-pptx/capabilities/motion";
+} from "@pptxdk/capabilities/motion";
 export {
   BuildError,
   CapabilityError,
   formatBaseline,
   targets,
-} from "@react-pptx/core/build";
-export { AuthorQuery, AuthorQueryError } from "@react-pptx/core/document";
+} from "@pptxdk/core/build";
+export { AuthorQuery, AuthorQueryError } from "@pptxdk/core/document";
 export {
   blockArc,
   linearGradient,
   path,
   preset,
   radialGradient,
-} from "@react-pptx/capabilities/shape";
+} from "@pptxdk/capabilities/shape";
 export type {
   CustomGeometry,
   Geometry,
@@ -252,12 +252,9 @@ export type {
   PathOptions,
   PresetGeometry,
   PresetGeometryName,
-} from "@react-pptx/capabilities/shape";
-export type {
-  ImageSource,
-  ImageVisualStyle,
-} from "@react-pptx/capabilities/image";
-export { transitions } from "@react-pptx/capabilities/transition";
+} from "@pptxdk/capabilities/shape";
+export type { ImageSource, ImageVisualStyle } from "@pptxdk/capabilities/image";
+export { transitions } from "@pptxdk/capabilities/transition";
 export type {
   BuildOptions,
   BuildReport,
@@ -274,7 +271,7 @@ export type {
   ResolutionReport,
   ResolveOptions,
   Target,
-} from "@react-pptx/core/build";
+} from "@pptxdk/core/build";
 export type {
   AuthorNodeGuard,
   CommonContainer,
@@ -285,9 +282,9 @@ export type {
   RichTextContainer,
   RichTextItem,
   StyleUpdate,
-} from "@react-pptx/core/document";
-export { createMorphScope, isMorphKey } from "@react-pptx/core/capability";
-export type { MorphKey, MorphScope } from "@react-pptx/core/capability";
+} from "@pptxdk/core/document";
+export { createMorphScope, isMorphKey } from "@pptxdk/core/capability";
+export type { MorphKey, MorphScope } from "@pptxdk/core/capability";
 export {
   darker,
   defaultTheme,
@@ -295,7 +292,7 @@ export {
   isNativeColorSlot,
   lighter,
   nativeColorSlots,
-} from "@react-pptx/core/theme";
+} from "@pptxdk/core/theme";
 export type {
   ColorValue,
   Font,
@@ -317,11 +314,11 @@ export type {
   ThemeScope,
   ThemeShade,
   VisualStyle,
-} from "@react-pptx/core/theme";
+} from "@pptxdk/core/theme";
 export type {
   LayoutLength,
   LayoutSpacing,
   LayoutStyle,
   LinkTarget,
   SlideBackground,
-} from "@react-pptx/core/capability";
+} from "@pptxdk/core/capability";

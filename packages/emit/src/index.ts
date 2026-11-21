@@ -25,4 +25,4 @@ export type {
   Extension,
   Resolution,
   Target,
-} from "@react-pptx/core/build";
+} from "@pptxdk/core/build";

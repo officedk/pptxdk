@@ -1,4 +1,4 @@
-import shared from "@react-pptx/tooling-config/vitest";
+import shared from "@pptxdk/tooling-config/vitest";
 import { defineConfig } from "vitest/config";
 
 export default defineConfig({

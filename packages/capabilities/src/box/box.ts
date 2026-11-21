@@ -23,9 +23,9 @@ import {
   type TextStyle,
   type ThemeScope,
   type VisualStyle,
-} from "@react-pptx/core/capability";
-import { CommonContainer } from "@react-pptx/core/document";
-import { xmlEscape } from "@react-pptx/emit";
+} from "@pptxdk/core/capability";
+import { CommonContainer } from "@pptxdk/core/document";
+import { xmlEscape } from "@pptxdk/emit";
 
 import {
   motionContainerAnnotations,

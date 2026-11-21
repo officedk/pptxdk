@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { getEventListeners } from "node:events";
 
+import { validatePptx } from "@pptxdk/validation";
 import {
   appendJSX,
   Box,
@@ -31,7 +32,6 @@ import {
   slide,
   text,
 } from "@react-pptx/react-pptx/document";
-import { validatePptx } from "@react-pptx/validation";
 import { strFromU8, unzipSync } from "fflate";
 import {
   Component,

@@ -2,7 +2,7 @@ import type {
   ColorValue,
   GeometryBox,
   ThemeContext,
-} from "@react-pptx/core/capability";
+} from "@pptxdk/core/capability";
 
 import type { ParsedAreaGroup, ParsedLineGroup } from "../chart-model.ts";
 import type { ChartDisplayBlanksAs, ChartLine } from "../chart-types.ts";

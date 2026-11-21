@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
-import { Box } from "@react-pptx/capabilities/box-elements";
-import { Chart } from "@react-pptx/capabilities/chart-elements";
+import { Box } from "@pptxdk/capabilities/box-elements";
+import { Chart } from "@pptxdk/capabilities/chart-elements";
 import {
   box,
   chart,
@@ -17,8 +17,8 @@ import {
   slide,
   step,
   text,
-} from "@react-pptx/capabilities/document";
-import { Group } from "@react-pptx/capabilities/group-elements";
+} from "@pptxdk/capabilities/document";
+import { Group } from "@pptxdk/capabilities/group-elements";
 import {
   after,
   breathe,
@@ -32,24 +32,24 @@ import {
   wipe,
   zoom,
   type MotionObservation,
-} from "@react-pptx/capabilities/motion";
+} from "@pptxdk/capabilities/motion";
 import {
   MotionScope,
   Step,
   useMotionScope,
-} from "@react-pptx/capabilities/motion-elements";
-import { Shape } from "@react-pptx/capabilities/shape-elements";
-import { Text } from "@react-pptx/capabilities/text-elements";
+} from "@pptxdk/capabilities/motion-elements";
+import { Shape } from "@pptxdk/capabilities/shape-elements";
+import { Text } from "@pptxdk/capabilities/text-elements";
 import {
   BuildError,
   targets,
   type BuildOptions,
   type CommonNode,
-} from "@react-pptx/core";
-import { createResolver } from "@react-pptx/core/build";
-import { emit } from "@react-pptx/emit";
-import { Deck, expandDocument, Section, Slide } from "@react-pptx/react";
-import { validatePptx } from "@react-pptx/validation";
+} from "@pptxdk/core";
+import { createResolver } from "@pptxdk/core/build";
+import { emit } from "@pptxdk/emit";
+import { Deck, expandDocument, Section, Slide } from "@pptxdk/react";
+import { validatePptx } from "@pptxdk/validation";
 import { strFromU8, unzipSync } from "fflate";
 import { PNG } from "pngjs";
 import { createElement, type ReactNode } from "react";

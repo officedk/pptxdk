@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 
+import { validatePptx } from "@pptxdk/validation";
 import {
   build,
   BuildError,
@@ -26,7 +27,6 @@ import {
   slide,
   span,
 } from "@react-pptx/react-pptx/document";
-import { validatePptx } from "@react-pptx/validation";
 import { strFromU8, unzipSync } from "fflate";
 import {
   createElement,

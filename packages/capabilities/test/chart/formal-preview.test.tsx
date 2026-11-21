@@ -1,22 +1,22 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
-import { slideBackgroundCapability } from "@react-pptx/capabilities";
-import { chartCapability } from "@react-pptx/capabilities/chart";
-import { Chart } from "@react-pptx/capabilities/chart-elements";
+import { slideBackgroundCapability } from "@pptxdk/capabilities";
+import { chartCapability } from "@pptxdk/capabilities/chart";
+import { Chart } from "@pptxdk/capabilities/chart-elements";
 import {
   chart,
   deck,
   documentCapabilities,
   font,
   slide,
-} from "@react-pptx/capabilities/document";
-import { type CapabilityModule, CommonNode } from "@react-pptx/core";
-import { createResolver } from "@react-pptx/core/build";
-import { emit } from "@react-pptx/emit";
-import { paint } from "@react-pptx/preview";
-import { Deck, Slide, expandDocument } from "@react-pptx/react";
-import { validatePptx } from "@react-pptx/validation";
+} from "@pptxdk/capabilities/document";
+import { type CapabilityModule, CommonNode } from "@pptxdk/core";
+import { createResolver } from "@pptxdk/core/build";
+import { emit } from "@pptxdk/emit";
+import { paint } from "@pptxdk/preview";
+import { Deck, Slide, expandDocument } from "@pptxdk/react";
+import { validatePptx } from "@pptxdk/validation";
 import { strFromU8, unzipSync } from "fflate";
 import { PNG } from "pngjs";
 import { createElement } from "react";

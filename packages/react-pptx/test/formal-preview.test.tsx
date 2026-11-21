@@ -554,11 +554,11 @@ import { createElement } from "react";
 registerHooks({
   resolve(specifier, context, nextResolve) {
     if (
-      specifier.includes("@react-pptx/preview") ||
+      specifier.includes("@pptxdk/preview") ||
       specifier.includes("@resvg/resvg-js") ||
       specifier.includes("pngjs") ||
       specifier.includes("jpeg-js") ||
-      specifier.includes("@react-pptx/validation")
+      specifier.includes("@pptxdk/validation")
     ) {
       throw new Error("JSX build loaded forbidden dependency: " + specifier);
     }
@@ -598,13 +598,13 @@ registerHooks({
       specifier === "react" ||
       specifier === "react-reconciler" ||
       specifier.startsWith("react/") ||
-      specifier === "@react-pptx/react" ||
-      specifier.startsWith("@react-pptx/react/") ||
-      specifier.includes("@react-pptx/preview") ||
+      specifier === "@pptxdk/react" ||
+      specifier.startsWith("@pptxdk/react/") ||
+      specifier.includes("@pptxdk/preview") ||
       specifier.includes("@resvg/resvg-js") ||
       specifier.includes("pngjs") ||
       specifier.includes("jpeg-js") ||
-      specifier.includes("@react-pptx/validation")
+      specifier.includes("@pptxdk/validation")
     ) {
       throw new Error("Document build loaded forbidden dependency: " + specifier);
     }
@@ -643,13 +643,13 @@ registerHooks({
       specifier === "react" ||
       specifier === "react-reconciler" ||
       specifier.startsWith("react/") ||
-      specifier === "@react-pptx/react" ||
-      specifier.startsWith("@react-pptx/react/") ||
-      specifier.includes("@react-pptx/preview") ||
+      specifier === "@pptxdk/react" ||
+      specifier.startsWith("@pptxdk/react/") ||
+      specifier.includes("@pptxdk/preview") ||
       specifier.includes("@resvg/resvg-js") ||
       specifier.includes("pngjs") ||
       specifier.includes("jpeg-js") ||
-      specifier.includes("@react-pptx/validation")
+      specifier.includes("@pptxdk/validation")
     ) {
       throw new Error("resolve + emit loaded forbidden dependency: " + specifier);
     }
@@ -657,11 +657,11 @@ registerHooks({
   },
 });
 
-const { imageCapability } = await import("@react-pptx/capabilities/image");
-const { createResolver } = await import("@react-pptx/core/build");
-const { createDeckNode, createSlideNode } = await import("@react-pptx/core/document");
-const { emit } = await import("@react-pptx/emit");
-const { createImageNode } = await import("@react-pptx/capabilities/image");
+const { imageCapability } = await import("@pptxdk/capabilities/image");
+const { createResolver } = await import("@pptxdk/core/build");
+const { createDeckNode, createSlideNode } = await import("@pptxdk/core/document");
+const { emit } = await import("@pptxdk/emit");
+const { createImageNode } = await import("@pptxdk/capabilities/image");
 
 const pngBytes = new Uint8Array(Buffer.from("${pngBase64}", "base64"));
 const jpegBytes = new Uint8Array(Buffer.from("${jpegBase64}", "base64"));
@@ -693,9 +693,9 @@ registerHooks({
       specifier === "react" ||
       specifier === "react-reconciler" ||
       specifier.startsWith("react/") ||
-      specifier === "@react-pptx/react" ||
-      specifier.startsWith("@react-pptx/react/") ||
-      specifier.includes("@react-pptx/validation")
+      specifier === "@pptxdk/react" ||
+      specifier.startsWith("@pptxdk/react/") ||
+      specifier.includes("@pptxdk/validation")
     ) {
       throw new Error("Plain document preview loaded React or test dependency: " + specifier);
     }
@@ -728,7 +728,7 @@ import { createElement } from "react";
 registerHooks({
   resolve(specifier, context, nextResolve) {
     if (
-      specifier.includes("@react-pptx/validation") ||
+      specifier.includes("@pptxdk/validation") ||
       specifier === "vitest" ||
       specifier.includes("/capabilities/test/")
     ) {

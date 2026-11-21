@@ -5,7 +5,7 @@ import {
   type ResolvedSlide,
   type SlideCapabilityModule,
   type SlideEmitOutput,
-} from "@react-pptx/core/capability";
+} from "@pptxdk/core/capability";
 
 /** Transition duration in milliseconds; rounded to the nearest integer millisecond when written to p14:dur. */
 export type TransitionDuration = number;

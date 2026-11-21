@@ -1,28 +1,28 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
-import { slideBackgroundCapability } from "@react-pptx/capabilities";
-import { chartCapability } from "@react-pptx/capabilities/chart";
-import { Chart } from "@react-pptx/capabilities/chart-elements";
+import { slideBackgroundCapability } from "@pptxdk/capabilities";
+import { chartCapability } from "@pptxdk/capabilities/chart";
+import { Chart } from "@pptxdk/capabilities/chart-elements";
 import {
   chart as impChart,
   deck as impDeck,
   font as impFont,
   slide as impSlide,
-} from "@react-pptx/capabilities/document";
-import { font } from "@react-pptx/capabilities/font";
+} from "@pptxdk/capabilities/document";
+import { font } from "@pptxdk/capabilities/font";
 import {
   fade,
   motionCapability,
   observeMotion,
-} from "@react-pptx/capabilities/motion";
-import { BuildError, createMorphScope, targets } from "@react-pptx/core";
-import { createResolver } from "@react-pptx/core/build";
-import { emit } from "@react-pptx/emit";
-import { paint } from "@react-pptx/preview";
-import { expandDocument } from "@react-pptx/react";
-import { Deck, Slide } from "@react-pptx/react";
-import { validatePptx } from "@react-pptx/validation";
+} from "@pptxdk/capabilities/motion";
+import { BuildError, createMorphScope, targets } from "@pptxdk/core";
+import { createResolver } from "@pptxdk/core/build";
+import { emit } from "@pptxdk/emit";
+import { paint } from "@pptxdk/preview";
+import { expandDocument } from "@pptxdk/react";
+import { Deck, Slide } from "@pptxdk/react";
+import { validatePptx } from "@pptxdk/validation";
 import { strFromU8, unzipSync } from "fflate";
 import { createElement } from "react";
 import { describe, it } from "vitest";

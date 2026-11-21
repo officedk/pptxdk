@@ -2,7 +2,7 @@ import type {
   GeometryBox,
   PaintContext,
   PaintOutput,
-} from "@react-pptx/core/capability";
+} from "@pptxdk/core/capability";
 
 import { parseTextContent } from "../../shared/text-service.ts";
 import { textOnlyChartStyle, type ParsedChart } from "../chart-model.ts";

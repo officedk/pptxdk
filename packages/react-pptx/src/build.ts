@@ -4,8 +4,8 @@ export {
   createResolver,
   formatBaseline,
   targets,
-} from "@react-pptx/core/build";
-export { emit } from "@react-pptx/emit";
+} from "@pptxdk/core/build";
+export { emit } from "@pptxdk/emit";
 export type {
   BuildOptions,
   BuildReport,
@@ -23,4 +23,4 @@ export type {
   ResolutionReport,
   ResolveOptions,
   Target,
-} from "@react-pptx/core/build";
+} from "@pptxdk/core/build";

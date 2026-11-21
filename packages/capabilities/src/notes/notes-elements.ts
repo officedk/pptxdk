@@ -1,4 +1,4 @@
-import { hostNodeCreator } from "@react-pptx/core/host";
+import { hostNodeCreator } from "@pptxdk/core/host";
 import { createElement, type ReactNode } from "react";
 
 import {

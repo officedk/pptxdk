@@ -1,7 +1,12 @@
 {
-  "name": "@react-pptx/core",
+  "name": "@pptxdk/core",
   "version": "0.0.0",
   "private": true,
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/pptxdk/pptxdk.git",
+    "directory": "packages/core"
+  },
   "files": [
     "dist"
   ],
@@ -67,7 +72,7 @@
     "yoga-layout": "catalog:"
   },
   "devDependencies": {
-    "@react-pptx/tooling-config": "workspace:*",
+    "@pptxdk/tooling-config": "workspace:*",
     "@types/node": "catalog:",
     "oxfmt": "catalog:",
     "oxlint": "catalog:",

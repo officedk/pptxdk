@@ -2,17 +2,17 @@ import assert from "node:assert/strict";
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
-import { documentCapabilities } from "@react-pptx/capabilities/document";
-import type { BuildReport, CommonNode } from "@react-pptx/core";
-import { createResolver, type Resolution } from "@react-pptx/core/build";
-import { emit } from "@react-pptx/emit";
+import { documentCapabilities } from "@pptxdk/capabilities/document";
+import type { BuildReport, CommonNode } from "@pptxdk/core";
+import { createResolver, type Resolution } from "@pptxdk/core/build";
+import { emit } from "@pptxdk/emit";
 import {
   paint,
   type PreviewPageResult,
   type PreviewResult,
-} from "@react-pptx/preview";
-import { expandDocument } from "@react-pptx/react";
-import { validatePptx, type ValidationResult } from "@react-pptx/validation";
+} from "@pptxdk/preview";
+import { expandDocument } from "@pptxdk/react";
+import { validatePptx, type ValidationResult } from "@pptxdk/validation";
 import { PNG } from "pngjs";
 import type { ReactNode } from "react";
 

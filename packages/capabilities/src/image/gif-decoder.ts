@@ -1,4 +1,4 @@
-import { CapabilityError } from "@react-pptx/core/capability";
+import { CapabilityError } from "@pptxdk/core/capability";
 
 export type DecodedRgbaImage = {
   readonly width: number;

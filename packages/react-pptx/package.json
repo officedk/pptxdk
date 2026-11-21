@@ -2,6 +2,11 @@
   "name": "@react-pptx/react-pptx",
   "version": "0.0.0",
   "private": true,
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/pptxdk/pptxdk.git",
+    "directory": "packages/react-pptx"
+  },
   "files": [
     "dist"
   ],
@@ -70,17 +75,17 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@react-pptx/capabilities": "workspace:*",
-    "@react-pptx/core": "workspace:*",
-    "@react-pptx/emit": "workspace:*",
-    "@react-pptx/preview": "workspace:*",
-    "@react-pptx/react": "workspace:*",
+    "@pptxdk/capabilities": "workspace:*",
+    "@pptxdk/core": "workspace:*",
+    "@pptxdk/emit": "workspace:*",
+    "@pptxdk/preview": "workspace:*",
+    "@pptxdk/react": "workspace:*",
     "esbuild": "catalog:",
     "react": "catalog:"
   },
   "devDependencies": {
-    "@react-pptx/tooling-config": "workspace:*",
-    "@react-pptx/validation": "workspace:*",
+    "@pptxdk/tooling-config": "workspace:*",
+    "@pptxdk/validation": "workspace:*",
     "@types/emscripten": "catalog:",
     "@types/fontkit": "catalog:",
     "@types/node": "catalog:",

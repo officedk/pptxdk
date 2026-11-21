@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 
-import { slideBackgroundCapability } from "@react-pptx/capabilities";
+import { slideBackgroundCapability } from "@pptxdk/capabilities";
 import {
   box,
   chart,
@@ -9,12 +9,12 @@ import {
   group,
   shape,
   slide,
-} from "@react-pptx/capabilities/document";
-import { shapeCapability } from "@react-pptx/capabilities/shape";
+} from "@pptxdk/capabilities/document";
+import { shapeCapability } from "@pptxdk/capabilities/shape";
 import {
   transitionCapability,
   transitions,
-} from "@react-pptx/capabilities/transition";
+} from "@pptxdk/capabilities/transition";
 import {
   BuildError,
   CommonContainer,
@@ -26,12 +26,12 @@ import {
   type BuildOptions,
   type CapabilityModule,
   type MorphKey,
-} from "@react-pptx/core";
-import { createResolver } from "@react-pptx/core/build";
-import { emit } from "@react-pptx/emit";
-import { paint } from "@react-pptx/preview";
-import { Deck, Slide } from "@react-pptx/react";
-import { validatePptx } from "@react-pptx/validation";
+} from "@pptxdk/core";
+import { createResolver } from "@pptxdk/core/build";
+import { emit } from "@pptxdk/emit";
+import { paint } from "@pptxdk/preview";
+import { Deck, Slide } from "@pptxdk/react";
+import { validatePptx } from "@pptxdk/validation";
 import { strFromU8, unzipSync } from "fflate";
 import { createElement } from "react";
 import { describe, expect, it } from "vitest";
@@ -274,7 +274,7 @@ describe("transitionCapability bound slide migration & generic continuity collab
       customContinuitySlideCapability,
     ]);
 
-    const { CommonNode } = await import("@react-pptx/core");
+    const { CommonNode } = await import("@pptxdk/core");
     const mismatchDoc = deck({ width: 320, height: 180 }).append(
       slide({ id: "src" }).append(
         shape({

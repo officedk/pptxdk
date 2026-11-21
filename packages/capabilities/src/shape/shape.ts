@@ -23,9 +23,9 @@ import {
   type PaintOutput,
   type PreviewTransform,
   type ResolvedObject,
-} from "@react-pptx/core/capability";
-import { RichTextContainer } from "@react-pptx/core/document";
-import { pxToEmu, xmlEscape } from "@react-pptx/emit";
+} from "@pptxdk/core/capability";
+import { RichTextContainer } from "@pptxdk/core/document";
+import { pxToEmu, xmlEscape } from "@pptxdk/emit";
 
 import { evaluateGeometry, type Geometry } from "../shared/geometry.ts";
 export {
@@ -52,7 +52,7 @@ import {
 } from "../shared/identity.ts";
 import { shapeXml } from "./shape-xml.ts";
 export { linearGradient, radialGradient } from "../shared/visual.ts";
-export type { PaddingStyle, VisualStyle } from "@react-pptx/core/capability";
+export type { PaddingStyle, VisualStyle } from "@pptxdk/core/capability";
 import { motionAnnotations, type MotionProps } from "../motion/motion-api.ts";
 import type { MorphProps } from "../shared/morph-api.ts";
 import {

@@ -1,11 +1,11 @@
-import type { Font, FontFace, FontOptions } from "@react-pptx/core/capability";
+import type { Font, FontFace, FontOptions } from "@pptxdk/core/capability";
 
 export type {
   Font,
   FontFace,
   FontFaceStyle,
   FontOptions,
-} from "@react-pptx/core/capability";
+} from "@pptxdk/core/capability";
 
 /** Creates a Font value; resources are read only from caller-provided bytes. */
 export function font(

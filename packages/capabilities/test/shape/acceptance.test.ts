@@ -4,13 +4,8 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import {
-  deck,
-  documentCapabilities,
-  font,
-  shape,
-  slide,
-} from "@pptxdk/capabilities/document";
+import { documentCapabilities } from "@pptxdk/capabilities/all";
+import { deck, font, shape, slide } from "@pptxdk/capabilities/document";
 import { shapeCapability } from "@pptxdk/capabilities/shape";
 import {
   BuildError,

@@ -9,7 +9,7 @@ import {
   type CellDeclarationProps,
   type RowDeclarationProps,
   type TableDeclarationProps,
-} from "./table.ts";
+} from "./table-declaration.ts";
 
 export type TableProps = TableDeclarationProps & {
   readonly children?: ReactNode;

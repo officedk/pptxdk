@@ -262,12 +262,9 @@ registerHooks({
 
 const { build, emit, resolve } = await import("pptxdk");
 const vanillaEntry = await import("pptxdk/vanilla");
+await import("pptxdk/react");
 const buildEntry = await import("pptxdk/build");
 await import("pptxdk/node");
-await import("pptxdk/shape");
-await import("pptxdk/chart");
-await import("pptxdk/text");
-void buildEntry;
 
 const doc = vanillaEntry.deck({ width: 320, height: 180 }).append(
   vanillaEntry.slide({ id: "s1" }).append(
@@ -277,9 +274,13 @@ const doc = vanillaEntry.deck({ width: 320, height: 180 }).append(
 const resolution = resolve(doc);
 const emitted = emit(resolution);
 const built = await build(doc);
+const trimmedBuilt = await buildEntry.build(doc, {
+  capabilities: ["shape", "chart"],
+});
 if (
   emitted.pptx.byteLength === 0 ||
-  built.pptx.byteLength === 0
+  built.pptx.byteLength === 0 ||
+  trimmedBuilt.pptx.byteLength === 0
 ) {
   throw new Error("expected PPTX bytes");
 }

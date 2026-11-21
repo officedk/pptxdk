@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
-import { documentCapabilities } from "@pptxdk/capabilities/document";
+import { documentCapabilities } from "@pptxdk/capabilities/all";
 import type { BuildReport, CommonNode } from "@pptxdk/core";
 import { createResolver, type Resolution } from "@pptxdk/core/build";
 import { emit } from "@pptxdk/emit";

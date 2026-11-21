@@ -2,18 +2,18 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { posix } from "node:path";
 
+import { documentCapabilities } from "@pptxdk/capabilities/all";
 import {
   box,
   deck,
-  documentCapabilities,
   font,
   notes,
-  notesCapability,
   paragraph,
   slide,
   span,
   text,
 } from "@pptxdk/capabilities/document";
+import { notesCapability } from "@pptxdk/capabilities/notes";
 import { Notes } from "@pptxdk/capabilities/notes-elements";
 import { textCapability } from "@pptxdk/capabilities/text";
 import { P, Span } from "@pptxdk/capabilities/text-elements";

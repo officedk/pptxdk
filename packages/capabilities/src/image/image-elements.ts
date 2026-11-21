@@ -2,7 +2,10 @@ import { hostNodeCreator } from "@pptxdk/core/host";
 import type { ReactNode } from "react";
 
 import { motionElement } from "../motion/motion-elements.ts";
-import { createImageNode, type ImageDeclarationProps } from "./image.ts";
+import {
+  createImageNode,
+  type ImageDeclarationProps,
+} from "./image-declaration.ts";
 
 export type ImageProps = ImageDeclarationProps & {
   readonly children?: ReactNode;

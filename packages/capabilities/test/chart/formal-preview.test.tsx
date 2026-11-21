@@ -2,15 +2,10 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
 import { slideBackgroundCapability } from "@pptxdk/capabilities";
+import { documentCapabilities } from "@pptxdk/capabilities/all";
 import { chartCapability } from "@pptxdk/capabilities/chart";
 import { Chart } from "@pptxdk/capabilities/chart-elements";
-import {
-  chart,
-  deck,
-  documentCapabilities,
-  font,
-  slide,
-} from "@pptxdk/capabilities/document";
+import { chart, deck, font, slide } from "@pptxdk/capabilities/document";
 import { type CapabilityModule, CommonNode } from "@pptxdk/core";
 import { createResolver } from "@pptxdk/core/build";
 import { emit } from "@pptxdk/emit";

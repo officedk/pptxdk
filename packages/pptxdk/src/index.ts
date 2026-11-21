@@ -1,7 +1,5 @@
-import {
-  documentCapabilities,
-  slideBackgroundCapability,
-} from "@pptxdk/capabilities/document";
+import { documentCapabilities } from "@pptxdk/capabilities/all";
+import { slideBackgroundCapability } from "@pptxdk/capabilities/slide-background";
 import { emit } from "@pptxdk/emit";
 
 import { createStagePipeline } from "./compose.ts";

@@ -1,12 +1,12 @@
 import assert from "node:assert/strict";
 
+import { documentCapabilities } from "@pptxdk/capabilities/all";
 import { Box } from "@pptxdk/capabilities/box-elements";
 import { Chart } from "@pptxdk/capabilities/chart-elements";
 import {
   box,
   chart,
   deck,
-  documentCapabilities,
   group,
   shape,
   slide,

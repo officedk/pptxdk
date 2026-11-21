@@ -13,6 +13,7 @@ import {
 } from "./motion-api.ts";
 
 export { Box, type BoxProps } from "../box/box-elements.ts";
+export type { MotionProps, MotionScopeProps, StepProps } from "./motion-api.ts";
 
 /**
  * Keeps one pure scope identity for the lifetime of this component instance.

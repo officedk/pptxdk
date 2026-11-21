@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
+import { documentCapabilities } from "@pptxdk/capabilities/all";
 import { Box } from "@pptxdk/capabilities/box-elements";
 import { Chart } from "@pptxdk/capabilities/chart-elements";
 import {
@@ -8,7 +9,6 @@ import {
   chart,
   createMotionScopeHandle,
   deck,
-  documentCapabilities,
   font,
   group,
   motionScope,

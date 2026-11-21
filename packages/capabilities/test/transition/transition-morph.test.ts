@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
 
 import { slideBackgroundCapability } from "@pptxdk/capabilities";
+import { documentCapabilities } from "@pptxdk/capabilities/all";
 import {
   box,
   chart,
   deck,
-  documentCapabilities,
   group,
   shape,
   slide,

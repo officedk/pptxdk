@@ -1,7 +1,7 @@
 import { hostNodeCreator } from "@pptxdk/core/host";
 import { createElement, type Key, type ReactNode } from "react";
 
-import { createBoxNode, type BoxDeclarationProps } from "./box.ts";
+import { createBoxNode, type BoxDeclarationProps } from "./box-declaration.ts";
 
 export type BoxProps = BoxDeclarationProps & {
   readonly key?: Key | null;

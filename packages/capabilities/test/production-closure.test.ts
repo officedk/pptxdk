@@ -24,12 +24,12 @@ function runIsolatedNode(
 }
 
 describe("@pptxdk/capabilities production runtime closure", () => {
-  it("imports all 23 public export subpaths without resolving preview, react adapter, validation, resvg, react-reconciler, or eager image decoders", () => {
+  it("imports all 25 public export subpaths without resolving preview, react adapter, validation, resvg, react-reconciler, or eager image decoders", () => {
     const pkg = JSON.parse(
       readFileSync(new URL("../package.json", import.meta.url), "utf8"),
     ) as { readonly exports: Record<string, unknown> };
     const subpaths = Object.keys(pkg.exports);
-    assert.equal(subpaths.length, 23);
+    assert.equal(subpaths.length, 25);
 
     const specifiers = subpaths.map((key) =>
       key === "."
@@ -138,12 +138,12 @@ registerHooks({
 
 const { createResolver } = await import("@pptxdk/core/build");
 const { emit } = await import("@pptxdk/emit");
+const { documentCapabilities } = await import("@pptxdk/capabilities/all");
 const {
   box,
   cell,
   chart,
   deck,
-  documentCapabilities,
   group,
   image,
   notes,

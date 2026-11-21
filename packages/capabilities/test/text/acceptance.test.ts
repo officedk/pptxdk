@@ -4,7 +4,8 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { documentCapabilities, font } from "@pptxdk/capabilities/document";
+import { documentCapabilities } from "@pptxdk/capabilities/all";
+import { font } from "@pptxdk/capabilities/document";
 import { Text } from "@pptxdk/capabilities/text-elements";
 import type { CapabilityModule, CommonNode } from "@pptxdk/core";
 import { createResolver } from "@pptxdk/core/build";

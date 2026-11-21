@@ -3,7 +3,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { documentCapabilities } from "@pptxdk/capabilities/document";
+import { documentCapabilities } from "@pptxdk/capabilities/all";
 import {
   BuildError,
   type CapabilityModule,

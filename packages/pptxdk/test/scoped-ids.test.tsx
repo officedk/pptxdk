@@ -525,9 +525,7 @@ describe("scoped author ids", () => {
     );
     assert.equal(shared?.length, 2);
     assert.equal(new Set(shared?.map(({ id }) => id)).size, 2);
-    assert.ok(
-      shared?.every(({ name }) => !name.startsWith("!!react-pptx-morph-")),
-    );
+    assert.ok(shared?.every(({ name }) => !name.startsWith("!!morph-")));
     assert.equal(result.report.slides[0]?.capabilities?.transition, undefined);
     assert.throws(
       () => result.query.getSlide("missing"),

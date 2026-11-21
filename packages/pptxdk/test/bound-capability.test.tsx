@@ -341,7 +341,7 @@ describe("bound object capability contract", () => {
     );
     assert.match(
       imperativeResult.report.slides[0]?.objects[0]?.name ?? "",
-      /^!!react-pptx-morph-/u,
+      /^!!morph-\d+$/u,
     );
 
     // 2. JSX build inside Box Flex container (exercises measureLayout + container collaboration)

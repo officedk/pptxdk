@@ -867,7 +867,7 @@ describe("Ticket 08: Object capability parse phase, container TextStyle validati
       const unzipped = unzipSync(result.pptx);
       const slideXml = strFromU8(unzipped["ppt/slides/slide1.xml"]!);
       assert.match(slideXml, /<p:grpSp>/u);
-      assert.match(slideXml, /name="!*react-pptx-morph-/u);
+      assert.match(slideXml, /name="!!morph-\d+"/u);
       assert.match(slideXml, /<a:hlinkClick/u);
     });
 

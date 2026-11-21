@@ -1,4 +1,5 @@
-import { Shape, Step, Text, fillColor, preset } from "@react-pptx/react-pptx";
+import { fillColor, preset } from "pptxdk";
+import { Shape, Step, Text } from "pptxdk/react";
 
 import { PanelCard, Rule, SemanticTag } from "../components/primitives.tsx";
 import { SlideFrame } from "../templates/slide-frame.tsx";

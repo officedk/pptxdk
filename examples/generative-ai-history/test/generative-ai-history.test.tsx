@@ -1,8 +1,9 @@
 import assert from "node:assert/strict";
 
 import { validatePptx } from "@pptxdk/validation";
-import { emit, expandDocument, resolve } from "@react-pptx/react-pptx";
-import { paint } from "@react-pptx/react-pptx/preview";
+import { emit, resolve } from "pptxdk";
+import { paint } from "pptxdk/preview";
+import { expandDocument } from "pptxdk/react";
 import { it } from "vitest";
 
 import { GenerativeAiHistoryDeck } from "../src/index.ts";

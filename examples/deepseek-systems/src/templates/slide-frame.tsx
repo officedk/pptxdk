@@ -1,11 +1,5 @@
-import {
-  Shape,
-  Slide,
-  SlideNumber,
-  Text,
-  transitions,
-  type Transition,
-} from "@react-pptx/react-pptx";
+import { transitions, type Transition } from "pptxdk";
+import { Shape, Slide, SlideNumber, Text } from "pptxdk/react";
 import type { ReactNode } from "react";
 
 import { Rule, type SemanticTone } from "../components/primitives.tsx";

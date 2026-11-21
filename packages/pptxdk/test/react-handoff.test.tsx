@@ -1,33 +1,29 @@
 import assert from "node:assert/strict";
 
 import { validatePptx } from "@pptxdk/validation";
+import { strFromU8, unzipSync } from "fflate";
 import {
   build,
   BuildError,
-  Cell,
-  Chart,
   CommonContainer,
   CommonNode,
+  RichTextContainer,
+} from "pptxdk";
+import { build as buildDocument } from "pptxdk";
+import {
+  Cell,
+  Chart,
   Deck,
   expandDocument,
   P,
-  RichTextContainer,
   Row,
   Shape,
   Slide,
   Span,
   Table,
   Text,
-} from "@react-pptx/react-pptx";
-import {
-  build as buildDocument,
-  deck,
-  paragraph,
-  shape,
-  slide,
-  span,
-} from "@react-pptx/react-pptx/document";
-import { strFromU8, unzipSync } from "fflate";
+} from "pptxdk/react";
+import { deck, paragraph, shape, slide, span } from "pptxdk/vanilla";
 import {
   createElement,
   useEffect,

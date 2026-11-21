@@ -1,13 +1,5 @@
-import {
-  Group,
-  Shape,
-  Slide,
-  Step,
-  Text,
-  preset,
-  spinIn,
-  wipe,
-} from "@react-pptx/react-pptx";
+import { preset, spinIn, wipe } from "pptxdk";
+import { Group, Shape, Slide, Step, Text } from "pptxdk/react";
 
 import { colors, motion } from "../theme.ts";
 

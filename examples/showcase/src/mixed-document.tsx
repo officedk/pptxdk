@@ -1,4 +1,4 @@
-import { expandDocument } from "@react-pptx/react-pptx";
+import { expandDocument } from "pptxdk/react";
 
 import { ShowcaseDeck } from "./deck.tsx";
 import { createComparisonPage } from "./pages/comparison-document.ts";

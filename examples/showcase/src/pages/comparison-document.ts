@@ -1,15 +1,13 @@
+import { createMotionScopeHandle, floatUp, wipe } from "pptxdk";
 import {
   box,
-  createMotionScopeHandle,
-  floatUp,
   group,
   motionScope,
   shape,
   slide,
   step,
   text,
-  wipe,
-} from "@react-pptx/react-pptx/document";
+} from "pptxdk/vanilla";
 
 import { colors, motion } from "../theme.ts";
 

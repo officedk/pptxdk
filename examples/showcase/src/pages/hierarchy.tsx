@@ -1,4 +1,4 @@
-import { Box, Slide, Text } from "@react-pptx/react-pptx";
+import { Box, Slide, Text } from "pptxdk/react";
 
 import { colors } from "../theme.ts";
 

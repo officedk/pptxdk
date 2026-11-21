@@ -8,38 +8,28 @@ import { validatePptx } from "@pptxdk/validation";
 import {
   BuildError,
   CommonNode,
-  Deck,
-  Shape,
-  Slide,
-  Text,
   emit as emitFromMain,
-  expandDocument,
   font,
   formatBaseline,
   observeMotion,
   resolve as resolveFromMain,
   targets,
-} from "@react-pptx/react-pptx";
+} from "pptxdk";
+import {
+  createMorphScope,
+  emit as emitFromDocument,
+  fade,
+  resolve as resolveFromDocument,
+  transitions,
+} from "pptxdk";
 import {
   createResolver,
   emit as emitFromBuild,
   type CapabilityModule,
-} from "@react-pptx/react-pptx/build";
-import {
-  box,
-  chart,
-  createMorphScope,
-  deck,
-  emit as emitFromDocument,
-  fade,
-  resolve as resolveFromDocument,
-  section,
-  shape,
-  slide,
-  text,
-  transitions,
-} from "@react-pptx/react-pptx/document";
-import { paint, preview } from "@react-pptx/react-pptx/preview";
+} from "pptxdk/build";
+import { paint, preview } from "pptxdk/preview";
+import { Deck, Shape, Slide, Text, expandDocument } from "pptxdk/react";
+import { box, chart, deck, section, shape, slide, text } from "pptxdk/vanilla";
 import { createElement } from "react";
 import { describe, it } from "vitest";
 
@@ -270,28 +260,26 @@ registerHooks({
   },
 });
 
-const { build, emit, resolve } = await import("@react-pptx/react-pptx");
-const docEntry = await import("@react-pptx/react-pptx/document");
-const buildEntry = await import("@react-pptx/react-pptx/build");
-await import("@react-pptx/react-pptx/node");
-await import("@react-pptx/react-pptx/shape");
-await import("@react-pptx/react-pptx/chart");
-await import("@react-pptx/react-pptx/text");
+const { build, emit, resolve } = await import("pptxdk");
+const vanillaEntry = await import("pptxdk/vanilla");
+const buildEntry = await import("pptxdk/build");
+await import("pptxdk/node");
+await import("pptxdk/shape");
+await import("pptxdk/chart");
+await import("pptxdk/text");
 void buildEntry;
 
-const doc = docEntry.deck({ width: 320, height: 180 }).append(
-  docEntry.slide({ id: "s1" }).append(
-    docEntry.shape({ id: "box", x: 10, y: 10, width: 40, height: 40 }),
+const doc = vanillaEntry.deck({ width: 320, height: 180 }).append(
+  vanillaEntry.slide({ id: "s1" }).append(
+    vanillaEntry.shape({ id: "box", x: 10, y: 10, width: 40, height: 40 }),
   ),
 );
 const resolution = resolve(doc);
 const emitted = emit(resolution);
 const built = await build(doc);
-const docBuilt = await docEntry.build(doc);
 if (
   emitted.pptx.byteLength === 0 ||
-  built.pptx.byteLength === 0 ||
-  docBuilt.pptx.byteLength === 0
+  built.pptx.byteLength === 0
 ) {
   throw new Error("expected PPTX bytes");
 }

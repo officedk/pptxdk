@@ -1,3 +1,4 @@
+import { fade, wipe } from "pptxdk";
 import {
   Cell,
   MotionScope,
@@ -7,10 +8,8 @@ import {
   Step,
   Table,
   Text,
-  fade,
   useMotionScope,
-  wipe,
-} from "@react-pptx/react-pptx";
+} from "pptxdk/react";
 
 import {
   EnteredShapeText,

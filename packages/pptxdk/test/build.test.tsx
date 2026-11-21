@@ -7,40 +7,42 @@ import { join } from "node:path";
 
 import type { BoundObjectCapabilityModule } from "@pptxdk/core";
 import { validatePptx } from "@pptxdk/validation";
+import { strFromU8, strToU8, unzipSync, zipSync } from "fflate";
+import * as fontkit from "fontkit";
+import * as harfbuzz from "harfbuzzjs";
 import {
   build,
   BuildError,
   boxCapability,
+  createMorphScope,
+  emit,
+  font,
+  shapeCapability,
+  targets,
+  transitions,
+  type EmitOptions,
+  type FontSize,
+  type ResolveOptions,
+} from "pptxdk";
+import { createResolver } from "pptxdk/build";
+import {
   Box,
   Cell,
   Chart,
-  createMorphScope,
   Deck,
-  emit,
   expandDocument,
-  font,
   Group,
   Notes,
   P,
   Row,
   Section,
   Shape,
-  shapeCapability,
   Slide,
   SlideNumber,
   Span,
   Table,
   Text,
-  targets,
-  transitions,
-  type EmitOptions,
-  type FontSize,
-  type ResolveOptions,
-} from "@react-pptx/react-pptx";
-import { createResolver } from "@react-pptx/react-pptx/build";
-import { strFromU8, strToU8, unzipSync, zipSync } from "fflate";
-import * as fontkit from "fontkit";
-import * as harfbuzz from "harfbuzzjs";
+} from "pptxdk/react";
 import {
   createElement,
   useEffect,
@@ -3342,7 +3344,7 @@ describe("public build entry", () => {
             'import { createElement } from "react";',
             'import { BuildError } from "@pptxdk/core";',
             'import { Text as TextDeclaration } from "@pptxdk/capabilities/text-elements";',
-            'import { build, Deck, Shape, Slide } from "@react-pptx/react-pptx/shape";',
+            'import { build, Deck, Shape, Slide } from "pptxdk/shape";',
             'import { validatePptx } from "@pptxdk/validation";',
             'const result = await build(createElement(Deck, { width: 120, height: 96 }, createElement(Slide, { id: "trimmed" }, createElement(Shape, { id: "plain", name: "plain", x: 0, y: 0, width: 20, height: 20 }), createElement(Shape, { id: "labeled", name: "labeled", x: 24, y: 0, width: 60, height: 20, text: "形状文字 — Shape text" }), createElement(Shape, { id: "empty-label", name: "empty-label", x: 90, y: 0, width: 20, height: 20, text: "" }))));',
             "const file = await validatePptx(result.pptx);",

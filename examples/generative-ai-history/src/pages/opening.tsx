@@ -1,4 +1,4 @@
-import { P, Slide, Text } from "@react-pptx/react-pptx";
+import { P, Slide, Text } from "pptxdk/react";
 
 import { SamplingField } from "../components/sampling-field.tsx";
 import { colors } from "../theme.ts";

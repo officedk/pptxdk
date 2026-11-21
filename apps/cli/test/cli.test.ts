@@ -46,8 +46,8 @@ describe("react-pptx CLI single export", () => {
       const programmaticScript = [
         'import { pathToFileURL } from "node:url";',
         'import { writeFile } from "node:fs/promises";',
-        'import { targets } from "@react-pptx/react-pptx";',
-        'import { buildFromSource } from "@react-pptx/react-pptx/node";',
+        'import { targets } from "pptxdk";',
+        'import { buildFromSource } from "pptxdk/node";',
         `const result = await buildFromSource(${JSON.stringify(source)});`,
         `await writeFile(${JSON.stringify(output)}, result.pptx);`,
         `const baselineResult = await buildFromSource(${JSON.stringify(source)}, { target: targets.baselineOnly });`,
@@ -114,7 +114,7 @@ describe("react-pptx CLI single export", () => {
 
   it("cancellation during source import terminates the call immediately and isolates concurrent loading", async () => {
     const programmaticScript = [
-      'import { buildFromSource } from "@react-pptx/react-pptx/node";',
+      'import { buildFromSource } from "pptxdk/node";',
       'import { pathToFileURL } from "node:url";',
       `const pendingEntry = ${JSON.stringify(fixture("source-load-pending.tsx"))};`,
       `const concurrentEntry = ${JSON.stringify(fixture("source-load-after-cancel.tsx"))};`,

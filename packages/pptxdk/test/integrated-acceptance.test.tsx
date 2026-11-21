@@ -3,33 +3,41 @@ import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 
 import { validatePptx, type FileObject } from "@pptxdk/validation";
+import { strFromU8, unzipSync } from "fflate";
 import {
   after,
-  appendJSX,
-  Box,
-  Cell,
-  Chart,
   CommonContainer,
   CommonNode,
   createMorphScope,
   createMotionScopeHandle,
-  Deck,
   defineTheme,
   emit,
-  expandDocument,
   fade,
   font,
-  Group,
-  Image,
   linearGradient,
-  MotionScope,
-  Notes,
   observeMotion,
-  P,
   path,
   preset,
   radialGradient,
   resolve,
+  transitions,
+  type MotionEffectObservation,
+  type MotionObservation,
+} from "pptxdk";
+import { build, type ChartGroup } from "pptxdk";
+import { paint } from "pptxdk/preview";
+import {
+  appendJSX,
+  Box,
+  Cell,
+  Chart,
+  Deck,
+  expandDocument,
+  Group,
+  Image,
+  MotionScope,
+  Notes,
+  P,
   Row,
   Section,
   Shape,
@@ -39,19 +47,9 @@ import {
   Step,
   Table,
   Text,
-  transitions,
-  type MotionEffectObservation,
-  type MotionObservation,
-} from "@react-pptx/react-pptx";
-import {
-  build,
-  type ChartGroup,
-  type ChartNode,
-  type ChartProps,
-  type TextNode,
-} from "@react-pptx/react-pptx/document";
-import { paint } from "@react-pptx/react-pptx/preview";
-import { strFromU8, unzipSync } from "fflate";
+} from "pptxdk/react";
+import { type ChartProps } from "pptxdk/react";
+import { type ChartNode, type TextNode } from "pptxdk/vanilla";
 import { createContext, createElement, Fragment, useContext } from "react";
 import { describe, it } from "vitest";
 

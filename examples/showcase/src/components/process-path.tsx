@@ -1,11 +1,5 @@
-import {
-  Group,
-  Shape,
-  Step,
-  Text,
-  floatUp,
-  preset,
-} from "@react-pptx/react-pptx";
+import { floatUp, preset } from "pptxdk";
+import { Group, Shape, Step, Text } from "pptxdk/react";
 
 import { colors, motion } from "../theme.ts";
 

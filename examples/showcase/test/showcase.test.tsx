@@ -1,20 +1,11 @@
 import assert from "node:assert/strict";
 
 import { validatePptx } from "@pptxdk/validation";
-import {
-  build,
-  Deck,
-  emit,
-  expandDocument,
-  resolve,
-  Slide,
-} from "@react-pptx/react-pptx";
-import {
-  emit as emitDocument,
-  resolve as resolveDocument,
-} from "@react-pptx/react-pptx/document";
-import { paint } from "@react-pptx/react-pptx/preview";
 import { unzipSync } from "fflate";
+import { build, emit, resolve } from "pptxdk";
+import { emit as emitDocument, resolve as resolveDocument } from "pptxdk";
+import { paint } from "pptxdk/preview";
+import { Deck, expandDocument, Slide } from "pptxdk/react";
 import { it } from "vitest";
 
 import { Progress } from "../src/components/progress.tsx";

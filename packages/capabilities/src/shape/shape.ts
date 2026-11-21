@@ -52,6 +52,11 @@ import {
 } from "../shared/identity.ts";
 import { shapeXml } from "./shape-xml.ts";
 export { linearGradient, radialGradient } from "../shared/visual.ts";
+export type {
+  ArrowType,
+  LineEndStyle,
+  ShapeVisualStyle,
+} from "../shared/visual.ts";
 export type { PaddingStyle, VisualStyle } from "@pptxdk/core/capability";
 import { motionAnnotations, type MotionProps } from "../motion/motion-api.ts";
 import type { MorphProps } from "../shared/morph-api.ts";

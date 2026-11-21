@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 
-import { defineTheme, font } from "@react-pptx/react-pptx/document";
+import { defineTheme, font } from "pptxdk";
 
 const jost = font(
   "Jost",

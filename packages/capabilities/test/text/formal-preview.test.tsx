@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
+import { documentCapabilities } from "@pptxdk/capabilities/all";
 import {
   cell,
   chart,
   deck,
-  documentCapabilities,
   font,
   paragraph,
   row,

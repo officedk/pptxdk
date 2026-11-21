@@ -1,14 +1,9 @@
 import assert from "node:assert/strict";
 import { createRequire } from "node:module";
 
+import { documentCapabilities } from "@pptxdk/capabilities/all";
 import { Box } from "@pptxdk/capabilities/box-elements";
-import {
-  box,
-  deck,
-  documentCapabilities,
-  shape,
-  slide,
-} from "@pptxdk/capabilities/document";
+import { box, deck, shape, slide } from "@pptxdk/capabilities/document";
 import { linearGradient, radialGradient } from "@pptxdk/capabilities/shape";
 import { Shape } from "@pptxdk/capabilities/shape-elements";
 import type { CapabilityModule, CommonNode } from "@pptxdk/core";

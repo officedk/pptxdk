@@ -12,8 +12,6 @@ import {
   type CapabilityParseContext,
   type EmitContext,
   type EmitOutput,
-  type LayoutStyle,
-  type LinkTarget,
   type ObjectCapabilityModule,
   type ObjectObservation,
   type ObjectResolveContext,
@@ -21,17 +19,13 @@ import {
   type PaintOutput,
   type PreviewTransform,
   type ResolvedObject,
-  type TextStyle,
   type ThemeScope,
-  type VisualStyle,
 } from "@pptxdk/core/capability";
-import { CommonContainer } from "@pptxdk/core/document";
 import { pxToEmu, xmlEscape } from "@pptxdk/emit";
 
 import {
   motionContainerAnnotations,
   validateMotionFlag,
-  type MotionProps,
 } from "../motion/motion-api.ts";
 import {
   nativeLinkXml,
@@ -39,33 +33,12 @@ import {
   parseMorphKey,
   parseOptionalName,
 } from "../shared/identity.ts";
-import type { MorphProps } from "../shared/morph-api.ts";
 import { groupXml } from "./group-xml.ts";
 
-/** Native Group preserves member relationships; style allows it to arrange as a layout child, with output bounds computed from the union of member geometries. */
-export type GroupDeclarationProps = MotionProps &
-  MorphProps & {
-    readonly id?: string;
-    readonly name?: string;
-    readonly link?: LinkTarget;
-    readonly style?: LayoutStyle & TextStyle & Pick<VisualStyle, "rotate">;
-    readonly theme?: ThemeScope;
-  };
-
-/** Creates the editable native group shared by the command factory and the Group JSX element. */
-export function createGroupNode(
-  props: GroupDeclarationProps,
-): CommonContainer<
-  "group",
-  GroupDeclarationProps,
-  NonNullable<GroupDeclarationProps["style"]>
-> {
-  return new CommonContainer<
-    "group",
-    GroupDeclarationProps,
-    NonNullable<GroupDeclarationProps["style"]>
-  >("group", "group", props);
-}
+export {
+  createGroupNode,
+  type GroupDeclarationProps,
+} from "./group-declaration.ts";
 
 const allowedParameters = [
   "id",

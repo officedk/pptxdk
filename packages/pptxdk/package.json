@@ -53,21 +53,6 @@
       "source": "./src/preview.ts",
       "types": "./dist/preview.d.ts",
       "default": "./dist/preview.js"
-    },
-    "./shape": {
-      "source": "./src/shape.ts",
-      "types": "./dist/shape.d.ts",
-      "default": "./dist/shape.js"
-    },
-    "./chart": {
-      "source": "./src/chart.ts",
-      "types": "./dist/chart.d.ts",
-      "default": "./dist/chart.js"
-    },
-    "./text": {
-      "source": "./src/text.ts",
-      "types": "./dist/text.d.ts",
-      "default": "./dist/text.js"
     }
   },
   "scripts": {

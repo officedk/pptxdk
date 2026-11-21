@@ -1,13 +1,8 @@
 import assert from "node:assert/strict";
 
 import { slideBackgroundCapability } from "@pptxdk/capabilities";
-import {
-  deck,
-  documentCapabilities,
-  notes,
-  shape,
-  slide,
-} from "@pptxdk/capabilities/document";
+import { documentCapabilities } from "@pptxdk/capabilities/all";
+import { deck, notes, shape, slide } from "@pptxdk/capabilities/document";
 import { motionCapability } from "@pptxdk/capabilities/motion";
 import { notesCapability } from "@pptxdk/capabilities/notes";
 import { linearGradient, shapeCapability } from "@pptxdk/capabilities/shape";

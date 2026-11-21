@@ -49,6 +49,11 @@
       "types": "./dist/document.d.ts",
       "default": "./dist/document.js"
     },
+    "./all": {
+      "source": "./src/all.ts",
+      "types": "./dist/all.d.ts",
+      "default": "./dist/all.js"
+    },
     "./font": {
       "source": "./src/font/font.ts",
       "types": "./dist/font/font.d.ts",
@@ -103,6 +108,11 @@
       "source": "./src/transition/transition.ts",
       "types": "./dist/transition/transition.d.ts",
       "default": "./dist/transition/transition.js"
+    },
+    "./slide-background": {
+      "source": "./src/slide-background/slide-background.ts",
+      "types": "./dist/slide-background/slide-background.d.ts",
+      "default": "./dist/slide-background/slide-background.js"
     },
     "./motion": {
       "source": "./src/motion/motion.ts",

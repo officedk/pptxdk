@@ -19,27 +19,23 @@ import {
 } from "@pptxdk/core/document";
 
 import {
-  boxCapability,
   createBoxNode,
   type BoxDeclarationProps,
-} from "./box/box.ts";
+} from "./box/box-declaration.ts";
 import {
-  chartCapability,
   createChartNode,
   type ChartNode,
   type ChartProps,
-} from "./chart/chart.ts";
+} from "./chart/chart-declaration.ts";
 import { font } from "./font/font.ts";
 import {
   createGroupNode,
-  groupCapability,
   type GroupDeclarationProps,
-} from "./group/group.ts";
+} from "./group/group-declaration.ts";
 import {
   createImageNode,
-  imageCapability,
   type ImageDeclarationProps,
-} from "./image/image.ts";
+} from "./image/image-declaration.ts";
 import {
   createMotionScopeHandle,
   createMotionScopeNode,
@@ -49,30 +45,25 @@ import {
   type MotionScopeHandle,
   type MotionStepAuthorProps,
 } from "./motion/motion-api.ts";
-import { motionCapability } from "./motion/motion.ts";
 import {
   createNotesNode,
   type NotesDeclarationProps,
 } from "./notes/notes-declaration.ts";
-import { notesCapability } from "./notes/notes.ts";
 import {
   createShapeNode,
-  shapeCapability,
   type ShapeDeclarationProps,
-} from "./shape/shape.ts";
-import { slideBackgroundCapability } from "./slide-background/slide-background.ts";
+} from "./shape/shape-declaration.ts";
 import {
   createCellNode,
   createRowNode,
   createTableNode,
-  tableCapability,
   type CellDeclarationProps,
   type CellNode,
   type RowDeclarationProps,
   type RowNode,
   type TableDeclarationProps,
   type TableNode,
-} from "./table/table.ts";
+} from "./table/table-declaration.ts";
 import {
   createParagraphNode,
   createSlideNumberNode,
@@ -83,11 +74,17 @@ import {
   type SpanDeclarationProps,
   type TextDeclarationProps,
 } from "./text/text-declaration.ts";
-import { textCapability } from "./text/text.ts";
 import {
-  transitionCapability,
+  transitions,
+  type FlipTransition,
+  type MorphTransition,
+  type StandardTransition,
+  type StripsDirection,
   type Transition,
-} from "./transition/transition.ts";
+  type TransitionDirection,
+  type TransitionDuration,
+  type TransitionSpeed,
+} from "./transition/transition-api.ts";
 
 /**
  * External addresses such as link URLs are stored as address values at authoring time. Content
@@ -368,33 +365,24 @@ export function step(props: MotionStepAuthorProps = {}): MotionStepNode {
   });
 }
 
-/** Baseline capabilities enabled by the public document build; factories never register capabilities. */
-export const documentCapabilities = Object.freeze([
-  boxCapability,
-  chartCapability,
-  groupCapability,
-  imageCapability,
-  motionCapability,
-  notesCapability,
-  shapeCapability,
-  slideBackgroundCapability,
-  tableCapability,
-  textCapability,
-  transitionCapability,
-] as const);
-
-export {
-  createMotionScopeHandle,
-  font,
-  notesCapability,
-  slideBackgroundCapability,
-};
+export { createMotionScopeHandle, font, transitions };
 export type {
   MotionScopeAuthorProps,
   MotionScopeHandle,
   MotionStepAuthorProps,
 } from "./motion/motion-api.ts";
-export type { LinkTarget, Transition };
+export type { MorphProps } from "./shared/morph-api.ts";
+export type {
+  FlipTransition,
+  LinkTarget,
+  MorphTransition,
+  StandardTransition,
+  StripsDirection,
+  Transition,
+  TransitionDirection,
+  TransitionDuration,
+  TransitionSpeed,
+};
 export type { NotesDeclarationProps } from "./notes/notes-declaration.ts";
 
 export type {
@@ -444,7 +432,7 @@ export type {
   ScatterErrorBars,
   ScatterLine,
   SharedCategoryData,
-} from "./chart/chart.ts";
+} from "./chart/chart-declaration.ts";
 export type {
   TableCellStyle,
   TableColumn,
@@ -453,4 +441,4 @@ export type {
   TableStyle,
   TableTextStyle,
   TableVerticalAlign,
-} from "./table/table.ts";
+} from "./table/table-declaration.ts";

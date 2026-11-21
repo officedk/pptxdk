@@ -611,7 +611,7 @@ describe("public document authoring entry", () => {
     );
     assert.equal(names.length, 2);
     assert.equal(names[0], names[1]);
-    assert.match(names[0]!, /^!!react-pptx-morph-/u);
+    assert.match(names[0]!, /^!!morph-\d+$/u);
   });
 
   it("loads and builds without importing React at runtime", () => {

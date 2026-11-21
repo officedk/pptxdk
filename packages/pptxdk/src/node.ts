@@ -3,16 +3,14 @@ import { registerHooks } from "node:module";
 import { extname, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
+import { CommonNode } from "@pptxdk/core/document";
+import { validateOptions } from "@pptxdk/emit";
 import { transformSync, type Loader } from "esbuild";
-import {
-  createElement,
-  isValidElement,
-  type ComponentType,
-  type ReactNode,
-} from "react";
+import type { ComponentType, ReactNode } from "react";
 
 import { build } from "./index.ts";
 import type { BuildOptions, BuildResult } from "./index.ts";
+import type { PreviewOptions, PreviewResult } from "./preview.ts";
 
 const sourceLoaders: Readonly<Record<string, Loader>> = {
   ".ts": "ts",
@@ -26,6 +24,13 @@ export type BuildFromSourceOptions = BuildOptions & {
   readonly exportName?: string;
 };
 
+export type PreviewFromSourceOptions = PreviewOptions & {
+  /** Use the named export of the entry module as the deck; defaults to "default". */
+  readonly exportName?: string;
+};
+
+export type { BuildOptions, BuildResult, PreviewOptions, PreviewResult };
+
 /** Error thrown when loading author deck source fails. */
 export class SourceLoadError extends Error {
   constructor(message: string, options?: ErrorOptions) {
@@ -35,7 +40,7 @@ export class SourceLoadError extends Error {
 }
 
 function registerSourceLoader() {
-  // Deferred imports also require source transformation, so hold the loader hook throughout the source build.
+  // Deferred imports also require source transformation, so hold the loader hook throughout the source operation.
   return registerHooks({
     load(url, context, nextLoad) {
       if (!url.startsWith("file:")) return nextLoad(url, context);
@@ -74,18 +79,18 @@ function sourceUrl(entry: string | URL): URL {
   return pathToFileURL(entry);
 }
 
-type SourceModuleLoad =
-  | { readonly kind: "loaded"; readonly module: Record<string, unknown> }
+type SettledPromise<T> =
+  | { readonly kind: "resolved"; readonly value: T }
   | { readonly kind: "cancelled" }
-  | { readonly kind: "failed"; readonly cause: unknown };
+  | { readonly kind: "rejected"; readonly cause: unknown };
 
-function importSourceModule(
-  url: URL,
+function settleWithSignal<T>(
+  promise: PromiseLike<T>,
   signal?: AbortSignal,
-): Promise<SourceModuleLoad> {
+): Promise<SettledPromise<T>> {
   return new Promise((resolve) => {
     let settled = false;
-    const settle = (result: SourceModuleLoad) => {
+    const settle = (result: SettledPromise<T>) => {
       if (settled) return;
       settled = true;
       signal?.removeEventListener("abort", onAbort);
@@ -103,50 +108,104 @@ function importSourceModule(
       return;
     }
 
-    // Imports cannot be aborted once initiated; intercept late settlement to prevent unhandled rejection.
-    void import(url.href).then(
-      (module: Record<string, unknown>) => settle({ kind: "loaded", module }),
-      (cause: unknown) => settle({ kind: "failed", cause }),
+    // Intercept late settlement after abort to prevent unhandled rejection in the host process.
+    void Promise.resolve(promise).then(
+      (value) => settle({ kind: "resolved", value }),
+      (cause: unknown) => settle({ kind: "rejected", cause }),
     );
   });
+}
+
+function isPromiseLike(value: unknown): value is PromiseLike<unknown> {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "then" in value &&
+    typeof (value as { readonly then?: unknown }).then === "function"
+  );
+}
+
+async function awaitSourcePromise<T>(
+  promise: PromiseLike<T>,
+  filePath: string,
+  signal?: AbortSignal,
+): Promise<T> {
+  const settled = await settleWithSignal(promise, signal);
+  if (settled.kind === "cancelled") throw signal?.reason;
+  if (settled.kind === "rejected") {
+    if (signal?.aborted && settled.cause === signal.reason) {
+      throw settled.cause;
+    }
+    const details =
+      settled.cause instanceof Error
+        ? (settled.cause.stack ?? settled.cause.message)
+        : String(settled.cause);
+    throw new SourceLoadError(
+      `Failed to load deck source at ${filePath}:\n${details}`,
+      { cause: settled.cause },
+    );
+  }
+  return settled.value;
 }
 
 async function loadDeck(
   url: URL,
   exportName: string,
   signal?: AbortSignal,
-): Promise<ReactNode> {
-  const loaded = await importSourceModule(url, signal);
-  if (loaded.kind === "cancelled") throw signal?.reason;
+): Promise<ReactNode | CommonNode> {
+  const filePath = fileURLToPath(url);
+  const deckModule = await awaitSourcePromise<Record<string, unknown>>(
+    import(url.href),
+    filePath,
+    signal,
+  );
 
-  if (loaded.kind === "failed") {
-    const { cause } = loaded;
-    const details =
-      cause instanceof Error ? (cause.stack ?? cause.message) : String(cause);
+  if (
+    !Object.hasOwn(deckModule, exportName) ||
+    deckModule[exportName] === undefined
+  ) {
     throw new SourceLoadError(
-      `Failed to load deck source at ${fileURLToPath(url)}:\n${details}`,
-      {
-        cause,
-      },
+      `Deck source at ${filePath} does not export ${JSON.stringify(exportName)}`,
     );
   }
 
-  const deckModule = loaded.module;
   const exported = deckModule[exportName];
-  if (isValidElement(exported)) return exported;
+  if (exported instanceof CommonNode) {
+    return exported;
+  }
+
+  if (isPromiseLike(exported)) {
+    const resolved = await awaitSourcePromise(exported, filePath, signal);
+    if (resolved instanceof CommonNode) {
+      return resolved;
+    }
+    throw new SourceLoadError(
+      `Deck source at ${filePath} export ${JSON.stringify(exportName)} resolved to an unsupported value; expected an editable document node`,
+    );
+  }
+
   if (typeof exported === "function") {
+    const { createElement } = await import("react");
     return createElement(exported as ComponentType);
+  }
+  if (
+    typeof exported === "object" &&
+    exported !== null &&
+    !Array.isArray(exported)
+  ) {
+    const { isValidElement } = await import("react");
+    if (isValidElement(exported)) return exported;
   }
 
   throw new SourceLoadError(
-    `Deck source at ${fileURLToPath(url)} must export a React element or component named ${JSON.stringify(exportName)}`,
+    `Deck source at ${filePath} must export an editable document node, Promise of document node, React element, or zero-arg React component named ${JSON.stringify(exportName)}`,
   );
 }
 
 /**
  * Run a formal build from a Node.js local ESM source entry. TS, TSX, MTS, and JSX are loaded by this entry;
  * the entry and its source dependencies are resolved according to Node file locations. Cancellation signals
- * also cover source import and preserve the original cancellation reason.
+ * also cover source import, async deck promises, and expansion, preserving the original cancellation reason.
  * The return value is identical to `build`.
  */
 export async function buildFromSource(
@@ -155,12 +214,41 @@ export async function buildFromSource(
 ): Promise<BuildResult> {
   const { exportName = "default", ...buildOptions } = options;
   const url = sourceUrl(entry);
-  if (buildOptions.signal?.aborted) return build(null, buildOptions);
+  validateOptions(buildOptions);
+  if (buildOptions.signal?.aborted) throw buildOptions.signal.reason;
 
   const hooks = registerSourceLoader();
   try {
     const deck = await loadDeck(url, exportName, buildOptions.signal);
     return await build(deck, buildOptions);
+  } finally {
+    hooks.deregister();
+  }
+}
+
+/**
+ * Run a formal static preview from a Node.js local ESM source entry. Shares source loading, export selection,
+ * and cancellation semantics with `buildFromSource`.
+ * The return value is identical to `preview`.
+ */
+export async function previewFromSource(
+  entry: string | URL,
+  options: PreviewFromSourceOptions = {},
+): Promise<PreviewResult> {
+  const { exportName = "default", ...previewOptions } = options;
+  const url = sourceUrl(entry);
+  if (
+    previewOptions.pages?.some((page) => !Number.isInteger(page) || page < 1)
+  ) {
+    throw new RangeError("Preview page numbers must be positive integers");
+  }
+  if (previewOptions.signal?.aborted) throw previewOptions.signal.reason;
+
+  const { preview } = await import("./preview.ts");
+  const hooks = registerSourceLoader();
+  try {
+    const deck = await loadDeck(url, exportName, previewOptions.signal);
+    return await preview(deck, previewOptions);
   } finally {
     hooks.deregister();
   }

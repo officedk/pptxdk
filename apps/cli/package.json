@@ -1,5 +1,5 @@
 {
-  "name": "@react-pptx/cli",
+  "name": "@pptxdk/cli",
   "version": "0.0.0",
   "private": true,
   "repository": {
@@ -8,7 +8,7 @@
     "directory": "apps/cli"
   },
   "bin": {
-    "react-pptx": "./dist/cli.js"
+    "pptxdk": "./dist/cli.js"
   },
   "files": [
     "dist"

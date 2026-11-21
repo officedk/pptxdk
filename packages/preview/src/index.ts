@@ -113,6 +113,19 @@ export function screenGeometry(
   };
 }
 
+/** Error thrown when requested preview page numbers exceed the resolved deck slide count. */
+export class PreviewPageRangeError extends RangeError {
+  readonly requestedPages: readonly number[];
+  readonly totalSlides: number;
+
+  constructor(requestedPages: readonly number[], totalSlides: number) {
+    super("Preview page number is outside the document");
+    this.name = "PreviewPageRangeError";
+    this.requestedPages = Object.freeze([...requestedPages]);
+    this.totalSlides = totalSlides;
+  }
+}
+
 function validateRequestedPages(pages: readonly number[] | undefined): void {
   if (pages?.some((page) => !Number.isInteger(page) || page < 1)) {
     throw new RangeError("Preview page numbers must be positive integers");
@@ -222,7 +235,7 @@ export function paint(
 
   const internal = getInternalResolution(resolution);
   if (requestedPages?.some((page) => page > internal.slides.length)) {
-    throw new RangeError("Preview page number is outside the document");
+    throw new PreviewPageRangeError(requestedPages, internal.slides.length);
   }
   const selected =
     requestedPages === undefined ? undefined : new Set(requestedPages);

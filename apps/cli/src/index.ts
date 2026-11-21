@@ -81,10 +81,70 @@ const buildInputSchema = z.object({
   embedFonts: z.enum(["full", "subset"]).optional(),
 });
 
+function parsePagesSpec(raw: string): number[] | undefined {
+  const parts = raw.split(",");
+  if (parts.length === 0) return undefined;
+
+  const selected = new Set<number>();
+  for (const part of parts) {
+    // Reject empty items ("", "1,", ",1", "1,,2"), whitespace, signs, decimals, or non-digits.
+    if (/^\d+$/u.test(part)) {
+      const page = Number(part);
+      if (!Number.isSafeInteger(page) || page < 1) return undefined;
+      selected.add(page);
+      continue;
+    }
+    const rangeMatch = /^(\d+)-(\d+)$/u.exec(part);
+    if (rangeMatch !== null) {
+      const start = Number(rangeMatch[1]);
+      const end = Number(rangeMatch[2]);
+      if (
+        !Number.isSafeInteger(start) ||
+        !Number.isSafeInteger(end) ||
+        start < 1 ||
+        end < 1 ||
+        start > end
+      ) {
+        return undefined;
+      }
+      for (let page = start; page <= end; page += 1) {
+        selected.add(page);
+      }
+      continue;
+    }
+    return undefined;
+  }
+  return [...selected].toSorted((a, b) => a - b);
+}
+
+const pagesOptionSchema = z.codec(
+  z.string().min(1),
+  z.array(z.number().int().positive()).min(1),
+  {
+    decode(raw, ctx) {
+      const parsed = parsePagesSpec(raw);
+      if (parsed === undefined) {
+        ctx.issues.push({
+          code: "custom",
+          input: raw,
+          message:
+            "Pages must be comma-separated 1-based page numbers or ascending closed ranges (for example, 1,3-5)",
+        });
+        return z.NEVER;
+      }
+      return parsed;
+    },
+    encode(pages) {
+      return pages.join(",");
+    },
+  },
+);
+
 const previewInputSchema = z.object({
   entry: z.string().min(1),
   outDir: z.string().min(1).optional(),
   export: z.string().min(1).optional(),
+  pages: pagesOptionSchema.optional(),
 });
 
 const builtSchema = z.object({
@@ -102,6 +162,11 @@ const previewedSchema = z.object({
 const invalidOutputSchema = z.object({
   entry: z.string(),
   output: z.string(),
+});
+
+const pageOutOfRangeSchema = z.object({
+  requestedPages: z.array(z.number().int().positive()),
+  totalSlides: z.number().int().nonnegative(),
 });
 
 const sourceLoadFailedSchema = z.object({
@@ -295,6 +360,12 @@ const previewInvalidOutputFailure = {
   schema: invalidOutputSchema,
 } as const;
 
+const previewPageOutOfRangeFailure = {
+  description: "Requested preview pages exceed total slide count",
+  exitCode: 2,
+  schema: pageOutOfRangeSchema,
+} as const;
+
 const previewFailedFailure = {
   description: "Deck preview failed on one or more pages",
   exitCode: 1,
@@ -315,6 +386,7 @@ const previewCancelledFailure = {
 
 const previewFailureVariants = {
   invalidOutput: previewInvalidOutputFailure,
+  pageOutOfRange: previewPageOutOfRangeFailure,
   sourceLoadFailed: sourceLoadFailedFailure,
   buildFailed: buildFailedFailure,
   previewFailed: previewFailedFailure,
@@ -426,6 +498,7 @@ async function previewDeckCommand({
   try {
     result = await previewFromSource(entry, {
       ...(input.export !== undefined && { exportName: input.export }),
+      ...(input.pages !== undefined && { pages: input.pages }),
       ...(dependencies.signal !== undefined && {
         signal: dependencies.signal,
       }),
@@ -438,6 +511,15 @@ async function previewDeckCommand({
       return outcome.failure.buildFailed({
         diagnostics: toBuildFailureDiagnostics(error.diagnostics),
       });
+    }
+    if (input.pages !== undefined && error instanceof RangeError) {
+      const { PreviewPageRangeError } = await import("pptxdk/preview");
+      if (error instanceof PreviewPageRangeError) {
+        return outcome.failure.pageOutOfRange({
+          requestedPages: input.pages,
+          totalSlides: error.totalSlides,
+        });
+      }
     }
     if (error instanceof SourceLoadError) {
       return outcome.failure.sourceLoadFailed({
@@ -697,6 +779,13 @@ const cliContract = define({
           description:
             "Named deck or component exported from entry (defaults to default)",
         },
+        pages: {
+          kind: "valueOption",
+          longOption: "--pages",
+          shortAlias: "-p",
+          description:
+            "1-based page numbers or closed ranges to preview (for example, 1,3-5)",
+        },
       },
       input: previewInputSchema,
       outputs: define.outputModes("preview", previewInputSchema, (mode) => ({
@@ -734,6 +823,15 @@ const cliContract = define({
                   text.lines(
                     toContractTextLines([
                       `Output directory cannot be a non-directory path: ${output}`,
+                    ]),
+                  ),
+              },
+              pageOutOfRange: {
+                ...previewPageOutOfRangeFailure,
+                text: ({ requestedPages, totalSlides }) =>
+                  text.lines(
+                    toContractTextLines([
+                      `Requested pages (${requestedPages.join(", ")}) exceed total slides (${totalSlides})`,
                     ]),
                   ),
               },

@@ -23,3 +23,33 @@ export const HundredPageDeck = deck({ width: 120, height: 96 }).append(
     ),
   ),
 );
+
+export const SixPageDeck = deck({ width: 120, height: 96 }).append(
+  ...Array.from({ length: 6 }, (_, index) =>
+    slide({ id: `six-${index + 1}` }).append(
+      shape({
+        id: `six-box-${index + 1}`,
+        x: 4 + index * 4,
+        y: 4,
+        width: 24,
+        height: 16,
+        fill: "#2563EB",
+      }),
+    ),
+  ),
+);
+
+export const OneTwentyPageDeck = deck({ width: 120, height: 96 }).append(
+  ...Array.from({ length: 120 }, (_, index) =>
+    slide({ id: `deck-120-slide-${index + 1}` }).append(
+      shape({
+        id: `deck-120-box-${index + 1}`,
+        x: 4 + (index % 10) * 4,
+        y: 4 + Math.floor(index / 10) * 4,
+        width: 24,
+        height: 16,
+        fill: "#0F766E",
+      }),
+    ),
+  ),
+);

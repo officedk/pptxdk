@@ -102,7 +102,7 @@ export type TextLayoutMeasurement = {
 
 type HostText = { readonly type: "#text"; readonly text: string };
 type HostElement = {
-  readonly type: `rp:${string}`;
+  readonly type: string;
   readonly props: Readonly<Record<string, unknown>>;
   readonly children: readonly unknown[];
 };
@@ -333,11 +333,15 @@ function escapedXml(value: string): string {
   }
 }
 
+function isHostText(child: TextChild): child is HostText {
+  return child.type === "#text" && "text" in child;
+}
+
 function hostChild(value: unknown): value is TextChild {
   if (!record(value) || typeof value["type"] !== "string") return false;
   if (value["type"] === "#text") return typeof value["text"] === "string";
   return (
-    value["type"].startsWith("rp:") &&
+    value["type"].trim() !== "" &&
     record(value["props"]) &&
     Array.isArray(value["children"])
   );
@@ -896,11 +900,11 @@ function collectRuns(
         "Text content tree contains invalid nodes",
       );
     }
-    if (child.type === "#text") {
+    if (isHostText(child)) {
       if (child.text !== "") runs.push({ text: child.text, style });
       continue;
     }
-    if (child.type !== "rp:span" && child.type !== "rp:slide-number") {
+    if (child.type !== "span" && child.type !== "slide-number") {
       throw new CapabilityError(
         "unsupported-text-child",
         `${child.type} cannot be used as text paragraph or run`,
@@ -917,7 +921,7 @@ function collectRuns(
     }
     const spanStyle = readRunStyle(child.props["style"]);
     const nextStyle = mergeRunStyle(style, spanStyle, theme);
-    if (child.type === "rp:slide-number") {
+    if (child.type === "slide-number") {
       if (child.children.length > 0) {
         throw new CapabilityError(
           "invalid-slide-number",
@@ -1300,14 +1304,14 @@ function normalizeParagraphs(
       );
     }
     if (
-      child.type === "#text" ||
-      child.type === "rp:span" ||
-      child.type === "rp:slide-number"
+      isHostText(child) ||
+      child.type === "span" ||
+      child.type === "slide-number"
     ) {
       collectRuns([child], baseRunStyle, inline, theme, fields);
       continue;
     }
-    if (child.type !== "rp:paragraph") {
+    if (child.type !== "paragraph") {
       throw new CapabilityError(
         "unsupported-text-child",
         `${child.type} cannot be used directly in text box`,

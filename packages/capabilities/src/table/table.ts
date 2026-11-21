@@ -596,7 +596,7 @@ function prepareRows(
       }
       continue;
     }
-    if (child.type !== "rp:row") {
+    if (child.type !== "row") {
       fail("invalid-table-structure", "Table can only contain Row directly");
     }
     const rowIndex = rows.length;
@@ -641,7 +641,7 @@ function prepareRows(
         }
         continue;
       }
-      if (cellChild.type !== "rp:cell") {
+      if (cellChild.type !== "cell") {
         fail(
           "invalid-table-structure",
           "Row can only contain Cell directly",
@@ -664,9 +664,8 @@ function prepareRows(
       }
       if (
         rowIndex + rowSpan >
-        input.children.filter(
-          (item) => "props" in item && item.type === "rp:row",
-        ).length
+        input.children.filter((item) => "props" in item && item.type === "row")
+          .length
       ) {
         fail(
           "invalid-table-merge",
@@ -1175,7 +1174,7 @@ function tableLayoutModel(
 
 /** Table module independently validates row and column structure, resolving layout/cells once for emit and paint. */
 export const tableCapability: ObjectCapabilityModule = {
-  declaration: "rp:table",
+  declaration: "table",
 
   bind(
     input: CapabilityInput,
@@ -1618,7 +1617,7 @@ export function createTableNode(props: TableDeclarationProps): TableNode {
     "table",
     TableDeclarationProps,
     NonNullable<TableDeclarationProps["style"]>
-  >("table", "rp:table", props);
+  >("table", "table", props);
 }
 
 /** Creates the editable row shared by command authoring and the Row JSX element. */
@@ -1627,7 +1626,7 @@ export function createRowNode(props: RowDeclarationProps): RowNode {
     "row",
     RowDeclarationProps,
     NonNullable<RowDeclarationProps["style"]>
-  >("row", "rp:row", props);
+  >("row", "row", props);
 }
 
 /** Creates the editable rich-text cell shared by command authoring and the Cell JSX element. */
@@ -1636,5 +1635,5 @@ export function createCellNode(props: CellDeclarationProps): CellNode {
     "cell",
     CellDeclarationProps,
     NonNullable<CellDeclarationProps["style"]>
-  >("cell", "rp:cell", props);
+  >("cell", "cell", props);
 }

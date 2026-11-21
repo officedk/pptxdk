@@ -533,19 +533,19 @@ export class AuthorQuery<Node extends CommonNode = CommonNode> {
 export function createDeckNode<Props extends object = DeckProps>(
   props: Props,
 ): CommonContainer<"deck", Props, TextStyle> {
-  return new CommonContainer("deck", "rp:deck", props);
+  return new CommonContainer("deck", "deck", props);
 }
 
 /** Creates the editable Slide node used by both React host expansion and command authoring. */
 export function createSlideNode<Props extends object = SlideProps>(
   props: Props,
 ): CommonContainer<"slide", Props, TextStyle & Omit<LayoutStyle, "zIndex">> {
-  return new CommonContainer("slide", "rp:slide", props);
+  return new CommonContainer("slide", "slide", props);
 }
 
 /** Creates the editable Section node used by both React host expansion and command authoring. */
 export function createSectionNode<Props extends object = SectionProps>(
   props: Props,
 ): CommonContainer<"section", Props> {
-  return new CommonContainer("section", "rp:section", props);
+  return new CommonContainer("section", "section", props);
 }

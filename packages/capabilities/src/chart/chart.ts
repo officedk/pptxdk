@@ -2807,7 +2807,7 @@ function displayBlanksAs(
 
 /** Chart module validates input and resolves chart data/configuration for native emit and static paint. */
 export const chartCapability: ObjectCapabilityModule = {
-  declaration: "rp:chart",
+  declaration: "chart",
 
   bind(
     input: CapabilityInput,
@@ -3879,7 +3879,7 @@ export type ChartNode = CommonNode<
 export function createChartNode(props: ChartProps): ChartNode {
   return new CommonNode<"chart", ChartProps, NonNullable<ChartProps["style"]>>(
     "chart",
-    "rp:chart",
+    "chart",
     props,
   );
 }

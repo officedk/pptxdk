@@ -60,7 +60,7 @@ const wrappingCopy =
 
 export const tablePositiveScenario: CapabilityScenario = {
   id: "table-layout-and-preview",
-  capability: "rp:table",
+  capability: "table",
   description:
     "Dual-author Table scenario covering px/auto/fr columns, rowSpan/colSpan merges, fills, solid borders, rich text with slide number, and constrained-width wrapping increasing row height.",
   visualCheckpoints: [
@@ -574,7 +574,7 @@ export const tablePositiveScenario: CapabilityScenario = {
 
 export const tableRichTextBordersAndOversetScenario: CapabilityScenario = {
   id: "table-rich-text-borders-and-overset",
-  capability: "rp:table",
+  capability: "table",
   description:
     "Dual-author Table scenario covering dashed/dotted borders, multiscript/BiDi, justify, bullet & numbered lists, underline/line-through, textShadow, letterSpacing, slideNumber, and fixed-height overset clipping with build warning and zero preview diagnostics.",
   visualCheckpoints: [
@@ -918,7 +918,7 @@ export const tableRichTextBordersAndOversetScenario: CapabilityScenario = {
 
 export const tableRejectionScenario: CapabilityScenario = {
   id: "table-preview-rejections",
-  capability: "rp:table",
+  capability: "table",
   kind: "rejection",
   description:
     "Dual-author Table rejection scenario verifying per-page error isolation strictly for cell missing-glyph and unmeasured font resources while valid sibling pages (with dashed borders & overset clipping) render.",

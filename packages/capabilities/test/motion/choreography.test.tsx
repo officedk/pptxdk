@@ -591,7 +591,7 @@ describe("plain authoring choreography", () => {
       motionOf(before).steps.map((entry) => entry.effects.length),
       [1, 0],
     );
-    assert.equal(moved.type, "rp:shape");
+    assert.equal(moved.type, "shape");
   });
 
   it("re-derives scope parentage when an explicit move nests one scope in another", async () => {

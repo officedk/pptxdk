@@ -4,26 +4,55 @@ import { validatePptx } from "@pptxdk/validation";
 import { strFromU8, unzipSync } from "fflate";
 import {
   build,
+  build as buildDocument,
   BuildError,
   CommonContainer,
   CommonNode,
+  createMotionScopeHandle,
+  resolve as resolveDocument,
   RichTextContainer,
 } from "pptxdk";
-import { build as buildDocument } from "pptxdk";
 import {
+  Box,
   Cell,
   Chart,
   Deck,
   expandDocument,
+  Group,
+  Image,
+  MotionScope,
+  Notes,
   P,
   Row,
+  Section,
   Shape,
   Slide,
+  SlideNumber,
   Span,
+  Step,
   Table,
   Text,
 } from "pptxdk/react";
-import { deck, paragraph, shape, slide, span } from "pptxdk/vanilla";
+import {
+  box,
+  cell,
+  chart,
+  deck,
+  group,
+  image,
+  motionScope,
+  notes,
+  paragraph,
+  row,
+  section,
+  shape,
+  slide,
+  slideNumber,
+  span,
+  step,
+  table,
+  text,
+} from "pptxdk/vanilla";
 import {
   createElement,
   useEffect,
@@ -101,7 +130,7 @@ describe("public React handoff", () => {
     );
     assert.deepEqual(committed, ["committed", "layout-cleanup"]);
     assert.ok(expanded instanceof CommonContainer);
-    assert.equal(expanded.type, "rp:deck");
+    assert.equal(expanded.type, "deck");
 
     const title = findTextNode(expanded, "handoff-title");
     assert.ok(title instanceof RichTextContainer);
@@ -403,6 +432,230 @@ describe("public React handoff", () => {
     assert.equal(
       (await buildDocument(second)).report.slides[0]?.objects[0]?.text,
       "Original",
+    );
+  });
+
+  it("uses identical plain host names across JSX and imperative trees, diagnostics, and native PPTX output", async () => {
+    const png1x1 = new Uint8Array([
+      137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, 73, 72, 68, 82, 0, 0, 0, 1,
+      0, 0, 0, 1, 8, 6, 0, 0, 0, 31, 21, 196, 137, 0, 0, 0, 13, 73, 68, 65, 84,
+      120, 156, 99, 248, 207, 192, 240, 31, 0, 5, 0, 1, 255, 137, 153, 61, 29,
+      0, 0, 0, 0, 73, 69, 78, 68, 174, 66, 96, 130,
+    ]);
+    const scopeHandle = createMotionScopeHandle();
+    const chartData = [
+      {
+        kind: "column" as const,
+        data: { kind: "shared-categories" as const, categories: ["Q1"] },
+        series: [{ name: "Sales", values: [12] }],
+      },
+    ];
+
+    const jsxExpanded = await expandDocument(
+      createElement(
+        Deck,
+        { width: 960, height: 540 },
+        createElement(
+          Section,
+          { name: "Main" },
+          createElement(
+            Slide,
+            { id: "overview" },
+            createElement(
+              MotionScope,
+              { scope: scopeHandle },
+              createElement(
+                Step,
+                { n: 1 },
+                createElement(
+                  Box,
+                  {
+                    id: "container",
+                    style: { width: 200, height: 60 },
+                  },
+                  createElement(
+                    Shape,
+                    { id: "hero-shape", width: 120, height: 48 },
+                    "Boxed",
+                  ),
+                ),
+              ),
+            ),
+            createElement(
+              Text,
+              { id: "title", x: 20, y: 100, width: 240, height: 40 },
+              createElement(
+                P,
+                null,
+                createElement(Span, null, "Page "),
+                createElement(SlideNumber, null),
+              ),
+            ),
+            createElement(Image, {
+              id: "logo",
+              src: png1x1,
+              x: 280,
+              y: 20,
+              width: 32,
+              height: 32,
+            }),
+            createElement(
+              Group,
+              { id: "pair" },
+              createElement(Shape, {
+                id: "in-group",
+                x: 280,
+                y: 80,
+                width: 80,
+                height: 40,
+              }),
+            ),
+            createElement(
+              Table,
+              { id: "grid", x: 20, y: 160, columns: [100] },
+              createElement(
+                Row,
+                { style: { height: 32 } },
+                createElement(Cell, null, "Cell"),
+              ),
+            ),
+            createElement(Chart, {
+              id: "sales-chart",
+              x: 400,
+              y: 20,
+              width: 240,
+              height: 160,
+              groups: chartData,
+            }),
+            createElement(Notes, null, createElement(P, null, "Speaker note")),
+          ),
+        ),
+      ),
+    );
+
+    const imperativeDoc = deck({ width: 960, height: 540 }).append(
+      section({ name: "Main" }).append(
+        slide({ id: "overview" }).append(
+          motionScope(scopeHandle).append(
+            step({ n: 1 }).append(
+              box({
+                id: "container",
+                style: { width: 200, height: 60 },
+              }).append(
+                shape({
+                  id: "hero-shape",
+                  width: 120,
+                  height: 48,
+                }).content("Boxed"),
+              ),
+            ),
+          ),
+          text([paragraph([span("Page "), slideNumber()])], {
+            id: "title",
+            x: 20,
+            y: 100,
+            width: 240,
+            height: 40,
+          }),
+          image({
+            id: "logo",
+            src: png1x1,
+            x: 280,
+            y: 20,
+            width: 32,
+            height: 32,
+          }),
+          group({ id: "pair" }).append(
+            shape({ id: "in-group", x: 280, y: 80, width: 80, height: 40 }),
+          ),
+          table({ id: "grid", x: 20, y: 160, columns: [100] }).append(
+            row({ style: { height: 32 } }).append(cell("Cell")),
+          ),
+          chart({
+            id: "sales-chart",
+            x: 400,
+            y: 20,
+            width: 240,
+            height: 160,
+            groups: chartData,
+          }),
+          notes(paragraph("Speaker note")),
+        ),
+      ),
+    );
+
+    const collectHostTypes = (root: CommonNode): string[] => {
+      const types: string[] = [];
+      const visit = (node: unknown) => {
+        if (!(node instanceof CommonNode)) return;
+        assert.equal(node.type, node.kind);
+        assert.equal(node.type.includes(":"), false);
+        types.push(node.type);
+        for (const child of node.children) visit(child);
+      };
+      visit(root);
+      return types;
+    };
+
+    const expectedTypes = [
+      "deck",
+      "section",
+      "slide",
+      "motion-scope",
+      "motion-step",
+      "box",
+      "shape",
+      "text",
+      "paragraph",
+      "span",
+      "slide-number",
+      "image",
+      "group",
+      "shape",
+      "table",
+      "row",
+      "cell",
+      "chart",
+      "notes",
+      "paragraph",
+    ];
+    assert.deepEqual(collectHostTypes(jsxExpanded), expectedTypes);
+    assert.deepEqual(collectHostTypes(imperativeDoc), expectedTypes);
+
+    const jsxBuilt = await build(jsxExpanded);
+    const impBuilt = await buildDocument(imperativeDoc);
+
+    const jsxValidated = await validatePptx(jsxBuilt.pptx);
+    const impValidated = await validatePptx(impBuilt.pptx);
+    assert.deepEqual(jsxValidated.errors, []);
+    assert.deepEqual(impValidated.errors, []);
+    assert.deepEqual(
+      jsxBuilt.report.slides[0]?.objects.map((o) => o.kind),
+      ["shape", "text", "image", "group", "table", "chart"],
+    );
+    assert.deepEqual(
+      impBuilt.report.slides[0]?.objects.map((o) => o.kind),
+      ["shape", "text", "image", "group", "table", "chart"],
+    );
+    assert.equal(jsxValidated.slides[0]?.objects.length, 6);
+    assert.equal(impValidated.slides[0]?.objects.length, 6);
+
+    const xml = slideXml(impBuilt);
+    assert.match(xml, /<p:sp>/u);
+    assert.match(xml, /<p:pic>/u);
+    assert.match(xml, /<p:grpSp>/u);
+    assert.match(xml, /<p:graphicFrame>/u);
+
+    const badDoc = deck({ width: 480, height: 270 }).append(
+      slide({ id: "diag" }).append(
+        shape({ id: "invalid-shape", x: 0, y: 0, width: -10, height: 20 }),
+      ),
+    );
+    assert.throws(
+      () => resolveDocument(badDoc),
+      (error: unknown) =>
+        error instanceof BuildError &&
+        error.diagnostics[0]?.path === "deck/slide[diag]/shape[invalid-shape]",
     );
   });
 });

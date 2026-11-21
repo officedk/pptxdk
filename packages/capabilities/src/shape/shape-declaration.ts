@@ -44,5 +44,5 @@ export function createShapeNode(
     "shape",
     ShapeDeclarationProps,
     NonNullable<ShapeDeclarationProps["style"]>
-  >("shape", "rp:shape", props);
+  >("shape", "shape", props);
 }

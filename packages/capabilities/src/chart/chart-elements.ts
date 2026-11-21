@@ -8,7 +8,7 @@ export type { ChartProps } from "./chart-declaration.ts";
 
 /** Declares an object compiled into a native chart by the official capability module. */
 export function Chart(props: ChartProps): ReactNode {
-  return motionElement("rp:chart", {
+  return motionElement("chart", {
     ...props,
     [hostNodeCreator]: createChartNode,
   });

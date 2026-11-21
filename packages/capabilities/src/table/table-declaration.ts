@@ -103,7 +103,7 @@ export function createTableNode(props: TableDeclarationProps): TableNode {
     "table",
     TableDeclarationProps,
     NonNullable<TableDeclarationProps["style"]>
-  >("table", "rp:table", props);
+  >("table", "table", props);
 }
 
 /** Creates the editable row shared by command authoring and the Row JSX element. */
@@ -112,7 +112,7 @@ export function createRowNode(props: RowDeclarationProps): RowNode {
     "row",
     RowDeclarationProps,
     NonNullable<RowDeclarationProps["style"]>
-  >("row", "rp:row", props);
+  >("row", "row", props);
 }
 
 /** Creates the editable rich-text cell shared by command authoring and the Cell JSX element. */
@@ -121,5 +121,5 @@ export function createCellNode(props: CellDeclarationProps): CellNode {
     "cell",
     CellDeclarationProps,
     NonNullable<CellDeclarationProps["style"]>
-  >("cell", "rp:cell", props);
+  >("cell", "cell", props);
 }

@@ -2470,13 +2470,13 @@ export const motionCapability: SlideCapabilityModule = Object.freeze({
   always: true,
   transparentDeclarations: [
     {
-      declaration: "rp:motion-scope",
+      declaration: "motion-scope",
       compileDeclaration(input) {
         return [motionScopeAnnotation(input.props)];
       },
     } satisfies TransparentCapabilityModule,
     {
-      declaration: "rp:motion-step",
+      declaration: "motion-step",
       compileDeclaration(input) {
         return motionStepAnnotation(input.props);
       },

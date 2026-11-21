@@ -77,7 +77,7 @@ function objectXml(
 
 /** Visible Box backgrounds use the same shape property writer; boxes without fill, stroke, or shadow retain layout semantics only. */
 export const boxCapability: ObjectCapabilityModule = {
-  declaration: "rp:box",
+  declaration: "box",
 
   bind(
     input: CapabilityInput,

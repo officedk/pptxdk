@@ -14,7 +14,7 @@ export type ShapeProps = ShapeDeclarationProps & {
 
 /** Declares a native object handled by the shape module within the React tree. */
 export function Shape(props: ShapeProps): ReactNode {
-  return motionElement("rp:shape", {
+  return motionElement("shape", {
     ...props,
     [hostNodeCreator]: createShapeNode,
   });

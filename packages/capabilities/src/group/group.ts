@@ -205,7 +205,7 @@ function paintGroupModel(
 
 /** Preserves members as native objects and writes group bounds according to final member geometry; layout participation uses generic container collaboration. */
 export const groupCapability: ObjectCapabilityModule = {
-  declaration: "rp:group",
+  declaration: "group",
 
   bind(
     input: CapabilityInput,

@@ -31,5 +31,5 @@ export function createBoxNode(
     "box",
     BoxDeclarationProps,
     NonNullable<BoxDeclarationProps["style"]>
-  >("box", "rp:box", props);
+  >("box", "box", props);
 }

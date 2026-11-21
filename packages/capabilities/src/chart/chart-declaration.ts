@@ -12,7 +12,7 @@ export type ChartNode = CommonNode<
 export function createChartNode(props: ChartProps): ChartNode {
   return new CommonNode<"chart", ChartProps, NonNullable<ChartProps["style"]>>(
     "chart",
-    "rp:chart",
+    "chart",
     props,
   );
 }

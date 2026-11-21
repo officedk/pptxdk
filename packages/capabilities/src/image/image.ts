@@ -457,7 +457,7 @@ function cropValues(
 
 /** Image module reads and validates formal resources, encapsulates bound state, and emits native picture objects. */
 export const imageCapability: BoundObjectCapabilityModule = {
-  declaration: "rp:image",
+  declaration: "image",
 
   bind(
     input: CapabilityInput,

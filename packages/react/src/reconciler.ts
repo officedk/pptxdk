@@ -183,7 +183,7 @@ function diagnostic(path: string, code: string, message: string): Diagnostic {
 function isDeckNode(
   node: CommonNode | undefined,
 ): node is CommonContainer<"deck"> {
-  return node instanceof CommonContainer && node.type === "rp:deck";
+  return node instanceof CommonContainer && node.type === "deck";
 }
 
 /**

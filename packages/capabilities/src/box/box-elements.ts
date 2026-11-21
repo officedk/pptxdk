@@ -16,7 +16,7 @@ export type BoxProps = BoxDeclarationProps & {
  */
 export function Box({ children, ...props }: BoxProps): ReactNode {
   return createElement(
-    "rp:box",
+    "box",
     { ...props, [hostNodeCreator]: createBoxNode },
     children,
   );

@@ -13,7 +13,7 @@ export type GroupProps = GroupDeclarationProps & {
 
 /** Declares an editable group preserving native member structure within the React tree. */
 export function Group(props: GroupProps): ReactNode {
-  return motionElement("rp:group", {
+  return motionElement("group", {
     ...props,
     [hostNodeCreator]: createGroupNode,
   });

@@ -1,6 +1,14 @@
 import { spawn, spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import {
+  mkdir,
+  mkdtemp,
+  readdir,
+  readFile,
+  rm,
+  symlink,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -30,28 +38,662 @@ function runNode(args: readonly string[], cwd: string) {
   };
 }
 
-describe("react-pptx CLI single export", () => {
-  it("resolves author dependencies from TSX paths with spaces and writes public build results", async () => {
-    const directory = await mkdtemp(join(tmpdir(), "react-pptx cli "));
+async function runInMemory(
+  args: readonly string[],
+  cwd: string,
+  signal?: AbortSignal,
+) {
+  let stdout = "";
+  let stderr = "";
+  const code = await runCli({
+    argv: ["node", "pptxdk", ...args],
+    cwd,
+    ...(signal !== undefined && { signal }),
+    write: ({ destination, chunk }) => {
+      if (destination === "stdout") stdout += chunk;
+      else stderr += chunk;
+    },
+  });
+  return { code, stdout, stderr };
+}
+
+describe("pptxdk CLI build", () => {
+  it("exposes help, version, and schema contract discovery on pptxdk and build", async () => {
+    const rootHelp = await runInMemory(["--help"], import.meta.dirname);
+    expect(rootHelp.code).toBe(0);
+    expect(rootHelp.stderr).toBe("");
+    expect(rootHelp.stdout).toContain("Usage");
+    expect(rootHelp.stdout).toContain("pptxdk <command>");
+    expect(rootHelp.stdout).toContain("build");
+    expect(rootHelp.stdout).toContain("--version");
+    expect(rootHelp.stdout).toContain("--schema");
+
+    const buildHelp = await runInMemory(["build", "-h"], import.meta.dirname);
+    expect(buildHelp.code).toBe(0);
+    expect(buildHelp.stderr).toBe("");
+    expect(buildHelp.stdout).toContain(
+      "pptxdk build [--output <mode>] <entry>",
+    );
+    expect(buildHelp.stdout).toContain("--out");
+    expect(buildHelp.stdout).toContain("--export");
+    expect(buildHelp.stdout).toContain("--target");
+    expect(buildHelp.stdout).toContain("--embed-fonts");
+    expect(buildHelp.stdout).toContain("--output");
+    expect(buildHelp.stdout).toContain('(choices: "full", "subset")');
+
+    const pkg = JSON.parse(
+      await readFile(join(import.meta.dirname, "../package.json"), "utf8"),
+    ) as { readonly version: string };
+
+    const versionLong = await runInMemory(["--version"], import.meta.dirname);
+    expect(versionLong.code).toBe(0);
+    expect(versionLong.stderr).toBe("");
+    expect(versionLong.stdout).toBe(`${pkg.version}\n`);
+
+    const versionShort = await runInMemory(["-V"], import.meta.dirname);
+    expect(versionShort.code).toBe(0);
+    expect(versionShort.stdout).toBe(`${pkg.version}\n`);
+
+    const rootSchema = await runInMemory(["--schema"], import.meta.dirname);
+    expect(rootSchema.code).toBe(0);
+    expect(JSON.parse(rootSchema.stdout)).toMatchObject({
+      kind: "directory",
+      schemaVersion: "5",
+      command: "pptxdk",
+      children: [{ command: "build" }],
+    });
+
+    const buildSchema = await runInMemory(
+      ["build", "--schema"],
+      import.meta.dirname,
+    );
+    expect(buildSchema.code).toBe(0);
+    expect(JSON.parse(buildSchema.stdout)).toMatchObject({
+      kind: "summary",
+      schemaVersion: "5",
+      command: "build",
+    });
+
+    const buildInputSchema = await runInMemory(
+      ["build", "--schema=input"],
+      import.meta.dirname,
+    );
+    expect(buildInputSchema.code).toBe(0);
+    expect(JSON.parse(buildInputSchema.stdout)).toMatchObject({
+      kind: "input",
+      schemaVersion: "5",
+      command: "build",
+    });
+  });
+
+  it("builds default and named exports across working directories with delivery options and validates PPTX", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "pptxdk cli "));
     try {
       const source = fixture("source deck.tsx");
-      const output = join(directory, "programmatic.pptx");
-      const baselineOutput = join(directory, "programmatic-baseline.pptx");
-      const cliOutput = join(directory, "nested output", "source deck.pptx");
-      const cliBaselineOutput = join(
+      const defaultOutput = join(directory, "source deck.pptx");
+
+      // Default output writes <stem>.pptx into current working directory when run outside source dir.
+      const defaultResult = runNode([cli, "build", source], directory);
+      expect(defaultResult.code).toBe(0);
+      expect(defaultResult.stderr).toBe("");
+      expect(defaultResult.stdout).toContain(`Built deck: ${defaultOutput}`);
+      expect(defaultResult.stdout).toContain("Slides: 1");
+
+      const defaultBytes = new Uint8Array(await readFile(defaultOutput));
+      const defaultFile = await validatePptx(defaultBytes);
+      expect(defaultFile.errors).toEqual([]);
+      expect(defaultFile.slides).toHaveLength(1);
+      expect(defaultFile.slides[0]?.objects[0]).toMatchObject({
+        name: "From source dependency",
+        text: { text: "From source dependency" },
+      });
+
+      const namedStructuredOut = join(directory, "nested", "overflow.pptx");
+      const namedStructured = await runInMemory(
+        [
+          "build",
+          source,
+          "-e",
+          "OverflowDeck",
+          "-o",
+          namedStructuredOut,
+          "--embed-fonts",
+          "subset",
+          "--output",
+          "structured",
+        ],
         directory,
-        "nested output",
-        "baseline.pptx",
       );
+      expect(namedStructured.code).toBe(0);
+      expect(namedStructured.stderr).toBe("");
+      expect(JSON.parse(namedStructured.stdout)).toMatchObject({
+        schemaVersion: "3",
+        command: "build",
+        outputMode: "structured",
+        kind: "data",
+        variant: "built",
+        data: {
+          output: namedStructuredOut,
+          slides: 1,
+          warnings: [
+            {
+              path: "deck/slide[overflow]/shape[overflow-shape]",
+              code: "overflow",
+            },
+          ],
+        },
+      });
+
+      const overflowFile = await validatePptx(
+        new Uint8Array(await readFile(namedStructuredOut)),
+      );
+      expect(overflowFile.errors).toEqual([]);
+      expect(overflowFile.slides).toHaveLength(1);
+      expect(overflowFile.slides[0]?.objects).toHaveLength(1);
+
+      const textWarning = await runInMemory(
+        [
+          "build",
+          source,
+          "--export",
+          "OverflowDeck",
+          "--out",
+          join(directory, "overflow-text.pptx"),
+          "--embed-fonts",
+          "full",
+        ],
+        directory,
+      );
+      expect(textWarning.code).toBe(0);
+      expect(textWarning.stdout).toContain(
+        "Warning deck/slide[overflow]/shape[overflow-shape] [overflow]:",
+      );
+      expect(textWarning.stdout).toContain("Built deck:");
+      expect(textWarning.stdout).toContain("Slides: 1");
+
+      const baselineOut = join(directory, "baseline.pptx");
+      const baseline = runNode(
+        [
+          cli,
+          "build",
+          source,
+          "--target",
+          "baseline-only",
+          "--out",
+          baselineOut,
+        ],
+        directory,
+      );
+      expect(baseline.code).toBe(0);
+      const baselineFile = await validatePptx(
+        new Uint8Array(await readFile(baselineOut)),
+      );
+      expect(baselineFile.errors).toEqual([]);
+      expect(baselineFile.extensions).toEqual([]);
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("returns usage status 2 for missing subcommand or invalid arguments and rejects overwriting source", async () => {
+    const missingSubcommand = await runInMemory(
+      ["talk.tsx"],
+      import.meta.dirname,
+    );
+    expect(missingSubcommand.code).toBe(2);
+    expect(JSON.parse(missingSubcommand.stderr)).toMatchObject({
+      schemaVersion: "3",
+      command: "pptxdk",
+      kind: "usageFailure",
+      usage: "pptxdk <command>",
+      helpArgv: ["pptxdk", "--help"],
+      issues: [{ code: "unknownCommand", command: "talk.tsx", position: 0 }],
+    });
+
+    const missingEntry = await runInMemory(["build"], import.meta.dirname);
+    expect(missingEntry.code).toBe(2);
+    expect(JSON.parse(missingEntry.stderr)).toMatchObject({
+      schemaVersion: "3",
+      command: "build",
+      kind: "usageFailure",
+      helpArgv: ["pptxdk", "build", "--help"],
+      issues: [{ code: "missingRequiredField", field: "entry" }],
+    });
+
+    const unknownOption = await runInMemory(
+      ["build", "--unknown"],
+      import.meta.dirname,
+    );
+    expect(unknownOption.code).toBe(2);
+    expect(JSON.parse(unknownOption.stderr)).toMatchObject({
+      schemaVersion: "3",
+      command: "build",
+      kind: "usageFailure",
+      issues: [{ code: "unknownOption", option: "--unknown", position: 1 }],
+    });
+
+    const missingValue = await runInMemory(
+      ["build", "--embed-fonts"],
+      import.meta.dirname,
+    );
+    expect(missingValue.code).toBe(2);
+    expect(JSON.parse(missingValue.stderr)).toMatchObject({
+      schemaVersion: "3",
+      command: "build",
+      kind: "usageFailure",
+      issues: [
+        {
+          code: "missingOptionValue",
+          field: "embedFonts",
+          option: "--embed-fonts",
+          position: 1,
+        },
+      ],
+    });
+
+    const invalidChoice = await runInMemory(
+      ["build", fixture("source deck.tsx"), "--embed-fonts", "invalid"],
+      import.meta.dirname,
+    );
+    expect(invalidChoice.code).toBe(2);
+    expect(JSON.parse(invalidChoice.stderr)).toMatchObject({
+      schemaVersion: "3",
+      command: "build",
+      kind: "usageFailure",
+      issues: [
+        {
+          code: "invalidFieldChoice",
+          field: "embedFonts",
+          value: "invalid",
+          choices: ["full", "subset"],
+        },
+      ],
+    });
+
+    const invalidTarget = await runInMemory(
+      ["build", fixture("source deck.tsx"), "--target", "invalid"],
+      import.meta.dirname,
+    );
+    expect(invalidTarget.code).toBe(2);
+    expect(JSON.parse(invalidTarget.stderr)).toMatchObject({
+      schemaVersion: "3",
+      command: "build",
+      kind: "usageFailure",
+      issues: [
+        {
+          code: "invalidFieldChoice",
+          field: "target",
+          value: "invalid",
+          choices: ["transitional", "baseline-only"],
+        },
+      ],
+    });
+
+    const invalidOutputMode = await runInMemory(
+      ["build", fixture("source deck.tsx"), "--output", "xml"],
+      import.meta.dirname,
+    );
+    expect(invalidOutputMode.code).toBe(2);
+    expect(JSON.parse(invalidOutputMode.stderr)).toMatchObject({
+      schemaVersion: "3",
+      command: "build",
+      kind: "usageFailure",
+      issues: [{ code: "invalidOutputMode", option: "--output" }],
+    });
+
+    const invalidSchemaQuery = await runInMemory(
+      ["build", "--schema=unknown"],
+      import.meta.dirname,
+    );
+    expect(invalidSchemaQuery.code).toBe(2);
+    expect(JSON.parse(invalidSchemaQuery.stderr)).toMatchObject({
+      schemaVersion: "3",
+      command: "build",
+      kind: "usageFailure",
+      issues: [{ code: "invalidSchemaQuery" }],
+    });
+
+    const directory = await mkdtemp(join(tmpdir(), "pptxdk cli "));
+    try {
+      const copiedSource = join(directory, "deck.tsx");
+      const sourceContent = await readFile(fixture("source deck.tsx"), "utf8");
+      await writeFile(copiedSource, sourceContent);
+      const linkedSource = join(directory, "deck-link.tsx");
+      await symlink(copiedSource, linkedSource);
+
+      const textOverwrite = await runInMemory(
+        ["build", copiedSource, "--out", copiedSource],
+        directory,
+      );
+      expect(textOverwrite.code).toBe(2);
+      expect(textOverwrite.stdout).toBe("");
+      expect(textOverwrite.stderr).toBe(
+        "Output path cannot overwrite deck source\n",
+      );
+      expect(await readFile(copiedSource, "utf8")).toBe(sourceContent);
+
+      const structuredOverwrite = await runInMemory(
+        [
+          "build",
+          copiedSource,
+          "--out",
+          linkedSource,
+          "--output",
+          "structured",
+        ],
+        directory,
+      );
+      expect(structuredOverwrite.code).toBe(2);
+      expect(structuredOverwrite.stdout).toBe("");
+      expect(JSON.parse(structuredOverwrite.stderr)).toEqual({
+        schemaVersion: "3",
+        command: "build",
+        outputMode: "structured",
+        kind: "failure",
+        variant: "invalidOutput",
+        data: {
+          entry: copiedSource,
+          output: linkedSource,
+        },
+      });
+      expect(await readFile(copiedSource, "utf8")).toBe(sourceContent);
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("reports sourceLoadFailed, buildFailed, writeFailed, and cancelled across text and structured outputs without stale artifacts", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "pptxdk cli "));
+    try {
+      const missingOut = join(directory, "missing.pptx");
+      const missingEntry = join(directory, "does-not-exist.tsx");
+      const textSourceFailure = await runInMemory(
+        ["build", missingEntry, "--out", missingOut],
+        directory,
+      );
+      expect(textSourceFailure.code).toBe(1);
+      expect(textSourceFailure.stdout).toBe("");
+      expect(textSourceFailure.stderr).toContain("Failed to load deck source:");
+      expect(existsSync(missingOut)).toBe(false);
+
+      const envLoadFailure = spawnSync(
+        process.execPath,
+        [cli, "build", fixture("load failure.tsx"), "--out", missingOut],
+        {
+          cwd: directory,
+          encoding: "utf8",
+          env: { ...process.env, PPTXDK_TEST_LOAD_FAILURE: "1" },
+        },
+      );
+      expect(envLoadFailure.status).toBe(1);
+      expect(envLoadFailure.stdout).toBe("");
+      expect(envLoadFailure.stderr).toContain("Failed to load deck source:");
+      expect(envLoadFailure.stderr).toContain(
+        "Failed to load author source module",
+      );
+      expect(existsSync(missingOut)).toBe(false);
+
+      const structuredSourceFailure = await runInMemory(
+        [
+          "build",
+          fixture("source deck.tsx"),
+          "--export",
+          "MissingExport",
+          "--out",
+          missingOut,
+          "--output",
+          "structured",
+        ],
+        directory,
+      );
+      expect(structuredSourceFailure.code).toBe(1);
+      expect(structuredSourceFailure.stdout).toBe("");
+      expect(JSON.parse(structuredSourceFailure.stderr)).toMatchObject({
+        schemaVersion: "3",
+        command: "build",
+        outputMode: "structured",
+        kind: "failure",
+        variant: "sourceLoadFailed",
+        data: {
+          message: expect.stringContaining("MissingExport"),
+        },
+      });
+      expect(existsSync(missingOut)).toBe(false);
+
+      const brokenOut = join(directory, "never.pptx");
+      const textBuildFailure = runNode(
+        [cli, "build", fixture("broken deck.tsx"), "--out", brokenOut],
+        directory,
+      );
+      expect(textBuildFailure.code).toBe(1);
+      expect(textBuildFailure.stdout).toBe("");
+      expect(textBuildFailure.stderr).toContain("Build failed:");
+      expect(textBuildFailure.stderr).toContain(
+        "deck/slide[broken]/shape[broken-shape] [invalid-coordinate]:",
+      );
+      expect(existsSync(brokenOut)).toBe(false);
+
+      const structuredBuildFailure = await runInMemory(
+        [
+          "build",
+          fixture("broken deck.tsx"),
+          "--out",
+          brokenOut,
+          "--output",
+          "structured",
+        ],
+        directory,
+      );
+      expect(structuredBuildFailure.code).toBe(1);
+      expect(structuredBuildFailure.stdout).toBe("");
+      expect(JSON.parse(structuredBuildFailure.stderr)).toMatchObject({
+        schemaVersion: "3",
+        command: "build",
+        outputMode: "structured",
+        kind: "failure",
+        variant: "buildFailed",
+        data: {
+          diagnostics: [
+            {
+              path: "deck/slide[broken]/shape[broken-shape]",
+              code: "invalid-coordinate",
+              message: expect.any(String),
+            },
+          ],
+        },
+      });
+      expect(existsSync(brokenOut)).toBe(false);
+
+      // Pre-create --out as a directory so rename fails with EISDIR even when running as root.
+      const dirAsOutput = join(directory, "occupied-as-dir.pptx");
+      await mkdir(dirAsOutput);
+
+      const textWriteFailure = await runInMemory(
+        ["build", fixture("source deck.tsx"), "--out", dirAsOutput],
+        directory,
+      );
+      expect(textWriteFailure.code).toBe(1);
+      expect(textWriteFailure.stdout).toBe("");
+      expect(textWriteFailure.stderr).toContain(
+        `Failed to write PPTX output to ${dirAsOutput}:`,
+      );
+      expect(await readdir(directory)).not.toEqual(
+        expect.arrayContaining([expect.stringMatching(/\.tmp$/u)]),
+      );
+
+      const structuredWriteFailure = await runInMemory(
+        [
+          "build",
+          fixture("source deck.tsx"),
+          "--out",
+          dirAsOutput,
+          "--output",
+          "structured",
+        ],
+        directory,
+      );
+      expect(structuredWriteFailure.code).toBe(1);
+      expect(structuredWriteFailure.stdout).toBe("");
+      expect(JSON.parse(structuredWriteFailure.stderr)).toMatchObject({
+        schemaVersion: "3",
+        command: "build",
+        outputMode: "structured",
+        kind: "failure",
+        variant: "writeFailed",
+        data: {
+          output: dirAsOutput,
+          message: expect.any(String),
+        },
+      });
+
+      const preAborted = new AbortController();
+      preAborted.abort(new Error("aborted before run"));
+      const cancelledOut = join(directory, "cancelled.pptx");
+      const structuredCancelled = await runInMemory(
+        [
+          "build",
+          fixture("source deck.tsx"),
+          "--out",
+          cancelledOut,
+          "--output",
+          "structured",
+        ],
+        directory,
+        preAborted.signal,
+      );
+      expect(structuredCancelled.code).toBe(130);
+      expect(structuredCancelled.stdout).toBe("");
+      expect(JSON.parse(structuredCancelled.stderr)).toEqual({
+        schemaVersion: "3",
+        command: "build",
+        outputMode: "structured",
+        kind: "failure",
+        variant: "cancelled",
+        data: {},
+      });
+      expect(existsSync(cancelledOut)).toBe(false);
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("connects SIGINT during build and source import to cancelled exit status 130", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "pptxdk cli "));
+    try {
+      const renderOutput = join(directory, "cancelled-render.pptx");
+      const renderChild = spawn(
+        process.execPath,
+        [cli, "build", fixture("cancelled deck.tsx"), "--out", renderOutput],
+        {
+          cwd: directory,
+          stdio: ["ignore", "pipe", "pipe"],
+        },
+      );
+      let renderStdout = "";
+      let renderStderr = "";
+      let renderInterrupted = false;
+      renderChild.stdout.setEncoding("utf8");
+      renderChild.stderr.setEncoding("utf8");
+      renderChild.stdout.on("data", (chunk: string) => {
+        renderStdout += chunk;
+        if (
+          !renderInterrupted &&
+          renderStdout.includes("__pptxdk_cancel_ready__")
+        ) {
+          renderInterrupted = true;
+          renderChild.kill("SIGINT");
+        }
+      });
+      renderChild.stderr.on("data", (chunk: string) => {
+        renderStderr += chunk;
+      });
+      const renderCode = await waitForClose(renderChild);
+
+      expect(renderCode).toBe(130);
+      expect(renderStderr).toBe("Deck build cancelled\n");
+      expect(existsSync(renderOutput)).toBe(false);
+
+      const loadOutput = join(directory, "cancelled-source-load.pptx");
+      const loadChild = spawn(
+        process.execPath,
+        [
+          cli,
+          "build",
+          fixture("source-load-cli-cancelled.tsx"),
+          "--out",
+          loadOutput,
+        ],
+        {
+          cwd: directory,
+          stdio: ["ignore", "pipe", "pipe"],
+        },
+      );
+      let loadStdout = "";
+      let loadStderr = "";
+      let loadInterrupted = false;
+      loadChild.stdout.setEncoding("utf8");
+      loadChild.stderr.setEncoding("utf8");
+      loadChild.stdout.on("data", (chunk: string) => {
+        loadStdout += chunk;
+        if (
+          !loadInterrupted &&
+          loadStdout.includes("__pptxdk_source_load_cancel_ready__")
+        ) {
+          loadInterrupted = true;
+          loadChild.kill("SIGINT");
+        }
+      });
+      loadChild.stderr.on("data", (chunk: string) => {
+        loadStderr += chunk;
+      });
+      const loadCode = await waitForClose(loadChild);
+
+      expect(loadCode).toBe(130);
+      expect(loadStderr).toBe("Deck build cancelled\n");
+      expect(loadStderr).not.toContain("Failed to load deck source");
+      expect(existsSync(loadOutput)).toBe(false);
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("handles EPIPE on stdout and unexpected stream write failures", async () => {
+    const brokenPipeCode = await runCli({
+      argv: ["node", "pptxdk", "--help"],
+      cwd: import.meta.dirname,
+      write: async () => {
+        throw Object.assign(new Error("broken pipe"), { code: "EPIPE" });
+      },
+    });
+    expect(brokenPipeCode).toBe(0);
+
+    let diagnosticStderr = "";
+    const writeFailureCode = await runCli({
+      argv: ["node", "pptxdk", "--help"],
+      cwd: import.meta.dirname,
+      write: async ({ destination, chunk }) => {
+        if (destination === "stdout") {
+          throw new Error("disk full");
+        }
+        diagnosticStderr += chunk;
+      },
+    });
+    expect(writeFailureCode).toBe(70);
+    expect(diagnosticStderr).toContain("Command execution failed");
+  });
+
+  it("keeps CLI build output identical to buildFromSource and releases source hooks across outcomes", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "pptxdk cli "));
+    try {
+      const source = fixture("source deck.tsx");
+      const programmaticOut = join(directory, "programmatic.pptx");
+      const cliOut = join(directory, "cli.pptx");
       const programmaticScript = [
         'import { pathToFileURL } from "node:url";',
         'import { writeFile } from "node:fs/promises";',
-        'import { targets } from "pptxdk";',
         'import { buildFromSource } from "pptxdk/node";',
-        `const result = await buildFromSource(${JSON.stringify(source)});`,
-        `await writeFile(${JSON.stringify(output)}, result.pptx);`,
-        `const baselineResult = await buildFromSource(${JSON.stringify(source)}, { target: targets.baselineOnly });`,
-        `await writeFile(${JSON.stringify(baselineOutput)}, baselineResult.pptx);`,
+        `const result = await buildFromSource(${JSON.stringify(source)}, { exportName: "SourceDeck" });`,
+        `await writeFile(${JSON.stringify(programmaticOut)}, result.pptx);`,
         'async function expectHookReleased(path) { const error = await import(pathToFileURL(path).href).then(() => undefined, failure => failure); if (error?.code !== "ERR_UNKNOWN_FILE_EXTENSION") throw new Error(JSON.stringify({ path, error })); }',
         `await expectHookReleased(${JSON.stringify(fixture("unloaded after success.tsx"))});`,
         'process.env.PPTXDK_TEST_LOAD_FAILURE = "1";',
@@ -80,39 +722,18 @@ describe("react-pptx CLI single export", () => {
       expect(programmatic.stdout).toContain('"sourceSlide":"source"');
       expect(programmatic.stdout).toContain('"independentSlide":"independent"');
 
-      const result = runNode(
-        [cli, source, "--export", "SourceDeck", "--out", cliOutput],
+      const cliResult = runNode(
+        [cli, "build", source, "--export", "SourceDeck", "--out", cliOut],
         directory,
       );
-
-      expect(result.code).toBe(0);
-      expect(result.stdout).toContain(cliOutput);
-      const bytes = await readFile(cliOutput);
-      expect(bytes).toEqual(await readFile(output));
-
-      const file = await validatePptx(new Uint8Array(bytes));
-      expect(file.errors).toEqual([]);
-      expect(file.slides[0]?.objects[0]).toMatchObject({
-        name: "From source dependency",
-        text: { text: "From source dependency" },
-      });
-
-      const baseline = runNode(
-        [cli, source, "--target", "baseline-only", "--out", cliBaselineOutput],
-        directory,
-      );
-      expect(baseline.code).toBe(0);
-      const baselineBytes = await readFile(cliBaselineOutput);
-      expect(baselineBytes).toEqual(await readFile(baselineOutput));
-      expect(
-        (await validatePptx(new Uint8Array(baselineBytes))).extensions,
-      ).toEqual([]);
+      expect(cliResult.code).toBe(0);
+      expect(await readFile(cliOut)).toEqual(await readFile(programmaticOut));
     } finally {
       await rm(directory, { recursive: true, force: true });
     }
   });
 
-  it("cancellation during source import terminates the call immediately and isolates concurrent loading", async () => {
+  it("cancellation during source import terminates the call immediately and isolates concurrent loading", () => {
     const programmaticScript = [
       'import { buildFromSource } from "pptxdk/node";',
       'import { pathToFileURL } from "node:url";',
@@ -161,310 +782,5 @@ describe("react-pptx CLI single export", () => {
       programmatic.code,
       `${programmatic.stderr}\n${programmatic.stdout}`,
     ).toBe(0);
-  });
-
-  it("exits with failure on build diagnostics and does not write pseudo-successful artifact", async () => {
-    const directory = await mkdtemp(join(tmpdir(), "react-pptx cli "));
-    try {
-      const output = join(directory, "never.pptx");
-      const result = runNode(
-        [cli, fixture("broken deck.tsx"), "--out", output],
-        directory,
-      );
-
-      expect(result.code).toBe(1);
-      expect(result.stderr).toContain("Build failed");
-      expect(result.stderr).toContain("invalid-coordinate");
-      expect(existsSync(output)).toBe(false);
-    } finally {
-      await rm(directory, { recursive: true, force: true });
-    }
-  });
-
-  it("connects process interruption to public build cancellation and exits with interrupted status", async () => {
-    const directory = await mkdtemp(join(tmpdir(), "react-pptx cli "));
-    try {
-      const output = join(directory, "cancelled.pptx");
-      const child = spawn(
-        process.execPath,
-        [cli, fixture("cancelled deck.tsx"), "--out", output],
-        {
-          cwd: directory,
-          stdio: ["ignore", "pipe", "pipe"],
-        },
-      );
-      let stdout = "";
-      let stderr = "";
-      let interrupted = false;
-      child.stdout.setEncoding("utf8");
-      child.stderr.setEncoding("utf8");
-      child.stdout.on("data", (chunk: string) => {
-        stdout += chunk;
-        if (!interrupted && stdout.includes("__pptxdk_cancel_ready__")) {
-          interrupted = true;
-          child.kill("SIGINT");
-        }
-      });
-      child.stderr.on("data", (chunk: string) => {
-        stderr += chunk;
-      });
-      const code = await waitForClose(child);
-
-      expect(code).toBe(130);
-      expect(stderr).toContain("cancelled");
-      expect(existsSync(output)).toBe(false);
-    } finally {
-      await rm(directory, { recursive: true, force: true });
-    }
-  });
-
-  it("preserves cancellation exit status on SIGINT during source import", async () => {
-    const directory = await mkdtemp(join(tmpdir(), "react-pptx cli "));
-    try {
-      const output = join(directory, "cancelled-during-source-load.pptx");
-      const child = spawn(
-        process.execPath,
-        [cli, fixture("source-load-cli-cancelled.tsx"), "--out", output],
-        {
-          cwd: directory,
-          stdio: ["ignore", "pipe", "pipe"],
-        },
-      );
-      let stdout = "";
-      let stderr = "";
-      let interrupted = false;
-      child.stdout.setEncoding("utf8");
-      child.stderr.setEncoding("utf8");
-      child.stdout.on("data", (chunk: string) => {
-        stdout += chunk;
-        if (
-          !interrupted &&
-          stdout.includes("__pptxdk_source_load_cancel_ready__")
-        ) {
-          interrupted = true;
-          child.kill("SIGINT");
-        }
-      });
-      child.stderr.on("data", (chunk: string) => {
-        stderr += chunk;
-      });
-      const code = await waitForClose(child);
-
-      expect(code).toBe(130);
-      expect(stderr).toContain("cancelled");
-      expect(stderr).not.toContain("Failed to load deck source");
-      expect(existsSync(output)).toBe(false);
-    } finally {
-      await rm(directory, { recursive: true, force: true });
-    }
-  });
-
-  it("returns usage status for invalid arguments", async () => {
-    const help = runNode([cli, "--help"], import.meta.dirname);
-    expect(help.code).toBe(0);
-    expect(help.stdout).toContain("Usage");
-    expect(help.stdout).toContain("react-pptx <entry>");
-    expect(help.stdout).toContain("--embed-fonts <embedFonts>");
-    expect(help.stdout).toContain('(choices: "full", "subset")');
-
-    const unknown = runNode([cli, "--unknown"], import.meta.dirname);
-    expect(unknown.code).toBe(2);
-    expect(JSON.parse(unknown.stderr)).toMatchObject({
-      schemaVersion: "2",
-      command: "reactPptx",
-      kind: "usageFailure",
-      helpArgv: ["react-pptx", "--help"],
-      issues: [{ code: "unknownOption", option: "--unknown", position: 0 }],
-    });
-
-    const missingValue = runNode([cli, "--embed-fonts"], import.meta.dirname);
-    expect(missingValue.code).toBe(2);
-    expect(JSON.parse(missingValue.stderr)).toMatchObject({
-      schemaVersion: "2",
-      command: "reactPptx",
-      kind: "usageFailure",
-      issues: [
-        {
-          code: "missingOptionValue",
-          field: "embedFonts",
-          option: "--embed-fonts",
-          position: 0,
-        },
-      ],
-    });
-
-    const invalidChoice = runNode(
-      [cli, fixture("source deck.tsx"), "--embed-fonts", "invalid"],
-      import.meta.dirname,
-    );
-    expect(invalidChoice.code).toBe(2);
-    expect(JSON.parse(invalidChoice.stderr)).toMatchObject({
-      schemaVersion: "2",
-      command: "reactPptx",
-      kind: "usageFailure",
-      issues: [
-        {
-          code: "invalidFieldChoice",
-          field: "embedFonts",
-          value: "invalid",
-          choices: ["full", "subset"],
-        },
-      ],
-    });
-
-    const invalidTarget = runNode(
-      [cli, fixture("source deck.tsx"), "--target", "invalid"],
-      import.meta.dirname,
-    );
-    expect(invalidTarget.code).toBe(2);
-    expect(JSON.parse(invalidTarget.stderr)).toMatchObject({
-      schemaVersion: "2",
-      command: "reactPptx",
-      kind: "usageFailure",
-      issues: [
-        {
-          code: "invalidFieldChoice",
-          field: "target",
-          value: "invalid",
-          choices: ["transitional", "baseline-only"],
-        },
-      ],
-    });
-  });
-
-  it("projects structured and text contract outcomes and handles output stream failures", async () => {
-    const directory = await mkdtemp(join(tmpdir(), "react-pptx cli "));
-    try {
-      const source = fixture("source deck.tsx");
-      const broken = fixture("broken deck.tsx");
-      const textOut = join(directory, "overflow-text.pptx");
-      const structuredOut = join(directory, "overflow-structured.pptx");
-
-      const runWithMemoryOutput = async (args: readonly string[]) => {
-        let stdout = "";
-        let stderr = "";
-        const code = await runCli({
-          argv: ["node", "react-pptx", ...args],
-          cwd: directory,
-          write: ({ destination, chunk }) => {
-            if (destination === "stdout") stdout += chunk;
-            else stderr += chunk;
-          },
-        });
-        return { code, stdout, stderr };
-      };
-
-      const textWarning = await runWithMemoryOutput([
-        source,
-        "--export",
-        "OverflowDeck",
-        "--out",
-        textOut,
-      ]);
-      expect(textWarning.code).toBe(0);
-      expect(textWarning.stderr).toBe("");
-      expect(textWarning.stdout).toContain(
-        "Warning deck/slide[overflow]/shape[overflow-shape] [overflow]:",
-      );
-      expect(textWarning.stdout).toContain(`Exported deck: ${textOut}`);
-      expect(textWarning.stdout).toContain("Slides: 1");
-
-      const structuredSuccess = await runWithMemoryOutput([
-        source,
-        "--export",
-        "OverflowDeck",
-        "--out",
-        structuredOut,
-        "--output-format",
-        "structured",
-      ]);
-      expect(structuredSuccess.code).toBe(0);
-      expect(structuredSuccess.stderr).toBe("");
-      expect(JSON.parse(structuredSuccess.stdout)).toMatchObject({
-        schemaVersion: "2",
-        command: "reactPptx",
-        kind: "data",
-        variant: "exported",
-        data: {
-          output: structuredOut,
-          slides: 1,
-          warnings: [
-            {
-              path: "deck/slide[overflow]/shape[overflow-shape]",
-              code: "overflow",
-            },
-          ],
-        },
-      });
-
-      const structuredOverwrite = await runWithMemoryOutput([
-        source,
-        "--out",
-        source,
-        "--output-format",
-        "structured",
-      ]);
-      expect(structuredOverwrite.code).toBe(2);
-      expect(structuredOverwrite.stdout).toBe("");
-      expect(JSON.parse(structuredOverwrite.stderr)).toEqual({
-        schemaVersion: "2",
-        command: "reactPptx",
-        kind: "failure",
-        variant: "invalidOutput",
-        data: {
-          entry: source,
-          output: source,
-        },
-      });
-
-      const structuredBuildFailure = await runWithMemoryOutput([
-        broken,
-        "--out",
-        join(directory, "never.pptx"),
-        "--output-format",
-        "structured",
-      ]);
-      expect(structuredBuildFailure.code).toBe(1);
-      expect(structuredBuildFailure.stdout).toBe("");
-      expect(JSON.parse(structuredBuildFailure.stderr)).toMatchObject({
-        schemaVersion: "2",
-        command: "reactPptx",
-        kind: "failure",
-        variant: "buildFailed",
-        data: {
-          diagnostics: [
-            {
-              path: "deck/slide[broken]/shape[broken-shape]",
-              code: "invalid-coordinate",
-            },
-          ],
-        },
-      });
-
-      const brokenPipeCode = await runCli({
-        argv: ["node", "react-pptx", "--help"],
-        cwd: directory,
-        write: async () => {
-          throw Object.assign(new Error("broken pipe"), { code: "EPIPE" });
-        },
-      });
-      expect(brokenPipeCode).toBe(0);
-
-      let diagnosticStderr = "";
-      const writeFailureCode = await runCli({
-        argv: ["node", "react-pptx", "--help"],
-        cwd: directory,
-        write: async ({ destination, chunk }) => {
-          if (destination === "stdout") {
-            throw new Error("disk full");
-          }
-          diagnosticStderr += chunk;
-        },
-      });
-      expect(writeFailureCode).toBe(70);
-      expect(diagnosticStderr).toContain("Command execution failed");
-    } finally {
-      await rm(directory, { recursive: true, force: true });
-    }
   });
 });

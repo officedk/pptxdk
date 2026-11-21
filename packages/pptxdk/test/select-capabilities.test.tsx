@@ -220,7 +220,10 @@ process.stdout.write(JSON.stringify(texts));
       reactError.diagnostics[0]?.path,
       "deck/slide[nested]/text[missing-text]",
     );
-    assert.match(reactError.diagnostics[0]?.message ?? "", /rp:text/u);
+    assert.equal(
+      reactError.diagnostics[0]?.message,
+      "No capability module registered for text",
+    );
 
     let vanillaError: unknown;
     try {

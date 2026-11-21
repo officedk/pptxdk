@@ -538,7 +538,7 @@ function prepareRows(
       }
       continue;
     }
-    if (child.type !== "rp:row") {
+    if (child.type !== "row") {
       fail("invalid-table-structure", "Table can only contain Row directly");
     }
     const rowIndex = rows.length;
@@ -583,7 +583,7 @@ function prepareRows(
         }
         continue;
       }
-      if (cellChild.type !== "rp:cell") {
+      if (cellChild.type !== "cell") {
         fail(
           "invalid-table-structure",
           "Row can only contain Cell directly",
@@ -606,9 +606,8 @@ function prepareRows(
       }
       if (
         rowIndex + rowSpan >
-        input.children.filter(
-          (item) => "props" in item && item.type === "rp:row",
-        ).length
+        input.children.filter((item) => "props" in item && item.type === "row")
+          .length
       ) {
         fail(
           "invalid-table-merge",
@@ -1117,7 +1116,7 @@ function tableLayoutModel(
 
 /** Table module independently validates row and column structure, resolving layout/cells once for emit and paint. */
 export const tableCapability: ObjectCapabilityModule = {
-  declaration: "rp:table",
+  declaration: "table",
 
   bind(
     input: CapabilityInput,

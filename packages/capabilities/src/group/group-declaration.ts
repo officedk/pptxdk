@@ -32,5 +32,5 @@ export function createGroupNode(
     "group",
     GroupDeclarationProps,
     NonNullable<GroupDeclarationProps["style"]>
-  >("group", "rp:group", props);
+  >("group", "group", props);
 }

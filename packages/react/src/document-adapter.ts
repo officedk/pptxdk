@@ -31,10 +31,6 @@ function withoutHostMetadata(
   return declaration;
 }
 
-function declarationKind(type: string): string {
-  return type.startsWith("rp:") ? type.slice(3) : type;
-}
-
 function isDocumentNodeCreator(value: unknown): value is DocumentNodeCreator {
   return typeof value === "function";
 }
@@ -46,7 +42,7 @@ export function createHostInstance(
   const create = props[hostNodeCreator];
   const declaration = withoutHostMetadata(props);
   if (isDocumentNodeCreator(create)) return create(declaration);
-  return new CommonNode(declarationKind(type), type, declaration);
+  return new CommonNode(type, type, declaration);
 }
 
 export function createHostText(text: string): HostTextNode {

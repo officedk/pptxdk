@@ -30,7 +30,7 @@ export function useMotionScope(): MotionScopeHandle {
 export function MotionScope(props: MotionScopeProps): ReactNode {
   const { children, ...declaration } = props;
   return createElement(
-    "rp:motion-scope",
+    "motion-scope",
     { ...declaration, [hostNodeCreator]: createMotionScopeNode },
     children,
   );
@@ -41,7 +41,7 @@ export function Step(props: StepProps): ReactNode {
   const { children, ...declaration } = props;
   const [stepIdentity] = useState(createMotionStepIdentity);
   return createElement(
-    "rp:motion-step",
+    "motion-step",
     { ...declaration, stepIdentity, [hostNodeCreator]: createMotionStepNode },
     children,
   );

@@ -74,5 +74,5 @@ export function createImageNode(
     "image",
     ImageDeclarationProps,
     NonNullable<ImageDeclarationProps["style"]>
-  >("image", "rp:image", props);
+  >("image", "image", props);
 }

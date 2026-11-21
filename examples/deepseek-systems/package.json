@@ -38,16 +38,16 @@
     "typecheck": "tsc -p tsconfig.node.json --noEmit --pretty false",
     "build": "rm -rf dist && tsc -p tsconfig.build.json --pretty false && cp -R src/assets/fonts dist/assets/",
     "test": "vitest run",
-    "export:pptx": "react-pptx src/index.ts --embed-fonts full --out dist/deepseek-systems.pptx"
+    "export:pptx": "pptxdk build src/index.ts --embed-fonts full --out dist/deepseek-systems.pptx"
   },
   "dependencies": {
     "pptxdk": "workspace:*",
     "react": "catalog:"
   },
   "devDependencies": {
+    "@pptxdk/cli": "workspace:*",
     "@pptxdk/tooling-config": "workspace:*",
     "@pptxdk/validation": "workspace:*",
-    "@react-pptx/cli": "workspace:*",
     "@types/node": "catalog:",
     "@types/react": "catalog:",
     "oxfmt": "catalog:",

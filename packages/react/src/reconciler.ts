@@ -1,6 +1,6 @@
-import { BuildError, type Diagnostic } from "@react-pptx/core";
-import { CommonContainer, CommonNode } from "@react-pptx/core/document";
-import type { HostTextNode } from "@react-pptx/core/host";
+import { BuildError, type Diagnostic } from "@pptxdk/core";
+import { CommonContainer, CommonNode } from "@pptxdk/core/document";
+import type { HostTextNode } from "@pptxdk/core/host";
 import { createContext, type ReactNode } from "react";
 import Reconciler from "react-reconciler";
 import {
@@ -68,7 +68,7 @@ const reconciler = Reconciler<
   supportsHydration: false,
   isPrimaryRenderer: false,
   rendererVersion: "0.0.0",
-  rendererPackageName: "@react-pptx/react",
+  rendererPackageName: "@pptxdk/react",
   extraDevToolsConfig: null,
   noTimeout: -1,
   scheduleTimeout: setTimeout,
@@ -268,7 +268,7 @@ async function expandReactRoot<Result>(
     null,
     false,
     null,
-    "react-pptx",
+    "pptxdk",
     (error) => {
       if (cleaning) {
         cleanupError ??= { error };

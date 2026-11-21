@@ -1,5 +1,5 @@
 {
-  "name": "react-pptx",
+  "name": "pptxdk",
   "build": {
     "dockerfile": "Dockerfile",
     "args": {

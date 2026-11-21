@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
-import type { ChartSeries } from "@react-pptx/capabilities/chart";
+import type { ChartSeries } from "@pptxdk/capabilities/chart";
 import {
   cell,
   chart,
@@ -12,17 +12,17 @@ import {
   slide,
   span,
   table,
-} from "@react-pptx/capabilities/document";
-import type { TableColumn } from "@react-pptx/capabilities/table";
-import { BuildError } from "@react-pptx/core";
-import { createResolver } from "@react-pptx/core/build";
+} from "@pptxdk/capabilities/document";
+import type { TableColumn } from "@pptxdk/capabilities/table";
+import { BuildError } from "@pptxdk/core";
+import { createResolver } from "@pptxdk/core/build";
 import {
   CommonContainer,
   CommonNode,
   RichTextContainer,
-} from "@react-pptx/core/document";
-import { emit } from "@react-pptx/emit";
-import { validatePptx, type FileChartSeries } from "@react-pptx/validation";
+} from "@pptxdk/core/document";
+import { emit } from "@pptxdk/emit";
+import { validatePptx, type FileChartSeries } from "@pptxdk/validation";
 import { strFromU8, strToU8, unzipSync, zipSync } from "fflate";
 import { describe, it } from "vitest";
 

@@ -1,5 +1,5 @@
-import type { SlideObservation } from "@react-pptx/core/capability";
-import { BuildQueryError } from "@react-pptx/core/query";
+import type { SlideObservation } from "@pptxdk/core/capability";
+import { BuildQueryError } from "@pptxdk/core/query";
 
 import type {
   MotionEffectObservation,

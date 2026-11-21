@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 
-import * as capabilities from "@react-pptx/capabilities";
+import * as capabilities from "@pptxdk/capabilities";
 import {
   after,
   createMorphScope,
@@ -8,7 +8,7 @@ import {
   observeMotion,
   transitions,
   type MotionObservation,
-} from "@react-pptx/capabilities";
+} from "@pptxdk/capabilities";
 import {
   box,
   createMotionScopeHandle,
@@ -18,12 +18,12 @@ import {
   shape,
   slide,
   step,
-} from "@react-pptx/capabilities/document";
-import { BuildError } from "@react-pptx/core";
-import { createResolver } from "@react-pptx/core/build";
-import { emit } from "@react-pptx/emit";
-import { Deck, Slide, expandDocument } from "@react-pptx/react";
-import { validatePptx } from "@react-pptx/validation";
+} from "@pptxdk/capabilities/document";
+import { BuildError } from "@pptxdk/core";
+import { createResolver } from "@pptxdk/core/build";
+import { emit } from "@pptxdk/emit";
+import { Deck, Slide, expandDocument } from "@pptxdk/react";
+import { validatePptx } from "@pptxdk/validation";
 import { strFromU8, unzipSync } from "fflate";
 import { createElement } from "react";
 import { describe, it } from "vitest";

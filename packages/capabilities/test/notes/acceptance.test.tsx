@@ -4,8 +4,8 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { slideBackgroundCapability } from "@react-pptx/capabilities";
-import { boxCapability } from "@react-pptx/capabilities/box";
+import { slideBackgroundCapability } from "@pptxdk/capabilities";
+import { boxCapability } from "@pptxdk/capabilities/box";
 import {
   box,
   deck,
@@ -17,23 +17,23 @@ import {
   slideNumber,
   span,
   text,
-} from "@react-pptx/capabilities/document";
-import { notesCapability } from "@react-pptx/capabilities/notes";
-import { Notes } from "@react-pptx/capabilities/notes-elements";
-import { shapeCapability } from "@react-pptx/capabilities/shape";
-import { Shape } from "@react-pptx/capabilities/shape-elements";
-import { P, SlideNumber, Span } from "@react-pptx/capabilities/text-elements";
+} from "@pptxdk/capabilities/document";
+import { notesCapability } from "@pptxdk/capabilities/notes";
+import { Notes } from "@pptxdk/capabilities/notes-elements";
+import { shapeCapability } from "@pptxdk/capabilities/shape";
+import { Shape } from "@pptxdk/capabilities/shape-elements";
+import { P, SlideNumber, Span } from "@pptxdk/capabilities/text-elements";
 import {
   BuildError,
   type CapabilityModule,
   type Diagnostic,
-} from "@react-pptx/core";
-import { createResolver } from "@react-pptx/core/build";
-import type { CommonNode } from "@react-pptx/core/document";
-import { emit } from "@react-pptx/emit";
-import { paint } from "@react-pptx/preview";
-import { Deck, Slide, expandDocument } from "@react-pptx/react";
-import { validatePptx } from "@react-pptx/validation";
+} from "@pptxdk/core";
+import { createResolver } from "@pptxdk/core/build";
+import type { CommonNode } from "@pptxdk/core/document";
+import { emit } from "@pptxdk/emit";
+import { paint } from "@pptxdk/preview";
+import { Deck, Slide, expandDocument } from "@pptxdk/react";
+import { validatePptx } from "@pptxdk/validation";
 import { strFromU8, unzipSync } from "fflate";
 import { PNG } from "pngjs";
 import { createElement, type ComponentType, type ReactNode } from "react";

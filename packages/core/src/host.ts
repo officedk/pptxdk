@@ -1,8 +1,8 @@
 /**
  * Internal host-adapter protocol for React reconciliation and JSX host element binding.
  *
- * Solely for the React host adapter (`@react-pptx/react`) and JSX host elements in
- * `@react-pptx/capabilities`; this subpath is not an author API and must never be re-exported from
+ * Solely for the React host adapter (`@pptxdk/react`) and JSX host elements in
+ * `@pptxdk/capabilities`; this subpath is not an author API and must never be re-exported from
  * `.` or `./document`.
  */
 import { validateAuthorIdScopes } from "#/author-ids.ts";
@@ -26,7 +26,7 @@ import type { CommonNode } from "#/document.ts";
  * this value before the declaration reaches the formal build, so it is not author content and the
  * adapter does not need a separate tag-to-node-class table.
  */
-export const hostNodeCreator = "__reactPptxNodeCreator";
+export const hostNodeCreator = "__pptxdkNodeCreator";
 
 /**
  * Creates the editable node shared by a command factory and the matching JSX host element.

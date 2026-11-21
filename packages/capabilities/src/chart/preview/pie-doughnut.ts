@@ -1,4 +1,4 @@
-import type { GeometryBox, ThemeContext } from "@react-pptx/core/capability";
+import type { GeometryBox, ThemeContext } from "@pptxdk/core/capability";
 
 import { mergeDataLabels } from "../chart-labels.ts";
 import type { ParsedDoughnutGroup, ParsedPieGroup } from "../chart-model.ts";

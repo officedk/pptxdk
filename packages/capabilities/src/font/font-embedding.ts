@@ -3,8 +3,8 @@ import { createHash } from "node:crypto";
 import {
   CapabilityError,
   type CapabilityPresentationContribution,
-} from "@react-pptx/core/capability";
-import { xmlEscape } from "@react-pptx/emit";
+} from "@pptxdk/core/capability";
+import { xmlEscape } from "@pptxdk/emit";
 import * as fontkit from "fontkit";
 
 import { fontFamilyKey, matchesFontFamily } from "./font-family.ts";

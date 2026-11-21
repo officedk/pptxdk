@@ -1,12 +1,12 @@
 import assert from "node:assert/strict";
 
-import { type ChartGroup } from "@react-pptx/capabilities/chart";
+import { type ChartGroup } from "@pptxdk/capabilities/chart";
 import {
   chart as documentChart,
   deck,
   slide as documentSlide,
-} from "@react-pptx/capabilities/document";
-import { validatePptx } from "@react-pptx/validation";
+} from "@pptxdk/capabilities/document";
+import { validatePptx } from "@pptxdk/validation";
 import { strFromU8, strToU8, unzipSync, zipSync } from "fflate";
 import { describe, it } from "vitest";
 

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
+import { validatePptx } from "@pptxdk/validation";
 import {
   boxCapability,
   build,
@@ -20,7 +21,6 @@ import {
   textCapability,
   transitions,
 } from "@react-pptx/react-pptx";
-import { validatePptx } from "@react-pptx/validation";
 import { strFromU8, unzipSync } from "fflate";
 import { describe, it, vi } from "vitest";
 

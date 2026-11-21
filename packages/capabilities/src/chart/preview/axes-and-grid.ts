@@ -1,4 +1,4 @@
-import type { GeometryBox, ThemeContext } from "@react-pptx/core/capability";
+import type { GeometryBox, ThemeContext } from "@pptxdk/core/capability";
 
 import type { TextStyle } from "../../shared/text-service.ts";
 import type { ParsedChart, ParsedChartAxis } from "../chart-model.ts";

@@ -1,30 +1,27 @@
 import assert from "node:assert/strict";
 
-import { slideBackgroundCapability } from "@react-pptx/capabilities";
+import { slideBackgroundCapability } from "@pptxdk/capabilities";
 import {
   deck,
   documentCapabilities,
   notes,
   shape,
   slide,
-} from "@react-pptx/capabilities/document";
-import { motionCapability } from "@react-pptx/capabilities/motion";
-import { notesCapability } from "@react-pptx/capabilities/notes";
-import {
-  linearGradient,
-  shapeCapability,
-} from "@react-pptx/capabilities/shape";
-import { Shape } from "@react-pptx/capabilities/shape-elements";
+} from "@pptxdk/capabilities/document";
+import { motionCapability } from "@pptxdk/capabilities/motion";
+import { notesCapability } from "@pptxdk/capabilities/notes";
+import { linearGradient, shapeCapability } from "@pptxdk/capabilities/shape";
+import { Shape } from "@pptxdk/capabilities/shape-elements";
 import {
   transitionCapability,
   transitions,
-} from "@react-pptx/capabilities/transition";
-import type { CapabilityModule, CommonNode } from "@react-pptx/core";
-import { createResolver } from "@react-pptx/core/build";
-import { emit } from "@react-pptx/emit";
-import { paint } from "@react-pptx/preview";
-import { Deck, Slide, expandDocument } from "@react-pptx/react";
-import { validatePptx } from "@react-pptx/validation";
+} from "@pptxdk/capabilities/transition";
+import type { CapabilityModule, CommonNode } from "@pptxdk/core";
+import { createResolver } from "@pptxdk/core/build";
+import { emit } from "@pptxdk/emit";
+import { paint } from "@pptxdk/preview";
+import { Deck, Slide, expandDocument } from "@pptxdk/react";
+import { validatePptx } from "@pptxdk/validation";
 import { PNG } from "pngjs";
 import { createElement } from "react";
 import { describe, it } from "vitest";

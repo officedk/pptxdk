@@ -1,5 +1,5 @@
 {
-  "extends": "@react-pptx/tooling-config/node.json",
+  "extends": "@pptxdk/tooling-config/node.json",
   "compilerOptions": {
     "types": ["node"],
     "composite": false,

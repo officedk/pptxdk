@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 
+import { validatePptx } from "@pptxdk/validation";
 import {
   build,
   Deck,
@@ -13,7 +14,6 @@ import {
   resolve as resolveDocument,
 } from "@react-pptx/react-pptx/document";
 import { paint } from "@react-pptx/react-pptx/preview";
-import { validatePptx } from "@react-pptx/validation";
 import { unzipSync } from "fflate";
 import { it } from "vitest";
 

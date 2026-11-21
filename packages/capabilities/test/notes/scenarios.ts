@@ -11,16 +11,11 @@ import {
   slideNumber,
   span,
   text,
-} from "@react-pptx/capabilities/document";
-import { Notes } from "@react-pptx/capabilities/notes-elements";
-import { Shape } from "@react-pptx/capabilities/shape-elements";
-import {
-  P,
-  SlideNumber,
-  Span,
-  Text,
-} from "@react-pptx/capabilities/text-elements";
-import { Deck, Slide } from "@react-pptx/react";
+} from "@pptxdk/capabilities/document";
+import { Notes } from "@pptxdk/capabilities/notes-elements";
+import { Shape } from "@pptxdk/capabilities/shape-elements";
+import { P, SlideNumber, Span, Text } from "@pptxdk/capabilities/text-elements";
+import { Deck, Slide } from "@pptxdk/react";
 import { strFromU8, unzipSync } from "fflate";
 import { PNG } from "pngjs";
 import { createElement } from "react";

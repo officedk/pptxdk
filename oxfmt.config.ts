@@ -1,1 +1,1 @@
-export { default } from "@react-pptx/tooling-config/oxfmt";
+export { default } from "@pptxdk/tooling-config/oxfmt";

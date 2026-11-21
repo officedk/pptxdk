@@ -5,7 +5,8 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import type { BoundObjectCapabilityModule } from "@react-pptx/core";
+import type { BoundObjectCapabilityModule } from "@pptxdk/core";
+import { validatePptx } from "@pptxdk/validation";
 import {
   build,
   BuildError,
@@ -33,7 +34,6 @@ import {
   type ResolveOptions,
 } from "@react-pptx/react-pptx";
 import { createResolver } from "@react-pptx/react-pptx/build";
-import { validatePptx } from "@react-pptx/validation";
 import { strFromU8, strToU8, unzipSync, zipSync } from "fflate";
 import * as fontkit from "fontkit";
 import * as harfbuzz from "harfbuzzjs";
@@ -3313,7 +3313,7 @@ describe("public build entry", () => {
   });
 
   it("generates plain shapes and shapes with text in standalone trimmed process without loading text box implementation", async () => {
-    const directory = await mkdtemp(join(tmpdir(), "react-pptx-text-trim-"));
+    const directory = await mkdtemp(join(tmpdir(), "pptxdk-text-trim-"));
     try {
       const loader = join(directory, "reject-text-box.mjs");
       await writeFile(
@@ -3336,10 +3336,10 @@ describe("public build entry", () => {
           "--eval",
           [
             'import { createElement } from "react";',
-            'import { BuildError } from "@react-pptx/core";',
-            'import { Text as TextDeclaration } from "@react-pptx/capabilities/text-elements";',
+            'import { BuildError } from "@pptxdk/core";',
+            'import { Text as TextDeclaration } from "@pptxdk/capabilities/text-elements";',
             'import { build, Deck, Shape, Slide } from "@react-pptx/react-pptx/shape";',
-            'import { validatePptx } from "@react-pptx/validation";',
+            'import { validatePptx } from "@pptxdk/validation";',
             'const result = await build(createElement(Deck, { width: 120, height: 96 }, createElement(Slide, { id: "trimmed" }, createElement(Shape, { id: "plain", name: "plain", x: 0, y: 0, width: 20, height: 20 }), createElement(Shape, { id: "labeled", name: "labeled", x: 24, y: 0, width: 60, height: 20, text: "形状文字 — Shape text" }), createElement(Shape, { id: "empty-label", name: "empty-label", x: 90, y: 0, width: 20, height: 20, text: "" }))));',
             "const file = await validatePptx(result.pptx);",
             'if (file.errors.length !== 0 || result.report.slides[0]?.objects[1]?.text !== "形状文字 — Shape text" || file.slides[0]?.objects[1]?.text?.text !== "形状文字 — Shape text" || file.slides[0]?.objects[2]?.text !== undefined) throw new Error(JSON.stringify(file.errors));',

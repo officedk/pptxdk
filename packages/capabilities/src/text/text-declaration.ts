@@ -3,8 +3,8 @@ import type {
   LinkTarget,
   PaddingStyle,
   VisualStyle,
-} from "@react-pptx/core/capability";
-import { CommonNode, RichTextContainer } from "@react-pptx/core/document";
+} from "@pptxdk/core/capability";
+import { CommonNode, RichTextContainer } from "@pptxdk/core/document";
 
 import type { MotionProps } from "../motion/motion-api.ts";
 import type { MorphProps } from "../shared/morph-api.ts";

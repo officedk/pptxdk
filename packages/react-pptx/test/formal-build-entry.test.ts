@@ -28,8 +28,8 @@ registerHooks({
       specifier === "react" ||
       specifier === "react-reconciler" ||
       specifier.startsWith("react/") ||
-      specifier === "@react-pptx/react" ||
-      specifier.startsWith("@react-pptx/react/")
+      specifier === "@pptxdk/react" ||
+      specifier.startsWith("@pptxdk/react/")
     ) {
       throw new Error("pure build entry loaded " + specifier);
     }

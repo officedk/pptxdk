@@ -1,8 +1,8 @@
-import type { Transition } from "@react-pptx/capabilities/transition";
+import type { Transition } from "@pptxdk/capabilities/transition";
 import {
   Slide as ReactSlide,
   type SlideProps as ReactSlideProps,
-} from "@react-pptx/react";
+} from "@pptxdk/react";
 import type { ReactNode } from "react";
 
 export type SlideProps = Omit<ReactSlideProps, "transition"> & {

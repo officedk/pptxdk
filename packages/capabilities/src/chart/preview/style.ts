@@ -2,7 +2,7 @@ import type {
   ColorValue,
   ResolvedColor,
   ThemeContext,
-} from "@react-pptx/core/capability";
+} from "@pptxdk/core/capability";
 
 import type { ChartLine, ChartLineDash } from "../chart-types.ts";
 import { assertNever } from "./types.ts";

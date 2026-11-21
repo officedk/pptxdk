@@ -3,17 +3,17 @@ import assert from "node:assert/strict";
 import {
   type ChartProps,
   type ScatterChartGroup,
-} from "@react-pptx/capabilities/chart";
-import { Chart } from "@react-pptx/capabilities/chart-elements";
+} from "@pptxdk/capabilities/chart";
+import { Chart } from "@pptxdk/capabilities/chart-elements";
 import {
   chart as documentChart,
   deck,
   slide as documentSlide,
-} from "@react-pptx/capabilities/document";
-import { fade } from "@react-pptx/capabilities/motion";
-import { BuildError } from "@react-pptx/core";
-import { Deck, Slide } from "@react-pptx/react";
-import { validatePptx, type FileChartDataLabel } from "@react-pptx/validation";
+} from "@pptxdk/capabilities/document";
+import { fade } from "@pptxdk/capabilities/motion";
+import { BuildError } from "@pptxdk/core";
+import { Deck, Slide } from "@pptxdk/react";
+import { validatePptx, type FileChartDataLabel } from "@pptxdk/validation";
 import { strFromU8, strToU8, unzipSync, zipSync, type Unzipped } from "fflate";
 import { describe, it } from "vitest";
 

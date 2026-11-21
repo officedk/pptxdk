@@ -1,22 +1,22 @@
 import assert from "node:assert/strict";
 import { createRequire } from "node:module";
 
-import { Box } from "@react-pptx/capabilities/box-elements";
+import { Box } from "@pptxdk/capabilities/box-elements";
 import {
   box,
   deck,
   documentCapabilities,
   shape,
   slide,
-} from "@react-pptx/capabilities/document";
-import { linearGradient, radialGradient } from "@react-pptx/capabilities/shape";
-import { Shape } from "@react-pptx/capabilities/shape-elements";
-import type { CapabilityModule, CommonNode } from "@react-pptx/core";
-import { createResolver } from "@react-pptx/core/build";
-import { emit } from "@react-pptx/emit";
-import { paint } from "@react-pptx/preview";
-import { Deck, Slide, expandDocument } from "@react-pptx/react";
-import { validatePptx } from "@react-pptx/validation";
+} from "@pptxdk/capabilities/document";
+import { linearGradient, radialGradient } from "@pptxdk/capabilities/shape";
+import { Shape } from "@pptxdk/capabilities/shape-elements";
+import type { CapabilityModule, CommonNode } from "@pptxdk/core";
+import { createResolver } from "@pptxdk/core/build";
+import { emit } from "@pptxdk/emit";
+import { paint } from "@pptxdk/preview";
+import { Deck, Slide, expandDocument } from "@pptxdk/react";
+import { validatePptx } from "@pptxdk/validation";
 import { PNG } from "pngjs";
 import { createElement } from "react";
 import { describe, expect, it } from "vitest";

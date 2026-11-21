@@ -5,14 +5,14 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { Box } from "@react-pptx/capabilities/box-elements";
-import { font } from "@react-pptx/capabilities/font";
-import { tableCapability } from "@react-pptx/capabilities/table";
-import { Cell, Row, Table } from "@react-pptx/capabilities/table-elements";
-import { P } from "@react-pptx/capabilities/text-elements";
-import { BuildError } from "@react-pptx/core";
-import { Deck, Slide } from "@react-pptx/react";
-import { validatePptx } from "@react-pptx/validation";
+import { Box } from "@pptxdk/capabilities/box-elements";
+import { font } from "@pptxdk/capabilities/font";
+import { tableCapability } from "@pptxdk/capabilities/table";
+import { Cell, Row, Table } from "@pptxdk/capabilities/table-elements";
+import { P } from "@pptxdk/capabilities/text-elements";
+import { BuildError } from "@pptxdk/core";
+import { Deck, Slide } from "@pptxdk/react";
+import { validatePptx } from "@pptxdk/validation";
 import { strFromU8, strToU8, unzipSync, zipSync } from "fflate";
 import { createElement, type ReactNode } from "react";
 import { describe, it, vi } from "vitest";
@@ -35,7 +35,7 @@ function tableDeck(content: ReactNode): ReactNode {
 
 describe("native tables", () => {
   it("writes tables through shared text service even when Text capability is stripped", async () => {
-    const directory = await mkdtemp(join(tmpdir(), "react-pptx-table-trim-"));
+    const directory = await mkdtemp(join(tmpdir(), "pptxdk-table-trim-"));
     try {
       const loader = join(directory, "reject-text-box.mjs");
       await writeFile(
@@ -56,12 +56,12 @@ describe("native tables", () => {
         "--eval",
         [
           'import { createElement } from "react";',
-          'import { Deck, Slide, expandDocument } from "@react-pptx/react";',
-          'import { createResolver } from "@react-pptx/core/build";',
-          'import { emit } from "@react-pptx/emit";',
-          'import { Cell, Row, Table } from "@react-pptx/capabilities/table-elements";',
-          'import { tableCapability } from "@react-pptx/capabilities/table";',
-          'import { validatePptx } from "@react-pptx/validation";',
+          'import { Deck, Slide, expandDocument } from "@pptxdk/react";',
+          'import { createResolver } from "@pptxdk/core/build";',
+          'import { emit } from "@pptxdk/emit";',
+          'import { Cell, Row, Table } from "@pptxdk/capabilities/table-elements";',
+          'import { tableCapability } from "@pptxdk/capabilities/table";',
+          'import { validatePptx } from "@pptxdk/validation";',
           "const resolve = createResolver([tableCapability]);",
           'const expanded = await expandDocument(createElement(Deck, { width: 160, height: 96 }, createElement(Slide, { id: "trimmed" }, createElement(Table, { id: "only-table", columns: [80] }, createElement(Row, { style: { height: 40 } }, createElement(Cell, null, "table survives Text crop"))))));',
           "const result = emit(resolve(expanded));",

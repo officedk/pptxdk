@@ -1,4 +1,4 @@
-import lintConfiguration from "@react-pptx/tooling-config/oxlint";
+import lintConfiguration from "@pptxdk/tooling-config/oxlint";
 import { defineConfig } from "oxlint";
 
 export default defineConfig({

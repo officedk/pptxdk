@@ -36,7 +36,7 @@ export type {
   RadialGradient,
   Shadow,
   VisualStyle,
-} from "@react-pptx/core";
+} from "@pptxdk/core";
 export { chartCapability } from "#/chart/chart.ts";
 export type {
   ChartAxis,

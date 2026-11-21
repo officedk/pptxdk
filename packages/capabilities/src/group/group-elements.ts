@@ -1,4 +1,4 @@
-import { hostNodeCreator } from "@react-pptx/core/host";
+import { hostNodeCreator } from "@pptxdk/core/host";
 import type { ReactNode } from "react";
 
 import { motionElement } from "../motion/motion-elements.ts";

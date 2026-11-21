@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
-import { slideBackgroundCapability } from "@react-pptx/capabilities";
+import { slideBackgroundCapability } from "@pptxdk/capabilities";
 import {
   cell,
   deck,
@@ -9,17 +9,17 @@ import {
   row,
   slide,
   table,
-} from "@react-pptx/capabilities/document";
-import { font } from "@react-pptx/capabilities/font";
-import { tableCapability } from "@react-pptx/capabilities/table";
-import { Cell, Row, Table } from "@react-pptx/capabilities/table-elements";
-import { P, SlideNumber } from "@react-pptx/capabilities/text-elements";
-import { BuildError } from "@react-pptx/core";
-import { createResolver } from "@react-pptx/core/build";
-import { emit } from "@react-pptx/emit";
-import { paint } from "@react-pptx/preview";
-import { Deck, expandDocument, Slide } from "@react-pptx/react";
-import { validatePptx } from "@react-pptx/validation";
+} from "@pptxdk/capabilities/document";
+import { font } from "@pptxdk/capabilities/font";
+import { tableCapability } from "@pptxdk/capabilities/table";
+import { Cell, Row, Table } from "@pptxdk/capabilities/table-elements";
+import { P, SlideNumber } from "@pptxdk/capabilities/text-elements";
+import { BuildError } from "@pptxdk/core";
+import { createResolver } from "@pptxdk/core/build";
+import { emit } from "@pptxdk/emit";
+import { paint } from "@pptxdk/preview";
+import { Deck, expandDocument, Slide } from "@pptxdk/react";
+import { validatePptx } from "@pptxdk/validation";
 import { strFromU8, unzipSync } from "fflate";
 import { createElement } from "react";
 import { describe, it } from "vitest";

@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 
+import { validatePptx } from "@pptxdk/validation";
 import {
   Box,
   BuildError,
@@ -32,7 +33,6 @@ import {
   type CommonNode,
   type TextNode,
 } from "@react-pptx/react-pptx/document";
-import { validatePptx } from "@react-pptx/validation";
 import { strFromU8, unzipSync } from "fflate";
 import { describe, it } from "vitest";
 

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 
-import { shapeCapability } from "@react-pptx/capabilities/shape";
+import { shapeCapability } from "@pptxdk/capabilities/shape";
+import { validatePptx } from "@pptxdk/validation";
 import {
   after,
   Box,
@@ -50,7 +51,6 @@ import {
   transitions,
   type MotionObservation,
 } from "@react-pptx/react-pptx/document";
-import { validatePptx } from "@react-pptx/validation";
 import { strFromU8, unzipSync } from "fflate";
 import { describe, it } from "vitest";
 

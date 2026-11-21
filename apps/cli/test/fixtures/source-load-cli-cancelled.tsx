@@ -6,7 +6,7 @@ await new Promise<void>((_resolve, reject) => {
     clearInterval(keepAlive);
     reject(new Error("Author source preparation cooperatively cancelled"));
   });
-  process.stdout.write("__react_pptx_source_load_cancel_ready__\n");
+  process.stdout.write("__pptxdk_source_load_cancel_ready__\n");
 });
 
 export default function SourceLoadCancelledDeck() {

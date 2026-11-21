@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 
-import { CapabilityError } from "@react-pptx/core/capability";
+import { CapabilityError } from "@pptxdk/core/capability";
 
 import { decodeGifFirstFrame } from "./gif-decoder.ts";
 

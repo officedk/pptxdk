@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
 import { createRequire } from "node:module";
 
-import { deck, image, shape, slide } from "@react-pptx/capabilities/document";
-import { Image } from "@react-pptx/capabilities/image-elements";
-import { path, preset } from "@react-pptx/capabilities/shape";
-import { Shape } from "@react-pptx/capabilities/shape-elements";
-import { Deck, Slide } from "@react-pptx/react";
+import { deck, image, shape, slide } from "@pptxdk/capabilities/document";
+import { Image } from "@pptxdk/capabilities/image-elements";
+import { path, preset } from "@pptxdk/capabilities/shape";
+import { Shape } from "@pptxdk/capabilities/shape-elements";
+import { Deck, Slide } from "@pptxdk/react";
 import { strFromU8, unzipSync } from "fflate";
 import { PNG } from "pngjs";
 import { createElement } from "react";

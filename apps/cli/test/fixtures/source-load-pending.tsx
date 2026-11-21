@@ -1,7 +1,7 @@
 import { Deck, Slide } from "@react-pptx/react-pptx";
 
 declare global {
-  var __reactPptxSourceLoadState:
+  var __pptxdkSourceLoadState:
     | {
         readonly controller: AbortController;
         started: boolean;
@@ -12,7 +12,7 @@ declare global {
     | undefined;
 }
 
-const state = globalThis.__reactPptxSourceLoadState;
+const state = globalThis.__pptxdkSourceLoadState;
 if (state === undefined) throw new Error("Missing source load test state");
 state.started = true;
 await new Promise<void>((_resolve, reject) => {

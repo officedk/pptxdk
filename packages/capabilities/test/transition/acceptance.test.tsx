@@ -3,21 +3,21 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { slideBackgroundCapability } from "@react-pptx/capabilities";
-import { imageCapability } from "@react-pptx/capabilities/image";
-import { Image } from "@react-pptx/capabilities/image-elements";
-import { shapeCapability } from "@react-pptx/capabilities/shape";
-import { Shape } from "@react-pptx/capabilities/shape-elements";
+import { slideBackgroundCapability } from "@pptxdk/capabilities";
+import { imageCapability } from "@pptxdk/capabilities/image";
+import { Image } from "@pptxdk/capabilities/image-elements";
+import { shapeCapability } from "@pptxdk/capabilities/shape";
+import { Shape } from "@pptxdk/capabilities/shape-elements";
 import {
   transitionCapability,
   transitions,
-} from "@react-pptx/capabilities/transition";
-import { BuildError, createMorphScope, targets } from "@react-pptx/core";
-import { createResolver } from "@react-pptx/core/build";
-import { emit } from "@react-pptx/emit";
-import { paint } from "@react-pptx/preview";
-import { Deck, Slide, expandDocument } from "@react-pptx/react";
-import { validatePptx } from "@react-pptx/validation";
+} from "@pptxdk/capabilities/transition";
+import { BuildError, createMorphScope, targets } from "@pptxdk/core";
+import { createResolver } from "@pptxdk/core/build";
+import { emit } from "@pptxdk/emit";
+import { paint } from "@pptxdk/preview";
+import { Deck, Slide, expandDocument } from "@pptxdk/react";
+import { validatePptx } from "@pptxdk/validation";
 import { createElement } from "react";
 import { describe, it } from "vitest";
 

@@ -2,7 +2,7 @@ import { Deck, Slide } from "@react-pptx/react-pptx";
 import { Suspense, use, useEffect } from "react";
 
 declare global {
-  var __reactPptxCancellation:
+  var __pptxdkCancellation:
     | {
         readonly controller: AbortController;
         readonly reason: Error;
@@ -18,11 +18,11 @@ function PendingContent() {
 
 function NotifyMount() {
   useEffect(() => {
-    const cancellation = globalThis.__reactPptxCancellation;
+    const cancellation = globalThis.__pptxdkCancellation;
     if (cancellation !== undefined) {
       cancellation.controller.abort(cancellation.reason);
     }
-    process.stdout.write("__react_pptx_cancel_ready__\n");
+    process.stdout.write("__pptxdk_cancel_ready__\n");
   }, []);
   return null;
 }

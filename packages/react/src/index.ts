@@ -1,5 +1,5 @@
-import { BuildError, type Diagnostic } from "@react-pptx/core";
-import type { CommonContainer, CommonNode } from "@react-pptx/core/document";
+import { BuildError, type Diagnostic } from "@pptxdk/core";
+import type { CommonContainer, CommonNode } from "@pptxdk/core/document";
 import type { ReactNode } from "react";
 
 import { assertAppendableAuthorIds } from "#/append.ts";

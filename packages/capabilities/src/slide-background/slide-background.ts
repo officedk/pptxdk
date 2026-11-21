@@ -12,7 +12,7 @@ import {
   type SlidePaintOutput,
   type SlideResolveContext,
   type ThemeContext,
-} from "@react-pptx/core/capability";
+} from "@pptxdk/core/capability";
 
 import {
   decodeImageToPngBytes,

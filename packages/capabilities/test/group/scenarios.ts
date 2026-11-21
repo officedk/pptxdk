@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
-import { createMorphScope } from "@react-pptx/capabilities";
-import { boxCapability } from "@react-pptx/capabilities/box";
-import { Box } from "@react-pptx/capabilities/box-elements";
+import { createMorphScope } from "@pptxdk/capabilities";
+import { boxCapability } from "@pptxdk/capabilities/box";
+import { Box } from "@pptxdk/capabilities/box-elements";
 import {
   box,
   deck,
@@ -13,20 +13,20 @@ import {
   shape,
   slide,
   text,
-} from "@react-pptx/capabilities/document";
-import { groupCapability } from "@react-pptx/capabilities/group";
-import { Group } from "@react-pptx/capabilities/group-elements";
-import { Image } from "@react-pptx/capabilities/image-elements";
-import { fade, type MotionObservation } from "@react-pptx/capabilities/motion";
-import { path } from "@react-pptx/capabilities/shape";
-import { shapeCapability } from "@react-pptx/capabilities/shape";
-import { Shape } from "@react-pptx/capabilities/shape-elements";
-import { Text } from "@react-pptx/capabilities/text-elements";
-import { transitions } from "@react-pptx/capabilities/transition";
-import { BuildError } from "@react-pptx/core";
-import { createResolver } from "@react-pptx/core/build";
-import { emit } from "@react-pptx/emit";
-import { Deck, Slide, expandDocument } from "@react-pptx/react";
+} from "@pptxdk/capabilities/document";
+import { groupCapability } from "@pptxdk/capabilities/group";
+import { Group } from "@pptxdk/capabilities/group-elements";
+import { Image } from "@pptxdk/capabilities/image-elements";
+import { fade, type MotionObservation } from "@pptxdk/capabilities/motion";
+import { path } from "@pptxdk/capabilities/shape";
+import { shapeCapability } from "@pptxdk/capabilities/shape";
+import { Shape } from "@pptxdk/capabilities/shape-elements";
+import { Text } from "@pptxdk/capabilities/text-elements";
+import { transitions } from "@pptxdk/capabilities/transition";
+import { BuildError } from "@pptxdk/core";
+import { createResolver } from "@pptxdk/core/build";
+import { emit } from "@pptxdk/emit";
+import { Deck, Slide, expandDocument } from "@pptxdk/react";
 import { strFromU8, unzipSync } from "fflate";
 import { PNG } from "pngjs";
 import { createElement } from "react";

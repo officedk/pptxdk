@@ -1,19 +1,19 @@
-import { documentCapabilities } from "@react-pptx/capabilities/document";
+import { documentCapabilities } from "@pptxdk/capabilities/document";
 import type {
   BuildOptions,
   BuildResult,
   Resolution,
   ResolveOptions,
-} from "@react-pptx/core/build";
-import { createResolver } from "@react-pptx/core/build";
-import { CommonNode } from "@react-pptx/core/document";
-import { emit, emittedBuildQuery, validateOptions } from "@react-pptx/emit";
+} from "@pptxdk/core/build";
+import { createResolver } from "@pptxdk/core/build";
+import { CommonNode } from "@pptxdk/core/document";
+import { emit, emittedBuildQuery, validateOptions } from "@pptxdk/emit";
 import {
   paint,
   type PreviewOptions,
   type PreviewResult,
-} from "@react-pptx/preview";
-import { expandDocument } from "@react-pptx/react";
+} from "@pptxdk/preview";
+import { expandDocument } from "@pptxdk/react";
 import type { ReactNode } from "react";
 
 const resolveDefault = createResolver(documentCapabilities);

@@ -16,8 +16,8 @@ import {
   type TextAlignment,
   type TextStyle,
   type ThemeContext,
-} from "@react-pptx/core/capability";
-import { pxToEmu, resolvedColorXml, xmlEscape } from "@react-pptx/emit";
+} from "@pptxdk/core/capability";
+import { pxToEmu, resolvedColorXml, xmlEscape } from "@pptxdk/emit";
 import * as fontkit from "fontkit";
 import * as hb from "harfbuzzjs";
 // @ts-expect-error -- linebreak does not provide types; declare the breakpoint interface used below.
@@ -38,7 +38,7 @@ export type {
   FontSize,
   TextAlignment,
   TextStyle,
-} from "@react-pptx/core/capability";
+} from "@pptxdk/core/capability";
 
 export type TextList =
   | {

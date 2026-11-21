@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 
-import { P, Text } from "@react-pptx/capabilities/text-elements";
-import { BuildError } from "@react-pptx/core";
-import { Deck, Slide } from "@react-pptx/react";
-import { validatePptx } from "@react-pptx/validation";
+import { P, Text } from "@pptxdk/capabilities/text-elements";
+import { BuildError } from "@pptxdk/core";
+import { Deck, Slide } from "@pptxdk/react";
+import { validatePptx } from "@pptxdk/validation";
 import { strFromU8, strToU8, unzipSync, zipSync } from "fflate";
 import { createElement } from "react";
 import { describe, it } from "vitest";

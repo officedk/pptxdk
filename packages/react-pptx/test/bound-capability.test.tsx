@@ -12,12 +12,12 @@ import {
   type CapabilityInput,
   type CapabilityParseContext,
   type LinkTarget,
-} from "@react-pptx/core";
+} from "@pptxdk/core";
 import {
   createResolver,
   type BuildOptions,
   type CapabilityModule,
-} from "@react-pptx/core/build";
+} from "@pptxdk/core/build";
 import {
   CapabilityError,
   isMorphKey,
@@ -35,12 +35,13 @@ import {
   type SlideEmitContext,
   type SlideResolveContext,
   type ThemeScope,
-} from "@react-pptx/core/capability";
-import { createDeckNode, createSlideNode } from "@react-pptx/core/document";
-import { hostNodeCreator } from "@react-pptx/core/host";
-import { emit, emittedBuildQuery, pxToEmu, xmlEscape } from "@react-pptx/emit";
-import { paint } from "@react-pptx/preview";
-import { Deck, expandDocument, Slide } from "@react-pptx/react";
+} from "@pptxdk/core/capability";
+import { createDeckNode, createSlideNode } from "@pptxdk/core/document";
+import { hostNodeCreator } from "@pptxdk/core/host";
+import { emit, emittedBuildQuery, pxToEmu, xmlEscape } from "@pptxdk/emit";
+import { paint } from "@pptxdk/preview";
+import { Deck, expandDocument, Slide } from "@pptxdk/react";
+import { validatePptx } from "@pptxdk/validation";
 import {
   Box,
   boxCapability,
@@ -73,7 +74,6 @@ import {
   slide as impSlide,
   span as impSpan,
 } from "@react-pptx/react-pptx/document";
-import { validatePptx } from "@react-pptx/validation";
 import { strFromU8, unzipSync } from "fflate";
 import { createElement, type ReactNode } from "react";
 import { describe, it } from "vitest";
@@ -1263,7 +1263,7 @@ describe("bound object capability contract", () => {
 
   it("collects annotations from transparent bound containers and binds motionCapability onto BoundSlideCapabilityModule", async () => {
     const observedMarkers: unknown[] = [];
-    const customTimingSlide: import("@react-pptx/core").BoundSlideCapabilityModule =
+    const customTimingSlide: import("@pptxdk/core").BoundSlideCapabilityModule =
       {
         declaration: "custom-timing",
         slideProp: "customTiming",

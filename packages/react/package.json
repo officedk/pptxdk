@@ -1,7 +1,12 @@
 {
-  "name": "@react-pptx/react",
+  "name": "@pptxdk/react",
   "version": "0.0.0",
   "private": true,
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/pptxdk/pptxdk.git",
+    "directory": "packages/react"
+  },
   "files": [
     "dist"
   ],
@@ -29,12 +34,12 @@
     "build": "rm -rf dist && tsc -p tsconfig.build.json --pretty false"
   },
   "dependencies": {
-    "@react-pptx/core": "workspace:*",
+    "@pptxdk/core": "workspace:*",
     "react": "catalog:",
     "react-reconciler": "catalog:"
   },
   "devDependencies": {
-    "@react-pptx/tooling-config": "workspace:*",
+    "@pptxdk/tooling-config": "workspace:*",
     "@types/node": "catalog:",
     "@types/react": "catalog:",
     "@types/react-reconciler": "catalog:",

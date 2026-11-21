@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
-import type { ChartProps } from "@react-pptx/capabilities/chart";
-import { Chart } from "@react-pptx/capabilities/chart-elements";
-import { chart, deck, font, slide } from "@react-pptx/capabilities/document";
-import { Deck, Slide } from "@react-pptx/react";
+import type { ChartProps } from "@pptxdk/capabilities/chart";
+import { Chart } from "@pptxdk/capabilities/chart-elements";
+import { chart, deck, font, slide } from "@pptxdk/capabilities/document";
+import { Deck, Slide } from "@pptxdk/react";
 import { strFromU8, unzipSync } from "fflate";
 import { PNG } from "pngjs";
 import { createElement } from "react";

@@ -9,8 +9,8 @@ import {
   type ResolvedColor,
   type ThemeContext,
   type VisualStyle as CoreVisualStyle,
-} from "@react-pptx/core/capability";
-import { pxToEmu, resolvedColorXml, xmlEscape } from "@react-pptx/emit";
+} from "@pptxdk/core/capability";
+import { pxToEmu, resolvedColorXml, xmlEscape } from "@pptxdk/emit";
 
 import {
   decodeImageToPngBytes,

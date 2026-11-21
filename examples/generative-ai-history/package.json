@@ -1,7 +1,12 @@
 {
-  "name": "@react-pptx/generative-ai-history",
+  "name": "@pptxdk/generative-ai-history",
   "version": "0.0.0",
   "private": true,
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/pptxdk/pptxdk.git",
+    "directory": "examples/generative-ai-history"
+  },
   "files": [
     "dist"
   ],
@@ -40,9 +45,9 @@
     "react": "catalog:"
   },
   "devDependencies": {
+    "@pptxdk/tooling-config": "workspace:*",
+    "@pptxdk/validation": "workspace:*",
     "@react-pptx/cli": "workspace:*",
-    "@react-pptx/tooling-config": "workspace:*",
-    "@react-pptx/validation": "workspace:*",
     "@types/node": "catalog:",
     "@types/react": "catalog:",
     "oxfmt": "catalog:",

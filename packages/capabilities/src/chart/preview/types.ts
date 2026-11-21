@@ -1,4 +1,4 @@
-import type { GeometryBox } from "@react-pptx/core/capability";
+import type { GeometryBox } from "@pptxdk/core/capability";
 
 import type { ParsedCategoryAxis, ParsedValueAxis } from "../chart-model.ts";
 import type { ChartMarkerSymbol } from "../chart-types.ts";

@@ -396,4 +396,8 @@ export const textMechanismVerifications = {
       assert.match(slideXml, /typeface="\+mn-lt"/u);
     },
   } satisfies MechanismVerificationEntry<typeof embeddedFontMechanism>,
-} satisfies ExhaustiveMechanismVerificationMap;
+} satisfies ExhaustiveMechanismVerificationMap<
+  | typeof textBoxMechanism
+  | typeof textFieldSlideNumMechanism
+  | typeof embeddedFontMechanism
+>;

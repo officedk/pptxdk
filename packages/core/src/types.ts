@@ -182,6 +182,7 @@ export type SlideObservation = {
   readonly layout?: string;
   readonly section?: string;
   readonly hidden?: boolean;
+  readonly showMasterPlaceholderAnimations?: boolean;
   readonly objects: readonly ObjectObservation[];
   readonly layouts?: readonly LayoutObservation[];
   readonly capabilities?: Readonly<Record<string, unknown>>;

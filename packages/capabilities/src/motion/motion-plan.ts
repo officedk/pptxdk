@@ -69,7 +69,7 @@ type ScopeValue = {
   readonly scope: MotionScopeDeclaration;
 };
 
-type ScheduledEffect = MotionEffectObservation & {
+export type ScheduledEffect = MotionEffectObservation & {
   readonly stepKey: string;
   readonly order: number;
   readonly effectIndex: number;
@@ -3132,8 +3132,12 @@ function motionPlan(
             ...(knownStart === undefined ? {} : { startMs: knownStart }),
             ...(effect.preset === "breathe" || effect.preset === "fillColor"
               ? {
-                  fromColor: effect.fromColor,
-                  toColor: effect.toColor,
+                  ...(effect.fromColor === undefined
+                    ? {}
+                    : { fromColor: effect.fromColor }),
+                  ...(effect.toColor === undefined
+                    ? {}
+                    : { toColor: effect.toColor }),
                 }
               : {}),
             ...(timing.end.state === "no-natural-completion"

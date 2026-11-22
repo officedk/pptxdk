@@ -30,6 +30,7 @@ export type ShapeTreeImportContext = {
   readonly package: PptxPackage;
   readonly relationships?: ReadonlyMap<string, ParsedRelationshipEntry>;
   readonly registerDeferredSlideLink?: (link: DeferredSlideLink) => void;
+  readonly registerImportedObject?: (spid: number, node: CommonNode) => void;
   readonly layoutPlaceholders?: PlaceholderMap;
   readonly clrMap?: Readonly<Record<string, NativeColorSlot>>;
 };
@@ -47,12 +48,20 @@ export type ShapeTreeImportHandler = {
   read(context: ShapeTreeImportContext): ShapeTreeImportOutcome;
 };
 
+export type OmittedSlideObjectInfo = {
+  readonly objectName?: string;
+  readonly reason: "unsupported" | "corrupt";
+};
+
 export type SlideImportContext = {
   readonly slideCursor: XmlElementCursor;
   readonly slideNode: CommonNode;
   readonly part: string;
   readonly slideIndex?: number;
   readonly package: PptxPackage;
+  readonly objectBySpid?: ReadonlyMap<number, CommonNode>;
+  readonly omittedSpids?: ReadonlyMap<number, OmittedSlideObjectInfo>;
+  readonly placeholderKeyBySpid?: ReadonlyMap<number, string>;
 };
 
 export type SlideImportOutcome = {

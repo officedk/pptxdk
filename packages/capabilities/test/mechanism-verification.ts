@@ -26,6 +26,7 @@ import {
 import { chartMechanismVerifications } from "./chart/mechanisms.ts";
 import { imageMechanismVerifications } from "./image/mechanisms.ts";
 import { themeMechanismVerifications } from "./masters/theme-mechanisms.ts";
+import { motionMechanismVerifications } from "./motion/mechanisms.ts";
 import { shapeAndGroupMechanismVerifications } from "./shape/mechanisms.ts";
 import { tableMechanismVerifications } from "./table/mechanisms.ts";
 import {
@@ -267,6 +268,7 @@ export const productionMechanismVerifications: ExhaustiveMechanismVerificationMa
     ...textMechanismVerifications,
     ...chartMechanismVerifications,
     ...transitionMechanismVerifications,
+    ...motionMechanismVerifications,
   };
 
 /** Runs every mechanism verification entry, deduplicating shared scenarios across initial and roundtrip artifacts. */

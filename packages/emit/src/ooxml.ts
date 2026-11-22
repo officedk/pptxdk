@@ -178,6 +178,7 @@ export type EmittedSlideLayoutSpec = {
   readonly colorMapOverride?: ColorMapOverride;
   readonly themeOverride?: ThemeOverride;
   readonly transitionXml?: string;
+  readonly timingXml?: string;
 };
 
 export type EmittedSlideMasterSpec = {
@@ -190,6 +191,7 @@ export type EmittedSlideMasterSpec = {
   readonly placeholders?: Readonly<Record<string, MasterPlaceholderSpec>>;
   readonly textStyles?: MasterTextStyles;
   readonly transitionXml?: string;
+  readonly timingXml?: string;
   readonly layouts: readonly EmittedSlideLayoutSpec[];
 };
 
@@ -889,7 +891,7 @@ function masterXml(
   const shapes = placeholderShapesXml(spec.placeholders, themeContext);
   const txStyles = masterTextStylesXml(spec.textStyles, themeContext);
   return xmlDocument(
-    `<p:sldMaster xmlns:a="${namespaces.a}" xmlns:r="${namespaces.r}" xmlns:p="${namespaces.p}"${preserveAttr}><p:cSld${nameAttr}>${shapeTreeXml(shapes)}</p:cSld>${colorMap}<p:sldLayoutIdLst>${layoutIdList}</p:sldLayoutIdLst>${spec.transitionXml ?? ""}${txStyles}</p:sldMaster>`,
+    `<p:sldMaster xmlns:a="${namespaces.a}" xmlns:r="${namespaces.r}" xmlns:p="${namespaces.p}"${preserveAttr}><p:cSld${nameAttr}>${shapeTreeXml(shapes)}</p:cSld>${colorMap}<p:sldLayoutIdLst>${layoutIdList}</p:sldLayoutIdLst>${spec.transitionXml ?? ""}${spec.timingXml ?? ""}${txStyles}</p:sldMaster>`,
   );
 }
 
@@ -914,14 +916,14 @@ function layoutXml(
   const showMasterSpAttr =
     spec.showMasterShapes === false ? ' showMasterSp="0"' : "";
   const showMasterPhAnimAttr =
-    spec.showMasterPlaceholderAnimations === false
-      ? ' showMasterPhAnim="0"'
-      : "";
+    spec.showMasterPlaceholderAnimations === undefined
+      ? ""
+      : ` showMasterPhAnim="${spec.showMasterPlaceholderAnimations ? "1" : "0"}"`;
   const nameAttr =
     spec.name === undefined ? "" : ` name="${xmlEscape(spec.name)}"`;
   const shapes = placeholderShapesXml(spec.placeholders, themeContext);
   return xmlDocument(
-    `<p:sldLayout xmlns:a="${namespaces.a}" xmlns:r="${namespaces.r}" xmlns:p="${namespaces.p}"${typeAttr}${preserveAttr}${matchingNameAttr}${userDrawnAttr}${showMasterSpAttr}${showMasterPhAnimAttr}><p:cSld${nameAttr}>${shapeTreeXml(shapes)}</p:cSld>${colorMapOverrideXml(spec.colorMapOverride)}${spec.transitionXml ?? ""}</p:sldLayout>`,
+    `<p:sldLayout xmlns:a="${namespaces.a}" xmlns:r="${namespaces.r}" xmlns:p="${namespaces.p}"${typeAttr}${preserveAttr}${matchingNameAttr}${userDrawnAttr}${showMasterSpAttr}${showMasterPhAnimAttr}><p:cSld${nameAttr}>${shapeTreeXml(shapes)}</p:cSld>${colorMapOverrideXml(spec.colorMapOverride)}${spec.transitionXml ?? ""}${spec.timingXml ?? ""}</p:sldLayout>`,
   );
 }
 
@@ -931,10 +933,15 @@ function slide(
   slideXml: string,
   backgroundXml: string,
   hidden: boolean,
+  showMasterPlaceholderAnimations?: boolean,
   colorMapOverride?: ColorMapOverride,
 ): string {
+  const showMasterPhAnimAttr =
+    showMasterPlaceholderAnimations === undefined
+      ? ""
+      : ` showMasterPhAnim="${showMasterPlaceholderAnimations ? "1" : "0"}"`;
   return xmlDocument(
-    `<p:sld xmlns:a="${namespaces.a}" xmlns:r="${namespaces.r}" xmlns:p="${namespaces.p}"${hidden ? ' show="false"' : ""}><p:cSld name="${xmlEscape(slideId)}">${backgroundXml}${shapeTreeXml(shapeXml)}</p:cSld>${colorMapOverrideXml(colorMapOverride)}${slideXml}</p:sld>`,
+    `<p:sld xmlns:a="${namespaces.a}" xmlns:r="${namespaces.r}" xmlns:p="${namespaces.p}"${hidden ? ' show="false"' : ""}${showMasterPhAnimAttr}><p:cSld name="${xmlEscape(slideId)}">${backgroundXml}${shapeTreeXml(shapeXml)}</p:cSld>${colorMapOverrideXml(colorMapOverride)}${slideXml}</p:sld>`,
   );
 }
 
@@ -997,6 +1004,7 @@ export function pptxParts(
     readonly colorMapOverride?: ColorMapOverride;
     readonly themeOverride?: ThemeOverride;
     readonly hidden?: boolean;
+    readonly showMasterPlaceholderAnimations?: boolean;
     readonly shapeXml: string;
     readonly backgroundXml?: string;
     readonly slideXml?: string;
@@ -1293,6 +1301,7 @@ export function pptxParts(
         slideXml,
         backgroundXml,
         hidden,
+        showMasterPlaceholderAnimations,
         layoutKey,
         colorMapOverride,
       },
@@ -1309,6 +1318,7 @@ export function pptxParts(
         slideXml ?? "",
         backgroundXml ?? "",
         hidden ?? false,
+        showMasterPlaceholderAnimations,
         colorMapOverride,
       );
       const slideOverrideTarget = slideThemeOverrideTargets[index];

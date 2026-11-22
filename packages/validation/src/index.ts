@@ -433,6 +433,8 @@ export type FileSlideLayout = {
   readonly themeOverride?: FileThemeSnapshot;
   readonly advanceAfterMs?: number;
   readonly transition?: FileTransition;
+  readonly animations?: readonly FileAnimationStep[];
+  readonly animationContainers?: readonly FileAnimationContainer[];
 };
 
 export type FileSlideMaster = {
@@ -446,6 +448,8 @@ export type FileSlideMaster = {
   readonly colorMap?: Readonly<Record<string, string>>;
   readonly advanceAfterMs?: number;
   readonly transition?: FileTransition;
+  readonly animations?: readonly FileAnimationStep[];
+  readonly animationContainers?: readonly FileAnimationContainer[];
   readonly layouts: readonly FileSlideLayout[];
 };
 
@@ -457,6 +461,7 @@ export type FileSlide = {
   readonly themeOverridePart?: string;
   readonly themeOverride?: FileThemeSnapshot;
   readonly hidden?: boolean;
+  readonly showMasterPlaceholderAnimations?: boolean;
   readonly advanceAfterMs?: number;
   readonly section?: string;
   readonly background?: FileSlideBackground;
@@ -2716,6 +2721,71 @@ function matchPlaceholderTemplateBox(
   return masterMatch?.boxEmu;
 }
 
+function readMasterOrLayoutAnimationObjects(
+  root: XmlElement,
+  theme: ThemeTextReader,
+  errors: ValidationIssue[],
+  part: string,
+): FileObject[] {
+  const cSld = first(root, presentationNamespace, "cSld");
+  const spTree =
+    cSld === undefined
+      ? undefined
+      : first(cSld, presentationNamespace, "spTree");
+  if (spTree === undefined) return [];
+  const objects: FileObject[] = [];
+  for (const sp of elements(spTree, presentationNamespace, "sp")) {
+    const nvSpPr = first(sp, presentationNamespace, "nvSpPr");
+    const cNvPr =
+      nvSpPr === undefined
+        ? undefined
+        : first(nvSpPr, presentationNamespace, "cNvPr");
+    const id = positiveIntegerValue(
+      cNvPr === undefined ? "" : attribute(cNvPr, "id"),
+    );
+    if (id === undefined) continue;
+    const name = cNvPr === undefined ? "" : attribute(cNvPr, "name");
+    const spPr = first(sp, presentationNamespace, "spPr");
+    const xfrm =
+      spPr === undefined ? undefined : first(spPr, drawingNamespace, "xfrm");
+    const off =
+      xfrm === undefined ? undefined : first(xfrm, drawingNamespace, "off");
+    const ext =
+      xfrm === undefined ? undefined : first(xfrm, drawingNamespace, "ext");
+    const x = off === undefined ? 0 : (integerAttribute(off, "x") ?? 0);
+    const y = off === undefined ? 0 : (integerAttribute(off, "y") ?? 0);
+    const cx = ext === undefined ? 0 : (integerAttribute(ext, "cx") ?? 0);
+    const cy = ext === undefined ? 0 : (integerAttribute(ext, "cy") ?? 0);
+    const txBody = first(sp, presentationNamespace, "txBody");
+    const paragraphEls =
+      txBody === undefined ? [] : elements(txBody, drawingNamespace, "p");
+    const paragraphs = paragraphEls.map((p) => {
+      const runs = elements(p, drawingNamespace, "r").map((r) => ({
+        text: first(r, drawingNamespace, "t")?.textContent ?? "",
+      }));
+      return { text: runs.map((r) => r.text).join(""), runs };
+    });
+    objects.push({
+      id,
+      name,
+      kind: "shape",
+      boxEmu: { x, y, width: cx, height: cy },
+      ...(paragraphs.length > 0
+        ? {
+            text: {
+              text: paragraphs.map((p) => p.text).join("\n"),
+              paragraphs,
+            },
+          }
+        : {}),
+    });
+  }
+  void theme;
+  void errors;
+  void part;
+  return objects;
+}
+
 function readMastersAndLayouts(
   files: XmlFiles,
   documents: Documents,
@@ -3060,6 +3130,30 @@ function readMastersAndLayouts(
       for (const extension of layoutTransition.extensions) {
         usedExtensions.add(extension);
       }
+      const layoutSizeEl = first(
+        presentationRoot,
+        presentationNamespace,
+        "sldSz",
+      );
+      const layoutSize = {
+        widthEmu: integerAttribute(layoutSizeEl, "cx") ?? 0,
+        heightEmu: integerAttribute(layoutSizeEl, "cy") ?? 0,
+      };
+      const layoutAnimationRead =
+        first(layoutRoot, presentationNamespace, "timing") === undefined
+          ? undefined
+          : readSlideAnimations(
+              layoutRoot,
+              layoutPart,
+              readMasterOrLayoutAnimationObjects(
+                layoutRoot,
+                themeTextReader(documents, "", masterPart, [], []),
+                errors,
+                layoutPart,
+              ),
+              layoutSize,
+              errors,
+            );
 
       const layoutInfo: FileSlideLayout = {
         part: layoutPart,
@@ -3092,6 +3186,12 @@ function readMastersAndLayouts(
         ...(layoutTransition.transition === undefined
           ? {}
           : { transition: layoutTransition.transition }),
+        ...(layoutAnimationRead === undefined
+          ? {}
+          : {
+              animations: layoutAnimationRead.steps,
+              animationContainers: layoutAnimationRead.containers,
+            }),
       };
       masterLayouts.push(layoutInfo);
       layoutByPart.set(layoutPart, layoutInfo);
@@ -3118,6 +3218,30 @@ function readMastersAndLayouts(
     for (const extension of masterTransition.extensions) {
       usedExtensions.add(extension);
     }
+    const masterSizeEl = first(
+      presentationRoot,
+      presentationNamespace,
+      "sldSz",
+    );
+    const masterSize = {
+      widthEmu: integerAttribute(masterSizeEl, "cx") ?? 0,
+      heightEmu: integerAttribute(masterSizeEl, "cy") ?? 0,
+    };
+    const masterAnimationRead =
+      first(masterRoot, presentationNamespace, "timing") === undefined
+        ? undefined
+        : readSlideAnimations(
+            masterRoot,
+            masterPart,
+            readMasterOrLayoutAnimationObjects(
+              masterRoot,
+              themeTextReader(documents, themePart ?? "", masterPart, [], []),
+              errors,
+              masterPart,
+            ),
+            masterSize,
+            errors,
+          );
 
     const masterInfo: FileSlideMaster = {
       part: masterPart,
@@ -3138,6 +3262,12 @@ function readMastersAndLayouts(
       ...(masterTransition.transition === undefined
         ? {}
         : { transition: masterTransition.transition }),
+      ...(masterAnimationRead === undefined
+        ? {}
+        : {
+            animations: masterAnimationRead.steps,
+            animationContainers: masterAnimationRead.containers,
+          }),
       layouts: masterLayouts,
     };
     masters.push(masterInfo);
@@ -10397,6 +10527,10 @@ function readPresentation(
     }
     stableSlideIds.add(stableSlideId);
     presentationSlideIds.set(presentationId, stableSlideId);
+    const slideShowMasterPlaceholderAnimations = parseOptionalBooleanAttr(
+      slideRoot,
+      "showMasterPhAnim",
+    );
     slides.push({
       id: stableSlideId,
       ...(slideLayoutPart === undefined ? {} : { layoutPart: slideLayoutPart }),
@@ -10411,6 +10545,12 @@ function readPresentation(
         ? {}
         : { themeOverride: slideThemeOverride.snapshot }),
       ...(attribute(slideRoot, "show") === "false" ? { hidden: true } : {}),
+      ...(slideShowMasterPlaceholderAnimations === undefined
+        ? {}
+        : {
+            showMasterPlaceholderAnimations:
+              slideShowMasterPlaceholderAnimations,
+          }),
       ...(advanceAfterMs === undefined ? {} : { advanceAfterMs }),
       ...(background === undefined ? {} : { background }),
       objects,

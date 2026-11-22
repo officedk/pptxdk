@@ -452,14 +452,22 @@ function readPlaceholderSpList(
   spTree: XmlElementCursor | undefined,
   clrMap: Readonly<Record<string, NativeColorSlot>>,
   isMaster: boolean,
-): PlaceholderMap | MasterPlaceholderMap | undefined {
-  if (spTree === undefined) return undefined;
+): {
+  readonly placeholders?: PlaceholderMap | MasterPlaceholderMap;
+  readonly placeholderKeyBySpid: ReadonlyMap<number, string>;
+} {
+  const placeholderKeyBySpid = new Map<number, string>();
+  if (spTree === undefined) return { placeholderKeyBySpid };
   const rawSpecs: LayoutPlaceholderSpec[] = [];
+  const rawSpids: (number | undefined)[] = [];
   for (const sp of spTree.children(P_NS, "sp")) {
     if (!directPlaceholderChild(sp.element)) continue;
     const nvSpPr = sp.child(P_NS, "nvSpPr");
     const cNvPr = nvSpPr?.child(P_NS, "cNvPr");
-    cNvPr?.consumeAttr("id");
+    const rawId = cNvPr?.attr("id");
+    const parsedSpid = OoxmlNonNegativeIntSchema.safeParse(rawId);
+    const spid =
+      parsedSpid.success && parsedSpid.data > 0 ? parsedSpid.data : undefined;
     const rawName = cNvPr?.attr("name");
     const name =
       rawName !== undefined && rawName.trim() !== "" ? rawName : undefined;
@@ -654,14 +662,20 @@ function readPlaceholderSpList(
       : layoutPlaceholderSpecSchema;
     const validated = schema.safeParse(candidate);
     rawSpecs.push(validated.success ? validated.data : candidate);
+    rawSpids.push(spid);
   }
-  if (rawSpecs.length === 0) return undefined;
+  if (rawSpecs.length === 0) return { placeholderKeyBySpid };
   const keys = allocatePlaceholderAuthorKeys(rawSpecs);
   const map: Record<string, LayoutPlaceholderSpec | MasterPlaceholderSpec> = {};
   for (let i = 0; i < rawSpecs.length; i += 1) {
-    map[keys[i]!] = rawSpecs[i]!;
+    const key = keys[i]!;
+    map[key] = rawSpecs[i]!;
+    const spid = rawSpids[i];
+    if (spid !== undefined) {
+      placeholderKeyBySpid.set(spid, key);
+    }
   }
-  return Object.freeze(map);
+  return { placeholders: Object.freeze(map), placeholderKeyBySpid };
 }
 
 /** Allocates a deterministic unique author id within `used`, disambiguating collisions with `-2`, `-3`, ... */
@@ -898,9 +912,12 @@ function readSlideLayoutPart(
   layoutName = cSld.attr("name");
   const spTree = cSld.child(P_NS, "spTree");
   let placeholders: PlaceholderMap | undefined;
+  let layoutPlaceholderKeyBySpid: ReadonlyMap<number, string> | undefined;
   if (spTree !== undefined) {
     consumeIdentityShapeTreeBoilerplate(spTree);
-    placeholders = readPlaceholderSpList(spTree, masterClrMap, false);
+    const placeholderRead = readPlaceholderSpList(spTree, masterClrMap, false);
+    placeholders = placeholderRead.placeholders;
+    layoutPlaceholderKeyBySpid = placeholderRead.placeholderKeyBySpid;
   }
   const clrMapOvr = layoutCursor.child(P_NS, "clrMapOvr");
   let colorMapOverride: ColorMapOverride | undefined;
@@ -991,7 +1008,7 @@ function readSlideLayoutPart(
 
   for (const slideHandler of slideHandlers) {
     if (
-      slideHandler.slot !== "transition" ||
+      (slideHandler.slot !== "transition" && slideHandler.slot !== "timing") ||
       (slideHandler.matches !== undefined &&
         !slideHandler.matches(layoutCursor))
     ) {
@@ -1002,6 +1019,9 @@ function readSlideLayoutPart(
       slideNode: layoutNode,
       part: layoutPartPath,
       package: pkg,
+      ...(layoutPlaceholderKeyBySpid === undefined
+        ? {}
+        : { placeholderKeyBySpid: layoutPlaceholderKeyBySpid }),
     });
     if (outcome.diagnostics !== undefined) {
       diagnostics.push(...outcome.diagnostics);
@@ -1108,9 +1128,12 @@ function readSlideMasterPart(
 
   const spTree = cSld.child(P_NS, "spTree");
   let masterPlaceholders: MasterPlaceholderMap | undefined;
+  let masterPlaceholderKeyBySpid: ReadonlyMap<number, string> | undefined;
   if (spTree !== undefined) {
     consumeIdentityShapeTreeBoilerplate(spTree);
-    masterPlaceholders = readPlaceholderSpList(spTree, masterClrMap, true);
+    const placeholderRead = readPlaceholderSpList(spTree, masterClrMap, true);
+    masterPlaceholders = placeholderRead.placeholders;
+    masterPlaceholderKeyBySpid = placeholderRead.placeholderKeyBySpid;
   }
 
   const txStylesCursor = masterCursor.child(P_NS, "txStyles");
@@ -1242,7 +1265,7 @@ function readSlideMasterPart(
 
   for (const slideHandler of slideHandlers) {
     if (
-      slideHandler.slot !== "transition" ||
+      (slideHandler.slot !== "transition" && slideHandler.slot !== "timing") ||
       (slideHandler.matches !== undefined &&
         !slideHandler.matches(masterCursor))
     ) {
@@ -1253,6 +1276,9 @@ function readSlideMasterPart(
       slideNode: masterNode,
       part: masterPartPath,
       package: pkg,
+      ...(masterPlaceholderKeyBySpid === undefined
+        ? {}
+        : { placeholderKeyBySpid: masterPlaceholderKeyBySpid }),
     });
     if (outcome.diagnostics !== undefined) {
       diagnostics.push(...outcome.diagnostics);

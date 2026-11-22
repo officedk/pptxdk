@@ -2,6 +2,7 @@ import {
   CapabilityError,
   type CapabilityInput,
   type GeometryBox,
+  type LayoutPlaceholderSpec,
   type ResolvedSlide,
   type SlideCapabilityModule,
   type SlideEmitContext,
@@ -10,6 +11,7 @@ import {
   type TransparentCapabilityModule,
 } from "@pptxdk/core/capability";
 import { pxToEmu, xmlEscape } from "@pptxdk/emit";
+import { defineShowMechanism } from "@pptxdk/import";
 
 import type {
   MotionDirection,
@@ -17,12 +19,15 @@ import type {
   MotionNativeProjection,
   MotionObservation,
   MotionStartDependency,
+  NormalizedEffect,
 } from "./motion-api.ts";
 import {
+  OwnerMotionSchema,
   maximumTimeNodeValue,
   motionScopeAnnotation,
   motionStepAnnotation,
 } from "./motion-api.ts";
+import { readSlideMotionImport } from "./motion-import.ts";
 import {
   addMotionPlanStartDelay,
   composeMotionPlanStarts,
@@ -33,10 +38,46 @@ import {
   type MotionPlanStart,
   type MotionPlanStartGate,
   type MotionPlanStep,
+  type ScheduledEffect,
 } from "./motion-plan.ts";
 import { registerMotionObservation } from "./motion-query.ts";
 
 export {
+  BreatheEffectSchema,
+  BreatheOptionsSchema,
+  EasingSchema,
+  EffectDelaySchema,
+  EffectDurationSchema,
+  EffectOptionsSchema,
+  EffectPresetSchema,
+  EffectSchema,
+  EmphasisEffectDeclarationSchema,
+  EmphasisEffectSchema,
+  EntranceEffectDeclarationSchema,
+  EntranceEffectSchema,
+  FillColorOptionsSchema,
+  MotionCompletionStateSchema,
+  MotionDirectionSchema,
+  MotionGranularitySchema,
+  MotionHexColorSchema,
+  MotionMomentOffsetSchema,
+  MotionMomentSchema,
+  MotionPropsSchema,
+  MotionScopeAuthorPropsSchema,
+  MotionScopeHandleSchema,
+  MotionScopeModeSchema,
+  MotionStepAuthorPropsSchema,
+  MotionTargetRangeSchema,
+  MotionTimingSchema,
+  NormalizedEffectSchema,
+  OwnerMotionEffectSchema,
+  OwnerMotionSchema,
+  OwnerMotionStepSchema,
+  OwnerMotionTargetSchema,
+  RepeatCountSchema,
+  RepeatedEffectSchema,
+  SpinAngleSchema,
+  SpinOptionsSchema,
   after,
   breathe,
   createMotionScopeHandle,
@@ -181,15 +222,20 @@ function element(
   return `<${name}${attrs}>${children.filter(Boolean).join("")}</${name}>`;
 }
 
-class TimingIds {
-  #next = 1;
+export type TimingIds = {
+  take(): number;
+};
 
-  take(): number {
-    return this.#next++;
-  }
+function createTimingIds(): TimingIds {
+  let next = 1;
+  return {
+    take() {
+      return next++;
+    },
+  };
 }
 
-type TimingEffect = MotionEffectObservation & {
+export type TimingEffect = MotionEffectObservation & {
   readonly effectIndex: number;
   readonly partIndex?: number;
   readonly targetKind: string;
@@ -223,7 +269,7 @@ type EffectTreeProjection = {
   readonly companions: readonly string[];
 };
 
-type MotionNativeMember = {
+export type MotionNativeMember = {
   readonly id: number;
   readonly kind: string;
   readonly name: string;
@@ -1140,6 +1186,291 @@ function effectTreeXml(
   );
 }
 
+export type MotionEffectEmitInput = {
+  readonly effect: TimingEffect;
+  readonly nodeType: string;
+  readonly startCondition: string;
+  readonly ids: TimingIds;
+  readonly effectId: number;
+  readonly buildGroupId: number | undefined;
+  readonly dimensions: { readonly width: number; readonly height: number };
+  readonly mixedShapeText: boolean;
+};
+
+export type MotionEffectMechanismOutput = SlideEmitOutput & {
+  readonly companions: readonly string[];
+};
+
+function emitMotionEffectTree(
+  model: MotionEffectEmitInput,
+): MotionEffectMechanismOutput {
+  const projection = behaviorIds(
+    model.effect,
+    model.ids,
+    model.dimensions,
+    model.mixedShapeText,
+  );
+  return {
+    xml: effectTreeXml(
+      model.effect,
+      model.nodeType,
+      model.startCondition,
+      model.effectId,
+      model.buildGroupId,
+      projection.primary,
+    ),
+    companions: projection.companions.map((companion) =>
+      effectTreeXml(
+        model.effect,
+        "withEffect",
+        model.startCondition,
+        model.ids.take(),
+        model.buildGroupId,
+        companion.behaviors,
+      ),
+    ),
+  };
+}
+
+/** Native show mechanism for `<p:par>` fade entrance (`presetID="10"`). */
+export const motionFadeMechanism = defineShowMechanism({
+  key: "motion-fade",
+  role: "show",
+  emit: (model: MotionEffectEmitInput, _context: undefined) =>
+    emitMotionEffectTree(model),
+  import: {
+    target: "slide",
+    slot: "timing",
+    read: readSlideMotionImport,
+  },
+});
+
+/** Native show mechanism for `<p:par>` wipe entrance (`presetID="22"`). */
+export const motionWipeMechanism = defineShowMechanism({
+  key: "motion-wipe",
+  role: "show",
+  emit: (model: MotionEffectEmitInput, _context: undefined) =>
+    emitMotionEffectTree(model),
+  import: {
+    target: "slide",
+    slot: "timing",
+    matches: () => false,
+    read: readSlideMotionImport,
+  },
+});
+
+/** Native show mechanism for `<p:par>` zoom entrance (`presetID="53"`). */
+export const motionZoomMechanism = defineShowMechanism({
+  key: "motion-zoom",
+  role: "show",
+  emit: (model: MotionEffectEmitInput, _context: undefined) =>
+    emitMotionEffectTree(model),
+  import: {
+    target: "slide",
+    slot: "timing",
+    matches: () => false,
+    read: readSlideMotionImport,
+  },
+});
+
+/** Native show mechanism for `<p:par>` fly entrance (`presetID="2"`). */
+export const motionFlyMechanism = defineShowMechanism({
+  key: "motion-fly",
+  role: "show",
+  emit: (model: MotionEffectEmitInput, _context: undefined) =>
+    emitMotionEffectTree(model),
+  import: {
+    target: "slide",
+    slot: "timing",
+    matches: () => false,
+    read: readSlideMotionImport,
+  },
+});
+
+/** Native show mechanism for `<p:par>` floatUp/floatDown entrance (`presetID="42"|"47"`). */
+export const motionFloatMechanism = defineShowMechanism({
+  key: "motion-float",
+  role: "show",
+  emit: (model: MotionEffectEmitInput, _context: undefined) =>
+    emitMotionEffectTree(model),
+  import: {
+    target: "slide",
+    slot: "timing",
+    matches: () => false,
+    read: readSlideMotionImport,
+  },
+});
+
+/** Native show mechanism for `<p:par>` spinIn entrance (`presetID="49"`). */
+export const motionSpinInMechanism = defineShowMechanism({
+  key: "motion-spin-in",
+  role: "show",
+  emit: (model: MotionEffectEmitInput, _context: undefined) =>
+    emitMotionEffectTree(model),
+  import: {
+    target: "slide",
+    slot: "timing",
+    matches: () => false,
+    read: readSlideMotionImport,
+  },
+});
+
+/** Native show mechanism for `<p:par>` stretch entrance (`presetID="17"`). */
+export const motionStretchMechanism = defineShowMechanism({
+  key: "motion-stretch",
+  role: "show",
+  emit: (model: MotionEffectEmitInput, _context: undefined) =>
+    emitMotionEffectTree(model),
+  import: {
+    target: "slide",
+    slot: "timing",
+    matches: () => false,
+    read: readSlideMotionImport,
+  },
+});
+
+/** Native show mechanism for `<p:par>` spin emphasis (`presetID="8"`). */
+export const motionSpinMechanism = defineShowMechanism({
+  key: "motion-spin",
+  role: "show",
+  emit: (model: MotionEffectEmitInput, _context: undefined) =>
+    emitMotionEffectTree(model),
+  import: {
+    target: "slide",
+    slot: "timing",
+    matches: () => false,
+    read: readSlideMotionImport,
+  },
+});
+
+/** Native show mechanism for `<p:par>` breathe emphasis (`presetID="0"` with `autoRev`). */
+export const motionBreatheMechanism = defineShowMechanism({
+  key: "motion-breathe",
+  role: "show",
+  emit: (model: MotionEffectEmitInput, _context: undefined) =>
+    emitMotionEffectTree(model),
+  import: {
+    target: "slide",
+    slot: "timing",
+    matches: () => false,
+    read: readSlideMotionImport,
+  },
+});
+
+/** Native show mechanism for `<p:par>` fillColor emphasis (`presetID="9"`). */
+export const motionFillColorMechanism = defineShowMechanism({
+  key: "motion-fill-color",
+  role: "show",
+  emit: (model: MotionEffectEmitInput, _context: undefined) =>
+    emitMotionEffectTree(model),
+  import: {
+    target: "slide",
+    slot: "timing",
+    matches: () => false,
+    read: readSlideMotionImport,
+  },
+});
+
+export type MotionChoreographyEmitInput = {
+  readonly rootId: number;
+  readonly sequenceId: number;
+  readonly slideTarget: string;
+  readonly stepGroups: readonly string[];
+  readonly buildList: readonly string[];
+};
+
+/** Native show mechanism for root `<p:timing>` (`tmRoot`, `mainSeq`, `endSync`, `bldLst`) choreography. */
+export const motionChoreographyMechanism = defineShowMechanism({
+  key: "motion-choreography",
+  role: "show",
+  emit(
+    model: MotionChoreographyEmitInput,
+    _context: undefined,
+  ): SlideEmitOutput {
+    return {
+      xml: element(
+        "p:timing",
+        undefined,
+        element(
+          "p:tnLst",
+          undefined,
+          element(
+            "p:par",
+            undefined,
+            element(
+              "p:cTn",
+              {
+                id: model.rootId,
+                dur: "indefinite",
+                restart: "never",
+                nodeType: "tmRoot",
+              },
+              element(
+                "p:childTnLst",
+                undefined,
+                element(
+                  "p:seq",
+                  { concurrent: true, nextAc: "seek" },
+                  element(
+                    "p:cTn",
+                    {
+                      id: model.sequenceId,
+                      dur: "indefinite",
+                      nodeType: "mainSeq",
+                    },
+                    element("p:childTnLst", undefined, ...model.stepGroups),
+                  ),
+                  element(
+                    "p:prevCondLst",
+                    undefined,
+                    element(
+                      "p:cond",
+                      { evt: "onPrev", delay: 0 },
+                      model.slideTarget,
+                    ),
+                  ),
+                  element(
+                    "p:nextCondLst",
+                    undefined,
+                    element(
+                      "p:cond",
+                      { evt: "onNext", delay: 0 },
+                      model.slideTarget,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+        model.buildList.length === 0
+          ? undefined
+          : element("p:bldLst", undefined, ...model.buildList),
+      ),
+    };
+  },
+  import: {
+    target: "slide",
+    slot: "timing",
+    matches: () => false,
+    read: readSlideMotionImport,
+  },
+});
+
+const effectMechanismByPreset = {
+  fade: motionFadeMechanism,
+  wipe: motionWipeMechanism,
+  zoom: motionZoomMechanism,
+  fly: motionFlyMechanism,
+  floatUp: motionFloatMechanism,
+  floatDown: motionFloatMechanism,
+  spinIn: motionSpinInMechanism,
+  stretch: motionStretchMechanism,
+  spin: motionSpinMechanism,
+  breathe: motionBreatheMechanism,
+  fillColor: motionFillColorMechanism,
+} as const;
+
 function effectTree(
   effect: TimingEffect,
   nodeType: string,
@@ -1150,26 +1481,23 @@ function effectTree(
   dimensions: { readonly width: number; readonly height: number },
   mixedShapeText: boolean,
 ): EffectTreeProjection {
-  const projection = behaviorIds(effect, ids, dimensions, mixedShapeText);
-  return {
-    primary: effectTreeXml(
+  const mechanism = effectMechanismByPreset[effect.preset];
+  const output = mechanism.emit(
+    {
       effect,
       nodeType,
       startCondition,
+      ids,
       effectId,
       buildGroupId,
-      projection.primary,
-    ),
-    companions: projection.companions.map((companion) =>
-      effectTreeXml(
-        effect,
-        "withEffect",
-        startCondition,
-        ids.take(),
-        buildGroupId,
-        companion.behaviors,
-      ),
-    ),
+      dimensions,
+      mixedShapeText,
+    },
+    undefined,
+  );
+  return {
+    primary: output.xml,
+    companions: output.companions,
   };
 }
 
@@ -1442,7 +1770,7 @@ function timingXml(
   steps: readonly MotionPlanStep[],
   dimensions: { readonly width: number; readonly height: number },
 ): MotionTimingWrite {
-  const ids = new TimingIds();
+  const ids = createTimingIds();
   const rootId = ids.take();
   const sequenceId = ids.take();
   const effectNodeIds = new Map<string, number>();
@@ -2412,62 +2740,192 @@ function timingXml(
       );
     }),
   ];
-  const xml = element(
-    "p:timing",
+  const xml = motionChoreographyMechanism.emit(
+    {
+      rootId,
+      sequenceId,
+      slideTarget,
+      stepGroups,
+      buildList,
+    },
     undefined,
-    element(
-      "p:tnLst",
-      undefined,
-      element(
-        "p:par",
-        undefined,
-        element(
-          "p:cTn",
-          {
-            id: rootId,
-            dur: "indefinite",
-            restart: "never",
-            nodeType: "tmRoot",
-          },
-          element(
-            "p:childTnLst",
-            undefined,
-            element(
-              "p:seq",
-              { concurrent: true, nextAc: "seek" },
-              element(
-                "p:cTn",
-                { id: sequenceId, dur: "indefinite", nodeType: "mainSeq" },
-                element("p:childTnLst", undefined, ...stepGroups),
-              ),
-              element(
-                "p:prevCondLst",
-                undefined,
-                element("p:cond", { evt: "onPrev", delay: 0 }, slideTarget),
-              ),
-              element(
-                "p:nextCondLst",
-                undefined,
-                element("p:cond", { evt: "onNext", delay: 0 }, slideTarget),
-              ),
-            ),
-          ),
-        ),
-      ),
-    ),
-    buildList.length === 0
-      ? undefined
-      : element("p:bldLst", undefined, ...buildList),
-  );
+  ).xml;
   return { xml, nativeProjections };
 }
 
+function buildOwnerMotionSteps(
+  ownerPath: string,
+  rawMotion: unknown,
+  rawPlaceholders: unknown,
+): readonly MotionPlanStep[] {
+  const parsed = OwnerMotionSchema.safeParse(rawMotion);
+  if (!parsed.success) {
+    throw new CapabilityError(
+      "invalid-owner-motion",
+      parsed.error.issues[0]?.message ??
+        `${ownerPath} motion declaration is invalid`,
+      ownerPath,
+    );
+  }
+  const placeholderEntries =
+    typeof rawPlaceholders === "object" && rawPlaceholders !== null
+      ? Object.entries(
+          rawPlaceholders as Readonly<Record<string, LayoutPlaceholderSpec>>,
+        )
+      : [];
+  const placeholderByKey = new Map<
+    string,
+    {
+      readonly spid: number;
+      readonly name: string;
+      readonly spec: LayoutPlaceholderSpec;
+    }
+  >();
+  placeholderEntries.forEach(([key, spec], index) => {
+    placeholderByKey.set(key, {
+      spid: 2 + index,
+      name: spec.name ?? key,
+      spec,
+    });
+  });
+
+  let clickCounter = 0;
+  return parsed.data.steps.map((step, stepIdx) => {
+    const stepKey =
+      step.trigger === "auto" ? "auto" : `click:${++clickCounter}`;
+    const targetGroups = new Map<number, ScheduledEffect[]>();
+
+    step.effects.forEach((item, effectIdx) => {
+      let spid: number;
+      let targetName: string;
+      let box: GeometryBox | undefined;
+      if ("placeholder" in item.target) {
+        const entry = placeholderByKey.get(item.target.placeholder);
+        if (entry === undefined) {
+          throw new CapabilityError(
+            "missing-motion-target",
+            `${ownerPath} motion references unknown placeholder ${JSON.stringify(item.target.placeholder)}`,
+            ownerPath,
+          );
+        }
+        spid = entry.spid;
+        targetName = entry.name;
+        if (
+          entry.spec.x !== undefined &&
+          entry.spec.y !== undefined &&
+          entry.spec.width !== undefined &&
+          entry.spec.height !== undefined
+        ) {
+          box = {
+            x: entry.spec.x,
+            y: entry.spec.y,
+            width: entry.spec.width,
+            height: entry.spec.height,
+          };
+        }
+      } else {
+        spid = item.target.spid;
+        targetName = `sp-${spid}`;
+      }
+
+      const rawEffect: NormalizedEffect =
+        item.effect.type === "repeated-effect"
+          ? { ...item.effect.effect, repeatCount: item.effect.count }
+          : item.effect;
+      const delayMs = Math.round(rawEffect.delay);
+      const durationMs = Math.round(rawEffect.duration);
+      const repeatCount = rawEffect.repeatCount;
+      const endMs =
+        repeatCount === "forever"
+          ? undefined
+          : delayMs +
+            durationMs * (typeof repeatCount === "number" ? repeatCount : 1);
+
+      const scheduledEffect: ScheduledEffect = {
+        target: {
+          id: spid,
+          name: targetName,
+          ...(item.range === undefined ? {} : { range: item.range }),
+        },
+        kind: rawEffect.kind,
+        preset: rawEffect.preset,
+        durationMs,
+        delayMs,
+        ...(repeatCount === undefined ? {} : { repeatCount }),
+        ...(rawEffect.from === undefined ? {} : { from: rawEffect.from }),
+        ...(rawEffect.by === undefined ? {} : { by: rawEffect.by }),
+        ...(rawEffect.intervalMs === undefined
+          ? {}
+          : { intervalMs: rawEffect.intervalMs }),
+        ...(rawEffect.easing === undefined ? {} : { easing: rawEffect.easing }),
+        ...(rawEffect.fromColor === undefined
+          ? {}
+          : { fromColor: rawEffect.fromColor }),
+        ...(rawEffect.toColor === undefined
+          ? {}
+          : { toColor: rawEffect.toColor }),
+        startMs: delayMs,
+        ...(endMs === undefined
+          ? { completion: "no-natural-completion" as const }
+          : { endMs }),
+        stepKey,
+        order: stepIdx * 1000 + effectIdx,
+        effectIndex: effectIdx,
+        targetKind: "shape",
+        targetTextBody: false,
+        targetFilled: true,
+        targetHasBackground: true,
+        ...(box === undefined ? {} : { targetBox: box }),
+      };
+
+      const existing = targetGroups.get(spid) ?? [];
+      existing.push(scheduledEffect);
+      targetGroups.set(spid, existing);
+    });
+
+    const effects = [...targetGroups.values()].flat();
+    const nodes: MotionPlanNode[] = [...targetGroups.entries()].map(
+      ([targetId, list]) => ({
+        kind: "target",
+        targetId,
+        nativeStart: { kind: "parent-start", delayMs: 0 },
+        effects: list,
+      }),
+    );
+
+    return {
+      key: stepKey,
+      order: stepIdx,
+      trigger: step.trigger,
+      nodes,
+      effects,
+    };
+  });
+}
+
+const motionMechanisms = [
+  motionFadeMechanism,
+  motionWipeMechanism,
+  motionZoomMechanism,
+  motionFlyMechanism,
+  motionFloatMechanism,
+  motionSpinInMechanism,
+  motionStretchMechanism,
+  motionSpinMechanism,
+  motionBreatheMechanism,
+  motionFillColorMechanism,
+  motionChoreographyMechanism,
+] as const;
+
 /** Slide-level motion module binds choreography, writes object timing, and leaves preview on the static edit canvas. */
-export const motionCapability: SlideCapabilityModule = Object.freeze({
+export const motionCapability: SlideCapabilityModule & {
+  readonly mechanisms: typeof motionMechanisms;
+} = Object.freeze({
   declaration: "motion",
   slideProp: "motion",
   slot: "timing",
   always: true,
+  mechanisms: motionMechanisms,
   transparentDeclarations: [
     {
       declaration: "motion-scope",
@@ -2482,7 +2940,37 @@ export const motionCapability: SlideCapabilityModule = Object.freeze({
       },
     } satisfies TransparentCapabilityModule,
   ],
-  bindSlide(_input: CapabilityInput, _parseContext) {
+  bindSlide(input: CapabilityInput, parseContext) {
+    if (input.type === "slide-master" || input.type === "slide-layout") {
+      const steps = buildOwnerMotionSteps(
+        parseContext.path,
+        input.props["motion"],
+        input.props["placeholders"],
+      );
+      return {
+        resolveSlide(_context: SlideResolveContext): ResolvedSlide {
+          const hasEffects = steps.some((step) => step.effects.length > 0);
+          if (!hasEffects) {
+            return {
+              extensions: [],
+              emit(): SlideEmitOutput {
+                return { xml: "" };
+              },
+            };
+          }
+          return {
+            extensions: [],
+            observation: input.props["motion"],
+            emit(emitContext: SlideEmitContext): SlideEmitOutput {
+              return {
+                xml: timingXml(steps, emitContext.dimensions).xml,
+              };
+            },
+          };
+        },
+      };
+    }
+
     return {
       resolveSlide(context: SlideResolveContext): ResolvedSlide {
         const plan = compileMotionPlan(context.contributions);

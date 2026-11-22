@@ -95,6 +95,7 @@ const slideCorePropsObjectSchema = z.strictObject({
   themeOverride: themeOverrideSchema.optional(),
   style: slideStyleSchema.optional(),
   hidden: z.boolean().optional(),
+  showMasterPlaceholderAnimations: z.boolean().optional(),
 });
 export const slideCorePropsSchema = slideCorePropsObjectSchema.readonly();
 
@@ -293,6 +294,7 @@ export function parseSlideCoreProps(
 ): {
   readonly id: AuthorId;
   readonly hidden?: boolean;
+  readonly showMasterPlaceholderAnimations?: boolean;
   readonly colorMapOverride?: ColorMapOverride;
   readonly themeOverride?: ThemeOverride;
 } {
@@ -305,6 +307,7 @@ export function parseSlideCoreProps(
     "themeOverride",
     "style",
     "hidden",
+    "showMasterPlaceholderAnimations",
     ...registeredSlideProps,
   ]);
   const unknown = Object.keys(props).find((key) => !allowed.has(key));
@@ -407,9 +410,32 @@ export function parseSlideCoreProps(
     }
     themeOverride = parsedOverride.data;
   }
+  const showMasterPlaceholderAnimations =
+    props["showMasterPlaceholderAnimations"];
+  if (
+    showMasterPlaceholderAnimations !== undefined &&
+    !slideCorePropsObjectSchema.shape.showMasterPlaceholderAnimations.safeParse(
+      showMasterPlaceholderAnimations,
+    ).success
+  ) {
+    throw new BuildError([
+      {
+        severity: "error",
+        path: `deck/slide[${authorId}]`,
+        code: "invalid-slide-prop",
+        message: "Slide.showMasterPlaceholderAnimations must be a boolean",
+      },
+    ]);
+  }
   return {
     id: authorId,
     ...(hidden === undefined ? {} : { hidden: hidden as boolean }),
+    ...(showMasterPlaceholderAnimations === undefined
+      ? {}
+      : {
+          showMasterPlaceholderAnimations:
+            showMasterPlaceholderAnimations as boolean,
+        }),
     ...(colorMapOverride === undefined ? {} : { colorMapOverride }),
     ...(themeOverride === undefined ? {} : { themeOverride }),
   };

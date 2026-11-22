@@ -1421,8 +1421,10 @@ function emitMasterOrLayoutCapabilities(
   docEmit: DocumentEmitState,
   target: Target,
   options: EmitOptions,
-): string {
-  if (capabilities === undefined || capabilities.length === 0) return "";
+): { readonly transitionXml: string; readonly timingXml: string } {
+  if (capabilities === undefined || capabilities.length === 0) {
+    return { transitionXml: "", timingXml: "" };
+  }
   const diagnostics: Diagnostic[] = [];
   const slideEmit: SlideEmitState = {
     index: 0,
@@ -1432,7 +1434,8 @@ function emitMasterOrLayoutCapabilities(
     resourceObservations: [],
   };
   const packageCtx: PackageContext = { document: docEmit, slide: slideEmit };
-  const parts: string[] = [];
+  const transitionParts: string[] = [];
+  const timingParts: string[] = [];
 
   for (const cap of capabilities) {
     checkExtensions(
@@ -1456,7 +1459,9 @@ function emitMasterOrLayoutCapabilities(
           addSharedPackagePart(key, part, packageCtx),
       });
       if (cap.slot === "transition" && output.xml !== "") {
-        parts.push(output.xml);
+        transitionParts.push(output.xml);
+      } else if (cap.slot === "timing" && output.xml !== "") {
+        timingParts.push(output.xml);
       }
     } catch (error) {
       diagnostics.push(
@@ -1473,7 +1478,10 @@ function emitMasterOrLayoutCapabilities(
   if (diagnostics.length > 0) {
     throw new BuildError(diagnostics);
   }
-  return parts.join("");
+  return {
+    transitionXml: transitionParts.join(""),
+    timingXml: timingParts.join(""),
+  };
 }
 
 /**
@@ -1503,7 +1511,7 @@ export function emit(
   );
 
   const emittedMasters = internal.masters?.map((master) => {
-    const transitionXml = emitMasterOrLayoutCapabilities(
+    const masterCapXml = emitMasterOrLayoutCapabilities(
       master.slideCapabilities,
       internal,
       docEmit,
@@ -1511,7 +1519,7 @@ export function emit(
       options,
     );
     const layouts = master.layouts.map((layout) => {
-      const layoutTransitionXml = emitMasterOrLayoutCapabilities(
+      const layoutCapXml = emitMasterOrLayoutCapabilities(
         layout.slideCapabilities,
         internal,
         docEmit,
@@ -1547,9 +1555,12 @@ export function emit(
         ...(layout.themeOverride === undefined
           ? {}
           : { themeOverride: layout.themeOverride }),
-        ...(layoutTransitionXml === ""
+        ...(layoutCapXml.transitionXml === ""
           ? {}
-          : { transitionXml: layoutTransitionXml }),
+          : { transitionXml: layoutCapXml.transitionXml }),
+        ...(layoutCapXml.timingXml === ""
+          ? {}
+          : { timingXml: layoutCapXml.timingXml }),
       };
     });
     return {
@@ -1565,7 +1576,12 @@ export function emit(
       ...(master.textStyles === undefined
         ? {}
         : { textStyles: master.textStyles }),
-      ...(transitionXml === "" ? {} : { transitionXml }),
+      ...(masterCapXml.transitionXml === ""
+        ? {}
+        : { transitionXml: masterCapXml.transitionXml }),
+      ...(masterCapXml.timingXml === ""
+        ? {}
+        : { timingXml: masterCapXml.timingXml }),
       layouts,
     };
   });
@@ -1652,6 +1668,12 @@ export function emit(
         ? {}
         : { themeOverride: resolvedSlide.themeOverride }),
       hidden: resolvedSlide.hidden,
+      ...(resolvedSlide.showMasterPlaceholderAnimations === undefined
+        ? {}
+        : {
+            showMasterPlaceholderAnimations:
+              resolvedSlide.showMasterPlaceholderAnimations,
+          }),
       shapeXml,
       backgroundXml,
       slideXml: slideXmlParts
@@ -1679,6 +1701,7 @@ export function emit(
         colorMapOverride,
         themeOverride,
         hidden,
+        showMasterPlaceholderAnimations,
         shapeXml,
         backgroundXml,
         slideXml,
@@ -1689,6 +1712,9 @@ export function emit(
         ...(colorMapOverride === undefined ? {} : { colorMapOverride }),
         ...(themeOverride === undefined ? {} : { themeOverride }),
         hidden,
+        ...(showMasterPlaceholderAnimations === undefined
+          ? {}
+          : { showMasterPlaceholderAnimations }),
         shapeXml,
         backgroundXml,
         slideXml,

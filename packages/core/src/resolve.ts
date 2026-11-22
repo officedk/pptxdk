@@ -109,6 +109,7 @@ type ParsedSlideNode = {
   readonly themeOverride?: ThemeOverride;
   readonly section?: string;
   readonly hidden?: boolean;
+  readonly showMasterPlaceholderAnimations?: boolean;
 };
 
 type ParsedLayoutSpec = {
@@ -476,7 +477,11 @@ function resolveSlides(
     (module) => module.slideProps ?? [module.slideProp],
   );
   const slidePropertySet = new Set(slideProperties);
-  const knownTrimmedSlideProps = new Set(["transition", "advanceAfter"]);
+  const knownTrimmedSlideProps = new Set([
+    "transition",
+    "advanceAfter",
+    "motion",
+  ]);
   const masters: ParsedMasterSpec[] = [];
   const layoutKeyByNode = new Map<DeclarationNode, string>();
   const layoutKeysByDefinition = new Map<SlideLayoutDefinition, string[]>();
@@ -856,7 +861,10 @@ function resolveSlides(
           ? {}
           : { themeOverride: parsedLayout.data.themeOverride }),
       };
-      const layoutSlideProps: Record<string, unknown> = {};
+      const layoutSlideProps: Record<string, unknown> =
+        parsedLayout.data.placeholders === undefined
+          ? {}
+          : { placeholders: parsedLayout.data.placeholders };
       for (const prop of slidePropertySet) {
         if (Object.hasOwn(effectiveLayoutProps, prop)) {
           layoutSlideProps[prop] = effectiveLayoutProps[prop];
@@ -873,7 +881,10 @@ function resolveSlides(
       });
     }
 
-    const masterSlideProps: Record<string, unknown> = {};
+    const masterSlideProps: Record<string, unknown> =
+      parsedMaster.data.placeholders === undefined
+        ? {}
+        : { placeholders: parsedMaster.data.placeholders };
     for (const prop of slidePropertySet) {
       if (Object.hasOwn(masterNode.props, prop)) {
         masterSlideProps[prop] = masterNode.props[prop];
@@ -976,11 +987,13 @@ function resolveSlides(
     ]);
   }
   const slides = candidates.map(({ node, section, sectionIndex }, index) => {
-    const { id, hidden, colorMapOverride, themeOverride } = parseSlideCoreProps(
-      node.props,
-      index,
-      slideProperties,
-    );
+    const {
+      id,
+      hidden,
+      showMasterPlaceholderAnimations,
+      colorMapOverride,
+      themeOverride,
+    } = parseSlideCoreProps(node.props, index, slideProperties);
     const authorId = id;
     if (authorIds.has(authorId)) {
       throw new BuildError([
@@ -1067,6 +1080,9 @@ function resolveSlides(
       ...(themeOverride === undefined ? {} : { themeOverride }),
       ...(section === undefined ? {} : { section }),
       ...(hidden === undefined ? {} : { hidden }),
+      ...(showMasterPlaceholderAnimations === undefined
+        ? {}
+        : { showMasterPlaceholderAnimations }),
     };
     if (sectionIndex !== undefined) {
       sections[sectionIndex]?.slideIndexes.push(index + 1);
@@ -2669,6 +2685,12 @@ function resolveSlideDeclaration(
     ...(layoutId === undefined ? {} : { layout: layoutId }),
     ...(section === undefined ? {} : { section }),
     ...(hidden ? { hidden: true } : {}),
+    ...(parsed.showMasterPlaceholderAnimations === undefined
+      ? {}
+      : {
+          showMasterPlaceholderAnimations:
+            parsed.showMasterPlaceholderAnimations,
+        }),
     objects: projectedObjects,
     ...(sortedLayouts.length > 0 && { layouts: sortedLayouts }),
     ...(Object.keys(capabilities).length > 0 && { capabilities }),
@@ -2692,6 +2714,12 @@ function resolveSlideDeclaration(
         : { themeOverride: parsed.themeOverride }),
       ...(section === undefined ? {} : { section }),
       hidden,
+      ...(parsed.showMasterPlaceholderAnimations === undefined
+        ? {}
+        : {
+            showMasterPlaceholderAnimations:
+              parsed.showMasterPlaceholderAnimations,
+          }),
       content: resolvedChildren.content,
       layers: resolvedChildren.layers,
       slideCapabilities,

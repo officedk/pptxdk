@@ -45,7 +45,6 @@ import {
   parseRunStyle,
   parseTextExtent,
   parseTextInsets,
-  parseTextList,
   runStyleSchema,
   textListSchema,
   type ParagraphStyle,
@@ -746,11 +745,6 @@ function readTextStyle(
 function paragraphStyle(value: unknown): ParagraphStyle {
   return parseParagraphStyle(value, "P.style");
 }
-
-function validateList(value: TextList): void {
-  parseTextList(value);
-}
-void validateList;
 
 function collectRuns(
   children: readonly unknown[],

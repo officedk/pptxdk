@@ -20,7 +20,7 @@ import {
   type ResolvedObject,
   type SlideEmitOutput,
 } from "@pptxdk/core/capability";
-import { assertXml10Characters, pxToEmu, xmlEscape } from "@pptxdk/emit";
+import { assertXml10Characters, xmlEscape } from "@pptxdk/emit";
 import { defineCanvasMechanism, defineShowMechanism } from "@pptxdk/import";
 
 import {
@@ -30,6 +30,7 @@ import {
 } from "../font/font-embedding.ts";
 import { embeddedFontImportHandler } from "../font/font-import.ts";
 import { motionAnnotations } from "../motion/motion-api.ts";
+import type { Geometry } from "../shared/geometry.ts";
 import {
   nativeLinkXml,
   parseLinkTarget,
@@ -60,11 +61,12 @@ import {
   type Run,
 } from "../shared/text-service.ts";
 import {
+  emitPlaceholderVisualSpPr,
   emitVisualModel,
   paintVisualModel,
   resolveVisualModel,
-  visualStyleKeys,
   visualSvgTransform,
+  type PlaceholderSpPrFlags,
   type ResolvedVisualModel,
 } from "../shared/visual.ts";
 import {
@@ -147,8 +149,7 @@ type ResolvedTextModel = {
   readonly insets: TextInsets;
   readonly placeholder?: {
     readonly nativeRef: NativePlaceholderRef;
-    readonly hasLocalBoxOverride: boolean;
-    readonly hasLocalVisualOverride: boolean;
+    readonly spPrFlags: PlaceholderSpPrFlags;
   };
 };
 
@@ -178,38 +179,14 @@ function emitTextModel(
     | undefined;
   let propertiesXml = "";
   if (model.placeholder !== undefined) {
-    if (
-      !model.placeholder.hasLocalBoxOverride &&
-      !model.placeholder.hasLocalVisualOverride &&
-      !model.visual.hasVisibleStyle &&
-      (model.visual.rotationUnits === undefined ||
-        model.visual.rotationUnits === 0)
-    ) {
-      placeholderEmit = {
-        nativeRef: model.placeholder.nativeRef,
-        spPrXml: "<p:spPr/>",
-      };
-    } else if (
-      !model.placeholder.hasLocalVisualOverride &&
-      !model.visual.hasVisibleStyle
-    ) {
-      const rotAttr =
-        model.visual.rotationUnits === undefined ||
-        model.visual.rotationUnits === 0
-          ? ""
-          : ` rot="${model.visual.rotationUnits}"`;
-      placeholderEmit = {
-        nativeRef: model.placeholder.nativeRef,
-        spPrXml: `<p:spPr><a:xfrm${rotAttr}><a:off x="${pxToEmu(model.box.x)}" y="${pxToEmu(model.box.y)}"/><a:ext cx="${pxToEmu(model.box.width)}" cy="${pxToEmu(model.box.height)}"/></a:xfrm></p:spPr>`,
-      };
-    } else {
-      propertiesXml = emitVisualModel(model.visual, (resource) =>
-        emitContext.registerResource(resource),
-      ).xml;
-      placeholderEmit = {
-        nativeRef: model.placeholder.nativeRef,
-      };
-    }
+    placeholderEmit = {
+      nativeRef: model.placeholder.nativeRef,
+      spPrXml: emitPlaceholderVisualSpPr(
+        model.visual,
+        model.placeholder.spPrFlags,
+        (resource) => emitContext.registerResource(resource),
+      ),
+    };
   } else {
     propertiesXml = emitVisualModel(model.visual, (resource) =>
       emitContext.registerResource(resource),
@@ -438,9 +415,15 @@ export const textCapability = {
     const rawSlideStyle = record(input.props["style"])
       ? input.props["style"]
       : undefined;
-    const hasLocalVisualOverride =
-      rawSlideStyle !== undefined &&
-      visualStyleKeys.some((key) => hasLocalDeclaration(rawSlideStyle, key));
+    const inheritedPlaceholderGeometry =
+      placeholder?.layoutPlaceholder?.geometry ??
+      placeholder?.masterPlaceholder?.geometry;
+    const inheritedPlaceholderFlipH =
+      placeholder?.layoutPlaceholder?.flipH ??
+      placeholder?.masterPlaceholder?.flipH;
+    const inheritedPlaceholderFlipV =
+      placeholder?.layoutPlaceholder?.flipV ??
+      placeholder?.masterPlaceholder?.flipV;
     const visualStyle =
       placeholder !== undefined
         ? resolvePlaceholderVisualStyle(placeholder, rawSlideStyle)
@@ -451,6 +434,15 @@ export const textCapability = {
       theme: placeholder?.masterTheme ?? context.theme,
       style: visualStyle,
       box: { x: 0, y: 0, width: 100, height: 100 },
+      ...(inheritedPlaceholderGeometry === undefined
+        ? {}
+        : { geometry: inheritedPlaceholderGeometry as Geometry }),
+      ...(inheritedPlaceholderFlipH === undefined
+        ? {}
+        : { flipH: inheritedPlaceholderFlipH }),
+      ...(inheritedPlaceholderFlipV === undefined
+        ? {}
+        : { flipV: inheritedPlaceholderFlipV }),
     });
 
     const authorId =
@@ -579,6 +571,15 @@ export const textCapability = {
           theme: placeholder?.masterTheme ?? resolveContext.theme,
           style: visualStyle,
           box,
+          ...(inheritedPlaceholderGeometry === undefined
+            ? {}
+            : { geometry: inheritedPlaceholderGeometry as Geometry }),
+          ...(inheritedPlaceholderFlipH === undefined
+            ? {}
+            : { flipH: inheritedPlaceholderFlipH }),
+          ...(inheritedPlaceholderFlipV === undefined
+            ? {}
+            : { flipV: inheritedPlaceholderFlipV }),
         });
         const name =
           resolveContext.morphName ??
@@ -631,9 +632,27 @@ export const textCapability = {
             : {
                 placeholder: {
                   nativeRef: placeholder.nativeRef,
-                  hasLocalBoxOverride:
-                    placeholderGeometry?.hasLocalBoxOverride === true,
-                  hasLocalVisualOverride,
+                  spPrFlags: {
+                    hasBox: placeholderGeometry?.hasLocalBoxOverride === true,
+                    hasRotate: hasLocalDeclaration(rawSlideStyle, "rotate"),
+                    hasFlipH: false,
+                    hasFlipV: false,
+                    hasGeometryOrRadius: hasLocalDeclaration(
+                      rawSlideStyle,
+                      "borderRadius",
+                    ),
+                    hasFill:
+                      hasLocalDeclaration(rawSlideStyle, "backgroundColor") ||
+                      hasLocalDeclaration(rawSlideStyle, "backgroundImage"),
+                    hasBorder:
+                      hasLocalDeclaration(rawSlideStyle, "borderColor") ||
+                      hasLocalDeclaration(rawSlideStyle, "borderWidth") ||
+                      hasLocalDeclaration(rawSlideStyle, "borderStyle"),
+                    hasEffects:
+                      hasLocalDeclaration(rawSlideStyle, "boxShadow") ||
+                      hasLocalDeclaration(rawSlideStyle, "softEdge"),
+                    includeDefaultRectWhenHasBox: false,
+                  },
                 },
               }),
         };

@@ -11,15 +11,10 @@ import {
   OoxmlNonNegativeIntSchema,
   OoxmlPositiveIntSchema,
   P_NS,
-  REL_SLIDE,
-  R_NS,
   XML_NS,
   emuToPx,
-  parseXmlPart,
-  resolvePartPath,
   type ImportDiagnostic,
   type ImportLocation,
-  type PptxPackage,
   type ShapeTreeImportContext,
   type ShapeTreeImportHandler,
   type ShapeTreeImportOutcome,
@@ -27,7 +22,12 @@ import {
 } from "@pptxdk/import";
 import { z } from "zod";
 
-import { consumeNonPlaceholderNvPr } from "../shared/identity.ts";
+import {
+  attachDeferredSlideLink,
+  consumeNonPlaceholderNvPr,
+  readClickLink,
+  type ClickLinkReadResult,
+} from "../shared/identity.ts";
 import { isPlaceholderSpElement } from "../shared/placeholder-import.ts";
 import type { ParagraphStyle, TextList } from "../shared/text-service.ts";
 import {
@@ -174,143 +174,16 @@ export function isCustomGeometryShapeSpElement(
   );
 }
 
-function resolveTargetSlideAuthorId(
-  pkg: PptxPackage,
-  targetSlidePart: string,
-): string | undefined {
-  const xmlText = pkg.readTextPart(targetSlidePart);
-  if (xmlText === undefined) return undefined;
-  let slideEl: XmlElement;
-  try {
-    slideEl = parseXmlPart(targetSlidePart, xmlText);
-  } catch {
-    return undefined;
-  }
-  const cSld = directElementChild(slideEl, P_NS, "cSld");
-  const explicitName = cSld?.getAttribute("name")?.trim();
-  if (explicitName !== undefined && explicitName.length > 0) {
-    return explicitName;
-  }
-  const relsById = new Map(
-    pkg.presentationRels.map((entry) => [entry.Id, entry]),
-  );
-  const sldIdLst = directElementChild(
-    pkg.presentationRoot.element,
-    P_NS,
-    "sldIdLst",
-  );
-  if (sldIdLst === undefined) return undefined;
-  let index = 0;
-  for (
-    let child = sldIdLst.firstChild;
-    child !== null;
-    child = child.nextSibling
-  ) {
-    if (child.nodeType !== 1) continue;
-    const el = child as XmlElement;
-    if (
-      (el.namespaceURI ?? "") !== P_NS ||
-      (el.localName ?? el.tagName) !== "sldId"
-    ) {
-      continue;
-    }
-    const rId = el.getAttributeNS(R_NS, "id");
-    const rel = rId === null ? undefined : relsById.get(rId);
-    const part =
-      rel === undefined
-        ? undefined
-        : resolvePartPath(pkg.presentationPath, rel.Target);
-    if (part === targetSlidePart) {
-      return `slide-${index + 1}`;
-    }
-    index += 1;
-  }
-  return undefined;
-}
-
-/** Reads `<a:hlinkClick>` from `<p:cNvPr>` into a `LinkTarget` while isolating broken links. */
-export function readHyperlinkClick(
-  cNvPrCursor: XmlElementCursor,
-  pkg: PptxPackage,
-  location: ImportLocation,
-  diagnostics: ImportDiagnostic[],
-): LinkTarget | undefined {
-  const hlink = cNvPrCursor.child(A_NS, "hlinkClick");
-  if (hlink === undefined) return undefined;
-  const rId = hlink.attr("id", R_NS);
-  const action = hlink.attr("action");
-  if (action === "ppaction://hlinkshowjump?jump=firstslide") {
-    return { action: "home" };
-  }
-  if (rId === undefined) {
-    diagnostics.push({
-      code: "unsupported-mechanism",
-      category: "unsupported",
-      disposition: "omitted",
-      location: { ...location, xpath: hlink.xpath },
-      namespaceUri: A_NS,
-      localName: "hlinkClick",
-      mechanismHint: action ?? "hlinkClick",
-    });
-    return undefined;
-  }
-  const rels = pkg.readRelationships(location.part);
-  diagnostics.push(...rels.diagnostics);
-  const rel = rels.entries.find((entry) => entry.Id === rId);
-  if (rel === undefined) {
-    diagnostics.push({
-      code: "broken-relationship",
-      category: "corrupt-input",
-      disposition: "omitted",
-      location: { ...location, xpath: hlink.xpath },
-      relationshipId: rId,
-    });
-    return undefined;
-  }
-  if (rel.TargetMode === "External") {
-    return { url: rel.Target };
-  }
-  if (rel.Type === REL_SLIDE) {
-    const targetPart = resolvePartPath(location.part, rel.Target);
-    if (targetPart === undefined || !pkg.hasPart(targetPart)) {
-      diagnostics.push({
-        code: "missing-target-part",
-        category: "corrupt-input",
-        disposition: "omitted",
-        location: { ...location, xpath: hlink.xpath },
-        relationshipId: rId,
-        targetPart: targetPart ?? rel.Target,
-      });
-      return undefined;
-    }
-    const targetId = resolveTargetSlideAuthorId(pkg, targetPart);
-    if (targetId !== undefined) {
-      return { id: targetId };
-    }
-  }
-  diagnostics.push({
-    code: "unsupported-mechanism",
-    category: "unsupported",
-    disposition: "omitted",
-    location: { ...location, xpath: hlink.xpath },
-    namespaceUri: A_NS,
-    localName: "hlinkClick",
-    mechanismHint: rel.Type,
-  });
-  return undefined;
-}
-
 /** Reads `<p:cNvPr>` id, name, and hyperlink without assuming shape vs group wrapper tag. */
 export function readNonVisualCommonProperties(
   cNvPrCursor: XmlElementCursor | undefined,
-  pkg: PptxPackage,
-  part: string,
-  slideIndex: number,
+  context: ShapeTreeImportContext,
   diagnostics: ImportDiagnostic[],
 ): {
   readonly objectId?: number;
   readonly objectName?: string;
   readonly link?: LinkTarget;
+  readonly deferredSlideLink?: ClickLinkReadResult["deferredSlideLink"];
 } {
   if (cNvPrCursor === undefined) return {};
   const raw = cNvPrCursor.attrsObject(["id", "name"]);
@@ -322,7 +195,11 @@ export function readNonVisualCommonProperties(
       code: "invalid-xml-value",
       category: "corrupt-input",
       disposition: "recovered",
-      location: { part, xpath: cNvPrCursor.xpath, slideIndex },
+      location: {
+        part: context.part,
+        xpath: cNvPrCursor.xpath,
+        slideIndex: context.slideIndex,
+      },
       attributeOrElement: "p:cNvPr",
       rawValue: JSON.stringify(raw),
     });
@@ -332,17 +209,22 @@ export function readNonVisualCommonProperties(
       objectName = parsed.data.name;
     }
   }
-  const location: ImportLocation = {
-    part,
-    slideIndex,
-    ...(objectId === undefined ? {} : { objectId }),
-    ...(objectName === undefined ? {} : { objectName }),
-  };
-  const link = readHyperlinkClick(cNvPrCursor, pkg, location, diagnostics);
+  const hlinkClick = cNvPrCursor.child(A_NS, "hlinkClick");
+  let clickResult: ClickLinkReadResult | undefined;
+  if (hlinkClick !== undefined) {
+    clickResult = readClickLink(hlinkClick, context, {
+      ...(objectId === undefined ? {} : { objectId }),
+      ...(objectName === undefined ? {} : { objectName }),
+    });
+    diagnostics.push(...clickResult.diagnostics);
+  }
   return {
     ...(objectId === undefined ? {} : { objectId }),
     ...(objectName === undefined ? {} : { objectName }),
-    ...(link === undefined ? {} : { link }),
+    ...(clickResult?.link === undefined ? {} : { link: clickResult.link }),
+    ...(clickResult?.deferredSlideLink === undefined
+      ? {}
+      : { deferredSlideLink: clickResult.deferredSlideLink }),
   };
 }
 
@@ -787,13 +669,8 @@ export function readShapeSp(
   }
 
   const cNvPr = nvSpPr.child(P_NS, "cNvPr");
-  const { objectId, objectName, link } = readNonVisualCommonProperties(
-    cNvPr,
-    pkg,
-    part,
-    slideIndex,
-    diagnostics,
-  );
+  const { objectId, objectName, link, deferredSlideLink } =
+    readNonVisualCommonProperties(cNvPr, context, diagnostics);
 
   const cNvSpPr = nvSpPr.child(P_NS, "cNvSpPr");
   if (cNvSpPr !== undefined) {
@@ -953,6 +830,7 @@ export function readShapeSp(
     node.content(...paragraphNodes);
   }
 
+  attachDeferredSlideLink(node, deferredSlideLink, context);
   return { node, diagnostics };
 }
 

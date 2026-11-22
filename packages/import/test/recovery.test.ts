@@ -6,7 +6,6 @@ import { CommonNode } from "@pptxdk/core/document";
 import {
   A_NS,
   DIAGRAM_NS,
-  ImportDiagnosticSchema,
   MC_NS,
   OPC_REL_NS,
   P_NS,
@@ -17,6 +16,7 @@ import {
   REL_OFFICE_DOCUMENT,
   REL_SLIDE,
   createImporter,
+  importDiagnosticSchema,
   openPptxPackage,
   readAlternateContent,
   buildRelationshipIndex,
@@ -81,7 +81,7 @@ describe("@pptxdk/import recovery, resources, and mc:AlternateContent", () => {
     assert.equal(slides.length, 1);
 
     const parsedDiags = result.report.diagnostics.map((d) =>
-      ImportDiagnosticSchema.parse(d),
+      importDiagnosticSchema.parse(d),
     );
     const unsupported = parsedDiags.find(
       (d): d is Extract<typeof d, { readonly code: "unsupported-mechanism" }> =>

@@ -1,14 +1,29 @@
 export { readAlternateContent } from "#/alternate-content.ts";
 export type { AlternateContentSelection } from "#/alternate-content.ts";
 export {
-  CascadedOmissionSchema,
-  EditabilityLossSchema,
-  FatalImportIssueSchema,
-  ImportDiagnosticSchema,
+  arrowTypeSchema,
+  arrowTypes,
+  readBlipFill,
+  readDrawingColor,
+  readEffectList,
+  readGradientFill,
+  readLineBorder,
+  readTransformXml,
+} from "#/visual.ts";
+export type {
+  ArrowType,
+  ImportedLineBorder,
+  ImportedTransform,
+} from "#/visual.ts";
+export {
   ImportError,
-  ImportLocationSchema,
-  ImportOptionsSchema,
-  ImportReportSchema,
+  cascadedOmissionSchema,
+  editabilityLossSchema,
+  fatalImportIssueSchema,
+  importDiagnosticSchema,
+  importLocationSchema,
+  importOptionsSchema,
+  importReportSchema,
 } from "#/diagnostics.ts";
 export type {
   CascadedOmission,
@@ -55,8 +70,10 @@ export type {
   DeckImportHandler,
   DeckImportOutcome,
   DeferredSlideLink,
+  ImportedPlaceholderSpPr,
   ImportMechanismHandler,
   OmittedSlideObjectInfo,
+  PlaceholderVisualReader,
   ShapeTreeImportContext,
   ShapeTreeImportHandler,
   ShapeTreeImportOutcome,

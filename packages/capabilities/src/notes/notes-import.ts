@@ -359,11 +359,14 @@ export const speakerNotesImportHandler: SlideImportHandler = {
  */
 export const presentationSectionsImportHandler: DeckImportHandler = {
   target: "deck",
+  stage: "post-slides",
   read(context: DeckImportContext): DeckImportOutcome {
-    const { presentationCursor, deckNode, package: pkg } = context;
-    if (!("masters" in deckNode)) {
-      return {};
-    }
+    const {
+      presentationCursor,
+      deckNode,
+      package: pkg,
+      slideNodeByPresentationSldId,
+    } = context;
     const alreadySectioned = deckNode.children.some(
       (child) => child instanceof CommonNode && child.type === "section",
     );
@@ -371,29 +374,33 @@ export const presentationSectionsImportHandler: DeckImportHandler = {
       return {};
     }
 
-    const slideNodes = deckNode.children.filter(
-      (child): child is CommonNode =>
-        child instanceof CommonNode && child.type === "slide",
-    );
-    const slideNodeBySldId = new Map<number, CommonNode>();
-    const sldIdLst = presentationCursor.child(P_NS, "sldIdLst");
-    if (sldIdLst !== undefined) {
-      const sldIds = sldIdLst.children(P_NS, "sldId");
-      for (let index = 0; index < sldIds.length; index += 1) {
-        const rawId = sldIds[index]?.attr("id");
-        const slideNode = slideNodes[index];
-        if (rawId !== undefined && slideNode !== undefined) {
-          const parsedId = Number(rawId);
-          if (Number.isInteger(parsedId)) {
-            slideNodeBySldId.set(parsedId, slideNode);
+    let slideNodeBySldId = slideNodeByPresentationSldId;
+    if (slideNodeBySldId === undefined) {
+      const fallbackMap = new Map<number, CommonNode>();
+      const slideNodes = deckNode.children.filter(
+        (child): child is CommonNode =>
+          child instanceof CommonNode && child.type === "slide",
+      );
+      const sldIdLst = presentationCursor.child(P_NS, "sldIdLst");
+      if (sldIdLst !== undefined) {
+        const sldIds = sldIdLst.children(P_NS, "sldId");
+        for (let index = 0; index < sldIds.length; index += 1) {
+          const rawId = sldIds[index]?.attr("id");
+          const slideNode = slideNodes[index];
+          if (rawId !== undefined && slideNode !== undefined) {
+            const parsedId = Number(rawId);
+            if (Number.isInteger(parsedId)) {
+              fallbackMap.set(parsedId, slideNode);
+            }
           }
         }
       }
+      slideNodeBySldId = fallbackMap;
     }
     const diagnostics: ImportDiagnostic[] = [];
     importPresentationSections(
       presentationCursor,
-      deckNode as Parameters<typeof importPresentationSections>[1],
+      deckNode,
       slideNodeBySldId,
       pkg.presentationPath,
       diagnostics,

@@ -781,6 +781,7 @@ export type SlideEmitContext = {
 
 export type SlideEmitOutput = {
   readonly xml: string;
+  readonly placeholderSpPrByKey?: Readonly<Record<string, string>>;
   readonly presentationContributions?: readonly CapabilityPresentationContribution[];
 };
 
@@ -814,8 +815,8 @@ export type BoundSlideCapability = {
 export type SlideCapabilityModule<
   Bound extends BoundSlideCapability = BoundSlideCapability,
 > = {
-  /** Slide property name handled by this module. */
-  readonly slideProp: string;
+  /** Slide property name handled by this module when applicable to Slide declarations. */
+  readonly slideProp?: string;
   /** Slide properties jointly consumed by the same module, such as transition and advance timing. */
   readonly slideProps?: readonly string[];
   /** Written to the slide following PresentationML fixed child element order. */

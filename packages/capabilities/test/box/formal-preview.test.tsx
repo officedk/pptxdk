@@ -31,7 +31,7 @@ function runDocPreview(modules: readonly CapabilityModule[]) {
   };
 }
 
-describe("Slice 4 (Ticket 05): Box static preview positive and negative behaviors", () => {
+describe("Box static preview positive and negative behaviors", () => {
   it("renders transparent and visible Box containers with solid fill/border, opacity, rotate, theme overrides, and post-preview isolation", async () => {
     const previewDoc = runDocPreview(documentCapabilities);
     const mutableCard = box({

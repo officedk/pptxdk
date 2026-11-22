@@ -7,6 +7,7 @@ import {
   type MorphKey,
   type NativeLink,
 } from "@pptxdk/core/capability";
+import type { CommonNode } from "@pptxdk/core/document";
 import { xmlEscape } from "@pptxdk/emit";
 import {
   OoxmlBoolSchema,
@@ -332,4 +333,23 @@ export function readClickLink(
     clickLocation,
     diagnostics: [],
   };
+}
+
+/** Registers a deferred internal slide-jump callback so links resolve via slidePartPath -> allocated Slide.id. */
+export function attachDeferredSlideLink(
+  node: CommonNode,
+  deferredSlideLink: ClickLinkReadResult["deferredSlideLink"],
+  context: ShapeTreeImportContext,
+): void {
+  if (
+    deferredSlideLink !== undefined &&
+    context.registerDeferredSlideLink !== undefined
+  ) {
+    context.registerDeferredSlideLink({
+      ...deferredSlideLink,
+      apply(targetSlideId: string) {
+        node.set({ link: { id: targetSlideId } });
+      },
+    });
+  }
 }

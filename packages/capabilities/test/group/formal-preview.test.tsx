@@ -50,7 +50,7 @@ function runDocPreview(modules: readonly CapabilityModule[]) {
   };
 }
 
-describe("Slice 5 (Ticket 08): Group static preview, screenGeometry, and member failure propagation", () => {
+describe("Group static preview, screenGeometry, and member failure propagation", () => {
   it("renders nested rotated Group trees with flipped members, Box children, screenGeometry, and post-preview isolation", async () => {
     const previewDoc = runDocPreview(documentCapabilities);
     const mutableShape = shape({

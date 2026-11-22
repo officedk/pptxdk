@@ -463,9 +463,9 @@ export const textMechanismVerifications = {
     assertPaint({ initial, roundtrip }) {
       assert.deepEqual(initial.pages[0]?.diagnostics, []);
       assert.ok(initial.pages[0]?.png instanceof Uint8Array);
-      // Unembedded imported text preserves native semantics while preview reports missing outline font.
       assert.equal(roundtrip.pages.length, 1);
-      assert.ok((roundtrip.pages[0]?.diagnostics.length ?? 0) > 0);
+      assert.deepEqual(roundtrip.pages[0]?.diagnostics, []);
+      assert.ok(roundtrip.pages[0]?.png instanceof Uint8Array);
     },
   } satisfies MechanismVerificationEntry<typeof textBoxMechanism>,
   "text-field-slidenum": {

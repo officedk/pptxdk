@@ -99,6 +99,8 @@ export type SlideStyle = z.infer<typeof slideStyleSchema>;
 const slideCorePropsObjectSchema = z.strictObject({
   /** Page author id; unique within the deck and written as the stable slide identifier. */
   id: authorIdSchema,
+  /** Optional PowerPoint display name written to `<p:cSld name="...">` without altering the stable `id`. */
+  name: xml10StringSchema.optional(),
   layout: z.unknown().optional(),
   theme: themeScopeSchema.optional(),
   colorMapOverride: colorMapOverrideSchema.optional(),
@@ -341,6 +343,7 @@ export function parseSlideCoreProps(
   registeredSlideProps: readonly string[],
 ): {
   readonly id: AuthorId;
+  readonly name?: string;
   readonly hidden?: boolean;
   readonly showMasterPlaceholderAnimations?: boolean;
   readonly showMasterShapes?: boolean;
@@ -349,6 +352,7 @@ export function parseSlideCoreProps(
 } {
   const allowed = new Set([
     "id",
+    "name",
     "layout",
     "placeholders",
     "theme",
@@ -390,6 +394,27 @@ export function parseSlideCoreProps(
         path: `deck/slide[${index + 1}]`,
         code: "invalid-xml-character",
         message: "Slide.id contains characters not allowed in XML 1.0",
+      },
+    ]);
+  }
+  const rawName = props["name"];
+  if (rawName !== undefined && typeof rawName !== "string") {
+    throw new BuildError([
+      {
+        severity: "error",
+        path: `deck/slide[${authorId}]`,
+        code: "invalid-slide-prop",
+        message: "Slide.name must be a string",
+      },
+    ]);
+  }
+  if (rawName !== undefined && !xml10StringSchema.safeParse(rawName).success) {
+    throw new BuildError([
+      {
+        severity: "error",
+        path: `deck/slide[${authorId}]`,
+        code: "invalid-xml-character",
+        message: "Slide.name contains characters not allowed in XML 1.0",
       },
     ]);
   }
@@ -495,6 +520,7 @@ export function parseSlideCoreProps(
   }
   return {
     id: authorId,
+    ...(rawName === undefined ? {} : { name: rawName }),
     ...(hidden === undefined ? {} : { hidden: hidden as boolean }),
     ...(showMasterPlaceholderAnimations === undefined
       ? {}

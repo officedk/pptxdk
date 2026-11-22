@@ -8,7 +8,7 @@ import {
   type TextStyle,
   type ThemeContext,
 } from "@pptxdk/core/capability";
-import { themeXml, xmlEscape } from "@pptxdk/emit";
+import { sectionListXml, themeXml, xmlEscape } from "@pptxdk/emit";
 import { defineShowMechanism } from "@pptxdk/import";
 
 import {
@@ -192,27 +192,12 @@ type ResolvedPresentationSectionsModel = {
   }[];
 };
 
-function serializePresentationSectionsXml(
-  model: ResolvedPresentationSectionsModel,
-): string {
-  if (model.sections.length === 0) return "";
-  const entries = model.sections
-    .map(
-      ({ name, slideIndexes }) =>
-        `<p14:section name="${xmlEscape(name)}"><p14:sldIdLst>${slideIndexes
-          .map((slideIndex) => `<p14:sldId id="${255 + slideIndex}"/>`)
-          .join("")}</p14:sldIdLst></p14:section>`,
-    )
-    .join("");
-  return `<p14:sectionLst xmlns:p14="http://schemas.microsoft.com/office/powerpoint/2010/main">${entries}</p14:sectionLst>`;
-}
-
 /** Typed native show mechanism connecting emit and import for `presentation-sections`. */
 export const presentationSectionsMechanism = defineShowMechanism({
   key: "presentation-sections",
   role: "show",
   emit: (model: ResolvedPresentationSectionsModel): SlideEmitOutput => ({
-    xml: serializePresentationSectionsXml(model),
+    xml: sectionListXml(model.sections),
   }),
   import: presentationSectionsImportHandler,
 });

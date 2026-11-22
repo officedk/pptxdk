@@ -43,7 +43,12 @@ function solidPng(r: number, g: number, b: number): Uint8Array {
   return new Uint8Array(PNG.sync.write(img));
 }
 
-function readPngPixelHex(pngBytes: Uint8Array, x: number, y: number): string {
+function readPngPixelHex(
+  pngBytes: Uint8Array | undefined,
+  x: number,
+  y: number,
+): string {
+  assert.ok(pngBytes instanceof Uint8Array);
   const decoded = PNG.sync.read(Buffer.from(pngBytes));
   const offset = (y * decoded.width + x) * 4;
   const r = decoded.data[offset] ?? 0;
@@ -341,34 +346,19 @@ export const masterSharedCanvasMechanismVerifications: Pick<
         assert.ok(page.png instanceof Uint8Array);
       }
       // Page 1: master red Logo (40, 24), master navy bar (300, 20), layout emerald pill (450, 120), slide amber card (100, 220)
-      assert.equal(readPngPixelHex(initial.pages[0]!.png!, 40, 24), "#EF4444");
-      assert.equal(readPngPixelHex(initial.pages[0]!.png!, 300, 20), "#1E293B");
-      assert.equal(
-        readPngPixelHex(initial.pages[0]!.png!, 450, 120),
-        "#10B981",
-      );
-      assert.equal(
-        readPngPixelHex(initial.pages[0]!.png!, 100, 220),
-        "#F59E0B",
-      );
+      assert.equal(readPngPixelHex(initial.pages[0]!.png, 40, 24), "#EF4444");
+      assert.equal(readPngPixelHex(initial.pages[0]!.png, 300, 20), "#1E293B");
+      assert.equal(readPngPixelHex(initial.pages[0]!.png, 450, 120), "#10B981");
+      assert.equal(readPngPixelHex(initial.pages[0]!.png, 100, 220), "#F59E0B");
 
       // Page 2: showMasterShapes=false hides master bar/logo and layout pill -> white at (40,24) and (450,120)
-      assert.equal(readPngPixelHex(initial.pages[1]!.png!, 40, 24), "#FFFFFF");
-      assert.equal(
-        readPngPixelHex(initial.pages[1]!.png!, 450, 120),
-        "#FFFFFF",
-      );
-      assert.equal(
-        readPngPixelHex(initial.pages[1]!.png!, 100, 220),
-        "#0284C7",
-      );
+      assert.equal(readPngPixelHex(initial.pages[1]!.png, 40, 24), "#FFFFFF");
+      assert.equal(readPngPixelHex(initial.pages[1]!.png, 450, 120), "#FFFFFF");
+      assert.equal(readPngPixelHex(initial.pages[1]!.png, 100, 220), "#0284C7");
 
       // Page 3: layout showMasterShapes=false hides master bar/logo (#FFFFFF at 40,24) while retaining layout banner (#EA580C at 100,120)
-      assert.equal(readPngPixelHex(initial.pages[2]!.png!, 40, 24), "#FFFFFF");
-      assert.equal(
-        readPngPixelHex(initial.pages[2]!.png!, 100, 120),
-        "#EA580C",
-      );
+      assert.equal(readPngPixelHex(initial.pages[2]!.png, 40, 24), "#FFFFFF");
+      assert.equal(readPngPixelHex(initial.pages[2]!.png, 100, 120), "#EA580C");
       assert.equal(roundtrip.pages.length, 3);
     },
   },
@@ -432,9 +422,9 @@ export async function verifyMasterLogoSingleEditPropagates(
   assert.equal(movedPaint.pages.length, 2);
   for (const page of movedPaint.pages) {
     assert.deepEqual(page.diagnostics, []);
-    assert.equal(readPngPixelHex(page.png!, 556, 24), "#EF4444");
-    assert.equal(readPngPixelHex(page.png!, 40, 24), "#1E293B");
+    assert.equal(readPngPixelHex(page.png, 556, 24), "#EF4444");
+    assert.equal(readPngPixelHex(page.png, 40, 24), "#1E293B");
   }
-  assert.equal(readPngPixelHex(movedPaint.pages[0]!.png!, 100, 220), "#F59E0B");
-  assert.equal(readPngPixelHex(movedPaint.pages[1]!.png!, 300, 220), "#0284C7");
+  assert.equal(readPngPixelHex(movedPaint.pages[0]!.png, 100, 220), "#F59E0B");
+  assert.equal(readPngPixelHex(movedPaint.pages[1]!.png, 300, 220), "#0284C7");
 }

@@ -1,9 +1,7 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 
 import {
   deck,
-  font,
   notes,
   paragraph,
   section,
@@ -28,10 +26,6 @@ import type {
   ExhaustiveMechanismVerificationMap,
   MechanismVerificationEntry,
 } from "../mechanism-verification.ts";
-
-// Keep font import available for future rich-text scenarios if needed; shapes alone need no embedded font.
-void readFileSync;
-void font;
 
 export const notesAndSectionsRoundtripScenario: CapabilityScenario = {
   id: "mechanism-notes-and-sections-roundtrip",

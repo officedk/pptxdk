@@ -18,7 +18,7 @@ import {
 import { z } from "zod";
 
 import {
-  ImportOptionsSchema,
+  importOptionsSchema,
   type ImportDiagnostic,
   type ImportOptions,
   type ImportReport,
@@ -27,7 +27,6 @@ import {
   allocateScopedAuthorId,
   appendUnconsumedDiagnostics,
   consumeCommonSlideCreationId,
-  importMastersAndLayouts,
   readShapeTreeItems,
 } from "#/masters.ts";
 import type {
@@ -54,7 +53,6 @@ import {
   type PptxPackage,
 } from "#/opc.ts";
 import { buildRelationshipIndex } from "#/resources.ts";
-import { importPresentationSections } from "#/sections.ts";
 import { readColorMapOverride, readThemeOverridePart } from "#/themes.ts";
 import {
   ExtentEmuFragmentSchema,
@@ -419,8 +417,15 @@ function readSlidePart(
     usedSlideIds,
     `slide-${slideIndex + 1}`,
   );
+  const displayName =
+    rawSlideName !== undefined &&
+    rawSlideName.trim().length > 0 &&
+    rawSlideName !== slideId
+      ? rawSlideName
+      : undefined;
   const slideNode = createSlideNode({
     id: slideId,
+    ...(displayName === undefined ? {} : { name: displayName }),
     ...(layoutNode === undefined ? {} : { layout: layoutNode }),
     ...(colorMapOverride === undefined ? {} : { colorMapOverride }),
     ...(themeOverride === undefined ? {} : { themeOverride }),
@@ -509,7 +514,7 @@ export function createImporter(
     input: Uint8Array,
     options: ImportOptions = {},
   ): ImportResult {
-    ImportOptionsSchema.parse(options);
+    importOptionsSchema.parse(options);
     if (options.signal?.aborted) {
       throw options.signal.reason;
     }
@@ -535,24 +540,49 @@ export function createImporter(
       string,
       Readonly<Record<string, NativeColorSlot>>
     >();
+    const layoutNodeByPartPath = new Map<string, SlideLayoutContainer>();
     const slideIdByPartPath = new Map<string, string>();
     const slideNodeByPresentationSldId = new Map<number, CommonNode>();
     const deferredSlideLinks: DeferredSlideLink[] = [];
     const registerDeferredSlideLink = (link: DeferredSlideLink): void => {
       deferredSlideLinks.push(link);
     };
-    const layoutNodeByPartPath = importMastersAndLayouts(
-      presCursor,
-      pkg,
-      relById,
-      deckNode,
-      usedDeckIds,
-      diagnostics,
-      handlers.slide,
-      handlers.shapeTree,
-      registerDeferredSlideLink,
-      clrMapByLayoutPartPath,
+
+    const seenDeckReaders = new Set<DeckImportHandler["read"]>();
+    const uniqueDeckHandlers = handlers.deck.filter((handler) => {
+      if (seenDeckReaders.has(handler.read)) return false;
+      seenDeckReaders.add(handler.read);
+      return true;
+    });
+    const preSlideDeckHandlers = uniqueDeckHandlers.filter(
+      (handler) => handler.stage === "pre-slides",
     );
+    const postSlideDeckHandlers = uniqueDeckHandlers.filter(
+      (handler) => handler.stage !== "pre-slides",
+    );
+
+    if (preSlideDeckHandlers.length > 0) {
+      for (const deckHandler of preSlideDeckHandlers) {
+        const outcome = deckHandler.read({
+          presentationCursor: presCursor,
+          deckNode,
+          package: pkg,
+          relById,
+          usedDeckIds,
+          slideHandlers: handlers.slide,
+          shapeTreeHandlers: handlers.shapeTree,
+          registerDeferredSlideLink,
+          layoutNodeByPartPath,
+          clrMapByLayoutPartPath,
+        });
+        if (outcome.diagnostics !== undefined) {
+          diagnostics.push(...outcome.diagnostics);
+        }
+      }
+    } else {
+      // Master and layout mechanisms are omitted; skip master/layout part parsing cleanly.
+      presCursor.child(P_NS, "sldMasterIdLst")?.suppressUnconsumed();
+    }
     const morphScope = createMorphScope();
     const morphHandleByToken = new Map<string, MorphKey>();
     let slideCount = 0;
@@ -676,19 +706,20 @@ export function createImporter(
     }
 
     inspectNotesAndHandoutMasters(presCursor, pkg, relById, diagnostics);
-    importPresentationSections(
-      presCursor,
-      deckNode,
-      slideNodeByPresentationSldId,
-      pkg.presentationPath,
-      diagnostics,
-    );
 
-    for (const deckHandler of handlers.deck) {
+    for (const deckHandler of postSlideDeckHandlers) {
       const outcome = deckHandler.read({
         presentationCursor: presCursor,
         deckNode,
         package: pkg,
+        relById,
+        usedDeckIds,
+        slideHandlers: handlers.slide,
+        shapeTreeHandlers: handlers.shapeTree,
+        registerDeferredSlideLink,
+        layoutNodeByPartPath,
+        clrMapByLayoutPartPath,
+        slideNodeByPresentationSldId,
       });
       if (outcome.diagnostics !== undefined) {
         diagnostics.push(...outcome.diagnostics);

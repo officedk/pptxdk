@@ -1221,4 +1221,174 @@ describe("typed text placeholders and style inheritance", () => {
     assert.ok(importedSlides[0]?.placeholder("title") !== undefined);
     assert.ok(importedSlides[0]?.placeholder("body") !== undefined);
   });
+
+  it("emits and roundtrips full master/layout placeholder visuals while keeping bound slide spPr strictly differential", async () => {
+    const idleVisualLayout = defineSlideLayout({
+      id: "idle-visual",
+      name: "Idle Visual",
+      type: "cust",
+      preserve: true,
+      placeholders: {
+        title: {
+          type: "title",
+          x: 64,
+          y: 48,
+          width: 400,
+          height: 80,
+          style: {
+            fontFamily: jostFont,
+            fontSize: "24pt",
+            color: "#FFFFFF",
+            backgroundColor: "#DC2626",
+            borderColor: "#1E293B",
+            borderWidth: 2,
+            borderRadius: 12,
+            rotate: 8,
+          },
+        },
+        badge: {
+          type: "body",
+          idx: 1,
+          x: 520,
+          y: 48,
+          width: 120,
+          height: 80,
+          style: {
+            backgroundImage: { image: tinyPng },
+          },
+        },
+      },
+    });
+
+    const usedVisualLayout = defineSlideLayout({
+      id: "used-visual",
+      name: "Used Visual",
+      type: "title",
+      preserve: true,
+      placeholders: {
+        title: {
+          type: "title",
+          x: 64,
+          y: 48,
+          width: 400,
+          height: 80,
+          style: {
+            fontFamily: jostFont,
+            fontSize: "24pt",
+            color: "#FFFFFF",
+            backgroundColor: "#DC2626",
+            borderColor: "#1E293B",
+            borderWidth: 2,
+            rotate: 8,
+          },
+        },
+      },
+    });
+
+    const built = await build(
+      <Deck width={960} height={540}>
+        <SlideMaster id="visual-master" name="Visual Master" preserve>
+          <SlideLayout layout={idleVisualLayout} />
+          <SlideLayout layout={usedVisualLayout} />
+        </SlideMaster>
+        <Slide
+          id="slide-inherited"
+          layout={usedVisualLayout}
+          placeholders={{ title: "Inherited Card" }}
+        />
+        <Slide
+          id="slide-local-bg"
+          layout={usedVisualLayout}
+          placeholders={{
+            title: (
+              <Text style={{ backgroundColor: "#2563EB" }}>Local Fill</Text>
+            ),
+          }}
+        />
+      </Deck>,
+      { embedFonts: "full" },
+    );
+
+    const validated = await validatePptx(built.pptx);
+    assert.deepEqual(validated.errors, []);
+
+    const zip = unzipSync(built.pptx);
+    const idleLayoutXml = strFromU8(zip["ppt/slideLayouts/slideLayout1.xml"]!);
+    const idleLayoutRels = strFromU8(
+      zip["ppt/slideLayouts/_rels/slideLayout1.xml.rels"]!,
+    );
+    const usedLayoutXml = strFromU8(zip["ppt/slideLayouts/slideLayout2.xml"]!);
+    const slide1Xml = strFromU8(zip["ppt/slides/slide1.xml"]!);
+    const slide2Xml = strFromU8(zip["ppt/slides/slide2.xml"]!);
+
+    // Idle layout placeholder carries full declared visuals, border, roundRect, rotation, and image relationship.
+    assert.match(idleLayoutXml, /val="DC2626"/u);
+    assert.match(idleLayoutXml, /<a:ln w="19050">/u);
+    assert.match(idleLayoutXml, /val="1E293B"/u);
+    assert.match(idleLayoutXml, /prst="roundRect"/u);
+    assert.match(idleLayoutXml, /rot="480000"/u);
+    assert.match(idleLayoutXml, /<a:blipFill/u);
+    assert.match(idleLayoutRels, /relationships\/image/u);
+
+    // Used layout also emits its placeholder visuals natively.
+    assert.match(usedLayoutXml, /val="DC2626"/u);
+
+    // Slide 1 does NOT materialize inherited background/border/rotation onto slide <p:spPr>.
+    assert.match(slide1Xml, /<p:spPr\/>/u);
+    assert.doesNotMatch(slide1Xml, /DC2626/u);
+    assert.doesNotMatch(slide1Xml, /1E293B/u);
+    assert.doesNotMatch(slide1Xml, /rot="480000"/u);
+
+    // Slide 2 only emits its local backgroundColor override (#2563EB) without materializing inherited border/rotation.
+    assert.match(slide2Xml, /val="2563EB"/u);
+    assert.doesNotMatch(slide2Xml, /1E293B/u);
+    assert.doesNotMatch(slide2Xml, /rot="480000"/u);
+
+    // Static preview still paints the inherited #DC2626 card on Slide 1.
+    const painted = await preview(
+      <Deck width={960} height={540}>
+        <SlideMaster id="visual-master" name="Visual Master" preserve>
+          <SlideLayout layout={usedVisualLayout} />
+        </SlideMaster>
+        <Slide
+          id="slide-inherited"
+          layout={usedVisualLayout}
+          placeholders={{ title: "Inherited Card" }}
+        />
+      </Deck>,
+    );
+    assert.match(painted.pages[0]?.svg ?? "", /#DC2626/u);
+
+    // Roundtrip import preserves idle layout placeholder visuals + image fill and keeps slide1 <p:spPr/> differential.
+    const imported = importPptx(built.pptx);
+    assert.deepEqual(imported.report.diagnostics, []);
+    assert.ok(imported.document instanceof DeckContainer);
+    const importedIdlePhs = imported.document.masters[0]!.layouts[0]!.props[
+      "placeholders"
+    ] as PlaceholderMap;
+    assert.equal(importedIdlePhs["title"]?.style?.backgroundColor, "#DC2626");
+    assert.equal(importedIdlePhs["title"]?.style?.borderColor, "#1E293B");
+    assert.equal(importedIdlePhs["title"]?.style?.borderWidth, 2);
+    assert.equal(importedIdlePhs["title"]?.style?.rotate, 8);
+    assert.ok(
+      Math.abs((importedIdlePhs["title"]?.style?.borderRadius ?? 0) - 12) <
+        0.05,
+    );
+    assert.ok(importedIdlePhs["body"]?.style?.backgroundImage !== undefined);
+
+    const rebuilt = await build(imported.document, { embedFonts: "full" });
+    const rebuiltZip = unzipSync(rebuilt.pptx);
+    assert.match(
+      strFromU8(rebuiltZip["ppt/slideLayouts/slideLayout1.xml"]!),
+      /val="DC2626"/u,
+    );
+    assert.match(
+      strFromU8(rebuiltZip["ppt/slides/slide1.xml"]!),
+      /<p:spPr\/>/u,
+    );
+    assert.doesNotMatch(
+      strFromU8(rebuiltZip["ppt/slides/slide1.xml"]!),
+      /DC2626/u,
+    );
+  });
 });

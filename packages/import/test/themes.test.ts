@@ -19,16 +19,61 @@ import {
   REL_THEME,
   R_NS,
   createImporter,
+  defineCanvasMechanism,
+  importMastersAndLayouts,
+  type DeckImportContext,
 } from "@pptxdk/import";
 import { strToU8, zipSync } from "fflate";
 import { describe, it } from "vitest";
+
+const testMastersCap = {
+  declaration: "test-masters",
+  slideProps: [] as const,
+  slot: "background" as const,
+  mechanisms: [
+    defineCanvasMechanism({
+      key: "test-masters",
+      role: "canvas",
+      emit: () => ({ xml: "" }),
+      paint: () => ({ svg: "" }),
+      import: {
+        target: "deck" as const,
+        stage: "pre-slides" as const,
+        read(context: DeckImportContext) {
+          const diagnostics: Parameters<typeof importMastersAndLayouts>[5] = [];
+          const layouts = importMastersAndLayouts(
+            context.presentationCursor,
+            context.package,
+            context.relById ?? new Map(),
+            context.deckNode,
+            context.usedDeckIds ?? new Set(),
+            diagnostics,
+            context.slideHandlers ?? [],
+            context.shapeTreeHandlers ?? [],
+            context.registerDeferredSlideLink ?? (() => {}),
+            context.clrMapByLayoutPartPath ?? new Map(),
+          );
+          if (context.layoutNodeByPartPath !== undefined) {
+            for (const [k, v] of layouts) {
+              context.layoutNodeByPartPath.set(k, v);
+            }
+          }
+          return diagnostics.length === 0 ? {} : { diagnostics };
+        },
+      },
+    }),
+  ],
+  bindSlide: () => ({
+    resolveSlide: () => ({ extensions: [], emit: () => ({ xml: "" }) }),
+  }),
+};
 
 describe("Native themes, color maps, and theme overrides import", () => {
   it("imports themes.pptx with 7 distinct Theme instances, sysClr values, inverted clrMap, and overrideClrMapping", () => {
     const bytes = new Uint8Array(
       readFileSync(new URL("./fixtures/themes.pptx", import.meta.url)),
     );
-    const importer = createImporter([]);
+    const importer = createImporter([testMastersCap]);
     const result = importer(bytes);
     bytes.fill(0);
 
@@ -133,7 +178,7 @@ describe("Native themes, color maps, and theme overrides import", () => {
         new URL("./fixtures/placeholder-layout-color.pptx", import.meta.url),
       ),
     );
-    const importer = createImporter([]);
+    const importer = createImporter([testMastersCap]);
     const result = importer(bytes);
     bytes.fill(0);
 
@@ -204,7 +249,7 @@ describe("Native themes, color maps, and theme overrides import", () => {
       ),
     });
 
-    const importer = createImporter([]);
+    const importer = createImporter([testMastersCap]);
     const result = importer(pptx);
     assert.deepEqual(result.report.diagnostics, []);
     assert.ok(result.document instanceof DeckContainer);

@@ -40,7 +40,7 @@ function createTwoToneSource(): PNG {
   return source;
 }
 
-describe("Slice 3 (Ticket 04): Image static preview positive behaviors", () => {
+describe("Image static preview positive behaviors", () => {
   it("renders PNG and JPEG with shared imagePlacement (contain, cover, explicit crop), transforms, opacity, and screenGeometry", async () => {
     const { encode } = await import("jpeg-js");
     const source = createTwoToneSource();

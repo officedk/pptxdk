@@ -9,7 +9,6 @@ import {
 } from "@pptxdk/core";
 import {
   A_NS,
-  ImportDiagnosticSchema,
   OPC_REL_NS,
   P14_NS,
   P14_SECTION_LIST_EXT_URI,
@@ -23,9 +22,45 @@ import {
   REL_THEME,
   R_NS,
   createImporter,
+  importDiagnosticSchema,
+  defineShowMechanism,
+  importPresentationSections,
+  type DeckImportContext,
 } from "@pptxdk/import";
 import { strToU8, unzipSync, zipSync } from "fflate";
 import { describe, it } from "vitest";
+
+const testSectionsCap = {
+  declaration: "test-sections",
+  slideProps: [] as const,
+  slot: "timing" as const,
+  mechanisms: [
+    defineShowMechanism({
+      key: "test-sections",
+      role: "show",
+      emit: () => ({ xml: "" }),
+      import: {
+        target: "deck" as const,
+        stage: "post-slides" as const,
+        read(context: DeckImportContext) {
+          const diagnostics: Parameters<typeof importPresentationSections>[4] =
+            [];
+          importPresentationSections(
+            context.presentationCursor,
+            context.deckNode,
+            context.slideNodeByPresentationSldId ?? new Map(),
+            context.package.presentationPath,
+            diagnostics,
+          );
+          return diagnostics.length === 0 ? {} : { diagnostics };
+        },
+      },
+    }),
+  ],
+  bindSlide: () => ({
+    resolveSlide: () => ({ extensions: [], emit: () => ({ xml: "" }) }),
+  }),
+};
 
 function blankSlideXml(name: string, extraAttrs = ""): string {
   return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
@@ -166,7 +201,7 @@ describe("Presentation slide order, hidden state, sections, and notes/handout ma
       ),
     });
 
-    const importer = createImporter([]);
+    const importer = createImporter([testSectionsCap]);
     const result = importer(pptx);
     assert.deepEqual(result.report.diagnostics, []);
     assert.equal(result.report.slideCount, 3);
@@ -239,7 +274,7 @@ describe("Presentation slide order, hidden state, sections, and notes/handout ma
       ),
     });
 
-    const importer = createImporter([]);
+    const importer = createImporter([testSectionsCap]);
     const result = importer(pptx);
     assert.deepEqual(result.report.diagnostics, []);
   });
@@ -309,7 +344,7 @@ describe("Presentation slide order, hidden state, sections, and notes/handout ma
     const importer = createImporter([]);
     const result = importer(pptx);
     const diags = result.report.diagnostics.map((d) =>
-      ImportDiagnosticSchema.parse(d),
+      importDiagnosticSchema.parse(d),
     );
     const notesMasterDiags = diags.filter(
       (d): d is Extract<typeof d, { readonly code: "unsupported-mechanism" }> =>

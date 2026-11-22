@@ -21,7 +21,10 @@ import {
   readShapeSp,
   type BoxCoordinateMapper,
 } from "../shape/shape-import.ts";
-import { consumeNonPlaceholderNvPr } from "../shared/identity.ts";
+import {
+  attachDeferredSlideLink,
+  consumeNonPlaceholderNvPr,
+} from "../shared/identity.ts";
 import { textBoxImportHandler } from "../text/text-import.ts";
 import {
   createGroupNode,
@@ -144,7 +147,7 @@ export function readGroupSp(
   context: ShapeTreeImportContext,
   parentMapper: BoxCoordinateMapper = identityMapper,
 ): ShapeTreeImportOutcome {
-  const { cursor, part, slideIndex, package: pkg } = context;
+  const { cursor, part, slideIndex } = context;
   const diagnostics: ImportDiagnostic[] = [];
 
   const nvGrpSpPr = cursor.child(P_NS, "nvGrpSpPr");
@@ -159,13 +162,8 @@ export function readGroupSp(
   }
 
   const cNvPr = nvGrpSpPr.child(P_NS, "cNvPr");
-  const { objectId, objectName, link } = readNonVisualCommonProperties(
-    cNvPr,
-    pkg,
-    part,
-    slideIndex,
-    diagnostics,
-  );
+  const { objectId, objectName, link, deferredSlideLink } =
+    readNonVisualCommonProperties(cNvPr, context, diagnostics);
   nvGrpSpPr.ignoreEmptyChild(P_NS, "cNvGrpSpPr");
   consumeNonPlaceholderNvPr(nvGrpSpPr);
 
@@ -442,6 +440,7 @@ export function readGroupSp(
 
   const node = createGroupNode(props);
   node.append(...members);
+  attachDeferredSlideLink(node, deferredSlideLink, context);
   return { node, diagnostics };
 }
 

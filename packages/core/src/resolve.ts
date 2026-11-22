@@ -32,6 +32,9 @@ import { getMorphKeyLabel, isMorphKey, type MorphKey } from "#/morph.ts";
 import {
   matchMasterPlaceholderSpec,
   nativePlaceholderRefSchema,
+  type MasterPlaceholderMap,
+  type MasterTextStyles,
+  type PlaceholderMap,
 } from "#/placeholders.ts";
 import { createBuildQuery, type QueryContentNode } from "#/query.ts";
 import {
@@ -48,9 +51,16 @@ import {
 import { resolveOptionsSchema } from "#/stage-options.ts";
 import {
   createThemeContext,
+  defaultColorMap,
+  defineTheme,
+  isTheme,
   textStyleFrom,
+  type ColorMap,
+  type ColorMapOverride,
+  type Theme,
   type ThemeContext,
   type ThemeInput,
+  type ThemeOverride,
   type ThemeScope,
 } from "#/theme.ts";
 import type {
@@ -95,15 +105,41 @@ type ParsedSlideNode = {
   readonly index: number;
   readonly layoutKey?: string;
   readonly hasExplicitLayout: boolean;
+  readonly colorMapOverride?: ColorMapOverride;
+  readonly themeOverride?: ThemeOverride;
   readonly section?: string;
   readonly hidden?: boolean;
 };
 
+type ParsedLayoutSpec = {
+  readonly data: Omit<
+    InternalResolvedSlideLayout,
+    "key" | "masterKey" | "placeholders" | "slideCapabilities"
+  >;
+  readonly placeholders?: PlaceholderMap;
+  readonly key: string;
+  readonly path: string;
+  readonly props: Readonly<Record<string, unknown>>;
+};
+
+type ParsedMasterSpec = {
+  readonly key: string;
+  readonly id: string;
+  readonly name?: string;
+  readonly preserve?: boolean;
+  readonly theme: Theme;
+  readonly colorMap: ColorMap;
+  readonly explicitColorMap?: ColorMap;
+  readonly style?: Readonly<Record<string, unknown>>;
+  readonly placeholders?: MasterPlaceholderMap;
+  readonly textStyles?: MasterTextStyles;
+  readonly path: string;
+  readonly props: Readonly<Record<string, unknown>>;
+  readonly layouts: readonly ParsedLayoutSpec[];
+};
+
 type ParsedDocument = {
-  readonly masters: readonly InternalResolvedSlideMaster[];
-  readonly masterObservations: readonly SlideMasterObservation[];
-  readonly masterByKey: ReadonlyMap<string, InternalResolvedSlideMaster>;
-  readonly layoutByKey: ReadonlyMap<string, InternalResolvedSlideLayout>;
+  readonly masters: readonly ParsedMasterSpec[];
   readonly layoutIdByKey: ReadonlyMap<string, string>;
   readonly slides: readonly ParsedSlideNode[];
   readonly sections: readonly ResolvedSectionRecord[];
@@ -385,6 +421,7 @@ function unknownPropertyKey(
 function resolveSlides(
   container: DeclarationContainer,
   modules: BoundCapabilityRegistry,
+  defaultDeckTheme: Theme,
 ): ParsedDocument {
   const decks = childNodes(container.children);
   if (decks.length !== 1 || decks[0]?.type !== "deck") {
@@ -435,10 +472,12 @@ function resolveSlides(
   );
 
   const authorIds = new Set<string>();
-  const masters: InternalResolvedSlideMaster[] = [];
-  const masterObservations: SlideMasterObservation[] = [];
-  const masterByKey = new Map<string, InternalResolvedSlideMaster>();
-  const layoutByKey = new Map<string, InternalResolvedSlideLayout>();
+  const slideProperties = [...modules.slideModules.values()].flatMap(
+    (module) => module.slideProps ?? [module.slideProp],
+  );
+  const slidePropertySet = new Set(slideProperties);
+  const knownTrimmedSlideProps = new Set(["transition", "advanceAfter"]);
+  const masters: ParsedMasterSpec[] = [];
   const layoutKeyByNode = new Map<DeclarationNode, string>();
   const layoutKeysByDefinition = new Map<SlideLayoutDefinition, string[]>();
   const layoutIdByKey = new Map<string, string>();
@@ -457,11 +496,22 @@ function resolveSlides(
       "name",
       "preserve",
       "theme",
+      "colorMap",
       "style",
       "placeholders",
       "textStyles",
+      ...slideProperties,
     ]);
     if (unknownMasterProp !== undefined) {
+      if (knownTrimmedSlideProps.has(unknownMasterProp)) {
+        throw new BuildError([
+          diagnostic(
+            masterPath,
+            "missing-capability",
+            `No capability module registered for SlideMaster.${unknownMasterProp}`,
+          ),
+        ]);
+      }
       throw new BuildError([
         diagnostic(
           masterPath,
@@ -475,6 +525,7 @@ function resolveSlides(
       "id",
       "name",
       "preserve",
+      "colorMap",
       "placeholders",
       "textStyles",
     ] as const) {
@@ -493,16 +544,29 @@ function resolveSlides(
         ),
       ]);
     }
-    let masterTheme: ThemeContext;
-    try {
-      masterTheme = createThemeContext(
-        (masterNode.props["theme"] as ThemeInput | undefined) ??
-          (deck.props["theme"] as ThemeInput | undefined),
-        masterNode.props["style"] as Record<string, unknown> | undefined,
-      );
-    } catch (error) {
-      if (!(error instanceof CapabilityError)) throw error;
-      throw new BuildError([diagnostic(masterPath, error.code, error.message)]);
+    let masterTheme: Theme;
+    const rawMasterTheme = masterNode.props["theme"];
+    if (rawMasterTheme === undefined) {
+      masterTheme = defaultDeckTheme;
+    } else if (isTheme(rawMasterTheme)) {
+      masterTheme = rawMasterTheme;
+    } else {
+      try {
+        masterTheme = defineTheme(rawMasterTheme as ThemeInput);
+      } catch (error) {
+        if (error instanceof CapabilityError) {
+          throw new BuildError([
+            diagnostic(masterPath, error.code, error.message),
+          ]);
+        }
+        throw new BuildError([
+          diagnostic(
+            masterPath,
+            "invalid-theme",
+            error instanceof Error ? error.message : String(error),
+          ),
+        ]);
+      }
     }
     if (masterAuthorId !== undefined) {
       if (!xml10StringSchema.safeParse(masterAuthorId).success) {
@@ -585,8 +649,7 @@ function resolveSlides(
     }
 
     const masterLayoutIds = new Set<string>();
-    const resolvedLayouts: InternalResolvedSlideLayout[] = [];
-    const observedLayouts: SlideLayoutObservation[] = [];
+    const resolvedLayouts: ParsedLayoutSpec[] = [];
 
     for (const [layoutIndex, layoutNode] of layoutNodes.entries()) {
       const rawLayoutPath = `${masterPath}/slide-layout[${layoutIndex + 1}]`;
@@ -621,8 +684,20 @@ function resolveSlides(
         "showMasterShapes",
         "showMasterPlaceholderAnimations",
         "placeholders",
+        "colorMapOverride",
+        "themeOverride",
+        ...slideProperties,
       ]);
       if (unknownLayoutProp !== undefined) {
+        if (knownTrimmedSlideProps.has(unknownLayoutProp)) {
+          throw new BuildError([
+            diagnostic(
+              rawLayoutPath,
+              "missing-capability",
+              `No capability module registered for SlideLayout.${unknownLayoutProp}`,
+            ),
+          ]);
+        }
         throw new BuildError([
           diagnostic(
             rawLayoutPath,
@@ -631,8 +706,26 @@ function resolveSlides(
           ),
         ]);
       }
+      const layoutDataInput: Record<string, unknown> = {};
+      for (const key of [
+        "id",
+        "name",
+        "type",
+        "preserve",
+        "matchingName",
+        "userDrawn",
+        "showMasterShapes",
+        "showMasterPlaceholderAnimations",
+        "placeholders",
+        "colorMapOverride",
+        "themeOverride",
+      ] as const) {
+        if (Object.hasOwn(effectiveLayoutProps, key)) {
+          layoutDataInput[key] = effectiveLayoutProps[key];
+        }
+      }
       const parsedLayout =
-        slideLayoutDataPropsSchema.safeParse(effectiveLayoutProps);
+        slideLayoutDataPropsSchema.safeParse(layoutDataInput);
       if (!parsedLayout.success) {
         throw new BuildError([
           diagnostic(
@@ -729,7 +822,7 @@ function resolveSlides(
 
       const layoutData: Omit<
         InternalResolvedSlideLayout,
-        "key" | "masterKey" | "placeholders"
+        "key" | "masterKey" | "placeholders" | "slideCapabilities"
       > = {
         id: layoutId,
         ...(parsedLayout.data.name === undefined
@@ -756,23 +849,41 @@ function resolveSlides(
               showMasterPlaceholderAnimations:
                 parsedLayout.data.showMasterPlaceholderAnimations,
             }),
+        ...(parsedLayout.data.colorMapOverride === undefined
+          ? {}
+          : { colorMapOverride: parsedLayout.data.colorMapOverride }),
+        ...(parsedLayout.data.themeOverride === undefined
+          ? {}
+          : { themeOverride: parsedLayout.data.themeOverride }),
       };
-      const resolvedLayout: InternalResolvedSlideLayout = {
+      const layoutSlideProps: Record<string, unknown> = {};
+      for (const prop of slidePropertySet) {
+        if (Object.hasOwn(effectiveLayoutProps, prop)) {
+          layoutSlideProps[prop] = effectiveLayoutProps[prop];
+        }
+      }
+      resolvedLayouts.push({
         key: layoutKey,
-        masterKey,
-        ...layoutData,
+        path: layoutPath,
+        data: layoutData,
         ...(parsedLayout.data.placeholders === undefined
           ? {}
           : { placeholders: parsedLayout.data.placeholders }),
-      };
-      layoutByKey.set(layoutKey, resolvedLayout);
-      resolvedLayouts.push(resolvedLayout);
-      observedLayouts.push(layoutData);
+        props: layoutSlideProps,
+      });
     }
 
-    const resolvedMaster: InternalResolvedSlideMaster = {
+    const masterSlideProps: Record<string, unknown> = {};
+    for (const prop of slidePropertySet) {
+      if (Object.hasOwn(masterNode.props, prop)) {
+        masterSlideProps[prop] = masterNode.props[prop];
+      }
+    }
+    const masterStyleProp = masterNode.props["style"];
+    masters.push({
       key: masterKey,
       id: masterId,
+      path: masterPath,
       ...(parsedMaster.data.name === undefined
         ? {}
         : { name: parsedMaster.data.name }),
@@ -780,25 +891,24 @@ function resolveSlides(
         ? {}
         : { preserve: parsedMaster.data.preserve }),
       theme: masterTheme,
+      colorMap: parsedMaster.data.colorMap ?? defaultColorMap,
+      ...(parsedMaster.data.colorMap === undefined
+        ? {}
+        : { explicitColorMap: parsedMaster.data.colorMap }),
+      ...(masterStyleProp !== undefined &&
+      typeof masterStyleProp === "object" &&
+      masterStyleProp !== null &&
+      !Array.isArray(masterStyleProp)
+        ? { style: masterStyleProp as Readonly<Record<string, unknown>> }
+        : {}),
       ...(parsedMaster.data.placeholders === undefined
         ? {}
         : { placeholders: parsedMaster.data.placeholders }),
       ...(parsedMaster.data.textStyles === undefined
         ? {}
         : { textStyles: parsedMaster.data.textStyles }),
+      props: masterSlideProps,
       layouts: resolvedLayouts,
-    };
-    masterByKey.set(masterKey, resolvedMaster);
-    masters.push(resolvedMaster);
-    masterObservations.push({
-      id: masterId,
-      ...(parsedMaster.data.name === undefined
-        ? {}
-        : { name: parsedMaster.data.name }),
-      ...(parsedMaster.data.preserve === undefined
-        ? {}
-        : { preserve: parsedMaster.data.preserve }),
-      layouts: observedLayouts,
     });
   }
 
@@ -865,11 +975,8 @@ function resolveSlides(
       diagnostic("deck", "missing-slide", "Deck requires at least one Slide"),
     ]);
   }
-  const slideProperties = [...modules.slideModules.values()].flatMap(
-    (module) => module.slideProps ?? [module.slideProp],
-  );
   const slides = candidates.map(({ node, section, sectionIndex }, index) => {
-    const { id, hidden } = parseSlideCoreProps(
+    const { id, hidden, colorMapOverride, themeOverride } = parseSlideCoreProps(
       node.props,
       index,
       slideProperties,
@@ -956,6 +1063,8 @@ function resolveSlides(
       index: index + 1,
       ...(layoutKey === undefined ? {} : { layoutKey }),
       hasExplicitLayout: rawLayout !== undefined,
+      ...(colorMapOverride === undefined ? {} : { colorMapOverride }),
+      ...(themeOverride === undefined ? {} : { themeOverride }),
       ...(section === undefined ? {} : { section }),
       ...(hidden === undefined ? {} : { hidden }),
     };
@@ -966,9 +1075,6 @@ function resolveSlides(
   });
   return {
     masters,
-    masterObservations,
-    masterByKey,
-    layoutByKey,
     layoutIdByKey,
     slides,
     sections: sections.map(({ name, slideIndexes }) => ({
@@ -2210,7 +2316,7 @@ function buildSlidePlaceholderContexts(args: {
       contexts.set(child, {
         ...(typeof rawKey === "string" ? { key: rawKey } : {}),
         nativeRef,
-        masterTheme: masterSpec.theme,
+        masterTheme: masterSpec.themeContext,
         ...(masterSpec.textStyles === undefined
           ? {}
           : { masterTextStyles: masterSpec.textStyles }),
@@ -2220,6 +2326,104 @@ function buildSlidePlaceholderContexts(args: {
     },
   );
   return contexts;
+}
+
+type OwnerSlideCapabilityResult = {
+  readonly slideCapabilities: readonly ResolvedSlideCapabilityRecord[];
+  readonly capabilities: Readonly<Record<string, unknown>>;
+  readonly continuityByDeclaration: ReadonlyMap<string, boolean | undefined>;
+};
+
+function resolveOwnerSlideCapabilities(args: {
+  readonly type: "slide-master" | "slide-layout";
+  readonly props: Readonly<Record<string, unknown>>;
+  readonly path: string;
+  readonly modules: BoundCapabilityRegistry;
+  readonly dimensions: ResolutionDimensions;
+  readonly document: DocumentResolveState;
+  readonly options: ResolveOptions;
+  readonly theme: ThemeContext;
+}): OwnerSlideCapabilityResult {
+  const { type, props, path, modules, dimensions, document, options, theme } =
+    args;
+  const slideCapabilities: ResolvedSlideCapabilityRecord[] = [];
+  const capabilities: Record<string, unknown> = {};
+  const continuityByDeclaration = new Map<string, boolean | undefined>();
+  const diagnostics: Diagnostic[] = [];
+  const input: CapabilityInput = { type, props, children: [] };
+
+  for (const module of modules.slideModules.values()) {
+    const slideProps = module.slideProps ?? [module.slideProp];
+    const hasSlideProps = slideProps.some((property) =>
+      Object.hasOwn(props, property),
+    );
+    if (!hasSlideProps) continue;
+    try {
+      const boundSlide = validateBoundSlideCapability(
+        module.bindSlide(input, {
+          path,
+          dimensions,
+          theme,
+          options,
+          slideNumber: 0,
+          contributions: [],
+        }),
+      );
+      continuityByDeclaration.set(
+        module.declaration,
+        boundSlide.continuity?.matchSourceKinds,
+      );
+      const resolvedSlideCap: ResolvedSlideCapabilityOutput =
+        boundSlide.resolveSlide({
+          path,
+          dimensions,
+          contributions: [],
+          children: [],
+          theme,
+          options,
+          slideNumber: 0,
+        });
+      if (resolvedSlideCap.observation !== undefined) {
+        capabilities[module.declaration] = resolvedSlideCap.observation;
+      }
+      for (const extension of resolvedSlideCap.extensions) {
+        document.usedExtensions.add(extension);
+      }
+      recordResourceClaims(
+        resolvedSlideCap.resourceClaims,
+        document,
+        diagnostics,
+        path,
+      );
+      recordCapabilityWarnings(resolvedSlideCap.warnings, document, path);
+      slideCapabilities.push({
+        declaration: module.declaration,
+        slot: module.slot,
+        hasSlideProps,
+        path,
+        theme,
+        extensions: resolvedSlideCap.extensions,
+        emit: (emitContext) => resolvedSlideCap.emit(emitContext),
+        ...(resolvedSlideCap.paint === undefined
+          ? {}
+          : {
+              paint: (paintContext) => resolvedSlideCap.paint!(paintContext),
+            }),
+      });
+    } catch (error) {
+      diagnostics.push(
+        error instanceof CapabilityError
+          ? diagnostic(error.path ?? path, error.code, error.message)
+          : diagnostic(
+              path,
+              "capability-failure",
+              error instanceof Error ? error.message : String(error),
+            ),
+      );
+    }
+  }
+  if (diagnostics.length > 0) throw new BuildError(diagnostics);
+  return { slideCapabilities, capabilities, continuityByDeclaration };
 }
 
 function resolveSlideDeclaration(
@@ -2232,6 +2436,7 @@ function resolveSlideDeclaration(
   layoutIdByKey: ReadonlyMap<string, string>,
   layoutByKey: ReadonlyMap<string, InternalResolvedSlideLayout>,
   masterByKey: ReadonlyMap<string, InternalResolvedSlideMaster>,
+  inheritedContinuity?: ReadonlyMap<string, boolean | undefined>,
 ): ResolvedSlideResult {
   const {
     node,
@@ -2355,7 +2560,12 @@ function resolveSlideDeclaration(
     const hasSlideProps = slideProps.some((property) =>
       Object.hasOwn(node.props, property),
     );
-    if (!module.always && !hasSlideProps) continue;
+    if (!module.always && !hasSlideProps) {
+      if (inheritedContinuity?.get(module.declaration) === true) {
+        slide.matchContinuityKinds = true;
+      }
+      continue;
+    }
     try {
       const boundSlide = validateBoundSlideCapability(
         module.bindSlide(input, {
@@ -2367,7 +2577,10 @@ function resolveSlideDeclaration(
           contributions,
         }),
       );
-      if (boundSlide.continuity?.matchSourceKinds === true) {
+      const effectiveContinuity =
+        boundSlide.continuity?.matchSourceKinds ??
+        inheritedContinuity?.get(module.declaration);
+      if (effectiveContinuity === true) {
         slide.matchContinuityKinds = true;
       }
       const resolvedSlideCap: ResolvedSlideCapabilityOutput =
@@ -2471,6 +2684,12 @@ function resolveSlideDeclaration(
       ...(authorId === undefined ? {} : { authorId }),
       index,
       ...(layoutKey === undefined ? {} : { layoutKey }),
+      ...(parsed.colorMapOverride === undefined
+        ? {}
+        : { colorMapOverride: parsed.colorMapOverride }),
+      ...(parsed.themeOverride === undefined
+        ? {}
+        : { themeOverride: parsed.themeOverride }),
       ...(section === undefined ? {} : { section }),
       hidden,
       content: resolvedChildren.content,
@@ -2485,33 +2704,31 @@ function resolveDocument(
   modules: BoundCapabilityRegistry,
   options: ResolveOptions,
 ): Resolution {
-  const parsed = resolveSlides(container, modules);
-  const {
-    masters,
-    masterObservations,
-    masterByKey,
-    layoutByKey,
-    layoutIdByKey,
-    slides,
-    sections,
-  } = parsed;
-  const deck = childNodes(container.children)[0];
-  if (deck === undefined)
+  const decks = childNodes(container.children);
+  if (decks.length !== 1 || decks[0]?.type !== "deck") {
     throw new BuildError([
-      diagnostic("deck", "document-root", "Missing Deck root component"),
+      diagnostic(
+        "deck",
+        "document-root",
+        "Build content must have exactly one Deck root component",
+      ),
     ]);
+  }
+  const deck = decks[0];
   const { width, height, title } = parseDeckProps(deck.props);
   const size: ResolutionDimensions = { width, height };
   let theme: ThemeContext;
   try {
     theme = createThemeContext(
-      deck.props["theme"] as ThemeInput | undefined,
+      deck.props["theme"] as ThemeInput | Theme | undefined,
       deck.props["style"] as Record<string, unknown> | undefined,
     );
   } catch (error) {
     if (!(error instanceof CapabilityError)) throw error;
     throw new BuildError([diagnostic("deck", error.code, error.message)]);
   }
+  const parsed = resolveSlides(container, modules, theme.theme);
+  const { masters: parsedMasters, layoutIdByKey, slides, sections } = parsed;
   const slideIndexById = new Map(
     slides.map((slide) => [slide.id, slide.index] as const),
   );
@@ -2528,19 +2745,196 @@ function resolveDocument(
     slideIndexById,
   };
 
-  const resolvedSlides = slides.map((parsedSlide) =>
-    resolveSlideDeclaration(
+  const masters: InternalResolvedSlideMaster[] = [];
+  const masterObservations: SlideMasterObservation[] = [];
+  const masterByKey = new Map<string, InternalResolvedSlideMaster>();
+  const masterByLayoutKey = new Map<string, InternalResolvedSlideMaster>();
+  const layoutByKey = new Map<string, InternalResolvedSlideLayout>();
+  const continuityByLayoutKey = new Map<
+    string,
+    ReadonlyMap<string, boolean | undefined>
+  >();
+
+  for (const parsedMaster of parsedMasters) {
+    const mergedMasterStyle =
+      parsedMaster.style === undefined
+        ? (deck.props["style"] as Record<string, unknown> | undefined)
+        : {
+            ...(deck.props["style"] as Record<string, unknown> | undefined),
+            ...parsedMaster.style,
+          };
+    let masterThemeBase: ThemeContext;
+    try {
+      masterThemeBase = createThemeContext(
+        parsedMaster.theme,
+        mergedMasterStyle,
+        { colorMap: parsedMaster.colorMap },
+      );
+    } catch (error) {
+      if (!(error instanceof CapabilityError)) throw error;
+      throw new BuildError([
+        diagnostic(parsedMaster.path, error.code, error.message),
+      ]);
+    }
+    const masterCapResult = resolveOwnerSlideCapabilities({
+      type: "slide-master",
+      props: parsedMaster.props,
+      path: parsedMaster.path,
+      modules,
+      dimensions: size,
+      document,
+      options,
+      theme: masterThemeBase,
+    });
+    const resolvedLayouts: InternalResolvedSlideLayout[] = [];
+    const observedLayouts: SlideLayoutObservation[] = [];
+
+    for (const parsedLayout of parsedMaster.layouts) {
+      let layoutThemeBase = masterThemeBase;
+      if (
+        parsedLayout.data.themeOverride !== undefined ||
+        parsedLayout.data.colorMapOverride !== undefined
+      ) {
+        layoutThemeBase = layoutThemeBase.withNativeOverrides(
+          parsedLayout.data.themeOverride,
+          parsedLayout.data.colorMapOverride,
+        );
+      }
+      const layoutCapResult = resolveOwnerSlideCapabilities({
+        type: "slide-layout",
+        props: parsedLayout.props,
+        path: parsedLayout.path,
+        modules,
+        dimensions: size,
+        document,
+        options,
+        theme: layoutThemeBase,
+      });
+      const mergedContinuity = new Map<string, boolean | undefined>(
+        masterCapResult.continuityByDeclaration,
+      );
+      for (const [decl, match] of layoutCapResult.continuityByDeclaration) {
+        if (match !== undefined) {
+          mergedContinuity.set(decl, match);
+        }
+      }
+      continuityByLayoutKey.set(parsedLayout.key, mergedContinuity);
+
+      const resolvedLayout: InternalResolvedSlideLayout = {
+        key: parsedLayout.key,
+        masterKey: parsedMaster.key,
+        ...parsedLayout.data,
+        ...(parsedLayout.placeholders === undefined
+          ? {}
+          : { placeholders: parsedLayout.placeholders }),
+        ...(layoutCapResult.slideCapabilities.length > 0
+          ? { slideCapabilities: layoutCapResult.slideCapabilities }
+          : {}),
+      };
+      resolvedLayouts.push(resolvedLayout);
+      layoutByKey.set(parsedLayout.key, resolvedLayout);
+      observedLayouts.push({
+        ...parsedLayout.data,
+        ...(Object.keys(layoutCapResult.capabilities).length > 0
+          ? { capabilities: layoutCapResult.capabilities }
+          : {}),
+      });
+    }
+
+    const resolvedMaster: InternalResolvedSlideMaster = {
+      key: parsedMaster.key,
+      id: parsedMaster.id,
+      ...(parsedMaster.name === undefined ? {} : { name: parsedMaster.name }),
+      ...(parsedMaster.preserve === undefined
+        ? {}
+        : { preserve: parsedMaster.preserve }),
+      theme: parsedMaster.theme,
+      themeContext: masterThemeBase,
+      colorMap: parsedMaster.colorMap,
+      ...(parsedMaster.placeholders === undefined
+        ? {}
+        : { placeholders: parsedMaster.placeholders }),
+      ...(parsedMaster.textStyles === undefined
+        ? {}
+        : { textStyles: parsedMaster.textStyles }),
+      ...(masterCapResult.slideCapabilities.length > 0
+        ? { slideCapabilities: masterCapResult.slideCapabilities }
+        : {}),
+      layouts: resolvedLayouts,
+    };
+    masterByKey.set(parsedMaster.key, resolvedMaster);
+    masters.push(resolvedMaster);
+    for (const resolvedLayout of resolvedLayouts) {
+      masterByLayoutKey.set(resolvedLayout.key, resolvedMaster);
+    }
+    masterObservations.push({
+      id: parsedMaster.id,
+      ...(parsedMaster.name === undefined ? {} : { name: parsedMaster.name }),
+      ...(parsedMaster.preserve === undefined
+        ? {}
+        : { preserve: parsedMaster.preserve }),
+      ...(parsedMaster.explicitColorMap === undefined
+        ? {}
+        : { colorMap: parsedMaster.explicitColorMap }),
+      ...(Object.keys(masterCapResult.capabilities).length > 0
+        ? { capabilities: masterCapResult.capabilities }
+        : {}),
+      layouts: observedLayouts,
+    });
+  }
+
+  const resolvedSlides = slides.map((parsedSlide) => {
+    const boundMaster =
+      parsedSlide.layoutKey === undefined
+        ? undefined
+        : masterByLayoutKey.get(parsedSlide.layoutKey);
+    const boundLayout =
+      parsedSlide.layoutKey === undefined
+        ? undefined
+        : layoutByKey.get(parsedSlide.layoutKey);
+    let slideThemeBase: ThemeContext;
+    if (boundMaster !== undefined) {
+      slideThemeBase = createThemeContext(
+        boundMaster.theme,
+        deck.props["style"] as Record<string, unknown> | undefined,
+        { colorMap: boundMaster.colorMap },
+      );
+      if (
+        boundLayout?.themeOverride !== undefined ||
+        boundLayout?.colorMapOverride !== undefined
+      ) {
+        slideThemeBase = slideThemeBase.withNativeOverrides(
+          boundLayout.themeOverride,
+          boundLayout.colorMapOverride,
+        );
+      }
+    } else {
+      slideThemeBase = theme;
+    }
+    if (
+      parsedSlide.themeOverride !== undefined ||
+      parsedSlide.colorMapOverride !== undefined
+    ) {
+      slideThemeBase = slideThemeBase.withNativeOverrides(
+        parsedSlide.themeOverride,
+        parsedSlide.colorMapOverride,
+      );
+    }
+    return resolveSlideDeclaration(
       parsedSlide,
       modules,
       size,
       document,
       options,
-      theme,
+      slideThemeBase,
       layoutIdByKey,
       layoutByKey,
       masterByKey,
-    ),
-  );
+      parsedSlide.layoutKey === undefined
+        ? undefined
+        : continuityByLayoutKey.get(parsedSlide.layoutKey),
+    );
+  });
 
   const morphDiagnostics: Diagnostic[] = [];
   for (let index = 0; index < slides.length; index += 1) {

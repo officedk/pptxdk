@@ -324,7 +324,7 @@ const defaultTextStyle: TextStyle = Object.freeze({
   fontSize: 24,
   fontWeight: "normal",
   fontStyle: "normal",
-  color: "dk1",
+  color: "tx1",
 });
 
 function record(value: unknown): value is Record<string, unknown> {
@@ -2938,7 +2938,7 @@ export function renderGlyphPathSvg(
   if (glyph.path === "") return "";
   const color = isResolvedColor(glyph.color)
     ? glyph.color
-    : theme.resolveColor(glyph.color ?? "dk1");
+    : theme.resolveColor(glyph.color ?? "tx1");
   return `<path d="${xmlEscape(glyph.path)}" fill="#${color.hex}" fill-opacity="${color.alpha ?? 1}" transform="translate(${glyph.x} ${glyph.y}) scale(${glyph.scale} ${-glyph.scale})"/>`;
 }
 
@@ -2948,7 +2948,7 @@ function renderDecorationRectSvg(
 ): string {
   const color = isResolvedColor(deco.color)
     ? deco.color
-    : theme.resolveColor(deco.color ?? "dk1");
+    : theme.resolveColor(deco.color ?? "tx1");
   return `<rect x="${roundSvgNumber(deco.x)}" y="${roundSvgNumber(deco.y)}" width="${roundSvgNumber(deco.width)}" height="${roundSvgNumber(deco.height)}" fill="#${color.hex}" fill-opacity="${color.alpha ?? 1}"/>`;
 }
 

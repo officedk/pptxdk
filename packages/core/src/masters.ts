@@ -10,7 +10,16 @@ import {
   type MasterTextStyles,
   type PlaceholderMap,
 } from "#/placeholders.ts";
-import type { TextStyle, ThemeInput } from "#/theme.ts";
+import {
+  colorMapOverrideSchema,
+  colorMapSchema,
+  themeOverrideSchema,
+  type ColorMapOverride,
+  type TextStyle,
+  type Theme,
+  type ThemeInput,
+  type ThemeOverride,
+} from "#/theme.ts";
 
 /** Official OOXML ST_SlideLayoutType enumeration values (ECMA-376 §19.7.15). */
 export const slideLayoutTypeValues = [
@@ -62,12 +71,15 @@ export const slideMasterDataPropsSchema = z
     preserve: z.boolean().optional(),
     placeholders: masterPlaceholderMapSchema.optional(),
     textStyles: masterTextStylesSchema.optional(),
+    colorMap: colorMapSchema.optional(),
+    transition: z.unknown().optional(),
+    advanceAfter: z.number().optional(),
   })
   .readonly();
 export type SlideMasterDataProps = z.infer<typeof slideMasterDataPropsSchema>;
 
 export type SlideMasterProps = SlideMasterDataProps & {
-  readonly theme?: ThemeInput | undefined;
+  readonly theme?: ThemeInput | Theme | undefined;
   readonly style?: TextStyle | undefined;
   readonly placeholders?: MasterPlaceholderMap | undefined;
   readonly textStyles?: MasterTextStyles | undefined;
@@ -84,6 +96,10 @@ export const slideLayoutDataPropsSchema = z
     showMasterShapes: z.boolean().optional(),
     showMasterPlaceholderAnimations: z.boolean().optional(),
     placeholders: placeholderMapSchema.optional(),
+    colorMapOverride: colorMapOverrideSchema.optional(),
+    themeOverride: themeOverrideSchema.optional(),
+    transition: z.unknown().optional(),
+    advanceAfter: z.number().optional(),
   })
   .readonly();
 
@@ -108,6 +124,9 @@ export const slideLayoutObservationSchema = z
     userDrawn: z.boolean().optional(),
     showMasterShapes: z.boolean().optional(),
     showMasterPlaceholderAnimations: z.boolean().optional(),
+    colorMapOverride: colorMapOverrideSchema.optional(),
+    themeOverride: themeOverrideSchema.optional(),
+    capabilities: z.record(z.string(), z.unknown()).readonly().optional(),
   })
   .readonly();
 export type SlideLayoutObservation = z.infer<
@@ -119,6 +138,8 @@ export const slideMasterObservationSchema = z
     id: z.string().min(1),
     name: z.string().optional(),
     preserve: z.boolean().optional(),
+    colorMap: colorMapSchema.optional(),
+    capabilities: z.record(z.string(), z.unknown()).readonly().optional(),
     layouts: z.array(slideLayoutObservationSchema).readonly(),
   })
   .readonly();
@@ -143,6 +164,10 @@ export type SlideLayoutDefinition<P extends PlaceholderMap = PlaceholderMap> = {
   readonly showMasterShapes?: boolean | undefined;
   readonly showMasterPlaceholderAnimations?: boolean | undefined;
   readonly placeholders?: P | undefined;
+  readonly colorMapOverride?: ColorMapOverride | undefined;
+  readonly themeOverride?: ThemeOverride | undefined;
+  readonly transition?: unknown;
+  readonly advanceAfter?: number | undefined;
 };
 
 export type SlideLayoutProps<P extends PlaceholderMap = PlaceholderMap> =
@@ -210,5 +235,17 @@ export function defineSlideLayout<
     ...(frozenProps.placeholders === undefined
       ? {}
       : { placeholders: frozenProps.placeholders }),
+    ...(frozenProps.colorMapOverride === undefined
+      ? {}
+      : { colorMapOverride: frozenProps.colorMapOverride }),
+    ...(frozenProps.themeOverride === undefined
+      ? {}
+      : { themeOverride: frozenProps.themeOverride }),
+    ...(frozenProps.transition === undefined
+      ? {}
+      : { transition: frozenProps.transition }),
+    ...(frozenProps.advanceAfter === undefined
+      ? {}
+      : { advanceAfter: frozenProps.advanceAfter }),
   });
 }

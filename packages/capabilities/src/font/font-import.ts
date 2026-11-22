@@ -1,10 +1,12 @@
 import {
   defaultTheme,
   defineTheme,
+  isTheme,
   type Font,
   type FontFace,
   type PlaceholderListStyles,
   type PlaceholderMap,
+  type Theme,
   type ThemeInput,
 } from "@pptxdk/core/capability";
 import { CommonNode } from "@pptxdk/core/document";
@@ -347,16 +349,33 @@ export function readEmbeddedFontsIntoDeck(
   };
 
   let masterFallbackTheme: ThemeInput | undefined;
+  const mutatedThemes = new Set<Theme>();
   for (const child of deckNode.children) {
     if (child instanceof CommonNode && child.type === "slide-master") {
-      const masterTheme = child.props["theme"] as ThemeInput | undefined;
+      const masterTheme = child.props["theme"] as
+        | Theme
+        | ThemeInput
+        | undefined;
       masterFallbackTheme ??= masterTheme;
-      const updatedMasterTheme = attachFontsToThemeInput(masterTheme);
-      if (
-        updatedMasterTheme.changed &&
-        updatedMasterTheme.theme !== undefined
-      ) {
-        child.set({ theme: updatedMasterTheme.theme });
+      if (isTheme(masterTheme) && masterTheme !== defaultTheme) {
+        if (!mutatedThemes.has(masterTheme)) {
+          mutatedThemes.add(masterTheme);
+          const updatedMasterTheme = attachFontsToThemeInput(masterTheme);
+          if (
+            updatedMasterTheme.changed &&
+            updatedMasterTheme.theme !== undefined
+          ) {
+            masterTheme.set({ fonts: updatedMasterTheme.theme.fonts });
+          }
+        }
+      } else {
+        const updatedMasterTheme = attachFontsToThemeInput(masterTheme);
+        if (
+          updatedMasterTheme.changed &&
+          updatedMasterTheme.theme !== undefined
+        ) {
+          child.set({ theme: updatedMasterTheme.theme });
+        }
       }
     }
   }

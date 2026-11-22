@@ -4,9 +4,11 @@ import {
   nativePlaceholderRefSchema,
   placeholderRoleSchema,
   placeholderStyleSchema,
+  schemeColorNameSchema,
   type ColorValue,
   type NativeColorSlot,
   type NativePlaceholderRef,
+  type SchemeColorName,
   type Shadow,
   type TextAlignment,
   type TextStyle,
@@ -137,46 +139,8 @@ const SrgbColorSchema = z.object({
 });
 
 const SchemeColorSchema = z.object({
-  val: z.enum([
-    "tx1",
-    "bg1",
-    "tx2",
-    "bg2",
-    "dk1",
-    "lt1",
-    "dk2",
-    "lt2",
-    "accent1",
-    "accent2",
-    "accent3",
-    "accent4",
-    "accent5",
-    "accent6",
-    "hlink",
-    "folHlink",
-  ]),
+  val: schemeColorNameSchema,
 });
-
-const schemeToNativeSlot: Readonly<
-  Record<z.infer<typeof SchemeColorSchema>["val"], NativeColorSlot>
-> = {
-  tx1: "dk1",
-  bg1: "lt1",
-  tx2: "dk2",
-  bg2: "lt2",
-  dk1: "dk1",
-  lt1: "lt1",
-  dk2: "dk2",
-  lt2: "lt2",
-  accent1: "accent1",
-  accent2: "accent2",
-  accent3: "accent3",
-  accent4: "accent4",
-  accent5: "accent5",
-  accent6: "accent6",
-  hlink: "hlink",
-  folHlink: "folHlink",
-};
 
 const anchorToVerticalAlign: Readonly<
   Record<"t" | "ctr" | "b", NonNullable<TextStyle["verticalAlign"]>>
@@ -280,7 +244,6 @@ function readColorElement(
   part: string,
   slideIndex: number,
   diagnostics: ImportDiagnostic[],
-  clrMap?: Readonly<Record<string, NativeColorSlot>>,
 ): ColorValue | undefined {
   const srgb = containerCursor.child(A_NS, "srgbClr");
   const scheme =
@@ -289,7 +252,7 @@ function readColorElement(
   if (colorCursor === undefined) return undefined;
 
   let baseString: string | undefined;
-  let schemeSlot: NativeColorSlot | undefined;
+  let schemeSlot: SchemeColorName | undefined;
 
   if (srgb !== undefined) {
     const raw = srgb.attrsObject(["val"]);
@@ -320,8 +283,7 @@ function readColorElement(
       });
       return undefined;
     }
-    schemeSlot =
-      clrMap?.[parsed.data.val] ?? schemeToNativeSlot[parsed.data.val];
+    schemeSlot = parsed.data.val;
   }
 
   const lumMod = readColorModifier(colorCursor, "lumMod");
@@ -349,7 +311,6 @@ function readOuterShadow(
   part: string,
   slideIndex: number,
   diagnostics: ImportDiagnostic[],
-  clrMap?: Readonly<Record<string, NativeColorSlot>>,
 ): Shadow | undefined {
   const effectLst = rPrCursor.child(A_NS, "effectLst");
   if (effectLst === undefined) return undefined;
@@ -376,13 +337,7 @@ function readOuterShadow(
     return undefined;
   }
 
-  const color = readColorElement(
-    outerShdw,
-    part,
-    slideIndex,
-    diagnostics,
-    clrMap,
-  );
+  const color = readColorElement(outerShdw, part, slideIndex, diagnostics);
   const blur =
     parsed.data.blurRad === undefined
       ? undefined
@@ -419,7 +374,6 @@ function readRunProperties(
   part: string,
   slideIndex: number,
   diagnostics: ImportDiagnostic[],
-  clrMap?: Readonly<Record<string, NativeColorSlot>>,
 ): { readonly style: ParsedRunStyle; readonly sizePt?: number } {
   const raw = rPrCursor.attrsObject([
     "lang",
@@ -498,16 +452,10 @@ function readRunProperties(
   let color: NonNullable<TextStyle["color"]> | undefined;
   const solidFill = rPrCursor.child(A_NS, "solidFill");
   if (solidFill !== undefined) {
-    color = readColorElement(solidFill, part, slideIndex, diagnostics, clrMap);
+    color = readColorElement(solidFill, part, slideIndex, diagnostics);
   }
 
-  const textShadow = readOuterShadow(
-    rPrCursor,
-    part,
-    slideIndex,
-    diagnostics,
-    clrMap,
-  );
+  const textShadow = readOuterShadow(rPrCursor, part, slideIndex, diagnostics);
 
   let fontFamily: NonNullable<TextStyle["fontFamily"]> | undefined;
   const latin = rPrCursor.child(A_NS, "latin");
@@ -641,7 +589,6 @@ function readParagraph(
   part: string,
   slideIndex: number,
   diagnostics: ImportDiagnostic[],
-  clrMap?: Readonly<Record<string, NativeColorSlot>>,
 ): ImportedParagraph {
   const pPr = pCursor.child(A_NS, "pPr");
 
@@ -765,7 +712,7 @@ function readParagraph(
       const parsedRPr =
         rPr === undefined
           ? { style: {} }
-          : readRunProperties(rPr, part, slideIndex, diagnostics, clrMap);
+          : readRunProperties(rPr, part, slideIndex, diagnostics);
       const t = child.child(A_NS, "t");
       if (t !== undefined) {
         t.consumeAttr("space", XML_NS);
@@ -785,7 +732,7 @@ function readParagraph(
       const parsedRPr =
         rPr === undefined
           ? { style: {} }
-          : readRunProperties(rPr, part, slideIndex, diagnostics, clrMap);
+          : readRunProperties(rPr, part, slideIndex, diagnostics);
       runs.push({
         kind: "text",
         text: "\n",
@@ -810,7 +757,6 @@ function readParagraph(
                 part,
                 slideIndex,
                 diagnostics,
-                clrMap,
               );
         runs.push({
           kind: "slide-number",
@@ -823,13 +769,7 @@ function readParagraph(
       continue;
     }
     if (child.namespaceUri === A_NS && child.localName === "endParaRPr") {
-      const parsedEnd = readRunProperties(
-        child,
-        part,
-        slideIndex,
-        diagnostics,
-        clrMap,
-      );
+      const parsedEnd = readRunProperties(child, part, slideIndex, diagnostics);
       endParaSizePt = parsedEnd.sizePt;
       continue;
     }
@@ -943,7 +883,7 @@ export function readRichTextBody(
   part: string,
   slideIndex: number,
   diagnostics: ImportDiagnostic[],
-  clrMap?: Readonly<Record<string, NativeColorSlot>>,
+  _clrMap?: Readonly<Record<string, NativeColorSlot>>,
 ): ImportedRichTextBody {
   let paddingTop: number | undefined;
   let paddingRight: number | undefined;
@@ -999,9 +939,7 @@ export function readRichTextBody(
 
   const importedParagraphs = txBody
     .children(A_NS, "p")
-    .map((pCursor) =>
-      readParagraph(pCursor, part, slideIndex, diagnostics, clrMap),
-    );
+    .map((pCursor) => readParagraph(pCursor, part, slideIndex, diagnostics));
 
   const boxStyle: NonNullable<TextDeclarationProps["style"]> = {
     ...(paddingTop === undefined ? {} : { paddingTop }),
@@ -1107,7 +1045,7 @@ function flattenImportedTextBody(
 export function readTextBoxSp(
   context: ShapeTreeImportContext,
 ): ShapeTreeImportOutcome {
-  const { cursor, part, slideIndex, clrMap } = context;
+  const { cursor, part, slideIndex } = context;
   const diagnostics: ImportDiagnostic[] = [];
 
   const nvSpPr = cursor.child(P_NS, "nvSpPr");
@@ -1245,7 +1183,6 @@ export function readTextBoxSp(
       part,
       slideIndex,
       diagnostics,
-      clrMap,
     );
   }
 
@@ -1256,13 +1193,7 @@ export function readTextBoxSp(
       ? parsedXfrm.data.rot / 60_000
       : undefined;
 
-  const imported = readRichTextBody(
-    txBody,
-    part,
-    slideIndex,
-    diagnostics,
-    clrMap,
-  );
+  const imported = readRichTextBody(txBody, part, slideIndex, diagnostics);
   const { boxStyle, singleText, paragraphsToPopulate } =
     flattenImportedTextBody(imported, rotate, backgroundColor);
 
@@ -1292,7 +1223,7 @@ export function readTextBoxSp(
 export function readTextPlaceholderSp(
   context: ShapeTreeImportContext,
 ): ShapeTreeImportOutcome {
-  const { cursor, part, slideIndex, layoutPlaceholders, clrMap } = context;
+  const { cursor, part, slideIndex, layoutPlaceholders } = context;
   const diagnostics: ImportDiagnostic[] = [];
 
   const nvSpPr = cursor.child(P_NS, "nvSpPr");
@@ -1494,7 +1425,6 @@ export function readTextPlaceholderSp(
       part,
       slideIndex,
       diagnostics,
-      clrMap,
     );
   }
   spPr.ignoreEmptyChild(A_NS, "extLst");
@@ -1503,7 +1433,7 @@ export function readTextPlaceholderSp(
   const imported =
     txBody === undefined
       ? undefined
-      : readRichTextBody(txBody, part, slideIndex, diagnostics, clrMap);
+      : readRichTextBody(txBody, part, slideIndex, diagnostics);
 
   const { boxStyle, singleText, paragraphsToPopulate } =
     flattenImportedTextBody(imported, rotate, backgroundColor);

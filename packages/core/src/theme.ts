@@ -136,10 +136,90 @@ export const nativeColorSlots = [
 export const nativeColorSlotSchema = z.enum(nativeColorSlots);
 export type NativeColorSlot = z.infer<typeof nativeColorSlotSchema>;
 
+export const schemeColorSlots = [
+  "bg1",
+  "tx1",
+  "bg2",
+  "tx2",
+  "accent1",
+  "accent2",
+  "accent3",
+  "accent4",
+  "accent5",
+  "accent6",
+  "hlink",
+  "folHlink",
+] as const;
+
+export const schemeColorSlotSchema = z.enum(schemeColorSlots);
+export type SchemeColorSlot = z.infer<typeof schemeColorSlotSchema>;
+
+export const schemeColorNames = [
+  "dk1",
+  "lt1",
+  "dk2",
+  "lt2",
+  "bg1",
+  "tx1",
+  "bg2",
+  "tx2",
+  "accent1",
+  "accent2",
+  "accent3",
+  "accent4",
+  "accent5",
+  "accent6",
+  "hlink",
+  "folHlink",
+] as const;
+
+export const schemeColorNameSchema = z.enum(schemeColorNames);
+export type SchemeColorName = z.infer<typeof schemeColorNameSchema>;
+
+/** Native `<p:clrMap>` / `<a:overrideClrMapping>` mapping the 12 scheme slots to 12 theme palette slots. */
+export const colorMapSchema = z
+  .strictObject({
+    bg1: nativeColorSlotSchema,
+    tx1: nativeColorSlotSchema,
+    bg2: nativeColorSlotSchema,
+    tx2: nativeColorSlotSchema,
+    accent1: nativeColorSlotSchema,
+    accent2: nativeColorSlotSchema,
+    accent3: nativeColorSlotSchema,
+    accent4: nativeColorSlotSchema,
+    accent5: nativeColorSlotSchema,
+    accent6: nativeColorSlotSchema,
+    hlink: nativeColorSlotSchema,
+    folHlink: nativeColorSlotSchema,
+  })
+  .readonly();
+export type ColorMap = z.infer<typeof colorMapSchema>;
+
+export const defaultColorMap: ColorMap = Object.freeze({
+  bg1: "lt1",
+  tx1: "dk1",
+  bg2: "lt2",
+  tx2: "dk2",
+  accent1: "accent1",
+  accent2: "accent2",
+  accent3: "accent3",
+  accent4: "accent4",
+  accent5: "accent5",
+  accent6: "accent6",
+  hlink: "hlink",
+  folHlink: "folHlink",
+});
+
+export const colorMapOverrideSchema = z.union([
+  z.literal("master"),
+  colorMapSchema,
+]);
+export type ColorMapOverride = z.infer<typeof colorMapOverrideSchema>;
+
 /** Native theme color represented with DrawingML luminance modulation. */
 export const themeShadeSchema = z
   .strictObject({
-    slot: nativeColorSlotSchema,
+    slot: schemeColorNameSchema,
     lumMod: z.number().finite().min(0).max(1),
     lumOff: z.number().finite().min(0).max(1).optional(),
   })
@@ -168,6 +248,7 @@ export const resolvedColorSchema = z
     hex: z.string(),
     alpha: z.number().finite().min(0).max(1).optional(),
     slot: nativeColorSlotSchema.optional(),
+    scheme: schemeColorNameSchema.optional(),
     lumMod: z.number().finite().min(0).max(1).optional(),
     lumOff: z.number().finite().min(0).max(1).optional(),
   })
@@ -296,7 +377,105 @@ export const textStyleShape = textStyleObjectSchema.shape;
 export const textStyleSchema = textStyleObjectSchema.readonly();
 export type TextStyle = z.infer<typeof textStyleSchema>;
 
-/** Deck-level theme input; major/minor fonts are simultaneously written to native PPTX theme. */
+export const formatColorTransformSchema = z
+  .strictObject({
+    color: z.union([z.literal("phClr"), schemeColorNameSchema, z.string()]),
+    alpha: z.number().finite().min(0).max(1).optional(),
+    lumMod: z.number().finite().min(0).max(1).optional(),
+    lumOff: z.number().finite().min(0).max(1).optional(),
+    tint: z.number().finite().min(0).max(1).optional(),
+    shade: z.number().finite().min(0).max(1).optional(),
+    satMod: z.number().finite().min(0).optional(),
+  })
+  .readonly();
+export type FormatColorTransform = z.infer<typeof formatColorTransformSchema>;
+
+export const formatGradientStopSchema = z
+  .strictObject({
+    position: z.number().finite().min(0).max(1),
+    color: formatColorTransformSchema,
+  })
+  .readonly();
+export type FormatGradientStop = z.infer<typeof formatGradientStopSchema>;
+
+export const formatFillStyleSchema = z.union([
+  z
+    .strictObject({
+      kind: z.literal("none"),
+    })
+    .readonly(),
+  z
+    .strictObject({
+      kind: z.literal("solid"),
+      color: formatColorTransformSchema,
+    })
+    .readonly(),
+  z
+    .strictObject({
+      kind: z.literal("gradient"),
+      rotWithShape: z.boolean().optional(),
+      stops: z.array(formatGradientStopSchema).readonly(),
+      linear: z
+        .strictObject({
+          angle: z.number().finite(),
+          scaled: z.boolean().optional(),
+        })
+        .readonly()
+        .optional(),
+      path: z
+        .strictObject({
+          shape: z.enum(["circle", "rect", "shape"]),
+          fillToRect: z
+            .strictObject({
+              l: z.number().finite(),
+              t: z.number().finite(),
+              r: z.number().finite(),
+              b: z.number().finite(),
+            })
+            .readonly()
+            .optional(),
+        })
+        .readonly()
+        .optional(),
+    })
+    .readonly(),
+]);
+export type FormatFillStyle = z.infer<typeof formatFillStyleSchema>;
+
+export const formatLineStyleSchema = z
+  .strictObject({
+    widthEmu: z.number().int().nonnegative().optional(),
+    cap: z.enum(["rnd", "sq", "flat"]).optional(),
+    compound: z
+      .enum(["sng", "dbl", "thickThin", "thinThick", "tri"])
+      .optional(),
+    align: z.enum(["ctr", "in"]).optional(),
+    dash: z.string().optional(),
+    fill: formatFillStyleSchema.optional(),
+  })
+  .readonly();
+export type FormatLineStyle = z.infer<typeof formatLineStyleSchema>;
+
+export const formatEffectStyleSchema = z
+  .strictObject({
+    shadow: shadowSchema.optional(),
+  })
+  .readonly();
+export type FormatEffectStyle = z.infer<typeof formatEffectStyleSchema>;
+
+/** DrawingML `<a:fmtScheme>` style matrix stored on a native theme or theme override. */
+export const formatSchemeSchema = z
+  .strictObject({
+    name: z.string().optional(),
+    fillStyles: z.array(formatFillStyleSchema).readonly().optional(),
+    lineStyles: z.array(formatLineStyleSchema).readonly().optional(),
+    effectStyles: z.array(formatEffectStyleSchema).readonly().optional(),
+    bgFillStyles: z.array(formatFillStyleSchema).readonly().optional(),
+  })
+  .readonly();
+export type FormatScheme = z.infer<typeof formatSchemeSchema>;
+
+/** Deck-level or master-level theme input; major/minor fonts are written to native PPTX theme. */
 export const themeInputSchema = z
   .strictObject({
     name: z.string().optional(),
@@ -326,11 +505,44 @@ export const themeInputSchema = z
       .catchall(fontTokenSchema)
       .readonly()
       .optional(),
+    formatScheme: formatSchemeSchema.optional(),
   })
   .readonly();
 export type ThemeInput = z.infer<typeof themeInputSchema>;
 
-export const themeSchema = z
+/** Native `<a:themeOverride>` partial override for a SlideLayout or Slide. */
+export const themeOverrideSchema = z
+  .strictObject({
+    colors: z
+      .strictObject({
+        dk1: z.string().optional(),
+        lt1: z.string().optional(),
+        dk2: z.string().optional(),
+        lt2: z.string().optional(),
+        accent1: z.string().optional(),
+        accent2: z.string().optional(),
+        accent3: z.string().optional(),
+        accent4: z.string().optional(),
+        accent5: z.string().optional(),
+        accent6: z.string().optional(),
+        hlink: z.string().optional(),
+        folHlink: z.string().optional(),
+      })
+      .readonly()
+      .optional(),
+    fonts: z
+      .strictObject({
+        major: fontTokenSchema.optional(),
+        minor: fontTokenSchema.optional(),
+      })
+      .readonly()
+      .optional(),
+    formatScheme: formatSchemeSchema.optional(),
+  })
+  .readonly();
+export type ThemeOverride = z.infer<typeof themeOverrideSchema>;
+
+export const themeDataSchema = z
   .strictObject({
     name: z.string(),
     colors: z
@@ -357,9 +569,19 @@ export const themeSchema = z
       })
       .catchall(fontTokenSchema)
       .readonly(),
+    formatScheme: formatSchemeSchema.optional(),
   })
   .readonly();
-export type Theme = z.infer<typeof themeSchema>;
+export type ThemeData = z.infer<typeof themeDataSchema>;
+
+export type Theme = ThemeData & {
+  /** Updates this theme in place while preserving instance identity across all referencing SlideMasters. */
+  set(patch: ThemeInput): Theme;
+};
+
+export const themeSchema: z.ZodType<Theme> = themeDataSchema.transform((data) =>
+  defineTheme(data),
+);
 
 /** Local theme scopes on slides or containers can only override color and font tokens already present in the deck. */
 export const themeScopeSchema = z
@@ -379,13 +601,20 @@ export const resolvedThemeFontSchema = z
   .readonly();
 export type ResolvedThemeFont = z.infer<typeof resolvedThemeFontSchema>;
 
-/** Theme, local scopes, and accumulated container text defaults in a single build. */
+/** Theme, local scopes, active color map, native overrides, and accumulated container text defaults in a single build. */
 export type ThemeContext = {
   readonly theme: Theme;
+  readonly colorMap: ColorMap;
+  readonly formatScheme: FormatScheme | undefined;
   readonly textStyle: TextStyle;
   with(scope?: ThemeScope, style?: TextStyle): ThemeContext;
   /** Replaces the accumulated container text defaults while retaining the same theme scope chain. */
   withTextStyle(style: TextStyle): ThemeContext;
+  /** Derives a child context applying native `<a:themeOverride>` and/or `<p:clrMapOvr>` without mutating `theme`. */
+  withNativeOverrides(
+    themeOverride?: ThemeOverride,
+    colorMapOverride?: ColorMapOverride,
+  ): ThemeContext;
   resolveColor(value: ColorValue): ResolvedColor;
   resolveFont(value: FontReference): ResolvedThemeFont;
 };
@@ -410,6 +639,7 @@ const contextRecords = new WeakMap<
   {
     readonly parent?: ThemeContext;
     readonly scope?: ThemeScope;
+    readonly themeOverride?: ThemeOverride;
   }
 >();
 
@@ -599,11 +829,138 @@ function nativeSlot(value: string): value is NativeColorSlot {
   return (nativeColorSlots as readonly string[]).includes(value);
 }
 
+function schemeSlot(value: string): value is SchemeColorSlot {
+  return (schemeColorSlots as readonly string[]).includes(value);
+}
+
+function schemeColorName(value: string): value is SchemeColorName {
+  return (schemeColorNames as readonly string[]).includes(value);
+}
+
+export function isSchemeColorSlot(value: string): value is SchemeColorSlot {
+  return schemeSlot(value);
+}
+
+export function isSchemeColorName(value: string): value is SchemeColorName {
+  return schemeColorName(value);
+}
+
 export function isFont(value: unknown): value is Font {
   return record(value) && typeof value["family"] === "string";
 }
 
-function normalizeTheme(input: ThemeInput = {}): Theme {
+const themeBrandSymbol = Symbol.for("@pptxdk/core/theme");
+
+/** Checks whether a runtime value is an identity-bearing `Theme` instance produced by `defineTheme`. */
+export function isTheme(value: unknown): value is Theme {
+  return (
+    typeof value === "object" && value !== null && themeBrandSymbol in value
+  );
+}
+
+class NativeThemeRecord implements Theme {
+  readonly [themeBrandSymbol] = true as const;
+  #name: string;
+  #colors: ThemeData["colors"];
+  #fonts: ThemeData["fonts"];
+  #formatScheme: FormatScheme | undefined;
+
+  constructor(initial: ThemeData) {
+    this.#name = initial.name;
+    this.#colors = initial.colors;
+    this.#fonts = initial.fonts;
+    this.#formatScheme = initial.formatScheme;
+    Object.defineProperties(this, {
+      name: {
+        enumerable: true,
+        configurable: false,
+        get: () => this.#name,
+      },
+      colors: {
+        enumerable: true,
+        configurable: false,
+        get: () => this.#colors,
+      },
+      fonts: {
+        enumerable: true,
+        configurable: false,
+        get: () => this.#fonts,
+      },
+      ...(initial.formatScheme === undefined
+        ? {}
+        : {
+            formatScheme: {
+              enumerable: true,
+              configurable: false,
+              get: () => this.#formatScheme,
+            },
+          }),
+    });
+  }
+
+  get name(): string {
+    return this.#name;
+  }
+
+  get colors(): ThemeData["colors"] {
+    return this.#colors;
+  }
+
+  get fonts(): ThemeData["fonts"] {
+    return this.#fonts;
+  }
+
+  get formatScheme(): FormatScheme | undefined {
+    return this.#formatScheme;
+  }
+
+  set(patch: ThemeInput): Theme {
+    if (this === defaultTheme) {
+      throw new TypeError("Cannot mutate defaultTheme");
+    }
+    if (!record(patch)) {
+      throw new TypeError("Theme update must be an object");
+    }
+    const parsed = themeInputSchema.safeParse(patch);
+    if (!parsed.success) {
+      const issue = parsed.error.issues[0];
+      throw new CapabilityError(
+        "invalid-theme",
+        issue?.message ?? "Invalid theme declaration",
+      );
+    }
+    const validPatch = parsed.data;
+    if (validPatch.name !== undefined) {
+      this.#name = validPatch.name;
+    }
+    if (validPatch.colors !== undefined) {
+      this.#colors = snapshotValue({
+        ...this.#colors,
+        ...validPatch.colors,
+      }) as ThemeData["colors"];
+    }
+    if (validPatch.fonts !== undefined) {
+      this.#fonts = snapshotValue({
+        ...this.#fonts,
+        ...validPatch.fonts,
+      }) as ThemeData["fonts"];
+    }
+    if (validPatch.formatScheme !== undefined) {
+      const hadFormatScheme = Object.hasOwn(this, "formatScheme");
+      this.#formatScheme = snapshotValue(validPatch.formatScheme);
+      if (!hadFormatScheme) {
+        Object.defineProperty(this, "formatScheme", {
+          enumerable: true,
+          configurable: false,
+          get: () => this.#formatScheme,
+        });
+      }
+    }
+    return this;
+  }
+}
+
+function parseThemeInputData(input: ThemeInput = {}): ThemeData {
   if (!record(input)) throw new TypeError("Theme must be an object");
   const parsed = themeInputSchema.safeParse(input);
   if (!parsed.success) {
@@ -618,33 +975,44 @@ function normalizeTheme(input: ThemeInput = {}): Theme {
   const colors = snapshotValue({
     ...officeColors,
     ...validInput.colors,
-  }) as Theme["colors"];
+  }) as ThemeData["colors"];
   const fonts = snapshotValue({
     ...validInput.fonts,
     major: validInput.fonts?.major ?? "Aptos Display",
     minor: validInput.fonts?.minor ?? "Aptos",
-  }) as Theme["fonts"];
-  return Object.freeze({
+  }) as ThemeData["fonts"];
+  const formatScheme =
+    validInput.formatScheme === undefined
+      ? undefined
+      : snapshotValue(validInput.formatScheme);
+  return {
     name: validInput.name ?? "Office Theme",
     colors,
     fonts,
-  });
+    ...(formatScheme === undefined ? {} : { formatScheme }),
+  };
 }
 
-/** Fill unsupplied theme items using initial Office palette and fonts. */
+function normalizeTheme(input?: ThemeInput | Theme): Theme {
+  if (input === undefined) return defaultTheme;
+  if (isTheme(input)) return input;
+  return new NativeThemeRecord(parseThemeInputData(input));
+}
+
+/** Fill unsupplied theme items using initial Office palette and fonts, returning an identity-bearing `Theme`. */
 export function defineTheme(input: ThemeInput = {}): Theme {
-  return normalizeTheme(input);
+  return new NativeThemeRecord(parseThemeInputData(input));
 }
 
-export const defaultTheme = defineTheme();
+export const defaultTheme: Theme = defineTheme();
 
 /** Generate darker variant in PowerPoint native palette. */
-export function darker(slot: NativeColorSlot, amount: number): ThemeShade {
+export function darker(slot: SchemeColorName, amount: number): ThemeShade {
   return { slot, lumMod: 1 - amount };
 }
 
 /** Generate lighter variant in PowerPoint native palette. */
-export function lighter(slot: NativeColorSlot, amount: number): ThemeShade {
+export function lighter(slot: SchemeColorName, amount: number): ThemeShade {
   return { slot, lumMod: 1 - amount, lumOff: amount };
 }
 
@@ -692,10 +1060,24 @@ function scopeFontValue(
   return undefined;
 }
 
-function shadeHex(hex: string, lumMod: number, lumOff: number): string {
-  const [r, g, b] = [0, 2, 4].map(
+function rgbChannelsFromHex(hex: string): [number, number, number] {
+  return [0, 2, 4].map(
     (start) => Number.parseInt(hex.slice(start, start + 2), 16) / 255,
   ) as [number, number, number];
+}
+
+function hexFromRgbChannels(r: number, g: number, b: number): string {
+  return [r, g, b]
+    .map((channel) =>
+      Math.round(Math.min(1, Math.max(0, channel)) * 255)
+        .toString(16)
+        .padStart(2, "0"),
+    )
+    .join("")
+    .toUpperCase();
+}
+
+function rgbToHsl(r: number, g: number, b: number): [number, number, number] {
   const max = Math.max(r, g, b);
   const min = Math.min(r, g, b);
   const lightness = (max + min) / 2;
@@ -710,10 +1092,17 @@ function shadeHex(hex: string, lumMod: number, lumOff: number): string {
         : max === g
           ? (b - r) / delta + 2
           : (r - g) / delta + 4;
-  const shaded = Math.min(1, Math.max(0, lightness * lumMod + lumOff));
-  const chroma = (1 - Math.abs(2 * shaded - 1)) * saturation;
+  return [hue, saturation, lightness];
+}
+
+function hslToRgb(
+  hue: number,
+  saturation: number,
+  lightness: number,
+): [number, number, number] {
+  const chroma = (1 - Math.abs(2 * lightness - 1)) * saturation;
   const x = chroma * (1 - Math.abs((hue % 2) - 1));
-  const m = shaded - chroma / 2;
+  const m = lightness - chroma / 2;
   const [r1, g1, b1] =
     hue < 1
       ? [chroma, x, 0]
@@ -726,14 +1115,61 @@ function shadeHex(hex: string, lumMod: number, lumOff: number): string {
             : hue < 5
               ? [x, 0, chroma]
               : [chroma, 0, x];
-  return [r1, g1, b1]
-    .map((channel) =>
-      Math.round((channel + m) * 255)
-        .toString(16)
-        .padStart(2, "0"),
-    )
-    .join("")
-    .toUpperCase();
+  return [r1 + m, g1 + m, b1 + m];
+}
+
+function shadeHex(hex: string, lumMod: number, lumOff: number): string {
+  const [r, g, b] = rgbChannelsFromHex(hex);
+  const [hue, saturation, lightness] = rgbToHsl(r, g, b);
+  const shaded = Math.min(1, Math.max(0, lightness * lumMod + lumOff));
+  const [r1, g1, b1] = hslToRgb(hue, saturation, shaded);
+  return hexFromRgbChannels(r1, g1, b1);
+}
+
+/**
+ * Applies DrawingML color modifiers (`tint`, `shade`, `satMod`, `lumMod`, `lumOff`, `alpha`)
+ * onto a resolved base color (used by theme format schemes and `<p:bgRef>` evaluation).
+ */
+export function applyFormatColorTransforms(
+  base: ResolvedColor,
+  transform: FormatColorTransform,
+): ResolvedColor {
+  let [r, g, b] = rgbChannelsFromHex(base.hex);
+  if (transform.tint !== undefined) {
+    const t = transform.tint;
+    r = r * t + (1 - t);
+    g = g * t + (1 - t);
+    b = b * t + (1 - t);
+  }
+  if (transform.shade !== undefined) {
+    const s = transform.shade;
+    r *= s;
+    g *= s;
+    b *= s;
+  }
+  if (
+    transform.satMod !== undefined ||
+    transform.lumMod !== undefined ||
+    transform.lumOff !== undefined
+  ) {
+    const [hue, sat, lum] = rgbToHsl(r, g, b);
+    const nextSat = Math.min(1, Math.max(0, sat * (transform.satMod ?? 1)));
+    const nextLum = Math.min(
+      1,
+      Math.max(0, lum * (transform.lumMod ?? 1) + (transform.lumOff ?? 0)),
+    );
+    [r, g, b] = hslToRgb(hue, nextSat, nextLum);
+  }
+  const alpha =
+    transform.alpha === undefined
+      ? base.alpha
+      : (base.alpha ?? 1) * transform.alpha;
+  return {
+    hex: hexFromRgbChannels(r, g, b),
+    ...(alpha === undefined || alpha === 1 ? {} : { alpha }),
+    ...(base.slot === undefined ? {} : { slot: base.slot }),
+    ...(base.scheme === undefined ? {} : { scheme: base.scheme }),
+  };
 }
 
 function checkedFraction(value: unknown, label: string): number {
@@ -749,6 +1185,15 @@ function checkedFraction(value: unknown, label: string): number {
     );
   }
   return value;
+}
+
+function effectiveThemeColor(
+  context: ThemeContext,
+  slot: NativeColorSlot,
+): string {
+  const overrideColor =
+    contextRecords.get(context)?.themeOverride?.colors?.[slot];
+  return overrideColor ?? context.theme.colors[slot];
 }
 
 function resolveColorName(
@@ -784,14 +1229,24 @@ function resolveColorName(
       ...(alpha === undefined || alpha === 1 ? {} : { alpha }),
     };
   }
-  if (nativeSlot(value)) {
-    const configured = context.theme.colors[value];
+  if (schemeSlot(value)) {
+    const mappedSlot = context.colorMap[value];
+    const configured = effectiveThemeColor(context, mappedSlot);
     const resolved = resolveColorName(
       configured,
       rootContext(context),
       depth + 1,
     );
-    return { ...resolved, slot: value };
+    return { ...resolved, slot: mappedSlot, scheme: value };
+  }
+  if (nativeSlot(value)) {
+    const configured = effectiveThemeColor(context, value);
+    const resolved = resolveColorName(
+      configured,
+      rootContext(context),
+      depth + 1,
+    );
+    return { ...resolved, slot: value, scheme: value };
   }
   const local = scopeValue(context, value);
   if (local !== undefined) {
@@ -828,7 +1283,7 @@ function resolveColorValue(
   if (typeof value === "string") return resolveColorName(value, context, depth);
   if (
     !record(value) ||
-    !nativeSlot(String(value["slot"])) ||
+    !schemeColorName(String(value["slot"])) ||
     typeof value["lumMod"] !== "number" ||
     !Number.isFinite(value["lumMod"])
   ) {
@@ -839,14 +1294,37 @@ function resolveColorValue(
     value["lumOff"] === undefined
       ? undefined
       : checkedFraction(value["lumOff"], "lumOff");
-  const slot = value["slot"];
-  const base = resolveColorName(slot, rootContext(context), depth + 1);
+  const scheme = value["slot"];
+  const base = resolveColorName(scheme, context, depth + 1);
   return {
     hex: shadeHex(base.hex, lumMod, lumOff ?? 0),
-    slot,
+    ...(base.slot === undefined ? {} : { slot: base.slot }),
+    scheme,
     lumMod,
     ...(lumOff === undefined ? {} : { lumOff }),
   };
+}
+
+function mergeThemeOverrides(
+  base: ThemeOverride | undefined,
+  next: ThemeOverride | undefined,
+): ThemeOverride | undefined {
+  if (base === undefined) return next;
+  if (next === undefined) return base;
+  const colors =
+    base.colors === undefined && next.colors === undefined
+      ? undefined
+      : { ...base.colors, ...next.colors };
+  const fonts =
+    base.fonts === undefined && next.fonts === undefined
+      ? undefined
+      : { ...base.fonts, ...next.fonts };
+  const formatScheme = next.formatScheme ?? base.formatScheme;
+  return Object.freeze({
+    ...(colors === undefined ? {} : { colors: Object.freeze(colors) }),
+    ...(fonts === undefined ? {} : { fonts: Object.freeze(fonts) }),
+    ...(formatScheme === undefined ? {} : { formatScheme }),
+  });
 }
 
 function createContext(
@@ -854,10 +1332,15 @@ function createContext(
   parent: ThemeContext | undefined,
   scope: ThemeScope | undefined,
   textStyle: TextStyle,
+  colorMap: ColorMap = defaultColorMap,
+  themeOverride?: ThemeOverride,
 ): ThemeContext {
+  const formatScheme = themeOverride?.formatScheme ?? theme.formatScheme;
   let context: ThemeContext;
   context = Object.freeze({
     theme,
+    colorMap,
+    formatScheme,
     textStyle: Object.freeze(textStyle),
     with(nextScope?: ThemeScope, style?: TextStyle) {
       let checkedScope: ThemeScope | undefined;
@@ -872,7 +1355,7 @@ function createContext(
         }
         const colors = parsedScope.data.colors;
         for (const name of Object.keys(colors ?? {})) {
-          if (nativeSlot(name)) {
+          if (schemeColorName(name)) {
             throw new CapabilityError(
               "invalid-theme-scope",
               `Local theme scope cannot redefine native color slot ${name}`,
@@ -908,11 +1391,20 @@ function createContext(
         context,
         checkedScope,
         context.textStyle,
+        colorMap,
+        themeOverride,
       );
       const validated =
         style === undefined ? {} : textStyleFrom(style, candidateContext);
       const nextStyle = { ...context.textStyle, ...validated };
-      return createContext(theme, context, checkedScope, nextStyle);
+      return createContext(
+        theme,
+        context,
+        checkedScope,
+        nextStyle,
+        colorMap,
+        themeOverride,
+      );
     },
     withTextStyle(style) {
       return createContext(
@@ -920,6 +1412,26 @@ function createContext(
         context,
         undefined,
         textStyleFrom(style, context),
+        colorMap,
+        themeOverride,
+      );
+    },
+    withNativeOverrides(nextThemeOverride, nextColorMapOverride) {
+      const mergedOverride = mergeThemeOverrides(
+        themeOverride,
+        nextThemeOverride,
+      );
+      const nextColorMap =
+        nextColorMapOverride === undefined || nextColorMapOverride === "master"
+          ? colorMap
+          : nextColorMapOverride;
+      return createContext(
+        theme,
+        context,
+        undefined,
+        context.textStyle,
+        nextColorMap,
+        mergedOverride,
       );
     },
     resolveColor(value: ColorValue) {
@@ -958,13 +1470,20 @@ function createContext(
         );
       }
       const local = scopeFontValue(context, value);
-      const token =
-        local?.value ??
-        (Object.hasOwn(theme.fonts, value) ? theme.fonts[value]! : value);
       const themeFontName: ResolvedThemeFont["themeFont"] =
         value === "major" || value === "minor" ? value : undefined;
+      const overrideFont =
+        themeFontName === undefined
+          ? undefined
+          : themeOverride?.fonts?.[themeFontName];
+      const token =
+        local?.value ??
+        overrideFont ??
+        (Object.hasOwn(theme.fonts, value) ? theme.fonts[value]! : value);
       const globalThemeFont =
-        themeFontName === undefined ? undefined : theme.fonts[themeFontName];
+        themeFontName === undefined
+          ? undefined
+          : (overrideFont ?? theme.fonts[themeFontName]);
       const globalFamily = isFont(globalThemeFont)
         ? globalThemeFont.family
         : globalThemeFont;
@@ -988,6 +1507,7 @@ function createContext(
   contextRecords.set(context, {
     ...(parent === undefined ? {} : { parent }),
     ...(scope === undefined ? {} : { scope }),
+    ...(themeOverride === undefined ? {} : { themeOverride }),
   });
   return context;
 }
@@ -996,6 +1516,10 @@ function createContext(
 export function createThemeContext(
   input?: ThemeInput | Theme,
   style?: TextStyle,
+  options: {
+    readonly colorMap?: ColorMap;
+    readonly themeOverride?: ThemeOverride;
+  } = {},
 ): ThemeContext {
   if (style !== undefined) {
     if (!record(style)) {
@@ -1010,11 +1534,21 @@ export function createThemeContext(
     }
   }
   const theme = normalizeTheme(input);
-  const initialContext = createContext(theme, undefined, undefined, {});
+  const colorMap = options.colorMap ?? defaultColorMap;
+  const initialContext = createContext(
+    theme,
+    undefined,
+    undefined,
+    {},
+    colorMap,
+    options.themeOverride,
+  );
   return createContext(
     theme,
     undefined,
     undefined,
     textStyleFrom(style, initialContext),
+    colorMap,
+    options.themeOverride,
   );
 }

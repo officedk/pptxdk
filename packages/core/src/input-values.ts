@@ -4,13 +4,20 @@ import { isMorphKey } from "#/morph.ts";
 const slideLayoutDefinitionSymbol = Symbol.for(
   "@pptxdk/core/slide-layout-definition",
 );
+const themeBrandSymbol = Symbol.for("@pptxdk/core/theme");
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function preservesIdentity(value: object): boolean {
-  if (isMorphKey(value) || slideLayoutDefinitionSymbol in value) return true;
+  if (
+    isMorphKey(value) ||
+    slideLayoutDefinitionSymbol in value ||
+    themeBrandSymbol in value
+  ) {
+    return true;
+  }
   // Common nodes expose this adapter hook; projecting their fields would discard node identity.
   if (replaceDeclarationProps in value) return true;
   // Motion scope handles carry a callable identity used by choreography; copying them would sever it.

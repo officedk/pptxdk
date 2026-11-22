@@ -4,11 +4,12 @@ import {
   layoutPlaceholderSpecSchema,
   masterPlaceholderSpecSchema,
   masterTextStylesSchema,
-  nativeColorSlotSchema,
   placeholderOrientSchema,
   placeholderRoleSchema,
   placeholderSzSchema,
   slideLayoutTypeSchema,
+  type ColorMap,
+  type ColorMapOverride,
   type ColorValue,
   type ContentPlaceholderRole,
   type LayoutPlaceholderSpec,
@@ -24,7 +25,9 @@ import {
   type SlideMasterProps,
   type TextAlignment,
   type TextList,
+  type Theme,
   type ThemeColor,
+  type ThemeOverride,
 } from "@pptxdk/core";
 import {
   createSlideLayoutNode,
@@ -35,11 +38,14 @@ import {
 import { z } from "zod";
 
 import type { ImportDiagnostic } from "#/diagnostics.ts";
+import type { SlideImportHandler } from "#/mechanism.ts";
 import {
   A_NS,
   P_NS,
   REL_SLIDE_LAYOUT,
   REL_SLIDE_MASTER,
+  REL_THEME,
+  REL_THEME_OVERRIDE,
   R_NS,
   XML_NS,
   emuToPx,
@@ -49,6 +55,13 @@ import {
   type ParsedRelationshipEntry,
   type PptxPackage,
 } from "#/opc.ts";
+import {
+  isNonDefaultColorMap,
+  readColorMapElement,
+  readColorMapOverride,
+  readThemeOverridePart,
+  readThemePart,
+} from "#/themes.ts";
 import {
   ExtentEmuFragmentSchema,
   HexRgb6Schema,
@@ -105,22 +118,6 @@ const directSchemeToSlot: Readonly<Record<string, NativeColorSlot>> = {
   hlink: "hlink",
   folHlink: "folHlink",
 };
-
-function readMasterColorMap(
-  clrMapCursor: XmlElementCursor | undefined,
-): Readonly<Record<string, NativeColorSlot>> {
-  const map: Record<string, NativeColorSlot> = { ...defaultColorMap };
-  if (clrMapCursor === undefined) return map;
-  for (const slot of Object.keys(defaultColorMap)) {
-    const raw = clrMapCursor.attr(slot);
-    if (raw === undefined) continue;
-    const parsed = nativeColorSlotSchema.safeParse(raw);
-    if (parsed.success) {
-      map[slot] = parsed.data;
-    }
-  }
-  return map;
-}
 
 function readColorModifierVal(
   colorCursor: XmlElementCursor,
@@ -786,28 +783,6 @@ function validateMasterLayoutNumericId(
   }
 }
 
-function consumeDefaultColorMapIfStandard(clrMap: XmlElementCursor): void {
-  const attrs = clrMap.element.attributes;
-  const observed = new Map<string, string>();
-  for (let i = 0; i < attrs.length; i += 1) {
-    const attr = attrs.item(i);
-    if (attr === null) continue;
-    const ns = attr.namespaceURI ?? "";
-    const local = attr.localName ?? attr.name;
-    if (ns === "" && local in defaultColorMap) {
-      observed.set(local, attr.value);
-    }
-  }
-  const matchesDefault = Object.entries(defaultColorMap).every(
-    ([slot, target]) => observed.get(slot) === target,
-  );
-  if (matchesDefault) {
-    for (const slot of Object.keys(defaultColorMap)) {
-      clrMap.consumeAttr(slot);
-    }
-  }
-}
-
 function readSlideLayoutPart(
   pkg: PptxPackage,
   layoutPartPath: string,
@@ -815,6 +790,7 @@ function readSlideLayoutPart(
   layoutOrder: number,
   usedLayoutIds: Set<string>,
   masterClrMap: Readonly<Record<string, NativeColorSlot>>,
+  slideHandlers: readonly SlideImportHandler[],
   diagnostics: ImportDiagnostic[],
 ): SlideLayoutContainer | undefined {
   const xmlText = pkg.readTextPart(layoutPartPath);
@@ -927,8 +903,17 @@ function readSlideLayoutPart(
     placeholders = readPlaceholderSpList(spTree, masterClrMap, false);
   }
   const clrMapOvr = layoutCursor.child(P_NS, "clrMapOvr");
+  let colorMapOverride: ColorMapOverride | undefined;
   if (clrMapOvr !== undefined) {
-    clrMapOvr.ignoreEmptyChild(A_NS, "masterClrMapping");
+    const parsedOvr = readColorMapOverride(
+      clrMapOvr,
+      layoutPartPath,
+      undefined,
+      diagnostics,
+    );
+    if (parsedOvr !== undefined && parsedOvr !== "master") {
+      colorMapOverride = parsedOvr;
+    }
   }
 
   const layoutRels = pkg.readRelationships(layoutPartPath);
@@ -953,7 +938,34 @@ function readSlideLayoutPart(
     }
   }
 
-  appendUnconsumedDiagnostics(layoutCursor, undefined, diagnostics);
+  let themeOverride: ThemeOverride | undefined;
+  const themeOverrideRel = layoutRels.entries.find(
+    (entry) =>
+      entry.Type === REL_THEME_OVERRIDE && entry.TargetMode !== "External",
+  );
+  if (themeOverrideRel !== undefined) {
+    const overridePart = resolvePartPath(
+      layoutPartPath,
+      themeOverrideRel.Target,
+    );
+    if (overridePart === undefined || !pkg.hasPart(overridePart)) {
+      diagnostics.push({
+        code: "missing-target-part",
+        category: "corrupt-input",
+        disposition: "omitted",
+        location: { part: layoutPartPath, xpath: themeOverrideRel.xpath },
+        relationshipId: themeOverrideRel.Id,
+        targetPart: overridePart ?? themeOverrideRel.Target,
+      });
+    } else {
+      themeOverride = readThemeOverridePart(
+        pkg,
+        overridePart,
+        undefined,
+        diagnostics,
+      );
+    }
+  }
 
   const layoutId = allocateScopedAuthorId(
     layoutName,
@@ -972,8 +984,32 @@ function readSlideLayoutPart(
       ? {}
       : { showMasterPlaceholderAnimations }),
     ...(placeholders === undefined ? {} : { placeholders }),
+    ...(colorMapOverride === undefined ? {} : { colorMapOverride }),
+    ...(themeOverride === undefined ? {} : { themeOverride }),
   };
-  return createSlideLayoutNode(props);
+  const layoutNode = createSlideLayoutNode(props);
+
+  for (const slideHandler of slideHandlers) {
+    if (
+      slideHandler.slot !== "transition" ||
+      (slideHandler.matches !== undefined &&
+        !slideHandler.matches(layoutCursor))
+    ) {
+      continue;
+    }
+    const outcome = slideHandler.read({
+      slideCursor: layoutCursor,
+      slideNode: layoutNode,
+      part: layoutPartPath,
+      package: pkg,
+    });
+    if (outcome.diagnostics !== undefined) {
+      diagnostics.push(...outcome.diagnostics);
+    }
+  }
+
+  appendUnconsumedDiagnostics(layoutCursor, undefined, diagnostics);
+  return layoutNode;
 }
 
 function readSlideMasterPart(
@@ -981,11 +1017,13 @@ function readSlideMasterPart(
   masterPartPath: string,
   masterOrder: number,
   usedDeckIds: Set<string>,
+  themesByPartPath: Map<string, Theme>,
   layoutNodeByPartPath: Map<string, SlideLayoutContainer>,
   clrMapByLayoutPartPath: Map<
     string,
     Readonly<Record<string, NativeColorSlot>>
   >,
+  slideHandlers: readonly SlideImportHandler[],
   diagnostics: ImportDiagnostic[],
 ) {
   const xmlText = pkg.readTextPart(masterPartPath);
@@ -1052,11 +1090,21 @@ function readSlideMasterPart(
     return undefined;
   }
   const masterName = cSld.attr("name");
-  const clrMapCursor = masterCursor.child(P_NS, "clrMap");
-  if (clrMapCursor !== undefined) {
-    consumeDefaultColorMapIfStandard(clrMapCursor);
+  const clrMap = masterCursor.child(P_NS, "clrMap");
+  let colorMap: ColorMap | undefined;
+  let masterClrMap: Readonly<Record<string, NativeColorSlot>> = defaultColorMap;
+  if (clrMap !== undefined) {
+    const parsedMap = readColorMapElement(
+      clrMap,
+      masterPartPath,
+      undefined,
+      diagnostics,
+    );
+    masterClrMap = parsedMap;
+    if (isNonDefaultColorMap(parsedMap)) {
+      colorMap = parsedMap;
+    }
   }
-  const masterClrMap = readMasterColorMap(clrMapCursor);
 
   const spTree = cSld.child(P_NS, "spTree");
   let masterPlaceholders: MasterPlaceholderMap | undefined;
@@ -1081,6 +1129,31 @@ function readSlideMasterPart(
     masterRelById.set(rel.Id, rel);
   }
 
+  let masterTheme: Theme | undefined;
+  const themeRel = masterRels.entries.find(
+    (entry) => entry.Type === REL_THEME && entry.TargetMode !== "External",
+  );
+  if (themeRel !== undefined) {
+    const themePartPath = resolvePartPath(masterPartPath, themeRel.Target);
+    if (themePartPath === undefined || !pkg.hasPart(themePartPath)) {
+      diagnostics.push({
+        code: "missing-target-part",
+        category: "corrupt-input",
+        disposition: "omitted",
+        location: { part: masterPartPath, xpath: themeRel.xpath },
+        relationshipId: themeRel.Id,
+        targetPart: themePartPath ?? themeRel.Target,
+      });
+    } else {
+      masterTheme = readThemePart(
+        pkg,
+        themePartPath,
+        themesByPartPath,
+        diagnostics,
+      );
+    }
+  }
+
   const masterId = allocateScopedAuthorId(
     masterName,
     usedDeckIds,
@@ -1094,6 +1167,8 @@ function readSlideMasterPart(
       ? {}
       : { placeholders: masterPlaceholders }),
     ...(textStyles === undefined ? {} : { textStyles }),
+    ...(masterTheme === undefined ? {} : { theme: masterTheme }),
+    ...(colorMap === undefined ? {} : { colorMap }),
   };
   const masterNode = createSlideMasterNode(masterProps);
 
@@ -1154,6 +1229,7 @@ function readSlideMasterPart(
         index + 1,
         usedLayoutIds,
         masterClrMap,
+        slideHandlers,
         diagnostics,
       );
       if (layoutNode !== undefined) {
@@ -1161,6 +1237,25 @@ function readSlideMasterPart(
         layoutNodeByPartPath.set(layoutPart, layoutNode);
         clrMapByLayoutPartPath.set(layoutPart, masterClrMap);
       }
+    }
+  }
+
+  for (const slideHandler of slideHandlers) {
+    if (
+      slideHandler.slot !== "transition" ||
+      (slideHandler.matches !== undefined &&
+        !slideHandler.matches(masterCursor))
+    ) {
+      continue;
+    }
+    const outcome = slideHandler.read({
+      slideCursor: masterCursor,
+      slideNode: masterNode,
+      part: masterPartPath,
+      package: pkg,
+    });
+    if (outcome.diagnostics !== undefined) {
+      diagnostics.push(...outcome.diagnostics);
     }
   }
 
@@ -1183,8 +1278,10 @@ export function importMastersAndLayouts(
     string,
     Readonly<Record<string, NativeColorSlot>>
   > = new Map(),
+  slideHandlers: readonly SlideImportHandler[] = [],
 ): ReadonlyMap<string, SlideLayoutContainer> {
   const layoutNodeByPartPath = new Map<string, SlideLayoutContainer>();
+  const themesByPartPath = new Map<string, Theme>();
   const masterIdLst = presCursor.child(P_NS, "sldMasterIdLst");
   if (masterIdLst === undefined) {
     return layoutNodeByPartPath;
@@ -1241,8 +1338,10 @@ export function importMastersAndLayouts(
       masterPart,
       index + 1,
       usedDeckIds,
+      themesByPartPath,
       layoutNodeByPartPath,
       clrMapByLayoutPartPath,
+      slideHandlers,
       diagnostics,
     );
     if (masterNode !== undefined) {

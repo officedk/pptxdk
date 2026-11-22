@@ -1,5 +1,5 @@
 import {
-  defineSlideLayout,
+  defineSlideLayout as defineCoreSlideLayout,
   type ContentPlaceholderRole,
   type EmptyPlaceholderMap,
   type PlaceholderMap,
@@ -115,12 +115,28 @@ import {
 
 export type DeckAuthorProps = DeckProps;
 
-export type SlideMasterAuthorProps = SlideMasterProps;
+export type SlideMasterAuthorProps = Omit<SlideMasterProps, "transition"> & {
+  readonly transition?: Transition;
+};
 export type SlideLayoutAuthorProps<P extends PlaceholderMap = PlaceholderMap> =
-  SlideLayoutProps<P>;
+  Omit<SlideLayoutProps<P>, "transition"> & {
+    readonly transition?: Transition;
+  };
+export type SlideLayoutAuthorDataProps<
+  P extends PlaceholderMap = EmptyPlaceholderMap,
+> = Omit<SlideLayoutDataProps<P>, "transition"> & {
+  readonly transition?: Transition;
+};
 export type SlideLayoutSource<P extends PlaceholderMap = PlaceholderMap> =
   | SlideLayoutDefinition<P>
   | SlideLayoutContainer<P>;
+
+/** Narrowed `defineSlideLayout` wrapper enforcing capability-typed `transition` declarations. */
+export function defineSlideLayout<
+  const P extends PlaceholderMap = EmptyPlaceholderMap,
+>(spec: SlideLayoutAuthorDataProps<P>): SlideLayoutDefinition<P> {
+  return defineCoreSlideLayout<P>(spec as SlideLayoutDataProps<P>);
+}
 
 export type InferPlaceholderMap<L> =
   L extends SlideLayoutSource<infer P> ? P : EmptyPlaceholderMap;
@@ -337,9 +353,13 @@ export function slideMaster(
 export function slideLayout<
   const P extends PlaceholderMap = EmptyPlaceholderMap,
 >(
-  propsOrDefinition: SlideLayoutDataProps<P> | SlideLayoutDefinition<P> = {},
+  propsOrDefinition:
+    | SlideLayoutAuthorDataProps<P>
+    | SlideLayoutDefinition<P> = {},
 ): SlideLayoutNode<P> {
-  return createSlideLayoutNode<P>(propsOrDefinition);
+  return createSlideLayoutNode<P>(
+    propsOrDefinition as SlideLayoutProps<P> | SlideLayoutDefinition<P>,
+  );
 }
 
 export type ImperativeSlideProps<
@@ -552,7 +572,7 @@ export {
 export { observeMotion } from "./motion/motion-query.ts";
 export { blockArc, path, preset } from "./shared/geometry.ts";
 export { linearGradient, radialGradient } from "./shared/visual.ts";
-export { defineSlideLayout, font, transitions };
+export { font, transitions };
 export type {
   ContentPlaceholderRole,
   EmptyPlaceholderMap,

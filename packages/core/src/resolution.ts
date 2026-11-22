@@ -12,7 +12,13 @@ import type {
   PlaceholderMap,
 } from "#/placeholders.ts";
 import type { QueryContentNode } from "#/query.ts";
-import type { ThemeContext } from "#/theme.ts";
+import type {
+  ColorMap,
+  ColorMapOverride,
+  Theme,
+  ThemeContext,
+  ThemeOverride,
+} from "#/theme.ts";
 import type {
   Diagnostic,
   EmitContext,
@@ -86,6 +92,9 @@ export type InternalResolvedSlideLayout = {
   readonly showMasterShapes?: boolean;
   readonly showMasterPlaceholderAnimations?: boolean;
   readonly placeholders?: PlaceholderMap;
+  readonly colorMapOverride?: ColorMapOverride;
+  readonly themeOverride?: ThemeOverride;
+  readonly slideCapabilities?: readonly ResolvedSlideCapabilityRecord[];
 };
 
 export type InternalResolvedSlideMaster = {
@@ -93,10 +102,13 @@ export type InternalResolvedSlideMaster = {
   readonly id: string;
   readonly name?: string;
   readonly preserve?: boolean;
-  readonly theme: ThemeContext;
+  readonly theme: Theme;
+  readonly themeContext: ThemeContext;
+  readonly colorMap: ColorMap;
   readonly placeholders?: MasterPlaceholderMap;
   readonly textStyles?: MasterTextStyles;
   readonly layouts: readonly InternalResolvedSlideLayout[];
+  readonly slideCapabilities?: readonly ResolvedSlideCapabilityRecord[];
 };
 
 export type InternalResolvedSlide = {
@@ -104,6 +116,8 @@ export type InternalResolvedSlide = {
   readonly authorId?: string;
   readonly index: number;
   readonly layoutKey?: string;
+  readonly colorMapOverride?: ColorMapOverride;
+  readonly themeOverride?: ThemeOverride;
   readonly section?: string;
   readonly hidden: boolean;
   readonly content: readonly QueryContentNode[];

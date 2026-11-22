@@ -51,7 +51,7 @@ export type SlideImportContext = {
   readonly slideCursor: XmlElementCursor;
   readonly slideNode: CommonNode;
   readonly part: string;
-  readonly slideIndex: number;
+  readonly slideIndex?: number;
   readonly package: PptxPackage;
 };
 
@@ -62,6 +62,8 @@ export type SlideImportOutcome = {
 export type SlideImportHandler = {
   readonly target: "slide";
   readonly slot: "background" | "transition" | "timing" | "notes";
+  /** Refines matching when multiple mechanisms share a slide slot. */
+  matches?(cursor: XmlElementCursor): boolean;
   read(context: SlideImportContext): SlideImportOutcome;
 };
 

@@ -60,6 +60,7 @@ import {
   type MotionScopeAuthorProps,
   type MotionScopeHandle,
   type MotionStepAuthorProps,
+  type OwnerMotion,
 } from "./motion/motion-api.ts";
 import {
   createNotesNode,
@@ -115,17 +116,23 @@ import {
 
 export type DeckAuthorProps = DeckProps;
 
-export type SlideMasterAuthorProps = Omit<SlideMasterProps, "transition"> & {
+export type SlideMasterAuthorProps = Omit<
+  SlideMasterProps,
+  "transition" | "motion"
+> & {
   readonly transition?: Transition;
+  readonly motion?: OwnerMotion;
 };
 export type SlideLayoutAuthorProps<P extends PlaceholderMap = PlaceholderMap> =
-  Omit<SlideLayoutProps<P>, "transition"> & {
+  Omit<SlideLayoutProps<P>, "transition" | "motion"> & {
     readonly transition?: Transition;
+    readonly motion?: OwnerMotion;
   };
 export type SlideLayoutAuthorDataProps<
   P extends PlaceholderMap = EmptyPlaceholderMap,
-> = Omit<SlideLayoutDataProps<P>, "transition"> & {
+> = Omit<SlideLayoutDataProps<P>, "transition" | "motion"> & {
   readonly transition?: Transition;
+  readonly motion?: OwnerMotion;
 };
 export type SlideLayoutSource<P extends PlaceholderMap = PlaceholderMap> =
   | SlideLayoutDefinition<P>

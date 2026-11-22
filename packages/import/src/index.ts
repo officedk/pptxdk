@@ -56,6 +56,7 @@ export type {
   DeckImportOutcome,
   DeferredSlideLink,
   ImportMechanismHandler,
+  OmittedSlideObjectInfo,
   ShapeTreeImportContext,
   ShapeTreeImportHandler,
   ShapeTreeImportOutcome,

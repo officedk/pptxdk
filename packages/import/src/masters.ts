@@ -43,6 +43,7 @@ import { readAlternateContent } from "#/alternate-content.ts";
 import type { ImportDiagnostic } from "#/diagnostics.ts";
 import type {
   DeferredSlideLink,
+  OmittedSlideObjectInfo,
   ShapeTreeImportHandler,
   SlideImportHandler,
 } from "#/mechanism.ts";
@@ -509,9 +510,14 @@ function readPlaceholderSpList(
   spTree: XmlElementCursor | undefined,
   clrMap: Readonly<Record<string, NativeColorSlot>>,
   isMaster: boolean,
-): PlaceholderMap | MasterPlaceholderMap | undefined {
-  if (spTree === undefined) return undefined;
+): {
+  readonly placeholders?: PlaceholderMap | MasterPlaceholderMap;
+  readonly placeholderKeyBySpid: ReadonlyMap<number, string>;
+} {
+  const placeholderKeyBySpid = new Map<number, string>();
+  if (spTree === undefined) return { placeholderKeyBySpid };
   const rawSpecs: LayoutPlaceholderSpec[] = [];
+  const rawSpids: (number | undefined)[] = [];
   for (const sp of spTree.matchingChildren(
     (el) =>
       (el.namespaceURI ?? "") === P_NS &&
@@ -520,7 +526,10 @@ function readPlaceholderSpList(
   )) {
     const nvSpPr = sp.child(P_NS, "nvSpPr");
     const cNvPr = nvSpPr?.child(P_NS, "cNvPr");
-    cNvPr?.consumeAttr("id");
+    const rawId = cNvPr?.attr("id");
+    const parsedSpid = OoxmlNonNegativeIntSchema.safeParse(rawId);
+    const spid =
+      parsedSpid.success && parsedSpid.data > 0 ? parsedSpid.data : undefined;
     const rawName = cNvPr?.attr("name");
     const name =
       rawName !== undefined && rawName.trim() !== "" ? rawName : undefined;
@@ -715,14 +724,20 @@ function readPlaceholderSpList(
       : layoutPlaceholderSpecSchema;
     const validated = schema.safeParse(candidate);
     rawSpecs.push(validated.success ? validated.data : candidate);
+    rawSpids.push(spid);
   }
-  if (rawSpecs.length === 0) return undefined;
+  if (rawSpecs.length === 0) return { placeholderKeyBySpid };
   const keys = allocatePlaceholderAuthorKeys(rawSpecs);
   const map: Record<string, LayoutPlaceholderSpec | MasterPlaceholderSpec> = {};
   for (let i = 0; i < rawSpecs.length; i += 1) {
-    map[keys[i]!] = rawSpecs[i]!;
+    const key = keys[i]!;
+    map[key] = rawSpecs[i]!;
+    const spid = rawSpids[i];
+    if (spid !== undefined) {
+      placeholderKeyBySpid.set(spid, key);
+    }
   }
-  return Object.freeze(map);
+  return { placeholders: Object.freeze(map), placeholderKeyBySpid };
 }
 
 /** Allocates a deterministic unique author id within `used`, disambiguating collisions with `-2`, `-3`, ... */
@@ -887,7 +902,10 @@ function readSingleShapeTreeItem(
   containerNode?: CommonNode,
   layoutPlaceholders?: PlaceholderMap,
   clrMap?: Readonly<Record<string, NativeColorSlot>>,
+  registerImportedObject?: (spid: number, node: CommonNode) => void,
+  omittedSpids?: Map<number, OmittedSlideObjectInfo>,
 ): CommonNode | undefined {
+  const identity = peekShapeTreeObjectIdentity(itemCursor.element);
   const match = shapeTreeHandlers.find(
     (handler) =>
       itemCursor.namespaceUri === P_NS &&
@@ -895,7 +913,14 @@ function readSingleShapeTreeItem(
       (handler.matches === undefined || handler.matches(itemCursor)),
   );
   if (match === undefined) {
-    const identity = peekShapeTreeObjectIdentity(itemCursor.element);
+    if (omittedSpids !== undefined && identity.objectId !== undefined) {
+      omittedSpids.set(identity.objectId, {
+        ...(identity.objectName === undefined
+          ? {}
+          : { objectName: identity.objectName }),
+        reason: "unsupported",
+      });
+    }
     const frameInfo =
       itemCursor.namespaceUri === P_NS &&
       itemCursor.localName === "graphicFrame"
@@ -936,6 +961,7 @@ function readSingleShapeTreeItem(
     ...(containerNode === undefined ? {} : { containerNode }),
     relationships: relIndex.byId,
     registerDeferredSlideLink,
+    ...(registerImportedObject === undefined ? {} : { registerImportedObject }),
     ...(layoutPlaceholders === undefined ? {} : { layoutPlaceholders }),
     ...(clrMap === undefined ? {} : { clrMap }),
   });
@@ -947,7 +973,19 @@ function readSingleShapeTreeItem(
     );
   }
   if (outcome.node === undefined) {
+    if (omittedSpids !== undefined && identity.objectId !== undefined) {
+      omittedSpids.set(identity.objectId, {
+        ...(identity.objectName === undefined
+          ? {}
+          : { objectName: identity.objectName }),
+        reason: "corrupt",
+      });
+    }
     itemCursor.suppressUnconsumed();
+    return undefined;
+  }
+  if (registerImportedObject !== undefined && identity.objectId !== undefined) {
+    registerImportedObject(identity.objectId, outcome.node);
   }
   return outcome.node;
 }
@@ -966,6 +1004,8 @@ export function readShapeTreeItems(args: {
   readonly containerNode?: CommonNode;
   readonly layoutPlaceholders?: PlaceholderMap;
   readonly clrMap?: Readonly<Record<string, NativeColorSlot>>;
+  readonly registerImportedObject?: (spid: number, node: CommonNode) => void;
+  readonly omittedSpids?: Map<number, OmittedSlideObjectInfo>;
 }): void {
   const {
     spTree,
@@ -980,6 +1020,8 @@ export function readShapeTreeItems(args: {
     containerNode,
     layoutPlaceholders,
     clrMap,
+    registerImportedObject,
+    omittedSpids,
   } = args;
   consumeIdentityShapeTreeBoilerplate(spTree);
   for (const itemCursor of spTree.remainingElementChildren()) {
@@ -1004,6 +1046,8 @@ export function readShapeTreeItems(args: {
             containerNode,
             layoutPlaceholders,
             clrMap,
+            registerImportedObject,
+            omittedSpids,
           );
           if (node !== undefined) appendNode(node);
         }
@@ -1023,6 +1067,8 @@ export function readShapeTreeItems(args: {
             containerNode,
             layoutPlaceholders,
             clrMap,
+            registerImportedObject,
+            omittedSpids,
           );
           if (node !== undefined) {
             adoptedFallback = true;
@@ -1080,6 +1126,8 @@ export function readShapeTreeItems(args: {
       containerNode,
       layoutPlaceholders,
       clrMap,
+      registerImportedObject,
+      omittedSpids,
     );
     if (node !== undefined) appendNode(node);
   }
@@ -1206,9 +1254,12 @@ function readSlideLayoutPart(
   consumeCommonSlideCreationId(cSld);
   const spTree = cSld.child(P_NS, "spTree");
   let placeholders: PlaceholderMap | undefined;
+  let layoutPlaceholderKeyBySpid: ReadonlyMap<number, string> | undefined;
   if (spTree !== undefined) {
     consumeIdentityShapeTreeBoilerplate(spTree);
-    placeholders = readPlaceholderSpList(spTree, masterClrMap, false);
+    const placeholderRead = readPlaceholderSpList(spTree, masterClrMap, false);
+    placeholders = placeholderRead.placeholders;
+    layoutPlaceholderKeyBySpid = placeholderRead.placeholderKeyBySpid;
   }
   const clrMapOvr = layoutCursor.child(P_NS, "clrMapOvr");
   let colorMapOverride: ColorMapOverride | undefined;
@@ -1338,6 +1389,9 @@ function readSlideLayoutPart(
       part: layoutPartPath,
       ...(slideHandler.slot === "transition" ? {} : { slideIndex: 0 }),
       package: pkg,
+      ...(layoutPlaceholderKeyBySpid === undefined
+        ? {}
+        : { placeholderKeyBySpid: layoutPlaceholderKeyBySpid }),
     });
     diagnostics.push(...stripSlideIndexFromDiagnostics(outcome.diagnostics));
   }
@@ -1445,9 +1499,12 @@ function readSlideMasterPart(
 
   const spTree = cSld.child(P_NS, "spTree");
   let masterPlaceholders: MasterPlaceholderMap | undefined;
+  let masterPlaceholderKeyBySpid: ReadonlyMap<number, string> | undefined;
   if (spTree !== undefined) {
     consumeIdentityShapeTreeBoilerplate(spTree);
-    masterPlaceholders = readPlaceholderSpList(spTree, masterClrMap, true);
+    const placeholderRead = readPlaceholderSpList(spTree, masterClrMap, true);
+    masterPlaceholders = placeholderRead.placeholders;
+    masterPlaceholderKeyBySpid = placeholderRead.placeholderKeyBySpid;
   }
 
   const txStylesCursor = masterCursor.child(P_NS, "txStyles");
@@ -1548,6 +1605,9 @@ function readSlideMasterPart(
       part: masterPartPath,
       ...(slideHandler.slot === "transition" ? {} : { slideIndex: 0 }),
       package: pkg,
+      ...(masterPlaceholderKeyBySpid === undefined
+        ? {}
+        : { placeholderKeyBySpid: masterPlaceholderKeyBySpid }),
     });
     diagnostics.push(...stripSlideIndexFromDiagnostics(outcome.diagnostics));
   }
@@ -1649,7 +1709,8 @@ export function importMastersAndLayouts(
     (handler) =>
       handler.slot === "background" ||
       handler.slot === "header-footer" ||
-      handler.slot === "transition",
+      handler.slot === "transition" ||
+      handler.slot === "timing",
   );
   const layoutNodeByPartPath = new Map<string, SlideLayoutContainer>();
   const themesByPartPath = new Map<string, Theme>();

@@ -128,6 +128,7 @@ export type InternalResolvedSlide = {
   readonly themeOverride?: ThemeOverride;
   readonly section?: string;
   readonly hidden: boolean;
+  readonly showMasterPlaceholderAnimations?: boolean;
   readonly showMasterShapes?: boolean;
   readonly inheritedBackground?: ResolvedSlideCapabilityRecord;
   readonly masterLayers?: readonly ResolvedObjectLayer[];

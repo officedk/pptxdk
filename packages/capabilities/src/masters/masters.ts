@@ -50,9 +50,9 @@ function serializeSlideLayoutXml(model: SlideLayoutProps): string {
   const showMasterSpAttr =
     model.showMasterShapes === false ? ' showMasterSp="0"' : "";
   const showMasterPhAnimAttr =
-    model.showMasterPlaceholderAnimations === false
-      ? ' showMasterPhAnim="0"'
-      : "";
+    model.showMasterPlaceholderAnimations === undefined
+      ? ""
+      : ` showMasterPhAnim="${model.showMasterPlaceholderAnimations ? "1" : "0"}"`;
   const nameAttr =
     model.name === undefined ? "" : ` name="${xmlEscape(model.name)}"`;
   return `<p:sldLayout${typeAttr}${preserveAttr}${matchingNameAttr}${userDrawnAttr}${showMasterSpAttr}${showMasterPhAnimAttr}><p:cSld${nameAttr}/></p:sldLayout>`;

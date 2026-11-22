@@ -1,4 +1,9 @@
-import type { ColorMapOverride, ThemeOverride } from "@pptxdk/core";
+import {
+  createMorphScope,
+  type ColorMapOverride,
+  type MorphKey,
+  type ThemeOverride,
+} from "@pptxdk/core";
 import type {
   NativeColorSlot,
   PlaceholderMap,
@@ -29,6 +34,7 @@ import type {
   DeckImportHandler,
   DeferredSlideLink,
   ImportMechanismHandler,
+  OmittedSlideObjectInfo,
   ShapeTreeImportHandler,
   SlideImportHandler,
 } from "#/mechanism.ts";
@@ -75,6 +81,7 @@ const SlideSizeFragmentSchema = ExtentEmuFragmentSchema.extend({
 
 const SlideShowAttrSchema = z.object({
   show: OoxmlBoolSchema.optional(),
+  showMasterPhAnim: OoxmlBoolSchema.optional(),
   showMasterSp: OoxmlBoolSchema.optional(),
 });
 
@@ -161,6 +168,38 @@ function readSlideSize(
   };
 }
 
+function applyNativeMorphToken(
+  node: CommonNode,
+  slidePartPath: string,
+  slideIndex: number,
+  morphScope: ReturnType<typeof createMorphScope>,
+  morphHandleByToken: Map<string, MorphKey>,
+  usedSlideMorphTokens: Set<string>,
+  diagnostics: ImportDiagnostic[],
+): void {
+  const rawName = node.props["name"];
+  if (typeof rawName !== "string" || !rawName.startsWith("!!")) return;
+  const token = rawName.slice(2);
+  if (token.trim() === "") return;
+  if (usedSlideMorphTokens.has(token)) {
+    diagnostics.push({
+      code: "invalid-xml-value",
+      category: "corrupt-input",
+      disposition: "recovered",
+      location: { part: slidePartPath, slideIndex },
+      attributeOrElement: "p:cNvPr/@name",
+      rawValue: rawName,
+    });
+    return;
+  }
+  usedSlideMorphTokens.add(token);
+  let handle = morphHandleByToken.get(token);
+  if (handle === undefined) {
+    handle = morphScope.handle(token);
+    morphHandleByToken.set(token, handle);
+  }
+  node.set({ name: undefined, morphKey: handle });
+}
 function readSlidePart(
   pkg: PptxPackage,
   slidePartPath: string,
@@ -173,6 +212,8 @@ function readSlidePart(
   >,
   handlers: RegisteredImportHandlers,
   registerDeferredSlideLink: (link: DeferredSlideLink) => void,
+  morphScope: ReturnType<typeof createMorphScope>,
+  morphHandleByToken: Map<string, MorphKey>,
   diagnostics: ImportDiagnostic[],
 ): { readonly node: CommonNode; readonly slideId: string } | undefined {
   const xmlText = pkg.readTextPart(slidePartPath);
@@ -216,27 +257,78 @@ function readSlidePart(
     slidePartPath,
     "/p:sld",
   );
-  const rawShow = slideCursor.attrsObject(["show", "showMasterSp"]);
+  const rawShow = slideCursor.attrsObject([
+    "show",
+    "showMasterPhAnim",
+    "showMasterSp",
+  ]);
   const parsedShow = SlideShowAttrSchema.safeParse(rawShow);
   let hidden = false;
+  let showMasterPlaceholderAnimations: boolean | undefined;
   let showMasterShapes: boolean | undefined;
   if (!parsedShow.success) {
-    diagnostics.push({
-      code: "invalid-xml-value",
-      category: "corrupt-input",
-      disposition: "recovered",
-      location: {
-        part: slidePartPath,
-        xpath: `${slideCursor.xpath}/@show`,
-        slideIndex,
-      },
-      attributeOrElement: "@show",
-      rawValue: rawShow["show"] ?? "",
-    });
-  } else {
-    if (parsedShow.data.show === false) {
-      hidden = true;
+    const singleShow = OoxmlBoolSchema.safeParse(rawShow["show"]);
+    if (rawShow["show"] !== undefined) {
+      if (!singleShow.success) {
+        diagnostics.push({
+          code: "invalid-xml-value",
+          category: "corrupt-input",
+          disposition: "recovered",
+          location: {
+            part: slidePartPath,
+            xpath: `${slideCursor.xpath}/@show`,
+            slideIndex,
+          },
+          attributeOrElement: "@show",
+          rawValue: rawShow["show"],
+        });
+      } else if (!singleShow.data) {
+        hidden = true;
+      }
     }
+    const singlePhAnim = OoxmlBoolSchema.safeParse(rawShow["showMasterPhAnim"]);
+    if (rawShow["showMasterPhAnim"] !== undefined) {
+      if (!singlePhAnim.success) {
+        diagnostics.push({
+          code: "invalid-xml-value",
+          category: "corrupt-input",
+          disposition: "recovered",
+          location: {
+            part: slidePartPath,
+            xpath: `${slideCursor.xpath}/@showMasterPhAnim`,
+            slideIndex,
+          },
+          attributeOrElement: "@showMasterPhAnim",
+          rawValue: rawShow["showMasterPhAnim"],
+        });
+      } else {
+        showMasterPlaceholderAnimations = singlePhAnim.data;
+      }
+    }
+    const singleShowMasterSp = OoxmlBoolSchema.safeParse(
+      rawShow["showMasterSp"],
+    );
+    if (rawShow["showMasterSp"] !== undefined) {
+      if (!singleShowMasterSp.success) {
+        diagnostics.push({
+          code: "invalid-xml-value",
+          category: "corrupt-input",
+          disposition: "recovered",
+          location: {
+            part: slidePartPath,
+            xpath: `${slideCursor.xpath}/@showMasterSp`,
+            slideIndex,
+          },
+          attributeOrElement: "@showMasterSp",
+          rawValue: rawShow["showMasterSp"],
+        });
+      } else {
+        showMasterShapes = singleShowMasterSp.data;
+      }
+    }
+  } else {
+    if (parsedShow.data.show === false) hidden = true;
+    showMasterPlaceholderAnimations = parsedShow.data.showMasterPhAnim;
     showMasterShapes = parsedShow.data.showMasterSp;
   }
 
@@ -333,8 +425,18 @@ function readSlidePart(
     ...(colorMapOverride === undefined ? {} : { colorMapOverride }),
     ...(themeOverride === undefined ? {} : { themeOverride }),
     ...(hidden ? { hidden: true } : {}),
+    ...(showMasterPlaceholderAnimations === undefined
+      ? {}
+      : { showMasterPlaceholderAnimations }),
     ...(showMasterShapes === undefined ? {} : { showMasterShapes }),
   });
+
+  const objectBySpid = new Map<number, CommonNode>();
+  const omittedSpids = new Map<number, OmittedSlideObjectInfo>();
+  const registerImportedObject = (spid: number, node: CommonNode): void => {
+    objectBySpid.set(spid, node);
+  };
+  const usedSlideMorphTokens = new Set<string>();
 
   const spTree = cSld.child(P_NS, "spTree");
   if (spTree !== undefined) {
@@ -346,7 +448,20 @@ function readSlidePart(
       relIndex,
       shapeTreeHandlers: handlers.shapeTree,
       registerDeferredSlideLink,
-      appendNode: (node) => slideNode.append(node),
+      registerImportedObject,
+      omittedSpids,
+      appendNode: (node) => {
+        applyNativeMorphToken(
+          node,
+          slidePartPath,
+          slideIndex,
+          morphScope,
+          morphHandleByToken,
+          usedSlideMorphTokens,
+          diagnostics,
+        );
+        slideNode.append(node);
+      },
       diagnostics,
       containerNode: slideNode,
       ...(layoutPlaceholders === undefined ? {} : { layoutPlaceholders }),
@@ -367,6 +482,8 @@ function readSlidePart(
       part: slidePartPath,
       slideIndex,
       package: pkg,
+      objectBySpid,
+      omittedSpids,
     });
     if (outcome.diagnostics !== undefined) {
       diagnostics.push(...outcome.diagnostics);
@@ -436,6 +553,8 @@ export function createImporter(
       registerDeferredSlideLink,
       clrMapByLayoutPartPath,
     );
+    const morphScope = createMorphScope();
+    const morphHandleByToken = new Map<string, MorphKey>();
     let slideCount = 0;
     const sldIdLst = presCursor.child(P_NS, "sldIdLst");
     if (sldIdLst !== undefined) {
@@ -522,6 +641,8 @@ export function createImporter(
           clrMapByLayoutPartPath,
           handlers,
           registerDeferredSlideLink,
+          morphScope,
+          morphHandleByToken,
           diagnostics,
         );
         if (slideResult !== undefined) {

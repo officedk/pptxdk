@@ -6,6 +6,7 @@ import {
   P_NS,
   TransformAttributesFragmentSchema,
   emuToPx,
+  peekShapeTreeObjectIdentity,
   type ImportDiagnostic,
   type ImportLocation,
   type ShapeTreeImportContext,
@@ -249,6 +250,10 @@ export function readGroupSp(
         diagnostics.push(...outcome.diagnostics);
       }
       if (outcome.node !== undefined) {
+        const identity = peekShapeTreeObjectIdentity(childCursor.element);
+        if (identity.objectId !== undefined) {
+          context.registerImportedObject?.(identity.objectId, outcome.node);
+        }
         members.push(outcome.node);
       }
       continue;
@@ -262,6 +267,10 @@ export function readGroupSp(
         }
         if (outcome.node !== undefined) {
           applyMemberMapper(outcome.node, memberMapper);
+          const identity = peekShapeTreeObjectIdentity(childCursor.element);
+          if (identity.objectId !== undefined) {
+            context.registerImportedObject?.(identity.objectId, outcome.node);
+          }
           members.push(outcome.node);
         }
         continue;
@@ -272,6 +281,10 @@ export function readGroupSp(
         diagnostics.push(...outcome.diagnostics);
       }
       if (outcome.node !== undefined) {
+        const identity = peekShapeTreeObjectIdentity(childCursor.element);
+        if (identity.objectId !== undefined) {
+          context.registerImportedObject?.(identity.objectId, outcome.node);
+        }
         members.push(outcome.node);
       }
       continue;
@@ -284,6 +297,10 @@ export function readGroupSp(
       }
       if (outcome.node !== undefined) {
         applyMemberMapper(outcome.node, memberMapper);
+        const identity = peekShapeTreeObjectIdentity(childCursor.element);
+        if (identity.objectId !== undefined) {
+          context.registerImportedObject?.(identity.objectId, outcome.node);
+        }
         members.push(outcome.node);
       }
       continue;

@@ -121,6 +121,7 @@ export const slideMasterDataPropsSchema = z
     footerPlaceholders: footerPlaceholdersSchema.optional(),
     transition: z.unknown().optional(),
     advanceAfter: z.number().optional(),
+    motion: z.unknown().optional(),
   })
   .readonly();
 export type SlideMasterDataProps = z.infer<typeof slideMasterDataPropsSchema>;
@@ -150,6 +151,7 @@ export const slideLayoutDataPropsSchema = z
     footerPlaceholders: footerPlaceholdersSchema.optional(),
     transition: z.unknown().optional(),
     advanceAfter: z.number().optional(),
+    motion: z.unknown().optional(),
   })
   .readonly();
 
@@ -224,6 +226,7 @@ export type SlideLayoutDefinition<P extends PlaceholderMap = PlaceholderMap> = {
   readonly footerPlaceholders?: FooterPlaceholders | undefined;
   readonly transition?: unknown;
   readonly advanceAfter?: number | undefined;
+  readonly motion?: unknown;
 };
 
 export type SlideLayoutProps<P extends PlaceholderMap = PlaceholderMap> =
@@ -312,5 +315,6 @@ export function defineSlideLayout<
     ...(frozenProps.advanceAfter === undefined
       ? {}
       : { advanceAfter: frozenProps.advanceAfter }),
+    ...(frozenProps.motion === undefined ? {} : { motion: frozenProps.motion }),
   });
 }

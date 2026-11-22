@@ -28,6 +28,7 @@ import { imageMechanismVerifications } from "./image/mechanisms.ts";
 import { footerPlaceholderMechanismVerifications } from "./masters/footer-mechanisms.ts";
 import { masterSharedCanvasMechanismVerifications } from "./masters/shared-canvas-mechanisms.ts";
 import { themeMechanismVerifications } from "./masters/theme-mechanisms.ts";
+import { motionMechanismVerifications } from "./motion/mechanisms.ts";
 import { notesMechanismVerifications } from "./notes/mechanisms.ts";
 import { placeholderMechanismVerifications } from "./placeholder/mechanisms.ts";
 import { shapeAndGroupMechanismVerifications } from "./shape/mechanisms.ts";
@@ -277,6 +278,7 @@ export const productionMechanismVerifications: ExhaustiveMechanismVerificationMa
     ...textMechanismVerifications,
     ...chartMechanismVerifications,
     ...transitionMechanismVerifications,
+    ...motionMechanismVerifications,
   };
 
 /** Runs every mechanism verification entry, deduplicating shared scenarios across initial and roundtrip artifacts. */

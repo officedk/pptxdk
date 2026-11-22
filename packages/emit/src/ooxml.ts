@@ -183,6 +183,7 @@ export type EmittedSlideLayoutSpec = {
   readonly shapeXml?: string;
   readonly extraRelationships?: readonly PptxRelationship[];
   readonly transitionXml?: string;
+  readonly timingXml?: string;
 };
 
 export type EmittedSlideMasterSpec = {
@@ -199,6 +200,7 @@ export type EmittedSlideMasterSpec = {
   readonly placeholders?: Readonly<Record<string, MasterPlaceholderSpec>>;
   readonly textStyles?: MasterTextStyles;
   readonly transitionXml?: string;
+  readonly timingXml?: string;
   readonly layouts: readonly EmittedSlideLayoutSpec[];
 };
 
@@ -913,7 +915,7 @@ function masterXml(
   const shapes = `${placeholderShapesXml(spec.placeholders, themeContext)}${spec.shapeXml ?? ""}`;
   const txStyles = masterTextStylesXml(spec.textStyles, themeContext);
   return xmlDocument(
-    `<p:sldMaster xmlns:a="${namespaces.a}" xmlns:r="${namespaces.r}" xmlns:p="${namespaces.p}"${preserveAttr}><p:cSld${nameAttr}>${spec.backgroundXml ?? ""}${shapeTreeXml(shapes)}</p:cSld>${colorMap}<p:sldLayoutIdLst>${layoutIdList}</p:sldLayoutIdLst>${spec.transitionXml ?? ""}${headerFooterXml(spec.headerFooter)}${txStyles}</p:sldMaster>`,
+    `<p:sldMaster xmlns:a="${namespaces.a}" xmlns:r="${namespaces.r}" xmlns:p="${namespaces.p}"${preserveAttr}><p:cSld${nameAttr}>${spec.backgroundXml ?? ""}${shapeTreeXml(shapes)}</p:cSld>${colorMap}<p:sldLayoutIdLst>${layoutIdList}</p:sldLayoutIdLst>${spec.transitionXml ?? ""}${spec.timingXml ?? ""}${headerFooterXml(spec.headerFooter)}${txStyles}</p:sldMaster>`,
   );
 }
 
@@ -938,14 +940,14 @@ function layoutXml(
   const showMasterSpAttr =
     spec.showMasterShapes === false ? ' showMasterSp="0"' : "";
   const showMasterPhAnimAttr =
-    spec.showMasterPlaceholderAnimations === false
-      ? ' showMasterPhAnim="0"'
-      : "";
+    spec.showMasterPlaceholderAnimations === undefined
+      ? ""
+      : ` showMasterPhAnim="${spec.showMasterPlaceholderAnimations ? "1" : "0"}"`;
   const nameAttr =
     spec.name === undefined ? "" : ` name="${xmlEscape(spec.name)}"`;
   const shapes = `${placeholderShapesXml(spec.placeholders, themeContext)}${spec.shapeXml ?? ""}`;
   return xmlDocument(
-    `<p:sldLayout xmlns:a="${namespaces.a}" xmlns:r="${namespaces.r}" xmlns:p="${namespaces.p}"${typeAttr}${preserveAttr}${matchingNameAttr}${userDrawnAttr}${showMasterSpAttr}${showMasterPhAnimAttr}><p:cSld${nameAttr}>${spec.backgroundXml ?? ""}${shapeTreeXml(shapes)}</p:cSld>${colorMapOverrideXml(spec.colorMapOverride)}${spec.transitionXml ?? ""}${headerFooterXml(spec.headerFooter)}</p:sldLayout>`,
+    `<p:sldLayout xmlns:a="${namespaces.a}" xmlns:r="${namespaces.r}" xmlns:p="${namespaces.p}"${typeAttr}${preserveAttr}${matchingNameAttr}${userDrawnAttr}${showMasterSpAttr}${showMasterPhAnimAttr}><p:cSld${nameAttr}>${spec.backgroundXml ?? ""}${shapeTreeXml(shapes)}</p:cSld>${colorMapOverrideXml(spec.colorMapOverride)}${spec.transitionXml ?? ""}${spec.timingXml ?? ""}${headerFooterXml(spec.headerFooter)}</p:sldLayout>`,
   );
 }
 
@@ -955,13 +957,18 @@ function slide(
   slideXml: string,
   backgroundXml: string,
   hidden: boolean,
+  showMasterPlaceholderAnimations?: boolean,
   colorMapOverride?: ColorMapOverride,
   showMasterShapes?: boolean,
 ): string {
   const showMasterSpAttr =
     showMasterShapes === false ? ' showMasterSp="0"' : "";
+  const showMasterPhAnimAttr =
+    showMasterPlaceholderAnimations === undefined
+      ? ""
+      : ` showMasterPhAnim="${showMasterPlaceholderAnimations ? "1" : "0"}"`;
   return xmlDocument(
-    `<p:sld xmlns:a="${namespaces.a}" xmlns:r="${namespaces.r}" xmlns:p="${namespaces.p}"${showMasterSpAttr}${hidden ? ' show="false"' : ""}><p:cSld name="${xmlEscape(slideId)}">${backgroundXml}${shapeTreeXml(shapeXml)}</p:cSld>${colorMapOverrideXml(colorMapOverride)}${slideXml}</p:sld>`,
+    `<p:sld xmlns:a="${namespaces.a}" xmlns:r="${namespaces.r}" xmlns:p="${namespaces.p}"${showMasterSpAttr}${showMasterPhAnimAttr}${hidden ? ' show="false"' : ""}><p:cSld name="${xmlEscape(slideId)}">${backgroundXml}${shapeTreeXml(shapeXml)}</p:cSld>${colorMapOverrideXml(colorMapOverride)}${slideXml}</p:sld>`,
   );
 }
 
@@ -1024,6 +1031,7 @@ export function pptxParts(
     readonly colorMapOverride?: ColorMapOverride;
     readonly themeOverride?: ThemeOverride;
     readonly hidden?: boolean;
+    readonly showMasterPlaceholderAnimations?: boolean;
     readonly showMasterShapes?: boolean;
     readonly shapeXml: string;
     readonly backgroundXml?: string;
@@ -1323,6 +1331,7 @@ export function pptxParts(
         slideXml,
         backgroundXml,
         hidden,
+        showMasterPlaceholderAnimations,
         showMasterShapes,
         layoutKey,
         colorMapOverride,
@@ -1340,6 +1349,7 @@ export function pptxParts(
         slideXml ?? "",
         backgroundXml ?? "",
         hidden ?? false,
+        showMasterPlaceholderAnimations,
         colorMapOverride,
         showMasterShapes,
       );

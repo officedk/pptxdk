@@ -8,49 +8,121 @@ import {
 import { CommonContainer } from "@pptxdk/core/document";
 import type { ReactNode } from "react";
 
-export type MotionDirection = "left" | "right" | "top" | "bottom";
-export type Easing = {
-  readonly accelerate?: number;
-  readonly decelerate?: number;
-};
+import {
+  EasingSchema,
+  EffectDelaySchema,
+  EffectDurationSchema,
+  EffectPresetSchema,
+  IntervalMsSchema,
+  MotionDirectionSchema,
+  MotionGranularitySchema,
+  MotionHexColorSchema,
+  MotionMomentOffsetSchema,
+  MotionMomentSchema,
+  MotionScopeHandleSchema,
+  MotionScopeModeSchema,
+  MotionStepAuthorPropsSchema,
+  RepeatCountSchema,
+  SpinAngleSchema,
+  maxRepeatCount,
+  maximumTimeNodeValue,
+  type BreatheEffect,
+  type BreatheOptions,
+  type Easing,
+  type Effect,
+  type EffectOptions,
+  type EffectPreset,
+  type EmphasisEffect,
+  type EntranceEffect,
+  type FillColorOptions,
+  type MotionCompletionState,
+  type MotionDirection,
+  type MotionGranularity,
+  type MotionMoment,
+  type MotionMomentOffset,
+  type MotionScopeAuthorProps,
+  type MotionScopeHandle,
+  type MotionScopeMode,
+  type MotionStepAuthorProps,
+  type MotionTargetRange,
+  type MotionTiming,
+  type NormalizedEffect,
+  type RepeatCount,
+  type RepeatedEffect,
+  type SpinOptions,
+} from "./motion-schemas.ts";
 
-export type EffectPreset =
-  | "fade"
-  | "wipe"
-  | "zoom"
-  | "fly"
-  | "floatUp"
-  | "floatDown"
-  | "spinIn"
-  | "stretch"
-  | "spin"
-  | "breathe"
-  | "fillColor";
-
-export type RepeatCount = number | "forever";
-
-export type MotionGranularity =
-  | "paragraph"
-  | "word"
-  | "letter"
-  | "series"
-  | "category"
-  | "seriesElements"
-  | "categoryElements";
-
-export type MotionTargetRange =
-  | { readonly type: "paragraph"; readonly start: number; readonly end: number }
-  | {
-      readonly type: "chart";
-      readonly step:
-        | "gridLegend"
-        | "series"
-        | "category"
-        | "ptInSeries"
-        | "ptInCategory";
-      readonly seriesIndex: number;
-      readonly categoryIndex: number;
-    };
+export {
+  BreatheEffectSchema,
+  BreatheOptionsSchema,
+  EasingSchema,
+  EffectDelaySchema,
+  EffectDurationSchema,
+  EffectOptionsSchema,
+  EffectPresetSchema,
+  EffectSchema,
+  EmphasisEffectDeclarationSchema,
+  EmphasisEffectSchema,
+  EntranceEffectDeclarationSchema,
+  EntranceEffectSchema,
+  FillColorOptionsSchema,
+  MotionCompletionStateSchema,
+  MotionDirectionSchema,
+  MotionGranularitySchema,
+  MotionHexColorSchema,
+  MotionMomentOffsetSchema,
+  MotionMomentSchema,
+  MotionPropsSchema,
+  MotionScopeAuthorPropsSchema,
+  MotionScopeHandleSchema,
+  MotionScopeModeSchema,
+  MotionStepAuthorPropsSchema,
+  MotionTargetRangeSchema,
+  MotionTimingSchema,
+  NormalizedEffectSchema,
+  OwnerMotionEffectSchema,
+  OwnerMotionSchema,
+  OwnerMotionStepSchema,
+  OwnerMotionTargetSchema,
+  RepeatCountSchema,
+  RepeatedEffectSchema,
+  SpinAngleSchema,
+  SpinOptionsSchema,
+  maximumTimeNodeValue,
+} from "./motion-schemas.ts";
+export type {
+  BreatheEffect,
+  BreatheOptions,
+  Easing,
+  Effect,
+  EffectOptions,
+  EffectPreset,
+  EmphasisEffect,
+  EmphasisEffectDeclaration,
+  EntranceEffect,
+  EntranceEffectDeclaration,
+  FillColorOptions,
+  MotionCompletionState,
+  MotionDirection,
+  MotionGranularity,
+  MotionMoment,
+  MotionMomentOffset,
+  MotionProps,
+  MotionScopeAuthorProps,
+  MotionScopeHandle,
+  MotionScopeMode,
+  MotionStepAuthorProps,
+  MotionTargetRange,
+  MotionTiming,
+  NormalizedEffect,
+  OwnerMotion,
+  OwnerMotionEffect,
+  OwnerMotionStep,
+  OwnerMotionTarget,
+  RepeatCount,
+  RepeatedEffect,
+  SpinOptions,
+} from "./motion-schemas.ts";
 
 /** Unknown start constraint points to the start or end time of an effect, effect collection for the same object, or real scope. */
 export type MotionStartDependency =
@@ -73,134 +145,6 @@ export type MotionStartDependency =
       readonly offsetMs: number;
     };
 
-export type Effect = {
-  readonly type: "effect";
-  readonly kind: "entrance" | "emphasis";
-  readonly preset: EffectPreset;
-  /** Duration of a single native behavior; total completion length when unfolded per-word or per-letter remains unknown. */
-  readonly duration: number;
-  readonly delay: number;
-  readonly from?: MotionDirection | number;
-  readonly fromColor?: string;
-  readonly toColor?: string;
-  readonly easing?: Easing;
-  /** Text or chart granularity; in spin, represents relative angle in degrees. */
-  readonly by?: MotionGranularity | number;
-  /** Launch interval between adjacent native units in per-word or per-letter effects. */
-  readonly intervalMs?: number;
-};
-
-export type MotionScopeMode = "parallel" | "sequence" | "stagger";
-
-/** Natural completion state of a scope; distinguishes between no natural completion and unknown duration. */
-export type MotionCompletionState =
-  | "known"
-  | "unknown"
-  | "no-natural-completion";
-
-/** Points to an explicit orchestration scope boundary or its publicly named moment. */
-export type MotionMoment = {
-  readonly type: "motion-moment";
-  readonly scope: string;
-  readonly point: "start" | "end" | "named";
-  readonly name?: string;
-};
-
-export type MotionMomentOffset = {
-  readonly type: "motion-offset";
-  readonly moment: MotionMoment;
-  readonly offsetMs: number;
-};
-
-export type MotionTiming = MotionMoment | MotionMomentOffset;
-
-/** A hook invocation represents the scope identity of a component instance; instances with the same component name each have an independent identity. */
-export type MotionScopeHandle = {
-  readonly type: "motion-scope-handle";
-  readonly identity: string;
-  readonly start: MotionMoment;
-  readonly end: MotionMoment;
-  cue(name: string): MotionMoment;
-};
-
-export type EntranceEffect = Effect & { readonly kind: "entrance" };
-export type EmphasisEffect = Effect & { readonly kind: "emphasis" };
-export type RepeatedEffect<E extends Effect = Effect> = {
-  readonly type: "repeated-effect";
-  readonly effect: E;
-  readonly count: RepeatCount;
-};
-export type EntranceEffectDeclaration =
-  | EntranceEffect
-  | RepeatedEffect<EntranceEffect>;
-export type EmphasisEffectDeclaration =
-  | EmphasisEffect
-  | RepeatedEffect<EmphasisEffect>;
-
-/** One-time fill color transition; terminal state is preserved until slide exit, applicable only to Shapes with solid fill. */
-export type FillColorOptions = Pick<
-  EffectOptions,
-  "duration" | "delay" | "easing"
-> & {
-  readonly from: string;
-  readonly to: string;
-};
-
-export type BreatheOptions = {
-  /** Complete dark->light->dark cycle in even milliseconds. */
-  readonly period: number;
-  /** Dark color at cycle start; playback begins from this color. */
-  readonly from: string;
-  /** Light color at half-cycle end. */
-  readonly to: string;
-  /** Delay relative to the trigger start, in milliseconds. */
-  readonly delay?: number;
-  /** Proportions of full cycle for acceleration and deceleration; sum cannot exceed 1. */
-  readonly easing?: Easing;
-};
-
-export type BreatheEffect = EmphasisEffect & {
-  readonly preset: "breathe";
-  readonly fromColor: string;
-  readonly toColor: string;
-};
-
-/** Internal effect validated after repeat(); authors must declare round count via RepeatedEffect. */
-export type NormalizedEffect = Effect & {
-  readonly repeatCount?: RepeatCount;
-};
-
-export type EffectOptions = {
-  /** Single effect behavior duration in milliseconds; fine-grained unfolding completion length is not represented by this value. */
-  readonly duration?: number;
-  /** Delay relative to the trigger start, in milliseconds. */
-  readonly delay?: number;
-  /** Proportions of duration for acceleration and deceleration; sum cannot exceed 1. */
-  readonly easing?: Easing;
-  /** Text per-word or per-letter launch interval; defaults to one tenth of single behavior duration when omitted. */
-  readonly intervalMs?: number;
-  /** Unfold item by item by native paragraph, word, letter, chart series, category, series points, or category points. */
-  readonly by?: MotionGranularity;
-};
-
-export type SpinOptions = Omit<EffectOptions, "by"> & {
-  /** String unfolds by text granularity; number represents relative angle, negative rotates in opposite direction. */
-  readonly by?: MotionGranularity | number;
-  /** Rotates back to object native orientation from specified angle. */
-  readonly from?: number;
-};
-
-export type MotionProps = {
-  /** Object entrance effects; effects in array start in parallel from the same trigger start. */
-  readonly enter?:
-    | EntranceEffectDeclaration
-    | readonly EntranceEffectDeclaration[];
-  /** Emphasis effect applied to already displayed object. */
-  readonly emphasis?: EmphasisEffectDeclaration;
-  /** Set to false to disable motion for this object and its descendants. */
-  readonly motion?: boolean;
-};
-
 export type MotionScopeDeclaration = {
   readonly identity: string;
   readonly parent?: string;
@@ -213,39 +157,17 @@ export type MotionScopeDeclaration = {
   readonly publishEnd?: MotionMoment;
 };
 
-export type MotionScopeProps = {
-  /** Created by useMotionScope() of the current component instance. */
-  readonly scope: MotionScopeHandle;
-  /** Composition relationship of child members, defaults to parallel. */
-  readonly mode?: MotionScopeMode;
-  /** Stagger launch interval for each direct member, in milliseconds. */
-  readonly each?: number;
-  /** Offset relative to parent scope start, in milliseconds. */
-  readonly delay?: number;
-  /** Launch from another scope moment; after() can be used to express offset. */
-  readonly startAt?: MotionTiming;
-  /** Publish this scope's start time to named moment belonging to the same orchestration. */
-  readonly publishStart?: MotionMoment;
-  /** Publish this scope's completion time to named moment belonging to the same orchestration. */
-  readonly publishEnd?: MotionMoment;
-  /** Set to false to disable motion for this scope and its descendants. */
-  readonly motion?: boolean;
+export type MotionScopeProps = MotionScopeAuthorProps & {
   readonly children?: ReactNode;
 };
 
-export type StepProps = {
-  /** Merge click steps with the same positive integer; each Step triggers independently when omitted. */
-  readonly n?: number;
+export type StepProps = MotionStepAuthorProps & {
   readonly children?: ReactNode;
 };
 
 export type StepDeclaration =
   | { readonly mode: "automatic"; readonly identity: string }
   | { readonly mode: "explicit"; readonly number: number };
-
-/** Plain authoring scope props; React children stay on the JSX entry. */
-export type MotionScopeAuthorProps = Omit<MotionScopeProps, "children">;
-export type MotionStepAuthorProps = Pick<StepProps, "n">;
 
 type MotionStepNodeProps = MotionStepAuthorProps & {
   /** Build-local identity of an automatic Step, created once when the host node is created. */
@@ -445,6 +367,7 @@ export function fillColor(options: FillColorOptions): EmphasisEffect {
   return Object.freeze({
     ...declaration("emphasis", "fillColor", timing, { duration: 500 }),
     kind: "emphasis" as const,
+    preset: "fillColor" as const,
     fromColor: from,
     toColor: to,
   });
@@ -648,20 +571,6 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-const directions = new Set<MotionDirection>(["left", "right", "top", "bottom"]);
-const presets = new Set<EffectPreset>([
-  "fade",
-  "wipe",
-  "zoom",
-  "fly",
-  "floatUp",
-  "floatDown",
-  "spinIn",
-  "stretch",
-  "spin",
-  "breathe",
-  "fillColor",
-]);
 const presetKinds: Readonly<Record<EffectPreset, Effect["kind"]>> = {
   fade: "entrance",
   wipe: "entrance",
@@ -675,8 +584,6 @@ const presetKinds: Readonly<Record<EffectPreset, Effect["kind"]>> = {
   breathe: "emphasis",
   fillColor: "emphasis",
 };
-const minimumRotationUnits = -2_147_483_648;
-const maximumRotationUnits = 2_147_483_647;
 const effectKeys = [
   "type",
   "kind",
@@ -691,29 +598,16 @@ const effectKeys = [
   "toColor",
 ] as const;
 
-const motionGranularities = new Set<MotionGranularity>([
-  "paragraph",
-  "word",
-  "letter",
-  "series",
-  "category",
-  "seriesElements",
-  "categoryElements",
-]);
-
-// ST_TLTime uses unsignedInt; repeatCount unit is one thousandth of a round.
-export const maximumTimeNodeValue = 4_294_967_295;
-const maxRepeatCount = Math.floor(maximumTimeNodeValue / 1000);
-
 function normalizeColor(
   value: unknown,
   name: string,
   code = "invalid-breathe-color",
 ): string {
-  if (typeof value !== "string" || !/^#[0-9a-f]{6}$/iu.test(value)) {
+  const parsed = MotionHexColorSchema.safeParse(value);
+  if (!parsed.success) {
     return fail(code, `${name} must be a #RRGGBB color`);
   }
-  return value.toUpperCase();
+  return parsed.data;
 }
 
 function relativeLuminance(color: string): number {
@@ -793,17 +687,15 @@ function validatedEffect(
         : `${String(effectValue["preset"])}() is an entrance effect and should be passed to enter`,
     );
   }
-  const preset = effectValue["preset"];
-  if (typeof preset !== "string" || !presets.has(preset as EffectPreset)) {
+  const parsedPreset = EffectPresetSchema.safeParse(effectValue["preset"]);
+  if (!parsedPreset.success) {
     return fail(
       "unsupported-effect",
-      `Unsupported animation effect ${String(preset)}`,
+      `Unsupported animation effect ${String(effectValue["preset"])}`,
     );
   }
-  if (
-    preset !== "breathe" &&
-    presetKinds[preset as EffectPreset] !== expected
-  ) {
+  const preset = parsedPreset.data;
+  if (preset !== "breathe" && presetKinds[preset] !== expected) {
     return fail(
       "invalid-motion",
       expected === "entrance"
@@ -811,32 +703,27 @@ function validatedEffect(
         : `${preset}() is an entrance effect and should be passed to enter`,
     );
   }
-  const duration = effectValue["duration"];
-  const delay = effectValue["delay"];
-  if (
-    typeof duration !== "number" ||
-    !Number.isFinite(duration) ||
-    duration <= 0 ||
-    Math.round(duration) < 1 ||
-    !Number.isSafeInteger(Math.round(duration))
-  ) {
+  const parsedDuration = EffectDurationSchema.safeParse(
+    effectValue["duration"],
+  );
+  if (!parsedDuration.success) {
     return fail(
       "invalid-duration",
       "Animation duration must be writable as a finite positive integer in milliseconds",
     );
   }
+  const duration = parsedDuration.data;
+  const parsedDelay = EffectDelaySchema.safeParse(effectValue["delay"]);
   if (
-    typeof delay !== "number" ||
-    !Number.isFinite(delay) ||
-    delay < 0 ||
-    !Number.isSafeInteger(Math.round(delay)) ||
-    !Number.isFinite(Math.round(delay) + Math.round(duration))
+    !parsedDelay.success ||
+    !Number.isFinite(Math.round(parsedDelay.data) + Math.round(duration))
   ) {
     return fail(
       "invalid-delay",
       "Animation delay must be writable as a finite non-negative integer in milliseconds",
     );
   }
+  const delay = parsedDelay.data;
   if (preset === "breathe" && Math.round(delay) > maximumTimeNodeValue) {
     return fail(
       "invalid-delay",
@@ -846,13 +733,7 @@ function validatedEffect(
   const by = effectValue["by"];
   const interval = effectValue["intervalMs"];
   if (preset === "spin" && typeof by === "number") {
-    const units = Math.round(by * 60000);
-    if (
-      !Number.isFinite(by) ||
-      !Number.isSafeInteger(units) ||
-      units < minimumRotationUnits ||
-      units > maximumRotationUnits
-    ) {
+    if (!SpinAngleSchema.safeParse(by).success) {
       return fail(
         "invalid-rotation",
         "spin by converted value must fall within signed 32-bit angle range",
@@ -866,8 +747,7 @@ function validatedEffect(
     }
   } else if (
     by !== undefined &&
-    (typeof by !== "string" ||
-      !motionGranularities.has(by as MotionGranularity))
+    !MotionGranularitySchema.safeParse(by).success
   ) {
     return fail(
       "invalid-motion",
@@ -877,9 +757,7 @@ function validatedEffect(
   if (
     interval !== undefined &&
     ((by !== "word" && by !== "letter") ||
-      typeof interval !== "number" ||
-      !Number.isSafeInteger(interval) ||
-      interval < 1)
+      !IntervalMsSchema.safeParse(interval).success)
   ) {
     return fail(
       "invalid-motion-interval",
@@ -888,8 +766,7 @@ function validatedEffect(
   }
   if (
     (preset === "wipe" || preset === "fly") &&
-    (typeof effectValue["from"] !== "string" ||
-      !directions.has(effectValue["from"] as MotionDirection))
+    !MotionDirectionSchema.safeParse(effectValue["from"]).success
   ) {
     return fail(
       "invalid-direction",
@@ -898,20 +775,11 @@ function validatedEffect(
   }
   if (preset === "spin") {
     const from = effectValue["from"];
-    if (typeof by !== "number") {
-      const units = typeof from === "number" ? Math.round(from * 60000) : NaN;
-      if (
-        typeof from !== "number" ||
-        !Number.isFinite(from) ||
-        !Number.isSafeInteger(units) ||
-        units < minimumRotationUnits ||
-        units > maximumRotationUnits
-      ) {
-        return fail(
-          "invalid-rotation",
-          "spin from converted value must fall within signed 32-bit angle range",
-        );
-      }
+    if (typeof by !== "number" && !SpinAngleSchema.safeParse(from).success) {
+      return fail(
+        "invalid-rotation",
+        "spin from converted value must fall within signed 32-bit angle range",
+      );
     }
   }
   if (
@@ -936,17 +804,7 @@ function validatedEffect(
         `easing contains unimplemented parameter ${unknownEasing}`,
       );
     }
-    const accelerate = easing["accelerate"] ?? 0;
-    const decelerate = easing["decelerate"] ?? 0;
-    if (
-      typeof accelerate !== "number" ||
-      !Number.isFinite(accelerate) ||
-      typeof decelerate !== "number" ||
-      !Number.isFinite(decelerate) ||
-      accelerate < 0 ||
-      decelerate < 0 ||
-      accelerate + decelerate > 1
-    ) {
+    if (!EasingSchema.safeParse(easing).success) {
       return fail(
         "invalid-easing",
         "easing accelerate and decelerate proportions must be non-negative and sum to at most 1",
@@ -1020,12 +878,7 @@ function validatedEffect(
           "forever currently only supports complete breathe cycles",
         );
       }
-    } else if (
-      typeof repeatCount !== "number" ||
-      !Number.isSafeInteger(repeatCount) ||
-      repeatCount < 1 ||
-      repeatCount > maxRepeatCount
-    ) {
+    } else if (!RepeatCountSchema.safeParse(repeatCount).success) {
       return fail(
         "invalid-repeat-count",
         `repeat count must be total rounds between 1 and ${maxRepeatCount}`,
@@ -1052,6 +905,12 @@ function validatedEffect(
         "Repeated effects cannot currently be combined with per-paragraph, per-word, per-letter, or chart granularity",
       );
     }
+    if (!RepeatCountSchema.safeParse(repeatCount).success) {
+      return fail(
+        "invalid-repeat-count",
+        `repeat count must be total rounds between 1 and ${maxRepeatCount}`,
+      );
+    }
   }
 
   return {
@@ -1076,17 +935,14 @@ function stepDeclarationFromProps(
     }
     return Object.freeze({ mode: "automatic" as const, identity });
   }
-  if (
-    typeof number !== "number" ||
-    !Number.isSafeInteger(number) ||
-    number < 1
-  ) {
+  const parsed = MotionStepAuthorPropsSchema.safeParse({ n: number });
+  if (!parsed.success || parsed.data.n === undefined) {
     return fail(
       "invalid-step",
       "Explicit click step number must be a positive integer",
     );
   }
-  return Object.freeze({ mode: "explicit" as const, number });
+  return Object.freeze({ mode: "explicit" as const, number: parsed.data.n });
 }
 
 function listed(value: unknown, many: boolean): readonly unknown[] {
@@ -1095,49 +951,37 @@ function listed(value: unknown, many: boolean): readonly unknown[] {
 }
 
 function validatedMoment(value: unknown): MotionMoment {
-  if (!isRecord(value) || value["type"] !== "motion-moment") {
-    return fail(
-      "invalid-moment",
-      "Moment handle must come from a motion scope handle.",
-    );
-  }
-  const scope = value["scope"];
-  const point = value["point"];
-  const name = value["name"];
-  if (
-    typeof scope !== "string" ||
-    scope === "" ||
-    (point !== "start" && point !== "end" && point !== "named") ||
-    (point === "named"
-      ? typeof name !== "string" || name.trim() === ""
-      : name !== undefined)
-  ) {
+  const parsed = MotionMomentSchema.safeParse(value);
+  if (!parsed.success) {
+    if (!isRecord(value) || value["type"] !== "motion-moment") {
+      return fail(
+        "invalid-moment",
+        "Moment handle must come from a motion scope handle.",
+      );
+    }
     return fail(
       "invalid-moment",
       "Moment handle scope, type, or name is invalid",
     );
   }
-  return value as unknown as MotionMoment;
+  return parsed.data;
 }
 
 function validatedTiming(value: unknown): MotionTiming {
   if (isRecord(value) && value["type"] === "motion-offset") {
-    const offset = value["offsetMs"];
-    if (
-      typeof offset !== "number" ||
-      !Number.isSafeInteger(offset) ||
-      offset < 0
-    ) {
+    const moment = validatedMoment(value["moment"]);
+    const parsed = MotionMomentOffsetSchema.safeParse({
+      type: "motion-offset",
+      moment,
+      offsetMs: value["offsetMs"],
+    });
+    if (!parsed.success) {
       return fail(
         "invalid-delay",
         "Moment offset must be a finite non-negative integer in milliseconds",
       );
     }
-    return Object.freeze({
-      type: "motion-offset",
-      moment: validatedMoment(value["moment"]),
-      offsetMs: offset,
-    });
+    return Object.freeze(parsed.data);
   }
   return validatedMoment(value);
 }
@@ -1152,15 +996,6 @@ function validatedPublisher(value: unknown): MotionMoment | undefined {
     );
   }
   return momentValue;
-}
-
-function isMotionScopeHandle(value: unknown): value is MotionScopeHandle {
-  return (
-    isRecord(value) &&
-    value["type"] === "motion-scope-handle" &&
-    typeof value["identity"] === "string" &&
-    value["identity"] !== ""
-  );
 }
 
 function localScopeDeclaration(
@@ -1184,33 +1019,33 @@ function localScopeDeclaration(
     );
   }
   validateMotionFlag(props["motion"]);
-  const handle = props["scope"];
-  if (!isMotionScopeHandle(handle)) {
+  const parsedHandle = MotionScopeHandleSchema.safeParse(props["scope"]);
+  if (!parsedHandle.success) {
     return fail(
       "invalid-scope",
       "MotionScope requires a handle created by createMotionScopeHandle() or useMotionScope()",
     );
   }
-  const mode = props["mode"] ?? "parallel";
-  const delay = props["delay"] ?? 0;
-  const each = props["each"];
-  if (mode !== "parallel" && mode !== "sequence" && mode !== "stagger") {
+  const handle = parsedHandle.data;
+  const parsedMode = MotionScopeModeSchema.safeParse(
+    props["mode"] ?? "parallel",
+  );
+  if (!parsedMode.success) {
     return fail(
       "invalid-scope",
       "MotionScope mode must be parallel, sequence, or stagger",
     );
   }
-  if (
-    typeof delay !== "number" ||
-    !Number.isFinite(delay) ||
-    delay < 0 ||
-    !Number.isSafeInteger(Math.round(delay))
-  ) {
+  const mode = parsedMode.data;
+  const parsedDelay = EffectDelaySchema.safeParse(props["delay"] ?? 0);
+  if (!parsedDelay.success) {
     return fail(
       "invalid-delay",
       "MotionScope delay must be a finite non-negative integer in milliseconds",
     );
   }
+  const delay = parsedDelay.data;
+  const each = props["each"];
   if (
     (mode === "stagger" &&
       (typeof each !== "number" ||

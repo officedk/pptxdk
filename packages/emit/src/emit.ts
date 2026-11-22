@@ -1441,10 +1441,13 @@ function emitMasterOrLayoutCapabilities(
   partEmit: SlideEmitState,
   target: Target,
   options: EmitOptions,
-): string {
-  if (capabilities === undefined || capabilities.length === 0) return "";
+): { readonly transitionXml: string; readonly timingXml: string } {
+  if (capabilities === undefined || capabilities.length === 0) {
+    return { transitionXml: "", timingXml: "" };
+  }
   const packageCtx: PackageContext = { document: docEmit, slide: partEmit };
-  const parts: string[] = [];
+  const transitionParts: string[] = [];
+  const timingParts: string[] = [];
 
   for (const cap of capabilities) {
     checkExtensions(
@@ -1468,7 +1471,9 @@ function emitMasterOrLayoutCapabilities(
           addSharedPackagePart(key, part, packageCtx),
       });
       if (cap.slot === "transition" && output.xml !== "") {
-        parts.push(output.xml);
+        transitionParts.push(output.xml);
+      } else if (cap.slot === "timing" && output.xml !== "") {
+        timingParts.push(output.xml);
       }
     } catch (error) {
       partEmit.diagnostics.push(
@@ -1482,7 +1487,10 @@ function emitMasterOrLayoutCapabilities(
       );
     }
   }
-  return parts.join("");
+  return {
+    transitionXml: transitionParts.join(""),
+    timingXml: timingParts.join(""),
+  };
 }
 
 /**
@@ -1528,7 +1536,7 @@ export function emit(
         document: docEmit,
         slide: masterEmit,
       };
-      const transitionXml = emitMasterOrLayoutCapabilities(
+      const masterCapXml = emitMasterOrLayoutCapabilities(
         master.slideCapabilities,
         internal,
         docEmit,
@@ -1628,7 +1636,7 @@ export function emit(
           document: docEmit,
           slide: layoutEmit,
         };
-        const layoutTransitionXml = emitMasterOrLayoutCapabilities(
+        const layoutCapXml = emitMasterOrLayoutCapabilities(
           layout.slideCapabilities,
           internal,
           docEmit,
@@ -1750,9 +1758,12 @@ export function emit(
           ...(layoutEmit.relationships.length === 0
             ? {}
             : { extraRelationships: layoutEmit.relationships }),
-          ...(layoutTransitionXml === ""
+          ...(layoutCapXml.transitionXml === ""
             ? {}
-            : { transitionXml: layoutTransitionXml }),
+            : { transitionXml: layoutCapXml.transitionXml }),
+          ...(layoutCapXml.timingXml === ""
+            ? {}
+            : { timingXml: layoutCapXml.timingXml }),
         };
       });
 
@@ -1779,7 +1790,12 @@ export function emit(
         ...(masterEmit.relationships.length === 0
           ? {}
           : { extraRelationships: masterEmit.relationships }),
-        ...(transitionXml === "" ? {} : { transitionXml }),
+        ...(masterCapXml.transitionXml === ""
+          ? {}
+          : { transitionXml: masterCapXml.transitionXml }),
+        ...(masterCapXml.timingXml === ""
+          ? {}
+          : { timingXml: masterCapXml.timingXml }),
         layouts: emittedLayouts,
       };
     });
@@ -1871,6 +1887,12 @@ export function emit(
         ? {}
         : { themeOverride: resolvedSlide.themeOverride }),
       hidden: resolvedSlide.hidden,
+      ...(resolvedSlide.showMasterPlaceholderAnimations === undefined
+        ? {}
+        : {
+            showMasterPlaceholderAnimations:
+              resolvedSlide.showMasterPlaceholderAnimations,
+          }),
       ...(resolvedSlide.showMasterShapes === undefined
         ? {}
         : { showMasterShapes: resolvedSlide.showMasterShapes }),
@@ -1901,6 +1923,7 @@ export function emit(
         colorMapOverride,
         themeOverride,
         hidden,
+        showMasterPlaceholderAnimations,
         showMasterShapes,
         shapeXml,
         backgroundXml,
@@ -1912,6 +1935,9 @@ export function emit(
         ...(colorMapOverride === undefined ? {} : { colorMapOverride }),
         ...(themeOverride === undefined ? {} : { themeOverride }),
         hidden,
+        ...(showMasterPlaceholderAnimations === undefined
+          ? {}
+          : { showMasterPlaceholderAnimations }),
         ...(showMasterShapes === undefined ? {} : { showMasterShapes }),
         shapeXml,
         backgroundXml,

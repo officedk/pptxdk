@@ -1,34 +1,29 @@
 import {
   BuildError,
   CapabilityError,
+  buildOptionsSchema,
   createResolver,
+  diagnosticSchema,
+  diagnosticSeveritySchema,
+  emitOptionsSchema,
+  extensionSchema,
+  fontEmbeddingModeSchema,
   formatBaseline,
+  formatBaselineSchema,
+  resolveOptionsSchema,
+  targetNameSchema,
+  targetSchema,
   targets,
-  type BuildOptions,
   type BuildResult,
   type CapabilityModule,
   type Resolution,
-  type ResolveOptions,
 } from "@pptxdk/core/build";
 import type { CommonNode } from "@pptxdk/core/document";
 import { emit, validateOptions } from "@pptxdk/emit";
 import type { ReactNode } from "react";
+import { z } from "zod";
 
 import { emitBuildResult, resolveDocumentInput } from "./compose.ts";
-
-/** Official capability module names accepted by `pptxdk/build`. */
-export type OfficialCapabilityName =
-  | "box"
-  | "chart"
-  | "group"
-  | "image"
-  | "motion"
-  | "notes"
-  | "shape"
-  | "slide-background"
-  | "table"
-  | "text"
-  | "transition";
 
 /** Complete list of official capability names in canonical order. */
 export const officialCapabilityNames = Object.freeze([
@@ -43,7 +38,17 @@ export const officialCapabilityNames = Object.freeze([
   "table",
   "text",
   "transition",
-] as const satisfies readonly OfficialCapabilityName[]);
+] as const);
+
+export const officialCapabilityNameSchema = z.enum(officialCapabilityNames);
+/** Official capability module names accepted by `pptxdk/build`. */
+export type OfficialCapabilityName = z.infer<
+  typeof officialCapabilityNameSchema
+>;
+
+const capabilitiesSelectionSchema = z
+  .array(officialCapabilityNameSchema)
+  .readonly();
 
 const capabilityLoaders: Readonly<
   Record<OfficialCapabilityName, () => Promise<CapabilityModule>>
@@ -71,34 +76,40 @@ const capabilityLoaders: Readonly<
     (await import("@pptxdk/capabilities/transition")).transitionCapability,
 };
 
-export type TrimmedResolveOptions = ResolveOptions & {
-  readonly capabilities: readonly OfficialCapabilityName[];
-};
+export const trimmedResolveOptionsSchema = resolveOptionsSchema
+  .unwrap()
+  .extend({
+    capabilities: capabilitiesSelectionSchema,
+  })
+  .readonly();
+export type TrimmedResolveOptions = z.infer<typeof trimmedResolveOptionsSchema>;
 
-export type TrimmedBuildOptions = BuildOptions & {
-  readonly capabilities: readonly OfficialCapabilityName[];
-};
-
-function assertOptionsObject(
-  value: unknown,
-  path: string,
-): asserts value is Record<string, unknown> {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) {
-    throw new BuildError([
-      {
-        severity: "error",
-        code: "invalid-options",
-        path,
-        message: "Build options must be an object",
-      },
-    ]);
-  }
-}
+export const trimmedBuildOptionsSchema = buildOptionsSchema
+  .unwrap()
+  .extend({
+    capabilities: capabilitiesSelectionSchema,
+  })
+  .readonly();
+export type TrimmedBuildOptions = z.infer<typeof trimmedBuildOptionsSchema>;
 
 function validateCapabilityNames(
   names: unknown,
 ): readonly OfficialCapabilityName[] {
-  if (!Array.isArray(names)) {
+  const parsed = capabilitiesSelectionSchema.safeParse(names);
+  if (!parsed.success) {
+    const issue = parsed.error.issues[0];
+    if (issue !== undefined && issue.path.length > 0) {
+      const index = Number(issue.path[0]);
+      const badName = Array.isArray(names) ? names[index] : undefined;
+      throw new BuildError([
+        {
+          severity: "error",
+          code: "unknown-capability",
+          path: `build.capabilities[${index}]`,
+          message: `Unknown official capability ${JSON.stringify(badName)}`,
+        },
+      ]);
+    }
     throw new BuildError([
       {
         severity: "error",
@@ -108,22 +119,7 @@ function validateCapabilityNames(
       },
     ]);
   }
-  const unique = new Set<OfficialCapabilityName>();
-  for (let index = 0; index < names.length; index += 1) {
-    const name: unknown = names[index];
-    if (typeof name !== "string" || !Object.hasOwn(capabilityLoaders, name)) {
-      throw new BuildError([
-        {
-          severity: "error",
-          code: "unknown-capability",
-          path: `build.capabilities[${index}]`,
-          message: `Unknown official capability ${JSON.stringify(name)}`,
-        },
-      ]);
-    }
-    unique.add(name as OfficialCapabilityName);
-  }
-  return [...unique];
+  return [...new Set(parsed.data)];
 }
 
 /**
@@ -164,20 +160,45 @@ export async function resolve(
   input: ReactNode | CommonNode,
   options: TrimmedResolveOptions,
 ): Promise<Resolution> {
-  assertOptionsObject(options, "resolve");
-  for (const key of Object.keys(options)) {
-    if (key !== "capabilities" && key !== "signal") {
+  const parsed = trimmedResolveOptionsSchema.safeParse(options);
+  if (!parsed.success) {
+    const issue = parsed.error.issues[0];
+    if (issue?.path[0] === "capabilities") {
+      validateCapabilityNames(
+        (options as { readonly capabilities?: unknown }).capabilities,
+      );
+    }
+    if (issue?.path.length === 0 && issue.code === "unrecognized_keys") {
       throw new BuildError([
         {
           severity: "error",
           code: "unknown-parameter",
           path: "resolve",
-          message: `Resolve options contain unknown parameter ${key}`,
+          message: `Resolve options contain unknown parameter ${issue.keys[0]}`,
         },
       ]);
     }
+    if (issue?.path[0] === "signal") {
+      throw new BuildError([
+        {
+          severity: "error",
+          code: "invalid-options",
+          path: "resolve.signal",
+          message: "Resolve options signal must be an AbortSignal",
+        },
+      ]);
+    }
+    throw new BuildError([
+      {
+        severity: "error",
+        code: "invalid-options",
+        path: "resolve",
+        message: "Build options must be an object",
+      },
+    ]);
   }
-  return resolveSelected(input, options.capabilities, options.signal);
+  const capabilities = validateCapabilityNames(parsed.data.capabilities);
+  return resolveSelected(input, capabilities, parsed.data.signal);
 }
 
 /**
@@ -187,10 +208,39 @@ export async function build(
   input: ReactNode | CommonNode,
   options: TrimmedBuildOptions,
 ): Promise<BuildResult> {
-  assertOptionsObject(options, "build");
-  const { capabilities, ...buildOptions } = options;
-  validateOptions(buildOptions);
-  validateCapabilityNames(capabilities);
+  const parsed = trimmedBuildOptionsSchema.safeParse(options);
+  if (!parsed.success) {
+    if (
+      typeof options !== "object" ||
+      options === null ||
+      Array.isArray(options)
+    ) {
+      throw new BuildError([
+        {
+          severity: "error",
+          code: "invalid-options",
+          path: "build",
+          message: "Build options must be an object",
+        },
+      ]);
+    }
+    const { capabilities, ...buildOptions } = options as Record<
+      string,
+      unknown
+    >;
+    validateOptions(buildOptions);
+    validateCapabilityNames(capabilities);
+    throw new BuildError([
+      {
+        severity: "error",
+        code: "invalid-options",
+        path: "build",
+        message: "Build options are invalid",
+      },
+    ]);
+  }
+  const capabilities = validateCapabilityNames(parsed.data.capabilities);
+  const { capabilities: _capabilities, ...buildOptions } = parsed.data;
   const resolution = await resolveSelected(
     input,
     capabilities,
@@ -202,9 +252,19 @@ export async function build(
 export {
   BuildError,
   CapabilityError,
+  buildOptionsSchema,
   createResolver,
+  diagnosticSchema,
+  diagnosticSeveritySchema,
   emit,
+  emitOptionsSchema,
+  extensionSchema,
+  fontEmbeddingModeSchema,
   formatBaseline,
+  formatBaselineSchema,
+  resolveOptionsSchema,
+  targetNameSchema,
+  targetSchema,
   targets,
 };
 export type {
@@ -217,11 +277,14 @@ export type {
   DeclarationNode,
   DeclarationText,
   Diagnostic,
+  DiagnosticSeverity,
   EmitOptions,
   EmitResult,
   Extension,
+  FontEmbeddingMode,
   Resolution,
   ResolutionReport,
   ResolveOptions,
   Target,
+  TargetName,
 } from "@pptxdk/core/build";

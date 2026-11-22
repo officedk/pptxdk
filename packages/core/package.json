@@ -69,7 +69,8 @@
     "build": "rm -rf dist && tsc -p tsconfig.build.json --pretty false"
   },
   "dependencies": {
-    "yoga-layout": "catalog:"
+    "yoga-layout": "catalog:",
+    "zod": "catalog:"
   },
   "devDependencies": {
     "@pptxdk/tooling-config": "workspace:*",

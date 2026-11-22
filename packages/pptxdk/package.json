@@ -71,7 +71,8 @@
     "@pptxdk/preview": "workspace:*",
     "@pptxdk/react": "workspace:*",
     "esbuild": "catalog:",
-    "react": "catalog:"
+    "react": "catalog:",
+    "zod": "catalog:"
   },
   "devDependencies": {
     "@pptxdk/tooling-config": "workspace:*",

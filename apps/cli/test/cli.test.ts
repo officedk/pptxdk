@@ -13,6 +13,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { validatePptx } from "@pptxdk/validation";
+import { fontEmbeddingModeSchema, targetNameSchema } from "pptxdk";
+import { previewPageNumberSchema } from "pptxdk/preview";
 import { describe, expect, it } from "vitest";
 
 import { runCli } from "../src/index.ts";
@@ -1977,6 +1979,101 @@ describe("pptxdk CLI preview", () => {
       expect(await readFile(join(existingOutDir, "keep.txt"))).toEqual(
         keepBytes,
       );
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("shares embedFonts, target, and page-number domains with SDK schemas and never loads @resvg/resvg-js during build", async () => {
+    const buildInputSchema = await runInMemory(
+      ["build", "--schema=input"],
+      import.meta.dirname,
+    );
+    expect(buildInputSchema.code).toBe(0);
+    const parsedBuildInput = JSON.parse(buildInputSchema.stdout) as {
+      readonly input: {
+        readonly inputSchema: {
+          readonly properties: {
+            readonly target: { readonly enum: readonly string[] };
+            readonly embedFonts: { readonly enum: readonly string[] };
+          };
+        };
+      };
+    };
+    expect(parsedBuildInput.input.inputSchema.properties.target.enum).toEqual(
+      targetNameSchema.options,
+    );
+    expect(
+      parsedBuildInput.input.inputSchema.properties.embedFonts.enum,
+    ).toEqual(fontEmbeddingModeSchema.options);
+
+    const previewInputSchema = await runInMemory(
+      ["preview", "--schema=input"],
+      import.meta.dirname,
+    );
+    expect(previewInputSchema.code).toBe(0);
+    const parsedPreviewInput = JSON.parse(previewInputSchema.stdout) as {
+      readonly input: {
+        readonly outputSchema: {
+          readonly properties: {
+            readonly pages: {
+              readonly items: Record<string, unknown>;
+            };
+          };
+        };
+      };
+    };
+    const expectedPageSchema = previewPageNumberSchema.toJSONSchema({
+      target: "draft-2020-12",
+    });
+    expect(
+      parsedPreviewInput.input.outputSchema.properties.pages.items,
+    ).toMatchObject({
+      type: expectedPageSchema.type,
+      exclusiveMinimum: expectedPageSchema.exclusiveMinimum,
+    });
+
+    // Reject unsafe integer page numbers that fail SDK previewPageNumberSchema.
+    const unsafePageResult = await runInMemory(
+      ["preview", fixture("multi-slide.ts"), "-p", "9007199254740992"],
+      import.meta.dirname,
+    );
+    expect(unsafePageResult.code).toBe(2);
+
+    // Running CLI `build` must never load @resvg/resvg-js even though CLI imports pptxdk/preview schemas.
+    const directory = await mkdtemp(join(tmpdir(), "pptxdk cli-isolation "));
+    try {
+      const cliRoot = join(import.meta.dirname, "..");
+      const outPath = join(directory, "isolated.pptx");
+      const script = `
+import { registerHooks } from "node:module";
+
+registerHooks({
+  resolve(specifier, context, nextResolve) {
+    if (specifier.includes("@resvg/resvg-js")) {
+      throw new Error("CLI build loaded forbidden @resvg/resvg-js: " + specifier);
+    }
+    return nextResolve(specifier, context);
+  },
+});
+
+const { runCli } = await import("./src/index.ts");
+const code = await runCli({
+  argv: ["node", "pptxdk", "build", ${JSON.stringify(fixture("source deck.tsx"))}, "--out", ${JSON.stringify(outPath)}],
+  cwd: ${JSON.stringify(directory)},
+  write: () => {},
+});
+if (code !== 0) {
+  throw new Error("CLI build exited with code " + code);
+}
+process.stdout.write("ok");
+`;
+      const child = runNode(
+        ["--conditions=source", "--input-type=module", "--eval", script],
+        cliRoot,
+      );
+      expect(child.code).toBe(0);
+      expect(child.stdout).toBe("ok");
     } finally {
       await rm(directory, { recursive: true, force: true });
     }

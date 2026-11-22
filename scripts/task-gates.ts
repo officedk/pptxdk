@@ -2,19 +2,63 @@ import { spawn, spawnSync } from "node:child_process";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
-export type TaskGate = "check" | "check:heavy" | "check:full" | "fix";
+import { z } from "zod";
 
-type ScriptRole =
-  | "quality:light"
-  | "quality:heavy"
-  | "quality:conditional"
-  | "quality:entry"
-  | "work:development"
-  | "work:repair"
-  | "work:release"
-  | "work:preparation"
-  | "work:lifecycle"
-  | "work:on-demand";
+export const taskGateSchema = z.enum([
+  "check",
+  "check:heavy",
+  "check:full",
+  "fix",
+]);
+
+export type TaskGate = z.infer<typeof taskGateSchema>;
+
+const scriptRoleSchema = z.enum([
+  "quality:light",
+  "quality:heavy",
+  "quality:conditional",
+  "quality:entry",
+  "work:development",
+  "work:repair",
+  "work:release",
+  "work:preparation",
+  "work:lifecycle",
+  "work:on-demand",
+]);
+
+type ScriptRole = z.infer<typeof scriptRoleSchema>;
+
+// Turbo returns null for script/command on commandless tasks and includes extra metadata fields in query/dry-run JSON.
+const turboQueryTaskItemSchema = z.object({
+  name: z.string().trim().min(1),
+  fullName: z.string().trim().min(1),
+  tags: z.array(z.string()),
+  script: z.string().nullish(),
+  command: z.string().nullish(),
+});
+
+const turboQueryPackageItemSchema = z.object({
+  name: z.string().trim().min(1),
+  tasks: z.object({
+    items: z.array(turboQueryTaskItemSchema),
+  }),
+});
+
+const turboTaskDirectoryResponseSchema = z.object({
+  data: z.object({
+    packages: z.object({
+      items: z.array(turboQueryPackageItemSchema),
+    }),
+  }),
+});
+
+const turboDryRunResponseSchema = z.object({
+  tasks: z.array(
+    z.object({
+      taskId: z.string().trim().min(1),
+    }),
+  ),
+});
 
 type TurboTask = {
   readonly name: string;
@@ -40,35 +84,37 @@ type CommandResult = {
 const turboTaskQuery =
   "{ packages { items { name tasks { items { name fullName tags script command } } } } }";
 
-const validRoles = new Set<ScriptRole>([
-  "quality:light",
-  "quality:heavy",
-  "quality:conditional",
-  "quality:entry",
-  "work:development",
-  "work:repair",
-  "work:release",
-  "work:preparation",
-  "work:lifecycle",
-  "work:on-demand",
-]);
-
-const publicGateNames = new Set<TaskGate>([
-  "check",
-  "check:heavy",
-  "check:full",
-  "fix",
-]);
-
 const defaultEntryCommand = "node --conditions=source scripts/task-gates.ts";
 const maxTurboOutputBytes = 16 * 1024 * 1024;
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
+function hasCommand(value: string | null | undefined): boolean {
+  return typeof value === "string" && value.trim().length > 0;
 }
 
-function isNonEmptyString(value: unknown): value is string {
-  return typeof value === "string" && value.trim().length > 0;
+function formatIssuePath(path: readonly PropertyKey[]): string {
+  if (path.length === 0) {
+    return "<root>";
+  }
+  let formatted = "";
+  for (const segment of path) {
+    if (typeof segment === "number") {
+      formatted += `[${String(segment)}]`;
+    } else {
+      const key = String(segment);
+      formatted += formatted === "" ? key : `.${key}`;
+    }
+  }
+  return formatted;
+}
+
+function formatSchemaIssues(
+  label: string,
+  issues: readonly z.core.$ZodIssue[],
+): readonly string[] {
+  return issues.map(
+    (issue) =>
+      `${label} invalid at ${formatIssuePath(issue.path)}: ${issue.message}`,
+  );
 }
 
 function report(message: string): void {
@@ -173,7 +219,7 @@ function publicGateTask(task: {
   readonly packageName: string;
 }): boolean {
   return (
-    task.packageName === "//" && publicGateNames.has(task.name as TaskGate)
+    task.packageName === "//" && taskGateSchema.safeParse(task.name).success
   );
 }
 
@@ -209,11 +255,12 @@ function assignRole(
   }
 
   const role = roles[0]!;
-  if (!validRoles.has(role as ScriptRole)) {
+  const parsedRole = scriptRoleSchema.safeParse(role);
+  if (!parsedRole.success) {
     diagnostics.push(`${task.fullName} uses unknown role tag ${role}`);
     return undefined;
   }
-  const scriptRole = role as ScriptRole;
+  const scriptRole = parsedRole.data;
   const publicRole = task.name === "fix" ? "work:repair" : "quality:entry";
   if (isPublicGate && scriptRole !== publicRole) {
     diagnostics.push(
@@ -253,9 +300,9 @@ function readTaskDirectory(
     };
   }
 
-  let response: unknown;
+  let rawResponse: unknown;
   try {
-    response = JSON.parse(result.stdout) as unknown;
+    rawResponse = JSON.parse(result.stdout) as unknown;
   } catch (error) {
     return {
       diagnostics: [
@@ -265,59 +312,24 @@ function readTaskDirectory(
     };
   }
 
-  const packages =
-    isRecord(response) && isRecord(response.data)
-      ? response.data.packages
-      : undefined;
-  const packageItems = isRecord(packages) ? packages.items : undefined;
-  if (!Array.isArray(packageItems)) {
+  const parsedResponse =
+    turboTaskDirectoryResponseSchema.safeParse(rawResponse);
+  if (!parsedResponse.success) {
     return {
-      diagnostics: ["Turbo native task directory is missing packages.items"],
+      diagnostics: formatSchemaIssues(
+        "Turbo native task directory",
+        parsedResponse.error.issues,
+      ),
       tasks: [],
     };
   }
 
   const diagnostics: string[] = [];
   const tasks: TurboTask[] = [];
-  for (const packageItem of packageItems) {
-    if (!isRecord(packageItem) || !isNonEmptyString(packageItem.name)) {
-      diagnostics.push(
-        "Turbo native task directory contains unrecognized workspace package",
-      );
-      continue;
-    }
-    const taskConnection = packageItem.tasks;
-    const taskItems = isRecord(taskConnection)
-      ? taskConnection.items
-      : undefined;
-    if (!Array.isArray(taskItems)) {
-      diagnostics.push(
-        `${packageItem.name} Turbo task directory is missing tasks.items`,
-      );
-      continue;
-    }
-
-    for (const taskItem of taskItems) {
-      if (!isRecord(taskItem)) {
-        diagnostics.push(
-          `${packageItem.name} Turbo task directory contains invalid task`,
-        );
-        continue;
-      }
+  for (const packageItem of parsedResponse.data.data.packages.items) {
+    for (const taskItem of packageItem.tasks.items) {
       const { name, fullName, tags, script, command } = taskItem;
-      if (
-        !isNonEmptyString(name) ||
-        !isNonEmptyString(fullName) ||
-        !Array.isArray(tags) ||
-        !tags.every((tag) => typeof tag === "string")
-      ) {
-        diagnostics.push(
-          `${packageItem.name} Turbo task entry is missing name or tags`,
-        );
-        continue;
-      }
-
-      const executable = isNonEmptyString(script) || isNonEmptyString(command);
+      const executable = hasCommand(script) || hasCommand(command);
       const taskWithoutRole = {
         name,
         fullName,
@@ -345,7 +357,7 @@ function readTaskDirectory(
     }
   }
 
-  for (const name of publicGateNames) {
+  for (const name of taskGateSchema.options) {
     if (
       !tasks.some((task) => task.packageName === "//" && task.name === name)
     ) {
@@ -379,9 +391,9 @@ function parseDryRun(
     };
   }
 
-  let response: unknown;
+  let rawResponse: unknown;
   try {
-    response = JSON.parse(result.stdout) as unknown;
+    rawResponse = JSON.parse(result.stdout) as unknown;
   } catch (error) {
     return {
       diagnostics: [
@@ -390,26 +402,22 @@ function parseDryRun(
       taskIds: [],
     };
   }
-  if (!isRecord(response) || !Array.isArray(response.tasks)) {
+
+  const parsedResponse = turboDryRunResponseSchema.safeParse(rawResponse);
+  if (!parsedResponse.success) {
     return {
-      diagnostics: ["Turbo task graph dry run is missing tasks"],
+      diagnostics: formatSchemaIssues(
+        "Turbo task graph dry run",
+        parsedResponse.error.issues,
+      ),
       taskIds: [],
     };
   }
 
-  const taskIds: string[] = [];
-  const diagnostics: string[] = [];
-  for (const task of response.tasks) {
-    if (!isRecord(task) || !isNonEmptyString(task.taskId)) {
-      diagnostics.push(
-        "Turbo task graph dry run contains unrecognized task identifier",
-      );
-      continue;
-    }
-    taskIds.push(task.taskId);
-  }
-
-  return { diagnostics, taskIds };
+  return {
+    diagnostics: [],
+    taskIds: parsedResponse.data.tasks.map((task) => task.taskId),
+  };
 }
 
 function validateLayerClosure(
@@ -490,9 +498,9 @@ export function inspectTaskGate(
   }[];
   readonly conditionalTasks: readonly TurboTask[];
 } {
-  if (!publicGateNames.has(gate)) {
+  if (!taskGateSchema.safeParse(gate).success) {
     return {
-      diagnostics: [`Unknown public task entrypoint: ${String(gate)}`],
+      diagnostics: [`Unknown public task entrypoint: ${gate}`],
       plans: [],
       conditionalTasks: [],
     };
@@ -608,11 +616,8 @@ export async function runTaskGateCli(
   entryCommand = defaultEntryCommand,
 ): Promise<void> {
   const [gate, ...extraArguments] = process.argv.slice(2);
-  if (
-    gate === undefined ||
-    !publicGateNames.has(gate as TaskGate) ||
-    extraArguments.length > 0
-  ) {
+  const parsedGate = taskGateSchema.safeParse(gate);
+  if (!parsedGate.success || extraArguments.length > 0) {
     report(`Usage: ${entryCommand} <check|check:heavy|check:full|fix>`);
     process.exitCode = 2;
     return;
@@ -620,7 +625,7 @@ export async function runTaskGateCli(
 
   try {
     process.exitCode = await runTaskGate(
-      gate as TaskGate,
+      parsedGate.data,
       process.cwd(),
       entryCommand,
     );

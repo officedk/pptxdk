@@ -35,7 +35,7 @@ import {
 } from "@pptxdk/import";
 import { paint } from "@pptxdk/preview";
 import { validatePptx } from "@pptxdk/validation";
-import { strToU8, unzipSync, zipSync } from "fflate";
+import { strToU8, zipSync } from "fflate";
 import { describe, it } from "vitest";
 
 const jostFont = font("Jost*", [
@@ -203,7 +203,6 @@ describe("Speaker notes, slide order, hidden slides, and sections roundtrip", ()
       validated.slides[2]?.notes?.text.text,
       "Edited first slide cue\nNow at index 3",
     );
-    void unzipSync;
   });
 
   it("imports non-sequential sldIds, show='0', custom notesMaster/handoutMaster loss, and preserves all slide notes bodies", async () => {

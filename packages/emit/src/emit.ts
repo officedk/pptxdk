@@ -48,6 +48,7 @@ import {
   hasThemeOverrideContent,
   pptxParts,
   type EmittedSlideMasterSpec,
+  type MastersEmitDriver,
   type PptxPackagePart,
   type PptxPackageRelationshipSet,
   type PptxPackageResource,
@@ -1253,7 +1254,7 @@ function createDocumentEmitState(
     internal.theme.theme,
   );
   return {
-    usedExtensions: new Set(internal.sections.length > 0 ? ["p14"] : []),
+    usedExtensions: new Set(),
     warnings: [...internal.warnings],
     resourceClaims: internal.resourceClaims,
     resources: new Map(),
@@ -1493,6 +1494,38 @@ function emitMasterOrLayoutCapabilities(
   };
 }
 
+function emitOwnerPlaceholderVisuals(
+  placeholderVisuals: ResolvedSlideCapabilityRecord | undefined,
+  internal: InternalResolution,
+  docEmit: DocumentEmitState,
+  ownerEmit: SlideEmitState,
+  ownerCtx: PackageContext,
+  target: Target,
+  options: EmitOptions,
+): Readonly<Record<string, string>> | undefined {
+  if (placeholderVisuals === undefined) return undefined;
+  checkExtensions(
+    placeholderVisuals.extensions,
+    target,
+    docEmit.usedExtensions,
+    ownerEmit.diagnostics,
+    placeholderVisuals.path,
+  );
+  const phOut = placeholderVisuals.emit({
+    path: placeholderVisuals.path,
+    dimensions: internal.dimensions,
+    theme: placeholderVisuals.theme,
+    options,
+    slideNumber: 1,
+    createTextFieldId: () => allocateTextFieldId(docEmit),
+    registerResource: (resource) => addResource(resource, ownerCtx),
+    registerPackagePart: (part) => addSlidePackagePart(part, ownerCtx),
+    registerSharedPart: (key, part) =>
+      addSharedPackagePart(key, part, ownerCtx),
+  });
+  return phOut.placeholderSpPrByKey;
+}
+
 /**
  * Emits a PPTX archive and BuildReport from an existing Resolution without re-resolving the document.
  */
@@ -1504,17 +1537,31 @@ export function emit(
   if (options.signal?.aborted) throw options.signal.reason;
   const internal = getInternalResolution(resolution);
 
-  if (internal.sections.length > 0 && !target.extensions.includes("p14")) {
-    throw new BuildError([
-      diagnostic(
-        "deck/sections",
-        "forbidden-mechanism",
-        "Current target forbids p14 section mechanism",
-      ),
-    ]);
+  const docEmit = createDocumentEmitState(internal);
+  let sectionXml = "";
+  if (internal.sectionsEmitter !== undefined) {
+    if (
+      !internal.sectionsEmitter.extensions.every((ext) =>
+        target.extensions.includes(ext),
+      )
+    ) {
+      throw new BuildError([
+        diagnostic(
+          "deck/sections",
+          "forbidden-mechanism",
+          "Current target forbids p14 section mechanism",
+        ),
+      ]);
+    }
+    for (const ext of internal.sectionsEmitter.extensions) {
+      docEmit.usedExtensions.add(ext);
+    }
+    sectionXml = internal.sectionsEmitter.emit().xml;
   }
 
-  const docEmit = createDocumentEmitState(internal);
+  const mastersEmitDriver = internal.mastersEmitDriver as
+    | MastersEmitDriver
+    | undefined;
   const slideIndexById = new Map(
     internal.slides.map((slide) => [slide.id, slide.index] as const),
   );
@@ -1572,18 +1619,9 @@ export function emit(
           maxResolvedObjectId(master.layers ?? []),
           1 + Object.keys(master.placeholders ?? {}).length,
         ) + 1;
-      let masterShapeXml = (master.layers ?? [])
-        .map((layer) =>
-          emitLayer(
-            layer,
-            slideIndexById,
-            docEmit,
-            masterEmit,
-            target,
-            options,
-          ),
-        )
-        .join("");
+      const masterShapeFragments = (master.layers ?? []).map((layer) =>
+        emitLayer(layer, slideIndexById, docEmit, masterEmit, target, options),
+      );
       if (master.footerPlaceholders !== undefined) {
         checkExtensions(
           master.footerPlaceholders.extensions,
@@ -1605,7 +1643,7 @@ export function emit(
           registerSharedPart: (key, part) =>
             addSharedPackagePart(key, part, masterCtx),
         });
-        masterShapeXml += fpOut.xml;
+        masterShapeFragments.push(fpOut.xml);
         for (const contribution of fpOut.presentationContributions ?? []) {
           addPresentationContribution(
             contribution,
@@ -1614,31 +1652,19 @@ export function emit(
           );
         }
       }
-      let masterPlaceholderSpPrByKey:
-        | Readonly<Record<string, string>>
-        | undefined;
-      if (master.placeholderVisuals !== undefined) {
-        checkExtensions(
-          master.placeholderVisuals.extensions,
-          target,
-          docEmit.usedExtensions,
-          masterEmit.diagnostics,
-          master.placeholderVisuals.path,
-        );
-        const phOut = master.placeholderVisuals.emit({
-          path: master.placeholderVisuals.path,
-          dimensions: internal.dimensions,
-          theme: master.placeholderVisuals.theme,
-          options,
-          slideNumber: 1,
-          createTextFieldId: () => allocateTextFieldId(docEmit),
-          registerResource: (resource) => addResource(resource, masterCtx),
-          registerPackagePart: (part) => addSlidePackagePart(part, masterCtx),
-          registerSharedPart: (key, part) =>
-            addSharedPackagePart(key, part, masterCtx),
-        });
-        masterPlaceholderSpPrByKey = phOut.placeholderSpPrByKey;
-      }
+      const masterShapeXml =
+        mastersEmitDriver !== undefined
+          ? mastersEmitDriver.emitSharedCanvas(masterShapeFragments)
+          : masterShapeFragments.join("");
+      const masterPlaceholderSpPrByKey = emitOwnerPlaceholderVisuals(
+        master.placeholderVisuals,
+        internal,
+        docEmit,
+        masterEmit,
+        masterCtx,
+        target,
+        options,
+      );
       if (masterEmit.diagnostics.length > 0) {
         throw new BuildError(masterEmit.diagnostics);
       }
@@ -1697,18 +1723,16 @@ export function emit(
             maxResolvedObjectId(layout.layers ?? []),
             1 + Object.keys(layout.placeholders ?? {}).length,
           ) + 1;
-        let layoutShapeXml = (layout.layers ?? [])
-          .map((layer) =>
-            emitLayer(
-              layer,
-              slideIndexById,
-              docEmit,
-              layoutEmit,
-              target,
-              options,
-            ),
-          )
-          .join("");
+        const layoutShapeFragments = (layout.layers ?? []).map((layer) =>
+          emitLayer(
+            layer,
+            slideIndexById,
+            docEmit,
+            layoutEmit,
+            target,
+            options,
+          ),
+        );
         if (layout.footerPlaceholders !== undefined) {
           checkExtensions(
             layout.footerPlaceholders.extensions,
@@ -1730,7 +1754,7 @@ export function emit(
             registerSharedPart: (key, part) =>
               addSharedPackagePart(key, part, layoutCtx),
           });
-          layoutShapeXml += fpOut.xml;
+          layoutShapeFragments.push(fpOut.xml);
           for (const contribution of fpOut.presentationContributions ?? []) {
             addPresentationContribution(
               contribution,
@@ -1739,31 +1763,19 @@ export function emit(
             );
           }
         }
-        let layoutPlaceholderSpPrByKey:
-          | Readonly<Record<string, string>>
-          | undefined;
-        if (layout.placeholderVisuals !== undefined) {
-          checkExtensions(
-            layout.placeholderVisuals.extensions,
-            target,
-            docEmit.usedExtensions,
-            layoutEmit.diagnostics,
-            layout.placeholderVisuals.path,
-          );
-          const phOut = layout.placeholderVisuals.emit({
-            path: layout.placeholderVisuals.path,
-            dimensions: internal.dimensions,
-            theme: layout.placeholderVisuals.theme,
-            options,
-            slideNumber: 1,
-            createTextFieldId: () => allocateTextFieldId(docEmit),
-            registerResource: (resource) => addResource(resource, layoutCtx),
-            registerPackagePart: (part) => addSlidePackagePart(part, layoutCtx),
-            registerSharedPart: (key, part) =>
-              addSharedPackagePart(key, part, layoutCtx),
-          });
-          layoutPlaceholderSpPrByKey = phOut.placeholderSpPrByKey;
-        }
+        const layoutShapeXml =
+          mastersEmitDriver !== undefined
+            ? mastersEmitDriver.emitSharedCanvas(layoutShapeFragments)
+            : layoutShapeFragments.join("");
+        const layoutPlaceholderSpPrByKey = emitOwnerPlaceholderVisuals(
+          layout.placeholderVisuals,
+          internal,
+          docEmit,
+          layoutEmit,
+          layoutCtx,
+          target,
+          options,
+        );
         if (layoutEmit.diagnostics.length > 0) {
           throw new BuildError(layoutEmit.diagnostics);
         }
@@ -2017,8 +2029,9 @@ export function emit(
     })),
     internal.theme.theme,
     internal.title,
-    internal.sections,
+    sectionXml,
     emittedMasters,
+    mastersEmitDriver,
   );
   const pptx = zipSync(
     Object.fromEntries(

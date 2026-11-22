@@ -1,23 +1,28 @@
 import type {
   ColorValue,
+  Geometry,
   GradientStop,
   LinearGradient,
   RadialGradient,
   SchemeColorName,
 } from "@pptxdk/core/capability";
-import { schemeColorNameSchema } from "@pptxdk/core/capability";
+import {
+  presetGeometryNameSchema,
+  schemeColorNameSchema,
+} from "@pptxdk/core/capability";
 import { z } from "zod";
 
 import type { ImportDiagnostic, ImportLocation } from "#/diagnostics.ts";
+import type { ImportedPlaceholderSpPr } from "#/mechanism.ts";
 import { A_NS, R_NS, emuToPx } from "#/namespaces.ts";
 import { resolvePartPath, type PptxPackage } from "#/opc.ts";
 import {
-  ExtentEmuFragmentSchema,
-  HexRgb6Schema,
-  OffsetEmuFragmentSchema,
-  OoxmlIntSchema,
-  OoxmlNonNegativeIntSchema,
-  TransformAttributesFragmentSchema,
+  extentEmuFragmentSchema,
+  hexRgb6Schema,
+  offsetEmuFragmentSchema,
+  ooxmlIntSchema,
+  ooxmlNonNegativeIntSchema,
+  transformAttributesFragmentSchema,
 } from "#/xml-fragments.ts";
 import type { XmlElementCursor } from "#/xml-reader.ts";
 
@@ -33,63 +38,63 @@ export const arrowTypes = [
 export const arrowTypeSchema = z.enum(arrowTypes);
 export type ArrowType = z.infer<typeof arrowTypeSchema>;
 
-const PercentValAttrSchema = z.object({
-  val: OoxmlNonNegativeIntSchema,
+const percentValAttrSchema = z.object({
+  val: ooxmlNonNegativeIntSchema,
 });
 
-const AlphaModFixAttrSchema = z.object({
-  amt: OoxmlNonNegativeIntSchema,
+const alphaModFixAttrSchema = z.object({
+  amt: ooxmlNonNegativeIntSchema,
 });
 
-const SrgbColorAttrSchema = z.object({
-  val: HexRgb6Schema,
+const srgbColorAttrSchema = z.object({
+  val: hexRgb6Schema,
 });
 
-const SchemeColorAttrSchema = z.object({
+const schemeColorAttrSchema = z.object({
   val: schemeColorNameSchema,
 });
 
-const SysColorAttrSchema = z.object({
+const sysColorAttrSchema = z.object({
   val: z.string().min(1),
-  lastClr: HexRgb6Schema.optional(),
+  lastClr: hexRgb6Schema.optional(),
 });
 
-const GradStopAttrSchema = z.object({
-  pos: OoxmlNonNegativeIntSchema,
+const gradStopAttrSchema = z.object({
+  pos: ooxmlNonNegativeIntSchema,
 });
 
-const GradLinAttrSchema = z.object({
-  ang: OoxmlIntSchema.optional(),
+const gradLinAttrSchema = z.object({
+  ang: ooxmlIntSchema.optional(),
   scaled: z.enum(["0", "1", "true", "false"]).optional(),
 });
 
-const LineAttrSchema = z.object({
-  w: OoxmlNonNegativeIntSchema.optional(),
+const lineAttrSchema = z.object({
+  w: ooxmlNonNegativeIntSchema.optional(),
   cap: z.enum(["rnd", "sq", "flat"]).optional(),
   cmpd: z.enum(["sng", "dbl", "thickThin", "thinThick", "tri"]).optional(),
   algn: z.enum(["ctr", "in"]).optional(),
 });
 
-const DashPresetAttrSchema = z.object({
+const dashPresetAttrSchema = z.object({
   val: z.string().min(1),
 });
 
-const LineEndAttrSchema = z.object({
+const lineEndAttrSchema = z.object({
   type: arrowTypeSchema.optional(),
   w: z.enum(["sm", "med", "lg"]).optional(),
   len: z.enum(["sm", "med", "lg"]).optional(),
 });
 
-const OuterShadowAttrSchema = z.object({
-  blurRad: OoxmlNonNegativeIntSchema.optional(),
-  dist: OoxmlNonNegativeIntSchema.optional(),
-  dir: OoxmlIntSchema.optional(),
+const outerShadowAttrSchema = z.object({
+  blurRad: ooxmlNonNegativeIntSchema.optional(),
+  dist: ooxmlNonNegativeIntSchema.optional(),
+  dir: ooxmlIntSchema.optional(),
   algn: z.string().optional(),
   rotWithShape: z.enum(["0", "1", "true", "false"]).optional(),
 });
 
-const SoftEdgeAttrSchema = z.object({
-  rad: OoxmlNonNegativeIntSchema,
+const softEdgeAttrSchema = z.object({
+  rad: ooxmlNonNegativeIntSchema,
 });
 
 /** Reads a DrawingML color child (`<a:srgbClr>`, `<a:schemeClr>`, `<a:sysClr>`) with optional alpha and luminance transforms. */
@@ -118,7 +123,7 @@ export function readDrawingColor(
     if (child.localName === "srgbClr" && colorCursor === undefined) {
       colorCursor = child;
       const raw = child.attrsObject(["val"]);
-      const parsed = SrgbColorAttrSchema.safeParse(raw);
+      const parsed = srgbColorAttrSchema.safeParse(raw);
       if (!parsed.success) {
         diagnostics.push({
           code: "invalid-xml-value",
@@ -134,7 +139,7 @@ export function readDrawingColor(
     } else if (child.localName === "schemeClr" && colorCursor === undefined) {
       colorCursor = child;
       const raw = child.attrsObject(["val"]);
-      const parsed = SchemeColorAttrSchema.safeParse(raw);
+      const parsed = schemeColorAttrSchema.safeParse(raw);
       if (!parsed.success) {
         diagnostics.push({
           code: "invalid-xml-value",
@@ -150,7 +155,7 @@ export function readDrawingColor(
     } else if (child.localName === "sysClr" && colorCursor === undefined) {
       colorCursor = child;
       const raw = child.attrsObject(["val", "lastClr"]);
-      const parsed = SysColorAttrSchema.safeParse(raw);
+      const parsed = sysColorAttrSchema.safeParse(raw);
       if (!parsed.success) {
         diagnostics.push({
           code: "invalid-xml-value",
@@ -192,17 +197,17 @@ export function readDrawingColor(
 
   for (const mod of colorCursor.remainingElementChildren()) {
     if (mod.namespaceUri === A_NS && mod.localName === "alpha") {
-      const parsed = PercentValAttrSchema.safeParse(mod.attrsObject(["val"]));
+      const parsed = percentValAttrSchema.safeParse(mod.attrsObject(["val"]));
       if (parsed.success) {
         alpha = Math.min(1, Math.max(0, parsed.data.val / 100_000));
       }
     } else if (mod.namespaceUri === A_NS && mod.localName === "lumMod") {
-      const parsed = PercentValAttrSchema.safeParse(mod.attrsObject(["val"]));
+      const parsed = percentValAttrSchema.safeParse(mod.attrsObject(["val"]));
       if (parsed.success) {
         lumMod = Math.min(1, Math.max(0, parsed.data.val / 100_000));
       }
     } else if (mod.namespaceUri === A_NS && mod.localName === "lumOff") {
-      const parsed = PercentValAttrSchema.safeParse(mod.attrsObject(["val"]));
+      const parsed = percentValAttrSchema.safeParse(mod.attrsObject(["val"]));
       if (parsed.success) {
         lumOff = Math.min(1, Math.max(0, parsed.data.val / 100_000));
       }
@@ -258,7 +263,7 @@ export function readTransformXml(
   diagnostics: ImportDiagnostic[],
 ): ImportedTransform | undefined {
   const rawXfrm = xfrmCursor.attrsObject(["rot", "flipH", "flipV"]);
-  const parsedXfrm = TransformAttributesFragmentSchema.safeParse(rawXfrm);
+  const parsedXfrm = transformAttributesFragmentSchema.safeParse(rawXfrm);
   const off = xfrmCursor.child(A_NS, "off");
   const ext = xfrmCursor.child(A_NS, "ext");
   if (off === undefined || ext === undefined) {
@@ -270,10 +275,10 @@ export function readTransformXml(
     });
     return undefined;
   }
-  const parsedOff = OffsetEmuFragmentSchema.safeParse(
+  const parsedOff = offsetEmuFragmentSchema.safeParse(
     off.attrsObject(["x", "y"]),
   );
-  const parsedExt = ExtentEmuFragmentSchema.safeParse(
+  const parsedExt = extentEmuFragmentSchema.safeParse(
     ext.attrsObject(["cx", "cy"]),
   );
   if (!parsedOff.success || !parsedExt.success) {
@@ -323,7 +328,7 @@ export function readGradientFill(
   if (gsLst !== undefined) {
     for (const gs of gsLst.children(A_NS, "gs")) {
       const rawPos = gs.attrsObject(["pos"]);
-      const parsedPos = GradStopAttrSchema.safeParse(rawPos);
+      const parsedPos = gradStopAttrSchema.safeParse(rawPos);
       const color = readDrawingColor(gs, location, diagnostics);
       if (!parsedPos.success || color === undefined) {
         diagnostics.push({
@@ -357,7 +362,7 @@ export function readGradientFill(
   const lin = gradFillCursor.child(A_NS, "lin");
   if (lin !== undefined) {
     const rawLin = lin.attrsObject(["ang", "scaled"]);
-    const parsedLin = GradLinAttrSchema.safeParse(rawLin);
+    const parsedLin = gradLinAttrSchema.safeParse(rawLin);
     const drawingAngle = parsedLin.success ? (parsedLin.data.ang ?? 0) : 0;
     const authorAngle = (((drawingAngle / 60_000 + 90) % 360) + 360) % 360;
     result = { type: "linear-gradient", angle: authorAngle, stops };
@@ -422,7 +427,7 @@ export function readBlipFill(
   let opacity: number | undefined;
   const alphaModFix = blip.child(A_NS, "alphaModFix");
   if (alphaModFix !== undefined) {
-    const parsedAmt = AlphaModFixAttrSchema.safeParse(
+    const parsedAmt = alphaModFixAttrSchema.safeParse(
       alphaModFix.attrsObject(["amt"]),
     );
     if (parsedAmt.success) {
@@ -502,7 +507,7 @@ export function readLineBorder(
   diagnostics: ImportDiagnostic[],
 ): ImportedLineBorder {
   const rawLn = lnCursor.attrsObject(["w", "cap", "cmpd", "algn"]);
-  const parsedLn = LineAttrSchema.safeParse(rawLn);
+  const parsedLn = lineAttrSchema.safeParse(rawLn);
   const width =
     parsedLn.success && parsedLn.data.w !== undefined
       ? emuToPx(parsedLn.data.w)
@@ -536,7 +541,7 @@ export function readLineBorder(
         break;
       case "prstDash": {
         const rawDash = child.attrsObject(["val"]);
-        const parsedDash = DashPresetAttrSchema.safeParse(rawDash);
+        const parsedDash = dashPresetAttrSchema.safeParse(rawDash);
         if (parsedDash.success) {
           const val = parsedDash.data.val;
           if (val === "solid") borderStyle = "solid";
@@ -569,7 +574,7 @@ export function readLineBorder(
       case "headEnd":
       case "tailEnd": {
         const rawEnd = child.attrsObject(["type", "w", "len"]);
-        const parsedEnd = LineEndAttrSchema.safeParse(rawEnd);
+        const parsedEnd = lineEndAttrSchema.safeParse(rawEnd);
         if (!parsedEnd.success) {
           diagnostics.push({
             code: "invalid-xml-value",
@@ -664,7 +669,7 @@ export function readEffectList(
         "algn",
         "rotWithShape",
       ]);
-      const parsed = OuterShadowAttrSchema.safeParse(raw);
+      const parsed = outerShadowAttrSchema.safeParse(raw);
       const color = readDrawingColor(child, location, diagnostics);
       if (parsed.success) {
         boxShadow = {
@@ -680,7 +685,7 @@ export function readEffectList(
       }
     } else if (child.localName === "softEdge") {
       const raw = child.attrsObject(["rad"]);
-      const parsed = SoftEdgeAttrSchema.safeParse(raw);
+      const parsed = softEdgeAttrSchema.safeParse(raw);
       if (parsed.success && parsed.data.rad > 0) {
         softEdge = emuToPx(parsed.data.rad);
       }
@@ -700,5 +705,236 @@ export function readEffectList(
   return {
     ...(boxShadow === undefined ? {} : { boxShadow }),
     ...(softEdge === undefined ? {} : { softEdge }),
+  };
+}
+
+export type PlaceholderSpPrVisualOptions = {
+  readonly readAppearance?: (
+    spPr: XmlElementCursor,
+    pkg: PptxPackage,
+    fallbackUnits: { readonly w: number; readonly h: number },
+    location: ImportLocation,
+    diagnostics: ImportDiagnostic[],
+  ) => {
+    readonly geometry?: Geometry;
+    readonly style: Record<string, unknown>;
+  };
+  readonly allowedStyleKeys?: ReadonlySet<string>;
+};
+
+function readBasicPlaceholderAppearance(
+  spPr: XmlElementCursor,
+  pkg: PptxPackage,
+  _fallbackUnits: { readonly w: number; readonly h: number },
+  location: ImportLocation,
+  diagnostics: ImportDiagnostic[],
+): {
+  readonly geometry?: Geometry;
+  readonly style: Record<string, unknown>;
+} {
+  let prstGeomName: string | undefined;
+  let roundRectAdj: number | undefined;
+  let backgroundColor: ColorValue | undefined;
+  let backgroundImage: unknown;
+  let opacity: number | undefined;
+  let border: ImportedLineBorder = {};
+  let effects: ReturnType<typeof readEffectList> = {};
+
+  for (const child of spPr.remainingElementChildren()) {
+    if (child.namespaceUri !== A_NS) continue;
+    switch (child.localName) {
+      case "prstGeom": {
+        prstGeomName = child.attr("prst");
+        const avLst = child.child(A_NS, "avLst");
+        if (avLst !== undefined) {
+          for (const gd of avLst.children(A_NS, "gd")) {
+            const name = gd.attr("name");
+            const fmla = gd.attr("fmla");
+            if (
+              name === "adj" &&
+              fmla !== undefined &&
+              fmla.startsWith("val ")
+            ) {
+              const num = Number(fmla.slice(4));
+              if (Number.isSafeInteger(num)) roundRectAdj = num;
+            }
+          }
+        }
+        break;
+      }
+      case "noFill":
+        break;
+      case "solidFill":
+        backgroundColor = readDrawingColor(child, location, diagnostics);
+        break;
+      case "gradFill":
+        backgroundImage = readGradientFill(child, location, diagnostics);
+        break;
+      case "blipFill": {
+        const blip = readBlipFill(child, pkg, location, diagnostics);
+        if (blip !== undefined) {
+          backgroundImage = { image: blip.image };
+          opacity = blip.opacity;
+        }
+        break;
+      }
+      case "ln":
+        border = readLineBorder(child, location, diagnostics);
+        break;
+      case "effectLst":
+        effects = readEffectList(child, location, diagnostics);
+        break;
+      case "extLst":
+        child.ignoreEmptyChild(A_NS, "ext");
+        break;
+      default:
+        break;
+    }
+  }
+
+  const parsedPrst =
+    prstGeomName === undefined
+      ? undefined
+      : presetGeometryNameSchema.safeParse(prstGeomName);
+  const geometry: Geometry | undefined = parsedPrst?.success
+    ? roundRectAdj !== undefined
+      ? { type: "preset", name: parsedPrst.data, adjust: { adj: roundRectAdj } }
+      : parsedPrst.data
+    : undefined;
+
+  const style: Record<string, unknown> = {
+    ...(backgroundColor === undefined ? {} : { backgroundColor }),
+    ...(backgroundImage === undefined ? {} : { backgroundImage }),
+    ...(border.borderColor === undefined
+      ? {}
+      : { borderColor: border.borderColor }),
+    ...(border.borderWidth === undefined
+      ? {}
+      : { borderWidth: border.borderWidth }),
+    ...(border.borderStyle === undefined
+      ? {}
+      : { borderStyle: border.borderStyle }),
+    ...(opacity === undefined ? {} : { opacity }),
+    ...(effects.boxShadow === undefined
+      ? {}
+      : { boxShadow: effects.boxShadow }),
+    ...(effects.softEdge === undefined ? {} : { softEdge: effects.softEdge }),
+  };
+
+  return {
+    ...(geometry === undefined ? {} : { geometry }),
+    style,
+  };
+}
+
+/**
+ * Shared reader for master and layout placeholder `<p:spPr>` transforms, geometry, fills, borders, and effects.
+ */
+export function readPlaceholderSpPrVisuals(
+  args: {
+    readonly spPr: XmlElementCursor;
+    readonly pkg: PptxPackage;
+    readonly location: ImportLocation;
+    readonly diagnostics: ImportDiagnostic[];
+  },
+  options?: PlaceholderSpPrVisualOptions,
+): ImportedPlaceholderSpPr {
+  const { spPr, pkg, location, diagnostics } = args;
+  let x: number | undefined;
+  let y: number | undefined;
+  let width: number | undefined;
+  let height: number | undefined;
+  let rotate: number | undefined;
+  let flipH: boolean | undefined;
+  let flipV: boolean | undefined;
+  let fallbackUnits = { w: 0, h: 0 };
+
+  const xfrm = spPr.child(A_NS, "xfrm");
+  if (xfrm !== undefined) {
+    if (
+      xfrm.child(A_NS, "off") !== undefined &&
+      xfrm.child(A_NS, "ext") !== undefined
+    ) {
+      const tf = readTransformXml(xfrm, location, diagnostics);
+      if (tf !== undefined) {
+        x = tf.x;
+        y = tf.y;
+        width = tf.width;
+        height = tf.height;
+        rotate = tf.rotate;
+        flipH = tf.flipH;
+        flipV = tf.flipV;
+        fallbackUnits = { w: tf.cxEmu, h: tf.cyEmu };
+      }
+    } else {
+      const parsedXfrm = transformAttributesFragmentSchema.safeParse(
+        xfrm.attrsObject(["rot", "flipH", "flipV"]),
+      );
+      if (parsedXfrm.success) {
+        if (parsedXfrm.data.rot !== undefined && parsedXfrm.data.rot !== 0) {
+          rotate = parsedXfrm.data.rot / 60_000;
+        }
+        if (parsedXfrm.data.flipH === true) flipH = true;
+        if (parsedXfrm.data.flipV === true) flipV = true;
+      }
+    }
+  }
+
+  const appearance = (
+    options?.readAppearance ?? readBasicPlaceholderAppearance
+  )(spPr, pkg, fallbackUnits, location, diagnostics);
+
+  let borderRadius: number | undefined;
+  let exportedGeometry: Geometry | undefined;
+  const geom = appearance.geometry;
+  if (geom === "roundRect") {
+    if (width !== undefined && height !== undefined) {
+      borderRadius = (16667 / 100_000) * Math.min(width, height);
+    } else {
+      exportedGeometry = geom;
+    }
+  } else if (typeof geom === "object" && geom.type === "preset") {
+    if (geom.name === "roundRect") {
+      if (width !== undefined && height !== undefined) {
+        const adj = geom.adjust?.["adj"] ?? 16667;
+        if (adj > 0) {
+          borderRadius = (adj / 100_000) * Math.min(width, height);
+        }
+      } else {
+        exportedGeometry = geom;
+      }
+    } else if (geom.name !== "rect") {
+      exportedGeometry = geom;
+    }
+  } else if (geom !== undefined && geom !== "rect") {
+    exportedGeometry = geom;
+  }
+
+  const style: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(appearance.style)) {
+    if (
+      value !== undefined &&
+      (options?.allowedStyleKeys === undefined ||
+        options.allowedStyleKeys.has(key))
+    ) {
+      style[key] = value;
+    }
+  }
+  if (borderRadius !== undefined) {
+    style["borderRadius"] = borderRadius;
+  }
+  if (rotate !== undefined) {
+    style["rotate"] = rotate;
+  }
+
+  return {
+    ...(x === undefined ? {} : { x }),
+    ...(y === undefined ? {} : { y }),
+    ...(width === undefined ? {} : { width }),
+    ...(height === undefined ? {} : { height }),
+    ...(exportedGeometry === undefined ? {} : { geometry: exportedGeometry }),
+    ...(flipH ? { flipH: true } : {}),
+    ...(flipV ? { flipV: true } : {}),
+    ...(Object.keys(style).length === 0 ? {} : { style }),
   };
 }

@@ -1,6 +1,7 @@
 import {
   assertValidLang,
   matchLayoutPlaceholderKey,
+  matchMasterPlaceholderSpec,
   placeholderStyleSchema,
   schemeColorNameSchema,
   type ColorValue,
@@ -14,15 +15,16 @@ import {
 import type { CommonNode } from "@pptxdk/core/document";
 import {
   A_NS,
-  ExtentEmuFragmentSchema,
-  HexRgb6Schema,
-  OffsetEmuFragmentSchema,
-  OoxmlBoolSchema,
-  OoxmlIntSchema,
-  OoxmlNonNegativeIntSchema,
-  OoxmlPositiveIntSchema,
+  EMU_PER_PX,
+  extentEmuFragmentSchema,
+  hexRgb6Schema,
+  offsetEmuFragmentSchema,
+  ooxmlBoolSchema,
+  ooxmlIntSchema,
+  ooxmlNonNegativeIntSchema,
+  ooxmlPositiveIntSchema,
   P_NS,
-  TransformAttributesFragmentSchema,
+  transformAttributesFragmentSchema,
   XML_NS,
   emuToPx,
   type ImportDiagnostic,
@@ -65,35 +67,35 @@ import {
 } from "./text-declaration.ts";
 
 const NonVisualSpPrFlagsSchema = z.object({
-  txBox: OoxmlBoolSchema.optional(),
+  txBox: ooxmlBoolSchema.optional(),
 });
 
 const BodyPrFragmentSchema = z.object({
   wrap: z.enum(["square", "none"]).optional(),
-  rtlCol: OoxmlBoolSchema.optional(),
-  lIns: OoxmlNonNegativeIntSchema.optional(),
-  tIns: OoxmlNonNegativeIntSchema.optional(),
-  rIns: OoxmlNonNegativeIntSchema.optional(),
-  bIns: OoxmlNonNegativeIntSchema.optional(),
+  rtlCol: ooxmlBoolSchema.optional(),
+  lIns: ooxmlNonNegativeIntSchema.optional(),
+  tIns: ooxmlNonNegativeIntSchema.optional(),
+  rIns: ooxmlNonNegativeIntSchema.optional(),
+  bIns: ooxmlNonNegativeIntSchema.optional(),
   anchor: z.enum(["t", "ctr", "b"]).optional(),
-  anchorCtr: OoxmlBoolSchema.optional(),
-  spcFirstLastPara: OoxmlBoolSchema.optional(),
+  anchorCtr: ooxmlBoolSchema.optional(),
+  spcFirstLastPara: ooxmlBoolSchema.optional(),
   numCol: z.string().optional(),
   spcCol: z.string().optional(),
 });
 
 const ParagraphPrFragmentSchema = z.object({
   algn: z.enum(["l", "ctr", "r", "just"]).optional(),
-  rtl: OoxmlBoolSchema.optional(),
-  lvl: OoxmlNonNegativeIntSchema.refine((value) => value <= 8).optional(),
+  rtl: ooxmlBoolSchema.optional(),
+  lvl: ooxmlNonNegativeIntSchema.refine((value) => value <= 8).optional(),
 });
 
 const SpacingPointsXmlSchema = z.object({
-  val: OoxmlNonNegativeIntSchema,
+  val: ooxmlNonNegativeIntSchema,
 });
 
 const SpacingPercentXmlSchema = z.object({
-  val: OoxmlPositiveIntSchema,
+  val: ooxmlPositiveIntSchema,
 });
 
 const BulletCharXmlSchema = z.object({
@@ -102,20 +104,20 @@ const BulletCharXmlSchema = z.object({
 
 const AutoNumXmlSchema = z.object({
   type: z.string().min(1),
-  startAt: OoxmlPositiveIntSchema.optional(),
+  startAt: ooxmlPositiveIntSchema.optional(),
 });
 
 const RunPrFragmentSchema = z.object({
   lang: z.string().min(1).optional(),
-  sz: OoxmlPositiveIntSchema.optional(),
-  b: OoxmlBoolSchema.optional(),
-  i: OoxmlBoolSchema.optional(),
+  sz: ooxmlPositiveIntSchema.optional(),
+  b: ooxmlBoolSchema.optional(),
+  i: ooxmlBoolSchema.optional(),
   u: z.enum(["none", "sng"]).optional(),
   strike: z.enum(["noStrike", "sngStrike"]).optional(),
   cap: z.enum(["none", "all"]).optional(),
-  spc: OoxmlIntSchema.optional(),
-  dirty: OoxmlBoolSchema.optional(),
-  smtClean: OoxmlBoolSchema.optional(),
+  spc: ooxmlIntSchema.optional(),
+  dirty: ooxmlBoolSchema.optional(),
+  smtClean: ooxmlBoolSchema.optional(),
 });
 
 const TextFieldXmlSchema = z.object({
@@ -124,11 +126,11 @@ const TextFieldXmlSchema = z.object({
 });
 
 const OuterShadowXmlSchema = z.object({
-  blurRad: OoxmlNonNegativeIntSchema.optional(),
-  dist: OoxmlNonNegativeIntSchema.optional(),
-  dir: OoxmlIntSchema.optional(),
+  blurRad: ooxmlNonNegativeIntSchema.optional(),
+  dist: ooxmlNonNegativeIntSchema.optional(),
+  dir: ooxmlIntSchema.optional(),
   algn: z.string().optional(),
-  rotWithShape: OoxmlBoolSchema.optional(),
+  rotWithShape: ooxmlBoolSchema.optional(),
 });
 
 const TypefaceFragmentSchema = z.object({
@@ -139,11 +141,11 @@ const TypefaceFragmentSchema = z.object({
 });
 
 const PercentModifierSchema = z.object({
-  val: OoxmlNonNegativeIntSchema,
+  val: ooxmlNonNegativeIntSchema,
 });
 
 const SrgbColorSchema = z.object({
-  val: HexRgb6Schema,
+  val: hexRgb6Schema,
 });
 
 const SchemeColorSchema = z.object({
@@ -1272,7 +1274,7 @@ export function readTextPlaceholderSp(
   const xfrm = spPr.child(A_NS, "xfrm");
   if (xfrm !== undefined) {
     const rawXfrm = xfrm.attrsObject(["rot", "flipH", "flipV"]);
-    const parsedXfrm = TransformAttributesFragmentSchema.safeParse(rawXfrm);
+    const parsedXfrm = transformAttributesFragmentSchema.safeParse(rawXfrm);
     if (
       parsedXfrm.success &&
       parsedXfrm.data.rot !== undefined &&
@@ -1283,10 +1285,10 @@ export function readTextPlaceholderSp(
     const off = xfrm.child(A_NS, "off");
     const ext = xfrm.child(A_NS, "ext");
     if (off !== undefined && ext !== undefined) {
-      const parsedOff = OffsetEmuFragmentSchema.safeParse(
+      const parsedOff = offsetEmuFragmentSchema.safeParse(
         off.attrsObject(["x", "y"]),
       );
-      const parsedExt = ExtentEmuFragmentSchema.safeParse(
+      const parsedExt = extentEmuFragmentSchema.safeParse(
         ext.attrsObject(["cx", "cy"]),
       );
       if (!parsedOff.success || !parsedExt.success) {
@@ -1309,17 +1311,42 @@ export function readTextPlaceholderSp(
     }
   }
 
+  const matchedKey = matchLayoutPlaceholderKey(layoutPlaceholders, {
+    type: nativeRef.type,
+    idx: nativeRef.idx,
+  });
+  const layoutPlaceholder =
+    matchedKey === undefined ? undefined : layoutPlaceholders?.[matchedKey];
+  const masterPlaceholder = matchMasterPlaceholderSpec(
+    context.masterPlaceholders,
+    nativeRef.type,
+  );
+  const inheritedWidth = layoutPlaceholder?.width ?? masterPlaceholder?.width;
+  const inheritedHeight =
+    layoutPlaceholder?.height ?? masterPlaceholder?.height;
+  const inheritedPlaceholderBox =
+    inheritedWidth !== undefined && inheritedHeight !== undefined
+      ? { width: inheritedWidth, height: inheritedHeight }
+      : undefined;
+  const effectiveFallbackUnits =
+    localBox === undefined && inheritedPlaceholderBox !== undefined
+      ? {
+          w: Math.round(inheritedPlaceholderBox.width * EMU_PER_PX),
+          h: Math.round(inheritedPlaceholderBox.height * EMU_PER_PX),
+        }
+      : fallbackUnits;
+
   const appearance = readSpPrAppearance(
     spPr,
     pkg,
-    fallbackUnits,
+    effectiveFallbackUnits,
     location,
     diagnostics,
   );
   const visualStyle = textBoxVisualStyle(
     appearance.style,
     appearance.geometry,
-    localBox,
+    localBox ?? inheritedPlaceholderBox,
     rotate,
     location,
     diagnostics,
@@ -1350,11 +1377,6 @@ export function readTextPlaceholderSp(
       });
     }
   }
-
-  const matchedKey = matchLayoutPlaceholderKey(layoutPlaceholders, {
-    type: nativeRef.type,
-    idx: nativeRef.idx,
-  });
 
   const props: TextDeclarationProps = {
     ...(objectName === undefined ? {} : { name: objectName }),

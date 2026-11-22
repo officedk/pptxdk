@@ -9,13 +9,13 @@ import {
 import { CommonContainer } from "@pptxdk/core/document";
 import { z } from "zod";
 
-import { MotionPropsSchema } from "../motion/motion-schemas.ts";
+import { motionPropsSchema } from "../motion/motion-schemas.ts";
 import {
   shapeCoordinateSchema,
   shapeSizeSchema,
 } from "../shape/shape-declaration.ts";
-import { OptionalNameSchema } from "../shared/identity.ts";
-import { MorphKeySchema } from "../shared/morph-api.ts";
+import { optionalNameSchema } from "../shared/identity.ts";
+import { morphKeySchema } from "../shared/morph-api.ts";
 
 const groupStyleObjectSchema = z.strictObject({
   ...layoutStyleSchema.unwrap().shape,
@@ -26,7 +26,7 @@ const groupStyleObjectSchema = z.strictObject({
 export const groupStyleSchema = groupStyleObjectSchema.readonly();
 export type GroupStyle = z.infer<typeof groupStyleSchema>;
 
-const motionPropsShape = MotionPropsSchema.unwrap().shape;
+const motionPropsShape = motionPropsSchema.unwrap().shape;
 
 const groupBoundsSchema = z
   .strictObject({
@@ -39,8 +39,8 @@ const groupBoundsSchema = z
 
 const groupDeclarationPropsObjectSchema = z.strictObject({
   id: authorIdSchema.optional(),
-  name: OptionalNameSchema.optional(),
-  morphKey: MorphKeySchema.optional(),
+  name: optionalNameSchema.optional(),
+  morphKey: morphKeySchema.optional(),
   link: linkTargetSchema.optional(),
   bounds: groupBoundsSchema.optional(),
   style: groupStyleSchema.optional(),

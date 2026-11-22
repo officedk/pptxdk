@@ -27,7 +27,7 @@ import {
   importPresentationSections,
   type DeckImportContext,
 } from "@pptxdk/import";
-import { strToU8, unzipSync, zipSync } from "fflate";
+import { strToU8, zipSync } from "fflate";
 import { describe, it } from "vitest";
 
 const testSectionsCap = {
@@ -405,6 +405,5 @@ describe("Presentation slide order, hidden state, sections, and notes/handout ma
       d.location.part.startsWith("ppt/notesMasters/"),
     );
     assert.deepEqual(layoutsNotesDiags, []);
-    void unzipSync;
   });
 });

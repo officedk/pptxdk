@@ -1,10 +1,28 @@
-import { CapabilityError, type GeometryBox } from "@pptxdk/core/capability";
+import {
+  CapabilityError,
+  customGeometrySchema,
+  geometryAdjustKeySchema,
+  geometryAdjustSchema,
+  geometryPathSchema,
+  geometrySchema,
+  pathCommandSchema,
+  presetGeometryNameSchema,
+  presetGeometrySchema,
+  presetGeometryTuple,
+  type CustomGeometry,
+  type Geometry,
+  type GeometryBox,
+  type GeometryPath,
+  type PathCommand,
+  type PresetGeometry,
+  type PresetGeometryName,
+} from "@pptxdk/core/capability";
 import { pxToEmu } from "@pptxdk/emit";
 import {
   A_NS,
-  OoxmlBoolSchema,
-  OoxmlIntSchema,
-  OoxmlPositiveIntSchema,
+  ooxmlBoolSchema,
+  ooxmlIntSchema,
+  ooxmlPositiveIntSchema,
   type ImportDiagnostic,
   type ImportLocation,
   type XmlElementCursor,
@@ -13,110 +31,30 @@ import { z } from "zod";
 
 import {
   presetDefinitions,
-  presetGeometryTuple,
-  type PresetGeometryName,
   type PresetPathFillMode,
   type PresetShapeDefinition,
 } from "./preset-definitions.ts";
 
-export { presetGeometryTuple };
-export type { PresetGeometryName, PresetPathFillMode };
-
-export const presetGeometryNameSchema = z.enum(presetGeometryTuple);
-
-export const geometryAdjustKeySchema = z
-  .string()
-  .regex(/^adj(?:[1-9]\d*)?$/u, "Geometry adjust key must match adj or adjN");
-
-export const geometryAdjustSchema = z
-  .record(
-    geometryAdjustKeySchema,
-    z
-      .number()
-      .refine(
-        Number.isSafeInteger,
-        "Geometry adjust must be an integer DrawingML parameter",
-      ),
-  )
-  .readonly();
-
-export const presetGeometrySchema = z
-  .strictObject({
-    type: z.literal("preset"),
-    name: presetGeometryNameSchema,
-    /** Raw DrawingML adjust values indexed by guide name (adj, adj1, adj2, etc.). */
-    adjust: geometryAdjustSchema.optional(),
-  })
-  .readonly();
-export type PresetGeometry = z.infer<typeof presetGeometrySchema>;
-
-const finiteCoordSchema = z.number().finite();
-
-export const pathCommandSchema = z.discriminatedUnion("op", [
-  z
-    .strictObject({
-      op: z.literal("M"),
-      x: finiteCoordSchema,
-      y: finiteCoordSchema,
-    })
-    .readonly(),
-  z
-    .strictObject({
-      op: z.literal("L"),
-      x: finiteCoordSchema,
-      y: finiteCoordSchema,
-    })
-    .readonly(),
-  z
-    .strictObject({
-      op: z.literal("C"),
-      x1: finiteCoordSchema,
-      y1: finiteCoordSchema,
-      x2: finiteCoordSchema,
-      y2: finiteCoordSchema,
-      x: finiteCoordSchema,
-      y: finiteCoordSchema,
-    })
-    .readonly(),
-  z
-    .strictObject({
-      op: z.literal("Q"),
-      x1: finiteCoordSchema,
-      y1: finiteCoordSchema,
-      x: finiteCoordSchema,
-      y: finiteCoordSchema,
-    })
-    .readonly(),
-  z.strictObject({ op: z.literal("Z") }).readonly(),
-]);
-export type PathCommand = z.infer<typeof pathCommandSchema>;
-
-export const geometryPathSchema = z
-  .strictObject({
-    commands: z.array(pathCommandSchema).min(1).readonly(),
-    fill: z.boolean().optional(),
-    stroke: z.boolean().optional(),
-  })
-  .readonly();
-export type GeometryPath = z.infer<typeof geometryPathSchema>;
-
-/** Custom geometry uses local coordinates and scales to the bounding box allocated by layout. */
-export const customGeometrySchema = z
-  .strictObject({
-    type: z.literal("custom"),
-    width: z.number().finite().positive(),
-    height: z.number().finite().positive(),
-    paths: z.array(geometryPathSchema).min(1).readonly(),
-  })
-  .readonly();
-export type CustomGeometry = z.infer<typeof customGeometrySchema>;
-
-export const geometrySchema = z.union([
+export {
+  customGeometrySchema,
+  geometryAdjustKeySchema,
+  geometryAdjustSchema,
+  geometryPathSchema,
+  geometrySchema,
+  pathCommandSchema,
   presetGeometryNameSchema,
   presetGeometrySchema,
-  customGeometrySchema,
-]);
-export type Geometry = z.infer<typeof geometrySchema>;
+  presetGeometryTuple,
+};
+export type {
+  CustomGeometry,
+  Geometry,
+  GeometryPath,
+  PathCommand,
+  PresetGeometry,
+  PresetGeometryName,
+  PresetPathFillMode,
+};
 
 /** Closed resolved geometry model consumed exhaustively by both emit and paint. */
 export type ResolvedGeometry =
@@ -1468,24 +1406,24 @@ const AdjustGuideAttrSchema = z.object({
 });
 
 const CustomPathAttrSchema = z.object({
-  w: OoxmlPositiveIntSchema.optional(),
-  h: OoxmlPositiveIntSchema.optional(),
+  w: ooxmlPositiveIntSchema.optional(),
+  h: ooxmlPositiveIntSchema.optional(),
   fill: z
     .enum(["none", "norm", "lighten", "lightenLess", "darken", "darkenLess"])
     .optional(),
-  stroke: OoxmlBoolSchema.optional(),
+  stroke: ooxmlBoolSchema.optional(),
 });
 
 const CustomPtAttrSchema = z.object({
-  x: OoxmlIntSchema,
-  y: OoxmlIntSchema,
+  x: ooxmlIntSchema,
+  y: ooxmlIntSchema,
 });
 
 const CustomArcAttrSchema = z.object({
-  wR: OoxmlIntSchema,
-  hR: OoxmlIntSchema,
-  stAng: OoxmlIntSchema,
-  swAng: OoxmlIntSchema,
+  wR: ooxmlIntSchema,
+  hR: ooxmlIntSchema,
+  stAng: ooxmlIntSchema,
+  swAng: ooxmlIntSchema,
 });
 
 /** Reads DrawingML `<a:prstGeom>` (and `<a:avLst>`) into author `Geometry`, emitting localized diagnostics on invalid/unsupported values. */

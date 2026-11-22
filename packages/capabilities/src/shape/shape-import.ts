@@ -6,10 +6,10 @@ import {
 } from "@pptxdk/core/capability";
 import {
   A_NS,
-  OoxmlBoolSchema,
-  OoxmlIntSchema,
-  OoxmlNonNegativeIntSchema,
-  OoxmlPositiveIntSchema,
+  ooxmlBoolSchema,
+  ooxmlIntSchema,
+  ooxmlNonNegativeIntSchema,
+  ooxmlPositiveIntSchema,
   P_NS,
   XML_NS,
   emuToPx,
@@ -48,37 +48,37 @@ import {
 } from "./shape-declaration.ts";
 
 const NonVisualIdAttrSchema = z.object({
-  id: OoxmlNonNegativeIntSchema,
+  id: ooxmlNonNegativeIntSchema,
   name: z.string().optional(),
 });
 
 const BodyPrAttrSchema = z.object({
   wrap: z.enum(["square", "none"]).optional(),
-  rtlCol: OoxmlBoolSchema.optional(),
-  lIns: OoxmlNonNegativeIntSchema.optional(),
-  tIns: OoxmlNonNegativeIntSchema.optional(),
-  rIns: OoxmlNonNegativeIntSchema.optional(),
-  bIns: OoxmlNonNegativeIntSchema.optional(),
+  rtlCol: ooxmlBoolSchema.optional(),
+  lIns: ooxmlNonNegativeIntSchema.optional(),
+  tIns: ooxmlNonNegativeIntSchema.optional(),
+  rIns: ooxmlNonNegativeIntSchema.optional(),
+  bIns: ooxmlNonNegativeIntSchema.optional(),
   anchor: z.enum(["t", "ctr", "b"]).optional(),
 });
 
 const ParagraphPrAttrSchema = z.object({
   algn: z.enum(["l", "ctr", "r", "just"]).optional(),
-  rtl: OoxmlBoolSchema.optional(),
-  lvl: OoxmlNonNegativeIntSchema.optional(),
+  rtl: ooxmlBoolSchema.optional(),
+  lvl: ooxmlNonNegativeIntSchema.optional(),
 });
 
 const RunPrAttrSchema = z.object({
   lang: z.string().min(1).optional(),
-  sz: OoxmlPositiveIntSchema.optional(),
-  b: OoxmlBoolSchema.optional(),
-  i: OoxmlBoolSchema.optional(),
+  sz: ooxmlPositiveIntSchema.optional(),
+  b: ooxmlBoolSchema.optional(),
+  i: ooxmlBoolSchema.optional(),
   u: z.enum(["none", "sng"]).optional(),
   strike: z.enum(["noStrike", "sngStrike"]).optional(),
   cap: z.enum(["none", "all"]).optional(),
-  spc: OoxmlIntSchema.optional(),
-  dirty: OoxmlBoolSchema.optional(),
-  smtClean: OoxmlBoolSchema.optional(),
+  spc: ooxmlIntSchema.optional(),
+  dirty: ooxmlBoolSchema.optional(),
+  smtClean: ooxmlBoolSchema.optional(),
 });
 
 const TypefaceAttrSchema = z.object({
@@ -91,11 +91,11 @@ const BulletCharAttrSchema = z.object({
 
 const BulletAutoNumAttrSchema = z.object({
   type: z.string().min(1),
-  startAt: OoxmlIntSchema.optional(),
+  startAt: ooxmlIntSchema.optional(),
 });
 
 const SpacingValAttrSchema = z.object({
-  val: OoxmlNonNegativeIntSchema,
+  val: ooxmlNonNegativeIntSchema,
 });
 
 const anchorToVerticalAlign: Readonly<

@@ -23,57 +23,57 @@ import type { ImportDiagnostic } from "#/diagnostics.ts";
 import { A_NS, P_NS } from "#/namespaces.ts";
 import type { PptxPackage } from "#/opc.ts";
 import {
-  HexRgb6Schema,
-  OoxmlBoolSchema,
-  OoxmlIntSchema,
-  OoxmlNonNegativeIntSchema,
+  hexRgb6Schema,
+  ooxmlBoolSchema,
+  ooxmlIntSchema,
+  ooxmlNonNegativeIntSchema,
 } from "#/xml-fragments.ts";
 import { XmlElementCursor, parseXmlPart } from "#/xml-reader.ts";
 
-const PercentValAttrSchema = z.object({
-  val: OoxmlNonNegativeIntSchema,
+const percentValAttrSchema = z.object({
+  val: ooxmlNonNegativeIntSchema,
 });
 
-const PercentPosAttrSchema = z.object({
-  pos: OoxmlNonNegativeIntSchema,
+const percentPosAttrSchema = z.object({
+  pos: ooxmlNonNegativeIntSchema,
 });
 
-const SysClrAttrSchema = z.object({
+const sysClrAttrSchema = z.object({
   val: z.string().min(1),
-  lastClr: HexRgb6Schema.optional(),
+  lastClr: hexRgb6Schema.optional(),
 });
 
-const ColorMapXmlAttrSchema = colorMapSchema;
+const colorMapXmlAttrSchema = colorMapSchema;
 
-const LineAttrSchema = z.object({
-  w: OoxmlNonNegativeIntSchema.optional(),
+const lineAttrSchema = z.object({
+  w: ooxmlNonNegativeIntSchema.optional(),
   cap: z.enum(["rnd", "sq", "flat"]).optional(),
   cmpd: z.enum(["sng", "dbl", "thickThin", "thinThick", "tri"]).optional(),
   algn: z.enum(["ctr", "in"]).optional(),
 });
 
-const LinearGradAttrSchema = z.object({
-  ang: OoxmlIntSchema.optional(),
-  scaled: OoxmlBoolSchema.optional(),
+const linearGradAttrSchema = z.object({
+  ang: ooxmlIntSchema.optional(),
+  scaled: ooxmlBoolSchema.optional(),
 });
 
-const PathGradAttrSchema = z.object({
+const pathGradAttrSchema = z.object({
   path: z.enum(["circle", "rect", "shape"]).optional(),
 });
 
-const FillToRectAttrSchema = z.object({
-  l: OoxmlIntSchema.optional(),
-  t: OoxmlIntSchema.optional(),
-  r: OoxmlIntSchema.optional(),
-  b: OoxmlIntSchema.optional(),
+const fillToRectAttrSchema = z.object({
+  l: ooxmlIntSchema.optional(),
+  t: ooxmlIntSchema.optional(),
+  r: ooxmlIntSchema.optional(),
+  b: ooxmlIntSchema.optional(),
 });
 
-const OuterShdwAttrSchema = z.object({
-  blurRad: OoxmlNonNegativeIntSchema.optional(),
-  dist: OoxmlNonNegativeIntSchema.optional(),
-  dir: OoxmlIntSchema.optional(),
+const outerShdwAttrSchema = z.object({
+  blurRad: ooxmlNonNegativeIntSchema.optional(),
+  dist: ooxmlNonNegativeIntSchema.optional(),
+  dir: ooxmlIntSchema.optional(),
   algn: z.string().optional(),
-  rotWithShape: OoxmlBoolSchema.optional(),
+  rotWithShape: ooxmlBoolSchema.optional(),
 });
 
 const officeFallbackColors: Record<NativeColorSlot, string> = {
@@ -103,7 +103,7 @@ export function readColorMapElement(
   diagnostics: ImportDiagnostic[],
 ): ColorMap {
   const raw = cursor.attrsObject(schemeColorSlots);
-  const parsed = ColorMapXmlAttrSchema.safeParse(raw);
+  const parsed = colorMapXmlAttrSchema.safeParse(raw);
   if (parsed.success) {
     return { ...parsed.data };
   }
@@ -183,7 +183,7 @@ function resolveSimpleThemeHex(
     }
     if (child.localName === "srgbClr" && result === undefined) {
       const raw = child.attrsObject(["val"]);
-      const parsed = HexRgb6Schema.safeParse(raw["val"]);
+      const parsed = hexRgb6Schema.safeParse(raw["val"]);
       if (!parsed.success) {
         diagnostics.push({
           code: "invalid-xml-value",
@@ -203,7 +203,7 @@ function resolveSimpleThemeHex(
       child.suppressUnconsumed();
     } else if (child.localName === "sysClr" && result === undefined) {
       const raw = child.attrsObject(["val", "lastClr"]);
-      const parsed = SysClrAttrSchema.safeParse(raw);
+      const parsed = sysClrAttrSchema.safeParse(raw);
       if (!parsed.success) {
         diagnostics.push({
           code: "invalid-xml-value",
@@ -359,7 +359,7 @@ function readFormatColorTransform(
     } else if (child.localName === "srgbClr" && colorCursor === undefined) {
       colorCursor = child;
       const val = child.attr("val");
-      const parsed = HexRgb6Schema.safeParse(val);
+      const parsed = hexRgb6Schema.safeParse(val);
       if (parsed.success) {
         colorValue = `#${parsed.data.toUpperCase()}`;
       }
@@ -390,7 +390,7 @@ function readFormatColorTransform(
   let satMod: number | undefined;
   for (const mod of colorCursor.remainingElementChildren()) {
     if (mod.namespaceUri !== A_NS) continue;
-    const parsed = PercentValAttrSchema.safeParse(mod.attrsObject(["val"]));
+    const parsed = percentValAttrSchema.safeParse(mod.attrsObject(["val"]));
     if (!parsed.success) continue;
     const fraction = parsed.data.val / 100_000;
     switch (mod.localName) {
@@ -461,9 +461,11 @@ function readFormatFillStyle(
     return color === undefined ? undefined : { kind: "solid", color };
   }
   if (cursor.localName === "gradFill") {
-    const gradAttrs = LinearGradAttrSchema.extend({
-      rotWithShape: OoxmlBoolSchema.optional(),
-    }).safeParse(cursor.attrsObject(["rotWithShape"]));
+    const gradAttrs = linearGradAttrSchema
+      .extend({
+        rotWithShape: ooxmlBoolSchema.optional(),
+      })
+      .safeParse(cursor.attrsObject(["rotWithShape"]));
     const rotWithShape = gradAttrs.success
       ? gradAttrs.data.rotWithShape
       : undefined;
@@ -475,7 +477,7 @@ function readFormatFillStyle(
     const gsLst = cursor.child(A_NS, "gsLst");
     if (gsLst !== undefined) {
       for (const gs of gsLst.children(A_NS, "gs")) {
-        const posParsed = PercentPosAttrSchema.safeParse(
+        const posParsed = percentPosAttrSchema.safeParse(
           gs.attrsObject(["pos"]),
         );
         const color = readFormatColorTransform(
@@ -500,7 +502,7 @@ function readFormatFillStyle(
       | undefined;
     const lin = cursor.child(A_NS, "lin");
     if (lin !== undefined) {
-      const parsed = LinearGradAttrSchema.safeParse(
+      const parsed = linearGradAttrSchema.safeParse(
         lin.attrsObject(["ang", "scaled"]),
       );
       if (parsed.success) {
@@ -525,7 +527,7 @@ function readFormatFillStyle(
       | undefined;
     const pathCursor = cursor.child(A_NS, "path");
     if (pathCursor !== undefined) {
-      const parsedPath = PathGradAttrSchema.safeParse(
+      const parsedPath = pathGradAttrSchema.safeParse(
         pathCursor.attrsObject(["path"]),
       );
       const rectCursor = pathCursor.child(A_NS, "fillToRect");
@@ -538,7 +540,7 @@ function readFormatFillStyle(
           }
         | undefined;
       if (rectCursor !== undefined) {
-        const parsedRect = FillToRectAttrSchema.safeParse(
+        const parsedRect = fillToRectAttrSchema.safeParse(
           rectCursor.attrsObject(["l", "t", "r", "b"]),
         );
         if (parsedRect.success) {
@@ -587,7 +589,7 @@ function readFormatLineStyle(
   slideIndex: number | undefined,
   diagnostics: ImportDiagnostic[],
 ): FormatLineStyle {
-  const parsed = LineAttrSchema.safeParse(
+  const parsed = lineAttrSchema.safeParse(
     lnCursor.attrsObject(["w", "cap", "cmpd", "algn"]),
   );
   let fill: FormatFillStyle | undefined;
@@ -657,7 +659,7 @@ function readFormatEffectStyle(
     if (child.localName === "effectLst") {
       const outerShdw = child.child(A_NS, "outerShdw");
       if (outerShdw !== undefined) {
-        const parsed = OuterShdwAttrSchema.safeParse(
+        const parsed = outerShdwAttrSchema.safeParse(
           outerShdw.attrsObject([
             "blurRad",
             "dist",

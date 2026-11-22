@@ -30,10 +30,10 @@ import {
 } from "@pptxdk/emit";
 import {
   A_NS,
-  ExtentEmuFragmentSchema,
-  OffsetEmuFragmentSchema,
-  OoxmlBoolSchema,
-  OoxmlNonNegativeIntSchema,
+  extentEmuFragmentSchema,
+  offsetEmuFragmentSchema,
+  ooxmlBoolSchema,
+  ooxmlNonNegativeIntSchema,
   P_NS,
   defineCanvasMechanism,
   emuToPx,
@@ -46,7 +46,7 @@ import {
 import { z } from "zod";
 
 import {
-  OptionalNameSchema,
+  optionalNameSchema,
   nativeLinkXml,
   parseLinkTarget,
   parseMorphKey,
@@ -62,17 +62,17 @@ import {
 import { resolvePlaceholderGeometry } from "../shared/style-inheritance.ts";
 
 const NonVisualSpIdSchema = z.object({
-  id: OoxmlNonNegativeIntSchema,
+  id: ooxmlNonNegativeIntSchema,
   name: z.string().optional(),
 });
 
 const NonVisualSpPrFlagsSchema = z.object({
-  txBox: OoxmlBoolSchema.optional(),
+  txBox: ooxmlBoolSchema.optional(),
 });
 
 export const placeholderDeclarationPropsSchema = z.strictObject({
   id: authorIdSchema.optional(),
-  name: OptionalNameSchema.optional(),
+  name: optionalNameSchema.optional(),
   morphKey: z.custom<MorphKey>(isMorphKey).optional(),
   placeholder: z.string().min(1).optional(),
   nativePlaceholder: nativePlaceholderRefSchema.optional(),
@@ -247,10 +247,10 @@ export function readContentPlaceholderSp(
     const off = xfrm.child(A_NS, "off");
     const ext = xfrm.child(A_NS, "ext");
     if (off !== undefined && ext !== undefined) {
-      const parsedOff = OffsetEmuFragmentSchema.safeParse(
+      const parsedOff = offsetEmuFragmentSchema.safeParse(
         off.attrsObject(["x", "y"]),
       );
-      const parsedExt = ExtentEmuFragmentSchema.safeParse(
+      const parsedExt = extentEmuFragmentSchema.safeParse(
         ext.attrsObject(["cx", "cy"]),
       );
       if (parsedOff.success && parsedExt.success) {

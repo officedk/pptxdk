@@ -10,6 +10,7 @@ import {
   CommonContainer,
   CommonNode,
   build as buildDefault,
+  defaultColorMap,
   defineSlideLayout,
   defineTheme,
   font,
@@ -25,7 +26,17 @@ import {
   selectCapabilities,
 } from "pptxdk/build";
 import { paint } from "pptxdk/preview";
-import { Deck, P, Shape, Slide, Span, Text } from "pptxdk/react";
+import {
+  Deck,
+  P,
+  Section,
+  Shape,
+  Slide,
+  SlideLayout,
+  SlideMaster,
+  Span,
+  Text,
+} from "pptxdk/react";
 import { deck, slide, slideLayout, slideMaster, text } from "pptxdk/vanilla";
 import { describe, it } from "vitest";
 
@@ -542,6 +553,97 @@ process.stdout.write(JSON.stringify(texts));
         (c) => c instanceof CommonNode && c.kind === "placeholder",
       ),
       true,
+    );
+  });
+
+  it("rejects SlideMaster when masters capability is trimmed and Section when notes capability is trimmed", async () => {
+    const blankLayout = defineSlideLayout({
+      id: "blank",
+      name: "Blank",
+      type: "blank",
+    });
+
+    await assert.rejects(
+      () =>
+        buildTrimmed(
+          <Deck width={960} height={540}>
+            <SlideMaster id="m1">
+              <SlideLayout layout={blankLayout} />
+            </SlideMaster>
+            <Slide id="s1" layout={blankLayout}>
+              <Text x={40} y={40} width={200} height={40}>
+                Hello
+              </Text>
+            </Slide>
+          </Deck>,
+          { capabilities: ["text"] },
+        ),
+      (error: unknown) =>
+        error instanceof BuildError &&
+        error.diagnostics[0]?.code === "missing-capability",
+    );
+
+    await assert.rejects(
+      () =>
+        buildTrimmed(
+          <Deck width={960} height={540}>
+            <Section name="Intro">
+              <Slide id="s1">
+                <Shape x={40} y={40} width={100} height={60} fill="#2563EB" />
+              </Slide>
+            </Section>
+          </Deck>,
+          { capabilities: ["shape"] },
+        ),
+      (error: unknown) =>
+        error instanceof BuildError &&
+        error.diagnostics[0]?.code === "missing-capability",
+    );
+  });
+
+  it("paints resolved dk1 canvas backdrop via mastersCanvas when colorMap inverts bg1 to dk1 without explicit background", async () => {
+    const invertedTheme = defineTheme({
+      name: "Inverted",
+      colors: { dk1: "#1E293B", lt1: "#F8FAFC" },
+    });
+    const blankLayout = defineSlideLayout({
+      id: "blank",
+      name: "Blank",
+      type: "blank",
+    });
+
+    const resolution = await resolveTrimmed(
+      <Deck width={320} height={180}>
+        <SlideMaster
+          id="m-inv"
+          theme={invertedTheme}
+          colorMap={{
+            ...defaultColorMap,
+            bg1: "dk1",
+            tx1: "lt1",
+            bg2: "dk2",
+            tx2: "lt2",
+          }}
+        >
+          <SlideLayout layout={blankLayout} />
+        </SlideMaster>
+        <Slide id="s-inv" layout={blankLayout} />
+      </Deck>,
+      { capabilities: ["masters"] },
+    );
+
+    const painted = paint(resolution);
+    assert.equal(painted.pages.length, 1);
+    assert.deepEqual(painted.pages[0]?.diagnostics, []);
+    assert.match(
+      painted.pages[0]?.svg ?? "",
+      /<rect width="100%" height="100%" fill="#1E293B"\/>/u,
+    );
+    const png = PNG.sync.read(Buffer.from(painted.pages[0].png!));
+    const idx = (10 * png.width + 10) * 4;
+    assert.deepEqual(
+      [png.data[idx], png.data[idx + 1], png.data[idx + 2]],
+      [0x1e, 0x29, 0x3b],
     );
   });
 });

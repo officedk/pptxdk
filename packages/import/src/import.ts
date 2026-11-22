@@ -5,6 +5,7 @@ import {
   type ThemeOverride,
 } from "@pptxdk/core";
 import type {
+  MasterPlaceholderMap,
   NativeColorSlot,
   PlaceholderMap,
   RegisteredCapabilityModule,
@@ -55,9 +56,9 @@ import {
 import { buildRelationshipIndex } from "#/resources.ts";
 import { readColorMapOverride, readThemeOverridePart } from "#/themes.ts";
 import {
-  ExtentEmuFragmentSchema,
-  OoxmlBoolSchema,
-  OoxmlIntSchema,
+  extentEmuFragmentSchema,
+  ooxmlBoolSchema,
+  ooxmlIntSchema,
 } from "#/xml-fragments.ts";
 import {
   MalformedXmlPartError,
@@ -73,14 +74,14 @@ export type ImportResult = {
 const defaultSlideWidthPx = 960;
 const defaultSlideHeightPx = 540;
 
-const SlideSizeFragmentSchema = ExtentEmuFragmentSchema.extend({
+const slideSizeFragmentSchema = extentEmuFragmentSchema.extend({
   type: z.string().optional(),
 });
 
-const SlideShowAttrSchema = z.object({
-  show: OoxmlBoolSchema.optional(),
-  showMasterPhAnim: OoxmlBoolSchema.optional(),
-  showMasterSp: OoxmlBoolSchema.optional(),
+const slideShowAttrSchema = z.object({
+  show: ooxmlBoolSchema.optional(),
+  showMasterPhAnim: ooxmlBoolSchema.optional(),
+  showMasterSp: ooxmlBoolSchema.optional(),
 });
 
 type RegisteredImportHandlers = {
@@ -148,7 +149,7 @@ function readSlideSize(
     return { width: defaultSlideWidthPx, height: defaultSlideHeightPx };
   }
   const raw = sldSz.attrsObject(["cx", "cy", "type"]);
-  const parsed = SlideSizeFragmentSchema.safeParse(raw);
+  const parsed = slideSizeFragmentSchema.safeParse(raw);
   if (!parsed.success) {
     diagnostics.push({
       code: "invalid-xml-value",
@@ -220,7 +221,7 @@ function readSlidePart(
   let slideEl: ReturnType<typeof parseXmlPart>;
   try {
     slideEl = parseXmlPart(slidePartPath, xmlText);
-  } catch (error) {
+  } catch {
     diagnostics.push({
       code: "corrupt-part",
       category: "corrupt-input",
@@ -230,7 +231,6 @@ function readSlidePart(
         slideIndex,
       },
     });
-    void error;
     return undefined;
   }
 
@@ -260,12 +260,12 @@ function readSlidePart(
     "showMasterPhAnim",
     "showMasterSp",
   ]);
-  const parsedShow = SlideShowAttrSchema.safeParse(rawShow);
+  const parsedShow = slideShowAttrSchema.safeParse(rawShow);
   let hidden = false;
   let showMasterPlaceholderAnimations: boolean | undefined;
   let showMasterShapes: boolean | undefined;
   if (!parsedShow.success) {
-    const singleShow = OoxmlBoolSchema.safeParse(rawShow["show"]);
+    const singleShow = ooxmlBoolSchema.safeParse(rawShow["show"]);
     if (rawShow["show"] !== undefined) {
       if (!singleShow.success) {
         diagnostics.push({
@@ -284,7 +284,7 @@ function readSlidePart(
         hidden = true;
       }
     }
-    const singlePhAnim = OoxmlBoolSchema.safeParse(rawShow["showMasterPhAnim"]);
+    const singlePhAnim = ooxmlBoolSchema.safeParse(rawShow["showMasterPhAnim"]);
     if (rawShow["showMasterPhAnim"] !== undefined) {
       if (!singlePhAnim.success) {
         diagnostics.push({
@@ -303,7 +303,7 @@ function readSlidePart(
         showMasterPlaceholderAnimations = singlePhAnim.data;
       }
     }
-    const singleShowMasterSp = OoxmlBoolSchema.safeParse(
+    const singleShowMasterSp = ooxmlBoolSchema.safeParse(
       rawShow["showMasterSp"],
     );
     if (rawShow["showMasterSp"] !== undefined) {
@@ -358,6 +358,9 @@ function readSlidePart(
       : layoutNodeByPartPath.get(resolvedLayoutPath);
   const layoutPlaceholders = layoutNode?.props["placeholders"] as
     | PlaceholderMap
+    | undefined;
+  const masterPlaceholders = layoutNode?.parent?.props["placeholders"] as
+    | MasterPlaceholderMap
     | undefined;
   const layoutClrMap =
     resolvedLayoutPath === undefined
@@ -470,6 +473,7 @@ function readSlidePart(
       diagnostics,
       containerNode: slideNode,
       ...(layoutPlaceholders === undefined ? {} : { layoutPlaceholders }),
+      ...(masterPlaceholders === undefined ? {} : { masterPlaceholders }),
       ...(layoutClrMap === undefined ? {} : { clrMap: layoutClrMap }),
     });
   }
@@ -596,7 +600,7 @@ export function createImporter(
         const sldIdCursor = sldIds[index]!;
         const rawId = sldIdCursor.attr("id");
         const parsedSlideNumId =
-          rawId === undefined ? undefined : OoxmlIntSchema.safeParse(rawId);
+          rawId === undefined ? undefined : ooxmlIntSchema.safeParse(rawId);
         if (parsedSlideNumId !== undefined && !parsedSlideNumId.success) {
           diagnostics.push({
             code: "invalid-xml-value",

@@ -6,28 +6,28 @@ import {
   visualStyleSchema,
 } from "@pptxdk/core/capability";
 import {
-  OoxmlIntSchema,
-  OoxmlNonNegativeIntSchema,
-  OoxmlPositiveIntSchema,
+  ooxmlIntSchema,
+  ooxmlNonNegativeIntSchema,
+  ooxmlPositiveIntSchema,
 } from "@pptxdk/import";
 import { z } from "zod";
 
-import { MotionPropsSchema } from "../motion/motion-schemas.ts";
+import { motionPropsSchema } from "../motion/motion-schemas.ts";
 import { geometrySchema } from "../shared/geometry.ts";
-import { OptionalNameSchema } from "../shared/identity.ts";
-import { MorphKeySchema } from "../shared/morph-api.ts";
+import { optionalNameSchema } from "../shared/identity.ts";
+import { morphKeySchema } from "../shared/morph-api.ts";
 
-export const ImageFitSchema = z.enum(["fill", "cover", "contain"]);
-export type ImageFit = z.infer<typeof ImageFitSchema>;
+export const imageFitSchema = z.enum(["fill", "cover", "contain"]);
+export type ImageFit = z.infer<typeof imageFitSchema>;
 
-export const CropFractionSchema = z.number().finite().min(0).max(1);
+export const cropFractionSchema = z.number().finite().min(0).max(1);
 
-export const ImageCropInputSchema = z
+export const imageCropInputSchema = z
   .strictObject({
-    left: CropFractionSchema.optional(),
-    top: CropFractionSchema.optional(),
-    right: CropFractionSchema.optional(),
-    bottom: CropFractionSchema.optional(),
+    left: cropFractionSchema.optional(),
+    top: cropFractionSchema.optional(),
+    right: cropFractionSchema.optional(),
+    bottom: cropFractionSchema.optional(),
   })
   .superRefine((crop, ctx) => {
     if ((crop.left ?? 0) + (crop.right ?? 0) > 1) {
@@ -45,28 +45,28 @@ export const ImageCropInputSchema = z
       });
     }
   });
-export type ImageCropInput = z.infer<typeof ImageCropInputSchema>;
+export type ImageCropInput = z.infer<typeof imageCropInputSchema>;
 
-export const ExternalImageSourceSchema = z.strictObject({
+export const externalImageSourceSchema = z.strictObject({
   externalUrl: z.string().min(1),
 });
-export type ExternalImageSource = z.infer<typeof ExternalImageSourceSchema>;
+export type ExternalImageSource = z.infer<typeof externalImageSourceSchema>;
 
-export const ImageSourceSchema = z.union([
+export const imageSourceSchema = z.union([
   z.string(),
   z.instanceof(URL),
   z.custom<Uint8Array>((value) => value instanceof Uint8Array),
-  ExternalImageSourceSchema,
+  externalImageSourceSchema,
 ]);
-export type ImageSource = z.infer<typeof ImageSourceSchema>;
+export type ImageSource = z.infer<typeof imageSourceSchema>;
 
-export const ImageCoordinateValueSchema = z
+export const imageCoordinateValueSchema = z
   .number()
   .finite()
   .min(-1_000_000)
   .max(1_000_000);
 
-export const ImageExtentValueSchema = z.number().finite().positive();
+export const imageExtentValueSchema = z.number().finite().positive();
 
 const coreVisualShape = visualStyleSchema.unwrap().shape;
 
@@ -95,31 +95,31 @@ export const imageStyleSchema = z
   })
   .readonly();
 
-const motionPropsShape = MotionPropsSchema.unwrap().shape;
+const motionPropsShape = motionPropsSchema.unwrap().shape;
 
 const imageDeclarationPropsObjectSchema = z.strictObject({
   id: authorIdSchema.optional(),
-  name: OptionalNameSchema.optional(),
+  name: optionalNameSchema.optional(),
   placeholder: z.string().optional(),
   nativePlaceholder: nativePlaceholderRefSchema.optional(),
-  morphKey: MorphKeySchema.optional(),
+  morphKey: morphKeySchema.optional(),
   link: linkTargetSchema.optional(),
-  src: ImageSourceSchema,
+  src: imageSourceSchema,
   /** Alternative text for the image. */
   alt: z.string().optional(),
   /** Position and bounds in px; position defaults to 0, width and height default to original image dimensions. */
-  x: ImageCoordinateValueSchema.optional(),
-  y: ImageCoordinateValueSchema.optional(),
-  width: ImageExtentValueSchema.optional(),
-  height: ImageExtentValueSchema.optional(),
+  x: imageCoordinateValueSchema.optional(),
+  y: imageCoordinateValueSchema.optional(),
+  width: imageExtentValueSchema.optional(),
+  height: imageExtentValueSchema.optional(),
   geometry: geometrySchema.optional(),
   flipH: z.boolean().optional(),
   flipV: z.boolean().optional(),
   style: imageStyleSchema.optional(),
   /** `fill` stretches, `cover` crops centered, `contain` preserves aspect ratio; defaults to `fill`. */
-  fit: ImageFitSchema.optional(),
+  fit: imageFitSchema.optional(),
   /** Explicit crop fraction for each side of the original image; takes precedence over `fit` when provided. */
-  crop: ImageCropInputSchema.optional(),
+  crop: imageCropInputSchema.optional(),
   enter: motionPropsShape.enter,
   emphasis: motionPropsShape.emphasis,
   motion: motionPropsShape.motion,
@@ -134,18 +134,18 @@ export const imageAllowedParameters: readonly string[] = Object.keys(
   imageDeclarationPropsObjectSchema.shape,
 );
 
-export const NonVisualPicIdSchema = z.object({
-  id: OoxmlNonNegativeIntSchema,
+export const nonVisualPicIdSchema = z.object({
+  id: ooxmlNonNegativeIntSchema,
   name: z.string().optional(),
   descr: z.string().optional(),
 });
 
-const OoxmlCropFractionSchema = OoxmlNonNegativeIntSchema.refine(
+const OoxmlCropFractionSchema = ooxmlNonNegativeIntSchema.refine(
   (value) => value <= 100_000,
   { message: "Crop value cannot exceed 100000" },
 );
 
-export const SrcRectFragmentSchema = z
+export const srcRectFragmentSchema = z
   .object({
     l: OoxmlCropFractionSchema.optional(),
     t: OoxmlCropFractionSchema.optional(),
@@ -159,49 +159,49 @@ export const SrcRectFragmentSchema = z
     { message: "Crop sum cannot exceed 100000" },
   );
 
-export const AlphaModFixFragmentSchema = z.object({
+export const alphaModFixFragmentSchema = z.object({
   amt: OoxmlCropFractionSchema,
 });
 
-export const PresetGeomFragmentSchema = z.object({
+export const presetGeomFragmentSchema = z.object({
   prst: z.string().min(1),
 });
 
-export const GeomGuideFragmentSchema = z.object({
+export const geomGuideFragmentSchema = z.object({
   name: z.string().min(1),
   fmla: z.string().regex(/^val (-?\d+)$/u),
 });
 
-export const CustomPathAttributesSchema = z.object({
-  w: OoxmlPositiveIntSchema.optional(),
-  h: OoxmlPositiveIntSchema.optional(),
+export const customPathAttributesSchema = z.object({
+  w: ooxmlPositiveIntSchema.optional(),
+  h: ooxmlPositiveIntSchema.optional(),
   fill: z
     .enum(["none", "norm", "lighten", "lightenLess", "darken", "darkenLess"])
     .optional(),
   stroke: z.enum(["0", "1", "true", "false"]).optional(),
 });
 
-export const CustomPathPointSchema = z.object({
-  x: OoxmlIntSchema,
-  y: OoxmlIntSchema,
+export const customPathPointSchema = z.object({
+  x: ooxmlIntSchema,
+  y: ooxmlIntSchema,
 });
 
-export const LineAttributesFragmentSchema = z.object({
-  w: OoxmlPositiveIntSchema.optional(),
+export const lineAttributesFragmentSchema = z.object({
+  w: ooxmlPositiveIntSchema.optional(),
 });
 
-export const PresetDashFragmentSchema = z.object({
+export const presetDashFragmentSchema = z.object({
   val: z.enum(["solid", "dash", "sysDot", "dot"]),
 });
 
-export const OuterShadowFragmentSchema = z.object({
-  blurRad: OoxmlNonNegativeIntSchema.optional(),
-  dist: OoxmlNonNegativeIntSchema.optional(),
-  dir: OoxmlNonNegativeIntSchema.optional(),
+export const outerShadowFragmentSchema = z.object({
+  blurRad: ooxmlNonNegativeIntSchema.optional(),
+  dist: ooxmlNonNegativeIntSchema.optional(),
+  dir: ooxmlNonNegativeIntSchema.optional(),
   algn: z.string().optional(),
   rotWithShape: z.string().optional(),
 });
 
-export const SoftEdgeFragmentSchema = z.object({
-  rad: OoxmlNonNegativeIntSchema,
+export const softEdgeFragmentSchema = z.object({
+  rad: ooxmlNonNegativeIntSchema,
 });

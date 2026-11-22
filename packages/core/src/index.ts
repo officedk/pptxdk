@@ -15,6 +15,25 @@ export {
 } from "#/author-schemas.ts";
 export { BuildError, CapabilityError } from "#/diagnostics.ts";
 export {
+  customGeometrySchema,
+  geometryAdjustKeySchema,
+  geometryAdjustSchema,
+  geometryPathSchema,
+  geometrySchema,
+  pathCommandSchema,
+  presetGeometryNameSchema,
+  presetGeometrySchema,
+  presetGeometryTuple,
+} from "#/geometry-schemas.ts";
+export type {
+  CustomGeometry,
+  Geometry,
+  GeometryPath,
+  PathCommand,
+  PresetGeometry,
+  PresetGeometryName,
+} from "#/geometry-schemas.ts";
+export {
   layoutLengthSchema,
   layoutSpacingSchema,
   layoutStyleSchema,

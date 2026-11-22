@@ -10,17 +10,17 @@ import {
 import {
   A_NS,
   C_NS,
-  ExtentEmuFragmentSchema,
-  HexRgb6Schema,
+  extentEmuFragmentSchema,
+  hexRgb6Schema,
   MC_NS,
-  OffsetEmuFragmentSchema,
-  OoxmlBoolSchema,
-  OoxmlIntSchema,
-  OoxmlNonNegativeIntSchema,
+  offsetEmuFragmentSchema,
+  ooxmlBoolSchema,
+  ooxmlIntSchema,
+  ooxmlNonNegativeIntSchema,
   P_NS,
   REL_CHART,
   R_NS,
-  TransformAttributesFragmentSchema,
+  transformAttributesFragmentSchema,
   XmlElementCursor,
   emuToPx,
   parseXmlPart,
@@ -94,7 +94,7 @@ const C16_UNIQUE_ID_EXT_URI = "{C3380CC4-5D6E-409C-BE32-E72D297353CC}";
 const WPS_CHART_PROPS_EXT_URI = "{0b15fc19-7d7d-44ad-8c2d-2c3a37ce22c3}";
 
 const NonVisualIdSchema = z.object({
-  id: OoxmlNonNegativeIntSchema,
+  id: ooxmlNonNegativeIntSchema,
   name: z.string().optional(),
 });
 
@@ -235,14 +235,14 @@ function readBoolVal(
 ): boolean | undefined {
   const raw = readValAttr(cursor);
   if (raw === undefined) return undefined;
-  const parsed = OoxmlBoolSchema.safeParse(raw);
+  const parsed = ooxmlBoolSchema.safeParse(raw);
   return parsed.success ? parsed.data : undefined;
 }
 
 function readIntVal(cursor: XmlElementCursor | undefined): number | undefined {
   const raw = readValAttr(cursor);
   if (raw === undefined) return undefined;
-  const parsed = OoxmlIntSchema.safeParse(raw);
+  const parsed = ooxmlIntSchema.safeParse(raw);
   return parsed.success ? parsed.data : undefined;
 }
 
@@ -282,7 +282,7 @@ function readSolidFillColor(
   let schemeSlot: SchemeColorName | undefined;
   if (srgb !== undefined) {
     const raw = srgb.attrsObject(["val"]);
-    const parsed = HexRgb6Schema.safeParse(raw["val"]);
+    const parsed = hexRgb6Schema.safeParse(raw["val"]);
     if (parsed.success) {
       baseString = `#${parsed.data.toUpperCase()}`;
     }
@@ -389,7 +389,7 @@ function readLineFromSpPr(spPr: XmlElementCursor): {
   }
   let width: number | undefined;
   if (rawW !== undefined) {
-    const parsedW = OoxmlIntSchema.safeParse(rawW);
+    const parsedW = ooxmlIntSchema.safeParse(rawW);
     if (parsedW.success && parsedW.data > 0) {
       width = emuToPx(parsedW.data);
     }
@@ -456,13 +456,13 @@ function readChartOuterShadow(rPrCursor: XmlElementCursor): Shadow | undefined {
   const blurRad =
     blurRadRaw === undefined
       ? undefined
-      : OoxmlNonNegativeIntSchema.safeParse(blurRadRaw);
+      : ooxmlNonNegativeIntSchema.safeParse(blurRadRaw);
   const dist =
     distRaw === undefined
       ? undefined
-      : OoxmlNonNegativeIntSchema.safeParse(distRaw);
+      : ooxmlNonNegativeIntSchema.safeParse(distRaw);
   const dir =
-    dirRaw === undefined ? undefined : OoxmlIntSchema.safeParse(dirRaw);
+    dirRaw === undefined ? undefined : ooxmlIntSchema.safeParse(dirRaw);
   return {
     ...(color === undefined ? {} : { color }),
     ...(blurRad?.success ? { blur: emuToPx(blurRad.data) } : {}),
@@ -479,7 +479,7 @@ function readChartRunProperties(rPrCursor: XmlElementCursor): ChartTextStyle {
 
   const szRaw = rPrCursor.attr("sz");
   const szParsed =
-    szRaw === undefined ? undefined : OoxmlIntSchema.safeParse(szRaw);
+    szRaw === undefined ? undefined : ooxmlIntSchema.safeParse(szRaw);
   const fontSize: ChartTextStyle["fontSize"] =
     szParsed?.success && szParsed.data >= 100 && szParsed.data <= 400_000
       ? `${szParsed.data / 100}pt`
@@ -487,7 +487,7 @@ function readChartRunProperties(rPrCursor: XmlElementCursor): ChartTextStyle {
 
   const bRaw = rPrCursor.attr("b");
   const bParsed =
-    bRaw === undefined ? undefined : OoxmlBoolSchema.safeParse(bRaw);
+    bRaw === undefined ? undefined : ooxmlBoolSchema.safeParse(bRaw);
   const fontWeight: ChartTextStyle["fontWeight"] = bParsed?.success
     ? bParsed.data
       ? "bold"
@@ -496,7 +496,7 @@ function readChartRunProperties(rPrCursor: XmlElementCursor): ChartTextStyle {
 
   const iRaw = rPrCursor.attr("i");
   const iParsed =
-    iRaw === undefined ? undefined : OoxmlBoolSchema.safeParse(iRaw);
+    iRaw === undefined ? undefined : ooxmlBoolSchema.safeParse(iRaw);
   const fontStyle: ChartTextStyle["fontStyle"] = iParsed?.success
     ? iParsed.data
       ? "italic"
@@ -517,7 +517,7 @@ function readChartRunProperties(rPrCursor: XmlElementCursor): ChartTextStyle {
 
   const spcRaw = rPrCursor.attr("spc");
   const spcParsed =
-    spcRaw === undefined ? undefined : OoxmlIntSchema.safeParse(spcRaw);
+    spcRaw === undefined ? undefined : ooxmlIntSchema.safeParse(spcRaw);
   const letterSpacing =
     spcParsed?.success &&
     spcParsed.data >= -400_000 &&
@@ -890,7 +890,7 @@ function readPtCount(container: XmlElementCursor): number | undefined {
   if (ptCountCursor === undefined) return undefined;
   const raw = readValAttr(ptCountCursor);
   if (raw === undefined) return undefined;
-  const parsed = OoxmlNonNegativeIntSchema.safeParse(raw);
+  const parsed = ooxmlNonNegativeIntSchema.safeParse(raw);
   return parsed.success ? parsed.data : undefined;
 }
 
@@ -908,7 +908,7 @@ function readStringCacheOrLit(container: XmlElementCursor): readonly string[] {
     const parsedIdx =
       rawIdx === undefined
         ? undefined
-        : OoxmlNonNegativeIntSchema.safeParse(rawIdx);
+        : ooxmlNonNegativeIntSchema.safeParse(rawIdx);
     const v = pt.child(C_NS, "v");
     const text = v?.textContent ?? "";
     consumeSubtree(pt);
@@ -947,7 +947,7 @@ function readNumericCacheOrLit(
     const parsedIdx =
       rawIdx === undefined
         ? undefined
-        : OoxmlNonNegativeIntSchema.safeParse(rawIdx);
+        : ooxmlNonNegativeIntSchema.safeParse(rawIdx);
     const v = pt.child(C_NS, "v");
     const rawVal = v?.textContent.trim();
     consumeSubtree(pt);
@@ -1013,7 +1013,7 @@ function readStringDataSource(
           const parsedIdx =
             rawIdx === undefined
               ? undefined
-              : OoxmlNonNegativeIntSchema.safeParse(rawIdx);
+              : ooxmlNonNegativeIntSchema.safeParse(rawIdx);
           const v = pt.child(C_NS, "v");
           if (
             parsedIdx?.success &&
@@ -3154,11 +3154,11 @@ export function readChartGraphicFrame(
   }
 
   const rawXfrm = xfrm.attrsObject(["rot", "flipH", "flipV"]);
-  TransformAttributesFragmentSchema.safeParse(rawXfrm);
-  const parsedOff = OffsetEmuFragmentSchema.safeParse(
+  transformAttributesFragmentSchema.safeParse(rawXfrm);
+  const parsedOff = offsetEmuFragmentSchema.safeParse(
     off.attrsObject(["x", "y"]),
   );
-  const parsedExt = ExtentEmuFragmentSchema.safeParse(
+  const parsedExt = extentEmuFragmentSchema.safeParse(
     ext.attrsObject(["cx", "cy"]),
   );
   if (!parsedOff.success || !parsedExt.success) {

@@ -8,12 +8,14 @@ export {
   readEffectList,
   readGradientFill,
   readLineBorder,
+  readPlaceholderSpPrVisuals,
   readTransformXml,
 } from "#/visual.ts";
 export type {
   ArrowType,
   ImportedLineBorder,
   ImportedTransform,
+  PlaceholderSpPrVisualOptions,
 } from "#/visual.ts";
 export {
   ImportError,
@@ -126,7 +128,7 @@ export {
   emuToPx,
 } from "#/namespaces.ts";
 export {
-  OpcRelationshipSchema,
+  opcRelationshipSchema,
   openPptxPackage,
   parseRelationshipsXml,
   relsPathFor,
@@ -150,14 +152,14 @@ export type {
   ResolvedInternalResource,
 } from "#/resources.ts";
 export {
-  ExtentEmuFragmentSchema,
-  HexRgb6Schema,
-  OffsetEmuFragmentSchema,
-  OoxmlBoolSchema,
-  OoxmlIntSchema,
-  OoxmlNonNegativeIntSchema,
-  OoxmlPositiveIntSchema,
-  TransformAttributesFragmentSchema,
+  extentEmuFragmentSchema,
+  hexRgb6Schema,
+  offsetEmuFragmentSchema,
+  ooxmlBoolSchema,
+  ooxmlIntSchema,
+  ooxmlNonNegativeIntSchema,
+  ooxmlPositiveIntSchema,
+  transformAttributesFragmentSchema,
 } from "#/xml-fragments.ts";
 export type {
   ExtentEmuFragment,

@@ -8,16 +8,16 @@ import { z } from "zod";
 import type { ImportDiagnostic } from "#/diagnostics.ts";
 import { allocateScopedAuthorId } from "#/masters.ts";
 import { P14_NS, P14_SECTION_LIST_EXT_URI, P_NS } from "#/namespaces.ts";
-import { OoxmlNonNegativeIntSchema } from "#/xml-fragments.ts";
+import { ooxmlNonNegativeIntSchema } from "#/xml-fragments.ts";
 import type { XmlElementCursor } from "#/xml-reader.ts";
 
-const SectionAttrsXmlSchema = z.object({
+const sectionAttrsXmlSchema = z.object({
   name: z.string().refine((value) => value.trim() !== ""),
   id: z.string().optional(),
 });
 
-const SectionSlideIdXmlSchema = z.object({
-  id: OoxmlNonNegativeIntSchema,
+const sectionSlideIdXmlSchema = z.object({
+  id: ooxmlNonNegativeIntSchema,
 });
 
 function hasMatchingSectionExtension(extLst: XmlElementCursor): boolean {
@@ -99,7 +99,7 @@ export function importPresentationSections(
     for (let index = 0; index < sectionCursors.length; index += 1) {
       const sectionCursor = sectionCursors[index]!;
       const rawAttrs = sectionCursor.attrsObject(["name", "id"]);
-      const parsedAttrs = SectionAttrsXmlSchema.safeParse(rawAttrs);
+      const parsedAttrs = sectionAttrsXmlSchema.safeParse(rawAttrs);
       let sectionName: string;
       if (!parsedAttrs.success) {
         diagnostics.push({
@@ -128,7 +128,7 @@ export function importPresentationSections(
       if (sldIdLst !== undefined) {
         for (const sldIdCursor of sldIdLst.children(P14_NS, "sldId")) {
           const rawSlideId = sldIdCursor.attrsObject(["id"]);
-          const parsedSlideId = SectionSlideIdXmlSchema.safeParse(rawSlideId);
+          const parsedSlideId = sectionSlideIdXmlSchema.safeParse(rawSlideId);
           if (!parsedSlideId.success) {
             diagnostics.push({
               code: "invalid-xml-value",

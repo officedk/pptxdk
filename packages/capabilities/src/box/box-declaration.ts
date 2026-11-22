@@ -9,8 +9,8 @@ import {
 import { CommonContainer } from "@pptxdk/core/document";
 import { z } from "zod";
 
-import { MotionPropsSchema } from "../motion/motion-schemas.ts";
-import { MorphKeySchema } from "../shared/morph-api.ts";
+import { motionPropsSchema } from "../motion/motion-schemas.ts";
+import { morphKeySchema } from "../shared/morph-api.ts";
 
 const boxStyleObjectSchema = z.strictObject({
   ...layoutStyleSchema.unwrap().shape,
@@ -21,11 +21,11 @@ const boxStyleObjectSchema = z.strictObject({
 export const boxStyleSchema = boxStyleObjectSchema.readonly();
 export type BoxStyle = z.infer<typeof boxStyleSchema>;
 
-const motionPropsShape = MotionPropsSchema.unwrap().shape;
+const motionPropsShape = motionPropsSchema.unwrap().shape;
 
 const boxDeclarationPropsObjectSchema = z.strictObject({
   id: authorIdSchema.optional(),
-  morphKey: MorphKeySchema.optional(),
+  morphKey: morphKeySchema.optional(),
   link: linkTargetSchema.optional(),
   style: boxStyleSchema.optional(),
   theme: themeScopeSchema.optional(),

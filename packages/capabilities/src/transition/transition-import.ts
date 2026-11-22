@@ -1,6 +1,6 @@
 import {
   MC_NS,
-  OoxmlNonNegativeIntSchema,
+  ooxmlNonNegativeIntSchema,
   P14_NS,
   P159_NS,
   P_NS,
@@ -14,7 +14,7 @@ import {
 import { z } from "zod";
 
 import {
-  TransitionSpeedSchema,
+  transitionSpeedSchema,
   transitions,
   type StandardTransition,
   type Transition,
@@ -50,7 +50,7 @@ const P14DurXmlSchema = z.string().transform((raw, ctx) => {
   return ms;
 });
 
-const AdvTmXmlSchema = OoxmlNonNegativeIntSchema.refine(
+const AdvTmXmlSchema = ooxmlNonNegativeIntSchema.refine(
   (value) => value <= 4_294_967_295,
 );
 
@@ -159,7 +159,7 @@ function readTransitionElement(
   const rawSpd = cursor.attr("spd");
   if (
     rawSpd !== undefined &&
-    !TransitionSpeedSchema.safeParse(rawSpd).success
+    !transitionSpeedSchema.safeParse(rawSpd).success
   ) {
     diagnostics.push({
       code: "invalid-xml-value",

@@ -50,12 +50,12 @@ import {
   picturePlaceholderImportHandler,
 } from "./image-import.ts";
 import {
-  ExternalImageSourceSchema,
-  ImageCoordinateValueSchema,
-  ImageCropInputSchema,
-  ImageExtentValueSchema,
-  ImageFitSchema,
-  ImageSourceSchema,
+  externalImageSourceSchema,
+  imageCoordinateValueSchema,
+  imageCropInputSchema,
+  imageExtentValueSchema,
+  imageFitSchema,
+  imageSourceSchema,
   imageAllowedParameters,
   imageDeclarationPropsSchema,
   imageStyleSchema,
@@ -410,8 +410,8 @@ function dimension(
   const actual = value === undefined ? fallback : value;
   const isExtent = name === "width" || name === "height";
   const parsed = isExtent
-    ? ImageExtentValueSchema.safeParse(actual)
-    : ImageCoordinateValueSchema.safeParse(actual);
+    ? imageExtentValueSchema.safeParse(actual)
+    : imageCoordinateValueSchema.safeParse(actual);
   if (!parsed.success) {
     throw new CapabilityError(
       "invalid-coordinate",
@@ -448,7 +448,7 @@ function parseCropValues(
   path?: string,
 ): Partial<ImageCrop> | undefined {
   if (value === undefined) return undefined;
-  const parsed = ImageCropInputSchema.safeParse(value);
+  const parsed = imageCropInputSchema.safeParse(value);
   if (!parsed.success) {
     const issue = parsed.error.issues[0];
     if (issue?.code === "unrecognized_keys") {
@@ -474,14 +474,14 @@ function parseCropValues(
 }
 
 function readImageSource(source: unknown): ResolvedImageSource {
-  const parsed = ImageSourceSchema.safeParse(source);
+  const parsed = imageSourceSchema.safeParse(source);
   if (!parsed.success) {
     throw new CapabilityError(
       "invalid-image-source",
       "Image.src must be a file path, file URL, image bytes, or externalUrl descriptor",
     );
   }
-  const externalParsed = ExternalImageSourceSchema.safeParse(parsed.data);
+  const externalParsed = externalImageSourceSchema.safeParse(parsed.data);
   if (externalParsed.success) {
     return {
       kind: "external",
@@ -583,7 +583,7 @@ export const imageCapability = {
     const requestedFit = input.props["fit"];
     let fit: ImageFit = "fill";
     if (requestedFit !== undefined) {
-      const parsedFit = ImageFitSchema.safeParse(requestedFit);
+      const parsedFit = imageFitSchema.safeParse(requestedFit);
       if (!parsedFit.success) {
         throw new CapabilityError(
           "unsupported-fit",

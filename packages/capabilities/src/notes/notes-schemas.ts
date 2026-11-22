@@ -1,5 +1,5 @@
 import { authorIdSchema, textStyleSchema } from "@pptxdk/core/capability";
-import { OoxmlBoolSchema, OoxmlNonNegativeIntSchema } from "@pptxdk/import";
+import { ooxmlBoolSchema, ooxmlNonNegativeIntSchema } from "@pptxdk/import";
 import { z } from "zod";
 
 /** Pure-data Zod v4 contract for page-affiliated speaker notes declarations (`Notes` / `notes()`). */
@@ -13,22 +13,22 @@ export const notesDeclarationPropsSchema = z
 export type NotesDeclarationProps = z.infer<typeof notesDeclarationPropsSchema>;
 
 /** Validates `<p:notes>` root attributes in Transitional OOXML. */
-export const NotesRootAttrsXmlSchema = z.object({
-  showMasterSp: OoxmlBoolSchema.optional(),
-  showMasterPhAnim: OoxmlBoolSchema.optional(),
+export const notesRootAttrsXmlSchema = z.object({
+  showMasterSp: ooxmlBoolSchema.optional(),
+  showMasterPhAnim: ooxmlBoolSchema.optional(),
 });
 
 /** Validates `<p:cNvPr>` attributes inside notes slide shapes. */
-export const NotesShapeIdentityXmlSchema = z.object({
-  id: OoxmlNonNegativeIntSchema,
+export const notesShapeIdentityXmlSchema = z.object({
+  id: ooxmlNonNegativeIntSchema,
   name: z.string().optional(),
 });
 
 /** Validates `<p:ph>` placeholder attributes inside notes slides. */
-export const NotesPlaceholderXmlSchema = z.object({
+export const notesPlaceholderXmlSchema = z.object({
   type: z.string().optional(),
-  idx: OoxmlNonNegativeIntSchema.optional(),
+  idx: ooxmlNonNegativeIntSchema.optional(),
   sz: z.enum(["full", "half", "quarter"]).optional(),
   orient: z.enum(["horz", "vert"]).optional(),
-  hasCustomPrompt: OoxmlBoolSchema.optional(),
+  hasCustomPrompt: ooxmlBoolSchema.optional(),
 });

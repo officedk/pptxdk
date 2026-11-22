@@ -484,6 +484,7 @@ export type FileSlideMaster = {
 
 export type FileSlide = {
   readonly id: string;
+  readonly name?: string;
   readonly layoutPart?: string;
   readonly masterPart?: string;
   readonly colorMapOverride?: "master" | Readonly<Record<string, string>>;
@@ -2757,12 +2758,7 @@ function matchPlaceholderTemplateBox(
   return masterMatch?.boxEmu;
 }
 
-function readMasterOrLayoutAnimationObjects(
-  root: XmlElement,
-  theme: ThemeTextReader,
-  errors: ValidationIssue[],
-  part: string,
-): FileObject[] {
+function readMasterOrLayoutAnimationObjects(root: XmlElement): FileObject[] {
   const cSld = first(root, presentationNamespace, "cSld");
   const spTree =
     cSld === undefined
@@ -2816,9 +2812,6 @@ function readMasterOrLayoutAnimationObjects(
         : {}),
     });
   }
-  void theme;
-  void errors;
-  void part;
   return objects;
 }
 
@@ -3221,12 +3214,7 @@ function readMastersAndLayouts(
           : readSlideAnimations(
               layoutRoot,
               layoutPart,
-              readMasterOrLayoutAnimationObjects(
-                layoutRoot,
-                themeTextReader(documents, "", masterPart, [], []),
-                errors,
-                layoutPart,
-              ),
+              readMasterOrLayoutAnimationObjects(layoutRoot),
               layoutSize,
               errors,
             );
@@ -3357,12 +3345,7 @@ function readMastersAndLayouts(
         : readSlideAnimations(
             masterRoot,
             masterPart,
-            readMasterOrLayoutAnimationObjects(
-              masterRoot,
-              themeTextReader(documents, themePart ?? "", masterPart, [], []),
-              errors,
-              masterPart,
-            ),
+            readMasterOrLayoutAnimationObjects(masterRoot),
             masterSize,
             errors,
           );
@@ -10855,19 +10838,13 @@ function readPresentation(
     }
     const rawSlideName =
       commonSlideData === undefined ? "" : attribute(commonSlideData, "name");
-    let stableSlideId =
+    const baseSlideId =
       rawSlideName !== "" ? rawSlideName : `slide-${index + 1}`;
+    let stableSlideId = baseSlideId;
+    let suffix = 2;
     while (stableSlideIds.has(stableSlideId)) {
-      if (rawSlideName !== "") {
-        issue(
-          errors,
-          slidePath,
-          "duplicate-stable-slide-id",
-          `Duplicate slide identifier ${stableSlideId}`,
-        );
-        break;
-      }
-      stableSlideId = `${stableSlideId}-dup`;
+      stableSlideId = `${baseSlideId}-${suffix}`;
+      suffix += 1;
     }
     stableSlideIds.add(stableSlideId);
     presentationSlideIds.set(presentationId, stableSlideId);
@@ -10881,6 +10858,7 @@ function readPresentation(
     );
     slides.push({
       id: stableSlideId,
+      ...(rawSlideName === "" ? {} : { name: rawSlideName }),
       ...(slideLayoutPart === undefined ? {} : { layoutPart: slideLayoutPart }),
       ...(slideMasterPart === undefined ? {} : { masterPart: slideMasterPart }),
       ...(slideColorMapOverride === undefined

@@ -9,24 +9,24 @@ import { CommonContainer } from "@pptxdk/core/document";
 import type { ReactNode } from "react";
 
 import {
-  BreatheOptionsSchema,
-  EasingSchema,
-  EffectDelaySchema,
-  EffectDurationSchema,
-  EffectPresetSchema,
-  EntranceEffectSchema,
-  IntervalMsSchema,
-  MotionDirectionSchema,
-  MotionGranularitySchema,
-  MotionHexColorSchema,
-  MotionMomentOffsetSchema,
-  MotionMomentSchema,
-  MotionScopeAuthorPropsSchema,
-  MotionScopeHandleSchema,
-  MotionScopeModeSchema,
-  MotionStepAuthorPropsSchema,
-  RepeatCountSchema,
-  SpinAngleSchema,
+  breatheOptionsSchema,
+  easingSchema,
+  effectDelaySchema,
+  effectDurationSchema,
+  effectPresetSchema,
+  entranceEffectSchema,
+  intervalMsSchema,
+  motionDirectionSchema,
+  motionGranularitySchema,
+  motionHexColorSchema,
+  motionMomentOffsetSchema,
+  motionMomentSchema,
+  motionScopeAuthorPropsSchema,
+  motionScopeHandleSchema,
+  motionScopeModeSchema,
+  motionStepAuthorPropsSchema,
+  repeatCountSchema,
+  spinAngleSchema,
   maxRepeatCount,
   maximumTimeNodeValue,
   type BreatheEffect,
@@ -56,41 +56,41 @@ import {
 } from "./motion-schemas.ts";
 
 export {
-  BreatheEffectSchema,
-  BreatheOptionsSchema,
-  EasingSchema,
-  EffectDelaySchema,
-  EffectDurationSchema,
-  EffectOptionsSchema,
-  EffectPresetSchema,
-  EffectSchema,
-  EmphasisEffectDeclarationSchema,
-  EmphasisEffectSchema,
-  EntranceEffectDeclarationSchema,
-  EntranceEffectSchema,
-  FillColorOptionsSchema,
-  MotionCompletionStateSchema,
-  MotionDirectionSchema,
-  MotionGranularitySchema,
-  MotionHexColorSchema,
-  MotionMomentOffsetSchema,
-  MotionMomentSchema,
-  MotionPropsSchema,
-  MotionScopeAuthorPropsSchema,
-  MotionScopeHandleSchema,
-  MotionScopeModeSchema,
-  MotionStepAuthorPropsSchema,
-  MotionTargetRangeSchema,
-  MotionTimingSchema,
-  NormalizedEffectSchema,
-  OwnerMotionEffectSchema,
-  OwnerMotionSchema,
-  OwnerMotionStepSchema,
-  OwnerMotionTargetSchema,
-  RepeatCountSchema,
-  RepeatedEffectSchema,
-  SpinAngleSchema,
-  SpinOptionsSchema,
+  breatheEffectSchema,
+  breatheOptionsSchema,
+  easingSchema,
+  effectDelaySchema,
+  effectDurationSchema,
+  effectOptionsSchema,
+  effectPresetSchema,
+  effectSchema,
+  emphasisEffectDeclarationSchema,
+  emphasisEffectSchema,
+  entranceEffectDeclarationSchema,
+  entranceEffectSchema,
+  fillColorOptionsSchema,
+  motionCompletionStateSchema,
+  motionDirectionSchema,
+  motionGranularitySchema,
+  motionHexColorSchema,
+  motionMomentOffsetSchema,
+  motionMomentSchema,
+  motionPropsSchema,
+  motionScopeAuthorPropsSchema,
+  motionScopeHandleSchema,
+  motionScopeModeSchema,
+  motionStepAuthorPropsSchema,
+  motionTargetRangeSchema,
+  motionTimingSchema,
+  normalizedEffectSchema,
+  ownerMotionEffectSchema,
+  ownerMotionSchema,
+  ownerMotionStepSchema,
+  ownerMotionTargetSchema,
+  repeatCountSchema,
+  repeatedEffectSchema,
+  spinAngleSchema,
+  spinOptionsSchema,
   maximumTimeNodeValue,
 } from "./motion-schemas.ts";
 export type {
@@ -379,7 +379,7 @@ export function fillColor(options: FillColorOptions): EmphasisEffect {
 // Retains extra options from structured JavaScript input for formal effect validation diagnostics.
 const breatheUnknownParameters = Symbol("breathe unknown parameters");
 const breatheOptionNames = new Set([
-  ...Object.keys(BreatheOptionsSchema.unwrap().shape),
+  ...Object.keys(breatheOptionsSchema.unwrap().shape),
   "by",
   "intervalMs",
 ]);
@@ -584,7 +584,7 @@ const presetKinds: Readonly<Record<EffectPreset, Effect["kind"]>> = {
   fillColor: "emphasis",
 };
 const effectKeys: readonly string[] = Object.keys(
-  EntranceEffectSchema.unwrap().shape,
+  entranceEffectSchema.unwrap().shape,
 );
 
 function normalizeColor(
@@ -592,7 +592,7 @@ function normalizeColor(
   name: string,
   code = "invalid-breathe-color",
 ): string {
-  const parsed = MotionHexColorSchema.safeParse(value);
+  const parsed = motionHexColorSchema.safeParse(value);
   if (!parsed.success) {
     return fail(code, `${name} must be a #RRGGBB color`);
   }
@@ -676,7 +676,7 @@ function validatedEffect(
         : `${String(effectValue["preset"])}() is an entrance effect and should be passed to enter`,
     );
   }
-  const parsedPreset = EffectPresetSchema.safeParse(effectValue["preset"]);
+  const parsedPreset = effectPresetSchema.safeParse(effectValue["preset"]);
   if (!parsedPreset.success) {
     return fail(
       "unsupported-effect",
@@ -692,7 +692,7 @@ function validatedEffect(
         : `${preset}() is an entrance effect and should be passed to enter`,
     );
   }
-  const parsedDuration = EffectDurationSchema.safeParse(
+  const parsedDuration = effectDurationSchema.safeParse(
     effectValue["duration"],
   );
   if (!parsedDuration.success) {
@@ -702,7 +702,7 @@ function validatedEffect(
     );
   }
   const duration = parsedDuration.data;
-  const parsedDelay = EffectDelaySchema.safeParse(effectValue["delay"]);
+  const parsedDelay = effectDelaySchema.safeParse(effectValue["delay"]);
   if (
     !parsedDelay.success ||
     !Number.isFinite(Math.round(parsedDelay.data) + Math.round(duration))
@@ -722,7 +722,7 @@ function validatedEffect(
   const by = effectValue["by"];
   const interval = effectValue["intervalMs"];
   if (preset === "spin" && typeof by === "number") {
-    if (!SpinAngleSchema.safeParse(by).success) {
+    if (!spinAngleSchema.safeParse(by).success) {
       return fail(
         "invalid-rotation",
         "spin by converted value must fall within signed 32-bit angle range",
@@ -736,7 +736,7 @@ function validatedEffect(
     }
   } else if (
     by !== undefined &&
-    !MotionGranularitySchema.safeParse(by).success
+    !motionGranularitySchema.safeParse(by).success
   ) {
     return fail(
       "invalid-motion",
@@ -746,7 +746,7 @@ function validatedEffect(
   if (
     interval !== undefined &&
     ((by !== "word" && by !== "letter") ||
-      !IntervalMsSchema.safeParse(interval).success)
+      !intervalMsSchema.safeParse(interval).success)
   ) {
     return fail(
       "invalid-motion-interval",
@@ -755,7 +755,7 @@ function validatedEffect(
   }
   if (
     (preset === "wipe" || preset === "fly") &&
-    !MotionDirectionSchema.safeParse(effectValue["from"]).success
+    !motionDirectionSchema.safeParse(effectValue["from"]).success
   ) {
     return fail(
       "invalid-direction",
@@ -764,7 +764,7 @@ function validatedEffect(
   }
   if (preset === "spin") {
     const from = effectValue["from"];
-    if (typeof by !== "number" && !SpinAngleSchema.safeParse(from).success) {
+    if (typeof by !== "number" && !spinAngleSchema.safeParse(from).success) {
       return fail(
         "invalid-rotation",
         "spin from converted value must fall within signed 32-bit angle range",
@@ -784,7 +784,7 @@ function validatedEffect(
     if (!isRecord(easing)) {
       return fail("invalid-easing", "easing must be an object");
     }
-    const parsedEasing = EasingSchema.safeParse(easing);
+    const parsedEasing = easingSchema.safeParse(easing);
     if (!parsedEasing.success) {
       const issue = parsedEasing.error.issues[0];
       if (issue?.code === "unrecognized_keys" && issue.keys[0] !== undefined) {
@@ -866,7 +866,7 @@ function validatedEffect(
           "forever currently only supports complete breathe cycles",
         );
       }
-    } else if (!RepeatCountSchema.safeParse(repeatCount).success) {
+    } else if (!repeatCountSchema.safeParse(repeatCount).success) {
       return fail(
         "invalid-repeat-count",
         `repeat count must be total rounds between 1 and ${maxRepeatCount}`,
@@ -893,7 +893,7 @@ function validatedEffect(
         "Repeated effects cannot currently be combined with per-paragraph, per-word, per-letter, or chart granularity",
       );
     }
-    if (!RepeatCountSchema.safeParse(repeatCount).success) {
+    if (!repeatCountSchema.safeParse(repeatCount).success) {
       return fail(
         "invalid-repeat-count",
         `repeat count must be total rounds between 1 and ${maxRepeatCount}`,
@@ -923,7 +923,7 @@ function stepDeclarationFromProps(
     }
     return Object.freeze({ mode: "automatic" as const, identity });
   }
-  const parsed = MotionStepAuthorPropsSchema.safeParse({ n: number });
+  const parsed = motionStepAuthorPropsSchema.safeParse({ n: number });
   if (!parsed.success || parsed.data.n === undefined) {
     return fail(
       "invalid-step",
@@ -939,7 +939,7 @@ function listed(value: unknown, many: boolean): readonly unknown[] {
 }
 
 function validatedMoment(value: unknown): MotionMoment {
-  const parsed = MotionMomentSchema.safeParse(value);
+  const parsed = motionMomentSchema.safeParse(value);
   if (!parsed.success) {
     if (!isRecord(value) || value["type"] !== "motion-moment") {
       return fail(
@@ -958,7 +958,7 @@ function validatedMoment(value: unknown): MotionMoment {
 function validatedTiming(value: unknown): MotionTiming {
   if (isRecord(value) && value["type"] === "motion-offset") {
     const moment = validatedMoment(value["moment"]);
-    const parsed = MotionMomentOffsetSchema.safeParse({
+    const parsed = motionMomentOffsetSchema.safeParse({
       type: "motion-offset",
       moment,
       offsetMs: value["offsetMs"],
@@ -987,11 +987,11 @@ function validatedPublisher(value: unknown): MotionMoment | undefined {
 }
 
 const motionScopeAllowedParameters = new Set(
-  Object.keys(MotionScopeAuthorPropsSchema.unwrap().shape),
+  Object.keys(motionScopeAuthorPropsSchema.unwrap().shape),
 );
 
 const motionStepAllowedParameters = new Set([
-  ...Object.keys(MotionStepAuthorPropsSchema.unwrap().shape),
+  ...Object.keys(motionStepAuthorPropsSchema.unwrap().shape),
   "stepIdentity",
 ]);
 
@@ -1008,7 +1008,7 @@ function localScopeDeclaration(
     );
   }
   validateMotionFlag(props["motion"]);
-  const parsedHandle = MotionScopeHandleSchema.safeParse(props["scope"]);
+  const parsedHandle = motionScopeHandleSchema.safeParse(props["scope"]);
   if (!parsedHandle.success) {
     return fail(
       "invalid-scope",
@@ -1016,7 +1016,7 @@ function localScopeDeclaration(
     );
   }
   const handle = parsedHandle.data;
-  const parsedMode = MotionScopeModeSchema.safeParse(
+  const parsedMode = motionScopeModeSchema.safeParse(
     props["mode"] ?? "parallel",
   );
   if (!parsedMode.success) {
@@ -1026,7 +1026,7 @@ function localScopeDeclaration(
     );
   }
   const mode = parsedMode.data;
-  const parsedDelay = EffectDelaySchema.safeParse(props["delay"] ?? 0);
+  const parsedDelay = effectDelaySchema.safeParse(props["delay"] ?? 0);
   if (!parsedDelay.success) {
     return fail(
       "invalid-delay",

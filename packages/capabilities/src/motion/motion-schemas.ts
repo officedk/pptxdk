@@ -7,10 +7,10 @@ export const maxRepeatCount = Math.floor(maximumTimeNodeValue / 1000);
 export const minimumRotationUnits = -2_147_483_648;
 export const maximumRotationUnits = 2_147_483_647;
 
-export const MotionDirectionSchema = z.enum(["left", "right", "top", "bottom"]);
-export type MotionDirection = z.infer<typeof MotionDirectionSchema>;
+export const motionDirectionSchema = z.enum(["left", "right", "top", "bottom"]);
+export type MotionDirection = z.infer<typeof motionDirectionSchema>;
 
-export const EntrancePresetSchema = z.enum([
+export const entrancePresetSchema = z.enum([
   "fade",
   "wipe",
   "zoom",
@@ -21,9 +21,9 @@ export const EntrancePresetSchema = z.enum([
   "stretch",
 ]);
 
-export const EmphasisPresetSchema = z.enum(["spin", "breathe", "fillColor"]);
+export const emphasisPresetSchema = z.enum(["spin", "breathe", "fillColor"]);
 
-export const EffectPresetSchema = z.enum([
+export const effectPresetSchema = z.enum([
   "fade",
   "wipe",
   "zoom",
@@ -36,15 +36,15 @@ export const EffectPresetSchema = z.enum([
   "breathe",
   "fillColor",
 ]);
-export type EffectPreset = z.infer<typeof EffectPresetSchema>;
+export type EffectPreset = z.infer<typeof effectPresetSchema>;
 
-export const RepeatCountSchema = z.union([
+export const repeatCountSchema = z.union([
   z.number().int().min(1).max(maxRepeatCount),
   z.literal("forever"),
 ]);
-export type RepeatCount = z.infer<typeof RepeatCountSchema>;
+export type RepeatCount = z.infer<typeof repeatCountSchema>;
 
-export const MotionGranularitySchema = z.enum([
+export const motionGranularitySchema = z.enum([
   "paragraph",
   "word",
   "letter",
@@ -53,9 +53,9 @@ export const MotionGranularitySchema = z.enum([
   "seriesElements",
   "categoryElements",
 ]);
-export type MotionGranularity = z.infer<typeof MotionGranularitySchema>;
+export type MotionGranularity = z.infer<typeof motionGranularitySchema>;
 
-export const MotionChartStepSchema = z.enum([
+export const motionChartStepSchema = z.enum([
   "gridLegend",
   "series",
   "category",
@@ -63,7 +63,7 @@ export const MotionChartStepSchema = z.enum([
   "ptInCategory",
 ]);
 
-export const MotionTargetRangeSchema = z.discriminatedUnion("type", [
+export const motionTargetRangeSchema = z.discriminatedUnion("type", [
   z
     .strictObject({
       type: z.literal("paragraph"),
@@ -74,15 +74,15 @@ export const MotionTargetRangeSchema = z.discriminatedUnion("type", [
   z
     .strictObject({
       type: z.literal("chart"),
-      step: MotionChartStepSchema,
+      step: motionChartStepSchema,
       seriesIndex: z.number().int(),
       categoryIndex: z.number().int(),
     })
     .readonly(),
 ]);
-export type MotionTargetRange = z.infer<typeof MotionTargetRangeSchema>;
+export type MotionTargetRange = z.infer<typeof motionTargetRangeSchema>;
 
-export const EasingSchema = z
+export const easingSchema = z
   .strictObject({
     accelerate: z.number().finite().min(0).max(1).optional(),
     decelerate: z.number().finite().min(0).max(1).optional(),
@@ -92,14 +92,14 @@ export const EasingSchema = z
     (value) => (value.accelerate ?? 0) + (value.decelerate ?? 0) <= 1,
     "easing accelerate and decelerate proportions must be non-negative and sum to at most 1",
   );
-export type Easing = z.infer<typeof EasingSchema>;
+export type Easing = z.infer<typeof easingSchema>;
 
 /** Hex RGB color (`#RRGGBB`) validated against core's color value domain and normalized to uppercase. */
-export const MotionHexColorSchema = colorValueSchema
+export const motionHexColorSchema = colorValueSchema
   .pipe(z.string().regex(/^#[0-9a-f]{6}$/iu, "color must be a #RRGGBB color"))
   .transform((value) => value.toUpperCase());
 
-export const EffectDurationSchema = z
+export const effectDurationSchema = z
   .number()
   .finite()
   .positive()
@@ -109,7 +109,7 @@ export const EffectDurationSchema = z
     "Animation duration must be writable as a finite positive integer in milliseconds",
   );
 
-export const EffectDelaySchema = z
+export const effectDelaySchema = z
   .number()
   .finite()
   .min(0)
@@ -118,9 +118,9 @@ export const EffectDelaySchema = z
     "Animation delay must be writable as a finite non-negative integer in milliseconds",
   );
 
-export const IntervalMsSchema = z.number().int().min(1);
+export const intervalMsSchema = z.number().int().min(1);
 
-export const SpinAngleSchema = z
+export const spinAngleSchema = z
   .number()
   .finite()
   .refine((value) => {
@@ -132,41 +132,41 @@ export const SpinAngleSchema = z
     );
   }, "spin angle converted value must fall within signed 32-bit angle range");
 
-export const EffectOptionsSchema = z
+export const effectOptionsSchema = z
   .strictObject({
-    duration: EffectDurationSchema.optional(),
-    delay: EffectDelaySchema.optional(),
-    easing: EasingSchema.optional(),
-    intervalMs: IntervalMsSchema.optional(),
-    by: MotionGranularitySchema.optional(),
+    duration: effectDurationSchema.optional(),
+    delay: effectDelaySchema.optional(),
+    easing: easingSchema.optional(),
+    intervalMs: intervalMsSchema.optional(),
+    by: motionGranularitySchema.optional(),
   })
   .readonly();
-export type EffectOptions = z.infer<typeof EffectOptionsSchema>;
+export type EffectOptions = z.infer<typeof effectOptionsSchema>;
 
-export const SpinOptionsSchema = z
+export const spinOptionsSchema = z
   .strictObject({
-    duration: EffectDurationSchema.optional(),
-    delay: EffectDelaySchema.optional(),
-    easing: EasingSchema.optional(),
-    intervalMs: IntervalMsSchema.optional(),
-    by: z.union([MotionGranularitySchema, SpinAngleSchema]).optional(),
-    from: SpinAngleSchema.optional(),
+    duration: effectDurationSchema.optional(),
+    delay: effectDelaySchema.optional(),
+    easing: easingSchema.optional(),
+    intervalMs: intervalMsSchema.optional(),
+    by: z.union([motionGranularitySchema, spinAngleSchema]).optional(),
+    from: spinAngleSchema.optional(),
   })
   .readonly();
-export type SpinOptions = z.infer<typeof SpinOptionsSchema>;
+export type SpinOptions = z.infer<typeof spinOptionsSchema>;
 
-export const FillColorOptionsSchema = z
+export const fillColorOptionsSchema = z
   .strictObject({
-    duration: EffectDurationSchema.optional(),
-    delay: EffectDelaySchema.optional(),
-    easing: EasingSchema.optional(),
-    from: MotionHexColorSchema,
-    to: MotionHexColorSchema,
+    duration: effectDurationSchema.optional(),
+    delay: effectDelaySchema.optional(),
+    easing: easingSchema.optional(),
+    from: motionHexColorSchema,
+    to: motionHexColorSchema,
   })
   .readonly();
-export type FillColorOptions = z.infer<typeof FillColorOptionsSchema>;
+export type FillColorOptions = z.infer<typeof fillColorOptionsSchema>;
 
-export const BreatheOptionsSchema = z
+export const breatheOptionsSchema = z
   .strictObject({
     period: z
       .number()
@@ -176,69 +176,71 @@ export const BreatheOptionsSchema = z
         (value) => value % 2 === 0 && value / 2 <= maximumTimeNodeValue,
         "breathe period must be an even integer in milliseconds greater than 1",
       ),
-    from: MotionHexColorSchema,
-    to: MotionHexColorSchema,
-    delay: EffectDelaySchema.refine(
-      (value) => Math.round(value) <= maximumTimeNodeValue,
-      "breathe delay exceeds native timing value range",
-    ).optional(),
-    easing: EasingSchema.optional(),
+    from: motionHexColorSchema,
+    to: motionHexColorSchema,
+    delay: effectDelaySchema
+      .refine(
+        (value) => Math.round(value) <= maximumTimeNodeValue,
+        "breathe delay exceeds native timing value range",
+      )
+      .optional(),
+    easing: easingSchema.optional(),
   })
   .readonly();
-export type BreatheOptions = z.infer<typeof BreatheOptionsSchema>;
+export type BreatheOptions = z.infer<typeof breatheOptionsSchema>;
 
 const effectCommonFields = {
   type: z.literal("effect"),
-  duration: EffectDurationSchema,
-  delay: EffectDelaySchema,
-  from: z.union([MotionDirectionSchema, SpinAngleSchema]).optional(),
-  fromColor: MotionHexColorSchema.optional(),
-  toColor: MotionHexColorSchema.optional(),
-  easing: EasingSchema.optional(),
-  by: z.union([MotionGranularitySchema, SpinAngleSchema]).optional(),
-  intervalMs: IntervalMsSchema.optional(),
+  duration: effectDurationSchema,
+  delay: effectDelaySchema,
+  from: z.union([motionDirectionSchema, spinAngleSchema]).optional(),
+  fromColor: motionHexColorSchema.optional(),
+  toColor: motionHexColorSchema.optional(),
+  easing: easingSchema.optional(),
+  by: z.union([motionGranularitySchema, spinAngleSchema]).optional(),
+  intervalMs: intervalMsSchema.optional(),
 };
 
 const entranceEffectObjectSchema = z.strictObject({
   ...effectCommonFields,
   kind: z.literal("entrance"),
-  preset: EntrancePresetSchema,
+  preset: entrancePresetSchema,
 });
 
-export const EntranceEffectSchema = entranceEffectObjectSchema.readonly();
-export type EntranceEffect = z.infer<typeof EntranceEffectSchema>;
+export const entranceEffectSchema = entranceEffectObjectSchema.readonly();
+export type EntranceEffect = z.infer<typeof entranceEffectSchema>;
 
 const emphasisEffectObjectSchema = z.strictObject({
   ...effectCommonFields,
   kind: z.literal("emphasis"),
-  preset: EmphasisPresetSchema,
+  preset: emphasisPresetSchema,
 });
 
-export const EmphasisEffectSchema = emphasisEffectObjectSchema.readonly();
-export type EmphasisEffect = z.infer<typeof EmphasisEffectSchema>;
+export const emphasisEffectSchema = emphasisEffectObjectSchema.readonly();
+export type EmphasisEffect = z.infer<typeof emphasisEffectSchema>;
 
-export const BreatheEffectSchema = z
+export const breatheEffectSchema = z
   .strictObject({
     ...effectCommonFields,
     kind: z.literal("emphasis"),
     preset: z.literal("breathe"),
-    fromColor: MotionHexColorSchema,
-    toColor: MotionHexColorSchema,
+    fromColor: motionHexColorSchema,
+    toColor: motionHexColorSchema,
   })
   .readonly();
-export type BreatheEffect = z.infer<typeof BreatheEffectSchema>;
+export type BreatheEffect = z.infer<typeof breatheEffectSchema>;
 
-export const EffectSchema = z.discriminatedUnion("kind", [
-  EntranceEffectSchema,
-  EmphasisEffectSchema,
+export const effectSchema = z.discriminatedUnion("kind", [
+  entranceEffectSchema,
+  emphasisEffectSchema,
 ]);
-export type Effect = z.infer<typeof EffectSchema>;
+export type Effect = z.infer<typeof effectSchema>;
 
-export const RepeatedEffectSchema = z
+export const repeatedEffectSchema = z
   .strictObject({
     type: z.literal("repeated-effect"),
-    effect: EffectSchema,
-    count: RepeatCountSchema,
+    effect: effectSchema,
+    count: repeatCountSchema,
   })
   .readonly();
 
@@ -248,13 +250,13 @@ export type RepeatedEffect<E extends Effect = Effect> = {
   readonly count: RepeatCount;
 };
 
-export const EntranceEffectDeclarationSchema = z.union([
-  EntranceEffectSchema,
+export const entranceEffectDeclarationSchema = z.union([
+  entranceEffectSchema,
   z
     .strictObject({
       type: z.literal("repeated-effect"),
-      effect: EntranceEffectSchema,
-      count: RepeatCountSchema,
+      effect: entranceEffectSchema,
+      count: repeatCountSchema,
     })
     .readonly(),
 ]);
@@ -262,13 +264,13 @@ export type EntranceEffectDeclaration =
   | EntranceEffect
   | RepeatedEffect<EntranceEffect>;
 
-export const EmphasisEffectDeclarationSchema = z.union([
-  EmphasisEffectSchema,
+export const emphasisEffectDeclarationSchema = z.union([
+  emphasisEffectSchema,
   z
     .strictObject({
       type: z.literal("repeated-effect"),
-      effect: EmphasisEffectSchema,
-      count: RepeatCountSchema,
+      effect: emphasisEffectSchema,
+      count: repeatCountSchema,
     })
     .readonly(),
 ]);
@@ -276,31 +278,31 @@ export type EmphasisEffectDeclaration =
   | EmphasisEffect
   | RepeatedEffect<EmphasisEffect>;
 
-export const NormalizedEffectSchema = z.discriminatedUnion("kind", [
+export const normalizedEffectSchema = z.discriminatedUnion("kind", [
   entranceEffectObjectSchema
-    .extend({ repeatCount: RepeatCountSchema.optional() })
+    .extend({ repeatCount: repeatCountSchema.optional() })
     .readonly(),
   emphasisEffectObjectSchema
-    .extend({ repeatCount: RepeatCountSchema.optional() })
+    .extend({ repeatCount: repeatCountSchema.optional() })
     .readonly(),
 ]);
-export type NormalizedEffect = z.infer<typeof NormalizedEffectSchema>;
+export type NormalizedEffect = z.infer<typeof normalizedEffectSchema>;
 
-export const MotionScopeModeSchema = z.enum([
+export const motionScopeModeSchema = z.enum([
   "parallel",
   "sequence",
   "stagger",
 ]);
-export type MotionScopeMode = z.infer<typeof MotionScopeModeSchema>;
+export type MotionScopeMode = z.infer<typeof motionScopeModeSchema>;
 
-export const MotionCompletionStateSchema = z.enum([
+export const motionCompletionStateSchema = z.enum([
   "known",
   "unknown",
   "no-natural-completion",
 ]);
-export type MotionCompletionState = z.infer<typeof MotionCompletionStateSchema>;
+export type MotionCompletionState = z.infer<typeof motionCompletionStateSchema>;
 
-export const MotionMomentSchema = z
+export const motionMomentSchema = z
   .strictObject({
     type: z.literal("motion-moment"),
     scope: z.string().min(1),
@@ -315,22 +317,22 @@ export const MotionMomentSchema = z
         : value.name === undefined,
     "Moment handle scope, type, or name is invalid",
   );
-export type MotionMoment = z.infer<typeof MotionMomentSchema>;
+export type MotionMoment = z.infer<typeof motionMomentSchema>;
 
-export const MotionMomentOffsetSchema = z
+export const motionMomentOffsetSchema = z
   .strictObject({
     type: z.literal("motion-offset"),
-    moment: MotionMomentSchema,
+    moment: motionMomentSchema,
     offsetMs: z.number().int().min(0),
   })
   .readonly();
-export type MotionMomentOffset = z.infer<typeof MotionMomentOffsetSchema>;
+export type MotionMomentOffset = z.infer<typeof motionMomentOffsetSchema>;
 
-export const MotionTimingSchema = z.union([
-  MotionMomentSchema,
-  MotionMomentOffsetSchema,
+export const motionTimingSchema = z.union([
+  motionMomentSchema,
+  motionMomentOffsetSchema,
 ]);
-export type MotionTiming = z.infer<typeof MotionTimingSchema>;
+export type MotionTiming = z.infer<typeof motionTimingSchema>;
 
 export type MotionScopeHandle = {
   readonly type: "motion-scope-handle";
@@ -341,7 +343,7 @@ export type MotionScopeHandle = {
 };
 
 /** Runtime-identity-preserving schema for handles created by `createMotionScopeHandle()` / `useMotionScope()`. */
-export const MotionScopeHandleSchema = z.custom<MotionScopeHandle>(
+export const motionScopeHandleSchema = z.custom<MotionScopeHandle>(
   (value) =>
     typeof value === "object" &&
     value !== null &&
@@ -349,81 +351,81 @@ export const MotionScopeHandleSchema = z.custom<MotionScopeHandle>(
     (value as { readonly type?: unknown }).type === "motion-scope-handle" &&
     typeof (value as { readonly identity?: unknown }).identity === "string" &&
     (value as { readonly identity: string }).identity !== "" &&
-    MotionMomentSchema.safeParse((value as { readonly start?: unknown }).start)
+    motionMomentSchema.safeParse((value as { readonly start?: unknown }).start)
       .success &&
-    MotionMomentSchema.safeParse((value as { readonly end?: unknown }).end)
+    motionMomentSchema.safeParse((value as { readonly end?: unknown }).end)
       .success &&
     typeof (value as { readonly cue?: unknown }).cue === "function",
   "MotionScope requires a handle created by createMotionScopeHandle() or useMotionScope()",
 );
 
-export const MotionPropsSchema = z
+export const motionPropsSchema = z
   .strictObject({
     enter: z
       .union([
-        EntranceEffectDeclarationSchema,
-        z.array(EntranceEffectDeclarationSchema).readonly(),
+        entranceEffectDeclarationSchema,
+        z.array(entranceEffectDeclarationSchema).readonly(),
       ])
       .optional(),
-    emphasis: EmphasisEffectDeclarationSchema.optional(),
+    emphasis: emphasisEffectDeclarationSchema.optional(),
     motion: z.boolean().optional(),
   })
   .readonly();
-export type MotionProps = z.infer<typeof MotionPropsSchema>;
+export type MotionProps = z.infer<typeof motionPropsSchema>;
 
-export const MotionScopeAuthorPropsSchema = z
+export const motionScopeAuthorPropsSchema = z
   .strictObject({
-    scope: MotionScopeHandleSchema,
-    mode: MotionScopeModeSchema.optional(),
+    scope: motionScopeHandleSchema,
+    mode: motionScopeModeSchema.optional(),
     each: z.number().int().min(0).optional(),
-    delay: EffectDelaySchema.optional(),
-    startAt: MotionTimingSchema.optional(),
-    publishStart: MotionMomentSchema.optional(),
-    publishEnd: MotionMomentSchema.optional(),
+    delay: effectDelaySchema.optional(),
+    startAt: motionTimingSchema.optional(),
+    publishStart: motionMomentSchema.optional(),
+    publishEnd: motionMomentSchema.optional(),
     motion: z.boolean().optional(),
   })
   .readonly();
 export type MotionScopeAuthorProps = z.infer<
-  typeof MotionScopeAuthorPropsSchema
+  typeof motionScopeAuthorPropsSchema
 >;
 
-export const MotionStepAuthorPropsSchema = z
+export const motionStepAuthorPropsSchema = z
   .strictObject({
     n: z.number().int().min(1).optional(),
   })
   .readonly();
-export type MotionStepAuthorProps = z.infer<typeof MotionStepAuthorPropsSchema>;
+export type MotionStepAuthorProps = z.infer<typeof motionStepAuthorPropsSchema>;
 
 /** Structured target and step timing declaration retained directly on `SlideMaster` and `SlideLayout` owners. */
-export const OwnerMotionTargetSchema = z.union([
+export const ownerMotionTargetSchema = z.union([
   z.strictObject({ placeholder: z.string().min(1) }).readonly(),
   z.strictObject({ spid: z.number().int().positive() }).readonly(),
 ]);
-export type OwnerMotionTarget = z.infer<typeof OwnerMotionTargetSchema>;
+export type OwnerMotionTarget = z.infer<typeof ownerMotionTargetSchema>;
 
-export const OwnerMotionEffectSchema = z
+export const ownerMotionEffectSchema = z
   .strictObject({
-    target: OwnerMotionTargetSchema,
+    target: ownerMotionTargetSchema,
     effect: z.union([
-      EntranceEffectDeclarationSchema,
-      EmphasisEffectDeclarationSchema,
+      entranceEffectDeclarationSchema,
+      emphasisEffectDeclarationSchema,
     ]),
-    range: MotionTargetRangeSchema.optional(),
+    range: motionTargetRangeSchema.optional(),
   })
   .readonly();
-export type OwnerMotionEffect = z.infer<typeof OwnerMotionEffectSchema>;
+export type OwnerMotionEffect = z.infer<typeof ownerMotionEffectSchema>;
 
-export const OwnerMotionStepSchema = z
+export const ownerMotionStepSchema = z
   .strictObject({
     trigger: z.enum(["auto", "click"]),
-    effects: z.array(OwnerMotionEffectSchema).readonly(),
+    effects: z.array(ownerMotionEffectSchema).readonly(),
   })
   .readonly();
-export type OwnerMotionStep = z.infer<typeof OwnerMotionStepSchema>;
+export type OwnerMotionStep = z.infer<typeof ownerMotionStepSchema>;
 
-export const OwnerMotionSchema = z
+export const ownerMotionSchema = z
   .strictObject({
-    steps: z.array(OwnerMotionStepSchema).readonly(),
+    steps: z.array(ownerMotionStepSchema).readonly(),
   })
   .readonly();
-export type OwnerMotion = z.infer<typeof OwnerMotionSchema>;
+export type OwnerMotion = z.infer<typeof ownerMotionSchema>;

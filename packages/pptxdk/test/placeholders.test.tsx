@@ -29,9 +29,9 @@ import {
   Text,
 } from "pptxdk/react";
 import {
+  CommonNode,
   DeckContainer,
   SlideContainer,
-  box,
   cell,
   chart,
   deck,
@@ -878,9 +878,6 @@ describe("typed text placeholders and style inheritance", () => {
       (error: unknown) =>
         hasDiagnosticCode(error, "incompatible-placeholder-content"),
     );
-
-    // Unused helper check in case box isn't referenced directly.
-    void box;
   });
 
   it("fills pic, tbl, chart, and generic obj placeholders in TSX and vanilla without narrowing obj across slides", async () => {
@@ -1390,5 +1387,163 @@ describe("typed text placeholders and style inheritance", () => {
       strFromU8(rebuiltZip["ppt/slides/slide1.xml"]!),
       /DC2626/u,
     );
+  });
+
+  it("rejects invalid LayoutPlaceholderSpec.geometry values at runtime via geometrySchema", () => {
+    assert.throws(() =>
+      defineSlideLayout({
+        id: "l",
+        placeholders: {
+          t: { type: "title", geometry: 123 as never },
+        },
+      }),
+    );
+  });
+
+  it("does not leak inherited layout rotate or flipH when slide placeholder overrides only box dimensions", async () => {
+    const layout = defineSlideLayout({
+      id: "rot-flip-layout",
+      name: "Rotated Flipped Layout",
+      type: "titleOnly",
+      placeholders: {
+        title: {
+          type: "title",
+          x: 64,
+          y: 48,
+          width: 360,
+          height: 80,
+          flipH: true,
+          style: { fontFamily: jostFont, rotate: 8 },
+        },
+      },
+    });
+
+    const built = await build(
+      <Deck width={960} height={540}>
+        <SlideMaster id="m-rot">
+          <SlideLayout layout={layout} />
+        </SlideMaster>
+        <Slide id="s1" layout={layout}>
+          <Text placeholder="title" width={500}>
+            Hi
+          </Text>
+        </Slide>
+      </Deck>,
+      { embedFonts: "full" },
+    );
+    const validated = await validatePptx(built.pptx);
+    assert.deepEqual(validated.errors, []);
+
+    const zip = unzipSync(built.pptx);
+    const slide1Xml = strFromU8(zip["ppt/slides/slide1.xml"]!);
+    assert.match(slide1Xml, /<a:xfrm>/u);
+    assert.doesNotMatch(slide1Xml, /rot=/u);
+    assert.doesNotMatch(slide1Xml, /flipH=/u);
+
+    const imported = importPptx(built.pptx);
+    assert.deepEqual(imported.report.diagnostics, []);
+    assert.ok(imported.document instanceof DeckContainer);
+    const importedLayout = imported.document.masters[0]!.layouts[0]!;
+    const importedPhs = importedLayout.props["placeholders"] as PlaceholderMap;
+    assert.equal(importedPhs["title"]?.flipH, true);
+    assert.equal(importedPhs["title"]?.style?.rotate, 8);
+
+    const importedSlide = imported.document.children.find(
+      (c): c is SlideContainer =>
+        c instanceof SlideContainer && c.kind === "slide",
+    )!;
+    const importedText = importedSlide.children.find(
+      (c): c is TextNode => c instanceof CommonNode && c.kind === "text",
+    )!;
+    assert.equal(
+      (importedText.props["style"] as Record<string, unknown> | undefined)
+        ?.rotate,
+      undefined,
+    );
+
+    importedLayout.set({
+      placeholders: {
+        ...importedPhs,
+        title: {
+          ...importedPhs["title"],
+          style: { ...importedPhs["title"]?.style, rotate: 15 },
+        },
+      },
+    });
+    const rebuilt = await build(imported.document, { embedFonts: "full" });
+    const rebuiltValidated = await validatePptx(rebuilt.pptx);
+    assert.deepEqual(rebuiltValidated.errors, []);
+    const rebuiltZip = unzipSync(rebuilt.pptx);
+    assert.match(
+      strFromU8(rebuiltZip["ppt/slideLayouts/slideLayout1.xml"]!),
+      /rot="900000"/u,
+    );
+    assert.doesNotMatch(
+      strFromU8(rebuiltZip["ppt/slides/slide1.xml"]!),
+      /rot=/u,
+    );
+    assert.equal(
+      rebuiltValidated.slides[0]?.objects[0]?.rotationDegrees,
+      undefined,
+    );
+    const rebuiltPreview = await preview(imported.document);
+    assert.match(rebuiltPreview.pages[0]?.svg ?? "", /rotate\(15\)/u);
+    assert.match(rebuiltPreview.pages[0]?.svg ?? "", /scale\(-1 1\)/u);
+  });
+
+  it("preserves slide-local borderRadius override without local box across emit and importPptx", async () => {
+    const layout = defineSlideLayout({
+      id: "radius-layout",
+      name: "Radius Layout",
+      type: "titleOnly",
+      placeholders: {
+        title: {
+          type: "title",
+          x: 64,
+          y: 48,
+          width: 400,
+          height: 80,
+        },
+      },
+    });
+
+    const built = await build(
+      <Deck width={960} height={540}>
+        <SlideMaster id="m-rad">
+          <SlideLayout layout={layout} />
+        </SlideMaster>
+        <Slide id="s1" layout={layout}>
+          <Text placeholder="title" style={{ borderRadius: 16 }}>
+            Hi
+          </Text>
+        </Slide>
+      </Deck>,
+    );
+    const validated = await validatePptx(built.pptx);
+    assert.deepEqual(validated.errors, []);
+
+    const zip = unzipSync(built.pptx);
+    const slide1Xml = strFromU8(zip["ppt/slides/slide1.xml"]!);
+    assert.doesNotMatch(slide1Xml, /<p:spPr>[\s\S]*?<a:xfrm/u);
+    assert.match(slide1Xml, /<a:prstGeom prst="roundRect">/u);
+
+    const imported = importPptx(built.pptx);
+    assert.deepEqual(imported.report.diagnostics, []);
+    assert.ok(imported.document instanceof DeckContainer);
+    const importedSlide = imported.document.children.find(
+      (c): c is SlideContainer =>
+        c instanceof SlideContainer && c.kind === "slide",
+    )!;
+    const importedText = importedSlide.children.find(
+      (c): c is TextNode => c instanceof CommonNode && c.kind === "text",
+    )!;
+    assert.equal(importedText.props["x"], undefined);
+    assert.equal(importedText.props["y"], undefined);
+    assert.equal(importedText.props["width"], undefined);
+    assert.equal(importedText.props["height"], undefined);
+    const style = importedText.props["style"] as
+      | Record<string, unknown>
+      | undefined;
+    assert.ok(Math.abs(((style?.borderRadius as number) ?? 0) - 16) < 0.05);
   });
 });

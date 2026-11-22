@@ -16,9 +16,9 @@ import {
 import { pxToEmu, xmlEscape } from "@pptxdk/emit";
 import { z } from "zod";
 
-import { MotionPropsSchema } from "../motion/motion-schemas.ts";
-import { OptionalNameSchema } from "./identity.ts";
-import { MorphKeySchema } from "./morph-api.ts";
+import { motionPropsSchema } from "../motion/motion-schemas.ts";
+import { optionalNameSchema } from "./identity.ts";
+import { morphKeySchema } from "./morph-api.ts";
 
 export { textListBulletSchema, textListNumberSchema, textListSchema };
 export type { TextList, TextStyle };
@@ -118,14 +118,14 @@ export const textBoxStyleSchema = z
   .readonly();
 export type TextBoxStyle = z.infer<typeof textBoxStyleSchema>;
 
-const motionPropsShape = MotionPropsSchema.unwrap().shape;
+const motionPropsShape = motionPropsSchema.unwrap().shape;
 
 const textAuthorPropsObjectSchema = z.strictObject({
   id: authorIdSchema.optional(),
-  name: OptionalNameSchema.optional(),
+  name: optionalNameSchema.optional(),
   placeholder: z.string().optional(),
   nativePlaceholder: nativePlaceholderRefSchema.optional(),
-  morphKey: MorphKeySchema.optional(),
+  morphKey: morphKeySchema.optional(),
   link: linkTargetSchema.optional(),
   x: textCoordinateSchema.optional(),
   y: textCoordinateSchema.optional(),

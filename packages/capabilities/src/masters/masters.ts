@@ -1,11 +1,11 @@
 import {
-  defaultColorMap,
   defaultTheme,
   visualStyleSchema,
   type ColorMap,
   type ColorMapOverride,
   type LayoutPlaceholderSpec,
   type NativeColorSlot,
+  type PaintOutput,
   type PlaceholderMap,
   type SlideCapabilityModule,
   type Theme,
@@ -21,26 +21,22 @@ import {
   themeXml,
   type EmittedSlideLayoutSpec,
   type EmittedSlideMasterSpec,
+  type MastersEmitDriver,
 } from "@pptxdk/emit";
 import {
-  A_NS,
-  TransformAttributesFragmentSchema,
   defineCanvasMechanism,
   importMastersAndLayouts,
+  readPlaceholderSpPrVisuals,
   type DeckImportContext,
   type DeckImportOutcome,
   type ImportDiagnostic,
-  type ImportedPlaceholderSpPr,
   type PlaceholderVisualReader,
 } from "@pptxdk/import";
 
-import type { Geometry } from "../shared/geometry.ts";
 import { hasLocalDeclaration } from "../shared/style-inheritance.ts";
 import {
   emitPlaceholderVisualSpPr,
-  paintVisualModel,
   readSpPrAppearance,
-  readTransformXml,
   resolveVisualModel,
   type PlaceholderSpPrFlags,
   type ResolvedVisualModel,
@@ -54,118 +50,13 @@ type ResolvedPlaceholderVisualEntry = {
   readonly key: string;
   readonly visual: ResolvedVisualModel;
   readonly flags: PlaceholderSpPrFlags;
-  readonly hasPaintableBox: boolean;
 };
 
-const readMasterPlaceholderVisuals: PlaceholderVisualReader = ({
-  spPr,
-  pkg,
-  location,
-  diagnostics,
-}): ImportedPlaceholderSpPr => {
-  let x: number | undefined;
-  let y: number | undefined;
-  let width: number | undefined;
-  let height: number | undefined;
-  let rotate: number | undefined;
-  let flipH: boolean | undefined;
-  let flipV: boolean | undefined;
-  let fallbackUnits = { w: 0, h: 0 };
-
-  const xfrm = spPr.child(A_NS, "xfrm");
-  if (xfrm !== undefined) {
-    if (
-      xfrm.child(A_NS, "off") !== undefined &&
-      xfrm.child(A_NS, "ext") !== undefined
-    ) {
-      const tf = readTransformXml(xfrm, location, diagnostics);
-      if (tf !== undefined) {
-        x = tf.x;
-        y = tf.y;
-        width = tf.width;
-        height = tf.height;
-        rotate = tf.rotate;
-        flipH = tf.flipH;
-        flipV = tf.flipV;
-        fallbackUnits = { w: tf.cxEmu, h: tf.cyEmu };
-      }
-    } else {
-      const parsedXfrm = TransformAttributesFragmentSchema.safeParse(
-        xfrm.attrsObject(["rot", "flipH", "flipV"]),
-      );
-      if (parsedXfrm.success) {
-        if (parsedXfrm.data.rot !== undefined && parsedXfrm.data.rot !== 0) {
-          rotate = parsedXfrm.data.rot / 60_000;
-        }
-        if (parsedXfrm.data.flipH === true) flipH = true;
-        if (parsedXfrm.data.flipV === true) flipV = true;
-      }
-    }
-  }
-
-  const appearance = readSpPrAppearance(
-    spPr,
-    pkg,
-    fallbackUnits,
-    location,
-    diagnostics,
-  );
-
-  let borderRadius: number | undefined;
-  let exportedGeometry: unknown;
-  if (appearance.geometry === "roundRect") {
-    if (width !== undefined && height !== undefined) {
-      borderRadius = (16667 / 100_000) * Math.min(width, height);
-    } else {
-      exportedGeometry = appearance.geometry;
-    }
-  } else if (
-    typeof appearance.geometry === "object" &&
-    appearance.geometry.type === "preset"
-  ) {
-    if (appearance.geometry.name === "roundRect") {
-      if (width !== undefined && height !== undefined) {
-        const adj = appearance.geometry.adjust?.["adj"] ?? 16667;
-        if (adj > 0) {
-          borderRadius = (adj / 100_000) * Math.min(width, height);
-        }
-      } else {
-        exportedGeometry = appearance.geometry;
-      }
-    } else if (appearance.geometry.name !== "rect") {
-      exportedGeometry = appearance.geometry;
-    }
-  } else if (
-    appearance.geometry !== undefined &&
-    appearance.geometry !== "rect"
-  ) {
-    exportedGeometry = appearance.geometry;
-  }
-
-  const style: Record<string, unknown> = {};
-  for (const [key, value] of Object.entries(appearance.style)) {
-    if (value !== undefined && supportedPlaceholderVisualStyleKeys.has(key)) {
-      style[key] = value;
-    }
-  }
-  if (borderRadius !== undefined) {
-    style["borderRadius"] = borderRadius;
-  }
-  if (rotate !== undefined) {
-    style["rotate"] = rotate;
-  }
-
-  return {
-    ...(x === undefined ? {} : { x }),
-    ...(y === undefined ? {} : { y }),
-    ...(width === undefined ? {} : { width }),
-    ...(height === undefined ? {} : { height }),
-    ...(exportedGeometry === undefined ? {} : { geometry: exportedGeometry }),
-    ...(flipH ? { flipH: true } : {}),
-    ...(flipV ? { flipV: true } : {}),
-    ...(Object.keys(style).length === 0 ? {} : { style }),
-  };
-};
+const readMasterPlaceholderVisuals: PlaceholderVisualReader = (args) =>
+  readPlaceholderSpPrVisuals(args, {
+    readAppearance: readSpPrAppearance,
+    allowedStyleKeys: supportedPlaceholderVisualStyleKeys,
+  });
 
 function importDeckMasters(context: DeckImportContext): DeckImportOutcome {
   if (context.deckNode.masters.length > 0) {
@@ -256,9 +147,7 @@ function resolvePlaceholderVisualEntries(
       theme,
       style: styleRecord ?? {},
       box,
-      ...(spec.geometry === undefined
-        ? {}
-        : { geometry: spec.geometry as Geometry }),
+      ...(spec.geometry === undefined ? {} : { geometry: spec.geometry }),
       ...(hasFlipH ? { flipH: true } : {}),
       ...(hasFlipV ? { flipV: true } : {}),
       layoutOnlyWhenInvisible: !hasBox,
@@ -277,50 +166,67 @@ function resolvePlaceholderVisualEntries(
         hasEffects,
         includeDefaultRectWhenHasBox: true,
       },
-      hasPaintableBox: hasBox && visual.hasVisibleStyle,
     });
   }
   return entries;
 }
 
-function paintPlaceholderVisualEntries(
-  entries: readonly ResolvedPlaceholderVisualEntry[],
-  slideNumber: number,
-): string {
-  return entries
-    .filter((entry) => entry.hasPaintableBox)
-    .map(
-      (entry, index) =>
-        paintVisualModel({
-          model: entry.visual,
-          slideNumber,
-          objectId: 2 + index,
-        }).svg,
-    )
-    .join("");
+function paintThemeCanvasBackdrop(model: {
+  readonly themeContext: ThemeContext;
+}): PaintOutput {
+  const bg = model.themeContext.resolveColor("bg1");
+  if (
+    bg.hex.toUpperCase() === "FFFFFF" &&
+    (bg.alpha === undefined || bg.alpha === 1)
+  ) {
+    return { svg: '<rect width="100%" height="100%" fill="white"/>' };
+  }
+  const opacityAttr =
+    bg.alpha === undefined || bg.alpha === 1
+      ? ""
+      : ` fill-opacity="${bg.alpha}"`;
+  return {
+    svg: `<rect width="100%" height="100%" fill="#${bg.hex}"${opacityAttr}/>`,
+  };
 }
 
-type SlideMasterMechanismModel = {
-  readonly spec: EmittedSlideMasterSpec;
-  readonly layoutIds: readonly { readonly id: number; readonly rId: string }[];
-  readonly themeContext: ThemeContext;
-  readonly placeholders?: readonly ResolvedPlaceholderVisualEntry[];
-  readonly slideNumber?: number;
-};
+function paintSharedCanvasFragments(model: {
+  readonly fragments: readonly string[];
+}): PaintOutput {
+  return { svg: model.fragments.join("") };
+}
+
+type SlideMasterMechanismModel =
+  | {
+      readonly spec: EmittedSlideMasterSpec;
+      readonly layoutIds: readonly {
+        readonly id: number;
+        readonly rId: string;
+      }[];
+      readonly themeContext: ThemeContext;
+      readonly fragments: readonly string[];
+    }
+  | { readonly fragments: readonly string[] };
 
 /** Native canvas mechanism for `<p:sldMaster>` ownership, `preserve`, and master-layout relationships. */
-export const slideMasterMechanism = defineCanvasMechanism({
+export const slideMasterMechanism = defineCanvasMechanism<
+  "slide-master",
+  SlideMasterMechanismModel,
+  void,
+  { readonly xml: string },
+  void
+>({
   key: "slide-master",
   role: "canvas",
-  emit: (model: SlideMasterMechanismModel) => ({
-    xml: masterXml(model.spec, model.layoutIds, model.themeContext),
-  }),
-  paint: (model: SlideMasterMechanismModel) => ({
-    svg: paintPlaceholderVisualEntries(
-      model.placeholders ?? [],
-      model.slideNumber ?? 1,
-    ),
-  }),
+  emit: (model) => {
+    if (!("spec" in model)) {
+      throw new Error(
+        "SlideMaster emit requires spec, layoutIds, and themeContext",
+      );
+    }
+    return { xml: masterXml(model.spec, model.layoutIds, model.themeContext) };
+  },
+  paint: paintSharedCanvasFragments,
   import: {
     target: "deck",
     stage: "pre-slides",
@@ -328,26 +234,31 @@ export const slideMasterMechanism = defineCanvasMechanism({
   },
 });
 
-type SlideLayoutMechanismModel = {
-  readonly spec: EmittedSlideLayoutSpec;
-  readonly themeContext: ThemeContext;
-  readonly placeholders?: readonly ResolvedPlaceholderVisualEntry[];
-  readonly slideNumber?: number;
-};
+type SlideLayoutMechanismModel =
+  | {
+      readonly spec: EmittedSlideLayoutSpec;
+      readonly themeContext: ThemeContext;
+      readonly fragments: readonly string[];
+    }
+  | { readonly fragments: readonly string[] };
 
 /** Native canvas mechanism for `<p:sldLayout>` ownership, `type`, `preserve`, and idle layout retention. */
-export const slideLayoutMechanism = defineCanvasMechanism({
+export const slideLayoutMechanism = defineCanvasMechanism<
+  "slide-layout",
+  SlideLayoutMechanismModel,
+  void,
+  { readonly xml: string },
+  void
+>({
   key: "slide-layout",
   role: "canvas",
-  emit: (model: SlideLayoutMechanismModel) => ({
-    xml: layoutXml(model.spec, model.themeContext),
-  }),
-  paint: (model: SlideLayoutMechanismModel) => ({
-    svg: paintPlaceholderVisualEntries(
-      model.placeholders ?? [],
-      model.slideNumber ?? 1,
-    ),
-  }),
+  emit: (model) => {
+    if (!("spec" in model)) {
+      throw new Error("SlideLayout emit requires spec and themeContext");
+    }
+    return { xml: layoutXml(model.spec, model.themeContext) };
+  },
+  paint: paintSharedCanvasFragments,
   import: {
     target: "deck",
     stage: "pre-slides",
@@ -359,10 +270,10 @@ function serializeColorMapModel(model: {
   readonly colorMap?: ColorMap;
   readonly colorMapOverride?: ColorMapOverride;
 }): string {
-  if (model.colorMapOverride !== undefined) {
-    return colorMapOverrideXml(model.colorMapOverride);
+  if (model.colorMap !== undefined) {
+    return `<p:clrMap ${colorMapAttributesXml(model.colorMap)}/>`;
   }
-  return `<p:clrMap ${colorMapAttributesXml(model.colorMap ?? defaultColorMap)}/>`;
+  return colorMapOverrideXml(model.colorMapOverride);
 }
 
 type NativeThemeMechanismModel = {
@@ -371,16 +282,17 @@ type NativeThemeMechanismModel = {
 };
 
 /** Native canvas mechanism for `<a:theme>` (`clrScheme`, `fontScheme`, `fmtScheme`) part identity and mutation. */
-export const nativeThemeMechanism = defineCanvasMechanism({
+export const nativeThemeMechanism = defineCanvasMechanism<
+  "native-theme",
+  NativeThemeMechanismModel,
+  void,
+  { readonly xml: string },
+  void
+>({
   key: "native-theme",
   role: "canvas",
-  emit: (model: NativeThemeMechanismModel) => ({ xml: themeXml(model.theme) }),
-  paint: (model: NativeThemeMechanismModel) => {
-    const bg = model.themeContext.resolveColor("bg1");
-    return {
-      svg: `<rect width="100%" height="100%" fill="#${bg.hex}" fill-opacity="${bg.alpha ?? 1}"/>`,
-    };
-  },
+  emit: (model) => ({ xml: themeXml(model.theme) }),
+  paint: paintThemeCanvasBackdrop,
   import: {
     target: "deck",
     stage: "pre-slides",
@@ -395,19 +307,19 @@ type ColorMapMechanismModel = {
 };
 
 /** Native canvas mechanism for master `<p:clrMap>` and layout/slide `<p:clrMapOvr>` color-slot mapping. */
-export const colorMapMechanism = defineCanvasMechanism({
+export const colorMapMechanism = defineCanvasMechanism<
+  "color-map",
+  ColorMapMechanismModel,
+  void,
+  { readonly xml: string },
+  void
+>({
   key: "color-map",
   role: "canvas",
-  emit: (model: ColorMapMechanismModel) => ({
+  emit: (model) => ({
     xml: serializeColorMapModel(model),
   }),
-  paint: (model: ColorMapMechanismModel) => {
-    const bg = model.themeContext.resolveColor("bg1");
-    const tx = model.themeContext.resolveColor("tx1");
-    return {
-      svg: `<g data-color-map-bg="#${bg.hex}" data-color-map-tx="#${tx.hex}"/>`,
-    };
-  },
+  paint: paintThemeCanvasBackdrop,
   import: {
     target: "deck",
     stage: "pre-slides",
@@ -422,18 +334,19 @@ type ThemeOverrideMechanismModel = {
 };
 
 /** Native canvas mechanism for `<a:themeOverride>` layout and slide palette/font/format overrides. */
-export const themeOverrideMechanism = defineCanvasMechanism({
+export const themeOverrideMechanism = defineCanvasMechanism<
+  "theme-override",
+  ThemeOverrideMechanismModel,
+  void,
+  { readonly xml: string },
+  void
+>({
   key: "theme-override",
   role: "canvas",
-  emit: (model: ThemeOverrideMechanismModel) => ({
+  emit: (model) => ({
     xml: themeOverrideXml(model.override, model.baseTheme ?? defaultTheme),
   }),
-  paint: (model: ThemeOverrideMechanismModel) => {
-    const accent1 = model.themeContext.resolveColor("accent1");
-    return {
-      svg: `<g data-theme-override-accent1="#${accent1.hex}"/>`,
-    };
-  },
+  paint: paintThemeCanvasBackdrop,
   import: {
     target: "deck",
     stage: "pre-slides",
@@ -441,16 +354,24 @@ export const themeOverrideMechanism = defineCanvasMechanism({
   },
 });
 
+type MasterSharedCanvasMechanismModel = {
+  readonly fragments: readonly string[];
+};
+
 /** Native canvas mechanism for non-placeholder shared canvas objects (`sp`/`pic`/`grpSp`) on SlideMaster and SlideLayout. */
-export const masterSharedCanvasMechanism = defineCanvasMechanism({
+export const masterSharedCanvasMechanism = defineCanvasMechanism<
+  "master-shared-canvas",
+  MasterSharedCanvasMechanismModel,
+  void,
+  { readonly xml: string },
+  void
+>({
   key: "master-shared-canvas",
   role: "canvas",
-  emit: (model: { readonly shapeXml: string; readonly svg: string }) => ({
-    xml: model.shapeXml,
+  emit: (model) => ({
+    xml: model.fragments.join(""),
   }),
-  paint: (model: { readonly shapeXml: string; readonly svg: string }) => ({
-    svg: model.svg,
-  }),
+  paint: paintSharedCanvasFragments,
   import: {
     target: "deck",
     stage: "pre-slides",
@@ -463,6 +384,42 @@ export {
   footerPlaceholderMechanism,
   footerPlaceholderShapeImportHandler,
 } from "./footer-placeholder.ts";
+
+const mastersEmitDriver: MastersEmitDriver = {
+  emitMaster(spec, layoutIds, themeContext) {
+    return slideMasterMechanism.emit({
+      spec,
+      layoutIds,
+      themeContext,
+      fragments: [],
+    }).xml;
+  },
+  emitLayout(spec, themeContext) {
+    return slideLayoutMechanism.emit({ spec, themeContext, fragments: [] }).xml;
+  },
+  emitTheme(theme) {
+    return nativeThemeMechanism.emit({
+      theme,
+      themeContext: undefined as never,
+    }).xml;
+  },
+  emitColorMap(model) {
+    return colorMapMechanism.emit({
+      ...model,
+      themeContext: undefined as never,
+    }).xml;
+  },
+  emitThemeOverride(override, baseTheme) {
+    return themeOverrideMechanism.emit({
+      override,
+      ...(baseTheme === undefined ? {} : { baseTheme }),
+      themeContext: undefined as never,
+    }).xml;
+  },
+  emitSharedCanvas(fragments) {
+    return masterSharedCanvasMechanism.emit({ fragments }).xml;
+  },
+};
 
 /** Capability declaration wiring native slide master, layout, theme, color-map, theme-override, and shared-canvas mechanisms into builds. */
 export const mastersCapability: SlideCapabilityModule & {
@@ -487,6 +444,21 @@ export const mastersCapability: SlideCapabilityModule & {
     themeOverrideMechanism,
     masterSharedCanvasMechanism,
   ] as const,
+  mastersCanvas: {
+    paintBackdrop(themeContext) {
+      return colorMapMechanism.paint({ themeContext });
+    },
+    paintMasterLayers(fragments) {
+      return slideMasterMechanism.paint({ fragments });
+    },
+    paintLayoutLayers(fragments) {
+      return slideLayoutMechanism.paint({ fragments });
+    },
+    paintSharedObject(svg) {
+      return masterSharedCanvasMechanism.paint({ fragments: [svg] });
+    },
+  },
+  mastersEmitDriver,
   bindSlide(input, context) {
     const placeholders = input.props["placeholders"] as
       | Readonly<Record<string, LayoutPlaceholderSpec>>
@@ -514,14 +486,6 @@ export const mastersCapability: SlideCapabilityModule & {
             return {
               xml: "",
               placeholderSpPrByKey,
-            };
-          },
-          paint(paintContext) {
-            return {
-              svg: paintPlaceholderVisualEntries(
-                entries,
-                paintContext.slideNumber,
-              ),
             };
           },
         };

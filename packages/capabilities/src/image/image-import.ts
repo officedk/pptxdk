@@ -11,11 +11,11 @@ import {
   REL_IMAGE,
   R_NS,
   emuToPx,
-  ExtentEmuFragmentSchema,
-  HexRgb6Schema,
-  OffsetEmuFragmentSchema,
-  OoxmlNonNegativeIntSchema,
-  TransformAttributesFragmentSchema,
+  extentEmuFragmentSchema,
+  hexRgb6Schema,
+  offsetEmuFragmentSchema,
+  ooxmlNonNegativeIntSchema,
+  transformAttributesFragmentSchema,
   resolveExternalRelationshipTarget,
   resolveInternalRelationshipTarget,
   type CascadedOmission,
@@ -50,17 +50,17 @@ import {
 } from "./image-declaration.ts";
 import { readImage } from "./image-decode.ts";
 import {
-  AlphaModFixFragmentSchema,
-  CustomPathAttributesSchema,
-  CustomPathPointSchema,
-  GeomGuideFragmentSchema,
-  LineAttributesFragmentSchema,
-  NonVisualPicIdSchema,
-  OuterShadowFragmentSchema,
-  PresetDashFragmentSchema,
-  PresetGeomFragmentSchema,
-  SoftEdgeFragmentSchema,
-  SrcRectFragmentSchema,
+  alphaModFixFragmentSchema,
+  customPathAttributesSchema,
+  customPathPointSchema,
+  geomGuideFragmentSchema,
+  lineAttributesFragmentSchema,
+  nonVisualPicIdSchema,
+  outerShadowFragmentSchema,
+  presetDashFragmentSchema,
+  presetGeomFragmentSchema,
+  softEdgeFragmentSchema,
+  srcRectFragmentSchema,
 } from "./image-schemas.ts";
 
 const SchemeColorSchema = z.object({
@@ -68,11 +68,11 @@ const SchemeColorSchema = z.object({
 });
 
 const SrgbColorSchema = z.object({
-  val: HexRgb6Schema,
+  val: hexRgb6Schema,
 });
 
 const AlphaModifierSchema = z.object({
-  val: OoxmlNonNegativeIntSchema,
+  val: ooxmlNonNegativeIntSchema,
 });
 
 function readColorElement(
@@ -139,7 +139,7 @@ function readCustomPathPoint(
   diagnostics: ImportDiagnostic[],
 ): { readonly x: number; readonly y: number } | undefined {
   const raw = ptCursor.attrsObject(["x", "y"]);
-  const parsed = CustomPathPointSchema.safeParse(raw);
+  const parsed = customPathPointSchema.safeParse(raw);
   if (!parsed.success) {
     diagnostics.push({
       code: "invalid-xml-value",
@@ -194,7 +194,7 @@ function readCustomGeometry(
 
   for (const pathCursor of pathLst.children(A_NS, "path")) {
     const rawPath = pathCursor.attrsObject(["w", "h", "fill", "stroke"]);
-    const parsedPath = CustomPathAttributesSchema.safeParse(rawPath);
+    const parsedPath = customPathAttributesSchema.safeParse(rawPath);
     if (!parsedPath.success) {
       diagnostics.push({
         code: "invalid-xml-value",
@@ -365,13 +365,13 @@ function readPictureGeometry(
   const prstGeom = spPr.child(A_NS, "prstGeom");
   if (prstGeom !== undefined) {
     const rawGeom = prstGeom.attrsObject(["prst"]);
-    const parsedGeom = PresetGeomFragmentSchema.safeParse(rawGeom);
+    const parsedGeom = presetGeomFragmentSchema.safeParse(rawGeom);
     const avLst = prstGeom.child(A_NS, "avLst");
     const adjust: Record<string, number> = {};
     if (avLst !== undefined) {
       for (const gd of avLst.children(A_NS, "gd")) {
         const rawGd = gd.attrsObject(["name", "fmla"]);
-        const parsedGd = GeomGuideFragmentSchema.safeParse(rawGd);
+        const parsedGd = geomGuideFragmentSchema.safeParse(rawGd);
         if (!parsedGd.success) {
           diagnostics.push({
             code: "invalid-xml-value",
@@ -428,7 +428,7 @@ function readBorderStyle(
     return {};
   }
   const rawLn = ln.attrsObject(["w"]);
-  const parsedLn = LineAttributesFragmentSchema.safeParse(rawLn);
+  const parsedLn = lineAttributesFragmentSchema.safeParse(rawLn);
   let borderWidth: number | undefined;
   if (!parsedLn.success) {
     diagnostics.push({
@@ -453,7 +453,7 @@ function readBorderStyle(
   const prstDash = ln.child(A_NS, "prstDash");
   if (prstDash !== undefined) {
     const rawDash = prstDash.attrsObject(["val"]);
-    const parsedDash = PresetDashFragmentSchema.safeParse(rawDash);
+    const parsedDash = presetDashFragmentSchema.safeParse(rawDash);
     if (!parsedDash.success) {
       diagnostics.push({
         code: "invalid-xml-value",
@@ -511,7 +511,7 @@ function readEffectList(
       "algn",
       "rotWithShape",
     ]);
-    const parsedShadow = OuterShadowFragmentSchema.safeParse(rawShadow);
+    const parsedShadow = outerShadowFragmentSchema.safeParse(rawShadow);
     if (!parsedShadow.success) {
       diagnostics.push({
         code: "invalid-xml-value",
@@ -541,7 +541,7 @@ function readEffectList(
   const softEdgeCursor = effectLst.child(A_NS, "softEdge");
   if (softEdgeCursor !== undefined) {
     const rawSoft = softEdgeCursor.attrsObject(["rad"]);
-    const parsedSoft = SoftEdgeFragmentSchema.safeParse(rawSoft);
+    const parsedSoft = softEdgeFragmentSchema.safeParse(rawSoft);
     if (!parsedSoft.success) {
       diagnostics.push({
         code: "invalid-xml-value",
@@ -591,7 +591,7 @@ export function readImagePic(
   const cNvPr = nvPicPr.child(P_NS, "cNvPr");
   if (cNvPr !== undefined) {
     const rawCNvPr = cNvPr.attrsObject(["id", "name", "descr"]);
-    const parsedCNvPr = NonVisualPicIdSchema.safeParse(rawCNvPr);
+    const parsedCNvPr = nonVisualPicIdSchema.safeParse(rawCNvPr);
     if (!parsedCNvPr.success) {
       diagnostics.push({
         code: "invalid-xml-value",
@@ -695,7 +695,7 @@ export function readImagePic(
   const alphaModFix = blip.child(A_NS, "alphaModFix");
   if (alphaModFix !== undefined) {
     const rawAlpha = alphaModFix.attrsObject(["amt"]);
-    const parsedAlpha = AlphaModFixFragmentSchema.safeParse(rawAlpha);
+    const parsedAlpha = alphaModFixFragmentSchema.safeParse(rawAlpha);
     if (!parsedAlpha.success) {
       diagnostics.push({
         code: "invalid-xml-value",
@@ -791,7 +791,7 @@ export function readImagePic(
   const srcRect = blipFill.child(A_NS, "srcRect");
   if (srcRect !== undefined) {
     const rawCrop = srcRect.attrsObject(["l", "t", "r", "b"]);
-    const parsedCrop = SrcRectFragmentSchema.safeParse(rawCrop);
+    const parsedCrop = srcRectFragmentSchema.safeParse(rawCrop);
     if (!parsedCrop.success) {
       diagnostics.push({
         code: "invalid-xml-value",
@@ -869,11 +869,11 @@ export function readImagePic(
     }
 
     const rawXfrm = xfrm.attrsObject(["rot", "flipH", "flipV"]);
-    const parsedXfrm = TransformAttributesFragmentSchema.safeParse(rawXfrm);
+    const parsedXfrm = transformAttributesFragmentSchema.safeParse(rawXfrm);
     const rawOff = off.attrsObject(["x", "y"]);
-    const parsedOff = OffsetEmuFragmentSchema.safeParse(rawOff);
+    const parsedOff = offsetEmuFragmentSchema.safeParse(rawOff);
     const rawExt = ext.attrsObject(["cx", "cy"]);
-    const parsedExt = ExtentEmuFragmentSchema.safeParse(rawExt);
+    const parsedExt = extentEmuFragmentSchema.safeParse(rawExt);
     if (!parsedOff.success || !parsedExt.success) {
       diagnostics.push({
         code: "invalid-xml-value",

@@ -10,15 +10,15 @@ import {
 } from "@pptxdk/core/capability";
 import { pxToEmu } from "@pptxdk/emit";
 import {
-  OoxmlBoolSchema,
-  OoxmlNonNegativeIntSchema,
-  OoxmlPositiveIntSchema,
+  ooxmlBoolSchema,
+  ooxmlNonNegativeIntSchema,
+  ooxmlPositiveIntSchema,
 } from "@pptxdk/import";
 import { z } from "zod";
 
-import { MotionPropsSchema } from "../motion/motion-schemas.ts";
-import { OptionalNameSchema } from "../shared/identity.ts";
-import { MorphKeySchema } from "../shared/morph-api.ts";
+import { motionPropsSchema } from "../motion/motion-schemas.ts";
+import { optionalNameSchema } from "../shared/identity.ts";
+import { morphKeySchema } from "../shared/morph-api.ts";
 import {
   parseTextInsets,
   textCoordinateSchema,
@@ -143,14 +143,14 @@ export type TableCellStyle = z.infer<typeof tableCellStyleSchema>;
 
 export const tableMergeSpanSchema = z.number().int().min(1);
 
-const motionPropsShape = MotionPropsSchema.unwrap().shape;
+const motionPropsShape = motionPropsSchema.unwrap().shape;
 
 const tableDeclarationPropsObjectSchema = z.strictObject({
-  id: OptionalNameSchema.optional(),
-  name: OptionalNameSchema.optional(),
+  id: optionalNameSchema.optional(),
+  name: optionalNameSchema.optional(),
   placeholder: z.string().optional(),
   nativePlaceholder: nativePlaceholderRefSchema.optional(),
-  morphKey: MorphKeySchema.optional(),
+  morphKey: morphKeySchema.optional(),
   link: linkTargetSchema.optional(),
   x: textCoordinateSchema.optional(),
   y: textCoordinateSchema.optional(),
@@ -168,7 +168,7 @@ export const tableDeclarationPropsSchema =
 export type TableDeclarationProps = z.infer<typeof tableDeclarationPropsSchema>;
 
 const rowDeclarationPropsObjectSchema = z.strictObject({
-  id: OptionalNameSchema.optional(),
+  id: optionalNameSchema.optional(),
   style: tableRowStyleSchema.optional(),
 });
 export const rowDeclarationPropsSchema =
@@ -176,7 +176,7 @@ export const rowDeclarationPropsSchema =
 export type RowDeclarationProps = z.infer<typeof rowDeclarationPropsSchema>;
 
 const cellDeclarationPropsObjectSchema = z.strictObject({
-  id: OptionalNameSchema.optional(),
+  id: optionalNameSchema.optional(),
   colSpan: tableMergeSpanSchema.optional(),
   rowSpan: tableMergeSpanSchema.optional(),
   style: tableCellStyleSchema.optional(),
@@ -210,59 +210,59 @@ export const cellStyleKeys: readonly string[] = Object.keys(
 
 /** OOXML `<p:cNvPr>` attribute fragment schema inside `<p:graphicFrame>`. */
 export const nonVisualGraphicFrameIdSchema = z.object({
-  id: OoxmlNonNegativeIntSchema,
+  id: ooxmlNonNegativeIntSchema,
   name: z.string().optional(),
 });
 
 /** OOXML `<a:graphicFrameLocks>` attribute fragment schema. */
 export const graphicFrameLocksXmlSchema = z.object({
-  noGrp: OoxmlBoolSchema.optional(),
-  noDrilldown: OoxmlBoolSchema.optional(),
-  noSelect: OoxmlBoolSchema.optional(),
-  noChangeAspect: OoxmlBoolSchema.optional(),
-  noMove: OoxmlBoolSchema.optional(),
-  noResize: OoxmlBoolSchema.optional(),
+  noGrp: ooxmlBoolSchema.optional(),
+  noDrilldown: ooxmlBoolSchema.optional(),
+  noSelect: ooxmlBoolSchema.optional(),
+  noChangeAspect: ooxmlBoolSchema.optional(),
+  noMove: ooxmlBoolSchema.optional(),
+  noResize: ooxmlBoolSchema.optional(),
 });
 
 /** OOXML `<a:tblPr>` attribute fragment schema. */
 export const tblPrXmlSchema = z.object({
-  firstRow: OoxmlBoolSchema.optional(),
-  firstCol: OoxmlBoolSchema.optional(),
-  lastRow: OoxmlBoolSchema.optional(),
-  lastCol: OoxmlBoolSchema.optional(),
-  bandRow: OoxmlBoolSchema.optional(),
-  bandCol: OoxmlBoolSchema.optional(),
-  rtl: OoxmlBoolSchema.optional(),
+  firstRow: ooxmlBoolSchema.optional(),
+  firstCol: ooxmlBoolSchema.optional(),
+  lastRow: ooxmlBoolSchema.optional(),
+  lastCol: ooxmlBoolSchema.optional(),
+  bandRow: ooxmlBoolSchema.optional(),
+  bandCol: ooxmlBoolSchema.optional(),
+  rtl: ooxmlBoolSchema.optional(),
 });
 
 /** OOXML `<a:gridCol w="..."/>` fragment schema. */
 export const tblGridColXmlSchema = z.object({
-  w: OoxmlPositiveIntSchema,
+  w: ooxmlPositiveIntSchema,
 });
 
 /** OOXML `<a:tr h="..."/>` fragment schema. */
 export const tblRowXmlSchema = z.object({
-  h: OoxmlPositiveIntSchema,
+  h: ooxmlPositiveIntSchema,
 });
 
 /** OOXML `<a:tc gridSpan="..." rowSpan="..." hMerge="..." vMerge="..."/>` fragment schema. */
 export const tblCellXmlSchema = z.object({
-  gridSpan: OoxmlPositiveIntSchema.optional(),
-  rowSpan: OoxmlPositiveIntSchema.optional(),
-  hMerge: OoxmlBoolSchema.optional(),
-  vMerge: OoxmlBoolSchema.optional(),
+  gridSpan: ooxmlPositiveIntSchema.optional(),
+  rowSpan: ooxmlPositiveIntSchema.optional(),
+  hMerge: ooxmlBoolSchema.optional(),
+  vMerge: ooxmlBoolSchema.optional(),
 });
 
 /** OOXML `<a:tcPr .../>` attribute fragment schema. */
 export const tblCellPrXmlSchema = z.object({
-  marL: OoxmlNonNegativeIntSchema.optional(),
-  marR: OoxmlNonNegativeIntSchema.optional(),
-  marT: OoxmlNonNegativeIntSchema.optional(),
-  marB: OoxmlNonNegativeIntSchema.optional(),
+  marL: ooxmlNonNegativeIntSchema.optional(),
+  marR: ooxmlNonNegativeIntSchema.optional(),
+  marT: ooxmlNonNegativeIntSchema.optional(),
+  marB: ooxmlNonNegativeIntSchema.optional(),
   anchor: z.enum(["t", "ctr", "b"]).optional(),
   vert: z.string().optional(),
   horzOverflow: z.string().optional(),
-  anchorCtr: OoxmlBoolSchema.optional(),
+  anchorCtr: ooxmlBoolSchema.optional(),
 });
 
 /** Validates a plain object parameter map against allowed parameter keys. */
@@ -288,7 +288,7 @@ export function parseOptionalTableId(
   path?: string,
 ): string | undefined {
   if (value === undefined) return undefined;
-  const parsed = OptionalNameSchema.safeParse(value);
+  const parsed = optionalNameSchema.safeParse(value);
   if (!parsed.success) {
     throw new CapabilityError(
       "invalid-parameter",

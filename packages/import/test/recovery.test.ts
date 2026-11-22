@@ -18,7 +18,6 @@ import {
   createImporter,
   importDiagnosticSchema,
   openPptxPackage,
-  readAlternateContent,
   buildRelationshipIndex,
   resolveExternalRelationshipTarget,
   resolveInternalRelationshipTarget,
@@ -193,7 +192,6 @@ describe("@pptxdk/import recovery, resources, and mc:AlternateContent", () => {
       result.report.diagnostics.some((d) => d.code === "unconsumed-xml"),
       false,
     );
-    void readAlternateContent;
   });
 
   it("resolves internal and external relationships cleanly and reports missing or broken targets", () => {

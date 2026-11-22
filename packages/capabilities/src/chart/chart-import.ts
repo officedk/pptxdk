@@ -1,8 +1,9 @@
-import type {
-  ColorValue,
-  LinkTarget,
-  NativeColorSlot,
-  ThemeShade,
+import {
+  bcp47LangSchema,
+  type ColorValue,
+  type LinkTarget,
+  type NativeColorSlot,
+  type Shadow,
 } from "@pptxdk/core/capability";
 import {
   A_NS,
@@ -32,15 +33,26 @@ import {
 import { z } from "zod";
 
 import { createChartNode } from "./chart-declaration.ts";
+import {
+  chartAxisPositionFromNative,
+  chartDataLabelPositionFromNative,
+  chartErrorBarValueTypeFromNative,
+  chartLegendPositionFromNative,
+  chartLineDashFromNative,
+  chartTrendlineTypeFromNative,
+} from "./chart-labels.ts";
 import type {
   ChartAxes,
   ChartAxis,
   ChartAxisCrossing,
   ChartAxisPosition,
+  ChartCustomErrorBars,
   ChartDataLabelPosition,
   ChartDataLabelSettings,
   ChartDataLabels,
   ChartDisplayBlanksAs,
+  ChartErrorBarInclude,
+  ChartErrorBars,
   ChartGroup,
   ChartKind,
   ChartLine,
@@ -49,12 +61,16 @@ import type {
   ChartPoint,
   ChartProps,
   ChartSeries,
+  ChartTextStyle,
   ChartTickLabelPosition,
   ChartTickMark,
+  ChartTitle,
+  ChartTrendline,
   IndependentCategorySeries,
   ScatterChartPoint,
   ScatterChartSeries,
   ScatterDataLabels,
+  ScatterErrorBars,
   ScatterLine,
 } from "./chart-schemas.ts";
 
@@ -138,7 +154,6 @@ const ScatterStyleSchema = z.object({
     "smoothMarker",
   ]),
 });
-const AxPosSchema = z.object({ val: z.enum(["b", "t", "l", "r"]) });
 const CrossesSchema = z.object({ val: z.enum(["autoZero", "max", "min"]) });
 const TickMarkSchema = z.object({
   val: z.enum(["none", "in", "out", "cross"]),
@@ -146,7 +161,6 @@ const TickMarkSchema = z.object({
 const TickLblPosSchema = z.object({
   val: z.enum(["nextTo", "high", "low", "none"]),
 });
-const LegendPosSchema = z.object({ val: z.enum(["t", "b", "l", "r", "tr"]) });
 const DispBlanksAsSchema = z.object({
   val: z.enum(["gap", "zero", "span"]),
 });
@@ -178,60 +192,9 @@ const MarkerSymbolSchema = z.object({
     "x",
   ]),
 });
-const PresetDashSchema = z.object({
-  val: z.enum([
-    "solid",
-    "dash",
-    "dot",
-    "dashDot",
-    "lgDash",
-    "lgDashDot",
-    "lgDashDotDot",
-  ]),
+const ErrBarTypeSchema = z.object({
+  val: z.enum(["both", "plus", "minus"]),
 });
-
-const axPosMap: Readonly<Record<"b" | "t" | "l" | "r", ChartAxisPosition>> = {
-  b: "bottom",
-  t: "top",
-  l: "left",
-  r: "right",
-};
-
-const legendPosMap: Readonly<
-  Record<"t" | "b" | "l" | "r" | "tr", NonNullable<ChartProps["legend"]>>
-> = {
-  t: "top",
-  b: "bottom",
-  l: "left",
-  r: "right",
-  tr: "topRight",
-};
-
-const dLblPosMap: Readonly<
-  Record<z.infer<typeof DLblPosSchema>["val"], ChartDataLabelPosition>
-> = {
-  ctr: "center",
-  inEnd: "insideEnd",
-  inBase: "insideBase",
-  outEnd: "outsideEnd",
-  bestFit: "bestFit",
-  l: "left",
-  r: "right",
-  b: "bottom",
-  t: "top",
-};
-
-const dashReverseMap: Readonly<
-  Record<z.infer<typeof PresetDashSchema>["val"], ChartLineDash>
-> = {
-  solid: "solid",
-  dash: "dash",
-  dot: "dot",
-  dashDot: "dashDot",
-  lgDash: "longDash",
-  lgDashDot: "longDashDot",
-  lgDashDotDot: "longDashDotDot",
-};
 
 type XmlElement = XmlElementCursor["element"];
 
@@ -321,6 +284,17 @@ function readFloatVal(
   return parsed.success ? parsed.data : undefined;
 }
 
+function readColorModifier(
+  colorCursor: XmlElementCursor,
+  localName: "alpha" | "lumMod" | "lumOff",
+): number | undefined {
+  const mod = colorCursor.child(A_NS, localName);
+  if (mod === undefined) return undefined;
+  const val = readIntVal(mod);
+  if (val === undefined || val < 0 || val > 100_000) return undefined;
+  return val / 100_000;
+}
+
 function readSolidFillColor(
   fillCursor: XmlElementCursor,
 ): ColorValue | undefined {
@@ -333,29 +307,35 @@ function readSolidFillColor(
     return undefined;
   }
 
-  let baseColor: string | ThemeShade | undefined;
+  let baseString: string | undefined;
+  let schemeSlot: NativeColorSlot | undefined;
   if (srgb !== undefined) {
     const raw = srgb.attrsObject(["val"]);
     const parsed = HexRgb6Schema.safeParse(raw["val"]);
     if (parsed.success) {
-      baseColor = `#${parsed.data.toUpperCase()}`;
+      baseString = `#${parsed.data.toUpperCase()}`;
     }
   } else if (scheme !== undefined) {
     const raw = scheme.attrsObject(["val"]);
     const parsed = SchemeColorSchema.safeParse(raw);
     if (parsed.success) {
-      baseColor = schemeToNativeSlot[parsed.data.val];
+      schemeSlot = schemeToNativeSlot[parsed.data.val];
     }
   }
-  const alphaCursor = colorCursor.child(A_NS, "alpha");
-  let alpha: number | undefined;
-  if (alphaCursor !== undefined) {
-    const val = readIntVal(alphaCursor);
-    if (val !== undefined && val >= 0 && val <= 100_000) {
-      alpha = val / 100_000;
-    }
-  }
+  const lumMod = readColorModifier(colorCursor, "lumMod");
+  const lumOff = readColorModifier(colorCursor, "lumOff");
+  const alpha = readColorModifier(colorCursor, "alpha");
   consumeSubtree(colorCursor);
+
+  const baseColor: ColorValue | undefined =
+    schemeSlot !== undefined && lumMod !== undefined
+      ? {
+          slot: schemeSlot,
+          lumMod: Math.min(1, lumMod),
+          ...(lumOff === undefined ? {} : { lumOff: Math.min(1, lumOff) }),
+        }
+      : (schemeSlot ?? baseString);
+
   if (baseColor === undefined) return undefined;
   return alpha === undefined ? baseColor : { color: baseColor, alpha };
 }
@@ -379,11 +359,9 @@ function readLineFromSpPr(spPr: XmlElementCursor): {
   const prstDash = ln.child(A_NS, "prstDash");
   let dash: ChartLineDash | undefined;
   if (prstDash !== undefined) {
-    const parsedDash = PresetDashSchema.safeParse(
-      prstDash.attrsObject(["val"]),
-    );
-    if (parsedDash.success) {
-      dash = dashReverseMap[parsedDash.data.val];
+    const rawDash = prstDash.attrsObject(["val"])["val"];
+    if (rawDash !== undefined) {
+      dash = chartLineDashFromNative[rawDash];
     }
   }
   consumeSubtree(ln);
@@ -422,37 +400,428 @@ function readSeriesSpPr(
   };
 }
 
-function extractRichTextString(cursor: XmlElementCursor): string {
-  const parts: string[] = [];
-  for (const p of cursor.children(A_NS, "p")) {
-    const runs: string[] = [];
-    for (const child of p.remainingElementChildren()) {
-      if (child.namespaceUri === A_NS && child.localName === "r") {
-        const t = child.child(A_NS, "t");
-        if (t !== undefined) {
-          runs.push(t.textContent);
-        }
-        consumeSubtree(child);
-      } else if (child.namespaceUri === A_NS && child.localName === "br") {
-        runs.push("\n");
-        consumeSubtree(child);
-      } else {
-        consumeSubtree(child);
-      }
-    }
-    parts.push(runs.join(""));
+function resolveChartTypefaceToken(
+  typeface: string,
+): NonNullable<ChartTextStyle["fontFamily"]> {
+  if (typeface === "+mn-lt" || typeface === "+mn-ea" || typeface === "+mn-cs") {
+    return "minor";
   }
-  consumeSubtree(cursor);
-  return parts.join("\n");
+  if (typeface === "+mj-lt" || typeface === "+mj-ea" || typeface === "+mj-cs") {
+    return "major";
+  }
+  return typeface;
 }
 
-function readTitleText(titleCursor: XmlElementCursor): string | undefined {
+function readChartOuterShadow(rPrCursor: XmlElementCursor): Shadow | undefined {
+  const effectLst = rPrCursor.child(A_NS, "effectLst");
+  if (effectLst === undefined) return undefined;
+  const outerShdw = effectLst.child(A_NS, "outerShdw");
+  if (outerShdw === undefined) {
+    consumeSubtree(effectLst);
+    return undefined;
+  }
+  const blurRadRaw = outerShdw.attr("blurRad");
+  const distRaw = outerShdw.attr("dist");
+  const dirRaw = outerShdw.attr("dir");
+  outerShdw.consumeAttr("algn");
+  outerShdw.consumeAttr("rotWithShape");
+  const color = readSolidFillColor(outerShdw);
+  consumeSubtree(outerShdw);
+  consumeSubtree(effectLst);
+
+  const blurRad =
+    blurRadRaw === undefined
+      ? undefined
+      : OoxmlNonNegativeIntSchema.safeParse(blurRadRaw);
+  const dist =
+    distRaw === undefined
+      ? undefined
+      : OoxmlNonNegativeIntSchema.safeParse(distRaw);
+  const dir =
+    dirRaw === undefined ? undefined : OoxmlIntSchema.safeParse(dirRaw);
+  return {
+    ...(color === undefined ? {} : { color }),
+    ...(blurRad?.success ? { blur: emuToPx(blurRad.data) } : {}),
+    ...(dist?.success ? { distance: emuToPx(dist.data) } : {}),
+    ...(dir?.success ? { angle: dir.data / 60_000 } : {}),
+  };
+}
+
+function readChartRunProperties(rPrCursor: XmlElementCursor): ChartTextStyle {
+  const rawLang = rPrCursor.attr("lang");
+  const parsedLang =
+    rawLang === undefined ? undefined : bcp47LangSchema.safeParse(rawLang);
+  const lang = parsedLang?.success ? parsedLang.data : undefined;
+
+  const szRaw = rPrCursor.attr("sz");
+  const szParsed =
+    szRaw === undefined ? undefined : OoxmlIntSchema.safeParse(szRaw);
+  const fontSize: ChartTextStyle["fontSize"] =
+    szParsed?.success && szParsed.data >= 100 && szParsed.data <= 400_000
+      ? `${szParsed.data / 100}pt`
+      : undefined;
+
+  const bRaw = rPrCursor.attr("b");
+  const bParsed =
+    bRaw === undefined ? undefined : OoxmlBoolSchema.safeParse(bRaw);
+  const fontWeight: ChartTextStyle["fontWeight"] = bParsed?.success
+    ? bParsed.data
+      ? "bold"
+      : "normal"
+    : undefined;
+
+  const iRaw = rPrCursor.attr("i");
+  const iParsed =
+    iRaw === undefined ? undefined : OoxmlBoolSchema.safeParse(iRaw);
+  const fontStyle: ChartTextStyle["fontStyle"] = iParsed?.success
+    ? iParsed.data
+      ? "italic"
+      : "normal"
+    : undefined;
+
+  const uRaw = rPrCursor.attr("u");
+  const strikeRaw = rPrCursor.attr("strike");
+  let textDecoration: ChartTextStyle["textDecoration"];
+  if (uRaw === "sng") textDecoration = "underline";
+  else if (strikeRaw === "sngStrike") textDecoration = "line-through";
+  else if (uRaw === "none" && strikeRaw === "noStrike") textDecoration = "none";
+
+  const capRaw = rPrCursor.attr("cap");
+  let textTransform: ChartTextStyle["textTransform"];
+  if (capRaw === "all") textTransform = "uppercase";
+  else if (capRaw === "none") textTransform = "none";
+
+  const spcRaw = rPrCursor.attr("spc");
+  const spcParsed =
+    spcRaw === undefined ? undefined : OoxmlIntSchema.safeParse(spcRaw);
+  const letterSpacing =
+    spcParsed?.success &&
+    spcParsed.data >= -400_000 &&
+    spcParsed.data <= 400_000
+      ? spcParsed.data / 75
+      : undefined;
+
+  const solidFill = rPrCursor.child(A_NS, "solidFill");
+  const color =
+    solidFill === undefined ? undefined : readSolidFillColor(solidFill);
+  if (solidFill !== undefined) consumeSubtree(solidFill);
+  const textShadow = readChartOuterShadow(rPrCursor);
+
+  const latin = rPrCursor.child(A_NS, "latin");
+  const ea = rPrCursor.child(A_NS, "ea");
+  const cs = rPrCursor.child(A_NS, "cs");
+  const latinTypeface = latin?.attr("typeface");
+  const eaTypeface = ea?.attr("typeface");
+  const csTypeface = cs?.attr("typeface");
+  if (latin !== undefined) consumeSubtree(latin);
+  if (ea !== undefined) consumeSubtree(ea);
+  if (cs !== undefined) consumeSubtree(cs);
+  const typeface = latinTypeface ?? eaTypeface ?? csTypeface;
+  let fontFamily: ChartTextStyle["fontFamily"];
+  if (typeface !== undefined && typeface.trim() !== "") {
+    fontFamily = resolveChartTypefaceToken(typeface);
+  }
+  consumeSubtree(rPrCursor);
+
+  return {
+    ...(fontFamily === undefined ? {} : { fontFamily }),
+    ...(fontSize === undefined ? {} : { fontSize }),
+    ...(fontWeight === undefined ? {} : { fontWeight }),
+    ...(fontStyle === undefined ? {} : { fontStyle }),
+    ...(color === undefined ? {} : { color }),
+    ...(letterSpacing === undefined ? {} : { letterSpacing }),
+    ...(textTransform === undefined ? {} : { textTransform }),
+    ...(textDecoration === undefined ? {} : { textDecoration }),
+    ...(textShadow === undefined ? {} : { textShadow }),
+    ...(lang === undefined ? {} : { lang }),
+  };
+}
+
+function readChartTextProperties(
+  txPrCursor: XmlElementCursor,
+): ChartTextStyle | undefined {
+  let verticalAlign: ChartTextStyle["verticalAlign"];
+  const bodyPr = txPrCursor.child(A_NS, "bodyPr");
+  if (bodyPr !== undefined) {
+    const anchor = bodyPr.attr("anchor");
+    if (anchor === "t") verticalAlign = "top";
+    else if (anchor === "ctr") verticalAlign = "middle";
+    else if (anchor === "b") verticalAlign = "bottom";
+    consumeSubtree(bodyPr);
+  }
+
+  let align: ChartTextStyle["align"];
+  let lineHeight: ChartTextStyle["lineHeight"];
+  let spacingAfter: ChartTextStyle["spacingAfter"];
+  let defStyle: ChartTextStyle = {};
+  let runStyle: ChartTextStyle = {};
+  let endLang: string | undefined;
+
+  const p = txPrCursor.child(A_NS, "p");
+  if (p !== undefined) {
+    const pPr = p.child(A_NS, "pPr");
+    if (pPr !== undefined) {
+      const algn = pPr.attr("algn");
+      if (algn === "l") align = "left";
+      else if (algn === "ctr") align = "center";
+      else if (algn === "r") align = "right";
+      else if (algn === "just") align = "justify";
+
+      const lnSpc = pPr.child(A_NS, "lnSpc");
+      if (lnSpc !== undefined) {
+        const spcPts = readIntVal(lnSpc.child(A_NS, "spcPts"));
+        if (spcPts !== undefined && spcPts > 0 && spcPts <= 158_400) {
+          lineHeight = `${spcPts / 100}pt`;
+        }
+        consumeSubtree(lnSpc);
+      }
+
+      const spcAft = pPr.child(A_NS, "spcAft");
+      if (spcAft !== undefined) {
+        const spcPts = readIntVal(spcAft.child(A_NS, "spcPts"));
+        if (spcPts !== undefined && spcPts >= 0 && spcPts <= 158_400) {
+          spacingAfter = spcPts / 75;
+        }
+        consumeSubtree(spcAft);
+      }
+
+      const defRPr = pPr.child(A_NS, "defRPr");
+      if (defRPr !== undefined) {
+        defStyle = readChartRunProperties(defRPr);
+      }
+      consumeSubtree(pPr);
+    }
+
+    const r = p.child(A_NS, "r");
+    if (r !== undefined) {
+      const rPr = r.child(A_NS, "rPr");
+      if (rPr !== undefined) {
+        runStyle = readChartRunProperties(rPr);
+      }
+      consumeSubtree(r);
+    }
+
+    const endParaRPr = p.child(A_NS, "endParaRPr");
+    if (endParaRPr !== undefined) {
+      const rawLang = endParaRPr.attr("lang");
+      const parsedLang =
+        rawLang === undefined ? undefined : bcp47LangSchema.safeParse(rawLang);
+      if (parsedLang?.success) endLang = parsedLang.data;
+      consumeSubtree(endParaRPr);
+    }
+    consumeSubtree(p);
+  }
+  consumeSubtree(txPrCursor);
+
+  const merged: ChartTextStyle = {
+    ...defStyle,
+    ...runStyle,
+    ...(endLang !== undefined &&
+    defStyle.lang === undefined &&
+    runStyle.lang === undefined
+      ? { lang: endLang }
+      : {}),
+    ...(verticalAlign === undefined ? {} : { verticalAlign }),
+    ...(align === undefined ? {} : { align }),
+    ...(lineHeight === undefined ? {} : { lineHeight }),
+    ...(spacingAfter === undefined ? {} : { spacingAfter }),
+  };
+  return Object.keys(merged).length === 0 ? undefined : merged;
+}
+
+function fontSizePointsValue(
+  value: ChartTextStyle["fontSize"],
+): number | undefined {
+  if (typeof value === "number") return value * 0.75;
+  if (typeof value === "string") {
+    if (value.endsWith("pt")) return Number(value.slice(0, -2));
+    if (value.endsWith("px")) return Number(value.slice(0, -2)) * 0.75;
+  }
+  return undefined;
+}
+
+function stableJsonEqual(left: unknown, right: unknown): boolean {
+  if (left === right) return true;
+  if (
+    typeof left !== "object" ||
+    typeof right !== "object" ||
+    left === null ||
+    right === null
+  ) {
+    return false;
+  }
+  const leftKeys = Object.keys(left as Record<string, unknown>).filter(
+    (k) => (left as Record<string, unknown>)[k] !== undefined,
+  );
+  const rightKeys = Object.keys(right as Record<string, unknown>).filter(
+    (k) => (right as Record<string, unknown>)[k] !== undefined,
+  );
+  if (leftKeys.length !== rightKeys.length) return false;
+  return leftKeys.every((key) =>
+    stableJsonEqual(
+      (left as Record<string, unknown>)[key],
+      (right as Record<string, unknown>)[key],
+    ),
+  );
+}
+
+function styleFieldEqual(
+  key: keyof ChartTextStyle,
+  left: unknown,
+  right: unknown,
+): boolean {
+  if (left === right) return true;
+  if (key === "fontSize" || key === "lineHeight") {
+    const lPt = fontSizePointsValue(left as ChartTextStyle["fontSize"]);
+    const rPt = fontSizePointsValue(right as ChartTextStyle["fontSize"]);
+    return lPt !== undefined && rPt !== undefined && Math.abs(lPt - rPt) < 1e-6;
+  }
+  return stableJsonEqual(left, right);
+}
+
+function diffChartTextStyle(
+  child: ChartTextStyle | undefined,
+  inherited: ChartTextStyle | undefined,
+): ChartTextStyle | undefined {
+  if (child === undefined) return undefined;
+  const baseline: ChartTextStyle = {
+    fontWeight: "normal",
+    fontStyle: "normal",
+    verticalAlign: "top",
+    textDecoration: "none",
+    textTransform: "none",
+    color: "dk1",
+    ...inherited,
+  };
+  const out: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(child)) {
+    if (value === undefined) continue;
+    const baseValue = (baseline as Record<string, unknown>)[key];
+    if (!styleFieldEqual(key as keyof ChartTextStyle, value, baseValue)) {
+      out[key] = value;
+    }
+  }
+  return Object.keys(out).length === 0 ? undefined : out;
+}
+
+function normalizeRootChartStyle(
+  rawStyle: ChartTextStyle | undefined,
+): ChartTextStyle | undefined {
+  if (rawStyle === undefined) return undefined;
+  const out: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(rawStyle)) {
+    if (value === undefined) continue;
+    if (key === "fontWeight" && value === "normal") continue;
+    if (key === "fontStyle" && value === "normal") continue;
+    if (key === "verticalAlign" && value === "top") continue;
+    if (key === "textDecoration" && value === "none") continue;
+    if (key === "textTransform" && value === "none") continue;
+    out[key] = value;
+  }
+  return Object.keys(out).length === 0 ? undefined : out;
+}
+
+function readChartTitle(
+  titleCursor: XmlElementCursor,
+  inheritedStyle: ChartTextStyle | undefined,
+): ChartTitle | undefined {
   let titleText: string | undefined;
+  let richStyle: ChartTextStyle | undefined;
   const tx = titleCursor.child(C_NS, "tx");
   if (tx !== undefined) {
     const rich = tx.child(C_NS, "rich");
     if (rich !== undefined) {
-      titleText = extractRichTextString(rich);
+      const bodyPr = rich.child(A_NS, "bodyPr");
+      const anchor = bodyPr?.attr("anchor");
+      const verticalAlign =
+        anchor === "t"
+          ? ("top" as const)
+          : anchor === "ctr"
+            ? ("middle" as const)
+            : anchor === "b"
+              ? ("bottom" as const)
+              : undefined;
+      if (bodyPr !== undefined) consumeSubtree(bodyPr);
+
+      let align: ChartTextStyle["align"];
+      let lineHeight: ChartTextStyle["lineHeight"];
+      let spacingAfter: ChartTextStyle["spacingAfter"];
+      let defRun: ChartTextStyle = {};
+      let explicitRun: ChartTextStyle = {};
+      const parts: string[] = [];
+
+      for (const [paraIndex, para] of rich.children(A_NS, "p").entries()) {
+        if (paraIndex === 0) {
+          const pPr = para.child(A_NS, "pPr");
+          if (pPr !== undefined) {
+            const algn = pPr.attr("algn");
+            align =
+              algn === "l"
+                ? ("left" as const)
+                : algn === "ctr"
+                  ? ("center" as const)
+                  : algn === "r"
+                    ? ("right" as const)
+                    : algn === "just"
+                      ? ("justify" as const)
+                      : undefined;
+            const lnSpc = pPr.child(A_NS, "lnSpc");
+            if (lnSpc !== undefined) {
+              const spcPts = readIntVal(lnSpc.child(A_NS, "spcPts"));
+              if (spcPts !== undefined && spcPts > 0 && spcPts <= 158_400) {
+                lineHeight = `${spcPts / 100}pt`;
+              }
+              consumeSubtree(lnSpc);
+            }
+            const spcAft = pPr.child(A_NS, "spcAft");
+            if (spcAft !== undefined) {
+              const spcPts = readIntVal(spcAft.child(A_NS, "spcPts"));
+              if (spcPts !== undefined && spcPts >= 0 && spcPts <= 158_400) {
+                spacingAfter = spcPts / 75;
+              }
+              consumeSubtree(spcAft);
+            }
+            const defRPr = pPr.child(A_NS, "defRPr");
+            if (defRPr !== undefined) {
+              defRun = readChartRunProperties(defRPr);
+            }
+            consumeSubtree(pPr);
+          }
+        }
+
+        const runs: string[] = [];
+        for (const child of para.remainingElementChildren()) {
+          if (child.namespaceUri === A_NS && child.localName === "r") {
+            if (paraIndex === 0 && Object.keys(explicitRun).length === 0) {
+              const rPr = child.child(A_NS, "rPr");
+              if (rPr !== undefined) {
+                explicitRun = readChartRunProperties(rPr);
+              }
+            }
+            const t = child.child(A_NS, "t");
+            if (t !== undefined) runs.push(t.textContent);
+            consumeSubtree(child);
+          } else if (child.namespaceUri === A_NS && child.localName === "br") {
+            runs.push("\n");
+            consumeSubtree(child);
+          } else {
+            consumeSubtree(child);
+          }
+        }
+        consumeSubtree(para);
+        parts.push(runs.join(""));
+      }
+
+      titleText = parts.join("\n");
+      consumeSubtree(rich);
+      richStyle = {
+        ...defRun,
+        ...explicitRun,
+        ...(verticalAlign === undefined ? {} : { verticalAlign }),
+        ...(align === undefined ? {} : { align }),
+        ...(lineHeight === undefined ? {} : { lineHeight }),
+        ...(spacingAfter === undefined ? {} : { spacingAfter }),
+      };
     } else {
       const strRef = tx.child(C_NS, "strRef");
       if (strRef !== undefined) {
@@ -471,9 +840,20 @@ function readTitleText(titleCursor: XmlElementCursor): string | undefined {
     }
     consumeSubtree(tx);
   }
+  const txPr = titleCursor.child(C_NS, "txPr");
+  const txPrStyle =
+    txPr === undefined ? undefined : readChartTextProperties(txPr);
   consumeSubtree(titleCursor);
   if (titleText === undefined || titleText.trim() === "") return undefined;
-  return titleText;
+
+  const combinedStyle =
+    richStyle !== undefined || txPrStyle !== undefined
+      ? { ...txPrStyle, ...richStyle }
+      : undefined;
+  const styleDiff = diffChartTextStyle(combinedStyle, inheritedStyle);
+  return styleDiff === undefined
+    ? titleText
+    : { text: titleText, style: styleDiff };
 }
 
 type StringDataSourceResult = {
@@ -717,23 +1097,25 @@ function readMarkerElement(
 
 type ImportedDataLabelsResult = {
   readonly dataLabels?: false | ChartDataLabelSettings;
+  readonly dataLabelsStyle?: ChartTextStyle;
   readonly pointLabels: ReadonlyMap<number, false | ChartDataLabelSettings>;
+  readonly pointLabelColors: ReadonlyMap<number, ColorValue>;
   readonly showDataLabelsRange?: boolean;
 };
 
 function readDataLabelSettingsBody(
   cursor: XmlElementCursor,
   kind: ChartKind,
+  isPointLevel = false,
 ): {
   readonly settings: ChartDataLabelSettings;
+  readonly rawStyle?: ChartTextStyle;
   readonly showDataLabelsRange?: boolean;
 } {
   const numFmtCursor = cursor.child(C_NS, "numFmt");
   let numberFormat: string | undefined;
   if (numFmtCursor !== undefined) {
     const code = numFmtCursor.attr("formatCode");
-    const sourceLinked = readBoolVal(undefined);
-    void sourceLinked;
     const slRaw = numFmtCursor.attr("sourceLinked");
     if (
       code !== undefined &&
@@ -748,14 +1130,22 @@ function readDataLabelSettingsBody(
   const spPr = cursor.child(C_NS, "spPr");
   if (spPr !== undefined) consumeSubtree(spPr);
   const txPr = cursor.child(C_NS, "txPr");
-  if (txPr !== undefined) consumeSubtree(txPr);
+  const rawStyle =
+    txPr === undefined ? undefined : readChartTextProperties(txPr);
 
   const dLblPos = cursor.child(C_NS, "dLblPos");
   let position: ChartDataLabelPosition | undefined;
   if (dLblPos !== undefined) {
     const parsed = DLblPosSchema.safeParse(dLblPos.attrsObject(["val"]));
     if (parsed.success && kind !== "area" && kind !== "doughnut") {
-      position = dLblPosMap[parsed.data.val];
+      const mapped = chartDataLabelPositionFromNative[parsed.data.val];
+      if (
+        mapped !== undefined &&
+        (kind !== "scatter" ||
+          ["left", "right", "bottom", "top", "center"].includes(mapped))
+      ) {
+        position = mapped;
+      }
     }
   }
 
@@ -816,7 +1206,6 @@ function readDataLabelSettingsBody(
         }
       }
     }
-    // Consume any remaining benign c15 extensions if extLst is now empty of unconsumed
   }
 
   // Consume any remaining c15 elements directly inside dLbls if WPS emitted them directly
@@ -855,7 +1244,11 @@ function readDataLabelSettingsBody(
     seriesName === true;
 
   let leaderLines: boolean | ChartLine | undefined;
-  if ((kind === "pie" || kind === "doughnut") && hasVisibleContent) {
+  if (
+    !isPointLevel &&
+    (kind === "pie" || kind === "doughnut") &&
+    hasVisibleContent
+  ) {
     if (leaderLineStyle !== undefined) {
       leaderLines = leaderLineStyle;
     } else if (showLeaderLines !== undefined) {
@@ -877,6 +1270,7 @@ function readDataLabelSettingsBody(
 
   return {
     settings,
+    ...(rawStyle === undefined ? {} : { rawStyle }),
     ...(showDataLabelsRange === undefined ? {} : { showDataLabelsRange }),
   };
 }
@@ -885,8 +1279,10 @@ function readDataLabelsElement(
   dLblsCursor: XmlElementCursor,
   kind: ChartKind,
   isGroupLevel: boolean,
+  inheritedChartStyle: ChartTextStyle | undefined,
 ): ImportedDataLabelsResult {
   const pointLabels = new Map<number, false | ChartDataLabelSettings>();
+  const pointRawColors = new Map<number, ColorValue>();
   for (const dLbl of dLblsCursor.children(C_NS, "dLbl")) {
     const idx = readIntVal(dLbl.child(C_NS, "idx"));
     const del = readBoolVal(dLbl.child(C_NS, "delete"));
@@ -894,8 +1290,15 @@ function readDataLabelsElement(
       if (del === true) {
         pointLabels.set(idx, false);
       } else {
-        const { settings } = readDataLabelSettingsBody(dLbl, kind);
+        const { settings, rawStyle } = readDataLabelSettingsBody(
+          dLbl,
+          kind,
+          true,
+        );
         pointLabels.set(idx, settings);
+        if (rawStyle?.color !== undefined) {
+          pointRawColors.set(idx, rawStyle.color);
+        }
       }
     }
     consumeSubtree(dLbl);
@@ -907,16 +1310,29 @@ function readDataLabelsElement(
     return {
       dataLabels: false,
       pointLabels,
+      pointLabelColors: new Map(),
     };
   }
 
-  const { settings, showDataLabelsRange } = readDataLabelSettingsBody(
+  const { settings, rawStyle, showDataLabelsRange } = readDataLabelSettingsBody(
     dLblsCursor,
     kind,
+    false,
   );
+  const dataLabelsStyle = diffChartTextStyle(rawStyle, inheritedChartStyle);
+
+  // Resolve point labelColor relative to the series/group label color (or chart color).
+  const inheritedLabelColor =
+    rawStyle?.color ?? inheritedChartStyle?.color ?? "dk1";
+  const pointLabelColors = new Map<number, ColorValue>();
+  for (const [idx, color] of pointRawColors.entries()) {
+    if (!stableJsonEqual(color, inheritedLabelColor)) {
+      pointLabelColors.set(idx, color);
+    }
+  }
 
   // At group level, an all-false boilerplate <c:dLbls> (e.g. PowerPoint/WPS default)
-  // represents no authored group dataLabels unless a visible flag or explicit format/position is set.
+  // represents no authored group dataLabels unless a visible flag or explicit format/position/style is set.
   const hasAnyEnabledOrCustomized =
     settings.value === true ||
     settings.percent === true ||
@@ -926,10 +1342,11 @@ function readDataLabelsElement(
     settings.separator !== undefined ||
     settings.numberFormat !== undefined ||
     settings.position !== undefined ||
-    settings.leaderLines !== undefined;
+    settings.leaderLines !== undefined ||
+    dataLabelsStyle !== undefined;
 
   if (isGroupLevel && !hasAnyEnabledOrCustomized) {
-    return { pointLabels };
+    return { pointLabels, pointLabelColors };
   }
 
   const normalized: ChartDataLabelSettings = {
@@ -952,8 +1369,295 @@ function readDataLabelsElement(
 
   return {
     ...(Object.keys(normalized).length > 0 ? { dataLabels: normalized } : {}),
+    ...(dataLabelsStyle === undefined ? {} : { dataLabelsStyle }),
     pointLabels,
+    pointLabelColors,
     ...(showDataLabelsRange === undefined ? {} : { showDataLabelsRange }),
+  };
+}
+
+function diffPointDataLabels(
+  pointLabels: false | ChartDataLabelSettings,
+  seriesLabels: false | ChartDataLabelSettings | undefined,
+): false | ChartDataLabelSettings | undefined {
+  if (pointLabels === false) return false;
+  if (seriesLabels === undefined || seriesLabels === false) {
+    return Object.keys(pointLabels).length === 0 ? undefined : pointLabels;
+  }
+  const out: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(pointLabels)) {
+    if (value === undefined) continue;
+    const baseVal = (seriesLabels as Record<string, unknown>)[key];
+    if (!stableJsonEqual(value, baseVal)) {
+      out[key] = value;
+    }
+  }
+  return Object.keys(out).length === 0 ? undefined : out;
+}
+
+function readSeriesTrendlines(
+  serCursor: XmlElementCursor,
+  kind: ChartKind,
+  stacking: "stacked" | "percent" | undefined,
+  pointCount: number,
+  fitPoints: readonly { readonly x: number; readonly y: number }[],
+): readonly ChartTrendline[] | undefined {
+  const nodes = serCursor.children(C_NS, "trendline");
+  if (nodes.length === 0) return undefined;
+  const supported =
+    kind !== "pie" && kind !== "doughnut" && stacking === undefined;
+  const result: ChartTrendline[] = [];
+
+  for (const tl of nodes) {
+    const nameEl = tl.child(C_NS, "name");
+    if (nameEl !== undefined) consumeSubtree(nameEl);
+
+    const spPr = tl.child(C_NS, "spPr");
+    const line = spPr === undefined ? undefined : readLineFromSpPr(spPr).line;
+    if (spPr !== undefined) consumeSubtree(spPr);
+
+    const typeRaw = readValAttr(tl.child(C_NS, "trendlineType"));
+    const type =
+      typeRaw === undefined ? undefined : chartTrendlineTypeFromNative[typeRaw];
+
+    const order = readIntVal(tl.child(C_NS, "order"));
+    const period = readIntVal(tl.child(C_NS, "period"));
+    const rawForward = readFloatVal(tl.child(C_NS, "forward"));
+    const rawBackward = readFloatVal(tl.child(C_NS, "backward"));
+    const rawIntercept = readFloatVal(tl.child(C_NS, "intercept"));
+    const displayRSquared = readBoolVal(tl.child(C_NS, "dispRSqr"));
+    const displayEquation = readBoolVal(tl.child(C_NS, "dispEq"));
+    consumeSubtree(tl);
+
+    if (!supported || type === undefined) continue;
+
+    const validForecast = (value: number | undefined): number | undefined => {
+      if (value === undefined || !Number.isFinite(value) || value <= 0) {
+        return undefined;
+      }
+      if (
+        kind !== "scatter" &&
+        Math.abs(value * 2 - Math.round(value * 2)) > 1e-9
+      ) {
+        return undefined;
+      }
+      return value;
+    };
+    const forward = validForecast(rawForward);
+    const backward = validForecast(rawBackward);
+    const baseFields = {
+      ...(line === undefined ? {} : { line }),
+      ...(forward === undefined ? {} : { forward }),
+      ...(backward === undefined ? {} : { backward }),
+    };
+
+    if (type === "movingAverage") {
+      if (
+        period !== undefined &&
+        period >= 2 &&
+        period <= 255 &&
+        period < pointCount
+      ) {
+        result.push({ ...baseFields, type: "movingAverage", period });
+      }
+      continue;
+    }
+
+    const displayFields = {
+      ...baseFields,
+      ...(displayEquation === undefined ? {} : { displayEquation }),
+      ...(displayRSquared === undefined ? {} : { displayRSquared }),
+    };
+
+    if (type === "polynomial") {
+      if (order !== undefined && order >= 2 && order <= 6) {
+        result.push({
+          ...displayFields,
+          type: "polynomial",
+          order,
+          ...(rawIntercept === undefined ? {} : { intercept: rawIntercept }),
+        });
+      }
+      continue;
+    }
+
+    if (type === "logarithmic") {
+      if (!fitPoints.some(({ x }) => x <= 0)) {
+        result.push({ ...displayFields, type: "logarithmic" });
+      }
+      continue;
+    }
+
+    if (type === "exponential") {
+      if (!fitPoints.some(({ y }) => y <= 0)) {
+        result.push({
+          ...displayFields,
+          type: "exponential",
+          ...(rawIntercept === undefined ? {} : { intercept: rawIntercept }),
+        });
+      }
+      continue;
+    }
+
+    if (type === "power") {
+      if (!fitPoints.some(({ x, y }) => x <= 0 || y <= 0)) {
+        result.push({ ...displayFields, type: "power" });
+      }
+      continue;
+    }
+
+    // linear
+    result.push({
+      ...displayFields,
+      type: "linear",
+      ...(rawIntercept === undefined ? {} : { intercept: rawIntercept }),
+    });
+  }
+
+  return result.length === 0 ? undefined : result;
+}
+
+function alignErrorBarValues(
+  values: readonly (number | null)[],
+  pointCount: number,
+): readonly (number | null)[] {
+  return Array.from({ length: pointCount }, (_, idx) => {
+    const v = values[idx];
+    return v !== undefined && v !== null && Number.isFinite(v) && v >= 0
+      ? v
+      : null;
+  });
+}
+
+function readSingleErrorBars(
+  errCursor: XmlElementCursor,
+  pointCount: number,
+): { readonly direction: "x" | "y"; readonly bars?: ChartErrorBars } {
+  const errDirRaw = readValAttr(errCursor.child(C_NS, "errDir"));
+  const direction: "x" | "y" = errDirRaw === "x" ? "x" : "y";
+
+  const includeParsed = ErrBarTypeSchema.safeParse(
+    errCursor.child(C_NS, "errBarType")?.attrsObject(["val"]) ?? {},
+  );
+  const include: ChartErrorBarInclude = includeParsed.success
+    ? includeParsed.data.val
+    : "both";
+
+  const errValTypeRaw = readValAttr(errCursor.child(C_NS, "errValType"));
+  const barType =
+    errValTypeRaw === undefined
+      ? undefined
+      : chartErrorBarValueTypeFromNative[errValTypeRaw];
+
+  const noEndCap = readBoolVal(errCursor.child(C_NS, "noEndCap"));
+  const endCap = noEndCap === true ? false : undefined;
+
+  const plusCursor = errCursor.child(C_NS, "plus");
+  const rawPlus =
+    plusCursor === undefined ? undefined : readNumericDataSource(plusCursor);
+  if (plusCursor !== undefined) consumeSubtree(plusCursor);
+
+  const minusCursor = errCursor.child(C_NS, "minus");
+  const rawMinus =
+    minusCursor === undefined ? undefined : readNumericDataSource(minusCursor);
+  if (minusCursor !== undefined) consumeSubtree(minusCursor);
+
+  const val = readFloatVal(errCursor.child(C_NS, "val"));
+
+  const spPr = errCursor.child(C_NS, "spPr");
+  const line = spPr === undefined ? undefined : readLineFromSpPr(spPr).line;
+  if (spPr !== undefined) consumeSubtree(spPr);
+
+  consumeSubtree(errCursor);
+
+  if (barType === undefined) return { direction };
+
+  const styleFields = {
+    ...(endCap === undefined ? {} : { endCap }),
+    ...(line === undefined ? {} : { line }),
+  };
+
+  if (barType === "standardError") {
+    return {
+      direction,
+      bars: {
+        ...styleFields,
+        type: "standardError",
+        ...(include === "both" ? {} : { include }),
+      },
+    };
+  }
+
+  if (barType === "custom") {
+    const plus =
+      rawPlus === undefined
+        ? undefined
+        : alignErrorBarValues(rawPlus, pointCount);
+    const minus =
+      rawMinus === undefined
+        ? undefined
+        : alignErrorBarValues(rawMinus, pointCount);
+
+    let custom: ChartCustomErrorBars | undefined;
+    if (include === "plus" && plus !== undefined) {
+      custom = { ...styleFields, type: "custom", include: "plus", plus };
+    } else if (include === "minus" && minus !== undefined) {
+      custom = { ...styleFields, type: "custom", include: "minus", minus };
+    } else if (plus !== undefined && minus !== undefined) {
+      custom = { ...styleFields, type: "custom", include: "both", plus, minus };
+    }
+    return { direction, ...(custom === undefined ? {} : { bars: custom }) };
+  }
+
+  if (val === undefined || !Number.isFinite(val) || val < 0) {
+    return { direction };
+  }
+  return {
+    direction,
+    bars: {
+      ...styleFields,
+      type: barType,
+      value: val,
+      ...(include === "both" ? {} : { include }),
+    },
+  };
+}
+
+function readCategoryErrorBars(
+  serCursor: XmlElementCursor,
+  kind: Exclude<ChartKind, "scatter">,
+  pointCount: number,
+): ChartErrorBars | undefined {
+  const nodes = serCursor.children(C_NS, "errBars");
+  if (nodes.length === 0) return undefined;
+  let result: ChartErrorBars | undefined;
+  for (const node of nodes) {
+    const parsed = readSingleErrorBars(node, pointCount);
+    if (kind !== "pie" && kind !== "doughnut" && result === undefined) {
+      result = parsed.bars;
+    }
+  }
+  return result;
+}
+
+function readScatterErrorBars(
+  serCursor: XmlElementCursor,
+  pointCount: number,
+): ScatterErrorBars | undefined {
+  const nodes = serCursor.children(C_NS, "errBars");
+  if (nodes.length === 0) return undefined;
+  let x: ChartErrorBars | undefined;
+  let y: ChartErrorBars | undefined;
+  for (const node of nodes) {
+    const parsed = readSingleErrorBars(node, pointCount);
+    if (parsed.bars === undefined) continue;
+    if (parsed.direction === "x" && x === undefined) x = parsed.bars;
+    else if (parsed.direction === "y" && y === undefined) y = parsed.bars;
+  }
+  if (x === undefined && y === undefined) return undefined;
+  return {
+    ...(x === undefined ? {} : { x }),
+    ...(y === undefined ? {} : { y }),
   };
 }
 
@@ -969,7 +1673,10 @@ type ImportedCategorySeriesDraft = {
   readonly marker?: boolean | ChartMarker;
   readonly smooth?: boolean;
   readonly dataLabels?: false | ChartDataLabelSettings;
+  readonly dataLabelsStyle?: ChartTextStyle;
   readonly points?: Readonly<Record<number, ChartPoint>>;
+  readonly trendlines?: readonly ChartTrendline[];
+  readonly errorBars?: ChartErrorBars;
   readonly datalabelsRange?: readonly string[];
 };
 
@@ -977,6 +1684,8 @@ function readCategorySeries(
   serCursor: XmlElementCursor,
   kind: Exclude<ChartKind, "scatter">,
   fallbackIndex: number,
+  stacking: "stacked" | "percent" | undefined,
+  inheritedChartStyle: ChartTextStyle | undefined,
 ): ImportedCategorySeriesDraft {
   const idx = readIntVal(serCursor.child(C_NS, "idx")) ?? fallbackIndex;
   const order = readIntVal(serCursor.child(C_NS, "order")) ?? idx;
@@ -1053,13 +1762,22 @@ function readCategorySeries(
   const dLblsResult =
     dLblsCursor === undefined
       ? undefined
-      : readDataLabelsElement(dLblsCursor, kind, false);
+      : readDataLabelsElement(dLblsCursor, kind, false, inheritedChartStyle);
   if (dLblsResult !== undefined) {
-    for (const [ptIdx, ptLabel] of dLblsResult.pointLabels.entries()) {
+    for (const [ptIdx, labelColor] of dLblsResult.pointLabelColors.entries()) {
       const existing = pointsRecord[ptIdx] ?? {};
       pointsRecord[ptIdx] = {
         ...existing,
-        dataLabels: ptLabel,
+        labelColor,
+      };
+    }
+    for (const [ptIdx, ptLabel] of dLblsResult.pointLabels.entries()) {
+      const diffed = diffPointDataLabels(ptLabel, dLblsResult.dataLabels);
+      if (diffed === undefined) continue;
+      const existing = pointsRecord[ptIdx] ?? {};
+      pointsRecord[ptIdx] = {
+        ...existing,
+        dataLabels: diffed,
       };
     }
   }
@@ -1075,6 +1793,18 @@ function readCategorySeries(
   const smoothCursor = serCursor.child(C_NS, "smooth");
   const smoothVal = readBoolVal(smoothCursor);
   const smooth = kind === "line" ? smoothVal : undefined;
+
+  const fitPoints = valData.flatMap((y, valueIndex) =>
+    y === null || !Number.isFinite(y) ? [] : [{ x: valueIndex + 1, y }],
+  );
+  const trendlines = readSeriesTrendlines(
+    serCursor,
+    kind,
+    stacking,
+    valData.length,
+    fitPoints,
+  );
+  const errorBars = readCategoryErrorBars(serCursor, kind, valData.length);
 
   let datalabelsRange: readonly string[] | undefined;
   const extLst = serCursor.child(C_NS, "extLst");
@@ -1124,9 +1854,14 @@ function readCategorySeries(
     ...(dLblsResult?.dataLabels === undefined
       ? {}
       : { dataLabels: dLblsResult.dataLabels }),
+    ...(dLblsResult?.dataLabelsStyle === undefined
+      ? {}
+      : { dataLabelsStyle: dLblsResult.dataLabelsStyle }),
     ...(Object.keys(normalizedPoints).length === 0
       ? {}
       : { points: normalizedPoints }),
+    ...(trendlines === undefined ? {} : { trendlines }),
+    ...(errorBars === undefined ? {} : { errorBars }),
     ...(datalabelsRange === undefined ? {} : { datalabelsRange }),
   };
 }
@@ -1136,7 +1871,12 @@ function readScatterSeries(
   groupLine: ScatterLine | undefined,
   groupMarkers: boolean,
   fallbackIndex: number,
-): { readonly order: number; readonly series: ScatterChartSeries } {
+  inheritedChartStyle: ChartTextStyle | undefined,
+): {
+  readonly order: number;
+  readonly series: ScatterChartSeries;
+  readonly dataLabelsStyle?: ChartTextStyle;
+} {
   const idx = readIntVal(serCursor.child(C_NS, "idx")) ?? fallbackIndex;
   const order = readIntVal(serCursor.child(C_NS, "order")) ?? idx;
   const name =
@@ -1189,13 +1929,27 @@ function readScatterSeries(
   const dLblsResult =
     dLblsCursor === undefined
       ? undefined
-      : readDataLabelsElement(dLblsCursor, "scatter", false);
+      : readDataLabelsElement(
+          dLblsCursor,
+          "scatter",
+          false,
+          inheritedChartStyle,
+        );
   if (dLblsResult !== undefined) {
-    for (const [ptIdx, ptLabel] of dLblsResult.pointLabels.entries()) {
+    for (const [ptIdx, labelColor] of dLblsResult.pointLabelColors.entries()) {
       const existing = pointsRecord[ptIdx] ?? {};
       pointsRecord[ptIdx] = {
         ...existing,
-        dataLabels: ptLabel as false | ScatterDataLabels,
+        labelColor,
+      };
+    }
+    for (const [ptIdx, ptLabel] of dLblsResult.pointLabels.entries()) {
+      const diffed = diffPointDataLabels(ptLabel, dLblsResult.dataLabels);
+      if (diffed === undefined) continue;
+      const existing = pointsRecord[ptIdx] ?? {};
+      pointsRecord[ptIdx] = {
+        ...existing,
+        dataLabels: diffed as false | ScatterDataLabels,
       };
     }
   }
@@ -1213,6 +1967,25 @@ function readScatterSeries(
       y = [...y, ...Array.from<null>({ length: maxLen - y.length }).fill(null)];
     }
   }
+
+  const fitPoints = x.flatMap((xv, pointIdx) => {
+    const yv = y[pointIdx];
+    return xv === null ||
+      yv === undefined ||
+      yv === null ||
+      !Number.isFinite(xv) ||
+      !Number.isFinite(yv)
+      ? []
+      : [{ x: xv, y: yv }];
+  });
+  const trendlines = readSeriesTrendlines(
+    serCursor,
+    "scatter",
+    undefined,
+    x.length,
+    fitPoints,
+  );
+  const errorBars = readScatterErrorBars(serCursor, x.length);
 
   const smoothCursor = serCursor.child(C_NS, "smooth");
   if (smoothCursor !== undefined) consumeSubtree(smoothCursor);
@@ -1236,6 +2009,9 @@ function readScatterSeries(
 
   return {
     order,
+    ...(dLblsResult?.dataLabelsStyle === undefined
+      ? {}
+      : { dataLabelsStyle: dLblsResult.dataLabelsStyle }),
     series: {
       name: name.trim() === "" ? `Series ${fallbackIndex + 1}` : name,
       x,
@@ -1251,6 +2027,8 @@ function readScatterSeries(
       ...(Object.keys(normalizedPoints).length === 0
         ? {}
         : { points: normalizedPoints }),
+      ...(trendlines === undefined ? {} : { trendlines }),
+      ...(errorBars === undefined ? {} : { errorBars }),
     },
   };
 }
@@ -1265,7 +2043,8 @@ type ImportedAxisRecord = {
   readonly gridlines?: boolean | ChartLine;
   readonly minorGridlines?: boolean | ChartLine;
   readonly line?: boolean | ChartLine;
-  readonly title?: string;
+  readonly style?: ChartTextStyle;
+  readonly title?: ChartTitle;
   readonly majorTickMark?: ChartTickMark;
   readonly minorTickMark?: ChartTickMark;
   readonly tickLabelPosition?: ChartTickLabelPosition;
@@ -1280,9 +2059,21 @@ type ImportedAxisRecord = {
     | { readonly kind: "crossesAt"; readonly value: number };
 };
 
+function readAxisGridline(
+  el: XmlElementCursor | undefined,
+): boolean | ChartLine | undefined {
+  if (el === undefined) return undefined;
+  const spPr = el.child(C_NS, "spPr");
+  const result =
+    spPr === undefined ? true : (readLineFromSpPr(spPr).line ?? true);
+  consumeSubtree(el);
+  return result;
+}
+
 function readAxisElement(
   axisCursor: XmlElementCursor,
   kind: "category" | "value",
+  inheritedChartStyle: ChartTextStyle | undefined,
 ): ImportedAxisRecord | undefined {
   const id = readIntVal(axisCursor.child(C_NS, "axId"));
   if (id === undefined) return undefined;
@@ -1309,28 +2100,32 @@ function readAxisElement(
   let position: ChartAxisPosition | undefined;
   const axPos = axisCursor.child(C_NS, "axPos");
   if (axPos !== undefined) {
-    const parsedPos = AxPosSchema.safeParse(axPos.attrsObject(["val"]));
-    if (parsedPos.success) {
-      position = axPosMap[parsedPos.data.val];
+    const val = axPos.attrsObject(["val"])["val"];
+    if (val !== undefined) {
+      position = chartAxisPositionFromNative[val];
     }
   }
 
-  const readGridline = (
-    el: XmlElementCursor | undefined,
-  ): boolean | ChartLine | undefined => {
-    if (el === undefined) return undefined;
-    const spPr = el.child(C_NS, "spPr");
-    if (spPr === undefined) return true;
-    const lineRes = readLineFromSpPr(spPr);
-    consumeSubtree(spPr);
-    return lineRes.line ?? true;
-  };
-  const gridlines = readGridline(axisCursor.child(C_NS, "majorGridlines"));
-  const minorGridlines = readGridline(axisCursor.child(C_NS, "minorGridlines"));
+  const gridlines = readAxisGridline(axisCursor.child(C_NS, "majorGridlines"));
+  const minorGridlines = readAxisGridline(
+    axisCursor.child(C_NS, "minorGridlines"),
+  );
+
+  const txPr = axisCursor.child(C_NS, "txPr");
+  const rawAxisStyle =
+    txPr === undefined ? undefined : readChartTextProperties(txPr);
+  const style = diffChartTextStyle(rawAxisStyle, inheritedChartStyle);
 
   const titleCursor = axisCursor.child(C_NS, "title");
   const title =
-    titleCursor === undefined ? undefined : readTitleText(titleCursor);
+    titleCursor === undefined
+      ? undefined
+      : readChartTitle(
+          titleCursor,
+          rawAxisStyle === undefined && inheritedChartStyle === undefined
+            ? undefined
+            : { ...inheritedChartStyle, ...rawAxisStyle },
+        );
 
   const numFmtCursor = axisCursor.child(C_NS, "numFmt");
   let numberFormat: string | undefined;
@@ -1377,9 +2172,6 @@ function readAxisElement(
     else if (lineRes.line !== undefined) line = lineRes.line;
     consumeSubtree(spPr);
   }
-
-  const txPr = axisCursor.child(C_NS, "txPr");
-  if (txPr !== undefined) consumeSubtree(txPr);
 
   const crossAxisId = readIntVal(axisCursor.child(C_NS, "crossAx"));
 
@@ -1430,6 +2222,7 @@ function readAxisElement(
     ...(gridlines === undefined ? {} : { gridlines }),
     ...(minorGridlines === undefined ? {} : { minorGridlines }),
     ...(line === undefined ? {} : { line }),
+    ...(style === undefined ? {} : { style }),
     ...(title === undefined ? {} : { title }),
     ...(majorTickMark === undefined ? {} : { majorTickMark }),
     ...(minorTickMark === undefined ? {} : { minorTickMark }),
@@ -1452,6 +2245,7 @@ type ImportedGroupDraft =
       readonly axisIds: readonly number[];
       readonly series: readonly ImportedCategorySeriesDraft[];
       readonly dataLabels?: false | ChartDataLabelSettings;
+      readonly seriesDataLabelsStyle?: ChartTextStyle;
       readonly stacking?: "stacked" | "percent";
       readonly gapWidth?: number;
       readonly overlap?: number;
@@ -1464,12 +2258,14 @@ type ImportedGroupDraft =
       readonly axisIds: readonly number[];
       readonly series: readonly ScatterChartSeries[];
       readonly dataLabels?: false | ScatterDataLabels;
+      readonly seriesDataLabelsStyle?: ChartTextStyle;
       readonly line?: ScatterLine;
       readonly markers: boolean;
     };
 
 function readChartGroupElement(
   groupCursor: XmlElementCursor,
+  inheritedChartStyle: ChartTextStyle | undefined,
 ): ImportedGroupDraft | undefined {
   const local = groupCursor.localName;
   const varyColors = groupCursor.child(C_NS, "varyColors");
@@ -1500,17 +2296,28 @@ function readChartGroupElement(
       markers = true;
     }
 
-    const rawSeries = groupCursor
+    const rawEntries = groupCursor
       .children(C_NS, "ser")
-      .map((ser, idx) => readScatterSeries(ser, line, markers, idx))
-      .toSorted((a, b) => a.order - b.order)
-      .map((entry) => entry.series);
+      .map((ser, idx) =>
+        readScatterSeries(ser, line, markers, idx, inheritedChartStyle),
+      )
+      .toSorted((a, b) => a.order - b.order);
+    const rawSeries = rawEntries.map((entry) => entry.series);
+    const seriesDataLabelsStyle = rawEntries.find(
+      (entry) => entry.dataLabelsStyle !== undefined,
+    )?.dataLabelsStyle;
 
     const dLblsCursor = groupCursor.child(C_NS, "dLbls");
-    const groupLabels =
+    const groupLabelsResult =
       dLblsCursor === undefined
         ? undefined
-        : readDataLabelsElement(dLblsCursor, "scatter", true).dataLabels;
+        : readDataLabelsElement(
+            dLblsCursor,
+            "scatter",
+            true,
+            inheritedChartStyle,
+          );
+    const groupLabels = groupLabelsResult?.dataLabels;
 
     const axisIds = groupCursor
       .children(C_NS, "axId")
@@ -1526,6 +2333,7 @@ function readChartGroupElement(
       ...(groupLabels === undefined
         ? {}
         : { dataLabels: groupLabels as false | ScatterDataLabels }),
+      ...(seriesDataLabelsStyle === undefined ? {} : { seriesDataLabelsStyle }),
     };
   }
 
@@ -1568,14 +2376,20 @@ function readChartGroupElement(
 
   const rawSeries = groupCursor
     .children(C_NS, "ser")
-    .map((ser, idx) => readCategorySeries(ser, kind, idx))
+    .map((ser, idx) =>
+      readCategorySeries(ser, kind, idx, stacking, inheritedChartStyle),
+    )
     .toSorted((a, b) => a.order - b.order);
+  const seriesDataLabelsStyle = rawSeries.find(
+    (entry) => entry.dataLabelsStyle !== undefined,
+  )?.dataLabelsStyle;
 
   const dLblsCursor = groupCursor.child(C_NS, "dLbls");
-  const groupLabels =
+  const groupLabelsResult =
     dLblsCursor === undefined
       ? undefined
-      : readDataLabelsElement(dLblsCursor, kind, true).dataLabels;
+      : readDataLabelsElement(dLblsCursor, kind, true, inheritedChartStyle);
+  const groupLabels = groupLabelsResult?.dataLabels;
 
   let gapWidth: number | undefined;
   let overlap: number | undefined;
@@ -1614,6 +2428,7 @@ function readChartGroupElement(
     axisIds,
     series: rawSeries,
     ...(groupLabels === undefined ? {} : { dataLabels: groupLabels }),
+    ...(seriesDataLabelsStyle === undefined ? {} : { seriesDataLabelsStyle }),
     ...(stacking === undefined ? {} : { stacking }),
     ...(gapWidth === undefined ? {} : { gapWidth }),
     ...(overlap === undefined ? {} : { overlap }),
@@ -1641,29 +2456,187 @@ function sameStringArray(a: readonly string[], b: readonly string[]): boolean {
   return a.length === b.length && a.every((item, idx) => item === b[idx]);
 }
 
+type RawAxisCrossing =
+  | { readonly kind: "crosses"; readonly value: ChartAxisCrossing }
+  | { readonly kind: "crossesAt"; readonly value: number };
+
+function sameRawCrossing(
+  left: RawAxisCrossing,
+  right: RawAxisCrossing,
+): boolean {
+  return left.kind === right.kind && left.value === right.value;
+}
+
+function positionForImportedRawCrossing(
+  crossing: RawAxisCrossing,
+  partner: ImportedAxisRecord,
+  direction: "horizontal" | "vertical",
+): ChartAxisPosition | undefined {
+  if (crossing.kind !== "crosses" || crossing.value === "autoZero") {
+    return undefined;
+  }
+  const maxAtFarEnd = partner.reversed !== true;
+  if (direction === "vertical") {
+    return (crossing.value === "max") === maxAtFarEnd ? "right" : "left";
+  }
+  return (crossing.value === "max") === maxAtFarEnd ? "top" : "bottom";
+}
+
+function importedCrossesKnownValueInterior(
+  crossing: RawAxisCrossing,
+  partner: ImportedAxisRecord,
+): boolean {
+  if (partner.kind !== "value") return false;
+  if (partner.min === undefined || partner.max === undefined) return false;
+  const low = Math.min(partner.min, partner.max);
+  const high = Math.max(partner.min, partner.max);
+  if (crossing.kind === "crossesAt") {
+    return crossing.value > low && crossing.value < high;
+  }
+  return (
+    crossing.kind === "crosses" &&
+    crossing.value === "autoZero" &&
+    low < 0 &&
+    high > 0
+  );
+}
+
+function importedKnownValueEndpoint(
+  crossing: RawAxisCrossing,
+  partner: ImportedAxisRecord,
+): "min" | "max" | undefined {
+  if (partner.kind !== "value") return undefined;
+  if (
+    partner.min === undefined ||
+    partner.max === undefined ||
+    partner.min === partner.max
+  ) {
+    return undefined;
+  }
+  if (crossing.kind === "crossesAt") {
+    if (crossing.value === partner.min) return "min";
+    if (crossing.value === partner.max) return "max";
+    return undefined;
+  }
+  if (crossing.kind !== "crosses" || crossing.value !== "autoZero") {
+    return undefined;
+  }
+  if (partner.min === 0) return "min";
+  if (partner.max === 0) return "max";
+  return undefined;
+}
+
+function withLiftedDataLabelsStyle(
+  groupLabels: false | ChartDataLabelSettings | undefined,
+  seriesStyle: ChartTextStyle | undefined,
+): false | ChartDataLabelSettings | undefined {
+  if (seriesStyle === undefined) return groupLabels;
+  if (groupLabels === false || groupLabels === undefined) {
+    return { style: seriesStyle };
+  }
+  return groupLabels.style === undefined
+    ? { ...groupLabels, style: seriesStyle }
+    : groupLabels;
+}
+
 function buildChartAxesAndGroups(
   groupDrafts: readonly ImportedGroupDraft[],
   importedAxes: readonly ImportedAxisRecord[],
 ): { readonly axes?: ChartAxes; readonly groups: readonly ChartGroup[] } {
   const axisById = new Map(importedAxes.map((ax) => [ax.id, ax]));
+  const axisDirectionById = new Map<number, "horizontal" | "vertical">();
+  for (const group of groupDrafts) {
+    if (group.kind === "pie" || group.kind === "doughnut") continue;
+    const [firstId, secondId] = group.axisIds;
+    if (group.kind === "bar") {
+      if (firstId !== undefined) axisDirectionById.set(firstId, "vertical");
+      if (secondId !== undefined) axisDirectionById.set(secondId, "horizontal");
+    } else {
+      if (firstId !== undefined) axisDirectionById.set(firstId, "horizontal");
+      if (secondId !== undefined) axisDirectionById.set(secondId, "vertical");
+    }
+  }
 
   // Map native crosses/crossesAt back to author-facing crossing partners.
   // An OOXML crossing on axis A positions A in crossAx partner B's domain.
-  const partnerCrossingFor = new Map<
-    number,
-    | { readonly kind: "crosses"; readonly value: ChartAxisCrossing }
-    | { readonly kind: "crossesAt"; readonly value: number }
-  >();
+  const incomingByTarget = new Map<number, ImportedAxisRecord[]>();
   for (const ax of importedAxes) {
-    if (ax.rawCrossing === undefined || ax.crossAxisId === undefined) continue;
-    if (ax.rawCrossing.kind === "crossesAt") {
-      partnerCrossingFor.set(ax.crossAxisId, ax.rawCrossing);
-    } else if (
-      ax.rawCrossing.kind === "crosses" &&
-      ax.rawCrossing.value !== "autoZero" &&
-      ax.position === undefined
+    if (ax.crossAxisId === undefined) continue;
+    const list = incomingByTarget.get(ax.crossAxisId) ?? [];
+    list.push(ax);
+    incomingByTarget.set(ax.crossAxisId, list);
+  }
+
+  const partnerCrossingFor = new Map<number, RawAxisCrossing>();
+  const omitPositionIds = new Set<number>();
+  for (const [targetId, incoming] of incomingByTarget.entries()) {
+    const targetAxis = axisById.get(targetId);
+    if (targetAxis === undefined || incoming.length === 0) continue;
+    const firstCrossing = incoming[0]?.rawCrossing;
+    if (firstCrossing === undefined) continue;
+    if (
+      !incoming.every(
+        (ax) =>
+          ax.rawCrossing !== undefined &&
+          sameRawCrossing(ax.rawCrossing, firstCrossing),
+      )
     ) {
-      partnerCrossingFor.set(ax.crossAxisId, ax.rawCrossing);
+      continue;
+    }
+
+    if (firstCrossing.kind === "crossesAt") {
+      if (
+        targetAxis.kind === "category" &&
+        (!Number.isSafeInteger(firstCrossing.value) || firstCrossing.value < 1)
+      ) {
+        continue;
+      }
+      partnerCrossingFor.set(targetId, firstCrossing);
+      for (const ax of incoming) {
+        if (ax.position === undefined) continue;
+        const axDir = axisDirectionById.get(ax.id);
+        const endpoint = importedKnownValueEndpoint(firstCrossing, targetAxis);
+        const endpointEdge =
+          endpoint !== undefined && axDir !== undefined
+            ? positionForImportedRawCrossing(
+                { kind: "crosses", value: endpoint },
+                targetAxis,
+                axDir,
+              )
+            : undefined;
+        if (
+          importedCrossesKnownValueInterior(firstCrossing, targetAxis) ||
+          (endpointEdge !== undefined && endpointEdge !== ax.position)
+        ) {
+          omitPositionIds.add(ax.id);
+        }
+      }
+      continue;
+    }
+
+    if (firstCrossing.value === "autoZero") {
+      if (importedCrossesKnownValueInterior(firstCrossing, targetAxis)) {
+        partnerCrossingFor.set(targetId, firstCrossing);
+        for (const ax of incoming) {
+          omitPositionIds.add(ax.id);
+        }
+      }
+      continue;
+    }
+
+    const agreesWithPositions = incoming.every((ax) => {
+      if (ax.position === undefined) return true;
+      const axDir = axisDirectionById.get(ax.id);
+      if (axDir === undefined) return true;
+      const edge = positionForImportedRawCrossing(
+        firstCrossing,
+        targetAxis,
+        axDir,
+      );
+      return edge === undefined || edge === ax.position;
+    });
+    if (agreesWithPositions) {
+      partnerCrossingFor.set(targetId, firstCrossing);
     }
   }
 
@@ -1702,6 +2675,8 @@ function buildChartAxesAndGroups(
     const name = axisNameById.get(ax.id);
     if (name === undefined) continue; // unreferenced axis
     const partnerCrossing = partnerCrossingFor.get(ax.id);
+    const keepPosition =
+      ax.position !== undefined && !omitPositionIds.has(ax.id);
     const common = {
       ...(ax.visible === undefined ? {} : { visible: ax.visible }),
       ...(ax.gridlines === undefined ? {} : { gridlines: ax.gridlines }),
@@ -1709,6 +2684,7 @@ function buildChartAxesAndGroups(
         ? {}
         : { minorGridlines: ax.minorGridlines }),
       ...(ax.line === undefined ? {} : { line: ax.line }),
+      ...(ax.style === undefined ? {} : { style: ax.style }),
       ...(ax.title === undefined ? {} : { title: ax.title }),
       ...(ax.majorTickMark === undefined
         ? {}
@@ -1720,7 +2696,7 @@ function buildChartAxesAndGroups(
         ? {}
         : { tickLabelPosition: ax.tickLabelPosition }),
       ...(ax.reversed === undefined ? {} : { reversed: ax.reversed }),
-      ...(ax.position === undefined ? {} : { position: ax.position }),
+      ...(keepPosition ? { position: ax.position } : {}),
       ...(partnerCrossing?.kind === "crosses"
         ? { crosses: partnerCrossing.value }
         : {}),
@@ -1768,6 +2744,11 @@ function buildChartAxesAndGroups(
   }
 
   const groups: ChartGroup[] = groupDrafts.map((group) => {
+    const liftedDataLabels = withLiftedDataLabelsStyle(
+      group.dataLabels,
+      group.seriesDataLabelsStyle,
+    );
+
     if (group.kind === "scatter") {
       const [xId, yId] = group.axisIds;
       const xName = xId === undefined ? undefined : axisNameById.get(xId);
@@ -1781,9 +2762,9 @@ function buildChartAxesAndGroups(
           : {}),
         ...(group.line === undefined ? {} : { line: group.line }),
         markers: group.markers,
-        ...(group.dataLabels === undefined
+        ...(liftedDataLabels === undefined
           ? {}
-          : { dataLabels: group.dataLabels }),
+          : { dataLabels: liftedDataLabels as false | ScatterDataLabels }),
       };
     }
 
@@ -1819,9 +2800,15 @@ function buildChartAxesAndGroups(
               ? {}
               : { dataLabels: item.dataLabels }),
             ...(item.points === undefined ? {} : { points: item.points }),
+            ...(item.trendlines === undefined
+              ? {}
+              : { trendlines: item.trendlines }),
+            ...(item.errorBars === undefined
+              ? {}
+              : { errorBars: item.errorBars }),
           };
         });
-        const indDoughnutLabels = narrowGroupDataLabels(group.dataLabels, []);
+        const indDoughnutLabels = narrowGroupDataLabels(liftedDataLabels, []);
         return {
           kind: "doughnut",
           data: { kind: "independent-categories" },
@@ -1879,11 +2866,15 @@ function buildChartAxesAndGroups(
         ...(item.marker === undefined ? {} : { marker: item.marker }),
         ...(item.smooth === undefined ? {} : { smooth: item.smooth }),
         ...(item.points === undefined ? {} : { points: item.points }),
+        ...(item.trendlines === undefined
+          ? {}
+          : { trendlines: item.trendlines }),
+        ...(item.errorBars === undefined ? {} : { errorBars: item.errorBars }),
       };
     });
 
     if (group.kind === "pie") {
-      const pieLabels = narrowGroupDataLabels(group.dataLabels, [
+      const pieLabels = narrowGroupDataLabels(liftedDataLabels, [
         "center",
         "insideEnd",
         "outsideEnd",
@@ -1901,7 +2892,7 @@ function buildChartAxesAndGroups(
     }
 
     if (group.kind === "doughnut") {
-      const doughnutLabels = narrowGroupDataLabels(group.dataLabels, []);
+      const doughnutLabels = narrowGroupDataLabels(liftedDataLabels, []);
       return {
         kind: "doughnut",
         data: { kind: "shared-categories", categories: domain },
@@ -1946,7 +2937,7 @@ function buildChartAxesAndGroups(
         ...(group.overlap === undefined ? {} : { overlap: group.overlap }),
       };
       if (group.stacking !== undefined) {
-        const stackedLabels = narrowGroupDataLabels(group.dataLabels, [
+        const stackedLabels = narrowGroupDataLabels(liftedDataLabels, [
           "center",
           "insideEnd",
           "insideBase",
@@ -1957,7 +2948,7 @@ function buildChartAxesAndGroups(
           ...(stackedLabels === undefined ? {} : { dataLabels: stackedLabels }),
         };
       }
-      const unstackedLabels = narrowGroupDataLabels(group.dataLabels, [
+      const unstackedLabels = narrowGroupDataLabels(liftedDataLabels, [
         "center",
         "insideEnd",
         "insideBase",
@@ -1972,7 +2963,7 @@ function buildChartAxesAndGroups(
     }
 
     if (group.kind === "line") {
-      const lineLabels = narrowGroupDataLabels(group.dataLabels, [
+      const lineLabels = narrowGroupDataLabels(liftedDataLabels, [
         "left",
         "right",
         "bottom",
@@ -1989,7 +2980,7 @@ function buildChartAxesAndGroups(
       };
     }
 
-    const areaLabels = narrowGroupDataLabels(group.dataLabels, []);
+    const areaLabels = narrowGroupDataLabels(liftedDataLabels, []);
     return {
       kind: "area",
       data: { kind: "shared-categories", categories: domain },
@@ -2286,7 +3277,11 @@ export function readChartGraphicFrame(
   for (const ac of chartSpace.children(MC_NS, "AlternateContent")) {
     consumeChartAlternateContent(ac);
   }
-  for (const tag of ["spPr", "txPr", "externalData"]) {
+  const chartTxPr = chartSpace.child(C_NS, "txPr");
+  const rawChartStyle =
+    chartTxPr === undefined ? undefined : readChartTextProperties(chartTxPr);
+  const chartStyle = normalizeRootChartStyle(rawChartStyle);
+  for (const tag of ["spPr", "externalData"]) {
     const el = chartSpace.child(C_NS, tag);
     if (el !== undefined) consumeSubtree(el);
   }
@@ -2309,7 +3304,8 @@ export function readChartGraphicFrame(
   }
 
   const titleEl = chartEl.child(C_NS, "title");
-  const title = titleEl === undefined ? undefined : readTitleText(titleEl);
+  const title =
+    titleEl === undefined ? undefined : readChartTitle(titleEl, rawChartStyle);
   const autoTitleDeleted = chartEl.child(C_NS, "autoTitleDeleted");
   if (autoTitleDeleted !== undefined) consumeSubtree(autoTitleDeleted);
   const pivotFmts = chartEl.child(C_NS, "pivotFmts");
@@ -2318,10 +3314,13 @@ export function readChartGraphicFrame(
   let legend: ChartProps["legend"];
   const legendEl = chartEl.child(C_NS, "legend");
   if (legendEl !== undefined) {
-    const posParsed = LegendPosSchema.safeParse(
-      legendEl.child(C_NS, "legendPos")?.attrsObject(["val"]) ?? {},
-    );
-    legend = posParsed.success ? legendPosMap[posParsed.data.val] : "right";
+    const posVal = legendEl.child(C_NS, "legendPos")?.attrsObject(["val"])[
+      "val"
+    ];
+    legend =
+      (posVal === undefined
+        ? undefined
+        : chartLegendPositionFromNative[posVal]) ?? "right";
     consumeSubtree(legendEl);
   }
 
@@ -2374,11 +3373,21 @@ export function readChartGraphicFrame(
   if (layoutEl !== undefined) {
     const manual = layoutEl.child(C_NS, "manualLayout");
     if (manual !== undefined) {
+      const target = readValAttr(manual.child(C_NS, "layoutTarget"));
+      const xMode = readValAttr(manual.child(C_NS, "xMode"));
+      const yMode = readValAttr(manual.child(C_NS, "yMode"));
+      const wMode = readValAttr(manual.child(C_NS, "wMode"));
+      const hMode = readValAttr(manual.child(C_NS, "hMode"));
       const xFrac = readFloatVal(manual.child(C_NS, "x"));
       const yFrac = readFloatVal(manual.child(C_NS, "y"));
       const wFrac = readFloatVal(manual.child(C_NS, "w"));
       const hFrac = readFloatVal(manual.child(C_NS, "h"));
       if (
+        (target === undefined || target === "inner") &&
+        (xMode === undefined || xMode === "edge") &&
+        (yMode === undefined || yMode === "edge") &&
+        (wMode === undefined || wMode === "factor") &&
+        (hMode === undefined || hMode === "factor") &&
         xFrac !== undefined &&
         yFrac !== undefined &&
         wFrac !== undefined &&
@@ -2394,6 +3403,7 @@ export function readChartGraphicFrame(
           plotArea = { left, top, width, height };
         }
       }
+      consumeSubtree(manual);
     }
     consumeSubtree(layoutEl);
   }
@@ -2406,16 +3416,16 @@ export function readChartGraphicFrame(
   for (const child of plotAreaEl.remainingElementChildren()) {
     if (child.namespaceUri !== C_NS) continue;
     if (child.localName === "catAx") {
-      const ax = readAxisElement(child, "category");
+      const ax = readAxisElement(child, "category", rawChartStyle);
       if (ax !== undefined) importedAxes.push(ax);
       continue;
     }
     if (child.localName === "valAx") {
-      const ax = readAxisElement(child, "value");
+      const ax = readAxisElement(child, "value", rawChartStyle);
       if (ax !== undefined) importedAxes.push(ax);
       continue;
     }
-    const group = readChartGroupElement(child);
+    const group = readChartGroupElement(child, rawChartStyle);
     if (group !== undefined) {
       groupDrafts.push(group);
       continue;
@@ -2505,6 +3515,7 @@ export function readChartGraphicFrame(
     ...(axes === undefined ? {} : { axes }),
     groups,
     ...(title === undefined ? {} : { title }),
+    ...(chartStyle === undefined ? {} : { style: chartStyle }),
     ...(displayBlanksAs === undefined ? {} : { displayBlanksAs }),
     ...(legend === undefined ? {} : { legend }),
     ...(plotArea === undefined ? {} : { plotArea }),

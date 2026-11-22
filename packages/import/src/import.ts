@@ -42,6 +42,7 @@ import {
   R_NS,
   emuToPx,
 } from "#/namespaces.ts";
+import { inspectNotesAndHandoutMasters } from "#/notes-masters.ts";
 import {
   openPptxPackage,
   resolvePartPath,
@@ -53,6 +54,7 @@ import {
   inspectUnsupportedGraphicFrame,
   peekShapeTreeObjectIdentity,
 } from "#/resources.ts";
+import { importPresentationSections } from "#/sections.ts";
 import { readColorMapOverride, readThemeOverridePart } from "#/themes.ts";
 import {
   ExtentEmuFragmentSchema,
@@ -589,6 +591,7 @@ export function createImporter(
     );
 
     const slideIdByPartPath = new Map<string, string>();
+    const slideNodeByPresentationSldId = new Map<number, CommonNode>();
     const deferredSlideLinks: DeferredSlideLink[] = [];
     const registerDeferredSlideLink = (link: DeferredSlideLink): void => {
       deferredSlideLinks.push(link);
@@ -603,7 +606,9 @@ export function createImporter(
         }
         const sldIdCursor = sldIds[index]!;
         const rawId = sldIdCursor.attr("id");
-        if (rawId !== undefined && !OoxmlIntSchema.safeParse(rawId).success) {
+        const parsedSlideNumId =
+          rawId === undefined ? undefined : OoxmlIntSchema.safeParse(rawId);
+        if (parsedSlideNumId !== undefined && !parsedSlideNumId.success) {
           diagnostics.push({
             code: "invalid-xml-value",
             category: "corrupt-input",
@@ -681,6 +686,12 @@ export function createImporter(
         );
         if (slideResult !== undefined) {
           slideIdByPartPath.set(targetPart, slideResult.slideId);
+          if (parsedSlideNumId?.success) {
+            slideNodeByPresentationSldId.set(
+              parsedSlideNumId.data,
+              slideResult.node,
+            );
+          }
           deckNode.append(slideResult.node);
           slideCount += 1;
         }
@@ -702,6 +713,15 @@ export function createImporter(
       }
       pending.apply(targetSlideId);
     }
+
+    inspectNotesAndHandoutMasters(presCursor, pkg, relById, diagnostics);
+    importPresentationSections(
+      presCursor,
+      deckNode,
+      slideNodeByPresentationSldId,
+      pkg.presentationPath,
+      diagnostics,
+    );
 
     for (const deckHandler of handlers.deck) {
       const outcome = deckHandler.read({

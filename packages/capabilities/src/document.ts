@@ -1,3 +1,11 @@
+import {
+  defineSlideLayout,
+  type SlideLayoutDataProps,
+  type SlideLayoutDefinition,
+  type SlideLayoutProps,
+  type SlideLayoutType,
+  type SlideMasterProps,
+} from "@pptxdk/core";
 import type {
   LayoutStyle,
   LinkTarget,
@@ -8,10 +16,15 @@ import type {
 import {
   CommonContainer,
   CommonNode,
+  DeckContainer,
+  RichTextContainer,
+  SlideLayoutContainer,
+  SlideMasterContainer,
   createDeckNode,
   createSectionNode,
+  createSlideLayoutNode,
+  createSlideMasterNode,
   createSlideNode,
-  RichTextContainer,
   type DeckProps,
   type RichTextItem,
   type SectionProps,
@@ -97,7 +110,12 @@ import {
 
 export type DeckAuthorProps = DeckProps;
 
-export type SlideAuthorProps = Omit<SlideProps, "transition"> & {
+export type SlideMasterAuthorProps = SlideMasterProps;
+export type SlideLayoutAuthorProps = SlideLayoutProps;
+export type SlideLayoutSource = SlideLayoutDefinition | SlideLayoutContainer;
+
+export type SlideAuthorProps = Omit<SlideProps, "transition" | "layout"> & {
+  readonly layout?: SlideLayoutSource | undefined;
   readonly transition?: Transition;
 };
 
@@ -117,7 +135,9 @@ export type RowAuthorProps = RowDeclarationProps;
 export type CellAuthorProps = CellDeclarationProps;
 export type NotesAuthorProps = NotesDeclarationProps;
 
-export type DeckNode = CommonContainer<"deck", DeckAuthorProps, TextStyle>;
+export type DeckNode = DeckContainer;
+export type SlideMasterNode = SlideMasterContainer;
+export type SlideLayoutNode = SlideLayoutContainer;
 export type SlideNode = CommonContainer<
   "slide",
   SlideAuthorProps,
@@ -214,6 +234,20 @@ function splitContent<Props extends object>(
 
 export function deck(props: DeckAuthorProps = {}): DeckNode {
   return createDeckNode(props);
+}
+
+/** Creates an editable native SlideMaster container owning SlideLayouts. */
+export function slideMaster(
+  props: SlideMasterAuthorProps = {},
+): SlideMasterNode {
+  return createSlideMasterNode(props);
+}
+
+/** Creates an editable native SlideLayout node from inline props or a `defineSlideLayout` spec. */
+export function slideLayout(
+  propsOrDefinition: SlideLayoutDataProps | SlideLayoutDefinition = {},
+): SlideLayoutNode {
+  return createSlideLayoutNode(propsOrDefinition);
 }
 
 export function slide(props: SlideAuthorProps): SlideNode {
@@ -369,7 +403,8 @@ export {
 export { observeMotion } from "./motion/motion-query.ts";
 export { blockArc, path, preset } from "./shared/geometry.ts";
 export { linearGradient, radialGradient } from "./shared/visual.ts";
-export { font, transitions };
+export { defineSlideLayout, font, transitions };
+export type { SlideLayoutDataProps, SlideLayoutDefinition, SlideLayoutType };
 export type {
   BreatheEffect,
   BreatheOptions,

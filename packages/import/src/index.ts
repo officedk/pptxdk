@@ -22,6 +22,7 @@ export type {
 } from "#/diagnostics.ts";
 export { createImporter, MalformedXmlPartError } from "#/import.ts";
 export type { ImportResult } from "#/import.ts";
+export { allocateScopedAuthorId, importMastersAndLayouts } from "#/masters.ts";
 export { defineCanvasMechanism, defineShowMechanism } from "#/mechanism.ts";
 export type {
   DeckImportContext,

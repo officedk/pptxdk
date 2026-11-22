@@ -74,7 +74,11 @@ describe("@pptxdk/import recovery, resources, and mc:AlternateContent", () => {
     smartArtBytes.fill(0);
 
     assert.equal(result.report.slideCount, 1);
-    assert.equal(result.document.children.length, 1);
+    const slides = result.document.children.filter(
+      (child): child is CommonNode =>
+        child instanceof CommonNode && child.type === "slide",
+    );
+    assert.equal(slides.length, 1);
 
     const parsedDiags = result.report.diagnostics.map((d) =>
       ImportDiagnosticSchema.parse(d),

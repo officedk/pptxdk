@@ -36,6 +36,12 @@ import {
   replaceDeclarationProps,
 } from "#/document-internals.ts";
 import { snapshotValue } from "#/input-values.ts";
+import {
+  isSlideLayoutDefinition,
+  type SlideLayoutDefinition,
+  type SlideLayoutProps,
+  type SlideMasterProps,
+} from "#/masters.ts";
 import type { TextStyle } from "#/theme.ts";
 export {
   colorValueSchema,
@@ -584,11 +590,82 @@ export class AuthorQuery<Node extends CommonNode = CommonNode> {
   }
 }
 
+/** Editable SlideLayout node owned by a SlideMaster. */
+export class SlideLayoutContainer<
+  Props extends object = SlideLayoutProps,
+> extends CommonContainer<"slide-layout", Props, TextStyle> {}
+
+/** Editable SlideMaster node owning its SlideLayouts in declaration order. */
+export class SlideMasterContainer<
+  Props extends object = SlideMasterProps,
+> extends CommonContainer<"slide-master", Props, TextStyle> {
+  /** Direct SlideLayout children owned by this master in `<p:sldLayoutIdLst>` order. */
+  get layouts(): readonly SlideLayoutContainer[] {
+    return Object.freeze(
+      this.children.filter(
+        (child): child is SlideLayoutContainer =>
+          child instanceof CommonNode && child.kind === "slide-layout",
+      ),
+    );
+  }
+}
+
+/** Editable Deck root node exposing its explicit SlideMasters. */
+export class DeckContainer<
+  Props extends object = DeckProps,
+> extends CommonContainer<"deck", Props, TextStyle> {
+  /** Direct SlideMaster children owned by this deck in `<p:sldMasterIdLst>` order. */
+  get masters(): readonly SlideMasterContainer[] {
+    return Object.freeze(
+      this.children.filter(
+        (child): child is SlideMasterContainer =>
+          child instanceof CommonNode && child.kind === "slide-master",
+      ),
+    );
+  }
+}
+
 /** Creates the editable Deck node used by both React host expansion and command authoring. */
 export function createDeckNode<Props extends object = DeckProps>(
   props: Props,
-): CommonContainer<"deck", Props, TextStyle> {
-  return new CommonContainer("deck", "deck", props);
+): DeckContainer<Props> {
+  return new DeckContainer("deck", "deck", props);
+}
+
+/** Creates an editable SlideMaster node used by both React host expansion and command authoring. */
+export function createSlideMasterNode<Props extends object = SlideMasterProps>(
+  props: Props = {} as Props,
+): SlideMasterContainer<Props> {
+  return new SlideMasterContainer("slide-master", "slide-master", props);
+}
+
+/** Creates an editable SlideLayout node from inline props or a shared `defineSlideLayout` definition. */
+export function createSlideLayoutNode<Props extends object = SlideLayoutProps>(
+  propsOrDefinition: Props | SlideLayoutDefinition = {} as Props,
+): SlideLayoutContainer<Props> {
+  if (isSlideLayoutDefinition(propsOrDefinition)) {
+    const merged = {
+      ...propsOrDefinition.props,
+      layout: propsOrDefinition,
+    } as unknown as Props;
+    return new SlideLayoutContainer("slide-layout", "slide-layout", merged);
+  }
+  if (
+    isRecord(propsOrDefinition) &&
+    isSlideLayoutDefinition(propsOrDefinition["layout"])
+  ) {
+    const def = propsOrDefinition["layout"];
+    const merged = {
+      ...def.props,
+      ...propsOrDefinition,
+    } as unknown as Props;
+    return new SlideLayoutContainer("slide-layout", "slide-layout", merged);
+  }
+  return new SlideLayoutContainer(
+    "slide-layout",
+    "slide-layout",
+    propsOrDefinition,
+  );
 }
 
 /** Creates the editable Slide node used by both React host expansion and command authoring. */

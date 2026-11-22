@@ -172,6 +172,8 @@ export type {
   SlideCapabilitySlot,
   SlideEmitContext,
   SlideEmitOutput,
+  SlideLayoutProps,
+  SlideMasterProps,
   SlideObservation,
   SlidePaintContext,
   SlidePaintOutput,

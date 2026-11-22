@@ -1,16 +1,67 @@
-import type {
-  ColorValue,
-  LayoutStyle,
-  LinkTarget,
-  PaddingStyle,
+import {
+  colorValueSchema,
+  isMorphKey,
+  linkTargetSchema,
+  textStyleSchema,
+  type ColorValue,
+  type LayoutStyle,
+  type LinkTarget,
+  type MorphKey,
+  type PaddingStyle,
 } from "@pptxdk/core/capability";
 import { RichTextContainer } from "@pptxdk/core/document";
+import { pxToEmu } from "@pptxdk/emit";
+import { z } from "zod";
 
 import type { MotionProps } from "../motion/motion-api.ts";
-import type { Geometry } from "../shared/geometry.ts";
+import { geometrySchema, type Geometry } from "../shared/geometry.ts";
 import type { MorphProps } from "../shared/morph-api.ts";
 import type { TextStyle } from "../shared/text-service.ts";
 import type { ShapeVisualStyle } from "../shared/visual.ts";
+
+export const shapeCoordinateSchema = z
+  .number()
+  .finite()
+  .min(-1_000_000)
+  .max(1_000_000);
+
+export const shapeSizeSchema = z
+  .number()
+  .finite()
+  .positive()
+  .refine((value) => {
+    const extentEmu = pxToEmu(value);
+    return extentEmu >= 1 && extentEmu <= 2_147_483_647;
+  });
+
+const shapeDeclarationPropsObjectSchema = z.strictObject({
+  id: z.string().optional(),
+  name: z.string().optional(),
+  morphKey: z.custom<MorphKey>(isMorphKey).optional(),
+  link: linkTargetSchema.optional(),
+  geometry: geometrySchema.optional(),
+  flipH: z.boolean().optional(),
+  flipV: z.boolean().optional(),
+  x: shapeCoordinateSchema.optional(),
+  y: shapeCoordinateSchema.optional(),
+  width: shapeSizeSchema.optional(),
+  height: shapeSizeSchema.optional(),
+  style: z.record(z.string(), z.unknown()).readonly().optional(),
+  fill: colorValueSchema.optional(),
+  text: z.string().optional(),
+  textStyle: textStyleSchema.optional(),
+  enter: z.unknown().optional(),
+  emphasis: z.unknown().optional(),
+  motion: z.unknown().optional(),
+});
+
+export const shapeDeclarationPropsKeys = [
+  ...Object.keys(shapeDeclarationPropsObjectSchema.shape),
+  "children",
+] as const;
+
+export const shapeDeclarationPropsSchema =
+  shapeDeclarationPropsObjectSchema.readonly();
 
 export type ShapeDeclarationProps = MotionProps &
   MorphProps & {

@@ -1,5 +1,15 @@
 import { CapabilityError, type GeometryBox } from "@pptxdk/core/capability";
 import { pxToEmu } from "@pptxdk/emit";
+import {
+  A_NS,
+  OoxmlBoolSchema,
+  OoxmlIntSchema,
+  OoxmlPositiveIntSchema,
+  type ImportDiagnostic,
+  type ImportLocation,
+  type XmlElementCursor,
+} from "@pptxdk/import";
+import { z } from "zod";
 
 import {
   presetDefinitions,
@@ -12,49 +22,101 @@ import {
 export { presetGeometryTuple };
 export type { PresetGeometryName, PresetPathFillMode };
 
-export type PresetGeometry = {
-  readonly type: "preset";
-  readonly name: PresetGeometryName;
-  /** Raw DrawingML adjust values indexed by guide name (adj, adj1, adj2, etc.). */
-  readonly adjust?: Readonly<Record<string, number>>;
-};
+export const presetGeometryNameSchema = z.enum(presetGeometryTuple);
 
-export type PathCommand =
-  | { readonly op: "M"; readonly x: number; readonly y: number }
-  | { readonly op: "L"; readonly x: number; readonly y: number }
-  | {
-      readonly op: "C";
-      readonly x1: number;
-      readonly y1: number;
-      readonly x2: number;
-      readonly y2: number;
-      readonly x: number;
-      readonly y: number;
-    }
-  | {
-      readonly op: "Q";
-      readonly x1: number;
-      readonly y1: number;
-      readonly x: number;
-      readonly y: number;
-    }
-  | { readonly op: "Z" };
+export const geometryAdjustKeySchema = z
+  .string()
+  .regex(/^adj(?:[1-9]\d*)?$/u, "Geometry adjust key must match adj or adjN");
 
-export type GeometryPath = {
-  readonly commands: readonly PathCommand[];
-  readonly fill?: boolean;
-  readonly stroke?: boolean;
-};
+export const geometryAdjustSchema = z
+  .record(
+    geometryAdjustKeySchema,
+    z
+      .number()
+      .refine(
+        Number.isSafeInteger,
+        "Geometry adjust must be an integer DrawingML parameter",
+      ),
+  )
+  .readonly();
+
+export const presetGeometrySchema = z
+  .strictObject({
+    type: z.literal("preset"),
+    name: presetGeometryNameSchema,
+    /** Raw DrawingML adjust values indexed by guide name (adj, adj1, adj2, etc.). */
+    adjust: geometryAdjustSchema.optional(),
+  })
+  .readonly();
+export type PresetGeometry = z.infer<typeof presetGeometrySchema>;
+
+const finiteCoordSchema = z.number().finite();
+
+export const pathCommandSchema = z.discriminatedUnion("op", [
+  z
+    .strictObject({
+      op: z.literal("M"),
+      x: finiteCoordSchema,
+      y: finiteCoordSchema,
+    })
+    .readonly(),
+  z
+    .strictObject({
+      op: z.literal("L"),
+      x: finiteCoordSchema,
+      y: finiteCoordSchema,
+    })
+    .readonly(),
+  z
+    .strictObject({
+      op: z.literal("C"),
+      x1: finiteCoordSchema,
+      y1: finiteCoordSchema,
+      x2: finiteCoordSchema,
+      y2: finiteCoordSchema,
+      x: finiteCoordSchema,
+      y: finiteCoordSchema,
+    })
+    .readonly(),
+  z
+    .strictObject({
+      op: z.literal("Q"),
+      x1: finiteCoordSchema,
+      y1: finiteCoordSchema,
+      x: finiteCoordSchema,
+      y: finiteCoordSchema,
+    })
+    .readonly(),
+  z.strictObject({ op: z.literal("Z") }).readonly(),
+]);
+export type PathCommand = z.infer<typeof pathCommandSchema>;
+
+export const geometryPathSchema = z
+  .strictObject({
+    commands: z.array(pathCommandSchema).min(1).readonly(),
+    fill: z.boolean().optional(),
+    stroke: z.boolean().optional(),
+  })
+  .readonly();
+export type GeometryPath = z.infer<typeof geometryPathSchema>;
 
 /** Custom geometry uses local coordinates and scales to the bounding box allocated by layout. */
-export type CustomGeometry = {
-  readonly type: "custom";
-  readonly width: number;
-  readonly height: number;
-  readonly paths: readonly GeometryPath[];
-};
+export const customGeometrySchema = z
+  .strictObject({
+    type: z.literal("custom"),
+    width: z.number().finite().positive(),
+    height: z.number().finite().positive(),
+    paths: z.array(geometryPathSchema).min(1).readonly(),
+  })
+  .readonly();
+export type CustomGeometry = z.infer<typeof customGeometrySchema>;
 
-export type Geometry = PresetGeometryName | PresetGeometry | CustomGeometry;
+export const geometrySchema = z.union([
+  presetGeometryNameSchema,
+  presetGeometrySchema,
+  customGeometrySchema,
+]);
+export type Geometry = z.infer<typeof geometrySchema>;
 
 /** Closed resolved geometry model consumed exhaustively by both emit and paint. */
 export type ResolvedGeometry =
@@ -105,56 +167,75 @@ export function preset(
   name: PresetGeometryName,
   adjust?: Readonly<Record<string, number>>,
 ): PresetGeometry {
-  if (!presetGeometryNames.has(name)) {
+  if (!presetGeometryNameSchema.safeParse(name).success) {
     throw new CapabilityError(
       "unsupported-geometry",
-      `Unsupported preset geometry ${name}`,
+      `Unsupported preset geometry ${String(name)}`,
     );
   }
   if (adjust !== undefined) {
-    for (const [key, value] of Object.entries(adjust)) {
-      if (!/^adj(?:[1-9]\d*)?$/u.test(key) || !Number.isSafeInteger(value)) {
-        invalidGeometry(
-          `Geometry adjust ${key} must be an integer DrawingML parameter`,
-        );
-      }
+    const parsedAdjust = geometryAdjustSchema.safeParse(adjust);
+    if (!parsedAdjust.success) {
+      const key = String(parsedAdjust.error.issues[0]?.path[0] ?? "adjust");
+      invalidGeometry(
+        `Geometry adjust ${key} must be an integer DrawingML parameter`,
+      );
     }
   }
   return { type: "preset", name, ...(adjust !== undefined && { adjust }) };
 }
 
+const blockArcOptionsSchema = z
+  .strictObject({
+    startAngle: z.number().finite(),
+    endAngle: z.number().finite(),
+    thickness: z.number().finite(),
+  })
+  .readonly();
+
 /**
  * Native blockArc (annular arc segment). Angles are in degrees, measured clockwise from 3 o'clock, consistent with DrawingML;
  * thickness represents the ring width as a fraction of the shape's shorter side.
  */
-export function blockArc(options: {
-  readonly startAngle: number;
-  readonly endAngle: number;
-  readonly thickness: number;
-}): PresetGeometry {
-  for (const key of ["startAngle", "endAngle", "thickness"] as const) {
-    if (!Number.isFinite(options[key])) {
-      invalidGeometry(`blockArc.${key} must be a finite number`);
-    }
+export function blockArc(
+  options: z.infer<typeof blockArcOptionsSchema>,
+): PresetGeometry {
+  const parsed = blockArcOptionsSchema.safeParse(options);
+  if (!parsed.success) {
+    const key = String(parsed.error.issues[0]?.path[0] ?? "options");
+    invalidGeometry(`blockArc.${key} must be a finite number`);
   }
   const angle = (degrees: number) =>
     Math.round((((degrees % 360) + 360) % 360) * 60000);
   return preset("blockArc", {
-    adj1: angle(options.startAngle),
-    adj2: angle(options.endAngle),
+    adj1: angle(parsed.data.startAngle),
+    adj2: angle(parsed.data.endAngle),
     // Preserves valid declarations even when values exceed the common guide range of the preset; the shape compiler reports a range warning rather than silently truncating.
-    adj3: Math.round(options.thickness * 100000),
+    adj3: Math.round(parsed.data.thickness * 100000),
   });
 }
 
-export type PathOptions = {
-  /** Dimensions of the local coordinate space, similar to an SVG viewBox starting from 0,0. */
-  readonly viewBox: readonly [width: number, height: number];
-  readonly fill?: boolean;
-  readonly stroke?: boolean;
-  /** Fill rule for SVG path data; see `path`. */
-  readonly fillRule?: "nonzero" | "evenodd";
-};
+export const pathOptionsSchema = z
+  .strictObject({
+    /** Dimensions of the local coordinate space, similar to an SVG viewBox starting from 0,0. */
+    viewBox: z
+      .tuple([z.number().finite().positive(), z.number().finite().positive()])
+      .readonly(),
+    fill: z.boolean().optional(),
+    stroke: z.boolean().optional(),
+    /** Fill rule for SVG path data; see `path`. */
+    fillRule: z.enum(["nonzero", "evenodd"]).optional(),
+  })
+  .readonly();
+export type PathOptions = z.infer<typeof pathOptionsSchema>;
+
+const pathDataSchema = z.union([
+  z.string().refine((item) => item.trim() !== ""),
+  z
+    .array(z.string().refine((item) => item.trim() !== ""))
+    .min(1)
+    .readonly(),
+]);
 
 /**
  * Creates custom geometry from SVG path data. Multiple subpaths in a single string constitute the same native path; pass an array for separately stroked paths.
@@ -167,48 +248,42 @@ export function path(
   data: string | readonly string[],
   options: PathOptions,
 ): CustomGeometry {
-  if (options.fill !== undefined && typeof options.fill !== "boolean") {
-    invalidGeometry("path.fill must be a boolean");
-  }
-  if (options.stroke !== undefined && typeof options.stroke !== "boolean") {
-    invalidGeometry("path.stroke must be a boolean");
-  }
-  if (
-    !Array.isArray(options.viewBox) ||
-    options.viewBox.length !== 2 ||
-    !options.viewBox.every((value) => Number.isFinite(value) && value > 0)
-  ) {
+  const parsedOptions = pathOptionsSchema.safeParse(options);
+  if (!parsedOptions.success) {
+    const issue = parsedOptions.error.issues[0];
+    const key = issue?.path[0];
+    if (key === "fill") invalidGeometry("path.fill must be a boolean");
+    if (key === "stroke") invalidGeometry("path.stroke must be a boolean");
+    if (key === "fillRule") {
+      invalidGeometry("path.fillRule must be nonzero or evenodd");
+    }
     invalidGeometry("path.viewBox must consist of two finite positive numbers");
   }
-  if (
-    options.fillRule !== undefined &&
-    !["nonzero", "evenodd"].includes(options.fillRule)
-  ) {
-    invalidGeometry("path.fillRule must be nonzero or evenodd");
-  }
-  if (typeof data !== "string" && !Array.isArray(data)) {
-    invalidGeometry("path data must be an SVG string or an array of strings");
-  }
-  const list = typeof data === "string" ? [data] : data;
-  if (
-    list.length === 0 ||
-    list.some((item) => typeof item !== "string" || item.trim() === "")
-  ) {
+  const parsedData = pathDataSchema.safeParse(data);
+  if (!parsedData.success) {
+    if (typeof data !== "string" && !Array.isArray(data)) {
+      invalidGeometry("path data must be an SVG string or an array of strings");
+    }
     invalidGeometry("path must contain at least one non-empty SVG path");
   }
+  const validOptions = parsedOptions.data;
+  const list =
+    typeof parsedData.data === "string" ? [parsedData.data] : parsedData.data;
   return {
     type: "custom",
-    width: options.viewBox[0],
-    height: options.viewBox[1],
+    width: validOptions.viewBox[0],
+    height: validOptions.viewBox[1],
     paths: list.map((item) => {
       const commands = parseSvgPath(item);
       return {
         commands:
-          options.fillRule === "evenodd"
+          validOptions.fillRule === "evenodd"
             ? alternateByNesting(commands)
             : commands,
-        ...(options.fill !== undefined && { fill: options.fill }),
-        ...(options.stroke !== undefined && { stroke: options.stroke }),
+        ...(validOptions.fill !== undefined && { fill: validOptions.fill }),
+        ...(validOptions.stroke !== undefined && {
+          stroke: validOptions.stroke,
+        }),
       };
     }),
   };
@@ -690,40 +765,37 @@ export function resolveGeometry(options: {
         "borderRadius cannot be used together with custom geometry",
       );
     }
-    const custom = value;
-    if (!Array.isArray(custom.paths)) {
-      invalidGeometry("Custom geometry must contain a paths array");
-    }
-    const width = finiteGeometryNumber(custom.width, "geometry.width");
-    const height = finiteGeometryNumber(custom.height, "geometry.height");
-    if (width <= 0 || height <= 0 || custom.paths.length === 0) {
+    const parsedCustom = customGeometrySchema.safeParse(value);
+    if (!parsedCustom.success) {
+      const issue = parsedCustom.error.issues[0];
+      if (issue?.path[0] === "width" || issue?.path[0] === "height") {
+        if (
+          typeof value[issue.path[0]] !== "number" ||
+          !Number.isFinite(value[issue.path[0]])
+        ) {
+          finiteGeometryNumber(
+            value[issue.path[0]],
+            `geometry.${issue.path[0]}`,
+          );
+        }
+        invalidGeometry(
+          "Custom geometry must have a positive viewBox and at least one path",
+        );
+      }
       invalidGeometry(
-        "Custom geometry must have a positive viewBox and at least one path",
+        issue?.message ??
+          "Custom geometry must have a positive viewBox and at least one path",
       );
     }
-    const widthUnits = pointUnit(width, "geometry.width");
-    const heightUnits = pointUnit(height, "geometry.height");
+    const custom = parsedCustom.data;
+    const widthUnits = pointUnit(custom.width, "geometry.width");
+    const heightUnits = pointUnit(custom.height, "geometry.height");
     if (Number(widthUnits) === 0 || Number(heightUnits) === 0) {
       invalidGeometry(
         "Custom geometry viewBox must retain positive width and height in path coordinate space after conversion",
       );
     }
-    const resolvedPaths = custom.paths.map((item, index) => {
-      if (
-        !isRecord(item) ||
-        !Array.isArray(item.commands) ||
-        item.commands.length === 0
-      ) {
-        invalidGeometry(`Custom path ${index + 1} must contain commands`);
-      }
-      if (
-        (item.fill !== undefined && typeof item.fill !== "boolean") ||
-        (item.stroke !== undefined && typeof item.stroke !== "boolean")
-      ) {
-        invalidGeometry(
-          `fill/stroke for custom path ${index + 1} must be boolean`,
-        );
-      }
+    const resolvedPaths = custom.paths.map((item) => {
       for (const command of item.commands) {
         validatePathCommand(command);
       }
@@ -736,8 +808,8 @@ export function resolveGeometry(options: {
     return {
       geometry: {
         kind: "custom",
-        width,
-        height,
+        width: custom.width,
+        height: custom.height,
         paths: resolvedPaths,
       },
       name: "custom",
@@ -761,7 +833,12 @@ export function resolveGeometry(options: {
       if (!isRecord(value["adjust"])) {
         invalidGeometry("preset.adjust must be an object");
       }
-      Object.assign(adjust, value["adjust"]);
+      const parsedAdjust = geometryAdjustSchema.safeParse(value["adjust"]);
+      if (!parsedAdjust.success) {
+        const key = String(parsedAdjust.error.issues[0]?.path[0] ?? "adjust");
+        invalidGeometry(`preset.adjust.${key} must be a finite integer`);
+      }
+      Object.assign(adjust, parsedAdjust.data);
     }
   } else {
     invalidGeometry(
@@ -769,13 +846,14 @@ export function resolveGeometry(options: {
     );
   }
 
-  if (!presetGeometryNames.has(rawName)) {
+  const parsedPresetName = presetGeometryNameSchema.safeParse(rawName);
+  if (!parsedPresetName.success) {
     throw new CapabilityError(
       "unsupported-geometry",
       `Unsupported preset geometry ${rawName}`,
     );
   }
-  let name = rawName as PresetGeometryName;
+  let name = parsedPresetName.data;
 
   if (radius !== undefined && radius > 0) {
     if (name !== "rect" && name !== "roundRect") {
@@ -801,9 +879,6 @@ export function resolveGeometry(options: {
   }
 
   for (const [key, amount] of Object.entries(adjust)) {
-    if (!/^adj(?:[1-9]\d*)?$/u.test(key) || !Number.isSafeInteger(amount)) {
-      invalidGeometry(`preset.adjust.${key} must be a finite integer`);
-    }
     if (
       name === "blockArc" &&
       (((key === "adj1" || key === "adj2") &&
@@ -1381,4 +1456,395 @@ export function shadeHex(hex: string, lumMod: number, lumOff: number): string {
     )
     .join("")
     .toUpperCase();
+}
+
+const PresetGeomAttrSchema = z.object({
+  prst: z.string().min(1),
+});
+
+const AdjustGuideAttrSchema = z.object({
+  name: geometryAdjustKeySchema,
+  fmla: z.string().regex(/^val\s+(-?\d+)$/u),
+});
+
+const CustomPathAttrSchema = z.object({
+  w: OoxmlPositiveIntSchema.optional(),
+  h: OoxmlPositiveIntSchema.optional(),
+  fill: z
+    .enum(["none", "norm", "lighten", "lightenLess", "darken", "darkenLess"])
+    .optional(),
+  stroke: OoxmlBoolSchema.optional(),
+});
+
+const CustomPtAttrSchema = z.object({
+  x: OoxmlIntSchema,
+  y: OoxmlIntSchema,
+});
+
+const CustomArcAttrSchema = z.object({
+  wR: OoxmlIntSchema,
+  hR: OoxmlIntSchema,
+  stAng: OoxmlIntSchema,
+  swAng: OoxmlIntSchema,
+});
+
+/** Reads DrawingML `<a:prstGeom>` (and `<a:avLst>`) into author `Geometry`, emitting localized diagnostics on invalid/unsupported values. */
+export function readPresetGeometryXml(
+  prstGeomCursor: XmlElementCursor,
+  location: ImportLocation,
+  diagnostics: ImportDiagnostic[],
+): Geometry {
+  const raw = prstGeomCursor.attrsObject(["prst"]);
+  const parsedAttr = PresetGeomAttrSchema.safeParse(raw);
+  if (!parsedAttr.success) {
+    diagnostics.push({
+      code: "invalid-xml-value",
+      category: "corrupt-input",
+      disposition: "recovered",
+      location: { ...location, xpath: prstGeomCursor.xpath },
+      attributeOrElement: "a:prstGeom/@prst",
+      rawValue: raw["prst"] ?? "",
+    });
+    prstGeomCursor.ignoreEmptyChild(A_NS, "avLst");
+    return "rect";
+  }
+
+  const parsedName = presetGeometryNameSchema.safeParse(parsedAttr.data.prst);
+  if (!parsedName.success) {
+    diagnostics.push({
+      code: "unsupported-mechanism",
+      category: "unsupported",
+      disposition: "omitted",
+      location: { ...location, xpath: prstGeomCursor.xpath },
+      namespaceUri: A_NS,
+      localName: "prstGeom",
+      mechanismHint: `preset:${parsedAttr.data.prst}`,
+    });
+    prstGeomCursor.ignoreEmptyChild(A_NS, "avLst");
+    return "rect";
+  }
+
+  const adjust: Record<string, number> = {};
+  const avLst = prstGeomCursor.child(A_NS, "avLst");
+  if (avLst !== undefined) {
+    for (const gd of avLst.children(A_NS, "gd")) {
+      const rawGd = gd.attrsObject(["name", "fmla"]);
+      const parsedGd = AdjustGuideAttrSchema.safeParse(rawGd);
+      if (!parsedGd.success) {
+        diagnostics.push({
+          code: "invalid-xml-value",
+          category: "corrupt-input",
+          disposition: "omitted",
+          location: { ...location, xpath: gd.xpath },
+          attributeOrElement: "a:gd",
+          rawValue: JSON.stringify(rawGd),
+        });
+        continue;
+      }
+      const match = /^val\s+(-?\d+)$/u.exec(parsedGd.data.fmla);
+      if (match !== null) {
+        const value = Number(match[1]);
+        if (Number.isSafeInteger(value)) {
+          adjust[parsedGd.data.name] = value;
+        }
+      }
+    }
+  }
+
+  return Object.keys(adjust).length === 0
+    ? parsedName.data
+    : { type: "preset", name: parsedName.data, adjust };
+}
+
+function readCustomPoint(
+  ptCursor: XmlElementCursor,
+  location: ImportLocation,
+  diagnostics: ImportDiagnostic[],
+): { readonly x: number; readonly y: number } | undefined {
+  const raw = ptCursor.attrsObject(["x", "y"]);
+  const parsed = CustomPtAttrSchema.safeParse(raw);
+  if (!parsed.success) {
+    const isFormulaRef =
+      (raw["x"] !== undefined && !/^-?\d+$/u.test(raw["x"])) ||
+      (raw["y"] !== undefined && !/^-?\d+$/u.test(raw["y"]));
+    diagnostics.push(
+      isFormulaRef
+        ? {
+            code: "unsupported-mechanism",
+            category: "unsupported",
+            disposition: "omitted",
+            location: { ...location, xpath: ptCursor.xpath },
+            namespaceUri: A_NS,
+            localName: "pt",
+            mechanismHint: "custom-geometry-guide-reference",
+          }
+        : {
+            code: "invalid-xml-value",
+            category: "corrupt-input",
+            disposition: "omitted",
+            location: { ...location, xpath: ptCursor.xpath },
+            attributeOrElement: "a:pt",
+            rawValue: JSON.stringify(raw),
+          },
+    );
+    return undefined;
+  }
+  return { x: parsed.data.x / 1000, y: parsed.data.y / 1000 };
+}
+
+/** Reads DrawingML `<a:custGeom>` into `CustomGeometry`, reporting localized diagnostics on unsupported guide formulas or invalid paths. */
+export function readCustomGeometryXml(
+  custGeomCursor: XmlElementCursor,
+  fallbackExtentUnits: { readonly w: number; readonly h: number },
+  location: ImportLocation,
+  diagnostics: ImportDiagnostic[],
+): CustomGeometry | undefined {
+  custGeomCursor.ignoreEmptyChild(A_NS, "avLst");
+  const gdLst = custGeomCursor.child(A_NS, "gdLst");
+  if (gdLst !== undefined) {
+    for (const gd of gdLst.children(A_NS, "gd")) {
+      gd.consumeAttr("name");
+      gd.consumeAttr("fmla");
+    }
+  }
+  custGeomCursor.ignoreEmptyChild(A_NS, "ahLst");
+  custGeomCursor.ignoreEmptyChild(A_NS, "cxnLst");
+  const rect = custGeomCursor.child(A_NS, "rect");
+  if (rect !== undefined) {
+    rect.consumeAttr("l");
+    rect.consumeAttr("t");
+    rect.consumeAttr("r");
+    rect.consumeAttr("b");
+  }
+
+  const pathLst = custGeomCursor.child(A_NS, "pathLst");
+  if (pathLst === undefined) {
+    diagnostics.push({
+      code: "invalid-xml-value",
+      category: "corrupt-input",
+      disposition: "omitted",
+      location: { ...location, xpath: custGeomCursor.xpath },
+      attributeOrElement: "a:custGeom/a:pathLst",
+    });
+    return undefined;
+  }
+
+  const paths: GeometryPath[] = [];
+  let viewWidth: number | undefined;
+  let viewHeight: number | undefined;
+
+  for (const pathCursor of pathLst.children(A_NS, "path")) {
+    const rawPath = pathCursor.attrsObject(["w", "h", "fill", "stroke"]);
+    const parsedPath = CustomPathAttrSchema.safeParse(rawPath);
+    if (!parsedPath.success) {
+      diagnostics.push({
+        code: "invalid-xml-value",
+        category: "corrupt-input",
+        disposition: "omitted",
+        location: { ...location, xpath: pathCursor.xpath },
+        attributeOrElement: "a:path",
+        rawValue: JSON.stringify(rawPath),
+      });
+      continue;
+    }
+    const pathWUnits = parsedPath.data.w ?? fallbackExtentUnits.w;
+    const pathHUnits = parsedPath.data.h ?? fallbackExtentUnits.h;
+    const pathWidth = pathWUnits / 1000;
+    const pathHeight = pathHUnits / 1000;
+    viewWidth ??= pathWidth;
+    viewHeight ??= pathHeight;
+    const scaleX = pathWidth === viewWidth ? 1 : viewWidth / pathWidth;
+    const scaleY = pathHeight === viewHeight ? 1 : viewHeight / pathHeight;
+
+    const commands: PathCommand[] = [];
+    let curX = 0;
+    let curY = 0;
+    let subStartX = 0;
+    let subStartY = 0;
+    let pathFailed = false;
+
+    for (const cmdCursor of pathCursor.remainingElementChildren()) {
+      if (cmdCursor.namespaceUri !== A_NS) {
+        diagnostics.push({
+          code: "unconsumed-xml",
+          category: "unsupported",
+          disposition: "omitted",
+          kind: "element",
+          location: { ...location, xpath: cmdCursor.xpath },
+          namespaceUri: cmdCursor.namespaceUri,
+          localName: cmdCursor.localName,
+        });
+        continue;
+      }
+      switch (cmdCursor.localName) {
+        case "moveTo": {
+          const pt = cmdCursor.child(A_NS, "pt");
+          const coords =
+            pt === undefined
+              ? undefined
+              : readCustomPoint(pt, location, diagnostics);
+          if (coords === undefined) {
+            pathFailed = true;
+            break;
+          }
+          curX = coords.x * scaleX;
+          curY = coords.y * scaleY;
+          subStartX = curX;
+          subStartY = curY;
+          commands.push({ op: "M", x: curX, y: curY });
+          break;
+        }
+        case "lnTo": {
+          const pt = cmdCursor.child(A_NS, "pt");
+          const coords =
+            pt === undefined
+              ? undefined
+              : readCustomPoint(pt, location, diagnostics);
+          if (coords === undefined) {
+            pathFailed = true;
+            break;
+          }
+          curX = coords.x * scaleX;
+          curY = coords.y * scaleY;
+          commands.push({ op: "L", x: curX, y: curY });
+          break;
+        }
+        case "cubicBezTo": {
+          const pts = cmdCursor.children(A_NS, "pt");
+          if (pts.length !== 3) {
+            pathFailed = true;
+            break;
+          }
+          const p1 = readCustomPoint(pts[0]!, location, diagnostics);
+          const p2 = readCustomPoint(pts[1]!, location, diagnostics);
+          const p3 = readCustomPoint(pts[2]!, location, diagnostics);
+          if (p1 === undefined || p2 === undefined || p3 === undefined) {
+            pathFailed = true;
+            break;
+          }
+          curX = p3.x * scaleX;
+          curY = p3.y * scaleY;
+          commands.push({
+            op: "C",
+            x1: p1.x * scaleX,
+            y1: p1.y * scaleY,
+            x2: p2.x * scaleX,
+            y2: p2.y * scaleY,
+            x: curX,
+            y: curY,
+          });
+          break;
+        }
+        case "quadBezTo": {
+          const pts = cmdCursor.children(A_NS, "pt");
+          if (pts.length !== 2) {
+            pathFailed = true;
+            break;
+          }
+          const p1 = readCustomPoint(pts[0]!, location, diagnostics);
+          const p2 = readCustomPoint(pts[1]!, location, diagnostics);
+          if (p1 === undefined || p2 === undefined) {
+            pathFailed = true;
+            break;
+          }
+          curX = p2.x * scaleX;
+          curY = p2.y * scaleY;
+          commands.push({
+            op: "Q",
+            x1: p1.x * scaleX,
+            y1: p1.y * scaleY,
+            x: curX,
+            y: curY,
+          });
+          break;
+        }
+        case "arcTo": {
+          const rawArc = cmdCursor.attrsObject(["wR", "hR", "stAng", "swAng"]);
+          const parsedArc = CustomArcAttrSchema.safeParse(rawArc);
+          if (!parsedArc.success) {
+            diagnostics.push({
+              code: "unsupported-mechanism",
+              category: "unsupported",
+              disposition: "omitted",
+              location: { ...location, xpath: cmdCursor.xpath },
+              namespaceUri: A_NS,
+              localName: "arcTo",
+              mechanismHint: "custom-geometry-arc-guide",
+            });
+            pathFailed = true;
+            break;
+          }
+          const arc = drawingMlArcToLocalCubics(
+            curX / scaleX,
+            curY / scaleY,
+            parsedArc.data.wR / 1000,
+            parsedArc.data.hR / 1000,
+            parsedArc.data.stAng,
+            parsedArc.data.swAng,
+          );
+          for (const cubic of arc.commands) {
+            if (cubic.op === "C") {
+              commands.push({
+                op: "C",
+                x1: cubic.x1 * scaleX,
+                y1: cubic.y1 * scaleY,
+                x2: cubic.x2 * scaleX,
+                y2: cubic.y2 * scaleY,
+                x: cubic.x * scaleX,
+                y: cubic.y * scaleY,
+              });
+            } else if (cubic.op === "L") {
+              commands.push({
+                op: "L",
+                x: cubic.x * scaleX,
+                y: cubic.y * scaleY,
+              });
+            }
+          }
+          curX = arc.endX * scaleX;
+          curY = arc.endY * scaleY;
+          break;
+        }
+        case "close":
+          curX = subStartX;
+          curY = subStartY;
+          commands.push({ op: "Z" });
+          break;
+        default:
+          diagnostics.push({
+            code: "unsupported-mechanism",
+            category: "unsupported",
+            disposition: "omitted",
+            location: { ...location, xpath: cmdCursor.xpath },
+            namespaceUri: cmdCursor.namespaceUri,
+            localName: cmdCursor.localName,
+          });
+          break;
+      }
+    }
+
+    if (pathFailed || commands.length === 0) continue;
+    paths.push({
+      commands,
+      ...(parsedPath.data.fill === "none" ? { fill: false } : {}),
+      ...(parsedPath.data.stroke === false ? { stroke: false } : {}),
+    });
+  }
+
+  if (
+    viewWidth === undefined ||
+    viewHeight === undefined ||
+    viewWidth <= 0 ||
+    viewHeight <= 0 ||
+    paths.length === 0
+  ) {
+    return undefined;
+  }
+
+  return {
+    type: "custom",
+    width: viewWidth,
+    height: viewHeight,
+    paths,
+  };
 }

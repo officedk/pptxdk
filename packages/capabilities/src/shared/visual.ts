@@ -1,9 +1,14 @@
 import {
   CapabilityError,
+  linearGradientSchema,
+  radialGradientSchema,
+  shadowSchema,
+  visualStyleSchema,
   type CapabilityResource,
   type ColorValue,
   type GradientStop,
   type LinearGradient,
+  type NativeColorSlot,
   type PaintOutput,
   type RadialGradient,
   type ResolvedColor,
@@ -11,6 +16,27 @@ import {
   type VisualStyle as CoreVisualStyle,
 } from "@pptxdk/core/capability";
 import { pxToEmu, resolvedColorXml, xmlEscape } from "@pptxdk/emit";
+import {
+  A_NS,
+  ExtentEmuFragmentSchema,
+  HexRgb6Schema,
+  OffsetEmuFragmentSchema,
+  OoxmlIntSchema,
+  OoxmlNonNegativeIntSchema,
+  P_NS,
+  R_NS,
+  TransformAttributesFragmentSchema,
+  defineCanvasMechanism,
+  emuToPx,
+  resolvePartPath,
+  type ImportDiagnostic,
+  type ImportLocation,
+  type PptxPackage,
+  type ShapeTreeImportContext,
+  type ShapeTreeImportOutcome,
+  type XmlElementCursor,
+} from "@pptxdk/import";
+import { z } from "zod";
 
 import {
   decodeImageToPngBytes,
@@ -19,6 +45,8 @@ import {
 } from "../image/image-decode.ts";
 import {
   evaluateGeometry,
+  readCustomGeometryXml,
+  readPresetGeometryXml,
   resolveGeometry,
   resolvedGeometryXml,
   shadeHex,
@@ -145,14 +173,6 @@ export type ResolvedVisualModel = {
   readonly warnings: readonly VisualWarning[];
 };
 
-export type ArrowType =
-  | "none"
-  | "triangle"
-  | "stealth"
-  | "arrow"
-  | "diamond"
-  | "oval";
-
 export const arrowTypes = [
   "none",
   "triangle",
@@ -162,10 +182,16 @@ export const arrowTypes = [
   "oval",
 ] as const;
 
-export type LineEndStyle = {
-  readonly startArrow?: ArrowType;
-  readonly endArrow?: ArrowType;
-};
+export const arrowTypeSchema = z.enum(arrowTypes);
+export type ArrowType = z.infer<typeof arrowTypeSchema>;
+
+export const lineEndStyleSchema = z
+  .strictObject({
+    startArrow: arrowTypeSchema.optional(),
+    endArrow: arrowTypeSchema.optional(),
+  })
+  .readonly();
+export type LineEndStyle = z.infer<typeof lineEndStyleSchema>;
 
 export const lineEndStyleKeys = ["startArrow", "endArrow"] as const;
 
@@ -278,35 +304,39 @@ export function resolveShadow(
 ): ResolvedShadow {
   if (!isRecord(value))
     invalid("invalid-shadow", `${label} must be a shadow object`);
-  const unknown = Object.keys(value).find(
-    (key) => !["color", "blur", "distance", "angle"].includes(key),
-  );
-  if (unknown !== undefined)
-    invalid(
-      "invalid-shadow",
-      `${label} contains unsupported parameter ${unknown}`,
-    );
-  const blur =
-    value["blur"] === undefined ? 4 : finite(value["blur"], `${label}.blur`);
-  const distance =
-    value["distance"] === undefined
-      ? 0
-      : finite(value["distance"], `${label}.distance`);
-  const angle =
-    value["angle"] === undefined
-      ? 90
-      : finite(value["angle"], `${label}.angle`);
-  if (blur < 0 || distance < 0)
-    invalid(
-      "invalid-shadow",
-      `${label}.blur and distance must be non-negative lengths`,
-    );
+  const parsed = shadowSchema.safeParse(value);
+  if (!parsed.success) {
+    const issue = parsed.error.issues[0];
+    if (issue?.code === "unrecognized_keys" && issue.keys[0] !== undefined) {
+      invalid(
+        "invalid-shadow",
+        `${label} contains unsupported parameter ${issue.keys[0]}`,
+      );
+    }
+    const key = String(issue?.path[0] ?? "value");
+    if (key === "blur" || key === "distance") {
+      if (typeof value[key] !== "number" || !Number.isFinite(value[key])) {
+        finite(value[key], `${label}.${key}`);
+      }
+      invalid(
+        "invalid-shadow",
+        `${label}.blur and distance must be non-negative lengths`,
+      );
+    }
+    if (key === "angle") {
+      finite(value[key], `${label}.angle`);
+    }
+    invalid("invalid-shadow", issue?.message ?? `${label} is invalid`);
+  }
+  const blur = parsed.data.blur ?? 4;
+  const distance = parsed.data.distance ?? 0;
+  const angle = parsed.data.angle ?? 90;
   emu(blur, `${label}.blur`);
   emu(distance, `${label}.distance`);
-  const colorValue = (value["color"] ?? {
+  const colorValue: ColorValue = parsed.data.color ?? {
     color: "#000000",
     alpha: 0.35,
-  }) as ColorValue;
+  };
   return { color: theme.resolveColor(colorValue), blur, distance, angle };
 }
 
@@ -317,51 +347,54 @@ export function textShadowXml(theme: ThemeContext, value: unknown): string {
   return `<a:effectLst><a:outerShdw blurRad="${emu(shadow.blur, "textShadow.blur")}" dist="${emu(shadow.distance, "textShadow.distance")}" dir="${direction}" algn="ctr" rotWithShape="0">${resolvedColorXml(shadow.color)}</a:outerShdw></a:effectLst>`;
 }
 
+const gradientSchema = z
+  .union([linearGradientSchema, radialGradientSchema])
+  .refine((value) => value.stops.length >= 2);
+
 /** Resolves and validates a linear or radial gradient declaration against a ThemeContext. */
 export function resolveGradientSpec(
   theme: ThemeContext,
   image: unknown,
   opacity: number | undefined,
 ): ResolvedGradientSpec {
-  if (
-    !isRecord(image) ||
-    (image["type"] !== "linear-gradient" &&
-      image["type"] !== "radial-gradient") ||
-    !Array.isArray(image["stops"]) ||
-    image["stops"].length < 2
-  ) {
+  const parsed = gradientSchema.safeParse(image);
+  if (!parsed.success) {
+    const issue = parsed.error.issues[0];
+    if (issue?.path[0] === "angle" && isRecord(image)) {
+      finite(image["angle"], "backgroundImage.angle");
+    }
+    if (
+      issue?.path[0] === "stops" &&
+      isRecord(image) &&
+      Array.isArray(image["stops"])
+    ) {
+      const idx = typeof issue.path[1] === "number" ? issue.path[1] : undefined;
+      if (idx !== undefined && issue.path[2] === "position") {
+        const stop = image["stops"][idx];
+        if (isRecord(stop)) {
+          finite(stop["position"], `backgroundImage.stops[${idx}].position`);
+        }
+      }
+    }
     invalid(
       "invalid-gradient",
       "backgroundImage must be a linear or radial gradient with at least two color stops",
     );
   }
-  const stops: ResolvedGradientStop[] = image["stops"].map(
-    (stop: unknown, index: number) => {
-      if (!isRecord(stop)) {
-        invalid("invalid-gradient", `Gradient stop ${index + 1} is invalid`);
-      }
-      const position = finite(
-        stop["position"],
-        `backgroundImage.stops[${index}].position`,
+  const stops: ResolvedGradientStop[] = parsed.data.stops.map((stop, index) => {
+    if (stop.position < 0 || stop.position > 1) {
+      invalid(
+        "invalid-gradient",
+        `position for gradient stop ${index + 1} must be between 0 and 1`,
       );
-      if (position < 0 || position > 1) {
-        invalid(
-          "invalid-gradient",
-          `position for gradient stop ${index + 1} must be between 0 and 1`,
-        );
-      }
-      const color = withOpacity(
-        theme.resolveColor(stop["color"] as ColorValue),
-        opacity,
-      );
-      return { position, color };
-    },
-  );
-  if (image["type"] === "radial-gradient") {
+    }
+    const color = withOpacity(theme.resolveColor(stop.color), opacity);
+    return { position: stop.position, color };
+  });
+  if (parsed.data.type === "radial-gradient") {
     return { kind: "radial-gradient", stops };
   }
-  const angle = finite(image["angle"], "backgroundImage.angle");
-  return { kind: "linear-gradient", angle, stops };
+  return { kind: "linear-gradient", angle: parsed.data.angle, stops };
 }
 
 /** Emits DrawingML `<a:gradFill>` from a closed resolved gradient specification. */
@@ -520,37 +553,30 @@ function resolveVisualBorder(
       "borderWidth must be a non-negative number",
     );
   }
-  const styleName = style["borderStyle"];
-  if (
-    styleName !== undefined &&
-    (typeof styleName !== "string" ||
-      !["solid", "dashed", "dotted"].includes(styleName))
-  ) {
+  const parsedBorder = visualStyleSchema.safeParse(
+    style["borderStyle"] === undefined
+      ? {}
+      : { borderStyle: style["borderStyle"] },
+  );
+  if (!parsedBorder.success) {
     invalid(
       "invalid-visual-style",
       "borderStyle must be solid, dashed, or dotted",
     );
   }
-  const startArrow = style["startArrow"];
-  if (
-    startArrow !== undefined &&
-    (typeof startArrow !== "string" ||
-      !arrowTypes.includes(startArrow as ArrowType))
-  ) {
-    invalid(
-      "invalid-visual-style",
-      "startArrow must be none, triangle, stealth, arrow, diamond, or oval",
+  const parsedLineEnds = lineEndStyleSchema.safeParse({
+    ...(style["startArrow"] === undefined
+      ? {}
+      : { startArrow: style["startArrow"] }),
+    ...(style["endArrow"] === undefined ? {} : { endArrow: style["endArrow"] }),
+  });
+  if (!parsedLineEnds.success) {
+    const field = String(
+      parsedLineEnds.error.issues[0]?.path[0] ?? "startArrow",
     );
-  }
-  const endArrow = style["endArrow"];
-  if (
-    endArrow !== undefined &&
-    (typeof endArrow !== "string" ||
-      !arrowTypes.includes(endArrow as ArrowType))
-  ) {
     invalid(
       "invalid-visual-style",
-      "endArrow must be none, triangle, stealth, arrow, diamond, or oval",
+      `${field} must be none, triangle, stealth, arrow, diamond, or oval`,
     );
   }
   if (color === undefined || width === 0) {
@@ -560,11 +586,13 @@ function resolveVisualBorder(
   return {
     color: withOpacity(theme.resolveColor(color as ColorValue), opacity),
     width,
-    style: (styleName as "solid" | "dashed" | "dotted" | undefined) ?? "solid",
-    ...(startArrow === undefined
+    style: parsedBorder.data.borderStyle ?? "solid",
+    ...(parsedLineEnds.data.startArrow === undefined
       ? {}
-      : { startArrow: startArrow as ArrowType }),
-    ...(endArrow === undefined ? {} : { endArrow: endArrow as ArrowType }),
+      : { startArrow: parsedLineEnds.data.startArrow }),
+    ...(parsedLineEnds.data.endArrow === undefined
+      ? {}
+      : { endArrow: parsedLineEnds.data.endArrow }),
   };
 }
 
@@ -696,29 +724,12 @@ function emitFillXml(
     case "none":
       return "<a:noFill/>";
     case "solid":
-      return `<a:solidFill>${resolvedColorXml(fill.color)}</a:solidFill>`;
+      return solidFillMechanism.emit(fill, undefined).xml;
     case "linear-gradient":
     case "radial-gradient":
-      return gradientFillXml(fill);
-    case "image": {
-      if (registerResource === undefined) {
-        invalid(
-          "image-resource-failure",
-          "Cannot emit image background fill without resource registrar",
-        );
-      }
-      const relationshipId = registerResource({
-        bytes: fill.image.bytes,
-        extension: fill.image.extension,
-        contentType: fill.image.contentType,
-        relationshipType: imageRelationship,
-      });
-      const alpha =
-        fill.opacity === undefined
-          ? ""
-          : `<a:alphaModFix amt="${Math.round(fill.opacity * 100000)}"/>`;
-      return `<a:blipFill rotWithShape="1"><a:blip r:embed="${xmlEscape(relationshipId)}">${alpha}</a:blip><a:stretch><a:fillRect/></a:stretch></a:blipFill>`;
-    }
+      return gradientFillMechanism.emit(fill, undefined).xml;
+    case "image":
+      return imageFillMechanism.emit(fill, registerResource).xml;
     default: {
       const exhaustive: never = fill;
       return exhaustive;
@@ -1165,14 +1176,12 @@ function resolveSubpathFill(
         overlayAttr: undefined,
         hasFill: false,
       };
-    case "solid": {
-      const hex = subpathFillHex(fill.color.hex, fillMode);
+    case "solid":
       return {
-        fillAttr: `fill="#${hex}" fill-opacity="${roundSvgNumber(fill.color.alpha ?? 1)}"`,
+        fillAttr: solidFillMechanism.paint(fill, { fillMode }).svg,
         overlayAttr: undefined,
         hasFill: true,
       };
-    }
     case "linear-gradient":
     case "radial-gradient":
     case "image":
@@ -1315,16 +1324,13 @@ export function paintVisualModel(options: {
     case "linear-gradient":
     case "radial-gradient": {
       fillDefId = `${prefix}-fill`;
-      defs.push(gradientDefSvg(fillDefId, model.fill));
+      defs.push(gradientFillMechanism.paint(model.fill, { id: fillDefId }).svg);
       break;
     }
     case "image": {
-      const pngBytes = decodeImageToPngBytes(model.fill.image);
-      const base64 = Buffer.from(pngBytes).toString("base64");
       fillDefId = `${prefix}-fill`;
-      const imgOpacity = roundSvgNumber(model.fill.opacity ?? 1);
       defs.push(
-        `<pattern id="${fillDefId}" patternUnits="userSpaceOnUse" x="${roundSvgNumber(box.x)}" y="${roundSvgNumber(box.y)}" width="${roundSvgNumber(box.width)}" height="${roundSvgNumber(box.height)}"><image x="0" y="0" width="${roundSvgNumber(box.width)}" height="${roundSvgNumber(box.height)}" preserveAspectRatio="none" opacity="${imgOpacity}" href="data:image/png;base64,${base64}"/></pattern>`,
+        imageFillMechanism.paint(model.fill, { id: fillDefId, box }).svg,
       );
       break;
     }
@@ -1394,3 +1400,971 @@ export function paintVisualModel(options: {
     svg: `${defsXml}${layer}`,
   };
 }
+
+// ---------------------------------------------------------------------------
+// DrawingML XML Import Readers & Production Fill Mechanisms
+// ---------------------------------------------------------------------------
+
+const PercentValAttrSchema = z.object({
+  val: OoxmlNonNegativeIntSchema,
+});
+
+const AlphaModFixAttrSchema = z.object({
+  amt: OoxmlNonNegativeIntSchema,
+});
+
+const SrgbColorAttrSchema = z.object({
+  val: HexRgb6Schema,
+});
+
+const SchemeColorAttrSchema = z.object({
+  val: z.enum([
+    "tx1",
+    "bg1",
+    "tx2",
+    "bg2",
+    "dk1",
+    "lt1",
+    "dk2",
+    "lt2",
+    "accent1",
+    "accent2",
+    "accent3",
+    "accent4",
+    "accent5",
+    "accent6",
+    "hlink",
+    "folHlink",
+  ]),
+});
+
+const SysColorAttrSchema = z.object({
+  val: z.string().min(1),
+  lastClr: HexRgb6Schema.optional(),
+});
+
+const schemeToNativeSlot: Readonly<
+  Record<z.infer<typeof SchemeColorAttrSchema>["val"], NativeColorSlot>
+> = {
+  tx1: "dk1",
+  bg1: "lt1",
+  tx2: "dk2",
+  bg2: "lt2",
+  dk1: "dk1",
+  lt1: "lt1",
+  dk2: "dk2",
+  lt2: "lt2",
+  accent1: "accent1",
+  accent2: "accent2",
+  accent3: "accent3",
+  accent4: "accent4",
+  accent5: "accent5",
+  accent6: "accent6",
+  hlink: "hlink",
+  folHlink: "folHlink",
+};
+
+const GradStopAttrSchema = z.object({
+  pos: OoxmlNonNegativeIntSchema,
+});
+
+const GradLinAttrSchema = z.object({
+  ang: OoxmlIntSchema.optional(),
+  scaled: z.enum(["0", "1", "true", "false"]).optional(),
+});
+
+const LineAttrSchema = z.object({
+  w: OoxmlNonNegativeIntSchema.optional(),
+  cap: z.enum(["rnd", "sq", "flat"]).optional(),
+  cmpd: z.enum(["sng", "dbl", "thickThin", "thinThick", "tri"]).optional(),
+  algn: z.enum(["ctr", "in"]).optional(),
+});
+
+const DashPresetAttrSchema = z.object({
+  val: z.string().min(1),
+});
+
+const LineEndAttrSchema = z.object({
+  type: arrowTypeSchema.optional(),
+  w: z.enum(["sm", "med", "lg"]).optional(),
+  len: z.enum(["sm", "med", "lg"]).optional(),
+});
+
+const OuterShadowAttrSchema = z.object({
+  blurRad: OoxmlNonNegativeIntSchema.optional(),
+  dist: OoxmlNonNegativeIntSchema.optional(),
+  dir: OoxmlIntSchema.optional(),
+  algn: z.string().optional(),
+  rotWithShape: z.enum(["0", "1", "true", "false"]).optional(),
+});
+
+const SoftEdgeAttrSchema = z.object({
+  rad: OoxmlNonNegativeIntSchema,
+});
+
+/** Reads a DrawingML color child (`<a:srgbClr>`, `<a:schemeClr>`, `<a:sysClr>`) with optional alpha and luminance transforms. */
+export function readDrawingColor(
+  parentCursor: XmlElementCursor,
+  location: ImportLocation,
+  diagnostics: ImportDiagnostic[],
+): ColorValue | undefined {
+  let colorCursor: XmlElementCursor | undefined;
+  let baseHex: string | undefined;
+  let slot: NativeColorSlot | undefined;
+
+  for (const child of parentCursor.remainingElementChildren()) {
+    if (child.namespaceUri !== A_NS) {
+      diagnostics.push({
+        code: "unconsumed-xml",
+        category: "unsupported",
+        disposition: "omitted",
+        kind: "element",
+        location: { ...location, xpath: child.xpath },
+        namespaceUri: child.namespaceUri,
+        localName: child.localName,
+      });
+      continue;
+    }
+    if (child.localName === "srgbClr" && colorCursor === undefined) {
+      colorCursor = child;
+      const raw = child.attrsObject(["val"]);
+      const parsed = SrgbColorAttrSchema.safeParse(raw);
+      if (!parsed.success) {
+        diagnostics.push({
+          code: "invalid-xml-value",
+          category: "corrupt-input",
+          disposition: "omitted",
+          location: { ...location, xpath: child.xpath },
+          attributeOrElement: "a:srgbClr/@val",
+          rawValue: raw["val"] ?? "",
+        });
+        return undefined;
+      }
+      baseHex = `#${parsed.data.val.toUpperCase()}`;
+    } else if (child.localName === "schemeClr" && colorCursor === undefined) {
+      colorCursor = child;
+      const raw = child.attrsObject(["val"]);
+      const parsed = SchemeColorAttrSchema.safeParse(raw);
+      if (!parsed.success) {
+        diagnostics.push({
+          code: "invalid-xml-value",
+          category: "corrupt-input",
+          disposition: "omitted",
+          location: { ...location, xpath: child.xpath },
+          attributeOrElement: "a:schemeClr/@val",
+          rawValue: raw["val"] ?? "",
+        });
+        return undefined;
+      }
+      slot = schemeToNativeSlot[parsed.data.val];
+    } else if (child.localName === "sysClr" && colorCursor === undefined) {
+      colorCursor = child;
+      const raw = child.attrsObject(["val", "lastClr"]);
+      const parsed = SysColorAttrSchema.safeParse(raw);
+      if (!parsed.success) {
+        diagnostics.push({
+          code: "invalid-xml-value",
+          category: "corrupt-input",
+          disposition: "omitted",
+          location: { ...location, xpath: child.xpath },
+          attributeOrElement: "a:sysClr",
+          rawValue: JSON.stringify(raw),
+        });
+        return undefined;
+      }
+      const fallback =
+        parsed.data.val === "windowText"
+          ? "000000"
+          : parsed.data.val === "window"
+            ? "FFFFFF"
+            : undefined;
+      const hex = parsed.data.lastClr ?? fallback;
+      if (hex === undefined) return undefined;
+      baseHex = `#${hex.toUpperCase()}`;
+    } else {
+      diagnostics.push({
+        code: "unsupported-mechanism",
+        category: "unsupported",
+        disposition: "omitted",
+        location: { ...location, xpath: child.xpath },
+        namespaceUri: child.namespaceUri,
+        localName: child.localName,
+        mechanismHint: `color:${child.localName}`,
+      });
+    }
+  }
+
+  if (colorCursor === undefined) return undefined;
+
+  let alpha: number | undefined;
+  let lumMod: number | undefined;
+  let lumOff: number | undefined;
+
+  for (const mod of colorCursor.remainingElementChildren()) {
+    if (mod.namespaceUri === A_NS && mod.localName === "alpha") {
+      const parsed = PercentValAttrSchema.safeParse(mod.attrsObject(["val"]));
+      if (parsed.success) {
+        alpha = Math.min(1, Math.max(0, parsed.data.val / 100_000));
+      }
+    } else if (mod.namespaceUri === A_NS && mod.localName === "lumMod") {
+      const parsed = PercentValAttrSchema.safeParse(mod.attrsObject(["val"]));
+      if (parsed.success) {
+        lumMod = Math.min(1, Math.max(0, parsed.data.val / 100_000));
+      }
+    } else if (mod.namespaceUri === A_NS && mod.localName === "lumOff") {
+      const parsed = PercentValAttrSchema.safeParse(mod.attrsObject(["val"]));
+      if (parsed.success) {
+        lumOff = Math.min(1, Math.max(0, parsed.data.val / 100_000));
+      }
+    } else {
+      diagnostics.push({
+        code: "unsupported-mechanism",
+        category: "unsupported",
+        disposition: "omitted",
+        location: { ...location, xpath: mod.xpath },
+        namespaceUri: mod.namespaceUri,
+        localName: mod.localName,
+        mechanismHint: `color-transform:${mod.localName}`,
+      });
+    }
+  }
+
+  const baseColor: ColorValue | undefined =
+    slot !== undefined
+      ? lumMod !== undefined
+        ? {
+            slot,
+            lumMod,
+            ...(lumOff === undefined ? {} : { lumOff }),
+          }
+        : slot
+      : baseHex;
+
+  if (baseColor === undefined) return undefined;
+  if (alpha !== undefined && alpha < 1) {
+    return { color: baseColor, alpha };
+  }
+  return baseColor;
+}
+
+export type ImportedTransform = {
+  readonly x: number;
+  readonly y: number;
+  readonly width: number;
+  readonly height: number;
+  readonly xEmu: number;
+  readonly yEmu: number;
+  readonly cxEmu: number;
+  readonly cyEmu: number;
+  readonly rotate?: number;
+  readonly flipH?: boolean;
+  readonly flipV?: boolean;
+};
+
+/** Parses `<a:xfrm>` offset, extent, rotation, and flips into pixels and raw EMU. */
+export function readTransformXml(
+  xfrmCursor: XmlElementCursor,
+  location: ImportLocation,
+  diagnostics: ImportDiagnostic[],
+): ImportedTransform | undefined {
+  const rawXfrm = xfrmCursor.attrsObject(["rot", "flipH", "flipV"]);
+  const parsedXfrm = TransformAttributesFragmentSchema.safeParse(rawXfrm);
+  const off = xfrmCursor.child(A_NS, "off");
+  const ext = xfrmCursor.child(A_NS, "ext");
+  if (off === undefined || ext === undefined) {
+    diagnostics.push({
+      code: "corrupt-part",
+      category: "corrupt-input",
+      disposition: "omitted",
+      location: { ...location, xpath: xfrmCursor.xpath },
+    });
+    return undefined;
+  }
+  const parsedOff = OffsetEmuFragmentSchema.safeParse(
+    off.attrsObject(["x", "y"]),
+  );
+  const parsedExt = ExtentEmuFragmentSchema.safeParse(
+    ext.attrsObject(["cx", "cy"]),
+  );
+  if (!parsedOff.success || !parsedExt.success) {
+    diagnostics.push({
+      code: "invalid-xml-value",
+      category: "corrupt-input",
+      disposition: "omitted",
+      location: { ...location, xpath: xfrmCursor.xpath },
+      attributeOrElement: "a:xfrm",
+    });
+    return undefined;
+  }
+  const rotate =
+    parsedXfrm.success &&
+    parsedXfrm.data.rot !== undefined &&
+    parsedXfrm.data.rot !== 0
+      ? parsedXfrm.data.rot / 60_000
+      : undefined;
+  const flipH = parsedXfrm.success && parsedXfrm.data.flipH === true;
+  const flipV = parsedXfrm.success && parsedXfrm.data.flipV === true;
+
+  return {
+    x: emuToPx(parsedOff.data.x),
+    y: emuToPx(parsedOff.data.y),
+    width: emuToPx(parsedExt.data.cx),
+    height: emuToPx(parsedExt.data.cy),
+    xEmu: parsedOff.data.x,
+    yEmu: parsedOff.data.y,
+    cxEmu: parsedExt.data.cx,
+    cyEmu: parsedExt.data.cy,
+    ...(rotate === undefined ? {} : { rotate }),
+    ...(flipH ? { flipH: true } : {}),
+    ...(flipV ? { flipV: true } : {}),
+  };
+}
+
+/** Reads DrawingML `<a:gradFill>` into a `LinearGradient` or `RadialGradient`. */
+export function readGradientFill(
+  gradFillCursor: XmlElementCursor,
+  location: ImportLocation,
+  diagnostics: ImportDiagnostic[],
+): LinearGradient | RadialGradient | undefined {
+  gradFillCursor.consumeAttr("rotWithShape");
+  gradFillCursor.consumeAttr("flip");
+  const gsLst = gradFillCursor.child(A_NS, "gsLst");
+  const stops: GradientStop[] = [];
+  if (gsLst !== undefined) {
+    for (const gs of gsLst.children(A_NS, "gs")) {
+      const rawPos = gs.attrsObject(["pos"]);
+      const parsedPos = GradStopAttrSchema.safeParse(rawPos);
+      const color = readDrawingColor(gs, location, diagnostics);
+      if (!parsedPos.success || color === undefined) {
+        diagnostics.push({
+          code: "invalid-xml-value",
+          category: "corrupt-input",
+          disposition: "omitted",
+          location: { ...location, xpath: gs.xpath },
+          attributeOrElement: "a:gs",
+          rawValue: JSON.stringify(rawPos),
+        });
+        continue;
+      }
+      stops.push({
+        position: Math.min(1, Math.max(0, parsedPos.data.pos / 100_000)),
+        color,
+      });
+    }
+  }
+  if (stops.length < 2) {
+    diagnostics.push({
+      code: "invalid-xml-value",
+      category: "corrupt-input",
+      disposition: "omitted",
+      location: { ...location, xpath: gradFillCursor.xpath },
+      attributeOrElement: "a:gradFill/a:gsLst",
+    });
+    return undefined;
+  }
+
+  let result: LinearGradient | RadialGradient | undefined;
+  const lin = gradFillCursor.child(A_NS, "lin");
+  if (lin !== undefined) {
+    const rawLin = lin.attrsObject(["ang", "scaled"]);
+    const parsedLin = GradLinAttrSchema.safeParse(rawLin);
+    const drawingAngle = parsedLin.success ? (parsedLin.data.ang ?? 0) : 0;
+    const authorAngle = (((drawingAngle / 60_000 + 90) % 360) + 360) % 360;
+    result = { type: "linear-gradient", angle: authorAngle, stops };
+  } else {
+    const pathEl = gradFillCursor.child(A_NS, "path");
+    if (pathEl !== undefined) {
+      pathEl.consumeAttr("path");
+      const fillToRect = pathEl.child(A_NS, "fillToRect");
+      if (fillToRect !== undefined) {
+        fillToRect.consumeAttr("l");
+        fillToRect.consumeAttr("t");
+        fillToRect.consumeAttr("r");
+        fillToRect.consumeAttr("b");
+      }
+      result = { type: "radial-gradient", stops };
+    }
+  }
+  const tileRect = gradFillCursor.child(A_NS, "tileRect");
+  if (tileRect !== undefined) {
+    tileRect.consumeAttr("l");
+    tileRect.consumeAttr("t");
+    tileRect.consumeAttr("r");
+    tileRect.consumeAttr("b");
+  }
+  return result;
+}
+
+/** Reads DrawingML `<a:blipFill>` embedded image bytes and optional `<a:alphaModFix>` opacity. */
+export function readBlipFill(
+  blipFillCursor: XmlElementCursor,
+  pkg: PptxPackage,
+  location: ImportLocation,
+  diagnostics: ImportDiagnostic[],
+): { readonly image: Uint8Array; readonly opacity?: number } | undefined {
+  blipFillCursor.consumeAttr("rotWithShape");
+  blipFillCursor.consumeAttr("dpi");
+  const srcRect = blipFillCursor.child(A_NS, "srcRect");
+  if (srcRect !== undefined) {
+    srcRect.consumeAttr("l");
+    srcRect.consumeAttr("t");
+    srcRect.consumeAttr("r");
+    srcRect.consumeAttr("b");
+  }
+  const stretch = blipFillCursor.child(A_NS, "stretch");
+  if (stretch !== undefined) {
+    stretch.ignoreEmptyChild(A_NS, "fillRect");
+  }
+  const blip = blipFillCursor.child(A_NS, "blip");
+  if (blip === undefined) {
+    diagnostics.push({
+      code: "corrupt-part",
+      category: "corrupt-input",
+      disposition: "omitted",
+      location: { ...location, xpath: blipFillCursor.xpath },
+    });
+    return undefined;
+  }
+  blip.consumeAttr("cstate");
+  const embedId = blip.attr("embed", R_NS);
+  const linkId = blip.attr("link", R_NS);
+  let opacity: number | undefined;
+  const alphaModFix = blip.child(A_NS, "alphaModFix");
+  if (alphaModFix !== undefined) {
+    const parsedAmt = AlphaModFixAttrSchema.safeParse(
+      alphaModFix.attrsObject(["amt"]),
+    );
+    if (parsedAmt.success) {
+      opacity = Math.min(1, Math.max(0, parsedAmt.data.amt / 100_000));
+    }
+  }
+  if (embedId === undefined) {
+    diagnostics.push({
+      code: "unsupported-mechanism",
+      category: "unsupported",
+      disposition: "omitted",
+      location: { ...location, xpath: blip.xpath },
+      namespaceUri: A_NS,
+      localName: "blip",
+      mechanismHint: linkId !== undefined ? "linked-image-fill" : "blip-fill",
+    });
+    return undefined;
+  }
+  const rels = pkg.readRelationships(location.part);
+  diagnostics.push(...rels.diagnostics);
+  const rel = rels.entries.find((entry) => entry.Id === embedId);
+  if (rel === undefined || rel.TargetMode === "External") {
+    diagnostics.push({
+      code: "broken-relationship",
+      category: "corrupt-input",
+      disposition: "omitted",
+      location: { ...location, xpath: blip.xpath },
+      relationshipId: embedId,
+    });
+    return undefined;
+  }
+  const targetPart = resolvePartPath(location.part, rel.Target);
+  if (targetPart === undefined || !pkg.hasPart(targetPart)) {
+    diagnostics.push({
+      code: "missing-target-part",
+      category: "corrupt-input",
+      disposition: "omitted",
+      location: { ...location, xpath: blip.xpath },
+      relationshipId: embedId,
+      targetPart: targetPart ?? rel.Target,
+    });
+    return undefined;
+  }
+  const detachedBytes = pkg.readDetachedBytes(targetPart);
+  if (detachedBytes === undefined) return undefined;
+  try {
+    readImage(detachedBytes);
+  } catch {
+    diagnostics.push({
+      code: "corrupt-part",
+      category: "corrupt-input",
+      disposition: "omitted",
+      location: { part: targetPart },
+    });
+    return undefined;
+  }
+  return {
+    image: detachedBytes,
+    ...(opacity === undefined ? {} : { opacity }),
+  };
+}
+
+export type ImportedLineBorder = {
+  readonly borderColor?: ColorValue;
+  readonly borderWidth?: number;
+  readonly borderStyle?: "solid" | "dashed" | "dotted";
+  readonly startArrow?: ArrowType;
+  readonly endArrow?: ArrowType;
+};
+
+/** Reads DrawingML `<a:ln>` stroke width, fill, dash preset, join, and line end arrows. */
+export function readLineBorder(
+  lnCursor: XmlElementCursor,
+  location: ImportLocation,
+  diagnostics: ImportDiagnostic[],
+): ImportedLineBorder {
+  const rawLn = lnCursor.attrsObject(["w", "cap", "cmpd", "algn"]);
+  const parsedLn = LineAttrSchema.safeParse(rawLn);
+  const width =
+    parsedLn.success && parsedLn.data.w !== undefined
+      ? emuToPx(parsedLn.data.w)
+      : undefined;
+
+  let borderColor: ColorValue | undefined;
+  let borderStyle: "solid" | "dashed" | "dotted" | undefined;
+  let startArrow: ArrowType | undefined;
+  let endArrow: ArrowType | undefined;
+  let hasNoFill = false;
+
+  for (const child of lnCursor.remainingElementChildren()) {
+    if (child.namespaceUri !== A_NS) {
+      diagnostics.push({
+        code: "unconsumed-xml",
+        category: "unsupported",
+        disposition: "omitted",
+        kind: "element",
+        location: { ...location, xpath: child.xpath },
+        namespaceUri: child.namespaceUri,
+        localName: child.localName,
+      });
+      continue;
+    }
+    switch (child.localName) {
+      case "noFill":
+        hasNoFill = true;
+        break;
+      case "solidFill":
+        borderColor = readDrawingColor(child, location, diagnostics);
+        break;
+      case "prstDash": {
+        const rawDash = child.attrsObject(["val"]);
+        const parsedDash = DashPresetAttrSchema.safeParse(rawDash);
+        if (parsedDash.success) {
+          const val = parsedDash.data.val;
+          if (val === "solid") borderStyle = "solid";
+          else if (val === "dot" || val === "sysDot") borderStyle = "dotted";
+          else if (
+            val === "dash" ||
+            val === "lgDash" ||
+            val === "dashDot" ||
+            val === "lgDashDot" ||
+            val === "lgDashDotDot" ||
+            val === "sysDash" ||
+            val === "sysDashDot" ||
+            val === "sysDashDotDot"
+          ) {
+            borderStyle = "dashed";
+          } else {
+            diagnostics.push({
+              code: "unsupported-mechanism",
+              category: "unsupported",
+              disposition: "omitted",
+              location: { ...location, xpath: child.xpath },
+              namespaceUri: A_NS,
+              localName: "prstDash",
+              mechanismHint: `dash:${val}`,
+            });
+          }
+        }
+        break;
+      }
+      case "headEnd":
+      case "tailEnd": {
+        const rawEnd = child.attrsObject(["type", "w", "len"]);
+        const parsedEnd = LineEndAttrSchema.safeParse(rawEnd);
+        if (!parsedEnd.success) {
+          diagnostics.push({
+            code: "invalid-xml-value",
+            category: "corrupt-input",
+            disposition: "omitted",
+            location: { ...location, xpath: child.xpath },
+            attributeOrElement: `a:${child.localName}`,
+            rawValue: JSON.stringify(rawEnd),
+          });
+          break;
+        }
+        if (parsedEnd.data.type !== undefined) {
+          if (child.localName === "headEnd") startArrow = parsedEnd.data.type;
+          else endArrow = parsedEnd.data.type;
+        }
+        break;
+      }
+      case "round":
+      case "miter":
+      case "bevel":
+        if (child.localName === "miter") child.consumeAttr("lim");
+        break;
+      default:
+        diagnostics.push({
+          code: "unsupported-mechanism",
+          category: "unsupported",
+          disposition: "omitted",
+          location: { ...location, xpath: child.xpath },
+          namespaceUri: child.namespaceUri,
+          localName: child.localName,
+          mechanismHint: `line:${child.localName}`,
+        });
+        break;
+    }
+  }
+
+  if (hasNoFill || borderColor === undefined) {
+    return {};
+  }
+
+  return {
+    borderColor,
+    borderWidth: width ?? 1,
+    ...(borderStyle === undefined ? {} : { borderStyle }),
+    ...(startArrow === undefined ? {} : { startArrow }),
+    ...(endArrow === undefined ? {} : { endArrow }),
+  };
+}
+
+/** Reads DrawingML `<a:effectLst>` outer shadow and soft edge while reporting unsupported effects cleanly. */
+export function readEffectList(
+  effectLstCursor: XmlElementCursor,
+  location: ImportLocation,
+  diagnostics: ImportDiagnostic[],
+): {
+  readonly boxShadow?: {
+    readonly color?: ColorValue;
+    readonly blur?: number;
+    readonly distance?: number;
+    readonly angle?: number;
+  };
+  readonly softEdge?: number;
+} {
+  let boxShadow:
+    | {
+        readonly color?: ColorValue;
+        readonly blur?: number;
+        readonly distance?: number;
+        readonly angle?: number;
+      }
+    | undefined;
+  let softEdge: number | undefined;
+
+  for (const child of effectLstCursor.remainingElementChildren()) {
+    if (child.namespaceUri !== A_NS) {
+      diagnostics.push({
+        code: "unconsumed-xml",
+        category: "unsupported",
+        disposition: "omitted",
+        kind: "element",
+        location: { ...location, xpath: child.xpath },
+        namespaceUri: child.namespaceUri,
+        localName: child.localName,
+      });
+      continue;
+    }
+    if (child.localName === "outerShdw") {
+      const raw = child.attrsObject([
+        "blurRad",
+        "dist",
+        "dir",
+        "algn",
+        "rotWithShape",
+      ]);
+      const parsed = OuterShadowAttrSchema.safeParse(raw);
+      const color = readDrawingColor(child, location, diagnostics);
+      if (parsed.success) {
+        boxShadow = {
+          ...(color === undefined ? {} : { color }),
+          blur:
+            parsed.data.blurRad === undefined
+              ? 0
+              : emuToPx(parsed.data.blurRad),
+          distance:
+            parsed.data.dist === undefined ? 0 : emuToPx(parsed.data.dist),
+          angle: parsed.data.dir === undefined ? 0 : parsed.data.dir / 60_000,
+        };
+      }
+    } else if (child.localName === "softEdge") {
+      const raw = child.attrsObject(["rad"]);
+      const parsed = SoftEdgeAttrSchema.safeParse(raw);
+      if (parsed.success && parsed.data.rad > 0) {
+        softEdge = emuToPx(parsed.data.rad);
+      }
+    } else {
+      diagnostics.push({
+        code: "unsupported-mechanism",
+        category: "unsupported",
+        disposition: "omitted",
+        location: { ...location, xpath: child.xpath },
+        namespaceUri: child.namespaceUri,
+        localName: child.localName,
+        mechanismHint: `effect:${child.localName}`,
+      });
+    }
+  }
+
+  return {
+    ...(boxShadow === undefined ? {} : { boxShadow }),
+    ...(softEdge === undefined ? {} : { softEdge }),
+  };
+}
+
+export type ImportedSpPrVisuals = {
+  readonly transform: ImportedTransform;
+  readonly geometry?: Geometry;
+  readonly style: ShapeVisualStyle;
+};
+
+/**
+ * Reads PresentationML `<p:spPr>` geometry, transform, fills, borders, and effects.
+ * Isolates unsupported visual elements/fills by emitting a localized ImportDiagnostic
+ * and omitting only the unsupported visual attribute while keeping geometry and text intact.
+ */
+export function readSpPrVisuals(
+  spPrCursor: XmlElementCursor,
+  pkg: PptxPackage,
+  location: ImportLocation,
+  diagnostics: ImportDiagnostic[],
+): ImportedSpPrVisuals | undefined {
+  let transform: ImportedTransform | undefined;
+  let geometry: Geometry | undefined;
+  let backgroundColor: ColorValue | undefined;
+  let backgroundImage: ShapeVisualStyle["backgroundImage"];
+  let opacity: number | undefined;
+  let border: ImportedLineBorder = {};
+  let effects: ReturnType<typeof readEffectList> = {};
+
+  // Read xfrm first so custom geometry fallback extent is available regardless of child element order.
+  const xfrmCursor = spPrCursor.child(A_NS, "xfrm");
+  if (xfrmCursor !== undefined) {
+    transform = readTransformXml(xfrmCursor, location, diagnostics);
+  }
+  if (transform === undefined) {
+    if (xfrmCursor === undefined) {
+      diagnostics.push({
+        code: "corrupt-part",
+        category: "corrupt-input",
+        disposition: "omitted",
+        location: { ...location, xpath: spPrCursor.xpath },
+      });
+    }
+    return undefined;
+  }
+
+  const fallbackUnits = {
+    w: transform.cxEmu,
+    h: transform.cyEmu,
+  };
+
+  for (const child of spPrCursor.remainingElementChildren()) {
+    if (child.namespaceUri !== A_NS) {
+      diagnostics.push({
+        code: "unconsumed-xml",
+        category: "unsupported",
+        disposition: "omitted",
+        kind: "element",
+        location: { ...location, xpath: child.xpath },
+        namespaceUri: child.namespaceUri,
+        localName: child.localName,
+      });
+      continue;
+    }
+    switch (child.localName) {
+      case "prstGeom":
+        geometry = readPresetGeometryXml(child, location, diagnostics);
+        break;
+      case "custGeom":
+        geometry = readCustomGeometryXml(
+          child,
+          fallbackUnits,
+          location,
+          diagnostics,
+        );
+        break;
+      case "noFill":
+        break;
+      case "solidFill":
+        backgroundColor = readDrawingColor(child, location, diagnostics);
+        break;
+      case "gradFill":
+        backgroundImage = readGradientFill(child, location, diagnostics);
+        break;
+      case "blipFill": {
+        const blip = readBlipFill(child, pkg, location, diagnostics);
+        if (blip !== undefined) {
+          backgroundImage = { image: blip.image };
+          if (blip.opacity !== undefined) opacity = blip.opacity;
+        }
+        break;
+      }
+      case "ln":
+        border = readLineBorder(child, location, diagnostics);
+        break;
+      case "effectLst":
+        effects = readEffectList(child, location, diagnostics);
+        break;
+      default:
+        diagnostics.push({
+          code: "unsupported-mechanism",
+          category: "unsupported",
+          disposition: "omitted",
+          location: { ...location, xpath: child.xpath },
+          namespaceUri: child.namespaceUri,
+          localName: child.localName,
+          mechanismHint: child.localName,
+        });
+        break;
+    }
+  }
+
+  const style: ShapeVisualStyle = {
+    ...(backgroundColor === undefined ? {} : { backgroundColor }),
+    ...(backgroundImage === undefined ? {} : { backgroundImage }),
+    ...(border.borderColor === undefined
+      ? {}
+      : { borderColor: border.borderColor }),
+    ...(border.borderWidth === undefined
+      ? {}
+      : { borderWidth: border.borderWidth }),
+    ...(border.borderStyle === undefined
+      ? {}
+      : { borderStyle: border.borderStyle }),
+    ...(border.startArrow === undefined
+      ? {}
+      : { startArrow: border.startArrow }),
+    ...(border.endArrow === undefined ? {} : { endArrow: border.endArrow }),
+    ...(opacity === undefined ? {} : { opacity }),
+    ...(effects.boxShadow === undefined
+      ? {}
+      : { boxShadow: effects.boxShadow }),
+    ...(effects.softEdge === undefined ? {} : { softEdge: effects.softEdge }),
+    ...(transform.rotate === undefined ? {} : { rotate: transform.rotate }),
+  };
+
+  return {
+    transform,
+    ...(geometry === undefined ? {} : { geometry }),
+    style,
+  };
+}
+
+type SolidFillModel = Extract<ResolvedFill, { readonly kind: "solid" }>;
+type GradientFillModel = Extract<
+  ResolvedFill,
+  { readonly kind: "linear-gradient" | "radial-gradient" }
+>;
+type ImageFillModel = Extract<ResolvedFill, { readonly kind: "image" }>;
+
+function readFillSubElement(
+  context: ShapeTreeImportContext,
+): ShapeTreeImportOutcome {
+  const diagnostics: ImportDiagnostic[] = [];
+  const spPrCursor = context.cursor.child(P_NS, "spPr");
+  if (spPrCursor === undefined) {
+    return { diagnostics };
+  }
+  readSpPrVisuals(
+    spPrCursor,
+    context.package,
+    { part: context.part, slideIndex: context.slideIndex },
+    diagnostics,
+  );
+  return { diagnostics };
+}
+
+/** Native canvas mechanism for DrawingML `<a:solidFill>`. */
+export const solidFillMechanism = defineCanvasMechanism({
+  key: "solid-fill",
+  role: "canvas",
+  emit(fill: SolidFillModel, _context: undefined): { readonly xml: string } {
+    return {
+      xml: `<a:solidFill>${resolvedColorXml(fill.color)}</a:solidFill>`,
+    };
+  },
+  paint(
+    fill: SolidFillModel,
+    context: {
+      readonly fillMode: Exclude<"norm" | PresetPathFillMode, "none">;
+    },
+  ): PaintOutput {
+    const hex = subpathFillHex(fill.color.hex, context.fillMode);
+    return {
+      svg: `fill="#${hex}" fill-opacity="${roundSvgNumber(fill.color.alpha ?? 1)}"`,
+    };
+  },
+  import: {
+    target: "shape-tree",
+    localName: "sp",
+    matches: () => false,
+    read: readFillSubElement,
+  },
+});
+
+/** Native canvas mechanism for DrawingML `<a:gradFill>` (linear and radial gradients). */
+export const gradientFillMechanism = defineCanvasMechanism({
+  key: "gradient-fill",
+  role: "canvas",
+  emit(fill: GradientFillModel, _context: undefined): { readonly xml: string } {
+    return { xml: gradientFillXml(fill) };
+  },
+  paint(
+    fill: GradientFillModel,
+    context: { readonly id: string },
+  ): PaintOutput {
+    return { svg: gradientDefSvg(context.id, fill) };
+  },
+  import: {
+    target: "shape-tree",
+    localName: "sp",
+    matches: () => false,
+    read: readFillSubElement,
+  },
+});
+
+/** Native canvas mechanism for DrawingML `<a:blipFill>` shape image fills. */
+export const imageFillMechanism = defineCanvasMechanism({
+  key: "image-fill",
+  role: "canvas",
+  emit(
+    fill: ImageFillModel,
+    registerResource: ((resource: CapabilityResource) => string) | undefined,
+  ): { readonly xml: string } {
+    if (registerResource === undefined) {
+      invalid(
+        "image-resource-failure",
+        "Cannot emit image background fill without resource registrar",
+      );
+    }
+    const relationshipId = registerResource({
+      bytes: fill.image.bytes,
+      extension: fill.image.extension,
+      contentType: fill.image.contentType,
+      relationshipType: imageRelationship,
+    });
+    const alpha =
+      fill.opacity === undefined
+        ? ""
+        : `<a:alphaModFix amt="${Math.round(fill.opacity * 100000)}"/>`;
+    return {
+      xml: `<a:blipFill rotWithShape="1"><a:blip r:embed="${xmlEscape(relationshipId)}">${alpha}</a:blip><a:stretch><a:fillRect/></a:stretch></a:blipFill>`,
+    };
+  },
+  paint(
+    fill: ImageFillModel,
+    context: { readonly id: string; readonly box: ShapeBox },
+  ): PaintOutput {
+    const pngBytes = decodeImageToPngBytes(fill.image);
+    const base64 = Buffer.from(pngBytes).toString("base64");
+    const imgOpacity = roundSvgNumber(fill.opacity ?? 1);
+    return {
+      svg: `<pattern id="${context.id}" patternUnits="userSpaceOnUse" x="${roundSvgNumber(context.box.x)}" y="${roundSvgNumber(context.box.y)}" width="${roundSvgNumber(context.box.width)}" height="${roundSvgNumber(context.box.height)}"><image x="0" y="0" width="${roundSvgNumber(context.box.width)}" height="${roundSvgNumber(context.box.height)}" preserveAspectRatio="none" opacity="${imgOpacity}" href="data:image/png;base64,${base64}"/></pattern>`,
+    };
+  },
+  import: {
+    target: "shape-tree",
+    localName: "sp",
+    matches: () => false,
+    read: readFillSubElement,
+  },
+});

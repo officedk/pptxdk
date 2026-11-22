@@ -1,49 +1,26 @@
-import type {
-  LayoutStyle,
-  LinkTarget,
-  NativePlaceholderRef,
-  PaddingStyle,
-  VisualStyle,
-} from "@pptxdk/core/capability";
 import { CommonNode, RichTextContainer } from "@pptxdk/core/document";
+import type { z } from "zod";
 
-import type { MotionProps } from "../motion/motion-api.ts";
-import type { MorphProps } from "../shared/morph-api.ts";
 import type {
-  ParagraphStyle,
-  RunTextStyle,
+  paragraphAuthorPropsSchema,
+  slideNumberAuthorPropsSchema,
+  spanAuthorPropsSchema,
+  textAuthorPropsSchema,
   TextStyle,
 } from "../shared/text-schemas.ts";
 
 /** Pure text box declaration shared by JSX and command authoring. */
-export type TextDeclarationProps = MotionProps &
-  MorphProps & {
-    readonly id?: string;
-    readonly name?: string;
-    readonly placeholder?: string;
-    readonly nativePlaceholder?: NativePlaceholderRef;
-    readonly link?: LinkTarget;
-    readonly x?: number;
-    readonly y?: number;
-    readonly width?: number;
-    readonly height?: number | "auto";
-    readonly style?: LayoutStyle & PaddingStyle & TextStyle & VisualStyle;
-  };
+export type TextDeclarationProps = z.infer<typeof textAuthorPropsSchema>;
 
-export type ParagraphDeclarationProps = {
-  readonly id?: string;
-  readonly style?: ParagraphStyle;
-};
+export type ParagraphDeclarationProps = z.infer<
+  typeof paragraphAuthorPropsSchema
+>;
 
-export type SpanDeclarationProps = {
-  readonly id?: string;
-  readonly style?: RunTextStyle;
-};
+export type SpanDeclarationProps = z.infer<typeof spanAuthorPropsSchema>;
 
-export type SlideNumberDeclarationProps = {
-  readonly id?: string;
-  readonly style?: RunTextStyle;
-};
+export type SlideNumberDeclarationProps = z.infer<
+  typeof slideNumberAuthorPropsSchema
+>;
 
 /** Pure text style type for Shape; does not depend on the text box capability module. */
 export type ShapeTextStyle = TextStyle;

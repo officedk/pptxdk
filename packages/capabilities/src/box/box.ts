@@ -1,10 +1,7 @@
 import {
   CapabilityError,
-  layoutStyleKeys,
-  paddingStyleKeys,
   parseCapabilityLayoutContract,
   textStyleFrom,
-  textStyleKeys,
   type BoundContainerCollaboration,
   type BoundObjectCapability,
   type BoundObjectNativeCollaboration,
@@ -36,20 +33,22 @@ import {
   hasVisibleBoxStyle,
   paintVisualModel,
   resolveVisualModel,
-  visualStyleKeys,
 } from "../shared/visual.ts";
-import { boxDeclarationPropsKeys } from "./box-declaration.ts";
+import { boxDeclarationPropsKeys, boxStyleSchema } from "./box-declaration.ts";
 
-export { createBoxNode, type BoxDeclarationProps } from "./box-declaration.ts";
+export {
+  boxDeclarationPropsSchema,
+  boxStyleSchema,
+  createBoxNode,
+  type BoxDeclarationProps,
+  type BoxStyle,
+} from "./box-declaration.ts";
 
 const boxAllowedParameters: readonly string[] = boxDeclarationPropsKeys;
 
-const boxAllowedStyleKeys = new Set<string>([
-  ...layoutStyleKeys,
-  ...paddingStyleKeys,
-  ...textStyleKeys,
-  ...visualStyleKeys,
-]);
+const boxAllowedStyleKeys = new Set<string>(
+  Object.keys(boxStyleSchema.unwrap().shape),
+);
 
 function styleRecord(value: unknown): Record<string, unknown> {
   if (value === undefined) return {};

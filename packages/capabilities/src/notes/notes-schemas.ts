@@ -1,11 +1,11 @@
-import { textStyleSchema } from "@pptxdk/core/capability";
+import { authorIdSchema, textStyleSchema } from "@pptxdk/core/capability";
 import { OoxmlBoolSchema, OoxmlNonNegativeIntSchema } from "@pptxdk/import";
 import { z } from "zod";
 
 /** Pure-data Zod v4 contract for page-affiliated speaker notes declarations (`Notes` / `notes()`). */
 export const notesDeclarationPropsSchema = z
   .strictObject({
-    id: z.string().optional(),
+    id: authorIdSchema.optional(),
     style: textStyleSchema.optional(),
   })
   .readonly();

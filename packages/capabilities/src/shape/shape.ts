@@ -1,7 +1,6 @@
 import {
   assertValidLang,
   CapabilityError,
-  layoutStyleKeys,
   paddingStyleKeys,
   parseCapabilityLayoutContract,
   textStyleKeys,
@@ -75,33 +74,29 @@ import {
   emitVisualModel,
   gradientFillMechanism,
   imageFillMechanism,
-  lineEndStyleKeys,
   paintVisualModel,
   resolveVisualModel,
   solidFillMechanism,
-  visualStyleKeys,
   type ResolvedVisualModel,
 } from "../shared/visual.ts";
 import {
   shapeCoordinateSchema,
   shapeDeclarationPropsKeys,
   shapeSizeSchema,
+  shapeStyleSchema,
 } from "./shape-declaration.ts";
 
 export {
   createShapeNode,
+  shapeDeclarationPropsSchema,
+  shapeStyleSchema,
   type ShapeDeclarationProps,
+  type ShapeStyle,
 } from "./shape-declaration.ts";
 
 const allowedParameters: readonly string[] = shapeDeclarationPropsKeys;
 
-export const shapeStyleKeys = [
-  ...layoutStyleKeys,
-  ...visualStyleKeys,
-  ...lineEndStyleKeys,
-  ...textStyleKeys,
-  ...paddingStyleKeys,
-] as const;
+export const shapeStyleKeys = Object.keys(shapeStyleSchema.unwrap().shape);
 
 function record(input: unknown): Record<string, unknown> {
   return typeof input === "object" && input !== null && !Array.isArray(input)
@@ -126,7 +121,10 @@ function shapeTextStyle(
     explicit === null ||
     Array.isArray(explicit)
   ) {
-    return inherited;
+    throw new CapabilityError(
+      "invalid-style",
+      "Shape.textStyle must be an object",
+    );
   }
   const explicitObj = explicit as Record<string, unknown>;
   if (explicitObj["lang"] !== undefined) {
@@ -377,16 +375,10 @@ export const shapeCapability = {
     if (declaredY !== undefined) {
       validateCoordinate(declaredY, "y");
     }
-    if (
-      input.props["width"] !== undefined &&
-      typeof input.props["width"] === "number"
-    ) {
+    if (input.props["width"] !== undefined) {
       validateSize(input.props["width"], "width");
     }
-    if (
-      input.props["height"] !== undefined &&
-      typeof input.props["height"] === "number"
-    ) {
+    if (input.props["height"] !== undefined) {
       validateSize(input.props["height"], "height");
     }
 
@@ -405,12 +397,15 @@ export const shapeCapability = {
       (typeof textProp === "string" && textProp !== "") ||
       (textProp === undefined && input.children.length > 0);
 
-    const allowedStyleKeys = new Set<string>([
-      ...layoutStyleKeys,
-      ...visualStyleKeys,
-      ...lineEndStyleKeys,
-      ...(hasText ? [...textStyleKeys, ...paddingStyleKeys] : []),
-    ]);
+    const allowedStyleKeys = new Set<string>(
+      hasText
+        ? shapeStyleKeys
+        : shapeStyleKeys.filter(
+            (key) =>
+              !textStyleKeys.has(key) &&
+              !(paddingStyleKeys as readonly string[]).includes(key),
+          ),
+    );
 
     const contract = parseCapabilityLayoutContract({
       nativeKind: "sp",

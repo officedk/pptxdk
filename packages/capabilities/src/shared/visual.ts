@@ -194,22 +194,15 @@ export const lineEndStyleSchema = z
   .readonly();
 export type LineEndStyle = z.infer<typeof lineEndStyleSchema>;
 
-export const lineEndStyleKeys = ["startArrow", "endArrow"] as const;
+export const lineEndStyleKeys = Object.keys(
+  lineEndStyleSchema.unwrap().shape,
+) as readonly (keyof LineEndStyle)[];
 
 export type ShapeVisualStyle = CoreVisualStyle & LineEndStyle;
 
-export const visualStyleKeys = [
-  "backgroundColor",
-  "backgroundImage",
-  "borderColor",
-  "borderWidth",
-  "borderStyle",
-  "borderRadius",
-  "opacity",
-  "boxShadow",
-  "softEdge",
-  "rotate",
-] as const;
+export const visualStyleKeys = Object.keys(
+  visualStyleSchema.unwrap().shape,
+) as readonly (keyof CoreVisualStyle)[];
 
 export type ShapePropertiesOptions = {
   readonly theme: ThemeContext;

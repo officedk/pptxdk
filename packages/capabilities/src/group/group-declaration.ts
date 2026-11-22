@@ -1,30 +1,39 @@
 import {
-  isMorphKey,
+  authorIdSchema,
+  layoutStyleSchema,
   linkTargetSchema,
+  textStyleSchema,
   themeScopeSchema,
-  type LayoutStyle,
-  type LinkTarget,
-  type MorphKey,
-  type TextStyle,
-  type ThemeScope,
-  type VisualStyle,
+  visualStyleSchema,
 } from "@pptxdk/core/capability";
 import { CommonContainer } from "@pptxdk/core/document";
 import { z } from "zod";
 
-import type { MotionProps } from "../motion/motion-api.ts";
-import type { MorphProps } from "../shared/morph-api.ts";
+import { MotionPropsSchema } from "../motion/motion-schemas.ts";
+import { OptionalNameSchema } from "../shared/identity.ts";
+import { MorphKeySchema } from "../shared/morph-api.ts";
+
+const groupStyleObjectSchema = z.strictObject({
+  ...layoutStyleSchema.unwrap().shape,
+  ...textStyleSchema.unwrap().shape,
+  rotate: visualStyleSchema.unwrap().shape.rotate,
+});
+
+export const groupStyleSchema = groupStyleObjectSchema.readonly();
+export type GroupStyle = z.infer<typeof groupStyleSchema>;
+
+const motionPropsShape = MotionPropsSchema.unwrap().shape;
 
 const groupDeclarationPropsObjectSchema = z.strictObject({
-  id: z.string().optional(),
-  name: z.string().optional(),
-  morphKey: z.custom<MorphKey>(isMorphKey).optional(),
+  id: authorIdSchema.optional(),
+  name: OptionalNameSchema.optional(),
+  morphKey: MorphKeySchema.optional(),
   link: linkTargetSchema.optional(),
-  style: z.record(z.string(), z.unknown()).readonly().optional(),
+  style: groupStyleSchema.optional(),
   theme: themeScopeSchema.optional(),
-  enter: z.unknown().optional(),
-  emphasis: z.unknown().optional(),
-  motion: z.unknown().optional(),
+  enter: motionPropsShape.enter,
+  emphasis: motionPropsShape.emphasis,
+  motion: motionPropsShape.motion,
 });
 
 export const groupDeclarationPropsKeys = Object.keys(
@@ -35,14 +44,7 @@ export const groupDeclarationPropsSchema =
   groupDeclarationPropsObjectSchema.readonly();
 
 /** Native Group preserves member relationships; style allows it to arrange as a layout child, with output bounds computed from the union of member geometries. */
-export type GroupDeclarationProps = MotionProps &
-  MorphProps & {
-    readonly id?: string;
-    readonly name?: string;
-    readonly link?: LinkTarget;
-    readonly style?: LayoutStyle & TextStyle & Pick<VisualStyle, "rotate">;
-    readonly theme?: ThemeScope;
-  };
+export type GroupDeclarationProps = z.infer<typeof groupDeclarationPropsSchema>;
 
 /** Creates the editable native group shared by the command factory and the Group JSX element. */
 export function createGroupNode(

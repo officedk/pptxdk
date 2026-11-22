@@ -9,16 +9,19 @@ import { CommonContainer } from "@pptxdk/core/document";
 import type { ReactNode } from "react";
 
 import {
+  BreatheOptionsSchema,
   EasingSchema,
   EffectDelaySchema,
   EffectDurationSchema,
   EffectPresetSchema,
+  EntranceEffectSchema,
   IntervalMsSchema,
   MotionDirectionSchema,
   MotionGranularitySchema,
   MotionHexColorSchema,
   MotionMomentOffsetSchema,
   MotionMomentSchema,
+  MotionScopeAuthorPropsSchema,
   MotionScopeHandleSchema,
   MotionScopeModeSchema,
   MotionStepAuthorPropsSchema,
@@ -376,11 +379,7 @@ export function fillColor(options: FillColorOptions): EmphasisEffect {
 // Retains extra options from structured JavaScript input for formal effect validation diagnostics.
 const breatheUnknownParameters = Symbol("breathe unknown parameters");
 const breatheOptionNames = new Set([
-  "period",
-  "delay",
-  "from",
-  "to",
-  "easing",
+  ...Object.keys(BreatheOptionsSchema.unwrap().shape),
   "by",
   "intervalMs",
 ]);
@@ -584,19 +583,9 @@ const presetKinds: Readonly<Record<EffectPreset, Effect["kind"]>> = {
   breathe: "emphasis",
   fillColor: "emphasis",
 };
-const effectKeys = [
-  "type",
-  "kind",
-  "preset",
-  "duration",
-  "delay",
-  "from",
-  "easing",
-  "by",
-  "intervalMs",
-  "fromColor",
-  "toColor",
-] as const;
+const effectKeys: readonly string[] = Object.keys(
+  EntranceEffectSchema.unwrap().shape,
+);
 
 function normalizeColor(
   value: unknown,
@@ -671,7 +660,7 @@ function validatedEffect(
     );
   }
   const unknown = Object.keys(effectValue).find(
-    (key) => !(effectKeys as readonly string[]).includes(key),
+    (key) => !effectKeys.includes(key),
   );
   if (unknown !== undefined) {
     return fail(
@@ -795,16 +784,15 @@ function validatedEffect(
     if (!isRecord(easing)) {
       return fail("invalid-easing", "easing must be an object");
     }
-    const unknownEasing = Object.keys(easing).find(
-      (key) => key !== "accelerate" && key !== "decelerate",
-    );
-    if (unknownEasing !== undefined) {
-      return fail(
-        "unknown-parameter",
-        `easing contains unimplemented parameter ${unknownEasing}`,
-      );
-    }
-    if (!EasingSchema.safeParse(easing).success) {
+    const parsedEasing = EasingSchema.safeParse(easing);
+    if (!parsedEasing.success) {
+      const issue = parsedEasing.error.issues[0];
+      if (issue?.code === "unrecognized_keys" && issue.keys[0] !== undefined) {
+        return fail(
+          "unknown-parameter",
+          `easing contains unimplemented parameter ${issue.keys[0]}`,
+        );
+      }
       return fail(
         "invalid-easing",
         "easing accelerate and decelerate proportions must be non-negative and sum to at most 1",
@@ -998,20 +986,21 @@ function validatedPublisher(value: unknown): MotionMoment | undefined {
   return momentValue;
 }
 
+const motionScopeAllowedParameters = new Set(
+  Object.keys(MotionScopeAuthorPropsSchema.unwrap().shape),
+);
+
+const motionStepAllowedParameters = new Set([
+  ...Object.keys(MotionStepAuthorPropsSchema.unwrap().shape),
+  "stepIdentity",
+]);
+
 function localScopeDeclaration(
   props: Readonly<Record<string, unknown>>,
 ): MotionScopeDeclaration {
-  const allowedParameters = new Set([
-    "scope",
-    "mode",
-    "each",
-    "delay",
-    "startAt",
-    "publishStart",
-    "publishEnd",
-    "motion",
-  ]);
-  const unknown = Object.keys(props).find((key) => !allowedParameters.has(key));
+  const unknown = Object.keys(props).find(
+    (key) => !motionScopeAllowedParameters.has(key),
+  );
   if (unknown !== undefined) {
     return fail(
       "unknown-parameter",
@@ -1097,7 +1086,7 @@ export function motionStepAnnotation(
   input: Readonly<Record<string, unknown>>,
 ): readonly CapabilityAnnotation[] {
   const unknown = Object.keys(input).find(
-    (key) => key !== "n" && key !== "stepIdentity",
+    (key) => !motionStepAllowedParameters.has(key),
   );
   if (unknown !== undefined) {
     return fail(

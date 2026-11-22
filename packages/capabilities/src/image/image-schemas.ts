@@ -1,10 +1,9 @@
 import {
-  isMorphKey,
+  authorIdSchema,
   layoutStyleSchema,
   linkTargetSchema,
   nativePlaceholderRefSchema,
   visualStyleSchema,
-  type MorphKey,
 } from "@pptxdk/core/capability";
 import {
   OoxmlIntSchema,
@@ -13,8 +12,10 @@ import {
 } from "@pptxdk/import";
 import { z } from "zod";
 
-import type { Geometry } from "../shared/geometry.ts";
+import { MotionPropsSchema } from "../motion/motion-schemas.ts";
+import { geometrySchema } from "../shared/geometry.ts";
 import { OptionalNameSchema } from "../shared/identity.ts";
+import { MorphKeySchema } from "../shared/morph-api.ts";
 
 export const ImageFitSchema = z.enum(["fill", "cover", "contain"]);
 export type ImageFit = z.infer<typeof ImageFitSchema>;
@@ -94,12 +95,14 @@ export const imageStyleSchema = z
   })
   .readonly();
 
+const motionPropsShape = MotionPropsSchema.unwrap().shape;
+
 const imageDeclarationPropsObjectSchema = z.strictObject({
-  id: z.string().optional(),
+  id: authorIdSchema.optional(),
   name: OptionalNameSchema.optional(),
   placeholder: z.string().optional(),
   nativePlaceholder: nativePlaceholderRefSchema.optional(),
-  morphKey: z.custom<MorphKey>(isMorphKey).optional(),
+  morphKey: MorphKeySchema.optional(),
   link: linkTargetSchema.optional(),
   src: ImageSourceSchema,
   /** Alternative text for the image. */
@@ -109,7 +112,7 @@ const imageDeclarationPropsObjectSchema = z.strictObject({
   y: ImageCoordinateValueSchema.optional(),
   width: ImageExtentValueSchema.optional(),
   height: ImageExtentValueSchema.optional(),
-  geometry: z.custom<Geometry>().optional(),
+  geometry: geometrySchema.optional(),
   flipH: z.boolean().optional(),
   flipV: z.boolean().optional(),
   style: imageStyleSchema.optional(),
@@ -117,13 +120,15 @@ const imageDeclarationPropsObjectSchema = z.strictObject({
   fit: ImageFitSchema.optional(),
   /** Explicit crop fraction for each side of the original image; takes precedence over `fit` when provided. */
   crop: ImageCropInputSchema.optional(),
-  enter: z.unknown().optional(),
-  emphasis: z.unknown().optional(),
-  motion: z.unknown().optional(),
+  enter: motionPropsShape.enter,
+  emphasis: motionPropsShape.emphasis,
+  motion: motionPropsShape.motion,
 });
 
 export const imageDeclarationPropsSchema =
   imageDeclarationPropsObjectSchema.readonly();
+
+export type ImageDeclarationProps = z.infer<typeof imageDeclarationPropsSchema>;
 
 export const imageAllowedParameters: readonly string[] = Object.keys(
   imageDeclarationPropsObjectSchema.shape,

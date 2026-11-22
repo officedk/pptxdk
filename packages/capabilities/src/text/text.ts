@@ -1,7 +1,5 @@
 import {
   CapabilityError,
-  layoutStyleKeys,
-  paddingStyleKeys,
   parseCapabilityLayoutContract,
   textStyleKeys,
   type BoundObjectCapability,
@@ -48,6 +46,7 @@ import {
   parseTextCoordinate,
   parseTextExtent,
   textBoxAllowedParamKeys,
+  textBoxStyleSchema,
 } from "../shared/text-schemas.ts";
 import {
   emitSlideNumberRunXml,
@@ -395,16 +394,16 @@ export const textCapability = {
     const declaredWidth = placeholderGeometry?.width ?? input.props["width"];
     if (declaredX !== undefined) coordinate(declaredX, "x");
     if (declaredY !== undefined) coordinate(declaredY, "y");
+    if (input.props["width"] !== undefined) {
+      size(input.props["width"], "width");
+    }
     if (declaredWidth !== undefined && typeof declaredWidth === "number") {
       size(declaredWidth, "width");
     }
 
-    const allowedStyleKeys = new Set<string>([
-      ...layoutStyleKeys,
-      ...paddingStyleKeys,
-      ...textStyleKeys,
-      ...visualStyleKeys,
-    ]);
+    const allowedStyleKeys = new Set<string>(
+      Object.keys(textBoxStyleSchema.unwrap().shape),
+    );
 
     const contract = parseCapabilityLayoutContract({
       nativeKind: "sp",

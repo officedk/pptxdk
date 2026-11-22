@@ -3,7 +3,6 @@ import {
   CapabilityError,
   layoutStyleKeys,
   parseCapabilityLayoutContract,
-  textStyleKeys,
   type BoundObjectCapability,
   type BoundObjectNativeCollaboration,
   type CapabilityInput,
@@ -71,6 +70,8 @@ import {
   rowAllowedParameters,
   rowStyleKeys,
   tableAllowedParameters,
+  tableStyleKeys,
+  tableTextStyleKeys,
   type TableTrack,
 } from "./table-schemas.ts";
 import {
@@ -179,7 +180,7 @@ function textStyle(
   const style = record(styleValue ?? {}, `${label}.style`, path);
   assertAllowedTableKeys(
     style,
-    [...textStyleKeys, ...additional],
+    [...tableTextStyleKeys, ...additional],
     `${label}.style`,
     path,
   );
@@ -194,7 +195,7 @@ function textStyle(
     }
   }
   const textStyle: Record<string, unknown> = {};
-  for (const key of textStyleKeys) {
+  for (const key of tableTextStyleKeys) {
     const value = style[key];
     if (value !== undefined) textStyle[key] = value;
   }
@@ -936,10 +937,7 @@ export const tableCapability = {
     const morphKey = parseMorphKey(input.props["morphKey"]);
     const link = parseLinkTarget(input.props["link"]);
 
-    const allowedStyleKeys = new Set<string>([
-      ...layoutStyleKeys,
-      ...textStyleKeys,
-    ]);
+    const allowedStyleKeys = new Set<string>(tableStyleKeys);
 
     const contract = parseCapabilityLayoutContract({
       nativeKind: "graphicFrame",

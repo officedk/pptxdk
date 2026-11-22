@@ -1,23 +1,24 @@
 import {
   CapabilityError,
-  bcp47LangSchema,
-  colorValueSchema,
-  fontFaceStyleSchema,
-  fontReferenceSchema,
-  fontSizeSchema,
+  authorIdSchema,
+  layoutStyleSchema,
   linkTargetSchema,
   nativePlaceholderRefSchema,
-  shadowSchema,
-  textAlignmentSchema,
   textListBulletSchema,
   textListNumberSchema,
   textListSchema,
+  textStyleSchema,
   validateTextStyle,
+  visualStyleSchema,
   type TextList,
   type TextStyle,
 } from "@pptxdk/core/capability";
 import { pxToEmu, xmlEscape } from "@pptxdk/emit";
 import { z } from "zod";
+
+import { MotionPropsSchema } from "../motion/motion-schemas.ts";
+import { OptionalNameSchema } from "./identity.ts";
+import { MorphKeySchema } from "./morph-api.ts";
 
 export { textListBulletSchema, textListNumberSchema, textListSchema };
 export type { TextList, TextStyle };
@@ -26,70 +27,19 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function textLengthToPixels(value: string | number): number {
-  if (typeof value === "number") return value;
-  const match = /^(\d+(?:\.\d+)?)(px|pt)$/u.exec(value);
-  if (match === null) return Number.NaN;
-  const amount = Number(match[1]);
-  return match[2] === "pt" ? (amount * 4) / 3 : amount;
-}
-
-function fontSizeToPoints(value: string | number): number {
-  if (typeof value === "string" && value.endsWith("pt")) {
-    return Number(value.slice(0, -2));
-  }
-  return textLengthToPixels(value) * 0.75;
-}
-
-const fontWeightSchema = z.union([
-  z.literal("normal"),
-  z.literal("bold"),
-  z
-    .number()
-    .int()
-    .min(100)
-    .max(900)
-    .refine((value) => value % 100 === 0),
-]);
-
-const validatedFontSizeSchema = fontSizeSchema.refine((value) => {
-  const serialized = Math.round(fontSizeToPoints(value) * 100);
-  return serialized >= 100 && serialized <= 400_000;
-}, "fontSize converted value must be within DrawingML range of 1 to 4000pt");
-
-const validatedLineHeightSchema = fontSizeSchema.refine((value) => {
-  const centipoints = Math.round(textLengthToPixels(value) * 75);
-  return centipoints >= 0 && centipoints <= 158_400;
-}, "lineHeight converted value must be within DrawingML range of 0 to 1584pt");
-
-const validatedSpacingAfterSchema = z
-  .number()
-  .finite()
-  .nonnegative()
-  .refine((value) => {
-    const centipoints = Math.round(value * 75);
-    return centipoints >= 0 && centipoints <= 158_400;
-  }, "spacingAfter converted value must be within DrawingML range of 0 to 1584pt");
-
-const validatedLetterSpacingSchema = z
-  .number()
-  .finite()
-  .refine((value) => {
-    const points = Math.round(value * 75);
-    return points >= -400_000 && points <= 400_000;
-  }, "letterSpacing converted value must be within DrawingML range of -4000 to 4000pt");
+const coreTextStyleShape = textStyleSchema.unwrap().shape;
 
 const runStyleObjectSchema = z.strictObject({
-  fontFamily: fontReferenceSchema.optional(),
-  fontSize: validatedFontSizeSchema.optional(),
-  fontWeight: fontWeightSchema.optional(),
-  fontStyle: fontFaceStyleSchema.optional(),
-  color: colorValueSchema.optional(),
-  letterSpacing: validatedLetterSpacingSchema.optional(),
-  textTransform: z.enum(["none", "uppercase"]).optional(),
-  textDecoration: z.enum(["none", "underline", "line-through"]).optional(),
-  textShadow: z.union([shadowSchema, z.literal("none")]).optional(),
-  lang: bcp47LangSchema.optional(),
+  fontFamily: coreTextStyleShape.fontFamily,
+  fontSize: coreTextStyleShape.fontSize,
+  fontWeight: coreTextStyleShape.fontWeight,
+  fontStyle: coreTextStyleShape.fontStyle,
+  color: coreTextStyleShape.color,
+  letterSpacing: coreTextStyleShape.letterSpacing,
+  textTransform: coreTextStyleShape.textTransform,
+  textDecoration: coreTextStyleShape.textDecoration,
+  textShadow: coreTextStyleShape.textShadow,
+  lang: coreTextStyleShape.lang,
 });
 
 /** Run-level style schema shared by `Span` and `SlideNumber`. */
@@ -97,9 +47,9 @@ export const runStyleSchema = runStyleObjectSchema.readonly();
 export type RunTextStyle = z.infer<typeof runStyleSchema>;
 
 const paragraphStyleObjectSchema = runStyleObjectSchema.extend({
-  lineHeight: validatedLineHeightSchema.optional(),
-  align: textAlignmentSchema.optional(),
-  spacingAfter: validatedSpacingAfterSchema.optional(),
+  lineHeight: coreTextStyleShape.lineHeight,
+  align: coreTextStyleShape.align,
+  spacingAfter: coreTextStyleShape.spacingAfter,
   list: textListSchema.optional(),
 });
 
@@ -159,54 +109,51 @@ export const textInsetsStyleSchema = z
   })
   .readonly();
 
-export const textBoxAllowedParamKeys = new Set([
-  "id",
-  "name",
-  "placeholder",
-  "nativePlaceholder",
-  "morphKey",
-  "link",
-  "x",
-  "y",
-  "width",
-  "height",
-  "style",
-  "children",
-  "enter",
-  "emphasis",
-  "motion",
-]);
-
-export const textAuthorPropsSchema = z
+export const textBoxStyleSchema = z
   .strictObject({
-    id: z.string().optional(),
-    name: z.string().optional(),
-    placeholder: z.string().optional(),
-    nativePlaceholder: nativePlaceholderRefSchema.optional(),
-    morphKey: z.unknown().optional(),
-    link: linkTargetSchema.optional(),
-    x: textCoordinateSchema.optional(),
-    y: textCoordinateSchema.optional(),
-    width: textPositiveSizeSchema.optional(),
-    height: z.union([textPositiveSizeSchema, z.literal("auto")]).optional(),
-    style: z.record(z.string(), z.unknown()).optional(),
-    children: z.unknown().optional(),
-    enter: z.unknown().optional(),
-    emphasis: z.unknown().optional(),
-    motion: z.unknown().optional(),
+    ...layoutStyleSchema.unwrap().shape,
+    ...coreTextStyleShape,
+    ...visualStyleSchema.unwrap().shape,
   })
   .readonly();
+export type TextBoxStyle = z.infer<typeof textBoxStyleSchema>;
+
+const motionPropsShape = MotionPropsSchema.unwrap().shape;
+
+const textAuthorPropsObjectSchema = z.strictObject({
+  id: authorIdSchema.optional(),
+  name: OptionalNameSchema.optional(),
+  placeholder: z.string().optional(),
+  nativePlaceholder: nativePlaceholderRefSchema.optional(),
+  morphKey: MorphKeySchema.optional(),
+  link: linkTargetSchema.optional(),
+  x: textCoordinateSchema.optional(),
+  y: textCoordinateSchema.optional(),
+  width: textPositiveSizeSchema.optional(),
+  height: z.union([textPositiveSizeSchema, z.literal("auto")]).optional(),
+  style: textBoxStyleSchema.optional(),
+  enter: motionPropsShape.enter,
+  emphasis: motionPropsShape.emphasis,
+  motion: motionPropsShape.motion,
+});
+
+export const textAuthorPropsSchema = textAuthorPropsObjectSchema.readonly();
+
+export const textBoxAllowedParamKeys = new Set([
+  ...Object.keys(textAuthorPropsObjectSchema.shape),
+  "children",
+]);
 
 export const paragraphAuthorPropsSchema = z
   .strictObject({
-    id: z.string().optional(),
+    id: authorIdSchema.optional(),
     style: paragraphStyleSchema.optional(),
   })
   .readonly();
 
 export const spanAuthorPropsSchema = z
   .strictObject({
-    id: z.string().optional(),
+    id: authorIdSchema.optional(),
     style: runStyleSchema.optional(),
   })
   .readonly();

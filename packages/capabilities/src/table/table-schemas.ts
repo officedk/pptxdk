@@ -1,12 +1,10 @@
 import {
   CapabilityError,
   colorValueSchema,
-  isMorphKey,
   layoutStyleSchema,
   linkTargetSchema,
   nativePlaceholderRefSchema,
   textStyleSchema,
-  type MorphKey,
   type ResolvedColor,
   type ThemeContext,
 } from "@pptxdk/core/capability";
@@ -18,7 +16,9 @@ import {
 } from "@pptxdk/import";
 import { z } from "zod";
 
+import { MotionPropsSchema } from "../motion/motion-schemas.ts";
 import { OptionalNameSchema } from "../shared/identity.ts";
+import { MorphKeySchema } from "../shared/morph-api.ts";
 import {
   parseTextInsets,
   textCoordinateSchema,
@@ -143,12 +143,14 @@ export type TableCellStyle = z.infer<typeof tableCellStyleSchema>;
 
 export const tableMergeSpanSchema = z.number().int().min(1);
 
+const motionPropsShape = MotionPropsSchema.unwrap().shape;
+
 const tableDeclarationPropsObjectSchema = z.strictObject({
   id: OptionalNameSchema.optional(),
   name: OptionalNameSchema.optional(),
   placeholder: z.string().optional(),
   nativePlaceholder: nativePlaceholderRefSchema.optional(),
-  morphKey: z.custom<MorphKey>(isMorphKey).optional(),
+  morphKey: MorphKeySchema.optional(),
   link: linkTargetSchema.optional(),
   x: textCoordinateSchema.optional(),
   y: textCoordinateSchema.optional(),
@@ -156,13 +158,14 @@ const tableDeclarationPropsObjectSchema = z.strictObject({
   width: textPositiveSizeSchema.optional(),
   columns: z.array(tableColumnSchema).nonempty().readonly(),
   style: tableStyleSchema.optional(),
-  enter: z.unknown().optional(),
-  emphasis: z.unknown().optional(),
-  motion: z.unknown().optional(),
+  enter: motionPropsShape.enter,
+  emphasis: motionPropsShape.emphasis,
+  motion: motionPropsShape.motion,
 });
 
 export const tableDeclarationPropsSchema =
   tableDeclarationPropsObjectSchema.readonly();
+export type TableDeclarationProps = z.infer<typeof tableDeclarationPropsSchema>;
 
 const rowDeclarationPropsObjectSchema = z.strictObject({
   id: OptionalNameSchema.optional(),
@@ -191,6 +194,12 @@ export const rowAllowedParameters: readonly string[] = Object.keys(
 );
 export const cellAllowedParameters: readonly string[] = Object.keys(
   cellDeclarationPropsObjectSchema.shape,
+);
+export const tableTextStyleKeys: readonly string[] = Object.keys(
+  tableTextStyleObjectSchema.shape,
+);
+export const tableStyleKeys: readonly string[] = Object.keys(
+  tableStyleSchema.unwrap().shape,
 );
 export const rowStyleKeys: readonly string[] = Object.keys(
   tableRowOwnStyleObjectSchema.shape,

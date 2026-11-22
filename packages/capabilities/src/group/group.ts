@@ -1,11 +1,7 @@
 import {
   CapabilityError,
-  layoutStyleKeys,
-  paddingStyleKeys,
   parseCapabilityLayoutContract,
   textStyleFrom,
-  textStyleKeys,
-  visualStyleSchema,
   type BoundContainerCollaboration,
   type BoundObjectCapability,
   type BoundObjectNativeCollaboration,
@@ -35,13 +31,19 @@ import {
   parseMorphKey,
   parseOptionalName,
 } from "../shared/identity.ts";
-import { groupDeclarationPropsKeys } from "./group-declaration.ts";
+import {
+  groupDeclarationPropsKeys,
+  groupStyleSchema,
+} from "./group-declaration.ts";
 import { groupImportHandler } from "./group-import.ts";
 import { groupXml } from "./group-xml.ts";
 
 export {
   createGroupNode,
+  groupDeclarationPropsSchema,
+  groupStyleSchema,
   type GroupDeclarationProps,
+  type GroupStyle,
 } from "./group-declaration.ts";
 
 const allowedParameters: readonly string[] = groupDeclarationPropsKeys;
@@ -143,12 +145,9 @@ function bounds(members: readonly ObjectObservation[]): {
   };
 }
 
-const groupAllowedStyleKeys = new Set<string>([
-  ...layoutStyleKeys,
-  ...paddingStyleKeys,
-  ...textStyleKeys,
-  "rotate",
-]);
+const groupAllowedStyleKeys = new Set<string>(
+  Object.keys(groupStyleSchema.unwrap().shape),
+);
 
 /** Closed resolved group model produced in resolve() and consumed by emitGroupModel and paintGroupModel. */
 type ResolvedGroupModel = {
@@ -249,7 +248,7 @@ export const groupCapability = {
     const rawRotation = styleRecord["rotate"];
     if (
       rawRotation !== undefined &&
-      !visualStyleSchema.safeParse({ rotate: rawRotation }).success
+      !groupStyleSchema.unwrap().shape.rotate.safeParse(rawRotation).success
     ) {
       throw new CapabilityError(
         "invalid-visual-style",

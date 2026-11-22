@@ -1,6 +1,5 @@
 import {
   CapabilityError,
-  layoutStyleKeys,
   parseCapabilityLayoutContract,
   type BoundObjectCapability,
   type BoundObjectNativeCollaboration,
@@ -46,7 +45,6 @@ import {
 } from "./chart-import.ts";
 import { mergeDataLabels } from "./chart-labels.ts";
 import {
-  chartTextStyleKeys,
   textOnlyChartStyle,
   type ParsedAxisCrossing,
   type ParsedCategoryAxis,
@@ -60,6 +58,7 @@ import {
   type ResolvedScatterAxes,
 } from "./chart-model.ts";
 import {
+  ChartStyleSchema,
   chartAllowedPropKeys,
   parseChartAxisBySchema,
   parseChartCoordinateBySchema,
@@ -119,20 +118,6 @@ function fail(code: string, message: string, path?: string): never {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function onlyKeys(
-  value: Record<string, unknown>,
-  allowed: readonly string[],
-  label: string,
-): void {
-  const unknown = Object.keys(value).find((key) => !allowed.includes(key));
-  if (unknown !== undefined) {
-    fail(
-      "unknown-parameter",
-      `${label} contains unimplemented parameter ${unknown}`,
-    );
-  }
 }
 
 type ParsedDraftSeries = ChartSeries & {
@@ -1077,12 +1062,19 @@ export const chartCapability = {
         "Chart does not accept children; chart text and data should be passed in groups",
       );
     }
-    onlyKeys(input.props, chartAllowedPropKeys, "Chart");
+    const unknown = Object.keys(input.props).find(
+      (key) => !chartAllowedPropKeys.includes(key),
+    );
+    if (unknown !== undefined) {
+      fail(
+        "unknown-parameter",
+        `Chart contains unimplemented parameter ${unknown}`,
+      );
+    }
 
-    const allowedStyleKeys = new Set<string>([
-      ...layoutStyleKeys,
-      ...chartTextStyleKeys,
-    ]);
+    const allowedStyleKeys = new Set<string>(
+      Object.keys(ChartStyleSchema.unwrap().shape),
+    );
     const contract = parseCapabilityLayoutContract({
       nativeKind: "graphicFrame",
       props: input.props,

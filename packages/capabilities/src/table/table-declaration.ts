@@ -1,14 +1,11 @@
 import { CommonContainer, RichTextContainer } from "@pptxdk/core/document";
-import type { z } from "zod";
 
-import type { MotionProps } from "../motion/motion-api.ts";
-import type { MorphProps } from "../shared/morph-api.ts";
 import type {
   CellDeclarationProps,
   RowDeclarationProps,
   TableCellStyle,
   TableColumn,
-  tableDeclarationPropsSchema,
+  TableDeclarationProps,
   TableRowStyle,
   TableSpacing,
   TableStyle,
@@ -21,21 +18,13 @@ export type {
   RowDeclarationProps,
   TableCellStyle,
   TableColumn,
+  TableDeclarationProps,
   TableRowStyle,
   TableSpacing,
   TableStyle,
   TableTextStyle,
   TableVerticalAlign,
 };
-
-type TableDeclarationDataProps = Omit<
-  z.infer<typeof tableDeclarationPropsSchema>,
-  "enter" | "emphasis" | "motion" | "morphKey"
->;
-
-export type TableDeclarationProps = MotionProps &
-  MorphProps &
-  TableDeclarationDataProps;
 
 export type TableNode = CommonContainer<
   "table",

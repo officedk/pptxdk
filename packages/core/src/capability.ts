@@ -1,15 +1,24 @@
 export { authorIdSchema, readAuthorId } from "#/author-ids.ts";
 export type { AuthorId } from "#/author-ids.ts";
 export {
+  backgroundRefSchema,
   deckPropsSchema,
   linkTargetSchema,
   parseLinkTarget,
+  placeholderSizeSchema,
   sectionPropsSchema,
   slideBackgroundSchema,
   slideCorePropsSchema,
+  slideFooterValueSchema,
+  slideNumberValueSchema,
   slidePropsSchema,
   slideStyleSchema,
 } from "#/author-schemas.ts";
+export {
+  footerPlaceholderSpecSchema,
+  footerPlaceholdersSchema,
+  headerFooterSchema,
+} from "#/masters.ts";
 export { BuildError, CapabilityError } from "#/diagnostics.ts";
 export {
   layoutLengthSchema,
@@ -196,9 +205,17 @@ export type {
   ResolvedObject,
   ResolvedObjectChildren,
   ResolvedSlide,
+  BackgroundRef,
+  FooterPlaceholderSpec,
+  FooterPlaceholders,
+  HeaderFooter,
+  PlaceholderSize,
   SlideBackground,
+  SlideFooterValue,
+  SlideNumberValue,
   SlideCapabilityModule,
   SlideCapabilityParseContext,
+  SlideMasterInheritanceContext,
   SlideCapabilitySlot,
   SlideEmitContext,
   SlideEmitOutput,

@@ -1,9 +1,16 @@
 import { z } from "zod";
 
+import {
+  placeholderSizeSchema,
+  slideBackgroundSchema,
+  xml10StringSchema,
+  type SlideBackground,
+} from "#/author-schemas.ts";
 import { CapabilityError } from "#/diagnostics.ts";
 import {
   colorMapOverrideSchema,
   colorMapSchema,
+  textStyleSchema,
   themeOverrideSchema,
   type ColorMapOverride,
   type TextStyle,
@@ -11,6 +18,43 @@ import {
   type ThemeInput,
   type ThemeOverride,
 } from "#/theme.ts";
+
+/** OOXML `<p:hf>` header/footer visibility flags on SlideMaster and SlideLayout (ECMA-376 §19.3.1.24). */
+export const headerFooterSchema = z
+  .strictObject({
+    dateTime: z.boolean().optional(),
+    footer: z.boolean().optional(),
+    header: z.boolean().optional(),
+    slideNumber: z.boolean().optional(),
+  })
+  .readonly();
+export type HeaderFooter = z.infer<typeof headerFooterSchema>;
+
+/** Geometry, placeholder metadata, and default text/style for a `dt`, `ftr`, or `sldNum` slot. */
+export const footerPlaceholderSpecSchema = z
+  .strictObject({
+    x: z.number().finite().optional(),
+    y: z.number().finite().optional(),
+    width: z.number().finite().positive().optional(),
+    height: z.number().finite().positive().optional(),
+    idx: z.number().int().nonnegative().optional(),
+    size: placeholderSizeSchema.optional(),
+    text: xml10StringSchema.optional(),
+    style: textStyleSchema.optional(),
+    visible: z.boolean().optional(),
+  })
+  .readonly();
+export type FooterPlaceholderSpec = z.infer<typeof footerPlaceholderSpecSchema>;
+
+/** Collection of date, footer, and slide-number metadata placeholder definitions on a master or layout. */
+export const footerPlaceholdersSchema = z
+  .strictObject({
+    dateTime: footerPlaceholderSpecSchema.optional(),
+    footer: footerPlaceholderSpecSchema.optional(),
+    slideNumber: footerPlaceholderSpecSchema.optional(),
+  })
+  .readonly();
+export type FooterPlaceholders = z.infer<typeof footerPlaceholdersSchema>;
 
 /** Official OOXML ST_SlideLayoutType enumeration values (ECMA-376 §19.7.15). */
 export const slideLayoutTypeValues = [
@@ -61,6 +105,9 @@ export const slideMasterDataPropsSchema = z
     name: z.string().optional(),
     preserve: z.boolean().optional(),
     colorMap: colorMapSchema.optional(),
+    background: slideBackgroundSchema.optional(),
+    headerFooter: headerFooterSchema.optional(),
+    footerPlaceholders: footerPlaceholdersSchema.optional(),
   })
   .readonly();
 export type SlideMasterDataProps = z.infer<typeof slideMasterDataPropsSchema>;
@@ -82,6 +129,9 @@ export const slideLayoutDataPropsSchema = z
     showMasterPlaceholderAnimations: z.boolean().optional(),
     colorMapOverride: colorMapOverrideSchema.optional(),
     themeOverride: themeOverrideSchema.optional(),
+    background: slideBackgroundSchema.optional(),
+    headerFooter: headerFooterSchema.optional(),
+    footerPlaceholders: footerPlaceholdersSchema.optional(),
   })
   .readonly();
 export type SlideLayoutDataProps = z.infer<typeof slideLayoutDataPropsSchema>;
@@ -98,6 +148,8 @@ export const slideLayoutObservationSchema = z
     showMasterPlaceholderAnimations: z.boolean().optional(),
     colorMapOverride: colorMapOverrideSchema.optional(),
     themeOverride: themeOverrideSchema.optional(),
+    background: slideBackgroundSchema.optional(),
+    headerFooter: headerFooterSchema.optional(),
   })
   .readonly();
 export type SlideLayoutObservation = z.infer<
@@ -110,6 +162,7 @@ export const slideMasterObservationSchema = z
     name: z.string().optional(),
     preserve: z.boolean().optional(),
     colorMap: colorMapSchema.optional(),
+    headerFooter: headerFooterSchema.optional(),
     layouts: z.array(slideLayoutObservationSchema).readonly(),
   })
   .readonly();
@@ -137,6 +190,9 @@ export type SlideLayoutDefinition<
   readonly showMasterPlaceholderAnimations?: boolean | undefined;
   readonly colorMapOverride?: ColorMapOverride | undefined;
   readonly themeOverride?: ThemeOverride | undefined;
+  readonly background?: SlideBackground | undefined;
+  readonly headerFooter?: HeaderFooter | undefined;
+  readonly footerPlaceholders?: FooterPlaceholders | undefined;
 };
 
 export type SlideLayoutProps = SlideLayoutDataProps & {
@@ -206,5 +262,14 @@ export function defineSlideLayout<const Spec extends SlideLayoutDataProps>(
     ...(frozenProps.themeOverride === undefined
       ? {}
       : { themeOverride: frozenProps.themeOverride }),
+    ...(frozenProps.background === undefined
+      ? {}
+      : { background: frozenProps.background }),
+    ...(frozenProps.headerFooter === undefined
+      ? {}
+      : { headerFooter: frozenProps.headerFooter }),
+    ...(frozenProps.footerPlaceholders === undefined
+      ? {}
+      : { footerPlaceholders: frozenProps.footerPlaceholders }),
   });
 }

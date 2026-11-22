@@ -31,6 +31,10 @@ import {
 } from "@pptxdk/import";
 import { z } from "zod";
 
+import {
+  consumeNonPlaceholderNvPr,
+  hasPlaceholderElement,
+} from "../shared/identity.ts";
 import type { ParagraphStyle, TextList } from "../shared/text-schemas.ts";
 import {
   createParagraphNode,
@@ -173,8 +177,9 @@ function directElementChild(
   return undefined;
 }
 
-/** Side-effect-free predicate distinguishing `<p:sp>` text boxes (`txBox="1"`) from shapes. */
+/** Side-effect-free predicate distinguishing `<p:sp>` text boxes (`txBox="1"`) from shapes and placeholders. */
 function isTextBoxSpElement(cursor: XmlElementCursor): boolean {
+  if (hasPlaceholderElement(cursor)) return false;
   const nvSpPr = directElementChild(cursor.element, P_NS, "nvSpPr");
   if (nvSpPr === undefined) return false;
   const cNvSpPr = directElementChild(nvSpPr, P_NS, "cNvSpPr");
@@ -856,6 +861,7 @@ export function readRichTextBody(
       if (b.bIns !== undefined && b.bIns !== 0) paddingBottom = emuToPx(b.bIns);
     }
     bodyPr.ignoreEmptyChild(A_NS, "noAutofit");
+    bodyPr.ignoreEmptyChild(A_NS, "spAutoFit");
   }
 
   txBody.ignoreEmptyChild(A_NS, "lstStyle");
@@ -963,7 +969,7 @@ export function readTextBoxSp(
     const rawFlags = cNvSpPr.attrsObject(["txBox"]);
     NonVisualSpPrFlagsSchema.safeParse(rawFlags);
   }
-  nvSpPr.ignoreEmptyChild(P_NS, "nvPr");
+  consumeNonPlaceholderNvPr(nvSpPr);
 
   const spPr = cursor.child(P_NS, "spPr");
   const txBody = cursor.child(P_NS, "txBody");

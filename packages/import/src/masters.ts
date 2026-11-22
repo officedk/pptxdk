@@ -2,6 +2,7 @@ import {
   slideLayoutTypeSchema,
   type ColorMap,
   type ColorMapOverride,
+  type HeaderFooter,
   type SlideLayoutProps,
   type SlideMasterProps,
   type Theme,
@@ -10,12 +11,19 @@ import {
 import {
   createSlideLayoutNode,
   createSlideMasterNode,
+  type CommonNode,
   type DeckContainer,
   type SlideLayoutContainer,
 } from "@pptxdk/core/document";
 import { z } from "zod";
 
+import { readAlternateContent } from "#/alternate-content.ts";
 import type { ImportDiagnostic } from "#/diagnostics.ts";
+import type {
+  DeferredSlideLink,
+  ShapeTreeImportHandler,
+  SlideImportHandler,
+} from "#/mechanism.ts";
 import {
   A_NS,
   P_NS,
@@ -30,6 +38,11 @@ import {
   type ParsedRelationshipEntry,
   type PptxPackage,
 } from "#/opc.ts";
+import {
+  inspectUnsupportedGraphicFrame,
+  peekShapeTreeObjectIdentity,
+  type RelationshipIndex,
+} from "#/resources.ts";
 import {
   isNonDefaultColorMap,
   readColorMapElement,
@@ -55,6 +68,44 @@ const SlideLayoutAttrsSchema = z.object({
   showMasterSp: OoxmlBoolSchema.optional(),
   showMasterPhAnim: OoxmlBoolSchema.optional(),
 });
+
+const HeaderFooterAttrsSchema = z.object({
+  sldNum: OoxmlBoolSchema.optional(),
+  hdr: OoxmlBoolSchema.optional(),
+  ftr: OoxmlBoolSchema.optional(),
+  dt: OoxmlBoolSchema.optional(),
+});
+
+function readHeaderFooterElement(
+  parentCursor: XmlElementCursor,
+  partPath: string,
+  diagnostics: ImportDiagnostic[],
+): HeaderFooter | undefined {
+  const hf = parentCursor.child(P_NS, "hf");
+  if (hf === undefined) return undefined;
+  const raw = hf.attrsObject(["sldNum", "hdr", "ftr", "dt"]);
+  const parsed = HeaderFooterAttrsSchema.safeParse(raw);
+  if (!parsed.success) {
+    diagnostics.push({
+      code: "invalid-xml-value",
+      category: "corrupt-input",
+      disposition: "omitted",
+      location: { part: partPath, xpath: hf.xpath },
+      attributeOrElement: "p:hf",
+      rawValue: JSON.stringify(raw),
+    });
+    return undefined;
+  }
+  const result: HeaderFooter = {
+    ...(parsed.data.dt === undefined ? {} : { dateTime: parsed.data.dt }),
+    ...(parsed.data.ftr === undefined ? {} : { footer: parsed.data.ftr }),
+    ...(parsed.data.hdr === undefined ? {} : { header: parsed.data.hdr }),
+    ...(parsed.data.sldNum === undefined
+      ? {}
+      : { slideNumber: parsed.data.sldNum }),
+  };
+  return Object.keys(result).length === 0 ? {} : result;
+}
 
 /** Allocates a deterministic unique author id within `used`, disambiguating collisions with `-2`, `-3`, ... */
 export function allocateScopedAuthorId(
@@ -175,12 +226,242 @@ function validateMasterLayoutNumericId(
   }
 }
 
+const p14Namespace = "http://schemas.microsoft.com/office/powerpoint/2010/main";
+const creationIdExtensionUri = "{BB962C8B-B14F-4D97-AF65-F5344CB8AC3E}";
+
+/** Consumes benign PowerPoint `<p:cSld>/<p:extLst>` creationId metadata without altering author models. */
+export function consumeCommonSlideCreationId(cSld: XmlElementCursor): void {
+  const extLst = cSld.child(P_NS, "extLst");
+  if (extLst === undefined) return;
+  for (const ext of extLst.children(P_NS, "ext")) {
+    if (ext.attr("uri") !== creationIdExtensionUri) continue;
+    const creationId = ext.child(p14Namespace, "creationId");
+    if (creationId !== undefined) {
+      creationId.consumeAttr("val");
+    }
+  }
+}
+
+function stripSlideIndexFromDiagnostics(
+  entries: readonly ImportDiagnostic[] | undefined,
+): ImportDiagnostic[] {
+  if (entries === undefined || entries.length === 0) return [];
+  return entries.map((entry) => {
+    const { slideIndex: _ignored, ...locationRest } = entry.location;
+    return {
+      ...entry,
+      location: locationRest,
+    };
+  });
+}
+
+const supportedShapeTreeNamespaces = new Set<string>([P_NS, A_NS, R_NS]);
+
+function readSingleShapeTreeItem(
+  itemCursor: XmlElementCursor,
+  pkg: PptxPackage,
+  partPath: string,
+  slideIndex: number | undefined,
+  relIndex: RelationshipIndex,
+  shapeTreeHandlers: readonly ShapeTreeImportHandler[],
+  registerDeferredSlideLink: (link: DeferredSlideLink) => void,
+  diagnostics: ImportDiagnostic[],
+  containerNode?: CommonNode,
+): CommonNode | undefined {
+  const match = shapeTreeHandlers.find(
+    (handler) =>
+      itemCursor.namespaceUri === P_NS &&
+      handler.localName === itemCursor.localName &&
+      (handler.matches === undefined || handler.matches(itemCursor)),
+  );
+  if (match === undefined) {
+    const identity = peekShapeTreeObjectIdentity(itemCursor.element);
+    const frameInfo =
+      itemCursor.namespaceUri === P_NS &&
+      itemCursor.localName === "graphicFrame"
+        ? inspectUnsupportedGraphicFrame(
+            itemCursor,
+            partPath,
+            relIndex.byId,
+            relIndex.entries,
+          )
+        : undefined;
+    diagnostics.push({
+      code: "unsupported-mechanism",
+      category: "unsupported",
+      disposition: "omitted",
+      location: {
+        part: partPath,
+        xpath: itemCursor.xpath,
+        ...(slideIndex === undefined ? {} : { slideIndex }),
+        ...identity,
+      },
+      namespaceUri: itemCursor.namespaceUri,
+      localName: itemCursor.localName,
+      ...(frameInfo?.mechanismHint === undefined
+        ? {}
+        : { mechanismHint: frameInfo.mechanismHint }),
+      ...(frameInfo === undefined || frameInfo.cascaded.length === 0
+        ? {}
+        : { cascaded: frameInfo.cascaded }),
+    });
+    itemCursor.suppressUnconsumed();
+    return undefined;
+  }
+  const outcome = match.read({
+    cursor: itemCursor,
+    part: partPath,
+    slideIndex: slideIndex ?? 0,
+    package: pkg,
+    ...(containerNode === undefined ? {} : { containerNode }),
+    relationships: relIndex.byId,
+    registerDeferredSlideLink,
+  });
+  if (outcome.diagnostics !== undefined) {
+    diagnostics.push(
+      ...(slideIndex === undefined
+        ? stripSlideIndexFromDiagnostics(outcome.diagnostics)
+        : outcome.diagnostics),
+    );
+  }
+  return outcome.node;
+}
+
+/** Shared `<p:spTree>` child reader for slides, slide layouts, and slide masters. */
+export function readShapeTreeItems(args: {
+  readonly spTree: XmlElementCursor;
+  readonly pkg: PptxPackage;
+  readonly partPath: string;
+  readonly slideIndex: number | undefined;
+  readonly relIndex: RelationshipIndex;
+  readonly shapeTreeHandlers: readonly ShapeTreeImportHandler[];
+  readonly registerDeferredSlideLink: (link: DeferredSlideLink) => void;
+  readonly appendNode: (node: CommonNode) => void;
+  readonly diagnostics: ImportDiagnostic[];
+  readonly containerNode?: CommonNode;
+}): void {
+  const {
+    spTree,
+    pkg,
+    partPath,
+    slideIndex,
+    relIndex,
+    shapeTreeHandlers,
+    registerDeferredSlideLink,
+    appendNode,
+    diagnostics,
+    containerNode,
+  } = args;
+  consumeIdentityShapeTreeBoilerplate(spTree);
+  for (const itemCursor of spTree.remainingElementChildren()) {
+    if (
+      itemCursor.namespaceUri === MC_NS_IMPORT_PLACEHOLDER &&
+      itemCursor.localName === "AlternateContent"
+    ) {
+      const selection = readAlternateContent(itemCursor, (ns) =>
+        supportedShapeTreeNamespaces.has(ns),
+      );
+      if (selection.branch === "choice") {
+        for (const childCursor of selection.children) {
+          const node = readSingleShapeTreeItem(
+            childCursor,
+            pkg,
+            partPath,
+            slideIndex,
+            relIndex,
+            shapeTreeHandlers,
+            registerDeferredSlideLink,
+            diagnostics,
+            containerNode,
+          );
+          if (node !== undefined) appendNode(node);
+        }
+      } else if (selection.branch === "fallback") {
+        let adoptedFallback = false;
+        for (const childCursor of selection.children) {
+          const identity = peekShapeTreeObjectIdentity(childCursor.element);
+          const node = readSingleShapeTreeItem(
+            childCursor,
+            pkg,
+            partPath,
+            slideIndex,
+            relIndex,
+            shapeTreeHandlers,
+            registerDeferredSlideLink,
+            diagnostics,
+            containerNode,
+          );
+          if (node !== undefined) {
+            adoptedFallback = true;
+            appendNode(node);
+            diagnostics.push({
+              code: "compatibility-fallback",
+              category: "unsupported",
+              disposition: "fallback",
+              location: {
+                part: partPath,
+                xpath: itemCursor.xpath,
+                ...(slideIndex === undefined ? {} : { slideIndex }),
+                ...identity,
+              },
+              preferredMechanism: selection.preferredMechanism,
+              selectedFallback: node.kind,
+              loss: {
+                lost: "native-mechanism",
+                retainedAs: node.kind,
+              },
+            });
+          }
+        }
+        if (!adoptedFallback) {
+          itemCursor.suppressUnconsumed();
+        }
+      } else {
+        diagnostics.push({
+          code: "unsupported-mechanism",
+          category: "unsupported",
+          disposition: "omitted",
+          location: {
+            part: partPath,
+            xpath: itemCursor.xpath,
+            ...(slideIndex === undefined ? {} : { slideIndex }),
+          },
+          namespaceUri: itemCursor.namespaceUri,
+          localName: itemCursor.localName,
+          mechanismHint: selection.preferredMechanism,
+        });
+        itemCursor.suppressUnconsumed();
+      }
+      continue;
+    }
+
+    const node = readSingleShapeTreeItem(
+      itemCursor,
+      pkg,
+      partPath,
+      slideIndex,
+      relIndex,
+      shapeTreeHandlers,
+      registerDeferredSlideLink,
+      diagnostics,
+      containerNode,
+    );
+    if (node !== undefined) appendNode(node);
+  }
+}
+
+const MC_NS_IMPORT_PLACEHOLDER =
+  "http://schemas.openxmlformats.org/markup-compatibility/2006";
+
 function readSlideLayoutPart(
   pkg: PptxPackage,
   layoutPartPath: string,
   ownerMasterPartPath: string,
   layoutOrder: number,
   usedLayoutIds: Set<string>,
+  masterLevelSlideHandlers: readonly SlideImportHandler[],
+  shapeTreeHandlers: readonly ShapeTreeImportHandler[],
+  registerDeferredSlideLink: (link: DeferredSlideLink) => void,
   diagnostics: ImportDiagnostic[],
 ): SlideLayoutContainer | undefined {
   const xmlText = pkg.readTextPart(layoutPartPath);
@@ -286,6 +567,7 @@ function readSlideLayoutPart(
     return undefined;
   }
   layoutName = cSld.attr("name");
+  consumeCommonSlideCreationId(cSld);
   const spTree = cSld.child(P_NS, "spTree");
   if (spTree !== undefined) {
     consumeIdentityShapeTreeBoilerplate(spTree);
@@ -303,6 +585,11 @@ function readSlideLayoutPart(
       colorMapOverride = parsedOvr;
     }
   }
+  const layoutHeaderFooter = readHeaderFooterElement(
+    layoutCursor,
+    layoutPartPath,
+    diagnostics,
+  );
 
   const layoutRels = pkg.readRelationships(layoutPartPath);
   diagnostics.push(...layoutRels.diagnostics);
@@ -355,8 +642,6 @@ function readSlideLayoutPart(
     }
   }
 
-  appendUnconsumedDiagnostics(layoutCursor, undefined, diagnostics);
-
   const layoutId = allocateScopedAuthorId(
     layoutName,
     usedLayoutIds,
@@ -375,8 +660,47 @@ function readSlideLayoutPart(
       : { showMasterPlaceholderAnimations }),
     ...(colorMapOverride === undefined ? {} : { colorMapOverride }),
     ...(themeOverride === undefined ? {} : { themeOverride }),
+    ...(layoutHeaderFooter === undefined
+      ? {}
+      : { headerFooter: layoutHeaderFooter }),
   };
-  return createSlideLayoutNode(props);
+  const layoutNode = createSlideLayoutNode(props);
+  if (spTree !== undefined) {
+    if (shapeTreeHandlers.length > 0) {
+      const relIndex: RelationshipIndex = {
+        entries: layoutRels.entries,
+        byId: new Map(layoutRels.entries.map((entry) => [entry.Id, entry])),
+        diagnostics: [],
+      };
+      readShapeTreeItems({
+        spTree,
+        pkg,
+        partPath: layoutPartPath,
+        slideIndex: undefined,
+        relIndex,
+        shapeTreeHandlers,
+        registerDeferredSlideLink,
+        appendNode: (node) => layoutNode.append(node),
+        diagnostics,
+        containerNode: layoutNode,
+      });
+    } else {
+      consumeIdentityShapeTreeBoilerplate(spTree);
+    }
+  }
+  for (const slideHandler of masterLevelSlideHandlers) {
+    const outcome = slideHandler.read({
+      slideCursor: layoutCursor,
+      slideNode: layoutNode,
+      part: layoutPartPath,
+      slideIndex: 0,
+      package: pkg,
+    });
+    diagnostics.push(...stripSlideIndexFromDiagnostics(outcome.diagnostics));
+  }
+
+  appendUnconsumedDiagnostics(layoutCursor, undefined, diagnostics);
+  return layoutNode;
 }
 
 function readSlideMasterPart(
@@ -386,6 +710,9 @@ function readSlideMasterPart(
   usedDeckIds: Set<string>,
   themesByPartPath: Map<string, Theme>,
   layoutNodeByPartPath: Map<string, SlideLayoutContainer>,
+  masterLevelSlideHandlers: readonly SlideImportHandler[],
+  shapeTreeHandlers: readonly ShapeTreeImportHandler[],
+  registerDeferredSlideLink: (link: DeferredSlideLink) => void,
   diagnostics: ImportDiagnostic[],
 ) {
   const xmlText = pkg.readTextPart(masterPartPath);
@@ -452,10 +779,8 @@ function readSlideMasterPart(
     return undefined;
   }
   const masterName = cSld.attr("name");
+  consumeCommonSlideCreationId(cSld);
   const spTree = cSld.child(P_NS, "spTree");
-  if (spTree !== undefined) {
-    consumeIdentityShapeTreeBoilerplate(spTree);
-  }
 
   const clrMap = masterCursor.child(P_NS, "clrMap");
   let colorMap: ColorMap | undefined;
@@ -477,6 +802,11 @@ function readSlideMasterPart(
     txStyles.ignoreEmptyChild(P_NS, "bodyStyle");
     txStyles.ignoreEmptyChild(P_NS, "otherStyle");
   }
+  const masterHeaderFooter = readHeaderFooterElement(
+    masterCursor,
+    masterPartPath,
+    diagnostics,
+  );
 
   const masterRels = pkg.readRelationships(masterPartPath);
   diagnostics.push(...masterRels.diagnostics);
@@ -521,8 +851,43 @@ function readSlideMasterPart(
     ...(preserve === undefined ? {} : { preserve }),
     ...(masterTheme === undefined ? {} : { theme: masterTheme }),
     ...(colorMap === undefined ? {} : { colorMap }),
+    ...(masterHeaderFooter === undefined
+      ? {}
+      : { headerFooter: masterHeaderFooter }),
   };
   const masterNode = createSlideMasterNode(masterProps);
+  if (spTree !== undefined) {
+    if (shapeTreeHandlers.length > 0) {
+      readShapeTreeItems({
+        spTree,
+        pkg,
+        partPath: masterPartPath,
+        slideIndex: undefined,
+        relIndex: {
+          entries: masterRels.entries,
+          byId: masterRelById,
+          diagnostics: [],
+        },
+        shapeTreeHandlers,
+        registerDeferredSlideLink,
+        appendNode: (node) => masterNode.append(node),
+        diagnostics,
+        containerNode: masterNode,
+      });
+    } else {
+      consumeIdentityShapeTreeBoilerplate(spTree);
+    }
+  }
+  for (const slideHandler of masterLevelSlideHandlers) {
+    const outcome = slideHandler.read({
+      slideCursor: masterCursor,
+      slideNode: masterNode,
+      part: masterPartPath,
+      slideIndex: 0,
+      package: pkg,
+    });
+    diagnostics.push(...stripSlideIndexFromDiagnostics(outcome.diagnostics));
+  }
 
   const usedLayoutIds = new Set<string>();
   const sldLayoutIdLst = masterCursor.child(P_NS, "sldLayoutIdLst");
@@ -580,6 +945,9 @@ function readSlideMasterPart(
         masterPartPath,
         index + 1,
         usedLayoutIds,
+        masterLevelSlideHandlers,
+        shapeTreeHandlers,
+        registerDeferredSlideLink,
         diagnostics,
       );
       if (layoutNode !== undefined) {
@@ -604,7 +972,14 @@ export function importMastersAndLayouts(
   deckNode: DeckContainer,
   usedDeckIds: Set<string>,
   diagnostics: ImportDiagnostic[],
+  slideHandlers: readonly SlideImportHandler[] = [],
+  shapeTreeHandlers: readonly ShapeTreeImportHandler[] = [],
+  registerDeferredSlideLink: (link: DeferredSlideLink) => void = () => {},
 ): ReadonlyMap<string, SlideLayoutContainer> {
+  const masterLevelSlideHandlers = slideHandlers.filter(
+    (handler) =>
+      handler.slot === "background" || handler.slot === "header-footer",
+  );
   const layoutNodeByPartPath = new Map<string, SlideLayoutContainer>();
   const themesByPartPath = new Map<string, Theme>();
   const masterIdLst = presCursor.child(P_NS, "sldMasterIdLst");
@@ -665,6 +1040,9 @@ export function importMastersAndLayouts(
       usedDeckIds,
       themesByPartPath,
       layoutNodeByPartPath,
+      masterLevelSlideHandlers,
+      shapeTreeHandlers,
+      registerDeferredSlideLink,
       diagnostics,
     );
     if (masterNode !== undefined) {

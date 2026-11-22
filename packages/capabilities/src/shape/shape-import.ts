@@ -27,6 +27,10 @@ import {
 } from "@pptxdk/import";
 import { z } from "zod";
 
+import {
+  consumeNonPlaceholderNvPr,
+  hasPlaceholderElement,
+} from "../shared/identity.ts";
 import type { ParagraphStyle, TextList } from "../shared/text-service.ts";
 import {
   readDrawingColor,
@@ -152,16 +156,24 @@ function isCustomGeomSpElement(cursor: XmlElementCursor): boolean {
   return directElementChild(spPr, A_NS, "custGeom") !== undefined;
 }
 
-/** Side-effect-free predicate matching non-textbox preset shapes (`<p:sp>` without `txBox="1"` or `<a:custGeom>`). */
+/** Side-effect-free predicate matching non-textbox preset shapes (`<p:sp>` without `txBox="1"`, `<p:ph>`, or `<a:custGeom>`). */
 export function isPresetShapeSpElement(cursor: XmlElementCursor): boolean {
-  return !isTextBoxSpElement(cursor) && !isCustomGeomSpElement(cursor);
+  return (
+    !hasPlaceholderElement(cursor) &&
+    !isTextBoxSpElement(cursor) &&
+    !isCustomGeomSpElement(cursor)
+  );
 }
 
-/** Side-effect-free predicate matching non-textbox custom-geometry shapes (`<p:sp>` with `<a:custGeom>`). */
+/** Side-effect-free predicate matching non-textbox custom-geometry shapes (`<p:sp>` with `<a:custGeom>` without `<p:ph>`). */
 export function isCustomGeometryShapeSpElement(
   cursor: XmlElementCursor,
 ): boolean {
-  return !isTextBoxSpElement(cursor) && isCustomGeomSpElement(cursor);
+  return (
+    !hasPlaceholderElement(cursor) &&
+    !isTextBoxSpElement(cursor) &&
+    isCustomGeomSpElement(cursor)
+  );
 }
 
 function resolveTargetSlideAuthorId(
@@ -722,6 +734,7 @@ function readShapeTxBody(
       if (b.bIns !== undefined && b.bIns !== 0) paddingBottom = emuToPx(b.bIns);
     }
     bodyPr.ignoreEmptyChild(A_NS, "noAutofit");
+    bodyPr.ignoreEmptyChild(A_NS, "spAutoFit");
   }
 
   txBodyCursor.ignoreEmptyChild(A_NS, "lstStyle");
@@ -788,7 +801,7 @@ export function readShapeSp(
   if (cNvSpPr !== undefined) {
     cNvSpPr.consumeAttr("txBox");
   }
-  nvSpPr.ignoreEmptyChild(P_NS, "nvPr");
+  consumeNonPlaceholderNvPr(nvSpPr);
 
   const location: ImportLocation = {
     part,

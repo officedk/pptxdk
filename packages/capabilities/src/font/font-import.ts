@@ -32,30 +32,88 @@ function fallbackStyleForSlot(slot: EmbeddedFontSlot): "normal" | "italic" {
   return slot === "italic" || slot === "boldItalic" ? "italic" : "normal";
 }
 
+function upgradeStyleFontFamily(
+  style: unknown,
+  fontsByKey: ReadonlyMap<string, Font>,
+): Record<string, unknown> | undefined {
+  if (typeof style !== "object" || style === null || Array.isArray(style)) {
+    return undefined;
+  }
+  const family = (style as Readonly<Record<string, unknown>>)["fontFamily"];
+  if (typeof family !== "string" || family === "major" || family === "minor") {
+    return undefined;
+  }
+  const matched = fontsByKey.get(fontFamilyKey(family));
+  if (matched === undefined) return undefined;
+  return {
+    ...(style as Readonly<Record<string, unknown>>),
+    fontFamily: matched,
+  };
+}
+
 function attachEmbeddedFontsToSubtree(
   node: CommonNode,
   fontsByKey: ReadonlyMap<string, Font>,
 ): void {
-  const style = node.props["style"];
-  if (typeof style === "object" && style !== null && !Array.isArray(style)) {
-    const family = (style as Readonly<Record<string, unknown>>)["fontFamily"];
-    if (
-      typeof family === "string" &&
-      family !== "major" &&
-      family !== "minor"
-    ) {
-      const matched = fontsByKey.get(fontFamilyKey(family));
-      if (matched !== undefined) {
-        (
-          node as CommonNode<
-            string,
-            Record<string, unknown>,
-            Record<string, unknown>
-          >
-        ).style({
-          fontFamily: matched,
-        });
+  const mutableNode = node as CommonNode<
+    string,
+    Record<string, unknown>,
+    Record<string, unknown>
+  >;
+  const upgradedStyle = upgradeStyleFontFamily(node.props["style"], fontsByKey);
+  if (upgradedStyle !== undefined) {
+    mutableNode.style({ fontFamily: upgradedStyle["fontFamily"] });
+  }
+  const rawFooterPlaceholders = node.props["footerPlaceholders"];
+  if (
+    typeof rawFooterPlaceholders === "object" &&
+    rawFooterPlaceholders !== null &&
+    !Array.isArray(rawFooterPlaceholders)
+  ) {
+    let changed = false;
+    const nextPlaceholders: Record<string, unknown> = {
+      ...(rawFooterPlaceholders as Readonly<Record<string, unknown>>),
+    };
+    for (const [slot, spec] of Object.entries(nextPlaceholders)) {
+      if (typeof spec !== "object" || spec === null || Array.isArray(spec)) {
+        continue;
       }
+      const nextStyle = upgradeStyleFontFamily(
+        (spec as Readonly<Record<string, unknown>>)["style"],
+        fontsByKey,
+      );
+      if (nextStyle !== undefined) {
+        nextPlaceholders[slot] = {
+          ...(spec as Readonly<Record<string, unknown>>),
+          style: nextStyle,
+        };
+        changed = true;
+      }
+    }
+    if (changed) {
+      mutableNode.set({ footerPlaceholders: nextPlaceholders });
+    }
+  }
+  for (const slideSlot of ["dateTime", "footer", "slideNumber"] as const) {
+    const rawSlot = node.props[slideSlot];
+    if (
+      typeof rawSlot !== "object" ||
+      rawSlot === null ||
+      Array.isArray(rawSlot)
+    ) {
+      continue;
+    }
+    const nextStyle = upgradeStyleFontFamily(
+      (rawSlot as Readonly<Record<string, unknown>>)["style"],
+      fontsByKey,
+    );
+    if (nextStyle !== undefined) {
+      mutableNode.set({
+        [slideSlot]: {
+          ...(rawSlot as Readonly<Record<string, unknown>>),
+          style: nextStyle,
+        },
+      });
     }
   }
   for (const child of node.children) {

@@ -26,6 +26,7 @@ export type ShapeTreeImportContext = {
   readonly part: string;
   readonly slideIndex: number;
   readonly package: PptxPackage;
+  readonly containerNode?: CommonNode;
   readonly relationships?: ReadonlyMap<string, ParsedRelationshipEntry>;
   readonly registerDeferredSlideLink?: (link: DeferredSlideLink) => void;
 };
@@ -57,7 +58,12 @@ export type SlideImportOutcome = {
 
 export type SlideImportHandler = {
   readonly target: "slide";
-  readonly slot: "background" | "transition" | "timing" | "notes";
+  readonly slot:
+    | "background"
+    | "header-footer"
+    | "transition"
+    | "timing"
+    | "notes";
   read(context: SlideImportContext): SlideImportOutcome;
 };
 

@@ -8,7 +8,6 @@ import {
 } from "@pptxdk/core/document";
 import { z } from "zod";
 
-import { readAlternateContent } from "#/alternate-content.ts";
 import {
   ImportOptionsSchema,
   type ImportDiagnostic,
@@ -18,8 +17,9 @@ import {
 import {
   allocateScopedAuthorId,
   appendUnconsumedDiagnostics,
-  consumeIdentityShapeTreeBoilerplate,
+  consumeCommonSlideCreationId,
   importMastersAndLayouts,
+  readShapeTreeItems,
 } from "#/masters.ts";
 import type {
   DeckImportHandler,
@@ -29,8 +29,6 @@ import type {
   SlideImportHandler,
 } from "#/mechanism.ts";
 import {
-  A_NS,
-  MC_NS,
   P_NS,
   REL_SLIDE,
   REL_SLIDE_LAYOUT,
@@ -44,11 +42,7 @@ import {
   type ParsedRelationshipEntry,
   type PptxPackage,
 } from "#/opc.ts";
-import {
-  buildRelationshipIndex,
-  inspectUnsupportedGraphicFrame,
-  peekShapeTreeObjectIdentity,
-} from "#/resources.ts";
+import { buildRelationshipIndex } from "#/resources.ts";
 import { readColorMapOverride, readThemeOverridePart } from "#/themes.ts";
 import {
   ExtentEmuFragmentSchema,
@@ -75,6 +69,7 @@ const SlideSizeFragmentSchema = ExtentEmuFragmentSchema.extend({
 
 const SlideShowAttrSchema = z.object({
   show: OoxmlBoolSchema.optional(),
+  showMasterSp: OoxmlBoolSchema.optional(),
 });
 
 type RegisteredImportHandlers = {
@@ -160,75 +155,6 @@ function readSlideSize(
   };
 }
 
-const supportedShapeTreeNamespaces = new Set<string>([P_NS, A_NS, R_NS]);
-
-function readSingleShapeTreeItem(
-  itemCursor: XmlElementCursor,
-  pkg: PptxPackage,
-  slidePartPath: string,
-  slideIndex: number,
-  relIndex: ReturnType<typeof buildRelationshipIndex>,
-  handlers: RegisteredImportHandlers,
-  registerDeferredSlideLink: (link: DeferredSlideLink) => void,
-  diagnostics: ImportDiagnostic[],
-): CommonNode | undefined {
-  const match = handlers.shapeTree.find(
-    (handler) =>
-      itemCursor.namespaceUri === P_NS &&
-      handler.localName === itemCursor.localName &&
-      (handler.matches === undefined || handler.matches(itemCursor)),
-  );
-  if (match === undefined) {
-    const identity = peekShapeTreeObjectIdentity(itemCursor.element);
-    const frameInfo =
-      itemCursor.namespaceUri === P_NS &&
-      itemCursor.localName === "graphicFrame"
-        ? inspectUnsupportedGraphicFrame(
-            itemCursor,
-            slidePartPath,
-            relIndex.byId,
-            relIndex.entries,
-          )
-        : undefined;
-    diagnostics.push({
-      code: "unsupported-mechanism",
-      category: "unsupported",
-      disposition: "omitted",
-      location: {
-        part: slidePartPath,
-        xpath: itemCursor.xpath,
-        slideIndex,
-        ...identity,
-      },
-      namespaceUri: itemCursor.namespaceUri,
-      localName: itemCursor.localName,
-      ...(frameInfo?.mechanismHint === undefined
-        ? {}
-        : { mechanismHint: frameInfo.mechanismHint }),
-      ...(frameInfo === undefined || frameInfo.cascaded.length === 0
-        ? {}
-        : { cascaded: frameInfo.cascaded }),
-    });
-    itemCursor.suppressUnconsumed();
-    return undefined;
-  }
-  const outcome = match.read({
-    cursor: itemCursor,
-    part: slidePartPath,
-    slideIndex,
-    package: pkg,
-    relationships: relIndex.byId,
-    registerDeferredSlideLink,
-  });
-  if (outcome.diagnostics !== undefined) {
-    diagnostics.push(...outcome.diagnostics);
-  }
-  if (outcome.node === undefined) {
-    itemCursor.suppressUnconsumed();
-  }
-  return outcome.node;
-}
-
 function readSlidePart(
   pkg: PptxPackage,
   slidePartPath: string,
@@ -280,9 +206,10 @@ function readSlidePart(
     slidePartPath,
     "/p:sld",
   );
-  const rawShow = slideCursor.attrsObject(["show"]);
+  const rawShow = slideCursor.attrsObject(["show", "showMasterSp"]);
   const parsedShow = SlideShowAttrSchema.safeParse(rawShow);
   let hidden = false;
+  let showMasterShapes: boolean | undefined;
   if (!parsedShow.success) {
     diagnostics.push({
       code: "invalid-xml-value",
@@ -296,8 +223,11 @@ function readSlidePart(
       attributeOrElement: "@show",
       rawValue: rawShow["show"] ?? "",
     });
-  } else if (parsedShow.data.show === false) {
-    hidden = true;
+  } else {
+    if (parsedShow.data.show === false) {
+      hidden = true;
+    }
+    showMasterShapes = parsedShow.data.showMasterSp;
   }
 
   const cSld = slideCursor.child(P_NS, "cSld");
@@ -310,6 +240,7 @@ function readSlidePart(
     });
     return undefined;
   }
+  consumeCommonSlideCreationId(cSld);
 
   const slideRels = pkg.readRelationships(slidePartPath);
   diagnostics.push(...slideRels.diagnostics);
@@ -385,107 +316,23 @@ function readSlidePart(
     ...(colorMapOverride === undefined ? {} : { colorMapOverride }),
     ...(themeOverride === undefined ? {} : { themeOverride }),
     ...(hidden ? { hidden: true } : {}),
+    ...(showMasterShapes === undefined ? {} : { showMasterShapes }),
   });
 
   const spTree = cSld.child(P_NS, "spTree");
   if (spTree !== undefined) {
-    consumeIdentityShapeTreeBoilerplate(spTree);
-    for (const itemCursor of spTree.remainingElementChildren()) {
-      if (
-        itemCursor.namespaceUri === MC_NS &&
-        itemCursor.localName === "AlternateContent"
-      ) {
-        const selection = readAlternateContent(itemCursor, (ns) =>
-          supportedShapeTreeNamespaces.has(ns),
-        );
-        if (selection.branch === "choice") {
-          for (const childCursor of selection.children) {
-            const node = readSingleShapeTreeItem(
-              childCursor,
-              pkg,
-              slidePartPath,
-              slideIndex,
-              relIndex,
-              handlers,
-              registerDeferredSlideLink,
-              diagnostics,
-            );
-            if (node !== undefined) {
-              slideNode.append(node);
-            }
-          }
-        } else if (selection.branch === "fallback") {
-          let adoptedFallback = false;
-          for (const childCursor of selection.children) {
-            const identity = peekShapeTreeObjectIdentity(childCursor.element);
-            const node = readSingleShapeTreeItem(
-              childCursor,
-              pkg,
-              slidePartPath,
-              slideIndex,
-              relIndex,
-              handlers,
-              registerDeferredSlideLink,
-              diagnostics,
-            );
-            if (node !== undefined) {
-              adoptedFallback = true;
-              slideNode.append(node);
-              diagnostics.push({
-                code: "compatibility-fallback",
-                category: "unsupported",
-                disposition: "fallback",
-                location: {
-                  part: slidePartPath,
-                  xpath: itemCursor.xpath,
-                  slideIndex,
-                  ...identity,
-                },
-                preferredMechanism: selection.preferredMechanism,
-                selectedFallback: node.kind,
-                loss: {
-                  lost: "native-mechanism",
-                  retainedAs: node.kind,
-                },
-              });
-            }
-          }
-          if (!adoptedFallback) {
-            itemCursor.suppressUnconsumed();
-          }
-        } else {
-          diagnostics.push({
-            code: "unsupported-mechanism",
-            category: "unsupported",
-            disposition: "omitted",
-            location: {
-              part: slidePartPath,
-              xpath: itemCursor.xpath,
-              slideIndex,
-            },
-            namespaceUri: itemCursor.namespaceUri,
-            localName: itemCursor.localName,
-            mechanismHint: selection.preferredMechanism,
-          });
-          itemCursor.suppressUnconsumed();
-        }
-        continue;
-      }
-
-      const node = readSingleShapeTreeItem(
-        itemCursor,
-        pkg,
-        slidePartPath,
-        slideIndex,
-        relIndex,
-        handlers,
-        registerDeferredSlideLink,
-        diagnostics,
-      );
-      if (node !== undefined) {
-        slideNode.append(node);
-      }
-    }
+    readShapeTreeItems({
+      spTree,
+      pkg,
+      partPath: slidePartPath,
+      slideIndex,
+      relIndex,
+      shapeTreeHandlers: handlers.shapeTree,
+      registerDeferredSlideLink,
+      appendNode: (node) => slideNode.append(node),
+      diagnostics,
+      containerNode: slideNode,
+    });
   }
 
   for (const slideHandler of handlers.slide) {
@@ -542,6 +389,11 @@ export function createImporter(
     }
 
     const usedDeckIds = new Set<string>();
+    const slideIdByPartPath = new Map<string, string>();
+    const deferredSlideLinks: DeferredSlideLink[] = [];
+    const registerDeferredSlideLink = (link: DeferredSlideLink): void => {
+      deferredSlideLinks.push(link);
+    };
     const layoutNodeByPartPath = importMastersAndLayouts(
       presCursor,
       pkg,
@@ -549,13 +401,10 @@ export function createImporter(
       deckNode,
       usedDeckIds,
       diagnostics,
+      handlers.slide,
+      handlers.shapeTree,
+      registerDeferredSlideLink,
     );
-
-    const slideIdByPartPath = new Map<string, string>();
-    const deferredSlideLinks: DeferredSlideLink[] = [];
-    const registerDeferredSlideLink = (link: DeferredSlideLink): void => {
-      deferredSlideLinks.push(link);
-    };
     let slideCount = 0;
     const sldIdLst = presCursor.child(P_NS, "sldIdLst");
     if (sldIdLst !== undefined) {

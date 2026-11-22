@@ -9,6 +9,8 @@ import {
 } from "@pptxdk/core/capability";
 import { xmlEscape } from "@pptxdk/emit";
 import {
+  OoxmlBoolSchema,
+  P_NS,
   REL_HYPERLINK,
   REL_SLIDE,
   R_NS,
@@ -20,6 +22,60 @@ import {
   type XmlElementCursor,
 } from "@pptxdk/import";
 import { z } from "zod";
+
+const NvPrUserDrawnSchema = z.object({
+  userDrawn: OoxmlBoolSchema.optional(),
+});
+
+function directChildDom(
+  parent: XmlElementCursor["element"],
+  namespaceUri: string,
+  localName: string,
+): XmlElementCursor["element"] | undefined {
+  for (
+    let child = parent.firstChild;
+    child !== null;
+    child = child.nextSibling
+  ) {
+    if (child.nodeType !== 1) continue;
+    const el = child as XmlElementCursor["element"];
+    if (
+      (el.namespaceURI ?? "") === namespaceUri &&
+      (el.localName ?? el.tagName) === localName
+    ) {
+      return el;
+    }
+  }
+  return undefined;
+}
+
+/** Side-effect-free check for `<p:ph>` inside an object's `<p:nvPr>`. */
+export function hasPlaceholderElement(cursor: XmlElementCursor): boolean {
+  for (const wrapperName of [
+    "nvSpPr",
+    "nvPicPr",
+    "nvGrpSpPr",
+    "nvGraphicFramePr",
+    "nvCxnSpPr",
+  ] as const) {
+    const wrapper = directChildDom(cursor.element, P_NS, wrapperName);
+    if (wrapper === undefined) continue;
+    const nvPr = directChildDom(wrapper, P_NS, "nvPr");
+    if (nvPr === undefined) continue;
+    if (directChildDom(nvPr, P_NS, "ph") !== undefined) return true;
+  }
+  return false;
+}
+
+/** Consumes `<p:nvPr>` (and optional `userDrawn` flag) for non-placeholder objects. */
+export function consumeNonPlaceholderNvPr(
+  nvParentCursor: XmlElementCursor,
+): void {
+  const nvPr = nvParentCursor.child(P_NS, "nvPr");
+  if (nvPr === undefined) return;
+  const raw = nvPr.attrsObject(["userDrawn"]);
+  NvPrUserDrawnSchema.safeParse(raw);
+}
 
 export const OptionalNameSchema = z
   .string()

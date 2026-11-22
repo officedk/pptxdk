@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 
+import type { HeaderFooter } from "@pptxdk/core";
 import {
   defaultColorMap,
   defaultTheme,
@@ -163,6 +164,10 @@ export type EmittedSlideLayoutSpec = {
   readonly showMasterPlaceholderAnimations?: boolean;
   readonly colorMapOverride?: ColorMapOverride;
   readonly themeOverride?: ThemeOverride;
+  readonly headerFooter?: HeaderFooter;
+  readonly backgroundXml?: string;
+  readonly shapeXml?: string;
+  readonly extraRelationships?: readonly PptxRelationship[];
 };
 
 export type EmittedSlideMasterSpec = {
@@ -171,6 +176,10 @@ export type EmittedSlideMasterSpec = {
   readonly preserve?: boolean;
   readonly theme?: Theme;
   readonly colorMap?: ColorMap;
+  readonly headerFooter?: HeaderFooter;
+  readonly backgroundXml?: string;
+  readonly shapeXml?: string;
+  readonly extraRelationships?: readonly PptxRelationship[];
   readonly layouts: readonly EmittedSlideLayoutSpec[];
 };
 
@@ -468,7 +477,9 @@ function effectiveThemeWithOverride(
   };
 }
 
-function hasThemeOverrideContent(override: ThemeOverride | undefined): boolean {
+export function hasThemeOverrideContent(
+  override: ThemeOverride | undefined,
+): boolean {
   if (override === undefined) return false;
   return (
     (override.colors !== undefined &&
@@ -520,6 +531,19 @@ export function colorMapOverrideXml(override?: ColorMapOverride): string {
   return `<p:clrMapOvr><a:overrideClrMapping ${colorMapAttributesXml(override)}/></p:clrMapOvr>`;
 }
 
+function headerFooterXml(hf?: HeaderFooter): string {
+  if (hf === undefined) return "";
+  const attrs = [
+    hf.slideNumber === undefined
+      ? ""
+      : ` sldNum="${hf.slideNumber ? "1" : "0"}"`,
+    hf.header === undefined ? "" : ` hdr="${hf.header ? "1" : "0"}"`,
+    hf.footer === undefined ? "" : ` ftr="${hf.footer ? "1" : "0"}"`,
+    hf.dateTime === undefined ? "" : ` dt="${hf.dateTime ? "1" : "0"}"`,
+  ].join("");
+  return `<p:hf${attrs}/>`;
+}
+
 function masterXml(
   spec: EmittedSlideMasterSpec,
   layoutIds: readonly { readonly id: number; readonly rId: string }[],
@@ -537,7 +561,7 @@ function masterXml(
     )
     .join("");
   return xmlDocument(
-    `<p:sldMaster xmlns:a="${namespaces.a}" xmlns:r="${namespaces.r}" xmlns:p="${namespaces.p}"${preserveAttr}><p:cSld${nameAttr}>${shapeTreeXml()}</p:cSld>${colorMap}<p:sldLayoutIdLst>${layoutIdList}</p:sldLayoutIdLst><p:txStyles><p:titleStyle/><p:bodyStyle/><p:otherStyle/></p:txStyles></p:sldMaster>`,
+    `<p:sldMaster xmlns:a="${namespaces.a}" xmlns:r="${namespaces.r}" xmlns:p="${namespaces.p}"${preserveAttr}><p:cSld${nameAttr}>${spec.backgroundXml ?? ""}${shapeTreeXml(spec.shapeXml ?? "")}</p:cSld>${colorMap}<p:sldLayoutIdLst>${layoutIdList}</p:sldLayoutIdLst>${headerFooterXml(spec.headerFooter)}<p:txStyles><p:titleStyle/><p:bodyStyle/><p:otherStyle/></p:txStyles></p:sldMaster>`,
   );
 }
 
@@ -565,7 +589,7 @@ function layoutXml(spec: EmittedSlideLayoutSpec): string {
   const nameAttr =
     spec.name === undefined ? "" : ` name="${xmlEscape(spec.name)}"`;
   return xmlDocument(
-    `<p:sldLayout xmlns:a="${namespaces.a}" xmlns:r="${namespaces.r}" xmlns:p="${namespaces.p}"${typeAttr}${preserveAttr}${matchingNameAttr}${userDrawnAttr}${showMasterSpAttr}${showMasterPhAnimAttr}><p:cSld${nameAttr}>${shapeTreeXml()}</p:cSld>${colorMapOverrideXml(spec.colorMapOverride)}</p:sldLayout>`,
+    `<p:sldLayout xmlns:a="${namespaces.a}" xmlns:r="${namespaces.r}" xmlns:p="${namespaces.p}"${typeAttr}${preserveAttr}${matchingNameAttr}${userDrawnAttr}${showMasterSpAttr}${showMasterPhAnimAttr}><p:cSld${nameAttr}>${spec.backgroundXml ?? ""}${shapeTreeXml(spec.shapeXml ?? "")}</p:cSld>${colorMapOverrideXml(spec.colorMapOverride)}${headerFooterXml(spec.headerFooter)}</p:sldLayout>`,
   );
 }
 
@@ -576,9 +600,12 @@ function slide(
   backgroundXml: string,
   hidden: boolean,
   colorMapOverride?: ColorMapOverride,
+  showMasterShapes?: boolean,
 ): string {
+  const showMasterSpAttr =
+    showMasterShapes === false ? ' showMasterSp="0"' : "";
   return xmlDocument(
-    `<p:sld xmlns:a="${namespaces.a}" xmlns:r="${namespaces.r}" xmlns:p="${namespaces.p}"${hidden ? ' show="false"' : ""}><p:cSld name="${xmlEscape(slideId)}">${backgroundXml}${shapeTreeXml(shapeXml)}</p:cSld>${colorMapOverrideXml(colorMapOverride)}${slideXml}</p:sld>`,
+    `<p:sld xmlns:a="${namespaces.a}" xmlns:r="${namespaces.r}" xmlns:p="${namespaces.p}"${showMasterSpAttr}${hidden ? ' show="false"' : ""}><p:cSld name="${xmlEscape(slideId)}">${backgroundXml}${shapeTreeXml(shapeXml)}</p:cSld>${colorMapOverrideXml(colorMapOverride)}${slideXml}</p:sld>`,
   );
 }
 
@@ -641,6 +668,7 @@ export function pptxParts(
     readonly colorMapOverride?: ColorMapOverride;
     readonly themeOverride?: ThemeOverride;
     readonly hidden?: boolean;
+    readonly showMasterShapes?: boolean;
     readonly shapeXml: string;
     readonly backgroundXml?: string;
     readonly slideXml?: string;
@@ -881,6 +909,7 @@ export function pptxParts(
         type: `${namespaces.r}/theme`,
         target: allocatedMaster.themeRelTarget,
       },
+      ...(allocatedMaster.spec.extraRelationships ?? []),
     ]);
     for (const allocatedLayout of allocatedMaster.layouts) {
       parts[allocatedLayout.layoutPart] = layoutXml(allocatedLayout.spec);
@@ -899,6 +928,7 @@ export function pptxParts(
                 target: allocatedLayout.themeOverrideTarget,
               },
             ]),
+        ...(allocatedLayout.spec.extraRelationships ?? []),
       ];
       parts[
         `ppt/slideLayouts/_rels/slideLayout${allocatedLayout.layoutNumber}.xml.rels`
@@ -913,6 +943,7 @@ export function pptxParts(
         slideXml,
         backgroundXml,
         hidden,
+        showMasterShapes,
         layoutKey,
         colorMapOverride,
       },
@@ -930,6 +961,7 @@ export function pptxParts(
         backgroundXml ?? "",
         hidden ?? false,
         colorMapOverride,
+        showMasterShapes,
       );
       const slideOverrideTarget = slideThemeOverrideTargets[index];
       const slideRels: PptxRelationship[] = [

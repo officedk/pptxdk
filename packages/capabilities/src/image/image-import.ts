@@ -35,7 +35,12 @@ import {
   type PathCommand,
   type PresetGeometryName,
 } from "../shared/geometry.ts";
-import { readClickLink, type ClickLinkReadResult } from "../shared/identity.ts";
+import {
+  consumeNonPlaceholderNvPr,
+  hasPlaceholderElement,
+  readClickLink,
+  type ClickLinkReadResult,
+} from "../shared/identity.ts";
 import {
   createImageNode,
   type ImageDeclarationProps,
@@ -629,7 +634,7 @@ export function readImagePic(
       picLocks.consumeAttr("preferRelativeResize");
     }
   }
-  nvPicPr.ignoreEmptyChild(P_NS, "nvPr");
+  consumeNonPlaceholderNvPr(nvPicPr);
 
   const picLocation: ImportLocation = {
     part,
@@ -918,5 +923,6 @@ export function readImagePic(
 export const imageImportHandler: ShapeTreeImportHandler = {
   target: "shape-tree",
   localName: "pic",
+  matches: (cursor) => !hasPlaceholderElement(cursor),
   read: readImagePic,
 };

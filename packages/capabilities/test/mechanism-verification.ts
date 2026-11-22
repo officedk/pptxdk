@@ -23,6 +23,7 @@ import {
   type CapabilityScenario,
   type NativeRoundtripAssertContext,
 } from "./acceptance-runner.ts";
+import { chartMechanismVerifications } from "./chart/mechanisms.ts";
 import { imageMechanismVerifications } from "./image/mechanisms.ts";
 import { notesMechanismVerifications } from "./notes/mechanisms.ts";
 import { shapeAndGroupMechanismVerifications } from "./shape/mechanisms.ts";
@@ -261,6 +262,7 @@ export const productionMechanismVerifications: ExhaustiveMechanismVerificationMa
     ...notesMechanismVerifications,
     ...shapeAndGroupMechanismVerifications,
     ...textMechanismVerifications,
+    ...chartMechanismVerifications,
   };
 
 /** Runs every mechanism verification entry, deduplicating shared scenarios across initial and roundtrip artifacts. */

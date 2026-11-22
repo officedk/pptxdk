@@ -149,12 +149,14 @@ export type EmittedSlideLayoutSpec = {
   readonly userDrawn?: boolean;
   readonly showMasterShapes?: boolean;
   readonly showMasterPlaceholderAnimations?: boolean;
+  readonly transitionXml?: string;
 };
 
 export type EmittedSlideMasterSpec = {
   readonly key: string;
   readonly name?: string;
   readonly preserve?: boolean;
+  readonly transitionXml?: string;
   readonly layouts: readonly EmittedSlideLayoutSpec[];
 };
 
@@ -290,7 +292,7 @@ function masterXml(
     )
     .join("");
   return xmlDocument(
-    `<p:sldMaster xmlns:a="${namespaces.a}" xmlns:r="${namespaces.r}" xmlns:p="${namespaces.p}"${preserveAttr}><p:cSld${nameAttr}>${shapeTreeXml()}</p:cSld>${colorMap}<p:sldLayoutIdLst>${layoutIdList}</p:sldLayoutIdLst><p:txStyles><p:titleStyle/><p:bodyStyle/><p:otherStyle/></p:txStyles></p:sldMaster>`,
+    `<p:sldMaster xmlns:a="${namespaces.a}" xmlns:r="${namespaces.r}" xmlns:p="${namespaces.p}"${preserveAttr}><p:cSld${nameAttr}>${shapeTreeXml()}</p:cSld>${colorMap}<p:sldLayoutIdLst>${layoutIdList}</p:sldLayoutIdLst>${spec.transitionXml ?? ""}<p:txStyles><p:titleStyle/><p:bodyStyle/><p:otherStyle/></p:txStyles></p:sldMaster>`,
   );
 }
 
@@ -318,7 +320,7 @@ function layoutXml(spec: EmittedSlideLayoutSpec): string {
   const nameAttr =
     spec.name === undefined ? "" : ` name="${xmlEscape(spec.name)}"`;
   return xmlDocument(
-    `<p:sldLayout xmlns:a="${namespaces.a}" xmlns:r="${namespaces.r}" xmlns:p="${namespaces.p}"${typeAttr}${preserveAttr}${matchingNameAttr}${userDrawnAttr}${showMasterSpAttr}${showMasterPhAnimAttr}><p:cSld${nameAttr}>${shapeTreeXml()}</p:cSld><p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr></p:sldLayout>`,
+    `<p:sldLayout xmlns:a="${namespaces.a}" xmlns:r="${namespaces.r}" xmlns:p="${namespaces.p}"${typeAttr}${preserveAttr}${matchingNameAttr}${userDrawnAttr}${showMasterSpAttr}${showMasterPhAnimAttr}><p:cSld${nameAttr}>${shapeTreeXml()}</p:cSld><p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr>${spec.transitionXml ?? ""}</p:sldLayout>`,
   );
 }
 

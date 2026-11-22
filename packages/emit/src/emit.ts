@@ -37,6 +37,7 @@ import {
   getInternalResolution,
   type InternalResolution,
   type ResolvedObjectLayer,
+  type ResolvedSlideCapabilityRecord,
 } from "@pptxdk/core/resolution";
 import { strToU8, zipSync } from "fflate";
 import type { z } from "zod";
@@ -1413,6 +1414,67 @@ export function emittedBuildQuery(
   return emittedQueries.get(report) ?? fallbackQuery;
 }
 
+function emitMasterOrLayoutCapabilities(
+  capabilities: readonly ResolvedSlideCapabilityRecord[] | undefined,
+  internal: InternalResolution,
+  docEmit: DocumentEmitState,
+  target: Target,
+  options: EmitOptions,
+): string {
+  if (capabilities === undefined || capabilities.length === 0) return "";
+  const diagnostics: Diagnostic[] = [];
+  const slideEmit: SlideEmitState = {
+    index: 0,
+    diagnostics,
+    relationships: [],
+    relationshipIds: new Map(),
+    resourceObservations: [],
+  };
+  const packageCtx: PackageContext = { document: docEmit, slide: slideEmit };
+  const parts: string[] = [];
+
+  for (const cap of capabilities) {
+    checkExtensions(
+      cap.extensions,
+      target,
+      docEmit.usedExtensions,
+      diagnostics,
+      cap.path,
+    );
+    try {
+      const output = cap.emit({
+        path: cap.path,
+        dimensions: internal.dimensions,
+        theme: cap.theme,
+        options,
+        slideNumber: 0,
+        createTextFieldId: () => allocateTextFieldId(docEmit),
+        registerResource: (resource) => addResource(resource, packageCtx),
+        registerPackagePart: (part) => addSlidePackagePart(part, packageCtx),
+        registerSharedPart: (key, part) =>
+          addSharedPackagePart(key, part, packageCtx),
+      });
+      if (cap.slot === "transition" && output.xml !== "") {
+        parts.push(output.xml);
+      }
+    } catch (error) {
+      diagnostics.push(
+        error instanceof CapabilityError
+          ? diagnostic(error.path ?? cap.path, error.code, error.message)
+          : diagnostic(
+              cap.path,
+              "capability-failure",
+              error instanceof Error ? error.message : String(error),
+            ),
+      );
+    }
+  }
+  if (diagnostics.length > 0) {
+    throw new BuildError(diagnostics);
+  }
+  return parts.join("");
+}
+
 /**
  * Emits a PPTX archive and BuildReport from an existing Resolution without re-resolving the document.
  */
@@ -1438,6 +1500,56 @@ export function emit(
   const slideIndexById = new Map(
     internal.slides.map((slide) => [slide.id, slide.index] as const),
   );
+
+  const emittedMasters = internal.masters?.map((master) => {
+    const transitionXml = emitMasterOrLayoutCapabilities(
+      master.slideCapabilities,
+      internal,
+      docEmit,
+      target,
+      options,
+    );
+    const layouts = master.layouts.map((layout) => {
+      const layoutTransitionXml = emitMasterOrLayoutCapabilities(
+        layout.slideCapabilities,
+        internal,
+        docEmit,
+        target,
+        options,
+      );
+      return {
+        key: layout.key,
+        ...(layout.name === undefined ? {} : { name: layout.name }),
+        ...(layout.type === undefined ? {} : { type: layout.type }),
+        ...(layout.preserve === undefined ? {} : { preserve: layout.preserve }),
+        ...(layout.matchingName === undefined
+          ? {}
+          : { matchingName: layout.matchingName }),
+        ...(layout.userDrawn === undefined
+          ? {}
+          : { userDrawn: layout.userDrawn }),
+        ...(layout.showMasterShapes === undefined
+          ? {}
+          : { showMasterShapes: layout.showMasterShapes }),
+        ...(layout.showMasterPlaceholderAnimations === undefined
+          ? {}
+          : {
+              showMasterPlaceholderAnimations:
+                layout.showMasterPlaceholderAnimations,
+            }),
+        ...(layoutTransitionXml === ""
+          ? {}
+          : { transitionXml: layoutTransitionXml }),
+      };
+    });
+    return {
+      key: master.key,
+      ...(master.name === undefined ? {} : { name: master.name }),
+      ...(master.preserve === undefined ? {} : { preserve: master.preserve }),
+      ...(transitionXml === "" ? {} : { transitionXml }),
+      layouts,
+    };
+  });
 
   const emittedSlides = internal.slides.map((resolvedSlide) => {
     const slideEmit: SlideEmitState = {
@@ -1568,7 +1680,7 @@ export function emit(
     internal.theme.theme,
     internal.title,
     internal.sections,
-    internal.masters,
+    emittedMasters,
   );
   const pptx = zipSync(
     Object.fromEntries(

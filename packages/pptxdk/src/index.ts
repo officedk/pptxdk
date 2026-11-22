@@ -74,7 +74,6 @@ export {
   darker,
   deckPropsSchema,
   defaultTheme,
-  defineSlideLayout,
   defineTheme,
   diagnosticSchema,
   diagnosticSeveritySchema,
@@ -194,6 +193,7 @@ export type {
   ThemeShade,
   VisualStyle,
 } from "@pptxdk/core";
+export { defineSlideLayout } from "@pptxdk/capabilities/document";
 export { boxCapability } from "@pptxdk/capabilities/box";
 export { chartCapability } from "@pptxdk/capabilities/chart";
 export type {

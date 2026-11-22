@@ -25,6 +25,7 @@ import {
 } from "./acceptance-runner.ts";
 import { imageMechanismVerifications } from "./image/mechanisms.ts";
 import { shapeAndGroupMechanismVerifications } from "./shape/mechanisms.ts";
+import { transitionMechanismVerifications } from "./transition/mechanisms.ts";
 
 export type ExtractMechanisms<Modules extends readonly unknown[]> =
   Modules[number] extends infer M
@@ -397,6 +398,7 @@ export const productionMechanismVerifications: ExhaustiveMechanismVerificationMa
       },
     },
     ...shapeAndGroupMechanismVerifications,
+    ...transitionMechanismVerifications,
   };
 
 /** Runs every mechanism verification entry, deduplicating shared scenarios across initial and roundtrip artifacts. */

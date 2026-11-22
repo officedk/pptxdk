@@ -1,11 +1,4 @@
-export {
-  appendJSX,
-  Deck,
-  expandDocument,
-  Section,
-  SlideLayout,
-  SlideMaster,
-} from "@pptxdk/react";
+export { appendJSX, Deck, expandDocument, Section } from "@pptxdk/react";
 export type {
   AppendJSXOptions,
   DeckProps,
@@ -13,10 +6,15 @@ export type {
   ExpandDocumentOptions,
   ExpandedDocument,
   SectionProps,
-  SlideLayoutProps,
-  SlideMasterProps,
 } from "@pptxdk/react";
-export { Slide, type SlideProps } from "./slide.ts";
+export {
+  Slide,
+  SlideLayout,
+  SlideMaster,
+  type SlideLayoutProps,
+  type SlideMasterProps,
+  type SlideProps,
+} from "./slide.ts";
 export { Box, type BoxProps } from "@pptxdk/capabilities/box-elements";
 export { Chart, type ChartProps } from "@pptxdk/capabilities/chart-elements";
 export { Group, type GroupProps } from "@pptxdk/capabilities/group-elements";
@@ -60,7 +58,6 @@ export {
   SlideMasterContainer,
   darker,
   defaultTheme,
-  defineSlideLayout,
   defineTheme,
   isNativeColorSlot,
   isSlideLayoutDefinition,
@@ -109,6 +106,7 @@ export {
   blockArc,
   breathe,
   createMotionScopeHandle,
+  defineSlideLayout,
   fade,
   fillColor,
   floatDown,

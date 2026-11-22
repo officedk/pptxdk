@@ -79,6 +79,7 @@ export type InternalResolvedSlideLayout = {
   readonly userDrawn?: boolean;
   readonly showMasterShapes?: boolean;
   readonly showMasterPlaceholderAnimations?: boolean;
+  readonly slideCapabilities?: readonly ResolvedSlideCapabilityRecord[];
 };
 
 export type InternalResolvedSlideMaster = {
@@ -87,6 +88,7 @@ export type InternalResolvedSlideMaster = {
   readonly name?: string;
   readonly preserve?: boolean;
   readonly layouts: readonly InternalResolvedSlideLayout[];
+  readonly slideCapabilities?: readonly ResolvedSlideCapabilityRecord[];
 };
 
 export type InternalResolvedSlide = {

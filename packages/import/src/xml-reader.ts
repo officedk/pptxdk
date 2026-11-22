@@ -246,6 +246,20 @@ export class XmlElementCursor {
     return matches;
   }
 
+  /** Returns matching direct element children without marking non-matching siblings consumed. */
+  matchingChildren(
+    predicate: (element: XmlElement) => boolean,
+  ): readonly XmlElementCursor[] {
+    const matches: XmlElementCursor[] = [];
+    for (const child of this.#elementChildren()) {
+      if (predicate(child)) {
+        this.#consumedChildren.add(child);
+        matches.push(this.#cursorFor(child));
+      }
+    }
+    return matches;
+  }
+
   /** Returns all direct element children as cursors and marks them consumed by the caller. */
   allElementChildren(): readonly XmlElementCursor[] {
     return this.#elementChildren().map((child) => {

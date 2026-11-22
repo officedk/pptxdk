@@ -51,6 +51,8 @@ export const slideMasterDataPropsSchema = z
     id: z.string().trim().min(1).optional(),
     name: z.string().optional(),
     preserve: z.boolean().optional(),
+    transition: z.unknown().optional(),
+    advanceAfter: z.number().optional(),
   })
   .readonly();
 export type SlideMasterDataProps = z.infer<typeof slideMasterDataPropsSchema>;
@@ -70,6 +72,8 @@ export const slideLayoutDataPropsSchema = z
     userDrawn: z.boolean().optional(),
     showMasterShapes: z.boolean().optional(),
     showMasterPlaceholderAnimations: z.boolean().optional(),
+    transition: z.unknown().optional(),
+    advanceAfter: z.number().optional(),
   })
   .readonly();
 export type SlideLayoutDataProps = z.infer<typeof slideLayoutDataPropsSchema>;
@@ -84,6 +88,7 @@ export const slideLayoutObservationSchema = z
     userDrawn: z.boolean().optional(),
     showMasterShapes: z.boolean().optional(),
     showMasterPlaceholderAnimations: z.boolean().optional(),
+    capabilities: z.record(z.string(), z.unknown()).readonly().optional(),
   })
   .readonly();
 export type SlideLayoutObservation = z.infer<
@@ -95,6 +100,7 @@ export const slideMasterObservationSchema = z
     id: z.string().min(1),
     name: z.string().optional(),
     preserve: z.boolean().optional(),
+    capabilities: z.record(z.string(), z.unknown()).readonly().optional(),
     layouts: z.array(slideLayoutObservationSchema).readonly(),
   })
   .readonly();
@@ -120,6 +126,8 @@ export type SlideLayoutDefinition<
   readonly userDrawn?: boolean | undefined;
   readonly showMasterShapes?: boolean | undefined;
   readonly showMasterPlaceholderAnimations?: boolean | undefined;
+  readonly transition?: unknown;
+  readonly advanceAfter?: number | undefined;
 };
 
 export type SlideLayoutProps = SlideLayoutDataProps & {
@@ -183,5 +191,11 @@ export function defineSlideLayout<const Spec extends SlideLayoutDataProps>(
           showMasterPlaceholderAnimations:
             frozenProps.showMasterPlaceholderAnimations,
         }),
+    ...(frozenProps.transition === undefined
+      ? {}
+      : { transition: frozenProps.transition }),
+    ...(frozenProps.advanceAfter === undefined
+      ? {}
+      : { advanceAfter: frozenProps.advanceAfter }),
   });
 }

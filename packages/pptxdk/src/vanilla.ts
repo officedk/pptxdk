@@ -13,6 +13,7 @@ export {
 } from "@pptxdk/core";
 export { createMorphScope, isMorphKey } from "@pptxdk/core/capability";
 export type {
+  AuthorId,
   AuthorNodeGuard,
   ColorValue,
   DocumentProps,
@@ -32,6 +33,7 @@ export type {
   MorphKey,
   MorphScope,
   NativeColorSlot,
+  PaddingStyle,
   RadialGradient,
   RichTextItem,
   Shadow,

@@ -1,6 +1,8 @@
 import {
   CapabilityError,
   isMorphKey,
+  linkTargetSchema,
+  parseLinkTarget,
   type LinkTarget,
   type MorphKey,
   type NativeLink,
@@ -25,16 +27,13 @@ export const OptionalNameSchema = z
     message: "name must be a non-empty string",
   });
 
-export const LinkTargetSchema: z.ZodType<LinkTarget> = z.union([
-  z.strictObject({ id: z.string() }),
-  z.strictObject({ url: z.string() }),
-  z.strictObject({ action: z.literal("home") }),
-]);
-
 const HlinkClickFragmentSchema = z.object({
   id: z.string().optional(),
   action: z.string().optional(),
 });
+
+export { linkTargetSchema, parseLinkTarget };
+export type { LinkTarget };
 
 /** Validates an optional non-empty object name parameter. */
 export function parseOptionalName(
@@ -67,43 +66,6 @@ export function parseMorphKey(
     );
   }
   return value;
-}
-
-/** Validates link target declarations once during capability bind. */
-export function parseLinkTarget(
-  value: unknown,
-  path?: string,
-): LinkTarget | undefined {
-  if (value === undefined) return undefined;
-  if (typeof value !== "object" || value === null || Array.isArray(value)) {
-    throw new CapabilityError(
-      "invalid-link",
-      "link must specify id, url, or home action",
-      path,
-    );
-  }
-  const normalized: Record<string, unknown> = {};
-  for (const [key, target] of Object.entries(value)) {
-    if (target !== undefined) {
-      normalized[key] = target;
-    }
-  }
-  if (Object.keys(normalized).length !== 1) {
-    throw new CapabilityError(
-      "invalid-link",
-      "link must specify exactly one target",
-      path,
-    );
-  }
-  const parsed = LinkTargetSchema.safeParse(normalized);
-  if (!parsed.success) {
-    throw new CapabilityError(
-      "invalid-link",
-      "link supports { id }, { url }, or { action: 'home' }",
-      path,
-    );
-  }
-  return parsed.data;
 }
 
 /** Native object capabilities share the same click link representation, with relationships and actions pre-resolved by core. */

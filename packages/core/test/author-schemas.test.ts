@@ -1,0 +1,181 @@
+import assert from "node:assert/strict";
+
+import {
+  BuildError,
+  CapabilityError,
+  authorIdSchema,
+  layoutLengthSchema,
+  layoutSpacingSchema,
+  layoutStyleSchema,
+  linkTargetSchema,
+  paddingStyleSchema,
+  type AuthorId,
+  type LayoutLength,
+  type LayoutSpacing,
+  type LayoutStyle,
+  type LinkTarget,
+  type PaddingStyle,
+} from "@pptxdk/core";
+import { parseLinkTarget, readAuthorId } from "@pptxdk/core/capability";
+import { describe, it } from "vitest";
+
+describe("Slice 1: core author primitives & layout schemas", () => {
+  it("validates AuthorId via authorIdSchema and readAuthorId with localized BuildError", () => {
+    const validId: AuthorId = authorIdSchema.parse("hero-title");
+    assert.equal(validId, "hero-title");
+    assert.equal(readAuthorId(undefined, "deck/slide[1]"), undefined);
+    assert.equal(readAuthorId("cover", "deck/slide[1]"), "cover");
+
+    for (const invalid of ["", "   ", 123, null, {}]) {
+      assert.equal(authorIdSchema.safeParse(invalid).success, false);
+      assert.throws(
+        () => readAuthorId(invalid, "deck/slide[1]/text[1]"),
+        (error: unknown) => {
+          assert(error instanceof BuildError);
+          assert.equal(error.diagnostics[0]?.code, "invalid-author-id");
+          assert.equal(error.diagnostics[0]?.path, "deck/slide[1]/text[1]");
+          return true;
+        },
+      );
+    }
+  });
+
+  it("validates LayoutLength and LayoutSpacing including percentages, tuples, and auto", () => {
+    const validLengths: readonly LayoutLength[] = [
+      0,
+      120,
+      -20,
+      "50%",
+      ".5%",
+      "-12.5%",
+      "auto",
+    ];
+    for (const value of validLengths) {
+      assert.equal(layoutLengthSchema.parse(value), value);
+    }
+
+    for (const invalid of [
+      Number.NaN,
+      Number.POSITIVE_INFINITY,
+      "20px",
+      "20pt",
+      "",
+      "%",
+      null,
+    ]) {
+      assert.equal(layoutLengthSchema.safeParse(invalid).success, false);
+    }
+
+    const validSpacings: readonly LayoutSpacing[] = [
+      12,
+      [10, 20],
+      [1, 2, 3, 4],
+      [-4, 8],
+    ];
+    for (const value of validSpacings) {
+      assert.deepEqual(layoutSpacingSchema.parse(value), value);
+    }
+
+    for (const invalid of [
+      [10],
+      [1, 2, 3],
+      [1, 2, 3, 4, 5],
+      ["10", 20],
+      Number.NaN,
+    ]) {
+      assert.equal(layoutSpacingSchema.safeParse(invalid).success, false);
+    }
+  });
+
+  it("validates PaddingStyle and Block/Flex/Grid LayoutStyle via Zod schemas", () => {
+    const pad: PaddingStyle = paddingStyleSchema.parse({
+      padding: [8, 16],
+      paddingTop: 12,
+    });
+    assert.deepEqual(pad, { padding: [8, 16], paddingTop: 12 });
+    assert.equal(paddingStyleSchema.safeParse({ padding: -1 }).success, false);
+    assert.equal(
+      paddingStyleSchema.safeParse({ paddingLeft: -2 }).success,
+      false,
+    );
+    assert.equal(paddingStyleSchema.safeParse({ margin: 10 }).success, false);
+
+    const flexLayout: LayoutStyle = layoutStyleSchema.parse({
+      display: "flex",
+      flexDirection: "column",
+      justifyContent: "space-between",
+      alignItems: "center",
+      gap: 12,
+      width: "100%",
+      height: "auto",
+      padding: [8, 12, 16, 20],
+      zIndex: 2,
+    });
+    assert.equal(flexLayout.display, "flex");
+
+    const gridLayout: LayoutStyle = layoutStyleSchema.parse({
+      display: "grid",
+      gridTemplateColumns: "120px 1fr auto",
+      gridTemplateRows: "auto",
+      gridAutoRows: "40px",
+      gridColumn: "1 / span 2",
+      gridRow: 2,
+      justifyItems: "stretch",
+      justifySelf: "center",
+    });
+    assert.equal(gridLayout.gridColumn, "1 / span 2");
+
+    assert.equal(
+      layoutStyleSchema.safeParse({ display: "inline" }).success,
+      false,
+    );
+    assert.equal(
+      layoutStyleSchema.safeParse({ aspectRatio: 0 }).success,
+      false,
+    );
+    assert.equal(
+      layoutStyleSchema.safeParse({ flexShrink: -1 }).success,
+      false,
+    );
+    assert.equal(
+      layoutStyleSchema.safeParse({ unknownLayoutProp: 1 }).success,
+      false,
+    );
+  });
+
+  it("validates LinkTarget via linkTargetSchema and parseLinkTarget", () => {
+    const idTarget: LinkTarget = linkTargetSchema.parse({ id: "details" });
+    const urlTarget: LinkTarget = linkTargetSchema.parse({
+      url: "https://example.test",
+    });
+    const homeTarget: LinkTarget = linkTargetSchema.parse({ action: "home" });
+    assert.deepEqual(idTarget, { id: "details" });
+    assert.deepEqual(urlTarget, { url: "https://example.test" });
+    assert.deepEqual(homeTarget, { action: "home" });
+
+    assert.deepEqual(parseLinkTarget({ id: "details", url: undefined }), {
+      id: "details",
+    });
+    assert.equal(parseLinkTarget(undefined), undefined);
+
+    for (const invalid of [
+      "not-an-object",
+      null,
+      {},
+      { id: undefined },
+      { id: "a", url: "https://x.test" },
+      { action: "next" },
+      { unknown: "value" },
+    ]) {
+      assert.throws(
+        () => parseLinkTarget(invalid, "box[cta]"),
+        (error: unknown) => {
+          assert(error instanceof CapabilityError);
+          assert.equal(error.code, "invalid-link");
+          assert.equal(error.path, "box[cta]");
+          return true;
+        },
+      );
+    }
+  });
+});

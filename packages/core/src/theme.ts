@@ -1,95 +1,122 @@
+import { z } from "zod";
+
 import { CapabilityError } from "#/diagnostics.ts";
 import { snapshotValue } from "#/input-values.ts";
 
-export type FontFaceStyle = "normal" | "italic";
+export const fontFaceStyleSchema = z.enum(["normal", "italic"]);
+export type FontFaceStyle = z.infer<typeof fontFaceStyleSchema>;
+
+const fontWeightNumberSchema = z
+  .int()
+  .min(100)
+  .max(900)
+  .refine(
+    (value) => value % 100 === 0,
+    "fontWeight must be normal, bold, or a hundreds integer between 100 and 900",
+  );
+
+const fontWeightSchema = z.union([
+  z.literal("normal"),
+  z.literal("bold"),
+  fontWeightNumberSchema,
+]);
+
+export const uint8ArraySchema = z.instanceof(
+  Uint8Array,
+) as unknown as z.ZodType<Uint8Array>;
 
 /** Font files provided by the caller can be used for measurement or embedded according to build options. */
-export type FontFace = {
-  readonly weight?: number;
-  readonly style?: FontFaceStyle;
-  readonly data?: Uint8Array;
-};
+export const fontFaceSchema = z
+  .strictObject({
+    weight: fontWeightNumberSchema.optional(),
+    style: fontFaceStyleSchema.optional(),
+    data: uint8ArraySchema
+      .refine((bytes) => bytes.byteLength > 0, "Font face data cannot be empty")
+      .optional(),
+  })
+  .readonly();
+export type FontFace = z.infer<typeof fontFaceSchema>;
+
+const nonEmptyTrimmedStringSchema = z
+  .string()
+  .refine((value) => value.trim() !== "", "Value cannot be empty");
 
 /** Font family and explicit measurement resources referenceable across deck themes and components. */
-export type Font = {
-  readonly family: string;
-  readonly faces?: readonly FontFace[];
-  readonly substitute?: boolean;
-  readonly embeddable?: boolean;
-};
+export const fontSchema = z
+  .strictObject({
+    family: nonEmptyTrimmedStringSchema,
+    faces: z.array(fontFaceSchema).readonly().optional(),
+    substitute: z.boolean().optional(),
+    embeddable: z.boolean().optional(),
+  })
+  .readonly();
+export type Font = z.infer<typeof fontSchema>;
 
-export type FontOptions = {
-  readonly substitute?: boolean;
-  readonly embeddable?: boolean;
-};
+export const fontOptionsSchema = z
+  .strictObject({
+    substitute: z.boolean().optional(),
+    embeddable: z.boolean().optional(),
+  })
+  .readonly();
+export type FontOptions = z.infer<typeof fontOptionsSchema>;
 
-export type FontReference = string | Font;
-export type FontSize = number | `${number}px` | `${number}pt`;
-export type TextAlignment = "left" | "center" | "right" | "justify";
+export const fontReferenceSchema = z.union([
+  nonEmptyTrimmedStringSchema,
+  fontSchema,
+]);
+export type FontReference = z.infer<typeof fontReferenceSchema>;
 
-/** Inheritable text style fields shared across text objects and containers. */
-export type TextStyle = {
-  readonly fontFamily?: FontReference;
-  readonly fontSize?: FontSize;
-  readonly fontWeight?: number | "normal" | "bold";
-  readonly fontStyle?: FontFaceStyle;
-  readonly color?: ColorValue;
-  readonly lineHeight?: FontSize;
-  readonly verticalAlign?: "top" | "middle" | "bottom";
-  /** Paragraph alignment when not explicitly overridden. */
-  readonly align?: TextAlignment;
-  /** Paragraph space-after when not explicitly overridden, in pixels. */
-  readonly spacingAfter?: number;
-  /** Character spacing in pixels. */
-  readonly letterSpacing?: number;
-  readonly textTransform?: "none" | "uppercase";
-  readonly textDecoration?: "none" | "underline" | "line-through";
-  readonly textShadow?: Shadow | "none";
-  /** Whether the text box wraps normally or keeps each line on a single line. */
-  readonly textWrap?: "normal" | "nowrap";
-  /** Natural language (BCP 47 language tag, e.g. zh-CN, en-US). */
-  readonly lang?: string;
-};
+export const fontTokenSchema = fontReferenceSchema;
+export type FontToken = z.infer<typeof fontTokenSchema>;
 
-export type GradientStop = {
-  readonly color: ColorValue;
-  readonly position: number;
-};
+const textLengthPattern = /^(\d+(?:\.\d+)?)(px|pt)$/u;
+const textLengthStringSchema = z
+  .string()
+  .regex(textLengthPattern) as unknown as z.ZodType<
+  `${number}px` | `${number}pt`
+>;
 
-export type LinearGradient = {
-  readonly type: "linear-gradient";
-  readonly angle: number;
-  readonly stops: readonly GradientStop[];
-};
+function textLengthToPixels(value: string | number): number {
+  if (typeof value === "number") return value;
+  const match = textLengthPattern.exec(value);
+  if (match === null) return Number.NaN;
+  const amount = Number(match[1]);
+  return match[2] === "pt" ? (amount * 4) / 3 : amount;
+}
 
-export type RadialGradient = {
-  readonly type: "radial-gradient";
-  readonly stops: readonly GradientStop[];
-};
+function fontSizeToPoints(value: string | number): number {
+  if (typeof value === "string" && value.endsWith("pt")) {
+    return Number(value.slice(0, -2));
+  }
+  return textLengthToPixels(value) * 0.75;
+}
 
-export type Shadow = {
-  readonly color?: ColorValue;
-  readonly blur?: number;
-  readonly distance?: number;
-  readonly angle?: number;
-};
+export const fontSizeSchema = z.union([
+  z.number().finite().positive(),
+  textLengthStringSchema.refine(
+    (value) => textLengthToPixels(value) > 0,
+    "Text length must be greater than 0",
+  ),
+]);
+export type FontSize = z.infer<typeof fontSizeSchema>;
 
-/** Visual fields shared across native DrawingML shapes, images, text boxes, and visible Boxes. */
-export type VisualStyle = {
-  readonly backgroundColor?: ColorValue;
-  readonly backgroundImage?:
-    | LinearGradient
-    | RadialGradient
-    | { readonly image: string | URL | Uint8Array };
-  readonly borderColor?: ColorValue;
-  readonly borderWidth?: number;
-  readonly borderStyle?: "solid" | "dashed" | "dotted";
-  readonly borderRadius?: number;
-  readonly opacity?: number;
-  readonly boxShadow?: Shadow;
-  readonly softEdge?: number;
-  readonly rotate?: number;
-};
+const validatedFontSizeSchema = fontSizeSchema.refine((value) => {
+  const serialized = Math.round(fontSizeToPoints(value) * 100);
+  return serialized >= 100 && serialized <= 400_000;
+}, "fontSize converted value must be within DrawingML range of 1 to 4000pt");
+
+const validatedLineHeightSchema = fontSizeSchema.refine((value) => {
+  const centipoints = Math.round(textLengthToPixels(value) * 75);
+  return centipoints >= 0 && centipoints <= 158_400;
+}, "lineHeight converted value must be within DrawingML range of 0 to 1584pt");
+
+export const textAlignmentSchema = z.enum([
+  "left",
+  "center",
+  "right",
+  "justify",
+]);
+export type TextAlignment = z.infer<typeof textAlignmentSchema>;
 
 export const nativeColorSlots = [
   "dk1",
@@ -106,66 +133,251 @@ export const nativeColorSlots = [
   "folHlink",
 ] as const;
 
-export type NativeColorSlot = (typeof nativeColorSlots)[number];
+export const nativeColorSlotSchema = z.enum(nativeColorSlots);
+export type NativeColorSlot = z.infer<typeof nativeColorSlotSchema>;
 
 /** Native theme color represented with DrawingML luminance modulation. */
-export type ThemeShade = {
-  readonly slot: NativeColorSlot;
-  readonly lumMod: number;
-  readonly lumOff?: number;
-};
+export const themeShadeSchema = z
+  .strictObject({
+    slot: nativeColorSlotSchema,
+    lumMod: z.number().finite().min(0).max(1),
+    lumOff: z.number().finite().min(0).max(1).optional(),
+  })
+  .readonly();
+export type ThemeShade = z.infer<typeof themeShadeSchema>;
 
-export type ThemeColor = string | ThemeShade;
+export const themeColorSchema = z.union([z.string(), themeShadeSchema]);
+export type ThemeColor = z.infer<typeof themeColorSchema>;
 
 /** Color entry can directly provide color, theme slot, or theme token, optionally with alpha. */
-export type ColorValue =
-  | string
-  | ThemeShade
-  | { readonly color: string | ThemeShade; readonly alpha?: number };
+export const colorValueSchema = z.union([
+  z.string(),
+  themeShadeSchema,
+  z
+    .strictObject({
+      color: themeColorSchema,
+      alpha: z.number().finite().min(0).max(1).optional(),
+    })
+    .readonly(),
+]);
+export type ColorValue = z.infer<typeof colorValueSchema>;
 
 /** Final theme value applied to a color entry. */
-export type ResolvedColor = {
-  readonly hex: string;
-  readonly alpha?: number;
-  readonly slot?: NativeColorSlot;
-  readonly lumMod?: number;
-  readonly lumOff?: number;
-};
+export const resolvedColorSchema = z
+  .strictObject({
+    hex: z.string(),
+    alpha: z.number().finite().min(0).max(1).optional(),
+    slot: nativeColorSlotSchema.optional(),
+    lumMod: z.number().finite().min(0).max(1).optional(),
+    lumOff: z.number().finite().min(0).max(1).optional(),
+  })
+  .readonly();
+export type ResolvedColor = z.infer<typeof resolvedColorSchema>;
 
-export type FontToken = FontReference;
+export const gradientStopSchema = z
+  .strictObject({
+    color: colorValueSchema,
+    position: z.number().finite(),
+  })
+  .readonly();
+export type GradientStop = z.infer<typeof gradientStopSchema>;
+
+export const linearGradientSchema = z
+  .strictObject({
+    type: z.literal("linear-gradient"),
+    angle: z.number().finite(),
+    stops: z.array(gradientStopSchema).readonly(),
+  })
+  .readonly();
+export type LinearGradient = z.infer<typeof linearGradientSchema>;
+
+export const radialGradientSchema = z
+  .strictObject({
+    type: z.literal("radial-gradient"),
+    stops: z.array(gradientStopSchema).readonly(),
+  })
+  .readonly();
+export type RadialGradient = z.infer<typeof radialGradientSchema>;
+
+export const shadowSchema = z
+  .strictObject({
+    color: colorValueSchema.optional(),
+    blur: z.number().finite().nonnegative().optional(),
+    distance: z.number().finite().nonnegative().optional(),
+    angle: z.number().finite().optional(),
+  })
+  .readonly();
+export type Shadow = z.infer<typeof shadowSchema>;
+
+/** Visual fields shared across native DrawingML shapes, images, text boxes, and visible Boxes. */
+export const visualStyleSchema = z
+  .strictObject({
+    backgroundColor: colorValueSchema.optional(),
+    backgroundImage: z
+      .union([
+        linearGradientSchema,
+        radialGradientSchema,
+        z
+          .strictObject({
+            image: z.union([z.string(), z.instanceof(URL), uint8ArraySchema]),
+          })
+          .readonly(),
+      ])
+      .optional(),
+    borderColor: colorValueSchema.optional(),
+    borderWidth: z.number().finite().optional(),
+    borderStyle: z.enum(["solid", "dashed", "dotted"]).optional(),
+    borderRadius: z.number().finite().optional(),
+    opacity: z.number().finite().optional(),
+    boxShadow: shadowSchema.optional(),
+    softEdge: z.number().finite().optional(),
+    rotate: z.number().finite().optional(),
+  })
+  .readonly();
+export type VisualStyle = z.infer<typeof visualStyleSchema>;
+
+export const bcp47LangSchema = z
+  .string()
+  .refine(
+    (value) =>
+      value.trim() !== "" && /^[A-Za-z0-9]+(-[A-Za-z0-9]+)*$/.test(value),
+    "Text language must be a valid BCP 47 language tag",
+  )
+  .refine((value) => {
+    try {
+      const canonical = Intl.getCanonicalLocales(value);
+      return Boolean(canonical && canonical.length === 1);
+    } catch {
+      return false;
+    }
+  }, "Text language must be a valid BCP 47 language tag");
+
+const textStyleObjectSchema = z.strictObject({
+  fontFamily: fontReferenceSchema.optional(),
+  fontSize: validatedFontSizeSchema.optional(),
+  fontWeight: fontWeightSchema.optional(),
+  fontStyle: fontFaceStyleSchema.optional(),
+  color: colorValueSchema.optional(),
+  lineHeight: validatedLineHeightSchema.optional(),
+  verticalAlign: z.enum(["top", "middle", "bottom"]).optional(),
+  /** Paragraph alignment when not explicitly overridden. */
+  align: textAlignmentSchema.optional(),
+  /** Paragraph space-after when not explicitly overridden, in pixels. */
+  spacingAfter: z
+    .number()
+    .finite()
+    .nonnegative()
+    .refine((value) => {
+      const centipoints = Math.round(value * 75);
+      return centipoints >= 0 && centipoints <= 158_400;
+    }, "spacingAfter converted value must be within DrawingML range of 0 to 1584pt")
+    .optional(),
+  /** Character spacing in pixels. */
+  letterSpacing: z
+    .number()
+    .finite()
+    .refine((value) => {
+      const points = Math.round(value * 75);
+      return points >= -400_000 && points <= 400_000;
+    }, "letterSpacing converted value must be within DrawingML range of -4000 to 4000pt")
+    .optional(),
+  textTransform: z.enum(["none", "uppercase"]).optional(),
+  textDecoration: z.enum(["none", "underline", "line-through"]).optional(),
+  textShadow: z.union([shadowSchema, z.literal("none")]).optional(),
+  /** Whether the text box wraps normally or keeps each line on a single line. */
+  textWrap: z.enum(["normal", "nowrap"]).optional(),
+  /** Natural language (BCP 47 language tag, e.g. zh-CN, en-US). */
+  lang: bcp47LangSchema.optional(),
+});
+
+export const textStyleShape = textStyleObjectSchema.shape;
+
+/** Inheritable text style fields shared across text objects and containers. */
+export const textStyleSchema = textStyleObjectSchema.readonly();
+export type TextStyle = z.infer<typeof textStyleSchema>;
 
 /** Deck-level theme input; major/minor fonts are simultaneously written to native PPTX theme. */
-export type ThemeInput = {
-  readonly name?: string;
-  readonly colors?: Partial<Record<NativeColorSlot, string>> &
-    Readonly<Record<string, ThemeColor>>;
-  readonly fonts?: {
-    readonly major?: FontToken;
-    readonly minor?: FontToken;
-  } & Readonly<Record<string, FontToken>>;
-};
+export const themeInputSchema = z
+  .strictObject({
+    name: z.string().optional(),
+    colors: z
+      .object({
+        dk1: z.string().optional(),
+        lt1: z.string().optional(),
+        dk2: z.string().optional(),
+        lt2: z.string().optional(),
+        accent1: z.string().optional(),
+        accent2: z.string().optional(),
+        accent3: z.string().optional(),
+        accent4: z.string().optional(),
+        accent5: z.string().optional(),
+        accent6: z.string().optional(),
+        hlink: z.string().optional(),
+        folHlink: z.string().optional(),
+      })
+      .catchall(themeColorSchema)
+      .readonly()
+      .optional(),
+    fonts: z
+      .object({
+        major: fontTokenSchema.optional(),
+        minor: fontTokenSchema.optional(),
+      })
+      .catchall(fontTokenSchema)
+      .readonly()
+      .optional(),
+  })
+  .readonly();
+export type ThemeInput = z.infer<typeof themeInputSchema>;
 
-export type Theme = {
-  readonly name: string;
-  readonly colors: Readonly<Record<NativeColorSlot, string>> &
-    Readonly<Record<string, ThemeColor>>;
-  readonly fonts: {
-    readonly major: FontToken;
-    readonly minor: FontToken;
-  } & Readonly<Record<string, FontToken>>;
-};
+export const themeSchema = z
+  .strictObject({
+    name: z.string(),
+    colors: z
+      .object({
+        dk1: z.string(),
+        lt1: z.string(),
+        dk2: z.string(),
+        lt2: z.string(),
+        accent1: z.string(),
+        accent2: z.string(),
+        accent3: z.string(),
+        accent4: z.string(),
+        accent5: z.string(),
+        accent6: z.string(),
+        hlink: z.string(),
+        folHlink: z.string(),
+      })
+      .catchall(themeColorSchema)
+      .readonly(),
+    fonts: z
+      .object({
+        major: fontTokenSchema,
+        minor: fontTokenSchema,
+      })
+      .catchall(fontTokenSchema)
+      .readonly(),
+  })
+  .readonly();
+export type Theme = z.infer<typeof themeSchema>;
 
 /** Local theme scopes on slides or containers can only override color and font tokens already present in the deck. */
-export type ThemeScope = {
-  readonly colors?: Readonly<Record<string, ThemeColor>>;
-  readonly fonts?: Readonly<Record<string, FontToken>>;
-};
+export const themeScopeSchema = z
+  .strictObject({
+    colors: z.record(z.string(), themeColorSchema).readonly().optional(),
+    fonts: z.record(z.string(), fontTokenSchema).readonly().optional(),
+  })
+  .readonly();
+export type ThemeScope = z.infer<typeof themeScopeSchema>;
 
-export type ResolvedThemeFont = {
-  readonly family: string;
-  readonly font?: Font;
-  readonly themeFont?: "major" | "minor";
-};
+export const resolvedThemeFontSchema = z
+  .strictObject({
+    family: z.string(),
+    font: fontSchema.optional(),
+    themeFont: z.enum(["major", "minor"]).optional(),
+  })
+  .readonly();
+export type ResolvedThemeFont = z.infer<typeof resolvedThemeFontSchema>;
 
 /** Theme, local scopes, and accumulated container text defaults in a single build. */
 export type ThemeContext = {
@@ -201,23 +413,118 @@ const contextRecords = new WeakMap<
   }
 >();
 
-export const textStyleKeys = new Set([
-  "fontFamily",
-  "fontSize",
-  "fontWeight",
-  "fontStyle",
-  "color",
-  "lineHeight",
-  "verticalAlign",
-  "align",
-  "spacingAfter",
-  "letterSpacing",
-  "textTransform",
-  "textDecoration",
-  "textShadow",
-  "textWrap",
-  "lang",
-]);
+export const textStyleKeys = new Set(Object.keys(textStyleObjectSchema.shape));
+
+function textStyleErrorForIssue(
+  issue: z.core.$ZodIssue | undefined,
+  rawStyle: Readonly<Record<string, unknown>>,
+): CapabilityError {
+  const field = issue?.path[0];
+  if (field === "fontFamily") {
+    if (issue?.path[1] === "faces") {
+      return new CapabilityError(
+        "invalid-font-face",
+        "Font.faces contains invalid weight, style, or resource",
+      );
+    }
+    return new CapabilityError(
+      "invalid-font-family",
+      issue?.message ??
+        "fontFamily must be a font value or non-empty family string",
+    );
+  }
+  if (field === "fontSize") {
+    const raw = rawStyle["fontSize"];
+    const validLengthSyntax =
+      typeof raw === "number" ||
+      (typeof raw === "string" && textLengthPattern.test(raw));
+    return new CapabilityError(
+      validLengthSyntax ? "invalid-font-size" : "invalid-text-length",
+      validLengthSyntax
+        ? "fontSize must be greater than 0 and within DrawingML range of 1 to 4000pt"
+        : "fontSize must be a positive pixel value or px/pt length",
+    );
+  }
+  if (field === "fontWeight") {
+    return new CapabilityError(
+      "invalid-font-weight",
+      "fontWeight must be normal, bold, or a hundreds integer between 100 and 900",
+    );
+  }
+  if (field === "fontStyle") {
+    return new CapabilityError(
+      "invalid-font-style",
+      "fontStyle must be normal or italic",
+    );
+  }
+  if (field === "color") {
+    return new CapabilityError("invalid-color", "Invalid color value format");
+  }
+  if (field === "lineHeight") {
+    return new CapabilityError(
+      "invalid-text-length",
+      "lineHeight must be a positive pixel value or px/pt length within 0 to 1584pt",
+    );
+  }
+  if (field === "verticalAlign") {
+    return new CapabilityError(
+      "invalid-vertical-align",
+      "verticalAlign must be top, middle, or bottom",
+    );
+  }
+  if (field === "align") {
+    return new CapabilityError(
+      "invalid-text-alignment",
+      "align must be left, center, right, or justify",
+    );
+  }
+  if (field === "spacingAfter") {
+    return new CapabilityError(
+      "invalid-paragraph-spacing",
+      "spacingAfter must be a finite non-negative pixel number within DrawingML range of 0 to 1584pt",
+    );
+  }
+  if (field === "letterSpacing") {
+    return new CapabilityError(
+      "invalid-letter-spacing",
+      "letterSpacing converted value must be within DrawingML range of -4000 to 4000pt",
+    );
+  }
+  if (field === "textTransform") {
+    return new CapabilityError(
+      "invalid-text-transform",
+      "textTransform must be none or uppercase",
+    );
+  }
+  if (field === "textDecoration") {
+    return new CapabilityError(
+      "invalid-text-decoration",
+      "textDecoration must be none, underline, or line-through",
+    );
+  }
+  if (field === "textWrap") {
+    return new CapabilityError(
+      "invalid-text-wrap",
+      "textWrap must be normal or nowrap",
+    );
+  }
+  if (field === "textShadow") {
+    return new CapabilityError(
+      "invalid-shadow",
+      issue?.message ?? "textShadow must be a shadow object or 'none'",
+    );
+  }
+  if (field === "lang") {
+    return new CapabilityError(
+      "invalid-text-lang",
+      `Text language must be a valid BCP 47 language tag: ${String(rawStyle["lang"])}`,
+    );
+  }
+  return new CapabilityError(
+    "invalid-style",
+    issue?.message ?? "Invalid text style",
+  );
+}
 
 /**
  * Validates inheritable text style fields shared across text objects and containers.
@@ -226,328 +533,32 @@ export function validateTextStyle(
   style: Readonly<Record<string, unknown>>,
   theme?: ThemeContext,
 ): TextStyle {
-  if (style["fontFamily"] !== undefined) {
-    const value = style["fontFamily"];
-    if (typeof value !== "string" && !isFont(value)) {
-      throw new CapabilityError(
-        "invalid-font-family",
-        "fontFamily must be a font value or non-empty family string",
-      );
-    }
-    if (typeof value === "string") {
-      if (value.trim() === "") {
-        throw new CapabilityError(
-          "invalid-font-family",
-          "fontFamily cannot be empty",
-        );
-      }
-      if (theme !== undefined) {
-        theme.resolveFont(value);
-      }
-    } else if (isFont(value)) {
-      if (typeof value.family !== "string" || value.family.trim() === "") {
-        throw new CapabilityError(
-          "invalid-font-family",
-          "Font.family cannot be empty",
-        );
-      }
-      if (value.faces !== undefined && !Array.isArray(value.faces)) {
-        throw new CapabilityError(
-          "invalid-font-family",
-          "Font.faces must be an array",
-        );
-      }
-      if (
-        value.substitute !== undefined &&
-        typeof value.substitute !== "boolean"
-      ) {
-        throw new CapabilityError(
-          "invalid-font-family",
-          "Font.substitute must be a boolean",
-        );
-      }
-      if (
-        value.embeddable !== undefined &&
-        typeof value.embeddable !== "boolean"
-      ) {
-        throw new CapabilityError(
-          "invalid-font-family",
-          "Font.embeddable must be a boolean",
-        );
-      }
+  const candidate: Record<string, unknown> = {};
+  for (const [key, item] of Object.entries(style)) {
+    if (textStyleKeys.has(key) && item !== undefined) {
+      candidate[key] = item;
     }
   }
-
-  if (style["fontSize"] !== undefined) {
-    const value = style["fontSize"];
-    let pixels: number;
-    if (typeof value === "number") {
-      pixels = value;
-    } else if (typeof value === "string") {
-      const match = /^(\d+(?:\.\d+)?)(px|pt)$/u.exec(value);
-      if (match === null) {
-        throw new CapabilityError(
-          "invalid-text-length",
-          "fontSize must be a positive pixel value or px/pt length",
-        );
-      }
-      const amount = Number(match[1]);
-      pixels = match[2] === "pt" ? (amount * 4) / 3 : amount;
-    } else {
-      throw new CapabilityError(
-        "invalid-text-length",
-        "fontSize must be a positive pixel value or px/pt length",
-      );
-    }
-    if (!Number.isFinite(pixels) || pixels <= 0) {
-      throw new CapabilityError(
-        "invalid-font-size",
-        "fontSize must be greater than 0",
-      );
-    }
-    const points =
-      typeof value === "string" && value.endsWith("pt")
-        ? Number(value.slice(0, -2))
-        : pixels * 0.75;
-    if (!Number.isFinite(points) || points <= 0) {
-      throw new CapabilityError(
-        "invalid-font-size",
-        "fontSize must be greater than 0",
-      );
-    }
-    const serialized = Math.round(points * 100);
-    if (serialized < 100 || serialized > 400_000) {
-      throw new CapabilityError(
-        "invalid-font-size",
-        "fontSize converted value must be within DrawingML range of 1 to 4000pt",
-      );
-    }
+  const parsed = textStyleObjectSchema.safeParse(candidate);
+  if (!parsed.success) {
+    throw textStyleErrorForIssue(parsed.error.issues[0], candidate);
   }
-
-  if (style["fontWeight"] !== undefined) {
-    const value = style["fontWeight"];
-    if (value !== "normal" && value !== "bold") {
-      if (
-        typeof value !== "number" ||
-        !Number.isInteger(value) ||
-        value < 100 ||
-        value > 900 ||
-        value % 100 !== 0
-      ) {
-        throw new CapabilityError(
-          "invalid-font-weight",
-          "fontWeight must be normal, bold, or a hundreds integer between 100 and 900",
-        );
-      }
+  const validated = parsed.data;
+  if (theme !== undefined) {
+    if (typeof validated.fontFamily === "string") {
+      theme.resolveFont(validated.fontFamily);
     }
-  }
-
-  if (style["fontStyle"] !== undefined) {
-    const value = style["fontStyle"];
-    if (value !== "normal" && value !== "italic") {
-      throw new CapabilityError(
-        "invalid-font-style",
-        "fontStyle must be normal or italic",
-      );
-    }
-  }
-
-  if (style["color"] !== undefined) {
-    const value = style["color"];
-    if (theme !== undefined) {
-      theme.resolveColor(value as ColorValue);
-    } else {
-      if (
-        typeof value !== "string" &&
-        (!record(value) || (!("slot" in value) && !("color" in value)))
-      ) {
-        throw new CapabilityError(
-          "invalid-color",
-          "Invalid color value format",
-        );
-      }
-    }
-  }
-
-  if (style["lineHeight"] !== undefined) {
-    const value = style["lineHeight"];
-    let pixels: number;
-    if (typeof value === "number") {
-      pixels = value;
-    } else if (typeof value === "string") {
-      const match = /^(\d+(?:\.\d+)?)(px|pt)$/u.exec(value);
-      if (match === null) {
-        throw new CapabilityError(
-          "invalid-text-length",
-          "lineHeight must be a positive pixel value or px/pt length",
-        );
-      }
-      const amount = Number(match[1]);
-      pixels = match[2] === "pt" ? (amount * 4) / 3 : amount;
-    } else {
-      throw new CapabilityError(
-        "invalid-text-length",
-        "lineHeight must be a positive pixel value or px/pt length",
-      );
-    }
-    if (!Number.isFinite(pixels) || pixels <= 0) {
-      throw new CapabilityError(
-        "invalid-text-length",
-        "lineHeight must be greater than 0",
-      );
-    }
-    const centipoints = Math.round(pixels * 75);
-    if (centipoints < 0 || centipoints > 158_400) {
-      throw new CapabilityError(
-        "invalid-text-length",
-        "lineHeight converted value must be within DrawingML range of 0 to 1584pt",
-      );
-    }
-  }
-
-  if (style["verticalAlign"] !== undefined) {
-    const value = style["verticalAlign"];
-    if (value !== "top" && value !== "middle" && value !== "bottom") {
-      throw new CapabilityError(
-        "invalid-vertical-align",
-        "verticalAlign must be top, middle, or bottom",
-      );
-    }
-  }
-
-  if (style["align"] !== undefined) {
-    const value = style["align"];
-    if (!["left", "center", "right", "justify"].includes(value as string)) {
-      throw new CapabilityError(
-        "invalid-text-alignment",
-        "align must be left, center, right, or justify",
-      );
-    }
-  }
-
-  if (style["spacingAfter"] !== undefined) {
-    const value = style["spacingAfter"];
-    if (typeof value !== "number" || !Number.isFinite(value) || value < 0) {
-      throw new CapabilityError(
-        "invalid-paragraph-spacing",
-        "spacingAfter must be a finite non-negative pixel number",
-      );
-    }
-    const centipoints = Math.round(value * 75);
-    if (centipoints < 0 || centipoints > 158_400) {
-      throw new CapabilityError(
-        "invalid-paragraph-spacing",
-        "spacingAfter converted value must be within DrawingML range of 0 to 1584pt",
-      );
-    }
-  }
-
-  if (style["letterSpacing"] !== undefined) {
-    const value = style["letterSpacing"];
-    if (typeof value !== "number" || !Number.isFinite(value)) {
-      throw new CapabilityError(
-        "invalid-letter-spacing",
-        "letterSpacing converted value must be within DrawingML range of -4000 to 4000pt",
-      );
-    }
-    const points = Math.round(value * 75);
-    if (points < -400_000 || points > 400_000) {
-      throw new CapabilityError(
-        "invalid-letter-spacing",
-        "letterSpacing converted value must be within DrawingML range of -4000 to 4000pt",
-      );
-    }
-  }
-
-  if (style["textTransform"] !== undefined) {
-    const value = style["textTransform"];
-    if (value !== "none" && value !== "uppercase") {
-      throw new CapabilityError(
-        "invalid-text-transform",
-        "textTransform must be none or uppercase",
-      );
-    }
-  }
-
-  if (style["textDecoration"] !== undefined) {
-    const value = style["textDecoration"];
-    if (value !== "none" && value !== "underline" && value !== "line-through") {
-      throw new CapabilityError(
-        "invalid-text-decoration",
-        "textDecoration must be none, underline, or line-through",
-      );
-    }
-  }
-
-  if (style["textWrap"] !== undefined) {
-    const value = style["textWrap"];
-    if (value !== "normal" && value !== "nowrap") {
-      throw new CapabilityError(
-        "invalid-text-wrap",
-        "textWrap must be normal or nowrap",
-      );
-    }
-  }
-
-  if (style["textShadow"] !== undefined && style["textShadow"] !== "none") {
-    const value = style["textShadow"];
-    if (!record(value)) {
-      throw new CapabilityError(
-        "invalid-shadow",
-        "textShadow must be a shadow object",
-      );
-    }
-    const unknown = Object.keys(value).find(
-      (k) => !["color", "blur", "distance", "angle"].includes(k),
-    );
-    if (unknown !== undefined) {
-      throw new CapabilityError(
-        "invalid-shadow",
-        `textShadow contains unsupported parameter ${unknown}`,
-      );
+    if (validated.color !== undefined) {
+      theme.resolveColor(validated.color);
     }
     if (
-      value["blur"] !== undefined &&
-      (typeof value["blur"] !== "number" ||
-        !Number.isFinite(value["blur"]) ||
-        value["blur"] < 0)
+      validated.textShadow !== undefined &&
+      validated.textShadow !== "none" &&
+      validated.textShadow.color !== undefined
     ) {
-      throw new CapabilityError(
-        "invalid-shadow",
-        "textShadow.blur and distance must be non-negative lengths",
-      );
-    }
-    if (
-      value["distance"] !== undefined &&
-      (typeof value["distance"] !== "number" ||
-        !Number.isFinite(value["distance"]) ||
-        value["distance"] < 0)
-    ) {
-      throw new CapabilityError(
-        "invalid-shadow",
-        "textShadow.blur and distance must be non-negative lengths",
-      );
-    }
-    if (
-      value["angle"] !== undefined &&
-      (typeof value["angle"] !== "number" || !Number.isFinite(value["angle"]))
-    ) {
-      throw new CapabilityError(
-        "invalid-shadow",
-        "textShadow.angle must be a finite number",
-      );
-    }
-    if (value["color"] !== undefined) {
-      if (theme !== undefined) {
-        theme.resolveColor(value["color"] as ColorValue);
-      }
+      theme.resolveColor(validated.textShadow.color);
     }
   }
-
-  if (style["lang"] !== undefined) {
-    assertValidLang(style["lang"]);
-  }
-
   return style;
 }
 
@@ -556,31 +567,14 @@ export function validateTextStyle(
  * Rejects non-string values, empty or whitespace strings, and malformed tags.
  */
 export function assertValidLang(value: unknown): string {
-  if (
-    typeof value !== "string" ||
-    value.trim() === "" ||
-    !/^[A-Za-z0-9]+(-[A-Za-z0-9]+)*$/.test(value)
-  ) {
+  const parsed = bcp47LangSchema.safeParse(value);
+  if (!parsed.success) {
     throw new CapabilityError(
       "invalid-text-lang",
       `Text language must be a valid BCP 47 language tag: ${String(value)}`,
     );
   }
-  try {
-    const canonical = Intl.getCanonicalLocales(value);
-    if (!canonical || canonical.length !== 1) {
-      throw new CapabilityError(
-        "invalid-text-lang",
-        `Text language must be a valid BCP 47 language tag: ${value}`,
-      );
-    }
-  } catch {
-    throw new CapabilityError(
-      "invalid-text-lang",
-      `Text language must be a valid BCP 47 language tag: ${value}`,
-    );
-  }
-  return value;
+  return parsed.data;
 }
 
 function record(value: unknown): value is Record<string, unknown> {
@@ -611,15 +605,27 @@ export function isFont(value: unknown): value is Font {
 
 function normalizeTheme(input: ThemeInput = {}): Theme {
   if (!record(input)) throw new TypeError("Theme must be an object");
+  const parsed = themeInputSchema.safeParse(input);
+  if (!parsed.success) {
+    const issue = parsed.error.issues[0];
+    throw new CapabilityError(
+      "invalid-theme",
+      issue?.message ?? "Invalid theme declaration",
+    );
+  }
+  const validInput = parsed.data;
   // Theme values are content inputs: isolate nested shades, font declarations, and font bytes.
-  const colors = snapshotValue({ ...officeColors, ...input.colors });
+  const colors = snapshotValue({
+    ...officeColors,
+    ...validInput.colors,
+  }) as Theme["colors"];
   const fonts = snapshotValue({
-    ...input.fonts,
-    major: input.fonts?.major ?? "Aptos Display",
-    minor: input.fonts?.minor ?? "Aptos",
-  });
+    ...validInput.fonts,
+    major: validInput.fonts?.major ?? "Aptos Display",
+    minor: validInput.fonts?.minor ?? "Aptos",
+  }) as Theme["fonts"];
   return Object.freeze({
-    name: input.name ?? "Office Theme",
+    name: validInput.name ?? "Office Theme",
     colors,
     fonts,
   });
@@ -856,28 +862,15 @@ function createContext(
     with(nextScope?: ThemeScope, style?: TextStyle) {
       let checkedScope: ThemeScope | undefined;
       if (nextScope !== undefined) {
-        if (!record(nextScope)) {
+        const parsedScope = themeScopeSchema.safeParse(nextScope);
+        if (!parsedScope.success) {
           throw new CapabilityError(
             "invalid-theme-scope",
-            "theme must be an object",
+            parsedScope.error.issues[0]?.message ??
+              "Local theme scope is invalid",
           );
         }
-        const unknown = Object.keys(nextScope).find(
-          (key) => key !== "colors" && key !== "fonts",
-        );
-        if (unknown !== undefined) {
-          throw new CapabilityError(
-            "invalid-theme-scope",
-            `Local theme scope contains unknown field ${unknown}`,
-          );
-        }
-        const colors = nextScope.colors;
-        if (colors !== undefined && !record(colors)) {
-          throw new CapabilityError(
-            "invalid-theme-scope",
-            "theme.colors must be an object",
-          );
-        }
+        const colors = parsedScope.data.colors;
         for (const name of Object.keys(colors ?? {})) {
           if (nativeSlot(name)) {
             throw new CapabilityError(
@@ -892,27 +885,12 @@ function createContext(
             );
           }
         }
-        const fonts = nextScope.fonts;
-        if (fonts !== undefined && !record(fonts)) {
-          throw new CapabilityError(
-            "invalid-theme-scope",
-            "theme.fonts must be an object",
-          );
-        }
-        for (const [name, font] of Object.entries(fonts ?? {})) {
+        const fonts = parsedScope.data.fonts;
+        for (const name of Object.keys(fonts ?? {})) {
           if (!Object.hasOwn(theme.fonts, name)) {
             throw new CapabilityError(
               "invalid-theme-scope",
               `Theme has no font token ${name}`,
-            );
-          }
-          if (
-            !isFont(font) &&
-            (typeof font !== "string" || font.trim() === "")
-          ) {
-            throw new CapabilityError(
-              "invalid-theme-scope",
-              `Font token ${name} must be replaced with a Font value or non-empty family string`,
             );
           }
         }

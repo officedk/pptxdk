@@ -2,10 +2,7 @@ import type {
   LayoutStyle,
   LinkTarget,
   PaddingStyle,
-  SlideBackground,
   TextStyle,
-  ThemeInput,
-  ThemeScope,
   VisualStyle,
 } from "@pptxdk/core/capability";
 import {
@@ -15,7 +12,10 @@ import {
   createSectionNode,
   createSlideNode,
   RichTextContainer,
+  type DeckProps,
   type RichTextItem,
+  type SectionProps,
+  type SlideProps,
 } from "@pptxdk/core/document";
 
 import {
@@ -95,27 +95,13 @@ import {
  * and are loaded again by every formal build.
  */
 
-export type DeckAuthorProps = {
-  readonly width?: number;
-  readonly height?: number;
-  readonly theme?: ThemeInput;
-  readonly style?: TextStyle;
-  readonly title?: string;
-};
+export type DeckAuthorProps = DeckProps;
 
-export type SlideAuthorProps = {
-  readonly id: string;
+export type SlideAuthorProps = Omit<SlideProps, "transition"> & {
   readonly transition?: Transition;
-  readonly background?: SlideBackground;
-  readonly theme?: ThemeScope;
-  readonly style?: TextStyle & Omit<LayoutStyle, "zIndex">;
-  readonly hidden?: boolean;
-  readonly advanceAfter?: number;
 };
 
-export type SectionAuthorProps = {
-  readonly name: string;
-};
+export type SectionAuthorProps = SectionProps;
 
 export type BoxAuthorProps = BoxDeclarationProps;
 export type ImageAuthorProps = ImageDeclarationProps;

@@ -1,19 +1,18 @@
 import {
   defineSlideLayout,
-  type LayoutStyle,
-  type LinkTarget,
-  type PaddingStyle,
-  type SlideBackground,
   type SlideLayoutDataProps,
   type SlideLayoutDefinition,
   type SlideLayoutProps,
   type SlideLayoutType,
   type SlideMasterProps,
-  type TextStyle,
-  type ThemeInput,
-  type ThemeScope,
-  type VisualStyle,
 } from "@pptxdk/core";
+import type {
+  LayoutStyle,
+  LinkTarget,
+  PaddingStyle,
+  TextStyle,
+  VisualStyle,
+} from "@pptxdk/core/capability";
 import {
   CommonContainer,
   CommonNode,
@@ -26,7 +25,10 @@ import {
   createSlideLayoutNode,
   createSlideMasterNode,
   createSlideNode,
+  type DeckProps,
   type RichTextItem,
+  type SectionProps,
+  type SlideProps,
 } from "@pptxdk/core/document";
 
 import {
@@ -106,32 +108,18 @@ import {
  * and are loaded again by every formal build.
  */
 
-export type DeckAuthorProps = {
-  readonly width?: number;
-  readonly height?: number;
-  readonly theme?: ThemeInput;
-  readonly style?: TextStyle;
-  readonly title?: string;
-};
+export type DeckAuthorProps = DeckProps;
 
 export type SlideMasterAuthorProps = SlideMasterProps;
 export type SlideLayoutAuthorProps = SlideLayoutProps;
 export type SlideLayoutSource = SlideLayoutDefinition | SlideLayoutContainer;
 
-export type SlideAuthorProps = {
-  readonly id: string;
+export type SlideAuthorProps = Omit<SlideProps, "transition" | "layout"> & {
   readonly layout?: SlideLayoutSource | undefined;
   readonly transition?: Transition;
-  readonly background?: SlideBackground;
-  readonly theme?: ThemeScope;
-  readonly style?: TextStyle & Omit<LayoutStyle, "zIndex">;
-  readonly hidden?: boolean;
-  readonly advanceAfter?: number;
 };
 
-export type SectionAuthorProps = {
-  readonly name: string;
-};
+export type SectionAuthorProps = SectionProps;
 
 export type BoxAuthorProps = BoxDeclarationProps;
 export type ImageAuthorProps = ImageDeclarationProps;
@@ -147,7 +135,7 @@ export type RowAuthorProps = RowDeclarationProps;
 export type CellAuthorProps = CellDeclarationProps;
 export type NotesAuthorProps = NotesDeclarationProps;
 
-export type DeckNode = DeckContainer<DeckAuthorProps>;
+export type DeckNode = DeckContainer;
 export type SlideMasterNode = SlideMasterContainer;
 export type SlideLayoutNode = SlideLayoutContainer;
 export type SlideNode = CommonContainer<

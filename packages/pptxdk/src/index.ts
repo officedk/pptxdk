@@ -61,6 +61,7 @@ export const build = pipeline.build;
 export { documentCapabilities, slideBackgroundCapability };
 
 export {
+  authorIdSchema,
   AuthorQuery,
   AuthorQueryError,
   BuildError,
@@ -71,6 +72,7 @@ export {
   CommonNode,
   DeckContainer,
   darker,
+  deckPropsSchema,
   defaultTheme,
   defineSlideLayout,
   defineTheme,
@@ -83,10 +85,17 @@ export {
   formatBaselineSchema,
   isNativeColorSlot,
   isSlideLayoutDefinition,
+  layoutLengthSchema,
+  layoutSpacingSchema,
+  layoutStyleSchema,
   lighter,
+  linkTargetSchema,
   nativeColorSlots,
+  paddingStyleSchema,
   resolveOptionsSchema,
   RichTextContainer,
+  sectionPropsSchema,
+  slideBackgroundSchema,
   SlideLayoutContainer,
   slideLayoutDataPropsSchema,
   slideLayoutObservationSchema,
@@ -95,9 +104,14 @@ export {
   SlideMasterContainer,
   slideMasterDataPropsSchema,
   slideMasterObservationSchema,
+  slidePropsSchema,
   targetNameSchema,
   targetSchema,
   targets,
+  textStyleSchema,
+  themeInputSchema,
+  themeSchema,
+  themeScopeSchema,
 } from "@pptxdk/core";
 export { createMorphScope, isMorphKey } from "@pptxdk/core/capability";
 export type {
@@ -107,6 +121,7 @@ export type {
   DeclarationText,
 } from "@pptxdk/core/build";
 export type {
+  AuthorId,
   AuthorNodeGuard,
   BuildOptions,
   BuildQuery,
@@ -114,6 +129,7 @@ export type {
   BuildResult,
   CapabilityModule,
   ColorValue,
+  DeckProps,
   Diagnostic,
   DiagnosticSeverity,
   DocumentProps,
@@ -147,6 +163,7 @@ export type {
   NativeTableObservation,
   NativeTablePartObservation,
   ObjectObservation,
+  PaddingStyle,
   PreviewTransform,
   PreviewWarning,
   RadialGradient,
@@ -155,6 +172,7 @@ export type {
   ResolveOptions,
   ResourceObservation,
   RichTextItem,
+  SectionProps,
   Shadow,
   SlideBackground,
   SlideLayoutDefinition,
@@ -164,6 +182,7 @@ export type {
   SlideMasterObservation,
   SlideMasterProps,
   SlideObservation,
+  SlideProps,
   SlideQuery,
   StyleUpdate,
   Target,

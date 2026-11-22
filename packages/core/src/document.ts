@@ -1,3 +1,34 @@
+export { authorIdSchema } from "#/author-ids.ts";
+export type { AuthorId } from "#/author-ids.ts";
+export {
+  deckPropsSchema,
+  linkTargetSchema,
+  sectionPropsSchema,
+  slideBackgroundSchema,
+  slideCorePropsSchema,
+  slidePropsSchema,
+  slideStyleSchema,
+} from "#/author-schemas.ts";
+export type {
+  DeckProps,
+  LinkTarget,
+  SectionProps,
+  SlideBackground,
+  SlideProps,
+  SlideStyle,
+} from "#/author-schemas.ts";
+export {
+  layoutLengthSchema,
+  layoutSpacingSchema,
+  layoutStyleSchema,
+  paddingStyleSchema,
+} from "#/layout-schemas.ts";
+export type {
+  LayoutLength,
+  LayoutSpacing,
+  LayoutStyle,
+  PaddingStyle,
+} from "#/layout-schemas.ts";
 import type { DeclarationChild, DeclarationNode } from "#/declaration.ts";
 import {
   insertDeclarationChild,
@@ -12,6 +43,30 @@ import {
   type SlideMasterProps,
 } from "#/masters.ts";
 import type { TextStyle } from "#/theme.ts";
+export {
+  colorValueSchema,
+  fontFaceSchema,
+  fontReferenceSchema,
+  fontSchema,
+  fontSizeSchema,
+  fontTokenSchema,
+  textStyleSchema,
+  themeInputSchema,
+  themeSchema,
+  themeScopeSchema,
+} from "#/theme.ts";
+export type {
+  ColorValue,
+  Font,
+  FontFace,
+  FontReference,
+  FontSize,
+  FontToken,
+  TextStyle,
+  Theme,
+  ThemeInput,
+  ThemeScope,
+} from "#/theme.ts";
 import type {
   DeckProps,
   LayoutStyle,

@@ -126,6 +126,7 @@ export class XmlElementCursor {
   readonly #registry: CursorRegistry;
   readonly #consumedAttrs = new Set<string>();
   readonly #consumedChildren = new Set<XmlElement>();
+  #suppressUnconsumed = false;
   #cachedChildren: readonly XmlElement[] | undefined;
 
   private constructor(
@@ -269,6 +270,19 @@ export class XmlElementCursor {
     this.#consumedChildren.add(child.element);
   }
 
+  /** Marks all direct element children consumed without descending into them. */
+  consumeChildrenWithoutVisiting(): void {
+    for (const child of this.#elementChildren()) {
+      this.#consumedChildren.add(child);
+    }
+  }
+
+  /** Suppresses unconsumed-xml diagnostics for this cursor and its remaining children (used when the subtree is already reported as omitted). */
+  suppressUnconsumed(): void {
+    this.#suppressUnconsumed = true;
+    this.consumeChildrenWithoutVisiting();
+  }
+
   /** Marks an empty schema-boilerplate child element consumed only when it has no attributes or element children. */
   ignoreEmptyChild(namespaceUri: string, localName: string): boolean {
     for (const child of this.#elementChildren()) {
@@ -294,6 +308,7 @@ export class XmlElementCursor {
   collectUnconsumed(): readonly UnconsumedXmlItem[] {
     const items: UnconsumedXmlItem[] = [];
     for (const cursor of this.#registry.ordered) {
+      if (cursor.#suppressUnconsumed) continue;
       const attributes = cursor.element.attributes;
       for (let i = 0; i < attributes.length; i += 1) {
         const attribute = attributes.item(i);

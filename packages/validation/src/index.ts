@@ -76,8 +76,9 @@ export type FileObject = {
   readonly rotationDegrees?: number;
   readonly image?: {
     readonly relationshipId: string;
-    readonly part: string;
-    readonly contentType: string;
+    readonly part?: string;
+    readonly contentType?: string;
+    readonly externalTarget?: string;
   };
   readonly chart?: FileChart;
   readonly crop?: {
@@ -3153,8 +3154,12 @@ function validatePicture(
       `Image ${identity.name} vertical crop out of bounds`,
     );
   }
-  const relationshipId =
+  const embedRelationshipId =
     blip?.getAttributeNS(relationshipNamespace, "embed") ?? "";
+  const linkRelationshipId =
+    blip?.getAttributeNS(relationshipNamespace, "link") ?? "";
+  const relationshipId =
+    embedRelationshipId !== "" ? embedRelationshipId : linkRelationshipId;
   const relationship = relationships.get(part)?.get(relationshipId);
   let image: FileObject["image"];
   if (relationship === undefined) {
@@ -3164,6 +3169,22 @@ function validatePicture(
       "missing-image-relationship",
       `Image ${identity.name} references non-existent relationship ${relationshipId}`,
     );
+  } else if (embedRelationshipId === "" && linkRelationshipId !== "") {
+    const externalTarget = attribute(relationship, "Target");
+    if (
+      attribute(relationship, "Type") !== `${relationshipNamespace}/image` ||
+      attribute(relationship, "TargetMode") !== "External" ||
+      externalTarget.trim() === ""
+    ) {
+      issue(
+        errors,
+        part,
+        "invalid-image-relationship",
+        `External image ${identity.name} must reference an external image relationship`,
+      );
+    } else {
+      image = { relationshipId, externalTarget };
+    }
   } else if (
     attribute(relationship, "Type") !== `${relationshipNamespace}/image` ||
     attribute(relationship, "TargetMode") === "External"

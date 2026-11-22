@@ -1,3 +1,5 @@
+import { z } from "zod";
+
 import {
   componentLabel,
   isDeclarationNode,
@@ -5,15 +7,28 @@ import {
 } from "#/declaration.ts";
 import { BuildError } from "#/diagnostics.ts";
 
+/** Non-empty trimmed author identifier unique within its naming scope. */
+export const authorIdSchema = z
+  .string()
+  .refine((value) => value.trim() !== "", {
+    message: "id must be a non-empty string",
+  });
+
+export type AuthorId = z.infer<typeof authorIdSchema>;
+
 /**
  * Reads a declared author id, rejecting present but invalid values.
  *
  * Anonymous nodes omit the id. Present values must be non-empty strings; the formal build reports
  * them once through the same path as other declaration errors.
  */
-export function readAuthorId(value: unknown, path: string): string | undefined {
+export function readAuthorId(
+  value: unknown,
+  path: string,
+): AuthorId | undefined {
   if (value === undefined) return undefined;
-  if (typeof value !== "string" || value.trim() === "") {
+  const parsed = authorIdSchema.safeParse(value);
+  if (!parsed.success) {
     throw new BuildError([
       {
         severity: "error",
@@ -23,7 +38,7 @@ export function readAuthorId(value: unknown, path: string): string | undefined {
       },
     ]);
   }
-  return value;
+  return parsed.data;
 }
 
 /**

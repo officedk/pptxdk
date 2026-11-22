@@ -1,5 +1,12 @@
 import { readAuthorId, validateAuthorIdScopes } from "#/author-ids.ts";
 import {
+  parseDeckProps,
+  parseLinkTarget,
+  parseSectionProps,
+  parseSlideCoreProps,
+  xml10StringSchema,
+} from "#/author-schemas.ts";
+import {
   componentLabel,
   declarationIdentity,
   isDeclarationNode,
@@ -167,32 +174,6 @@ type ResolvedSlideResult = {
   readonly linkedSlideIndexes: ReadonlySet<number>;
 };
 
-const minimumSlideSizeEmu = 914_400;
-const maximumSlideSizeEmu = 51_206_400;
-const emuPerPx = 9525;
-
-function pxToEmu(value: number): number {
-  return Math.round(value * emuPerPx);
-}
-
-function assertXml10Characters(value: string): void {
-  for (const character of value) {
-    const codePoint = character.codePointAt(0);
-    if (
-      codePoint !== undefined &&
-      codePoint !== 0x9 &&
-      codePoint !== 0xa &&
-      codePoint !== 0xd &&
-      (codePoint < 0x20 ||
-        (codePoint >= 0xd800 && codePoint <= 0xdfff) ||
-        codePoint === 0xfffe ||
-        codePoint === 0xffff)
-    ) {
-      throw new Error("String contains characters not allowed in XML 1.0");
-    }
-  }
-}
-
 function diagnostic(path: string, code: string, message: string): Diagnostic {
   return { severity: "error", path, code, message };
 }
@@ -243,13 +224,6 @@ function projectObservations(
   return observations.map((observation) =>
     projectObservation(observation, layoutDerivedObjectIds),
   );
-}
-
-function ownKeys(
-  value: Record<string, unknown>,
-  allowed: readonly string[],
-): string | undefined {
-  return Object.keys(value).find((key) => !allowed.includes(key));
 }
 
 function isObjectCapability(
@@ -386,50 +360,14 @@ function validateResolveOptions(options: ResolveOptions): void {
   ]);
 }
 
-function positiveDimension(value: unknown, label: string): number {
-  if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) {
-    throw new BuildError([
-      diagnostic(
-        "deck",
-        "invalid-dimension",
-        `${label} must be a finite positive pixel value`,
-      ),
-    ]);
-  }
-  const sizeEmu = pxToEmu(value);
-  if (sizeEmu < minimumSlideSizeEmu || sizeEmu > maximumSlideSizeEmu) {
-    throw new BuildError([
-      diagnostic(
-        "deck",
-        "invalid-dimension",
-        `${label} converted slide size must be within the closed interval of ${minimumSlideSizeEmu} to ${maximumSlideSizeEmu} EMU`,
-      ),
-    ]);
-  }
-  return value;
-}
+// Deck dimensions and props validated via parseDeckProps(deck.props).
 
-function deckDimensions(node: DeclarationNode): ResolutionDimensions {
-  const unknown = ownKeys(node.props, [
-    "width",
-    "height",
-    "theme",
-    "style",
-    "title",
-  ]);
-  if (unknown !== undefined) {
-    throw new BuildError([
-      diagnostic(
-        "deck",
-        "unknown-parameter",
-        `Deck contains unknown parameter ${unknown}`,
-      ),
-    ]);
-  }
-  return {
-    width: positiveDimension(node.props["width"] ?? 1280, "Deck.width"),
-    height: positiveDimension(node.props["height"] ?? 720, "Deck.height"),
-  };
+function unknownPropertyKey(
+  props: Readonly<Record<string, unknown>>,
+  allowed: readonly string[],
+): string | undefined {
+  const allowedSet = new Set(allowed);
+  return Object.keys(props).find((key) => !allowedSet.has(key));
 }
 
 function resolveSlides(
@@ -499,7 +437,7 @@ function resolveSlides(
     const masterAuthorId = readAuthorId(masterNode.props["id"], rawMasterPath);
     const masterId = masterAuthorId ?? `master-${masterIndex + 1}`;
     const masterPath = `deck/slide-master[${masterAuthorId ?? masterIndex + 1}]`;
-    const unknownMasterProp = ownKeys(masterNode.props, [
+    const unknownMasterProp = unknownPropertyKey(masterNode.props, [
       "id",
       "name",
       "preserve",
@@ -533,9 +471,7 @@ function resolveSlides(
       ]);
     }
     if (masterAuthorId !== undefined) {
-      try {
-        assertXml10Characters(masterAuthorId);
-      } catch {
+      if (!xml10StringSchema.safeParse(masterAuthorId).success) {
         throw new BuildError([
           diagnostic(
             masterPath,
@@ -555,18 +491,17 @@ function resolveSlides(
       }
       authorIds.add(masterAuthorId);
     }
-    if (parsedMaster.data.name !== undefined) {
-      try {
-        assertXml10Characters(parsedMaster.data.name);
-      } catch {
-        throw new BuildError([
-          diagnostic(
-            masterPath,
-            "invalid-xml-character",
-            "SlideMaster.name contains characters not allowed in XML 1.0",
-          ),
-        ]);
-      }
+    if (
+      parsedMaster.data.name !== undefined &&
+      !xml10StringSchema.safeParse(parsedMaster.data.name).success
+    ) {
+      throw new BuildError([
+        diagnostic(
+          masterPath,
+          "invalid-xml-character",
+          "SlideMaster.name contains characters not allowed in XML 1.0",
+        ),
+      ]);
     }
     if (nonWhitespaceText(masterNode.children)) {
       throw new BuildError([
@@ -628,7 +563,7 @@ function resolveSlides(
         if (key === "layout" || value === undefined) continue;
         effectiveLayoutProps[key] = value;
       }
-      const unknownLayoutProp = ownKeys(effectiveLayoutProps, [
+      const unknownLayoutProp = unknownPropertyKey(effectiveLayoutProps, [
         "id",
         "name",
         "type",
@@ -680,9 +615,7 @@ function resolveSlides(
         parsedLayout.data.matchingName,
       ]) {
         if (textField === undefined) continue;
-        try {
-          assertXml10Characters(textField);
-        } catch {
+        if (!xml10StringSchema.safeParse(textField).success) {
           throw new BuildError([
             diagnostic(
               layoutPath,
@@ -801,37 +734,7 @@ function resolveSlides(
           ),
         ]);
       }
-      const unknown = ownKeys(node.props, ["name"]);
-      if (unknown !== undefined) {
-        throw new BuildError([
-          diagnostic(
-            `deck/section[${index + 1}]`,
-            "unknown-section-property",
-            `Section does not support property ${unknown}`,
-          ),
-        ]);
-      }
-      const name = node.props["name"];
-      if (typeof name !== "string" || name.trim() === "") {
-        throw new BuildError([
-          diagnostic(
-            `deck/section[${index + 1}]`,
-            "invalid-section-name",
-            "Section.name must be a non-empty string",
-          ),
-        ]);
-      }
-      try {
-        assertXml10Characters(name);
-      } catch {
-        throw new BuildError([
-          diagnostic(
-            `deck/section[${name}]`,
-            "invalid-xml-character",
-            "Section.name contains characters not allowed in XML 1.0",
-          ),
-        ]);
-      }
+      const { name } = parseSectionProps(node.props, index);
       if (nonWhitespaceText(node.children)) {
         throw new BuildError([
           diagnostic(
@@ -880,46 +783,12 @@ function resolveSlides(
     (module) => module.slideProps ?? [module.slideProp],
   );
   const slides = candidates.map(({ node, section, sectionIndex }, index) => {
-    const unknown = ownKeys(node.props, [
-      "id",
-      "layout",
-      "theme",
-      "style",
-      "hidden",
-      ...slideProperties,
-    ]);
-    const authorId = readAuthorId(node.props["id"], `deck/slide[${index + 1}]`);
-    if (unknown !== undefined) {
-      const label = authorId ?? index + 1;
-      throw new BuildError([
-        diagnostic(
-          `deck/slide[${label}]`,
-          "missing-capability",
-          `No capability module registered for Slide.${unknown}`,
-        ),
-      ]);
-    }
-    if (authorId === undefined) {
-      throw new BuildError([
-        diagnostic(
-          `deck/slide[${index + 1}]`,
-          "invalid-author-id",
-          "Slide must declare id as a non-empty string",
-        ),
-      ]);
-    }
-    try {
-      assertXml10Characters(authorId);
-    } catch {
-      throw new BuildError([
-        diagnostic(
-          `deck/slide[${index + 1}]`,
-          "invalid-xml-character",
-          "Slide.id contains characters not allowed in XML 1.0",
-        ),
-      ]);
-    }
-    const id = authorId;
+    const { id, hidden } = parseSlideCoreProps(
+      node.props,
+      index,
+      slideProperties,
+    );
+    const authorId = id;
     if (authorIds.has(authorId)) {
       throw new BuildError([
         diagnostic(
@@ -931,16 +800,6 @@ function resolveSlides(
     }
     authorIds.add(authorId);
     validateAuthorIdScopes(node, `deck/slide[${id}]`, new Set());
-    const hidden = node.props["hidden"];
-    if (hidden !== undefined && typeof hidden !== "boolean") {
-      throw new BuildError([
-        diagnostic(
-          `deck/slide[${id}]`,
-          "invalid-hidden-slide",
-          "Slide.hidden must be a boolean",
-        ),
-      ]);
-    }
 
     let layoutKey: string | undefined;
     const rawLayout = node.props["layout"];
@@ -1035,30 +894,27 @@ function validateLink(
   context: ResolvePassContext,
   path: string,
 ): ResolvedLink | undefined {
-  if (value === undefined) return undefined;
-  const reportInvalid = (message: string) => {
-    context.slide.diagnostics.push(diagnostic(path, "invalid-link", message));
-  };
-  if (typeof value !== "object" || value === null || Array.isArray(value)) {
-    reportInvalid("link must specify id, url, or home action");
-    return undefined;
+  let parsed: ReturnType<typeof parseLinkTarget>;
+  try {
+    parsed = parseLinkTarget(value, path);
+  } catch (error) {
+    if (error instanceof CapabilityError) {
+      context.slide.diagnostics.push(
+        diagnostic(path, error.code, error.message),
+      );
+      return undefined;
+    }
+    throw error;
   }
-  const entries = Object.entries(value).filter(
-    ([, target]) => target !== undefined,
-  );
-  if (entries.length !== 1) {
-    reportInvalid("link must specify exactly one target");
-    return undefined;
-  }
-  const [kind, target] = entries[0] ?? [];
-  if (kind === "id" && typeof target === "string") {
-    const targetIndex = context.document.slideIndexById.get(target);
+  if (parsed === undefined) return undefined;
+  if ("id" in parsed) {
+    const targetIndex = context.document.slideIndexById.get(parsed.id);
     if (targetIndex === undefined) {
       context.slide.diagnostics.push(
         diagnostic(
           path,
           "missing-link-target",
-          `No target slide with author id ${JSON.stringify(target)}`,
+          `No target slide with author id ${JSON.stringify(parsed.id)}`,
         ),
       );
       return undefined;
@@ -1066,23 +922,21 @@ function validateLink(
     if (targetIndex !== context.slide.index) {
       context.slide.linkedSlideIndexes.add(targetIndex);
     }
-    return { target: { id: target }, summary: `slide:${target}` };
+    return { target: { id: parsed.id }, summary: `slide:${parsed.id}` };
   }
-  if (kind === "url" && typeof target === "string") {
+  if ("url" in parsed) {
     let url: URL;
     try {
-      url = new URL(target);
+      url = new URL(parsed.url);
     } catch {
-      reportInvalid("link.url must be an absolute URL");
+      context.slide.diagnostics.push(
+        diagnostic(path, "invalid-link", "link.url must be an absolute URL"),
+      );
       return undefined;
     }
     return { target: { url: url.href }, summary: `url:${url.href}` };
   }
-  if (kind === "action" && target === "home") {
-    return { target: { action: "home" }, summary: "home" };
-  }
-  reportInvalid("link supports { id }, { url }, or { action: 'home' }");
-  return undefined;
+  return { target: { action: "home" }, summary: "home" };
 }
 
 function recordResourceClaims(
@@ -2291,26 +2145,8 @@ function resolveDocument(
     throw new BuildError([
       diagnostic("deck", "document-root", "Missing Deck root component"),
     ]);
-  const size = deckDimensions(deck);
-  const title = deck.props["title"];
-  if (title !== undefined && typeof title !== "string") {
-    throw new BuildError([
-      diagnostic("deck", "invalid-title", "Deck.title must be a string"),
-    ]);
-  }
-  if (typeof title === "string") {
-    try {
-      assertXml10Characters(title);
-    } catch {
-      throw new BuildError([
-        diagnostic(
-          "deck",
-          "invalid-title",
-          "Deck.title contains characters not allowed in XML 1.0",
-        ),
-      ]);
-    }
-  }
+  const { width, height, title } = parseDeckProps(deck.props);
+  const size: ResolutionDimensions = { width, height };
   let theme: ThemeContext;
   try {
     theme = createThemeContext(

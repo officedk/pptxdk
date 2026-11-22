@@ -25,6 +25,7 @@ import {
 } from "./acceptance-runner.ts";
 import { imageMechanismVerifications } from "./image/mechanisms.ts";
 import { shapeAndGroupMechanismVerifications } from "./shape/mechanisms.ts";
+import { tableMechanismVerifications } from "./table/mechanisms.ts";
 import {
   textBoxRoundtripScenario,
   textMechanismVerifications,
@@ -258,6 +259,7 @@ export const productionMechanismVerifications: ExhaustiveMechanismVerificationMa
     },
     ...imageMechanismVerifications,
     ...shapeAndGroupMechanismVerifications,
+    ...tableMechanismVerifications,
     ...textMechanismVerifications,
   };
 

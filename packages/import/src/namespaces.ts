@@ -23,6 +23,12 @@ export const REL_SLIDE_MASTER =
   "http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideMaster";
 export const REL_THEME =
   "http://schemas.openxmlformats.org/officeDocument/2006/relationships/theme";
+export const REL_NOTES_MASTER =
+  "http://schemas.openxmlformats.org/officeDocument/2006/relationships/notesMaster";
+export const REL_NOTES_SLIDE =
+  "http://schemas.openxmlformats.org/officeDocument/2006/relationships/notesSlide";
+export const REL_HANDOUT_MASTER =
+  "http://schemas.openxmlformats.org/officeDocument/2006/relationships/handoutMaster";
 export const REL_FONT =
   "http://schemas.openxmlformats.org/officeDocument/2006/relationships/font";
 export const REL_IMAGE =
@@ -46,6 +52,11 @@ export const CHART_NS =
   "http://schemas.openxmlformats.org/drawingml/2006/chart";
 export const TABLE_NS_URI =
   "http://schemas.openxmlformats.org/drawingml/2006/table";
+export const P14_NS =
+  "http://schemas.microsoft.com/office/powerpoint/2010/main";
+export const P14_SECTION_LIST_EXT_URI =
+  "{521415D9-36F7-43E2-AB2F-B90AF26B5E84}";
+export const P14_CREATION_ID_EXT_URI = "{BB962C8B-B14F-4D97-AF65-F5344CB8AC3E}";
 
 // ISO/IEC 29500 Strict OOXML (Detect & Reject with unsupported-format-baseline)
 export const STRICT_NS_PREFIX = "http://purl.oclc.org/ooxml/";
@@ -67,6 +78,7 @@ const canonicalPrefixes: ReadonlyMap<string, string> = new Map([
   [MC_NS, "mc"],
   [DIAGRAM_NS, "dgm"],
   [CHART_NS, "c"],
+  [P14_NS, "p14"],
   [XML_NS, "xml"],
 ]);
 

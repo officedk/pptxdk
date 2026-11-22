@@ -24,6 +24,7 @@ import {
   type NativeRoundtripAssertContext,
 } from "./acceptance-runner.ts";
 import { imageMechanismVerifications } from "./image/mechanisms.ts";
+import { notesMechanismVerifications } from "./notes/mechanisms.ts";
 import { shapeAndGroupMechanismVerifications } from "./shape/mechanisms.ts";
 import {
   textBoxRoundtripScenario,
@@ -257,6 +258,7 @@ export const productionMechanismVerifications: ExhaustiveMechanismVerificationMa
       },
     },
     ...imageMechanismVerifications,
+    ...notesMechanismVerifications,
     ...shapeAndGroupMechanismVerifications,
     ...textMechanismVerifications,
   };

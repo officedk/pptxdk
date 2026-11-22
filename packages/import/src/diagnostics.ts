@@ -119,6 +119,7 @@ export const ImportDiagnosticSchema = z.discriminatedUnion("code", [
     namespaceUri: z.string(),
     localName: z.string(),
     mechanismHint: z.string().optional(),
+    loss: EditabilityLossSchema.optional(),
     cascaded: z.array(CascadedOmissionSchema).readonly().optional(),
   }),
   z.object({

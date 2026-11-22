@@ -1204,6 +1204,10 @@ function slideSlotOrder(slot: SlideCapabilitySlot): number {
 function createDocumentEmitState(
   internal: InternalResolution,
 ): DocumentEmitState {
+  const masterCount =
+    internal.masters !== undefined && internal.masters.length > 0
+      ? internal.masters.length
+      : 1;
   return {
     usedExtensions: new Set(internal.sections.length > 0 ? ["p14"] : []),
     warnings: [...internal.warnings],
@@ -1213,14 +1217,20 @@ function createDocumentEmitState(
     packageParts: new Map(),
     packageRelationships: new Map(),
     presentationAttributes: new Map(),
-    // The deck theme part is generated outside shared part registration; reserve its path so a
-    // capability-provided theme part gets a distinct OPC identity.
-    presentationPartPaths: new Set(["ppt/theme/theme1.xml"]),
+    // Master theme parts are generated outside shared part registration; reserve all of them so
+    // capability-provided theme parts (e.g. notes master) get distinct OPC identities.
+    presentationPartPaths: new Set(
+      Array.from(
+        { length: masterCount },
+        (_, index) => `ppt/theme/theme${index + 1}.xml`,
+      ),
+    ),
     presentationCollections: new Map(),
     sharedParts: new Map(),
     presentationElements: [],
     nextPackagePartId: 1,
-    nextPresentationRelationshipId: internal.slides.length + 2,
+    nextPresentationRelationshipId:
+      (internal.masters?.length ?? 1) + internal.slides.length + 1,
     nextTextFieldId: 1,
   };
 }
@@ -1466,6 +1476,9 @@ export function emit(
 
     return {
       id: resolvedSlide.id,
+      ...(resolvedSlide.layoutKey === undefined
+        ? {}
+        : { layoutKey: resolvedSlide.layoutKey }),
       hidden: resolvedSlide.hidden,
       shapeXml,
       backgroundXml,
@@ -1488,8 +1501,17 @@ export function emit(
   const parts = pptxParts(
     internal.dimensions,
     emittedSlides.map(
-      ({ id, hidden, shapeXml, backgroundXml, slideXml, relationships }) => ({
+      ({
         id,
+        layoutKey,
+        hidden,
+        shapeXml,
+        backgroundXml,
+        slideXml,
+        relationships,
+      }) => ({
+        id,
+        ...(layoutKey === undefined ? {} : { layoutKey }),
         hidden,
         shapeXml,
         backgroundXml,
@@ -1511,6 +1533,7 @@ export function emit(
     internal.theme.theme,
     internal.title,
     internal.sections,
+    internal.masters,
   );
   const pptx = zipSync(
     Object.fromEntries(
@@ -1533,6 +1556,9 @@ export function emit(
       extensions: Object.freeze([...target.extensions]),
     }),
     extensions: Object.freeze([...docEmit.usedExtensions]),
+    ...(resolution.report.masters === undefined
+      ? {}
+      : { masters: resolution.report.masters }),
     slides: resolution.report.slides,
     diagnostics: Object.freeze(
       docEmit.warnings.map((warning) => Object.freeze({ ...warning })),

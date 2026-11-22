@@ -1,3 +1,4 @@
+import type { SlideMasterObservation } from "#/masters.ts";
 import type { NativeMechanismDefinition } from "#/mechanisms.ts";
 import type { MorphKey } from "#/morph.ts";
 import {
@@ -49,6 +50,17 @@ export type {
   ThemeScope,
   ThemeShade,
 } from "#/theme.ts";
+
+export type {
+  SlideLayoutDataProps,
+  SlideLayoutDefinition,
+  SlideLayoutObservation,
+  SlideLayoutProps,
+  SlideLayoutType,
+  SlideMasterDataProps,
+  SlideMasterObservation,
+  SlideMasterProps,
+} from "#/masters.ts";
 
 export { formatBaseline, targets };
 export type {
@@ -257,6 +269,7 @@ export type SlideObservation = {
   /** Author id declared on the Slide, retained as the explicit author observation for pages. */
   readonly authorId?: string;
   readonly index: number;
+  readonly layout?: string;
   readonly section?: string;
   readonly hidden?: boolean;
   readonly objects: readonly ObjectObservation[];
@@ -268,6 +281,7 @@ export type ResolutionReport = {
   readonly evidence: "generation";
   readonly title?: string;
   readonly extensions: readonly Extension[];
+  readonly masters?: readonly SlideMasterObservation[];
   readonly slides: readonly SlideObservation[];
   readonly diagnostics: readonly Diagnostic[];
 };
@@ -286,6 +300,7 @@ export type BuildReport = {
     readonly extensions: readonly Extension[];
   };
   readonly extensions: readonly Extension[];
+  readonly masters?: readonly SlideMasterObservation[];
   readonly slides: readonly SlideObservation[];
   readonly diagnostics: readonly Diagnostic[];
 };
@@ -894,6 +909,7 @@ export type DeckProps = {
 export type SlideProps = {
   /** Page author id; unique within the deck and written as the stable slide identifier. */
   readonly id: string;
+  readonly layout?: unknown;
   readonly transition?: unknown;
   readonly theme?: ThemeScope;
   readonly style?: TextStyle & Omit<LayoutStyle, "zIndex">;

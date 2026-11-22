@@ -1,6 +1,7 @@
 import type { RegisteredCapabilityModule } from "@pptxdk/core/capability";
 import {
   type CommonNode,
+  type SlideLayoutContainer,
   createDeckNode,
   createSlideNode,
 } from "@pptxdk/core/document";
@@ -12,13 +13,26 @@ import {
   type ImportOptions,
   type ImportReport,
 } from "#/diagnostics.ts";
+import {
+  allocateScopedAuthorId,
+  appendUnconsumedDiagnostics,
+  consumeIdentityShapeTreeBoilerplate,
+  importMastersAndLayouts,
+} from "#/masters.ts";
 import type {
   DeckImportHandler,
   ImportMechanismHandler,
   ShapeTreeImportHandler,
   SlideImportHandler,
 } from "#/mechanism.ts";
-import { A_NS, P_NS, REL_SLIDE, R_NS, emuToPx } from "#/namespaces.ts";
+import {
+  A_NS,
+  P_NS,
+  REL_SLIDE,
+  REL_SLIDE_LAYOUT,
+  R_NS,
+  emuToPx,
+} from "#/namespaces.ts";
 import {
   openPptxPackage,
   resolvePartPath,
@@ -95,110 +109,13 @@ function collectHandlers(
   return { shapeTree, slide, deck };
 }
 
-function allocateSlideId(
-  requested: string | undefined,
-  used: Set<string>,
-  slideNumber: number,
-): string {
-  const base =
-    requested !== undefined && requested.trim().length > 0
-      ? requested.trim()
-      : `slide-${slideNumber}`;
-  if (!used.has(base)) {
-    used.add(base);
-    return base;
-  }
-  let suffix = 2;
-  while (used.has(`${base}-${suffix}`)) {
-    suffix += 1;
-  }
-  const unique = `${base}-${suffix}`;
-  used.add(unique);
-  return unique;
-}
-
-function consumeIdentityShapeTreeBoilerplate(spTree: XmlElementCursor): void {
-  const nvGrpSpPr = spTree.child(P_NS, "nvGrpSpPr");
-  if (nvGrpSpPr !== undefined) {
-    const cNvPr = nvGrpSpPr.child(P_NS, "cNvPr");
-    if (cNvPr !== undefined) {
-      cNvPr.consumeAttr("id");
-      cNvPr.consumeAttr("name");
-    }
-    nvGrpSpPr.ignoreEmptyChild(P_NS, "cNvGrpSpPr");
-    nvGrpSpPr.ignoreEmptyChild(P_NS, "nvPr");
-  }
-  const grpSpPr = spTree.child(P_NS, "grpSpPr");
-  if (grpSpPr !== undefined) {
-    const xfrm = grpSpPr.child(A_NS, "xfrm");
-    if (xfrm !== undefined) {
-      const off = xfrm.child(A_NS, "off");
-      if (off !== undefined && off.attr("x") === "0" && off.attr("y") === "0") {
-        // standard identity offset
-      }
-      const ext = xfrm.child(A_NS, "ext");
-      if (
-        ext !== undefined &&
-        ext.attr("cx") === "0" &&
-        ext.attr("cy") === "0"
-      ) {
-        // standard identity extent
-      }
-      const chOff = xfrm.child(A_NS, "chOff");
-      if (
-        chOff !== undefined &&
-        chOff.attr("x") === "0" &&
-        chOff.attr("y") === "0"
-      ) {
-        // standard identity child offset
-      }
-      const chExt = xfrm.child(A_NS, "chExt");
-      if (
-        chExt !== undefined &&
-        chExt.attr("cx") === "0" &&
-        chExt.attr("cy") === "0"
-      ) {
-        // standard identity child extent
-      }
-    }
-  }
-}
-
 function consumePresentationHeaderBoilerplate(
   presCursor: XmlElementCursor,
 ): void {
-  const masterIdLst = presCursor.child(P_NS, "sldMasterIdLst");
-  if (masterIdLst !== undefined) {
-    for (const masterId of masterIdLst.children(P_NS, "sldMasterId")) {
-      masterId.consumeAttr("id");
-      masterId.consumeAttr("id", R_NS);
-    }
-  }
   const notesSz = presCursor.child(P_NS, "notesSz");
   if (notesSz !== undefined) {
     notesSz.consumeAttr("cx");
     notesSz.consumeAttr("cy");
-  }
-}
-
-function appendUnconsumedDiagnostics(
-  cursor: XmlElementCursor,
-  slideIndex: number | undefined,
-  diagnostics: ImportDiagnostic[],
-): void {
-  for (const item of cursor.collectUnconsumed()) {
-    diagnostics.push({
-      code: "unconsumed-xml",
-      category: "unsupported",
-      disposition: "omitted",
-      kind: item.kind,
-      location: {
-        ...item.location,
-        ...(slideIndex === undefined ? {} : { slideIndex }),
-      },
-      namespaceUri: item.namespaceUri,
-      localName: item.localName,
-    });
   }
 }
 
@@ -234,6 +151,7 @@ function readSlidePart(
   slidePartPath: string,
   slideIndex: number,
   usedSlideIds: Set<string>,
+  layoutNodeByPartPath: ReadonlyMap<string, SlideLayoutContainer>,
   handlers: RegisteredImportHandlers,
   diagnostics: ImportDiagnostic[],
 ): CommonNode | undefined {
@@ -306,10 +224,30 @@ function readSlidePart(
     return undefined;
   }
 
+  const slideRels = pkg.readRelationships(slidePartPath);
+  diagnostics.push(...slideRels.diagnostics);
+  const layoutRel = slideRels.entries.find(
+    (entry) =>
+      entry.Type === REL_SLIDE_LAYOUT && entry.TargetMode !== "External",
+  );
+  const resolvedLayoutPath =
+    layoutRel === undefined
+      ? undefined
+      : resolvePartPath(slidePartPath, layoutRel.Target);
+  const layoutNode =
+    resolvedLayoutPath === undefined
+      ? undefined
+      : layoutNodeByPartPath.get(resolvedLayoutPath);
+
   const rawSlideName = cSld.attr("name");
-  const slideId = allocateSlideId(rawSlideName, usedSlideIds, slideIndex + 1);
+  const slideId = allocateScopedAuthorId(
+    rawSlideName,
+    usedSlideIds,
+    `slide-${slideIndex + 1}`,
+  );
   const slideNode = createSlideNode({
     id: slideId,
+    ...(layoutNode === undefined ? {} : { layout: layoutNode }),
     ...(hidden ? { hidden: true } : {}),
   });
 
@@ -411,7 +349,16 @@ export function createImporter(
       relById.set(rel.Id, rel);
     }
 
-    const usedSlideIds = new Set<string>();
+    const usedDeckIds = new Set<string>();
+    const layoutNodeByPartPath = importMastersAndLayouts(
+      presCursor,
+      pkg,
+      relById,
+      deckNode,
+      usedDeckIds,
+      diagnostics,
+    );
+
     let slideCount = 0;
     const sldIdLst = presCursor.child(P_NS, "sldIdLst");
     if (sldIdLst !== undefined) {
@@ -491,7 +438,8 @@ export function createImporter(
           pkg,
           targetPart,
           index,
-          usedSlideIds,
+          usedDeckIds,
+          layoutNodeByPartPath,
           handlers,
           diagnostics,
         );

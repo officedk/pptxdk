@@ -99,10 +99,12 @@ export async function appendJSX(
   }
 }
 
-export { Deck, Section, Slide } from "#/elements.ts";
+export { Deck, Section, Slide, SlideLayout, SlideMaster } from "#/elements.ts";
 export type {
   DeckProps,
   ElementProps,
   SectionProps,
+  SlideLayoutProps,
+  SlideMasterProps,
   SlideProps,
 } from "#/elements.ts";

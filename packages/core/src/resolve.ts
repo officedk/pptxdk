@@ -13,12 +13,22 @@ import {
   validateBoundObjectCapability,
   type LayoutPassResult,
 } from "#/layout.ts";
+import {
+  isSlideLayoutDefinition,
+  slideLayoutDataPropsSchema,
+  slideMasterDataPropsSchema,
+  type SlideLayoutDefinition,
+  type SlideLayoutObservation,
+  type SlideMasterObservation,
+} from "#/masters.ts";
 import { getMorphKeyLabel, isMorphKey, type MorphKey } from "#/morph.ts";
 import { createBuildQuery, type QueryContentNode } from "#/query.ts";
 import {
   registerInternalResolution,
   type InternalResolution,
   type InternalResolvedSlide,
+  type InternalResolvedSlideLayout,
+  type InternalResolvedSlideMaster,
   type ResolutionDimensions,
   type ResolvedObjectLayer,
   type ResolvedSectionRecord,
@@ -71,11 +81,15 @@ type ParsedSlideNode = {
   readonly id: string;
   readonly authorId?: string;
   readonly index: number;
+  readonly layoutKey?: string;
   readonly section?: string;
   readonly hidden?: boolean;
 };
 
 type ParsedDocument = {
+  readonly masters: readonly InternalResolvedSlideMaster[];
+  readonly masterObservations: readonly SlideMasterObservation[];
+  readonly layoutIdByKey: ReadonlyMap<string, string>;
   readonly slides: readonly ParsedSlideNode[];
   readonly sections: readonly ResolvedSectionRecord[];
 };
@@ -451,7 +465,7 @@ function resolveSlides(
       diagnostic(
         "deck",
         "unexpected-text",
-        "Deck can only contain Slide and Section components",
+        "Deck can only contain SlideMaster, Slide, and Section components",
       ),
     ]);
   }
@@ -464,7 +478,312 @@ function resolveSlides(
       diagnostic("deck", "missing-slide", "Deck requires at least one Slide"),
     ]);
   }
-  const sectioned = topLevel.some((node) => node.type === "section");
+
+  const masterNodes = topLevel.filter((node) => node.type === "slide-master");
+  const slideOrSectionNodes = topLevel.filter(
+    (node) => node.type !== "slide-master",
+  );
+
+  const authorIds = new Set<string>();
+  const masters: InternalResolvedSlideMaster[] = [];
+  const masterObservations: SlideMasterObservation[] = [];
+  const layoutKeyByNode = new Map<DeclarationNode, string>();
+  const layoutKeysByDefinition = new Map<SlideLayoutDefinition, string[]>();
+  const layoutIdByKey = new Map<string, string>();
+  let defaultBlankLayoutKey: string | undefined;
+  let firstLayoutKey: string | undefined;
+  let globalLayoutCounter = 0;
+
+  for (const [masterIndex, masterNode] of masterNodes.entries()) {
+    const rawMasterPath = `deck/slide-master[${masterIndex + 1}]`;
+    const masterAuthorId = readAuthorId(masterNode.props["id"], rawMasterPath);
+    const masterId = masterAuthorId ?? `master-${masterIndex + 1}`;
+    const masterPath = `deck/slide-master[${masterAuthorId ?? masterIndex + 1}]`;
+    const unknownMasterProp = ownKeys(masterNode.props, [
+      "id",
+      "name",
+      "preserve",
+      "theme",
+      "style",
+    ]);
+    if (unknownMasterProp !== undefined) {
+      throw new BuildError([
+        diagnostic(
+          masterPath,
+          "unknown-parameter",
+          `SlideMaster contains unknown parameter ${unknownMasterProp}`,
+        ),
+      ]);
+    }
+    const masterDataInput: Record<string, unknown> = {};
+    for (const key of ["id", "name", "preserve"] as const) {
+      if (Object.hasOwn(masterNode.props, key)) {
+        masterDataInput[key] = masterNode.props[key];
+      }
+    }
+    const parsedMaster = slideMasterDataPropsSchema.safeParse(masterDataInput);
+    if (!parsedMaster.success) {
+      throw new BuildError([
+        diagnostic(
+          masterPath,
+          "invalid-slide-master",
+          parsedMaster.error.issues[0]?.message ??
+            "Invalid SlideMaster declaration",
+        ),
+      ]);
+    }
+    if (masterAuthorId !== undefined) {
+      try {
+        assertXml10Characters(masterAuthorId);
+      } catch {
+        throw new BuildError([
+          diagnostic(
+            masterPath,
+            "invalid-xml-character",
+            "SlideMaster.id contains characters not allowed in XML 1.0",
+          ),
+        ]);
+      }
+      if (authorIds.has(masterAuthorId)) {
+        throw new BuildError([
+          diagnostic(
+            masterPath,
+            "duplicate-author-id",
+            `Duplicate author id ${JSON.stringify(masterAuthorId)} in the deck`,
+          ),
+        ]);
+      }
+      authorIds.add(masterAuthorId);
+    }
+    if (parsedMaster.data.name !== undefined) {
+      try {
+        assertXml10Characters(parsedMaster.data.name);
+      } catch {
+        throw new BuildError([
+          diagnostic(
+            masterPath,
+            "invalid-xml-character",
+            "SlideMaster.name contains characters not allowed in XML 1.0",
+          ),
+        ]);
+      }
+    }
+    if (nonWhitespaceText(masterNode.children)) {
+      throw new BuildError([
+        diagnostic(
+          masterPath,
+          "unexpected-text",
+          "SlideMaster cannot directly contain text",
+        ),
+      ]);
+    }
+    const masterChildren = childNodes(masterNode.children);
+    const layoutNodes: DeclarationNode[] = [];
+    for (const [childIndex, child] of masterChildren.entries()) {
+      if (child.type !== "slide-layout") {
+        throw new BuildError([
+          diagnostic(
+            `${masterPath}/${componentLabel(child, childIndex)}`,
+            "unexpected-declaration",
+            "SlideMaster can only contain SlideLayout declarations",
+          ),
+        ]);
+      }
+      layoutNodes.push(child);
+    }
+    if (layoutNodes.length === 0) {
+      throw new BuildError([
+        diagnostic(
+          masterPath,
+          "empty-slide-master",
+          "SlideMaster requires at least one SlideLayout",
+        ),
+      ]);
+    }
+
+    const masterLayoutIds = new Set<string>();
+    const resolvedLayouts: InternalResolvedSlideLayout[] = [];
+    const observedLayouts: SlideLayoutObservation[] = [];
+
+    for (const [layoutIndex, layoutNode] of layoutNodes.entries()) {
+      const rawLayoutPath = `${masterPath}/slide-layout[${layoutIndex + 1}]`;
+      const rawLayoutDef = layoutNode.props["layout"];
+      let layoutDef: SlideLayoutDefinition | undefined;
+      if (rawLayoutDef !== undefined) {
+        if (!isSlideLayoutDefinition(rawLayoutDef)) {
+          throw new BuildError([
+            diagnostic(
+              rawLayoutPath,
+              "invalid-slide-layout",
+              "SlideLayout.layout must be created by defineSlideLayout()",
+            ),
+          ]);
+        }
+        layoutDef = rawLayoutDef;
+      }
+      const effectiveLayoutProps: Record<string, unknown> = {
+        ...layoutDef?.props,
+      };
+      for (const [key, value] of Object.entries(layoutNode.props)) {
+        if (key === "layout" || value === undefined) continue;
+        effectiveLayoutProps[key] = value;
+      }
+      const unknownLayoutProp = ownKeys(effectiveLayoutProps, [
+        "id",
+        "name",
+        "type",
+        "preserve",
+        "matchingName",
+        "userDrawn",
+        "showMasterShapes",
+        "showMasterPlaceholderAnimations",
+      ]);
+      if (unknownLayoutProp !== undefined) {
+        throw new BuildError([
+          diagnostic(
+            rawLayoutPath,
+            "unknown-parameter",
+            `SlideLayout contains unknown parameter ${unknownLayoutProp}`,
+          ),
+        ]);
+      }
+      const parsedLayout =
+        slideLayoutDataPropsSchema.safeParse(effectiveLayoutProps);
+      if (!parsedLayout.success) {
+        throw new BuildError([
+          diagnostic(
+            rawLayoutPath,
+            "invalid-slide-layout",
+            parsedLayout.error.issues[0]?.message ??
+              "Invalid SlideLayout declaration",
+          ),
+        ]);
+      }
+      const layoutAuthorId = readAuthorId(parsedLayout.data.id, rawLayoutPath);
+      const layoutId = layoutAuthorId ?? `layout-${layoutIndex + 1}`;
+      const layoutPath = `${masterPath}/slide-layout[${layoutAuthorId ?? layoutIndex + 1}]`;
+      if (layoutAuthorId !== undefined) {
+        if (masterLayoutIds.has(layoutAuthorId)) {
+          throw new BuildError([
+            diagnostic(
+              layoutPath,
+              "duplicate-author-id",
+              `Duplicate SlideLayout.id ${JSON.stringify(layoutAuthorId)} in ${masterPath}`,
+            ),
+          ]);
+        }
+        masterLayoutIds.add(layoutAuthorId);
+      }
+      for (const textField of [
+        parsedLayout.data.id,
+        parsedLayout.data.name,
+        parsedLayout.data.matchingName,
+      ]) {
+        if (textField === undefined) continue;
+        try {
+          assertXml10Characters(textField);
+        } catch {
+          throw new BuildError([
+            diagnostic(
+              layoutPath,
+              "invalid-xml-character",
+              "SlideLayout text property contains characters not allowed in XML 1.0",
+            ),
+          ]);
+        }
+      }
+      validateAuthorIdScopes(layoutNode, layoutPath, new Set());
+      if (nonWhitespaceText(layoutNode.children)) {
+        throw new BuildError([
+          diagnostic(
+            layoutPath,
+            "unexpected-text",
+            "SlideLayout cannot directly contain text",
+          ),
+        ]);
+      }
+      if (childNodes(layoutNode.children).length > 0) {
+        const firstChild = childNodes(layoutNode.children)[0]!;
+        throw new BuildError([
+          diagnostic(
+            `${layoutPath}/${componentLabel(firstChild, 0)}`,
+            "unexpected-declaration",
+            "SlideLayout child objects are not yet supported",
+          ),
+        ]);
+      }
+
+      const layoutKey = `layout-${++globalLayoutCounter}`;
+      layoutKeyByNode.set(layoutNode, layoutKey);
+      if (layoutDef !== undefined) {
+        const existing = layoutKeysByDefinition.get(layoutDef) ?? [];
+        existing.push(layoutKey);
+        layoutKeysByDefinition.set(layoutDef, existing);
+      }
+      layoutIdByKey.set(layoutKey, layoutId);
+      firstLayoutKey ??= layoutKey;
+      if (
+        parsedLayout.data.type === "blank" &&
+        defaultBlankLayoutKey === undefined
+      ) {
+        defaultBlankLayoutKey = layoutKey;
+      }
+
+      const layoutData: Omit<InternalResolvedSlideLayout, "key"> = {
+        id: layoutId,
+        ...(parsedLayout.data.name === undefined
+          ? {}
+          : { name: parsedLayout.data.name }),
+        ...(parsedLayout.data.type === undefined
+          ? {}
+          : { type: parsedLayout.data.type }),
+        ...(parsedLayout.data.preserve === undefined
+          ? {}
+          : { preserve: parsedLayout.data.preserve }),
+        ...(parsedLayout.data.matchingName === undefined
+          ? {}
+          : { matchingName: parsedLayout.data.matchingName }),
+        ...(parsedLayout.data.userDrawn === undefined
+          ? {}
+          : { userDrawn: parsedLayout.data.userDrawn }),
+        ...(parsedLayout.data.showMasterShapes === undefined
+          ? {}
+          : { showMasterShapes: parsedLayout.data.showMasterShapes }),
+        ...(parsedLayout.data.showMasterPlaceholderAnimations === undefined
+          ? {}
+          : {
+              showMasterPlaceholderAnimations:
+                parsedLayout.data.showMasterPlaceholderAnimations,
+            }),
+      };
+      resolvedLayouts.push({ key: layoutKey, ...layoutData });
+      observedLayouts.push(layoutData);
+    }
+
+    masters.push({
+      key: `master-${masterIndex + 1}`,
+      id: masterId,
+      ...(parsedMaster.data.name === undefined
+        ? {}
+        : { name: parsedMaster.data.name }),
+      ...(parsedMaster.data.preserve === undefined
+        ? {}
+        : { preserve: parsedMaster.data.preserve }),
+      layouts: resolvedLayouts,
+    });
+    masterObservations.push({
+      id: masterId,
+      ...(parsedMaster.data.name === undefined
+        ? {}
+        : { name: parsedMaster.data.name }),
+      ...(parsedMaster.data.preserve === undefined
+        ? {}
+        : { preserve: parsedMaster.data.preserve }),
+      layouts: observedLayouts,
+    });
+  }
+
+  const sectioned = slideOrSectionNodes.some((node) => node.type === "section");
   const candidates: {
     node: DeclarationNode;
     section?: string;
@@ -472,7 +791,7 @@ function resolveSlides(
   }[] = [];
   const sections: { name: string; slideIndexes: number[] }[] = [];
   if (sectioned) {
-    for (const [index, node] of topLevel.entries()) {
+    for (const [index, node] of slideOrSectionNodes.entries()) {
       if (node.type !== "section") {
         throw new BuildError([
           diagnostic(
@@ -539,31 +858,31 @@ function resolveSlides(
       }
     }
   } else {
-    for (const [index, node] of topLevel.entries()) {
+    for (const [index, node] of slideOrSectionNodes.entries()) {
       if (node.type !== "slide") {
         throw new BuildError([
           diagnostic(
             `deck/${componentLabel(node, index)}`,
             "unexpected-declaration",
-            "Direct children of Deck must be Slide or Section",
+            "Direct children of Deck must be SlideMaster, Slide, or Section",
           ),
         ]);
       }
       candidates.push({ node });
     }
   }
-  if (candidates.length === 0) {
+  if (candidates.length === 0 && masters.length === 0) {
     throw new BuildError([
       diagnostic("deck", "missing-slide", "Deck requires at least one Slide"),
     ]);
   }
-  const authorIds = new Set<string>();
   const slideProperties = [...modules.slideModules.values()].flatMap(
     (module) => module.slideProps ?? [module.slideProp],
   );
   const slides = candidates.map(({ node, section, sectionIndex }, index) => {
     const unknown = ownKeys(node.props, [
       "id",
+      "layout",
       "theme",
       "style",
       "hidden",
@@ -622,11 +941,75 @@ function resolveSlides(
         ),
       ]);
     }
-    const resolved = {
+
+    let layoutKey: string | undefined;
+    const rawLayout = node.props["layout"];
+    if (rawLayout === undefined) {
+      if (masters.length > 0) {
+        layoutKey = defaultBlankLayoutKey ?? firstLayoutKey;
+      }
+    } else if (isSlideLayoutDefinition(rawLayout)) {
+      const keys = layoutKeysByDefinition.get(rawLayout);
+      const targetLabel = rawLayout.id ?? rawLayout.name ?? "<unnamed>";
+      if (keys === undefined || keys.length === 0) {
+        throw new BuildError([
+          diagnostic(
+            `deck/slide[${id}]`,
+            "foreign-slide-layout",
+            `Slide ${JSON.stringify(id)} references slide layout ${JSON.stringify(targetLabel)}, which is not owned by this deck`,
+          ),
+        ]);
+      }
+      if (keys.length > 1) {
+        throw new BuildError([
+          diagnostic(
+            `deck/slide[${id}]`,
+            "ambiguous-slide-layout",
+            `Slide ${JSON.stringify(id)} references slide layout ${JSON.stringify(targetLabel)} mounted multiple times in this deck`,
+          ),
+        ]);
+      }
+      layoutKey = keys[0];
+    } else if (isDeclarationNode(rawLayout)) {
+      if (rawLayout.type !== "slide-layout") {
+        throw new BuildError([
+          diagnostic(
+            `deck/slide[${id}]`,
+            "invalid-slide-layout",
+            "Slide.layout must be a SlideLayout or defineSlideLayout specification",
+          ),
+        ]);
+      }
+      const matchedKey = layoutKeyByNode.get(rawLayout);
+      if (matchedKey === undefined) {
+        const rawTarget = rawLayout.props["id"] ?? rawLayout.props["name"];
+        const targetLabel =
+          typeof rawTarget === "string" ? rawTarget : "<unnamed>";
+        throw new BuildError([
+          diagnostic(
+            `deck/slide[${id}]`,
+            "foreign-slide-layout",
+            `Slide ${JSON.stringify(id)} references slide layout ${JSON.stringify(targetLabel)}, which is not owned by this deck`,
+          ),
+        ]);
+      }
+      layoutKey = matchedKey;
+    } else {
+      throw new BuildError([
+        diagnostic(
+          `deck/slide[${id}]`,
+          "invalid-slide-layout",
+          "Slide.layout must be a SlideLayout or defineSlideLayout specification",
+        ),
+      ]);
+    }
+
+    const resolved: ParsedSlideNode = {
       node,
       id,
       ...(authorId === undefined ? {} : { authorId }),
       index: index + 1,
+      ...(layoutKey === undefined ? {} : { layoutKey }),
       ...(section === undefined ? {} : { section }),
       ...(hidden === undefined ? {} : { hidden }),
     };
@@ -636,6 +1019,9 @@ function resolveSlides(
     return resolved;
   });
   return {
+    masters,
+    masterObservations,
+    layoutIdByKey,
     slides,
     sections: sections.map(({ name, slideIndexes }) => ({
       name,
@@ -1667,8 +2053,17 @@ function resolveSlideDeclaration(
   document: DocumentResolveState,
   options: ResolveOptions,
   documentTheme: ThemeContext,
+  layoutIdByKey: ReadonlyMap<string, string>,
 ): ResolvedSlideResult {
-  const { node, id, authorId, index, section, hidden = false } = parsed;
+  const {
+    node,
+    id,
+    authorId,
+    index,
+    layoutKey,
+    section,
+    hidden = false,
+  } = parsed;
   const slide: SlideResolveState = {
     index,
     nextId: 2,
@@ -1850,10 +2245,13 @@ function resolveSlideDeclaration(
   const sortedLayouts = [...slide.layouts].sort(
     (left, right) => left.id - right.id,
   );
+  const layoutId =
+    layoutKey === undefined ? undefined : layoutIdByKey.get(layoutKey);
   const observation: SlideObservation = {
     id,
     ...(authorId === undefined ? {} : { authorId }),
     index,
+    ...(layoutId === undefined ? {} : { layout: layoutId }),
     ...(section === undefined ? {} : { section }),
     ...(hidden ? { hidden: true } : {}),
     objects: projectedObjects,
@@ -1870,6 +2268,7 @@ function resolveSlideDeclaration(
       id,
       ...(authorId === undefined ? {} : { authorId }),
       index,
+      ...(layoutKey === undefined ? {} : { layoutKey }),
       ...(section === undefined ? {} : { section }),
       hidden,
       content: resolvedChildren.content,
@@ -1885,7 +2284,8 @@ function resolveDocument(
   options: ResolveOptions,
 ): Resolution {
   const parsed = resolveSlides(container, modules);
-  const { slides, sections } = parsed;
+  const { masters, masterObservations, layoutIdByKey, slides, sections } =
+    parsed;
   const deck = childNodes(container.children)[0];
   if (deck === undefined)
     throw new BuildError([
@@ -1945,6 +2345,7 @@ function resolveDocument(
       document,
       options,
       theme,
+      layoutIdByKey,
     ),
   );
 
@@ -2001,6 +2402,7 @@ function resolveDocument(
     evidence: "generation",
     ...(typeof title === "string" ? { title } : {}),
     extensions: [...document.usedExtensions],
+    ...(masterObservations.length > 0 ? { masters: masterObservations } : {}),
     slides: slideObservations,
     diagnostics: document.warnings,
   });
@@ -2015,6 +2417,7 @@ function resolveDocument(
     dimensions: size,
     ...(typeof title === "string" ? { title } : {}),
     theme,
+    ...(masters.length > 0 ? { masters } : {}),
     sections,
     slides: resolvedSlides.map(({ internal: slideInternal }) => slideInternal),
     resourceClaims: document.resourceClaims,

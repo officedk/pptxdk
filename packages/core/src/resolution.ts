@@ -4,6 +4,7 @@
  * Solely for internal stage backend packages (`@pptxdk/emit` and `@pptxdk/preview`);
  * this subpath is not an author API and must never be re-exported from `.` or `./document`.
  */
+import type { SlideLayoutType } from "#/masters.ts";
 import type { MorphKey } from "#/morph.ts";
 import type { QueryContentNode } from "#/query.ts";
 import type { ThemeContext } from "#/theme.ts";
@@ -68,10 +69,31 @@ export type ResolvedSlideCapabilityRecord = {
   readonly paint?: (context: SlidePaintContext) => SlidePaintOutput;
 };
 
+export type InternalResolvedSlideLayout = {
+  readonly key: string;
+  readonly id: string;
+  readonly name?: string;
+  readonly type?: SlideLayoutType;
+  readonly preserve?: boolean;
+  readonly matchingName?: string;
+  readonly userDrawn?: boolean;
+  readonly showMasterShapes?: boolean;
+  readonly showMasterPlaceholderAnimations?: boolean;
+};
+
+export type InternalResolvedSlideMaster = {
+  readonly key: string;
+  readonly id: string;
+  readonly name?: string;
+  readonly preserve?: boolean;
+  readonly layouts: readonly InternalResolvedSlideLayout[];
+};
+
 export type InternalResolvedSlide = {
   readonly id: string;
   readonly authorId?: string;
   readonly index: number;
+  readonly layoutKey?: string;
   readonly section?: string;
   readonly hidden: boolean;
   readonly content: readonly QueryContentNode[];
@@ -83,6 +105,7 @@ export type InternalResolution = {
   readonly dimensions: ResolutionDimensions;
   readonly title?: string;
   readonly theme: ThemeContext;
+  readonly masters?: readonly InternalResolvedSlideMaster[];
   readonly sections: readonly ResolvedSectionRecord[];
   readonly slides: readonly InternalResolvedSlide[];
   readonly resourceClaims: ReadonlyMap<

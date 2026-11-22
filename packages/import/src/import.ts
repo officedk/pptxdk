@@ -1,5 +1,9 @@
 import type { ColorMapOverride, ThemeOverride } from "@pptxdk/core";
-import type { RegisteredCapabilityModule } from "@pptxdk/core/capability";
+import type {
+  NativeColorSlot,
+  PlaceholderMap,
+  RegisteredCapabilityModule,
+} from "@pptxdk/core/capability";
 import {
   type CommonNode,
   type SlideLayoutContainer,
@@ -36,6 +40,7 @@ import {
   R_NS,
   emuToPx,
 } from "#/namespaces.ts";
+import { inspectNotesAndHandoutMasters } from "#/notes-masters.ts";
 import {
   openPptxPackage,
   resolvePartPath,
@@ -43,6 +48,7 @@ import {
   type PptxPackage,
 } from "#/opc.ts";
 import { buildRelationshipIndex } from "#/resources.ts";
+import { importPresentationSections } from "#/sections.ts";
 import { readColorMapOverride, readThemeOverridePart } from "#/themes.ts";
 import {
   ExtentEmuFragmentSchema,
@@ -161,6 +167,10 @@ function readSlidePart(
   slideIndex: number,
   usedSlideIds: Set<string>,
   layoutNodeByPartPath: ReadonlyMap<string, SlideLayoutContainer>,
+  clrMapByLayoutPartPath: ReadonlyMap<
+    string,
+    Readonly<Record<string, NativeColorSlot>>
+  >,
   handlers: RegisteredImportHandlers,
   registerDeferredSlideLink: (link: DeferredSlideLink) => void,
   diagnostics: ImportDiagnostic[],
@@ -256,6 +266,13 @@ function readSlidePart(
     resolvedLayoutPath === undefined
       ? undefined
       : layoutNodeByPartPath.get(resolvedLayoutPath);
+  const layoutPlaceholders = layoutNode?.props["placeholders"] as
+    | PlaceholderMap
+    | undefined;
+  const layoutClrMap =
+    resolvedLayoutPath === undefined
+      ? undefined
+      : clrMapByLayoutPartPath.get(resolvedLayoutPath);
 
   const clrMapOvr = slideCursor.child(P_NS, "clrMapOvr");
   let colorMapOverride: ColorMapOverride | undefined;
@@ -332,10 +349,18 @@ function readSlidePart(
       appendNode: (node) => slideNode.append(node),
       diagnostics,
       containerNode: slideNode,
+      ...(layoutPlaceholders === undefined ? {} : { layoutPlaceholders }),
+      ...(layoutClrMap === undefined ? {} : { clrMap: layoutClrMap }),
     });
   }
 
   for (const slideHandler of handlers.slide) {
+    if (
+      slideHandler.matches !== undefined &&
+      !slideHandler.matches(slideCursor)
+    ) {
+      continue;
+    }
     const outcome = slideHandler.read({
       slideCursor,
       slideNode,
@@ -389,7 +414,12 @@ export function createImporter(
     }
 
     const usedDeckIds = new Set<string>();
+    const clrMapByLayoutPartPath = new Map<
+      string,
+      Readonly<Record<string, NativeColorSlot>>
+    >();
     const slideIdByPartPath = new Map<string, string>();
+    const slideNodeByPresentationSldId = new Map<number, CommonNode>();
     const deferredSlideLinks: DeferredSlideLink[] = [];
     const registerDeferredSlideLink = (link: DeferredSlideLink): void => {
       deferredSlideLinks.push(link);
@@ -404,6 +434,7 @@ export function createImporter(
       handlers.slide,
       handlers.shapeTree,
       registerDeferredSlideLink,
+      clrMapByLayoutPartPath,
     );
     let slideCount = 0;
     const sldIdLst = presCursor.child(P_NS, "sldIdLst");
@@ -415,7 +446,9 @@ export function createImporter(
         }
         const sldIdCursor = sldIds[index]!;
         const rawId = sldIdCursor.attr("id");
-        if (rawId !== undefined && !OoxmlIntSchema.safeParse(rawId).success) {
+        const parsedSlideNumId =
+          rawId === undefined ? undefined : OoxmlIntSchema.safeParse(rawId);
+        if (parsedSlideNumId !== undefined && !parsedSlideNumId.success) {
           diagnostics.push({
             code: "invalid-xml-value",
             category: "corrupt-input",
@@ -486,12 +519,19 @@ export function createImporter(
           index,
           usedDeckIds,
           layoutNodeByPartPath,
+          clrMapByLayoutPartPath,
           handlers,
           registerDeferredSlideLink,
           diagnostics,
         );
         if (slideResult !== undefined) {
           slideIdByPartPath.set(targetPart, slideResult.slideId);
+          if (parsedSlideNumId?.success) {
+            slideNodeByPresentationSldId.set(
+              parsedSlideNumId.data,
+              slideResult.node,
+            );
+          }
           deckNode.append(slideResult.node);
           slideCount += 1;
         }
@@ -513,6 +553,15 @@ export function createImporter(
       }
       pending.apply(targetSlideId);
     }
+
+    inspectNotesAndHandoutMasters(presCursor, pkg, relById, diagnostics);
+    importPresentationSections(
+      presCursor,
+      deckNode,
+      slideNodeByPresentationSldId,
+      pkg.presentationPath,
+      diagnostics,
+    );
 
     for (const deckHandler of handlers.deck) {
       const outcome = deckHandler.read({

@@ -4,6 +4,8 @@ import {
   isTheme,
   type Font,
   type FontFace,
+  type PlaceholderListStyles,
+  type PlaceholderMap,
   type Theme,
   type ThemeInput,
 } from "@pptxdk/core/capability";
@@ -32,23 +34,91 @@ function fallbackStyleForSlot(slot: EmbeddedFontSlot): "normal" | "italic" {
   return slot === "italic" || slot === "boldItalic" ? "italic" : "normal";
 }
 
-function upgradeStyleFontFamily(
-  style: unknown,
+function upgradeFontToken(
+  family: unknown,
   fontsByKey: ReadonlyMap<string, Font>,
-): Record<string, unknown> | undefined {
-  if (typeof style !== "object" || style === null || Array.isArray(style)) {
-    return undefined;
-  }
-  const family = (style as Readonly<Record<string, unknown>>)["fontFamily"];
+): Font | undefined {
   if (typeof family !== "string" || family === "major" || family === "minor") {
     return undefined;
   }
-  const matched = fontsByKey.get(fontFamilyKey(family));
-  if (matched === undefined) return undefined;
-  return {
-    ...(style as Readonly<Record<string, unknown>>),
-    fontFamily: matched,
-  };
+  return fontsByKey.get(fontFamilyKey(family));
+}
+
+function upgradeStyleRecordFont(
+  style: unknown,
+  fontsByKey: ReadonlyMap<string, Font>,
+): {
+  readonly value?: Readonly<Record<string, unknown>>;
+  readonly changed: boolean;
+} {
+  if (typeof style !== "object" || style === null || Array.isArray(style)) {
+    return { changed: false };
+  }
+  const rec = style as Readonly<Record<string, unknown>>;
+  const matched = upgradeFontToken(rec["fontFamily"], fontsByKey);
+  if (matched === undefined) return { changed: false };
+  return { changed: true, value: { ...rec, fontFamily: matched } };
+}
+
+function upgradePlaceholderListStylesFont(
+  listStyles: PlaceholderListStyles | undefined,
+  fontsByKey: ReadonlyMap<string, Font>,
+): {
+  readonly value: PlaceholderListStyles | undefined;
+  readonly changed: boolean;
+} {
+  if (listStyles === undefined) return { value: undefined, changed: false };
+  let changed = false;
+  const next: Record<string, unknown> = {};
+  for (const [levelKey, levelStyle] of Object.entries(listStyles)) {
+    if (levelStyle === undefined) continue;
+    const upgraded = upgradeStyleRecordFont(levelStyle, fontsByKey);
+    if (upgraded.changed && upgraded.value !== undefined) {
+      next[levelKey] = upgraded.value;
+      changed = true;
+    } else {
+      next[levelKey] = levelStyle;
+    }
+  }
+  return changed
+    ? { value: next, changed: true }
+    : { value: listStyles, changed: false };
+}
+
+function upgradePlaceholdersFont(
+  placeholders: PlaceholderMap | undefined,
+  fontsByKey: ReadonlyMap<string, Font>,
+): {
+  readonly value: PlaceholderMap | undefined;
+  readonly changed: boolean;
+} {
+  if (placeholders === undefined) return { value: undefined, changed: false };
+  let changed = false;
+  const next: Record<string, PlaceholderMap[string]> = {};
+  for (const [key, spec] of Object.entries(placeholders)) {
+    const styleUp = upgradeStyleRecordFont(spec.style, fontsByKey);
+    const listUp = upgradePlaceholderListStylesFont(
+      spec.listStyles,
+      fontsByKey,
+    );
+    if (styleUp.changed || listUp.changed) {
+      changed = true;
+      next[key] = {
+        ...spec,
+        ...(styleUp.changed && styleUp.value !== undefined
+          ? { style: styleUp.value }
+          : {}),
+        ...(listUp.changed && listUp.value !== undefined
+          ? { listStyles: listUp.value }
+          : {}),
+      };
+    } else {
+      next[key] = spec;
+    }
+  }
+  return changed
+    ? { value: next, changed: true }
+    : { value: placeholders, changed: false };
 }
 
 function attachEmbeddedFontsToSubtree(
@@ -60,9 +130,56 @@ function attachEmbeddedFontsToSubtree(
     Record<string, unknown>,
     Record<string, unknown>
   >;
-  const upgradedStyle = upgradeStyleFontFamily(node.props["style"], fontsByKey);
-  if (upgradedStyle !== undefined) {
-    mutableNode.style({ fontFamily: upgradedStyle["fontFamily"] });
+  const styleUp = upgradeStyleRecordFont(node.props["style"], fontsByKey);
+  if (styleUp.changed && styleUp.value !== undefined) {
+    mutableNode.style({ fontFamily: styleUp.value["fontFamily"] });
+  }
+  if (node.type === "slide-master" || node.type === "slide-layout") {
+    const rawPlaceholders = node.props["placeholders"] as
+      | PlaceholderMap
+      | undefined;
+    const upgradedPh = upgradePlaceholdersFont(rawPlaceholders, fontsByKey);
+    if (upgradedPh.changed && upgradedPh.value !== undefined) {
+      mutableNode.set({ placeholders: upgradedPh.value });
+    }
+    if (node.type === "slide-master") {
+      const rawTextStyles = node.props["textStyles"] as
+        | {
+            readonly titleStyle?: PlaceholderListStyles;
+            readonly bodyStyle?: PlaceholderListStyles;
+            readonly otherStyle?: PlaceholderListStyles;
+          }
+        | undefined;
+      if (rawTextStyles !== undefined) {
+        const titleUp = upgradePlaceholderListStylesFont(
+          rawTextStyles.titleStyle,
+          fontsByKey,
+        );
+        const bodyUp = upgradePlaceholderListStylesFont(
+          rawTextStyles.bodyStyle,
+          fontsByKey,
+        );
+        const otherUp = upgradePlaceholderListStylesFont(
+          rawTextStyles.otherStyle,
+          fontsByKey,
+        );
+        if (titleUp.changed || bodyUp.changed || otherUp.changed) {
+          mutableNode.set({
+            textStyles: {
+              ...(titleUp.value === undefined
+                ? {}
+                : { titleStyle: titleUp.value }),
+              ...(bodyUp.value === undefined
+                ? {}
+                : { bodyStyle: bodyUp.value }),
+              ...(otherUp.value === undefined
+                ? {}
+                : { otherStyle: otherUp.value }),
+            },
+          });
+        }
+      }
+    }
   }
   const rawFooterPlaceholders = node.props["footerPlaceholders"];
   if (
@@ -78,14 +195,14 @@ function attachEmbeddedFontsToSubtree(
       if (typeof spec !== "object" || spec === null || Array.isArray(spec)) {
         continue;
       }
-      const nextStyle = upgradeStyleFontFamily(
+      const nextStyle = upgradeStyleRecordFont(
         (spec as Readonly<Record<string, unknown>>)["style"],
         fontsByKey,
       );
-      if (nextStyle !== undefined) {
+      if (nextStyle.changed && nextStyle.value !== undefined) {
         nextPlaceholders[slot] = {
           ...(spec as Readonly<Record<string, unknown>>),
-          style: nextStyle,
+          style: nextStyle.value,
         };
         changed = true;
       }
@@ -103,15 +220,15 @@ function attachEmbeddedFontsToSubtree(
     ) {
       continue;
     }
-    const nextStyle = upgradeStyleFontFamily(
+    const nextStyle = upgradeStyleRecordFont(
       (rawSlot as Readonly<Record<string, unknown>>)["style"],
       fontsByKey,
     );
-    if (nextStyle !== undefined) {
+    if (nextStyle.changed && nextStyle.value !== undefined) {
       mutableNode.set({
         [slideSlot]: {
           ...(rawSlot as Readonly<Record<string, unknown>>),
-          style: nextStyle,
+          style: nextStyle.value,
         },
       });
     }

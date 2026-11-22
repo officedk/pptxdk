@@ -7,6 +7,7 @@ import type {
 } from "#/masters.ts";
 import type { NativeMechanismDefinition } from "#/mechanisms.ts";
 import type { MorphKey } from "#/morph.ts";
+import type { PlaceholderResolutionContext } from "#/placeholders.ts";
 import {
   formatBaseline,
   targets,
@@ -82,6 +83,24 @@ export type {
   SlideMasterObservation,
   SlideMasterProps,
 } from "#/masters.ts";
+export type {
+  ContentPlaceholderRole,
+  EmptyPlaceholderMap,
+  LayoutPlaceholderSpec,
+  MasterPlaceholderMap,
+  MasterPlaceholderSpec,
+  MasterTextStyles,
+  NativePlaceholderRef,
+  PlaceholderLevelStyle,
+  PlaceholderListStyles,
+  PlaceholderMap,
+  PlaceholderOrient,
+  PlaceholderResolutionContext,
+  PlaceholderStyle,
+  PlaceholderSz,
+  TextList,
+  TextPlaceholderRole,
+} from "#/placeholders.ts";
 
 export { formatBaseline, targets };
 export type {
@@ -117,6 +136,7 @@ export type ObjectObservation = {
   readonly name: string;
   /** Author id declared on the source node; numeric `id` remains the build observation identity. */
   readonly authorId?: string;
+  readonly placeholder?: string;
   readonly geometry?: string;
   readonly box?: GeometryBox;
   readonly text?: string;
@@ -473,6 +493,7 @@ export type CapabilityParseContext = {
   readonly theme: ThemeContext;
   readonly options: ResolveOptions;
   readonly slideNumber: number;
+  readonly placeholder?: PlaceholderResolutionContext;
 };
 
 /** Intrinsic size and main-axis min-content size provided by capability modules, in pixels. */
@@ -590,6 +611,7 @@ export type ObjectResolveContext = {
   readonly options: ResolveOptions;
   readonly slideNumber: number;
   readonly layoutBox?: GeometryBox;
+  readonly placeholder?: PlaceholderResolutionContext;
   /** Convert an explicit continuity handle into an OOXML object name; objects without declared continuity omit this value. */
   readonly morphName?: string;
   /** Link target already validated during resolve before relationship ID allocation in emit. */

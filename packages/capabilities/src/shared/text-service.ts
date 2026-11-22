@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 
 import {
   CapabilityError,
+  paddingStyleKeys,
   textStyleKeys,
   validateTextStyle,
   type CapabilityPresentationContribution,
@@ -11,6 +12,7 @@ import {
   type FontReference,
   type FontSize,
   type GeometryBox,
+  type PlaceholderResolutionContext,
   type ResolvedColor,
   type Shadow,
   type TextAlignment,
@@ -31,6 +33,12 @@ import {
 } from "../font/font-embedding.ts";
 import { matchesFontFamily } from "../font/font-family.ts";
 import type {} from "./emscripten.d.ts";
+import {
+  hasLocalDeclaration,
+  localDeclaredKeySet,
+  resolvePlaceholderBaseTextStyle,
+  resolvePlaceholderLevelTextStyle,
+} from "./style-inheritance.ts";
 import {
   paragraphStyleSchema,
   parseParagraphStyle,
@@ -70,6 +78,8 @@ export type ResolvedTextBody = {
   readonly verticalAlign: TextStyle["verticalAlign"];
   readonly layout?: TextLayoutRequest;
   readonly destination: TextBodyDestination;
+  readonly isPlaceholder?: boolean;
+  readonly localBodyDeclared?: ReadonlySet<string>;
   readonly text: string;
   readonly paragraphCount: number;
   readonly resourceClaims: readonly TextResourceClaim[];
@@ -119,6 +129,7 @@ type RunStyle = {
 export type Run = {
   readonly text: string;
   readonly style: RunStyle;
+  readonly localDeclared?: RunStyle;
   readonly field?: { readonly id: string; readonly type: "slidenum" };
 };
 export type TextFieldContext = {
@@ -137,7 +148,9 @@ const textAuthorMetadataKeys: ReadonlySet<string> = new Set(["id"]);
 export type Paragraph = {
   readonly runs: readonly Run[];
   readonly style: ParagraphStyle;
+  readonly localStyle?: ParagraphStyle;
   readonly endStyle: RunStyle;
+  readonly localEndStyle?: RunStyle;
   readonly wrap: "normal" | "nowrap";
 };
 type NormalizedFont = {
@@ -564,6 +577,125 @@ export type ResolvedTextStyle = TextStyle & {
   readonly themeFont?: "major" | "minor";
 };
 
+function mergeLocalRunDeclared(
+  parent: RunStyle,
+  child: Readonly<Record<string, unknown>>,
+  theme: ThemeContext,
+): RunStyle {
+  const declared: Record<string, unknown> = { ...parent };
+  for (const [key, value] of Object.entries(child)) {
+    if (!Object.hasOwn(child, key) || value === undefined) continue;
+    declared[key] = value;
+  }
+  if (hasLocalDeclaration(child, "fontFamily")) {
+    const resolved = theme.resolveFont(child["fontFamily"] as FontReference);
+    declared["fontFamily"] = resolved.font ?? resolved.family;
+    if (resolved.themeFont === undefined) delete declared["themeFont"];
+    else declared["themeFont"] = resolved.themeFont;
+  }
+  if (hasLocalDeclaration(child, "color") && !isResolvedColor(child["color"])) {
+    declared["color"] = theme.resolveColor(child["color"] as ColorValue);
+  }
+  return declared;
+}
+
+function resolveRunStyleFromRecord(
+  style: Readonly<Record<string, unknown>>,
+  theme: ThemeContext,
+): RunStyle {
+  const font = theme.resolveFont(
+    (style["fontFamily"] as FontReference | undefined) ??
+      defaultTextStyle.fontFamily!,
+  );
+  const rawColor = style["color"] as ColorValue | ResolvedColor | undefined;
+  const color =
+    rawColor === undefined
+      ? theme.resolveColor(defaultTextStyle.color!)
+      : isResolvedColor(rawColor)
+        ? rawColor
+        : theme.resolveColor(rawColor);
+  const resolved: RunStyle = {
+    fontFamily: font.font ?? font.family,
+    fontSize:
+      (style["fontSize"] as FontSize | undefined) ?? defaultTextStyle.fontSize,
+    fontWeight:
+      (style["fontWeight"] as TextStyle["fontWeight"] | undefined) ??
+      defaultTextStyle.fontWeight,
+    fontStyle:
+      (style["fontStyle"] as FontFaceStyle | undefined) ??
+      defaultTextStyle.fontStyle,
+    color,
+    ...(font.themeFont === undefined ? {} : { themeFont: font.themeFont }),
+    ...(style["letterSpacing"] === undefined
+      ? {}
+      : { letterSpacing: style["letterSpacing"] as number }),
+    ...(style["textTransform"] === undefined
+      ? {}
+      : {
+          textTransform: style["textTransform"] as TextStyle["textTransform"],
+        }),
+    ...(style["textDecoration"] === undefined
+      ? {}
+      : {
+          textDecoration: style[
+            "textDecoration"
+          ] as TextStyle["textDecoration"],
+        }),
+    ...(style["textShadow"] === undefined || style["textShadow"] === "none"
+      ? {}
+      : { textShadow: style["textShadow"] as Shadow }),
+    ...(style["lang"] === undefined ? {} : { lang: style["lang"] as string }),
+  };
+  return validateRunStyle(resolved);
+}
+
+function readPlaceholderTextStyle(
+  value: unknown,
+  label: string,
+  placeholder: PlaceholderResolutionContext,
+): {
+  readonly style: ResolvedTextStyle;
+  readonly localDeclaredStyle: Record<string, unknown>;
+} {
+  const props = styleRecord(value, label);
+  onlyKnownKeys(props, [...textStyleKeys], label);
+  const localDeclaredStyle: Record<string, unknown> = {};
+  for (const key of textStyleKeys) {
+    if (hasLocalDeclaration(props, key)) {
+      localDeclaredStyle[key] = props[key];
+    }
+  }
+  const effectiveBase = resolvePlaceholderBaseTextStyle(
+    placeholder,
+    localDeclaredStyle,
+  );
+  const masterTheme = placeholder.masterTheme;
+  const merged = {
+    ...defaultTextStyle,
+    ...effectiveBase,
+  } as TextStyle;
+  const font = masterTheme.resolveFont(
+    merged.fontFamily ?? defaultTextStyle.fontFamily!,
+  );
+  if (merged.color !== undefined && !isResolvedColor(merged.color)) {
+    masterTheme.resolveColor(merged.color);
+  }
+  validateTextStyle({
+    ...merged,
+    fontFamily: font.font ?? font.family,
+    ...(isResolvedColor(merged.color) ? { color: undefined } : {}),
+  });
+  const result = {
+    ...merged,
+    fontFamily: font.font ?? font.family,
+    ...(font.themeFont === undefined ? {} : { themeFont: font.themeFont }),
+  };
+  if (result.textShadow === "none") {
+    delete (result as { textShadow?: Shadow | "none" }).textShadow;
+  }
+  return { style: result, localDeclaredStyle };
+}
+
 function readTextStyle(
   value: unknown,
   label: string,
@@ -626,6 +758,7 @@ function collectRuns(
   runs: Run[],
   theme: ThemeContext,
   fields: TextFieldContext,
+  localDeclared?: RunStyle,
 ): void {
   for (const child of children) {
     if (!hostChild(child)) {
@@ -635,7 +768,13 @@ function collectRuns(
       );
     }
     if (isHostText(child)) {
-      if (child.text !== "") runs.push({ text: child.text, style });
+      if (child.text !== "") {
+        runs.push({
+          text: child.text,
+          style,
+          ...(localDeclared === undefined ? {} : { localDeclared }),
+        });
+      }
       continue;
     }
     if (child.type !== "span" && child.type !== "slide-number") {
@@ -655,6 +794,10 @@ function collectRuns(
     }
     const spanStyle = readRunStyle(child.props["style"]);
     const nextStyle = mergeRunStyle(style, spanStyle, theme);
+    const nextLocalDeclared =
+      localDeclared === undefined
+        ? undefined
+        : mergeLocalRunDeclared(localDeclared, spanStyle, theme);
     if (child.type === "slide-number") {
       if (child.children.length > 0) {
         throw new CapabilityError(
@@ -665,6 +808,9 @@ function collectRuns(
       runs.push({
         text: String(fields.slideNumber),
         style: nextStyle,
+        ...(nextLocalDeclared === undefined
+          ? {}
+          : { localDeclared: nextLocalDeclared }),
         field: {
           id:
             fields.createId?.() ??
@@ -675,7 +821,14 @@ function collectRuns(
       });
       continue;
     }
-    collectRuns(child.children, nextStyle, runs, theme, fields);
+    collectRuns(
+      child.children,
+      nextStyle,
+      runs,
+      theme,
+      fields,
+      nextLocalDeclared,
+    );
   }
 }
 
@@ -770,17 +923,8 @@ function transformAttribute(transform: ResolvedTextTransform): string[] {
   }
 }
 
-function runPropertiesXml(
-  style: RunStyle,
-  tag: "a:rPr" | "a:defRPr",
-  theme: ThemeContext,
-): string {
+function runFontSlotsXml(style: RunStyle): string {
   const font = normalizedFonts(style)[0]!;
-  const points = fontSizePoints(style.fontSize);
-  const bold = outputBold(font);
-  const color = isResolvedColor(style.color)
-    ? style.color
-    : theme.resolveColor(style.color ?? "tx1");
   const latinTypeface =
     style.themeFont === "major"
       ? "+mj-lt"
@@ -799,7 +943,72 @@ function runPropertiesXml(
       : style.themeFont === "minor"
         ? "+mn-cs"
         : font.family;
-  const fontSlots = `<a:latin typeface="${escapedXml(latinTypeface)}"/><a:ea typeface="${escapedXml(eaTypeface)}"/><a:cs typeface="${escapedXml(csTypeface)}"/>`;
+  return `<a:latin typeface="${escapedXml(latinTypeface)}"/><a:ea typeface="${escapedXml(eaTypeface)}"/><a:cs typeface="${escapedXml(csTypeface)}"/>`;
+}
+
+function runPropertiesXml(
+  style: RunStyle,
+  tag: "a:rPr" | "a:defRPr",
+  theme: ThemeContext,
+  differential = false,
+): string {
+  if (differential) {
+    const attributes: string[] = [];
+    if (style.lang !== undefined) {
+      attributes.push(`lang="${escapedXml(style.lang)}"`);
+    }
+    if (style.fontSize !== undefined) {
+      attributes.push(`sz="${centipoints(fontSizePoints(style.fontSize))}"`);
+    }
+    if (style.fontWeight !== undefined) {
+      const font = normalizedFonts(style)[0]!;
+      attributes.push(`b="${outputBold(font) ? 1 : 0}"`);
+    }
+    if (style.fontStyle !== undefined) {
+      attributes.push(`i="${style.fontStyle === "italic" ? 1 : 0}"`);
+    }
+    if (style.textDecoration !== undefined) {
+      attributes.push(
+        ...decorationAttribute(resolveDecoration(style.textDecoration)),
+      );
+    }
+    if (style.textTransform !== undefined) {
+      attributes.push(
+        ...transformAttribute(resolveTransform(style.textTransform)),
+      );
+    }
+    if (style.letterSpacing !== undefined) {
+      attributes.push(`spc="${letterSpacingCentipoints(style.letterSpacing)}"`);
+    }
+    const fillXml =
+      style.color === undefined
+        ? ""
+        : `<a:solidFill>${resolvedColorXml(
+            isResolvedColor(style.color)
+              ? style.color
+              : theme.resolveColor(style.color),
+          )}</a:solidFill>`;
+    const shadowXml =
+      style.textShadow === undefined
+        ? ""
+        : textShadowXml(theme, style.textShadow);
+    const fontXml =
+      style.fontFamily === undefined && style.themeFont === undefined
+        ? ""
+        : runFontSlotsXml(style);
+    const attrText = attributes.length === 0 ? "" : ` ${attributes.join(" ")}`;
+    const childrenXml = `${fillXml}${shadowXml}${fontXml}`;
+    return childrenXml === ""
+      ? `<${tag}${attrText}/>`
+      : `<${tag}${attrText}>${childrenXml}</${tag}>`;
+  }
+  const font = normalizedFonts(style)[0]!;
+  const points = fontSizePoints(style.fontSize);
+  const bold = outputBold(font);
+  const color = isResolvedColor(style.color)
+    ? style.color
+    : theme.resolveColor(style.color ?? "dk1");
+  const fontSlots = runFontSlotsXml(style);
   const decoration = resolveDecoration(style.textDecoration);
   const transform = resolveTransform(style.textTransform);
   const attributes = [
@@ -827,21 +1036,28 @@ export function emitSlideNumberRunXml(
   run: Run,
   theme: ThemeContext,
   createFieldId?: () => string,
+  differential = false,
 ): string {
   const fieldId =
     createFieldId !== undefined
       ? createFieldId()
       : (run.field?.id ?? "00000000-0000-4000-8000-000000000001");
   const fieldType = run.field?.type ?? "slidenum";
-  return `<a:fld id="${escapedXml(fieldId)}" type="${fieldType}">${runPropertiesXml(run.style, "a:rPr", theme)}<a:t>${escapedXml(run.text)}</a:t></a:fld>`;
+  const rPr = differential
+    ? runPropertiesXml(run.localDeclared ?? {}, "a:rPr", theme, true)
+    : runPropertiesXml(run.style, "a:rPr", theme, false);
+  return `<a:fld id="${escapedXml(fieldId)}" type="${fieldType}">${rPr}<a:t>${escapedXml(run.text)}</a:t></a:fld>`;
 }
 
-function runXml(run: Run, theme: ThemeContext): string {
+function runXml(run: Run, theme: ThemeContext, differential = false): string {
   if (run.field !== undefined) {
-    return emitSlideNumberRunXml(run, theme);
+    return emitSlideNumberRunXml(run, theme, undefined, differential);
   }
   const text = escapedXml(run.text);
-  return `<a:r>${runPropertiesXml(run.style, "a:rPr", theme)}<a:t xml:space="preserve">${text}</a:t></a:r>`;
+  const rPr = differential
+    ? runPropertiesXml(run.localDeclared ?? {}, "a:rPr", theme, true)
+    : runPropertiesXml(run.style, "a:rPr", theme, false);
+  return `<a:r>${rPr}<a:t xml:space="preserve">${text}</a:t></a:r>`;
 }
 
 function textResourceClaims(runs: readonly Run[]): {
@@ -949,8 +1165,13 @@ function alignmentValue(value: TextAlignment | undefined): string | undefined {
   }
 }
 
-function paragraphXml(paragraph: Paragraph, theme: ThemeContext): string {
-  const { style, runs } = paragraph;
+function paragraphXml(
+  paragraph: Paragraph,
+  theme: ThemeContext,
+  differential = false,
+): string {
+  const style = differential ? (paragraph.localStyle ?? {}) : paragraph.style;
+  const { runs } = paragraph;
   const attributes: string[] = [];
   const align = alignmentValue(style.align);
   if (align !== undefined) attributes.push(`algn="${align}"`);
@@ -991,12 +1212,20 @@ function paragraphXml(paragraph: Paragraph, theme: ThemeContext): string {
       list.length ===
     0
       ? ""
-      : `<a:pPr ${attributes.join(" ")}>${lineSpacing}${spacingAfter}${list}</a:pPr>`;
+      : `<a:pPr${attributes.length === 0 ? "" : ` ${attributes.join(" ")}`}${lineSpacing.length + spacingAfter.length + list.length === 0 ? "/>" : `>${lineSpacing}${spacingAfter}${list}</a:pPr>`}`;
+  const endStyle = differential
+    ? (paragraph.localEndStyle ?? {})
+    : paragraph.endStyle;
   const endProperties =
     runs.length === 0
-      ? `<a:endParaRPr${paragraph.endStyle.lang !== undefined ? ` lang="${escapedXml(paragraph.endStyle.lang)}"` : ""} sz="${centipoints(fontSizePoints(paragraph.endStyle.fontSize))}"/>`
+      ? differential
+        ? runPropertiesXml(endStyle, "a:rPr" as const, theme, true).replace(
+            /<(\/?)a:rPr\b/gu,
+            "<$1a:endParaRPr",
+          )
+        : `<a:endParaRPr${endStyle.lang !== undefined ? ` lang="${escapedXml(endStyle.lang)}"` : ""} sz="${centipoints(fontSizePoints(endStyle.fontSize))}"/>`
       : "";
-  return `<a:p>${pPr}${runs.map((run) => runXml(run, theme)).join("")}${endProperties}</a:p>`;
+  return `<a:p>${pPr}${runs.map((run) => runXml(run, theme, differential)).join("")}${endProperties}</a:p>`;
 }
 
 function normalizeParagraphs(
@@ -1004,6 +1233,8 @@ function normalizeParagraphs(
   textStyle: ResolvedTextStyle,
   theme: ThemeContext,
   fields: TextFieldContext,
+  placeholder?: PlaceholderResolutionContext,
+  localSlideDeclaredStyle?: Readonly<Record<string, unknown>>,
 ): Paragraph[] {
   const baseRunStyle: RunStyle = {
     fontFamily: textStyle.fontFamily,
@@ -1019,6 +1250,41 @@ function normalizeParagraphs(
     lang: textStyle.lang,
   };
   validateRunStyle(baseRunStyle);
+
+  const localSlideRunDeclared: RunStyle | undefined =
+    placeholder === undefined
+      ? undefined
+      : mergeLocalRunDeclared(
+          {},
+          localSlideDeclaredStyle ?? {},
+          placeholder.masterTheme,
+        );
+  const localSlidePStyle: ParagraphStyle | undefined =
+    placeholder === undefined
+      ? undefined
+      : {
+          ...(hasLocalDeclaration(localSlideDeclaredStyle, "lineHeight")
+            ? {
+                lineHeight: localSlideDeclaredStyle![
+                  "lineHeight"
+                ] as ParagraphStyle["lineHeight"],
+              }
+            : {}),
+          ...(hasLocalDeclaration(localSlideDeclaredStyle, "align")
+            ? {
+                align: localSlideDeclaredStyle![
+                  "align"
+                ] as ParagraphStyle["align"],
+              }
+            : {}),
+          ...(hasLocalDeclaration(localSlideDeclaredStyle, "spacingAfter")
+            ? {
+                spacingAfter: localSlideDeclaredStyle![
+                  "spacingAfter"
+                ] as ParagraphStyle["spacingAfter"],
+              }
+            : {}),
+        };
 
   const paragraphs: Paragraph[] = [];
   let inline: Run[] = [];
@@ -1037,7 +1303,13 @@ function normalizeParagraphs(
       paragraphs.push({
         runs: inline,
         style: baseParagraphStyle,
+        ...(localSlidePStyle === undefined
+          ? {}
+          : { localStyle: localSlidePStyle }),
         endStyle: baseRunStyle,
+        ...(localSlideRunDeclared === undefined
+          ? {}
+          : { localEndStyle: localSlideRunDeclared }),
         wrap: textStyle.textWrap ?? "normal",
       });
       inline = [];
@@ -1056,7 +1328,14 @@ function normalizeParagraphs(
       child.type === "span" ||
       child.type === "slide-number"
     ) {
-      collectRuns([child], baseRunStyle, inline, theme, fields);
+      collectRuns(
+        [child],
+        baseRunStyle,
+        inline,
+        theme,
+        fields,
+        localSlideRunDeclared,
+      );
       continue;
     }
     if (child.type !== "paragraph") {
@@ -1075,12 +1354,43 @@ function normalizeParagraphs(
         `P contains unimplemented parameter ${unknown}`,
       );
     }
+    const localPStyle = paragraphStyle(child.props["style"]);
+    const rawLevel = localPStyle.list?.level ?? 0;
+    const levelBase =
+      placeholder === undefined
+        ? undefined
+        : resolvePlaceholderLevelTextStyle(
+            placeholder,
+            rawLevel,
+            localSlideDeclaredStyle,
+          );
+    const effectiveTheme = placeholder?.masterTheme ?? theme;
+    const effectiveBaseP: ParagraphStyle =
+      levelBase === undefined
+        ? baseParagraphStyle
+        : {
+            ...(levelBase.lineHeight === undefined
+              ? {}
+              : { lineHeight: levelBase.lineHeight }),
+            ...(levelBase.align === undefined
+              ? {}
+              : { align: levelBase.align }),
+            ...(levelBase.spacingAfter === undefined
+              ? {}
+              : { spacingAfter: levelBase.spacingAfter }),
+            ...(levelBase.lang === undefined ? {} : { lang: levelBase.lang }),
+            ...(levelBase.list === undefined ? {} : { list: levelBase.list }),
+          };
+    const levelRunBase: RunStyle =
+      levelBase === undefined
+        ? baseRunStyle
+        : resolveRunStyleFromRecord(levelBase, effectiveTheme);
     const style = {
-      ...baseParagraphStyle,
-      ...paragraphStyle(child.props["style"]),
+      ...effectiveBaseP,
+      ...localPStyle,
     };
     const paragraphRunStyle = mergeRunStyle(
-      baseRunStyle,
+      levelRunBase,
       {
         fontFamily: style.fontFamily,
         fontSize: style.fontSize,
@@ -1093,14 +1403,39 @@ function normalizeParagraphs(
         textShadow: style.textShadow,
         lang: style.lang,
       },
-      theme,
+      effectiveTheme,
     );
+    const mergedLocalPStyle: ParagraphStyle | undefined =
+      placeholder === undefined
+        ? undefined
+        : { ...localSlidePStyle, ...localPStyle };
+    const localPRunDeclared: RunStyle | undefined =
+      placeholder === undefined
+        ? undefined
+        : mergeLocalRunDeclared(
+            localSlideRunDeclared ?? {},
+            localPStyle,
+            effectiveTheme,
+          );
     const runs: Run[] = [];
-    collectRuns(child.children, paragraphRunStyle, runs, theme, fields);
+    collectRuns(
+      child.children,
+      paragraphRunStyle,
+      runs,
+      effectiveTheme,
+      fields,
+      localPRunDeclared,
+    );
     paragraphs.push({
       runs,
       style,
+      ...(mergedLocalPStyle === undefined
+        ? {}
+        : { localStyle: mergedLocalPStyle }),
       endStyle: paragraphRunStyle,
+      ...(localPRunDeclared === undefined
+        ? {}
+        : { localEndStyle: localPRunDeclared }),
       wrap: textStyle.textWrap ?? "normal",
     });
   }
@@ -1109,7 +1444,13 @@ function normalizeParagraphs(
     paragraphs.push({
       runs: [],
       style: baseParagraphStyle,
+      ...(localSlidePStyle === undefined
+        ? {}
+        : { localStyle: localSlidePStyle }),
       endStyle: baseRunStyle,
+      ...(localSlideRunDeclared === undefined
+        ? {}
+        : { localEndStyle: localSlideRunDeclared }),
       wrap: textStyle.textWrap ?? "normal",
     });
   }
@@ -2753,13 +3094,37 @@ function bodyAnchor(verticalAlign: TextStyle["verticalAlign"]): string {
   return { top: "t", middle: "ctr", bottom: "b" }[verticalAlign ?? "top"];
 }
 
-export function textInsets(value: unknown): {
+export function textInsets(
+  value: unknown,
+  placeholder?: PlaceholderResolutionContext,
+): {
   readonly top: number;
   readonly right: number;
   readonly bottom: number;
   readonly left: number;
 } {
-  return parseTextInsets(value);
+  if (placeholder === undefined) return parseTextInsets(value);
+  const effective: Record<string, unknown> = {};
+  const layers = [
+    placeholder.masterPlaceholder?.style,
+    placeholder.layoutPlaceholder?.style,
+    record(value) ? value : undefined,
+  ];
+  for (const layer of layers) {
+    if (layer === undefined) continue;
+    for (const key of paddingStyleKeys) {
+      if (hasLocalDeclaration(layer, key)) {
+        if (key === "padding") {
+          delete effective["paddingTop"];
+          delete effective["paddingRight"];
+          delete effective["paddingBottom"];
+          delete effective["paddingLeft"];
+        }
+        effective[key] = layer[key];
+      }
+    }
+  }
+  return parseTextInsets(effective);
 }
 
 /** Parses text children, validates element structure, and resolves paragraphs and text styles once. */
@@ -2769,13 +3134,38 @@ export function parseTextContent(
   theme: ThemeContext,
   fields: TextFieldContext = { slideNumber: 1 },
   label = "Text.style",
+  placeholder?: PlaceholderResolutionContext,
+  fullSlideStyle?: unknown,
 ): {
   readonly paragraphs: readonly Paragraph[];
   readonly style: ResolvedTextStyle;
+  readonly localBodyDeclared?: ReadonlySet<string>;
 } {
-  const style = readTextStyle(styleValue, label, theme);
-  const paragraphs = normalizeParagraphs(children, style, theme, fields);
-  return { paragraphs, style };
+  if (placeholder === undefined) {
+    const style = readTextStyle(styleValue, label, theme);
+    const paragraphs = normalizeParagraphs(children, style, theme, fields);
+    return { paragraphs, style };
+  }
+  const { style, localDeclaredStyle } = readPlaceholderTextStyle(
+    styleValue,
+    label,
+    placeholder,
+  );
+  const fullRecord = record(fullSlideStyle) ? fullSlideStyle : undefined;
+  const localBodyDeclared = localDeclaredKeySet(fullRecord, [
+    "textWrap",
+    "verticalAlign",
+    ...paddingStyleKeys,
+  ]);
+  const paragraphs = normalizeParagraphs(
+    children,
+    style,
+    placeholder.masterTheme,
+    fields,
+    placeholder,
+    localDeclaredStyle,
+  );
+  return { paragraphs, style, localBodyDeclared };
 }
 
 export const parseTextParagraphs = parseTextContent;
@@ -2824,6 +3214,10 @@ export function resolveTextBody(
   verticalAlign: TextStyle["verticalAlign"] = "top",
   layout?: TextLayoutRequest,
   destination: TextBodyDestination = "text-box",
+  placeholderOptions?: {
+    readonly isPlaceholder?: boolean;
+    readonly localBodyDeclared?: ReadonlySet<string>;
+  },
 ): ResolvedTextBody {
   const runs = paragraphs.flatMap((paragraph) =>
     paragraph.runs.length > 0
@@ -2909,6 +3303,12 @@ export function resolveTextBody(
     verticalAlign,
     ...(layout === undefined ? {} : { layout }),
     destination,
+    ...(placeholderOptions?.isPlaceholder === true
+      ? { isPlaceholder: true }
+      : {}),
+    ...(placeholderOptions?.localBodyDeclared === undefined
+      ? {}
+      : { localBodyDeclared: placeholderOptions.localBodyDeclared }),
     text,
     paragraphCount: outputParagraphs.length,
     resourceClaims,
@@ -2963,11 +3363,42 @@ export function emitTextBody(
           ),
         }))
       : resolved.paragraphs;
-  const { style, verticalAlign, layout, destination } = resolved;
-  const xml =
-    destination === "table-cell"
-      ? `<a:txBody><a:bodyPr/><a:lstStyle/>${emittedParagraphs.map((paragraph) => paragraphXml(paragraph, theme)).join("")}</a:txBody>`
-      : `<p:txBody><a:bodyPr wrap="${style.textWrap === "nowrap" ? "none" : "square"}" lIns="${pxToEmu(layout?.insets?.left ?? 0)}" tIns="${pxToEmu(layout?.insets?.top ?? 0)}" rIns="${pxToEmu(layout?.insets?.right ?? 0)}" bIns="${pxToEmu(layout?.insets?.bottom ?? 0)}" anchor="${bodyAnchor(style.verticalAlign ?? verticalAlign)}"><a:noAutofit/></a:bodyPr><a:lstStyle/>${emittedParagraphs.map((paragraph) => paragraphXml(paragraph, theme)).join("")}</p:txBody>`;
+  const { style, verticalAlign, layout, destination, isPlaceholder } = resolved;
+  let xml: string;
+  if (destination === "table-cell") {
+    xml = `<a:txBody><a:bodyPr/><a:lstStyle/>${emittedParagraphs.map((paragraph) => paragraphXml(paragraph, theme)).join("")}</a:txBody>`;
+  } else if (isPlaceholder) {
+    const localBody = resolved.localBodyDeclared ?? new Set<string>();
+    const bodyAttrs: string[] = [];
+    if (localBody.has("textWrap")) {
+      bodyAttrs.push(
+        `wrap="${style.textWrap === "nowrap" ? "none" : "square"}"`,
+      );
+    }
+    if (
+      paddingStyleKeys.some((key) => localBody.has(key)) &&
+      layout?.insets !== undefined
+    ) {
+      bodyAttrs.push(
+        `lIns="${pxToEmu(layout.insets.left)}"`,
+        `tIns="${pxToEmu(layout.insets.top)}"`,
+        `rIns="${pxToEmu(layout.insets.right)}"`,
+        `bIns="${pxToEmu(layout.insets.bottom)}"`,
+      );
+    }
+    if (localBody.has("verticalAlign")) {
+      bodyAttrs.push(
+        `anchor="${bodyAnchor(style.verticalAlign ?? verticalAlign)}"`,
+      );
+    }
+    const bodyPr =
+      bodyAttrs.length === 0
+        ? "<a:bodyPr/>"
+        : `<a:bodyPr ${bodyAttrs.join(" ")}/>`;
+    xml = `<p:txBody>${bodyPr}<a:lstStyle/>${emittedParagraphs.map((paragraph) => paragraphXml(paragraph, theme, true)).join("")}</p:txBody>`;
+  } else {
+    xml = `<p:txBody><a:bodyPr wrap="${style.textWrap === "nowrap" ? "none" : "square"}" lIns="${pxToEmu(layout?.insets?.left ?? 0)}" tIns="${pxToEmu(layout?.insets?.top ?? 0)}" rIns="${pxToEmu(layout?.insets?.right ?? 0)}" bIns="${pxToEmu(layout?.insets?.bottom ?? 0)}" anchor="${bodyAnchor(style.verticalAlign ?? verticalAlign)}"><a:noAutofit/></a:bodyPr><a:lstStyle/>${emittedParagraphs.map((paragraph) => paragraphXml(paragraph, theme)).join("")}</p:txBody>`;
+  }
   return {
     xml,
     presentationContributions: fontPresentationContributions(

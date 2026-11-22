@@ -2,8 +2,10 @@ import type {
   CanvasMechanismDefinition,
   EmitContext,
   EmitOutput,
+  NativeColorSlot,
   PaintContext,
   PaintOutput,
+  PlaceholderMap,
   ShowMechanismDefinition,
   SlideEmitContext,
   SlideEmitOutput,
@@ -29,6 +31,8 @@ export type ShapeTreeImportContext = {
   readonly containerNode?: CommonNode;
   readonly relationships?: ReadonlyMap<string, ParsedRelationshipEntry>;
   readonly registerDeferredSlideLink?: (link: DeferredSlideLink) => void;
+  readonly layoutPlaceholders?: PlaceholderMap;
+  readonly clrMap?: Readonly<Record<string, NativeColorSlot>>;
 };
 
 export type ShapeTreeImportOutcome = {
@@ -48,7 +52,7 @@ export type SlideImportContext = {
   readonly slideCursor: XmlElementCursor;
   readonly slideNode: CommonNode;
   readonly part: string;
-  readonly slideIndex: number;
+  readonly slideIndex?: number;
   readonly package: PptxPackage;
 };
 
@@ -64,6 +68,8 @@ export type SlideImportHandler = {
     | "transition"
     | "timing"
     | "notes";
+  /** Refines matching when multiple mechanisms share a slide slot. */
+  matches?(cursor: XmlElementCursor): boolean;
   read(context: SlideImportContext): SlideImportOutcome;
 };
 

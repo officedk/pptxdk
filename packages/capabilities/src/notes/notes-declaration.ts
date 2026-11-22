@@ -1,17 +1,12 @@
 import { RichTextContainer } from "@pptxdk/core/document";
 
 import type { TextStyle } from "../shared/text-service.ts";
+import {
+  notesDeclarationPropsSchema,
+  type NotesDeclarationProps,
+} from "./notes-schemas.ts";
 
-/**
- * Page-affiliated speaker notes declaration shared by JSX and command authoring.
- *
- * Notes carry only an author id and shared rich-text style/content. Layout, native object,
- * Morph, link, and motion properties belong to slide canvas objects, not to the notes body.
- */
-export type NotesDeclarationProps = {
-  readonly id?: string;
-  readonly style?: TextStyle;
-};
+export { notesDeclarationPropsSchema, type NotesDeclarationProps };
 
 export type NotesNode = RichTextContainer<
   "notes",

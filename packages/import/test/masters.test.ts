@@ -134,6 +134,96 @@ describe("SlideMaster and SlideLayout import", () => {
     assert.equal(resolvedLayouts.length, 11);
     assert.equal(resolvedLayouts[9]?.type, "vertTx");
     assert.equal(resolvedLayouts[10]?.type, "vertTitleAndTx");
+
+    // Master txStyles and placeholders + deterministic Comparison placeholder keys.
+    assert.ok(master.props["textStyles"] !== undefined);
+    assert.ok(master.props["placeholders"] !== undefined);
+    const comparisonPlaceholders = master.layouts[4]?.props["placeholders"] as
+      | Readonly<
+          Record<string, { readonly type: string; readonly idx?: number }>
+        >
+      | undefined;
+    assert.ok(comparisonPlaceholders !== undefined);
+    assert.deepEqual(Object.keys(comparisonPlaceholders), [
+      "title",
+      "body-1",
+      "content-2",
+      "body-3",
+      "content-4",
+      "dt",
+      "ftr",
+      "sldNum",
+    ]);
+    assert.equal(comparisonPlaceholders["body-1"]?.type, "body");
+    assert.equal(comparisonPlaceholders["body-1"]?.idx, 1);
+    assert.equal(comparisonPlaceholders["content-2"]?.type, "obj");
+    assert.equal(comparisonPlaceholders["content-2"]?.idx, 2);
+    assert.equal(comparisonPlaceholders["body-3"]?.type, "body");
+    assert.equal(comparisonPlaceholders["body-3"]?.idx, 3);
+    assert.equal(comparisonPlaceholders["content-4"]?.type, "obj");
+    assert.equal(comparisonPlaceholders["content-4"]?.idx, 4);
+  });
+
+  it("imports placeholder-layout-color.pptx with layout listStyles (35pt #00FFFF), master clrMap, and disambiguated duplicate title keys", () => {
+    const bytes = new Uint8Array(
+      readFileSync(
+        new URL("./fixtures/placeholder-layout-color.pptx", import.meta.url),
+      ),
+    );
+    const importer = createImporter([]);
+    const result = importer(bytes);
+    bytes.fill(0);
+
+    assert.equal(result.report.slideCount, 1);
+    assert.ok(result.document instanceof DeckContainer);
+    const master = result.document.masters[0]!;
+    const layout = master.layouts[0]!;
+    const layoutPlaceholders = layout.props["placeholders"] as
+      | Readonly<
+          Record<
+            string,
+            {
+              readonly type: string;
+              readonly idx?: number;
+              readonly hasCustomPrompt?: boolean;
+              readonly listStyles?: Readonly<
+                Record<
+                  number,
+                  {
+                    readonly fontSize?: string;
+                    readonly color?: string;
+                    readonly fontFamily?: string;
+                  }
+                >
+              >;
+            }
+          >
+        >
+      | undefined;
+    assert.ok(layoutPlaceholders !== undefined);
+    assert.deepEqual(Object.keys(layoutPlaceholders), ["title", "title-2"]);
+    assert.equal(
+      layoutPlaceholders["title"]?.listStyles?.[1]?.fontSize,
+      "35pt",
+    );
+    assert.equal(
+      layoutPlaceholders["title"]?.listStyles?.[1]?.color,
+      "#00FFFF",
+    );
+    assert.equal(
+      layoutPlaceholders["title"]?.listStyles?.[1]?.fontFamily,
+      "major",
+    );
+    assert.equal(layoutPlaceholders["title-2"]?.idx, 2);
+    assert.equal(layoutPlaceholders["title-2"]?.hasCustomPrompt, true);
+    assert.equal(
+      layoutPlaceholders["title-2"]?.listStyles?.[1]?.fontSize,
+      "80pt",
+    );
+    assert.equal(
+      layoutPlaceholders["title-2"]?.listStyles?.[1]?.color,
+      "#FF0000",
+    );
   });
 
   it("disambiguates duplicate display names deterministically within a master while preserving display names", () => {

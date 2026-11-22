@@ -29,6 +29,7 @@ import type {
   GeometryBox,
   LayoutStyle,
   NativeElementKind,
+  PlaceholderResolutionContext,
   RegisteredCapabilityModule,
   ResolveOptions,
   ThemeContext,
@@ -303,6 +304,9 @@ export class LayoutPass {
   readonly #warnings: Diagnostic[] = [];
   readonly #warningKeys = new Set<string>();
   readonly #solver: LayoutSolver;
+  #placeholderFor: (
+    element: CapabilityElement,
+  ) => PlaceholderResolutionContext | undefined = () => undefined;
 
   constructor(
     modules: ReadonlyMap<string, RegisteredCapabilityModule>,
@@ -329,7 +333,11 @@ export class LayoutPass {
     parentPath: string,
     theme: ThemeContext,
     slideStyle?: unknown,
+    placeholderFor?: (
+      element: CapabilityElement,
+    ) => PlaceholderResolutionContext | undefined,
   ): LayoutPassResult {
+    this.#placeholderFor = placeholderFor ?? (() => undefined);
     const rootStyle = readStyle(
       slideStyle,
       parentPath,
@@ -382,6 +390,7 @@ export class LayoutPass {
     childPath: string,
     themeContext: ThemeContext,
     module: BoundObjectCapabilityModule,
+    placeholder?: PlaceholderResolutionContext,
   ): BoundObjectCapability {
     let bound = this.#boundObjects.get(child);
     if (bound === undefined) {
@@ -392,6 +401,7 @@ export class LayoutPass {
             theme: themeContext,
             options: this.#options,
             slideNumber: this.#slideNumber,
+            ...(placeholder === undefined ? {} : { placeholder }),
           }),
         );
         this.#boundObjects.set(child, bound);
@@ -444,15 +454,25 @@ export class LayoutPass {
         return;
       }
       if (objectModule(module)) {
+        const placeholder = this.#placeholderFor(child);
+        const elementTheme =
+          placeholder === undefined ? themeContext : placeholder.masterTheme;
         const bound = this.#bindCapability(
           child,
           childPath,
-          themeContext,
+          elementTheme,
           module,
+          placeholder,
         );
         const contract = bound.contract;
         if (contract.layoutStyle.display === "none") {
           this.#markHidden(child);
+          return;
+        }
+        if (placeholder !== undefined) {
+          // Bound native placeholders resolve position/style from master+layout+local overrides
+          // outside Yoga flow containers.
+          this.#themes.set(child, elementTheme);
           return;
         }
         for (const mode of customContainerModes) {

@@ -37,6 +37,7 @@ import {
   getInternalResolution,
   type InternalResolution,
   type ResolvedObjectLayer,
+  type ResolvedSlideCapabilityRecord,
 } from "@pptxdk/core/resolution";
 import { strToU8, zipSync } from "fflate";
 import type { z } from "zod";
@@ -1433,6 +1434,57 @@ export function emittedBuildQuery(
   return emittedQueries.get(report) ?? fallbackQuery;
 }
 
+function emitMasterOrLayoutCapabilities(
+  capabilities: readonly ResolvedSlideCapabilityRecord[] | undefined,
+  internal: InternalResolution,
+  docEmit: DocumentEmitState,
+  partEmit: SlideEmitState,
+  target: Target,
+  options: EmitOptions,
+): string {
+  if (capabilities === undefined || capabilities.length === 0) return "";
+  const packageCtx: PackageContext = { document: docEmit, slide: partEmit };
+  const parts: string[] = [];
+
+  for (const cap of capabilities) {
+    checkExtensions(
+      cap.extensions,
+      target,
+      docEmit.usedExtensions,
+      partEmit.diagnostics,
+      cap.path,
+    );
+    try {
+      const output = cap.emit({
+        path: cap.path,
+        dimensions: internal.dimensions,
+        theme: cap.theme,
+        options,
+        slideNumber: 0,
+        createTextFieldId: () => allocateTextFieldId(docEmit),
+        registerResource: (resource) => addResource(resource, packageCtx),
+        registerPackagePart: (part) => addSlidePackagePart(part, packageCtx),
+        registerSharedPart: (key, part) =>
+          addSharedPackagePart(key, part, packageCtx),
+      });
+      if (cap.slot === "transition" && output.xml !== "") {
+        parts.push(output.xml);
+      }
+    } catch (error) {
+      partEmit.diagnostics.push(
+        error instanceof CapabilityError
+          ? diagnostic(error.path ?? cap.path, error.code, error.message)
+          : diagnostic(
+              cap.path,
+              "capability-failure",
+              error instanceof Error ? error.message : String(error),
+            ),
+      );
+    }
+  }
+  return parts.join("");
+}
+
 /**
  * Emits a PPTX archive and BuildReport from an existing Resolution without re-resolving the document.
  */
@@ -1476,6 +1528,14 @@ export function emit(
         document: docEmit,
         slide: masterEmit,
       };
+      const transitionXml = emitMasterOrLayoutCapabilities(
+        master.slideCapabilities,
+        internal,
+        docEmit,
+        masterEmit,
+        target,
+        options,
+      );
       let masterBackgroundXml = "";
       if (master.background !== undefined) {
         checkExtensions(
@@ -1499,7 +1559,11 @@ export function emit(
         });
         masterBackgroundXml = bgOut.xml;
       }
-      let nextMasterObjectId = maxResolvedObjectId(master.layers ?? []) + 1;
+      let nextMasterObjectId =
+        Math.max(
+          maxResolvedObjectId(master.layers ?? []),
+          1 + Object.keys(master.placeholders ?? {}).length,
+        ) + 1;
       let masterShapeXml = (master.layers ?? [])
         .map((layer) =>
           emitLayer(
@@ -1564,6 +1628,14 @@ export function emit(
           document: docEmit,
           slide: layoutEmit,
         };
+        const layoutTransitionXml = emitMasterOrLayoutCapabilities(
+          layout.slideCapabilities,
+          internal,
+          docEmit,
+          layoutEmit,
+          target,
+          options,
+        );
         let layoutBackgroundXml = "";
         if (layout.background !== undefined) {
           checkExtensions(
@@ -1587,7 +1659,11 @@ export function emit(
           });
           layoutBackgroundXml = bgOut.xml;
         }
-        let nextLayoutObjectId = maxResolvedObjectId(layout.layers ?? []) + 1;
+        let nextLayoutObjectId =
+          Math.max(
+            maxResolvedObjectId(layout.layers ?? []),
+            1 + Object.keys(layout.placeholders ?? {}).length,
+          ) + 1;
         let layoutShapeXml = (layout.layers ?? [])
           .map((layer) =>
             emitLayer(
@@ -1655,6 +1731,9 @@ export function emit(
                 showMasterPlaceholderAnimations:
                   layout.showMasterPlaceholderAnimations,
               }),
+          ...(layout.placeholders === undefined
+            ? {}
+            : { placeholders: layout.placeholders }),
           ...(layout.colorMapOverride === undefined
             ? {}
             : { colorMapOverride: layout.colorMapOverride }),
@@ -1671,6 +1750,9 @@ export function emit(
           ...(layoutEmit.relationships.length === 0
             ? {}
             : { extraRelationships: layoutEmit.relationships }),
+          ...(layoutTransitionXml === ""
+            ? {}
+            : { transitionXml: layoutTransitionXml }),
         };
       });
 
@@ -1679,7 +1761,14 @@ export function emit(
         ...(master.name === undefined ? {} : { name: master.name }),
         ...(master.preserve === undefined ? {} : { preserve: master.preserve }),
         theme: master.theme,
+        themeContext: master.themeContext,
         colorMap: master.colorMap,
+        ...(master.placeholders === undefined
+          ? {}
+          : { placeholders: master.placeholders }),
+        ...(master.textStyles === undefined
+          ? {}
+          : { textStyles: master.textStyles }),
         ...(master.headerFooter === undefined
           ? {}
           : { headerFooter: master.headerFooter }),
@@ -1690,6 +1779,7 @@ export function emit(
         ...(masterEmit.relationships.length === 0
           ? {}
           : { extraRelationships: masterEmit.relationships }),
+        ...(transitionXml === "" ? {} : { transitionXml }),
         layouts: emittedLayouts,
       };
     });

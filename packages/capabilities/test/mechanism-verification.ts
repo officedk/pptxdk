@@ -28,6 +28,7 @@ import { imageMechanismVerifications } from "./image/mechanisms.ts";
 import { footerPlaceholderMechanismVerifications } from "./masters/footer-mechanisms.ts";
 import { masterSharedCanvasMechanismVerifications } from "./masters/shared-canvas-mechanisms.ts";
 import { themeMechanismVerifications } from "./masters/theme-mechanisms.ts";
+import { notesMechanismVerifications } from "./notes/mechanisms.ts";
 import { shapeAndGroupMechanismVerifications } from "./shape/mechanisms.ts";
 import { slideBackgroundMechanismVerifications } from "./slide-background/mechanisms.ts";
 import { tableMechanismVerifications } from "./table/mechanisms.ts";
@@ -35,6 +36,7 @@ import {
   textBoxRoundtripScenario,
   textMechanismVerifications,
 } from "./text/mechanisms.ts";
+import { transitionMechanismVerifications } from "./transition/mechanisms.ts";
 
 export { textBoxRoundtripScenario };
 
@@ -267,10 +269,12 @@ export const productionMechanismVerifications: ExhaustiveMechanismVerificationMa
     ...footerPlaceholderMechanismVerifications,
     ...slideBackgroundMechanismVerifications,
     ...imageMechanismVerifications,
+    ...notesMechanismVerifications,
     ...shapeAndGroupMechanismVerifications,
     ...tableMechanismVerifications,
     ...textMechanismVerifications,
     ...chartMechanismVerifications,
+    ...transitionMechanismVerifications,
   };
 
 /** Runs every mechanism verification entry, deduplicating shared scenarios across initial and roundtrip artifacts. */

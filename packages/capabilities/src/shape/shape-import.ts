@@ -27,10 +27,7 @@ import {
 } from "@pptxdk/import";
 import { z } from "zod";
 
-import {
-  consumeNonPlaceholderNvPr,
-  hasPlaceholderElement,
-} from "../shared/identity.ts";
+import { consumeNonPlaceholderNvPr } from "../shared/identity.ts";
 import type { ParagraphStyle, TextList } from "../shared/text-service.ts";
 import {
   readDrawingColor,
@@ -44,6 +41,7 @@ import {
   type ParagraphDeclarationProps,
   type SpanDeclarationProps,
 } from "../text/text-declaration.ts";
+import { isPlaceholderSpElement } from "../text/text-import.ts";
 import {
   createShapeNode,
   type ShapeDeclarationProps,
@@ -159,18 +157,18 @@ function isCustomGeomSpElement(cursor: XmlElementCursor): boolean {
 /** Side-effect-free predicate matching non-textbox preset shapes (`<p:sp>` without `txBox="1"`, `<p:ph>`, or `<a:custGeom>`). */
 export function isPresetShapeSpElement(cursor: XmlElementCursor): boolean {
   return (
-    !hasPlaceholderElement(cursor) &&
+    !isPlaceholderSpElement(cursor) &&
     !isTextBoxSpElement(cursor) &&
     !isCustomGeomSpElement(cursor)
   );
 }
 
-/** Side-effect-free predicate matching non-textbox custom-geometry shapes (`<p:sp>` with `<a:custGeom>` without `<p:ph>`). */
+/** Side-effect-free predicate matching non-textbox custom-geometry shapes (`<p:sp>` without `<p:ph>` and with `<a:custGeom>`). */
 export function isCustomGeometryShapeSpElement(
   cursor: XmlElementCursor,
 ): boolean {
   return (
-    !hasPlaceholderElement(cursor) &&
+    !isPlaceholderSpElement(cursor) &&
     !isTextBoxSpElement(cursor) &&
     isCustomGeomSpElement(cursor)
   );

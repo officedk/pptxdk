@@ -65,6 +65,11 @@ export type FileObject = {
   readonly id: number;
   readonly name: string;
   readonly kind: "shape" | "image" | "chart" | "group" | "table";
+  readonly placeholder?: {
+    readonly type: string;
+    readonly idx?: number;
+  };
+  readonly hasLocalTransform?: boolean;
   readonly geometry?: string;
   readonly boxEmu: {
     readonly x: number;
@@ -396,6 +401,12 @@ export type FileNotes = {
   readonly text: FileText;
 };
 
+export type FilePlaceholderTemplate = {
+  readonly type: string;
+  readonly idx?: number;
+  readonly boxEmu?: FileObject["boxEmu"];
+};
+
 export type FileThemeSnapshot = {
   readonly name?: string;
   readonly colors: Readonly<Record<string, string>>;
@@ -437,6 +448,7 @@ export type FileSlideLayout = {
   readonly userDrawn?: boolean;
   readonly showMasterShapes?: boolean;
   readonly showMasterPlaceholderAnimations?: boolean;
+  readonly placeholders?: readonly FilePlaceholderTemplate[];
   readonly colorMapOverride?: "master" | Readonly<Record<string, string>>;
   readonly themeOverridePart?: string;
   readonly themeOverride?: FileThemeSnapshot;
@@ -444,6 +456,8 @@ export type FileSlideLayout = {
   readonly background?: FileSlideBackground;
   readonly footerPlaceholders?: readonly FileFooterPlaceholder[];
   readonly objects?: readonly FileObject[];
+  readonly advanceAfterMs?: number;
+  readonly transition?: FileTransition;
 };
 
 export type FileSlideMaster = {
@@ -452,12 +466,15 @@ export type FileSlideMaster = {
   readonly name?: string;
   readonly preserve?: boolean;
   readonly themePart?: string;
+  readonly placeholders?: readonly FilePlaceholderTemplate[];
   readonly theme?: FileThemeSnapshot;
   readonly colorMap?: Readonly<Record<string, string>>;
   readonly headerFooter?: FileHeaderFooter;
   readonly background?: FileSlideBackground;
   readonly footerPlaceholders?: readonly FileFooterPlaceholder[];
   readonly objects?: readonly FileObject[];
+  readonly advanceAfterMs?: number;
+  readonly transition?: FileTransition;
   readonly layouts: readonly FileSlideLayout[];
 };
 
@@ -2656,6 +2673,85 @@ function parseOptionalBooleanAttr(
   return undefined;
 }
 
+function readPlaceholderTemplates(
+  root: XmlElement,
+): readonly FilePlaceholderTemplate[] {
+  const cSld = first(root, presentationNamespace, "cSld");
+  const spTree =
+    cSld === undefined
+      ? undefined
+      : first(cSld, presentationNamespace, "spTree");
+  if (spTree === undefined) return [];
+  const templates: FilePlaceholderTemplate[] = [];
+  for (const sp of elements(spTree, presentationNamespace, "sp")) {
+    const nvSpPr = first(sp, presentationNamespace, "nvSpPr");
+    const nvPr =
+      nvSpPr === undefined
+        ? undefined
+        : first(nvSpPr, presentationNamespace, "nvPr");
+    const ph =
+      nvPr === undefined ? undefined : first(nvPr, presentationNamespace, "ph");
+    if (ph === undefined) continue;
+    const type = attribute(ph, "type") || "obj";
+    const idx = integerAttribute(ph, "idx");
+    const spPr = first(sp, presentationNamespace, "spPr");
+    const xfrm =
+      spPr === undefined ? undefined : first(spPr, drawingNamespace, "xfrm");
+    const off =
+      xfrm === undefined ? undefined : first(xfrm, drawingNamespace, "off");
+    const ext =
+      xfrm === undefined ? undefined : first(xfrm, drawingNamespace, "ext");
+    const x = integerAttribute(off, "x");
+    const y = integerAttribute(off, "y");
+    const width = integerAttribute(ext, "cx");
+    const height = integerAttribute(ext, "cy");
+    const boxEmu =
+      x !== undefined &&
+      y !== undefined &&
+      width !== undefined &&
+      height !== undefined
+        ? { x, y, width, height }
+        : undefined;
+    templates.push({
+      type,
+      ...(idx === undefined ? {} : { idx }),
+      ...(boxEmu === undefined ? {} : { boxEmu }),
+    });
+  }
+  return templates;
+}
+
+function matchPlaceholderTemplateBox(
+  ref: { readonly type: string; readonly idx?: number },
+  lookup?: {
+    readonly layout?: readonly FilePlaceholderTemplate[];
+    readonly master?: readonly FilePlaceholderTemplate[];
+  },
+): FileObject["boxEmu"] | undefined {
+  if (lookup === undefined) return undefined;
+  const layoutList = lookup.layout ?? [];
+  let matchedLayout: FilePlaceholderTemplate | undefined;
+  if (ref.idx !== undefined) {
+    matchedLayout = layoutList.find((item) => item.idx === ref.idx);
+  } else {
+    matchedLayout =
+      layoutList.find(
+        (item) => item.idx === undefined && item.type === ref.type,
+      ) ?? layoutList.find((item) => item.type === ref.type);
+  }
+  if (matchedLayout?.boxEmu !== undefined) return matchedLayout.boxEmu;
+  const effectiveRole = matchedLayout?.type ?? ref.type;
+  const masterList = lookup.master ?? [];
+  const masterMatch =
+    masterList.find((item) => item.type === effectiveRole) ??
+    (effectiveRole === "ctrTitle"
+      ? masterList.find((item) => item.type === "title")
+      : effectiveRole === "subTitle" || effectiveRole === "obj"
+        ? masterList.find((item) => item.type === "body")
+        : undefined);
+  return masterMatch?.boxEmu;
+}
+
 function readMastersAndLayouts(
   files: XmlFiles,
   documents: Documents,
@@ -2667,18 +2763,22 @@ function readMastersAndLayouts(
   errors: ValidationIssue[],
 ): {
   readonly masters: readonly FileSlideMaster[];
+  readonly masterByPart: ReadonlyMap<string, FileSlideMaster>;
   readonly layoutByPart: ReadonlyMap<string, FileSlideLayout>;
+  readonly extensions: readonly ValidationExtension[];
 } {
   const presentationPart = "ppt/presentation.xml";
   const presentationRoot = documents.get(presentationPart)?.documentElement;
   const masters: FileSlideMaster[] = [];
+  const masterByPart = new Map<string, FileSlideMaster>();
   const layoutByPart = new Map<string, FileSlideLayout>();
+  const usedExtensions = new Set<ValidationExtension>();
   if (
     presentationRoot == null ||
     presentationRoot.localName !== "presentation" ||
     presentationRoot.namespaceURI !== presentationNamespace
   ) {
-    return { masters, layoutByPart };
+    return { masters, masterByPart, layoutByPart, extensions: [] };
   }
 
   const masterIdList = first(
@@ -2697,7 +2797,7 @@ function readMastersAndLayouts(
       "missing-slide-master",
       "Presentation contains no slide masters",
     );
-    return { masters, layoutByPart };
+    return { masters, masterByPart, layoutByPart, extensions: [] };
   }
 
   const presentationRels = relationships.get(presentationPart) ?? new Map();
@@ -2973,6 +3073,7 @@ function readMastersAndLayouts(
         "showMasterPhAnim",
       );
 
+      const layoutPlaceholders = readPlaceholderTemplates(layoutRoot);
       const layoutColorMapOverride = readColorMapOverrideForPart(layoutRoot);
       const layoutThemeOverride = readAndValidateThemeOverride(
         layoutPart,
@@ -3015,11 +3116,26 @@ function readMastersAndLayouts(
               contentTypes,
               errors,
               layoutThemeReader,
+              undefined,
+              true,
             );
       const layoutFooterPlaceholders =
         layoutTree === undefined
           ? []
           : readFooterPlaceholders(layoutTree, layoutPart, errors);
+      const layoutTransition = readSlideTransition(
+        layoutRoot,
+        layoutPart,
+        errors,
+      );
+      const layoutAdvanceAfterMs = readAdvanceAfter(
+        layoutRoot,
+        layoutPart,
+        errors,
+      );
+      for (const extension of layoutTransition.extensions) {
+        usedExtensions.add(extension);
+      }
 
       const layoutInfo: FileSlideLayout = {
         part: layoutPart,
@@ -3034,6 +3150,9 @@ function readMastersAndLayouts(
         ...(showMasterPlaceholderAnimations === undefined
           ? {}
           : { showMasterPlaceholderAnimations }),
+        ...(layoutPlaceholders.length === 0
+          ? {}
+          : { placeholders: layoutPlaceholders }),
         ...(layoutColorMapOverride === undefined
           ? {}
           : { colorMapOverride: layoutColorMapOverride }),
@@ -3053,11 +3172,18 @@ function readMastersAndLayouts(
           ? {}
           : { footerPlaceholders: layoutFooterPlaceholders }),
         ...(layoutObjects.length === 0 ? {} : { objects: layoutObjects }),
+        ...(layoutAdvanceAfterMs === undefined
+          ? {}
+          : { advanceAfterMs: layoutAdvanceAfterMs }),
+        ...(layoutTransition.transition === undefined
+          ? {}
+          : { transition: layoutTransition.transition }),
       };
       masterLayouts.push(layoutInfo);
       layoutByPart.set(layoutPart, layoutInfo);
     }
 
+    const masterPlaceholders = readPlaceholderTemplates(masterRoot);
     const masterColorMap = readColorMapRecord(
       first(masterRoot, presentationNamespace, "clrMap"),
     );
@@ -3096,18 +3222,36 @@ function readMastersAndLayouts(
             contentTypes,
             errors,
             masterThemeReader,
+            undefined,
+            true,
           );
     const masterFooterPlaceholders =
       masterTree === undefined
         ? []
         : readFooterPlaceholders(masterTree, masterPart, errors);
+    const masterTransition = readSlideTransition(
+      masterRoot,
+      masterPart,
+      errors,
+    );
+    const masterAdvanceAfterMs = readAdvanceAfter(
+      masterRoot,
+      masterPart,
+      errors,
+    );
+    for (const extension of masterTransition.extensions) {
+      usedExtensions.add(extension);
+    }
 
-    masters.push({
+    const masterInfo: FileSlideMaster = {
       part: masterPart,
       id: masterId ?? 0,
       ...(masterName === undefined ? {} : { name: masterName }),
       ...(masterPreserve === undefined ? {} : { preserve: masterPreserve }),
       ...(themePart === undefined ? {} : { themePart }),
+      ...(masterPlaceholders.length === 0
+        ? {}
+        : { placeholders: masterPlaceholders }),
       ...(masterThemeSnapshot === undefined
         ? {}
         : { theme: masterThemeSnapshot }),
@@ -3122,11 +3266,24 @@ function readMastersAndLayouts(
         ? {}
         : { footerPlaceholders: masterFooterPlaceholders }),
       ...(masterObjects.length === 0 ? {} : { objects: masterObjects }),
+      ...(masterAdvanceAfterMs === undefined
+        ? {}
+        : { advanceAfterMs: masterAdvanceAfterMs }),
+      ...(masterTransition.transition === undefined
+        ? {}
+        : { transition: masterTransition.transition }),
       layouts: masterLayouts,
-    });
+    };
+    masters.push(masterInfo);
+    masterByPart.set(masterPart, masterInfo);
   }
 
-  return { masters, layoutByPart };
+  return {
+    masters,
+    masterByPart,
+    layoutByPart,
+    extensions: [...usedExtensions],
+  };
 }
 
 function validateTextValueRange(
@@ -3310,12 +3467,32 @@ function validateShape(
   part: string,
   errors: ValidationIssue[],
   theme: ThemeTextReader,
+  placeholderLookup?: {
+    readonly layout?: readonly FilePlaceholderTemplate[];
+    readonly master?: readonly FilePlaceholderTemplate[];
+  },
 ): FileObject | undefined {
   const shapeProperties = first(shape, presentationNamespace, "nvSpPr");
   const drawingProperties =
     shapeProperties === undefined
       ? undefined
       : first(shapeProperties, presentationNamespace, "cNvPr");
+  const nvPr =
+    shapeProperties === undefined
+      ? undefined
+      : first(shapeProperties, presentationNamespace, "nvPr");
+  const ph =
+    nvPr === undefined ? undefined : first(nvPr, presentationNamespace, "ph");
+  const placeholderRef =
+    ph === undefined
+      ? undefined
+      : (() => {
+          const phIdx = integerAttribute(ph, "idx");
+          return {
+            type: attribute(ph, "type") || "obj",
+            ...(phIdx === undefined ? {} : { idx: phIdx }),
+          };
+        })();
   const id = integerAttribute(drawingProperties, "id");
   const name =
     drawingProperties === undefined ? "" : attribute(drawingProperties, "name");
@@ -3330,7 +3507,7 @@ function validateShape(
   }
   const properties = first(shape, presentationNamespace, "spPr");
   const geometryName = readGeometryName(properties);
-  if (geometryName === "") {
+  if (geometryName === "" && placeholderRef === undefined) {
     issue(
       errors,
       part,
@@ -3343,6 +3520,7 @@ function validateShape(
     properties === undefined
       ? undefined
       : first(properties, drawingNamespace, "xfrm");
+  const hasLocalTransform = transform !== undefined;
   const rotation = readRotationDegrees(transform);
   const offset =
     transform === undefined
@@ -3352,10 +3530,14 @@ function validateShape(
     transform === undefined
       ? undefined
       : first(transform, drawingNamespace, "ext");
-  const x = integerAttribute(offset, "x");
-  const y = integerAttribute(offset, "y");
-  const width = integerAttribute(extent, "cx");
-  const height = integerAttribute(extent, "cy");
+  const inheritedBoxEmu =
+    placeholderRef === undefined
+      ? undefined
+      : matchPlaceholderTemplateBox(placeholderRef, placeholderLookup);
+  const x = integerAttribute(offset, "x") ?? inheritedBoxEmu?.x;
+  const y = integerAttribute(offset, "y") ?? inheritedBoxEmu?.y;
+  const width = integerAttribute(extent, "cx") ?? inheritedBoxEmu?.width;
+  const height = integerAttribute(extent, "cy") ?? inheritedBoxEmu?.height;
   if (
     x === undefined ||
     y === undefined ||
@@ -3377,11 +3559,20 @@ function validateShape(
   validateTextValueRanges(shape, part, errors);
   validateLineProperties(properties, part, errors);
   const text = readTextBody(shape, theme, part, errors);
+  const effectiveGeometry =
+    geometryName !== ""
+      ? geometryName
+      : placeholderRef !== undefined
+        ? "rect"
+        : "";
   return {
     id,
     name,
     kind: "shape",
-    geometry: geometryName,
+    ...(placeholderRef === undefined
+      ? {}
+      : { placeholder: placeholderRef, hasLocalTransform }),
+    ...(effectiveGeometry === "" ? {} : { geometry: effectiveGeometry }),
     boxEmu: { x, y, width, height },
     ...(rotation === undefined ? {} : { rotationDegrees: rotation }),
     ...(text === undefined ? {} : { text }),
@@ -7297,6 +7488,11 @@ function readObjects(
   },
   errors: ValidationIssue[],
   theme: ThemeTextReader,
+  placeholderLookup?: {
+    readonly layout?: readonly FilePlaceholderTemplate[];
+    readonly master?: readonly FilePlaceholderTemplate[];
+  },
+  skipAllPlaceholders = false,
 ): FileObject[] {
   const objects: FileObject[] = [];
   for (
@@ -7320,8 +7516,17 @@ function readObjects(
           nvPr === undefined
             ? undefined
             : first(nvPr, presentationNamespace, "ph");
-        if (ph !== undefined) break;
-        object = validateShape(spEl, part, errors, theme);
+        const phType = ph === undefined ? undefined : attribute(ph, "type");
+        if (
+          ph !== undefined &&
+          (skipAllPlaceholders ||
+            phType === "dt" ||
+            phType === "ftr" ||
+            phType === "sldNum")
+        ) {
+          break;
+        }
+        object = validateShape(spEl, part, errors, theme, placeholderLookup);
         break;
       }
       case "pic":
@@ -7961,6 +8166,22 @@ function readAlternateTransition(
   };
 }
 
+function isTransitionAlternateContent(element: XmlElement): boolean {
+  if (
+    element.namespaceURI !== markupCompatibilityNamespace ||
+    element.localName !== "AlternateContent"
+  ) {
+    return false;
+  }
+  return [
+    ...elements(element, markupCompatibilityNamespace, "Choice"),
+    ...elements(element, markupCompatibilityNamespace, "Fallback"),
+  ].some(
+    (branch) =>
+      elements(branch, presentationNamespace, "transition").length > 0,
+  );
+}
+
 function readSlideTransition(
   slide: XmlElement,
   part: string,
@@ -7970,8 +8191,7 @@ function readSlideTransition(
     (child) =>
       (child.namespaceURI === presentationNamespace &&
         child.localName === "transition") ||
-      (child.namespaceURI === markupCompatibilityNamespace &&
-        child.localName === "AlternateContent"),
+      isTransitionAlternateContent(child),
   );
   if (candidates.length > 1) {
     issue(
@@ -8004,8 +8224,7 @@ function readAdvanceAfter(
     (child) =>
       (child.namespaceURI === presentationNamespace &&
         child.localName === "transition") ||
-      (child.namespaceURI === markupCompatibilityNamespace &&
-        child.localName === "AlternateContent"),
+      isTransitionAlternateContent(child),
   );
   const transitions = candidates.flatMap((candidate) =>
     candidate.namespaceURI === presentationNamespace
@@ -10192,7 +10411,9 @@ function readPresentation(
   },
   mastersRead: {
     readonly masters: readonly FileSlideMaster[];
+    readonly masterByPart: ReadonlyMap<string, FileSlideMaster>;
     readonly layoutByPart: ReadonlyMap<string, FileSlideLayout>;
+    readonly extensions: readonly ValidationExtension[];
   },
   errors: ValidationIssue[],
 ): {
@@ -10201,9 +10422,6 @@ function readPresentation(
   extensions: ValidationExtension[];
 } {
   const firstMaster = mastersRead.masters[0];
-  const masterByPart = new Map(
-    mastersRead.masters.map((master) => [master.part, master] as const),
-  );
   const part = "ppt/presentation.xml";
   const document = documents.get(part);
   const root = document?.documentElement;
@@ -10247,7 +10465,7 @@ function readPresentation(
     ids === undefined ? [] : elements(ids, presentationNamespace, "sldId");
   const presentationRelationships = relationships.get(part) ?? new Map();
   const slides: FileSlide[] = [];
-  const usedExtensions = new Set<ValidationExtension>();
+  const usedExtensions = new Set<ValidationExtension>(mastersRead.extensions);
   const presentationSlideIds = new Map<string, string>();
   const stableSlideIds = new Set<string>();
   slideIds.forEach((slideId, index) => {
@@ -10350,7 +10568,7 @@ function readPresentation(
     const matchedMaster =
       slideMasterPart === undefined
         ? firstMaster
-        : (masterByPart.get(slideMasterPart) ?? firstMaster);
+        : (mastersRead.masterByPart.get(slideMasterPart) ?? firstMaster);
     const slideColorMapOverride = readColorMapOverrideForPart(slideRoot);
     const slideThemeOverride = readAndValidateThemeOverride(
       slidePath,
@@ -10360,7 +10578,7 @@ function readPresentation(
       contentTypes,
       errors,
     );
-    const textTheme = themeTextReader(
+    const slideTextTheme = themeTextReader(
       documents,
       matchedMaster?.themePart ?? "ppt/theme/theme1.xml",
       matchedMaster?.part ?? "ppt/slideMasters/slideMaster1.xml",
@@ -10375,7 +10593,17 @@ function readPresentation(
       relationships,
       contentTypes,
       errors,
-      textTheme,
+      slideTextTheme,
+      matchedLayout === undefined
+        ? undefined
+        : {
+            ...(matchedLayout.placeholders === undefined
+              ? {}
+              : { layout: matchedLayout.placeholders }),
+            ...(matchedMaster?.placeholders === undefined
+              ? {}
+              : { master: matchedMaster.placeholders }),
+          },
     );
     const slideFooterPlaceholders = readFooterPlaceholders(
       slideTree,
@@ -10390,7 +10618,7 @@ function readPresentation(
       files,
       relationships,
       contentTypes,
-      textTheme,
+      slideTextTheme,
       errors,
     );
     const animationRead = readSlideAnimations(
@@ -10408,7 +10636,7 @@ function readPresentation(
       files,
       documents,
       relationships,
-      textTheme,
+      slideTextTheme,
       errors,
     );
     for (const extension of transition.extensions) {

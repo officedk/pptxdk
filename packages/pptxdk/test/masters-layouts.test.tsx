@@ -344,9 +344,23 @@ describe("explicit SlideMaster and SlideLayout ownership", () => {
     assert.equal(validatedLayout1?.objects?.length, 1);
     assert.equal(validatedLayout1?.objects?.[0]?.name, "TextBox 6");
     assert.equal(validatedLayout1?.objects?.[0]?.boxEmu.x, nextX * 9525);
-    // Shared layout object stays in slideLayout1.xml, not flattened into slides.
-    assert.equal(validated.slides[0]?.objects.length, 0);
-    assert.equal(validated.slides[1]?.objects.length, 0);
+    // Shared layout object stays in slideLayout1.xml, not flattened into slides (slides only hold their own placeholders).
+    assert.equal(
+      validated.slides[0]?.objects.some((o) => o.name === "TextBox 6"),
+      false,
+    );
+    assert.equal(
+      validated.slides[1]?.objects.some((o) => o.name === "TextBox 6"),
+      false,
+    );
+    assert.equal(
+      validated.slides[0]?.objects.every((o) => o.placeholder !== undefined),
+      true,
+    );
+    assert.equal(
+      validated.slides[1]?.objects.every((o) => o.placeholder !== undefined),
+      true,
+    );
     assert.equal(validated.slides[0]?.footerPlaceholders, undefined);
     assert.deepEqual(
       validated.slides[1]?.footerPlaceholders?.map((p) => p.kind),

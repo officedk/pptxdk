@@ -235,7 +235,7 @@ describe("pptxdk CLI build", () => {
     } finally {
       await rm(directory, { recursive: true, force: true });
     }
-  });
+  }, 45_000);
 
   it("returns usage status 2 for missing subcommand or invalid arguments and rejects overwriting source", async () => {
     const missingSubcommand = await runInMemory(

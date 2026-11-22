@@ -473,7 +473,16 @@ export function paint(
 
     const fallbackBackground =
       internal.mastersCanvas !== undefined
-        ? internal.mastersCanvas.paintBackdrop(slide.theme).svg
+        ? internal.mastersCanvas.paintBackdrop({
+            theme: slide.theme,
+            ...(slide.hasCustomColorMap ? { hasCustomColorMap: true } : {}),
+            ...(slide.effectiveColorMapOverride === undefined
+              ? {}
+              : { colorMapOverride: slide.effectiveColorMapOverride }),
+            ...(slide.effectiveThemeOverride === undefined
+              ? {}
+              : { themeOverride: slide.effectiveThemeOverride }),
+          }).svg
         : defaultCanvasBackground;
     const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${internal.dimensions.width}" height="${internal.dimensions.height}" viewBox="0 0 ${internal.dimensions.width} ${internal.dimensions.height}">${background ?? fallbackBackground}${masterLayersSvg}${layoutLayersSvg}${shapeTreeCapSvg}${layers}</svg>`;
     const Resvg = getResvg();

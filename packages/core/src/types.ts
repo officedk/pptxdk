@@ -7,7 +7,12 @@ import type {
 } from "#/masters.ts";
 import type { NativeMechanismDefinition } from "#/mechanisms.ts";
 import type { MorphKey } from "#/morph.ts";
-import type { PlaceholderResolutionContext } from "#/placeholders.ts";
+import type {
+  LayoutPlaceholderSpec,
+  MasterPlaceholderSpec,
+  MasterTextStyles,
+  PlaceholderResolutionContext,
+} from "#/placeholders.ts";
 import {
   formatBaseline,
   targets,
@@ -21,7 +26,13 @@ import {
   type Target,
   type TargetName,
 } from "#/stage-options.ts";
-import type { ThemeContext } from "#/theme.ts";
+import type {
+  ColorMap,
+  ColorMapOverride,
+  Theme,
+  ThemeContext,
+  ThemeOverride,
+} from "#/theme.ts";
 
 export type { AuthorId } from "#/author-ids.ts";
 export type {
@@ -811,6 +822,69 @@ export type BoundSlideCapability = {
   resolveSlide(context: SlideResolveContext): ResolvedSlide;
 };
 
+export type PptxRelationship = {
+  readonly id: string;
+  readonly type: string;
+  readonly target: string;
+  readonly targetMode?: "External";
+};
+
+export type EmittedSlideLayoutSpec = {
+  readonly key: string;
+  readonly name?: string;
+  readonly type?: string;
+  readonly preserve?: boolean;
+  readonly matchingName?: string;
+  readonly userDrawn?: boolean;
+  readonly showMasterShapes?: boolean;
+  readonly showMasterPlaceholderAnimations?: boolean;
+  readonly placeholders?: Readonly<Record<string, LayoutPlaceholderSpec>>;
+  readonly placeholderSpPrByKey?: Readonly<Record<string, string>>;
+  readonly colorMapOverride?: ColorMapOverride;
+  readonly themeOverride?: ThemeOverride;
+  readonly headerFooter?: HeaderFooter;
+  readonly backgroundXml?: string;
+  readonly shapeXml?: string;
+  readonly extraRelationships?: readonly PptxRelationship[];
+  readonly transitionXml?: string;
+  readonly timingXml?: string;
+};
+
+export type EmittedSlideMasterSpec = {
+  readonly key: string;
+  readonly name?: string;
+  readonly preserve?: boolean;
+  readonly theme?: Theme;
+  readonly themeContext?: ThemeContext;
+  readonly colorMap?: ColorMap;
+  readonly headerFooter?: HeaderFooter;
+  readonly backgroundXml?: string;
+  readonly shapeXml?: string;
+  readonly extraRelationships?: readonly PptxRelationship[];
+  readonly placeholders?: Readonly<Record<string, MasterPlaceholderSpec>>;
+  readonly placeholderSpPrByKey?: Readonly<Record<string, string>>;
+  readonly textStyles?: MasterTextStyles;
+  readonly transitionXml?: string;
+  readonly timingXml?: string;
+  readonly layouts: readonly EmittedSlideLayoutSpec[];
+};
+
+export type MastersEmitDriver = {
+  emitMaster(
+    spec: EmittedSlideMasterSpec,
+    layoutIds: readonly { readonly id: number; readonly rId: string }[],
+    themeContext: ThemeContext,
+  ): string;
+  emitLayout(spec: EmittedSlideLayoutSpec, themeContext: ThemeContext): string;
+  emitTheme(theme: Theme): string;
+  emitColorMap(model: {
+    readonly colorMap?: ColorMap;
+    readonly colorMapOverride?: ColorMapOverride;
+  }): string;
+  emitThemeOverride(override: ThemeOverride, baseTheme?: Theme): string;
+  emitSharedCanvas(fragments: readonly string[]): string;
+};
+
 /** Slide capability module that binds per-build slide declaration state into a closed handle. */
 export type SlideCapabilityModule<
   Bound extends BoundSlideCapability = BoundSlideCapability,
@@ -829,12 +903,17 @@ export type SlideCapabilityModule<
   readonly transparentDeclarations?: readonly TransparentCapabilityModule[];
   readonly mechanisms?: readonly NativeMechanismDefinition[];
   readonly mastersCanvas?: {
-    paintBackdrop(themeContext: ThemeContext): PaintOutput;
+    paintBackdrop(input: {
+      readonly theme: ThemeContext;
+      readonly hasCustomColorMap?: boolean;
+      readonly colorMapOverride?: ColorMapOverride;
+      readonly themeOverride?: ThemeOverride;
+    }): PaintOutput;
     paintMasterLayers(fragments: readonly string[]): PaintOutput;
     paintLayoutLayers(fragments: readonly string[]): PaintOutput;
     paintSharedObject(svg: string): PaintOutput;
   };
-  readonly mastersEmitDriver?: unknown;
+  readonly mastersEmitDriver?: MastersEmitDriver;
   bindSections?(
     sections: readonly {
       readonly name: string;

@@ -3,12 +3,17 @@ import { createHash } from "node:crypto";
 import type {
   HeaderFooter,
   LayoutPlaceholderSpec,
-  MasterPlaceholderSpec,
   MasterTextStyles,
   NativePlaceholderRef,
   PlaceholderLevelStyle,
   PlaceholderListStyles,
 } from "@pptxdk/core";
+import type {
+  EmittedSlideLayoutSpec,
+  EmittedSlideMasterSpec,
+  MastersEmitDriver,
+  PptxRelationship,
+} from "@pptxdk/core/capability";
 import {
   createThemeContext,
   defaultColorMap,
@@ -148,11 +153,11 @@ export type PptxPackageResource = {
   readonly contentType: string;
 };
 
-export type PptxRelationship = {
-  readonly id: string;
-  readonly type: string;
-  readonly target: string;
-  readonly targetMode?: "External";
+export type {
+  EmittedSlideLayoutSpec,
+  EmittedSlideMasterSpec,
+  MastersEmitDriver,
+  PptxRelationship,
 };
 
 export type PptxPackagePart = {
@@ -164,62 +169,6 @@ export type PptxPackagePart = {
 export type PptxPackageRelationshipSet = {
   readonly sourcePath: string;
   readonly relationships: readonly PptxRelationship[];
-};
-
-export type EmittedSlideLayoutSpec = {
-  readonly key: string;
-  readonly name?: string;
-  readonly type?: string;
-  readonly preserve?: boolean;
-  readonly matchingName?: string;
-  readonly userDrawn?: boolean;
-  readonly showMasterShapes?: boolean;
-  readonly showMasterPlaceholderAnimations?: boolean;
-  readonly placeholders?: Readonly<Record<string, LayoutPlaceholderSpec>>;
-  readonly placeholderSpPrByKey?: Readonly<Record<string, string>>;
-  readonly colorMapOverride?: ColorMapOverride;
-  readonly themeOverride?: ThemeOverride;
-  readonly headerFooter?: HeaderFooter;
-  readonly backgroundXml?: string;
-  readonly shapeXml?: string;
-  readonly extraRelationships?: readonly PptxRelationship[];
-  readonly transitionXml?: string;
-  readonly timingXml?: string;
-};
-
-export type EmittedSlideMasterSpec = {
-  readonly key: string;
-  readonly name?: string;
-  readonly preserve?: boolean;
-  readonly theme?: Theme;
-  readonly themeContext?: ThemeContext;
-  readonly colorMap?: ColorMap;
-  readonly headerFooter?: HeaderFooter;
-  readonly backgroundXml?: string;
-  readonly shapeXml?: string;
-  readonly extraRelationships?: readonly PptxRelationship[];
-  readonly placeholders?: Readonly<Record<string, MasterPlaceholderSpec>>;
-  readonly placeholderSpPrByKey?: Readonly<Record<string, string>>;
-  readonly textStyles?: MasterTextStyles;
-  readonly transitionXml?: string;
-  readonly timingXml?: string;
-  readonly layouts: readonly EmittedSlideLayoutSpec[];
-};
-
-export type MastersEmitDriver = {
-  emitMaster(
-    spec: EmittedSlideMasterSpec,
-    layoutIds: readonly { readonly id: number; readonly rId: string }[],
-    themeContext: ThemeContext,
-  ): string;
-  emitLayout(spec: EmittedSlideLayoutSpec, themeContext: ThemeContext): string;
-  emitTheme(theme: Theme): string;
-  emitColorMap(model: {
-    readonly colorMap?: ColorMap;
-    readonly colorMapOverride?: ColorMapOverride;
-  }): string;
-  emitThemeOverride(override: ThemeOverride, baseTheme?: Theme): string;
-  emitSharedCanvas(fragments: readonly string[]): string;
 };
 
 const defaultEmittedMasters: readonly EmittedSlideMasterSpec[] = [
@@ -920,8 +869,8 @@ export function masterXml(
   spec: EmittedSlideMasterSpec,
   layoutIds: readonly { readonly id: number; readonly rId: string }[],
   themeContext: ThemeContext,
+  colorMapXml: string = `<p:clrMap ${colorMapAttributesXml(spec.colorMap ?? defaultColorMap)}/>`,
 ): string {
-  const colorMap = `<p:clrMap ${colorMapAttributesXml(spec.colorMap ?? defaultColorMap)}/>`;
   const preserveAttr =
     spec.preserve === undefined
       ? ""
@@ -936,13 +885,14 @@ export function masterXml(
   const shapes = `${placeholderShapesXml(spec.placeholders, themeContext, spec.placeholderSpPrByKey)}${spec.shapeXml ?? ""}`;
   const txStyles = masterTextStylesXml(spec.textStyles, themeContext);
   return xmlDocument(
-    `<p:sldMaster xmlns:a="${namespaces.a}" xmlns:r="${namespaces.r}" xmlns:p="${namespaces.p}"${preserveAttr}><p:cSld${nameAttr}>${spec.backgroundXml ?? ""}${shapeTreeXml(shapes)}</p:cSld>${colorMap}<p:sldLayoutIdLst>${layoutIdList}</p:sldLayoutIdLst>${spec.transitionXml ?? ""}${spec.timingXml ?? ""}${headerFooterXml(spec.headerFooter)}${txStyles}</p:sldMaster>`,
+    `<p:sldMaster xmlns:a="${namespaces.a}" xmlns:r="${namespaces.r}" xmlns:p="${namespaces.p}"${preserveAttr}><p:cSld${nameAttr}>${spec.backgroundXml ?? ""}${shapeTreeXml(shapes)}</p:cSld>${colorMapXml}<p:sldLayoutIdLst>${layoutIdList}</p:sldLayoutIdLst>${spec.transitionXml ?? ""}${spec.timingXml ?? ""}${headerFooterXml(spec.headerFooter)}${txStyles}</p:sldMaster>`,
   );
 }
 
 export function layoutXml(
   spec: EmittedSlideLayoutSpec,
   themeContext: ThemeContext,
+  colorMapOvrXml: string = colorMapOverrideXml(spec.colorMapOverride),
 ): string {
   const typeAttr =
     spec.type === undefined ? "" : ` type="${xmlEscape(spec.type)}"`;
@@ -968,7 +918,7 @@ export function layoutXml(
     spec.name === undefined ? "" : ` name="${xmlEscape(spec.name)}"`;
   const shapes = `${placeholderShapesXml(spec.placeholders, themeContext, spec.placeholderSpPrByKey)}${spec.shapeXml ?? ""}`;
   return xmlDocument(
-    `<p:sldLayout xmlns:a="${namespaces.a}" xmlns:r="${namespaces.r}" xmlns:p="${namespaces.p}"${typeAttr}${preserveAttr}${matchingNameAttr}${userDrawnAttr}${showMasterSpAttr}${showMasterPhAnimAttr}><p:cSld${nameAttr}>${spec.backgroundXml ?? ""}${shapeTreeXml(shapes)}</p:cSld>${colorMapOverrideXml(spec.colorMapOverride)}${spec.transitionXml ?? ""}${spec.timingXml ?? ""}${headerFooterXml(spec.headerFooter)}</p:sldLayout>`,
+    `<p:sldLayout xmlns:a="${namespaces.a}" xmlns:r="${namespaces.r}" xmlns:p="${namespaces.p}"${typeAttr}${preserveAttr}${matchingNameAttr}${userDrawnAttr}${showMasterSpAttr}${showMasterPhAnimAttr}><p:cSld${nameAttr}>${spec.backgroundXml ?? ""}${shapeTreeXml(shapes)}</p:cSld>${colorMapOvrXml}${spec.transitionXml ?? ""}${spec.timingXml ?? ""}${headerFooterXml(spec.headerFooter)}</p:sldLayout>`,
   );
 }
 

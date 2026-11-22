@@ -48,7 +48,6 @@ import {
   hasThemeOverrideContent,
   pptxParts,
   type EmittedSlideMasterSpec,
-  type MastersEmitDriver,
   type PptxPackagePart,
   type PptxPackageRelationshipSet,
   type PptxPackageResource,
@@ -1559,9 +1558,7 @@ export function emit(
     sectionXml = internal.sectionsEmitter.emit().xml;
   }
 
-  const mastersEmitDriver = internal.mastersEmitDriver as
-    | MastersEmitDriver
-    | undefined;
+  const mastersEmitDriver = internal.mastersEmitDriver;
   const slideIndexById = new Map(
     internal.slides.map((slide) => [slide.id, slide.index] as const),
   );

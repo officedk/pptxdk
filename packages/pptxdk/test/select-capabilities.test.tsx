@@ -646,4 +646,80 @@ process.stdout.write(JSON.stringify(texts));
       [0x1e, 0x29, 0x3b],
     );
   });
+
+  it("paints backdrop SVG and PNG across nativeTheme, custom colorMap, and themeOverride paths", async () => {
+    const plainTheme = defineTheme({
+      name: "PlainBackdrop",
+      colors: { lt1: "#EFF6FF", dk1: "#0F172A" },
+    });
+    const invertedTheme = defineTheme({
+      name: "InvertedBackdrop",
+      colors: { dk1: "#1E293B", lt1: "#F8FAFC" },
+    });
+    const plainLayout = defineSlideLayout({
+      id: "plain-blank",
+      name: "Plain Blank",
+      type: "blank",
+    });
+    const invertedLayout = defineSlideLayout({
+      id: "inv-blank",
+      name: "Inverted Blank",
+      type: "blank",
+    });
+
+    const resolution = await resolveTrimmed(
+      <Deck width={320} height={180}>
+        <SlideMaster id="m-plain" theme={plainTheme}>
+          <SlideLayout layout={plainLayout} />
+        </SlideMaster>
+        <SlideMaster
+          id="m-inv"
+          theme={invertedTheme}
+          colorMap={{
+            ...defaultColorMap,
+            bg1: "dk1",
+            tx1: "lt1",
+            bg2: "dk2",
+            tx2: "lt2",
+          }}
+        >
+          <SlideLayout layout={invertedLayout} />
+        </SlideMaster>
+        <Slide id="s-plain" layout={plainLayout} />
+        <Slide id="s-custom-cmap" layout={invertedLayout} />
+        <Slide
+          id="s-theme-ovr"
+          layout={plainLayout}
+          themeOverride={{ colors: { lt1: "#FEF2F2" } }}
+        />
+      </Deck>,
+      { capabilities: ["masters"] },
+    );
+
+    const painted = paint(resolution);
+    assert.equal(painted.pages.length, 3);
+    const expected = [
+      { hex: "#EFF6FF", rgb: [0xef, 0xf6, 0xff] },
+      { hex: "#1E293B", rgb: [0x1e, 0x29, 0x3b] },
+      { hex: "#FEF2F2", rgb: [0xfe, 0xf2, 0xf2] },
+    ] as const;
+    for (const [pageIndex, spec] of expected.entries()) {
+      const page = painted.pages[pageIndex];
+      assert.ok(page);
+      assert.deepEqual(page.diagnostics, []);
+      assert.match(
+        page.svg ?? "",
+        new RegExp(
+          `<rect width="100%" height="100%" fill="${spec.hex}"/>`,
+          "u",
+        ),
+      );
+      const png = PNG.sync.read(Buffer.from(page.png!));
+      const idx = (10 * png.width + 10) * 4;
+      assert.deepEqual(
+        [png.data[idx], png.data[idx + 1], png.data[idx + 2]],
+        spec.rgb,
+      );
+    }
+  });
 });

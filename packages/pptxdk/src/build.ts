@@ -20,6 +20,7 @@ import {
 } from "@pptxdk/core/build";
 import type { CommonNode } from "@pptxdk/core/document";
 import { emit, validateOptions } from "@pptxdk/emit";
+import { ImportError, createImporter } from "@pptxdk/import";
 import type { ReactNode } from "react";
 import { z } from "zod";
 
@@ -252,7 +253,9 @@ export async function build(
 export {
   BuildError,
   CapabilityError,
+  ImportError,
   buildOptionsSchema,
+  createImporter,
   createResolver,
   diagnosticSchema,
   diagnosticSeveritySchema,
@@ -267,6 +270,16 @@ export {
   targetSchema,
   targets,
 };
+export type {
+  CascadedOmission,
+  EditabilityLoss,
+  FatalImportIssue,
+  ImportDiagnostic,
+  ImportLocation,
+  ImportOptions,
+  ImportReport,
+  ImportResult,
+} from "@pptxdk/import";
 export type {
   BuildOptions,
   BuildReport,

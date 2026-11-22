@@ -29,6 +29,11 @@ export {
   validateTextStyle,
 } from "#/theme.ts";
 export { createMorphScope, getMorphKeyLabel, isMorphKey } from "#/morph.ts";
+export type {
+  CanvasMechanismDefinition,
+  NativeMechanismDefinition,
+  ShowMechanismDefinition,
+} from "#/mechanisms.ts";
 export type { MorphKey, MorphScope } from "#/morph.ts";
 export {
   layoutStyleKeys,
@@ -112,6 +117,7 @@ export type {
   PaintOutput,
   PreviewTransform,
   PreviewWarning,
+  RegisteredCapabilityModule,
   Resolution,
   ResolutionReport,
   ResolvedLink,

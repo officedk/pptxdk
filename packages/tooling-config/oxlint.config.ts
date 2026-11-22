@@ -48,7 +48,7 @@ export default defineConfig({
                   "@pptxdk/react/*",
                 ],
                 message:
-                  "Capabilities production source must only depend on core/emit stage contracts; preview and react are test-only devDependencies.",
+                  "Capabilities production source must only depend on core/emit/import stage contracts; preview and react are test-only devDependencies.",
               },
             ],
           },

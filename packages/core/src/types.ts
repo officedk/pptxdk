@@ -1,3 +1,4 @@
+import type { NativeMechanismDefinition } from "#/mechanisms.ts";
 import type { MorphKey } from "#/morph.ts";
 import {
   formatBaseline,
@@ -740,6 +741,7 @@ export type ObjectCapabilityModule<
   Bound extends BoundObjectCapability = BoundObjectCapability,
 > = {
   readonly declaration: string;
+  readonly mechanisms?: readonly NativeMechanismDefinition[];
   bind(input: CapabilityInput, context: CapabilityParseContext): Bound;
 };
 
@@ -862,6 +864,7 @@ export type SlideCapabilityModule<
   readonly declaration: string;
   /** Handlers wired by this capability for internal transparent declaration hosts. */
   readonly transparentDeclarations?: readonly TransparentCapabilityModule[];
+  readonly mechanisms?: readonly NativeMechanismDefinition[];
   bindSlide(
     input: CapabilityInput,
     context: SlideCapabilityParseContext,

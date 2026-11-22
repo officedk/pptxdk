@@ -408,12 +408,17 @@ export type ContributionResolver = (
   contributions: readonly CapabilityContribution[],
 ) => readonly CapabilityContribution[];
 
-export type CapabilityResource = {
-  readonly bytes: Uint8Array;
-  readonly extension: string;
-  readonly contentType: string;
-  readonly relationshipType: string;
-};
+export type CapabilityResource =
+  | {
+      readonly bytes: Uint8Array;
+      readonly extension: string;
+      readonly contentType: string;
+      readonly relationshipType: string;
+    }
+  | {
+      readonly externalTarget: string;
+      readonly relationshipType: string;
+    };
 
 /** A slide native part and binary resources it references via part relationships. */
 export type CapabilityPackagePart = {

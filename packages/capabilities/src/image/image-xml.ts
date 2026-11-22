@@ -5,8 +5,8 @@ export function imageXml(
   id: number,
   escapedName: string,
   escapedAlt: string | undefined,
-  relationshipId: string,
-  box: { x: number; y: number; width: number; height: number },
+  blipRef: { readonly kind: "embed" | "link"; readonly relationshipId: string },
+  _box: { x: number; y: number; width: number; height: number },
   crop: Record<string, number>,
   properties: string,
   opacity: number | undefined,
@@ -25,5 +25,9 @@ export function imageXml(
     opacity === undefined
       ? ""
       : `<a:alphaModFix amt="${Math.round(opacity * 100000)}"/>`;
-  return `<p:pic><p:nvPicPr><p:cNvPr id="${id}" name="${escapedName}"${description}>${linkXml}</p:cNvPr><p:cNvPicPr><a:picLocks noChangeAspect="1"/></p:cNvPicPr><p:nvPr/></p:nvPicPr><p:blipFill><a:blip r:embed="${xmlEscape(relationshipId)}">${alpha}</a:blip>${cropXml}<a:stretch><a:fillRect/></a:stretch></p:blipFill>${properties}</p:pic>`;
+  const blipAttr =
+    blipRef.kind === "link"
+      ? `r:link="${xmlEscape(blipRef.relationshipId)}"`
+      : `r:embed="${xmlEscape(blipRef.relationshipId)}"`;
+  return `<p:pic><p:nvPicPr><p:cNvPr id="${id}" name="${escapedName}"${description}>${linkXml}</p:cNvPr><p:cNvPicPr><a:picLocks noChangeAspect="1"/></p:cNvPicPr><p:nvPr/></p:nvPicPr><p:blipFill><a:blip ${blipAttr}>${alpha}</a:blip>${cropXml}<a:stretch><a:fillRect/></a:stretch></p:blipFill>${properties}</p:pic>`;
 }

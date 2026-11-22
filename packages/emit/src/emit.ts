@@ -254,6 +254,41 @@ function addResource(
   context: PackageContext,
   objectId?: number,
 ): string {
+  if ("externalTarget" in resource) {
+    if (
+      typeof resource.externalTarget !== "string" ||
+      resource.externalTarget.trim() === "" ||
+      typeof resource.relationshipType !== "string" ||
+      resource.relationshipType.trim() === ""
+    ) {
+      throw new CapabilityError(
+        "invalid-resource",
+        "External resource target or relationship type is invalid",
+      );
+    }
+    try {
+      assertXml10Characters(resource.externalTarget);
+      assertXml10Characters(resource.relationshipType);
+    } catch {
+      throw new CapabilityError(
+        "invalid-resource",
+        "External resource contains characters not allowed in XML",
+      );
+    }
+    const relationshipKey = `external\u0000${resource.relationshipType}\u0000${resource.externalTarget}`;
+    const existingRelationship =
+      context.slide.relationshipIds.get(relationshipKey);
+    if (existingRelationship !== undefined) return existingRelationship;
+    const id = `rId${context.slide.relationships.length + 2}`;
+    context.slide.relationshipIds.set(relationshipKey, id);
+    context.slide.relationships.push({
+      id,
+      type: resource.relationshipType,
+      target: resource.externalTarget,
+      targetMode: "External",
+    });
+    return id;
+  }
   if (
     !(resource.bytes instanceof Uint8Array) ||
     resource.bytes.byteLength === 0

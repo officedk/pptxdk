@@ -4,7 +4,6 @@ import {
   layoutStyleKeys,
   parseCapabilityLayoutContract,
   type BoundObjectCapability,
-  type BoundObjectCapabilityModule,
   type BoundObjectNativeCollaboration,
   type CapabilityInput,
   type CapabilityLayoutMeasurement,
@@ -14,16 +13,22 @@ import {
   type EmitOutput,
   type GeometryBox,
   type MorphKey,
+  type ObjectCapabilityModule,
   type ObjectResolveContext,
   type PaintContext,
   type PaintOutput,
   type ResolvedObject,
 } from "@pptxdk/core/capability";
 import { assertXml10Characters, pxToEmu, xmlEscape } from "@pptxdk/emit";
+import { defineCanvasMechanism } from "@pptxdk/import";
 
 import { motionAnnotations } from "../motion/motion-api.ts";
 import { evaluateGeometry, type Geometry } from "../shared/geometry.ts";
-import { nativeLinkXml, parseLinkTarget } from "../shared/identity.ts";
+import {
+  nativeLinkXml,
+  parseLinkTarget,
+  parseOptionalName,
+} from "../shared/identity.ts";
 import {
   emitVisualModel,
   resolveVisualModel,
@@ -31,24 +36,34 @@ import {
   type ResolvedBorder,
   type ResolvedVisualModel,
 } from "../shared/visual.ts";
-import { imageVisualStyleKeys } from "./image-declaration.ts";
+import { imageVisualStyleKeys, type ImageFit } from "./image-declaration.ts";
 import {
   decodeImageToPngBytes,
   readImage,
   type LoadedImage,
 } from "./image-decode.ts";
+import { imageImportHandler } from "./image-import.ts";
+import {
+  ExternalImageSourceSchema,
+  ImageCoordinateValueSchema,
+  ImageCropInputSchema,
+  ImageExtentValueSchema,
+  ImageFitSchema,
+  ImageSourceSchema,
+} from "./image-schemas.ts";
 import { imageXml } from "./image-xml.ts";
 
 export { readImage, type LoadedImage } from "./image-decode.ts";
 export {
   createImageNode,
   imageVisualStyleKeys,
+  type ExternalImageSource,
+  type ImageCropInput,
   type ImageDeclarationProps,
+  type ImageFit,
   type ImageSource,
   type ImageVisualStyle,
 } from "./image-declaration.ts";
-
-type ImageFit = "fill" | "cover" | "contain";
 
 type ImageCrop = {
   readonly l: number;
@@ -62,9 +77,13 @@ type ImagePlacement = {
   readonly sourceCrop: ImageCrop;
 };
 
+type ResolvedImageSource =
+  | ({ readonly kind: "embedded" } & LoadedImage)
+  | { readonly kind: "external"; readonly externalUrl: string };
+
 /** Closed resolved image model produced in resolve() and exhaustively consumed by emit and paint. */
 type ResolvedImageModel = {
-  readonly image: LoadedImage;
+  readonly image: ResolvedImageSource;
   readonly placement: ImagePlacement;
   readonly visual: ResolvedVisualModel;
   readonly name: string;
@@ -97,6 +116,9 @@ function borderStrokeAttributes(border: ResolvedBorder): string {
   return `stroke="#${border.color.hex}" stroke-opacity="${roundSvgNumber(border.color.alpha ?? 1)}" stroke-width="${roundSvgNumber(border.width)}"${dashAttr}`;
 }
 
+const imageRelationshipType =
+  "http://schemas.openxmlformats.org/officeDocument/2006/relationships/image";
+
 function emitImageModel(
   model: ResolvedImageModel,
   emitContext: EmitContext,
@@ -108,13 +130,18 @@ function emitImageModel(
   const escapedAlt = model.alt === undefined ? undefined : xmlEscape(model.alt);
   let relationshipId: string;
   try {
-    relationshipId = emitContext.registerResource({
-      bytes: model.image.bytes,
-      extension: model.image.extension,
-      contentType: model.image.contentType,
-      relationshipType:
-        "http://schemas.openxmlformats.org/officeDocument/2006/relationships/image",
-    });
+    relationshipId =
+      model.image.kind === "external"
+        ? emitContext.registerResource({
+            externalTarget: model.image.externalUrl,
+            relationshipType: imageRelationshipType,
+          })
+        : emitContext.registerResource({
+            bytes: model.image.bytes,
+            extension: model.image.extension,
+            contentType: model.image.contentType,
+            relationshipType: imageRelationshipType,
+          });
   } catch (error) {
     if (error instanceof CapabilityError) throw error;
     throw new CapabilityError(
@@ -138,7 +165,10 @@ function emitImageModel(
       emitContext.id,
       escapedName,
       escapedAlt,
-      relationshipId,
+      {
+        kind: model.image.kind === "external" ? "link" : "embed",
+        relationshipId,
+      },
       model.placement.box,
       serializedCrop,
       properties.xml,
@@ -157,9 +187,39 @@ function paintImageModel(
   paintContext: PaintContext,
 ): PaintOutput {
   const { image, placement, visual } = model;
+  const { box, sourceCrop } = placement;
+
+  if (image.kind === "external") {
+    const evaluated = evaluateGeometry(visual.geometry, box);
+    const placeholderShapes = evaluated.paths
+      .filter((pathItem) => pathItem.fillMode !== "none" && pathItem.d !== "")
+      .map(
+        (pathItem) =>
+          `<path d="${pathItem.d}" fill="#F1F5F9" stroke="#94A3B8" stroke-width="1" stroke-dasharray="4 4"/>`,
+      )
+      .join("");
+    const borderElements =
+      visual.border !== undefined
+        ? evaluated.paths
+            .filter((pathItem) => pathItem.stroke && pathItem.d !== "")
+            .map(
+              (pathItem) =>
+                `<path d="${pathItem.d}" fill="none" ${borderStrokeAttributes(visual.border!)}/>`,
+            )
+            .join("")
+        : "";
+    return {
+      svg: `<g transform="${visualSvgTransform(visual)}">${placeholderShapes}${borderElements}</g>`,
+      warnings: [
+        {
+          message: `External linked image (${image.externalUrl}) is unavailable offline; rendered placeholder`,
+        },
+      ],
+    };
+  }
+
   const pngBytes = decodeImageToPngBytes(image);
 
-  const { box, sourceCrop } = placement;
   const leftCrop = roundCropFraction(sourceCrop.l);
   const topCrop = roundCropFraction(sourceCrop.t);
   const rightCrop = roundCropFraction(sourceCrop.r);
@@ -262,7 +322,7 @@ function paintImageModel(
 
 /** Shared image placement calculation for native OOXML output and static preview. */
 function imagePlacement(
-  image: { readonly width: number; readonly height: number },
+  image: { readonly width?: number; readonly height?: number },
   fit: ImageFit,
   crop: Partial<ImageCrop> | undefined,
   allocated: GeometryBox,
@@ -273,29 +333,35 @@ function imagePlacement(
   let t = crop?.t ?? 0;
   let r = crop?.r ?? 0;
   let b = crop?.b ?? 0;
-  if (crop === undefined && fit === "cover") {
-    const imageRatio = image.width / image.height;
-    const boxRatio = width / height;
-    if (imageRatio > boxRatio) {
-      const excess = (1 - boxRatio / imageRatio) / 2;
-      l = excess;
-      r = excess;
-    } else if (imageRatio < boxRatio) {
-      const excess = (1 - imageRatio / boxRatio) / 2;
-      t = excess;
-      b = excess;
-    }
-  } else if (crop === undefined && fit === "contain") {
-    const imageRatio = image.width / image.height;
-    const boxRatio = width / height;
-    if (imageRatio > boxRatio) {
-      const fittedHeight = width / imageRatio;
-      box.y += (height - fittedHeight) / 2;
-      box.height = fittedHeight;
-    } else if (imageRatio < boxRatio) {
-      const fittedWidth = height * imageRatio;
-      box.x += (width - fittedWidth) / 2;
-      box.width = fittedWidth;
+  if (
+    crop === undefined &&
+    image.width !== undefined &&
+    image.height !== undefined
+  ) {
+    if (fit === "cover") {
+      const imageRatio = image.width / image.height;
+      const boxRatio = width / height;
+      if (imageRatio > boxRatio) {
+        const excess = (1 - boxRatio / imageRatio) / 2;
+        l = excess;
+        r = excess;
+      } else if (imageRatio < boxRatio) {
+        const excess = (1 - imageRatio / boxRatio) / 2;
+        t = excess;
+        b = excess;
+      }
+    } else if (fit === "contain") {
+      const imageRatio = image.width / image.height;
+      const boxRatio = width / height;
+      if (imageRatio > boxRatio) {
+        const fittedHeight = width / imageRatio;
+        box.y += (height - fittedHeight) / 2;
+        box.height = fittedHeight;
+      } else if (imageRatio < boxRatio) {
+        const fittedWidth = height * imageRatio;
+        box.x += (width - fittedWidth) / 2;
+        box.width = fittedWidth;
+      }
     }
   }
   // Dimensions derived by contain must also be representable as non-zero EMU.
@@ -331,23 +397,6 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function optionalText(
-  props: Record<string, unknown>,
-  name: "name",
-  path?: string,
-): string | undefined {
-  const value = props[name];
-  if (value === undefined) return undefined;
-  if (typeof value !== "string" || value.trim() === "") {
-    throw new CapabilityError(
-      "invalid-parameter",
-      `${name} must be a non-empty string`,
-      path,
-    );
-  }
-  return value;
-}
-
 function dimension(
   value: unknown,
   name: "x" | "y" | "width" | "height",
@@ -355,18 +404,17 @@ function dimension(
 ): number {
   const actual = value === undefined ? fallback : value;
   const isExtent = name === "width" || name === "height";
-  if (
-    typeof actual !== "number" ||
-    !Number.isFinite(actual) ||
-    (isExtent ? actual <= 0 : actual < -1_000_000 || actual > 1_000_000)
-  ) {
+  const parsed = isExtent
+    ? ImageExtentValueSchema.safeParse(actual)
+    : ImageCoordinateValueSchema.safeParse(actual);
+  if (!parsed.success) {
     throw new CapabilityError(
       "invalid-coordinate",
       `${name} must be a finite pixel number, width and height must be greater than 0, and coordinates must be between -1000000 and 1000000`,
     );
   }
   if (isExtent) {
-    const extentEmu = pxToEmu(actual);
+    const extentEmu = pxToEmu(parsed.data);
     if (extentEmu < 1 || extentEmu > maximumShapeExtentEmu) {
       throw new CapabilityError(
         "invalid-coordinate",
@@ -374,7 +422,7 @@ function dimension(
       );
     }
   }
-  return actual;
+  return parsed.data;
 }
 
 function requestedDimension(
@@ -390,74 +438,70 @@ function requestedDimension(
       : undefined;
 }
 
-function cropValues(
+function parseCropValues(
   value: unknown,
   path?: string,
 ): Partial<ImageCrop> | undefined {
   if (value === undefined) return undefined;
-  if (!isRecord(value)) {
-    throw new CapabilityError(
-      "invalid-crop",
-      "crop must be a four-sided fraction object",
-      path,
-    );
-  }
-  const crop = value;
-  const allowed = ["left", "top", "right", "bottom"] as const;
-  const unknown = Object.keys(crop).find(
-    (key) => !(allowed as readonly string[]).includes(key),
-  );
-  if (unknown !== undefined) {
-    throw new CapabilityError(
-      "unknown-parameter",
-      `crop contains unknown parameter ${unknown}`,
-      path,
-    );
-  }
-  const result: { l?: number; t?: number; r?: number; b?: number } = {};
-  const sideMap = {
-    left: "l",
-    top: "t",
-    right: "r",
-    bottom: "b",
-  } as const;
-  for (const side of allowed) {
-    const fraction = crop[side];
-    if (fraction === undefined) continue;
-    if (
-      typeof fraction !== "number" ||
-      !Number.isFinite(fraction) ||
-      fraction < 0 ||
-      fraction > 1
-    ) {
+  const parsed = ImageCropInputSchema.safeParse(value);
+  if (!parsed.success) {
+    const issue = parsed.error.issues[0];
+    if (issue?.code === "unrecognized_keys") {
       throw new CapabilityError(
-        "invalid-crop",
-        `crop.${side} must be a finite fraction between 0 and 1`,
+        "unknown-parameter",
+        `crop contains unknown parameter ${issue.keys[0]}`,
         path,
       );
     }
-    result[sideMap[side]] = fraction;
-  }
-  if ((result.l ?? 0) + (result.r ?? 0) > 1) {
     throw new CapabilityError(
       "invalid-crop",
-      "Sum of crop left and right cannot exceed 1",
+      issue?.message ?? "crop must be a four-sided fraction object",
       path,
     );
   }
-  if ((result.t ?? 0) + (result.b ?? 0) > 1) {
-    throw new CapabilityError(
-      "invalid-crop",
-      "Sum of crop top and bottom cannot exceed 1",
-      path,
-    );
-  }
-  return result;
+  const { left, top, right, bottom } = parsed.data;
+  return {
+    ...(left === undefined ? {} : { l: left }),
+    ...(top === undefined ? {} : { t: top }),
+    ...(right === undefined ? {} : { r: right }),
+    ...(bottom === undefined ? {} : { b: bottom }),
+  };
 }
 
+function readImageSource(source: unknown): ResolvedImageSource {
+  const parsed = ImageSourceSchema.safeParse(source);
+  if (!parsed.success) {
+    throw new CapabilityError(
+      "invalid-image-source",
+      "Image.src must be a file path, file URL, image bytes, or externalUrl descriptor",
+    );
+  }
+  const externalParsed = ExternalImageSourceSchema.safeParse(parsed.data);
+  if (externalParsed.success) {
+    return {
+      kind: "external",
+      externalUrl: externalParsed.data.externalUrl,
+    };
+  }
+  return {
+    kind: "embedded",
+    ...readImage(parsed.data),
+  };
+}
+
+/** Typed native canvas mechanism connecting emit, paint, and import for `image`. */
+export const imageMechanism = defineCanvasMechanism({
+  key: "image",
+  role: "canvas",
+  emit: emitImageModel,
+  paint: paintImageModel,
+  import: imageImportHandler,
+});
+
 /** Image module reads and validates formal resources, encapsulates bound state, and emits native picture objects. */
-export const imageCapability: BoundObjectCapabilityModule = {
+export const imageCapability = {
   declaration: "image",
+  mechanisms: [imageMechanism] as const,
 
   bind(
     input: CapabilityInput,
@@ -483,7 +527,7 @@ export const imageCapability: BoundObjectCapabilityModule = {
       );
     }
 
-    const requestedName = optionalText(input.props, "name");
+    const requestedName = parseOptionalName(input.props["name"]);
     const rawMorphKey = input.props["morphKey"];
     let morphKey: MorphKey | undefined;
     if (rawMorphKey !== undefined) {
@@ -520,16 +564,20 @@ export const imageCapability: BoundObjectCapabilityModule = {
       : {};
 
     const requestedFit = input.props["fit"];
-    const fit = requestedFit === undefined ? "fill" : requestedFit;
-    if (fit !== "fill" && fit !== "cover" && fit !== "contain") {
-      throw new CapabilityError(
-        "unsupported-fit",
-        "fit must be fill, cover, or contain",
-      );
+    let fit: ImageFit = "fill";
+    if (requestedFit !== undefined) {
+      const parsedFit = ImageFitSchema.safeParse(requestedFit);
+      if (!parsedFit.success) {
+        throw new CapabilityError(
+          "unsupported-fit",
+          "fit must be fill, cover, or contain",
+        );
+      }
+      fit = parsedFit.data;
     }
 
-    const crop = cropValues(input.props["crop"]);
-    const image = readImage(input.props["src"]);
+    const crop = parseCropValues(input.props["crop"]);
+    const image = readImageSource(input.props["src"]);
     const geometry = input.props["geometry"] as Geometry | undefined;
     const flipH = input.props["flipH"] as boolean | undefined;
     const flipV = input.props["flipV"] as boolean | undefined;
@@ -583,11 +631,22 @@ export const imageCapability: BoundObjectCapabilityModule = {
 
       measureLayout(
         request: CapabilityLayoutRequest,
-      ): CapabilityLayoutMeasurement {
+      ): CapabilityLayoutMeasurement | undefined {
         const declaredWidth =
           typeof requestedWidth === "number" ? requestedWidth : undefined;
         const declaredHeight =
           typeof requestedHeight === "number" ? requestedHeight : undefined;
+        if (image.kind === "external") {
+          if (declaredWidth !== undefined && declaredHeight !== undefined) {
+            return {
+              width: declaredWidth,
+              height: declaredHeight,
+              minContentWidth: declaredWidth,
+              minContentHeight: declaredHeight,
+            };
+          }
+          return undefined;
+        }
         const width =
           declaredWidth ??
           Math.min(image.width, request.availableWidth ?? image.width);
@@ -608,6 +667,9 @@ export const imageCapability: BoundObjectCapabilityModule = {
         if (resolveContext.layoutBox !== undefined) {
           width = dimension(resolveContext.layoutBox.width, "width");
           height = dimension(resolveContext.layoutBox.height, "height");
+        } else if (image.kind === "external") {
+          width = dimension(requestedWidth, "width");
+          height = dimension(requestedHeight, "height");
         } else if (
           requestedWidth === undefined &&
           requestedHeight === undefined
@@ -627,12 +689,12 @@ export const imageCapability: BoundObjectCapabilityModule = {
         width = dimension(width, "width");
         height = dimension(height, "height");
 
-        const placement = imagePlacement(image, fit, crop, {
-          x,
-          y,
-          width,
-          height,
-        });
+        const placement = imagePlacement(
+          image.kind === "external" ? {} : image,
+          fit,
+          crop,
+          { x, y, width, height },
+        );
         const { box } = placement;
         const resolvedVisual = resolveVisualModel({
           theme: resolveContext.theme,
@@ -708,4 +770,4 @@ export const imageCapability: BoundObjectCapabilityModule = {
       },
     };
   },
-};
+} satisfies ObjectCapabilityModule;

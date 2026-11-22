@@ -25,7 +25,8 @@ import {
   type ResolvedObject,
   type ThemeContext,
 } from "@pptxdk/core/capability";
-import { assertXml10Characters, pxToEmu, xmlEscape } from "@pptxdk/emit";
+import { assertXml10Characters, xmlEscape } from "@pptxdk/emit";
+import { defineCanvasMechanism } from "@pptxdk/import";
 
 import {
   fontPresentationContributions,
@@ -43,12 +44,30 @@ import {
   parseTextParagraphs,
   renderTextOutlinesSvg,
   resolveTextBody,
-  textExtent,
   type Paragraph,
   type ResolvedTextBody,
   type ResolvedTextStyle,
 } from "../shared/text-service.ts";
 import type { TableVerticalAlign } from "./table-declaration.ts";
+import { tableImportHandler } from "./table-import.ts";
+import {
+  assertAllowedTableKeys,
+  assertTableEmuExtent,
+  cellAllowedParameters,
+  cellStyleKeys,
+  parseOptionalTableId,
+  parseTableCellBorder,
+  parseTableCellPadding,
+  parseTableColumns,
+  parseTableCoordinate,
+  parseTableMergeSpan,
+  parseTablePositiveSize,
+  parseTableVerticalAlign,
+  rowAllowedParameters,
+  rowStyleKeys,
+  tableAllowedParameters,
+  type TableTrack,
+} from "./table-schemas.ts";
 import {
   emptyTableCellXml,
   tableCellPropertiesXml,
@@ -76,11 +95,7 @@ export {
   type TableVerticalAlign,
 } from "./table-declaration.ts";
 
-type Track =
-  | { readonly kind: "px"; readonly value: number }
-  | { readonly kind: "fr"; readonly value: number }
-  | { readonly kind: "auto" };
-
+type Track = TableTrack;
 type Edges = TableCellPadding;
 
 type ParsedCell = {
@@ -106,36 +121,6 @@ type ParsedRow = {
   readonly verticalAlign?: TableVerticalAlign;
   readonly fill?: ResolvedColor;
 };
-const rowStyleKeys = ["height", "backgroundColor"] as const;
-const cellStyleKeys = [
-  "backgroundColor",
-  "borderColor",
-  "borderWidth",
-  "borderStyle",
-  "padding",
-  "paddingTop",
-  "paddingRight",
-  "paddingBottom",
-  "paddingLeft",
-] as const;
-const tableParameters = [
-  "id",
-  "name",
-  "morphKey",
-  "link",
-  "x",
-  "y",
-  "width",
-  "columns",
-  "style",
-  "children",
-  "enter",
-  "emphasis",
-  "motion",
-] as const;
-const tablePartParameters = ["id", "style"] as const;
-const cellParameters = [...tablePartParameters, "colSpan", "rowSpan"] as const;
-const verticalAlignments = new Set(["top", "middle", "bottom"]);
 const maximumExtentEmu = 2_147_483_647;
 
 function fail(code: string, message: string, path?: string): never {
@@ -156,73 +141,8 @@ function record(
   return value;
 }
 
-function onlyKeys(
-  value: Record<string, unknown>,
-  allowed: readonly string[],
-  label: string,
-  path?: string,
-): void {
-  const unknown = Object.keys(value).find((key) => !allowed.includes(key));
-  if (unknown !== undefined) {
-    fail(
-      "unknown-parameter",
-      `${label} contains unsupported parameter ${unknown}`,
-      path,
-    );
-  }
-}
-
-function optionalName(
-  value: unknown,
-  label: "id" | "name",
-  path?: string,
-): string | undefined {
-  if (value === undefined) return undefined;
-  if (typeof value !== "string" || value.trim() === "") {
-    fail("invalid-parameter", `${label} must be a non-empty string`, path);
-  }
-  return value;
-}
-
 function pathLabel(value: unknown, fallback: string): string {
   return typeof value === "string" && value.trim() !== "" ? value : fallback;
-}
-
-function coordinate(value: unknown, label: "x" | "y"): number {
-  if (value === undefined && (label === "x" || label === "y")) {
-    return 0;
-  }
-  if (
-    typeof value !== "number" ||
-    !Number.isFinite(value) ||
-    value < -1_000_000 ||
-    value > 1_000_000
-  ) {
-    fail(
-      "invalid-table-geometry",
-      `${label} must be a finite pixel number between -1000000 and 1000000`,
-    );
-  }
-  return value;
-}
-
-function positiveSize(value: unknown, label: string, path?: string): number {
-  if (typeof value !== "number") {
-    fail(
-      "invalid-table-geometry",
-      `${label} must be a finite positive pixel number`,
-      path,
-    );
-  }
-  try {
-    textExtent(value, label);
-  } catch (error) {
-    if (error instanceof CapabilityError) {
-      fail(error.code, error.message, path);
-    }
-    throw error;
-  }
-  return value;
 }
 
 function color(
@@ -242,21 +162,6 @@ function color(
   }
 }
 
-function verticalAlign(
-  value: unknown,
-  path?: string,
-): TableVerticalAlign | undefined {
-  if (value === undefined) return undefined;
-  if (typeof value !== "string" || !verticalAlignments.has(value)) {
-    fail(
-      "invalid-vertical-align",
-      "verticalAlign must be top, middle, or bottom",
-      path,
-    );
-  }
-  return value as TableVerticalAlign;
-}
-
 function textStyle(
   styleValue: unknown,
   label: string,
@@ -267,7 +172,12 @@ function textStyle(
   readonly style: Record<string, unknown>;
 } {
   const style = record(styleValue ?? {}, `${label}.style`, path);
-  onlyKeys(style, [...textStyleKeys, ...additional], `${label}.style`, path);
+  assertAllowedTableKeys(
+    style,
+    [...textStyleKeys, ...additional],
+    `${label}.style`,
+    path,
+  );
   if (style["lang"] !== undefined) {
     try {
       assertValidLang(style["lang"]);
@@ -283,7 +193,7 @@ function textStyle(
     const value = style[key];
     if (value !== undefined) textStyle[key] = value;
   }
-  verticalAlign(style["verticalAlign"], path);
+  parseTableVerticalAlign(style["verticalAlign"], path);
   return { textStyle, style };
 }
 
@@ -292,56 +202,6 @@ function mergeTextStyle(
   child: Record<string, unknown>,
 ): Record<string, unknown> {
   return { ...parent, ...child };
-}
-
-function positiveTrack(value: number, label: string): number {
-  if (!Number.isFinite(value) || value <= 0) {
-    fail("invalid-table-column", `${label} must be greater than 0`);
-  }
-  return value;
-}
-
-function parseTracks(value: unknown): Track[] {
-  if (!Array.isArray(value) || value.length === 0) {
-    fail("invalid-table-column", "Table.columns must be a non-empty array");
-  }
-  return value.map((column, index) => {
-    if (typeof column === "number") {
-      return {
-        kind: "px",
-        value: positiveTrack(column, `column ${index + 1} width`),
-      };
-    }
-    if (column === "auto") return { kind: "auto" };
-    if (typeof column === "string") {
-      const fraction = /^(\d+(?:\.\d+)?)fr$/u.exec(column);
-      if (fraction !== null) {
-        return {
-          kind: "fr",
-          value: positiveTrack(
-            Number(fraction[1]),
-            `column ${index + 1} fraction`,
-          ),
-        };
-      }
-    }
-    fail(
-      "invalid-table-column",
-      `Invalid width for column ${index + 1}; use positive px number, positive "Nfr", or "auto"`,
-    );
-  });
-}
-
-function span(
-  value: unknown,
-  label: "colSpan" | "rowSpan",
-  path: string,
-): number {
-  if (value === undefined) return 1;
-  if (typeof value !== "number" || !Number.isInteger(value) || value < 1) {
-    fail("invalid-table-merge", `${label} must be a positive integer`, path);
-  }
-  return value;
 }
 
 function trackStyle(
@@ -364,117 +224,6 @@ function trackStyle(
     path,
     additional,
   );
-}
-
-function spacing(value: unknown, path: string): Edges {
-  if (value === undefined) return { top: 0, right: 0, bottom: 0, left: 0 };
-  const values: readonly unknown[] =
-    typeof value === "number" ? [value] : Array.isArray(value) ? value : [];
-  if (values.length !== 1 && values.length !== 2 && values.length !== 4) {
-    fail(
-      "invalid-table-padding",
-      "padding must be a number, a 2-tuple, or a 4-tuple",
-      path,
-    );
-  }
-  const number = (entry: unknown): number => {
-    if (typeof entry !== "number" || !Number.isFinite(entry) || entry < 0) {
-      fail(
-        "invalid-table-padding",
-        "Cell padding must be a finite non-negative pixel number",
-        path,
-      );
-    }
-    return entry;
-  };
-  const [a, b, c, d] = values.map(number);
-  if (values.length === 1) return { top: a!, right: a!, bottom: a!, left: a! };
-  if (values.length === 2) return { top: a!, right: b!, bottom: a!, left: b! };
-  return { top: a!, right: b!, bottom: c!, left: d! };
-}
-
-function cellPadding(style: Record<string, unknown>, path: string): Edges {
-  const base = spacing(style["padding"], path);
-  const edge = (
-    name: "paddingTop" | "paddingRight" | "paddingBottom" | "paddingLeft",
-    fallback: number,
-  ) => {
-    const value = style[name];
-    if (value === undefined) return fallback;
-    if (typeof value !== "number" || !Number.isFinite(value) || value < 0) {
-      fail(
-        "invalid-table-padding",
-        `${name} must be a finite non-negative pixel number`,
-        path,
-      );
-    }
-    return value;
-  };
-  return {
-    top: edge("paddingTop", base.top),
-    right: edge("paddingRight", base.right),
-    bottom: edge("paddingBottom", base.bottom),
-    left: edge("paddingLeft", base.left),
-  };
-}
-
-function mergeBorder(
-  style: Record<string, unknown>,
-  theme: ThemeContext,
-  path: string,
-): ParsedCell["border"] {
-  const borderColor = color(style["borderColor"], "borderColor", theme, path);
-  const widthValue = style["borderWidth"];
-  const lineStyle = style["borderStyle"];
-  if (
-    widthValue !== undefined &&
-    (typeof widthValue !== "number" ||
-      !Number.isFinite(widthValue) ||
-      widthValue < 0)
-  ) {
-    fail(
-      "invalid-table-border",
-      "borderWidth must be a finite non-negative pixel number",
-      path,
-    );
-  }
-  if (
-    lineStyle !== undefined &&
-    lineStyle !== "solid" &&
-    lineStyle !== "dashed" &&
-    lineStyle !== "dotted"
-  ) {
-    fail(
-      "invalid-table-border",
-      "borderStyle must be solid, dashed, or dotted",
-      path,
-    );
-  }
-  const width = widthValue ?? (borderColor === undefined ? 0 : 1);
-  if (width === 0) return undefined;
-  pxExtent(width, "borderWidth", path);
-  return {
-    color: borderColor ?? theme.resolveColor("dk1"),
-    width,
-    dash:
-      lineStyle === "dashed"
-        ? "dash"
-        : lineStyle === "dotted"
-          ? "dot"
-          : "solid",
-  };
-}
-
-function pxExtent(value: number, label: string, path?: string): number {
-  const emu = pxToEmu(value);
-  if (!Number.isSafeInteger(emu) || emu < 1 || emu > maximumExtentEmu) {
-    fail(
-      "invalid-table-geometry",
-      `${label} exceeds writable table dimension range after conversion`,
-      path,
-    );
-  }
-  return emu;
 }
 
 function resolveCellBody(
@@ -543,14 +292,14 @@ function prepareRows(
     }
     const rowIndex = rows.length;
     const rowPath = identityPath("row", child.props, rowIndex);
-    onlyKeys(child.props, tablePartParameters, "Row", rowPath);
-    const rowAuthorId = optionalName(child.props["id"], "id", rowPath);
+    assertAllowedTableKeys(child.props, rowAllowedParameters, "Row", rowPath);
+    const rowAuthorId = parseOptionalTableId(child.props["id"], rowPath);
     const rowStyle = trackStyle(child, "row", rowPath);
     const heightValue = rowStyle.style["height"];
     const height =
       heightValue === undefined
         ? undefined
-        : positiveSize(heightValue, "Row.style.height", rowPath);
+        : parseTablePositiveSize(heightValue, "Row.style.height", rowPath);
     const rowFill = color(
       rowStyle.style["backgroundColor"],
       "Row.style.backgroundColor",
@@ -558,7 +307,7 @@ function prepareRows(
       rowPath,
     );
     const rowVerticalAlign =
-      verticalAlign(rowStyle.style["verticalAlign"], rowPath) ??
+      parseTableVerticalAlign(rowStyle.style["verticalAlign"], rowPath) ??
       tableVerticalAlign;
     const row: ParsedRow = {
       path: rowPath,
@@ -592,11 +341,27 @@ function prepareRows(
       }
       const cellPath = `${rowPath}/${identityPath("cell", cellChild.props, cellIndex)}`;
       cellIndex += 1;
-      onlyKeys(cellChild.props, cellParameters, "Cell", cellPath);
-      const cellAuthorId = optionalName(cellChild.props["id"], "id", cellPath);
+      assertAllowedTableKeys(
+        cellChild.props,
+        cellAllowedParameters,
+        "Cell",
+        cellPath,
+      );
+      const cellAuthorId = parseOptionalTableId(
+        cellChild.props["id"],
+        cellPath,
+      );
       while (owners.has(`${rowIndex}:${column}`)) column += 1;
-      const colSpan = span(cellChild.props["colSpan"], "colSpan", cellPath);
-      const rowSpan = span(cellChild.props["rowSpan"], "rowSpan", cellPath);
+      const colSpan = parseTableMergeSpan(
+        cellChild.props["colSpan"],
+        "colSpan",
+        cellPath,
+      );
+      const rowSpan = parseTableMergeSpan(
+        cellChild.props["rowSpan"],
+        "rowSpan",
+        cellPath,
+      );
       if (column + colSpan > columns.length) {
         fail(
           "invalid-table-merge",
@@ -635,9 +400,14 @@ function prepareRows(
           cellPath,
         ) ?? row.fill;
       const cellVerticalAlign =
-        verticalAlign(cellStyle.style["verticalAlign"], cellPath) ??
+        parseTableVerticalAlign(cellStyle.style["verticalAlign"], cellPath) ??
         rowVerticalAlign;
-      const border = mergeBorder(cellStyle.style, theme, cellPath);
+      const border = parseTableCellBorder(
+        cellStyle.style,
+        (value, label, itemPath) => color(value, label, theme, itemPath),
+        theme,
+        cellPath,
+      );
       const cellTextStyle = {
         ...mergeTextStyle(row.textStyle, cellStyle.textStyle),
         textWrap: "normal",
@@ -670,7 +440,7 @@ function prepareRows(
         paragraphs: parsedParagraphs,
         textStyle: parsedTextStyle,
         verticalAlign: cellVerticalAlign,
-        padding: cellPadding(cellStyle.style, cellPath),
+        padding: parseTableCellPadding(cellStyle.style, cellPath),
         ...(fill === undefined ? {} : { fill }),
         ...(border === undefined ? {} : { border }),
       };
@@ -1036,7 +806,7 @@ function tableLayoutModel(
     }
   }
   const widthsEmu = widths.map((width, index) =>
-    pxExtent(width, `column ${index + 1} width`),
+    assertTableEmuExtent(width, `column ${index + 1} width`),
   );
   if (widthsEmu.reduce((sum, value) => sum + value, 0) > maximumExtentEmu) {
     fail(
@@ -1093,7 +863,7 @@ function tableLayoutModel(
     if (height <= 0) heights[index] = 1;
   });
   const heightsEmu = heights.map((height, index) =>
-    pxExtent(height, `row ${index + 1} height`, rows[index]?.path),
+    assertTableEmuExtent(height, `row ${index + 1} height`, rows[index]?.path),
   );
   if (heightsEmu.reduce((sum, value) => sum + value, 0) > maximumExtentEmu) {
     fail(
@@ -1114,15 +884,25 @@ function tableLayoutModel(
   };
 }
 
+/** Typed native canvas mechanism connecting emit, paint, and import for `table`. */
+export const tableMechanism = defineCanvasMechanism({
+  key: "table",
+  role: "canvas",
+  emit: emitTableModel,
+  paint: paintTableModel,
+  import: tableImportHandler,
+});
+
 /** Table module independently validates row and column structure, resolving layout/cells once for emit and paint. */
-export const tableCapability: ObjectCapabilityModule = {
+export const tableCapability = {
   declaration: "table",
+  mechanisms: [tableMechanism] as const,
 
   bind(
     input: CapabilityInput,
     context: CapabilityParseContext,
   ): BoundObjectCapability {
-    onlyKeys(input.props, tableParameters, "Table");
+    assertAllowedTableKeys(input.props, tableAllowedParameters, "Table");
     const requestedName = parseOptionalName(input.props["name"]);
     const morphKey = parseMorphKey(input.props["morphKey"]);
     const link = parseLinkTarget(input.props["link"]);
@@ -1140,10 +920,10 @@ export const tableCapability: ObjectCapabilityModule = {
       path: context.path,
     });
 
-    const columns = parseTracks(input.props["columns"]);
+    const columns = parseTableColumns(input.props["columns"]);
     const tableStyle = trackStyle(input, "table");
     const tableVerticalAlign =
-      verticalAlign(tableStyle.style["verticalAlign"]) ?? "middle";
+      parseTableVerticalAlign(tableStyle.style["verticalAlign"]) ?? "middle";
     const { rows, cells } = prepareRows(
       input,
       columns,
@@ -1198,7 +978,7 @@ export const tableCapability: ObjectCapabilityModule = {
       ): CapabilityLayoutMeasurement {
         const declaredSize =
           typeof parsed.declaredWidth === "number"
-            ? positiveSize(parsed.declaredWidth, "Table.width")
+            ? parseTablePositiveSize(parsed.declaredWidth, "Table.width")
             : undefined;
         const natural = tableLayoutModel(parsed, undefined, request.theme);
         const naturalWidth = natural.widths.reduce(
@@ -1241,7 +1021,7 @@ export const tableCapability: ObjectCapabilityModule = {
         const requestedWidth =
           resolveContext.layoutBox?.width ??
           (typeof parsed.declaredWidth === "number"
-            ? positiveSize(parsed.declaredWidth, "Table.width")
+            ? parseTablePositiveSize(parsed.declaredWidth, "Table.width")
             : undefined);
         const model = tableLayoutModel(
           parsed,
@@ -1288,11 +1068,11 @@ export const tableCapability: ObjectCapabilityModule = {
             });
           }
         }
-        const x = coordinate(
+        const x = parseTableCoordinate(
           resolveContext.layoutBox?.x ?? parsed.declaredX,
           "x",
         );
-        const y = coordinate(
+        const y = parseTableCoordinate(
           resolveContext.layoutBox?.y ?? parsed.declaredY,
           "y",
         );
@@ -1525,14 +1305,14 @@ export const tableCapability: ObjectCapabilityModule = {
           ...(warnings.length === 0 ? {} : { warnings }),
 
           emit(emitContext: EmitContext): EmitOutput {
-            return emitTableModel(resolvedModel, emitContext);
+            return tableMechanism.emit(resolvedModel, emitContext);
           },
 
           paint(paintContext: PaintContext): PaintOutput {
-            return paintTableModel(resolvedModel, paintContext);
+            return tableMechanism.paint(resolvedModel, paintContext);
           },
         };
       },
     };
   },
-};
+} satisfies ObjectCapabilityModule;

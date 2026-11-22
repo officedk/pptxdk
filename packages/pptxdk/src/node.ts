@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs";
+import { readFile } from "node:fs/promises";
 import { registerHooks } from "node:module";
 import { extname, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -8,8 +9,18 @@ import { validateOptions } from "@pptxdk/emit";
 import { transformSync, type Loader } from "esbuild";
 import type { ComponentType, ReactNode } from "react";
 
-import { build } from "./index.ts";
-import type { BuildOptions, BuildResult } from "./index.ts";
+import {
+  ImportError,
+  build,
+  importPptx,
+  type BuildOptions,
+  type BuildResult,
+  type FatalImportIssue,
+  type ImportDiagnostic,
+  type ImportOptions,
+  type ImportReport,
+  type ImportResult,
+} from "./index.ts";
 import type { PreviewOptions, PreviewResult } from "./preview.ts";
 
 const sourceLoaders: Readonly<Record<string, Loader>> = {
@@ -29,7 +40,36 @@ export type PreviewFromSourceOptions = PreviewOptions & {
   readonly exportName?: string;
 };
 
-export type { BuildOptions, BuildResult, PreviewOptions, PreviewResult };
+export type {
+  BuildOptions,
+  BuildResult,
+  FatalImportIssue,
+  ImportDiagnostic,
+  ImportOptions,
+  ImportReport,
+  ImportResult,
+  PreviewOptions,
+  PreviewResult,
+};
+export { ImportError };
+
+/**
+ * Reads a Transitional PPTX file from disk and imports it into an editable CommonNode document
+ * and structured `ImportReport`, detaching completely from the file buffer after import.
+ */
+export async function importPptxFile(
+  entry: string | URL,
+  options: ImportOptions = {},
+): Promise<ImportResult> {
+  if (options.signal?.aborted) {
+    throw options.signal.reason;
+  }
+  const bytes = await readFile(
+    entry,
+    options.signal === undefined ? undefined : { signal: options.signal },
+  );
+  return importPptx(new Uint8Array(bytes), options);
+}
 
 /** Error thrown when loading author deck source fails. */
 export class SourceLoadError extends Error {

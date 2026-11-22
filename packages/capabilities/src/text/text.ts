@@ -21,6 +21,7 @@ import {
   type ResolvedObject,
 } from "@pptxdk/core/capability";
 import { assertXml10Characters, xmlEscape } from "@pptxdk/emit";
+import { defineCanvasMechanism } from "@pptxdk/import";
 
 import { motionAnnotations } from "../motion/motion-api.ts";
 import {
@@ -48,6 +49,7 @@ import {
   visualSvgTransform,
   type ResolvedVisualModel,
 } from "../shared/visual.ts";
+import { textBoxImportHandler } from "./text-import.ts";
 import { textBoxXml } from "./text-xml.ts";
 
 export type {
@@ -218,9 +220,19 @@ function paintTextModel(
   };
 }
 
+/** Typed native canvas mechanism connecting emit, paint, and import for `text-box`. */
+export const textBoxMechanism = defineCanvasMechanism({
+  key: "text-box",
+  role: "canvas",
+  emit: emitTextModel,
+  paint: paintTextModel,
+  import: textBoxImportHandler,
+});
+
 /** Fixed-region and content-sized text box capability bound per formal build. */
-export const textCapability: ObjectCapabilityModule = {
+export const textCapability = {
   declaration: "text",
+  mechanisms: [textBoxMechanism] as const,
 
   bind(
     input: CapabilityInput,
@@ -464,13 +476,13 @@ export const textCapability: ObjectCapabilityModule = {
           ...(annotations.length === 0 ? {} : { annotations }),
           resourceClaims: resolvedText.resourceClaims,
           emit(emitContext: EmitContext): EmitOutput {
-            return emitTextModel(model, emitContext);
+            return textBoxMechanism.emit(model, emitContext);
           },
           paint(paintContext: PaintContext): PaintOutput {
-            return paintTextModel(model, paintContext);
+            return textBoxMechanism.paint(model, paintContext);
           },
         };
       },
     };
   },
-};
+} satisfies ObjectCapabilityModule;

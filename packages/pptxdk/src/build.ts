@@ -12,6 +12,7 @@ import {
 } from "@pptxdk/core/build";
 import type { CommonNode } from "@pptxdk/core/document";
 import { emit, validateOptions } from "@pptxdk/emit";
+import { ImportError, createImporter } from "@pptxdk/import";
 import type { ReactNode } from "react";
 
 import { emitBuildResult, resolveDocumentInput } from "./compose.ts";
@@ -202,11 +203,23 @@ export async function build(
 export {
   BuildError,
   CapabilityError,
+  ImportError,
+  createImporter,
   createResolver,
   emit,
   formatBaseline,
   targets,
 };
+export type {
+  CascadedOmission,
+  EditabilityLoss,
+  FatalImportIssue,
+  ImportDiagnostic,
+  ImportLocation,
+  ImportOptions,
+  ImportReport,
+  ImportResult,
+} from "@pptxdk/import";
 export type {
   BuildOptions,
   BuildReport,

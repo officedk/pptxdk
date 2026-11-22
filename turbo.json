@@ -72,6 +72,11 @@
           "allow": ["layer:tooling", "layer:validation", "layer:core"]
         }
       },
+      "layer:import": {
+        "dependencies": {
+          "allow": ["layer:tooling", "layer:validation", "layer:core"]
+        }
+      },
       "layer:react": {
         "dependencies": {
           "allow": ["layer:tooling", "layer:validation", "layer:core"]
@@ -84,6 +89,7 @@
             "layer:validation",
             "layer:core",
             "layer:emit",
+            "layer:import",
             "layer:preview",
             "layer:react"
           ]
@@ -96,6 +102,7 @@
             "layer:validation",
             "layer:core",
             "layer:emit",
+            "layer:import",
             "layer:preview",
             "layer:capabilities",
             "layer:react"
@@ -109,6 +116,7 @@
             "layer:validation",
             "layer:core",
             "layer:emit",
+            "layer:import",
             "layer:preview",
             "layer:capabilities",
             "layer:react",
@@ -124,6 +132,7 @@
             "layer:validation",
             "layer:core",
             "layer:emit",
+            "layer:import",
             "layer:preview",
             "layer:capabilities",
             "layer:react",

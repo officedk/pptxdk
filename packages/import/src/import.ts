@@ -6,6 +6,7 @@ import {
 } from "@pptxdk/core/document";
 import { z } from "zod";
 
+import { readAlternateContent } from "#/alternate-content.ts";
 import {
   ImportOptionsSchema,
   type ImportDiagnostic,
@@ -14,17 +15,23 @@ import {
 } from "#/diagnostics.ts";
 import type {
   DeckImportHandler,
+  DeferredSlideLink,
   ImportMechanismHandler,
   ShapeTreeImportHandler,
   SlideImportHandler,
 } from "#/mechanism.ts";
-import { A_NS, P_NS, REL_SLIDE, R_NS, emuToPx } from "#/namespaces.ts";
+import { A_NS, MC_NS, P_NS, REL_SLIDE, R_NS, emuToPx } from "#/namespaces.ts";
 import {
   openPptxPackage,
   resolvePartPath,
   type ParsedRelationshipEntry,
   type PptxPackage,
 } from "#/opc.ts";
+import {
+  buildRelationshipIndex,
+  inspectUnsupportedGraphicFrame,
+  peekShapeTreeObjectIdentity,
+} from "#/resources.ts";
 import {
   ExtentEmuFragmentSchema,
   OoxmlBoolSchema,
@@ -232,14 +239,84 @@ function readSlideSize(
   };
 }
 
+const supportedShapeTreeNamespaces = new Set<string>([P_NS, A_NS, R_NS]);
+
+function readSingleShapeTreeItem(
+  itemCursor: XmlElementCursor,
+  pkg: PptxPackage,
+  slidePartPath: string,
+  slideIndex: number,
+  relIndex: ReturnType<typeof buildRelationshipIndex>,
+  handlers: RegisteredImportHandlers,
+  registerDeferredSlideLink: (link: DeferredSlideLink) => void,
+  diagnostics: ImportDiagnostic[],
+): CommonNode | undefined {
+  const match = handlers.shapeTree.find(
+    (handler) =>
+      itemCursor.namespaceUri === P_NS &&
+      handler.localName === itemCursor.localName &&
+      (handler.matches === undefined || handler.matches(itemCursor)),
+  );
+  if (match === undefined) {
+    const identity = peekShapeTreeObjectIdentity(itemCursor.element);
+    const frameInfo =
+      itemCursor.namespaceUri === P_NS &&
+      itemCursor.localName === "graphicFrame"
+        ? inspectUnsupportedGraphicFrame(
+            itemCursor,
+            slidePartPath,
+            relIndex.byId,
+            relIndex.entries,
+          )
+        : undefined;
+    diagnostics.push({
+      code: "unsupported-mechanism",
+      category: "unsupported",
+      disposition: "omitted",
+      location: {
+        part: slidePartPath,
+        xpath: itemCursor.xpath,
+        slideIndex,
+        ...identity,
+      },
+      namespaceUri: itemCursor.namespaceUri,
+      localName: itemCursor.localName,
+      ...(frameInfo?.mechanismHint === undefined
+        ? {}
+        : { mechanismHint: frameInfo.mechanismHint }),
+      ...(frameInfo === undefined || frameInfo.cascaded.length === 0
+        ? {}
+        : { cascaded: frameInfo.cascaded }),
+    });
+    itemCursor.suppressUnconsumed();
+    return undefined;
+  }
+  const outcome = match.read({
+    cursor: itemCursor,
+    part: slidePartPath,
+    slideIndex,
+    package: pkg,
+    relationships: relIndex.byId,
+    registerDeferredSlideLink,
+  });
+  if (outcome.diagnostics !== undefined) {
+    diagnostics.push(...outcome.diagnostics);
+  }
+  if (outcome.node === undefined) {
+    itemCursor.suppressUnconsumed();
+  }
+  return outcome.node;
+}
+
 function readSlidePart(
   pkg: PptxPackage,
   slidePartPath: string,
   slideIndex: number,
   usedSlideIds: Set<string>,
   handlers: RegisteredImportHandlers,
+  registerDeferredSlideLink: (link: DeferredSlideLink) => void,
   diagnostics: ImportDiagnostic[],
-): CommonNode | undefined {
+): { readonly node: CommonNode; readonly slideId: string } | undefined {
   const xmlText = pkg.readTextPart(slidePartPath);
   if (xmlText === undefined) return undefined;
 
@@ -272,6 +349,9 @@ function readSlidePart(
     });
     return undefined;
   }
+
+  const relIndex = buildRelationshipIndex(pkg, slidePartPath);
+  diagnostics.push(...relIndex.diagnostics);
 
   const slideCursor = XmlElementCursor.createRoot(
     slideEl,
@@ -325,38 +405,99 @@ function readSlidePart(
   if (spTree !== undefined) {
     consumeIdentityShapeTreeBoilerplate(spTree);
     for (const itemCursor of spTree.remainingElementChildren()) {
-      const match = handlers.shapeTree.find(
-        (handler) =>
-          itemCursor.namespaceUri === P_NS &&
-          handler.localName === itemCursor.localName &&
-          (handler.matches === undefined || handler.matches(itemCursor)),
-      );
-      if (match === undefined) {
-        diagnostics.push({
-          code: "unsupported-mechanism",
-          category: "unsupported",
-          disposition: "omitted",
-          location: {
-            part: slidePartPath,
-            xpath: itemCursor.xpath,
-            slideIndex,
-          },
-          namespaceUri: itemCursor.namespaceUri,
-          localName: itemCursor.localName,
-        });
+      if (
+        itemCursor.namespaceUri === MC_NS &&
+        itemCursor.localName === "AlternateContent"
+      ) {
+        const selection = readAlternateContent(itemCursor, (ns) =>
+          supportedShapeTreeNamespaces.has(ns),
+        );
+        if (selection.branch === "choice") {
+          for (const childCursor of selection.children) {
+            const node = readSingleShapeTreeItem(
+              childCursor,
+              pkg,
+              slidePartPath,
+              slideIndex,
+              relIndex,
+              handlers,
+              registerDeferredSlideLink,
+              diagnostics,
+            );
+            if (node !== undefined) {
+              slideNode.append(node);
+            }
+          }
+        } else if (selection.branch === "fallback") {
+          let adoptedFallback = false;
+          for (const childCursor of selection.children) {
+            const identity = peekShapeTreeObjectIdentity(childCursor.element);
+            const node = readSingleShapeTreeItem(
+              childCursor,
+              pkg,
+              slidePartPath,
+              slideIndex,
+              relIndex,
+              handlers,
+              registerDeferredSlideLink,
+              diagnostics,
+            );
+            if (node !== undefined) {
+              adoptedFallback = true;
+              slideNode.append(node);
+              diagnostics.push({
+                code: "compatibility-fallback",
+                category: "unsupported",
+                disposition: "fallback",
+                location: {
+                  part: slidePartPath,
+                  xpath: itemCursor.xpath,
+                  slideIndex,
+                  ...identity,
+                },
+                preferredMechanism: selection.preferredMechanism,
+                selectedFallback: node.kind,
+                loss: {
+                  lost: "native-mechanism",
+                  retainedAs: node.kind,
+                },
+              });
+            }
+          }
+          if (!adoptedFallback) {
+            itemCursor.suppressUnconsumed();
+          }
+        } else {
+          diagnostics.push({
+            code: "unsupported-mechanism",
+            category: "unsupported",
+            disposition: "omitted",
+            location: {
+              part: slidePartPath,
+              xpath: itemCursor.xpath,
+              slideIndex,
+            },
+            namespaceUri: itemCursor.namespaceUri,
+            localName: itemCursor.localName,
+            mechanismHint: selection.preferredMechanism,
+          });
+          itemCursor.suppressUnconsumed();
+        }
         continue;
       }
-      const outcome = match.read({
-        cursor: itemCursor,
-        part: slidePartPath,
+
+      const node = readSingleShapeTreeItem(
+        itemCursor,
+        pkg,
+        slidePartPath,
         slideIndex,
-        package: pkg,
-      });
-      if (outcome.diagnostics !== undefined) {
-        diagnostics.push(...outcome.diagnostics);
-      }
-      if (outcome.node !== undefined) {
-        slideNode.append(outcome.node);
+        relIndex,
+        handlers,
+        registerDeferredSlideLink,
+        diagnostics,
+      );
+      if (node !== undefined) {
+        slideNode.append(node);
       }
     }
   }
@@ -375,7 +516,7 @@ function readSlidePart(
   }
 
   appendUnconsumedDiagnostics(slideCursor, slideIndex, diagnostics);
-  return slideNode;
+  return { node: slideNode, slideId };
 }
 
 /**
@@ -415,6 +556,11 @@ export function createImporter(
     }
 
     const usedSlideIds = new Set<string>();
+    const slideIdByPartPath = new Map<string, string>();
+    const deferredSlideLinks: DeferredSlideLink[] = [];
+    const registerDeferredSlideLink = (link: DeferredSlideLink): void => {
+      deferredSlideLinks.push(link);
+    };
     let slideCount = 0;
     const sldIdLst = presCursor.child(P_NS, "sldIdLst");
     if (sldIdLst !== undefined) {
@@ -490,19 +636,37 @@ export function createImporter(
           continue;
         }
 
-        const slideNode = readSlidePart(
+        const slideResult = readSlidePart(
           pkg,
           targetPart,
           index,
           usedSlideIds,
           handlers,
+          registerDeferredSlideLink,
           diagnostics,
         );
-        if (slideNode !== undefined) {
-          deckNode.append(slideNode);
+        if (slideResult !== undefined) {
+          slideIdByPartPath.set(targetPart, slideResult.slideId);
+          deckNode.append(slideResult.node);
           slideCount += 1;
         }
       }
+    }
+
+    for (const pending of deferredSlideLinks) {
+      const targetSlideId = slideIdByPartPath.get(pending.targetPart);
+      if (targetSlideId === undefined) {
+        diagnostics.push({
+          code: "missing-target-part",
+          category: "corrupt-input",
+          disposition: "omitted",
+          location: pending.location,
+          relationshipId: pending.relationshipId,
+          targetPart: pending.targetPart,
+        });
+        continue;
+      }
+      pending.apply(targetSlideId);
     }
 
     for (const deckHandler of handlers.deck) {

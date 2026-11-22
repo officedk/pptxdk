@@ -10,15 +10,24 @@ import type {
 } from "@pptxdk/core/capability";
 import type { CommonNode } from "@pptxdk/core/document";
 
-import type { ImportDiagnostic } from "#/diagnostics.ts";
-import type { PptxPackage } from "#/opc.ts";
+import type { ImportDiagnostic, ImportLocation } from "#/diagnostics.ts";
+import type { ParsedRelationshipEntry, PptxPackage } from "#/opc.ts";
 import type { XmlElementCursor } from "#/xml-reader.ts";
+
+export type DeferredSlideLink = {
+  readonly targetPart: string;
+  readonly relationshipId: string;
+  readonly location: ImportLocation;
+  apply(targetSlideId: string): void;
+};
 
 export type ShapeTreeImportContext = {
   readonly cursor: XmlElementCursor;
   readonly part: string;
   readonly slideIndex: number;
   readonly package: PptxPackage;
+  readonly relationships?: ReadonlyMap<string, ParsedRelationshipEntry>;
+  readonly registerDeferredSlideLink?: (link: DeferredSlideLink) => void;
 };
 
 export type ShapeTreeImportOutcome = {

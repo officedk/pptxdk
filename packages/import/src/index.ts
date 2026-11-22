@@ -1,3 +1,5 @@
+export { readAlternateContent } from "#/alternate-content.ts";
+export type { AlternateContentSelection } from "#/alternate-content.ts";
 export {
   CascadedOmissionSchema,
   EditabilityLossSchema,
@@ -37,6 +39,7 @@ export type {
   DeckImportContext,
   DeckImportHandler,
   DeckImportOutcome,
+  DeferredSlideLink,
   ImportMechanismHandler,
   ShapeTreeImportContext,
   ShapeTreeImportHandler,
@@ -49,12 +52,21 @@ export type {
 } from "#/mechanism.ts";
 export {
   A_NS,
+  CHART_NS,
   CONTENT_TYPES_NS,
+  DIAGRAM_NS,
   EMU_PER_PX,
   MC_NS,
   OPC_REL_NS,
   P_NS,
+  REL_DIAGRAM_COLORS,
+  REL_DIAGRAM_DATA,
+  REL_DIAGRAM_DRAWING,
+  REL_DIAGRAM_LAYOUT,
+  REL_DIAGRAM_QUICK_STYLE,
   REL_FONT,
+  REL_HYPERLINK,
+  REL_IMAGE,
   REL_OFFICE_DOCUMENT,
   REL_SLIDE,
   REL_SLIDE_LAYOUT,
@@ -64,6 +76,7 @@ export {
   STRICT_NS_PREFIX,
   STRICT_P_NS,
   STRICT_REL_OFFICE_DOCUMENT,
+  TABLE_NS_URI,
   XMLNS_NS,
   XML_NS,
   canonicalQName,
@@ -81,6 +94,18 @@ export type {
   ParsedRelationshipEntry,
   PptxPackage,
 } from "#/opc.ts";
+export {
+  buildRelationshipIndex,
+  inspectUnsupportedGraphicFrame,
+  peekShapeTreeObjectIdentity,
+  resolveExternalRelationshipTarget,
+  resolveInternalRelationshipTarget,
+} from "#/resources.ts";
+export type {
+  RelationshipIndex,
+  ResolvedExternalResource,
+  ResolvedInternalResource,
+} from "#/resources.ts";
 export {
   ExtentEmuFragmentSchema,
   HexRgb6Schema,

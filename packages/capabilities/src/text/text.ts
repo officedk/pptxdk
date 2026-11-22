@@ -30,7 +30,6 @@ import {
 } from "../font/font-embedding.ts";
 import { embeddedFontImportHandler } from "../font/font-import.ts";
 import { motionAnnotations } from "../motion/motion-api.ts";
-import type { Geometry } from "../shared/geometry.ts";
 import {
   nativeLinkXml,
   parseLinkTarget,
@@ -436,7 +435,7 @@ export const textCapability = {
       box: { x: 0, y: 0, width: 100, height: 100 },
       ...(inheritedPlaceholderGeometry === undefined
         ? {}
-        : { geometry: inheritedPlaceholderGeometry as Geometry }),
+        : { geometry: inheritedPlaceholderGeometry }),
       ...(inheritedPlaceholderFlipH === undefined
         ? {}
         : { flipH: inheritedPlaceholderFlipH }),
@@ -573,7 +572,7 @@ export const textCapability = {
           box,
           ...(inheritedPlaceholderGeometry === undefined
             ? {}
-            : { geometry: inheritedPlaceholderGeometry as Geometry }),
+            : { geometry: inheritedPlaceholderGeometry }),
           ...(inheritedPlaceholderFlipH === undefined
             ? {}
             : { flipH: inheritedPlaceholderFlipH }),

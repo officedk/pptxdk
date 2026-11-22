@@ -298,8 +298,12 @@ export function paint(
     const transforms = new Map<number, PreviewTransform>();
 
     const masterOffset = maxPaintObjectId(slide.layers) + 1000;
-    const masterLayersSvg = (slide.masterLayers ?? [])
-      .map((layer) =>
+    const wrapSharedObjectSvg = (svg: string): string =>
+      svg !== "" && internal.mastersCanvas !== undefined
+        ? internal.mastersCanvas.paintSharedObject(svg).svg
+        : svg;
+    const masterLayerFragments = (slide.masterLayers ?? []).map((layer) =>
+      wrapSharedObjectSvg(
         paintLayer(
           layer,
           pageNumber,
@@ -309,12 +313,16 @@ export function paint(
           masterOffset,
           false,
         ),
-      )
-      .join("");
+      ),
+    );
+    const masterLayersSvg =
+      internal.mastersCanvas !== undefined
+        ? internal.mastersCanvas.paintMasterLayers(masterLayerFragments).svg
+        : masterLayerFragments.join("");
     const layoutOffset =
       masterOffset + maxPaintObjectId(slide.masterLayers ?? []) + 1000;
-    const layoutLayersSvg = (slide.layoutLayers ?? [])
-      .map((layer) =>
+    const layoutLayerFragments = (slide.layoutLayers ?? []).map((layer) =>
+      wrapSharedObjectSvg(
         paintLayer(
           layer,
           pageNumber,
@@ -324,8 +332,12 @@ export function paint(
           layoutOffset,
           false,
         ),
-      )
-      .join("");
+      ),
+    );
+    const layoutLayersSvg =
+      internal.mastersCanvas !== undefined
+        ? internal.mastersCanvas.paintLayoutLayers(layoutLayerFragments).svg
+        : layoutLayerFragments.join("");
 
     const layers = slide.layers
       .map((layer) =>
@@ -459,7 +471,11 @@ export function paint(
       continue;
     }
 
-    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${internal.dimensions.width}" height="${internal.dimensions.height}" viewBox="0 0 ${internal.dimensions.width} ${internal.dimensions.height}">${background ?? defaultCanvasBackground}${masterLayersSvg}${layoutLayersSvg}${shapeTreeCapSvg}${layers}</svg>`;
+    const fallbackBackground =
+      internal.mastersCanvas !== undefined
+        ? internal.mastersCanvas.paintBackdrop(slide.theme).svg
+        : defaultCanvasBackground;
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${internal.dimensions.width}" height="${internal.dimensions.height}" viewBox="0 0 ${internal.dimensions.width} ${internal.dimensions.height}">${background ?? fallbackBackground}${masterLayersSvg}${layoutLayersSvg}${shapeTreeCapSvg}${layers}</svg>`;
     const Resvg = getResvg();
     const png = new Uint8Array(
       new Resvg(svg, { font: { loadSystemFonts: false } }).render().asPng(),

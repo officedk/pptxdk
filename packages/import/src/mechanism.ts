@@ -2,6 +2,8 @@ import type {
   CanvasMechanismDefinition,
   EmitContext,
   EmitOutput,
+  Geometry,
+  MasterPlaceholderMap,
   NativeColorSlot,
   PaintContext,
   PaintOutput,
@@ -37,6 +39,7 @@ export type ShapeTreeImportContext = {
   readonly registerDeferredSlideLink?: (link: DeferredSlideLink) => void;
   readonly registerImportedObject?: (spid: number, node: CommonNode) => void;
   readonly layoutPlaceholders?: PlaceholderMap;
+  readonly masterPlaceholders?: MasterPlaceholderMap;
   readonly clrMap?: Readonly<Record<string, NativeColorSlot>>;
 };
 
@@ -91,7 +94,7 @@ export type ImportedPlaceholderSpPr = {
   readonly y?: number;
   readonly width?: number;
   readonly height?: number;
-  readonly geometry?: unknown;
+  readonly geometry?: Geometry;
   readonly flipH?: boolean;
   readonly flipV?: boolean;
   readonly style?: Record<string, unknown>;

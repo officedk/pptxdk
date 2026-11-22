@@ -828,6 +828,22 @@ export type SlideCapabilityModule<
   /** Handlers wired by this capability for internal transparent declaration hosts. */
   readonly transparentDeclarations?: readonly TransparentCapabilityModule[];
   readonly mechanisms?: readonly NativeMechanismDefinition[];
+  readonly mastersCanvas?: {
+    paintBackdrop(themeContext: ThemeContext): PaintOutput;
+    paintMasterLayers(fragments: readonly string[]): PaintOutput;
+    paintLayoutLayers(fragments: readonly string[]): PaintOutput;
+    paintSharedObject(svg: string): PaintOutput;
+  };
+  readonly mastersEmitDriver?: unknown;
+  bindSections?(
+    sections: readonly {
+      readonly name: string;
+      readonly slideIndexes: readonly number[];
+    }[],
+  ): {
+    readonly extensions: readonly Extension[];
+    emit(): SlideEmitOutput;
+  };
   bindSlide(
     input: CapabilityInput,
     context: SlideCapabilityParseContext,

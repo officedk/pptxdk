@@ -10,9 +10,9 @@ import { defineShowMechanism } from "@pptxdk/import";
 import type { z } from "zod";
 
 import {
-  AdvanceAfterSchema,
-  TransitionKindSchema,
-  TransitionSchema,
+  advanceAfterSchema,
+  transitionKindSchema,
+  transitionSchema,
   type FlipTransition,
   type MorphTransition,
   type StandardTransition,
@@ -24,20 +24,20 @@ import {
 import { readSlideTransitionImport } from "./transition-import.ts";
 
 export {
-  AdvanceAfterSchema,
-  FadeTransitionSchema,
-  FlipDirectionSchema,
-  FlipTransitionSchema,
-  MorphBySchema,
-  MorphTransitionSchema,
-  PushTransitionSchema,
-  StandardTransitionSchema,
-  StripsDirectionSchema,
-  StripsTransitionSchema,
-  TransitionDirectionSchema,
-  TransitionDurationSchema,
-  TransitionSchema,
-  TransitionSpeedSchema,
+  advanceAfterSchema,
+  fadeTransitionSchema,
+  flipDirectionSchema,
+  flipTransitionSchema,
+  morphBySchema,
+  morphTransitionSchema,
+  pushTransitionSchema,
+  standardTransitionSchema,
+  stripsDirectionSchema,
+  stripsTransitionSchema,
+  transitionDirectionSchema,
+  transitionDurationSchema,
+  transitionSchema,
+  transitionSpeedSchema,
   transitions,
   type FlipTransition,
   type MorphTransition,
@@ -164,13 +164,13 @@ function parseTransitionValue(value: unknown): Transition {
       "Slide.transition is missing a valid transition declaration tag",
     );
   }
-  if (!TransitionKindSchema.safeParse(raw["kind"]).success) {
+  if (!transitionKindSchema.safeParse(raw["kind"]).success) {
     return fail(
       "unsupported-transition",
       `Unsupported transition kind ${String(raw["kind"])}`,
     );
   }
-  const parsed = TransitionSchema.safeParse(raw);
+  const parsed = transitionSchema.safeParse(raw);
   if (!parsed.success) {
     return mapTransitionIssue(raw, parsed.error.issues);
   }
@@ -480,7 +480,7 @@ export const transitionCapability = {
     const rawAdvanceAfter = input.props["advanceAfter"];
     let advanceAfter: number | undefined;
     if (rawAdvanceAfter !== undefined) {
-      const parsedAdvance = AdvanceAfterSchema.safeParse(rawAdvanceAfter);
+      const parsedAdvance = advanceAfterSchema.safeParse(rawAdvanceAfter);
       if (!parsedAdvance.success) {
         return fail(
           "invalid-advance-after",

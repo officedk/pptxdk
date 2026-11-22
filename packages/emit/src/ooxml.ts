@@ -206,6 +206,22 @@ export type EmittedSlideMasterSpec = {
   readonly layouts: readonly EmittedSlideLayoutSpec[];
 };
 
+export type MastersEmitDriver = {
+  emitMaster(
+    spec: EmittedSlideMasterSpec,
+    layoutIds: readonly { readonly id: number; readonly rId: string }[],
+    themeContext: ThemeContext,
+  ): string;
+  emitLayout(spec: EmittedSlideLayoutSpec, themeContext: ThemeContext): string;
+  emitTheme(theme: Theme): string;
+  emitColorMap(model: {
+    readonly colorMap?: ColorMap;
+    readonly colorMapOverride?: ColorMapOverride;
+  }): string;
+  emitThemeOverride(override: ThemeOverride, baseTheme?: Theme): string;
+  emitSharedCanvas(fragments: readonly string[]): string;
+};
+
 const defaultEmittedMasters: readonly EmittedSlideMasterSpec[] = [
   {
     key: "master-1",
@@ -966,6 +982,7 @@ function slide(
   colorMapOverride?: ColorMapOverride,
   showMasterShapes?: boolean,
   name?: string,
+  colorMapOvrXml: string = colorMapOverrideXml(colorMapOverride),
 ): string {
   const showMasterSpAttr =
     showMasterShapes === false ? ' showMasterSp="0"' : "";
@@ -974,7 +991,7 @@ function slide(
       ? ""
       : ` showMasterPhAnim="${showMasterPlaceholderAnimations ? "1" : "0"}"`;
   return xmlDocument(
-    `<p:sld xmlns:a="${namespaces.a}" xmlns:r="${namespaces.r}" xmlns:p="${namespaces.p}"${showMasterSpAttr}${showMasterPhAnimAttr}${hidden ? ' show="false"' : ""}><p:cSld name="${xmlEscape(name ?? slideId)}">${backgroundXml}${shapeTreeXml(shapeXml)}</p:cSld>${colorMapOverrideXml(colorMapOverride)}${slideXml}</p:sld>`,
+    `<p:sld xmlns:a="${namespaces.a}" xmlns:r="${namespaces.r}" xmlns:p="${namespaces.p}"${showMasterSpAttr}${showMasterPhAnimAttr}${hidden ? ' show="false"' : ""}><p:cSld name="${xmlEscape(name ?? slideId)}">${backgroundXml}${shapeTreeXml(shapeXml)}</p:cSld>${colorMapOvrXml}${slideXml}</p:sld>`,
   );
 }
 
@@ -1055,11 +1072,9 @@ export function pptxParts(
   presentationAttributes: readonly { name: string; value: string }[] = [],
   themeValue: Theme = defaultTheme,
   title?: string,
-  sections: readonly {
-    readonly name: string;
-    readonly slideIndexes: readonly number[];
-  }[] = [],
+  sectionXml: string = "",
   mastersInput?: readonly EmittedSlideMasterSpec[],
+  mastersEmitDriver?: MastersEmitDriver,
 ): Record<string, string | Uint8Array> {
   const masters =
     mastersInput !== undefined && mastersInput.length > 0
@@ -1095,7 +1110,13 @@ export function pptxParts(
       partPath,
       relTarget: `../theme/theme${themeNumber}.xml`,
     };
-    emittedThemeParts.push({ partPath, xml: themeXml(masterTheme) });
+    emittedThemeParts.push({
+      partPath,
+      xml:
+        mastersEmitDriver !== undefined
+          ? mastersEmitDriver.emitTheme(masterTheme)
+          : themeXml(masterTheme),
+    });
     if (masterTheme !== defaultTheme) {
       allocatedThemePartByTheme.set(masterTheme, allocation);
     }
@@ -1110,7 +1131,10 @@ export function pptxParts(
     const partPath = `ppt/theme/themeOverride${overrideNumber}.xml`;
     emittedThemeOverrideParts.push({
       partPath,
-      xml: themeOverrideXml(override, baseTheme),
+      xml:
+        mastersEmitDriver !== undefined
+          ? mastersEmitDriver.emitThemeOverride(override, baseTheme)
+          : themeOverrideXml(override, baseTheme),
     });
     return `../theme/themeOverride${overrideNumber}.xml`;
   };
@@ -1216,7 +1240,7 @@ export function pptxParts(
       ({ sourcePath }) => sourcePath === "ppt/presentation.xml",
     )?.relationships ?? [];
   const presentation = xmlDocument(
-    `<p:presentation xmlns:a="${namespaces.a}" xmlns:r="${namespaces.r}" xmlns:p="${namespaces.p}"${presentationAttributeXml}><p:sldMasterIdLst>${masterIdsXml}</p:sldMasterIdLst>${presentationContent.beforeSlides ?? ""}${slideIdListXml}<p:sldSz cx="${pxToEmu(size.width)}" cy="${pxToEmu(size.height)}"/><p:notesSz cx="6858000" cy="9144000"/>${presentationContent.afterNotesSize ?? ""}${sectionListXml(sections)}</p:presentation>`,
+    `<p:presentation xmlns:a="${namespaces.a}" xmlns:r="${namespaces.r}" xmlns:p="${namespaces.p}"${presentationAttributeXml}><p:sldMasterIdLst>${masterIdsXml}</p:sldMasterIdLst>${presentationContent.beforeSlides ?? ""}${slideIdListXml}<p:sldSz cx="${pxToEmu(size.width)}" cy="${pxToEmu(size.height)}"/><p:notesSz cx="6858000" cy="9144000"/>${presentationContent.afterNotesSize ?? ""}${sectionXml}</p:presentation>`,
   );
   const parts: Record<string, string | Uint8Array> = {
     "[Content_Types].xml": contentTypes(
@@ -1272,14 +1296,18 @@ export function pptxParts(
               ? {}
               : { colorMap: allocatedMaster.spec.colorMap },
           ));
-    parts[allocatedMaster.masterPart] = masterXml(
-      allocatedMaster.spec,
-      allocatedMaster.layouts.map((item) => ({
-        id: item.layoutId,
-        rId: item.masterRelId,
-      })),
-      masterThemeCtx,
-    );
+    const masterLayoutIds = allocatedMaster.layouts.map((item) => ({
+      id: item.layoutId,
+      rId: item.masterRelId,
+    }));
+    parts[allocatedMaster.masterPart] =
+      mastersEmitDriver !== undefined
+        ? mastersEmitDriver.emitMaster(
+            allocatedMaster.spec,
+            masterLayoutIds,
+            masterThemeCtx,
+          )
+        : masterXml(allocatedMaster.spec, masterLayoutIds, masterThemeCtx);
     parts[
       `ppt/slideMasters/_rels/slideMaster${allocatedMaster.masterNumber}.xml.rels`
     ] = relationships([
@@ -1304,10 +1332,10 @@ export function pptxParts(
               allocatedLayout.spec.colorMapOverride,
             )
           : masterThemeCtx;
-      parts[allocatedLayout.layoutPart] = layoutXml(
-        allocatedLayout.spec,
-        layoutThemeCtx,
-      );
+      parts[allocatedLayout.layoutPart] =
+        mastersEmitDriver !== undefined
+          ? mastersEmitDriver.emitLayout(allocatedLayout.spec, layoutThemeCtx)
+          : layoutXml(allocatedLayout.spec, layoutThemeCtx);
       const layoutRels: PptxRelationship[] = [
         {
           id: "rId1",
@@ -1350,6 +1378,12 @@ export function pptxParts(
           ? undefined
           : layoutPartByKey.get(layoutKey)) ?? fallbackLayoutPart;
       const targetLayoutRel = `../${targetLayoutPart.slice("ppt/".length)}`;
+      const colorMapOvrXml =
+        mastersEmitDriver !== undefined
+          ? mastersEmitDriver.emitColorMap(
+              colorMapOverride === undefined ? {} : { colorMapOverride },
+            )
+          : colorMapOverrideXml(colorMapOverride);
       parts[`ppt/slides/slide${index + 1}.xml`] = slide(
         slides[index]!.id,
         shapeXml,
@@ -1360,6 +1394,7 @@ export function pptxParts(
         colorMapOverride,
         showMasterShapes,
         slides[index]!.name,
+        colorMapOvrXml,
       );
       const slideOverrideTarget = slideThemeOverrideTargets[index];
       const slideRels: PptxRelationship[] = [

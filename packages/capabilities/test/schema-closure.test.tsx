@@ -49,7 +49,7 @@ import {
   boxDeclarationPropsSchema,
   boxStyleSchema,
 } from "../src/box/box-declaration.ts";
-import { ChartPropsSchema } from "../src/chart/chart-schemas.ts";
+import { chartPropsSchema } from "../src/chart/chart-schemas.ts";
 import {
   groupDeclarationPropsSchema,
   groupStyleSchema,
@@ -69,8 +69,8 @@ import {
 } from "../src/shared/text-schemas.ts";
 import { tableDeclarationPropsSchema } from "../src/table/table-schemas.ts";
 import {
-  TransitionKindSchema,
-  TransitionSchema,
+  transitionKindSchema,
+  transitionSchema,
 } from "../src/transition/transition-api.ts";
 
 describe("Capability pure-data schema closure: Box, Group, and Shape", () => {
@@ -438,7 +438,7 @@ describe("Capability pure-data schema closure: Text, Image, Table, Chart, Notes,
       ],
     };
     assert.equal(
-      ChartPropsSchema.safeParse({
+      chartPropsSchema.safeParse({
         ...chartBase,
         id: "ch1",
         enter: fade(),
@@ -447,11 +447,11 @@ describe("Capability pure-data schema closure: Text, Image, Table, Chart, Notes,
       true,
     );
     assert.equal(
-      ChartPropsSchema.safeParse({ ...chartBase, id: "  " }).success,
+      chartPropsSchema.safeParse({ ...chartBase, id: "  " }).success,
       false,
     );
     assert.equal(
-      ChartPropsSchema.safeParse({ ...chartBase, enter: spin() }).success,
+      chartPropsSchema.safeParse({ ...chartBase, enter: spin() }).success,
       false,
     );
 
@@ -676,16 +676,16 @@ describe("Capability pure-data schema closure: Text, Image, Table, Chart, Notes,
 
 describe("Capability pure-data schema closure: Transition and Motion", () => {
   it("validates Transition, MotionScope, Step, and Breathe options consistently across JSX and imperative entries", async () => {
-    assert.equal(TransitionKindSchema.safeParse("morph").success, true);
-    assert.equal(TransitionKindSchema.safeParse("blinds").success, false);
+    assert.equal(transitionKindSchema.safeParse("morph").success, true);
+    assert.equal(transitionKindSchema.safeParse("blinds").success, false);
     assert.equal(
-      TransitionSchema.safeParse(
+      transitionSchema.safeParse(
         transitions.morph({ by: "word", fallback: transitions.fade() }),
       ).success,
       true,
     );
     assert.equal(
-      TransitionSchema.safeParse({
+      transitionSchema.safeParse({
         type: "transition",
         kind: "morph",
         by: "word",

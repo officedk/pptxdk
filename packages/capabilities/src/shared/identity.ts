@@ -10,7 +10,7 @@ import {
 import type { CommonNode } from "@pptxdk/core/document";
 import { xmlEscape } from "@pptxdk/emit";
 import {
-  OoxmlBoolSchema,
+  ooxmlBoolSchema,
   P_NS,
   REL_HYPERLINK,
   REL_SLIDE,
@@ -25,7 +25,7 @@ import {
 import { z } from "zod";
 
 const NvPrUserDrawnSchema = z.object({
-  userDrawn: OoxmlBoolSchema.optional(),
+  userDrawn: ooxmlBoolSchema.optional(),
 });
 
 function directChildDom(
@@ -78,7 +78,7 @@ export function consumeNonPlaceholderNvPr(
   NvPrUserDrawnSchema.safeParse(raw);
 }
 
-export const OptionalNameSchema = z
+export const optionalNameSchema = z
   .string()
   .refine((value) => value.trim() !== "", {
     message: "name must be a non-empty string",
@@ -98,7 +98,7 @@ export function parseOptionalName(
   path?: string,
 ): string | undefined {
   if (value === undefined) return undefined;
-  const parsed = OptionalNameSchema.safeParse(value);
+  const parsed = optionalNameSchema.safeParse(value);
   if (!parsed.success) {
     throw new CapabilityError(
       "invalid-parameter",

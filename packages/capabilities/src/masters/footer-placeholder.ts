@@ -27,12 +27,12 @@ import {
 import { pxToEmu, xmlEscape } from "@pptxdk/emit";
 import {
   A_NS,
-  ExtentEmuFragmentSchema,
-  HexRgb6Schema,
-  OffsetEmuFragmentSchema,
-  OoxmlBoolSchema,
-  OoxmlNonNegativeIntSchema,
-  OoxmlPositiveIntSchema,
+  extentEmuFragmentSchema,
+  hexRgb6Schema,
+  offsetEmuFragmentSchema,
+  ooxmlBoolSchema,
+  ooxmlNonNegativeIntSchema,
+  ooxmlPositiveIntSchema,
   P_NS,
   XML_NS,
   defineCanvasMechanism,
@@ -485,16 +485,16 @@ function resolveContainerFooterModel(args: {
 const PlaceholderAttrSchema = z.object({
   type: z.enum(["dt", "ftr", "sldNum"]),
   sz: z.enum(["full", "half", "quarter"]).optional(),
-  idx: OoxmlNonNegativeIntSchema.optional(),
+  idx: ooxmlNonNegativeIntSchema.optional(),
 });
 
 const NonVisualIdAttrSchema = z.object({
-  id: OoxmlNonNegativeIntSchema,
+  id: ooxmlNonNegativeIntSchema,
   name: z.string().optional(),
 });
 
 const SpLocksAttrSchema = z.object({
-  noGrp: OoxmlBoolSchema.optional(),
+  noGrp: ooxmlBoolSchema.optional(),
 });
 
 const PrstGeomAttrSchema = z.object({
@@ -504,11 +504,11 @@ const PrstGeomAttrSchema = z.object({
 const BodyPrAttrSchema = z.object({
   vert: z.string().optional(),
   wrap: z.enum(["square", "none"]).optional(),
-  rtlCol: OoxmlBoolSchema.optional(),
-  lIns: OoxmlNonNegativeIntSchema.optional(),
-  tIns: OoxmlNonNegativeIntSchema.optional(),
-  rIns: OoxmlNonNegativeIntSchema.optional(),
-  bIns: OoxmlNonNegativeIntSchema.optional(),
+  rtlCol: ooxmlBoolSchema.optional(),
+  lIns: ooxmlNonNegativeIntSchema.optional(),
+  tIns: ooxmlNonNegativeIntSchema.optional(),
+  rIns: ooxmlNonNegativeIntSchema.optional(),
+  bIns: ooxmlNonNegativeIntSchema.optional(),
   anchor: z.enum(["t", "ctr", "b"]).optional(),
 });
 
@@ -518,12 +518,12 @@ const LvlPPrAttrSchema = z.object({
 
 const RunPrAttrSchema = z.object({
   lang: z.string().min(1).optional(),
-  sz: OoxmlPositiveIntSchema.optional(),
-  b: OoxmlBoolSchema.optional(),
-  i: OoxmlBoolSchema.optional(),
-  dirty: OoxmlBoolSchema.optional(),
-  smtClean: OoxmlBoolSchema.optional(),
-  kern: OoxmlNonNegativeIntSchema.optional(),
+  sz: ooxmlPositiveIntSchema.optional(),
+  b: ooxmlBoolSchema.optional(),
+  i: ooxmlBoolSchema.optional(),
+  dirty: ooxmlBoolSchema.optional(),
+  smtClean: ooxmlBoolSchema.optional(),
+  kern: ooxmlNonNegativeIntSchema.optional(),
 });
 
 const FieldAttrSchema = z.object({
@@ -531,12 +531,12 @@ const FieldAttrSchema = z.object({
   type: z.string().min(1),
 });
 
-const PercentValAttrSchema = z.object({
-  val: OoxmlNonNegativeIntSchema,
+const percentValAttrSchema = z.object({
+  val: ooxmlNonNegativeIntSchema,
 });
 
 const SrgbAttrSchema = z.object({
-  val: HexRgb6Schema,
+  val: hexRgb6Schema,
 });
 
 const SchemeClrAttrSchema = z.object({
@@ -628,7 +628,7 @@ function readFooterXmlColor(
   let alpha: number | undefined;
   for (const mod of colorCursor.remainingElementChildren()) {
     if (mod.namespaceUri !== A_NS) continue;
-    const parsed = PercentValAttrSchema.safeParse(mod.attrsObject(["val"]));
+    const parsed = percentValAttrSchema.safeParse(mod.attrsObject(["val"]));
     if (!parsed.success) continue;
     const fraction = Math.min(1, Math.max(0, parsed.data.val / 100_000));
     if (mod.localName === "tint") {
@@ -746,10 +746,10 @@ function readSpPrTransformBox(
   const off = xfrm.child(A_NS, "off");
   const ext = xfrm.child(A_NS, "ext");
   if (off === undefined || ext === undefined) return undefined;
-  const parsedOff = OffsetEmuFragmentSchema.safeParse(
+  const parsedOff = offsetEmuFragmentSchema.safeParse(
     off.attrsObject(["x", "y"]),
   );
-  const parsedExt = ExtentEmuFragmentSchema.safeParse(
+  const parsedExt = extentEmuFragmentSchema.safeParse(
     ext.attrsObject(["cx", "cy"]),
   );
   if (!parsedOff.success || !parsedExt.success) {

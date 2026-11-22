@@ -2805,6 +2805,7 @@ function resolveSlideDeclaration(
       ...(name === undefined ? {} : { name }),
       ...(authorId === undefined ? {} : { authorId }),
       index,
+      theme,
       ...(layoutKey === undefined ? {} : { layoutKey }),
       ...(parsed.colorMapOverride === undefined
         ? {}
@@ -3131,6 +3132,53 @@ function resolveDocument(
   }
   const parsed = resolveSlides(container, modules, theme.theme);
   const { masters: parsedMasters, layoutIdByKey, slides, sections } = parsed;
+
+  const mastersModule = modules.slideModules.get("slide-masters");
+  if (parsedMasters.length > 0 && mastersModule === undefined) {
+    throw new BuildError([
+      diagnostic(
+        parsedMasters[0]!.path,
+        "missing-capability",
+        "No capability module registered for slide-masters",
+      ),
+    ]);
+  }
+  const slideRequiringMasters = slides.find(
+    (slide) =>
+      slide.colorMapOverride !== undefined || slide.themeOverride !== undefined,
+  );
+  if (slideRequiringMasters !== undefined && mastersModule === undefined) {
+    throw new BuildError([
+      diagnostic(
+        `deck/slide[${slideRequiringMasters.id}]`,
+        "missing-capability",
+        "No capability module registered for slide-masters",
+      ),
+    ]);
+  }
+
+  let boundSections:
+    | {
+        readonly extensions: readonly Extension[];
+        emit(): { readonly xml: string };
+      }
+    | undefined;
+  if (sections.length > 0) {
+    const sectionsModule = [...modules.slideModules.values()].find(
+      (module) => module.bindSections !== undefined,
+    );
+    if (sectionsModule === undefined) {
+      throw new BuildError([
+        diagnostic(
+          "deck/section[1]",
+          "missing-capability",
+          "No capability module registered for section",
+        ),
+      ]);
+    }
+    boundSections = sectionsModule.bindSections!(sections);
+  }
+
   const slideIndexById = new Map(
     slides.map((slide) => [slide.id, slide.index] as const),
   );
@@ -3141,7 +3189,7 @@ function resolveDocument(
     ),
   ];
   const document: DocumentResolveState = {
-    usedExtensions: new Set(sections.length > 0 ? ["p14"] : []),
+    usedExtensions: new Set(boundSections?.extensions ?? []),
     warnings: [],
     resourceClaims: new Map(),
     morphNames: new Map(),
@@ -3167,9 +3215,6 @@ function resolveDocument(
     (module) =>
       module.slot === "shape-tree" &&
       module.declaration === "footer-placeholder",
-  );
-  const mastersModule = [...modules.slideModules.values()].find(
-    (module) => module.declaration === "slide-masters",
   );
 
   const resolvedMasters: InternalResolvedSlideMaster[] = [];
@@ -3694,7 +3739,14 @@ function resolveDocument(
     ...(typeof title === "string" ? { title } : {}),
     theme,
     ...(resolvedMasters.length > 0 ? { masters: resolvedMasters } : {}),
+    ...(mastersModule?.mastersCanvas === undefined
+      ? {}
+      : { mastersCanvas: mastersModule.mastersCanvas }),
+    ...(mastersModule?.mastersEmitDriver === undefined
+      ? {}
+      : { mastersEmitDriver: mastersModule.mastersEmitDriver }),
     sections,
+    ...(boundSections === undefined ? {} : { sectionsEmitter: boundSections }),
     slides: resolvedSlides.map(({ internal: slideInternal }) => slideInternal),
     resourceClaims: document.resourceClaims,
     warnings: [...document.warnings],

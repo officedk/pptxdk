@@ -17,13 +17,13 @@ import {
 } from "#/xml-reader.ts";
 
 /** Zod schema for an OPC `<Relationship>` element attributes. */
-export const OpcRelationshipSchema = z.object({
+export const opcRelationshipSchema = z.object({
   Id: z.string().min(1),
   Type: z.string().min(1),
   Target: z.string().min(1),
   TargetMode: z.enum(["Internal", "External"]).default("Internal"),
 });
-export type OpcRelationship = z.infer<typeof OpcRelationshipSchema>;
+export type OpcRelationship = z.infer<typeof opcRelationshipSchema>;
 
 export type ParsedRelationshipEntry = OpcRelationship & {
   readonly xpath: string;
@@ -92,7 +92,7 @@ export function parseRelationshipsXml(
   const diagnostics: ImportDiagnostic[] = [];
   for (const relCursor of cursor.children(OPC_REL_NS, "Relationship")) {
     const raw = relCursor.attrsObject(["Id", "Type", "Target", "TargetMode"]);
-    const parsed = OpcRelationshipSchema.safeParse(raw);
+    const parsed = opcRelationshipSchema.safeParse(raw);
     if (!parsed.success) {
       diagnostics.push({
         code: "broken-relationship",

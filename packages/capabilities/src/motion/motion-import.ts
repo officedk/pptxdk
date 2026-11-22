@@ -1,8 +1,8 @@
 import { CommonContainer, CommonNode } from "@pptxdk/core/document";
 import {
   A_NS,
-  OoxmlNonNegativeIntSchema,
-  OoxmlPositiveIntSchema,
+  ooxmlNonNegativeIntSchema,
+  ooxmlPositiveIntSchema,
   P_NS,
   type ImportDiagnostic,
   type ImportLocation,
@@ -201,13 +201,13 @@ function locationFor(
 
 function parsePositiveInt(raw: string | undefined): number | undefined {
   if (raw === undefined) return undefined;
-  const parsed = OoxmlPositiveIntSchema.safeParse(raw);
+  const parsed = ooxmlPositiveIntSchema.safeParse(raw);
   return parsed.success ? parsed.data : undefined;
 }
 
 function parseNonNegativeInt(raw: string | undefined): number | undefined {
   if (raw === undefined) return undefined;
-  const parsed = OoxmlNonNegativeIntSchema.safeParse(raw);
+  const parsed = ooxmlNonNegativeIntSchema.safeParse(raw);
   return parsed.success ? parsed.data : undefined;
 }
 
@@ -219,9 +219,7 @@ function parseSignedInt(raw: string | undefined): number | undefined {
 
 function consumeTargetElement(tgtEl: XmlElementCursor): ParsedTargetRef[] {
   const refs: ParsedTargetRef[] = [];
-  for (const sldTgt of tgtEl.children(P_NS, "sldTgt")) {
-    void sldTgt;
-  }
+  tgtEl.children(P_NS, "sldTgt");
   for (const spTgt of tgtEl.children(P_NS, "spTgt")) {
     const spid = parsePositiveInt(spTgt.attr("spid"));
     let isBackground = false;

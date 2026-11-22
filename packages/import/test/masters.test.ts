@@ -18,54 +18,11 @@ import {
   REL_SLIDE_MASTER,
   R_NS,
   createImporter,
-  defineCanvasMechanism,
-  importMastersAndLayouts,
-  type DeckImportContext,
 } from "@pptxdk/import";
 import { strToU8, zipSync } from "fflate";
 import { describe, it } from "vitest";
 
-const testMastersCap = {
-  declaration: "test-masters",
-  slideProps: [] as const,
-  slot: "background" as const,
-  mechanisms: [
-    defineCanvasMechanism({
-      key: "test-masters",
-      role: "canvas",
-      emit: () => ({ xml: "" }),
-      paint: () => ({ svg: "" }),
-      import: {
-        target: "deck" as const,
-        stage: "pre-slides" as const,
-        read(context: DeckImportContext) {
-          const diagnostics: Parameters<typeof importMastersAndLayouts>[5] = [];
-          const layouts = importMastersAndLayouts(
-            context.presentationCursor,
-            context.package,
-            context.relById ?? new Map(),
-            context.deckNode,
-            context.usedDeckIds ?? new Set(),
-            diagnostics,
-            context.slideHandlers ?? [],
-            context.shapeTreeHandlers ?? [],
-            context.registerDeferredSlideLink ?? (() => {}),
-            context.clrMapByLayoutPartPath ?? new Map(),
-          );
-          if (context.layoutNodeByPartPath !== undefined) {
-            for (const [k, v] of layouts) {
-              context.layoutNodeByPartPath.set(k, v);
-            }
-          }
-          return diagnostics.length === 0 ? {} : { diagnostics };
-        },
-      },
-    }),
-  ],
-  bindSlide: () => ({
-    resolveSlide: () => ({ extensions: [], emit: () => ({ xml: "" }) }),
-  }),
-};
+import { testMastersCap } from "./test-masters-cap.ts";
 
 describe("SlideMaster and SlideLayout import", () => {
   it("imports prs-slide-masters.pptx with 0 slides, 2 masters, preserve distinction, and 2 idle layouts", () => {
@@ -104,7 +61,7 @@ describe("SlideMaster and SlideLayout import", () => {
     assert.equal(master2.layouts[0]?.props["preserve"], true);
 
     // Resolve the 0-slide deck as-is.
-    const resolve = createResolver([]);
+    const resolve = createResolver([testMastersCap]);
     const zeroSlideResolution = resolve(result.document);
     assert.equal(zeroSlideResolution.report.slides.length, 0);
     assert.equal(zeroSlideResolution.report.masters?.length, 2);
@@ -172,7 +129,7 @@ describe("SlideMaster and SlideLayout import", () => {
     assert.equal(slides[0]?.props["layout"], master.layouts[0]);
     assert.equal(slides[9]?.props["layout"], master.layouts[1]);
 
-    const resolve = createResolver([]);
+    const resolve = createResolver([testMastersCap]);
     const resolved = resolve(result.document);
     const resolvedLayouts: readonly SlideLayoutObservation[] =
       resolved.report.masters?.[0]?.layouts ?? [];

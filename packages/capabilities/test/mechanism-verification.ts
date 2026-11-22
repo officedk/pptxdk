@@ -302,7 +302,7 @@ export async function runProductionMechanismVerifications(): Promise<void> {
     }>
   >();
 
-  for (const [key, entry] of entries) {
+  for (const [, entry] of entries) {
     let runPromise = cachedRuns.get(entry.scenario);
     if (runPromise === undefined) {
       runPromise = (async () => {
@@ -355,6 +355,5 @@ export async function runProductionMechanismVerifications(): Promise<void> {
         roundtrip: data.roundtrip.preview,
       });
     }
-    void key;
   }
 }

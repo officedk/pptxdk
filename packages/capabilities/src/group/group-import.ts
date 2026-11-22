@@ -2,10 +2,10 @@ import { CommonNode } from "@pptxdk/core/document";
 import { pxToEmu } from "@pptxdk/emit";
 import {
   A_NS,
-  ExtentEmuFragmentSchema,
-  OffsetEmuFragmentSchema,
+  extentEmuFragmentSchema,
+  offsetEmuFragmentSchema,
   P_NS,
-  TransformAttributesFragmentSchema,
+  transformAttributesFragmentSchema,
   emuToPx,
   peekShapeTreeObjectIdentity,
   type ImportDiagnostic,
@@ -206,19 +206,19 @@ export function readGroupSp(
     return { diagnostics };
   }
 
-  const parsedXfrm = TransformAttributesFragmentSchema.safeParse(
+  const parsedXfrm = transformAttributesFragmentSchema.safeParse(
     xfrm.attrsObject(["rot", "flipH", "flipV"]),
   );
-  const parsedOff = OffsetEmuFragmentSchema.safeParse(
+  const parsedOff = offsetEmuFragmentSchema.safeParse(
     off.attrsObject(["x", "y"]),
   );
-  const parsedExt = ExtentEmuFragmentSchema.safeParse(
+  const parsedExt = extentEmuFragmentSchema.safeParse(
     ext.attrsObject(["cx", "cy"]),
   );
-  const parsedChOff = OffsetEmuFragmentSchema.safeParse(
+  const parsedChOff = offsetEmuFragmentSchema.safeParse(
     chOff.attrsObject(["x", "y"]),
   );
-  const parsedChExt = ExtentEmuFragmentSchema.safeParse(
+  const parsedChExt = extentEmuFragmentSchema.safeParse(
     chExt.attrsObject(["cx", "cy"]),
   );
   if (

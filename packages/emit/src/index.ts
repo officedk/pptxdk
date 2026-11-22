@@ -18,6 +18,7 @@ export {
 export type {
   EmittedSlideLayoutSpec,
   EmittedSlideMasterSpec,
+  MastersEmitDriver,
   PptxPackagePart,
   PptxPackageRelationshipSet,
   PptxPackageResource,

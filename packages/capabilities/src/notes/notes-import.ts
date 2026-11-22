@@ -25,9 +25,9 @@ import {
 import { populateRichTextNode, readRichTextBody } from "../text/text-import.ts";
 import { createNotesNode } from "./notes-declaration.ts";
 import {
-  NotesPlaceholderXmlSchema,
-  NotesRootAttrsXmlSchema,
-  NotesShapeIdentityXmlSchema,
+  notesPlaceholderXmlSchema,
+  notesRootAttrsXmlSchema,
+  notesShapeIdentityXmlSchema,
 } from "./notes-schemas.ts";
 
 const baselineNotesSlidePlaceholders = new Set([
@@ -68,7 +68,7 @@ function readNotesPlaceholderInfo(
   const cNvPr = nvSpPr.child(P_NS, "cNvPr");
   if (cNvPr !== undefined) {
     const rawCNvPr = cNvPr.attrsObject(["id", "name"]);
-    const parsedCNvPr = NotesShapeIdentityXmlSchema.safeParse(rawCNvPr);
+    const parsedCNvPr = notesShapeIdentityXmlSchema.safeParse(rawCNvPr);
     if (parsedCNvPr.success) {
       objectId = parsedCNvPr.data.id;
       if (
@@ -107,7 +107,7 @@ function readNotesPlaceholderInfo(
     "orient",
     "hasCustomPrompt",
   ]);
-  const parsedPh = NotesPlaceholderXmlSchema.safeParse(rawPh);
+  const parsedPh = notesPlaceholderXmlSchema.safeParse(rawPh);
   if (!parsedPh.success) {
     diagnostics.push({
       code: "invalid-xml-value",
@@ -228,7 +228,7 @@ export const speakerNotesImportHandler: SlideImportHandler = {
       "showMasterSp",
       "showMasterPhAnim",
     ]);
-    if (!NotesRootAttrsXmlSchema.safeParse(rawRootAttrs).success) {
+    if (!notesRootAttrsXmlSchema.safeParse(rawRootAttrs).success) {
       diagnostics.push({
         code: "invalid-xml-value",
         category: "corrupt-input",

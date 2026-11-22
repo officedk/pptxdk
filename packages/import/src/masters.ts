@@ -13,6 +13,7 @@ import {
   type ColorMapOverride,
   type ColorValue,
   type ContentPlaceholderRole,
+  type Geometry,
   type HeaderFooter,
   type LayoutPlaceholderSpec,
   type MasterPlaceholderMap,
@@ -45,7 +46,6 @@ import { readAlternateContent } from "#/alternate-content.ts";
 import type { ImportDiagnostic, ImportLocation } from "#/diagnostics.ts";
 import type {
   DeferredSlideLink,
-  ImportedPlaceholderSpPr,
   OmittedSlideObjectInfo,
   PlaceholderVisualReader,
   ShapeTreeImportHandler,
@@ -79,45 +79,37 @@ import {
   readThemeOverridePart,
   readThemePart,
 } from "#/themes.ts";
+import { readPlaceholderSpPrVisuals } from "#/visual.ts";
 import {
-  readBlipFill,
-  readDrawingColor,
-  readEffectList,
-  readGradientFill,
-  readLineBorder,
-  readTransformXml,
-} from "#/visual.ts";
-import {
-  HexRgb6Schema,
-  OoxmlBoolSchema,
-  OoxmlIntSchema,
-  OoxmlNonNegativeIntSchema,
-  OoxmlPositiveIntSchema,
-  TransformAttributesFragmentSchema,
+  hexRgb6Schema,
+  ooxmlBoolSchema,
+  ooxmlIntSchema,
+  ooxmlNonNegativeIntSchema,
+  ooxmlPositiveIntSchema,
 } from "#/xml-fragments.ts";
 import { XmlElementCursor, parseXmlPart } from "#/xml-reader.ts";
 
 const minimumMasterLayoutId = 2_147_483_648;
 const maximumMasterLayoutId = 4_294_967_295;
 
-const SlideMasterAttrsSchema = z.object({
-  preserve: OoxmlBoolSchema.optional(),
+const slideMasterAttrsSchema = z.object({
+  preserve: ooxmlBoolSchema.optional(),
 });
 
-const SlideLayoutAttrsSchema = z.object({
+const slideLayoutAttrsSchema = z.object({
   type: slideLayoutTypeSchema.optional(),
-  preserve: OoxmlBoolSchema.optional(),
+  preserve: ooxmlBoolSchema.optional(),
   matchingName: z.string().optional(),
-  userDrawn: OoxmlBoolSchema.optional(),
-  showMasterSp: OoxmlBoolSchema.optional(),
-  showMasterPhAnim: OoxmlBoolSchema.optional(),
+  userDrawn: ooxmlBoolSchema.optional(),
+  showMasterSp: ooxmlBoolSchema.optional(),
+  showMasterPhAnim: ooxmlBoolSchema.optional(),
 });
 
-const HeaderFooterAttrsSchema = z.object({
-  sldNum: OoxmlBoolSchema.optional(),
-  hdr: OoxmlBoolSchema.optional(),
-  ftr: OoxmlBoolSchema.optional(),
-  dt: OoxmlBoolSchema.optional(),
+const headerFooterAttrsSchema = z.object({
+  sldNum: ooxmlBoolSchema.optional(),
+  hdr: ooxmlBoolSchema.optional(),
+  ftr: ooxmlBoolSchema.optional(),
+  dt: ooxmlBoolSchema.optional(),
 });
 
 function readHeaderFooterElement(
@@ -128,7 +120,7 @@ function readHeaderFooterElement(
   const hf = parentCursor.child(P_NS, "hf");
   if (hf === undefined) return undefined;
   const raw = hf.attrsObject(["sldNum", "hdr", "ftr", "dt"]);
-  const parsed = HeaderFooterAttrsSchema.safeParse(raw);
+  const parsed = headerFooterAttrsSchema.safeParse(raw);
   if (!parsed.success) {
     diagnostics.push({
       code: "invalid-xml-value",
@@ -172,7 +164,7 @@ function readColorModifierVal(
 ): number | undefined {
   const mod = colorCursor.child(A_NS, localName);
   if (mod === undefined) return undefined;
-  const parsed = OoxmlNonNegativeIntSchema.safeParse(mod.attr("val"));
+  const parsed = ooxmlNonNegativeIntSchema.safeParse(mod.attr("val"));
   return parsed.success ? Math.min(1, parsed.data / 100_000) : undefined;
 }
 
@@ -188,7 +180,7 @@ function readStyleColor(
 
   let baseColor: ThemeColor | undefined;
   if (srgb !== undefined) {
-    const parsed = HexRgb6Schema.safeParse(srgb.attr("val"));
+    const parsed = hexRgb6Schema.safeParse(srgb.attr("val"));
     if (!parsed.success) return undefined;
     baseColor = `#${parsed.data.toUpperCase()}`;
   } else if (scheme !== undefined) {
@@ -246,17 +238,17 @@ function readDefRPr(
       lang = undefined;
     }
   }
-  const szParsed = OoxmlPositiveIntSchema.safeParse(raw["sz"]);
+  const szParsed = ooxmlPositiveIntSchema.safeParse(raw["sz"]);
   const fontSize = szParsed.success
     ? (`${szParsed.data / 100}pt` as const)
     : undefined;
-  const bParsed = OoxmlBoolSchema.safeParse(raw["b"]);
+  const bParsed = ooxmlBoolSchema.safeParse(raw["b"]);
   const fontWeight = bParsed.success
     ? bParsed.data
       ? ("bold" as const)
       : ("normal" as const)
     : undefined;
-  const iParsed = OoxmlBoolSchema.safeParse(raw["i"]);
+  const iParsed = ooxmlBoolSchema.safeParse(raw["i"]);
   const fontStyle = iParsed.success
     ? iParsed.data
       ? ("italic" as const)
@@ -276,7 +268,7 @@ function readDefRPr(
       : raw["cap"] === "none"
         ? ("none" as const)
         : undefined;
-  const spcParsed = OoxmlIntSchema.safeParse(raw["spc"]);
+  const spcParsed = ooxmlIntSchema.safeParse(raw["spc"]);
   const letterSpacing = spcParsed.success ? spcParsed.data / 75 : undefined;
 
   const solidFill = rPr.child(A_NS, "solidFill");
@@ -349,9 +341,9 @@ function readLevelParagraphProperties(
     "hangingPunct",
     "fontAlgn",
   ]);
-  const marLParsed = OoxmlNonNegativeIntSchema.safeParse(rawAttrs["marL"]);
+  const marLParsed = ooxmlNonNegativeIntSchema.safeParse(rawAttrs["marL"]);
   const marginLeft = marLParsed.success ? emuToPx(marLParsed.data) : undefined;
-  const indentParsed = OoxmlIntSchema.safeParse(rawAttrs["indent"]);
+  const indentParsed = ooxmlIntSchema.safeParse(rawAttrs["indent"]);
   const indent = indentParsed.success ? emuToPx(indentParsed.data) : undefined;
   const algnMap: Readonly<Record<string, TextAlignment>> = {
     l: "left",
@@ -366,21 +358,21 @@ function readLevelParagraphProperties(
   const spcBefPts = spcBef?.child(A_NS, "spcPts");
   const spcBefPct = spcBef?.child(A_NS, "spcPct");
   spcBefPct?.consumeAttr("val");
-  const spcBefVal = OoxmlNonNegativeIntSchema.safeParse(spcBefPts?.attr("val"));
+  const spcBefVal = ooxmlNonNegativeIntSchema.safeParse(spcBefPts?.attr("val"));
   const spacingBefore = spcBefVal.success ? spcBefVal.data / 75 : undefined;
 
   const spcAft = pPr.child(A_NS, "spcAft");
   const spcAftPts = spcAft?.child(A_NS, "spcPts");
   const spcAftPct = spcAft?.child(A_NS, "spcPct");
   spcAftPct?.consumeAttr("val");
-  const spcAftVal = OoxmlNonNegativeIntSchema.safeParse(spcAftPts?.attr("val"));
+  const spcAftVal = ooxmlNonNegativeIntSchema.safeParse(spcAftPts?.attr("val"));
   const spacingAfter = spcAftVal.success ? spcAftVal.data / 75 : undefined;
 
   const lnSpc = pPr.child(A_NS, "lnSpc");
   const lnSpcPts = lnSpc?.child(A_NS, "spcPts");
   const lnSpcPct = lnSpc?.child(A_NS, "spcPct");
   lnSpcPct?.consumeAttr("val");
-  const lnSpcVal = OoxmlPositiveIntSchema.safeParse(lnSpcPts?.attr("val"));
+  const lnSpcVal = ooxmlPositiveIntSchema.safeParse(lnSpcPts?.attr("val"));
   const lineHeight = lnSpcVal.success
     ? (`${lnSpcVal.data / 100}pt` as const)
     : undefined;
@@ -407,7 +399,7 @@ function readLevelParagraphProperties(
     }
   } else if (buAutoNum !== undefined) {
     buAutoNum.consumeAttr("type");
-    const startParsed = OoxmlPositiveIntSchema.safeParse(
+    const startParsed = ooxmlPositiveIntSchema.safeParse(
       buAutoNum.attr("startAt"),
     );
     list = {
@@ -503,164 +495,6 @@ function directPlaceholderChild(el: XmlElementCursor["element"]): boolean {
   return false;
 }
 
-function readDefaultPlaceholderSpPr(args: {
-  readonly spPr: XmlElementCursor;
-  readonly pkg: PptxPackage;
-  readonly location: ImportLocation;
-  readonly diagnostics: ImportDiagnostic[];
-}): ImportedPlaceholderSpPr {
-  const { spPr, pkg, location, diagnostics } = args;
-  let x: number | undefined;
-  let y: number | undefined;
-  let width: number | undefined;
-  let height: number | undefined;
-  let rotate: number | undefined;
-  let flipH: boolean | undefined;
-  let flipV: boolean | undefined;
-  let borderRadius: number | undefined;
-  let prstGeomName: string | undefined;
-  let roundRectAdj: number | undefined;
-
-  const xfrm = spPr.child(A_NS, "xfrm");
-  if (xfrm !== undefined) {
-    if (
-      xfrm.child(A_NS, "off") !== undefined &&
-      xfrm.child(A_NS, "ext") !== undefined
-    ) {
-      const tf = readTransformXml(xfrm, location, diagnostics);
-      if (tf !== undefined) {
-        x = tf.x;
-        y = tf.y;
-        width = tf.width;
-        height = tf.height;
-        rotate = tf.rotate;
-        flipH = tf.flipH;
-        flipV = tf.flipV;
-      }
-    } else {
-      const parsedXfrm = TransformAttributesFragmentSchema.safeParse(
-        xfrm.attrsObject(["rot", "flipH", "flipV"]),
-      );
-      if (parsedXfrm.success) {
-        if (parsedXfrm.data.rot !== undefined && parsedXfrm.data.rot !== 0) {
-          rotate = parsedXfrm.data.rot / 60_000;
-        }
-        if (parsedXfrm.data.flipH === true) flipH = true;
-        if (parsedXfrm.data.flipV === true) flipV = true;
-      }
-    }
-  }
-
-  let backgroundColor: ColorValue | undefined;
-  let backgroundImage: unknown;
-  let opacity: number | undefined;
-  let border: ReturnType<typeof readLineBorder> = {};
-  let effects: ReturnType<typeof readEffectList> = {};
-
-  for (const child of spPr.remainingElementChildren()) {
-    if (child.namespaceUri !== A_NS) continue;
-    switch (child.localName) {
-      case "prstGeom": {
-        prstGeomName = child.attr("prst");
-        const avLst = child.child(A_NS, "avLst");
-        if (avLst !== undefined) {
-          for (const gd of avLst.children(A_NS, "gd")) {
-            const name = gd.attr("name");
-            const fmla = gd.attr("fmla");
-            if (
-              name === "adj" &&
-              fmla !== undefined &&
-              fmla.startsWith("val ")
-            ) {
-              const num = Number(fmla.slice(4));
-              if (Number.isSafeInteger(num)) roundRectAdj = num;
-            }
-          }
-        }
-        break;
-      }
-      case "noFill":
-        break;
-      case "solidFill":
-        backgroundColor = readDrawingColor(child, location, diagnostics);
-        break;
-      case "gradFill":
-        backgroundImage = readGradientFill(child, location, diagnostics);
-        break;
-      case "blipFill": {
-        const blip = readBlipFill(child, pkg, location, diagnostics);
-        if (blip !== undefined) {
-          backgroundImage = { image: blip.image };
-          opacity = blip.opacity;
-        }
-        break;
-      }
-      case "ln":
-        border = readLineBorder(child, location, diagnostics);
-        break;
-      case "effectLst":
-        effects = readEffectList(child, location, diagnostics);
-        break;
-      case "extLst":
-        child.ignoreEmptyChild(A_NS, "ext");
-        break;
-      default:
-        break;
-    }
-  }
-
-  if (
-    prstGeomName === "roundRect" &&
-    width !== undefined &&
-    height !== undefined
-  ) {
-    const adj = roundRectAdj ?? 16667;
-    if (adj > 0) {
-      borderRadius = (adj / 100_000) * Math.min(width, height);
-    }
-  }
-  const geometry =
-    prstGeomName !== undefined &&
-    prstGeomName !== "rect" &&
-    !(prstGeomName === "roundRect" && borderRadius !== undefined)
-      ? roundRectAdj !== undefined
-        ? { type: "preset", name: prstGeomName, adjust: { adj: roundRectAdj } }
-        : prstGeomName
-      : undefined;
-
-  const style: Record<string, unknown> = {
-    ...(backgroundColor === undefined ? {} : { backgroundColor }),
-    ...(backgroundImage === undefined ? {} : { backgroundImage }),
-    ...(border.borderColor === undefined
-      ? {}
-      : { borderColor: border.borderColor }),
-    ...(border.borderWidth === undefined
-      ? {}
-      : { borderWidth: border.borderWidth }),
-    ...(border.borderStyle === undefined
-      ? {}
-      : { borderStyle: border.borderStyle }),
-    ...(opacity === undefined ? {} : { opacity }),
-    ...(effects.boxShadow === undefined
-      ? {}
-      : { boxShadow: effects.boxShadow }),
-    ...(effects.softEdge === undefined ? {} : { softEdge: effects.softEdge }),
-    ...(borderRadius === undefined ? {} : { borderRadius }),
-    ...(rotate === undefined ? {} : { rotate }),
-  };
-
-  return {
-    ...(x === undefined ? {} : { x }),
-    ...(y === undefined ? {} : { y }),
-    ...(width === undefined ? {} : { width }),
-    ...(height === undefined ? {} : { height }),
-    ...(geometry === undefined ? {} : { geometry }),
-    ...(flipH ? { flipH: true } : {}),
-    ...(flipV ? { flipV: true } : {}),
-    ...(Object.keys(style).length === 0 ? {} : { style }),
-  };
-}
-
 function readPlaceholderSpList(
   spTree: XmlElementCursor | undefined,
   clrMap: Readonly<Record<string, NativeColorSlot>>,
@@ -686,7 +520,7 @@ function readPlaceholderSpList(
     const nvSpPr = sp.child(P_NS, "nvSpPr");
     const cNvPr = nvSpPr?.child(P_NS, "cNvPr");
     const rawId = cNvPr?.attr("id");
-    const parsedSpid = OoxmlNonNegativeIntSchema.safeParse(rawId);
+    const parsedSpid = ooxmlNonNegativeIntSchema.safeParse(rawId);
     const spid =
       parsedSpid.success && parsedSpid.data > 0 ? parsedSpid.data : undefined;
     const rawName = cNvPr?.attr("name");
@@ -708,11 +542,11 @@ function readPlaceholderSpList(
     const phType: ContentPlaceholderRole = typeRes.success
       ? typeRes.data
       : "obj";
-    const idxParsed = OoxmlNonNegativeIntSchema.safeParse(ph.attr("idx"));
+    const idxParsed = ooxmlNonNegativeIntSchema.safeParse(ph.attr("idx"));
     const idx = idxParsed.success ? idxParsed.data : undefined;
     const szParsed = placeholderSzSchema.safeParse(ph.attr("sz"));
     const orientParsed = placeholderOrientSchema.safeParse(ph.attr("orient"));
-    const customPromptParsed = OoxmlBoolSchema.safeParse(
+    const customPromptParsed = ooxmlBoolSchema.safeParse(
       ph.attr("hasCustomPrompt"),
     );
 
@@ -720,7 +554,7 @@ function readPlaceholderSpList(
     let y: number | undefined;
     let width: number | undefined;
     let height: number | undefined;
-    let geometry: unknown;
+    let geometry: Geometry | undefined;
     let flipH: boolean | undefined;
     let flipV: boolean | undefined;
     const styleProps: Record<string, unknown> = {};
@@ -733,7 +567,7 @@ function readPlaceholderSpList(
         ...(name === undefined ? {} : { objectName: name }),
       };
       const importedSpPr = (
-        readPlaceholderVisuals ?? readDefaultPlaceholderSpPr
+        readPlaceholderVisuals ?? readPlaceholderSpPrVisuals
       )({
         spPr,
         pkg,
@@ -774,10 +608,10 @@ function readPlaceholderSpList(
         if (b["anchor"] === "t") styleProps["verticalAlign"] = "top";
         else if (b["anchor"] === "ctr") styleProps["verticalAlign"] = "middle";
         else if (b["anchor"] === "b") styleProps["verticalAlign"] = "bottom";
-        const lIns = OoxmlNonNegativeIntSchema.safeParse(b["lIns"]);
-        const tIns = OoxmlNonNegativeIntSchema.safeParse(b["tIns"]);
-        const rIns = OoxmlNonNegativeIntSchema.safeParse(b["rIns"]);
-        const bIns = OoxmlNonNegativeIntSchema.safeParse(b["bIns"]);
+        const lIns = ooxmlNonNegativeIntSchema.safeParse(b["lIns"]);
+        const tIns = ooxmlNonNegativeIntSchema.safeParse(b["tIns"]);
+        const rIns = ooxmlNonNegativeIntSchema.safeParse(b["rIns"]);
+        const bIns = ooxmlNonNegativeIntSchema.safeParse(b["bIns"]);
         if (lIns.success && lIns.data !== 0)
           styleProps["paddingLeft"] = emuToPx(lIns.data);
         if (tIns.success && tIns.data !== 0)
@@ -998,7 +832,7 @@ function validateMasterLayoutNumericId(
   diagnostics: ImportDiagnostic[],
 ): void {
   if (rawId === undefined) return;
-  const parsed = OoxmlNonNegativeIntSchema.safeParse(rawId);
+  const parsed = ooxmlNonNegativeIntSchema.safeParse(rawId);
   if (
     !parsed.success ||
     parsed.data < minimumMasterLayoutId ||
@@ -1060,6 +894,7 @@ function readSingleShapeTreeItem(
   clrMap?: Readonly<Record<string, NativeColorSlot>>,
   registerImportedObject?: (spid: number, node: CommonNode) => void,
   omittedSpids?: Map<number, OmittedSlideObjectInfo>,
+  masterPlaceholders?: MasterPlaceholderMap,
 ): CommonNode | undefined {
   const identity = peekShapeTreeObjectIdentity(itemCursor.element);
   const match = shapeTreeHandlers.find(
@@ -1119,6 +954,7 @@ function readSingleShapeTreeItem(
     registerDeferredSlideLink,
     ...(registerImportedObject === undefined ? {} : { registerImportedObject }),
     ...(layoutPlaceholders === undefined ? {} : { layoutPlaceholders }),
+    ...(masterPlaceholders === undefined ? {} : { masterPlaceholders }),
     ...(clrMap === undefined ? {} : { clrMap }),
   });
   if (outcome.diagnostics !== undefined) {
@@ -1159,6 +995,7 @@ export function readShapeTreeItems(args: {
   readonly diagnostics: ImportDiagnostic[];
   readonly containerNode?: CommonNode;
   readonly layoutPlaceholders?: PlaceholderMap;
+  readonly masterPlaceholders?: MasterPlaceholderMap;
   readonly clrMap?: Readonly<Record<string, NativeColorSlot>>;
   readonly registerImportedObject?: (spid: number, node: CommonNode) => void;
   readonly omittedSpids?: Map<number, OmittedSlideObjectInfo>;
@@ -1175,6 +1012,7 @@ export function readShapeTreeItems(args: {
     diagnostics,
     containerNode,
     layoutPlaceholders,
+    masterPlaceholders,
     clrMap,
     registerImportedObject,
     omittedSpids,
@@ -1204,6 +1042,7 @@ export function readShapeTreeItems(args: {
             clrMap,
             registerImportedObject,
             omittedSpids,
+            masterPlaceholders,
           );
           if (node !== undefined) appendNode(node);
         }
@@ -1225,6 +1064,7 @@ export function readShapeTreeItems(args: {
             clrMap,
             registerImportedObject,
             omittedSpids,
+            masterPlaceholders,
           );
           if (node !== undefined) {
             adoptedFallback = true;
@@ -1284,6 +1124,7 @@ export function readShapeTreeItems(args: {
       clrMap,
       registerImportedObject,
       omittedSpids,
+      masterPlaceholders,
     );
     if (node !== undefined) appendNode(node);
   }
@@ -1347,7 +1188,7 @@ function readSlideLayoutPart(
     "showMasterSp",
     "showMasterPhAnim",
   ]);
-  const parsedAttrs = SlideLayoutAttrsSchema.safeParse(rawAttrs);
+  const parsedAttrs = slideLayoutAttrsSchema.safeParse(rawAttrs);
   let layoutType: SlideLayoutProps["type"];
   let preserve: boolean | undefined;
   let matchingName: string | undefined;
@@ -1379,16 +1220,16 @@ function readSlideLayoutPart(
     }
     const typeRes = slideLayoutTypeSchema.safeParse(rawAttrs["type"]);
     if (typeRes.success) layoutType = typeRes.data;
-    const preserveRes = OoxmlBoolSchema.safeParse(rawAttrs["preserve"]);
+    const preserveRes = ooxmlBoolSchema.safeParse(rawAttrs["preserve"]);
     if (preserveRes.success) preserve = preserveRes.data;
     if (rawAttrs["matchingName"] !== undefined) {
       matchingName = rawAttrs["matchingName"];
     }
-    const userDrawnRes = OoxmlBoolSchema.safeParse(rawAttrs["userDrawn"]);
+    const userDrawnRes = ooxmlBoolSchema.safeParse(rawAttrs["userDrawn"]);
     if (userDrawnRes.success) userDrawn = userDrawnRes.data;
-    const showSpRes = OoxmlBoolSchema.safeParse(rawAttrs["showMasterSp"]);
+    const showSpRes = ooxmlBoolSchema.safeParse(rawAttrs["showMasterSp"]);
     if (showSpRes.success) showMasterShapes = showSpRes.data;
-    const showPhAnimRes = OoxmlBoolSchema.safeParse(
+    const showPhAnimRes = ooxmlBoolSchema.safeParse(
       rawAttrs["showMasterPhAnim"],
     );
     if (showPhAnimRes.success) {
@@ -1617,7 +1458,7 @@ function readSlideMasterPart(
     "/p:sldMaster",
   );
   const rawAttrs = masterCursor.attrsObject(["preserve"]);
-  const parsedAttrs = SlideMasterAttrsSchema.safeParse(rawAttrs);
+  const parsedAttrs = slideMasterAttrsSchema.safeParse(rawAttrs);
   let preserve: boolean | undefined;
   if (!parsedAttrs.success) {
     diagnostics.push({

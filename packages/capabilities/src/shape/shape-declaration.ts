@@ -10,10 +10,10 @@ import { RichTextContainer } from "@pptxdk/core/document";
 import { pxToEmu } from "@pptxdk/emit";
 import { z } from "zod";
 
-import { MotionPropsSchema } from "../motion/motion-schemas.ts";
+import { motionPropsSchema } from "../motion/motion-schemas.ts";
 import { geometrySchema } from "../shared/geometry.ts";
-import { OptionalNameSchema } from "../shared/identity.ts";
-import { MorphKeySchema } from "../shared/morph-api.ts";
+import { optionalNameSchema } from "../shared/identity.ts";
+import { morphKeySchema } from "../shared/morph-api.ts";
 import { lineEndStyleSchema } from "../shared/visual.ts";
 
 export const shapeCoordinateSchema = z
@@ -41,12 +41,12 @@ const shapeStyleObjectSchema = z.strictObject({
 export const shapeStyleSchema = shapeStyleObjectSchema.readonly();
 export type ShapeStyle = z.infer<typeof shapeStyleSchema>;
 
-const motionPropsShape = MotionPropsSchema.unwrap().shape;
+const motionPropsShape = motionPropsSchema.unwrap().shape;
 
 const shapeDeclarationPropsObjectSchema = z.strictObject({
   id: authorIdSchema.optional(),
-  name: OptionalNameSchema.optional(),
-  morphKey: MorphKeySchema.optional(),
+  name: optionalNameSchema.optional(),
+  morphKey: morphKeySchema.optional(),
   link: linkTargetSchema.optional(),
   geometry: geometrySchema.optional(),
   flipH: z.boolean().optional(),

@@ -58,7 +58,7 @@ import {
   type ResolvedScatterAxes,
 } from "./chart-model.ts";
 import {
-  ChartStyleSchema,
+  chartStyleSchema,
   chartAllowedPropKeys,
   parseChartAxisBySchema,
   parseChartCoordinateBySchema,
@@ -1073,7 +1073,7 @@ export const chartCapability = {
     }
 
     const allowedStyleKeys = new Set<string>(
-      Object.keys(ChartStyleSchema.unwrap().shape),
+      Object.keys(chartStyleSchema.unwrap().shape),
     );
     const contract = parseCapabilityLayoutContract({
       nativeKind: "graphicFrame",

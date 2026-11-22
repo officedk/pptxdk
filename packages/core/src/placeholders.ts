@@ -1,5 +1,6 @@
 import { z } from "zod";
 
+import { geometrySchema } from "#/geometry-schemas.ts";
 import { paddingStyleSchema } from "#/layout-schemas.ts";
 import {
   textStyleShape,
@@ -119,7 +120,7 @@ const basePlaceholderSpecSchema = z.strictObject({
   y: z.number().finite().optional(),
   width: z.number().finite().positive().optional(),
   height: z.number().finite().positive().optional(),
-  geometry: z.unknown().optional(),
+  geometry: geometrySchema.optional(),
   flipH: z.boolean().optional(),
   flipV: z.boolean().optional(),
   style: placeholderStyleSchema.optional(),

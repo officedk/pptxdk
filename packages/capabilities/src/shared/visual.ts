@@ -820,14 +820,9 @@ export function emitPlaceholderVisualSpPr(
 ): string {
   let xfrmXml = "";
   if (flags.hasBox || flags.hasRotate || flags.hasFlipH || flags.hasFlipV) {
-    const rotAttr =
-      model.rotationUnits !== undefined && model.rotationUnits !== 0
-        ? ` rot="${model.rotationUnits}"`
-        : flags.hasRotate
-          ? ' rot="0"'
-          : "";
-    const flipHAttr = model.flipH ? ' flipH="1"' : "";
-    const flipVAttr = model.flipV ? ' flipV="1"' : "";
+    const rotAttr = flags.hasRotate ? ` rot="${model.rotationUnits ?? 0}"` : "";
+    const flipHAttr = flags.hasFlipH && model.flipH ? ' flipH="1"' : "";
+    const flipVAttr = flags.hasFlipV && model.flipV ? ' flipV="1"' : "";
     if (flags.hasBox) {
       const { box } = model;
       xfrmXml = `<a:xfrm${rotAttr}${flipHAttr}${flipVAttr}><a:off x="${emu(box.x, "x", true, true)}" y="${emu(box.y, "y", true, true)}"/><a:ext cx="${emu(box.width, "width", false)}" cy="${emu(box.height, "height", false)}"/></a:xfrm>`;

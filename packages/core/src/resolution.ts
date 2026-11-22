@@ -30,6 +30,7 @@ import type {
   PreviewTransform,
   Resolution,
   ResolvedLink,
+  SlideCapabilityModule,
   SlideCapabilitySlot,
   SlideEmitContext,
   SlideEmitOutput,
@@ -126,6 +127,7 @@ export type InternalResolvedSlide = {
   readonly name?: string;
   readonly authorId?: string;
   readonly index: number;
+  readonly theme: ThemeContext;
   readonly layoutKey?: string;
   readonly colorMapOverride?: ColorMapOverride;
   readonly themeOverride?: ThemeOverride;
@@ -146,7 +148,13 @@ export type InternalResolution = {
   readonly title?: string;
   readonly theme: ThemeContext;
   readonly masters?: readonly InternalResolvedSlideMaster[];
+  readonly mastersCanvas?: NonNullable<SlideCapabilityModule["mastersCanvas"]>;
+  readonly mastersEmitDriver?: unknown;
   readonly sections: readonly ResolvedSectionRecord[];
+  readonly sectionsEmitter?: {
+    readonly extensions: readonly Extension[];
+    emit(): SlideEmitOutput;
+  };
   readonly slides: readonly InternalResolvedSlide[];
   readonly resourceClaims: ReadonlyMap<
     string,

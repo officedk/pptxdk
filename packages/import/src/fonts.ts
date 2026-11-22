@@ -14,7 +14,7 @@ import {
   type ParsedRelationshipEntry,
   type PptxPackage,
 } from "#/opc.ts";
-import { OoxmlBoolSchema, OoxmlIntSchema } from "#/xml-fragments.ts";
+import { ooxmlBoolSchema, ooxmlIntSchema } from "#/xml-fragments.ts";
 import { XmlElementCursor, parseXmlPart } from "#/xml-reader.ts";
 
 export type EmbeddedFontSlot = "regular" | "bold" | "italic" | "boldItalic";
@@ -64,23 +64,23 @@ const fontSlotNames: readonly EmbeddedFontSlot[] = [
   "boldItalic",
 ];
 
-const PresentationFontAttrSchema = z.object({
-  embedTrueTypeFonts: OoxmlBoolSchema.optional(),
-  saveSubsetFonts: OoxmlBoolSchema.optional(),
+const presentationFontAttrSchema = z.object({
+  embedTrueTypeFonts: ooxmlBoolSchema.optional(),
+  saveSubsetFonts: ooxmlBoolSchema.optional(),
 });
 
-const EmbeddedFontTypefaceXmlSchema = z.object({
+const embeddedFontTypefaceXmlSchema = z.object({
   typeface: z.string().min(1),
-  pitchFamily: OoxmlIntSchema.optional(),
-  charset: OoxmlIntSchema.optional(),
+  pitchFamily: ooxmlIntSchema.optional(),
+  charset: ooxmlIntSchema.optional(),
   panose: z.string().optional(),
 });
 
-const EmbeddedFontSlotRefXmlSchema = z.object({
+const embeddedFontSlotRefXmlSchema = z.object({
   id: z.string().min(1),
 });
 
-const ThemeTypefaceXmlSchema = z.object({
+const themeTypefaceXmlSchema = z.object({
   typeface: z.string().min(1),
 });
 
@@ -176,7 +176,7 @@ export function readEmbeddedFontList(
     "embedTrueTypeFonts",
     "saveSubsetFonts",
   ]);
-  const parsedPresAttrs = PresentationFontAttrSchema.safeParse(rawPresAttrs);
+  const parsedPresAttrs = presentationFontAttrSchema.safeParse(rawPresAttrs);
   if (!parsedPresAttrs.success) {
     diagnostics.push({
       code: "invalid-xml-value",
@@ -218,7 +218,7 @@ export function readEmbeddedFontList(
       "charset",
       "panose",
     ]);
-    const parsedFont = EmbeddedFontTypefaceXmlSchema.safeParse(rawFont);
+    const parsedFont = embeddedFontTypefaceXmlSchema.safeParse(rawFont);
     if (!parsedFont.success) {
       diagnostics.push({
         code: "invalid-xml-value",
@@ -236,7 +236,7 @@ export function readEmbeddedFontList(
       const slotCursor = entryCursor.child(P_NS, slotName);
       if (slotCursor === undefined) continue;
       const rId = slotCursor.attr("id", R_NS);
-      const parsedRef = EmbeddedFontSlotRefXmlSchema.safeParse({ id: rId });
+      const parsedRef = embeddedFontSlotRefXmlSchema.safeParse({ id: rId });
       if (!parsedRef.success) {
         diagnostics.push({
           code: "invalid-xml-value",
@@ -361,8 +361,8 @@ export function readPresentationThemeFontScheme(
     ?.child(A_NS, "latin")
     ?.attrsObject(["typeface"]);
 
-  const parsedMajor = ThemeTypefaceXmlSchema.safeParse(majorLatin);
-  const parsedMinor = ThemeTypefaceXmlSchema.safeParse(minorLatin);
+  const parsedMajor = themeTypefaceXmlSchema.safeParse(majorLatin);
+  const parsedMinor = themeTypefaceXmlSchema.safeParse(minorLatin);
 
   return {
     ...(themeName !== undefined && themeName.trim() !== ""

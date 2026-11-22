@@ -4,8 +4,8 @@ import {
   type NativePlaceholderRef,
 } from "@pptxdk/core/capability";
 import {
-  OoxmlBoolSchema,
-  OoxmlNonNegativeIntSchema,
+  ooxmlBoolSchema,
+  ooxmlNonNegativeIntSchema,
   P_NS,
   type ImportDiagnostic,
   type ImportLocation,
@@ -145,8 +145,8 @@ export function readNvPrPlaceholder(
     return { kind: "error" };
   }
 
-  const idxParsed = OoxmlNonNegativeIntSchema.safeParse(rawPh["idx"]);
-  const hasPromptParsed = OoxmlBoolSchema.safeParse(rawPh["hasCustomPrompt"]);
+  const idxParsed = ooxmlNonNegativeIntSchema.safeParse(rawPh["idx"]);
+  const hasPromptParsed = ooxmlBoolSchema.safeParse(rawPh["hasCustomPrompt"]);
   const parsedNativeRef = nativePlaceholderRefSchema.safeParse({
     type: parsedRole.data,
     explicitType,

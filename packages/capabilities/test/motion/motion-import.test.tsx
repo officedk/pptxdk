@@ -32,33 +32,33 @@ import {
   zoom,
 } from "@pptxdk/capabilities/motion";
 import {
-  BreatheEffectSchema,
-  BreatheOptionsSchema,
-  EasingSchema,
-  EffectOptionsSchema,
-  EffectPresetSchema,
-  EffectSchema,
-  EmphasisEffectDeclarationSchema,
-  EmphasisEffectSchema,
-  EntranceEffectDeclarationSchema,
-  EntranceEffectSchema,
-  FillColorOptionsSchema,
-  MotionDirectionSchema,
-  MotionGranularitySchema,
-  MotionHexColorSchema,
-  MotionMomentOffsetSchema,
-  MotionMomentSchema,
-  MotionPropsSchema,
-  MotionScopeAuthorPropsSchema,
-  MotionScopeHandleSchema,
-  MotionScopeModeSchema,
-  MotionStepAuthorPropsSchema,
-  MotionTargetRangeSchema,
-  MotionTimingSchema,
-  OwnerMotionSchema,
-  RepeatCountSchema,
-  RepeatedEffectSchema,
-  SpinOptionsSchema,
+  breatheEffectSchema,
+  breatheOptionsSchema,
+  easingSchema,
+  effectOptionsSchema,
+  effectPresetSchema,
+  effectSchema,
+  emphasisEffectDeclarationSchema,
+  emphasisEffectSchema,
+  entranceEffectDeclarationSchema,
+  entranceEffectSchema,
+  fillColorOptionsSchema,
+  motionDirectionSchema,
+  motionGranularitySchema,
+  motionHexColorSchema,
+  motionMomentOffsetSchema,
+  motionMomentSchema,
+  motionPropsSchema,
+  motionScopeAuthorPropsSchema,
+  motionScopeHandleSchema,
+  motionScopeModeSchema,
+  motionStepAuthorPropsSchema,
+  motionTargetRangeSchema,
+  motionTimingSchema,
+  ownerMotionSchema,
+  repeatCountSchema,
+  repeatedEffectSchema,
+  spinOptionsSchema,
 } from "@pptxdk/capabilities/motion";
 import { MotionScope, Step } from "@pptxdk/capabilities/motion-elements";
 import { Shape } from "@pptxdk/capabilities/shape-elements";
@@ -75,39 +75,39 @@ import { createElement } from "react";
 import { describe, it } from "vitest";
 
 import {
-  MorphKeySchema,
-  MorphPropsSchema,
+  morphKeySchema,
+  morphPropsSchema,
   parseNativeMorphToken,
 } from "../../src/shared/morph-api.ts";
 
 describe("Motion Zod v4 schemas & Morph handle identity", () => {
   it("validates all object effect presets, triggers, durations, delays, easing, repeat counts, and target ranges", () => {
-    assert.equal(MotionDirectionSchema.parse("left"), "left");
-    assert.equal(EffectPresetSchema.parse("fillColor"), "fillColor");
-    assert.equal(MotionScopeModeSchema.parse("stagger"), "stagger");
+    assert.equal(motionDirectionSchema.parse("left"), "left");
+    assert.equal(effectPresetSchema.parse("fillColor"), "fillColor");
+    assert.equal(motionScopeModeSchema.parse("stagger"), "stagger");
     assert.equal(
-      MotionGranularitySchema.parse("seriesElements"),
+      motionGranularitySchema.parse("seriesElements"),
       "seriesElements",
     );
-    assert.equal(RepeatCountSchema.parse("forever"), "forever");
-    assert.equal(RepeatCountSchema.parse(3), 3);
-    assert.equal(RepeatCountSchema.safeParse(0).success, false);
+    assert.equal(repeatCountSchema.parse("forever"), "forever");
+    assert.equal(repeatCountSchema.parse(3), 3);
+    assert.equal(repeatCountSchema.safeParse(0).success, false);
 
-    assert.deepEqual(EasingSchema.parse({ accelerate: 0.3, decelerate: 0.7 }), {
+    assert.deepEqual(easingSchema.parse({ accelerate: 0.3, decelerate: 0.7 }), {
       accelerate: 0.3,
       decelerate: 0.7,
     });
     assert.equal(
-      EasingSchema.safeParse({ accelerate: 0.6, decelerate: 0.5 }).success,
+      easingSchema.safeParse({ accelerate: 0.6, decelerate: 0.5 }).success,
       false,
     );
 
     assert.deepEqual(
-      MotionTargetRangeSchema.parse({ type: "paragraph", start: 0, end: 2 }),
+      motionTargetRangeSchema.parse({ type: "paragraph", start: 0, end: 2 }),
       { type: "paragraph", start: 0, end: 2 },
     );
     assert.deepEqual(
-      MotionTargetRangeSchema.parse({
+      motionTargetRangeSchema.parse({
         type: "chart",
         step: "ptInSeries",
         seriesIndex: 1,
@@ -133,9 +133,9 @@ describe("Motion Zod v4 schemas & Morph handle identity", () => {
     ] as const;
 
     for (const eff of entrances) {
-      assert.deepEqual(EntranceEffectSchema.parse(eff), eff);
-      assert.deepEqual(EntranceEffectDeclarationSchema.parse(eff), eff);
-      assert.deepEqual(EffectSchema.parse(eff), eff);
+      assert.deepEqual(entranceEffectSchema.parse(eff), eff);
+      assert.deepEqual(entranceEffectDeclarationSchema.parse(eff), eff);
+      assert.deepEqual(effectSchema.parse(eff), eff);
     }
 
     const spinEff = spin({ by: -90, duration: 400 });
@@ -149,31 +149,31 @@ describe("Motion Zod v4 schemas & Morph handle identity", () => {
       to: "#16324F",
       duration: 600,
     });
-    assert.deepEqual(EmphasisEffectSchema.parse(spinEff), spinEff);
-    assert.deepEqual(BreatheEffectSchema.parse(breatheEff), breatheEff);
-    assert.deepEqual(EmphasisEffectSchema.parse(fillEff), fillEff);
-    assert.equal(MotionHexColorSchema.parse("#164e3d"), "#164E3D");
+    assert.deepEqual(emphasisEffectSchema.parse(spinEff), spinEff);
+    assert.deepEqual(breatheEffectSchema.parse(breatheEff), breatheEff);
+    assert.deepEqual(emphasisEffectSchema.parse(fillEff), fillEff);
+    assert.equal(motionHexColorSchema.parse("#164e3d"), "#164E3D");
 
     const repeatedSpin = repeat(spinEff, 2);
     const repeatedBreathe = repeat(breatheEff, "forever");
-    assert.deepEqual(RepeatedEffectSchema.parse(repeatedSpin), repeatedSpin);
+    assert.deepEqual(repeatedEffectSchema.parse(repeatedSpin), repeatedSpin);
     assert.deepEqual(
-      EmphasisEffectDeclarationSchema.parse(repeatedBreathe),
+      emphasisEffectDeclarationSchema.parse(repeatedBreathe),
       repeatedBreathe,
     );
 
     assert.equal(
-      EffectOptionsSchema.safeParse({ duration: 500 }).success,
+      effectOptionsSchema.safeParse({ duration: 500 }).success,
       true,
     );
-    assert.equal(SpinOptionsSchema.safeParse({ from: 180 }).success, true);
+    assert.equal(spinOptionsSchema.safeParse({ from: 180 }).success, true);
     assert.equal(
-      FillColorOptionsSchema.safeParse({ from: "#000000", to: "#FFFFFF" })
+      fillColorOptionsSchema.safeParse({ from: "#000000", to: "#FFFFFF" })
         .success,
       true,
     );
     assert.equal(
-      BreatheOptionsSchema.safeParse({
+      breatheOptionsSchema.safeParse({
         period: 800,
         from: "#164E3D",
         to: "#4ADE80",
@@ -187,17 +187,17 @@ describe("Motion Zod v4 schemas & Morph handle identity", () => {
     const cue = scope.cue("ready");
     const delayed = after(cue, 120);
 
-    assert.equal(MotionScopeHandleSchema.parse(scope), scope);
-    assert.deepEqual(MotionMomentSchema.parse(cue), cue);
-    assert.deepEqual(MotionMomentOffsetSchema.parse(delayed), delayed);
-    assert.deepEqual(MotionTimingSchema.parse(delayed), delayed);
+    assert.equal(motionScopeHandleSchema.parse(scope), scope);
+    assert.deepEqual(motionMomentSchema.parse(cue), cue);
+    assert.deepEqual(motionMomentOffsetSchema.parse(delayed), delayed);
+    assert.deepEqual(motionTimingSchema.parse(delayed), delayed);
     assert.equal(
-      MotionScopeHandleSchema.safeParse({ type: "other" }).success,
+      motionScopeHandleSchema.safeParse({ type: "other" }).success,
       false,
     );
 
     assert.equal(
-      MotionScopeAuthorPropsSchema.parse({
+      motionScopeAuthorPropsSchema.parse({
         scope,
         mode: "stagger",
         each: 100,
@@ -207,9 +207,9 @@ describe("Motion Zod v4 schemas & Morph handle identity", () => {
       }).scope,
       scope,
     );
-    assert.equal(MotionStepAuthorPropsSchema.parse({ n: 2 }).n, 2);
+    assert.equal(motionStepAuthorPropsSchema.parse({ n: 2 }).n, 2);
     assert.equal(
-      MotionPropsSchema.safeParse({
+      motionPropsSchema.safeParse({
         enter: [fade(), fly({ from: "left" })],
         emphasis: spin(),
         motion: true,
@@ -218,7 +218,7 @@ describe("Motion Zod v4 schemas & Morph handle identity", () => {
     );
 
     assert.equal(
-      OwnerMotionSchema.safeParse({
+      ownerMotionSchema.safeParse({
         steps: [
           {
             trigger: "click",
@@ -236,9 +236,9 @@ describe("Motion Zod v4 schemas & Morph handle identity", () => {
 
     const morph = createMorphScope();
     const hero = morph.handle("hero");
-    assert.equal(MorphKeySchema.parse(hero), hero);
-    assert.equal(MorphPropsSchema.parse({ morphKey: hero }).morphKey, hero);
-    assert.equal(MorphKeySchema.safeParse({ label: "hero" }).success, false);
+    assert.equal(morphKeySchema.parse(hero), hero);
+    assert.equal(morphPropsSchema.parse({ morphKey: hero }).morphKey, hero);
+    assert.equal(morphKeySchema.safeParse({ label: "hero" }).success, false);
     assert.equal(parseNativeMorphToken("!!hero"), "hero");
     assert.equal(parseNativeMorphToken("!!"), undefined);
     assert.equal(parseNativeMorphToken("Hero Card"), undefined);
@@ -839,7 +839,6 @@ describe("Motion mechanisms, roundtrip target identity, Morph continuity, owners
         ),
       ),
     );
-    void png1x1;
 
     const base = emit(resolveAll(d)).pptx;
     // Inject two failure modes in ppt/slides/slide1.xml:
@@ -862,7 +861,6 @@ describe("Motion mechanisms, roundtrip target identity, Morph continuity, owners
       assert.notEqual(next, withMissingSpid);
       return next;
     });
-    void removePart;
 
     const imported = importAll(corrupted);
     assert.ok(

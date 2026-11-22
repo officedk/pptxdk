@@ -552,12 +552,7 @@ describe("slide navigation", () => {
 
     const rebuilt = await build(imported.document);
     const validation = await validatePptx(rebuilt.pptx);
-    assert.deepEqual(
-      validation.errors.filter(
-        (error) => error.code !== "duplicate-stable-slide-id",
-      ),
-      [],
-    );
+    assert.deepEqual(validation.errors, []);
 
     const rebuiltFiles = unzipSync(rebuilt.pptx);
     const rebuiltSlide1 = strFromU8(rebuiltFiles["ppt/slides/slide1.xml"]!);
@@ -580,5 +575,39 @@ describe("slide navigation", () => {
         new RegExp(`Id="${relId}"[^>]*Target="slide2\\.xml"`, "u"),
       );
     }
+  });
+
+  it("disambiguates duplicate slide <p:cSld name> in validation while mapping each slide to its own section", async () => {
+    const built = await build(
+      <Deck>
+        <Section name="S1">
+          <Slide id="a" name="Section" />
+        </Section>
+        <Section name="S2">
+          <Slide id="b" name="Section" />
+        </Section>
+      </Deck>,
+    );
+    const validation = await validatePptx(built.pptx);
+    assert.deepEqual(validation.errors, []);
+    assert.equal(validation.slides[0]?.section, "S1");
+    assert.equal(validation.slides[1]?.section, "S2");
+    assert.equal(validation.slides[0]?.name, "Section");
+    assert.equal(validation.slides[1]?.name, "Section");
+
+    const imported = importPptx(built.pptx);
+    assert.deepEqual(imported.report.diagnostics, []);
+    const importedSections = imported.document.children.filter(
+      (child): child is CommonContainer =>
+        child instanceof CommonContainer && child.kind === "section",
+    );
+    assert.equal(importedSections.length, 2);
+    assert.equal(importedSections[0]?.props["name"], "S1");
+    assert.equal(importedSections[1]?.props["name"], "S2");
+    const s1Slide = importedSections[0]?.children[0] as CommonContainer;
+    const s2Slide = importedSections[1]?.children[0] as CommonContainer;
+    assert.equal(s1Slide.id, "Section");
+    assert.equal(s2Slide.id, "Section-2");
+    assert.equal(s2Slide.props["name"], "Section");
   });
 });

@@ -117,10 +117,7 @@ describe("explicit SlideMaster and SlideLayout ownership", () => {
     );
 
     const foreignLayout = slideLayout({ id: "other-layout", name: "Foreign" });
-    const otherDeck = deck().append(
-      slideMaster({ id: "other-master" }).append(foreignLayout),
-    );
-    void otherDeck;
+    deck().append(slideMaster({ id: "other-master" }).append(foreignLayout));
 
     const hostDeck = deck().append(
       slideMaster({ id: "host-master" }).append(

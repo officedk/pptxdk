@@ -19,7 +19,7 @@ import {
   type PptxPackage,
 } from "#/opc.ts";
 import { peekShapeTreeObjectIdentity } from "#/resources.ts";
-import { OoxmlNonNegativeIntSchema } from "#/xml-fragments.ts";
+import { ooxmlNonNegativeIntSchema } from "#/xml-fragments.ts";
 import { XmlElementCursor, parseXmlPart } from "#/xml-reader.ts";
 
 const standardNotesMasterPlaceholders = new Set([
@@ -53,15 +53,15 @@ const defaultColorMap: Readonly<Record<string, string>> = {
   folHlink: "folHlink",
 };
 
-const PlaceholderTypeXmlSchema = z.object({
+const placeholderTypeXmlSchema = z.object({
   type: z.string().optional(),
-  idx: OoxmlNonNegativeIntSchema.optional(),
+  idx: ooxmlNonNegativeIntSchema.optional(),
   sz: z.enum(["full", "half", "quarter"]).optional(),
   orient: z.enum(["horz", "vert"]).optional(),
 });
 
-const BgRefAttrsSchema = z.object({
-  idx: OoxmlNonNegativeIntSchema,
+const bgRefAttrsSchema = z.object({
+  idx: ooxmlNonNegativeIntSchema,
 });
 
 function isStandardColorMap(clrMap: XmlElementCursor): boolean {
@@ -91,7 +91,7 @@ function isBaselineBgRef(bg: XmlElementCursor): boolean {
   const bgRef = bg.child(P_NS, "bgRef");
   if (bgRef === undefined) return false;
   const raw = bgRef.attrsObject(["idx"]);
-  const parsed = BgRefAttrsSchema.safeParse(raw);
+  const parsed = bgRefAttrsSchema.safeParse(raw);
   if (!parsed.success || parsed.data.idx !== 1001) {
     return false;
   }
@@ -130,7 +130,7 @@ function readPlaceholderTypeOnSp(
   if (nvPr === undefined) return undefined;
   const ph = nvPr.child(P_NS, "ph");
   if (ph === undefined) return undefined;
-  const parsed = PlaceholderTypeXmlSchema.safeParse(
+  const parsed = placeholderTypeXmlSchema.safeParse(
     ph.attrsObject(["type", "idx", "sz", "orient"]),
   );
   return parsed.success ? parsed.data.type : undefined;

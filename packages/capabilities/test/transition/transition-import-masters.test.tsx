@@ -10,19 +10,18 @@ import {
   slideLayout,
   slideMaster,
 } from "@pptxdk/capabilities/document";
-import { Image } from "@pptxdk/capabilities/image-elements";
 import { shapeCapability } from "@pptxdk/capabilities/shape";
 import { Shape } from "@pptxdk/capabilities/shape-elements";
 import {
-  AdvanceAfterSchema,
-  FlipTransitionSchema,
-  MorphTransitionSchema,
-  StandardTransitionSchema,
-  StripsDirectionSchema,
-  TransitionDirectionSchema,
-  TransitionDurationSchema,
-  TransitionSchema,
-  TransitionSpeedSchema,
+  advanceAfterSchema,
+  flipTransitionSchema,
+  morphTransitionSchema,
+  standardTransitionSchema,
+  stripsDirectionSchema,
+  transitionDirectionSchema,
+  transitionDurationSchema,
+  transitionSchema,
+  transitionSpeedSchema,
   transitionCapability,
   transitions,
 } from "@pptxdk/capabilities/transition";
@@ -69,43 +68,43 @@ const png1x1 = new Uint8Array(
 
 describe("Transition Zod schemas", () => {
   it("validates baseline transitions, flip, morph, directions, speeds, durations, and advanceAfter", () => {
-    assert.equal(TransitionSpeedSchema.parse("med"), "med");
-    assert.equal(TransitionDirectionSchema.parse("left"), "left");
-    assert.equal(StripsDirectionSchema.parse("leftUp"), "leftUp");
-    assert.equal(TransitionDurationSchema.parse(750), 750);
-    assert.equal(AdvanceAfterSchema.parse(2000), 2000);
+    assert.equal(transitionSpeedSchema.parse("med"), "med");
+    assert.equal(transitionDirectionSchema.parse("left"), "left");
+    assert.equal(stripsDirectionSchema.parse("leftUp"), "leftUp");
+    assert.equal(transitionDurationSchema.parse(750), 750);
+    assert.equal(advanceAfterSchema.parse(2000), 2000);
 
     const fade = transitions.fade({ duration: 500 });
-    assert.deepEqual(StandardTransitionSchema.parse(fade), fade);
+    assert.deepEqual(standardTransitionSchema.parse(fade), fade);
 
     const strips = transitions.strips({ direction: "rightUp" });
-    assert.deepEqual(StandardTransitionSchema.parse(strips), strips);
+    assert.deepEqual(standardTransitionSchema.parse(strips), strips);
 
     const push = transitions.push({ from: "left", duration: 700 });
-    assert.deepEqual(StandardTransitionSchema.parse(push), push);
+    assert.deepEqual(standardTransitionSchema.parse(push), push);
 
     const flip = transitions.flip({
       direction: "left",
       fallback: transitions.push({ from: "right" }),
     });
-    assert.deepEqual(FlipTransitionSchema.parse(flip), flip);
+    assert.deepEqual(flipTransitionSchema.parse(flip), flip);
 
     const morph = transitions.morph({
       duration: 1200,
       by: "word",
       fallback: transitions.fade(),
     });
-    assert.deepEqual(MorphTransitionSchema.parse(morph), morph);
-    assert.deepEqual(TransitionSchema.parse(morph), morph);
+    assert.deepEqual(morphTransitionSchema.parse(morph), morph);
+    assert.deepEqual(transitionSchema.parse(morph), morph);
 
-    assert.equal(TransitionDurationSchema.safeParse(-1).success, false);
+    assert.equal(transitionDurationSchema.safeParse(-1).success, false);
     assert.equal(
-      TransitionDurationSchema.safeParse(Number.POSITIVE_INFINITY).success,
+      transitionDurationSchema.safeParse(Number.POSITIVE_INFINITY).success,
       false,
     );
-    assert.equal(AdvanceAfterSchema.safeParse(4_294_967_296).success, false);
+    assert.equal(advanceAfterSchema.safeParse(4_294_967_296).success, false);
     assert.equal(
-      TransitionSchema.safeParse({
+      transitionSchema.safeParse({
         type: "transition",
         kind: "flip",
         direction: "left",
@@ -454,12 +453,9 @@ describe("Transition Zod schemas", () => {
         error.diagnostics.some((d) => d.code === "missing-capability"),
     );
 
-    void jsxEmitted;
-    void Image;
-    void SlideMaster;
-    void SlideLayout;
-    void Slide;
-    void Deck;
+    const jsxValidated = await validatePptx(jsxEmitted.pptx);
+    assert.deepEqual(jsxValidated.errors, []);
+    assert.equal(jsxValidated.slides.length, 3);
   });
 
   it("roundtrips three-layer transitions across emit -> import -> edit -> re-emit preserving exact ownership", async () => {

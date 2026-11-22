@@ -193,10 +193,14 @@ type ResolvedPresentationSectionsModel = {
 };
 
 /** Typed native show mechanism connecting emit and import for `presentation-sections`. */
-export const presentationSectionsMechanism = defineShowMechanism({
+export const presentationSectionsMechanism = defineShowMechanism<
+  "presentation-sections",
+  ResolvedPresentationSectionsModel,
+  void
+>({
   key: "presentation-sections",
   role: "show",
-  emit: (model: ResolvedPresentationSectionsModel): SlideEmitOutput => ({
+  emit: (model) => ({
     xml: sectionListXml(model.sections),
   }),
   import: presentationSectionsImportHandler,
@@ -233,6 +237,12 @@ export const notesCapability: SlideCapabilityModule & {
   slot: "timing",
   always: true,
   mechanisms: [speakerNotesMechanism, presentationSectionsMechanism] as const,
+  bindSections(sections) {
+    return {
+      extensions: ["p14"] as const,
+      emit: () => presentationSectionsMechanism.emit({ sections }),
+    };
+  },
   transparentDeclarations: [
     {
       declaration: "notes",
@@ -314,4 +324,9 @@ export const notesCapability: SlideCapabilityModule & {
       },
     };
   },
+} satisfies SlideCapabilityModule & {
+  readonly mechanisms: readonly [
+    typeof speakerNotesMechanism,
+    typeof presentationSectionsMechanism,
+  ];
 });

@@ -9,7 +9,7 @@ import { z } from "zod";
 export const nativeMorphPrefix = "!!";
 
 /** Runtime-identity-preserving Zod schema for handles created by `createMorphScope().handle(name)`. */
-export const MorphKeySchema = z.custom<MorphKey>(
+export const morphKeySchema = z.custom<MorphKey>(
   isMorphKey,
   "morphKey must be created by createMorphScope().handle(name)",
 );
@@ -19,20 +19,20 @@ export const MorphKeySchema = z.custom<MorphKey>(
  *
  * Morph writes handles into the OOXML native object name, so the same object cannot declare a separate name.
  */
-export const MorphPropsSchema = z
+export const morphPropsSchema = z
   .strictObject({
-    morphKey: MorphKeySchema.optional(),
+    morphKey: morphKeySchema.optional(),
   })
   .readonly();
-export type MorphProps = z.infer<typeof MorphPropsSchema>;
+export type MorphProps = z.infer<typeof morphPropsSchema>;
 
 /** Click target schema for public native objects; core resolves identifiers into package relationships. */
-export const LinkPropsSchema = z
+export const linkPropsSchema = z
   .strictObject({
     link: linkTargetSchema.optional(),
   })
   .readonly();
-export type LinkProps = z.infer<typeof LinkPropsSchema>;
+export type LinkProps = z.infer<typeof linkPropsSchema>;
 
 /**
  * Extracts a cross-slide Morph token exclusively from native `!!...` `<p:cNvPr name="!!...">` markers.

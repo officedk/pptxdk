@@ -1,7 +1,7 @@
 import type { BackgroundRef, SlideBackground } from "@pptxdk/core/capability";
 import {
   A_NS,
-  OoxmlBoolSchema,
+  ooxmlBoolSchema,
   P_NS,
   type ImportDiagnostic,
   type ImportLocation,
@@ -19,14 +19,14 @@ import {
 } from "../shared/visual.ts";
 
 const BgAttrsSchema = z.object({
-  shadeToTitle: OoxmlBoolSchema.optional(),
+  shadeToTitle: ooxmlBoolSchema.optional(),
 });
 
 const BgPrAttrsSchema = z.object({
-  rotWithShape: OoxmlBoolSchema.optional(),
+  rotWithShape: ooxmlBoolSchema.optional(),
 });
 
-const BgRefAttrsSchema = z.object({
+const bgRefAttrsSchema = z.object({
   idx: z.enum(["1001", "1002", "1003"]),
 });
 
@@ -125,7 +125,7 @@ function readBackgroundElement(
       }
     } else if (child.localName === "bgRef") {
       const rawRefAttrs = child.attrsObject(["idx"]);
-      const parsedRefAttrs = BgRefAttrsSchema.safeParse(rawRefAttrs);
+      const parsedRefAttrs = bgRefAttrsSchema.safeParse(rawRefAttrs);
       if (!parsedRefAttrs.success) {
         diagnostics.push({
           code: "invalid-xml-value",

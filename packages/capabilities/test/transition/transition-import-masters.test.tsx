@@ -752,7 +752,10 @@ describe("Transition Zod schemas", () => {
       ),
     });
 
-    const importer = createImporter([transitionCapability]);
+    const mastersCap = documentCapabilities.find(
+      (capability) => capability.declaration === "slide-masters",
+    )!;
+    const importer = createImporter([transitionCapability, mastersCap]);
     const result = importer(pptx);
     assert.ok(result.document instanceof DeckContainer);
     const layout = result.document.masters[0]!.layouts[0]!;

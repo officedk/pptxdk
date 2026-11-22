@@ -9,7 +9,7 @@ import { emit } from "@pptxdk/emit";
 import { createImporter } from "@pptxdk/import";
 import { paint } from "@pptxdk/preview";
 import { validatePptx } from "@pptxdk/validation";
-import { strFromU8, unzipSync } from "fflate";
+import { strFromU8, strToU8, unzipSync, zipSync } from "fflate";
 import { describe, expect, it } from "vitest";
 
 const jostFont = font("Jost*", [
@@ -207,5 +207,35 @@ describe("Native content placeholders fixtures", () => {
 
     const reimported = importDocument(pptx);
     expect(reimported.report.diagnostics).toEqual([]);
+  });
+
+  it("reports unconsumed-xml when an unpopulated placeholder spPr carries unsupported fills or effects", () => {
+    const bytes = readFixture("ph-unpopulated-placeholders.pptx");
+    const entries = unzipSync(bytes);
+    const slide4Xml = strFromU8(entries["ppt/slides/slide4.xml"]!);
+    entries["ppt/slides/slide4.xml"] = strToU8(
+      slide4Xml.replace(
+        "<p:spPr/>",
+        '<p:spPr><a:solidFill><a:srgbClr val="DC2626"/></a:solidFill><a:effectLst><a:outerShdw blurRad="50800"/></a:effectLst></p:spPr>',
+      ),
+    );
+    const mutated = zipSync(entries);
+    const imported = importDocument(mutated);
+    const slide4Unconsumed = imported.report.diagnostics.filter(
+      (
+        d,
+      ): d is Extract<
+        (typeof imported.report.diagnostics)[number],
+        { readonly code: "unconsumed-xml" }
+      > =>
+        d.code === "unconsumed-xml" &&
+        d.location.part === "ppt/slides/slide4.xml",
+    );
+    expect(slide4Unconsumed.some((d) => d.localName === "solidFill")).toBe(
+      true,
+    );
+    expect(slide4Unconsumed.some((d) => d.localName === "effectLst")).toBe(
+      true,
+    );
   });
 });

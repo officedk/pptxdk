@@ -7,6 +7,7 @@ import {
   placeholderOrientSchema,
   placeholderRoleSchema,
   placeholderSzSchema,
+  schemeColorNameSchema,
   slideLayoutTypeSchema,
   type ColorMap,
   type ColorMapOverride,
@@ -22,6 +23,7 @@ import {
   type PlaceholderListStyles,
   type PlaceholderMap,
   type PlaceholderStyle,
+  type SchemeColorName,
   type SlideLayoutProps,
   type SlideMasterProps,
   type TextAlignment,
@@ -40,10 +42,12 @@ import {
 import { z } from "zod";
 
 import { readAlternateContent } from "#/alternate-content.ts";
-import type { ImportDiagnostic } from "#/diagnostics.ts";
+import type { ImportDiagnostic, ImportLocation } from "#/diagnostics.ts";
 import type {
   DeferredSlideLink,
+  ImportedPlaceholderSpPr,
   OmittedSlideObjectInfo,
+  PlaceholderVisualReader,
   ShapeTreeImportHandler,
   SlideImportHandler,
 } from "#/mechanism.ts";
@@ -76,13 +80,20 @@ import {
   readThemePart,
 } from "#/themes.ts";
 import {
-  ExtentEmuFragmentSchema,
+  readBlipFill,
+  readDrawingColor,
+  readEffectList,
+  readGradientFill,
+  readLineBorder,
+  readTransformXml,
+} from "#/visual.ts";
+import {
   HexRgb6Schema,
-  OffsetEmuFragmentSchema,
   OoxmlBoolSchema,
   OoxmlIntSchema,
   OoxmlNonNegativeIntSchema,
   OoxmlPositiveIntSchema,
+  TransformAttributesFragmentSchema,
 } from "#/xml-fragments.ts";
 import { XmlElementCursor, parseXmlPart } from "#/xml-reader.ts";
 
@@ -155,21 +166,6 @@ const defaultColorMap: Readonly<Record<string, NativeColorSlot>> = {
   folHlink: "folHlink",
 };
 
-const directSchemeToSlot: Readonly<Record<string, NativeColorSlot>> = {
-  dk1: "dk1",
-  lt1: "lt1",
-  dk2: "dk2",
-  lt2: "lt2",
-  accent1: "accent1",
-  accent2: "accent2",
-  accent3: "accent3",
-  accent4: "accent4",
-  accent5: "accent5",
-  accent6: "accent6",
-  hlink: "hlink",
-  folHlink: "folHlink",
-};
-
 function readColorModifierVal(
   colorCursor: XmlElementCursor,
   localName: "alpha" | "lumMod" | "lumOff" | "tint",
@@ -182,7 +178,7 @@ function readColorModifierVal(
 
 function readStyleColor(
   containerCursor: XmlElementCursor,
-  clrMap: Readonly<Record<string, NativeColorSlot>>,
+  _clrMap?: Readonly<Record<string, NativeColorSlot>>,
 ): ColorValue | undefined {
   const srgb = containerCursor.child(A_NS, "srgbClr");
   const scheme =
@@ -196,9 +192,10 @@ function readStyleColor(
     if (!parsed.success) return undefined;
     baseColor = `#${parsed.data.toUpperCase()}`;
   } else if (scheme !== undefined) {
-    const val = scheme.attr("val");
-    const slot =
-      val === undefined ? undefined : (clrMap[val] ?? directSchemeToSlot[val]);
+    const parsedScheme = schemeColorNameSchema.safeParse(scheme.attr("val"));
+    const slot: SchemeColorName | undefined = parsedScheme.success
+      ? parsedScheme.data
+      : undefined;
     if (slot === undefined) return undefined;
     const rawLumMod = readColorModifierVal(colorCursor, "lumMod");
     const rawLumOff = readColorModifierVal(colorCursor, "lumOff");
@@ -506,10 +503,172 @@ function directPlaceholderChild(el: XmlElementCursor["element"]): boolean {
   return false;
 }
 
+function readDefaultPlaceholderSpPr(args: {
+  readonly spPr: XmlElementCursor;
+  readonly pkg: PptxPackage;
+  readonly location: ImportLocation;
+  readonly diagnostics: ImportDiagnostic[];
+}): ImportedPlaceholderSpPr {
+  const { spPr, pkg, location, diagnostics } = args;
+  let x: number | undefined;
+  let y: number | undefined;
+  let width: number | undefined;
+  let height: number | undefined;
+  let rotate: number | undefined;
+  let flipH: boolean | undefined;
+  let flipV: boolean | undefined;
+  let borderRadius: number | undefined;
+  let prstGeomName: string | undefined;
+  let roundRectAdj: number | undefined;
+
+  const xfrm = spPr.child(A_NS, "xfrm");
+  if (xfrm !== undefined) {
+    if (
+      xfrm.child(A_NS, "off") !== undefined &&
+      xfrm.child(A_NS, "ext") !== undefined
+    ) {
+      const tf = readTransformXml(xfrm, location, diagnostics);
+      if (tf !== undefined) {
+        x = tf.x;
+        y = tf.y;
+        width = tf.width;
+        height = tf.height;
+        rotate = tf.rotate;
+        flipH = tf.flipH;
+        flipV = tf.flipV;
+      }
+    } else {
+      const parsedXfrm = TransformAttributesFragmentSchema.safeParse(
+        xfrm.attrsObject(["rot", "flipH", "flipV"]),
+      );
+      if (parsedXfrm.success) {
+        if (parsedXfrm.data.rot !== undefined && parsedXfrm.data.rot !== 0) {
+          rotate = parsedXfrm.data.rot / 60_000;
+        }
+        if (parsedXfrm.data.flipH === true) flipH = true;
+        if (parsedXfrm.data.flipV === true) flipV = true;
+      }
+    }
+  }
+
+  let backgroundColor: ColorValue | undefined;
+  let backgroundImage: unknown;
+  let opacity: number | undefined;
+  let border: ReturnType<typeof readLineBorder> = {};
+  let effects: ReturnType<typeof readEffectList> = {};
+
+  for (const child of spPr.remainingElementChildren()) {
+    if (child.namespaceUri !== A_NS) continue;
+    switch (child.localName) {
+      case "prstGeom": {
+        prstGeomName = child.attr("prst");
+        const avLst = child.child(A_NS, "avLst");
+        if (avLst !== undefined) {
+          for (const gd of avLst.children(A_NS, "gd")) {
+            const name = gd.attr("name");
+            const fmla = gd.attr("fmla");
+            if (
+              name === "adj" &&
+              fmla !== undefined &&
+              fmla.startsWith("val ")
+            ) {
+              const num = Number(fmla.slice(4));
+              if (Number.isSafeInteger(num)) roundRectAdj = num;
+            }
+          }
+        }
+        break;
+      }
+      case "noFill":
+        break;
+      case "solidFill":
+        backgroundColor = readDrawingColor(child, location, diagnostics);
+        break;
+      case "gradFill":
+        backgroundImage = readGradientFill(child, location, diagnostics);
+        break;
+      case "blipFill": {
+        const blip = readBlipFill(child, pkg, location, diagnostics);
+        if (blip !== undefined) {
+          backgroundImage = { image: blip.image };
+          opacity = blip.opacity;
+        }
+        break;
+      }
+      case "ln":
+        border = readLineBorder(child, location, diagnostics);
+        break;
+      case "effectLst":
+        effects = readEffectList(child, location, diagnostics);
+        break;
+      case "extLst":
+        child.ignoreEmptyChild(A_NS, "ext");
+        break;
+      default:
+        break;
+    }
+  }
+
+  if (
+    prstGeomName === "roundRect" &&
+    width !== undefined &&
+    height !== undefined
+  ) {
+    const adj = roundRectAdj ?? 16667;
+    if (adj > 0) {
+      borderRadius = (adj / 100_000) * Math.min(width, height);
+    }
+  }
+  const geometry =
+    prstGeomName !== undefined &&
+    prstGeomName !== "rect" &&
+    !(prstGeomName === "roundRect" && borderRadius !== undefined)
+      ? roundRectAdj !== undefined
+        ? { type: "preset", name: prstGeomName, adjust: { adj: roundRectAdj } }
+        : prstGeomName
+      : undefined;
+
+  const style: Record<string, unknown> = {
+    ...(backgroundColor === undefined ? {} : { backgroundColor }),
+    ...(backgroundImage === undefined ? {} : { backgroundImage }),
+    ...(border.borderColor === undefined
+      ? {}
+      : { borderColor: border.borderColor }),
+    ...(border.borderWidth === undefined
+      ? {}
+      : { borderWidth: border.borderWidth }),
+    ...(border.borderStyle === undefined
+      ? {}
+      : { borderStyle: border.borderStyle }),
+    ...(opacity === undefined ? {} : { opacity }),
+    ...(effects.boxShadow === undefined
+      ? {}
+      : { boxShadow: effects.boxShadow }),
+    ...(effects.softEdge === undefined ? {} : { softEdge: effects.softEdge }),
+    ...(borderRadius === undefined ? {} : { borderRadius }),
+    ...(rotate === undefined ? {} : { rotate }),
+  };
+
+  return {
+    ...(x === undefined ? {} : { x }),
+    ...(y === undefined ? {} : { y }),
+    ...(width === undefined ? {} : { width }),
+    ...(height === undefined ? {} : { height }),
+    ...(geometry === undefined ? {} : { geometry }),
+    ...(flipH ? { flipH: true } : {}),
+    ...(flipV ? { flipV: true } : {}),
+    ...(Object.keys(style).length === 0 ? {} : { style }),
+  };
+}
+
 function readPlaceholderSpList(
   spTree: XmlElementCursor | undefined,
   clrMap: Readonly<Record<string, NativeColorSlot>>,
   isMaster: boolean,
+  pkg: PptxPackage,
+  partPath: string,
+  diagnostics: ImportDiagnostic[],
+  readPlaceholderVisuals?: PlaceholderVisualReader,
 ): {
   readonly placeholders?: PlaceholderMap | MasterPlaceholderMap;
   readonly placeholderKeyBySpid: ReadonlyMap<number, string>;
@@ -561,43 +720,37 @@ function readPlaceholderSpList(
     let y: number | undefined;
     let width: number | undefined;
     let height: number | undefined;
-    let backgroundColor: ColorValue | undefined;
+    let geometry: unknown;
+    let flipH: boolean | undefined;
+    let flipV: boolean | undefined;
+    const styleProps: Record<string, unknown> = {};
     const spPr = sp.child(P_NS, "spPr");
     if (spPr !== undefined) {
-      const xfrm = spPr.child(A_NS, "xfrm");
-      if (xfrm !== undefined) {
-        xfrm.consumeAttr("rot");
-        xfrm.consumeAttr("flipH");
-        xfrm.consumeAttr("flipV");
-        const off = xfrm.child(A_NS, "off");
-        const ext = xfrm.child(A_NS, "ext");
-        const parsedOff =
-          off === undefined
-            ? { success: false as const }
-            : OffsetEmuFragmentSchema.safeParse(off.attrsObject(["x", "y"]));
-        const parsedExt =
-          ext === undefined
-            ? { success: false as const }
-            : ExtentEmuFragmentSchema.safeParse(ext.attrsObject(["cx", "cy"]));
-        if (parsedOff.success && parsedExt.success) {
-          x = emuToPx(parsedOff.data.x);
-          y = emuToPx(parsedOff.data.y);
-          width = emuToPx(parsedExt.data.cx);
-          height = emuToPx(parsedExt.data.cy);
-        }
-      }
-      const prstGeom = spPr.child(A_NS, "prstGeom");
-      prstGeom?.consumeAttr("prst");
-      prstGeom?.ignoreEmptyChild(A_NS, "avLst");
-      spPr.ignoreEmptyChild(A_NS, "noFill");
-      const solidFill = spPr.child(A_NS, "solidFill");
-      if (solidFill !== undefined) {
-        backgroundColor = readStyleColor(solidFill, clrMap);
+      const phLocation: ImportLocation = {
+        part: partPath,
+        xpath: spPr.xpath,
+        ...(spid === undefined ? {} : { objectId: spid }),
+        ...(name === undefined ? {} : { objectName: name }),
+      };
+      const importedSpPr = (
+        readPlaceholderVisuals ?? readDefaultPlaceholderSpPr
+      )({
+        spPr,
+        pkg,
+        location: phLocation,
+        diagnostics,
+      });
+      x = importedSpPr.x;
+      y = importedSpPr.y;
+      width = importedSpPr.width;
+      height = importedSpPr.height;
+      geometry = importedSpPr.geometry;
+      flipH = importedSpPr.flipH;
+      flipV = importedSpPr.flipV;
+      if (importedSpPr.style !== undefined) {
+        Object.assign(styleProps, importedSpPr.style);
       }
     }
-
-    const styleProps: Record<string, unknown> =
-      backgroundColor === undefined ? {} : { backgroundColor };
     let listStyles: PlaceholderListStyles | undefined;
     let promptText: string | undefined;
     const txBody = sp.child(P_NS, "txBody");
@@ -715,6 +868,9 @@ function readPlaceholderSpList(
       ...(y === undefined ? {} : { y }),
       ...(width === undefined ? {} : { width }),
       ...(height === undefined ? {} : { height }),
+      ...(geometry === undefined ? {} : { geometry }),
+      ...(flipH ? { flipH: true } : {}),
+      ...(flipV ? { flipV: true } : {}),
       ...(style === undefined ? {} : { style }),
       ...(listStyles === undefined ? {} : { listStyles }),
       ...(promptText === undefined ? {} : { promptText }),
@@ -1147,6 +1303,7 @@ function readSlideLayoutPart(
   shapeTreeHandlers: readonly ShapeTreeImportHandler[],
   registerDeferredSlideLink: (link: DeferredSlideLink) => void,
   diagnostics: ImportDiagnostic[],
+  readPlaceholderVisuals?: PlaceholderVisualReader,
 ): SlideLayoutContainer | undefined {
   const xmlText = pkg.readTextPart(layoutPartPath);
   if (xmlText === undefined) return undefined;
@@ -1257,7 +1414,15 @@ function readSlideLayoutPart(
   let layoutPlaceholderKeyBySpid: ReadonlyMap<number, string> | undefined;
   if (spTree !== undefined) {
     consumeIdentityShapeTreeBoilerplate(spTree);
-    const placeholderRead = readPlaceholderSpList(spTree, masterClrMap, false);
+    const placeholderRead = readPlaceholderSpList(
+      spTree,
+      masterClrMap,
+      false,
+      pkg,
+      layoutPartPath,
+      diagnostics,
+      readPlaceholderVisuals,
+    );
     placeholders = placeholderRead.placeholders;
     layoutPlaceholderKeyBySpid = placeholderRead.placeholderKeyBySpid;
   }
@@ -1415,6 +1580,7 @@ function readSlideMasterPart(
   shapeTreeHandlers: readonly ShapeTreeImportHandler[],
   registerDeferredSlideLink: (link: DeferredSlideLink) => void,
   diagnostics: ImportDiagnostic[],
+  readPlaceholderVisuals?: PlaceholderVisualReader,
 ) {
   const xmlText = pkg.readTextPart(masterPartPath);
   if (xmlText === undefined) return undefined;
@@ -1502,7 +1668,15 @@ function readSlideMasterPart(
   let masterPlaceholderKeyBySpid: ReadonlyMap<number, string> | undefined;
   if (spTree !== undefined) {
     consumeIdentityShapeTreeBoilerplate(spTree);
-    const placeholderRead = readPlaceholderSpList(spTree, masterClrMap, true);
+    const placeholderRead = readPlaceholderSpList(
+      spTree,
+      masterClrMap,
+      true,
+      pkg,
+      masterPartPath,
+      diagnostics,
+      readPlaceholderVisuals,
+    );
     masterPlaceholders = placeholderRead.placeholders;
     masterPlaceholderKeyBySpid = placeholderRead.placeholderKeyBySpid;
   }
@@ -1673,6 +1847,7 @@ function readSlideMasterPart(
         shapeTreeHandlers,
         registerDeferredSlideLink,
         diagnostics,
+        readPlaceholderVisuals,
       );
       if (layoutNode !== undefined) {
         masterNode.append(layoutNode);
@@ -1704,6 +1879,7 @@ export function importMastersAndLayouts(
     string,
     Readonly<Record<string, NativeColorSlot>>
   > = new Map(),
+  readPlaceholderVisuals?: PlaceholderVisualReader,
 ): ReadonlyMap<string, SlideLayoutContainer> {
   const masterLevelSlideHandlers = slideHandlers.filter(
     (handler) =>
@@ -1777,6 +1953,7 @@ export function importMastersAndLayouts(
       shapeTreeHandlers,
       registerDeferredSlideLink,
       diagnostics,
+      readPlaceholderVisuals,
     );
     if (masterNode !== undefined) {
       deckNode.append(masterNode);

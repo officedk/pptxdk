@@ -3,12 +3,22 @@ import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
+import { createPlaceholderNode } from "@pptxdk/capabilities/placeholder";
 import { validatePptx } from "@pptxdk/validation";
 import { PNG } from "pngjs";
-import { build as buildDefault, defineTheme, font, transitions } from "pptxdk";
+import {
+  CommonContainer,
+  CommonNode,
+  build as buildDefault,
+  defineSlideLayout,
+  defineTheme,
+  font,
+  transitions,
+} from "pptxdk";
 import {
   BuildError,
   build as buildTrimmed,
+  createImporter,
   emit,
   officialCapabilityNames,
   resolve as resolveTrimmed,
@@ -16,7 +26,7 @@ import {
 } from "pptxdk/build";
 import { paint } from "pptxdk/preview";
 import { Deck, P, Shape, Slide, Span, Text } from "pptxdk/react";
-import { deck, slide, text } from "pptxdk/vanilla";
+import { deck, slide, slideLayout, slideMaster, text } from "pptxdk/vanilla";
 import { describe, it } from "vitest";
 
 const packageRoot = fileURLToPath(new URL("../", import.meta.url));
@@ -421,7 +431,10 @@ process.stdout.write(JSON.stringify(texts));
   });
 
   it("validates capability names, deduplicates repeated selections, and respects AbortSignal", async () => {
-    assert.equal(officialCapabilityNames.length, 11);
+    assert.equal(officialCapabilityNames.length, 14);
+    assert.ok(officialCapabilityNames.includes("footer-placeholder"));
+    assert.ok(officialCapabilityNames.includes("masters"));
+    assert.ok(officialCapabilityNames.includes("placeholder"));
 
     const modules = await selectCapabilities(["shape", "shape", "transition"]);
     assert.equal(modules.length, 2);
@@ -457,6 +470,78 @@ process.stdout.write(JSON.stringify(texts));
           signal: controller.signal,
         }),
       (error: unknown) => error === reason,
+    );
+  });
+
+  it("supports masters, footer-placeholder, and placeholder in trimmed build and createImporter(selectCapabilities(officialCapabilityNames))", async () => {
+    const contentLayout = defineSlideLayout({
+      id: "content-layout",
+      name: "Content Layout",
+      type: "obj",
+      preserve: true,
+      footerPlaceholders: {
+        footer: { x: 40, y: 480, width: 320, height: 28, text: "Footer" },
+      },
+      placeholders: {
+        title: { type: "title", x: 40, y: 32, width: 560, height: 48 },
+        body: { type: "obj", idx: 1, x: 40, y: 96, width: 560, height: 320 },
+      },
+    });
+
+    const unpopulatedDeck = deck({ width: 960, height: 540 }).append(
+      slideMaster({ id: "brand", name: "Brand" }).append(
+        slideLayout(contentLayout),
+      ),
+      slide({
+        id: "s1",
+        layout: contentLayout,
+        footer: "Quarterly",
+        placeholders: { title: "Title" },
+      }).append(
+        createPlaceholderNode({
+          placeholder: "body",
+          nativePlaceholder: { type: "obj", idx: 1 },
+        }),
+      ),
+    );
+    const trimmed = await buildTrimmed(unpopulatedDeck, {
+      capabilities: [
+        "masters",
+        "footer-placeholder",
+        "placeholder",
+        "text",
+      ] as unknown as readonly (typeof officialCapabilityNames)[number][],
+    });
+    const validated = await validatePptx(trimmed.pptx);
+    assert.deepEqual(validated.errors, []);
+
+    const fullModules = await selectCapabilities(officialCapabilityNames);
+    const importer = createImporter(fullModules);
+    const imported = importer(trimmed.pptx);
+    assert.deepEqual(imported.report.diagnostics, []);
+    assert.equal(
+      imported.document.children.some(
+        (c) => c instanceof CommonNode && c.kind === "slide-master",
+      ),
+      true,
+    );
+    const importedSlide = imported.document.children.find(
+      (c): c is CommonContainer =>
+        c instanceof CommonContainer && c.kind === "slide",
+    );
+    const footerProp = importedSlide?.props["footer"] as
+      | string
+      | { readonly text?: string }
+      | undefined;
+    assert.equal(
+      typeof footerProp === "string" ? footerProp : footerProp?.text,
+      "Quarterly",
+    );
+    assert.equal(
+      importedSlide?.children.some(
+        (c) => c instanceof CommonNode && c.kind === "placeholder",
+      ),
+      true,
     );
   });
 });

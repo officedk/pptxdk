@@ -5,7 +5,9 @@ import * as coreMain from "@pptxdk/core";
 import * as coreCapability from "@pptxdk/core/capability";
 import * as coreDocument from "@pptxdk/core/document";
 import * as coreTheme from "@pptxdk/core/theme";
+import * as importMain from "@pptxdk/import";
 import { validatePptx } from "@pptxdk/validation";
+import * as pptxdkMain from "pptxdk";
 import {
   BuildError,
   authorIdSchema,
@@ -28,6 +30,7 @@ import {
   themeSchema,
   themeScopeSchema,
 } from "pptxdk";
+import * as pptxdkBuild from "pptxdk/build";
 import {
   Box,
   Deck,
@@ -72,7 +75,7 @@ function ScopedMotion({
   return <MotionScope scope={scope}>{children}</MotionScope>;
 }
 
-describe("Ticket 16: core author Zod schemas & dual-entry parity", () => {
+describe("core author Zod schemas & dual-entry parity", () => {
   it("exposes Zod schemas across @pptxdk/core public subpaths (., ./capability, ./document, ./theme)", () => {
     for (const key of [
       "authorIdSchema",
@@ -108,6 +111,21 @@ describe("Ticket 16: core author Zod schemas & dual-entry parity", () => {
       "fontSchema",
     ] as const) {
       assert.ok(key in coreTheme, `@pptxdk/core/theme must export ${key}`);
+    }
+
+    for (const key of [
+      "importLocationSchema",
+      "editabilityLossSchema",
+      "cascadedOmissionSchema",
+      "fatalImportIssueSchema",
+      "importDiagnosticSchema",
+      "importReportSchema",
+      "importOptionsSchema",
+      "ImportError",
+    ] as const) {
+      assert.ok(key in importMain, `@pptxdk/import must export ${key}`);
+      assert.ok(key in pptxdkMain, `pptxdk must export ${key}`);
+      assert.ok(key in pptxdkBuild, `pptxdk/build must export ${key}`);
     }
 
     assert.equal(authorIdSchema.parse("hero"), "hero");

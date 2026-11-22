@@ -334,8 +334,11 @@ export const themeMechanismVerifications: Pick<
       const png = initial.pages[2]?.png;
       assert.ok(png instanceof Uint8Array);
       assert.equal(readPngPixelHex(png, 80, 80), "#2563EB");
-      // Until Ticket 02 imports embedded fonts, unembedded imported text reports missing outline font on roundtrip paint.
       assert.equal(roundtrip.pages.length, 3);
+      assert.deepEqual(roundtrip.pages[2]?.diagnostics, []);
+      const roundtripPng = roundtrip.pages[2]?.png;
+      assert.ok(roundtripPng instanceof Uint8Array);
+      assert.equal(readPngPixelHex(roundtripPng, 80, 80), "#2563EB");
     },
   },
   "color-map": {
@@ -364,6 +367,10 @@ export const themeMechanismVerifications: Pick<
       assert.ok(png instanceof Uint8Array);
       assert.equal(readPngPixelHex(png, 80, 80), "#F8FAFC");
       assert.equal(roundtrip.pages.length, 3);
+      assert.deepEqual(roundtrip.pages[0]?.diagnostics, []);
+      const roundtripPng = roundtrip.pages[0]?.png;
+      assert.ok(roundtripPng instanceof Uint8Array);
+      assert.equal(readPngPixelHex(roundtripPng, 80, 80), "#F8FAFC");
     },
   },
   "theme-override": {
@@ -392,6 +399,10 @@ export const themeMechanismVerifications: Pick<
       assert.ok(png instanceof Uint8Array);
       assert.equal(readPngPixelHex(png, 80, 80), "#DC2626");
       assert.equal(roundtrip.pages.length, 3);
+      assert.deepEqual(roundtrip.pages[1]?.diagnostics, []);
+      const roundtripPng = roundtrip.pages[1]?.png;
+      assert.ok(roundtripPng instanceof Uint8Array);
+      assert.equal(readPngPixelHex(roundtripPng, 80, 80), "#DC2626");
     },
   },
 };

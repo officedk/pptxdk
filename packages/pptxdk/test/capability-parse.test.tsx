@@ -28,7 +28,7 @@ const notoFont = font("Noto Sans CJK SC", [
   },
 ]);
 
-describe("Ticket 08: Object capability parse phase, container TextStyle validation, and Text pilot", () => {
+describe("Object capability parse phase, container TextStyle validation, and Text support", () => {
   describe("Container declaration site validation for inheritable TextStyle", () => {
     it("directly rejects invalid TextStyle on Deck and points error path to deck", async () => {
       await assert.rejects(
@@ -374,7 +374,7 @@ describe("Ticket 08: Object capability parse phase, container TextStyle validati
     });
   });
 
-  describe("Ticket 09: Migrate Shape to capability parse, fix text style on children and baseline alignment", () => {
+  describe("Shape capability parse, child text styles, and baseline alignment", () => {
     it("allows Shape with <P> and <Span> children to set fontSize, color, and padding in style", async () => {
       const result = await build(
         <Deck width={960} height={540}>
@@ -837,7 +837,7 @@ describe("Ticket 08: Object capability parse phase, container TextStyle validati
     });
   });
 
-  describe("Ticket 11: Unify Box and Group, tighten parse contract, and remove leaf coupling", () => {
+  describe("Box and Group parse contract and leaf decoupling", () => {
     it("allows Group in flex layout to use morphKey and link", async () => {
       const morph = createMorphScope();
       const groupKey = morph.handle("flex-group-key");

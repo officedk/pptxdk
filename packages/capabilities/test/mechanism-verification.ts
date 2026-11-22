@@ -315,6 +315,10 @@ export async function runProductionMechanismVerifications(): Promise<void> {
           ...(entry.scenario.emitOptions === undefined
             ? {}
             : { emitOptions: entry.scenario.emitOptions }),
+          fontSourceDocument: entry.scenario.document(),
+          ...(entry.scenario.kind === "rejection"
+            ? {}
+            : { allowFontWeight400Fallback: true }),
         });
         assert.deepEqual(
           roundtrip.importReport.diagnostics,

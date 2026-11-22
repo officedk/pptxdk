@@ -143,6 +143,21 @@
       "source": "./src/group/group-elements.ts",
       "types": "./dist/group/group-elements.d.ts",
       "default": "./dist/group/group-elements.js"
+    },
+    "./masters": {
+      "source": "./src/masters/masters.ts",
+      "types": "./dist/masters/masters.d.ts",
+      "default": "./dist/masters/masters.js"
+    },
+    "./footer-placeholder": {
+      "source": "./src/masters/footer-placeholder.ts",
+      "types": "./dist/masters/footer-placeholder.d.ts",
+      "default": "./dist/masters/footer-placeholder.js"
+    },
+    "./placeholder": {
+      "source": "./src/placeholder/placeholder.ts",
+      "types": "./dist/placeholder/placeholder.d.ts",
+      "default": "./dist/placeholder/placeholder.js"
     }
   },
   "scripts": {

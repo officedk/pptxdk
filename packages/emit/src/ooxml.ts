@@ -176,6 +176,7 @@ export type EmittedSlideLayoutSpec = {
   readonly showMasterShapes?: boolean;
   readonly showMasterPlaceholderAnimations?: boolean;
   readonly placeholders?: Readonly<Record<string, LayoutPlaceholderSpec>>;
+  readonly placeholderSpPrByKey?: Readonly<Record<string, string>>;
   readonly colorMapOverride?: ColorMapOverride;
   readonly themeOverride?: ThemeOverride;
   readonly headerFooter?: HeaderFooter;
@@ -198,6 +199,7 @@ export type EmittedSlideMasterSpec = {
   readonly shapeXml?: string;
   readonly extraRelationships?: readonly PptxRelationship[];
   readonly placeholders?: Readonly<Record<string, MasterPlaceholderSpec>>;
+  readonly placeholderSpPrByKey?: Readonly<Record<string, string>>;
   readonly textStyles?: MasterTextStyles;
   readonly transitionXml?: string;
   readonly timingXml?: string;
@@ -714,6 +716,7 @@ function placeholderBodyPrXml(style: LayoutPlaceholderSpec["style"]): string {
 function placeholderShapesXml(
   placeholders: Readonly<Record<string, LayoutPlaceholderSpec>> | undefined,
   themeContext: ThemeContext,
+  placeholderSpPrByKey?: Readonly<Record<string, string>>,
 ): string {
   if (placeholders === undefined) return "";
   return Object.entries(placeholders)
@@ -737,9 +740,11 @@ function placeholderShapesXml(
         spec.y !== undefined &&
         spec.width !== undefined &&
         spec.height !== undefined;
-      const spPr = hasBox
-        ? `<p:spPr><a:xfrm><a:off x="${pxToEmu(spec.x)}" y="${pxToEmu(spec.y)}"/><a:ext cx="${pxToEmu(spec.width)}" cy="${pxToEmu(spec.height)}"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></p:spPr>`
-        : "<p:spPr/>";
+      const spPr =
+        placeholderSpPrByKey?.[key] ??
+        (hasBox
+          ? `<p:spPr><a:xfrm><a:off x="${pxToEmu(spec.x)}" y="${pxToEmu(spec.y)}"/><a:ext cx="${pxToEmu(spec.width)}" cy="${pxToEmu(spec.height)}"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></p:spPr>`
+          : "<p:spPr/>");
       const mergedLvl1 =
         styleAsLevel1(spec.style) === undefined &&
         spec.listStyles?.[1] === undefined
@@ -895,7 +900,7 @@ function headerFooterXml(hf?: HeaderFooter): string {
   return `<p:hf${attrs}/>`;
 }
 
-function masterXml(
+export function masterXml(
   spec: EmittedSlideMasterSpec,
   layoutIds: readonly { readonly id: number; readonly rId: string }[],
   themeContext: ThemeContext,
@@ -912,14 +917,14 @@ function masterXml(
       ({ id, rId }) => `<p:sldLayoutId id="${id}" r:id="${xmlEscape(rId)}"/>`,
     )
     .join("");
-  const shapes = `${placeholderShapesXml(spec.placeholders, themeContext)}${spec.shapeXml ?? ""}`;
+  const shapes = `${placeholderShapesXml(spec.placeholders, themeContext, spec.placeholderSpPrByKey)}${spec.shapeXml ?? ""}`;
   const txStyles = masterTextStylesXml(spec.textStyles, themeContext);
   return xmlDocument(
     `<p:sldMaster xmlns:a="${namespaces.a}" xmlns:r="${namespaces.r}" xmlns:p="${namespaces.p}"${preserveAttr}><p:cSld${nameAttr}>${spec.backgroundXml ?? ""}${shapeTreeXml(shapes)}</p:cSld>${colorMap}<p:sldLayoutIdLst>${layoutIdList}</p:sldLayoutIdLst>${spec.transitionXml ?? ""}${spec.timingXml ?? ""}${headerFooterXml(spec.headerFooter)}${txStyles}</p:sldMaster>`,
   );
 }
 
-function layoutXml(
+export function layoutXml(
   spec: EmittedSlideLayoutSpec,
   themeContext: ThemeContext,
 ): string {
@@ -945,7 +950,7 @@ function layoutXml(
       : ` showMasterPhAnim="${spec.showMasterPlaceholderAnimations ? "1" : "0"}"`;
   const nameAttr =
     spec.name === undefined ? "" : ` name="${xmlEscape(spec.name)}"`;
-  const shapes = `${placeholderShapesXml(spec.placeholders, themeContext)}${spec.shapeXml ?? ""}`;
+  const shapes = `${placeholderShapesXml(spec.placeholders, themeContext, spec.placeholderSpPrByKey)}${spec.shapeXml ?? ""}`;
   return xmlDocument(
     `<p:sldLayout xmlns:a="${namespaces.a}" xmlns:r="${namespaces.r}" xmlns:p="${namespaces.p}"${typeAttr}${preserveAttr}${matchingNameAttr}${userDrawnAttr}${showMasterSpAttr}${showMasterPhAnimAttr}><p:cSld${nameAttr}>${spec.backgroundXml ?? ""}${shapeTreeXml(shapes)}</p:cSld>${colorMapOverrideXml(spec.colorMapOverride)}${spec.transitionXml ?? ""}${spec.timingXml ?? ""}${headerFooterXml(spec.headerFooter)}</p:sldLayout>`,
   );
@@ -960,6 +965,7 @@ function slide(
   showMasterPlaceholderAnimations?: boolean,
   colorMapOverride?: ColorMapOverride,
   showMasterShapes?: boolean,
+  name?: string,
 ): string {
   const showMasterSpAttr =
     showMasterShapes === false ? ' showMasterSp="0"' : "";
@@ -968,7 +974,7 @@ function slide(
       ? ""
       : ` showMasterPhAnim="${showMasterPlaceholderAnimations ? "1" : "0"}"`;
   return xmlDocument(
-    `<p:sld xmlns:a="${namespaces.a}" xmlns:r="${namespaces.r}" xmlns:p="${namespaces.p}"${showMasterSpAttr}${showMasterPhAnimAttr}${hidden ? ' show="false"' : ""}><p:cSld name="${xmlEscape(slideId)}">${backgroundXml}${shapeTreeXml(shapeXml)}</p:cSld>${colorMapOverrideXml(colorMapOverride)}${slideXml}</p:sld>`,
+    `<p:sld xmlns:a="${namespaces.a}" xmlns:r="${namespaces.r}" xmlns:p="${namespaces.p}"${showMasterSpAttr}${showMasterPhAnimAttr}${hidden ? ' show="false"' : ""}><p:cSld name="${xmlEscape(name ?? slideId)}">${backgroundXml}${shapeTreeXml(shapeXml)}</p:cSld>${colorMapOverrideXml(colorMapOverride)}${slideXml}</p:sld>`,
   );
 }
 
@@ -980,7 +986,7 @@ function sectionId(index: number, name: string): string {
   return `{${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20, 32)}}`;
 }
 
-function sectionListXml(
+export function sectionListXml(
   sections: readonly {
     readonly name: string;
     readonly slideIndexes: readonly number[];
@@ -1027,6 +1033,7 @@ export function pptxParts(
   size: { readonly width: number; readonly height: number },
   slides: readonly {
     readonly id: string;
+    readonly name?: string;
     readonly layoutKey?: string;
     readonly colorMapOverride?: ColorMapOverride;
     readonly themeOverride?: ThemeOverride;
@@ -1352,6 +1359,7 @@ export function pptxParts(
         showMasterPlaceholderAnimations,
         colorMapOverride,
         showMasterShapes,
+        slides[index]!.name,
       );
       const slideOverrideTarget = slideThemeOverrideTargets[index];
       const slideRels: PptxRelationship[] = [

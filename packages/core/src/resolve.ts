@@ -106,6 +106,7 @@ import type {
 type ParsedSlideNode = {
   readonly node: DeclarationNode;
   readonly id: string;
+  readonly name?: string;
   readonly authorId?: string;
   readonly index: number;
   readonly layoutKey?: string;
@@ -497,7 +498,9 @@ function resolveSlides(
 
   const authorIds = new Set<string>();
   const slideProperties = [...modules.slideModules.values()].flatMap(
-    (module) => module.slideProps ?? [module.slideProp],
+    (module) =>
+      module.slideProps ??
+      (module.slideProp === undefined ? [] : [module.slideProp]),
   );
   const slidePropertySet = new Set(slideProperties);
   const knownTrimmedSlideProps = new Set([
@@ -1065,6 +1068,7 @@ function resolveSlides(
   const slides = candidates.map(({ node, section, sectionIndex }, index) => {
     const {
       id,
+      name,
       hidden,
       showMasterPlaceholderAnimations,
       showMasterShapes,
@@ -1149,6 +1153,7 @@ function resolveSlides(
     const resolved: ParsedSlideNode = {
       node,
       id,
+      ...(name === undefined ? {} : { name }),
       ...(authorId === undefined ? {} : { authorId }),
       index: index + 1,
       ...(layoutKey === undefined ? {} : { layoutKey }),
@@ -2260,6 +2265,7 @@ function buildSlidePlaceholderContexts(args: {
   readonly hasExplicitLayout: boolean;
   readonly layoutSpec: InternalResolvedSlideLayout | undefined;
   readonly masterSpec: InternalResolvedSlideMaster | undefined;
+  readonly placeholderTheme?: ThemeContext;
   readonly children: readonly CapabilityChild[];
   readonly rawPlaceholdersProp: unknown;
   readonly modules: BoundCapabilityRegistry;
@@ -2271,6 +2277,7 @@ function buildSlidePlaceholderContexts(args: {
     hasExplicitLayout,
     layoutSpec,
     masterSpec,
+    placeholderTheme,
     children,
     rawPlaceholdersProp,
     modules,
@@ -2410,7 +2417,7 @@ function buildSlidePlaceholderContexts(args: {
       contexts.set(child, {
         ...(typeof rawKey === "string" ? { key: rawKey } : {}),
         nativeRef,
-        masterTheme: masterSpec.themeContext,
+        masterTheme: placeholderTheme ?? masterSpec.themeContext,
         ...(masterSpec.textStyles === undefined
           ? {}
           : { masterTextStyles: masterSpec.textStyles }),
@@ -2447,7 +2454,9 @@ function resolveOwnerSlideCapabilities(args: {
   const input: CapabilityInput = { type, props, children: [] };
 
   for (const module of modules.slideModules.values()) {
-    const slideProps = module.slideProps ?? [module.slideProp];
+    const slideProps =
+      module.slideProps ??
+      (module.slideProp === undefined ? [] : [module.slideProp]);
     const hasSlideProps = slideProps.some((property) =>
       Object.hasOwn(props, property),
     );
@@ -2539,6 +2548,7 @@ function resolveSlideDeclaration(
   const {
     node,
     id,
+    name,
     authorId,
     index,
     layoutKey,
@@ -2578,6 +2588,7 @@ function resolveSlideDeclaration(
     hasExplicitLayout,
     layoutSpec,
     masterSpec,
+    placeholderTheme: documentTheme.withTextStyle({}),
     children,
     rawPlaceholdersProp: node.props["placeholders"],
     modules,
@@ -2655,7 +2666,9 @@ function resolveSlideDeclaration(
   };
 
   for (const module of modules.slideModules.values()) {
-    const slideProps = module.slideProps ?? [module.slideProp];
+    const slideProps =
+      module.slideProps ??
+      (module.slideProp === undefined ? [] : [module.slideProp]);
     const hasSlideProps = slideProps.some((property) =>
       Object.hasOwn(node.props, property),
     );
@@ -2739,9 +2752,10 @@ function resolveSlideDeclaration(
     if (
       consumer === undefined ||
       (!consumer.always &&
-        !(consumer.slideProps ?? [consumer.slideProp]).some((property) =>
-          Object.hasOwn(node.props, property),
-        ))
+        !(
+          consumer.slideProps ??
+          (consumer.slideProp === undefined ? [] : [consumer.slideProp])
+        ).some((property) => Object.hasOwn(node.props, property)))
     ) {
       slide.diagnostics.push(
         diagnostic(
@@ -2788,6 +2802,7 @@ function resolveSlideDeclaration(
     linkedSlideIndexes: slide.linkedSlideIndexes,
     internal: {
       id,
+      ...(name === undefined ? {} : { name }),
       ...(authorId === undefined ? {} : { authorId }),
       index,
       ...(layoutKey === undefined ? {} : { layoutKey }),
@@ -3153,13 +3168,15 @@ function resolveDocument(
       module.slot === "shape-tree" &&
       module.declaration === "footer-placeholder",
   );
+  const mastersModule = [...modules.slideModules.values()].find(
+    (module) => module.declaration === "slide-masters",
+  );
 
   const resolvedMasters: InternalResolvedSlideMaster[] = [];
   const masterObservations: SlideMasterObservation[] = [];
   const masterByKey = new Map<string, InternalResolvedSlideMaster>();
   const masterByLayoutKey = new Map<string, InternalResolvedSlideMaster>();
   const layoutByKey = new Map<string, InternalResolvedSlideLayout>();
-  const parsedMasterByKey = new Map<string, ParsedMasterSpec>();
   const parsedLayoutByKey = new Map<
     string,
     { readonly master: ParsedMasterSpec; readonly layout: ParsedLayoutSpec }
@@ -3170,7 +3187,6 @@ function resolveDocument(
   >();
 
   for (const parsedMaster of parsedMasters) {
-    parsedMasterByKey.set(parsedMaster.key, parsedMaster);
     const mergedMasterStyle =
       parsedMaster.style === undefined
         ? (deck.props["style"] as Record<string, unknown> | undefined)
@@ -3247,6 +3263,20 @@ function resolveDocument(
         document,
       });
     }
+    const masterPlaceholderVisuals =
+      parsedMaster.placeholders !== undefined && mastersModule !== undefined
+        ? resolveMasterOrLayoutSlideCapability({
+            module: mastersModule,
+            targetType: "slide-master",
+            props: { placeholders: parsedMaster.placeholders },
+            path: parsedMaster.path,
+            dimensions: size,
+            theme: masterThemeBase,
+            options,
+            slideNumber: 1,
+            document,
+          })
+        : undefined;
     const masterLayers = resolveSharedCanvasLayers({
       children: parsedMaster.canvasChildren.map(capabilityChild),
       path: parsedMaster.path,
@@ -3343,6 +3373,20 @@ function resolveDocument(
           document,
         });
       }
+      const layoutPlaceholderVisuals =
+        parsedLayout.placeholders !== undefined && mastersModule !== undefined
+          ? resolveMasterOrLayoutSlideCapability({
+              module: mastersModule,
+              targetType: "slide-layout",
+              props: { placeholders: parsedLayout.placeholders },
+              path: parsedLayout.path,
+              dimensions: size,
+              theme: layoutThemeBase,
+              options,
+              slideNumber: 1,
+              document,
+            })
+          : undefined;
       const layoutLayers = resolveSharedCanvasLayers({
         children: parsedLayout.node.children.map(capabilityChild),
         path: parsedLayout.path,
@@ -3368,6 +3412,9 @@ function resolveDocument(
         ...(layoutFooterPlaceholders === undefined
           ? {}
           : { footerPlaceholders: layoutFooterPlaceholders }),
+        ...(layoutPlaceholderVisuals === undefined
+          ? {}
+          : { placeholderVisuals: layoutPlaceholderVisuals }),
         ...(layoutLayers.length === 0 ? {} : { layers: layoutLayers }),
         ...(layoutCapResult.slideCapabilities.length > 0
           ? { slideCapabilities: layoutCapResult.slideCapabilities }
@@ -3402,6 +3449,9 @@ function resolveDocument(
       ...(masterFooterPlaceholders === undefined
         ? {}
         : { footerPlaceholders: masterFooterPlaceholders }),
+      ...(masterPlaceholderVisuals === undefined
+        ? {}
+        : { placeholderVisuals: masterPlaceholderVisuals }),
       ...(masterLayers.length === 0 ? {} : { layers: masterLayers }),
       ...(parsedMaster.placeholders === undefined
         ? {}
@@ -3574,7 +3624,6 @@ function resolveDocument(
       inheritance,
     );
   });
-  void parsedMasterByKey;
 
   const morphDiagnostics: Diagnostic[] = [];
   for (let index = 0; index < slides.length; index += 1) {

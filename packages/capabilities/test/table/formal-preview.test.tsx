@@ -41,7 +41,7 @@ function runDocPreview(modules: readonly CapabilityModule[]) {
   };
 }
 
-describe("Slice 4 (Ticket 09): Table static preview positive and negative behaviors", () => {
+describe("Table static preview positive and negative behaviors", () => {
   const jostRegularBytes = readFileSync(
     new URL("../assets/fonts/Jost-400-Book.ttf", import.meta.url),
   );

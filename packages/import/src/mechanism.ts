@@ -10,7 +10,11 @@ import type {
   SlideEmitContext,
   SlideEmitOutput,
 } from "@pptxdk/core/capability";
-import type { CommonNode } from "@pptxdk/core/document";
+import type {
+  CommonNode,
+  DeckContainer,
+  SlideLayoutContainer,
+} from "@pptxdk/core/document";
 
 import type { ImportDiagnostic, ImportLocation } from "#/diagnostics.ts";
 import type { ParsedRelationshipEntry, PptxPackage } from "#/opc.ts";
@@ -82,10 +86,39 @@ export type SlideImportHandler = {
   read(context: SlideImportContext): SlideImportOutcome;
 };
 
+export type ImportedPlaceholderSpPr = {
+  readonly x?: number;
+  readonly y?: number;
+  readonly width?: number;
+  readonly height?: number;
+  readonly geometry?: unknown;
+  readonly flipH?: boolean;
+  readonly flipV?: boolean;
+  readonly style?: Record<string, unknown>;
+};
+
+export type PlaceholderVisualReader = (args: {
+  readonly spPr: XmlElementCursor;
+  readonly pkg: PptxPackage;
+  readonly location: ImportLocation;
+  readonly diagnostics: ImportDiagnostic[];
+}) => ImportedPlaceholderSpPr;
+
 export type DeckImportContext = {
   readonly presentationCursor: XmlElementCursor;
-  readonly deckNode: CommonNode;
+  readonly deckNode: DeckContainer;
   readonly package: PptxPackage;
+  readonly relById?: ReadonlyMap<string, ParsedRelationshipEntry>;
+  readonly usedDeckIds?: Set<string>;
+  readonly slideHandlers?: readonly SlideImportHandler[];
+  readonly shapeTreeHandlers?: readonly ShapeTreeImportHandler[];
+  readonly registerDeferredSlideLink?: (link: DeferredSlideLink) => void;
+  readonly layoutNodeByPartPath?: Map<string, SlideLayoutContainer>;
+  readonly clrMapByLayoutPartPath?: Map<
+    string,
+    Readonly<Record<string, NativeColorSlot>>
+  >;
+  readonly slideNodeByPresentationSldId?: ReadonlyMap<number, CommonNode>;
 };
 
 export type DeckImportOutcome = {
@@ -94,7 +127,8 @@ export type DeckImportOutcome = {
 
 export type DeckImportHandler = {
   readonly target: "deck";
-  read(context: DeckImportContext): DeckImportOutcome;
+  readonly stage?: "pre-slides" | "post-slides";
+  readonly read: (context: DeckImportContext) => DeckImportOutcome;
 };
 
 export type TextInlineImportContext = {

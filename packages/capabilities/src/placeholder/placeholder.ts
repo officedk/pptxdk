@@ -42,7 +42,6 @@ import {
   type ShapeTreeImportContext,
   type ShapeTreeImportHandler,
   type ShapeTreeImportOutcome,
-  type XmlElementCursor,
 } from "@pptxdk/import";
 import { z } from "zod";
 
@@ -127,27 +126,6 @@ function emitPlaceholderModel(
 function paintPlaceholderModel(): PaintOutput {
   // Unpopulated content placeholders show prompt chrome only inside interactive editors and draw nothing on static preview.
   return { svg: "" };
-}
-
-function consumeUnknownSubtree(cursor: XmlElementCursor): void {
-  const attrs = cursor.element.attributes;
-  for (let i = 0; i < attrs.length; i += 1) {
-    const attr = attrs.item(i);
-    if (attr === null) continue;
-    const ns = attr.namespaceURI ?? "";
-    const local = attr.localName ?? attr.name;
-    if (
-      ns === "http://www.w3.org/2000/xmlns/" ||
-      attr.name === "xmlns" ||
-      attr.prefix === "xmlns"
-    ) {
-      continue;
-    }
-    cursor.consumeAttr(local, ns);
-  }
-  for (const child of cursor.remainingElementChildren()) {
-    consumeUnknownSubtree(child);
-  }
 }
 
 /**
@@ -285,7 +263,31 @@ export function readContentPlaceholderSp(
       }
     }
   }
-  consumeUnknownSubtree(spPr);
+  const prstGeomEl = directElementChild(spPr.element, A_NS, "prstGeom");
+  if (
+    prstGeomEl !== undefined &&
+    prstGeomEl.getAttribute("prst") === "rect" &&
+    prstGeomEl.attributes.length === 1
+  ) {
+    const prstGeom = spPr.child(A_NS, "prstGeom")!;
+    prstGeom.consumeAttr("prst");
+    const avLstEl = directElementChild(prstGeom.element, A_NS, "avLst");
+    if (
+      avLstEl !== undefined &&
+      avLstEl.children.length === 0 &&
+      avLstEl.attributes.length === 0
+    ) {
+      prstGeom.child(A_NS, "avLst");
+    }
+  }
+  const noFillEl = directElementChild(spPr.element, A_NS, "noFill");
+  if (
+    noFillEl !== undefined &&
+    noFillEl.children.length === 0 &&
+    noFillEl.attributes.length === 0
+  ) {
+    spPr.child(A_NS, "noFill");
+  }
 
   const matchedKey = matchLayoutPlaceholderKey(layoutPlaceholders, {
     type: nativeRef.type,

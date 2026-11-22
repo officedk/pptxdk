@@ -97,6 +97,7 @@ export type InternalResolvedSlideLayout = {
   readonly headerFooter?: HeaderFooter;
   readonly background?: ResolvedSlideCapabilityRecord;
   readonly footerPlaceholders?: ResolvedSlideCapabilityRecord;
+  readonly placeholderVisuals?: ResolvedSlideCapabilityRecord;
   readonly layers?: readonly ResolvedObjectLayer[];
   readonly slideCapabilities?: readonly ResolvedSlideCapabilityRecord[];
 };
@@ -112,6 +113,7 @@ export type InternalResolvedSlideMaster = {
   readonly headerFooter?: HeaderFooter;
   readonly background?: ResolvedSlideCapabilityRecord;
   readonly footerPlaceholders?: ResolvedSlideCapabilityRecord;
+  readonly placeholderVisuals?: ResolvedSlideCapabilityRecord;
   readonly layers?: readonly ResolvedObjectLayer[];
   readonly placeholders?: MasterPlaceholderMap;
   readonly textStyles?: MasterTextStyles;
@@ -121,6 +123,7 @@ export type InternalResolvedSlideMaster = {
 
 export type InternalResolvedSlide = {
   readonly id: string;
+  readonly name?: string;
   readonly authorId?: string;
   readonly index: number;
   readonly layoutKey?: string;

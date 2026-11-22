@@ -1614,6 +1614,31 @@ export function emit(
           );
         }
       }
+      let masterPlaceholderSpPrByKey:
+        | Readonly<Record<string, string>>
+        | undefined;
+      if (master.placeholderVisuals !== undefined) {
+        checkExtensions(
+          master.placeholderVisuals.extensions,
+          target,
+          docEmit.usedExtensions,
+          masterEmit.diagnostics,
+          master.placeholderVisuals.path,
+        );
+        const phOut = master.placeholderVisuals.emit({
+          path: master.placeholderVisuals.path,
+          dimensions: internal.dimensions,
+          theme: master.placeholderVisuals.theme,
+          options,
+          slideNumber: 1,
+          createTextFieldId: () => allocateTextFieldId(docEmit),
+          registerResource: (resource) => addResource(resource, masterCtx),
+          registerPackagePart: (part) => addSlidePackagePart(part, masterCtx),
+          registerSharedPart: (key, part) =>
+            addSharedPackagePart(key, part, masterCtx),
+        });
+        masterPlaceholderSpPrByKey = phOut.placeholderSpPrByKey;
+      }
       if (masterEmit.diagnostics.length > 0) {
         throw new BuildError(masterEmit.diagnostics);
       }
@@ -1714,6 +1739,31 @@ export function emit(
             );
           }
         }
+        let layoutPlaceholderSpPrByKey:
+          | Readonly<Record<string, string>>
+          | undefined;
+        if (layout.placeholderVisuals !== undefined) {
+          checkExtensions(
+            layout.placeholderVisuals.extensions,
+            target,
+            docEmit.usedExtensions,
+            layoutEmit.diagnostics,
+            layout.placeholderVisuals.path,
+          );
+          const phOut = layout.placeholderVisuals.emit({
+            path: layout.placeholderVisuals.path,
+            dimensions: internal.dimensions,
+            theme: layout.placeholderVisuals.theme,
+            options,
+            slideNumber: 1,
+            createTextFieldId: () => allocateTextFieldId(docEmit),
+            registerResource: (resource) => addResource(resource, layoutCtx),
+            registerPackagePart: (part) => addSlidePackagePart(part, layoutCtx),
+            registerSharedPart: (key, part) =>
+              addSharedPackagePart(key, part, layoutCtx),
+          });
+          layoutPlaceholderSpPrByKey = phOut.placeholderSpPrByKey;
+        }
         if (layoutEmit.diagnostics.length > 0) {
           throw new BuildError(layoutEmit.diagnostics);
         }
@@ -1742,6 +1792,9 @@ export function emit(
           ...(layout.placeholders === undefined
             ? {}
             : { placeholders: layout.placeholders }),
+          ...(layoutPlaceholderSpPrByKey === undefined
+            ? {}
+            : { placeholderSpPrByKey: layoutPlaceholderSpPrByKey }),
           ...(layout.colorMapOverride === undefined
             ? {}
             : { colorMapOverride: layout.colorMapOverride }),
@@ -1777,6 +1830,9 @@ export function emit(
         ...(master.placeholders === undefined
           ? {}
           : { placeholders: master.placeholders }),
+        ...(masterPlaceholderSpPrByKey === undefined
+          ? {}
+          : { placeholderSpPrByKey: masterPlaceholderSpPrByKey }),
         ...(master.textStyles === undefined
           ? {}
           : { textStyles: master.textStyles }),
@@ -1877,6 +1933,7 @@ export function emit(
 
     return {
       id: resolvedSlide.id,
+      ...(resolvedSlide.name === undefined ? {} : { name: resolvedSlide.name }),
       ...(resolvedSlide.layoutKey === undefined
         ? {}
         : { layoutKey: resolvedSlide.layoutKey }),
@@ -1919,6 +1976,7 @@ export function emit(
     emittedSlides.map(
       ({
         id,
+        name,
         layoutKey,
         colorMapOverride,
         themeOverride,
@@ -1931,6 +1989,7 @@ export function emit(
         relationships,
       }) => ({
         id,
+        ...(name === undefined ? {} : { name }),
         ...(layoutKey === undefined ? {} : { layoutKey }),
         ...(colorMapOverride === undefined ? {} : { colorMapOverride }),
         ...(themeOverride === undefined ? {} : { themeOverride }),

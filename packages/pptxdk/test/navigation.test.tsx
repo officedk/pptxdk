@@ -2,7 +2,15 @@ import assert from "node:assert/strict";
 
 import { BuildError } from "@pptxdk/core";
 import { validatePptx } from "@pptxdk/validation";
-import { build, createMorphScope, linearGradient, transitions } from "pptxdk";
+import { strFromU8, unzipSync, zipSync } from "fflate";
+import {
+  CommonContainer,
+  build,
+  createMorphScope,
+  importPptx,
+  linearGradient,
+  transitions,
+} from "pptxdk";
 import {
   Deck,
   Box,
@@ -466,5 +474,111 @@ describe("slide navigation", () => {
       assert.equal(error.diagnostics[0]?.code, "link-needs-object");
       return true;
     });
+  });
+
+  it("preserves duplicate slide display names and internal slide-jump targets to the disambiguated second slide", async () => {
+    const initial = await build(
+      createElement(
+        Deck,
+        {},
+        createElement(
+          Slide,
+          { id: "first", name: "Section" },
+          createElement(Shape, {
+            id: "shape-jump",
+            x: 20,
+            y: 20,
+            width: 100,
+            height: 40,
+            link: { id: "second" },
+          }),
+          createElement(Text, {
+            id: "text-jump",
+            x: 20,
+            y: 70,
+            width: 120,
+            height: 40,
+            link: { id: "second" },
+            children: "Go to Section 2",
+          }),
+          createElement(
+            Group,
+            { id: "group-jump", link: { id: "second" } },
+            createElement(Shape, {
+              id: "group-child",
+              x: 160,
+              y: 20,
+              width: 60,
+              height: 40,
+            }),
+          ),
+          createElement(Chart, {
+            id: "chart-jump",
+            x: 20,
+            y: 130,
+            width: 160,
+            height: 100,
+            link: { id: "second" },
+            groups: [
+              {
+                kind: "line",
+                data: { kind: "shared-categories", categories: ["Q1"] },
+                series: [{ name: "S1", values: [1] }],
+              },
+            ],
+          }),
+        ),
+        createElement(Slide, { id: "second", name: "Section" }),
+      ),
+    );
+
+    const files = unzipSync(initial.pptx);
+    const slide1XmlBefore = strFromU8(files["ppt/slides/slide1.xml"]!);
+    const slide2XmlBefore = strFromU8(files["ppt/slides/slide2.xml"]!);
+    assert.match(slide1XmlBefore, /<p:cSld name="Section">/u);
+    assert.match(slide2XmlBefore, /<p:cSld name="Section">/u);
+
+    const imported = importPptx(zipSync(files));
+    assert.deepEqual(imported.report.diagnostics, []);
+
+    const slides = imported.document.children.filter(
+      (child): child is CommonContainer =>
+        child instanceof CommonContainer && child.kind === "slide",
+    );
+    assert.equal(slides.length, 2);
+    assert.equal(slides[0]?.id, "Section");
+    assert.equal(slides[1]?.id, "Section-2");
+    assert.equal(slides[1]?.props["name"], "Section");
+
+    const rebuilt = await build(imported.document);
+    const validation = await validatePptx(rebuilt.pptx);
+    assert.deepEqual(
+      validation.errors.filter(
+        (error) => error.code !== "duplicate-stable-slide-id",
+      ),
+      [],
+    );
+
+    const rebuiltFiles = unzipSync(rebuilt.pptx);
+    const rebuiltSlide1 = strFromU8(rebuiltFiles["ppt/slides/slide1.xml"]!);
+    const rebuiltSlide2 = strFromU8(rebuiltFiles["ppt/slides/slide2.xml"]!);
+    const rebuiltSlide1Rels = strFromU8(
+      rebuiltFiles["ppt/slides/_rels/slide1.xml.rels"]!,
+    );
+    assert.match(rebuiltSlide1, /<p:cSld name="Section">/u);
+    assert.match(rebuiltSlide2, /<p:cSld name="Section">/u);
+
+    const jumpRelIds = [
+      ...rebuiltSlide1.matchAll(
+        /<a:hlinkClick r:id="([^"]+)" action="ppaction:\/\/hlinksldjump"/gu,
+      ),
+    ].map((match) => match[1]!);
+    assert.equal(jumpRelIds.length, 4);
+    for (const relId of jumpRelIds) {
+      assert.match(
+        rebuiltSlide1Rels,
+        new RegExp(`Id="${relId}"[^>]*Target="slide2\\.xml"`, "u"),
+      );
+    }
   });
 });

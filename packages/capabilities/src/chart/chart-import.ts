@@ -1,10 +1,10 @@
 import {
   bcp47LangSchema,
   matchLayoutPlaceholderKey,
+  schemeColorNameSchema,
   type ColorValue,
-  type LinkTarget,
-  type NativeColorSlot,
   type NativePlaceholderRef,
+  type SchemeColorName,
   type Shadow,
 } from "@pptxdk/core/capability";
 import {
@@ -19,7 +19,6 @@ import {
   OoxmlNonNegativeIntSchema,
   P_NS,
   REL_CHART,
-  REL_HYPERLINK,
   R_NS,
   TransformAttributesFragmentSchema,
   XmlElementCursor,
@@ -28,13 +27,17 @@ import {
   resolvePartPath,
   type ImportDiagnostic,
   type ImportLocation,
-  type PptxPackage,
   type ShapeTreeImportContext,
   type ShapeTreeImportHandler,
   type ShapeTreeImportOutcome,
 } from "@pptxdk/import";
 import { z } from "zod";
 
+import {
+  attachDeferredSlideLink,
+  readClickLink,
+  type ClickLinkReadResult,
+} from "../shared/identity.ts";
 import {
   isPlaceholderGraphicFrameElement,
   readNvPrPlaceholder,
@@ -105,46 +108,8 @@ const OoxmlFloatSchema = z
   .refine((value) => Number.isFinite(value));
 
 const SchemeColorSchema = z.object({
-  val: z.enum([
-    "tx1",
-    "bg1",
-    "tx2",
-    "bg2",
-    "dk1",
-    "lt1",
-    "dk2",
-    "lt2",
-    "accent1",
-    "accent2",
-    "accent3",
-    "accent4",
-    "accent5",
-    "accent6",
-    "hlink",
-    "folHlink",
-  ]),
+  val: schemeColorNameSchema,
 });
-
-const schemeToNativeSlot: Readonly<
-  Record<z.infer<typeof SchemeColorSchema>["val"], NativeColorSlot>
-> = {
-  tx1: "dk1",
-  bg1: "lt1",
-  tx2: "dk2",
-  bg2: "lt2",
-  dk1: "dk1",
-  lt1: "lt1",
-  dk2: "dk2",
-  lt2: "lt2",
-  accent1: "accent1",
-  accent2: "accent2",
-  accent3: "accent3",
-  accent4: "accent4",
-  accent5: "accent5",
-  accent6: "accent6",
-  hlink: "hlink",
-  folHlink: "folHlink",
-};
 
 const BarDirSchema = z.object({ val: z.enum(["col", "bar"]) });
 const GroupingSchema = z.object({
@@ -314,7 +279,7 @@ function readSolidFillColor(
   }
 
   let baseString: string | undefined;
-  let schemeSlot: NativeColorSlot | undefined;
+  let schemeSlot: SchemeColorName | undefined;
   if (srgb !== undefined) {
     const raw = srgb.attrsObject(["val"]);
     const parsed = HexRgb6Schema.safeParse(raw["val"]);
@@ -325,7 +290,7 @@ function readSolidFillColor(
     const raw = scheme.attrsObject(["val"]);
     const parsed = SchemeColorSchema.safeParse(raw);
     if (parsed.success) {
-      schemeSlot = schemeToNativeSlot[parsed.data.val];
+      schemeSlot = parsed.data.val;
     }
   }
   const lumMod = readColorModifier(colorCursor, "lumMod");
@@ -346,19 +311,67 @@ function readSolidFillColor(
   return alpha === undefined ? baseColor : { color: baseColor, alpha };
 }
 
+function isEmptyXmlElement(el: XmlElementCursor["element"]): boolean {
+  return el.children.length === 0 && el.attributes.length === 0;
+}
+
+function consumeBenignLineElement(spPr: XmlElementCursor): boolean {
+  const lnEl = directElementChild(spPr.element, A_NS, "ln");
+  if (lnEl === undefined) return false;
+  const lnChildren = Array.from(lnEl.children);
+  const hasNoFillChild = lnChildren.some(
+    (c) => c.namespaceURI === A_NS && c.localName === "noFill",
+  );
+  if (!hasNoFillChild && lnChildren.length > 0) {
+    return false;
+  }
+  const hasOnlyBenignChildren = lnChildren.every(
+    (c) =>
+      c.namespaceURI === A_NS &&
+      (c.localName === "noFill" || c.localName === "round") &&
+      isEmptyXmlElement(c),
+  );
+  if (!hasOnlyBenignChildren) return false;
+  const ln = spPr.child(A_NS, "ln")!;
+  ln.consumeAttr("w");
+  ln.consumeAttr("cap");
+  for (const child of ln.remainingElementChildren()) {
+    consumeSubtree(child);
+  }
+  return true;
+}
+
+function consumeBenignChartSpPr(spPr: XmlElementCursor): void {
+  const noFillEl = directElementChild(spPr.element, A_NS, "noFill");
+  if (noFillEl !== undefined && isEmptyXmlElement(noFillEl)) {
+    spPr.child(A_NS, "noFill");
+  }
+  consumeBenignLineElement(spPr);
+  const effectEl = directElementChild(spPr.element, A_NS, "effectLst");
+  if (effectEl !== undefined && isEmptyXmlElement(effectEl)) {
+    spPr.child(A_NS, "effectLst");
+  }
+  const extEl = directElementChild(spPr.element, A_NS, "extLst");
+  if (extEl !== undefined && isEmptyXmlElement(extEl)) {
+    spPr.child(A_NS, "extLst");
+  }
+}
+
 function readLineFromSpPr(spPr: XmlElementCursor): {
   readonly noLine: boolean;
   readonly line?: ChartLine;
 } {
-  const ln = spPr.child(A_NS, "ln");
-  if (ln === undefined) return { noLine: false };
-  const rawW = ln.attr("w");
-  ln.consumeAttr("cap");
-  const noFill = ln.child(A_NS, "noFill");
-  if (noFill !== undefined) {
-    consumeSubtree(ln);
+  const lnEl = directElementChild(spPr.element, A_NS, "ln");
+  if (lnEl === undefined) return { noLine: false };
+  if (
+    directElementChild(lnEl, A_NS, "noFill") !== undefined &&
+    consumeBenignLineElement(spPr)
+  ) {
     return { noLine: true };
   }
+  const ln = spPr.child(A_NS, "ln")!;
+  const rawW = ln.attr("w");
+  ln.consumeAttr("cap");
   const solidFill = ln.child(A_NS, "solidFill");
   const color =
     solidFill === undefined ? undefined : readSolidFillColor(solidFill);
@@ -370,7 +383,10 @@ function readLineFromSpPr(spPr: XmlElementCursor): {
       dash = chartLineDashFromNative[rawDash];
     }
   }
-  consumeSubtree(ln);
+  const roundEl = directElementChild(ln.element, A_NS, "round");
+  if (roundEl !== undefined && isEmptyXmlElement(roundEl)) {
+    ln.child(A_NS, "round");
+  }
   let width: number | undefined;
   if (rawW !== undefined) {
     const parsedW = OoxmlIntSchema.safeParse(rawW);
@@ -398,8 +414,10 @@ function readSeriesSpPr(
   const solidFill = spPr.child(A_NS, "solidFill");
   const color =
     solidFill === undefined ? undefined : readSolidFillColor(solidFill);
-  const { line } = ignoreLine ? { line: undefined } : readLineFromSpPr(spPr);
-  consumeSubtree(spPr);
+  const { line } = ignoreLine
+    ? (consumeBenignLineElement(spPr), { line: undefined })
+    : readLineFromSpPr(spPr);
+  consumeBenignChartSpPr(spPr);
   return {
     ...(color === undefined ? {} : { color }),
     ...(line === undefined ? {} : { line }),
@@ -3027,41 +3045,6 @@ function consumeChartAlternateContent(ac: XmlElementCursor): boolean {
   return false;
 }
 
-function readLinkFromCNvPr(
-  cNvPr: XmlElementCursor,
-  part: string,
-  slideIndex: number,
-  pkg: PptxPackage,
-  diagnostics: ImportDiagnostic[],
-): LinkTarget | undefined {
-  const hlinkClick = cNvPr.child(A_NS, "hlinkClick");
-  if (hlinkClick === undefined) return undefined;
-  const rId = hlinkClick.attr("id", R_NS);
-  const action = hlinkClick.attr("action");
-  if (action === "ppaction://hlinkshowjump?jump=firstslide") {
-    return { action: "home" };
-  }
-  if (rId !== undefined) {
-    const rels = pkg.readRelationships(part);
-    diagnostics.push(...rels.diagnostics);
-    const rel = rels.entries.find((entry) => entry.Id === rId);
-    if (rel === undefined) {
-      diagnostics.push({
-        code: "broken-relationship",
-        category: "corrupt-input",
-        disposition: "omitted",
-        location: { part, xpath: hlinkClick.xpath, slideIndex },
-        relationshipId: rId,
-      });
-      return undefined;
-    }
-    if (rel.Type === REL_HYPERLINK && rel.TargetMode === "External") {
-      return { url: rel.Target };
-    }
-  }
-  return undefined;
-}
-
 /**
  * Reads a Transitional `<p:graphicFrame>` chart and its `ppt/charts/chart{n}.xml` part into an editable `ChartNode`.
  */
@@ -3090,7 +3073,7 @@ export function readChartGraphicFrame(
 
   let objectId: number | undefined;
   let objectName: string | undefined;
-  let link: LinkTarget | undefined;
+  let clickResult: ClickLinkReadResult | undefined;
   const cNvPr = nvGraphicFramePr.child(P_NS, "cNvPr");
   if (cNvPr !== undefined) {
     const rawCNvPr = cNvPr.attrsObject(["id", "name"]);
@@ -3113,7 +3096,14 @@ export function readChartGraphicFrame(
         objectName = parsedCNvPr.data.name;
       }
     }
-    link = readLinkFromCNvPr(cNvPr, part, slideIndex, pkg, diagnostics);
+    const hlinkClick = cNvPr.child(A_NS, "hlinkClick");
+    if (hlinkClick !== undefined) {
+      clickResult = readClickLink(hlinkClick, context, {
+        ...(objectId === undefined ? {} : { objectId }),
+        ...(objectName === undefined ? {} : { objectName }),
+      });
+      diagnostics.push(...clickResult.diagnostics);
+    }
   }
 
   const cNvGraphicFramePr = nvGraphicFramePr.child(P_NS, "cNvGraphicFramePr");
@@ -3344,7 +3334,23 @@ export function readChartGraphicFrame(
       (posVal === undefined
         ? undefined
         : chartLegendPositionFromNative[posVal]) ?? "right";
-    consumeSubtree(legendEl);
+    legendEl.child(C_NS, "overlay")?.attr("val");
+    const legendLayoutEl = directElementChild(legendEl.element, C_NS, "layout");
+    if (legendLayoutEl !== undefined && isEmptyXmlElement(legendLayoutEl)) {
+      legendEl.child(C_NS, "layout");
+    }
+    const legendTxPr = legendEl.child(C_NS, "txPr");
+    if (legendTxPr !== undefined) {
+      readChartTextProperties(legendTxPr);
+    }
+    for (const legendEntry of legendEl.children(C_NS, "legendEntry")) {
+      legendEntry.child(C_NS, "idx")?.attr("val");
+      legendEntry.child(C_NS, "delete")?.attr("val");
+    }
+    const legendSpPr = legendEl.child(C_NS, "spPr");
+    if (legendSpPr !== undefined) {
+      consumeBenignChartSpPr(legendSpPr);
+    }
   }
 
   const plotVisOnly = chartEl.child(C_NS, "plotVisOnly");
@@ -3432,7 +3438,7 @@ export function readChartGraphicFrame(
   }
 
   const plotSpPr = plotAreaEl.child(C_NS, "spPr");
-  if (plotSpPr !== undefined) consumeSubtree(plotSpPr);
+  if (plotSpPr !== undefined) consumeBenignChartSpPr(plotSpPr);
 
   const groupDrafts: ImportedGroupDraft[] = [];
   const importedAxes: ImportedAxisRecord[] = [];
@@ -3532,7 +3538,7 @@ export function readChartGraphicFrame(
     ...(objectName === undefined ? {} : { name: objectName }),
     ...(matchedKey === undefined ? {} : { placeholder: matchedKey }),
     ...(nativeRef === undefined ? {} : { nativePlaceholder: nativeRef }),
-    ...(link === undefined ? {} : { link }),
+    ...(clickResult?.link === undefined ? {} : { link: clickResult.link }),
     x: boxX,
     y: boxY,
     width: boxWidth,
@@ -3546,8 +3552,10 @@ export function readChartGraphicFrame(
     ...(plotArea === undefined ? {} : { plotArea }),
   };
 
+  const node = createChartNode(props);
+  attachDeferredSlideLink(node, clickResult?.deferredSlideLink, context);
   return {
-    node: createChartNode(props),
+    node,
     diagnostics,
   };
 }

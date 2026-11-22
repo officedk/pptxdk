@@ -1040,4 +1040,78 @@ describe("chart import, editing, and native-23-absent roundtrip", () => {
     assert.equal(fileScatter.series[0]?.trendlines?.length, 4);
     assert.equal(fileScatter.series[0]?.errorBars?.length, 2);
   });
+
+  it("reports unconsumed-xml when plotArea, legend, or series spPr contains unsupported visual fills instead of swallowing them", () => {
+    const pptx = buildChartDeck({
+      id: "unconsumed-sppr",
+      x: 20,
+      y: 20,
+      width: 600,
+      height: 320,
+      legend: "bottom",
+      groups: [
+        {
+          kind: "column",
+          data: { kind: "shared-categories", categories: ["A", "B"] },
+          series: [{ name: "S", values: [1, 2] }],
+        },
+      ],
+    });
+    const entries = unzipSync(pptx);
+    const baseChartXml = strFromU8(entries["ppt/charts/chart1.xml"]!);
+
+    const gradFill =
+      '<a:gradFill><a:gsLst><a:gs pos="0"><a:srgbClr val="FF0000"/></a:gs><a:gs pos="100000"><a:srgbClr val="0000FF"/></a:gs></a:gsLst></a:gradFill>';
+
+    const mutatedPlotArea = baseChartXml.replace(
+      "<c:plotArea>",
+      `<c:plotArea><c:spPr>${gradFill}</c:spPr>`,
+    );
+    const importedPlotArea = importPptx(
+      zipSync({
+        ...entries,
+        "ppt/charts/chart1.xml": strToU8(mutatedPlotArea),
+      }),
+    );
+    assert.ok(
+      importedPlotArea.report.diagnostics.some(
+        (d) =>
+          d.code === "unconsumed-xml" &&
+          d.location.xpath?.includes("plotArea") &&
+          d.localName === "gradFill",
+      ),
+    );
+
+    const mutatedLegend = baseChartXml.replace(
+      "</c:legend>",
+      `<c:spPr>${gradFill}</c:spPr></c:legend>`,
+    );
+    const importedLegend = importPptx(
+      zipSync({ ...entries, "ppt/charts/chart1.xml": strToU8(mutatedLegend) }),
+    );
+    assert.ok(
+      importedLegend.report.diagnostics.some(
+        (d) =>
+          d.code === "unconsumed-xml" &&
+          d.location.xpath?.includes("legend") &&
+          (d.localName === "spPr" || d.localName === "gradFill"),
+      ),
+    );
+
+    const mutatedSeries = baseChartXml.replace(
+      "</c:ser>",
+      `<c:spPr>${gradFill}</c:spPr></c:ser>`,
+    );
+    const importedSeries = importPptx(
+      zipSync({ ...entries, "ppt/charts/chart1.xml": strToU8(mutatedSeries) }),
+    );
+    assert.ok(
+      importedSeries.report.diagnostics.some(
+        (d) =>
+          d.code === "unconsumed-xml" &&
+          d.location.xpath?.includes("ser") &&
+          d.localName === "gradFill",
+      ),
+    );
+  });
 });

@@ -51,7 +51,7 @@ function firstSlideNode(document: CommonNode): CommonNode {
   return slideNode;
 }
 
-describe("Ticket 04: Image roundtrip, external links, and partial loss recovery", () => {
+describe("Image roundtrip, external links, and partial loss recovery", () => {
   it("detaches embedded image bytes on import and keeps image, crop, and links editable after zeroing inputBytes", async () => {
     const doc = deck({ width: 640, height: 360 }).append(
       slide({ id: "page-1" }).append(

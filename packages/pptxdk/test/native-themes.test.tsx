@@ -505,4 +505,133 @@ describe("Slice 2: multi-master theme identity, clrMap, clrMapOvr, and themeOver
       },
     );
   });
+
+  it("preserves schemeClr tx1/bg1/tx2/bg2 in master txStyles across emit -> import -> resolve -> paint so dark layout colorMapOverride resolves inherited title color to lt1", async () => {
+    const darkLayout = defineSlideLayout({
+      id: "dark-title",
+      name: "Dark Title",
+      type: "title",
+      colorMapOverride: {
+        ...defaultColorMap,
+        bg1: "dk1",
+        tx1: "lt1",
+        bg2: "dk2",
+        tx2: "lt2",
+      },
+      background: "bg1",
+      placeholders: {
+        title: {
+          type: "title",
+          x: 40,
+          y: 40,
+          width: 480,
+          height: 80,
+        },
+      },
+    });
+    const lightTheme = defineTheme({
+      name: "LightBase",
+      colors: {
+        dk1: "#111827",
+        lt1: "#F8FAFC",
+      },
+      fonts: { major: jostFont, minor: jostFont },
+    });
+
+    const built = await build(
+      <Deck width={640} height={360}>
+        <SlideMaster
+          id="m-scheme"
+          name="Scheme Master"
+          theme={lightTheme}
+          colorMap={defaultColorMap}
+          textStyles={{
+            titleStyle: {
+              1: { fontFamily: jostFont, fontSize: 28, color: "tx1" },
+            },
+          }}
+        >
+          <SlideLayout layout={darkLayout} />
+        </SlideMaster>
+        <Slide id="dark-slide" layout={darkLayout}>
+          <Text id="s-title" placeholder="title">
+            Dark Layout Title
+          </Text>
+        </Slide>
+      </Deck>,
+      { embedFonts: "full" },
+    );
+
+    const initialParts = unzipSync(built.pptx);
+    const initialMasterXml = strFromU8(
+      initialParts["ppt/slideMasters/slideMaster1.xml"]!,
+    );
+    assert.match(initialMasterXml, /<a:schemeClr val="tx1"\/>/u);
+
+    const initialValidated = await validatePptx(built.pptx);
+    assert.deepEqual(initialValidated.errors, []);
+    assert.equal(
+      initialValidated.slides[0]?.objects[0]?.text?.paragraphs[0]?.runs[0]
+        ?.color,
+      undefined,
+    );
+    const initialPainted = await preview(
+      <Deck width={640} height={360}>
+        <SlideMaster
+          id="m-scheme"
+          name="Scheme Master"
+          theme={lightTheme}
+          colorMap={defaultColorMap}
+          textStyles={{
+            titleStyle: {
+              1: { fontFamily: jostFont, fontSize: 28, color: "tx1" },
+            },
+          }}
+        >
+          <SlideLayout layout={darkLayout} />
+        </SlideMaster>
+        <Slide id="dark-slide" layout={darkLayout}>
+          <Text id="s-title" placeholder="title">
+            Dark Layout Title
+          </Text>
+        </Slide>
+      </Deck>,
+    );
+    assert.deepEqual(initialPainted.pages[0]?.diagnostics, []);
+    assert.ok(
+      initialPainted.pages[0]?.svg?.includes("#F8FAFC"),
+      "Expected initial dark layout inherited title color to resolve through colorMapOverride to lt1 (#F8FAFC)",
+    );
+
+    const imported = importPptx(new Uint8Array(built.pptx));
+    assert.deepEqual(imported.report.diagnostics, []);
+    assert.ok(imported.document instanceof DeckContainer);
+    const importedTextStyles = imported.document.masters[0]?.props[
+      "textStyles"
+    ] as
+      | {
+          readonly titleStyle?: {
+            readonly 1?: { readonly color?: unknown };
+          };
+        }
+      | undefined;
+    assert.equal(importedTextStyles?.titleStyle?.[1]?.color, "tx1");
+
+    const reemitted = await build(imported.document);
+    const reemittedParts = unzipSync(reemitted.pptx);
+    const reemittedMasterXml = strFromU8(
+      reemittedParts["ppt/slideMasters/slideMaster1.xml"]!,
+    );
+    assert.match(reemittedMasterXml, /<a:schemeClr val="tx1"\/>/u);
+
+    const reemittedValidated = await validatePptx(reemitted.pptx);
+    assert.deepEqual(reemittedValidated.errors, []);
+
+    const painted = await preview(imported.document);
+    assert.deepEqual(painted.pages[0]?.diagnostics, []);
+    assert.ok(
+      painted.pages[0]?.svg?.includes("#F8FAFC"),
+      "Expected dark layout inherited title color to resolve through colorMapOverride to lt1 (#F8FAFC)",
+    );
+  });
 });

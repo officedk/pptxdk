@@ -3,7 +3,14 @@ import { slideBackgroundCapability } from "@pptxdk/capabilities/slide-background
 import { emit } from "@pptxdk/emit";
 import {
   ImportError,
+  cascadedOmissionSchema,
   createImporter,
+  editabilityLossSchema,
+  fatalImportIssueSchema,
+  importDiagnosticSchema,
+  importLocationSchema,
+  importOptionsSchema,
+  importReportSchema,
   type CascadedOmission,
   type EditabilityLoss,
   type FatalImportIssue,
@@ -30,7 +37,16 @@ export function importPptx(
   return importDocument(input, options);
 }
 
-export { ImportError };
+export {
+  ImportError,
+  cascadedOmissionSchema,
+  editabilityLossSchema,
+  fatalImportIssueSchema,
+  importDiagnosticSchema,
+  importLocationSchema,
+  importOptionsSchema,
+  importReportSchema,
+};
 export type {
   CascadedOmission,
   EditabilityLoss,
@@ -290,9 +306,16 @@ export type {
   ScatterLine,
   SharedCategoryData,
 } from "@pptxdk/capabilities/chart";
+export { footerPlaceholderCapability } from "@pptxdk/capabilities/footer-placeholder";
 export { groupCapability } from "@pptxdk/capabilities/group";
 export { imageCapability } from "@pptxdk/capabilities/image";
 export type { ImageSource, ImageVisualStyle } from "@pptxdk/capabilities/image";
+export { mastersCapability } from "@pptxdk/capabilities/masters";
+export { placeholderCapability } from "@pptxdk/capabilities/placeholder";
+export type {
+  PlaceholderDeclarationProps,
+  PlaceholderNode,
+} from "@pptxdk/capabilities/placeholder";
 export {
   after,
   breathe,

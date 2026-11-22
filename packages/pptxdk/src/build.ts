@@ -20,7 +20,17 @@ import {
 } from "@pptxdk/core/build";
 import type { CommonNode } from "@pptxdk/core/document";
 import { emit, validateOptions } from "@pptxdk/emit";
-import { ImportError, createImporter } from "@pptxdk/import";
+import {
+  ImportError,
+  cascadedOmissionSchema,
+  createImporter,
+  editabilityLossSchema,
+  fatalImportIssueSchema,
+  importDiagnosticSchema,
+  importLocationSchema,
+  importOptionsSchema,
+  importReportSchema,
+} from "@pptxdk/import";
 import type { ReactNode } from "react";
 import { z } from "zod";
 
@@ -30,10 +40,13 @@ import { emitBuildResult, resolveDocumentInput } from "./compose.ts";
 export const officialCapabilityNames = Object.freeze([
   "box",
   "chart",
+  "footer-placeholder",
   "group",
   "image",
+  "masters",
   "motion",
   "notes",
+  "placeholder",
   "shape",
   "slide-background",
   "table",
@@ -57,14 +70,21 @@ const capabilityLoaders: Readonly<
   box: async () => (await import("@pptxdk/capabilities/box")).boxCapability,
   chart: async () =>
     (await import("@pptxdk/capabilities/chart")).chartCapability,
+  "footer-placeholder": async () =>
+    (await import("@pptxdk/capabilities/footer-placeholder"))
+      .footerPlaceholderCapability,
   group: async () =>
     (await import("@pptxdk/capabilities/group")).groupCapability,
   image: async () =>
     (await import("@pptxdk/capabilities/image")).imageCapability,
+  masters: async () =>
+    (await import("@pptxdk/capabilities/masters")).mastersCapability,
   motion: async () =>
     (await import("@pptxdk/capabilities/motion")).motionCapability,
   notes: async () =>
     (await import("@pptxdk/capabilities/notes")).notesCapability,
+  placeholder: async () =>
+    (await import("@pptxdk/capabilities/placeholder")).placeholderCapability,
   shape: async () =>
     (await import("@pptxdk/capabilities/shape")).shapeCapability,
   "slide-background": async () =>
@@ -255,16 +275,23 @@ export {
   CapabilityError,
   ImportError,
   buildOptionsSchema,
+  cascadedOmissionSchema,
   createImporter,
   createResolver,
   diagnosticSchema,
   diagnosticSeveritySchema,
+  editabilityLossSchema,
   emit,
   emitOptionsSchema,
   extensionSchema,
+  fatalImportIssueSchema,
   fontEmbeddingModeSchema,
   formatBaseline,
   formatBaselineSchema,
+  importDiagnosticSchema,
+  importLocationSchema,
+  importOptionsSchema,
+  importReportSchema,
   resolveOptionsSchema,
   targetNameSchema,
   targetSchema,

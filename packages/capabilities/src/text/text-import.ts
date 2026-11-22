@@ -39,6 +39,7 @@ import { z } from "zod";
 import { readNonVisualCommonProperties } from "../shape/shape-import.ts";
 import type { Geometry } from "../shared/geometry.ts";
 import {
+  attachDeferredSlideLink,
   consumeNonPlaceholderNvPr,
   hasPlaceholderElement,
 } from "../shared/identity.ts";
@@ -1096,13 +1097,8 @@ export function readTextBoxSp(
   }
 
   const cNvPr = nvSpPr.child(P_NS, "cNvPr");
-  const { objectId, objectName, link } = readNonVisualCommonProperties(
-    cNvPr,
-    pkg,
-    part,
-    slideIndex,
-    diagnostics,
-  );
+  const { objectId, objectName, link, deferredSlideLink } =
+    readNonVisualCommonProperties(cNvPr, context, diagnostics);
   cNvPr?.ignoreEmptyChild(A_NS, "extLst");
 
   const cNvSpPr = nvSpPr.child(P_NS, "cNvSpPr");
@@ -1175,6 +1171,7 @@ export function readTextBoxSp(
     populateRichTextNode(node, paragraphsToPopulate);
   }
 
+  attachDeferredSlideLink(node, deferredSlideLink, context);
   return { node, diagnostics };
 }
 
@@ -1206,13 +1203,8 @@ export function readTextPlaceholderSp(
   }
 
   const cNvPr = nvSpPr.child(P_NS, "cNvPr");
-  const { objectId, objectName, link } = readNonVisualCommonProperties(
-    cNvPr,
-    pkg,
-    part,
-    slideIndex,
-    diagnostics,
-  );
+  const { objectId, objectName, link, deferredSlideLink } =
+    readNonVisualCommonProperties(cNvPr, context, diagnostics);
   cNvPr?.ignoreEmptyChild(A_NS, "extLst");
 
   const cNvSpPr = nvSpPr.child(P_NS, "cNvSpPr");
@@ -1380,6 +1372,7 @@ export function readTextPlaceholderSp(
     populateRichTextNode(node, paragraphsToPopulate);
   }
 
+  attachDeferredSlideLink(node, deferredSlideLink, context);
   return { node, diagnostics };
 }
 

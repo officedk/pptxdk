@@ -1,6 +1,15 @@
 import { createHash } from "node:crypto";
 
+import type {
+  LayoutPlaceholderSpec,
+  MasterPlaceholderSpec,
+  MasterTextStyles,
+  NativePlaceholderRef,
+  PlaceholderLevelStyle,
+  PlaceholderListStyles,
+} from "@pptxdk/core";
 import {
+  createThemeContext,
   defaultColorMap,
   defaultTheme,
   isFont,
@@ -8,6 +17,7 @@ import {
   schemeColorSlots,
   type ColorMap,
   type ColorMapOverride,
+  type FontSize,
   type FormatColorTransform,
   type FormatEffectStyle,
   type FormatFillStyle,
@@ -15,7 +25,10 @@ import {
   type FormatScheme,
   type NativeColorSlot,
   type ResolvedColor,
+  type TextAlignment,
+  type TextStyle,
   type Theme,
+  type ThemeContext,
   type ThemeOverride,
 } from "@pptxdk/core/theme";
 
@@ -161,6 +174,7 @@ export type EmittedSlideLayoutSpec = {
   readonly userDrawn?: boolean;
   readonly showMasterShapes?: boolean;
   readonly showMasterPlaceholderAnimations?: boolean;
+  readonly placeholders?: Readonly<Record<string, LayoutPlaceholderSpec>>;
   readonly colorMapOverride?: ColorMapOverride;
   readonly themeOverride?: ThemeOverride;
   readonly transitionXml?: string;
@@ -171,7 +185,10 @@ export type EmittedSlideMasterSpec = {
   readonly name?: string;
   readonly preserve?: boolean;
   readonly theme?: Theme;
+  readonly themeContext?: ThemeContext;
   readonly colorMap?: ColorMap;
+  readonly placeholders?: Readonly<Record<string, MasterPlaceholderSpec>>;
+  readonly textStyles?: MasterTextStyles;
   readonly transitionXml?: string;
   readonly layouts: readonly EmittedSlideLayoutSpec[];
 };
@@ -437,6 +454,336 @@ export function themeXml(value: Theme): string {
   );
 }
 
+function fontSizeCentipoints(value: FontSize): number {
+  if (typeof value === "string" && value.endsWith("pt")) {
+    return Math.round(Number(value.slice(0, -2)) * 100);
+  }
+  if (typeof value === "string" && value.endsWith("px")) {
+    return Math.round(Number(value.slice(0, -2)) * 75);
+  }
+  return Math.round(Number(value) * 75);
+}
+
+function lengthCentipoints(value: FontSize): number {
+  if (typeof value === "string" && value.endsWith("pt")) {
+    return Math.round(Number(value.slice(0, -2)) * 100);
+  }
+  if (typeof value === "string" && value.endsWith("px")) {
+    return Math.round(Number(value.slice(0, -2)) * 75);
+  }
+  return Math.round(Number(value) * 75);
+}
+
+function ooxmlAlign(value: TextAlignment): string {
+  switch (value) {
+    case "left":
+      return "l";
+    case "center":
+      return "ctr";
+    case "right":
+      return "r";
+    case "justify":
+      return "just";
+  }
+}
+
+function ooxmlAnchor(value: NonNullable<TextStyle["verticalAlign"]>): string {
+  return value === "middle" ? "ctr" : value === "bottom" ? "b" : "t";
+}
+
+function placeholderRefXml(ref: NativePlaceholderRef): string {
+  const attrs: string[] = [];
+  if (ref.explicitType !== false) attrs.push(`type="${xmlEscape(ref.type)}"`);
+  if (ref.sz !== undefined) attrs.push(`sz="${xmlEscape(ref.sz)}"`);
+  if (ref.orient !== undefined) attrs.push(`orient="${xmlEscape(ref.orient)}"`);
+  if (ref.idx !== undefined) attrs.push(`idx="${ref.idx}"`);
+  if (ref.hasCustomPrompt === true) attrs.push('hasCustomPrompt="1"');
+  return `<p:ph${attrs.length === 0 ? "" : ` ${attrs.join(" ")}`}/>`;
+}
+
+function levelDefRPrXml(
+  style: PlaceholderLevelStyle,
+  themeContext: ThemeContext,
+): string {
+  const attrs: string[] = [];
+  if (style.lang !== undefined) attrs.push(`lang="${xmlEscape(style.lang)}"`);
+  if (style.fontSize !== undefined) {
+    attrs.push(`sz="${fontSizeCentipoints(style.fontSize)}"`);
+  }
+  if (style.fontWeight !== undefined) {
+    const bold =
+      style.fontWeight === "bold" ||
+      (typeof style.fontWeight === "number" && style.fontWeight >= 600);
+    attrs.push(`b="${bold ? 1 : 0}"`);
+  }
+  if (style.fontStyle !== undefined) {
+    attrs.push(`i="${style.fontStyle === "italic" ? 1 : 0}"`);
+  }
+  if (style.textDecoration === "underline") attrs.push('u="sng"');
+  else if (style.textDecoration === "line-through")
+    attrs.push('strike="sngStrike"');
+  if (style.textTransform === "uppercase") attrs.push('cap="all"');
+  if (style.letterSpacing !== undefined) {
+    attrs.push(`spc="${Math.round(style.letterSpacing * 75)}"`);
+  }
+
+  let fillXml = "";
+  if (style.color !== undefined) {
+    const resolved = themeContext.resolveColor(style.color);
+    fillXml = `<a:solidFill>${resolvedColorXml(resolved)}</a:solidFill>`;
+  }
+  let fontXml = "";
+  if (style.fontFamily !== undefined) {
+    const resolved = themeContext.resolveFont(style.fontFamily);
+    const latin =
+      resolved.themeFont === "major"
+        ? "+mj-lt"
+        : resolved.themeFont === "minor"
+          ? "+mn-lt"
+          : resolved.family;
+    const ea =
+      resolved.themeFont === "major"
+        ? "+mj-ea"
+        : resolved.themeFont === "minor"
+          ? "+mn-ea"
+          : resolved.family;
+    const cs =
+      resolved.themeFont === "major"
+        ? "+mj-cs"
+        : resolved.themeFont === "minor"
+          ? "+mn-cs"
+          : resolved.family;
+    fontXml = `<a:latin typeface="${xmlEscape(latin)}"/><a:ea typeface="${xmlEscape(ea)}"/><a:cs typeface="${xmlEscape(cs)}"/>`;
+  }
+  if (attrs.length === 0 && fillXml === "" && fontXml === "") return "";
+  const attrText = attrs.length === 0 ? "" : ` ${attrs.join(" ")}`;
+  const inner = `${fillXml}${fontXml}`;
+  return inner === ""
+    ? `<a:defRPr${attrText}/>`
+    : `<a:defRPr${attrText}>${inner}</a:defRPr>`;
+}
+
+function levelParagraphPropertiesXml(
+  tagName: string,
+  level: PlaceholderLevelStyle,
+  themeContext: ThemeContext,
+): string {
+  const attrs: string[] = [];
+  if (level.marginLeft !== undefined) {
+    attrs.push(`marL="${pxToEmu(level.marginLeft)}"`);
+  }
+  if (level.indent !== undefined) {
+    attrs.push(`indent="${pxToEmu(level.indent)}"`);
+  }
+  if (level.align !== undefined) {
+    attrs.push(`algn="${ooxmlAlign(level.align)}"`);
+  }
+  const spcBef =
+    level.spacingBefore === undefined
+      ? ""
+      : `<a:spcBef><a:spcPts val="${Math.round(level.spacingBefore * 75)}"/></a:spcBef>`;
+  const lnSpc =
+    level.lineHeight === undefined
+      ? ""
+      : `<a:lnSpc><a:spcPts val="${lengthCentipoints(level.lineHeight)}"/></a:lnSpc>`;
+  const spcAft =
+    level.spacingAfter === undefined
+      ? ""
+      : `<a:spcAft><a:spcPts val="${Math.round(level.spacingAfter * 75)}"/></a:spcAft>`;
+  let listXml = "";
+  if (level.list !== undefined) {
+    if (level.list.type === "bullet") {
+      listXml = `<a:buChar char="${xmlEscape(level.list.character ?? "•")}"/>`;
+    } else {
+      listXml = `<a:buAutoNum type="${level.list.style ?? "arabicPeriod"}"${level.list.startAt === undefined ? "" : ` startAt="${level.list.startAt}"`}/>`;
+    }
+  }
+  const defRPr = levelDefRPrXml(level, themeContext);
+  const children = `${lnSpc}${spcBef}${spcAft}${listXml}${defRPr}`;
+  if (attrs.length === 0 && children === "") return "";
+  const attrText = attrs.length === 0 ? "" : ` ${attrs.join(" ")}`;
+  return children === ""
+    ? `<${tagName}${attrText}/>`
+    : `<${tagName}${attrText}>${children}</${tagName}>`;
+}
+
+function listStylesInnerXml(
+  styles: PlaceholderListStyles | undefined,
+  themeContext: ThemeContext,
+): string {
+  if (styles === undefined) return "";
+  const parts: string[] = [];
+  for (const levelNumber of [1, 2, 3, 4, 5, 6, 7, 8, 9] as const) {
+    const entry = styles[levelNumber];
+    if (entry === undefined) continue;
+    const xml = levelParagraphPropertiesXml(
+      `a:lvl${levelNumber}pPr`,
+      entry,
+      themeContext,
+    );
+    if (xml !== "") parts.push(xml);
+  }
+  return parts.join("");
+}
+
+function styleAsLevel1(
+  style: LayoutPlaceholderSpec["style"],
+): PlaceholderLevelStyle | undefined {
+  if (style === undefined) return undefined;
+  const lvl: Record<string, unknown> = {};
+  for (const key of [
+    "fontFamily",
+    "fontSize",
+    "fontWeight",
+    "fontStyle",
+    "color",
+    "letterSpacing",
+    "textTransform",
+    "textDecoration",
+    "textShadow",
+    "lang",
+    "lineHeight",
+    "align",
+    "spacingAfter",
+  ] as const) {
+    if (style[key] !== undefined) lvl[key] = style[key];
+  }
+  return Object.keys(lvl).length === 0 ? undefined : lvl;
+}
+
+function placeholderBodyPrXml(style: LayoutPlaceholderSpec["style"]): string {
+  if (style === undefined) return "<a:bodyPr/>";
+  const attrs: string[] = [];
+  if (style.textWrap !== undefined) {
+    attrs.push(`wrap="${style.textWrap === "nowrap" ? "none" : "square"}"`);
+  }
+  const rawPad = style.padding;
+  const padTop =
+    style.paddingTop ??
+    (typeof rawPad === "number"
+      ? rawPad
+      : Array.isArray(rawPad)
+        ? rawPad[0]
+        : undefined);
+  const padRight =
+    style.paddingRight ??
+    (typeof rawPad === "number"
+      ? rawPad
+      : Array.isArray(rawPad)
+        ? rawPad[1]
+        : undefined);
+  const padBottom =
+    style.paddingBottom ??
+    (typeof rawPad === "number"
+      ? rawPad
+      : Array.isArray(rawPad)
+        ? rawPad.length === 2
+          ? rawPad[0]
+          : rawPad[2]
+        : undefined);
+  const padLeft =
+    style.paddingLeft ??
+    (typeof rawPad === "number"
+      ? rawPad
+      : Array.isArray(rawPad)
+        ? rawPad.length === 2
+          ? rawPad[1]
+          : rawPad[3]
+        : undefined);
+  if (padLeft !== undefined) attrs.push(`lIns="${pxToEmu(padLeft)}"`);
+  if (padTop !== undefined) attrs.push(`tIns="${pxToEmu(padTop)}"`);
+  if (padRight !== undefined) attrs.push(`rIns="${pxToEmu(padRight)}"`);
+  if (padBottom !== undefined) attrs.push(`bIns="${pxToEmu(padBottom)}"`);
+  if (style.verticalAlign !== undefined) {
+    attrs.push(`anchor="${ooxmlAnchor(style.verticalAlign)}"`);
+  }
+  return attrs.length === 0 ? "<a:bodyPr/>" : `<a:bodyPr ${attrs.join(" ")}/>`;
+}
+
+function placeholderShapesXml(
+  placeholders: Readonly<Record<string, LayoutPlaceholderSpec>> | undefined,
+  themeContext: ThemeContext,
+): string {
+  if (placeholders === undefined) return "";
+  return Object.entries(placeholders)
+    .map(([key, spec], index) => {
+      const id = 2 + index;
+      const name = xmlEscape(spec.name ?? key);
+      const phXml = placeholderRefXml({
+        type: spec.type,
+        ...(spec.explicitType === undefined
+          ? {}
+          : { explicitType: spec.explicitType }),
+        ...(spec.idx === undefined ? {} : { idx: spec.idx }),
+        ...(spec.sz === undefined ? {} : { sz: spec.sz }),
+        ...(spec.orient === undefined ? {} : { orient: spec.orient }),
+        ...(spec.hasCustomPrompt === undefined
+          ? {}
+          : { hasCustomPrompt: spec.hasCustomPrompt }),
+      });
+      const hasBox =
+        spec.x !== undefined &&
+        spec.y !== undefined &&
+        spec.width !== undefined &&
+        spec.height !== undefined;
+      const spPr = hasBox
+        ? `<p:spPr><a:xfrm><a:off x="${pxToEmu(spec.x)}" y="${pxToEmu(spec.y)}"/><a:ext cx="${pxToEmu(spec.width)}" cy="${pxToEmu(spec.height)}"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></p:spPr>`
+        : "<p:spPr/>";
+      const mergedLvl1 =
+        styleAsLevel1(spec.style) === undefined &&
+        spec.listStyles?.[1] === undefined
+          ? undefined
+          : { ...styleAsLevel1(spec.style), ...spec.listStyles?.[1] };
+      const effectiveListStyles: PlaceholderListStyles | undefined =
+        mergedLvl1 === undefined && spec.listStyles === undefined
+          ? undefined
+          : {
+              ...spec.listStyles,
+              ...(mergedLvl1 === undefined ? {} : { 1: mergedLvl1 }),
+            };
+      const lstStyleInner = listStylesInnerXml(
+        effectiveListStyles,
+        themeContext,
+      );
+      const lstStyle =
+        lstStyleInner === ""
+          ? "<a:lstStyle/>"
+          : `<a:lstStyle>${lstStyleInner}</a:lstStyle>`;
+      const bodyPr = placeholderBodyPrXml(spec.style);
+      const p =
+        spec.promptText === undefined
+          ? "<a:p><a:endParaRPr/></a:p>"
+          : `<a:p><a:r><a:t xml:space="preserve">${xmlEscape(spec.promptText)}</a:t></a:r></a:p>`;
+      return `<p:sp><p:nvSpPr><p:cNvPr id="${id}" name="${name}"/><p:cNvSpPr><a:spLocks noGrp="1"/></p:cNvSpPr><p:nvPr>${phXml}</p:nvPr></p:nvSpPr>${spPr}<p:txBody>${bodyPr}${lstStyle}${p}</p:txBody></p:sp>`;
+    })
+    .join("");
+}
+
+function masterTextStylesXml(
+  textStyles: MasterTextStyles | undefined,
+  themeContext: ThemeContext,
+): string {
+  if (textStyles === undefined) {
+    return "<p:txStyles><p:titleStyle/><p:bodyStyle/><p:otherStyle/></p:txStyles>";
+  }
+  const titleInner = listStylesInnerXml(textStyles.titleStyle, themeContext);
+  const bodyInner = listStylesInnerXml(textStyles.bodyStyle, themeContext);
+  const otherInner = listStylesInnerXml(textStyles.otherStyle, themeContext);
+  const titleTag =
+    titleInner === ""
+      ? "<p:titleStyle/>"
+      : `<p:titleStyle>${titleInner}</p:titleStyle>`;
+  const bodyTag =
+    bodyInner === ""
+      ? "<p:bodyStyle/>"
+      : `<p:bodyStyle>${bodyInner}</p:bodyStyle>`;
+  const otherTag =
+    otherInner === ""
+      ? "<p:otherStyle/>"
+      : `<p:otherStyle>${otherInner}</p:otherStyle>`;
+  return `<p:txStyles>${titleTag}${bodyTag}${otherTag}</p:txStyles>`;
+}
+
 function effectiveThemeWithOverride(
   baseTheme: Theme,
   override: ThemeOverride | undefined,
@@ -525,6 +872,7 @@ export function colorMapOverrideXml(override?: ColorMapOverride): string {
 function masterXml(
   spec: EmittedSlideMasterSpec,
   layoutIds: readonly { readonly id: number; readonly rId: string }[],
+  themeContext: ThemeContext,
 ): string {
   const colorMap = `<p:clrMap ${colorMapAttributesXml(spec.colorMap ?? defaultColorMap)}/>`;
   const preserveAttr =
@@ -538,12 +886,17 @@ function masterXml(
       ({ id, rId }) => `<p:sldLayoutId id="${id}" r:id="${xmlEscape(rId)}"/>`,
     )
     .join("");
+  const shapes = placeholderShapesXml(spec.placeholders, themeContext);
+  const txStyles = masterTextStylesXml(spec.textStyles, themeContext);
   return xmlDocument(
-    `<p:sldMaster xmlns:a="${namespaces.a}" xmlns:r="${namespaces.r}" xmlns:p="${namespaces.p}"${preserveAttr}><p:cSld${nameAttr}>${shapeTreeXml()}</p:cSld>${colorMap}<p:sldLayoutIdLst>${layoutIdList}</p:sldLayoutIdLst>${spec.transitionXml ?? ""}<p:txStyles><p:titleStyle/><p:bodyStyle/><p:otherStyle/></p:txStyles></p:sldMaster>`,
+    `<p:sldMaster xmlns:a="${namespaces.a}" xmlns:r="${namespaces.r}" xmlns:p="${namespaces.p}"${preserveAttr}><p:cSld${nameAttr}>${shapeTreeXml(shapes)}</p:cSld>${colorMap}<p:sldLayoutIdLst>${layoutIdList}</p:sldLayoutIdLst>${spec.transitionXml ?? ""}${txStyles}</p:sldMaster>`,
   );
 }
 
-function layoutXml(spec: EmittedSlideLayoutSpec): string {
+function layoutXml(
+  spec: EmittedSlideLayoutSpec,
+  themeContext: ThemeContext,
+): string {
   const typeAttr =
     spec.type === undefined ? "" : ` type="${xmlEscape(spec.type)}"`;
   const preserveAttr =
@@ -566,8 +919,9 @@ function layoutXml(spec: EmittedSlideLayoutSpec): string {
       : "";
   const nameAttr =
     spec.name === undefined ? "" : ` name="${xmlEscape(spec.name)}"`;
+  const shapes = placeholderShapesXml(spec.placeholders, themeContext);
   return xmlDocument(
-    `<p:sldLayout xmlns:a="${namespaces.a}" xmlns:r="${namespaces.r}" xmlns:p="${namespaces.p}"${typeAttr}${preserveAttr}${matchingNameAttr}${userDrawnAttr}${showMasterSpAttr}${showMasterPhAnimAttr}><p:cSld${nameAttr}>${shapeTreeXml()}</p:cSld>${colorMapOverrideXml(spec.colorMapOverride)}${spec.transitionXml ?? ""}</p:sldLayout>`,
+    `<p:sldLayout xmlns:a="${namespaces.a}" xmlns:r="${namespaces.r}" xmlns:p="${namespaces.p}"${typeAttr}${preserveAttr}${matchingNameAttr}${userDrawnAttr}${showMasterSpAttr}${showMasterPhAnimAttr}><p:cSld${nameAttr}>${shapeTreeXml(shapes)}</p:cSld>${colorMapOverrideXml(spec.colorMapOverride)}${spec.transitionXml ?? ""}</p:sldLayout>`,
   );
 }
 
@@ -856,6 +1210,7 @@ export function pptxParts(
     ]),
   };
 
+  const defaultThemeCtx = createThemeContext(themeValue);
   for (const themePart of emittedThemeParts) {
     parts[themePart.partPath] = themePart.xml;
   }
@@ -863,12 +1218,24 @@ export function pptxParts(
     parts[overridePart.partPath] = overridePart.xml;
   }
   for (const allocatedMaster of allocatedMasters) {
+    const masterThemeCtx =
+      allocatedMaster.spec.themeContext ??
+      (allocatedMaster.spec.theme === undefined
+        ? defaultThemeCtx
+        : createThemeContext(
+            allocatedMaster.spec.theme,
+            undefined,
+            allocatedMaster.spec.colorMap === undefined
+              ? {}
+              : { colorMap: allocatedMaster.spec.colorMap },
+          ));
     parts[allocatedMaster.masterPart] = masterXml(
       allocatedMaster.spec,
       allocatedMaster.layouts.map((item) => ({
         id: item.layoutId,
         rId: item.masterRelId,
       })),
+      masterThemeCtx,
     );
     parts[
       `ppt/slideMasters/_rels/slideMaster${allocatedMaster.masterNumber}.xml.rels`
@@ -885,7 +1252,18 @@ export function pptxParts(
       },
     ]);
     for (const allocatedLayout of allocatedMaster.layouts) {
-      parts[allocatedLayout.layoutPart] = layoutXml(allocatedLayout.spec);
+      const layoutThemeCtx =
+        allocatedLayout.spec.themeOverride !== undefined ||
+        allocatedLayout.spec.colorMapOverride !== undefined
+          ? masterThemeCtx.withNativeOverrides(
+              allocatedLayout.spec.themeOverride,
+              allocatedLayout.spec.colorMapOverride,
+            )
+          : masterThemeCtx;
+      parts[allocatedLayout.layoutPart] = layoutXml(
+        allocatedLayout.spec,
+        layoutThemeCtx,
+      );
       const layoutRels: PptxRelationship[] = [
         {
           id: "rId1",

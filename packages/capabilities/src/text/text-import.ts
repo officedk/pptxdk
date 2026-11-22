@@ -1,7 +1,13 @@
 import {
   assertValidLang,
+  matchLayoutPlaceholderKey,
+  nativePlaceholderRefSchema,
+  placeholderRoleSchema,
+  placeholderStyleSchema,
   schemeColorNameSchema,
   type ColorValue,
+  type NativeColorSlot,
+  type NativePlaceholderRef,
   type SchemeColorName,
   type Shadow,
   type TextAlignment,
@@ -62,6 +68,10 @@ const BodyPrFragmentSchema = z.object({
   rIns: OoxmlNonNegativeIntSchema.optional(),
   bIns: OoxmlNonNegativeIntSchema.optional(),
   anchor: z.enum(["t", "ctr", "b"]).optional(),
+  anchorCtr: OoxmlBoolSchema.optional(),
+  spcFirstLastPara: OoxmlBoolSchema.optional(),
+  numCol: z.string().optional(),
+  spcCol: z.string().optional(),
 });
 
 const ParagraphPrFragmentSchema = z.object({
@@ -173,6 +183,18 @@ function directElementChild(
   return undefined;
 }
 
+const textCompatiblePlaceholderRoles = new Set<string>([
+  "title",
+  "ctrTitle",
+  "subTitle",
+  "body",
+  "dt",
+  "ftr",
+  "hdr",
+  "obj",
+  "sldNum",
+]);
+
 /** Side-effect-free predicate distinguishing `<p:sp>` text boxes (`txBox="1"`) from shapes. */
 function isTextBoxSpElement(cursor: XmlElementCursor): boolean {
   const nvSpPr = directElementChild(cursor.element, P_NS, "nvSpPr");
@@ -181,6 +203,30 @@ function isTextBoxSpElement(cursor: XmlElementCursor): boolean {
   if (cNvSpPr === undefined) return false;
   const txBox = cNvSpPr.getAttribute("txBox");
   return txBox === "1" || txBox === "true";
+}
+
+function directPlaceholderElement(
+  cursor: XmlElementCursor,
+): XmlElement | undefined {
+  const nvSpPr = directElementChild(cursor.element, P_NS, "nvSpPr");
+  if (nvSpPr === undefined) return undefined;
+  const nvPr = directElementChild(nvSpPr, P_NS, "nvPr");
+  if (nvPr === undefined) return undefined;
+  return directElementChild(nvPr, P_NS, "ph");
+}
+
+/** Side-effect-free predicate identifying `<p:sp>` elements bound to a placeholder (`<p:ph>`). */
+export function isPlaceholderSpElement(cursor: XmlElementCursor): boolean {
+  return directPlaceholderElement(cursor) !== undefined;
+}
+
+/** Side-effect-free predicate matching text-compatible `<p:sp>` placeholder elements. */
+export function isTextPlaceholderSpElement(cursor: XmlElementCursor): boolean {
+  const ph = directPlaceholderElement(cursor);
+  if (ph === undefined) return false;
+  const rawType = ph.getAttribute("type");
+  const role = rawType === null || rawType === "" ? "obj" : rawType;
+  return textCompatiblePlaceholderRoles.has(role);
 }
 
 function readColorModifier(
@@ -466,6 +512,7 @@ export const textFieldSlideNumImportHandler: TextInlineImportHandler = {
     const rawField = cursor.attrsObject(["id", "type"]);
     const parsedField = TextFieldXmlSchema.safeParse(rawField);
     const rPrCursor = cursor.child(A_NS, "rPr");
+    cursor.ignoreEmptyChild(A_NS, "pPr");
     const tCursor = cursor.child(A_NS, "t");
     if (tCursor !== undefined) {
       tCursor.consumeAttr("space", XML_NS);
@@ -552,8 +599,23 @@ function readParagraph(
   let spcAftNode: XmlElementCursor | undefined;
 
   if (pPr !== undefined) {
-    const rawPPr = pPr.attrsObject(["algn", "rtl", "lvl"]);
-    const parsedPPr = ParagraphPrFragmentSchema.safeParse(rawPPr);
+    const rawPPr = pPr.attrsObject([
+      "algn",
+      "rtl",
+      "lvl",
+      "marL",
+      "indent",
+      "fontAlgn",
+      "eaLnBrk",
+      "latinLnBrk",
+      "hangingPunct",
+      "defTabSz",
+    ]);
+    const parsedPPr = ParagraphPrFragmentSchema.safeParse({
+      algn: rawPPr["algn"],
+      rtl: rawPPr["rtl"],
+      lvl: rawPPr["lvl"],
+    });
     if (!parsedPPr.success) {
       diagnostics.push({
         code: "invalid-xml-value",
@@ -570,10 +632,17 @@ function readParagraph(
       lvl = parsedPPr.data.lvl;
     }
 
+    const spcBefNode = pPr.child(A_NS, "spcBef");
+    if (spcBefNode !== undefined) {
+      spcBefNode.child(A_NS, "spcPts")?.consumeAttr("val");
+      spcBefNode.child(A_NS, "spcPct")?.consumeAttr("val");
+    }
     lnSpcNode = pPr.child(A_NS, "lnSpc");
     spcAftNode = pPr.child(A_NS, "spcAft");
 
     pPr.ignoreEmptyChild(A_NS, "buNone");
+    const buFont = pPr.child(A_NS, "buFont");
+    buFont?.attrsObject(["typeface", "pitchFamily", "charset", "panose"]);
     const buChar = pPr.child(A_NS, "buChar");
     const buAutoNum = pPr.child(A_NS, "buAutoNum");
     if (buChar !== undefined) {
@@ -814,6 +883,7 @@ export function readRichTextBody(
   part: string,
   slideIndex: number,
   diagnostics: ImportDiagnostic[],
+  _clrMap?: Readonly<Record<string, NativeColorSlot>>,
 ): ImportedRichTextBody {
   let paddingTop: number | undefined;
   let paddingRight: number | undefined;
@@ -832,6 +902,10 @@ export function readRichTextBody(
       "rIns",
       "bIns",
       "anchor",
+      "anchorCtr",
+      "spcFirstLastPara",
+      "numCol",
+      "spcCol",
     ]);
     const parsedBodyPr = BodyPrFragmentSchema.safeParse(rawBodyPr);
     if (!parsedBodyPr.success) {
@@ -856,6 +930,9 @@ export function readRichTextBody(
       if (b.bIns !== undefined && b.bIns !== 0) paddingBottom = emuToPx(b.bIns);
     }
     bodyPr.ignoreEmptyChild(A_NS, "noAutofit");
+    bodyPr.ignoreEmptyChild(A_NS, "spAutoFit");
+    const normAutofit = bodyPr.child(A_NS, "normAutofit");
+    normAutofit?.attrsObject(["fontScale", "lnSpcReduction"]);
   }
 
   txBody.ignoreEmptyChild(A_NS, "lstStyle");
@@ -912,8 +989,58 @@ export function populateRichTextNode(
   target.content(...paragraphNodes);
 }
 
+function flattenImportedTextBody(
+  imported: ImportedRichTextBody | undefined,
+  rotate: number | undefined,
+  backgroundColor: ColorValue | undefined,
+): {
+  readonly boxStyle: NonNullable<TextDeclarationProps["style"]>;
+  readonly singleText?: string;
+  readonly paragraphsToPopulate?: readonly ImportedParagraph[];
+} {
+  const importedParagraphs = imported?.importedParagraphs ?? [];
+  const singleParagraph =
+    importedParagraphs.length === 1 ? importedParagraphs[0] : undefined;
+  const singleTextRun =
+    singleParagraph !== undefined &&
+    singleParagraph.style.list === undefined &&
+    singleParagraph.runs.length === 1 &&
+    singleParagraph.runs[0]!.kind === "text"
+      ? singleParagraph.runs[0]
+      : undefined;
+  const singleEmptyParagraph =
+    singleParagraph !== undefined &&
+    singleParagraph.style.list === undefined &&
+    singleParagraph.runs.length === 0;
+
+  const flatParagraphStyle: Omit<ParagraphStyle, "list"> | undefined =
+    (singleTextRun === undefined && !singleEmptyParagraph) ||
+    singleParagraph === undefined
+      ? undefined
+      : (() => {
+          const { list: _list, ...rest } = singleParagraph.style;
+          return rest;
+        })();
+
+  const boxStyle: NonNullable<TextDeclarationProps["style"]> = {
+    ...imported?.boxStyle,
+    ...(rotate === undefined ? {} : { rotate }),
+    ...(backgroundColor === undefined ? {} : { backgroundColor }),
+    ...flatParagraphStyle,
+    ...(singleTextRun === undefined ? {} : singleTextRun.style),
+  };
+
+  if (singleTextRun !== undefined) {
+    return { boxStyle, singleText: singleTextRun.text };
+  }
+  if (!singleEmptyParagraph && importedParagraphs.length > 0) {
+    return { boxStyle, paragraphsToPopulate: importedParagraphs };
+  }
+  return { boxStyle };
+}
+
 /**
- * Reads a Transitional `<p:sp>` text box (`<p:cNvSpPr txBox="1"/>`) into an editable `TextNode`.
+ * Reads a Transitional `<p:sp>` text box (`<p:cNvSpPr txBox="1"/>` without `<p:ph>`) into an editable `TextNode`.
  */
 export function readTextBoxSp(
   context: ShapeTreeImportContext,
@@ -1066,38 +1193,9 @@ export function readTextBoxSp(
       ? parsedXfrm.data.rot / 60_000
       : undefined;
 
-  const { boxStyle: bodyStyle, importedParagraphs } = readRichTextBody(
-    txBody,
-    part,
-    slideIndex,
-    diagnostics,
-  );
-
-  const singleParagraph =
-    importedParagraphs.length === 1 ? importedParagraphs[0] : undefined;
-  const singleTextRun =
-    singleParagraph !== undefined &&
-    singleParagraph.style.list === undefined &&
-    singleParagraph.runs.length === 1 &&
-    singleParagraph.runs[0]!.kind === "text"
-      ? singleParagraph.runs[0]
-      : undefined;
-
-  const flatParagraphStyle: Omit<ParagraphStyle, "list"> | undefined =
-    singleTextRun === undefined || singleParagraph === undefined
-      ? undefined
-      : (() => {
-          const { list: _list, ...rest } = singleParagraph.style;
-          return rest;
-        })();
-
-  const boxStyle: NonNullable<TextDeclarationProps["style"]> = {
-    ...bodyStyle,
-    ...(rotate === undefined ? {} : { rotate }),
-    ...(backgroundColor === undefined ? {} : { backgroundColor }),
-    ...flatParagraphStyle,
-    ...(singleTextRun === undefined ? {} : singleTextRun.style),
-  };
+  const imported = readRichTextBody(txBody, part, slideIndex, diagnostics);
+  const { boxStyle, singleText, paragraphsToPopulate } =
+    flattenImportedTextBody(imported, rotate, backgroundColor);
 
   const props: TextDeclarationProps = {
     ...(objectName === undefined ? {} : { name: objectName }),
@@ -1109,10 +1207,272 @@ export function readTextBoxSp(
   };
 
   const node = createTextNode(props);
-  if (singleTextRun !== undefined) {
-    node.content(singleTextRun.text);
-  } else if (importedParagraphs.length > 0) {
-    populateRichTextNode(node, importedParagraphs);
+  if (singleText !== undefined) {
+    node.content(singleText);
+  } else if (paragraphsToPopulate !== undefined) {
+    populateRichTextNode(node, paragraphsToPopulate);
+  }
+
+  return { node, diagnostics };
+}
+
+/**
+ * Reads a Transitional `<p:sp>` bound placeholder (`<p:nvPr><p:ph .../></p:nvPr>`)
+ * into a layout-bound `TextNode` preserving differential transforms and styles.
+ */
+export function readTextPlaceholderSp(
+  context: ShapeTreeImportContext,
+): ShapeTreeImportOutcome {
+  const { cursor, part, slideIndex, layoutPlaceholders } = context;
+  const diagnostics: ImportDiagnostic[] = [];
+
+  const nvSpPr = cursor.child(P_NS, "nvSpPr");
+  if (nvSpPr === undefined) {
+    diagnostics.push({
+      code: "corrupt-part",
+      category: "corrupt-input",
+      disposition: "omitted",
+      location: { part, xpath: cursor.xpath, slideIndex },
+    });
+    return { diagnostics };
+  }
+
+  let objectId: number | undefined;
+  let objectName: string | undefined;
+  const cNvPr = nvSpPr.child(P_NS, "cNvPr");
+  if (cNvPr !== undefined) {
+    const rawCNvPr = cNvPr.attrsObject(["id", "name"]);
+    const parsedCNvPr = NonVisualSpIdSchema.safeParse(rawCNvPr);
+    if (!parsedCNvPr.success) {
+      diagnostics.push({
+        code: "invalid-xml-value",
+        category: "corrupt-input",
+        disposition: "recovered",
+        location: { part, xpath: cNvPr.xpath, slideIndex },
+        attributeOrElement: "p:cNvPr",
+        rawValue: JSON.stringify(rawCNvPr),
+      });
+    } else {
+      objectId = parsedCNvPr.data.id;
+      if (
+        parsedCNvPr.data.name !== undefined &&
+        parsedCNvPr.data.name.trim() !== ""
+      ) {
+        objectName = parsedCNvPr.data.name;
+      }
+    }
+    cNvPr.ignoreEmptyChild(A_NS, "extLst");
+  }
+
+  const cNvSpPr = nvSpPr.child(P_NS, "cNvSpPr");
+  if (cNvSpPr !== undefined) {
+    cNvSpPr.consumeAttr("txBox");
+    const spLocks = cNvSpPr.child(A_NS, "spLocks");
+    spLocks?.attrsObject([
+      "noGrp",
+      "noRot",
+      "noChangeAspect",
+      "noMove",
+      "noResize",
+      "noSelect",
+    ]);
+  }
+
+  const nvPr = nvSpPr.child(P_NS, "nvPr");
+  const ph = nvPr?.child(P_NS, "ph");
+  if (ph === undefined) {
+    diagnostics.push({
+      code: "corrupt-part",
+      category: "corrupt-input",
+      disposition: "omitted",
+      location: { part, xpath: cursor.xpath, slideIndex },
+    });
+    return { diagnostics };
+  }
+
+  const rawPh = ph.attrsObject([
+    "type",
+    "idx",
+    "sz",
+    "orient",
+    "hasCustomPrompt",
+  ]);
+  const explicitType = rawPh["type"] !== undefined;
+  const parsedRole = placeholderRoleSchema.safeParse(rawPh["type"] ?? "obj");
+  if (!parsedRole.success) {
+    diagnostics.push({
+      code: "unsupported-mechanism",
+      category: "unsupported",
+      disposition: "omitted",
+      location: {
+        part,
+        xpath: ph.xpath,
+        slideIndex,
+        ...(objectId === undefined ? {} : { objectId }),
+        ...(objectName === undefined ? {} : { objectName }),
+      },
+      namespaceUri: P_NS,
+      localName: "ph",
+      mechanismHint: `ph:${rawPh["type"] ?? ""}`,
+    });
+    return { diagnostics };
+  }
+  const idxParsed = OoxmlNonNegativeIntSchema.safeParse(rawPh["idx"]);
+  const hasPromptParsed = OoxmlBoolSchema.safeParse(rawPh["hasCustomPrompt"]);
+  const parsedNativeRef = nativePlaceholderRefSchema.safeParse({
+    type: parsedRole.data,
+    explicitType,
+    ...(idxParsed.success ? { idx: idxParsed.data } : {}),
+    ...(rawPh["sz"] !== undefined ? { sz: rawPh["sz"] } : {}),
+    ...(rawPh["orient"] !== undefined ? { orient: rawPh["orient"] } : {}),
+    ...(hasPromptParsed.success && hasPromptParsed.data
+      ? { hasCustomPrompt: true }
+      : {}),
+  });
+  if (!parsedNativeRef.success) {
+    diagnostics.push({
+      code: "invalid-xml-value",
+      category: "corrupt-input",
+      disposition: "omitted",
+      location: { part, xpath: ph.xpath, slideIndex },
+      attributeOrElement: "p:ph",
+      rawValue: JSON.stringify(rawPh),
+    });
+    return { diagnostics };
+  }
+  const nativeRef: NativePlaceholderRef = parsedNativeRef.data;
+
+  const spPr = cursor.child(P_NS, "spPr");
+  if (spPr === undefined) {
+    diagnostics.push({
+      code: "corrupt-part",
+      category: "corrupt-input",
+      disposition: "omitted",
+      location: {
+        part,
+        xpath: cursor.xpath,
+        slideIndex,
+        ...(objectId === undefined ? {} : { objectId }),
+        ...(objectName === undefined ? {} : { objectName }),
+      },
+    });
+    return { diagnostics };
+  }
+
+  let localBox:
+    | {
+        readonly x: number;
+        readonly y: number;
+        readonly width: number;
+        readonly height: number;
+      }
+    | undefined;
+  let rotate: number | undefined;
+  const xfrm = spPr.child(A_NS, "xfrm");
+  if (xfrm !== undefined) {
+    const rawXfrm = xfrm.attrsObject(["rot", "flipH", "flipV"]);
+    const parsedXfrm = TransformAttributesFragmentSchema.safeParse(rawXfrm);
+    if (
+      parsedXfrm.success &&
+      parsedXfrm.data.rot !== undefined &&
+      parsedXfrm.data.rot !== 0
+    ) {
+      rotate = parsedXfrm.data.rot / 60_000;
+    }
+    const off = xfrm.child(A_NS, "off");
+    const ext = xfrm.child(A_NS, "ext");
+    if (off !== undefined && ext !== undefined) {
+      const parsedOff = OffsetEmuFragmentSchema.safeParse(
+        off.attrsObject(["x", "y"]),
+      );
+      const parsedExt = ExtentEmuFragmentSchema.safeParse(
+        ext.attrsObject(["cx", "cy"]),
+      );
+      if (!parsedOff.success || !parsedExt.success) {
+        diagnostics.push({
+          code: "invalid-xml-value",
+          category: "corrupt-input",
+          disposition: "omitted",
+          location: { part, xpath: xfrm.xpath, slideIndex },
+          attributeOrElement: "a:xfrm",
+        });
+        return { diagnostics };
+      }
+      localBox = {
+        x: emuToPx(parsedOff.data.x),
+        y: emuToPx(parsedOff.data.y),
+        width: emuToPx(parsedExt.data.cx),
+        height: emuToPx(parsedExt.data.cy),
+      };
+    }
+  }
+
+  const prstGeom = spPr.child(A_NS, "prstGeom");
+  if (prstGeom !== undefined) {
+    prstGeom.consumeAttr("prst");
+    prstGeom.ignoreEmptyChild(A_NS, "avLst");
+  }
+  spPr.ignoreEmptyChild(A_NS, "noFill");
+  const ln = spPr.child(A_NS, "ln");
+  if (ln !== undefined) {
+    ln.ignoreEmptyChild(A_NS, "noFill");
+  }
+  let backgroundColor: ColorValue | undefined;
+  const spSolidFill = spPr.child(A_NS, "solidFill");
+  if (spSolidFill !== undefined) {
+    backgroundColor = readColorElement(
+      spSolidFill,
+      part,
+      slideIndex,
+      diagnostics,
+    );
+  }
+  spPr.ignoreEmptyChild(A_NS, "extLst");
+
+  const txBody = cursor.child(P_NS, "txBody");
+  const imported =
+    txBody === undefined
+      ? undefined
+      : readRichTextBody(txBody, part, slideIndex, diagnostics);
+
+  const { boxStyle, singleText, paragraphsToPopulate } =
+    flattenImportedTextBody(imported, rotate, backgroundColor);
+
+  let validatedStyle: TextDeclarationProps["style"] | undefined;
+  if (Object.keys(boxStyle).length > 0) {
+    const parsedStyle = placeholderStyleSchema.safeParse(boxStyle);
+    if (parsedStyle.success) {
+      validatedStyle = parsedStyle.data;
+    } else {
+      diagnostics.push({
+        code: "invalid-xml-value",
+        category: "corrupt-input",
+        disposition: "recovered",
+        location: { part, xpath: cursor.xpath, slideIndex },
+        attributeOrElement: "p:sp",
+        rawValue: parsedStyle.error.issues[0]?.message ?? "invalid style",
+      });
+    }
+  }
+
+  const matchedKey = matchLayoutPlaceholderKey(layoutPlaceholders, {
+    type: nativeRef.type,
+    idx: nativeRef.idx,
+  });
+
+  const props: TextDeclarationProps = {
+    ...(objectName === undefined ? {} : { name: objectName }),
+    ...(matchedKey === undefined ? {} : { placeholder: matchedKey }),
+    nativePlaceholder: nativeRef,
+    ...localBox,
+    ...(validatedStyle === undefined ? {} : { style: validatedStyle }),
+  };
+
+  const node = createTextNode(props);
+  if (singleText !== undefined) {
+    node.content(singleText);
+  } else if (paragraphsToPopulate !== undefined) {
+    populateRichTextNode(node, paragraphsToPopulate);
   }
 
   return { node, diagnostics };
@@ -1121,6 +1481,14 @@ export function readTextBoxSp(
 export const textBoxImportHandler: ShapeTreeImportHandler = {
   target: "shape-tree",
   localName: "sp",
-  matches: isTextBoxSpElement,
+  matches: (cursor) =>
+    isTextBoxSpElement(cursor) && !isPlaceholderSpElement(cursor),
   read: readTextBoxSp,
+};
+
+export const textPlaceholderImportHandler: ShapeTreeImportHandler = {
+  target: "shape-tree",
+  localName: "sp",
+  matches: isTextPlaceholderSpElement,
+  read: readTextPlaceholderSp,
 };

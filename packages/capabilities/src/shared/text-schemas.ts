@@ -6,15 +6,21 @@ import {
   fontReferenceSchema,
   fontSizeSchema,
   linkTargetSchema,
+  nativePlaceholderRefSchema,
   shadowSchema,
   textAlignmentSchema,
+  textListBulletSchema,
+  textListNumberSchema,
+  textListSchema,
   validateTextStyle,
+  type TextList,
   type TextStyle,
 } from "@pptxdk/core/capability";
 import { pxToEmu, xmlEscape } from "@pptxdk/emit";
 import { z } from "zod";
 
-export type { TextStyle };
+export { textListBulletSchema, textListNumberSchema, textListSchema };
+export type { TextList, TextStyle };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -72,37 +78,6 @@ const validatedLetterSpacingSchema = z
     const points = Math.round(value * 75);
     return points >= -400_000 && points <= 400_000;
   }, "letterSpacing converted value must be within DrawingML range of -4000 to 4000pt");
-
-const singleUnicodeCharacterSchema = z.string().refine((character) => {
-  const codePoint = character.codePointAt(0);
-  return (
-    codePoint !== undefined && String.fromCodePoint(codePoint) === character
-  );
-}, "Bullet must be a single Unicode character");
-
-export const textListBulletSchema = z
-  .strictObject({
-    type: z.literal("bullet"),
-    character: singleUnicodeCharacterSchema.optional(),
-    level: z.number().int().min(0).max(8).optional(),
-  })
-  .readonly();
-
-export const textListNumberSchema = z
-  .strictObject({
-    type: z.literal("number"),
-    style: z.literal("arabicPeriod").optional(),
-    startAt: z.number().int().min(1).max(32767).optional(),
-    level: z.number().int().min(0).max(8).optional(),
-  })
-  .readonly();
-
-/** Native paragraph list schema (bullets and Arabic period numbering). */
-export const textListSchema = z.discriminatedUnion("type", [
-  textListBulletSchema,
-  textListNumberSchema,
-]);
-export type TextList = z.infer<typeof textListSchema>;
 
 const runStyleObjectSchema = z.strictObject({
   fontFamily: fontReferenceSchema.optional(),
@@ -187,6 +162,8 @@ export const textInsetsStyleSchema = z
 export const textBoxAllowedParamKeys = new Set([
   "id",
   "name",
+  "placeholder",
+  "nativePlaceholder",
   "morphKey",
   "link",
   "x",
@@ -204,6 +181,8 @@ export const textAuthorPropsSchema = z
   .strictObject({
     id: z.string().optional(),
     name: z.string().optional(),
+    placeholder: z.string().optional(),
+    nativePlaceholder: nativePlaceholderRefSchema.optional(),
     morphKey: z.unknown().optional(),
     link: linkTargetSchema.optional(),
     x: textCoordinateSchema.optional(),

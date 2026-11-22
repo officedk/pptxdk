@@ -1,5 +1,8 @@
 import {
   defineSlideLayout as defineCoreSlideLayout,
+  type ContentPlaceholderRole,
+  type EmptyPlaceholderMap,
+  type PlaceholderMap,
   type SlideLayoutDataProps,
   type SlideLayoutDefinition,
   type SlideLayoutProps,
@@ -18,6 +21,7 @@ import {
   CommonNode,
   DeckContainer,
   RichTextContainer,
+  SlideContainer,
   SlideLayoutContainer,
   SlideMasterContainer,
   createDeckNode,
@@ -65,6 +69,7 @@ import {
   createShapeNode,
   type ShapeDeclarationProps,
 } from "./shape/shape-declaration.ts";
+import type { TypedElement } from "./shared/typed-element.ts";
 import {
   createCellNode,
   createRowNode,
@@ -113,32 +118,115 @@ export type DeckAuthorProps = DeckProps;
 export type SlideMasterAuthorProps = Omit<SlideMasterProps, "transition"> & {
   readonly transition?: Transition;
 };
-export type SlideLayoutAuthorProps = Omit<SlideLayoutProps, "transition"> & {
+export type SlideLayoutAuthorProps<P extends PlaceholderMap = PlaceholderMap> =
+  Omit<SlideLayoutProps<P>, "transition"> & {
+    readonly transition?: Transition;
+  };
+export type SlideLayoutAuthorDataProps<
+  P extends PlaceholderMap = EmptyPlaceholderMap,
+> = Omit<SlideLayoutDataProps<P>, "transition"> & {
   readonly transition?: Transition;
 };
-export type SlideLayoutAuthorDataProps = Omit<
-  SlideLayoutDataProps,
-  "transition"
-> & {
-  readonly transition?: Transition;
-};
-export type SlideLayoutSource<
-  Spec extends SlideLayoutDataProps = SlideLayoutDataProps,
-> = SlideLayoutDefinition<Spec> | SlideLayoutContainer;
+export type SlideLayoutSource<P extends PlaceholderMap = PlaceholderMap> =
+  | SlideLayoutDefinition<P>
+  | SlideLayoutContainer<P>;
 
 /** Narrowed `defineSlideLayout` wrapper enforcing capability-typed `transition` declarations. */
 export function defineSlideLayout<
-  const Spec extends SlideLayoutAuthorDataProps,
->(spec: Spec): SlideLayoutDefinition<Spec> {
-  return defineCoreSlideLayout(
-    spec as SlideLayoutDataProps,
-  ) as SlideLayoutDefinition<Spec>;
+  const P extends PlaceholderMap = EmptyPlaceholderMap,
+>(spec: SlideLayoutAuthorDataProps<P>): SlideLayoutDefinition<P> {
+  return defineCoreSlideLayout<P>(spec as SlideLayoutDataProps<P>);
 }
 
-export type SlideAuthorProps = Omit<SlideProps, "transition" | "layout"> & {
-  readonly layout?: SlideLayoutSource | undefined;
-  readonly transition?: Transition;
+export type InferPlaceholderMap<L> =
+  L extends SlideLayoutSource<infer P> ? P : EmptyPlaceholderMap;
+
+export type ImperativeTextPlaceholderValue =
+  | string
+  | TextNode
+  | ParagraphNode
+  | SpanNode
+  | SlideNumberNode
+  | readonly (string | ParagraphNode | SpanNode | SlideNumberNode)[];
+
+export type ImperativePlaceholderFillForRole<
+  Role extends ContentPlaceholderRole,
+> = Role extends
+  | "title"
+  | "ctrTitle"
+  | "subTitle"
+  | "body"
+  | "dt"
+  | "ftr"
+  | "hdr"
+  ? ImperativeTextPlaceholderValue
+  : Role extends "sldNum"
+    ? string | SlideNumberNode | TextNode
+    : Role extends "pic" | "clipArt"
+      ? ImageNode
+      : Role extends "tbl"
+        ? TableNode
+        : Role extends "chart"
+          ? ChartNode
+          : Role extends "obj"
+            ? ImperativeTextPlaceholderValue | ImageNode | TableNode | ChartNode
+            : never;
+
+export type ImperativePlaceholders<P extends PlaceholderMap> = {
+  readonly [K in keyof P]?: ImperativePlaceholderFillForRole<P[K]["type"]>;
 };
+
+export type JsxElementLike = {
+  readonly type: unknown;
+  readonly props: unknown;
+  readonly key: unknown;
+};
+
+export type JsxTextPlaceholderValue =
+  | string
+  | JsxElementLike
+  | TextNode
+  | ParagraphNode
+  | SpanNode
+  | SlideNumberNode
+  | readonly (
+      | string
+      | JsxElementLike
+      | ParagraphNode
+      | SpanNode
+      | SlideNumberNode
+    )[];
+
+export type JsxPlaceholderFillForRole<Role extends ContentPlaceholderRole> =
+  Role extends "title" | "ctrTitle" | "subTitle" | "body" | "dt" | "ftr" | "hdr"
+    ? JsxTextPlaceholderValue
+    : Role extends "sldNum"
+      ? string | JsxElementLike | SlideNumberNode | TextNode
+      : Role extends "pic" | "clipArt"
+        ? JsxElementLike | ImageNode
+        : Role extends "tbl"
+          ? JsxElementLike | TableNode
+          : Role extends "chart"
+            ? JsxElementLike | ChartNode
+            : Role extends "obj"
+              ?
+                  | JsxTextPlaceholderValue
+                  | JsxElementLike
+                  | ImageNode
+                  | TableNode
+                  | ChartNode
+              : never;
+
+export type JsxPlaceholders<P extends PlaceholderMap> = {
+  readonly [K in keyof P]?: JsxPlaceholderFillForRole<P[K]["type"]>;
+};
+
+export type SlideAuthorProps<L extends SlideLayoutSource = SlideLayoutSource> =
+  Omit<SlideProps, "transition" | "layout"> & {
+    readonly layout?: L | undefined;
+    readonly placeholders?: ImperativePlaceholders<InferPlaceholderMap<L>>;
+    readonly transition?: Transition;
+  };
 
 export type SectionAuthorProps = SectionProps;
 
@@ -158,12 +246,9 @@ export type NotesAuthorProps = NotesDeclarationProps;
 
 export type DeckNode = DeckContainer;
 export type SlideMasterNode = SlideMasterContainer;
-export type SlideLayoutNode = SlideLayoutContainer;
-export type SlideNode = CommonContainer<
-  "slide",
-  SlideAuthorProps,
-  TextStyle & Omit<LayoutStyle, "zIndex">
->;
+export type SlideLayoutNode<P extends PlaceholderMap = PlaceholderMap> =
+  SlideLayoutContainer<P>;
+export type SlideNode = SlideContainer<SlideAuthorProps>;
 export type SectionNode = CommonContainer<"section", SectionAuthorProps>;
 export type BoxNode = CommonContainer<
   "box",
@@ -265,14 +350,77 @@ export function slideMaster(
 }
 
 /** Creates an editable native SlideLayout node from inline props or a `defineSlideLayout` spec. */
-export function slideLayout(
-  propsOrDefinition: SlideLayoutAuthorDataProps | SlideLayoutDefinition = {},
-): SlideLayoutNode {
-  return createSlideLayoutNode(propsOrDefinition as SlideLayoutProps);
+export function slideLayout<
+  const P extends PlaceholderMap = EmptyPlaceholderMap,
+>(
+  propsOrDefinition:
+    | SlideLayoutAuthorDataProps<P>
+    | SlideLayoutDefinition<P> = {},
+): SlideLayoutNode<P> {
+  return createSlideLayoutNode<P>(
+    propsOrDefinition as SlideLayoutProps<P> | SlideLayoutDefinition<P>,
+  );
 }
 
-export function slide(props: SlideAuthorProps): SlideNode {
-  return createSlideNode(props);
+export type ImperativeSlideProps<
+  L extends SlideLayoutSource | undefined = SlideLayoutSource | undefined,
+> = Omit<SlideAuthorProps, "layout" | "placeholders"> &
+  ([L] extends [undefined]
+    ? {
+        readonly layout?: undefined;
+        readonly placeholders?: never;
+      }
+    : [L] extends [SlideLayoutSource]
+      ? {
+          readonly layout: L;
+          readonly placeholders?: ImperativePlaceholders<
+            InferPlaceholderMap<L>
+          >;
+        }
+      :
+          | {
+              readonly layout: SlideLayoutSource;
+              readonly placeholders?: ImperativePlaceholders<PlaceholderMap>;
+            }
+          | {
+              readonly layout?: undefined;
+              readonly placeholders?: never;
+            });
+
+export function slide<
+  const L extends SlideLayoutSource | undefined = undefined,
+>(props: ImperativeSlideProps<L>): SlideNode {
+  const { placeholders, ...rest } = props as SlideAuthorProps & {
+    readonly placeholders?: Readonly<Record<string, unknown>>;
+  };
+  const entries =
+    placeholders === undefined
+      ? []
+      : Object.entries(placeholders).filter(([, value]) => value !== undefined);
+  const keepEmptyPlaceholders =
+    placeholders !== undefined &&
+    props.layout === undefined &&
+    entries.length === 0;
+  const node = createSlideNode(
+    keepEmptyPlaceholders ? { ...rest, placeholders } : rest,
+  );
+  for (const [key, value] of entries) {
+    if (typeof value === "string" || Array.isArray(value)) {
+      node.append(text(value as TextContent, { placeholder: key }));
+    } else if (value instanceof CommonNode) {
+      if (
+        value.type === "paragraph" ||
+        value.type === "span" ||
+        value.type === "slide-number"
+      ) {
+        node.append(text(value, { placeholder: key }));
+      } else {
+        value.set({ placeholder: key });
+        node.append(value);
+      }
+    }
+  }
+  return node;
 }
 
 export function section(props: SectionAuthorProps): SectionNode {
@@ -425,7 +573,15 @@ export { observeMotion } from "./motion/motion-query.ts";
 export { blockArc, path, preset } from "./shared/geometry.ts";
 export { linearGradient, radialGradient } from "./shared/visual.ts";
 export { font, transitions };
-export type { SlideLayoutDataProps, SlideLayoutDefinition, SlideLayoutType };
+export type {
+  ContentPlaceholderRole,
+  EmptyPlaceholderMap,
+  PlaceholderMap,
+  SlideLayoutDataProps,
+  SlideLayoutDefinition,
+  SlideLayoutType,
+  TypedElement,
+};
 export type {
   BreatheEffect,
   BreatheOptions,

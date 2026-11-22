@@ -42,6 +42,7 @@ import {
   type SlideLayoutProps,
   type SlideMasterProps,
 } from "#/masters.ts";
+import type { PlaceholderMap } from "#/placeholders.ts";
 import type { TextStyle, Theme, ThemeInput } from "#/theme.ts";
 export {
   colorValueSchema,
@@ -592,8 +593,31 @@ export class AuthorQuery<Node extends CommonNode = CommonNode> {
 
 /** Editable SlideLayout node owned by a SlideMaster. */
 export class SlideLayoutContainer<
-  Props extends object = SlideLayoutProps,
-> extends CommonContainer<"slide-layout", Props, TextStyle> {}
+  P extends PlaceholderMap = PlaceholderMap,
+  Props extends object = SlideLayoutProps<P>,
+> extends CommonContainer<"slide-layout", Props, TextStyle> {
+  // Retains the inferred placeholder map type parameter so Slide<layout> can extract P without casts.
+  declare readonly "~placeholderMap"?: P;
+}
+
+/** Editable Slide node exposing named placeholder lookup alongside slide styling. */
+export class SlideContainer<
+  Props extends object = SlideProps,
+> extends CommonContainer<
+  "slide",
+  Props,
+  TextStyle & Omit<LayoutStyle, "zIndex">
+> {
+  /** Finds a bound placeholder node on this slide by its layout placeholder key. */
+  placeholder(key: string): CommonNode | undefined {
+    for (const child of this.children) {
+      if (child instanceof CommonNode && child.props["placeholder"] === key) {
+        return child;
+      }
+    }
+    return undefined;
+  }
+}
 
 /** Editable SlideMaster node owning its SlideLayouts in declaration order. */
 export class SlideMasterContainer<
@@ -645,15 +669,22 @@ export function createSlideMasterNode<Props extends object = SlideMasterProps>(
 }
 
 /** Creates an editable SlideLayout node from inline props or a shared `defineSlideLayout` definition. */
-export function createSlideLayoutNode<Props extends object = SlideLayoutProps>(
-  propsOrDefinition: Props | SlideLayoutDefinition = {} as Props,
-): SlideLayoutContainer<Props> {
+export function createSlideLayoutNode<
+  P extends PlaceholderMap = PlaceholderMap,
+  Props extends object = SlideLayoutProps<P>,
+>(
+  propsOrDefinition: Props | SlideLayoutDefinition<P> = {} as Props,
+): SlideLayoutContainer<P, Props> {
   if (isSlideLayoutDefinition(propsOrDefinition)) {
     const merged = {
       ...propsOrDefinition.props,
       layout: propsOrDefinition,
     } as unknown as Props;
-    return new SlideLayoutContainer("slide-layout", "slide-layout", merged);
+    return new SlideLayoutContainer<P, Props>(
+      "slide-layout",
+      "slide-layout",
+      merged,
+    );
   }
   if (
     isRecord(propsOrDefinition) &&
@@ -664,9 +695,13 @@ export function createSlideLayoutNode<Props extends object = SlideLayoutProps>(
       ...def.props,
       ...propsOrDefinition,
     } as unknown as Props;
-    return new SlideLayoutContainer("slide-layout", "slide-layout", merged);
+    return new SlideLayoutContainer<P, Props>(
+      "slide-layout",
+      "slide-layout",
+      merged,
+    );
   }
-  return new SlideLayoutContainer(
+  return new SlideLayoutContainer<P, Props>(
     "slide-layout",
     "slide-layout",
     propsOrDefinition,
@@ -676,8 +711,8 @@ export function createSlideLayoutNode<Props extends object = SlideLayoutProps>(
 /** Creates the editable Slide node used by both React host expansion and command authoring. */
 export function createSlideNode<Props extends object = SlideProps>(
   props: Props,
-): CommonContainer<"slide", Props, TextStyle & Omit<LayoutStyle, "zIndex">> {
-  return new CommonContainer("slide", "slide", props);
+): SlideContainer<Props> {
+  return new SlideContainer("slide", "slide", props);
 }
 
 /** Creates the editable Section node used by both React host expansion and command authoring. */

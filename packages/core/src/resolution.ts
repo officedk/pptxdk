@@ -6,6 +6,11 @@
  */
 import type { SlideLayoutType } from "#/masters.ts";
 import type { MorphKey } from "#/morph.ts";
+import type {
+  MasterPlaceholderMap,
+  MasterTextStyles,
+  PlaceholderMap,
+} from "#/placeholders.ts";
 import type { QueryContentNode } from "#/query.ts";
 import type {
   ColorMap,
@@ -77,6 +82,7 @@ export type ResolvedSlideCapabilityRecord = {
 
 export type InternalResolvedSlideLayout = {
   readonly key: string;
+  readonly masterKey: string;
   readonly id: string;
   readonly name?: string;
   readonly type?: SlideLayoutType;
@@ -85,6 +91,7 @@ export type InternalResolvedSlideLayout = {
   readonly userDrawn?: boolean;
   readonly showMasterShapes?: boolean;
   readonly showMasterPlaceholderAnimations?: boolean;
+  readonly placeholders?: PlaceholderMap;
   readonly colorMapOverride?: ColorMapOverride;
   readonly themeOverride?: ThemeOverride;
   readonly slideCapabilities?: readonly ResolvedSlideCapabilityRecord[];
@@ -96,7 +103,10 @@ export type InternalResolvedSlideMaster = {
   readonly name?: string;
   readonly preserve?: boolean;
   readonly theme: Theme;
+  readonly themeContext: ThemeContext;
   readonly colorMap: ColorMap;
+  readonly placeholders?: MasterPlaceholderMap;
+  readonly textStyles?: MasterTextStyles;
   readonly layouts: readonly InternalResolvedSlideLayout[];
   readonly slideCapabilities?: readonly ResolvedSlideCapabilityRecord[];
 };

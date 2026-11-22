@@ -1538,6 +1538,9 @@ export function emit(
               showMasterPlaceholderAnimations:
                 layout.showMasterPlaceholderAnimations,
             }),
+        ...(layout.placeholders === undefined
+          ? {}
+          : { placeholders: layout.placeholders }),
         ...(layout.colorMapOverride === undefined
           ? {}
           : { colorMapOverride: layout.colorMapOverride }),
@@ -1554,7 +1557,14 @@ export function emit(
       ...(master.name === undefined ? {} : { name: master.name }),
       ...(master.preserve === undefined ? {} : { preserve: master.preserve }),
       theme: master.theme,
+      themeContext: master.themeContext,
       colorMap: master.colorMap,
+      ...(master.placeholders === undefined
+        ? {}
+        : { placeholders: master.placeholders }),
+      ...(master.textStyles === undefined
+        ? {}
+        : { textStyles: master.textStyles }),
       ...(transitionXml === "" ? {} : { transitionXml }),
       layouts,
     };

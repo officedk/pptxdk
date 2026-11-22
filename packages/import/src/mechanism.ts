@@ -2,8 +2,10 @@ import type {
   CanvasMechanismDefinition,
   EmitContext,
   EmitOutput,
+  NativeColorSlot,
   PaintContext,
   PaintOutput,
+  PlaceholderMap,
   ShowMechanismDefinition,
   SlideEmitContext,
   SlideEmitOutput,
@@ -28,6 +30,8 @@ export type ShapeTreeImportContext = {
   readonly package: PptxPackage;
   readonly relationships?: ReadonlyMap<string, ParsedRelationshipEntry>;
   readonly registerDeferredSlideLink?: (link: DeferredSlideLink) => void;
+  readonly layoutPlaceholders?: PlaceholderMap;
+  readonly clrMap?: Readonly<Record<string, NativeColorSlot>>;
 };
 
 export type ShapeTreeImportOutcome = {

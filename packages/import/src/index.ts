@@ -67,6 +67,8 @@ export {
   EMU_PER_PX,
   MC_NS,
   OPC_REL_NS,
+  P14_NS,
+  P159_NS,
   P_NS,
   REL_CHART,
   REL_DIAGRAM_COLORS,

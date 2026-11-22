@@ -32,6 +32,7 @@ import {
   textBoxRoundtripScenario,
   textMechanismVerifications,
 } from "./text/mechanisms.ts";
+import { transitionMechanismVerifications } from "./transition/mechanisms.ts";
 
 export { textBoxRoundtripScenario };
 
@@ -265,6 +266,7 @@ export const productionMechanismVerifications: ExhaustiveMechanismVerificationMa
     ...tableMechanismVerifications,
     ...textMechanismVerifications,
     ...chartMechanismVerifications,
+    ...transitionMechanismVerifications,
   };
 
 /** Runs every mechanism verification entry, deduplicating shared scenarios across initial and roundtrip artifacts. */

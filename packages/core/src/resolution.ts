@@ -87,6 +87,7 @@ export type InternalResolvedSlideLayout = {
   readonly showMasterPlaceholderAnimations?: boolean;
   readonly colorMapOverride?: ColorMapOverride;
   readonly themeOverride?: ThemeOverride;
+  readonly slideCapabilities?: readonly ResolvedSlideCapabilityRecord[];
 };
 
 export type InternalResolvedSlideMaster = {
@@ -97,6 +98,7 @@ export type InternalResolvedSlideMaster = {
   readonly theme: Theme;
   readonly colorMap: ColorMap;
   readonly layouts: readonly InternalResolvedSlideLayout[];
+  readonly slideCapabilities?: readonly ResolvedSlideCapabilityRecord[];
 };
 
 export type InternalResolvedSlide = {

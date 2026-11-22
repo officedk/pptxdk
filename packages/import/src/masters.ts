@@ -16,6 +16,7 @@ import {
 import { z } from "zod";
 
 import type { ImportDiagnostic } from "#/diagnostics.ts";
+import type { SlideImportHandler } from "#/mechanism.ts";
 import {
   A_NS,
   P_NS,
@@ -181,6 +182,7 @@ function readSlideLayoutPart(
   ownerMasterPartPath: string,
   layoutOrder: number,
   usedLayoutIds: Set<string>,
+  slideHandlers: readonly SlideImportHandler[],
   diagnostics: ImportDiagnostic[],
 ): SlideLayoutContainer | undefined {
   const xmlText = pkg.readTextPart(layoutPartPath);
@@ -355,8 +357,6 @@ function readSlideLayoutPart(
     }
   }
 
-  appendUnconsumedDiagnostics(layoutCursor, undefined, diagnostics);
-
   const layoutId = allocateScopedAuthorId(
     layoutName,
     usedLayoutIds,
@@ -376,7 +376,29 @@ function readSlideLayoutPart(
     ...(colorMapOverride === undefined ? {} : { colorMapOverride }),
     ...(themeOverride === undefined ? {} : { themeOverride }),
   };
-  return createSlideLayoutNode(props);
+  const layoutNode = createSlideLayoutNode(props);
+
+  for (const slideHandler of slideHandlers) {
+    if (
+      slideHandler.slot !== "transition" ||
+      (slideHandler.matches !== undefined &&
+        !slideHandler.matches(layoutCursor))
+    ) {
+      continue;
+    }
+    const outcome = slideHandler.read({
+      slideCursor: layoutCursor,
+      slideNode: layoutNode,
+      part: layoutPartPath,
+      package: pkg,
+    });
+    if (outcome.diagnostics !== undefined) {
+      diagnostics.push(...outcome.diagnostics);
+    }
+  }
+
+  appendUnconsumedDiagnostics(layoutCursor, undefined, diagnostics);
+  return layoutNode;
 }
 
 function readSlideMasterPart(
@@ -386,6 +408,7 @@ function readSlideMasterPart(
   usedDeckIds: Set<string>,
   themesByPartPath: Map<string, Theme>,
   layoutNodeByPartPath: Map<string, SlideLayoutContainer>,
+  slideHandlers: readonly SlideImportHandler[],
   diagnostics: ImportDiagnostic[],
 ) {
   const xmlText = pkg.readTextPart(masterPartPath);
@@ -580,12 +603,32 @@ function readSlideMasterPart(
         masterPartPath,
         index + 1,
         usedLayoutIds,
+        slideHandlers,
         diagnostics,
       );
       if (layoutNode !== undefined) {
         masterNode.append(layoutNode);
         layoutNodeByPartPath.set(layoutPart, layoutNode);
       }
+    }
+  }
+
+  for (const slideHandler of slideHandlers) {
+    if (
+      slideHandler.slot !== "transition" ||
+      (slideHandler.matches !== undefined &&
+        !slideHandler.matches(masterCursor))
+    ) {
+      continue;
+    }
+    const outcome = slideHandler.read({
+      slideCursor: masterCursor,
+      slideNode: masterNode,
+      part: masterPartPath,
+      package: pkg,
+    });
+    if (outcome.diagnostics !== undefined) {
+      diagnostics.push(...outcome.diagnostics);
     }
   }
 
@@ -604,6 +647,7 @@ export function importMastersAndLayouts(
   deckNode: DeckContainer,
   usedDeckIds: Set<string>,
   diagnostics: ImportDiagnostic[],
+  slideHandlers: readonly SlideImportHandler[] = [],
 ): ReadonlyMap<string, SlideLayoutContainer> {
   const layoutNodeByPartPath = new Map<string, SlideLayoutContainer>();
   const themesByPartPath = new Map<string, Theme>();
@@ -665,6 +709,7 @@ export function importMastersAndLayouts(
       usedDeckIds,
       themesByPartPath,
       layoutNodeByPartPath,
+      slideHandlers,
       diagnostics,
     );
     if (masterNode !== undefined) {

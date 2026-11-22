@@ -10,6 +10,10 @@ export const MC_NS =
 // Transitional OOXML (Supported Baseline)
 export const P_NS =
   "http://schemas.openxmlformats.org/presentationml/2006/main";
+export const P14_NS =
+  "http://schemas.microsoft.com/office/powerpoint/2010/main";
+export const P159_NS =
+  "http://schemas.microsoft.com/office/powerpoint/2015/09/main";
 export const A_NS = "http://schemas.openxmlformats.org/drawingml/2006/main";
 export const C_NS = "http://schemas.openxmlformats.org/drawingml/2006/chart";
 export const R_NS =
@@ -67,6 +71,8 @@ export function emuToPx(emu: number): number {
 
 const canonicalPrefixes: ReadonlyMap<string, string> = new Map([
   [P_NS, "p"],
+  [P14_NS, "p14"],
+  [P159_NS, "p159"],
   [A_NS, "a"],
   [C_NS, "c"],
   [R_NS, "r"],

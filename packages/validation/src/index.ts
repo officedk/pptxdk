@@ -419,6 +419,8 @@ export type FileSlideLayout = {
   readonly colorMapOverride?: "master" | Readonly<Record<string, string>>;
   readonly themeOverridePart?: string;
   readonly themeOverride?: FileThemeSnapshot;
+  readonly advanceAfterMs?: number;
+  readonly transition?: FileTransition;
 };
 
 export type FileSlideMaster = {
@@ -429,6 +431,8 @@ export type FileSlideMaster = {
   readonly themePart?: string;
   readonly theme?: FileThemeSnapshot;
   readonly colorMap?: Readonly<Record<string, string>>;
+  readonly advanceAfterMs?: number;
+  readonly transition?: FileTransition;
   readonly layouts: readonly FileSlideLayout[];
 };
 
@@ -2632,17 +2636,19 @@ function readMastersAndLayouts(
 ): {
   readonly masters: readonly FileSlideMaster[];
   readonly layoutByPart: ReadonlyMap<string, FileSlideLayout>;
+  readonly extensions: readonly ValidationExtension[];
 } {
   const presentationPart = "ppt/presentation.xml";
   const presentationRoot = documents.get(presentationPart)?.documentElement;
   const masters: FileSlideMaster[] = [];
   const layoutByPart = new Map<string, FileSlideLayout>();
+  const usedExtensions = new Set<ValidationExtension>();
   if (
     presentationRoot == null ||
     presentationRoot.localName !== "presentation" ||
     presentationRoot.namespaceURI !== presentationNamespace
   ) {
-    return { masters, layoutByPart };
+    return { masters, layoutByPart, extensions: [] };
   }
 
   const masterIdList = first(
@@ -2661,7 +2667,7 @@ function readMastersAndLayouts(
       "missing-slide-master",
       "Presentation contains no slide masters",
     );
-    return { masters, layoutByPart };
+    return { masters, layoutByPart, extensions: [] };
   }
 
   const presentationRels = relationships.get(presentationPart) ?? new Map();
@@ -2946,6 +2952,19 @@ function readMastersAndLayouts(
         contentTypes,
         errors,
       );
+      const layoutTransition = readSlideTransition(
+        layoutRoot,
+        layoutPart,
+        errors,
+      );
+      const layoutAdvanceAfterMs = readAdvanceAfter(
+        layoutRoot,
+        layoutPart,
+        errors,
+      );
+      for (const extension of layoutTransition.extensions) {
+        usedExtensions.add(extension);
+      }
 
       const layoutInfo: FileSlideLayout = {
         part: layoutPart,
@@ -2969,6 +2988,12 @@ function readMastersAndLayouts(
         ...(layoutThemeOverride?.snapshot === undefined
           ? {}
           : { themeOverride: layoutThemeOverride.snapshot }),
+        ...(layoutAdvanceAfterMs === undefined
+          ? {}
+          : { advanceAfterMs: layoutAdvanceAfterMs }),
+        ...(layoutTransition.transition === undefined
+          ? {}
+          : { transition: layoutTransition.transition }),
       };
       masterLayouts.push(layoutInfo);
       layoutByPart.set(layoutPart, layoutInfo);
@@ -2981,6 +3006,19 @@ function readMastersAndLayouts(
       themePart === undefined
         ? undefined
         : readThemeSnapshot(documents.get(themePart)?.documentElement, false);
+    const masterTransition = readSlideTransition(
+      masterRoot,
+      masterPart,
+      errors,
+    );
+    const masterAdvanceAfterMs = readAdvanceAfter(
+      masterRoot,
+      masterPart,
+      errors,
+    );
+    for (const extension of masterTransition.extensions) {
+      usedExtensions.add(extension);
+    }
 
     masters.push({
       part: masterPart,
@@ -2992,11 +3030,17 @@ function readMastersAndLayouts(
         ? {}
         : { theme: masterThemeSnapshot }),
       ...(masterColorMap === undefined ? {} : { colorMap: masterColorMap }),
+      ...(masterAdvanceAfterMs === undefined
+        ? {}
+        : { advanceAfterMs: masterAdvanceAfterMs }),
+      ...(masterTransition.transition === undefined
+        ? {}
+        : { transition: masterTransition.transition }),
       layouts: masterLayouts,
     });
   }
 
-  return { masters, layoutByPart };
+  return { masters, layoutByPart, extensions: [...usedExtensions] };
 }
 
 function validateTextValueRange(
@@ -7695,6 +7739,22 @@ function readAlternateTransition(
   };
 }
 
+function isTransitionAlternateContent(element: XmlElement): boolean {
+  if (
+    element.namespaceURI !== markupCompatibilityNamespace ||
+    element.localName !== "AlternateContent"
+  ) {
+    return false;
+  }
+  return [
+    ...elements(element, markupCompatibilityNamespace, "Choice"),
+    ...elements(element, markupCompatibilityNamespace, "Fallback"),
+  ].some(
+    (branch) =>
+      elements(branch, presentationNamespace, "transition").length > 0,
+  );
+}
+
 function readSlideTransition(
   slide: XmlElement,
   part: string,
@@ -7704,8 +7764,7 @@ function readSlideTransition(
     (child) =>
       (child.namespaceURI === presentationNamespace &&
         child.localName === "transition") ||
-      (child.namespaceURI === markupCompatibilityNamespace &&
-        child.localName === "AlternateContent"),
+      isTransitionAlternateContent(child),
   );
   if (candidates.length > 1) {
     issue(
@@ -7738,8 +7797,7 @@ function readAdvanceAfter(
     (child) =>
       (child.namespaceURI === presentationNamespace &&
         child.localName === "transition") ||
-      (child.namespaceURI === markupCompatibilityNamespace &&
-        child.localName === "AlternateContent"),
+      isTransitionAlternateContent(child),
   );
   const transitions = candidates.flatMap((candidate) =>
     candidate.namespaceURI === presentationNamespace
@@ -9927,6 +9985,7 @@ function readPresentation(
   mastersRead: {
     readonly masters: readonly FileSlideMaster[];
     readonly layoutByPart: ReadonlyMap<string, FileSlideLayout>;
+    readonly extensions: readonly ValidationExtension[];
   },
   errors: ValidationIssue[],
 ): {
@@ -9981,7 +10040,7 @@ function readPresentation(
     ids === undefined ? [] : elements(ids, presentationNamespace, "sldId");
   const presentationRelationships = relationships.get(part) ?? new Map();
   const slides: FileSlide[] = [];
-  const usedExtensions = new Set<ValidationExtension>();
+  const usedExtensions = new Set<ValidationExtension>(mastersRead.extensions);
   const presentationSlideIds = new Map<string, string>();
   const stableSlideIds = new Set<string>();
   slideIds.forEach((slideId, index) => {

@@ -1,5 +1,5 @@
 import {
-  defineSlideLayout,
+  defineSlideLayout as defineCoreSlideLayout,
   type SlideLayoutDataProps,
   type SlideLayoutDefinition,
   type SlideLayoutProps,
@@ -110,9 +110,30 @@ import {
 
 export type DeckAuthorProps = DeckProps;
 
-export type SlideMasterAuthorProps = SlideMasterProps;
-export type SlideLayoutAuthorProps = SlideLayoutProps;
-export type SlideLayoutSource = SlideLayoutDefinition | SlideLayoutContainer;
+export type SlideMasterAuthorProps = Omit<SlideMasterProps, "transition"> & {
+  readonly transition?: Transition;
+};
+export type SlideLayoutAuthorProps = Omit<SlideLayoutProps, "transition"> & {
+  readonly transition?: Transition;
+};
+export type SlideLayoutAuthorDataProps = Omit<
+  SlideLayoutDataProps,
+  "transition"
+> & {
+  readonly transition?: Transition;
+};
+export type SlideLayoutSource<
+  Spec extends SlideLayoutDataProps = SlideLayoutDataProps,
+> = SlideLayoutDefinition<Spec> | SlideLayoutContainer;
+
+/** Narrowed `defineSlideLayout` wrapper enforcing capability-typed `transition` declarations. */
+export function defineSlideLayout<
+  const Spec extends SlideLayoutAuthorDataProps,
+>(spec: Spec): SlideLayoutDefinition<Spec> {
+  return defineCoreSlideLayout(
+    spec as SlideLayoutDataProps,
+  ) as SlideLayoutDefinition<Spec>;
+}
 
 export type SlideAuthorProps = Omit<SlideProps, "transition" | "layout"> & {
   readonly layout?: SlideLayoutSource | undefined;
@@ -245,9 +266,9 @@ export function slideMaster(
 
 /** Creates an editable native SlideLayout node from inline props or a `defineSlideLayout` spec. */
 export function slideLayout(
-  propsOrDefinition: SlideLayoutDataProps | SlideLayoutDefinition = {},
+  propsOrDefinition: SlideLayoutAuthorDataProps | SlideLayoutDefinition = {},
 ): SlideLayoutNode {
-  return createSlideLayoutNode(propsOrDefinition);
+  return createSlideLayoutNode(propsOrDefinition as SlideLayoutProps);
 }
 
 export function slide(props: SlideAuthorProps): SlideNode {
@@ -403,7 +424,7 @@ export {
 export { observeMotion } from "./motion/motion-query.ts";
 export { blockArc, path, preset } from "./shared/geometry.ts";
 export { linearGradient, radialGradient } from "./shared/visual.ts";
-export { defineSlideLayout, font, transitions };
+export { font, transitions };
 export type { SlideLayoutDataProps, SlideLayoutDefinition, SlideLayoutType };
 export type {
   BreatheEffect,

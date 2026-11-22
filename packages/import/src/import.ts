@@ -489,6 +489,12 @@ function readSlidePart(
   }
 
   for (const slideHandler of handlers.slide) {
+    if (
+      slideHandler.matches !== undefined &&
+      !slideHandler.matches(slideCursor)
+    ) {
+      continue;
+    }
     const outcome = slideHandler.read({
       slideCursor,
       slideNode,
@@ -549,6 +555,7 @@ export function createImporter(
       deckNode,
       usedDeckIds,
       diagnostics,
+      handlers.slide,
     );
 
     const slideIdByPartPath = new Map<string, string>();

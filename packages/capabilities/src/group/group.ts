@@ -33,6 +33,7 @@ import {
 } from "../shared/identity.ts";
 import {
   groupDeclarationPropsKeys,
+  groupDeclarationPropsSchema,
   groupStyleSchema,
 } from "./group-declaration.ts";
 import { groupImportHandler } from "./group-import.ts";
@@ -257,6 +258,27 @@ export const groupCapability = {
     }
     const rotation = rawRotation as number | undefined;
 
+    let explicitBox:
+      | {
+          readonly x: number;
+          readonly y: number;
+          readonly width: number;
+          readonly height: number;
+        }
+      | undefined;
+    if (input.props["bounds"] !== undefined) {
+      const parsedBounds = groupDeclarationPropsSchema
+        .unwrap()
+        .shape.bounds.safeParse(input.props["bounds"]);
+      if (!parsedBounds.success) {
+        throw new CapabilityError(
+          "invalid-group-geometry",
+          parsedBounds.error.issues[0]?.message ?? "Invalid Group bounds",
+        );
+      }
+      explicitBox = parsedBounds.data;
+    }
+
     const theme = context.theme.with(
       input.props["theme"] as ThemeScope | undefined,
       textStyleFrom(styleRecord),
@@ -305,7 +327,8 @@ export const groupCapability = {
       resolve(resolveContext: ObjectResolveContext): ResolvedObject {
         const resolvedChildren = resolveContext.resolveChildren(input.children);
         const geometry = bounds(resolvedChildren.objects);
-        const outputGeometry = resolveContext.layoutBox ?? geometry.pixels;
+        const outputGeometry =
+          resolveContext.layoutBox ?? explicitBox ?? geometry.pixels;
         if (outputGeometry.width <= 0 || outputGeometry.height <= 0) {
           throw new CapabilityError(
             "invalid-group-geometry",

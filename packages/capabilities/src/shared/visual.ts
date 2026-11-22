@@ -2072,46 +2072,28 @@ export type ImportedSpPrVisuals = {
   readonly style: ShapeVisualStyle;
 };
 
+export type ImportedSpPrAppearance = {
+  readonly geometry?: Geometry;
+  readonly style: ShapeVisualStyle;
+};
+
 /**
- * Reads PresentationML `<p:spPr>` geometry, transform, fills, borders, and effects.
- * Isolates unsupported visual elements/fills by emitting a localized ImportDiagnostic
- * and omitting only the unsupported visual attribute while keeping geometry and text intact.
+ * Reads PresentationML `<p:spPr>` geometry, fills, borders, and effects (without requiring `<a:xfrm>`).
+ * Used both by full-shape import and placeholder import where transform overrides may be absent.
  */
-export function readSpPrVisuals(
+export function readSpPrAppearance(
   spPrCursor: XmlElementCursor,
   pkg: PptxPackage,
+  fallbackUnits: { readonly w: number; readonly h: number },
   location: ImportLocation,
   diagnostics: ImportDiagnostic[],
-): ImportedSpPrVisuals | undefined {
-  let transform: ImportedTransform | undefined;
+): ImportedSpPrAppearance {
   let geometry: Geometry | undefined;
   let backgroundColor: ColorValue | undefined;
   let backgroundImage: ShapeVisualStyle["backgroundImage"];
   let opacity: number | undefined;
   let border: ImportedLineBorder = {};
   let effects: ReturnType<typeof readEffectList> = {};
-
-  // Read xfrm first so custom geometry fallback extent is available regardless of child element order.
-  const xfrmCursor = spPrCursor.child(A_NS, "xfrm");
-  if (xfrmCursor !== undefined) {
-    transform = readTransformXml(xfrmCursor, location, diagnostics);
-  }
-  if (transform === undefined) {
-    if (xfrmCursor === undefined) {
-      diagnostics.push({
-        code: "corrupt-part",
-        category: "corrupt-input",
-        disposition: "omitted",
-        location: { ...location, xpath: spPrCursor.xpath },
-      });
-    }
-    return undefined;
-  }
-
-  const fallbackUnits = {
-    w: transform.cxEmu,
-    h: transform.cyEmu,
-  };
 
   for (const child of spPrCursor.remainingElementChildren()) {
     if (child.namespaceUri !== A_NS) {
@@ -2160,6 +2142,9 @@ export function readSpPrVisuals(
       case "effectLst":
         effects = readEffectList(child, location, diagnostics);
         break;
+      case "extLst":
+        child.ignoreEmptyChild(A_NS, "ext");
+        break;
       default:
         diagnostics.push({
           code: "unsupported-mechanism",
@@ -2195,12 +2180,62 @@ export function readSpPrVisuals(
       ? {}
       : { boxShadow: effects.boxShadow }),
     ...(effects.softEdge === undefined ? {} : { softEdge: effects.softEdge }),
+  };
+
+  return {
+    ...(geometry === undefined ? {} : { geometry }),
+    style,
+  };
+}
+
+/**
+ * Reads PresentationML `<p:spPr>` geometry, transform, fills, borders, and effects.
+ * Isolates unsupported visual elements/fills by emitting a localized ImportDiagnostic
+ * and omitting only the unsupported visual attribute while keeping geometry and text intact.
+ */
+export function readSpPrVisuals(
+  spPrCursor: XmlElementCursor,
+  pkg: PptxPackage,
+  location: ImportLocation,
+  diagnostics: ImportDiagnostic[],
+): ImportedSpPrVisuals | undefined {
+  let transform: ImportedTransform | undefined;
+
+  // Read xfrm first so custom geometry fallback extent is available regardless of child element order.
+  const xfrmCursor = spPrCursor.child(A_NS, "xfrm");
+  if (xfrmCursor !== undefined) {
+    transform = readTransformXml(xfrmCursor, location, diagnostics);
+  }
+  if (transform === undefined) {
+    if (xfrmCursor === undefined) {
+      diagnostics.push({
+        code: "corrupt-part",
+        category: "corrupt-input",
+        disposition: "omitted",
+        location: { ...location, xpath: spPrCursor.xpath },
+      });
+    }
+    return undefined;
+  }
+
+  const appearance = readSpPrAppearance(
+    spPrCursor,
+    pkg,
+    { w: transform.cxEmu, h: transform.cyEmu },
+    location,
+    diagnostics,
+  );
+
+  const style: ShapeVisualStyle = {
+    ...appearance.style,
     ...(transform.rotate === undefined ? {} : { rotate: transform.rotate }),
   };
 
   return {
     transform,
-    ...(geometry === undefined ? {} : { geometry }),
+    ...(appearance.geometry === undefined
+      ? {}
+      : { geometry: appearance.geometry }),
     style,
   };
 }

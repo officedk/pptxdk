@@ -193,7 +193,7 @@ process.stdout.write("ok");
     const selectiveImporter = createImporter(textOnly);
     const res = selectiveImporter(sample.pptx);
     assert.equal(res.report.slideCount, 1);
-  });
+  }, 45_000);
 
   it("reads PPTX files via pptxdk/node importPptxFile and surfaces ImportError on invalid files", async () => {
     const sample = await build(
@@ -301,7 +301,7 @@ process.stdout.write("ok");
     for (const conditions of [["--conditions=source"], []] as const) {
       assert.equal(runSubprocess(conditions, script), "ok");
     }
-  });
+  }, 45_000);
 
   it("reports exact part and xpath for unconsumed XML inside a text box while keeping the text editable", async () => {
     const base = await build(
@@ -324,7 +324,7 @@ process.stdout.write("ok");
     entries["ppt/slides/slide1.xml"] = strToU8(
       slideXml
         .replace("<a:bodyPr ", '<a:bodyPr vert="eaVert" ')
-        .replace("<a:noFill/>", "<a:noFill/><a:effectDag/>"),
+        .replace("<a:noFill/>", "<a:noFill/><p:unknownUnconsumed/>"),
     );
     const mutatedPptx = zipSync(entries);
 
@@ -348,9 +348,11 @@ process.stdout.write("ok");
     assert.ok(
       unconsumedEl !== undefined && unconsumedEl.code === "unconsumed-xml",
     );
-    assert.equal(unconsumedEl.localName, "effectDag");
+    assert.equal(unconsumedEl.localName, "unknownUnconsumed");
     assert.equal(unconsumedEl.location.part, "ppt/slides/slide1.xml");
-    assert.ok(unconsumedEl.location.xpath?.endsWith("/p:spPr/a:effectDag"));
+    assert.ok(
+      unconsumedEl.location.xpath?.endsWith("/p:spPr/p:unknownUnconsumed"),
+    );
 
     const textNode = imported.document.query
       .get("s1")

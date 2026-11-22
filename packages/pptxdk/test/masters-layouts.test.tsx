@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { readdirSync, readFileSync } from "node:fs";
 
 import { validatePptx } from "@pptxdk/validation";
 import { strFromU8, unzipSync } from "fflate";
@@ -430,5 +431,34 @@ describe("explicit SlideMaster and SlideLayout ownership", () => {
       validated.slides[0]?.layoutPart,
       validated.masters?.[0]?.layouts[0]?.part,
     );
+  });
+
+  it("verifies SHA-256 checksums for every external PPTX fixture in test/fixtures", () => {
+    const expectedChecksums: Readonly<Record<string, string>> = {
+      "WithMaster.pptx":
+        "54ae7677fd2813a815160cc72bd8960a4e482690dfc369b392868521c9b61549",
+      "layouts.pptx":
+        "9c3d53afa3115de2ba72ec77637a616aeed505a6ff3b30a46db871c4edd32be5",
+      "placeholder-layout-color.pptx":
+        "b683af99cf4e71db112fe87db15840846c53dbc7a6839cbf84804980d21af9ce",
+      "prs-notes.pptx":
+        "664dc13965c7ea24688256d1ecd869936ca51a2e94d2aefe0f614bb8554976ea",
+      "prs-slide-masters.pptx":
+        "6f2a9083194f537179b582ba962c9fc324bba76fd18f50e8446e7760ffb5d7eb",
+      "themes.pptx":
+        "3ea86e4ee84a8bca6b99fe3a9f2a9a9186c0655df28ff92a2d02da24926c64ba",
+    };
+
+    const fixturesUrl = new URL("./fixtures/", import.meta.url);
+    const actualFiles = readdirSync(fixturesUrl)
+      .filter((name) => name.endsWith(".pptx"))
+      .sort();
+    assert.deepEqual(actualFiles, Object.keys(expectedChecksums).sort());
+
+    for (const filename of actualFiles) {
+      const bytes = readFileSync(new URL(filename, fixturesUrl));
+      const actualSha256 = createHash("sha256").update(bytes).digest("hex");
+      assert.equal(actualSha256, expectedChecksums[filename], filename);
+    }
   });
 });

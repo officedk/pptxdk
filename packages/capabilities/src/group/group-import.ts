@@ -1,4 +1,5 @@
-import type { CommonNode } from "@pptxdk/core/document";
+import { CommonNode } from "@pptxdk/core/document";
+import { pxToEmu } from "@pptxdk/emit";
 import {
   A_NS,
   ExtentEmuFragmentSchema,
@@ -26,6 +27,85 @@ import {
   createGroupNode,
   type GroupDeclarationProps,
 } from "./group-declaration.ts";
+
+function nodeBoundsEmu(node: CommonNode):
+  | {
+      readonly x: number;
+      readonly y: number;
+      readonly width: number;
+      readonly height: number;
+    }
+  | undefined {
+  const props = node.props as {
+    readonly x?: number;
+    readonly y?: number;
+    readonly width?: number;
+    readonly height?: number;
+    readonly bounds?: {
+      readonly x: number;
+      readonly y: number;
+      readonly width: number;
+      readonly height: number;
+    };
+  };
+  if (props.bounds !== undefined) {
+    return {
+      x: pxToEmu(props.bounds.x),
+      y: pxToEmu(props.bounds.y),
+      width: pxToEmu(props.bounds.width),
+      height: pxToEmu(props.bounds.height),
+    };
+  }
+  if (
+    typeof props.x === "number" &&
+    typeof props.y === "number" &&
+    typeof props.width === "number" &&
+    typeof props.height === "number"
+  ) {
+    return {
+      x: pxToEmu(props.x),
+      y: pxToEmu(props.y),
+      width: pxToEmu(props.width),
+      height: pxToEmu(props.height),
+    };
+  }
+  if (node.type === "group") {
+    const childNodes = node.children.filter(
+      (child): child is CommonNode => child instanceof CommonNode,
+    );
+    return memberUnionEmu(childNodes);
+  }
+  return undefined;
+}
+
+function memberUnionEmu(members: readonly CommonNode[]):
+  | {
+      readonly x: number;
+      readonly y: number;
+      readonly width: number;
+      readonly height: number;
+    }
+  | undefined {
+  if (members.length === 0) return undefined;
+  let minX = Number.POSITIVE_INFINITY;
+  let minY = Number.POSITIVE_INFINITY;
+  let maxRight = Number.NEGATIVE_INFINITY;
+  let maxBottom = Number.NEGATIVE_INFINITY;
+  for (const member of members) {
+    const box = nodeBoundsEmu(member);
+    if (box === undefined) return undefined;
+    minX = Math.min(minX, box.x);
+    minY = Math.min(minY, box.y);
+    maxRight = Math.max(maxRight, box.x + box.width);
+    maxBottom = Math.max(maxBottom, box.y + box.height);
+  }
+  return {
+    x: minX,
+    y: minY,
+    width: maxRight - minX,
+    height: maxBottom - minY,
+  };
+}
 
 const identityMapper: BoxCoordinateMapper = (box) => box;
 
@@ -328,9 +408,35 @@ export function readGroupSp(
     return { diagnostics };
   }
 
+  const mappedGroupBox = parentMapper({
+    x: offX,
+    y: offY,
+    width: extW,
+    height: extH,
+  });
+  const unionEmu = memberUnionEmu(members);
+  const preserveExplicitGroupBox =
+    pxToEmu(mappedGroupBox.width) > 0 &&
+    pxToEmu(mappedGroupBox.height) > 0 &&
+    (unionEmu === undefined ||
+      unionEmu.x !== pxToEmu(mappedGroupBox.x) ||
+      unionEmu.y !== pxToEmu(mappedGroupBox.y) ||
+      unionEmu.width !== pxToEmu(mappedGroupBox.width) ||
+      unionEmu.height !== pxToEmu(mappedGroupBox.height));
+
   const props: GroupDeclarationProps = {
     ...(objectName === undefined ? {} : { name: objectName }),
     ...(link === undefined ? {} : { link }),
+    ...(preserveExplicitGroupBox
+      ? {
+          bounds: {
+            x: mappedGroupBox.x,
+            y: mappedGroupBox.y,
+            width: mappedGroupBox.width,
+            height: mappedGroupBox.height,
+          },
+        }
+      : {}),
     ...(rotate === undefined ? {} : { style: { rotate } }),
   };
 

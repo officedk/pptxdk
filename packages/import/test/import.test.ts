@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { readdirSync, readFileSync } from "node:fs";
 
 import {
   A_NS,
@@ -239,5 +240,38 @@ describe("@pptxdk/import package entry and diagnostics", () => {
     assert.equal(unconsumed.localName, "customAttr");
     assert.equal(unconsumed.location.part, "ppt/slides/slide1.xml");
     assert.equal(unconsumed.location.xpath, "/p:sld/@customAttr");
+  });
+
+  it("verifies SHA-256 checksums for every external PPTX fixture in test/fixtures", () => {
+    const expectedChecksums: Readonly<Record<string, string>> = {
+      "SmartArt.pptx":
+        "b97e4c6d2ee1dd4094f50f9043820610268dd452d7717c537f5456636adcc353",
+      "WithMaster.pptx":
+        "54ae7677fd2813a815160cc72bd8960a4e482690dfc369b392868521c9b61549",
+      "layouts.pptx":
+        "9c3d53afa3115de2ba72ec77637a616aeed505a6ff3b30a46db871c4edd32be5",
+      "placeholder-layout-color.pptx":
+        "b683af99cf4e71db112fe87db15840846c53dbc7a6839cbf84804980d21af9ce",
+      "prs-notes.pptx":
+        "664dc13965c7ea24688256d1ecd869936ca51a2e94d2aefe0f614bb8554976ea",
+      "prs-slide-masters.pptx":
+        "6f2a9083194f537179b582ba962c9fc324bba76fd18f50e8446e7760ffb5d7eb",
+      "strict-anchorModified.pptx":
+        "06dd5d1f54fa66cb102890cc621f0b10bb67a87914928ac232a4e296bb8b41fb",
+      "themes.pptx":
+        "3ea86e4ee84a8bca6b99fe3a9f2a9a9186c0655df28ff92a2d02da24926c64ba",
+    };
+
+    const fixturesUrl = new URL("./fixtures/", import.meta.url);
+    const actualFiles = readdirSync(fixturesUrl)
+      .filter((name) => name.endsWith(".pptx"))
+      .sort();
+    assert.deepEqual(actualFiles, Object.keys(expectedChecksums).sort());
+
+    for (const filename of actualFiles) {
+      const bytes = readFileSync(new URL(filename, fixturesUrl));
+      const actualSha256 = createHash("sha256").update(bytes).digest("hex");
+      assert.equal(actualSha256, expectedChecksums[filename], filename);
+    }
   });
 });

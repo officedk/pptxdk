@@ -24,6 +24,7 @@ import {
   type ResolvedSectionRecord,
   type ResolvedSlideCapabilityRecord,
 } from "#/resolution.ts";
+import { resolveOptionsSchema } from "#/stage-options.ts";
 import {
   createThemeContext,
   textStyleFrom,
@@ -339,29 +340,36 @@ function nativeObjectName(
 }
 
 function validateResolveOptions(options: ResolveOptions): void {
-  if (
-    typeof options !== "object" ||
-    options === null ||
-    Array.isArray(options)
-  ) {
-    throw new BuildError([
-      diagnostic(
-        "resolve",
-        "invalid-options",
-        "Resolve options must be an object",
-      ),
-    ]);
-  }
-  const unknown = ownKeys(options, ["signal"]);
-  if (unknown !== undefined) {
+  const parsed = resolveOptionsSchema.safeParse(options);
+  if (parsed.success) return;
+
+  const issue = parsed.error.issues[0];
+  if (issue === undefined) return;
+  if (issue.path.length === 0 && issue.code === "unrecognized_keys") {
     throw new BuildError([
       diagnostic(
         "resolve",
         "unknown-parameter",
-        `Resolve options contain unknown parameter ${unknown}`,
+        `Resolve options contain unknown parameter ${issue.keys[0]}`,
       ),
     ]);
   }
+  if (issue.path[0] === "signal") {
+    throw new BuildError([
+      diagnostic(
+        "resolve.signal",
+        "invalid-options",
+        "Resolve options signal must be an AbortSignal",
+      ),
+    ]);
+  }
+  throw new BuildError([
+    diagnostic(
+      "resolve",
+      "invalid-options",
+      "Resolve options must be an object",
+    ),
+  ]);
 }
 
 function positiveDimension(value: unknown, label: string): number {

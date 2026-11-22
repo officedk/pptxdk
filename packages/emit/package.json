@@ -35,7 +35,8 @@
   },
   "dependencies": {
     "@pptxdk/core": "workspace:*",
-    "fflate": "catalog:"
+    "fflate": "catalog:",
+    "zod": "catalog:"
   },
   "devDependencies": {
     "@pptxdk/tooling-config": "workspace:*",

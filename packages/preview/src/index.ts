@@ -1,3 +1,5 @@
+import { createRequire } from "node:module";
+
 import {
   CapabilityError,
   type BuildQuery,
@@ -15,35 +17,47 @@ import {
   getInternalResolution,
   type ResolvedObjectLayer,
 } from "@pptxdk/core/resolution";
-import { Resvg } from "@resvg/resvg-js";
+import type { Resvg as ResvgClass } from "@resvg/resvg-js";
+
+import {
+  PreviewPageRangeError,
+  paintOptionsSchema,
+  previewDiagnosticSchema,
+  previewOptionsSchema,
+  previewPageNumberSchema,
+  previewPagesSchema,
+  previewSeveritySchema,
+  screenGeometrySchema,
+  screenPointSchema,
+  validatePaintOptions,
+  type PaintOptions,
+  type PreviewDiagnostic,
+  type PreviewOptions,
+  type PreviewSeverity,
+  type ScreenGeometry,
+  type ScreenPoint,
+} from "#/options.ts";
 
 export type { PreviewTransform, PreviewWarning };
-
-export type PaintOptions = {
-  /** 1-based page numbers to paint. Omit to draw all pages; an empty list draws none. */
-  readonly pages?: readonly number[];
-  readonly signal?: AbortSignal;
+export {
+  PreviewPageRangeError,
+  paintOptionsSchema,
+  previewDiagnosticSchema,
+  previewOptionsSchema,
+  previewPageNumberSchema,
+  previewPagesSchema,
+  previewSeveritySchema,
+  screenGeometrySchema,
+  screenPointSchema,
+  validatePaintOptions,
 };
-
-export type PreviewOptions = PaintOptions;
-
-export type PreviewSeverity = "error" | "warning";
-
-export type PreviewDiagnostic = {
-  readonly severity: PreviewSeverity;
-  readonly page: number;
-  readonly path: string;
-  readonly message: string;
-};
-
-export type ScreenPoint = {
-  readonly x: number;
-  readonly y: number;
-};
-
-export type ScreenGeometry = {
-  readonly corners: readonly ScreenPoint[];
-  readonly screenBox: GeometryBox;
+export type {
+  PaintOptions,
+  PreviewDiagnostic,
+  PreviewOptions,
+  PreviewSeverity,
+  ScreenGeometry,
+  ScreenPoint,
 };
 
 export type PreviewNodeObservation = ObjectObservation & {
@@ -113,23 +127,23 @@ export function screenGeometry(
   };
 }
 
-/** Error thrown when requested preview page numbers exceed the resolved deck slide count. */
-export class PreviewPageRangeError extends RangeError {
-  readonly requestedPages: readonly number[];
-  readonly totalSlides: number;
+let cachedResvg: typeof ResvgClass | undefined;
 
-  constructor(requestedPages: readonly number[], totalSlides: number) {
-    super("Preview page number is outside the document");
-    this.name = "PreviewPageRangeError";
-    this.requestedPages = Object.freeze([...requestedPages]);
-    this.totalSlides = totalSlides;
+function getResvg(): typeof ResvgClass {
+  if (cachedResvg === undefined) {
+    const require = createRequire(import.meta.url);
+    const loaded: unknown = require("@resvg/resvg-js");
+    if (
+      typeof loaded !== "object" ||
+      loaded === null ||
+      !("Resvg" in loaded) ||
+      typeof loaded.Resvg !== "function"
+    ) {
+      throw new Error("Failed to load @resvg/resvg-js Resvg constructor");
+    }
+    cachedResvg = loaded.Resvg as typeof ResvgClass;
   }
-}
-
-function validateRequestedPages(pages: readonly number[] | undefined): void {
-  if (pages?.some((page) => !Number.isInteger(page) || page < 1)) {
-    throw new RangeError("Preview page numbers must be positive integers");
-  }
+  return cachedResvg;
 }
 
 function paintLayer(
@@ -229,8 +243,7 @@ export function paint(
   resolution: Resolution,
   options: PaintOptions = {},
 ): PaintResult {
-  const { pages: requestedPages, signal } = options;
-  validateRequestedPages(requestedPages);
+  const { pages: requestedPages, signal } = validatePaintOptions(options);
   if (signal?.aborted) throw signal.reason;
 
   const internal = getInternalResolution(resolution);
@@ -349,6 +362,7 @@ export function paint(
     }
 
     const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${internal.dimensions.width}" height="${internal.dimensions.height}" viewBox="0 0 ${internal.dimensions.width} ${internal.dimensions.height}">${background ?? defaultCanvasBackground}${layers}</svg>`;
+    const Resvg = getResvg();
     const png = new Uint8Array(
       new Resvg(svg, { font: { loadSystemFonts: false } }).render().asPng(),
     );

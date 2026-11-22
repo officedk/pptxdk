@@ -1,5 +1,21 @@
 export { BuildError, CapabilityError } from "#/diagnostics.ts";
 export {
+  fontEmbeddingModeSchema,
+  formatBaseline,
+  targets,
+} from "#/stage-options.ts";
+export type {
+  BuildOptions,
+  Diagnostic,
+  DiagnosticSeverity,
+  EmitOptions,
+  Extension,
+  FontEmbeddingMode,
+  ResolveOptions,
+  Target,
+  TargetName,
+} from "#/stage-options.ts";
+export {
   assertValidLang,
   darker,
   defaultTheme,
@@ -57,7 +73,6 @@ export type {
   BoundSlideCapability,
   BoundSlideCapabilityModule,
   BoundSlideContinuityCollaboration,
-  BuildOptions,
   BuildReport,
   BuildResult,
   CapabilityAnnotation,
@@ -80,12 +95,9 @@ export type {
   CapabilitySubPartObservation,
   CapabilityWarning,
   ContributionResolver,
-  Diagnostic,
   EmitContext,
-  EmitOptions,
   EmitOutput,
   EmitResult,
-  Extension,
   GeometryBox,
   LayoutChildReference,
   LayoutLength,
@@ -108,7 +120,6 @@ export type {
   RegisteredCapabilityModule,
   Resolution,
   ResolutionReport,
-  ResolveOptions,
   ResolvedLink,
   ResolvedObject,
   ResolvedObjectChildren,
@@ -123,6 +134,5 @@ export type {
   SlidePaintContext,
   SlidePaintOutput,
   SlideResolveContext,
-  Target,
   TransparentCapabilityModule,
 } from "#/types.ts";

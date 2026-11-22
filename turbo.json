@@ -36,6 +36,18 @@
       "outputs": [],
       "tags": ["quality:light"]
     },
+    "//#test": {
+      "inputs": [
+        "scripts/**",
+        "test/**",
+        "package.json",
+        "turbo.json",
+        "vitest.config.ts",
+        "tsconfig.scripts.json"
+      ],
+      "outputs": [],
+      "tags": ["quality:light"]
+    },
     "//#publication:pack": {
       "tags": ["work:release"],
       "cache": false

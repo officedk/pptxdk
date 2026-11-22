@@ -6,7 +6,15 @@ import type {
 import { pxToEmu, resolvedColorXml, xmlEscape } from "@pptxdk/emit";
 import { strToU8, zipSync } from "fflate";
 
-import { chartDataLabelPositions, mergeDataLabels } from "./chart-labels.ts";
+import {
+  chartAxisPositionCodes,
+  chartDataLabelPositions,
+  chartErrorBarValueTypes,
+  chartLegendPositions,
+  chartLineDashValues,
+  chartTrendlineTypeValues,
+  mergeDataLabels,
+} from "./chart-labels.ts";
 import type {
   ParsedAxisCrossing,
   ParsedChart,
@@ -387,16 +395,6 @@ function color(value: ColorValue, theme: ThemeContext): XmlRaw {
   return { raw: resolvedColorXml(theme.resolveColor(value)) };
 }
 
-const presetDashValues = {
-  solid: "solid",
-  dash: "dash",
-  dot: "dot",
-  dashDot: "dashDot",
-  longDash: "lgDash",
-  longDashDot: "lgDashDot",
-  longDashDotDot: "lgDashDotDot",
-} as const;
-
 function chartLine(
   value: ChartLine | undefined,
   theme: ThemeContext,
@@ -408,7 +406,7 @@ function chartLine(
     el("a:solidFill", null, color(value.color ?? "dk1", theme)),
     value.dash === undefined
       ? undefined
-      : el("a:prstDash", { val: presetDashValues[value.dash] }),
+      : el("a:prstDash", { val: chartLineDashValues[value.dash] }),
   );
 }
 
@@ -565,14 +563,6 @@ function errorBarFormula(channel: ErrorBarChannel): string {
   return `${sheet}!$${column}$2:$${column}$${channel.pointCount + 1}`;
 }
 
-const errorBarValueTypes = {
-  custom: "cust",
-  fixed: "fixedVal",
-  percentage: "percentage",
-  standardDeviation: "stdDev",
-  standardError: "stdErr",
-} as const;
-
 /**
  * Writes one native error-bar element.
  *
@@ -629,7 +619,7 @@ function errorBarXml(
       ? undefined
       : el("c:errDir", { val: nativeDirection }),
     el("c:errBarType", { val: bars.include ?? "both" }),
-    el("c:errValType", { val: errorBarValueTypes[bars.type] }),
+    el("c:errValType", { val: chartErrorBarValueTypes[bars.type] }),
     bars.endCap === false ? el("c:noEndCap", { val: true }) : undefined,
     plus,
     minus,
@@ -909,16 +899,7 @@ function pointShape(
 }
 
 function trendlineXml(value: ChartTrendline, theme: ThemeContext): XmlElement {
-  const type =
-    value.type === "movingAverage"
-      ? "movingAvg"
-      : value.type === "polynomial"
-        ? "poly"
-        : value.type === "exponential"
-          ? "exp"
-          : value.type === "logarithmic"
-            ? "log"
-            : value.type;
+  const type = chartTrendlineTypeValues[value.type];
   return el(
     "c:trendline",
     null,
@@ -1538,13 +1519,6 @@ function axisCrossing(crossing: ParsedAxisCrossing): XmlElement {
     : el("c:crosses", { val: crossing.value });
 }
 
-const axisPositionCodes = {
-  bottom: "b",
-  top: "t",
-  left: "l",
-  right: "r",
-} as const;
-
 function axisCrossBetween(
   parsed: ParsedChart,
   axis: ParsedChartAxis,
@@ -1585,7 +1559,7 @@ function axisXml(
         el("c:axId", { val: axis.id }),
         axisScaling(spec, false),
         el("c:delete", { val: spec.visible === false }),
-        el("c:axPos", { val: axisPositionCodes[axis.position] }),
+        el("c:axPos", { val: chartAxisPositionCodes[axis.position] }),
         gridlines(spec, "major", theme),
         gridlines(spec, "minor", theme),
         axisTitle(spec, textStyles, axis.name),
@@ -1619,7 +1593,7 @@ function axisXml(
         el("c:axId", { val: axis.id }),
         axisScaling(spec, true),
         el("c:delete", { val: spec.visible === false }),
-        el("c:axPos", { val: axisPositionCodes[axis.position] }),
+        el("c:axPos", { val: chartAxisPositionCodes[axis.position] }),
         gridlines(spec, "major", theme),
         gridlines(spec, "minor", theme),
         axisTitle(spec, textStyles, axis.name),
@@ -1664,19 +1638,6 @@ function axes(
   );
 }
 
-const legendPositions = {
-  top: "t",
-  bottom: "b",
-  left: "l",
-  right: "r",
-  topRight: "tr",
-} as const;
-
-/**
- * An independent-category doughnut legend explains the first declared ring's ordered
- * category positions. Native legend entries beyond that domain would otherwise describe
- * positions no first-ring category owns; delete only those trailing entries.
- */
 function independentLegendEntries(parsed: ParsedChart): XmlElement[] {
   if (parsed.groups.length !== 1) return [];
   const group = parsed.groups[0]!;
@@ -1774,7 +1735,7 @@ export function chartPartXml(
           : el(
               "c:legend",
               null,
-              el("c:legendPos", { val: legendPositions[parsed.legend] }),
+              el("c:legendPos", { val: chartLegendPositions[parsed.legend] }),
               independentLegendEntries(parsed),
               el("c:overlay", { val: false }),
             ),

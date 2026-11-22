@@ -89,6 +89,9 @@ function collectHandlers(
         case "deck":
           deck.push(handler);
           break;
+        case "text-inline":
+          // Consumed directly by rich-text paragraph readers inside shape-tree/slide mechanisms.
+          break;
       }
     }
   }

@@ -23,6 +23,8 @@ export const REL_SLIDE_MASTER =
   "http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideMaster";
 export const REL_THEME =
   "http://schemas.openxmlformats.org/officeDocument/2006/relationships/theme";
+export const REL_FONT =
+  "http://schemas.openxmlformats.org/officeDocument/2006/relationships/font";
 
 // ISO/IEC 29500 Strict OOXML (Detect & Reject with unsupported-format-baseline)
 export const STRICT_NS_PREFIX = "http://purl.oclc.org/ooxml/";

@@ -8,7 +8,11 @@ import { CommonNode, RichTextContainer } from "@pptxdk/core/document";
 
 import type { MotionProps } from "../motion/motion-api.ts";
 import type { MorphProps } from "../shared/morph-api.ts";
-import type { ParagraphStyle, TextStyle } from "../shared/text-service.ts";
+import type {
+  ParagraphStyle,
+  RunTextStyle,
+  TextStyle,
+} from "../shared/text-schemas.ts";
 
 /** Pure text box declaration shared by JSX and command authoring. */
 export type TextDeclarationProps = MotionProps &
@@ -30,12 +34,12 @@ export type ParagraphDeclarationProps = {
 
 export type SpanDeclarationProps = {
   readonly id?: string;
-  readonly style?: Omit<TextStyle, "verticalAlign" | "lineHeight" | "textWrap">;
+  readonly style?: RunTextStyle;
 };
 
 export type SlideNumberDeclarationProps = {
   readonly id?: string;
-  readonly style?: Omit<TextStyle, "verticalAlign" | "lineHeight" | "textWrap">;
+  readonly style?: RunTextStyle;
 };
 
 /** Pure text style type for Shape; does not depend on the text box capability module. */

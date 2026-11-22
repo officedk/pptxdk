@@ -3,7 +3,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
 import { documentCapabilities } from "@pptxdk/capabilities/all";
-import type { BuildReport, CommonNode } from "@pptxdk/core";
+import type { BuildReport, CommonNode, EmitOptions } from "@pptxdk/core";
 import { createResolver, type Resolution } from "@pptxdk/core/build";
 import { emit } from "@pptxdk/emit";
 import { createImporter, type ImportReport } from "@pptxdk/import";
@@ -54,6 +54,7 @@ export type CapabilityScenario = {
   readonly visualCheckpoints: readonly string[];
   readonly nativeCheckpoints: readonly string[];
   readonly pages?: readonly number[];
+  readonly emitOptions?: EmitOptions;
   jsx(): ReactNode;
   document(): CommonNode;
   assert(context: ScenarioAssertContext): void | Promise<void>;
@@ -85,7 +86,10 @@ const importDocument = createImporter(documentCapabilities);
 /** Executes the formal `import -> resolve -> emit -> paint -> validatePptx` roundtrip over an emitted PPTX. */
 export async function runScenarioRoundtrip(
   pptx: Uint8Array,
-  options: { readonly pages?: readonly number[] } = {},
+  options: {
+    readonly pages?: readonly number[];
+    readonly emitOptions?: EmitOptions;
+  } = {},
 ): Promise<RoundtripRunOutput> {
   const detachedCopy = new Uint8Array(pptx);
   const imported = importDocument(detachedCopy);
@@ -95,7 +99,7 @@ export async function runScenarioRoundtrip(
   const previewOptions =
     options.pages === undefined ? {} : { pages: options.pages };
   const resolution = resolveDocument(imported.document);
-  const { pptx: reemittedPptx, report } = emit(resolution);
+  const { pptx: reemittedPptx, report } = emit(resolution, options.emitOptions);
   const { pages } = paint(resolution, previewOptions);
   const preview: PreviewResult = Object.freeze({
     report: resolution.report,
@@ -241,7 +245,7 @@ export async function runCapabilityScenario(
         ? await expandDocument(scenario.jsx())
         : scenario.document();
     const resolution = resolveDocument(document);
-    const { pptx, report } = emit(resolution);
+    const { pptx, report } = emit(resolution, scenario.emitOptions);
     const { pages } = paint(resolution, previewOptions);
     const preview: PreviewResult = Object.freeze({
       report: resolution.report,

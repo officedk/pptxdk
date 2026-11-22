@@ -20,6 +20,18 @@ export type {
 } from "#/diagnostics.ts";
 export { createImporter, MalformedXmlPartError } from "#/import.ts";
 export type { ImportResult } from "#/import.ts";
+export {
+  readEmbeddedFontList,
+  readPresentationThemeFontScheme,
+  unpackEotFontData,
+} from "#/fonts.ts";
+export type {
+  EmbeddedFontRecord,
+  EmbeddedFontSlot,
+  EmbeddedFontSlotRecord,
+  PresentationFontSchemeInfo,
+  UnpackedEotResult,
+} from "#/fonts.ts";
 export { defineCanvasMechanism, defineShowMechanism } from "#/mechanism.ts";
 export type {
   DeckImportContext,
@@ -32,6 +44,8 @@ export type {
   SlideImportContext,
   SlideImportHandler,
   SlideImportOutcome,
+  TextInlineImportContext,
+  TextInlineImportHandler,
 } from "#/mechanism.ts";
 export {
   A_NS,
@@ -40,6 +54,7 @@ export {
   MC_NS,
   OPC_REL_NS,
   P_NS,
+  REL_FONT,
   REL_OFFICE_DOCUMENT,
   REL_SLIDE,
   REL_SLIDE_LAYOUT,

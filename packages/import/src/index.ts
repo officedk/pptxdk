@@ -23,6 +23,13 @@ export type {
 export { createImporter, MalformedXmlPartError } from "#/import.ts";
 export type { ImportResult } from "#/import.ts";
 export { allocateScopedAuthorId, importMastersAndLayouts } from "#/masters.ts";
+export {
+  isNonDefaultColorMap,
+  readColorMapElement,
+  readColorMapOverride,
+  readThemeOverridePart,
+  readThemePart,
+} from "#/themes.ts";
 export { defineCanvasMechanism, defineShowMechanism } from "#/mechanism.ts";
 export type {
   DeckImportContext,
@@ -58,6 +65,7 @@ export {
   REL_SLIDE_LAYOUT,
   REL_SLIDE_MASTER,
   REL_THEME,
+  REL_THEME_OVERRIDE,
   R_NS,
   STRICT_NS_PREFIX,
   STRICT_P_NS,

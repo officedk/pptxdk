@@ -1,7 +1,7 @@
-import type {
-  ColorValue,
-  NativeColorSlot,
-  Shadow,
+import {
+  schemeColorNameSchema,
+  type ColorValue,
+  type Shadow,
 } from "@pptxdk/core/capability";
 import {
   A_NS,
@@ -58,24 +58,7 @@ import {
 } from "./image-schemas.ts";
 
 const SchemeColorSchema = z.object({
-  val: z.enum([
-    "tx1",
-    "bg1",
-    "tx2",
-    "bg2",
-    "dk1",
-    "lt1",
-    "dk2",
-    "lt2",
-    "accent1",
-    "accent2",
-    "accent3",
-    "accent4",
-    "accent5",
-    "accent6",
-    "hlink",
-    "folHlink",
-  ]),
+  val: schemeColorNameSchema,
 });
 
 const SrgbColorSchema = z.object({
@@ -85,27 +68,6 @@ const SrgbColorSchema = z.object({
 const AlphaModifierSchema = z.object({
   val: OoxmlNonNegativeIntSchema,
 });
-
-const schemeToNativeSlot: Readonly<
-  Record<z.infer<typeof SchemeColorSchema>["val"], NativeColorSlot>
-> = {
-  tx1: "dk1",
-  bg1: "lt1",
-  tx2: "dk2",
-  bg2: "lt2",
-  dk1: "dk1",
-  lt1: "lt1",
-  dk2: "dk2",
-  lt2: "lt2",
-  accent1: "accent1",
-  accent2: "accent2",
-  accent3: "accent3",
-  accent4: "accent4",
-  accent5: "accent5",
-  accent6: "accent6",
-  hlink: "hlink",
-  folHlink: "folHlink",
-};
 
 function readColorElement(
   containerCursor: XmlElementCursor,
@@ -149,7 +111,7 @@ function readColorElement(
       });
       return undefined;
     }
-    baseColor = schemeToNativeSlot[parsed.data.val];
+    baseColor = parsed.data.val;
   }
 
   if (baseColor === undefined) return undefined;

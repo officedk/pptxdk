@@ -24,6 +24,7 @@ import {
   type NativeRoundtripAssertContext,
 } from "./acceptance-runner.ts";
 import { imageMechanismVerifications } from "./image/mechanisms.ts";
+import { themeMechanismVerifications } from "./masters/theme-mechanisms.ts";
 import { shapeAndGroupMechanismVerifications } from "./shape/mechanisms.ts";
 
 export type ExtractMechanisms<Modules extends readonly unknown[]> =
@@ -353,6 +354,7 @@ export const productionMechanismVerifications: ExhaustiveMechanismVerificationMa
         assert.equal(roundtrip.pages.length, 1);
       },
     },
+    ...themeMechanismVerifications,
     ...imageMechanismVerifications,
     "text-box": {
       scenario: textBoxRoundtripScenario,

@@ -42,7 +42,7 @@ import {
   type SlideLayoutProps,
   type SlideMasterProps,
 } from "#/masters.ts";
-import type { TextStyle } from "#/theme.ts";
+import type { TextStyle, Theme, ThemeInput } from "#/theme.ts";
 export {
   colorValueSchema,
   fontFaceSchema,
@@ -599,6 +599,11 @@ export class SlideLayoutContainer<
 export class SlideMasterContainer<
   Props extends object = SlideMasterProps,
 > extends CommonContainer<"slide-master", Props, TextStyle> {
+  /** Native theme bound to this master (shared by object identity across masters when reused). */
+  get theme(): Theme | ThemeInput | undefined {
+    return this.props["theme"] as Theme | ThemeInput | undefined;
+  }
+
   /** Direct SlideLayout children owned by this master in `<p:sldLayoutIdLst>` order. */
   get layouts(): readonly SlideLayoutContainer[] {
     return Object.freeze(

@@ -43,6 +43,7 @@ import type { z } from "zod";
 
 import {
   assertXml10Characters,
+  countAllocatedMasterThemeParts,
   pptxParts,
   type PptxPackagePart,
   type PptxPackageRelationshipSet,
@@ -1239,10 +1240,10 @@ function slideSlotOrder(slot: SlideCapabilitySlot): number {
 function createDocumentEmitState(
   internal: InternalResolution,
 ): DocumentEmitState {
-  const masterCount =
-    internal.masters !== undefined && internal.masters.length > 0
-      ? internal.masters.length
-      : 1;
+  const themePartCount = countAllocatedMasterThemeParts(
+    internal.masters,
+    internal.theme.theme,
+  );
   return {
     usedExtensions: new Set(internal.sections.length > 0 ? ["p14"] : []),
     warnings: [...internal.warnings],
@@ -1256,7 +1257,7 @@ function createDocumentEmitState(
     // capability-provided theme parts (e.g. notes master) get distinct OPC identities.
     presentationPartPaths: new Set(
       Array.from(
-        { length: masterCount },
+        { length: themePartCount },
         (_, index) => `ppt/theme/theme${index + 1}.xml`,
       ),
     ),
@@ -1514,6 +1515,12 @@ export function emit(
       ...(resolvedSlide.layoutKey === undefined
         ? {}
         : { layoutKey: resolvedSlide.layoutKey }),
+      ...(resolvedSlide.colorMapOverride === undefined
+        ? {}
+        : { colorMapOverride: resolvedSlide.colorMapOverride }),
+      ...(resolvedSlide.themeOverride === undefined
+        ? {}
+        : { themeOverride: resolvedSlide.themeOverride }),
       hidden: resolvedSlide.hidden,
       shapeXml,
       backgroundXml,
@@ -1539,6 +1546,8 @@ export function emit(
       ({
         id,
         layoutKey,
+        colorMapOverride,
+        themeOverride,
         hidden,
         shapeXml,
         backgroundXml,
@@ -1547,6 +1556,8 @@ export function emit(
       }) => ({
         id,
         ...(layoutKey === undefined ? {} : { layoutKey }),
+        ...(colorMapOverride === undefined ? {} : { colorMapOverride }),
+        ...(themeOverride === undefined ? {} : { themeOverride }),
         hidden,
         shapeXml,
         backgroundXml,

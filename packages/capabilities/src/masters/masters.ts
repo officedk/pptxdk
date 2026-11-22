@@ -1,9 +1,21 @@
-import type {
-  SlideCapabilityModule,
-  SlideLayoutProps,
-  SlideMasterProps,
+import {
+  defaultColorMap,
+  defaultTheme,
+  type ColorMap,
+  type ColorMapOverride,
+  type SlideCapabilityModule,
+  type SlideLayoutProps,
+  type SlideMasterProps,
+  type Theme,
+  type ThemeOverride,
 } from "@pptxdk/core/capability";
-import { xmlEscape } from "@pptxdk/emit";
+import {
+  colorMapAttributesXml,
+  colorMapOverrideXml,
+  themeOverrideXml,
+  themeXml,
+  xmlEscape,
+} from "@pptxdk/emit";
 import {
   defineCanvasMechanism,
   importMastersAndLayouts,
@@ -78,14 +90,74 @@ export const slideLayoutMechanism = defineCanvasMechanism({
   },
 });
 
-/** Capability declaration wiring native slide master and slide layout mechanisms into builds. */
+function serializeColorMapModel(model: {
+  readonly colorMap?: ColorMap;
+  readonly colorMapOverride?: ColorMapOverride;
+}): string {
+  if (model.colorMapOverride !== undefined) {
+    return colorMapOverrideXml(model.colorMapOverride);
+  }
+  return `<p:clrMap ${colorMapAttributesXml(model.colorMap ?? defaultColorMap)}/>`;
+}
+
+/** Native canvas mechanism for `<a:theme>` (`clrScheme`, `fontScheme`, `fmtScheme`) part identity and mutation. */
+export const nativeThemeMechanism = defineCanvasMechanism({
+  key: "native-theme",
+  role: "canvas",
+  emit: (model: Theme) => ({ xml: themeXml(model) }),
+  paint: () => ({ svg: "" }),
+  import: {
+    target: "deck",
+    read: importDeckMastersIfUnpopulated,
+  },
+});
+
+/** Native canvas mechanism for master `<p:clrMap>` and layout/slide `<p:clrMapOvr>` color-slot mapping. */
+export const colorMapMechanism = defineCanvasMechanism({
+  key: "color-map",
+  role: "canvas",
+  emit: (model: {
+    readonly colorMap?: ColorMap;
+    readonly colorMapOverride?: ColorMapOverride;
+  }) => ({ xml: serializeColorMapModel(model) }),
+  paint: () => ({ svg: "" }),
+  import: {
+    target: "deck",
+    read: importDeckMastersIfUnpopulated,
+  },
+});
+
+/** Native canvas mechanism for `<a:themeOverride>` layout and slide palette/font/format overrides. */
+export const themeOverrideMechanism = defineCanvasMechanism({
+  key: "theme-override",
+  role: "canvas",
+  emit: (model: {
+    readonly override: ThemeOverride;
+    readonly baseTheme?: Theme;
+  }) => ({
+    xml: themeOverrideXml(model.override, model.baseTheme ?? defaultTheme),
+  }),
+  paint: () => ({ svg: "" }),
+  import: {
+    target: "deck",
+    read: importDeckMastersIfUnpopulated,
+  },
+});
+
+/** Capability declaration wiring native slide master, layout, theme, color-map, and theme-override mechanisms into builds. */
 export const mastersCapability = {
   declaration: "slide-masters",
   slideProp: "slideMasters",
   slideProps: [],
   slot: "background",
   always: false,
-  mechanisms: [slideMasterMechanism, slideLayoutMechanism] as const,
+  mechanisms: [
+    slideMasterMechanism,
+    slideLayoutMechanism,
+    nativeThemeMechanism,
+    colorMapMechanism,
+    themeOverrideMechanism,
+  ] as const,
   bindSlide() {
     return {
       resolveSlide() {

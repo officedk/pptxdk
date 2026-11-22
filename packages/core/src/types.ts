@@ -1,4 +1,17 @@
 import type { MorphKey } from "#/morph.ts";
+import {
+  formatBaseline,
+  targets,
+  type BuildOptions,
+  type Diagnostic,
+  type DiagnosticSeverity,
+  type EmitOptions,
+  type Extension,
+  type FontEmbeddingMode,
+  type ResolveOptions,
+  type Target,
+  type TargetName,
+} from "#/stage-options.ts";
 import type {
   ThemeContext,
   ThemeInput,
@@ -36,9 +49,16 @@ export type {
   ThemeShade,
 } from "#/theme.ts";
 
-export const formatBaseline = "ECMA-376 5th edition Transitional" as const;
-
-export type Extension = "p14" | "p159" | "c15";
+export { formatBaseline, targets };
+export type {
+  BuildOptions,
+  EmitOptions,
+  Extension,
+  FontEmbeddingMode,
+  ResolveOptions,
+  Target,
+  TargetName,
+};
 
 /** Slide background can use theme colors, gradients supported by the shared visual writer, or formal image resource inputs. */
 export type SlideBackground =
@@ -46,41 +66,6 @@ export type SlideBackground =
   | LinearGradient
   | RadialGradient
   | { readonly image: string | URL | Uint8Array };
-
-export type Target = {
-  readonly name: string;
-  readonly format: typeof formatBaseline;
-  readonly extensions: readonly Extension[];
-};
-
-export const targets = Object.freeze({
-  transitional: Object.freeze({
-    name: "transitional",
-    format: formatBaseline,
-    extensions: Object.freeze(["p14", "p159", "c15"] as const),
-  }),
-  baselineOnly: Object.freeze({
-    name: "baseline-only",
-    format: formatBaseline,
-    extensions: Object.freeze([] as const),
-  }),
-});
-
-export type BuildOptions = {
-  readonly target?: Target;
-  /** Explicitly request embedding full files or character subsets of fonts actually used by the deck; no embedding by default. */
-  readonly embedFonts?: "full" | "subset";
-  /**
-   * Cooperative cancellation signal for a single build; no default timeout when unspecified.
-   * Completion, unhandled errors, and cancellation follow the first established terminal state; cancelling after completion does not alter the result.
-   */
-  readonly signal?: AbortSignal;
-};
-
-export type ResolveOptions = {
-  readonly signal?: AbortSignal;
-};
-export type EmitOptions = BuildOptions;
 
 export type GeometryBox = {
   readonly x: number;
@@ -893,12 +878,7 @@ export type RegisteredCapabilityModule =
   | CapabilityModule
   | TransparentCapabilityModule;
 
-export type Diagnostic = {
-  readonly severity: "error" | "warning";
-  readonly path: string;
-  readonly code: string;
-  readonly message: string;
-};
+export type { Diagnostic, DiagnosticSeverity };
 
 export type DeckProps = {
   readonly width?: number;

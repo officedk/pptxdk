@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import {
   CapabilityError,
   type CapabilityPresentationContribution,
+  type FontEmbeddingMode,
 } from "@pptxdk/core/capability";
 import { xmlEscape } from "@pptxdk/emit";
 import * as fontkit from "fontkit";
@@ -19,7 +20,7 @@ export function requiresFontGlyph(character: string): boolean {
 const fontRelationship =
   "http://schemas.openxmlformats.org/officeDocument/2006/relationships/font";
 const fontContentType = "application/x-fontdata";
-export type FontEmbeddingMode = "full" | "subset";
+export type { FontEmbeddingMode };
 
 /** Final font file and style chosen during text serialization; missing files are preserved as actual font requirements. */
 export type FontEmbeddingUse = {

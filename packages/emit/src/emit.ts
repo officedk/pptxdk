@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import {
   BuildError,
   CapabilityError,
+  buildOptionsSchema,
   formatBaseline,
   targets,
   type BuildOptions,
@@ -38,6 +39,7 @@ import {
   type ResolvedObjectLayer,
 } from "@pptxdk/core/resolution";
 import { strToU8, zipSync } from "fflate";
+import type { z } from "zod";
 
 import {
   assertXml10Characters,
@@ -137,129 +139,114 @@ function diagnostic(path: string, code: string, message: string): Diagnostic {
   return { severity: "error", path, code, message };
 }
 
-function ownKeys(
-  value: Record<string, unknown>,
-  allowed: readonly string[],
-): string | undefined {
-  return Object.keys(value).find((key) => !allowed.includes(key));
-}
-
 function allocateTextFieldId(document: DocumentPackageState): string {
   const serial = document.nextTextFieldId++;
   const suffix = serial.toString(16).padStart(12, "0").toUpperCase();
   return `{00000000-0000-4000-8000-${suffix}}`;
 }
 
-function validateTarget(target: Target | undefined): Target {
-  const value = target === undefined ? targets.transitional : target;
-  if (typeof value !== "object" || value === null || Array.isArray(value)) {
-    throw new BuildError([
-      diagnostic("build.target", "invalid-target", "Target must be an object"),
-    ]);
+function readValueAtPath(root: unknown, path: readonly PropertyKey[]): unknown {
+  let current: unknown = root;
+  for (const key of path) {
+    if (typeof current !== "object" || current === null) return undefined;
+    current = Reflect.get(current, key);
   }
-  const record = value as unknown as Record<string, unknown>;
-  const unknown = ownKeys(record, ["name", "format", "extensions"]);
-  if (unknown !== undefined) {
-    throw new BuildError([
-      diagnostic(
-        "build.target",
+  return current;
+}
+
+function mapBuildOptionsIssue(
+  rawOptions: unknown,
+  issue: z.core.$ZodIssue,
+): Diagnostic {
+  const [head, second, third] = issue.path;
+  if (head === undefined) {
+    if (issue.code === "unrecognized_keys") {
+      return diagnostic(
+        "build",
         "unknown-parameter",
-        `Target contains unknown parameter ${unknown}`,
-      ),
-    ]);
+        `Build options contain unknown parameter ${issue.keys[0]}`,
+      );
+    }
+    return diagnostic(
+      "build",
+      "invalid-options",
+      "Build options must be an object",
+    );
   }
-  if (typeof record["name"] !== "string" || record["name"].trim() === "") {
-    throw new BuildError([
-      diagnostic(
+  if (head === "embedFonts") {
+    return diagnostic(
+      "build.embedFonts",
+      "unsupported-font-embedding",
+      "embedFonts currently only supports 'full' or 'subset'",
+    );
+  }
+  if (head === "signal") {
+    return diagnostic(
+      "build.signal",
+      "invalid-options",
+      "Build options signal must be an AbortSignal",
+    );
+  }
+  if (head === "target") {
+    if (second === undefined) {
+      if (issue.code === "unrecognized_keys") {
+        return diagnostic(
+          "build.target",
+          "unknown-parameter",
+          `Target contains unknown parameter ${issue.keys[0]}`,
+        );
+      }
+      return diagnostic(
+        "build.target",
+        "invalid-target",
+        "Target must be an object",
+      );
+    }
+    if (second === "name") {
+      return diagnostic(
         "build.target",
         "invalid-target",
         "Target requires a non-empty name",
-      ),
-    ]);
-  }
-  if (record["format"] !== formatBaseline) {
-    throw new BuildError([
-      diagnostic(
+      );
+    }
+    if (second === "format") {
+      return diagnostic(
         "build.target",
         "unsupported-format",
         `This build only emits ${formatBaseline}`,
-      ),
-    ]);
-  }
-  if (!Array.isArray(record["extensions"])) {
-    throw new BuildError([
-      diagnostic(
+      );
+    }
+    if (second === "extensions") {
+      if (third === undefined) {
+        return diagnostic(
+          "build.target",
+          "invalid-target",
+          "Target extensions must be an array",
+        );
+      }
+      if (issue.code === "custom") {
+        return diagnostic("build.target", "duplicate-extension", issue.message);
+      }
+      const badExtension = readValueAtPath(rawOptions, issue.path);
+      return diagnostic(
         "build.target",
-        "invalid-target",
-        "Target extensions must be an array",
-      ),
-    ]);
-  }
-  const extensions: Extension[] = [];
-  for (const extension of record["extensions"]) {
-    if (extension !== "p14" && extension !== "p159" && extension !== "c15") {
-      throw new BuildError([
-        diagnostic(
-          "build.target",
-          "unsupported-extension",
-          `Unsupported target extension ${String(extension)}`,
-        ),
-      ]);
+        "unsupported-extension",
+        `Unsupported target extension ${String(badExtension)}`,
+      );
     }
-    if (extensions.includes(extension)) {
-      throw new BuildError([
-        diagnostic(
-          "build.target",
-          "duplicate-extension",
-          `Duplicate target extension declaration ${extension}`,
-        ),
-      ]);
-    }
-    extensions.push(extension);
   }
-  return Object.freeze({
-    name: record["name"],
-    format: formatBaseline,
-    extensions: Object.freeze(extensions),
-  });
+  return diagnostic("build", "invalid-options", issue.message);
 }
 
 /** Validates emit/build options (`target`, `embedFonts`, `signal`) and normalizes the target. */
 export function validateOptions(options: BuildOptions): Target {
-  if (
-    typeof options !== "object" ||
-    options === null ||
-    Array.isArray(options)
-  ) {
-    throw new BuildError([
-      diagnostic("build", "invalid-options", "Build options must be an object"),
-    ]);
+  const parsed = buildOptionsSchema.safeParse(options);
+  if (!parsed.success) {
+    throw new BuildError(
+      parsed.error.issues.map((issue) => mapBuildOptionsIssue(options, issue)),
+    );
   }
-  const unknown = ownKeys(options, ["target", "signal", "embedFonts"]);
-  if (unknown !== undefined) {
-    throw new BuildError([
-      diagnostic(
-        "build",
-        "unknown-parameter",
-        `Build options contain unknown parameter ${unknown}`,
-      ),
-    ]);
-  }
-  const embedFonts = options.embedFonts;
-  if (
-    embedFonts !== undefined &&
-    embedFonts !== "full" &&
-    embedFonts !== "subset"
-  ) {
-    throw new BuildError([
-      diagnostic(
-        "build.embedFonts",
-        "unsupported-font-embedding",
-        "embedFonts currently only supports 'full' or 'subset'",
-      ),
-    ]);
-  }
-  return validateTarget(options.target);
+  return parsed.data.target ?? targets.transitional;
 }
 
 function addResource(

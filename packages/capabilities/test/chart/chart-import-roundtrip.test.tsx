@@ -9,7 +9,7 @@ import {
   type IndependentCategoryData,
 } from "@pptxdk/capabilities/chart";
 import { chart, deck, font, slide } from "@pptxdk/capabilities/document";
-import { BuildError, defineTheme } from "@pptxdk/core";
+import { BuildError, DeckContainer, defineTheme, isTheme } from "@pptxdk/core";
 import { createResolver } from "@pptxdk/core/build";
 import type { CommonContainer, CommonNode } from "@pptxdk/core/document";
 import { emit } from "@pptxdk/emit";
@@ -445,11 +445,17 @@ describe("chart import, editing, and native-23-absent roundtrip", () => {
       bytes.fill(0);
 
       // Attach a monochrome TTF theme font so all 10 slides paint cleanly with zero diagnostics.
-      imported.document.set({
-        theme: defineTheme({
-          fonts: { major: jostFont, minor: jostFont },
-        }),
+      const fontFallbackTheme = defineTheme({
+        fonts: { major: jostFont, minor: jostFont },
       });
+      imported.document.set({ theme: fontFallbackTheme });
+      if (imported.document instanceof DeckContainer) {
+        for (const master of imported.document.masters) {
+          if (isTheme(master.theme)) {
+            master.theme.set({ fonts: { major: jostFont, minor: jostFont } });
+          }
+        }
+      }
 
       const bindChartFont = (props: ChartProps) => {
         const mapStyle = (style: ChartProps["style"] | undefined) =>

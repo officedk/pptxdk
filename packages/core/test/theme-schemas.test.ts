@@ -2,8 +2,12 @@ import assert from "node:assert/strict";
 
 import { CapabilityError } from "@pptxdk/core";
 import {
+  colorMapOverrideSchema,
+  colorMapSchema,
   colorValueSchema,
   createThemeContext,
+  defaultColorMap,
+  defaultTheme,
   defineTheme,
   fontFaceSchema,
   fontFaceStyleSchema,
@@ -12,26 +16,34 @@ import {
   fontSchema,
   fontSizeSchema,
   fontTokenSchema,
+  formatSchemeSchema,
   gradientStopSchema,
+  isTheme,
   linearGradientSchema,
   nativeColorSlotSchema,
   radialGradientSchema,
+  schemeColorNameSchema,
+  schemeColorSlotSchema,
   shadowSchema,
   textAlignmentSchema,
   textStyleSchema,
   themeColorSchema,
   themeInputSchema,
+  themeOverrideSchema,
   themeSchema,
   themeScopeSchema,
   themeShadeSchema,
   validateTextStyle,
   visualStyleSchema,
+  type ColorMap,
+  type ColorMapOverride,
   type ColorValue,
   type Font,
   type FontFace,
   type FontOptions,
   type FontReference,
   type FontSize,
+  type FormatScheme,
   type LinearGradient,
   type NativeColorSlot,
   type RadialGradient,
@@ -41,11 +53,14 @@ import {
   type Theme,
   type ThemeColor,
   type ThemeInput,
+  type ThemeOverride,
   type ThemeScope,
   type ThemeShade,
   type VisualStyle,
 } from "@pptxdk/core/theme";
 import { describe, it } from "vitest";
+
+import { snapshotValue } from "../src/input-values.ts";
 
 describe("Slice 2: theme, color, font, and textStyle Zod schemas", () => {
   it("exports Zod schemas for color, font, visual, and text style primitives and preserves units", () => {
@@ -232,5 +247,104 @@ describe("Slice 2: theme, color, font, and textStyle Zod schemas", () => {
         },
       );
     }
+  });
+
+  it("preserves Theme instance identity, supports .set() mutation, and guards defaultTheme", () => {
+    const brand = defineTheme({
+      name: "Brand A",
+      colors: { accent1: "#112233", ink: "accent1" },
+      fonts: { major: "Aptos Display" },
+    });
+    assert.equal(isTheme(brand), true);
+    assert.equal(isTheme(defaultTheme), true);
+    assert.equal(isTheme({ name: "Plain", colors: {}, fonts: {} }), false);
+
+    // snapshotValue preserves Theme reference identity (used by CommonNode props).
+    assert.equal(snapshotValue(brand), brand);
+
+    const same = brand.set({
+      name: "Brand A v2",
+      colors: { accent1: "#AA0000" },
+      fonts: { minor: "Jost*" },
+    });
+    assert.equal(same, brand);
+    assert.equal(brand.name, "Brand A v2");
+    assert.equal(brand.colors.accent1, "#AA0000");
+    assert.equal(brand.colors["ink"], "accent1");
+    assert.equal(brand.fonts.major, "Aptos Display");
+    assert.equal(brand.fonts.minor, "Jost*");
+
+    assert.throws(() => defaultTheme.set({ name: "Mutated" }), TypeError);
+  });
+
+  it("validates color maps, format schemes, and theme overrides and resolves scheme colors through active colorMap", () => {
+    assert.equal(schemeColorSlotSchema.parse("tx1"), "tx1");
+    assert.equal(schemeColorNameSchema.parse("lt2"), "lt2");
+
+    const invertedMap: ColorMap = colorMapSchema.parse({
+      ...defaultColorMap,
+      bg1: "dk1",
+      tx1: "lt1",
+      bg2: "dk2",
+      tx2: "lt2",
+    });
+    const overrideMap: ColorMapOverride =
+      colorMapOverrideSchema.parse(invertedMap);
+    assert.equal(colorMapOverrideSchema.parse("master"), "master");
+
+    const fmt: FormatScheme = formatSchemeSchema.parse({
+      name: "CustomFmt",
+      bgFillStyles: [
+        { kind: "solid", color: { color: "phClr" } },
+        {
+          kind: "gradient",
+          stops: [
+            { position: 0, color: { color: "phClr", tint: 0.4 } },
+            { position: 1, color: { color: "phClr", shade: 0.2 } },
+          ],
+          path: {
+            shape: "circle",
+            fillToRect: { l: 0.5, t: 0.5, r: 0.5, b: 0.5 },
+          },
+        },
+      ],
+    });
+    const override: ThemeOverride = themeOverrideSchema.parse({
+      colors: { accent1: "#FF6600" },
+      fonts: { major: "Georgia" },
+      formatScheme: fmt,
+    });
+
+    const theme = defineTheme({
+      colors: {
+        dk1: "#111111",
+        lt1: "#EEEEEE",
+        dk2: "#222222",
+        lt2: "#DDDDDD",
+        accent1: "#0055AA",
+      },
+      fonts: { major: "Aptos Display", minor: "Aptos" },
+    });
+    const baseCtx = createThemeContext(theme, undefined, {
+      colorMap: invertedMap,
+    });
+    // tx1 resolves via invertedMap (tx1 -> lt1 -> #EEEEEE) while preserving scheme: "tx1"
+    const tx1Resolved = baseCtx.resolveColor("tx1");
+    assert.equal(tx1Resolved.hex, "EEEEEE");
+    assert.equal(tx1Resolved.slot, "lt1");
+    assert.equal(tx1Resolved.scheme, "tx1");
+
+    // Direct native slot lt2 resolves directly to lt2 (#DDDDDD) with scheme: "lt2"
+    const lt2Resolved = baseCtx.resolveColor("lt2");
+    assert.equal(lt2Resolved.hex, "DDDDDD");
+    assert.equal(lt2Resolved.slot, "lt2");
+    assert.equal(lt2Resolved.scheme, "lt2");
+
+    // ThemeOverride overrides accent1 & major font without mutating base Theme
+    const overriddenCtx = baseCtx.withNativeOverrides(override, overrideMap);
+    assert.equal(overriddenCtx.resolveColor("accent1").hex, "FF6600");
+    assert.equal(overriddenCtx.resolveFont("major").family, "Georgia");
+    assert.equal(theme.colors.accent1, "#0055AA");
+    assert.equal(overriddenCtx.theme, theme);
   });
 });

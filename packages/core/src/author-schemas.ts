@@ -4,14 +4,18 @@ import { authorIdSchema, readAuthorId, type AuthorId } from "#/author-ids.ts";
 import { BuildError, CapabilityError } from "#/diagnostics.ts";
 import { slideLayoutStyleShape } from "#/layout-schemas.ts";
 import {
+  colorMapOverrideSchema,
   colorValueSchema,
   linearGradientSchema,
   radialGradientSchema,
   textStyleSchema,
   textStyleShape,
   themeInputSchema,
+  themeOverrideSchema,
   themeScopeSchema,
   uint8ArraySchema,
+  type ColorMapOverride,
+  type ThemeOverride,
 } from "#/theme.ts";
 
 const minimumSlideSizeEmu = 914_400;
@@ -87,6 +91,8 @@ const slideCorePropsObjectSchema = z.strictObject({
   id: authorIdSchema,
   layout: z.unknown().optional(),
   theme: themeScopeSchema.optional(),
+  colorMapOverride: colorMapOverrideSchema.optional(),
+  themeOverride: themeOverrideSchema.optional(),
   style: slideStyleSchema.optional(),
   hidden: z.boolean().optional(),
 });
@@ -284,11 +290,19 @@ export function parseSlideCoreProps(
   props: Readonly<Record<string, unknown>>,
   index: number,
   registeredSlideProps: readonly string[],
-): { readonly id: AuthorId; readonly hidden?: boolean } {
+): {
+  readonly id: AuthorId;
+  readonly hidden?: boolean;
+  readonly colorMapOverride?: ColorMapOverride;
+  readonly themeOverride?: ThemeOverride;
+} {
   const allowed = new Set([
     "id",
     "layout",
+    "placeholders",
     "theme",
+    "colorMapOverride",
+    "themeOverride",
     "style",
     "hidden",
     ...registeredSlideProps,
@@ -357,8 +371,46 @@ export function parseSlideCoreProps(
       },
     ]);
   }
+  const rawColorMapOverride = props["colorMapOverride"];
+  let colorMapOverride: ColorMapOverride | undefined;
+  if (rawColorMapOverride !== undefined) {
+    const parsedMap = colorMapOverrideSchema.safeParse(rawColorMapOverride);
+    if (!parsedMap.success) {
+      throw new BuildError([
+        {
+          severity: "error",
+          path: `deck/slide[${authorId}]`,
+          code: "invalid-color-map-override",
+          message:
+            parsedMap.error.issues[0]?.message ??
+            "Slide.colorMapOverride must be 'master' or a 12-slot color map",
+        },
+      ]);
+    }
+    colorMapOverride = parsedMap.data;
+  }
+  const rawThemeOverride = props["themeOverride"];
+  let themeOverride: ThemeOverride | undefined;
+  if (rawThemeOverride !== undefined) {
+    const parsedOverride = themeOverrideSchema.safeParse(rawThemeOverride);
+    if (!parsedOverride.success) {
+      throw new BuildError([
+        {
+          severity: "error",
+          path: `deck/slide[${authorId}]`,
+          code: "invalid-theme-override",
+          message:
+            parsedOverride.error.issues[0]?.message ??
+            "Slide.themeOverride is invalid",
+        },
+      ]);
+    }
+    themeOverride = parsedOverride.data;
+  }
   return {
     id: authorId,
     ...(hidden === undefined ? {} : { hidden: hidden as boolean }),
+    ...(colorMapOverride === undefined ? {} : { colorMapOverride }),
+    ...(themeOverride === undefined ? {} : { themeOverride }),
   };
 }

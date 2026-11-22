@@ -3,16 +3,19 @@ import { readFileSync } from "node:fs";
 
 import {
   deck,
+  defineSlideLayout,
   font,
   paragraph,
   slide,
+  slideLayout,
+  slideMaster,
   slideNumber,
   span,
   text,
 } from "@pptxdk/capabilities/document";
 import { P, SlideNumber, Span, Text } from "@pptxdk/capabilities/text-elements";
 import { defineTheme } from "@pptxdk/core";
-import { Deck, Slide } from "@pptxdk/react";
+import { Deck, Slide, SlideLayout, SlideMaster } from "@pptxdk/react";
 import { strFromU8, unzipSync } from "fflate";
 import { createElement } from "react";
 
@@ -20,6 +23,7 @@ import type {
   embeddedFontMechanism,
   textBoxMechanism,
   textFieldSlideNumMechanism,
+  textPlaceholderMechanism,
 } from "../../src/text/text.ts";
 import type { CapabilityScenario } from "../acceptance-runner.ts";
 import type {
@@ -308,6 +312,118 @@ export const embeddedFontRoundtripScenario: CapabilityScenario = {
   },
 };
 
+const placeholderScenarioLayout = defineSlideLayout({
+  id: "section-heading",
+  name: "Section Heading",
+  type: "title",
+  preserve: true,
+  placeholders: {
+    title: {
+      type: "title",
+      x: 48,
+      y: 36,
+      width: 544,
+      height: 64,
+      style: { fontFamily: jostFont, fontSize: "32pt", color: "#0F172A" },
+    },
+  },
+});
+
+export const textPlaceholderRoundtripScenario: CapabilityScenario = {
+  id: "mechanism-text-placeholder-roundtrip",
+  capability: "text",
+  description:
+    "Dual-author 3-way 32pt bound placeholder scenario verifying differential OOXML emission, layout inheritance, and roundtrip.",
+  visualCheckpoints: [
+    "Slide 1 renders layout-inherited 32pt title placeholder and free 32pt text box; Slide 2 renders locally overridden 32pt crimson title.",
+  ],
+  nativeCheckpoints: [
+    "Both initial and roundtrip PPTX omit <a:xfrm> via <p:spPr/> on bound placeholders and omit/emit sz='3200' strictly by local declaration.",
+  ],
+  emitOptions: { embedFonts: "subset" },
+  jsx() {
+    return createElement(
+      Deck,
+      { width: 640, height: 360 },
+      createElement(
+        SlideMaster,
+        { id: "m-ph", name: "Placeholder Master", preserve: true },
+        createElement(SlideLayout, { layout: placeholderScenarioLayout }),
+      ),
+      createElement(
+        Slide,
+        {
+          id: "ph-inherited",
+          layout: placeholderScenarioLayout,
+          placeholders: { title: "Inherited 32pt" },
+        },
+        createElement(
+          Text,
+          {
+            id: "free-32",
+            name: "Free 32pt",
+            x: 48,
+            y: 136,
+            width: 400,
+            height: 56,
+            style: { fontFamily: jostFont, fontSize: "32pt", color: "#334155" },
+          },
+          "Free 32pt",
+        ),
+      ),
+      createElement(Slide, {
+        id: "ph-override",
+        layout: placeholderScenarioLayout,
+        placeholders: {
+          title: createElement(
+            Text,
+            { style: { fontSize: "32pt", color: "#CC0000" } },
+            "Explicit 32pt",
+          ),
+        },
+      }),
+    );
+  },
+  document() {
+    return deck({ width: 640, height: 360 }).append(
+      slideMaster({
+        id: "m-ph",
+        name: "Placeholder Master",
+        preserve: true,
+      }).append(slideLayout(placeholderScenarioLayout)),
+      slide({
+        id: "ph-inherited",
+        layout: placeholderScenarioLayout,
+        placeholders: { title: "Inherited 32pt" },
+      }).append(
+        text("Free 32pt", {
+          id: "free-32",
+          name: "Free 32pt",
+          x: 48,
+          y: 136,
+          width: 400,
+          height: 56,
+          style: { fontFamily: jostFont, fontSize: "32pt", color: "#334155" },
+        }),
+      ),
+      slide({
+        id: "ph-override",
+        layout: placeholderScenarioLayout,
+        placeholders: {
+          title: text("Explicit 32pt", {
+            style: { fontSize: "32pt", color: "#CC0000" },
+          }),
+        },
+      }),
+    );
+  },
+  assert({ validation }) {
+    assert.equal(validation.slides.length, 2);
+    assert.equal(validation.slides[0]?.objects.length, 2);
+    assert.equal(validation.slides[1]?.objects.length, 1);
+  },
+};
+
 export const textMechanismVerifications = {
   "text-box": {
     scenario: textBoxRoundtripScenario,
@@ -396,8 +512,51 @@ export const textMechanismVerifications = {
       assert.match(slideXml, /typeface="\+mn-lt"/u);
     },
   } satisfies MechanismVerificationEntry<typeof embeddedFontMechanism>,
+  "text-placeholder": {
+    scenario: textPlaceholderRoundtripScenario,
+    assertNative({ stage, pptx, validation }) {
+      assert.equal(validation.errors.length, 0, `${stage} validation errors`);
+      assert.equal(validation.slides.length, 2);
+      const s1Title = validation.slides[0]?.objects[0];
+      const s1Free = validation.slides[0]?.objects[1];
+      const s2Title = validation.slides[1]?.objects[0];
+      assert.equal(s1Title?.placeholder?.type, "title");
+      assert.equal(s1Title?.hasLocalTransform, false);
+      assert.deepEqual(s1Title?.boxEmu, {
+        x: 48 * 9525,
+        y: 36 * 9525,
+        width: 544 * 9525,
+        height: 64 * 9525,
+      });
+      assert.equal(s1Free?.text?.text, "Free 32pt");
+      assert.equal(s2Title?.placeholder?.type, "title");
+      assert.equal(s2Title?.hasLocalTransform, false);
+
+      const entries = unzipSync(pptx);
+      const slide1Xml = strFromU8(entries["ppt/slides/slide1.xml"]!);
+      const slide2Xml = strFromU8(entries["ppt/slides/slide2.xml"]!);
+      assert.match(slide1Xml, /<p:spPr\/>/u);
+      assert.match(slide1Xml, /<p:ph type="title"\/>/u);
+      // Slide 1 title placeholder omits sz="3200", while Slide 1 free text emits sz="3200".
+      const slide1TitleXml = slide1Xml.split("<p:sp>")[1] ?? "";
+      assert.doesNotMatch(slide1TitleXml, /sz="3200"/u);
+      assert.match(slide2Xml, /<p:spPr\/>/u);
+      assert.match(slide2Xml, /sz="3200"/u);
+      assert.match(slide2Xml, /val="CC0000"/u);
+    },
+    assertPaint({ initial, roundtrip }) {
+      for (const preview of [initial, roundtrip]) {
+        assert.equal(preview.pages.length, 2);
+        for (const page of preview.pages) {
+          assert.deepEqual(page.diagnostics, []);
+          assert.ok(page.png instanceof Uint8Array);
+        }
+      }
+    },
+  } satisfies MechanismVerificationEntry<typeof textPlaceholderMechanism>,
 } satisfies ExhaustiveMechanismVerificationMap<
   | typeof textBoxMechanism
+  | typeof textPlaceholderMechanism
   | typeof textFieldSlideNumMechanism
   | typeof embeddedFontMechanism
 >;

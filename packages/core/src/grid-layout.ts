@@ -1,6 +1,5 @@
 import { BuildError } from "#/diagnostics.ts";
 import {
-  describeStyleValue,
   expandedSpacing,
   resolvePercent,
   type CustomContainerMode,
@@ -362,67 +361,8 @@ function validateGridContainerStyle(
   }
 }
 
-function validateGridStyleValues(
-  value: Readonly<Record<string, unknown>>,
-  path: string,
-): void {
-  const allowedValue = (
-    name: string,
-    candidate: unknown,
-    values: readonly string[],
-  ) => {
-    if (
-      candidate !== undefined &&
-      !values.includes(typeof candidate === "string" ? candidate : "")
-    ) {
-      fail(
-        path,
-        "unsupported-layout-value",
-        `${name} does not support value ${describeStyleValue(candidate)}`,
-      );
-    }
-  };
-  allowedValue("justifyItems", value["justifyItems"], [
-    "start",
-    "end",
-    "center",
-    "stretch",
-    "flex-start",
-    "flex-end",
-  ]);
-  allowedValue("justifySelf", value["justifySelf"], [
-    "auto",
-    "start",
-    "end",
-    "center",
-    "stretch",
-    "flex-start",
-    "flex-end",
-  ]);
-  for (const key of [
-    "gridTemplateColumns",
-    "gridTemplateRows",
-    "gridAutoRows",
-  ] as const) {
-    if (value[key] !== undefined && typeof value[key] !== "string") {
-      fail(path, "invalid-layout-style", `${key} must be a grid track string`);
-    }
-  }
-  for (const key of gridItemProperties) {
-    const candidate = value[key];
-    if (
-      candidate !== undefined &&
-      key !== "justifySelf" &&
-      typeof candidate !== "number" &&
-      typeof candidate !== "string"
-    ) {
-      fail(
-        path,
-        "invalid-layout-style",
-        `${key} must be a line number or span declaration`,
-      );
-    }
-  }
+function validateGridStyleValues(): void {
+  // Pure grid property shapes are validated upfront by layoutStyleSchema in layout.ts.
 }
 
 function validateGridItemStyle(

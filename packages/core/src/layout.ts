@@ -5,9 +5,7 @@ import {
   paddingStyleKeys,
   validateBlockFlexContainerContext,
   validateBlockFlexContainerProperties,
-  validateBlockFlexDimensionsAndOffsets,
-  validateBlockFlexEnumValues,
-  validateBlockFlexSpacingAndBounds,
+  validateBlockFlexLayoutContextBounds,
 } from "#/block-flex-layout.ts";
 import { BuildError, CapabilityError } from "#/diagnostics.ts";
 import { gridLayoutMode } from "#/grid-layout.ts";
@@ -17,6 +15,7 @@ import {
   type LayoutSolver,
   type LayoutSolverNode,
 } from "#/layout-protocol.ts";
+import { validateLayoutStyleValues } from "#/layout-schemas.ts";
 import { textStyleKeys } from "#/theme.ts";
 import type {
   BoundContainerCollaboration,
@@ -120,12 +119,11 @@ function readStyle(
   for (const mode of customContainerModes) {
     mode.validateContainerStyle(value, resolvedDisplay, path);
   }
-  validateBlockFlexEnumValues(value, path);
+  validateLayoutStyleValues(value, path);
   for (const mode of customContainerModes) {
     mode.validateStyleValues(value, path);
   }
-  validateBlockFlexDimensionsAndOffsets(value, allowsPadding, path);
-  validateBlockFlexSpacingAndBounds(value, allowsPadding, path);
+  validateBlockFlexLayoutContextBounds(value, allowsPadding, path);
   return value;
 }
 

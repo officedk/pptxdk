@@ -153,14 +153,6 @@ function failLayoutProtocol(
   throw new BuildError([diagnostic]);
 }
 
-export function describeStyleValue(value: unknown): string {
-  if (typeof value === "string") return `"${value}"`;
-  if (typeof value === "number" || typeof value === "boolean") {
-    return String(value);
-  }
-  return typeof value;
-}
-
 export function parseLayoutNumber(
   value: unknown,
   name: string,

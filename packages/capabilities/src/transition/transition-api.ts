@@ -32,31 +32,37 @@ export type TransitionSpeed = z.infer<typeof TransitionSpeedSchema>;
 export const FlipDirectionSchema = z.enum(["left", "right"]);
 export const MorphBySchema = z.enum(["object", "word", "character"]);
 
-export const FadeTransitionSchema = z
-  .strictObject({
-    type: z.literal("transition"),
-    kind: z.literal("fade"),
-    duration: TransitionDurationSchema.optional(),
-  })
-  .readonly();
+export const TransitionKindSchema = z.enum([
+  "fade",
+  "strips",
+  "push",
+  "flip",
+  "morph",
+]);
+export type TransitionKind = z.infer<typeof TransitionKindSchema>;
 
-export const StripsTransitionSchema = z
-  .strictObject({
-    type: z.literal("transition"),
-    kind: z.literal("strips"),
-    duration: TransitionDurationSchema.optional(),
-    direction: StripsDirectionSchema,
-  })
-  .readonly();
+const fadeTransitionObjectSchema = z.strictObject({
+  type: z.literal("transition"),
+  kind: z.literal("fade"),
+  duration: TransitionDurationSchema.optional(),
+});
+export const FadeTransitionSchema = fadeTransitionObjectSchema.readonly();
 
-export const PushTransitionSchema = z
-  .strictObject({
-    type: z.literal("transition"),
-    kind: z.literal("push"),
-    duration: TransitionDurationSchema.optional(),
-    from: TransitionDirectionSchema,
-  })
-  .readonly();
+const stripsTransitionObjectSchema = z.strictObject({
+  type: z.literal("transition"),
+  kind: z.literal("strips"),
+  duration: TransitionDurationSchema.optional(),
+  direction: StripsDirectionSchema,
+});
+export const StripsTransitionSchema = stripsTransitionObjectSchema.readonly();
+
+const pushTransitionObjectSchema = z.strictObject({
+  type: z.literal("transition"),
+  kind: z.literal("push"),
+  duration: TransitionDurationSchema.optional(),
+  from: TransitionDirectionSchema,
+});
+export const PushTransitionSchema = pushTransitionObjectSchema.readonly();
 
 /** Transitional baseline transition that does not depend on extension namespaces. */
 export const StandardTransitionSchema = z.discriminatedUnion("kind", [
@@ -66,28 +72,26 @@ export const StandardTransitionSchema = z.discriminatedUnion("kind", [
 ]);
 export type StandardTransition = z.infer<typeof StandardTransitionSchema>;
 
+const flipTransitionObjectSchema = z.strictObject({
+  type: z.literal("transition"),
+  kind: z.literal("flip"),
+  duration: TransitionDurationSchema.optional(),
+  direction: FlipDirectionSchema,
+  fallback: StandardTransitionSchema,
+});
 /** p14 Flip transition; must provide a baseline format fallback for other consumers. */
-export const FlipTransitionSchema = z
-  .strictObject({
-    type: z.literal("transition"),
-    kind: z.literal("flip"),
-    duration: TransitionDurationSchema.optional(),
-    direction: FlipDirectionSchema,
-    fallback: StandardTransitionSchema,
-  })
-  .readonly();
+export const FlipTransitionSchema = flipTransitionObjectSchema.readonly();
 export type FlipTransition = z.infer<typeof FlipTransitionSchema>;
 
+const morphTransitionObjectSchema = z.strictObject({
+  type: z.literal("transition"),
+  kind: z.literal("morph"),
+  duration: TransitionDurationSchema.optional(),
+  by: MorphBySchema,
+  fallback: StandardTransitionSchema,
+});
 /** p159 Morph transition; must provide a baseline format fallback for other consumers. */
-export const MorphTransitionSchema = z
-  .strictObject({
-    type: z.literal("transition"),
-    kind: z.literal("morph"),
-    duration: TransitionDurationSchema.optional(),
-    by: MorphBySchema,
-    fallback: StandardTransitionSchema,
-  })
-  .readonly();
+export const MorphTransitionSchema = morphTransitionObjectSchema.readonly();
 export type MorphTransition = z.infer<typeof MorphTransitionSchema>;
 
 /** Slide, layout, or master transition declaration; build fails when target forbids required mechanisms. */
@@ -100,7 +104,38 @@ export const TransitionSchema = z.discriminatedUnion("kind", [
 ]);
 export type Transition = z.infer<typeof TransitionSchema>;
 
-type TransitionOptions = { readonly duration?: TransitionDuration };
+export const FadeTransitionOptionsSchema = fadeTransitionObjectSchema
+  .pick({ duration: true })
+  .readonly();
+export type FadeTransitionOptions = z.infer<typeof FadeTransitionOptionsSchema>;
+
+export const StripsTransitionOptionsSchema = stripsTransitionObjectSchema
+  .pick({ duration: true, direction: true })
+  .partial({ direction: true })
+  .readonly();
+export type StripsTransitionOptions = z.infer<
+  typeof StripsTransitionOptionsSchema
+>;
+
+export const PushTransitionOptionsSchema = pushTransitionObjectSchema
+  .pick({ duration: true, from: true })
+  .partial({ from: true })
+  .readonly();
+export type PushTransitionOptions = z.infer<typeof PushTransitionOptionsSchema>;
+
+export const FlipTransitionOptionsSchema = flipTransitionObjectSchema
+  .pick({ duration: true, direction: true, fallback: true })
+  .partial({ direction: true })
+  .readonly();
+export type FlipTransitionOptions = z.infer<typeof FlipTransitionOptionsSchema>;
+
+export const MorphTransitionOptionsSchema = morphTransitionObjectSchema
+  .pick({ duration: true, by: true, fallback: true })
+  .partial({ by: true })
+  .readonly();
+export type MorphTransitionOptions = z.infer<
+  typeof MorphTransitionOptionsSchema
+>;
 
 function declaration<Kind extends Transition["kind"]>(
   kind: Kind,
@@ -118,43 +153,29 @@ function declaration<Kind extends Transition["kind"]>(
 /** Creates baseline and extended transition values used for slide, layout, and master transition declarations. */
 export const transitions = Object.freeze({
   /** Uses baseline fade effect; defaults to slow speed. */
-  fade: (options: TransitionOptions = {}): StandardTransition =>
+  fade: (options: FadeTransitionOptions = {}): StandardTransition =>
     declaration("fade", options),
   /** Uses baseline strips effect toward the specified diagonal direction. */
-  strips: (
-    options: TransitionOptions & { readonly direction?: StripsDirection } = {},
-  ): StandardTransition =>
+  strips: (options: StripsTransitionOptions = {}): StandardTransition =>
     declaration("strips", {
       ...options,
       direction:
         options.direction === undefined ? "rightDown" : options.direction,
     }),
   /** Uses baseline push effect entering from the slide edge. */
-  push: (
-    options: TransitionOptions & { readonly from?: TransitionDirection } = {},
-  ): StandardTransition =>
+  push: (options: PushTransitionOptions = {}): StandardTransition =>
     declaration("push", {
       ...options,
       from: options.from === undefined ? "bottom" : options.from,
     }),
   /** Uses p14 Flip with an explicit baseline fallback for targets that exclude extensions. */
-  flip: (
-    options: TransitionOptions & {
-      readonly direction?: "left" | "right";
-      readonly fallback: StandardTransition;
-    },
-  ): FlipTransition =>
+  flip: (options: FlipTransitionOptions): FlipTransition =>
     declaration("flip", {
       ...options,
       direction: options.direction === undefined ? "right" : options.direction,
     }),
   /** Uses p159 Morph with an explicit baseline fallback for targets that exclude extensions. */
-  morph: (
-    options: TransitionOptions & {
-      readonly by?: "object" | "word" | "character";
-      readonly fallback: StandardTransition;
-    },
-  ): MorphTransition =>
+  morph: (options: MorphTransitionOptions): MorphTransition =>
     declaration("morph", {
       ...options,
       by: options.by === undefined ? "object" : options.by,

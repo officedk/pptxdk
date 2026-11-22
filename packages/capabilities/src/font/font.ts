@@ -27,10 +27,22 @@ export function font(
     throw new TypeError("Font options.substitute must be a boolean");
   }
   const validOptions = parsedOptions.data;
-  return Object.freeze({
+  const candidate = {
     family,
+    faces,
+    ...(validOptions.substitute === true ? { substitute: true } : {}),
+    ...(validOptions.embeddable === false ? { embeddable: false } : {}),
+  };
+  const parsedFont = fontSchema.safeParse(candidate);
+  if (!parsedFont.success) {
+    throw new TypeError(
+      parsedFont.error.issues[0]?.message ?? "Invalid Font declaration",
+    );
+  }
+  return Object.freeze({
+    ...parsedFont.data,
     faces: Object.freeze(
-      faces.map((face) =>
+      (parsedFont.data.faces ?? []).map((face) =>
         Object.freeze({
           ...face,
           ...(face.data === undefined
@@ -39,7 +51,5 @@ export function font(
         }),
       ),
     ),
-    ...(validOptions.substitute === true ? { substitute: true } : {}),
-    ...(validOptions.embeddable === false ? { embeddable: false } : {}),
   });
 }

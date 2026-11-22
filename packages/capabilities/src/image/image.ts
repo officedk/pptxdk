@@ -1,6 +1,5 @@
 import {
   CapabilityError,
-  layoutStyleKeys,
   parseCapabilityLayoutContract,
   type BoundObjectCapability,
   type BoundObjectNativeCollaboration,
@@ -59,6 +58,7 @@ import {
   ImageSourceSchema,
   imageAllowedParameters,
   imageDeclarationPropsSchema,
+  imageStyleSchema,
 } from "./image-schemas.ts";
 import { imageXml } from "./image-xml.ts";
 
@@ -564,10 +564,9 @@ export const imageCapability = {
     }
     const altValue = altParsed.data;
 
-    const allowedStyleKeys = new Set<string>([
-      ...layoutStyleKeys,
-      ...imageVisualStyleKeys,
-    ]);
+    const allowedStyleKeys = new Set<string>(
+      Object.keys(imageStyleSchema.unwrap().shape),
+    );
 
     const contract = parseCapabilityLayoutContract({
       nativeKind: "pic",

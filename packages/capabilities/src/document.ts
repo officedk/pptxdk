@@ -9,13 +9,7 @@ import {
   type SlideLayoutType,
   type SlideMasterProps,
 } from "@pptxdk/core";
-import type {
-  LayoutStyle,
-  LinkTarget,
-  PaddingStyle,
-  TextStyle,
-  VisualStyle,
-} from "@pptxdk/core/capability";
+import type { LinkTarget, TextStyle } from "@pptxdk/core/capability";
 import {
   CommonContainer,
   CommonNode,
@@ -260,7 +254,7 @@ export type SectionNode = CommonContainer<"section", SectionAuthorProps>;
 export type BoxNode = CommonContainer<
   "box",
   BoxAuthorProps,
-  LayoutStyle & TextStyle & VisualStyle
+  NonNullable<BoxDeclarationProps["style"]>
 >;
 export type ShapeNode = RichTextContainer<
   "shape",
@@ -270,7 +264,7 @@ export type ShapeNode = RichTextContainer<
 export type TextNode = RichTextContainer<
   "text",
   TextAuthorProps,
-  LayoutStyle & PaddingStyle & TextStyle & VisualStyle
+  NonNullable<TextDeclarationProps["style"]>
 >;
 export type NotesNode = RichTextContainer<"notes", NotesAuthorProps, TextStyle>;
 export type ImageNode = CommonNode<

@@ -1,18 +1,17 @@
 import {
   CapabilityError,
+  authorIdSchema,
   colorValueSchema,
-  isMorphKey,
   layoutStyleSchema,
   linkTargetSchema,
   nativePlaceholderRefSchema,
   textStyleSchema,
-  type MorphKey,
 } from "@pptxdk/core/capability";
 import { pxToEmu, xmlEscape } from "@pptxdk/emit";
 import { z } from "zod";
 
-import type { MotionProps } from "../motion/motion-api.ts";
-import type { MorphProps } from "../shared/morph-api.ts";
+import { MotionPropsSchema } from "../motion/motion-schemas.ts";
+import { MorphKeySchema } from "../shared/morph-api.ts";
 import { chartDataLabelPositions } from "./chart-labels.ts";
 
 const maximumLineWidthEmu = 20_116_800;
@@ -1730,12 +1729,14 @@ export const ChartExtentSchema = z
     }
   });
 
+const motionPropsShape = MotionPropsSchema.unwrap().shape;
+
 const chartPropsObjectSchema = z.strictObject({
-  id: z.string().optional(),
+  id: authorIdSchema.optional(),
   name: xmlStringSchema("Chart.name").optional(),
   placeholder: z.string().optional(),
   nativePlaceholder: nativePlaceholderRefSchema.optional(),
-  morphKey: z.custom<MorphKey>(isMorphKey).optional(),
+  morphKey: MorphKeySchema.optional(),
   link: linkTargetSchema.optional(),
   x: ChartCoordinateSchema.optional(),
   y: ChartCoordinateSchema.optional(),
@@ -1748,9 +1749,9 @@ const chartPropsObjectSchema = z.strictObject({
   legend: ChartLegendSchema.optional(),
   plotArea: ChartPlotAreaSchema.optional(),
   style: ChartStyleSchema.optional(),
-  enter: z.unknown().optional(),
-  emphasis: z.unknown().optional(),
-  motion: z.unknown().optional(),
+  enter: motionPropsShape.enter,
+  emphasis: motionPropsShape.emphasis,
+  motion: motionPropsShape.motion,
 });
 
 export const ChartPropsSchema = chartPropsObjectSchema.readonly();
@@ -1759,14 +1760,8 @@ export const chartAllowedPropKeys: readonly string[] = Object.keys(
   chartPropsObjectSchema.shape,
 );
 
-export type ChartBase = MotionProps &
-  MorphProps &
-  Omit<
-    z.infer<typeof ChartPropsSchema>,
-    "enter" | "emphasis" | "motion" | "morphKey"
-  >;
-
-export type ChartProps = ChartBase;
+export type ChartProps = z.infer<typeof ChartPropsSchema>;
+export type ChartBase = ChartProps;
 
 /** Maps a Zod validation issue inside chart authoring data to a stable `CapabilityError` code. */
 export function resolveChartZodError(

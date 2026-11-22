@@ -11,6 +11,7 @@ import type { z } from "zod";
 
 import {
   AdvanceAfterSchema,
+  TransitionKindSchema,
   TransitionSchema,
   type FlipTransition,
   type MorphTransition,
@@ -70,8 +71,6 @@ const morphOptions = {
   word: "byWord",
   character: "byChar",
 } as const;
-
-const supportedKinds = new Set(["fade", "strips", "push", "flip", "morph"]);
 
 type TransitionEmitInput<T extends Transition = Transition> = {
   readonly transition: T;
@@ -165,7 +164,7 @@ function parseTransitionValue(value: unknown): Transition {
       "Slide.transition is missing a valid transition declaration tag",
     );
   }
-  if (typeof raw["kind"] !== "string" || !supportedKinds.has(raw["kind"])) {
+  if (!TransitionKindSchema.safeParse(raw["kind"]).success) {
     return fail(
       "unsupported-transition",
       `Unsupported transition kind ${String(raw["kind"])}`,

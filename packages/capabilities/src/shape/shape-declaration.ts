@@ -1,23 +1,20 @@
 import {
+  authorIdSchema,
   colorValueSchema,
-  isMorphKey,
+  layoutStyleSchema,
   linkTargetSchema,
   textStyleSchema,
-  type ColorValue,
-  type LayoutStyle,
-  type LinkTarget,
-  type MorphKey,
-  type PaddingStyle,
+  visualStyleSchema,
 } from "@pptxdk/core/capability";
 import { RichTextContainer } from "@pptxdk/core/document";
 import { pxToEmu } from "@pptxdk/emit";
 import { z } from "zod";
 
-import type { MotionProps } from "../motion/motion-api.ts";
-import { geometrySchema, type Geometry } from "../shared/geometry.ts";
-import type { MorphProps } from "../shared/morph-api.ts";
-import type { TextStyle } from "../shared/text-service.ts";
-import type { ShapeVisualStyle } from "../shared/visual.ts";
+import { MotionPropsSchema } from "../motion/motion-schemas.ts";
+import { geometrySchema } from "../shared/geometry.ts";
+import { OptionalNameSchema } from "../shared/identity.ts";
+import { MorphKeySchema } from "../shared/morph-api.ts";
+import { lineEndStyleSchema } from "../shared/visual.ts";
 
 export const shapeCoordinateSchema = z
   .number()
@@ -34,10 +31,22 @@ export const shapeSizeSchema = z
     return extentEmu >= 1 && extentEmu <= 2_147_483_647;
   });
 
+const shapeStyleObjectSchema = z.strictObject({
+  ...layoutStyleSchema.unwrap().shape,
+  ...visualStyleSchema.unwrap().shape,
+  ...lineEndStyleSchema.unwrap().shape,
+  ...textStyleSchema.unwrap().shape,
+});
+
+export const shapeStyleSchema = shapeStyleObjectSchema.readonly();
+export type ShapeStyle = z.infer<typeof shapeStyleSchema>;
+
+const motionPropsShape = MotionPropsSchema.unwrap().shape;
+
 const shapeDeclarationPropsObjectSchema = z.strictObject({
-  id: z.string().optional(),
-  name: z.string().optional(),
-  morphKey: z.custom<MorphKey>(isMorphKey).optional(),
+  id: authorIdSchema.optional(),
+  name: OptionalNameSchema.optional(),
+  morphKey: MorphKeySchema.optional(),
   link: linkTargetSchema.optional(),
   geometry: geometrySchema.optional(),
   flipH: z.boolean().optional(),
@@ -46,13 +55,15 @@ const shapeDeclarationPropsObjectSchema = z.strictObject({
   y: shapeCoordinateSchema.optional(),
   width: shapeSizeSchema.optional(),
   height: shapeSizeSchema.optional(),
-  style: z.record(z.string(), z.unknown()).readonly().optional(),
+  style: shapeStyleSchema.optional(),
   fill: colorValueSchema.optional(),
+  /** Directly writes native text into this shape without creating an additional text box; mutually exclusive with children. */
   text: z.string().optional(),
+  /** Shape text uses shared text services and can still be emitted when text box capability is omitted. */
   textStyle: textStyleSchema.optional(),
-  enter: z.unknown().optional(),
-  emphasis: z.unknown().optional(),
-  motion: z.unknown().optional(),
+  enter: motionPropsShape.enter,
+  emphasis: motionPropsShape.emphasis,
+  motion: motionPropsShape.motion,
 });
 
 export const shapeDeclarationPropsKeys = [
@@ -63,25 +74,7 @@ export const shapeDeclarationPropsKeys = [
 export const shapeDeclarationPropsSchema =
   shapeDeclarationPropsObjectSchema.readonly();
 
-export type ShapeDeclarationProps = MotionProps &
-  MorphProps & {
-    readonly link?: LinkTarget;
-    readonly id?: string;
-    readonly name?: string;
-    readonly geometry?: Geometry;
-    readonly flipH?: boolean;
-    readonly flipV?: boolean;
-    readonly x?: number;
-    readonly y?: number;
-    readonly width?: number;
-    readonly height?: number;
-    readonly style?: LayoutStyle & ShapeVisualStyle & TextStyle & PaddingStyle;
-    readonly fill?: ColorValue;
-    /** Directly writes native text into this shape without creating an additional text box; mutually exclusive with children. */
-    readonly text?: string;
-    /** Shape text uses shared text services and can still be emitted when text box capability is omitted. */
-    readonly textStyle?: TextStyle;
-  };
+export type ShapeDeclarationProps = z.infer<typeof shapeDeclarationPropsSchema>;
 
 /** Creates the editable native shape shared by the command factory and the Shape JSX element. */
 export function createShapeNode(

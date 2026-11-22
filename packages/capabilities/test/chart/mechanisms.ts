@@ -2,8 +2,17 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
 import { Chart } from "@pptxdk/capabilities/chart-elements";
-import { chart, deck, font, slide } from "@pptxdk/capabilities/document";
-import { Deck, Slide } from "@pptxdk/react";
+import {
+  chart,
+  deck,
+  defineSlideLayout,
+  font,
+  slide,
+  slideLayout,
+  slideMaster,
+} from "@pptxdk/capabilities/document";
+import { Deck, Slide, SlideLayout, SlideMaster } from "@pptxdk/react";
+import { strFromU8, unzipSync } from "fflate";
 import { createElement } from "react";
 
 import type { CapabilityScenario } from "../acceptance-runner.ts";
@@ -356,6 +365,88 @@ function assertComboNative(
   assert.deepEqual(ch.embeddedWorkbook?.series, ch.series);
 }
 
+const chartHolderLayout = defineSlideLayout({
+  id: "chart-holder-layout",
+  name: "Chart Holder",
+  placeholders: {
+    plot: {
+      type: "chart",
+      explicitType: true,
+      idx: 12,
+      x: 50,
+      y: 40,
+      width: 320,
+      height: 200,
+      name: "Chart Slot",
+    },
+  },
+});
+
+const chartHolderProps = {
+  id: "ph-pie-chart",
+  legend: "bottom" as const,
+  style: { fontFamily: jostFont, fontSize: 11 },
+  groups: [
+    {
+      kind: "pie" as const,
+      data: {
+        kind: "shared-categories" as const,
+        categories: ["Direct", "Partner"],
+      },
+      series: [{ name: "Share", values: [60, 40] }],
+    },
+  ],
+};
+
+export const chartPlaceholderRoundtripScenario: CapabilityScenario = {
+  id: "mechanism-chart-placeholder-roundtrip",
+  capability: "chart",
+  description:
+    "Dual-author chart-placeholder mechanism scenario verifying inherited bounds and <p:ph> binding roundtrip.",
+  visualCheckpoints: [
+    "Page 1 paints a pie chart inside inherited layout bounds (50, 40, 320x200) with zero diagnostics.",
+  ],
+  nativeCheckpoints: [
+    "Both initial and roundtrip PPTX retain <p:nvPr><p:ph type='chart' idx='12'/></p:nvPr> and <p:xfrm> matching layout bounds.",
+  ],
+  jsx() {
+    return createElement(
+      Deck,
+      { width: 640, height: 360 },
+      createElement(
+        SlideMaster,
+        { id: "chart-master", name: "Chart Master" },
+        createElement(SlideLayout, { layout: chartHolderLayout }),
+      ),
+      createElement(Slide, {
+        id: "chart-ph-slide",
+        layout: chartHolderLayout,
+        placeholders: {
+          plot: createElement(Chart, chartHolderProps),
+        },
+      }),
+    );
+  },
+  document() {
+    return deck({ width: 640, height: 360 }).append(
+      slideMaster({ id: "chart-master", name: "Chart Master" }).append(
+        slideLayout(chartHolderLayout),
+      ),
+      slide({
+        id: "chart-ph-slide",
+        layout: chartHolderLayout,
+        placeholders: {
+          plot: chart(chartHolderProps),
+        },
+      }),
+    );
+  },
+  assert({ validation }) {
+    assert.equal(validation.errors.length, 0);
+    assert.equal(validation.slides.length, 1);
+  },
+};
+
 export type ChartMechanismKey =
   | "chart-column"
   | "chart-bar"
@@ -363,12 +454,37 @@ export type ChartMechanismKey =
   | "chart-area"
   | "chart-pie"
   | "chart-doughnut"
-  | "chart-scatter";
+  | "chart-scatter"
+  | "chart-placeholder";
 
 export const chartMechanismVerifications: Pick<
   ExhaustiveMechanismVerificationMap,
   ChartMechanismKey
 > = {
+  "chart-placeholder": {
+    scenario: chartPlaceholderRoundtripScenario,
+    assertNative({ stage, pptx, validation }) {
+      assert.equal(validation.errors.length, 0, `${stage} validation errors`);
+      const ch = validation.slides[0]?.objects[0];
+      assert.equal(ch?.kind, "chart", `${stage} chart kind`);
+      assert.deepEqual(ch?.placeholder, { type: "chart", idx: 12 });
+      assert.equal(ch?.hasLocalTransform, true);
+      assert.deepEqual(ch?.boxEmu, {
+        x: 50 * 9525,
+        y: 40 * 9525,
+        width: 320 * 9525,
+        height: 200 * 9525,
+      });
+      const slideXml = strFromU8(unzipSync(pptx)["ppt/slides/slide1.xml"]!);
+      assert.match(slideXml, /<p:ph type="chart" idx="12"\/>/u);
+    },
+    assertPaint({ initial, roundtrip }) {
+      assert.equal(initial.pages.length, 1);
+      assert.deepEqual(initial.pages[0]?.diagnostics, []);
+      assert.ok(initial.pages[0]?.png instanceof Uint8Array);
+      assert.equal(roundtrip.pages.length, 1);
+    },
+  },
   "chart-column": {
     scenario: chartComboRoundtripScenario,
     assertNative({ stage, validation }) {

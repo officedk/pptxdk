@@ -27,6 +27,7 @@ import {
 } from "@pptxdk/import";
 import { z } from "zod";
 
+import { isPlaceholderSpElement } from "../shared/placeholder-import.ts";
 import type { ParagraphStyle, TextList } from "../shared/text-service.ts";
 import {
   readDrawingColor,
@@ -40,7 +41,6 @@ import {
   type ParagraphDeclarationProps,
   type SpanDeclarationProps,
 } from "../text/text-declaration.ts";
-import { isPlaceholderSpElement } from "../text/text-import.ts";
 import {
   createShapeNode,
   type ShapeDeclarationProps,

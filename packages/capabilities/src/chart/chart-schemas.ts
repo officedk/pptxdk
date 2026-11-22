@@ -1,6 +1,7 @@
 import {
   CapabilityError,
   isMorphKey,
+  nativePlaceholderRefSchema,
   type ColorValue,
   type LayoutStyle,
   type LinkTarget,
@@ -1733,6 +1734,8 @@ export const ChartPropsSchema = z
   .strictObject({
     id: z.string().optional(),
     name: xmlStringSchema("Chart.name").optional(),
+    placeholder: z.string().optional(),
+    nativePlaceholder: nativePlaceholderRefSchema.optional(),
     morphKey: z.custom<MorphKey>(isMorphKey).optional(),
     link: z.custom<LinkTarget>().optional(),
     x: z.number().finite().min(-1_000_000).max(1_000_000).optional(),
@@ -1753,22 +1756,11 @@ export const ChartPropsSchema = z
   .readonly();
 
 export type ChartBase = MotionProps &
-  MorphProps & {
-    readonly id?: string;
-    readonly name?: string;
-    readonly link?: LinkTarget;
-    readonly x?: number;
-    readonly y?: number;
-    readonly width?: number;
-    readonly height?: number;
-    readonly axes?: ChartAxes;
-    readonly groups: readonly ChartGroup[];
-    readonly title?: ChartTitle;
-    readonly displayBlanksAs?: ChartDisplayBlanksAs;
-    readonly legend?: ChartLegend;
-    readonly plotArea?: ChartPlotArea;
-    readonly style?: ChartTextStyle & LayoutStyle;
-  };
+  MorphProps &
+  Omit<
+    z.infer<typeof ChartPropsSchema>,
+    "enter" | "emphasis" | "motion" | "morphKey"
+  >;
 
 export type ChartProps = ChartBase;
 

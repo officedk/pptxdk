@@ -1,5 +1,13 @@
-import type { ResolvedColor } from "@pptxdk/core/capability";
-import { pxToEmu, resolvedColorXml, xmlEscape } from "@pptxdk/emit";
+import type {
+  NativePlaceholderRef,
+  ResolvedColor,
+} from "@pptxdk/core/capability";
+import {
+  placeholderRefXml,
+  pxToEmu,
+  resolvedColorXml,
+  xmlEscape,
+} from "@pptxdk/emit";
 
 const tableUri = "http://schemas.openxmlformats.org/drawingml/2006/table";
 
@@ -68,6 +76,7 @@ export function tableFrameXml(
   heights: readonly number[],
   rows: readonly string[],
   linkXml: string,
+  placeholder?: NativePlaceholderRef,
 ): string {
   const columnXml = widths
     .map((width) => `<a:gridCol w="${pxToEmu(width)}"/>`)
@@ -77,5 +86,13 @@ export function tableFrameXml(
     .join("");
   const width = widths.reduce((sum, value) => sum + pxToEmu(value), 0);
   const height = heights.reduce((sum, value) => sum + pxToEmu(value), 0);
-  return `<p:graphicFrame><p:nvGraphicFramePr><p:cNvPr id="${id}" name="${escapedName}">${linkXml}</p:cNvPr><p:cNvGraphicFramePr/><p:nvPr/></p:nvGraphicFramePr><p:xfrm><a:off x="${pxToEmu(x)}" y="${pxToEmu(y)}"/><a:ext cx="${width}" cy="${height}"/></p:xfrm><a:graphic><a:graphicData uri="${tableUri}"><a:tbl><a:tblPr/><a:tblGrid>${columnXml}</a:tblGrid>${rowXml}</a:tbl></a:graphicData></a:graphic></p:graphicFrame>`;
+  const cNvGraphicFramePr =
+    placeholder === undefined
+      ? "<p:cNvGraphicFramePr/>"
+      : '<p:cNvGraphicFramePr><a:graphicFrameLocks noGrp="1"/></p:cNvGraphicFramePr>';
+  const nvPr =
+    placeholder === undefined
+      ? "<p:nvPr/>"
+      : `<p:nvPr>${placeholderRefXml(placeholder)}</p:nvPr>`;
+  return `<p:graphicFrame><p:nvGraphicFramePr><p:cNvPr id="${id}" name="${escapedName}">${linkXml}</p:cNvPr>${cNvGraphicFramePr}${nvPr}</p:nvGraphicFramePr><p:xfrm><a:off x="${pxToEmu(x)}" y="${pxToEmu(y)}"/><a:ext cx="${width}" cy="${height}"/></p:xfrm><a:graphic><a:graphicData uri="${tableUri}"><a:tbl><a:tblPr/><a:tblGrid>${columnXml}</a:tblGrid>${rowXml}</a:tbl></a:graphicData></a:graphic></p:graphicFrame>`;
 }

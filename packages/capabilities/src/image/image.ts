@@ -1,6 +1,5 @@
 import {
   CapabilityError,
-  isMorphKey,
   layoutStyleKeys,
   parseCapabilityLayoutContract,
   type BoundObjectCapability,
@@ -12,7 +11,7 @@ import {
   type EmitContext,
   type EmitOutput,
   type GeometryBox,
-  type MorphKey,
+  type NativePlaceholderRef,
   type ObjectCapabilityModule,
   type ObjectResolveContext,
   type PaintContext,
@@ -27,8 +26,13 @@ import { evaluateGeometry, type Geometry } from "../shared/geometry.ts";
 import {
   nativeLinkXml,
   parseLinkTarget,
+  parseMorphKey,
   parseOptionalName,
 } from "../shared/identity.ts";
+import {
+  hasLocalDeclaration,
+  resolvePlaceholderGeometry,
+} from "../shared/style-inheritance.ts";
 import {
   emitVisualModel,
   resolveVisualModel,
@@ -42,7 +46,10 @@ import {
   readImage,
   type LoadedImage,
 } from "./image-decode.ts";
-import { imageImportHandler } from "./image-import.ts";
+import {
+  imageImportHandler,
+  picturePlaceholderImportHandler,
+} from "./image-import.ts";
 import {
   ExternalImageSourceSchema,
   ImageCoordinateValueSchema,
@@ -50,6 +57,8 @@ import {
   ImageExtentValueSchema,
   ImageFitSchema,
   ImageSourceSchema,
+  imageAllowedParameters,
+  imageDeclarationPropsSchema,
 } from "./image-schemas.ts";
 import { imageXml } from "./image-xml.ts";
 
@@ -88,6 +97,10 @@ type ResolvedImageModel = {
   readonly visual: ResolvedVisualModel;
   readonly name: string;
   readonly alt?: string;
+  readonly placeholder?: {
+    readonly nativeRef: NativePlaceholderRef;
+    readonly omitSpPrTransform: boolean;
+  };
 };
 
 function roundSvgNumber(value: number): string {
@@ -174,6 +187,14 @@ function emitImageModel(
       properties.xml,
       properties.opacity,
       nativeLinkXml(emitContext.nativeLink),
+      model.placeholder === undefined
+        ? undefined
+        : {
+            nativeRef: model.placeholder.nativeRef,
+            ...(model.placeholder.omitSpPrTransform
+              ? { spPrXml: "<p:spPr/>" }
+              : {}),
+          },
     ),
   };
 }
@@ -370,29 +391,6 @@ function imagePlacement(
   return { box, sourceCrop: { l, t, r, b } };
 }
 
-const allowedParameters = [
-  "id",
-  "name",
-  "placeholder",
-  "nativePlaceholder",
-  "morphKey",
-  "link",
-  "src",
-  "alt",
-  "x",
-  "y",
-  "width",
-  "height",
-  "geometry",
-  "flipH",
-  "flipV",
-  "style",
-  "fit",
-  "crop",
-  "enter",
-  "emphasis",
-  "motion",
-] as const;
 const imageCompatiblePlaceholderRoles = new Set<string>([
   "pic",
   "clipArt",
@@ -505,19 +503,28 @@ export const imageMechanism = defineCanvasMechanism({
   import: imageImportHandler,
 });
 
+/** Typed native canvas mechanism connecting emit, paint, and import for `picture-placeholder`. */
+export const picturePlaceholderMechanism = defineCanvasMechanism({
+  key: "picture-placeholder",
+  role: "canvas",
+  emit: emitImageModel,
+  paint: paintImageModel,
+  import: picturePlaceholderImportHandler,
+});
+
 /** Image module reads and validates formal resources, encapsulates bound state, and emits native picture objects. */
 export const imageCapability = {
   declaration: "image",
-  mechanisms: [imageMechanism] as const,
+  mechanisms: [imageMechanism, picturePlaceholderMechanism] as const,
 
   bind(
     input: CapabilityInput,
     context: CapabilityParseContext,
   ): BoundObjectCapability {
-    if (context.placeholder !== undefined) {
+    const placeholder = context.placeholder;
+    if (placeholder !== undefined) {
       const role =
-        context.placeholder.layoutPlaceholder?.type ??
-        context.placeholder.nativeRef.type;
+        placeholder.layoutPlaceholder?.type ?? placeholder.nativeRef.type;
       if (!imageCompatiblePlaceholderRoles.has(role)) {
         throw new CapabilityError(
           "incompatible-placeholder-content",
@@ -526,7 +533,7 @@ export const imageCapability = {
       }
     }
     const unknown = Object.keys(input.props).find(
-      (key) => !(allowedParameters as readonly string[]).includes(key),
+      (key) => !imageAllowedParameters.includes(key),
     );
     if (unknown !== undefined) {
       throw new CapabilityError(
@@ -546,23 +553,16 @@ export const imageCapability = {
     }
 
     const requestedName = parseOptionalName(input.props["name"]);
-    const rawMorphKey = input.props["morphKey"];
-    let morphKey: MorphKey | undefined;
-    if (rawMorphKey !== undefined) {
-      if (!isMorphKey(rawMorphKey)) {
-        throw new CapabilityError(
-          "invalid-morph-key",
-          "morphKey must be created by createMorphScope().handle(name)",
-        );
-      }
-      morphKey = rawMorphKey;
-    }
+    const morphKey = parseMorphKey(input.props["morphKey"]);
     const link = parseLinkTarget(input.props["link"]);
 
-    const altValue = input.props["alt"];
-    if (altValue !== undefined && typeof altValue !== "string") {
+    const altParsed = imageDeclarationPropsSchema
+      .unwrap()
+      .shape.alt.safeParse(input.props["alt"]);
+    if (!altParsed.success) {
       throw new CapabilityError("invalid-parameter", "alt must be a string");
     }
+    const altValue = altParsed.data;
 
     const allowedStyleKeys = new Set<string>([
       ...layoutStyleKeys,
@@ -611,14 +611,25 @@ export const imageCapability = {
       image: true,
     });
 
-    const declaredX = input.props["x"];
-    const declaredY = input.props["y"];
-    const requestedWidth = requestedDimension(imageStyle, input.props, "width");
-    const requestedHeight = requestedDimension(
-      imageStyle,
-      input.props,
-      "height",
-    );
+    const placeholderGeometry =
+      placeholder === undefined
+        ? undefined
+        : resolvePlaceholderGeometry(placeholder, input.props);
+    const hasLocalVisualOverride =
+      geometry !== undefined ||
+      flipH === true ||
+      flipV === true ||
+      [...imageVisualStyleKeys].some(
+        (key) => key !== "opacity" && hasLocalDeclaration(imageStyle, key),
+      );
+    const declaredX = placeholderGeometry?.x ?? input.props["x"];
+    const declaredY = placeholderGeometry?.y ?? input.props["y"];
+    const requestedWidth =
+      requestedDimension(imageStyle, input.props, "width") ??
+      placeholderGeometry?.width;
+    const requestedHeight =
+      requestedDimension(imageStyle, input.props, "height") ??
+      placeholderGeometry?.height;
     const authorId =
       typeof input.props["id"] === "string" ? input.props["id"] : undefined;
     const motionProps: Readonly<Record<string, unknown>> = {
@@ -714,6 +725,11 @@ export const imageCapability = {
           { x, y, width, height },
         );
         const { box } = placement;
+        const boxChangedByFit =
+          Math.abs(box.x - x) > 0.01 ||
+          Math.abs(box.y - y) > 0.01 ||
+          Math.abs(box.width - width) > 0.01 ||
+          Math.abs(box.height - height) > 0.01;
         const resolvedVisual = resolveVisualModel({
           theme: resolveContext.theme,
           style: imageStyle,
@@ -726,6 +742,7 @@ export const imageCapability = {
         const name =
           resolveContext.morphName ??
           requestedName ??
+          placeholder?.layoutPlaceholder?.name ??
           `Image ${resolveContext.id - 1}`;
         try {
           assertXml10Characters(name);
@@ -750,13 +767,30 @@ export const imageCapability = {
             (typeof imageStyle["borderWidth"] === "number" &&
               imageStyle["borderWidth"] > 0),
         });
+        const omitSpPrTransform =
+          placeholder !== undefined &&
+          placeholderGeometry?.hasLocalBoxOverride !== true &&
+          !hasLocalVisualOverride &&
+          !boxChangedByFit;
         const model: ResolvedImageModel = {
           image,
           placement,
           visual: resolvedVisual,
           name,
           ...(altValue === undefined ? {} : { alt: altValue }),
+          ...(placeholder === undefined
+            ? {}
+            : {
+                placeholder: {
+                  nativeRef: placeholder.nativeRef,
+                  omitSpPrTransform,
+                },
+              }),
         };
+        const mechanism =
+          placeholder === undefined
+            ? imageMechanism
+            : picturePlaceholderMechanism;
 
         return {
           observation: {
@@ -778,11 +812,11 @@ export const imageCapability = {
           ...(annotations.length === 0 ? {} : { annotations }),
 
           emit(emitContext: EmitContext): EmitOutput {
-            return emitImageModel(model, emitContext);
+            return mechanism.emit(model, emitContext);
           },
 
           paint(paintContext: PaintContext): PaintOutput {
-            return paintImageModel(model, paintContext);
+            return mechanism.paint(model, paintContext);
           },
         };
       },

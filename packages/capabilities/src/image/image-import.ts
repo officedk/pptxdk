@@ -1,6 +1,8 @@
 import {
+  matchLayoutPlaceholderKey,
   schemeColorNameSchema,
   type ColorValue,
+  type NativePlaceholderRef,
   type Shadow,
 } from "@pptxdk/core/capability";
 import {
@@ -36,6 +38,10 @@ import {
   type PresetGeometryName,
 } from "../shared/geometry.ts";
 import { readClickLink, type ClickLinkReadResult } from "../shared/identity.ts";
+import {
+  isPlaceholderPicElement,
+  readNvPrPlaceholder,
+} from "../shared/placeholder-import.ts";
 import {
   createImageNode,
   type ImageDeclarationProps,
@@ -563,7 +569,7 @@ function readEffectList(
 export function readImagePic(
   context: ShapeTreeImportContext,
 ): ShapeTreeImportOutcome {
-  const { cursor, part, slideIndex } = context;
+  const { cursor, part, slideIndex, layoutPlaceholders } = context;
   const diagnostics: ImportDiagnostic[] = [];
 
   const nvPicPr = cursor.child(P_NS, "nvPicPr");
@@ -629,8 +635,6 @@ export function readImagePic(
       picLocks.consumeAttr("preferRelativeResize");
     }
   }
-  nvPicPr.ignoreEmptyChild(P_NS, "nvPr");
-
   const picLocation: ImportLocation = {
     part,
     xpath: cursor.xpath,
@@ -638,6 +642,13 @@ export function readImagePic(
     ...(objectId === undefined ? {} : { objectId }),
     ...(objectName === undefined ? {} : { objectName }),
   };
+  const nvPr = nvPicPr.child(P_NS, "nvPr");
+  const phResult = readNvPrPlaceholder(nvPr, picLocation, diagnostics);
+  if (phResult.kind === "error") {
+    return { diagnostics };
+  }
+  const nativeRef: NativePlaceholderRef | undefined =
+    phResult.kind === "ok" ? phResult.nativeRef : undefined;
 
   const cascadedForPicture: CascadedOmission[] =
     clickResult?.clickLocation !== undefined
@@ -698,7 +709,16 @@ export function readImagePic(
       opacity = parsedAlpha.data.amt / 100_000;
     }
   }
-  blip.ignoreEmptyChild(A_NS, "extLst");
+  const blipExtLst = blip.child(A_NS, "extLst");
+  if (blipExtLst !== undefined) {
+    for (const ext of blipExtLst.children(A_NS, "ext")) {
+      if (ext.attr("uri") === "{28A0092B-C50C-407E-A947-70E740481C1C}") {
+        for (const child of ext.remainingElementChildren()) {
+          child.consumeAttr("val");
+        }
+      }
+    }
+  }
 
   let src: ImageSource;
   const relationships = context.relationships ?? new Map();
@@ -800,60 +820,98 @@ export function readImagePic(
     stretch.ignoreEmptyChild(A_NS, "fillRect");
   }
 
+  const matchedKey =
+    nativeRef === undefined
+      ? undefined
+      : matchLayoutPlaceholderKey(layoutPlaceholders, {
+          type: nativeRef.type,
+          idx: nativeRef.idx,
+        });
+  const matchedLayoutPh =
+    matchedKey === undefined ? undefined : layoutPlaceholders?.[matchedKey];
+
+  let localX: number | undefined;
+  let localY: number | undefined;
+  let localWidth: number | undefined;
+  let localHeight: number | undefined;
+  let rotate: number | undefined;
+  let flipH: true | undefined;
+  let flipV: true | undefined;
+
   const xfrm = spPr.child(A_NS, "xfrm");
-  const off = xfrm?.child(A_NS, "off");
-  const ext = xfrm?.child(A_NS, "ext");
-  if (xfrm === undefined || off === undefined || ext === undefined) {
-    diagnostics.push({
-      code: "corrupt-part",
-      category: "corrupt-input",
-      disposition: "omitted",
-      location: picLocation,
-      ...(cascadedForPicture.length === 0
-        ? {}
-        : { cascaded: cascadedForPicture }),
-    });
-    return { diagnostics };
-  }
+  if (xfrm === undefined) {
+    if (nativeRef === undefined) {
+      diagnostics.push({
+        code: "corrupt-part",
+        category: "corrupt-input",
+        disposition: "omitted",
+        location: picLocation,
+        ...(cascadedForPicture.length === 0
+          ? {}
+          : { cascaded: cascadedForPicture }),
+      });
+      return { diagnostics };
+    }
+  } else {
+    const off = xfrm.child(A_NS, "off");
+    const ext = xfrm.child(A_NS, "ext");
+    if (off === undefined || ext === undefined) {
+      diagnostics.push({
+        code: "corrupt-part",
+        category: "corrupt-input",
+        disposition: "omitted",
+        location: picLocation,
+        ...(cascadedForPicture.length === 0
+          ? {}
+          : { cascaded: cascadedForPicture }),
+      });
+      return { diagnostics };
+    }
 
-  const rawXfrm = xfrm.attrsObject(["rot", "flipH", "flipV"]);
-  const parsedXfrm = TransformAttributesFragmentSchema.safeParse(rawXfrm);
-  const rawOff = off.attrsObject(["x", "y"]);
-  const parsedOff = OffsetEmuFragmentSchema.safeParse(rawOff);
-  const rawExt = ext.attrsObject(["cx", "cy"]);
-  const parsedExt = ExtentEmuFragmentSchema.safeParse(rawExt);
-  if (!parsedOff.success || !parsedExt.success) {
-    diagnostics.push({
-      code: "invalid-xml-value",
-      category: "corrupt-input",
-      disposition: "omitted",
-      location: { ...picLocation, xpath: xfrm.xpath },
-      attributeOrElement: "a:xfrm",
-      ...(cascadedForPicture.length === 0
-        ? {}
-        : { cascaded: cascadedForPicture }),
-    });
-    return { diagnostics };
-  }
+    const rawXfrm = xfrm.attrsObject(["rot", "flipH", "flipV"]);
+    const parsedXfrm = TransformAttributesFragmentSchema.safeParse(rawXfrm);
+    const rawOff = off.attrsObject(["x", "y"]);
+    const parsedOff = OffsetEmuFragmentSchema.safeParse(rawOff);
+    const rawExt = ext.attrsObject(["cx", "cy"]);
+    const parsedExt = ExtentEmuFragmentSchema.safeParse(rawExt);
+    if (!parsedOff.success || !parsedExt.success) {
+      diagnostics.push({
+        code: "invalid-xml-value",
+        category: "corrupt-input",
+        disposition: "omitted",
+        location: { ...picLocation, xpath: xfrm.xpath },
+        attributeOrElement: "a:xfrm",
+        ...(cascadedForPicture.length === 0
+          ? {}
+          : { cascaded: cascadedForPicture }),
+      });
+      return { diagnostics };
+    }
 
-  const width = emuToPx(parsedExt.data.cx);
-  const height = emuToPx(parsedExt.data.cy);
-  const rotate =
-    parsedXfrm.success &&
-    parsedXfrm.data.rot !== undefined &&
-    parsedXfrm.data.rot !== 0
-      ? parsedXfrm.data.rot / 60_000
-      : undefined;
-  const flipH =
-    parsedXfrm.success && parsedXfrm.data.flipH === true ? true : undefined;
-  const flipV =
-    parsedXfrm.success && parsedXfrm.data.flipV === true ? true : undefined;
+    localX = emuToPx(parsedOff.data.x);
+    localY = emuToPx(parsedOff.data.y);
+    localWidth = emuToPx(parsedExt.data.cx);
+    localHeight = emuToPx(parsedExt.data.cy);
+    rotate =
+      parsedXfrm.success &&
+      parsedXfrm.data.rot !== undefined &&
+      parsedXfrm.data.rot !== 0
+        ? parsedXfrm.data.rot / 60_000
+        : undefined;
+    flipH =
+      parsedXfrm.success && parsedXfrm.data.flipH === true ? true : undefined;
+    flipV =
+      parsedXfrm.success && parsedXfrm.data.flipV === true ? true : undefined;
+  }
 
   const geometry = readPictureGeometry(
     spPr,
     part,
     slideIndex,
-    { width, height },
+    {
+      width: localWidth ?? matchedLayoutPh?.width ?? 100,
+      height: localHeight ?? matchedLayoutPh?.height ?? 100,
+    },
     diagnostics,
   );
   spPr.ignoreEmptyChild(A_NS, "noFill");
@@ -884,12 +942,14 @@ export function readImagePic(
   const props: ImageDeclarationProps = {
     src,
     ...(objectName === undefined ? {} : { name: objectName }),
+    ...(matchedKey === undefined ? {} : { placeholder: matchedKey }),
+    ...(nativeRef === undefined ? {} : { nativePlaceholder: nativeRef }),
     ...(alt === undefined ? {} : { alt }),
     ...(clickResult?.link === undefined ? {} : { link: clickResult.link }),
-    x: emuToPx(parsedOff.data.x),
-    y: emuToPx(parsedOff.data.y),
-    width,
-    height,
+    ...(localX === undefined ? {} : { x: localX }),
+    ...(localY === undefined ? {} : { y: localY }),
+    ...(localWidth === undefined ? {} : { width: localWidth }),
+    ...(localHeight === undefined ? {} : { height: localHeight }),
     ...(geometry === undefined ? {} : { geometry }),
     ...(flipH === undefined ? {} : { flipH }),
     ...(flipV === undefined ? {} : { flipV }),
@@ -918,5 +978,13 @@ export function readImagePic(
 export const imageImportHandler: ShapeTreeImportHandler = {
   target: "shape-tree",
   localName: "pic",
+  matches: (cursor) => !isPlaceholderPicElement(cursor),
+  read: readImagePic,
+};
+
+export const picturePlaceholderImportHandler: ShapeTreeImportHandler = {
+  target: "shape-tree",
+  localName: "pic",
+  matches: isPlaceholderPicElement,
   read: readImagePic,
 };

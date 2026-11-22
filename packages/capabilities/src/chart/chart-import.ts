@@ -1,8 +1,10 @@
-import type {
-  ColorValue,
-  LinkTarget,
-  NativeColorSlot,
-  ThemeShade,
+import {
+  matchLayoutPlaceholderKey,
+  type ColorValue,
+  type LinkTarget,
+  type NativeColorSlot,
+  type NativePlaceholderRef,
+  type ThemeShade,
 } from "@pptxdk/core/capability";
 import {
   A_NS,
@@ -24,6 +26,7 @@ import {
   parseXmlPart,
   resolvePartPath,
   type ImportDiagnostic,
+  type ImportLocation,
   type PptxPackage,
   type ShapeTreeImportContext,
   type ShapeTreeImportHandler,
@@ -31,6 +34,10 @@ import {
 } from "@pptxdk/import";
 import { z } from "zod";
 
+import {
+  isPlaceholderGraphicFrameElement,
+  readNvPrPlaceholder,
+} from "../shared/placeholder-import.ts";
 import { createChartNode } from "./chart-declaration.ts";
 import type {
   ChartAxes,
@@ -62,7 +69,6 @@ const C14_NS = "http://schemas.microsoft.com/office/drawing/2007/8/2/chart";
 const C15_NS = "http://schemas.microsoft.com/office/drawing/2012/chart";
 const WPS_ET_NS = "https://web.wps.cn/et/2018/main";
 
-const P14_MOD_ID_EXT_URI = "{D42A27DB-BD31-4B8C-83A1-F6EECF244321}";
 const C15_CAT_RANGE_EXT_URI = "{02D57815-91ED-43cb-92C2-25804820EDAC}";
 const C15_DLBL_RANGE_FLAG_EXT_URI = "{CE6537A1-D6FC-4f65-9D91-7224C49458BB}";
 const C16_UNIQUE_ID_EXT_URI = "{C3380CC4-5D6E-409C-BE32-E72D297353CC}";
@@ -2070,7 +2076,13 @@ function readLinkFromCNvPr(
 export function readChartGraphicFrame(
   context: ShapeTreeImportContext,
 ): ShapeTreeImportOutcome {
-  const { cursor, part, slideIndex, package: pkg } = context;
+  const {
+    cursor,
+    part,
+    slideIndex,
+    package: pkg,
+    layoutPlaceholders,
+  } = context;
   const diagnostics: ImportDiagnostic[] = [];
 
   const nvGraphicFramePr = cursor.child(P_NS, "nvGraphicFramePr");
@@ -2118,17 +2130,27 @@ export function readChartGraphicFrame(
     if (locks !== undefined) consumeSubtree(locks);
   }
 
+  const chartLocation: ImportLocation = {
+    part,
+    xpath: cursor.xpath,
+    slideIndex,
+    ...(objectId === undefined ? {} : { objectId }),
+    ...(objectName === undefined ? {} : { objectName }),
+  };
   const nvPr = nvGraphicFramePr.child(P_NS, "nvPr");
-  if (nvPr !== undefined) {
-    const extLst = nvPr.child(P_NS, "extLst");
-    if (extLst !== undefined) {
-      for (const ext of extLst.children(P_NS, "ext")) {
-        if (ext.attr("uri") === P14_MOD_ID_EXT_URI) {
-          consumeSubtree(ext);
-        }
-      }
-    }
+  const phResult = readNvPrPlaceholder(nvPr, chartLocation, diagnostics);
+  if (phResult.kind === "error") {
+    return { diagnostics };
   }
+  const nativeRef: NativePlaceholderRef | undefined =
+    phResult.kind === "ok" ? phResult.nativeRef : undefined;
+  const matchedKey =
+    nativeRef === undefined
+      ? undefined
+      : matchLayoutPlaceholderKey(layoutPlaceholders, {
+          type: nativeRef.type,
+          idx: nativeRef.idx,
+        });
 
   const xfrm = cursor.child(P_NS, "xfrm");
   const off = xfrm?.child(A_NS, "off");
@@ -2497,6 +2519,8 @@ export function readChartGraphicFrame(
 
   const props: ChartProps = {
     ...(objectName === undefined ? {} : { name: objectName }),
+    ...(matchedKey === undefined ? {} : { placeholder: matchedKey }),
+    ...(nativeRef === undefined ? {} : { nativePlaceholder: nativeRef }),
     ...(link === undefined ? {} : { link }),
     x: boxX,
     y: boxY,
@@ -2516,9 +2540,20 @@ export function readChartGraphicFrame(
   };
 }
 
+/** Shape-tree import handler wired into free chart canvas mechanisms. */
 export const chartImportHandler: ShapeTreeImportHandler = {
   target: "shape-tree",
   localName: "graphicFrame",
-  matches: isChartGraphicFrame,
+  matches: (cursor) =>
+    isChartGraphicFrame(cursor) && !isPlaceholderGraphicFrameElement(cursor),
+  read: readChartGraphicFrame,
+};
+
+/** Shape-tree import handler wired into `chartPlaceholderMechanism` for placeholder-bound charts. */
+export const chartPlaceholderImportHandler: ShapeTreeImportHandler = {
+  target: "shape-tree",
+  localName: "graphicFrame",
+  matches: (cursor) =>
+    isChartGraphicFrame(cursor) && isPlaceholderGraphicFrameElement(cursor),
   read: readChartGraphicFrame,
 };

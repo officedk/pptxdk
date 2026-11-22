@@ -135,7 +135,7 @@ export type SlideLayoutSource<P extends PlaceholderMap = PlaceholderMap> =
 export function defineSlideLayout<
   const P extends PlaceholderMap = EmptyPlaceholderMap,
 >(spec: SlideLayoutAuthorDataProps<P>): SlideLayoutDefinition<P> {
-  return defineCoreSlideLayout<P>(spec as SlideLayoutDataProps<P>);
+  return defineCoreSlideLayout<P>(spec);
 }
 
 export type InferPlaceholderMap<L> =
@@ -357,9 +357,7 @@ export function slideLayout<
     | SlideLayoutAuthorDataProps<P>
     | SlideLayoutDefinition<P> = {},
 ): SlideLayoutNode<P> {
-  return createSlideLayoutNode<P>(
-    propsOrDefinition as SlideLayoutProps<P> | SlideLayoutDefinition<P>,
-  );
+  return createSlideLayoutNode<P>(propsOrDefinition);
 }
 
 export type ImperativeSlideProps<

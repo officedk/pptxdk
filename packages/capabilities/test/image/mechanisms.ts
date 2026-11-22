@@ -1,9 +1,17 @@
 import assert from "node:assert/strict";
 
-import { deck, image, slide } from "@pptxdk/capabilities/document";
+import {
+  deck,
+  defineSlideLayout,
+  image,
+  slide,
+  slideLayout,
+  slideMaster,
+} from "@pptxdk/capabilities/document";
 import { Image } from "@pptxdk/capabilities/image-elements";
 import { path, preset } from "@pptxdk/capabilities/shape";
-import { Deck, Slide } from "@pptxdk/react";
+import { Deck, Slide, SlideLayout, SlideMaster } from "@pptxdk/react";
+import { strFromU8, unzipSync } from "fflate";
 import { PNG } from "pngjs";
 import { createElement } from "react";
 
@@ -168,6 +176,81 @@ export const imageRoundtripScenario: CapabilityScenario = {
   },
 };
 
+const pictureHolderLayout = defineSlideLayout({
+  id: "picture-holder-layout",
+  name: "Picture Holder",
+  placeholders: {
+    photo: {
+      type: "pic",
+      explicitType: true,
+      idx: 10,
+      sz: "quarter",
+      x: 48,
+      y: 48,
+      width: 240,
+      height: 120,
+      name: "Photo Slot",
+    },
+  },
+});
+
+export const picturePlaceholderRoundtripScenario: CapabilityScenario = {
+  id: "mechanism-picture-placeholder-roundtrip",
+  capability: "image",
+  description:
+    "Dual-author picture-placeholder mechanism scenario verifying inherited bounds without local <a:xfrm>, crop preservation, and roundtrip.",
+  visualCheckpoints: [
+    "Page 1 paints image inside inherited layout bounds (48, 48, 240x120) with zero diagnostics.",
+  ],
+  nativeCheckpoints: [
+    "Both initial and roundtrip PPTX retain <p:nvPr><p:ph type='pic' sz='quarter' idx='10'/></p:nvPr>, empty <p:spPr/> without <a:xfrm>, and inherited boxEmu.",
+  ],
+  jsx() {
+    return createElement(
+      Deck,
+      { width: 640, height: 360 },
+      createElement(
+        SlideMaster,
+        { id: "pic-master", name: "Pic Master" },
+        createElement(SlideLayout, { layout: pictureHolderLayout }),
+      ),
+      createElement(Slide, {
+        id: "pic-ph-slide",
+        layout: pictureHolderLayout,
+        placeholders: {
+          photo: createElement(Image, {
+            id: "hero-photo",
+            src: samplePng,
+            crop: { left: 0.1, right: 0.1 },
+          }),
+        },
+      }),
+    );
+  },
+  document() {
+    return deck({ width: 640, height: 360 }).append(
+      slideMaster({ id: "pic-master", name: "Pic Master" }).append(
+        slideLayout(pictureHolderLayout),
+      ),
+      slide({
+        id: "pic-ph-slide",
+        layout: pictureHolderLayout,
+        placeholders: {
+          photo: image({
+            id: "hero-photo",
+            src: samplePng,
+            crop: { left: 0.1, right: 0.1 },
+          }),
+        },
+      }),
+    );
+  },
+  assert({ validation }) {
+    assert.equal(validation.slides.length, 1);
+    assert.equal(validation.slides[0]?.objects.length, 1);
+  },
+};
+
 export const imageMechanismVerifications = {
   image: {
     scenario: imageRoundtripScenario,
@@ -207,6 +290,39 @@ export const imageMechanismVerifications = {
     Extract<
       import("../mechanism-verification.ts").ProductionMechanism,
       { readonly key: "image" }
+    >
+  >,
+  "picture-placeholder": {
+    scenario: picturePlaceholderRoundtripScenario,
+    assertNative({ stage, pptx, validation }) {
+      assert.equal(validation.errors.length, 0, `${stage} validation errors`);
+      assert.equal(validation.slides.length, 1);
+      const pic = validation.slides[0]?.objects[0];
+      assert.equal(pic?.kind, "image", `${stage} pic kind`);
+      assert.deepEqual(pic?.placeholder, { type: "pic", idx: 10 });
+      assert.equal(pic?.hasLocalTransform, false);
+      assert.deepEqual(pic?.boxEmu, {
+        x: 48 * 9525,
+        y: 48 * 9525,
+        width: 240 * 9525,
+        height: 120 * 9525,
+      });
+      assert.deepEqual(pic?.crop, { left: 10000, right: 10000 });
+      const slideXml = strFromU8(unzipSync(pptx)["ppt/slides/slide1.xml"]!);
+      assert.match(slideXml, /<p:ph type="pic" sz="quarter" idx="10"\/>/u);
+      assert.match(slideXml, /<p:spPr\/>/u);
+    },
+    assertPaint({ initial, roundtrip }) {
+      for (const preview of [initial, roundtrip]) {
+        assert.equal(preview.pages.length, 1);
+        assert.deepEqual(preview.pages[0]?.diagnostics, []);
+        assert.ok(preview.pages[0]?.png instanceof Uint8Array);
+      }
+    },
+  } satisfies MechanismVerificationEntry<
+    Extract<
+      import("../mechanism-verification.ts").ProductionMechanism,
+      { readonly key: "picture-placeholder" }
     >
   >,
 } as const;

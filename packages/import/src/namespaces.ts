@@ -23,6 +23,27 @@ export const REL_SLIDE_MASTER =
   "http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideMaster";
 export const REL_THEME =
   "http://schemas.openxmlformats.org/officeDocument/2006/relationships/theme";
+export const REL_IMAGE =
+  "http://schemas.openxmlformats.org/officeDocument/2006/relationships/image";
+export const REL_HYPERLINK =
+  "http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink";
+export const REL_DIAGRAM_DATA =
+  "http://schemas.openxmlformats.org/officeDocument/2006/relationships/diagramData";
+export const REL_DIAGRAM_LAYOUT =
+  "http://schemas.openxmlformats.org/officeDocument/2006/relationships/diagramLayout";
+export const REL_DIAGRAM_QUICK_STYLE =
+  "http://schemas.openxmlformats.org/officeDocument/2006/relationships/diagramQuickStyle";
+export const REL_DIAGRAM_COLORS =
+  "http://schemas.openxmlformats.org/officeDocument/2006/relationships/diagramColors";
+export const REL_DIAGRAM_DRAWING =
+  "http://schemas.microsoft.com/office/2007/relationships/diagramDrawing";
+
+export const DIAGRAM_NS =
+  "http://schemas.openxmlformats.org/drawingml/2006/diagram";
+export const CHART_NS =
+  "http://schemas.openxmlformats.org/drawingml/2006/chart";
+export const TABLE_NS_URI =
+  "http://schemas.openxmlformats.org/drawingml/2006/table";
 
 // ISO/IEC 29500 Strict OOXML (Detect & Reject with unsupported-format-baseline)
 export const STRICT_NS_PREFIX = "http://purl.oclc.org/ooxml/";
@@ -42,6 +63,8 @@ const canonicalPrefixes: ReadonlyMap<string, string> = new Map([
   [A_NS, "a"],
   [R_NS, "r"],
   [MC_NS, "mc"],
+  [DIAGRAM_NS, "dgm"],
+  [CHART_NS, "c"],
   [XML_NS, "xml"],
 ]);
 

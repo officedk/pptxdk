@@ -13,6 +13,7 @@ import {
   type ShapeTreeImportOutcome,
 } from "@pptxdk/import";
 
+import { imageImportHandler } from "../image/image-import.ts";
 import {
   readNonVisualCommonProperties,
   readShapeSp,
@@ -25,6 +26,33 @@ import {
 } from "./group-declaration.ts";
 
 const identityMapper: BoxCoordinateMapper = (box) => box;
+
+function applyMemberMapper(
+  node: CommonNode,
+  memberMapper: BoxCoordinateMapper,
+): void {
+  const props = node.props as {
+    readonly x?: number;
+    readonly y?: number;
+    readonly width?: number;
+    readonly height?: number;
+  };
+  if (
+    typeof props.x === "number" &&
+    typeof props.y === "number" &&
+    typeof props.width === "number" &&
+    typeof props.height === "number"
+  ) {
+    node.set(
+      memberMapper({
+        x: props.x,
+        y: props.y,
+        width: props.width,
+        height: props.height,
+      }),
+    );
+  }
+}
 
 /**
  * Reads a Transitional `<p:grpSp>` recursively into an editable `GroupNode`,
@@ -210,10 +238,8 @@ export function readGroupSp(
     }
 
     const childContext: ShapeTreeImportContext = {
+      ...context,
       cursor: childCursor,
-      part,
-      slideIndex,
-      package: pkg,
     };
 
     if (childCursor.localName === "grpSp") {
@@ -234,27 +260,7 @@ export function readGroupSp(
           diagnostics.push(...outcome.diagnostics);
         }
         if (outcome.node !== undefined) {
-          const props = outcome.node.props as {
-            readonly x?: number;
-            readonly y?: number;
-            readonly width?: number;
-            readonly height?: number;
-          };
-          if (
-            typeof props.x === "number" &&
-            typeof props.y === "number" &&
-            typeof props.width === "number" &&
-            typeof props.height === "number"
-          ) {
-            outcome.node.set(
-              memberMapper({
-                x: props.x,
-                y: props.y,
-                width: props.width,
-                height: props.height,
-              }),
-            );
-          }
+          applyMemberMapper(outcome.node, memberMapper);
           members.push(outcome.node);
         }
         continue;
@@ -265,6 +271,18 @@ export function readGroupSp(
         diagnostics.push(...outcome.diagnostics);
       }
       if (outcome.node !== undefined) {
+        members.push(outcome.node);
+      }
+      continue;
+    }
+
+    if (childCursor.localName === "pic") {
+      const outcome = imageImportHandler.read(childContext);
+      if (outcome.diagnostics !== undefined) {
+        diagnostics.push(...outcome.diagnostics);
+      }
+      if (outcome.node !== undefined) {
+        applyMemberMapper(outcome.node, memberMapper);
         members.push(outcome.node);
       }
       continue;

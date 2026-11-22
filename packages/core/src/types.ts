@@ -1,3 +1,5 @@
+import type { LinkTarget } from "#/author-schemas.ts";
+import type { LayoutStyle } from "#/layout-schemas.ts";
 import type { NativeMechanismDefinition } from "#/mechanisms.ts";
 import type { MorphKey } from "#/morph.ts";
 import {
@@ -13,15 +15,23 @@ import {
   type Target,
   type TargetName,
 } from "#/stage-options.ts";
-import type {
-  ThemeContext,
-  ThemeInput,
-  ThemeScope,
-  TextStyle,
-  ColorValue,
-  LinearGradient,
-  RadialGradient,
-} from "#/theme.ts";
+import type { ThemeContext } from "#/theme.ts";
+
+export type { AuthorId } from "#/author-ids.ts";
+export type {
+  DeckProps,
+  LinkTarget,
+  SectionProps,
+  SlideBackground,
+  SlideProps,
+  SlideStyle,
+} from "#/author-schemas.ts";
+export type {
+  LayoutLength,
+  LayoutSpacing,
+  LayoutStyle,
+  PaddingStyle,
+} from "#/layout-schemas.ts";
 
 export type {
   ColorValue,
@@ -61,12 +71,7 @@ export type {
   TargetName,
 };
 
-/** Slide background can use theme colors, gradients supported by the shared visual writer, or formal image resource inputs. */
-export type SlideBackground =
-  | ColorValue
-  | LinearGradient
-  | RadialGradient
-  | { readonly image: string | URL | Uint8Array };
+// SlideBackground is derived from slideBackgroundSchema in author-schemas.ts.
 
 export type GeometryBox = {
   readonly x: number;
@@ -75,122 +80,7 @@ export type GeometryBox = {
   readonly height: number;
 };
 
-/** Fixed canvas length; numeric values are interpreted in pixels, percentages are evaluated against the parent layout region. */
-export type LayoutLength = number | `${number}%` | "auto";
-
-export type LayoutSpacing =
-  | number
-  | readonly [vertical: number, horizontal: number]
-  | readonly [top: number, right: number, bottom: number, left: number];
-
-/** Fixed canvas CSS layout subset; numeric lengths are interpreted in pixels. */
-export type LayoutStyle = {
-  readonly display?: "block" | "flex" | "grid" | "none";
-  readonly position?: "static" | "relative" | "absolute";
-  readonly inset?: LayoutLength;
-  readonly left?: LayoutLength;
-  readonly top?: LayoutLength;
-  readonly right?: LayoutLength;
-  readonly bottom?: LayoutLength;
-  readonly width?: LayoutLength;
-  readonly height?: LayoutLength;
-  readonly minWidth?: LayoutLength;
-  readonly minHeight?: LayoutLength;
-  readonly maxWidth?: LayoutLength;
-  readonly maxHeight?: LayoutLength;
-  readonly margin?: LayoutSpacing;
-  readonly marginTop?: number;
-  readonly marginRight?: number;
-  readonly marginBottom?: number;
-  readonly marginLeft?: number;
-  readonly padding?: LayoutSpacing;
-  readonly paddingTop?: number;
-  readonly paddingRight?: number;
-  readonly paddingBottom?: number;
-  readonly paddingLeft?: number;
-  readonly gap?: number;
-  readonly rowGap?: number;
-  readonly columnGap?: number;
-  readonly flexDirection?: "row" | "column" | "row-reverse" | "column-reverse";
-  readonly flexWrap?: "nowrap" | "wrap";
-  readonly justifyContent?:
-    | "start"
-    | "end"
-    | "center"
-    | "flex-start"
-    | "flex-end"
-    | "space-between"
-    | "space-around"
-    | "space-evenly";
-  readonly alignItems?:
-    | "start"
-    | "end"
-    | "center"
-    | "stretch"
-    | "flex-start"
-    | "flex-end"
-    | "baseline";
-  readonly alignSelf?:
-    | "auto"
-    | "start"
-    | "end"
-    | "center"
-    | "stretch"
-    | "flex-start"
-    | "flex-end"
-    | "baseline";
-  readonly alignContent?:
-    | "start"
-    | "end"
-    | "center"
-    | "flex-start"
-    | "flex-end"
-    | "space-between"
-    | "space-around"
-    | "space-evenly"
-    | "stretch";
-  readonly flex?: number;
-  readonly flexGrow?: number;
-  readonly flexShrink?: number;
-  readonly flexBasis?: LayoutLength;
-  readonly aspectRatio?: number;
-  readonly gridTemplateColumns?: string;
-  readonly gridTemplateRows?: string;
-  /** Track sizes for implicit Grid rows, cycling in order like CSS `grid-auto-rows`; defaults to `auto`. */
-  readonly gridAutoRows?: string;
-  readonly gridColumn?: number | string;
-  readonly gridRow?: number | string;
-  readonly justifyItems?:
-    | "start"
-    | "end"
-    | "center"
-    | "stretch"
-    | "flex-start"
-    | "flex-end";
-  readonly justifySelf?:
-    | "auto"
-    | "start"
-    | "end"
-    | "center"
-    | "stretch"
-    | "flex-start"
-    | "flex-end";
-  readonly zIndex?: number;
-};
-
-export type PaddingStyle = {
-  readonly padding?: LayoutSpacing;
-  readonly paddingTop?: number;
-  readonly paddingRight?: number;
-  readonly paddingBottom?: number;
-  readonly paddingLeft?: number;
-};
-
-/** Target declaration interpreted by PowerPoint upon clicking an object; internal targets are resolved by page author id. */
-export type LinkTarget =
-  | { readonly id: string }
-  | { readonly url: string }
-  | { readonly action: "home" };
+// LayoutLength, LayoutSpacing, LayoutStyle, PaddingStyle, and LinkTarget are derived from Zod schemas.
 
 /** Link properties registered by core as relationships or slide actions for native object capabilities to write out. */
 export type NativeLink = {
@@ -408,12 +298,17 @@ export type ContributionResolver = (
   contributions: readonly CapabilityContribution[],
 ) => readonly CapabilityContribution[];
 
-export type CapabilityResource = {
-  readonly bytes: Uint8Array;
-  readonly extension: string;
-  readonly contentType: string;
-  readonly relationshipType: string;
-};
+export type CapabilityResource =
+  | {
+      readonly bytes: Uint8Array;
+      readonly extension: string;
+      readonly contentType: string;
+      readonly relationshipType: string;
+    }
+  | {
+      readonly externalTarget: string;
+      readonly relationshipType: string;
+    };
 
 /** A slide native part and binary resources it references via part relationships. */
 export type CapabilityPackagePart = {
@@ -883,26 +778,4 @@ export type RegisteredCapabilityModule =
 
 export type { Diagnostic, DiagnosticSeverity };
 
-export type DeckProps = {
-  readonly width?: number;
-  readonly height?: number;
-  readonly theme?: ThemeInput;
-  readonly style?: TextStyle;
-  readonly title?: string;
-};
-
-export type SlideProps = {
-  /** Page author id; unique within the deck and written as the stable slide identifier. */
-  readonly id: string;
-  readonly transition?: unknown;
-  readonly theme?: ThemeScope;
-  readonly style?: TextStyle & Omit<LayoutStyle, "zIndex">;
-  readonly hidden?: boolean;
-  readonly advanceAfter?: number;
-  readonly background?: SlideBackground;
-};
-
-/** Organizes slides into collapsible flat sections in PowerPoint. */
-export type SectionProps = {
-  readonly name: string;
-};
+// DeckProps, SlideProps, and SectionProps are derived from Zod schemas in author-schemas.ts.

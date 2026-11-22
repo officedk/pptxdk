@@ -207,7 +207,7 @@ describe("chartCapability resolved contract", () => {
         ),
       (error: unknown) =>
         error instanceof BuildError &&
-        error.diagnostics.some(({ code }) => code === "invalid-text-length"),
+        error.diagnostics.some(({ code }) => code === "invalid-font-size"),
     );
 
     assert.throws(

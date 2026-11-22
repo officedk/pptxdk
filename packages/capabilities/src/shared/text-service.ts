@@ -1,9 +1,9 @@
 import { createHash } from "node:crypto";
 
 import {
-  assertValidLang,
   CapabilityError,
   textStyleKeys,
+  validateTextStyle,
   type CapabilityPresentationContribution,
   type ColorValue,
   type Font,
@@ -54,8 +54,6 @@ export type TextList =
     };
 
 export type ParagraphStyle = Omit<TextStyle, "verticalAlign" | "textWrap"> & {
-  readonly align?: TextAlignment;
-  readonly spacingAfter?: number;
   readonly list?: TextList;
 };
 
@@ -456,102 +454,19 @@ function fontSizePoints(value: FontSize | undefined): number {
 function weightValue(value: TextStyle["fontWeight"]): number {
   if (value === undefined || value === "normal") return 400;
   if (value === "bold") return 700;
-  if (
-    typeof value !== "number" ||
-    !Number.isInteger(value) ||
-    value < 100 ||
-    value > 900 ||
-    value % 100 !== 0
-  ) {
-    throw new CapabilityError(
-      "invalid-font-weight",
-      "fontWeight must be normal, bold, or a hundreds integer between 100 and 900",
-    );
-  }
   return value;
 }
 
 function fontFamilyValue(value: FontReference | undefined): Font {
   if (value === undefined) return { family: "Aptos" };
-  if (typeof value === "string") {
-    if (value.trim() === "") {
-      throw new CapabilityError(
-        "invalid-font-family",
-        "fontFamily cannot be empty",
-      );
-    }
-    return { family: value };
-  }
-  if (!record(value) || typeof value["family"] !== "string") {
-    throw new CapabilityError(
-      "invalid-font-family",
-      "fontFamily must be a font value",
-    );
-  }
-  if (value["family"].trim() === "") {
-    throw new CapabilityError(
-      "invalid-font-family",
-      "Font.family cannot be empty",
-    );
-  }
-  onlyKnownKeys(value, ["family", "faces", "substitute", "embeddable"], "Font");
-  if (value["faces"] !== undefined && !Array.isArray(value["faces"])) {
-    throw new CapabilityError(
-      "invalid-font-family",
-      "Font.faces must be an array",
-    );
-  }
-  if (
-    value["substitute"] !== undefined &&
-    typeof value["substitute"] !== "boolean"
-  ) {
-    throw new CapabilityError(
-      "invalid-font-family",
-      "Font.substitute must be a boolean",
-    );
-  }
-  if (
-    value["embeddable"] !== undefined &&
-    typeof value["embeddable"] !== "boolean"
-  ) {
-    throw new CapabilityError(
-      "invalid-font-family",
-      "Font.embeddable must be a boolean",
-    );
-  }
-  return value;
+  return typeof value === "string" ? { family: value } : value;
 }
 
 function normalizedFonts(style: RunStyle): NormalizedFont[] {
   const family = fontFamilyValue(style.fontFamily);
   const weight = weightValue(style.fontWeight);
   const faceStyle = style.fontStyle ?? "normal";
-  if (faceStyle !== "normal" && faceStyle !== "italic") {
-    throw new CapabilityError(
-      "invalid-font-style",
-      "fontStyle must be normal or italic",
-    );
-  }
   const faces = family.faces ?? [];
-  for (const face of faces) {
-    onlyKnownKeys(face, ["weight", "style", "data"], "FontFace");
-    const faceWeight = face.weight ?? 400;
-    const styleValue = face.style ?? "normal";
-    if (
-      !Number.isInteger(faceWeight) ||
-      faceWeight < 100 ||
-      faceWeight > 900 ||
-      faceWeight % 100 !== 0 ||
-      (styleValue !== "normal" && styleValue !== "italic") ||
-      (face.data !== undefined &&
-        (!(face.data instanceof Uint8Array) || face.data.byteLength === 0))
-    ) {
-      throw new CapabilityError(
-        "invalid-font-face",
-        "Font.faces contains invalid weight, style, or resource",
-      );
-    }
-  }
   const matchingFaces = faces.filter(
     (candidate) =>
       (candidate.weight ?? 400) === weight &&
@@ -586,32 +501,11 @@ function normalizedFonts(style: RunStyle): NormalizedFont[] {
 }
 
 function validateRunStyle(style: RunStyle): RunStyle {
-  fontSizePoints(style.fontSize);
-  weightValue(style.fontWeight);
-  normalizedFonts(style);
-  if (style.letterSpacing !== undefined)
-    letterSpacingCentipoints(style.letterSpacing);
-  if (
-    style.textTransform !== undefined &&
-    !["none", "uppercase"].includes(style.textTransform)
-  ) {
-    throw new CapabilityError(
-      "invalid-text-transform",
-      "textTransform must be none or uppercase",
-    );
-  }
-  if (
-    style.textDecoration !== undefined &&
-    !["none", "underline", "line-through"].includes(style.textDecoration)
-  ) {
-    throw new CapabilityError(
-      "invalid-text-decoration",
-      "textDecoration must be none, underline, or line-through",
-    );
-  }
-  if (style.lang !== undefined) {
-    assertValidLang(style.lang);
-  }
+  const { themeFont: _themeFont, color, ...rest } = style;
+  validateTextStyle({
+    ...rest,
+    ...(color !== undefined && !isResolvedColor(color) ? { color } : {}),
+  });
   return style;
 }
 
@@ -689,32 +583,6 @@ export type ResolvedTextStyle = TextStyle & {
   readonly themeFont?: "major" | "minor";
 };
 
-function validateParagraphDefaults(
-  style: Pick<ParagraphStyle, "align" | "spacingAfter">,
-): void {
-  if (
-    style.align !== undefined &&
-    !["left", "center", "right", "justify"].includes(style.align)
-  ) {
-    throw new CapabilityError(
-      "invalid-text-alignment",
-      "align must be left, center, right, or justify",
-    );
-  }
-  if (
-    style.spacingAfter !== undefined &&
-    (!Number.isFinite(style.spacingAfter) || style.spacingAfter < 0)
-  ) {
-    throw new CapabilityError(
-      "invalid-paragraph-spacing",
-      "spacingAfter must be a finite non-negative pixel number",
-    );
-  }
-  if (style.spacingAfter !== undefined) {
-    spacingCentipoints(style.spacingAfter, "spacingAfter");
-  }
-}
-
 function readTextStyle(
   value: unknown,
   label: string,
@@ -722,36 +590,11 @@ function readTextStyle(
 ): ResolvedTextStyle {
   const props = styleRecord(value, label);
   onlyKnownKeys(props, [...textStyleKeys], label);
-  if (props["lang"] !== undefined) {
-    assertValidLang(props["lang"]);
-  }
   const style = {
     ...defaultTextStyle,
     ...theme.textStyle,
     ...props,
   } as TextStyle;
-  if (style.textShadow === "none")
-    delete (style as { textShadow?: Shadow | "none" }).textShadow;
-  if (
-    style.textWrap !== undefined &&
-    style.textWrap !== "normal" &&
-    style.textWrap !== "nowrap"
-  ) {
-    throw new CapabilityError(
-      "invalid-text-wrap",
-      "textWrap must be normal or nowrap",
-    );
-  }
-  if (
-    style.verticalAlign !== undefined &&
-    !["top", "middle", "bottom"].includes(style.verticalAlign)
-  ) {
-    throw new CapabilityError(
-      "invalid-vertical-align",
-      "verticalAlign must be top, middle, or bottom",
-    );
-  }
-  validateParagraphDefaults(style);
   const runStyle: RunStyle = {
     fontFamily: style.fontFamily,
     fontSize: style.fontSize,
@@ -771,20 +614,20 @@ function readTextStyle(
   if (runStyle.color !== undefined && !isResolvedColor(runStyle.color)) {
     theme.resolveColor(runStyle.color);
   }
-  validateRunStyle({
-    ...runStyle,
+  validateTextStyle({
+    ...style,
     fontFamily: font.font ?? font.family,
+    ...(isResolvedColor(style.color) ? { color: undefined } : {}),
   });
-  if (style.lineHeight !== undefined)
-    spacingCentipoints(
-      positiveLength(style.lineHeight, "lineHeight"),
-      "lineHeight",
-    );
-  return {
+  const result = {
     ...style,
     fontFamily: font.font ?? font.family,
     ...(font.themeFont === undefined ? {} : { themeFont: font.themeFont }),
   };
+  if (result.textShadow === "none") {
+    delete (result as { textShadow?: Shadow | "none" }).textShadow;
+  }
+  return result;
 }
 
 function paragraphStyle(value: unknown): ParagraphStyle {
@@ -809,16 +652,8 @@ function paragraphStyle(value: unknown): ParagraphStyle {
     ],
     "P.style",
   );
-  if (props["lang"] !== undefined) {
-    assertValidLang(props["lang"]);
-  }
+  validateTextStyle(props);
   const style = props as ParagraphStyle;
-  validateParagraphDefaults(style);
-  if (style.lineHeight !== undefined)
-    spacingCentipoints(
-      positiveLength(style.lineHeight, "lineHeight"),
-      "lineHeight",
-    );
   if (style.list !== undefined) validateList(style.list);
   return style;
 }

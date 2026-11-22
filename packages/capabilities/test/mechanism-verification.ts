@@ -16,6 +16,7 @@ import {
   type NativeRoundtripAssertContext,
 } from "./acceptance-runner.ts";
 import { chartMechanismVerifications } from "./chart/mechanisms.ts";
+import { imageMechanismVerifications } from "./image/mechanisms.ts";
 
 export type ExtractMechanisms<Modules extends readonly unknown[]> =
   Modules[number] extends infer M
@@ -169,6 +170,7 @@ export const textBoxRoundtripScenario: CapabilityScenario = {
 
 export const productionMechanismVerifications: ExhaustiveMechanismVerificationMap =
   {
+    ...imageMechanismVerifications,
     "text-box": {
       scenario: textBoxRoundtripScenario,
       assertNative({ stage, validation }) {

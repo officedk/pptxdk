@@ -1,0 +1,8 @@
+# Third-Party Test Fixtures
+
+The binary `.pptx` fixtures in this directory are unmodified upstream test files retained solely for automated OOXML import tests.
+
+| File                         | Upstream Source                                                                                                                                                                                                                                              | License    | SHA-256                                                            |
+| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------- | ------------------------------------------------------------------ |
+| `SmartArt.pptx`              | [Apache POI (`test-data/slideshow/SmartArt.pptx`)](https://github.com/apache/poi/blob/c94ee8ad9096bdb8cf8e5e59d8d12432e950dbf3/test-data/slideshow/SmartArt.pptx)                                                                                            | Apache-2.0 | `b97e4c6d2ee1dd4094f50f9043820610268dd452d7717c537f5456636adcc353` |
+| `strict-anchorModified.pptx` | [Open-XML-SDK (`O14ISOStrict/Graphics/anchorModified.pptx`)](https://github.com/dotnet/Open-XML-SDK/blob/431ab05cf160248cc3885a4a766026d4f8243792/test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O14ISOStrict/Graphics/anchorModified.pptx) | MIT        | `06dd5d1f54fa66cb102890cc621f0b10bb67a87914928ac232a4e296bb8b41fb` |
